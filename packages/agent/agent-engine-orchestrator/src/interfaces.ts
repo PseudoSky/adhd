@@ -146,6 +146,14 @@ export interface EngineConfig {
    * Omitted ⇒ `'allow'`.
    */
   permissionGate?: PermissionGate;
+  /**
+   * Maximum parent-chain depth at which an `ask` may escalate to the PARENT
+   * (ADR-0008 D6/D11: "bounded (v1: by parent-chain depth)"). A task escalates
+   * only while its `recursionDepth` is strictly below this bound; at/over it the
+   * ask fails closed (`PERMISSION_ASK_DENIED`). Omitted ⇒
+   * {@link DEFAULT_MAX_ESCALATION_DEPTH} (3).
+   */
+  escalationMaxDepth?: number;
 }
 
 /**

@@ -11,7 +11,9 @@ Implements [ADR-0008](../../../docs/decisions/0008-agent-mcp-native-tooling.md)
 This package owns **only**:
 
 - resolution of the builtin `fs` / `shell` / `dispatch` servers against a
-  **task-time** cwd (`resolveNativeTooling`); and
+  **task-time** cwd (`resolveNativeTooling`);
+- the ONE canonical agent-mcp self launch config (`buildDispatchSelf`), shared by
+  agent-mcp and dispatch-cli; and
 - tool-**NAME** permission matching (`matchPermission`).
 
 It owns **no** command parser, **no** command segmentation, and **no**
@@ -51,9 +53,15 @@ the gated live-test header
 import {
   resolveNativeTooling,
   resolveNativeToolingMap,
+  buildDispatchSelf,
   matchPermission,
   NATIVE_SERVER_CATALOG,
 } from '@adhd/agent-core-native-tooling';
+
+// The ONE agent-mcp self launch config (default `npx -y @adhd/agent-mcp@latest`,
+// overridable by `ADHD_AGENT_MCP_COMMAND`/`ADHD_AGENT_MCP_ARGS`). Hosts pass the
+// result as `ctx.dispatchSelf`; never hand-build a second producer.
+const dispatchSelf = buildDispatchSelf();
 
 // Resolution is TASK-time: the stored definition never carries a resolved root.
 const servers = resolveNativeTooling(

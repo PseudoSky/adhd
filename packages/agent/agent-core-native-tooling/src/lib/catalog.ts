@@ -89,12 +89,26 @@ export interface WrappableCommand {
 /**
  * Wrap a command + argv with the adopted `srt` sandbox: `srt <command> <args…>`.
  * Pure — returns a fresh object; the input is never mutated.
+ *
+ * When `settingsPath` is supplied the explicit `srt -s <path>` override is
+ * emitted (`srt -s <path> <command> <args…>`), so the wrapped server reads a
+ * PER-RUN policy file rather than the shared `~/.srt-settings.json` default.
+ * This is how the host keeps a per-spawn cwd allow out of the global file
+ * (ADR-0008 D7 / finding 535c1101 / A4). Absent ⇒ the pre-existing behavior
+ * (`srt` reads its own default path).
  */
-export function wrapWithSandbox(spec: WrappableCommand): {
+export function wrapWithSandbox(
+  spec: WrappableCommand,
+  settingsPath?: string
+): {
   command: string;
   args: string[];
 } {
-  return { command: SRT_SANDBOX.command, args: [spec.command, ...(spec.args ?? [])] };
+  const prefix = settingsPath ? ['-s', settingsPath] : [];
+  return {
+    command: SRT_SANDBOX.command,
+    args: [...prefix, spec.command, ...(spec.args ?? [])],
+  };
 }
 
 /** One catalog entry describing a builtin native server. */

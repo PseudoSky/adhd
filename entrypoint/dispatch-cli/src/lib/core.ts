@@ -20,6 +20,7 @@ import { createRequire } from 'node:module';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 
+import { buildDispatchSelf } from '@adhd/agent-core-native-tooling';
 import type { McpServerConfig, NativeToolingConfig } from '@adhd/agent-base-types';
 import type {
   DagJson,
@@ -249,37 +250,37 @@ export function defaultDispatchMcpServers(
 }
 
 /**
- * The REAL agent-mcp launch config for THIS host — one place, shared by the
- * spawned child (`buildProductionAgentMcpRunner`) and the `dispatch` self
- * server (`buildDispatchSelfServer`, D1). Env-overridable so a hermetic test or
- * an out-of-repo caller can point at a local build.
- *   - `ADHD_DISPATCH_AGENT_MCP_COMMAND` (default `npx`)
- *   - `ADHD_DISPATCH_AGENT_MCP_ARGS`    (whitespace-separated; default `-y @adhd/agent-mcp`)
+ * The REAL agent-mcp launch config for THIS host — the SINGLE source is
+ * `buildDispatchSelf` in `@adhd/agent-core-native-tooling` (A2: agent-mcp and
+ * dispatch-cli previously each authored their own launch config, with two
+ * different default argvs and two different env-var pairs). Env-overridable so a
+ * hermetic test or an out-of-repo caller can point at a local build:
+ *   - `ADHD_AGENT_MCP_COMMAND` (default `npx`)
+ *   - `ADHD_AGENT_MCP_ARGS`    (whitespace-separated; default `-y @adhd/agent-mcp@latest`)
  */
 function resolveAgentMcpLaunch(env: NodeJS.ProcessEnv): {
   command: string;
   args: string[];
 } {
-  const command = env['ADHD_DISPATCH_AGENT_MCP_COMMAND'] ?? 'npx';
-  const args = env['ADHD_DISPATCH_AGENT_MCP_ARGS']
-    ? env['ADHD_DISPATCH_AGENT_MCP_ARGS'].split(/\s+/).filter(Boolean)
-    : ['-y', '@adhd/agent-mcp'];
-  return { command, args };
+  const cfg = buildDispatchSelf(env);
+  if (cfg.transport !== 'stdio') {
+    throw new Error('buildDispatchSelf must return a stdio agent-mcp config');
+  }
+  return { command: cfg.command, args: cfg.args ?? [] };
 }
 
 /**
  * The REAL agent-mcp MCP server launch config for THIS host, surfaced as the
  * `dispatch` member of the native toolset (ADR-0008 D1). It is the SAME
- * command/argv `buildProductionAgentMcpRunner` spawns (both env-overridable via
- * `ADHD_DISPATCH_AGENT_MCP_COMMAND` / `ADHD_DISPATCH_AGENT_MCP_ARGS`), never an
- * authored wrapper — the dispatched agent's registry routes the `agent-mcp` name
- * to agent-mcp's real, in-process tool surface.
+ * command/argv `buildProductionAgentMcpRunner` spawns, both derived from the ONE
+ * shared producer (`buildDispatchSelf`, A2) — never an authored wrapper; the
+ * dispatched agent's registry routes the `agent-mcp` name to agent-mcp's real,
+ * in-process tool surface.
  */
 export function buildDispatchSelfServer(
   env: NodeJS.ProcessEnv = process.env
 ): McpServerConfig {
-  const { command, args } = resolveAgentMcpLaunch(env);
-  return { transport: 'stdio', command, args };
+  return buildDispatchSelf(env);
 }
 
 /** Options for {@link resolveDispatchMcpServers}. */
@@ -374,12 +375,11 @@ export function resolveProductionRunnerCwd(toolsRoot?: string): string {
  * Production `AgentMcpRunner` wiring — spawns agent-mcp via `npx -y
  * @adhd/agent-mcp` by default (matching agent-mcp's documented Quickstart).
  *
- * The launch is environment-overridable so a caller (or a hermetic e2e test)
- * can point at a local/alternative agent-mcp build instead of the published
- * one:
- *   - `ADHD_DISPATCH_AGENT_MCP_COMMAND` (default `npx`)
- *   - `ADHD_DISPATCH_AGENT_MCP_ARGS`    (whitespace-separated; default
- *     `-y @adhd/agent-mcp`)
+ * The launch is the ONE shared producer `buildDispatchSelf` (A2) — the SAME
+ * command/argv/env-pair agent-mcp itself surfaces as the `dispatch` member:
+ *   - `ADHD_AGENT_MCP_COMMAND` (default `npx`)
+ *   - `ADHD_AGENT_MCP_ARGS`    (whitespace-separated; default
+ *     `-y @adhd/agent-mcp@latest`)
  */
 export interface ProductionRunnerOverrides {
   /** Test seam: inject the MCP client instead of spawning `command`/`args`. */

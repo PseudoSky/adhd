@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 import { StdioMcpClient } from '../clients/stdio-client.js';
 import { HttpMcpClient, SseMcpClient } from '../clients/http-client.js';
+import type { EngineConfig, EngineLogger } from '../interfaces.js';
 import type { AgentDefinition, McpServerConfig } from '../validation/index.js';
 
 /**
@@ -65,6 +66,14 @@ export interface AgentVerifyMcpResult {
 
 export interface AgentVerifyMcpDeps {
   agentStore: { read(name: string): AgentDefinition };
+  /**
+   * The SAME engine config the task path threads into every stdio client
+   * (`McpClientRegistry`). Threaded here so a verify probe spawns children with
+   * the identical curated env (`subprocessEnv()`) instead of none (finding A5).
+   */
+  config?: EngineConfig;
+  /** Logger for child-process lifecycle warnings, matching the registry. */
+  logger?: EngineLogger;
 }
 
 /** The bits of every concrete client this module needs (IMcpClient omits
@@ -75,8 +84,17 @@ interface IConnectableClient {
   close(): Promise<void>;
 }
 
-function createClient(name: string, config: McpServerConfig): IConnectableClient {
-  if (config.transport === 'stdio') return new StdioMcpClient(name, config);
+function createClient(
+  name: string,
+  config: McpServerConfig,
+  engineConfig: EngineConfig | undefined,
+  logger: EngineLogger | undefined
+): IConnectableClient {
+  // Mirror `McpClientRegistry.getOrCreateClient`: a stdio child gets the same
+  // engine config (curated env) + logger the task path uses (A5).
+  if (config.transport === 'stdio') {
+    return new StdioMcpClient(name, config, engineConfig, logger);
+  }
   if (config.transport === 'http') return new HttpMcpClient(name, config);
   return new SseMcpClient(name, config);
 }
@@ -87,7 +105,8 @@ function errorMessage(err: unknown): string {
 
 async function verifyOne(
   name: string,
-  config: McpServerConfig
+  config: McpServerConfig,
+  deps: AgentVerifyMcpDeps
 ): Promise<McpServerVerification> {
   // The engine never connects to `agent-mcp` as an out-of-process MCP server —
   // it routes that name to its own in-process tool surface (see
@@ -106,7 +125,7 @@ async function verifyOne(
 
   let client: IConnectableClient;
   try {
-    client = createClient(name, config);
+    client = createClient(name, config, deps.config, deps.logger);
   } catch (err) {
     return {
       name,
@@ -160,7 +179,7 @@ export async function verifyAgentMcpServers(
 
   const results: McpServerVerification[] = [];
   for (const [serverName, config] of Object.entries(servers)) {
-    results.push(await verifyOne(serverName, config));
+    results.push(await verifyOne(serverName, config, deps));
   }
 
   return { agent: input.name, servers: results };

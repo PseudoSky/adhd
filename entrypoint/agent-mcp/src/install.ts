@@ -27,6 +27,8 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 
+import { DISPATCH_SELF_DEFAULT_ARGS } from '@adhd/agent-core-native-tooling';
+
 export type McpHost = 'claude' | 'codex' | 'opencode';
 export type McpScope = 'user' | 'project';
 
@@ -42,7 +44,10 @@ export const ALL_HOSTS: readonly McpHost[] = ['claude', 'codex', 'opencode'];
  * consumer). Same design as `backlog install`'s
  * `BACKLOG_MCP_NPX_ARGS` (`backlog/src/install.ts:54`).
  */
-export const AGENT_MCP_NPX_ARGS: readonly string[] = ['-y', '@adhd/agent-mcp@latest'];
+// Single-sourced from the native-tooling package's canonical dispatch-self argv
+// (A2): the install command, the `dispatch` self member, and dispatch-cli's
+// spawned child all launch the SAME argv. Never re-author the literal here.
+export const AGENT_MCP_NPX_ARGS: readonly string[] = DISPATCH_SELF_DEFAULT_ARGS;
 
 export type McpInstallStatus = 'written' | 'manual';
 
@@ -70,8 +75,8 @@ function readJsonFile(path: string): Record<string, unknown> {
 /**
  * The command signature of an MCP entry, used to recognize a second
  * registration of the SAME server under a different key. `command` is either
- * an array (`["npx", "-y", "@adhd/agent-mcp@latest"]`) or a string
- * (`"npx"`) paired with an `args` array (`["-y", "@adhd/agent-mcp@latest"]`).
+ * an array (the `npx` command followed by {@link AGENT_MCP_NPX_ARGS}) or a
+ * string `command` (`"npx"`) paired with that same `args` array.
  * In BOTH shapes the full argv is identity-bearing: a bare `npx` command says
  * nothing about WHICH server it launches, so `args` must be folded into the
  * string-command signature too — otherwise two unrelated `npx` servers collide

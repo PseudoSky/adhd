@@ -43,7 +43,7 @@ export interface TaskStore {
         onUpstreamFailure?: "fail" | "skip";
         isEphemeral?: boolean;
     }): { id: string; status: string; result?: string; error?: string };
-    read(taskId: string): { id: string; status: string; result?: string; error?: string; sessionId?: string | null; isEphemeral?: boolean; prompt: string; recursionDepth: number; inputs?: Record<string, string> | null };
+    read(taskId: string): { id: string; status: string; result?: string; error?: string; sessionId?: string | null; isEphemeral?: boolean; prompt: string; recursionDepth: number; parentTaskId?: string; inputs?: Record<string, string> | null };
     updateStatus(taskId: string, status: string, fields?: Record<string, unknown>): void;
     list(filter: TaskListInput): Task[];
     cancel(taskId: string): void;
@@ -617,6 +617,11 @@ export async function enqueueExistingTask(
     sessionId: task.sessionId,
     agentName: agentDefinition.name,
     agentDefinition,
+    // Preserve the parent/child link across a re-dispatch (restart/DAG): the
+    // escalate-to-parent ask chain (ADR-0008 D6) routes an `ask` to this task's
+    // parent, so dropping it here would silently disable escalation for any
+    // task that was not started inline by `taskTool`.
+    parentTaskId: task.parentTaskId,
     recursionDepth: task.recursionDepth,
     toolCallCount: 0,
     inputs: task.inputs ?? undefined,

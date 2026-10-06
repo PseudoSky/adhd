@@ -39,6 +39,7 @@ import {
   buildBacklogEnv,
   resolveBacklogDbPath,
   backlogEnvironmentSpec,
+  isLiveProductionStore,
 } from './env.js';
 import {
   buildBacklogApigenPackage,
@@ -253,6 +254,37 @@ export interface RunBacklogCliOpts {
    *  caller's `optsIn.namespace`) sets this directly; a programmatic caller
    *  may also pass it without going through argv at all. */
   namespace?: string;
+  /**
+   * (S02 AC14) The explicit TYPED production-write gate. `true` opens a write
+   * against the LIVE production store; absent/false refuses it loudly. A
+   * parsed `--allow-production-write` (recognized anywhere in argv, like
+   * `--namespace`) sets this. NEVER an env toggle (RSD-18 / ADR-0013).
+   */
+  allowProductionWrite?: boolean;
+}
+
+/**
+ * (S02 AC14) Strips the standalone boolean `--allow-production-write` token
+ * from argv (recognized anywhere, like `--help`/`--namespace`) and reports
+ * whether it was present. A value-less switch: `--allow-production-write=true`
+ * is deliberately NOT accepted (no accidental value parsing), so an unknown
+ * `--allow-production-write=…` is left in argv for the apigen parser to reject
+ * loudly rather than silently interpreted.
+ */
+export function stripAllowProductionWriteFlag(argv: readonly string[]): {
+  argv: string[];
+  allowProductionWrite: boolean;
+} {
+  let allowProductionWrite = false;
+  const rest: string[] = [];
+  for (const arg of argv) {
+    if (arg === '--allow-production-write') {
+      allowProductionWrite = true;
+      continue;
+    }
+    rest.push(arg);
+  }
+  return { argv: rest, allowProductionWrite };
 }
 
 /**
@@ -405,12 +437,21 @@ export async function runBacklogCli(
   optsIn: RunBacklogCliOpts = {}
 ): Promise<void> {
   const {
-    argv: userArgvEarly,
+    argv: namespaceStripped,
     namespace: parsedNamespace,
     missingValue,
     conflicting,
   } = stripNamespaceFlag(argvIn ?? process.argv.slice(2));
+  // S02 AC14: `--allow-production-write` is a typed global switch (never an env
+  // toggle). Strip it before the apigen parser sees argv, exactly like
+  // `--namespace`; a programmatic `optsIn.allowProductionWrite` wins outright.
+  const {
+    argv: userArgvEarly,
+    allowProductionWrite: parsedAllowProductionWrite,
+  } = stripAllowProductionWriteFlag(namespaceStripped);
   const opts: RunBacklogCliOpts = { ...optsIn };
+  const allowProductionWrite =
+    optsIn.allowProductionWrite ?? parsedAllowProductionWrite;
 
   // D1/D3: reject a malformed `--namespace` BEFORE doing anything else with
   // it — never silently fall through to `buildBacklogEnv`'s own default (an
@@ -829,11 +870,31 @@ export async function runBacklogCli(
       // BUG-002: open through `resolveBacklogDbPath` so ADHD_BACKLOG_DATABASE_PATH
       // (→ config.db.path) actually redirects the store; `env.files.db` is only
       // the fallback.
+      const dbPath = resolveBacklogDbPath(env);
       const store = await openGraphBacklogStore(
-        resolveBacklogDbPath(env),
+        dbPath,
         env.config.db.busyTimeoutMs
       );
-      opened = { store, ctx: { store, env } };
+      // S02 AC14: attach the production-write gate ONLY when this invocation
+      // actually resolves the live production store; an isolated run
+      // (`--namespace sandbox`/`test`, an explicit root/db override, a non-global
+      // scope) is left ungated.
+      const productionWrite = isLiveProductionStore({
+        namespace: opts.namespace,
+        scope: opts.scope,
+        adhdRoot: opts.adhdRoot,
+        dbPathOverride: env.config.db.path,
+      })
+        ? { isProductionStore: true, allowProductionWrite }
+        : undefined;
+      opened = {
+        store,
+        ctx: {
+          store,
+          env,
+          ...(productionWrite !== undefined ? { productionWrite } : {}),
+        },
+      };
     }
     return opened.ctx;
   };

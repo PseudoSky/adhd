@@ -73,6 +73,10 @@ export const BACKLOG_VERBS: readonly string[] = [
   'upsert-location',
   'rm-location',
   'delete',
+  // S02 AC14 (cluster backlog-lifecycle-model 0b0df8f3): the item lifecycle —
+  // `restore` reverses a soft `delete`, `remove` permanently retires.
+  'remove',
+  'restore',
   'embedding-status',
   'merge-project',
   'rm-project',

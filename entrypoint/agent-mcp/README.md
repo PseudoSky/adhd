@@ -171,14 +171,17 @@ carries no resolved root, so it is usable from any directory:
 | `dispatch` | the REAL agent-mcp server | so the agent can dispatch sub-agents; never a wrapper |
 | `hitl` | `true` | `false` hides `request_human_input` and prunes `suspend` from the ask chain |
 
-The `fs`/`shell` builtins are wrapped by `@anthropic-ai/sandbox-runtime` (`srt`),
-and the host provisions the matching policy automatically (`ADHD_AGENT_SRT_SETTINGS`
-overrides the settings path). **One producer:** the fs/shell launch commands live
-only in `@adhd/agent-core-native-tooling`'s catalog — no host hand-builds a second
-fs/shell server, and the array and keyed-map forms of the resolver are the same
-computation. Merge precedence is explicit `mcpServers` > `nativeTooling` > the
-`dispatch` self floor, and `allowedTools`/`disallowedTools` remain enforced on
-every call.
+The `fs`/`shell` builtins are wrapped by `@anthropic-ai/sandbox-runtime` (`srt`).
+The host provisions a per-run policy carrying the dispatching cwd and passes it via
+`srt -s`, so the shared `~/.srt-settings.json` is never accumulated with a per-spawn
+path (`ADHD_AGENT_SRT_SETTINGS` overrides the per-run settings path). The server-wide
+`ADHD_AGENT_NATIVE_TOOLING_*` config is merged **beneath** each agent's own
+`nativeTooling` (the agent wins). **One producer:** the fs/shell launch commands live
+only in `@adhd/agent-core-native-tooling`'s catalog, and the agent-mcp self launch
+config is single-sourced (`buildDispatchSelf`) — no host hand-builds a second server,
+and the array and keyed-map forms of the resolver are the same computation. Merge
+precedence is explicit `mcpServers` > `nativeTooling` > the `dispatch` self floor, and
+`allowedTools`/`disallowedTools` remain enforced on every call.
 
 **The permission / HITL gate is enforced.** Before every native tool call the
 resolved `nativeTooling.*.permissions` rule map is evaluated host-side against the

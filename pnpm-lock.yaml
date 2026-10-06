@@ -707,6 +707,9 @@ importers:
       '@adhd/agent-base-types':
         specifier: ^2.3.3
         version: link:../../packages/agent/agent-base-types
+      '@adhd/agent-core-native-tooling':
+        specifier: ^0.0.1
+        version: link:../../packages/agent/agent-core-native-tooling
       '@adhd/backlog':
         specifier: ^1.0.8
         version: link:../backlog
@@ -731,10 +734,6 @@ importers:
       commander:
         specifier: 14.0.3
         version: 14.0.3
-    devDependencies:
-      '@adhd/agent-core-native-tooling':
-        specifier: ^0.0.1
-        version: link:../../packages/agent/agent-core-native-tooling
 
   entrypoint/environment-cli:
     dependencies:
@@ -1509,6 +1508,9 @@ importers:
       '@adhd/data-base-transforms':
         specifier: ^2.3.3
         version: link:../data-base-transforms
+      '@adhd/data-core-structures':
+        specifier: ^2.3.3
+        version: link:../data-core-structures
 
   packages/dispatch/dispatch-base-spec: {}
 

@@ -39,6 +39,19 @@ const HITL_TOOL_NAME = 'request_human_input';
 // share it without an import cycle.
 export { DEFAULT_PROVIDER_TIMEOUT_MS };
 
+/**
+ * Default bound on parent-chain escalation depth (ADR-0008 D6/D11).
+ *
+ * When `nativeTooling.hitl` is disabled, an `ask` is routed to the task's PARENT
+ * for approval. Escalation "follows the existing parent/child graph to the root
+ * and is bounded (v1: by parent-chain depth)": a task may escalate only while its
+ * `recursionDepth` is strictly below this bound. At or beyond it the ask fails
+ * CLOSED (`PERMISSION_ASK_DENIED`), exactly like the no-parent floor — an
+ * unanswered ask never hangs and is never unbounded. Overridable per host via
+ * `EngineConfig.escalationMaxDepth`.
+ */
+export const DEFAULT_MAX_ESCALATION_DEPTH = 3;
+
 const HITL_BUILTIN_TOOL_DEFINITION = {
   name: 'builtin__request_human_input',
   description:
@@ -148,11 +161,26 @@ function hitlUnavailableResult(
   };
 }
 
-/** TaskStore-like interface for orchestrator consumption */
+/**
+ * TaskStore-like interface for orchestrator consumption.
+ *
+ * `read` is optional so minimal fakes (unit tests that never take the
+ * `escalate` branch) keep compiling; the real `TaskStore` satisfies it. The
+ * escalate path uses it to restore the PARENT task to its pre-ask status after
+ * routing an ask to it (see {@link DEFAULT_MAX_ESCALATION_DEPTH}); when absent
+ * the engine falls back to `'running'`.
+ *
+ * `fields.resumeToken` is `Record`-typed (as before) but the escalate path
+ * passes `null` to explicitly CLEAR a child's prior token — load-bearing: a
+ * child parked for escalation must not carry a stale token from an earlier
+ * `suspend`, or a direct child resume would find a match and fail the child.
+ */
 export interface OrchestratorTaskStore {
     updateStatus(taskId: string, status: string, fields?: Record<string, unknown>): void;
     appendEvent(evt: { taskId: string; type: string; payload?: unknown }): void;
     unregisterCancellation(taskId: string): void;
+    /** Read a task row (status/parent/recursionDepth) — used to restore a parent. */
+    read?(taskId: string): { status?: string; parentTaskId?: string; recursionDepth?: number } | undefined;
 }
 
 /** SessionStore-like interface for orchestrator consumption */
@@ -248,6 +276,11 @@ export class Orchestrator {
 
     const logger = loggerInput ?? { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} } as EngineLogger;
     const config = configInput ?? { server: { contextLimit: 0, defaultMaxTokens: 8192 } } as EngineConfig;
+
+    // Bounded parent-chain escalation (ADR-0008 D6/D11). See
+    // {@link DEFAULT_MAX_ESCALATION_DEPTH} and `EngineConfig.escalationMaxDepth`.
+    const escalationMaxDepth =
+      config.escalationMaxDepth ?? DEFAULT_MAX_ESCALATION_DEPTH;
 
     const emit = (event: Parameters<NonNullable<typeof emitTaskEvent>>[0]) => {
       emitTaskEvent?.(event);
@@ -794,8 +827,9 @@ export class Orchestrator {
             // Fixed ask-resolution chain (ADR-0008 D6):
             //   suspend  — iff HITL is enabled (`nativeTooling.hitl !== false`)
             //              AND the suspension is answerable on this transport
-            //   escalate — iff a parent exists (routed to the parent agent) AND
-            //              the suspension is answerable
+            //   escalate — iff a parent exists AND the child is within the
+            //              parent-chain depth bound; the ask is ROUTED TO THE
+            //              PARENT TASK for approval (never answered on the child)
             //   deny     — the fail-closed floor
             //
             // A synchronous call (one-shot `agent_name`, `background:false`) is
@@ -806,16 +840,28 @@ export class Orchestrator {
             const hitlEnabled =
               effectiveHitl(executionContext.agentDefinition) !== false;
             const parentTaskId = executionContext.parentTaskId;
+            const recursionDepth = executionContext.recursionDepth ?? 0;
+            // Bounded escalation (ADR-0008 D6/D11): the ask may climb the parent
+            // chain only while the child is within `escalationMaxDepth` levels.
+            // At/over the bound it fails closed — never unbounded, never a hang.
+            const withinEscalationBound = recursionDepth < escalationMaxDepth;
             let resolution: 'suspend' | 'escalate' | 'deny';
             if (!suspensionAnswerable) resolution = 'deny';
             else if (hitlEnabled) resolution = 'suspend';
-            else if (parentTaskId) resolution = 'escalate';
+            else if (parentTaskId && withinEscalationBound)
+              resolution = 'escalate';
             else resolution = 'deny';
 
             if (resolution === 'deny') {
-              const reason = suspensionAnswerable
-                ? 'HITL is disabled and the task has no parent'
-                : 'the synchronous call has no reachable approver';
+              let reason: string;
+              if (!suspensionAnswerable) {
+                reason = 'the synchronous call has no reachable approver';
+              } else if (parentTaskId) {
+                // A parent exists but the chain is too deep — the bound floored it.
+                reason = `escalation depth bound reached (depth ${recursionDepth} >= max ${escalationMaxDepth})`;
+              } else {
+                reason = 'HITL is disabled and the task has no parent';
+              }
               taskStore.appendEvent({
                 taskId,
                 type: 'TOOL_CALL',
@@ -840,85 +886,284 @@ export class Orchestrator {
               continue;
             }
 
-            // Both `suspend` (sessioned HITL) and `escalate` (parent-approves)
-            // park the task in `awaiting_input` and await the same human/parent
-            // answer via `task_resume` → `resolveHitl`. The difference is
-            // observability: an escalated ask is attributed to the parent.
-            const resumeToken = randomUUID();
-            let askAbortHandler: (() => void) | undefined;
-            const approvalPromise = new Promise<string>((resolve, reject) => {
-              hitlResolvers.set(taskId, resolve);
-              askAbortHandler = () => {
+            if (resolution === 'suspend') {
+              // ── `suspend` — the CHILD itself is the decision surface ──────
+              // (sessioned HITL). Park the child in `awaiting_input` holding its
+              // own resumeToken; a caller resumes the child via `task_resume`.
+              const resumeToken = randomUUID();
+              let askAbortHandler: (() => void) | undefined;
+              const approvalPromise = new Promise<string>((resolve, reject) => {
+                hitlResolvers.set(taskId, resolve);
+                askAbortHandler = () => {
+                  hitlResolvers.delete(taskId);
+                  reject(
+                    new ToolError(
+                      'PROVIDER_ERROR',
+                      'Task cancelled while awaiting permission approval'
+                    )
+                  );
+                };
+                signal.addEventListener('abort', askAbortHandler, { once: true });
+              });
+
+              try {
+                await taskStore.updateStatus(taskId, 'awaiting_input', {
+                  resumeToken,
+                });
+              } catch (err) {
                 hitlResolvers.delete(taskId);
-                reject(
-                  new ToolError(
-                    'PROVIDER_ERROR',
-                    'Task cancelled while awaiting permission approval'
-                  )
+                if (askAbortHandler)
+                  signal.removeEventListener('abort', askAbortHandler);
+                void approvalPromise.catch(() => {});
+                throw err;
+              }
+              try {
+                emit({
+                  type: 'status_change',
+                  taskId,
+                  status: 'awaiting_input',
+                });
+              } catch (err) {
+                logger.warn(
+                  { taskId, err, status: 'awaiting_input' },
+                  'Failed to emit awaiting_input status_change for permission ask; suspension continues'
                 );
-              };
-              signal.addEventListener('abort', askAbortHandler, { once: true });
-            });
+              }
 
-            try {
-              await taskStore.updateStatus(taskId, 'awaiting_input', {
-                resumeToken,
-              });
-            } catch (err) {
-              hitlResolvers.delete(taskId);
-              if (askAbortHandler)
-                signal.removeEventListener('abort', askAbortHandler);
-              void approvalPromise.catch(() => {});
-              throw err;
-            }
-            try {
-              emit({
-                type: 'status_change',
+              taskStore.appendEvent({
                 taskId,
-                status: 'awaiting_input',
+                type: 'TOOL_CALL',
+                payload: {
+                  tool: qualifiedToolName,
+                  callId: tc.id,
+                  permission: 'ask',
+                  resolution: 'suspend',
+                  resumeToken,
+                },
               });
-            } catch (err) {
-              logger.warn(
-                { taskId, err, status: 'awaiting_input' },
-                'Failed to emit awaiting_input status_change for permission ask; suspension continues'
-              );
-            }
 
-            taskStore.appendEvent({
-              taskId,
-              type: 'TOOL_CALL',
-              payload: {
-                tool: qualifiedToolName,
-                callId: tc.id,
-                permission: 'ask',
-                resolution,
-                ...(resolution === 'escalate'
-                  ? { escalatedTo: parentTaskId }
-                  : {}),
-                resumeToken,
-              },
-            });
-
-            const answer = await approvalPromise.finally(() => {
-              if (askAbortHandler)
-                signal.removeEventListener('abort', askAbortHandler);
-            });
-            await taskStore.updateStatus(taskId, 'running');
-            emit({ type: 'status_change', taskId, status: 'running' });
-
-            if (!isPermissionApproval(answer)) {
-              warningResults.set(tc.id, {
-                result: permissionRefusalResult(
-                  resolved.server,
-                  resolved.tool,
-                  'PERMISSION_ASK_DENIED',
-                  'The approver declined.'
-                ),
-                isError: true,
+              const answer = await approvalPromise.finally(() => {
+                if (askAbortHandler)
+                  signal.removeEventListener('abort', askAbortHandler);
               });
+              await taskStore.updateStatus(taskId, 'running');
+              emit({ type: 'status_change', taskId, status: 'running' });
+
+              if (!isPermissionApproval(answer)) {
+                warningResults.set(tc.id, {
+                  result: permissionRefusalResult(
+                    resolved.server,
+                    resolved.tool,
+                    'PERMISSION_ASK_DENIED',
+                    'The approver declined.'
+                  ),
+                  isError: true,
+                });
+                continue;
+              }
+              // Approved → fall through to pre:tool_call + policy.check + Phase 2.
               continue;
             }
-            // Approved → fall through to pre:tool_call + policy.check + Phase 2.
+
+            // ── `escalate` — the PARENT TASK is the decision surface ─────────
+            // The ask is DELIVERED to the parent task: the parent is parked in
+            // `awaiting_input` holding the resumeToken, a resolver is registered
+            // under the PARENT task id, and the child waits. The child is parked
+            // tokenless, so it can never approve its own ask. `task_resume` on
+            // the PARENT resolves the child's promise; on approval the child
+            // executes, on rejection it denies — exactly as if the parent had
+            // answered. Bounded by `escalationMaxDepth` (checked above).
+            {
+              const parentId = parentTaskId as string;
+
+              // One pending decision per task. If the parent already holds a
+              // pending escalation (two children asking at once), fail THIS ask
+              // closed rather than clobber the live resolver and hang the first.
+              if (hitlResolvers.has(parentId)) {
+                const reason = `the parent task '${parentId}' already has a pending approval request`;
+                taskStore.appendEvent({
+                  taskId,
+                  type: 'TOOL_CALL',
+                  payload: {
+                    tool: qualifiedToolName,
+                    callId: tc.id,
+                    permission: 'ask',
+                    resolution: 'deny',
+                    code: 'PERMISSION_ASK_DENIED',
+                    reason,
+                  },
+                });
+                warningResults.set(tc.id, {
+                  result: permissionRefusalResult(
+                    resolved.server,
+                    resolved.tool,
+                    'PERMISSION_ASK_DENIED',
+                    reason
+                  ),
+                  isError: true,
+                });
+                continue;
+              }
+
+              // Remember the parent's pre-ask status so it can be restored once
+              // the decision lands (best-effort; `read` is optional on the store).
+              let parentPriorStatus = 'running';
+              try {
+                parentPriorStatus = taskStore.read?.(parentId)?.status ?? 'running';
+              } catch {
+                parentPriorStatus = 'running';
+              }
+
+              const resumeToken = randomUUID();
+              let askAbortHandler: (() => void) | undefined;
+              const approvalPromise = new Promise<string>((resolve, reject) => {
+                hitlResolvers.set(parentId, resolve);
+                askAbortHandler = () => {
+                  hitlResolvers.delete(parentId);
+                  reject(
+                    new ToolError(
+                      'PROVIDER_ERROR',
+                      'Task cancelled while awaiting parent approval'
+                    )
+                  );
+                };
+                signal.addEventListener('abort', askAbortHandler, { once: true });
+              });
+
+              let parentParked = false;
+              try {
+                // Park the PARENT first — it owns the resumeToken and is the
+                // observable surface a caller answers.
+                await taskStore.updateStatus(parentId, 'awaiting_input', {
+                  resumeToken,
+                });
+                parentParked = true;
+                emit({
+                  type: 'status_change',
+                  taskId: parentId,
+                  status: 'awaiting_input',
+                });
+                // Park the CHILD tokenless (`resumeToken: null` CLEARS any stale
+                // token from an earlier suspend): the child is NOT directly
+                // resumable, so a child self-approve can never satisfy the ask.
+                await taskStore.updateStatus(taskId, 'awaiting_input', {
+                  resumeToken: null,
+                });
+                emit({
+                  type: 'status_change',
+                  taskId,
+                  status: 'awaiting_input',
+                });
+              } catch (err) {
+                hitlResolvers.delete(parentId);
+                if (askAbortHandler)
+                  signal.removeEventListener('abort', askAbortHandler);
+                void approvalPromise.catch(() => {});
+                if (parentParked) {
+                  try {
+                    await taskStore.updateStatus(parentId, parentPriorStatus);
+                    emit({
+                      type: 'status_change',
+                      taskId: parentId,
+                      status: parentPriorStatus,
+                    });
+                  } catch {
+                    // parent row vanished — nothing to restore
+                  }
+                }
+                logger.warn(
+                  { taskId, parentId, err },
+                  'Failed to route permission ask to the parent task; failing closed'
+                );
+                const reason = `the parent task '${parentId}' could not be reached for approval`;
+                taskStore.appendEvent({
+                  taskId,
+                  type: 'TOOL_CALL',
+                  payload: {
+                    tool: qualifiedToolName,
+                    callId: tc.id,
+                    permission: 'ask',
+                    resolution: 'deny',
+                    code: 'PERMISSION_ASK_DENIED',
+                    reason,
+                  },
+                });
+                warningResults.set(tc.id, {
+                  result: permissionRefusalResult(
+                    resolved.server,
+                    resolved.tool,
+                    'PERMISSION_ASK_DENIED',
+                    reason
+                  ),
+                  isError: true,
+                });
+                continue;
+              }
+
+              // Child-side audit: the ask escalated TO the parent. Deliberately
+              // carries NO resumeToken (the child is not the decision surface).
+              taskStore.appendEvent({
+                taskId,
+                type: 'TOOL_CALL',
+                payload: {
+                  tool: qualifiedToolName,
+                  callId: tc.id,
+                  permission: 'ask',
+                  resolution: 'escalate',
+                  escalatedTo: parentId,
+                },
+              });
+              // Parent-side surface: the pending decision + its resumeToken.
+              taskStore.appendEvent({
+                taskId: parentId,
+                type: 'TOOL_CALL',
+                payload: {
+                  tool: qualifiedToolName,
+                  callId: tc.id,
+                  permission: 'ask',
+                  resolution: 'escalate',
+                  escalatedFrom: taskId,
+                  resumeToken,
+                },
+              });
+
+              const answer = await approvalPromise.finally(() => {
+                if (askAbortHandler)
+                  signal.removeEventListener('abort', askAbortHandler);
+              });
+
+              // Restore both. The child resumes either way; the parent returns
+              // to its pre-ask status so it is not left parked forever.
+              await taskStore.updateStatus(taskId, 'running');
+              emit({ type: 'status_change', taskId, status: 'running' });
+              try {
+                await taskStore.updateStatus(parentId, parentPriorStatus);
+                emit({
+                  type: 'status_change',
+                  taskId: parentId,
+                  status: parentPriorStatus,
+                });
+              } catch (err) {
+                logger.warn(
+                  { taskId, parentId, err },
+                  'Failed to restore parent task status after an escalated ask'
+                );
+              }
+
+              if (!isPermissionApproval(answer)) {
+                warningResults.set(tc.id, {
+                  result: permissionRefusalResult(
+                    resolved.server,
+                    resolved.tool,
+                    'PERMISSION_ASK_DENIED',
+                    'The approver declined.'
+                  ),
+                  isError: true,
+                });
+                continue;
+              }
+              // Approved → fall through to pre:tool_call + policy.check + Phase 2.
+            }
           }
 
           await hooks.emit('pre:tool_call', {

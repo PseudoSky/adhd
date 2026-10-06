@@ -28,8 +28,9 @@ import type {
   Orchestrator,
   TaskDeps,
   ExecutionContext,
+  AgentCreateInput,
+  EngineConfig,
 } from '@adhd/agent-engine-orchestrator';
-import type { AgentCreateInput } from '@adhd/agent-engine-orchestrator';
 
 import { ScriptedProvider } from './scripted-provider.js';
 import {
@@ -129,6 +130,60 @@ function toolMessageText(harness: Harness, sessionId: string): string {
     .filter((m) => m.role === 'tool')
     .map((m) => JSON.stringify(m.toolResults ?? []))
     .join('\n');
+}
+
+// ── a0c0a826 — real parent-routing fixtures ──────────────────────────────────
+//
+// Pre-fix, `escalate` was behaviorally identical to `suspend`: the CHILD parked
+// itself in `awaiting_input` holding its own resumeToken, and NAT-TOOL-6 AC5
+// "proved parent approval" by resuming the CHILD directly — the "parent" was a
+// bare random UUID with no task row. These fixtures build a REAL parent task so
+// the ask can actually be routed to it and answered there.
+
+/** A real parent task + its execution context (the surface an ask routes to). */
+function makeParentTask(
+  harness: Harness,
+  recursionDepth = 0
+): { parentTaskId: string; parentSessionId: string; parentCtx: ExecutionContext } {
+  const parentAgent = createAgent(harness);
+  const parentSessionId = openSession(harness, parentAgent);
+  const parentDefinition = harness.agentStore.read(parentAgent);
+  const parentTaskId = crypto.randomUUID();
+  harness.taskStore.create({
+    id: parentTaskId,
+    sessionId: parentSessionId,
+    prompt: 'parent task',
+  });
+  harness.taskStore.updateStatus(parentTaskId, 'running');
+  const parentCtx: ExecutionContext = {
+    taskId: parentTaskId,
+    sessionId: parentSessionId,
+    agentName: parentAgent,
+    agentDefinition: parentDefinition,
+    recursionDepth,
+    toolCallCount: 0,
+  };
+  return { parentTaskId, parentSessionId, parentCtx };
+}
+
+/** A child agent whose `ask` must escalate (hitl:false prunes suspend). */
+function makeEscalatingChild(harness: Harness): { agentName: string; sessionId: string } {
+  const agentName = createAgent(harness, {
+    nativeTooling: { dispatch: { permissions: { 'agent-mcp.*': 'ask' } }, hitl: false },
+  });
+  return { agentName, sessionId: openSession(harness, agentName) };
+}
+
+/** `gatedDeps` with an EngineConfig override (e.g. the escalation depth bound). */
+function gatedDepsWithConfig(
+  harness: Harness,
+  executed: string[],
+  patch: Partial<EngineConfig>
+): TaskDeps {
+  return {
+    ...gatedDeps(harness, executed),
+    config: { ...harness.taskDeps.config, ...patch },
+  };
 }
 
 describe('NAT-TOOL-6 — permission gate (ADR-0008 D5/D6)', () => {
@@ -303,51 +358,270 @@ describe('NAT-TOOL-6 — permission gate (ADR-0008 D5/D6)', () => {
     }
   }, 60_000);
 
-  it('AC5: a sub-agent `ask` escalates to the parent, the parent approves, and the tool executes', async () => {
+  it('AC5 (corrected): a sub-agent `ask` is ROUTED to the parent task; the parent approves and the child executes', async () => {
+    // CHANGED (a0c0a826): this test previously "proved parent approval" by
+    // calling `taskResume` on the CHILD directly, with a synthetic parent UUID
+    // that had no task row — i.e. it cosmetically self-approved. It now builds a
+    // REAL parent task, routes the ask to it, and answers on the PARENT.
     const harness = await buildHarness();
     try {
-      const childAgent = createAgent(harness, {
-        // hitl:false forces the escalate branch (suspend needs HITL).
-        nativeTooling: { dispatch: { permissions: { 'agent-mcp.*': 'ask' } }, hitl: false },
-      });
-      const childSession = openSession(harness, childAgent);
+      const { sessionId: childSession } = makeEscalatingChild(harness);
+      const { parentTaskId, parentCtx } = makeParentTask(harness);
       const executed: string[] = [];
-      const deps = gatedDeps(harness, executed);
-
-      const parentCtx: ExecutionContext = {
-        taskId: crypto.randomUUID(),
-        sessionId: crypto.randomUUID(),
-        agentName: 'parent-agent',
-        agentDefinition: harness.agentStore.read(childAgent),
-        recursionDepth: 0,
-        toolCallCount: 0,
-      };
 
       const out = await taskTool(
         { session_id: childSession, prompt: 'call echo', background: true } as never,
-        withProvider(harness, deps, echoThenComplete()),
+        withProvider(harness, gatedDeps(harness, executed), echoThenComplete()),
         parentCtx
       );
 
-      const suspended = await waitFor(harness, out.task_id, ['awaiting_input']);
-      expect(suspended.status).toBe('awaiting_input');
+      // AC1: the decision surfaces on the PARENT, not the child.
+      const parentSuspended = await waitFor(harness, parentTaskId, ['awaiting_input']);
+      expect(parentSuspended.status).toBe('awaiting_input');
+      expect(parentSuspended.resumeToken, 'the PARENT holds the resume token').toBeTruthy();
+
+      const childRow = harness.taskStore.read(out.task_id);
+      expect(childRow.status).toBe('awaiting_input');
+      expect(childRow.resumeToken, 'the child must NOT expose its own resume token').toBeFalsy();
+
       const escalateEvent = toolCallEvents(harness, out.task_id).find(
         (e) => e.permission === 'ask'
       );
       expect(escalateEvent?.resolution, 'the ask escalated (not plain suspend)').toBe('escalate');
       expect(escalateEvent?.escalatedTo, 'escalation is attributed to the parent task').toBe(
-        parentCtx.taskId
+        parentTaskId
+      );
+      const parentEvent = toolCallEvents(harness, parentTaskId).find((e) => e.permission === 'ask');
+      expect(parentEvent?.escalatedFrom, 'the parent surface records the asking child').toBe(
+        out.task_id
       );
       expect(executed, 'not executed before the parent approves').toEqual([]);
 
-      // The parent approves → the tool executes.
+      // AC2: the PARENT approves → the child resumes and the tool executes.
+      const resumed = await taskResume(
+        {
+          taskId: parentTaskId,
+          resumeToken: parentSuspended.resumeToken as string,
+          userInput: 'approve',
+        },
+        { taskStore: harness.taskStore }
+      );
+      expect(resumed.success).toBe(true);
+      await drainQueue(harness.queue, 15_000);
+      expect(harness.taskStore.read(out.task_id).status).toBe('completed');
+      expect(executed, 'after parent approval the child executes').toEqual(['echo']);
+      // The parent is restored, not left parked forever.
+      expect(harness.taskStore.read(parentTaskId).status).toBe('running');
+    } finally {
+      await harness.teardown();
+    }
+  }, 60_000);
+
+  it('a0c0a826 AC1: a sub-agent `ask` surfaces the decision on the PARENT task; the child does NOT self-approve', async () => {
+    const harness = await buildHarness();
+    try {
+      const { sessionId: childSession } = makeEscalatingChild(harness);
+      const { parentTaskId, parentCtx } = makeParentTask(harness);
+      const executed: string[] = [];
+
+      const out = await taskTool(
+        { session_id: childSession, prompt: 'call echo', background: true } as never,
+        withProvider(harness, gatedDeps(harness, executed), echoThenComplete()),
+        parentCtx
+      );
+      const parentSuspended = await waitFor(harness, parentTaskId, ['awaiting_input']);
+
+      const parentRow = harness.taskStore.read(parentTaskId);
+      const childRow = harness.taskStore.read(out.task_id);
+      // The decision is on the PARENT (status + token)…
+      expect(parentRow.status).toBe('awaiting_input');
+      expect(parentRow.resumeToken).toBeTruthy();
+      // …the child is parked but carries NO resume token (not self-approvable).
+      expect(childRow.status).toBe('awaiting_input');
+      expect(childRow.resumeToken).toBeFalsy();
+      expect(executed).toEqual([]);
+
+      // NEGATIVE CONTROL (revert-failing): pre-fix, `escalate` was `suspend` —
+      // the CHILD held its own resumeToken here, so `childRow.resumeToken` was a
+      // truthy token and the assertion above goes RED.
+
+      // Drain the pending ask so teardown is immediate (parent rejection path).
       await taskResume(
-        { taskId: out.task_id, resumeToken: suspended.resumeToken as string, userInput: 'approve' },
+        {
+          taskId: parentTaskId,
+          resumeToken: parentSuspended.resumeToken as string,
+          userInput: 'deny',
+        },
+        { taskStore: harness.taskStore }
+      );
+      await drainQueue(harness.queue, 15_000);
+    } finally {
+      await harness.teardown();
+    }
+  }, 60_000);
+
+  it('a0c0a826 AC2: the parent DENIES → the child denies and the tool never executes', async () => {
+    const harness = await buildHarness();
+    try {
+      const { sessionId: childSession } = makeEscalatingChild(harness);
+      const { parentTaskId, parentCtx } = makeParentTask(harness);
+      const executed: string[] = [];
+
+      const out = await taskTool(
+        { session_id: childSession, prompt: 'call echo', background: true } as never,
+        withProvider(harness, gatedDeps(harness, executed), echoThenComplete()),
+        parentCtx
+      );
+      const parentSuspended = await waitFor(harness, parentTaskId, ['awaiting_input']);
+
+      // The parent's decision is a REJECTION.
+      await taskResume(
+        {
+          taskId: parentTaskId,
+          resumeToken: parentSuspended.resumeToken as string,
+          userInput: 'deny',
+        },
+        { taskStore: harness.taskStore }
+      );
+      await drainQueue(harness.queue, 15_000);
+
+      expect(harness.taskStore.read(out.task_id).status).toBe('completed');
+      expect(executed, 'a parent rejection must not execute the tool').toEqual([]);
+      expect(toolMessageText(harness, childSession)).toContain('PERMISSION_ASK_DENIED');
+    } finally {
+      await harness.teardown();
+    }
+  }, 60_000);
+
+  it('a0c0a826 AC3: escalation is BOUNDED by parent-chain depth; at the bound it fails closed', async () => {
+    const harness = await buildHarness();
+    try {
+      const { sessionId: childSession } = makeEscalatingChild(harness);
+      // Parent at depth 1 → the child is at depth 2 (recursionDepth + 1). With
+      // the bound at 1, `2 < 1` is false: escalation must fail closed.
+      const { parentTaskId, parentCtx } = makeParentTask(harness, 1);
+      const executed: string[] = [];
+
+      const out = await taskTool(
+        { session_id: childSession, prompt: 'call echo', background: true } as never,
+        withProvider(
+          harness,
+          gatedDepsWithConfig(harness, executed, { escalationMaxDepth: 1 }),
+          echoThenComplete()
+        ),
+        parentCtx
+      );
+
+      // The ask is refused at the bound — never parked (would hang).
+      const settled = await waitFor(harness, out.task_id, ['completed', 'failed'], 8_000);
+      expect(settled.status, 'at the bound the ask fails closed, never suspends').toBe('completed');
+      expect(harness.taskStore.read(parentTaskId).status, 'the parent is never parked').toBe(
+        'running'
+      );
+      expect(executed, 'a bound-refused ask never executes the tool').toEqual([]);
+      expect(toolMessageText(harness, childSession)).toContain('PERMISSION_ASK_DENIED');
+      const askEvent = toolCallEvents(harness, out.task_id).find((e) => e.permission === 'ask');
+      expect(askEvent?.resolution).toBe('deny');
+      expect(String(askEvent?.reason)).toContain('depth bound');
+
+      // NEGATIVE CONTROL (revert-failing): with the bound removed (or raised
+      // above the child's depth) the SAME run escalates instead — the child
+      // would park in `awaiting_input` and `settled.status` would not be
+      // 'completed', so this assertion goes RED.
+    } finally {
+      await harness.teardown();
+    }
+  }, 60_000);
+
+  it('a0c0a826 AC3 (positive control): the SAME depth escalates when the bound permits it', async () => {
+    const harness = await buildHarness();
+    try {
+      const { sessionId: childSession } = makeEscalatingChild(harness);
+      const { parentTaskId, parentCtx } = makeParentTask(harness, 1);
+      const executed: string[] = [];
+
+      const out = await taskTool(
+        { session_id: childSession, prompt: 'call echo', background: true } as never,
+        withProvider(
+          harness,
+          gatedDepsWithConfig(harness, executed, { escalationMaxDepth: 5 }),
+          echoThenComplete()
+        ),
+        parentCtx
+      );
+      const parentSuspended = await waitFor(harness, parentTaskId, ['awaiting_input']);
+      expect(parentSuspended.status, 'within the bound the ask escalates to the parent').toBe(
+        'awaiting_input'
+      );
+      // Drain the pending ask so teardown is clean (parent rejection path).
+      await taskResume(
+        {
+          taskId: parentTaskId,
+          resumeToken: parentSuspended.resumeToken as string,
+          userInput: 'deny',
+        },
         { taskStore: harness.taskStore }
       );
       await drainQueue(harness.queue, 15_000);
       expect(harness.taskStore.read(out.task_id).status).toBe('completed');
-      expect(executed, 'after parent approval the tool executes').toEqual(['echo']);
+    } finally {
+      await harness.teardown();
+    }
+  }, 60_000);
+
+  it('a0c0a826 AC4: NEGATIVE CONTROL — a direct child self-resume cannot satisfy an escalated ask', async () => {
+    const harness = await buildHarness();
+    try {
+      const { sessionId: childSession } = makeEscalatingChild(harness);
+      const { parentTaskId, parentCtx } = makeParentTask(harness);
+      const executed: string[] = [];
+
+      const out = await taskTool(
+        { session_id: childSession, prompt: 'call echo', background: true } as never,
+        withProvider(harness, gatedDeps(harness, executed), echoThenComplete()),
+        parentCtx
+      );
+      const parentSuspended = await waitFor(harness, parentTaskId, ['awaiting_input']);
+      const childRow = harness.taskStore.read(out.task_id);
+
+      // The child carries NO resume token under parent routing. PRE-FIX the child
+      // parked itself with its OWN token — so this assertion is the primary RED
+      // bite if parent routing is reverted (a child could then self-approve).
+      expect(childRow.resumeToken, 'the child is not the decision surface').toBeFalsy();
+
+      // Resuming the CHILD with its own (absent) token must be refused: a direct
+      // child self-resume can never satisfy an escalated ask. PRE-FIX this call
+      // RESOLVED (the child approved itself), so `rejects` would be RED.
+      await expect(
+        taskResume(
+          {
+            taskId: out.task_id,
+            resumeToken: childRow.resumeToken ?? 'no-child-token',
+            userInput: 'approve',
+          },
+          { taskStore: harness.taskStore }
+        )
+      ).rejects.toThrow();
+      expect(executed, 'a refused child self-approve must not execute').toEqual([]);
+      expect(harness.taskStore.read(out.task_id).status, 'child stays parked').toBe(
+        'awaiting_input'
+      );
+
+      // NEGATIVE CONTROL (revert-failing): pre-fix the child parked with its OWN
+      // resumeToken, so `childRow.resumeToken` was truthy and this direct child
+      // resume SUCCEEDED, `executed` became `['echo']` — every assertion above
+      // goes RED. (The old NAT-TOOL-6 AC5 body did exactly this.)
+
+      // Drain the still-parked child so teardown is immediate.
+      await taskResume(
+        {
+          taskId: parentTaskId,
+          resumeToken: parentSuspended.resumeToken as string,
+          userInput: 'deny',
+        },
+        { taskStore: harness.taskStore }
+      );
+      await drainQueue(harness.queue, 15_000);
     } finally {
       await harness.teardown();
     }

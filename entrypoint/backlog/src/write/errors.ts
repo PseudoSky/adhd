@@ -902,3 +902,78 @@ export class CitationNotFoundError extends BacklogWriteError {
     super(`No live citation found for uid "${uid}"`);
   }
 }
+
+/**
+ * (S02 AC14) `restore` was handed a uid that does not name a RESTORABLE
+ * (soft-deleted) issue. `delete` is the only reversible retire; a uid that is
+ * live, missing, superseded, or permanently removed by `remove` cannot be
+ * restored. `E_VALIDATION` → the envelope maps it to `precondition_failed`
+ * (nothing is written; a re-read shows the same state).
+ *
+ * Declared ATTACHED to `errors.ts`'s end so this additive change shifts NO
+ * existing line and leaves `CONTRACT.md`'s `(errors.ts:NNN)` anchors true.
+ */
+export class IssueNotRestorableError extends BacklogWriteError {
+  readonly code = 'E_VALIDATION' as const;
+  readonly retryable = false;
+
+  constructor(
+    public readonly uid: string,
+    public readonly reason:
+      | 'live'
+      | 'absent'
+      | 'superseded'
+      | 'permanently-removed'
+  ) {
+    super(
+      `Issue "${uid}" is not restorable (${reason}) — only a soft-"delete"d issue can be restored` +
+        (reason === 'permanently-removed'
+          ? '; this item was permanently removed and cannot be un-retired'
+          : '')
+    );
+  }
+}
+
+/**
+ * (S02 AC14) `remove` permanently retires an item and therefore requires the
+ * caller's explicit `confirm: true`; a missing/false `confirm` is refused
+ * before any write runs. `E_VALIDATION` → `precondition_failed`.
+ *
+ * Declared ATTACHED to `errors.ts`'s end (anchors preserved, as above).
+ */
+export class RemoveConfirmationRequiredError extends BacklogWriteError {
+  readonly code = 'E_VALIDATION' as const;
+  readonly retryable = false;
+
+  constructor(public readonly uid: string) {
+    super(
+      `Refused: "remove" of "${uid}" permanently retires the item and requires confirm: true`
+    );
+  }
+}
+
+/**
+ * (S02 AC14 / cluster `backlog-lifecycle-model` 0b0df8f3) The production-write
+ * gate: a write against the LIVE production store with no explicit typed
+ * opt-in is refused loudly, so a probe/sandbox or automated caller can never
+ * silently contaminate the store of record. The gate is opened only by an
+ * explicit typed flag/config (`allow_production_write: true` /
+ * `--allow-production-write`) — never an ambient env toggle (ADR-0013), which
+ * is why the refusal message names the explicit input rather than an env var.
+ *
+ * `E_VALIDATION` → `precondition_failed`; nothing is written. Declared
+ * ATTACHED to `errors.ts`'s end (anchors preserved, as above).
+ */
+export class ProductionWriteRefusedError extends BacklogWriteError {
+  readonly code = 'E_VALIDATION' as const;
+  readonly retryable = false;
+
+  constructor(public readonly verb: string) {
+    super(
+      `Refused: "${verb}" would write to the live PRODUCTION store and no explicit ` +
+        'production-write gate was passed. Re-run with the typed opt-in ' +
+        '(--allow-production-write on the CLI / allow_production_write:true in the ' +
+        'input), or point the command at an isolated store (--namespace sandbox).'
+    );
+  }
+}

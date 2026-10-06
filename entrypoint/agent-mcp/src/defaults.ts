@@ -19,8 +19,11 @@
  * no create-time/second-timing behaviour.
  */
 import {
+  buildDispatchSelf,
   matchPermission,
   resolveNativeToolingMap,
+  DISPATCH_SELF_COMMAND_ENV,
+  DISPATCH_SELF_ARGS_ENV,
 } from '@adhd/agent-core-native-tooling';
 import type {
   AgentDefinition,
@@ -31,8 +34,22 @@ import type {
 } from '@adhd/agent-base-types';
 import type { PermissionGate } from '@adhd/agent-engine-orchestrator';
 
-import { AGENT_MCP_NPX_ARGS } from './install.js';
-import { ensureBinDirOnPath, resolveNativeBinDir } from './srt-policy.js';
+import {
+  ensureBinDirOnPath,
+  getSrtRunSettingsPath,
+  resolveNativeBinDir,
+} from './srt-policy.js';
+
+/**
+ * The ONE canonical agent-mcp self-config producer (A2), sourced from the shared
+ * `@adhd/agent-core-native-tooling` package so agent-mcp and dispatch-cli derive
+ * the launch config from a single function, a single default argv, and a single
+ * env-var pair. Re-exported here so existing consumers/tests importing from
+ * `./defaults.js` keep working.
+ */
+export { buildDispatchSelf };
+export const AGENT_MCP_SELF_COMMAND_ENV = DISPATCH_SELF_COMMAND_ENV;
+export const AGENT_MCP_SELF_ARGS_ENV = DISPATCH_SELF_ARGS_ENV;
 
 /** Runtime context for host-side native-tooling resolution (task time). */
 export interface NativeToolingHostContext {
@@ -48,6 +65,20 @@ export interface NativeToolingHostContext {
    * policy (`srt-policy.ts`, deferral `a5a2f1d4`) so the builtins can spawn.
    */
   sandbox?: boolean;
+  /**
+   * Explicit per-run `srt` settings file for the sandbox-wrapped builtins. When
+   * set the resolver emits `srt -s <path> …` (finding 535c1101 / A4), so the
+   * per-spawn cwd allow lives in a per-run file rather than the shared
+   * `~/.srt-settings.json`. Built by {@link buildNativeToolingContext}.
+   */
+  srtSettingsPath?: string;
+  /**
+   * Server-wide `nativeTooling` from the resolved `@adhd/environment` config
+   * (`env.config.nativeTooling`) — merged BENEATH an agent's own
+   * `def.nativeTooling` at task time, agent wins (finding A1). Absent ⇒ no
+   * server-wide layer.
+   */
+  defaultNativeTooling?: NativeToolingConfig;
 }
 
 /** An agent definition carrying at least the two fields resolution reads. */
@@ -74,14 +105,128 @@ export function withDefaultMcpServers<T extends ResolvableDefinition>(
   def: T,
   ctx: NativeToolingHostContext
 ): T & { mcpServers: Record<string, McpServerConfig> } {
-  const native = resolveNativeToolingMap(def.nativeTooling ?? {}, {
+  // A1: the server-wide `nativeTooling` (env/config surface) is merged BENEATH
+  // the agent's own `def.nativeTooling` — the agent wins. The MERGED config is
+  // resolved (and carried onto the returned definition so consumers such as the
+  // HITL predicate see the effective value); the STORED definition is never
+  // mutated, and no resolved root is persisted (ADR-0008 D4).
+  const effectiveNativeTooling = mergeNativeTooling(
+    ctx.defaultNativeTooling,
+    def.nativeTooling
+  );
+  const native = resolveNativeToolingMap(effectiveNativeTooling, {
     cwd: ctx.cwd,
     env: ctx.env,
     dispatchSelf: ctx.dispatchSelf,
     sandbox: ctx.sandbox,
+    srtSettingsPath: ctx.srtSettingsPath,
   });
   // explicit `mcpServers` WIN over nativeTooling > dispatch floor (D1/D4).
-  return { ...def, mcpServers: { ...native, ...(def.mcpServers ?? {}) } };
+  return {
+    ...def,
+    nativeTooling: effectiveNativeTooling,
+    mcpServers: { ...native, ...(def.mcpServers ?? {}) },
+  };
+}
+
+/**
+ * Merge the server-wide native-tooling config BENEATH an agent's own (A1): the
+ * agent's value wins per member, and for two plain override objects the fields
+ * are merged (agent field wins). Pure — neither input is mutated.
+ *
+ * Special member values: `false` (agent disables) wins outright; `true` (agent
+ * enables the zero-override builtin) inherits the server-wide tuning if any;
+ * an `McpServerConfig` REPLACES the builtin wholesale and therefore wins.
+ */
+export function mergeNativeTooling(
+  base: NativeToolingConfig | undefined,
+  over: NativeToolingConfig | undefined
+): NativeToolingConfig | undefined {
+  if (!base) return over;
+  if (!over) return base;
+  const merged: NativeToolingConfig = {
+    fs: mergeMember(base.fs, over.fs) as NativeToolingConfig['fs'],
+    shell: mergeMember(base.shell, over.shell) as NativeToolingConfig['shell'],
+    dispatch: mergeMember(base.dispatch, over.dispatch) as NativeToolingConfig['dispatch'],
+    hitl: over.hitl !== undefined ? over.hitl : base.hitl,
+  };
+  if (over.askPolicy !== undefined) merged.askPolicy = over.askPolicy;
+  else if (base.askPolicy !== undefined) merged.askPolicy = base.askPolicy;
+  return merged;
+}
+
+function isMcpServerConfigLike(value: unknown): value is McpServerConfig {
+  return (
+    !!value &&
+    typeof value === 'object' &&
+    typeof (value as Record<string, unknown>)['transport'] === 'string'
+  );
+}
+
+function mergeMember(base: unknown, over: unknown): unknown {
+  if (over === undefined) return base;
+  if (over === false) return false;
+  if (over === true) return base === undefined ? true : base;
+  if (isMcpServerConfigLike(over)) return over;
+  if (
+    base !== undefined &&
+    base !== null &&
+    typeof base === 'object' &&
+    !isMcpServerConfigLike(base)
+  ) {
+    return {
+      ...(base as Record<string, unknown>),
+      ...(over as Record<string, unknown>),
+    };
+  }
+  return over;
+}
+
+/**
+ * Bridge the resolved `@adhd/environment` `nativeTooling` shape (readonly
+ * arrays, every leaf present) into an `@adhd/agent-base-types`
+ * {@link NativeToolingConfig} (mutable arrays, optional leaves). The two shapes
+ * are the same data; only `readonly`/optionality differ, so a cast would be
+ * required — this explicit mapping keeps it type-safe.
+ */
+export function nativeToolingFromResolvedConfig(cfg: {
+  fs: {
+    root: string | undefined;
+    readOnly: boolean | undefined;
+    allowedTools: readonly string[] | undefined;
+    disallowedTools: readonly string[] | undefined;
+  };
+  shell: {
+    root: string | undefined;
+    allowCommands: readonly string[] | undefined;
+    timeoutMs: number | undefined;
+  };
+  dispatch: {
+    allowedTools: readonly string[] | undefined;
+    disallowedTools: readonly string[] | undefined;
+  };
+  hitl: boolean;
+}): NativeToolingConfig {
+  const copy = (v: readonly string[] | undefined): string[] | undefined =>
+    v === undefined ? undefined : [...v];
+  return {
+    fs: {
+      root: cfg.fs.root,
+      readOnly: cfg.fs.readOnly,
+      allowedTools: copy(cfg.fs.allowedTools),
+      disallowedTools: copy(cfg.fs.disallowedTools),
+    },
+    shell: {
+      root: cfg.shell.root,
+      allowCommands: copy(cfg.shell.allowCommands),
+      timeoutMs: cfg.shell.timeoutMs,
+    },
+    dispatch: {
+      allowedTools: copy(cfg.dispatch.allowedTools),
+      disallowedTools: copy(cfg.dispatch.disallowedTools),
+    },
+    hitl: cfg.hitl,
+  };
 }
 
 /**
@@ -107,51 +252,42 @@ export function resolveDefinitionNativeTooling(
   return withDefaultMcpServers(def, ctx);
 }
 
-/** Env override for the real agent-mcp server command surfaced as `dispatch` (D1). */
-export const AGENT_MCP_SELF_COMMAND_ENV = 'ADHD_AGENT_MCP_COMMAND';
-/** Env override (whitespace-separated) for the `dispatch` server args. */
-export const AGENT_MCP_SELF_ARGS_ENV = 'ADHD_AGENT_MCP_ARGS';
-
-/**
- * The REAL agent-mcp MCP server config surfaced as the `dispatch` member (D1).
- * Defaults to the ONE canonical launch config (`AGENT_MCP_NPX_ARGS`,
- * `npx -y @adhd/agent-mcp@latest` — the same argv `agent-mcp-install` writes),
- * overridable by env so a hermetic host/e2e can point at a local build. The
- * registry routes the `agent-mcp` name to its in-process tool surface (never a
- * spawn), so this config documents the surface rather than re-authoring it.
- */
-export function buildDispatchSelf(env: NodeJS.ProcessEnv = process.env): McpServerConfig {
-  const command = env[AGENT_MCP_SELF_COMMAND_ENV] || 'npx';
-  const rawArgs = env[AGENT_MCP_SELF_ARGS_ENV];
-  const args = rawArgs
-    ? rawArgs.split(/\s+/).filter(Boolean)
-    : [...AGENT_MCP_NPX_ARGS];
-  return { transport: 'stdio', command, args };
-}
-
 export interface BuildNativeToolingContextOptions {
   /** Dispatching cwd; defaults to `process.cwd()` read per call. */
   cwd?: string;
   dispatchSelf?: McpServerConfig;
   env?: Record<string, string>;
   sandbox?: boolean;
+  /** Server-wide `nativeTooling` merged beneath the agent's own (A1). */
+  defaultNativeTooling?: NativeToolingConfig;
 }
 
 /**
  * Assemble the task-time context, injecting the local `node_modules/.bin` on
- * `PATH` so the `srt`-wrapped `npx`/`uvx` children resolve their launchers.
+ * `PATH` so the `srt`-wrapped `npx`/`uvx` children resolve their launchers, and
+ * (when the sandbox is on) threading the per-run `srt` settings path the host
+ * provisioned at startup (`provisionRunSrtPolicy`, A3/A4) so the builtins spawn
+ * with a per-spawn cwd allow via `srt -s` rather than the shared global file.
+ *
+ * `undefined` when no run policy was provisioned (e.g. a bare `createServer` in
+ * a test, or `sandbox:false`) — the resolver then emits a plain `srt` command.
  */
 export function buildNativeToolingContext(
   opts: BuildNativeToolingContextOptions = {}
 ): NativeToolingHostContext {
+  const cwd = opts.cwd ?? process.cwd();
   const path = ensureBinDirOnPath(process.env['PATH'], resolveNativeBinDir());
   const env: Record<string, string> = { ...(opts.env ?? {}) };
   if (path) env['PATH'] = path;
+  const srtSettingsPath =
+    opts.sandbox === false ? undefined : getSrtRunSettingsPath();
   return {
-    cwd: opts.cwd ?? process.cwd(),
+    cwd,
     dispatchSelf: opts.dispatchSelf ?? buildDispatchSelf(),
     env: Object.keys(env).length > 0 ? env : undefined,
     sandbox: opts.sandbox,
+    srtSettingsPath,
+    defaultNativeTooling: opts.defaultNativeTooling,
   };
 }
 

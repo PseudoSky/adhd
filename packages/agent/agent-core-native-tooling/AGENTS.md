@@ -20,8 +20,15 @@ Public surface (`src/index.ts`):
   projections.
 - `matchPermission(ruleMap, toolName)` — thin gate: tool **NAME**, last-match-wins,
   `deny` terminal. Never parses command text.
+- `buildDispatchSelf(env?)` — the ONE canonical agent-mcp self launch config
+  (default argv `DISPATCH_SELF_DEFAULT_ARGS`, env pair
+  `ADHD_AGENT_MCP_COMMAND`/`ADHD_AGENT_MCP_ARGS`), shared by agent-mcp and
+  dispatch-cli, so no host authors a second self config.
+- `NativeResolveContext.srtSettingsPath` — when set, the resolver emits
+  `srt -s <path> …` for the builtins, letting the host hand each spawn its own
+  per-run policy file (finding 535c1101 / A4) instead of the shared global one.
 - `NATIVE_SERVER_CATALOG`, `FS_SERVER`, `SHELL_SERVER`, `SRT_SANDBOX`,
-  `wrapWithSandbox`, `DISPATCH_SERVER_KEY`.
+  `wrapWithSandbox`, `DISPATCH_SERVER_KEY`, `DISPATCH_SELF_DEFAULT_ARGS`.
 
 ## What it deliberately does NOT own
 

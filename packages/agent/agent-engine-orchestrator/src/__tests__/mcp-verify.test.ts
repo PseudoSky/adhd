@@ -16,6 +16,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 import type { AgentDefinition } from '../validation/index.js';
+import type { EngineConfig } from '../interfaces.js';
 import { verifyAgentMcpServers } from '../tools/mcp-verify.js';
 
 const FIXTURE = fileURLToPath(
@@ -130,5 +131,49 @@ describe('verifyAgentMcpServers — handshake before a real task (1f352507)', ()
       { agentStore: fakeAgentStore({}) }
     );
     expect(result.servers).toEqual([]);
+  });
+
+  // A5 — the verify path must spawn the SAME env the task path does.
+  it('A5: threads the engine config so a stdio verify spawns with the curated subprocessEnv', async () => {
+    // The child process does NOT inherit arbitrary parent env (the SDK safe-inherit
+    // set excludes it), so `VERIFY_ENV_TOKEN` can only reach it via
+    // `subprocessEnv()`. The fixture exposes `env-seen` iff it saw the token.
+    const prev = process.env['VERIFY_ENV_TOKEN'];
+    delete process.env['VERIFY_ENV_TOKEN'];
+    try {
+      const withConfig = await verifyAgentMcpServers(
+        { name: 'env-threaded' },
+        {
+          agentStore: fakeAgentStore({
+            echo: { transport: 'stdio', command: process.execPath, args: [FIXTURE] },
+          }),
+          // The SAME shape the registry/task path passes.
+          config: {
+            subprocessEnv: () => ({ VERIFY_ENV_TOKEN: 'tok' }),
+          } as unknown as EngineConfig,
+        }
+      );
+      expect(withConfig.servers[0].status).toBe('verified');
+      expect(withConfig.servers[0].tools).toContain('echo');
+      // TEETH: present ONLY because the engine config was threaded.
+      expect(withConfig.servers[0].tools).toContain('env-seen');
+
+      // Negative control: with NO engine config the child gets no token, so the
+      // env-dependent tool is absent — proving the assertion above has teeth.
+      const withoutConfig = await verifyAgentMcpServers(
+        { name: 'env-missing' },
+        {
+          agentStore: fakeAgentStore({
+            echo: { transport: 'stdio', command: process.execPath, args: [FIXTURE] },
+          }),
+        }
+      );
+      expect(withoutConfig.servers[0].status).toBe('verified');
+      expect(withoutConfig.servers[0].tools).toContain('echo');
+      expect(withoutConfig.servers[0].tools).not.toContain('env-seen');
+    } finally {
+      if (prev === undefined) delete process.env['VERIFY_ENV_TOKEN'];
+      else process.env['VERIFY_ENV_TOKEN'] = prev;
+    }
   });
 });

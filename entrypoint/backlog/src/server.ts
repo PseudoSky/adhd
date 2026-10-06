@@ -59,7 +59,11 @@ import {
   hasExternalSignalHandling,
   installSignalCleanup,
 } from './store/signal-cleanup.js';
-import { buildBacklogEnv, resolveBacklogDbPath } from './env.js';
+import {
+  buildBacklogEnv,
+  resolveBacklogDbPath,
+  isLiveProductionStore,
+} from './env.js';
 // The BAKE-AT-BUILD artifact reader (design doc Revision 3). Deliberately
 // ts-morph-free: this is the module `extractApiOperations` prefers on the hot
 // startup path, so importing it must never drag the extractor in. The
@@ -456,6 +460,13 @@ export interface StartOpts {
   /** Explicit-parameter-first namespace override — see
    *  `BuildBacklogEnvOptions.namespace`'s doc comment. */
   namespace?: string;
+  /**
+   * (S02 AC14) The explicit TYPED production-write gate. `true` opens writes
+   * against the LIVE production store; absent/false refuses them loudly. A
+   * long-lived `serve` in production therefore requires a deliberate opt-in —
+   * never an env toggle (RSD-18 / ADR-0013).
+   */
+  allowProductionWrite?: boolean;
 }
 
 /**
@@ -802,9 +813,23 @@ export async function createBacklogServer(
   // stay resolve-once (swapping the whole env mid-process would move an
   // already-open store) and `ctx.env` is never reassigned. See
   // `write/embedding-config.ts` and `api.ts`'s `ensureSemanticReady`.
+  // S02 AC14: attach the production-write gate ONLY when this server actually
+  // resolves the live production store; an isolated run is left ungated.
+  const productionWrite = isLiveProductionStore({
+    namespace: opts.namespace,
+    scope: opts.scope,
+    adhdRoot: opts.adhdRoot,
+    dbPathOverride: env.config.db.path,
+  })
+    ? {
+        isProductionStore: true,
+        allowProductionWrite: opts.allowProductionWrite === true,
+      }
+    : undefined;
   const ctx: BacklogCtx = {
     store,
     env,
+    ...(productionWrite !== undefined ? { productionWrite } : {}),
     embeddingConfig: createEmbeddingLiveConfig({
       baseline: env,
       rebuild: () =>

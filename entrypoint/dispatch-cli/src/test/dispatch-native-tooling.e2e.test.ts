@@ -71,8 +71,8 @@ function productionRunner(opts: {
   return buildProductionAgentMcpRunner(
     {
       ...process.env,
-      ADHD_DISPATCH_AGENT_MCP_COMMAND: process.execPath,
-      ADHD_DISPATCH_AGENT_MCP_ARGS: AGENT_MCP_DIST,
+      ADHD_AGENT_MCP_COMMAND: process.execPath,
+      ADHD_AGENT_MCP_ARGS: AGENT_MCP_DIST,
       // Pin a synthetic, cwd-INDEPENDENT backlog entry — the backlog server is
       // never required to work here (only probed by `agent_verify_mcp`, where it
       // fails fast), and a cwd-relative path would muddy the "no /P root" check.

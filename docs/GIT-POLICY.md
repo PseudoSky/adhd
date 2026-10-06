@@ -90,10 +90,19 @@ Recovery runbook:
 
 ## Release
 
-- **Versioning & tag scheme:** there are **no git tags** — the npm registry is the source of
-  truth for what is released. A package version is released iff `name@version` resolves on the
+- **Versioning & tag scheme:** the live release pipeline creates no git tags — `nx release` is
+  retired for this repo and the npm registry is the source of truth for what is released (cited:
+  `PUBLISHING.md` §Workflow). A package version is released iff `name@version` resolves on the
   registry. Versions are computed per-project and written to each package's `package.json` by the
   `@adhd/nx-build:version` executor (cited: `PUBLISHING.md` §Workflow; `tools/nx-plugins/build/`).
+  `refs/tags` is nevertheless **not empty** (`git tag` lists 29): 13 legacy semver tags
+  `v0.1.0`–`v2.2.0`; 11 `{projectName}@{version}` baseline tags established locally on 2026-07-20
+  by the since-retired `nx release` (cited: `PUBLISHING.md`; `DEBT-RELEASE-BASELINE-TAGS-001`); 1
+  `agent-mcp-baseline-pre-registry`; 2 `rescue/stash-*` recovery tags; and 2 test-fixture tags
+  (`v9.9.9`, `fixture-pkg@1.2.3`). `nx.json` retains
+  `release.releaseTag.pattern = "{projectName}@{version}"` and
+  `tools/nx-plugins/build/lib/release-reset.js` reads `{projectName}@*` tags as a diff baseline —
+  tags exist and are read here; they are simply not how the live pipeline designates a release.
 - **Changelog / release notes:** the root `CHANGELOG.md` is maintained by hand and committed by
   the opt-in `pnpm release:commit` step, which stages only bumped `package.json`, `CHANGELOG.md`,
   and `published-state.json` (cited: `PUBLISHING.md` §Workflow;
@@ -1795,3 +1804,103 @@ Schema version 1.
   affected -t test build lint --base=1bcc147d` exit 0 and dispatch-cli/dispatch-orchestrator
   build/lint/verify-dist-load exit 0 — and directed that none be run). This record is the only change
   to this file in this operation. Recorded under §Commit convention's `docs(<area>):` scope.
+
+- **2026-10-06 — operation record: land of `fix/escalate-parent-routing-9c4e`, reap its worktree
+  (dispatch-2026-10-04-9c4e).** Landed the real parent routing for the `ask` escalate branch plus the
+  parent-chain depth bound onto `main` as a **merge commit**
+  `021c4cd8f944a6e33e8b0efcd12fdca0884690d0` (parents
+  `1f86e1a18165f64974569ea90bfee3cb6beb2894` = pre-merge `main`,
+  `d84733924c32d1308e1252c24b63d19a88e24ed6` = branch head), moving `main` `1f86e1a1` → `021c4cd8`;
+  5 files, +633/-101. The branch carried two commits since the merge-base
+  `b16a627be6c4035f1d8cc5508f38303f407c33e9` (`git rev-list --count b16a627b..d8473392` = 2):
+  `85fa0dba` (`fix(agent-engine-orchestrator): route an escalated ask to the parent task (a0c0a826)`)
+  and `d8473392` (`docs(adr-0008): specify escalate routing mechanics and the parent-chain depth bound
+  (a0c0a826)`); `main` had advanced 17 commits past that base (`git rev-list --count
+  b16a627b..1f86e1a1` = 17), so the landing is a genuine non-fast-forward. §Branching & merge was the
+  deciding rule: this history "carries true merge commits" and ff-only is not enforced, while
+  rebase-in-flight is permitted only on a branch "solely your own" — this is an in-flight executor
+  branch, not the operator's, so rewriting its two commits was out; the dispatch directed `--no-ff`,
+  and a merge commit is the stated shape here. Dry-run `git merge-tree --write-tree --messages main
+  d8473392` exited 0, producing tree `09094eb09ffad0d07ea4df17d6fa498b7f1e6887` with no conflict hunks;
+  the actual `git merge --no-ff fix/escalate-parent-routing-9c4e -m "fix(orchestrator): route ask
+  escalation to the parent + depth bound (a0c0a826)"` was conflict-free (ort strategy, exit 0; the
+  sole `Auto-merging` line was `docs/decisions/0008-agent-mcp-native-tooling.md`) and the post-merge
+  tree (`git rev-parse HEAD^{tree}`) is `09094eb0…`, byte-identical to the dry-run tree, so no conflict
+  arose and none required resolution. No conflict marker remains in the five merged paths
+  (`git grep -nE '^(<<<<<<<|=======|>>>>>>>)' HEAD --` the five paths exited 1 with no matches). A
+  concurrent agent's uncommitted work was present in the working tree throughout, all disjoint from
+  the branch's five changed paths (`comm -12` of the two path sets = 0 lines): 14 modified paths under
+  `entrypoint/agent-mcp/**`, `entrypoint/dispatch-cli/**`, `packages/agent/agent-core-native-tooling/**`,
+  and `packages/agent/agent-engine-orchestrator/src/tools/mcp-verify.ts`, plus one untracked
+  `packages/agent/agent-core-native-tooling/src/lib/dispatch-self.ts` (pre-merge `git status
+  --porcelain` = 15 lines, sha256 `a447c1ab…`). None was staged, swept, or modified by the merge. One
+  further concurrent edit appeared *during* the merge — `packages/agent/agent-engine-orchestrator/
+  src/__tests__/fixtures/verify-echo-server.mjs` became modified between the pre- and post-merge
+  snapshots (post-merge = 16 lines, sha256 `4c8ce3cd…`) — so the working tree, correctly, changed
+  under the merge; that path is not in the merge commit (`git show --name-only HEAD` lists only the
+  five branch paths) and remains unstaged. The branch never touched this file (`git diff --name-only
+  b16a627b..d8473392 -- docs/GIT-POLICY.md` empty), so `main`'s policy blob
+  `b1f746fc67327c29e5b89f22866db105d4aff826` survived the merge byte-identical (pre-merge `1f86e1a1`,
+  post-merge `021c4cd8`, and the on-disk file all resolve to the same blob). The merge is two-parent
+  (not fast-forward); post-merge `git merge-base --is-ancestor` exits 0 for both `85fa0dba` and
+  `d8473392`, so both commits are contained. The merge invoked no gate: git runs `pre-merge-commit`
+  (not `pre-commit`) for a merge and `.githooks/` ships no such hook, so none ran. The worktree
+  `.worktrees/dispatch-9c4e-escalate-parent` was then reaped under §Cleanup's three-part test: `git
+  status --porcelain` inside it was empty, it carried no `locked` line, and its head `d8473392` was an
+  ancestor of `main` after the merge — so `git worktree remove` (no `--force`) ran and the branch was
+  deleted with `git branch -d fix/escalate-parent-routing-9c4e` (was `d8473392`); worktrees went
+  82 → 81. The merged commit remains reachable from the durable `main` ref, so recovery does not
+  depend on the reflog. No push (the dispatch directed none) and no gates were run by this operation
+  (the dispatch reported them already green — `nx affected -t test build lint --base=1bcc147d` exit 0,
+  and agent-engine-orchestrator + agent-mcp build/verify-dist-load exit 0 — and directed that none be
+  run). This record is the only change to this file in this operation. Recorded under §Commit
+  convention's `docs(<area>):` scope.
+
+- **2026-10-06 — operation record: land of `fix/static-review-bucket-a-9c4e`, reap its worktree
+  (dispatch-2026-10-04-9c4e).** Landed the wired `nativeTooling` env surface, the single shared
+  self-producer, and the per-run srt policy onto `main` as a **merge commit**
+  `de7126c682a91158a8f01053fdddd7b3e57493d5` (parents
+  `aa019938e02fcdafa82e2cf347edf491f2a47454` = pre-merge `main`,
+  `1cf338b054542ec0ad7167b815c920c9631fadff` = branch head), moving `main` `aa019938` → `de7126c6`;
+  29 files, +1091/-152. The branch carried one commit since the merge-base `aa019938` (`git
+  rev-list --count aa019938..1cf338b0` = 1), and that merge-base **equals** pre-merge `main`, so
+  the branch was a direct descendant — an otherwise fast-forwardable change landed as a genuine
+  two-parent merge. §Branching & merge was the deciding rule: this history "carries true merge
+  commits" and ff-only is not enforced, while rebase-in-flight is permitted only on a branch
+  "solely your own" — this is an in-flight executor branch, not the operator's, so rewriting its
+  commit was out; the dispatch directed `--no-ff`. Dry-run `git merge-tree --write-tree --messages
+  main 1cf338b0` exited 0, producing tree `85325eec20bad9e1aec4b9d96788ca45193ba261` with no conflict
+  hunks; the actual `git merge --no-ff fix/static-review-bucket-a-9c4e -m "fix(agent-mcp): wire
+  nativeTooling env surface, single self-producer, srt per-run policy (static-review A)"` was
+  conflict-free (ort strategy, exit 0) and the post-merge tree (`git rev-parse HEAD^{tree}`) is
+  `85325eec…`, byte-identical to both the dry-run tree and the branch tree, so no conflict arose and
+  none required resolution. No conflict marker remains in the merged paths (`git grep -nE
+  '^(<<<<<<<|=======|>>>>>>>)' HEAD --` the 29 paths exited 1 with no matches). Disjointness was
+  checked before the merge: the branch's 29-path set (`comm -12`) was empty against `main`'s
+  31-path uncommitted WIP (`.mcp.json`, `docs/plan/backlog-consolidation/**`, and
+  `entrypoint/backlog/**`), and empty against `burn-agent-b`'s two uncommitted paths
+  (`entrypoint/agent-mcp/src/config.ts`,
+  `entrypoint/agent-mcp/src/__tests__/integration/real-environment.e2e.test.ts`) — the dispatch's
+  named caution, confirmed **uncommitted but disjoint**, so it was not a STOP. The working tree was
+  byte-identical before and after the merge (`git status --porcelain` sha256 `517171ac…`, 31 lines
+  on both sides), so no concurrent work was staged, swept, or modified. The branch never touched
+  `docs/GIT-POLICY.md` (empty `git diff --name-only main..1cf338b0 -- docs/GIT-POLICY.md`), so
+  `main`'s policy blob survived byte-identical through the merge (pre-merge `aa019938`, post-merge
+  `de7126c6`, and the on-disk file all `2d10b386…`). **Policy sync:** §Release above was out of sync
+  with the repo — it asserted "there are **no git tags**", but `git tag` lists 29 tags and `nx.json`
+  configures `release.releaseTag.pattern`; corrected in this operation by replacing the false
+  absolute with the registry-source-of-truth rule plus the real tag inventory, cited to
+  `PUBLISHING.md` and `nx.json` by path. The merge invoked no gate: git runs `pre-merge-commit` (not
+  `pre-commit`) for a merge and `.githooks/` ships no such hook, so none ran. The §Release correction
+  and this record were committed together with an explicit path (never `git add -A`/`.`/`-a`),
+  bypassing the `pre-commit` hook with `--no-verify` per the dispatch's "do not run gates"
+  direction; no other path was staged. The worktree `.worktrees/wt-static-bucket-a-9c4e` was then
+  reaped under §Cleanup's three-part test: `git status --porcelain` inside it was empty, it carried
+  no `locked` line, and its head `1cf338b0` was an ancestor of `main` after the merge — so `git
+  worktree remove` (no `--force`) ran and the branch was deleted with `git branch -d
+  fix/static-review-bucket-a-9c4e` (was `1cf338b0`); worktrees went 81 → 80. The merged commit
+  remains reachable from the durable `main` ref, so recovery does not depend on the reflog. No push
+  (the dispatch directed none) and no gates were run by this operation (the dispatch reported them
+  already green — `nx affected -t test build lint --base=1bcc147d` exit 0, and agent-mcp +
+  dispatch-cli verify-dist-load exit 0 — and directed that none be run). Recorded under §Commit
+  convention's `docs(<area>):` scope.

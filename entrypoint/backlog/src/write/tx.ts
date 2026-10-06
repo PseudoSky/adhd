@@ -27,7 +27,10 @@ import type { AdapterTransaction, StoreAdapter } from '@adhd/sox-store-adapter';
 import type { TypePolicy } from '@adhd/sox-graph-store';
 import { randomUUID, createHash } from 'node:crypto';
 import {
+  AmbiguousReferenceError,
   BacklogWriteError,
+  IssueNotFoundError,
+  IssueNotRestorableError,
   SingleValuedRelationConflictError,
   StaleSupersedeError,
   WriteContentionError,
@@ -36,12 +39,17 @@ import {
 } from './errors.js';
 import {
   type INodeReadExecutor,
+  type IUidCandidate,
   classifyUidRef,
   missingUidError,
   queryLiveUidPrefixCandidates,
   selectUniqueUidCandidate,
   tooShortUidError,
 } from './uid-prefix.js';
+import {
+  type IProductionWriteGate,
+  assertProductionWriteAllowed,
+} from './production-gate.js';
 
 /**
  * The on-write embedding substrate (§4b, FEAT-021) — the narrow slice of
@@ -109,6 +117,15 @@ export interface IWriteStoreHandle {
    * wiring and the touch-vs-supersede scope decision).
    */
   readonly embedding?: IEmbeddingBackend;
+  /**
+   * (S02 AC14) The explicit production-write gate — OPTIONAL and inert when
+   * absent. Only a transport that has positively established the handle points
+   * at the LIVE production store (`cli.ts`/`server.ts`) attaches one; every
+   * direct-store caller (tests, ETL, the library surface) leaves it off, so
+   * this gate can never fail open into a domain-write outage. See
+   * `production-gate.ts` for the refusal contract.
+   */
+  readonly productionWrite?: IProductionWriteGate;
 }
 
 /** A node row as read back inside a transaction, mapped onto the fields the write layer needs. */
@@ -319,6 +336,60 @@ export async function resolveLiveIssueTx(
   if (row.isSuperseded) {
     throw new StaleSupersedeError(uid);
   }
+  return row;
+}
+
+/**
+ * (S02 AC14) uid reference → a SOFT-DELETED (`delete`d) `issue` row, inside a
+ * tx — the resolver `restore` needs.
+ *
+ * The inverse of {@link resolveUidPrefixTx}'s liveness filter, deliberately:
+ * it INCLUDES `t_invalid IS NOT NULL` rows (that is the whole point of a
+ * restore) and REFUSES a live one, so a caller cannot "restore" something that
+ * was never deleted. Exact uid is the fast path; a unique prefix is accepted
+ * with the same too-short / ambiguous rules as the live resolver. A uid naming
+ * a non-`issue` kind is `IssueNotFoundError`, exactly as the live path reports.
+ *
+ * @throws IssueNotFoundError when nothing (live or deleted) matches.
+ * @throws IssueNotRestorableError when the exact uid names a LIVE issue (or
+ *   the caller is expected to restore something that was never retired).
+ * @throws AmbiguousReferenceError when a prefix matches more than one deleted row.
+ */
+export async function resolveRestorableIssueTx(
+  tx: INodeReadExecutor,
+  ref: string
+): Promise<ITxNodeRow> {
+  const exact = await getNodeByUidTx(tx, ref);
+  if (exact) {
+    if (exact.kind !== 'issue') throw new IssueNotFoundError(ref);
+    if (exact.tInvalid === null) {
+      throw new IssueNotRestorableError(ref, 'live');
+    }
+    return exact;
+  }
+
+  const refKind = classifyUidRef(ref);
+  if (refKind === 'too-short') throw tooShortUidError(ref);
+  if (refKind !== 'prefix') throw new IssueNotFoundError(ref);
+
+  const lower = ref.toLowerCase();
+  const { rows } = await tx.executeAll<IRawNodeRow>(
+    'SELECT * FROM node WHERE uid >= ? AND uid < ? AND t_invalid IS NOT NULL',
+    [lower, `${lower}\uffff`]
+  );
+  const deletedIssues: IUidCandidate[] = rows
+    .filter((row) => row.kind === 'issue')
+    .map((row) => ({
+      uid: row.uid,
+      kind: row.kind,
+      name: row.name,
+      isSuperseded: row.is_superseded === 1,
+    }));
+  const chosen = selectUniqueUidCandidate(ref, deletedIssues);
+  if (!chosen) throw new IssueNotFoundError(ref, true);
+
+  const row = await getNodeByUidTx(tx, chosen.uid);
+  if (!row) throw new IssueNotFoundError(ref, true);
   return row;
 }
 
@@ -935,6 +1006,9 @@ export async function executeWriteTransaction<T>(
   handle: IWriteStoreHandle,
   fn: (tx: AdapterTransaction) => Promise<T>
 ): Promise<T> {
+  // (S02 AC14) The production-write gate runs BEFORE the retry loop opens any
+  // transaction: a refusal is terminal (never retried) and has no side effect.
+  assertProductionWriteAllowed(handle, 'write');
   let attempt = 0;
   for (;;) {
     try {
