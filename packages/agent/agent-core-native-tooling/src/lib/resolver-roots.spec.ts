@@ -11,7 +11,7 @@
  * map, or the absolute-path rejection turns the matching AC RED.
  */
 import { describe, it, expect } from 'vitest';
-import type { McpServerConfig } from '@adhd/agent-base-types';
+import type { McpServerConfig, NativeToolingConfig } from '@adhd/agent-base-types';
 import { NativeToolingRootError, resolveFsRoots, resolveNativeTooling } from './resolver.js';
 
 type Stdio = Extract<McpServerConfig, { transport: 'stdio' }>;
@@ -56,7 +56,7 @@ describe('AC1 — multi-root: every hint becomes one argv entry', () => {
 
 describe('AC2 — portability: the SAME def fires from /P then /Q; stored JSON byte-identical', () => {
   it('relative hints resolve against each caller cwd, definition unchanged', () => {
-    const def = { fs: { roots: ['a', 'b'] }, shell: false, dispatch: false } as const;
+    const def: NativeToolingConfig = { fs: { roots: ['a', 'b'] }, shell: false, dispatch: false };
     const snapshot = JSON.stringify(def);
 
     const atP = resolveNativeTooling(def, { cwd: '/P' });

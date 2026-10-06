@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import type { McpServerConfig } from '@adhd/agent-base-types';
+import type { McpServerConfig, NativeToolingConfig } from '@adhd/agent-base-types';
 import { resolveNativeTooling, resolveNativeToolingMap } from './resolver.js';
 import {
   DISPATCH_SERVER_KEY,
@@ -107,7 +107,7 @@ describe('resolveNativeTooling — task-time resolution (ADR-0008 D2/D4)', () =>
   });
 
   it('AC1: shell.allowPatterns emits ALLOW_PATTERNS into the RESOLVED config (regex passthrough)', () => {
-    const cfg = { fs: false, shell: { allowPatterns: ['ls.*', 'git'] } } as const;
+    const cfg: NativeToolingConfig = { fs: false, shell: { allowPatterns: ['ls.*', 'git'] } };
     const servers = resolveNativeTooling(cfg, { cwd: '/p/a' });
     expect(shellServer(servers)!.env?.ALLOW_PATTERNS).toBe('ls.*,git');
     // The keyed projection is the SAME computation — the pattern is on the server
