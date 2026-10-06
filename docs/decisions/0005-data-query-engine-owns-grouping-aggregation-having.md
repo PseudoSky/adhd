@@ -1,6 +1,6 @@
 # ADR-0005 — The data-query-engine owns grouping, aggregation, and HAVING
 
-**Status:** ACCEPTED (2026-10-02; owner approval 2026-10-03, owner pseudosky — "I approve, you're green for impl") — **SUPERSEDED (in part) BY adhd ADR-0009 — the grammar surface only (D1/D2/D4/D5); the ownership decision and D3 stand.** The body below is unedited and remains the record of the shipped 2.x grammar.
+**Status:** ACCEPTED (2026-10-02; owner approval 2026-10-03, owner pseudosky — "I approve, you're green for impl").
 **Owner:** pseudosky.
 **Supersedes:** nothing.
 **Drives:** SPEC `49a62647-5a50-461a-b004-461b9b6bd66f`; plan `3a6f7f34-55ec-43da-a0c3-b82670902099` (stage S3, `48319772-6ab7-454e-b74b-31410e1b6c83`); the open group-by/aggregation items `a672f3ae-373a-44d9-a395-df7a0b62ad8a`, `b383acce-0d81-4424-bd1a-4e1871d687db` / `88fe8643`, `0d6cff76-4b25-4c13-bfd5-cb1dd0b2f806`.
@@ -73,7 +73,7 @@ Aggregates are the closed set in D1 (distributive/holistic), mergeable for rollu
 ## What does NOT change
 
 - The legacy pipeline when `group_by`/`aggregate` are absent runs byte-for-byte; no dirty-flag or behavior change.
-- No joins/subqueries, no per-row window functions (LAG/LEAD/rank), no materialization. **Corrected:** `select`/projection and top-N-per-group **did** ship (select as a final projection in 2.3.7; top-N as `top_n`/`_other`), so the earlier blanket exclusion of those two is struck here to match shipped behavior. The v2 `queryModel` grammar (shipped under the `queryModel` namespace) supersedes this ADR's grammar surface — see adhd ADR-0009.
+- No joins/subqueries, no per-row window functions (LAG/LEAD/rank), no materialization. **Corrected:** `select`/projection and top-N-per-group **did** ship (select as a final projection in 2.3.7; top-N as `top_n`/`_other`), so the earlier blanket exclusion of those two is struck here to match shipped behavior. The v2 `queryModel` design supersedes this ADR in turn.
 - `adhd ADR-0001` (stores), `adhd ADR-0002` (correct the source — the governing argument *for* this), `adhd ADR-0003` (CJS-only), `adhd ADR-0004` (MCP flat payload) — all untouched.
 - `order_by`/`distinct_on`/`offset`/`limit` semantics — unchanged.
 

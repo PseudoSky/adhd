@@ -35,8 +35,7 @@ This is what makes `AGENTS.md`'s parallel-process hard rule unambiguous: its `AD
 | [0002](./0002-correct-the-source-never-work-around.md) | Correct the source, never work around a functional gap (adhd ↔ sox) | ACCEPTED (2026-09-24) |
 | [0003](./0003-adhd-packages-publish-commonjs-only.md) | `@adhd/*` packages publish CommonJS-only | ACCEPTED (2026-09-25) |
 | [0004](./0004-mcp-tool-output-is-the-flat-content-payload.md) | MCP tool output is the flat payload on `content`; no `{result}` envelope | ACCEPTED (2026-09-25) |
-| [0005](./0005-data-query-engine-owns-grouping-aggregation-having.md) | The data-query-engine owns grouping, aggregation, and HAVING | ACCEPTED (2026-10-02; owner approval 2026-10-03) — SUPERSEDED (in part) BY 0009 (grammar surface only) |
-| [0009](./0009-data-query-engine-v2-query-model-grammar.md) | Adopt the v2 `queryModel` grammar (self-similar, position-typed) as the engine's grouping grammar | ACCEPTED (2026-10-06; supersedes 0005's grammar surface) |
+| [0005](./0005-data-query-engine-owns-grouping-aggregation-having.md) | The data-query-engine owns grouping, aggregation, and HAVING | ACCEPTED (2026-10-02; owner approval 2026-10-03) |
 | [0006](./0006-backlog-public-interface-freeze.md) | Backlog public interface freeze — verbs, envelope, naming | ACCEPTED (2026-10-05) — SUPERSEDED (in part) BY 0007 (breaking list only) |
 | [0007](./0007-backlog-target-public-interface.md) | Backlog target public interface — additive/breaking deltas (designated target record) | ACCEPTED (2026-10-05) |
 | [0008](./0008-agent-mcp-native-tooling.md) | Standardized, portable native tooling for dispatched agents (fs / shell / dispatch) | ACCEPTED (2026-10-05) |
