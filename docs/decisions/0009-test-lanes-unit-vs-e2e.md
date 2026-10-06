@@ -1,6 +1,6 @@
 # ADR-0009 — Test lanes: unit `test` runs no subprocess; `e2e` owns every subprocess / real-server suite
 
-**Status:** PROPOSED (2026-10-06) — awaiting owner confirmation; the lane model itself is already in force in `docs/PIPELINE.md` §2 and the apigen/backlog `e2e` targets.
+**Status:** ACCEPTED (2026-10-06) — owner approval relayed by dispatch-2026-10-06-48dc, conditional wording fix applied. The lane model itself is already in force in `docs/PIPELINE.md` §2 and the apigen/backlog `e2e` targets.
 **Owner:** devops (pipeline) with the repo owner.
 **Supersedes:** nothing.
 **Drives:** backlog 5b839b90 (agent packages: separate subprocess-spawning tests into a dedicated e2e lane).
@@ -8,7 +8,7 @@
 
 ## TL;DR for the next agent
 
-A test that spawns a process (`child_process`, `StdioClientTransport`/`StdioMcpClient`, a stdio MCP server on `npx`/`uvx`/`srt`/`node`) is an **e2e** test: name it `*.e2e.test.ts` (agent family) or `*.e2e.ts` (apigen/backlog convention) and it runs in the project's `e2e` target (`nx affected -t e2e --parallel=1`), default-running with no env gate. The unit `test` target excludes those files. Never gate an e2e behind an env flag unless it calls a paid third-party service (AGENTS.md §7). The trap: renaming a file is not enough — the project needs an `e2e` target and a `vitest.e2e.config.ts`; `check-lane-reachability.mjs` rules 1 and 8 fail the gate if either is missing.
+A test that spawns a process (`child_process`, `StdioClientTransport`/`StdioMcpClient`, a stdio MCP server on `npx`/`uvx`/`srt`/`node`) is an **e2e** test: name it `*.e2e.test.ts` (agent family) or `*.e2e.ts` (apigen/backlog convention) and it runs in the project's `e2e` target (`nx affected -t e2e --parallel=1`) — its own pipeline stage (docs/PIPELINE.md:30), not `nx test`. The unit `test` target excludes those files. Separately, e2e tests are not env-gated except under the paid-third-party exception in AGENTS.md §7. The trap: renaming a file is not enough — the project needs an `e2e` target and a `vitest.e2e.config.ts`; `check-lane-reachability.mjs` rules 1 and 8 fail the gate if either is missing.
 
 ## Context
 
@@ -18,7 +18,7 @@ A test that spawns a process (`child_process`, `StdioClientTransport`/`StdioMcpC
 
 ### D1 — Lane contract
 
-Unit `test` = no subprocess, no bound ports to real servers, fast, cacheable at `--parallel=5`. `e2e` = every suite that spawns a process or runs a real server; run with `--parallel=1`; default-running; cached on content (`cache:true`, `inputs` containing `default`, no declared `outputs`); reached by the gate via `tools/gate/lane-gate.mjs` `GATE_TARGETS` and by `publish` / `nx-release-publish`.
+Unit `test` = no subprocess, no bound ports to real servers, fast, cacheable at `--parallel=5`. `e2e` = every suite that spawns a process or runs a real server; run with `--parallel=1` as its own pipeline stage (docs/PIPELINE.md:30; in ci.yml after `lint test build verify-dist-load`, docs/PIPELINE.md:36-37), never inside `nx test`; not env-gated (paid-third-party exception only, AGENTS.md §7); cached on content (`cache:true`, `inputs` containing `default`, no declared `outputs`); reached by the gate via `tools/gate/lane-gate.mjs` `GATE_TARGETS` and by `publish` / `nx-release-publish`.
 
 ### D2 — File convention and single source
 
@@ -56,4 +56,4 @@ apigen-* and `entrypoint/backlog` lanes and their `*.e2e.ts` convention; paid-se
 
 ## Provenance
 
-- 2026-10-06 — backlog 5b839b90. AC1 and AC2 are proven by tests citing them (`check-lane-reachability.spec.mjs`, `check-agent-lane-spawn.spec.mjs`). AC3 (moved e2e still run by default) and AC4 (this ADR, AGENTS.md and PIPELINE.md pointers) have no applicable unit test: AC3 is proven by the `nx affected -t e2e --parallel=1` run, AC4 by the documents themselves.
+- 2026-10-06 — backlog 5b839b90. AC1 and AC2 are proven by tests citing them (`check-lane-reachability.spec.mjs`, `check-agent-lane-spawn.spec.mjs`). AC3 (moved e2e tests still run in the `e2e` lane, un-gated) and AC4 (this ADR, AGENTS.md and PIPELINE.md pointers) have no applicable unit test: AC3 is proven by the `nx affected -t e2e --parallel=1` run, AC4 by the documents themselves.

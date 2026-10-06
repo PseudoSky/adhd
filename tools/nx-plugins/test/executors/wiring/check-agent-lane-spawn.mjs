@@ -9,7 +9,7 @@
  * `nx affected -t test` and blocked publishing agent-engine-orchestrator
  * (native-tooling-caller-cwd.test.ts). The lane model (docs/PIPELINE.md §2,
  * docs/decisions/0009-test-lanes-unit-vs-e2e.md) is: unit `test` = no subprocess;
- * `e2e` = subprocess / real servers, `--parallel=1`, default-running.
+ * `e2e` = subprocess / real servers, `--parallel=1`, its own pipeline stage (never in `nx test`).
  *
  * WHAT IT CHECKS (any violation => exit 1). A UNIT-LANE file is any
  * `src/**\/*.{test,spec}.*` in an agent-family project that does NOT match the

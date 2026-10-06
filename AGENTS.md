@@ -201,7 +201,7 @@ You are responsible for the lint status of every file you touch. Run `npx nx lin
 
 - **Logic/Math:** Use `layer:test-logic` (Vitest/Node). Focus on edge cases and pure functions.
 - **UI/Hooks:** Use `layer:test-ui` (JSDOM/Storybook). Focus on component states and user interactions.
-- **Lanes:** unit `test` = no subprocess; subprocess / real-server tests are `*.e2e.test.ts` (agent family) or `*.e2e.ts` and run in `e2e` (`--parallel=1`, default-running, isolated cwd + fake HOME) — `docs/decisions/0009-test-lanes-unit-vs-e2e.md`; gated by lane-reachability rule 8.
+- **Lanes:** unit `test` = no subprocess; subprocess / real-server tests are `*.e2e.test.ts` (agent family) or `*.e2e.ts` and run in the `e2e` lane (`nx affected -t e2e --parallel=1`, its own pipeline stage after `test`, not in `nx test`; isolated cwd + fake HOME; env-gated only under the paid-third-party exception above) — `docs/decisions/0009-test-lanes-unit-vs-e2e.md`; gated by lane-reachability rule 8.
 - **Verification:** Before marking a task as complete, you must run the relevant test suite and ensure 0 failures.
 
 ### Proving features actually work (verification standard)

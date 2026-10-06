@@ -85,7 +85,7 @@
       }
     },
     "e2e": {
-      "//": "Subprocess / real-server lane (backlog 5b839b90 AC1; docs/decisions/0009-test-lanes-unit-vs-e2e.md). Runs ONLY src/**/*.e2e.ts and src/**/*.e2e.test.ts via vitest.e2e.config.ts; the unit `test` target excludes those files. Reached by the push/CI gate (`nx affected -t e2e --parallel=1`, tools/vite-plugins/e2e-globs.mjs + tools/gate/lane-gate.mjs) and by `publish`/`nx-release-publish`. Default-running: no env gate. Cached on content (`cache:true` + inputs); declares no outputs so it never restores over dist/. dependsOn mirrors the artifacts the spawned children execute (built dist of this project and its dependencies).",
+      "//": "Subprocess / real-server lane (backlog 5b839b90 AC1; docs/decisions/0009-test-lanes-unit-vs-e2e.md). Runs ONLY src/**/*.e2e.ts and src/**/*.e2e.test.ts via vitest.e2e.config.ts; the unit `test` target excludes those files. Reached by the push/CI gate (`nx affected -t e2e --parallel=1`, tools/vite-plugins/e2e-globs.mjs + tools/gate/lane-gate.mjs) and by `publish`/`nx-release-publish`. Its own pipeline stage, never in `nx test`; not env-gated. Cached on content (`cache:true` + inputs); declares no outputs so it never restores over dist/. dependsOn mirrors the artifacts the spawned children execute (built dist of this project and its dependencies).",
       "executor": "nx:run-commands",
       "dependsOn": [
         "^build",
