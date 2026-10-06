@@ -381,6 +381,15 @@ export interface AgentMcpRunnerConfig {
    * injected (the fake client decides its own timing).
    */
   requestTimeoutMs?: number;
+  /**
+   * Re-assert `defaultMcpServers` on an ALREADY-EXISTING agent via `agent_update`
+   * (ADR-0008 D4 / NAT-TOOL-5). The dispatch host sets `true` so a pre-existing
+   * agent is re-scoped to the CURRENT dispatching cwd on reuse — a reused agent
+   * never keeps a previous dispatch's resolved root. Default `false` preserves
+   * the pre-NAT-TOOL-5 "reuse does nothing" behavior (a resolve-free caller that
+   * leaves `defaultMcpServers` empty has nothing to re-assert anyway).
+   */
+  reassertMcpServersOnReuse?: boolean;
 }
 
 function defaultClientFactory(
@@ -424,7 +433,14 @@ export class AgentMcpRunner implements IDispatchAgentRunner {
   private readonly makeClient: () => IMcpToolClient;
   private readonly defaultMcpServers: Record<string, Record<string, unknown>>;
   private readonly createAgentsIfMissing: boolean;
+  private readonly reassertMcpServersOnReuse: boolean;
   private readonly requestTimeoutMs: number | undefined;
+  /**
+   * The cwd the spawned agent-mcp child runs in (ADR-0008 D4/D9). `undefined`
+   * means the child inherits the parent process cwd. Read by tests/the host to
+   * prove the dispatching cwd is threaded.
+   */
+  readonly cwd: string | undefined;
   private client: IMcpToolClient | null = null;
   private connecting: Promise<IMcpToolClient> | null = null;
 
@@ -432,7 +448,9 @@ export class AgentMcpRunner implements IDispatchAgentRunner {
     this.makeClient = config.clientFactory ?? defaultClientFactory(config);
     this.defaultMcpServers = config.defaultMcpServers ?? {};
     this.createAgentsIfMissing = config.createAgentsIfMissing ?? true;
+    this.reassertMcpServersOnReuse = config.reassertMcpServersOnReuse ?? false;
     this.requestTimeoutMs = config.requestTimeoutMs;
+    this.cwd = config.cwd;
   }
 
   private async getClient(): Promise<IMcpToolClient> {
@@ -484,13 +502,29 @@ export class AgentMcpRunner implements IDispatchAgentRunner {
   }
 
   async ensureAgent(unit: DispatchUnit): Promise<void> {
+    let exists = false;
     try {
       await this.callTool('agent_read', { name: unit.agent_name });
-      return; // already exists — nothing to do
+      exists = true;
     } catch (err) {
       if (!(err instanceof AgentMcpToolError) || err.code !== 'AGENT_NOT_FOUND') {
         throw err;
       }
+    }
+
+    if (exists) {
+      // Re-assert the current task-time resolution on the already-existing agent
+      // (ADR-0008 D4 / NAT-TOOL-5): the resolved fs/shell roots carry THIS
+      // dispatch's cwd, so a reused agent is re-scoped rather than keeping a
+      // previous dispatch's root. Opt-in — a resolve-free caller leaves
+      // `defaultMcpServers` empty and does nothing (the pre-NAT-TOOL-5 behavior).
+      if (this.reassertMcpServersOnReuse) {
+        await this.callTool('agent_update', {
+          name: unit.agent_name,
+          patch: { mcpServers: this.defaultMcpServers },
+        });
+      }
+      return;
     }
 
     // No-auto-create mode (backlog f1dbd0f2): a DAG-named agent that is absent

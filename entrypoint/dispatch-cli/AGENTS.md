@@ -9,6 +9,28 @@ Factual, code-grounded notes for LLM/agent consumption. This file is not marketi
 milestones into dispatch units, and fires them through an `IDispatchAgentRunner`
 (default: `AgentMcpRunner` → a spawned `@adhd/agent-mcp`). See `README.md`.
 
+## Native tooling for dispatched agents (NAT-TOOL-5 / ADR-0008)
+
+The dispatch host resolves the standardized native toolset at the **dispatching
+cwd** and threads it (and the cwd) to the runner, so a dispatched agent gets
+`fs` + `shell` + the `dispatch` self server **plus** `memory-server` + `backlog`.
+
+- `resolveDispatchMcpServers({ cwd })` (in `src/lib/core.ts`) is the ONE
+  composition: it reuses `resolveNativeToolingMap` from
+  `@adhd/agent-core-native-tooling` — the single fs/shell producer; this package
+  authors no fs/shell config of its own — and merges the explicit
+  `memory-server`/`backlog` half. Precedence: explicit `mcpServers` >
+  `nativeTooling` > the `dispatch` self floor.
+- `buildProductionAgentMcpRunner(env, { cwd })` sets the spawned agent-mcp
+  child's cwd AND roots the resolved fs/shell configs at the same `cwd`. The
+  `run` command roots at `--tools-root` when supplied, else `process.cwd()`.
+- `AgentMcpRunner` re-asserts the current resolution on an already-existing
+  agent (`agent_update`) so a reused agent is re-scoped to the current cwd.
+
+Proven default-running + hermetic (real spawned agent-mcp, fake `$HOME`, temp
+registry DB): `src/test/resolve-dispatch-mcp-servers.spec.ts`,
+`src/test/dispatch-native-tooling.e2e.test.ts`.
+
 ## Live dispatch e2e — env-gated (paid/external model)
 
 `src/test/integration/live-dispatch-five-acs.e2e.test.ts` drives the REAL system

@@ -20,6 +20,8 @@ import { createRequire } from 'node:module';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 
+import { resolveNativeToolingMap } from '@adhd/agent-core-native-tooling';
+import type { McpServerConfig, NativeToolingConfig } from '@adhd/agent-base-types';
 import type {
   DagJson,
   DagSnapshot,
@@ -248,6 +250,115 @@ export function defaultDispatchMcpServers(
 }
 
 /**
+ * The REAL agent-mcp launch config for THIS host — one place, shared by the
+ * spawned child (`buildProductionAgentMcpRunner`) and the `dispatch` self
+ * server (`buildDispatchSelfServer`, D1). Env-overridable so a hermetic test or
+ * an out-of-repo caller can point at a local build.
+ *   - `ADHD_DISPATCH_AGENT_MCP_COMMAND` (default `npx`)
+ *   - `ADHD_DISPATCH_AGENT_MCP_ARGS`    (whitespace-separated; default `-y @adhd/agent-mcp`)
+ */
+function resolveAgentMcpLaunch(env: NodeJS.ProcessEnv): {
+  command: string;
+  args: string[];
+} {
+  const command = env['ADHD_DISPATCH_AGENT_MCP_COMMAND'] ?? 'npx';
+  const args = env['ADHD_DISPATCH_AGENT_MCP_ARGS']
+    ? env['ADHD_DISPATCH_AGENT_MCP_ARGS'].split(/\s+/).filter(Boolean)
+    : ['-y', '@adhd/agent-mcp'];
+  return { command, args };
+}
+
+/**
+ * The REAL agent-mcp MCP server launch config for THIS host, surfaced as the
+ * `dispatch` member of the native toolset (ADR-0008 D1). It is the SAME
+ * command/argv `buildProductionAgentMcpRunner` spawns (both env-overridable via
+ * `ADHD_DISPATCH_AGENT_MCP_COMMAND` / `ADHD_DISPATCH_AGENT_MCP_ARGS`), never an
+ * authored wrapper — the dispatched agent's registry routes the `agent-mcp` name
+ * to agent-mcp's real, in-process tool surface.
+ */
+export function buildDispatchSelfServer(
+  env: NodeJS.ProcessEnv = process.env
+): McpServerConfig {
+  const { command, args } = resolveAgentMcpLaunch(env);
+  return { transport: 'stdio', command, args };
+}
+
+/** Options for {@link resolveDispatchMcpServers}. */
+export interface ResolveDispatchMcpServersOptions {
+  /** Env for the backlog/memory entries + the dispatch-self launch config. */
+  env?: NodeJS.ProcessEnv;
+  /**
+   * The DISPATCHING cwd (ADR-0008 D4): becomes the builtin fs root and the
+   * shell child's cwd, and is the root of the `fs`/`shell` configs. Default:
+   * `process.cwd()`, read per call (never captured at import time).
+   */
+  cwd?: string;
+  /** Override the `dispatch` self server (default: {@link buildDispatchSelfServer}). */
+  dispatchSelf?: McpServerConfig;
+  /** Wrap the builtin fs/shell with `srt` (ADR-0008 D7). Default: resolver default (true). */
+  sandbox?: boolean;
+  /**
+   * Declarative native-tooling config. Absent ⇒ the standardized defaults
+   * (`{fs:true, shell:true, dispatch:true}`, D8); set a member to `false` to
+   * omit it, or pass overrides (e.g. `{fs:{root:'/custom'}}`).
+   */
+  nativeTooling?: NativeToolingConfig;
+  /**
+   * Caller-supplied explicit servers that WIN over every other entry
+   * (explicit `mcpServers` > `nativeTooling` > `dispatch` self, D1/D4).
+   */
+  explicit?: Record<string, McpServerConfig>;
+}
+
+/**
+ * Resolve a dispatch-created agent's full `mcpServers` map at the DISPATCHING
+ * cwd (ADR-0008 D1/D4), for the `defaultDispatchMcpServers` /
+ * `buildProductionAgentMcpRunner` path:
+ *
+ *   native toolset (fs / shell / dispatch self, via the ONE producer
+ *   `resolveNativeToolingMap`)  MERGED WITH  the explicit half (memory-server +
+ *   backlog from {@link defaultDispatchMcpServers}, plus any caller `explicit`).
+ *
+ * Precedence, highest first: explicit `mcpServers` > `nativeTooling` > `dispatch`
+ * self. There is exactly ONE producer of the fs/shell configs — this function
+ * authors none of its own (it reuses `@adhd/agent-core-native-tooling`), so no
+ * second producer can appear.
+ *
+ * Resolution is against the passed `cwd`; the result is returned to the caller
+ * (never persisted by this function). The dispatch host threads this map — and
+ * the same `cwd` — to the runner so a dispatched agent gets fs+shell+dispatch
+ * rooted at the dispatching directory, plus backlog+memory.
+ */
+export function resolveDispatchMcpServers(
+  opts: ResolveDispatchMcpServersOptions = {}
+): Record<string, McpServerConfig> {
+  const env = opts.env ?? process.env;
+  const cwd = opts.cwd ?? process.cwd();
+  const native = resolveNativeToolingMap(opts.nativeTooling, {
+    cwd,
+    dispatchSelf: opts.dispatchSelf ?? buildDispatchSelfServer(env),
+    ...(opts.sandbox !== undefined ? { sandbox: opts.sandbox } : {}),
+  });
+  // The explicit half: memory-server + backlog (environment-overridable), then
+  // any caller-supplied explicit servers win over all of the above.
+  const explicitHalf = defaultDispatchMcpServers(env) as unknown as Record<
+    string,
+    McpServerConfig
+  >;
+  return { ...native, ...explicitHalf, ...(opts.explicit ?? {}) };
+}
+
+/**
+ * The cwd a production dispatch roots at (ADR-0008 D4): the operator's
+ * `--tools-root`, else the dispatching host's `process.cwd()`. Kept as a named
+ * function so the runner cwd and `OrchestratorDeps.toolsRoot` are provably the
+ * same value (`--tools-root` stays consistent with the resolved fs/shell roots).
+ */
+export function resolveProductionRunnerCwd(toolsRoot?: string): string {
+  return toolsRoot ?? process.cwd();
+}
+
+/**
  * Production `AgentMcpRunner` wiring — spawns agent-mcp via `npx -y
  * @adhd/agent-mcp` by default (matching agent-mcp's documented Quickstart).
  *
@@ -262,6 +373,13 @@ export interface ProductionRunnerOverrides {
   /** Test seam: inject the MCP client instead of spawning `command`/`args`. */
   clientFactory?: () => IMcpToolClient;
   /**
+   * Extra env vars merged over the current process env for the SPAWNED
+   * agent-mcp child. Used by hermetic e2e (isolated `HOME` + a temp
+   * `ADHD_AGENT_DATABASE_PATH` so `loadEnvHierarchy`'s `<cwd>/.env` override can
+   * never redirect the store — ADR-0008 D11).
+   */
+  env?: Record<string, string>;
+  /**
    * No-auto-create override (backlog f1dbd0f2). Defaults to `false` for the
    * dispatch host: a DAG's `agent` field names an operator-owned agent, and a
    * missing one (e.g. a persona since `agent_delete`d) must FAIL the run rather
@@ -270,32 +388,70 @@ export interface ProductionRunnerOverrides {
    * pre-exists.
    */
   createAgentsIfMissing?: boolean;
+  /**
+   * The DISPATCHING cwd (ADR-0008 D4). Threaded to the spawned agent-mcp child
+   * (so the host resolves native tooling against it at task time) AND used to
+   * root the resolved fs/shell configs. Default: `process.cwd()`.
+   */
+  cwd?: string;
+  /** Declarative native-tooling config for the resolved map. Default: standardized defaults. */
+  nativeTooling?: NativeToolingConfig;
+  /** Wrap the builtin fs/shell with `srt` (ADR-0008 D7). Default: resolver default (true). */
+  sandbox?: boolean;
+  /** Extra explicit `mcpServers` that win over the native toolset (D1/D4). */
+  mcpServers?: Record<string, McpServerConfig>;
+  /**
+   * Re-assert the resolved `mcpServers` on an ALREADY-EXISTING agent
+   * (ADR-0008 D4 / NAT-TOOL-5). Defaults to `true` for the dispatch host so a
+   * reused agent never keeps a previous dispatch's resolved root; `calibrate`
+   * may leave it as-is (its agent is always fresh).
+   */
+  reassertMcpServersOnReuse?: boolean;
 }
 
 export function buildProductionAgentMcpRunner(
   env: NodeJS.ProcessEnv = process.env,
   overrides: ProductionRunnerOverrides = {}
 ): AgentMcpRunner {
-  const command = env['ADHD_DISPATCH_AGENT_MCP_COMMAND'] ?? 'npx';
-  const args = env['ADHD_DISPATCH_AGENT_MCP_ARGS']
-    ? env['ADHD_DISPATCH_AGENT_MCP_ARGS'].split(/\s+/).filter(Boolean)
-    : ['-y', '@adhd/agent-mcp'];
+  const { command, args } = resolveAgentMcpLaunch(env);
   const requestTimeoutMs = env['ADHD_DISPATCH_AGENT_MCP_REQUEST_TIMEOUT_MS']
     ? Number(env['ADHD_DISPATCH_AGENT_MCP_REQUEST_TIMEOUT_MS'])
     : DEFAULT_POLL.timeoutMs;
+  // The dispatching cwd: roots the fs/shell configs AND the spawned child (so
+  // agent-mcp's own task-time resolution agrees with them). Read per call.
+  const cwd = overrides.cwd ?? process.cwd();
   return new AgentMcpRunner({
     command,
     args,
-    defaultMcpServers: defaultDispatchMcpServers(env),
+    // Thread the dispatching cwd (D4): the spawned agent-mcp's process.cwd() is
+    // the dispatch directory, so its task-time native resolution roots fs/shell
+    // there, and the fs/shell `cwd` fields below match.
+    cwd,
+    // The full map for a dispatch-created agent: fs/shell/dispatch self
+    // (ONE producer: @adhd/agent-core-native-tooling) + the explicit
+    // memory-server/backlog half, resolved at the dispatching cwd (D4).
+    defaultMcpServers: resolveDispatchMcpServers({
+      env,
+      cwd,
+      ...(overrides.nativeTooling !== undefined
+        ? { nativeTooling: overrides.nativeTooling }
+        : {}),
+      ...(overrides.sandbox !== undefined ? { sandbox: overrides.sandbox } : {}),
+      ...(overrides.mcpServers !== undefined ? { explicit: overrides.mcpServers } : {}),
+    }) as unknown as Record<string, Record<string, unknown>>,
     // DAG-named agents must already exist (f1dbd0f2): never silently
     // (re)create a missing/deleted persona. `calibrate` overrides this.
     createAgentsIfMissing: overrides.createAgentsIfMissing ?? false,
+    // Re-assert the current task-time resolution on a reused agent (D4): a
+    // pre-existing agent is re-scoped to THIS dispatch's cwd on reuse.
+    reassertMcpServersOnReuse: overrides.reassertMcpServersOnReuse ?? true,
     // Align the MCP per-request timeout with the orchestrator poll budget
     // (DEFAULT_POLL) so a synchronous `task` call can never be aborted at the
     // SDK's 60s default before the poll deadline it is paired with — the
     // "60s MCP abort vs Ns poll" mismatch. Sessioned tasks already fire in the
     // background (03145a46); this covers the synchronous ephemeral path too.
     requestTimeoutMs,
+    ...(overrides.env ? { env: overrides.env } : {}),
     ...(overrides.clientFactory ? { clientFactory: overrides.clientFactory } : {}),
   });
 }
@@ -459,7 +615,13 @@ export async function runCycleCore(
     runnerOverride ??
     (dryRun
       ? new MockAgentRunner({ debugDir: DEFAULT_RUN_DEBUG_DIR })
-      : buildProductionAgentMcpRunner());
+      : buildProductionAgentMcpRunner(process.env, {
+          // Root the production runner at the SAME cwd the orchestrator scopes
+          // its fs ops to (`--tools-root`, else process.cwd()), so the resolved
+          // fs/shell roots and `OrchestratorDeps.toolsRoot` never diverge
+          // (ADR-0008 D4 / NAT-TOOL-5 AC3).
+          cwd: resolveProductionRunnerCwd(toolsRoot),
+        }));
 
   const deps: OrchestratorDeps = {
     client: buildClient(dagPath),

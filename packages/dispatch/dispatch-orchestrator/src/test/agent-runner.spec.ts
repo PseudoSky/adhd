@@ -105,6 +105,42 @@ describe('AgentMcpRunner', () => {
       ]);
     });
 
+    it('reassertMcpServersOnReuse re-asserts the CURRENT mcpServers on an existing agent (NAT-TOOL-5)', async () => {
+      const defaults = {
+        fs: {
+          transport: 'stdio' as const,
+          command: 'srt',
+          args: ['npx', '-y', '@modelcontextprotocol/server-filesystem', '/Q'],
+          cwd: '/Q',
+        },
+      };
+      const client = new FakeMcpToolClient({
+        agent_read: () => ({ name: 'workflow-researcher', mcpServers: {} }),
+        agent_update: (args) => ({ ...args, version: 2 }),
+      });
+      const runner = new AgentMcpRunner({
+        command: 'unused-in-test',
+        clientFactory: () => client,
+        defaultMcpServers: defaults,
+        reassertMcpServersOnReuse: true,
+      });
+
+      await runner.ensureAgent(makeUnit({ agent_name: 'workflow-researcher' }));
+
+      // Teeth: dropping the `reassertMcpServersOnReuse` branch reverts to a
+      // lone `agent_read` and this fails.
+      expect(client.calls.map((c) => c.name)).toEqual(['agent_read', 'agent_update']);
+      expect(client.calls[1]?.arguments).toEqual({
+        name: 'workflow-researcher',
+        patch: { mcpServers: defaults },
+      });
+    });
+
+    it('exposes the threaded cwd for the host to observe (NAT-TOOL-5 AC1)', () => {
+      const runner = new AgentMcpRunner({ command: 'unused-in-test', cwd: '/P' });
+      expect(runner.cwd).toBe('/P');
+    });
+
     it('creates the agent with mcpServers: {} and the right name/provider when agent_read misses', async () => {
       const { client, runner } = makeRunner({
         agent_read: () =>

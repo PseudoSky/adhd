@@ -102,6 +102,30 @@ Neither path is exercised by this package's default-running tests, which
 call the DI'd `lib/core.ts` functions directly with an injected
 `MockAgentRunner` and a calibration path under `tmp/dispatch-cli/`.
 
+## Native tooling — dispatching cwd + the full default toolset (NAT-TOOL-5)
+
+Every agent this host dispatches gets the standardized native toolset
+(`fs` + `shell` + the `dispatch` self server) **plus** the `memory-server` and
+`backlog` servers, resolved at the **dispatching cwd** (ADR-0008 D1/D4).
+
+- `resolveDispatchMcpServers({ cwd })` is the ONE composition: it resolves the
+  builtin servers via `resolveNativeToolingMap` (`@adhd/agent-core-native-tooling`
+  — the single producer; this host authors no fs/shell config of its own) and
+  merges the explicit `memory-server`/`backlog` half. Precedence, highest first:
+  explicit `mcpServers` > `nativeTooling` > the `dispatch` self floor.
+- `buildProductionAgentMcpRunner(env, { cwd })` threads the dispatching cwd to
+  the spawned agent-mcp child **and** roots the resolved fs/shell configs there,
+  so firing from `/P` then `/Q` roots each at its own directory. Rooting follows
+  `--tools-root` when given (the same cwd the orchestrator scopes relative
+  `fs.*` ops to), else `process.cwd()`.
+- On **reuse** (`ensureAgent` of an already-registered agent), the runner
+  re-asserts the current resolution via `agent_update`, so a reused agent never
+  keeps a previous dispatch's resolved root.
+
+Proven default-running and hermetically (real spawned agent-mcp, fake `$HOME`,
+temp registry DB, isolated cwd): `src/test/resolve-dispatch-mcp-servers.spec.ts`
+and `src/test/dispatch-native-tooling.e2e.test.ts`.
+
 ## Building
 
 Run `nx build dispatch-cli` to build the main library code. This does NOT compile the CLI binary — you must also run `nx run dispatch-cli:build-bin` to compile `bin/cli.ts` to JavaScript (`dist/bin/cli.js`), which is what gets published.
