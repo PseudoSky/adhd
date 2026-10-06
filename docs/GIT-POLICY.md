@@ -1464,3 +1464,54 @@ Schema version 1.
   `nx lint environment-base-spec` exit 0, and `nx build agent-mcp` exit 0; and the dispatch directed
   none). This record is the only change to this file in this operation. Recorded under §Commit
   convention's `docs(<area>):` scope.
+
+- **2026-10-05 — operation record: land of `feat/nat-tool-5-dispatch-host-9c4e`, reap its worktree
+  (dispatch-2026-10-04-9c4e).** Landed NAT-TOOL-5's dispatch-host native-tooling resolution onto
+  `main` as a **merge commit** `90b24795fb96464508b1940674879f438ef4df8e` (parents `4632cd70` =
+  pre-merge `main`, `adf5d2b8` = branch head), moving `main` `4632cd70` → `90b24795`; 11 files,
+  +730/-7: `entrypoint/dispatch-cli/AGENTS.md` (M, +22), `entrypoint/dispatch-cli/README.md`
+  (M, +24), `entrypoint/dispatch-cli/package.json` (M, +2), `entrypoint/dispatch-cli/src/index.ts`
+  (M, +7), `entrypoint/dispatch-cli/src/lib/core.ts` (M, +174),
+  `entrypoint/dispatch-cli/src/test/dispatch-native-tooling-producer.guard.spec.ts` (A, +64),
+  `entrypoint/dispatch-cli/src/test/dispatch-native-tooling.e2e.test.ts` (A, +146),
+  `entrypoint/dispatch-cli/src/test/resolve-dispatch-mcp-servers.spec.ts` (A, +220),
+  `packages/dispatch/dispatch-orchestrator/src/lib/agent-runner.ts` (M, +36),
+  `packages/dispatch/dispatch-orchestrator/src/test/agent-runner.spec.ts` (M, +36), and
+  `pnpm-lock.yaml` (M, +6) — the dispatch host resolving native tooling at the dispatching cwd,
+  threading that cwd through, and re-asserting the resolution on client reuse. The branch was 2
+  commits — `be70922d` (`feat(dispatch-cli,dispatch-orchestrator): resolve native tooling at the
+  dispatching cwd (NAT-TOOL-5)`) and `adf5d2b8` (`test(dispatch-cli): guard against a second fs/shell
+  producer in the dispatch host (NAT-TOOL-5 AC4)`) — matching the dispatch list exactly. The
+  merge-base was `8c515c69`, differing from pre-merge `main` tip `4632cd70`, so the landing is a
+  genuine non-fast-forward. §Branching & merge was the deciding rule: this history "carries true
+  merge commits" and ff-only is not enforced, while rebase-in-flight is permitted only on a branch
+  "solely your own" — this is an in-flight executor branch, not the operator's, so rewriting its 2
+  commits was out; the dispatch directed `--no-ff`, and a merge commit is the stated shape here.
+  Dry-run `git merge-tree --write-tree --name-only main feat/nat-tool-5-dispatch-host-9c4e` exited 0,
+  producing tree `40590f28b41d8c940d82bdb6177fb266a0403287` with no conflict hunks; the actual
+  `git merge --no-ff feat/nat-tool-5-dispatch-host-9c4e -m "feat(dispatch-cli): resolve native
+  tooling at the dispatching cwd (NAT-TOOL-5)"` was conflict-free (ort strategy, exit 0) and the
+  post-merge tree (`git rev-parse HEAD^{tree}`) is `40590f28…`, byte-identical to the dry-run tree, so
+  no conflict arose and none required resolution. No conflict marker remains in the merged paths
+  (`git grep -nE '^(<<<<<<<|>>>>>>>)' HEAD -- entrypoint/dispatch-cli
+  packages/dispatch/dispatch-orchestrator` exited 1 with no matches). The branch never touched this
+  file (`git diff --name-only main...feat/nat-tool-5-dispatch-host-9c4e -- docs/GIT-POLICY.md`
+  empty), so `main`'s policy blob `c56a94f26dd59844bed859641583edc6ff550937` survived the merge
+  byte-identical (pre-merge `4632cd70`, post-merge `90b24795`, and the on-disk file all resolve to
+  the same blob). The merge is two-parent (not fast-forward); post-merge `git rev-list --count
+  main..feat/nat-tool-5-dispatch-host-9c4e` = 0 and `git merge-base --is-ancestor` exits 0 for each
+  of `be70922d` and `adf5d2b8` individually, so both are contained. The merge invoked no gate: git
+  runs `pre-merge-commit` (not `pre-commit`) for a merge and `.githooks/` ships no such hook, so none
+  ran. The worktree `.worktrees/dispatch-nat-tool-5-9c4e` was then reaped under §Cleanup's three-part
+  test: `git status --porcelain` inside it was empty, it carried no `locked` line, and its head
+  `adf5d2b8` was an ancestor of `main` after the merge — so `git worktree remove` (no `--force`) ran
+  and the branch was deleted with `git branch -d feat/nat-tool-5-dispatch-host-9c4e` (was `adf5d2b8`);
+  worktrees went 79 → 78. The merged commits remain reachable from the durable `main` ref, so
+  recovery does not depend on the reflog. The working tree was clean before and after (`git status
+  --porcelain` empty), nothing was staged before or after (`git diff --cached --name-only` empty),
+  and the dispatch's anticipated unrelated concurrent dirt (a possibly active `agent-mcp` worktree)
+  was not present in the repo root and no other worktree was touched, so nothing had to be avoided or
+  protected. No push (the dispatch directed none) and no gates were run by this operation (the
+  dispatch reported them already green: `nx affected -t test build lint --base=1bcc147d` exit 0, and
+  `dispatch-cli` build/typecheck-spec/lint/verify-dist-load all exit 0). This record is the only
+  change to this file in this operation. Recorded under §Commit convention's `docs(<area>):` scope.
