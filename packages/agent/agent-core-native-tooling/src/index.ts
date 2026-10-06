@@ -7,7 +7,12 @@
 // It owns NO command parser, NO command segmentation, and NO dangerous-command
 // catalog — hard enforcement is delegated to the adopted servers and `srt` (D5/D7).
 
-export { resolveNativeTooling, resolveNativeToolingMap } from './lib/resolver.js';
+export {
+  NativeToolingRootError,
+  resolveNativeTooling,
+  resolveNativeToolingMap,
+  resolveFsRoots,
+} from './lib/resolver.js';
 export type { NativeResolveContext, ResolvedNativeServer } from './lib/resolver.js';
 
 export { matchPermission } from './lib/permissions.js';

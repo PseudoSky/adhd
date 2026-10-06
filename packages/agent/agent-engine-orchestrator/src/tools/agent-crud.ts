@@ -77,8 +77,13 @@ export interface AgentStore {
      * The agent definition as the engine consumes it. A host MAY inject a store
      * whose `read` resolves host-specific config against run-time context (e.g.
      * `@adhd/agent-mcp` resolves `nativeTooling` into an `mcpServers` map here).
+     *
+     * `cwd` is the caller-supplied dispatching cwd for THIS task (ADR-0008 D4;
+     * caller-cwd contract) — a host's resolving `read` uses it to anchor
+     * portable fs-root hints. Absent ⇒ the host falls back to `process.cwd()`
+     * (flagged). Plain stores ignore it.
      */
-    read(name: string): AgentDefinition;
+    read(name: string, cwd?: string): AgentDefinition;
     /**
      * OPTIONAL: the STORED, UNRESOLVED definition (ADR-0008 D4/D8).
      *

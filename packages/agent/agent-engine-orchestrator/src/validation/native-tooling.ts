@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { isAbsolute } from 'node:path';
 import { mcpServerConfigSchema } from './mcp.js';
 
 /**
@@ -13,6 +14,11 @@ import { mcpServerConfigSchema } from './mcp.js';
  *     value to `mcpServerConfigSchema` instead of being silently stripped.
  *   - `askPolicy` is accepted for boundary compatibility but is retired (ADR-0008
  *     D6): the ask chain is fixed and the only knob is `hitl`.
+ *   - `fs.root`/`fs.roots` are PORTABLE HINTS (a cwd-relative subpath or a named
+ *     alias in the global allowed-root map). An ABSOLUTE path is REJECTED at this
+ *     boundary — it welds a host path into a record that must stay reusable
+ *     (D4/D8; the fs analogue of the welded-`provider` bug). The resolver also
+ *     rejects it (defense in depth).
  */
 
 export const permissionActionSchema = z.enum(['allow', 'ask', 'deny']);
@@ -22,8 +28,23 @@ export const permissionRuleMapSchema = z.record(
   permissionActionSchema
 );
 
+/**
+ * A portable fs root hint: a cwd-relative subpath, or a named alias resolved via
+ * the global allowed-root map. Absolute is rejected here so a definition can
+ * never carry a host path (the resolver rejects it too, for a stale/bypassed
+ * def). Exported for direct testing.
+ */
+export const fsRootHintSchema = z
+  .string()
+  .refine((hint) => !isAbsolute(hint), {
+    message:
+      'fs root must be a portable hint (a cwd-relative subpath or a named ' +
+      'alias in the global allowed-root map), not an absolute path',
+  });
+
 export const fsBuiltinOverridesSchema = z.strictObject({
-  root: z.string().optional(),
+  root: fsRootHintSchema.optional(),
+  roots: z.array(fsRootHintSchema).optional(),
   readOnly: z.boolean().optional(),
   permissions: permissionRuleMapSchema.optional(),
   allowedTools: z.array(z.string()).optional(),

@@ -108,11 +108,16 @@ async function runEphemeralTask(
     prompt: string;
     depends_on?: string[];
     on_upstream_failure?: 'fail' | 'skip';
+    cwd?: string;
   },
   deps: TaskDeps,
   callerContext?: ExecutionContext
 ): Promise<TaskToolOutput> {
-  const agentDefinition = deps.agentStore.read(input.agent_name);
+  // Caller-cwd contract (ADR-0008 D4): the caller may supply a `cwd`; a
+  // sub-dispatch inherits the parent's. Absent ⇒ the host falls back to its own
+  // process.cwd() (flagged on the resolve context).
+  const effectiveCwd = input.cwd ?? callerContext?.cwd;
+  const agentDefinition = deps.agentStore.read(input.agent_name, effectiveCwd);
   // The session snapshot must be the DECLARATIVE definition (ADR-0008 D4/D8):
   // a host whose `agentStore.read` resolves the native toolset against the
   // dispatching cwd exposes `readUnresolved`, so no task-time resolved root is
@@ -183,6 +188,8 @@ async function runEphemeralTask(
     rootTaskId: rootTaskId ?? undefined,
     recursionDepth: (callerContext?.recursionDepth ?? -1) + 1,
     toolCallCount: 0,
+    // Carry the effective cwd so a further sub-dispatch inherits it (ADR-0008 D4).
+    cwd: effectiveCwd,
   };
 
   const provider = createProvider(
@@ -298,8 +305,12 @@ export async function taskTool(
     );
   }
 
+  // Caller-cwd contract (ADR-0008 D4): the caller may supply a `cwd` on the
+  // task; a sub-dispatch inherits the parent's. Absent ⇒ host fallback (flagged).
+  const effectiveCwd = input.cwd ?? callerContext?.cwd;
   const agentDefinition = deps.sessionStore.getAgentDefinition(
-    input.session_id
+    input.session_id,
+    effectiveCwd
   );
 
   const dependsOn = (input as { depends_on?: string[] }).depends_on ?? [];
@@ -366,6 +377,8 @@ export async function taskTool(
     rootTaskId: rootTaskId ?? undefined,
     recursionDepth: (callerContext?.recursionDepth ?? -1) + 1,
     toolCallCount: 0,
+    // Carry the effective cwd so a further sub-dispatch inherits it (ADR-0008 D4).
+    cwd: effectiveCwd,
   };
 
   const controller = new AbortController();

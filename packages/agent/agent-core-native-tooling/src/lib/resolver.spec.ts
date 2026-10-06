@@ -106,13 +106,13 @@ describe('resolveNativeTooling — task-time resolution (ADR-0008 D2/D4)', () =>
     expect(shell.env?.DENY_COMMANDS).toBeUndefined();
   });
 
-  it('fs.root override pins the root arg while cwd stays the task cwd', () => {
+  it('fs.root override (a cwd-relative hint) pins the root arg while cwd stays the task cwd', () => {
     const servers = resolveNativeTooling(
-      { fs: { root: '/fixed' }, shell: false, dispatch: false },
+      { fs: { root: 'fixed' }, shell: false, dispatch: false },
       { cwd: '/p/a' }
     );
     const fs = fsServer(servers)!;
-    expect(fs.args![fs.args!.length - 1]).toBe('/fixed');
+    expect(fs.args![fs.args!.length - 1]).toBe('/p/a/fixed');
     expect(fs.cwd).toBe('/p/a');
   });
 
@@ -125,7 +125,7 @@ describe('resolveNativeTooling — task-time resolution (ADR-0008 D2/D4)', () =>
   });
 
   it('NEVER mutates the stored config — the definition stays byte-identical across fires (D4)', () => {
-    const cfg = { fs: { root: '/fixed' }, shell: true as const };
+    const cfg = { fs: { root: 'fixed' }, shell: true as const };
     const snapshot = JSON.stringify(cfg);
     resolveNativeTooling(cfg, { cwd: '/p/a' });
     resolveNativeTooling(cfg, { cwd: '/p/b' });

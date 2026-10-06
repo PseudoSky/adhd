@@ -30,6 +30,7 @@ import {
   resolveSrtRunSettingsPath,
   resolveSrtSettingsPath,
 } from '../srt-policy.js';
+import { withDefaultMcpServers } from '../defaults.js';
 
 const REPO_ROOT = fileURLToPath(new URL('../../../../', import.meta.url));
 const LOCK_HOLDER = fileURLToPath(new URL('./fixtures/srt-lock-holder.cjs', import.meta.url));
@@ -194,6 +195,25 @@ describe('A3/A4 — per-run settings file + `srt -s` wiring', () => {
     expect(global.filesystem?.allowWrite ?? []).not.toContain('/some/dispatch/cwd');
     expect(run.filesystem?.allowWrite ?? []).toContain('/some/dispatch/cwd');
     expect(getSrtRunSettingsPath()).toBe(runPath);
+  });
+
+  it('AC6: EVERY resolved fs root is unioned into the per-run srt allowWrite (multi-root)', async () => {
+    const runPath = join(dir, 'run-multi.srt.json');
+    provisionRunSrtPolicy('/host/cwd', {
+      [SRT_SETTINGS_ENV]: runPath,
+    } as NodeJS.ProcessEnv);
+
+    // Resolve a definition with TWO portable roots at caller cwd /P — through the
+    // SAME host resolution path used at task time. The host must union BOTH into
+    // the per-run policy, else a read from the second root is sandbox-DENIED.
+    withDefaultMcpServers(
+      { mcpServers: {}, nativeTooling: { fs: { roots: ['a', 'b'] } } },
+      { cwd: '/P' }
+    );
+
+    const run = JSON.parse(await readFile(runPath, 'utf8')) as SrtShape;
+    expect(run.filesystem?.allowWrite ?? []).toContain('/P/a');
+    expect(run.filesystem?.allowWrite ?? []).toContain('/P/b');
   });
 
   it('removeRunSrtPolicy removes the file WE created', async () => {

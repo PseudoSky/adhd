@@ -37,6 +37,7 @@ import {
 
 import { startServer } from "./server.js";
 import {
+  allowedRootsFromResolvedConfig,
   buildNativeToolingContext,
   nativeToolingFromResolvedConfig,
   withResolvedNativeTooling,
@@ -359,8 +360,11 @@ async function main() {
     const defaultNativeTooling = nativeToolingFromResolvedConfig(
         env.config.nativeTooling
     );
-    const nativeToolingContext = () =>
-        buildNativeToolingContext({ defaultNativeTooling });
+    const allowedRoots = allowedRootsFromResolvedConfig(
+        env.config.nativeTooling.fs.allowedRoots
+    );
+    const nativeToolingContext = (cwd?: string) =>
+        buildNativeToolingContext({ cwd, roots: allowedRoots, defaultNativeTooling });
     const resolvingAgentStore = withResolvedNativeTooling(agentStore, nativeToolingContext);
     const resolvingSessionStore = withResolvedNativeToolingSession(sessionStore, nativeToolingContext);
 

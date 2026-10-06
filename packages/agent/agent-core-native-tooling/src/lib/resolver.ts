@@ -1,3 +1,5 @@
+import { isAbsolute, resolve, sep } from 'node:path';
+
 import type {
   DispatchToolConfig,
   FsToolConfig,
@@ -13,13 +15,60 @@ import {
 } from './catalog.js';
 
 /**
+ * A typed failure resolving an `fs` root HINT (ADR-0008 D7; the multi-root /
+ * portability contract). Thrown at TASK time, when `resolveFsRoots` turns a
+ * definition's portable hint into a concrete directory — never at definition
+ * storage time (the definition carries only hints; D4/D8).
+ *
+ * Two codes:
+ *  - `ABSOLUTE_ROOT_NOT_PORTABLE` — the hint is an absolute path. An absolute
+ *    path in a definition welds a host path into a record that must be reusable
+ *    from any directory, so it is rejected (the fs analogue of the welded
+ *    `provider` bug). Absolute machine directories belong in the GLOBAL
+ *    allowed-root map, referenced by a named alias.
+ *  - `ROOT_ESCAPES_CALLER_CWD` — a relative hint resolves outside the caller
+ *    cwd (e.g. `..`); containment is the point of scoping the server.
+ */
+export class NativeToolingRootError extends Error {
+  constructor(
+    public readonly code:
+      | 'ABSOLUTE_ROOT_NOT_PORTABLE'
+      | 'ROOT_ESCAPES_CALLER_CWD',
+    message: string,
+    public readonly root: string
+  ) {
+    super(message);
+    this.name = 'NativeToolingRootError';
+  }
+}
+
+/**
  * Runtime context for native-tooling resolution — known only at TASK time
  * (ADR-0008 D4). The resolver NEVER mutates the stored definition and NEVER
  * persists the resolved root.
  */
 export interface NativeResolveContext {
-  /** The dispatching host's working directory; injected as the builtin root. */
+  /** The dispatching working directory; the base for relative root hints. */
   cwd: string;
+  /**
+   * Where `cwd` came from (ADR-0008 D4; caller-cwd contract).
+   *  - `'caller'` — supplied by the MCP caller or inherited from a parent
+   *    dispatch (the portable, correct case).
+   *  - `'host-fallback'` — absent from the caller, so the host process's own
+   *    cwd was used; this "may not be the agent's cwd" and is flagged so a
+   *    caller can surface the ambiguity.
+   * Absent ⇒ treated as `'caller'` for a bare resolver call (hosts set it).
+   */
+  cwdSource?: 'caller' | 'host-fallback';
+  /**
+   * The GLOBAL allowed-root map: a named alias → the machine-specific,
+   * operator-owned ABSOLUTE directory it resolves to (the fs analogue of the
+   * provider registry). A definition references an alias portably (e.g.
+   * `fs: { roots: ['project'] }`); the operator's global config owns the
+   * mapping `{ project: '/Users/me/proj' }`. This is the ONLY place an absolute
+   * directory lives in the resolution path — never the definition.
+   */
+  roots?: Record<string, string>;
   /** Base environment merged into every resolved stdio server (D9). */
   env?: Record<string, string>;
   /**
@@ -95,6 +144,83 @@ function withSandbox(
   return { ...config, command: wrapped.command, args: wrapped.args };
 }
 
+/**
+ * Resolve ONE portable root hint to a concrete directory (ADR-0008 D7; the
+ * multi-root / caller-cwd contract). Pure.
+ *
+ *  1. A named alias present in the GLOBAL allowed-root map (`ctx.roots`) wins —
+ *     the operator owns the absolute target, the definition stays portable.
+ *  2. An ABSOLUTE path is rejected with a typed {@link NativeToolingRootError}:
+ *     it welds a host path into the record (the fs analogue of the welded
+ *     `provider` bug). Absolute machine dirs belong in the global map.
+ *  3. A relative subpath resolves against the caller cwd, and MUST stay within
+ *     it — a `..` subpath that escapes is rejected (containment is the point).
+ */
+function resolveRootHint(hint: string, ctx: NativeResolveContext): string {
+  const mapped = ctx.roots?.[hint];
+  if (mapped !== undefined) return mapped;
+  if (isAbsolute(hint)) {
+    throw new NativeToolingRootError(
+      'ABSOLUTE_ROOT_NOT_PORTABLE',
+      `fs root hint '${hint}' is an absolute path — fs roots must be portable ` +
+        `(a relative subpath of the caller cwd, or a named alias in the global ` +
+        `allowed-root map); absolute machine directories belong in the global map`,
+      hint
+    );
+  }
+  const resolved = resolve(ctx.cwd, hint);
+  if (!isWithin(ctx.cwd, resolved)) {
+    throw new NativeToolingRootError(
+      'ROOT_ESCAPES_CALLER_CWD',
+      `fs root hint '${hint}' resolves to '${resolved}', which escapes the ` +
+        `caller cwd '${ctx.cwd}'`,
+      hint
+    );
+  }
+  return resolved;
+}
+
+/** True when `child` is `parent` itself or sits beneath it (path-segment safe). */
+function isWithin(parent: string, child: string): boolean {
+  const p = resolve(parent);
+  const c = resolve(child);
+  return c === p || c.startsWith(p + sep);
+}
+
+/**
+ * The filesystem roots a resolved `fs` config exposes, in argv order — the ONE
+ * producer of the root list (ADR-0008 D7). A non-empty `roots` array WINS and
+ * `root` is ignored; otherwise the list is `[root]`. When neither is given the
+ * list is `[ctx.cwd]` (the caller cwd is the default scope). A disabled
+ * (`false`) or custom (`McpServerConfig`) member yields `[]` (the builtin owns
+ * no roots). Pure — never mutates the config.
+ *
+ * Each hint is resolved through {@link resolveRootHint}: an alias from the
+ * global map, or a cwd-relative subpath, `..`-contained; an absolute hint
+ * throws a typed {@link NativeToolingRootError}.
+ *
+ * Exported so a host provisions the matching per-run `srt` policy from the SAME
+ * list the resolver emits (finding 535c1101 / A3) rather than a second,
+ * divergent derivation.
+ */
+export function resolveFsRoots(
+  fs: FsToolConfig | undefined,
+  ctx: NativeResolveContext
+): string[] {
+  if (fs === false || isMcpServerConfig(fs)) return [];
+  const overrides = fs === true || fs === undefined ? {} : fs;
+  let hints: string[];
+  if (overrides.roots && overrides.roots.length > 0) {
+    hints = [...overrides.roots];
+  } else if (overrides.root !== undefined) {
+    hints = [overrides.root];
+  } else {
+    hints = [];
+  }
+  if (hints.length === 0) return [ctx.cwd];
+  return hints.map((hint) => resolveRootHint(hint, ctx));
+}
+
 function resolveFs(
   fs: FsToolConfig | undefined,
   ctx: NativeResolveContext
@@ -107,7 +233,10 @@ function resolveFs(
   const config: McpServerConfig = {
     transport: 'stdio',
     command: FS_SERVER.command,
-    args: [...FS_SERVER.args, overrides.root ?? ctx.cwd],
+    // MULTI-ROOT: every resolved root becomes one argv entry — the reference fs
+    // server accepts `process.argv.slice(2)` as its allowed-directory allow-list
+    // (ADR-0008 D7). `roots` wins; else `[root]`; else `[callerCwd]` (resolveFsRoots).
+    args: [...FS_SERVER.args, ...resolveFsRoots(fs, ctx)],
     cwd: ctx.cwd,
   };
   if (overrides.allowedTools) config.allowedTools = [...overrides.allowedTools];

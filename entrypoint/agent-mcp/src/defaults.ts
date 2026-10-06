@@ -21,6 +21,7 @@
 import {
   buildDispatchSelf,
   matchPermission,
+  resolveFsRoots,
   resolveNativeToolingMap,
   DISPATCH_SELF_COMMAND_ENV,
   DISPATCH_SELF_ARGS_ENV,
@@ -35,6 +36,7 @@ import type {
 import type { PermissionGate } from '@adhd/agent-engine-orchestrator';
 
 import {
+  addRunSrtAllowWrite,
   ensureBinDirOnPath,
   getSrtRunSettingsPath,
   resolveNativeBinDir,
@@ -53,8 +55,23 @@ export const AGENT_MCP_SELF_ARGS_ENV = DISPATCH_SELF_ARGS_ENV;
 
 /** Runtime context for host-side native-tooling resolution (task time). */
 export interface NativeToolingHostContext {
-  /** The dispatching host's working directory; becomes the builtin root. */
+  /** The dispatching working directory; the base for relative root hints. */
   cwd: string;
+  /**
+   * Where `cwd` came from (ADR-0008 D4; caller-cwd contract): `'caller'` when
+   * supplied by the MCP caller / inherited from a parent dispatch, `'host-fallback'`
+   * when absent and the host's own process cwd was used (which "may not be the
+   * agent's cwd").
+   */
+  cwdSource?: 'caller' | 'host-fallback';
+  /**
+   * The GLOBAL allowed-root map (alias → absolute machine path), from the global
+   * config (env `ADHD_AGENT_NATIVE_TOOLING_FS_ALLOWED_ROOTS` / global config.yaml).
+   * Lets a definition reference `project`/`tmp` portably while the operator owns
+   * the absolute targets. The ONLY place an absolute directory lives in the
+   * resolution path — never the definition.
+   */
+  roots?: Record<string, string>;
   /** The REAL agent-mcp MCP server config, surfaced for `dispatch: true` (D1). */
   dispatchSelf?: McpServerConfig;
   /** Base env merged into every resolved stdio server (D9). */
@@ -114,13 +131,25 @@ export function withDefaultMcpServers<T extends ResolvableDefinition>(
     ctx.defaultNativeTooling,
     def.nativeTooling
   );
-  const native = resolveNativeToolingMap(effectiveNativeTooling, {
+  const resolveCtx = {
     cwd: ctx.cwd,
+    cwdSource: ctx.cwdSource,
+    roots: ctx.roots,
     env: ctx.env,
     dispatchSelf: ctx.dispatchSelf,
     sandbox: ctx.sandbox,
     srtSettingsPath: ctx.srtSettingsPath,
-  });
+  };
+  const native = resolveNativeToolingMap(effectiveNativeTooling, resolveCtx);
+  // AC6 / finding 535c1101 (A3): every resolved fs root must be in the per-run
+  // `srt` policy's `allowWrite`, or a read from a SECOND root is sandbox-DENIED
+  // even though the fs server allows it. Derive the list from the SAME producer
+  // the resolver used (`resolveFsRoots`) — never a second, divergent derivation.
+  // A no-op when no per-run policy is active (bare `srt`/sandbox off) or the fs
+  // member is disabled/custom (`[]`).
+  addRunSrtAllowWrite(
+    resolveFsRoots(effectiveNativeTooling?.fs, resolveCtx)
+  );
   // explicit `mcpServers` WIN over nativeTooling > dispatch floor (D1/D4).
   return {
     ...def,
@@ -183,6 +212,32 @@ function mergeMember(base: unknown, over: unknown): unknown {
 }
 
 /**
+ * Parse the GLOBAL allowed-root map from the resolved config surface (ADR-0008
+ * D7; the fs analogue of the provider registry). Each entry is `alias=path`
+ * (the `@adhd/environment` `array` field splits on commas), e.g.
+ * `["project=/Users/me/proj", "tmp=/tmp/scratch"]` →
+ * `{ project: "/Users/me/proj", tmp: "/tmp/scratch" }`.
+ *
+ * The operator owns the absolute targets here; a definition references an alias
+ * portably (`fs:{roots:["project"]}`). An entry without `=` is ignored (a
+ * malformed mapping never silently becomes a root). Pure.
+ */
+export function allowedRootsFromResolvedConfig(
+  entries: readonly string[] | undefined
+): Record<string, string> | undefined {
+  if (!entries || entries.length === 0) return undefined;
+  const map: Record<string, string> = {};
+  for (const entry of entries) {
+    const eq = entry.indexOf('=');
+    if (eq <= 0) continue;
+    const alias = entry.slice(0, eq).trim();
+    const path = entry.slice(eq + 1).trim();
+    if (alias.length > 0 && path.length > 0) map[alias] = path;
+  }
+  return Object.keys(map).length > 0 ? map : undefined;
+}
+
+/**
  * Bridge the resolved `@adhd/environment` `nativeTooling` shape (readonly
  * arrays, every leaf present) into an `@adhd/agent-base-types`
  * {@link NativeToolingConfig} (mutable arrays, optional leaves). The two shapes
@@ -192,6 +247,8 @@ function mergeMember(base: unknown, over: unknown): unknown {
 export function nativeToolingFromResolvedConfig(cfg: {
   fs: {
     root: string | undefined;
+    /** Global alias→path map entries (`alias=path`); consumed by {@link allowedRootsFromResolvedConfig}, not part of the definition. */
+    allowedRoots?: readonly string[] | undefined;
     readOnly: boolean | undefined;
     allowedTools: readonly string[] | undefined;
     disallowedTools: readonly string[] | undefined;
@@ -253,8 +310,20 @@ export function resolveDefinitionNativeTooling(
 }
 
 export interface BuildNativeToolingContextOptions {
-  /** Dispatching cwd; defaults to `process.cwd()` read per call. */
+  /**
+   * The caller-supplied dispatching cwd for THIS task (ADR-0008 D4; caller-cwd
+   * contract) — from the `task`/`agent` MCP input or inherited from the
+   * dispatching parent. Absent ⇒ the host's own cwd is used and flagged
+   * (`cwdSource: 'host-fallback'`).
+   */
   cwd?: string;
+  /** Host cwd resolver used when no caller cwd is supplied; defaults to `process.cwd`. */
+  hostCwd?: () => string;
+  /**
+   * The GLOBAL allowed-root map (alias → absolute path), from the global config.
+   * Resolution reads it to expand a definition's alias hints (AC3).
+   */
+  roots?: Record<string, string>;
   dispatchSelf?: McpServerConfig;
   env?: Record<string, string>;
   sandbox?: boolean;
@@ -269,13 +338,18 @@ export interface BuildNativeToolingContextOptions {
  * provisioned at startup (`provisionRunSrtPolicy`, A3/A4) so the builtins spawn
  * with a per-spawn cwd allow via `srt -s` rather than the shared global file.
  *
+ * The caller-supplied `cwd` WINS; when absent the host's own cwd is used and the
+ * context is FLAGGED `cwdSource: 'host-fallback'` (ADR-0008 D4 — it "may not be
+ * the agent's cwd"). `roots` carries the global alias→path map (AC3).
+ *
  * `undefined` when no run policy was provisioned (e.g. a bare `createServer` in
  * a test, or `sandbox:false`) — the resolver then emits a plain `srt` command.
  */
 export function buildNativeToolingContext(
   opts: BuildNativeToolingContextOptions = {}
 ): NativeToolingHostContext {
-  const cwd = opts.cwd ?? process.cwd();
+  const cwdIsCaller = opts.cwd !== undefined;
+  const cwd = opts.cwd ?? (opts.hostCwd ?? process.cwd)();
   const path = ensureBinDirOnPath(process.env['PATH'], resolveNativeBinDir());
   const env: Record<string, string> = { ...(opts.env ?? {}) };
   if (path) env['PATH'] = path;
@@ -283,6 +357,8 @@ export function buildNativeToolingContext(
     opts.sandbox === false ? undefined : getSrtRunSettingsPath();
   return {
     cwd,
+    cwdSource: cwdIsCaller ? 'caller' : 'host-fallback',
+    roots: opts.roots,
     dispatchSelf: opts.dispatchSelf ?? buildDispatchSelf(),
     env: Object.keys(env).length > 0 ? env : undefined,
     sandbox: opts.sandbox,
@@ -291,13 +367,17 @@ export function buildNativeToolingContext(
   };
 }
 
-type AgentReader = { read(name: string): AgentDefinition };
-type SessionAgentReader = { getAgentDefinition(sessionId: string): unknown };
+type AgentReader = { read(name: string, cwd?: string): AgentDefinition };
+type SessionAgentReader = { getAgentDefinition(sessionId: string, cwd?: string): unknown };
 
 /**
  * Wrap an `AgentStore` so its `read` returns a definition whose `mcpServers` are
- * resolved at READ time (task time) against the current context. All other
+ * resolved at READ time (task time) against the per-call caller cwd. All other
  * methods pass through untouched, and the stored definition is never mutated.
+ *
+ * `context(cwd?)` builds the resolution context for the caller-supplied cwd (a
+ * `task`/`agent` input, or a parent's inherited cwd); `undefined` ⇒ the host
+ * falls back to its own cwd, flagged (ADR-0008 D4).
  *
  * It ALSO exposes `readUnresolved` — the raw store's (unresolved) `read` — so a
  * session snapshot persists the DECLARATIVE definition and never a task-time
@@ -310,14 +390,14 @@ type SessionAgentReader = { getAgentDefinition(sessionId: string): unknown };
  */
 export function withResolvedNativeTooling<T extends AgentReader>(
   store: T,
-  context: () => NativeToolingHostContext
+  context: (cwd?: string) => NativeToolingHostContext
 ): T {
   return new Proxy(store, {
     get(target, prop, receiver) {
       if (prop === 'read') {
         const bound = target.read.bind(target);
-        return (name: string) =>
-          resolveDefinitionNativeTooling(bound(name), context());
+        return (name: string, cwd?: string) =>
+          resolveDefinitionNativeTooling(bound(name, cwd), context(cwd));
       }
       // The DECLARATIVE read (ADR-0008 D4/D8): the raw store's `read` is the
       // stored, unresolved definition — expose it so callers that snapshot a
@@ -333,20 +413,20 @@ export function withResolvedNativeTooling<T extends AgentReader>(
 /**
  * Wrap a session store so `getAgentDefinition` resolves the session's snapshot
  * (which carries the stored `nativeTooling`, never a resolved root) against the
- * current task-time context. All other methods pass through.
+ * per-call caller cwd. All other methods pass through.
  */
 export function withResolvedNativeToolingSession<T extends SessionAgentReader>(
   store: T,
-  context: () => NativeToolingHostContext
+  context: (cwd?: string) => NativeToolingHostContext
 ): T {
   return new Proxy(store, {
     get(target, prop, receiver) {
       if (prop === 'getAgentDefinition') {
         const bound = target.getAgentDefinition.bind(target);
-        return (sessionId: string) =>
+        return (sessionId: string, cwd?: string) =>
           resolveDefinitionNativeTooling(
-            bound(sessionId) as AgentDefinition,
-            context()
+            bound(sessionId, cwd) as AgentDefinition,
+            context(cwd)
           );
       }
       return Reflect.get(target, prop, receiver);
