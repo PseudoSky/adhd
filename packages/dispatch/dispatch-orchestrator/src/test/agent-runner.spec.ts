@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   AgentMcpRunner,
+  bindingToAgentCreateProvider,
   AgentMcpToolError,
   usageToTurns,
   type DispatchUsageReport,
@@ -220,7 +221,9 @@ describe('AgentMcpRunner', () => {
       // — this assertion goes red.
       expect(client.calls[1]?.arguments).toEqual({
         name: 'workflow-researcher',
-        provider: { type: 'claudecli' },
+        // 5ad2cf37: a unit with no provider creates a provider-less agent — no
+        // implicit `claudecli` default (the payload carries no provider).
+        provider: undefined,
         systemPrompt: 'STABLE PREAMBLE BODY',
         mcpServers: {},
       });
@@ -618,5 +621,19 @@ describe('agent-runner source guard (AC-C)', () => {
 
   it('sends the declarative nativeTooling on agent_create (never a resolved map)', () => {
     expect(source).toContain('nativeTooling: this.nativeTooling');
+  });
+});
+
+describe('bindingToAgentCreateProvider — fail closed (5ad2cf37 AC2, dispatch seam)', () => {
+  it('no binding / no providerType maps to undefined, never an implicit claudecli', () => {
+    expect(bindingToAgentCreateProvider(null)).toBeUndefined();
+    expect(bindingToAgentCreateProvider({ modelRef: 'claude_sonnet_4_6' })).toBeUndefined();
+  });
+
+  it('a bound unit still maps providerType/modelRef to the stored wire spelling', () => {
+    expect(bindingToAgentCreateProvider({ providerType: 'anthropic', modelRef: 'claude_sonnet_4_6' })).toEqual({
+      type: 'anthropic',
+      model: 'claude_sonnet_4_6',
+    });
   });
 });

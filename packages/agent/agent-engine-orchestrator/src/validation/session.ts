@@ -38,6 +38,22 @@ export const sessionCloseInputSchema = z.object({
   session_id: z.string().uuid(),
 });
 
+/**
+ * `session_update` — swap the session-held provider binding (the `session` tier
+ * of the selection chain). At least one of `provider` / `model` / `models`.
+ * `model` and `models` take canonical refs (e.g. `claude_sonnet_4_6`).
+ */
+export const sessionUpdateInputSchema = z
+  .object({
+    session_id: z.string().uuid(),
+    provider: z.enum(['anthropic', 'openai', 'claudecli']).optional(),
+    model: z.string().min(1).optional(),
+    models: z.array(z.string().min(1)).min(1).optional(),
+  })
+  .refine((v) => v.provider !== undefined || v.model !== undefined || v.models !== undefined, {
+    message: 'session_update needs at least one of provider, model, models',
+  });
+
 export const sessionClearInputSchema = z.object({
   session_id: z.string().uuid(),
 });
@@ -51,5 +67,6 @@ export type AgentToolInput = z.infer<typeof agentToolInputSchema>;
 export type AgentToolOutput = z.infer<typeof agentToolOutputSchema>;
 export type SessionListInput = z.infer<typeof sessionListInputSchema>;
 export type SessionCloseInput = z.infer<typeof sessionCloseInputSchema>;
+export type SessionUpdateInput = z.infer<typeof sessionUpdateInputSchema>;
 export type SessionClearInput = z.infer<typeof sessionClearInputSchema>;
 export type SessionClearOutput = z.infer<typeof sessionClearOutputSchema>;

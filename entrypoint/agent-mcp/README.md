@@ -374,3 +374,11 @@ fetch. The same record appears in this package's `AGENTS.md`, in
 ## License
 
 See LICENSE file in this directory.
+
+## Provider selection (agent is not welded to a provider)
+
+`agent_create` may omit `provider`. Bind one per session with `session_update { session_id, provider, model }` (canonical
+model refs such as `claude_sonnet_4_6`; the wire string `claude-sonnet-4-6` is resolved through the provider registry at
+task time and the binding persists across restarts), or set a host-wide default with `ADHD_AGENT_DEFAULT_PROVIDER` /
+`ADHD_AGENT_DEFAULT_MODEL`. Chain: `task > session > agent > host default`. With none of them a task fails closed with
+`NO_PROVIDER_SELECTED` rather than silently falling back to `claudecli`.

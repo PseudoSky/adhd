@@ -102,7 +102,7 @@ import type {
   DagJson,
   MilestoneDag,
   OperationDag,
-  ProviderConfig,
+  PartialBinding,
 } from '@adhd/dispatch-base-spec';
 import { createDagClient } from '@adhd/dispatch-core-client';
 import { createJsonFileSerializer } from '@adhd/dispatch-serializer-json';
@@ -414,34 +414,33 @@ async function closeRunner(runner: AgentMcpRunner): Promise<void> {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** `DispatchUnit.provider` shape (snake_case). `base_url` routes via the proxy. */
-function providerConfig(): ProviderConfig {
+function providerConfig(): PartialBinding {
   if (PROVIDER === 'deepseek') {
     return {
-      type: 'openai',
-      model_id: MODEL,
-      env_secret: 'ADHD_AGENT_DEEPSEEK_SECRET',
-      base_url: PROXY ?? 'https://api.deepseek.com/v1',
-      timeout_ms: 180_000,
-      retry_config: { retries: 0, min_timeout: 1000, max_timeout: 5000, factor: 2 },
+      providerType: 'openai',
+      modelRef: MODEL,
+      env: { secret: 'ADHD_AGENT_DEEPSEEK_SECRET' },
+      baseURL: PROXY ?? 'https://api.deepseek.com/v1',
+      timeoutMs: 180_000,
+      retryConfig: { retries: 0, minTimeout: 1000, maxTimeout: 5000, factor: 2 },
     };
   }
   if (PROVIDER === 'anthropic') {
     return {
-      type: 'anthropic',
-      model_id: MODEL,
-      env_secret: 'ADHD_AGENT_ANTHROPIC_SECRET',
-      base_url: PROXY ?? null,
-      timeout_ms: 180_000,
-      retry_config: { retries: 0, min_timeout: 1000, max_timeout: 5000, factor: 2 },
+      providerType: 'anthropic',
+      modelRef: MODEL,
+      env: { secret: 'ADHD_AGENT_ANTHROPIC_SECRET' },
+      baseURL: PROXY ?? null,
+      timeoutMs: 180_000,
+      retryConfig: { retries: 0, minTimeout: 1000, maxTimeout: 5000, factor: 2 },
     };
   }
   return {
-    type: 'claudecli',
-    model_id: MODEL,
-    env_secret: null,
-    base_url: PROXY ?? null,
-    timeout_ms: 240_000,
-    retry_config: { retries: 0, min_timeout: 1000, max_timeout: 5000, factor: 2 },
+    providerType: 'claudecli',
+    modelRef: MODEL,
+    baseURL: PROXY ?? null,
+    timeoutMs: 240_000,
+    retryConfig: { retries: 0, minTimeout: 1000, maxTimeout: 5000, factor: 2 },
   };
 }
 
@@ -644,7 +643,7 @@ function newDag(opts: {
   terminal: string;
 }): DagJson {
   return {
-    schema_version: 4,
+    schema_version: 5,
     plan_kind: 'greenfield',
     description: opts.description,
     problem: 'drive a real dispatch under hard guards',

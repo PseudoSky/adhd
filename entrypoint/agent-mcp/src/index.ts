@@ -24,6 +24,7 @@ import { ComposedPromptStore } from "@adhd/agent-store-prompts";
 // obtained from that same dynamic import and threaded through
 // BuildPromptResolverOpts (see main()).
 
+import { createProviderRegistry, seedProviderRegistry } from "@adhd/agent-engine-orchestrator";
 import type { CompileAgentFn, PromptResolverDeps } from "@adhd/agent-engine-orchestrator";
 import {
   BackgroundQueue,
@@ -142,6 +143,15 @@ export function buildPromptResolver(opts: BuildPromptResolverOpts): PromptResolv
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const registryDb = drizzle(registrySqlite) as any;
 
+    // Seed the provider/model registry (idempotent INSERT OR IGNORE) so a canonical
+    // `modelRef` (e.g. claude_sonnet_4_6) resolves to its wire string on a fresh
+    // machine. Failure is non-fatal: refs then pass through verbatim.
+    try {
+        seedProviderRegistry(registryDb);
+    } catch (err) {
+        logger.warn({ err }, "Provider registry seed failed — model refs will not resolve to wire strings");
+    }
+
     const composedPromptStore = new ComposedPromptStore(registryDb);
 
     return {
@@ -165,7 +175,7 @@ function verifyAgentEnvRefs(agents: AgentDefinition[]): void {
     const names: string[] = [];
     for (const agent of agents) {
         const p = agent.provider;
-        if (p.type === "openai" || p.type === "anthropic") {
+        if (p?.type === "openai" || p?.type === "anthropic") {
             const env = p.env;
             if (env?.secret)   names.push(env.secret);
             if (env?.base_url) names.push(env.base_url);
@@ -339,6 +349,10 @@ async function main() {
         setSseBoundPort(undefined);
     }
 
+    const providerRegistry = promptResolver
+        ? createProviderRegistry(promptResolver.registryDb as Parameters<typeof createProviderRegistry>[0])
+        : undefined;
+
     const { close } = await startServer({
         agentStore,
         sessionStore,
@@ -350,6 +364,7 @@ async function main() {
         db: dbAny,
         dagEngine,
         promptResolver,
+        providerRegistry,
     });
 
     // The DAG dispatch path resolves `nativeTooling` at task time against the
@@ -385,6 +400,7 @@ async function main() {
         dagEngine,
         config: toEngineConfig(),
         logger,
+        providerRegistry,
         emitTaskEvent: emitTaskEvent as NonNullable<Parameters<typeof enqueueExistingTask>[1]>["emitTaskEvent"],
     } as Parameters<typeof enqueueExistingTask>[1];
 

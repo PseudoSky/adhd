@@ -22,7 +22,7 @@ import type {
   DagJson,
   MilestoneDag,
   OperationDag,
-  ProviderConfig,
+  PartialBinding,
 } from '@adhd/dispatch-base-spec';
 import { createDagClient } from '@adhd/dispatch-core-client';
 import { createJsonFileSerializer } from '@adhd/dispatch-serializer-json';
@@ -46,14 +46,12 @@ afterAll(() => {
   fs.rmSync(TMP_ROOT, { recursive: true, force: true });
 });
 
-function providerConfig(): ProviderConfig {
+function providerConfig(): PartialBinding {
   return {
-    type: 'claudecli',
-    model_id: 'claude-sonnet-test',
-    env_secret: null,
-    base_url: null,
-    timeout_ms: 30_000,
-    retry_config: { retries: 0, min_timeout: 0, max_timeout: 0, factor: 1 },
+    providerType: 'claudecli',
+    modelRef: 'claude-sonnet-test',
+    timeoutMs: 30_000,
+    retryConfig: { retries: 0, minTimeout: 0, maxTimeout: 0, factor: 1 },
   };
 }
 
@@ -102,7 +100,7 @@ function op(): OperationDag {
 
 function makeDag(agentName: string): DagJson {
   return {
-    schema_version: 4,
+    schema_version: 5,
     plan_kind: 'greenfield',
     description: 'no-auto-create plan',
     problem: 'x',

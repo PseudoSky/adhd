@@ -22,6 +22,7 @@ import { Environment } from "@adhd/environment";
 import { nativeToolingConfigFieldSpecs } from "@adhd/environment-base-spec";
 import type { EnvironmentSpec } from "@adhd/environment-base-spec";
 import type { EngineConfig } from "@adhd/agent-engine-orchestrator";
+import type { PartialBinding } from "@adhd/agent-base-types";
 
 import { loadEnvHierarchy } from "./utils/load-env.js";
 import { defaultPermissionGate } from "./defaults.js";
@@ -63,6 +64,14 @@ export interface AgentMcpConfig {
     /** Unset by default — see the `"server.registryDbPath"` FieldSpec below
      *  for why `@adhd/agent-core-env` owns the canonical fallback. */
     readonly registryDbPath: string | undefined;
+    /**
+     * The `global` tier of the provider selection chain
+     * `task ?? session ?? agent ?? global` (D-G(2)). Both unset by default: there
+     * is NO implicit default provider, and an unbound task fails closed with
+     * `NO_PROVIDER_SELECTED`.
+     */
+    readonly defaultProvider: string | undefined;
+    readonly defaultModel: string | undefined;
   };
   readonly transport: { readonly kind: string; readonly port: number };
   readonly sse: {
@@ -221,6 +230,23 @@ export const agentMcpEnvironmentSpec: EnvironmentSpec<AgentMcpConfig> = {
         "@adhd/agent-core-env's resolveRegistryDbPath() canonical default " +
         "(buildPromptResolver() in index.ts), so this field and the 5 family " +
         "packages always agree on ONE path without duplicating a default here.",
+    },
+    "server.defaultProvider": {
+      type: "string",
+      env: "ADHD_AGENT_DEFAULT_PROVIDER",
+      description:
+        "Host-wide default provider type (anthropic|openai|claudecli) — the `global` " +
+        "tier of the selection chain task ?? session ?? agent ?? global. Unset by " +
+        "default: no implicit provider; an unbound task fails closed " +
+        "(NO_PROVIDER_SELECTED).",
+    },
+    "server.defaultModel": {
+      type: "string",
+      env: "ADHD_AGENT_DEFAULT_MODEL",
+      description:
+        "Host-wide default model (a canonical ref such as claude_sonnet_4_6, or a " +
+        "provider-native string) — the `global` tier's model. Pair with " +
+        "ADHD_AGENT_DEFAULT_PROVIDER.",
     },
     "transport.kind": {
       type: "string",
@@ -508,6 +534,27 @@ export function computeSseBaseUrl(
   return configuredOverride ?? `http://localhost:${boundPort ?? configuredPort}`;
 }
 
+/** The `global` tier binding from the resolved config, or `undefined` when unset. */
+function globalSelection(): PartialBinding | undefined {
+  const providerType = env.config.server.defaultProvider;
+  const modelRef = env.config.server.defaultModel;
+  if (providerType === undefined && modelRef === undefined) return undefined;
+  if (
+    providerType !== undefined &&
+    providerType !== "anthropic" &&
+    providerType !== "openai" &&
+    providerType !== "claudecli"
+  ) {
+    throw new Error(
+      `ADHD_AGENT_DEFAULT_PROVIDER='${providerType}' is not one of anthropic|openai|claudecli`
+    );
+  }
+  return {
+    ...(providerType !== undefined && { providerType }),
+    ...(modelRef !== undefined && { modelRef }),
+  };
+}
+
 /**
  * Builds the `EngineConfig`-shaped adapter the orchestrator layer (`server.ts`,
  * `index.ts`) is injected with — the engine MUST NOT import `config.ts`
@@ -519,6 +566,7 @@ export function computeSseBaseUrl(
  */
 export function toEngineConfig(): EngineConfig {
   return {
+    defaultSelection: globalSelection(),
     server: {
       contextLimit: env.config.server.contextLimit,
       defaultMaxTokens: env.config.server.defaultMaxTokens,

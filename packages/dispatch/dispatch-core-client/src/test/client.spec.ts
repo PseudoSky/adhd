@@ -26,7 +26,7 @@ class InMemorySerializer implements IDagSerializer {
 
 function makeTestDag(): DagJson {
   return {
-    schema_version: 4,
+    schema_version: 5,
     plan_kind: 'brownfield',
     description: 'Test plan',
     problem: 'Test problem',
@@ -131,7 +131,7 @@ describe('DagClient', () => {
       const dag = makeTestDag();
       await client.saveDag(dag);
       const loaded = await client.load();
-      expect(loaded.schema_version).toBe(4);
+      expect(loaded.schema_version).toBe(5);
       expect(loaded.description).toBe('Test plan');
     });
   });
@@ -402,7 +402,7 @@ describe('DagClient', () => {
         snapshot_at: '2024-01-01T00:00:00Z',
         snapshot_version: 1,
         plan: 'test',
-        schema_version: 4,
+        schema_version: 5,
         plan_kind: 'brownfield',
         description: 'snapshot test',
         problem: '',

@@ -111,7 +111,72 @@ const MIGRATIONS: MigrationStep[] = [
       }
     },
   },
+  {
+    from: 4,
+    to: 5,
+    apply: (dag) => {
+      // v4 -> v5 (D-G(1)): `providers` entries move from the dispatch-only
+      // snake_case ProviderConfig to the shared camelCase PartialBinding.
+      const providers = dag['providers'];
+      if (providers && typeof providers === 'object') {
+        const map = providers as Record<string, unknown>;
+        for (const [tier, entry] of Object.entries(map)) {
+          map[tier] = migrateProviderEntry(entry);
+        }
+      }
+    },
+  },
 ];
+
+/** The dag.json schema version this package reads and writes. */
+export const CURRENT_DAG_SCHEMA_VERSION = 5;
+
+/**
+ * Convert one v4 snake_case provider entry (`type`, `model_id`, `env_secret`,
+ * `base_url`, `timeout_ms`, `retry_config{retries,min_timeout,max_timeout,
+ * factor}`) to a camelCase `PartialBinding`. Idempotent: an entry that is
+ * already a binding (no snake_case keys) is returned unchanged. `null` legacy
+ * fields are dropped (a binding field is absent, not null).
+ *
+ * `model_id` becomes `modelRef` verbatim — v4 stored wire strings
+ * (`claude-sonnet-4-5`), which stay valid refs until D-G(2) resolves refs
+ * through the provider registry at construction time.
+ */
+function migrateProviderEntry(entry: unknown): unknown {
+  if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return entry;
+  const old = entry as Record<string, unknown>;
+  const out: Record<string, unknown> = {};
+  const legacy = ['type', 'model_id', 'env_secret', 'base_url', 'timeout_ms', 'retry_config'];
+  // Carry over any key that is not a legacy key (already-migrated fields).
+  for (const [k, v] of Object.entries(old)) if (!legacy.includes(k)) out[k] = v;
+  if (old['type'] != null) out['providerType'] = old['type'];
+  if (old['model_id'] != null) out['modelRef'] = old['model_id'];
+  if (old['env_secret'] != null) out['env'] = { secret: old['env_secret'] };
+  if (old['base_url'] != null) out['baseURL'] = old['base_url'];
+  if (old['timeout_ms'] != null) out['timeoutMs'] = old['timeout_ms'];
+  const rc = old['retry_config'];
+  if (rc && typeof rc === 'object') {
+    const r = rc as Record<string, unknown>;
+    out['retryConfig'] = {
+      retries: r['retries'],
+      minTimeout: r['min_timeout'],
+      maxTimeout: r['max_timeout'],
+      factor: r['factor'],
+    };
+  }
+  return out;
+}
+
+/**
+ * Bring a parsed dag.json of any known older `schema_version` up to
+ * {@link CURRENT_DAG_SCHEMA_VERSION}, in place. A document already at (or
+ * above) the current version is untouched. Called by every dag read path.
+ */
+export function upgradeDagToCurrent(dag: Record<string, unknown>): void {
+  const from = dag['schema_version'];
+  if (typeof from !== 'number' || from >= CURRENT_DAG_SCHEMA_VERSION) return;
+  migrateDag(from, CURRENT_DAG_SCHEMA_VERSION, dag);
+}
 
 export function migrateDag(
   fromVersion: number,

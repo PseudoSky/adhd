@@ -31,6 +31,9 @@ export type {
   EmitShape,
 } from './store/tool-format-store.js';
 
+export { createProviderRegistry } from './registry.js';
+export type { ProviderRegistry, ProviderRegistryDb } from './registry.js';
+
 export { ProviderAdapterImpl } from './adapter/provider-adapter.js';
 
 export {

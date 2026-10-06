@@ -35,9 +35,8 @@ export type {
   PairwiseOverlapMap,
   PlanKind,
   Provenance,
-  ProviderConfig,
+  PartialBinding,
   ProviderType,
-  RetryConfig,
   SentinelFanoutConfig,
   SentinelRole,
   Shape,
@@ -72,4 +71,8 @@ export {
   validateSnapshot,
 } from './lib/validate.js';
 
-export { migrateDag } from './lib/migrate.js';
+export {
+  migrateDag,
+  upgradeDagToCurrent,
+  CURRENT_DAG_SCHEMA_VERSION,
+} from './lib/migrate.js';

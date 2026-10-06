@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import { upgradeDagToCurrent } from '@adhd/dispatch-base-spec';
 import type { DagJson, DagSnapshot } from '@adhd/dispatch-base-spec';
 import type { IDagSerializer } from '@adhd/dispatch-core-client';
 
@@ -44,6 +45,9 @@ export function createJsonFileSerializer(filePath: string): IDagSerializer {
     try {
       const content = fs.readFileSync(dagPath, 'utf-8');
       const parsed = JSON.parse(content) as DagJson;
+      // Older on-disk documents (e.g. v4 snake_case provider entries) are
+      // upgraded to the current schema in place before anything reads them.
+      upgradeDagToCurrent(parsed as unknown as Record<string, unknown>);
       return normalizeDag(parsed);
     } catch (err) {
       if (err instanceof Error && 'code' in err && err.code === 'ENOENT') {

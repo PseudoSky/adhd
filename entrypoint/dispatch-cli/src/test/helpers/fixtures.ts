@@ -14,20 +14,18 @@ import type {
   DispatchLogEntry,
   MilestoneDag,
   OperationDag,
-  ProviderConfig,
+  PartialBinding,
 } from '@adhd/dispatch-base-spec';
 
 /** A guard command that always passes — cheap, real, no network. */
 export const PASS_GUARD = 'node -e "process.exit(0)"';
 
-export function makeProviderConfig(): ProviderConfig {
+export function makePartialBinding(): PartialBinding {
   return {
-    type: 'claudecli',
-    model_id: 'claude-sonnet-test',
-    env_secret: null,
-    base_url: null,
-    timeout_ms: 30000,
-    retry_config: { retries: 0, min_timeout: 0, max_timeout: 0, factor: 1 },
+    providerType: 'claudecli',
+    modelRef: 'claude-sonnet-test',
+    timeoutMs: 30000,
+    retryConfig: { retries: 0, minTimeout: 0, maxTimeout: 0, factor: 1 },
   };
 }
 
@@ -89,7 +87,7 @@ export function makeOp(overrides: Partial<OperationDag> = {}): OperationDag {
  */
 export function makeFixtureDag(overrides: Partial<DagJson> = {}): DagJson {
   return {
-    schema_version: 4,
+    schema_version: 5,
     plan_kind: 'greenfield',
     description: 'dispatch-cli fixture plan',
     problem: 'fixture',
@@ -109,7 +107,7 @@ export function makeFixtureDag(overrides: Partial<DagJson> = {}): DagJson {
       context_window_override: null,
       b_override: null,
     },
-    providers: { Sonnet: makeProviderConfig() },
+    providers: { Sonnet: makePartialBinding() },
     effort_max_tokens: { medium: 4096 },
     milestones: {
       a: makeMilestone(),

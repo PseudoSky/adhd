@@ -93,7 +93,7 @@ import type {
   DagJson,
   MilestoneDag,
   OperationDag,
-  ProviderConfig,
+  PartialBinding,
 } from '@adhd/dispatch-base-spec';
 import { createDagClient } from '@adhd/dispatch-core-client';
 import { createJsonFileSerializer } from '@adhd/dispatch-serializer-json';
@@ -229,15 +229,15 @@ describe.skipIf(!LIVE)(
     }
 
     /** Provider config in dispatch-base-spec's snake_case shape. */
-    function providerConfig(): ProviderConfig {
+    function providerConfig(): PartialBinding {
       if (PROVIDER === 'deepseek') {
         return {
-          type: 'openai',
-          model_id: process.env["DISPATCH_E2E_MODEL"] ?? 'deepseek-chat',
-          env_secret: 'ADHD_AGENT_DEEPSEEK_SECRET',
-          base_url: 'https://api.deepseek.com/v1',
-          timeout_ms: 180_000,
-          retry_config: { retries: 0, min_timeout: 1000, max_timeout: 5000, factor: 2 },
+          providerType: 'openai',
+          modelRef: process.env["DISPATCH_E2E_MODEL"] ?? 'deepseek-chat',
+          env: { secret: 'ADHD_AGENT_DEEPSEEK_SECRET' },
+          baseURL: 'https://api.deepseek.com/v1',
+          timeoutMs: 180_000,
+          retryConfig: { retries: 0, minTimeout: 1000, maxTimeout: 5000, factor: 2 },
         };
       }
       if (PROVIDER === 'anthropic') {
@@ -245,21 +245,18 @@ describe.skipIf(!LIVE)(
         // through ADHD_AGENT_ANTHROPIC_SECRET; `claude-sonnet-4-6` is the model
         // the agent-mcp live-oauth e2e proves reachable with that token.
         return {
-          type: 'anthropic',
-          model_id: process.env["DISPATCH_E2E_MODEL"] ?? 'claude-sonnet-4-6',
-          env_secret: 'ADHD_AGENT_ANTHROPIC_SECRET',
-          base_url: null,
-          timeout_ms: 180_000,
-          retry_config: { retries: 0, min_timeout: 1000, max_timeout: 5000, factor: 2 },
+          providerType: 'anthropic',
+          modelRef: process.env["DISPATCH_E2E_MODEL"] ?? 'claude-sonnet-4-6',
+          env: { secret: 'ADHD_AGENT_ANTHROPIC_SECRET' },
+          timeoutMs: 180_000,
+          retryConfig: { retries: 0, minTimeout: 1000, maxTimeout: 5000, factor: 2 },
         };
       }
       return {
-        type: 'claudecli',
-        model_id: process.env["DISPATCH_E2E_MODEL"] ?? '',
-        env_secret: null,
-        base_url: null,
-        timeout_ms: 240_000,
-        retry_config: { retries: 0, min_timeout: 1000, max_timeout: 5000, factor: 2 },
+        providerType: 'claudecli',
+        modelRef: process.env["DISPATCH_E2E_MODEL"] ?? '',
+        timeoutMs: 240_000,
+        retryConfig: { retries: 0, minTimeout: 1000, maxTimeout: 5000, factor: 2 },
       };
     }
 
@@ -439,7 +436,7 @@ describe.skipIf(!LIVE)(
       terminal?: string;
     }): DagJson {
       return {
-        schema_version: 4,
+        schema_version: 5,
         plan_kind: 'greenfield',
         description: opts.description,
         problem: 'prove the live acceptance criteria end-to-end',

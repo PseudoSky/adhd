@@ -1,6 +1,6 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
-import type { DispatchUnit, ProviderConfig } from '@adhd/dispatch-base-spec';
+import type { DispatchUnit, PartialBinding } from '@adhd/dispatch-base-spec';
 
 // ---------------------------------------------------------------------------
 // ── WIRE-MIRROR TYPES ────────────────────────────────────────────────────────
@@ -254,7 +254,7 @@ const ERROR_CODE_PATTERN = /^\[([A-Z_]+)\]\s*([\s\S]*)$/;
  * union of exactly `'anthropic' | 'openai' | 'claudecli'` —
  * packages/agent/agent-engine-orchestrator/src/validation/agent.ts). These
  * are the SAME 3 values `@adhd/dispatch-base-spec`'s `ProviderType`/
- * `ProviderConfig.type` already restrict `DispatchUnit.provider` to
+ * `PartialBinding.providerType` already restrict `DispatchUnit.provider` to
  * (types.ts:84) — DeepSeek is not a 4th type on either side: it dispatches as
  * `type: 'openai'` with a DeepSeek `model`/`baseURL`, exactly matching the
  * real production `typescript-deepseek` agent definition. `@adhd/agent-mcp`
@@ -274,51 +274,43 @@ export interface McpAgentProviderConfig {
 }
 
 /**
- * Translates `DispatchUnit.provider` (dispatch-base-spec's snake_case
- * `ProviderConfig`) into the camelCase payload agent-mcp's real
- * `agent_create` tool accepts. THE FIX: `ensureAgent` previously hardcoded an
- * unconditional `{ type: 'claudecli' }` here regardless of `unit.provider` —
- * every field the DAG author configured via `dag.providers` (threaded onto
- * each unit by dispatch-orchestrator's `resolveUnitProviderAndTokens`) was
- * silently discarded, so the real (`dryRun: false`) path could never reach
- * DeepSeek (or any provider other than claudecli) no matter what the DAG
- * specified. Now a `type: 'openai'` unit with a DeepSeek `model_id`/
- * `base_url`/`env_secret` really dispatches to DeepSeek.
+ * Maps `DispatchUnit.provider` (the shared camelCase `PartialBinding` — the
+ * same shape every layer uses since D-G(1)) onto the wire `provider` payload
+ * agent-mcp's `agent_create` accepts today. The only renames are
+ * `providerType -> type` and `modelRef -> model`; there is no snake_case
+ * translation any more (that parallel representation is retired).
  *
- * `null` (no provider configured — every pre-fix caller, including
- * MockAgentRunner fixtures and the real-e2e claudecli live gate) preserves
- * the exact pre-fix default: a bare `{ type: 'claudecli' }` agent, no other
- * keys — verified byte-for-byte against `agent-runner.spec.ts`'s existing
- * `ensureAgent` assertions, which still pass unmodified.
+ * `null` / no `providerType` (no provider configured) maps to `undefined`: the
+ * `agent_create` payload then OMITS `provider` and agent-mcp stores a
+ * provider-less agent (D-G(2): `AgentDefinition.provider` is optional). There is
+ * no implicit `claudecli` default any more — an unbound task resolves its
+ * provider from the session / host-default tiers and otherwise fails closed with
+ * `NO_PROVIDER_SELECTED`.
+ *
+ * The rename to the legacy wire spelling stays because agent-mcp's stored
+ * agent definition still carries `{type, model}` (the agent tier is read as a
+ * binding by `providerConfigToBinding` in agent-engine-orchestrator).
  */
-export function toAgentMcpProviderConfig(
-  provider: ProviderConfig | null
-): McpAgentProviderConfig {
-  if (!provider) return { type: 'claudecli' };
+export function bindingToAgentCreateProvider(
+  binding: PartialBinding | null
+): McpAgentProviderConfig | undefined {
+  if (!binding?.providerType) return undefined;
 
-  if (provider.type === 'claudecli') {
+  if (binding.providerType === 'claudecli') {
     const config: McpAgentProviderConfig = { type: 'claudecli' };
-    if (provider.model_id) config.model = provider.model_id;
-    if (provider.timeout_ms) config.timeoutMs = provider.timeout_ms;
+    if (binding.modelRef) config.model = binding.modelRef;
+    if (binding.timeoutMs) config.timeoutMs = binding.timeoutMs;
     return config;
   }
 
   // 'anthropic' | 'openai' — DeepSeek and any other OpenAI-compatible
-  // endpoint dispatch through 'openai' + model_id/base_url (see doc comment
-  // above).
-  const config: McpAgentProviderConfig = { type: provider.type };
-  if (provider.model_id) config.model = provider.model_id;
-  if (provider.base_url) config.baseURL = provider.base_url;
-  if (provider.env_secret) config.env = { secret: provider.env_secret };
-  if (provider.timeout_ms) config.timeoutMs = provider.timeout_ms;
-  if (provider.retry_config) {
-    config.retryConfig = {
-      retries: provider.retry_config.retries,
-      minTimeout: provider.retry_config.min_timeout,
-      maxTimeout: provider.retry_config.max_timeout,
-      factor: provider.retry_config.factor,
-    };
-  }
+  // endpoint dispatch through 'openai' + modelRef/baseURL.
+  const config: McpAgentProviderConfig = { type: binding.providerType };
+  if (binding.modelRef) config.model = binding.modelRef;
+  if (binding.baseURL) config.baseURL = binding.baseURL;
+  if (binding.env?.secret) config.env = { secret: binding.env.secret };
+  if (binding.timeoutMs) config.timeoutMs = binding.timeoutMs;
+  if (binding.retryConfig) config.retryConfig = { ...binding.retryConfig };
   return config;
 }
 
@@ -569,7 +561,7 @@ export class AgentMcpRunner implements IDispatchAgentRunner {
     // `agent_create` payload stays byte-identical.
     await this.callTool('agent_create', {
       name: unit.agent_name,
-      provider: toAgentMcpProviderConfig(unit.provider),
+      provider: bindingToAgentCreateProvider(unit.provider),
       systemPrompt: unit.systemPrompt ?? undefined,
       mcpServers: this.defaultMcpServers,
       ...(this.nativeTooling !== undefined

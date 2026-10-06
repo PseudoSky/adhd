@@ -36,7 +36,7 @@ import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import { AgentStore, CompositionStore } from '@adhd/agent-store-prompts';
 import type { CompositionContext } from '@adhd/agent-store-prompts';
 import { ToolStore, BindingStore } from '@adhd/agent-store-tools';
-import { ToolFormatStore, emitToolsForProvider } from '@adhd/agent-core-provider';
+import { createProviderRegistry, emitToolsForProvider } from '@adhd/agent-core-provider';
 import type { ToolFormatLookup } from '@adhd/agent-core-provider';
 
 import { resolveTools } from './resolve/tools.js';
@@ -218,9 +218,7 @@ export function compileAgent(input: CompileInput): CompiledAgent {
       // For JSON platforms, tools is a structured array; reconstruct from the
       // same resolve path so the return shape is consistent.
       const toolStore = new ToolStore(db);
-      const toolFormatStore = new ToolFormatStore(db);
-      const lookupFmt: ToolFormatLookup = (pid, ct) =>
-        toolFormatStore.getShape(pid, ct);
+      const lookupFmt: ToolFormatLookup = createProviderRegistry(db).toolFormatLookup;
       const platformToProvider: Record<string, string> = {
         claude_api: 'anthropic',
         openai: 'openai',
@@ -305,9 +303,7 @@ export function compileAgent(input: CompileInput): CompiledAgent {
     // emitToolsForProvider can shape them.  inputSchema defaults to {} since
     // the registry doesn't store JSON schemas for tool grants.
     const toolStore = new ToolStore(db);
-    const toolFormatStore = new ToolFormatStore(db);
-    const lookupFmt: ToolFormatLookup = (providerId, canonicalTool) =>
-      toolFormatStore.getShape(providerId, canonicalTool);
+    const lookupFmt: ToolFormatLookup = createProviderRegistry(db).toolFormatLookup;
 
     // Map the target platform id to the provider id (Decision B.2: tools shaped
     // via provider_tool_formats).  claude_api → 'anthropic' is the seed mapping

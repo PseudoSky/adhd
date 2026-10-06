@@ -21,6 +21,7 @@ export const errorCodeSchema = z.enum([
   'VALIDATION_ERROR',
   'BUDGET_EXCEEDED',
   'COMPOSED_PROMPT_NOT_FOUND',
+  'NO_PROVIDER_SELECTED',
 ]);
 
 import type { AgentMcpErrorCode } from '@adhd/agent-base-types';

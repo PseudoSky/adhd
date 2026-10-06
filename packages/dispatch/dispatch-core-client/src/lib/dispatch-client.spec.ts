@@ -38,7 +38,7 @@ class InMemorySerializer implements IDagSerializer {
 
 function makeFixtureDag(): DagJson {
   return {
-    schema_version: 4,
+    schema_version: 5,
     plan_kind: 'brownfield',
     description: 'test',
     problem: 'test',

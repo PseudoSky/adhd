@@ -1197,9 +1197,14 @@ class BudgetPlugin implements Plugin {
    */
   private resolveCapLimit(cap: Cap, ctx: ExecutionContext): number {
     if (cap.maximum !== undefined) return cap.maximum;
-    const provider = ctx.agentDefinition.provider;
+    // The wire model resolved at construction; a hand-built context falls back to
+    // the selection's ref, then the agent's own (legacy) inline model.
+    const model =
+      ctx.wireModel ??
+      (ctx.selection?.modelRef || undefined) ??
+      ctx.agentDefinition.provider?.model;
     return Math.floor(
-      contextWindowFor(provider.model) * (cap.contextWindowFraction ?? 0)
+      contextWindowFor(model) * (cap.contextWindowFraction ?? 0)
     );
   }
 

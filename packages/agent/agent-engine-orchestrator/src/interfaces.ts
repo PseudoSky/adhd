@@ -71,6 +71,12 @@ export type PermissionGate = (
 export const DEFAULT_PROVIDER_TIMEOUT_MS = 300_000;
 
 export interface EngineConfig {
+  /**
+   * The host-wide default binding — the `global` tier of the selection chain
+   * `task ?? session ?? agent ?? global`. Unset (the default) means there is no
+   * default provider and an unbound task fails closed with `NO_PROVIDER_SELECTED`.
+   */
+  defaultSelection?: import('@adhd/agent-base-types').PartialBinding;
   server: {
     /** Estimated token limit for the message window passed to each provider call.
      *  When > 0, oldest non-system messages are dropped to fit. */

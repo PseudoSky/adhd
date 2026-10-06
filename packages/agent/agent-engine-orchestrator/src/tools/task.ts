@@ -9,7 +9,8 @@ import type {
   InProcessToolDescriptor,
   InProcessToolHandler,
 } from '../clients/in-process.js';
-import { createProvider } from '../providers/factory.js';
+import { buildProviderForSelection, resolveTaskSelection } from '../providers/construct.js';
+import type { ProviderRegistry } from '@adhd/agent-core-provider';
 import type { AgentStore } from './agent-crud.js';
 import type { SessionStoreForTool } from './session.js';
 import { McpClientRegistry } from '../clients/registry.js';
@@ -67,6 +68,11 @@ export interface TaskDeps {
   dagEngine: DagEngine;
   config: EngineConfig;
   logger: EngineLogger;
+  /**
+   * The provider/model data registry. When present, a canonical `modelRef` is
+   * resolved to its provider-native wire string at provider construction.
+   */
+  providerRegistry?: ProviderRegistry;
   emitTaskEvent?: (event: { type: string; taskId: string; status?: string; result?: string | null; error?: string | null; toolName?: string; toolCallId?: string; input?: unknown; content?: unknown }) => void;
 }
 
@@ -126,6 +132,14 @@ async function runEphemeralTask(
   // (what actually runs), never for persistence.
   const snapshotDefinition =
     deps.agentStore.readUnresolved?.(input.agent_name) ?? agentDefinition;
+
+  // Resolve the provider selection BEFORE any session/task row exists: an agent
+  // with no provider and no host default is refused up front (fail closed).
+  const { selection, wireModel } = resolveTaskSelection({
+    agentDefinition,
+    config: deps.config,
+    registry: deps.providerRegistry,
+  });
 
   const taskId = generateId();
   const rootTaskId = callerContext
@@ -190,14 +204,17 @@ async function runEphemeralTask(
     toolCallCount: 0,
     // Carry the effective cwd so a further sub-dispatch inherits it (ADR-0008 D4).
     cwd: effectiveCwd,
+    selection,
+    wireModel,
   };
 
-  const provider = createProvider(
-    agentDefinition.provider,
-    agentDefinition.mcpServers,
-    deps.config,
-    deps.logger
-  );
+  const provider = buildProviderForSelection({
+    agentDefinition,
+    selection,
+    config: deps.config,
+    logger: deps.logger,
+    registry: deps.providerRegistry,
+  });
 
   const userMessage = {
     id: generateId(),
@@ -313,6 +330,16 @@ export async function taskTool(
     effectiveCwd
   );
 
+  // Resolve the provider selection BEFORE the task row is created (fail closed:
+  // `NO_PROVIDER_SELECTED` leaves nothing half-created). The session-held
+  // binding is the `session` tier of the chain.
+  const { selection, wireModel } = resolveTaskSelection({
+    agentDefinition,
+    sessionBinding: deps.sessionStore.getSelection?.(input.session_id) ?? null,
+    config: deps.config,
+    registry: deps.providerRegistry,
+  });
+
   const dependsOn = (input as { depends_on?: string[] }).depends_on ?? [];
   const onUpstreamFailure = (input as { on_upstream_failure?: 'fail' | 'skip' })
     .on_upstream_failure;
@@ -379,17 +406,20 @@ export async function taskTool(
     toolCallCount: 0,
     // Carry the effective cwd so a further sub-dispatch inherits it (ADR-0008 D4).
     cwd: effectiveCwd,
+    selection,
+    wireModel,
   };
 
   const controller = new AbortController();
   deps.taskStore.registerCancellation(task.id, controller);
 
-  const provider = createProvider(
-    agentDefinition.provider,
-    agentDefinition.mcpServers,
-    deps.config,
-    deps.logger
-  );
+  const provider = buildProviderForSelection({
+    agentDefinition,
+    selection,
+    config: deps.config,
+    logger: deps.logger,
+    registry: deps.providerRegistry,
+  });
 
   const existingMessages = deps.sessionStore.getMessages(input.session_id);
   const userMessage = {
@@ -625,6 +655,28 @@ export async function enqueueExistingTask(
 
   const agentDefinition = deps.sessionStore.getAgentDefinition(task.sessionId);
 
+  let resolved: ReturnType<typeof resolveTaskSelection>;
+  try {
+    resolved = resolveTaskSelection({
+      agentDefinition,
+      sessionBinding: deps.sessionStore.getSelection?.(task.sessionId) ?? null,
+      config: deps.config,
+      registry: deps.providerRegistry,
+    });
+  } catch (err) {
+    // Fail closed: a re-dispatched task whose chain resolves no provider is
+    // marked failed with the typed reason rather than silently defaulted.
+    const message = err instanceof Error ? err.message : String(err);
+    deps.logger.warn({ taskId, err }, 'enqueueExistingTask: no provider selected');
+    try {
+      deps.taskStore.updateStatus(taskId, 'failed', { error: message });
+    } catch {
+      // Already terminal — ignore
+    }
+    return;
+  }
+  const { selection, wireModel } = resolved;
+
   const executionContext: ExecutionContext = {
     taskId,
     sessionId: task.sessionId,
@@ -638,17 +690,20 @@ export async function enqueueExistingTask(
     recursionDepth: task.recursionDepth,
     toolCallCount: 0,
     inputs: task.inputs ?? undefined,
+    selection,
+    wireModel,
   };
 
   const controller = new AbortController();
   deps.taskStore.registerCancellation(taskId, controller);
 
-  const provider = createProvider(
-    agentDefinition.provider,
-    agentDefinition.mcpServers,
-    deps.config,
-    deps.logger
-  );
+  const provider = buildProviderForSelection({
+    agentDefinition,
+    selection,
+    config: deps.config,
+    logger: deps.logger,
+    registry: deps.providerRegistry,
+  });
 
   const existingMessages = deps.sessionStore.getMessages(task.sessionId);
   const userMessage = {

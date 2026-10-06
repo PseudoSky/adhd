@@ -25,7 +25,7 @@ import type {
   IOptimizerDeps,
   MilestoneDag,
   OperationDag,
-  ProviderConfig,
+  PartialBinding,
 } from '@adhd/dispatch-base-spec';
 import { createDagClient } from '@adhd/dispatch-core-client';
 import { createJsonFileSerializer } from '@adhd/dispatch-serializer-json';
@@ -72,14 +72,12 @@ afterAll(() => {
 const PASS_GUARD = 'node -e "process.exit(0)"';
 const FAIL_GUARD = 'node -e "process.exit(1)"';
 
-function makeProviderConfig(): ProviderConfig {
+function makePartialBinding(): PartialBinding {
   return {
-    type: 'claudecli',
-    model_id: 'claude-sonnet-test',
-    env_secret: null,
-    base_url: null,
-    timeout_ms: 30000,
-    retry_config: { retries: 0, min_timeout: 0, max_timeout: 0, factor: 1 },
+    providerType: 'claudecli',
+    modelRef: 'claude-sonnet-test',
+    timeoutMs: 30000,
+    retryConfig: { retries: 0, minTimeout: 0, maxTimeout: 0, factor: 1 },
   };
 }
 
@@ -135,7 +133,7 @@ function makeOp(overrides: Partial<OperationDag> = {}): OperationDag {
 
 function makeDag(overrides: Partial<DagJson> = {}): DagJson {
   return {
-    schema_version: 4,
+    schema_version: 5,
     plan_kind: 'greenfield',
     description: 'test plan',
     problem: 'test',
@@ -155,7 +153,7 @@ function makeDag(overrides: Partial<DagJson> = {}): DagJson {
       context_window_override: null,
       b_override: null,
     },
-    providers: { Sonnet: makeProviderConfig() },
+    providers: { Sonnet: makePartialBinding() },
     effort_max_tokens: { medium: 4096, high: 8192 },
     milestones: { a: makeMilestone() },
     operations: [makeOp()],
@@ -229,7 +227,7 @@ describe('orchestrateCycle — real agent dispatch', () => {
     // null — see resolveUnitProviderAndTokens doc comment). Proven via the
     // unit MockAgentRunner actually received.
     expect(runner.firedUnits).toHaveLength(1);
-    expect(runner.firedUnits[0]?.provider).toEqual(makeProviderConfig());
+    expect(runner.firedUnits[0]?.provider).toEqual(makePartialBinding());
     expect(runner.firedUnits[0]?.resolved_max_tokens).toBe(4096);
 
     // CONSUMER OUTCOME: read the dag file back from disk via a FRESH client.
@@ -268,9 +266,9 @@ describe('orchestrateCycle — real agent dispatch', () => {
 
   it('falls back to provider claudecli (never anthropic) when a real dispatch has no dag.providers entry for its model (DEBT-DISPATCH-019)', async () => {
     // Sonnet has no matching entry in `providers` -> resolveUnitProviderAndTokens
-    // leaves unit.provider === null -> AgentMcpRunner.ensureAgent's real
-    // toAgentMcpProviderConfig(null) default is { type: 'claudecli' }
-    // (agent-runner.ts), so telemetry must report that, not a blind 'anthropic'.
+    // leaves unit.provider === null -> AgentMcpRunner.ensureAgent creates a
+    // provider-less agent (D-G(2)); the telemetry LABEL falls back to 'claudecli'
+    // (a label only, never a behavioural default), not a blind 'anthropic'.
     const { dagPath, deps, runner } = await setupScenario(
       'no-provider-config',
       makeDag({ providers: {} })

@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://adhd.dev/schemas/dag-v4.schema.json",
-  "title": "DagJson v4",
-  "description": "Authored plan document — intent + execution log. Schema version 4.",
+  "$id": "https://adhd.dev/schemas/dag-v5.schema.json",
+  "title": "DagJson v5",
+  "description": "Authored plan document — intent + execution log. Schema version 5.",
   "type": "object",
   "required": [
     "schema_version",
@@ -21,7 +21,7 @@
     "dispatch_log"
   ],
   "properties": {
-    "schema_version": { "const": 4 },
+    "schema_version": { "const": 5 },
     "plan_kind": { "enum": ["brownfield", "greenfield"] },
     "description": { "type": "string", "minLength": 1 },
     "problem": { "type": "string" },

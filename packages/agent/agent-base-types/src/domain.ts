@@ -123,6 +123,17 @@ export interface Message {
   createdAt: string;
 }
 
+import type { ProviderSelection } from './provider-binding.js';
+
+// Provider binding types (D-G(1)): one binding shape shared by agent, session,
+// task and the dispatch DAG. Defined in provider-binding.ts.
+export type {
+  ModelSlug,
+  ProviderType,
+  PartialBinding,
+  ProviderSelection,
+} from './provider-binding.js';
+
 export interface RetryConfig {
   retries: number;
   minTimeout: number;
@@ -440,7 +451,15 @@ export interface AgentDefinition {
   name: string;
   description?: string;
   version: number;
-  provider: ProviderConfig;
+  /**
+   * OPTIONAL: an agent is not welded to a provider (D-G(2)). Its binding is the
+   * `agent` tier of the selection chain `task ?? session ?? agent ?? global`
+   * (see `providerConfigToBinding` / `resolveSelection` in
+   * `@adhd/agent-engine-orchestrator`). An agent with no provider resolves from
+   * the session / task / global tiers and fails closed with
+   * `NO_PROVIDER_SELECTED` when none supplies one.
+   */
+  provider?: ProviderConfig;
   /**
    * COMPUTED COMPAT SHIM — never user-authored after Plan 6 wave 3 (agent-store-retire).
    *
@@ -534,6 +553,22 @@ export interface ExecutionContext {
    * have `depends_on` entries. Failed/cancelled upstreams are omitted.
    */
   inputs?: Record<string, string>;
+  /**
+   * The provider binding resolved ONCE for this task from the chain
+   * `task ?? session ?? agent ?? global`. Every orchestrator provider
+   * dereference reads this, never `agentDefinition.provider`. Optional on the
+   * type so hand-built contexts (tests, delegation) stay valid; the orchestrator
+   * derives it from the agent tier when absent and fails closed
+   * (`NO_PROVIDER_SELECTED`) when that yields nothing.
+   */
+  selection?: ProviderSelection;
+  /**
+   * The provider-native model string for `selection.modelRef`, resolved through
+   * the provider registry at construction (`createProvider` time). Rate-card,
+   * context-window and compaction lookups key on this wire string, never on a
+   * canonical slug. Absent when the selection uses the provider default model.
+   */
+  wireModel?: string;
 }
 
 /**

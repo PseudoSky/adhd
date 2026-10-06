@@ -212,7 +212,7 @@ import type {
   DispatchUnit,
   MilestoneDag,
   OperationDag,
-  ProviderConfig,
+  PartialBinding,
   ValidationResult,
 } from '@adhd/dispatch-base-spec';
 import { createDagClient } from '@adhd/dispatch-core-client';
@@ -374,14 +374,12 @@ export function runCli(args: string[]): CliResult {
 // ── Fixture builders ─────────────────────────────────────────────────────────
 // ---------------------------------------------------------------------------
 
-function makeProviderConfig(): ProviderConfig {
+function makePartialBinding(): PartialBinding {
   return {
-    type: 'claudecli',
-    model_id: 'claude-sonnet-e2e',
-    env_secret: null,
-    base_url: null,
-    timeout_ms: 30_000,
-    retry_config: { retries: 0, min_timeout: 0, max_timeout: 0, factor: 1 },
+    providerType: 'claudecli',
+    modelRef: 'claude-sonnet-e2e',
+    timeoutMs: 30_000,
+    retryConfig: { retries: 0, minTimeout: 0, maxTimeout: 0, factor: 1 },
   };
 }
 
@@ -529,7 +527,7 @@ async function scenario1(ctx: LifecycleCtx): Promise<string> {
   // DRIFT-1: no `init` command exists — create the skeleton through the real
   // DagClient instead.
   const skeleton: DagJson = {
-    schema_version: 4,
+    schema_version: 5,
     plan_kind: 'greenfield',
     description: 'real-e2e test-e2e lifecycle plan',
     problem: 'prove the dispatch-production fast path end-to-end',
@@ -606,7 +604,7 @@ async function scenario2(ctx: LifecycleCtx): Promise<string> {
     makeOp('interface.2', 'interface', ['interface.1']),
     makeOp('implement.1', 'implement', []),
   ];
-  dag.providers = { Sonnet: makeProviderConfig() };
+  dag.providers = { Sonnet: makePartialBinding() };
   dag.effort_max_tokens = { medium: 4096 };
   dag.terminal = 'implement';
 
@@ -991,7 +989,7 @@ async function liveScenario(): Promise<ScenarioResult> {
 
   try {
     const dag: DagJson = {
-      schema_version: 4,
+      schema_version: 5,
       plan_kind: 'greenfield',
       description: 'real-e2e LIVE scenario — one real agent-mcp dispatch',
       problem: 'prove the orchestrator-to-agent-mcp boundary works against a real model',
@@ -1000,7 +998,7 @@ async function liveScenario(): Promise<ScenarioResult> {
       phases: ['e2e-live'],
       terminal: 'embedding-research',
       optimization: EMPTY_OPTIMIZATION,
-      providers: { Haiku: makeProviderConfig() },
+      providers: { Haiku: makePartialBinding() },
       effort_max_tokens: { low: 2048 },
       milestones: {
         'embedding-research': makeMilestone({

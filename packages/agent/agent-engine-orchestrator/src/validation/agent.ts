@@ -108,7 +108,7 @@ export const agentDefinitionSchema = z.object({
   name: z.string().min(1),
   description: z.string().optional(),
   version: z.number().int().positive(),
-  provider: providerConfigSchema,
+  provider: providerConfigSchema.optional(),
   systemPrompt: z.optional(z.string()),
   mcpServers: z.record(z.string(), mcpServerConfigSchema).default({}),
   permissions: agentPermissionsSchema.default({}),
@@ -125,7 +125,7 @@ export const agentDefinitionSchema = z.object({
 export type { AgentDefinition } from '@adhd/agent-base-types';
 
 export const agentDefinitionStoredSchema = agentDefinitionSchema.extend({
-  provider: providerConfigStoredSchema,
+  provider: providerConfigStoredSchema.optional(),
 });
 
 /**
