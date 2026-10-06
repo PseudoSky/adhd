@@ -94,6 +94,55 @@ interface IEdgeTargets {
 }
 
 /**
+ * Page-level batched edge/node reads shared by every card in a `query` page
+ * (built once by {@link assembleIssueCards}). The whole point is the N+1 fix:
+ * a `query` page used to cost, per item, an outgoing `getEdges({src})`, one or
+ * more incoming `getEdges({dst,...})`, several `getNodesByIds`, and a
+ * `resolveStatusesFor` per status-bearing resolver (`blockers`/`related`/
+ * `blocksOut`/`partOf`/`similar`) — O(page) store round trips. This batch pays
+ * a bounded number of round trips UP FRONT (one `getEdges({rel})` per needed
+ * relation + a constant number of node/status reads) and every card reads from
+ * memory. It is keyed by the page's node ids, so its cost is independent of
+ * page size.
+ */
+export interface IPageReadBatch {
+  /** Page-issue outgoing edges, keyed by src issue id, in the per-src order the store's `getEdges({src})` yields. */
+  readonly outgoingBySrc: ReadonlyMap<number, readonly EdgeRecord[]>;
+  /** Page-issue incoming edges, keyed by dst issue id, in the per-dst order `getEdges({dst})` yields. */
+  readonly incomingByDst: ReadonlyMap<number, readonly EdgeRecord[]>;
+  /** Every neighbour node referenced by the page's batched edges, keyed by id. */
+  readonly nodeById: ReadonlyMap<number, NodeRecord>;
+  /** Status node per node id, resolved page-wide in one pass (never one per item). */
+  readonly statusByNodeId: ReadonlyMap<number, NodeRecord>;
+  /** Outbound `blocks` adjacency (src → dst[]) over page ids, for the `dependents` walk. */
+  readonly blocksOutAdj: ReadonlyMap<number, readonly number[]>;
+  /** Placement per node id (page ids + neighbours), populated only when a placement-bearing field is requested. */
+  readonly placementByNodeId: ReadonlyMap<
+    number,
+    { component?: NodeRecord; project?: NodeRecord }
+  >;
+}
+
+/**
+ * Resolve a set of ids to node records, preferring a page-wide pre-resolved
+ * `nodeById` map over a fresh store read. Preserves `getNodesByIds`'s contract:
+ * requested-id order, missing/tombstoned ids omitted.
+ */
+async function pickNodes(
+  graph: GraphBackend,
+  nodeById: ReadonlyMap<number, NodeRecord> | undefined,
+  ids: readonly number[]
+): Promise<NodeRecord[]> {
+  if (!nodeById) return graph.getNodesByIds([...ids]);
+  const out: NodeRecord[] = [];
+  for (const id of ids) {
+    const n = nodeById.get(id);
+    if (n) out.push(n);
+  }
+  return out;
+}
+
+/**
  * Resolve the `n:1` catalog edges every issue carries (`has_kind`/
  * `has_status`/`has_priority`/`authored_by`) from one already-fetched
  * `getEdges({src: issueId})` result, batching the target reads into one
@@ -102,7 +151,8 @@ interface IEdgeTargets {
 async function resolveCatalogTargets(
   graph: GraphBackend,
   issueId: number,
-  outgoing: EdgeRecord[]
+  outgoing: readonly EdgeRecord[],
+  nodeById?: ReadonlyMap<number, NodeRecord>
 ): Promise<IEdgeTargets> {
   const kindEdge = outgoing.find(
     (e) => e.rel === 'has_kind' && e.src === issueId
@@ -124,7 +174,7 @@ async function resolveCatalogTargets(
     authorEdge?.dst,
   ].filter((id): id is number => id !== undefined);
   if (ids.length === 0) return {};
-  const nodes = await graph.getNodesByIds(ids);
+  const nodes = await pickNodes(graph, nodeById, ids);
   const byId = new Map(nodes.map((n) => [n.id, n]));
   return {
     kind: kindEdge ? byId.get(kindEdge.dst) : undefined,
@@ -137,13 +187,14 @@ async function resolveCatalogTargets(
 async function resolveCitations(
   graph: GraphBackend,
   issueId: number,
-  outgoing: EdgeRecord[]
+  outgoing: readonly EdgeRecord[],
+  nodeById?: ReadonlyMap<number, NodeRecord>
 ): Promise<IIssueCitation[]> {
   const edges = outgoing.filter(
     (e) => e.rel === 'has_citation' && e.src === issueId
   );
   if (edges.length === 0) return [];
-  const nodes = await graph.getNodesByIds(edges.map((e) => e.dst));
+  const nodes = await pickNodes(graph, nodeById, edges.map((e) => e.dst));
   // The ONE decoder for the persisted citation node (`../citation.ts`) — the
   // read projection can never drift from the write encoding.
   return nodes.map((n) =>
@@ -160,13 +211,14 @@ async function resolveCitations(
 async function resolveNotes(
   graph: GraphBackend,
   issueId: number,
-  outgoing: EdgeRecord[]
+  outgoing: readonly EdgeRecord[],
+  nodeById?: ReadonlyMap<number, NodeRecord>
 ): Promise<IIssueNote[]> {
   const edges = outgoing.filter(
     (e) => e.rel === 'has_note' && e.src === issueId
   );
   if (edges.length === 0) return [];
-  const nodes = await graph.getNodesByIds(edges.map((e) => e.dst));
+  const nodes = await pickNodes(graph, nodeById, edges.map((e) => e.dst));
   return nodes.map((n) => ({
     uid: n.uid,
     author: typeof n.metadata?.author === 'string' ? n.metadata.author : '',
@@ -179,13 +231,14 @@ async function resolveNotes(
 export async function resolveAuditTrail(
   graph: GraphBackend,
   issueId: number,
-  outgoing?: EdgeRecord[]
+  outgoing?: readonly EdgeRecord[],
+  nodeById?: ReadonlyMap<number, NodeRecord>
 ): Promise<IIssueAuditEntry[]> {
   const edges = (outgoing ?? (await getOutgoingEdges(graph, issueId))).filter(
     (e) => e.rel === 'audits' && e.src === issueId
   );
   if (edges.length === 0) return [];
-  const nodes = await graph.getNodesByIds(edges.map((e) => e.dst));
+  const nodes = await pickNodes(graph, nodeById, edges.map((e) => e.dst));
   const entries = nodes.map((n) => ({
     uid: n.uid,
     actor: typeof n.metadata?.actor === 'string' ? n.metadata.actor : '',
@@ -208,13 +261,20 @@ export async function resolveAuditTrail(
  */
 export async function resolveBlockers(
   graph: GraphBackend,
-  issueId: number
+  issueId: number,
+  batch?: IPageReadBatch
 ): Promise<IIssueRef[]> {
-  const incoming = await graph.getEdges({ dst: issueId, rel: 'blocks' });
-  if (incoming.length === 0) return [];
-  const blockerIds = incoming.map((e) => e.src);
-  const blockers = await graph.getNodesByIds(blockerIds);
-  const statuses = await resolveStatusesFor(graph, blockers);
+  const incoming = batch
+    ? (batch.incomingByDst.get(issueId) ?? [])
+    : await graph.getEdges({ dst: issueId, rel: 'blocks' });
+  const blockEdges = incoming.filter(
+    (e) => e.rel === 'blocks' && e.dst === issueId
+  );
+  if (blockEdges.length === 0) return [];
+  const blockerIds = blockEdges.map((e) => e.src);
+  const blockers = await pickNodes(graph, batch?.nodeById, blockerIds);
+  const statuses =
+    batch?.statusByNodeId ?? (await resolveStatusesFor(graph, blockers));
   return blockers
     .filter((b) => !isStatusTerminal(statuses.get(b.id)))
     .map((b) => ({
@@ -245,10 +305,13 @@ export async function resolveBlockers(
 export async function resolveRelated(
   graph: GraphBackend,
   issueId: number,
-  outgoing?: EdgeRecord[]
+  outgoing?: readonly EdgeRecord[],
+  batch?: IPageReadBatch
 ): Promise<IIssueRef[]> {
   const out = outgoing ?? (await getOutgoingEdges(graph, issueId));
-  const incoming = await getIncomingEdges(graph, issueId);
+  const incoming = batch
+    ? (batch.incomingByDst.get(issueId) ?? [])
+    : await getIncomingEdges(graph, issueId);
 
   const relById = new Map<number, NonNullable<IIssueRef['rel']>>();
   const add = (id: number, rel: NonNullable<IIssueRef['rel']>): void => {
@@ -265,8 +328,9 @@ export async function resolveRelated(
     else if (e.rel === 'blocks') add(e.src, 'blocked_by');
   }
   if (relById.size === 0) return [];
-  const others = await graph.getNodesByIds([...relById.keys()]);
-  const statuses = await resolveStatusesFor(graph, others);
+  const others = await pickNodes(graph, batch?.nodeById, [...relById.keys()]);
+  const statuses =
+    batch?.statusByNodeId ?? (await resolveStatusesFor(graph, others));
   return others.map((n) => ({
     uid: n.uid,
     title: n.name ?? '',
@@ -287,10 +351,13 @@ export async function resolveRelated(
 export async function resolveSimilar(
   graph: GraphBackend,
   issueId: number,
-  outgoing?: EdgeRecord[]
+  outgoing?: readonly EdgeRecord[],
+  batch?: IPageReadBatch
 ): Promise<ISimilarLinks> {
   const out = outgoing ?? (await getOutgoingEdges(graph, issueId));
-  const incoming = await getIncomingEdges(graph, issueId);
+  const incoming = batch
+    ? (batch.incomingByDst.get(issueId) ?? [])
+    : await getIncomingEdges(graph, issueId);
   const toEdges = out.filter(
     (e) => e.rel === 'similar_to' && e.src === issueId
   );
@@ -302,13 +369,16 @@ export async function resolveSimilar(
   ];
   if (ids.length === 0) return { similarTo: [], similarFrom: [] };
 
-  const nodes = await graph.getNodesByIds(ids);
+  const nodes = await pickNodes(graph, batch?.nodeById, ids);
   const byId = new Map(nodes.map((n) => [n.id, n]));
-  const statuses = await resolveStatusesFor(graph, nodes);
+  const statuses =
+    batch?.statusByNodeId ?? (await resolveStatusesFor(graph, nodes));
   const refFor = async (id: number): Promise<ISimilarRef | undefined> => {
     const node = byId.get(id);
     if (!node) return undefined;
-    const { project } = await resolveIssuePlacement(graph, node.id);
+    const { project } = batch
+      ? (batch.placementByNodeId.get(node.id) ?? {})
+      : await resolveIssuePlacement(graph, node.id);
     const ref: ISimilarRef = {
       uid: node.uid,
       title: node.name ?? '',
@@ -344,15 +414,17 @@ export async function resolveSimilar(
 export async function resolveBlocksOut(
   graph: GraphBackend,
   issueId: number,
-  outgoing?: EdgeRecord[]
+  outgoing?: readonly EdgeRecord[],
+  batch?: IPageReadBatch
 ): Promise<IIssueRef[]> {
   const edges = (outgoing ?? (await getOutgoingEdges(graph, issueId))).filter(
     (e) => e.rel === 'blocks' && e.src === issueId
   );
   if (edges.length === 0) return [];
-  const targets = await graph.getNodesByIds(edges.map((e) => e.dst));
+  const targets = await pickNodes(graph, batch?.nodeById, edges.map((e) => e.dst));
   if (targets.length === 0) return [];
-  const statuses = await resolveStatusesFor(graph, targets);
+  const statuses =
+    batch?.statusByNodeId ?? (await resolveStatusesFor(graph, targets));
   return targets.map((n) => ({
     uid: n.uid,
     title: n.name ?? '',
@@ -376,18 +448,21 @@ export async function resolveBlocksOut(
 export async function resolveDependents(
   graph: GraphBackend,
   issueId: number,
-  scope?: ReadonlySet<number>
+  scope?: ReadonlySet<number>,
+  blocksOutAdj?: ReadonlyMap<number, readonly number[]>
 ): Promise<number> {
   const visited = new Set<number>();
   const queue: number[] = [issueId];
   while (queue.length > 0) {
     const id = queue.shift()!;
-    const edges = await graph.getEdges({ src: id, rel: 'blocks' });
-    for (const e of edges) {
-      if (e.dst === issueId || visited.has(e.dst)) continue;
-      if (scope && !scope.has(e.dst)) continue;
-      visited.add(e.dst);
-      queue.push(e.dst);
+    const dsts = blocksOutAdj
+      ? (blocksOutAdj.get(id) ?? [])
+      : (await graph.getEdges({ src: id, rel: 'blocks' })).map((e) => e.dst);
+    for (const dst of dsts) {
+      if (dst === issueId || visited.has(dst)) continue;
+      if (scope && !scope.has(dst)) continue;
+      visited.add(dst);
+      queue.push(dst);
     }
   }
   return visited.size;
@@ -402,15 +477,17 @@ export async function resolveDependents(
 export async function resolvePartOf(
   graph: GraphBackend,
   issueId: number,
-  outgoing?: EdgeRecord[]
+  outgoing?: readonly EdgeRecord[],
+  batch?: IPageReadBatch
 ): Promise<IIssueRef | null> {
   const edge = (outgoing ?? (await getOutgoingEdges(graph, issueId))).find(
     (e) => e.rel === 'part_of' && e.src === issueId
   );
   if (!edge) return null;
-  const [parent] = await graph.getNodesByIds([edge.dst]);
+  const [parent] = await pickNodes(graph, batch?.nodeById, [edge.dst]);
   if (!parent) return null;
-  const statuses = await resolveStatusesFor(graph, [parent]);
+  const statuses =
+    batch?.statusByNodeId ?? (await resolveStatusesFor(graph, [parent]));
   return {
     uid: parent.uid,
     title: parent.name ?? '',
@@ -432,13 +509,14 @@ export async function resolvePartOf(
 export async function resolveObligations(
   graph: GraphBackend,
   issueId: number,
-  outgoing?: EdgeRecord[]
+  outgoing?: readonly EdgeRecord[],
+  batch?: IPageReadBatch
 ): Promise<IObligationView[]> {
   const edges = (outgoing ?? (await getOutgoingEdges(graph, issueId))).filter(
     (e) => e.rel === 'has_obligation' && e.src === issueId
   );
   if (edges.length === 0) return [];
-  const nodes = await graph.getNodesByIds(edges.map((e) => e.dst));
+  const nodes = await pickNodes(graph, batch?.nodeById, edges.map((e) => e.dst));
   const byId = new Map(nodes.map((n) => [n.id, n]));
   const views: IObligationView[] = [];
   for (const e of edges) {
@@ -513,7 +591,14 @@ export interface IAssembleIssueCardOptions {
    */
   bounds?: { lastN?: number; after?: string };
   /** Pre-fetched outgoing edges (`getEdges({src: issue.id})`) — pass when the caller already has them (e.g. a batch `query` page) to avoid a redundant round trip. */
-  outgoingEdges?: EdgeRecord[];
+  outgoingEdges?: readonly EdgeRecord[];
+  /**
+   * Page-level batched edge/node reads (see {@link IPageReadBatch}) — supplied
+   * by {@link assembleIssueCards} so every edge pseudo-field resolves from one
+   * bounded prefetch instead of per-item store round trips. Absent on a
+   * single `get` (N=1), which resolves directly against the graph unchanged.
+   */
+  batch?: IPageReadBatch;
   /**
    * The candidate id set a `dependents` walk is bounded to (C2). A list page
    * passes its own page id set so an N-item page costs N bounded walks; a
@@ -586,9 +671,13 @@ export async function assembleIssueCard(
   const needsSpec = want('spec');
   const needsSimilar = want('similar');
 
-  const outgoing =
-    opts.outgoingEdges ??
-    (needsCatalogTargets ||
+  let outgoing: readonly EdgeRecord[] | undefined;
+  if (opts.outgoingEdges) {
+    outgoing = opts.outgoingEdges;
+  } else if (opts.batch) {
+    outgoing = opts.batch.outgoingBySrc.get(issue.id) ?? [];
+  } else if (
+    needsCatalogTargets ||
     needsCitations ||
     needsNotes ||
     needsAuditTrail ||
@@ -597,8 +686,9 @@ export async function assembleIssueCard(
     needsPartOf ||
     needsObligations ||
     needsSimilar
-      ? await getOutgoingEdges(graph, issue.id)
-      : undefined);
+  ) {
+    outgoing = await getOutgoingEdges(graph, issue.id);
+  }
 
   if (want('title')) card.title = issue.name ?? '';
   if (want('createdAt')) card.createdAt = issue.tCreated;
@@ -623,7 +713,12 @@ export async function assembleIssueCard(
   if (want('body')) card.body = issue.content;
 
   if (needsCatalogTargets && outgoing) {
-    const targets = await resolveCatalogTargets(graph, issue.id, outgoing);
+    const targets = await resolveCatalogTargets(
+      graph,
+      issue.id,
+      outgoing,
+      opts.batch?.nodeById
+    );
     if (want('kind') && targets.kind) card.kind = targets.kind.name ?? '';
     if (want('status') && targets.status)
       card.status = targets.status.name ?? '';
@@ -634,41 +729,63 @@ export async function assembleIssueCard(
   }
 
   if (needsPlacement) {
-    const { project, component } = await resolveIssuePlacement(graph, issue.id);
+    const { project, component } = opts.batch
+      ? (opts.batch.placementByNodeId.get(issue.id) ?? {})
+      : await resolveIssuePlacement(graph, issue.id);
     if (want('project') && project) card.project = project.uid;
     if (want('component') && component) card.component = component.uid;
   }
 
   if (needsCitations && outgoing)
     card.citations = boundSubCollection(
-      await resolveCitations(graph, issue.id, outgoing),
+      await resolveCitations(graph, issue.id, outgoing, opts.batch?.nodeById),
       opts.bounds
     );
   if (needsNotes && outgoing)
-    card.notes = await resolveNotes(graph, issue.id, outgoing);
+    card.notes = await resolveNotes(
+      graph,
+      issue.id,
+      outgoing,
+      opts.batch?.nodeById
+    );
   if (needsAuditTrail && outgoing)
     card.auditTrail = boundSubCollection(
-      await resolveAuditTrail(graph, issue.id, outgoing),
+      await resolveAuditTrail(graph, issue.id, outgoing, opts.batch?.nodeById),
       opts.bounds
     );
   if (needsBlockers)
     card.blockers = boundSubCollection(
-      await resolveBlockers(graph, issue.id),
+      await resolveBlockers(graph, issue.id, opts.batch),
       opts.bounds
     );
   if (needsRelated && outgoing)
     card.related = boundSubCollection(
-      await resolveRelated(graph, issue.id, outgoing),
+      await resolveRelated(graph, issue.id, outgoing, opts.batch),
       opts.bounds
     );
   if (needsBlocksOut && outgoing)
-    card.blocksOut = await resolveBlocksOut(graph, issue.id, outgoing);
+    card.blocksOut = await resolveBlocksOut(
+      graph,
+      issue.id,
+      outgoing,
+      opts.batch
+    );
   if (needsDependents)
-    card.dependents = await resolveDependents(graph, issue.id, opts.scope);
+    card.dependents = await resolveDependents(
+      graph,
+      issue.id,
+      opts.scope,
+      opts.batch?.blocksOutAdj
+    );
   if (needsPartOf && outgoing)
-    card.partOf = await resolvePartOf(graph, issue.id, outgoing);
+    card.partOf = await resolvePartOf(graph, issue.id, outgoing, opts.batch);
   if (needsObligations && outgoing)
-    card.obligations = await resolveObligations(graph, issue.id, outgoing);
+    card.obligations = await resolveObligations(
+      graph,
+      issue.id,
+      outgoing,
+      opts.batch
+    );
 
   if (needsVerdict) {
     // C6 — derived on read. An UNEXPECTED derivation failure degrades to an
@@ -726,7 +843,7 @@ export async function assembleIssueCard(
   }
 
   if (needsSimilar && outgoing)
-    card.similar = await resolveSimilar(graph, issue.id, outgoing);
+    card.similar = await resolveSimilar(graph, issue.id, outgoing, opts.batch);
 
   if (want('_score') && opts.score !== undefined) {
     card._score = opts.score;
@@ -743,7 +860,157 @@ export async function assembleIssueCard(
   return card;
 }
 
-/** Batch-assemble cards for a page of issue nodes, sharing one `getNodesByIds`-batched catalog/placement resolution pass where possible. Falls back to per-issue assembly (still batches internally) — a cross-issue batch would require a different, `getEdges`-list API this file's dependency (`GraphBackend`) does not expose.
+/**
+ * Build the page-level batched edge/node reads for a `query` page (the N+1
+ * fix). Determines the relations the requested `fields` need, fetches each
+ * relation-wide in ONE `getEdges({rel})` call, and groups the results by the
+ * page's node ids — so the whole page costs a bounded number of store round
+ * trips independent of page size. Relations are fetched in ascending order and
+ * grouped by appending, which reproduces the per-src/per-dst order the store's
+ * indexed `getEdges({src})`/`getEdges({dst})` calls yield (index `(src, rel,
+ * rowid)` / `(dst, rel, rowid)`), so output order is preserved exactly.
+ *
+ * When `fields` requests no edge/pseudo data at all, this issues zero store
+ * calls (the common fast path is untouched).
+ */
+async function buildPageReadBatch(
+  graph: GraphBackend,
+  issueIds: readonly number[],
+  fields: readonly IIssueField[]
+): Promise<IPageReadBatch> {
+  const want = (f: IIssueField): boolean => fields.includes(f);
+  const pageIds = new Set(issueIds);
+
+  const outRels = new Set<string>();
+  const inRels = new Set<string>();
+  if (want('kind') || want('status') || want('priority') || want('author')) {
+    outRels.add('has_kind');
+    outRels.add('has_status');
+    outRels.add('has_priority');
+    outRels.add('authored_by');
+  }
+  if (want('citations')) outRels.add('has_citation');
+  if (want('notes')) outRels.add('has_note');
+  if (want('auditTrail')) outRels.add('audits');
+  if (want('related')) {
+    for (const rel of ['relates_to', 'part_of', 'blocks']) {
+      outRels.add(rel);
+      inRels.add(rel);
+    }
+  }
+  if (want('blockers')) inRels.add('blocks');
+  if (want('blocksOut') || want('dependents')) outRels.add('blocks');
+  if (want('partOf')) outRels.add('part_of');
+  if (want('obligations')) outRels.add('has_obligation');
+  if (want('similar')) {
+    outRels.add('similar_to');
+    inRels.add('similar_to');
+  }
+
+  const outgoingBySrc = new Map<number, EdgeRecord[]>();
+  const incomingByDst = new Map<number, EdgeRecord[]>();
+  const push = (
+    m: Map<number, EdgeRecord[]>,
+    key: number,
+    edge: EdgeRecord
+  ): void => {
+    const list = m.get(key);
+    if (list) list.push(edge);
+    else m.set(key, [edge]);
+  };
+  const rels = [...new Set([...outRels, ...inRels])].sort();
+  for (const rel of rels) {
+    const edges = await graph.getEdges({ rel });
+    const asOut = outRels.has(rel);
+    const asIn = inRels.has(rel);
+    for (const e of edges) {
+      if (asOut && pageIds.has(e.src)) push(outgoingBySrc, e.src, e);
+      if (asIn && pageIds.has(e.dst)) push(incomingByDst, e.dst, e);
+    }
+  }
+
+  const neighbourIds = new Set<number>();
+  for (const list of outgoingBySrc.values())
+    for (const e of list) neighbourIds.add(e.dst);
+  for (const list of incomingByDst.values())
+    for (const e of list) neighbourIds.add(e.src);
+
+  const nodeById = new Map<number, NodeRecord>();
+  if (neighbourIds.size > 0) {
+    const nodes = await graph.getNodesByIds([...neighbourIds]);
+    for (const n of nodes) nodeById.set(n.id, n);
+  }
+  const statusByNodeId = await resolveStatusesFor(graph, [...nodeById.values()]);
+
+  const blocksOutAdj = new Map<number, readonly number[]>();
+  if (want('dependents')) {
+    for (const [src, list] of outgoingBySrc) {
+      const dsts: number[] = [];
+      for (const e of list) if (e.rel === 'blocks' && e.src === src) dsts.push(e.dst);
+      blocksOutAdj.set(src, dsts);
+    }
+  }
+
+  const placementByNodeId = new Map<
+    number,
+    { component?: NodeRecord; project?: NodeRecord }
+  >();
+  if (
+    want('project') ||
+    want('component') ||
+    want('similar')
+  ) {
+    const targets = new Set<number>([...pageIds, ...neighbourIds]);
+    // `owns_component: component → issue` (component is the SOURCE); the
+    // component that owns a node is the `src` of the edge into it.
+    const compIdByNode = new Map<number, number>();
+    for (const e of await graph.getEdges({ rel: 'owns_component' })) {
+      if (targets.has(e.dst) && !compIdByNode.has(e.dst))
+        compIdByNode.set(e.dst, e.src);
+    }
+    const compIds = new Set([...compIdByNode.values()]);
+    // `owns_project: project → component` (project is the SOURCE); the project
+    // that owns a component is the `src` of the edge into it.
+    const projIdByComp = new Map<number, number>();
+    for (const e of await graph.getEdges({ rel: 'owns_project' })) {
+      if (compIds.has(e.dst) && !projIdByComp.has(e.dst))
+        projIdByComp.set(e.dst, e.src);
+    }
+    const placeIds = new Set<number>([
+      ...compIds,
+      ...projIdByComp.values(),
+    ]);
+    const placeById = new Map<number, NodeRecord>();
+    if (placeIds.size > 0) {
+      for (const n of await graph.getNodesByIds([...placeIds]))
+        placeById.set(n.id, n);
+    }
+    for (const [nodeId, compId] of compIdByNode) {
+      const component = placeById.get(compId);
+      if (!component) continue;
+      const projId = projIdByComp.get(compId);
+      const project = projId === undefined ? undefined : placeById.get(projId);
+      placementByNodeId.set(nodeId, project ? { component, project } : { component });
+    }
+  }
+
+  return {
+    outgoingBySrc,
+    incomingByDst,
+    nodeById,
+    statusByNodeId,
+    blocksOutAdj,
+    placementByNodeId,
+  };
+}
+
+/** Batch-assemble cards for a page of issue nodes. Every edge pseudo-field
+ * (`blockers`/`partOf`/`related`/`blocksOut`/`dependents`/`obligations`/
+ * `similar`) and the catalog/placement reads resolve from ONE page-level
+ * prefetch ({@link buildPageReadBatch}) — a bounded number of store round trips
+ * independent of page size — instead of the previous per-item (N+1) fan-out.
+ * Output is byte-for-byte unchanged: the batch groups the same live edges and
+ * nodes the per-item resolvers read, in the same order.
  *
  * The page's own node ids are handed to each card as the `dependents` walk's
  * `scope` (C2): a list read bounds each transitive-dependent count to the page
@@ -761,12 +1028,21 @@ export async function assembleIssueCards(
   verdictOpts?: { rung?: IVerdictRung; onRung?: (rung: number) => void }
 ): Promise<IIssueCard[]> {
   const scope = new Set(issues.map((i) => i.id));
+  const batch =
+    issues.length > 0
+      ? await buildPageReadBatch(
+          graph,
+          issues.map((i) => i.id),
+          fields
+        )
+      : undefined;
   return Promise.all(
     issues.map((issue) =>
       assembleIssueCard(graph, issue, fields, {
         score: scoreByUid?.get(issue.uid),
         scoreKind: scoreKindByUid?.get(issue.uid),
         scope,
+        ...(batch ? { batch } : {}),
         ...(verdictOpts?.rung !== undefined
           ? { verdictRung: verdictOpts.rung }
           : {}),
