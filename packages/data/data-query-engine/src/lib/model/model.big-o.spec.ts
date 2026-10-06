@@ -16,19 +16,32 @@ import type { Predicate, QueryExpression, Row } from './types';
 
 // ── deterministic instrumentation ───────────────────────────────────────────
 
-interface MapGetMeter<K, V> { proxy: Map<K, V>; get: () => number }
+interface MapGetMeter<K, V> { proxy: Map<K, V>; get: () => number; reads: () => number }
 
-/** Wrap a Map so `get` calls are counted (other methods bound to the real Map). */
+/**
+ * Wrap a Map so `get` calls (and every read that could scan the map — iteration,
+ * keys/values/entries/forEach/size) are counted. `get` is exact for `rowsFor`;
+ * `reads` is a superset, used to prove `candidates` never touches the row store.
+ */
 function meterMapGet<K, V>(map: Map<K, V>): MapGetMeter<K, V> {
   let gets = 0;
+  let reads = 0;
+  const READ_METHODS = new Set(['keys', 'values', 'entries', 'forEach']);
   const proxy = new Proxy(map, {
     get(target, prop) {
-      if (prop === 'get') return (key: K): V | undefined => { gets += 1; return target.get(key); };
+      if (prop === 'get') return (key: K): V | undefined => { gets += 1; reads += 1; return target.get(key); };
+      if (prop === 'size') { reads += 1; return target.size; }
+      if (typeof prop === 'symbol') { reads += 1; return target[Symbol.iterator].bind(target); }
+      if (typeof prop === 'string' && READ_METHODS.has(prop)) {
+        reads += 1;
+        const method = target[prop as 'keys'];
+        return method.bind(target);
+      }
       const value = Reflect.get(target, prop, target);
       return typeof value === 'function' ? value.bind(target) : value;
     },
   });
-  return { proxy, get: () => gets };
+  return { proxy, get: () => gets, reads: () => reads };
 }
 
 interface RowMeter { rows: Row[]; v: () => number; ts: () => number }
@@ -80,9 +93,9 @@ describe('IndexStore — candidates/rowsFor are index-bound, not scan-bound', ()
     const store = buildStore(rows, [{ field: 'g', kind: 'eq' }]);
     const meter = meterMapGet((store as unknown as RawIndexStore).rows);
     (store as unknown as RawIndexStore).rows = meter.proxy;
-    const before = meter.get();
+    const before = meter.reads();
     const ids = store.candidates({ g: { _eq: 7 } });
-    expect(meter.get() - before).toBe(0); // zero row reads — a fallback scan would read n
+    expect(meter.reads() - before).toBe(0); // zero row reads — any scan (get/iterate) would read n
     if (ids === undefined) throw new Error('expected index candidates');
     const expected = rows.map((r, i) => (r['g'] === 7 ? i : -1)).filter((i) => i >= 0);
     expect([...ids].sort((a, b) => a - b)).toEqual(expected);
@@ -92,9 +105,9 @@ describe('IndexStore — candidates/rowsFor are index-bound, not scan-bound', ()
     const store = buildStore(rows, [{ field: 'v', kind: 'range' }]);
     const meter = meterMapGet((store as unknown as RawIndexStore).rows);
     (store as unknown as RawIndexStore).rows = meter.proxy;
-    const before = meter.get();
+    const before = meter.reads();
     const ids = store.candidates({ v: { _between: [100, 109] } });
-    expect(meter.get() - before).toBe(0);
+    expect(meter.reads() - before).toBe(0);
     if (ids === undefined) throw new Error('expected index candidates');
     expect([...ids].sort((a, b) => a - b)).toEqual([100, 101, 102, 103, 104, 105, 106, 107, 108, 109]);
   });
@@ -103,9 +116,9 @@ describe('IndexStore — candidates/rowsFor are index-bound, not scan-bound', ()
     const store = buildStore(rows, [{ field: 'g', kind: 'bitmap' }]);
     const meter = meterMapGet((store as unknown as RawIndexStore).rows);
     (store as unknown as RawIndexStore).rows = meter.proxy;
-    const before = meter.get();
+    const before = meter.reads();
     const ids = store.candidates({ g: { _eq: 5 } });
-    expect(meter.get() - before).toBe(0);
+    expect(meter.reads() - before).toBe(0);
     if (ids === undefined) throw new Error('expected index candidates');
     expect(ids.size).toBe(n / 100);
   });
