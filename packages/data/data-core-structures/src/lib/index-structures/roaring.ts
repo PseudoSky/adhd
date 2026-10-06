@@ -22,7 +22,9 @@ function lowerBound(arr: number[], target: number): number {
 }
 
 function toBitmap(arr: number[]): Uint32Array {
-  const bits = new Uint32Array(1024);
+  // The low 16 bits span 0..65535 — 65536 bits = 2048 Uint32 words. A 1024-word
+  // (32768-bit) array silently drops every value whose low bits are ≥ 32768.
+  const bits = new Uint32Array(2048);
   for (const lo of arr) bits[lo >>> 5] |= 1 << (lo & 31);
   return bits;
 }
@@ -100,7 +102,9 @@ export class RoaringBitmap {
         let bits = c[w] ?? 0;
         while (bits !== 0) {
           const lsb = bits & -bits;
-          out.push(base + (w << 5) + Math.log2(lsb));
+          // `lsb` is signed int32, so `Math.log2` returns NaN once bit 31 is the
+          // lowest set bit (0x80000000 reads as -2147483648). `clz32` is unsigned.
+          out.push(base + (w << 5) + (31 - Math.clz32(lsb)));
           bits ^= lsb;
         }
       }

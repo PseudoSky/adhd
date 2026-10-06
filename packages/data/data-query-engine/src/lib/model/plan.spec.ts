@@ -4,7 +4,7 @@ import { computeAccessPath, planQuery } from './plan';
 import { IndexStore } from './indexing';
 import { DataView } from './dataview';
 import { execute, type EvalCtx } from './execute';
-import type { QueryExpression, Row } from './types';
+import type { Predicate, QueryExpression, Row } from './types';
 
 const store = (rows: Row[], fields: Array<{ field: string; kind: 'eq' | 'range' | 'bitmap' }>): IndexStore => {
   const s = new IndexStore(fields);
@@ -156,5 +156,33 @@ describe('index-accelerated execution matches a scan (§11/§13)', () => {
     expect(planKey(q1)).toBe(planKey(q2));
     const dv = new DataView([{ name: 's', data: [{ k: 'x', v: 1 }, { k: 'y', v: 2 }, { k: 'x', v: 3 }] }]);
     expect(dv.query(q1)).toEqual(dv.query(q2));
+  });
+});
+
+describe('audit fixes (§11/§7) — access & order soundness', () => {
+  it('B1: a non-finite or non-number value in a range-indexed field matches a scan', () => {
+    const data: Row[] = [{ v: 0 }, { v: NaN }, { v: Infinity }, { v: -Infinity }, { v: 'z' }];
+    const indexed = new DataView([{ name: 's', data: [...data] }], {
+      indexes: { s: [{ field: 'v', kind: 'range' }] },
+    });
+    const plain = new DataView([{ name: 's', data: [...data] }]);
+    const wheres: Predicate[] = [
+      { v: { _gte: 0 } },
+      { v: { _gt: 0 } },
+      { v: { _lt: 0 } },
+      { v: { _lte: 0 } },
+    ];
+    for (const where of wheres) {
+      expect(indexed.query({ source: 's', where })).toEqual(plain.query({ source: 's', where }));
+    }
+  });
+
+  it('B7: order_by honours the null-ordering variants', () => {
+    const data: Row[] = [{ v: 1 }, { v: null }, { v: 2 }];
+    const vals = (q: QueryExpression): unknown[] => execute(q, data).map((r) => r['v']);
+    expect(vals({ select: ['v'], order_by: [{ v: 'asc' }] })).toEqual([1, 2, null]);
+    expect(vals({ select: ['v'], order_by: [{ v: 'asc_nulls_first' }] })).toEqual([null, 1, 2]);
+    expect(vals({ select: ['v'], order_by: [{ v: 'desc' }] })).toEqual([null, 2, 1]);
+    expect(vals({ select: ['v'], order_by: [{ v: 'desc_nulls_last' }] })).toEqual([2, 1, null]);
   });
 });

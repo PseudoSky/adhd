@@ -237,6 +237,8 @@ dv.query({ source: 'sales', where: { region: { _eq: 'west' }, amount: { _gte: 10
 
 Equality (`PostingIndex`), range (B+ tree), and low-cardinality (`RoaringBitmap`) indexes are maintained across `insert`/`append`/`remove`; the planner picks among them and falls back to a scan for any non-indexable disjunct.
 
+**Notes.** `group_by` output key order is unspecified — canonicalization treats `group_by` items as an order-independent set, so two queries differing only in item order share one incremental cache. A range index over a field that has held a non-finite number (NaN/±Infinity) or a non-number falls back to a scan, so the index can never change a result. The reference executor materializes window frames, so an unbounded frame is quadratic in the partition size (a bounded frame is linear); the prefix-sum/deque acceleration is part of the §13 optimization layer, not this reference executor.
+
 
 Example:
 

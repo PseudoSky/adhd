@@ -50,6 +50,21 @@ class SortedRun {
     for (const k of this.keys) this.bloom.add(k);
   }
 
+  /** Whether `key` is present — distinguishes a stored `undefined` from absent. */
+  has(key: number): boolean {
+    if (!this.bloom.mightContain(key)) return false;
+    let lo = 0;
+    let hi = this.keys.length - 1;
+    while (lo <= hi) {
+      const mid = (lo + hi) >>> 1;
+      const k = this.keys[mid] as number;
+      if (k === key) return true;
+      if (k < key) lo = mid + 1;
+      else hi = mid - 1;
+    }
+    return false;
+  }
+
   get(key: number): unknown {
     if (!this.bloom.mightContain(key)) return undefined;
     let lo = 0;
@@ -90,8 +105,9 @@ export class LsmTree {
   get(key: number): unknown {
     if (this.mem.has(key)) return this.mem.get(key);
     for (const run of this.runs) {
-      const v = run.get(key);
-      if (v !== undefined) return v;
+      // Presence, not value: a newest write of `undefined` must not fall through to
+      // an older run's real value.
+      if (run.has(key)) return run.get(key);
     }
     return undefined;
   }

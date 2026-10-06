@@ -595,12 +595,31 @@ function applyWindowPhase(rows: Row[], select: SelectItem[] | undefined, ctx: Ev
 }
 
 // ── tail + projection ───────────────────────────────────────────────────────
+/**
+ * One order key. The null bucket is decided by the direction SUFFIX only (`_nulls_first`
+ * / `_nulls_last`), and the value order by `asc`/`desc` — so `asc_nulls_first` puts
+ * nulls first and `desc_nulls_last` puts them last (SQL default: ASC → NULLS LAST,
+ * DESC → NULLS FIRST).
+ */
+function compareOrderKey(av: unknown, bv: unknown, dir: string): number {
+  const aNull = av === null || av === undefined;
+  const bNull = bv === null || bv === undefined;
+  if (aNull || bNull) {
+    if (aNull && bNull) return 0;
+    const nullsFirst = dir.endsWith('_nulls_first') || (dir === 'desc' && !dir.endsWith('_nulls_last'));
+    const nullRank = nullsFirst ? -1 : 1;
+    return aNull ? nullRank : -nullRank;
+  }
+  const c = _.compareOrder(av, bv);
+  return dir.startsWith('desc') ? -c : c;
+}
+
 function compareMulti(orders: OrderByExpression[], a: Row, b: Row): number {
   for (const order of orders) {
     for (const [field, dir] of Object.entries(order)) {
       if (typeof dir !== 'string') continue;
-      const c = _.compareOrder(get(field)(a), get(field)(b));
-      if (c !== 0) return dir.startsWith('desc') ? -c : c;
+      const c = compareOrderKey(get(field)(a), get(field)(b), dir);
+      if (c !== 0) return c;
     }
   }
   return 0;
@@ -714,7 +733,12 @@ export function execute(query: QueryExpression, rows: Row[], ctx?: EvalCtx): Row
         }
         out[item.name ?? 'nested'] = rows;
       }
-      return [out];
+      // Apply the tail + qualify to the single emitted row (consistent with the
+      // grouped path) rather than silently ignoring them.
+      let rowsOut: Row[] = [out];
+      const qualify = query.qualify;
+      if (qualify !== undefined) rowsOut = rowsOut.filter((r) => matches(qualify, r, context));
+      return applyTail(rowsOut, query, (r) => r);
     }
 
     let rowsOut = applyWindowPhase(data, select, context);

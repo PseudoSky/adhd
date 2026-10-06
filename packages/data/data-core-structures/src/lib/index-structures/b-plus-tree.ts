@@ -16,19 +16,24 @@ class Leaf {
 class Internal {
   readonly keys: number[] = []; // separator: keys[i] is the min key of children[i+1]
   readonly children: Array<Leaf | Internal> = [];
+  /** Cached SUM of this node's subtree sizes. Maintained bottom-up on insert so
+   *  `rank`/`select` can read a child's size in O(1) instead of recursing over the
+   *  whole subtree (which is what made them O(n)). */
+  size = 0;
 }
 
 type Node = Leaf | Internal;
 
-function subtreeSize(node: Node): number {
-  return node instanceof Leaf ? node.keys.length : node.children.reduce((s, c) => s + subtreeSize(c), 0);
+/** A node's subtree size in O(1): live for a leaf, the cached field for an internal. */
+function sizeOf(node: Node): number {
+  return node instanceof Leaf ? node.keys.length : node.size;
 }
 
 export class BPlusTree {
   private root: Node = new Leaf();
 
   get size(): number {
-    return subtreeSize(this.root);
+    return sizeOf(this.root);
   }
 
   /** The number of keys strictly less than `key` (0-based rank). */
@@ -47,7 +52,7 @@ export class BPlusTree {
       while (i < node.keys.length && key > (node.keys[i] ?? 0)) {
         const child = node.children[i];
         if (child === undefined) return r;
-        r += subtreeSize(child);
+        r += sizeOf(child);
         i += 1;
       }
       const next = node.children[i];
@@ -69,7 +74,7 @@ export class BPlusTree {
       for (;;) {
         const child = node.children[i];
         if (child === undefined) return undefined;
-        const size = subtreeSize(child);
+        const size = sizeOf(child);
         if (target < size) {
           node = child;
           break;
@@ -99,6 +104,7 @@ export class BPlusTree {
       const newRoot = new Internal();
       newRoot.children.push(this.root, split.right);
       newRoot.keys.push(split.separator);
+      newRoot.size = sizeOf(this.root) + sizeOf(split.right);
       this.root = newRoot;
     }
   }
@@ -128,15 +134,21 @@ export class BPlusTree {
     const child = node.children[i];
     if (child === undefined) return undefined;
     const childSplit = this.insertInto(child, key, value);
-    if (childSplit === undefined) return undefined;
-    node.keys.splice(i, 0, childSplit.separator);
-    node.children.splice(i + 1, 0, childSplit.right);
-    if (node.keys.length <= MAX_KEYS) return undefined;
+    if (childSplit !== undefined) {
+      node.keys.splice(i, 0, childSplit.separator);
+      node.children.splice(i + 1, 0, childSplit.right);
+    }
+    if (node.keys.length <= MAX_KEYS) {
+      node.size = node.children.reduce((s, c) => s + sizeOf(c), 0);
+      return undefined;
+    }
     const mid = Math.ceil(node.keys.length / 2);
     const right = new Internal();
     const sep = node.keys.splice(mid, 1)[0] as number;
     right.keys.push(...node.keys.splice(mid));
     right.children.push(...node.children.splice(mid + 1));
+    node.size = node.children.reduce((s, c) => s + sizeOf(c), 0);
+    right.size = right.children.reduce((s, c) => s + sizeOf(c), 0);
     return { separator: sep, right };
   }
 

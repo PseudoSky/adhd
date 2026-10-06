@@ -11,8 +11,12 @@ export class Fenwick {
     this.tree = new Array<number>(size + 1).fill(0);
   }
 
-  /** Add `delta` at 0-based index `i`. */
+  /** Add `delta` at 0-based index `i`. Throws on an out-of-range index (an `i < 0`
+   *  would otherwise spin forever: `x = i+1 = 0` and `x & -x === 0` never advances). */
   update(i: number, delta: number): void {
+    if (!Number.isInteger(i) || i < 0 || i >= this.size) {
+      throw new RangeError(`Fenwick.update: index ${i} out of range [0, ${this.size})`);
+    }
     for (let x = i + 1; x <= this.size; x += x & -x) this.tree[x] = (this.tree[x] ?? 0) + delta;
   }
 

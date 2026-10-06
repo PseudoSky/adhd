@@ -53,6 +53,8 @@ export class IndexStore implements PlannerIndex {
   private readonly eq = new Map<string, PostingIndex>();
   private readonly range = new Map<string, BPlusTree>();
   private readonly bitmap = new Map<string, Map<string, RoaringBitmap>>();
+  /** Range fields that have held a present non-finite / non-number value. */
+  private readonly rangeImpure = new Set<string>();
 
   constructor(fields: IndexField[]) {
     for (const f of fields) {
@@ -75,7 +77,18 @@ export class IndexStore implements PlannerIndex {
     else bucket.push(id);
     for (const [field, idx] of this.eq) idx.add(getPath(row, field), id);
     for (const [field, tree] of this.range) {
-      const v = num(getPath(row, field));
+      const raw = getPath(row, field);
+      // A present, non-null value that is not a finite number (a string, Date, NaN,
+      // ±Infinity, …) is omitted from the numeric tree but may still MATCH a range
+      // predicate, because `compareOrder` places NaN/Infinity among the numbers and
+      // compares other types by string form. Mark the field impure so range narrowing
+      // falls back to a scan — keeping the index a PURE SUPERSET (never a different
+      // result). Null/undefined are safe: `isDefined` already excludes them.
+      if (raw !== null && raw !== undefined && (typeof raw !== 'number' || !Number.isFinite(raw))) {
+        this.rangeImpure.add(field);
+        continue;
+      }
+      const v = num(raw);
       if (v === undefined) continue;
       const existing = tree.get(v);
       if (existing === undefined) tree.insert(v, [id]);
@@ -103,7 +116,12 @@ export class IndexStore implements PlannerIndex {
     this.rows.delete(id);
     for (const [field, idx] of this.eq) idx.remove(getPath(row, field), id);
     for (const [field, tree] of this.range) {
-      const v = num(getPath(row, field));
+      const raw = getPath(row, field);
+      if (raw !== null && raw !== undefined && (typeof raw !== 'number' || !Number.isFinite(raw))) {
+        this.rangeImpure.add(field);
+        continue;
+      }
+      const v = num(raw);
       if (v === undefined) continue;
       const existing = tree.get(v) as number[] | undefined;
       if (existing !== undefined) {
@@ -184,7 +202,7 @@ export class IndexStore implements PlannerIndex {
       }
       return out;
     }
-    if (rangeIdx === undefined) return undefined;
+    if (rangeIdx === undefined || this.rangeImpure.has(field)) return undefined;
     if (op === '_between' && Array.isArray(operand) && operand.length >= 2) {
       const lo = num(operand[0]);
       const hi = num(operand[1]);
