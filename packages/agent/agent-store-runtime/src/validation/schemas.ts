@@ -34,7 +34,10 @@ export const agentDefinitionStoredSchema = z
       .object({
         type: z.enum(['anthropic', 'openai', 'claudecli']),
       })
-      .passthrough(),
+      .passthrough()
+      // Optional: an agent may hold no provider (D-G(2)); the binding then comes
+      // from the session / task / host-default tiers of the selection chain.
+      .optional(),
     systemPrompt: z.string().optional(),
     mcpServers: z.record(z.string(), z.unknown()).default({}),
     permissions: z

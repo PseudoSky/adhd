@@ -45,8 +45,10 @@ import {
   agentTool,
   sessionList,
   sessionClose,
+  sessionUpdate,
   sessionClear,
 } from '@adhd/agent-engine-orchestrator';
+import type { ProviderRegistry } from '@adhd/agent-engine-orchestrator';
 import {
   taskTool,
   taskList,
@@ -67,6 +69,7 @@ import {
   agentToolInputSchema,
   sessionListInputSchema,
   sessionCloseInputSchema,
+  sessionUpdateInputSchema,
   sessionClearInputSchema,
   taskToolInputSchema,
   tasksBatchInputSchema,
@@ -109,6 +112,12 @@ export interface ServerDeps {
   dagEngine: DagEngine;
   promptResolver?: PromptResolverDeps;
   /**
+   * The provider/model data registry. When present, a canonical `modelRef`
+   * (e.g. `claude_sonnet_4_6`) is resolved to its provider-native wire string at
+   * provider construction; absent, refs pass through verbatim.
+   */
+  providerRegistry?: ProviderRegistry;
+  /**
    * The dispatching cwd used for task-time native-tooling resolution
    * (ADR-0008 D4). Read at each task/verify fire so the stored definition stays
    * portable; defaults to `process.cwd()`.
@@ -120,6 +129,11 @@ export interface ServerDeps {
    */
   dispatchSelf?: McpServerConfig;
 }
+
+const SESSION_UPDATE_DESCRIPTION =
+  'Set the session-held provider binding: provider (anthropic|openai|claudecli), model (canonical ref such as claude_sonnet_4_6), models (ordered fallback list). ' +
+  'The binding is the session tier of the selection chain task > session > agent > host default and applies to the next task on the session. ' +
+  'An agent with no provider fails closed (NO_PROVIDER_SELECTED) until a binding is set here or a host default exists.';
 
 function toMcpErrorContent(error: unknown): {
   content: Array<{ type: 'text'; text: string }>;
@@ -468,6 +482,11 @@ export function createServer(deps: ServerDeps): Server {
       inputSchema: toMcpInputSchema(sessionCloseInputSchema),
     },
     {
+      name: 'session_update',
+      description: SESSION_UPDATE_DESCRIPTION,
+      inputSchema: toMcpInputSchema(sessionUpdateInputSchema),
+    },
+    {
       name: 'session_clear',
       description:
         "Clear all messages from a session's context without closing it",
@@ -548,6 +567,12 @@ export function createServer(deps: ServerDeps): Server {
           sessionStore: deps.sessionStore,
           policy: deps.policy,
         });
+      case 'session_update':
+        return sessionUpdate(sessionUpdateInputSchema.parse(args), {
+          agentStore: deps.agentStore,
+          sessionStore: deps.sessionStore,
+          policy: deps.policy,
+        });
       case 'session_clear':
         return sessionClear(sessionClearInputSchema.parse(args), {
           agentStore: deps.agentStore,
@@ -585,6 +610,7 @@ export function createServer(deps: ServerDeps): Server {
     dagEngine: deps.dagEngine,
     config: toEngineConfig(),
     logger: logger,
+    providerRegistry: deps.providerRegistry,
     emitTaskEvent: emitTaskEvent as (event: { type: string; taskId: string; status?: string; result?: string | null; error?: string | null; toolName?: string; toolCallId?: string; input?: unknown; content?: unknown }) => void,
   });
 
@@ -640,6 +666,11 @@ export function createServer(deps: ServerDeps): Server {
         name: 'session_close',
         description: 'Close an active session',
         inputSchema: toMcpInputSchema(sessionCloseInputSchema),
+      },
+      {
+        name: 'session_update',
+        description: SESSION_UPDATE_DESCRIPTION,
+        inputSchema: toMcpInputSchema(sessionUpdateInputSchema),
       },
       {
         name: 'session_clear',
@@ -807,6 +838,15 @@ export function createServer(deps: ServerDeps): Server {
         case 'session_close':
           return toMcpContent(
             sessionClose(sessionCloseInputSchema.parse(args), {
+              agentStore: deps.agentStore,
+              sessionStore: deps.sessionStore,
+              policy: deps.policy,
+            })
+          );
+
+        case 'session_update':
+          return toMcpContent(
+            sessionUpdate(sessionUpdateInputSchema.parse(args), {
               agentStore: deps.agentStore,
               sessionStore: deps.sessionStore,
               policy: deps.policy,
