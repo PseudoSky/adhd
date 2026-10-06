@@ -20,6 +20,16 @@ Public surface (`src/index.ts`):
   projections.
 - `matchPermission(ruleMap, toolName)` — thin gate: tool **NAME**, last-match-wins,
   `deny` terminal. Never parses command text.
+- `resolveFsRoots(fs, ctx)` — the ONE producer of the resolved `fs` root list. Turns
+  a definition's **portable hints** into concrete dirs: a named alias into
+  `ctx.roots` (the global allowed-root map, alias → absolute path) wins; a relative
+  hint resolves against `ctx.cwd` and must not escape it; an **absolute** hint
+  (or a `..` escape) throws a typed `NativeToolingRootError`
+  (`ABSOLUTE_ROOT_NOT_PORTABLE` / `ROOT_ESCAPES_CALLER_CWD`). The host unions this
+  exact list into the per-run `srt` policy (AC6), so a second root is not
+  sandbox-denied.
+- `NativeResolveContext.cwd` is the task-time caller cwd; `cwdSource` flags
+  `'caller'` vs `'host-fallback'`; `roots` is the global alias→path map.
 - `buildDispatchSelf(env?)` — the ONE canonical agent-mcp self launch config
   (default argv `DISPATCH_SELF_DEFAULT_ARGS`, env pair
   `ADHD_AGENT_MCP_COMMAND`/`ADHD_AGENT_MCP_ARGS`), shared by agent-mcp and

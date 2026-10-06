@@ -180,6 +180,17 @@ the `dispatch` self floor.
   `@adhd/agent-core-native-tooling` catalog; `resolveNativeTooling` (array) and
   `resolveNativeToolingMap` (keyed `mcpServers` map) are two projections of the same
   computation, and no host hand-builds a second fs/shell server (NAT-TOOL-4 AC6).
+- **Multi-root, portable fs roots + caller-supplied cwd (ADR-0008 D4/D7/D8).**
+  `nativeTooling.fs.root`/`roots` are **portable hints** — a cwd-relative subpath
+  or a named alias into the GLOBAL allowed-root map — never an absolute host path
+  (which is rejected with a typed `NativeToolingRootError`; the fs analogue of the
+  welded-`provider` bug). The global map (`ADHD_AGENT_NATIVE_TOOLING_FS_ALLOWED_ROOTS`
+  / global `config.yaml`, `alias=absolute-path`) is the machine-specific,
+  operator-owned surface; an agent references `project`/`tmp` portably. The
+  **caller cwd** enters via a `cwd` on the `task`/`agent` MCP input, is inherited by
+  a sub-dispatch (`ExecutionContext.cwd`), and falls back to the host `process.cwd()`
+  only when absent (flagged). Every RESOLVED root is unioned into the per-run `srt`
+  policy's `allowWrite` (else a 2nd root is sandbox-denied).
 - **The permission / HITL gate is ENFORCED (NAT-TOOL-6).** The host injects
   `defaultPermissionGate` (`src/defaults.ts`, wired in `src/config.ts` `toEngineConfig()`);
   the engine evaluates it **before** `pre:tool_call` for every native tool call.

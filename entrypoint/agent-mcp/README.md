@@ -166,10 +166,21 @@ carries no resolved root, so it is usable from any directory:
 
 | member | resolved default | notes |
 |---|---|---|
-| `fs` | `srt npx -y @modelcontextprotocol/server-filesystem <cwd>` | `false` omits it |
+| `fs` | `srt npx -y @modelcontextprotocol/server-filesystem <root…>` | multi-root; `false` omits it |
 | `shell` | `srt uvx mcp-shell-server` | allowlisted argv — never a shell string; `false` omits it |
 | `dispatch` | the REAL agent-mcp server | so the agent can dispatch sub-agents; never a wrapper |
 | `hitl` | `true` | `false` hides `request_human_input` and prunes `suspend` from the ask chain |
+
+**Portable, multi-root fs roots.** `fs.root`/`fs.roots` are **hints**, never host
+paths: a named alias into the global allowed-root map, or a cwd-relative subpath
+(`..` may not escape the caller cwd). An absolute hint is rejected with a typed
+error. `{ "fs": { "roots": ["a", "b"] } }` at caller cwd `/P` exposes both `/P/a`
+and `/P/b`. The **global map** (`nativeTooling.fs.allowedRoots`, env
+`ADHD_AGENT_NATIVE_TOOLING_FS_ALLOWED_ROOTS` as `alias=absolute-path`, or the global
+`config.yaml`) is where the operator owns machine-specific absolute directories; an
+agent references `project`/`tmp` portably. The **caller cwd** comes from a `cwd` on
+the `task`/`agent` call (inherited by a sub-dispatch), with the host `process.cwd()`
+as a flagged last-resort fallback.
 
 The `fs`/`shell` builtins are wrapped by `@anthropic-ai/sandbox-runtime` (`srt`).
 The host provisions a per-run policy carrying the dispatching cwd and passes it via
