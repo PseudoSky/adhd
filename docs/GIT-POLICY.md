@@ -1795,3 +1795,54 @@ Schema version 1.
   affected -t test build lint --base=1bcc147d` exit 0 and dispatch-cli/dispatch-orchestrator
   build/lint/verify-dist-load exit 0 — and directed that none be run). This record is the only change
   to this file in this operation. Recorded under §Commit convention's `docs(<area>):` scope.
+
+- **2026-10-06 — operation record: land of `fix/escalate-parent-routing-9c4e`, reap its worktree
+  (dispatch-2026-10-04-9c4e).** Landed the real parent routing for the `ask` escalate branch plus the
+  parent-chain depth bound onto `main` as a **merge commit**
+  `021c4cd8f944a6e33e8b0efcd12fdca0884690d0` (parents
+  `1f86e1a18165f64974569ea90bfee3cb6beb2894` = pre-merge `main`,
+  `d84733924c32d1308e1252c24b63d19a88e24ed6` = branch head), moving `main` `1f86e1a1` → `021c4cd8`;
+  5 files, +633/-101. The branch carried two commits since the merge-base
+  `b16a627be6c4035f1d8cc5508f38303f407c33e9` (`git rev-list --count b16a627b..d8473392` = 2):
+  `85fa0dba` (`fix(agent-engine-orchestrator): route an escalated ask to the parent task (a0c0a826)`)
+  and `d8473392` (`docs(adr-0008): specify escalate routing mechanics and the parent-chain depth bound
+  (a0c0a826)`); `main` had advanced 17 commits past that base (`git rev-list --count
+  b16a627b..1f86e1a1` = 17), so the landing is a genuine non-fast-forward. §Branching & merge was the
+  deciding rule: this history "carries true merge commits" and ff-only is not enforced, while
+  rebase-in-flight is permitted only on a branch "solely your own" — this is an in-flight executor
+  branch, not the operator's, so rewriting its two commits was out; the dispatch directed `--no-ff`,
+  and a merge commit is the stated shape here. Dry-run `git merge-tree --write-tree --messages main
+  d8473392` exited 0, producing tree `09094eb09ffad0d07ea4df17d6fa498b7f1e6887` with no conflict hunks;
+  the actual `git merge --no-ff fix/escalate-parent-routing-9c4e -m "fix(orchestrator): route ask
+  escalation to the parent + depth bound (a0c0a826)"` was conflict-free (ort strategy, exit 0; the
+  sole `Auto-merging` line was `docs/decisions/0008-agent-mcp-native-tooling.md`) and the post-merge
+  tree (`git rev-parse HEAD^{tree}`) is `09094eb0…`, byte-identical to the dry-run tree, so no conflict
+  arose and none required resolution. No conflict marker remains in the five merged paths
+  (`git grep -nE '^(<<<<<<<|=======|>>>>>>>)' HEAD --` the five paths exited 1 with no matches). A
+  concurrent agent's uncommitted work was present in the working tree throughout, all disjoint from
+  the branch's five changed paths (`comm -12` of the two path sets = 0 lines): 14 modified paths under
+  `entrypoint/agent-mcp/**`, `entrypoint/dispatch-cli/**`, `packages/agent/agent-core-native-tooling/**`,
+  and `packages/agent/agent-engine-orchestrator/src/tools/mcp-verify.ts`, plus one untracked
+  `packages/agent/agent-core-native-tooling/src/lib/dispatch-self.ts` (pre-merge `git status
+  --porcelain` = 15 lines, sha256 `a447c1ab…`). None was staged, swept, or modified by the merge. One
+  further concurrent edit appeared *during* the merge — `packages/agent/agent-engine-orchestrator/
+  src/__tests__/fixtures/verify-echo-server.mjs` became modified between the pre- and post-merge
+  snapshots (post-merge = 16 lines, sha256 `4c8ce3cd…`) — so the working tree, correctly, changed
+  under the merge; that path is not in the merge commit (`git show --name-only HEAD` lists only the
+  five branch paths) and remains unstaged. The branch never touched this file (`git diff --name-only
+  b16a627b..d8473392 -- docs/GIT-POLICY.md` empty), so `main`'s policy blob
+  `b1f746fc67327c29e5b89f22866db105d4aff826` survived the merge byte-identical (pre-merge `1f86e1a1`,
+  post-merge `021c4cd8`, and the on-disk file all resolve to the same blob). The merge is two-parent
+  (not fast-forward); post-merge `git merge-base --is-ancestor` exits 0 for both `85fa0dba` and
+  `d8473392`, so both commits are contained. The merge invoked no gate: git runs `pre-merge-commit`
+  (not `pre-commit`) for a merge and `.githooks/` ships no such hook, so none ran. The worktree
+  `.worktrees/dispatch-9c4e-escalate-parent` was then reaped under §Cleanup's three-part test: `git
+  status --porcelain` inside it was empty, it carried no `locked` line, and its head `d8473392` was an
+  ancestor of `main` after the merge — so `git worktree remove` (no `--force`) ran and the branch was
+  deleted with `git branch -d fix/escalate-parent-routing-9c4e` (was `d8473392`); worktrees went
+  82 → 81. The merged commit remains reachable from the durable `main` ref, so recovery does not
+  depend on the reflog. No push (the dispatch directed none) and no gates were run by this operation
+  (the dispatch reported them already green — `nx affected -t test build lint --base=1bcc147d` exit 0,
+  and agent-engine-orchestrator + agent-mcp build/verify-dist-load exit 0 — and directed that none be
+  run). This record is the only change to this file in this operation. Recorded under §Commit
+  convention's `docs(<area>):` scope.
