@@ -268,3 +268,25 @@ This is deliberate, not an oversight: the `e2e` target is in **no** target's `de
 - `publish` dependsOn: `[test, ^test, version, dist-manifest, verify-dist-load, publish-hygiene]` → `[test, ^test, version, ^publish, dist-manifest, verify-dist-load, publish-hygiene]`
 
 Checked & found correct: `e2e` is absent from `nx.json` `targetDefaults`; the four GATE 2 smoke packages (`agent-mcp`, `apigen-cli`, `backlog`, `decompile-cli`) all exist, all declare `bin`, all carry `dist-manifest`/`verify-dist-load`/`publish-hygiene`; the other 12 packages declaring an `e2e` target do not wire it into `test.dependsOn`.
+
+---
+
+## CREATE `docs/playbooks/real-mcp-testing.md` — 2026-10-06T00:25:54Z
+
+reason: user-request (dispatch-2026-10-04-9c4e): "make a playbook so other agents could repeat the real testing + test that agents that get the agent dispatching tools can successfully use them (there should already be a playbook or testing script for this somewhere)." No `docs/playbooks/` directory and no pre-existing real-MCP-testing playbook existed (verified: `ls docs/playbooks` ENOENT; `rg -l playbook docs` had no testing runbook). The existing "script somewhere" is `entrypoint/dispatch-cli/src/test/integration/run-live-guarded.ts` (guarded live runner, landed 676f94d2) + `live-guard-core.ts` + the five-AC suite. The playbook is the procedure around that runner, not a duplicate of it: it cites (does not restate) `docs/TEST-STRATEGY.md`, the runner, the guard primitives, the five-AC suite, the package `README.md`/`AGENTS.md` gate record, `agent-mcp-registry.ts`, and `agent_verify_mcp`. Every command is grounded in a real file (runner header 69-75 + README §"Guarded live runner" 261-273; `dist-manifest` target at `entrypoint/agent-mcp/project.json`; `tsx` root devDependency; `claude auth status` at `run-live-guarded.ts:245`). The one captured output quoted (the non-gated skip notice) is a real run executed during authoring; the PASS-table and `[guard]` lines are presented as fixed formats from `printTable`/`RunMonitor.tick`, with run-dependent numbers shown as placeholders rather than invented. Section list: Prerequisites; The guardrails and why; The exact command; The delegation test; Proving the guards themselves; Failure playbook; Repeatability. All 9 relative links resolve (executed a pathname resolver: 0 dead).
+
+removed_or_moved (verbatim, if any):
+
+```
+(none — new file)
+```
+
+## EDIT `docs/TEST-STRATEGY.md` — 2026-10-06T00:25:54Z
+
+reason: add the one-line pointer from the "Environments — live e2e" section to the new playbook (explicitly requested). Purely additive: an insertion after the "fail loudly" paragraph, before "## Automation architecture". No text removed or moved.
+
+removed_or_moved (verbatim, if any):
+
+```
+(none — additive insertion; prior paragraph unchanged)
+```

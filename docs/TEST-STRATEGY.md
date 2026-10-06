@@ -122,6 +122,11 @@ run command in **all three** required places: the owning package's `README.md`, 
 A live gate must **fail loudly** when it is enabled but a required credential/subscription is
 absent — never a silent skip.
 
+**Procedure → the real-MCP testing playbook.** The end-to-end runbook for running real
+dispatch through the real MCP boundary under hard guards (the guarded runner, its
+guardrails, the agent-dispatching-tools/ delegation test, and the kill demo) is
+[`playbooks/real-mcp-testing.md`](playbooks/real-mcp-testing.md).
+
 ## Automation architecture
 
 - **One abstraction for one surface.** A screen/surface is represented once; selectors and
