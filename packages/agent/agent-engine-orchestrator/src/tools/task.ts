@@ -115,7 +115,6 @@ async function runEphemeralTask(
   const agentDefinition = deps.agentStore.read(input.agent_name);
 
   const taskId = generateId();
-  const ephemeralSessionId = generateId();
   const rootTaskId = callerContext
     ? callerContext.rootTaskId ?? callerContext.taskId
     : undefined;
@@ -138,9 +137,19 @@ async function runEphemeralTask(
     );
   }
 
+  // Every task is SESSIONED (ADR-0008 D6): a one-shot `agent_name` dispatch
+  // creates a REAL session row, not a sessionless placeholder. The noop-session
+  // path is retired. `isEphemeral: true` is the retention class (an ephemeral
+  // session is reclaimed on terminal), NOT an interactivity/HITL property.
+  const session = deps.sessionStore.create({
+    agentName: agentDefinition.name,
+    agentDefinition,
+  });
+  const sessionId = session.id;
+
   deps.taskStore.create({
     id: taskId,
-    sessionId: ephemeralSessionId,
+    sessionId,
     isEphemeral: true,
     prompt: input.prompt,
     parentTaskId: callerContext?.taskId,
@@ -158,7 +167,7 @@ async function runEphemeralTask(
 
   const executionContext: ExecutionContext = {
     taskId,
-    sessionId: ephemeralSessionId,
+    sessionId,
     agentName: agentDefinition.name,
     agentDefinition,
     callingAgentName: callerContext?.agentName,
@@ -177,7 +186,7 @@ async function runEphemeralTask(
 
   const userMessage = {
     id: generateId(),
-    sessionId: ephemeralSessionId,
+    sessionId,
     role: 'user' as const,
     content: input.prompt,
     createdAt: nowIso(),
@@ -186,7 +195,7 @@ async function runEphemeralTask(
     ? [
         {
           id: generateId(),
-          sessionId: ephemeralSessionId,
+          sessionId,
           role: 'system' as const,
           content: agentDefinition.systemPrompt,
           createdAt: nowIso(),
@@ -195,10 +204,12 @@ async function runEphemeralTask(
       ]
     : [userMessage];
 
-  const noopSessionStore = {
-    appendMessage: async () => {},
-    close: () => {},
-  };
+  // Persist the user message to the real session (mirrors the session path) so
+  // the one-shot task's transcript is complete for the retention window.
+  // `appendMessage` is on the concrete SessionStore, not the minimal
+  // `SessionStoreForTool` surface — same cast the session path already uses.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await (deps.sessionStore as any).appendMessage(sessionId, userMessage);
 
   const registry = new McpClientRegistry(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -222,7 +233,8 @@ async function runEphemeralTask(
       provider,
       policy: deps.policy,
       taskStore: deps.taskStore,
-      sessionStore: noopSessionStore,
+      sessionStore:
+        deps.sessionStore as unknown as import('../engine/orchestrator.js').OrchestratorSessionStore,
       signal: controller.signal,
       taskId,
       hooks: deps.hooks,
@@ -235,6 +247,15 @@ async function runEphemeralTask(
     // Orchestrator already updated status via deps.taskStore
   } finally {
     deps.taskStore.unregisterCancellation(taskId);
+    // Retention `ephemeral` = reclaim on terminal (ADR-0008 D6). The session
+    // row is REAL (created above) and is closed once its task reaches a
+    // terminal state; closing is idempotent-protected by the store (a second
+    // close raises SESSION_CLOSED, which we swallow here).
+    try {
+      deps.sessionStore.close(sessionId);
+    } catch {
+      // already closed / absent — nothing to reclaim
+    }
   }
 
   const finalTask = deps.taskStore.read(taskId);

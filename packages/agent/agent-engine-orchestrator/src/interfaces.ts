@@ -1,3 +1,5 @@
+import type { AgentDefinition, PermissionAction } from '@adhd/agent-base-types';
+
 /**
  * EngineConfig — injectable config interface for the engine layer.
  *
@@ -5,6 +7,38 @@
  * Instead, the host (entrypoint) constructs an object satisfying this interface
  * and passes it where needed (constructor params, function arguments).
  */
+
+/**
+ * The decision context handed to a {@link PermissionGate} (ADR-0008 D5).
+ *
+ * `server`/`tool` are the resolved server and tool names of the call being gated
+ * (never command text — the gate matches TOOL NAMES only); `agentDefinition` is
+ * the definition of the agent whose task is making the call, so the gate can
+ * resolve that agent's `nativeTooling.*.permissions` map at call time.
+ */
+export interface PermissionDecisionContext {
+  server: string;
+  tool: string;
+  agentDefinition: AgentDefinition;
+}
+
+/**
+ * The resolved native-tooling permission gate (ADR-0008 D5) — the **policy hook**
+ * the host injects into the engine. Evaluated host-side, *before* `pre:tool_call`,
+ * for every native tool call. Returns one of:
+ *
+ *  - `'allow'` — run the tool;
+ *  - `'deny'`  — refuse with a typed `PERMISSION_DENIED` result, never executed;
+ *  - `'ask'`   — resolve through the fixed ask chain (`suspend` → `escalate` →
+ *                `deny`) implemented by the orchestrator (ADR-0008 D6).
+ *
+ * It is a pure decision function: the engine owns the *enforcement* (and the
+ * session/parent graph the ask chain needs); the host owns the rule map. When no
+ * gate is injected the engine defaults to `'allow'` (the base toolset posture).
+ */
+export type PermissionGate = (
+  ctx: PermissionDecisionContext
+) => PermissionAction;
 
 /**
  * Default per-`provider.chat()` timeout when an agent definition does not set
@@ -94,6 +128,12 @@ export interface EngineConfig {
    * the allowlist (ADHD_AGENT_ENV_ALLOWLIST) extends this set.
    */
   isEnvNameAllowed(name: string): boolean;
+  /**
+   * The resolved native-tooling permission gate (ADR-0008 D5/D6), evaluated
+   * before `pre:tool_call` for every native tool call. Injected by the host so
+   * the engine owns no rule map and no config singleton. Omitted ⇒ `'allow'`.
+   */
+  permissionGate?: PermissionGate;
 }
 
 /**

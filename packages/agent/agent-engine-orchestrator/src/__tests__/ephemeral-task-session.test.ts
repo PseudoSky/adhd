@@ -2,13 +2,12 @@ import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { TaskStore } from "@adhd/agent-store-runtime";
+import { SessionStore, TaskStore } from "@adhd/agent-store-runtime";
 import type { AgentDefinition } from "@adhd/agent-base-types";
 
 import { taskTool } from "../tools/task.js";
 import type { TaskDeps } from "../tools/task.js";
 import type { AgentStore } from "../tools/agent-crud.js";
-import type { SessionStoreForTool } from "../tools/session.js";
 import { PolicyEngine } from "../engine/policy.js";
 import { HookRegistry } from "../engine/hooks.js";
 import { BackgroundQueue } from "../engine/queue.js";
@@ -55,6 +54,28 @@ vi.mock("openai", () => {
 });
 
 const CREATE_TABLES_SQL = `
+CREATE TABLE IF NOT EXISTS sessions (
+    id TEXT PRIMARY KEY NOT NULL,
+    agent_name TEXT NOT NULL,
+    agent_version INTEGER NOT NULL,
+    agent_data TEXT NOT NULL,
+    status TEXT DEFAULT 'active' NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    closed_at TEXT,
+    composed_prompt_id TEXT
+);
+
+CREATE TABLE IF NOT EXISTS messages (
+    id TEXT PRIMARY KEY NOT NULL,
+    session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+    role TEXT NOT NULL,
+    content TEXT,
+    tool_calls TEXT,
+    tool_results TEXT,
+    created_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS tasks (
     id TEXT PRIMARY KEY NOT NULL,
     session_id TEXT,
@@ -141,24 +162,6 @@ function makeStubAgentStore(agentDefinition: AgentDefinition): AgentStore {
     };
 }
 
-/** Ephemeral tasks never touch the session store (see noopSessionStore in
- * runEphemeralTask) — every method throws if the ephemeral path regresses to
- * calling it, which would itself be a signal something changed. */
-function makeUnusedSessionStore(): SessionStoreForTool {
-    const fail = (method: string) => (): never => {
-        throw new Error(`SessionStoreForTool.${method} should not be called on the ephemeral task path`);
-    };
-    return {
-        create: fail("create"),
-        read: fail("read"),
-        getAgentDefinition: fail("getAgentDefinition"),
-        getMessages: fail("getMessages"),
-        list: fail("list"),
-        close: fail("close"),
-        clearMessages: fail("clearMessages"),
-    };
-}
-
 function makeEngineConfig(): EngineConfig {
     return {
         server: { contextLimit: 0, defaultMaxTokens: 1024 },
@@ -178,7 +181,12 @@ const silentLogger: EngineLogger = {
     debug: () => {},
 };
 
-function makeDeps(): { deps: TaskDeps; taskStore: TaskStore; capturedSessionIds: string[] } {
+function makeDeps(): {
+    deps: TaskDeps;
+    taskStore: TaskStore;
+    sessionStore: SessionStore;
+    capturedSessionIds: string[];
+} {
     const sqlite = new Database(":memory:");
     sqlite.exec(CREATE_TABLES_SQL);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -187,7 +195,10 @@ function makeDeps(): { deps: TaskDeps; taskStore: TaskStore; capturedSessionIds:
     const taskStore = new TaskStore(db);
     const agentDefinition = makeTestAgentDefinition();
     const agentStore = makeStubAgentStore(agentDefinition);
-    const sessionStore = makeUnusedSessionStore();
+    // REAL session store (ADR-0008 D6, sessioned-everything): the one-shot
+    // `agent_name` path creates a real session row, so the store must be real
+    // — the retired noop-session stub is gone.
+    const sessionStore = new SessionStore(db);
     const policy = new PolicyEngine({ serverMaxDepth: 10, serverMaxToolLoops: 10 });
     const hooks = new HookRegistry();
     const queue = new BackgroundQueue(1, silentLogger);
@@ -232,7 +243,7 @@ function makeDeps(): { deps: TaskDeps; taskStore: TaskStore; capturedSessionIds:
         logger: silentLogger,
     };
 
-    return { deps, taskStore, capturedSessionIds };
+    return { deps, taskStore, sessionStore, capturedSessionIds };
 }
 
 describe("runEphemeralTask — session id persistence (BUG: ephemeral tasks lost session_id)", () => {
@@ -241,7 +252,7 @@ describe("runEphemeralTask — session id persistence (BUG: ephemeral tasks lost
     });
 
     it("persists the exact ephemeral sessionId used by the execution context, not null", async () => {
-        const { deps, taskStore, capturedSessionIds } = makeDeps();
+        const { deps, taskStore, sessionStore, capturedSessionIds } = makeDeps();
 
         const result = await taskTool(
             { agent_name: "ephemeral-test-agent", prompt: "hello from a real ephemeral task" },
@@ -268,5 +279,12 @@ describe("runEphemeralTask — session id persistence (BUG: ephemeral tasks lost
         expect(persistedTask.sessionId).toBeDefined();
         expect(persistedTask.sessionId).not.toBeNull();
         expect(persistedTask.sessionId).toBe(usedSessionId);
+
+        // ADR-0008 D6 — sessioned-everything: the one-shot task's session is a
+        // REAL persisted row (not the retired noop placeholder). Retention
+        // `ephemeral` reclaims it on terminal, so it is closed (not absent).
+        const reclaimed = sessionStore.read(usedSessionId);
+        expect(reclaimed.agentName).toBe("ephemeral-test-agent");
+        expect(reclaimed.status).toBe("closed");
     });
 });

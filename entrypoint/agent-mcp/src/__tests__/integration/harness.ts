@@ -44,6 +44,7 @@ import {
   type LLMProvider,
 } from "@adhd/agent-engine-orchestrator";
 import { AgentStore } from "../../store/agent-store.js";
+import { defaultPermissionGate } from "../../defaults.js";
 import { runMigrationsOn, MIGRATIONS_FOLDER } from "../../db/migrate-runner.js";
 import { startSseServer } from "../../streaming/sse-server.js";
 import { emitTaskEvent } from "../../streaming/event-bus.js";
@@ -161,6 +162,10 @@ function testConfig(_opts: {
     isEnvNameAllowed(name: string) {
       return name.startsWith("ADHD_AGENT_") || name.startsWith("LMSTUDIO_");
     },
+    // Mirrors the production wiring (config.ts `toEngineConfig`): the harness
+    // evaluates the REAL resolved permission gate, so a permission AC that
+    // passes here passes against the shipped server.
+    permissionGate: defaultPermissionGate,
   };
 }
 

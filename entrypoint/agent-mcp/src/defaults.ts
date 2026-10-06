@@ -18,12 +18,18 @@
  * call this module — it stores only the declarative `nativeTooling` — so there is
  * no create-time/second-timing behaviour.
  */
-import { resolveNativeToolingMap } from '@adhd/agent-core-native-tooling';
+import {
+  matchPermission,
+  resolveNativeToolingMap,
+} from '@adhd/agent-core-native-tooling';
 import type {
   AgentDefinition,
   McpServerConfig,
   NativeToolingConfig,
+  PermissionAction,
+  PermissionRuleMap,
 } from '@adhd/agent-base-types';
+import type { PermissionGate } from '@adhd/agent-engine-orchestrator';
 
 import { AGENT_MCP_NPX_ARGS } from './install.js';
 import { ensureBinDirOnPath, resolveNativeBinDir } from './srt-policy.js';
@@ -200,3 +206,82 @@ export function withResolvedNativeToolingSession<T extends SessionAgentReader>(
     },
   });
 }
+
+// ============================================================================
+// The resolved permission map + the injected gate (ADR-0008 D5/D6)
+// ============================================================================
+
+/**
+ * The engine-wide DEFAULT permission rule map (ADR-0008 D5: "base tools `allow`;
+ * explicit tool-name `deny` guardrails"). Deliberately permissive — the default
+ * toolset must be usable without an interactive answer — and deliberately free of
+ * any command pattern: the gate matches TOOL NAMES only and agent-mcp owns no
+ * dangerous-command catalog or command segmentation (D5).
+ *
+ * Rules are keyed by the **server-qualified tool name** (`<server>.<tool>`, e.g.
+ * `agent-mcp.task`, `shell.shell_execute`; a whole server is `<server>.*`). This
+ * is the ADR's documented example form (`agent-mcp.*`, ADR-0008 :129) and the
+ * resource `matchPermission` is called with.
+ */
+export const DEFAULT_PERMISSION_RULES: PermissionRuleMap = { '*': 'allow' };
+
+/**
+ * Resolve an agent's effective permission rule map: the {@link DEFAULT_PERMISSION_RULES}
+ * baseline overlaid, in a fixed order (`fs` → `shell` → `dispatch`), with the
+ * `permissions` maps declared on each `nativeTooling` member. Later rules win and
+ * a matched `deny` is terminal — exactly the semantics `matchPermission` implements
+ * (last-match-wins, `deny` terminal; ADR-0008 D5, Q1 ratified).
+ *
+ * Pure; never mutates the input config.
+ */
+export function resolvePermissionRules(
+  nativeTooling?: NativeToolingConfig,
+  baseline: PermissionRuleMap = DEFAULT_PERMISSION_RULES
+): PermissionRuleMap {
+  const merged: PermissionRuleMap = { ...baseline };
+  for (const member of [
+    nativeTooling?.fs,
+    nativeTooling?.shell,
+    nativeTooling?.dispatch,
+  ]) {
+    if (member && typeof member === 'object' && !('transport' in member)) {
+      const permissions = (member as { permissions?: PermissionRuleMap })
+        .permissions;
+      if (permissions) {
+        for (const [pattern, action] of Object.entries(permissions)) {
+          merged[pattern] = action;
+        }
+      }
+    }
+  }
+  return merged;
+}
+
+/**
+ * Evaluate the resolved permission action for one native tool call (ADR-0008 D5).
+ * The matched resource is the server-qualified **tool name**; command text is
+ * never passed or parsed.
+ */
+export function evaluateNativePermission(
+  nativeTooling: NativeToolingConfig | undefined,
+  server: string,
+  tool: string
+): PermissionAction {
+  return matchPermission(
+    resolvePermissionRules(nativeTooling),
+    `${server}.${tool}`
+  );
+}
+
+/**
+ * The production {@link PermissionGate} the host injects into the engine via
+ * `toEngineConfig()` (ADR-0008 D5). Resolves the calling agent's permission map
+ * at call time and matches the server-qualified tool name; the engine owns the
+ * enforcement (and the ask chain the decision `'ask'` triggers).
+ */
+export const defaultPermissionGate: PermissionGate = (ctx) =>
+  evaluateNativePermission(
+    ctx.agentDefinition.nativeTooling,
+    ctx.server,
+    ctx.tool
+  );

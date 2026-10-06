@@ -24,6 +24,7 @@ import type { EnvironmentSpec } from "@adhd/environment-base-spec";
 import type { EngineConfig } from "@adhd/agent-engine-orchestrator";
 
 import { loadEnvHierarchy } from "./utils/load-env.js";
+import { defaultPermissionGate } from "./defaults.js";
 
 // BUG-MCP-CREDENTIALS-001: populate `process.env` from the `.env` file
 // hierarchy (`~/.adhd/.env` → `<cwd>/.adhd/.env` → `<cwd>/.env`) BEFORE the
@@ -527,6 +528,11 @@ export function toEngineConfig(): EngineConfig {
     subprocessEnv: env.subprocessEnv,
     resolveEnvName: (name: string) => env.resolveEnvName(name),
     isEnvNameAllowed: (name: string) => env.isEnvNameAllowed(name),
+    // ADR-0008 D5 — the resolved native-tooling permission gate, evaluated by the
+    // engine before `pre:tool_call` for every native tool. This is the ONLY
+    // production wiring of `AgentDefinition.nativeTooling.*.permissions`; without
+    // it the field would be validated + persisted but never enforced.
+    permissionGate: defaultPermissionGate,
   };
 }
 
