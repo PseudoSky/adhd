@@ -1314,3 +1314,54 @@ Schema version 1.
   protected. No push (the dispatch directed none) and no gates were run by this operation (docs-only;
   the dispatch directed none). This record is the only change to this file in this operation.
   Recorded under §Commit convention's `docs(<area>):` scope.
+
+- **2026-10-05 — operation record: land of `feat/native-tooling-nat-tool-8-9c4e` (dispatch-2026-10-04-9c4e).**
+  Landed NAT-TOOL-8's native-tooling adoption onto `main` as a **merge commit** `52236c86` (parents
+  `7d038ed0` = pre-merge `main`, `db17316f` = branch head), moving `main` `7d038ed0` → `52236c86`; 16
+  files, +543/-20: `entrypoint/agent-mcp/{AGENTS.md,README.md,package.json}` (M),
+  `entrypoint/agent-mcp/src/__tests__/integration/native-tooling-adoption.e2e.test.ts` (A, +161),
+  `packages/agent/agent-core-native-tooling/{AGENTS.md,README.md}` (A), `.../eslint.config.mjs` (A),
+  `.../package.json` (M), `.../src/index.spec.ts` (M), `.../src/index.ts` (M),
+  `.../src/lib/{catalog.ts,resolver.ts,resolver.spec.ts}` (M), `pnpm-lock.yaml` (M), and
+  `tools/mcp-shell/{README.md,server.mjs}` (M) — the adoption of `server-filesystem` +
+  `tumf/mcp-shell-server` + `@anthropic-ai/sandbox-runtime` (srt) and the retirement of the authored
+  `tools/mcp-shell/server.mjs` to a deprecated fallback, plus a live adoption e2e. The dispatch named
+  the branch `feat/native-tooling-native-tool-8-9c4e`; the branch that exists and matches the named
+  worktree `.worktrees/nat-tool-8-9c4e` and head `db17316f` is `feat/native-tooling-nat-tool-8-9c4e`
+  (the shorter `nat-tool-8` form), so that branch — unambiguously fixed by the worktree, the commit,
+  and the ref — was the target merged; the variant name is noted, not an ambiguity. The branch was a
+  single commit, `db17316f` (`feat(agent-core-native-tooling): adopt fs + tumf shell + srt; retire
+  authored shell (NAT-TOOL-8)`), whose only parent is the merge-base `1731dab5` (`git show -s
+  --format=%P db17316f` = `1731dab5`); `main` had advanced 11 commits beyond that base, so the landing
+  is a genuine non-fast-forward. §Branching & merge was the deciding rule: this history "carries true
+  merge commits" and ff-only is not enforced, while rebase-in-flight is permitted only on a branch
+  "solely your own" — this is an in-flight executor branch, not the operator's, so rewriting its
+  commit was out; the dispatch directed `--no-ff`, and a merge commit is the stated shape here.
+  Dry-run `git merge-tree --write-tree --name-only main db17316f` exited 0, producing tree `4f28ddf8`
+  with no conflict hunks; the actual `git merge --no-ff` was conflict-free (ort strategy, exit 0) and
+  the post-merge tree at `52236c86` is `4f28ddf8`, byte-identical to the dry-run tree, so no conflict
+  arose and none required resolution. The disjointness of the two sides' path sets confirms it: the
+  branch changed only its 16 files and `main`'s 11 commits since `1731dab5` touched a different set,
+  so nothing overlapped. A raw grep for `^(=======)` matches three lines in the pre-existing
+  `docs/playbooks/real-mcp-testing.md` (108/110/113) — the literal `printTable` banner rows of `=`
+  marks documented there, not conflict markers, and not in this merge's fileset; `^<<<<<<<` and
+  `^>>>>>>>` match nothing anywhere, and the merged tree carries no conflict hunks. The branch never
+  touched this file (empty intersection and `git diff --name-only 7d038ed0..db17316f --
+  docs/GIT-POLICY.md` empty), so `main`'s policy blob `f54d4e63aeb75c36fe3d2fa9dc2a952b5948c9a8`
+  survived the merge byte-identical (pre-merge `7d038ed0`, post-merge `52236c86`, and the on-disk file
+  all resolve to the same blob). The merge is two-parent (not fast-forward); post-merge
+  `git rev-list --count main..feat/native-tooling-nat-tool-8-9c4e` = 0 and `git merge-base
+  --is-ancestor db17316f main` exits 0, so `db17316f` is contained. The worktree
+  `.worktrees/nat-tool-8-9c4e` was reaped under §Cleanup's three-part test: `git status --porcelain`
+  inside it was empty, it carried no `locked` line, and its head `db17316f` was an ancestor of `main`
+  after the merge — so `git worktree remove` (no `--force`) ran and the branch was deleted with
+  `git branch -d feat/native-tooling-nat-tool-8-9c4e` (was `db17316f`); worktrees went 77 → 76. The
+  commit remains reachable from the durable `main` ref, so recovery does not depend on the reflog.
+  The working tree was clean before and after (`git status --porcelain` empty) and nothing was staged
+  before or after (`git diff --cached --name-only` empty); the dispatch's anticipated "unrelated
+  concurrent dirt" was not present, so nothing had to be avoided or protected. No push (the dispatch
+  directed none) and no gates were run by this operation (the dispatch reported them already green:
+  affected test/build/lint all exit 0 and the live handshake verified; the dispatch directed that no
+  gates be run) — the git-invoked hook, if any, is git's own behavior, not a gate this operation
+  chose to run. This record is the only change to this file in this operation. Recorded under
+  §Commit convention's `docs(<area>):` scope.
