@@ -36,6 +36,7 @@ import {
 } from './catalog.js';
 import { writeAudit } from './audit.js';
 import {
+  ActorMismatchError,
   ClaimHeldError,
   InvalidArgumentError,
   IssueNotFoundError,
@@ -208,7 +209,7 @@ async function touchMetadataTx(
  * | `release` | `== by`                                                 | clear both fields; `status:'released'` |
  * | `release` | `!= by` or unset                                        | no write; `status:'release-noop'`, `wasClaimedBy` |
  * | `renew`   | `== by`                                                 | bump `claimedAt`; `status:'renewed'` |
- * | `renew`   | `!= by` or unset                                        | throws `ClaimHeldError` |
+ * | `renew`   | `!= by` or unset                                        | throws `ActorMismatchError` |
  *
  * **Audit.** Every branch that performs a real write emits exactly one
  * `audit` node via {@link writeAudit}, inside the SAME transaction (§4a "no
@@ -226,13 +227,13 @@ async function touchMetadataTx(
  * audit node" and the rule table's own "no write" / four-action vocabulary;
  * it is the only reading consistent with `writeAudit`'s own doc comment.
  *
- * **`renew` against an unclaimed issue.** The rule table assigns this to the
- * SAME `ClaimHeldError` outcome as "held by someone else" — but there is no
- * real holder to report. SPEC.md does not resolve this case explicitly; this
- * implementation reports `ClaimHeldError('', '')` (empty-string sentinels,
- * never a fabricated agent name or timestamp) so the thrown error's shape is
- * still exactly `ClaimHeldError` per the rule table, without inventing data
- * the graph does not have.
+ * **`renew` against an unclaimed issue / by a non-holder.** `renew` is not a
+ * claim attempt: it is a caller-identity check, so a mismatch throws the typed
+ * `ActorMismatchError` (envelope `validation`, `details.reason:'actor_mismatch'`)
+ * with `heldBy` undefined when there is no holder — never a `ClaimHeldError`
+ * carrying empty-string sentinels. `claim` contention (non-force claim of an
+ * item another actor holds) deliberately stays `ClaimHeldError` → `conflict`:
+ * a lease race with a defined remedy (`force`, or wait for staleness).
  *
  * Errors: `InvalidArgumentError` (`uid`/`by` missing/blank, or `action`
  * outside the closed `'claim'|'release'|'renew'` set — the TS type restricts
@@ -468,6 +469,6 @@ export async function claim(
     // != by or unset — "renew is not a claim attempt" (SPEC.md §6.3.5) — throws unconditionally.
     // See this function's own doc comment ("renew against an unclaimed issue") for the
     // empty-string sentinel used when there is no real holder to report.
-    throw new ClaimHeldError(claimedBy ?? '', claimedAt ?? '');
+    throw new ActorMismatchError('renew', input.by, claimedBy, claimedAt);
   });
 }

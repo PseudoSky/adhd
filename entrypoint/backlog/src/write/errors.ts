@@ -385,6 +385,35 @@ export class ClaimHeldError extends BacklogWriteError {
 }
 
 /**
+ * (A-AC11 / `65029970`, S02 AC15) A write verb whose ACTOR does not match the
+ * live claim holder: `transition` by someone other than the holder of a
+ * non-stale claim, or `renew` by a non-holder (or on an unclaimed item). A
+ * caller-identity error, distinct from {@link ClaimHeldError} — the `claim`
+ * verb's own lease race, which keeps `conflict` and its `force` remedy.
+ *
+ * `E_VALIDATION` → `validation` (envelope), carrying
+ * `details.reason === 'actor_mismatch'` plus `verb`, `actor`, `heldBy`,
+ * `heldSince`. Nothing is written.
+ */
+export class ActorMismatchError extends BacklogWriteError {
+  readonly code = 'E_VALIDATION' as const;
+  readonly retryable = false;
+
+  constructor(
+    public readonly verb: string,
+    public readonly actor: string,
+    public readonly heldBy: string | undefined,
+    public readonly heldSince?: string
+  ) {
+    super(
+      `"${verb}" by "${actor}" refused: the item's live claim is held by ${
+        heldBy ? `"${heldBy}"` : 'nobody'
+      }${heldSince ? ` since ${heldSince}` : ''}`
+    );
+  }
+}
+
+/**
  * `claim` (§6.3.5): the target issue's current status is `terminal` — there
  * is nothing left to lease on an already-closed issue. Re-open via
  * `transition` to a non-terminal status instead (SPEC.md's own `closedAt`

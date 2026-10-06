@@ -93,7 +93,7 @@ import { writeAudit } from './audit.js';
 import { resolveSiblingProjectRootsTx } from './citation-path.js';
 import {
   CitationRequiredError,
-  ClaimHeldError,
+  ActorMismatchError,
   InvalidArgumentError,
   NoteRequiredError,
   ObligationUnsatisfiedError,
@@ -291,7 +291,7 @@ function enforceRequiredFields(
  * rejects a target whose canonical path lies outside the project root AND
  * every `citationAllowedExternalRoots` entry — BUG c6d35272 — and the error
  * names those roots),
- * `ClaimHeldError(heldBy, heldSince)` (§6.3.5 — a
+ * `ActorMismatchError('transition', by, heldBy, heldSince)` (§6.3.5 — a
  * live, non-stale claim held by someone other than `input.by` blocks the
  * status change; see claim-lease.ts), `WriteContentionError`/`WriteIOError`
  * (§4c — an exhausted driver-level retry on the underlying `immediate`
@@ -369,7 +369,7 @@ export async function transition(
       claimedBy !== input.by &&
       !isClaimStale(claimedAt, now, policy.claimStaleAfterMin)
     ) {
-      throw new ClaimHeldError(claimedBy, claimedAt ?? now);
+      throw new ActorMismatchError('transition', input.by, claimedBy, claimedAt ?? now);
     }
 
     const currentStatusRow = await resolveIssueStatusTx(

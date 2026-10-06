@@ -75,6 +75,7 @@ import {
   CitationNotFoundError,
   CitationRequiredError,
   CitationUnverifiableError,
+  ActorMismatchError,
   ClaimHeldError,
   InvalidArgumentError,
   InvalidPredicateError,
@@ -490,6 +491,7 @@ const ERROR_CLASS_TO_ENVELOPE_CODE: ReadonlyArray<
   [InvalidArgumentError, 'invalid_argument'],
   [AnchorLocatorInvalidError, 'invalid_argument'],
   [InvalidPredicateError, 'invalid_argument'],
+  [ActorMismatchError, 'validation'],
   [ClaimHeldError, 'conflict'],
   [SingleValuedRelationConflictError, 'conflict'],
   [StaleSupersedeError, 'conflict'],
@@ -562,6 +564,19 @@ function toEnvelope(err: unknown): IOutcomeFailure {
         return errorEnvelope(code, err.message, {
           ...(details ?? {}),
           refusal: err.refusal,
+        });
+      }
+      // A-AC11 — actor-mismatch is a typed validation error: the structured
+      // reason rides under `error.details` so a caller can tell it from a
+      // generic validation failure without parsing the message.
+      if (err instanceof ActorMismatchError) {
+        return errorEnvelope(code, err.message, {
+          ...(details ?? {}),
+          reason: 'actor_mismatch',
+          verb: err.verb,
+          actor: err.actor,
+          ...(err.heldBy !== undefined ? { heldBy: err.heldBy } : {}),
+          ...(err.heldSince !== undefined ? { heldSince: err.heldSince } : {}),
         });
       }
       return errorEnvelope(code, err.message, details);
