@@ -129,3 +129,44 @@ describe("2cd99264 — gitnexus-singleton concurrency contract", () => {
     expect(skill.toLowerCase()).toContain("isolated");
   });
 });
+
+describe("NAT-TOOL-10 AC4 — task/guide surface stops advertising a sessionless task", () => {
+  // NAT-TOOL-6 (ADR-0008 D6) retired the noop-session path: every task is
+  // sessioned — a one-shot `agent_name` dispatch creates a REAL session row
+  // (retention `ephemeral`, reclaimed on terminal). The source tool
+  // descriptions must not keep advertising the old "no session" behavior.
+  // Reference: packages/agent/agent-engine-orchestrator/src/tools/task.ts:140-147.
+  const server = readRepoFile("../server.ts");
+
+  it("AC4: the guide no longer claims a one-shot task needs no session", () => {
+    expect(server).not.toMatch(/no session needed/i);
+  });
+
+  it("AC4: the `task` tool description no longer claims no persisted context", () => {
+    expect(server).not.toContain("no persisted context");
+  });
+
+  it("AC4: the guide and the `task` tool description both state the sessioned behavior", () => {
+    // Workflow 0 in USAGE_GUIDE.
+    const wf0 = server.indexOf("## Workflow 0");
+    const wf1 = server.indexOf("## Workflow 1");
+    expect(wf0).toBeGreaterThan(-1);
+    expect(wf1).toBeGreaterThan(wf0);
+    const guide = server.slice(wf0, wf1);
+    expect(guide).toMatch(/creates a real session row/i);
+
+    // The `task` tool description literal (ends at the next MCP tool). There
+    // are two `task` descriptors — the early in-process one is terse; the
+    // advertised MCP one (the surface AC4 names) carries the long text, so
+    // anchor on it and slice from the `name:` that precedes it.
+    const descIdx = server.indexOf("run a one-shot ephemeral task");
+    const taskIdx = server.lastIndexOf("name: 'task'", descIdx);
+    const batchIdx = server.indexOf("name: 'tasks_batch'", descIdx);
+    expect(descIdx).toBeGreaterThan(-1);
+    expect(taskIdx).toBeGreaterThan(-1);
+    expect(batchIdx).toBeGreaterThan(taskIdx);
+    const taskDesc = server.slice(taskIdx, batchIdx);
+    expect(taskDesc).toMatch(/still sessioned/i);
+    expect(taskDesc).toMatch(/ephemeral retention/i);
+  });
+});

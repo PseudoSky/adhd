@@ -164,15 +164,73 @@ at **task time** against the dispatching cwd by `resolveNativeTooling`
 (`@adhd/agent-core-native-tooling`) — the stored definition is never mutated and
 carries no resolved root, so it is usable from any directory:
 
-- `fs` → `srt npx -y @modelcontextprotocol/server-filesystem <cwd>`
-- `shell` → `srt uvx mcp-shell-server` (allowlisted argv — never a shell string)
-- `dispatch` → the REAL agent-mcp server, so the agent can dispatch sub-agents
+| member | resolved default | notes |
+|---|---|---|
+| `fs` | `srt npx -y @modelcontextprotocol/server-filesystem <cwd>` | `false` omits it |
+| `shell` | `srt uvx mcp-shell-server` | allowlisted argv — never a shell string; `false` omits it |
+| `dispatch` | the REAL agent-mcp server | so the agent can dispatch sub-agents; never a wrapper |
+| `hitl` | `true` | `false` hides `request_human_input` and prunes `suspend` from the ask chain |
 
 The `fs`/`shell` builtins are wrapped by `@anthropic-ai/sandbox-runtime` (`srt`),
-and the host provisions the matching policy automatically. Merge precedence is
-explicit `mcpServers` > `nativeTooling` > the `dispatch` self floor, and
-`allowedTools`/`disallowedTools` remain enforced on every call. See `AGENTS.md`
-§“Native tooling for dispatched agents”.
+and the host provisions the matching policy automatically (`ADHD_AGENT_SRT_SETTINGS`
+overrides the settings path). **One producer:** the fs/shell launch commands live
+only in `@adhd/agent-core-native-tooling`'s catalog — no host hand-builds a second
+fs/shell server, and the array and keyed-map forms of the resolver are the same
+computation. Merge precedence is explicit `mcpServers` > `nativeTooling` > the
+`dispatch` self floor, and `allowedTools`/`disallowedTools` remain enforced on
+every call.
+
+**The permission / HITL gate is enforced.** Before every native tool call the
+resolved `nativeTooling.*.permissions` rule map is evaluated host-side against the
+server-qualified **tool name** (`<server>.<tool>`, e.g. `shell.shell_execute`,
+`agent-mcp.task`) — never against command text. `deny` returns a typed refusal and
+the tool does not execute; `ask` resolves through the fixed chain — **suspend**
+(HITL enabled) → **escalate** (routed to the parent agent) → **deny** (the
+fail-closed floor). `nativeTooling.hitl:false` removes the suspend step, leaving
+`escalate` (if parented) or `deny`. Rule resolution is last-match-wins with `deny`
+terminal. The retired `askPolicy`/`ephemeralAskPolicy` knobs are gone — the chain
+is fixed.
+
+A worked definition — filesystem on, shell tool calls require approval, dispatch allowed:
+
+```jsonc
+{
+  "name": "reviewer",
+  "provider": { "type": "anthropic", "model": "claude-opus-4-1" },
+  "nativeTooling": {
+    "fs": true,
+    "shell": { "permissions": { "shell.shell_execute": "ask" } },
+    "dispatch": true,
+    "hitl": true
+  }
+}
+```
+
+#### Native tooling environment variables
+
+Every `nativeTooling` leaf is a typed config field with an `ADHD_AGENT_*` env
+override, resolved through the normal code → global → project → env cascade
+(ADR-0008 D10). These are **values, never feature switches** — disable a member
+with `false` on the agent definition, not with an env toggle:
+
+| Variable | Type | Purpose |
+|---|---|---|
+| `ADHD_AGENT_NATIVE_TOOLING_FS_ROOT` | path | fs root; unset ⇒ the dispatching cwd at task time |
+| `ADHD_AGENT_NATIVE_TOOLING_FS_READ_ONLY` | bool | reserved — read-only roots are enforced via `srt`/Docker, not a stdio flag |
+| `ADHD_AGENT_NATIVE_TOOLING_FS_ALLOWED_TOOLS` | csv | fs tool-name allowlist |
+| `ADHD_AGENT_NATIVE_TOOLING_FS_DISALLOWED_TOOLS` | csv | fs tool-name denylist (wins) |
+| `ADHD_AGENT_NATIVE_TOOLING_SHELL_ROOT` | path | shell working directory; unset ⇒ the dispatching cwd |
+| `ADHD_AGENT_NATIVE_TOOLING_SHELL_ALLOW_COMMANDS` | csv | command NAMES accepted by the adopted argv-allowlist server |
+| `ADHD_AGENT_NATIVE_TOOLING_SHELL_DENY_COMMANDS` | csv | declared on the surface but not forwarded — the adopted server exposes an allow-list only (ADR-0008 D5) |
+| `ADHD_AGENT_NATIVE_TOOLING_SHELL_TIMEOUT_MS` | int | default command timeout (ms) |
+| `ADHD_AGENT_NATIVE_TOOLING_DISPATCH_ALLOWED_TOOLS` | csv | dispatch (agent-mcp self) tool-name allowlist |
+| `ADHD_AGENT_NATIVE_TOOLING_DISPATCH_DISALLOWED_TOOLS` | csv | dispatch tool-name denylist (wins) |
+| `ADHD_AGENT_NATIVE_TOOLING_HITL` | bool | HITL enablement; default `true` |
+
+The retired authored-shell-server path override (the `server.mjs` fallback removed
+by NAT-TOOL-4) no longer resolves; shell configuration is `nativeTooling.shell.*`.
+See `AGENTS.md` §“Native tooling for dispatched agents” and
+[adhd ADR-0008](../../docs/decisions/0008-agent-mcp-native-tooling.md).
 
 ## 2.0.2 Release Notes
 
