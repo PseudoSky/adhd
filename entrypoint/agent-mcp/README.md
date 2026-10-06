@@ -337,13 +337,13 @@ invariants. The same record appears in this package's `AGENTS.md` and in each te
 ## Native-tooling adoption gate (env-gated — external third-party server)
 
 The ADR-0008 D7 upstream-server adoption is a **human-gated** decision (NAT-TOOL-8).
-The live test that proves the adopted shell server (`tumf/mcp-shell-server`, fetched
-from PyPI at run time by `uvx`) starts and executes an allowlisted argv command
-through the real `agent_verify_mcp` handshake is gated behind `NAT_TOOL_LIVE=1`:
+The live tests that prove the adopted servers start and execute through the real
+`agent_verify_mcp` handshake are gated behind `NAT_TOOL_LIVE=1`:
 
 | Test file | Gate | Real dependency |
 |---|---|---|
 | `src/__tests__/integration/native-tooling-adoption.e2e.test.ts` | `NAT_TOOL_LIVE=1` | `uvx mcp-shell-server` (external PyPI package) + `srt` |
+| `src/__tests__/integration/native-tooling-real-ops.e2e.test.ts` | `NAT_TOOL_LIVE=1` | `uvx mcp-shell-server` (external PyPI package) + `srt` |
 
 **Approved by:** pseudosky (repo owner), 2026-10-05, under the owner directive
 "Finish the project". Rationale: the test drives a real external third-party MCP
