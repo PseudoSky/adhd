@@ -28,7 +28,7 @@ import type {
   DispatchLogEntry,
   MilestoneDag,
   OperationDag,
-  ProviderConfig,
+  PartialBinding,
 } from '@adhd/dispatch-base-spec';
 import { createDagClient } from '@adhd/dispatch-core-client';
 import { createJsonFileSerializer } from '@adhd/dispatch-serializer-json';
@@ -66,14 +66,12 @@ afterAll(() => {
 const PASS_GUARD = 'node -e "process.exit(0)"';
 const TARGET_AGENT = 'forbidden-agent';
 
-function makeProviderConfig(): ProviderConfig {
+function makePartialBinding(): PartialBinding {
   return {
-    type: 'claudecli',
-    model_id: 'claude-sonnet-test',
-    env_secret: null,
-    base_url: null,
-    timeout_ms: 30000,
-    retry_config: { retries: 0, min_timeout: 0, max_timeout: 0, factor: 1 },
+    providerType: 'claudecli',
+    modelRef: 'claude-sonnet-test',
+    timeoutMs: 30000,
+    retryConfig: { retries: 0, minTimeout: 0, maxTimeout: 0, factor: 1 },
   };
 }
 
@@ -129,7 +127,7 @@ function makeOp(overrides: Partial<OperationDag> = {}): OperationDag {
 
 function makeDag(overrides: Partial<DagJson> = {}): DagJson {
   return {
-    schema_version: 4,
+    schema_version: 5,
     plan_kind: 'greenfield',
     description: 'test plan',
     problem: 'test',
@@ -149,7 +147,7 @@ function makeDag(overrides: Partial<DagJson> = {}): DagJson {
       context_window_override: null,
       b_override: null,
     },
-    providers: { Sonnet: makeProviderConfig() },
+    providers: { Sonnet: makePartialBinding() },
     effort_max_tokens: { medium: 4096, high: 8192 },
     milestones: { a: makeMilestone() },
     operations: [makeOp()],

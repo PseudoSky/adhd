@@ -1,7 +1,9 @@
 {
   "name": "@adhd/dispatch-base-spec",
   "version": "0.1.5",
-  "dependencies": {},
+  "dependencies": {
+    "@adhd/agent-base-types": "^2.3.3"
+  },
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
   "typings": "./dist/index.d.ts",
@@ -13,7 +15,7 @@
     "CHANGELOG.md"
   ],
   "assets": [
-    "src/dag-v4.schema.json",
+    "src/dag-v5.schema.json",
     "src/valid-ops-by-kind.json"
   ],
   "description": "Specification and types for @adhd/dispatch task DAGs",

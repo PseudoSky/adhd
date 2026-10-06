@@ -15,7 +15,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
-import type { DagJson, MilestoneDag, OperationDag, ProviderConfig } from '@adhd/dispatch-base-spec';
+import type { DagJson, MilestoneDag, OperationDag, PartialBinding } from '@adhd/dispatch-base-spec';
 import { createDagClient } from '@adhd/dispatch-core-client';
 import { createJsonFileSerializer } from '@adhd/dispatch-serializer-json';
 import { snapshot, optimize } from '@adhd/dispatch-core-optimizer';
@@ -44,14 +44,12 @@ afterAll(() => {
 const GUARD_OUTPUT_CAP_BYTES = 8 * 1024;
 const REPLACEMENT_CHAR = '�';
 
-function makeProviderConfig(): ProviderConfig {
+function makePartialBinding(): PartialBinding {
   return {
-    type: 'claudecli',
-    model_id: 'claude-sonnet-test',
-    env_secret: null,
-    base_url: null,
-    timeout_ms: 30000,
-    retry_config: { retries: 0, min_timeout: 0, max_timeout: 0, factor: 1 },
+    providerType: 'claudecli',
+    modelRef: 'claude-sonnet-test',
+    timeoutMs: 30000,
+    retryConfig: { retries: 0, minTimeout: 0, maxTimeout: 0, factor: 1 },
   };
 }
 
@@ -75,7 +73,7 @@ function makeMilestone(overrides: Partial<MilestoneDag> = {}): MilestoneDag {
 
 function makeDag(overrides: Partial<DagJson> = {}): DagJson {
   return {
-    schema_version: 4,
+    schema_version: 5,
     plan_kind: 'greenfield',
     description: 'test plan',
     problem: 'test',
@@ -95,7 +93,7 @@ function makeDag(overrides: Partial<DagJson> = {}): DagJson {
       context_window_override: null,
       b_override: null,
     },
-    providers: { Sonnet: makeProviderConfig() },
+    providers: { Sonnet: makePartialBinding() },
     effort_max_tokens: { medium: 4096, high: 8192 },
     milestones: { a: makeMilestone() },
     operations: [] as OperationDag[],

@@ -39,7 +39,7 @@ import type {
   DispatchUnit,
   MilestoneDag,
   OperationDag,
-  ProviderConfig,
+  PartialBinding,
 } from '@adhd/dispatch-base-spec';
 import { createDagClient } from '@adhd/dispatch-core-client';
 import { createJsonFileSerializer } from '@adhd/dispatch-serializer-json';
@@ -117,14 +117,12 @@ function makeHitlHandlers(state: HitlState): Record<string, FakeToolHandler> {
   };
 }
 
-function makeProviderConfig(): ProviderConfig {
+function makePartialBinding(): PartialBinding {
   return {
-    type: 'claudecli',
-    model_id: 'claude-sonnet-test',
-    env_secret: null,
-    base_url: null,
-    timeout_ms: 30_000,
-    retry_config: { retries: 0, min_timeout: 0, max_timeout: 0, factor: 1 },
+    providerType: 'claudecli',
+    modelRef: 'claude-sonnet-test',
+    timeoutMs: 30_000,
+    retryConfig: { retries: 0, minTimeout: 0, maxTimeout: 0, factor: 1 },
   };
 }
 
@@ -180,7 +178,7 @@ function makeOp(overrides: Partial<OperationDag> = {}): OperationDag {
 
 function makeDag(): DagJson {
   return {
-    schema_version: 4,
+    schema_version: 5,
     plan_kind: 'greenfield',
     description: 'HITL test plan',
     problem: 'test',
@@ -201,7 +199,7 @@ function makeDag(): DagJson {
       context_window_override: null,
       b_override: null,
     },
-    providers: { Sonnet: makeProviderConfig() },
+    providers: { Sonnet: makePartialBinding() },
     effort_max_tokens: { medium: 4096, high: 8192 },
     milestones: { a: makeMilestone() },
     operations: [makeOp()],

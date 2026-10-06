@@ -123,6 +123,15 @@ export interface Message {
   createdAt: string;
 }
 
+// Provider binding types (D-G(1)): one binding shape shared by agent, session,
+// task and the dispatch DAG. Defined in provider-binding.ts.
+export type {
+  ModelSlug,
+  ProviderType,
+  PartialBinding,
+  ProviderSelection,
+} from './provider-binding.js';
+
 export interface RetryConfig {
   retries: number;
   minTimeout: number;

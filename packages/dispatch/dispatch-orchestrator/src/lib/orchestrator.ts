@@ -1544,10 +1544,10 @@ async function dispatchUnit(
     // dag.providers via resolveUnitProviderAndTokens — use it directly instead
     // of a blind literal (DEBT-DISPATCH-019). Falls back to 'claudecli' (not
     // 'anthropic') when no provider was configured at all: that's the exact
-    // default AgentMcpRunner.ensureAgent's toAgentMcpProviderConfig(null)
+    // default AgentMcpRunner.ensureAgent's bindingToAgentCreateProvider(null)
     // produces (agent-runner.ts:227, { type: 'claudecli' }), so the fallback
     // here matches what the real dispatch actually used.
-    provider: hasRealDispatch ? (unit.provider?.type ?? 'claudecli') : 'local',
+    provider: hasRealDispatch ? (unit.provider?.providerType ?? 'claudecli') : 'local',
     model: hasRealDispatch ? unit.model : null,
     agent: hasRealDispatch ? unit.agent_name : GUARD_EXEC_AGENT_LABEL,
     effort: unit.effort,

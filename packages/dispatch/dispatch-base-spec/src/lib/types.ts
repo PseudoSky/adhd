@@ -5,7 +5,7 @@
  * Design decisions: D-01 through D-18 in DECISIONS.md
  *
  * Field provenance: dag | derived | scheduler | optimizer | clock | gitnexus
- * Zero dependencies. Pure TypeScript. platform:shared.
+ * Pure TypeScript (type-only dependency on @adhd/agent-base-types). platform:shared.
  */
 
 // ---------------------------------------------------------------------------
@@ -13,6 +13,8 @@
 // ---------------------------------------------------------------------------
 
 /** D-03 + D-18 — which executor the orchestrator routes this operation to. */
+import type { PartialBinding, ProviderType } from '@adhd/agent-base-types';
+
 export type OperationType = 'automated' | 'tool-call' | 'generative';
 
 export type OperationAction =
@@ -92,7 +94,6 @@ export type Provenance = 'gitnexus' | 'manual' | 'assumed' | 'vendored';
 export type Confidence = 'verified' | 'vendored' | 'documented' | 'assumed';
 export type KiSource = 'estimate' | 'calibrated' | 'actual';
 export type DispatchKind = 'planning' | 'execution';
-export type ProviderType = 'anthropic' | 'openai' | 'claudecli';
 export type SentinelRole = 'prewarm' | 'payload' | 'solo';
 export type ModelTier = 'Haiku' | 'Sonnet' | 'Opus';
 export type EffortTier = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
@@ -390,21 +391,13 @@ export interface OperationConflict {
 // ── PROVIDER ────────────────────────────────────────────────────────────────
 // ---------------------------------------------------------------------------
 
-export interface RetryConfig {
-  retries: number;
-  min_timeout: number;
-  max_timeout: number;
-  factor: number;
-}
-
-export interface ProviderConfig {
-  type: ProviderType;
-  model_id: string;
-  env_secret: string | null;
-  base_url: string | null;
-  timeout_ms: number;
-  retry_config: RetryConfig;
-}
+/**
+ * Provider bindings in a DAG are the shared camelCase `PartialBinding`
+ * (`@adhd/agent-base-types`) — the same shape agent definitions, sessions and
+ * tasks use. The former snake_case `ProviderConfig`/`RetryConfig` (schema v4)
+ * are gone; `migrateDag` converts v4 documents on load.
+ */
+export type { PartialBinding, ProviderType };
 
 // ---------------------------------------------------------------------------
 // ── DISPATCH LOG ────────────────────────────────────────────────────────────
@@ -616,7 +609,7 @@ export interface DagJson {
    */
   session_id?: string | null;
   optimization: OptimizationConfig;
-  providers: Record<string, ProviderConfig>;
+  providers: Record<string, PartialBinding>;
   effort_max_tokens: Record<string, number>;
   milestones: Record<string, MilestoneDag>;
   operations: OperationDag[] | Record<string, OperationDag>;
@@ -668,7 +661,7 @@ export interface DispatchUnit {
   model: ModelTier | null;
   effort: EffortTier | null;
   two_stage: boolean;
-  provider: ProviderConfig | null;
+  provider: PartialBinding | null;
   agent_name: string;
   execution_mode: DispatchExecutionMode; // NEW (BL-102): distinguishes a guard-only/tool-call-only unit (compiles to a null `prompt` — e.g. a D-12 milestone with model===null, or an all-tool-call batch) from a genuine model dispatch, as an explicit signal instead of orchestrator.ts inferring it from `prompt !== null` as a side effect of compilePrompt's return contract.
   mcp_servers: Record<string, unknown> | null;

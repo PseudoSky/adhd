@@ -48,7 +48,7 @@ worked, not a plan that an agent _thinks_ worked (D-05, D-12).
 ### 5. Cross-language by design
 
 TypeScript types are the canonical representation, but this package ships
-**JSON Schema** (`dag-v4.schema.json`) and a **per-kind operation vocabulary
+**JSON Schema** (`dag-v5.schema.json`) and a **per-kind operation vocabulary
 mapping** (`valid-ops-by-kind.json`) as plain JSON data. A Python orchestrator
 can validate a dag.json with `jsonschema` and constrain tool inputs with
 `op in mapping[kind]`. No npm install needed.
@@ -71,7 +71,8 @@ token cost is amortized over every execution. The optimizer's savings compound.
 | `validateSnapshot`    | D-07 eligibility invariant + status/wave/ref validation                                               |
 | `assertValidDagJson`  | Throwing variant — narrows type to `DagJson`                                                          |
 | `assertValidSnapshot` | Throwing variant — narrows to `DagSnapshot`                                                           |
-| `migrateDag`          | `(from, to, dag) → void` — sequential v2→v3→v4 schema upgrades                                        |
+| `upgradeDagToCurrent` | `(dag) → void` — bring any older dag.json up to schema v5 in place (run by every read path); v5 `providers` entries are camelCase `PartialBinding`s from `@adhd/agent-base-types` |
+| `migrateDag`          | `(from, to, dag) → void` — sequential v2→v3→v4→v5 schema upgrades                                        |
 | `VALID_OPS_BY_KIND`   | `Record<string, ReadonlySet<ShapeOpType>>`                                                            |
 | `isValidOpForKind`    | `(kind, op) → boolean` — runtime check                                                                |
 | `WRITE_CLASS_ACTIONS` | `ReadonlySet<OperationAction>`                                                                        |
@@ -81,7 +82,7 @@ token cost is amortized over every execution. The optimizer's savings compound.
 
 | File                     | Purpose                                                 |
 | ------------------------ | ------------------------------------------------------- |
-| `dag-v4.schema.json`     | Full JSON Schema for dag.json — 18 top-level properties |
+| `dag-v5.schema.json`     | Full JSON Schema for dag.json — 18 top-level properties |
 | `valid-ops-by-kind.json` | 13 kind entries mapping `shape.kind` → allowed ops      |
 
 ## Zero dependencies

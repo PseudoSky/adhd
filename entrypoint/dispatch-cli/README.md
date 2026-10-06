@@ -280,7 +280,7 @@ Guards (all env-overridable; defaults are the guardrails):
 | Strict turn count | `DISPATCH_E2E_MAX_TURNS` | `12` | Baked into every agent (`maxToolLoops`) and the child (`ADHD_AGENT_BUDGET_MAX_CALLS`, a global model-call cap); asserted post-run (`Σ model_calls ≤ cap`). |
 | Cost kill | `DISPATCH_E2E_MAX_COST_USD` | `0.10` | Polls `Σ task_usage.est_cost_usd` every `DISPATCH_E2E_POLL_MS`; **hard-kills** (closes the spawned agent-mcp, exits non-zero) the moment spend exceeds the cap. Fails loudly if cost is unpriceable (NULL) and no proxy meters it. |
 | Message-size protection | `DISPATCH_E2E_MAX_MSG_BYTES` | `262144` | Polls the largest single stored message byte-length; kills if exceeded. |
-| Proxy | `DISPATCH_E2E_PROXY` | unset | Routes the provider `base_url` + child `HTTP(S)_PROXY` through a proxy so API calls can be metered/blocked. When unset, the runner says so and relies on the cost + message-size guards. |
+| Proxy | `DISPATCH_E2E_PROXY` | unset | Routes the provider `baseURL` + child `HTTP(S)_PROXY` through a proxy so API calls can be metered/blocked. When unset, the runner says so and relies on the cost + message-size guards. |
 | Poll interval | `DISPATCH_E2E_POLL_MS` | `1000` | Monitor cadence (floored at 100 ms). |
 | Scenario | `DISPATCH_E2E_SCENARIO` | `all` | `all` \| `dispatch` \| `delegation`. |
 

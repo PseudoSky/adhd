@@ -49,10 +49,33 @@ const model = await modelStore.create({
 });
 ```
 
+### One registry: `createProviderRegistry`
+
+`createProviderRegistry(db)` returns the single canonical, read-only **data**
+registry over the provider / model-binding / tool-format tables. Selection and
+provider construction live in `@adhd/agent-engine-orchestrator`, not here.
+
+```typescript
+import { createProviderRegistry } from '@adhd/agent-core-provider';
+
+const registry = createProviderRegistry(db);
+registry.resolveModelRef('claude_sonnet_4_6', 'claude_api'); // 'claude-sonnet-4-6'
+registry.resolveModelRef('claude_sonnet_4_6', 'claude_code'); // 'sonnet'
+registry.toolFormatLookup('anthropic', 'web_search')?.emitShape; // 'server_side'
+registry.list(); // all providers;  registry.get('anthropic') // Provider | null
+```
+
+`toolFormatLookup` is a `ToolFormatLookup`, so it plugs straight into
+`emitToolsForProvider`. An unbound (ref, platform) pair throws
+`ModelStoreError('MODEL_BINDING_NOT_FOUND')` — never another platform's string.
+The shared binding types (`PartialBinding`, `ProviderSelection`, `ModelSlug`,
+`ProviderType`) live in `@adhd/agent-base-types`.
+
 ## Key exports
 
 | Export | Purpose |
 |--------|---------|
+| `createProviderRegistry(db)` | Canonical read-only registry: `list`/`get`/`resolveModelRef`/`toolFormatLookup` |
 | `ProviderStore` | LLM provider registry |
 | `ModelStore` | Model definitions and capabilities |
 | `ToolFormatStore` | Tool format specifications per model |

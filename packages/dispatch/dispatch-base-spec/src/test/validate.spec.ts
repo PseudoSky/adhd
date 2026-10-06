@@ -11,7 +11,7 @@ function miniDag(
     problem: 'test',
     approach: 'test',
     executor: 'test',
-    schema_version: 4,
+    schema_version: 5,
     plan_kind: 'greenfield',
     phases: ['test'],
     terminal: 'a',
@@ -38,7 +38,7 @@ describe('validateDagJson', () => {
     expect(validateDagJson('not').valid).toBe(false);
   });
   it('rejects missing fields', () => {
-    expect(validateDagJson({ schema_version: 4 }).valid).toBe(false);
+    expect(validateDagJson({ schema_version: 5 }).valid).toBe(false);
   });
   it('rejects invalid plan_kind', () => {
     expect(validateDagJson(miniDag({ plan_kind: 'invalid' })).valid).toBe(
@@ -345,7 +345,7 @@ const baseSnap = {
   snapshot_at: '2026-01-01T00:00:00Z',
   snapshot_version: 1,
   plan: 'test',
-  schema_version: 4,
+  schema_version: 5,
   plan_kind: 'greenfield',
   description: 'test',
   problem: 'test',

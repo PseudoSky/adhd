@@ -1,7 +1,7 @@
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 
 import { AgentStore } from '@adhd/agent-store-prompts';
-import { ModelStore, ModelStoreError } from '@adhd/agent-core-provider';
+import { createProviderRegistry, ModelStoreError } from '@adhd/agent-core-provider';
 
 // ──────────────────────────────────────────────
 // resolveModel — resolve an agent's model_hint to a platform-specific model id.
@@ -60,9 +60,10 @@ export function resolveModel(
   }
 
   // Step 3: resolve via ModelStore — the platform filter lives here, not in resolveModel.
-  const modelStore = new ModelStore(db);
+  // (D-G(1): through the one canonical ProviderRegistry, not a raw ModelStore.)
+  const registry = createProviderRegistry(db);
   try {
-    return modelStore.resolveModelId(modelHint, platform);
+    return registry.resolveModelRef(modelHint, platform);
   } catch (err) {
     if (
       err instanceof ModelStoreError &&

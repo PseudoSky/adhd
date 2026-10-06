@@ -83,7 +83,7 @@ const EMPTY_OPTIMIZATION: DagJson['optimization'] = {
 
 export function miniDag(overrides: Partial<DagJson> = {}): DagJson {
   return {
-    schema_version: 4,
+    schema_version: 5,
     plan_kind: 'greenfield',
     description: 'test',
     problem: 'test',
