@@ -23,14 +23,21 @@ export type {
 export {
   assertModelTier,
   buildClient,
+  buildDispatchSelfServer,
   buildProductionAgentMcpRunner,
   calibrateCore,
   DEFAULT_CALIBRATION_PATH,
   DEFAULT_RUN_DEBUG_DIR,
   eligibleCore,
   optimizeCore,
+  resolveDispatchMcpServers,
+  resolveProductionRunnerCwd,
   runCycleCore,
   snapshotCore,
   statusCore,
   validateCore,
+} from './lib/core.js';
+export type {
+  ProductionRunnerOverrides,
+  ResolveDispatchMcpServersOptions,
 } from './lib/core.js';

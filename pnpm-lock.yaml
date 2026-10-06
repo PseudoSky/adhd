@@ -704,6 +704,12 @@ importers:
 
   entrypoint/dispatch-cli:
     dependencies:
+      '@adhd/agent-base-types':
+        specifier: ^2.3.3
+        version: link:../../packages/agent/agent-base-types
+      '@adhd/agent-core-native-tooling':
+        specifier: ^0.0.1
+        version: link:../../packages/agent/agent-core-native-tooling
       '@adhd/backlog':
         specifier: ^1.0.8
         version: link:../backlog
