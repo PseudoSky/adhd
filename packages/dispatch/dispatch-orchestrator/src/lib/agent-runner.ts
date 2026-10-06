@@ -280,17 +280,21 @@ export interface McpAgentProviderConfig {
  * `providerType -> type` and `modelRef -> model`; there is no snake_case
  * translation any more (that parallel representation is retired).
  *
- * `null` (no provider configured) keeps the pre-existing default of a bare
- * `{ type: 'claudecli' }` agent — removing that default is D-G(2)'s
- * fail-closed `NO_PROVIDER_SELECTED` change, not D-G(1)'s.
+ * `null` / no `providerType` (no provider configured) maps to `undefined`: the
+ * `agent_create` payload then OMITS `provider` and agent-mcp stores a
+ * provider-less agent (D-G(2): `AgentDefinition.provider` is optional). There is
+ * no implicit `claudecli` default any more — an unbound task resolves its
+ * provider from the session / host-default tiers and otherwise fails closed with
+ * `NO_PROVIDER_SELECTED`.
  *
- * D-G(2) makes `AgentDefinition.provider` an optional `PartialBinding`, at
- * which point this adapter disappears and the binding is passed through.
+ * The rename to the legacy wire spelling stays because agent-mcp's stored
+ * agent definition still carries `{type, model}` (the agent tier is read as a
+ * binding by `providerConfigToBinding` in agent-engine-orchestrator).
  */
 export function bindingToAgentCreateProvider(
   binding: PartialBinding | null
-): McpAgentProviderConfig {
-  if (!binding?.providerType) return { type: 'claudecli' };
+): McpAgentProviderConfig | undefined {
+  if (!binding?.providerType) return undefined;
 
   if (binding.providerType === 'claudecli') {
     const config: McpAgentProviderConfig = { type: 'claudecli' };

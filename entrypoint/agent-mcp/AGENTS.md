@@ -37,6 +37,7 @@ The server exposes these MCP tools:
 | `task_resume` | `(taskId: string, resumeInput: string) -> {}` | Resume a HITL-suspended task with user input |
 | `session_list` | `(filter?: object) -> {sessions: [...]}` | List sessions (filter by agentName, status) |
 | `session_close` | `(sessionId: string) -> {}` | Close a session; marks final state |
+| `session_update` | `({ session_id, provider?, model?, models? }) -> { session_id, selection }` | Set the session-held provider binding (`provider` = anthropic\|openai\|claudecli, `model`/`models` = canonical refs such as `claude_sonnet_4_6`). The session tier of the selection chain `task > session > agent > host default`; a provider-less agent with no binding fails closed (`NO_PROVIDER_SELECTED`). Persisted: survives a restart. |
 | `session_clear` | `(sessionId: string) -> {}` | Delete message history for a session (preserves agent snapshot) |
 | `usage_query` | `(filter?: object, groupBy?: string) -> {usage: [...]}` | Query task usage across multiple tasks (grouped by agent, model, provider) |
 | `guide` | `() -> {workflows, providers, errors}` | Built-in help: 6 workflows, provider table, error codes |
@@ -377,3 +378,11 @@ Every claim in this document is tied to:
 - **Research docs:** `docs/ideas/` contain wire-trace evidence for 2.0.2 changes
 
 Do not present this document as aspirational. All features are currently shipped.
+
+## Provider selection (D-G(2))
+
+An agent's `provider` is optional. Each task resolves ONE provider from the chain `task > session > agent > host default`
+(per field, first tier wins; a tier naming a different provider type is skipped). The host default is
+`ADHD_AGENT_DEFAULT_PROVIDER` (`anthropic|openai|claudecli`) + `ADHD_AGENT_DEFAULT_MODEL`, both unset by default. If no tier
+supplies a provider and a model the task fails closed with `NO_PROVIDER_SELECTED` — there is no implicit `claudecli`.
+A canonical model ref resolves to the provider-native wire string through the provider registry (seeded at startup).

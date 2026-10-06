@@ -266,9 +266,9 @@ describe('orchestrateCycle — real agent dispatch', () => {
 
   it('falls back to provider claudecli (never anthropic) when a real dispatch has no dag.providers entry for its model (DEBT-DISPATCH-019)', async () => {
     // Sonnet has no matching entry in `providers` -> resolveUnitProviderAndTokens
-    // leaves unit.provider === null -> AgentMcpRunner.ensureAgent's real
-    // toAgentMcpPartialBinding(null) default is { type: 'claudecli' }
-    // (agent-runner.ts), so telemetry must report that, not a blind 'anthropic'.
+    // leaves unit.provider === null -> AgentMcpRunner.ensureAgent creates a
+    // provider-less agent (D-G(2)); the telemetry LABEL falls back to 'claudecli'
+    // (a label only, never a behavioural default), not a blind 'anthropic'.
     const { dagPath, deps, runner } = await setupScenario(
       'no-provider-config',
       makeDag({ providers: {} })
