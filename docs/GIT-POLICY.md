@@ -1365,3 +1365,55 @@ Schema version 1.
   gates be run) — the git-invoked hook, if any, is git's own behavior, not a gate this operation
   chose to run. This record is the only change to this file in this operation. Recorded under
   §Commit convention's `docs(<area>):` scope.
+
+- **2026-10-05 — operation record: preserve abandoned parallel NAT-TOOL-4 root tree, land
+  `feat/nat-tool-4-agent-mcp`, reap its worktree (dispatch-2026-10-04-9c4e).**
+  `main` (`f3209b46`) carried a stale, uncommitted parallel NAT-TOOL-4 implementation in its working
+  tree (16 modified tracked files, one tracked deletion `tools/mcp-shell/server.mjs`, and one
+  untracked `entrypoint/agent-mcp/src/__tests__/default-mcp-producer.guard.test.ts`; ~4.5h idle), a
+  review had confirmed it fully superseded by branch `feat/nat-tool-4-agent-mcp`, and the user
+  authorized proceeding after comparing. Because the discard is destructive to uncommitted work, B
+  was preserved durably **before** the tree was touched: `git stash` is denied by this operator's run
+  policy, so the equivalent plumbing path was used — the working-tree tracked state (modifications
+  plus the deletion) was written into a TEMP index (`git read-tree f3209b46` + explicit
+  `git add -- <17 paths>`), the untracked file was added with `git hash-object -w` +
+  `git update-index --add --cacheinfo`, `git write-tree` produced tree `75d806fc`, and
+  `git commit-tree 75d806fc -p f3209b46` produced single-parent commit `4e201ee9`, published as the
+  durable branch `wip/nat-tool-4-root-abandoned`. `git show --stat wip/nat-tool-4-root-abandoned`
+  lists all 18 B paths (16 M, the `server.mjs` `D`, the untracked guard test `+147`), so the branch
+  contains the tracked and untracked state; the untracked blob `bcd8212e` is byte-identical to the
+  working file (`git rev-parse wip/nat-tool-4-root-abandoned:<path>` = `git hash-object -- <path>`
+  = `bcd8212e3351ae1a35db60a6ab26664f1ac088b1`) and was also copied to operator scratch with sha256
+  `28c9e2ed…`. The preservation touches no working-tree file and no real index entry — the
+  18-entry `git status --porcelain` was identical before and after. With B safe, the root tree was
+  cleaned to `f3209b46` by explicit `git restore -- <17 named paths>` (restoring the modifications
+  and recreating the deleted `tools/mcp-shell/server.mjs`) and a single `rm` of the one untracked
+  file — no `git reset --hard`, no `git clean -f`, no `git stash`, no `--force`; `git status
+  --porcelain` and `git diff --cached --name-only` were both empty afterward. The branch (4 commits
+  — `27f23441`, `740f8325`, `a5fa4ca1`, `102414c6`) was then landed. Its merge-base with `main` was
+  the pre-merge tip `f3209b46`, so the landing is a genuine non-fast-forward (main had not advanced)
+  and `--no-ff` was correct; dry-run `git merge-tree --write-tree --name-only main
+  feat/nat-tool-4-agent-mcp` exited 0, producing tree `8b5f45ba` — identical to the branch tip tree,
+  as expected with no divergence — and the actual `git merge --no-ff` was conflict-free (ort
+  strategy, exit 0), its tree at the merge commit also `8b5f45ba`, byte-identical to the dry-run
+  tree, so no conflict arose and none required resolution. The merge commit is `990106a3` (parents
+  `f3209b46` = pre-merge `main`, `102414c6` = branch head), moving `main` `f3209b46` → `990106a3`;
+  27 files, +1566/-433 (a superset of B: the branch also adds `srt-policy.ts`, `srt-policy.test.ts`,
+  `native-tooling-resolution.test.ts`, `docs-and-config-contract.test.ts`,
+  `srt-policy-spawn.e2e.test.ts` and modifies `server.ts`/`index.ts`, and its own
+  `default-mcp-producer.guard.test.ts` at 145 lines differs from B's abandoned 147-line variant — B
+  is preserved, not lost). All four commits are contained: `git merge-base --is-ancestor <sha> main`
+  exits 0 for each and `git rev-list --count main..feat/nat-tool-4-agent-mcp` = 0. The branch never
+  touched this file (`git diff --name-only f3209b46 102414c6 -- docs/GIT-POLICY.md` empty), so
+  `main`'s policy blob `9e13a756` survived the merge byte-identical (pre-merge `f3209b46`,
+  post-merge `990106a3`, and the on-disk file all resolve to it). The merge invoked no gate:
+  `.githooks/` supplies `pre-commit`, `post-commit`, and `pre-push`, and git runs `pre-merge-commit`
+  (not `pre-commit`) for a merge — no such hook exists, so none ran. The worktree
+  `.worktrees/nat-tool-4-9c4e` was then reaped under the §Cleanup three-part test: `git status
+  --porcelain` inside it was empty, it carried no `locked` line, and its head `102414c6` was an
+  ancestor of `main` after the merge — so `git worktree remove` (no `--force`) ran and the branch
+  was deleted with `git branch -d feat/nat-tool-4-agent-mcp` (was `102414c6`); worktrees went
+  78 → 77. The merged commits remain reachable from the durable `main` ref and the abandoned B
+  state from `wip/nat-tool-4-root-abandoned`, so recovery depends on no reflog. No push (the
+  dispatch directed none) and no gates were run. This record is the only change to this file in this
+  operation. Recorded under §Commit convention's `docs(<area>):` scope.
