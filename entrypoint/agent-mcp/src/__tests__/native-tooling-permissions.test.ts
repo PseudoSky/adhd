@@ -99,6 +99,35 @@ describe('evaluateNativePermission — tool-NAME resource, last-match-wins, `den
   });
 });
 
+describe('gate blast radius — the gate is consulted for EVERY tool call (FIX 3, ADR-0008 D5)', () => {
+  it('a bare `*` rule denies a NON-native server (documented blast radius, not a bug)', () => {
+    // The engine holds no server taxonomy and consults the gate for every tool
+    // call; `resolvePermissionRules` merges any member's `permissions` into one
+    // flat map with a `*` baseline. So `{ '*': 'deny' }` under one member denies
+    // `backlog` too — the documented behavior, pinned here so a change is a
+    // deliberate decision, not silent drift.
+    expect(
+      evaluateNativePermission(
+        { dispatch: { permissions: { '*': 'deny' } } },
+        'backlog',
+        'create'
+      )
+    ).toBe('deny');
+  });
+
+  it('a server-qualified rule does NOT leak to another server', () => {
+    // The advised form: scope by server-qualified name. A `shell.*` deny leaves
+    // every other server at its default (`allow`).
+    expect(
+      evaluateNativePermission(
+        { shell: { permissions: { 'shell.*': 'deny' } } },
+        'backlog',
+        'create'
+      )
+    ).toBe('allow');
+  });
+});
+
 describe('defaultPermissionGate + production wiring (guard against a silent no-op)', () => {
   it('toEngineConfig() injects the permission gate — `nativeTooling.permissions` IS read in production', () => {
     const gate = toEngineConfig().permissionGate;

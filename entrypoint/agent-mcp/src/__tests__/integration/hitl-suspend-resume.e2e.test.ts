@@ -21,8 +21,9 @@
  *      'completed', result is the second turn's content ('confirmed')
  *   5. TOOL_CALL task_event recorded for request_human_input (with resumeToken)
  *
- * Ephemeral-task guard (orchestrator.ts) is not hit: harness tasks are DB-backed
- * (taskTool background path → TaskStore.create → real tasks row).
+ * The task is ANSWERABLE (session + background): the harness task is enqueued
+ * (`taskTool` background path → TaskStore.create → real tasks row), so the
+ * orchestrator's suspension stays resumable in-process (ADR-0008 D6).
  */
 
 import { describe, it, expect } from "vitest";

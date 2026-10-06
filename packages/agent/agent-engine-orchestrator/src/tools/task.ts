@@ -238,7 +238,11 @@ async function runEphemeralTask(
       signal: controller.signal,
       taskId,
       hooks: deps.hooks,
-      isEphemeral: true,
+      // A one-shot `agent_name` dispatch is SYNCHRONOUS: this call blocks until
+      // `run` resolves, so the caller can never receive a resumeToken. Hence no
+      // approver is reachable within the call — an `ask` must fail closed rather
+      // than suspend (ADR-0008 D6: an unanswered ask never hangs).
+      suspensionAnswerable: false,
       emitTaskEvent: deps.emitTaskEvent,
       logger: deps.logger,
       config: deps.config,
@@ -402,6 +406,13 @@ export async function taskTool(
     deps.logger
   );
 
+  // A `background:false` session task is SYNCHRONOUS — `taskTool` awaits
+  // `orchestrator.run` to completion, so its caller can never receive a
+  // resumeToken and no approver is reachable: it must fail closed on an `ask`
+  // rather than suspend (ADR-0008 D6). A `background:true` task is enqueued and
+  // observable/resumable, so suspension stays answerable.
+  const suspensionAnswerable = input.background === true;
+
   const runTask = async (): Promise<void> => {
     try {
       await deps.orchestrator.run({
@@ -415,6 +426,7 @@ export async function taskTool(
         signal: controller.signal,
         taskId: task.id,
         hooks: deps.hooks,
+        suspensionAnswerable,
         emitTaskEvent: deps.emitTaskEvent,
         logger: deps.logger,
         config: deps.config,

@@ -261,6 +261,10 @@ describe("Orchestrator tool advertisement", () => {
         if (!request.tools) throw new Error("expected tools");
         expect(JSON.stringify(request.tools)).toContain(SECRET);
 
+        // ADR-0008 D6 / 0ea6f9e0 FIX 1: HITL defaults ON, so
+        // `builtin__request_human_input` is advertised without any opt-in.
+        expect(request.tools.map((t) => t.name)).toContain("builtin__request_human_input");
+
         // The system message is the untouched original — no tool doc prepended in 'full' mode.
         const system = request.messages[0];
         expect(system.role).toBe("system");
@@ -332,8 +336,11 @@ describe("Orchestrator tool advertisement", () => {
         expect(requests[1].messages[0].content).toContain("## Available Tools");
     });
 
-    it("sends no tools field when the registry has no tools", async () => {
-        const ctx = makeCtx();
+    it("sends no tools field when there are no registry tools AND HITL is disabled", async () => {
+        // ADR-0008 D6 / 0ea6f9e0 FIX 1: HITL defaults ON, so the builtin HITL
+        // tool is ALWAYS advertised unless `nativeTooling.hitl:false`. Opt out
+        // here to exercise the genuine empty-tool-list path deterministically.
+        const ctx = makeCtx({ nativeTooling: { hitl: false } });
         const { provider, requests } = capturingProvider(["completed"]);
         await run(ctx, provider, [systemMessage(ctx.sessionId), userMessage(ctx.sessionId)], []);
 
