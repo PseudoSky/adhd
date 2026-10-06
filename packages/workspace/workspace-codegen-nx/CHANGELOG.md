@@ -1,3 +1,13 @@
+## 0.1.5 (2026-10-06)
+
+### 🩹 Fixes
+
+- **workspace-codegen-nx:** emit typecheck-spec target + baseline (a4c837a2) ([94773071](https://github.com/PseudoSky/adhd/commit/94773071))
+
+### ❤️ Thank You
+
+- pseudosky
+
 ## 0.1.3 (2026-09-26)
 
 ### 🚀 Features

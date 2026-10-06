@@ -252,10 +252,10 @@
     "publishedFromRef": "a1a6ba024c5526b930f97c5420e920639d14e110"
   },
   "@adhd/backlog": {
-    "version": "1.0.8",
-    "normalizedHash": "sha256:8f1f8217dcebdba0311c5b41ea02631e40b22e1b96d9ece17846898e55a453f5",
-    "publishedIntegrity": "sha512-IF4iushCtC8v7hdvEUlLOmNWN2ntEwkfJoxLiqyPhnP4jnu3eVOJ+a5CN7Pv1yN0M2vnoyc9qaAQnq+2koS7pg==",
-    "publishedFromRef": "ef4f46db77e36555b8a0edf18d767afee08e3b5b"
+    "version": "1.0.9",
+    "normalizedHash": "sha256:e5a6572af7ecb27b404df48187f091878810b742ea88314431cc0e5dc00fcfff",
+    "publishedIntegrity": "sha512-hblwz9BxuJAjZxPdHrk9RZpf+bPkXceDpdYVU+97ZpO3GMhAtHR5UVubYwYK3E0rZ/+1KeWEfSA7AyHWOIRXFA==",
+    "publishedFromRef": "b5c550f0dd5126906f819eefb0af7007036e7cc0"
   },
   "@adhd/data-base-transforms": {
     "version": "2.3.4",
@@ -270,10 +270,10 @@
     "publishedFromRef": "a49d4fbe51581ba895a217105b27c18d65190c69"
   },
   "@adhd/data-query-engine": {
-    "version": "2.3.9",
-    "normalizedHash": "sha256:8130f2f533051582d10546200aa3bf53c6b550c62e40b6d60d55530e334cfa3f",
-    "publishedIntegrity": "sha512-0XQoPGB8vsrfm+LznLpjWg0tY6lsa20Ol8yTyKsNNOvpuZripGCh1p31p4ykihAY4OE0rxEGY9R8y0qnA13vsQ==",
-    "publishedFromRef": "a49d4fbe51581ba895a217105b27c18d65190c69"
+    "version": "2.3.10",
+    "normalizedHash": "sha256:f8564d828987b403647e41e56223bbce12039378a898929a53cba788b4fe610c",
+    "publishedIntegrity": "sha512-Aj/v3ZswIf074PCIHGjoRrBVDAa4pmIDuUG+Nb76xhBhgONfHvtgmeUmwMyZuLwmwX+Cw21YhCwy0cs0J9EA7A==",
+    "publishedFromRef": "b5c550f0dd5126906f819eefb0af7007036e7cc0"
   },
   "@adhd/decompile-cli": {
     "version": "0.2.4",
@@ -294,10 +294,10 @@
     "publishedFromRef": "a1a6ba024c5526b930f97c5420e920639d14e110"
   },
   "@adhd/dispatch-cli": {
-    "version": "0.1.5",
-    "normalizedHash": "sha256:e5f40da1e0f1582b6b625e9de080deb61c2cf974af39c7ae57e5b316724f20e1",
-    "publishedIntegrity": "sha512-6XXo9Ha6BN7PYvtPXyeBwJsEz45bIOcETt24aybJx6UzLy7KMfmg8jYnwVaZsal579d2Ji4ZsltFDFUuVs/jIw==",
-    "publishedFromRef": "a1a6ba024c5526b930f97c5420e920639d14e110"
+    "version": "0.1.6",
+    "normalizedHash": "sha256:32a7ea77f0e17835573ca973a5f6c96beb13785a47eddcd4e5ce41f242215823",
+    "publishedIntegrity": "sha512-Jg2zMLPD+q3aYYPKlySJgVth0VwTsHvahFqX2uBzmgs9rO/jGAuMO8zQvhMEew/nBfPcLIwou0t8aGiHSQyiOw==",
+    "publishedFromRef": "b5c550f0dd5126906f819eefb0af7007036e7cc0"
   },
   "@adhd/dispatch-core-client": {
     "version": "0.1.3",
@@ -366,9 +366,9 @@
     "publishedFromRef": "a1a6ba024c5526b930f97c5420e920639d14e110"
   },
   "@adhd/workspace-codegen-nx": {
-    "version": "0.1.4",
-    "normalizedHash": "sha256:4145fadec38f42dcab0c0195ff854649f336af9d3918e2db82ba881ab88691b5",
-    "publishedIntegrity": "sha512-2QHFWspwuSxPWNmv96eSP4ufHVG4qhBQbiCIHNOQwE5O24pRKUCYoearhxfbo4fCxAeuPm+KEpkyvQA0ka5Siw==",
-    "publishedFromRef": "a1a6ba024c5526b930f97c5420e920639d14e110"
+    "version": "0.1.5",
+    "normalizedHash": "sha256:a2b9ccf3691b0f3685686ee8f98a31ca6b36c6771f015197358128dce231247a",
+    "publishedIntegrity": "sha512-xBPNNKbvyEUaQ252rvr5vhCLFBokDykRlsetg6JVZEV4jILFMxMlE/i4y7vh3cMGxRysNAef2EKMeRnx490qjw==",
+    "publishedFromRef": "b5c550f0dd5126906f819eefb0af7007036e7cc0"
   }
 }

@@ -1,3 +1,13 @@
+## 2.3.10 (2026-10-06)
+
+### 🩹 Fixes
+
+- **data-query-engine:** make canon iterative so deep queries cannot overflow the stack (dqe-canonical-b7d4) ([80054103](https://github.com/PseudoSky/adhd/commit/80054103))
+
+### ❤️ Thank You
+
+- pseudosky
+
 ## 2.3.9 (2026-10-06)
 
 ### 🚀 Features
