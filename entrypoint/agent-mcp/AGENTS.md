@@ -141,33 +141,35 @@ executed by the provider. Set `nativeWebTools: false` on the agent definition
 to opt out. Providers without native web tools (openai/claudecli) are
 unaffected.
 
-### Default MCP servers for new agents (97acef07)
+### Native tooling for dispatched agents (ADR-0008 / NAT-TOOL-4)
 
-`agent_create` default-wires the adopted filesystem and shell MCP servers
-when the caller supplies no `mcpServers` (or an empty map). A newly created
-agent is therefore born with these capabilities without an operator
-hand-authoring an `mcpServers` block:
+Every dispatched agent inherits a standardized, **portable** native toolset described by
+`AgentDefinition.nativeTooling` (`{ fs?, shell?, dispatch?, hitl? }`) and resolved by
+`resolveNativeTooling` (`@adhd/agent-core-native-tooling`) at **task time** against the
+dispatching cwd — never baked into the stored definition (ADR-0008 D4). Merge precedence,
+highest first: explicit `mcpServers` > `nativeTooling` > the `dispatch` self floor.
 
-| server | transport | command | allowlisted tools (canonical capability) |
-|---|---|---|---|
-| `filesystem` | stdio | `npx -y @modelcontextprotocol/server-filesystem <root>` | `read_text_file`, `read_file`, `read_multiple_files`, `read_media_file`, `write_file`, `edit_file`, `create_directory`, `list_directory`, `list_directory_with_sizes`, `directory_tree`, `move_file`, `search_files`, `get_file_info`, `list_allowed_directories` (canonical `file_read`/`file_write`/`file_glob`/`file_grep`) |
-| `shell` | stdio | `node <repo>/tools/mcp-shell/server.mjs <root>` | `shell` (canonical `shell_exec`) |
+| member | resolved server (adopted) |
+|---|---|
+| `fs` | `srt npx -y @modelcontextprotocol/server-filesystem <cwd>` |
+| `shell` | `srt uvx mcp-shell-server` (allowlisted argv — never a shell string) |
+| `dispatch` | the REAL agent-mcp server (`agent-mcp`), handled in-process — never a wrapper |
+| `hitl` | HITL enablement; `false` hides `request_human_input` (ADR-0008 D6) |
 
-- `<root>` defaults to the server process's working directory.
-- The shell entry is omitted when `tools/mcp-shell/server.mjs` cannot be
-  resolved (e.g. the published package installed outside the monorepo); set
-  `ADHD_AGENT_SHELL_MCP_PATH` to point at it explicitly.
-- **`tools/mcp-shell/server.mjs` is a DEPRECATED fallback** (ADR-0008 D5/D7,
-  NAT-TOOL-8). It is the retired homegrown thick layer (a regex
-  prefix/blocklist over command text), superseded by the adopted
-  `tumf/mcp-shell-server` (allowlisted argv arrays — never a shell string)
-  wrapped by `@anthropic-ai/sandbox-runtime` (`srt`). Its permanent removal is
-  owned by NAT-TOOL-4, when `buildDefaultMcpServers` is replaced by
-  `resolveNativeTooling` (`@adhd/agent-core-native-tooling`).
-- **An explicit non-empty `mcpServers` map always wins** — defaults are only
-  applied when the caller supplies none. `allowedTools`/`disallowedTools`
-  remain enforced by `McpClientRegistry` at every `callTool`, exactly as for
-  operator-authored servers.
+- The `fs`/`shell` builtins are wrapped by `@anthropic-ai/sandbox-runtime` (`srt`) by default
+  (ADR-0008 D7). The host provisions an `srt` policy (`src/srt-policy.ts`; deferral
+  `a5a2f1d4`) so they can initialize their caches/registries and spawn.
+- `nativeTooling` is PORTABLE: the same stored definition fired from `/P` then `/Q` yields
+  fs root `/P` then `/Q` while the stored JSON stays byte-identical (D4). Resolution never
+  mutates the stored definition.
+- A definition with no `nativeTooling` behaves as the standardized defaults (D1/D8); any
+  member set to `false` is omitted.
+- An explicit `mcpServers` entry is preserved and WINS over `nativeTooling` for a shared
+  name. `allowedTools`/`disallowedTools` remain enforced by `McpClientRegistry` at every
+  `callTool`, exactly as for operator-authored servers.
+
+The authored `tools/mcp-shell/server.mjs` thick layer was **removed** by NAT-TOOL-4 (ADR-0008
+D5/D7); the adopted `tumf/mcp-shell-server` (`uvx mcp-shell-server`) replaces it.
 
 ### Delegation (Agent → Child Agent)
 

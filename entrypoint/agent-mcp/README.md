@@ -156,22 +156,23 @@ When connected to `agent-mcp` via MCP, call tools in sequence:
 
 See the source repository's `examples/` directory for end-to-end client libraries (Node.js, Python).
 
-### Default tools for new agents
+### Native tools for dispatched agents
 
-`agent_create` default-wires the filesystem and shell MCP servers when you
-pass no `mcpServers`, so a new agent can read/write/glob/grep files and run
-allowlisted shell commands out of the box:
+Every dispatched agent inherits a standardized, portable native toolset from
+`AgentDefinition.nativeTooling` (`{ fs?, shell?, dispatch?, hitl? }`), resolved
+at **task time** against the dispatching cwd by `resolveNativeTooling`
+(`@adhd/agent-core-native-tooling`) — the stored definition is never mutated and
+carries no resolved root, so it is usable from any directory:
 
-- `filesystem` → `npx -y @modelcontextprotocol/server-filesystem <cwd>`,
-  allowlisting `read_text_file`, `write_file`, `edit_file`, `search_files`,
-  and the other standard filesystem tools.
-- `shell` → `node <repo>/tools/mcp-shell/server.mjs <cwd>` (allowlisting the
-  `shell` tool), omitted if the server file is not found — set
-  `ADHD_AGENT_SHELL_MCP_PATH` to point at it.
+- `fs` → `srt npx -y @modelcontextprotocol/server-filesystem <cwd>`
+- `shell` → `srt uvx mcp-shell-server` (allowlisted argv — never a shell string)
+- `dispatch` → the REAL agent-mcp server, so the agent can dispatch sub-agents
 
-An explicit non-empty `mcpServers` map always overrides the defaults, and
-`allowedTools`/`disallowedTools` remain enforced on every call. See
-`AGENTS.md` §“Default MCP servers for new agents”.
+The `fs`/`shell` builtins are wrapped by `@anthropic-ai/sandbox-runtime` (`srt`),
+and the host provisions the matching policy automatically. Merge precedence is
+explicit `mcpServers` > `nativeTooling` > the `dispatch` self floor, and
+`allowedTools`/`disallowedTools` remain enforced on every call. See `AGENTS.md`
+§“Native tooling for dispatched agents”.
 
 ## 2.0.2 Release Notes
 

@@ -6,91 +6,19 @@
  *   cecf2a94 — architecture-and-security.md states the THREE real provider types.
  *   3c79bf07 — guide() USAGE_GUIDE documents Workflow 5 (depends_on chaining).
  *   d58c1155 — live-test gate approval + named owner in README + AGENTS.md + headers.
- *    f141baad — the mcp-shell security-config path is real: canonical file exists,
- *              the bogus scripts/ path is gone, and every catalog DB entry points
- *              its MCP_SHELL_SEC_CONFIG_FILE at an existing file. A repo-owned
- *              seeded fixture catalog (fixtures/catalog-shell-config.seed.json)
- *              makes AC2 assert unconditionally in CI, where no machine-global
- *              catalog exists.
+ *   NAT-TOOL-4 — the authored `tools/mcp-shell` fallback (server.mjs + security.yaml)
+ *              is permanently removed and no runtime source references it.
  */
-import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
-import { dirname, isAbsolute, resolve } from 'node:path';
+import { existsSync, readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import Database from 'better-sqlite3';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
 const here = dirname(fileURLToPath(import.meta.url)); // entrypoint/agent-mcp/src/__tests__
 const pkgRoot = resolve(here, '..', '..'); // entrypoint/agent-mcp
 const repoRoot = resolve(pkgRoot, '..', '..'); // repo root
 const read = (p: string): string => readFileSync(p, 'utf8');
-
-/**
- * The f141baad AC2 assertion must not go vacuous in CI, where the machine-global
- * agent-mcp catalog does not exist. This seeds a repo-owned fixture catalog — a
- * real SQLite `agents` table built from the committed seed file
- * `fixtures/catalog-shell-config.seed.json` — so AC2 always has a catalog to
- * check. The seed records `MCP_SHELL_SEC_CONFIG_FILE` repo-relatively; the test
- * resolves it against the repo root, so a moved/renamed/deleted canonical
- * `tools/mcp-shell/security.yaml` (or a regression back to the removed bogus
- * `scripts/mcp-shell-security.yaml`) turns the assertion red.
- */
-let fixtureCatalogDb: string | undefined;
-
-function seedFixtureCatalog(): string {
-  const seed = JSON.parse(
-    read(resolve(here, 'fixtures', 'catalog-shell-config.seed.json'))
-  ) as {
-    agents: Array<{
-      name: string;
-      mcpServers?: Record<string, { env?: Record<string, string> }>;
-    }>;
-  };
-  // Ephemeral artifact under the canonical tmp/ root; removed in afterAll.
-  const dir = resolve(
-    repoRoot,
-    'tmp',
-    'agent-mcp',
-    `docs-contract-fixture-${process.pid}`
-  );
-  mkdirSync(dir, { recursive: true });
-  const dbPath = resolve(dir, 'catalog.db');
-  const db = new Database(dbPath);
-  try {
-    db.exec(
-      'CREATE TABLE agents (name TEXT PRIMARY KEY NOT NULL, data TEXT NOT NULL)'
-    );
-    const insert = db.prepare(
-      'INSERT INTO agents (name, data) VALUES (?, ?)'
-    );
-    for (const agent of seed.agents) {
-      for (const srv of Object.values(agent.mcpServers ?? {})) {
-        const cfg = srv?.env?.['MCP_SHELL_SEC_CONFIG_FILE'];
-        if (cfg && srv?.env && !isAbsolute(cfg)) {
-          srv.env['MCP_SHELL_SEC_CONFIG_FILE'] = resolve(repoRoot, cfg);
-        }
-      }
-      insert.run(
-        agent.name,
-        JSON.stringify({ name: agent.name, mcpServers: agent.mcpServers ?? {} })
-      );
-    }
-  } finally {
-    db.close();
-  }
-  return dbPath;
-}
-
-beforeAll(() => {
-  fixtureCatalogDb = seedFixtureCatalog();
-});
-
-afterAll(() => {
-  if (fixtureCatalogDb) {
-    rmSync(dirname(fixtureCatalogDb), { recursive: true, force: true });
-  }
-});
-
 
 describe('cecf2a94 — architecture-and-security.md provider claims', () => {
   const doc = read(resolve(pkgRoot, 'docs', 'architecture-and-security.md'));
@@ -155,48 +83,27 @@ describe('d58c1155 — env-gated live tests carry a named-owner approval', () =>
   });
 });
 
-describe('f141baad — mcp-shell security-config path is real', () => {
-  const canonical = resolve(repoRoot, 'tools', 'mcp-shell', 'security.yaml');
-  const bogus = resolve(repoRoot, 'scripts', 'mcp-shell-security.yaml');
-
-  it('AC1: the canonical security.yaml exists and the bogus scripts/ path does not', () => {
-    expect(existsSync(canonical)).toBe(true);
-    expect(existsSync(bogus)).toBe(false);
+describe('NAT-TOOL-4 — the authored mcp-shell fallback is permanently removed', () => {
+  it('AC4: the retired fallback files are gone', () => {
+    expect(existsSync(resolve(repoRoot, 'tools', 'mcp-shell', 'server.mjs'))).toBe(false);
+    expect(existsSync(resolve(repoRoot, 'tools', 'mcp-shell', 'security.yaml'))).toBe(false);
   });
 
-  it('AC2: every catalog agent points MCP_SHELL_SEC_CONFIG_FILE at an existing file (typescript-deepseek == canonical)', () => {
-    const candidates = discoverCatalogDbs();
-    let checked = 0;
-    for (const dbPath of candidates) {
-      if (!existsSync(dbPath)) continue;
-      const db = new Database(dbPath, { readonly: true, fileMustExist: true });
-      try {
-        const rows = db.prepare('SELECT name, data FROM agents').all() as Array<{ name: string; data: string }>;
-        for (const row of rows) {
-          const parsed = JSON.parse(row.data) as {
-            mcpServers?: Record<string, { env?: Record<string, string> }>;
-          };
-          for (const srv of Object.values(parsed.mcpServers ?? {})) {
-            const cfg = srv?.env?.['MCP_SHELL_SEC_CONFIG_FILE'];
-            if (!cfg) continue;
-            checked += 1;
-            expect(existsSync(cfg), `${row.name} shell config ${cfg} must exist`).toBe(true);
-            // Must be the per-repo mcp-shell policy, NOT the bogus scripts/ path. The
-            // catalog is machine-global and may name the main checkout, so compare the
-            // canonical relative suffix rather than an absolute path.
-            if (row.name === 'typescript-deepseek') {
-              expect(cfg.endsWith('/tools/mcp-shell/security.yaml')).toBe(true);
-              expect(cfg).not.toContain('scripts/mcp-shell-security.yaml');
-            }
-          }
-        }
-      } finally {
-        db.close();
-      }
+  it('AC4: no runtime source references the retired server or its env override', () => {
+    for (const rel of [
+      ['src', 'defaults.ts'],
+      ['src', 'server.ts'],
+      ['src', 'index.ts'],
+      ['src', 'srt-policy.ts'],
+    ]) {
+      const src = read(resolve(pkgRoot, ...rel));
+      expect(src, `${rel.join('/')} must not reference the retired server`).not.toContain(
+        'mcp-shell/server.mjs'
+      );
+      expect(src, `${rel.join('/')} must not reference the retired env var`).not.toContain(
+        'ADHD_AGENT_SHELL_MCP_PATH'
+      );
     }
-    // The repo-owned seeded fixture catalog is always present, so AC2 is asserted
-    // unconditionally — it no longer goes vacuous in CI (no machine-global catalog).
-    expect(checked).toBeGreaterThan(0);
   });
 });
 
@@ -237,30 +144,3 @@ describe('d965f490 — project.json dist-manifest comment cites a real test file
     expect(dispatchProjectJson).toContain('helpers/agent-mcp-registry.ts');
   });
 });
-
-/** Catalog DBs the app may use: the path in .mcp.json plus the two default scopes. */
-function discoverCatalogDbs(): string[] {
-  const found = new Set<string>();
-  const mcpJson = resolve(repoRoot, '.mcp.json');
-  if (existsSync(mcpJson)) {
-    try {
-      const cfg = JSON.parse(readFileSync(mcpJson, 'utf8')) as {
-        mcpServers?: Record<string, { env?: Record<string, string> }>;
-      };
-      for (const s of Object.values(cfg.mcpServers ?? {})) {
-        const p = s?.env?.['ADHD_AGENT_DATABASE_PATH'];
-        if (p) found.add(p);
-      }
-    } catch {
-      // malformed .mcp.json must not mask the f141baad assertions
-    }
-  }
-  const home = process.env['HOME'];
-  if (home) {
-    found.add(resolve(home, '.adhd', 'agent-mcp', 'agents.db'));
-    found.add(resolve(home, '.adhd', 'agent-mcp', 'production', 'data', 'agents.db'));
-  }
-  // Repo-owned seeded fixture catalog — always present, so AC2 is never vacuous.
-  if (fixtureCatalogDb) found.add(fixtureCatalogDb);
-  return [...found];
-}

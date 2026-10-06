@@ -36,6 +36,12 @@ import {
 } from "@adhd/agent-engine-orchestrator";
 
 import { startServer } from "./server.js";
+import {
+  buildNativeToolingContext,
+  withResolvedNativeTooling,
+  withResolvedNativeToolingSession,
+} from "./defaults.js";
+import { provisionSrtPolicy } from "./srt-policy.js";
 import { startSseServer } from "./streaming/sse-server.js";
 import type { GatewayDepsRef } from "./streaming/chat-gateway.js";
 import { emitTaskEvent } from "./streaming/event-bus.js";
@@ -201,6 +207,23 @@ function verifyAgentEnvRefs(agents: AgentDefinition[]): void {
 async function main() {
     runMigrations();
 
+    // Provision the adopted `srt` policy so the (default) srt-wrapped `fs`/
+    // `shell` builtins can initialize their caches/registries and spawn
+    // (ADR-0008 D7; deferral a5a2f1d4). Additive + idempotent — an existing
+    // user policy is never clobbered.
+    try {
+        const provisioned = provisionSrtPolicy({ allowWrite: [process.cwd()] });
+        logger.info(
+            { path: provisioned.path, created: provisioned.created, updated: provisioned.updated },
+            "Provisioned srt sandbox policy for native tooling"
+        );
+    } catch (err) {
+        logger.warn(
+            { err },
+            "Could not provision the srt policy — srt-wrapped native servers may fail to spawn"
+        );
+    }
+
     const hooks = new HookRegistry();
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -311,9 +334,16 @@ async function main() {
         promptResolver,
     });
 
+    // The DAG dispatch path resolves `nativeTooling` at task time against the
+    // dispatching cwd, exactly like the MCP `task` path (ADR-0008 D4). Stores
+    // are wrapped here so the stored definition is never mutated.
+    const nativeToolingContext = () => buildNativeToolingContext();
+    const resolvingAgentStore = withResolvedNativeTooling(agentStore, nativeToolingContext);
+    const resolvingSessionStore = withResolvedNativeToolingSession(sessionStore, nativeToolingContext);
+
     taskDepsRef.value = {
-        agentStore,
-        sessionStore,
+        agentStore: resolvingAgentStore,
+        sessionStore: resolvingSessionStore,
         taskStore,
         orchestrator,
         queue,

@@ -30,12 +30,12 @@
     "@adhd/agent-engine-compiler": "^2.2.6",
     "@adhd/agent-plugin-budget": "^0.2.3",
     "@adhd/agent-core-env": "^0.1.2",
+    "@adhd/agent-core-native-tooling": "^0.0.1",
     "dotenv": "17.4.2",
     "tslib": "^2.3.0"
   },
   "devDependencies": {
-    "@adhd/agent-base-types": "^2.3.3",
-    "@adhd/agent-core-native-tooling": "^0.0.1"
+    "@adhd/agent-base-types": "^2.3.3"
   },
   "main": "./dist/src/index.js",
   "license": "MIT",

@@ -28,9 +28,8 @@
  * Run: `NAT_TOOL_LIVE=1 npx nx test agent-mcp -- native-tooling-adoption`
  * ────────────────────────────────────────────────────────────────────────────
  */
-import { existsSync } from 'node:fs';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
-import { homedir, tmpdir } from 'node:os';
+import { mkdir, mkdtemp, rm } from 'node:fs/promises';
+import { homedir } from 'node:os';
 import { delimiter, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -45,6 +44,8 @@ import type {
   McpServerConfig,
 } from '@adhd/agent-engine-orchestrator';
 import { resolveNativeTooling } from '@adhd/agent-core-native-tooling';
+
+import { provisionSrtPolicy } from '../../srt-policy.js';
 
 type Stdio = Extract<McpServerConfig, { transport: 'stdio' }>;
 
@@ -75,22 +76,16 @@ function fakeAgentStore(mcpServers: AgentDefinition['mcpServers']) {
   };
 }
 
-/** The `srt` policy that lets the wrapped server reach its own uv cache + PyPI. */
-function srtSettings(home: string, workdir: string): string {
-  const allowWrite = [home, workdir, UV_CACHE, tmpdir(), '/private/tmp'].filter(
-    (p) => p === workdir || p === home || existsSync(p)
-  );
-  return JSON.stringify(
-    {
-      filesystem: { denyRead: [], allowWrite, denyWrite: [] },
-      network: {
-        allowedDomains: ['pypi.org', '*.pypi.org', 'files.pythonhosted.org'],
-        deniedDomains: [],
-      },
-    },
-    null,
-    2
-  );
+/**
+ * The `srt` policy that lets the wrapped server reach its own uv cache + PyPI —
+ * provisioned through the host's own helper (deferral `a5a2f1d4`), which seeds
+ * the PyPI + npm allow-list by default.
+ */
+function srtSettings(home: string, workdir: string): void {
+  provisionSrtPolicy({
+    settingsPath: join(home, '.srt-settings.json'),
+    allowWrite: [home, workdir, UV_CACHE],
+  });
 }
 
 describe.skipIf(!isLive)(
@@ -108,7 +103,7 @@ describe.skipIf(!isLive)(
       workdir = await mkdtemp(join(scratchRoot, 'nat-tool-8-'));
       home = join(workdir, 'home');
       await mkdir(home, { recursive: true });
-      await writeFile(join(home, '.srt-settings.json'), srtSettings(home, workdir));
+      srtSettings(home, workdir);
       // The host owns PATH: the `srt` bin is a local dependency bin, not globally
       // installed, so make it resolvable for the spawned child (and its `uvx`).
       originalPath = process.env['PATH'] ?? '';

@@ -390,6 +390,9 @@ importers:
       '@adhd/agent-core-env':
         specifier: ^0.1.2
         version: link:../../packages/agent/agent-core-env
+      '@adhd/agent-core-native-tooling':
+        specifier: ^0.0.1
+        version: link:../../packages/agent/agent-core-native-tooling
       '@adhd/agent-engine-compiler':
         specifier: ^2.2.6
         version: link:../../packages/agent/agent-engine-compiler
@@ -432,10 +435,6 @@ importers:
       zod:
         specifier: ^4.4.3
         version: 4.4.3
-    devDependencies:
-      '@adhd/agent-core-native-tooling':
-        specifier: ^0.0.1
-        version: link:../../packages/agent/agent-core-native-tooling
 
   entrypoint/apigen-cli:
     dependencies:

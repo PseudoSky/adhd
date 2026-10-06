@@ -1,33 +1,32 @@
 /**
- * Default MCP-server wiring for new agents (backlog 97acef07).
+ * NAT-TOOL-4 — the REAL agent-mcp host consumes `resolveNativeTooling`
+ * (ADR-0008 D1/D4). Replaces the retired definition-creation-time defaults
+ * (`buildDefaultMcpServers` / `withDefaultMcpServers`, backlog 97acef07).
  *
- * AC1: a newly created agent (via the REAL agent-mcp MCP surface) is born with
- *      the filesystem + shell MCP servers pre-wired, granting
- *      file_read/file_write/file_glob/file_grep + shell_exec capabilities.
- * AC2: an explicit non-empty mcpServers map wins untouched, and
- *      allowedTools/disallowedTools remain enforced by the real
- *      McpClientRegistry at every callTool.
+ * AC1: the host resolves an agent's `nativeTooling` at VERIFY/task time against
+ *      the dispatching cwd — the `agent_verify_mcp` surface sees the resolved
+ *      toolset (with the `agent-mcp` dispatch floor skipped in-process).
+ * AC2: an explicit `mcpServers` map is preserved and wins for its own name.
+ * AC3: the STORED definition carries only declarative `nativeTooling` — no
+ *      resolved root is baked in, so the same definition fired from `/P` then
+ *      `/Q` yields each root while the stored JSON stays byte-identical.
  *
  * Drives the real server over an in-memory MCP client transport; the only
- * fakes are the stores/queue via the shared harness (no external process).
+ * fakes are the orchestrator provider (via the shared harness) — no external
+ * process is spawned (the resolved builtins are asserted via the pure resolver
+ * and the spawn-free `agent-mcp` dispatch floor; the adopted fs/shell servers
+ * are exercised under their dedicated gate).
  */
 import { afterEach, describe, expect, it } from 'vitest';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import type { Server } from '@modelcontextprotocol/sdk/server/index.js';
 
-import { McpClientRegistry } from '@adhd/agent-engine-orchestrator';
 import type { McpServerConfig } from '@adhd/agent-engine-orchestrator';
 
 import { buildHarness, type Harness } from './harness.js';
 import { createServer } from '../../server.js';
-import {
-  buildDefaultMcpServers,
-  withDefaultMcpServers,
-  DEFAULT_FILESYSTEM_ALLOWED_TOOLS,
-  DEFAULT_SHELL_ALLOWED_TOOLS,
-  resolveShellServerPath,
-} from '../../defaults.js';
+import { resolveAgentMcpServers } from '../../defaults.js';
 
 async function connectMcp(harness: Harness): Promise<{
   client: Client;
@@ -49,7 +48,7 @@ async function connectMcp(harness: Harness): Promise<{
     InMemoryTransport.createLinkedPair();
   await server.connect(serverTransport);
   const client = new Client(
-    { name: 'default-mcp-e2e', version: '0.0.1' },
+    { name: 'native-tooling-host-e2e', version: '0.0.1' },
     { capabilities: {} }
   );
   await client.connect(clientTransport);
@@ -71,7 +70,9 @@ function parse<T>(result: {
   return JSON.parse(text) as T;
 }
 
-describe('default MCP servers (97acef07)', () => {
+const OPENAI = { type: 'openai' as const, model: 'test-model' };
+
+describe('native-tooling resolution at the real host (NAT-TOOL-4)', () => {
   let harness: Harness | undefined;
   let close: (() => Promise<void>) | undefined;
 
@@ -82,101 +83,109 @@ describe('default MCP servers (97acef07)', () => {
     harness = undefined;
   });
 
-  it('AC1: agent_create with no mcpServers yields filesystem + shell defaults', async () => {
+  it('AC1: agent_verify_mcp sees the RESOLVED toolset (dispatch floor, spawn-free)', async () => {
     harness = await buildHarness();
     const conn = await connectMcp(harness);
     close = conn.close;
 
-    const created = parse<{ name: string }>(
-      await conn.client.callTool({
-        name: 'agent_create',
-        arguments: {
-          name: 'default-tools-agent',
-          provider: { type: 'openai', model: 'test-model' },
-          systemPrompt: 'hi',
-          permissions: {},
-        },
-      })
-    );
-    expect(created.name).toBe('default-tools-agent');
+    await conn.client.callTool({
+      name: 'agent_create',
+      arguments: {
+        name: 'native-verify-agent',
+        provider: OPENAI,
+        systemPrompt: 'hi',
+        nativeTooling: { fs: false, shell: false, dispatch: true },
+      },
+    });
 
-    const read = parse<{
-      mcpServers: Record<string, McpServerConfig>;
+    const verified = parse<{
+      servers: Array<{ name: string; status: string }>;
     }>(
       await conn.client.callTool({
-        name: 'agent_read',
-        arguments: { name: 'default-tools-agent' },
+        name: 'agent_verify_mcp',
+        arguments: { name: 'native-verify-agent' },
       })
     );
 
-    const fs = read.mcpServers['filesystem'];
-    expect(fs).toBeDefined();
-    expect(fs.transport).toBe('stdio');
-    const fsAllowed = fs.allowedTools ?? [];
-    // read / write / search capabilities the AC names.
-    expect(fsAllowed).toContain('read_text_file');
-    expect(fsAllowed).toContain('write_file');
-    expect(fsAllowed).toContain('edit_file');
-    expect(fsAllowed).toContain('search_files');
-
-    const shell = read.mcpServers['shell'];
-    expect(shell).toBeDefined();
-    expect(shell.allowedTools).toContain('shell');
+    // Without host-side resolution this would be [] (no stored mcpServers).
+    expect(verified.servers.map((s) => s.name)).toEqual(['agent-mcp']);
+    expect(verified.servers[0]!.status).toBe('skipped');
   });
 
-  it('AC2: an explicit mcpServers map wins untouched', () => {
-    const explicit: Record<string, McpServerConfig> = {
-      mine: { transport: 'stdio', command: 'my-server', allowedTools: ['only_this'] },
-    };
-    const out = withDefaultMcpServers({ mcpServers: explicit });
-    expect(out.mcpServers).toBe(explicit);
-    expect(out.mcpServers['filesystem']).toBeUndefined();
-  });
+  it('AC3: the stored definition keeps only declarative nativeTooling — no baked root', async () => {
+    harness = await buildHarness();
+    const conn = await connectMcp(harness);
+    close = conn.close;
 
-  it('AC2: the real McpClientRegistry still enforces allowedTools', () => {
-    const registry = new McpClientRegistry(
-      {
-        fs: {
-          transport: 'stdio',
-          command: 'noop',
-          allowedTools: ['read_text_file'],
-        } as McpServerConfig,
+    await conn.client.callTool({
+      name: 'agent_create',
+      arguments: {
+        name: 'portable-agent',
+        provider: OPENAI,
+        systemPrompt: 'hi',
+        nativeTooling: { fs: true, shell: true, dispatch: true },
       },
-      undefined,
-      [],
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (async () => undefined) as any,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      {} as any
+    });
+
+    const read = parse<{ mcpServers: Record<string, McpServerConfig>; nativeTooling: unknown }>(
+      await conn.client.callTool({
+        name: 'agent_read',
+        arguments: { name: 'portable-agent' },
+      })
     );
 
-    expect(() => registry.assertToolAllowed('fs', 'read_text_file')).not.toThrow();
-    expect(() => registry.assertToolAllowed('fs', 'write_file')).toThrow(
-      /disallowed/
+    // No definition-time server baking (the old `withDefaultMcpServers` bug).
+    expect(read.mcpServers).toEqual({});
+    expect(read.nativeTooling).toEqual({ fs: true, shell: true, dispatch: true });
+
+    // The SAME stored definition resolves to each dispatching root, byte-identically.
+    const storedSnapshot = JSON.stringify(read);
+    const dispatchSelf: McpServerConfig = { transport: 'stdio', command: 'npx', args: ['-y', '@adhd/agent-mcp'] };
+    const atP = resolveAgentMcpServers(read, { cwd: '/P', dispatchSelf });
+    const atQ = resolveAgentMcpServers(read, { cwd: '/Q', dispatchSelf });
+    const fsRoot = (s: Record<string, McpServerConfig>): string => {
+      const fs = s['fs'];
+      if (!fs || fs.transport !== 'stdio') throw new Error('no stdio fs server');
+      const args = fs.args ?? [];
+      const root = args[args.length - 1];
+      if (!root) throw new Error('fs server resolved without a root arg');
+      return root;
+    };
+    expect(fsRoot(atP)).toBe('/P');
+    expect(fsRoot(atQ)).toBe('/Q');
+    expect(JSON.stringify(read)).toBe(storedSnapshot); // resolution never mutated the read
+  });
+
+  it('AC2: an explicit mcpServers map is preserved alongside the native toolset', async () => {
+    harness = await buildHarness();
+    const conn = await connectMcp(harness);
+    close = conn.close;
+
+    await conn.client.callTool({
+      name: 'agent_create',
+      arguments: {
+        name: 'explicit-agent',
+        provider: OPENAI,
+        systemPrompt: 'hi',
+        mcpServers: {
+          // A fast-failing local process — proves the EXPLICIT entry is what is
+          // probed (a native `fs` would instead spawn the srt-wrapped reference
+          // server, which this hermetic test must not do).
+          mine: { transport: 'stdio', command: 'true' },
+        },
+        nativeTooling: { fs: false, shell: false, dispatch: false },
+      },
+    });
+
+    const verified = parse<{ servers: Array<{ name: string; status: string }> }>(
+      await conn.client.callTool({
+        name: 'agent_verify_mcp',
+        arguments: { name: 'explicit-agent' },
+      })
     );
-  });
-
-  it('buildDefaultMcpServers omits shell when no server path resolves, and includes it when given one', () => {
-    const noShell = buildDefaultMcpServers({ shellServerPath: undefined });
-    // In-repo the server exists; assert the shape only when present.
-    if (noShell['shell']) {
-      expect(noShell['shell'].allowedTools).toEqual([
-        ...DEFAULT_SHELL_ALLOWED_TOOLS,
-      ]);
-    }
-
-    const withShell = buildDefaultMcpServers({ shellServerPath: '/tmp/fake-shell.mjs' });
-    expect(withShell['shell']).toBeDefined();
-    expect(withShell['shell'].args?.[0]).toBe('/tmp/fake-shell.mjs');
-
-    expect(withShell['filesystem'].allowedTools).toEqual([
-      ...DEFAULT_FILESYSTEM_ALLOWED_TOOLS,
-    ]);
-  });
-
-  it('resolveShellServerPath resolves tools/mcp-shell/server.mjs in-repo', () => {
-    // This repo ships the server; if the walk fails the default silently drops
-    // shell, so assert the in-repo resolution explicitly.
-    expect(resolveShellServerPath()).toMatch(/tools\/mcp-shell\/server\.mjs$/);
+    expect(verified.servers.map((s) => s.name)).toEqual(['mine']);
+    // `true` is not an MCP server, so the probe errors — but it WAS probed,
+    // proving the explicit config survived and no native `fs`/`shell` was added.
+    expect(verified.servers[0]!.status).toBe('error');
   });
 });

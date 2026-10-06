@@ -23,7 +23,12 @@ import type {
 } from '@adhd/agent-engine-orchestrator';
 import type { IHookRegistry } from '@adhd/agent-base-types';
 import { subscribeToTaskDone, emitTaskEvent } from './streaming/event-bus.js';
-import { withDefaultMcpServers } from './defaults.js';
+import {
+  buildNativeToolingContext,
+  withResolvedNativeTooling,
+  withResolvedNativeToolingSession,
+} from './defaults.js';
+import type { McpServerConfig } from '@adhd/agent-base-types';
 
 import {
   agentCreate,
@@ -101,6 +106,17 @@ export interface ServerDeps {
   selfUrl?: string;
   dagEngine: DagEngine;
   promptResolver?: PromptResolverDeps;
+  /**
+   * The dispatching cwd used for task-time native-tooling resolution
+   * (ADR-0008 D4). Read at each task/verify fire so the stored definition stays
+   * portable; defaults to `process.cwd()`.
+   */
+  resolveCwd?: () => string;
+  /**
+   * The REAL agent-mcp MCP server config surfaced as the `dispatch` member
+   * (ADR-0008 D1); defaults to the documented `npx -y @adhd/agent-mcp` launch.
+   */
+  dispatchSelf?: McpServerConfig;
 }
 
 function toMcpErrorContent(error: unknown): {
@@ -341,6 +357,24 @@ export function createServer(deps: ServerDeps): Server {
       deps.sessionStore.list({ agentName: filter.agentName, status: filter.status as never }).map(s => ({ id: s.id })),
     close: (sessionId: string) => { deps.sessionStore.close(sessionId); },
   };
+
+  // Task-time native-tooling context (ADR-0008 D4): the cwd is READ at each
+  // fire, never captured at construction, so the same stored definition stays
+  // portable across dispatching directories.
+  const nativeToolingContext = () =>
+    buildNativeToolingContext({
+      cwd: (deps.resolveCwd ?? process.cwd)(),
+      dispatchSelf: deps.dispatchSelf,
+    });
+  const resolvingAgentStore = withResolvedNativeTooling(
+    deps.agentStore,
+    nativeToolingContext
+  );
+  const resolvingSessionStore = withResolvedNativeToolingSession(
+    deps.sessionStore,
+    nativeToolingContext
+  );
+
   const server = new Server(
     { name: 'agent-mcp', version: PACKAGE_VERSION },
     { capabilities: { tools: {} } }
@@ -495,8 +529,12 @@ export function createServer(deps: ServerDeps): Server {
    * Defined after `inProcessHandler` (which it closes over).
    */
   const buildTaskDeps = (): TaskDeps => ({
-    agentStore: deps.agentStore,
-    sessionStore: deps.sessionStore,
+    // Resolve `nativeTooling` at task time against the dispatching cwd, so a
+    // dispatched agent receives the standardized fs/shell/dispatch toolset
+    // (ADR-0008 D1/D4) without the stored definition ever being mutated. The
+    // CRUD surface keeps the raw stores (byte-identical reads).
+    agentStore: resolvingAgentStore,
+    sessionStore: resolvingSessionStore,
     taskStore: deps.taskStore,
     orchestrator: deps.orchestrator,
     queue: deps.queue,
@@ -636,11 +674,14 @@ export function createServer(deps: ServerDeps): Server {
           const createInput = agentCreateInputSchema.parse(args);
           // Reject non-ADHD_AGENT_-prefixed env names at create time (BUG-ORCH-011).
           assertEnvNamesAllowed(createInput.provider, toEngineConfig(), ['provider']);
-          // Default-wire the adopted filesystem + shell MCP servers so a new
-          // agent is born with file/shell capabilities (backlog 97acef07). An
-          // explicit non-empty mcpServers map always wins.
+          // The standardized native toolset is NOT baked in at create time
+          // (that would pin the definition to the creating cwd and break
+          // portability, ADR-0008 D4/D8). The definition stores only its
+          // declarative `nativeTooling`; the host resolves it at TASK time
+          // (buildTaskDeps) against the dispatching cwd. An explicit
+          // `mcpServers` entry wins over `nativeTooling` for the same name.
           return toMcpContent(
-            agentCreate(withDefaultMcpServers(createInput), {
+            agentCreate(createInput, {
               agentStore: deps.agentStore,
               sessionStore: crudSessionStore,
             })
@@ -684,10 +725,15 @@ export function createServer(deps: ServerDeps): Server {
           );
 
         case 'agent_verify_mcp':
+          // Verify the RESOLVED toolset: `nativeTooling` is resolved here too,
+          // so the handshake covers the servers the agent will actually receive
+          // at task time (ADR-0008 D4). Resolution is spawn-free for the
+          // self-referential `agent-mcp` dispatch floor; the adopted fs/shell
+          // servers are real probes (NAT-TOOL-9's live gate).
           return toMcpContent(
             await verifyAgentMcpServers(
               agentVerifyMcpInputSchema.parse(args),
-              { agentStore: deps.agentStore }
+              { agentStore: resolvingAgentStore }
             )
           );
 
