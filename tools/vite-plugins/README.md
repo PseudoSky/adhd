@@ -6,8 +6,8 @@ Vite plugins (loaded by vite, NOT Nx). `externalize.mjs` = externalizeRealDeps b
 
 `nxViteTsPathsPre()` only reorders the vitest **parent** graph. A test that spawns a **real Node child process** (e.g. `spawnSync(process.execPath, [<built dist entry>])`, or an esbuild bundle that keeps `@adhd/*` external) resolves `@adhd/*` through `node_modules` to the dependency's built `dist`, and **cannot** be made to follow the parent's tsconfig paths. Applying the plugin to such a project would run the parent against `src` and the child against `dist` — one test run, two builds of one package. Those projects therefore deliberately **do NOT** use the plugin and stay consistently all-`dist`, keeping `^build` in their test `dependsOn`:
 
-- `entrypoint/agent-mcp` (`src/__tests__/main-entry-symlink.test.ts`)
-- `entrypoint/dispatch-cli` (`src/test/cli-smoke.spec.ts`, compiled bin)
+- `entrypoint/agent-mcp` (`src/__tests__/main-entry-symlink.e2e.test.ts`)
+- `entrypoint/dispatch-cli` (`src/test/cli-smoke.e2e.test.ts`, compiled bin)
 - `packages/agent/agent-engine-compiler` (`src/__tests__/compile-cli*.test.ts`)
 - `packages/apigen/apigen-engine-conformance` (`src/test/gate-workspace-root.spec.ts`)
 

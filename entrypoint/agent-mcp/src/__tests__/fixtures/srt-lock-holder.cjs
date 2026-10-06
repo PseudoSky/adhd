@@ -1,6 +1,6 @@
 'use strict';
 // srt-lock-holder.cjs — a SEPARATE-PROCESS concurrent provisioner used by
-// srt-policy.test.ts to prove `provisionSrtPolicy`'s read-modify-write is
+// srt-policy.e2e.test.ts to prove `provisionSrtPolicy`'s read-modify-write is
 // serialized by the lock (ADR-0012; finding 535c1101). It:
 //   1. acquires the SAME lock file `provisionSrtPolicy` uses (`<path>.lock`);
 //   2. signals readiness (`.ready`);

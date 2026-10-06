@@ -1,5 +1,5 @@
 /**
- * nat-tool-3-cwd-env.test.ts — ADR-0008 D9 (NAT-TOOL-3).
+ * nat-tool-3-cwd-env.e2e.test.ts — ADR-0008 D9 (NAT-TOOL-3).
  *
  * Thread `McpServerConfig.cwd` and the injected `subprocessEnv()` through the
  * engine's MCP client layer into the spawned stdio child, and run `claude` in

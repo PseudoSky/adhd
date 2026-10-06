@@ -3,7 +3,7 @@
   "total": 7,
   "files": {
     "packages/agent/agent-core-env/src/__tests__/open-registry-store.test.ts": 1,
-    "packages/agent/agent-core-env/src/__tests__/registry-adapter-concurrency.test.ts": 3,
+    "packages/agent/agent-core-env/src/__tests__/registry-adapter-concurrency.e2e.test.ts": 3,
     "packages/agent/agent-core-env/vite.config.ts": 3
   }
 }

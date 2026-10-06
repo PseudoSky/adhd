@@ -1,5 +1,7 @@
 /// <reference types='vitest' />
 import { defineConfig } from 'vite';
+import { configDefaults } from 'vitest/config';
+import { E2E_FILE_EXCLUDES } from '../../tools/vite-plugins/e2e-globs.mjs';
 import dts from 'vite-plugin-dts';
 import * as path from 'path';
 import { nxViteTsPaths } from '@nx/vite/plugins/nx-tsconfig-paths.plugin';
@@ -13,7 +15,7 @@ export default defineConfig({
   root: __dirname,
   cacheDir: projectCacheDir(__dirname),
 
-  // Deliberately OMITS nxViteTsPathsPre(): src/test/cli-smoke.spec.ts spawns the
+  // Deliberately OMITS nxViteTsPathsPre(): src/test/cli-smoke.e2e.test.ts spawns the
   // COMPILED bin (dist/bin/cli.js) as a real Node child process, and a real-Node
   // child resolves `@adhd/*` through node_modules to each dependency's built
   // `dist` — it cannot be made to follow the parent's tsconfig paths. The
@@ -66,6 +68,10 @@ export default defineConfig({
     },
     environment: 'node',
     include: ['src/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'],
+    // Subprocess / real-server suites (`*.e2e.ts`, `*.e2e.test.ts`) run in the separate
+    // `e2e` lane (vitest.e2e.config.ts), never here (backlog 5b839b90 AC1;
+    // docs/decisions/0009-test-lanes-unit-vs-e2e.md). Gated by check-agent-lane-spawn.mjs.
+    exclude: [...configDefaults.exclude, ...E2E_FILE_EXCLUDES],
 
     reporters: ['default'],
     coverage: {

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Minimal stdio MCP server used by nat-tool-3-cwd-env.test.ts (ADR-0008 D9).
+// Minimal stdio MCP server used by nat-tool-3-cwd-env.e2e.test.ts (ADR-0008 D9).
 //
 // It reports two things about ITS OWN process so a real spawn can prove what
 // the engine threaded through:

@@ -96,7 +96,7 @@ empty/default systemPrompt — so the run never dispatches under a *different*
 agent than the one the DAG named. `calibrate` is the sole caller that opts back
 in (`createAgentsIfMissing: true`, minting its synthetic null-task agent).
 
-**CLI implementation:** `bin/cli.ts` (the hand-written fallback) uses Commander's native `--no-dry-run` negation, so it *does* reach the real paid path from the command line — proved by `cli-smoke.spec.ts`'s `run --no-dry-run` test. This is the CLI that ships (compiled to `dist/bin/cli.js` and executed via `npx dispatch-cli`).
+**CLI implementation:** `bin/cli.ts` (the hand-written fallback) uses Commander's native `--no-dry-run` negation, so it *does* reach the real paid path from the command line — proved by `cli-smoke.e2e.test.ts`'s `run --no-dry-run` test. This is the CLI that ships (compiled to `dist/bin/cli.js` and executed via `npx dispatch-cli`).
 
 Neither path is exercised by this package's default-running tests, which
 call the DI'd `lib/core.ts` functions directly with an injected

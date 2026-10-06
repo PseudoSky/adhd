@@ -6,7 +6,7 @@
     "packages/agent/agent-engine-orchestrator/src/__tests__/claudecli-env-bleed.test.ts": 9,
     "packages/agent/agent-engine-orchestrator/src/__tests__/dag-engine.test.ts": 3,
     "packages/agent/agent-engine-orchestrator/src/__tests__/ephemeral-task-session.test.ts": 1,
-    "packages/agent/agent-engine-orchestrator/src/__tests__/mcp-verify.test.ts": 6,
+    "packages/agent/agent-engine-orchestrator/src/__tests__/mcp-verify.e2e.test.ts": 6,
     "packages/agent/agent-engine-orchestrator/src/__tests__/orchestrator.test.ts": 4,
     "packages/agent/agent-engine-orchestrator/src/__tests__/provider-timeout.test.ts": 4,
     "packages/agent/agent-engine-orchestrator/src/__tests__/task-dependency-gating.test.ts": 1,

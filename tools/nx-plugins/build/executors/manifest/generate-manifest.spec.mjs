@@ -205,7 +205,7 @@ test('assertResolvedInternalDeps: checks optionalDependencies too', () => {
 // BUG-020: dist/package.json's `type` must never disagree with the source
 // package.json's `type` — a real incident had `entrypoint/agent-mcp`'s dist
 // manifest say "type":"commonjs" while dist/src/index.js contained real ESM
-// `import` syntax, breaking main-entry-symlink.test.ts with a SyntaxError.
+// `import` syntax, breaking main-entry-symlink.e2e.test.ts with a SyntaxError.
 test('assertMatchingModuleType: throws when manifest.type diverges from source type (esm source, cjs-labeled manifest — the exact BUG-020 shape)', () => {
   const sourcePkg = { name: '@adhd/agent-mcp', type: 'module' };
   const manifest = { name: '@adhd/agent-mcp', type: 'commonjs' };

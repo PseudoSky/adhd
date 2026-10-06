@@ -21,7 +21,7 @@
  * workflows, before the lanes, so a mis-wired gate fails in seconds.
  *
  * RULES (any violation => exit 1):
- *   1. A project that ships `src/**\/*.e2e.ts` MUST declare an `e2e` target
+ *   1. A project that ships `src/**\/*.e2e.ts` or `src/**\/*.e2e.test.ts` MUST declare an `e2e` target
  *      (otherwise its heavy suites are dead config).
  *   2. NO project's `test.dependsOn` may contain `e2e` (the coupling that made
  *      the heavy lane run uncached on every `nx affected -t test` — re-adding it
@@ -54,6 +54,12 @@
  *      escape `nx affected -t test` (47557842). Delegated to
  *      `check-vite-config-plugins.mjs` (one implementation).
  *
+ *   8. No agent-family (packages/agent/*, entrypoint/agent-mcp, entrypoint/dispatch-cli)
+ *      UNIT-lane test spawns a subprocess (child_process / StdioClientTransport /
+ *      StdioMcpClient / a real-executable stdio MCP server), and every project that
+ *      ships `*.e2e.test.ts` excludes them from its unit lane. Delegated to
+ *      `check-agent-lane-spawn.mjs` (backlog 5b839b90 AC2).
+ *
  * Exit code is the only signal (0 = wired, 1 = gap found), per the repo's
  * verification standard — never grep stdout for "passed".
  *
@@ -66,6 +72,8 @@ import { dirname, join, resolve, relative } from 'node:path';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { collectViteConfigPluginViolations } from './check-vite-config-plugins.mjs';
+import { collectAgentLaneSpawnViolations } from './check-agent-lane-spawn.mjs';
+import { E2E_FILE_INCLUDES } from '../../../../vite-plugins/e2e-globs.mjs';
 
 const require = createRequire(import.meta.url);
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -133,7 +141,7 @@ function fileInvokesTarget(text, t) {
  * injecting a deliberately-broken plugin; production always passes the REAL
  * plugin (see `main`).
  */
-export async function runChecks({ workspaceRoot, gateTargets, createNodesFn, baseline: baselineOverride }) {
+export async function runChecks({ workspaceRoot, gateTargets, createNodesFn, baseline: baselineOverride, agentLaneBaseline }) {
   const violations = [];
   const add = (rule, detail) => violations.push({ rule, detail });
 
@@ -151,12 +159,12 @@ export async function runChecks({ workspaceRoot, gateTargets, createNodesFn, bas
 
   // ---- rule 1: e2e files => e2e target -----------------------------------
   for (const p of projects) {
-    const e2eFiles = globSync('src/**/*.e2e.ts', {
+    const e2eFiles = globSync(E2E_FILE_INCLUDES, {
       cwd: join(workspaceRoot, p.root),
       ignore: ['**/node_modules/**'],
     });
     if (e2eFiles.length > 0 && !(p.json.targets && p.json.targets.e2e)) {
-      add('1-e2e-files-without-target', `${p.root} — ${e2eFiles.length} src/**/*.e2e.ts file(s) but no \`e2e\` target (dead config).`);
+      add('1-e2e-files-without-target', `${p.root} — ${e2eFiles.length} src/**/*.e2e.ts / *.e2e.test.ts file(s) but no \`e2e\` target (dead config).`);
     }
   }
 
@@ -282,6 +290,14 @@ export async function runChecks({ workspaceRoot, gateTargets, createNodesFn, bas
     add('7-vite-sweep-found-nothing', `${workspaceRoot} — discovered project.json files but ZERO vite.config.ts files; the sweep walker is broken.`);
   }
   for (const v of vite.violations) add(v.rule, v.detail);
+
+  // ---- rule 8: no subprocess-spawning test in an agent-family UNIT lane -----
+  // backlog 5b839b90 AC2. Delegated to check-agent-lane-spawn.mjs (one
+  // implementation; rules A/B/C there). Unconditional, like rule 7, so it does
+  // not depend on nx-affected membership.
+  for (const v of collectAgentLaneSpawnViolations(workspaceRoot, agentLaneBaseline).violations) {
+    add(`8-${v.rule}`, v.detail);
+  }
 
   return { violations, gapProjects };
 }

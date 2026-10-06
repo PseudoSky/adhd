@@ -242,7 +242,7 @@ function assertResolvedInternalDeps(manifest, versionMap) {
  * system and throw a `SyntaxError` three layers removed from this write — the
  * exact failure BUG-020 diagnosed (`entrypoint/agent-mcp/dist/package.json`
  * said `"type":"commonjs"` while `dist/src/index.js` contained real ESM
- * `import` syntax, breaking `main-entry-symlink.test.ts` with "Cannot use
+ * `import` syntax, breaking `main-entry-symlink.e2e.test.ts` with "Cannot use
  * import statement outside a module").
  *
  * @param {Record<string, any>} manifest the RESOLVED dist manifest (generateDistManifest's output)

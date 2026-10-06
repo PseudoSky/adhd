@@ -28,7 +28,7 @@
  * adopted server's pattern allow-list, `re.fullmatch` over the command NAME)
  * is enforced by the REAL server — a matching NAME runs, a non-matching NAME is
  * denied. The default (unflagged) pattern proof lives in
- * `native-tooling-pattern-allowlist.test.ts`.
+ * `native-tooling-pattern-allowlist.e2e.test.ts`.
  *
  * Run: `NAT_TOOL_LIVE=1 npx nx test agent-mcp -- native-tooling-adoption`
  * ────────────────────────────────────────────────────────────────────────────

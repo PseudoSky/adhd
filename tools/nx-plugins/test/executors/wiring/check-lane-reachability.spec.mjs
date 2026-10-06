@@ -15,10 +15,14 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync, existsSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { runChecks } from './check-lane-reachability.mjs';
+// Rule 8's own negative controls ride this (already `test:build-tools`-wired) spec file.
+import './check-agent-lane-spawn.spec.mjs';
 
 const GATE_TARGETS = ['test', 'e2e'];
 // A stub createNodes that attaches NO publish target (so rule 4 is silent
@@ -60,7 +64,7 @@ function baseFiles(overrides = {}) {
 }
 
 async function check(root, extra = {}) {
-  return runChecks({ workspaceRoot: root, gateTargets: GATE_TARGETS, createNodesFn: NO_PUBLISH, baseline: { tsconfigSpecWithoutCompileTarget: [] }, ...extra });
+  return runChecks({ workspaceRoot: root, gateTargets: GATE_TARGETS, createNodesFn: NO_PUBLISH, baseline: { tsconfigSpecWithoutCompileTarget: [] }, agentLaneBaseline: { pendingMove: [] }, ...extra });
 }
 
 const hasRule = (res, rule) => res.violations.some((v) => v.rule === rule);
@@ -229,5 +233,38 @@ test('rule 6 ratchet: a baselined gap is suppressed; a wired one is not flagged'
     assert.ok(!res2.violations.some((v) => v.detail.startsWith('packages/foo')), 'wired project must not be flagged');
   } finally {
     close(root);
+  }
+});
+
+test('rule 8 fires: an agent-family unit test spawning a subprocess [5b839b90 AC2]', async () => {
+  const root = fixture({
+    ...baseFiles().files,
+    'packages/agent/agent-foo/project.json': JSON.stringify({ name: 'agent-foo', targets: {} }),
+    'packages/agent/agent-foo/package.json': JSON.stringify({ name: '@adhd/agent-foo', version: '0.0.0' }),
+    'packages/agent/agent-foo/vite.config.ts': 'export default { plugins: [] };\n',
+    'packages/agent/agent-foo/src/spawn.test.ts': "import { spawnSync } from 'node:child_process';\nspawnSync('npx', []);\n",
+  });
+  try {
+    const res = await check(root);
+    assert.ok(hasRule(res, '8-A-spawn-in-unit-lane'), JSON.stringify(res.violations));
+  } finally { close(root); }
+});
+
+test('the five agent projects have an e2e target and their unit test excludes the e2e globs [5b839b90 AC1]', () => {
+  const repo = join(dirname(fileURLToPath(import.meta.url)), '../../../../..');
+  const projects = [
+    'packages/agent/agent-core-env',
+    'packages/agent/agent-engine-compiler',
+    'packages/agent/agent-engine-orchestrator',
+    'entrypoint/agent-mcp',
+    'entrypoint/dispatch-cli',
+  ];
+  for (const p of projects) {
+    const proj = JSON.parse(readFileSync(join(repo, p, 'project.json'), 'utf8'));
+    assert.ok(proj.targets.e2e, `${p} has no e2e target`);
+    assert.equal(proj.targets.e2e.cache, true, `${p} e2e not cached`);
+    assert.ok(proj.targets['nx-release-publish'].dependsOn.includes('e2e'), `${p} release does not reach e2e`);
+    assert.ok(existsSync(join(repo, p, 'vitest.e2e.config.ts')), `${p} lacks vitest.e2e.config.ts`);
+    assert.match(readFileSync(join(repo, p, 'vite.config.ts'), 'utf8'), /exclude:\s*\[[^\]]*E2E_FILE_EXCLUDES/, `${p} unit lane does not exclude e2e globs`);
   }
 });

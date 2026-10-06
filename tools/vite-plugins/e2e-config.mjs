@@ -1,4 +1,5 @@
-import { mergeConfig } from 'vitest/config';
+import { configDefaults, mergeConfig } from 'vitest/config';
+import { E2E_FILE_EXCLUDES, E2E_FILE_INCLUDES } from './e2e-globs.mjs';
 import {
   projectCacheDir,
   projectCoverage,
@@ -17,7 +18,10 @@ import {
  * This factory is the single source of truth for the lane's mechanics.
  *
  * It applies exactly three things:
- *   1. Narrows `test.include` to `src/**\/*.e2e.ts` — the resource suites only.
+ *   1. Narrows `test.include` to `E2E_FILE_INCLUDES` (`src/**\/*.e2e.ts` and
+ *      `src/**\/*.e2e.test.ts`, see `./e2e-globs.mjs`) — the resource suites only.
+ *      The base config's `test.exclude` is inherited MINUS those e2e globs (a unit
+ *      lane excludes them; this lane must not).
  *   2. Points the vitest transform cache at a DISTINCT `<cacheDir>-e2e`.
  *   3. Points coverage at a DISTINCT `<coverageDir>-e2e` `reportsDirectory`.
  *
@@ -57,7 +61,10 @@ export function defineE2eConfig(baseConfig, dirname) {
   return mergeConfig(baseViteConfig, {
     test: {
       ...sharedTest,
-      include: ['src/**/*.e2e.ts'],
+      include: E2E_FILE_INCLUDES,
+      exclude: (sharedTest.exclude ?? configDefaults.exclude).filter(
+        (glob) => !E2E_FILE_EXCLUDES.includes(glob),
+      ),
       cache: {
         ...sharedCache,
         dir: `${projectCacheDir(dirname)}-e2e`,

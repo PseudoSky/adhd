@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Stand-in for `claude -p --output-format stream-json`, used by
-// nat-tool-3-cwd-env.test.ts (ADR-0008 D9 / NAT-TOOL-3).
+// nat-tool-3-cwd-env.e2e.test.ts (ADR-0008 D9 / NAT-TOOL-3).
 //
 // The REAL ClaudeCliProvider spawns this script with whatever `cwd` and env it
 // configures. The script then:

@@ -1,5 +1,5 @@
 /**
- * compile-cli.test.ts
+ * compile-cli.e2e.test.ts
  *
  * Behavioral test for the compile CLI bin ([dod.5], [compile-cli.1],
  * [compile-cli.2]).

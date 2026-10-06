@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Minimal stdio MCP server used by native-tooling-pattern-allowlist.test.ts.
+// Minimal stdio MCP server used by native-tooling-pattern-allowlist.e2e.test.ts.
 //
 // It is a FAITHFUL stand-in for the adopted external server
 // (`tumf/mcp-shell-server`, ADR-0008 D7) at the ONE boundary this suite needs to
