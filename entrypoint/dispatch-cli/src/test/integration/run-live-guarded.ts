@@ -87,8 +87,16 @@
  */
 
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { join } from 'node:path';
+
+import Database from 'better-sqlite3';
 
 import type {
   DagJson,
@@ -107,10 +115,13 @@ import {
   type OrchestratorDeps,
 } from '@adhd/dispatch-orchestrator';
 
+import { resolveDispatchMcpServers } from '../../lib/core.js';
+
 import {
   GuardAbort,
   RunMonitor,
   enforcePostRun,
+  readUsageSnapshot,
   type GuardConfig,
   type UsageSnapshot,
 } from './live-guard-core.js';
@@ -188,7 +199,11 @@ const PROXY = (process.env['DISPATCH_E2E_PROXY'] ?? '').trim() || undefined;
 const SCENARIO = (process.env['DISPATCH_E2E_SCENARIO'] ?? 'all') as
   | 'all'
   | 'dispatch'
-  | 'delegation';
+  | 'delegation'
+  | 'native-fs-shell'
+  | 'portability'
+  | 'hitl'
+  | 'retention';
 
 /** A model provider that advertises JSON-schema tools (agent-mcp's client-side
  *  pseudo-tools, e.g. `agent-mcp__agent`, are only reachable from one). */
@@ -273,8 +288,44 @@ function assertPrerequisites(): void {
 interface Launched {
   runner: AgentMcpRunner;
   scratch: string;
+  /** The fake `$HOME` the spawned child ran with (D11 #14 leak guard). */
+  home: string;
   dagPath: string;
   dbPath: string;
+}
+
+/** Options for {@link launch} beyond the scenario defaults. */
+interface LaunchOptions {
+  /** Reuse an existing scratch dir (the portability scenario shares one store). */
+  scratch?: string;
+  /** Reuse an existing fake HOME. */
+  home?: string;
+  /** Reuse an existing child store path (so two children share one registry DB). */
+  dbPath?: string;
+  /** The spawned child's cwd (the "dispatching cwd", ADR-0008 D4). Default: the scratch dir. */
+  cwd?: string;
+  /** Resolved `mcpServers` the child's `agent_create` gets (dispatch-host path). */
+  defaultMcpServers?: Record<string, Record<string, unknown>>;
+  /** Create a DAG-named agent if absent. Default false (mirrors the dispatch host). */
+  createAgentsIfMissing?: boolean;
+  /** Re-assert resolved `mcpServers` on a reused agent (NAT-TOOL-5). Default false. */
+  reassertMcpServersOnReuse?: boolean;
+  /** Extra child env merged over the hermetic defaults. */
+  extraEnv?: Record<string, string>;
+}
+
+/**
+ * Create the isolated fake `$HOME` for a spawned agent-mcp (D11 #14: the
+ * `.env override:true` leak guard). Pre-creates the cache roots the `srt`-wrapped
+ * `npx`/`uvx` servers initialize, so `provisionSrtPolicy`'s existing-dir filter
+ * (`defaultSrtAllowWrite`) picks them up even though `$HOME` is not the real one.
+ */
+function mkFakeHome(scratch: string): string {
+  const home = join(scratch, 'home');
+  for (const rel of ['.cache/uv', '.npm', '.local/share/uv', '.adhd']) {
+    mkdirSync(join(home, rel), { recursive: true });
+  }
+  return home;
 }
 
 /**
@@ -305,15 +356,21 @@ function childEnv(overrides: Record<string, string>): Record<string, string> {
   return merged;
 }
 
-/** Spawn a real agent-mcp for one scenario, in an isolated scratch dir. */
-function launch(scenario: string): Launched {
-  const scratch = mkdtempSync(join(TMP_ROOT, `${scenario}-`));
-  const dbPath = join(scratch, 'agents.db');
+/** Spawn a real agent-mcp for one scenario, in an isolated scratch dir + fake HOME. */
+function launch(scenario: string, opts: LaunchOptions = {}): Launched {
+  const scratch = opts.scratch ?? mkdtempSync(join(TMP_ROOT, `${scenario}-`));
+  const dbPath = opts.dbPath ?? join(scratch, 'agents.db');
+  const home = opts.home ?? mkFakeHome(scratch);
   const runner = new AgentMcpRunner({
     command: process.execPath,
     args: [AGENT_MCP_DIST],
-    cwd: scratch,
+    // The dispatching cwd (D4): rooting the child here makes its task-time
+    // native resolution root fs/shell at this directory.
+    cwd: opts.cwd ?? scratch,
     env: childEnv({
+      // D11 #14: fake HOME, so `~/.adhd/.env` (the real user's) is never read and
+      // the srt policy is written under the scratch home, not the real one.
+      HOME: home,
       ADHD_AGENT_DATABASE_PATH: dbPath,
       ADHD_AGENT_REGISTRY_DB_PATH: join(scratch, 'registry.db'),
       ADHD_AGENT_SSE_ENABLED: 'false',
@@ -326,12 +383,22 @@ function launch(scenario: string): Launched {
       // GUARD 1: agent-mcp's default budget plugin enforces this as a GLOBAL
       // cumulative model-call cap (config.ts#defaultPluginEntries).
       ADHD_AGENT_BUDGET_MAX_CALLS: String(MAX_TURNS),
+      ...(opts.extraEnv ?? {}),
     }),
+    ...(opts.defaultMcpServers
+      ? { defaultMcpServers: opts.defaultMcpServers }
+      : {}),
+    ...(opts.createAgentsIfMissing !== undefined
+      ? { createAgentsIfMissing: opts.createAgentsIfMissing }
+      : {}),
+    ...(opts.reassertMcpServersOnReuse !== undefined
+      ? { reassertMcpServersOnReuse: opts.reassertMcpServersOnReuse }
+      : {}),
     // Pair the MCP request budget with the poll budget so a long synchronous
     // task call is never aborted at the SDK's 60s default.
     requestTimeoutMs: 300_000,
   });
-  return { runner, scratch, dagPath: join(scratch, 'dag.json'), dbPath };
+  return { runner, scratch, home, dagPath: join(scratch, 'dag.json'), dbPath };
 }
 
 async function closeRunner(runner: AgentMcpRunner): Promise<void> {
@@ -410,6 +477,8 @@ interface CreateAgentOptions {
   permissions?: Record<string, unknown>;
   mcpServers?: Record<string, Record<string, unknown>>;
   allowHumanInput?: boolean;
+  /** Declarative native tooling (ADR-0008 D1/D3) — resolved at task time. */
+  nativeTooling?: Record<string, unknown>;
 }
 
 /** Create a real agent-mcp agent with the run's turn cap baked in. */
@@ -427,7 +496,92 @@ async function createAgent(
     maxToolLoops: MAX_TURNS,
     ...(opts.systemPrompt !== undefined ? { systemPrompt: opts.systemPrompt } : {}),
     ...(opts.allowHumanInput !== undefined ? { allowHumanInput: opts.allowHumanInput } : {}),
+    ...(opts.nativeTooling !== undefined ? { nativeTooling: opts.nativeTooling } : {}),
   });
+}
+
+/** The in-process self-referential `agent-mcp` MCP server (never spawned). */
+const SELF_MCP = {
+  'agent-mcp': {
+    transport: 'stdio',
+    command: process.execPath,
+    args: ['-e', 'process.exit(0)'],
+  },
+};
+
+/** Poll a task's `result` until it reaches one of `statuses` (bounded deadline). */
+async function pollTaskStatus(
+  runner: AgentMcpRunner,
+  taskId: string,
+  statuses: string[],
+  timeoutMs = 60_000
+): Promise<{ status: string; resumeToken?: string | null }> {
+  const deadline = Date.now() + timeoutMs;
+  let last: { status: string; resumeToken?: string | null } = { status: 'unknown' };
+  while (Date.now() < deadline) {
+    last = await runner.callTool<{ status: string; resumeToken?: string | null }>(
+      'result',
+      { task_id: taskId }
+    );
+    if (statuses.includes(last.status)) return last;
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  return last;
+}
+
+/**
+ * Read every stored `tool_results` blob for a task's session from the child's
+ * real store. The proof that a tool REALLY ran is the tool's returned payload,
+ * never the model's prose — so scenarios assert on this, not on the final text.
+ */
+function readToolResults(dbPath: string, taskId: string): string {
+  const db = new Database(dbPath, { readonly: true, fileMustExist: true });
+  try {
+    const task = db
+      .prepare('SELECT session_id FROM tasks WHERE id = ?')
+      .get(taskId) as { session_id: string | null } | undefined;
+    if (!task?.session_id) return '';
+    const rows = db
+      .prepare(
+        'SELECT tool_results FROM messages WHERE session_id = ? AND tool_results IS NOT NULL'
+      )
+      .all(task.session_id) as Array<{ tool_results: string }>;
+    return rows.map((r) => r.tool_results).join('\n');
+  } catch {
+    return '';
+  } finally {
+    db.close();
+  }
+}
+
+/** The child store's cumulative recorded spend for a scenario (USD). */
+function costFromDb(dbPath: string): number {
+  const db = new Database(dbPath, { readonly: true, fileMustExist: true });
+  try {
+    const row = db
+      .prepare('SELECT COALESCE(SUM(est_cost_usd), 0) AS c FROM task_usage')
+      .get() as { c: number };
+    return row.c;
+  } catch {
+    return 0;
+  } finally {
+    db.close();
+  }
+}
+
+/** Count a session's rows for an agent straight from the child's store. */
+function countSessions(dbPath: string, agentName: string): number {
+  const db = new Database(dbPath, { readonly: true, fileMustExist: true });
+  try {
+    const row = db
+      .prepare('SELECT COUNT(*) AS n FROM sessions WHERE agent_name = ?')
+      .get(agentName) as { n: number };
+    return row.n;
+  } catch {
+    return 0;
+  } finally {
+    db.close();
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -761,7 +915,392 @@ async function scenarioDelegation(): Promise<ScenarioResult> {
       id,
       name,
       status: 'PASS',
-      detail: `parent completed; child session(s) for '${CHILD}': ${list.length} (real sub-dispatch)`,
+      detail:
+        `parent completed; child session(s) for '${CHILD}': ${list.length} (real sub-dispatch); ` +
+        `$${costFromDb(l.dbPath).toFixed(6)}`,
+    };
+  } finally {
+    await closeRunner(l.runner);
+    rmSync(l.scratch, { recursive: true, force: true });
+  }
+}
+
+/** The fs server's resolved root: the LAST argv entry (`… server-filesystem <root>`). */
+function fsRootOf(def: { mcpServers?: Record<string, { args?: string[] }> }): string {
+  const fs = def.mcpServers?.['fs'];
+  const args = fs?.args ?? [];
+  return args.length > 0 ? (args[args.length - 1] as string) : '';
+}
+
+/** A minimal `DispatchUnit` for `ensureAgent` (it reads only these three fields). */
+function unitFor(agentName: string, systemPrompt: string): DispatchUnit {
+  return { agent_name: agentName, provider: null, systemPrompt } as unknown as DispatchUnit;
+}
+
+/**
+ * N1 (AC1) — the REAL end-to-end native-tooling proof: a dispatched agent whose
+ * child agent-mcp is rooted at a real dispatching directory `/P` uses the
+ * `srt`-wrapped `fs` server to read `/P/hello.txt` and the `srt`-wrapped shell
+ * server to run `pwd` in `/P`. The assertion reads the child's OWN store
+ * (`messages.tool_results`) — the tools' returned payloads, not the model's
+ * prose — so it has teeth: if the fs/shell servers never ran (or ran at the wrong
+ * root) the token/path are absent.
+ */
+async function scenarioNativeFsShell(): Promise<ScenarioResult> {
+  const id = 'N1';
+  const name = 'AC1: dispatched agent reads /P/<file> + runs a shell cmd in /P';
+  const base = mkdtempSync(join(TMP_ROOT, 'native-fs-shell-'));
+  const P = join(base, 'P');
+  mkdirSync(P, { recursive: true });
+  const token = `NAT-TOOL-9-READ-OK-${Date.now()}`;
+  writeFileSync(join(P, 'hello.txt'), `${token}\n`, 'utf8');
+  // The dispatch-host-resolved map, with an explicit argv allow-list so `pwd` is
+  // a permitted shell command (the adopted server's default policy is narrow).
+  const resolved = resolveDispatchMcpServers({
+    cwd: P,
+    nativeTooling: {
+      fs: true,
+      shell: { allowCommands: ['pwd', 'echo', 'ls', 'cat'] },
+      dispatch: true,
+    },
+  }) as unknown as Record<string, Record<string, unknown>>;
+  // Hermetic: swap the explicit memory/backlog half for local stubs. Their
+  // transport is ORTHOGONAL to the native tooling under test (fs/shell/dispatch);
+  // leaving the real ones would spawn an unbuilt backlog entry and hang on an
+  // absent localhost SSE endpoint.
+  resolved['memory-server'] = {
+    transport: 'stdio',
+    command: process.execPath,
+    args: [MEMORY_STUB],
+    allowedTools: [],
+  };
+  resolved['backlog'] = {
+    transport: 'stdio',
+    command: process.execPath,
+    args: ['-e', 'process.exit(0)'],
+    allowedTools: [],
+  };
+  const l = launch('native-fs-shell', {
+    cwd: P,
+    dbPath: join(base, 'agents.db'),
+    scratch: base,
+    home: mkFakeHome(base),
+    defaultMcpServers: resolved,
+    createAgentsIfMissing: true,
+    reassertMcpServersOnReuse: true,
+  });
+  try {
+    const AGENT = 'n9-native-fs-shell';
+    await createAgent(l.runner, AGENT, {
+      systemPrompt:
+        'You are a dispatched agent. Use the filesystem MCP tool to read files and the shell MCP ' +
+        'tool to run commands. Follow the requested output format exactly.',
+      mcpServers: resolved,
+    });
+    const dag = newDag({
+      description: 'N9 fs/shell e2e',
+      terminal: 'read',
+      milestones: {
+        read: milestone({
+          agent: AGENT,
+          description:
+            `Use the filesystem tool to read the file "${join(P, 'hello.txt')}". ` +
+            'Then use the shell tool to run the command ["pwd"]. ' +
+            'Finally reply with exactly two lines: "FILECONTENT=<the file contents>" then ' +
+            '"PWD=<the pwd output>".',
+        }),
+      },
+      operations: [op('read.1', 'read', 'read the /P file and run pwd in /P')],
+    });
+    const { cycle, snapshot } = await runUnderGuard(l, dag);
+    assert(cycle.dispatched.length === 1, `expected 1 dispatched unit, got ${cycle.dispatched.length}`);
+    assert(
+      cycle.dispatched[0]?.taskStatus === 'completed',
+      `expected the task to complete, got ${String(cycle.dispatched[0]?.taskStatus)}`
+    );
+    const taskId = cycle.dispatched[0]?.taskId;
+    assert(taskId, 'dispatched unit carried no taskId');
+    const toolBlob = readToolResults(l.dbPath, taskId);
+    assert(
+      toolBlob.includes(token),
+      `the fs tool never returned the /P file contents (token ${token} absent from tool_results)`
+    );
+    assert(
+      toolBlob.includes(P),
+      `the shell tool never ran its command in /P (${P} absent from tool_results)`
+    );
+    return {
+      id,
+      name,
+      status: 'PASS',
+      detail:
+        `fs read ${token} under ${P}; shell ran in ${P}; ` +
+        `${snapshot.modelCalls}/${MAX_TURNS} calls; $${costFromDb(l.dbPath).toFixed(6)}`,
+    };
+  } finally {
+    await closeRunner(l.runner);
+    rmSync(base, { recursive: true, force: true });
+  }
+}
+
+/**
+ * N2 (AC2) — functional portability of the DISPATCH HOST (ADR-0008 D4, reconciled
+ * from "byte-identical JSON" to "each dispatch resolves its own root"): the SAME
+ * stored definition fired from `/P` then `/Q` yields fs root `/P` then `/Q`,
+ * because `AgentMcpRunner.ensureAgent` re-asserts the freshly-resolved map on
+ * reuse. Deterministic (no model). The in-file negative control proves the teeth:
+ * with `reassertMcpServersOnReuse:false` a reused agent keeps the STALE `/P` root.
+ */
+async function scenarioPortability(): Promise<ScenarioResult> {
+  const id = 'N2';
+  const name = 'AC2: dispatch-host functional portability (/P then /Q, re-assert on reuse)';
+  const base = mkdtempSync(join(TMP_ROOT, 'portability-'));
+  const P = join(base, 'P');
+  const Q = join(base, 'Q');
+  mkdirSync(P, { recursive: true });
+  mkdirSync(Q, { recursive: true });
+  const home = mkFakeHome(base);
+  const dbPath = join(base, 'agents.db');
+  const AGENT = 'n9-portable';
+  const unit = unitFor(AGENT, 'You are a dispatched agent.');
+  const mk = (
+    cwd: string,
+    reassert: boolean
+  ): Launched =>
+    launch('portability', {
+      scratch: base,
+      home,
+      dbPath,
+      cwd,
+      defaultMcpServers: resolveDispatchMcpServers({ cwd }) as unknown as Record<
+        string,
+        Record<string, unknown>
+      >,
+      createAgentsIfMissing: true,
+      reassertMcpServersOnReuse: reassert,
+    });
+
+  // (1) create at /P → the stored definition roots fs at /P.
+  const a = mk(P, true);
+  let rootAfterCreate = '';
+  try {
+    await a.runner.ensureAgent(unit);
+    const def = await a.runner.callTool<{ mcpServers: Record<string, { args?: string[] }> }>(
+      'agent_read',
+      { name: AGENT }
+    );
+    rootAfterCreate = fsRootOf(def);
+  } finally {
+    await closeRunner(a.runner);
+  }
+
+  // (2) NEGATIVE CONTROL (D11 #4): reuse at /Q with the re-assert DISABLED keeps
+  // the stale /P root — proving the re-assert is what re-scopes a reused agent.
+  const c = mk(Q, false);
+  let staleRoot = '';
+  try {
+    await c.runner.ensureAgent(unit);
+    const def = await c.runner.callTool<{ mcpServers: Record<string, { args?: string[] }> }>(
+      'agent_read',
+      { name: AGENT }
+    );
+    staleRoot = fsRootOf(def);
+  } finally {
+    await closeRunner(c.runner);
+  }
+
+  // (3) reuse at /Q WITH the re-assert → fs root becomes /Q.
+  const b = mk(Q, true);
+  let rootAfterReuse = '';
+  try {
+    await b.runner.ensureAgent(unit);
+    const def = await b.runner.callTool<{ mcpServers: Record<string, { args?: string[] }> }>(
+      'agent_read',
+      { name: AGENT }
+    );
+    rootAfterReuse = fsRootOf(def);
+  } finally {
+    await closeRunner(b.runner);
+  }
+
+  assert(rootAfterCreate === P, `create at /P stored fs root ${rootAfterCreate} (expected ${P})`);
+  assert(
+    staleRoot === P,
+    `negative control failed: without re-assert a reused agent should keep the stale ${P} root, got ${staleRoot}`
+  );
+  assert(rootAfterReuse === Q, `reuse at /Q re-asserted fs root ${rootAfterReuse} (expected ${Q})`);
+  rmSync(base, { recursive: true, force: true });
+  return {
+    id,
+    name,
+    status: 'PASS',
+    detail: `create@/P → ${rootAfterCreate}; negative control (no re-assert) → ${staleRoot}; reuse@/Q → ${rootAfterReuse}`,
+  };
+}
+
+/**
+ * N3 (AC3a) — a sessioned `ask` suspends the real task and later resumes it.
+ * Drives the real spawned agent-mcp through its own `agent`/`task`/`task_resume`
+ * MCP tools: the parent agent's gate returns `ask` for `agent-mcp.*`, the task
+ * suspends to `awaiting_input` carrying a `resumeToken`, and resuming it executes
+ * the tool — proven by a REAL child session row (only the dispatching tool writes
+ * one). Needs a function-tool provider (DeepSeek/Anthropic).
+ */
+async function scenarioHitlAsk(): Promise<ScenarioResult> {
+  const id = 'N3';
+  const name = 'AC3: sessioned ask suspends + resumes (real MCP task/task_resume)';
+  if (!FUNCTION_TOOL_PROVIDER) {
+    return {
+      id,
+      name,
+      status: 'SKIP',
+      detail: 'provider=claudecli cannot receive agent-mcp client-side pseudo-tools; use deepseek|anthropic.',
+    };
+  }
+  const l = launch('hitl');
+  try {
+    const CHILD = 'n9-hitl-child';
+    const PARENT = 'n9-hitl-parent';
+    await createAgent(l.runner, CHILD, { systemPrompt: 'Reply with exactly: hi.' });
+    await createAgent(l.runner, PARENT, {
+      systemPrompt:
+        `Call the agent-mcp__agent tool exactly once with {"name":"${CHILD}"}, then reply "done".`,
+      permissions: { allowedAgents: [CHILD] },
+      mcpServers: SELF_MCP,
+      // `dispatch:true` with an `ask` rule on the self server; `hitl:true` enables
+      // the suspend branch. fs/shell disabled so no srt server spins up.
+      nativeTooling: {
+        fs: false,
+        shell: false,
+        dispatch: { permissions: { 'agent-mcp.*': 'ask' } },
+        hitl: true,
+      },
+    });
+
+    const { session_id } = await l.runner.callTool<{ session_id: string }>('agent', {
+      name: PARENT,
+    });
+    const fired = await l.runner.callTool<{ task_id: string }>('task', {
+      session_id,
+      prompt: 'go',
+      background: true,
+    });
+    const suspended = await pollTaskStatus(l.runner, fired.task_id, ['awaiting_input'], 90_000);
+    assert(
+      suspended.status === 'awaiting_input',
+      `expected awaiting_input, got ${suspended.status}`
+    );
+    assert(suspended.resumeToken, 'a suspended task must carry a resumeToken');
+    assert(
+      countSessions(l.dbPath, CHILD) === 0,
+      'the ask must NOT have executed the tool before approval'
+    );
+
+    await l.runner.callTool('task_resume', {
+      taskId: fired.task_id,
+      resumeToken: suspended.resumeToken,
+      userInput: 'approve',
+    });
+    const done = await pollTaskStatus(l.runner, fired.task_id, ['completed', 'failed'], 90_000);
+    assert(done.status === 'completed', `resumed task ended ${done.status}`);
+    assert(
+      countSessions(l.dbPath, CHILD) >= 1,
+      'after approval the tool executed (a real child session row exists)'
+    );
+    return {
+      id,
+      name,
+      status: 'PASS',
+      detail:
+        `suspended (token ${String(suspended.resumeToken).slice(0, 8)}…) → resumed → child session created; ` +
+        `$${costFromDb(l.dbPath).toFixed(6)}`,
+    };
+  } finally {
+    await closeRunner(l.runner);
+    rmSync(l.scratch, { recursive: true, force: true });
+  }
+}
+
+/**
+ * N5 (AC5) — a one-shot `agent_name` task is a REAL session (`retention:
+ * ephemeral`) reclaimed on terminal, while a sessioned task's session survives
+ * to `session_close`. Proves the retention class is a real lifecycle, not
+ * `ephemeral` = non-interactive.
+ */
+async function scenarioRetention(): Promise<ScenarioResult> {
+  const id = 'N5';
+  const name = 'AC5: ephemeral session reclaimed on terminal; retained survives';
+  const l = launch('retention');
+  try {
+    const EPHEMERAL = 'n9-retained-ephemeral';
+    const SESSIONED = 'n9-retained-sessioned';
+    await createAgent(l.runner, EPHEMERAL, {
+      systemPrompt: 'Reply with exactly: one.',
+      nativeTooling: { fs: false, shell: false, dispatch: false },
+    });
+    await createAgent(l.runner, SESSIONED, {
+      systemPrompt: 'Reply with exactly: two.',
+      nativeTooling: { fs: false, shell: false, dispatch: false },
+    });
+
+    // One-shot (`agent_name`) → ephemeral retention, synchronous.
+    const one = await l.runner.callTool<{ task_id: string; status: string }>('task', {
+      agent_name: EPHEMERAL,
+      prompt: 'one',
+    });
+    assert(one.status === 'completed', `one-shot task ended ${one.status}`);
+    const tasks = await l.runner.callTool<{
+      tasks?: Array<{ id: string; isEphemeral?: boolean; sessionId?: string }>;
+    }>('task_list', { agentName: EPHEMERAL });
+    const list = Array.isArray(tasks) ? tasks : (tasks.tasks ?? []);
+    const row = list.find((t) => t.id === one.task_id);
+    assert(row, 'the one-shot task is not in task_list');
+    assert(row?.isEphemeral === true, 'a one-shot task must be retention=ephemeral');
+    const ephSessions = await l.runner.callTool<{
+      sessions?: Array<{ id: string; status?: string }>;
+    }>('session_list', { agentName: EPHEMERAL });
+    const ephList = Array.isArray(ephSessions) ? ephSessions : (ephSessions.sessions ?? []);
+    const ephSession = ephList.find((s) => s.id === row?.sessionId);
+    assert(ephSession, 'the ephemeral task must still have a real session row');
+    assert(
+      ephSession?.status === 'closed',
+      `an ephemeral session must be reclaimed (closed) on terminal, got ${String(ephSession?.status)}`
+    );
+
+    // Sessioned → the session survives terminal (retained).
+    const { session_id } = await l.runner.callTool<{ session_id: string }>('agent', {
+      name: SESSIONED,
+    });
+    const firedSessioned = await l.runner.callTool<{ task_id: string }>('task', {
+      session_id,
+      prompt: 'two',
+      background: true,
+    });
+    const done = await pollTaskStatus(
+      l.runner,
+      firedSessioned.task_id,
+      ['completed', 'failed'],
+      90_000
+    );
+    assert(done.status === 'completed', `sessioned task ended ${done.status}`);
+    const sess = await l.runner.callTool<{
+      sessions?: Array<{ id: string; status?: string }>;
+    }>('session_list', { agentName: SESSIONED });
+    const sList = Array.isArray(sess) ? sess : (sess.sessions ?? []);
+    const live = sList.find((s) => s.id === session_id);
+    assert(live, 'the sessioned session row is missing');
+    assert(
+      live?.status === 'active',
+      `a retained session must survive a terminal task, got ${String(live?.status)}`
+    );
+
+    return {
+      id,
+      name,
+      status: 'PASS',
+      detail:
+        `ephemeral session ${row?.sessionId} reclaimed (closed); sessioned session ${session_id} retained (active); ` +
+        `$${costFromDb(l.dbPath).toFixed(6)}`,
     };
   } finally {
     await closeRunner(l.runner);
@@ -816,6 +1355,19 @@ async function main(): Promise<number> {
     }
     if (SCENARIO === 'all' || SCENARIO === 'delegation') {
       results.push(await scenarioDelegation());
+    }
+    // NAT-TOOL-9 (the real end-to-end proof of the native tooling, ADR-0008 D11).
+    if (SCENARIO === 'all' || SCENARIO === 'native-fs-shell') {
+      results.push(await scenarioNativeFsShell());
+    }
+    if (SCENARIO === 'all' || SCENARIO === 'portability') {
+      results.push(await scenarioPortability());
+    }
+    if (SCENARIO === 'all' || SCENARIO === 'hitl') {
+      results.push(await scenarioHitlAsk());
+    }
+    if (SCENARIO === 'all' || SCENARIO === 'retention') {
+      results.push(await scenarioRetention());
     }
   } catch (err) {
     if (err instanceof GuardAbort) {

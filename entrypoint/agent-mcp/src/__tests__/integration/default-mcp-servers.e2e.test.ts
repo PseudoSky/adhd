@@ -22,11 +22,17 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import type { Server } from '@modelcontextprotocol/sdk/server/index.js';
 
-import type { McpServerConfig, Orchestrator } from '@adhd/agent-engine-orchestrator';
+import {
+  McpClientRegistry,
+  type ExecutionContext,
+  type McpServerConfig,
+  type Orchestrator,
+} from '@adhd/agent-engine-orchestrator';
+import type { AgentDefinition } from '@adhd/agent-base-types';
 
 import { buildHarness, type Harness } from './harness.js';
 import { createServer, type ServerDeps } from '../../server.js';
-import { resolveAgentMcpServers } from '../../defaults.js';
+import { defaultPermissionGate, resolveAgentMcpServers } from '../../defaults.js';
 
 /** Extra `createServer` deps a test may inject (e.g. a cwd/orchestrator stub). */
 type ServerOverrides = Partial<Pick<ServerDeps, 'resolveCwd' | 'dispatchSelf' | 'orchestrator'>>;
@@ -279,5 +285,77 @@ describe('native-tooling resolution at the real host (NAT-TOOL-4)', () => {
       )
     );
     expect(storedAfter).toBe(storedAfterCreate);
+  });
+
+  it('NAT-TOOL-9: the resolved {fs,shell,dispatch} toolset connects through the REAL McpClientRegistry', async () => {
+    // The task-time map for a definition using all three native members.
+    const dispatchSelf: McpServerConfig = {
+      transport: 'stdio',
+      command: 'npx',
+      args: ['-y', '@adhd/agent-mcp'],
+    };
+    const map = resolveAgentMcpServers(
+      { nativeTooling: { fs: true, shell: true, dispatch: true } },
+      { cwd: '/P', dispatchSelf }
+    );
+
+    // Consumer-visible resolution: fs/shell are `srt`-wrapped stdio servers rooted
+    // at the task cwd; `dispatch` references the REAL agent-mcp server.
+    expect(map['fs']).toMatchObject({ transport: 'stdio', command: 'srt', cwd: '/P' });
+    expect(map['shell']).toMatchObject({ transport: 'stdio', command: 'srt', cwd: '/P' });
+    const fsArgs = (map['fs'] as { args?: string[] }).args ?? [];
+    expect(fsArgs).toContain('/P');
+    expect(map['agent-mcp']).toMatchObject({ transport: 'stdio' });
+
+    // The registry resolves and CONNECTS the resolved set; the in-process
+    // `agent-mcp` member's tool really executes (the `dispatch` floor, D1).
+    const executed: string[] = [];
+    const ctx = {
+      taskId: 'registry-probe',
+      sessionId: 'registry-probe-session',
+      agentName: 'registry-probe-agent',
+      agentDefinition: {
+        name: 'registry-probe-agent',
+        mcpServers: map,
+      } as unknown as ExecutionContext['agentDefinition'],
+      recursionDepth: 0,
+      toolCallCount: 0,
+    } as ExecutionContext;
+    const registry = new McpClientRegistry(
+      map,
+      undefined,
+      [{ name: 'echo', description: 'echo', inputSchema: { type: 'object', properties: {} } }],
+      async (toolName: string) => {
+        executed.push(toolName);
+        return { echoed: toolName };
+      },
+      ctx
+    );
+    try {
+      const client = await registry.getClient('agent-mcp');
+      const out = await client.callTool('echo', {});
+      expect(executed, 'the resolved dispatch member must route to the real in-process surface').toEqual([
+        'echo',
+      ]);
+      expect(JSON.stringify(out)).toContain('echo');
+    } finally {
+      await registry.closeAll();
+    }
+  });
+
+  it('NAT-TOOL-9: the production permission gate DENIES a deny-matched tool NAME', () => {
+    const denied = {
+      nativeTooling: { dispatch: { permissions: { 'agent-mcp.*': 'deny' } } },
+    } as unknown as AgentDefinition;
+    expect(
+      defaultPermissionGate({ server: 'agent-mcp', tool: 'agent', agentDefinition: denied })
+    ).toBe('deny');
+
+    // TEETH (D11 #5/#6): without the deny rule the SAME call is allowed — the
+    // rule, not some other path, is what refuses it.
+    const allowed = { nativeTooling: {} } as unknown as AgentDefinition;
+    expect(
+      defaultPermissionGate({ server: 'agent-mcp', tool: 'agent', agentDefinition: allowed })
+    ).toBe('allow');
   });
 });
