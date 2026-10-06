@@ -290,6 +290,18 @@ export class Orchestrator {
       emitTaskEvent?.(event);
     };
 
+    // Observational trace events (TRACE-2, f376e27a): the permission / HITL
+    // events never alter a decision or a task outcome. The default HookRegistry
+    // already isolates handler errors; this additionally isolates a registry
+    // whose `emit` itself throws or rejects, so no emit can break a task.
+    const emitObservational: IHookRegistry['emit'] = async (event, payload) => {
+      try {
+        await hooks.emit(event, payload);
+      } catch (err) {
+        logger.warn({ taskId, event, err }, 'Observational hook emit failed (ignored)');
+      }
+    };
+
     const currentMessages: Message[] = [...input.messages];
     const contextLimit = config.server.contextLimit;
 
@@ -767,9 +779,30 @@ export class Orchestrator {
               );
             }
 
-            const userInput = await userInputPromise.finally(() => {
-              if (abortHandler)
-                signal.removeEventListener('abort', abortHandler);
+            await emitObservational('hitl:suspend', {
+              executionContext,
+              kind: 'request_human_input',
+              parkedTaskId: taskId,
+              resumeToken,
+            });
+            let userInput: string;
+            try {
+              userInput = await userInputPromise.finally(() => {
+                if (abortHandler)
+                  signal.removeEventListener('abort', abortHandler);
+              });
+            } catch (err) {
+              await emitObservational('hitl:resume', {
+                executionContext,
+                parkedTaskId: taskId,
+                outcome: 'cancelled',
+              });
+              throw err;
+            }
+            await emitObservational('hitl:resume', {
+              executionContext,
+              parkedTaskId: taskId,
+              outcome: 'resumed',
             });
 
             await taskStore.updateStatus(taskId, 'running');
@@ -802,7 +835,29 @@ export class Orchestrator {
               })
             : 'allow';
 
+          // Observational verdict record (never alters the decision): `action`
+          // is the gate's raw verdict, `resolution` what the chain settled on.
+          const emitPermissionDecision = (
+            resolution: 'allow' | 'suspend' | 'escalate' | 'deny',
+            reason?: string
+          ): Promise<void> =>
+            emitObservational('permission:decision', {
+              executionContext,
+              server: resolved.server,
+              tool: resolved.tool,
+              callId: tc.id,
+              qualifiedToolName,
+              action: permissionAction,
+              resolution,
+              ...(reason !== undefined ? { reason } : {}),
+            });
+
+          if (permissionAction === 'allow') {
+            await emitPermissionDecision('allow');
+          }
+
           if (permissionAction === 'deny') {
+            await emitPermissionDecision('deny');
             taskStore.appendEvent({
               taskId,
               type: 'TOOL_CALL',
@@ -867,6 +922,7 @@ export class Orchestrator {
               } else {
                 reason = 'HITL is disabled and the task has no parent';
               }
+              await emitPermissionDecision('deny', reason);
               taskStore.appendEvent({
                 taskId,
                 type: 'TOOL_CALL',
@@ -947,9 +1003,31 @@ export class Orchestrator {
                 },
               });
 
-              const answer = await approvalPromise.finally(() => {
-                if (askAbortHandler)
-                  signal.removeEventListener('abort', askAbortHandler);
+              await emitPermissionDecision('suspend');
+              await emitObservational('hitl:suspend', {
+                executionContext,
+                kind: 'permission_ask',
+                parkedTaskId: taskId,
+                resumeToken,
+              });
+              let answer: string;
+              try {
+                answer = await approvalPromise.finally(() => {
+                  if (askAbortHandler)
+                    signal.removeEventListener('abort', askAbortHandler);
+                });
+              } catch (err) {
+                await emitObservational('hitl:resume', {
+                  executionContext,
+                  parkedTaskId: taskId,
+                  outcome: 'cancelled',
+                });
+                throw err;
+              }
+              await emitObservational('hitl:resume', {
+                executionContext,
+                parkedTaskId: taskId,
+                outcome: isPermissionApproval(answer) ? 'approved' : 'declined',
               });
               await taskStore.updateStatus(taskId, 'running');
               emit({ type: 'status_change', taskId, status: 'running' });
@@ -995,6 +1073,7 @@ export class Orchestrator {
               // closed rather than clobber the live resolver and hang the first.
               if (hitlResolvers.has(parentId)) {
                 const reason = `the parent task '${parentId}' already has a pending approval request`;
+                await emitPermissionDecision('deny', reason);
                 taskStore.appendEvent({
                   taskId,
                   type: 'TOOL_CALL',
@@ -1090,6 +1169,7 @@ export class Orchestrator {
                   'Failed to route permission ask to the parent task; failing closed'
                 );
                 const reason = `the parent task '${parentId}' could not be reached for approval`;
+                await emitPermissionDecision('deny', reason);
                 taskStore.appendEvent({
                   taskId,
                   type: 'TOOL_CALL',
@@ -1146,8 +1226,33 @@ export class Orchestrator {
               // rejection (the child signal aborting / cancellation): without it a
               // rejected `approvalPromise` would skip the restore entirely and
               // strand the parent in `awaiting_input` holding a dead resumeToken.
+              await emitPermissionDecision('escalate');
+              await emitObservational('hitl:suspend', {
+                executionContext,
+                kind: 'escalation',
+                parkedTaskId: parentId,
+                resumeToken,
+                escalatedFrom: taskId,
+              });
               try {
-                const answer = await approvalPromise;
+                let answer: string;
+                try {
+                  answer = await approvalPromise;
+                } catch (err) {
+                  await emitObservational('hitl:resume', {
+                    executionContext,
+                    parkedTaskId: parentId,
+                    outcome: 'cancelled',
+                  });
+                  throw err;
+                }
+                await emitObservational('hitl:resume', {
+                  executionContext,
+                  parkedTaskId: parentId,
+                  outcome: isPermissionApproval(answer)
+                    ? 'approved'
+                    : 'declined',
+                });
 
                 if (!isPermissionApproval(answer)) {
                   warningResults.set(tc.id, {

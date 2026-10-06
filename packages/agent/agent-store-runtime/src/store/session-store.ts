@@ -240,7 +240,19 @@ export class SessionStore {
     }
 
     logger.info({ sessionId: id }, 'Session closed');
-    return this.read(id);
+    const session = this.read(id);
+    // Observational (TRACE-2, f376e27a): fire-and-forget like `session:created`;
+    // a throwing/rejecting registry can never change close()'s outcome.
+    try {
+      void Promise.resolve(this.hooks?.emit('session:closed', { session })).catch(
+        (err: unknown) => {
+          logger.warn({ sessionId: id, err }, 'session:closed hook emit failed (ignored)');
+        }
+      );
+    } catch (err) {
+      logger.warn({ sessionId: id, err }, 'session:closed hook emit failed (ignored)');
+    }
+    return session;
   }
 
   /**
