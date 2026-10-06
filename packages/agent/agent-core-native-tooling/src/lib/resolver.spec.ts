@@ -1,7 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import type { McpServerConfig } from '@adhd/agent-base-types';
-import { resolveNativeTooling } from './resolver.js';
-import { SRT_SANDBOX } from './catalog.js';
+import { resolveNativeTooling, resolveNativeToolingMap } from './resolver.js';
+import {
+  DISPATCH_SERVER_KEY,
+  FS_SERVER,
+  SHELL_SERVER,
+  SRT_SANDBOX,
+} from './catalog.js';
 
 const dispatchSelf: McpServerConfig = {
   transport: 'stdio',
@@ -125,6 +130,40 @@ describe('resolveNativeTooling — task-time resolution (ADR-0008 D2/D4)', () =>
     resolveNativeTooling(cfg, { cwd: '/p/a' });
     resolveNativeTooling(cfg, { cwd: '/p/b' });
     expect(JSON.stringify(cfg)).toBe(snapshot);
+  });
+});
+
+describe('resolveNativeToolingMap — keyed projection, one producer (NAT-TOOL-4)', () => {
+  const cfg = { fs: true, shell: true, dispatch: true } as const;
+  const ctx = { cwd: '/p/a', dispatchSelf } as const;
+
+  it('keys the builtins by their catalog serverKey (fs/shell/agent-mcp)', () => {
+    const map = resolveNativeToolingMap(cfg, ctx);
+    expect(Object.keys(map).sort()).toEqual(
+      [DISPATCH_SERVER_KEY, FS_SERVER.key, SHELL_SERVER.key].sort()
+    );
+    expect(Object.keys(map).sort()).toEqual(['agent-mcp', 'fs', 'shell']);
+  });
+
+  it('is the SAME computation as the array form — values identical, in order', () => {
+    const map = resolveNativeToolingMap(cfg, ctx);
+    const arr = resolveNativeTooling(cfg, ctx);
+    expect(Object.values(map)).toEqual(arr);
+  });
+
+  it('omits the key for a member disabled by config', () => {
+    const map = resolveNativeToolingMap(
+      { fs: false, shell: true, dispatch: false },
+      { cwd: '/p/a' }
+    );
+    expect(Object.keys(map)).toEqual(['shell']);
+  });
+
+  it('NEVER mutates the stored config (no resolved root leaked back)', () => {
+    const stored = { fs: true, shell: true, dispatch: true } as const;
+    const snapshot = JSON.stringify(stored);
+    resolveNativeToolingMap(stored, { cwd: '/p/a', dispatchSelf });
+    expect(JSON.stringify(stored)).toBe(snapshot);
   });
 });
 

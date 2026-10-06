@@ -12,7 +12,12 @@ agents. It implements [ADR-0008](../../../docs/decisions/0008-agent-mcp-native-t
 
 Public surface (`src/index.ts`):
 
-- `resolveNativeTooling(cfg, ctx)` — task-time resolution of the builtin servers.
+- `resolveNativeTooling(cfg, ctx)` — task-time resolution of the builtin servers
+  (array form).
+- `resolveNativeToolingMap(cfg, ctx)` — the keyed projection of the SAME
+  computation: `mcpServers` keys come only from the catalog (`fs`/`shell`/
+  `agent-mcp`), so no host authors a divergent key. One producer, two
+  projections.
 - `matchPermission(ruleMap, toolName)` — thin gate: tool **NAME**, last-match-wins,
   `deny` terminal. Never parses command text.
 - `NATIVE_SERVER_CATALOG`, `FS_SERVER`, `SHELL_SERVER`, `SRT_SANDBOX`,

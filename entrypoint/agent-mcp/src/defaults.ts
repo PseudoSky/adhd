@@ -1,126 +1,202 @@
 /**
- * Default MCP-server wiring for newly created agents (backlog 97acef07).
+ * Task-time native-tooling resolution for the agent-mcp host (ADR-0008 D1/D4).
  *
- * RESCOPED scope: this is a DX/defaults gap, not a capability gap. The
- * filesystem and shell MCP servers are already adopted and already work
- * through `McpClientRegistry` (allowedTools/disallowedTools enforced at every
- * callTool); this module just wires them into `agent_create` so a newly
- * created agent is born with file read/write/glob/grep and shell exec
- * capabilities instead of every operator hand-authoring an `mcpServers`
- * block. No new executor code is introduced (adopt-not-build).
+ * This module is the host's SINGLE resolution point for an agent's MCP servers.
+ * It does NOT author any fs/shell server config of its own: every builtin comes
+ * from `resolveNativeToolingMap` (`@adhd/agent-core-native-tooling`), whose one
+ * catalog (`packages/agent/agent-core-native-tooling/src/lib/catalog.ts`) owns
+ * the keys (`fs`/`shell`/`agent-mcp`) and commands. There is exactly ONE
+ * producer, and exactly ONE merge ( {@link withDefaultMcpServers} ).
  *
- * An explicit non-empty `mcpServers` supplied by the caller always wins; the
- * defaults are only applied when the caller supplies none.
+ * Merge precedence, highest first (ADR-0008 D1/D4):
+ *     explicit `mcpServers`  >  `nativeTooling`  >  `dispatch` self floor.
+ *
+ * Resolution is TASK time, against the dispatching cwd: the stored definition is
+ * NEVER mutated and never carries a resolved root, so the same definition fired
+ * from `/P/a` then `/P/b` yields fs root `/P/a` then `/P/b` while its stored JSON
+ * stays byte-identical (ADR-0008 D4/D8). `agent_create` deliberately does NOT
+ * call this module — it stores only the declarative `nativeTooling` — so there is
+ * no create-time/second-timing behaviour.
  */
-import { existsSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { resolveNativeToolingMap } from '@adhd/agent-core-native-tooling';
+import type {
+  AgentDefinition,
+  McpServerConfig,
+  NativeToolingConfig,
+} from '@adhd/agent-base-types';
 
-import type { McpServerConfig } from '@adhd/agent-engine-orchestrator';
+import { AGENT_MCP_NPX_ARGS } from './install.js';
+import { ensureBinDirOnPath, resolveNativeBinDir } from './srt-policy.js';
 
-/**
- * Filesystem MCP server tool names, covering the canonical fs capabilities
- * (`file_read`/`file_write`/`file_glob`/`file_grep`) the defaults must grant.
- * These are the server's OWN tool names (the `isToolHidden` filter compares
- * against them verbatim), so `read_text_file` is the wire name for the
- * canonical `file_read` capability.
- */
-export const DEFAULT_FILESYSTEM_ALLOWED_TOOLS = [
-  'read_text_file',
-  'read_file',
-  'read_multiple_files',
-  'read_media_file',
-  'write_file',
-  'edit_file',
-  'create_directory',
-  'list_directory',
-  'list_directory_with_sizes',
-  'directory_tree',
-  'move_file',
-  'search_files',
-  'get_file_info',
-  'list_allowed_directories',
-] as const;
-
-/** `tools/mcp-shell/server.mjs` exposes a single tool named `shell`. */
-export const DEFAULT_SHELL_ALLOWED_TOOLS = ['shell'] as const;
-
-/** Env override for the in-repo shell MCP server path. */
-export const SHELL_MCP_PATH_ENV = 'ADHD_AGENT_SHELL_MCP_PATH';
-
-/**
- * Resolve `tools/mcp-shell/server.mjs` by walking up from this module. Returns
- * `undefined` when it cannot be found (e.g. the published package installed
- * outside the monorepo) — the shell default is then omitted rather than
- * pointing at a non-existent file.
- */
-export function resolveShellServerPath(): string | undefined {
-  const override = process.env[SHELL_MCP_PATH_ENV];
-  if (override) return override;
-
-  let dir = dirname(fileURLToPath(import.meta.url));
-  for (let i = 0; i < 10; i++) {
-    const candidate = join(dir, 'tools', 'mcp-shell', 'server.mjs');
-    if (existsSync(candidate)) return candidate;
-    const parent = dirname(dir);
-    if (parent === dir) break;
-    dir = parent;
-  }
-  return undefined;
+/** Runtime context for host-side native-tooling resolution (task time). */
+export interface NativeToolingHostContext {
+  /** The dispatching host's working directory; becomes the builtin root. */
+  cwd: string;
+  /** The REAL agent-mcp MCP server config, surfaced for `dispatch: true` (D1). */
+  dispatchSelf?: McpServerConfig;
+  /** Base env merged into every resolved stdio server (D9). */
+  env?: Record<string, string>;
+  /**
+   * Wrap the builtin `fs`/`shell` servers with the adopted `srt` sandbox
+   * (ADR-0008 D7). Defaults to `true`; the host provisions the matching srt
+   * policy (`srt-policy.ts`, deferral `a5a2f1d4`) so the builtins can spawn.
+   */
+  sandbox?: boolean;
 }
 
-export interface DefaultMcpServerOptions {
-  /** Filesystem root the filesystem server is scoped to. Default `process.cwd()`. */
-  root?: string;
-  /** Explicit shell server path (tests inject one); `undefined` → auto-resolve. */
-  shellServerPath?: string | undefined;
+/** An agent definition carrying at least the two fields resolution reads. */
+type ResolvableDefinition = {
+  mcpServers?: Record<string, McpServerConfig>;
+  nativeTooling?: NativeToolingConfig;
+};
+
+/**
+ * The ONE resolution path (ADR-0008 D1/D4): resolve `def.nativeTooling` against
+ * the task-time context into the keyed builtin map, then let an explicit
+ * `def.mcpServers` entry WIN over a native/dispatch member of the same name.
+ *
+ * Pure — the passed definition is never mutated; the returned object is a new
+ * definition whose `mcpServers` is the merged map. This is called at TASK time
+ * only (`buildTaskDeps`/`agent_verify_mcp`); `agent_create` never calls it, so no
+ * resolved root is ever persisted.
+ *
+ * The name is preserved from the pre-NAT-TOOL-4 create-time helper, but its
+ * behaviour is now a MERGE at task time — not the old "return explicit untouched
+ * then ignore native" no-op.
+ */
+export function withDefaultMcpServers<T extends ResolvableDefinition>(
+  def: T,
+  ctx: NativeToolingHostContext
+): T & { mcpServers: Record<string, McpServerConfig> } {
+  const native = resolveNativeToolingMap(def.nativeTooling ?? {}, {
+    cwd: ctx.cwd,
+    env: ctx.env,
+    dispatchSelf: ctx.dispatchSelf,
+    sandbox: ctx.sandbox,
+  });
+  // explicit `mcpServers` WIN over nativeTooling > dispatch floor (D1/D4).
+  return { ...def, mcpServers: { ...native, ...(def.mcpServers ?? {}) } };
 }
 
 /**
- * Build the default MCP-server map: a `filesystem` server rooted at `root`
- * and (when resolvable) a `shell` server. Every tool the servers may expose
- * is allowlisted explicitly so `disallowedTools`/`allowedTools` mediation
- * still applies downstream.
+ * The keyed `mcpServers` map for a definition at task time — the accessor form of
+ * {@link withDefaultMcpServers}. Exposed because the store wrappers and the real
+ * host tests need the map, not the wrapped definition.
  */
-export function buildDefaultMcpServers(
-  opts: DefaultMcpServerOptions = {}
+export function resolveAgentMcpServers(
+  def: ResolvableDefinition,
+  ctx: NativeToolingHostContext
 ): Record<string, McpServerConfig> {
-  const root = opts.root ?? process.cwd();
-  const shellPath =
-    opts.shellServerPath !== undefined
-      ? opts.shellServerPath
-      : resolveShellServerPath();
-
-  const servers: Record<string, McpServerConfig> = {
-    filesystem: {
-      transport: 'stdio',
-      command: 'npx',
-      args: ['-y', '@modelcontextprotocol/server-filesystem', root],
-      allowedTools: [...DEFAULT_FILESYSTEM_ALLOWED_TOOLS],
-    },
-  };
-
-  if (shellPath) {
-    servers['shell'] = {
-      transport: 'stdio',
-      command: 'node',
-      args: [shellPath, root],
-      allowedTools: [...DEFAULT_SHELL_ALLOWED_TOOLS],
-    };
-  }
-
-  return servers;
+  return withDefaultMcpServers(def, ctx).mcpServers;
 }
 
 /**
- * Apply the defaults to an `agent_create` payload ONLY when the caller
- * supplied no MCP servers. A caller-provided non-empty map (including one
- * with its own `allowedTools`/`disallowedTools`) is returned untouched.
+ * Return a shallow copy of `def` whose `mcpServers` is the task-time resolved
+ * map. The input is never mutated (ADR-0008 D4).
  */
-export function withDefaultMcpServers<
-  T extends { mcpServers?: Record<string, McpServerConfig> },
->(input: T): T {
-  const existing = input.mcpServers ?? {};
-  if (Object.keys(existing).length > 0) return input;
-  return { ...input, mcpServers: buildDefaultMcpServers() };
+export function resolveDefinitionNativeTooling(
+  def: AgentDefinition,
+  ctx: NativeToolingHostContext
+): AgentDefinition {
+  return withDefaultMcpServers(def, ctx);
+}
+
+/** Env override for the real agent-mcp server command surfaced as `dispatch` (D1). */
+export const AGENT_MCP_SELF_COMMAND_ENV = 'ADHD_AGENT_MCP_COMMAND';
+/** Env override (whitespace-separated) for the `dispatch` server args. */
+export const AGENT_MCP_SELF_ARGS_ENV = 'ADHD_AGENT_MCP_ARGS';
+
+/**
+ * The REAL agent-mcp MCP server config surfaced as the `dispatch` member (D1).
+ * Defaults to the ONE canonical launch config (`AGENT_MCP_NPX_ARGS`,
+ * `npx -y @adhd/agent-mcp@latest` — the same argv `agent-mcp-install` writes),
+ * overridable by env so a hermetic host/e2e can point at a local build. The
+ * registry routes the `agent-mcp` name to its in-process tool surface (never a
+ * spawn), so this config documents the surface rather than re-authoring it.
+ */
+export function buildDispatchSelf(env: NodeJS.ProcessEnv = process.env): McpServerConfig {
+  const command = env[AGENT_MCP_SELF_COMMAND_ENV] || 'npx';
+  const rawArgs = env[AGENT_MCP_SELF_ARGS_ENV];
+  const args = rawArgs
+    ? rawArgs.split(/\s+/).filter(Boolean)
+    : [...AGENT_MCP_NPX_ARGS];
+  return { transport: 'stdio', command, args };
+}
+
+export interface BuildNativeToolingContextOptions {
+  /** Dispatching cwd; defaults to `process.cwd()` read per call. */
+  cwd?: string;
+  dispatchSelf?: McpServerConfig;
+  env?: Record<string, string>;
+  sandbox?: boolean;
+}
+
+/**
+ * Assemble the task-time context, injecting the local `node_modules/.bin` on
+ * `PATH` so the `srt`-wrapped `npx`/`uvx` children resolve their launchers.
+ */
+export function buildNativeToolingContext(
+  opts: BuildNativeToolingContextOptions = {}
+): NativeToolingHostContext {
+  const path = ensureBinDirOnPath(process.env['PATH'], resolveNativeBinDir());
+  const env: Record<string, string> = { ...(opts.env ?? {}) };
+  if (path) env['PATH'] = path;
+  return {
+    cwd: opts.cwd ?? process.cwd(),
+    dispatchSelf: opts.dispatchSelf ?? buildDispatchSelf(),
+    env: Object.keys(env).length > 0 ? env : undefined,
+    sandbox: opts.sandbox,
+  };
+}
+
+type AgentReader = { read(name: string): AgentDefinition };
+type SessionAgentReader = { getAgentDefinition(sessionId: string): unknown };
+
+/**
+ * Wrap an `AgentStore` so its `read` returns a definition whose `mcpServers` are
+ * resolved at READ time (task time) against the current context. All other
+ * methods pass through untouched, and the stored definition is never mutated.
+ *
+ * The CRUD surface (`agent_read`/`agent_list`) deliberately keeps using the RAW
+ * store, so a stored definition is returned byte-identically and portability is
+ * preserved (ADR-0008 D4).
+ */
+export function withResolvedNativeTooling<T extends AgentReader>(
+  store: T,
+  context: () => NativeToolingHostContext
+): T {
+  return new Proxy(store, {
+    get(target, prop, receiver) {
+      if (prop === 'read') {
+        const bound = target.read.bind(target);
+        return (name: string) =>
+          resolveDefinitionNativeTooling(bound(name), context());
+      }
+      return Reflect.get(target, prop, receiver);
+    },
+  });
+}
+
+/**
+ * Wrap a session store so `getAgentDefinition` resolves the session's snapshot
+ * (which carries the stored `nativeTooling`, never a resolved root) against the
+ * current task-time context. All other methods pass through.
+ */
+export function withResolvedNativeToolingSession<T extends SessionAgentReader>(
+  store: T,
+  context: () => NativeToolingHostContext
+): T {
+  return new Proxy(store, {
+    get(target, prop, receiver) {
+      if (prop === 'getAgentDefinition') {
+        const bound = target.getAgentDefinition.bind(target);
+        return (sessionId: string) =>
+          resolveDefinitionNativeTooling(
+            bound(sessionId) as AgentDefinition,
+            context()
+          );
+      }
+      return Reflect.get(target, prop, receiver);
+    },
+  });
 }

@@ -125,6 +125,10 @@ function createAnthropicAgent(
     systemPrompt: 'You are a test agent.',
     mcpServers: {},
     permissions: {},
+    // This test is about native (provider-side) web tools, not the native
+    // fs/shell/dispatch toolset: opt out so the runtime does not attempt to
+    // spawn the srt-wrapped adopted servers (NAT-TOOL-4).
+    nativeTooling: { fs: false, shell: false, dispatch: false },
     ...(nativeWebTools !== undefined ? { nativeWebTools } : {}),
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } as any);

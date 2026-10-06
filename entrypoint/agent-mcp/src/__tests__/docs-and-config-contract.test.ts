@@ -12,6 +12,9 @@
  *              seeded fixture catalog (fixtures/catalog-shell-config.seed.json)
  *              makes AC2 assert unconditionally in CI, where no machine-global
  *              catalog exists.
+ *   NAT-TOOL-4 — the authored `tools/mcp-shell` fallback server (server.mjs) is
+ *              permanently removed and no runtime source references it. The
+ *              legacy sonirico `security.yaml` policy is RETAINED (AC6).
  */
 import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { dirname, isAbsolute, resolve } from 'node:path';
@@ -197,6 +200,29 @@ describe('f141baad — mcp-shell security-config path is real', () => {
     // The repo-owned seeded fixture catalog is always present, so AC2 is asserted
     // unconditionally — it no longer goes vacuous in CI (no machine-global catalog).
     expect(checked).toBeGreaterThan(0);
+  });
+});
+
+describe('NAT-TOOL-4 — the authored mcp-shell fallback is permanently removed', () => {
+  it('AC4: the retired fallback server file is gone', () => {
+    expect(existsSync(resolve(repoRoot, 'tools', 'mcp-shell', 'server.mjs'))).toBe(false);
+  });
+
+  it('AC4: no runtime source references the retired server or its env override', () => {
+    for (const rel of [
+      ['src', 'defaults.ts'],
+      ['src', 'server.ts'],
+      ['src', 'index.ts'],
+      ['src', 'srt-policy.ts'],
+    ]) {
+      const src = read(resolve(pkgRoot, ...rel));
+      expect(src, `${rel.join('/')} must not reference the retired server`).not.toContain(
+        'mcp-shell/server.mjs'
+      );
+      expect(src, `${rel.join('/')} must not reference the retired env var`).not.toContain(
+        'ADHD_AGENT_SHELL_MCP_PATH'
+      );
+    }
   });
 });
 

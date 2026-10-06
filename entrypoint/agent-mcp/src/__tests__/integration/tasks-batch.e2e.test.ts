@@ -76,6 +76,10 @@ function createAgent(harness: Harness, name: string): void {
     systemPrompt: 'You are a test assistant.',
     mcpServers: {},
     permissions: {},
+    // Hermetic: this test is about batch fan-out, not the native toolset —
+    // opt out so the runtime does not spawn the srt-wrapped adopted servers
+    // (NAT-TOOL-4).
+    nativeTooling: { fs: false, shell: false, dispatch: false },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } as any);
 }

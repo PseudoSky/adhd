@@ -664,17 +664,19 @@ describe.skipIf(!LIVE)(
           // allowHumanInput, so provision the agent explicitly (an operator step),
           // then open a real session for it so the unit is non-ephemeral.
           //
-          // Isolate the tool surface to the HITL tool. agent-mcp's `agent_create`
-          // default-wires filesystem + shell servers when `mcpServers` is empty
-          // (defaults.ts `withDefaultMcpServers`); on the first live run under
-          // anthropic the model chose the injected `shell__shell` tool instead of
-          // suspending, and that call hung. Passing a NON-EMPTY map whose every
-          // tool is hidden (`allowedTools: []` is truthy → registry.ts
-          // `isToolHidden` drops every tool) suppresses the fs/shell defaults (an
-          // explicit non-empty map always wins) AND advertises no MCP tool, so
-          // `builtin__request_human_input` is the only callable tool. This is the
-          // same isolation the repo's own live HITL tests achieve with an empty
-          // tool registry (agent-mcp live-oauth.e2e.test.ts /
+          // Isolate the tool surface to the HITL tool. agent-mcp resolves the
+          // builtin fs/shell/agent-mcp servers at TASK time for any definition
+          // without `nativeTooling` (defaults.ts `withDefaultMcpServers` →
+          // `resolveNativeToolingMap`; the adopted shell's tool is
+          // `shell_execute`); on the first live run under anthropic the model chose
+          // that shell tool instead of suspending, and the call hung. A non-empty
+          // `mcpServers` map does NOT suppress those builtins — they merge UNDER the
+          // explicit map (different keys) — so disable them explicitly via
+          // `nativeTooling` AND pass a NON-EMPTY map whose every tool is hidden
+          // (`allowedTools: []` is truthy → registry.ts `isToolHidden` drops every
+          // tool). That leaves `builtin__request_human_input` the only callable
+          // tool. This is the same isolation the repo's own live HITL tests achieve
+          // with an empty tool registry (agent-mcp live-oauth.e2e.test.ts /
           // hitl-suspend-resume.e2e.test.ts) — it changes only test setup, never
           // product behavior.
           const HITL_ISOLATED_MCP = {
@@ -691,6 +693,7 @@ describe.skipIf(!LIVE)(
               'builtin__request_human_input. When asked to confirm, you MUST call that tool ' +
               'with the prompt "confirm deployment" and then stop. Do not answer on your own.',
             allowHumanInput: true,
+            nativeTooling: { fs: false, shell: false, dispatch: false },
             mcpServers: HITL_ISOLATED_MCP,
           });
 

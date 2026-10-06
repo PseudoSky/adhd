@@ -50,6 +50,7 @@ the gated live-test header
 ```ts
 import {
   resolveNativeTooling,
+  resolveNativeToolingMap,
   matchPermission,
   NATIVE_SERVER_CATALOG,
 } from '@adhd/agent-core-native-tooling';
@@ -60,6 +61,14 @@ const servers = resolveNativeTooling(
   { cwd: process.cwd(), dispatchSelf }
 );
 // -> [fsServer, shellServer, dispatchServer], each rooted at process.cwd()
+
+// The keyed projection is the SAME computation, for hosts that mount an
+// `mcpServers` map. Keys come only from the catalog: `fs`, `shell`, `agent-mcp`.
+const byKey = resolveNativeToolingMap(
+  { fs: true, shell: true, dispatch: true },
+  { cwd: process.cwd(), dispatchSelf }
+);
+// -> { fs: fsServer, shell: shellServer, 'agent-mcp': dispatchServer }
 
 // Rule resolution is LAST-match-wins, with `deny` terminal (ADR-0008 D5 / Q1).
 // The resource is a TOOL NAME — never command text (D5): the thin gate owns no

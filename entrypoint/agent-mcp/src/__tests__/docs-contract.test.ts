@@ -70,22 +70,23 @@ describe("307a36c1 — provider secret surfacing", () => {
   });
 });
 
-describe("97acef07 — default MCP servers documented", () => {
-  it("AC3: AGENTS.md documents the default filesystem + shell wiring and opt-out", () => {
+describe("97acef07 / NAT-TOOL-4 — native tooling documented", () => {
+  it("AGENTS.md documents task-time native tooling and the precedence", () => {
     const agents = readRepoFile("../../AGENTS.md");
-    expect(agents).toContain("Default MCP servers for new agents");
-    expect(agents).toContain("`filesystem`");
-    expect(agents).toContain("`shell`");
+    expect(agents).toContain("Native tooling for dispatched agents");
+    expect(agents).toContain("resolveNativeTooling");
+    expect(agents).toContain("nativeTooling");
     expect(agents).toContain("@modelcontextprotocol/server-filesystem");
-    expect(agents).toContain("ADHD_AGENT_SHELL_MCP_PATH");
-    expect(agents).toMatch(/explicit non-empty `mcpServers` map always wins/i);
+    expect(agents).toMatch(/explicit .*`mcpServers`.*wins/i);
+    // NAT-TOOL-4 retired the authored shell fallback and its env var.
+    expect(agents).not.toContain("ADHD_AGENT_SHELL_MCP_PATH");
   });
 
-  it("AC3: README documents the default tools", () => {
+  it("README documents the native toolset", () => {
     const readme = readRepoFile("../../README.md");
-    expect(readme).toContain("Default tools for new agents");
+    expect(readme).toContain("Native tools for dispatched agents");
     expect(readme).toContain("@modelcontextprotocol/server-filesystem");
-    expect(readme).toContain("ADHD_AGENT_SHELL_MCP_PATH");
+    expect(readme).not.toContain("ADHD_AGENT_SHELL_MCP_PATH");
   });
 });
 
