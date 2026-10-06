@@ -18,7 +18,7 @@
     "@adhd/environment": "^0.1.0",
     "@adhd/environment-base-spec": "^0.1.4",
     "@adhd/environment-builder": "^0.1.7",
-    "@adhd/sox-graph-store": "^0.12.0",
+    "@adhd/sox-graph-store": "^0.12.4",
     "@adhd/sox-hybrid-search": "^0.6.0",
     "@adhd/sox-semantic": "^0.1.8",
     "@adhd/sox-store-adapter": "^0.13.0",

@@ -100,10 +100,11 @@ interface IEdgeTargets {
  * more incoming `getEdges({dst,...})`, several `getNodesByIds`, and a
  * `resolveStatusesFor` per status-bearing resolver (`blockers`/`related`/
  * `blocksOut`/`partOf`/`similar`) — O(page) store round trips. This batch pays
- * a bounded number of round trips UP FRONT (one `getEdges({rel})` per needed
- * relation + a constant number of node/status reads) and every card reads from
- * memory. It is keyed by the page's node ids, so its cost is independent of
- * page size.
+ * a bounded number of round trips UP FRONT (one page-keyed
+ * `getEdges({srcs, rels})` + one `getEdges({dsts, rels})` + a constant number
+ * of node/status reads) and every card reads from memory. It is keyed by the
+ * page's node ids, so its round-trip count is independent of page size and its
+ * row count is bounded by the page's own edges, not the store's size.
  */
 export interface IPageReadBatch {
   /** Page-issue outgoing edges, keyed by src issue id, in the per-src order the store's `getEdges({src})` yields. */
@@ -544,12 +545,11 @@ export async function resolveObligations(
 
 /**
  * Batch-resolve `has_status` targets for a set of issue nodes — one
- * `getEdges({rel:'has_status'})` covering every `has_status` edge in the
- * store, filtered down to `issues` in memory, plus one `getNodesByIds` for
- * the distinct status targets. `getEdges` only accepts a single `src`/`dst`
- * (see `queryReady` in `query.ts` for the same relation-wide-fetch pattern),
- * so a per-issue `getEdges({src, rel})` call — even fired concurrently via
- * `Promise.all` — is still N round trips to the backend, not the constant
+ * page-keyed `getEdges({srcs, rels:['has_status']})` (cost bounded by the
+ * number of `issues`, never by the store's total `has_status` cardinality —
+ * e54afd3f), plus one `getNodesByIds` for the distinct status targets. A
+ * per-issue `getEdges({src, rel})` call — even fired concurrently via
+ * `Promise.all` — would be N round trips to the backend, not the constant
  * number this function promises its callers.
  */
 async function resolveStatusesFor(
@@ -557,12 +557,13 @@ async function resolveStatusesFor(
   issues: NodeRecord[]
 ): Promise<Map<number, NodeRecord>> {
   if (issues.length === 0) return new Map();
-  const issueIds = new Set(issues.map((i) => i.id));
-  const edges = await graph.getEdges({ rel: 'has_status' });
+  const edges = await graph.getEdges({
+    srcs: [...new Set(issues.map((i) => i.id))],
+    rels: ['has_status'],
+  });
   const statusEdgeByIssue = new Map<number, number>();
   for (const e of edges) {
-    if (issueIds.has(e.src) && !statusEdgeByIssue.has(e.src))
-      statusEdgeByIssue.set(e.src, e.dst);
+    if (!statusEdgeByIssue.has(e.src)) statusEdgeByIssue.set(e.src, e.dst);
   }
   const statusIds = [...new Set(statusEdgeByIssue.values())];
   if (statusIds.length === 0) return new Map();
@@ -862,13 +863,15 @@ export async function assembleIssueCard(
 
 /**
  * Build the page-level batched edge/node reads for a `query` page (the N+1
- * fix). Determines the relations the requested `fields` need, fetches each
- * relation-wide in ONE `getEdges({rel})` call, and groups the results by the
- * page's node ids — so the whole page costs a bounded number of store round
- * trips independent of page size. Relations are fetched in ascending order and
- * grouped by appending, which reproduces the per-src/per-dst order the store's
- * indexed `getEdges({src})`/`getEdges({dst})` calls yield (index `(src, rel,
- * rowid)` / `(dst, rel, rowid)`), so output order is preserved exactly.
+ * fix). Determines the relations the requested `fields` need and fetches them
+ * keyed by the page's node ids — ONE `getEdges({srcs, rels})` for outgoing and
+ * ONE `getEdges({dsts, rels})` for incoming — so the whole page costs a bounded
+ * number of store round trips independent of page size AND a row count bounded
+ * by the page's own edges, not by the store's relation cardinality (e54afd3f).
+ * The store yields `(src, rel, rowid)` / `(dst, rel, rowid)` order — the same
+ * per-key order the indexed single-key `getEdges({src})`/`getEdges({dst})`
+ * reads give — and grouping by appending preserves it, so output order is
+ * preserved exactly.
  *
  * When `fields` requests no edge/pseudo data at all, this issues zero store
  * calls (the common fast path is untouched).
@@ -918,15 +921,27 @@ async function buildPageReadBatch(
     if (list) list.push(edge);
     else m.set(key, [edge]);
   };
-  const rels = [...new Set([...outRels, ...inRels])].sort();
-  for (const rel of rels) {
-    const edges = await graph.getEdges({ rel });
-    const asOut = outRels.has(rel);
-    const asIn = inRels.has(rel);
-    for (const e of edges) {
-      if (asOut && pageIds.has(e.src)) push(outgoingBySrc, e.src, e);
-      if (asIn && pageIds.has(e.dst)) push(incomingByDst, e.dst, e);
-    }
+  // e54afd3f AC-C1: two page-keyed reads (never a whole-relation
+  // `getEdges({rel})`). The store returns `(src, rel, rowid)` /
+  // `(dst, rel, rowid)` order — exactly the per-key order the indexed
+  // single-key reads yield — so appending in row order reproduces the old
+  // per-relation-ascending grouping byte-for-byte. `rels` narrows to the
+  // relations the requested fields need, so the maps hold the same rows the
+  // whole-relation path put there.
+  const pageIdList = [...pageIds];
+  if (outRels.size > 0) {
+    const outgoing = await graph.getEdges({
+      srcs: pageIdList,
+      rels: [...outRels].sort(),
+    });
+    for (const e of outgoing) push(outgoingBySrc, e.src, e);
+  }
+  if (inRels.size > 0) {
+    const incoming = await graph.getEdges({
+      dsts: pageIdList,
+      rels: [...inRels].sort(),
+    });
+    for (const e of incoming) push(incomingByDst, e.dst, e);
   }
 
   const neighbourIds = new Set<number>();
@@ -964,17 +979,20 @@ async function buildPageReadBatch(
     // `owns_component: component → issue` (component is the SOURCE); the
     // component that owns a node is the `src` of the edge into it.
     const compIdByNode = new Map<number, number>();
-    for (const e of await graph.getEdges({ rel: 'owns_component' })) {
-      if (targets.has(e.dst) && !compIdByNode.has(e.dst))
-        compIdByNode.set(e.dst, e.src);
+    for (const e of await graph.getEdges({
+      dsts: [...targets],
+      rel: 'owns_component',
+    })) {
+      if (!compIdByNode.has(e.dst)) compIdByNode.set(e.dst, e.src);
     }
     const compIds = new Set([...compIdByNode.values()]);
     // `owns_project: project → component` (project is the SOURCE); the project
     // that owns a component is the `src` of the edge into it.
     const projIdByComp = new Map<number, number>();
-    for (const e of await graph.getEdges({ rel: 'owns_project' })) {
-      if (compIds.has(e.dst) && !projIdByComp.has(e.dst))
-        projIdByComp.set(e.dst, e.src);
+    for (const e of compIds.size === 0
+      ? []
+      : await graph.getEdges({ dsts: [...compIds], rel: 'owns_project' })) {
+      if (!projIdByComp.has(e.dst)) projIdByComp.set(e.dst, e.src);
     }
     const placeIds = new Set<number>([
       ...compIds,
