@@ -96,3 +96,118 @@ All 2.0.2 facts derived from:
 No version bump made (package.json remains 2.0.0 per instructions).
 No source code edited.
 No publish attempted.
+
+---
+
+# Documentation Stewardship Operations — 2026-10-05 (dispatch-2026-10-04-9c4e, NAT-TOOL-10)
+
+Documentation/ADR reconciliation for the merged native-tooling feature (ADR-0008 /
+NAT-TOOL-1…8). No prose removed without preservation; no source code edited. Base `27c194cd`.
+
+## REVISE entrypoint/agent-mcp/README.md — 2026-10-05T22:39:49-04:00
+
+**Reason:** NAT-TOOL-10 AC2 (worked `{fs:true, shell:{permissions}}` example), the env-var table for
+the typed native-tooling surface, and the NAT-TOOL-6 gate-enforcement / one-producer facts were
+absent from the consumer README.
+
+**Added:** resolved-default table (fs/shell/dispatch/hitl); `srt` + `ADHD_AGENT_SRT_SETTINGS` note;
+ONE-producer statement; "permission / HITL gate is enforced" paragraph (fixed chain, last-match-wins,
+terminal `deny`); a worked `{ fs: true, shell: { permissions: { "shell.shell_execute": "ask" } }, dispatch: true, hitl: true }` JSONC example; the `ADHD_AGENT_NATIVE_TOOLING_*` env-var table (11 rows); a link to `../../docs/decisions/0008-agent-mcp-native-tooling.md` (link resolved, EXISTS).
+
+**removed (verbatim):**
+
+```
+- `fs` → `srt npx -y @modelcontextprotocol/server-filesystem <cwd>`
+- `shell` → `srt uvx mcp-shell-server` (allowlisted argv — never a shell string)
+- `dispatch` → the REAL agent-mcp server, so the agent can dispatch sub-agents
+
+The `fs`/`shell` builtins are wrapped by `@anthropic-ai/sandbox-runtime` (`srt`),
+and the host provisions the matching policy automatically. Merge precedence is
+explicit `mcpServers` > `nativeTooling` > the `dispatch` self floor, and
+`allowedTools`/`disallowedTools` remain enforced on every call. See `AGENTS.md`
+§“Native tooling for dispatched agents”.
+```
+
+## REVISE entrypoint/agent-mcp/AGENTS.md — 2026-10-05T22:39:49-04:00
+
+**Reason:** (a) `AgentMcpConfig` now declares `nativeTooling` (src/config.ts) — the old field list
+contradicted the merged code; (b) added the native-tooling env-var table; (c) added the
+NAT-TOOL-6 gate-enforcement and NAT-TOOL-4 single-producer facts to the native section.
+
+**removed (verbatim):**
+
+```
+`AgentMcpConfig` (`src/config.ts`) declares only `db`, `logging`, `queue`, `server`, `transport`, `sse`, `plugins` as cascade-managed fields — no `providers`/secret field exists.
+```
+
+```
+| member | resolved server (adopted) |
+|---|---|
+| `fs` | `srt npx -y @modelcontextprotocol/server-filesystem <cwd>` |
+```
+
+## REVISE docs/decisions/0008-agent-mcp-native-tooling.md — 2026-10-05T22:39:49-04:00
+
+**Reason:** Reconcile stale text against the merged code (NAT-TOOL-1…8): the third-party adoption is
+APPROVED/implemented (not pending); `ADHD_AGENT_SHELL_MCP_PATH` is removed (not "migrates");
+`withDefaultMcpServers` now merges (not "no-ops"); NAT-TOOL-6 AC4 is aligned; add the single-producer
+fact and the gate-enforcement wiring; add the NAT-TOOL-1 askPolicy retirement delta to Backlog
+reconciliation. Status was already `ACCEPTED` (a6db9730) — unchanged.
+
+**removed (verbatim, each replaced sentence):**
+
+```
+the spec records that `withDefaultMcpServers` currently **no-ops** where it should merge (NAT-TOOL-4).
+```
+```
+`withDefaultMcpServers` MUST **merge** (currently it no-ops — `entrypoint/agent-mcp/src/defaults.ts`); the fix is at that source (`adhd ADR-0002`), never a per-caller workaround.
+```
+```
+- `resolveNativeTooling(cfg, { cwd, env, dispatchSelf }) -> McpServerConfig[]`
+- `matchPermission(ruleMap, toolName) -> PermissionAction` — matches the **tool name**, last-match-wins with `deny` terminal (D5). It **never** parses, matches, or segments command text.
+- the **server catalog** (the fs/shell/dispatch server specs; the `dispatch` spec resolves to the real agent-mcp server, D1)
+```
+```
+(a) The concrete third-party server adoption in D7 is **not yet executed** — NAT-TOOL-8 is explicitly a human-gated decision item, its **named human owner is supplied by the owner** (left blank here), and no dependency is added by this record alone.
+```
+```
+**This is a HUMAN-GATED decision (NAT-TOOL-8).** No dependency may be added and `tools/mcp-shell/server.mjs` may not be removed until the human approval is recorded with a **named owner in all three of `README.md`, `AGENTS.md`, and the gated test header** (per the repo's live-testing/gating rule), and license + maintenance status is written to memory. **The named human-approval owner is intentionally left blank in this record for the owner to supply.** The authored shell server is retired — **removed, not grown** (Consequences). No bash-string ever reaches a shell: shell execution is allowlisted command **names as argv arrays**.
+```
+```
+The legacy `ADHD_AGENT_SHELL_MCP_PATH` migrates onto the typed surface (it is a path *value*, legitimate environment configuration, not a feature switch).
+```
+```
+The upstream-server adoption in D7 additionally waits on the **separate** human-gated approval NAT-TOOL-8 requires, documented in all three required places with a named owner.
+```
+```
+Its removal is gated by NAT-TOOL-8's human approval (D7).
+```
+```
+`ADHD_AGENT_SHELL_MCP_PATH` migrates to the typed surface.
+```
+```
+Shell overrides carry the adopted server's **argv allowlist** (`allowCommands`) plus tool-NAME rules; `rm *` is expressed server-side, not as a harness permission.
+```
+```
+2. **NAT-TOOL-8 named human-approval owner — RESOLVED as left blank by design.** The name is supplied by the owner at the NAT-TOOL-8 adoption gate and is required in `README.md` + `AGENTS.md` + the gated test header; it is intentionally not invented here.
+```
+```
+NAT-TOOL-6 AC4 (most-restrictive-wins) is **superseded** and must be aligned (Backlog reconciliation).
+```
+```
+NAT-TOOL-2 AC3 stands; NAT-TOOL-6 AC4 (most-restrictive-wins) is superseded and must be aligned.
+```
+```
+the earlier NAT-TOOL-2 / NAT-TOOL-6 conflict is resolved and NAT-TOOL-6 AC4 must be aligned.
+```
+
+## REVISE entrypoint/agent-mcp/CHANGELOG.md — 2026-10-05T22:39:49-04:00
+
+**Reason:** Record the shipped native-tooling surface, the removal of the authored shell server + its
+`ADHD_AGENT_SHELL_MCP_PATH` override (NAT-TOOL-4), and the enforced permission/HITL gate (NAT-TOOL-6)
+under `## Unreleased`. No prior text removed.
+
+**Outstanding (not a docs edit — left to the backlog operator):** debt `675a6ba6` — the LIVE
+NAT-TOOL-1 and NAT-TOOL-7 ticket bodies still name the retired `askPolicy`; ticket bodies are edited
+via `adhd-backlog`, never by hand. The ADR's Backlog-reconciliation NAT-TOOL-1 bullet now records the
+askPolicy retirement.

@@ -50,6 +50,14 @@ This was a version bump only for agent-mcp to align it with other projects, ther
 
 - **agent-mcp:** new `agent-mcp-install` bin registers the MCP server into claude/opencode/codex host configs at user or project scope — `npx -y --package @adhd/agent-mcp@latest agent-mcp-install --host opencode --scope user` (BUG-AGENTMCP-006)
 
+- **agent-mcp:** standardized, portable native tooling — `AgentDefinition.nativeTooling` (`{ fs?, shell?, dispatch?, hitl? }`) is resolved at **task time** against the dispatching cwd by `@adhd/agent-core-native-tooling`, with `ADHD_AGENT_NATIVE_TOOLING_*` config overrides (ADR-0008)
+
+### ⚠️ Breaking Changes
+
+- **agent-mcp:** the authored `tools/mcp-shell/server.mjs` fallback and its `ADHD_AGENT_SHELL_MCP_PATH` path override are **removed** (NAT-TOOL-4). Shell execution is now the adopted `tumf/mcp-shell-server` (`uvx mcp-shell-server`, allowlisted argv — never a shell string) wrapped by `srt`, configured via `nativeTooling.shell.*`. The create-time `buildDefaultMcpServers` helper is gone; `@adhd/agent-core-native-tooling` is the single fs/shell producer and `withDefaultMcpServers` merges at task time.
+
+- **agent-mcp:** the resolved `nativeTooling.*.permissions` gate is **enforced** before every native tool call (NAT-TOOL-6). `deny` returns a typed `PERMISSION_DENIED` and the tool does not execute; `ask` resolves through the fixed chain `suspend → escalate → deny`. The retired `askPolicy`/`ephemeralAskPolicy` knobs no longer apply (ADR-0008 D5/D6).
+
 ## 2.2.3 (2026-08-08)
 
 

@@ -72,7 +72,27 @@ These env vars configure the server-wide default agent and provider credentials:
 
 **Not real:** `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `DEEPSEEK_API_KEY`, `GOOGLE_API_KEY` (bare SDK-style names) are never read by this codebase — only the `ADHD_AGENT_<PROVIDER>_SECRET` names above are resolved, and only via `process.env` directly (see "Provider credentials are excluded from the config cascade" below). There is no Gemini support (`GOOGLE_API_KEY` implies a provider that does not exist in code).
 
-**Provider credentials are excluded from the `@adhd/environment` config cascade.** `AgentMcpConfig` (`src/config.ts`) declares only `db`, `logging`, `queue`, `server`, `transport`, `sse`, `plugins` as cascade-managed fields — no `providers`/secret field exists. Provider credentials resolve exclusively from `process.env` on the running server process, at agent-construction time, never from a config file layer (global/project/namespace). This repo's own `.mcp.json` entry for `agent-mcp` does not forward any `ADHD_AGENT_<PROVIDER>_SECRET` today — tracked as backlog `agent-mcp-001`.
+**Provider credentials are excluded from the `@adhd/environment` config cascade.** `AgentMcpConfig` (`src/config.ts`) declares `db`, `logging`, `queue`, `server`, `transport`, `sse`, `plugins`, and `nativeTooling` as cascade-managed fields — no `providers`/secret field exists. Provider credentials resolve exclusively from `process.env` on the running server process, at agent-construction time, never from a config file layer (global/project/namespace). This repo's own `.mcp.json` entry for `agent-mcp` does not forward any `ADHD_AGENT_<PROVIDER>_SECRET` today — tracked as backlog `agent-mcp-001`.
+
+### Configuration: Native tooling environment variables
+
+The typed `nativeTooling` surface (ADR-0008 D10) is part of the `@adhd/environment` cascade. Each leaf has an explicit `ADHD_AGENT_NATIVE_TOOLING_*` env name (values, never feature switches — a member is disabled by setting it to `false` on the definition):
+
+| Variable | Type | Purpose |
+|---|---|---|
+| `ADHD_AGENT_NATIVE_TOOLING_FS_ROOT` | path | fs root; unset ⇒ dispatching cwd at task time |
+| `ADHD_AGENT_NATIVE_TOOLING_FS_READ_ONLY` | bool | reserved — enforced via `srt`/Docker, not a stdio flag |
+| `ADHD_AGENT_NATIVE_TOOLING_FS_ALLOWED_TOOLS` | csv | fs tool-name allowlist |
+| `ADHD_AGENT_NATIVE_TOOLING_FS_DISALLOWED_TOOLS` | csv | fs tool-name denylist (wins) |
+| `ADHD_AGENT_NATIVE_TOOLING_SHELL_ROOT` | path | shell working directory; unset ⇒ dispatching cwd |
+| `ADHD_AGENT_NATIVE_TOOLING_SHELL_ALLOW_COMMANDS` | csv | command NAMES accepted by the adopted argv-allowlist server |
+| `ADHD_AGENT_NATIVE_TOOLING_SHELL_DENY_COMMANDS` | csv | declared but not forwarded — the adopted server has an allow-list only (D5) |
+| `ADHD_AGENT_NATIVE_TOOLING_SHELL_TIMEOUT_MS` | int | default command timeout (ms) |
+| `ADHD_AGENT_NATIVE_TOOLING_DISPATCH_ALLOWED_TOOLS` | csv | dispatch (agent-mcp self) tool-name allowlist |
+| `ADHD_AGENT_NATIVE_TOOLING_DISPATCH_DISALLOWED_TOOLS` | csv | dispatch tool-name denylist (wins) |
+| `ADHD_AGENT_NATIVE_TOOLING_HITL` | bool | HITL enablement; default `true` |
+
+The rule map (`nativeTooling.*.permissions`) and `shell.env` are JSON objects with no flat `FieldSpec`, so they are authored on the agent definition, not set via env. The removed authored-shell-server path override is dead: `tools/mcp-shell/server.mjs` was deleted by NAT-TOOL-4 and shell configuration is `nativeTooling.shell.*`.
 
 ### Database
 
@@ -141,21 +161,33 @@ executed by the provider. Set `nativeWebTools: false` on the agent definition
 to opt out. Providers without native web tools (openai/claudecli) are
 unaffected.
 
-### Native tooling for dispatched agents (ADR-0008 / NAT-TOOL-4)
+### Native tooling for dispatched agents (ADR-0008 / NAT-TOOL-4/6)
 
 Every dispatched agent inherits a standardized, **portable** native toolset described by
 `AgentDefinition.nativeTooling` (`{ fs?, shell?, dispatch?, hitl? }`) and resolved by
-`resolveNativeTooling` (`@adhd/agent-core-native-tooling`) at **task time** against the
-dispatching cwd — never baked into the stored definition (ADR-0008 D4). Merge precedence,
-highest first: explicit `mcpServers` > `nativeTooling` > the `dispatch` self floor.
+`resolveNativeTooling`/`resolveNativeToolingMap` (`@adhd/agent-core-native-tooling`) at
+**task time** against the dispatching cwd — never baked into the stored definition
+(ADR-0008 D4). Merge precedence, highest first: explicit `mcpServers` > `nativeTooling` >
+the `dispatch` self floor.
 
-| member | resolved server (adopted) |
-|---|---|
-| `fs` | `srt npx -y @modelcontextprotocol/server-filesystem <cwd>` |
-| `shell` | `srt uvx mcp-shell-server` (allowlisted argv — never a shell string) |
-| `dispatch` | the REAL agent-mcp server (`agent-mcp`), handled in-process — never a wrapper |
-| `hitl` | HITL enablement; `false` hides `request_human_input` (ADR-0008 D6) |
+| member | default | resolved server (adopted) |
+|---|---|---|
+| `fs` | on | `srt npx -y @modelcontextprotocol/server-filesystem <cwd>` |
+| `shell` | on | `srt uvx mcp-shell-server` (allowlisted argv — never a shell string) |
+| `dispatch` | on | the REAL agent-mcp server (`agent-mcp`), handled in-process — never a wrapper |
+| `hitl` | `true` | HITL enablement; `false` hides `request_human_input` (ADR-0008 D6) |
 
+- **ONE producer.** The fs/shell launch commands live only in the
+  `@adhd/agent-core-native-tooling` catalog; `resolveNativeTooling` (array) and
+  `resolveNativeToolingMap` (keyed `mcpServers` map) are two projections of the same
+  computation, and no host hand-builds a second fs/shell server (NAT-TOOL-4 AC6).
+- **The permission / HITL gate is ENFORCED (NAT-TOOL-6).** The host injects
+  `defaultPermissionGate` (`src/defaults.ts`, wired in `src/config.ts` `toEngineConfig()`);
+  the engine evaluates it **before** `pre:tool_call` for every native tool call.
+  `deny` → typed `PERMISSION_DENIED`, tool not executed; `ask` → the fixed chain
+  `suspend → escalate → deny` (`hitl:false` prunes suspend; no parent ⇒ deny). Rules match
+  the server-qualified **tool name** (`<server>.<tool>`), last-match-wins with `deny`
+  terminal. `agent-mcp` owns no command parser and no dangerous-command catalog (D5).
 - The `fs`/`shell` builtins are wrapped by `@anthropic-ai/sandbox-runtime` (`srt`) by default
   (ADR-0008 D7). The host provisions an `srt` policy (`src/srt-policy.ts`; deferral
   `a5a2f1d4`) so they can initialize their caches/registries and spawn.
