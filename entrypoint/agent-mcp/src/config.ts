@@ -19,6 +19,7 @@
  * lookup and the agent-definition env-ref allowlist guard.
  */
 import { Environment } from "@adhd/environment";
+import { nativeToolingConfigFieldSpecs } from "@adhd/environment-base-spec";
 import type { EnvironmentSpec } from "@adhd/environment-base-spec";
 import type { EngineConfig } from "@adhd/agent-engine-orchestrator";
 
@@ -70,6 +71,34 @@ export interface AgentMcpConfig {
     readonly baseUrl: string | undefined;
   };
   readonly plugins: { readonly configPath: string | undefined; readonly entries: readonly string[] };
+  /**
+   * The portable native-tooling config surface (ADR-0008 D10 / NAT-TOOL-7),
+   * spread from `nativeToolingConfigFieldSpecs("ADHD_AGENT")`. TYPED CONFIG
+   * ONLY — no feature-switch env var (adhd ADR-0001 / sox ADR-0013). Every leaf
+   * is optional except `hitl` (default `true`); `fs.root`/`shell.root` carry NO
+   * default because the root is resolved at TASK time against the dispatching
+   * cwd (ADR-0008 D4). Session retention is a session/run surface and is
+   * deliberately absent, as are the retired ask-policy knobs.
+   */
+  readonly nativeTooling: {
+    readonly fs: {
+      readonly root: string | undefined;
+      readonly readOnly: boolean | undefined;
+      readonly allowedTools: readonly string[] | undefined;
+      readonly disallowedTools: readonly string[] | undefined;
+    };
+    readonly shell: {
+      readonly root: string | undefined;
+      readonly allowCommands: readonly string[] | undefined;
+      readonly denyCommands: readonly string[] | undefined;
+      readonly timeoutMs: number | undefined;
+    };
+    readonly dispatch: {
+      readonly allowedTools: readonly string[] | undefined;
+      readonly disallowedTools: readonly string[] | undefined;
+    };
+    readonly hitl: boolean;
+  };
 }
 
 // ============================================================================
@@ -241,6 +270,11 @@ export const agentMcpEnvironmentSpec: EnvironmentSpec<AgentMcpConfig> = {
       default: [],
       description: "Comma-separated external plugin entry paths.",
     },
+    // ADR-0008 D10 / NAT-TOOL-7 — the portable native-tooling config surface.
+    // Built with this spec's `ADHD_AGENT` prefix so each field gets an explicit
+    // env name (e.g. `ADHD_AGENT_NATIVE_TOOLING_FS_ROOT`). TYPED CONFIG ONLY:
+    // these are values, never feature switches.
+    ...nativeToolingConfigFieldSpecs("ADHD_AGENT"),
   },
 };
 
