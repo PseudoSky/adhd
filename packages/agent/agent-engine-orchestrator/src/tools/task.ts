@@ -206,7 +206,9 @@ async function runEphemeralTask(
     deps.selfUrl,
     deps.inProcessDescriptors,
     deps.inProcessHandler,
-    executionContext
+    executionContext,
+    deps.config,
+    deps.logger
   );
 
   const controller = new AbortController();
@@ -374,7 +376,9 @@ export async function taskTool(
     deps.selfUrl,
     deps.inProcessDescriptors,
     deps.inProcessHandler,
-    executionContext
+    executionContext,
+    deps.config,
+    deps.logger
   );
 
   const runTask = async (): Promise<void> => {
@@ -616,7 +620,9 @@ export async function enqueueExistingTask(
     deps.selfUrl,
     deps.inProcessDescriptors,
     deps.inProcessHandler,
-    executionContext
+    executionContext,
+    deps.config,
+    deps.logger
   );
 
   deps.queue.enqueue(taskId, async () => {
