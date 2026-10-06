@@ -1962,3 +1962,30 @@ Schema version 1.
   --base=1bcc147d` exit 0, and agent-mcp + dispatch-cli verify-dist-load exit 0 — and directed that
   none be run). This record is the only change to this file in this operation. Recorded under
   §Commit convention's `docs(<area>):` scope.
+
+- **2026-10-06 — operation record: pre-merge integration branch `integration/promerge-9c4e`
+  (dispatch-2026-10-04-9c4e).** Policy read from `main` `3a1ff7e4`
+  (blob `4942ff79f0c9958e76d7fd2fbce9f22312526584`) — complete and in sync, so this entry is the
+  operation log, not a correction. Created worktree `.worktrees/integration-promerge-9c4e` from
+  `main` `3a1ff7e4` (`git worktree add … -b integration/promerge-9c4e main`, exit 0) and
+  provisioned it (`corepack pnpm install`, exit 0; `node_modules/.modules.yaml` and
+  `node_modules/nx` present, per §Worktree layout). Merged in order:
+  `feat/native-tooling-multi-root-9c4e` (head `71eeea90`, commits `99f43c07`,`71eeea90`) with
+  `git merge --no-ff` → merge commit `59e3aa18` (parents `3a1ff7e4`, `71eeea90`), exit 0,
+  conflict-free. `feat/shell-pattern-allowlist` (head `f74e9b05`) merged with `--no-ff` and
+  **conflicted** (exit 1) in exactly three paths:
+  `packages/agent/agent-core-native-tooling/src/lib/resolver.spec.ts` (spec-block collision),
+  `packages/agent/agent-engine-orchestrator/src/__tests__/native-tooling-validation.test.ts`
+  (fixture — portable `fs.root: 'work'` + no `allowPatterns` on our side, vs `/work` +
+  `allowPatterns` on the branch), and
+  `packages/agent/agent-engine-orchestrator/src/validation/native-tooling.ts` (JSDoc collision).
+  Per the dispatch's explicit STOP instruction no resolution was attempted: `git merge --abort`
+  (exit 0) left the branch at the last clean merge `59e3aa18`. The third branch,
+  `docs/agent-tracing-spec-9c4e` (head `b90d1197`, docs-only, 2 paths, previewed conflict-free),
+  was **not** merged — the sequence halted at branch 2. The post-merge gates (`nx affected -t test
+  build lint --base=1bcc147d`; `agent-mcp` + `agent-core-native-tooling` `verify-dist-load`) were
+  **not** run — their precondition ("after ALL clean") was not met. `main` was not touched (still
+  `3a1ff7e4`; the pre-existing modified/untracked `entrypoint/backlog/**` dirt was never staged or
+  altered). No push. Outcome: the integration branch is **not** ready for the live-test/review
+  stage. This is the only change to this file in this operation, committed on
+  `integration/promerge-9c4e` (not `main`).
