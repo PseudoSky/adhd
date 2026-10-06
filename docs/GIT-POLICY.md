@@ -1515,3 +1515,55 @@ Schema version 1.
   dispatch reported them already green: `nx affected -t test build lint --base=1bcc147d` exit 0, and
   `dispatch-cli` build/typecheck-spec/lint/verify-dist-load all exit 0). This record is the only
   change to this file in this operation. Recorded under §Commit convention's `docs(<area>):` scope.
+
+- **2026-10-05 — operation record: land of `feat/nat-tool-6-permission-gate-9c4e` (dispatch-2026-10-04-9c4e).**
+  Landed NAT-TOOL-6's native-tooling permission gate onto `main` as a **merge commit**
+  `76ddccb9f08423f3b8e0d53a828f6a0e445f3dc5` (parents `0c5155d7` = pre-merge `main`, `ff9368a1` =
+  branch head), moving `main` `0c5155d7` → `76ddccb9`; 11 files, +1012/-49:
+  `entrypoint/agent-mcp/src/__tests__/integration/harness.ts` (M, +5),
+  `entrypoint/agent-mcp/src/__tests__/integration/nat-tool-6-permission-gate.e2e.test.ts` (A, +443),
+  `entrypoint/agent-mcp/src/__tests__/native-tooling-permissions.test.ts` (A, +121),
+  `entrypoint/agent-mcp/src/config.ts` (M, +6), `entrypoint/agent-mcp/src/defaults.ts` (M, +87/-?),
+  `packages/agent/agent-base-types/src/errors.ts` (M, +12/-?), and five
+  `packages/agent/agent-engine-orchestrator` files (`src/__tests__/ephemeral-task-session.test.ts` M,
+  `src/engine/orchestrator.ts` M +233, `src/index.ts` M +7, `src/interfaces.ts` M +40,
+  `src/tools/task.ts` M +41) — the resolved-gate enforcement plus its wiring and end-to-end proof.
+  The branch was 2 commits — `0103dc2f` (`feat(agent-engine-orchestrator): enforce the resolved
+  native-tooling permission gate (NAT-TOOL-6)`) and `ff9368a1` (`feat(agent-mcp): wire the
+  native-tooling permission gate + prove it end-to-end (NAT-TOOL-6)`), a linear chain on the
+  merge-base `4632cd70` (`git show -s --format=%P 0103dc2f` = `4632cd70`; `%P ff9368a1` =
+  `0103dc2f`) — matching the dispatch list exactly. The merge-base `4632cd70` differs from pre-merge
+  `main` tip `0c5155d7`, so the landing is a genuine non-fast-forward. §Branching & merge was the
+  deciding rule: this history "carries true merge commits" and ff-only is not enforced, while
+  rebase-in-flight is permitted only on a branch "solely your own" — this is an in-flight executor
+  branch, not the operator's, so rewriting its 2 commits was out; the dispatch directed `--no-ff`,
+  and a merge commit is the stated shape here. Dry-run `git merge-tree --write-tree --name-only main
+  ff9368a1` exited 0, producing tree `aaa9b8cee5ca5aa0a311e4b9b5878e457c9e7f06` with no conflict
+  hunks; the actual `git merge --no-ff feat/nat-tool-6-permission-gate-9c4e -m
+  "feat(native-tooling): enforce permission gate + HITL chain (NAT-TOOL-6)"` was conflict-free (ort
+  strategy, exit 0) and the post-merge tree (`git rev-parse HEAD^{tree}`) is `aaa9b8ce…`,
+  byte-identical to the dry-run tree, so no conflict arose and none required resolution. No conflict
+  arose because the branch and `main`'s commits since the merge-base changed disjoint path sets (the
+  intersection of `git diff --name-only 4632cd70..main` and `git diff --name-only 4632cd70..ff9368a1`
+  is empty). No conflict marker remains in the merged paths (`git grep -nE
+  '^(<<<<<<<|=======|>>>>>>>)' main -- entrypoint/agent-mcp packages/agent/agent-base-types
+  packages/agent/agent-engine-orchestrator` exited 1 with no matches). The branch never touched this
+  file (`git diff --name-only main...ff9368a1 -- docs/GIT-POLICY.md` empty), so `main`'s policy blob
+  `9083c31af29c99eeb86b7e18f09be7df3d352768` survived the merge byte-identical (pre-merge `0c5155d7`,
+  post-merge `76ddccb9`, and the on-disk file all resolve to the same blob). The merge is two-parent
+  (not fast-forward); post-merge `git rev-list --count main..feat/nat-tool-6-permission-gate-9c4e` =
+  0 and `git merge-base --is-ancestor` exits 0 for each of `0103dc2f` and `ff9368a1` individually, so
+  both are contained. The merge invoked no gate: git runs `pre-merge-commit` (not `pre-commit`) for a
+  merge and `.githooks/` ships no such hook, so none ran. The worktree `.worktrees/nat-tool-6-9c4e`
+  was then reaped under §Cleanup's three-part test: `git status --porcelain` inside it was empty, it
+  carried no `locked` line, and its head `ff9368a1` was an ancestor of `main` after the merge — so
+  `git worktree remove` (no `--force`) ran and the branch was deleted with `git branch -d
+  feat/nat-tool-6-permission-gate-9c4e` (was `ff9368a1`); worktrees went 78 → 77. The merged commits
+  remain reachable from the durable `main` ref, so recovery does not depend on the reflog. The
+  working tree was clean before and after (`git status --porcelain` empty), nothing was staged before
+  or after (`git diff --cached --name-only` empty), and the dispatch's anticipated unrelated
+  concurrent dirt was not present in the repo root and no other worktree was touched, so nothing had
+  to be avoided or protected. No push (the dispatch directed none) and no gates were run by this
+  operation (the dispatch reported them already green and directed that none be run). This record is
+  the only change to this file in this operation. Recorded under §Commit convention's
+  `docs(<area>):` scope.
