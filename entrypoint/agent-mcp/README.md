@@ -344,6 +344,7 @@ through the real `agent_verify_mcp` handshake is gated behind `NAT_TOOL_LIVE=1`:
 | Test file | Gate | Real dependency |
 |---|---|---|
 | `src/__tests__/integration/native-tooling-adoption.e2e.test.ts` | `NAT_TOOL_LIVE=1` | `uvx mcp-shell-server` (external PyPI package) + `srt` |
+| `src/__tests__/integration/agent-portability-live.e2e.test.ts` | `NAT_TOOL_LIVE=1` | paid DeepSeek model (`ADHD_AGENT_DEEPSEEK_SECRET`); owner pseudosky, $0.05 cap (dispatch-2026-10-06-48dc). The non-model portability matrix (`agent-portability.e2e.test.ts`) is NOT gated. |
 
 **Approved by:** pseudosky (repo owner), 2026-10-05, under the owner directive
 "Finish the project". Rationale: the test drives a real external third-party MCP

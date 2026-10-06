@@ -182,9 +182,27 @@ export function applyNativeToolingSrtPolicy(
   ctx: NativeToolingHostContext
 ): void {
   const resolveCtx = toResolveContext(ctx);
+  const fs = effectiveNativeTooling?.fs;
+  const shell = effectiveNativeTooling?.shell;
+  const shellRoot = resolveShellRoot(shell, resolveCtx);
+  // 99cb14a7 AC6: the spawned builtins' PROCESS cwd is the caller cwd (`fs`
+  // always; `shell` unless it has an explicit root). An EXPLICIT `fs.root`/
+  // `roots` hint narrows only what the fs server exposes — it must NOT drop the
+  // caller cwd from the srt policy, or a shell running in that cwd cannot write
+  // to it (the cwd is not under the static allow-list unless it happens to live
+  // in the OS tmpdir). Only a builtin member counts: a disabled (`false`) or
+  // custom (`McpServerConfig`) member is not ours to sandbox-widen.
+  const isBuiltin = (member: unknown): boolean =>
+    member !== false &&
+    !(member && typeof member === 'object' && 'transport' in member);
+  const callerCwdRoots =
+    isBuiltin(fs) || (isBuiltin(shell) && shellRoot === undefined)
+      ? [ctx.cwd]
+      : [];
   const roots = [
-    ...resolveFsRoots(effectiveNativeTooling?.fs, resolveCtx),
-    resolveShellRoot(effectiveNativeTooling?.shell, resolveCtx),
+    ...callerCwdRoots,
+    ...resolveFsRoots(fs, resolveCtx),
+    shellRoot,
   ].filter((root): root is string => typeof root === 'string');
   addRunSrtAllowWrite(roots);
 }
