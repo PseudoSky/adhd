@@ -59,9 +59,9 @@ describe('09e84a88 — dispatch-cli agents import round-trips into a temp regist
       ADHD_AGENT_SSE_ENABLED: 'false',
       ADHD_AGENT_TRANSPORT: 'stdio',
       // Point the CLI's AgentMcpRunner at the LOCAL built agent-mcp instead of
-      // `npx -y @adhd/agent-mcp` (network / published version).
-      ADHD_DISPATCH_AGENT_MCP_COMMAND: process.execPath,
-      ADHD_DISPATCH_AGENT_MCP_ARGS: AGENT_MCP_DIST,
+      // `npx -y @adhd/agent-mcp@latest` (network / published version).
+      ADHD_AGENT_MCP_COMMAND: process.execPath,
+      ADHD_AGENT_MCP_ARGS: AGENT_MCP_DIST,
     });
     const res = spawnSync(
       'npx',

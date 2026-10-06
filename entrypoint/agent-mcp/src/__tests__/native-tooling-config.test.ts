@@ -24,8 +24,11 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { Environment } from '@adhd/environment';
 import { nativeToolingConfigFieldSpecs } from '@adhd/environment-base-spec';
+import { effectiveHitl } from '@adhd/agent-base-types';
+import type { McpServerConfig } from '@adhd/agent-base-types';
 
 import { agentMcpEnvironmentSpec, type AgentMcpConfig } from '../config.js';
+import { nativeToolingFromResolvedConfig, withDefaultMcpServers } from '../defaults.js';
 
 const here = dirname(fileURLToPath(import.meta.url)); // .../agent-mcp/src/__tests__
 const pkgRoot = resolve(here, '..', '..'); // entrypoint/agent-mcp
@@ -196,6 +199,53 @@ describe('NAT-TOOL-7 — native tooling config surface (ADR-0008 D10)', () => {
       expect(env.config.nativeTooling.fs.root).toBeUndefined();
     } finally {
       restoreScope();
+    }
+  });
+
+  // A1: the config surface must demonstrably CHANGE a dispatched agent's resolved
+  // toolset — not merely reach `env.config`. Asserts the EFFECT end to end.
+  it('A1: ADHD_AGENT_NATIVE_TOOLING_* changes a dispatched agent\'s resolved toolset + HITL', () => {
+    const restoreHitl = withEnvVar('ADHD_AGENT_NATIVE_TOOLING_HITL', 'false');
+    const restoreTools = withEnvVar(
+      'ADHD_AGENT_NATIVE_TOOLING_DISPATCH_ALLOWED_TOOLS',
+      'task,agent'
+    );
+    const restoreScope = withEnvVar('ADHD_ENV_SCOPE', undefined);
+    try {
+      const env = makeEnv(mkAdhdRoot(), mkCwdFixture(false));
+      const dispatchSelf: McpServerConfig = {
+        transport: 'stdio',
+        command: 'npx',
+        args: ['-y', '@adhd/agent-mcp@latest'],
+      };
+      const ctx = {
+        cwd: '/P',
+        dispatchSelf,
+        defaultNativeTooling: nativeToolingFromResolvedConfig(env.config.nativeTooling),
+      };
+
+      // The server-wide env values are now the EFFECTIVE toolset of an agent that
+      // declares no nativeTooling of its own (A1 wiring).
+      const resolved = withDefaultMcpServers({ mcpServers: {} }, ctx);
+      expect(
+        (resolved.mcpServers['agent-mcp'] as { allowedTools?: string[] }).allowedTools
+      ).toEqual(['task', 'agent']);
+      expect(effectiveHitl(resolved)).toBe(false);
+
+      // NEGATIVE CONTROL: drop the server-wide layer → the SAME env vars have NO
+      // effect (the resolved toolset is unconstrained, HITL is not pinned false).
+      const bare = withDefaultMcpServers(
+        { mcpServers: {} },
+        { cwd: '/P', dispatchSelf }
+      );
+      expect(
+        (bare.mcpServers['agent-mcp'] as { allowedTools?: string[] }).allowedTools
+      ).toBeUndefined();
+      expect(effectiveHitl(bare)).not.toBe(false);
+    } finally {
+      restoreScope();
+      restoreTools();
+      restoreHitl();
     }
   });
 });

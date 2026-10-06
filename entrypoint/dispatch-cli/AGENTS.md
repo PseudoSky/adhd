@@ -28,6 +28,11 @@ root `/P` then `/Q` while the stored JSON stays byte-identical.
   agent-mcp child's cwd (D9) and stores the declarative `nativeTooling`; it does
   NOT resolve/root fs/shell itself. The `run` command roots at `--tools-root` when
   supplied, else `process.cwd()`.
+- The agent-mcp launch config — the spawned child AND the `dispatch` self member — is
+  single-sourced from `buildDispatchSelf` (`@adhd/agent-core-native-tooling`), overridable
+  by `ADHD_AGENT_MCP_COMMAND`/`ADHD_AGENT_MCP_ARGS` (the retired `ADHD_DISPATCH_AGENT_MCP_*`
+  pair is gone). A third producer is caught by agent-mcp's one-producer guard, which
+  scans `entrypoint/dispatch-cli/src`.
 - `AgentMcpRunner.ensureAgent` writes the declarative config on CREATE and
   performs NO write on reuse — `agent_update` is never called, so the stored
   definition is never mutated by resolution.

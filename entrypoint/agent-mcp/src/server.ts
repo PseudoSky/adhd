@@ -25,6 +25,7 @@ import type { IHookRegistry } from '@adhd/agent-base-types';
 import { subscribeToTaskDone, emitTaskEvent } from './streaming/event-bus.js';
 import {
   buildNativeToolingContext,
+  nativeToolingFromResolvedConfig,
   withResolvedNativeTooling,
   withResolvedNativeToolingSession,
 } from './defaults.js';
@@ -360,11 +361,16 @@ export function createServer(deps: ServerDeps): Server {
 
   // Task-time native-tooling context (ADR-0008 D4): the cwd is READ at each
   // fire, never captured at construction, so the same stored definition stays
-  // portable across dispatching directories.
+  // portable across dispatching directories. The server-wide
+  // `env.config.nativeTooling` is merged BENEATH each agent's own (A1).
+  const defaultNativeTooling = nativeToolingFromResolvedConfig(
+    env.config.nativeTooling
+  );
   const nativeToolingContext = () =>
     buildNativeToolingContext({
       cwd: (deps.resolveCwd ?? process.cwd)(),
       dispatchSelf: deps.dispatchSelf,
+      defaultNativeTooling,
     });
   const resolvingAgentStore = withResolvedNativeTooling(
     deps.agentStore,
@@ -733,7 +739,14 @@ export function createServer(deps: ServerDeps): Server {
           return toMcpContent(
             await verifyAgentMcpServers(
               agentVerifyMcpInputSchema.parse(args),
-              { agentStore: resolvingAgentStore }
+              {
+                agentStore: resolvingAgentStore,
+                // A5: thread the SAME engine config + logger the registry uses,
+                // so a stdio verify spawns with the identical curated env as the
+                // task path (previously it spawned with none).
+                config: toEngineConfig(),
+                logger,
+              }
             )
           );
 

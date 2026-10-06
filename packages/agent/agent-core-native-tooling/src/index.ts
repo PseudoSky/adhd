@@ -26,3 +26,11 @@ export type {
   NativeServerCatalogEntry,
   WrappableCommand,
 } from './lib/catalog.js';
+
+// The ONE producer of the agent-mcp self (`dispatch` member) launch config (A2).
+export {
+  buildDispatchSelf,
+  DISPATCH_SELF_COMMAND_ENV,
+  DISPATCH_SELF_ARGS_ENV,
+  DISPATCH_SELF_DEFAULT_ARGS,
+} from './lib/dispatch-self.js';
