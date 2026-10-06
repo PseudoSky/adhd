@@ -1272,9 +1272,9 @@ Schema version 1.
   78 → 77. The commit remains reachable from the durable `main` ref, so recovery does not depend on
   the reflog. The working tree was clean before and after (`git status --porcelain` empty), so no
   unrelated concurrent dirt had to be avoided; no push (the dispatch directed none) and no gates were
-run by this operation (the dispatch reported them already green: affected test 0, affected build 0,
-`lint dispatch-cli` 0, focused spec 15/15). This record is the only change to this file in this
-operation. Recorded under §Commit convention's `docs(<area>):` scope.
+  run by this operation (the dispatch reported them already green: affected test 0, affected build 0,
+  `lint dispatch-cli` 0, focused spec 15/15). This record is the only change to this file in this
+  operation. Recorded under §Commit convention's `docs(<area>):` scope.
 
 - **2026-10-05 — operation record: land of `docs/playbook-real-mcp-testing-9c4e`
   (dispatch-2026-10-04-9c4e).** Landed the real-MCP testing playbook onto `main` as a **merge commit**
