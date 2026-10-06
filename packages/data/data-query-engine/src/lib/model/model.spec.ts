@@ -115,20 +115,20 @@ describe('execute', () => {
         'agent',
         't',
         {
-          name: 'cost_window',
+          name: 'cost_scan',
           aggregate: {
             _sum: 'cost_usd',
             _scan: { order_by: 't', frame: 'running', partition_by: 'agent' },
           },
         },
       ],
-      qualify: { cost_window: { _gt: 0 } },
+      qualify: { cost_scan: { _gt: 0 } },
       order_by: [{ t: 'asc' }],
     };
     expect(execute(q, sessions)).toEqual([
-      { session_id: 's1', agent: 'a', t: 100, cost_window: 1 },
-      { session_id: 's3', agent: 'b', t: 150, cost_window: 5 },
-      { session_id: 's2', agent: 'a', t: 200, cost_window: 3 },
+      { session_id: 's1', agent: 'a', t: 100, cost_scan: 1 },
+      { session_id: 's3', agent: 'b', t: 150, cost_scan: 5 },
+      { session_id: 's2', agent: 'a', t: 200, cost_scan: 3 },
     ]);
   });
 

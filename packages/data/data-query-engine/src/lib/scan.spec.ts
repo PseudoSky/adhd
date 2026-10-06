@@ -4,6 +4,8 @@
  * index-accelerated access. Drives the real `DataView`/`execute` seam.
  */
 import { describe, it, expect } from 'vitest';
+import * as fs from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { DataView, type Fold, type QueryExpression } from '../index';
 import { execute } from './model/execute';
 import { planQuery } from './model/plan';
@@ -297,5 +299,100 @@ describe('_scan + index-accelerated access', () => {
     const q = scanQuery({ t: { _gte: 5 } });
     expect(indexed.query(q)).toEqual(plain.query(q));
     expect(indexed.query(q).map((r) => r['w'])).toEqual([2, 5]);
+  });
+});
+
+describe('the fluent `.scan(...)` builder', () => {
+  it('equals the equivalent setQuery for a running frame', () => {
+    const rows: Row[] = [
+      { t: 1, v: 10 },
+      { t: 2, v: 20 },
+      { t: 3, v: 30 },
+    ];
+    const fluent = new DataView(rows)
+      .select(['t'])
+      .scan('w', { _sum: 'v' }, { order_by: 't' })
+      .view();
+    const explicit = new DataView(rows, {
+      select: ['t', { name: 'w', aggregate: { _sum: 'v', _scan: { order_by: 't' } } }],
+    }).view();
+    expect(fluent).toEqual(explicit);
+    expect(fluent).toEqual([
+      { t: 1, w: 10 },
+      { t: 2, w: 30 },
+      { t: 3, w: 60 },
+    ]);
+  });
+
+  it('carries the frame size and partition key', () => {
+    const rows: Row[] = [
+      { p: 'a', t: 1, v: 1 },
+      { p: 'b', t: 1, v: 10 },
+      { p: 'a', t: 2, v: 2 },
+    ];
+    const fluent = new DataView(rows)
+      .scan('w', { _sum: 'v' }, { order_by: 't', frame: 2, partition_by: 'p' })
+      .view();
+    const explicit = new DataView(rows, {
+      select: [
+        { name: 'w', aggregate: { _sum: 'v', _scan: { order_by: 't', frame: 2, partition_by: 'p' } } },
+      ],
+    }).view();
+    expect(fluent).toEqual(explicit);
+    expect(fluent.map((r) => r['w'])).toEqual([1, 10, 3]);
+  });
+
+  it('composes with `.groupBy(...)`, `.where(...)` and `.qualify(...)`', () => {
+    const rows: Row[] = [
+      { agent: 'a', t: 1, c: 1 },
+      { agent: 'a', t: 2, c: 2 },
+      { agent: 'b', t: 1, c: 9 },
+    ];
+    const fluent = new DataView(rows)
+      .where({ c: { _gt: 0 } })
+      .groupBy(['agent', { name: 'total', aggregate: { _sum: 'c' } }])
+      .scan('r', { _sum: 'total' }, { order_by: 'total' })
+      .qualify({ r: { _gt: 0 } })
+      .view();
+    const explicit = new DataView(rows, {
+      where: { c: { _gt: 0 } },
+      group_by: ['agent', { name: 'total', aggregate: { _sum: 'c' } }],
+      select: [{ name: 'r', aggregate: { _sum: 'total', _scan: { order_by: 'total' } } }],
+      qualify: { r: { _gt: 0 } },
+    }).view();
+    expect(fluent).toEqual(explicit);
+  });
+});
+
+describe('the retired window clause: no surviving token in the package surface', () => {
+  // The retired token is assembled at runtime so this spec file itself does not
+  // contain the literal (a package-wide grep must come back empty).
+  const RETIRED = ['_', 'window'].join('');
+
+  const packageRoot = fileURLToPath(new URL('../../', import.meta.url));
+  const productionSources = (dir: string): string[] => {
+    const out: string[] = [];
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const path = `${dir}/${entry.name}`;
+      if (entry.isDirectory()) out.push(...productionSources(path));
+      else if (entry.name.endsWith('.ts') && !entry.name.endsWith('.spec.ts')) out.push(path);
+    }
+    return out;
+  };
+
+  it('no production source file or the README carries the retired token', () => {
+    expect(fs.readFileSync(`${packageRoot}README.md`, 'utf-8')).not.toContain(RETIRED);
+    const files = productionSources(`${packageRoot}src`);
+    expect(files.length).toBeGreaterThan(0);
+    for (const file of files) {
+      expect(fs.readFileSync(file, 'utf-8'), file).not.toContain(RETIRED);
+    }
+  });
+
+  it('the DataView exposes `.scan(...)` and no window-shaped method', () => {
+    const anyDv = new DataView([{ a: 1 }]) as unknown as Record<string, unknown>;
+    expect(typeof anyDv['scan']).toBe('function');
+    expect(anyDv['window']).toBeUndefined();
+    expect(anyDv[RETIRED]).toBeUndefined();
   });
 });

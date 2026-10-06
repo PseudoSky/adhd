@@ -33,7 +33,8 @@ pnpm add @adhd/data-query-engine
 
 ### Query API
 
-Every `QueryExpression` slot has a fluent builder (each returns `this`):
+Every `QueryExpression` slot — plus the `_scan` fold-mode — has a fluent builder
+(each returns `this`):
 
 | Function (params)                     | Slot                            |
 | ------------------------------------- | ------------------------------- |
@@ -41,15 +42,24 @@ Every `QueryExpression` slot has a fluent builder (each returns `this`):
 | `.as(name: string)`                   | `name` (output identity)        |
 | `.aggregate(expr)`                    | `aggregate` (leaf value)        |
 | `.where(predicate)`                   | `where` (pre + post-group)      |
-| `.qualify(predicate)`                 | `qualify` (post-window)         |
+| `.qualify(predicate)`                 | `qualify` (post-scan)           |
 | `.groupBy(items)`                     | `group_by`                      |
 | `.keep({ n, other: true })`           | `keep` (top-N + `_other`)       |
 | `.select(items)`                      | `select`                        |
+| `.scan(name, fold, spec)`             | append a `_scan` fold to `select` |
 | `.orderBy(sort)`                      | `order_by`                      |
 | `.distinctOn(fields)`                 | `distinct_on`                   |
 | `.offset(n)` / `.limit(n)`            | `offset` / `limit`              |
 | `.rollup(...dims)` / `.cube(...dims)` | grouping sets (as `select` relations) |
 | `.view()` / `.toJson()`               | run / serialise                 |
+
+```ts
+new DataView(rows)
+  .select(['t'])
+  .scan('running', { _sum: 'amount' }, { order_by: 't', partition_by: 'agent' })
+  .qualify({ running: { _gt: 0 } })
+  .view();
+```
 
 `rollup('region','product')` and `cube('region','product')` build a parent query
 with no `group_by` whose `select` lists one relation per grouping set (the

@@ -1,10 +1,12 @@
 import { Transform as _ } from '@adhd/data-base-transforms';
 import {
   BooleanExpression,
+  type Fold,
   type GroupItem,
   OrderByExpression,
   Predicate,
   QueryExpression,
+  type ScanSpec,
 } from './expressions';
 import { compileWhere, parseOrderBy } from './parser';
 import { compileAccessor } from './path';
@@ -340,6 +342,19 @@ export class DataView<T = unknown> {
 
   aggregate = (expr: QueryExpression['aggregate']) => {
     this._raw.aggregate = expr;
+    this.dirty = true;
+    return this;
+  };
+
+  /**
+   * Append a running / sliding SCAN column to `select` — the fold in
+   * retain-intermediates mode over an ordered frame (one value per row). The
+   * fluent equivalent of the `select` item
+   * `{ name, aggregate: { ...aggregate, _scan: spec } }`.
+   */
+  scan = (name: string, aggregate: Fold, spec: ScanSpec) => {
+    const item: QueryExpression = { name, aggregate: { ...aggregate, _scan: spec } };
+    this._raw.select = [...(this._raw.select ?? []), item];
     this.dirty = true;
     return this;
   };
