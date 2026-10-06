@@ -225,3 +225,53 @@ the DAG — re-runs the milestone guard and marks the milestone complete — so
 surface directly and resumes through the real MCP boundary (live-verified
 2026-10-05 under `DISPATCH_E2E_PROVIDER=deepseek`; `anthropic` is also a
 function-tool provider).
+
+### Guarded live runner (`run-live-guarded.ts`)
+
+`src/test/integration/run-live-guarded.ts` wraps a real dispatch-through-a-real-
+agent-mcp run with **hard, mechanical guards** so a live test can never run away.
+It is a self-executing script (not collected by Vitest), reusing the same real
+substrate as the five-AC suite, and is the harness a later authorized live test
+drives. It runs two scenarios — a guarded smoke dispatch and a guarded
+**delegation** (a dispatched agent really calls `agent-mcp__agent` to spawn a
+child) — under the guards below.
+
+- **Gate:** `DISPATCH_E2E_LIVE=1` (loud notice + exit 0 otherwise; never a silent
+  skip). Real, billed model call — the single AGENTS.md §7 gate reason.
+- **Approved by (named owner):** pseudosky (skywinstonsk@gmail.com). Recorded here,
+  in this package's `AGENTS.md`, and in the script's own header.
+- **Provider:** `DISPATCH_E2E_PROVIDER=deepseek` (default; needs
+  `ADHD_AGENT_DEEPSEEK_SECRET`), `anthropic` (`ADHD_AGENT_ANTHROPIC_SECRET`), or
+  `claudecli` (the `claude` CLI's OAuth). Secrets live in `~/.adhd/.env`; `set -a;
+  source ~/.adhd/.env; set +a` before running.
+- **Fails loudly** when enabled without the credential / built `agent-mcp::dist-manifest` /
+  memory-stub prerequisite.
+
+Guards (all env-overridable; defaults are the guardrails):
+
+| Guard | Env | Default | Behaviour |
+|---|---|---|---|
+| Strict turn count | `DISPATCH_E2E_MAX_TURNS` | `12` | Baked into every agent (`maxToolLoops`) and the child (`ADHD_AGENT_BUDGET_MAX_CALLS`, a global model-call cap); asserted post-run (`Σ model_calls ≤ cap`). |
+| Cost kill | `DISPATCH_E2E_MAX_COST_USD` | `0.10` | Polls `Σ task_usage.est_cost_usd` every `DISPATCH_E2E_POLL_MS`; **hard-kills** (closes the spawned agent-mcp, exits non-zero) the moment spend exceeds the cap. Fails loudly if cost is unpriceable (NULL) and no proxy meters it. |
+| Message-size protection | `DISPATCH_E2E_MAX_MSG_BYTES` | `262144` | Polls the largest single stored message byte-length; kills if exceeded. |
+| Proxy | `DISPATCH_E2E_PROXY` | unset | Routes the provider `base_url` + child `HTTP(S)_PROXY` through a proxy so API calls can be metered/blocked. When unset, the runner says so and relies on the cost + message-size guards. |
+| Poll interval | `DISPATCH_E2E_POLL_MS` | `1000` | Monitor cadence (floored at 100 ms). |
+| Scenario | `DISPATCH_E2E_SCENARIO` | `all` | `all` \| `dispatch` \| `delegation`. |
+
+```bash
+# prerequisite: build the child agent-mcp the runner spawns
+npx nx run agent-mcp:dist-manifest
+set -a; source ~/.adhd/.env; set +a
+
+DISPATCH_E2E_LIVE=1 npx tsx --tsconfig tsconfig.base.json \
+  entrypoint/dispatch-cli/src/test/integration/run-live-guarded.ts
+
+# prove the KILL fires (a cap of 0 breaches on the first priced turn)
+DISPATCH_E2E_LIVE=1 DISPATCH_E2E_MAX_COST_USD=0 DISPATCH_E2E_POLL_MS=100 \
+  DISPATCH_E2E_SCENARIO=delegation npx tsx --tsconfig tsconfig.base.json \
+  entrypoint/dispatch-cli/src/test/integration/run-live-guarded.ts
+# exits non-zero, prints [GUARD-KILL:cost-exceeded] with the observed cost.
+```
+
+The `delegation` scenario requires a function-tool provider (`deepseek`/`anthropic`)
+and reports a loud SKIP under `claudecli`.
