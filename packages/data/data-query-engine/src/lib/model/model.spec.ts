@@ -118,7 +118,7 @@ describe('execute', () => {
           name: 'cost_window',
           aggregate: {
             _sum: 'cost_usd',
-            _window: { field: 't', partition_by: 'agent', frame: ['unbounded', 0] },
+            _scan: { order_by: 't', frame: 'running', partition_by: 'agent' },
           },
         },
       ],
@@ -225,7 +225,7 @@ describe('review fixes (regression guards)', () => {
     expect(out[0]).toEqual({ before: [{ cost: 3 }], after: [{ cost: 4 }] });
   });
 
-  it('computes a window fold in select beside a group_by', () => {
+  it('computes a scan fold in select beside a group_by', () => {
     const data: Row[] = [
       { agent: 'a', t: 1, c: 1 },
       { agent: 'a', t: 2, c: 2 },
@@ -236,7 +236,7 @@ describe('review fixes (regression guards)', () => {
       select: [
         'agent',
         'c',
-        { name: 'r', aggregate: { _sum: 'c', _window: { field: 't', partition_by: 'agent', frame: ['unbounded', 0] } } },
+        { name: 'r', aggregate: { _sum: 'c', _scan: { order_by: 't', frame: 'running', partition_by: 'agent' } } },
       ],
       order_by: [{ agent: 'asc' }],
     };

@@ -112,7 +112,8 @@
  *   - honest limits: the G-dimension (hash cost, O(G) space) and the
  *     non-algebraic `_quantile` (buffers and sorts each group's values) are
  *     NOT asserted here — neither is linear in N, and a per-N ladder cannot
- *     isolate them. `_period`/`_window` share the same O(n) per-row bound.
+ *     isolate them. `_period`/`_filter` share the same O(n) per-row bound; the
+ *     running/sliding `_scan` is linear (asserted in the differential harness).
  *
  * ADDED WITH ADR-0005 SELECT + NESTED SELECT + PATH/RANGE OPS
  *   op                       bound        source
@@ -529,7 +530,7 @@ describe('complexity — group_by / aggregate / HAVING', () => {
     expectLinear(r.p, 'group_by flat');
   });
 
-  it('a window-scoped fold is O(n) (window is a per-row test)', () => {
+  it('a time-scoped fold (`_filter`) is O(n) (a per-row test)', () => {
     const r = measureQuery(LIN_SIZES, () => ({
       group_by: [
         'group',
@@ -537,13 +538,13 @@ describe('complexity — group_by / aggregate / HAVING', () => {
           name: 's',
           aggregate: {
             _sum: 'value',
-            _window: { field: 'ts', period: ['P100Y', BASE_TS] },
+            _filter: { ts: { _period: ['P100Y', BASE_TS] } },
           },
         },
       ],
     }));
-    logFit('group_by windowed', r);
-    expectLinear(r.p, 'group_by windowed');
+    logFit('group_by time-scoped', r);
+    expectLinear(r.p, 'group_by time-scoped');
   });
 
   it('a post-group `where` leaf (HAVING) adds only an O(G) pass over the grouped rows', () => {

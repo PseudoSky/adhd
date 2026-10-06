@@ -180,7 +180,7 @@ export function incrementalPlan(
     if ('_bucket' in item) return undefined; // a bucket key recomputes, never incremental
     const { name, aggregate } = item;
     if (name === undefined || aggregate === undefined || !isFold(aggregate)) return undefined;
-    if (aggregate._window !== undefined || aggregate._filter !== undefined) return undefined;
+    if (aggregate._scan !== undefined || aggregate._filter !== undefined) return undefined;
     const kind = Object.keys(aggregate).find((k) => k.startsWith('_') && MONOID.has(k));
     if (kind === undefined) return undefined;
     const operand = foldOperand(aggregate);

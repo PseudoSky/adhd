@@ -148,7 +148,7 @@ describe('the v2 grammar expresses the former v1 operations', () => {
     expect(out.find((r) => r['_other'] === true)?.['cost']).toBe(1);
   });
 
-  it('broadcast is a window fold in select + qualify', () => {
+  it('a running scan broadcasts in select + qualify', () => {
     const sessions = [
       { id: 's1', agent: 'a', t: 100, cost: 1 },
       { id: 's2', agent: 'a', t: 200, cost: 2 },
@@ -163,7 +163,7 @@ describe('the v2 grammar expresses the former v1 operations', () => {
           name: 'running',
           aggregate: {
             _sum: 'cost',
-            _window: { field: 't', partition_by: 'agent', frame: ['unbounded', 0] },
+            _scan: { order_by: 't', partition_by: 'agent' },
           },
         },
       ],

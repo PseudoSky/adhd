@@ -229,22 +229,28 @@ position-typed model. There is no second syntax and no alias layer:
   (a fold or arithmetic expression).
 - `where` carries BOTH the pre-group and post-group predicate in one tree, split
   by the **phase rule** (a leaf's phase is decided by reference); `qualify` is the
-  post-window filter; `keep` folds a top-N tail into one `_other` row.
-- Window is an attribute of the fold (`_window`), not a query-level key.
+  post-scan filter; `keep` folds a top-N tail into one `_other` row.
+- A running / sliding aggregate is `_scan` on a fold — a **fold-mode**, not a
+  phase and not a query-level key. `_scan: { order_by, frame?, partition_by? }`
+  where `frame` is `'running'` (default), a sliding size `n`, or `{ where }` (the
+  frame is the partition rows matching the predicate). It broadcasts one value
+  per row.
+- `_filter` scopes a fold's input (orthogonal to `_scan`).
 
 Every classic operation is expressed directly in this grammar:
 
 | want | write |
 | ---- | ----- |
 | HAVING | a post-group leaf in `where`, e.g. `{ where: { total: { _gt: 0 } } }` |
-| scoped aggregate (window) | `_window` on the fold, e.g. `{ _sum: 'cost', _window: { field: 't', period: 'P1D' } }` |
-| broadcast (`SUM(x) OVER (PARTITION BY g)`) | a window fold in `select` + `qualify` |
+| time-scoped aggregate | `_filter` on the fold, e.g. `{ _sum: 'cost', _filter: { t: { _period: 'P1D' } } }` |
+| running / sliding aggregate | `_scan` on a fold, e.g. `{ _sum: 'cost', _scan: { order_by: 't', frame: 'running' } }` |
+| broadcast (`SUM(x) OVER (PARTITION BY g)`) | a `_scan` fold in `select` + `qualify` |
 | top-N | `order_by` + `limit`; with an `_other` tail, `keep: { n, other: true }` |
 | hierarchical grouping | a nested `select` (a query nested under its `name`) |
 | time bucket | `group_by: [{ _bucket: { field: 't', unit: 'hour' } }]` |
 
-A grouping-set family (`_rollup`/`_cube`) has no expression in this grammar and is
-not supported.
+A grouping-set family (`_rollup`/`_cube`) is expressed as `select` relations — see
+`DataView.rollup(...)`/`cube(...)`.
 
 ### `canonical.ts` — plan identity
 
@@ -278,7 +284,7 @@ dv.query({ source: 'sales', where: { region: { _eq: 'west' }, amount: { _gte: 10
 
 Equality (`PostingIndex`), range (B+ tree), and low-cardinality (`RoaringBitmap`) indexes are maintained across `insert`/`append`/`remove`; the planner picks among them and falls back to a scan for any non-indexable disjunct.
 
-**Notes.** `group_by` output key order is unspecified — canonicalization treats `group_by` items as an order-independent set, so two queries differing only in item order share one incremental cache. A range index over a field that has held a non-finite number (NaN/±Infinity) or a non-number falls back to a scan, so the index can never change a result. The reference executor materializes window frames, so an unbounded frame is quadratic in the partition size (a bounded frame is linear); the prefix-sum/deque acceleration is part of the §13 optimization layer, not this reference executor.
+**Notes.** `group_by` output key order is unspecified — canonicalization treats `group_by` items as an order-independent set, so two queries differing only in item order share one incremental cache. A range index over a field that has held a non-finite number (NaN/±Infinity) or a non-number falls back to a scan, so the index can never change a result. `_scan` is O(partition) for the monoid folds (`_sum`/`_count`/`_avg`/`_ratio_of_sums` via prefix sums, `_min`/`_max` via a monotonic deque; running and sliding). The holistic folds (`_distinct_count`/`_quantile`) have no fast path and fall back to a per-row frame fold — documented, not silent. A predicate frame is position-independent (one filtered set per partition).
 
 
 Example:

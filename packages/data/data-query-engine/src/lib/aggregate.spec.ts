@@ -7,8 +7,8 @@ import type { QueryExpression } from '../index';
  * HAVING, re-expressed in the ONE canonical (v2) grammar:
  *  - a group item is `{ name, aggregate }` (position-typed);
  *  - HAVING is a post-group leaf in the merged `where` (the phase rule routes it);
- *  - a window is `_window` on the fold; broadcast is a window fold in `select`
- *    plus `qualify`;
+ *  - a time-scoped aggregate is `_filter` (`_period`) on the fold; a
+ *    running/sliding aggregate is `_scan` on a fold in `select` plus `qualify`;
  *  - top-N is `order_by` + `limit` / `keep:{n,other:true}`;
  *  - hierarchical grouping is a nested `select`.
  * Where the v2 semantics differ from the retired v1 pipeline (e.g. `_avg` counts
@@ -51,7 +51,11 @@ const A_QUERY: QueryExpression = {
       name: 'c',
       aggregate: {
         _sum: 'cost_usd',
-        _window: { field: 't', period: ['PT1H', MAX_T], partition_by: 'agent' },
+        _scan: {
+          order_by: 't',
+          frame: { where: { t: { _period: ['PT1H', MAX_T] } } },
+          partition_by: 'agent',
+        },
       },
     },
   ],
@@ -112,7 +116,8 @@ describe('SPEC AC — grouping / aggregation / HAVING', () => {
       { id: 'out', agent: 'x', t: MAX_T - HOUR_MS - 1, cost_usd: 1_000 },
       { id: 'stale', agent: 'y', t: MAX_T - HOUR_MS - 1_000, cost_usd: 7 },
     ];
-    // Broadcast + qualify: agent y has no in-window rows -> its window sum is 0 -> dropped.
+    // Broadcast via a predicate-frame scan: agent y has no in-window rows -> its
+    // frame set is empty -> sum 0 -> dropped by qualify.
     const broadcast: QueryExpression = {
       select: [
         'id',
@@ -122,20 +127,24 @@ describe('SPEC AC — grouping / aggregation / HAVING', () => {
           name: 'c',
           aggregate: {
             _sum: 'cost_usd',
-            _window: { field: 't', period: ['PT1H', MAX_T], partition_by: 'agent' },
+            _scan: {
+              order_by: 't',
+              frame: { where: { t: { _period: ['PT1H', MAX_T] } } },
+              partition_by: 'agent',
+            },
           },
         },
       ],
       qualify: { c: { _gt: 0 } },
     };
     expect(idList(rows, broadcast)).toEqual(['in', 'out']);
-    // A group-scoped window fold counts only the in-window row of its group.
+    // A time-scoped group fold (`_filter`) counts only the in-window row of its group.
     const groups = view(rows, {
       group_by: [
         'agent',
         {
           name: 'c',
-          aggregate: { _sum: 'cost_usd', _window: { field: 't', period: ['PT1H', MAX_T] } },
+          aggregate: { _sum: 'cost_usd', _filter: { t: { _period: ['PT1H', MAX_T] } } },
         },
       ],
     });
@@ -146,15 +155,15 @@ describe('SPEC AC — grouping / aggregation / HAVING', () => {
     const rows: Row[] = [
       { id: 's', agent: 'y', t: MAX_T - HOUR_MS - 1, cost_usd: 7, n: 3 },
     ];
-    const win = { field: 't', period: ['PT1H', MAX_T] as [string, number] };
+    const winFilter = { t: { _period: ['PT1H', MAX_T] as [string, number] } };
     const out = view(rows, {
       group_by: [
         'agent',
-        { name: 's', aggregate: { _sum: 'cost_usd', _window: win } },
-        { name: 'c', aggregate: { _count: true, _window: win } },
-        { name: 'mn', aggregate: { _min: 'cost_usd', _window: win } },
-        { name: 'mx', aggregate: { _max: 'cost_usd', _window: win } },
-        { name: 'av', aggregate: { _avg: 'cost_usd', _window: win } },
+        { name: 's', aggregate: { _sum: 'cost_usd', _filter: winFilter } },
+        { name: 'c', aggregate: { _count: true, _filter: winFilter } },
+        { name: 'mn', aggregate: { _min: 'cost_usd', _filter: winFilter } },
+        { name: 'mx', aggregate: { _max: 'cost_usd', _filter: winFilter } },
+        { name: 'av', aggregate: { _avg: 'cost_usd', _filter: winFilter } },
       ],
     });
     expect(out).toEqual([
@@ -181,7 +190,7 @@ describe('SPEC AC — grouping / aggregation / HAVING', () => {
     // P1M is a CALENDAR month with a day clamp (Mar 31 -> Feb 28 in 2026).
     expect(resolveIsoPeriod('P1M', Date.UTC(2026, 2, 31)).from).toBe(Date.UTC(2026, 1, 28));
 
-    // Boundary rows: the window fold and the `_period` where-operator agree.
+    // Boundary rows: the time-scoped group fold and the `_period` where-operator agree.
     const boundary: Row[] = [
       { id: 'lo', t: a - HOUR_MS },
       { id: 'mid', t: a - 1 },
@@ -193,7 +202,7 @@ describe('SPEC AC — grouping / aggregation / HAVING', () => {
         'id',
         {
           name: 'c',
-          aggregate: { _count: true, _window: { field: 't', period: ['PT1H', a] } },
+          aggregate: { _count: true, _filter: { t: { _period: ['PT1H', a] } } },
         },
       ],
       qualify: { c: { _gt: 0 } },
@@ -217,7 +226,13 @@ describe('SPEC AC — grouping / aggregation / HAVING', () => {
         'agent',
         'is_sub',
         'cost_usd',
-        { name: 'c', aggregate: { _sum: 'cost_usd', _window: { partition_by: 'agent' } } },
+        {
+          name: 'c',
+          aggregate: {
+            _sum: 'cost_usd',
+            _scan: { order_by: 'id', frame: { where: {} }, partition_by: 'agent' },
+          },
+        },
       ],
       qualify: { c: { _gt: 0 } },
     }).view() as unknown as Row[];
@@ -301,9 +316,15 @@ describe('SPEC AC — grouping / aggregation / HAVING', () => {
       select: [
         'id',
         'cost_usd',
-        { name: 'c', aggregate: { _sum: 'cost_usd', _window: { partition_by: 'agent' } } },
+        {
+          name: 'c',
+          aggregate: {
+            _sum: 'cost_usd',
+            _scan: { order_by: 'id', frame: { where: {} }, partition_by: 'agent' },
+          },
+        },
       ],
-      qualify: { c: { _gt: 0 } }, // POST-window
+      qualify: { c: { _gt: 0 } }, // POST-scan
     });
     expect(out).toEqual(['B1']);
   });

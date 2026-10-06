@@ -1,8 +1,9 @@
 /**
  * The ONE query grammar — the v2 self-similar, position-typed model. There is no
  * v1 clause family: `having` is a post-group leaf in the merged `where` (phase
- * rule), `window` is `_window` on a fold, broadcast is a window fold in `select`
- * + `qualify`, and top-N is `order_by` + `limit` / `keep:{n,other:true}`.
+ * rule), a time-scoped aggregate is `_filter` on the fold, a running/sliding
+ * aggregate is `_scan` on a fold (a fold-mode broadcast in `select` + `qualify`),
+ * and top-N is `order_by` + `limit` / `keep:{n,other:true}`.
  *
  * The `Operator`/`BooleanExpression` vocabulary (the shared predicate language)
  * is retained, and is a subset of what the schema-agnostic `Predicate` accepts.
@@ -129,31 +130,34 @@ export interface OrderByExpression {
 /** A raw row: the model is schema-agnostic and works over nested JSON records. */
 export type Row = Record<string, unknown>;
 
-// ── Window (an aggregate's input scope) ─────────────────────────────────────
+// ── Scan (an aggregate as a per-row fold-mode over an ordered frame) ─────────
 /**
- * An inclusive `[from, to]` frame, modeling SQL `{RANGE|ROWS|GROUPS} BETWEEN
- * <start> AND <end>`:
- *  - a number bound = a ROWS/GROUPS offset (negative = preceding, 0 = current);
- *  - an ISO-8601 duration string = a RANGE value offset (`"P7D"` = 7 days before);
- *  - `'unbounded'` = UNBOUNDED PRECEDING/FOLLOWING.
+ * The frame of a `_scan`:
+ *  - `'running'` (the default) — the partition rows from the first through the
+ *    current row;
+ *  - a `number` `n` — a sliding frame of the last `n` rows through the current row;
+ *  - `{ where }` — the frame is the set of partition rows satisfying the predicate
+ *    (position-independent; `{ where: {} }` is the whole partition).
  */
-export type WindowBound = number | string | 'unbounded';
-export type WindowFrame = [WindowBound, WindowBound];
-/** Explicit frame unit when the bound type is ambiguous (a number could be ROWS or GROUPS). */
-export type WindowFrameMode = 'rows' | 'groups' | 'range';
+export type ScanFrame = 'running' | number | { where: Predicate };
 
-export interface WindowSpec {
-  /** Order key FALLBACK for a window over raw rows; else the group_by entry's `order_by`. */
-  field?: string;
-  frame_mode?: WindowFrameMode;
-  period?: string | [string, number];
-  frame?: WindowFrame;
-  /** Defaults to the query's `group_by`. */
+/**
+ * A scan modifier on a fold: the SAME closed fold vocabulary in
+ * "retain-intermediates" mode over an ordered frame, producing one value per row
+ * of the relation it is attached to (a broadcast). It is a fold-mode, NOT a phase
+ * and NOT a detached clause. The partition defaults to the enclosing `group_by`.
+ */
+export interface ScanSpec {
+  /** The order key within each partition. */
+  order_by: string;
+  /** Defaults to `'running'`. */
+  frame?: ScanFrame;
+  /** Partition key(s); defaults to the enclosing `group_by`. */
   partition_by?: string | string[];
 }
 
 export interface FoldMods {
-  _window?: WindowSpec;
+  _scan?: ScanSpec;
   _filter?: Predicate;
 }
 

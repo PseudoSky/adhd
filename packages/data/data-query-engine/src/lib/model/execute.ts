@@ -2,12 +2,15 @@
  * The reference executor for the v2 query model — over an array of rows.
  *
  * Fixed phase order (the wrong order is unrepresentable):
- *   where(pre) -> group_by -> aggregate -> where(post) -> window -> qualify ->
- *   order_by -> distinct_on -> offset -> limit -> select (final projection).
+ *   where(pre) -> group_by -> aggregate -> where(post) -> scan(_scan folds) ->
+ *   qualify -> order_by -> distinct_on -> offset -> limit -> select (final).
+ *
+ * `_scan` is NOT a phase of its own — it is a fold-mode evaluated in a broadcast
+ * pass between the post-group `where` and `qualify` (a fold carrying `_scan`
+ * produces one value per row of the relation it is attached to).
  */
 import { Transform as _ } from '@adhd/data-base-transforms';
 import { compileAccessor, type PathGetter } from '../path';
-import { resolveIsoPeriod } from '../period';
 import { operators } from '../filters';
 import type { OrderByExpression } from '../expressions';
 import { postNames, splitWhere, validateQuery } from './phase';
@@ -23,11 +26,10 @@ import type {
   Predicate,
   QueryExpression,
   Row,
+  ScanFrame,
+  ScanSpec,
   ScalarOperator,
   SelectItem,
-  WindowBound,
-  WindowFrame,
-  WindowSpec,
 } from './types';
 
 // ── evaluation context ──────────────────────────────────────────────────────
@@ -286,22 +288,14 @@ const FOLD_KEYS = [
 export const isFold = (e: Expr): e is Fold =>
   typeof e === 'object' && e !== null && FOLD_KEYS.some((k) => k in e);
 
-/** Restrict a fold's input rows: its `_filter`, then its `_window.period` (Phase-3 scope). */
+/**
+ * Restrict a fold's input rows to its `_filter` (a fold's input scope). This is
+ * orthogonal to `_scan` — the scan frame is applied by the scan pass, not here.
+ */
 function scopeFold(fold: Fold, rows: Row[], ctx: EvalCtx): Row[] {
-  let scoped = rows;
   const filter = fold._filter;
-  if (filter !== undefined) scoped = scoped.filter((r) => matches(filter, r, ctx));
-  const spec = fold._window;
-  if (spec?.period === undefined) return scoped;
-  if (spec.field === undefined) throw new QueryModelError('`_window.period` requires `field` (the order key)');
-  if (spec.frame !== undefined) throw new QueryModelError('`_window.period` and `_window.frame` are mutually exclusive');
-  const field = spec.field;
-  const { from, to } =
-    typeof spec.period === 'string' ? resolveIsoPeriod(spec.period, Date.now()) : resolveIsoPeriod(spec.period[0], spec.period[1]);
-  return scoped.filter((r) => {
-    const t = toMs(get(field)(r));
-    return t !== null && t >= from && t <= to;
-  });
+  if (filter === undefined) return rows;
+  return rows.filter((r) => matches(filter, r, ctx));
 }
 
 function applyFold(fold: Fold, rows: Row[], ctx: EvalCtx): unknown {
@@ -449,108 +443,48 @@ function computeItems(group: Grouped, items: QueryExpression[], ctx: EvalCtx): v
   if (pending.length > 0) throw new QueryModelError('cycle in `group_by` derived items');
 }
 
-// ── window broadcast ────────────────────────────────────────────────────────
-interface WindowColumn {
+// ── scan: a fold-mode broadcast over an ordered frame ───────────────────────
+interface ScanColumn {
   name: string;
-  spec: WindowSpec;
+  spec: ScanSpec;
   fold: Fold;
 }
 
-function collectWindowColumns(select: SelectItem[] | undefined): WindowColumn[] {
-  const cols: WindowColumn[] = [];
+function collectScanColumns(select: SelectItem[] | undefined): ScanColumn[] {
+  const cols: ScanColumn[] = [];
   for (const item of select ?? []) {
     if (typeof item === 'string') continue;
     const { name, aggregate } = item;
     if (name === undefined || aggregate === undefined) continue;
-    if (isFold(aggregate) && aggregate._window !== undefined) cols.push({ name, spec: aggregate._window, fold: aggregate });
+    if (isFold(aggregate) && aggregate._scan !== undefined) cols.push({ name, spec: aggregate._scan, fold: aggregate });
   }
   return cols;
 }
 
-function partitionKeysOf(spec: WindowSpec): string[] {
-  if (spec.partition_by === undefined) return [];
+/** Partition keys for a scan: its own `partition_by`, else the enclosing `group_by`. */
+function partitionKeysOf(spec: ScanSpec, fallback: string[]): string[] {
+  if (spec.partition_by === undefined) return fallback;
   return Array.isArray(spec.partition_by) ? spec.partition_by : [spec.partition_by];
 }
 
-function lowerBound(bound: WindowBound, cur: number): number {
-  if (bound === 'unbounded') return -Infinity;
-  if (typeof bound === 'string') return resolveIsoPeriod(bound, cur).from;
-  return Number.NEGATIVE_INFINITY;
-}
-
-function upperBound(bound: WindowBound, cur: number): number {
-  if (bound === 'unbounded') return Infinity;
-  if (typeof bound === 'string') return resolveIsoPeriod(bound, cur).to;
-  return Number.POSITIVE_INFINITY;
-}
-
-function frameRowsFor(ordered: number[], pos: number, rows: Row[], spec: WindowSpec): Row[] {
-  const frame: WindowFrame | undefined = spec.frame;
-  if (frame === undefined) return ordered.map((i) => rows[i]);
-  const [fromB, toB] = frame;
-  const orderKey = spec.field;
-  // A bound is a RANGE (time) offset only when it is a duration string — `'unbounded'`
-  // is also a string, so it must be excluded.
-  const hasDuration =
-    (fromB !== 'unbounded' && typeof fromB === 'string') || (toB !== 'unbounded' && typeof toB === 'string');
-  const mode = spec.frame_mode ?? (hasDuration ? 'range' : 'rows');
-  if (mode === 'range') {
-    if (orderKey === undefined) throw new QueryModelError('a RANGE frame requires `_window.field`');
-    const cur = toMs(get(orderKey)(rows[ordered[pos]]));
-    if (cur === null) return [];
-    const lower = lowerBound(fromB, cur);
-    const upper = upperBound(toB, cur);
-    return ordered
-      .map((i) => rows[i])
-      .filter((r) => {
-        const t = toMs(get(orderKey)(r));
-        return t !== null && t >= lower && t <= upper;
-      });
-  }
-  if (mode === 'groups') {
-    const gid = new Array<number>(ordered.length);
-    let g = -1;
-    let prev: unknown;
-    ordered.forEach((i, p) => {
-      const v = orderKey === undefined ? p : get(orderKey)(rows[i]);
-      if (p === 0 || !_.isEqual(v, prev)) {
-        g += 1;
-        prev = v;
-      }
-      gid[p] = g;
-    });
-    const total = g + 1;
-    const posG = gid[pos];
-    const loG = fromB === 'unbounded' ? 0 : posG + (typeof fromB === 'number' ? fromB : 0);
-    const hiG = toB === 'unbounded' ? total - 1 : posG + (typeof toB === 'number' ? toB : 0);
-    return ordered.filter((_, p) => gid[p] >= Math.max(0, loG) && gid[p] <= Math.min(total - 1, hiG)).map((i) => rows[i]);
-  }
-  const lo = fromB === 'unbounded' ? 0 : pos + (typeof fromB === 'number' ? fromB : 0);
-  const hi = toB === 'unbounded' ? ordered.length - 1 : pos + (typeof toB === 'number' ? toB : 0);
-  return ordered.slice(Math.max(0, lo), Math.min(ordered.length - 1, hi) + 1).map((i) => rows[i]);
-}
-
-/** Per-position inclusive frame bounds for a ROWS-mode (or whole-partition) frame. */
-function rowFrameBounds(n: number, spec: WindowSpec): { lo: number[]; hi: number[] } | undefined {
-  const frame = spec.frame;
-  if (frame === undefined) {
-    return { lo: new Array<number>(n).fill(0), hi: new Array<number>(n).fill(n - 1) };
-  }
-  const [fromB, toB] = frame;
-  const hasDuration =
-    (fromB !== 'unbounded' && typeof fromB === 'string') || (toB !== 'unbounded' && typeof toB === 'string');
-  const mode = spec.frame_mode ?? (hasDuration ? 'range' : 'rows');
-  if (mode !== 'rows') return undefined; // groups/range frames stay on the materializing path
+/**
+ * Inclusive `[lo, hi]` per-position bounds for a running / sliding frame, or
+ * `undefined` for a predicate frame (which is position-independent and computed
+ * as a single filtered set).
+ */
+function scanRowBounds(n: number, frame: ScanFrame | undefined): { lo: number[]; hi: number[] } | undefined {
+  if (frame !== undefined && typeof frame === 'object') return undefined; // predicate frame
+  const size = typeof frame === 'number' ? frame : undefined;
   const lo = new Array<number>(n);
   const hi = new Array<number>(n);
   for (let pos = 0; pos < n; pos++) {
-    lo[pos] = Math.max(0, fromB === 'unbounded' ? 0 : pos + (typeof fromB === 'number' ? fromB : 0));
-    hi[pos] = Math.min(n - 1, toB === 'unbounded' ? n - 1 : pos + (typeof toB === 'number' ? toB : 0));
+    lo[pos] = size === undefined ? 0 : Math.max(0, pos - size + 1);
+    hi[pos] = pos;
   }
   return { lo, hi };
 }
 
-/** A monoid fold the fast window path can answer from prefix sums / a deque. */
+/** A monoid fold the fast scan path can answer from prefix sums / a deque. */
 function isFastFold(fold: Fold): boolean {
   return (
     '_sum' in fold || '_count' in fold || '_avg' in fold || '_min' in fold || '_max' in fold || '_ratio_of_sums' in fold
@@ -571,15 +505,21 @@ function prefix(ordered: number[], rows: Row[], val: (r: Row) => number): number
 
 const rangeSum = (p: number[], lo: number, hi: number): number => (hi < lo ? 0 : (p[hi + 1] ?? 0) - (p[lo] ?? 0));
 
-/** Sliding-window min/max over monotone `[lo, hi]` bounds via a monotonic deque. */
+/**
+ * Sliding-window min/max over monotone `[lo, hi]` bounds via a monotonic deque.
+ * A back entry is popped only when it is STRICTLY worse than the incoming value,
+ * so on ties the EARLIER index is retained — matching the naive fold's
+ * `reduce((a,b) => compareOrder(b,a) < 0 ? b : a)`, which keeps the FIRST minimal
+ * (so the fast path is bit-identical to the per-row frame fold).
+ */
 function monotonicFrames(vals: unknown[], lo: number[], hi: number[], isMin: boolean): unknown[] {
   const n = vals.length;
   const out = new Array<unknown>(n);
   const deque: number[] = [];
   let head = 0;
   let nextAdd = 0;
-  const notBetter = (a: unknown, b: unknown): boolean =>
-    isMin ? _.compareOrder(a, b) >= 0 : _.compareOrder(a, b) <= 0;
+  const strictlyWorse = (a: unknown, b: unknown): boolean =>
+    isMin ? _.compareOrder(a, b) > 0 : _.compareOrder(a, b) < 0;
   for (let pos = 0; pos < n; pos++) {
     const hiPos = hi[pos] ?? -1;
     while (nextAdd <= hiPos) {
@@ -588,7 +528,7 @@ function monotonicFrames(vals: unknown[], lo: number[], hi: number[], isMin: boo
         while (deque.length > head) {
           const backPos = deque[deque.length - 1];
           const bv = backPos === undefined ? undefined : vals[backPos];
-          if (bv !== null && bv !== undefined && notBetter(bv, v)) deque.pop();
+          if (bv !== null && bv !== undefined && strictlyWorse(bv, v)) deque.pop();
           else break;
         }
         deque.push(nextAdd);
@@ -607,8 +547,8 @@ function monotonicFrames(vals: unknown[], lo: number[], hi: number[], isMin: boo
   return out;
 }
 
-/** O(partition) evaluation of a ROWS-mode / whole-partition monoid window fold. */
-function evaluateWindowFast(
+/** O(partition) evaluation of a running / sliding monoid scan fold. */
+function evaluateScanFast(
   ordered: number[],
   rows: Row[],
   fold: Fold,
@@ -676,9 +616,16 @@ function evaluateWindowFast(
   }
 }
 
-function computeWindowColumn(rows: Row[], col: WindowColumn, ctx: EvalCtx): unknown[] {
-  const orderKey = col.spec.field;
-  const partitionKeys = partitionKeysOf(col.spec);
+/**
+ * One scan column over the relation's rows: partition, order each partition by
+ * the scan order key, and compute a value per row. Monoid folds take the O(partition)
+ * fast path (prefix sums / monotonic deque); `_filter` or a non-monoid fold falls
+ * back to a per-row frame fold (see `applyFold`) — for a predicate frame the frame
+ * set is position-independent, so it is computed ONCE per partition and broadcast.
+ */
+function computeScanColumn(rows: Row[], col: ScanColumn, ctx: EvalCtx, fallbackPartition: string[]): unknown[] {
+  const orderKey = col.spec.order_by;
+  const partitionKeys = partitionKeysOf(col.spec, fallbackPartition);
   const partitions = new Map<string, number[]>();
   rows.forEach((row, i) => {
     const key = JSON.stringify(partitionKeys.map((k) => get(k)(row)));
@@ -687,31 +634,45 @@ function computeWindowColumn(rows: Row[], col: WindowColumn, ctx: EvalCtx): unkn
     else list.push(i);
   });
   const out = new Array<unknown>(rows.length);
-  const fastEligible = isFastFold(col.fold) && col.fold._filter === undefined && col.spec.period === undefined;
+  const frame = col.spec.frame;
+  const predicateFrame = frame !== undefined && typeof frame === 'object' ? frame.where : undefined;
+  const fastEligible = isFastFold(col.fold) && col.fold._filter === undefined && predicateFrame === undefined;
   for (const indices of partitions.values()) {
-    const ordered =
-      orderKey === undefined
-        ? indices
-        : [...indices].sort((x, y) => _.compareOrder(get(orderKey)(rows[x]), get(orderKey)(rows[y])));
-    const bounds = fastEligible ? rowFrameBounds(ordered.length, col.spec) : undefined;
-    if (bounds !== undefined) {
-      evaluateWindowFast(ordered, rows, col.fold, bounds, out);
+    const ordered = [...indices].sort((x, y) => _.compareOrder(get(orderKey)(rows[x]), get(orderKey)(rows[y])));
+    if (predicateFrame !== undefined) {
+      // Position-independent: one filtered set, one value, broadcast to every row.
+      const frameRows = ordered.filter((i) => matches(predicateFrame, rows[i], ctx)).map((i) => rows[i]);
+      const value = applyFold(col.fold, frameRows, ctx);
+      for (const i of indices) out[i] = value;
+      continue;
+    }
+    const bounds = scanRowBounds(ordered.length, frame);
+    if (bounds !== undefined && fastEligible) {
+      evaluateScanFast(ordered, rows, col.fold, bounds, out);
     } else {
       ordered.forEach((rowIndex, pos) => {
-        out[rowIndex] = applyFold(col.fold, frameRowsFor(ordered, pos, rows, col.spec), ctx);
+        const lo = bounds?.lo[pos] ?? 0;
+        const hi = bounds?.hi[pos] ?? ordered.length - 1;
+        const frameRows = ordered.slice(lo, hi + 1).map((i) => rows[i]);
+        out[rowIndex] = applyFold(col.fold, frameRows, ctx);
       });
     }
   }
   return out;
 }
 
-/** Attach every window-fold column in `select` to each row (the window phase). */
-function applyWindowPhase(rows: Row[], select: SelectItem[] | undefined, ctx: EvalCtx): Row[] {
-  const cols = collectWindowColumns(select);
+/** Attach every scan-fold column in `select` to each row (the scan broadcast pass). */
+function applyScanPhase(
+  rows: Row[],
+  select: SelectItem[] | undefined,
+  ctx: EvalCtx,
+  fallbackPartition: string[]
+): Row[] {
+  const cols = collectScanColumns(select);
   if (cols.length === 0) return rows;
   let out = rows;
   for (const col of cols) {
-    const column = computeWindowColumn(rows, col, ctx);
+    const column = computeScanColumn(rows, col, ctx, fallbackPartition);
     out = out.map((row, i) => ({ ...row, [col.name]: column[i] }));
   }
   return out;
@@ -790,8 +751,8 @@ function projectGroup(group: Grouped, query: QueryExpression, ctx: EvalCtx): Row
     }
     const name = item.name ?? 'nested';
     const agg = item.aggregate;
-    if (agg !== undefined && isFold(agg) && agg._window !== undefined) {
-      out[name] = group.record[name]; // the window column, computed in the window phase
+    if (agg !== undefined && isFold(agg) && agg._scan !== undefined) {
+      out[name] = group.record[name]; // the scan column, computed in the scan pass
     } else {
       const key = computeKey(item);
       let rows = nested.get(key);
@@ -834,13 +795,14 @@ export function execute(query: QueryExpression, rows: Row[], ctx?: EvalCtx): Row
 
   if (items.length === 0) {
     // A relation-valued select with no group_by nests over the SOURCE (the parent)
-    // and emits ONE row (§15.10) — unless a window fold is present (broadcast, §15.7).
-    const hasWindow = collectWindowColumns(select).length > 0;
+    // and emits ONE row (§15.10) — unless a scan fold is present (broadcast, §15.7).
+    const hasScan = collectScanColumns(select).length > 0;
     const relations = (select ?? []).filter(
       (item): item is QueryExpression =>
-        typeof item !== 'string' && !(item.aggregate !== undefined && isFold(item.aggregate) && item.aggregate._window !== undefined)
+        typeof item !== 'string' && !(item.aggregate !== undefined && isFold(item.aggregate) && item.aggregate._scan !== undefined)
     );
-    if (relations.length > 0 && !hasWindow) {
+    // A scan fold keeps the row-wise path (no single-row relation nesting).
+    if (relations.length > 0 && !hasScan) {
       const out: Row = {};
       const nested = new Map<string, Row[]>();
       for (const item of select ?? []) {
@@ -864,7 +826,7 @@ export function execute(query: QueryExpression, rows: Row[], ctx?: EvalCtx): Row
       return applyTail(rowsOut, query, (r) => r);
     }
 
-    let rowsOut = applyWindowPhase(data, select, context);
+    let rowsOut = applyScanPhase(data, select, context, []);
     const qualify = query.qualify;
     if (qualify !== undefined) rowsOut = rowsOut.filter((r) => matches(qualify, r, context));
     const tailed = applyTail(rowsOut, query, (r) => r);
@@ -879,7 +841,7 @@ export function execute(query: QueryExpression, rows: Row[], ctx?: EvalCtx): Row
         }
         const name = item.name ?? 'nested';
         const agg = item.aggregate;
-        if (agg !== undefined && isFold(agg) && agg._window !== undefined) out[name] = row[name];
+        if (agg !== undefined && isFold(agg) && agg._scan !== undefined) out[name] = row[name];
         else {
           const key = computeKey(item);
           let rows = nested.get(key);
@@ -927,13 +889,13 @@ export function execute(query: QueryExpression, rows: Row[], ctx?: EvalCtx): Row
   }
   if (postFilter !== undefined) grouped = grouped.filter((g) => matches(postFilter, g.record, context));
 
-  // Window phase over the group records (partition defaults to the group_by — here,
-  // each record is one group, so the window is whole-partition unless overridden).
-  if (collectWindowColumns(select).length > 0) {
-    const records = applyWindowPhase(
+  // Scan pass over the group records (partition defaults to the enclosing group_by).
+  if (collectScanColumns(select).length > 0) {
+    const records = applyScanPhase(
       grouped.map((g) => g.record),
       select,
-      context
+      context,
+      keyItems.map(keyName)
     );
     grouped = grouped.map((g, i) => ({ record: records[i], rows: g.rows }));
   }

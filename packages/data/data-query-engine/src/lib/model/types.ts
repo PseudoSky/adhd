@@ -20,10 +20,8 @@ export type {
   QuantileSketch,
   QueryExpression,
   Row,
+  ScanFrame,
+  ScanSpec,
   ScalarOperator,
   SelectItem,
-  WindowBound,
-  WindowFrame,
-  WindowFrameMode,
-  WindowSpec,
 } from '../expressions';
