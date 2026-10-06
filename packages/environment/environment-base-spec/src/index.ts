@@ -206,6 +206,124 @@ export interface EnvironmentSpec<T = Record<string, unknown>> {
   readonly __configShape?: T;
 }
 
+// ============================================================================
+// 3a. Native tooling config surface (ADR-0008 D10 / NAT-TOOL-7)
+// ============================================================================
+
+/**
+ * Builds the canonical native-tooling `FieldSpec` fragment for a consumer's
+ * env-var `prefix` (ADR-0008 D10): `nativeTooling.fs.*`,
+ * `nativeTooling.shell.*`, `nativeTooling.dispatch.*`, and
+ * `nativeTooling.hitl`.
+ *
+ * Why this lives here and not in a host: the field *definitions* are the
+ * portable contract every `@adhd/environment` consumer shares (agent-mcp today,
+ * a future host next), so they belong to the environment family's canonical
+ * spec package — the same package that owns the `FieldSpec` type.
+ *
+ * Why a builder, not a frozen const: each field's env-var name is
+ * `"<prefix>_NATIVE_TOOLING_<LEAF>"` and must be declared **explicitly**. The
+ * generic `inferEnvVar` collapses camelCase path segments (`nativeTooling` →
+ * `NATIVETOOLING`), which is not this repo's `ADHD_AGENT_*` env convention.
+ * Taking the prefix as a parameter keeps the fragment portable across consumers
+ * while each gets correct, stable env names (e.g. prefix `ADHD_AGENT` →
+ * `ADHD_AGENT_NATIVE_TOOLING_FS_ROOT`).
+ *
+ * TYPED CONFIG ONLY — these are declarative VALUES, never feature switches
+ * (`adhd ADR-0001` / `sox ADR-0013`). A member is disabled by setting the
+ * `nativeTooling` member itself to `false` on the agent definition, never by a
+ * `*_ENABLED` env toggle; this fragment declares no such switch.
+ *
+ * Deliberate omissions:
+ *   - Only the `Builtin…Overrides` **leaves** representable as a flat
+ *     `FieldSpec` appear here. The tool-name→action `permissions` rule map (and
+ *     `shell.env`) are JSON objects with no `FieldType` and are therefore NOT
+ *     config fields — they are authored on the agent definition.
+ *   - Session retention (`retention` / `ttlMs`) is a session/run surface
+ *     (ADR-0008 D6), never a native-tooling config field.
+ *   - The retired ask-policy knobs are absent (ADR-0008 D6 — the ask chain is
+ *     fixed and the only knob is `hitl`).
+ *   - The legacy authored-shell-server path env var is retired: the authored
+ *     `tools/mcp-shell/server.mjs` was removed by NAT-TOOL-4, and the adopted
+ *     `uvx mcp-shell-server` is configured through `nativeTooling.shell.*`.
+ *
+ * No `default` for `fs.root`/`shell.root`: under ADR-0008 D4 the root resolves
+ * at TASK time against the dispatching cwd, never baked into stored config.
+ */
+export function nativeToolingConfigFieldSpecs(prefix: string): Record<string, FieldSpec> {
+  const env = (leaf: string): string => `${prefix}_NATIVE_TOOLING_${leaf}`;
+  return {
+    'nativeTooling.fs.root': {
+      type: 'string',
+      env: env('FS_ROOT'),
+      description:
+        'Filesystem root exposed to the adopted fs server. Unset ⇒ the dispatching cwd at task time (ADR-0008 D4).',
+    },
+    'nativeTooling.fs.readOnly': {
+      type: 'boolean',
+      env: env('FS_READ_ONLY'),
+      description:
+        'Reserved: the reference fs server exposes no stdio read-only flag; read-only roots are enforced via srt / Docker ro (ADR-0008 D7).',
+    },
+    'nativeTooling.fs.allowedTools': {
+      type: 'array',
+      env: env('FS_ALLOWED_TOOLS'),
+      items: { type: 'string' },
+      description: 'Allowlist of fs tool names (adopted server surface).',
+    },
+    'nativeTooling.fs.disallowedTools': {
+      type: 'array',
+      env: env('FS_DISALLOWED_TOOLS'),
+      items: { type: 'string' },
+      description: 'Denylist of fs tool names (wins over allowedTools).',
+    },
+    'nativeTooling.shell.root': {
+      type: 'string',
+      env: env('SHELL_ROOT'),
+      description:
+        'Working directory for the adopted shell server. Unset ⇒ the dispatching cwd at task time.',
+    },
+    'nativeTooling.shell.allowCommands': {
+      type: 'array',
+      env: env('SHELL_ALLOW_COMMANDS'),
+      items: { type: 'string' },
+      description:
+        'Command NAMES accepted by the adopted argv-allowlist server (a passthrough, not a per-command gate — ADR-0008 D5/D7).',
+    },
+    'nativeTooling.shell.denyCommands': {
+      type: 'array',
+      env: env('SHELL_DENY_COMMANDS'),
+      items: { type: 'string' },
+      description: 'Command NAMES explicitly rejected (server-side allowlist passthrough).',
+    },
+    'nativeTooling.shell.timeoutMs': {
+      type: 'integer',
+      env: env('SHELL_TIMEOUT_MS'),
+      minimum: 0,
+      description: 'Default command timeout, in milliseconds.',
+    },
+    'nativeTooling.dispatch.allowedTools': {
+      type: 'array',
+      env: env('DISPATCH_ALLOWED_TOOLS'),
+      items: { type: 'string' },
+      description: 'Allowlist of dispatch (agent-mcp self) tool names.',
+    },
+    'nativeTooling.dispatch.disallowedTools': {
+      type: 'array',
+      env: env('DISPATCH_DISALLOWED_TOOLS'),
+      items: { type: 'string' },
+      description: 'Denylist of dispatch (agent-mcp self) tool names (wins over allowedTools).',
+    },
+    'nativeTooling.hitl': {
+      type: 'boolean',
+      env: env('HITL'),
+      default: true,
+      description:
+        'Human-in-the-loop enablement (ADR-0008 D6). Default true. When false, request_human_input is hidden and suspend is pruned from the ask chain. Legacy alias: allowHumanInput.',
+    },
+  };
+}
+
 /** Options accepted by the `Environment` constructor. Every field optional —
  *  the whole point of zero-config. */
 export interface EnvironmentOptions {
