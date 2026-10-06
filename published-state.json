@@ -36,10 +36,10 @@
     "publishedFromRef": "a49d4fbe51581ba895a217105b27c18d65190c69"
   },
   "@adhd/agent-engine-orchestrator": {
-    "version": "2.3.3",
-    "normalizedHash": "sha256:d2456e559444205576f53f3f94202edcc2af4dfa511e2abc0f67e4f87622cabe",
-    "publishedIntegrity": "sha512-CMIjvotqVB/D3d0lIvHeLIPliHKc0yzw9WbGYRRfvgIsiK7Hri3KiKQ5JzjBiD4ioSz9s5OGbzCe36aJbC2/1Q==",
-    "publishedFromRef": "a1a6ba024c5526b930f97c5420e920639d14e110"
+    "version": "2.3.4",
+    "normalizedHash": "sha256:436e9cd6c6e8feebcff3b0eb51c36434f06ba613f1f7c38d712739b89d99f0f1",
+    "publishedIntegrity": "sha512-nnyvLoijvO58i/dJ2tROduvhVcgzBv+UwQZhJJ+yTTuq3G6oKOFtTREVEwZ40E6xtGSUdwYpZpIe8uDqjz6zzA==",
+    "publishedFromRef": "5bb8a9d5bbff1035b90609624473246d927ebc4d"
   },
   "@adhd/agent-generator-plugin": {
     "version": "0.1.6",
@@ -48,10 +48,10 @@
     "publishedFromRef": "a49d4fbe51581ba895a217105b27c18d65190c69"
   },
   "@adhd/agent-mcp": {
-    "version": "2.3.4",
-    "normalizedHash": "sha256:18827cf91272f039a6669afc8dc262a5a8d83385a70894d5a2278069338c616a",
-    "publishedIntegrity": "sha512-lgvFOejZZsgyLtgO3HW3oGFghNhMU9EBsJPJdej/LwH3e8TtFLmWOxFFUBhoK5we4inZxUZBjdSFrSiqhBJOHg==",
-    "publishedFromRef": "a1a6ba024c5526b930f97c5420e920639d14e110"
+    "version": "2.3.5",
+    "normalizedHash": "sha256:071a643e4616ee9f1fd1bf9d34862f1cceecc7970dc8b83d47bcd4d8190eacfa",
+    "publishedIntegrity": "sha512-UbdyqcM62LKGpbE0qtFngCOB3Lf4FroUl5PjCqKVI7L1lU6msDWN5JQ/a4p2lJsAuHYSZcNr8PFZw8qAnfjE2g==",
+    "publishedFromRef": "5bb8a9d5bbff1035b90609624473246d927ebc4d"
   },
   "@adhd/agent-plugin-budget": {
     "version": "0.2.4",
@@ -312,10 +312,10 @@
     "publishedFromRef": "a49d4fbe51581ba895a217105b27c18d65190c69"
   },
   "@adhd/dispatch-orchestrator": {
-    "version": "0.1.5",
-    "normalizedHash": "sha256:9503c40f936b9d8f8805380993d0aa9bd0915eb4686b2b25db31544742c33969",
-    "publishedIntegrity": "sha512-wVfgXGFVVQ00yZ91z5Br9YLKW36zrAW4ul7N8kQeUvMrkmFOYgBfgZGvVPZseIxTaOfJtRsXHeD9ESOvJPjWtg==",
-    "publishedFromRef": "a1a6ba024c5526b930f97c5420e920639d14e110"
+    "version": "0.1.6",
+    "normalizedHash": "sha256:1aec61ea7dbcd5d6cd4be565d2e78871e7f15cc6a783f46e5d6909a19d4d5833",
+    "publishedIntegrity": "sha512-BfDX9z0EvjvCefD+dJ5In/mywoibNt44AUd+APvBDM4O02BItNNjumFjTHqR0bDes7BzJeuFU3YhquKuUAEQiQ==",
+    "publishedFromRef": "5bb8a9d5bbff1035b90609624473246d927ebc4d"
   },
   "@adhd/dispatch-serializer-json": {
     "version": "0.1.3",
