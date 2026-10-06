@@ -24,34 +24,46 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+/**
+ * An identity-keyed memo for a single canonicalization pass. A shared-reference
+ * (DAG) query would otherwise re-canonicalize a reused subexpression once per
+ * reference — ~2^depth — so the planner threads ONE memo through every key it
+ * computes, making the whole pass O(nodes). Query objects are treated as
+ * immutable for the duration of a pass (they are).
+ */
+export type CanonMemo = Map<unknown, string>;
+
 /** A canonical JSON string: object keys sorted; commutative arrays normalized. */
-function canon(value: unknown, key?: string): string {
+function canon(value: unknown, key: string | undefined, memo: CanonMemo): string {
   if (Array.isArray(value)) {
-    const arr: readonly unknown[] = value;
-    let items = arr.map((v) => canon(v));
-    if (key !== undefined && SORT_DEDUP.has(key)) items = [...new Set(items)].sort();
-    else if (key !== undefined && SORT_KEEP.has(key)) items = [...items].sort();
+    const items = value.map((v) => canon(v, undefined, memo));
+    if (key !== undefined && SORT_DEDUP.has(key)) return `[${[...new Set(items)].sort().join(',')}]`;
+    if (key !== undefined && SORT_KEEP.has(key)) return `[${[...items].sort().join(',')}]`;
     return `[${items.join(',')}]`;
   }
   if (isRecord(value)) {
+    const hit = memo.get(value);
+    if (hit !== undefined) return hit;
     const keys = Object.keys(value).sort();
-    return `{${keys.map((k) => `${JSON.stringify(k)}:${canon(value[k], k)}`).join(',')}}`;
+    const out = `{${keys.map((k) => `${JSON.stringify(k)}:${canon(value[k], k, memo)}`).join(',')}}`;
+    memo.set(value, out);
+    return out;
   }
   const out = JSON.stringify(value);
   return out === undefined ? 'null' : out;
 }
 
 /** The structural canonical string of a predicate. */
-export function canonicalizePredicate(pred: Predicate): string {
-  return canon(pred);
+export function canonicalizePredicate(pred: Predicate, memo: CanonMemo = new Map()): string {
+  return canon(pred, undefined, memo);
 }
 
 /**
  * The full plan key — includes `name` and `source`. Stable across object-key order
  * and `_and`/`_or`/`_in`/`_nin`/`group_by` operand order.
  */
-export function planKey(query: QueryExpression): string {
-  return canon(query);
+export function planKey(query: QueryExpression, memo: CanonMemo = new Map()): string {
+  return canon(query, undefined, memo);
 }
 
 /**
@@ -59,11 +71,11 @@ export function planKey(query: QueryExpression): string {
  * node's `name` (only its parent labels the output), so two items that are identical
  * but for `name` compute identically and may share one evaluation.
  */
-export function computeKey(query: QueryExpression): string {
+export function computeKey(query: QueryExpression, memo: CanonMemo = new Map()): string {
   const clone: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(query)) {
     if (k === 'name') continue;
     clone[k] = v;
   }
-  return canon(clone);
+  return canon(clone, undefined, memo);
 }

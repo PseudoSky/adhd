@@ -96,7 +96,9 @@ export class RoaringBitmap {
   toArray(): number[] {
     const out: number[] = [];
     for (const [hi, c] of [...this.containers.entries()].sort((a, b) => a[0] - b[0])) {
-      const base = hi << 16;
+      // `hi << 16` is a signed int32 shift; for hi >= 32768 (values >= 2^31) it
+      // overflows to a negative base. Coerce back to unsigned (`has` already does).
+      const base = (hi << 16) >>> 0;
       if (Array.isArray(c)) for (const lo of c) out.push(base + lo);
       else for (let w = 0; w < c.length; w++) {
         let bits = c[w] ?? 0;

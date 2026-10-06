@@ -33,16 +33,54 @@ pnpm add @adhd/data-query-engine
 
 ### Query API
 
-| Function (params)                   | Description                        |
-| ----------------------------------- | ---------------------------------- |
-| `.where(filter: QueryExpression)`   | Filter data by object or predicate |
-| `.where(filter: function)`          | Filter data by custom function     |
-| `.orderBy(sort: OrderByExpression)` | Sort by fields                     |
-| `.limit(n: number)`                 | Limit results                      |
-| `.offset(n: number)`                | Skip results                       |
-| `.distinctOn(fields: string[])`     | Remove duplicates by fields        |
-| `.select(fields: string[])`         | Select fields (TODO)               |
-| `.view()`                           | Get the result                     |
+Every `QueryExpression` slot — plus the `_scan` fold-mode — has a fluent builder
+(each returns `this`):
+
+| Function (params)                     | Slot                            |
+| ------------------------------------- | ------------------------------- |
+| `.from(source: string)`               | `source` (input binding)        |
+| `.as(name: string)`                   | `name` (output identity)        |
+| `.aggregate(expr)`                    | `aggregate` (leaf value)        |
+| `.where(predicate)`                   | `where` (pre + post-group)      |
+| `.qualify(predicate)`                 | `qualify` (post-scan)           |
+| `.groupBy(items)`                     | `group_by`                      |
+| `.keep({ n, other: true })`           | `keep` (top-N + `_other`)       |
+| `.select(items)`                      | `select`                        |
+| `.scan(name, fold, spec)`             | append a `_scan` fold to `select` |
+| `.orderBy(sort)`                      | `order_by`                      |
+| `.distinctOn(fields)`                 | `distinct_on`                   |
+| `.offset(n)` / `.limit(n)`            | `offset` / `limit`              |
+| `.rollup(...dims)` / `.cube(...dims)` | grouping sets (as `select` relations) |
+| `.view()` / `.toJson()`               | run / serialise                 |
+
+```ts
+new DataView(rows)
+  .select(['t'])
+  .scan('running', { _sum: 'amount' }, { order_by: 't', partition_by: 'agent' })
+  .qualify({ running: { _gt: 0 } })
+  .view();
+```
+
+The builders mutate the instance. For a **stateless run** (no instance, no
+mutation), use the static `DataView.query(data, expr)` — and `DataView<TIn, TOut>`
+types input rows vs output rows (a grouped result is `TOut`, not `TIn`):
+
+```ts
+DataView.query(rows, { group_by: ['region', { name: 'total', aggregate: { _sum: 'amount' } }] });
+// typed: new DataView<InRow, GroupRow>(rows, groupedExpr).view(): GroupRow[]
+```
+
+`rollup('region','product')` and `cube('region','product')` build a parent query
+with no `group_by` whose `select` lists one relation per grouping set (the
+aggregates are the query's existing `groupBy(...)` items, or a `_count` default):
+
+```ts
+new DataView(rows)
+  .groupBy([{ name: 'amount', aggregate: { _sum: 'amount' } }])
+  .cube('region', 'product')
+  .view();
+// → [{ region_product: [...], region: [{east,3},{west,4}], product: [{x,5},{y,2}], total: [{7}] }]
+```
 
 ### Operators
 
@@ -201,9 +239,41 @@ Combine filters using logical operators:
 
 ---
 
-## Query planner (v2 `queryModel`)
+## The query grammar
 
-The v2 model — exported under the `queryModel` namespace (`export * as queryModel from './lib/model'`) — adds a self-similar, position-typed grammar, a reference executor, an incremental multi-source `DataView`, and a **rule-based planner** that turns the engine's implicit access decision into an explicit plan. Namespace-additive: the shipped `QueryExpression`/`DataView` surface is unchanged.
+`DataView` is ONE class with ONE grammar (`QueryExpression`) — the self-similar,
+position-typed model. There is no second syntax and no alias layer:
+
+- `group_by` and `select` hold queries; a leaf is a query carrying an `aggregate`
+  (a fold or arithmetic expression).
+- `where` carries BOTH the pre-group and post-group predicate in one tree, split
+  by the **phase rule** (a leaf's phase is decided by reference); `qualify` is the
+  post-scan filter; `keep` folds a top-N tail into one `_other` row.
+- A running / sliding aggregate is `_scan` on a fold — a **fold-mode**, not a
+  phase and not a query-level key. `_scan: { order_by, frame?, partition_by? }`.
+  The `frame` shapes are: `'running'` (default; == `{ rows: ['unbounded', 0] }`), a
+  sliding size `n`, a positional `{ rows: [from, to] }` (centered/lookahead, e.g.
+  `{ rows: [-1, 1] }`), a `{ range: [from, to] }` (key/value/temporal bounds on the
+  order key — a number is a value delta, an ISO-8601 duration a temporal offset),
+  a `{ groups: [from, to] }` (peer-group offsets), or `{ where }` (the
+  position-independent set of partition rows matching the predicate). It broadcasts
+  one value per row.
+- `_filter` scopes a fold's input (orthogonal to `_scan`).
+
+Every classic operation is expressed directly in this grammar:
+
+| want | write |
+| ---- | ----- |
+| HAVING | a post-group leaf in `where`, e.g. `{ where: { total: { _gt: 0 } } }` |
+| time-scoped aggregate | `_filter` on the fold, e.g. `{ _sum: 'cost', _filter: { t: { _period: 'P1D' } } }` |
+| running / sliding aggregate | `_scan` on a fold, e.g. `{ _sum: 'cost', _scan: { order_by: 't', frame: 'running' } }` |
+| broadcast (`SUM(x) OVER (PARTITION BY g)`) | a `_scan` fold in `select` + `qualify` |
+| top-N | `order_by` + `limit`; with an `_other` tail, `keep: { n, other: true }` |
+| hierarchical grouping | a nested `select` (a query nested under its `name`) |
+| time bucket | `group_by: [{ _bucket: { field: 't', unit: 'hour' } }]` |
+
+A grouping-set family (`_rollup`/`_cube`) is expressed as `select` relations — see
+`DataView.rollup(...)`/`cube(...)`.
 
 ### `canonical.ts` — plan identity
 
@@ -237,7 +307,7 @@ dv.query({ source: 'sales', where: { region: { _eq: 'west' }, amount: { _gte: 10
 
 Equality (`PostingIndex`), range (B+ tree), and low-cardinality (`RoaringBitmap`) indexes are maintained across `insert`/`append`/`remove`; the planner picks among them and falls back to a scan for any non-indexable disjunct.
 
-**Notes.** `group_by` output key order is unspecified — canonicalization treats `group_by` items as an order-independent set, so two queries differing only in item order share one incremental cache. A range index over a field that has held a non-finite number (NaN/±Infinity) or a non-number falls back to a scan, so the index can never change a result. The reference executor materializes window frames, so an unbounded frame is quadratic in the partition size (a bounded frame is linear); the prefix-sum/deque acceleration is part of the §13 optimization layer, not this reference executor.
+**Notes.** `group_by` output key order is unspecified — canonicalization treats `group_by` items as an order-independent set, so two queries differing only in item order share one incremental cache. A range index over a field that has held a non-finite number (NaN/±Infinity) or a non-number falls back to a scan, so the index can never change a result. `_scan` is O(partition) for the monoid folds (`_sum`/`_count`/`_avg`/`_ratio_of_sums` via prefix sums, `_min`/`_max` via a monotonic deque; running and sliding). The holistic folds (`_distinct_count`/`_quantile`) have no fast path and fall back to a per-row frame fold — documented, not silent. A predicate frame is position-independent (one filtered set per partition).
 
 
 Example:
