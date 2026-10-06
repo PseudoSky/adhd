@@ -636,7 +636,7 @@ describe('claim — real concurrent-process CAS proof (BEGIN IMMEDIATE, SPEC.md 
         ' — CAS held this run despite the downgrade (not guaranteed under deferred; see comment above)';
     } else if (unexpected.length > 0) {
       observationNote =
-        ' — DOWNGRADE MANIFESTED AS DRIVER-LEVEL CHAOS instead of a clean CAS rejection (also a break: the CONTROL case never produces an unclassified error at this concurrency level)';
+        " — EXPECTED DOWNGRADE SIGNATURE (1687b889 AC3): the deferred BEGIN took no lock, the loser's read->write upgrade hit a stale snapshot and the driver refused it loudly (unclassified WriteIOError) instead of letting it silently double-win; the production immediate-mode CONTROL case above never produces this error";
     } else {
       observationNote = '';
     }
@@ -646,6 +646,20 @@ describe('claim — real concurrent-process CAS proof (BEGIN IMMEDIATE, SPEC.md 
         `results=${JSON.stringify(results)}` +
         observationNote
     );
+
+    // (1687b889 AC3) An unexpected error here is the downgrade's expected, loud signature — the
+    // driver's stale-snapshot refusal (surfaced as WriteIOError, see
+    // stale-snapshot-classification.spec.ts) or lock contention — never some other fault class.
+    for (const u of unexpected) {
+      expect(
+        String((u as { message?: string }).message),
+        `unexpected error is not the deferred-downgrade signature: ${JSON.stringify(
+          u
+        )}`
+      ).toMatch(
+        /Database snapshot is stale|Write contention|database is (locked|busy)/i
+      );
+    }
 
     // The one invariant that must ALWAYS hold regardless of mode or failure signature: the
     // store itself is never left corrupted — reopened fresh, the persisted `claimedBy` (if any)
