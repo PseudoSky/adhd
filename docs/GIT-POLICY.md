@@ -1670,3 +1670,38 @@ Schema version 1.
   them already green: `nx affected -t test build lint --base=1bcc147d` exit 0, and directed that none
   be run). This record is the only change to this file in this operation. Recorded under §Commit
   convention's `docs(<area>):` scope.
+
+- **2026-10-04 — operation record: land of `fix/native-tooling-hitl-gate-9c4e` (dispatch-2026-10-04-9c4e).**
+  Landed the HITL-gate fix onto `main` as a **merge commit** `5ad44fcd` (parents `890076cb` =
+  pre-merge `main`, `17f6dfb7` = branch head), moving `main` `890076cb` → `5ad44fcd`; 9 files,
+  +817/−24. The branch carried one commit (`f4b631b6..17f6dfb7`), so the merge-base `f4b631b6`
+  differs from pre-merge `main` `890076cb` and the landing is a genuine non-fast-forward. §Branching
+  & merge was the deciding rule: this history "carries true merge commits" and ff-only is not
+  enforced, while rebase-in-flight is permitted only on a branch "solely your own" — this is an
+  in-flight executor branch, not the operator's, so rewriting its commit was out; the dispatch
+  directed `--no-ff`. Dry-run `git merge-tree --write-tree --name-only main 17f6dfb7` exited 0,
+  producing tree `578ded04` with no conflict hunks, and the actual `git merge --no-ff
+  fix/native-tooling-hitl-gate-9c4e -m "fix(native-tooling): hitl advertisement + one-shot ask
+  fail-closed + gate wording (0ea6f9e0, f5abca83)"` was conflict-free (ort strategy, exit 0; the sole
+  `Auto-merging` line, `orchestrator.ts`, resolved with no conflict). The commit folds FIX1 (HITL
+  advertisement via `effectiveHitl`, `0ea6f9e0`), FIX2 (one-shot ask → fail-closed
+  `PERMISSION_ASK_DENIED`, `f5abca83`), FIX3 (gate wording) and FIX4 (dead `isEphemeral`). A
+  concurrent agent's uncommitted work was present in the working tree throughout — 12 modified and 4
+  untracked paths, all under `entrypoint/backlog/**` and `docs/plan/backlog-consolidation/**` — and
+  was proven disjoint from the merge's changed paths (`comm -12` of the two path sets = 0 lines)
+  before the merge ran, then neither staged, swept, nor modified (the post-merge `git status
+  --porcelain` is byte-for-byte the same 16 paths). No conflict arose because the two sets are
+  disjoint: the branch touched `docs/decisions/0008-*.md`, `entrypoint/agent-mcp/**`, and
+  `packages/agent/agent-engine-orchestrator/**`, none of which the dirt touches. The staged index was
+  empty before the merge (`git diff --cached --name-only` empty) and no `pre-merge-commit` hook exists
+  in `.githooks/`, so none ran. Post-merge `git rev-list --count main..fix/native-tooling-hitl-gate-9c4e`
+  = 0 and `git merge-base --is-ancestor 17f6dfb7 main` exits 0, so the commit is contained. The
+  worktree `.worktrees/wt-hitl-gate-9c4e` was then reaped under §Cleanup's three-part test: `git
+  status --porcelain` inside it was empty, it carried no `locked` line, and its head `17f6dfb7` was an
+  ancestor of `main` after the merge — so `git worktree remove` (no `--force`) ran and the branch was
+  deleted with `git branch -d fix/native-tooling-hitl-gate-9c4e` (was `17f6dfb7`); the merged commit
+  remains reachable from the durable `main` ref, so recovery does not depend on the reflog. No push
+  (the dispatch directed none) and no gates were run by this operation (the dispatch reported them
+  already green: `nx affected -t test build lint --base=1bcc147d` exit 0, and builds + verify-dist-load
+  exit 0). This record is the only change to this file in this operation. Recorded under §Commit
+  convention's `docs(<area>):` scope.
