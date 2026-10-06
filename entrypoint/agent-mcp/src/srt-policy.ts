@@ -91,6 +91,13 @@ export const DEFAULT_SRT_ALLOWED_DOMAINS: readonly string[] = [
 export function defaultSrtAllowWrite(): string[] {
   const candidates = [
     join(homedir(), '.cache', 'uv'),
+    // `uvx` unpacks/installs the tool it runs under `~/.local/share/uv/tools`,
+    // NOT `~/.cache/uv`. Without this root the wrapped `uvx mcp-shell-server`
+    // fails with "Could not create temporary file … Operation not permitted"
+    // (surfaced by NAT-TOOL-9's live fs/shell e2e). `~/.local/share` is the
+    // parent uv also touches; both are needed for a first-run tool install.
+    join(homedir(), '.local', 'share', 'uv'),
+    join(homedir(), '.local', 'share'),
     join(homedir(), '.npm'),
     join(homedir(), '.cache'),
     tmpdir(),

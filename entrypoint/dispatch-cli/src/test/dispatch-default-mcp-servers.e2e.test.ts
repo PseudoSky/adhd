@@ -19,7 +19,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import type { DispatchUnit } from '@adhd/dispatch-base-spec';
 
-import { defaultDispatchMcpServers } from '../lib/core.js';
+import { defaultDispatchMcpServers, resolveDispatchMcpServers } from '../lib/core.js';
 import {
   assertAgentMcpBuilt,
   cleanupScratch,
@@ -71,4 +71,40 @@ describe('daafe2d3 — dispatch-created agents get memory-server + backlog (real
       await runner.close().catch(() => undefined);
     }
   }, 60_000);
+});
+
+describe('NAT-TOOL-9 — the dispatch host resolves the native toolset from ONE producer', () => {
+  it('resolveDispatchMcpServers yields fs/shell/dispatch + memory/backlog, rooted at the dispatching cwd', () => {
+    const map = resolveDispatchMcpServers({ cwd: '/P' });
+
+    // Keys come only from the ONE catalog (fs/shell/agent-mcp) + the explicit half.
+    expect(Object.keys(map).sort()).toEqual(
+      ['agent-mcp', 'backlog', 'fs', 'memory-server', 'shell'].sort()
+    );
+
+    const fs = map['fs'] as unknown as { transport: string; command: string; args?: string[]; cwd?: string };
+    expect(fs).toMatchObject({ transport: 'stdio', command: 'srt', cwd: '/P' });
+    const fsArgs = fs.args ?? [];
+    expect(fsArgs[fsArgs.length - 1], 'fs root is the dispatching cwd').toBe('/P');
+
+    const shell = map['shell'] as unknown as { transport: string; command: string; cwd?: string };
+    expect(shell).toMatchObject({ transport: 'stdio', command: 'srt', cwd: '/P' });
+
+    expect(map['agent-mcp']).toMatchObject({ transport: 'stdio' });
+    expect(map['memory-server']).toMatchObject({ transport: 'sse' });
+    expect(map['backlog']).toMatchObject({ transport: 'stdio', command: 'node' });
+  });
+
+  it('the dispatch host resolves fs/shell through the ONE producer (no second producer)', () => {
+    // The dispatch host authors no fs/shell config of its own — it delegates to
+    // `@adhd/agent-core-native-tooling`'s single producer (D11 #1/#12). The
+    // exhaustive source-level guard (and its revert-failing negative control)
+    // lives in agent-mcp's `default-mcp-producer.guard.test.ts`.
+    const source = resolveDispatchMcpServers.toString();
+    expect(source, 'must delegate to the single native-tooling producer').toContain(
+      'resolveNativeToolingMap'
+    );
+    expect(source).not.toContain('server-filesystem');
+    expect(source).not.toContain('mcp-shell-server');
+  });
 });
