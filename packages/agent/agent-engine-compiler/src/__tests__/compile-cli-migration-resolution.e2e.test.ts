@@ -1,5 +1,5 @@
 /**
- * compile-cli-migration-resolution.test.ts
+ * compile-cli-migration-resolution.e2e.test.ts
  *
  * Regression test for the sibling-migration-folder resolution bug in
  * `cli/compile.ts` (BUG: `AI_DIST = path.resolve(__dirname, '../../../')`

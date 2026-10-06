@@ -38,7 +38,7 @@
  *     reachable well inside the deadline — this test PASSES.
  *   Verified manually during development by reverting the guard in
  *   `src/index.ts` to the pre-fix comparison and re-running this file alone
- *   (`npx vitest run src/__tests__/main-entry-symlink.test.ts`): it fails on
+ *   (`npx vitest run src/__tests__/main-entry-symlink.e2e.test.ts`): it fails on
  *   a deadline timeout with the pre-fix guard, and passes with the fix.
  *
  * BUG-011 residual divergence (product re-verified 2026-08-08 on the

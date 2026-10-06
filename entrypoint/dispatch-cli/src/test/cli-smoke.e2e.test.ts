@@ -1,5 +1,5 @@
 /**
- * cli-smoke.spec.ts — the mandated DEFAULT-RUNNING smoke test for the
+ * cli-smoke.e2e.test.ts — the mandated DEFAULT-RUNNING smoke test for the
  * dispatch-cli entrypoint (dag.json milestone "cli", op cli.2).
  *
  * This target `dependsOn: ["generate-cli"]` (project.json), so `nx test

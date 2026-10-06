@@ -39,6 +39,7 @@ This is what makes `AGENTS.md`'s parallel-process hard rule unambiguous: its `AD
 | [0006](./0006-backlog-public-interface-freeze.md) | Backlog public interface freeze — verbs, envelope, naming | ACCEPTED (2026-10-05) — SUPERSEDED (in part) BY 0007 (breaking list only) |
 | [0007](./0007-backlog-target-public-interface.md) | Backlog target public interface — additive/breaking deltas (designated target record) | ACCEPTED (2026-10-05) |
 | [0008](./0008-agent-mcp-native-tooling.md) | Standardized, portable native tooling for dispatched agents (fs / shell / dispatch) | ACCEPTED (2026-10-05) |
+| [0009](./0009-test-lanes-unit-vs-e2e.md) | Test lanes: unit `test` runs no subprocess; `e2e` owns every subprocess / real-server suite | PROPOSED (2026-10-06) |
 
 ---
 

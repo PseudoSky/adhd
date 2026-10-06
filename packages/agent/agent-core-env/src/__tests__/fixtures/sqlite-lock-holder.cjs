@@ -1,4 +1,4 @@
-// Forked (OS-process) fixture for registry-adapter-concurrency.test.ts's
+// Forked (OS-process) fixture for registry-adapter-concurrency.e2e.test.ts's
 // NEGATIVE CONTROL (ADR-0001 D5). This is the PRE-MIGRATION better-sqlite3
 // shape: a bare connection with `busy_timeout = 0`, an explicit
 // `BEGIN IMMEDIATE` write lock, insert, hold `argv[3]` ms, COMMIT.

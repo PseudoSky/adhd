@@ -1,5 +1,5 @@
 /**
- * registry-connect-retry.test.ts
+ * registry-connect-retry.e2e.test.ts
  *
  * Guards two defects in `McpClientRegistry.getOrCreateClient` (BACKLOG BUG-ORCH-001,
  * BUG-ORCH-002), both in the same block:

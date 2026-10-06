@@ -1,5 +1,5 @@
 /**
- * registry-adapter-concurrency.test.ts — the ADR-0001 D5 acceptance gate for
+ * registry-adapter-concurrency.e2e.test.ts — the ADR-0001 D5 acceptance gate for
  * backlog 331508ac: a REAL two-OS-process concurrency proof against the sox
  * store adapter (Turso), with a negative control that must go RED on the
  * pre-migration better-sqlite3 build.

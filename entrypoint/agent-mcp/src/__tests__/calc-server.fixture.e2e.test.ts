@@ -1,5 +1,5 @@
 /**
- * calc-server.fixture.test.ts — the teeth for backlog 305a63d4.
+ * calc-server.fixture.e2e.test.ts — the teeth for backlog 305a63d4.
  *
  * `live-dag.e2e.test.ts` and `live-budget.e2e.test.ts` both wire a real stdio
  * MCP server at `<integration>/fixtures/calc-server.mjs` (the worker agent's

@@ -173,6 +173,7 @@ Refer to these established packages when building new features. **Verify with `C
 
 - **List Projects:** `npx nx list`
 - **Build Project:** `npx nx build <project-name>`
+- **Run e2e (subprocess / real-server suites):** `npx nx affected -t e2e --parallel=1`. Unit `test` runs no subprocess; any test that spawns one is `*.e2e.test.ts` / `*.e2e.ts` and lives in the project's `e2e` target — [`docs/decisions/0009-test-lanes-unit-vs-e2e.md`](docs/decisions/0009-test-lanes-unit-vs-e2e.md).
 - **Run Tests:** `npx nx affected -t test` when the package has dependents — targeted `npx nx test <project>` exercises only that project and silently misses downstream consumers (`DEBT-PROCESS-AFFECTED-TEST-001`). `nx test <project>` is safe only for a leaf with zero dependents.
 - **Linting:** `npx nx lint <project-name>` — includes `@nx/dependency-checks` (check-only, never mutates). Repair dependency drift with `npx nx run <project>:sync-deps` (or `npx nx affected -t sync-deps`) — the explicit, standalone replacement for the removed pre-commit `--fix`/auto-restage. **Never run dependency-checks in a workspace root without an installed `node_modules`** (e.g. a fresh `git worktree`): it misreports used deps as unused and strips them (`BUG-REPO-PRECOMMIT-DEPCHECK-STRIPS-USED-DEPS-001`) — run `corepack pnpm install` there first.
 - **Verify a build actually loads:** `npx nx run <project>:verify-dist-load` (`npx nx affected -t verify-dist-load`) builds then `require()`/`import()`s the real `dist/` entry the way a consumer does. A green `nx test` resolves to source and never loads the production bundle, so it can pass while the shipped artifact throws on load.
@@ -200,6 +201,7 @@ You are responsible for the lint status of every file you touch. Run `npx nx lin
 
 - **Logic/Math:** Use `layer:test-logic` (Vitest/Node). Focus on edge cases and pure functions.
 - **UI/Hooks:** Use `layer:test-ui` (JSDOM/Storybook). Focus on component states and user interactions.
+- **Lanes:** unit `test` = no subprocess; subprocess / real-server tests are `*.e2e.test.ts` (agent family) or `*.e2e.ts` and run in `e2e` (`--parallel=1`, default-running, isolated cwd + fake HOME) — `docs/decisions/0009-test-lanes-unit-vs-e2e.md`; gated by lane-reachability rule 8.
 - **Verification:** Before marking a task as complete, you must run the relevant test suite and ensure 0 failures.
 
 ### Proving features actually work (verification standard)

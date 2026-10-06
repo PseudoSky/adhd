@@ -1,5 +1,5 @@
 /**
- * mcp-verify.test.ts — backlog 1f352507.
+ * mcp-verify.e2e.test.ts — backlog 1f352507.
  *
  * `verifyAgentMcpServers` handshake-verifies an agent's `mcpServers` before a
  * real task: it connects each server, lists its tools, and reports either the

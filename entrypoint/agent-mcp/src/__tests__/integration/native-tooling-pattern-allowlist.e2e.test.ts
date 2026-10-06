@@ -1,5 +1,5 @@
 /**
- * native-tooling-pattern-allowlist.test.ts — the shell `allowPatterns`
+ * native-tooling-pattern-allowlist.e2e.test.ts — the shell `allowPatterns`
  * passthrough (ADR-0008 D5/D7 "Free win": enable the adopted server's
  * `ALLOW_PATTERNS`). SPEC §AC1/AC2/AC3.
  *

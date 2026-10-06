@@ -27,7 +27,7 @@ Ordered stages and the gate that advances each (`.github/workflows/pull-request.
 2. `lint` (`nx affected -t lint`)
 3. lane-reachability (`tools/nx-plugins/test/executors/wiring/check-lane-reachability.mjs`)
 4. `test` (`nx affected -t test --parallel=5`)
-5. `e2e` (its own resource-heavy lane, `--parallel=1`)
+5. `e2e` (its own resource-heavy lane, `--parallel=1`; every subprocess / real-server suite lives here and is excluded from `test` — `docs/decisions/0009-test-lanes-unit-vs-e2e.md`; the agent-family spawn gate is lane-reachability rule 8)
 6. `verify-dist-load` (loads the REAL built `dist/`, which `nx test` does not)
 7. `publish` — `if: success() && (label 'publish' || closed-and-merged to main)`
 
@@ -128,6 +128,7 @@ unwired analyzer. The `claude`, `trigger-dev-app`, and `vercel` apps also post c
 - **Every edit to this doc** — what changed and why, below.
 
 ## Provenance
+- `2026-10-06` — Agent-family e2e lane (backlog `5b839b90`, base `a49d4fbe`). §2 stage 5 now states the lane contract and cites `docs/decisions/0009-test-lanes-unit-vs-e2e.md`; lane-reachability gained rule 8 (`check-agent-lane-spawn.mjs`); `packages/agent/{agent-core-env,agent-engine-compiler,agent-engine-orchestrator}`, `entrypoint/agent-mcp`, `entrypoint/dispatch-cli` each gained an `e2e` target. Why: subprocess suites ran in the unit lane at `--parallel=5` and timed out under load.
 - `2026-10-05` — Corrected-and-synced while fixing cluster 12 (`8c0c314e`, CI chronically red) at
   revision `4bbf87d2`. (1) `ci.yml` `main` + `pull-request.yml` `test` set
   `ONNXRUNTIME_NODE_INSTALL_CUDA=skip` — root cause of the red real-fastembed e2e lane

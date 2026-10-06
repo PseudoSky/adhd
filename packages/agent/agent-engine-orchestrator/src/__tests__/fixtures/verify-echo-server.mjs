@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Minimal stdio MCP server used by mcp-verify.test.ts (backlog 1f352507).
+// Minimal stdio MCP server used by mcp-verify.e2e.test.ts (backlog 1f352507).
 // Exposes exactly one tool so a real handshake + listTools has something to
 // report. It never touches a model.
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';

@@ -1,4 +1,4 @@
-// Forked (OS-process) fixture for registry-adapter-concurrency.test.ts
+// Forked (OS-process) fixture for registry-adapter-concurrency.e2e.test.ts
 // (ADR-0001 D5). Opens its OWN adapter connection to `argv[2]`, takes a real
 // `BEGIN IMMEDIATE` write lock on the shared store, inserts a row, signals
 // `{type:'locked'}`, then commits after `argv[3]` ms and signals `{type:'committed'}`.

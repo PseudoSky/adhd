@@ -1,0 +1,6 @@
+{
+  "//": "Files known to spawn a real stdio MCP server through the Orchestrator (not statically provable). Pending move to *.e2e.test.ts; the entry must be removed when the file moves (rule B).",
+  "pendingMove": [
+    "packages/agent/agent-engine-orchestrator/src/__tests__/native-tooling-caller-cwd.test.ts"
+  ]
+}

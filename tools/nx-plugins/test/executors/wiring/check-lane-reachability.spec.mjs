@@ -19,6 +19,8 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { runChecks } from './check-lane-reachability.mjs';
+// Rule 8's own negative controls ride this (already `test:build-tools`-wired) spec file.
+import './check-agent-lane-spawn.spec.mjs';
 
 const GATE_TARGETS = ['test', 'e2e'];
 // A stub createNodes that attaches NO publish target (so rule 4 is silent
@@ -60,7 +62,7 @@ function baseFiles(overrides = {}) {
 }
 
 async function check(root, extra = {}) {
-  return runChecks({ workspaceRoot: root, gateTargets: GATE_TARGETS, createNodesFn: NO_PUBLISH, baseline: { tsconfigSpecWithoutCompileTarget: [] }, ...extra });
+  return runChecks({ workspaceRoot: root, gateTargets: GATE_TARGETS, createNodesFn: NO_PUBLISH, baseline: { tsconfigSpecWithoutCompileTarget: [] }, agentLaneBaseline: { pendingMove: [] }, ...extra });
 }
 
 const hasRule = (res, rule) => res.violations.some((v) => v.rule === rule);
@@ -230,4 +232,18 @@ test('rule 6 ratchet: a baselined gap is suppressed; a wired one is not flagged'
   } finally {
     close(root);
   }
+});
+
+test('rule 8 fires: an agent-family unit test spawning a subprocess (backlog 5b839b90 AC2)', async () => {
+  const root = fixture({
+    ...baseFiles().files,
+    'packages/agent/agent-foo/project.json': JSON.stringify({ name: 'agent-foo', targets: {} }),
+    'packages/agent/agent-foo/package.json': JSON.stringify({ name: '@adhd/agent-foo', version: '0.0.0' }),
+    'packages/agent/agent-foo/vite.config.ts': 'export default { plugins: [] };\n',
+    'packages/agent/agent-foo/src/spawn.test.ts': "import { spawnSync } from 'node:child_process';\nspawnSync('npx', []);\n",
+  });
+  try {
+    const res = await check(root);
+    assert.ok(hasRule(res, '8-A-spawn-in-unit-lane'), JSON.stringify(res.violations));
+  } finally { close(root); }
 });
