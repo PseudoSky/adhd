@@ -23,14 +23,24 @@ export interface PermissionDecisionContext {
 }
 
 /**
- * The resolved native-tooling permission gate (ADR-0008 D5) — the **policy hook**
- * the host injects into the engine. Evaluated host-side, *before* `pre:tool_call`,
- * for every native tool call. Returns one of:
+ * The resolved permission gate (ADR-0008 D5) — the **policy hook** the host
+ * injects into the engine. Evaluated host-side, *before* `pre:tool_call`, for
+ * **every tool call** the engine is about to make (the engine holds no server
+ * taxonomy and cannot tell "native" from non-native). Returns one of:
  *
  *  - `'allow'` — run the tool;
  *  - `'deny'`  — refuse with a typed `PERMISSION_DENIED` result, never executed;
  *  - `'ask'`   — resolve through the fixed ask chain (`suspend` → `escalate` →
  *                `deny`) implemented by the orchestrator (ADR-0008 D6).
+ *
+ * **Blast radius (documented, not accidental).** Because the gate is consulted
+ * for every tool call, a rule matching `'*'` applies to every server the agent
+ * can call — including non-native ones (e.g. `backlog`, `memory`), not only
+ * `fs`/`shell`/`agent-mcp`. The production `defaultPermissionGate` merges each
+ * `nativeTooling.*.permissions` member into one flat map with a `'*'` baseline,
+ * so a bare `{'*':'deny'}` declared under ANY member denies every tool call.
+ * Rules SHOULD therefore scope by server-qualified name (`fs.*`, `shell.*`,
+ * `agent-mcp.*`). The engine does NOT narrow the gate to a catalog.
  *
  * It is a pure decision function: the engine owns the *enforcement* (and the
  * session/parent graph the ask chain needs); the host owns the rule map. When no
@@ -129,9 +139,11 @@ export interface EngineConfig {
    */
   isEnvNameAllowed(name: string): boolean;
   /**
-   * The resolved native-tooling permission gate (ADR-0008 D5/D6), evaluated
-   * before `pre:tool_call` for every native tool call. Injected by the host so
-   * the engine owns no rule map and no config singleton. Omitted ⇒ `'allow'`.
+   * The resolved permission gate (ADR-0008 D5/D6), evaluated before
+   * `pre:tool_call` for **every tool call** (not only native-tooling servers —
+   * see {@link PermissionGate} for the documented `'*'` blast radius). Injected
+   * by the host so the engine owns no rule map and no config singleton.
+   * Omitted ⇒ `'allow'`.
    */
   permissionGate?: PermissionGate;
 }

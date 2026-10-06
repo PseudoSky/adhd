@@ -106,12 +106,33 @@ function permissionRefusalResult(
   const lead =
     code === 'PERMISSION_DENIED'
       ? `Tool '${qualified}' is denied by the agent's permission policy and was not executed.`
-      : `Tool '${qualified}' requires human approval, which could not be obtained (HITL disabled and no parent agent), so it was not executed.`;
+      : `Tool '${qualified}' requires human approval, which could not be obtained, so it was not executed.`;
   return {
     error: {
       code,
       tool: qualified,
       message: detail ? `${lead} ${detail}` : lead,
+    },
+  };
+}
+
+/**
+ * Typed refusal when a direct `request_human_input` call cannot suspend — HITL
+ * is disabled, or the synchronous transport has no reachable approver
+ * (ADR-0008 D6). Never a hang. Uses the same `PERMISSION_ASK_DENIED` code as a
+ * fail-closed permission `ask`: both are an unanswered human-approval request.
+ */
+function hitlUnavailableResult(
+  server: string,
+  tool: string,
+  reason: string
+): { error: { code: string; tool: string; message: string } } {
+  const qualified = `${server}.${tool}`;
+  return {
+    error: {
+      code: 'PERMISSION_ASK_DENIED',
+      tool: qualified,
+      message: `Tool '${qualified}' asks for human input, which is unavailable (${reason}), so it was not executed.`,
     },
   };
 }
@@ -150,7 +171,24 @@ export interface OrchestratorRunInput {
   signal: AbortSignal;
   taskId: string;
   hooks?: IHookRegistry;
-  isEphemeral?: boolean;
+  /**
+   * Whether a suspension on this run can actually be ANSWERED by its caller
+   * (ADR-0008 D6). Default `true`.
+   *
+   * A sessioned/background task can be answered: the caller observes the
+   * `awaiting_input` status + `resumeToken` and later calls `task_resume`.
+   * The SYNCHRONOUS transport — a one-shot `agent_name` dispatch and a
+   * `session_id` task with `background:false` — sets this `false`: the caller is
+   * blocked for the entire call and can never receive the resumeToken, so no
+   * approver is reachable within the call.
+   *
+   * When `false`, the ask-resolution chain degrades directly to its fail-closed
+   * floor (`deny`) and a direct `request_human_input` call is refused — an
+   * unanswered ask NEVER hangs (ADR-0008 D6). This is a TRANSPORT property, not
+   * the retired `isEphemeral` retention/interactivity conflation: retention
+   * (`ephemeral`) is orthogonal (D6).
+   */
+  suspensionAnswerable?: boolean;
   /** Injected emitTaskEvent callback (replaces streaming/event-bus import). */
   emitTaskEvent?: (event: { type: string; taskId: string; status?: string; result?: string | null; error?: string | null; toolName?: string; toolCallId?: string; input?: unknown; content?: unknown }) => void;
   /** Injected logger (replaces logger.js import). */
@@ -191,6 +229,7 @@ export class Orchestrator {
       signal,
       taskId,
       hooks = noopHooks,
+      suspensionAnswerable = true,
       emitTaskEvent,
       logger: loggerInput,
       config: configInput,
@@ -222,11 +261,14 @@ export class Orchestrator {
 
       const tools = await registry.listAllTools();
 
-      // HITL is opt-in per definition (`allowHumanInput`, legacy alias of
-      // `nativeTooling.hitl`). Every task is sessioned (ADR-0008 D6 — the
-      // noop-session path is retired), so an ephemeral one-shot task now has a
-      // real session row and can suspend just like a session-backed task.
-      if (executionContext.agentDefinition.allowHumanInput === true) {
+      // HITL enablement is `nativeTooling.hitl` (legacy alias `allowHumanInput`),
+      // resolved by `effectiveHitl` and DEFAULT-ON (ADR-0008 D3/D6: `hitl`
+      // defaults to true). A definition that sets `hitl:false` — or the legacy
+      // `allowHumanInput:false` — HIDES `request_human_input`; the default and an
+      // explicit `hitl:true` advertise it. This is the SAME predicate the ask
+      // chain uses to prune `suspend` below and the per-call handler uses to fail
+      // closed: advertisement, ask resolution, and the handler must agree.
+      if (effectiveHitl(executionContext.agentDefinition) !== false) {
         tools.push(HITL_BUILTIN_TOOL_DEFINITION);
       }
 
@@ -577,6 +619,35 @@ export class Orchestrator {
           }
 
           if (tc.tool === HITL_TOOL_NAME) {
+            // The model may call this whether or not it was advertised. It may
+            // only SUSPEND when HITL is enabled AND the suspension is answerable
+            // on this transport (ADR-0008 D6). Otherwise the ask FAILS CLOSED —
+            // no suspension, a typed refusal, never a hang.
+            const hitlDisabled =
+              effectiveHitl(executionContext.agentDefinition) === false;
+            if (hitlDisabled || !suspensionAnswerable) {
+              const reason = hitlDisabled
+                ? 'HITL is disabled (nativeTooling.hitl:false)'
+                : 'the synchronous call has no reachable approver';
+              taskStore.appendEvent({
+                taskId,
+                type: 'TOOL_CALL',
+                payload: {
+                  tool: `${tc.server}__${tc.tool}`,
+                  callId: tc.id,
+                  permission: 'ask',
+                  resolution: 'deny',
+                  code: 'PERMISSION_ASK_DENIED',
+                  reason,
+                },
+              });
+              warningResults.set(tc.id, {
+                result: hitlUnavailableResult(tc.server, tc.tool, reason),
+                isError: true,
+              });
+              continue;
+            }
+
             // Every task is sessioned (ADR-0008 D6), so there is no
             // "ephemeral task has no row to persist a resume token" case left:
             // a one-shot `agent_name` task creates a real session row, and
@@ -711,17 +782,29 @@ export class Orchestrator {
           if (permissionAction === 'ask') {
             // Fixed ask-resolution chain (ADR-0008 D6):
             //   suspend  — iff HITL is enabled (`nativeTooling.hitl !== false`)
-            //   escalate — iff a parent exists (routed to the parent agent)
-            //   deny     — the fail-closed floor (no HITL capability, no parent)
+            //              AND the suspension is answerable on this transport
+            //   escalate — iff a parent exists (routed to the parent agent) AND
+            //              the suspension is answerable
+            //   deny     — the fail-closed floor
+            //
+            // A synchronous call (one-shot `agent_name`, `background:false`) is
+            // blocked for its entire duration, so it can never receive the
+            // resumeToken: neither `suspend` nor `escalate` can be answered, and
+            // the ask degrades directly to `deny`. An unanswered ask NEVER hangs
+            // (ADR-0008 D6).
             const hitlEnabled =
               effectiveHitl(executionContext.agentDefinition) !== false;
             const parentTaskId = executionContext.parentTaskId;
             let resolution: 'suspend' | 'escalate' | 'deny';
-            if (hitlEnabled) resolution = 'suspend';
+            if (!suspensionAnswerable) resolution = 'deny';
+            else if (hitlEnabled) resolution = 'suspend';
             else if (parentTaskId) resolution = 'escalate';
             else resolution = 'deny';
 
             if (resolution === 'deny') {
+              const reason = suspensionAnswerable
+                ? 'HITL is disabled and the task has no parent'
+                : 'the synchronous call has no reachable approver';
               taskStore.appendEvent({
                 taskId,
                 type: 'TOOL_CALL',
@@ -731,13 +814,15 @@ export class Orchestrator {
                   permission: 'ask',
                   resolution: 'deny',
                   code: 'PERMISSION_ASK_DENIED',
+                  reason,
                 },
               });
               warningResults.set(tc.id, {
                 result: permissionRefusalResult(
                   resolved.server,
                   resolved.tool,
-                  'PERMISSION_ASK_DENIED'
+                  'PERMISSION_ASK_DENIED',
+                  reason
                 ),
                 isError: true,
               });
