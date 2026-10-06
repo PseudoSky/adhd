@@ -1,0 +1,86 @@
+{
+  "name": "agent-plugin-tracing",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "packages/agent/agent-plugin-tracing/src",
+  "projectType": "library",
+  "release": {
+    "version": {
+      "manifestRootsToUpdate": [
+        "dist/{projectRoot}"
+      ],
+      "currentVersionResolver": "git-tag",
+      "fallbackCurrentVersionResolver": "disk"
+    }
+  },
+  "tags": [
+    "domain:agent",
+    "pkg-kind:plugin",
+    "pkg-class:optional",
+    "layer:logic",
+    "platform:node",
+    "access:public",
+    "publish:npm"
+  ],
+  "targets": {
+    "nx-release-publish": {
+      "options": {
+        "packageRoot": "{projectRoot}/dist"
+      },
+      "dependsOn": [
+        "build",
+        "test",
+        "verify-dist-load",
+        "dist-manifest",
+        "publish-hygiene"
+      ]
+    },
+    "lint": {
+      "executor": "@nx/eslint:lint"
+    },
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "tsc -p packages/agent/agent-plugin-tracing/tsconfig.lib.json --noEmit"
+      }
+    },
+    "typecheck-spec": {
+      "//": "Type-checks the spec corpus (tsconfig.spec.json) via the shared ratchet (lane-reachability rule 6 / backlog 770c0919); baseline in tools/nx-plugins/build/executors/typecheck-spec/agent-plugin-tracing.baseline.json. Wired into test.dependsOn so `nx affected -t test` runs it.",
+      "executor": "nx:run-commands",
+      "cache": true,
+      "inputs": [
+        "default",
+        {
+          "externalDependencies": [
+            "typescript"
+          ]
+        }
+      ],
+      "options": {
+        "cwd": ".",
+        "command": "node tools/nx-plugins/build/executors/typecheck-spec/ratchet.mjs --tsconfig packages/agent/agent-plugin-tracing/tsconfig.spec.json --baseline tools/nx-plugins/build/executors/typecheck-spec/agent-plugin-tracing.baseline.json"
+      }
+    },
+    "test": {
+      "//": "Partial override — executor/cache/outputs still come from the inferred @nx/vitest target; dependsOn is replaced wholesale, so lint/^build are relisted, plus typecheck-spec (the spec-corpus ratchet). The command is overridden because this package's vitest config is `.mts` while the workspace targetDefaults hardcodes `.ts`. No `build` dependency: the built-artifact proof is the default-running verify-dist-load gate.",
+      "dependsOn": [
+        "lint",
+        "^build",
+        "typecheck-spec"
+      ],
+      "options": {
+        "cwd": ".",
+        "command": "vitest run --config packages/agent/agent-plugin-tracing/vite.config.mts"
+      }
+    },
+    "build": {
+      "//": "Override of the `build` target inferred by @nx/js/typescript (registered for this package in nx.json). Emits CommonJS-only (tsconfig.build.json -> tsconfig.lib.json, module=commonjs) into {projectRoot}/dist/index.js + index.d.ts per adhd ADR-0003; rootDir=src so the entry lands at dist/index.js. tsconfig.build.json maps the one workspace dep (@adhd/agent-base-types) to its BUILT declaration, which ^build guarantees, so compilation never depends on an optional per-package node_modules symlink (adhd ADR-0002). Same shape as agent-core-native-tooling.",
+      "outputs": [
+        "{projectRoot}/dist"
+      ],
+      "options": {
+        "cwd": ".",
+        "command": "node node_modules/typescript/bin/tsc -p {projectRoot}/tsconfig.build.json --outDir {projectRoot}/dist --rootDir {projectRoot}/src --composite false --noEmitOnError"
+      }
+    }
+  }
+}
