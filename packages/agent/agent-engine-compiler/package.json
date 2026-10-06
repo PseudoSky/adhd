@@ -1,6 +1,6 @@
 {
   "name": "@adhd/agent-engine-compiler",
-  "version": "2.2.6",
+  "version": "2.2.7",
   "description": "Registry-family store for agent-compiler: drizzle-backed SQLite tables sharing the one registry database.",
   "type": "module",
   "publishConfig": {
@@ -31,7 +31,7 @@
     "@adhd/agent-store-tools": "^2.2.3",
     "@adhd/agent-core-provider": "^2.2.3",
     "@adhd/agent-core-policy": "^2.2.3",
-    "@adhd/agent-core-env": "^0.1.2"
+    "@adhd/agent-core-env": "^0.1.3"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",

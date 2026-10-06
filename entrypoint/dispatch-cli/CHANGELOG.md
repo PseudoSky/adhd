@@ -1,3 +1,21 @@
+## 0.1.6 (2026-10-06)
+
+### 🚀 Features
+
+- **dispatch-cli,dispatch-orchestrator:** resolve native tooling at the dispatching cwd (NAT-TOOL-5) ([be70922d](https://github.com/PseudoSky/adhd/commit/be70922d))
+- **dispatch-cli:** guarded live runner (turn cap + cost kill + msg-size + delegation) ([e05c6c78](https://github.com/PseudoSky/adhd/commit/e05c6c78))
+
+### 🩹 Fixes
+
+- **agent-mcp,dispatch-cli,agent-engine-orchestrator:** wire nativeTooling config + single self producer + per-run srt policy (bucket A) ([1cf338b0](https://github.com/PseudoSky/adhd/commit/1cf338b0))
+- **dispatch-orchestrator,dispatch-cli:** store declarative nativeTooling, never a resolved root (rework NAT-TOOL-5 / ADR-0008 D4/D8) ([b2f4187d](https://github.com/PseudoSky/adhd/commit/b2f4187d))
+- **agent-mcp:** retain legacy mcp-shell security.yaml; restore f141baad guard (NAT-TOOL-4) ([102414c6](https://github.com/PseudoSky/adhd/commit/102414c6))
+- **dispatch-orchestrator,dispatch-cli:** reconcile resumed HITL task back into the DAG (48b14ec1) ([97c1bb85](https://github.com/PseudoSky/adhd/commit/97c1bb85))
+
+### ❤️ Thank You
+
+- pseudosky
+
 ## Unreleased
 
 

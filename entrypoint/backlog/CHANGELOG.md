@@ -1,3 +1,22 @@
+## 1.0.9 (2026-10-06)
+
+### 🚀 Features
+
+- **backlog:** add remove/restore lifecycle + production-write gate (S02 AC14, cluster 8) ([1f86e1a1](https://github.com/PseudoSky/adhd/commit/1f86e1a1))
+
+### 🩹 Fixes
+
+- **backlog:** open the production-write gate for serve; close the transport test gap ([3a1ff7e4](https://github.com/PseudoSky/adhd/commit/3a1ff7e4))
+- **backlog:** honor direction:"desc" for sort:"priority" (D3) + correct card.ts related comment (D1) ([1ff78e39](https://github.com/PseudoSky/adhd/commit/1ff78e39))
+
+### 🔥 Performance
+
+- **backlog:** batch edge pseudo-field reads in query (fix N+1) — 2267eaf9 ([b1f35e35](https://github.com/PseudoSky/adhd/commit/b1f35e35))
+
+### ❤️ Thank You
+
+- pseudosky
+
 ## 1.0.8 (2026-10-04)
 
 ### 🚀 Features

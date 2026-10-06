@@ -1,3 +1,18 @@
+## 2.3.4 (2026-10-06)
+
+### 🚀 Features
+
+- **data-query-engine:** v2 query model, index structures, rule-based planner ([16b0809e](https://github.com/PseudoSky/adhd/commit/16b0809e))
+
+### 🩹 Fixes
+
+- **data-query-engine,data-core-structures:** clear 5 test-audit findings ([ae07b40b](https://github.com/PseudoSky/adhd/commit/ae07b40b))
+- **data-query-engine:** access/index/order audit fixes (range-index soundness, B+ rank O(log n), roaring bit-31, fenwick/lsm/order_by) + Big-O specs ([f214713d](https://github.com/PseudoSky/adhd/commit/f214713d))
+
+### ❤️ Thank You
+
+- pseudosky
+
 ## 2.3.2 (2026-09-26)
 
 ### 🚀 Features

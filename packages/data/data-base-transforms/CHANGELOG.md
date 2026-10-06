@@ -1,3 +1,13 @@
+## 2.3.4 (2026-10-06)
+
+### 🚀 Features
+
+- **data-query-engine:** v2 query model, index structures, rule-based planner ([16b0809e](https://github.com/PseudoSky/adhd/commit/16b0809e))
+
+### ❤️ Thank You
+
+- pseudosky
+
 ## 2.3.2 (2026-09-26)
 
 ### 🚀 Features

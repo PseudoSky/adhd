@@ -1,3 +1,17 @@
+## 0.1.4 (2026-10-06)
+
+### 🚀 Features
+
+- **environment-base-spec:** add native-tooling config field-spec fragment (NAT-TOOL-7) ([4e61a981](https://github.com/PseudoSky/adhd/commit/4e61a981))
+
+### 🩹 Fixes
+
+- **agent,environment:** static-review bucket B — declarative session snapshot, drop denyCommands, cache+freeze permission map ([1749a443](https://github.com/PseudoSky/adhd/commit/1749a443))
+
+### ❤️ Thank You
+
+- pseudosky
+
 ## 0.1.2 (2026-09-26)
 
 ### 🚀 Features

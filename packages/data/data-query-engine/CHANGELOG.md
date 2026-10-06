@@ -1,3 +1,30 @@
+## 2.3.9 (2026-10-06)
+
+### 🚀 Features
+
+- **data-query-engine:** fluent `.scan(...)` builder; no `_window` token survives ([6099196c](https://github.com/PseudoSky/adhd/commit/6099196c))
+- ⚠️  **data-query-engine:** implement `_scan` (fold-mode) and retire `_window` ([baffd556](https://github.com/PseudoSky/adhd/commit/baffd556))
+- **data-query-engine:** fluent rollup()/cube() and complete fluent surface ([cd44a542](https://github.com/PseudoSky/adhd/commit/cd44a542))
+- **data-query-engine:** v2 query model, index structures, rule-based planner ([16b0809e](https://github.com/PseudoSky/adhd/commit/16b0809e))
+
+### 🩹 Fixes
+
+- **data-query-engine,data-core-structures:** clear 5 test-audit findings ([ae07b40b](https://github.com/PseudoSky/adhd/commit/ae07b40b))
+- **data-query-engine:** clear all open query-engine findings ([ec2f266c](https://github.com/PseudoSky/adhd/commit/ec2f266c))
+- **data-query-engine:** access/index/order audit fixes (range-index soundness, B+ rank O(log n), roaring bit-31, fenwick/lsm/order_by) + Big-O specs ([f214713d](https://github.com/PseudoSky/adhd/commit/f214713d))
+
+### 🔥 Performance
+
+- **data-query-engine:** O(partition) window fast path (prefix sums + monotonic deque) — resolves unbounded-frame O(n^2) ([a661d8e5](https://github.com/PseudoSky/adhd/commit/a661d8e5))
+
+### ⚠️  Breaking Changes
+
+- **data-query-engine:** implement `_scan` (fold-mode) and retire `_window`  ([baffd556](https://github.com/PseudoSky/adhd/commit/baffd556))
+
+### ❤️ Thank You
+
+- pseudosky
+
 ## 2.3.8 (2026-10-04)
 
 ### 🔥 Performance

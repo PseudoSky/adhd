@@ -33,7 +33,7 @@
     "tslib": "^2.3.0",
     "@babel/register": "7.29.7",
     "react": "19.3.0",
-    "@adhd/data-base-transforms": "^2.3.3"
+    "@adhd/data-base-transforms": "^2.3.4"
   },
   "files": [
     "dist",

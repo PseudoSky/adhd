@@ -1,8 +1,8 @@
 {
   "name": "@adhd/dispatch-core-optimizer",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "dependencies": {
-    "@adhd/dispatch-base-spec": "^0.1.5"
+    "@adhd/dispatch-base-spec": "^0.1.6"
   },
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",

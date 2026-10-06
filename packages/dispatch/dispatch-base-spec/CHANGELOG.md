@@ -1,3 +1,18 @@
+## 0.1.6 (2026-10-06)
+
+### 🚀 Features
+
+- **dispatch-orchestrator:** dag.session_id producer stamps every DispatchUnit (fa9d3079/03145a46) ([e8271d77](https://github.com/PseudoSky/adhd/commit/e8271d77))
+- **dispatch-orchestrator:** thread session_id through DispatchUnit + fire (fa9d3079) ([e3d3aa26](https://github.com/PseudoSky/adhd/commit/e3d3aa26))
+
+### 🩹 Fixes
+
+- **dispatch-orchestrator,dispatch-cli:** make HITL reachable from dispatch ([57f53429](https://github.com/PseudoSky/adhd/commit/57f53429))
+
+### ❤️ Thank You
+
+- pseudosky
+
 ## 0.1.4 (2026-09-26)
 
 ### 🚀 Features

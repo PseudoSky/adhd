@@ -1,3 +1,28 @@
+## 0.1.6 (2026-10-06)
+
+### 🚀 Features
+
+- **dispatch-cli,dispatch-orchestrator:** resolve native tooling at the dispatching cwd (NAT-TOOL-5) ([be70922d](https://github.com/PseudoSky/adhd/commit/be70922d))
+- **dispatch-orchestrator:** dag.session_id producer stamps every DispatchUnit (fa9d3079/03145a46) ([e8271d77](https://github.com/PseudoSky/adhd/commit/e8271d77))
+- **dispatch-cli,dispatch-orchestrator:** dispatch-cli agents import for Claude Code personas ([1647488d](https://github.com/PseudoSky/adhd/commit/1647488d))
+- **dispatch-orchestrator,dispatch-cli:** default memory-server + backlog mcpServers on dispatch-created agents ([2c3fa5b7](https://github.com/PseudoSky/adhd/commit/2c3fa5b7))
+- **dispatch-orchestrator:** thread session_id through DispatchUnit + fire (fa9d3079) ([e3d3aa26](https://github.com/PseudoSky/adhd/commit/e3d3aa26))
+
+### 🩹 Fixes
+
+- **dispatch-orchestrator,dispatch-cli:** store declarative nativeTooling, never a resolved root (rework NAT-TOOL-5 / ADR-0008 D4/D8) ([b2f4187d](https://github.com/PseudoSky/adhd/commit/b2f4187d))
+- **dispatch-orchestrator:** harden HITL reconcile against transient poll failures (48b14ec1) ([33454e2c](https://github.com/PseudoSky/adhd/commit/33454e2c))
+- **dispatch-orchestrator,dispatch-cli:** reconcile resumed HITL task back into the DAG (48b14ec1) ([97c1bb85](https://github.com/PseudoSky/adhd/commit/97c1bb85))
+- **dispatch-orchestrator,dispatch-cli:** make HITL reachable from dispatch ([57f53429](https://github.com/PseudoSky/adhd/commit/57f53429))
+- **dispatch-orchestrator:** no-auto-create mode for DAG-named agents (f1dbd0f2) ([34a9b766](https://github.com/PseudoSky/adhd/commit/34a9b766))
+- **dispatch-cli:** resolve the default backlog MCP entry relative to the package, not cwd ([fabf0b50](https://github.com/PseudoSky/adhd/commit/fabf0b50))
+- **dispatch-orchestrator:** surface agent-mcp policy violations through dispatch_log (4e829a08) ([b6884f67](https://github.com/PseudoSky/adhd/commit/b6884f67))
+- **dispatch-orchestrator:** bracket-access index-signature key in fire (fa9d3079) ([c2a570ae](https://github.com/PseudoSky/adhd/commit/c2a570ae))
+
+### ❤️ Thank You
+
+- pseudosky
+
 ## 0.1.4 (2026-09-26)
 
 ### 🚀 Features

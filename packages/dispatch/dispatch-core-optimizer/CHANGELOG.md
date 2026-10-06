@@ -1,3 +1,13 @@
+## 0.1.6 (2026-10-06)
+
+### 🩹 Fixes
+
+- **dispatch-orchestrator,dispatch-cli:** make HITL reachable from dispatch ([57f53429](https://github.com/PseudoSky/adhd/commit/57f53429))
+
+### ❤️ Thank You
+
+- pseudosky
+
 ## 0.1.4 (2026-09-26)
 
 ### 🚀 Features

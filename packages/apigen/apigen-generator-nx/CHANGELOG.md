@@ -1,3 +1,23 @@
+## 0.1.5 (2026-10-06)
+
+### 🩹 Fixes
+
+- **agent-mcp:** pin wildcard externals to real ranges ([9869db26](https://github.com/PseudoSky/adhd/commit/9869db26))
+
+### ❤️ Thank You
+
+- pseudosky
+
+## 0.1.4 (2026-10-06)
+
+### 🩹 Fixes
+
+- **agent-mcp:** pin wildcard externals to real ranges ([9869db26](https://github.com/PseudoSky/adhd/commit/9869db26))
+
+### ❤️ Thank You
+
+- pseudosky
+
 ## 0.1.2 (2026-09-26)
 
 ### 🚀 Features

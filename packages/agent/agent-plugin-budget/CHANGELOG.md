@@ -1,3 +1,14 @@
+## 0.2.4 (2026-10-06)
+
+### 🩹 Fixes
+
+- **agent-plugin-budget:** enforce global-scope caps via the drizzle handle + scoped cost ([6a2da60d](https://github.com/PseudoSky/adhd/commit/6a2da60d))
+- **agent-mcp:** pin wildcard externals to real ranges ([9869db26](https://github.com/PseudoSky/adhd/commit/9869db26))
+
+### ❤️ Thank You
+
+- pseudosky
+
 ## 0.2.2 (2026-09-26)
 
 ### 🚀 Features
