@@ -18,11 +18,15 @@ import { mcpServerConfigSchema } from './mcp.js';
  *     alias in the global allowed-root map). An ABSOLUTE path is REJECTED at this
  *     boundary — it welds a host path into a record that must stay reusable
  *     (D4/D8; the fs analogue of the welded-`provider` bug). The resolver also
- *     rejects it (defense in depth).
+ *     rejects it (defense in depth). `shell.root` uses the SAME contract (the
+ *     ONE portable-hint schema, {@link fsRootHintSchema}) — an absolute/`..`/alias
+ *     `shell.root` is rejected/mapped exactly like `fs.root` (#3).
  *   - The shell override carries the adopted server's argv allowlist BOTH as
  *     exact NAMES (`allowCommands`) and as regex NAMES (`allowPatterns`, its
  *     `ALLOW_PATTERNS`, `fullmatch` over `command[0]`) — both are config
- *     passthroughs, never a per-command permission map (ADR-0008 D5).
+ *     passthroughs, never a per-command permission map (ADR-0008 D5). A pattern
+ *     containing a comma is REJECTED: the harness CSV-joins the list into one env
+ *     value, so a comma inside a pattern would split/corrupt its neighbour (#9).
  */
 
 export const permissionActionSchema = z.enum(['allow', 'ask', 'deny']);
@@ -33,17 +37,34 @@ export const permissionRuleMapSchema = z.record(
 );
 
 /**
- * A portable fs root hint: a cwd-relative subpath, or a named alias resolved via
- * the global allowed-root map. Absolute is rejected here so a definition can
- * never carry a host path (the resolver rejects it too, for a stale/bypassed
- * def). Exported for direct testing.
+ * A portable fs/shell root hint: a cwd-relative subpath, or a named alias
+ * resolved via the global allowed-root map. Absolute is rejected here so a
+ * definition can never carry a host path (the resolver rejects it too, for a
+ * stale/bypassed def). Exported for direct testing. Used for BOTH `fs.root(s)`
+ * and `shell.root` — the ONE portable-hint contract (#3).
  */
 export const fsRootHintSchema = z
   .string()
   .refine((hint) => !isAbsolute(hint), {
     message:
-      'fs root must be a portable hint (a cwd-relative subpath or a named ' +
+      'root must be a portable hint (a cwd-relative subpath or a named ' +
       'alias in the global allowed-root map), not an absolute path',
+  });
+
+/**
+ * A single shell allow pattern. Rejects a comma because the resolver joins the
+ * list into ONE `ALLOW_PATTERNS` env value with `,` (the adopted server's CSV
+ * format), so a comma inside a pattern would silently split it and corrupt the
+ * neighbouring pattern (#9). The adopted server `re.fullmatch`es each pattern
+ * against the whole command NAME; author a comma-free regex.
+ */
+export const shellAllowPatternSchema = z
+  .string()
+  .refine((pattern) => !pattern.includes(','), {
+    message:
+      'allowPatterns entries are CSV-joined into one ALLOW_PATTERNS env value, ' +
+      'so a pattern must not contain a comma (it would split the list and ' +
+      'corrupt the neighbouring pattern)',
   });
 
 export const fsBuiltinOverridesSchema = z.strictObject({
@@ -56,13 +77,16 @@ export const fsBuiltinOverridesSchema = z.strictObject({
 });
 
 export const shellBuiltinOverridesSchema = z.strictObject({
-  root: z.string().optional(),
+  // Same portable-hint contract as `fs.root` (#3): alias-map → absolute-reject
+  // → `..`-containment. An absolute shell cwd welds a host path into the record.
+  root: fsRootHintSchema.optional(),
   permissions: permissionRuleMapSchema.optional(),
   allowCommands: z.array(z.string()).optional(),
   // Regex passthrough to the adopted server's `ALLOW_PATTERNS` (fullmatch over
   // the command NAME, OR'd with `allowCommands`) — ADR-0008 D5: the harness
-  // owns no parser, so these are not validated as regexes here.
-  allowPatterns: z.array(z.string()).optional(),
+  // owns no parser, so these are not validated as regexes here. A comma is
+  // rejected (CSV join), see {@link shellAllowPatternSchema}.
+  allowPatterns: z.array(shellAllowPatternSchema).optional(),
   timeoutMs: z.number().int().positive().optional(),
   env: z.record(z.string(), z.string()).optional(),
 });
