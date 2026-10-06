@@ -86,6 +86,7 @@ The typed `nativeTooling` surface (ADR-0008 D10) is part of the `@adhd/environme
 | `ADHD_AGENT_NATIVE_TOOLING_FS_DISALLOWED_TOOLS` | csv | fs tool-name denylist (wins) |
 | `ADHD_AGENT_NATIVE_TOOLING_SHELL_ROOT` | path | shell working directory; unset ⇒ dispatching cwd |
 | `ADHD_AGENT_NATIVE_TOOLING_SHELL_ALLOW_COMMANDS` | csv | command NAMES accepted by the adopted argv-allowlist server |
+| `ADHD_AGENT_NATIVE_TOOLING_SHELL_ALLOW_PATTERNS` | csv | regex patterns (`re.fullmatch` over the command NAME) accepted by the adopted server, OR'd with `…_ALLOW_COMMANDS` |
 | `ADHD_AGENT_NATIVE_TOOLING_SHELL_TIMEOUT_MS` | int | default command timeout (ms) |
 | `ADHD_AGENT_NATIVE_TOOLING_DISPATCH_ALLOWED_TOOLS` | csv | dispatch (agent-mcp self) tool-name allowlist |
 | `ADHD_AGENT_NATIVE_TOOLING_DISPATCH_DISALLOWED_TOOLS` | csv | dispatch tool-name denylist (wins) |

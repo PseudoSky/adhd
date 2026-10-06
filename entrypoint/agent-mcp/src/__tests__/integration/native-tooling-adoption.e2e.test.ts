@@ -23,7 +23,12 @@
  * What it proves (AC2): a server RESOLVED by `resolveNativeTooling`
  * (`@adhd/agent-core-native-tooling`) — the adopted, `srt`-wrapped
  * `tumf/mcp-shell-server` — starts, HANDSHAKES through the real
- * `agent_verify_mcp` implementation, and EXECUTES an allowlisted argv command.
+ * `agent_verify_mcp` implementation, and EXECUTES an allowlisted argv command;
+ * and that the `ALLOW_PATTERNS` passthrough (ADR-0008 D5 "free win": enable the
+ * adopted server's pattern allow-list, `re.fullmatch` over the command NAME)
+ * is enforced by the REAL server — a matching NAME runs, a non-matching NAME is
+ * denied. The default (unflagged) pattern proof lives in
+ * `native-tooling-pattern-allowlist.test.ts`.
  *
  * Run: `NAT_TOOL_LIVE=1 npx nx test agent-mcp -- native-tooling-adoption`
  * ────────────────────────────────────────────────────────────────────────────
@@ -148,6 +153,50 @@ describe.skipIf(!isLive)(
           command: ['echo', LIVE_TOKEN],
         });
         expect(JSON.stringify(output)).toContain(LIVE_TOKEN);
+      } finally {
+        await client.close();
+      }
+    }, 180_000);
+
+    it('passes ALLOW_PATTERNS through and the REAL server executes a matching NAME, denies a non-matching NAME', async () => {
+      const servers = resolveNativeTooling(
+        { fs: false, shell: { allowPatterns: ['ec.*'] }, dispatch: false },
+        {
+          cwd: workdir,
+          env: { HOME: home, UV_CACHE_DIR: UV_CACHE, PATH: process.env['PATH'] ?? '' },
+        }
+      );
+      const shell = servers.find((s): s is Stdio => s.transport === 'stdio');
+      if (!shell) throw new Error('a stdio shell server must resolve');
+      expect(shell.command).toBe('srt');
+      expect(shell.args).toEqual(['uvx', 'mcp-shell-server']);
+      // D5/D7: the pattern allow-list is a passthrough of the adopted server's
+      // env — no exact names here, ONLY the regex.
+      expect(shell.env?.ALLOW_PATTERNS).toBe('ec.*');
+      expect(shell.env?.ALLOW_COMMANDS).toBeUndefined();
+
+      // 1) HANDSHAKE — the real `agent_verify_mcp` implementation.
+      const verified = await verifyAgentMcpServers(
+        { name: 'native-tooling-pattern-adoption' },
+        { agentStore: fakeAgentStore({ shell }) }
+      );
+      const shellResult = verified.servers.find((s) => s.name === 'shell');
+      expect(shellResult?.status, shellResult?.error).toBe('verified');
+      expect(shellResult?.tools).toContain('shell_execute');
+
+      // 2) EXECUTE — `echo` fully matches `ec.*`, so the real server runs it.
+      const client = new StdioMcpClient('shell', shell);
+      await client.connect();
+      try {
+        const output = await client.callTool('shell_execute', {
+          command: ['echo', LIVE_TOKEN],
+        });
+        expect(JSON.stringify(output)).toContain(LIVE_TOKEN);
+
+        // 3) DENY — `frobnicate` matches no pattern → the real server refuses.
+        await expect(
+          client.callTool('shell_execute', { command: ['frobnicate', '--x'] })
+        ).rejects.toThrow(/not allowed|rejected/i);
       } finally {
         await client.close();
       }

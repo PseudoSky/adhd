@@ -127,6 +127,13 @@ function resolveShell(
   if (overrides.allowCommands?.length) {
     env[SHELL_SERVER.envKeys.allowCommands] = overrides.allowCommands.join(',');
   }
+  // Pattern allow-list passthrough (ADR-0008 D5): the adopted server `fullmatch`es
+  // each regex against the command NAME (`re.fullmatch(pattern, command[0])`),
+  // OR'd with `ALLOW_COMMANDS`. The harness only plumbs the config through — it
+  // owns no parser and evaluates no pattern.
+  if (overrides.allowPatterns?.length) {
+    env[SHELL_SERVER.envKeys.allowPatterns] = overrides.allowPatterns.join(',');
+  }
   if (overrides.timeoutMs !== undefined) {
     env[SHELL_SERVER.envKeys.timeoutSeconds] = String(
       Math.ceil(overrides.timeoutMs / 1000)

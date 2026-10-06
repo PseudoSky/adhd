@@ -106,6 +106,46 @@ describe('resolveNativeTooling — task-time resolution (ADR-0008 D2/D4)', () =>
     expect(shell.env?.DENY_COMMANDS).toBeUndefined();
   });
 
+  it('AC1: shell.allowPatterns emits ALLOW_PATTERNS into the RESOLVED config (regex passthrough)', () => {
+    const cfg = { fs: false, shell: { allowPatterns: ['ls.*', 'git'] } } as const;
+    const servers = resolveNativeTooling(cfg, { cwd: '/p/a' });
+    expect(shellServer(servers)!.env?.ALLOW_PATTERNS).toBe('ls.*,git');
+    // The keyed projection is the SAME computation — the pattern is on the server
+    // the host actually mounts, not merely a local variable.
+    const map = resolveNativeToolingMap(cfg, { cwd: '/p/a' });
+    expect((map['shell'] as Stdio).env?.ALLOW_PATTERNS).toBe('ls.*,git');
+  });
+
+  it('AC1 negative-control: with no allowPatterns the resolved env carries NO ALLOW_PATTERNS', () => {
+    // Teeth for AC1: this is the exact state a missing emission produces, so the
+    // AC1 assertion above cannot pass on a fictional/always-present env var.
+    const servers = resolveNativeTooling(
+      { fs: false, shell: { allowCommands: ['ls'] } },
+      { cwd: '/p/a' }
+    );
+    expect(shellServer(servers)!.env?.ALLOW_PATTERNS).toBeUndefined();
+  });
+
+  it('AC3: allowCommands (exact) still works unchanged AND combines with allowPatterns', () => {
+    const servers = resolveNativeTooling(
+      { fs: false, shell: { allowCommands: ['pwd'], allowPatterns: ['ls.*'] } },
+      { cwd: '/p/a' }
+    );
+    const shell = shellServer(servers)!;
+    // Exact names unchanged …
+    expect(shell.env?.ALLOW_COMMANDS).toBe('pwd');
+    // … and the pattern passthrough is emitted ALONGSIDE (server ORs the two).
+    expect(shell.env?.ALLOW_PATTERNS).toBe('ls.*');
+  });
+
+  it('AC1: an EMPTY allowPatterns array emits no ALLOW_PATTERNS key (mirrors allowCommands)', () => {
+    const servers = resolveNativeTooling(
+      { fs: false, shell: { allowPatterns: [] } },
+      { cwd: '/p/a' }
+    );
+    expect(shellServer(servers)!.env?.ALLOW_PATTERNS).toBeUndefined();
+  });
+
   it('fs.root override pins the root arg while cwd stays the task cwd', () => {
     const servers = resolveNativeTooling(
       { fs: { root: '/fixed' }, shell: false, dispatch: false },

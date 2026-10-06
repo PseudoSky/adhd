@@ -52,6 +52,15 @@ describe('NAT-TOOL-7 AC2 — environment-base-spec native tooling field-spec fra
     expect(FRAGMENT['nativeTooling.shell.root'].default).toBeUndefined();
   });
 
+  it('AC1/AC4: `nativeTooling.shell.allowPatterns` is declared with its explicit CSV env name', () => {
+    const spec = FRAGMENT['nativeTooling.shell.allowPatterns'];
+    expect(spec).toBeDefined();
+    expect(spec.type).toBe('array');
+    expect(spec.items).toEqual({ type: 'string' });
+    // The env name is explicit (ADR-0008 D10) — inference would collapse it.
+    expect(spec.env).toBe('ADHD_AGENT_NATIVE_TOOLING_SHELL_ALLOW_PATTERNS');
+  });
+
   it('B2: the retired `nativeTooling.shell.denyCommands` is absent from the fragment', () => {
     // Removed surface (ADR-0008 D5: the adopted shell server is allow-list only;
     // a deny-list would be a silent no-op). Re-adding the FieldSpec turns this RED.

@@ -59,13 +59,38 @@ describe('nativeTooling zod validation (ADR-0008 D3; NAT-TOOL-1)', () => {
   it('AC3: nativeTooling survives a serialize -> store -> read round-trip', () => {
     const nativeTooling = {
       fs: { root: '/work', readOnly: true, permissions: { fs: 'ask' as const } },
-      shell: { allowCommands: ['ls', 'git'], timeoutMs: 30_000 },
+      shell: {
+        allowCommands: ['ls', 'git'],
+        allowPatterns: ['ls.*', 'git'],
+        timeoutMs: 30_000,
+      },
       dispatch: true,
       hitl: true,
     };
     const stored = agentDefinitionStoredSchema.parse({ ...base, nativeTooling });
     const read = agentDefinitionStoredSchema.parse(JSON.parse(JSON.stringify(stored)));
     expect(read.nativeTooling).toEqual(nativeTooling);
+  });
+
+  it('AC1: accepts the shell `allowPatterns` passthrough; a non-array is rejected', () => {
+    // The adopted server's `ALLOW_PATTERNS` (regex fullmatch over command NAMES)
+    // is config plumbing only (ADR-0008 D5) — the schema accepts it as a string[].
+    expect(
+      shellBuiltinOverridesSchema.safeParse({ allowPatterns: ['ls.*', 'git'] }).success
+    ).toBe(true);
+    expect(
+      shellBuiltinOverridesSchema.safeParse({ allowCommands: ['ls'], allowPatterns: ['ls.*'] })
+        .success
+    ).toBe(true);
+    // Teeth: the leaf is a string[], not a string — a scalar must be rejected.
+    expect(shellBuiltinOverridesSchema.safeParse({ allowPatterns: 'ls.*' }).success).toBe(false);
+    // And the agent-definition boundary accepts it too, end to end.
+    expect(
+      agentDefinitionSchema.safeParse({
+        ...base,
+        nativeTooling: { shell: { allowPatterns: ['ls.*'] } },
+      }).success
+    ).toBe(true);
   });
 
   it('AC4: a definition whose MCP server has no `cwd` still validates', () => {

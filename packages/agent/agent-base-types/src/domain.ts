@@ -300,12 +300,12 @@ export interface FsBuiltinOverrides {
 
 /**
  * Overrides for the builtin shell tool (`tumf/mcp-shell-server`, ADR-0008 D7).
- * `allowCommands` is a **passthrough** of the adopted server's own argv allowlist
- * (config plumbing only) — the harness runs NO command parser and owns NO
- * dangerous-command catalog (ADR-0008 D5). There is deliberately NO
- * `denyCommands`: the adopted server is allow-list only, and D5 forbids the
- * harness from owning per-command deny semantics (a deny-list would be a silent
- * no-op).
+ * `allowCommands` and `allowPatterns` are **passthroughs** of the adopted
+ * server's own argv allowlist (config plumbing only) — the harness runs NO
+ * command parser and owns NO dangerous-command catalog (ADR-0008 D5). There is
+ * deliberately NO `denyCommands`: the adopted server is allow-list only, and D5
+ * forbids the harness from owning per-command deny semantics (a deny-list would
+ * be a silent no-op).
  */
 export interface ShellBuiltinOverrides {
   /** Working directory for spawned commands. Defaults to the dispatching cwd. */
@@ -314,6 +314,16 @@ export interface ShellBuiltinOverrides {
   permissions?: PermissionRuleMap;
   /** Command NAMES accepted by the adopted argv-allowlist server. */
   allowCommands?: string[];
+  /**
+   * Regex patterns the adopted server `fullmatch`es against a command **NAME**
+   * (its `ALLOW_PATTERNS` env), OR'd with {@link allowCommands}. A passthrough,
+   * not a harness-side matcher (ADR-0008 D5): the adopted server applies
+   * `re.fullmatch(pattern, command[0])` — the whole NAME must match, metachar
+   * patterns are rejected, and the server's default dangerous-command policy
+   * still runs first (a pattern cannot re-enable `python`, `sh`, …). Example:
+   * `['ls.*', 'git']` allows `ls`, `ls -la`, and `git`.
+   */
+  allowPatterns?: string[];
   /** Default command timeout, in milliseconds. */
   timeoutMs?: number;
   /** Extra environment for the shell server process. */

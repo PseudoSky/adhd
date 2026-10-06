@@ -91,6 +91,7 @@ export interface AgentMcpConfig {
     readonly shell: {
       readonly root: string | undefined;
       readonly allowCommands: readonly string[] | undefined;
+      readonly allowPatterns: readonly string[] | undefined;
       readonly timeoutMs: number | undefined;
     };
     readonly dispatch: {
