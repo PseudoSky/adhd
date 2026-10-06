@@ -1705,3 +1705,38 @@ Schema version 1.
   already green: `nx affected -t test build lint --base=1bcc147d` exit 0, and builds + verify-dist-load
   exit 0). This record is the only change to this file in this operation. Recorded under §Commit
   convention's `docs(<area>):` scope.
+
+- **2026-10-05 — operation record: land of `docs/provider-split-dg-spec-9c4e` (dispatch-2026-10-04-9c4e).**
+  Landed the docs-only branch onto `main` as a **merge commit** `ac50d485` (parents `e284743d` =
+  pre-merge `main`, `eb72a110` = branch head), moving `main` `e284743d` → `ac50d485`; 2 files, +45
+  (new `docs/plan/provider-split/SPEC.md`, +43; `docs/plan/agent-final/GOAL.md`, +2 — the one-line
+  pointer from the D-G ruling to the SPEC). The branch carried exactly 1 commit since the merge-base
+  `b16a627b` (`git rev-list --count b16a627b..eb72a110` = 1), and `main` had advanced 4 commits past
+  that base to `e284743d` (the `feat/query-engine-model-v2` landings, all `packages/data/**` +
+  `CHANGELOG.md`). §Branching & merge was the deciding rule: this history "carries true merge
+  commits" and ff-only is not enforced, while rebase-in-flight is permitted only on a branch "solely
+  your own" — the branch is an executor's, not the operator's — so the directed `--no-ff` merge is the
+  stated shape. Dry-run `git merge-tree --write-tree --name-only main eb72a110` exited 0, producing
+  tree `977a2861052fbff1deacdc966a6597a776f00bf7` with no conflict hunks; the actual `git merge
+  --no-ff` was conflict-free (ort strategy, exit 0). No hook ran: `.githooks/` has no
+  `pre-merge-commit` hook, and the `pre-commit` success banner (which the hook always prints on a
+  clean pass) did not appear, so git did not invoke it for this merge commit. Post-merge
+  `git rev-list --count main..docs/provider-split-dg-spec-9c4e` = 0 and
+  `git merge-base --is-ancestor eb72a110 main` exits 0, so the commit is contained. The branch never
+  touched this file (empty `git diff b16a627b..eb72a110 -- docs/GIT-POLICY.md`; its changed paths are
+  exactly `docs/plan/agent-final/GOAL.md` and `docs/plan/provider-split/SPEC.md`), so `main`'s policy
+  blob `48823501795cc65aa9e6e7819b93e79176c34019` survived the merge byte-identical. A concurrent
+  agent's uncommitted work was present in the working tree throughout — 14 modified and 4 untracked
+  paths, all under `entrypoint/backlog/**`, `docs/plan/backlog-consolidation/**`, and
+  `packages/data/data-query-engine/src/lib/model/**` — and was proven disjoint from the merge's
+  changed paths (`comm -12` of the two path sets = 0 lines) before the merge ran, then neither
+  staged, swept, nor modified (the post-merge `git status --porcelain` is byte-for-byte identical:
+  sha256 `a075d0ae3c8f48ef82e768f7d800f6dc88c48c19075f07698a1787c51542e1f3` before and after). The
+  worktree `.worktrees/provider-split-dg-spec-9c4e` was then reaped under §Cleanup's three-part test:
+  `git status --porcelain` inside it was empty, it carried no `locked` line, and its head `eb72a110`
+  was an ancestor of `main` after the merge — so `git worktree remove` (no `--force`) ran and the
+  branch was deleted with `git branch -d docs/provider-split-dg-spec-9c4e` (was `eb72a110`); the
+  merged commit remains reachable from the durable `main` ref, so recovery does not depend on the
+  reflog. No push (the dispatch directed none) and no gates were run by this operation (the dispatch
+  directed none; docs-only). This record is the only change to this file in this operation. Recorded
+  under §Commit convention's `docs(<area>):` scope.
