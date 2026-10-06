@@ -8,6 +8,7 @@
 import { Transform as _ } from '@adhd/data-base-transforms';
 import { compileAccessor, type PathGetter } from '../path';
 import { resolveIsoPeriod } from '../period';
+import { operators } from '../filters';
 import type { OrderByExpression } from '../expressions';
 import { postNames, splitWhere, validateQuery } from './phase';
 import { computeKey } from './canonical';
@@ -69,36 +70,6 @@ function toMs(value: unknown): number | null {
   return null;
 }
 
-function periodMatch(value: unknown, bound: unknown): boolean {
-  let duration: string;
-  let anchor: number;
-  if (typeof bound === 'string') {
-    duration = bound;
-    anchor = Date.now();
-  } else if (Array.isArray(bound) && bound.length === 2 && typeof bound[0] === 'string' && typeof bound[1] === 'number') {
-    duration = bound[0];
-    anchor = bound[1];
-  } else {
-    return false;
-  }
-  const t = toMs(value);
-  if (t === null) return false;
-  try {
-    const { from, to } = resolveIsoPeriod(duration, anchor);
-    return t >= from && t <= to;
-  } catch {
-    return false;
-  }
-}
-
-function between(value: unknown, bound: unknown): boolean {
-  if (!Array.isArray(bound) || bound.length < 2) return false;
-  const t = toMs(value);
-  const from = toMs(bound[0]);
-  const to = toMs(bound[1]);
-  return t !== null && from !== null && to !== null && t >= from && t <= to;
-}
-
 // ── subquery operands ───────────────────────────────────────────────────────
 function isScalarOp(value: unknown): value is ScalarOperator {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
@@ -143,31 +114,31 @@ function inOperand(value: unknown, bound: unknown, ctx: EvalCtx): boolean {
   return false;
 }
 
-type Op = (a: unknown, b: unknown, ctx: EvalCtx) => boolean;
-const OPS: Record<string, Op> = {
-  _eq: (a, b) => _.isEqual(a, b),
-  _ne: (a, b) => _.isNotEqual(a, b),
-  // A nullish operand must NOT pass a range comparison — gate on isDefined, then
-  // use the total order (compareOrder). (Shipped `_.isGreaterThan` has the same
-  // null→false rule; `compareOrder` alone would sort null last and wrongly pass.)
-  _gt: (a, b) => _.isDefined(a) && _.isDefined(b) && _.compareOrder(a, b) > 0,
-  _gte: (a, b) => _.isDefined(a) && _.isDefined(b) && _.compareOrder(a, b) >= 0,
-  _lt: (a, b) => _.isDefined(a) && _.isDefined(b) && _.compareOrder(a, b) < 0,
-  _lte: (a, b) => _.isDefined(a) && _.isDefined(b) && _.compareOrder(a, b) <= 0,
-  _in: (a, b, ctx) => inOperand(a, b, ctx),
-  _nin: (a, b, ctx) => !inOperand(a, b, ctx),
-  _is_null: (a, b) => _.isDefined(a) !== b,
-  _period: (a, b) => periodMatch(a, b),
-  _between: (a, b) => between(a, b),
-};
-
+/**
+ * Evaluate one leaf. The leaf operator vocabulary is the SHIPPED table
+ * (`../filters.operators`), so the one grammar supports every shipped operator.
+ * Two special cases stay here: `_between`/`_nbetween` are compile-time sugar for
+ * a single-range `_in_datetimerange`/`_nin_datetimerange`, and `_in`/`_nin` may
+ * carry a subquery operand (memoized by canonical key).
+ */
 function matchLeaf(field: string, operator: ScalarOperator, row: Row, ctx: EvalCtx): boolean {
   const value = get(field)(row);
   for (const [op, operand] of Object.entries(operator)) {
     if (operand === undefined) continue;
-    const fn = OPS[op];
+    if (op === '_between' || op === '_nbetween') {
+      const desugared = op === '_between' ? '_in_datetimerange' : '_nin_datetimerange';
+      const fn = operators[desugared];
+      if (!fn?.(value)([operand])) return false;
+      continue;
+    }
+    if ((op === '_in' || op === '_nin') && isSubquery(operand)) {
+      const member = inOperand(value, operand, ctx);
+      if (op === '_in' ? !member : member) return false;
+      continue;
+    }
+    const fn = operators[op];
     if (fn === undefined) throw new QueryModelError(`unknown operator '${op}' on '${field}'`);
-    if (!fn(value, operand, ctx)) return false;
+    if (!fn(value)(operand)) return false;
   }
   return true;
 }

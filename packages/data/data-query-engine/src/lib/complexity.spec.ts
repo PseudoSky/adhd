@@ -105,25 +105,22 @@
  *                                         Date math per row (src/lib/period.ts)
  *
  * COVERED SINCE THE GROUPING SURFACE LANDED (SPEC 49a62647 §4)
- *   - group_by / aggregate / having / top_n: one hash-partition pass per
- *     grouping set => O(n) per set. The ladder holds G constant (GROUPS, 8
- *     values) so the fitted slope is the N-dimension.
- *   - _rollup(d) = O(n*(d+1)) (Gray et al. 1997); asserted here at d=2 over two
- *     low-cardinality dims, still O(n) per grouping set. CUBE is O(n*2^d) and
- *     the engine caps d at 12.
+ *   - group_by / fold items / post-group `where` (HAVING) / `keep`: one
+ *     hash-partition pass plus one fold per row => O(n). The ladder holds G
+ *     constant (GROUPS, 8 values) so the fitted slope is the N-dimension.
+ *   - a two-dimension group_by is one hash-partition pass => O(n).
  *   - honest limits: the G-dimension (hash cost, O(G) space) and the
  *     non-algebraic `_quantile` (buffers and sorts each group's values) are
  *     NOT asserted here — neither is linear in N, and a per-N ladder cannot
- *     isolate them. _period/window share the same O(n) per-row bound.
+ *     isolate them. `_period`/`_window` share the same O(n) per-row bound.
  *
- * ADDED WITH ADR-0005 SELECT + _nest + PATH/RANGE OPS
+ * ADDED WITH ADR-0005 SELECT + NESTED SELECT + PATH/RANGE OPS
  *   op                       bound        source
  *   -----------------------  -----------  -----------------------------------
  *   select                   O(n)         a single Array.map projection over
- *                                         the rows surviving the whole tail
- *                                         (src/lib/query.ts:337-345). The suite
- *                                         holds the projection width fixed
- *                                         (2 refs), so the fit is the N-slope.
+ *                                         the rows surviving the whole tail.
+ *                                         The suite holds the projection width
+ *                                         fixed (2 refs), so the fit is N.
  *   path resolver            O(n*d)       compileAccessor() splits the ref ONCE
  *                                         at compile time (src/lib/path.ts:38-66)
  *                                         then walks d segments per row, with an
@@ -136,25 +133,20 @@
  *                                         INTERVAL row value instead of a point.
  *   _between / _nbetween     O(n*k)       compile-time SUGAR desugaring into the
  *                                         SAME _in/_nin_datetimerange predicate
- *                                         (src/lib/parser.ts desugarOperators);
- *                                         there is deliberately no second code
- *                                         path, so it needs no separate bound.
+ *                                         (src/lib/model/execute.ts); there is
+ *                                         deliberately no second code path.
  *
- *   - _nest is a single-pass TRIE OF ACCUMULATORS: each row descends its tree
- *     path once, adding into every ancestor, so per-row work is O(d) and the
- *     pass is O(n*d) time, O(G) space (G = emitted nodes). Asserted at d=2 and
+ *   - a nested `select` partitions the parent rows: each row is processed once
+ *     per level, so the pass is O(n*d) time, O(G) space. Asserted at d=2 and
  *     d=3 — with d HELD CONSTANT — so the fitted slope is the N-dimension.
  *   - HONEST LIMIT (nested): the D-DIMENSION is NOT assertable by a per-N
  *     ladder. A ladder over N holds d fixed and can only recover the N-slope;
  *     it cannot distinguish O(n*d) from O(n) at a fixed d, and it cannot see a
- *     regression that is super-linear in d. Likewise a per-node `top_n` adds an
- *     O(G log G) term that the suite CANNOT separate from O(n) (the n-log-n
- *     limit above). The nested ladder therefore omits top_n, and the d-limit is
- *     stated here rather than faked.
- *   - POSITIVE CONTROL (nested): the pass PARTITIONS the parent set — each row
- *     updates its own ancestor chain rather than rescanning all data per node.
- *     A rescan variant would be O(G*n) and is rejected by the linear band; the
- *     nested controls below are the gate that would catch it.
+ *     regression that is super-linear in d.
+ *   - POSITIVE CONTROL (nested): the pass PARTITIONS the parent set rather than
+ *     rescanning all data per node. A rescan variant would be O(G*n) and is
+ *     rejected by the linear band; the nested controls below are the gate that
+ *     would catch it.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -525,53 +517,60 @@ describe('complexity — distinct_on / offset+limit', () => {
 describe('complexity — group_by / aggregate / HAVING', () => {
   // G is held constant (GROUPS, 8 values) across the ladder, so each suite
   // isolates the N-dimension: one hash-partition pass + one fold per row.
-  it('flat group_by + aggregate is O(n) per grouping set', () => {
+  it('flat group_by + aggregate is O(n)', () => {
     const r = measureQuery(LIN_SIZES, () => ({
-      group_by: ['group'],
-      aggregate: { s: { _sum: 'value' }, c: { _count: true } },
+      group_by: [
+        'group',
+        { name: 's', aggregate: { _sum: 'value' } },
+        { name: 'c', aggregate: { _count: true } },
+      ],
     }));
     logFit('group_by flat', r);
     expectLinear(r.p, 'group_by flat');
   });
 
-  it('windowed group_by + aggregate is O(n) (window is a per-row test)', () => {
+  it('a window-scoped fold is O(n) (window is a per-row test)', () => {
     const r = measureQuery(LIN_SIZES, () => ({
-      group_by: ['group'],
-      window: { field: 'ts', period: ['P100Y', BASE_TS] },
-      aggregate: { s: { _sum: 'value' } },
+      group_by: [
+        'group',
+        {
+          name: 's',
+          aggregate: {
+            _sum: 'value',
+            _window: { field: 'ts', period: ['P100Y', BASE_TS] },
+          },
+        },
+      ],
     }));
     logFit('group_by windowed', r);
     expectLinear(r.p, 'group_by windowed');
   });
 
-  it('HAVING adds only an O(G) pass over the grouped rows', () => {
+  it('a post-group `where` leaf (HAVING) adds only an O(G) pass over the grouped rows', () => {
     const r = measureQuery(LIN_SIZES, () => ({
-      group_by: ['group'],
-      aggregate: { s: { _sum: 'value' } },
-      having: { s: { _gt: -1 } },
+      group_by: ['group', { name: 's', aggregate: { _sum: 'value' } }],
+      where: { s: { _gt: -1 } },
     }));
     logFit('group_by + having', r);
     expectLinear(r.p, 'group_by + having');
   });
 
-  it('_rollup over two low-cardinality dims is O(n) per grouping set', () => {
-    // d=2 => {group,rank}, {group}, {}: three passes, so still O(n).
+  it('a two-dimension group_by is O(n)', () => {
     const r = measureQuery(LIN_SIZES, () => ({
-      group_by: { _rollup: ['group', 'rank'] },
-      aggregate: { s: { _sum: 'value' } },
+      group_by: ['group', 'rank', { name: 's', aggregate: { _sum: 'value' } }],
     }));
-    logFit('group_by rollup(2)', r);
-    expectLinear(r.p, 'group_by rollup(2)');
+    logFit('group_by 2-dim', r);
+    expectLinear(r.p, 'group_by 2-dim');
   });
 
-  it('top_n adds only an O(G log G) rank over the grouped rows', () => {
+  it('keep (top-N + _other) adds only an O(G log G) rank over the grouped rows', () => {
     const r = measureQuery(LIN_SIZES, () => ({
-      group_by: ['group'],
-      aggregate: { v: { _sum: 'value' } },
-      top_n: { n: 2, by: 'v', other: true },
+      group_by: ['group', { name: 'v', aggregate: { _sum: 'value' } }],
+      order_by: [{ v: 'desc' }],
+      keep: { n: 2, other: true },
     }));
-    logFit('group_by + top_n', r);
-    expectLinear(r.p, 'group_by + top_n');
+    logFit('group_by + keep', r);
+    expectLinear(r.p, 'group_by + keep');
   });
 });
 
@@ -621,48 +620,45 @@ describe('complexity — select / path resolver / date-range (ADR-0005 ops)', ()
   });
 });
 
-describe('complexity — nested group_by (_nest)', () => {
-  // Each row descends its tree path ONCE, adding into every ancestor: O(n*d)
-  // time at a fixed tree, O(G) space. The ladder holds d constant, so the fit
-  // is the N-slope; see the header's honest-limit note for what this CANNOT
-  // assert (the d-dimension, and the per-node top_n n-log-n term).
+describe('complexity — nested select (hierarchical grouping)', () => {
+  // Each row is processed once per level: O(n*d) time at a fixed tree, O(G)
+  // space. The ladder holds d constant, so the fit is the N-slope.
 
-  it('_nest d=2 (group -> rank) is O(n*d), linear in N at fixed d', () => {
+  it('nested select d=2 (group -> rank) is O(n*d), linear in N at fixed d', () => {
     const r = measureQuery(LIN_SIZES, () => ({
-      group_by: {
-        _nest: [
-          {
-            key: 'group',
-            aggregate: { s: { _sum: 'value' } },
-            children: [{ key: 'rank', aggregate: { s: { _sum: 'value' } } }],
-          },
-        ],
-      },
+      group_by: ['group', { name: 's', aggregate: { _sum: 'value' } }],
+      select: [
+        'group',
+        's',
+        {
+          name: 'children',
+          group_by: ['rank', { name: 's', aggregate: { _sum: 'value' } }],
+        },
+      ],
     }));
-    logFit('_nest d=2', r);
-    expectLinear(r.p, '_nest d=2');
+    logFit('nested select d=2', r);
+    expectLinear(r.p, 'nested select d=2');
   });
 
-  it('_nest d=3 (group -> rank -> id) is O(n*d), linear in N at fixed d', () => {
+  it('nested select d=3 (group -> rank -> id) is O(n*d), linear in N at fixed d', () => {
     const r = measureQuery(LIN_SIZES, () => ({
-      group_by: {
-        _nest: [
-          {
-            key: 'group',
-            aggregate: { s: { _sum: 'value' } },
-            children: [
-              {
-                key: 'rank',
-                aggregate: { s: { _sum: 'value' } },
-                children: [{ key: 'id', aggregate: { s: { _sum: 'value' } } }],
-              },
-            ],
-          },
-        ],
-      },
+      group_by: ['group', { name: 's', aggregate: { _sum: 'value' } }],
+      select: [
+        'group',
+        's',
+        {
+          name: 'd2',
+          group_by: ['rank', { name: 's', aggregate: { _sum: 'value' } }],
+          select: [
+            'rank',
+            's',
+            { name: 'd3', group_by: ['id', { name: 's', aggregate: { _sum: 'value' } }] },
+          ],
+        },
+      ],
     }));
-    logFit('_nest d=3', r);
-    expectLinear(r.p, '_nest d=3');
+    logFit('nested select d=3', r);
+    expectLinear(r.p, 'nested select d=3');
   });
 
   it('positive control: the nested pass partitions the parent set (not quadratic)', () => {
@@ -670,17 +666,17 @@ describe('complexity — nested group_by (_nest)', () => {
     // here; the pass under test partitions instead. _count keeps the fixture
     // work non-elidable while asserting the same linear class.
     const r = measureQuery(LIN_SIZES, () => ({
-      group_by: {
-        _nest: [
-          {
-            key: 'group',
-            aggregate: { c: { _count: true } },
-            children: [{ key: 'rank', aggregate: { c: { _count: true } } }],
-          },
-        ],
-      },
+      group_by: ['group', { name: 'c', aggregate: { _count: true } }],
+      select: [
+        'group',
+        'c',
+        {
+          name: 'children',
+          group_by: ['rank', { name: 'c', aggregate: { _count: true } }],
+        },
+      ],
     }));
-    logFit('_nest positive control', r);
-    expectLinear(r.p, '_nest positive control');
+    logFit('nested select positive control', r);
+    expectLinear(r.p, 'nested select positive control');
   });
 });

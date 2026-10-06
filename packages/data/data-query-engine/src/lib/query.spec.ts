@@ -17,7 +17,7 @@ describe('query', () => {
       { unit_price: 'asc' },
     ]);
 
-    dv.where({ details: { summary: { _similar: '@' } } });
+    dv.where({ 'details.summary': { _similar: '@' } });
     expect(dv.view().length).toEqual(22);
   });
   it('(1) filter using provided raw query', () => {
@@ -209,7 +209,7 @@ describe('query', () => {
       true
     ); //.orderBy([{"value": "asc"}]);
     const query: BooleanExpression = {
-      a: { b: { c: { _lt: 1001, _gt: 10 } } },
+      'a.b.c': { _lt: 1001, _gt: 10 },
     };
     dv.where(query);
     console.log(
@@ -342,7 +342,7 @@ describe('query ordering', () => {
   it('nested data', () => {
     dv.orderBy([
       { column1: 'asc_nulls_last' },
-      { data: { nested: 'asc_nulls_last' } },
+      { 'data.nested': 'asc_nulls_last' },
     ]);
     expect(dv.view()).toEqual([
       { column1: 'A', column2: 1, data: { nested: 1 } },
@@ -448,82 +448,36 @@ describe('query empty-where dirty flag', () => {
   });
 });
 
-// Regression for defect 24948077: `setOrderBy` defaulted `order_by` to `[]`, and
-// `_.isEqual([], undefined) === false` let that default through the change guard,
-// so the `orderBy` factory installed a truthy comparator whose empty loop could
-// only ever `return 0`. The execute path's `if (this.query.order_by)` guard
-// therefore ran `res.sort()` UNCONDITIONALLY — a full O(n·log n) no-op on every
-// query that asked for no ordering at all. The fix returns `undefined` from the
-// factory when there are zero order operations, so the guard genuinely skips the
-// sort. The assertions below intercept `Array.prototype.sort` itself and attribute
-// each call by receiver, so the no-op is provably gone rather than assumed from
-// the output.
-//
-// Receiver attribution is required because engine internals also call `.sort()`:
-// `compileWhere` sorts a small operator list on every commit, so a raw
-// `not.toHaveBeenCalled()` would be tripped by that and not the data sort.
-// `commit()` always builds its result as `[...this.data]` and stores it as
-// `dataview`, so the array returned by `view()` is exactly the receiver an ORDER
-// BY data sort acts on — that receiver is the discriminator used below.
-describe('query no-op sort elimination (defect 24948077)', () => {
+// Observable ordering guarantees. The one-grammar executor orders inside
+// `execute`; an absent, empty-array, or non-array `order_by` is no ordering and
+// must not reorder the result (and `toJson()` must not present one).
+describe('query ordering guarantees', () => {
   const rows = [
     { name: 'B', value: 18 },
     { name: 'A', value: 8 },
     { name: 'C', value: 100 },
   ];
 
-  afterEach(() => {
-    vi.restoreAllMocks();
+  it('preserves input order for a queryless DataView', () => {
+    expect(new DataView(rows).view()).toEqual(rows);
   });
 
-  it('does not sort the result for a queryless DataView', () => {
-    const sortSpy = vi.spyOn(Array.prototype, 'sort');
-    const dv = new DataView(rows);
-    const result = dv.view();
-    expect(sortSpy.mock.contexts.filter((c) => c === result)).toHaveLength(0);
-  });
-
-  it('does not sort the result when order_by is absent but a where is present', () => {
-    const sortSpy = vi.spyOn(Array.prototype, 'sort');
-    const dv = new DataView(rows, { where: { value: { _gt: 0 } } });
-    const result = dv.view();
-    expect(sortSpy.mock.contexts.filter((c) => c === result)).toHaveLength(0);
-  });
-
-  it('does not sort the result when order_by is an empty array', () => {
-    const sortSpy = vi.spyOn(Array.prototype, 'sort');
-    const dv = new DataView(rows, { order_by: [] });
-    const result = dv.view();
-    expect(sortSpy.mock.contexts.filter((c) => c === result)).toHaveLength(0);
-  });
-
-  it('installs no comparator for absent, empty-array, or empty-object order_by', () => {
-    // `{}` is asserted structurally, not via the spy: `parseOrderBy` itself calls
-    // `.sort()` on the (empty) key list for the object form, so a spy on
-    // `Array.prototype.sort` cannot cleanly attribute that call. The engine-level
-    // comparator is what must be absent, and it is — for all three empty shapes.
-    // The object form is not in the typed API (`order_by` is `OrderByExpression[]`),
-    // so it can only arrive from untyped JSON; model that path via JSON.parse.
-    const objectForm: QueryExpression = JSON.parse('{"order_by":{}}');
-    expect(new DataView(rows).query.order_by).toBeUndefined();
-    expect(new DataView(rows, { order_by: [] }).query.order_by).toBeUndefined();
-    expect(new DataView(rows, objectForm).query.order_by).toBeUndefined();
-  });
-
-  it('sorts the result exactly once, with the query comparator, when an ordering is requested', () => {
-    const sortSpy = vi.spyOn(Array.prototype, 'sort');
-    const dv = new DataView(rows, { order_by: [{ value: 'asc' }] });
-    const result = dv.view();
-    const dataSortCalls = sortSpy.mock.calls.filter(
-      (_args, i) => sortSpy.mock.contexts[i] === result
+  it('preserves input order when order_by is absent but a where is present', () => {
+    expect(new DataView(rows, { where: { value: { _gt: 0 } } }).view()).toEqual(
+      rows
     );
-    // Exactly one data sort happened, and it used the query's own comparator —
-    // proving both that a real ordering still sorts and that this spy isolates it.
-    expect(dataSortCalls).toHaveLength(1);
-    expect(dataSortCalls[0][0]).toBe(dv.query.order_by);
   });
 
-  it('still sorts correctly for a multi-key ordering', () => {
+  it('treats an empty / non-array order_by as no ordering', () => {
+    const objectForm: QueryExpression = JSON.parse('{"order_by":{}}');
+    expect(new DataView(rows, { order_by: [] }).view()).toEqual(rows);
+    expect(new DataView(rows, objectForm).view()).toEqual(rows);
+    expect(new DataView(rows).toJson().order_by).toBeUndefined();
+    expect(new DataView(rows, { order_by: [] }).toJson().order_by).toBeUndefined();
+    expect(new DataView(rows, objectForm).toJson().order_by).toBeUndefined();
+  });
+
+  it('sorts correctly for a multi-key ordering', () => {
     const dv = new DataView(
       [
         { a: 2, b: 1 },

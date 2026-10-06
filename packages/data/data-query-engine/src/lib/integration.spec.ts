@@ -1,19 +1,14 @@
 /**
- * Consumer-outcome integration specs for the fold of the v2 query features into
- * the ONE shipped `DataView`. These drive the real barrel/class the way a
- * consumer does — not mocks — and each assertion is binary.
+ * Consumer-outcome integration specs for the ONE-grammar `DataView`. These drive
+ * the real barrel/class the way a consumer does — not mocks — and each assertion
+ * is binary.
  */
 import { describe, it, expect } from 'vitest';
 import * as fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import * as pkg from '../index';
 import * as modelIndex from './model/index';
-import {
-  DataView,
-  QueryValidationError,
-  normalizeQuery,
-  type QueryExpression,
-} from '../index';
+import { DataView, type QueryExpression } from '../index';
 import { execute, type EvalCtx } from './model/execute';
 
 describe('one surface', () => {
@@ -81,9 +76,7 @@ describe('builder + multi-source round-trip', () => {
       sources: new Map([['data', source]]),
       memo: new Map(),
     };
-    expect(dv.view()).toEqual(
-      execute(q as unknown as Parameters<typeof execute>[0], source, ctx)
-    );
+    expect(dv.view()).toEqual(execute(q, source, ctx));
   });
 
   it('NEGATIVE CONTROL: without raising `dirty`, the view is stale', () => {
@@ -123,104 +116,61 @@ describe('v2 grammar via view() equals query()', () => {
   });
 });
 
-describe('deprecated v1 fields still produce their v1 results', () => {
+describe('the v2 grammar expresses the former v1 operations', () => {
   const rows = [
     { agent: 'a', v: 1 },
     { agent: 'b', v: 5 },
     { agent: 'a', v: 2 },
   ];
 
-  it('the root aggregate-map sums per group', () => {
+  it('a post-group leaf in `where` is HAVING', () => {
     expect(
       new DataView(rows, {
-        group_by: ['agent'],
-        aggregate: { c: { _sum: 'v' } },
-      }).view()
-    ).toEqual([
-      { agent: 'a', c: 3 },
-      { agent: 'b', c: 5 },
-    ]);
-  });
-
-  it('having filters the grouped result', () => {
-    expect(
-      new DataView(rows, {
-        group_by: ['agent'],
-        aggregate: { c: { _sum: 'v' } },
-        having: { c: { _gt: 3 } },
+        group_by: ['agent', { name: 'c', aggregate: { _sum: 'v' } }],
+        where: { c: { _gt: 3 } },
       }).view()
     ).toEqual([{ agent: 'b', c: 5 }]);
   });
 
-  it("output:'rows' broadcasts back to the source rows", () => {
-    const data = [
-      { id: 'first', g: 'x', v: 5 },
-      { id: 'second', g: 'x', v: 1 },
-    ];
-    const out = new DataView(data, {
-      group_by: ['g'],
-      aggregate: { c: { _sum: 'v' } },
-      output: 'rows',
-    }).view() as unknown as Record<string, unknown>[];
-    expect(out.map((r) => r['id'])).toEqual(['first', 'second']);
-  });
-
-  it('top_n keeps N groups and folds the tail into one _other', () => {
+  it('top-N is order_by + keep', () => {
     const data = [
       { agent: 'a', v: 1 },
       { agent: 'b', v: 2 },
       { agent: 'c', v: 3 },
     ];
     const out = new DataView(data, {
-      group_by: ['agent'],
-      aggregate: { cost: { _sum: 'v' } },
-      top_n: { n: 2, by: 'cost', other: true },
+      group_by: ['agent', { name: 'cost', aggregate: { _sum: 'v' } }],
+      order_by: [{ cost: 'desc' }],
+      keep: { n: 2, other: true },
     }).view() as unknown as Record<string, unknown>[];
     expect(out.length).toBe(3);
     expect(out[0]['agent']).toBe('c');
     expect(out.find((r) => r['_other'] === true)?.['cost']).toBe(1);
   });
-});
 
-describe('normalizeQuery — the deprecated-alias boundary', () => {
-  it('translates aggregate-map + having + top_n into the canonical IR', () => {
-    const n = normalizeQuery({
-      group_by: ['agent'],
-      aggregate: { cost: { _sum: 'v' } },
-      where: { v: { _gt: 0 } },
-      having: { cost: { _gt: 0 } },
-      top_n: { n: 2, by: 'cost', other: true },
-    });
-    expect(n.group_by).toEqual([
-      'agent',
-      { name: 'cost', aggregate: { _sum: 'v' } },
-    ]);
-    expect(n.where).toEqual({ _and: [{ v: { _gt: 0 } }, { cost: { _gt: 0 } }] });
-    expect(n.order_by).toEqual([{ cost: 'desc' }]);
-    expect(n.keep).toEqual({ n: 2, other: true });
-  });
-
-  it('moves a query-level window onto each fold', () => {
-    const n = normalizeQuery({
-      group_by: ['agent'],
-      aggregate: { c: { _sum: 'v' } },
-      window: { field: 't', period: ['PT1H', 0] },
-    });
-    expect(n.group_by).toEqual([
-      'agent',
-      {
-        name: 'c',
-        aggregate: { _sum: 'v', _window: { field: 't', period: ['PT1H', 0] } },
-      },
-    ]);
-  });
-
-  it('rejects a shape that has no canonical form', () => {
-    expect(() =>
-      normalizeQuery({
-        group_by: { _rollup: ['a'] },
-        aggregate: { s: { _sum: 'v' } },
-      })
-    ).toThrow(QueryValidationError);
+  it('broadcast is a window fold in select + qualify', () => {
+    const sessions = [
+      { id: 's1', agent: 'a', t: 100, cost: 1 },
+      { id: 's2', agent: 'a', t: 200, cost: 2 },
+      { id: 's3', agent: 'b', t: 150, cost: 5 },
+    ];
+    const out = new DataView(sessions, {
+      select: [
+        'id',
+        'agent',
+        't',
+        {
+          name: 'running',
+          aggregate: {
+            _sum: 'cost',
+            _window: { field: 't', partition_by: 'agent', frame: ['unbounded', 0] },
+          },
+        },
+      ],
+      qualify: { running: { _gt: 0 } },
+      order_by: [{ t: 'asc' }],
+    }).view() as unknown as Record<string, unknown>[];
+    expect(out.map((r) => r['id'])).toEqual(['s1', 's3', 's2']);
+    expect(out.find((r) => r['id'] === 's2')?.['running']).toBe(3);
   });
 });
