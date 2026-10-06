@@ -43,6 +43,8 @@ every plan's demo must survive.
 
 **D-G implementation spec:** [`provider-split/SPEC.md`](../provider-split/SPEC.md) — the locked D-G architecture (dispatch `dispatch-2026-10-04-9c4e`).
 
+**SoX tracing spec:** [`agent-tracing/SPEC.md`](../agent-tracing/SPEC.md) — the locked `agent-plugin-tracing` architecture (dispatch `dispatch-2026-10-04-9c4e`).
+
 † `agent-core-policy`: intended as agent restrictions (tools/files/access modes);
 owner-assessed "may be irrelevant at this point" — on hold, unratified as a runtime
 enforcer. See Resolved questions O-1.
@@ -70,7 +72,7 @@ done when the spine demo runs green. Not sibling plans; one dag, one story.
 | Milestone | Demo artifact | State |
 |---|---|---|
 | store-move | [`store-move/`](./store-move/GOAL.md) GOAL+DEMO+UNRESOLVED | **written** |
-| dispatch | [`superseded/dispatch-completion/demo/DEMO.md`](./superseded/dispatch-completion/demo/DEMO.md) — **retained as-is** (owner, O-3: "I want that demo, i have not confirmed that they are invalid"); its 15 ⟦U#⟧ ledger is the acceptance frame | **exists** |
+| dispatch | [`dispatch-completion/demo/DEMO.md`](../dispatch-completion/demo/DEMO.md) — **retained as-is** (owner, O-3: "I want that demo, i have not confirmed that they are invalid"); its 15 ⟦U#⟧ ledger is the acceptance frame | **exists** |
 | client-factory · seam · authoring-lane (consuming sox) · compile · plugins/test-wiring · spine | to author, same idiom | — |
 
 ## Resolved questions (rulings on record — OBSERVATIONS.md OBS-21)
