@@ -53,3 +53,7 @@ apigen-* and `entrypoint/backlog` lanes and their `*.e2e.ts` convention; paid-se
 - `docs/PIPELINE.md` §2; `tools/gate/lane-gate.mjs`; `tools/vite-plugins/e2e-globs.mjs`
 - adhd ADR-0008 (`docs/decisions/0008-agent-mcp-native-tooling.md`:32)
 - backlog 5b839b90
+
+## Provenance
+
+- 2026-10-06 — backlog 5b839b90. AC1 and AC2 are proven by tests citing them (`check-lane-reachability.spec.mjs`, `check-agent-lane-spawn.spec.mjs`). AC3 (moved e2e still run by default) and AC4 (this ADR, AGENTS.md and PIPELINE.md pointers) have no applicable unit test: AC3 is proven by the `nx affected -t e2e --parallel=1` run, AC4 by the documents themselves.

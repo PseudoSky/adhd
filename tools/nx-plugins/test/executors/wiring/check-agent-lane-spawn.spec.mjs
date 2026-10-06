@@ -39,7 +39,7 @@ function fixture(files) {
 }
 const rules = (r) => r.violations.map((v) => v.rule);
 
-test('clean workspace is silent', () => {
+test('clean workspace is silent [5b839b90 AC2]', () => {
   const root = fixture({});
   try {
     assert.deepEqual(rules(collectAgentLaneSpawnViolations(root, EMPTY_BASELINE)), []);
@@ -55,26 +55,26 @@ test('A fires: unit-lane spec importing child_process (5b839b90 AC2)', () => {
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
-test('A is silent once the same file is in the e2e lane', () => {
+test('A is silent once the same file is in the e2e lane [5b839b90 AC2]', () => {
   const root = fixture({ 'packages/agent/agent-foo/src/bad.e2e.test.ts': SPAWNING });
   try {
     assert.deepEqual(rules(collectAgentLaneSpawnViolations(root, EMPTY_BASELINE)), []);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
-test('A fires on StdioClientTransport and a real-executable stdio registry', () => {
+test('A fires on StdioClientTransport and a real-executable stdio registry [5b839b90 AC2]', () => {
   assert.match(spawnReason(`new StdioClientTransport({ command: 'x' })`) ?? '', /StdioClientTransport/);
   assert.ok(spawnReason(`new McpClientRegistry({ a: { transport: 'stdio', command: process.execPath } })`));
 });
 
-test('A is silent for mocked child_process, comment mentions, and inert config data', () => {
+test('A is silent for mocked child_process, comment mentions, and inert config data [5b839b90 AC2]', () => {
   assert.equal(spawnReason(`vi.mock('child_process', () => ({}));\nconst { spawn } = await import('child_process');`), undefined);
   assert.equal(spawnReason(`// uses child_process and StdioClientTransport\n/* StdioMcpClient */\n`), undefined);
   assert.equal(spawnReason(`const s = { transport: 'stdio', command: 'npx' };`), undefined);
   assert.equal(stripComments('a // x\nb'), 'a \nb');
 });
 
-test('C fires: *.e2e.test.ts present but unit lane does not exclude them', () => {
+test('C fires: *.e2e.test.ts present but unit lane does not exclude them [5b839b90 AC2]', () => {
   const root = fixture({
     'packages/agent/agent-foo/src/x.e2e.test.ts': SPAWNING,
     'packages/agent/agent-foo/vite.config.ts': 'export default { test: {} };\n',
@@ -84,7 +84,7 @@ test('C fires: *.e2e.test.ts present but unit lane does not exclude them', () =>
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
-test('B fires on a stale pendingMove entry and is silent while the file is still unit-lane', () => {
+test('B fires on a stale pendingMove entry and is silent while the file is still unit-lane [5b839b90 AC2]', () => {
   const root = fixture({ 'packages/agent/agent-foo/src/pending.test.ts': 'export {};\n' });
   try {
     const live = { pendingMove: ['packages/agent/agent-foo/src/pending.test.ts'] };
@@ -94,7 +94,7 @@ test('B fires on a stale pendingMove entry and is silent while the file is still
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
-test('CLI exits 1 on a planted violation and 0 once removed', () => {
+test('CLI exits 1 on a planted violation and 0 once removed [5b839b90 AC2]', () => {
   const root = fixture({ 'packages/agent/agent-foo/src/bad.test.ts': SPAWNING, 'baseline.json': '{"pendingMove":[]}' });
   const args = [CLI, '--workspace-root', root, '--baseline', join(root, 'baseline.json')];
   try {
