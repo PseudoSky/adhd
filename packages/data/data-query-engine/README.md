@@ -199,6 +199,47 @@ Combine filters using logical operators:
 - `_or`: Any condition must be true
 - `_not`: Negate a condition
 
+---
+
+## Query planner (v2 `queryModel`)
+
+The v2 model — exported under the `queryModel` namespace (`export * as queryModel from './lib/model'`) — adds a self-similar, position-typed grammar, a reference executor, an incremental multi-source `DataView`, and a **rule-based planner** that turns the engine's implicit access decision into an explicit plan. Namespace-additive: the shipped `QueryExpression`/`DataView` surface is unchanged.
+
+### `canonical.ts` — plan identity
+
+| Export                     | Meaning                                                                                                                             |
+| -------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `canonicalizePredicate(p)` | Structural string of a predicate: object keys sorted; `_and`/`_or` sorted; `_in`/`_nin` sorted+deduped.                             |
+| `planKey(q)`               | Full query key (includes `name`/`source`). Stable across object-key and commutative-array order.                                   |
+| `computeKey(q)`            | `planKey` with `name` normalized away — the CSE identity (`execute` never reads a node's `name`).                                   |
+
+Order-SENSITIVE slots are **not** reordered: `order_by`, `distinct_on`, `select`, and the arithmetic operand arrays (`_add`/`_sub`/`_mul`/`_div`/`_coalesce`/`_round`) keep their order — evaluation depends on it (float summation order).
+
+### `plan.ts` — access-path selection
+
+- `AccessPath = { kind: 'scan' } | { kind: 'index', ids }`.
+- `computeAccessPath(pre, index)` — `index` when `index.candidates(pre)` narrows, else `scan`.
+- `planQuery(query, { indexFor, defaultSource })` — walks the self-similar tree (root + `select`-nested + `_in`/`_nin` subqueries), splits each `where` with the **phase rule**, and derives the access path from the **PRE (raw-row) predicate only** — a post-group output name can never select an index. Returns a `PhysicalPlan` (`root` + a `computeKey`→node map = the CSE lookup).
+
+### `execute.ts` — `executePlanned`
+
+`executePlanned(plan, rows, ctx?, indexFor?, source?)` installs the plan + index lookup on the eval context, applies the root access path (index candidate-narrowing — the exact predicate is still re-checked, so an index can only speed things up), and delegates to the unchanged reference executor. CSE scopes: `_in` subquery operands are memoized globally by `computeKey`; `select`-nested evaluations are memoized **per parent call** (cross-group sharing is unsound and intentionally omitted).
+
+### `DataView` index configuration
+
+```ts
+const dv = new DataView(
+  [{ name: 'sales', data: rows }],
+  { indexes: { sales: [{ field: 'region', kind: 'eq' }, { field: 'amount', kind: 'range' }] } }
+);
+dv.query({ source: 'sales', where: { region: { _eq: 'west' }, amount: { _gte: 100 } } });
+```
+
+Equality (`PostingIndex`), range (B+ tree), and low-cardinality (`RoaringBitmap`) indexes are maintained across `insert`/`append`/`remove`; the planner picks among them and falls back to a scan for any non-indexable disjunct.
+
+**Notes.** `group_by` output key order is unspecified — canonicalization treats `group_by` items as an order-independent set, so two queries differing only in item order share one incremental cache. A range index over a field that has held a non-finite number (NaN/±Infinity) or a non-number falls back to a scan, so the index can never change a result. The reference executor materializes window frames, so an unbounded frame is quadratic in the partition size (a bounded frame is linear); the prefix-sum/deque acceleration is part of the §13 optimization layer, not this reference executor.
+
+
 Example:
 
 ```js

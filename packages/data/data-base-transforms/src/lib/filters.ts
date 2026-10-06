@@ -115,6 +115,42 @@ export function isLessThanOrEqual(a: number, b: number) {
 export function isGreaterThanOrEqual(a: number, b: number) {
   return a >= b;
 }
+/**
+ * A TOTAL ORDER over two arbitrary values, for schema-agnostic SORTING (the query
+ * engine's `order_by` and window-frame ordering). Numbers compare numerically, a
+ * `Date` by its epoch, booleans `false < true` (only when BOTH are boolean);
+ * `NaN` sorts LAST among numbers; everything else compares by its string form;
+ * `null`/`undefined` sort LAST in ascending order. Returns `-1 | 0 | 1`.
+ *
+ * Unlike `isGreaterThan`/`isLessThan` (typed for `number`), this accepts `unknown`
+ * on both sides, so a caller over untyped rows need not coerce or cast.
+ *
+ * This is a SORT order, NOT a comparison predicate: for `_gt`/`_gte`/`_lt`/`_lte`
+ * a nullish operand must yield `false`, so gate on `isDefined` before comparing
+ * (the query engine does).
+ */
+export function compareOrder(a: unknown, b: unknown): number {
+  if (a === b) return 0;
+  if (a === null || a === undefined) return 1;
+  if (b === null || b === undefined) return -1;
+  const an = a instanceof Date ? a.getTime() : a;
+  const bn = b instanceof Date ? b.getTime() : b;
+  if (typeof an === 'number' && typeof bn === 'number') {
+    if (Number.isNaN(an)) return Number.isNaN(bn) ? 0 : 1;
+    if (Number.isNaN(bn)) return -1;
+    if (an < bn) return -1;
+    if (an > bn) return 1;
+    return 0;
+  }
+  if (typeof an === 'boolean' && typeof bn === 'boolean') {
+    return (an ? 1 : 0) - (bn ? 1 : 0);
+  }
+  const as = typeof an === 'string' ? an : (JSON.stringify(an) ?? '');
+  const bs = typeof bn === 'string' ? bn : (JSON.stringify(bn) ?? '');
+  if (as < bs) return -1;
+  if (as > bs) return 1;
+  return 0;
+}
 export function isShallowEqual(a: unknown, b: unknown) {
   return a === b;
 }
@@ -164,6 +200,7 @@ export function isEmpty(obj: unknown) {
 }
 
 export default {
+  compareOrder,
   isArray,
   isDate,
   isBoolean,
