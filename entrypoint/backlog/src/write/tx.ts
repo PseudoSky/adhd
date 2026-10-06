@@ -343,9 +343,42 @@ export async function resolveLiveIssueTx(
   // remains here is the supersession CAS check (see this function's doc).
   const row = await resolveUidPrefixTx(tx, uid, { expectedKind: 'issue' });
   if (row.isSuperseded) {
-    throw new StaleSupersedeError(uid);
+    throw new StaleSupersedeError(uid, await currentUidOfTx(tx, row));
   }
   return row;
+}
+
+/**
+ * The uid a superseded issue lives under NOW — the head of the `SUPERSEDES`
+ * chain starting at `row`, walked INSIDE the caller's transaction so the
+ * answer is authoritative for that snapshot (an `immediate` write transaction
+ * holds the writer lock, so no other writer can extend the chain mid-walk).
+ * Mirrors the read path's `currentUidOf` (`query/resolve.ts`); `undefined`
+ * means "no live successor found", never "none exists". Cycle-safe.
+ */
+export async function currentUidOfTx(
+  tx: INodeReadExecutor,
+  row: ITxNodeRow
+): Promise<string | undefined> {
+  const seen = new Set<number>([row.rowid]);
+  let cursor = row.rowid;
+  let head: string | undefined;
+  for (;;) {
+    const next = await tx.executeGet<{ src: number }>(
+      "SELECT src FROM edge WHERE rel = 'SUPERSEDES' AND dst = ? AND t_invalid IS NULL ORDER BY rowid DESC LIMIT 1",
+      [cursor]
+    );
+    if (!next || seen.has(next.src)) return head;
+    seen.add(next.src);
+    const successor = await tx.executeGet<IRawNodeRow>(
+      'SELECT * FROM node WHERE rowid = ?',
+      [next.src]
+    );
+    if (successor?.t_invalid !== null) return head;
+    head = successor.uid;
+    if (successor.is_superseded !== 1) return head;
+    cursor = next.src;
+  }
 }
 
 /**

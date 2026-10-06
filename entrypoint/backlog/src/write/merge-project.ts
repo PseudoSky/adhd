@@ -30,7 +30,8 @@
  * written, or nothing is.
  */
 
-import type { IWriteStoreHandle } from './tx.js';
+import type { AdapterTransaction } from '@adhd/sox-store-adapter';
+import type { ITxNodeRow, IWriteStoreHandle } from './tx.js';
 import {
   executeWriteTransaction,
   getNodeByUidTx,
@@ -45,6 +46,52 @@ import {
   InvalidArgumentError,
   assertNotBareRoleLiteral,
 } from './errors.js';
+import {
+  classifyUidRef,
+  selectUniqueUidCandidate,
+  type IUidCandidate,
+} from './uid-prefix.js';
+
+/**
+ * (A-AC10) Resolve a `project` uid reference — an exact uid OR a unique uid
+ * prefix — to its row, LIVE OR RETIRED. Retired rows must stay addressable by
+ * uid (a repeated `merge-project`/`rm-project` is an idempotent success), so
+ * unlike `resolveUidPrefixTx` this scan does not exclude `t_invalid` rows.
+ * An ambiguous prefix throws `AmbiguousReferenceError` naming every candidate;
+ * nothing matching throws `CatalogNotFoundError('project', ref)`.
+ */
+async function resolveProjectUidRefTx(
+  tx: AdapterTransaction,
+  ref: string
+): Promise<ITxNodeRow> {
+  const exact = await getNodeByUidTx(tx, ref);
+  if (exact) {
+    if (exact.kind !== 'project') throw new CatalogNotFoundError('project', ref);
+    return exact;
+  }
+  if (classifyUidRef(ref) !== 'prefix') throw new CatalogNotFoundError('project', ref);
+  const lower = ref.toLowerCase();
+  const { rows } = await tx.executeAll<{
+    uid: string;
+    kind: string;
+    name: string | null;
+    is_superseded: number | null;
+  }>(
+    "SELECT uid, kind, name, is_superseded FROM node WHERE uid >= ? AND uid < ? AND kind = 'project'",
+    [lower, `${lower}\uffff`]
+  );
+  const candidates: IUidCandidate[] = rows.map((r) => ({
+    uid: r.uid,
+    kind: r.kind,
+    name: r.name,
+    isSuperseded: r.is_superseded === 1,
+  }));
+  const chosen = selectUniqueUidCandidate(ref, candidates);
+  if (!chosen) throw new CatalogNotFoundError('project', ref);
+  const row = await getNodeByUidTx(tx, chosen.uid);
+  if (!row) throw new CatalogNotFoundError('project', ref);
+  return row;
+}
 
 export interface IMergeProjectInput {
   /** The duplicate / retiring row — an exact uid. */
@@ -123,10 +170,7 @@ export async function mergeProject(
 
   return executeWriteTransaction({ ...handle, verb: 'merge-project' }, async (tx) => {
     const now = nowISO();
-    const from = await getNodeByUidTx(tx, input.fromUid);
-    if (from?.kind !== 'project') {
-      throw new CatalogNotFoundError('project', input.fromUid);
-    }
+    const from = await resolveProjectUidRefTx(tx, input.fromUid);
     const to = await resolveProjectTx(tx, input.toUid);
     if (from.uid === to.uid) {
       throw new InvalidArgumentError('toUid', 'must differ from fromUid');
@@ -258,10 +302,7 @@ export async function rmProject(
 
   return executeWriteTransaction({ ...handle, verb: 'rm-project' }, async (tx) => {
     const now = nowISO();
-    const row = await getNodeByUidTx(tx, input.uid);
-    if (row?.kind !== 'project') {
-      throw new CatalogNotFoundError('project', input.uid);
-    }
+    const row = await resolveProjectUidRefTx(tx, input.uid);
     if (row.tInvalid !== null) return { uid: row.uid, retired: true };
 
     const meta = {

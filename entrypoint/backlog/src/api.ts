@@ -566,6 +566,17 @@ function toEnvelope(err: unknown): IOutcomeFailure {
           refusal: err.refusal,
         });
       }
+      // A-AC10 — an ambiguous uid prefix carries the CANDIDATE SET (and the
+      // offending ref) on the envelope, so the caller can pick one and retry
+      // without parsing the message. Every uid-taking verb funnels through
+      // this one branch.
+      if (err instanceof AmbiguousReferenceError) {
+        return errorEnvelope(code, err.message, {
+          ...(details ?? {}),
+          ref: err.ref,
+          candidates: err.candidates.map((c) => ({ ...c })),
+        });
+      }
       // A-AC11 — actor-mismatch is a typed validation error: the structured
       // reason rides under `error.details` so a caller can tell it from a
       // generic validation failure without parsing the message.

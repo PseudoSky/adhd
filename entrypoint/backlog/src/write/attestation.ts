@@ -57,6 +57,7 @@ import { readRevision } from './revision.js';
 import {
   type ITxNodeRow,
   type IWriteStoreHandle,
+  currentUidOfTx,
   executeWriteTransaction,
   nowISO,
   resolveUidPrefixTx,
@@ -95,7 +96,7 @@ async function resolveAttestSubject(
     throw new IssueNotFoundError(uid);
   }
   if (row.kind === 'issue' && row.isSuperseded) {
-    throw new StaleSupersedeError(uid);
+    throw new StaleSupersedeError(uid, await currentUidOfTx(exec, row));
   }
   return { rowid: row.rowid, uid: row.uid, kind: row.kind, metadata: row.metadata };
 }

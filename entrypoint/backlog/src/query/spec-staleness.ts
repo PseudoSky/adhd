@@ -19,6 +19,7 @@
  */
 
 import type { GraphBackend } from '@adhd/sox-graph-store';
+import { tryResolveUidPrefix } from './resolve.js';
 import {
   deriveSpecHead,
   readPointerRecord,
@@ -76,8 +77,14 @@ export async function checkSpecStaleness(
 ): Promise<ISpecCheckOutcome> {
   const mode = resolveStalenessMode();
 
-  const pointer = await readPointerRecord(graph, input.uid);
-  const derived = await deriveSpecHead(graph, input.uid);
+  // A-AC10 — a uid PREFIX resolves like every other uid-taking verb: a unique
+  // prefix names its item, an AMBIGUOUS one is refused with the candidate set
+  // (never "unknown / no-revision", which silently reads as "no spec"). An
+  // unmatched ref keeps the pre-existing `unknown` answer.
+  const resolved = await tryResolveUidPrefix(graph, input.uid);
+  const uid = resolved?.uid ?? input.uid;
+  const pointer = await readPointerRecord(graph, uid);
+  const derived = await deriveSpecHead(graph, uid);
 
   // AC7 — the pointer is never silently trusted: a divergence between the
   // on-record pointer and the derived chain head is `stale` for every caller.
