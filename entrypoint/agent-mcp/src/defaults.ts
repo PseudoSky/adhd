@@ -1,11 +1,12 @@
 /**
  * Task-time native-tooling resolution for the agent-mcp host (ADR-0008 D1/D4).
  *
- * This module REPLACES the retired definition-creation-time defaults
- * (`buildDefaultMcpServers` / `withDefaultMcpServers`, backlog 97acef07) with a
- * task-time resolver over `AgentDefinition.nativeTooling`. It is the single
- * choke point through which the host consumes `resolveNativeTooling`
- * (`@adhd/agent-core-native-tooling`, ADR-0008 D2).
+ * This module is the host's SINGLE resolution point for an agent's MCP servers.
+ * It does NOT author any fs/shell server config of its own: every builtin comes
+ * from `resolveNativeToolingMap` (`@adhd/agent-core-native-tooling`), whose one
+ * catalog (`packages/agent/agent-core-native-tooling/src/lib/catalog.ts`) owns
+ * the keys (`fs`/`shell`/`agent-mcp`) and commands. There is exactly ONE
+ * producer, and exactly ONE merge ( {@link withDefaultMcpServers} ).
  *
  * Merge precedence, highest first (ADR-0008 D1/D4):
  *     explicit `mcpServers`  >  `nativeTooling`  >  `dispatch` self floor.
@@ -13,15 +14,11 @@
  * Resolution is TASK time, against the dispatching cwd: the stored definition is
  * NEVER mutated and never carries a resolved root, so the same definition fired
  * from `/P/a` then `/P/b` yields fs root `/P/a` then `/P/b` while its stored JSON
- * stays byte-identical (ADR-0008 D4/D8).
+ * stays byte-identical (ADR-0008 D4/D8). `agent_create` deliberately does NOT
+ * call this module — it stores only the declarative `nativeTooling` — so there is
+ * no create-time/second-timing behaviour.
  */
-import {
-  DISPATCH_SERVER_KEY,
-  FS_SERVER,
-  SHELL_SERVER,
-  resolveNativeTooling,
-  type NativeToolName,
-} from '@adhd/agent-core-native-tooling';
+import { resolveNativeToolingMap } from '@adhd/agent-core-native-tooling';
 import type {
   AgentDefinition,
   McpServerConfig,
@@ -46,88 +43,50 @@ export interface NativeToolingHostContext {
   sandbox?: boolean;
 }
 
-/**
- * `mcpServers` key each resolved native member is mounted under, from the
- * resolver's own catalog. `dispatch` surfaces the real agent-mcp server (D1).
- */
-const SERVER_KEY_BY_MEMBER: Record<NativeToolName, string> = {
-  fs: FS_SERVER.key,
-  shell: SHELL_SERVER.key,
-  dispatch: DISPATCH_SERVER_KEY,
+/** An agent definition carrying at least the two fields resolution reads. */
+type ResolvableDefinition = {
+  mcpServers?: Record<string, McpServerConfig>;
+  nativeTooling?: NativeToolingConfig;
 };
 
-/** A custom `McpServerConfig` (transport-bearing) — as opposed to an overrides object. */
-function isTransportObject(value: unknown): value is McpServerConfig {
-  return (
-    !!value &&
-    typeof value === 'object' &&
-    typeof (value as Record<string, unknown>)['transport'] === 'string'
-  );
-}
-
 /**
- * The members `resolveNativeTooling` will emit, in its documented fixed order
- * (`fs`, `shell`, `dispatch`). Mirrors the resolver's own omission rules so the
- * host can key each returned server without the resolver carrying key metadata:
- * `false` omits a member; `dispatch` is additionally omitted when no real
- * `dispatchSelf` is available (a wrapper is never authored instead).
+ * The ONE resolution path (ADR-0008 D1/D4): resolve `def.nativeTooling` against
+ * the task-time context into the keyed builtin map, then let an explicit
+ * `def.mcpServers` entry WIN over a native/dispatch member of the same name.
+ *
+ * Pure — the passed definition is never mutated; the returned object is a new
+ * definition whose `mcpServers` is the merged map. This is called at TASK time
+ * only (`buildTaskDeps`/`agent_verify_mcp`); `agent_create` never calls it, so no
+ * resolved root is ever persisted.
+ *
+ * The name is preserved from the pre-NAT-TOOL-4 create-time helper, but its
+ * behaviour is now a MERGE at task time — not the old "return explicit untouched
+ * then ignore native" no-op.
  */
-export function enabledNativeMembers(
-  cfg: NativeToolingConfig | undefined,
-  ctx: Pick<NativeToolingHostContext, 'dispatchSelf'>
-): NativeToolName[] {
-  const c = cfg ?? {};
-  const members: NativeToolName[] = [];
-  if (c.fs !== false) members.push('fs');
-  if (c.shell !== false) members.push('shell');
-  const dispatch = c.dispatch;
-  if (
-    dispatch !== false &&
-    (isTransportObject(dispatch) || !!ctx.dispatchSelf)
-  ) {
-    members.push('dispatch');
-  }
-  return members;
-}
-
-/**
- * Resolve a definition's `nativeTooling` against the task-time context into a
- * keyed `mcpServers` map, applying merge precedence (explicit > native >
- * dispatch floor). Pure — the passed definition is never mutated.
- */
-export function resolveAgentMcpServers(
-  def: Pick<AgentDefinition, 'mcpServers' | 'nativeTooling'>,
+export function withDefaultMcpServers<T extends ResolvableDefinition>(
+  def: T,
   ctx: NativeToolingHostContext
-): Record<string, McpServerConfig> {
-  const cfg = def.nativeTooling ?? {};
-  const resolved = resolveNativeTooling(cfg, {
+): T & { mcpServers: Record<string, McpServerConfig> } {
+  const native = resolveNativeToolingMap(def.nativeTooling ?? {}, {
     cwd: ctx.cwd,
     env: ctx.env,
     dispatchSelf: ctx.dispatchSelf,
     sandbox: ctx.sandbox,
   });
-  const members = enabledNativeMembers(cfg, ctx);
-  if (resolved.length !== members.length) {
-    throw new Error(
-      `resolveAgentMcpServers: resolver returned ${resolved.length} server(s) for ` +
-        `${members.length} expected member(s) [${members.join(', ')}] — the resolver's ` +
-        `fixed member order (ADR-0008 D2) changed; update this keying.`
-    );
-  }
+  // explicit `mcpServers` WIN over nativeTooling > dispatch floor (D1/D4).
+  return { ...def, mcpServers: { ...native, ...(def.mcpServers ?? {}) } };
+}
 
-  const native: Record<string, McpServerConfig> = {};
-  members.forEach((member, i) => {
-    const server = resolved[i];
-    if (!server) {
-      throw new Error(
-        `resolveAgentMcpServers: no resolved server for member "${member}"`
-      );
-    }
-    native[SERVER_KEY_BY_MEMBER[member]] = server;
-  });
-
-  // Explicit `mcpServers` WIN over nativeTooling > dispatch floor (D1/D4).
-  return { ...native, ...(def.mcpServers ?? {}) };
+/**
+ * The keyed `mcpServers` map for a definition at task time — the accessor form of
+ * {@link withDefaultMcpServers}. Exposed because the store wrappers and the real
+ * host tests need the map, not the wrapped definition.
+ */
+export function resolveAgentMcpServers(
+  def: ResolvableDefinition,
+  ctx: NativeToolingHostContext
+): Record<string, McpServerConfig> {
+  return withDefaultMcpServers(def, ctx).mcpServers;
 }
 
 /**
@@ -138,7 +97,7 @@ export function resolveDefinitionNativeTooling(
   def: AgentDefinition,
   ctx: NativeToolingHostContext
 ): AgentDefinition {
-  return { ...def, mcpServers: resolveAgentMcpServers(def, ctx) };
+  return withDefaultMcpServers(def, ctx);
 }
 
 /** Env override for the real agent-mcp server command surfaced as `dispatch` (D1). */

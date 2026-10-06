@@ -5,7 +5,12 @@ import type {
   NativeToolingConfig,
   ShellToolConfig,
 } from '@adhd/agent-base-types';
-import { FS_SERVER, SHELL_SERVER, wrapWithSandbox } from './catalog.js';
+import {
+  DISPATCH_SERVER_KEY,
+  FS_SERVER,
+  SHELL_SERVER,
+  wrapWithSandbox,
+} from './catalog.js';
 
 /**
  * Runtime context for native-tooling resolution — known only at TASK time
@@ -43,6 +48,18 @@ function isMcpServerConfig(value: unknown): value is McpServerConfig {
   );
 }
 
+/**
+ * One resolved builtin server paired with the `mcpServers` KEY under which the
+ * host must mount it. The key comes from the ONE catalog ({@link FS_SERVER},
+ * {@link SHELL_SERVER}, {@link DISPATCH_SERVER_KEY}) — a host never invents a
+ * divergent key (`filesystem` vs `fs`) for the same server.
+ */
+export interface ResolvedNativeServer {
+  /** `mcpServers` key: `fs` | `shell` | `agent-mcp` (all catalog-owned). */
+  serverKey: string;
+  config: McpServerConfig;
+}
+
 /** Merge the ambient env under a stdio server's own env (server values win). */
 function withBaseEnv(
   config: McpServerConfig,
@@ -70,10 +87,10 @@ function withSandbox(
 function resolveFs(
   fs: FsToolConfig | undefined,
   ctx: NativeResolveContext
-): McpServerConfig | undefined {
+): ResolvedNativeServer | undefined {
   if (fs === false) return undefined;
   // A full McpServerConfig REPLACES the builtin (D3) — respected as-is, never overridden.
-  if (isMcpServerConfig(fs)) return { ...fs };
+  if (isMcpServerConfig(fs)) return { serverKey: FS_SERVER.key, config: { ...fs } };
 
   const overrides = fs === true || fs === undefined ? {} : fs;
   const config: McpServerConfig = {
@@ -84,15 +101,15 @@ function resolveFs(
   };
   if (overrides.allowedTools) config.allowedTools = [...overrides.allowedTools];
   if (overrides.disallowedTools) config.disallowedTools = [...overrides.disallowedTools];
-  return withSandbox(withBaseEnv(config, ctx), ctx);
+  return { serverKey: FS_SERVER.key, config: withSandbox(withBaseEnv(config, ctx), ctx) };
 }
 
 function resolveShell(
   shell: ShellToolConfig | undefined,
   ctx: NativeResolveContext
-): McpServerConfig | undefined {
+): ResolvedNativeServer | undefined {
   if (shell === false) return undefined;
-  if (isMcpServerConfig(shell)) return { ...shell };
+  if (isMcpServerConfig(shell)) return { serverKey: SHELL_SERVER.key, config: { ...shell } };
 
   const overrides = shell === true || shell === undefined ? {} : shell;
   const env: Record<string, string> = {};
@@ -118,15 +135,17 @@ function resolveShell(
     cwd: overrides.root ?? ctx.cwd,
   };
   if (Object.keys(env).length > 0) config.env = env;
-  return withSandbox(withBaseEnv(config, ctx), ctx);
+  return { serverKey: SHELL_SERVER.key, config: withSandbox(withBaseEnv(config, ctx), ctx) };
 }
 
 function resolveDispatch(
   dispatch: DispatchToolConfig | undefined,
   ctx: NativeResolveContext
-): McpServerConfig | undefined {
+): ResolvedNativeServer | undefined {
   if (dispatch === false) return undefined;
-  if (isMcpServerConfig(dispatch)) return { ...dispatch };
+  if (isMcpServerConfig(dispatch)) {
+    return { serverKey: DISPATCH_SERVER_KEY, config: { ...dispatch } };
+  }
   // `dispatch: true` (or default-present) means the REAL agent-mcp server the host
   // supplies — never an authored wrapper (D1). Absent `dispatchSelf` ⇒ omit.
   if (!ctx.dispatchSelf) return undefined;
@@ -135,7 +154,7 @@ function resolveDispatch(
   const config: McpServerConfig = { ...ctx.dispatchSelf };
   if (overrides.allowedTools) config.allowedTools = [...overrides.allowedTools];
   if (overrides.disallowedTools) config.disallowedTools = [...overrides.disallowedTools];
-  return config;
+  return { serverKey: DISPATCH_SERVER_KEY, config };
 }
 
 /**
@@ -154,17 +173,49 @@ export function resolveNativeTooling(
   cfg: NativeToolingConfig | undefined,
   ctx: NativeResolveContext
 ): McpServerConfig[] {
+  return resolveNativeToolingEntries(cfg, ctx).map((entry) => entry.config);
+}
+
+/**
+ * The keyed form of {@link resolveNativeTooling}: the SAME resolution, returned
+ * as the `mcpServers` map a host mounts on an agent. Every key comes from the ONE
+ * catalog ({@link FS_SERVER}, {@link SHELL_SERVER}, {@link DISPATCH_SERVER_KEY}) —
+ * `fs`, `shell`, `agent-mcp` — so no host authors a divergent key
+ * (`filesystem` vs `fs`) for the same server. The array form and this map are the
+ * same computation; neither is a second producer.
+ */
+export function resolveNativeToolingMap(
+  cfg: NativeToolingConfig | undefined,
+  ctx: NativeResolveContext
+): Record<string, McpServerConfig> {
+  const out: Record<string, McpServerConfig> = {};
+  for (const entry of resolveNativeToolingEntries(cfg, ctx)) {
+    out[entry.serverKey] = entry.config;
+  }
+  return out;
+}
+
+/**
+ * The single internal resolution step: each member resolved ONCE, in fixed order
+ * (`fs`, `shell`, `dispatch`), paired with its catalog key. Both public
+ * projections ({@link resolveNativeTooling}, {@link resolveNativeToolingMap})
+ * are derived from this — there is exactly one producer.
+ */
+function resolveNativeToolingEntries(
+  cfg: NativeToolingConfig | undefined,
+  ctx: NativeResolveContext
+): ResolvedNativeServer[] {
   const config = cfg ?? {};
-  const servers: McpServerConfig[] = [];
+  const entries: ResolvedNativeServer[] = [];
 
   const fs = resolveFs(config.fs, ctx);
-  if (fs) servers.push(fs);
+  if (fs) entries.push(fs);
 
   const shell = resolveShell(config.shell, ctx);
-  if (shell) servers.push(shell);
+  if (shell) entries.push(shell);
 
   const dispatch = resolveDispatch(config.dispatch, ctx);
-  if (dispatch) servers.push(dispatch);
+  if (dispatch) entries.push(dispatch);
 
-  return servers;
+  return entries;
 }

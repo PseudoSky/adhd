@@ -22,13 +22,19 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import type { Server } from '@modelcontextprotocol/sdk/server/index.js';
 
-import type { McpServerConfig } from '@adhd/agent-engine-orchestrator';
+import type { McpServerConfig, Orchestrator } from '@adhd/agent-engine-orchestrator';
 
 import { buildHarness, type Harness } from './harness.js';
-import { createServer } from '../../server.js';
+import { createServer, type ServerDeps } from '../../server.js';
 import { resolveAgentMcpServers } from '../../defaults.js';
 
-async function connectMcp(harness: Harness): Promise<{
+/** Extra `createServer` deps a test may inject (e.g. a cwd/orchestrator stub). */
+type ServerOverrides = Partial<Pick<ServerDeps, 'resolveCwd' | 'dispatchSelf' | 'orchestrator'>>;
+
+async function connectMcp(
+  harness: Harness,
+  overrides: ServerOverrides = {}
+): Promise<{
   client: Client;
   close: () => Promise<void>;
 }> {
@@ -43,6 +49,7 @@ async function connectMcp(harness: Harness): Promise<{
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     db: harness.db as any,
     dagEngine: harness.dagEngine,
+    ...overrides,
   });
   const [clientTransport, serverTransport] =
     InMemoryTransport.createLinkedPair();
@@ -187,5 +194,90 @@ describe('native-tooling resolution at the real host (NAT-TOOL-4)', () => {
     // `true` is not an MCP server, so the probe errors — but it WAS probed,
     // proving the explicit config survived and no native `fs`/`shell` was added.
     expect(verified.servers[0]!.status).toBe('error');
+  });
+
+  it('AC3 (host): the SAME stored def fired twice at two cwds yields each root with byte-identical stored JSON', async () => {
+    harness = await buildHarness();
+
+    // The dispatching cwd the REAL host reads at each fire (ADR-0008 D4) —
+    // mutable, so one server can be fired from two directories.
+    let cwd = '/P';
+    const dispatchSelf: McpServerConfig = {
+      transport: 'stdio',
+      command: 'npx',
+      args: ['-y', '@adhd/agent-mcp'],
+    };
+    // Capture the RESOLVED agent definition the host hands the orchestrator on
+    // each `task` — the consumer-visible outcome of task-time resolution.
+    const resolvedPerFire: Array<Record<string, McpServerConfig>> = [];
+    const stubOrchestrator = {
+      run: async (input: { executionContext: { agentDefinition: { mcpServers: Record<string, McpServerConfig> } } }) => {
+        resolvedPerFire.push(input.executionContext.agentDefinition.mcpServers);
+        return { result: 'stub' };
+      },
+    } as unknown as Orchestrator;
+
+    const conn = await connectMcp(harness, {
+      resolveCwd: () => cwd,
+      dispatchSelf,
+      orchestrator: stubOrchestrator,
+    });
+    close = conn.close;
+
+    await conn.client.callTool({
+      name: 'agent_create',
+      arguments: {
+        name: 'two-cwd-agent',
+        provider: OPENAI,
+        systemPrompt: 'hi',
+        nativeTooling: { fs: true, shell: false, dispatch: false },
+      },
+    });
+    const storedAfterCreate = JSON.stringify(
+      parse<{ mcpServers: Record<string, McpServerConfig> }>(
+        await conn.client.callTool({
+          name: 'agent_read',
+          arguments: { name: 'two-cwd-agent' },
+        })
+      )
+    );
+
+    const { session_id } = parse<{ session_id: string }>(
+      await conn.client.callTool({ name: 'agent', arguments: { name: 'two-cwd-agent' } })
+    );
+
+    cwd = '/P';
+    await conn.client.callTool({
+      name: 'task',
+      arguments: { session_id, prompt: 'one' },
+    });
+    cwd = '/Q';
+    await conn.client.callTool({
+      name: 'task',
+      arguments: { session_id, prompt: 'two' },
+    });
+
+    const fsRoot = (map: Record<string, McpServerConfig>): string => {
+      const fs = map['fs'];
+      if (!fs || fs.transport !== 'stdio') throw new Error('no stdio fs server resolved');
+      const args = fs.args ?? [];
+      const root = args[args.length - 1];
+      if (!root) throw new Error('fs server resolved without a root arg');
+      return root;
+    };
+    expect(resolvedPerFire).toHaveLength(2);
+    expect(fsRoot(resolvedPerFire[0]!)).toBe('/P');
+    expect(fsRoot(resolvedPerFire[1]!)).toBe('/Q');
+
+    // The stored definition is untouched by either fire — no resolved root baked in.
+    const storedAfter = JSON.stringify(
+      parse<{ mcpServers: Record<string, McpServerConfig> }>(
+        await conn.client.callTool({
+          name: 'agent_read',
+          arguments: { name: 'two-cwd-agent' },
+        })
+      )
+    );
+    expect(storedAfter).toBe(storedAfterCreate);
   });
 });

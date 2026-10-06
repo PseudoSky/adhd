@@ -12,9 +12,9 @@ import type { McpServerConfig } from '@adhd/agent-base-types';
 import {
   buildDispatchSelf,
   buildNativeToolingContext,
-  enabledNativeMembers,
   resolveAgentMcpServers,
   resolveDefinitionNativeTooling,
+  withDefaultMcpServers,
   withResolvedNativeTooling,
   withResolvedNativeToolingSession,
 } from '../defaults.js';
@@ -121,17 +121,33 @@ describe('resolveAgentMcpServers — task-time resolution (ADR-0008 D4)', () => 
     expect(servers['fs']).toEqual(custom);
   });
 
-  it('enabledNativeMembers mirrors the resolver omission rules (order + dispatch floor)', () => {
-    expect(enabledNativeMembers({ fs: true, shell: true, dispatch: true }, { dispatchSelf })).toEqual([
-      'fs',
-      'shell',
-      'dispatch',
-    ]);
-    expect(enabledNativeMembers({ fs: false, shell: true, dispatch: true }, { dispatchSelf })).toEqual([
-      'shell',
-      'dispatch',
-    ]);
-    expect(enabledNativeMembers({ fs: true, shell: true, dispatch: true }, {})).toEqual(['fs', 'shell']);
+  it('AC(c): the agent_create defaults (no nativeTooling) and an explicit nativeTooling go through ONE path', () => {
+    // A legacy definition with NO nativeTooling behaves as the standardized
+    // defaults — resolved by the SAME single function, not a second producer.
+    const defaults = withDefaultMcpServers({ mcpServers: {} }, { cwd: '/P', dispatchSelf });
+    const explicit = withDefaultMcpServers(
+      { mcpServers: {}, nativeTooling: { fs: true, shell: true, dispatch: true } },
+      { cwd: '/P', dispatchSelf }
+    );
+    expect(defaults.mcpServers).toEqual(explicit.mcpServers);
+    // `resolveAgentMcpServers` is the accessor over that one merge — no second
+    // resolution/timing behaviour.
+    expect(resolveAgentMcpServers({ mcpServers: {} }, { cwd: '/P', dispatchSelf })).toEqual(
+      defaults.mcpServers
+    );
+  });
+
+  it('withDefaultMcpServers MERGES (explicit > native > dispatch) rather than returning explicit untouched', () => {
+    // The old bug: an explicit map made the function a no-op, so native members
+    // (and the dispatch floor) were silently dropped. They must now be merged.
+    const custom: McpServerConfig = { transport: 'stdio', command: 'my-custom-fs' };
+    const merged = withDefaultMcpServers(
+      { mcpServers: { fs: custom }, nativeTooling: { fs: true, shell: true, dispatch: true } },
+      { cwd: '/P', dispatchSelf }
+    );
+    expect(merged.mcpServers['fs']).toEqual(custom); // explicit wins for its key
+    expect(merged.mcpServers['shell']).toBeDefined(); // native shell still merged
+    expect(merged.mcpServers['agent-mcp']).toEqual(dispatchSelf); // dispatch floor still merged
   });
 
   it('resolveDefinitionNativeTooling returns a NEW object (never mutates the input)', () => {
