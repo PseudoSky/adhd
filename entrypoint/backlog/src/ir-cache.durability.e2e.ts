@@ -46,6 +46,7 @@ import {
   isolatedSpawnOptions,
   runIsolatedBin,
 } from './test/helpers/spawn-isolated-bin.js';
+import { spawnTimeoutMs } from './test/helpers/spawn-timeout.js';
 import {
   createIsolatedDist,
   type IsolatedDist,
@@ -136,7 +137,7 @@ describe('IR-cache durability — a SIGKILL right after stdout still leaves a va
       // Respawn → the same source is a HIT: no `put`, so the mtime is intact.
       const r = runIsolatedBin(DIST_INDEX, ['get', '--help'], root, {
         extraEnv: { APIGEN_IR_CACHE_FILE: cacheFile },
-        timeoutMs: 120_000,
+        timeoutMs: spawnTimeoutMs(),
       });
       expect(r.status, r.stderr).toBe(0);
       expect(statSync(cacheFile).mtimeMs).toBe(mtimeAfterKill);

@@ -28,6 +28,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { runIsolatedBin } from './test/helpers/spawn-isolated-bin.js';
+import { spawnTimeoutMs } from './test/helpers/spawn-timeout.js';
 import {
   createIsolatedDist,
   type IsolatedDist,
@@ -46,7 +47,7 @@ function timedRun(
   const start = performance.now();
   const r = runIsolatedBin(binPath, ['--help'], cwd, {
     extraEnv: env,
-    timeoutMs: 120_000,
+    timeoutMs: spawnTimeoutMs(),
   });
   const elapsed = performance.now() - start;
   expect(r.status, `stderr:\n${r.stderr}`).toBe(0);

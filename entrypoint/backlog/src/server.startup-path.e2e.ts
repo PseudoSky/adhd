@@ -45,6 +45,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { runIsolatedBin } from './test/helpers/spawn-isolated-bin.js';
+import { spawnTimeoutMs } from './test/helpers/spawn-timeout.js';
 import {
   createIsolatedDist,
   type IsolatedDist,
@@ -122,7 +123,7 @@ describe('server startup path — baked artifact vs. live extraction (design doc
     assertBuilt();
     const r = runIsolatedBin(iso!.indexPath, ['--help'], root, {
       extraEnv: probeEnv(),
-      timeoutMs: 60_000,
+      timeoutMs: spawnTimeoutMs(),
     });
     expect(r.status, r.stderr).toBe(0);
     expect(probeLogText()).not.toContain('ts-morph');
@@ -135,7 +136,7 @@ describe('server startup path — baked artifact vs. live extraction (design doc
     try {
       const r = runIsolatedBin(iso!.indexPath, ['--help'], root, {
         extraEnv: probeEnv(),
-        timeoutMs: 120_000,
+        timeoutMs: spawnTimeoutMs(),
       });
       expect(r.status, r.stderr).toBe(0);
       expect(probeLogText()).toContain('ts-morph');
@@ -151,7 +152,7 @@ describe('server startup path — baked artifact vs. live extraction (design doc
       writeFileSync(iso!.apiDtsPath, `${original}\n// stale-source probe\n`);
       const r = runIsolatedBin(iso!.indexPath, ['--help'], root, {
         extraEnv: probeEnv(),
-        timeoutMs: 120_000,
+        timeoutMs: spawnTimeoutMs(),
       });
       expect(r.status, r.stderr).toBe(0);
       expect(probeLogText()).toContain('ts-morph');

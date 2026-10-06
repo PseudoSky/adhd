@@ -50,6 +50,10 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { runIsolatedBin } from './test/helpers/spawn-isolated-bin.js';
 import {
+  e2eTestTimeoutMs,
+  spawnTimeoutMs,
+} from './test/helpers/spawn-timeout.js';
+import {
   createIsolatedDist,
   type IsolatedDist,
 } from './test/helpers/isolated-dist.js';
@@ -69,7 +73,7 @@ function runHelp(
 ): { status: number | null } {
   const r = runIsolatedBin(binPath, ['--help'], cwd, {
     extraEnv: { APIGEN_IR_CACHE_FILE: cacheFile, ...extraEnv },
-    timeoutMs: 120_000,
+    timeoutMs: spawnTimeoutMs(),
   });
   return { status: r.status };
 }
@@ -175,7 +179,9 @@ describe('FEAT-002 — extract-stage IR cache on the REAL backlog hot path', () 
         writeFileSync(privateApiDts, originalApiDts);
       }
     });
-  });
+    // e2955e9f AC1/AC2 (child d863b3ee): FOUR sequential real-bin spawns (runs 1
+    // and 4 are live ts-morph extractions), each budgeted spawnTimeoutMs().
+  }, e2eTestTimeoutMs(4));
 
   it('APIGEN_IR_CACHE_ENABLED=0 disables the runtime cache (forced fallback)', () => {
     assertBuilt();
@@ -194,5 +200,6 @@ describe('FEAT-002 — extract-stage IR cache on the REAL backlog hot path', () 
       ).toBe(0);
       expect(existsSync(cacheFile)).toBe(false);
     });
-  });
+    // e2955e9f AC1/AC2 (child d863b3ee): TWO sequential live-extraction spawns.
+  }, e2eTestTimeoutMs(2));
 });

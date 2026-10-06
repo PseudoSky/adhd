@@ -6,6 +6,7 @@ import {
   projectCoverage,
 } from '../../packages/workspace/workspace-base-vite-paths/src/index';
 import baseConfig from './vite.config';
+import { e2eTestTimeoutMs } from './src/test/helpers/spawn-timeout';
 
 const repoRoot = path.resolve(__dirname, '../..');
 
@@ -90,6 +91,17 @@ const e2eConfig = mergeConfig(
       // an unrelated latent spec-isolation leak, so the default lane keeps its
       // own concurrency.
       maxWorkers: 1,
+      // backlog e2955e9f AC1 — the lane's enforced timeout must be >= the
+      // child-process budget its suites hand their spawned bins. The base
+      // config's 30s `testTimeout` is FOR the fast spec lane; every `.e2e.ts`
+      // spawn helper defaults to `spawnTimeoutMs()` (120s, BACKLOG 345973b3), so
+      // a spawning test with no per-test override was killed by the runner at
+      // 30s mid-work (it red the 2026-09-29 `@adhd/backlog` release). Derived
+      // from the SAME constant the spawns use (`e2eTestTimeoutMs`), never a
+      // second hardcoded number. A test that runs N children in sequence passes
+      // `e2eTestTimeoutMs(N)` per test.
+      testTimeout: e2eTestTimeoutMs(1),
+      hookTimeout: e2eTestTimeoutMs(1),
       // Distinct from the default lane's shared `…/node_modules/.vitest`.
       cache: { dir: path.join(repoRoot, 'node_modules/.vitest-e2e') },
       // Distinct from the default lane's `…/coverage/entrypoint/backlog`.

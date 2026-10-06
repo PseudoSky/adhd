@@ -46,6 +46,7 @@
  * rows silently failed to land.
  */
 import { spawn } from 'node:child_process';
+import { e2eTestTimeoutMs } from '../test/helpers/spawn-timeout.js';
 import { existsSync, rmSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -285,7 +286,7 @@ describe('cross-process write safety — BUG-039 fix verification (SPEC.md §9.1
         a.ok + b.ok
       } persisted rows (writers reported ok:true for all of them), reopened fresh got ${persisted}`
     ).toBe(a.ok + b.ok);
-  }, 60000);
+  }, e2eTestTimeoutMs(1));
 
   it(`CONTROL (distinct-target — no forced collision): two REAL OS processes each createIssue ${N} times into the SAME project, each call carrying a UNIQUE body, persist exactly ${
     2 * N
@@ -312,7 +313,7 @@ describe('cross-process write safety — BUG-039 fix verification (SPEC.md §9.1
         a.ok + b.ok
       } persisted rows (writers reported ok:true for all of them, zero forced content collision), reopened fresh got ${persisted}`
     ).toBe(a.ok + b.ok);
-  }, 60000);
+  }, e2eTestTimeoutMs(1));
 
   it('NEGATIVE CONTROL: ADHD_BACKLOG_UNSAFE_TX_MODE=deferred strips the BEGIN IMMEDIATE CAS guarantee — this proves the CONTROL case above is actually exercising that guarantee, not passing for an unrelated reason', async () => {
     const [a, b] = await runBarrieredPair(dbPath, dir, projectUid, N, {
@@ -386,7 +387,7 @@ describe('cross-process write safety — BUG-039 fix verification (SPEC.md §9.1
               a.ok + b.ok - persisted
             } row(s) reported ok:true but did not persist`)
     );
-  }, 60000);
+  }, e2eTestTimeoutMs(1));
 
   it("NEGATIVE CONTROL (dedupe): ADHD_BACKLOG_UNSAFE_DEDUPE_MODE=on re-enables content-hash dedupe — this proves the design choice `write/tx.ts`'s writeNodeTx makes (skipDedupe:true, unconditional, on every entity write) is load-bearing for cross-process safety, not the `immediate` transaction mode above", async () => {
     // Distinct from the `deferred` tx-mode control above: THAT control
@@ -460,5 +461,5 @@ describe('cross-process write safety — BUG-039 fix verification (SPEC.md §9.1
       `dedupe negative control: writers together reported ok:true ${combinedOk} times but a fresh reopen found ` +
         `${persisted} row(s) — SILENT LOSS with no visible error to either caller`
     ).toBeLessThan(combinedOk);
-  }, 60000);
+  }, e2eTestTimeoutMs(1));
 });

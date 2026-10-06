@@ -41,3 +41,30 @@ export function spawnTimeoutMs(): number {
   const n = Number(process.env.ADHD_SPAWN_TIMEOUT_MS);
   return Number.isFinite(n) && n > 0 ? n : DEFAULT_SPAWN_TIMEOUT_MS;
 }
+
+/**
+ * Headroom (ms) a vitest per-test timeout carries ABOVE the child-process
+ * budget it wraps. The spawn's own `ETIMEDOUT` (a diagnosable "child X exceeded
+ * N ms") must fire BEFORE the runner's anonymous "Test timed out in Nms", so a
+ * hung child reports what hung rather than a bare runner kill.
+ */
+export const E2E_TEST_TIMEOUT_HEADROOM_MS = 15_000;
+
+/**
+ * The vitest `testTimeout` a test needs when it runs `sequentialSpawns` real
+ * child processes back to back, each allowed up to `spawnTimeoutMs()`.
+ *
+ * ONE owner for the relationship between the spawn budget and the runner's
+ * enforced timeout (backlog e2955e9f AC1): the e2e lane config
+ * (`vitest.e2e.config.ts`) uses `e2eTestTimeoutMs(1)` as its lane-wide floor, and
+ * a test that spawns N children in sequence passes `e2eTestTimeoutMs(N)` as its
+ * per-test timeout. Both derive from {@link spawnTimeoutMs}, so raising the
+ * spawn budget (or `ADHD_SPAWN_TIMEOUT_MS`) raises the runner cap with it and
+ * the two can never drift apart again.
+ */
+export function e2eTestTimeoutMs(sequentialSpawns = 1): number {
+  return (
+    Math.max(1, sequentialSpawns) * spawnTimeoutMs() +
+    E2E_TEST_TIMEOUT_HEADROOM_MS
+  );
+}
