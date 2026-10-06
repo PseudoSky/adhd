@@ -62,17 +62,28 @@ const HITL_BUILTIN_TOOL_DEFINITION = {
 /**
  * Affirmative answers accepted when a suspended permission `ask` is resumed via
  * `task_resume`. Anything else (including an empty string) DECLINES the ask and
- * the tool is not executed. Accepted forms: the bare words below (case
- * insensitive), or JSON carrying `{"allow":true}` / `{"approved":true}`.
+ * the tool is not executed.
+ *
+ * The vocabulary is deliberately restricted to EXPLICIT approval words. A
+ * permission `ask` gates a privileged tool, and its answer can arrive from a
+ * path that was never meant as an approval: the chat gateway auto-resumes an
+ * `awaiting_input` task with whatever chat message comes in
+ * (`entrypoint/agent-mcp/src/streaming/chat-gateway.ts`), so a bare
+ * conversational affirmative (`ok` / `yes` / `y` / `true`) sent for an unrelated
+ * reason must NOT approve a privileged call. Only unambiguous permission verbs
+ * qualify as a bare-word approval. Accepted forms:
+ *
+ *  - one of the words below (case insensitive), or
+ *  - a structured approval signal: JSON carrying `{"allow":true}` or
+ *    `{"approved":true}`.
+ *
+ * Normal HITL resume (`request_human_input`, whose free-text answer is handed to
+ * the model verbatim) does NOT pass through this predicate and is unaffected.
  */
 const PERMISSION_APPROVAL_WORDS = new Set([
   'allow',
   'approve',
   'approved',
-  'yes',
-  'y',
-  'true',
-  'ok',
 ]);
 
 /** Does the human's resume input approve the ask? See {@link PERMISSION_APPROVAL_WORDS}. */

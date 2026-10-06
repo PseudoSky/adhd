@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { Orchestrator, resolveHitl, DEFAULT_PROVIDER_TIMEOUT_MS } from "../engine/orchestrator.js";
+import { Orchestrator, resolveHitl, isPermissionApproval, DEFAULT_PROVIDER_TIMEOUT_MS } from "../engine/orchestrator.js";
 import type { OrchestratorTaskStore, OrchestratorSessionStore } from "../engine/orchestrator.js";
+import type { EngineConfig } from "../interfaces.js";
 import { ToolError } from "../validation/errors.js";
 import { nowIso } from "../utils/timestamps.js";
 import { generateId } from "../utils/ids.js";
@@ -945,5 +946,163 @@ describe("Orchestrator", () => {
                 "the abort-race rejection of userInputPromise must be marked handled"
             ).toEqual([]);
         }, 10_000);
+    });
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Permission-ask approval vocabulary (FIX 5)
+    //
+    // A permission `ask` gates a PRIVILEGED tool, and its answer can arrive from
+    // a path that was never meant as an approval: the chat gateway auto-resumes
+    // an `awaiting_input` task with whatever chat message comes in. A bare
+    // conversational affirmative (`ok`/`yes`) must therefore NOT approve a
+    // privileged call — only an explicit approval does. Normal HITL resume
+    // (`request_human_input`) is unaffected because it never routes through
+    // `isPermissionApproval`.
+    // ─────────────────────────────────────────────────────────────────────
+    describe("permission ask approval vocabulary (FIX 5)", () => {
+        it("accepts only explicit approval words / structured signals; rejects bare conversational affirmatives", () => {
+            for (const explicit of ["allow", "approve", "approved", "ALLOW", "Approve"]) {
+                expect(
+                    isPermissionApproval(explicit),
+                    `'${explicit}' is an explicit approval`
+                ).toBe(true);
+            }
+            // A structured approval signal is accepted.
+            expect(isPermissionApproval('{"allow":true}')).toBe(true);
+            expect(isPermissionApproval('{"approved":true}')).toBe(true);
+
+            // Loose conversational affirmatives must NOT gate a privileged call.
+            for (const incidental of [
+                "ok",
+                "yes",
+                "y",
+                "true",
+                "OK",
+                "Yes",
+                "sure",
+                "yeah",
+                "okay",
+                "",
+            ]) {
+                expect(
+                    isPermissionApproval(incidental),
+                    `'${incidental}' is not an explicit approval and must decline a permission ask`
+                ).toBe(false);
+            }
+            // A structured signal that does not set the approval flags declines.
+            expect(isPermissionApproval('{"allow":false}')).toBe(false);
+            expect(isPermissionApproval('{"approved":false}')).toBe(false);
+        });
+
+        /**
+         * Drives the REAL permission-ask path — `config.permissionGate` → 'ask' →
+         * suspend (`awaiting_input`) → `resolveHitl(input)` — and reports whether
+         * the gated tool executed. This mirrors exactly what the chat gateway does
+         * when it auto-resumes an awaiting task with an incoming chat message.
+         */
+        async function runGatedAsk(resumeInput: string): Promise<boolean> {
+            const ctx = makeCtx();
+            const orch = new Orchestrator();
+            const taskId = generateId();
+            let executed = false;
+
+            const askRegistry = {
+                listAllTools: async () => [],
+                resolveToolName: (name: string) => {
+                    const [server, tool] = name.split("__");
+                    return { server, tool };
+                },
+                getClient: async () => ({
+                    callTool: async () => {
+                        executed = true;
+                        return "ran";
+                    },
+                }),
+                closeAll: async () => { /* no-op: test stub */ },
+            } as unknown as McpClientRegistry;
+
+            // Turn 1 → call the gated tool; turn 2 → complete after the resume.
+            let turn = 0;
+            const provider: LLMProvider = {
+                chat: async (): Promise<ProviderChatResponse> => {
+                    turn++;
+                    if (turn === 1) {
+                        return {
+                            message: {
+                                id: generateId(),
+                                sessionId: ctx.sessionId,
+                                role: "assistant",
+                                content: "",
+                                toolCalls: [
+                                    {
+                                        id: generateId(),
+                                        server: "fs",
+                                        tool: "read_file",
+                                        arguments: {},
+                                    },
+                                ],
+                                createdAt: nowIso(),
+                            },
+                            stopReason: "tool_calls",
+                        };
+                    }
+                    return {
+                        message: {
+                            id: generateId(),
+                            sessionId: ctx.sessionId,
+                            role: "assistant",
+                            content: "done",
+                            createdAt: nowIso(),
+                        },
+                        stopReason: "completed",
+                    };
+                },
+            };
+
+            // Resume the instant the ask parks the task — exactly how task_resume
+            // and the chat gateway land their input. The resolver is registered
+            // BEFORE the awaiting_input status write, so this is synchronous.
+            const resumingTaskStore: OrchestratorTaskStore = {
+                updateStatus: (tid, status) => {
+                    if (status === "awaiting_input") {
+                        resolveHitl(tid, resumeInput);
+                    }
+                },
+                appendEvent: () => { /* no-op: test stub */ },
+                unregisterCancellation: () => { /* no-op: test stub */ },
+            };
+
+            await orch.run({
+                executionContext: ctx,
+                messages: [makeUserMessage(ctx.sessionId)],
+                registry: askRegistry,
+                provider,
+                policy,
+                taskStore: resumingTaskStore,
+                sessionStore,
+                signal: new AbortController().signal,
+                taskId,
+                config: {
+                    server: { contextLimit: 0, defaultMaxTokens: 8192 },
+                    permissionGate: () => "ask",
+                } as unknown as EngineConfig,
+            });
+
+            return executed;
+        }
+
+        it("an incidental 'ok' does NOT approve a permission ask — the tool is not executed", async () => {
+            expect(
+                await runGatedAsk("ok"),
+                "a bare 'ok' auto-resumed from an unrelated message must not approve a privileged ask"
+            ).toBe(false);
+        });
+
+        it("an explicit 'approve' DOES approve a permission ask — the tool executes", async () => {
+            expect(
+                await runGatedAsk("approve"),
+                "an explicit approval must resume the ask and run the tool"
+            ).toBe(true);
+        });
     });
 });

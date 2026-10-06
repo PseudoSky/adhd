@@ -248,7 +248,9 @@ describe('NAT-TOOL-6 — permission gate (ADR-0008 D5/D6)', () => {
       const suspended = await waitFor(harness, hitlOut.task_id, ['awaiting_input']);
       expect(suspended.status).toBe('awaiting_input');
       await taskResume(
-        { taskId: hitlOut.task_id, resumeToken: suspended.resumeToken as string, userInput: 'yes' },
+        // FIX 5: a permission ask requires an EXPLICIT approval — a bare 'yes'
+        // is now declined (it can arrive incidentally from the chat gateway).
+        { taskId: hitlOut.task_id, resumeToken: suspended.resumeToken as string, userInput: 'approve' },
         { taskStore: harness.taskStore }
       );
       await drainQueue(harness.queue, 15_000);
