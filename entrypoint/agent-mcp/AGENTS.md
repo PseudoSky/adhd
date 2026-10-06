@@ -157,6 +157,13 @@ hand-authoring an `mcpServers` block:
 - The shell entry is omitted when `tools/mcp-shell/server.mjs` cannot be
   resolved (e.g. the published package installed outside the monorepo); set
   `ADHD_AGENT_SHELL_MCP_PATH` to point at it explicitly.
+- **`tools/mcp-shell/server.mjs` is a DEPRECATED fallback** (ADR-0008 D5/D7,
+  NAT-TOOL-8). It is the retired homegrown thick layer (a regex
+  prefix/blocklist over command text), superseded by the adopted
+  `tumf/mcp-shell-server` (allowlisted argv arrays — never a shell string)
+  wrapped by `@anthropic-ai/sandbox-runtime` (`srt`). Its permanent removal is
+  owned by NAT-TOOL-4, when `buildDefaultMcpServers` is replaced by
+  `resolveNativeTooling` (`@adhd/agent-core-native-tooling`).
 - **An explicit non-empty `mcpServers` map always wins** — defaults are only
   applied when the caller supplies none. `allowedTools`/`disallowedTools`
   remain enforced by `McpClientRegistry` at every `callTool`, exactly as for
@@ -179,6 +186,28 @@ permits. **Approved by:** pseudosky (repo owner). Gated files:
 reason is that a real model is a paid third-party service; skipping it in CI saves money
 and avoids an outside system. The same record is in this package's `README.md` and each
 test's header.
+
+## Native-tooling adoption gate (env-gated — external third-party server)
+
+The ADR-0008 D7 upstream-server adoption is a **human-gated** decision
+(NAT-TOOL-8). The test that proves the adopted shell server
+(`tumf/mcp-shell-server`, fetched from PyPI at run time by `uvx`) starts and
+executes an allowlisted argv command through the real `agent_verify_mcp`
+handshake is gated behind `NAT_TOOL_LIVE=1` (the qualifying reason: a real
+external third-party service CI cannot provide hermetically):
+
+| Test file | Gate | Real dependency |
+|---|---|---|
+| `src/__tests__/integration/native-tooling-adoption.e2e.test.ts` | `NAT_TOOL_LIVE=1` | `uvx mcp-shell-server` (external PyPI package) + `srt` |
+
+**Approved by:** pseudosky (repo owner), 2026-10-05, under the owner directive
+"Finish the project". **Adopted set:** `@modelcontextprotocol/server-filesystem`,
+`tumf/mcp-shell-server`, `@anthropic-ai/sandbox-runtime` (`srt`, wraps both);
+`unbash` dropped, `rust-mcp-filesystem` deferred. The resolver emits the adopted,
+`srt`-wrapped builtins (`@adhd/agent-core-native-tooling`); the default
+(unflagged) suite proves the resolved shape and the `agent_verify_mcp` path with
+no external fetch. The same record is in this package's `README.md`, in
+`@adhd/agent-core-native-tooling`'s `README.md`/`AGENTS.md`, and in the test's header.
 
 ## Known Limitations (as of 2.0.2)
 

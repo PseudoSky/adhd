@@ -5,7 +5,7 @@ import type {
   NativeToolingConfig,
   ShellToolConfig,
 } from '@adhd/agent-base-types';
-import { FS_SERVER, SHELL_SERVER } from './catalog.js';
+import { FS_SERVER, SHELL_SERVER, wrapWithSandbox } from './catalog.js';
 
 /**
  * Runtime context for native-tooling resolution — known only at TASK time
@@ -23,6 +23,16 @@ export interface NativeResolveContext {
    * no dispatch server can be resolved — a wrapper is never authored instead.
    */
   dispatchSelf?: McpServerConfig;
+  /**
+   * Wrap the builtin `fs` and `shell` servers with the adopted
+   * `@anthropic-ai/sandbox-runtime` (`srt`) OS enforcement layer (ADR-0008 D7).
+   * Defaults to `true` — D7 adopts `srt` "in the first cut … to wrap both
+   * servers". Set `false` only where a provisioned `srt` policy is unavailable;
+   * hard enforcement then degrades to the servers' own confinement (the shell
+   * argv allowlist and the fs root scoping). Custom `McpServerConfig`
+   * replacements and the `dispatch` self server are never wrapped.
+   */
+  sandbox?: boolean;
 }
 
 function isMcpServerConfig(value: unknown): value is McpServerConfig {
@@ -43,6 +53,20 @@ function withBaseEnv(
   return { ...config, env: { ...ctx.env, ...(config.env ?? {}) } };
 }
 
+/**
+ * Wrap a resolved builtin stdio server with the adopted `srt` sandbox (D7),
+ * unless the caller disabled it. Non-stdio configs are left untouched.
+ */
+function withSandbox(
+  config: McpServerConfig,
+  ctx: NativeResolveContext
+): McpServerConfig {
+  if (ctx.sandbox === false) return config;
+  if (config.transport !== 'stdio') return config;
+  const wrapped = wrapWithSandbox({ command: config.command, args: config.args });
+  return { ...config, command: wrapped.command, args: wrapped.args };
+}
+
 function resolveFs(
   fs: FsToolConfig | undefined,
   ctx: NativeResolveContext
@@ -60,7 +84,7 @@ function resolveFs(
   };
   if (overrides.allowedTools) config.allowedTools = [...overrides.allowedTools];
   if (overrides.disallowedTools) config.disallowedTools = [...overrides.disallowedTools];
-  return withBaseEnv(config, ctx);
+  return withSandbox(withBaseEnv(config, ctx), ctx);
 }
 
 function resolveShell(
@@ -75,14 +99,16 @@ function resolveShell(
   if (overrides.allowCommands?.length) {
     env[SHELL_SERVER.envKeys.allowCommands] = overrides.allowCommands.join(',');
   }
-  if (overrides.denyCommands?.length) {
-    env[SHELL_SERVER.envKeys.denyCommands] = overrides.denyCommands.join(',');
-  }
   if (overrides.timeoutMs !== undefined) {
     env[SHELL_SERVER.envKeys.timeoutSeconds] = String(
       Math.ceil(overrides.timeoutMs / 1000)
     );
   }
+  // NOTE: `overrides.denyCommands` is intentionally NOT emitted. The adopted
+  // server (`tumf/mcp-shell-server`) exposes an allow-list ONLY — it has no
+  // deny-list environment variable — and ADR-0008 D5 forbids the harness from
+  // owning per-command deny semantics. Emitting a fictional `DENY_COMMANDS` var
+  // would be a silent no-op (the server ignores it).
   if (overrides.env) Object.assign(env, overrides.env);
 
   const config: McpServerConfig = {
@@ -92,7 +118,7 @@ function resolveShell(
     cwd: overrides.root ?? ctx.cwd,
   };
   if (Object.keys(env).length > 0) config.env = env;
-  return withBaseEnv(config, ctx);
+  return withSandbox(withBaseEnv(config, ctx), ctx);
 }
 
 function resolveDispatch(
@@ -118,9 +144,11 @@ function resolveDispatch(
  * `fs`, `shell`, `dispatch` — omitting any member set to `false` (or, for
  * `dispatch`, any member with no `dispatchSelf` to reference).
  *
- * The stored `cfg` is NEVER mutated, and no resolved root is persisted: the same
- * definition fired from `/P/a` then `/P/b` yields roots `/P/a` then `/P/b` while
- * the definition stays byte-identical (D4/D8).
+ * The `fs` and `shell` builtins are wrapped with the adopted `srt` sandbox by
+ * default (D7); pass `ctx.sandbox === false` to disable. The stored `cfg` is
+ * NEVER mutated, and no resolved root is persisted: the same definition fired
+ * from `/P/a` then `/P/b` yields roots `/P/a` then `/P/b` while the definition
+ * stays byte-identical (D4/D8).
  */
 export function resolveNativeTooling(
   cfg: NativeToolingConfig | undefined,

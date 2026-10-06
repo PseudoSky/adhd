@@ -18,5 +18,11 @@ export {
   DISPATCH_SERVER_KEY,
   FS_SERVER,
   SHELL_SERVER,
+  SRT_SANDBOX,
+  wrapWithSandbox,
 } from './lib/catalog.js';
-export type { NativeToolName, NativeServerCatalogEntry } from './lib/catalog.js';
+export type {
+  NativeToolName,
+  NativeServerCatalogEntry,
+  WrappableCommand,
+} from './lib/catalog.js';

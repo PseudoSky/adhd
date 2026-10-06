@@ -20,6 +20,31 @@ dangerous-command catalog. Hard enforcement is delegated to the adopted servers
 `@anthropic-ai/sandbox-runtime` (ADR-0008 D5/D7). A harness that pattern-matched
 command text would be best-effort, not a security boundary.
 
+## Adopted upstream servers (ADR-0008 D7 — human-gated, APPROVED)
+
+| role | server | how it is used |
+|---|---|---|
+| filesystem | `@modelcontextprotocol/server-filesystem` (MIT) | `npx -y @modelcontextprotocol/server-filesystem <root>` |
+| shell | `tumf/mcp-shell-server` (MIT) | `uvx mcp-shell-server` — allowlisted command **NAMES as argv arrays**, never a shell string |
+| OS enforcement | `@anthropic-ai/sandbox-runtime` (`srt`, Apache-2.0) | wraps **both** servers: `srt <command> <args…>` |
+
+`unbash` is **dropped**; `rust-mcp-filesystem` is **deferred** (ADR-0008 D7).
+
+`resolveNativeTooling` wraps the `fs` and `shell` builtins with `srt` by default
+(`ctx.sandbox !== false`), so the resolved command is `srt …`. A real deployment
+must provision an `srt` policy (`~/.srt-settings.json`) that lets the wrapped
+servers reach their own caches/registries (e.g. `~/.cache/uv` and PyPI for the
+shell server). Pass `{ sandbox: false }` where no policy is provisioned; hard
+enforcement then degrades to the shell argv allowlist and the fs root scoping.
+
+**Human-gated adoption — approved.** The ADR-0008 D7 adoption above is a
+human-gated decision, recorded as APPROVED:
+**Approved by: pseudosky (repo owner), 2026-10-05**, under the owner directive
+*"Finish the project"*. The same record is in this package's `AGENTS.md` and in
+the gated live-test header
+(`entrypoint/agent-mcp/src/__tests__/integration/native-tooling-adoption.e2e.test.ts`).
+
+
 ## Usage
 
 ```ts

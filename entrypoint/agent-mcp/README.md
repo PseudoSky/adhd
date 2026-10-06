@@ -261,6 +261,28 @@ reason. The default (unflagged) suite still exercises the orchestrator/tool path
 scripted providers; these live tests add real-model confirmation of model-independent
 invariants. The same record appears in this package's `AGENTS.md` and in each test's header.
 
+## Native-tooling adoption gate (env-gated — external third-party server)
+
+The ADR-0008 D7 upstream-server adoption is a **human-gated** decision (NAT-TOOL-8).
+The live test that proves the adopted shell server (`tumf/mcp-shell-server`, fetched
+from PyPI at run time by `uvx`) starts and executes an allowlisted argv command
+through the real `agent_verify_mcp` handshake is gated behind `NAT_TOOL_LIVE=1`:
+
+| Test file | Gate | Real dependency |
+|---|---|---|
+| `src/__tests__/integration/native-tooling-adoption.e2e.test.ts` | `NAT_TOOL_LIVE=1` | `uvx mcp-shell-server` (external PyPI package) + `srt` |
+
+**Approved by:** pseudosky (repo owner), 2026-10-05, under the owner directive
+"Finish the project". Rationale: the test drives a real external third-party MCP
+server (`uvx` fetches `tumf/mcp-shell-server` from PyPI), which CI cannot provide
+hermetically — the qualifying gate reason. **Adopted set:** `@modelcontextprotocol/server-filesystem`,
+`tumf/mcp-shell-server`, `@anthropic-ai/sandbox-runtime` (`srt`, wraps both);
+`unbash` dropped, `rust-mcp-filesystem` deferred. The resolver emits the adopted,
+`srt`-wrapped builtins (`@adhd/agent-core-native-tooling`); the default (unflagged)
+suite proves the resolved shape and the `agent_verify_mcp` path with no external
+fetch. The same record appears in this package's `AGENTS.md`, in
+`@adhd/agent-core-native-tooling`'s `README.md`/`AGENTS.md`, and in the test's header.
+
 ## Limitations
 
 - **No OS-level sandboxing** — filesystem/network access is enforced by policy, not by OS isolation. A malicious or compromised agent can still access the host if the policy permits.
