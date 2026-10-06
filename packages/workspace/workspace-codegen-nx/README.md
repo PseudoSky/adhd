@@ -61,7 +61,7 @@ Entrypoint: entrypoint/<name>/                       → @adhd/<name>
 
 ## Post-generation patches
 
-The generator applies six patching functions to scaffold packages correctly:
+The generator applies eight patching functions to scaffold packages correctly:
 
 1. **patchInSourceDist** — Migrates `project.json` and `vite.config.ts` from pre-migration workspace-root layout (`dist/{projectRoot}`) to in-source layout (`{projectRoot}/dist`)
 2. **patchViteConfig** — Configures `vite.config.ts`:
@@ -73,6 +73,8 @@ The generator applies six patching functions to scaffold packages correctly:
 4. **ensureReadme** — Creates a starter `README.md` scaffold if missing
 5. **patchEslintrc** — Adds `vite.config.*` patterns to `.eslintrc.json` `ignorePatterns`
 6. **patchTsconfigLib** — Adds `src/test/**` to `tsconfig.lib.json` `exclude`
+7. **patchTsconfigSpec** — Sets `module: esnext`, `moduleResolution: bundler`, `allowJs: true` in `tsconfig.spec.json` so the spec corpus (which includes `vite.config.mts`) compiles with zero errors (a4c837a2)
+8. **patchTypecheckSpec** — Emits the spec-corpus compile gate required by release GATE 0 / lane-reachability rule 6 (a4c837a2): a cached `typecheck-spec` target (`tools/nx-plugins/build/executors/typecheck-spec/ratchet.mjs`), `typecheck-spec` appended to `test.dependsOn` (`["lint","^build","typecheck-spec"]`), and an empty ratchet baseline at `tools/nx-plugins/build/executors/typecheck-spec/<project>.baseline.json` written into the Tree. Applies to every tier that scaffolds a `tsconfig.spec.json`; `entrypoint` scaffolds none, so it is exempt from rule 6 and gets no target.
 
 ## Examples
 

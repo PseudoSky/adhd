@@ -197,7 +197,8 @@ async function resolveCandidateIds(
   projectUid: string | undefined
 ): Promise<Set<number> | undefined> {
   if (scope === 'store-wide') return undefined;
-  if (scope === 'multi-project') return resolveMultiProjectIds(graph, projectUid);
+  if (scope === 'multi-project')
+    return resolveMultiProjectIds(graph, projectUid);
   return resolveSameProjectIds(graph, projectUid);
 }
 
@@ -254,6 +255,23 @@ function provenanceFor(
 }
 
 /**
+ * Reduce free user text to FTS-safe word tokens (cfa0ec44). The store
+ * adapter's `normalizeFtsTokens` strips `"` and `buildMatchQuery` wraps each
+ * whitespace token as `"<token>"`, but a token containing a backslash (a
+ * JSON-escaped quote such as `\"`, or a lone `\`) yields `"\"` / `"tok\"`,
+ * whose closing quote is escaped — the Tantivy parser then throws
+ * `FTS parse error: Syntax Error` and aborts the create. Every character that
+ * is not a Unicode letter, digit, or underscore (quotes, backslashes, `*`,
+ * `:`, `-`, parentheses, `^`, braces, brackets, punctuation) is FTS query
+ * syntax, never searchable content, so it is replaced by a space. Boolean
+ * keywords (AND/OR/NOT/NEAR) survive as plain words: the adapter quotes every
+ * token, so they are matched as terms, not operators.
+ */
+export function toFtsSafeText(text: string): string {
+  return text.replace(/[^\p{L}\p{N}_]+/gu, ' ').trim();
+}
+
+/**
  * The scan, with its degraded-mode metadata. Returns `{candidates:[], degraded:false}`
  * when the scope is a COMPLETE scan of nothing (the scope resolves to an empty
  * candidate set, or every candidate was excluded); returns a degraded outcome
@@ -305,7 +323,9 @@ export async function scanSimilarCandidatesWithMeta(
   const vec = await search.embedQuery(text);
   const signals: SignalSpec[] = [{ kind: 'text' }, { kind: 'vec' }];
   const query: SearchQuery = {
-    text,
+    // The embedding sees the raw text; ONLY the FTS text signal gets the
+    // sanitized form (cfa0ec44) — the single chokepoint for user text → MATCH.
+    text: toFtsSafeText(text),
     vec,
     signals,
     filters: candidateIds ? { ids: [...candidateIds] } : { kind: 'issue' },

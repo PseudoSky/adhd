@@ -256,210 +256,231 @@ describe('cross-process write safety — BUG-039 fix verification (SPEC.md §9.1
     removeTestIssueStoreDir(dir);
   });
 
-  it(`CONTROL (immediate — the only mode used in production): two REAL OS processes each createIssue ${N} times into the SAME project persist exactly ${
-    2 * N
-  } issues, and every writer's own ok:true count matches what it reports`, async () => {
-    const [a, b] = await runBarrieredPair(dbPath, dir, projectUid, N);
+  it(
+    `CONTROL (immediate — the only mode used in production): two REAL OS processes each createIssue ${N} times into the SAME project persist exactly ${
+      2 * N
+    } issues, and every writer's own ok:true count matches what it reports`,
+    async () => {
+      const [a, b] = await runBarrieredPair(dbPath, dir, projectUid, N);
 
-    // No unhandled createIssue failures under normal (immediate) operation —
-    // a thrown error here would mean the retry/backoff contract (§4c) did
-    // not hold at this concurrency level, a DIFFERENT defect than BUG-039's
-    // silent loss.
-    expect(
-      a.threw,
-      `writer A: ${a.threw} unexpected createIssue failures, first: ${a.firstError}`
-    ).toBe(0);
-    expect(
-      b.threw,
-      `writer B: ${b.threw} unexpected createIssue failures, first: ${b.firstError}`
-    ).toBe(0);
-    expect(a.ok).toBe(N);
-    expect(b.ok).toBe(N);
+      // No unhandled createIssue failures under normal (immediate) operation —
+      // a thrown error here would mean the retry/backoff contract (§4c) did
+      // not hold at this concurrency level, a DIFFERENT defect than BUG-039's
+      // silent loss.
+      expect(
+        a.threw,
+        `writer A: ${a.threw} unexpected createIssue failures, first: ${a.firstError}`
+      ).toBe(0);
+      expect(
+        b.threw,
+        `writer B: ${b.threw} unexpected createIssue failures, first: ${b.firstError}`
+      ).toBe(0);
+      expect(a.ok).toBe(N);
+      expect(b.ok).toBe(N);
 
-    const persisted = await storedCount(dbPath, projectUid);
-    // THE assertion BUG-039 falsified under the old model: every write
-    // reported `ok:true` by EITHER process actually landed — reopened,
-    // fresh, from neither writer's own in-memory view.
-    expect(
-      persisted,
-      `expected exactly ${
-        a.ok + b.ok
-      } persisted rows (writers reported ok:true for all of them), reopened fresh got ${persisted}`
-    ).toBe(a.ok + b.ok);
-  }, e2eTestTimeoutMs(1));
+      const persisted = await storedCount(dbPath, projectUid);
+      // THE assertion BUG-039 falsified under the old model: every write
+      // reported `ok:true` by EITHER process actually landed — reopened,
+      // fresh, from neither writer's own in-memory view.
+      expect(
+        persisted,
+        `expected exactly ${
+          a.ok + b.ok
+        } persisted rows (writers reported ok:true for all of them), reopened fresh got ${persisted}`
+      ).toBe(a.ok + b.ok);
+    },
+    e2eTestTimeoutMs(1)
+  );
 
-  it(`CONTROL (distinct-target — no forced collision): two REAL OS processes each createIssue ${N} times into the SAME project, each call carrying a UNIQUE body, persist exactly ${
-    2 * N
-  } issues (SPEC.md §8 AC-22's "distinct-target" case, alongside the same-target case above)`, async () => {
-    const [a, b] = await runBarrieredPair(dbPath, dir, projectUid, N, {
-      ADHD_TEST_CROSS_PROCESS_BODY_MODE: 'distinct',
-    });
+  it(
+    `CONTROL (distinct-target — no forced collision): two REAL OS processes each createIssue ${N} times into the SAME project, each call carrying a UNIQUE body, persist exactly ${
+      2 * N
+    } issues (SPEC.md §8 AC-22's "distinct-target" case, alongside the same-target case above)`,
+    async () => {
+      const [a, b] = await runBarrieredPair(dbPath, dir, projectUid, N, {
+        ADHD_TEST_CROSS_PROCESS_BODY_MODE: 'distinct',
+      });
 
-    expect(
-      a.threw,
-      `writer A: ${a.threw} unexpected createIssue failures, first: ${a.firstError}`
-    ).toBe(0);
-    expect(
-      b.threw,
-      `writer B: ${b.threw} unexpected createIssue failures, first: ${b.firstError}`
-    ).toBe(0);
-    expect(a.ok).toBe(N);
-    expect(b.ok).toBe(N);
+      expect(
+        a.threw,
+        `writer A: ${a.threw} unexpected createIssue failures, first: ${a.firstError}`
+      ).toBe(0);
+      expect(
+        b.threw,
+        `writer B: ${b.threw} unexpected createIssue failures, first: ${b.firstError}`
+      ).toBe(0);
+      expect(a.ok).toBe(N);
+      expect(b.ok).toBe(N);
 
-    const persisted = await storedCount(dbPath, projectUid);
-    expect(
-      persisted,
-      `expected exactly ${
-        a.ok + b.ok
-      } persisted rows (writers reported ok:true for all of them, zero forced content collision), reopened fresh got ${persisted}`
-    ).toBe(a.ok + b.ok);
-  }, e2eTestTimeoutMs(1));
+      const persisted = await storedCount(dbPath, projectUid);
+      expect(
+        persisted,
+        `expected exactly ${
+          a.ok + b.ok
+        } persisted rows (writers reported ok:true for all of them, zero forced content collision), reopened fresh got ${persisted}`
+      ).toBe(a.ok + b.ok);
+    },
+    e2eTestTimeoutMs(1)
+  );
 
-  it('NEGATIVE CONTROL: ADHD_BACKLOG_UNSAFE_TX_MODE=deferred strips the BEGIN IMMEDIATE CAS guarantee — this proves the CONTROL case above is actually exercising that guarantee, not passing for an unrelated reason', async () => {
-    const [a, b] = await runBarrieredPair(dbPath, dir, projectUid, N, {
-      ADHD_BACKLOG_UNSAFE_TX_MODE: 'deferred',
-    });
-    const persisted = await storedCount(dbPath, projectUid);
+  it(
+    'NEGATIVE CONTROL: ADHD_BACKLOG_UNSAFE_TX_MODE=deferred strips the BEGIN IMMEDIATE CAS guarantee — this proves the CONTROL case above is actually exercising that guarantee, not passing for an unrelated reason',
+    async () => {
+      const [a, b] = await runBarrieredPair(dbPath, dir, projectUid, N, {
+        ADHD_BACKLOG_UNSAFE_TX_MODE: 'deferred',
+      });
+      const persisted = await storedCount(dbPath, projectUid);
 
-    // The DETERMINISTIC invariant this checks, regardless of how the
-    // downgrade manifests: a writer's own `ok` count can never overstate
-    // what actually persisted. This is BUG-039's exact defect signature —
-    // "reported ok:true, row never landed" — and it is the one thing a
-    // caller can never detect from its own return value alone, so it is
-    // the one thing worth asserting deterministically even when the raw
-    // exact-count outcome (see below) is not.
-    expect(
-      persisted,
-      `deferred mode: writers together reported ok:true ${
-        a.ok + b.ok
-      } times but a fresh reopen found ${persisted} rows — ` +
-        "this is BUG-039's silent-loss signature reproduced under the downgraded transaction mode"
-    ).toBeLessThanOrEqual(a.ok + b.ok);
+      // The DETERMINISTIC invariant this checks, regardless of how the
+      // downgrade manifests: a writer's own `ok` count can never overstate
+      // what actually persisted. This is BUG-039's exact defect signature —
+      // "reported ok:true, row never landed" — and it is the one thing a
+      // caller can never detect from its own return value alone, so it is
+      // the one thing worth asserting deterministically even when the raw
+      // exact-count outcome (see below) is not.
+      expect(
+        persisted,
+        `deferred mode: writers together reported ok:true ${
+          a.ok + b.ok
+        } times but a fresh reopen found ${persisted} rows — ` +
+          "this is BUG-039's silent-loss signature reproduced under the downgraded transaction mode"
+      ).toBeLessThanOrEqual(a.ok + b.ok);
 
-    // The exact-persistence property the CONTROL case proves under
-    // `immediate` is EXPECTED to fail here — that is what makes this a
-    // real negative control rather than a second copy of the same
-    // assertion. Not encoded as a hard `expect` (SPEC.md's own history
-    // notes this repro is "flaky in both directions" under load), so this
-    // test can never itself become a source of CI flakiness; the actual
-    // observed numbers are asserted above (the invariant that must ALWAYS
-    // hold) and reported by whoever reads this test's output.
-    //
-    // **Genuine-effort finding, not a shrug (AC-22 audit gap 2).** A
-    // deterministic hard `toBeLessThan(combinedOk)` HERE was attempted and
-    // is not reachable, for a structural reason, not a flakiness
-    // shrug — confirmed both by code review and by repeated live runs this
-    // session (N=200 and N=1500, both under real two-process load): every
-    // entity write in this codebase is `crypto.randomUUID()`-keyed with
-    // `skipDedupe: true` UNCONDITIONAL (`write/tx.ts`'s `writeNodeTx`) —
-    // there is no unique constraint, in-band counter, or content-hash key
-    // for two concurrent inserts to ever collide on, with or without the
-    // `BEGIN IMMEDIATE` RESERVED-lock guarantee. Downgrading to `deferred`
-    // therefore cannot manufacture a SILENT lost-update the way BUG-039's
-    // original free-string-identity path could; observed at N=200 this
-    // session: 4 driver-level throws (`WriteIOError`), zero silent loss
-    // (persisted === combinedOk exactly, 396/396). At N=1500 the same
-    // downgrade instead pushes total wall time over the harness's 60s
-    // bound (heavier driver-level busy/retry contention, still throwing
-    // loudly, never silently) rather than ever producing a below-count. The ONE
-    // reachable, deterministic reproduction of BUG-039's exact "ok:true,
-    // row never landed" signature in THIS write path is the content-hash
-    // dedupe collapse below (`ADHD_BACKLOG_UNSAFE_DEDUPE_MODE=on`) — hard
-    // `toBe`/`toBeLessThan` assertions, deterministic every run — which is
-    // why that second negative control exists alongside this one rather
-    // than replacing it: this test proves the `BEGIN IMMEDIATE` CAS
-    // guarantee is real and its failure mode is LOUD; the dedupe test
-    // proves AC-22's literal "stored count BELOW the expected total"
-    // silent-loss signature, deterministically.
-    // eslint-disable-next-line no-console
-    console.warn(
-      `[cross-process-write-safety] NEGATIVE CONTROL numbers this run: attempted=${
-        2 * N
-      } ` +
-        `a.ok=${a.ok} a.threw=${a.threw} b.ok=${b.ok} b.threw=${b.threw} ` +
-        `combined-ok=${a.ok + b.ok} persisted(fresh reopen)=${persisted} ` +
-        `a.firstError=${a.firstError ?? 'n/a'} b.firstError=${
-          b.firstError ?? 'n/a'
-        }` +
-        (persisted === a.ok + b.ok
-          ? " — every reported ok:true persisted (no SILENT loss this run; visible throws, if any, are the downgrade's only symptom here)"
-          : ` — SILENT LOSS: ${
-              a.ok + b.ok - persisted
-            } row(s) reported ok:true but did not persist`)
-    );
-  }, e2eTestTimeoutMs(1));
+      // The exact-persistence property the CONTROL case proves under
+      // `immediate` is EXPECTED to fail here — that is what makes this a
+      // real negative control rather than a second copy of the same
+      // assertion. Not encoded as a hard `expect` (SPEC.md's own history
+      // notes this repro is "flaky in both directions" under load), so this
+      // test can never itself become a source of CI flakiness; the actual
+      // observed numbers are asserted above (the invariant that must ALWAYS
+      // hold) and reported by whoever reads this test's output.
+      //
+      // **Genuine-effort finding, not a shrug (AC-22 audit gap 2).** A
+      // deterministic hard `toBeLessThan(combinedOk)` HERE was attempted and
+      // is not reachable, for a structural reason, not a flakiness
+      // shrug — confirmed both by code review and by repeated live runs this
+      // session (N=200 and N=1500, both under real two-process load): every
+      // entity write in this codebase is `crypto.randomUUID()`-keyed with
+      // `skipDedupe: true` UNCONDITIONAL (`write/tx.ts`'s `writeNodeTx`) —
+      // there is no unique constraint, in-band counter, or content-hash key
+      // for two concurrent inserts to ever collide on, with or without the
+      // `BEGIN IMMEDIATE` RESERVED-lock guarantee. Downgrading to `deferred`
+      // therefore cannot manufacture a SILENT lost-update the way BUG-039's
+      // original free-string-identity path could; observed at N=200 this
+      // session: 4 driver-level throws (`WriteIOError`), zero silent loss
+      // (persisted === combinedOk exactly, 396/396). At N=1500 the same
+      // downgrade instead pushes total wall time over the harness's 60s
+      // bound (heavier driver-level busy/retry contention, still throwing
+      // loudly, never silently) rather than ever producing a below-count. The ONE
+      // reachable, deterministic reproduction of BUG-039's exact "ok:true,
+      // row never landed" signature in THIS write path is the content-hash
+      // dedupe collapse below (`ADHD_BACKLOG_UNSAFE_DEDUPE_MODE=on`) — hard
+      // `toBe`/`toBeLessThan` assertions, deterministic every run — which is
+      // why that second negative control exists alongside this one rather
+      // than replacing it: this test proves the `BEGIN IMMEDIATE` CAS
+      // guarantee is real and its failure mode is LOUD; the dedupe test
+      // proves AC-22's literal "stored count BELOW the expected total"
+      // silent-loss signature, deterministically.
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[cross-process-write-safety] NEGATIVE CONTROL numbers this run: attempted=${
+          2 * N
+        } ` +
+          `a.ok=${a.ok} a.threw=${a.threw} b.ok=${b.ok} b.threw=${b.threw} ` +
+          `combined-ok=${a.ok + b.ok} persisted(fresh reopen)=${persisted} ` +
+          `a.firstError=${a.firstError ?? 'n/a'} b.firstError=${
+            b.firstError ?? 'n/a'
+          }` +
+          (`${a.firstError ?? ''}${b.firstError ?? ''}`.includes(
+            'snapshot is stale'
+          )
+            ? ' [firstError "Database snapshot is stale" is the deferred downgrade\'s expected loud signature (1687b889 AC3): a deferred BEGIN takes no lock, so a read->write upgrade after a peer commit is refused; BEGIN IMMEDIATE cannot produce it]'
+            : '') +
+          (persisted === a.ok + b.ok
+            ? " — every reported ok:true persisted (no SILENT loss this run; visible throws, if any, are the downgrade's only symptom here)"
+            : ` — SILENT LOSS: ${
+                a.ok + b.ok - persisted
+              } row(s) reported ok:true but did not persist`)
+      );
+    },
+    e2eTestTimeoutMs(1)
+  );
 
-  it("NEGATIVE CONTROL (dedupe): ADHD_BACKLOG_UNSAFE_DEDUPE_MODE=on re-enables content-hash dedupe — this proves the design choice `write/tx.ts`'s writeNodeTx makes (skipDedupe:true, unconditional, on every entity write) is load-bearing for cross-process safety, not the `immediate` transaction mode above", async () => {
-    // Distinct from the `deferred` tx-mode control above: THAT control
-    // proves the `BEGIN IMMEDIATE` compare-and-swap guarantee (a claim/CAS
-    // criterion). THIS control proves a DIFFERENT criterion —
-    // `writeNodeTx`'s unconditional `skipDedupe: true` (SPEC.md §1/§4: "All
-    // entity writes pass `skipDedupe: true`" — "two identical-body issues
-    // are two rows, never one collapsed row"). Both controls run the SAME
-    // two-real-OS-process barriered harness; only the env switch differs.
-    //
-    // `cross-process-issue-writer.ts` writes the EXACT SAME `body` (and
-    // the SAME `by` identity) on every one of the 2*N calls, across BOTH
-    // processes — see that fixture's own inline comments for why this
-    // collision is deliberate and why `by` must be shared (an
-    // `authored_by` multiplicity conflict, not silent loss, is what a
-    // per-tag `by` would produce once dedupe collapses the rows).
-    // `content_hash` dedupe is GLOBAL (BUG-040 in `@adhd/sox-graph-store`'s
-    // own dist comment: it ignores `kind` entirely), so every one of the
-    // 2*N calls hashes identically and collapses onto whichever ONE call
-    // happens to INSERT first.
-    const [a, b] = await runBarrieredPair(dbPath, dir, projectUid, N, {
-      ADHD_BACKLOG_UNSAFE_DEDUPE_MODE: 'on',
-    });
+  it(
+    "NEGATIVE CONTROL (dedupe): ADHD_BACKLOG_UNSAFE_DEDUPE_MODE=on re-enables content-hash dedupe — this proves the design choice `write/tx.ts`'s writeNodeTx makes (skipDedupe:true, unconditional, on every entity write) is load-bearing for cross-process safety, not the `immediate` transaction mode above",
+    async () => {
+      // Distinct from the `deferred` tx-mode control above: THAT control
+      // proves the `BEGIN IMMEDIATE` compare-and-swap guarantee (a claim/CAS
+      // criterion). THIS control proves a DIFFERENT criterion —
+      // `writeNodeTx`'s unconditional `skipDedupe: true` (SPEC.md §1/§4: "All
+      // entity writes pass `skipDedupe: true`" — "two identical-body issues
+      // are two rows, never one collapsed row"). Both controls run the SAME
+      // two-real-OS-process barriered harness; only the env switch differs.
+      //
+      // `cross-process-issue-writer.ts` writes the EXACT SAME `body` (and
+      // the SAME `by` identity) on every one of the 2*N calls, across BOTH
+      // processes — see that fixture's own inline comments for why this
+      // collision is deliberate and why `by` must be shared (an
+      // `authored_by` multiplicity conflict, not silent loss, is what a
+      // per-tag `by` would produce once dedupe collapses the rows).
+      // `content_hash` dedupe is GLOBAL (BUG-040 in `@adhd/sox-graph-store`'s
+      // own dist comment: it ignores `kind` entirely), so every one of the
+      // 2*N calls hashes identically and collapses onto whichever ONE call
+      // happens to INSERT first.
+      const [a, b] = await runBarrieredPair(dbPath, dir, projectUid, N, {
+        ADHD_BACKLOG_UNSAFE_DEDUPE_MODE: 'on',
+      });
 
-    // No unhandled createIssue failures — a `by`-mismatch multiplicity
-    // conflict (the failure mode this fixture is specifically designed to
-    // avoid) would surface here as `threw > 0`, and would mean the
-    // collision below is not actually exercising SILENT loss.
-    expect(
-      a.threw,
-      `writer A: ${a.threw} unexpected createIssue failures, first: ${a.firstError}`
-    ).toBe(0);
-    expect(
-      b.threw,
-      `writer B: ${b.threw} unexpected createIssue failures, first: ${b.firstError}`
-    ).toBe(0);
-    expect(a.ok).toBe(N);
-    expect(b.ok).toBe(N);
+      // No unhandled createIssue failures — a `by`-mismatch multiplicity
+      // conflict (the failure mode this fixture is specifically designed to
+      // avoid) would surface here as `threw > 0`, and would mean the
+      // collision below is not actually exercising SILENT loss.
+      expect(
+        a.threw,
+        `writer A: ${a.threw} unexpected createIssue failures, first: ${a.firstError}`
+      ).toBe(0);
+      expect(
+        b.threw,
+        `writer B: ${b.threw} unexpected createIssue failures, first: ${b.firstError}`
+      ).toBe(0);
+      expect(a.ok).toBe(N);
+      expect(b.ok).toBe(N);
 
-    const persisted = await storedCount(dbPath, projectUid);
-    const combinedOk = a.ok + b.ok;
+      const persisted = await storedCount(dbPath, projectUid);
+      const combinedOk = a.ok + b.ok;
 
-    // eslint-disable-next-line no-console
-    console.warn(
-      `[cross-process-write-safety] DEDUPE NEGATIVE CONTROL numbers this run: attempted=${
-        2 * N
-      } ` +
-        `a.ok=${a.ok} a.threw=${a.threw} b.ok=${b.ok} b.threw=${b.threw} ` +
-        `combined-ok=${combinedOk} persisted(fresh reopen)=${persisted}` +
-        (persisted < combinedOk
-          ? ` — SILENT LOSS: ${
-              combinedOk - persisted
-            } row(s) reported ok:true but did not persist (both callers still saw ok:true, no thrown error)`
-          : ' — no collapse observed this run (unexpected — every colliding call should have converged onto one row)')
-    );
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[cross-process-write-safety] DEDUPE NEGATIVE CONTROL numbers this run: attempted=${
+          2 * N
+        } ` +
+          `a.ok=${a.ok} a.threw=${a.threw} b.ok=${b.ok} b.threw=${b.threw} ` +
+          `combined-ok=${combinedOk} persisted(fresh reopen)=${persisted}` +
+          (persisted < combinedOk
+            ? ` — SILENT LOSS: ${
+                combinedOk - persisted
+              } row(s) reported ok:true but did not persist (both callers still saw ok:true, no thrown error)`
+            : ' — no collapse observed this run (unexpected — every colliding call should have converged onto one row)')
+      );
 
-    // THE assertion this control exists to make go RED against the
-    // production default (`skipDedupe: true`, where it is always exactly
-    // `2*N`, per the CONTROL case above) and GREEN here: every one of the
-    // `combinedOk` calls reported `ok:true`, yet content-hash dedupe
-    // collapses them all onto ONE row — the exact "silent loss with
-    // ok:true" signature this file's dedupe control exists to prove is
-    // reachable the moment `skipDedupe` is not unconditional.
-    expect(
-      persisted,
-      `expected all ${combinedOk} colliding creates (across BOTH processes) to collapse onto exactly 1 row ` +
-        `under content-hash dedupe, got ${persisted} persisted row(s) — every caller still reported ok:true`
-    ).toBe(1);
-    expect(
-      persisted,
-      `dedupe negative control: writers together reported ok:true ${combinedOk} times but a fresh reopen found ` +
-        `${persisted} row(s) — SILENT LOSS with no visible error to either caller`
-    ).toBeLessThan(combinedOk);
-  }, e2eTestTimeoutMs(1));
+      // THE assertion this control exists to make go RED against the
+      // production default (`skipDedupe: true`, where it is always exactly
+      // `2*N`, per the CONTROL case above) and GREEN here: every one of the
+      // `combinedOk` calls reported `ok:true`, yet content-hash dedupe
+      // collapses them all onto ONE row — the exact "silent loss with
+      // ok:true" signature this file's dedupe control exists to prove is
+      // reachable the moment `skipDedupe` is not unconditional.
+      expect(
+        persisted,
+        `expected all ${combinedOk} colliding creates (across BOTH processes) to collapse onto exactly 1 row ` +
+          `under content-hash dedupe, got ${persisted} persisted row(s) — every caller still reported ok:true`
+      ).toBe(1);
+      expect(
+        persisted,
+        `dedupe negative control: writers together reported ok:true ${combinedOk} times but a fresh reopen found ` +
+          `${persisted} row(s) — SILENT LOSS with no visible error to either caller`
+      ).toBeLessThan(combinedOk);
+    },
+    e2eTestTimeoutMs(1)
+  );
 });

@@ -128,6 +128,8 @@ export async function scaffoldGenerator(tree: Tree, schema: ScaffoldGeneratorSch
   ensureReadme(tree, projectRoot, projectName);
   patchEslintrc(tree, projectRoot);
   patchTsconfigLib(tree, projectRoot);
+  patchTsconfigSpec(tree, projectRoot);
+  patchTypecheckSpec(tree, projectRoot, projectName);
   // DEBT-WORKSPACE-VITE-PATHS-001: deliberately NOT declaring the
   // vite-paths package (workspace-base-vite-paths) as a package.json
   // dependency here. It is consumed by a RELATIVE import into
@@ -477,6 +479,84 @@ function patchTsconfigLib(tree: Tree, dir: string) {
     tsconfigLib.exclude.push('src/test/**');
     writeJson(tree, tsconfigLibPath, tsconfigLib);
   }
+}
+
+/**
+ * a4c837a2: make the scaffolded spec corpus compile CLEAN under the new
+ * `typecheck-spec` gate, so the baseline it ships with can honestly be empty.
+ * Measured on a real scaffold, `tsconfig.spec.json` (which includes
+ * `vite.config.mts`) carried 5 errors out of the box: 2x TS1343 (the Nx vite
+ * template's `import.meta.dirname` under the inherited `module: commonjs`) and
+ * 3x TS7016 (the patched-in `tools/vite-plugins/*.mjs` imports have no
+ * declaration files). The spec corpus is ESM run by vitest/vite, so
+ * `module: esnext` + `moduleResolution: bundler` is the correct setting, and
+ * `allowJs` lets the `.mjs` plugin imports resolve and type from their source.
+ * Scoped to tsconfig.spec.json only; the library build config is untouched.
+ */
+function patchTsconfigSpec(tree: Tree, dir: string) {
+  const specPath = joinPathFragments(dir, 'tsconfig.spec.json');
+  if (!tree.exists(specPath)) return;
+  const spec = readJson(tree, specPath);
+  spec.compilerOptions = {
+    ...(spec.compilerOptions ?? {}),
+    module: 'esnext',
+    moduleResolution: 'bundler',
+    allowJs: true,
+  };
+  writeJson(tree, specPath, spec);
+}
+
+/** Workspace-relative home of every typecheck-spec ratchet baseline. */
+const TYPECHECK_SPEC_DIR = 'tools/nx-plugins/build/executors/typecheck-spec';
+
+/**
+ * Wire the spec-corpus compile gate (a4c837a2). `@nx/js:library` emits
+ * `tsconfig.spec.json`, but `nx.json`'s `production` namedInput excludes it and
+ * no inferred target compiles it, so a fresh package fails release GATE 0 /
+ * lane-reachability rule 6 ("tsconfig.spec.json with no compiling target").
+ * Emits, mirroring packages/agent/agent-core-native-tooling/project.json:
+ *   - a cached `typecheck-spec` target running the ratchet over the package's
+ *     tsconfig.spec.json against its own baseline,
+ *   - `typecheck-spec` in `test.dependsOn` (the partial override relists the
+ *     workspace `targetDefaults.test.dependsOn` of lint + ^build, because a
+ *     project-level `dependsOn` replaces the default wholesale),
+ *   - an EMPTY baseline (`total: 0`) in the Tree. Fresh code carries no
+ *     pre-existing spec errors to baseline, and ratchet.mjs exits 2 on a
+ *     missing baseline, so the file must exist; empty is the strictest correct
+ *     value (any spec type error is an increase and fails).
+ * No-op when the package has no tsconfig.spec.json (entrypoints are scaffolded
+ * without a spec tsconfig, so rule 6 does not apply to them).
+ */
+function patchTypecheckSpec(tree: Tree, dir: string, projectName: string) {
+  const specTsconfig = joinPathFragments(dir, 'tsconfig.spec.json');
+  const projectPath = joinPathFragments(dir, 'project.json');
+  if (!tree.exists(specTsconfig) || !tree.exists(projectPath)) return;
+
+  const baselinePath = joinPathFragments(TYPECHECK_SPEC_DIR, `${projectName}.baseline.json`);
+  const projectJson = readJson(tree, projectPath);
+  projectJson.targets = projectJson.targets ?? {};
+  projectJson.targets['typecheck-spec'] = {
+    '//': `Type-checks the SPEC corpus (${specTsconfig}). Closes lane-reachability rule 6: a tsconfig.spec.json with no compiling target lets the spec corpus carry type errors no gate can see (nx.json production namedInput excludes it). The ratchet fails on any per-file increase over ${baselinePath} or on include narrowing. Wired into test.dependsOn so nx affected -t test runs it.`,
+    executor: 'nx:run-commands',
+    cache: true,
+    inputs: ['default', { externalDependencies: ['typescript'] }],
+    options: {
+      cwd: '.',
+      command: `node ${TYPECHECK_SPEC_DIR}/ratchet.mjs --tsconfig ${specTsconfig} --baseline ${baselinePath}`,
+    },
+  };
+  const test = projectJson.targets.test ?? {};
+  const dependsOn: unknown[] = Array.isArray(test.dependsOn) ? test.dependsOn : ['lint', '^build'];
+  if (!dependsOn.includes('typecheck-spec')) dependsOn.push('typecheck-spec');
+  test.dependsOn = dependsOn;
+  projectJson.targets.test = test;
+  writeJson(tree, projectPath, projectJson);
+
+  writeJson(tree, baselinePath, {
+    '//': `typecheck-spec ratchet baseline for ${specTsconfig}. Per-file error counts; the gate fails on any INCREASE (or a new file with errors). Empty because the package was scaffolded clean; this number may only go DOWN. Regenerate with ratchet.mjs --write-baseline.`,
+    total: 0,
+    files: {},
+  });
 }
 
 export default scaffoldGenerator;

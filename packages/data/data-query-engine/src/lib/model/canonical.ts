@@ -33,24 +33,96 @@ function isRecord(value: unknown): value is Record<string, unknown> {
  */
 export type CanonMemo = Map<unknown, string>;
 
-/** A canonical JSON string: object keys sorted; commutative arrays normalized. */
-function canon(value: unknown, key: string | undefined, memo: CanonMemo): string {
-  if (Array.isArray(value)) {
-    const items = value.map((v) => canon(v, undefined, memo));
-    if (key !== undefined && SORT_DEDUP.has(key)) return `[${[...new Set(items)].sort().join(',')}]`;
-    if (key !== undefined && SORT_KEEP.has(key)) return `[${[...items].sort().join(',')}]`;
-    return `[${items.join(',')}]`;
+/** One in-flight container on `canon`'s explicit work stack. */
+interface ArrFrame {
+  readonly kind: 'arr';
+  readonly value: readonly unknown[];
+  readonly key: string | undefined;
+  readonly out: string[];
+  i: number;
+}
+interface RecFrame {
+  readonly kind: 'rec';
+  readonly value: Record<string, unknown>;
+  readonly keys: string[];
+  readonly out: string[];
+  i: number;
+}
+type Frame = ArrFrame | RecFrame;
+
+/**
+ * A canonical JSON string: object keys sorted; commutative arrays normalized.
+ *
+ * ITERATIVE (explicit work stack), never native recursion: query nesting depth is
+ * caller-controlled, and a recursive walk costs several V8 frames per level, so a
+ * ~1k-deep `_and` chain sat within ~15% of the default stack limit and overflowed
+ * nondeterministically (JIT tier / worker load). Stack use here is O(1); the heap
+ * work stack is O(depth). Evaluation order, memoization and output are identical
+ * to the recursive formulation. A cyclic query throws `TypeError`.
+ */
+function canon(root: unknown, rootKey: string | undefined, memo: CanonMemo): string {
+  const stack: Frame[] = [];
+  /** Records currently being canonicalized — a re-entry is a cycle. */
+  const active = new Set<object>();
+
+  /** A leaf / memo hit resolves to its string now; a container pushes a frame (returns undefined). */
+  const enter = (value: unknown, key: string | undefined): string | undefined => {
+    if (Array.isArray(value)) {
+      if (active.has(value)) throw new TypeError('canon: cyclic query structure');
+      active.add(value);
+      stack.push({ kind: 'arr', value, key, out: [], i: 0 });
+      return undefined;
+    }
+    if (isRecord(value)) {
+      const hit = memo.get(value);
+      if (hit !== undefined) return hit;
+      if (active.has(value)) throw new TypeError('canon: cyclic query structure');
+      active.add(value);
+      stack.push({ kind: 'rec', value, keys: Object.keys(value).sort(), out: [], i: 0 });
+      return undefined;
+    }
+    const out = JSON.stringify(value);
+    return out === undefined ? 'null' : out;
+  };
+
+  const first = enter(root, rootKey);
+  if (first !== undefined) return first;
+
+  let result = '';
+  while (stack.length > 0) {
+    const top = stack[stack.length - 1];
+    const n = top.kind === 'arr' ? top.value.length : top.keys.length;
+    if (top.i < n) {
+      const idx = top.i++;
+      const child = top.kind === 'arr' ? top.value[idx] : top.value[top.keys[idx]];
+      const childKey = top.kind === 'arr' ? undefined : top.keys[idx];
+      const s = enter(child, childKey);
+      if (s !== undefined) top.out.push(top.kind === 'arr' ? s : `${JSON.stringify(childKey)}:${s}`);
+      continue;
+    }
+    // All children resolved — fold this container and hand it to its parent.
+    stack.pop();
+    active.delete(top.value);
+    let folded: string;
+    if (top.kind === 'arr') {
+      const items = top.out;
+      if (top.key !== undefined && SORT_DEDUP.has(top.key)) folded = `[${[...new Set(items)].sort().join(',')}]`;
+      else if (top.key !== undefined && SORT_KEEP.has(top.key)) folded = `[${[...items].sort().join(',')}]`;
+      else folded = `[${items.join(',')}]`;
+    } else {
+      folded = `{${top.out.join(',')}}`;
+      memo.set(top.value, folded);
+    }
+    const parent = stack[stack.length - 1];
+    if (parent === undefined) {
+      result = folded;
+    } else if (parent.kind === 'arr') {
+      parent.out.push(folded);
+    } else {
+      parent.out.push(`${JSON.stringify(parent.keys[parent.i - 1])}:${folded}`);
+    }
   }
-  if (isRecord(value)) {
-    const hit = memo.get(value);
-    if (hit !== undefined) return hit;
-    const keys = Object.keys(value).sort();
-    const out = `{${keys.map((k) => `${JSON.stringify(k)}:${canon(value[k], k, memo)}`).join(',')}}`;
-    memo.set(value, out);
-    return out;
-  }
-  const out = JSON.stringify(value);
-  return out === undefined ? 'null' : out;
+  return result;
 }
 
 /** The structural canonical string of a predicate. */
