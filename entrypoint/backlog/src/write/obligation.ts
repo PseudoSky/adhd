@@ -390,7 +390,7 @@ export async function obligate(
   const now = nowISO();
   const requirement = input.requirement as unknown as Record<string, unknown>;
 
-  return executeWriteTransaction(handle, async (tx: AdapterTransaction) => {
+  return executeWriteTransaction({ ...handle, verb: 'obligate' }, async (tx: AdapterTransaction) => {
     const issue = await resolveLiveIssueTx(tx, input.uid);
 
     const metadata: Record<string, unknown> = {
@@ -465,7 +465,7 @@ export async function unobligate(
   assertNonBlank('by', input.by);
   assertNotBareRoleLiteral('by', input.by);
 
-  return executeWriteTransaction(handle, async (tx: AdapterTransaction) => {
+  return executeWriteTransaction({ ...handle, verb: 'unobligate' }, async (tx: AdapterTransaction) => {
     const row = await resolveObligationNode(tx, input.obligationUid);
     const now = nowISO();
 

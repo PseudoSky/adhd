@@ -1172,7 +1172,7 @@ export async function upsertProject(
   assertNonBlank('by', input.by);
   assertNotBareRoleLiteral('by', input.by);
 
-  return executeWriteTransaction(handle, (tx) =>
+  return executeWriteTransaction({ ...handle, verb: 'upsert-project' }, (tx) =>
     upsertProjectTx(tx, handle, input)
   );
 }
@@ -1408,7 +1408,7 @@ export async function upsertComponent(
   assertNonBlank('by', input.by);
   assertNotBareRoleLiteral('by', input.by);
 
-  return executeWriteTransaction(handle, (tx) =>
+  return executeWriteTransaction({ ...handle, verb: 'upsert-component' }, (tx) =>
     upsertComponentTx(tx, handle, input)
   );
 }
@@ -1594,7 +1594,7 @@ export async function upsertLocation(
     );
   }
 
-  return executeWriteTransaction(handle, async (tx: AdapterTransaction) => {
+  return executeWriteTransaction({ ...handle, verb: 'upsert-location' }, async (tx: AdapterTransaction) => {
     const now = nowISO();
 
     let component: IResolvedCatalogRow;
@@ -1734,7 +1734,7 @@ export async function rmLocation(
   assertNonBlank('by', input.by);
   assertNotBareRoleLiteral('by', input.by);
 
-  return executeWriteTransaction(handle, async (tx: AdapterTransaction) => {
+  return executeWriteTransaction({ ...handle, verb: 'rm-location' }, async (tx: AdapterTransaction) => {
     const now = nowISO();
     const row = await resolveByUidTx(tx, 'location', input.uid);
 

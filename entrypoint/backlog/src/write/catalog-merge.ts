@@ -381,7 +381,7 @@ export async function applyCaseFragmentMerge(
   handle: IWriteStoreHandle,
   plan: IMergePlan
 ): Promise<IMergeJournal> {
-  return executeWriteTransaction(handle, async (tx) => {
+  return executeWriteTransaction({ ...handle, verb: 'admin(case-fragment-merge)' }, async (tx) => {
     const entries: IMergeJournalEntry[] = [];
 
     for (const group of plan.groups) {
@@ -561,7 +561,7 @@ export async function reverseCaseFragmentMerge(
   handle: IWriteStoreHandle,
   journal: IMergeJournal
 ): Promise<void> {
-  await executeWriteTransaction(handle, async (tx) => {
+  await executeWriteTransaction({ ...handle, verb: 'admin(case-fragment-merge-reverse)' }, async (tx) => {
     const at = nowISO();
 
     // Restore canonical meta ONCE per canonical, from its recorded prior meta.

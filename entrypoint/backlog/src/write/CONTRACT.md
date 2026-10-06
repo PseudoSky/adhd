@@ -11,9 +11,9 @@ files to make its own verb easier is silently changing semantics under the
 other eight agents building in parallel.
 
 Every export below was read directly out of the current file (paths and line
-numbers are cited per-export). Nothing here is guessed. Counts: `tx.ts` — 26
-exports, `catalog.ts` — 17 exports, `errors.ts` — 21 exports, `audit.ts` — 3
-exports. **Total: 67 exports.** (C10 added `updateNodeMetaTx` to `tx.ts`;
+numbers are cited per-export). Nothing here is guessed. Counts: `tx.ts` — 27
+exports, `catalog.ts` — 17 exports, `errors.ts` — 25 exports, `audit.ts` — 3
+exports. **Total: 72 exports.** (C10 added `updateNodeMetaTx` to `tx.ts`;
 Wave 2 (C4–C6) added `InvalidPredicateError`, `ObligationNotFoundError`,
 `ObligationUnsatisfiedError`, `OverrideNotPermittedError` and
 `PreconditionRefusedError`, and C10 added `SpecRevisionConflictError` to
@@ -78,7 +78,7 @@ catalog surface with `lifecycle:"deprecated"` + `replacedBy`.
 
 ---
 
-## `tx.ts` (26 exports)
+## `tx.ts` (27 exports)
 
 ### `IWriteStoreHandle` — interface (`tx.ts:97`)
 
@@ -95,7 +95,7 @@ Guarantees: the two dependencies every write verb needs — the raw
 `GraphBackend` was constructed with. Constructed once at store-open time and
 threaded through every write verb.
 
-### `ITxNodeRow` — interface (`tx.ts:132`)
+### `ITxNodeRow` — interface (`tx.ts:139`)
 
 ```ts
 export interface ITxNodeRow {
@@ -114,7 +114,7 @@ Guarantees: the shape every node row read back inside a transaction is mapped
 onto — `metadata` is always either a parsed object or `undefined` (never a
 raw JSON string, never a thrown parse error).
 
-### `nowISO()` — function (`tx.ts:185`)
+### `nowISO()` — function (`tx.ts:192`)
 
 ```ts
 export function nowISO(): string;
@@ -123,7 +123,7 @@ export function nowISO(): string;
 Guarantees: returns the current UTC timestamp in the exact ISO-8601 shape
 `@adhd/sox-graph-store` stamps every row with.
 
-### `sha256Hex(input)` — function (`tx.ts:190`)
+### `sha256Hex(input)` — function (`tx.ts:197`)
 
 ```ts
 export function sha256Hex(input: string | Buffer): string;
@@ -133,7 +133,7 @@ Guarantees: `sha256` hex digest of the given content — used for citation and
 audit content-addressing; NEVER the library's own dedupe hash (that is
 trim+lowercase, computed separately inside `writeNodeTx`).
 
-### `canonicalJSONStringify(value)` — function (`tx.ts:202`)
+### `canonicalJSONStringify(value)` — function (`tx.ts:209`)
 
 ```ts
 export function canonicalJSONStringify(value: Record<string, unknown>): string;
@@ -144,7 +144,7 @@ nesting level and `undefined` values omitted (never serialized as `null`) —
 the one canonical form both `audit.sha` and `transition.sha` are computed
 over.
 
-### `getNodeByUidTx(tx, uid)` — function (`tx.ts:225`)
+### `getNodeByUidTx(tx, uid)` — function (`tx.ts:232`)
 
 ```ts
 export async function getNodeByUidTx(tx: INodeReadExecutor, uid: string): Promise<ITxNodeRow | null>;
@@ -158,7 +158,7 @@ that need "live only" check `row.tInvalid === null` themselves). The
 — an `AdapterTransaction`, a `StoreAdapter`, or graph-store's
 `GraphTransaction`.
 
-### `resolveUidPrefixTx(exec, ref, opts?)` — function (`tx.ts:254`)
+### `resolveUidPrefixTx(exec, ref, opts?)` — function (`tx.ts:261`)
 
 ```ts
 export async function resolveUidPrefixTx(
@@ -177,7 +177,21 @@ a prefix matching ≥2 live rows of the expected kind throws
 `resolveLiveIssueTx` and `catalog.ts`'s `resolveByUidTx` both delegate here,
 so every issue verb and `rm-location` share ONE prefix contract.
 
-### `getNodeByRowidTx(tx, rowid)` — function (`tx.ts:397`)
+### `resolveRestorableIssueTx(tx, ref)` — function (`tx.ts:366`)
+
+```ts
+export async function resolveRestorableIssueTx(tx: INodeReadExecutor, ref: string): Promise<ITxNodeRow>;
+```
+
+Guarantees (S02 AC14): the `restore` inverse of `resolveUidPrefixTx` — `ref` →
+a SOFT-DELETED (`delete`d) `issue` row inside `tx`. It INCLUDES
+`t_invalid IS NOT NULL` rows (the whole point of a restore) and REFUSES a live
+or SUPERSEDED one with `IssueNotRestorableError` (`reason: 'live'` /
+`'superseded'`). Exact uid is the fast path; a unique prefix is accepted with
+the same too-short/ambiguous rules. `IssueNotFoundError` when nothing matches;
+`AmbiguousReferenceError` when a prefix matches more than one deleted row.
+
+### `getNodeByRowidTx(tx, rowid)` — function (`tx.ts:413`)
 
 ```ts
 export async function getNodeByRowidTx(tx: AdapterTransaction, rowid: number): Promise<ITxNodeRow | null>;
@@ -186,7 +200,7 @@ export async function getNodeByRowidTx(tx: AdapterTransaction, rowid: number): P
 Guarantees: same as `getNodeByUidTx`, keyed by internal `rowid` instead —
 used to resolve an edge endpoint's kind without a redundant round trip.
 
-### `IWriteNodeTxInput` — interface (`tx.ts:408`)
+### `IWriteNodeTxInput` — interface (`tx.ts:424`)
 
 ```ts
 export interface IWriteNodeTxInput {
@@ -208,7 +222,7 @@ atomic instant. `skipDedupe` is typed `never` — declaring it on an input
 object literal is a compile error; see `writeNodeTx`'s own guarantee below
 for why.
 
-### `writeNodeTx(tx, input)` — function (`tx.ts:551`)
+### `writeNodeTx(tx, input)` — function (`tx.ts:567`)
 
 ```ts
 export async function writeNodeTx(tx: AdapterTransaction, input: IWriteNodeTxInput): Promise<{ rowid: number; uid: string }>;
@@ -223,7 +237,7 @@ the library's content-hash-SELECT-then-maybe-insert behavior. SPEC.md §1/§4
 this function never runs that SELECT for any kind at all: always a fresh
 INSERT, always a fresh `crypto.randomUUID()` uid.
 
-### `EdgeMultiplicity` — type (`tx.ts:629`)
+### `EdgeMultiplicity` — type (`tx.ts:645`)
 
 ```ts
 export type EdgeMultiplicity = 'n:1' | '1:n' | 'n:m';
@@ -233,7 +247,7 @@ Guarantees: the closed set of multiplicity values every `edge_kind` rule
 declares. `n:1` caps the edge's SOURCE out-degree at one; `1:n` caps the
 TARGET in-degree at one; `n:m` is uncapped on both sides.
 
-### `IEdgeKindRule` — interface (`tx.ts:631`)
+### `IEdgeKindRule` — interface (`tx.ts:647`)
 
 ```ts
 export interface IEdgeKindRule {
@@ -250,7 +264,7 @@ source-kind match — now used by TWO rels: `audits` (a subject of any kind) and
 since C10, `attests` (an attestation may be keyed to an `issue` OR a `SPEC`
 revision).
 
-### `IWriteEdgeTxInput` — interface (`tx.ts:639`)
+### `IWriteEdgeTxInput` — interface (`tx.ts:655`)
 
 ```ts
 export interface IWriteEdgeTxInput {
@@ -275,7 +289,7 @@ one call — `rule` must be the caller's own already-resolved `edge_kind` rule
 follows the same one-logical-write-one-timestamp rule as
 `IWriteNodeTxInput.at`.
 
-### `writeEdgeTx(tx, input)` — function (`tx.ts:743`)
+### `writeEdgeTx(tx, input)` — function (`tx.ts:759`)
 
 ```ts
 export async function writeEdgeTx(tx: AdapterTransaction, input: IWriteEdgeTxInput): Promise<void>;
@@ -289,7 +303,7 @@ mismatch), enforces `checkMultiplicityTx`'s capped-side conflict check
 CONFLICT(src, dst, rel) DO UPDATE` / re-livening (`t_invalid = NULL`) as the
 library's own `writeEdgeInternal`, issued against `tx`.
 
-### `BacklogEdgeKindMismatchError` — class (`tx.ts:806`)
+### `BacklogEdgeKindMismatchError` — class (`tx.ts:822`)
 
 ```ts
 export class BacklogEdgeKindMismatchError extends BacklogWriteError {
@@ -304,7 +318,7 @@ does not match the actual endpoint being written — a write-layer composition
 defect, expected to be unreachable in practice; fails loudly rather than
 writing a mismatched edge.
 
-### `IInvalidateEdgeTxInput` — interface (`tx.ts:822`)
+### `IInvalidateEdgeTxInput` — interface (`tx.ts:838`)
 
 ```ts
 export interface IInvalidateEdgeTxInput {
@@ -319,7 +333,7 @@ export interface IInvalidateEdgeTxInput {
 Guarantees: everything `invalidateEdgeTx` needs to invalidate one live edge,
 with an optional human-readable `reason` merged into the edge's `meta`.
 
-### `invalidateEdgeTx(tx, input)` — function (`tx.ts:841`)
+### `invalidateEdgeTx(tx, input)` — function (`tx.ts:857`)
 
 ```ts
 export async function invalidateEdgeTx(tx: AdapterTransaction, input: IInvalidateEdgeTxInput): Promise<void>;
@@ -330,7 +344,7 @@ no-op if the edge is already invalidated or absent; otherwise sets
 `t_invalid` and merges `invalidatedAt`/`invalidatedReason` into `meta`,
 issued against `tx`.
 
-### `updateNodeMetaTx(tx, uid, patch, expectedRevision)` — function (`tx.ts:882`)
+### `updateNodeMetaTx(tx, uid, patch, expectedRevision)` — function (`tx.ts:898`)
 
 ```ts
 export async function updateNodeMetaTx(tx: AdapterTransaction, uid: string, patch: Record<string, unknown>, expectedRevision: number): Promise<number | null>;
@@ -347,14 +361,17 @@ per-node CAS, DESIGN §2 Primitive 1) and exists solely for C10's spec pointer
 (`meta.spec_revision`); no other verb may adopt it without a new decision. A
 node with no `meta.revision` reads as revision `0`.
 
-### `executeWriteTransaction(handle, fn)` — function (`tx.ts:1005`)
+### `executeWriteTransaction(handle, fn)` — function (`tx.ts:1021`)
 
 ```ts
 export async function executeWriteTransaction<T>(handle: IWriteStoreHandle, fn: (tx: AdapterTransaction) => Promise<T>): Promise<T>;
 ```
 
-Guarantees: the ONE transaction wrapper every write verb calls. Opens
-`handle.adapter.transaction(fn, { mode: <resolved mode> })` where the mode is
+Guarantees: the ONE transaction wrapper every write verb calls. Before opening
+any transaction it runs the S02 AC14 production-write gate, naming the verb
+from `handle.verb` (request metadata the caller sets via `{ ...handle, verb:
+'<id>' }`; absent ⇒ `'write'`) — a refusal is terminal and side-effect-free.
+Then opens `handle.adapter.transaction(fn, { mode: <resolved mode> })` where the mode is
 `'immediate'` in every normal run (see the `ADHD_BACKLOG_UNSAFE_TX_MODE`
 contract below) and layers the retry contract on top: a thrown
 `BacklogWriteError` is rethrown untouched (already-decided, terminal);
@@ -916,7 +933,7 @@ citation (absent, already removed, or a foreign kind).
 
 ---
 
-## `errors.ts` (22 exports)
+## `errors.ts` (25 exports)
 
 ### `WriteErrorCode` — type (`errors.ts:41`)
 
@@ -1326,6 +1343,54 @@ node — absent, already removed, or a uid naming a node of a different kind (th
 "foreign citation" refusal). Maps to the envelope code `item_not_found`.
 **Additive** — appended after every pre-existing export so no existing
 `CONTRACT.md` anchor shifted.
+
+### `IssueNotRestorableError(uid, reason)` — class (`errors.ts:916`)
+
+```ts
+export class IssueNotRestorableError extends BacklogWriteError {
+  readonly code: 'E_VALIDATION';
+  readonly retryable: false;
+  constructor(uid: string, reason: 'live' | 'absent' | 'superseded' | 'permanently-removed');
+}
+```
+
+Guarantees (S02 AC14): thrown by `restore` when the uid does not name a
+RESTORABLE (soft-`delete`d) issue — the row is still live (`reason: 'live'`),
+superseded (`reason: 'superseded'`), or permanently `remove`d
+(`reason: 'permanently-removed'`). Maps to `precondition_failed`; nothing is
+written. **Additive** — appended after every pre-existing export.
+
+### `RemoveConfirmationRequiredError(uid)` — class (`errors.ts:944`)
+
+```ts
+export class RemoveConfirmationRequiredError extends BacklogWriteError {
+  readonly code: 'E_VALIDATION';
+  readonly retryable: false;
+  constructor(uid: string);
+}
+```
+
+Guarantees (S02 AC14): thrown by `remove` when `confirm !== true` — the
+irreversible retire requires the explicit typed confirmation, refused before
+any write. Maps to `precondition_failed`. **Additive** — appended after every
+pre-existing export.
+
+### `ProductionWriteRefusedError(verb)` — class (`errors.ts:967`)
+
+```ts
+export class ProductionWriteRefusedError extends BacklogWriteError {
+  readonly code: 'E_VALIDATION';
+  readonly retryable: false;
+  constructor(verb: string);
+}
+```
+
+Guarantees (S02 AC14): thrown by `executeWriteTransaction` when a write targets
+the LIVE production store and no explicit typed opt-in was passed. The gate is
+opened ONLY by a typed opt-in — `--allow-production-write` on the CLI (and in
+the `serve` server args, e.g. `.mcp.json`) — never an ambient env toggle
+(ADR-0013). Maps to `precondition_failed`; refused before any transaction opens,
+so it has no side effect. **Additive** — appended after every pre-existing export.
 
 ---
 

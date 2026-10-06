@@ -90,7 +90,7 @@ export async function restoreIssue(
   let restored: { rowid: number; uid: string; text: string } | undefined;
 
   const outcome = await executeWriteTransaction(
-    handle,
+    { ...handle, verb: 'restore' },
     async (tx: AdapterTransaction) => {
       const now = nowISO();
       const row = await resolveRestorableIssueTx(tx, input.uid);

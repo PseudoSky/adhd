@@ -82,6 +82,14 @@ export interface RunServeCommandOpts {
    *  serve` (cli.ts) sets this to `'sandbox'`, along with minting a fresh
    *  `adhdRoot` and writing D8's sandbox `config.yaml`. */
   namespace?: string;
+  /**
+   * (S02 AC14) The explicit TYPED production-write opt-in, threaded from the
+   * CLI's `--allow-production-write` (cli.ts assigns it onto `opts`) into
+   * `StartOpts` through the `...opts` spread below. Absent ⇒ `server.ts` arms
+   * the production-write gate CLOSED, so a `serve` against the live production
+   * store refuses every write unless the operator opted in.
+   */
+  allowProductionWrite?: boolean;
 }
 
 /**

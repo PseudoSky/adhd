@@ -121,7 +121,7 @@ export async function mergeProject(
   assertNonBlank('by', input.by);
   assertNotBareRoleLiteral('by', input.by);
 
-  return executeWriteTransaction(handle, async (tx) => {
+  return executeWriteTransaction({ ...handle, verb: 'merge-project' }, async (tx) => {
     const now = nowISO();
     const from = await getNodeByUidTx(tx, input.fromUid);
     if (from?.kind !== 'project') {
@@ -256,7 +256,7 @@ export async function rmProject(
   assertNonBlank('by', input.by);
   assertNotBareRoleLiteral('by', input.by);
 
-  return executeWriteTransaction(handle, async (tx) => {
+  return executeWriteTransaction({ ...handle, verb: 'rm-project' }, async (tx) => {
     const now = nowISO();
     const row = await getNodeByUidTx(tx, input.uid);
     if (row?.kind !== 'project') {

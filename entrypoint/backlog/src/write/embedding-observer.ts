@@ -225,7 +225,7 @@ async function runEmbedRoundTrip(
   }
 
   try {
-    await executeWriteTransaction(handle, async (tx) => {
+      await executeWriteTransaction({ ...handle, verb: 'embed' }, async (tx) => {
       await writeAudit({
         tx,
         typePolicy: handle.typePolicy,
@@ -275,7 +275,7 @@ export async function recordUnsettledEmbedsAsFailed(
   const unrecorded: IPendingEmbed[] = [];
   for (const entry of pending) {
     try {
-      await executeWriteTransaction(handle, async (tx) => {
+    await executeWriteTransaction({ ...handle, verb: 'embed' }, async (tx) => {
         await writeAudit({
           tx,
           typePolicy: handle.typePolicy,

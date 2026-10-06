@@ -185,7 +185,7 @@ export async function applyTerminalBackfill(
   handle: IWriteStoreHandle,
   plan: ITerminalBackfillPlan
 ): Promise<ITerminalBackfillJournal> {
-  return executeWriteTransaction(handle, async (tx: AdapterTransaction) => {
+  return executeWriteTransaction({ ...handle, verb: 'admin(terminal-backfill)' }, async (tx: AdapterTransaction) => {
     const entries: ITerminalBackfillJournal['entries'] = [];
     for (const rowid of plan.setTerminalRowids) {
       const row = await tx.executeGet<IRawStatusRow>(
@@ -229,7 +229,7 @@ export async function reverseTerminalBackfill(
   handle: IWriteStoreHandle,
   journal: ITerminalBackfillJournal
 ): Promise<void> {
-  await executeWriteTransaction(handle, async (tx: AdapterTransaction) => {
+  await executeWriteTransaction({ ...handle, verb: 'admin(terminal-backfill-reverse)' }, async (tx: AdapterTransaction) => {
     for (const entry of journal.entries) {
       const row = await tx.executeGet<IRawStatusRow>(
         'SELECT rowid, uid, kind, name, meta FROM node WHERE rowid = ? AND t_invalid IS NULL',

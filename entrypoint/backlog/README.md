@@ -282,8 +282,8 @@ and `Unknown option: --<field>. Available: --input`. (`--help` prints a
 "per-field flags are also accepted" footer line; it is generated boilerplate
 that does not hold for these commands — `--input` is the only option they
 accept. The special commands `serve`, `install-skill`, and `search` are the
-exception: they take argv flags and no `--input`.) Thirty operations (the
-29 verbs plus `batch`):
+exception: they take argv flags and no `--input`.) Thirty-two operations (the
+31 verbs plus `batch`):
 
 | Verb              | CLI                             | MCP tool                   |
 | ----------------- | ------------------------------- | -------------------------- |
@@ -310,6 +310,8 @@ exception: they take argv flags and no `--input`.) Thirty operations (the
 | `relate`          | `adhd-backlog relate`           | `backlog_relate`           |
 | `move`            | `adhd-backlog move`             | `backlog_move`             |
 | `delete`          | `adhd-backlog delete`           | `backlog_delete`           |
+| `remove`          | `adhd-backlog remove`           | `backlog_remove`           |
+| `restore`         | `adhd-backlog restore`          | `backlog_restore`          |
 | `upsertProject`   | `adhd-backlog upsert-project`   | `backlog_upsert_project`   |
 | `upsertComponent` | `adhd-backlog upsert-component` | `backlog_upsert_component` |
 | `upsertLocation`  | `adhd-backlog upsert-location`  | `backlog_upsert_location`  |
@@ -322,7 +324,8 @@ exception: they take argv flags and no `--input`.) Thirty operations (the
 `adhd-backlog <verb>` form shown above, and accepts the explicit namespace
 prefix at any position. `get`/`query`/`lookup`/`embedding-status` and the four
 stats/rollup ops are reads. `create`/`update`/`add-citation`/`remove-citation`/
-`transition`/`claim`/`relate`/`move`/`delete` mutate one issue;
+`transition`/`claim`/`relate`/`move`/`delete` mutate one issue (`remove`
+permanently retires one, `restore` reverses a `delete`);
 `attest`/`recheck` record anchored evidence,
 and `obligate`/`unobligate` declare or retire a typed requirement that gates a
 transition ([SKILL.md §4](skill/SKILL.md)); `specAppend`/`specCheck` advance
@@ -435,7 +438,7 @@ the item's `Citations:` block. Omit it and nothing is stored.
 ### Which build these docs describe
 
 These docs describe `entrypoint/backlog/dist/index.js` built from the revision
-captured here, which mounts 29 verbs — including the citation
+captured here, which mounts 31 verbs — including the citation
 (`add-citation`/`remove-citation`), obligation
 (`obligate`/`unobligate`), spec-pointer (`spec-append`/`spec-check`),
 and catalog (`query --input '{"view":"catalogs"}'`) surfaces. A **globally

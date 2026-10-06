@@ -225,4 +225,29 @@ describe(`S02 AC14 — lifecycle remove/restore + production gate (cluster ${CLU
     // A non-production store (the direct-handle default) is never gated.
     expect(() => assertProductionWriteAllowed(store, 'delete')).not.toThrow();
   });
+
+  it('restore of a SUPERSEDED (body-edited) uid is refused with reason "superseded" — un-deleting is not a supersede inverse', async () => {
+    // Mark the row superseded directly — the exact end-state `update`'s
+    // supersede CAS produces (`is_superseded = 1` with `t_invalid` UNTOUCHED).
+    // Same fixture technique `create-duplicate-gate.spec.ts` uses.
+    await store.adapter.transaction(async (tx) => {
+      await tx.executeRun('UPDATE node SET is_superseded = 1 WHERE uid = ?', [
+        issueUid,
+      ]);
+    });
+
+    let caught: unknown;
+    try {
+      await restoreIssue(store, { uid: issueUid, by: 'rescuer' });
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeInstanceOf(IssueNotRestorableError);
+    expect((caught as IssueNotRestorableError).reason).toBe('superseded');
+
+    // Nothing was re-livened: still superseded, `t_invalid` still NULL.
+    const row = await readNode(store, issueUid);
+    expect(row?.isSuperseded).toBe(true);
+    expect(row?.tInvalid).toBeNull();
+  });
 });

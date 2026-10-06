@@ -824,7 +824,7 @@ export async function update(
     | undefined;
 
   const outcome = await executeWriteTransaction(
-    handle,
+    { ...handle, verb: 'update' },
     async (tx: AdapterTransaction) => {
       const now = nowISO();
 

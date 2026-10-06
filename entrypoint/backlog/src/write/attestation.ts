@@ -440,7 +440,7 @@ export async function attest(
     by: input.by,
   });
 
-  return executeWriteTransaction(handle, async (tx: AdapterTransaction) => {
+  return executeWriteTransaction({ ...handle, verb: 'attest' }, async (tx: AdapterTransaction) => {
     const subjectRow = await resolveAttestSubject(tx, input.subject.id);
 
     // Stale-revision guard: never silently `verified` when the caller observed
@@ -580,7 +580,7 @@ export async function recheck(
         reason: 'attestation carries no readable anchor',
       };
 
-  return executeWriteTransaction(handle, async (tx: AdapterTransaction) => {
+  return executeWriteTransaction({ ...handle, verb: 'recheck' }, async (tx: AdapterTransaction) => {
     const row = await resolveAttestationNode(tx, input.attestationUid);
     const meta = row.metadata ?? {};
     const checks = [...readChecks(meta), newCheck];

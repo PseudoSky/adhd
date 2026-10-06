@@ -105,6 +105,13 @@ export interface IWriteStoreHandle {
    */
   readonly typePolicy: TypePolicy;
   /**
+   * (S02 AC14) OPTIONAL write-verb id — request metadata the caller sets (via
+   * `{ ...handle, verb: '<id>' }`) so the production-write gate names the verb
+   * actually attempted in its refusal, never a generic `'write'`. Absent ⇒
+   * `'write'`. Not part of the store identity; a per-call decoration.
+   */
+  readonly verb?: string;
+  /**
    * §4b's on-write embedding substrate — OPTIONAL, mirroring
    * `IDuplicateScanHandle.search`'s own "never silently go dark, but also
    * never hard-fail when unwired" posture (`create-issue.ts`). Absent →
@@ -351,8 +358,9 @@ export async function resolveLiveIssueTx(
  * a non-`issue` kind is `IssueNotFoundError`, exactly as the live path reports.
  *
  * @throws IssueNotFoundError when nothing (live or deleted) matches.
- * @throws IssueNotRestorableError when the exact uid names a LIVE issue (or
- *   the caller is expected to restore something that was never retired).
+ * @throws IssueNotRestorableError when the exact uid names a LIVE issue
+ *   (`reason: 'live'`) or a SUPERSEDED one (`reason: 'superseded'`) — the
+ *   caller is expected to restore only something `delete` actually retired.
  * @throws AmbiguousReferenceError when a prefix matches more than one deleted row.
  */
 export async function resolveRestorableIssueTx(
@@ -362,6 +370,14 @@ export async function resolveRestorableIssueTx(
   const exact = await getNodeByUidTx(tx, ref);
   if (exact) {
     if (exact.kind !== 'issue') throw new IssueNotFoundError(ref);
+    // A SUPERSEDED row keeps `t_invalid IS NULL` (update's supersede CAS sets
+    // `is_superseded` ONLY — see `resolveLiveIssueTx`), so without this check
+    // it would be reported as 'live'. It is neither live nor restorable:
+    // restoring it would be a no-op `SET t_invalid = NULL` on an already-live
+    // row. Report the accurate reason.
+    if (exact.isSuperseded) {
+      throw new IssueNotRestorableError(ref, 'superseded');
+    }
     if (exact.tInvalid === null) {
       throw new IssueNotRestorableError(ref, 'live');
     }
@@ -1008,7 +1024,10 @@ export async function executeWriteTransaction<T>(
 ): Promise<T> {
   // (S02 AC14) The production-write gate runs BEFORE the retry loop opens any
   // transaction: a refusal is terminal (never retried) and has no side effect.
-  assertProductionWriteAllowed(handle, 'write');
+  // The verb is request metadata carried on the handle (`handle.verb`) so the
+  // refusal names the operation the caller actually attempted rather than a
+  // generic 'write'.
+  assertProductionWriteAllowed(handle, handle.verb ?? 'write');
   let attempt = 0;
   for (;;) {
     try {

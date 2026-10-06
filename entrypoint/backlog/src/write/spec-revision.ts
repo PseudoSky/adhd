@@ -426,7 +426,7 @@ export async function appendSpecRevision(
     ? undefined
     : await declaredSpecRowids(handle.graph);
 
-  return executeWriteTransaction(handle, async (tx: AdapterTransaction) => {
+  return executeWriteTransaction({ ...handle, verb: 'spec-append' }, async (tx: AdapterTransaction) => {
     const { head, chainUids } = await resolveLogicalHeadTx(tx, input.uid);
     const now = nowISO();
 

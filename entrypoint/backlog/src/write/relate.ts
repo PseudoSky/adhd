@@ -209,7 +209,7 @@ export async function relate(
     );
   }
 
-  return executeWriteTransaction(handle, async (tx: AdapterTransaction) => {
+  return executeWriteTransaction({ ...handle, verb: 'relate' }, async (tx: AdapterTransaction) => {
     const now = nowISO();
 
     const sourceRow = await resolveLiveIssueTx(tx, input.sourceUid);

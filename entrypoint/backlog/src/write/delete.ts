@@ -112,7 +112,7 @@ export async function deleteIssue(
   let deletedIssue: { rowid: number; uid: string } | undefined;
 
   const outcome = await executeWriteTransaction(
-    handle,
+    { ...handle, verb: 'delete' },
     async (tx: AdapterTransaction) => {
       const now = nowISO();
       const row = await resolveLiveIssueTx(tx, input.uid);

@@ -21,7 +21,7 @@ the successor. Never treat a stored uid as immutable across edits.
 
 Every example below was run against `entrypoint/backlog/dist/index.js` and its
 exact output is what is shown. The obligations/verdict (§4), spec-pointer (§5),
-and catalog/order (§6) examples were run on the build that mounts all 29 verbs;
+and catalog/order (§6) examples were run on the build that mounts all 31 verbs;
 the §11 stats/rollup examples on the build that first mounted those ops. A
 _globally installed_ `adhd-backlog` may be an older build: in particular
 `gitContext` on `create`/`transition` (§9) exists in the `9df2a5c7` build but
@@ -31,7 +31,7 @@ or after the one that mounted them. Compare the `backlog create`, `backlog
 priority-matrix`, and `backlog obligate` lines of `adhd-backlog --help` with §1
 before relying on a field.
 
-## 1. Command surface — 29 verbs (plus `batch`), one calling convention
+## 1. Command surface — 31 verbs (plus `batch`), one calling convention
 
 **Every verb except `embedding-status` takes a single `--input` flag carrying
 one JSON object** (`embedding-status` takes no options at all). There
@@ -69,8 +69,10 @@ adhd-backlog backlog priority-matrix    --input '<IPriorityMatrixInput json>'
 adhd-backlog backlog query              --input '<IIssueQueryInput json>'
 adhd-backlog backlog recheck            --input '<IRecheckInput json>'
 adhd-backlog backlog relate             --input '<IRelateInput json>'
+adhd-backlog backlog remove             --input '<IRemoveIssueInput json>'
 adhd-backlog backlog remove-citation    --input '<IRemoveCitationInput json>'
 adhd-backlog backlog report             --input '<IReportInput json>'
+adhd-backlog backlog restore            --input '<IRestoreIssueInput json>'
 adhd-backlog backlog rm-location        --input '<IRmLocationInput json>'
 adhd-backlog backlog rm-project         --input '<IRmProjectInput json>'
 adhd-backlog backlog spec-append        --input '<ISpecAppendInput json>'
@@ -116,8 +118,10 @@ Verbs (one-token, --input JSON envelope):
   backlog query  { input: { text?: string, filter?: object, fields?: union[], sort?: 'priority'|'updated'|'created'|'relevance'|'textMatch', direction?: 'asc'|'desc', limit?: number, offset?: number, after?: string, view?: 'list'|'ready'|'graph'|'order'|'stale'|'similar'|'overlap'|'projects'|'components'|'locations'|'kinds'|'catalogs', format?: 'json'|'markdown', overlapAxis?: 'file'|'project'|'component'|'author', overlapUids?: string[], staleAfterMin?: number, catalog?: 'kind'|'status'|'priority'|'relation'|'field'|'error_code'|'location_type'|'verb' } }
   backlog recheck  { input: { attestationUid: string, by: string } }
   backlog relate  { input: { sourceUid: string, targetUid: string, rel: 'relates_to'|'supersedes'|'blocks'|'duplicate_of'|'part_of'|'similar_to', action: 'add'|'remove', by: string } }
+  backlog remove  { input: { uid: string, confirm: boolean, reason?: string, by: string } }
   backlog remove-citation  { input: { uid: string, by: string, reason?: string } }
   backlog report  { input: { filter?: object } }
+  backlog restore  { input: { uid: string, by: string } }
   backlog rm-location  { input: { uid: string, by: string, reason?: string } }
   backlog rm-project  { input: { uid: string, reason: string, by: string } }
   backlog spec-append  { input: { uid: string, fragment: string, anchor?: object, base_revision: string, by: string } }
@@ -302,11 +306,12 @@ Each verb is also an MCP tool once `.mcp.json` wires the server, named
 `backlog_get`, `backlog_lookup`, `backlog_merge_project`, `backlog_move`,
 `backlog_obligate`, `backlog_open_curve`, `backlog_part_of_rollup`,
 `backlog_priority_matrix`, `backlog_query`, `backlog_recheck`, `backlog_relate`,
-`backlog_report`, `backlog_rm_location`, `backlog_rm_project`,
+`backlog_remove`, `backlog_report`, `backlog_restore`, `backlog_rm_location`,
+`backlog_rm_project`,
 `backlog_spec_append`, `backlog_spec_check`, `backlog_transition`,
 `backlog_unobligate`, `backlog_update`, `backlog_upsert_component`,
 `backlog_upsert_location`, `backlog_upsert_project`, plus the un-namespaced
-`batch_action` — 29 verbs + `batch`.
+`batch_action` — 31 verbs + `batch`.
 
 The tool list a session sees is the MCP **server process's** build, which can
 lag the CLI: a long-lived `serve` started before a verb was mounted does not
@@ -591,6 +596,25 @@ pointing at it remain readable:
 ```
 $ adhd-backlog backlog delete --input '{"uid":"777c5e33-…","reason":"duplicate of tracked work","by":"claude:1"}'
 {"ok":true,"data":{"uid":"777c5e33-…","invalidated":true}}
+```
+
+**Permanently retire an issue — `remove` (irreversible).** Unlike `delete`,
+`remove` cannot be undone: it retires the item permanently, and a later
+`restore` REFUSES it. It requires the explicit `confirm: true` (a missing/false
+value is refused before any write), plus `by` and an optional `reason`:
+
+```
+$ adhd-backlog backlog remove --input '{"uid":"777c5e33-…","confirm":true,"reason":"mis-filed junk","by":"claude:1"}'
+{"ok":true,"data":{"uid":"777c5e33-…","removed":true}}
+```
+
+**Reverse a soft-`delete` — `restore`.** `restore` un-invalidates the SAME node
+(same uid; never a re-create), so every citation and edge that pointed at it is
+addressable again. Only a `delete` is reversible — a `remove`d item is refused:
+
+```
+$ adhd-backlog backlog restore --input '{"uid":"777c5e33-…","by":"claude:1"}'
+{"ok":true,"data":{"uid":"777c5e33-…","restored":true}}
 ```
 
 **Attest anchored evidence.** `attest` creates a SEPARATE `attestation` node
@@ -1179,9 +1203,9 @@ status:'rejected', reason}` — `value`/`reason` is the SAME outcome envelope
 `error.code` still applies. `mode` (`'parallel'` default · `'serial'` ·
 `'chained'`), `onItemError` (`'continue'` default · `'abort'`), and
 `concurrency`/`itemTimeoutMs` govern how the fan-out runs. The valid
-`operation` values are exactly the 28 mounted verbs above, each prefixed
+`operation` values are exactly the 30 mounted verbs above, each prefixed
 `backlog/` — passing a bare verb name (`"create"`) is rejected with
-`invalid_argument` naming the full list (the live error enumerates all 28).
+`invalid_argument` naming the full list (the live error enumerates all 30).
 
 ## 9. Citations — structured, not hand-typed markdown
 

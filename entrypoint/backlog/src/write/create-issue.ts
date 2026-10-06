@@ -964,7 +964,7 @@ export async function createIssue(
   let embeddedIssue: { rowid: number; uid: string } | undefined;
 
   const outcome = await executeWriteTransaction(
-    handle,
+    { ...handle, verb: 'create' },
     async (tx: AdapterTransaction) => {
       // ONE timestamp for every row this logical write produces — the catalog
       // mints, the issue node, each citation node, and every edge. Captured here

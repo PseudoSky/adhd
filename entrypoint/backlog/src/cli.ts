@@ -452,6 +452,15 @@ export async function runBacklogCli(
   const opts: RunBacklogCliOpts = { ...optsIn };
   const allowProductionWrite =
     optsIn.allowProductionWrite ?? parsedAllowProductionWrite;
+  // S02 AC14: assign onto `opts` too — the one-shot `getCtx` below reads the
+  // LOCAL `allowProductionWrite`, but `serve` is dispatched with `opts`
+  // (`runServeCommand(userArgvEarly.slice(1), opts)`) and must carry the
+  // opt-in through `RunServeCommandOpts` into `StartOpts`. Without this line
+  // `serve` armed the production-write gate with `allowProductionWrite:false`
+  // unconditionally and refused EVERY write — including `.mcp.json`'s own
+  // configured server, which launches `serve --transport mcp` with no other
+  // way to opt in (the CRITICAL this assignment fixes).
+  opts.allowProductionWrite = allowProductionWrite;
 
   // D1/D3: reject a malformed `--namespace` BEFORE doing anything else with
   // it — never silently fall through to `buildBacklogEnv`'s own default (an

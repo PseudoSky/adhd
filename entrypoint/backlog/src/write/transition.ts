@@ -346,7 +346,7 @@ export async function transition(
     );
   }
 
-  return executeWriteTransaction(handle, async (tx: AdapterTransaction) => {
+  return executeWriteTransaction({ ...handle, verb: 'transition' }, async (tx: AdapterTransaction) => {
     const now = nowISO();
 
     const issueRow = await resolveLiveIssueTx(tx, input.uid);

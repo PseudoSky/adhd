@@ -13,6 +13,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   buildBacklogEnv,
+  isLiveProductionStore,
   resolveBacklogDbPath,
   resolveIrCacheFile,
 } from './env.js';
@@ -354,6 +355,91 @@ describe('scope isolation — real Environment instances, real temp filesystem r
       );
       process.env['APIGEN_IR_CACHE_FILE'] = override;
       expect(resolveIrCacheFile({ adhdRoot: globalHomeDir })).toBe(override);
+    });
+  });
+
+  // S02 AC14 — the five-signal conjunction `isLiveProductionStore` uses to
+  // classify the LIVE production store (the one the write gate protects).
+  // Each signal is exercised INDEPENDENTLY, holding the other four at their
+  // production values, so a single dropped signal is caught; each negative is
+  // paired with the all-production positive control so the assertion has teeth.
+  describe('isLiveProductionStore — the five-signal production classification', () => {
+    let prevRoot: string | undefined;
+    let prevScope: string | undefined;
+    let prevGeneric: string | undefined;
+
+    beforeEach(() => {
+      prevRoot = process.env['ADHD_ROOT'];
+      prevScope = process.env['ADHD_BACKLOG_SCOPE'];
+      prevGeneric = process.env['ADHD_ENV_SCOPE'];
+      delete process.env['ADHD_ROOT'];
+      delete process.env['ADHD_BACKLOG_SCOPE'];
+      delete process.env['ADHD_ENV_SCOPE'];
+    });
+    afterEach(() => {
+      if (prevRoot === undefined) delete process.env['ADHD_ROOT'];
+      else process.env['ADHD_ROOT'] = prevRoot;
+      if (prevScope === undefined) delete process.env['ADHD_BACKLOG_SCOPE'];
+      else process.env['ADHD_BACKLOG_SCOPE'] = prevScope;
+      if (prevGeneric === undefined) delete process.env['ADHD_ENV_SCOPE'];
+      else process.env['ADHD_ENV_SCOPE'] = prevGeneric;
+    });
+
+    /** The all-production baseline: namespace production, scope global, no overrides. */
+    const PRODUCTION = {
+      namespace: 'production',
+      scope: 'global' as const,
+      adhdRoot: undefined,
+      dbPathOverride: undefined,
+    };
+
+    it('classifies the all-production baseline as the LIVE production store', () => {
+      expect(isLiveProductionStore(PRODUCTION)).toBe(true);
+    });
+
+    it('signal 1 — namespace: a non-production namespace is NOT production', () => {
+      expect(isLiveProductionStore({ ...PRODUCTION, namespace: 'sandbox' })).toBe(
+        false
+      );
+      expect(isLiveProductionStore({ ...PRODUCTION, namespace: 'test' })).toBe(
+        false
+      );
+      // An omitted namespace defaults to production (first-declared namespace).
+      expect(
+        isLiveProductionStore({ ...PRODUCTION, namespace: undefined })
+      ).toBe(true);
+    });
+
+    it('signal 2 — an explicit adhdRoot override is NOT production', () => {
+      expect(
+        isLiveProductionStore({ ...PRODUCTION, adhdRoot: '/tmp/whatever' })
+      ).toBe(false);
+    });
+
+    it('signal 3 — an ambient ADHD_ROOT is NOT production', () => {
+      expect(isLiveProductionStore(PRODUCTION)).toBe(true); // control
+      process.env['ADHD_ROOT'] = '/tmp/ambient-root';
+      expect(isLiveProductionStore(PRODUCTION)).toBe(false);
+    });
+
+    it('signal 4 — a db.path override (ADHD_BACKLOG_DATABASE_PATH) is NOT production', () => {
+      expect(
+        isLiveProductionStore({
+          ...PRODUCTION,
+          dbPathOverride: '/tmp/redirect.db',
+        })
+      ).toBe(false);
+    });
+
+    it('signal 5 — a non-global scope is NOT production', () => {
+      expect(isLiveProductionStore({ ...PRODUCTION, scope: 'project' })).toBe(
+        false
+      );
+      // Scope resolved from an ambient ADHD_BACKLOG_SCOPE is honoured too.
+      process.env['ADHD_BACKLOG_SCOPE'] = 'project';
+      expect(
+        isLiveProductionStore({ ...PRODUCTION, scope: undefined })
+      ).toBe(false);
     });
   });
 });

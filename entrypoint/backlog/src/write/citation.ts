@@ -580,7 +580,7 @@ export async function addCitation(
     'addCitation'
   );
 
-  return executeWriteTransaction(handle, async (tx: AdapterTransaction) => {
+  return executeWriteTransaction({ ...handle, verb: 'add-citation' }, async (tx: AdapterTransaction) => {
     const now = nowISO();
     const issueRow = await resolveLiveIssueTx(tx, input.uid);
     const appended = await appendCitationTx(tx, handle, {
@@ -658,7 +658,7 @@ export async function removeCitation(
   assertNonBlank('by', input.by);
   assertNotBareRoleLiteral('by', input.by);
 
-  return executeWriteTransaction(handle, async (tx: AdapterTransaction) => {
+  return executeWriteTransaction({ ...handle, verb: 'remove-citation' }, async (tx: AdapterTransaction) => {
     const now = nowISO();
     const citationRow = await resolveCitationNodeTx(tx, input.uid);
 

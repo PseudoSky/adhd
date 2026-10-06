@@ -238,7 +238,7 @@ export async function move(
   assertNonBlank('by', input.by);
   assertNotBareRoleLiteral('by', input.by);
 
-  return executeWriteTransaction(handle, async (tx: AdapterTransaction) => {
+  return executeWriteTransaction({ ...handle, verb: 'move' }, async (tx: AdapterTransaction) => {
     const now = nowISO();
 
     const issueRow = await resolveLiveIssueTx(tx, input.uid);

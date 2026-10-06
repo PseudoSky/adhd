@@ -266,7 +266,7 @@ export async function claim(
   }
   const force = input.force === true;
 
-  return executeWriteTransaction(handle, async (tx: AdapterTransaction) => {
+  return executeWriteTransaction({ ...handle, verb: 'claim' }, async (tx: AdapterTransaction) => {
     const now = nowISO();
     const row = await resolveLiveIssueTx(tx, input.uid);
 

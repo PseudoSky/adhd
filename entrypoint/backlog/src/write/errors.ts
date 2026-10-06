@@ -971,9 +971,10 @@ export class ProductionWriteRefusedError extends BacklogWriteError {
   constructor(public readonly verb: string) {
     super(
       `Refused: "${verb}" would write to the live PRODUCTION store and no explicit ` +
-        'production-write gate was passed. Re-run with the typed opt-in ' +
-        '(--allow-production-write on the CLI / allow_production_write:true in the ' +
-        'input), or point the command at an isolated store (--namespace sandbox).'
+        'production-write opt-in was passed. Re-run with the typed opt-in — ' +
+        '`--allow-production-write` on the CLI (and in the `serve` server args, ' +
+        'e.g. `.mcp.json`) — or point the command at an isolated store ' +
+        '(--namespace sandbox).'
     );
   }
 }

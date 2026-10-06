@@ -265,7 +265,7 @@ export async function applySpecRevisionReconcile(
 ): Promise<ISpecReconcileReport> {
   const plan = await planSpecRevisionReconcile(store);
 
-  await executeWriteTransaction(store, async (tx) => {
+  await executeWriteTransaction({ ...store, verb: 'admin(spec-revision-reconcile)' }, async (tx) => {
     await tx.executeRun(INDEX_DDL);
     const now = nowISO();
 
