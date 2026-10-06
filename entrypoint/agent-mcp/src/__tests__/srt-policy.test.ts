@@ -30,7 +30,7 @@ import {
   resolveSrtRunSettingsPath,
   resolveSrtSettingsPath,
 } from '../srt-policy.js';
-import { withDefaultMcpServers } from '../defaults.js';
+import { withResolvedNativeTooling } from '../defaults.js';
 
 const REPO_ROOT = fileURLToPath(new URL('../../../../', import.meta.url));
 const LOCK_HOLDER = fileURLToPath(new URL('./fixtures/srt-lock-holder.cjs', import.meta.url));
@@ -203,17 +203,42 @@ describe('A3/A4 — per-run settings file + `srt -s` wiring', () => {
       [SRT_SETTINGS_ENV]: runPath,
     } as NodeJS.ProcessEnv);
 
-    // Resolve a definition with TWO portable roots at caller cwd /P — through the
-    // SAME host resolution path used at task time. The host must union BOTH into
+    // Drive the REAL host task-time call site — the store wrapper — not the pure
+    // resolver (#11: the union is an explicit host step). Resolve a definition
+    // with TWO portable roots at caller cwd /P; the host must union BOTH into
     // the per-run policy, else a read from the second root is sandbox-DENIED.
-    withDefaultMcpServers(
-      { mcpServers: {}, nativeTooling: { fs: { roots: ['a', 'b'] } } },
-      { cwd: '/P' }
+    const def = { mcpServers: {}, nativeTooling: { fs: { roots: ['a', 'b'] } } };
+    const wrapped = withResolvedNativeTooling(
+      { read: () => def as never },
+      () => ({ cwd: '/P' })
     );
+    wrapped.read('a');
 
     const run = JSON.parse(await readFile(runPath, 'utf8')) as SrtShape;
     expect(run.filesystem?.allowWrite ?? []).toContain('/P/a');
     expect(run.filesystem?.allowWrite ?? []).toContain('/P/b');
+  });
+
+  it('#3/#11: a resolved `shell.root` alias is unioned into the per-run srt allowWrite', async () => {
+    const runPath = join(dir, 'run-shell.srt.json');
+    provisionRunSrtPolicy('/host/cwd', {
+      [SRT_SETTINGS_ENV]: runPath,
+    } as NodeJS.ProcessEnv);
+
+    // `shell.root` is now the SAME portable-hint contract as `fs.root` (#3), so
+    // an alias outside the dispatching cwd becomes the shell's cwd — and must be
+    // in the srt policy or the srt-wrapped shell is DENIED its own cwd.
+    const def = { mcpServers: {}, nativeTooling: { shell: { root: 'project' } } };
+    const wrapped = withResolvedNativeTooling(
+      { read: () => def as never },
+      () => ({ cwd: '/P', roots: { project: '/opt/proj' } })
+    );
+    wrapped.read('a');
+
+    const run = JSON.parse(await readFile(runPath, 'utf8')) as SrtShape;
+    expect(run.filesystem?.allowWrite ?? []).toContain('/opt/proj');
+    // Teeth: the un-resolved alias name is NOT what lands in the policy.
+    expect(run.filesystem?.allowWrite ?? []).not.toContain('/P/project');
   });
 
   it('removeRunSrtPolicy removes the file WE created', async () => {

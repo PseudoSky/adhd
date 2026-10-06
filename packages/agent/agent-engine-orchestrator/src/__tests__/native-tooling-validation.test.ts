@@ -6,7 +6,11 @@ import {
   agentPatchSchema,
   AGENT_PROJECTABLE_FIELDS,
 } from '../validation/agent.js';
-import { shellBuiltinOverridesSchema } from '../validation/native-tooling.js';
+import {
+  shellBuiltinOverridesSchema,
+  fsRootHintSchema,
+  shellAllowPatternSchema,
+} from '../validation/native-tooling.js';
 
 const base = {
   name: 'native-tooling-agent',
@@ -149,5 +153,73 @@ describe('nativeTooling zod validation (ADR-0008 D3; NAT-TOOL-1)', () => {
     ).toBe(false);
     // Teeth: the same strictObject still ACCEPTS the supported allowCommands.
     expect(shellBuiltinOverridesSchema.safeParse({ allowCommands: ['ls'] }).success).toBe(true);
+  });
+});
+
+/**
+ * The portable-hint zod boundary (#6): the exported `fsRootHintSchema` is now
+ * covered directly AND through the agent-definition boundary, for BOTH `fs.root(s)`
+ * and `shell.root` (the ONE contract, #3).
+ */
+describe('fsRootHintSchema — portable-hint boundary (#3/#6)', () => {
+  it('rejects an absolute fs.root and fs.roots at the agent-definition boundary', () => {
+    expect(
+      agentDefinitionSchema.safeParse({ ...base, nativeTooling: { fs: { root: '/abs' } } }).success
+    ).toBe(false);
+    expect(
+      agentDefinitionSchema.safeParse({ ...base, nativeTooling: { fs: { roots: ['/abs'] } } }).success
+    ).toBe(false);
+    // Teeth: the SAME shape with a portable hint is accepted — proving the
+    // rejection is driven by absoluteness, not by the shape being unknown.
+    expect(
+      agentDefinitionSchema.safeParse({ ...base, nativeTooling: { fs: { roots: ['a', 'b'] } } }).success
+    ).toBe(true);
+  });
+
+  it('accepts a relative hint AND an alias hint; rejects a non-string', () => {
+    expect(fsRootHintSchema.safeParse('work/sub').success).toBe(true);
+    expect(fsRootHintSchema.safeParse('project').success).toBe(true); // a named alias
+    expect(fsRootHintSchema.safeParse('/abs').success).toBe(false);
+    expect(fsRootHintSchema.safeParse(42).success).toBe(false);
+    expect(fsRootHintSchema.safeParse(true).success).toBe(false);
+  });
+
+  it('#3: shell.root obeys the SAME portable-hint contract as fs.root', () => {
+    // Absolute shell.root is rejected at the boundary …
+    expect(
+      agentDefinitionSchema.safeParse({ ...base, nativeTooling: { shell: { root: '/abs' } } }).success
+    ).toBe(false);
+    // … while a relative subpath and an alias are accepted.
+    expect(
+      agentDefinitionSchema.safeParse({ ...base, nativeTooling: { shell: { root: 'work' } } }).success
+    ).toBe(true);
+    expect(
+      agentDefinitionSchema.safeParse({ ...base, nativeTooling: { shell: { root: 'project' } } }).success
+    ).toBe(true);
+    // Direct schema check (no union fallthrough can mask the leaf).
+    expect(shellBuiltinOverridesSchema.safeParse({ root: '/abs' }).success).toBe(false);
+  });
+
+  it('#9: a comma-bearing allowPatterns entry is rejected (CSV join would corrupt it)', () => {
+    // Teeth: a comma-free pattern with the SAME prefix is accepted, so the
+    // rejection is the comma, not the pattern.
+    expect(shellAllowPatternSchema.safeParse('ls.*').success).toBe(true);
+    expect(shellAllowPatternSchema.safeParse('ls.*,git').success).toBe(false);
+    expect(
+      shellBuiltinOverridesSchema.safeParse({ allowPatterns: ['ls.*,git'] }).success
+    ).toBe(false);
+    expect(
+      agentDefinitionSchema.safeParse({
+        ...base,
+        nativeTooling: { shell: { allowPatterns: ['a,b'] } },
+      }).success
+    ).toBe(false);
+    // A comma-free list is still accepted end to end.
+    expect(
+      agentDefinitionSchema.safeParse({
+        ...base,
+        nativeTooling: { shell: { allowPatterns: ['ls.*', 'git'] } },
+      }).success
+    ).toBe(true);
   });
 });

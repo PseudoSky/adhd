@@ -352,6 +352,13 @@ instead — a distinct, orthogonal legacy shape (one row per group with \`taskCo
 | MAX_TOOL_LOOPS_EXCEEDED | Agent used too many tool calls |
 | DELEGATION_NOT_ALLOWED  | Target agent not in caller's allowedAgents |`;
 
+/**
+ * Once-per-process latch for the host-fallback cwd notice (#12). The fallback
+ * is evaluated per resolution (once per task), so an unconditional warn spams
+ * one line per task; after the first, the notice is debug-level.
+ */
+let hostFallbackCwdWarned = false;
+
 export function createServer(deps: ServerDeps): Server {
   // Adapter: bridge SessionStore (SessionListInput) to SessionStoreForCrud ({agentName, status})
   const crudSessionStore = {
@@ -375,10 +382,19 @@ export function createServer(deps: ServerDeps): Server {
   const nativeToolingContext = (cwd?: string) => {
     if (cwd === undefined) {
       // "Flagged host fallback" (ADR-0008 D4): no caller cwd was supplied, so the
-      // host's own process cwd is used — which may not be the agent's cwd.
-      logger.warn(
-        'native tooling: no caller cwd supplied — falling back to the host process cwd (this may not be the agent\u2019s cwd; ADR-0008 D4)'
-      );
+      // host's own process cwd is used — which may not be the agent's cwd. WARN
+      // ONCE PER PROCESS (#12); a per-resolution warn would spam one line per
+      // task. After the first, downgrade to debug.
+      if (!hostFallbackCwdWarned) {
+        hostFallbackCwdWarned = true;
+        logger.warn(
+          'native tooling: no caller cwd supplied — falling back to the host process cwd (this may not be the agent\u2019s cwd; ADR-0008 D4)'
+        );
+      } else {
+        logger.debug(
+          'native tooling: host-fallback cwd (repeat notice suppressed — warned once per process)'
+        );
+      }
     }
     return buildNativeToolingContext({
       cwd,
