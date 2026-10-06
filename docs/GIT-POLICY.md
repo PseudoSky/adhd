@@ -1272,6 +1272,45 @@ Schema version 1.
   78 → 77. The commit remains reachable from the durable `main` ref, so recovery does not depend on
   the reflog. The working tree was clean before and after (`git status --porcelain` empty), so no
   unrelated concurrent dirt had to be avoided; no push (the dispatch directed none) and no gates were
-  run by this operation (the dispatch reported them already green: affected test 0, affected build 0,
-  `lint dispatch-cli` 0, focused spec 15/15). This record is the only change to this file in this
-  operation. Recorded under §Commit convention's `docs(<area>):` scope.
+run by this operation (the dispatch reported them already green: affected test 0, affected build 0,
+`lint dispatch-cli` 0, focused spec 15/15). This record is the only change to this file in this
+operation. Recorded under §Commit convention's `docs(<area>):` scope.
+
+- **2026-10-05 — operation record: land of `docs/playbook-real-mcp-testing-9c4e`
+  (dispatch-2026-10-04-9c4e).** Landed the real-MCP testing playbook onto `main` as a **merge commit**
+  `e9c7c300` (parents `21107c07` = pre-merge `main`, `0144fdf8` = branch head), moving `main`
+  `21107c07` → `e9c7c300`; 3 files, +244: `docs/TEST-STRATEGY.md` (M, +5),
+  `docs/marketing/.catalog/doc-ops.md` (M, +22), and `docs/playbooks/real-mcp-testing.md` (A, +217).
+  The branch carried exactly 1 commit since the merge-base `21107c07` — which equalled `main`'s tip,
+  so the merge was fast-forwardable; the dispatch directed `--no-ff`, and a merge commit is within
+  §Branching & merge, which states history "carries true merge commits" and ff-only is not enforced.
+  §Branching & merge was the deciding rule: rebase-in-flight is permitted only on a branch "solely
+  your own" — this is an in-flight executor branch, not the operator's, so rewriting its commit was
+  out; a merge commit is the stated shape here. Dry-run
+  `git merge-tree --write-tree --name-only main 0144fdf8` exited 0, producing tree `023dfd4e` with no
+  conflict hunks; the actual `git merge --no-ff` was conflict-free (ort strategy, exit 0) and the
+  post-merge tree at `e9c7c300` is `023dfd4e`, byte-identical to the dry-run tree, so no conflict
+  arose and none required resolution. (A raw grep for `^(=======)` matches three lines in the new
+  playbook — lines 108/110/113 — but these are the literal `printTable` banner rows of 96 `=` marks
+  shown as the documented output format, not conflict markers: `^<<<<<<<` and `^>>>>>>>` match
+  nothing, and `^=======$` matches nothing.) The dispatch described the commit as the new playbook
+  plus a one-line `docs/TEST-STRATEGY.md` pointer; the commit in fact also modified
+  `docs/marketing/.catalog/doc-ops.md` (the tracked doc-ops catalog ledger, +22), and the
+  TEST-STRATEGY pointer is a 5-line prose block. Both are documentation, so the change remains
+  docs-only; the branch is well-defined by its head `0144fdf8`, which is what was merged. The branch
+  never touched this file (`git diff --name-only 21107c07..0144fdf8 -- docs/GIT-POLICY.md` empty), so
+  `main`'s policy blob `abe0c2d11ef2318012d45842f44f414e6b5b714d` survived the merge byte-identical
+  (pre-merge `21107c07`, post-merge `e9c7c300`, and the on-disk file all resolve to the same blob).
+  The merge is two-parent (not fast-forward); post-merge `git rev-list --count
+  main..docs/playbook-real-mcp-testing-9c4e` = 0 and `git merge-base --is-ancestor 0144fdf8 main`
+  exits 0, so `0144fdf8` is contained. The worktree `.worktrees/playbook-real-mcp-testing-9c4e` was
+  reaped under §Cleanup's three-part test: `git status --porcelain` inside it was empty, it carried
+  no `locked` line, and its head `0144fdf8` was an ancestor of `main` — so `git worktree remove` (no
+  `--force`) ran and the branch was deleted with `git branch -d docs/playbook-real-mcp-testing-9c4e`
+  (was `0144fdf8`); worktrees went 78 → 77. The commit remains reachable from the durable `main` ref,
+  so recovery does not depend on the reflog. The working tree was clean before and after
+  (`git status --porcelain` empty) and nothing was staged before or after (`git diff --cached
+  --name-only` empty); no unrelated concurrent dirt was present, so nothing had to be avoided or
+  protected. No push (the dispatch directed none) and no gates were run by this operation (docs-only;
+  the dispatch directed none). This record is the only change to this file in this operation.
+  Recorded under §Commit convention's `docs(<area>):` scope.
