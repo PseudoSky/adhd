@@ -117,8 +117,12 @@ describe("af567fb8 — ADHD_AGENT_SKIP_LEGACY_MIGRATION documented", () => {
 
 describe("2cd99264 — gitnexus-singleton concurrency contract", () => {
   it("AC1: the skill documents the one-client kill-and-replace contract", () => {
+    // The contract lives in its own skill, outside `.claude/skills/gitnexus/`:
+    // that directory is owned by `gitnexus analyze`, which the global
+    // PostToolUse hook re-runs after every commit and which rewrites its
+    // SKILL.md files back to the stock template, erasing any local additions.
     const skill = readRepoFile(
-      "../../../../.claude/skills/gitnexus/gitnexus-cli/SKILL.md"
+      "../../../../.claude/skills/gitnexus-singleton/SKILL.md"
     );
     expect(skill).toContain("gitnexus-singleton.sh");
     expect(skill.toLowerCase()).toContain("kill-and-replace");
