@@ -8,9 +8,11 @@
  *
  * The CLI is spawned as a real child process (`npx tsx bin/cli.ts agents import
  * <dir>`) — the way a human dispatcher runs it. Its nested agent-mcp is pointed
- * at the LOCAL built entry via `ADHD_DISPATCH_AGENT_MCP_COMMAND`/`_ARGS` (rather
- * than `npx -y @adhd/agent-mcp`), and the child is spawned with an isolated
- * `cwd` + fake `$HOME` so no repo-root `.env` can redirect the registry.
+ * at the LOCAL built entry via `ADHD_AGENT_MCP_COMMAND`/`ADHD_AGENT_MCP_ARGS`
+ * (rather than `npx -y @adhd/agent-mcp`), and the child is spawned with an
+ * isolated `cwd` + fake `$HOME` so no repo-root `.env` can redirect the registry.
+ * (The legacy `ADHD_DISPATCH_AGENT_MCP_COMMAND`/`_ARGS` names are honoured as a
+ * one-release fallback, but the canonical pair is preferred.)
  *
  * No model call is made, so nothing here is env-gated (AGENTS.md §7).
  */
