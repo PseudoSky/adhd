@@ -297,6 +297,13 @@ export function nativeToolingConfigFieldSpecs(prefix: string): Record<string, Fi
       description:
         'Command NAMES accepted by the adopted argv-allowlist server (a passthrough, not a per-command gate — ADR-0008 D5/D7).',
     },
+    'nativeTooling.shell.allowPatterns': {
+      type: 'array',
+      env: env('SHELL_ALLOW_PATTERNS'),
+      items: { type: 'string' },
+      description:
+        'Regex patterns the adopted server fullmatches against a command NAME (its ALLOW_PATTERNS, OR-d with allowCommands). A passthrough, not a harness-side matcher — the harness owns no command parser (ADR-0008 D5/D7).',
+    },
     'nativeTooling.shell.timeoutMs': {
       type: 'integer',
       env: env('SHELL_TIMEOUT_MS'),

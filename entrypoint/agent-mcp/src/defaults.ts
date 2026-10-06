@@ -256,6 +256,7 @@ export function nativeToolingFromResolvedConfig(cfg: {
   shell: {
     root: string | undefined;
     allowCommands: readonly string[] | undefined;
+    allowPatterns: readonly string[] | undefined;
     timeoutMs: number | undefined;
   };
   dispatch: {
@@ -276,6 +277,7 @@ export function nativeToolingFromResolvedConfig(cfg: {
     shell: {
       root: cfg.shell.root,
       allowCommands: copy(cfg.shell.allowCommands),
+      allowPatterns: copy(cfg.shell.allowPatterns),
       timeoutMs: cfg.shell.timeoutMs,
     },
     dispatch: {

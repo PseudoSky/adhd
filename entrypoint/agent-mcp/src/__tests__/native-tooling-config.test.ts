@@ -202,6 +202,56 @@ describe('NAT-TOOL-7 — native tooling config surface (ADR-0008 D10)', () => {
     }
   });
 
+  // The new shell pattern allow-list leaf must be WIRED, not inert: the env var
+  // must resolve through the cascade, survive the resolved-config bridge, and be
+  // emitted as `ALLOW_PATTERNS` on the resolved shell server.
+  it('AC1: ADHD_AGENT_NATIVE_TOOLING_SHELL_ALLOW_PATTERNS reaches the resolved shell server env', () => {
+    const restorePatterns = withEnvVar(
+      'ADHD_AGENT_NATIVE_TOOLING_SHELL_ALLOW_PATTERNS',
+      'ls.*,git'
+    );
+    const restoreScope = withEnvVar('ADHD_ENV_SCOPE', undefined);
+    try {
+      const env = makeEnv(mkAdhdRoot(), mkCwdFixture(false));
+      expect(env.config.nativeTooling.shell.allowPatterns).toEqual(['ls.*', 'git']);
+      expect(env.get('provenance.nativeTooling.shell.allowPatterns')).toMatchObject({
+        source: 'env',
+        env: 'ADHD_AGENT_NATIVE_TOOLING_SHELL_ALLOW_PATTERNS',
+      });
+
+      const resolved = withDefaultMcpServers(
+        { mcpServers: {} },
+        {
+          cwd: '/P',
+          defaultNativeTooling: nativeToolingFromResolvedConfig(env.config.nativeTooling),
+        }
+      );
+      const shell = resolved.mcpServers['shell'] as { env?: Record<string, string> };
+      expect(shell.env?.ALLOW_PATTERNS).toBe('ls.*,git');
+
+      // NEGATIVE CONTROL: with the var unset the shell server emits no
+      // ALLOW_PATTERNS — proving the assertion above is driven by the env var.
+      const restoreOff = withEnvVar('ADHD_AGENT_NATIVE_TOOLING_SHELL_ALLOW_PATTERNS', undefined);
+      try {
+        const bare = makeEnv(mkAdhdRoot(), mkCwdFixture(false));
+        const resolvedBare = withDefaultMcpServers(
+          { mcpServers: {} },
+          {
+            cwd: '/P',
+            defaultNativeTooling: nativeToolingFromResolvedConfig(bare.config.nativeTooling),
+          }
+        );
+        const shellBare = resolvedBare.mcpServers['shell'] as { env?: Record<string, string> };
+        expect(shellBare.env?.ALLOW_PATTERNS).toBeUndefined();
+      } finally {
+        restoreOff();
+      }
+    } finally {
+      restoreScope();
+      restorePatterns();
+    }
+  });
+
   // A1: the config surface must demonstrably CHANGE a dispatched agent's resolved
   // toolset — not merely reach `env.config`. Asserts the EFFECT end to end.
   it('A1: ADHD_AGENT_NATIVE_TOOLING_* changes a dispatched agent\'s resolved toolset + HITL', () => {

@@ -19,6 +19,10 @@ import { mcpServerConfigSchema } from './mcp.js';
  *     boundary — it welds a host path into a record that must stay reusable
  *     (D4/D8; the fs analogue of the welded-`provider` bug). The resolver also
  *     rejects it (defense in depth).
+ *   - The shell override carries the adopted server's argv allowlist BOTH as
+ *     exact NAMES (`allowCommands`) and as regex NAMES (`allowPatterns`, its
+ *     `ALLOW_PATTERNS`, `fullmatch` over `command[0]`) — both are config
+ *     passthroughs, never a per-command permission map (ADR-0008 D5).
  */
 
 export const permissionActionSchema = z.enum(['allow', 'ask', 'deny']);
@@ -55,6 +59,10 @@ export const shellBuiltinOverridesSchema = z.strictObject({
   root: z.string().optional(),
   permissions: permissionRuleMapSchema.optional(),
   allowCommands: z.array(z.string()).optional(),
+  // Regex passthrough to the adopted server's `ALLOW_PATTERNS` (fullmatch over
+  // the command NAME, OR'd with `allowCommands`) — ADR-0008 D5: the harness
+  // owns no parser, so these are not validated as regexes here.
+  allowPatterns: z.array(z.string()).optional(),
   timeoutMs: z.number().int().positive().optional(),
   env: z.record(z.string(), z.string()).optional(),
 });
