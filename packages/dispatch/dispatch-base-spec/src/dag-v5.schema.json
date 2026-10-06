@@ -107,7 +107,9 @@
           },
           "two_stage": { "type": "boolean" },
           "read_only": { "type": "array", "items": { "type": "string" } },
-          "guard": { "oneOf": [{ "type": "string" }, { "type": "null" }] }
+          "guard": { "oneOf": [{ "type": "string" }, { "type": "null" }] },
+          "lane": { "type": "string" },
+          "tool_grant": { "type": "array", "items": { "type": "string" } }
         }
       }
     },

@@ -12,6 +12,7 @@ import type {
   ShapeOpType,
 } from './types.js';
 import { isValidOpForKind } from './types.js';
+import { LANE_NAMES, unsatisfiedLaneGroups } from './lanes.js';
 
 const VALID_MILESTONE_STATUSES = new Set<MilestoneStatus>([
   'pending',
@@ -165,6 +166,52 @@ function validateDispatchLogTurns(
   }
 }
 
+/**
+ * Lane / tool-grant check (backlog 7ed25125 D-AC1). A milestone that declares a
+ * `lane` must declare the `tool_grant` its agent holds, the lane must be known,
+ * and the grant must satisfy every requirement group of that lane. All three
+ * failures carry a stable `code` so callers can branch on the typed error.
+ */
+function validateLaneGrant(
+  slug: string,
+  m: Record<string, unknown>,
+  errors: ValidationError[]
+): void {
+  const lane = m['lane'];
+  const grant = m['tool_grant'];
+  if (grant !== undefined && (!Array.isArray(grant) || !grant.every(isString))) {
+    errors.push({ ...err(`milestones.${slug}.tool_grant`, 'must be an array of strings', grant), code: 'invalid_tool_grant' });
+    return;
+  }
+  if (lane === undefined || lane === null) return;
+  if (!isString(lane) || lane.trim() === '') {
+    errors.push({ ...err(`milestones.${slug}.lane`, 'must be a non-empty string', lane), code: 'invalid_lane' });
+    return;
+  }
+  const groups = unsatisfiedLaneGroups(lane, (grant as string[] | undefined) ?? []);
+  if (groups === null) {
+    errors.push({
+      ...err(`milestones.${slug}.lane`, `unknown lane "${lane}" (known: ${LANE_NAMES.join(', ')})`, lane),
+      code: 'unknown_lane',
+    });
+    return;
+  }
+  if (grant === undefined) {
+    errors.push({
+      ...err(`milestones.${slug}.tool_grant`, `lane "${lane}" is declared but no tool_grant is — the grant cannot be proven to satisfy the lane`),
+      code: 'lane_tool_grant_missing',
+    });
+    return;
+  }
+  if (groups.length > 0) {
+    const need = groups.map((g) => g.join(' | ')).join('; ');
+    errors.push({
+      ...err(`milestones.${slug}.tool_grant`, `tool grant cannot satisfy lane "${lane}": missing one of [${need}]`, grant),
+      code: 'lane_tool_grant_unsatisfied',
+    });
+  }
+}
+
 export function validateDagJson(dag: unknown): ValidationResult {
   const errors: ValidationError[] = [];
   if (!isObject(dag))
@@ -296,6 +343,7 @@ export function validateDagJson(dag: unknown): ValidationResult {
             m['read_only']
           )
         );
+      validateLaneGrant(slug, m, errors);
     }
 
     const cycle = detectCycle(

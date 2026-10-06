@@ -17,8 +17,9 @@
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { homedir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { createHash } from 'node:crypto';
+import { homedir, tmpdir } from 'node:os';
+import { dirname, join, resolve } from 'node:path';
 
 import {
   buildDispatchSelf,
@@ -53,6 +54,7 @@ import {
   DEFAULT_POLL,
   FS_DESTRUCTIVE_ACTIONS,
   MockAgentRunner,
+  acquireDispatchLock,
   orchestrateCycle,
   pollUntilTerminal,
   type CycleResult,
@@ -680,7 +682,26 @@ export async function runCycleCore(
     allowedFsActions: allowedFsActions as OperationAction[],
     ...(toolsRoot !== undefined ? { toolsRoot } : {}),
   };
-  return orchestrateCycle(deps);
+  if (dryRun) return orchestrateCycle(deps);
+  // Duplicate-dispatch guard (backlog d794287f D-AC3): a live run of this DAG
+  // may exist at most once, across processes. A second `run` against the same
+  // dag while the first is live is refused with `DuplicateDispatchError`.
+  const lock = acquireDispatchLock(dispatchLockPath(dagPath), resolve(dagPath));
+  try {
+    return await orchestrateCycle(deps);
+  } finally {
+    lock.release();
+  }
+}
+
+/**
+ * Where the live-dispatch lock for `dagPath` lives: a per-DAG file under the OS
+ * temp dir (never inside the repo tree, so a run cannot dirty the working tree
+ * and a crash leaves only a stale, pid-checked file).
+ */
+export function dispatchLockPath(dagPath: string): string {
+  const id = createHash('sha256').update(resolve(dagPath)).digest('hex').slice(0, 16);
+  return join(tmpdir(), 'adhd-dispatch-locks', `${id}.lock`);
 }
 
 // ---------------------------------------------------------------------------

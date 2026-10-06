@@ -527,6 +527,14 @@ export interface MilestoneDag {
   two_stage: boolean;
   read_only: string[];
   guard: string | null;
+  /**
+   * OPTIONAL lane of work this milestone performs (`file-ops`, `research`,
+   * `execution`, `backlog` — see `LANE_TOOL_REQUIREMENTS`). When declared,
+   * `tool_grant` is required and must satisfy the lane (backlog 7ed25125).
+   */
+  lane?: string;
+  /** OPTIONAL tools the executing agent holds; checked against `lane` by `validateDagJson`. */
+  tool_grant?: string[];
 }
 
 export interface CrossPlanDep {
@@ -699,6 +707,8 @@ export interface ValidationError {
   path: string;
   message: string;
   value?: unknown;
+  /** Stable machine-readable code for typed errors (e.g. `lane_tool_grant_unsatisfied`). */
+  code?: string;
 }
 export interface ValidationResult {
   valid: boolean;

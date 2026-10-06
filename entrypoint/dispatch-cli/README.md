@@ -144,6 +144,14 @@ Proven default-running and hermetically (real spawned agent-mcp, fake `$HOME`,
 temp registry DB, isolated cwd): `src/test/resolve-dispatch-mcp-servers.spec.ts`
 and `src/test/dispatch-native-tooling.e2e.test.ts`.
 
+## Self-enforcement — lane grants and duplicate runs
+
+- `validate` refuses a milestone whose `lane` is not satisfied by its `tool_grant` (typed
+  `lane_tool_grant_unsatisfied` — see `@adhd/dispatch-base-spec`).
+- `run` (non-dry-run) takes a per-dag live-dispatch lock under the OS temp dir
+  (`adhd-dispatch-locks/<hash>.lock`); a second `run` of the same dag while the first is live fails with
+  `DuplicateDispatchError` before any unit is fired. A crashed run's lock is reclaimed once its pid is gone.
+
 ## Building
 
 Run `nx build dispatch-cli` to build the main library code. This does NOT compile the CLI binary — you must also run `nx run dispatch-cli:build-bin` to compile `bin/cli.ts` to JavaScript (`dist/bin/cli.js`), which is what gets published.

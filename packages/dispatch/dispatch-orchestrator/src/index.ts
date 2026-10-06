@@ -50,3 +50,21 @@ export {
   FS_DESTRUCTIVE_ACTIONS,
   pollUntilTerminal,
 } from './lib/orchestrator.js';
+
+export type { LivenessConfig, LivenessState, NowMsFn } from './lib/liveness.js';
+export { LivenessMonitor } from './lib/liveness.js';
+
+export type {
+  AcquireOptions,
+  DispatchLock,
+  ReapedChild,
+  ReapReason,
+  ReaperConfig,
+} from './lib/process-guard.js';
+export {
+  acquireDispatchLock,
+  ChildReaper,
+  DuplicateDispatchError,
+  pidAlive,
+  psRssBytes,
+} from './lib/process-guard.js';

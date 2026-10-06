@@ -76,3 +76,10 @@ export {
   upgradeDagToCurrent,
   CURRENT_DAG_SCHEMA_VERSION,
 } from './lib/migrate.js';
+
+export {
+  grantCovers,
+  LANE_NAMES,
+  LANE_TOOL_REQUIREMENTS,
+  unsatisfiedLaneGroups,
+} from './lib/lanes.js';

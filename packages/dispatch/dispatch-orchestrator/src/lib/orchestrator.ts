@@ -60,6 +60,7 @@ import type {
   RealUsageTurn,
 } from './agent-runner.js';
 import { AgentMcpToolError } from './agent-runner.js';
+import { LivenessMonitor, type LivenessConfig } from './liveness.js';
 
 // ---------------------------------------------------------------------------
 // ── DETERMINISM SEAMS ────────────────────────────────────────────────────────
@@ -265,6 +266,14 @@ export interface OrchestratorDeps {
    * aborting the cycle. When `false`, the error propagates up immediately.
    */
   continueOnError?: boolean;
+  /**
+   * OPTIONAL liveness heartbeats (backlog 7ed25125 D-AC2). When set, every
+   * dispatched task is registered with a `LivenessMonitor`; each answered poll is
+   * a heartbeat, and a task whose heartbeat has not been seen within
+   * `deadlineMs` (measured on `nowMs`, injectable) is marked dead and its unit
+   * failed instead of polling until the full `poll.timeoutMs`. Omitted: unchanged.
+   */
+  liveness?: LivenessConfig;
 }
 
 interface ResolvedDeps {
@@ -282,6 +291,7 @@ interface ResolvedDeps {
   guardTimeoutMs: number;
   toolCallExec: ToolCallExecFn;
   continueOnError: boolean;
+  liveness?: LivenessMonitor;
 }
 
 // ---------------------------------------------------------------------------
@@ -812,6 +822,7 @@ async function resolveDeps(deps: OrchestratorDeps): Promise<ResolvedDeps> {
       fsOpPolicy
     ),
     continueOnError: deps.continueOnError ?? true,
+    ...(deps.liveness ? { liveness: new LivenessMonitor(deps.liveness) } : {}),
   };
 }
 
@@ -955,6 +966,8 @@ export interface PollOutcome {
   error?: string;
   /** HITL resume token, present only when `status === 'awaiting_input'`. */
   resumeToken?: string;
+  /** True when the liveness monitor marked the task dead (heartbeat stopped past its deadline). */
+  dead?: boolean;
 }
 
 /**
@@ -966,13 +979,36 @@ export async function pollUntilTerminal(
   runner: IDispatchAgentRunner,
   taskId: string,
   poll: PollConfig,
-  sleep: SleepFn
+  sleep: SleepFn,
+  liveness?: LivenessMonitor
 ): Promise<PollOutcome> {
   let elapsedMs = 0;
+  liveness?.register(taskId);
   for (;;) {
-    const { status, usage, error, resumeToken } = await runner.poll(taskId);
+    let polled: Awaited<ReturnType<IDispatchAgentRunner['poll']>>;
+    try {
+      polled = await runner.poll(taskId);
+      liveness?.heartbeat(taskId);
+    } catch (err) {
+      // Without a monitor a failing poll propagates exactly as before. With one,
+      // a poll that cannot reach the task is a MISSED heartbeat: keep waiting
+      // until the liveness deadline marks the task dead (or the poll budget ends).
+      if (!liveness) throw err;
+      const message = err instanceof Error ? err.message : String(err);
+      if (liveness.sweep().includes(taskId)) {
+        return { status: 'failed', usage: undefined, timedOut: false, dead: true, error: `liveness deadline (${liveness.deadlineMs}ms) exceeded — last poll error: ${message}` };
+      }
+      if (elapsedMs >= poll.timeoutMs) {
+        return { status: 'failed', usage: undefined, timedOut: true, error: message };
+      }
+      await sleep(poll.intervalMs);
+      elapsedMs += poll.intervalMs;
+      continue;
+    }
+    const { status, usage, error, resumeToken } = polled;
     const token = resumeToken !== undefined ? { resumeToken } : {};
     if (POLL_TERMINAL_STATUSES.has(status)) {
+      liveness?.finish(taskId);
       return { status, usage, timedOut: false, ...(error !== undefined ? { error } : {}), ...token };
     }
     if (elapsedMs >= poll.timeoutMs) {
@@ -1396,14 +1432,20 @@ async function dispatchUnit(
     const fired = await deps.runner.fire(unit);
     taskId = fired.taskId;
 
-    const polled = await pollUntilTerminal(deps.runner, taskId, deps.poll, deps.sleep);
+    const polled = await pollUntilTerminal(deps.runner, taskId, deps.poll, deps.sleep, deps.liveness);
     taskStatus = polled.status;
     taskError = polled.error;
     turns = reconcileTurns(await deps.runner.queryTurns(taskId));
 
     const errorSuffix = taskError ? `: ${taskError}` : '';
 
-    if (polled.timedOut) {
+    if (polled.dead) {
+      opResultStatus = 'failed';
+      notes.push({
+        level: 'error',
+        text: `dispatch ${dispatchId}: task '${taskId}' marked DEAD — no heartbeat within the liveness deadline${errorSuffix} — marking operations failed, skipping milestone guard(s)`,
+      });
+    } else if (polled.timedOut) {
       opResultStatus = 'failed';
       notes.push({
         level: 'error',

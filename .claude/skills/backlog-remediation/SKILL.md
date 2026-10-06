@@ -58,10 +58,10 @@ Default run directory: `tmp/backlog-run/`.
 
 | Stage | Artifact | Shape |
 |---|---|---|
-| S0 cluster + coverage | `clusters.json` | `{"<cluster>": ["<humanId>", …]}` — plus the recorded result of the set-equality assertion (flattened id set == pulled id set, zero duplicates). Do not proceed on a mismatch. |
-| S1 triage | `triage.json` | `{clusters:[{cluster, items:[{humanId, cluster, title, verdict, evidence, severity, effort, discipline, notes, duplicateOf?, blockedBy?, citations?}]}]}` |
-| S2 refutation | `phase2.json` | `{verdicts:[{humanId, refuted, evidence, recommendedStatus?, closingNote?, residualWork?}]}` |
-| S3 architect | `packages.json` | `{packages:[…], deferred:[{humanId, reason}]}` — each element per the **package schema** in S3 below. This is the array fed straight to `remediation-pipeline.js` as `args.packages`. |
+| S0 cluster + coverage | `clusters.json` | `{"<cluster>": ["<uid>", …]}` — plus the recorded result of the set-equality assertion (flattened id set == pulled id set, zero duplicates). Do not proceed on a mismatch. |
+| S1 triage | `triage.json` | `{clusters:[{cluster, items:[{uid, cluster, title, verdict, evidence, severity, effort, discipline, notes, duplicateOf?, blockedBy?, citations?}]}]}` |
+| S2 refutation | `phase2.json` | `{verdicts:[{uid, refuted, evidence, recommendedStatus?, closingNote?, residualWork?}]}` |
+| S3 architect | `packages.json` | `{packages:[…], deferred:[{uid, reason}]}` — each element per the **package schema** in S3 below. This is the array fed straight to `remediation-pipeline.js` as `args.packages`. |
 | S5 wave planning | `wave<N>-pkgs.json` | The subset of `packages[]` admitted to wave N (same element schema), plus the wave's explicit serialization rules. One file per wave; feed the pipeline one wave at a time. |
 | S10 docs targeting | `doc-dispatch.json` | `{"<project>": {files:[…], commits:[…], branches:[…], worktree?, new?: bool, dir?: string}}` — the object passed as `args.docs`. See S10 for field semantics. |
 
@@ -70,13 +70,22 @@ a mid-run resume possible at all.
 
 ### S0 — Inventory + cluster
 
-Pull *all* open items. Cluster **mechanically by id family** (`DEBT-DISPATCH-*`,
-`ENV-PLAN-*`, …) — not by semantic judgment, which is unreproducible and drops
-items silently.
+Pull *all* open items. Cluster **mechanically by `<project>/<component>/<kind>`** —
+all three are store fields, so the clustering is reproducible. (Items no longer carry a
+family-scoped human id; identity is the global `uid`. Do not cluster by semantic
+judgment, which is unreproducible and drops items silently.)
 
 Gate before any other stage: **100% coverage, zero duplicates.**
 `sum(len(cluster) for cluster in clusters) == len(all_open_items)` and the flattened
-id set equals the pulled id set. Write `clusters.json`; do not proceed on a mismatch.
+uid set equals the pulled uid set. Run it as a script, not by hand:
+
+```
+node .claude/skills/backlog-remediation/s0-coverage.mjs --dry-run             # prints: S0 coverage: <n>/<n> (100.0%) duplicates=0 clusters=<k>
+node .claude/skills/backlog-remediation/s0-coverage.mjs --out tmp/backlog-run  # writes clusters.json, only on 100%
+```
+
+It pulls every open item through the paginated `adhd-backlog backlog query`, clusters,
+asserts set equality, and exits 1 on any mismatch. Do not proceed on a mismatch.
 
 ### S1 — Triage for confirmation
 
@@ -98,7 +107,7 @@ actually opened**. A grep hit is not reading. Also assign `severity`, `effort`,
 `discipline`, and free-form `notes` (mixed verdicts are common — record which
 sub-claims closed and which stayed open).
 
-Item schema: `{humanId, cluster, title, verdict, evidence, severity, effort,
+Item schema: `{uid, cluster, title, verdict, evidence, severity, effort,
 discipline, notes, duplicateOf?, blockedBy?, citations?}`.
 
 ### S2 — Adversarial refutation of closures ← highest ROI stage
@@ -121,7 +130,7 @@ failure shapes, which is what makes the stage work:
 
 For `SUPERSEDED` specifically: prove the superseding thing *exists* and *covers it*.
 
-Output per item: `{humanId, refuted, evidence, recommendedStatus?, closingNote?,
+Output per item: `{uid, refuted, evidence, recommendedStatus?, closingNote?,
 residualWork?}`. The refuter **acts** on non-refuted items (append closing note,
 transition status) and leaves refuted items untouched and OPEN.
 

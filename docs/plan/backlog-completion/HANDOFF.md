@@ -162,7 +162,7 @@ Filed this session before this was understood — annotate, do not "fix":
 - DEBT-005 — non-compliant `RUN_NEGATIVE_CONTROL` gate, `src/store/id-uniqueness.spec.ts:137`
 - DEBT-006 — vitest workers never call `initTelemetry()`
 - BUG-012 — `duplicate_candidate` returns empty `details`, naming no candidate
-- Test-lane pattern applied nowhere; 43 spawn-based specs across 13 projects.
+- Test-lane pattern applied nowhere; spawn-based specs exist across many projects (no authoritative count is tracked).
   (The dead `tools/nx-plugins/test/lib/spec-lanes.mjs` stub was removed
   2026-09-28 — it described a `.proc.spec.ts`/`test-proc` lane that exists in NO
   project.json, so it misled readers into thinking the lane was real. The idea

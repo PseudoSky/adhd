@@ -74,6 +74,10 @@ jobs:
       # `test.dependsOn` re-couples `e2e`, that every `e2e` lane is cached, and
       # that `publish` reaches every declared `e2e`.
       - run: node tools/nx-plugins/test/executors/wiring/check-lane-reachability.mjs
+      # Evidence tooling (backlog 65788fd8): check-suite-tree-state, commit-mine and
+      # audit-closed-items, each with a negative control; the exit code gates.
+      - name: Evidence tooling gates
+        run: npx nx run @adhd/source:evidence-gates
       # Published-vs-source parity (backlog 420a7051): no publishable project's
       # source version may be behind its published-state.json version.
       - name: Published-vs-source version parity

@@ -85,6 +85,23 @@ token cost is amortized over every execution. The optimizer's savings compound.
 | `dag-v5.schema.json`     | Full JSON Schema for dag.json — 18 top-level properties |
 | `valid-ops-by-kind.json` | 13 kind entries mapping `shape.kind` → allowed ops      |
 
+## Lanes and tool grants
+
+A milestone may declare the `lane` of work it performs and the `tool_grant` its
+executing agent holds. `validateDagJson` refuses a milestone whose grant cannot
+satisfy its lane, with a typed error (`ValidationError.code`):
+
+| code | meaning |
+| --- | --- |
+| `lane_tool_grant_unsatisfied` | the grant lacks every alternative of at least one requirement group of the lane |
+| `lane_tool_grant_missing` | a `lane` is declared with no `tool_grant`, so the grant cannot be proven |
+| `unknown_lane` | the lane is not in `LANE_TOOL_REQUIREMENTS` (`file-ops`, `research`, `execution`, `backlog`) |
+| `invalid_tool_grant` / `invalid_lane` | wrong type |
+
+`LANE_TOOL_REQUIREMENTS`, `unsatisfiedLaneGroups` and `grantCovers` are exported
+(a trailing `*` in a grant or a requirement is a prefix wildcard, e.g. `mcp__backlog__*`).
+A milestone with no `lane` is unaffected.
+
 ## Zero dependencies
 
 This package imports nothing but TypeScript. No filesystem, no node APIs, no

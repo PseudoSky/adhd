@@ -109,6 +109,16 @@
       "metadata": {
         "description": "Proves the demo-acceptance gate has teeth (backlog ddceb069): a deliberately broken R-control turns the runner red; the unbroken runner is green. Invoked by the CI `main` job after `demo-acceptance`."
       }
+    },
+    "evidence-gates": {
+      "executor": "nx:run-commands",
+      "cache": false,
+      "options": {
+        "command": "node --test tools/evidence/evidence.spec.mjs"
+      },
+      "metadata": {
+        "description": "Evidence tooling gate (backlog 65788fd8 D-AC4): drives check-suite-tree-state, commit-mine and audit-closed-items as real processes against throwaway git repos; each tool has a negative control (a broken copy must go red). Exit code gates. Invoked by the CI `main` job."
+      }
     }
   }
 }
