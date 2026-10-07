@@ -100,3 +100,21 @@ test('50e8c966 regression NEGATIVE CONTROL: with the scrub removed the decoy IS 
     rmSync(decoy, { recursive: true, force: true });
   }
 });
+
+// Every other git-spawning C+D spec must hold the same guarantee: a hostile hook GIT_DIR never
+// reaches the repo it points at. (ci-hygiene.spec.mjs is excluded: it drives real `nx` runs and is
+// covered by the e2e/test gate itself; it scrubs through the same cleanGitEnv helper.)
+for (const rel of ['executors/publish/release-commit.spec.mjs', '../../evidence/evidence.spec.mjs']) {
+  test(`50e8c966 regression: ${rel} run with GIT_DIR aimed at a decoy repo leaves the decoy untouched`, () => {
+    const subject = join(here, rel);
+    const decoy = makeDecoy();
+    try {
+      const before = snapshot(decoy);
+      const r = runSubject(subject, decoy);
+      assert.equal(r.status, 0, `${rel} must pass under a hostile GIT_DIR:\n${r.stdout.slice(-1500)}\n${r.stderr.slice(-800)}`);
+      assertDecoyUntouched(before, snapshot(decoy));
+    } finally {
+      rmSync(decoy, { recursive: true, force: true });
+    }
+  });
+}

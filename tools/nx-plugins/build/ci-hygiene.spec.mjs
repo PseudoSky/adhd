@@ -121,13 +121,17 @@ test('255394d0 C-AC4 NEGATIVE CONTROL: a package.json with the old pins is repor
 const FILE = 'packages/agent/agent-core-env/src/__tests__/open-registry-db.test.ts';
 function nxTest(extra) {
   const env = cleanGitEnv(process.env, { CI: 'true' });
-  for (const k of Object.keys(env)) if (k.startsWith('NX_TASK') || k === 'NX_WORKSPACE_ROOT_PATH') delete env[k];
+  // NX_INVOCATION_ROOT_PID keys nx's recursive-invocation guard: when this spec runs inside an outer
+  // `nx affected -t test`, a nested run of agent-core-env:test collides with a sibling spec's concurrent
+  // apigen-engine-runtime:test -> agent-core-env:test and nx exits 1 ("Recursive task invocation detected").
+  // This nested run is an independent top-level invocation, so it must be its own invocation root.
+  for (const k of Object.keys(env)) if (k.startsWith('NX_TASK') || k === 'NX_WORKSPACE_ROOT_PATH' || k === 'NX_INVOCATION_ROOT_PID') delete env[k];
   const r = sh('npx', ['nx', 'run', 'agent-core-env:test', '--excludeTaskDependencies', ...extra], { cwd: REPO, env });
   const m = /Test Files\s+(?:\d+ failed \| )?(\d+) passed \((\d+)\)/.exec(r.stdout + r.stderr);
-  return { status: r.status, files: m ? Number(m[2]) : null };
+  return { status: r.status, files: m ? Number(m[2]) : null, out: (r.stdout + r.stderr).slice(-2500) };
 }
 function assertSingleFile(run) {
-  assert.equal(run.status, 0);
+  assert.equal(run.status, 0, `nested nx run failed:\n${run.out}`);
   assert.equal(run.files, 1, `vitest must report exactly 1 test file, got ${run.files}`);
 }
 
@@ -137,7 +141,7 @@ test('b83f167d C-AC5: `nx run <project>:test <file>` runs only that file (vitest
 
 test('b83f167d C-AC5 NEGATIVE CONTROL: an unfiltered run reports more than one file and trips the assertion', () => {
   const full = nxTest([]);
-  assert.equal(full.status, 0);
+  assert.equal(full.status, 0, `nested nx run failed:\n${full.out}`);
   assert.ok(full.files > 1, `the whole project suite is more than one file (got ${full.files})`);
   assert.throws(() => assertSingleFile(full), /exactly 1 test file/);
 });
