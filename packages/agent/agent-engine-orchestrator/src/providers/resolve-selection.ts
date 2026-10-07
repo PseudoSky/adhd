@@ -90,6 +90,9 @@ export function providerConfigToBinding(
     modelRef: config.model ?? PROVIDER_DEFAULT_MODEL,
   };
   if (config.timeoutMs !== undefined) binding.timeoutMs = config.timeoutMs;
+  if (config.models !== undefined) binding.models = config.models;
+  if (config.billingScope !== undefined) binding.billingScope = config.billingScope;
+  if (config.tripwire !== undefined) binding.tripwire = config.tripwire;
   if (config.type !== 'claudecli') {
     if (config.env !== undefined) binding.env = config.env;
     if (config.maxTokens !== undefined) binding.maxTokens = config.maxTokens;

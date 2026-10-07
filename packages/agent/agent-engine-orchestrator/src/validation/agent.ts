@@ -22,35 +22,65 @@ const providerEnvBlockSchema = z
 
 const baseUrlSchema = z.string().url().optional();
 
-const anthropicProviderSchema = z.object({
-  type: z.literal('anthropic'),
-  model: z.string().optional(),
-  env: providerEnvBlockSchema,
-  temperature: z.number().min(0).max(1).optional(),
-  maxTokens: z.number().int().positive().optional(),
-  timeoutMs: z.number().int().positive().optional(),
-  retryConfig: retryConfigSchema.optional(),
+/** `retryConfig` plus the retry window (provider-failure SPEC §2). */
+export const bindingRetryConfigSchema = retryConfigSchema.extend({
+  retryWindowMs: z.number().int().positive().optional(),
 });
 
-const openaiProviderSchema = z.object({
-  type: z.literal('openai'),
-  model: z.string().optional(),
-  env: providerEnvBlockSchema,
-  baseURL: baseUrlSchema,
-  temperature: z.number().min(0).max(1).optional(),
-  maxTokens: z.number().int().positive().optional(),
-  timeoutMs: z.number().int().positive().optional(),
-  retryConfig: retryConfigSchema.optional(),
+/** Operator-tunable tripwire knobs (mirrors `TripwireConfig`). */
+export const tripwireConfigSchema = z.strictObject({
+  baseMs: z.number().int().positive().optional(),
+  maxMs: z.number().int().positive().optional(),
+  probeLeaseMs: z.number().int().positive().optional(),
 });
 
-const claudecliProviderSchema = z.object({
-  type: z.literal('claudecli'),
-  model: z.string().optional(),
-  claudePath: z.string().optional(),
-  timeoutMs: z.number().int().positive().optional(),
-  allowedBuiltinTools: z.array(z.string()).optional(),
-  systemPromptIsAgentSpec: z.boolean().optional(),
-});
+/** PF-1 fields shared by every provider variant (mirrors `PartialBinding`). */
+const failureBindingShape = {
+  models: z.array(z.string().min(1)).optional(),
+  billingScope: z.string().min(1).optional(),
+  tripwire: tripwireConfigSchema.optional(),
+};
+
+/**
+ * Builds the provider-variant union. `strict: true` (agent create/update
+ * input) rejects unknown keys so a typo can never be silently dropped;
+ * `strict: false` (stored rows) strips them so an older row never fails to load.
+ */
+function buildProviderConfigSchema(strict: boolean) {
+  const obj = strict ? z.strictObject : z.object;
+  return z.discriminatedUnion('type', [
+    obj({
+      type: z.literal('anthropic'),
+      model: z.string().optional(),
+      env: providerEnvBlockSchema,
+      temperature: z.number().min(0).max(1).optional(),
+      maxTokens: z.number().int().positive().optional(),
+      timeoutMs: z.number().int().positive().optional(),
+      retryConfig: bindingRetryConfigSchema.optional(),
+      ...failureBindingShape,
+    }),
+    obj({
+      type: z.literal('openai'),
+      model: z.string().optional(),
+      env: providerEnvBlockSchema,
+      baseURL: baseUrlSchema,
+      temperature: z.number().min(0).max(1).optional(),
+      maxTokens: z.number().int().positive().optional(),
+      timeoutMs: z.number().int().positive().optional(),
+      retryConfig: bindingRetryConfigSchema.optional(),
+      ...failureBindingShape,
+    }),
+    obj({
+      type: z.literal('claudecli'),
+      model: z.string().optional(),
+      claudePath: z.string().optional(),
+      timeoutMs: z.number().int().positive().optional(),
+      allowedBuiltinTools: z.array(z.string()).optional(),
+      systemPromptIsAgentSpec: z.boolean().optional(),
+      ...failureBindingShape,
+    }),
+  ]);
+}
 
 // Legacy normalize-on-load shim
 function legacyShim(raw: unknown): unknown {
@@ -85,15 +115,11 @@ function legacyShim(raw: unknown): unknown {
   return r;
 }
 
-export const providerConfigSchema = z.discriminatedUnion('type', [
-  anthropicProviderSchema,
-  openaiProviderSchema,
-  claudecliProviderSchema,
-]);
+export const providerConfigSchema = buildProviderConfigSchema(true);
 
 export const providerConfigStoredSchema = z.preprocess(
   legacyShim,
-  providerConfigSchema
+  buildProviderConfigSchema(false)
 );
 
 export type { ProviderConfig } from '@adhd/agent-base-types';
@@ -209,7 +235,7 @@ export const mcpServersPatchSchema = z.record(
 export type McpServerPatchValue = z.infer<typeof mcpServerPatchValueSchema>;
 export type McpServersPatch = z.infer<typeof mcpServersPatchSchema>;
 
-export const agentPatchSchema = z.object({
+export const agentPatchSchema = z.strictObject({
   description: z.string().optional(),
   provider: providerConfigSchema.optional(),
   systemPrompt: z.optional(z.string()),
@@ -219,6 +245,7 @@ export const agentPatchSchema = z.object({
   maxToolLoops: z.number().int().positive().optional(),
   allowHumanInput: z.boolean().optional(),
   sanitization: z.enum(['none', 'prefix', 'wrap']).optional(),
+  toolAdvertisement: z.enum(['names', 'full']).optional(),
   nativeWebTools: z.boolean().optional(),
 });
 
