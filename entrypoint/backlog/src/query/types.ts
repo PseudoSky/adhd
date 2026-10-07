@@ -531,6 +531,8 @@ export type IIssueView =
   | 'stale'
   | 'similar'
   | 'overlap'
+  | 'registry-orphans' // 39799f8e — typed registry-integrity findings (duplicate project identity, component/project mismatch, empty project)
+  | 'orphaned-parents' // S02 AC14 tail — terminal parents that still have open `part_of` descendants
   | 'projects'
   | 'components'
   | 'locations'
@@ -651,6 +653,8 @@ export type IIssueQueryResult =
   | { view: 'stale'; items: IIssueCard[] }
   | { view: 'similar'; items: IIssueCard[]; clusters?: ISimilarViewClusterBlock }
   | { view: 'overlap'; groups: IOverlapGroup[] }
+  | { view: 'registry-orphans'; findings: IRegistryFinding[]; total: number }
+  | { view: 'orphaned-parents'; items: IOrphanedParentItem[]; total: number; hasMore: boolean }
   | { view: 'projects'; items: IProjectSummary[] }
   | { view: 'components'; items: IComponentSummary[] }
   | { view: 'locations'; items: ILocationSummary[] }
@@ -665,6 +669,34 @@ export type IIssueQueryResult =
 // ---------------------------------------------------------------------------
 // §3a registry read surface (project / component / location)
 // ---------------------------------------------------------------------------
+
+/** One retired parent that still has open work under it. */
+export interface IOrphanedParentItem {
+  uid: string;
+  title: string;
+  /** The parent's own (terminal) status name. */
+  status: string;
+  /** Count of still-open TRANSITIVE descendants via `part_of` (the same population the part-of rollup counts). */
+  openChildren: number;
+  /** Open descendant uids, capped at `ORPHANED_PARENT_SAMPLE` (5). */
+  openChildUids: readonly string[];
+}
+
+/** One typed registry-integrity finding (`view:"registry-orphans"`). */
+export type IRegistryFinding =
+  | {
+      kind: 'duplicate-identity';
+      projectUids: string[];
+      evidence: 'repoUrl' | 'path' | 'name-suffix';
+      normalized: string;
+    }
+  | {
+      kind: 'component-project-mismatch';
+      componentUid: string;
+      metaProjectUid: string;
+      edgeProjectUid: string | null;
+    }
+  | { kind: 'empty-project'; projectUid: string; reason: 'no-issues-no-locations' };
 
 export interface IProjectSummary {
   uid: string;

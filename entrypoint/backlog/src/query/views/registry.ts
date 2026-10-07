@@ -36,6 +36,7 @@ import {
   type ILookupResult,
   type IProjectDetail,
   type IProjectSummary,
+  type IRegistryFinding,
   type IRegistryQueryFilter,
   MAX_QUERY_LIMIT,
 } from '../types.js';
@@ -85,6 +86,146 @@ function toLocationSummary(n: NodeRecord): ILocationSummary {
         ? n.metadata.componentUid
         : '',
   };
+}
+
+// ---------------------------------------------------------------------------
+// registry-orphans — the project-identity detector (39799f8e, S02.C4 / AC16)
+// ---------------------------------------------------------------------------
+
+/** The identity keys a project is compared on, strongest evidence first. */
+export type IIdentityEvidence = 'repoUrl' | 'path' | 'name-suffix';
+
+/**
+ * Normalize one project's identity along ONE axis.
+ *
+ * - `repoUrl`: lowercased, scheme / `user@` / trailing `.git` / trailing slash
+ *   stripped, `host:org/repo` (scp form) folded to `host/org/repo`.
+ * - `path`: the canonical absolute path (no trailing slash).
+ * - `name-suffix`: the lowercased segment after the last `/` of the NAME.
+ *
+ * Pure. A `name-suffix` match is evidence for a REVIEWED merge, never an
+ * auto-merge (ADR-0007 D3: never auto-links).
+ */
+export function normalizeProjectIdentity(
+  p: { name: string; path?: string; repoUrl?: string },
+  evidence: IIdentityEvidence
+): string | undefined {
+  if (evidence === 'repoUrl') {
+    if (p.repoUrl === undefined || p.repoUrl.trim() === '') return undefined;
+    let u = p.repoUrl.trim().toLowerCase();
+    u = u.replace(/^[a-z][a-z0-9+.-]*:\/\//, '').replace(/^[^@/]+@/, '');
+    u = u.replace(/^([^/:]+):(?!\/)/, '$1/');
+    u = u.replace(/\/+$/, '').replace(/\.git$/, '').replace(/\/+$/, '');
+    return u === '' ? undefined : u;
+  }
+  if (evidence === 'path') {
+    if (p.path === undefined || p.path.trim() === '') return undefined;
+    const t = p.path.trim().replace(/\/+$/, '');
+    return t === '' ? '/' : t;
+  }
+  const name = p.name.trim().toLowerCase();
+  if (name === '') return undefined;
+  const suffix = name.slice(name.lastIndexOf('/') + 1);
+  return suffix === '' ? undefined : suffix;
+}
+
+const IDENTITY_EVIDENCE_ORDER: readonly IIdentityEvidence[] = ['repoUrl', 'path', 'name-suffix'];
+
+/**
+ * `query {view:"registry-orphans"}` — the typed findings behind a registry that
+ * lists one project per identity. Three finding kinds:
+ *
+ * - `duplicate-identity`: two or more LIVE projects share a normalized identity.
+ *   Each distinct set of uids is reported ONCE, under its strongest evidence.
+ *   The second project is reported here, never hidden from `view:"projects"`.
+ * - `component-project-mismatch`: a live component whose `meta.projectUid`
+ *   disagrees with the project its live `owns_project` edge comes from.
+ * - `empty-project`: a live project with no issue owned through any of its
+ *   components and no location registered on any of them.
+ *
+ * Retired (merged) projects carry `t_invalid` and are never examined. After
+ * `merge-project` folds a duplicate into its survivor the finding disappears.
+ */
+export async function listRegistryFindings(
+  graph: GraphBackend
+): Promise<IRegistryFinding[]> {
+  const projects = await graph.queryNodes({ kind: 'project', liveOnly: true });
+  const components = await graph.queryNodes({ kind: 'component', liveOnly: true });
+  const locations = await graph.queryNodes({ kind: 'location', liveOnly: true });
+  const ownsProject = await graph.getEdges({ rel: 'owns_project' });
+  const ownsComponent = await graph.getEdges({ rel: 'owns_component' });
+
+  const findings: IRegistryFinding[] = [];
+
+  // duplicate-identity
+  const reported = new Set<string>();
+  for (const evidence of IDENTITY_EVIDENCE_ORDER) {
+    const groups = new Map<string, string[]>();
+    for (const n of projects) {
+      const summary = toProjectSummary(n);
+      const key = normalizeProjectIdentity(summary, evidence);
+      if (key === undefined) continue;
+      const list = groups.get(key);
+      if (list) list.push(n.uid);
+      else groups.set(key, [n.uid]);
+    }
+    for (const [normalized, uids] of [...groups.entries()].sort(([a], [b]) => a.localeCompare(b))) {
+      if (uids.length < 2) continue;
+      const sorted = [...uids].sort();
+      const setKey = sorted.join('|');
+      if (reported.has(setKey)) continue;
+      reported.add(setKey);
+      findings.push({ kind: 'duplicate-identity', projectUids: sorted, evidence, normalized });
+    }
+  }
+
+  // component-project-mismatch
+  const projectById = new Map(projects.map((p) => [p.id, p]));
+  const edgeProjectOfComponent = new Map<number, string>();
+  for (const e of ownsProject) {
+    const p = projectById.get(e.src);
+    if (p) edgeProjectOfComponent.set(e.dst, p.uid);
+  }
+  for (const c of components) {
+    const meta =
+      typeof c.metadata?.projectUid === 'string' ? c.metadata.projectUid : '';
+    const edge = edgeProjectOfComponent.get(c.id) ?? null;
+    if (edge === null || edge !== meta) {
+      findings.push({
+        kind: 'component-project-mismatch',
+        componentUid: c.uid,
+        metaProjectUid: meta,
+        edgeProjectUid: edge,
+      });
+    }
+  }
+
+  // empty-project
+  const componentsByProject = new Map<string, Set<number>>();
+  for (const [componentId, projectUid] of edgeProjectOfComponent) {
+    const set = componentsByProject.get(projectUid) ?? new Set<number>();
+    set.add(componentId);
+    componentsByProject.set(projectUid, set);
+  }
+  const componentUidById = new Map(components.map((c) => [c.id, c.uid]));
+  const liveComponentIds = new Set(components.map((c) => c.id));
+  const componentsWithIssues = new Set<number>();
+  for (const e of ownsComponent) {
+    if (liveComponentIds.has(e.src)) componentsWithIssues.add(e.src);
+  }
+  const componentsWithLocations = new Set<string>();
+  for (const l of locations) {
+    if (typeof l.metadata?.componentUid === 'string') componentsWithLocations.add(l.metadata.componentUid);
+  }
+  for (const p of projects) {
+    const comps = componentsByProject.get(p.uid) ?? new Set<number>();
+    const hasIssue = [...comps].some((id) => componentsWithIssues.has(id));
+    const hasLocation = [...comps].some((id) => componentsWithLocations.has(componentUidById.get(id) ?? ''));
+    if (!hasIssue && !hasLocation) {
+      findings.push({ kind: 'empty-project', projectUid: p.uid, reason: 'no-issues-no-locations' });
+    }
+  }
+  return findings;
 }
 
 /** `query --input '{"view":"projects"}'` (§3a) — every live `project` row, optionally narrowed by `filter.project` (name/uid substring is NOT supported here; pass the exact ref — this is a listing view, not a search). */

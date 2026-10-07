@@ -60,10 +60,12 @@ import { querySimilarViewWithMeta } from './views/semantic.js';
 import { buildSimilarClusterBlock } from './similar-clusters.js';
 import { renderIssueCardsMarkdown } from './markdown.js';
 import { catalogFor, catalogView } from './views/catalog.js';
+import { orphanedParents } from './views/stats.js';
 import {
   listComponents,
   listLocations,
   listProjects,
+  listRegistryFindings,
 } from './views/registry.js';
 
 /**
@@ -1426,6 +1428,16 @@ async function dispatchQueryView(
       return {
         result: { view: 'overlap', groups: await queryOverlap(handle, input) },
       };
+    case 'registry-orphans': {
+      const findings = await listRegistryFindings(handle.graph);
+      return { result: { view: 'registry-orphans', findings, total: findings.length } };
+    }
+    case 'orphaned-parents': {
+      const r = await orphanedParents(handle, {
+        ...(input.limit !== undefined ? { limit: input.limit } : {}),
+      });
+      return { result: { view: 'orphaned-parents', ...r } };
+    }
     case 'projects':
       return {
         result: { view: 'projects', items: await queryProjects(handle, input) },
