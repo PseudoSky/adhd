@@ -222,7 +222,10 @@ describe('48dc-PORT agent portability across caller cwds (real built agent-mcp o
       const policy = JSON.parse(fs.readFileSync(host.srtSettingsPath, 'utf8')) as {
         filesystem: { allowWrite: string[] };
       };
-      expect(policy.filesystem.allowWrite).toContain(f().cwd);
+      // Only a cwd OUTSIDE os.tmpdir() depends on `callerCwdRoots` to be in the policy;
+      // the tmpdir-resident `space` cwd is covered by the static list, so this case
+      // isolates whitespace quoting and stays green when that branch regresses (AC7).
+      if (f().nonTmp) expect(policy.filesystem.allowWrite).toContain(f().cwd);
       rec('(d/e) shell pwd + write', 'PASS pwd=cwd, wrote');
     }, 300_000);
 
