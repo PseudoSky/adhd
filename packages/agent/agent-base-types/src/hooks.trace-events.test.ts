@@ -34,6 +34,12 @@ type NewEvents =
   | 'hitl:suspend'
   | 'hitl:resume'
   | 'session:closed';
+/** Added additively by the provider-failure family (5e72d493 PF-1). */
+type ProviderFailureEvents =
+  | 'provider:attempt_failed'
+  | 'provider:failed'
+  | 'provider:tripped'
+  | 'provider:recovered';
 
 const ctx = {} as ExecutionContext;
 const session = {} as Session;
@@ -83,8 +89,8 @@ describe('da907b90 AC2 — the existing events are unchanged (additive-only)', (
   it('every pre-existing event is still a HookEvent with an unchanged key set', () => {
     expectTypeOf<ExistingEvents>().toExtend<HookEvent>();
     // Exactly existing ∪ new — nothing renamed, nothing removed, nothing extra.
-    expectTypeOf<HookEvent>().toEqualTypeOf<ExistingEvents | NewEvents>();
-    expectTypeOf<Exclude<HookEvent, NewEvents>>().toEqualTypeOf<ExistingEvents>();
+    expectTypeOf<HookEvent>().toEqualTypeOf<ExistingEvents | NewEvents | ProviderFailureEvents>();
+    expectTypeOf<Exclude<HookEvent, NewEvents | ProviderFailureEvents>>().toEqualTypeOf<ExistingEvents>();
   });
 
   it('a real HookRegistry still delivers a pre-existing event', async () => {
@@ -110,7 +116,7 @@ describe('da907b90 AC3 — payload shapes and unknown-event rejection (type-leve
 
   it('HitlSuspendPayload shape', () => {
     expectTypeOf<HitlSuspendPayload['kind']>().toEqualTypeOf<
-      'request_human_input' | 'permission_ask' | 'escalation'
+      'request_human_input' | 'permission_ask' | 'escalation' | 'provider_blocked'
     >();
     expectTypeOf<HitlSuspendPayload['parkedTaskId']>().toEqualTypeOf<string>();
     expectTypeOf<HitlSuspendPayload['resumeToken']>().toEqualTypeOf<string>();

@@ -56,3 +56,5 @@ export { BINDING_ROWS } from './seed/index.js';
 
 export { RATE_CARD, estimateCostUsd } from './pricing/rate-card.js';
 export type { ModelRate } from './pricing/rate-card.js';
+
+export * from './failure/index.js';

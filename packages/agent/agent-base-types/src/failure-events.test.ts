@@ -82,6 +82,33 @@ describe('5e72d493 AC7 - isFailureEventKey', () => {
   });
 });
 
+/**
+ * 5e72d493 AC7 negative control: the same acceptance assertion that the real
+ * `isFailureEventKey` satisfies must go RED on deliberately-wrong validators.
+ */
+describe('5e72d493 AC7 - negative controls (assertions have teeth)', () => {
+  const assertAC7 = (isKey: (k: string) => boolean) => {
+    for (const v of FAILURE_VERBS) expect(isKey(`provider:${v}`)).toBe(true);
+    expect(isKey('task:failed')).toBe(false);
+    expect(isKey('provider:blocked')).toBe(false);
+  };
+  it('the real validator satisfies the assertion', () => {
+    assertAC7(isFailureEventKey);
+  });
+  it('NC: accepting any verb (provider:blocked) goes RED', () => {
+    expect(() => assertAC7((k) => k.startsWith('provider:'))).toThrow();
+  });
+  it('NC: accepting any domain (task:failed) goes RED', () => {
+    expect(() => assertAC7((k) => k.endsWith(':failed') || (FAILURE_VERBS as readonly string[]).includes(k.split(':')[1] ?? ''))).toThrow();
+  });
+  it('NC: a validator that ignores the registry (rejects every domain but provider, even a registered one) cannot pass the generality proof', () => {
+    registerFailureDomain('tool');
+    const hardcoded = (k: string) => k.startsWith('provider:') && (FAILURE_VERBS as readonly string[]).includes(k.slice(9));
+    expect(isFailureEventKey('tool:failed')).toBe(true);
+    expect(hardcoded('tool:failed')).toBe(false);
+  });
+});
+
 describe('5e72d493 - HookEventMap additive provider-failure surface', () => {
   it('declares the four provider failure events with typed payloads; existing events unchanged', () => {
     expectTypeOf<'provider:attempt_failed' | 'provider:failed' | 'provider:tripped' | 'provider:recovered'>().toExtend<HookEvent>();
