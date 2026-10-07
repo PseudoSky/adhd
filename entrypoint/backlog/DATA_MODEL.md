@@ -169,8 +169,29 @@ store has no dedicated event tables, so each is an ordinary node of its own
 note         kind='note'
   meta: { author, text, at }
 
+session      kind='session', name = sessionId (INTERNAL, S11)
+  meta: { sessionId, agent, startedAt, endedAt?, parentSessionId?, stub? }
+  -- unique by meta.sessionId; created by the first verb carrying `sessionId`.
+
+op_event     kind='op_event', name = op (INTERNAL, S11, APPEND-ONLY)
+  meta: { sessionId, agent, op, targetUid, delta:{from?,to?,note?}, t }
+  -- written by the single audit seam when a call carries `sessionId`; a separate
+  -- node kind with its own `in_session` edge, NOT derived from `auditTrail`.
+
+reservation  kind='reservation', name = issueUid (INTERNAL, S11)
+  meta: { issueUid, paths[], holder, sessionId?, claimedAt, leaseExpiry,
+          endedAt?, endReason?: 'released'|'reclaimed-stale'|'expired-superseded' }
+  -- one per claim; renew refreshes the live one in place; ended ones are kept.
+
 citation     kind='citation'
-  meta: { target, target_type, sha, line, at, symbol, blastRadius, revision }
+  meta: { target, target_type, sha, line, at, symbol, blastRadius, revision,
+          verification, unverified_reason? }
+  -- verification: 'verified' | 'unverified-with-reason'. The citation GATE checks
+  -- that the evidence EXISTS, not that it sits inside the project: an existing
+  -- out-of-root file or a worktree-only path is verified; a directory, a missing
+  -- target, an unresolved revision, a path-less project or an abstract anchor
+  -- (`url:`/`registry:`/`query:`) is persisted `unverified-with-reason` with
+  -- `unverified_reason` set — a citation is never dropped or refused-and-omitted.
   -- content-addressed: sha is sha256 of the cited content at citation time.
   -- Verification = re-hash the target and compare. When no path is known
   -- for the owning project, or the target no longer resolves, sha is the
@@ -190,7 +211,11 @@ citation     kind='citation'
   -- against the live set, never through a body rewrite (§5).
 
 transition   kind='transition'
-  meta: { from_status, to_status, agent, note, sha, at }
+  meta: { from_status, to_status, agent, note, sha, at, supersede_reason? }
+  -- supersede_reason: the closed-enum reason of a SUPERSEDED transition
+  -- (v1-to-v2-premise-deletion | imported-never-transitioned |
+  -- deliberate-plan-retirement | status-token-correction |
+  -- obsolete-by-obsolescence); the successor rides a `supersedes` edge.
   -- sha = sha256 over the canonical (sorted-key) JSON serialization of
   -- { issue_id: target_uid, from, to, agent_id: agent, note, at } — the
   -- same convention and helper (canonicalJSONStringify + sha256Hex) the
@@ -211,7 +236,17 @@ audit        kind='audit'
 
 ```
 owns_project    project    → component  (1:n)   -- project owns its components
-owns_component  component  → issue      (1:n)   -- component owns its issues
+owns_component  component  → issue      (1:n)   -- component owns its issues:
+                                                 -- the single PRIMARY owner
+in_component    issue      → component  (n:m)   -- INTERNAL membership join (meta
+                                                 -- {via:'primary'|'citation',
+                                                 -- citationUid?}); an issue is a
+                                                 -- member of its primary component
+                                                 -- and of every component its
+                                                 -- citations reach. Not on `relate`.
+in_session      op_event   → session    (n:1)   -- INTERNAL (S11)
+child_of_session session   → session    (n:1)   -- INTERNAL (S11): parent chain
+has_reservation issue      → reservation (1:n)  -- INTERNAL (S11): claim reservations
 has_kind        issue      → kind       (n:1)
 has_status      issue      → status     (n:1)
 has_priority    issue      → priority   (n:1)
@@ -286,6 +321,18 @@ deterministic dependent-count → priority-rank → uid tiebreak is a later wave
 (today the queue is FIFO among equal in-degree nodes).
 
 ## 6. Integrity rules (hard requirements)
+
+**Placement is n:m with ONE primary owner.** `owns_component` (1:n) stays the
+single routing/ACL anchor and the key per-project counts are taken on; the
+internal `in_component` edge adds membership of every component an issue's
+citations reach (project membership is derived: component → `owns_project`).
+Invariants: I1 every live issue has exactly one live `owns_component`; I2 every
+live issue has a live `in_component` to its primary component with
+`via:'primary'`; I3 every live `path` citation that resolves to a registered
+component (longest-prefix match on `location` rows / `component.meta.path`, at
+most one component per project) has a live `in_component` to it. The membership
+migration (`tools/migrate/membership-backfill.ts`) only ADDS rows; per-project
+counts keyed by primary owner are unchanged by construction.
 
 1. **Every transition requires** an agent, a `note` (unless the owning
    project's policy sets `transitionRequiresNote: false`), and a `sha` — the

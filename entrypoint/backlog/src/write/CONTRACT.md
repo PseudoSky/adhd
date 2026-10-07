@@ -1601,3 +1601,15 @@ logical-id resolver: one redirect hop, then the `SUPERSEDES` chain to its head
 THROWS `StaleSupersedeError` on a superseded uid — the split is deliberate:
 `get`/`card`/`stats` want the stale-reference signal, while an attestation
 subject wants the same logical item back.
+
+
+## Additions after the freeze (additive; not part of the frozen export count)
+
+- `IVerbedWriteHandle` — `IWriteStoreHandle & { readonly verb: string }`; `executeWriteTransaction` requires it by type, so the production-write gate always names the real verb (no `'write'` fallback).
+- `currentUidOfTx(tx, row)` — the head of a superseded issue's `SUPERSEDES` chain, walked inside the caller's transaction; `StaleSupersedeError` names it.
+- `ActorMismatchError(verb, actor, heldBy, heldSince?)` — a `transition`/`renew` by a non-holder; envelope code `validation`, `details.reason:"actor_mismatch"`.
+- `membership.ts` — `in_component` n:m membership: `findComponentsForPathTx`, `reconcileMembershipTx` (idempotent; returns its write count), `readMembershipsTx`; `membership-backfill.ts` — `planMembershipBackfill` / `applyMembershipBackfill` / `reverseMembershipBackfill` / `measureMembership`.
+- `session-stamp.ts` / `session.ts` — `ISessionStamp {sessionId?, parentSessionId?}` (extended by every mutating verb input), `bindTxSession`/`sessionOfTx`, `ensureSessionTx`, `appendOpEventTx`; `IWriteStoreHandle.session` carries the call's stamp and `writeAudit` appends the op-event.
+- `reservation.ts` — `collectReservationPathsTx`, `recordReservationTx`, `endReservationsTx`; `claim-lease.ts` — `leaseExpiryOf(claimedAt, staleAfterMin)`.
+- Internal edge kinds (not on `relate`): `in_component`, `in_session`, `child_of_session`, `has_reservation`; internal node kinds: `session`, `op_event`, `reservation`.
+- `transition.ts` — `SUPERSEDE_REASONS`, `SupersedeReason`, `SUPERSEDED_WITHOUT_REASON_WARNING`; `ITransitionInput.supersededBy?`/`reason?`; `ITransitionOutcome.warnings?`.

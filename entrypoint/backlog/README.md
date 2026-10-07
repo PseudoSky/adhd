@@ -283,7 +283,7 @@ and `Unknown option: --<field>. Available: --input`. (`--help` prints a
 that does not hold for these commands — `--input` is the only option they
 accept. The special commands `serve`, `install-skill`, and `search` are the
 exception: they take argv flags and no `--input`.) Thirty-two operations (the
-31 verbs plus `batch`):
+32 verbs plus `batch`):
 
 | Verb              | CLI                             | MCP tool                   |
 | ----------------- | ------------------------------- | -------------------------- |
@@ -299,6 +299,7 @@ exception: they take argv flags and no `--input`.) Thirty-two operations (the
 | `update`          | `adhd-backlog update`           | `backlog_update`           |
 | `addCitation`     | `adhd-backlog add-citation`     | `backlog_add_citation`     |
 | `removeCitation`  | `adhd-backlog remove-citation`  | `backlog_remove_citation`  |
+| `timeline`        | `adhd-backlog timeline`         | `backlog_timeline`         |
 | `transition`      | `adhd-backlog transition`       | `backlog_transition`       |
 | `attest`          | `adhd-backlog attest`           | `backlog_attest`           |
 | `recheck`         | `adhd-backlog recheck`          | `backlog_recheck`          |
@@ -547,3 +548,18 @@ semantic search unconfigured rather than failing to start.
 
 See [`CONTRIBUTING.md`](CONTRIBUTING.md). This package is MIT-licensed under
 [`LICENSE`](LICENSE); security policy: [`SECURITY.md`](../../SECURITY.md).
+
+
+## Sessions, reservations, timeline and the joined evidence model
+
+Mutating verbs accept `sessionId`/`parentSessionId`; each such call appends one
+append-only op-event, `claim`/`renew`/`release` persist a reservation, and
+`timeline {sessionId}` reconstructs what a session (and its child sessions) did.
+`query {view:"reservations"|"sessions"|"orphaned-parents"|"registry-orphans"}` and
+`query {projection:"byCitationPath", path}` are the store-wide reads. Placement is n:m with
+one primary owner (`get {fields:["primaryOwner","memberships"]}`); citations check that
+the evidence exists, recording `unverified-with-reason` rather than dropping it; `transition`
+to SUPERSEDED takes an optional closed `reason` and `supersededBy`. See `skill/SKILL.md` §13
+and `SPEC.md`'s S02/S11 appendix. The membership migration is
+`tools/migrate/membership-backfill.ts` (dry-run by default; `--apply`, `--reverse <journal>`;
+a path under `~/.adhd/backlog/production/` additionally requires `--allow-production-write`).

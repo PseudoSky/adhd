@@ -325,8 +325,21 @@ without an agent touching the filesystem or a search index. This is the agent's
   symbol). Unique per (component, locType, value).
 
 **Edges:** `owns_project` (project→component), `has_location`
-(component→location). A location belongs to exactly one component; a component to
-exactly one project — the chain `location → component → project` is unambiguous.
+(component→location). A location belongs to a single component; a component to a
+single project — the chain `location → component → project` is unambiguous. An
+ISSUE, by contrast, is a member of many components (n:m, see "Issue membership"
+below) with ONE distinguished primary owner.
+
+**Issue membership (n:m, one primary owner).** `owns_component` is the single
+primary owner (routing/ACL anchor; per-project counts are keyed on it). The
+internal `in_component` edge (`issue → component`, meta `{via:'primary'|'citation',
+citationUid?}`, not on `relate`'s rel union) adds membership of every component
+the issue's `path` citations reach, found by longest-prefix match against
+registered `location` rows and `component.meta.path` (at most one component per
+project; no registered location, no membership). `get {fields:["primaryOwner"]}`
+returns exactly one owner; `get {fields:["memberships"]}` returns every row;
+`query {filter:{memberOfProject|memberOfComponent}}` selects by membership while
+`filter.project`/`filter.component` keep primary-owner semantics.
 
 **Resolution (`lookup`):** `lookup(q)` normalizes `q` into one `locType` and walks
 the chain:
@@ -2482,8 +2495,9 @@ handle (§4, `moveIssue`; §4c — never a call to the library's `invalidateEdge
 `writeEdge`, both of which run against the bare adapter and would autocommit
 outside this transaction). It is a
 DISTINCT verb from `relate` because `owns_component` is a structural
-placement (exactly one component per issue, enforced by having exactly one
-live `owns_component` edge at a time), not a peer relation — collapsing it
+placement (one PRIMARY owning component per issue, enforced by having exactly one
+live `owns_component` edge at a time; membership in further components is the
+separate n:m `in_component` join), not a peer relation — collapsing it
 into `relate`'s five-rel union would let a caller `relate(issue, component,
 'owns_component', 'add')` without ever invalidating the old edge, silently
 producing two live `owns_component` edges for one issue. Keeping `move` a
@@ -3057,3 +3071,55 @@ Library-tier changes beyond the `graph-store` 0.9.1 uid-surfacing patch (already
 committed); data-model
 changes beyond this spec; multi-tenancy/auth (identity = `agent` catalog;
 access control out of scope).
+
+
+## Appendix — S02 / S11 additions (additive; ADR-0007 breaking #7/#8 shipped)
+
+- **Citation gate = existence, not membership (#8).** A citation to an EXISTING
+  file anywhere on disk (out of the project root, a worktree-only path) is
+  `verified`; a directory, a missing target, an unresolved `revision`, a path-less
+  project, or an abstract anchor (`url:`/`registry:`/`query:`) is persisted
+  `unverified-with-reason` (`get {fields:["citations"]}` returns `verification` and
+  `unverifiedReason`). A missing target is still refused when
+  `project_policy.citation_requires_sha`. A citation is never dropped and never
+  refused-and-omitted.
+- **Ambiguous prefix (#7).** An ambiguous uid prefix on ANY uid-taking verb is
+  `ambiguous_reference` with `error.details.candidates` and `details.ref`; reads
+  follow the supersession chain, writes refuse a superseded uid naming the head.
+- **SUPERSEDED.** `transition {toStatus:"SUPERSEDED", supersededBy?, reason?}`:
+  `reason` is the closed enum `v1-to-v2-premise-deletion |
+  imported-never-transitioned | deliberate-plan-retirement |
+  status-token-correction | obsolete-by-obsolescence` (out-of-enum is
+  `invalid_argument`); `supersededBy` writes a `supersedes` edge retired →
+  successor in the SAME transaction (an unresolvable successor leaves the status
+  unchanged). A reasonless SUPERSEDED still succeeds and returns
+  `warnings:["superseded-without-reason"]`. `get {fields:["supersededBy",
+  "supersedeReason"]}` and `query {filter:{status:"SUPERSEDED"}, fields:[...]}`
+  read them back.
+- **Actor mismatch.** A `transition`, or a `renew` by a non-holder, of an item
+  whose live claim is held by someone else is `validation` with
+  `details.reason:"actor_mismatch"` and `heldBy`/`heldSince`. Claim-verb
+  contention itself stays `conflict` (a lease race, remedy `force`).
+- **Orphaned parent.** `part-of-rollup` carries `orphanedParent` when the root's
+  own status is terminal and it still has open transitive `part_of` descendants;
+  `query {view:"orphaned-parents"}` lists every such parent store-wide.
+- **Registry integrity.** `query {view:"registry-orphans"}` returns typed
+  findings: `duplicate-identity` (normalized repoUrl / path / name-suffix),
+  `component-project-mismatch`, `empty-project`. `merge-project` folds a duplicate
+  into its survivor with a recorded Redirect; the finding then disappears.
+- **Sessions, op-events, reservations (S11).** Any mutating verb accepts
+  `sessionId` (and `parentSessionId`); the first one creates the `session` node,
+  and every call appends exactly one append-only `op_event` `{sessionId, agent,
+  op, targetUid, delta, t}` (independent of `auditTrail`). `claim`/`renew`/
+  `release` persist a `reservation` `{issueUid, paths[], holder, sessionId,
+  claimedAt, leaseExpiry}` (paths = the item's path citations plus
+  `claim.paths`). `query {view:"reservations", filter:{pathPrefix, project,
+  component, sessionId, holder}, now?}` lists ACTIVE reservations (`leaseExpiry >
+  now`, `now` injectable); `query {view:"sessions"}` lists sessions; the
+  `timeline {sessionId}` verb returns the session, its descendants and the ordered
+  ops. Spellings `list reservation` / `get session` belong to the unshipped
+  CLI-HIERARCHY verb tree; the shipped spellings are the views above.
+- **Reads.** `get {fields:["specRevisionFragment"]}` returns the HEAD revision's
+  fragment verbatim; `query {projection:"byCitationPath", path:P}` returns every
+  live item citing P (exact path equality, relative paths resolved per project
+  root).

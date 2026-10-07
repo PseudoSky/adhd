@@ -31,7 +31,7 @@ or after the one that mounted them. Compare the `backlog create`, `backlog
 priority-matrix`, and `backlog obligate` lines of `adhd-backlog --help` with §1
 before relying on a field.
 
-## 1. Command surface — 31 verbs (plus `batch`), one calling convention
+## 1. Command surface — 32 verbs (plus `batch`), one calling convention
 
 **Every verb except `embedding-status` takes a single `--input` flag carrying
 one JSON object** (`embedding-status` takes no options at all). There
@@ -77,6 +77,7 @@ adhd-backlog backlog rm-location        --input '<IRmLocationInput json>'
 adhd-backlog backlog rm-project         --input '<IRmProjectInput json>'
 adhd-backlog backlog spec-append        --input '<ISpecAppendInput json>'
 adhd-backlog backlog spec-check         --input '<ISpecCheckInput json>'
+adhd-backlog backlog timeline           --input '<ITimelineInput json>'
 adhd-backlog backlog transition         --input '<ITransitionInput json>'
 adhd-backlog backlog unobligate         --input '<IUnobligateInput json>'
 adhd-backlog backlog update             --input '<IUpdateIssueInput json>'
@@ -126,6 +127,7 @@ Verbs (one-token, --input JSON envelope):
   backlog rm-project  { input: { uid: string, reason: string, by: string } }
   backlog spec-append  { input: { uid: string, fragment: string, anchor?: object, base_revision: string, by: string } }
   backlog spec-check  { input: { uid: string, token?: string } }
+  backlog timeline  { input: { sessionId: string, includeChildren?: boolean, limit?: number, after?: string } }
   backlog transition  { input: { uid: string, by: string, toStatus: string, note?: string, citations?: object[], gitContext?: string, override?: object } }
   backlog unobligate  { input: { obligationUid: string, by: string } }
   backlog update  { input: { uid: string, by: string, title?: string, body?: string, kind?: string, priority?: string, assignee?: string, author?: string, citations?: object[], awaitEmbed?: boolean } }
@@ -311,7 +313,7 @@ Each verb is also an MCP tool once `.mcp.json` wires the server, named
 `backlog_spec_append`, `backlog_spec_check`, `backlog_transition`,
 `backlog_unobligate`, `backlog_update`, `backlog_upsert_component`,
 `backlog_upsert_location`, `backlog_upsert_project`, plus the un-namespaced
-`batch_action` — 31 verbs + `batch`.
+`batch_action` — 32 verbs + `batch`.
 
 The tool list a session sees is the MCP **server process's** build, which can
 lag the CLI: a long-lived `serve` started before a verb was mounted does not
@@ -1318,3 +1320,74 @@ in-process surface is described in `README.md` → "Library API".
 Inside the adhd repo: `create` a `FEAT` on project `adhd`, component `entrypoint/backlog`, with `duplicateAction:"comment"` (attaches your reproduction when it is already filed — never force); body = the exact command, the exact output, the workaround, and the outcome you wanted.
 Outside the adhd repo: file the same four things with `gh issue create --repo PseudoSky/adhd` (https://github.com/PseudoSky/adhd); if `gh` is unusable, report it instead of dropping it.
 File **every** distinct friction — one item per friction, not one per dispatch — deduping each first: the create-time dedupe scan (`duplicateAction:"comment"`) attaches it to an existing item rather than filing a duplicate, and `force` is never used. Report each uid (or issue URL). Reporting friction is not designing the fix — no invented change, no priority, no `claim`, no `plan` field.
+
+
+## 13. Joined evidence model, SUPERSEDED, sessions & reservations
+
+Additive surface (ADR-0007 breaking #7/#8 are shipped; everything else is additive).
+
+**Placement is n:m with one primary owner.** `get {uid, fields:["primaryOwner"]}`
+returns exactly one `{projectUid, projectName, componentUid, componentName}`;
+`fields:["memberships"]` returns every `{componentUid, projectUid, via:"primary"|"citation", citationUid?}`.
+`query {filter:{memberOfProject:[P1,P2]}}` / `memberOfComponent` select by
+membership (ANY-of); `filter.project` / `filter.component` keep primary-owner
+semantics. An item citing evidence in two registered components across two
+projects is returned for BOTH projects and still has one primary owner.
+
+**Citations check existence, not membership.** An existing out-of-root file or
+worktree-only path is `verified`. A directory, a missing target, an unresolved
+`revision`, a path-less project or an abstract anchor (`url:`, `registry:`,
+`query:`) is persisted with `verification:"unverified-with-reason"` and
+`unverifiedReason`; `get {fields:["citations"]}` returns both. A missing target is
+still refused (`precondition_failed`) when the project requires a sha.
+
+**SUPERSEDED.**
+
+```
+adhd-backlog transition --input '{"uid":"<retired>","by":"me","toStatus":"SUPERSEDED","note":"replaced","supersededBy":"<successor>","reason":"deliberate-plan-retirement"}'
+```
+
+`reason` is optional and closed: `v1-to-v2-premise-deletion`,
+`imported-never-transitioned`, `deliberate-plan-retirement`,
+`status-token-correction`, `obsolete-by-obsolescence` (anything else is
+`invalid_argument`; `reason`/`supersededBy` on a non-SUPERSEDED transition is also
+`invalid_argument`). A reasonless SUPERSEDED succeeds with
+`warnings:["superseded-without-reason"]`. `supersededBy` writes the `supersedes`
+edge in the same transaction. Read back with `get {fields:["supersededBy","supersedeReason"]}`.
+
+**Errors.** `ambiguous_reference` carries `error.details.candidates` (`[{uid,kind,name}]`)
+and `details.ref` on EVERY uid verb. A `transition` (or a `renew`) of an item whose
+live claim another actor holds is `validation` with `details.reason:"actor_mismatch"`,
+`heldBy`, `heldSince`; `claim` contention itself stays `conflict` (use `force` or
+wait for staleness); `release` by a non-holder is the idempotent `release-noop`.
+
+**Rollups and registry integrity.** `part-of-rollup` includes `orphanedParent`
+`{parentStatus, openChildren, sampleOpenUids}` when a terminal parent still has open
+work; `query {view:"orphaned-parents"}` lists every such parent. `query
+{view:"registry-orphans"}` returns `duplicate-identity` / `component-project-mismatch` /
+`empty-project` findings; fold a duplicate project with `merge-project`.
+
+**Sessions, the op-event log, reservations, timeline.** Pass `sessionId` (and
+optionally `parentSessionId`) on any mutating verb:
+
+```
+adhd-backlog create --input '{"project":"adhd","title":"t","body":"b","by":"agent-1","sessionId":"S1"}'
+adhd-backlog claim  --input '{"uid":"<uid>","by":"agent-1","action":"claim","sessionId":"S1","paths":["/abs/extra.ts"]}'
+adhd-backlog query  --input '{"view":"reservations","filter":{"pathPrefix":"/abs/repo/src"}}'
+adhd-backlog query  --input '{"view":"reservations","filter":{"sessionId":"S1"}}'
+adhd-backlog query  --input '{"view":"sessions"}'
+adhd-backlog timeline --input '{"sessionId":"S1"}'
+```
+
+Each such call appends exactly one append-only op-event (independent of
+`auditTrail`); no `sessionId` means no session node and no op-event. A claim records a
+reservation `{issueUid, paths[], holder, sessionId, claimedAt, leaseExpiry}` (paths =
+the item's path citations plus `paths`); `view:"reservations"` lists the ACTIVE ones
+(`leaseExpiry > now`; `now` is injectable for tests; `pathPrefix` is segment-aware).
+`timeline` returns the session, its child sessions, the ordered ops and the item uids
+touched; an unknown session is `item_not_found`. (`list reservation` / `get session`
+are the future CLI-HIERARCHY spellings of these views.)
+
+**Other reads.** `get {fields:["specRevisionFragment"]}` returns the head revision's
+fragment verbatim. `query {projection:"byCitationPath", path:"<abs or repo-relative path>"}`
+returns every live item citing that exact path.
