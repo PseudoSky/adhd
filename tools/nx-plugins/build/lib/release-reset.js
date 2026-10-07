@@ -187,11 +187,29 @@ function analyze(input)
     (!chHeadTop || chHeadTop.version !== chWorkingTop.version)
   );
 
-  // package.json version moved but the changelog was never touched at all,
-  // and doesn't already claim the new version (mirror-image partial run:
-  // version step ran, changelog step didn't).
+  // The package.json `version` field differs from HEAD's. This is the ONLY
+  // evidence that a release step bumped THIS package; a dependency-range or
+  // other edit that leaves `version` equal to HEAD's is NOT a version bump.
+  const versionMovedFromHead = Boolean(pkgWorkingVersion && pkgWorkingVersion !== pkgHeadVersion);
+
+  // package.json version moved (vs HEAD) but the changelog was never touched at
+  // all, and doesn't already claim the new version (mirror-image partial run:
+  // version step ran, changelog step didn't). Comparing against HEAD matters:
+  // `nx release version` also rewrites internal `@adhd/*` dependency ranges in
+  // packages whose own version it does NOT bump, and some packages already have
+  // a CHANGELOG top that is behind their package.json version at HEAD (agent-core-policy,
+  // dispatch-core-client). Without the HEAD comparison those range-only edits
+  // were reported as orphan version bumps and failed the release the version
+  // phase itself had just prepared.
   const orphanVersionBump = Boolean(
-    pkgDirty && !changelogDirty && chHeadTop && pkgWorkingVersion && chHeadTop.version !== pkgWorkingVersion
+    pkgDirty && versionMovedFromHead && !changelogDirty && chHeadTop && chHeadTop.version !== pkgWorkingVersion
+  );
+
+  // Range/dependency-only edit (version == HEAD) on a package whose CHANGELOG
+  // top is behind its version AT HEAD: not a half-applied release, but worth a
+  // prominent advisory so the drift is visible in the release receipt.
+  const changelogBehindVersion = Boolean(
+    pkgDirty && !versionMovedFromHead && !changelogDirty && chHeadTop && pkgWorkingVersion && chHeadTop.version !== pkgWorkingVersion
   );
 
   // Both moved TOGETHER to the same version — a normal in-progress release,
@@ -213,17 +231,22 @@ function analyze(input)
     // the sole difference from HEAD is a clean prepend. Anything else means
     // a human/other-agent also touched the file; refuse to guess.
 
-    // const headText = changelogHeadText || '';
-    // HUMAN: I'm disabling it because It currently is tripping on the pnpm run dry run issue + wasting a ton of time in the release stage. The full releasee runs and only fails at the end even though this errors.
-    //        It can be put back in when these checks are properly run in parallel before publishes rather than sequentially in publish and the reason changelogs are appearing empty is known.
-    //        Also I think failing a publish on this is strange, it should be a pre publish verification
-    // changelogWorkingText != null && changelogWorkingText.endsWith(headText);
-    const safe = true;
+    // Reanalysed (the earlier `const safe = true` override is gone): `safe`
+    // gates ONLY the auto-revert (`applyRevert` does `git restore` of the whole
+    // file, which would destroy any hand edit that is not a clean prepend). It
+    // never decided whether the check fails on its own; forcing it true did not
+    // stop the release failing, it only let `--live` clobber hand-edited
+    // changelogs. A phantom entry sitting on top of OTHER edits cannot be proven
+    // to be a half-applied release step (a human may be editing the changelog),
+    // so it is REPORTED for review (severity 'review') without failing the check.
+    const headText = changelogHeadText || '';
+    const safe = changelogWorkingText != null && changelogWorkingText.endsWith(headText);
     actions.push({
       type: 'changelog-phantom-entry',
       path: changelogPath,
       phantomVersion: chWorkingTop.version,
       safe,
+      severity: safe ? 'fail' : 'review',
       reason: safe
         ? `CHANGELOG.md top entry "${chWorkingTop.version}" is not the package.json version ` +
         `("${pkgWorkingVersion}") and was cleanly prepended over HEAD's content — safe to revert to HEAD.`
@@ -241,6 +264,9 @@ function analyze(input)
       workingVersion: pkgWorkingVersion,
       headVersion: pkgHeadVersion,
       safe: diffIsVersionOnly,
+      // version differs from HEAD with no matching changelog entry: genuinely
+      // half-applied regardless of whether other fields also changed.
+      severity: 'fail',
       reason: diffIsVersionOnly
         ? `package.json version bumped to "${pkgWorkingVersion}" with no corresponding CHANGELOG.md ` +
         `entry, and the ONLY diff from HEAD is the version field — safe to revert.`
@@ -248,6 +274,21 @@ function analyze(input)
         `entry, but other fields also differ from HEAD — refusing to auto-revert; needs manual review.`,
     });
   }
+
+  const advisories = [];
+  if (changelogBehindVersion) {
+    advisories.push({
+      type: 'changelog-behind-version',
+      path: changelogPath,
+      reason:
+        `package.json is at "${pkgWorkingVersion}" (same as HEAD) but CHANGELOG.md's top entry is ` +
+        `"${chHeadTop.version}" — pre-existing changelog drift, not a half-applied release (only ` +
+        `dependency ranges / other fields changed). Reported for review; does not fail the release.`,
+    });
+  }
+
+  const failing = actions.some((a) => a.severity === 'fail');
+  const reviewRequired = advisories.length > 0 || actions.some((a) => a.severity === 'review');
 
   return {
     projectName,
@@ -262,6 +303,13 @@ function analyze(input)
     orphanVersionBump,
     consistentInProgress,
     inconsistent,
+    /** true iff a genuinely half-applied release state exists — the ONLY thing that fails `--check`. */
+    failing,
+    /** true iff something is reported for human review without failing the check. */
+    reviewRequired,
+    changelogBehindVersion,
+    versionMovedFromHead,
+    advisories,
     tagBehindWorking,
     actions,
   };

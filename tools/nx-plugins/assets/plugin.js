@@ -70,6 +70,10 @@ exports.createNodes = ['**/package.json', (configFiles, _o, ctx) =>
               // the re-stamp that every dist-trusting release task runs last.
               dependsOn: ['build'],
               cache: true,
+              // cache-dag item 3: the workspace `default` input no longer hashes
+              // CHANGELOG.md (a release rewrites it for unchanged-code packages), but
+              // `assets` COPIES it into dist, so it must be an explicit input here.
+              inputs: ['default', '{projectRoot}/CHANGELOG.md', '{projectRoot}/README.md'],
               outputs: assetOutputs(ctx.workspaceRoot, projectRoot),
             },
             'chmod-bin': {

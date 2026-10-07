@@ -4,6 +4,32 @@ const { existsSync, readFileSync } = require('node:fs');
 const { dirname, join } = require('node:path');
 const { hasBuildTarget, isPublishable } = require('./detect-target');
 const { isScratchPath } = require('../lib/scratch-root');
+/**
+ * cache-dag item 3: fields of a publishable project's own package.json that the
+ * release (`version` phase / `sync-deps`) rewrites WITHOUT any code change: the
+ * `version` field and every internal `@adhd/*` dependency RANGE (dependencies,
+ * devDependencies, peerDependencies, optionalDependencies). Excluding exactly
+ * these from the `manifest` named input (workspace default in nx.json, which
+ * `default` includes) keeps build/test/lint/typecheck/typecheck-spec caches HIT
+ * across the version phase for unchanged packages, while any real dependency
+ * change (an external dep, a NEW or REMOVED internal dep, `exports`, `bin`,
+ * `scripts`, ...) still changes the hash — a removed/added internal dep changes
+ * the excluded-field SET, which is derived from the on-disk key list.
+ * @param {string} workspaceRoot
+ * @param {string} projectRoot
+ * @returns {string[]} excludeFields for the nx `{json}` input
+ */
+function releaseRewrittenFields(workspaceRoot, projectRoot) {
+  let pkg = {};
+  try { pkg = JSON.parse(readFileSync(join(workspaceRoot, projectRoot, 'package.json'), 'utf8')); } catch { return ['version']; }
+  const fields = ['version'];
+  for (const section of ['dependencies', 'devDependencies', 'peerDependencies', 'optionalDependencies']) {
+    for (const name of Object.keys(pkg[section] || {})) {
+      if (name.startsWith('@adhd/')) fields.push(`${section}.${name}`);
+    }
+  }
+  return fields;
+}
 function skip(p) { return p === '.' || p.startsWith('node_modules/') || p.includes('/node_modules/') || p.startsWith('dist/') || p.includes('/dist/') || isScratchPath(p); }
 // publish does not depend on e2e (owner decision 2026-10-07); run e2e explicitly before a release.
 // Nx 23 unified on the v2 plugin API: createNodes[1] receives the ARRAY of
@@ -87,8 +113,14 @@ exports.createNodes = ['**/package.json', (configFiles, _o, ctx) =>
     return [pkgPath, {
       projects: {
         [projectRoot]: {
+          // Project-level override of the workspace `manifest` named input (nx.json):
+          // see releaseRewrittenFields. A project-level named input replaces the
+          // workspace one of the same name.
+          namedInputs: {
+            manifest: [{ json: '{projectRoot}/package.json', excludeFields: releaseRewrittenFields(ctx.workspaceRoot, projectRoot) }],
+          },
           targets: {
-            "version": { "executor": "@adhd/nx-build:version", "dependsOn": ["build", "assets", "^version", "release-reset-check"], /*"cache": false */ },
+            "version": { "executor": "@adhd/nx-build:version", "dependsOn": ["build", "assets", "^version"], /*"cache": false */ },
             "reconcile": { "executor": "@adhd/nx-build:reconcile", "dependsOn": ["build", "assets"], /*"cache": false*/ },
             // cache-dag AC9: CACHED. The executor is a pure function of (this project's source
             // package.json, the versions of its workspace dependencies' package.json, its
@@ -182,13 +214,19 @@ exports.createNodes = ['**/package.json', (configFiles, _o, ctx) =>
             // old snapshot). See tools/nx-plugins/build/lib/release-reset.js.
             "release-reset": { "executor": "@adhd/nx-build:release-reset", "cache": false },
             // release-reset-check (backlog df9de4da): the NON-MUTATING precondition
-            // form of release-reset. `version` and `publish` both depend on it, so a
-            // half-generated release step (phantom CHANGELOG entry / orphaned
-            // version bump) fails the release BEFORE anything is bumped or
-            // published, instead of being reported as `success: true`. `version`
-            // depends on it too so the check always observes the PRE-mutation
-            // state (running concurrently with `version` could see its own
-            // package.json write before the changelog write and false-fail).
+            // form of release-reset. ONLY `publish` depends on it (once per project
+            // per release). `version` does NOT: version never reads the check's
+            // verdict, and running it before version re-ran the identical check a
+            // second time per project (63 + 61 runs per release). It fails iff a
+            // genuinely half-applied release state exists (orphaned version bump vs
+            // HEAD, or a phantom CHANGELOG entry that is a clean prepend); states
+            // that only need human review are reported as warnings and listed in
+            // the release receipt but never fail it (lib/release-reset.js).
+            // Ordering contract: run-release.mjs completes the `version` phase
+            // before the publish phase starts, so by the time this check runs the
+            // version phase's package.json/CHANGELOG writes are finished (the
+            // publish-phase `version` task is an idempotent no-op that writes
+            // nothing).
             "release-reset-check": { "executor": "@adhd/nx-build:release-reset", "options": { "check": true }, "cache": false }
           }
         }

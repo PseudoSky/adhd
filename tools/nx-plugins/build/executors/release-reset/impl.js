@@ -21,7 +21,7 @@
  * workspace-level script needed — every publishable project gets this
  * target wired in by `plugin.js`, so `run-many` IS the workspace sweep.
  *
- * `dependsOn`: none, `cache: false` — this reads LIVE git/working-tree
+ * `dependsOn`: none (the `-check` form is a `publish` precondition only — it is NOT a `version` prerequisite), `cache: false` — this reads LIVE git/working-tree
  * state (uncached by design; a cache hit would replay a stale verdict).
  */
 const { detectProjectReleaseState, applyRevert } = require('../../lib/release-reset');
@@ -32,9 +32,14 @@ const { withMetrics } = require('../../../lib/metrics');
  * detected state and the invocation mode. Kept pure so every branch is
  * unit-testable without git or nx.
  *
- * - `check` (the publish/version precondition): NEVER mutates; fails iff the
- *   state is inconsistent, because publishing over a half-generated release
- *   step ships permanently-wrong metadata.
+ * - `check` (the publish precondition): NEVER mutates; fails iff a genuinely
+ *   half-applied release state exists (`state.failing`: an orphaned version
+ *   bump, or a phantom CHANGELOG entry proven to be a clean prepend), because
+ *   publishing over a half-generated release step ships permanently-wrong
+ *   metadata. States that merely need human review (a phantom-shaped entry
+ *   over other hand edits, changelog drift on a range-only edit) are REPORTED
+ *   (warning + `outcome.status: 'review-required'`, listed in the release
+ *   receipt) but never fail the check.
  * - `live`: applies the SAFE actions, then FAILS iff anything was left in
  *   `skipped (manual review)` OR a re-detection of the project still reports
  *   an inconsistent release state (a phantom changelog entry / orphaned
@@ -43,7 +48,7 @@ const { withMetrics } = require('../../../lib/metrics');
  *   (backlog df9de4da).
  * - default (dry-run): report only, never fails.
  *
- * @param {{ inconsistent: boolean }} state detected state
+ * @param {{ inconsistent: boolean, failing?: boolean }} state detected state
  * @param {{ live?: boolean, check?: boolean }} mode
  * @param {{ skipped: string[], remainingInconsistent: boolean }|null} liveResult
  * @returns {{ success: boolean, reason?: string }}
@@ -51,6 +56,7 @@ const { withMetrics } = require('../../../lib/metrics');
 function verdict(state, mode, liveResult) {
   if (!state.inconsistent) return { success: true };
   if (mode.check) {
+    if (!state.failing) return { success: true };
     return { success: false, reason: 'inconsistent release state (phantom CHANGELOG entry or orphaned version bump) — run `release-reset --live` or resolve by hand before publishing' };
   }
   if (!mode.live || !liveResult) return { success: true };
@@ -63,6 +69,23 @@ function verdict(state, mode, liveResult) {
   return { success: true };
 }
 
+/** Prominent, non-failing review notice for advisory-only states. */
+function printReview(projectName, state) {
+  console.warn(`release-reset: ${projectName}: WARNING — REVIEW REQUIRED (does NOT fail the release; listed in the release receipt)`);
+  for (const a of state.advisories) console.warn(`  - ${a.path}\n      ${a.reason}`);
+}
+
+/** Machine-readable review outcome persisted by withMetrics and rendered by task-report.mjs. */
+function reviewOutcome(state) {
+  return {
+    status: 'review-required',
+    items: [
+      ...state.actions.filter((a) => a.severity === 'review').map((a) => ({ type: a.type, path: a.path, reason: a.reason })),
+      ...state.advisories.map((a) => ({ type: a.type, path: a.path, reason: a.reason })),
+    ],
+  };
+}
+
 async function run(options, context) {
   return withMetrics('release-reset', context, async (rec) => {
     const projectRoot = context.projectsConfigurations.projects[context.projectName].root;
@@ -73,15 +96,21 @@ async function run(options, context) {
 
     const state = rec.time('detectProjectReleaseState', detect);
 
-    if (!state.inconsistent) {
+    if (!state.inconsistent && !state.reviewRequired) {
       const note = state.tagBehindWorking
         ? ` (informational: latest tag ${state.latestTagVersion} is behind working version ${state.pkgWorkingVersion} — normal for an untagged in-progress release)`
         : '';
       console.log(`release-reset: ${context.projectName}: clean${note}`);
-      return { success: true };
+      return { success: true, outcome: { status: 'clean' } };
     }
 
-    console.log(`release-reset: ${context.projectName}: INCONSISTENT release state detected`);
+    if (!state.inconsistent) {
+      // Advisory only (e.g. changelog drift on a range-only edit): never fails, never mutates.
+      printReview(context.projectName, state);
+      return { success: true, outcome: reviewOutcome(state) };
+    }
+
+    console.log(`release-reset: ${context.projectName}: ${state.failing ? 'INCONSISTENT release state detected' : 'REVIEW REQUIRED (not provably a half-applied release)'}`);
     for (const action of state.actions) {
       console.log(`  - [${action.safe ? 'SAFE' : 'MANUAL REVIEW REQUIRED'}] ${action.path}`);
       console.log(`      ${action.reason}`);
@@ -89,8 +118,12 @@ async function run(options, context) {
 
     if (check) {
       const v = verdict(state, { check: true }, null);
-      console.error(`release-reset: ${context.projectName}: FAILED precondition — ${v.reason}`);
-      return { success: false };
+      if (!v.success) {
+        console.error(`release-reset: ${context.projectName}: FAILED precondition — ${v.reason}`);
+        return { success: false, outcome: { status: 'failed', ...reviewOutcome(state) } };
+      }
+      console.warn(`release-reset: ${context.projectName}: WARNING — needs human review before relying on this release's metadata (does NOT fail the release; listed in the release receipt)`);
+      return { success: true, outcome: reviewOutcome(state) };
     }
 
     if (!live) {

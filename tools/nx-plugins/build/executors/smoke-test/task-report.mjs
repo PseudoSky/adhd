@@ -117,11 +117,20 @@ for (const r of publishRecords) {
   else publishOutcomes.unclassified.push(pkgLabel(r) + (r.success === false ? ' (failed)' : ''));
 }
 
+// release-reset REVIEW-REQUIRED items — states the check could not prove were a
+// half-applied release (so it did NOT fail the release) but a human should look
+// at. Sourced from the executor's own `outcome` (release-reset/impl.js).
+const reviewItems = [];
+for (const r of run.filter((x) => x.task === 'release-reset' && x.outcome && x.outcome.status === 'review-required')) {
+  for (const it of r.outcome.items || []) reviewItems.push({ project: r.project, type: it.type, path: it.path, reason: it.reason });
+}
+
 if (has('json')) {
   console.log(JSON.stringify({ state, window: windowSource, since, records: run.length,
     tasks: tasks.map((t) => ({ task: t.task, count: t.n, totalMs: Math.round(t.total), maxMs: Math.round(t.max),
       fail: t.fail, projects: [...t.projects].map(([p, v]) => ({ project: p, count: v.n, totalMs: Math.round(v.total) }))
         .sort((a, b) => b.totalMs - a.totalMs) })),
+    releaseResetReview: reviewItems,
     publishes: publishRecords.length ? {
       published: publishOutcomes.published,
       skippedAlreadyPublished: publishOutcomes.skipped,
@@ -156,9 +165,13 @@ if (has('json')) {
       console.log('    (failed/refused, or recorded before the outcome field existed — no published-vs-skipped signal)');
     }
   }
+  if (reviewItems.length) {
+    console.log(`\n!! RELEASE-RESET REVIEW REQUIRED (${reviewItems.length}) — did NOT fail the release; a human should look:`);
+    for (const it of reviewItems) console.log(`  - ${it.project}: ${it.path}\n      ${it.reason}`);
+  }
   const fails = run.filter((r) => r.success === false);
   console.log(`\nfailures: ${fails.length}` + (fails.length ? ' — ' + fails.map((f) => `${f.task}:${f.project}`).join(', ') : ''));
-  console.log('covered: version, publish, publish-hygiene, dist-manifest, verify-dist-load, sync-deps-check, secret-scan, assets-*');
+  console.log('covered: version, publish, release-reset, publish-hygiene, dist-manifest, verify-dist-load, sync-deps-check, secret-scan, assets-*');
   console.log('NOT covered (nx-native — read nx run data): build, test, e2e, lint, typecheck*');
 }
 process.exit(state === 'unreadable' ? 1 : 0);

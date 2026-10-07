@@ -140,7 +140,7 @@ test('df9de4da C-AC2 NEGATIVE CONTROL: an executor that always reports success i
   }
 });
 
-test('df9de4da C-AC2: release-reset-check is wired into the version AND publish dependsOn (publish-graph precondition)', () => {
+test('df9de4da C-AC2: release-reset-check is wired into publish dependsOn ONLY (publish-graph precondition; version does not need it)', () => {
   const ws = mkdtempSync(join(tmpdir(), 'release-reset-wiring-'));
   try {
     const root = 'packages/demo/demo-core-w';
@@ -153,7 +153,7 @@ test('df9de4da C-AC2: release-reset-check is wired into the version AND publish 
     assert.ok(targets['release-reset-check'], 'release-reset-check target must exist');
     assert.equal(targets['release-reset-check'].options.check, true);
     assert.ok(targets.publish.dependsOn.includes('release-reset-check'), 'publish must depend on release-reset-check');
-    assert.ok(targets.version.dependsOn.includes('release-reset-check'), 'version must depend on release-reset-check so it observes pre-mutation state');
+    assert.ok(!targets.version.dependsOn.includes('release-reset-check'), 'version must NOT depend on release-reset-check (it never reads the verdict; the check runs once per project, in publish)');
   } finally {
     rmSync(ws, { recursive: true, force: true });
   }

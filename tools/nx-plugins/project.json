@@ -9,20 +9,162 @@
     "@adhd/nx-deps",
     "@adhd/nx-mass-delete-guard",
     "@adhd/nx-secret-scan",
-    "@adhd/nx-test"
+    "@adhd/nx-test",
+    "agent-core-env"
   ],
   "targets": {
     "test": {
       "executor": "nx:run-commands",
-      "cache": false,
+      "cache": true,
       "dependsOn": [],
       "options": {
         "command": "pnpm run test:build-tools",
         "cwd": "."
       },
       "metadata": {
-        "description": "Runs the repo's existing `test:build-tools` suite (root package.json — reused verbatim, never forked) so the build/release-tooling specs, including the release pipeline's own, are covered by `nx affected -t test`. This project exists only to give the package.json-less `tools/nx-plugins/` tree a first-class nx identity: the six `@adhd/nx-*` sub-packages under it are separate workspace projects by longest-root-prefix, so the umbrella declares them as `implicitDependencies` to become affected whenever the build tooling changes. Deliberately uncached: the suite validates repo-wide build/release wiring and reads files owned by other projects (`.github/workflows/**`, `entrypoint/backlog/**`), so no exhaustive content-hash cache key exists and caching could report a stale green. Deliberately has no cross-target `dependsOn`: the umbrella is package.json-less, so the `lint`/`sync-deps-check` targets that targetDefaults expect do not exist here."
-      }
+        "description": "Runs the repo's existing `test:build-tools` suite (root package.json - reused verbatim, never forked) so the build/release-tooling specs, including the release pipeline's own, are covered by `nx affected -t test`. This project exists only to give the package.json-less `tools/nx-plugins/` tree a first-class nx identity: the six `@adhd/nx-*` sub-packages under it are separate workspace projects by longest-root-prefix, so the umbrella declares them as `implicitDependencies` to become affected whenever the build tooling changes. CACHED (cache-dag item 1): the suite validates repo-wide build/release wiring, so its `inputs` are the honest, audited read set (measured by an fs/child_process read-trace of a full `pnpm run test:build-tools` run): tools/**, .githooks/**, .github/**, root wiring files (nx.json, package.json, pnpm-workspace.yaml, pnpm-lock.yaml, tsconfig.base.json, published-state.json, .npmrc), every project's project.json/package.json/tsconfig*/vite.config*/executors.json/schema.json, every spec/test/e2e file in the workspace (lane-reachability walks them), the few docs files specs read, agent-core-env (a spec runs a nested `nx run agent-core-env:test`), toolchain versions, the git facts the specs read (history depth, shallow clone, lane-gate/.github clean vs HEAD, global git config) and the env vars the build tooling reads. Deliberately has no cross-target `dependsOn`: the umbrella is package.json-less, so the `lint`/`sync-deps-check` targets that targetDefaults expect do not exist here. NOTE: `.nxignore` hides docs/ and .claude/ from nx's file hasher entirely (explicit globs there match nothing), so the docs/.claude files the specs read are hashed by the `git hash-object` runtime input instead."
+      },
+      "inputs": [
+        "default",
+        "^production",
+        {
+          "input": "default",
+          "projects": [
+            "agent-core-env"
+          ]
+        },
+        "{workspaceRoot}/tools/**/*",
+        "!{workspaceRoot}/tools/**/node_modules/**",
+        "{workspaceRoot}/.githooks/**/*",
+        "{workspaceRoot}/.github/**/*",
+        "{workspaceRoot}/scripts/**/*",
+        "{workspaceRoot}/nx.json",
+        "{workspaceRoot}/package.json",
+        "{workspaceRoot}/pnpm-workspace.yaml",
+        "{workspaceRoot}/pnpm-lock.yaml",
+        "{workspaceRoot}/tsconfig.base.json",
+        "{workspaceRoot}/jest.config.ts",
+        "{workspaceRoot}/.npmrc",
+        "{workspaceRoot}/published-state.json",
+        "{workspaceRoot}/entrypoint/backlog/tools/**/*",
+        "{workspaceRoot}/{entrypoint,packages}/**/{project.json,package.json,executors.json,generators.json,schema.json,eslint.config.*}",
+        "{workspaceRoot}/{entrypoint,packages}/**/tsconfig*.json",
+        "{workspaceRoot}/{entrypoint,packages}/**/vite.config.*",
+        "{workspaceRoot}/{entrypoint,packages}/**/*.e2e.{ts,tsx,mts}",
+        "!{workspaceRoot}/**/node_modules/**",
+        "!{workspaceRoot}/**/dist/**",
+        {
+          "externalDependencies": [
+            "nx",
+            "vitest",
+            "@nx/vite",
+            "@nx/devkit",
+            "@swc/core",
+            "better-sqlite3"
+          ]
+        },
+        {
+          "runtime": "node --version"
+        },
+        {
+          "runtime": "pnpm --version"
+        },
+        {
+          "runtime": "git --version"
+        },
+        {
+          "runtime": "git rev-parse --is-shallow-repository"
+        },
+        {
+          "runtime": "git rev-list --count --max-count=5 HEAD"
+        },
+        {
+          "runtime": "git diff --quiet HEAD -- .github tools/gate/lane-gate.mjs; echo $?"
+        },
+        {
+          "runtime": "git config --global --list | sort | shasum"
+        },
+        {
+          "runtime": "git ls-files --cached --others --exclude-standard -- docs/PIPELINE.md docs/contributing/conventions/worktree-workflow.md docs/plan/backlog-completion/HANDOFF.md docs/plan/backlog-completion/TASKS.md .claude/skills/backlog-remediation 'docs/*.spec.*' 'docs/*.test.*' 'docs/*.e2e.*' | sort -u | xargs git hash-object | shasum"
+        },
+        {
+          "env": "CI"
+        },
+        {
+          "env": "GIT_DIR"
+        },
+        {
+          "env": "GIT_INDEX_FILE"
+        },
+        {
+          "env": "RELEASE_RUN_TOKEN"
+        },
+        {
+          "env": "RELEASE_FORCE_REASON"
+        },
+        {
+          "env": "RELEASE_FORCE_FULL_PUBLISH"
+        },
+        {
+          "env": "RELEASE_BASE_REF"
+        },
+        {
+          "env": "ADHD_REPO_ROOT"
+        },
+        {
+          "env": "ADHD_NX_METRICS"
+        },
+        {
+          "env": "ADHD_NX_METRICS_MAX_CPU_PCT"
+        },
+        {
+          "env": "ADHD_NX_METRICS_CPU_MODE"
+        },
+        {
+          "env": "ADHD_NX_VERSION_DRY_RUN"
+        },
+        {
+          "env": "ADHD_PUBLISH_VERIFY_TIMEOUT_MS"
+        },
+        {
+          "env": "ADHD_PUBLISH_VERIFY_INTERVAL_MS"
+        },
+        {
+          "env": "ADHD_NPM_REGISTRY"
+        },
+        {
+          "env": "ADHD_NPM_REGISTRY_BASE"
+        },
+        {
+          "env": "VERIFY_DIST_LOAD_TIMEOUT_MS"
+        },
+        {
+          "env": "SECRET_SCAN_REQUIRE_GITLEAKS"
+        },
+        {
+          "env": "ADHD_SMOKE_REGISTRY_PROPAGATION_MS"
+        },
+        {
+          "env": "ADHD_SMOKE_REGISTRY_POLL_MS"
+        },
+        {
+          "env": "ADHD_SMOKE_LIBRARY_LOAD_TIMEOUT_MS"
+        },
+        {
+          "env": "ADHD_SMOKE_INSTALL_RETRY_DELAY_MS"
+        },
+        {
+          "env": "ADHD_SMOKE_INSTALL_RETRIES"
+        },
+        {
+          "env": "ADHD_SMOKE_CONCURRENCY"
+        },
+        {
+          "env": "ADHD_SMOKE_BIN_TIMEOUT_MS"
+        },
+        "{workspaceRoot}/{entrypoint,packages,tools,.githooks}/**/*.{spec,test,e2e}.{ts,tsx,mts,cts,js,mjs,cjs}"
+      ],
+      "outputs": []
     }
   }
 }

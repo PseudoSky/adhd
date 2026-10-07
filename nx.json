@@ -10,7 +10,16 @@
     "default": [
       "{projectRoot}/**/*",
       "!{projectRoot}/dist/**",
+      "!{projectRoot}/package.json",
+      "!{projectRoot}/CHANGELOG.md",
+      "manifest",
       "sharedGlobals"
+    ],
+    "manifest": [
+      {
+        "json": "{projectRoot}/package.json",
+        "excludeFields": ["version"]
+      }
     ],
     "production": [
       "default",
