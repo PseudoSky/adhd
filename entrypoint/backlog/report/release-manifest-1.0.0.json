@@ -8,5 +8,7 @@
   "distSha256": "a74a180e913c6d177a4485990e0b98fb45e470a20610dee0af6cdb41a8207668",
   "distBytes": 722074,
   "distMode": "755",
+  "restoreMinSha": "257b146edb7292dc152792015a5bf1e9ed50067c",
+  "frozenDist": ".worktrees/backlog-cutover/entrypoint/backlog/dist/index.js",
   "note": "This is the LIVE-1 clean build record. deploy-verify.sh reads a copy named BUILD-MANIFEST.json (or SOURCE_SHA) placed at the release root after LIVE-2 stages ~/.adhd/backlog/releases/<v>/."
 }

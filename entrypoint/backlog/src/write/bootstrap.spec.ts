@@ -71,6 +71,27 @@ async function openBootstrapTestCtx(
   return { ctx: { store, env }, dir, store };
 }
 
+/**
+ * True when `source` has an `import … from '…'` or `export … from '…'`
+ * statement (single- or MULTI-line, `import type` or value, named, default,
+ * namespace or re-export) that mentions `symbol`. Comments are stripped first,
+ * so PROSE may name the symbol freely (as the mirror's own doc comment does)
+ * while any real statement naming it — however it is laid out — is caught. The
+ * previous line-anchored regex missed `import type {\n  Sym\n} from '…'` and
+ * `export { Sym } from '…'` (55ba4178).
+ */
+export function importsOrReExportsSymbol(source: string, symbol: string): boolean {
+  const code = source
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/(^|[^:])\/\/[^\n]*/g, '$1');
+  const statement = /(?:^|\n)\s*(?:import|export)\b[^;]*?\bfrom\s*['"][^'"]+['"]/g;
+  const word = new RegExp(`\\b${symbol.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`);
+  for (const m of code.matchAll(statement)) {
+    if (word.test(m[0])) return true;
+  }
+  return false;
+}
+
 describe('write/bootstrap.ts — search/embedding wired through the real api.ts surface', () => {
   let dir: string | undefined;
   let adapter: StoreAdapter | undefined;
@@ -213,8 +234,8 @@ describe('write/bootstrap.ts — isVectorSpacePopulated uses the bounded capabil
       'utf8'
     );
     expect(
-      /^import\b[^;]*AsyncVectorExistenceProbe/m.test(source),
-      "bootstrap.ts must not import the optional store's additive probe interface by name — it breaks the build against a lagging install; mirror it locally (OptVectorExistenceProbe) instead."
+      importsOrReExportsSymbol(source, 'AsyncVectorExistenceProbe'),
+      "bootstrap.ts must not import the optional store's additive probe interface by name — it breaks the build against a lagging install; mirror it locally (see OptVectorExistenceProbe)"
     ).toBe(false);
   });
 
@@ -231,5 +252,28 @@ describe('write/bootstrap.ts — isVectorSpacePopulated uses the bounded capabil
     } as unknown as AsyncVectorBackend;
 
     expect(await isVectorSpacePopulated(legacy, 'legacy-model')).toBe(false);
+  });
+});
+
+describe('importsOrReExportsSymbol — the guard has teeth (55ba4178)', () => {
+  const SYM = 'AsyncVectorExistenceProbe';
+  it('catches a single-line named import', () => {
+    expect(importsOrReExportsSymbol(`import { ${SYM} } from '@adhd/sox-vector-store';`, SYM)).toBe(true);
+  });
+  it('catches a MULTI-line `import type` (the form the old line-anchored regex missed)', () => {
+    const src = `import type {\n  AsyncVectorBackend,\n  ${SYM},\n} from '@adhd/sox-vector-store';\n`;
+    expect(importsOrReExportsSymbol(src, SYM)).toBe(true);
+  });
+  it('catches an aliased import and a re-export', () => {
+    expect(importsOrReExportsSymbol(`import { ${SYM} as P } from 'x';`, SYM)).toBe(true);
+    expect(importsOrReExportsSymbol(`export type { ${SYM} } from 'x';`, SYM)).toBe(true);
+    expect(importsOrReExportsSymbol(`export * from 'x'; import * as ns from 'y';`, SYM)).toBe(false);
+  });
+  it('ignores prose and comments that merely name the symbol', () => {
+    const src = `/** mirrors ${SYM} from the optional store */\n// import { ${SYM} } from 'x';\nimport { other } from 'y';\nconst a = 1;\n`;
+    expect(importsOrReExportsSymbol(src, SYM)).toBe(false);
+  });
+  it('does not match a longer identifier that merely contains the symbol', () => {
+    expect(importsOrReExportsSymbol(`import { My${SYM}2 } from 'x';`, SYM)).toBe(false);
   });
 });
