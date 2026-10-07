@@ -114,6 +114,7 @@ import {
   readLiveCitationsTx,
   removeCitationTx,
 } from './citation.js';
+import { reconcileMembershipTx } from './membership.js';
 import { resolveSiblingProjectRootsTx } from './citation-path.js';
 import {
   type IResolvedProjectRow,
@@ -1102,6 +1103,14 @@ export async function update(
             issueUid: currentUid,
             citation: entry.citation,
             verification: entry.verification,
+            at: now,
+            deferMembershipReconcile: true,
+          });
+        }
+        if (toAdd.length > 0) {
+          await reconcileMembershipTx(tx, handle, {
+            issueRowid: currentRowid,
+            issueUid: currentUid,
             at: now,
           });
         }

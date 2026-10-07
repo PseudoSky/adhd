@@ -96,18 +96,22 @@ function parseMeta(raw: string | null): Record<string, unknown> {
 }
 
 /**
- * Longest-prefix match of an absolute path against every LIVE `location`
- * (`locType:'path'`) value and every live `component.meta.path` (joined to its
- * project's `meta.path`). At most ONE component per project is returned (the
- * one with the longest matching root); every live project is searched, so a
- * citation into a sibling repo yields that repo's component — the cross-project
- * evidence the n:m model exists for.
+ * A snapshot of every live component root: the result of the (project,
+ * component, location) scans, computed ONCE per transaction so matching many
+ * paths is pure in-memory work instead of three full table scans per path.
  */
-export async function findComponentsForPathTx(
-  exec: ISiblingRootExecutor,
-  absPath: string
-): Promise<IComponentHit[]> {
-  const target = resolvePath(absPath);
+export interface IComponentRootIndex {
+  /** (componentUid, resolved absolute root) candidates. */
+  readonly roots: ReadonlyArray<{ componentUid: string; root: string }>;
+  readonly compInfo: ReadonlyMap<string, { rowid: number; projectUid: string; path?: string }>;
+}
+
+/**
+ * Scan every live `project`, `component` and `location` (`locType:'path'`)
+ * ONCE and resolve their absolute roots (component paths are joined to their
+ * project's `meta.path`). Feed the result to {@link matchComponentsForPath}.
+ */
+export async function loadComponentRootIndexTx(exec: ISiblingRootExecutor): Promise<IComponentRootIndex> {
   const { rows: projects } = await exec.executeAll<{ uid: string; meta: string | null }>(
     "SELECT uid, meta FROM node WHERE kind = 'project' AND t_invalid IS NULL"
   );
@@ -134,7 +138,6 @@ export async function findComponentsForPathTx(
     });
   }
 
-  /** (componentUid, root) candidates. */
   const roots: Array<{ componentUid: string; root: string }> = [];
   for (const [uid, info] of compInfo) {
     const base = projectPath.get(info.projectUid);
@@ -157,21 +160,40 @@ export async function findComponentsForPathTx(
     const abs = absoluteRoot(value, base);
     if (abs !== undefined) roots.push({ componentUid, root: resolvePath(abs) });
   }
+  return { roots, compInfo };
+}
 
+/**
+ * Longest-prefix match of an absolute path against a preloaded
+ * {@link IComponentRootIndex}. At most ONE component per project is returned
+ * (the one with the longest matching root); every live project is searched, so
+ * a citation into a sibling repo yields that repo's component — the
+ * cross-project evidence the n:m model exists for. Pure, no I/O.
+ */
+export function matchComponentsForPath(index: IComponentRootIndex, absPath: string): IComponentHit[] {
+  const target = resolvePath(absPath);
   const best = new Map<string, { componentUid: string; rootLen: number }>();
-  for (const { componentUid, root } of roots) {
+  for (const { componentUid, root } of index.roots) {
     if (!isPathWithin(root, target)) continue;
-    const info = compInfo.get(componentUid)!;
+    const info = index.compInfo.get(componentUid)!;
     const cur = best.get(info.projectUid);
     if (cur === undefined || root.length > cur.rootLen) {
       best.set(info.projectUid, { componentUid, rootLen: root.length });
     }
   }
   return [...best.entries()].map(([projectUid, b]) => ({
-    componentRowid: compInfo.get(b.componentUid)!.rowid,
+    componentRowid: index.compInfo.get(b.componentUid)!.rowid,
     componentUid: b.componentUid,
     projectUid,
   }));
+}
+
+/** One-shot form of {@link loadComponentRootIndexTx} + {@link matchComponentsForPath}. Callers matching several paths in one transaction load the index once instead. */
+export async function findComponentsForPathTx(
+  exec: ISiblingRootExecutor,
+  absPath: string
+): Promise<IComponentHit[]> {
+  return matchComponentsForPath(await loadComponentRootIndexTx(exec), absPath);
 }
 
 /**
@@ -216,6 +238,8 @@ export async function reconcileMembershipTx(
      ORDER BY n.rowid ASC`,
     [args.issueRowid]
   );
+  // ONE scan of the root tables for the whole reconcile (not one per citation).
+  const rootIndex = citations.length > 0 ? await loadComponentRootIndexTx(tx) : undefined;
   for (const c of citations) {
     const meta = parseMeta(c.meta);
     if (meta['target_type'] !== undefined && meta['target_type'] !== 'path') continue;
@@ -223,7 +247,7 @@ export async function reconcileMembershipTx(
     if (typeof target !== 'string' || target.length === 0) continue;
     const abs = absoluteRoot(target, projectRoot);
     if (abs === undefined) continue;
-    for (const hit of await findComponentsForPathTx(tx, abs)) {
+    for (const hit of matchComponentsForPath(rootIndex!, abs)) {
       if (desired.has(hit.componentRowid)) continue; // primary wins; first citation names the row
       desired.set(hit.componentRowid, {
         componentRowid: hit.componentRowid,

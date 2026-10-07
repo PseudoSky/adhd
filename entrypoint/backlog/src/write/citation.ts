@@ -448,6 +448,14 @@ export async function appendCitationTx(
     citation: ICitation;
     verification: ICitationVerification;
     at: string;
+    /**
+     * Skip the per-citation membership reconcile. A caller appending SEVERAL
+     * citations in one transaction sets this and calls
+     * {@link reconcileMembershipTx} ONCE after its loop (membership is derived
+     * from the full citation set, so the end state is identical) — avoiding an
+     * O(N^2) rescan inside the write lock.
+     */
+    deferMembershipReconcile?: boolean;
   }
 ): Promise<{ rowid: number; uid: string }> {
   const citationNode = await writeNodeTx(tx, {
@@ -484,11 +492,13 @@ export async function appendCitationTx(
   // (A-AC5 I3) the new citation may reach another component — derive the
   // membership in the SAME transaction (create/addCitation/transition/update
   // all funnel through here).
-  await reconcileMembershipTx(tx, handle, {
-    issueRowid: params.issueRowid,
-    issueUid: params.issueUid,
-    at: params.at,
-  });
+  if (params.deferMembershipReconcile !== true) {
+    await reconcileMembershipTx(tx, handle, {
+      issueRowid: params.issueRowid,
+      issueUid: params.issueUid,
+      at: params.at,
+    });
+  }
   return citationNode;
 }
 

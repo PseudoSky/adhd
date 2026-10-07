@@ -88,6 +88,7 @@ import {
   resolveCitationShas,
   type ICitationVerification,
 } from './citation.js';
+import { reconcileMembershipTx } from './membership.js';
 import {
   type IResolvedProjectRow,
   mintOrResolveStatusTx,
@@ -595,6 +596,14 @@ export async function transition(
         issueUid: issueRow.uid,
         citation: citations[i],
         verification: citationShas[i]!,
+        at: now,
+        deferMembershipReconcile: true,
+      });
+    }
+    if (citations.length > 0) {
+      await reconcileMembershipTx(tx, handle, {
+        issueRowid: issueRow.rowid,
+        issueUid: issueRow.uid,
         at: now,
       });
     }
