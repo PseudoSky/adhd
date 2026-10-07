@@ -32,6 +32,18 @@ export interface ProviderChatResponse {
   stopReason: 'completed' | 'tool_calls';
   usage?: TokenUsage;
   rawUsage?: unknown;
+  /**
+   * Usage-accounting only. Tool invocations the provider executed ITSELF inside this
+   * single response (e.g. the claude CLI running built-in tools). Never executed or
+   * re-driven by the orchestrator — do not confuse with `message.toolCalls`, which
+   * the orchestrator loop executes. Absent for providers that don't run tools internally.
+   */
+  reportedToolUses?: number;
+  /**
+   * Usage-accounting only. Real model-call count behind this response when the provider
+   * ran several internal turns in one invocation (claudecli `num_turns`). Absent means 1.
+   */
+  reportedModelCalls?: number;
 }
 
 export interface LLMProvider {

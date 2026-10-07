@@ -29,6 +29,13 @@ export interface PostModelResponsePayload {
   executionContext: ExecutionContext;
   stopReason: string;
   toolCallCount: number;
+  /**
+   * Model calls this single provider response represents. Optional: absent means 1
+   * (every provider that returns one model call per response). Providers that run
+   * an internal multi-turn loop in one invocation (claudecli's `num_turns`) report
+   * the real count here so usage accounting is not under-counted.
+   */
+  modelCalls?: number;
   tokenUsage?: TokenUsage;
   /** MODEL_RESPONSE.created_at − MODEL_REQUEST.created_at for this turn's model call. */
   computeMs: number;

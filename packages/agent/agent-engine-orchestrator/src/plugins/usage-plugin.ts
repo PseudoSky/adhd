@@ -89,6 +89,8 @@ export class UsagePlugin implements Plugin {
   private onModelResponse(payload: PostModelResponsePayload): void {
     try {
       const { executionContext, tokenUsage, toolCallCount, computeMs } = payload;
+      // Providers that fold several internal turns into one response report the real count.
+      const modelCalls = payload.modelCalls ?? 1;
       const taskId = executionContext.taskId;
       const acc = this.accumulators.get(taskId);
 
@@ -127,7 +129,7 @@ export class UsagePlugin implements Plugin {
           inputTokens,
           outputTokens,
           toolCallCount: toolCalls,
-          modelCalls: 1,
+          modelCalls,
           latencyMs: 0,
           isComplete: 0,
           stopReason: acc?.mostSevereStopReason ?? incoming,
@@ -152,7 +154,7 @@ export class UsagePlugin implements Plugin {
             inputTokens: sql`${taskUsageTable.inputTokens} + ${inputTokens}`,
             outputTokens: sql`${taskUsageTable.outputTokens} + ${outputTokens}`,
             toolCallCount: sql`${taskUsageTable.toolCallCount} + ${toolCalls}`,
-            modelCalls: sql`${taskUsageTable.modelCalls} + 1`,
+            modelCalls: sql`${taskUsageTable.modelCalls} + ${modelCalls}`,
             stopReason: acc?.mostSevereStopReason ?? incoming,
             cacheReadTokens: sql`COALESCE(${
               taskUsageTable.cacheReadTokens
@@ -175,7 +177,7 @@ export class UsagePlugin implements Plugin {
             // Record WHICH call peaked, but only when this call is the new peak.
             peakContextAt: sql`CASE WHEN ${inputTokens} > COALESCE(${
               taskUsageTable.peakContextTokens
-            }, 0) THEN ${taskUsageTable.modelCalls} + 1 ELSE ${taskUsageTable.peakContextAt} END`,
+            }, 0) THEN ${taskUsageTable.modelCalls} + ${modelCalls} ELSE ${taskUsageTable.peakContextAt} END`,
             // CUMULATIVE Σ turn compute_ms — always additive, no special case (DESIGN.md §6).
             computeMs: sql`COALESCE(${taskUsageTable.computeMs}, 0) + ${computeMs}`,
             // Additive when this turn priced; forced NULL once ANY turn's model has no

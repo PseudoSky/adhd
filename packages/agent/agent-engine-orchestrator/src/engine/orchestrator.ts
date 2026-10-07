@@ -693,10 +693,16 @@ export class Orchestrator {
         }
         // compute_ms: MODEL_RESPONSE.created_at - MODEL_REQUEST.created_at for this turn.
         const computeMs = Date.now() - modelCallStartedAt;
+        // Prefer the provider's own count of tools it ran internally (claudecli); otherwise
+        // the tool calls the orchestrator loop is about to execute. Accounting only —
+        // loop control still keys off assistantMessage.toolCalls / executionContext.
+        const reportedToolCallCount =
+          providerResponse.reportedToolUses ?? assistantMessage.toolCalls?.length ?? 0;
         await hooks.emit('post:model_response', {
           executionContext,
           stopReason: providerResponse.stopReason,
-          toolCallCount: assistantMessage.toolCalls?.length ?? 0,
+          toolCallCount: reportedToolCallCount,
+          modelCalls: providerResponse.reportedModelCalls,
           tokenUsage: providerResponse.usage,
           computeMs,
         });
@@ -711,7 +717,8 @@ export class Orchestrator {
           payload: {
             stopReason: providerResponse.stopReason,
             hasContent: !!assistantMessage.content,
-            toolCallCount: assistantMessage.toolCalls?.length ?? 0,
+            toolCallCount: reportedToolCallCount,
+            modelCalls: providerResponse.reportedModelCalls,
             inputTokens: providerResponse.usage?.inputTokens,
             outputTokens: providerResponse.usage?.outputTokens,
             cacheReadTokens: providerResponse.usage?.cacheReadTokens,

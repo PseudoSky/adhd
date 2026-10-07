@@ -49,6 +49,8 @@ interface ClaudeStreamResultEvent {
     is_error: boolean;
     result?: string;
     stop_reason?: string;
+    /** Model turns the CLI ran inside this single `-p` invocation. */
+    num_turns?: number;
     total_cost_usd?: number;
     usage?: {
         input_tokens: number;
@@ -457,6 +459,10 @@ export class ClaudeCliProvider implements LLMProvider {
             let finalResult = "";
             let finalUsage: ClaudeStreamResultEvent["usage"];
             let finalStopReason: string | undefined;
+            let finalNumTurns: number | undefined;
+            // tool_use blocks the CLI emitted (it runs its own tools inside the one invocation).
+            // Usage-accounting only: NEVER surfaced as message.toolCalls, which the orchestrator would re-execute.
+            let toolUseCount = 0;
 
             for await (const line of rl) {
                 if (request.signal?.aborted) {
@@ -481,6 +487,7 @@ export class ClaudeCliProvider implements LLMProvider {
                     finalResult = r.result ?? "";
                     finalUsage = r.usage;
                     finalStopReason = r.stop_reason;
+                    finalNumTurns = typeof r.num_turns === "number" && r.num_turns >= 1 ? r.num_turns : undefined;
                     break;
                 }
 
@@ -489,6 +496,8 @@ export class ClaudeCliProvider implements LLMProvider {
                     const toolUseBlocks = (assistantEvent.message?.content ?? []).filter(
                         (b): b is ClaudeToolUseBlock => b.type === "tool_use"
                     );
+
+                    toolUseCount += toolUseBlocks.length;
 
                     for (const block of toolUseBlocks) {
                         let toolResultText: string;
@@ -563,6 +572,8 @@ export class ClaudeCliProvider implements LLMProvider {
                 message,
                 stopReason: "completed",
                 rawUsage: finalUsage,
+                reportedToolUses: toolUseCount,
+                reportedModelCalls: finalNumTurns,
                 usage: finalUsage
                     ? normaliseAnthropicUsage(
                         finalUsage,
