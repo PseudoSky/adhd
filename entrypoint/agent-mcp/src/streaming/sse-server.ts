@@ -171,7 +171,21 @@ export function startSseServer(
         server.on("listening", () => {
             const addr = server.address();
             const boundPort = addr && typeof addr === "object" ? addr.port : port;
-            logger.info({ host, port: boundPort }, "SSE server listening");
+            // S11 (backlog 5989ed90): ONE structured, greppable line carrying the
+            // requested vs. actually-bound port, so an operator/client can always
+            // discover where the gateway landed (`fellBack: true` = the requested
+            // port was taken and an OS-assigned ephemeral port was used).
+            logger.info(
+                {
+                    event: "sse.listening",
+                    host,
+                    requestedPort: port,
+                    port: boundPort,
+                    fellBack: triedEphemeralFallback,
+                    streamBaseUrl: `http://${host.includes(":") ? `[${host}]` : host}:${boundPort}`,
+                },
+                "SSE server listening"
+            );
             settle(boundPort);
         });
 

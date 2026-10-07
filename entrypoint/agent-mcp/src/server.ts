@@ -5,6 +5,7 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
+  isInitializeRequest,
 } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 import type http from 'node:http';
@@ -972,36 +973,139 @@ export async function startServer(deps: ServerDeps): Promise<{
 
   if (transport === 'http') {
     const { createServer: createHttpServer } = await import('node:http');
+    const host = env.config.transport.host;
 
-    const httpTransport = new StreamableHTTPServerTransport({
-      sessionIdGenerator: () => crypto.randomUUID(),
+    // S8 (backlog 5989ed90): one MCP session per `initialize`. The SDK's
+    // StreamableHTTPServerTransport is single-session by construction (a second
+    // `initialize` on the same instance is rejected with "Server already
+    // initialized"), so each session gets its OWN transport + protocol Server,
+    // routed by the `mcp-session-id` header. All sessions share `deps`.
+    interface HttpSession {
+      transport: StreamableHTTPServerTransport;
+      server: Server;
+      unsubNotifications: () => void;
+    }
+    const sessions = new Map<string, HttpSession>();
+
+    const closeSession = (sid: string): void => {
+      const s = sessions.get(sid);
+      if (!s) return;
+      sessions.delete(sid);
+      s.unsubNotifications();
+    };
+
+    const readJsonBody = (req: http.IncomingMessage): Promise<unknown> =>
+      new Promise((resolve, reject) => {
+        const chunks: Buffer[] = [];
+        req.on('data', (c: Buffer) => chunks.push(c));
+        req.on('end', () => {
+          if (chunks.length === 0) return resolve(undefined);
+          try {
+            resolve(JSON.parse(Buffer.concat(chunks).toString('utf8')));
+          } catch (err) {
+            reject(err);
+          }
+        });
+        req.on('error', reject);
+      });
+
+    const sendJsonRpcError = (
+      res: http.ServerResponse,
+      status: number,
+      code: number,
+      message: string
+    ): void => {
+      if (res.headersSent) return;
+      res.writeHead(status, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ jsonrpc: '2.0', error: { code, message }, id: null }));
+    };
+
+    const createSession = async (): Promise<HttpSession> => {
+      const sessionServer = createServer(deps);
+      const sessionTransport = new StreamableHTTPServerTransport({
+        sessionIdGenerator: () => crypto.randomUUID(),
+        onsessioninitialized: (sid) => {
+          sessions.set(sid, session);
+          logger.info({ transport: 'http', sessionId: sid, sessions: sessions.size }, 'MCP session opened');
+        },
+      });
+      const session: HttpSession = {
+        transport: sessionTransport,
+        server: sessionServer,
+        unsubNotifications: wireTaskNotifications(sessionServer),
+      };
+      sessionTransport.onclose = () => {
+        if (sessionTransport.sessionId) closeSession(sessionTransport.sessionId);
+        else session.unsubNotifications();
+      };
+      await sessionServer.connect(sessionTransport);
+      return session;
+    };
+
+    const httpServer = createHttpServer((req, res) => {
+      void (async () => {
+        try {
+          const sidHeader = req.headers['mcp-session-id'];
+          const sid = Array.isArray(sidHeader) ? sidHeader[0] : sidHeader;
+          const existing = sid ? sessions.get(sid) : undefined;
+          if (existing) {
+            await existing.transport.handleRequest(req, res);
+            return;
+          }
+          if (sid) {
+            // Unknown/expired session (e.g. the server restarted): 404 tells a
+            // spec-compliant client to re-`initialize`.
+            sendJsonRpcError(res, 404, -32001, 'Session not found');
+            return;
+          }
+          if (req.method !== 'POST') {
+            sendJsonRpcError(res, 400, -32000, 'Bad Request: No valid session ID provided');
+            return;
+          }
+          let body: unknown;
+          try {
+            body = await readJsonBody(req);
+          } catch {
+            sendJsonRpcError(res, 400, -32700, 'Parse error');
+            return;
+          }
+          const first = Array.isArray(body) ? body[0] : body;
+          if (!isInitializeRequest(first)) {
+            sendJsonRpcError(res, 400, -32000, 'Bad Request: No valid session ID provided');
+            return;
+          }
+          const created = await createSession();
+          await created.transport.handleRequest(req, res, body);
+        } catch (err) {
+          logger.error({ err }, 'http transport: unhandled request error');
+          sendJsonRpcError(res, 500, -32603, 'Internal server error');
+        }
+      })();
     });
-
-    const httpServer = createHttpServer(async (req, res) => {
-      await httpTransport.handleRequest(req, res);
-    });
-
-    await server.connect(httpTransport);
-
-    const unsubNotifications = wireTaskNotifications(server);
 
     await new Promise<void>((resolve, reject) => {
-      httpServer.listen(port, () => {
-        logger.info({ transport: 'http', port }, 'MCP server started');
+      httpServer.once('error', reject);
+      httpServer.listen(port, host, () => {
+        httpServer.off('error', reject);
+        logger.info({ transport: 'http', host, port }, 'MCP server started');
         resolve();
       });
-      httpServer.on('error', reject);
     });
 
-    const selfUrl = `http://localhost:${port}`;
-    deps.selfUrl = selfUrl;
+    const isWildcard = host === '0.0.0.0' || host === '::';
+    const bracketed = host.includes(':') ? `[${host}]` : host;
+    const urlHost = isWildcard ? 'localhost' : bracketed;
+    deps.selfUrl = `http://${urlHost}:${port}`;
 
     return {
       close: async () => {
-        unsubNotifications();
-        await server.close();
+        for (const [sid, s] of [...sessions]) {
+          closeSession(sid);
+          await s.server.close().catch(() => undefined);
+        }
         await new Promise<void>((resolve, reject) => {
           httpServer.close((err) => (err ? reject(err) : resolve()));
+          httpServer.closeAllConnections?.();
         });
       },
       httpServer,

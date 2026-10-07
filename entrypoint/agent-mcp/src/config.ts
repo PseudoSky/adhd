@@ -73,7 +73,7 @@ export interface AgentMcpConfig {
     readonly defaultProvider: string | undefined;
     readonly defaultModel: string | undefined;
   };
-  readonly transport: { readonly kind: string; readonly port: number };
+  readonly transport: { readonly kind: string; readonly port: number; readonly host: string };
   readonly sse: {
     readonly enabled: boolean;
     readonly port: number;
@@ -272,6 +272,17 @@ export const agentMcpEnvironmentSpec: EnvironmentSpec<AgentMcpConfig> = {
       default: 3000,
       minimum: 1,
     },
+    "transport.host": {
+      type: "string",
+      env: "ADHD_AGENT_HOST",
+      default: "127.0.0.1",
+      description:
+        "Interface the streamable-HTTP transport (ADHD_AGENT_TRANSPORT=http) binds. " +
+        "Loopback by default: the MCP surface has no authentication, so binding a " +
+        "non-loopback address (e.g. 0.0.0.0) exposes every agent/tool to the network " +
+        "and must be an explicit operator choice. The SSE/gateway server has its own " +
+        "knob, ADHD_AGENT_SSE_HOST (also 127.0.0.1 by default).",
+    },
     "sse.enabled": {
       type: "boolean",
       env: "ADHD_AGENT_SSE_ENABLED",
@@ -300,6 +311,9 @@ export const agentMcpEnvironmentSpec: EnvironmentSpec<AgentMcpConfig> = {
       type: "string",
       env: "ADHD_AGENT_SSE_HOST",
       default: "127.0.0.1",
+      description:
+        "Interface the SSE/OpenAI-compat-gateway server binds. Loopback by default; " +
+        "the gateway is unauthenticated, so binding elsewhere must be explicit.",
     },
     "sse.baseUrl": {
       type: "string",
