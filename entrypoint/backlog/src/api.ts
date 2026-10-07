@@ -933,9 +933,15 @@ export async function transition(
   ctx: BacklogCtx,
   input: ITransitionInput
 ): Promise<IOutcomeEnvelope<ITransitionOutcome>> {
-  return envelope(async () =>
-    transitionIssueOp(await writeHandle(ctx, { needsSemantic: false }), input)
-  );
+  try {
+    const outcome = await transitionIssueOp(
+      await writeHandle(ctx, { needsSemantic: false }),
+      input
+    );
+    return okEnvelope(outcome, { warnings: outcome.warnings });
+  } catch (err) {
+    return toEnvelope(err);
+  }
 }
 
 /**

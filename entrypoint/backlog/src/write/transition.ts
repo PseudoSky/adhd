@@ -121,6 +121,28 @@ import { extractClaimMeta, isClaimStale } from './claim-lease.js';
 import { resolveIssueStatusTx } from './issue-status.js';
 import { evaluateTransitionGateTx, type IGateEvaluation } from './gate.js';
 
+/**
+ * The closed reason enum for a SUPERSEDED transition (ADR-0007 additive form,
+ * S02.T1). OPTIONAL on the wire: a reasonless SUPERSEDED still succeeds and
+ * returns `warnings:["superseded-without-reason"]`.
+ */
+export const SUPERSEDE_REASONS = [
+  'v1-to-v2-premise-deletion',
+  'imported-never-transitioned',
+  'deliberate-plan-retirement',
+  'status-token-correction',
+  'obsolete-by-obsolescence',
+] as const;
+export type SupersedeReason = (typeof SUPERSEDE_REASONS)[number];
+
+/** The warning a SUPERSEDED transition carries when it names no reason. */
+export const SUPERSEDED_WITHOUT_REASON_WARNING = 'superseded-without-reason';
+
+/** `toStatus` names the SUPERSEDED status (case-insensitive on the resolved name). */
+function isSupersededStatusName(name: string | undefined): boolean {
+  return typeof name === 'string' && name.trim().toUpperCase() === 'SUPERSEDED';
+}
+
 export interface ITransitionInput {
   /** The `issue` uid to transition (§6.3, an "Issue verb"). */
   uid: string;
@@ -151,6 +173,15 @@ export interface ITransitionInput {
    * `OverrideNotPermittedError`.
    */
   override?: { reason: string };
+  /**
+   * Only valid when `toStatus` resolves to SUPERSEDED. The uid (or unique
+   * prefix) of the successor issue. A `supersedes` edge FROM this (retired)
+   * issue TO the successor is written in the SAME transaction as the status
+   * change, so an unresolvable successor leaves the status unchanged.
+   */
+  supersededBy?: string;
+  /** Only valid when `toStatus` resolves to SUPERSEDED. Closed enum {@link SUPERSEDE_REASONS}; an out-of-enum value is `invalid_argument`. */
+  reason?: SupersedeReason;
 }
 
 export interface ITransitionOutcome {
@@ -161,6 +192,8 @@ export interface ITransitionOutcome {
   closedAt?: string;
   /** The minted `transition` node's own uid, for audit-trail addressing. */
   transitionUid: string;
+  /** Non-fatal advisories (e.g. `superseded-without-reason`); absent when none. */
+  warnings?: string[];
 }
 
 function assertNonBlank(
@@ -309,6 +342,18 @@ export async function transition(
   assertNonBlank('by', input.by);
   assertNotBareRoleLiteral('by', input.by);
   assertNonBlank('toStatus', input.toStatus);
+  if (input.reason !== undefined) {
+    if (
+      typeof input.reason !== 'string' ||
+      !(SUPERSEDE_REASONS as readonly string[]).includes(input.reason)
+    ) {
+      throw new InvalidArgumentError(
+        'reason',
+        `must be one of ${SUPERSEDE_REASONS.map((r) => `"${r}"`).join(', ')} (got ${JSON.stringify(input.reason)})`
+      );
+    }
+  }
+  if (input.supersededBy !== undefined) assertNonBlank('supersededBy', input.supersededBy);
 
   // Same write-time cap `createIssue` enforces — a shared helper so the two
   // gates never drift (see `create-issue.ts`'s `MAX_GIT_CONTEXT_LENGTH`).
@@ -392,6 +437,13 @@ export async function transition(
       status: toStatusRow.name,
       note: input.note,
     });
+    const toSuperseded = isSupersededStatusName(toStatusRow.name);
+    if (!toSuperseded && (input.reason !== undefined || input.supersededBy !== undefined)) {
+      throw new InvalidArgumentError(
+        input.reason !== undefined ? 'reason' : 'supersededBy',
+        `is only valid when toStatus is "SUPERSEDED" (got "${toStatusRow.name}")`
+      );
+    }
     const toStatusFullRow = await getNodeByRowidTx(tx, toStatusRow.rowid);
     const toTerminal = toStatusFullRow?.metadata?.['terminal'] === true;
 
@@ -454,6 +506,9 @@ export async function transition(
         note: input.note ?? null,
         sha: transitionSha,
         at: now,
+        ...(toSuperseded && input.reason !== undefined
+          ? { supersede_reason: input.reason }
+          : {}),
         ...(gate !== undefined && gate.satisfiedBy.length > 0
           ? { satisfied_by: gate.satisfiedBy }
           : {}),
@@ -502,6 +557,33 @@ export async function transition(
       rule: hasStatusRule,
       typePolicy: handle.typePolicy,
     });
+
+    // S02.T2 — the successor edge rides THIS transaction: an unresolvable or
+    // conflicting successor throws here and rolls the status change back.
+    let successorUid: string | undefined;
+    if (toSuperseded && input.supersededBy !== undefined) {
+      const successor = await resolveLiveIssueTx(tx, input.supersededBy);
+      if (successor.rowid === issueRow.rowid) {
+        throw new InvalidArgumentError(
+          'supersededBy',
+          'an issue cannot be superseded by itself'
+        );
+      }
+      const supersedesRule = await resolveEdgeKindTx(tx, 'supersedes');
+      await writeEdgeTx(tx, {
+        at: now,
+        srcRowid: issueRow.rowid,
+        srcUid: issueRow.uid,
+        srcKind: 'issue',
+        dstRowid: successor.rowid,
+        dstUid: successor.uid,
+        dstKind: 'issue',
+        rel: 'supersedes',
+        rule: supersedesRule,
+        typePolicy: handle.typePolicy,
+      });
+      successorUid = successor.uid;
+    }
 
     // Each citation is the SAME node+edge write `addCitation` performs, via
     // the SAME helper. The sha was computed and policy-gated before this
@@ -588,12 +670,12 @@ export async function transition(
       input.override.reason.trim().length > 0
         ? `override: ${input.override.reason}`
         : undefined;
-    const auditNote =
-      overrideReason === undefined
-        ? input.note
-        : [input.note, overrideReason]
-            .filter((p): p is string => typeof p === 'string' && p.length > 0)
-            .join(' — ');
+    const supersedeNote = toSuperseded
+      ? `superseded: ${input.reason ?? 'none'}${successorUid !== undefined ? `; successor: ${successorUid}` : ''}`
+      : undefined;
+    const auditNote = [input.note, overrideReason, supersedeNote]
+      .filter((p): p is string => typeof p === 'string' && p.length > 0)
+      .join(' — ');
 
     await writeAudit({
       tx,
@@ -605,16 +687,21 @@ export async function transition(
       action: 'transitioned',
       from: fromStatusName,
       to: toStatusRow.name,
-      note: auditNote,
+      note: auditNote.length > 0 ? auditNote : input.note,
       at: now,
     });
 
+    const warnings =
+      toSuperseded && input.reason === undefined
+        ? [SUPERSEDED_WITHOUT_REASON_WARNING]
+        : undefined;
     return {
       uid: issueRow.uid,
       fromStatus: fromStatusName,
       toStatus: toStatusRow.name,
       closedAt: toTerminal ? now : undefined,
       transitionUid: transitionNode.uid,
+      ...(warnings !== undefined ? { warnings } : {}),
     };
   });
 }
