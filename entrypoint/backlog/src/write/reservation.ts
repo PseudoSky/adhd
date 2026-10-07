@@ -11,6 +11,8 @@
  * - `paths` = the distinct ABSOLUTE targets of the issue's live `path`
  *   citations at that instant (a relative target resolves against the owning
  *   project's root) UNION the optional explicit `IClaimInput.paths`.
+ *   The explicit paths are also persisted as `explicitPaths` so a refresh
+ *   (renew / re-claim by the holder) re-includes them (56f736c9).
  * - `leaseExpiry = claimedAt + project_policy.claim_stale_after_min`
  *   ({@link leaseExpiryOf}, the same arithmetic `isClaimStale` uses).
  * - claim / reclaim: any live reservation of the issue is ENDED and a new one
@@ -34,6 +36,8 @@ export type ReservationEndReason = 'released' | 'reclaimed-stale' | 'expired-sup
 export interface IReservationMeta {
   issueUid: string;
   paths: string[];
+  /** The caller-supplied `IClaimInput.paths` (trimmed, un-canonicalised), kept so a refresh (`renew` / re-claim by the holder) re-includes them: `paths` is recomputed from the live citations on every refresh and would otherwise drop them (56f736c9). */
+  explicitPaths?: string[];
   holder: string;
   sessionId?: string;
   claimedAt: string;
@@ -159,6 +163,25 @@ export async function endReservationsTx(
 }
 
 /**
+ * The explicit claim paths persisted on the LIVE reservation held by `holder`
+ * (empty when none is live, it belongs to someone else, or it predates the
+ * `explicitPaths` field). A refresh unions these with any newly supplied paths.
+ */
+export async function liveExplicitPathsTx(
+  tx: AdapterTransaction,
+  issueRowid: number,
+  holder: string
+): Promise<string[]> {
+  const live = await liveReservationsTx(tx, issueRowid);
+  const current = live[live.length - 1];
+  if (current === undefined) return [];
+  const meta = parseMeta(current.meta);
+  if (meta['holder'] !== holder) return [];
+  const explicit = meta['explicitPaths'];
+  return Array.isArray(explicit) ? explicit.filter((p): p is string => typeof p === 'string') : [];
+}
+
+/**
  * Record the reservation for a successful claim-family action.
  *
  * - `mode:'new'` (first claim, or a reclaim): end the live reservation(s) with
@@ -179,6 +202,8 @@ export async function recordReservationTx(
     claimedAt: string;
     leaseExpiry: string;
     paths: string[];
+    /** Explicit claim paths to persist alongside `paths` (see {@link IReservationMeta.explicitPaths}). */
+    explicitPaths?: string[];
     mode: 'new' | 'refresh';
     endReason?: ReservationEndReason;
     at: string;
@@ -187,6 +212,7 @@ export async function recordReservationTx(
   const base: IReservationMeta = {
     issueUid: args.issueUid,
     paths: args.paths,
+    ...(args.explicitPaths !== undefined && args.explicitPaths.length > 0 ? { explicitPaths: args.explicitPaths } : {}),
     holder: args.holder,
     ...(args.sessionId !== undefined ? { sessionId: args.sessionId } : {}),
     claimedAt: args.claimedAt,

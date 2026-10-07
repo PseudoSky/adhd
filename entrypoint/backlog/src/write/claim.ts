@@ -46,7 +46,7 @@ import {
   assertNotBareRoleLiteral,
 } from './errors.js';
 import { claimAgeMinutes, extractClaimMeta, isClaimStale, leaseExpiryOf } from './claim-lease.js';
-import { collectReservationPathsTx, endReservationsTx, recordReservationTx } from './reservation.js';
+import { collectReservationPathsTx, endReservationsTx, liveExplicitPathsTx, recordReservationTx } from './reservation.js';
 import { evaluateVerdictTx } from './gate.js';
 import { nextRevision } from './revision.js';
 import { resolveIssueStatusTx } from './issue-status.js';
@@ -283,7 +283,21 @@ export async function claim(
       endReason?: 'reclaimed-stale'
     ): Promise<void> => {
       const leasePolicy = await resolveIssueProjectPolicyTx(tx, row.rowid);
-      const paths = await collectReservationPathsTx(tx, row.rowid, input.paths ?? []);
+      // A refresh (renew / re-claim by the holder) must keep the explicit
+      // paths the original claim named: union what was persisted with any
+      // newly supplied (56f736c9).
+      const explicit = [
+        ...new Set(
+          [
+            ...(mode === 'refresh' ? await liveExplicitPathsTx(tx, row.rowid, input.by) : []),
+            ...(input.paths ?? []),
+          ]
+            .filter((p): p is string => typeof p === 'string')
+            .map((p) => p.trim())
+            .filter((p) => p.length > 0)
+        ),
+      ];
+      const paths = await collectReservationPathsTx(tx, row.rowid, explicit);
       await recordReservationTx(tx, handle.typePolicy, {
         issueRowid: row.rowid,
         issueUid: row.uid,
@@ -292,6 +306,7 @@ export async function claim(
         claimedAt: now,
         leaseExpiry: leaseExpiryOf(now, leasePolicy.claimStaleAfterMin),
         paths,
+        explicitPaths: explicit,
         mode,
         ...(endReason !== undefined ? { endReason } : {}),
         at: now,
