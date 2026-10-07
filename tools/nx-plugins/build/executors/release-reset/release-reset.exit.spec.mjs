@@ -24,6 +24,9 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const require = createRequire(import.meta.url);
+const { cleanGitEnv, scrubProcessGitEnv } = require('../../../lib/git-env.js');
+// The REAL executor runs in-process and its own git spawns inherit process.env (50e8c966).
+scrubProcessGitEnv();
 const here = dirname(fileURLToPath(import.meta.url));
 const implPath = join(here, 'impl.js');
 const pluginPath = join(here, '..', '..', 'plugin.js');
@@ -34,7 +37,7 @@ const PKG = '{\n  "name": "@adhd/demo-core-x",\n  "version": "0.1.0"\n}\n';
 const CHANGELOG = '## 0.1.0 (2026-07-20)\n\ninitial\n';
 
 function git(cwd, args) {
-  return execFileSync('git', args, { cwd, encoding: 'utf8' });
+  return execFileSync('git', args, { cwd, encoding: 'utf8', env: cleanGitEnv() });
 }
 
 function makeRepo() {

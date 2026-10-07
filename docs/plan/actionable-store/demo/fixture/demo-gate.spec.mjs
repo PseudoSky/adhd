@@ -24,9 +24,13 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
+// 50e8c966: the runner (a child of this process) shells out to git; hook-exported GIT_* in
+// process.env would redirect it at the real repo. Scrub in place before anything spawns.
+createRequire(import.meta.url)('../../../../../tools/nx-plugins/lib/git-env.js').scrubProcessGitEnv();
 const REPO_ROOT = join(HERE, '..', '..', '..', '..', '..');
 const RUNNER = join(HERE, 'run.mjs');
 const BROKEN = join(HERE, 'run.negctl.mjs');

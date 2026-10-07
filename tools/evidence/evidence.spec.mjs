@@ -17,14 +17,17 @@ import { mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from '
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
 
 const here = dirname(fileURLToPath(import.meta.url));
+const { cleanGitEnv } = createRequire(import.meta.url)('../nx-plugins/lib/git-env.js');
 const SCRIPTS = {
   tree: join(here, 'check-suite-tree-state.mjs'),
   mine: join(here, 'commit-mine.mjs'),
   audit: join(here, 'audit-closed-items.mjs'),
 };
-const sh = (cmd, args, opts = {}) => spawnSync(cmd, args, { encoding: 'utf8', ...opts });
+// 50e8c966: scrub hook-exported GIT_* so throwaway-repo git calls cannot reach the real repo.
+const sh = (cmd, args, opts = {}) => spawnSync(cmd, args, { encoding: 'utf8', ...opts, env: cleanGitEnv(opts.env ?? process.env) });
 const git = (cwd, ...args) => sh('git', args, { cwd });
 
 function repo() {

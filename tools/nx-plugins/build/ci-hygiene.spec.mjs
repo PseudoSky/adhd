@@ -26,10 +26,13 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const require = createRequire(import.meta.url);
 const here = dirname(fileURLToPath(import.meta.url));
 const REPO = join(here, '..', '..', '..');
+const { cleanGitEnv } = require('../lib/git-env.js');
 const { checkParity, publishedFromState } = require('./lib/published-parity.js');
 const { discoverReleaseSet } = require('./lib/range-resolvability.js');
 
-const sh = (cmd, args, opts = {}) => spawnSync(cmd, args, { encoding: 'utf8', ...opts });
+// 50e8c966: every spawn here runs git (directly or via worktree-setup.sh / nx) against throwaway
+// repos — ambient hook-exported GIT_* must never reach them. An explicit opts.env is scrubbed too.
+const sh = (cmd, args, opts = {}) => spawnSync(cmd, args, { encoding: 'utf8', ...opts, env: cleanGitEnv(opts.env ?? process.env) });
 const tmp = (p) => mkdtempSync(join(tmpdir(), p));
 const read = (rel) => readFileSync(join(REPO, rel), 'utf8');
 
@@ -117,7 +120,7 @@ test('255394d0 C-AC4 NEGATIVE CONTROL: a package.json with the old pins is repor
 // ── C-AC5 ────────────────────────────────────────────────────────────────────
 const FILE = 'packages/agent/agent-core-env/src/__tests__/open-registry-db.test.ts';
 function nxTest(extra) {
-  const env = { ...process.env, CI: 'true' };
+  const env = cleanGitEnv(process.env, { CI: 'true' });
   for (const k of Object.keys(env)) if (k.startsWith('NX_TASK') || k === 'NX_WORKSPACE_ROOT_PATH') delete env[k];
   const r = sh('npx', ['nx', 'run', 'agent-core-env:test', '--excludeTaskDependencies', ...extra], { cwd: REPO, env });
   const m = /Test Files\s+(?:\d+ failed \| )?(\d+) passed \((\d+)\)/.exec(r.stdout + r.stderr);
@@ -268,8 +271,11 @@ test('7b7d5e38 C-AC8: worktree-setup.sh <name> creates .worktrees/<name> with an
     assert.equal(r2.status, 0, r2.stdout + r2.stderr);
     assertRealNodeModules(join(root, '.worktrees/wt-two'));
   } finally {
+    // Remove ONLY worktrees living under this fixture's own <realpath(root)>/.worktrees/ — never
+    // anything else `git worktree list` prints (50e8c966), and never --force outside that scope.
+    const fixtureWorktrees = join(realpathOf(root), '.worktrees') + '/';
     const list = sh('git', ['worktree', 'list', '--porcelain'], { cwd: root }).stdout;
-    for (const m of list.matchAll(/^worktree (.+)$/gm)) if (m[1] !== root && m[1] !== realpathOf(root)) sh('git', ['worktree', 'remove', '--force', m[1]], { cwd: root });
+    for (const m of list.matchAll(/^worktree (.+)$/gm)) if (m[1].startsWith(fixtureWorktrees)) sh('git', ['worktree', 'remove', '--force', m[1]], { cwd: root });
     rmSync(root, { recursive: true, force: true });
   }
 });
