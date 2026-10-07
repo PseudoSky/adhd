@@ -139,7 +139,7 @@ pkg_status_before=$(git status --porcelain | grep -E 'package\.json$' || true)
 # Gate 2 runs with the hook's GIT_* unset (50e8c966) — only Gate 1 needs the index var (it reads
 # the staged index), and Gate 0/this hook's own git calls keep the hook environment.
 guard_snapshot
-CI=true no_hook_git_env npx nx affected --target=lint --files="$files" --output-style=stream-without-prefixes >"$out" 2>&1
+no_hook_git_env env CI=true npx nx affected --target=lint --files="$files" --output-style=stream-without-prefixes >"$out" 2>&1
 status=$?
 if ! guard_verify; then
   cat "$out"
@@ -182,6 +182,15 @@ fi
 # invocation per implicated project) — its own output IS the reproduce
 # instructions on failure, so it is allowed to print directly rather than
 # being captured through $out like the other gates.
+#
+# GIT_INDEX_FILE decision (50e8c966 M1): `no_hook_git_env` unsets it for this child ON PURPOSE.
+# In a `git commit -- <paths>` (--only) commit git hands the hook a TEMP index; the staged list
+# is computed above from the hook's own environment and piped in on stdin, so the runner never
+# reads the index itself - it only spawns `npx vitest`, whose tests must not see the index var
+# (an unscrubbed `git add`/`commit` in a test's mkdtemp dir would otherwise write straight into
+# the real/temp index). Proven by the --only test in .githooks/git-env-leak.spec.mjs.
+# Fresh snapshot immediately before this gate, so a leak is attributed to the gate that caused it.
+guard_snapshot
 printf '%s\n' "$staged" | no_hook_git_env node "$hook_dir/lib/run-staged-tests.mjs"
 tests_status=$?
 # Prove no spec leaked into the real repo config — BEFORE reporting the test verdict.

@@ -41,14 +41,15 @@ const GUARD = join(here, 'lib', 'git-env-guard.sh');
 const PROVEN_SPECS = [
   'tools/nx-plugins/build/lib/release-reset.spec.mjs',
   'tools/nx-plugins/build/executors/publish/release-commit.spec.mjs',
+  'tools/nx-plugins/build/lib/changed-set.spec.mjs',
   '.githooks/detect-mass-deletion.spec.mjs',
   '.githooks/check-no-credentials.spec.mjs',
 ];
 
 const IDENT = ['-c', 'user.name=fixture', '-c', 'user.email=fixture@example.invalid'];
 
-function git(cwd, args) {
-  const r = spawnSync('git', args, { cwd, encoding: 'utf8', env: cleanGitEnv() });
+function git(cwd, args, extraEnv = {}) {
+  const r = spawnSync('git', args, { cwd, encoding: 'utf8', env: cleanGitEnv(process.env, extraEnv) });
   if (r.status !== 0) throw new Error(`git ${args.join(' ')} failed: ${r.stderr}`);
   return r.stdout;
 }
@@ -64,7 +65,13 @@ before(() => {
   W = join(base, 'W');
   mkdirSync(R);
   git(R, ['init', '-q']);
-  git(R, [...IDENT, 'commit', '-q', '--allow-empty', '-m', 'base']);
+  // >= 5 commits: changed-set.spec.mjs resolves refs against the cwd repo's own
+  // history (`rev-list --skip=3 HEAD`), so the hook-env fixture must be that deep.
+  // Distinct commit timestamps too: that spec orders refs by %ct, and same-second ties flip the result.
+  ['base', 'c2', 'c3', 'c4', 'c5'].forEach((n, i) => {
+    const d = `${1_700_000_000 + i * 100} +0000`;
+    git(R, [...IDENT, 'commit', '-q', '--allow-empty', '-m', n], { GIT_AUTHOR_DATE: d, GIT_COMMITTER_DATE: d });
+  });
   git(R, ['branch', 'side']);
   git(R, ['worktree', 'add', '-q', W, '-b', 'wbranch']);
   const gitdir = join(R, '.git', 'worktrees', 'W');
@@ -127,14 +134,15 @@ execFileSync('git', ['config', 'user.email', 't@example.com'], { cwd: d });
 
 test('50e8c966 AC2 (negative control): an UNSCRUBBED spawn under the hook env DOES corrupt R — the harness has teeth', () => {
   const before = snapshot();
-  const r = runUnderHookEnv([writeLeakyScript()]);
-  assert.equal(r.status, 0, 'the leaky fixture exits 0 — that silence is the bug');
-  const after = snapshot();
-  assert.ok(!before.config.equals(after.config), 'harness must detect the leak (R/.git/config changed)');
-  assert.equal(git(R, ['config', '--file', join(R, '.git', 'config'), '--bool', 'core.bare']).trim(), 'true');
-  // Repair R for the remaining tests.
-  git(R, ['config', '--file', join(R, '.git', 'config'), '--bool', 'core.bare', 'false']);
-  git(R, ['config', '--file', join(R, '.git', 'config'), '--remove-section', 'user']);
+  try {
+    const r = runUnderHookEnv([writeLeakyScript()]);
+    assert.equal(r.status, 0, 'the leaky fixture exits 0 — that silence is the bug');
+    const after = snapshot();
+    assert.ok(!before.config.equals(after.config), 'harness must detect the leak (R/.git/config changed)');
+    assert.equal(git(R, ['config', '--file', join(R, '.git', 'config'), '--bool', 'core.bare']).trim(), 'true');
+  } finally {
+    repair(); // even a FAILED assertion must not leave R corrupted for later tests
+  }
 });
 
 for (const spec of PROVEN_SPECS) {
@@ -213,4 +221,124 @@ test('50e8c966 AC3: pre-commit and pre-push are wired to the guard (source it, s
     assert.match(text, /guard_snapshot/, `${hook} must snapshot before the tests`);
     assert.match(text, /guard_verify/, `${hook} must verify after the tests`);
   }
+});
+
+// ─── f2836e29 AC2: guard also detects stray refs and worktrees ──────────────
+
+function headSha(cwd) {
+  return git(cwd, ['rev-parse', 'HEAD']).trim();
+}
+
+test('f2836e29 AC2: guard_verify names a NEW ref created during the run', () => {
+  const r = runGuard(`guard_snapshot\ngit -C "${R}" update-ref refs/heads/stray-fixture ${headSha(R)}\nguard_verify`);
+  try {
+    assert.notEqual(r.status, 0, 'a stray ref must fail the hook');
+    assert.match(r.stderr, /GIT-ENV-LEAK/);
+    assert.match(r.stderr, /refs\/heads\/stray-fixture/);
+  } finally {
+    spawnSync('git', ['-C', R, 'update-ref', '-d', 'refs/heads/stray-fixture'], { env: cleanGitEnv() });
+  }
+});
+
+test('f2836e29 AC2: guard_verify names a MOVED ref (an unchecked-out branch tip changed)', () => {
+  const tip = headSha(R);
+  const moved = git(R, [...IDENT, 'commit-tree', '-p', tip, '-m', 'moved', `${tip}^{tree}`]).trim();
+  const r = runGuard(`guard_snapshot\ngit -C "${R}" update-ref refs/heads/side ${moved}\nguard_verify`);
+  try {
+    assert.notEqual(r.status, 0, 'a moved ref must fail the hook');
+    assert.match(r.stderr, /refs changed/);
+    assert.match(r.stderr, /refs\/heads\/side/);
+  } finally {
+    spawnSync('git', ['-C', R, 'update-ref', 'refs/heads/side', tip], { env: cleanGitEnv() });
+  }
+});
+
+test('f2836e29 AC2: guard_exclude_ref exempts the ref being pushed; other-worktree branches are not blamed', () => {
+  const tip = headSha(R);
+  const mainRef = git(R, ['symbolic-ref', 'HEAD']).trim();
+  const moved = git(R, [...IDENT, 'commit-tree', '-p', tip, '-m', 'moved', `${tip}^{tree}`]).trim();
+  // `side` is excluded; the branch checked out in R (a different worktree than W) moves legitimately.
+  const r = runGuard(
+    `guard_exclude_ref refs/heads/side\nguard_snapshot\ngit -C "${R}" update-ref refs/heads/side ${moved}\n` +
+      `git -C "${R}" update-ref ${mainRef} ${moved}\nguard_verify`
+  );
+  try {
+    assert.equal(r.status, 0, r.stderr);
+  } finally {
+    spawnSync('git', ['-C', R, 'update-ref', 'refs/heads/side', tip], { env: cleanGitEnv() });
+    spawnSync('git', ['-C', R, 'update-ref', mainRef, tip], { env: cleanGitEnv() });
+  }
+});
+
+test('f2836e29 AC2: guard_verify names a STRAY WORKTREE added during the run', () => {
+  const stray = join(base, 'stray-wt');
+  const r = runGuard(`guard_snapshot\ngit -C "${R}" worktree add -q "${stray}" -b stray-wt-branch\nguard_verify`);
+  try {
+    assert.notEqual(r.status, 0, 'a stray worktree must fail the hook');
+    assert.match(r.stderr, /worktree list changed/);
+    assert.match(r.stderr, /stray-wt/);
+  } finally {
+    spawnSync('git', ['-C', R, 'worktree', 'remove', '--force', stray], { env: cleanGitEnv() });
+    spawnSync('git', ['-C', R, 'branch', '-D', 'stray-wt-branch'], { env: cleanGitEnv() });
+  }
+});
+
+// ─── f2836e29 AC1: --only commit — Gate 3 sees the right staged list ────────
+
+/**
+ * A real git hook in a throwaway repo that mirrors pre-commit's Gate 3 wiring:
+ * the staged list is computed from the hook's own environment and piped to a
+ * probe run under `no_hook_git_env` (the real runner's stdin contract).
+ */
+function onlyCommit(stagedCmd) {
+  const id = Math.random().toString(36).slice(2);
+  const T = join(base, `only-${id}`);
+  const out = join(base, `probe-${id}.json`);
+  const probe = join(base, `probe-${id}.mjs`);
+  mkdirSync(T);
+  writeFileSync(
+    probe,
+    `import { readFileSync, writeFileSync } from 'node:fs';
+const keys = Object.keys(process.env).filter((k) => /^GIT_(DIR|INDEX_FILE|WORK_TREE|COMMON_DIR|PREFIX)$/.test(k));
+writeFileSync(process.env.PROBE_OUT, JSON.stringify({ stdin: readFileSync(0, 'utf8').trim(), leaked: keys }));
+`
+  );
+  git(T, ['init', '-q']);
+  writeFileSync(join(T, 'seed.txt'), 's\n');
+  git(T, ['add', 'seed.txt']);
+  git(T, [...IDENT, 'commit', '-q', '-m', 'seed']);
+  writeFileSync(
+    join(T, '.git', 'hooks', 'pre-commit'),
+    `#!/bin/sh\n. "${GUARD}"\nhook_index="\${GIT_INDEX_FILE:-unset}"\nstaged=$(${stagedCmd})\n` +
+      `printf '%s\\n' "$staged" | no_hook_git_env node "${probe}"\necho "$hook_index" > "${out}.idx"\n`,
+    { mode: 0o755 }
+  );
+  writeFileSync(join(T, 'a.txt'), 'a\n');
+  writeFileSync(join(T, 'b.txt'), 'b\n');
+  git(T, ['add', 'a.txt', 'b.txt']);
+  const c = spawnSync('git', [...IDENT, 'commit', '-q', '--only', '-m', 'only a', '--', 'a.txt'], {
+    cwd: T,
+    encoding: 'utf8',
+    env: cleanGitEnv(process.env, { PROBE_OUT: out }),
+  });
+  assert.equal(c.status, 0, `--only commit must succeed\n${c.stdout}\n${c.stderr}`);
+  return {
+    T,
+    probe: JSON.parse(readFileSync(out, 'utf8')),
+    hookIndex: readFileSync(`${out}.idx`, 'utf8').trim(),
+    committed: git(T, ['show', '--name-only', '--format=', 'HEAD']).trim(),
+  };
+}
+
+test('f2836e29 AC1: in a --only commit the hook computes the staged list under the temp index; the test child is scrubbed of GIT_INDEX_FILE and still sees exactly the --only file', () => {
+  const r = onlyCommit('git diff --cached --name-only --diff-filter=ACMR');
+  assert.notEqual(r.hookIndex, 'unset', 'premise: git exported GIT_INDEX_FILE (a temp index) into the --only hook');
+  assert.equal(r.probe.stdin, 'a.txt', 'Gate 3 must receive ONLY the --only path, not b.txt (also staged in the real index)');
+  assert.deepEqual(r.probe.leaked, [], 'the test child must have no repo-selecting GIT_* (incl. GIT_INDEX_FILE)');
+  assert.equal(r.committed, 'a.txt');
+});
+
+test('f2836e29 AC1 (negative control): computing the staged list AFTER the scrub reads the REAL index and wrongly includes b.txt, which is why the list is computed in the hook environment', () => {
+  const r = onlyCommit('no_hook_git_env git diff --cached --name-only --diff-filter=ACMR');
+  assert.deepEqual(r.probe.stdin.split('\n').sort(), ['a.txt', 'b.txt']);
 });

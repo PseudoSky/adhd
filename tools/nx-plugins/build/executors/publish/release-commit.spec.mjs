@@ -27,7 +27,14 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const scriptPath = join(__dirname, 'release-commit.mjs');
 
 function sh(cmd, args, opts = {}) {
-  const res = spawnSync(cmd, args, { encoding: 'utf8', ...opts, env: cleanGitEnv(opts.env) });
+  // Scrub ambient GIT_* (hook GIT_DIR/GIT_INDEX_FILE), but let a caller's EXPLICIT
+  // GIT_AUTHOR_*/GIT_COMMITTER_* pins survive: they are deliberate identity/date
+  // settings for the fixture, layered back on via cleanGitEnv's `extra` argument.
+  // Only an explicitly-passed opts.env counts as deliberate (ambient process.env never does).
+  const deliberate = Object.fromEntries(
+    Object.entries(opts.env ?? {}).filter(([k]) => /^GIT_(AUTHOR|COMMITTER)_/.test(k))
+  );
+  const res = spawnSync(cmd, args, { encoding: 'utf8', ...opts, env: cleanGitEnv(opts.env, deliberate) });
   if (res.error) throw res.error;
   return res;
 }

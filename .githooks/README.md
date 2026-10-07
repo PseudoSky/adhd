@@ -90,10 +90,23 @@ still exited 0. Three layers now stop it:
    `pre-push`): `no_hook_git_env <cmd>` runs the lint/test/`nx affected`
    invocations with those variables unset. Gate 0 and Gate 1 (secret-scan) keep
    the hook environment on purpose — they read the staged index.
-3. **Tripwire**: `guard_snapshot` / `guard_verify` compare the shared repo
-   config before and after the tests and fail the hook with a `GIT-ENV-LEAK`
-   message if `core.bare` flipped to `true` or a repo-local `user.name` /
-   `user.email` appeared.
+3. **Tripwire**: `guard_snapshot` / `guard_verify` snapshot, then re-compare
+   after the tests, and fail the hook with a `GIT-ENV-LEAK` message naming what
+   changed: the shared repo config (`core.bare` flipped to `true`, a new
+   repo-local `user.name` / `user.email`), refs (`git for-each-ref`: a new,
+   moved, or deleted ref), and the worktree list (`git worktree list
+   --porcelain`: a worktree added or removed). Scope: `refs/remotes/*` and
+   branches checked out in *other* worktrees are ignored, and `pre-push` excludes
+   the ref being pushed (`guard_exclude_ref`). `pre-commit` takes a fresh
+   snapshot immediately before each gate that runs foreign code (Gate 2 lint,
+   Gate 3 staged specs). A ref or worktree change made by a concurrent process
+   during the run is reported too (the message names it); re-run the hook if it
+   is not a fixture.
+
+`no_hook_git_env` also unsets `GIT_INDEX_FILE` for Gate 3 on purpose: the staged
+file list is computed by the hook (which keeps the real/temp `--only` index) and
+piped to the runner on stdin; the runner only spawns `npx vitest`, whose tests
+have no legitimate need for the index and could corrupt it.
 
 Proof: `node --test .githooks/git-env-leak.spec.mjs` runs the four originally
 leaking specs as children under the exact worktree-hook environment against a

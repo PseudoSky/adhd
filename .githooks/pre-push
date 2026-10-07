@@ -80,6 +80,7 @@ while read -r local_ref local_sha remote_ref remote_sha; do
     continue
   fi
   any_ref=1
+  guard_exclude_ref "$local_ref" # the ref being pushed may legitimately differ
 
   base="$remote_sha"
   if [ "$remote_sha" = "$zero_sha" ]; then
@@ -127,16 +128,16 @@ while read -r local_ref local_sha remote_ref remote_sha; do
   status_file=$(mktemp 2>/dev/null || echo /tmp/adhd-pre-push-status.$$)
 
   if [ -n "$base" ]; then
-    { CI=true no_hook_git_env npx nx affected $flags --base="$base" --head="$local_sha" --output-style=stream-without-prefixes; echo $? > "$status_file"; } 2>&1 | tee "$timings_log"
+    { no_hook_git_env env CI=true npx nx affected $flags --base="$base" --head="$local_sha" --output-style=stream-without-prefixes; echo $? > "$status_file"; } 2>&1 | tee "$timings_log"
   else
-    { CI=true no_hook_git_env npx nx affected $flags --head="$local_sha" --output-style=stream-without-prefixes; echo $? > "$status_file"; } 2>&1 | tee "$timings_log"
+    { no_hook_git_env env CI=true npx nx affected $flags --head="$local_sha" --output-style=stream-without-prefixes; echo $? > "$status_file"; } 2>&1 | tee "$timings_log"
   fi
   # nx's TRUE status (the pipeline's status above is tee's, and is discarded).
   status=$(cat "$status_file" 2>/dev/null)
+  rm -f "$status_file" 2>/dev/null || true
   if ! guard_verify; then
     exit 1
   fi
-  rm -f "$status_file" 2>/dev/null || true
 
   # Keep the newest 50 captures; drop the rest. Best-effort.
   ls -1t "$timings_dir"/*.log 2>/dev/null | tail -n +51 | while IFS= read -r old; do rm -f "$old" 2>/dev/null || true; done
