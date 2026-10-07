@@ -186,6 +186,49 @@ function gatedDepsWithConfig(
   };
 }
 
+/**
+ * A REAL task row in an ancestor chain (fc466f0b): its own agent/session, an
+ * optional `parentTaskId`, and an `ExecutionContext` a delegated child can be
+ * started from. `hitl:false` makes the ancestor NON-interactive.
+ */
+function makeChainTask(
+  harness: Harness,
+  opts: {
+    parentTaskId?: string;
+    recursionDepth: number;
+    /** The depth the context CLAIMS (defaults to the row's depth). */
+    claimedDepth?: number;
+    nonInteractive?: boolean;
+  }
+): { taskId: string; ctx: ExecutionContext } {
+  const agent = createAgent(
+    harness,
+    opts.nonInteractive ? { nativeTooling: { hitl: false } } : {}
+  );
+  const sessionId = openSession(harness, agent);
+  const taskId = crypto.randomUUID();
+  harness.taskStore.create({
+    id: taskId,
+    sessionId,
+    prompt: 'chain task',
+    ...(opts.parentTaskId ? { parentTaskId: opts.parentTaskId } : {}),
+    recursionDepth: opts.recursionDepth,
+  });
+  harness.taskStore.updateStatus(taskId, 'running');
+  return {
+    taskId,
+    ctx: {
+      taskId,
+      sessionId,
+      agentName: agent,
+      agentDefinition: harness.agentStore.read(agent),
+      ...(opts.parentTaskId ? { parentTaskId: opts.parentTaskId } : {}),
+      recursionDepth: opts.claimedDepth ?? opts.recursionDepth,
+      toolCallCount: 0,
+    },
+  };
+}
+
 describe('NAT-TOOL-6 — permission gate (ADR-0008 D5/D6)', () => {
   it('AC1: a `deny` rule refuses with a typed error and the tool is NOT executed', async () => {
     const harness = await buildHarness();
@@ -626,6 +669,240 @@ describe('NAT-TOOL-6 — permission gate (ADR-0008 D5/D6)', () => {
       await harness.teardown();
     }
   }, 60_000);
+
+  // ── fc466f0b — transitive escalation to the root ───────────────────────────
+  // Chain root -> A -> B(child asks). Each test cites its `fc466f0b AC<n>`.
+
+  it('fc466f0b AC1+AC5: root -> A(non-interactive) -> B asks: the ask is delivered to the ROOT; approving there runs the tool; every hop is restored', async () => {
+    const harness = await buildHarness();
+    try {
+      const { sessionId: childSession } = makeEscalatingChild(harness);
+      const root = makeChainTask(harness, { recursionDepth: 0 });
+      const a = makeChainTask(harness, {
+        parentTaskId: root.taskId,
+        recursionDepth: 1,
+        nonInteractive: true,
+      });
+      const executed: string[] = [];
+
+      const out = await taskTool(
+        { session_id: childSession, prompt: 'call echo', background: true } as never,
+        withProvider(harness, gatedDeps(harness, executed), echoThenComplete()),
+        a.ctx
+      );
+
+      // The ROOT is the decision surface and holds the only token.
+      const rootParked = await waitFor(harness, root.taskId, ['awaiting_input']);
+      expect(rootParked.status, 'the ask reached the root').toBe('awaiting_input');
+      expect(rootParked.resumeToken, 'the ROOT holds the resume token').toBeTruthy();
+      // A is passed through: observably waiting, but tokenless (cannot answer).
+      const aRow = harness.taskStore.read(a.taskId);
+      expect(aRow.status).toBe('awaiting_input');
+      expect(aRow.resumeToken, 'the non-interactive hop holds NO token').toBeFalsy();
+      expect(harness.taskStore.read(out.task_id).resumeToken).toBeFalsy();
+      expect(executed, 'not executed before the root approves').toEqual([]);
+
+      // Audit: B -> root attribution, a forward row on A, the ask on the root.
+      const bAsk = toolCallEvents(harness, out.task_id).find((e) => e.permission === 'ask');
+      expect(bAsk?.resolution).toBe('escalate');
+      expect(bAsk?.escalatedTo, 'escalation is attributed to the ROOT, not the parent').toBe(
+        root.taskId
+      );
+      const aAsk = toolCallEvents(harness, a.taskId).find((e) => e.permission === 'ask');
+      expect(aAsk?.resolution, 'the hop is audited as a forward').toBe('forward');
+      expect(aAsk?.escalatedFrom).toBe(out.task_id);
+      const rootAsk = toolCallEvents(harness, root.taskId).find((e) => e.permission === 'ask');
+      expect(rootAsk?.escalatedFrom).toBe(out.task_id);
+
+      const resumed = await taskResume(
+        {
+          taskId: root.taskId,
+          resumeToken: rootParked.resumeToken as string,
+          userInput: 'approve',
+        },
+        { taskStore: harness.taskStore }
+      );
+      expect(resumed.success).toBe(true);
+      await drainQueue(harness.queue, 15_000);
+      expect(harness.taskStore.read(out.task_id).status).toBe('completed');
+      expect(executed, 'after the root approves, B executes').toEqual(['echo']);
+      // fc466f0b AC5: every hop is restored to its pre-ask status.
+      expect(harness.taskStore.read(root.taskId).status).toBe('running');
+      expect(harness.taskStore.read(a.taskId).status).toBe('running');
+    } finally {
+      await harness.teardown();
+    }
+  }, 60_000);
+
+  it('fc466f0b AC1+AC5: the ROOT denies -> B denies, the tool never runs, every hop is restored', async () => {
+    const harness = await buildHarness();
+    try {
+      const { sessionId: childSession } = makeEscalatingChild(harness);
+      const root = makeChainTask(harness, { recursionDepth: 0 });
+      const a = makeChainTask(harness, {
+        parentTaskId: root.taskId,
+        recursionDepth: 1,
+        nonInteractive: true,
+      });
+      const executed: string[] = [];
+      const out = await taskTool(
+        { session_id: childSession, prompt: 'call echo', background: true } as never,
+        withProvider(harness, gatedDeps(harness, executed), echoThenComplete()),
+        a.ctx
+      );
+      const rootParked = await waitFor(harness, root.taskId, ['awaiting_input']);
+      await taskResume(
+        {
+          taskId: root.taskId,
+          resumeToken: rootParked.resumeToken as string,
+          userInput: 'deny',
+        },
+        { taskStore: harness.taskStore }
+      );
+      await drainQueue(harness.queue, 15_000);
+      expect(harness.taskStore.read(out.task_id).status).toBe('completed');
+      expect(executed).toEqual([]);
+      expect(toolMessageText(harness, childSession)).toContain('PERMISSION_ASK_DENIED');
+      expect(harness.taskStore.read(root.taskId).status).toBe('running');
+      expect(harness.taskStore.read(a.taskId).status).toBe('running');
+    } finally {
+      await harness.teardown();
+    }
+  }, 60_000);
+
+  it('fc466f0b AC2: every ancestor non-interactive -> the walk denies AT the root; the tool never runs; each hop is audited', async () => {
+    const harness = await buildHarness();
+    try {
+      const { sessionId: childSession } = makeEscalatingChild(harness);
+      const root = makeChainTask(harness, { recursionDepth: 0, nonInteractive: true });
+      const a = makeChainTask(harness, {
+        parentTaskId: root.taskId,
+        recursionDepth: 1,
+        nonInteractive: true,
+      });
+      const executed: string[] = [];
+      const out = await taskTool(
+        { session_id: childSession, prompt: 'call echo', background: true } as never,
+        withProvider(harness, gatedDeps(harness, executed), echoThenComplete()),
+        a.ctx
+      );
+      const settled = await waitFor(harness, out.task_id, ['completed', 'failed'], 8_000);
+      expect(settled.status, 'the ask fails closed — never parks').toBe('completed');
+      expect(executed, 'a root-denied ask never executes the tool').toEqual([]);
+      expect(toolMessageText(harness, childSession)).toContain('PERMISSION_ASK_DENIED');
+      // Nothing was parked: no hop is stranded awaiting a decision.
+      expect(harness.taskStore.read(root.taskId).status).toBe('running');
+      expect(harness.taskStore.read(a.taskId).status).toBe('running');
+
+      const bAsk = toolCallEvents(harness, out.task_id).find((e) => e.permission === 'ask');
+      expect(bAsk?.resolution).toBe('deny');
+      expect(String(bAsk?.reason)).toContain('root');
+      // Audit rows per hop: A forwarded, the ROOT recorded the terminal deny.
+      const aAsk = toolCallEvents(harness, a.taskId).find((e) => e.permission === 'ask');
+      expect(aAsk?.resolution).toBe('forward');
+      const rootAsk = toolCallEvents(harness, root.taskId).find((e) => e.permission === 'ask');
+      expect(rootAsk?.resolution, 'the terminal deny is recorded AT the root').toBe('deny');
+      expect(rootAsk?.code).toBe('PERMISSION_ASK_DENIED');
+    } finally {
+      await harness.teardown();
+    }
+  }, 60_000);
+
+  it('fc466f0b AC3: a chain longer than the escalation bound denies even though an interactive root exists beyond it', async () => {
+    const harness = await buildHarness();
+    try {
+      const { sessionId: childSession } = makeEscalatingChild(harness);
+      // root(interactive) -> A1(non-int) -> A2(non-int); B asks from A2. The ask
+      // is within the depth gate (A2's CONTEXT claims depth 0 -> B at depth 1 < 2)
+      // but reaching the interactive root needs a third hop; the bound is 2.
+      const root = makeChainTask(harness, { recursionDepth: 0 });
+      const a1 = makeChainTask(harness, {
+        parentTaskId: root.taskId,
+        recursionDepth: 1,
+        nonInteractive: true,
+      });
+      const a2 = makeChainTask(harness, {
+        parentTaskId: a1.taskId,
+        recursionDepth: 2,
+        claimedDepth: 0,
+        nonInteractive: true,
+      });
+      const executed: string[] = [];
+      const out = await taskTool(
+        { session_id: childSession, prompt: 'call echo', background: true } as never,
+        withProvider(
+          harness,
+          gatedDepsWithConfig(harness, executed, { escalationMaxDepth: 2 }),
+          echoThenComplete()
+        ),
+        a2.ctx
+      );
+      const settled = await waitFor(harness, out.task_id, ['completed', 'failed'], 8_000);
+      expect(settled.status, 'past the bound the ask fails closed, never parks').toBe('completed');
+      expect(executed).toEqual([]);
+      const bAsk = toolCallEvents(harness, out.task_id).find((e) => e.permission === 'ask');
+      expect(bAsk?.resolution).toBe('deny');
+      expect(String(bAsk?.reason)).toContain('depth bound');
+      expect(harness.taskStore.read(root.taskId).status, 'the root was never parked').toBe(
+        'running'
+      );
+    } finally {
+      await harness.teardown();
+    }
+  }, 60_000);
+
+  it('fc466f0b AC3 (positive control): the SAME chain reaches the root when the bound permits three hops', async () => {
+    const harness = await buildHarness();
+    try {
+      const { sessionId: childSession } = makeEscalatingChild(harness);
+      const root = makeChainTask(harness, { recursionDepth: 0 });
+      const a1 = makeChainTask(harness, {
+        parentTaskId: root.taskId,
+        recursionDepth: 1,
+        nonInteractive: true,
+      });
+      const a2 = makeChainTask(harness, {
+        parentTaskId: a1.taskId,
+        recursionDepth: 2,
+        claimedDepth: 0,
+        nonInteractive: true,
+      });
+      const executed: string[] = [];
+      const out = await taskTool(
+        { session_id: childSession, prompt: 'call echo', background: true } as never,
+        withProvider(
+          harness,
+          gatedDepsWithConfig(harness, executed, { escalationMaxDepth: 3 }),
+          echoThenComplete()
+        ),
+        a2.ctx
+      );
+      const rootParked = await waitFor(harness, root.taskId, ['awaiting_input']);
+      expect(rootParked.status, 'within the bound the ask climbs to the root').toBe(
+        'awaiting_input'
+      );
+      await taskResume(
+        {
+          taskId: root.taskId,
+          resumeToken: rootParked.resumeToken as string,
+          userInput: 'approve',
+        },
+        { taskStore: harness.taskStore }
+      );
+      await drainQueue(harness.queue, 15_000);
+      expect(executed).toEqual(['echo']);
+      for (const id of [root.taskId, a1.taskId, a2.taskId]) {
+        expect(harness.taskStore.read(id).status, `hop ${id} restored`).toBe('running');
+      }
+      expect(harness.taskStore.read(out.task_id).status).toBe('completed');
+    } finally {
+      await harness.teardown();
+    }
+  }, 60_000);
+
+  // fc466f0b AC4 (negative control): a walk that stops at the first ancestor
+  // delivers the ask to A (non-interactive), so the ROOT never holds a token and
+  // the AC1 assertions above go RED. Exercised by the executor's revert run.
 
   it('AC6: a one-shot `agent_name` task creates a REAL session row (retention ephemeral, reclaimed on terminal)', async () => {
     const harness = await buildHarness();

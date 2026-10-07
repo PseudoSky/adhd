@@ -621,6 +621,55 @@ export async function tasksBatch(
   return { concurrency, results };
 }
 
+/**
+ * Reconstruct a re-dispatched task's delegation attribution from its persisted
+ * ancestry (0d77376f). The `tasks` table carries `parent_task_id` only — no
+ * `root_task_id` — so the root is recovered by walking `parentTaskId` upward.
+ * The result mirrors what `taskTool` stamps on a freshly started child:
+ * `rootTaskId` is the topmost ancestor (undefined for a top-level task, never
+ * the task's own id), and `callingAgentName` is the IMMEDIATE parent's agent.
+ *
+ * Bounded: the walk takes at most `recursionDepth + 1` hops and tracks visited
+ * ids, so a corrupt/cyclic parent chain terminates instead of hanging. A parent
+ * row (or session) that cannot be read leaves the affected field undefined —
+ * attribution is best-effort and must never block a re-dispatch.
+ */
+function reconstructDelegationAttribution(
+  task: { parentTaskId?: string; recursionDepth: number },
+  deps: TaskDeps
+): { rootTaskId?: string; callingAgentName?: string } {
+  if (!task.parentTaskId) return {};
+
+  let callingAgentName: string | undefined;
+  try {
+    const parent = deps.taskStore.read(task.parentTaskId);
+    if (parent.sessionId) {
+      callingAgentName = deps.sessionStore.getAgentDefinition(parent.sessionId).name;
+    }
+  } catch (err) {
+    deps.logger.warn(
+      { parentTaskId: task.parentTaskId, err },
+      'enqueueExistingTask: could not resolve the parent agent; callingAgentName left unset'
+    );
+  }
+
+  const visited = new Set<string>();
+  let rootTaskId = task.parentTaskId;
+  const maxHops = Math.max(task.recursionDepth, 0) + 1;
+  for (let hop = 0; hop < maxHops; hop++) {
+    visited.add(rootTaskId);
+    let next: string | undefined;
+    try {
+      next = deps.taskStore.read(rootTaskId).parentTaskId;
+    } catch {
+      break;
+    }
+    if (!next || visited.has(next)) break;
+    rootTaskId = next;
+  }
+  return { rootTaskId, callingAgentName };
+}
+
 export async function enqueueExistingTask(
   taskId: string,
   deps: TaskDeps
@@ -688,6 +737,9 @@ export async function enqueueExistingTask(
     // task that was not started inline by `taskTool`.
     parentTaskId: task.parentTaskId,
     recursionDepth: task.recursionDepth,
+    // 0d77376f: the `tasks` table has no root column, so root attribution and the
+    // calling agent are reconstructed from the persisted parent chain.
+    ...reconstructDelegationAttribution(task, deps),
     toolCallCount: 0,
     inputs: task.inputs ?? undefined,
     selection,
