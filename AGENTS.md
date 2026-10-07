@@ -31,7 +31,7 @@ You are an expert full-stack engineer operating within a high-scale **Nx Monorep
 
 - **Gates are blocking — run them, never assume them.** Your final message must contain a `Gates:` list: one line per gate run, giving the command and its exit code.
   - Before you commit, return, or say work is done (after your last edit): `npx nx affected -t lint,typecheck,typecheck-spec`
-  - Before any `git push`: `npx nx affected --base=origin/main --head=HEAD $(node tools/gate/lane-gate.mjs)` (`tools/gate/lane-gate.mjs` is the canonical target list). A non-zero exit means do not push; report it instead.
+  - Before any `git push` (the pre-push hook runs `test` only, not `e2e`, so this is the only e2e gate before CI): `npx nx affected --base=origin/main --head=HEAD $(node tools/gate/lane-gate.mjs)` (`tools/gate/lane-gate.mjs` is the canonical target list). A non-zero exit means do not push; report it instead.
 
 ---
 

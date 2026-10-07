@@ -20,10 +20,10 @@ It fails when:
    `e2e` — i.e. the conditional in `tools/nx-plugins/build/plugin.js`
    (`hasE2e ? ["e2e"] : []`) is broken (verified by invoking the plugin's OWN
    `createNodes`, never a re-implementation);
-5. any gate file (`.githooks/pre-push`, `.github/workflows/pull-request.yml`,
-   `.github/workflows/ci.yml`) fails to invoke every target in `GATE_TARGETS`
-   (the single source is `tools/gate/lane-gate.mjs`); `.githooks/pre-push` must
-   additionally derive its flags from that module;
+5. either CI workflow (`.github/workflows/pull-request.yml`, `ci.yml`) fails to
+   invoke every target in `GATE_TARGETS` (`tools/gate/lane-gate.mjs`); or
+   `.githooks/pre-push` stops deriving its flags from `.githooks/lib/pre-push-flags.mjs`
+   (GATE_TARGETS minus `e2e`), drops `test`, or runs `e2e`;
 6. any project with a `tsconfig.spec.json` has no compiling target over it
    (ratcheted via `executors/wiring/lane-reachability.baseline.json`, which may
    only shrink).

@@ -1,19 +1,20 @@
 #!/usr/bin/env sh
 #
-# Pre-push hook — the full, honest `nx affected` closure over both gate lanes
-# (`test` + `e2e`) that used to live in `pre-commit` (DEBT-PROCESS-AFFECTED-TEST-001
+# Pre-push hook — the full, honest `nx affected` closure over the `test` lane
+# that used to live in `pre-commit` (DEBT-PROCESS-AFFECTED-TEST-001
 # Option 2 -> Option 3 migration; see `.githooks/pre-commit`'s Gate 3 header for
 # the incident that moved it here). The lane list is NOT hard-coded here: it is
-# sourced from the single canonical module `tools/gate/lane-gate.mjs`
-# (`GATE_TARGETS = ['test','e2e']`), the same list both CI workflows consume —
-# so this file, `pull-request.yml`, and `ci.yml` cannot drift. `@adhd/backlog`'s
-# resource-heavy `e2e` lane is deliberately NOT in `test.dependsOn` (2026-09-28,
-# backlog-e2e-cache-separation — coupling it there ran the whole heavy lane
-# uncached on every push), so the gate must reach it explicitly here.
+# `tools/gate/lane-gate.mjs`'s `GATE_TARGETS` minus `PRE_PUSH_EXCLUDED = ['e2e']`,
+# resolved by `.githooks/lib/pre-push-flags.mjs`. The `e2e` lane is NOT run by this
+# hook (too heavy per push); CI (`pull-request.yml`, `ci.yml`) consumes
+# `lane-gate.mjs` directly and still runs it, and AGENTS.md "Gates are blocking"
+# tells agents to run the full lane gate (including e2e) before any push.
+# `@adhd/backlog`'s `e2e` is deliberately NOT in `test.dependsOn` (2026-09-28,
+# backlog-e2e-cache-separation), so nothing local reaches it implicitly.
 # Reachability at the gate is the invariant, and
 # `tools/nx-plugins/test/executors/wiring/check-lane-reachability.mjs` (run
-# below, unconditionally) fails the push if any gate file stops invoking every
-# target in that list.
+# below, unconditionally) fails the push if a CI gate file stops invoking every
+# target in that list, or if this hook stops running `test` / starts running `e2e`.
 # `pre-commit`'s Gate 3 now runs a fast, staged-file-scoped
 # vitest pass (seconds); THIS hook runs the real, whole-project, full-affected
 # suite that gate used to run (minutes), but scoped by COMMIT RANGE rather
@@ -47,12 +48,10 @@ hook_dir=$(dirname "$0")
 repo_root=$(cd "$hook_dir/.." && pwd)
 
 # The gate's affected-target list is canonicalised in ONE module
-# (`tools/gate/lane-gate.mjs`, `GATE_TARGETS = ['test','e2e']`). Never
-# hard-code `--target=…` here: if this file and the CI workflows drift, a lane
-# drops out of the gate silently. `flags` is the shell rendering of that list
-# ("--target=test --target=e2e"), reused in the run, echo, and inspect lines
-# below.
-flags=$(node "$repo_root/tools/gate/lane-gate.mjs")
+# (`tools/gate/lane-gate.mjs`); this hook runs it minus `PRE_PUSH_EXCLUDED`
+# (`e2e`). Never hard-code `--target=…` here. `flags` is the shell rendering
+# ("--target=test"), reused in the run, echo, and inspect lines below.
+flags=$(node "$repo_root/.githooks/lib/pre-push-flags.mjs")
 
 # Fail fast, before spending minutes running the gate (or trusting a green
 # result): prove every gate file still invokes every target in GATE_TARGETS.
