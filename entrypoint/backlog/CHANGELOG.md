@@ -13,6 +13,8 @@
 
 ### 🩹 Fixes
 
+- **backlog:** citation hashing is now streamed and capped at 64 MiB (additive resource safety): a larger target is persisted `unverified-with-reason` with the new `target-too-large` reason instead of being loaded whole; abstract `url:`/`registry:`/`query:` anchors keep persisting as `abstract-anchor-unchecked`; the vestigial always-empty default-external-roots function is removed with no change to default-root behaviour (82e2c109)
+
 - **backlog:** SPEC-SET S02.T1 now states the SUPERSEDED `reason` is optional from the closed 5-member enum (unknown value is `invalid_argument`, reasonless succeeds with `superseded-without-reason`), matching the shipped additive ADR-0007 behaviour; mandatory `reason` would need an owner-approved breaking-list amendment (ADR-0006 D6) (7130d457)
 
 - **backlog:** test-assertion guards with teeth, install verifies what it wrote, report artifacts free of machine-local constants (55ba4178, 5fd61857, 4a979cef, 2cf61846 B-AC11..13) ([456eda3e](https://github.com/PseudoSky/adhd/commit/456eda3e))

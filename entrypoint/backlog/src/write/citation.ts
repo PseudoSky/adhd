@@ -438,19 +438,16 @@ export function assertCitationShasVerifiable(
 ): void {
   for (let i = 0; i < citations.length; i += 1) {
     const v = verifications[i]!;
-    // Evidence that does not exist (a missing target, a revision that does not
-    // resolve) is refused under `citationRequiresSha`; an existing target of any
-    // kind, a directory and a path-less project are PERSISTED with their
-    // recorded outcome (A-AC1..3) — never refused-and-omitted.
-    // An abstract anchor (`url:`/`registry:`/`query:`) and an over-cap target
-    // carry NO content hash, so they are not evidence either: under
-    // `citationRequiresSha` they are refused too (82e2c109). With the policy
-    // off they are persisted with their recorded outcome, as before.
+    // Only evidence that does not exist (a missing target, a revision that does
+    // not resolve) is refused under `citationRequiresSha`. Every other outcome
+    // is PERSISTED with its recorded reason (A-AC1..3; SPEC-SET S02.C2 "never
+    // drop, never abort"): an existing target of any kind, a directory, a
+    // path-less project, an abstract `url:`/`registry:`/`query:` anchor
+    // (`abstract-anchor-unchecked`) and an over-cap target (`target-too-large`)
+    // are stored `unverified-with-reason`, never refused (ADR-0007 #8 only
+    // permits refusing FEWER citations).
     const refusable =
-      v.reason === 'target-missing' ||
-      v.reason === 'revision-unresolved' ||
-      v.reason === 'abstract-anchor-unchecked' ||
-      v.reason === 'target-too-large';
+      v.reason === 'target-missing' || v.reason === 'revision-unresolved';
     if (refusable && policy.citationRequiresSha && projectHasKnownPath(project)) {
       throw new CitationUnverifiableError(
         citations[i]!.file,

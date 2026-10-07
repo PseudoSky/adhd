@@ -488,18 +488,11 @@ export class SingleValuedRelationConflictError extends BacklogWriteError {
 }
 
 /** Why a citation has no real sha and `citationRequiresSha` refuses it. */
-export type CitationUnverifiableReason =
-  | 'target-missing'
-  | 'revision-unresolved'
-  | 'abstract-anchor-unchecked'
-  | 'target-too-large';
+export type CitationUnverifiableReason = 'target-missing' | 'revision-unresolved';
 
 const UNVERIFIABLE_REASON_TEXT: Record<CitationUnverifiableReason, string> = {
   'target-missing': 'the target does not exist',
   'revision-unresolved': 'the pinned revision does not contain it',
-  'abstract-anchor-unchecked':
-    'a url:/registry:/query: anchor has no content to hash (record it with `attest`, or cite a file)',
-  'target-too-large': 'the target is larger than the citation size cap',
 };
 
 /**
@@ -507,11 +500,9 @@ const UNVERIFIABLE_REASON_TEXT: Record<CitationUnverifiableReason, string> = {
  * and `project_policy.citation_requires_sha` (default `true`) rejects
  * non-existent evidence. EXISTENCE is the gate (ADR-0007 breaking #8): an
  * existing file anywhere on the machine, an existing directory, a worktree-only
- * path are PERSISTED with a recorded verification outcome, never refused. An
- * abstract `url:`/`registry:`/`query:` anchor and a target over the size cap
- * hash nothing, so under the policy they are refused too (82e2c109); with the
- * policy off they are persisted with their recorded outcome. A PATH-LESS project
- * cannot hash its citations at all, so the gate is waived and `sha:"unverified"` is
+ * path, an abstract `url:`/`registry:`/`query:` anchor and a target over the
+ * size cap are all PERSISTED `unverified-with-reason`, never refused. A PATH-LESS
+ * project cannot hash its citations at all, so the gate is waived and `sha:"unverified"` is
  * persisted verbatim — `CitationUnverifiableError` is never thrown for it.
  */
 export class CitationUnverifiableError extends BacklogWriteError {

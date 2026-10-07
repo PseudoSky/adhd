@@ -62,11 +62,6 @@ describe('46cf1086 B-AC1 — claim reservations persist', () => {
     writeFileSync(fileA, 'a\n');
     writeFileSync(fileB, 'b\n');
     const project = data(await api.upsertProject(ctx, { name: 'proj', path: root, by: 's' })).uid;
-    // The seeded `url:` anchor has no content hash; citationRequiresSha (default) refuses it (82e2c109), so this fixture turns the policy off.
-    await tmp.store.adapter.executeRun('UPDATE node SET meta = ? WHERE uid = ?', [
-      JSON.stringify({ path: root, policy: { citationRequiresSha: false } }),
-      project,
-    ]);
     issue = data(
       await api.create(ctx, {
         project,

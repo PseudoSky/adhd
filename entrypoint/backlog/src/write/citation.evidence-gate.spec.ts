@@ -2,16 +2,21 @@
  * citation.evidence-gate.spec.ts — 82e2c109 (the ticket states no numbered
  * ACs; AC1..AC3 map to its three stated expectations):
  *   AC1  computeCitationSha enforces a size cap (streamed, never loaded whole);
+ *        an over-cap target is PERSISTED `unverified-with-reason`
+ *        (`target-too-large`), never refused;
  *   AC2  the vestigial default-external-roots indirection is gone (asserted in
  *        citation-path.spec.ts / catalog.spec.ts, where the module lives; the
  *        policy opt-in `citationAllowedExternalRoots` still works — AC2 below);
- *   AC3  `citationRequiresSha` demands evidence: an abstract url:/registry:/
- *        query: anchor (no content hash) is refused, and persisted only when
- *        the project turns the policy off.
+ *   AC3  an abstract url:/registry:/query: anchor is PERSISTED
+ *        `unverified-with-reason` (`abstract-anchor-unchecked`) under the
+ *        DEFAULT `citationRequiresSha:true` — never refused (SPEC-SET S02.C2
+ *        "never drop, never abort"; ADR-0007 #8) — and reads back as
+ *        evidence-free (`verification:'unverified-with-reason'`, sha sentinel).
+ *        Only a MISSING target is still refused under the policy.
  *
  * UNIT tests (real store + real verbs). Negative controls (run once,
- * restored): (a) drop the cap check in `hashFileCapped` -> AC1 red;
- * (b) drop 'abstract-anchor-unchecked' from `refusable` -> AC3 red.
+ * restored): (a) drop the cap check in `hashFileCapped` -> AC1 cap tests red;
+ * (b) add 'abstract-anchor-unchecked' to `refusable` -> AC3 persist tests red.
  */
 import { mkdirSync, truncateSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
@@ -23,18 +28,12 @@ import * as api from '../api.js';
 import { computeCitationSha, MAX_CITATION_BYTES } from './citation.js';
 import type { IResolvedProjectRow } from './catalog.js';
 
-describe('82e2c109 — citation evidence gate and size cap', () => {
+describe('82e2c109 — citation persist-not-refuse and size cap', () => {
   let tmp: TmpStore;
   let ctx: api.BacklogCtx;
   let repo: string;
   let projectUid: string;
 
-  async function setPolicy(policy: Record<string, unknown>): Promise<void> {
-    await tmp.store.adapter.executeRun('UPDATE node SET meta = ? WHERE uid = ?', [
-      JSON.stringify({ path: repo, policy }),
-      projectUid,
-    ]);
-  }
   async function citationCount(): Promise<number> {
     const r = await tmp.store.adapter.executeGet<{ c: number }>(
       "SELECT COUNT(*) AS c FROM node WHERE kind = 'citation' AND t_invalid IS NULL"
@@ -44,10 +43,10 @@ describe('82e2c109 — citation evidence gate and size cap', () => {
   function create(file: string) {
     return api.create(ctx, { project: projectUid, title: `cites ${file}`.slice(0, 60), body: 'b', by: 'filer', citations: [{ file }] });
   }
-  async function reasonOf(uid: string): Promise<unknown> {
+  async function citationsOf(uid: string): Promise<Array<Record<string, unknown>>> {
     const got = await api.get(ctx, { uid, fields: ['citations'] });
     if (!got.ok) throw new Error(JSON.stringify(got));
-    return (got.data as unknown as { citations: Array<Record<string, unknown>> }).citations[0]!['unverifiedReason'];
+    return (got.data as unknown as { citations: Array<Record<string, unknown>> }).citations;
   }
   const project = (): IResolvedProjectRow => ({ uid: projectUid, metadata: { path: repo } }) as unknown as IResolvedProjectRow;
 
@@ -74,18 +73,15 @@ describe('82e2c109 — citation evidence gate and size cap', () => {
     expect(exact).toMatchObject({ outcome: 'verified', sha: createHash('sha256').update(body).digest('hex') });
   });
 
-  it('82e2c109 AC1 — the production cap is 64 MiB: an over-cap file is refused under the default policy and persisted unverified when the policy is off', async () => {
+  it('82e2c109 AC1 — the production cap is 64 MiB: an over-cap file is PERSISTED target-too-large under the default policy (never refused)', async () => {
     const f = join(repo, 'huge.bin');
     writeFileSync(f, '');
     truncateSync(f, MAX_CITATION_BYTES + 1); // sparse
-    const refused = await create(f);
-    expect(refused.ok).toBe(false);
-    expect((refused as { error: { message: string } }).error.message).toMatch(/could not be verified/);
-    expect(await citationCount()).toBe(0);
-    await setPolicy({ citationRequiresSha: false });
     const ok = await create(f);
     expect(ok.ok, JSON.stringify(ok)).toBe(true);
-    expect(await reasonOf((ok as { data: { uid: string } }).data.uid)).toBe('target-too-large');
+    expect(await citationCount()).toBe(1);
+    const [c] = await citationsOf((ok as { data: { uid: string } }).data.uid);
+    expect(c).toMatchObject({ verification: 'unverified-with-reason', unverifiedReason: 'target-too-large' });
   });
 
   it('82e2c109 AC2 — the typed per-project external-root opt-in still resolves (only the vestigial default is gone)', async () => {
@@ -98,19 +94,20 @@ describe('82e2c109 — citation evidence gate and size cap', () => {
   });
 
   it.each(['url:https://example.com/doc', 'registry:npm/@adhd/backlog', 'query:status=open'])(
-    '82e2c109 AC3 — abstract anchor %s is refused under citationRequiresSha (default) and writes nothing',
+    '82e2c109 AC3 — abstract anchor %s is PERSISTED unverified-with-reason under the default policy (never refused)',
     async (anchor) => {
       const out = await create(anchor);
-      expect(out.ok).toBe(false);
-      expect((out as { error: { message: string } }).error.message).toMatch(/could not be verified/);
-      expect(await citationCount()).toBe(0);
+      expect(out.ok, JSON.stringify(out)).toBe(true);
+      expect(await citationCount()).toBe(1);
+      const [c] = await citationsOf((out as { data: { uid: string } }).data.uid);
+      expect(c).toMatchObject({ verification: 'unverified-with-reason', sha: 'unverified', unverifiedReason: 'abstract-anchor-unchecked' });
     }
   );
 
-  it('82e2c109 AC3 — with citationRequiresSha off an abstract anchor is persisted with its recorded outcome', async () => {
-    await setPolicy({ citationRequiresSha: false });
-    const out = await create('url:https://example.com/doc');
-    expect(out.ok, JSON.stringify(out)).toBe(true);
-    expect(await reasonOf((out as { data: { uid: string } }).data.uid)).toBe('abstract-anchor-unchecked');
+  it('82e2c109 AC3 — a MISSING target is still refused under the default policy and writes nothing', async () => {
+    const out = await create(join(repo, 'nope.txt'));
+    expect(out.ok).toBe(false);
+    expect((out as { error: { message: string } }).error.message).toMatch(/could not be verified/);
+    expect(await citationCount()).toBe(0);
   });
 });

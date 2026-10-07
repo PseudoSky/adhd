@@ -64,7 +64,7 @@ describe('phase 6 A — the built bin', () => {
           title: 'spans two projects',
           body: 'b',
           by: 'filer',
-          citations: [{ file: join(root1, 'pkg-a', 'a.ts') }, { file: fileInP2 }, { file: join(outside, 'o.ts') }, { file: outside }],
+          citations: [{ file: join(root1, 'pkg-a', 'a.ts') }, { file: fileInP2 }, { file: join(outside, 'o.ts') }, { file: outside }, { file: 'url:https://example.com/x' }],
         }),
         'create'
       )['uid'] as string;
@@ -78,7 +78,7 @@ describe('phase 6 A — the built bin', () => {
       expect(byFile.get(join(outside, 'o.ts'))?.verification).toBe('verified'); // existing out-of-root file
       expect(byFile.get(outside)?.verification).toBe('unverified-with-reason'); // a directory
       expect(byFile.get(outside)?.unverifiedReason).toBe('target-is-directory');
-      // abstract url:/registry:/query: anchors are refused under citationRequiresSha (82e2c109); covered by the unit spec write/citation.evidence-gate.spec.ts.
+      expect(byFile.get('url:https://example.com/x')?.unverifiedReason).toBe('abstract-anchor-unchecked');
       expect(card.primaryOwner.projectUid).toBe(p1);
       // One row per (component, via): the primary row and a citation row can both land in p1, so assert per DISTINCT project.
       expect([...new Set(card.memberships.map((m) => m.projectUid))].sort()).toEqual([p1, p2].sort());
