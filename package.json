@@ -3,7 +3,7 @@
   "version": "0.5.0",
   "license": "MIT",
   "scripts": {
-    "prepare": "git config core.hooksPath .githooks 2>/dev/null || true",
+    "prepare": "node -e \"const{execFileSync:x}=require('child_process'),r=require('path').resolve,g=a=>x('git',a,{encoding:'utf8',stdio:['ignore','pipe','ignore']}).trim();try{if(r(g(['rev-parse','--git-dir']))!==r(g(['rev-parse','--git-common-dir'])))process.exit(0);let c='';try{c=g(['config','--local','--get','core.hooksPath'])}catch(e){}if(c!=='.githooks')x('git',['config','core.hooksPath','.githooks'])}catch(e){}\"",
     "watch:test": "vitest watch --changed",
     "watch": "nx run-many --targets=build --configuration=development --all --watch",
     "build": "nx run-many --targets=build --configuration=production --all",

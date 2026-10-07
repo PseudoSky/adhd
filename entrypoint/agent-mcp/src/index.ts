@@ -1,5 +1,8 @@
 #!/usr/bin/env node
 
+// MUST stay the first import: answers --help/--version/unknown flags before
+// any later import (db/client.js opens the DB at import time) is evaluated.
+import "./cli-preflight.js";
 import { realpathSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
