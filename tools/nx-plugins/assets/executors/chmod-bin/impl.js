@@ -33,40 +33,57 @@ const { existsSync, readFileSync, chmodSync, statSync } = require('node:fs');
 const { join } = require('node:path');
 const { withMetrics } = require('../../../lib/metrics');
 
+/**
+ * Set the executable bit on every `bin` target of the package whose SOURCE
+ * root is `src`. Idempotent (skips files that already carry the bit) and
+ * side-effect-only, so it is safe to call from any code path that is about to
+ * trust or ship `dist/` (cache cd-dag AC9: this is how the bit is guaranteed
+ * WITHOUT a standing uncacheable `chmod-bin` task in every build/test graph).
+ *
+ * @param {string} src absolute project root (contains package.json)
+ * @returns {string[]} the bin paths that were chmod'ed (empty when all were already executable)
+ */
+function chmodBinEntries(src) {
+  const pkgPath = join(src, 'package.json');
+  const pkg = existsSync(pkgPath) ? JSON.parse(readFileSync(pkgPath, 'utf8')) : {};
+
+  // `pkg.bin` may be declared in STRING form ("bin": "./cli.js") or OBJECT
+  // form ({ name: path }). Normalize to the object shape, keyed by the
+  // package name's basename for the string form — npm's own convention.
+  let binMap = null;
+  if (typeof pkg.bin === 'string') {
+    const pkgName = typeof pkg.name === 'string' ? pkg.name : '';
+    const key = pkgName.includes('/') ? pkgName.slice(pkgName.lastIndexOf('/') + 1) : pkgName;
+    if (key) binMap = { [key]: pkg.bin };
+  } else if (pkg.bin && typeof pkg.bin === 'object') {
+    binMap = pkg.bin;
+  }
+  if (!binMap) return [];
+
+  const changed = [];
+  for (const [name, relPath] of Object.entries(binMap)) {
+    const binFile = join(src, relPath);
+    if (!existsSync(binFile)) {
+      console.error('assets-chmod-bin: bin[' + name + '] -> ' + relPath + ' does not exist, skipping chmod');
+      continue;
+    }
+    const mode = statSync(binFile).mode;
+    if ((mode & 0o111) !== 0o111) {
+      chmodSync(binFile, mode | 0o755);
+      console.log('assets-chmod-bin: chmod +x ' + relPath + ' (bin[' + name + '])');
+      changed.push(relPath);
+    }
+  }
+  return changed;
+}
+
 async function run(_options, context) {
   return withMetrics('assets-chmod-bin', context, async () => {
     const projRoot = context.projectsConfigurations.projects[context.projectName].root;
-    const src = join(context.root, projRoot);
-    const pkgPath = join(src, 'package.json');
-    const pkg = existsSync(pkgPath) ? JSON.parse(readFileSync(pkgPath, 'utf8')) : {};
-
-    // `pkg.bin` may be declared in STRING form ("bin": "./cli.js") or OBJECT
-    // form ({ name: path }). Normalize to the object shape, keyed by the
-    // package name's basename for the string form — npm's own convention.
-    let binMap = null;
-    if (typeof pkg.bin === 'string') {
-      const pkgName = typeof pkg.name === 'string' ? pkg.name : '';
-      const key = pkgName.includes('/') ? pkgName.slice(pkgName.lastIndexOf('/') + 1) : pkgName;
-      if (key) binMap = { [key]: pkg.bin };
-    } else if (pkg.bin && typeof pkg.bin === 'object') {
-      binMap = pkg.bin;
-    }
-    if (!binMap) return { success: true };
-
-    for (const [name, relPath] of Object.entries(binMap)) {
-      const binFile = join(src, relPath);
-      if (!existsSync(binFile)) {
-        console.error('assets-chmod-bin: bin[' + name + '] -> ' + relPath + ' does not exist, skipping chmod');
-        continue;
-      }
-      const mode = statSync(binFile).mode;
-      if ((mode & 0o111) !== 0o111) {
-        chmodSync(binFile, mode | 0o755);
-        console.log('assets-chmod-bin: chmod +x ' + relPath + ' (bin[' + name + '])');
-      }
-    }
+    chmodBinEntries(join(context.root, projRoot));
     return { success: true };
   });
 }
 module.exports = run;
 module.exports.default = run;
+module.exports.chmodBinEntries = chmodBinEntries;

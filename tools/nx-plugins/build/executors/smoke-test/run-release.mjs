@@ -124,9 +124,13 @@
  *      range as unresolvable (confirmed root cause of failure #1 on
  *      2026-07-31). Running `version` as its own explicit prior phase means
  *      GATE 1 now reads the REAL, post-bump disk state. `publish`'s own
- *      `dependsOn: [..., "version", ...]` chain is untouched — Nx cache-skips
- *      it on the real publish run since inputs haven't changed since this
- *      explicit run.
+ *      `dependsOn: [..., "version", ...]` chain is untouched. `version` is
+ *      `cache:false` (it reads the live registry/git and writes tracked source),
+ *      so Nx does NOT cache-skip it in the publish phase: it re-executes there
+ *      (measured: 63 runs in this phase + 54 more in the publish phase, per
+ *      release). It is idempotent after the bump (already-bumped versions are
+ *      "not yet on npm — no bump"), so the repeat is redundant cost, not a
+ *      correctness risk (docs/PIPELINE.md §4).
  *   2. GATE 1 (`check-release-ranges.mjs`) — hard pre-gate, unchanged in
  *      behavior, just re-ordered to run after step 1.
  *   3. `nx run-many -t publish --projects=<computed-list>` — the actual

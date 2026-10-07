@@ -33,7 +33,8 @@ function skip(p) { return p === '.' || p.startsWith('node_modules/') || p.includ
  * `inputs` are deliberately left at the nx default: narrowing them risks
  * under-invalidation, which is a worse failure than an occasional extra copy.
  */
-function assetOutputs(workspaceRoot, projectRoot) {
+function assetOutputs(workspaceRoot, projectRoot)
+{
   const src = join(workspaceRoot, projectRoot);
   let pkg = {};
   try { pkg = JSON.parse(readFileSync(join(src, 'package.json'), 'utf8')); } catch { pkg = {}; }
@@ -50,34 +51,42 @@ function assetOutputs(workspaceRoot, projectRoot) {
 // Nx 23 unified on the v2 plugin API: createNodes[1] receives the ARRAY of
 // matched config files and returns [configFile, result] tuples.
 exports.createNodes = ['**/package.json', (configFiles, _o, ctx) =>
-  configFiles.map((pkgPath) => {
-  const projectRoot = dirname(pkgPath);
-  if (skip(projectRoot)) return [pkgPath, {}];
-  if (!existsSync(join(ctx.workspaceRoot, projectRoot, 'project.json'))) return [pkgPath, {}];
-  if (!hasBuildTarget(ctx.workspaceRoot, projectRoot)) return [pkgPath, {}];
-  return [pkgPath, { projects: { [projectRoot]: { targets: {
-    assets: {
-      executor: '@adhd/nx-assets:copy',
-      // BUG-NXASSETS-001: `chmod-bin` in the dependsOn list (not merely
-      // `build`) is what pulls the always-runs chmod into every consumer of
-      // `assets` via nx's transitive task graph — no per-project
-      // `project.json` needs to know chmod-bin exists. (DEBT-024: the
-      // `["^build","build","assets"]` value is `entrypoint/backlog/
-      // project.json`'s `test` target specifically — the ONLY `test` target
-      // that consumes `assets`. The global `targetDefaults.test.dependsOn` is
-      // `["lint","^build"]` and never included `assets`, so the propagation is
-      // not "every test".)
-      dependsOn: ['build', 'chmod-bin'],
-      cache: true,
-      outputs: assetOutputs(ctx.workspaceRoot, projectRoot),
-    },
-    'chmod-bin': {
-      executor: '@adhd/nx-assets:chmod-bin',
-      dependsOn: ['build'],
-      // Deliberately UNCACHEABLE — see executors/chmod-bin/impl.js's doc
-      // comment. The whole point is that this must run on every invocation;
-      // caching it reintroduces the exact defect it fixes.
-      cache: false,
-    },
-  } } } }];
+  configFiles.map((pkgPath) =>
+  {
+    const projectRoot = dirname(pkgPath);
+    if (skip(projectRoot)) return [pkgPath, {}];
+    if (!existsSync(join(ctx.workspaceRoot, projectRoot, 'project.json'))) return [pkgPath, {}];
+    if (!hasBuildTarget(ctx.workspaceRoot, projectRoot)) return [pkgPath, {}];
+    return [pkgPath, {
+      projects: {
+        [projectRoot]: {
+          targets: {
+            assets: {
+              executor: '@adhd/nx-assets:copy',
+              // BUG-NXASSETS-001 / cache-dag AC9: `assets` depends on `build` only.
+              // The bin executable bit is NOT a task dependency here (an uncacheable
+              // `chmod-bin` in every consumer's graph meant no `nx build`/`nx test` run
+              // could ever be 100% cache hits); `writeDistManifest` chmods the bin at
+              // the re-stamp that every dist-trusting release task runs last.
+              dependsOn: ['build'],
+              cache: true,
+              outputs: assetOutputs(ctx.workspaceRoot, projectRoot),
+            },
+            'chmod-bin': {
+              executor: '@adhd/nx-assets:chmod-bin',
+              dependsOn: ['build'],
+              // Deliberately UNCACHEABLE (proved by experiment, cache-dag AC1): with
+              // `cache:true` and no outputs, a hit leaves a bin that lost its
+              // executable bit non-executable ("existing outputs match the cache,
+              // left as is" compares content, never mode). It is NO LONGER a
+              // dependency of `assets` (cache-dag AC9): the bit is guaranteed by
+              // `writeDistManifest` (build/executors/manifest/generate-manifest.js),
+              // the re-stamp every dist-trusting release task runs. This target
+              // remains for manual `nx run <p>:chmod-bin`.
+              cache: false,
+            },
+          }
+        }
+      }
+    }];
   })];

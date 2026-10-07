@@ -1,6 +1,6 @@
 # Pipeline — `adhd`
 
-**Schema:** `1` · **Last updated:** 2026-10-04 · **Owner:** devops
+**Schema:** `1` · **Last updated:** 2026-10-07 · **Owner:** devops
 
 Single source of truth for the path from a commit to a published `@adhd/*` artifact. Where a rule
 already lives in a committed document, this doc **cites it** rather than restating it — the cited
@@ -65,12 +65,38 @@ and `vercel` apps post check suites; none gates a merge. DeepSource is **not use
 
 ## 4. Caching
 - **nx cache** — `nx.json` `cacheDirectory: ".nx/cache"`; the key is the content hash of the task's
-  declared inputs, with `cache: true` on `@nx/vite:build`, `test`, and `typecheck`. Invalidation is
-  input-hash drift (content), never time.
+  declared inputs. **Requirement (owner, AC9):** two identical runs of `nx affected -t build` or
+  `-t test` in a row — dependency tasks included — end in `Cache: N/N hit`; the only exception
+  recorded is `@adhd/nx-plugins:test` (see GAP below).
+- **Cached targets** (all `cache: true`): `build`, `typecheck`, `typecheck-spec`, `lint`,
+  `sync-deps-check`, `test`, `assets`, `build-bin`, `vocabulary-gate`, `traceability`, backlog `build`
+  (vite + `ir-artifact` bake, formerly uncached), `dispatch-cli:generate-cli` (declared
+  `apigen-cli:build` dependency, outputs `dist/entrypoint/dispatch-cli/cli`), `dist-manifest`
+  (inputs: own `package.json`/`CHANGELOG.md` + dependency `package.json`s + `sharedGlobals`; outputs
+  `dist/package.json`, `dist/CHANGELOG.md`), `verify-dist-load` and `publish-hygiene` (inputs: the
+  on-disk outputs of `build`/`dist-manifest` via `dependentTasksOutputFiles`, `sharedGlobals` so an
+  executor change invalidates a stale verdict, node/npm version, `VERIFY_DIST_LOAD_TIMEOUT_MS`).
+- **Deliberately uncached** (one-line proofs): `version` (reads the live registry + git, writes
+  tracked `package.json`/`CHANGELOG.md`), `reconcile` (live registry), `release-reset`/
+  `release-reset-check` (live git/working-tree state), `publish` (registry mutation),
+  `chmod-bin` (a hit leaves a bin that lost its executable bit non-executable: nx's "existing
+  outputs match the cache, left as is" compares content, not mode — measured), `serve`, `bench`.
+  The bin mode is instead guaranteed by `writeDistManifest` (the re-stamp run by dist-manifest,
+  version, verify-dist-load, publish-hygiene, publish), and `chmod-bin` is no longer a dependency
+  of `assets`.
+- **`test` input rule** — `targetDefaults.test` hashes upstream outputs with
+  `dependentTasksOutputFiles` restricted to code-bearing extensions (`js,mjs,cjs,d.ts,d.mts,d.cts`).
+  A `**/*` glob also hashed `dist/package.json`/README/CHANGELOG that `assets`/`dist-manifest`
+  rewrite concurrently, which made 29 of 67 `test` tasks miss on a second identical run.
 - **Release-decision cache** — `published-state.json`, content-addressed by `normalizedHash`
   (PUBLISHING.md §"The published-state.json cache — zero-network change detection"). It advances
   only on a *verified* publish (`publish/impl.js`), so a never-promoted version cannot poison it.
-- **Rule** — nothing is keyed on a mutable tag or wall-clock; correctness outranks hit rate.
+- **Rule** — nothing is keyed on a mutable tag or wall-clock; correctness outranks hit rate. Every
+  cached target above has a recorded negative control (a real input change misses, the revert hits).
+- **GAP** — `@adhd/nx-plugins:test` is `cache:false` (it reads repo-wide wiring and the repo's git
+  state, so no exhaustive key exists) and is red on `main` (`release-reset` specs), so a second
+  `nx affected -t test` always executes it. `version` re-executes in the publish phase (uncached,
+  idempotent).
 
 ## 5. Release & versioning
 - **Version** — independent per project (`nx.json` `release.projectsRelationship:"independent"`);
@@ -129,6 +155,7 @@ and `vercel` apps post check suites; none gates a merge. DeepSource is **not use
 - **Every edit to this doc** — what changed and why, below.
 
 ## Provenance
+- `2026-10-07` — Cache audit (run `dispatch-2026-10-06-48dc`, branch `fix/cache-dag-48dc`). §4 rewritten from measurements: backlog `build`, `dist-manifest`, `verify-dist-load`, `publish-hygiene`, `generate-cli` cached with declared inputs/outputs; `chmod-bin` removed from `assets`' dependsOn (bit guaranteed in `writeDistManifest`); `test` upstream-output glob narrowed to code files. Why: the previous text claimed `cache: true` on `@nx/vite:build`, `test`, `typecheck` only, and a second identical `build`/`test` run missed 29+ tasks. Evidence and negative controls: the cache-dag report.
 - `2026-10-06` — Deleted `.deepsource.toml` and rewrote the §2 external-checks paragraph (backlog `8c0c314e`, phase-6 bucket C). Why: the config was wired to no workflow and its check was chronically red; keeping an unwired, failing external gate is worse than none. Revert path: `git revert` the commit and re-install the app.
 - `2026-10-06` — Agent-family e2e lane (backlog `5b839b90`, base `a49d4fbe`). §2 stage 5 now states the lane contract and cites `docs/decisions/0009-test-lanes-unit-vs-e2e.md`; lane-reachability gained rule 8 (`check-agent-lane-spawn.mjs`); `packages/agent/{agent-core-env,agent-engine-compiler,agent-engine-orchestrator}`, `entrypoint/agent-mcp`, `entrypoint/dispatch-cli` each gained an `e2e` target. Why: subprocess suites ran in the unit lane at `--parallel=5` and timed out under load.
 - `2026-10-05` — Corrected-and-synced while fixing cluster 12 (`8c0c314e`, CI chronically red) at

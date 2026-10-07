@@ -349,6 +349,14 @@ async function writeDistManifest(context, pkgRoot, distDir) {
   if (!assetsResult || assetsResult.success === false) {
     throw new Error(`writeDistManifest: assets re-copy failed for ${context.projectName} — see assets-copy output above.`);
   }
+  // BUG-NXASSETS-001 (cache-dag AC9): the `bin` executable bit is guaranteed
+  // HERE — at the re-stamp every dist-trusting task (dist-manifest, version,
+  // verify-dist-load, publish-hygiene, publish) runs last — instead of via a
+  // standing uncacheable `chmod-bin` task wired into every `assets` consumer
+  // (which made every `nx build`/`nx test` graph carry an always-miss task).
+  // A cached/restored bin that lost its bit is therefore repaired before it is
+  // hashed, verified, or packed. Idempotent; reads only source package.json.
+  require('../../../assets/executors/chmod-bin/impl').chmodBinEntries(pkgRoot);
   const sourcePkg = JSON.parse(_readFileSync(_join(pkgRoot, 'package.json'), 'utf8'));
   const versionMap = buildVersionMapFromDisk(context);
   const manifest = generateDistManifest(sourcePkg, versionMap);

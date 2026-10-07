@@ -35,7 +35,16 @@
       }
     },
     "generate-cli": {
+      "//": "cache-dag AC9/AC3: CACHED. Runs the BUILT apigen-cli (`entrypoint/apigen-cli/dist/index.js`, see the executor) over `src/api.ts` and writes the generated CLI under the workspace-root `dist/entrypoint/dispatch-cli/cli`. `apigen-cli:build` is now an explicit dependency (the executor reads its dist; nothing declared that before) and its transitive build outputs are hashed via `dependentTasksOutputFiles`; the project source + its dependencies' production source are inputs. Measured cold ~6s; uncached it re-ran on every release phase.",
       "executor": "@adhd/apigen-generator-nx:generate",
+      "cache": true,
+      "dependsOn": ["apigen-cli:build", "^build"],
+      "inputs": [
+        "default",
+        "^production",
+        { "dependentTasksOutputFiles": "**/*.{js,mjs,cjs,d.ts,d.mts,d.cts}", "transitive": true }
+      ],
+      "outputs": ["{workspaceRoot}/dist/entrypoint/dispatch-cli/cli"],
       "options": {
         "source": "src/api.ts",
         "type": "cli",

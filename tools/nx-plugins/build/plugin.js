@@ -10,132 +10,189 @@ function skip(p) { return p === '.' || p.startsWith('node_modules/') || p.includ
 // matched config files and returns [configFile, result] tuples.
 exports.createNodes = ['**/package.json', (configFiles, _o, ctx) =>
   configFiles.map((pkgPath) =>
-{
-  const projectRoot = dirname(pkgPath);
-  if (skip(projectRoot)) return [pkgPath, {}];
-  if (!existsSync(join(ctx.workspaceRoot, projectRoot, 'project.json'))) return [pkgPath, {}];
-  if (!hasBuildTarget(ctx.workspaceRoot, projectRoot)) return [pkgPath, {}];
-  // Private packages have no published artifact to verify/ship.
-  if (!isPublishable(ctx.workspaceRoot, projectRoot)) return [pkgPath, {}];
-  // In-source dist ({projectRoot}/dist) + publish-from-source-root means pnpm resolves
-  // @adhd/* natively via each package's own manifest (main → ./dist/…). The old `link`
-  // target (symlink node_modules/@adhd/<name> → repo-root dist) is retired — it created
-  // the per-package-source-link shadowing that broke @adhd builds (BUG-WORKSPACE-NO-LINKING-001).
-  // CORRECTED (2026-07-22 — the previous version of this comment was WRONG and nearly
-  // caused a real regression): `@adhd/nx-build:publish` (executors/publish/impl.js) runs
-  // `npm publish {projectRoot}/dist` — npm treats that DIRECTORY ITSELF as the package
-  // root. Anything outside it (including a source-root README.md/CHANGELOG.md) is
-  // completely invisible to that publish — there is no "ships straight from the package
-  // root" path. README.md/CHANGELOG.md (+ any package.json-declared extra assets) MUST
-  // physically exist inside {projectRoot}/dist before publish packs it. That's what the
-  // `assets` target (@adhd/nx-assets, tools/nx-plugins/assets/) does — every target that
-  // needs a doc-complete dist (`dist-manifest`, and transitively `publish-hygiene` +
-  // `publish` which depend on it; `version`, which diffs dist against the published
-  // tarball) depends on it below.
-  // `dist-manifest` versions the dist: it (over)writes {projectRoot}/dist/package.json
-  // with the resolved, dist-root publishable manifest (see executors/manifest). It is
-  // NOT cached (its correctness depends on every sibling's version, an impractical
-  // cache key) and is authoritative over any manifest an earlier build step emitted.
-  // Publishing packs from {projectRoot}/dist, so publish-hygiene and publish both
-  // depend on it. verify-dist-load reads the source manifest against the same physical
-  // dist/ files, so it needs only `build` and stays independently cacheable.
-  // `version` bumps the SOURCE package.json iff the built dist differs from what's
-  // published at its current version (registry as baseline — no tags). Runs before
-  // publish in `pnpm release`; not cached (reads live registry, mutates source).
-  // `dependsOn: ["build", "assets", "^version"]` — `^version` orders versioning
-  // TOPOLOGICALLY: a package's own internal @adhd/* dependencies get their
-  // `version` task run FIRST, so by the time THIS project's version task
-  // runs, every dependency it declares has already settled its version. The
-  // version executor's own final step (see executors/version/impl.js) then
-  // reconciles this package's declared internal ranges against that now-
-  // settled state — reusing the `deps` plugin's `sync-deps` logic verbatim,
-  // never duplicating it. See tools/nx-plugins/build/README.md and
-  // tools/nx-plugins/deps/README.md for the full composition + the
-  // "no forced cascade bump" guarantee (compare-published.js already strips
-  // internal @adhd/* ranges before diffing, so a range-only sync is never
-  // itself a bump trigger).
-  // `reconcile` (PUBLISHED-STATE-CACHE-001): (re)builds THIS package's entry
-  // in the committed `published-state.json` cache from npm, integrity-gated
-  // so it pulls a full tarball only when local dist actually diverges from
-  // what's published (see executors/reconcile/reconcile-core.js). It is the
-  // ONLY task (besides `publish`'s own write-through) that talks to the
-  // registry on the `version`/`sync-deps` happy path — `version` reads the
-  // cache this populates and falls back to a single-package in-process call
-  // into the SAME reconcile-core logic on a cache miss, never re-implementing
-  // it. `dependsOn: ["build","assets"]` mirrors `version`'s own dist
-  // freshness/doc-completeness requirement; `cache:false` because it reads
-  // live registry state with no stable cache key.
-  // BUG-007: `verify-dist-load` now reads the REBASED `{projectRoot}/dist/
-  // package.json` (the one `dist-manifest` writes — entry paths rewritten
-  // dist-root-relative) and resolves its entries against `dist/` itself, to
-  // match exactly what an installed consumer's `require`/`import`
-  // resolution sees. The RAW build-only output is UN-rebased — its `main`
-  // still reads `./dist/index.js` (relative to the SOURCE root, not `dist/`
-  // itself) — so if `verify-dist-load` ran before `dist-manifest` rebased
-  // it, resolution would double the `dist/` segment (`dist/dist/index.js`,
-  // never on disk) and fail. `dependsOn` now includes `dist-manifest` to
-  // guarantee the rebased manifest exists first (no cycle: `dist-manifest`
-  // only depends on `build`+`assets`; `verify-dist-load` depends on
-  // `build`+`dist-manifest`; `publish` depends on both of those plus
-  // `verify-dist-load` itself). `cache: false` for the same reason as
-  // `publish-hygiene` (BUG-004, below): its verdict now depends on the
-  // rebased dist manifest, which — like all of `dist/**` — is excluded from
-  // nx's default cache inputs, so a cache HIT would replay a stale verdict
-  // without ever re-reading the current rebase. The executor itself is
-  // cheap (require/import of a handful of entries), so leaving it uncached
-  // costs nothing.
-  return [pkgPath, {
-    projects: {
-      [projectRoot]: {
-        targets: {
-          "version": { "executor": "@adhd/nx-build:version", "dependsOn": ["build", "assets", "^version", "release-reset-check"], "cache": false },
-          "reconcile": { "executor": "@adhd/nx-build:reconcile", "dependsOn": ["build", "assets"], "cache": false },
-          "dist-manifest": { "executor": "@adhd/nx-build:manifest", "dependsOn": ["build", "assets"], "cache": false },
-          "verify-dist-load": { "executor": "@adhd/nx-build:verify", "dependsOn": ["build", "dist-manifest"], "cache": false },
-          // BUG-004 (HIGH): NOT cached. nx's default `production`/`default`
-          // inputs exclude `{projectRoot}/dist/**`, so the cache key for this
-          // target never changes when dist content changes — a cache HIT would
-          // replay a stale verdict from before the executor's BUG-001 re-stamp
-          // fix without ever re-running it. The executor itself only shells
-          // `npm pack --dry-run` against the already-built dist (cheap,
-          // read-only, no network) — same rationale already applied to
-          // `dist-manifest`/`version`/`publish` below, all of which read live
-          // dist/registry state and are also `cache: false`.
-          "publish-hygiene": { "executor": "@adhd/nx-build:hygiene", "dependsOn": ["dist-manifest"], "cache": false },
-          // BUG-002 (CRITICAL): `^publish` orders publish TOPOLOGICALLY, mirroring
-          // the existing `^version` pattern above (see the long comment on
-          // `version` at line 40-51 for the full rationale). Without it, nx is
-          // free to publish a dependent before the internal @adhd/* dependency
-          // it declares has itself landed on the registry — a consumer running
-          // `npm install <dependent>` in that exact window resolves the
-          // dependency's declared range against a version that isn't published
-          // yet and hits ETARGET. `^publish` guarantees every internal
-          // dependency's publish task completes first, closing that window.
-          // `publish` deliberately does NOT depend on `e2e` (owner decision,
-          // c0bf141d): the resource-heavy lane is not a publish prerequisite.
-          "publish": { "executor": "@adhd/nx-build:publish", "dependsOn": ["test", "^test", "version", "^publish", "dist-manifest", "verify-dist-load", "publish-hygiene", "release-reset-check"], "cache": false },
-          // release-reset (FEAT-RELEASE-RESET-001): reads LIVE git/working-tree
-          // state (HEAD vs working `package.json`/`CHANGELOG.md`) to detect a
-          // partial/half-generated release step for THIS project and, with
-          // `--live`, surgically revert only what it can prove is a pure
-          // release-generated artifact. No build dependency — it never reads
-          // `dist/`. `cache: false`: same rationale as `version`/`reconcile`
-          // above — live state, no stable cache key, and a stale verdict here
-          // would be actively dangerous (silently reporting "clean" against an
-          // old snapshot). See tools/nx-plugins/build/lib/release-reset.js.
-          "release-reset": { "executor": "@adhd/nx-build:release-reset", "cache": false },
-          // release-reset-check (backlog df9de4da): the NON-MUTATING precondition
-          // form of release-reset. `version` and `publish` both depend on it, so a
-          // half-generated release step (phantom CHANGELOG entry / orphaned
-          // version bump) fails the release BEFORE anything is bumped or
-          // published, instead of being reported as `success: true`. `version`
-          // depends on it too so the check always observes the PRE-mutation
-          // state (running concurrently with `version` could see its own
-          // package.json write before the changelog write and false-fail).
-          "release-reset-check": { "executor": "@adhd/nx-build:release-reset", "options": { "check": true }, "cache": false }
+  {
+    const projectRoot = dirname(pkgPath);
+    if (skip(projectRoot)) return [pkgPath, {}];
+    if (!existsSync(join(ctx.workspaceRoot, projectRoot, 'project.json'))) return [pkgPath, {}];
+    if (!hasBuildTarget(ctx.workspaceRoot, projectRoot)) return [pkgPath, {}];
+    // Private packages have no published artifact to verify/ship.
+    if (!isPublishable(ctx.workspaceRoot, projectRoot)) return [pkgPath, {}];
+    // In-source dist ({projectRoot}/dist) + publish-from-source-root means pnpm resolves
+    // @adhd/* natively via each package's own manifest (main → ./dist/…). The old `link`
+    // target (symlink node_modules/@adhd/<name> → repo-root dist) is retired — it created
+    // the per-package-source-link shadowing that broke @adhd builds (BUG-WORKSPACE-NO-LINKING-001).
+    // CORRECTED (2026-07-22 — the previous version of this comment was WRONG and nearly
+    // caused a real regression): `@adhd/nx-build:publish` (executors/publish/impl.js) runs
+    // `npm publish {projectRoot}/dist` — npm treats that DIRECTORY ITSELF as the package
+    // root. Anything outside it (including a source-root README.md/CHANGELOG.md) is
+    // completely invisible to that publish — there is no "ships straight from the package
+    // root" path. README.md/CHANGELOG.md (+ any package.json-declared extra assets) MUST
+    // physically exist inside {projectRoot}/dist before publish packs it. That's what the
+    // `assets` target (@adhd/nx-assets, tools/nx-plugins/assets/) does — every target that
+    // needs a doc-complete dist (`dist-manifest`, and transitively `publish-hygiene` +
+    // `publish` which depend on it; `version`, which diffs dist against the published
+    // tarball) depends on it below.
+    // `dist-manifest` versions the dist: it (over)writes {projectRoot}/dist/package.json
+    // with the resolved, dist-root publishable manifest (see executors/manifest). It is
+    // NOT cached (its correctness depends on every sibling's version, an impractical
+    // cache key) and is authoritative over any manifest an earlier build step emitted.
+    // Publishing packs from {projectRoot}/dist, so publish-hygiene and publish both
+    // depend on it. verify-dist-load reads the source manifest against the same physical
+    // dist/ files, so it needs only `build` and stays independently cacheable.
+    // `version` bumps the SOURCE package.json iff the built dist differs from what's
+    // published at its current version (registry as baseline — no tags). Runs before
+    // publish in `pnpm release`; not cached (reads live registry, mutates source).
+    // `dependsOn: ["build", "assets", "^version"]` — `^version` orders versioning
+    // TOPOLOGICALLY: a package's own internal @adhd/* dependencies get their
+    // `version` task run FIRST, so by the time THIS project's version task
+    // runs, every dependency it declares has already settled its version. The
+    // version executor's own final step (see executors/version/impl.js) then
+    // reconciles this package's declared internal ranges against that now-
+    // settled state — reusing the `deps` plugin's `sync-deps` logic verbatim,
+    // never duplicating it. See tools/nx-plugins/build/README.md and
+    // tools/nx-plugins/deps/README.md for the full composition + the
+    // "no forced cascade bump" guarantee (compare-published.js already strips
+    // internal @adhd/* ranges before diffing, so a range-only sync is never
+    // itself a bump trigger).
+    // `reconcile` (PUBLISHED-STATE-CACHE-001): (re)builds THIS package's entry
+    // in the committed `published-state.json` cache from npm, integrity-gated
+    // so it pulls a full tarball only when local dist actually diverges from
+    // what's published (see executors/reconcile/reconcile-core.js). It is the
+    // ONLY task (besides `publish`'s own write-through) that talks to the
+    // registry on the `version`/`sync-deps` happy path — `version` reads the
+    // cache this populates and falls back to a single-package in-process call
+    // into the SAME reconcile-core logic on a cache miss, never re-implementing
+    // it. `dependsOn: ["build","assets"]` mirrors `version`'s own dist
+    // freshness/doc-completeness requirement; `cache:false` because it reads
+    // live registry state with no stable cache key.
+    // BUG-007: `verify-dist-load` now reads the REBASED `{projectRoot}/dist/
+    // package.json` (the one `dist-manifest` writes — entry paths rewritten
+    // dist-root-relative) and resolves its entries against `dist/` itself, to
+    // match exactly what an installed consumer's `require`/`import`
+    // resolution sees. The RAW build-only output is UN-rebased — its `main`
+    // still reads `./dist/index.js` (relative to the SOURCE root, not `dist/`
+    // itself) — so if `verify-dist-load` ran before `dist-manifest` rebased
+    // it, resolution would double the `dist/` segment (`dist/dist/index.js`,
+    // never on disk) and fail. `dependsOn` now includes `dist-manifest` to
+    // guarantee the rebased manifest exists first (no cycle: `dist-manifest`
+    // only depends on `build`+`assets`; `verify-dist-load` depends on
+    // `build`+`dist-manifest`; `publish` depends on both of those plus
+    // `verify-dist-load` itself). `cache: false` for the same reason as
+    // `publish-hygiene` (BUG-004, below): its verdict now depends on the
+    // rebased dist manifest, which — like all of `dist/**` — is excluded from
+    // nx's default cache inputs, so a cache HIT would replay a stale verdict
+    // without ever re-reading the current rebase. The executor itself is
+    // cheap (require/import of a handful of entries), so leaving it uncached
+    // costs nothing.
+    return [pkgPath, {
+      projects: {
+        [projectRoot]: {
+          targets: {
+            "version": { "executor": "@adhd/nx-build:version", "dependsOn": ["build", "assets", "^version", "release-reset-check"], /*"cache": false */ },
+            "reconcile": { "executor": "@adhd/nx-build:reconcile", "dependsOn": ["build", "assets"], /*"cache": false*/ },
+            // cache-dag AC9: CACHED. The executor is a pure function of (this project's source
+            // package.json, the versions of its workspace dependencies' package.json, its
+            // CHANGELOG.md) — `generateDistManifest`/`assertResolvedInternalDeps` read nothing
+            // else (no registry, clock or env). Those are exactly the declared inputs; build/assets
+            // hashes fold in through `dependsOn`. A hit restores the two files it writes. The
+            // earlier "impractical cache key" claim (sibling versions) is answered by the
+            // `dependencies:true` package.json fileset. Experiment: negative controls in
+            // docs/PIPELINE.md §4 provenance / the cache-dag report.
+            "dist-manifest": {
+              "executor": "@adhd/nx-build:manifest",
+              "dependsOn": ["build", "assets"],
+              "cache": true,
+              "inputs": [
+                "{projectRoot}/package.json",
+                "{projectRoot}/CHANGELOG.md",
+                { "fileset": "{projectRoot}/package.json", "dependencies": true },
+                "sharedGlobals"
+              ],
+              "outputs": ["{projectRoot}/dist/package.json", "{projectRoot}/dist/CHANGELOG.md"]
+            },
+            // cache-dag AC2: CACHED (supersedes the BUG-004 "cache:false"). BUG-004's hazard was a
+            // hit replaying a verdict although `dist/**` changed (dist is excluded from
+            // `default`/`production`) or although the executor itself changed. Both are now in the
+            // key: `dependentTasksOutputFiles` hashes the actual on-disk outputs of `build` +
+            // `dist-manifest` (the dist being loaded) and, transitively, the code-bearing files of
+            // the workspace dependencies' dists it resolves through node_modules; `sharedGlobals`
+            // carries `tools/nx-plugins/build/**` (the executor + verify-dist-load.mjs); the probe
+            // timeout env var and the node version are declared. The verdict is a pure function of
+            // those (read-only spawn of `node` against dist/). The re-stamp it performs is
+            // idempotent and re-run by publish itself.
+            "verify-dist-load": {
+              "executor": "@adhd/nx-build:verify",
+              "dependsOn": ["build", "dist-manifest"],
+              "cache": true,
+              "inputs": [
+                "sharedGlobals",
+                "{projectRoot}/package.json",
+                { "dependentTasksOutputFiles": "**/*", "transitive": false },
+                { "dependentTasksOutputFiles": "**/*.{js,mjs,cjs,d.ts,d.mts,d.cts,node}", "transitive": true },
+                { "env": "VERIFY_DIST_LOAD_TIMEOUT_MS" },
+                { "runtime": "node --version" }
+              ]
+            },
+            // BUG-004 (HIGH): NOT cached. nx's default `production`/`default`
+            // inputs exclude `{projectRoot}/dist/**`, so the cache key for this
+            // target never changes when dist content changes — a cache HIT would
+            // replay a stale verdict from before the executor's BUG-001 re-stamp
+            // fix without ever re-running it. The executor itself only shells
+            // `npm pack --dry-run` against the already-built dist (cheap,
+            // read-only, no network) — same rationale already applied to
+            // `dist-manifest`/`version`/`publish` below, all of which read live
+            // dist/registry state and are also `cache: false`.
+            // cache-dag AC2: CACHED. The verdict is `npm pack --dry-run --json` over `dist/` +
+            // check-publish-hygiene.mjs, a pure function of the dist content (hashed via
+            // `dependentTasksOutputFiles` over the OWN `build`/`assets`/`dist-manifest` outputs — all three are
+            // direct dependencies so a non-transitive glob sees the whole dist), the executor code (`sharedGlobals` includes
+            // `tools/nx-plugins/build/**`) and the npm version. The BUG-004 stale-replay (executor
+            // fixed, hit replays old verdict) is closed by `sharedGlobals`.
+            "publish-hygiene": {
+              "executor": "@adhd/nx-build:hygiene",
+              "dependsOn": ["build", "assets", "dist-manifest"],
+              "cache": true,
+              "inputs": [
+                "sharedGlobals",
+                "{projectRoot}/package.json",
+                { "dependentTasksOutputFiles": "**/*", "transitive": false },
+                { "runtime": "npm --version" }
+              ]
+            },
+            // BUG-002 (CRITICAL): `^publish` orders publish TOPOLOGICALLY, mirroring
+            // the existing `^version` pattern above (see the long comment on
+            // `version` at line 40-51 for the full rationale). Without it, nx is
+            // free to publish a dependent before the internal @adhd/* dependency
+            // it declares has itself landed on the registry — a consumer running
+            // `npm install <dependent>` in that exact window resolves the
+            // dependency's declared range against a version that isn't published
+            // yet and hits ETARGET. `^publish` guarantees every internal
+            // dependency's publish task completes first, closing that window.
+            // `publish` deliberately does NOT depend on `e2e` (owner decision,
+            // c0bf141d): the resource-heavy lane is not a publish prerequisite.
+            "publish": { "executor": "@adhd/nx-build:publish", "dependsOn": ["test", "^test", "version", "^publish", "dist-manifest", "verify-dist-load", "publish-hygiene", "release-reset-check"], "cache": false },
+            // release-reset (FEAT-RELEASE-RESET-001): reads LIVE git/working-tree
+            // state (HEAD vs working `package.json`/`CHANGELOG.md`) to detect a
+            // partial/half-generated release step for THIS project and, with
+            // `--live`, surgically revert only what it can prove is a pure
+            // release-generated artifact. No build dependency — it never reads
+            // `dist/`. `cache: false`: same rationale as `version`/`reconcile`
+            // above — live state, no stable cache key, and a stale verdict here
+            // would be actively dangerous (silently reporting "clean" against an
+            // old snapshot). See tools/nx-plugins/build/lib/release-reset.js.
+            "release-reset": { "executor": "@adhd/nx-build:release-reset", "cache": false },
+            // release-reset-check (backlog df9de4da): the NON-MUTATING precondition
+            // form of release-reset. `version` and `publish` both depend on it, so a
+            // half-generated release step (phantom CHANGELOG entry / orphaned
+            // version bump) fails the release BEFORE anything is bumped or
+            // published, instead of being reported as `success: true`. `version`
+            // depends on it too so the check always observes the PRE-mutation
+            // state (running concurrently with `version` could see its own
+            // package.json write before the changelog write and false-fail).
+            "release-reset-check": { "executor": "@adhd/nx-build:release-reset", "options": { "check": true }, "cache": false }
+          }
         }
       }
-    }
-  }];
+    }];
   }),
 ];

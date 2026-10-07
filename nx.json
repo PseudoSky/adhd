@@ -190,7 +190,7 @@
       "inputs": ["production", "^production"]
     },
     "test": {
-      "//": "`dependentTasksOutputFiles` closes backlog 62535ce7: a `test` target may `dependsOn` a task of a project OUTSIDE its Nx project graph — e.g. dispatch-cli spawns agent-mcp's BUILT entry as an external MCP boundary and names `agent-mcp:dist-manifest` in test.dependsOn, but imports nothing from agent-mcp, so `^production` never sees agent-mcp's source or dist. The task-dependsOn REBUILDS agent-mcp/dist, yet the consumer test's hash did not change and Nx served a STALE cached PASS across a real rebuild (reproduced in bucket-h). `transitive: true` is REQUIRED, not stylistic: the direct dependency `agent-mcp:dist-manifest` resolves NO outputs (its @adhd/nx-build:manifest executor declares none), so a non-transitive glob matches nothing — the artifact is materialized by the transitive `agent-mcp:build`, which declares `{projectRoot}/dist`. The glob `**/*` matches every candidate path; the hasher restricts the match to files inside a declared output of an upstream task in the task graph.",
+      "//": "`dependentTasksOutputFiles` closes backlog 62535ce7: a `test` target may `dependsOn` a task of a project OUTSIDE its Nx project graph — e.g. dispatch-cli spawns agent-mcp's BUILT entry as an external MCP boundary and names `agent-mcp:dist-manifest` in test.dependsOn, but imports nothing from agent-mcp, so `^production` never sees agent-mcp's source or dist. The task-dependsOn REBUILDS agent-mcp/dist, yet the consumer test's hash did not change and Nx served a STALE cached PASS across a real rebuild (reproduced in bucket-h). `transitive: true` is REQUIRED, not stylistic: the direct dependency `agent-mcp:dist-manifest` resolves NO outputs (its @adhd/nx-build:manifest executor declares none), so a non-transitive glob matches nothing — the artifact is materialized by the transitive `agent-mcp:build`, which declares `{projectRoot}/dist`. The glob is the CODE-bearing extensions only (cache-dag AC9): `dist/package.json`/README/CHANGELOG are rewritten in place by `assets`/`dist-manifest` concurrently with downstream hashing, so a `**/*` glob hashed a racy intermediate state and made `test` miss on a second identical run (29 of 67 `test` tasks measured); those files are pure functions of source inputs already in the hash (own `default`, deps' `^production`). The hasher restricts the match to files inside a declared output of an upstream task in the task graph.",
       "cache": true,
       "dependsOn": ["lint", "^build"],
       "inputs": [
@@ -200,7 +200,7 @@
           "externalDependencies": ["vitest", "better-sqlite3", "drizzle-orm"]
         },
         {
-          "dependentTasksOutputFiles": "**/*",
+          "dependentTasksOutputFiles": "**/*.{js,mjs,cjs,d.ts,d.mts,d.cts}",
           "transitive": true
         }
       ],
@@ -210,6 +210,7 @@
       }
     },
     "build": {
+      "cache": true,
       "dependsOn": ["^build", "typecheck"],
       "inputs": ["production", "^production"]
     },
@@ -227,7 +228,9 @@
         "publish-hygiene"
       ]
     },
+    "sync-deps-check": { "cache": true },
     "lint": {
+      "cache": true,
       "dependsOn": ["sync-deps-check"]
     }
   },
