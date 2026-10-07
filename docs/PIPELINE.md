@@ -135,8 +135,11 @@ and `vercel` apps post check suites; none gates a merge. DeepSource is **not use
   other hand edits; changelog drift on a range-only edit) are REPORTED — a warning in the task log
   and a "RELEASE-RESET REVIEW REQUIRED" block in the release receipt — and never fail the release.
   `--live` revert stays strict (refuses anything that is not a clean prepend / version-only diff).
-  Ordering contract: `run-release.mjs` finishes the `version` phase before the publish phase, so the
-  check observes settled files.
+  Ordering: the check `dependsOn` its own project's `version` task (acyclic — `version` does not depend
+  on it), so raw `nx run-many -t publish` / `nx run <p>:publish` never reads a half-written bump.
+  Standalone `nx run <p>:release-reset-check` therefore runs `version` first (use
+  `ADHD_NX_VERSION_DRY_RUN=1` for a read-only check). `run-release.mjs`'s explicit version phase is still
+  needed: it fixes the topological bump order and the GATE 1 range check before any publish starts.
 - **What publishes what** — the `publish` nx target (`tools/nx-plugins/build/executors/publish/impl.js`)
   uploads `dist/` to npm; `run-release.mjs` orchestrates the whole run. Changesets are NOT used
   (no `.changeset/`).

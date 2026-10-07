@@ -222,12 +222,13 @@ exports.createNodes = ['**/package.json', (configFiles, _o, ctx) =>
             // HEAD, or a phantom CHANGELOG entry that is a clean prepend); states
             // that only need human review are reported as warnings and listed in
             // the release receipt but never fail it (lib/release-reset.js).
-            // Ordering contract: run-release.mjs completes the `version` phase
-            // before the publish phase starts, so by the time this check runs the
-            // version phase's package.json/CHANGELOG writes are finished (the
-            // publish-phase `version` task is an idempotent no-op that writes
-            // nothing).
-            "release-reset-check": { "executor": "@adhd/nx-build:release-reset", "options": { "check": true }, "cache": false }
+            // Ordering: the check `dependsOn: ["version"]` (its OWN project's version
+            // task), so a raw `nx run-many -t publish` / `nx run <p>:publish` can never
+            // have the check read the half-written bump (package.json written before
+            // CHANGELOG.md) that version is still producing. Acyclic: version does not
+            // depend on the check. Consequence: running the check standalone also runs
+            // `version` first (set ADHD_NX_VERSION_DRY_RUN=1 to keep that read-only).
+            "release-reset-check": { "executor": "@adhd/nx-build:release-reset", "options": { "check": true }, "dependsOn": ["version"], "cache": false }
           }
         }
       }
