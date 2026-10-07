@@ -2,7 +2,6 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import type { PluginFactory } from '@adhd/agent-base-types';
-import { snapshotMetrics } from '@adhd/sox-telemetry';
 import { resolveHitl } from '@adhd/agent-engine-orchestrator';
 import defaultExport, {
   CORE_MAPPINGS,
@@ -35,6 +34,10 @@ import type { Recorded, RunOpts } from '../test/harness.js';
  *   AC2 `default` / `createPlugin` export satisfies `PluginFactory`
  *   AC3 each core operation emits exactly one start/finish span to the durable sink
  *
+ * Post-merge blind-review fixes (see review-fixes.test.ts): AC7 F1 by_tool prototype keys,
+ * AC8 F2 no state resurrection after task end, AC9 F3 dispose closes open spans, AC10 F6 snapshot
+ * rate limit, AC11 F7 no latency for partial tasks.
+ *
  * Real components: the plugin through a real `HookRegistry`, the real `Orchestrator.run()` with
  * TRACE-2's emit sites, real better-sqlite3 stores, and a real `@adhd/sox-telemetry` JSONL sink.
  * Only the LLM provider and the MCP tool registry are scripted.
@@ -62,9 +65,10 @@ async function driveTask(hooks: HookRegistry, o: { gate?: RunOpts['gate'] } = {}
   const ctx = makeCtx(env);
   const executed: string[] = [];
   const result = await new Orchestrator().run(runInput(env, ctx, { gate: o.gate ?? (() => 'allow'), executed }));
+  // `session:closed` is emitted fire-and-forget by the store; await the event itself.
+  const closed = eventSeen(hooks, 'session:closed');
   env.sessionStore.close(env.sessionId);
-  // `session:closed` is emitted fire-and-forget by the store; drain it.
-  await new Promise<void>((r) => setImmediate(r));
+  await withDeadline(closed, 'session:closed');
   return { env, ctx, result, executed };
 }
 
@@ -94,7 +98,7 @@ describe('6ae794fe AC1 — scaffold at the plugin tier, registry-loadable', () =
     const hooks = new HookRegistry();
     await plugin.install(hooks);
     expect(plugin.name).toBe('agent-plugin-tracing');
-    (plugin as TracingPlugin).dispose();
+    await (plugin as TracingPlugin).dispose();
   });
 
   it('6ae794fe AC1: default-on — an empty config is valid and there is no enable/disable switch', () => {
@@ -132,7 +136,7 @@ describe('6ae794fe AC3 — each core operation emits exactly one start/finish sp
     expect([...names].sort()).toEqual(
       ['agent.model_call', 'agent.permission.decision', 'agent.session', 'agent.task', 'agent.tool_call'].sort()
     );
-    plugin.dispose();
+    await plugin.dispose();
   });
 
   it('6ae794fe AC3: spans carry correlation — one trace_id across the task tree, distinct from the session span', async () => {
@@ -145,7 +149,7 @@ describe('6ae794fe AC3 — each core operation emits exactly one start/finish sp
     expect(taskStart?.trace_id).toBeTruthy();
     expect(toolFinish?.trace_id).toBe(taskStart?.trace_id);
     expect(toolFinish?.['agent.tool.name']).toBe('agent-mcp__task');
-    plugin.dispose();
+    await plugin.dispose();
   });
 
   it('6ae794fe AC3: .start is durable BEFORE the operation ends (hang-visible), .finish carries duration_ms', async () => {
@@ -163,7 +167,7 @@ describe('6ae794fe AC3 — each core operation emits exactly one start/finish sp
     const end = records(plugin);
     expect(spanCounts(end, 'agent.task')).toEqual({ start: 1, finish: 1, error: 0 });
     expect(typeof end.find((r) => r.event === 'agent.task.finish')?.duration_ms).toBe('number');
-    plugin.dispose();
+    await plugin.dispose();
   });
 
   it('6ae794fe AC3: deny and ask→suspend→approve record permission + HITL spans, with wait_ms on resume', async () => {
@@ -184,7 +188,7 @@ describe('6ae794fe AC3 — each core operation emits exactly one start/finish sp
     const resume = recs.find((r) => r.event === 'agent.hitl.resume.finish');
     expect(resume).toMatchObject({ 'agent.hitl.outcome': 'approved', 'agent.hitl.parked_task_id': ctx.taskId });
     expect(typeof resume?.['agent.hitl.wait_ms']).toBe('number');
-    plugin.dispose();
+    await plugin.dispose();
   });
 
   it('6ae794fe AC3: a denied tool call records the deny decision and no tool_call span', async () => {
@@ -195,8 +199,9 @@ describe('6ae794fe AC3 — each core operation emits exactly one start/finish sp
       'agent.permission.action': 'deny',
       'agent.permission.resolution': 'deny',
     });
-    expect(spanCounts(recs, 'agent.tool_call').start).toBe(spanCounts(recs, 'agent.tool_call').finish + spanCounts(recs, 'agent.tool_call').error);
-    plugin.dispose();
+    // A denied call never reaches pre:tool_call: no tool_call span of any kind exists.
+    expect(spanCounts(recs, 'agent.tool_call')).toEqual({ start: 0, finish: 0, error: 0 });
+    await plugin.dispose();
   });
 
   it('6ae794fe AC3: tool arguments are sha256-digested, never recorded, unless captureArgs', async () => {
@@ -214,7 +219,7 @@ describe('6ae794fe AC3 — each core operation emits exactly one start/finish sp
     expect(String(start?.['agent.tool.args_sha256'])).toMatch(/^sha256:[0-9a-f]{64}$/);
     expect(JSON.stringify(records(quiet))).not.toContain('hunter2');
     expect(start?.['agent.tool.args']).toBeUndefined();
-    quiet.dispose();
+    await quiet.dispose();
   });
 });
 
@@ -222,17 +227,12 @@ describe('metrics — agent_tracing snapshot section (rates derived by the reade
   it('6ae794fe AC3: counters reach metrics.snapshot.sections.agent_tracing', async () => {
     const { hooks, plugin } = await installed();
     await driveTask(hooks);
-    // A snapshot is also requested at each task terminal (fire-and-forget); keep pulling until
-    // one written after the session closed is visible — bounded, no wall-clock sleep.
     type Section = ReturnType<TracingPlugin['counters']>;
-    let section: Section | undefined;
-    for (let i = 0; i < 100 && section?.sessions.closed !== 1; i++) {
-      await snapshotMetrics('pull');
-      await new Promise<void>((r) => setImmediate(r));
-      const snaps = readSnapshots(log.dir);
-      const last = snaps[snaps.length - 1] as (Recorded & { sections?: { agent_tracing?: Section } }) | undefined;
-      section = last?.sections?.agent_tracing;
-    }
+    // Explicit flush: writes one snapshot now and resolves when it is on disk — no polling.
+    await plugin.flushSnapshot();
+    const snaps = readSnapshots(log.dir);
+    const last = snaps[snaps.length - 1] as (Recorded & { sections?: { agent_tracing?: Section } }) | undefined;
+    const section: Section | undefined = last?.sections?.agent_tracing;
     expect(section).toBeDefined();
     expect(section).toMatchObject({
       sessions: { created: 1, closed: 1 },
@@ -243,7 +243,7 @@ describe('metrics — agent_tracing snapshot section (rates derived by the reade
       permission: { allow: 1, ask: 0, deny: 0 },
     });
     expect(section?.by_tool['agent-mcp__task']).toEqual({ calls: 1, errors: 0 });
-    plugin.dispose();
+    await plugin.dispose();
   });
 });
 
@@ -258,7 +258,7 @@ describe('negative controls — the assertions have teeth', () => {
     await driveTask(hooks2);
     expect(agentRecords(records(plugin)).length).toBeGreaterThan(0);
     expect(readdirSync(log.dir).length).toBeGreaterThan(0);
-    plugin.dispose();
+    await plugin.dispose();
   });
 
   it('removing the tool_call mapping turns the AC3 contract red', async () => {
@@ -266,7 +266,7 @@ describe('negative controls — the assertions have teeth', () => {
     const { hooks, plugin } = await installed({ mappings });
     await driveTask(hooks);
     expect(() => assertEveryCoreOperationSpanned(records(plugin))).toThrow();
-    plugin.dispose();
+    await plugin.dispose();
   });
 
   it('removing the permission mapping turns the AC3 contract red', async () => {
@@ -274,7 +274,7 @@ describe('negative controls — the assertions have teeth', () => {
     const { hooks, plugin } = await installed({ mappings });
     await driveTask(hooks);
     expect(() => assertEveryCoreOperationSpanned(records(plugin))).toThrow();
-    plugin.dispose();
+    await plugin.dispose();
   });
 });
 
@@ -303,6 +303,6 @@ describe('forward compatibility — new event families are rows, not restructuri
       'agent.budget.field': 'cost',
       'agent.budget.maximum': 5,
     });
-    plugin.dispose();
+    await plugin.dispose();
   });
 });

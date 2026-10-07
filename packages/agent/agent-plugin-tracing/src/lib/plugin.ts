@@ -6,6 +6,8 @@ import type { TracingConfig } from './config.js';
 import { CORE_MAPPINGS, subscribe } from './mappings.js';
 import type { AnyEventMapping } from './mappings.js';
 import { TraceRuntime } from './runtime.js';
+import { SnapshotThrottle } from './snapshot-throttle.js';
+import type { SnapshotThrottleDeps } from './snapshot-throttle.js';
 import type { TracingSnapshot } from './counters.js';
 
 /** Plugin name as registered with the host. */
@@ -26,6 +28,11 @@ export interface TracingPluginOptions {
    * traced without restructuring the plugin — see `pointSpanMapping`.
    */
   extraMappings?: readonly AnyEventMapping[];
+  /**
+   * Tune or replace the `metrics.snapshot` rate limiter (default: one activity snapshot per
+   * 5 s, trailing write coalesced). Tests inject a fake clock/timer/writer.
+   */
+  snapshot?: Partial<SnapshotThrottleDeps>;
 }
 
 /**
@@ -42,14 +49,27 @@ export class TracingPlugin implements Plugin {
   telemetry: TelemetryHandle | undefined;
   private readonly runtime: TraceRuntime;
   private unregisterSnapshot: (() => void) | undefined;
+  private readonly throttle: SnapshotThrottle;
 
   constructor(
     private readonly config: TracingConfig,
     private readonly options: TracingPluginOptions = {}
   ) {
-    this.runtime = new TraceRuntime(config.captureArgs, () => {
-      void snapshotMetrics('activity').catch(() => undefined);
+    this.throttle = new SnapshotThrottle({
+      write: () => snapshotMetrics('activity'),
+      ...options.snapshot,
     });
+    this.runtime = new TraceRuntime(config.captureArgs, () => this.throttle.request());
+  }
+
+  /** Sizes of the plugin's per-process state tables (diagnostics / leak assertions). */
+  stateSizes(): ReturnType<TraceRuntime['stateSizes']> {
+    return this.runtime.stateSizes();
+  }
+
+  /** Write a `metrics.snapshot` now (bypassing the rate limit) and resolve once it is written. */
+  flushSnapshot(): Promise<void> {
+    return this.throttle.flush();
   }
 
   async install(hooks: IHookRegistry): Promise<void> {
@@ -80,8 +100,15 @@ export class TracingPlugin implements Plugin {
     return this.runtime.counters.snapshot();
   }
 
-  /** Detach the snapshot section and close the telemetry handle this plugin created. */
-  dispose(): void {
+  /**
+   * Shut down: persist any coalesced metrics snapshot, close every still-open session/task/
+   * model/tool span with `agent.outcome: "unclosed"` (releasing the per-process tables), detach
+   * the snapshot section, then close the telemetry handle this plugin created. Resolves once
+   * the terminal records have reached the sink.
+   */
+  async dispose(): Promise<void> {
+    await this.throttle.dispose();
+    await this.runtime.closeAll();
     this.unregisterSnapshot?.();
     this.unregisterSnapshot = undefined;
     this.telemetry?.close();

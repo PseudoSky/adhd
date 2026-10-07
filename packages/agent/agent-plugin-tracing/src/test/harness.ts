@@ -24,7 +24,7 @@ import type {
   ProviderChatResponse,
   ToolDefinition,
 } from '@adhd/agent-engine-orchestrator';
-import type { AgentDefinition, ExecutionContext, IHookRegistry, Message, PermissionAction } from '@adhd/agent-base-types';
+import type { AgentDefinition, ExecutionContext, HookEvent, IHookRegistry, Message, PermissionAction } from '@adhd/agent-base-types';
 import { _resetTelemetryForTest } from '@adhd/sox-telemetry';
 import type { Plugin } from '@adhd/agent-base-types';
 
@@ -276,7 +276,7 @@ export function withDeadline<T>(p: Promise<T>, label: string, ms = 5000): Promis
 }
 
 /** Resolves once `hooks` has seen `event` (registered as a plain observer — no sleeps). */
-export function eventSeen(hooks: IHookRegistry, event: 'hitl:suspend'): Promise<void> {
+export function eventSeen(hooks: IHookRegistry, event: HookEvent): Promise<void> {
   return new Promise((resolve) => {
     hooks.register(event, (() => resolve()) as never);
   });

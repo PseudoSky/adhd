@@ -48,13 +48,25 @@ All spans of a delegation tree share one `trace_id`; identity is carried in `age
 `agent.task_id`, `agent.root_task_id`, `agent.parent_task_id`, `agent.name`. Tool arguments are
 recorded as `agent.tool.args_sha256` only (plus `agent.tool.args` under `captureArgs`).
 
-A task that ends while a model/tool span is still open closes it with `agent.outcome: "unclosed"`,
-so every `.start` has exactly one terminal record.
+A task that ends while a model/tool span is still open closes it with `agent.outcome: "unclosed"`.
+`await plugin.dispose()` does the same for every still-open session, task, model and tool span and
+releases all per-process state, so for a process that shuts down through `dispose()` every
+`.start` has exactly one terminal record. The one exception is a process that dies without
+disposing (crash, `kill -9`): its in-flight spans keep only their durable `.start`, which is the
+hang-visible design, not a gap.
+
+Events that arrive after their task already ended (a `post:tool_call`, `permission:decision` or
+`hitl:resume` racing a cancel) are counted and recorded but never recreate per-task state; a
+duplicate terminal for an ended task is dropped (the first outcome wins). A task first seen
+mid-flight (began before install, no `task:start`) is counted but contributes no
+`latency_ms.task` observation.
 
 ### Metrics
 
-Counters are exposed as the `agent_tracing` section of `metrics.snapshot` (a snapshot is requested
-at every task terminal): sessions, tasks, model/tool calls, `by_tool`, tokens, permission
+Counters are exposed as the `agent_tracing` section of `metrics.snapshot`. A snapshot is requested at
+task terminals but rate-limited: the first writes immediately, further terminals inside the window
+(default 5 s, `TracingPluginOptions.snapshot.minIntervalMs`) coalesce into one trailing write that
+`flushSnapshot()` / `dispose()` also drain, so the final counters are always persisted. Contents: sessions, tasks, model/tool calls, `by_tool`, tokens, permission
 allow/ask/deny and ask outcomes, HITL suspend/resume, delegations, `delegation_depth_max`, and
 latency series. Rates are derived by the reader, never stored.
 

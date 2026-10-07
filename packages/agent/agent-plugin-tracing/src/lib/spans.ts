@@ -22,7 +22,11 @@ export interface SpanOutcome {
 export class OpenSpan {
   private settled = false;
 
-  constructor(private readonly settle: (outcome: SpanOutcome) => void) {}
+  constructor(
+    private readonly settle: (outcome: SpanOutcome) => void,
+    /** Resolves (never rejects) once the span's terminal record has been handed to the sink. */
+    readonly written: Promise<void> = Promise.resolve()
+  ) {}
 
   get isOpen(): boolean {
     return !this.settled;
@@ -45,19 +49,23 @@ export function openSpan(name: string, attrs: OtelAttributes, traceId: string): 
   const done = new Promise<SpanOutcome>((resolve) => {
     settle = resolve;
   });
+  let written: Promise<void> = Promise.resolve();
   try {
     withTrace(traceId, () => {
-      withSpan(name, attrs, async (span) => {
+      written = withSpan(name, attrs, async (span) => {
         const outcome = await done;
         if (outcome.attrs !== undefined) span.setAttributes(outcome.attrs);
         // withSpan records `<name>.error` when its body throws; the rejection is expected.
         if (outcome.error !== undefined) throw new Error(outcome.error);
-      }).catch(() => undefined);
+      }).then(
+        () => undefined,
+        () => undefined
+      );
     });
   } catch {
     /* telemetry must never break a task */
   }
-  return new OpenSpan(settle);
+  return new OpenSpan(settle, written);
 }
 
 /** An instantaneous operation: a span that starts and finishes immediately. */
