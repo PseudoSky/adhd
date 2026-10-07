@@ -352,7 +352,12 @@ function expectNLogN(p: number, label: string): void {
 // from p=2; because the measurement is a count, there is no timing floor to
 // clear, so the control's ladder can stay small enough that its O(n^2) inner
 // loop is cheap to execute under the Proxy.
-const LIN_SIZES = [25_000, 50_000, 100_000, 200_000];
+// The linear ladder is 5k..40k (the same 8x / three-octave sweep as the former
+// 25k..200k): the count is a pure function of (query, fixture), so the fitted
+// exponent is unchanged (p=1.000 for every linear op, 1.124/1.146 for the sorts,
+// before and after) while the Proxy-wrapped fixtures are 5x smaller — this file
+// was ~5.3s of the package's ~6.9s wall, the slowest in data-query-engine.
+const LIN_SIZES = [5_000, 10_000, 20_000, 40_000];
 const SORT_SIZES = [2_000, 4_000, 8_000, 16_000];
 const QUAD_SIZES = [256, 512, 1_024, 2_048];
 
@@ -365,7 +370,7 @@ describe('complexity harness — controls', () => {
     // A single linear pass over an instrumented array: one touch per element,
     // plus the one `length` read. `sink` is consumed by an assertion so V8
     // cannot dead-code-eliminate the loop.
-    const sizes = [50_000, 100_000, 200_000, 400_000];
+    const sizes = [10_000, 20_000, 40_000, 80_000];
     const points: Point[] = sizes.map((n) => {
       const a = countArray(new Array<number>(n).fill(1));
       const len = a.length;
@@ -424,7 +429,7 @@ describe('complexity harness — controls', () => {
     // measurement is a pure function of (query, fixture). Two independent runs
     // must report the same work, regardless of machine load. No wall-clock is
     // read anywhere in this file.
-    const rows = makeRows(20_000).map(countRow);
+    const rows = makeRows(5_000).map(countRow);
     const run = () =>
       countWork(() => {
         new DataView(countArray(rows), {

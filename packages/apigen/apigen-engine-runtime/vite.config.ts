@@ -8,7 +8,7 @@ import { nxViteTsPathsPre } from '../../../tools/vite-plugins/source-resolution.
 import { projectCacheDir, projectCoverage } from '../../workspace/workspace-base-vite-paths/src/index';
 import { externalizeRealDeps } from '../../../tools/vite-plugins/externalize.mjs';
 
-import { vitestTestDefaults } from '../../../tools/vite-plugins/vitest-pool-defaults.mjs';
+import { vitestNoIsolateDefaults } from '../../../tools/vite-plugins/vitest-pool-defaults.mjs';
 export default defineConfig({
   root: __dirname,
   cacheDir: projectCacheDir(__dirname),
@@ -57,7 +57,7 @@ export default defineConfig({
   },
 
   test: {
-    ...vitestTestDefaults,
+    ...vitestNoIsolateDefaults,
     globals: true,
     cache: {
       dir: '../../../node_modules/.vitest',

@@ -66,8 +66,8 @@ and `vercel` apps post check suites; none gates a merge. DeepSource is **not use
 ## 4. Caching
 - **nx cache** — `nx.json` `cacheDirectory: ".nx/cache"`; the key is the content hash of the task's
   declared inputs. **Requirement (owner, AC9):** two identical runs of `nx affected -t build` or
-  `-t test` in a row — dependency tasks included — end in `Cache: N/N hit`; the only exception
-  recorded is `@adhd/nx-plugins:test` (see GAP below).
+  `-t test` in a row — dependency tasks included — end in `Cache: N/N hit` AND exit 0; there is no
+  recorded exception.
 - **Cached targets** (all `cache: true`): `build`, `typecheck`, `typecheck-spec`, `lint`,
   `sync-deps-check`, `test`, `assets`, `build-bin`, `vocabulary-gate`, `traceability`, backlog `build`
   (vite + `ir-artifact` bake, formerly uncached), `dispatch-cli:generate-cli` (declared
@@ -88,15 +88,35 @@ and `vercel` apps post check suites; none gates a merge. DeepSource is **not use
   `dependentTasksOutputFiles` restricted to code-bearing extensions (`js,mjs,cjs,d.ts,d.mts,d.cts`).
   A `**/*` glob also hashed `dist/package.json`/README/CHANGELOG that `assets`/`dist-manifest`
   rewrite concurrently, which made 29 of 67 `test` tasks miss on a second identical run.
+- **Release-written fields are not code inputs** — the `default` named input excludes
+  `{projectRoot}/package.json` and `{projectRoot}/CHANGELOG.md` and includes the `manifest` named input
+  instead: `{json: "{projectRoot}/package.json", excludeFields: ["version"]}` at workspace level, and a
+  per-project override emitted by `tools/nx-plugins/build/plugin.js` that additionally excludes every
+  internal `@adhd/*` dependency range (`dependencies|devDependencies|peerDependencies|optionalDependencies.<name>`).
+  The `version` phase rewrites exactly those fields (version, internal ranges, CHANGELOG.md) for
+  packages whose code did not change, which used to invalidate build/test/lint/typecheck/
+  typecheck-spec between the `version` and `publish` invocations. Anything else in `package.json`
+  (an external dependency, a new or removed internal dependency, `exports`, `bin`, `scripts`) and
+  every source file still invalidates. `assets` declares `CHANGELOG.md`/`README.md` as explicit
+  inputs because it copies them into `dist/`; `dist-manifest` keeps its own raw `package.json`
+  inputs. Evidence: the cache-dag report, "Item 3".
+- **`@adhd/nx-plugins:test` is cached** (formerly `cache:false`). Its `inputs` are the read set
+  measured by an fs/child_process trace of a full `test:build-tools` run (tools/**, `.githooks/**`,
+  `.github/**`, the root wiring files, every project's `project.json`/`package.json`/`tsconfig*`/
+  `vite.config.*`/`executors.json`/`schema.json`, every spec/test/e2e file, the agent-core-env project
+  a spec runs nested, toolchain versions, the git facts specs read, and the env vars the build
+  tooling reads). `.nxignore` hides `docs/`, `.claude/` and `entrypoint/apigen-cli/src/test/fixtures`
+  from nx's file hasher entirely (a glob input there matches nothing), so the files specs read from
+  those trees are hashed by `git hash-object` runtime inputs (nx-plugins:test and the apigen-cli
+  `test`/`e2e`/`generate-api` targets).
 - **Release-decision cache** — `published-state.json`, content-addressed by `normalizedHash`
   (PUBLISHING.md §"The published-state.json cache — zero-network change detection"). It advances
   only on a *verified* publish (`publish/impl.js`), so a never-promoted version cannot poison it.
 - **Rule** — nothing is keyed on a mutable tag or wall-clock; correctness outranks hit rate. Every
   cached target above has a recorded negative control (a real input change misses, the revert hits).
-- **GAP** — `@adhd/nx-plugins:test` is `cache:false` (it reads repo-wide wiring and the repo's git
-  state, so no exhaustive key exists) and is red on `main` (`release-reset` specs), so a second
-  `nx affected -t test` always executes it. `version` re-executes in the publish phase (uncached,
-  idempotent).
+- **GAP** — `version` re-executes in the publish phase (uncached, idempotent; it reads the live
+  registry). `nx-plugins:test` inputs are an audited snapshot: a NEW kind of file a spec starts reading
+  must be added to `tools/nx-plugins/project.json` (the lane-reachability gate does not check this).
 
 ## 5. Release & versioning
 - **Version** — independent per project (`nx.json` `release.projectsRelationship:"independent"`);
@@ -105,6 +125,18 @@ and `vercel` apps post check suites; none gates a merge. DeepSource is **not use
 - **Changelog** — per project `{projectRoot}/CHANGELOG.md`, `automaticFromRef:true`
   (`nx.json` `release.changelog`).
 - **Tag** — `nx.json` `release.releaseTag.pattern = "{projectName}@{version}"`.
+- **Half-applied release guard** — `release-reset-check` (non-mutating; `lib/release-reset.js`) is a
+  dependency of `publish` ONLY (once per project per release; `version` never read its verdict, so it
+  no longer depends on it — previously 63 + 61 runs per release). It FAILS the release only for a
+  genuinely half-applied state: `package.json` `version` differs from HEAD's with no matching
+  CHANGELOG entry, or a phantom CHANGELOG top entry that is a clean prepend over HEAD. A range-only /
+  dependency-sync edit (version equal to HEAD's) is not a version bump even when the CHANGELOG top is
+  behind the version at HEAD. States that cannot be proven half-applied (a phantom-shaped entry over
+  other hand edits; changelog drift on a range-only edit) are REPORTED — a warning in the task log
+  and a "RELEASE-RESET REVIEW REQUIRED" block in the release receipt — and never fail the release.
+  `--live` revert stays strict (refuses anything that is not a clean prepend / version-only diff).
+  Ordering contract: `run-release.mjs` finishes the `version` phase before the publish phase, so the
+  check observes settled files.
 - **What publishes what** — the `publish` nx target (`tools/nx-plugins/build/executors/publish/impl.js`)
   uploads `dist/` to npm; `run-release.mjs` orchestrates the whole run. Changesets are NOT used
   (no `.changeset/`).
@@ -155,6 +187,7 @@ and `vercel` apps post check suites; none gates a merge. DeepSource is **not use
 - **Every edit to this doc** — what changed and why, below.
 
 ## Provenance
+- `2026-10-07` — Cache audit part 2 (run `dispatch-2026-10-06-48dc`, owner follow-up). §4: `nx-plugins:test` cached with audited inputs (was `cache:false`); `default` named input no longer hashes release-written `version`/internal ranges/`CHANGELOG.md` (`manifest` named input + per-project override), so the version phase no longer invalidates unchanged packages' caches; apigen-cli fixtures hashed by runtime input (`.nxignore` hid them). §5: `release-reset-check` moved from `version`+`publish` to `publish` only, made HEAD-aware (range-only edits are not orphan version bumps), review-only states warn and appear in the receipt instead of failing; the `safe = true` override was removed because it only let `--live` clobber hand-edited changelogs. `bug-nxassets-001` spec rewritten to the post-chmod-bin wiring. Evidence: the cache-dag report.
 - `2026-10-07` — Cache audit (run `dispatch-2026-10-06-48dc`, branch `fix/cache-dag-48dc`). §4 rewritten from measurements: backlog `build`, `dist-manifest`, `verify-dist-load`, `publish-hygiene`, `generate-cli` cached with declared inputs/outputs; `chmod-bin` removed from `assets`' dependsOn (bit guaranteed in `writeDistManifest`); `test` upstream-output glob narrowed to code files. Why: the previous text claimed `cache: true` on `@nx/vite:build`, `test`, `typecheck` only, and a second identical `build`/`test` run missed 29+ tasks. Evidence and negative controls: the cache-dag report.
 - `2026-10-06` — Deleted `.deepsource.toml` and rewrote the §2 external-checks paragraph (backlog `8c0c314e`, phase-6 bucket C). Why: the config was wired to no workflow and its check was chronically red; keeping an unwired, failing external gate is worse than none. Revert path: `git revert` the commit and re-install the app.
 - `2026-10-06` — Agent-family e2e lane (backlog `5b839b90`, base `a49d4fbe`). §2 stage 5 now states the lane contract and cites `docs/decisions/0009-test-lanes-unit-vs-e2e.md`; lane-reachability gained rule 8 (`check-agent-lane-spawn.mjs`); `packages/agent/{agent-core-env,agent-engine-compiler,agent-engine-orchestrator}`, `entrypoint/agent-mcp`, `entrypoint/dispatch-cli` each gained an `e2e` target. Why: subprocess suites ran in the unit lane at `--parallel=5` and timed out under load.

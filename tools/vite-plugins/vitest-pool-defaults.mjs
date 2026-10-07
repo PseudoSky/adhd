@@ -37,9 +37,33 @@ export const maxTestThreads = Math.max(2, Math.min(4, Math.ceil(cores / 3)));
  * and are unaffected by the worker cap (but still inherit the timeout). */
 export const vitestTestDefaults = {
   maxWorkers: maxTestThreads,
+  // Pool settings are MEASURED, not guessed (cache-dag item 6; per-package A/B,
+  // interleaved runs, exit codes of every run, see docs/PIPELINE.md §4 and the
+  // cache-dag report). `forks` (vitest 4's own default, pinned so a config can't
+  // drift) beat `threads` by 10-20% on data-query-engine, apigen-core-client and
+  // apigen-engine-runtime, and `vmThreads`/`vmForks` were slower still (and
+  // failed on apigen-engine-runtime and backlog). `poolOptions` /
+  // `vmMemoryLimit` are deliberately absent: Vitest 4 removed `poolOptions`
+  // (silently ignored), and `vmMemoryLimit` only applies to the vm pools, which
+  // lose. File parallelism is on (vitest's default) with per-file isolation kept
+  // ON: dropping isolation (`vitestNoIsolateDefaults`) was <= ~10% and within
+  // noise on 2 of 3 libraries, so it is opt-in per package, never the default.
+  pool: 'forks',
+  fileParallelism: true,
+  logHeapUsage: false,
   // Heavy suites (real TypeScript program builds, real JVM/Python spawns) run
   // well past Vitest's 5s default under Vitest 4's slower collection path;
   // they are deterministic, just slow, so give them headroom rather than
   // flaking on wall-clock.
   testTimeout: 30_000,
 };
+
+/**
+ * Opt-in for pure-logic / ts-morph libraries whose test files share no mutable
+ * module state: skips per-file module-graph re-evaluation (`isolate: false`).
+ * Measured win: apigen-engine-runtime 5.03s -> 4.50s median (5 interleaved runs,
+ * all exit 0, 218/218 passing). NEVER use it for a package with native addons
+ * (better-sqlite3, @tursodatabase/database): the same flag made backlog fail
+ * under file parallelism.
+ */
+export const vitestNoIsolateDefaults = { ...vitestTestDefaults, isolate: false };

@@ -141,8 +141,14 @@ export default defineConfig({
       dir: path.join(repoRoot, 'node_modules/.vitest'),
     },
     environment: 'node',
+    // Measured (cache-dag item 6, backlog project, vitest direct, exit codes
+    // checked): forks + file parallelism + isolation + 4 workers = ~68s vs ~182s
+    // serial (same 1059 passing). threads, vmForks and isolate:false all FAILED
+    // tests under file parallelism (native @tursodatabase store), so they are not
+    // an option here.
     pool: 'forks',
-    fileParallelism: false,
+    fileParallelism: true,
+    maxWorkers: 4,
     // `*.spec.ts` ONLY. The resource-consuming suites (real subprocess spawns,
     // the real fastembed embedding model, real HTTP servers bound to ports)
     // live in sibling `*.e2e.ts` files and run in their OWN config
