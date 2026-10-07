@@ -68,7 +68,7 @@ describe('C8 — closed primitives, readable catalogs, self-describing surface',
 
   /** Seed a live catalog row directly (bypassing the mint) — the setup a case-fragment fixture needs. */
   async function seedKindRow(name: string): Promise<string> {
-    const node = await executeWriteTransaction(store, (tx) =>
+    const node = await executeWriteTransaction({ ...store, verb: 'test-fixture' }, (tx) =>
       writeNodeTx(tx, { kind: 'kind', name, metadata: {} })
     );
     return node.uid;
@@ -318,7 +318,7 @@ describe('C8 — closed primitives, readable catalogs, self-describing surface',
       expect(term?.lifecycle).toBe('deprecated');
       expect(term?.replacedBy).toBe('FEAT');
 
-      const resolved = await executeWriteTransaction(store, (tx) =>
+      const resolved = await executeWriteTransaction({ ...store, verb: 'test-fixture' }, (tx) =>
         mintOrResolveCatalogTx(tx, {
           catalogKind: 'kind' as FlatCatalogKind,
           ref: 'EPIC',

@@ -64,7 +64,7 @@ export async function writeCrossIssueEdges(
 
   if (structural.length === 0) return { edgesWritten, danglingReferences, droppedByRel };
 
-  await executeWriteTransaction(handle, async (tx: AdapterTransaction) => {
+  await executeWriteTransaction({ ...handle, verb: 'etl-import' }, async (tx: AdapterTransaction) => {
     const now = nowISO();
     const ruleCache = new Map<string, Awaited<ReturnType<typeof resolveEdgeKindTx>>>();
     const getRule = async (rel: string) => {

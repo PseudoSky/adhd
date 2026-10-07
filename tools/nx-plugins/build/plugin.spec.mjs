@@ -178,12 +178,11 @@ test('createNodes: version target still carries ^version (topological dependency
 });
 
 /**
- * GAP 1 (2026-09-28, backlog-e2e-cache-separation): the resource-heavy `e2e`
- * lane is no longer reached through `test.dependsOn`, so `publish` must reach a
- * DECLARING project's `e2e` directly — else a broken heavy suite publishes
- * green. The conditional is `hasE2e ? ["e2e"] : []`.
+ * Owner decision c0bf141d (2026-10-07): `publish` no longer depends on `e2e`,
+ * even for a project that declares an `e2e` target. e2e is run explicitly
+ * before a release. Reintroducing the dependency must turn this red.
  */
-test('createNodes: publish reaches `e2e` iff the project declares an `e2e` target', () => {
+test('createNodes: publish.dependsOn never includes `e2e`, even when declared (c0bf141d)', () => {
   const workspaceRoot = mkdtempSync(join(tmpdir(), 'nx-build-plugin-fixture-e2e-'));
   try {
     const withE2e = makeFixtureProject({
@@ -204,8 +203,8 @@ test('createNodes: publish reaches `e2e` iff the project declares an `e2e` targe
       runFor(withoutE2e, { workspaceRoot }).projects['packages/fixture/fixture-no-e2e'].targets;
 
     assert.ok(
-      ownerTargets.publish.dependsOn.includes('e2e'),
-      `a project declaring \`e2e\` must have it in publish.dependsOn — got: ${JSON.stringify(ownerTargets.publish.dependsOn)}`
+      !ownerTargets.publish.dependsOn.includes('e2e'),
+      `publish.dependsOn must NOT include \`e2e\` even when the project declares it (c0bf141d) — got: ${JSON.stringify(ownerTargets.publish.dependsOn)}`
     );
     assert.ok(
       !plainTargets.publish.dependsOn.includes('e2e'),

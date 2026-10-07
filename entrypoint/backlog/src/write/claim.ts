@@ -28,6 +28,7 @@
  * itself runs, issued against `tx`.
  */
 
+import type { ISessionStamp } from './session-stamp.js';
 import type { AdapterTransaction } from '@adhd/sox-store-adapter';
 import {
   type IProjectPolicy,
@@ -36,6 +37,7 @@ import {
 } from './catalog.js';
 import { writeAudit } from './audit.js';
 import {
+  ActorMismatchError,
   ClaimHeldError,
   InvalidArgumentError,
   IssueNotFoundError,
@@ -43,7 +45,8 @@ import {
   PreconditionRefusedError,
   assertNotBareRoleLiteral,
 } from './errors.js';
-import { claimAgeMinutes, extractClaimMeta, isClaimStale } from './claim-lease.js';
+import { claimAgeMinutes, extractClaimMeta, isClaimStale, leaseExpiryOf } from './claim-lease.js';
+import { collectReservationPathsTx, endReservationsTx, recordReservationTx } from './reservation.js';
 import { evaluateVerdictTx } from './gate.js';
 import { nextRevision } from './revision.js';
 import { resolveIssueStatusTx } from './issue-status.js';
@@ -56,7 +59,7 @@ import {
   resolveLiveIssueTx,
 } from './tx.js';
 
-export interface IClaimInput {
+export interface IClaimInput extends ISessionStamp {
   /** The `issue` uid to claim/release/renew (§6.3, an "Issue verb"). */
   uid: string;
   /** The claimant — the acting agent or person. REQUIRED on every action (§6.3's opening rule). */
@@ -64,6 +67,8 @@ export interface IClaimInput {
   action: 'claim' | 'release' | 'renew';
   /** Human-confirmed override of a NON-stale claim (§6.2). Only consulted on `action:'claim'` when the current claimant differs and the lease is not yet stale. */
   force?: boolean;
+  /** Additional paths to reserve explicitly (on top of the issue's live path citations). `action:'claim'`/`'renew'` only; canonicalised and recorded on the reservation. */
+  paths?: string[];
 }
 
 export interface IClaimOutcome {
@@ -208,7 +213,7 @@ async function touchMetadataTx(
  * | `release` | `== by`                                                 | clear both fields; `status:'released'` |
  * | `release` | `!= by` or unset                                        | no write; `status:'release-noop'`, `wasClaimedBy` |
  * | `renew`   | `== by`                                                 | bump `claimedAt`; `status:'renewed'` |
- * | `renew`   | `!= by` or unset                                        | throws `ClaimHeldError` |
+ * | `renew`   | `!= by` or unset                                        | throws `ActorMismatchError` |
  *
  * **Audit.** Every branch that performs a real write emits exactly one
  * `audit` node via {@link writeAudit}, inside the SAME transaction (§4a "no
@@ -226,13 +231,13 @@ async function touchMetadataTx(
  * audit node" and the rule table's own "no write" / four-action vocabulary;
  * it is the only reading consistent with `writeAudit`'s own doc comment.
  *
- * **`renew` against an unclaimed issue.** The rule table assigns this to the
- * SAME `ClaimHeldError` outcome as "held by someone else" — but there is no
- * real holder to report. SPEC.md does not resolve this case explicitly; this
- * implementation reports `ClaimHeldError('', '')` (empty-string sentinels,
- * never a fabricated agent name or timestamp) so the thrown error's shape is
- * still exactly `ClaimHeldError` per the rule table, without inventing data
- * the graph does not have.
+ * **`renew` against an unclaimed issue / by a non-holder.** `renew` is not a
+ * claim attempt: it is a caller-identity check, so a mismatch throws the typed
+ * `ActorMismatchError` (envelope `validation`, `details.reason:'actor_mismatch'`)
+ * with `heldBy` undefined when there is no holder — never a `ClaimHeldError`
+ * carrying empty-string sentinels. `claim` contention (non-force claim of an
+ * item another actor holds) deliberately stays `ClaimHeldError` → `conflict`:
+ * a lease race with a defined remedy (`force`, or wait for staleness).
  *
  * Errors: `InvalidArgumentError` (`uid`/`by` missing/blank, or `action`
  * outside the closed `'claim'|'release'|'renew'` set — the TS type restricts
@@ -269,6 +274,29 @@ export async function claim(
   return executeWriteTransaction({ ...handle, verb: 'claim' }, async (tx: AdapterTransaction) => {
     const now = nowISO();
     const row = await resolveLiveIssueTx(tx, input.uid);
+
+    // B-AC1 (46cf1086 S11.R1): every success arm persists the reservation
+    // `{issueUid, paths[], holder, sessionId, claimedAt, leaseExpiry}` in THIS
+    // transaction (see write/reservation.ts).
+    const reserve = async (
+      mode: 'new' | 'refresh',
+      endReason?: 'reclaimed-stale'
+    ): Promise<void> => {
+      const leasePolicy = await resolveIssueProjectPolicyTx(tx, row.rowid);
+      const paths = await collectReservationPathsTx(tx, row.rowid, input.paths ?? []);
+      await recordReservationTx(tx, handle.typePolicy, {
+        issueRowid: row.rowid,
+        issueUid: row.uid,
+        holder: input.by,
+        ...(handle.session?.sessionId !== undefined ? { sessionId: handle.session.sessionId } : {}),
+        claimedAt: now,
+        leaseExpiry: leaseExpiryOf(now, leasePolicy.claimStaleAfterMin),
+        paths,
+        mode,
+        ...(endReason !== undefined ? { endReason } : {}),
+        at: now,
+      });
+    };
 
     const meta = { ...(row.metadata ?? {}) };
     const { claimedBy, claimedAt } = extractClaimMeta(meta);
@@ -330,6 +358,7 @@ export async function claim(
           note: forceNote,
           at: now,
         });
+        await reserve('new');
         return {
           uid: row.uid,
           status: 'claimed',
@@ -363,6 +392,7 @@ export async function claim(
               : `${forceNote} — re-affirmed (held)`,
           at: now,
         });
+        await reserve('refresh');
         return {
           uid: row.uid,
           status: 'held',
@@ -407,6 +437,7 @@ export async function claim(
           forceNote === undefined ? reclaimNote : `${forceNote} — ${reclaimNote}`,
         at: now,
       });
+      await reserve('new', 'reclaimed-stale');
       return {
         uid: row.uid,
         status: 'reclaimed-stale',
@@ -436,6 +467,7 @@ export async function claim(
           from: input.by,
           at: now,
         });
+        await endReservationsTx(tx, { issueRowid: row.rowid, reason: 'released', at: now });
         return { uid: row.uid, status: 'released' };
       }
       // != by or unset — "no write" per the rule table: no touch, no audit (nothing changed).
@@ -458,6 +490,7 @@ export async function claim(
         to: input.by,
         at: now,
       });
+      await reserve('refresh');
       return {
         uid: row.uid,
         status: 'renewed',
@@ -468,6 +501,6 @@ export async function claim(
     // != by or unset — "renew is not a claim attempt" (SPEC.md §6.3.5) — throws unconditionally.
     // See this function's own doc comment ("renew against an unclaimed issue") for the
     // empty-string sentinel used when there is no real holder to report.
-    throw new ClaimHeldError(claimedBy ?? '', claimedAt ?? '');
+    throw new ActorMismatchError('renew', input.by, claimedBy, claimedAt);
   });
 }

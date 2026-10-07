@@ -35,6 +35,7 @@ import { createIssue } from './create-issue.js';
 import { claim, type IClaimOutcome } from './claim.js';
 import { transition } from './transition.js';
 import {
+  ActorMismatchError,
   ClaimHeldError,
   InvalidArgumentError,
   IssueNotFoundError,
@@ -295,7 +296,7 @@ describe('claim — rule-table coverage (SPEC.md §6.3.5, real store, single con
     expect(renewed.claimedAt).not.toBe(first.claimedAt);
   });
 
-  it('renew by a non-claimant: throws ClaimHeldError, never mutates', async () => {
+  it('renew by a non-claimant: throws ActorMismatchError, never mutates', async () => {
     const claimed = await claim(store, {
       uid: issueUid,
       by: 'agent-a',
@@ -303,11 +304,11 @@ describe('claim — rule-table coverage (SPEC.md §6.3.5, real store, single con
     });
     await expect(
       claim(store, { uid: issueUid, by: 'agent-b', action: 'renew' })
-    ).rejects.toThrow(ClaimHeldError);
+    ).rejects.toThrow(ActorMismatchError);
     try {
       await claim(store, { uid: issueUid, by: 'agent-b', action: 'renew' });
     } catch (err) {
-      const held = err as ClaimHeldError;
+      const held = err as ActorMismatchError;
       expect(held.heldBy).toBe('agent-a');
       expect(held.heldSince).toBe(claimed.claimedAt);
     }
@@ -315,10 +316,10 @@ describe('claim — rule-table coverage (SPEC.md §6.3.5, real store, single con
     expect(row?.metadata?.['claimedBy']).toBe('agent-a');
   });
 
-  it('renew on an unclaimed issue: throws ClaimHeldError (SPEC.md §6.3.5 assigns this to the same outcome as "held by someone else")', async () => {
+  it('renew on an unclaimed issue: throws ActorMismatchError with no holder (never a ClaimHeldError with empty sentinels)', async () => {
     await expect(
       claim(store, { uid: issueUid, by: 'agent-a', action: 'renew' })
-    ).rejects.toThrow(ClaimHeldError);
+    ).rejects.toThrow(ActorMismatchError);
   });
 
   it('IssueNotFoundError for a uid that does not resolve to a live issue', async () => {

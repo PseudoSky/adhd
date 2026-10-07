@@ -26,6 +26,7 @@
 import type { AdapterTransaction, StoreAdapter } from '@adhd/sox-store-adapter';
 import type { TypePolicy } from '@adhd/sox-graph-store';
 import { randomUUID, createHash } from 'node:crypto';
+import { bindTxSession, type ISessionStamp } from './session-stamp.js';
 import {
   AmbiguousReferenceError,
   BacklogWriteError,
@@ -107,10 +108,18 @@ export interface IWriteStoreHandle {
   /**
    * (S02 AC14) OPTIONAL write-verb id — request metadata the caller sets (via
    * `{ ...handle, verb: '<id>' }`) so the production-write gate names the verb
-   * actually attempted in its refusal, never a generic `'write'`. Absent ⇒
-   * `'write'`. Not part of the store identity; a per-call decoration.
+   * actually attempted in its refusal. A store handle carries no verb of its
+   * own; {@link executeWriteTransaction} REQUIRES one by type
+   * ({@link IVerbedWriteHandle}), so no generic `'write'` fallback exists.
+   * Not part of the store identity; a per-call decoration.
    */
   readonly verb?: string;
+  /**
+   * (B-AC5/B-AC6) The session stamp of THIS call, set by the transport wrapper
+   * from the verb input's `sessionId`/`parentSessionId`. Absent => no session
+   * node and no op-event is written. Per-call decoration, like `verb`.
+   */
+  readonly session?: ISessionStamp;
   /**
    * §4b's on-write embedding substrate — OPTIONAL, mirroring
    * `IDuplicateScanHandle.search`'s own "never silently go dark, but also
@@ -341,9 +350,42 @@ export async function resolveLiveIssueTx(
   // remains here is the supersession CAS check (see this function's doc).
   const row = await resolveUidPrefixTx(tx, uid, { expectedKind: 'issue' });
   if (row.isSuperseded) {
-    throw new StaleSupersedeError(uid);
+    throw new StaleSupersedeError(uid, await currentUidOfTx(tx, row));
   }
   return row;
+}
+
+/**
+ * The uid a superseded issue lives under NOW — the head of the `SUPERSEDES`
+ * chain starting at `row`, walked INSIDE the caller's transaction so the
+ * answer is authoritative for that snapshot (an `immediate` write transaction
+ * holds the writer lock, so no other writer can extend the chain mid-walk).
+ * Mirrors the read path's `currentUidOf` (`query/resolve.ts`); `undefined`
+ * means "no live successor found", never "none exists". Cycle-safe.
+ */
+export async function currentUidOfTx(
+  tx: INodeReadExecutor,
+  row: ITxNodeRow
+): Promise<string | undefined> {
+  const seen = new Set<number>([row.rowid]);
+  let cursor = row.rowid;
+  let head: string | undefined;
+  for (;;) {
+    const next = await tx.executeGet<{ src: number }>(
+      "SELECT src FROM edge WHERE rel = 'SUPERSEDES' AND dst = ? AND t_invalid IS NULL ORDER BY rowid DESC LIMIT 1",
+      [cursor]
+    );
+    if (!next || seen.has(next.src)) return head;
+    seen.add(next.src);
+    const successor = await tx.executeGet<IRawNodeRow>(
+      'SELECT * FROM node WHERE rowid = ?',
+      [next.src]
+    );
+    if (successor?.t_invalid !== null) return head;
+    head = successor.uid;
+    if (successor.is_superseded !== 1) return head;
+    cursor = next.src;
+  }
 }
 
 /**
@@ -422,7 +464,7 @@ export async function getNodeByRowidTx(
 }
 
 export interface IWriteNodeTxInput {
-  /** The entity-type discriminator — `project`/`component`/`location`/`issue`/`kind`/`edge_kind`/`status`/`priority`/`agent`/`note`/`citation`/`transition`/`audit`/`attestation`/`obligation`/`SPEC` (§3; the SPEC revision kind is added by C10, DESIGN §12). NEVER validated against a closed vocabulary here — the schema is open by design (§0 anti-antipattern 3); the write layer is the only composer of these literals. */
+  /** The entity-type discriminator — `project`/`component`/`location`/`issue`/`kind`/`edge_kind`/`status`/`priority`/`agent`/`note`/`citation`/`transition`/`audit`/`attestation`/`obligation`/`SPEC`/`session`/`op_event`/`reservation` (§3; the SPEC revision kind is added by C10, DESIGN §12; the last three are the S11 shared persistence, see write/session.ts and write/reservation.ts). NEVER validated against a closed vocabulary here — the schema is open by design (§0 anti-antipattern 3); the write layer is the only composer of these literals. */
   kind: string;
   /** The business name (`issue.title`, a catalog row's name, …). Omit for a node with no name (none currently exist in §3's table, but the column is nullable). */
   name?: string;
@@ -984,6 +1026,14 @@ function resolveTransactionMode(): TxMode {
 }
 
 /**
+ * (A-AC13 / `31b37c54`) A write handle that names the verb it is about to run.
+ * {@link executeWriteTransaction} accepts ONLY this shape, so the production
+ * gate's refusal can never fall back to a generic `'write'`: a caller that
+ * forgets `{ ...handle, verb: '<id>' }` fails to compile.
+ */
+export type IVerbedWriteHandle = IWriteStoreHandle & { readonly verb: string };
+
+/**
  * The one transaction wrapper every write verb calls — `store.adapter.transaction(fn,
  * {mode: resolveTransactionMode()})`, which is `'immediate'` (§4c: `BEGIN
  * IMMEDIATE`, the RESERVED-lock-at-BEGIN "compare-and-swap primitive" every
@@ -1019,7 +1069,7 @@ function resolveTransactionMode(): TxMode {
  *   not-actually-specified wrapper class.
  */
 export async function executeWriteTransaction<T>(
-  handle: IWriteStoreHandle,
+  handle: IVerbedWriteHandle,
   fn: (tx: AdapterTransaction) => Promise<T>
 ): Promise<T> {
   // (S02 AC14) The production-write gate runs BEFORE the retry loop opens any
@@ -1027,13 +1077,17 @@ export async function executeWriteTransaction<T>(
   // The verb is request metadata carried on the handle (`handle.verb`) so the
   // refusal names the operation the caller actually attempted rather than a
   // generic 'write'.
-  assertProductionWriteAllowed(handle, handle.verb ?? 'write');
+  assertProductionWriteAllowed(handle, handle.verb);
   let attempt = 0;
   for (;;) {
     try {
-      return await handle.adapter.transaction(fn, {
-        mode: resolveTransactionMode(),
-      });
+      return await handle.adapter.transaction(
+        (tx: AdapterTransaction) => {
+          bindTxSession(tx, handle.session);
+          return fn(tx);
+        },
+        { mode: resolveTransactionMode() }
+      );
     } catch (err) {
       if (err instanceof BacklogWriteError) throw err;
 

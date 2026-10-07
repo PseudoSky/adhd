@@ -85,7 +85,12 @@ export type IIssuePseudoField =
   | 'obligations' // NEW (C4): the declared, typed requirements on this item
   | 'verdict' // NEW (C6): the derived actionability verdict (never stored)
   | 'spec' // NEW (C10): the work item's current spec revision pointer (never the body)
-  | 'similar'; // NEW (C9): reviewed `similar_to` links, both directions (advisory `duplicate_of` is NOT this field)
+  | 'similar' // NEW (C9): reviewed `similar_to` links, both directions (advisory `duplicate_of` is NOT this field)
+  | 'primaryOwner' // NEW (A-AC5): the single primary owning project+component (`owns_component`)
+  | 'memberships' // NEW (A-AC5): every component (and its project) the item belongs to — primary + citation-derived (`in_component`)
+  | 'supersededBy' // NEW (A-AC8): the successor uid of a retired SUPERSEDED item, or null
+  | 'supersedeReason' // NEW (A-AC8): the closed-enum reason recorded by the SUPERSEDED transition, or null
+  | 'specRevisionFragment'; // NEW (B-AC9): the head spec revision's FRAGMENT body, or null
 
 export type IIssueField = IIssuePlainField | IIssuePseudoField;
 
@@ -121,6 +126,11 @@ export const ISSUE_PSEUDO_FIELDS: readonly IIssuePseudoField[] = [
   'verdict',
   'spec',
   'similar',
+  'primaryOwner',
+  'memberships',
+  'supersededBy',
+  'supersedeReason',
+  'specRevisionFragment',
 ];
 
 const ISSUE_FIELD_SET: ReadonlySet<string> = new Set<string>([
@@ -375,6 +385,42 @@ export interface IIssueCard {
    * the reserved `duplicate_of` same-judgement relation.
    */
   similar?: ISimilarLinks;
+  /** A-AC5 — exactly ONE primary owner (the `owns_component` placement); `null` only for a malformed legacy node. */
+  primaryOwner?: IPrimaryOwner | null;
+  /** A-AC5 — every membership row: the primary first, then citation-derived (`in_component`). */
+  memberships?: IMembershipView[];
+  /** A-AC8 — the uid this item was superseded by (`supersedes` edge), or `null`. */
+  supersededBy?: string | null;
+  /** A-AC8 — the recorded SUPERSEDED reason (closed enum), or `null` when none was recorded. */
+  supersedeReason?: string | null;
+  /** B-AC9 — the head spec revision's fragment body (byte-for-byte what `spec-append` wrote), or `null` when the item has no spec. */
+  specRevisionFragment?: ISpecRevisionFragmentView | null;
+}
+
+/** The primary owner of an item — the project + component that `owns_component`/`owns_project` name. */
+export interface IPrimaryOwner {
+  projectUid: string;
+  projectName: string;
+  componentUid: string;
+  componentName: string;
+}
+
+/** One membership row (see `write/membership.ts`). */
+export interface IMembershipView {
+  componentUid: string;
+  componentName: string;
+  projectUid: string;
+  projectName: string;
+  via: 'primary' | 'citation';
+  citationUid?: string;
+}
+
+/** The head spec revision's fragment, with its pointer identity. */
+export interface ISpecRevisionFragmentView {
+  revision_uid: string;
+  revision_token: string;
+  revision_seq: number;
+  fragment: string;
 }
 
 /**
@@ -421,6 +467,20 @@ export interface IIssueFilter {
   project?: string;
   /** uid or name, scoped within `project`. */
   component?: string;
+  /** (A-AC5) ANY-of: items that BELONG to a project via any component membership (primary or citation-derived). `project` keeps primary-owner semantics. */
+  memberOfProject?: string | string[];
+  /** (A-AC5) ANY-of: items with a membership in any of these components. `component` keeps primary-owner semantics. */
+  memberOfComponent?: string | string[];
+  /** `view:'reservations'` only — keep reservations whose path equals this path or lies under it (segment-aware: `/a/b` matches `/a/b` and `/a/b/x`, never `/a/bc`). */
+  pathPrefix?: string;
+  /** `view:'reservations'` / `view:'sessions'` — the session id the reservation was taken under / the session itself. */
+  sessionId?: string;
+  /** `view:'reservations'` only — the claim holder. */
+  holder?: string;
+  /** `view:'sessions'` only — keep sessions whose agent is this. */
+  agent?: string;
+  /** `view:'sessions'` only — keep sessions whose parent session is this. */
+  parentSessionId?: string;
   kind?: string | string[];
   status?: string | string[] | 'open' | 'closed' | 'all';
   priority?: string | string[];
@@ -481,6 +541,10 @@ export type IIssueView =
   | 'stale'
   | 'similar'
   | 'overlap'
+  | 'reservations' // 46cf1086 — active claim reservations, store-wide, no uid needed
+  | 'sessions' // 91a8c640 — sessions (id, agent, startedAt, endedAt, parentSessionId)
+  | 'registry-orphans' // 39799f8e — typed registry-integrity findings (duplicate project identity, component/project mismatch, empty project)
+  | 'orphaned-parents' // S02 AC14 tail — terminal parents that still have open `part_of` descendants
   | 'projects'
   | 'components'
   | 'locations'
@@ -525,6 +589,12 @@ export interface IIssueQueryInput {
   overlapUids?: readonly string[];
   /** `view:'stale'` only — minutes since `claimedAt`; falls back to `project_policy.claim_stale_after_min` (default 30) when omitted. */
   staleAfterMin?: number;
+  /** B2 (ADR-0007 D7): when `'byCitationPath'`, the call is the citation-by-path projection — requires `path`, ignores `view`. */
+  projection?: 'byCitationPath';
+  /** `projection:'byCitationPath'` only — the path whose citing items are returned (absolute, or relative to each project root). */
+  path?: string;
+  /** `view:'reservations'` only — the clock (ISO) a lease is judged live against; defaults to the current time. The ONLY clock seam, so a test proves lease expiry by injecting `now`, never by sleeping. */
+  now?: string;
   /** C8 — `view:'catalogs'` only: narrow to one vocabulary catalog. Omitted ⇒ every catalog's terms (the same set `view:'kinds'` exposes). */
   catalog?: CatalogKindName;
 }
@@ -601,6 +671,23 @@ export type IIssueQueryResult =
   | { view: 'stale'; items: IIssueCard[] }
   | { view: 'similar'; items: IIssueCard[]; clusters?: ISimilarViewClusterBlock }
   | { view: 'overlap'; groups: IOverlapGroup[] }
+  | {
+      view: 'by-citation-path';
+      projection: 'byCitationPath';
+      path: string;
+      items: Array<{
+        uid: string;
+        title: string;
+        status: string;
+        citationUid: string;
+        line?: string;
+        verification: string;
+      }>;
+    }
+  | { view: 'reservations'; items: IReservationRow[] }
+  | { view: 'sessions'; items: ISessionSummary[] }
+  | { view: 'registry-orphans'; findings: IRegistryFinding[]; total: number }
+  | { view: 'orphaned-parents'; items: IOrphanedParentItem[]; total: number; hasMore: boolean }
   | { view: 'projects'; items: IProjectSummary[] }
   | { view: 'components'; items: IComponentSummary[] }
   | { view: 'locations'; items: ILocationSummary[] }
@@ -615,6 +702,53 @@ export type IIssueQueryResult =
 // ---------------------------------------------------------------------------
 // §3a registry read surface (project / component / location)
 // ---------------------------------------------------------------------------
+
+/** One retired parent that still has open work under it. */
+export interface IOrphanedParentItem {
+  uid: string;
+  title: string;
+  /** The parent's own (terminal) status name. */
+  status: string;
+  /** Count of still-open TRANSITIVE descendants via `part_of` (the same population the part-of rollup counts). */
+  openChildren: number;
+  /** Open descendant uids, capped at `ORPHANED_PARENT_SAMPLE` (5). */
+  openChildUids: readonly string[];
+}
+
+/** One active reservation row — one per (reservation x path). */
+export interface IReservationRow {
+  path: string;
+  uid: string;
+  holder: string;
+  sessionId: string | null;
+  claimedAt: string;
+  leaseExpiry: string;
+}
+
+/** A session as listed by `view:'sessions'`. `endedAt` is the explicit end if recorded, else the time of the session's latest op-event. */
+export interface ISessionSummary {
+  sessionId: string;
+  agent: string;
+  startedAt: string;
+  endedAt: string | null;
+  parentSessionId: string | null;
+}
+
+/** One typed registry-integrity finding (`view:"registry-orphans"`). */
+export type IRegistryFinding =
+  | {
+      kind: 'duplicate-identity';
+      projectUids: string[];
+      evidence: 'repoUrl' | 'path' | 'name-suffix';
+      normalized: string;
+    }
+  | {
+      kind: 'component-project-mismatch';
+      componentUid: string;
+      metaProjectUid: string;
+      edgeProjectUid: string | null;
+    }
+  | { kind: 'empty-project'; projectUid: string; reason: 'no-issues-no-locations' };
 
 export interface IProjectSummary {
   uid: string;

@@ -12,9 +12,9 @@
  *     a regression in any of them reported green.
  *   - 2026-09-28 (backlog-e2e-cache-separation) `e2e` was removed from
  *     `entrypoint/backlog`'s `test.dependsOn` (correctly — coupling it there ran
- *     the whole heavy lane UNCACHED on every push), which moved the burden of
- *     reaching it onto the gate files. A gate file left naming only `test` would
- *     let a broken heavy lane ship — or get published.
+ *     the whole heavy lane UNCACHED on every push). As of 2026-10-07, `publish`
+ *     no longer reaches `e2e` either (owner decision); `e2e` must be run explicitly
+ *     via the CI gate when needed.
  *
  * This script is the ratchet that makes both classes impossible to reintroduce
  * unnoticed. It is run UNCONDITIONALLY by the pre-push hook and both CI
@@ -29,13 +29,11 @@
  *   3. Every `e2e` target MUST be `cache: true` with non-empty `inputs`
  *      containing `default` (so the gate reaches it without re-running it
  *      uncached every time — the whole point of the separation).
- *   4. For every PUBLISHABLE project, its declaration of an `e2e` target MUST
- *      agree with `publish` reaching `e2e` — i.e. the conditional in
- *      `tools/nx-plugins/build/plugin.js` (`hasE2e ? ["e2e"] : []`) is intact,
- *      so a broken heavy suite can never be published green. Verified by
- *      invoking the plugin's OWN `createNodes` and reading the resolved
- *      `publish.dependsOn` (never a re-implementation — a re-implementation
- *      would stay green when the plugin breaks, defeating the check).
+ *   4. For every PUBLISHABLE project, `publish` must NOT depend on `e2e`
+ *      (owner decision 2026-10-07). Verified by invoking the plugin's OWN
+ *      `createNodes` and reading the resolved `publish.dependsOn` (never a
+ *      re-implementation — a re-implementation would stay green when the
+ *      plugin breaks, defeating the check).
  *   5. Both CI workflows (`.github/workflows/pull-request.yml`, `ci.yml`) MUST
  *      invoke every target in `GATE_TARGETS` (imported from `tools/gate/lane-gate.mjs`).
  *      `.githooks/pre-push` runs `test` but NOT `e2e` (too heavy per push; CI and the
@@ -203,7 +201,7 @@ export async function runChecks({ workspaceRoot, gateTargets, createNodesFn, bas
     }
   }
 
-  // ---- rule 4: publishable project's publish reaches its e2e -------------
+  // ---- rule 4: publish must not depend on e2e (owner decision 2026-10-07) -----
   // Invoke the REAL build plugin's createNodes and read its resolved output —
   // never a re-implementation (a re-implementation would stay green when the
   // plugin itself breaks).
@@ -221,14 +219,12 @@ export async function runChecks({ workspaceRoot, gateTargets, createNodesFn, bas
     const resolved = result && result.projects && result.projects[root];
     const publish = resolved && resolved.targets && resolved.targets.publish;
     if (!publish) continue; // plugin did not attach a publish target (not buildable/publishable)
-    const project = projects.find((p) => p.root === root);
-    const declaresE2e = Boolean(project && project.json.targets && project.json.targets.e2e);
     const reachesE2e = dependsOnTargets(publish.dependsOn).includes('e2e');
-    if (declaresE2e !== reachesE2e) {
+    if (reachesE2e === true) {
       add(
-        '4-publish-e2e-disagreement',
-        `${root} — declares \`e2e\`=${declaresE2e} but \`publish.dependsOn\` reaches e2e=${reachesE2e} ` +
-          `(resolved: ${JSON.stringify(publish.dependsOn)}). The conditional in tools/nx-plugins/build/plugin.js is broken.`,
+        '4-publish-reaches-e2e',
+        `${root} — \`publish.dependsOn\` reaches e2e (resolved: ${JSON.stringify(publish.dependsOn)}). ` +
+          `publish must not depend on e2e (owner decision 2026-10-07). Remove e2e from tools/nx-plugins/build/plugin.js or this project's nx-release-publish override.`,
       );
     }
   }
@@ -353,12 +349,12 @@ async function main() {
     console.error('');
     console.error('  The gate runs GATE_TARGETS from tools/gate/lane-gate.mjs; both CI workflows must reach');
     console.error('  every target (pre-push runs test, never e2e), every `e2e` lane must be cached, `test` must not re-couple `e2e`,');
-    console.error('  `publish` must reach every declared `e2e` (tools/nx-plugins/build/plugin.js), and every');
+    console.error('  `publish` does not depend on `e2e` (owner decision 2026-10-07), and every');
     console.error('  `vite.config.ts` must declare exactly ONE `plugins:` array (check-vite-config-plugins.mjs).');
     process.exit(1);
   }
 
-  console.log(`✓ lane reachability OK — gate targets [${gateTargets.join(', ')}]; CI workflows reach them, pre-push runs test without e2e; every e2e lane cached; publish reaches every declared e2e; every vite.config.ts single-array.`);
+  console.log(`✓ lane reachability OK — gate targets [${gateTargets.join(', ')}]; CI workflows reach them, pre-push runs test without e2e; every e2e lane cached; publish does not depend on e2e; every vite.config.ts single-array.`);
 }
 
 // Only run when invoked directly (never when imported by a test).

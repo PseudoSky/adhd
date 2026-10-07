@@ -256,7 +256,7 @@ describe('C1 Reference — canonical identity & resolution (real store, mounted 
     if (!isOutcomeOk(bySurvivor)) return;
     if (!('items' in bySurvivor.data))
       throw new Error(`expected a list result, got ${bySurvivor.data.view}`);
-    expect(new Set(bySurvivor.data.items.map((i) => i.uid))).toEqual(
+    expect(new Set(bySurvivor.data.items.map((i) => (i as { uid: string }).uid))).toEqual(
       new Set([issueA, issueB])
     );
 
@@ -270,7 +270,7 @@ describe('C1 Reference — canonical identity & resolution (real store, mounted 
     if (!isOutcomeOk(byRetiredName)) return;
     if (!('items' in byRetiredName.data))
       throw new Error(`expected a list result, got ${byRetiredName.data.view}`);
-    expect(new Set(byRetiredName.data.items.map((i) => i.uid))).toEqual(
+    expect(new Set(byRetiredName.data.items.map((i) => (i as { uid: string }).uid))).toEqual(
       new Set([issueA, issueB])
     );
 

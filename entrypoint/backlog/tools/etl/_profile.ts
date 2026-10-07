@@ -19,7 +19,7 @@ async function main() {
   const projectsByName = new Map();
   for (const name of distinctNames) {
     const metadata = name === ADHD_PROJECT_NAME ? { path: ADHD_PROJECT_PATH } : {};
-    const p = await executeWriteTransaction(handle, (tx) => upsertProjectTx(handle, tx, { name, metadata }));
+    const p = await executeWriteTransaction({ ...handle, verb: 'etl-import' }, (tx) => upsertProjectTx(handle, tx, { name, metadata }));
     projectsByName.set(name, p);
   }
   const t0 = performance.now();

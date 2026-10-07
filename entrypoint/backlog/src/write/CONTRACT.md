@@ -80,7 +80,7 @@ catalog surface with `lifecycle:"deprecated"` + `replacedBy`.
 
 ## `tx.ts` (27 exports)
 
-### `IWriteStoreHandle` — interface (`tx.ts:97`)
+### `IWriteStoreHandle` — interface (`tx.ts:98`)
 
 ```ts
 export interface IWriteStoreHandle {
@@ -95,7 +95,7 @@ Guarantees: the two dependencies every write verb needs — the raw
 `GraphBackend` was constructed with. Constructed once at store-open time and
 threaded through every write verb.
 
-### `ITxNodeRow` — interface (`tx.ts:139`)
+### `ITxNodeRow` — interface (`tx.ts:148`)
 
 ```ts
 export interface ITxNodeRow {
@@ -114,7 +114,7 @@ Guarantees: the shape every node row read back inside a transaction is mapped
 onto — `metadata` is always either a parsed object or `undefined` (never a
 raw JSON string, never a thrown parse error).
 
-### `nowISO()` — function (`tx.ts:192`)
+### `nowISO()` — function (`tx.ts:201`)
 
 ```ts
 export function nowISO(): string;
@@ -123,7 +123,7 @@ export function nowISO(): string;
 Guarantees: returns the current UTC timestamp in the exact ISO-8601 shape
 `@adhd/sox-graph-store` stamps every row with.
 
-### `sha256Hex(input)` — function (`tx.ts:197`)
+### `sha256Hex(input)` — function (`tx.ts:206`)
 
 ```ts
 export function sha256Hex(input: string | Buffer): string;
@@ -133,7 +133,7 @@ Guarantees: `sha256` hex digest of the given content — used for citation and
 audit content-addressing; NEVER the library's own dedupe hash (that is
 trim+lowercase, computed separately inside `writeNodeTx`).
 
-### `canonicalJSONStringify(value)` — function (`tx.ts:209`)
+### `canonicalJSONStringify(value)` — function (`tx.ts:218`)
 
 ```ts
 export function canonicalJSONStringify(value: Record<string, unknown>): string;
@@ -144,7 +144,7 @@ nesting level and `undefined` values omitted (never serialized as `null`) —
 the one canonical form both `audit.sha` and `transition.sha` are computed
 over.
 
-### `getNodeByUidTx(tx, uid)` — function (`tx.ts:232`)
+### `getNodeByUidTx(tx, uid)` — function (`tx.ts:241`)
 
 ```ts
 export async function getNodeByUidTx(tx: INodeReadExecutor, uid: string): Promise<ITxNodeRow | null>;
@@ -158,7 +158,7 @@ that need "live only" check `row.tInvalid === null` themselves). The
 — an `AdapterTransaction`, a `StoreAdapter`, or graph-store's
 `GraphTransaction`.
 
-### `resolveUidPrefixTx(exec, ref, opts?)` — function (`tx.ts:261`)
+### `resolveUidPrefixTx(exec, ref, opts?)` — function (`tx.ts:270`)
 
 ```ts
 export async function resolveUidPrefixTx(
@@ -177,7 +177,7 @@ a prefix matching ≥2 live rows of the expected kind throws
 `resolveLiveIssueTx` and `catalog.ts`'s `resolveByUidTx` both delegate here,
 so every issue verb and `rm-location` share ONE prefix contract.
 
-### `resolveRestorableIssueTx(tx, ref)` — function (`tx.ts:366`)
+### `resolveRestorableIssueTx(tx, ref)` — function (`tx.ts:408`)
 
 ```ts
 export async function resolveRestorableIssueTx(tx: INodeReadExecutor, ref: string): Promise<ITxNodeRow>;
@@ -191,7 +191,7 @@ or SUPERSEDED one with `IssueNotRestorableError` (`reason: 'live'` /
 the same too-short/ambiguous rules. `IssueNotFoundError` when nothing matches;
 `AmbiguousReferenceError` when a prefix matches more than one deleted row.
 
-### `getNodeByRowidTx(tx, rowid)` — function (`tx.ts:413`)
+### `getNodeByRowidTx(tx, rowid)` — function (`tx.ts:455`)
 
 ```ts
 export async function getNodeByRowidTx(tx: AdapterTransaction, rowid: number): Promise<ITxNodeRow | null>;
@@ -200,7 +200,7 @@ export async function getNodeByRowidTx(tx: AdapterTransaction, rowid: number): P
 Guarantees: same as `getNodeByUidTx`, keyed by internal `rowid` instead —
 used to resolve an edge endpoint's kind without a redundant round trip.
 
-### `IWriteNodeTxInput` — interface (`tx.ts:424`)
+### `IWriteNodeTxInput` — interface (`tx.ts:466`)
 
 ```ts
 export interface IWriteNodeTxInput {
@@ -222,7 +222,7 @@ atomic instant. `skipDedupe` is typed `never` — declaring it on an input
 object literal is a compile error; see `writeNodeTx`'s own guarantee below
 for why.
 
-### `writeNodeTx(tx, input)` — function (`tx.ts:567`)
+### `writeNodeTx(tx, input)` — function (`tx.ts:609`)
 
 ```ts
 export async function writeNodeTx(tx: AdapterTransaction, input: IWriteNodeTxInput): Promise<{ rowid: number; uid: string }>;
@@ -237,7 +237,7 @@ the library's content-hash-SELECT-then-maybe-insert behavior. SPEC.md §1/§4
 this function never runs that SELECT for any kind at all: always a fresh
 INSERT, always a fresh `crypto.randomUUID()` uid.
 
-### `EdgeMultiplicity` — type (`tx.ts:645`)
+### `EdgeMultiplicity` — type (`tx.ts:687`)
 
 ```ts
 export type EdgeMultiplicity = 'n:1' | '1:n' | 'n:m';
@@ -247,7 +247,7 @@ Guarantees: the closed set of multiplicity values every `edge_kind` rule
 declares. `n:1` caps the edge's SOURCE out-degree at one; `1:n` caps the
 TARGET in-degree at one; `n:m` is uncapped on both sides.
 
-### `IEdgeKindRule` — interface (`tx.ts:647`)
+### `IEdgeKindRule` — interface (`tx.ts:689`)
 
 ```ts
 export interface IEdgeKindRule {
@@ -264,7 +264,7 @@ source-kind match — now used by TWO rels: `audits` (a subject of any kind) and
 since C10, `attests` (an attestation may be keyed to an `issue` OR a `SPEC`
 revision).
 
-### `IWriteEdgeTxInput` — interface (`tx.ts:655`)
+### `IWriteEdgeTxInput` — interface (`tx.ts:697`)
 
 ```ts
 export interface IWriteEdgeTxInput {
@@ -289,7 +289,7 @@ one call — `rule` must be the caller's own already-resolved `edge_kind` rule
 follows the same one-logical-write-one-timestamp rule as
 `IWriteNodeTxInput.at`.
 
-### `writeEdgeTx(tx, input)` — function (`tx.ts:759`)
+### `writeEdgeTx(tx, input)` — function (`tx.ts:801`)
 
 ```ts
 export async function writeEdgeTx(tx: AdapterTransaction, input: IWriteEdgeTxInput): Promise<void>;
@@ -303,7 +303,7 @@ mismatch), enforces `checkMultiplicityTx`'s capped-side conflict check
 CONFLICT(src, dst, rel) DO UPDATE` / re-livening (`t_invalid = NULL`) as the
 library's own `writeEdgeInternal`, issued against `tx`.
 
-### `BacklogEdgeKindMismatchError` — class (`tx.ts:822`)
+### `BacklogEdgeKindMismatchError` — class (`tx.ts:864`)
 
 ```ts
 export class BacklogEdgeKindMismatchError extends BacklogWriteError {
@@ -318,7 +318,7 @@ does not match the actual endpoint being written — a write-layer composition
 defect, expected to be unreachable in practice; fails loudly rather than
 writing a mismatched edge.
 
-### `IInvalidateEdgeTxInput` — interface (`tx.ts:838`)
+### `IInvalidateEdgeTxInput` — interface (`tx.ts:880`)
 
 ```ts
 export interface IInvalidateEdgeTxInput {
@@ -333,7 +333,7 @@ export interface IInvalidateEdgeTxInput {
 Guarantees: everything `invalidateEdgeTx` needs to invalidate one live edge,
 with an optional human-readable `reason` merged into the edge's `meta`.
 
-### `invalidateEdgeTx(tx, input)` — function (`tx.ts:857`)
+### `invalidateEdgeTx(tx, input)` — function (`tx.ts:899`)
 
 ```ts
 export async function invalidateEdgeTx(tx: AdapterTransaction, input: IInvalidateEdgeTxInput): Promise<void>;
@@ -344,7 +344,7 @@ no-op if the edge is already invalidated or absent; otherwise sets
 `t_invalid` and merges `invalidatedAt`/`invalidatedReason` into `meta`,
 issued against `tx`.
 
-### `updateNodeMetaTx(tx, uid, patch, expectedRevision)` — function (`tx.ts:898`)
+### `updateNodeMetaTx(tx, uid, patch, expectedRevision)` — function (`tx.ts:940`)
 
 ```ts
 export async function updateNodeMetaTx(tx: AdapterTransaction, uid: string, patch: Record<string, unknown>, expectedRevision: number): Promise<number | null>;
@@ -361,7 +361,7 @@ per-node CAS, DESIGN §2 Primitive 1) and exists solely for C10's spec pointer
 (`meta.spec_revision`); no other verb may adopt it without a new decision. A
 node with no `meta.revision` reads as revision `0`.
 
-### `executeWriteTransaction(handle, fn)` — function (`tx.ts:1021`)
+### `executeWriteTransaction(handle, fn)` — function (`tx.ts:1071`)
 
 ```ts
 export async function executeWriteTransaction<T>(handle: IWriteStoreHandle, fn: (tx: AdapterTransaction) => Promise<T>): Promise<T>;
@@ -415,7 +415,7 @@ catalogs, find-then-mint). The definition lives in `write/uid-prefix.ts`
 (which also owns the uid-PREFIX classification) and is re-exported from
 `catalog.ts` so existing importers keep their path.
 
-### `IResolvedCatalogRow` — interface (`catalog.ts:89`)
+### `IResolvedCatalogRow` — interface (`catalog.ts:90`)
 
 ```ts
 export interface IResolvedCatalogRow {
@@ -429,7 +429,7 @@ Guarantees: the minimal resolved shape every catalog resolution returns —
 `name` is never `null` here (a live catalog row with a null name is treated
 as unresolved and throws before this shape is ever constructed).
 
-### `IResolvedProjectRow` — interface (`catalog.ts:95`)
+### `IResolvedProjectRow` — interface (`catalog.ts:96`)
 
 ```ts
 export interface IResolvedProjectRow extends IResolvedCatalogRow {
@@ -441,7 +441,7 @@ Guarantees: `IResolvedCatalogRow` plus the project's parsed `meta` blob
 (`undefined` if absent or unparsable) — the shape `resolveProjectPolicy`
 reads `metadata.policy` off of.
 
-### `resolveProjectTx(tx, ref)` — function (`catalog.ts:143`)
+### `resolveProjectTx(tx, ref)` — function (`catalog.ts:144`)
 
 ```ts
 export async function resolveProjectTx(tx: AdapterTransaction, ref: string): Promise<IResolvedProjectRow>;
@@ -451,7 +451,7 @@ Guarantees: resolves `ref` (uid or name) to a LIVE `project` row inside `tx`.
 Resolved-ONLY — NEVER mints a project. Throws `CatalogNotFoundError` on no
 match.
 
-### `resolveComponentTx(tx, input)` — function (`catalog.ts:182`)
+### `resolveComponentTx(tx, input)` — function (`catalog.ts:183`)
 
 ```ts
 export async function resolveComponentTx(tx: AdapterTransaction, input: { projectUid: string; ref: string }): Promise<IResolvedCatalogRow>;
@@ -462,7 +462,7 @@ scoped to `input.projectUid` inside `tx`. Resolved-ONLY — an unresolved name,
 or a uid-shaped ref belonging to a DIFFERENT project, throws
 `CatalogNotFoundError('component', ref)` rather than forking a new component.
 
-### `resolveDefaultComponentTx(tx, input)` — function (`catalog.ts:217`)
+### `resolveDefaultComponentTx(tx, input)` — function (`catalog.ts:218`)
 
 ```ts
 export async function resolveDefaultComponentTx(tx: AdapterTransaction, input: { projectRowid: number }): Promise<IResolvedCatalogRow>;
@@ -474,7 +474,7 @@ belonging to a different project can never be mismatched onto this one).
 NEVER mints — throws `CatalogNotFoundError('component', '(root)')` if
 missing (a row `upsertProject` is expected to already guarantee).
 
-### `FlatCatalogKind` — type (`catalog.ts:237`)
+### `FlatCatalogKind` — type (`catalog.ts:238`)
 
 ```ts
 export type FlatCatalogKind = 'kind' | 'status' | 'priority' | 'agent';
@@ -483,7 +483,7 @@ export type FlatCatalogKind = 'kind' | 'status' | 'priority' | 'agent';
 Guarantees: the closed set of catalog kinds that are mintable on an
 unresolved NAME (never on an unresolved uid-shaped ref).
 
-### `IMintOrResolveInput` — interface (`catalog.ts:239`)
+### `IMintOrResolveInput` — interface (`catalog.ts:240`)
 
 ```ts
 export interface IMintOrResolveInput {
@@ -501,7 +501,7 @@ mint, never read or applied when `ref` resolves to an existing row. `at` is
 NOT threaded into `resolveEdgeKindTx`'s own `edge_kind` rows (those keep
 their own clock; see that function's guarantee below).
 
-### `RESERVED_TERMINAL_STATUS_NAMES` — const (`catalog.ts:295`)
+### `RESERVED_TERMINAL_STATUS_NAMES` — const (`catalog.ts:296`)
 
 ```ts
 export const RESERVED_TERMINAL_STATUS_NAMES: ReadonlySet<string>;
@@ -514,7 +514,7 @@ case-sensitive. The mint layer seeds a `status` row's `terminal` flag from it
 name-blind (ADR-0002 D1). `catalog-repair.ts` re-exports this SAME set rather
 than declaring its own.
 
-### `isReservedTerminalStatusName(name)` — function (`catalog.ts:310`)
+### `isReservedTerminalStatusName(name)` — function (`catalog.ts:311`)
 
 ```ts
 export function isReservedTerminalStatusName(name: string): boolean;
@@ -524,7 +524,7 @@ Guarantees: exact, case-sensitive membership in
 `RESERVED_TERMINAL_STATUS_NAMES` — the same predicate the `(kind,name)`
 resolve uses.
 
-### `DEPRECATED_KIND_NAMES` — const (`catalog.ts:325`)
+### `DEPRECATED_KIND_NAMES` — const (`catalog.ts:326`)
 
 ```ts
 export const DEPRECATED_KIND_NAMES: ReadonlySet<string>;
@@ -537,7 +537,7 @@ on `RESERVED_TERMINAL_STATUS_NAMES`. Membership is decided on the case fold, so
 `allowDeprecated`, and is reported `lifecycle:"deprecated"` on the generated
 catalog view (`query/views/catalog.ts`).
 
-### `DEPRECATED_KIND_REPLACEMENTS` — const (`catalog.ts:333`)
+### `DEPRECATED_KIND_REPLACEMENTS` — const (`catalog.ts:334`)
 
 ```ts
 export const DEPRECATED_KIND_REPLACEMENTS: ReadonlyMap<string, string>;
@@ -547,7 +547,7 @@ Guarantees: the term to use INSTEAD of each `DEPRECATED_KIND_NAMES` entry
 (`EPIC` → `FEAT`). A row's live `meta.replacedBy` is preferred when present;
 this map is the in-code fallback the error and the catalog both name.
 
-### `isDeprecatedKindName(name)` — function (`catalog.ts:348`)
+### `isDeprecatedKindName(name)` — function (`catalog.ts:349`)
 
 ```ts
 export function isDeprecatedKindName(name: string): boolean;
@@ -556,7 +556,7 @@ export function isDeprecatedKindName(name: string): boolean;
 Guarantees: case-fold membership in `DEPRECATED_KIND_NAMES` — `EPIC` and `epic`
 both count.
 
-### `deprecatedKindReplacement(name)` — function (`catalog.ts:353`)
+### `deprecatedKindReplacement(name)` — function (`catalog.ts:354`)
 
 ```ts
 export function deprecatedKindReplacement(name: string): string | undefined;
@@ -565,7 +565,7 @@ export function deprecatedKindReplacement(name: string): string | undefined;
 Guarantees: the case-folded in-code replacement for a deprecated `kind` name,
 or `undefined` when the name is not one of `DEPRECATED_KIND_NAMES`.
 
-### `VALID_LOCATION_TYPES` — const (`catalog.ts:1525`)
+### `VALID_LOCATION_TYPES` — const (`catalog.ts:1559`)
 
 ```ts
 export const VALID_LOCATION_TYPES: readonly ILocationType[];
@@ -576,7 +576,7 @@ Guarantees: the closed `location_type` vocabulary (`path`/`url`/`tool`) the
 `location_type` catalog (`query/views/catalog.ts`) projects from the SAME
 source rather than a second, hand-maintained copy.
 
-### `mintOrResolveCatalogTx(tx, input)` — function (`catalog.ts:491`)
+### `mintOrResolveCatalogTx(tx, input)` — function (`catalog.ts:492`)
 
 ```ts
 export async function mintOrResolveCatalogTx(tx: AdapterTransaction, input: IMintOrResolveInput): Promise<IResolvedCatalogRow>;
@@ -587,7 +587,7 @@ uid-shaped `ref` that does not resolve throws `CatalogNotFoundError` (uids
 are never auto-vivified). A name-shaped `ref` that does not resolve is
 minted via `writeNodeTx` inside the SAME `tx`.
 
-### `mintOrResolveStatusTx(tx, input)` — function (`catalog.ts:614`)
+### `mintOrResolveStatusTx(tx, input)` — function (`catalog.ts:615`)
 
 ```ts
 export async function mintOrResolveStatusTx(tx: AdapterTransaction, input: { ref: string; at?: string }): Promise<IResolvedCatalogRow>;
@@ -601,7 +601,7 @@ self-heal): an existing row is resolved, never re-minted, so no duplicate rows
 accumulate. A uid-shaped `ref` that does not resolve throws
 `CatalogNotFoundError`.
 
-### `nextPriorityRankTx(tx)` — function (`catalog.ts:629`)
+### `nextPriorityRankTx(tx)` — function (`catalog.ts:630`)
 
 ```ts
 export async function nextPriorityRankTx(tx: AdapterTransaction): Promise<number>;
@@ -611,7 +611,7 @@ Guarantees: returns one past the current max `priority.meta.rank` (0 if no
 priority rows exist) — a novel priority can never silently outrank an
 existing one.
 
-### `EDGE_KIND_TABLE` — const (`catalog.ts:644`)
+### `EDGE_KIND_TABLE` — const (`catalog.ts:645`)
 
 ```ts
 export const EDGE_KIND_TABLE: readonly IEdgeKindRule[];
@@ -648,7 +648,7 @@ gate `supersedes`/`duplicate_of` use, with no `part_of`-specific code path.
 Re-adding the SAME parent is a no-op (`noop: true`). A multi-parent model would
 require changing this row's multiplicity, not special-casing `part_of`.
 
-### `resolveEdgeKindTx(tx, rel)` — function (`catalog.ts:819`)
+### `resolveEdgeKindTx(tx, rel)` — function (`catalog.ts:853`)
 
 ```ts
 export async function resolveEdgeKindTx(tx: AdapterTransaction, rel: string): Promise<IEdgeKindRule>;
@@ -663,7 +663,7 @@ row (corrupt or missing `meta` keys) is invalidated and replaced in the SAME
 `CatalogNotFoundError('edge_kind', rel)` if `rel` isn't in
 `EDGE_KIND_TABLE` at all.
 
-### `IProjectPolicy` — interface (`catalog.ts:887`)
+### `IProjectPolicy` — interface (`catalog.ts:921`)
 
 ```ts
 export interface IProjectPolicy {
@@ -717,7 +717,7 @@ minimum title-token Jaccard for the SECOND independent signal — cosine alone i
 never sufficient cross-project. All four are data (never env toggles) resolved
 by `resolveProjectPolicy` over `DEFAULT_PROJECT_POLICY`.
 
-### `resolveProjectPolicy(project)` — function (`catalog.ts:993`)
+### `resolveProjectPolicy(project)` — function (`catalog.ts:1027`)
 
 ```ts
 export function resolveProjectPolicy(project: IResolvedProjectRow): IProjectPolicy;
@@ -824,7 +824,7 @@ export interface IResolvedCitationTarget {
 }
 ```
 
-### `resolveCitationTarget(projectRoot, file, allowedRoots)` — function (`citation-path.ts:184`)
+### `resolveCitationTarget(projectRoot, file, allowedRoots)` — function (`citation-path.ts:188`)
 
 ```ts
 export async function resolveCitationTarget(
@@ -849,7 +849,7 @@ The ONE copy of §8.5's citation-sha rule (`create`/`transition`/`update`/
 by a `has_citation` edge; the ONE contract lives in the `citation.ts` leaf
 (`src/citation.ts`), which this module encodes to / decodes from.
 
-### `computeCitationSha(project, file, revision, allowedExternalRoots, siblingRoots?)` — function (`citation.ts:248`)
+### `computeCitationSha(project, file, revision, allowedExternalRoots, siblingRoots?)` — function (`citation.ts:305`)
 
 ```ts
 export async function computeCitationSha(
@@ -867,40 +867,40 @@ export async function computeCitationSha(
 working-tree read, canonical containment against the project root ∪
 `allowedExternalRoots`.
 
-### `computeCitationShas(project, citations, allowedExternalRoots, siblingRoots?)` — function (`citation.ts:287`)
+### `computeCitationShas(project, citations, allowedExternalRoots, siblingRoots?)` — function (`citation.ts:353`)
 
 The filesystem/git half of the pre-resolve, with NO policy gate — callable on
 its own by `update`'s diff-emitter, which defers the gate until it knows which
 citations are actually being added.
 
-### `assertCitationShasVerifiable(project, policy, citations, shas, verb)` — function (`citation.ts:322`)
+### `assertCitationShasVerifiable(project, policy, citations, shas, verb)` — function (`citation.ts:388`)
 
 Enforce `citationRequiresSha` over an already-computed sha list. Only where
 verification is possible (a known project `path`) is an `"unverified"` sha a
 hard `CitationUnverifiableError`; a path-less project records `sha:"unverified"`
 and logs the waiver.
 
-### `resolveCitationShas(project, policy, citations, siblingRoots, verb)` — function (`citation.ts:350`)
+### `resolveCitationShas(project, policy, citations, siblingRoots, verb)` — function (`citation.ts:420`)
 
 `computeCitationShas` + `assertCitationShasVerifiable` — compute AND gate every
 citation, in order.
 
-### `appendCitationTx(tx, handle, params)` — function (`citation.ts:372`)
+### `appendCitationTx(tx, handle, params)` — function (`citation.ts:442`)
 
 Mint ONE `citation` node + its `has_citation` edge against the issue, inside the
 caller's open `tx`. Never writes an audit row (the calling verb owns it).
 
-### `readLiveCitationsTx(tx, issueRowid)` — function (`citation.ts:421`)
+### `readLiveCitationsTx(tx, issueRowid)` — function (`citation.ts:510`)
 
 The LIVE citations currently attached to an issue, each with its `citationKey`
 (`file` + `lines`) — the "live set" `update`'s diff compares a desired set to.
 
-### `removeCitationTx(tx, params)` — function (`citation.ts:452`)
+### `removeCitationTx(tx, params)` — function (`citation.ts:541`)
 
 Bi-temporally invalidate ONE citation: its node (merged `invalidatedAt` /
 `invalidatedReason`) AND its `has_citation` edge. Never writes an audit row.
 
-### `IAddCitationInput` — interface (`citation.ts:521`)
+### `IAddCitationInput` — interface (`citation.ts:620`)
 
 ```ts
 export interface IAddCitationInput {
@@ -910,12 +910,12 @@ export interface IAddCitationInput {
 }
 ```
 
-### `addCitation(handle, input)` — function (`citation.ts:554`)
+### `addCitation(handle, input)` — function (`citation.ts:653`)
 
 One `immediate` transaction: resolve the issue → mint the citation node + edge →
 audit. The sha is computed before the transaction opens.
 
-### `IRemoveCitationInput` — interface (`citation.ts:626`)
+### `IRemoveCitationInput` — interface (`citation.ts:729`)
 
 ```ts
 export interface IRemoveCitationInput {
@@ -925,7 +925,7 @@ export interface IRemoveCitationInput {
 }
 ```
 
-### `removeCitation(handle, input)` — function (`citation.ts:653`)
+### `removeCitation(handle, input)` — function (`citation.ts:756`)
 
 One `immediate` transaction: resolve the citation by its OWN uid → invalidate
 the node + edge → audit. `CitationNotFoundError` when the uid is not a live
@@ -935,7 +935,7 @@ citation (absent, already removed, or a foreign kind).
 
 ## `errors.ts` (25 exports)
 
-### `WriteErrorCode` — type (`errors.ts:41`)
+### `WriteErrorCode` — type (`errors.ts:40`)
 
 ```ts
 export type WriteErrorCode = 'E_CONTENTION' | 'E_CONSTRAINT' | 'E_VALIDATION' | 'E_IO';
@@ -943,7 +943,7 @@ export type WriteErrorCode = 'E_CONTENTION' | 'E_CONSTRAINT' | 'E_VALIDATION' | 
 
 Guarantees: the closed code union every `IWriteError` carries.
 
-### `IWriteError` — interface (`errors.ts:55`)
+### `IWriteError` — interface (`errors.ts:54`)
 
 ```ts
 export interface IWriteError {
@@ -960,7 +960,7 @@ failure — never the shape a caller of a write verb receives directly (they
 only ever catch a named `BacklogWriteError` subclass). `cause` is never
 swallowed.
 
-### `BacklogWriteError` — abstract class (`errors.ts:71`)
+### `BacklogWriteError` — abstract class (`errors.ts:70`)
 
 ```ts
 export abstract class BacklogWriteError extends Error implements IWriteError {
@@ -976,7 +976,7 @@ Guarantees: common base for every transport-facing error the write layer
 throws. `tx.ts`'s retry loop uses `instanceof BacklogWriteError` to recognize
 an already-decided, terminal failure and rethrow it untouched.
 
-### `WriteContentionError` — class (`errors.ts:97`)
+### `WriteContentionError` — class (`errors.ts:96`)
 
 ```ts
 export class WriteContentionError extends BacklogWriteError {
@@ -990,7 +990,7 @@ Guarantees: thrown after `E_CONTENTION` exhausts the retry budget (3 total
 attempts). `retryable` stays `true` even on exhaustion — the caller, not the
 write layer, owns any retry beyond this bound.
 
-### `WriteIOError` — class (`errors.ts:126`)
+### `WriteIOError` — class (`errors.ts:125`)
 
 ```ts
 export class WriteIOError extends BacklogWriteError {
@@ -1015,7 +1015,7 @@ the `backlog.write.io_failure` telemetry event with `origin`
 (`transaction`|`citation_sha`), `retryable`, `error`, `error_code` and
 `stack`.
 
-### `StaleSupersedeError` — class (`errors.ts:215`)
+### `StaleSupersedeError` — class (`errors.ts:214`)
 
 ```ts
 export class StaleSupersedeError extends BacklogWriteError {
@@ -1029,7 +1029,7 @@ Guarantees: the one deliberate `E_CONSTRAINT` this spec's own CAS raises —
 thrown when `supersede`'s `is_superseded` guard affects zero rows (a
 concurrent writer already superseded the same target). Never retryable.
 
-### `CatalogNotFoundError` — class (`errors.ts:248`)
+### `CatalogNotFoundError` — class (`errors.ts:247`)
 
 ```ts
 export class CatalogNotFoundError extends BacklogWriteError {
@@ -1043,7 +1043,7 @@ Guarantees: thrown when a `project`/`component`/`kind`/`status`/`priority`/
 `agent`/`edge_kind` reference did not resolve — a uid-shaped ref with no live
 row, or a `project`/`component` name (neither is ever mint-on-miss).
 
-### `AmbiguousReferenceError` — class (`errors.ts:274`)
+### `AmbiguousReferenceError` — class (`errors.ts:273`)
 
 ```ts
 export class AmbiguousReferenceError extends BacklogWriteError {
@@ -1062,7 +1062,7 @@ disambiguate; the resolver NEVER auto-selects. Maps to the distinct envelope
 code `ambiguous_reference` (exit 1) — not `item_not_found` — so a caller can
 branch: a short reference is actionable, an absent uid is not.
 
-### `InvalidArgumentError` — class (`errors.ts:335`)
+### `InvalidArgumentError` — class (`errors.ts:334`)
 
 ```ts
 export class InvalidArgumentError extends BacklogWriteError {
@@ -1075,7 +1075,7 @@ export class InvalidArgumentError extends BacklogWriteError {
 Guarantees: thrown when a caller-supplied argument is missing, blank, or
 fails a project-declared invariant.
 
-### `IssueNotFoundError` — class (`errors.ts:349`)
+### `IssueNotFoundError` — class (`errors.ts:348`)
 
 ```ts
 export class IssueNotFoundError extends BacklogWriteError {
@@ -1087,7 +1087,7 @@ export class IssueNotFoundError extends BacklogWriteError {
 
 Guarantees: thrown when no live `issue` node carries the given `uid`.
 
-### `ClaimHeldError` — class (`errors.ts:375`)
+### `ClaimHeldError` — class (`errors.ts:374`)
 
 ```ts
 export class ClaimHeldError extends BacklogWriteError {
@@ -1100,7 +1100,7 @@ export class ClaimHeldError extends BacklogWriteError {
 Guarantees: thrown by `claim` when the lease is held by someone else, not yet
 stale, and the caller did not pass `force: true`.
 
-### `SingleValuedRelationConflictError` — class (`errors.ts:432`)
+### `SingleValuedRelationConflictError` — class (`errors.ts:460`)
 
 ```ts
 export class SingleValuedRelationConflictError extends BacklogWriteError {
@@ -1121,7 +1121,7 @@ resolve `cappedUid`/`conflictingUid` via different SQL joins, and named
 fields make a source/target field swap a compile error instead of a silent
 message-text bug.
 
-### `CitationUnverifiableError` — class (`errors.ts:478`)
+### `CitationUnverifiableError` — class (`errors.ts:500`)
 
 ```ts
 export class CitationUnverifiableError extends BacklogWriteError {
@@ -1145,7 +1145,7 @@ The message names the allowed external roots (`~`-anchored) and the
 rejection is actionable; with an empty allowlist (the default, or an explicit
 `[]`) it instead names the project root and says the policy array is empty.
 
-### `CitationTargetIsDirectoryError` — class (`errors.ts:524`)
+### `CitationTargetIsDirectoryError` — class (`errors.ts:536`)
 
 ```ts
 export class CitationTargetIsDirectoryError extends BacklogWriteError {
@@ -1161,7 +1161,7 @@ has no content to hash, so the payload can never succeed as-is; nothing is
 written. The mapping from a citation read error to this class or to
 `WriteIOError` lives in `errors.ts`'s `citationReadError` (56a2133e).
 
-### `NoteRequiredError` — class (`errors.ts:554`)
+### `NoteRequiredError` — class (`errors.ts:566`)
 
 ```ts
 export class NoteRequiredError extends BacklogWriteError {
@@ -1174,7 +1174,7 @@ export class NoteRequiredError extends BacklogWriteError {
 Guarantees: thrown by `transition` when `project_policy.transitionRequiresNote`
 (default `true`) is set and no `note` was given.
 
-### `CitationRequiredError` — class (`errors.ts:566`)
+### `CitationRequiredError` — class (`errors.ts:578`)
 
 ```ts
 export class CitationRequiredError extends BacklogWriteError {
@@ -1188,7 +1188,7 @@ Guarantees: thrown by `transition` when `project_policy.citationRequired`
 (default `false`) is set, the target status is terminal, and no citation was
 given.
 
-### `BacklogValidationError` — class (`errors.ts:589`)
+### `BacklogValidationError` — class (`errors.ts:601`)
 
 ```ts
 export class BacklogValidationError extends BacklogWriteError {
@@ -1203,7 +1203,7 @@ or an out-of-range/non-integral `limit`) — deliberately the SAME
 `E_VALIDATION`-class member of this same error union, not a parallel one, so
 a `query`/`get` caller catches it identically to any write-verb error.
 
-### `AnchorLocatorInvalidError` — class (`errors.ts:604`)
+### `AnchorLocatorInvalidError` — class (`errors.ts:616`)
 
 ```ts
 export class AnchorLocatorInvalidError extends BacklogWriteError {
@@ -1218,7 +1218,7 @@ Guarantees: a supplied anchor locator is outside the closed grammar
 is a bare `path:line` with no `digest`. A caller-input mistake — `E_VALIDATION`,
 never retryable; nothing is written.
 
-### `AttestationNotFoundError` — class (`errors.ts:623`)
+### `AttestationNotFoundError` — class (`errors.ts:635`)
 
 ```ts
 export class AttestationNotFoundError extends BacklogWriteError {
@@ -1233,7 +1233,7 @@ node. Distinct from `IssueNotFoundError` (an `issue` uid) and
 `CatalogNotFoundError`, so a caller can branch on the missing record kind;
 `E_VALIDATION`, never retryable.
 
-### `InvalidPredicateError` — class (`errors.ts:645`)
+### `InvalidPredicateError` — class (`errors.ts:657`)
 
 ```ts
 export class InvalidPredicateError extends BacklogWriteError {
@@ -1248,7 +1248,7 @@ predicate core — an unknown `op`, a missing/ill-typed leaf, an unexpected extr
 key, or `evidence.min < 1`. Raised before any transaction opens, so an invalid
 predicate never holds a write lock; `E_VALIDATION`, never retryable.
 
-### `ObligationNotFoundError` — class (`errors.ts:660`)
+### `ObligationNotFoundError` — class (`errors.ts:672`)
 
 ```ts
 export class ObligationNotFoundError extends BacklogWriteError {
@@ -1262,7 +1262,7 @@ Guarantees: thrown by `unobligate` when the named uid is not a live `obligation`
 node. Distinct from `IssueNotFoundError` / `AttestationNotFoundError`, so a
 caller can branch on the missing record kind; `E_VALIDATION`, never retryable.
 
-### `SpecRevisionConflictError` — class (`errors.ts:682`)
+### `SpecRevisionConflictError` — class (`errors.ts:694`)
 
 ```ts
 export class SpecRevisionConflictError extends BacklogWriteError {
@@ -1278,7 +1278,7 @@ EXPLICITLY to the envelope code `precondition_failed` in `api.ts`'s
 `ERROR_CLASS_TO_ENVELOPE_CODE` (AC6); the `E_VALIDATION` fallthrough would
 otherwise return `validation`. No write runs.
 
-### `classifyDriverError(err)` — function (`errors.ts:733`)
+### `classifyDriverError(err)` — function (`errors.ts:745`)
 
 ```ts
 export function classifyDriverError(err: unknown): IWriteError;
@@ -1293,7 +1293,7 @@ distinguishes a recognized-but-unclassified database error (`E_IO`,
 (`E_IO`, `retryable: false` — never retried, since it never even reached the
 driver).
 
-### `ObligationUnsatisfiedError(refusal)` — class (`errors.ts:815`)
+### `ObligationUnsatisfiedError(refusal)` — class (`errors.ts:827`)
 
 ```ts
 export class ObligationUnsatisfiedError extends BacklogWriteError {
@@ -1311,7 +1311,7 @@ envelope code `precondition_failed` (exit 1), with the structured refusal in
 a re-read shows the status unchanged. Never retryable. **Additive (C5)** —
 appended after every pre-existing export so no `CONTRACT.md` anchor shifted.
 
-### `OverrideNotPermittedError(obligationUid, actor)` — class (`errors.ts:835`)
+### `OverrideNotPermittedError(obligationUid, actor)` — class (`errors.ts:847`)
 
 ```ts
 export class OverrideNotPermittedError extends BacklogWriteError {
@@ -1328,7 +1328,7 @@ recorded reason (DESIGN §2 Primitive 3), never a configurable boolean. Maps to
 `precondition_failed`; never retryable. **Additive (C5)** — appended after every
 pre-existing export so no `CONTRACT.md` anchor shifted.
 
-### `CitationNotFoundError(uid)` — class (`errors.ts:897`)
+### `CitationNotFoundError(uid)` — class (`errors.ts:909`)
 
 ```ts
 export class CitationNotFoundError extends BacklogWriteError {
@@ -1344,7 +1344,7 @@ node — absent, already removed, or a uid naming a node of a different kind (th
 **Additive** — appended after every pre-existing export so no existing
 `CONTRACT.md` anchor shifted.
 
-### `IssueNotRestorableError(uid, reason)` — class (`errors.ts:916`)
+### `IssueNotRestorableError(uid, reason)` — class (`errors.ts:928`)
 
 ```ts
 export class IssueNotRestorableError extends BacklogWriteError {
@@ -1360,7 +1360,7 @@ superseded (`reason: 'superseded'`), or permanently `remove`d
 (`reason: 'permanently-removed'`). Maps to `precondition_failed`; nothing is
 written. **Additive** — appended after every pre-existing export.
 
-### `RemoveConfirmationRequiredError(uid)` — class (`errors.ts:944`)
+### `RemoveConfirmationRequiredError(uid)` — class (`errors.ts:956`)
 
 ```ts
 export class RemoveConfirmationRequiredError extends BacklogWriteError {
@@ -1375,7 +1375,7 @@ irreversible retire requires the explicit typed confirmation, refused before
 any write. Maps to `precondition_failed`. **Additive** — appended after every
 pre-existing export.
 
-### `ProductionWriteRefusedError(verb)` — class (`errors.ts:967`)
+### `ProductionWriteRefusedError(verb)` — class (`errors.ts:979`)
 
 ```ts
 export class ProductionWriteRefusedError extends BacklogWriteError {
@@ -1396,7 +1396,7 @@ so it has no side effect. **Additive** — appended after every pre-existing exp
 
 ## `audit.ts` (3 exports)
 
-### `IWriteAuditInput` — interface (`audit.ts:45`)
+### `IWriteAuditInput` — interface (`audit.ts:47`)
 
 ```ts
 export interface IWriteAuditInput {
@@ -1420,7 +1420,7 @@ write already opened — there is no other way to call `writeAudit`.
 sentinel. `at` defaults to `nowISO()` but should be reused from the caller's
 own already-computed `now`.
 
-### `IAuditWriteResult` — interface (`audit.ts:63`)
+### `IAuditWriteResult` — interface (`audit.ts:65`)
 
 ```ts
 export interface IAuditWriteResult {
@@ -1433,7 +1433,7 @@ export interface IAuditWriteResult {
 Guarantees: the rowid/uid of the newly-written `audit` node plus its computed
 content-addressing `sha`.
 
-### `writeAudit(input)` — function (`audit.ts:79`)
+### `writeAudit(input)` — function (`audit.ts:81`)
 
 ```ts
 export async function writeAudit(input: IWriteAuditInput): Promise<IAuditWriteResult>;
@@ -1601,3 +1601,15 @@ logical-id resolver: one redirect hop, then the `SUPERSEDES` chain to its head
 THROWS `StaleSupersedeError` on a superseded uid — the split is deliberate:
 `get`/`card`/`stats` want the stale-reference signal, while an attestation
 subject wants the same logical item back.
+
+
+## Additions after the freeze (additive; not part of the frozen export count)
+
+- `IVerbedWriteHandle` — `IWriteStoreHandle & { readonly verb: string }`; `executeWriteTransaction` requires it by type, so the production-write gate always names the real verb (no `'write'` fallback).
+- `currentUidOfTx(tx, row)` — the head of a superseded issue's `SUPERSEDES` chain, walked inside the caller's transaction; `StaleSupersedeError` names it.
+- `ActorMismatchError(verb, actor, heldBy, heldSince?)` — a `transition`/`renew` by a non-holder; envelope code `validation`, `details.reason:"actor_mismatch"`.
+- `membership.ts` — `in_component` n:m membership: `findComponentsForPathTx`, `reconcileMembershipTx` (idempotent; returns its write count), `readMembershipsTx`; `membership-backfill.ts` — `planMembershipBackfill` / `applyMembershipBackfill` / `reverseMembershipBackfill` / `measureMembership`.
+- `session-stamp.ts` / `session.ts` — `ISessionStamp {sessionId?, parentSessionId?}` (extended by every mutating verb input), `bindTxSession`/`sessionOfTx`, `ensureSessionTx`, `appendOpEventTx`; `IWriteStoreHandle.session` carries the call's stamp and `writeAudit` appends the op-event.
+- `reservation.ts` — `collectReservationPathsTx`, `recordReservationTx`, `endReservationsTx`; `claim-lease.ts` — `leaseExpiryOf(claimedAt, staleAfterMin)`.
+- Internal edge kinds (not on `relate`): `in_component`, `in_session`, `child_of_session`, `has_reservation`; internal node kinds: `session`, `op_event`, `reservation`.
+- `transition.ts` — `SUPERSEDE_REASONS`, `SupersedeReason`, `SUPERSEDED_WITHOUT_REASON_WARNING`; `ITransitionInput.supersededBy?`/`reason?`; `ITransitionOutcome.warnings?`.

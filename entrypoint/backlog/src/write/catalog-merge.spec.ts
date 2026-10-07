@@ -150,7 +150,7 @@ async function mintCatalog(
   name: string,
   metadata: Record<string, unknown>
 ): Promise<{ rowid: number; uid: string }> {
-  return executeWriteTransaction(store, (tx) =>
+  return executeWriteTransaction({ ...store, verb: 'test-fixture' }, (tx) =>
     writeNodeTx(tx, { kind, name, metadata })
   );
 }
@@ -162,7 +162,7 @@ async function repointIssueEdge(
   rel: 'has_status' | 'has_priority',
   dst: { rowid: number; uid: string; kind: 'status' | 'priority' }
 ): Promise<void> {
-  await executeWriteTransaction(store, async (tx) => {
+  await executeWriteTransaction({ ...store, verb: 'test-fixture' }, async (tx) => {
     const issue = await getNodeByUidTx(tx, issueUid);
     if (!issue) throw new Error(`test setup: no issue ${issueUid}`);
     const existing = await tx.executeGet<{ dst: number }>(
@@ -431,7 +431,7 @@ describe('catalog-merge — status/priority case-fragment collapse', () => {
     });
 
     const t1 = new Date(Date.now() + 60_000).toISOString();
-    await executeWriteTransaction(store, async (tx) => {
+    await executeWriteTransaction({ ...store, verb: 'test-fixture' }, async (tx) => {
       const issueNode = await getNodeByUidTx(tx, createdUid(issue));
       if (!issueNode) throw new Error('test setup: issue vanished');
       await writeAudit({
@@ -628,7 +628,7 @@ describe('catalog-merge — status/priority case-fragment collapse', () => {
     const open = await queryIssues(store, { filter: { status: 'open' }, limit: 100 });
     expect(open.view).toBe('list');
     if (!('items' in open)) throw new Error('expected a list-shaped result');
-    expect(open.items.map((i) => i.uid)).toContain(createdUid(issue));
+    expect(open.items.map((i) => (i as { uid: string }).uid)).toContain(createdUid(issue));
   });
 
   it('SELF-REGENERATION REGRESSION: after merging an open/OPEN pair, an ordinary create must NOT mint a fresh open', async () => {
@@ -666,7 +666,7 @@ describe('catalog-merge — status/priority case-fragment collapse', () => {
 
     // Force the survivor back to the write-path-divergent spelling — exactly
     // what the pre-fix canonical selection did.
-    await executeWriteTransaction(store, async (tx) => {
+    await executeWriteTransaction({ ...store, verb: 'test-fixture' }, async (tx) => {
       const survivor = await getNodeByUidTx(tx, journal.entries[0]!.canonicalUid);
       if (!survivor) throw new Error('test setup: canonical vanished');
       await tx.executeRun(

@@ -237,15 +237,25 @@ export function installSkillToHosts(
   hosts: SkillHost[],
   scope: SkillScope,
   cwd: string,
-  homeOverride?: string
+  homeOverride?: string,
+  /** TEST-ISOLATION ESCAPE HATCH ONLY (like `homeOverride`): the SKILL.md to install instead of the packaged one. */
+  skillSourceOverride?: string
 ): InstallSkillResult[] {
-  const skillMdSource = packagedSkillMdPath();
+  const skillMdSource = skillSourceOverride ?? packagedSkillMdPath();
   if (!existsSync(skillMdSource)) {
     throw new Error(
       `backlog install-skill: packaged skill file not found at ${skillMdSource} — was @adhd/backlog built/installed correctly?`
     );
   }
   const skillMdContent = readFileSync(skillMdSource, 'utf8');
+  // B-AC12 (5fd61857): refuse BEFORE any write when the precondition fails — an
+  // empty/blank source would otherwise be installed as an empty SKILL.md and
+  // reported as a success.
+  if (skillMdContent.trim().length === 0) {
+    throw new Error(
+      `backlog install-skill: refusing to install — the packaged skill file at ${skillMdSource} is empty; nothing was written`
+    );
+  }
 
   // BUG-013 (FIX B) applies identically here: in a PUBLISHED install,
   // `package.json` is a SIBLING of this file's own directory (both at the
@@ -271,6 +281,13 @@ export function installSkillToHosts(
     mkdirSync(targetDir, { recursive: true });
     const targetSkillMd = join(targetDir, 'SKILL.md');
     writeFileSync(targetSkillMd, skillMdContent, 'utf8');
+    // Read the file back: a write that did not land (full disk, a racing
+    // writer) must not be reported as an install.
+    if (readFileSync(targetSkillMd, 'utf8') !== skillMdContent) {
+      throw new Error(
+        `backlog install-skill: verification failed — ${targetSkillMd} does not contain the packaged skill after writing`
+      );
+    }
     writeFileSync(
       join(targetDir, 'extension.json'),
       JSON.stringify(

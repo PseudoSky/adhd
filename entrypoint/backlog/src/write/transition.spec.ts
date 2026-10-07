@@ -32,7 +32,7 @@ import {
   CatalogNotFoundError,
   CitationRequiredError,
   CitationUnverifiableError,
-  ClaimHeldError,
+  ActorMismatchError,
   InvalidArgumentError,
   IssueNotFoundError,
   NoteRequiredError,
@@ -723,7 +723,7 @@ describe('transition — status change (SPEC.md §6.3.4, real store)', () => {
   });
 
   describe('BUG-BACKLOG-CLAIM-TRANSITION-GATE-001 — a live claim gates transition (SPEC.md §6.3.5)', () => {
-    it('a live claim by a DIFFERENT agent blocks transition with ClaimHeldError', async () => {
+    it('a live claim by a DIFFERENT agent blocks transition with ActorMismatchError', async () => {
       await claim(store, { uid: issueUid, by: 'agent-a', action: 'claim' });
 
       await expect(
@@ -733,7 +733,7 @@ describe('transition — status change (SPEC.md §6.3.4, real store)', () => {
           toStatus: 'in-progress',
           note: 'should be blocked',
         })
-      ).rejects.toThrow(ClaimHeldError);
+      ).rejects.toThrow(ActorMismatchError);
 
       // Nothing was written — still exactly the ONE has_status edge from createIssue.
       const edges = await liveEdges(store, 'has_status', { src: issueRowid });

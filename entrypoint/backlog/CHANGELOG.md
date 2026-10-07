@@ -1,3 +1,33 @@
+## 1.0.10 (2026-10-07)
+
+### 🚀 Features
+
+- **backlog:** query projection byCitationPath equal to the O(n) reference walk (7e5469d3 B-AC10) ([bd1f9a1a](https://github.com/PseudoSky/adhd/commit/bd1f9a1a))
+- **backlog:** sessions, append-only op-event log, persisted claim reservations, reservations/sessions views, timeline verb, spec fragment read (46cf1086 B-AC1..4, 91a8c640 B-AC5..7, 34b69c69 B-AC9) ([073d68a3](https://github.com/PseudoSky/adhd/commit/073d68a3))
+- **backlog:** membership backfill upgrade + runner with production guard; orphaned-parent rollup flag and view; registry-orphans identity detector (e54bd58b A-AC5, 7a78312c/0b0df8f3 A-AC9, 39799f8e A-AC12 code) ([165c8b61](https://github.com/PseudoSky/adhd/commit/165c8b61))
+- **backlog:** SUPERSEDED reason enum + supersededBy edge in the transition tx; reasonless stays additive with a warning (7ef53d55 A-AC6/7/8 code) ([3ada7d88](https://github.com/PseudoSky/adhd/commit/3ada7d88))
+- **backlog:** n:m in_component membership with a single primary owner; primaryOwner/memberships get fields; memberOfProject/memberOfComponent filters; spec fragment reader (e54bd58b A-AC5, 34b69c69 reader) ([a3a0f7ae](https://github.com/PseudoSky/adhd/commit/a3a0f7ae))
+- **backlog:** citation gate checks existence, not membership; verification outcome persisted and returned (050ea18f A-AC1..4, 8392a07c A-AC14) ([89a1689a](https://github.com/PseudoSky/adhd/commit/89a1689a))
+- **backlog:** ambiguous_reference carries candidates on every uid verb; spec-check/merge-project/rm-project resolve prefixes; write-path stale refusal names the head (3a4a0405 A-AC10) ([04f558fc](https://github.com/PseudoSky/adhd/commit/04f558fc))
+- **backlog:** typed ActorMismatchError for transition/renew by a non-holder (65029970 A-AC11) ([908ff76d](https://github.com/PseudoSky/adhd/commit/908ff76d))
+
+### 🩹 Fixes
+
+- **backlog:** test-assertion guards with teeth, install verifies what it wrote, report artifacts free of machine-local constants (55ba4178, 5fd61857, 4a979cef, 2cf61846 B-AC11..13) ([456eda3e](https://github.com/PseudoSky/adhd/commit/456eda3e))
+- **githooks:** scrub hook-exported GIT_* from spec git spawns and guard the real repo config (50e8c966) ([ee788e22](https://github.com/PseudoSky/adhd/commit/ee788e22))
+- **backlog:** assert sandbox path never loads embeddings instead of a stopwatch (633cbaf6) ([b5c550f0](https://github.com/PseudoSky/adhd/commit/b5c550f0))
+- **backlog:** pin deferred-downgrade stale-snapshot signature, correct misleading negative-control text (1687b889) ([dc55db4c](https://github.com/PseudoSky/adhd/commit/dc55db4c))
+- **backlog:** escape user text in dedupe FTS query (cfa0ec44) ([13ce74f2](https://github.com/PseudoSky/adhd/commit/13ce74f2))
+- **backlog:** derive e2e runner timeouts from the spawn budget (e2955e9f, d863b3ee) ([5bb8a9d5](https://github.com/PseudoSky/adhd/commit/5bb8a9d5))
+
+### 🔥 Performance
+
+- **backlog:** page-keyed getEdges reads in card assembly instead of whole-relation scans (e54afd3f) ([b82fc147](https://github.com/PseudoSky/adhd/commit/b82fc147))
+
+### ❤️ Thank You
+
+- pseudosky
+
 ## 1.0.9 (2026-10-06)
 
 ### 🚀 Features

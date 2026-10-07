@@ -120,16 +120,15 @@ test('rule 3 RED: e2e not cached / no inputs', async () => {
   }
 });
 
-test('rule 4 RED: publish does not reach a declared e2e (broken plugin conditional)', async () => {
+test('rule 4 RED: publish reaches e2e (must not depend on e2e, owner decision)', async () => {
   const { files } = baseFiles();
   const root = fixture(files);
-  // Inject a plugin that attaches a publish target WITHOUT e2e for foo, which
-  // DOES declare e2e -> disagreement.
+  // Inject a plugin that attaches a publish target WITH e2e -> violation (should not reach).
   const brokenPlugin = (configFiles) =>
-    configFiles.map((p) => [p, { projects: { [dirname(p)]: { targets: { publish: { dependsOn: ['test'] } } } } }]);
+    configFiles.map((p) => [p, { projects: { [dirname(p)]: { targets: { publish: { dependsOn: ['test', 'e2e'] } } } } }]);
   try {
     const res = await check(root, { createNodesFn: brokenPlugin });
-    assert.ok(hasRule(res, '4-publish-e2e-disagreement'), JSON.stringify(res.violations));
+    assert.ok(hasRule(res, '4-publish-reaches-e2e'), JSON.stringify(res.violations));
   } finally {
     close(root);
   }
@@ -291,7 +290,7 @@ test('the five agent projects have an e2e target and their unit test excludes th
     const proj = JSON.parse(readFileSync(join(repo, p, 'project.json'), 'utf8'));
     assert.ok(proj.targets.e2e, `${p} has no e2e target`);
     assert.equal(proj.targets.e2e.cache, true, `${p} e2e not cached`);
-    assert.ok(proj.targets['nx-release-publish'].dependsOn.includes('e2e'), `${p} release does not reach e2e`);
+    assert.ok(!proj.targets['nx-release-publish'].dependsOn.includes('e2e'), `${p} release should not depend on e2e`);
     assert.ok(existsSync(join(repo, p, 'vitest.e2e.config.ts')), `${p} lacks vitest.e2e.config.ts`);
     assert.match(readFileSync(join(repo, p, 'vite.config.ts'), 'utf8'), /exclude:\s*\[[^\]]*E2E_FILE_EXCLUDES/, `${p} unit lane does not exclude e2e globs`);
   }

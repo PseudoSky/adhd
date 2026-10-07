@@ -90,6 +90,7 @@ const EXPECTED = [
     mcp: 'backlog_spec_check',
     cli: 'backlog spec-check',
   },
+  { id: 'backlog/timeline', mcp: 'backlog_timeline', cli: 'backlog timeline' },
   { id: 'backlog/claim', mcp: 'backlog_claim', cli: 'backlog claim' },
   { id: 'backlog/relate', mcp: 'backlog_relate', cli: 'backlog relate' },
   { id: 'backlog/move', mcp: 'backlog_move', cli: 'backlog move' },

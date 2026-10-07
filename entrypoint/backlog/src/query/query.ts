@@ -8,6 +8,7 @@
  * copy of the pagination machinery.
  */
 
+import { assembleIssueCardsWithExtras } from './extra-fields.js';
 import type {
   GraphBackend,
   NodeFilter,
@@ -23,7 +24,6 @@ import {
   InvalidArgumentError,
 } from '../write/errors.js';
 import {
-  assembleIssueCards,
   assertKnownIssueFields,
   isStatusTerminal,
   resolveDependents,
@@ -32,6 +32,7 @@ import {
   getOutgoingEdges,
   intersectCandidateSets,
   resolveIssuePlacement,
+  resolveMembershipCandidates,
   resolveValidatedCatalogFilter,
   tryResolveComponentRef,
   tryResolveRef,
@@ -59,10 +60,15 @@ import { querySimilarViewWithMeta } from './views/semantic.js';
 import { buildSimilarClusterBlock } from './similar-clusters.js';
 import { renderIssueCardsMarkdown } from './markdown.js';
 import { catalogFor, catalogView } from './views/catalog.js';
+import { orphanedParents } from './views/stats.js';
+import { queryReservations } from './views/reservations.js';
+import { queryByCitationPath } from './views/by-citation-path.js';
+import { querySessions } from './views/sessions.js';
 import {
   listComponents,
   listLocations,
   listProjects,
+  listRegistryFindings,
 } from './views/registry.js';
 
 /**
@@ -197,7 +203,7 @@ async function resolveOpenClosedCandidates(
 }
 
 /** Resolve every edge-scoped filter dimension present in `filter` to its candidate set, then AND them together (SPEC.md §6.5 rules 3-4). Returns `undefined` when no edge-scoped filter was given at all (⇒ no `ids` restriction on the composed `NodeFilter`). */
-async function resolveEdgeScopedFilterIds(
+export async function resolveEdgeScopedFilterIds(
   graph: GraphBackend,
   filter: IIssueFilter | undefined
 ): Promise<Set<number> | undefined> {
@@ -235,6 +241,23 @@ async function resolveEdgeScopedFilterIds(
       rel: 'owns_component',
     });
     perDimension.push(new Set(edges.map((e) => e.dst)));
+  }
+
+  if (filter.memberOfProject !== undefined) {
+    perDimension.push(
+      await resolveMembershipCandidates(graph, {
+        dimension: 'project',
+        refs: Array.isArray(filter.memberOfProject) ? filter.memberOfProject : [filter.memberOfProject],
+      })
+    );
+  }
+  if (filter.memberOfComponent !== undefined) {
+    perDimension.push(
+      await resolveMembershipCandidates(graph, {
+        dimension: 'component',
+        refs: Array.isArray(filter.memberOfComponent) ? filter.memberOfComponent : [filter.memberOfComponent],
+      })
+    );
   }
 
   if (filter.kind !== undefined) {
@@ -630,7 +653,7 @@ async function queryList(
     const scoreKindByUid = new Map<string, IScoreKind>(
       [...scoreByUid.keys()].map((uid) => [uid, scoreKind] as const)
     );
-    const items = await assembleIssueCards(
+    const items = await assembleIssueCardsWithExtras(
       graph,
       ordered,
       fields,
@@ -717,7 +740,7 @@ async function queryList(
   const page = hasMore ? nodes.slice(0, limit) : nodes;
   const nextCursor = hasMore ? String(page[page.length - 1].id) : undefined;
 
-  const items = await assembleIssueCards(graph, page, fields, undefined, undefined, {
+  const items = await assembleIssueCardsWithExtras(graph, page, fields, undefined, undefined, {
     rung: 2,
     onRung: handle.onVerdictRung,
   });
@@ -853,7 +876,7 @@ async function queryReady(
   }
   const hasMore = ready.length > limit;
   const page = hasMore ? ready.slice(0, limit) : ready;
-  const items = await assembleIssueCards(graph, page, fields, undefined, undefined, {
+  const items = await assembleIssueCardsWithExtras(graph, page, fields, undefined, undefined, {
     rung: 2,
     onRung: handle.onVerdictRung,
   });
@@ -884,7 +907,7 @@ async function queryStale(
   const nodes = await graph.queryNodes(nodeFilter as unknown as NodeFilter);
   const hasMore = nodes.length > limit;
   const page = hasMore ? nodes.slice(0, limit) : nodes;
-  const items = await assembleIssueCards(graph, page, fields, undefined, undefined, {
+  const items = await assembleIssueCardsWithExtras(graph, page, fields, undefined, undefined, {
     rung: 2,
     onRung: handle.onVerdictRung,
   });
@@ -1342,6 +1365,32 @@ async function dispatchQueryView(
   handle: IQueryStoreHandle,
   input: IIssueQueryInput
 ): Promise<IQueryIssuesOutcome> {
+  // B2 (ADR-0007 D7): the citation-by-path projection is selected by
+  // `projection`, not `view`, and short-circuits the view switch.
+  if (input.projection !== undefined) {
+    if (input.projection !== 'byCitationPath') {
+      throw new InvalidArgumentError(
+        'projection',
+        `must be "byCitationPath" (got ${JSON.stringify(input.projection)})`
+      );
+    }
+    const r = await queryByCitationPath(handle.graph, input);
+    return {
+      result: {
+        view: 'by-citation-path',
+        projection: 'byCitationPath',
+        path: r.path,
+        items: r.items,
+      },
+      meta: {
+        total: r.total,
+        total_relation: 'eq',
+        returned: r.items.length,
+        limit: r.limit,
+        has_more: r.hasMore,
+      },
+    };
+  }
   const view = input.view ?? 'list';
   switch (view) {
     case 'list': {
@@ -1408,6 +1457,44 @@ async function dispatchQueryView(
       return {
         result: { view: 'overlap', groups: await queryOverlap(handle, input) },
       };
+    case 'reservations': {
+      const r = await queryReservations(handle.graph, input, (f) =>
+        resolveEdgeScopedFilterIds(handle.graph, f)
+      );
+      return {
+        result: { view: 'reservations', items: r.items },
+        meta: {
+          total: r.total,
+          total_relation: 'eq',
+          returned: r.items.length,
+          limit: r.limit,
+          has_more: r.hasMore,
+        },
+      };
+    }
+    case 'sessions': {
+      const r = await querySessions(handle.graph, input);
+      return {
+        result: { view: 'sessions', items: r.items },
+        meta: {
+          total: r.total,
+          total_relation: 'eq',
+          returned: r.items.length,
+          limit: r.limit,
+          has_more: r.hasMore,
+        },
+      };
+    }
+    case 'registry-orphans': {
+      const findings = await listRegistryFindings(handle.graph);
+      return { result: { view: 'registry-orphans', findings, total: findings.length } };
+    }
+    case 'orphaned-parents': {
+      const r = await orphanedParents(handle, {
+        ...(input.limit !== undefined ? { limit: input.limit } : {}),
+      });
+      return { result: { view: 'orphaned-parents', ...r } };
+    }
     case 'projects':
       return {
         result: { view: 'projects', items: await queryProjects(handle, input) },

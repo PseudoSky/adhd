@@ -38,13 +38,15 @@
 # path and no unread hardcoded sha; the release manifest supplies the shas)
 #   EXPECTED_SHA       merged-main source sha      (default: `sourceSha` from
 #                                                   report/release-manifest-1.0.0.json)
-#   RESTORE_MIN_SHA    disposable hand-port sha    (default: repo-history commit
-#                                                   `257b146e…`; not a manifest field)
+#   RESTORE_MIN_SHA    disposable hand-port sha    (REQUIRED: env, else the manifest's
+#                                                   `restoreMinSha`; the script exits 2
+#                                                   with a usage message when neither)
 #   LATENCY_MAX_S      (b) threshold, seconds          (default 2)
 #   LATENCY_SAMPLES    samples per latency run         (default 5)
-#   FROZEN_DIST        frozen rollback dist path       (default: the frozen
-#                                                       `backlog-cutover` worktree,
-#                                                       resolved from the repo root)
+#   FROZEN_DIST        frozen rollback dist path       (REQUIRED: env, else the manifest's
+#                                                       `frozenDist` — repo-relative paths
+#                                                       resolve from the repo root; exits 2
+#                                                       with a usage message when neither)
 #   FROZEN_CAP_S       (c) rollback answer cap, sec    (default 120)
 #   FROZEN_MIN_RED_S   negative-control floor, sec     (default 12; packet baseline)
 #   RECORDED_DIST_SHA  clean merged-main dist sha256   (default: `distSha256` from
@@ -67,15 +69,35 @@ manifest_field() {
 }
 
 EXPECTED_SHA="${EXPECTED_SHA:-$(manifest_field sourceSha)}"
-RESTORE_MIN_SHA="${RESTORE_MIN_SHA:-257b146edb7292dc152792015a5bf1e9ed50067c}"
+RESTORE_MIN_SHA="${RESTORE_MIN_SHA:-$(manifest_field restoreMinSha)}"
 LATENCY_MAX_S="${LATENCY_MAX_S:-2}"
 LATENCY_SAMPLES="${LATENCY_SAMPLES:-5}"
-FROZEN_DIST="${FROZEN_DIST:-$REPO_ROOT/.worktrees/backlog-cutover/entrypoint/backlog/dist/index.js}"
+FROZEN_DIST="${FROZEN_DIST:-$(manifest_field frozenDist)}"
+case "$FROZEN_DIST" in
+  "" | /*) ;;
+  *) FROZEN_DIST="$REPO_ROOT/$FROZEN_DIST" ;;
+esac
 FROZEN_CAP_S="${FROZEN_CAP_S:-120}"
 FROZEN_MIN_RED_S="${FROZEN_MIN_RED_S:-12}"
 RECORDED_DIST_SHA="${RECORDED_DIST_SHA:-$(manifest_field distSha256)}"
 QUERY_INPUT='{"limit":1}'
 BIN_NAME="adhd-backlog"
+
+# B-AC13 (4a979cef): the two machine-local inputs are REQUIRED, never defaulted
+# to a baked-in sha or path. Missing => exit 2 with a usage message.
+missing=""
+[ -n "$RESTORE_MIN_SHA" ] || missing="$missing RESTORE_MIN_SHA (env, or 'restoreMinSha' in $RELEASE_MANIFEST)"
+[ -n "$FROZEN_DIST" ] || missing="$missing FROZEN_DIST (env, or 'frozenDist' in $RELEASE_MANIFEST)"
+if [ -n "$missing" ]; then
+  case "${1:-}" in
+    --help | -h) ;;
+    *)
+      echo "deploy-verify.sh: required input(s) not provided:$missing" >&2
+      echo "usage: [RESTORE_MIN_SHA=<sha>] [FROZEN_DIST=<path>] [RELEASE_MANIFEST=<file>] deploy-verify.sh [--negative-control|--help]" >&2
+      exit 2
+      ;;
+  esac
+fi
 
 NEGATIVE_CONTROL=0
 case "${1:-}" in

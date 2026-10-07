@@ -39,11 +39,11 @@ import {
   type TestIssueStore,
 } from '../test/helpers/open-test-issue-store.js';
 import { freshTmpDir } from '../test/helpers/tmp-store.js';
+import { getIssue } from '../query/get.js';
 import { createIssue } from './create-issue.js';
 import { transition } from './transition.js';
 import { upsertProject } from './catalog.js';
 import {
-  CitationTargetIsDirectoryError,
   WRITE_IO_FAILURE_EVENT,
   WriteIOError,
   classifyDriverError,
@@ -112,53 +112,37 @@ describe('56a2133e — E_IO instrumentation and the directory-citation root caus
     return { nodes: n.rows[0]?.n ?? 0, edges: e.rows[0]?.n ?? 0 };
   }
 
-  it('create: the production payload (directory citation) is E_VALIDATION, not retryable, and deterministic — 5/5 identical, nothing written', async () => {
+  it('050ea18f A-AC1: create with a DIRECTORY citation persists it as unverified-with-reason target-is-directory — 5/5 identical, no I/O fault logged', async () => {
     const project = await upsertProject(store, {
       name: 'sox-ecosystem',
       by: 'filer:1',
       path: projectDir,
     });
-    const before = await liveCounts();
 
     for (let attempt = 0; attempt < 5; attempt += 1) {
-      const err = await createIssue(store, {
+      const created = await createIssue(store, {
         project: project.uid,
-        title:
-          'store-adapter full suite: 1 of 4 full runs failed with an unidentified test',
-        body: 'flake, cause unknown',
+        title: `store-adapter full suite: run ${attempt}`,
+        body: `flake, cause unknown ${attempt}`,
         priority: 'MEDIUM',
         by: 'filer:1',
         citations: [{ file: 'libs/data/store/store-adapter' }],
-      }).then(
-        () => undefined,
-        (e: unknown) => e
-      );
-      expect(err).toBeInstanceOf(CitationTargetIsDirectoryError);
-      expect(err).not.toBeInstanceOf(WriteIOError);
-      const typed = err as CitationTargetIsDirectoryError;
-      expect(typed.code).toBe('E_VALIDATION');
-      expect(typed.retryable).toBe(false);
-      expect(typed.message).toContain('libs/data/store/store-adapter');
-      expect(typed.message).toContain('is a directory');
+      });
+      expect(created.created).toBe(true);
+      const card = await getIssue(store.graph, { uid: created.uid!, fields: ['citations'] });
+      expect(card.citations).toHaveLength(1);
+      expect(card.citations![0]).toMatchObject({
+        file: 'libs/data/store/store-adapter',
+        sha: 'unverified',
+        verification: 'unverified-with-reason',
+        unverifiedReason: 'target-is-directory',
+      });
     }
-
-    expect(await liveCounts()).toEqual(before);
-    // A validation error is not an I/O fault — it must not be logged as one.
+    // A directory is not an I/O fault — it must not be logged as one.
     expect(ioFailureRecords(logDir)).toEqual([]);
-
-    // The SAME payload citing a FILE inside that directory succeeds.
-    const ok = await createIssue(store, {
-      project: project.uid,
-      title: 'same payload, file citation',
-      body: 'flake, cause unknown',
-      priority: 'MEDIUM',
-      by: 'filer:1',
-      citations: [{ file: 'libs/data/store/store-adapter/index.ts' }],
-    });
-    expect(ok.created).toBe(true);
   });
 
-  it('transition: a directory citation is the same E_VALIDATION class (the second computeCitationSha copy)', async () => {
+  it('050ea18f A-AC1: transition with a DIRECTORY citation persists it the same way (the second call site)', async () => {
     const project = await upsertProject(store, {
       name: 'transition-dir-cite',
       by: 'filer:1',
@@ -170,18 +154,19 @@ describe('56a2133e — E_IO instrumentation and the directory-citation root caus
       body: 'b',
       by: 'filer:1',
     });
-    const err = await transition(store, {
-      uid: created.uid,
+    await transition(store, {
+      uid: created.uid!,
       by: 'filer:1',
       toStatus: 'in_progress',
       note: 'n',
       citations: [{ file: 'libs/data/store/store-adapter' }],
-    }).then(
-      () => undefined,
-      (e: unknown) => e
-    );
-    expect(err).toBeInstanceOf(CitationTargetIsDirectoryError);
-    expect((err as CitationTargetIsDirectoryError).retryable).toBe(false);
+    });
+    const card = await getIssue(store.graph, { uid: created.uid!, fields: ['citations'] });
+    expect(card.citations).toHaveLength(1);
+    expect(card.citations![0]).toMatchObject({
+      verification: 'unverified-with-reason',
+      unverifiedReason: 'target-is-directory',
+    });
   });
 
   it('a REAL citation I/O fault (EACCES) stays E_IO but now carries the raw errno message and emits an error-level telemetry record', async () => {

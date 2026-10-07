@@ -22,6 +22,7 @@
  * revision node after creation, and never rewrites the ticket body.
  */
 
+import type { ISessionStamp } from './session-stamp.js';
 import type { GraphBackend, NodeRecord } from '@adhd/sox-graph-store';
 import type { AdapterTransaction } from '@adhd/sox-store-adapter';
 import { writeAudit } from './audit.js';
@@ -76,7 +77,7 @@ export interface ISpecRevisionMeta {
   appended_at: string;
 }
 
-export interface ISpecAppendInput {
+export interface ISpecAppendInput extends ISessionStamp {
   /** The ticket's logical id — any uid on its `SUPERSEDES` chain is resolved forward. */
   uid: string;
   /** The delta appended at this revision (becomes the node's `content`). */
@@ -617,6 +618,29 @@ export async function readPointerRecord(
         ? (node.metadata['spec_revision_seq'] as number)
         : 0,
   };
+}
+
+/** The head spec revision's pointer identity plus its FRAGMENT body (B-AC9). */
+export interface ISpecRevisionFragment extends ISpecPointer {
+  /** The fragment appended at the head revision — byte-for-byte what `spec-append` wrote (the document is the fold over the chain). */
+  fragment: string;
+}
+
+/**
+ * Read-only fragment reader (B-AC9, ADR-0007 D7 additive): the head revision
+ * node's `content` — the FRAGMENT appended at that revision (`appendSpecRevision`
+ * writes it verbatim as the node's `content`), never re-encoded or trimmed.
+ * `undefined` when the item has no spec. No write path is touched.
+ */
+export async function readSpecRevisionFragment(
+  graph: GraphBackend,
+  uid: string
+): Promise<ISpecRevisionFragment | undefined> {
+  const pointer = await readSpecPointer(graph, uid);
+  if (!pointer) return undefined;
+  const node = await graph.getNodeByUid(pointer.revision_uid);
+  if (!node) return undefined;
+  return { ...pointer, fragment: node.content ?? '' };
 }
 
 /**

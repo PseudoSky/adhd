@@ -37,6 +37,7 @@
  * `unobligate` soft-invalidates (bi-temporal), never hard-deletes.
  */
 
+import type { ISessionStamp } from './session-stamp.js';
 import type { AdapterTransaction } from '@adhd/sox-store-adapter';
 import { resolveEdgeKindTx } from './catalog.js';
 import { writeAudit } from './audit.js';
@@ -100,7 +101,7 @@ export interface IObligationOverride {
   actors: string[];
 }
 
-export interface IObligateInput {
+export interface IObligateInput extends ISessionStamp {
   uid: string;
   applies_to: IObligationAppliesTo;
   requirement: IPredicate;
@@ -114,7 +115,7 @@ export interface IObligateOutcome {
   obligationUid: string;
 }
 
-export interface IUnobligateInput {
+export interface IUnobligateInput extends ISessionStamp {
   obligationUid: string;
   by: string;
 }

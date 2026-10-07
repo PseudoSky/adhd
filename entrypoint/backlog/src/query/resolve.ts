@@ -648,3 +648,30 @@ export function intersectCandidateSets(
   }
   return acc;
 }
+
+/**
+ * (A-AC5) Candidate issue ids for the membership filters `memberOfProject` /
+ * `memberOfComponent`: ANY-of over `refs`. Membership is the n:m `in_component`
+ * edge (issue → component); a PROJECT's members are the issues in any component
+ * it owns (`owns_project`). An unresolved ref contributes nothing (read-path
+ * rule §6.1). The existing `project`/`component` filters keep PRIMARY-owner
+ * semantics and do not use this helper.
+ */
+export async function resolveMembershipCandidates(
+  graph: GraphBackend,
+  input: { dimension: 'project' | 'component'; refs: readonly string[] }
+): Promise<Set<number>> {
+  const union = new Set<number>();
+  for (const ref of input.refs) {
+    const resolved = await tryResolveRef(graph, input.dimension, ref);
+    if (!resolved) continue;
+    const componentIds =
+      input.dimension === 'component'
+        ? [resolved.id]
+        : (await graph.getEdges({ src: resolved.id, rel: 'owns_project' })).map((e) => e.dst);
+    for (const cid of componentIds) {
+      for (const e of await graph.getEdges({ dst: cid, rel: 'in_component' })) union.add(e.src);
+    }
+  }
+  return union;
+}

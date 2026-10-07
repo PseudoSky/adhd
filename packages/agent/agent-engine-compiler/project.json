@@ -57,7 +57,6 @@
       "dependsOn": [
         "build",
         "test",
-        "e2e",
         "verify-dist-load",
         "dist-manifest",
         "publish-hygiene"

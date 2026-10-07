@@ -53,7 +53,7 @@ export type McpScope = SkillScope;
  *  third-party consumer). */
 export const BACKLOG_MCP_NPX_ARGS: readonly string[] = ['-y', '@adhd/backlog@latest', 'serve', '--transport', 'mcp'];
 
-export type McpInstallStatus = 'written' | 'manual';
+export type McpInstallStatus = 'written' | 'manual' | 'failed';
 
 export interface McpInstallResult {
   host: McpHost;
@@ -184,15 +184,54 @@ function registerMcpOpencode(scope: McpScope, cwd: string, homeOverride?: string
   return { host: 'opencode', scope, configPath, status: 'written' };
 }
 
+/**
+ * The problem with a codex `config.toml`'s backlog entry, or `undefined` when it
+ * is sound: the `[mcp_servers.backlog]` table exists and carries
+ * `command = "npx"` plus an `args` array naming every launch argument. A
+ * line-based check of the exact shape this file writes — NOT a TOML parser (no
+ * parser dependency is added; see {@link upsertTomlTable}).
+ */
+export function verifyCodexBacklogEntry(text: string): string | undefined {
+  const lines = text.split('\n');
+  const header = lines.findIndex((l) => l.trim() === '[mcp_servers.backlog]');
+  if (header === -1) return 'the [mcp_servers.backlog] table is missing';
+  let end = header + 1;
+  while (end < lines.length && !(lines[end]?.trim().startsWith('[') ?? true)) end++;
+  const body = lines.slice(header + 1, end).map((l) => l.trim());
+  if (!body.includes('command = "npx"')) return 'the table has no `command = "npx"` line';
+  const args = body.find((l) => l.startsWith('args = ['));
+  if (args === undefined) return 'the table has no `args = [...]` line';
+  const missing = BACKLOG_MCP_NPX_ARGS.filter((a) => !args.includes(JSON.stringify(a)));
+  if (missing.length > 0) return `args is missing ${missing.map((m) => JSON.stringify(m)).join(', ')}`;
+  return undefined;
+}
+
 function registerMcpCodex(scope: McpScope, cwd: string, homeOverride?: string): McpInstallResult {
   const configPath = codexConfigPath(scope, cwd, homeOverride);
-  const existing = existsSync(configPath) ? readFileSync(configPath, 'utf8') : '';
-  const updated = upsertTomlTable(existing, 'mcp_servers.backlog', [
-    'command = "npx"',
-    `args = ${tomlStringArray(BACKLOG_MCP_NPX_ARGS)}`,
-  ]);
-  mkdirSync(dirname(configPath), { recursive: true });
-  writeFileSync(configPath, updated, 'utf8');
+  // B-AC12 (5fd61857): never report `written` on faith. A read or write that
+  // throws, or a file that does not read back with a sound backlog entry, is
+  // `failed`.
+  try {
+    const existing = existsSync(configPath) ? readFileSync(configPath, 'utf8') : '';
+    const updated = upsertTomlTable(existing, 'mcp_servers.backlog', [
+      'command = "npx"',
+      `args = ${tomlStringArray(BACKLOG_MCP_NPX_ARGS)}`,
+    ]);
+    mkdirSync(dirname(configPath), { recursive: true });
+    writeFileSync(configPath, updated, 'utf8');
+  } catch (err) {
+    return {
+      host: 'codex',
+      scope,
+      configPath,
+      status: 'failed',
+      note: `could not update the config: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
+  const problem = verifyCodexBacklogEntry(readFileSync(configPath, 'utf8'));
+  if (problem !== undefined) {
+    return { host: 'codex', scope, configPath, status: 'failed', note: `written file failed verification: ${problem}` };
+  }
   return { host: 'codex', scope, configPath, status: 'written' };
 }
 
@@ -313,4 +352,7 @@ export async function runInstallCommand(argv: string[]): Promise<void> {
     console.error(`[backlog install] mcp   -> ${m.host} (${m.scope}) [${m.status}]: ${m.configPath}${suffix}`);
   }
   console.log(JSON.stringify(result));
+  // A failed MCP registration is a failed install: exit non-zero so a script
+  // never mistakes a refused write for a success.
+  if (result.mcp.some((m) => m.status === 'failed')) process.exitCode = 1;
 }

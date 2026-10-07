@@ -156,11 +156,10 @@
       }
     },
     "nx-release-publish": {
-      "//": "Retired `nx release` path. `e2e` is named EXPLICITLY here because the plugin's conditional `publish.dependsOn` (tools/nx-plugins/build/plugin.js, `hasE2e ? [\"e2e\"] : []`) cannot reach this legacy target, whose dependsOn nx.json's `targetDefaults['nx-release-publish']` supplies. The LIVE gate is the plugin's `publish` target; this override keeps the retired path from silently skipping the heavy lane.",
+      "//": "Retired `nx release` path. `publish` no longer depends on `e2e` (owner decision 2026-10-07).",
       "dependsOn": [
         "build",
         "test",
-        "e2e",
         "verify-dist-load",
         "dist-manifest",
         "publish-hygiene"

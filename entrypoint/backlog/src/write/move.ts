@@ -47,6 +47,7 @@
  * node" does not apply here because nothing changed.
  */
 
+import type { ISessionStamp } from './session-stamp.js';
 import type { AdapterTransaction } from '@adhd/sox-store-adapter';
 import {
   type IResolvedCatalogRow,
@@ -55,6 +56,7 @@ import {
   resolveEdgeKindTx,
   resolveProjectTx,
 } from './catalog.js';
+import { reconcileMembershipTx } from './membership.js';
 import { writeAudit } from './audit.js';
 import {
   InvalidArgumentError,
@@ -65,7 +67,6 @@ import {
   type IWriteStoreHandle,
   executeWriteTransaction,
   getNodeByRowidTx,
-  getNodeByUidTx,
   invalidateEdgeTx,
   nowISO,
   writeEdgeTx,
@@ -73,7 +74,7 @@ import {
 } from './tx.js';
 import { nextRevision } from './revision.js';
 
-export interface IMoveIssueInput {
+export interface IMoveIssueInput extends ISessionStamp {
   /** The `issue` uid to move (§6.3, an "Issue verb"). */
   uid: string;
   /**
@@ -309,6 +310,16 @@ export async function move(
       rel: 'owns_component',
       rule: ownsComponentRule,
       typePolicy: handle.typePolicy,
+    });
+
+    // (A-AC5) the primary placement changed: re-derive the membership rows
+    // (old primary row dropped unless a citation still reaches it; new
+    // primary row written). `owns_component` — the single primary owner — was
+    // re-pointed above and is the only placement edge.
+    await reconcileMembershipTx(tx, handle, {
+      issueRowid: issueRow.rowid,
+      issueUid: issueRow.uid,
+      at: now,
     });
 
     // C6 — a real move bumps the issue's content revision.

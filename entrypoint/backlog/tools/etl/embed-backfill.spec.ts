@@ -67,7 +67,7 @@ async function seedIssue(
   store: TestIssueStore,
   opts: { name: string; content: string; superseded?: boolean; invalid?: boolean }
 ): Promise<{ rowid: number; uid: string }> {
-  const node = await executeWriteTransaction(store, (tx) =>
+  const node = await executeWriteTransaction({ ...store, verb: 'test-fixture' }, (tx) =>
     writeNodeTx(tx, { kind: 'issue', name: opts.name, content: opts.content })
   );
   if (opts.superseded) {

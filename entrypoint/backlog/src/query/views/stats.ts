@@ -67,7 +67,7 @@ import {
   tryResolveComponentRef,
   tryResolveRef,
 } from '../resolve.js';
-import type { IIssueAuditEntry, IIssueFilter } from '../types.js';
+import type { IIssueAuditEntry, IIssueFilter, IOrphanedParentItem } from '../types.js';
 import type { IQueryStoreHandle } from '../query.js';
 
 /**
@@ -449,7 +449,21 @@ export interface IPartOfRollupResult {
   nextCursor?: string;
   /** True iff more open-descendant uids exist beyond this page. */
   hasMore?: boolean;
+  /**
+   * The `orphaned-parent` condition (S02 AC14 tail): present iff the ROOT's own
+   * status is terminal AND at least one transitive descendant is still open —
+   * a retired parent with live children. Absent otherwise (never `null`, never
+   * an empty marker), so a healthy rollup is byte-identical to before.
+   */
+  orphanedParent?: {
+    parentStatus: string;
+    openChildren: number;
+    sampleOpenUids: readonly string[];
+  };
 }
+
+/** How many open-child uids an `orphanedParent` marker samples. */
+export const ORPHANED_PARENT_SAMPLE = 5;
 
 /** Default/maximum uid-list page size for {@link partOfRollup}'s non-count-only mode. */
 export const DEFAULT_PART_OF_ROLLUP_LIMIT = 50;
@@ -544,11 +558,21 @@ export async function partOfRollup(
     }
   }
 
+  const rootStatus = (await resolveStatusesForNodes(graph, [root])).get(root.id);
+  const orphanedParent =
+    isStatusTerminal(rootStatus) && childrenOpen > 0
+      ? {
+          parentStatus: rootStatus?.name ?? '',
+          openChildren: childrenOpen,
+          sampleOpenUids: childrenOpenUids.slice(0, ORPHANED_PARENT_SAMPLE),
+        }
+      : undefined;
   const counts = {
     uid: root.uid,
     childrenTotal: descendants.length,
     childrenOpen,
     childrenClosed,
+    ...(orphanedParent !== undefined ? { orphanedParent } : {}),
   };
 
   // Count-only mode: the uid list is omitted ENTIRELY (never an empty array
@@ -572,6 +596,88 @@ export async function partOfRollup(
     ...(hasMore && page.length > 0
       ? { nextCursor: page[page.length - 1] }
       : {}),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// orphanedParents — store-wide enumeration of the `orphaned-parent` condition.
+// ---------------------------------------------------------------------------
+
+export type { IOrphanedParentItem };
+export interface IOrphanedParentsResult {
+  items: IOrphanedParentItem[];
+  /** Total orphaned parents in the store (before `limit`). */
+  total: number;
+  hasMore: boolean;
+}
+
+export const DEFAULT_ORPHANED_PARENTS_LIMIT = 50;
+export const MAX_ORPHANED_PARENTS_LIMIT = 1000;
+
+/**
+ * `view:'orphaned-parents'` — every live issue whose own status is terminal and
+ * that still has at least one open transitive `part_of` descendant. Needs no
+ * uid: one scan of the live `part_of` edges, one batched status resolve, then a
+ * cycle-safe walk down from each terminal parent (S02 AC14 tail; mirrors the
+ * per-root {@link partOfRollup} `orphanedParent` marker exactly).
+ */
+export async function orphanedParents(
+  handle: IQueryStoreHandle,
+  input: { limit?: number } = {}
+): Promise<IOrphanedParentsResult> {
+  const { graph } = handle;
+  const limit = input.limit ?? DEFAULT_ORPHANED_PARENTS_LIMIT;
+  if (!Number.isInteger(limit) || limit <= 0 || limit > MAX_ORPHANED_PARENTS_LIMIT) {
+    throw new BacklogValidationError(
+      'limit',
+      `must be a positive integer ≤ ${MAX_ORPHANED_PARENTS_LIMIT}, got ${limit}`
+    );
+  }
+  const edges = await graph.getEdges({ rel: 'part_of' });
+  const ids = [...new Set(edges.flatMap((e) => [e.src, e.dst]))];
+  const nodes = (await graph.getNodesByIds(ids)).filter(
+    (n) => n.kind === 'issue' && !n.tInvalid
+  );
+  const nodeById = new Map(nodes.map((n) => [n.id, n]));
+  const childrenOf = new Map<number, number[]>();
+  for (const e of edges) {
+    if (!nodeById.has(e.src) || !nodeById.has(e.dst)) continue;
+    const list = childrenOf.get(e.dst);
+    if (list) list.push(e.src);
+    else childrenOf.set(e.dst, [e.src]);
+  }
+  const statuses = await resolveStatusesForNodes(graph, nodes);
+
+  const found: IOrphanedParentItem[] = [];
+  for (const parentId of childrenOf.keys()) {
+    const parent = nodeById.get(parentId)!;
+    const parentStatus = statuses.get(parentId);
+    if (!isStatusTerminal(parentStatus)) continue;
+    const open: string[] = [];
+    const seen = new Set<number>([parentId]);
+    const stack = [...(childrenOf.get(parentId) ?? [])];
+    while (stack.length > 0) {
+      const id = stack.pop()!;
+      if (seen.has(id)) continue;
+      seen.add(id);
+      if (!isStatusTerminal(statuses.get(id))) open.push(nodeById.get(id)!.uid);
+      stack.push(...(childrenOf.get(id) ?? []));
+    }
+    if (open.length === 0) continue;
+    open.sort();
+    found.push({
+      uid: parent.uid,
+      title: parent.name ?? '',
+      status: parentStatus?.name ?? '',
+      openChildren: open.length,
+      openChildUids: open.slice(0, ORPHANED_PARENT_SAMPLE),
+    });
+  }
+  found.sort((a, b) => a.uid.localeCompare(b.uid));
+  return {
+    items: found.slice(0, limit),
+    total: found.length,
+    hasMore: found.length > limit,
   };
 }
 

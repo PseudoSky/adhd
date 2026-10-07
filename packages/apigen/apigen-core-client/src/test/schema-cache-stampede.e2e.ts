@@ -276,7 +276,10 @@ describe('BUG-APIGEN-CORE-003: buildSchema cache-stampede fix', () => {
     const project = internal.projectFor(undefined);
     const sf = internal.sourceFileFor(filePath, undefined);
 
-    const HANG_TIMEOUT_MS = 8000;
+    // A true deadlock never resolves, so this only has to be far above the
+    // loaded-box cost of a cold ts-morph Project build (~2.5s idle, >12s under
+    // load) — never tuned to speed. Must stay below the test timeout (below).
+    const HANG_TIMEOUT_MS = 90_000;
     const result = await Promise.race([
       buildSchema(project, sf, 'RecursiveNode', undefined, internal),
       new Promise<never>((_resolve, reject) =>
@@ -304,5 +307,5 @@ describe('BUG-APIGEN-CORE-003: buildSchema cache-stampede fix', () => {
 
     session.dispose();
     fs.rmSync(dir, { recursive: true, force: true });
-  }, 10000);
+  }, 120_000);
 });

@@ -145,7 +145,7 @@ describe('citation-path — resolveCitationTarget (canonical containment against
     const file = join(projectRoot, 'in.ts');
     writeFileSync(file, 'export const x = 1;\n');
     const r = await resolveCitationTarget(projectRoot, 'in.ts', []);
-    expect(r.accepted).toBe(true);
+    expect(r.inRoot).toBe(true);
     expect(r.candidate).toBe(realpathSync(file));
   });
 
@@ -153,7 +153,7 @@ describe('citation-path — resolveCitationTarget (canonical containment against
     const file = join(allowedRoot, 'ext.ts');
     writeFileSync(file, 'export const x = 1;\n');
     const r = await resolveCitationTarget(projectRoot, file, [allowedRoot]);
-    expect(r.accepted).toBe(true);
+    expect(r.inRoot).toBe(true);
     expect(r.candidate).toBe(realpathSync(file));
   });
 
@@ -161,13 +161,13 @@ describe('citation-path — resolveCitationTarget (canonical containment against
     const file = join(dir, 'outside.ts');
     writeFileSync(file, 'export const x = 1;\n');
     const r = await resolveCitationTarget(projectRoot, file, [allowedRoot]);
-    expect(r.accepted).toBe(false);
+    expect(r.inRoot).toBe(false);
   });
 
   it('rejects a ".." traversal even when the target file EXISTS', async () => {
     writeFileSync(join(dir, 'outside.ts'), 'export const x = 1;\n');
     const r = await resolveCitationTarget(projectRoot, '../outside.ts', []);
-    expect(r.accepted).toBe(false);
+    expect(r.inRoot).toBe(false);
   });
 
   it('rejects a symlink inside the root that points OUTSIDE it (an escape cannot widen the allowlist)', async () => {
@@ -175,12 +175,12 @@ describe('citation-path — resolveCitationTarget (canonical containment against
     writeFileSync(secret, 'export const secret = 1;\n');
     symlinkSync(secret, join(projectRoot, 'link.ts'));
     const r = await resolveCitationTarget(projectRoot, 'link.ts', []);
-    expect(r.accepted).toBe(false);
+    expect(r.inRoot).toBe(false);
   });
 
   it('accepts a missing file inside the project root — existence is the caller readFile\'s concern', async () => {
     const r = await resolveCitationTarget(projectRoot, 'not-yet.ts', []);
-    expect(r.accepted).toBe(true);
+    expect(r.inRoot).toBe(true);
   });
 
   it('REJECTS the shared backlog store + its backups under the DEFAULT roots (BUG 62059b57 follow-up — negative control)', async () => {
@@ -223,7 +223,7 @@ describe('citation-path — resolveCitationTarget (canonical containment against
           target,
           defaultCitationAllowedExternalRoots()
         );
-        expect(r.accepted).toBe(false);
+        expect(r.inRoot).toBe(false);
         // The candidate is still RESOLVED — containment was computed against
         // the real path, it simply is not accepted.
         expect(r.candidate).toBe(realpathSync(target));

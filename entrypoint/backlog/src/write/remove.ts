@@ -22,6 +22,7 @@
  * the bare adapter, never an open transaction).
  */
 
+import type { ISessionStamp } from './session-stamp.js';
 import type { AdapterTransaction } from '@adhd/sox-store-adapter';
 import { writeAudit } from './audit.js';
 import { scheduleIssueEmbedding } from './embedding-observer.js';
@@ -37,7 +38,7 @@ import {
   resolveLiveIssueTx,
 } from './tx.js';
 
-export interface IRemoveIssueInput {
+export interface IRemoveIssueInput extends ISessionStamp {
   /** Exact uid, or a unique uid prefix, of the live issue to permanently retire. */
   uid: string;
   /**

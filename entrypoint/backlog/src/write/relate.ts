@@ -65,6 +65,7 @@
  * gap by construction rather than by an added guard.
  */
 
+import type { ISessionStamp } from './session-stamp.js';
 import type { AdapterTransaction } from '@adhd/sox-store-adapter';
 import { resolveEdgeKindTx } from './catalog.js';
 import { writeAudit } from './audit.js';
@@ -102,7 +103,7 @@ const RELATE_RELS: readonly RelateRel[] = [
   'similar_to',
 ];
 
-export interface IRelateInput {
+export interface IRelateInput extends ISessionStamp {
   /** The relation's SOURCE `issue` uid (§1: uid is the only identifier — never a name, never repo-scoped). */
   sourceUid: string;
   /** The relation's TARGET `issue` uid — may belong to ANY project, including a different one than `sourceUid` (see this file's own doc comment on the resolved cross-project gap). */

@@ -103,12 +103,14 @@
  * had, which was already validated when IT was set.
  */
 
+import type { ISessionStamp } from './session-stamp.js';
 import type { AdapterTransaction } from '@adhd/sox-store-adapter';
 import { citationKey, type ICitation } from '../citation.js';
 import {
   appendCitationTx,
   assertCitationShasVerifiable,
   computeCitationShas,
+  type ICitationVerification,
   readLiveCitationsTx,
   removeCitationTx,
 } from './citation.js';
@@ -146,7 +148,7 @@ import {
 } from './tx.js';
 import { nextRevision } from './revision.js';
 
-export interface IUpdateIssueInput {
+export interface IUpdateIssueInput extends ISessionStamp {
   /** The `issue` uid to update (§6.3, an "Issue verb"). */
   uid: string;
   /** The acting identity — an agent or a person (§6.3's opening rule). REQUIRED. */
@@ -785,7 +787,7 @@ export async function update(
   // citations actually being ADDED (`assertCitationShasVerifiable`), so an
   // issue holding a citation whose file has since vanished can still be
   // updated — that already-live citation is neither re-added nor re-gated.
-  let citationShas: string[] = [];
+  let citationShas: ICitationVerification[] = [];
   if (input.citations !== undefined && input.citations.length > 0) {
     const preIssueRow = await resolveUidPrefixTx(handle.adapter, input.uid, {
       expectedKind: 'issue',
@@ -1068,17 +1070,17 @@ export async function update(
         // transaction's own authoritative project/policy), so a live citation
         // whose file has since vanished is not re-gated. Thrown before any
         // write, so the gate refusal rolls the whole transaction back.
-        const toAdd: { citation: ICitation; sha: string }[] = [];
+        const toAdd: { citation: ICitation; verification: ICitationVerification }[] = [];
         for (let i = 0; i < desired.length; i += 1) {
           if (!liveKeys.has(citationKey(desired[i]))) {
-            toAdd.push({ citation: desired[i], sha: citationShas[i] });
+            toAdd.push({ citation: desired[i], verification: citationShas[i]! });
           }
         }
         assertCitationShasVerifiable(
           project,
           policy,
           toAdd.map((t) => t.citation),
-          toAdd.map((t) => t.sha),
+          toAdd.map((t) => t.verification),
           'update'
         );
 
@@ -1090,6 +1092,7 @@ export async function update(
               citationUid: row.uid,
               at: now,
               reason: 'removed via update citations diff',
+              handle,
             });
           }
         }
@@ -1098,7 +1101,7 @@ export async function update(
             issueRowid: currentRowid,
             issueUid: currentUid,
             citation: entry.citation,
-            sha: entry.sha,
+            verification: entry.verification,
             at: now,
           });
         }

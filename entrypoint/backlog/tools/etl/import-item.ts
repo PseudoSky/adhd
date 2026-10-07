@@ -67,7 +67,7 @@ export async function importItem(input: IImportItemInput): Promise<IImportItemRe
 
   const { transitions, consumedNoteIndices, firstTerminalTransitionAt } = reconstructTransitions(meta, transitionEvents);
 
-  const uid = await executeWriteTransaction(handle, async (tx: AdapterTransaction) => {
+  const uid = await executeWriteTransaction({ ...handle, verb: 'etl-import' }, async (tx: AdapterTransaction) => {
     const now = nowISO();
 
     const component = meta.projectPath !== undefined

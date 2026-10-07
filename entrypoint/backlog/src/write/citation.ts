@@ -41,6 +41,7 @@
  * gate is applied identically for every caller.
  */
 
+import type { ISessionStamp } from './session-stamp.js';
 import { execFileSync } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 import { isAbsolute, relative, resolve as resolvePath, sep } from 'node:path';
@@ -59,6 +60,7 @@ import {
   resolveProjectPolicy,
 } from './catalog.js';
 import { writeAudit } from './audit.js';
+import { reconcileMembershipTx } from './membership.js';
 import {
   CatalogNotFoundError,
   CitationNotFoundError,
@@ -223,27 +225,82 @@ function readCitationShaAtRevision(
   }
 }
 
+/** Why a citation could not be content-addressed — recorded, never silently dropped (A-AC2). */
+export type CitationUnverifiedReason =
+  | 'target-missing'
+  | 'target-is-directory'
+  | 'target-not-a-file'
+  | 'revision-unresolved'
+  | 'path-less-project'
+  | 'abstract-anchor-unchecked';
+
+/** The verification outcome of ONE citation: a real `sha` (`verified`) or the `'unverified'` sentinel plus the reason. */
+export interface ICitationVerification {
+  sha: string;
+  outcome: 'verified' | 'unverified-with-reason';
+  reason?: CitationUnverifiedReason;
+  /** `path` | `url` | `registry` | `query`. */
+  targetType: string;
+}
+
+const ABSTRACT_ANCHOR_RE = /^(url|registry|query):(.*)$/s;
+
 /**
- * §8.5's two-branch citation-sha rule, in ONE place (the generalization of the
- * copy `create-issue.ts`/`transition.ts` each used to carry).
+ * Abstract (non-filesystem) anchors: `url:`, `registry:`, `query:`. They never
+ * touch the filesystem; the shape is validated, the kind recorded, and the
+ * outcome is `unverified-with-reason: abstract-anchor-unchecked` (the anchor
+ * re-verification of these kinds is the attestation program's S04, not this
+ * gate). A malformed anchor is a caller mistake (`InvalidArgumentError`).
+ */
+function abstractAnchorVerification(file: string): ICitationVerification | undefined {
+  const m = ABSTRACT_ANCHOR_RE.exec(file);
+  if (!m) return undefined;
+  const kind = m[1]!;
+  const rest = m[2]!;
+  if (rest.trim().length === 0) {
+    throw new InvalidArgumentError('citation.file', `"${kind}:" anchor needs a non-empty target`);
+  }
+  if (kind === 'url') {
+    let parsed: URL;
+    try {
+      parsed = new URL(rest);
+    } catch {
+      throw new InvalidArgumentError('citation.file', `"url:" anchor is not a valid URL: ${rest}`);
+    }
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      throw new InvalidArgumentError('citation.file', `"url:" anchor must be http(s), got ${parsed.protocol}`);
+    }
+  }
+  return {
+    sha: 'unverified',
+    outcome: 'unverified-with-reason',
+    reason: 'abstract-anchor-unchecked',
+    targetType: kind,
+  };
+}
+
+function unverified(reason: CitationUnverifiedReason): ICitationVerification {
+  return { sha: 'unverified', outcome: 'unverified-with-reason', reason, targetType: 'path' };
+}
+
+/**
+ * The citation verification rule, in ONE place (A-AC1..3, breaking #8).
+ * EXISTENCE — not project membership — decides verification:
  *
- * Branch 1: a PATH-LESS project cannot content-address anything, so every
- * citation degrades to the `'unverified'` sentinel up front.
+ * - `url:`/`registry:`/`query:` anchors bypass the filesystem (see
+ *   {@link abstractAnchorVerification}).
+ * - A PATH-LESS project cannot content-address anything → `path-less-project`.
+ * - Revision-pinned: `git show <revision>:<relpath>` resolves → verified, else
+ *   `revision-unresolved`.
+ * - Working tree: the canonical target is `stat`ed. A regular FILE is read and
+ *   hashed (verified) REGARDLESS of whether it sits inside the project root —
+ *   an existing out-of-root file or a worktree-only path is verified. A
+ *   DIRECTORY → `target-is-directory`; a socket/fifo/device → `target-not-a-file`;
+ *   a path that does not exist → `target-missing`. No content is persisted
+ *   (sha only).
  *
- * Branch 2a (revision-pinned): when `revision` is given, the target is resolved
- * against the git revision (`git show <revision>:<relpath>`) rather than the
- * working tree — so a file that exists only on an unmerged branch is citable.
- * The read is confined to the project's own git object database (git refuses a
- * `..` path), so no filesystem containment check is needed for it.
- *
- * Branch 2b (working tree): the target must resolve (canonically) within the
- * project root OR within one of `allowedExternalRoots` —
- * `citation-path.ts`'s {@link resolveCitationTarget}. The only filesystem read
- * happens after acceptance.
- *
- * §4c's error taxonomy is preserved exactly: ENOENT/ENOTDIR → `'unverified'`
- * (the file genuinely is not there); EISDIR → `CitationTargetIsDirectoryError`;
- * any other errno → `WriteIOError` (`citationReadError`).
+ * §4c's I/O taxonomy is preserved: ENOENT/ENOTDIR → `target-missing`; any other
+ * errno → `WriteIOError` (`citationReadError`).
  */
 export async function computeCitationSha(
   project: IResolvedProjectRow,
@@ -251,28 +308,37 @@ export async function computeCitationSha(
   revision: string | undefined,
   allowedExternalRoots: readonly string[],
   siblingRoots: readonly string[] = []
-): Promise<string> {
-  if (!projectHasKnownPath(project)) return 'unverified';
+): Promise<ICitationVerification> {
+  const abstract = abstractAnchorVerification(file);
+  if (abstract !== undefined) return abstract;
+
+  if (!projectHasKnownPath(project)) return unverified('path-less-project');
 
   if (revision !== undefined) {
     const relpath = toRepoRelative(project.metadata.path, file);
-    if (relpath === undefined) return 'unverified';
-    return readCitationShaAtRevision(project.metadata.path, revision, relpath)
-      ?? 'unverified';
+    const sha =
+      relpath === undefined
+        ? undefined
+        : readCitationShaAtRevision(project.metadata.path, revision, relpath);
+    return sha === undefined
+      ? unverified('revision-unresolved')
+      : { sha, outcome: 'verified', targetType: 'path' };
   }
 
   try {
-    const { accepted, candidate } = await resolveCitationTarget(
-      project.metadata.path,
-      file,
-      [...allowedExternalRoots, ...toolOwnedCitationRoots(), ...siblingRoots]
-    );
-    if (!accepted) return 'unverified';
+    const target = await resolveCitationTarget(project.metadata.path, file, [
+      ...allowedExternalRoots,
+      ...toolOwnedCitationRoots(),
+      ...siblingRoots,
+    ]);
+    if (target.kind === 'missing') return unverified('target-missing');
+    if (target.kind === 'directory') return unverified('target-is-directory');
+    if (target.kind === 'other') return unverified('target-not-a-file');
 
-    const content = await readFile(candidate);
-    return sha256Hex(content);
+    const content = await readFile(target.candidate);
+    return { sha: sha256Hex(content), outcome: 'verified', targetType: 'path' };
   } catch (err) {
-    if (isMissingPathError(err)) return 'unverified';
+    if (isMissingPathError(err)) return unverified('target-missing');
     throw citationReadError(err, file);
   }
 }
@@ -289,8 +355,8 @@ export async function computeCitationShas(
   citations: readonly ICitation[],
   allowedExternalRoots: readonly string[],
   siblingRoots: readonly string[] = []
-): Promise<string[]> {
-  const shas: string[] = [];
+): Promise<ICitationVerification[]> {
+  const shas: ICitationVerification[] = [];
   for (const citation of citations) {
     shas.push(
       await computeCitationSha(
@@ -323,19 +389,23 @@ export function assertCitationShasVerifiable(
   project: IResolvedProjectRow,
   policy: IProjectPolicy,
   citations: readonly ICitation[],
-  shas: readonly string[],
+  verifications: readonly ICitationVerification[],
   verb: string
 ): void {
   for (let i = 0; i < citations.length; i += 1) {
-    if (shas[i] === 'unverified' && policy.citationRequiresSha) {
-      if (projectHasKnownPath(project)) {
-        throw new CitationUnverifiableError(
-          citations[i].file,
-          policy.citationAllowedExternalRoots
-        );
-      }
+    const v = verifications[i]!;
+    // Only NON-EXISTENT evidence (a missing target, or a revision that does not
+    // resolve) is refused under `citationRequiresSha`; an existing target of any
+    // kind, a directory, an abstract anchor and a path-less project are all
+    // PERSISTED with their recorded outcome (A-AC1..3) — never refused-and-omitted.
+    const missing =
+      v.reason === 'target-missing' || v.reason === 'revision-unresolved';
+    if (missing && policy.citationRequiresSha && projectHasKnownPath(project)) {
+      throw new CitationUnverifiableError(citations[i]!.file, v.reason as 'target-missing' | 'revision-unresolved');
+    }
+    if (v.reason === 'path-less-project' && policy.citationRequiresSha) {
       console.error(
-        `${verb}: citation_requires_sha waived for path-less project uid="${project.uid}" — cannot verify citation "${citations[i].file}", persisting sha:"unverified" (set the project's metadata.path to make citation_requires_sha enforceable).`
+        `${verb}: citation_requires_sha waived for path-less project uid="${project.uid}" — cannot verify citation "${citations[i]!.file}", persisting sha:"unverified" (set the project's metadata.path to make citation_requires_sha enforceable).`
       );
     }
   }
@@ -353,7 +423,7 @@ export async function resolveCitationShas(
   citations: readonly ICitation[],
   siblingRoots: readonly string[],
   verb: string
-): Promise<string[]> {
+): Promise<ICitationVerification[]> {
   const shas = await computeCitationShas(
     project,
     citations,
@@ -376,7 +446,7 @@ export async function appendCitationTx(
     issueRowid: number;
     issueUid: string;
     citation: ICitation;
-    sha: string;
+    verification: ICitationVerification;
     at: string;
   }
 ): Promise<{ rowid: number; uid: string }> {
@@ -385,7 +455,18 @@ export async function appendCitationTx(
     kind: 'citation',
     name: params.citation.file,
     content: params.citation.context ?? params.citation.file,
-    metadata: citationNodeMetadata(params.citation, params.sha, params.at),
+    metadata: citationNodeMetadata(
+      params.citation,
+      params.verification.sha,
+      params.at,
+      {
+        verification: params.verification.outcome,
+        ...(params.verification.reason !== undefined
+          ? { unverifiedReason: params.verification.reason }
+          : {}),
+        targetType: params.verification.targetType,
+      }
+    ),
   });
   const rule = await resolveEdgeKindTx(tx, 'has_citation');
   await writeEdgeTx(tx, {
@@ -399,6 +480,14 @@ export async function appendCitationTx(
     rel: 'has_citation',
     rule,
     typePolicy: handle.typePolicy,
+  });
+  // (A-AC5 I3) the new citation may reach another component — derive the
+  // membership in the SAME transaction (create/addCitation/transition/update
+  // all funnel through here).
+  await reconcileMembershipTx(tx, handle, {
+    issueRowid: params.issueRowid,
+    issueUid: params.issueUid,
+    at: params.at,
   });
   return citationNode;
 }
@@ -456,6 +545,8 @@ export async function removeCitationTx(
     citationUid: string;
     at: string;
     reason?: string;
+    /** The write handle — needed to re-derive the owning issue's membership once the citation is gone (A-AC5). */
+    handle: IWriteStoreHandle;
   }
 ): Promise<void> {
   const row = await getNodeByRowidTx(tx, params.citationRowid);
@@ -493,6 +584,14 @@ export async function removeCitationTx(
       reason: params.reason,
       at: params.at,
     });
+    const issue = await getNodeByRowidTx(tx, edge.src);
+    if (issue?.kind === 'issue') {
+      await reconcileMembershipTx(tx, params.handle, {
+        issueRowid: issue.rowid,
+        issueUid: issue.uid,
+        at: params.at,
+      });
+    }
   }
 }
 
@@ -518,7 +617,7 @@ async function resolveCitationNodeTx(
   }
 }
 
-export interface IAddCitationInput {
+export interface IAddCitationInput extends ISessionStamp {
   /** The `issue` uid the citation is attached to. */
   uid: string;
   /** The citation to add — the SAME {@link ICitation} contract `create`/`transition` accept, including the optional `revision`. */
@@ -587,7 +686,7 @@ export async function addCitation(
       issueRowid: issueRow.rowid,
       issueUid: issueRow.uid,
       citation: input.citation,
-      sha: shas[0],
+      verification: shas[0]!,
       at: now,
     });
 
@@ -615,15 +714,19 @@ export async function addCitation(
         symbol: input.citation.symbol,
         blastRadius: input.citation.blastRadius,
         revision: input.citation.revision,
-        sha: shas[0],
+        sha: shas[0]!.sha,
         at: now,
-        targetType: 'path',
+        targetType: shas[0]!.targetType,
+        verification: shas[0]!.outcome,
+        ...(shas[0]!.reason !== undefined
+          ? { unverifiedReason: shas[0]!.reason }
+          : {}),
       },
     };
   });
 }
 
-export interface IRemoveCitationInput {
+export interface IRemoveCitationInput extends ISessionStamp {
   /** The `citation` uid to soft-remove — the citation's OWN uid, never a `(target,line)` re-specification. */
   uid: string;
   /** The acting identity (§6.3's opening rule). REQUIRED. */
@@ -685,6 +788,7 @@ export async function removeCitation(
       citationUid: citationRow.uid,
       at: now,
       reason: input.reason,
+      handle,
     });
 
     await writeAudit({

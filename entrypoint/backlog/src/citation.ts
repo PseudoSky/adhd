@@ -116,6 +116,23 @@ export interface ICitationRecord extends ICitation {
   at: string;
   /** The persisted target discriminator (`'path'` today). Optional so a legacy row without one still projects. */
   targetType?: string;
+  /**
+   * (A-AC2) The verification outcome the write recorded. `'verified'` ⇒ `sha`
+   * is a real content hash; `'unverified-with-reason'` ⇒ `sha` is the
+   * `'unverified'` sentinel and `unverifiedReason` says why. Legacy rows that
+   * predate the field derive it from `sha === 'unverified'` (reason absent).
+   */
+  verification: 'verified' | 'unverified-with-reason';
+  /** Why the citation is unverified — absent when `verified` and for legacy rows. */
+  unverifiedReason?: string;
+}
+
+/** The persisted verification outcome threaded from the write layer's sha gate into the citation node. */
+export interface ICitationVerificationMeta {
+  verification: 'verified' | 'unverified-with-reason';
+  unverifiedReason?: string;
+  /** `path` (default) | `url` | `registry` | `query` — the anchor kind of `file`. */
+  targetType?: string;
 }
 
 /**
@@ -145,12 +162,18 @@ export interface ICitationNodeView {
 export function citationNodeMetadata(
   citation: ICitation,
   sha: string,
-  at: string
+  at: string,
+  verification?: ICitationVerificationMeta
 ): Record<string, unknown> {
+  const outcome =
+    verification?.verification ??
+    (sha === 'unverified' ? 'unverified-with-reason' : 'verified');
   return {
     target: citation.file,
-    target_type: 'path',
+    target_type: verification?.targetType ?? 'path',
     sha,
+    verification: outcome,
+    unverified_reason: verification?.unverifiedReason ?? null,
     line: citation.lines ?? null,
     at,
     symbol: citation.symbol ?? null,
@@ -171,6 +194,18 @@ export function citationNodeMetadata(
  * node's `t_created`. A malformed `meta` never throws — the caller gets a
  * best-effort projection, never a crash.
  */
+/** The persisted outcome, or — for a legacy row that predates the field — derived from the `sha` sentinel. */
+function verificationFromMetadata(
+  md: Record<string, unknown>
+): 'verified' | 'unverified-with-reason' {
+  const stored = md['verification'];
+  if (stored === 'verified' || stored === 'unverified-with-reason') {
+    return stored;
+  }
+  const sha = typeof md['sha'] === 'string' ? md['sha'] : 'unverified';
+  return sha === 'unverified' ? 'unverified-with-reason' : 'verified';
+}
+
 export function citationFromNode(node: ICitationNodeView): ICitationRecord {
   const md = node.metadata ?? {};
   return {
@@ -185,6 +220,10 @@ export function citationFromNode(node: ICitationNodeView): ICitationRecord {
     at: typeof md['at'] === 'string' ? md['at'] : node.tCreated,
     targetType:
       typeof md['target_type'] === 'string' ? md['target_type'] : undefined,
+    verification: verificationFromMetadata(md),
+    ...(typeof md['unverified_reason'] === 'string'
+      ? { unverifiedReason: md['unverified_reason'] }
+      : {}),
   };
 }
 

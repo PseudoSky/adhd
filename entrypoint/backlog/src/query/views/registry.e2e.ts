@@ -98,7 +98,7 @@ interface Fixture {
 async function seedFixture(
   handle: Pick<IWriteStoreHandle, 'adapter' | 'typePolicy'>
 ): Promise<Fixture> {
-  return executeWriteTransaction(handle, async (tx) => {
+  return executeWriteTransaction({ ...handle, verb: 'test-fixture' }, async (tx) => {
     const now = nowISO();
     const ownsProjectRule = await resolveEdgeKindTx(tx, 'owns_project');
     const hasLocationRule = await resolveEdgeKindTx(tx, 'has_location');
@@ -590,7 +590,7 @@ describe('registry views + lookup (SPEC.md §3a)', () => {
       // live `project` row — a deliberately orphaned chain (§3a: "never a
       // silent null" applies to THIS gap too — `lookup` must still return a
       // usable partial result, not throw or crash).
-      await executeWriteTransaction(store, async (tx) => {
+      await executeWriteTransaction({ ...store, verb: 'test-fixture' }, async (tx) => {
         const now = nowISO();
         const hasLocationRule = await resolveEdgeKindTx(tx, 'has_location');
         const orphanComponent = await writeNodeTx(tx, {
@@ -679,7 +679,7 @@ describe('registry views + lookup (SPEC.md §3a)', () => {
         '/some/very/long/absolute/prefix/that/is/not/queried/directly/entrypoint/backlog/src/deep/needle.ts';
       const needleQuery = 'entrypoint/backlog/src/deep/needle.ts';
 
-      await executeWriteTransaction(store, async (tx) => {
+      await executeWriteTransaction({ ...store, verb: 'test-fixture' }, async (tx) => {
         const now = nowISO();
         // MAX_QUERY_LIMIT (1000) non-matching path locations, inserted FIRST so
         // they occupy the capped scan window ahead of the real match.
@@ -725,7 +725,7 @@ describe('registry views + lookup (SPEC.md §3a)', () => {
       const needleValue = '/prefix/entrypoint/backlog/src/shallow/needle.ts';
       const needleQuery = 'entrypoint/backlog/src/shallow/needle.ts';
 
-      await executeWriteTransaction(store, async (tx) => {
+      await executeWriteTransaction({ ...store, verb: 'test-fixture' }, async (tx) => {
         const now = nowISO();
         for (let i = 0; i < 50; i++) {
           await writeNodeTx(tx, {

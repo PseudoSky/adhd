@@ -12,6 +12,7 @@
  * `writeNode`/`writeEdge`/`findOrCreateNode` themselves (§4c).
  */
 
+import type { ISessionStamp } from './session-stamp.js';
 import type { AdapterTransaction } from '@adhd/sox-store-adapter';
 import type { GraphBackend } from '@adhd/sox-graph-store';
 import type {
@@ -34,6 +35,7 @@ import { writeAudit } from './audit.js';
 import { resolveSiblingProjectRootsTx } from './citation-path.js';
 import { type ICitation } from '../citation.js';
 import { appendCitationTx, resolveCitationShas } from './citation.js';
+import { reconcileMembershipTx } from './membership.js';
 import {
   composeEmbedText,
   scheduleIssueEmbedding,
@@ -77,7 +79,7 @@ import {
  */
 export type { ICitation, ICitationInput } from '../citation.js';
 
-export interface ICreateIssueInput {
+export interface ICreateIssueInput extends ISessionStamp {
   title: string;
   body: string;
   /** uid or name — resolved per §6.1; REQUIRED (every issue has a component chain). NEVER minted by this verb (§1/§6.1). */
@@ -1163,6 +1165,14 @@ export async function createIssue(
         typePolicy: handle.typePolicy,
       });
 
+      // (A-AC5 I2) The primary placement is also a membership row, so
+      // membership reads need no special case for an issue that cites nothing.
+      await reconcileMembershipTx(tx, handle, {
+        issueRowid: issue.rowid,
+        issueUid: issue.uid,
+        at: now,
+      });
+
       // Each citation is the SAME node+edge write `addCitation` performs,
       // through the SAME helper — so filing-time and after-the-fact citation
       // writes can never diverge. The sha is already computed (and
@@ -1173,7 +1183,7 @@ export async function createIssue(
           issueRowid: issue.rowid,
           issueUid: issue.uid,
           citation: citations[i],
-          sha: citationShas[i],
+          verification: citationShas[i]!,
           at: now,
         });
       }

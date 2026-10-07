@@ -15,6 +15,7 @@
  * than the package's bare apigen-namespaced singleton. It is labelled as such and
  * is not the proof.
  */
+import { isCiRun } from './test/helpers/ci-env.js';
 import { describe, expect, it, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync, rmSync, existsSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -131,10 +132,14 @@ describe('backlog is a REQUIRED, adhd-namespaced tracing consumer (FEAT-APIGEN-T
     try {
       mod = await import('./cli.js');
     } catch (err) {
-      ctx.skip(
+      const reason =
         `cli.ts could not be loaded (${err instanceof Error ? err.message : String(err)}) — ` +
-          'identity requires a built/installed tree; static USE_PLUGINS membership is asserted separately below'
-      );
+        'identity requires a built/installed tree; static USE_PLUGINS membership is asserted separately below';
+      // B-AC11 (55ba4178): CI always has the built tree, so a load failure there
+      // is a real defect — FAIL, never skip. Locally the skip stays, with its
+      // reason printed by the runner.
+      if (isCiRun()) throw Object.assign(new Error(`[CI] ${reason}`), { cause: err });
+      ctx.skip(reason);
     }
     const { USE_PLUGINS } = mod!;
     expect(USE_PLUGINS[0]).toBe(tracingPlugin);
