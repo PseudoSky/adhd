@@ -43,15 +43,19 @@ export { DEFAULT_PROVIDER_TIMEOUT_MS };
 /**
  * Default bound on parent-chain escalation depth (ADR-0008 D6/D11).
  *
- * When `nativeTooling.hitl` is disabled, an `ask` is routed to the task's PARENT
- * for approval. **v1 escalates exactly ONE HOP — to the IMMEDIATE parent task**
- * (the successor of `a0c0a826`); `escalationMaxDepth` gates that single hop: a
- * task may escalate only while its `recursionDepth` is strictly below this bound.
- * The bounded, transitive climb up the parent chain *to the root* —
- * re-evaluating the ask at each ancestor and terminating in the `deny` floor at
- * the root — is NOT built in v1; it is tracked as `fc466f0b`. At or beyond the
- * bound the ask fails CLOSED (`PERMISSION_ASK_DENIED`), exactly like the
- * no-parent floor — an unanswered ask never hangs and is never unbounded.
+ * When `nativeTooling.hitl` is disabled, an `ask` climbs the parent chain
+ * toward the root until it reaches an INTERACTIVE ancestor (one whose
+ * definition does not disable HITL) — that ancestor becomes the decision
+ * surface and is the only task parked holding the resumeToken. Non-interactive
+ * ancestors passed on the way are parked tokenless for the duration and
+ * restored afterwards. If every ancestor up to the root is non-interactive the
+ * walk terminates in the `deny` floor AT the root.
+ *
+ * The climb is bounded twice by `escalationMaxDepth`: a task may escalate only
+ * while its `recursionDepth` is strictly below the bound, and the walk visits at
+ * most that many ancestors (cycle-safe). At or beyond the bound the ask fails
+ * CLOSED (`PERMISSION_ASK_DENIED`), exactly like the no-parent floor — an
+ * unanswered ask never hangs and is never unbounded.
  * Overridable per host via `EngineConfig.escalationMaxDepth`.
  */
 export const DEFAULT_MAX_ESCALATION_DEPTH = 3;
@@ -184,13 +188,93 @@ export interface OrchestratorTaskStore {
     appendEvent(evt: { taskId: string; type: string; payload?: unknown }): void;
     unregisterCancellation(taskId: string): void;
     /** Read a task row (status/parent/recursionDepth) — used to restore a parent. */
-    read?(taskId: string): { status?: string; parentTaskId?: string; recursionDepth?: number } | undefined;
+    read?(taskId: string): { status?: string; parentTaskId?: string; recursionDepth?: number; sessionId?: string | null } | undefined;
 }
 
 /** SessionStore-like interface for orchestrator consumption */
 export interface OrchestratorSessionStore {
     appendMessage(sessionId: string, message: Message): Promise<void>;
     close(sessionId: string): void;
+    /**
+     * Resolve a session's agent definition. Optional so minimal fakes compile;
+     * the real `SessionStore` satisfies it. The escalation walk uses it to tell
+     * whether an ancestor task is interactive; when absent (or the lookup
+     * fails) the ancestor is treated as interactive and the ask is delivered
+     * there, exactly as the one-hop behaviour did.
+     */
+    getAgentDefinition?(sessionId: string): Parameters<typeof effectiveHitl>[0];
+}
+
+/** Outcome of climbing the parent chain for an escalated `ask` (fc466f0b). */
+type EscalationWalk =
+  | { kind: 'deliver'; targetId: string; passed: string[] }
+  | { kind: 'deny'; reason: string; passed: string[]; rootId?: string };
+
+/**
+ * Climb from `startId` (the asking task's immediate parent) toward the root and
+ * pick the decision surface: the first ancestor whose agent is interactive
+ * (`effectiveHitl !== false`). Non-interactive ancestors are recorded in
+ * `passed` (nearest first) and the walk advances to THEIR parent. Reaching a
+ * non-interactive root yields `deny` AT the root. The walk visits at most
+ * `maxHops` ancestors and tracks visited ids, so a long or cyclic chain fails
+ * closed instead of walking forever. An ancestor whose row/definition cannot be
+ * resolved is treated as interactive (delivery then fails closed on its own if
+ * the row is truly unreachable).
+ */
+function walkEscalationChain(
+  taskStore: OrchestratorTaskStore,
+  sessionStore: OrchestratorSessionStore,
+  startId: string,
+  maxHops: number
+): EscalationWalk {
+  const passed: string[] = [];
+  const visited = new Set<string>();
+  let cursor = startId;
+  for (let hop = 0; hop < maxHops; hop++) {
+    if (visited.has(cursor)) {
+      return {
+        kind: 'deny',
+        reason: `escalation chain is cyclic at task '${cursor}'`,
+        passed,
+      };
+    }
+    visited.add(cursor);
+
+    let row: ReturnType<NonNullable<OrchestratorTaskStore['read']>>;
+    try {
+      row = taskStore.read?.(cursor);
+    } catch {
+      return { kind: 'deliver', targetId: cursor, passed };
+    }
+
+    let interactive = true;
+    if (row?.sessionId && sessionStore.getAgentDefinition) {
+      try {
+        interactive =
+          effectiveHitl(sessionStore.getAgentDefinition(row.sessionId)) !== false;
+      } catch {
+        interactive = true;
+      }
+    }
+    if (interactive) return { kind: 'deliver', targetId: cursor, passed };
+
+    passed.push(cursor);
+    const next = row?.parentTaskId;
+    if (!next) {
+      return {
+        kind: 'deny',
+        reason: `every ancestor up to the root task '${cursor}' is non-interactive (HITL disabled)`,
+        passed,
+        rootId: cursor,
+      };
+    }
+    cursor = next;
+  }
+  return {
+    kind: 'deny',
+    reason: `escalation depth bound reached (walked ${maxHops} ancestors without finding an interactive approver; max ${maxHops})`,
+    passed,
+  };
 }
 
 const hitlResolvers = new Map<string, (userInput: string) => void>();
@@ -884,9 +968,10 @@ export class Orchestrator {
             //   suspend  — iff HITL is enabled (`nativeTooling.hitl !== false`)
             //              AND the suspension is answerable on this transport
             //   escalate — iff a parent exists AND the child is within the
-            //              parent-chain depth bound; v1 routes the ask ONE HOP to
-            //              the IMMEDIATE PARENT TASK for approval (never answered
-            //              on the child; the climb-to-root is `fc466f0b`)
+            //              parent-chain depth bound; the ask climbs the parent
+            //              chain to the nearest INTERACTIVE ancestor (never
+            //              answered on the child). A chain with no interactive
+            //              ancestor denies AT the root (fc466f0b).
             //   deny     — the fail-closed floor
             //
             // A synchronous call (one-shot `agent_name`, `background:false`) is
@@ -898,24 +983,52 @@ export class Orchestrator {
               effectiveHitl(executionContext.agentDefinition) !== false;
             const parentTaskId = executionContext.parentTaskId;
             const recursionDepth = executionContext.recursionDepth ?? 0;
-            // Bounded escalation (ADR-0008 D6/D11): v1 escalates ONE HOP to the
-            // IMMEDIATE parent, gated by `escalationMaxDepth` — the ask may
-            // escalate to that parent only while the child's `recursionDepth` is
-            // strictly below the bound. The transitive climb-to-root is tracked as
-            // `fc466f0b`. At/over the bound it fails closed — never unbounded,
+            // Bounded escalation (ADR-0008 D6/D11): the ask may escalate only
+            // while the child's `recursionDepth` is strictly below
+            // `escalationMaxDepth`, and the climb visits at most that many
+            // ancestors. At/over the bound it fails closed — never unbounded,
             // never a hang.
             const withinEscalationBound = recursionDepth < escalationMaxDepth;
+            let walk: EscalationWalk | undefined;
             let resolution: 'suspend' | 'escalate' | 'deny';
             if (!suspensionAnswerable) resolution = 'deny';
             else if (hitlEnabled) resolution = 'suspend';
-            else if (parentTaskId && withinEscalationBound)
-              resolution = 'escalate';
-            else resolution = 'deny';
+            else if (parentTaskId && withinEscalationBound) {
+              walk = walkEscalationChain(
+                taskStore,
+                sessionStore,
+                parentTaskId,
+                escalationMaxDepth
+              );
+              resolution = walk.kind === 'deliver' ? 'escalate' : 'deny';
+            } else resolution = 'deny';
 
             if (resolution === 'deny') {
               let reason: string;
               if (!suspensionAnswerable) {
                 reason = 'the synchronous call has no reachable approver';
+              } else if (walk?.kind === 'deny') {
+                // The climb ended in the fail-closed floor (root-terminal deny,
+                // hop cap, or a cyclic chain).
+                reason = walk.reason;
+                // Audit EVERY hop the ask visited: each passed ancestor records
+                // the forward, and the root records the terminal deny.
+                for (const hopId of walk.passed) {
+                  taskStore.appendEvent({
+                    taskId: hopId,
+                    type: 'TOOL_CALL',
+                    payload: {
+                      tool: qualifiedToolName,
+                      callId: tc.id,
+                      permission: 'ask',
+                      resolution: hopId === walk.rootId ? 'deny' : 'forward',
+                      escalatedFrom: taskId,
+                      ...(hopId === walk.rootId
+                        ? { code: 'PERMISSION_ASK_DENIED', reason }
+                        : {}),
+                    },
+                  });
+                }
               } else if (parentTaskId) {
                 // A parent exists but the chain is too deep — the bound floored it.
                 reason = `escalation depth bound reached (depth ${recursionDepth} >= max ${escalationMaxDepth})`;
@@ -1049,24 +1162,26 @@ export class Orchestrator {
               // like an approved `escalate`; only a decline short-circuits above.)
             }
 
-            // ── `escalate` — the PARENT TASK is the decision surface ─────────
-            // The ask is DELIVERED to the parent task: the parent is parked in
-            // `awaiting_input` holding the resumeToken, a resolver is registered
-            // under the PARENT task id, and the child waits. The child is parked
+            // ── `escalate` — the nearest INTERACTIVE ANCESTOR is the surface ──
+            // The ask is DELIVERED to the ancestor the chain walk selected (the
+            // immediate parent when it is interactive): that ancestor is parked
+            // in `awaiting_input` holding the resumeToken, a resolver is
+            // registered under ITS task id, and the child waits. Non-interactive
+            // ancestors passed on the way are parked tokenless (and audited) so
+            // every hop is observable, then restored. The child is parked
             // tokenless, so it can never approve its own ask. `task_resume` on
-            // the PARENT resolves the child's promise; on approval the child
-            // executes, on rejection it denies — exactly as if the parent had
+            // the TARGET resolves the child's promise; on approval the child
+            // executes, on rejection it denies — exactly as if the target had
             // answered. Bounded by `escalationMaxDepth` (checked above).
             //
             // This is an `else`, not a bare block: the `suspend` branch above no
             // longer unconditionally `continue`s, so an APPROVED `suspend` must
             // fall through to the execution phase — NOT into this escalation
-            // branch. v1 escalation is ONE HOP: the ask is routed to the IMMEDIATE
-            // parent task only; `escalationMaxDepth` gates that single hop. The
-            // bounded, transitive climb up the parent chain to the root is NOT
-            // built in v1 — tracked as `fc466f0b`.
+            // branch.
             else {
-              const parentId = parentTaskId as string;
+              const escalationWalk = walk as Extract<EscalationWalk, { kind: 'deliver' }>;
+              const parentId = escalationWalk.targetId;
+              const passedHops = escalationWalk.passed;
 
               // One pending decision per task. If the parent already holds a
               // pending escalation (two children asking at once), fail THIS ask
@@ -1098,14 +1213,22 @@ export class Orchestrator {
                 continue;
               }
 
-              // Remember the parent's pre-ask status so it can be restored once
-              // the decision lands (best-effort; `read` is optional on the store).
-              let parentPriorStatus = 'running';
-              try {
-                parentPriorStatus = taskStore.read?.(parentId)?.status ?? 'running';
-              } catch {
-                parentPriorStatus = 'running';
-              }
+              // Remember each hop's pre-ask status (the target and every passed
+              // non-interactive ancestor) so it can be restored once the
+              // decision lands (best-effort; `read` is optional on the store).
+              const priorStatusOf = (id: string): string => {
+                try {
+                  return taskStore.read?.(id)?.status ?? 'running';
+                } catch {
+                  return 'running';
+                }
+              };
+              const parentPriorStatus = priorStatusOf(parentId);
+              const hopPriorStatus = new Map<string, string>(
+                passedHops.map((id) => [id, priorStatusOf(id)])
+              );
+              // Every ancestor actually parked so far, for restore-on-failure.
+              const parkedHops: string[] = [];
 
               const resumeToken = randomUUID();
               let askAbortHandler: (() => void) | undefined;
@@ -1136,6 +1259,20 @@ export class Orchestrator {
                   taskId: parentId,
                   status: 'awaiting_input',
                 });
+                // Park every passed non-interactive ancestor tokenless: each hop
+                // is observably waiting on the decision, but only the target
+                // holds the token, so no intermediate can answer the ask.
+                for (const hopId of passedHops) {
+                  await taskStore.updateStatus(hopId, 'awaiting_input', {
+                    resumeToken: null,
+                  });
+                  parkedHops.push(hopId);
+                  emit({
+                    type: 'status_change',
+                    taskId: hopId,
+                    status: 'awaiting_input',
+                  });
+                }
                 // Park the CHILD tokenless (`resumeToken: null` CLEARS any stale
                 // token from an earlier suspend): the child is NOT directly
                 // resumable, so a child self-approve can never satisfy the ask.
@@ -1162,6 +1299,15 @@ export class Orchestrator {
                     });
                   } catch {
                     // parent row vanished — nothing to restore
+                  }
+                }
+                for (const hopId of parkedHops) {
+                  const prior = hopPriorStatus.get(hopId) ?? 'running';
+                  try {
+                    await taskStore.updateStatus(hopId, prior);
+                    emit({ type: 'status_change', taskId: hopId, status: prior });
+                  } catch {
+                    // hop row vanished — nothing to restore
                   }
                 }
                 logger.warn(
@@ -1194,8 +1340,25 @@ export class Orchestrator {
                 continue;
               }
 
-              // Child-side audit: the ask escalated TO the parent. Deliberately
-              // carries NO resumeToken (the child is not the decision surface).
+              // Per-hop audit: each non-interactive ancestor the ask passed
+              // through records the forward (no token — not a decision surface).
+              for (const hopId of passedHops) {
+                taskStore.appendEvent({
+                  taskId: hopId,
+                  type: 'TOOL_CALL',
+                  payload: {
+                    tool: qualifiedToolName,
+                    callId: tc.id,
+                    permission: 'ask',
+                    resolution: 'forward',
+                    escalatedFrom: taskId,
+                    escalatedTo: parentId,
+                  },
+                });
+              }
+              // Child-side audit: the ask escalated TO the target ancestor.
+              // Deliberately carries NO resumeToken (the child is not the
+              // decision surface).
               taskStore.appendEvent({
                 taskId,
                 type: 'TOOL_CALL',
@@ -1295,6 +1458,18 @@ export class Orchestrator {
                     { taskId, parentId, err },
                     'Failed to restore parent task status after an escalated ask'
                   );
+                }
+                for (const hopId of passedHops) {
+                  const prior = hopPriorStatus.get(hopId) ?? 'running';
+                  try {
+                    await taskStore.updateStatus(hopId, prior);
+                    emit({ type: 'status_change', taskId: hopId, status: prior });
+                  } catch (err) {
+                    logger.warn(
+                      { taskId, hopId, err },
+                      'Failed to restore an intermediate ancestor status after an escalated ask'
+                    );
+                  }
                 }
               }
             }
