@@ -253,6 +253,12 @@ hermetically):
 | `src/__tests__/integration/native-tooling-real-ops.e2e.test.ts` | `NAT_TOOL_LIVE=1` | `uvx mcp-shell-server` (external PyPI package) + `srt` |
 | `src/__tests__/integration/agent-portability-live.e2e.test.ts` | `NAT_TOOL_LIVE=1` | paid DeepSeek model (`ADHD_AGENT_DEEPSEEK_SECRET`); owner pseudosky, $0.05 cap (dispatch-2026-10-06-48dc). The non-model portability matrix (`agent-portability.e2e.test.ts`) is NOT gated. |
 
+These live tests are **off by default** (they skip unless `NAT_TOOL_LIVE=1`) and are not
+run by the pre-push hook; CI's `e2e` lane runs them skipped. The table above is
+machine-checked against the files that actually gate on `NAT_TOOL_LIVE`
+(`tools/nx-plugins/test/executors/wiring/nat-tool-live-docs.spec.mjs`): add a gated file
+without a row here and that spec goes red.
+
 **Approved by:** pseudosky (repo owner), 2026-10-05, under the owner directive
 "Finish the project". **Adopted set:** `@modelcontextprotocol/server-filesystem`,
 `tumf/mcp-shell-server`, `@anthropic-ai/sandbox-runtime` (`srt`, wraps both);

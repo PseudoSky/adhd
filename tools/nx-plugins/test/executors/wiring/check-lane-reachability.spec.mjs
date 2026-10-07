@@ -23,6 +23,8 @@ import { dirname, join } from 'node:path';
 import { runChecks } from './check-lane-reachability.mjs';
 // Rule 8's own negative controls ride this (already `test:build-tools`-wired) spec file.
 import './check-agent-lane-spawn.spec.mjs';
+// 90d07610 AC4: the NAT_TOOL_LIVE gate-table docs contract rides this same wired spec file.
+import './nat-tool-live-docs.spec.mjs';
 
 const GATE_TARGETS = ['test', 'e2e'];
 // A stub createNodes that attaches NO publish target (so rule 4 is silent

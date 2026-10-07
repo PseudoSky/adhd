@@ -30,7 +30,7 @@ An e2e that spawns agent-mcp passes an isolated cwd and a fake `HOME` (adhd ADR-
 
 ### D4 — Mechanical enforcement
 
-`tools/nx-plugins/test/executors/wiring/check-agent-lane-spawn.mjs` (invoked as rule 8 of `check-lane-reachability.mjs`, run unconditionally by pre-push and both CI workflows) fails when an agent-family unit-lane file spawns a subprocess, when a project with `*.e2e.test.ts` does not exclude them from its unit lane, or when a `pendingMove` baseline entry is stale. Negative controls: `check-agent-lane-spawn.spec.mjs`.
+`tools/nx-plugins/test/executors/wiring/check-agent-lane-spawn.mjs` (invoked as rule 8 of `check-lane-reachability.mjs`, run unconditionally by pre-push and both CI workflows (the check runs in pre-push; the `e2e` lane itself runs in CI only — see Amendment)) fails when an agent-family unit-lane file spawns a subprocess, when a project with `*.e2e.test.ts` does not exclude them from its unit lane, or when a `pendingMove` baseline entry is stale. Negative controls: `check-agent-lane-spawn.spec.mjs`.
 
 ## Consequences
 
@@ -53,6 +53,10 @@ apigen-* and `entrypoint/backlog` lanes and their `*.e2e.ts` convention; paid-se
 - `docs/PIPELINE.md` §2; `tools/gate/lane-gate.mjs`; `tools/vite-plugins/e2e-globs.mjs`
 - adhd ADR-0008 (`docs/decisions/0008-agent-mcp-native-tooling.md`:32)
 - backlog 5b839b90
+
+## Amendment — e2e is not part of the local push gate (2026-10-07)
+
+Owner decision (verbatim, dispatch-2026-10-06-48dc): "do not run e2e by default, yes remove from push". The `e2e` lane is **CI-only**: `.githooks/pre-push` runs affected `test` only (`GATE_TARGETS` minus `e2e`, resolved by `.githooks/lib/pre-push-flags.mjs`), while both CI workflows keep `test` + `e2e` (`GATE_TARGETS` in `tools/gate/lane-gate.mjs`); lane-reachability rule 5 enforces that pre-push derives its flags from `pre-push-flags.mjs`, runs `test`, and never runs `e2e`. Run e2e locally on demand with `npx nx affected -t e2e --parallel=1`. Env-gated live suites (`NAT_TOOL_LIVE=1`, paid/third-party) stay off by default everywhere, with their gate tables checked by `nat-tool-live-docs.spec.mjs` (backlog 90d07610). Where D1-D4 above describe pre-push running the lanes, read it as CI.
 
 ## Provenance
 
