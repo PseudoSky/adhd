@@ -17,7 +17,17 @@ export default [
           // fs/shell servers; it is never `import`ed, so `@nx/dependency-checks`
           // cannot see the use by static analysis. Declared here (not removed)
           // so the dependency is genuinely installed and pinned.
-          ignoredDependencies: ['@anthropic-ai/sandbox-runtime'],
+          //
+          // `@modelcontextprotocol/server-filesystem` is the adopted fs server,
+          // launched as `node <its bin>` (c9f0a791). Its bin is ESM and is
+          // executed, never imported; the catalog locates it with
+          // `createRequire(...).resolve('<pkg>/package.json')` on a computed
+          // specifier, which static analysis cannot see. Declared (exact-pinned)
+          // so it ships in the published closure instead of being fetched by `npx`.
+          ignoredDependencies: [
+            '@anthropic-ai/sandbox-runtime',
+            '@modelcontextprotocol/server-filesystem',
+          ],
         },
       ],
     },

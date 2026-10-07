@@ -20,9 +20,9 @@ const stdio = (servers: McpServerConfig[]): Stdio[] =>
 
 /** The final argv entries of the resolved fs server (the allowed dirs). */
 const fsRootsOf = (servers: McpServerConfig[]): string[] => {
-  const fs = stdio(servers).find((s) => s.args?.includes('@modelcontextprotocol/server-filesystem'));
+  const fs = stdio(servers).find((s) => s.args?.some((a) => a.includes('server-filesystem')));
   if (!fs) throw new Error('no fs server resolved');
-  const marker = fs.args!.indexOf('@modelcontextprotocol/server-filesystem');
+  const marker = fs.args!.findIndex((a) => a.includes('server-filesystem'));
   return fs.args!.slice(marker + 1);
 };
 
