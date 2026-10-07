@@ -14,7 +14,13 @@ source is authoritative, and this doc is the index that keeps the pieces togethe
   `tools/nx-plugins/{build,lint,assets,deps,test}/plugin.js`. Key edges: `build` →
   `dependsOn: ["^build","typecheck"]`; `test` → `["lint","^build"]`; `lint` → `["sync-deps-check"]`;
   `publish` → `["build","assets","test","dist-manifest","verify-dist-load","publish-hygiene"]`
-  (`targetDefaults["nx-release-publish"]`).
+  (`targetDefaults["nx-release-publish"]`). The inferred `version`/`publish` targets
+  (`tools/nx-plugins/build/plugin.js`) order after each RUNTIME dependency's `version`/`publish`/`test`
+  via explicit per-project `{projects, target}` entries built from `dependencies`,
+  `peerDependencies` and `optionalDependencies` (npm name mapped to Nx project name through
+  `project.json#name`); `devDependencies` are excluded because Nx graph edges carry no dependency
+  kind and a graph-wide `^version`/`^publish` would fan out over devDependency and test-import edges.
+  `build`/`test` keep `^build` over the full graph, so `affected` and cache hashing are unchanged.
 - **"Affected by a change"** — nx `affected` against `defaultBase: "main"` (`nx.json`); the matched
   inputs are the declared `namedInputs` (`default`, `production`, `sharedGlobals`).
 - **Artifact per target** — `build` emits each project's `dist/`; `publish` publishes that `dist/`
@@ -190,6 +196,7 @@ and `vercel` apps post check suites; none gates a merge. DeepSource is **not use
 - **Every edit to this doc** — what changed and why, below.
 
 ## Provenance
+- `2026-10-07` — Publish/version graph narrowed to runtime dependencies (run `dispatch-2026-10-06-48dc`, branch `fix/graph-48dc`). §1 documents the per-project `{projects, target}` ordering that replaced `^version`/`^test`/`^publish` in `plugin.js`. Why: `agent-plugin-tracing:publish` expanded to 193 tasks / 15 projects through devDependency and test-import edges; it is now 53 tasks, `:version` 61 to 35, `apigen-plugin-tracing:publish` 52 to 41. The `version` executor now maps `@adhd/*` names to projects through each project's `package.json#name` (`@adhd/environment` is `environment-core-node`), so its internal ranges are reconciled.
 - `2026-10-07` — Cache audit part 2 (run `dispatch-2026-10-06-48dc`, owner follow-up). §4: `nx-plugins:test` cached with audited inputs (was `cache:false`); `default` named input no longer hashes release-written `version`/internal ranges/`CHANGELOG.md` (`manifest` named input + per-project override), so the version phase no longer invalidates unchanged packages' caches; apigen-cli fixtures hashed by runtime input (`.nxignore` hid them). §5: `release-reset-check` moved from `version`+`publish` to `publish` only, made HEAD-aware (range-only edits are not orphan version bumps), review-only states warn and appear in the receipt instead of failing; the `safe = true` override was removed because it only let `--live` clobber hand-edited changelogs. `bug-nxassets-001` spec rewritten to the post-chmod-bin wiring. Evidence: the cache-dag report.
 - `2026-10-07` — Cache audit (run `dispatch-2026-10-06-48dc`, branch `fix/cache-dag-48dc`). §4 rewritten from measurements: backlog `build`, `dist-manifest`, `verify-dist-load`, `publish-hygiene`, `generate-cli` cached with declared inputs/outputs; `chmod-bin` removed from `assets`' dependsOn (bit guaranteed in `writeDistManifest`); `test` upstream-output glob narrowed to code files. Why: the previous text claimed `cache: true` on `@nx/vite:build`, `test`, `typecheck` only, and a second identical `build`/`test` run missed 29+ tasks. Evidence and negative controls: the cache-dag report.
 - `2026-10-06` — Deleted `.deepsource.toml` and rewrote the §2 external-checks paragraph (backlog `8c0c314e`, phase-6 bucket C). Why: the config was wired to no workflow and its check was chronically red; keeping an unwired, failing external gate is worse than none. Revert path: `git revert` the commit and re-install the app.

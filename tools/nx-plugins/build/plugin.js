@@ -31,11 +31,64 @@ function releaseRewrittenFields(workspaceRoot, projectRoot) {
   return fields;
 }
 function skip(p) { return p === '.' || p.startsWith('node_modules/') || p.includes('/node_modules/') || p.startsWith('dist/') || p.includes('/dist/') || isScratchPath(p); }
+/**
+ * npm package name -> Nx project name, built from every workspace `package.json` that sits
+ * next to a `project.json`. The Nx project name comes from `project.json#name` (falling back
+ * to the package name with its scope stripped only when `project.json` has no name), NEVER by
+ * stripping `@adhd/`: `@adhd/environment` is the project `environment-core-node`.
+ * @param {string} workspaceRoot
+ * @param {string[]} configFiles workspace-relative package.json paths (createNodes matches)
+ * @returns {Map<string, string>}
+ */
+function buildPackageNameIndex(workspaceRoot, configFiles) {
+  const index = new Map();
+  for (const pkgPath of configFiles) {
+    const root = dirname(pkgPath);
+    if (skip(root)) continue;
+    const projectJson = join(workspaceRoot, root, 'project.json');
+    if (!existsSync(projectJson)) continue;
+    try {
+      const pkgName = JSON.parse(readFileSync(join(workspaceRoot, pkgPath), 'utf8')).name;
+      if (!pkgName) continue;
+      const projName = JSON.parse(readFileSync(projectJson, 'utf8')).name || pkgName.replace(/^@[^/]+\//, '');
+      index.set(pkgName, projName);
+    } catch { /* unreadable manifest: not an indexable workspace project */ }
+  }
+  return index;
+}
+/**
+ * Nx project names of the workspace packages a project needs at RUNTIME: its package.json
+ * `dependencies`, `peerDependencies` and `optionalDependencies` that are workspace projects.
+ * `devDependencies` are excluded on purpose: consumers never install them
+ * (generate-manifest.js deletes them from the published manifest), yet Nx project-graph edges
+ * carry no dependency kind, so `^version`/`^publish` would fan out over dev/test-only edges.
+ * @param {string} workspaceRoot
+ * @param {string} projectRoot
+ * @param {Map<string, string>} nameIndex from buildPackageNameIndex
+ * @param {string} selfProject this project's own Nx name (never its own dependency)
+ * @returns {string[]} sorted, de-duplicated Nx project names
+ */
+function runtimeInternalProjects(workspaceRoot, projectRoot, nameIndex, selfProject) {
+  let pkg = {};
+  try { pkg = JSON.parse(readFileSync(join(workspaceRoot, projectRoot, 'package.json'), 'utf8')); } catch { return []; }
+  const out = new Set();
+  for (const section of ['dependencies', 'peerDependencies', 'optionalDependencies']) {
+    for (const name of Object.keys(pkg[section] || {})) {
+      const proj = nameIndex.get(name);
+      if (proj && proj !== selfProject) out.add(proj);
+    }
+  }
+  return [...out].sort();
+}
+exports.buildPackageNameIndex = buildPackageNameIndex;
+exports.runtimeInternalProjects = runtimeInternalProjects;
 // publish does not depend on e2e (owner decision 2026-10-07); run e2e explicitly before a release.
 // Nx 23 unified on the v2 plugin API: createNodes[1] receives the ARRAY of
 // matched config files and returns [configFile, result] tuples.
 exports.createNodes = ['**/package.json', (configFiles, _o, ctx) =>
-  configFiles.map((pkgPath) =>
+{
+  const nameIndex = buildPackageNameIndex(ctx.workspaceRoot, configFiles);
+  return configFiles.map((pkgPath) =>
   {
     const projectRoot = dirname(pkgPath);
     if (skip(projectRoot)) return [pkgPath, {}];
@@ -43,6 +96,14 @@ exports.createNodes = ['**/package.json', (configFiles, _o, ctx) =>
     if (!hasBuildTarget(ctx.workspaceRoot, projectRoot)) return [pkgPath, {}];
     // Private packages have no published artifact to verify/ship.
     if (!isPublishable(ctx.workspaceRoot, projectRoot)) return [pkgPath, {}];
+    // Runtime-only ordering (see runtimeInternalProjects): explicit per-project dependsOn
+    // objects replace `^version` / `^test` / `^publish`, which expand over EVERY project-graph
+    // edge including devDependency and test/vite-config import edges. `build`/`test`'s own
+    // `^build`, `affected`, cache hashing and lint boundaries keep using the full graph.
+    let selfProject = null;
+    try { selfProject = JSON.parse(readFileSync(join(ctx.workspaceRoot, projectRoot, 'project.json'), 'utf8')).name || null; } catch { /* name stays null */ }
+    const runtimeDeps = runtimeInternalProjects(ctx.workspaceRoot, projectRoot, nameIndex, selfProject);
+    const onDeps = (target) => runtimeDeps.map((projects) => ({ projects, target }));
     // In-source dist ({projectRoot}/dist) + publish-from-source-root means pnpm resolves
     // @adhd/* natively via each package's own manifest (main → ./dist/…). The old `link`
     // target (symlink node_modules/@adhd/<name> → repo-root dist) is retired — it created
@@ -68,7 +129,7 @@ exports.createNodes = ['**/package.json', (configFiles, _o, ctx) =>
     // `version` bumps the SOURCE package.json iff the built dist differs from what's
     // published at its current version (registry as baseline — no tags). Runs before
     // publish in `pnpm release`; not cached (reads live registry, mutates source).
-    // `dependsOn: ["build", "assets", "^version"]` — `^version` orders versioning
+    // `dependsOn: ["build", "assets", <runtime deps>:version]` — the runtime-dependency `version` tasks order versioning
     // TOPOLOGICALLY: a package's own internal @adhd/* dependencies get their
     // `version` task run FIRST, so by the time THIS project's version task
     // runs, every dependency it declares has already settled its version. The
@@ -120,7 +181,7 @@ exports.createNodes = ['**/package.json', (configFiles, _o, ctx) =>
             manifest: [{ json: '{projectRoot}/package.json', excludeFields: releaseRewrittenFields(ctx.workspaceRoot, projectRoot) }],
           },
           targets: {
-            "version": { "executor": "@adhd/nx-build:version", "dependsOn": ["build", "assets", "^version"], /*"cache": false */ },
+            "version": { "executor": "@adhd/nx-build:version", "dependsOn": ["build", "assets", ...onDeps("version")], /*"cache": false */ },
             "reconcile": { "executor": "@adhd/nx-build:reconcile", "dependsOn": ["build", "assets"], /*"cache": false*/ },
             // cache-dag AC9: CACHED. The executor is a pure function of (this project's source
             // package.json, the versions of its workspace dependencies' package.json, its
@@ -191,18 +252,18 @@ exports.createNodes = ['**/package.json', (configFiles, _o, ctx) =>
                 { "runtime": "npm --version" }
               ]
             },
-            // BUG-002 (CRITICAL): `^publish` orders publish TOPOLOGICALLY, mirroring
-            // the existing `^version` pattern above (see the long comment on
+            // BUG-002 (CRITICAL): the runtime-dependency `publish` tasks order publish TOPOLOGICALLY, mirroring
+            // the `version` pattern above (see the long comment on
             // `version` at line 40-51 for the full rationale). Without it, nx is
             // free to publish a dependent before the internal @adhd/* dependency
             // it declares has itself landed on the registry — a consumer running
             // `npm install <dependent>` in that exact window resolves the
             // dependency's declared range against a version that isn't published
-            // yet and hits ETARGET. `^publish` guarantees every internal
+            // yet and hits ETARGET. Depending on each runtime dependency's `publish` guarantees every internal
             // dependency's publish task completes first, closing that window.
             // `publish` deliberately does NOT depend on `e2e` (owner decision,
             // c0bf141d): the resource-heavy lane is not a publish prerequisite.
-            "publish": { "executor": "@adhd/nx-build:publish", "dependsOn": ["test", "^test", "version", "^publish", "dist-manifest", "verify-dist-load", "publish-hygiene", "release-reset-check"], "cache": false },
+            "publish": { "executor": "@adhd/nx-build:publish", "dependsOn": ["test", ...onDeps("test"), "version", ...onDeps("publish"), "dist-manifest", "verify-dist-load", "publish-hygiene", "release-reset-check"], "cache": false },
             // release-reset (FEAT-RELEASE-RESET-001): reads LIVE git/working-tree
             // state (HEAD vs working `package.json`/`CHANGELOG.md`) to detect a
             // partial/half-generated release step for THIS project and, with
@@ -233,5 +294,5 @@ exports.createNodes = ['**/package.json', (configFiles, _o, ctx) =>
         }
       }
     }];
-  }),
-];
+  });
+}];

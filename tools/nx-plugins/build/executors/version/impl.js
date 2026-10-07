@@ -34,7 +34,7 @@
  * only the mechanism moved from "fetch + per-file diff every run" to
  * "cache-hash compare, backfill only on a miss".
  *
- * dependsOn ["build", "assets", "^version"]: needs the built + doc-complete
+ * dependsOn ["build", "assets", <runtime-dep version tasks>]: needs the built + doc-complete
  * dist to hash (`build`+`assets`), and needs every internal @adhd/*
  * dependency to have ALREADY settled its own version first (`^version` —
  * topological). Runs per-project (each writes only its own package.json —
@@ -60,7 +60,7 @@
  * running the FULL `@nx/dependency-checks` ESLint rule (missing/obsolete/
  * external-version-mismatch, not just internal-range drift) a SECOND time
  * for the same project, every single `version` run. That was provably
- * redundant: `version`'s own `dependsOn:["build","assets","^version"]`
+ * redundant: `version`'s own `dependsOn:["build","assets",<runtime-dep version tasks>]`
  * (tools/nx-plugins/build/plugin.js) means `build` — whose own
  * `dependsOn:["^build","lint"]`, whose own `dependsOn:["sync-deps"]`
  * (nx.json targetDefaults) — has ALREADY run the real `sync-deps` for this
@@ -346,6 +346,27 @@ async function writeChangelogEntry(context, projectRoot, version, dryRun, rec) {
 }
 
 /**
+ * npm package name -> Nx project configuration, from each workspace project's own
+ * `package.json#name`. Memoized per Nx context object.
+ * @param {object} context Nx executor context
+ * @returns {Map<string, object>}
+ */
+const _nameIndexCache = new WeakMap();
+function packageNameToProject(context) {
+  let index = _nameIndexCache.get(context);
+  if (index) return index;
+  index = new Map();
+  for (const proj of Object.values(context.projectsConfigurations.projects)) {
+    try {
+      const name = JSON.parse(readFileSync(join(context.root, proj.root, 'package.json'), 'utf8')).name;
+      if (name && !index.has(name)) index.set(name, proj);
+    } catch { /* project without a readable package.json is not an npm package */ }
+  }
+  _nameIndexCache.set(context, index);
+  return index;
+}
+
+/**
  * STALE-GRAPH FIX (correctness — see the `dependsOn: [..., "^version"]` note
  * above): the `deps` plugin's `sync-deps`/`sync-deps-check` executors
  * delegate to the REAL `@nx/dependency-checks` ESLint rule, which resolves
@@ -426,9 +447,9 @@ function reconcileInternalRangesFromDisk(context, dryRun) {
     if (!deps) continue;
     for (const [depName, currentRange] of Object.entries(deps)) {
       if (!depName.startsWith('@adhd/')) continue;
-      const depProjectName = depName.slice('@adhd/'.length);
-      const depProject =
-        context.projectsConfigurations.projects[depProjectName];
+      // npm name -> Nx project via each project's package.json `name` (NOT by stripping
+      // the scope: `@adhd/environment` is the project `environment-core-node`).
+      const depProject = packageNameToProject(context).get(depName);
       if (!depProject) continue; // not a workspace project — leave whatever's there alone
       const depPkgPath = join(context.root, depProject.root, 'package.json');
       let depVersion;

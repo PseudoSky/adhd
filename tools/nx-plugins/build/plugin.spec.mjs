@@ -1,6 +1,7 @@
 /**
  * plugin.spec.mjs — proves `@adhd/nx-build`'s `createNodes` attaches the
- * `^publish` topological ordering edge to every publishable project's
+ * topological ordering edges (one `{projects, target}` per RUNTIME dependency,
+ * never `^publish`/`^version`/`^test`, which also fan out over devDependency edges) to every publishable project's
  * `publish` target (BUG-RELEASE-ATOMICITY-DEP-RANGE-AHEAD-OF-TARGET-PUBLISH-001,
  * point 1 — "publish has no `^publish` graph edge to stop it shipping
  * anyway").
@@ -47,6 +48,7 @@ function makeFixtureProject({
   name,
   isPrivate = false,
   extraTargets = {},
+  pkgExtra = {},
 }) {
   const abs = join(workspaceRoot, projectRoot);
   mkdirSync(abs, { recursive: true });
@@ -54,56 +56,60 @@ function makeFixtureProject({
     join(abs, 'project.json'),
     JSON.stringify({ name, targets: { build: {}, ...extraTargets } })
   );
-  const pkg = { name, version: '1.0.0' };
+  const pkg = { name, version: '1.0.0', ...pkgExtra };
   if (isPrivate) pkg.private = true;
   writeFileSync(join(abs, 'package.json'), JSON.stringify(pkg));
   return join(abs, 'package.json');
 }
 
-test('createNodes: publish target dependsOn includes ^publish (topological dependency-publish-first ordering)', () => {
+test('createNodes: publish target dependsOn orders after each RUNTIME dependency (topological dependency-publish-first ordering) and never over devDependencies', () => {
   const workspaceRoot = mkdtempSync(join(tmpdir(), 'nx-build-plugin-fixture-'));
   try {
+    // Runtime dep (project name differs from the scope-stripped npm name, like
+    // `@adhd/environment` -> `environment-core-node`), a peer dep, and a devDependency.
+    makeFixtureProject({ workspaceRoot, projectRoot: 'packages/fixture/runtime-dep', name: 'fixture-core-runtime', pkgExtra: { name: '@adhd/runtime' } });
+    makeFixtureProject({ workspaceRoot, projectRoot: 'packages/fixture/peer-dep', name: 'fixture-core-peer', pkgExtra: { name: '@adhd/peer' } });
+    makeFixtureProject({ workspaceRoot, projectRoot: 'packages/fixture/dev-dep', name: 'fixture-core-dev', pkgExtra: { name: '@adhd/dev' } });
     const pkgPath = makeFixtureProject({
       workspaceRoot,
       projectRoot: 'packages/fixture/fixture-core-widget',
-      name: '@adhd/fixture-core-widget',
+      name: 'fixture-core-widget',
+      pkgExtra: {
+        name: '@adhd/fixture-core-widget',
+        dependencies: { '@adhd/runtime': '^1.0.0', 'left-pad': '^1.0.0' },
+        peerDependencies: { '@adhd/peer': '^1.0.0' },
+        devDependencies: { '@adhd/dev': '^1.0.0' },
+      },
     });
-    const pkgPathRel = pkgPath.slice(workspaceRoot.length + 1);
+    const rel = (p) => p.slice(workspaceRoot.length + 1);
+    const allFiles = ['runtime-dep', 'peer-dep', 'dev-dep', 'fixture-core-widget'].map((d) => `packages/fixture/${d}/package.json`);
 
-    const result = runFor(pkgPathRel, { workspaceRoot });
+    const tuples = handler(allFiles, {}, { workspaceRoot });
+    const result = tuples.find(([f]) => f === rel(pkgPath))[1];
 
     const projectRoot = 'packages/fixture/fixture-core-widget';
     const targets = result.projects[projectRoot].targets;
-    assert.ok(
-      targets.publish,
-      'expected a publish target to be attached to a publishable project'
-    );
-    assert.ok(
-      Array.isArray(targets.publish.dependsOn),
-      'publish.dependsOn must be an array'
-    );
-    assert.ok(
-      targets.publish.dependsOn.includes('^publish'),
-      `publish.dependsOn must include "^publish" so nx's task graph forces every internal ` +
-        `@adhd/* dependency's OWN publish task to complete before this dependent's publish runs. ` +
-        `Got: ${JSON.stringify(targets.publish.dependsOn)}`
-    );
-    // Guard against a false-positive teeth test: prove the OTHER real
-    // dependencies are still present too — this must ADD the edge, not
-    // replace the existing gate chain.
-    for (const dep of [
-      'test',
-      '^test',
-      'version',
-      'dist-manifest',
-      'verify-dist-load',
-      'publish-hygiene',
-    ]) {
+    assert.ok(targets.publish, 'expected a publish target to be attached to a publishable project');
+    assert.ok(Array.isArray(targets.publish.dependsOn), 'publish.dependsOn must be an array');
+    for (const target of ['publish', 'test']) {
+      for (const projects of ['fixture-core-runtime', 'fixture-core-peer']) {
+        assert.ok(
+          targets.publish.dependsOn.some((d) => d && d.projects === projects && d.target === target),
+          `publish.dependsOn must order after ${projects}:${target}. Got: ${JSON.stringify(targets.publish.dependsOn)}`
+        );
+      }
+    }
+    for (const t of ['publish', 'version']) {
+      const deps = targets[t].dependsOn;
+      assert.ok(!deps.some((d) => typeof d === 'string' && d.startsWith('^')), `${t}.dependsOn must not use a graph-wide ^ edge (fans out over devDependency/test edges). Got: ${JSON.stringify(deps)}`);
+      assert.ok(!deps.some((d) => d && d.projects === 'fixture-core-dev'), `${t}.dependsOn must not include a devDependency. Got: ${JSON.stringify(deps)}`);
+    }
+    // The OTHER real dependencies must still be present: this ADDS ordering, it
+    // does not replace the existing gate chain.
+    for (const dep of ['test', 'version', 'dist-manifest', 'verify-dist-load', 'publish-hygiene']) {
       assert.ok(
         targets.publish.dependsOn.includes(dep),
-        `publish.dependsOn must still include "${dep}" — got: ${JSON.stringify(
-          targets.publish.dependsOn
-        )}`
+        `publish.dependsOn must still include "${dep}" — got: ${JSON.stringify(targets.publish.dependsOn)}`
       );
     }
   } finally {
@@ -155,23 +161,27 @@ test('createNodes: a private (non-publishable) project gets no publish/version/d
   }
 });
 
-test('createNodes: version target still carries ^version (topological dependency-version-first ordering — must not regress alongside the ^publish fix)', () => {
+test('createNodes: version target orders after each runtime dependency (topological dependency-version-first ordering — must not regress alongside the publish ordering)', () => {
   const workspaceRoot = mkdtempSync(
     join(tmpdir(), 'nx-build-plugin-fixture-version-')
   );
   try {
+    makeFixtureProject({ workspaceRoot, projectRoot: 'packages/fixture/dep', name: 'fixture-core-dep', pkgExtra: { name: '@adhd/dep' } });
     const pkgPath = makeFixtureProject({
       workspaceRoot,
       projectRoot: 'packages/fixture/fixture-core-widget2',
-      name: '@adhd/fixture-core-widget2',
+      name: 'fixture-core-widget2',
+      pkgExtra: { name: '@adhd/fixture-core-widget2', dependencies: { '@adhd/dep': '^1.0.0' } },
     });
     const pkgPathRel = pkgPath.slice(workspaceRoot.length + 1);
 
-    const result = runFor(pkgPathRel, { workspaceRoot });
+    const tuples = handler(['packages/fixture/dep/package.json', pkgPathRel], {}, { workspaceRoot });
+    const result = tuples.find(([f]) => f === pkgPathRel)[1];
 
     const projectRoot = 'packages/fixture/fixture-core-widget2';
     const targets = result.projects[projectRoot].targets;
-    assert.ok(targets.version.dependsOn.includes('^version'));
+    assert.ok(targets.version.dependsOn.some((d) => d && d.projects === 'fixture-core-dep' && d.target === 'version'));
+    assert.ok(!targets.version.dependsOn.includes('^version'));
   } finally {
     rmSync(workspaceRoot, { recursive: true, force: true });
   }
