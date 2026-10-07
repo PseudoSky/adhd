@@ -20,6 +20,12 @@ const mcpStdioConfigSchema = transportOnly({
   // task-time from the dispatching cwd; never persisted on the definition.
   cwd: z.string().optional(),
   timeoutMs: z.number().int().positive().optional(),
+  // Budget for the spawn + MCP `initialize` handshake and for the first
+  // `tools/list` (each phase gets this budget). Exceeding it fails fast with an
+  // error naming the server, phase, elapsed ms and command (c9f0a791). Absent ->
+  // DEFAULT_MCP_CONNECT_TIMEOUT_MS (the SDK's unconfigured 60s default made a
+  // slow spawn cost 120s once the first call reconnected).
+  connectTimeoutMs: z.number().int().positive().optional(),
 });
 
 const mcpHttpConfigSchema = transportOnly({

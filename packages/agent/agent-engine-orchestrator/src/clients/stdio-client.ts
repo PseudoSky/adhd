@@ -1,12 +1,54 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import type { ChildProcess } from "node:child_process";
+import { performance } from "node:perf_hooks";
 
 import type { ToolDefinition } from "../providers/types.js";
 import type { McpStdioConfig } from "../validation/index.js";
 import { ToolError } from "../validation/errors.js";
 import type { IMcpClient } from "./types.js";
 import type { EngineLogger, EngineConfig } from "../interfaces.js";
+
+/**
+ * Default budget for the stdio spawn + `initialize` handshake and for the first
+ * `tools/list` (each phase). Replaces the MCP SDK's unconfigured 60s default
+ * (c9f0a791): a pinned direct-node server initializes in well under a second,
+ * so 30s is generous headroom for a loaded machine yet fails ~4x sooner than
+ * the old connect-then-reconnect path (60s + 60s).
+ */
+export const DEFAULT_MCP_CONNECT_TIMEOUT_MS = 30_000;
+
+export type McpStartupPhase = "connect" | "list";
+
+/**
+ * A stdio MCP server did not become usable within its startup budget (or died
+ * while starting). The message names the server, the phase, the elapsed ms, the
+ * budget and the command, so a `-32001` is never anonymous again.
+ */
+export class McpStartupError extends ToolError {
+    constructor(
+        readonly server: string,
+        readonly phase: McpStartupPhase,
+        readonly elapsedMs: number,
+        readonly timeoutMs: number,
+        readonly commandLine: string,
+        readonly timedOut: boolean,
+        cause: unknown
+    ) {
+        super(
+            "MCP_CLIENT_ERROR",
+            `MCP server '${server}' ${timedOut ? "timed out" : "failed"} during ${phase} ` +
+                `after ${Math.round(elapsedMs)}ms (connectTimeoutMs=${timeoutMs}, command: ${commandLine}): ` +
+                `${cause instanceof Error ? cause.message : String(cause)}`,
+            { server, phase, elapsedMs, timeoutMs, command: commandLine, timedOut }
+        );
+        this.name = "McpStartupError";
+        (this as { cause?: unknown }).cause = cause;
+    }
+}
+
+/** MCP JSON-RPC `RequestTimeout` code, raised by the SDK when a request budget elapses. */
+const MCP_REQUEST_TIMEOUT_CODE = -32001;
 
 export class StdioMcpClient implements IMcpClient {
     private client: Client | null = null;
@@ -23,6 +65,23 @@ export class StdioMcpClient implements IMcpClient {
     ) {
         this.config = config ?? { subprocessEnv: () => ({}) } as EngineConfig;
         this.logger = logger ?? { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} } as EngineLogger;
+    }
+
+    private connectTimeoutMs(): number {
+        return this.serverConfig.connectTimeoutMs ?? DEFAULT_MCP_CONNECT_TIMEOUT_MS;
+    }
+
+    private startupError(
+        phase: McpStartupPhase,
+        startedAt: number,
+        timeoutMs: number,
+        cause: unknown
+    ): McpStartupError {
+        const elapsedMs = performance.now() - startedAt;
+        const code = (cause as { code?: unknown } | null)?.code;
+        const timedOut = code === MCP_REQUEST_TIMEOUT_CODE;
+        const commandLine = [this.serverConfig.command, ...(this.serverConfig.args ?? [])].join(" ");
+        return new McpStartupError(this.serverName, phase, elapsedMs, timeoutMs, commandLine, timedOut, cause);
     }
 
     async connect(): Promise<void> {
@@ -49,7 +108,15 @@ export class StdioMcpClient implements IMcpClient {
         );
 
         this.client = client;
-        await client.connect(transport);
+        const timeoutMs = this.connectTimeoutMs();
+        const startedAt = performance.now();
+        try {
+            await client.connect(transport, { timeout: timeoutMs });
+        } catch (error) {
+            // Reap the half-started child so a timed-out spawn never lingers.
+            await this.close();
+            throw this.startupError("connect", startedAt, timeoutMs, error);
+        }
 
         const childProc = (transport as unknown as { process?: ChildProcess }).process;
         if (childProc) {
@@ -72,7 +139,14 @@ export class StdioMcpClient implements IMcpClient {
             throw new ToolError("MCP_CLIENT_ERROR", `Client '${this.serverName}' not connected`);
         }
 
-        const response = await this.client.listTools();
+        const timeoutMs = this.connectTimeoutMs();
+        const startedAt = performance.now();
+        let response: Awaited<ReturnType<Client["listTools"]>>;
+        try {
+            response = await this.client.listTools(undefined, { timeout: timeoutMs });
+        } catch (error) {
+            throw this.startupError("list", startedAt, timeoutMs, error);
+        }
         return response.tools.map(tool => ({
             name: tool.name,
             description: tool.description ?? "",
