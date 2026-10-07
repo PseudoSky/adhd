@@ -52,7 +52,7 @@ export function defineMapping<E extends HookEvent>(
  * This is the extension seam: the provider-failure event family
  * (`<domain>:attempt_failed|failed|tripped|recovered`, `isFailureEventKey`) is added later by
  * generating one `pointSpanMapping` per member key and passing them as
- * `TracingOptions.extraMappings` — or appending them to {@link CORE_MAPPINGS} — with no change
+ * `TracingPluginOptions.extraMappings` — or appending them to {@link CORE_MAPPINGS} — with no change
  * to the subscription loop, the counters, or the span machinery.
  */
 export function pointSpanMapping<E extends HookEvent>(
@@ -104,9 +104,8 @@ const sessionClosedMapping = defineMapping('session:closed', ({ session }, rt) =
 });
 
 const taskStart = defineMapping('task:start', ({ executionContext: ctx }, rt) => {
-  const state = rt.task(ctx);
+  const state = rt.startTask(ctx);
   rt.counters.taskStarted(ctx.recursionDepth, ctx.parentTaskId !== undefined);
-  state.startedAt = rt.now();
   state.span = openSpan('agent.task', rt.taskAttrs(ctx, state.traceId), state.traceId);
 });
 
@@ -118,6 +117,9 @@ function endTask(
   error?: string
 ): void {
   const state = rt.task(ctx);
+  // A second terminal for a task that already ended (cancel racing completion) is dropped: the
+  // first one is the task's outcome, and counting both would double-book it.
+  if (state === undefined) return;
   rt.closeDangling(state);
   const attrs: OtelAttributes = { 'agent.outcome': kind };
   if (state.span !== undefined) {
@@ -127,9 +129,9 @@ function endTask(
     const point = openSpan('agent.task', { ...rt.taskAttrs(ctx, state.traceId), 'agent.partial': true }, state.traceId);
     point.close(error === undefined ? { attrs } : { attrs, error });
   }
-  rt.counters.taskEnded(kind, rt.now() - state.startedAt);
-  rt.tasks.delete(ctx.taskId);
-  rt.releaseTrace(ctx);
+  // No `task:start` seen ⇒ no start time ⇒ no honest latency: skip the observation.
+  rt.counters.taskEnded(kind, state.startedAt === undefined ? undefined : rt.now() - state.startedAt);
+  rt.finishTask(ctx);
   rt.requestSnapshot();
 }
 
@@ -146,6 +148,7 @@ const taskCancelled = defineMapping('task:cancelled', ({ executionContext }, rt)
 const modelRequest = defineMapping('pre:model_request', (p, rt) => {
   const ctx = p.executionContext;
   const state = rt.task(ctx);
+  if (state === undefined) return; // task already ended: opening a span now would never close
   state.model?.span.close({ attrs: { 'agent.outcome': 'unclosed' } });
   const span = openSpan(
     'agent.model_call',
@@ -163,8 +166,8 @@ const modelResponse = defineMapping('post:model_response', (p, rt) => {
   const state = rt.task(p.executionContext);
   const input = p.tokenUsage?.inputTokens ?? 0;
   const output = p.tokenUsage?.outputTokens ?? 0;
-  const open = state.model;
-  state.model = undefined;
+  const open = state?.model;
+  if (state !== undefined) state.model = undefined;
   open?.span.close({
     attrs: {
       'agent.model_call.stop_reason': p.stopReason,
@@ -180,6 +183,7 @@ const modelResponse = defineMapping('post:model_response', (p, rt) => {
 const toolRequest = defineMapping('pre:tool_call', (p, rt) => {
   const ctx = p.executionContext;
   const state = rt.task(ctx);
+  if (state === undefined) return; // task already ended: opening a span now would never close
   const span = openSpan(
     'agent.tool_call',
     {
@@ -195,8 +199,8 @@ const toolRequest = defineMapping('pre:tool_call', (p, rt) => {
 
 const toolResponse = defineMapping('post:tool_call', (p, rt) => {
   const state = rt.task(p.executionContext);
-  const open = state.tools.get(p.callId);
-  state.tools.delete(p.callId);
+  const open = state?.tools.get(p.callId);
+  state?.tools.delete(p.callId);
   const attrs: OtelAttributes = {
     'agent.tool.is_error': p.isError,
     'agent.tool.est_result_tokens': p.estResultTokens,

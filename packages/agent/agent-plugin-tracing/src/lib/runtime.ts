@@ -8,15 +8,19 @@ import { OpenSpan } from './spans.js';
 /** Longest `captureArgs` payload recorded verbatim (characters). */
 const MAX_CAPTURED_ARGS = 2000;
 
+/** How many ended task ids are remembered (FIFO) so late events cannot resurrect their state. */
+export const MAX_ENDED_TASKS = 4096;
+
 interface ToolSpan {
   span: OpenSpan;
   startedAt: number;
   tool: string;
 }
 
-interface TaskState {
+export interface TaskState {
   span?: OpenSpan;
-  startedAt: number;
+  /** Monotonic ms of `task:start`; undefined for a task first seen mid-flight (no latency to report). */
+  startedAt?: number;
   traceId: string;
   model?: { span: OpenSpan; startedAt: number };
   tools: Map<string, ToolSpan>;
@@ -38,6 +42,12 @@ export class TraceRuntime {
   /** `parkedTaskId` → when its `hitl:suspend` fired, so `hitl:resume` can attach `wait_ms`. */
   readonly suspendedAt = new Map<string, number>();
   private readonly traceIds = new Map<string, string>();
+  /**
+   * Ids of tasks that already reached a terminal (bounded, oldest evicted first). A late event for
+   * one of these (`post:tool_call`, `permission:decision`, `hitl:resume` racing a cancel) must not
+   * lazily recreate per-task state that nothing would ever delete.
+   */
+  private readonly ended = new Set<string>();
 
   constructor(
     readonly captureArgs: boolean,
@@ -59,13 +69,17 @@ export class TraceRuntime {
     return performance.now();
   }
 
-  /** The trace id for the delegation tree `ctx` belongs to (created on first sight). */
+  /**
+   * The trace id for the delegation tree `ctx` belongs to (created on first sight). For a tree
+   * whose root already ended the id is NOT cached — a late event still gets a trace id, but no
+   * table entry that would outlive it.
+   */
   traceFor(ctx: ExecutionContext): string {
     const root = ctx.rootTaskId ?? ctx.taskId;
     let id = this.traceIds.get(root);
     if (id === undefined) {
       id = newTraceId();
-      this.traceIds.set(root, id);
+      if (!this.ended.has(root)) this.traceIds.set(root, id);
     }
     return id;
   }
@@ -75,14 +89,78 @@ export class TraceRuntime {
     if ((ctx.rootTaskId ?? ctx.taskId) === ctx.taskId) this.traceIds.delete(ctx.taskId);
   }
 
-  /** The task's state, created lazily so events for a task that began before install still trace. */
-  task(ctx: ExecutionContext): TaskState {
+  /**
+   * The task's state, created lazily so events for a task that began before install still trace.
+   * Returns `undefined` for a task that has already ended: its late events are counted but never
+   * resurrect state.
+   */
+  task(ctx: ExecutionContext): TaskState | undefined {
     let state = this.tasks.get(ctx.taskId);
     if (state === undefined) {
-      state = { startedAt: this.now(), traceId: this.traceFor(ctx), tools: new Map() };
+      if (this.ended.has(ctx.taskId)) return undefined;
+      state = { traceId: this.traceFor(ctx), tools: new Map() };
       this.tasks.set(ctx.taskId, state);
     }
     return state;
+  }
+
+  /** Sizes of every per-process table — what a leak looks like (all zero once nothing is live). */
+  stateSizes(): { sessions: number; tasks: number; traces: number; suspended: number; ended: number } {
+    return {
+      sessions: this.sessions.size,
+      tasks: this.tasks.size,
+      traces: this.traceIds.size,
+      suspended: this.suspendedAt.size,
+      ended: this.ended.size,
+    };
+  }
+
+  /** State for a `task:start`: a (re)start clears any ended mark and records `startedAt`. */
+  startTask(ctx: ExecutionContext): TaskState {
+    this.ended.delete(ctx.taskId);
+    const state = this.task(ctx) as TaskState; // not ended, so always defined
+    state.startedAt = this.now();
+    return state;
+  }
+
+  /** Mark `ctx`'s task terminal: drop its state and remember the id (bounded) against late events. */
+  finishTask(ctx: ExecutionContext): void {
+    this.tasks.delete(ctx.taskId);
+    this.suspendedAt.delete(ctx.taskId);
+    this.releaseTrace(ctx);
+    this.ended.add(ctx.taskId);
+    if (this.ended.size > MAX_ENDED_TASKS) {
+      const oldest = this.ended.values().next().value;
+      if (oldest !== undefined) this.ended.delete(oldest);
+    }
+  }
+
+  /**
+   * Close every span still open — tasks, their model/tool spans, sessions — as
+   * `agent.outcome: "unclosed"` and release all per-process state. Called at dispose so a
+   * shutdown never strands a `.start` record without a terminal one. Resolves once every
+   * terminal record has reached the sink (so the caller may then close it).
+   */
+  closeAll(): Promise<void> {
+    const closing: OpenSpan[] = [];
+    const close = (span: OpenSpan | undefined): void => {
+      if (span?.isOpen) {
+        span.close({ attrs: { 'agent.outcome': 'unclosed' } });
+        closing.push(span);
+      }
+    };
+    for (const state of this.tasks.values()) {
+      close(state.model?.span);
+      for (const tool of state.tools.values()) close(tool.span);
+      close(state.span);
+    }
+    for (const { span } of this.sessions.values()) close(span);
+    this.tasks.clear();
+    this.sessions.clear();
+    this.suspendedAt.clear();
+    this.traceIds.clear();
+    this.ended.clear();
+    return Promise.all(closing.map((s) => s.written)).then(() => undefined);
   }
 
   /** Identity attributes carried by every span of a task. */
