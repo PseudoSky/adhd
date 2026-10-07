@@ -20,7 +20,13 @@ import { createRequire } from 'node:module';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 
-import { buildDispatchSelf } from '@adhd/agent-core-native-tooling';
+import {
+  buildDispatchSelf,
+  DISPATCH_SELF_ARGS_ENV,
+  DISPATCH_SELF_ARGS_ENV_LEGACY,
+  DISPATCH_SELF_COMMAND_ENV,
+  DISPATCH_SELF_COMMAND_ENV_LEGACY,
+} from '@adhd/agent-core-native-tooling';
 import type { McpServerConfig, NativeToolingConfig } from '@adhd/agent-base-types';
 import type {
   DagJson,
@@ -371,6 +377,34 @@ export function resolveProductionRunnerCwd(toolsRoot?: string): string {
   return toolsRoot ?? process.cwd();
 }
 
+/** Canonical request-timeout env name (ms) for the spawned agent-mcp runner. */
+export const AGENT_MCP_REQUEST_TIMEOUT_ENV = 'ADHD_AGENT_MCP_REQUEST_TIMEOUT_MS';
+/** LEGACY request-timeout env name — honoured as a FALLBACK (64e7ebe7). */
+export const AGENT_MCP_REQUEST_TIMEOUT_ENV_LEGACY =
+  'ADHD_DISPATCH_AGENT_MCP_REQUEST_TIMEOUT_MS';
+
+/** Legacy `ADHD_DISPATCH_AGENT_MCP_*` names and the canonical name replacing each. */
+const LEGACY_AGENT_MCP_ENV: ReadonlyArray<readonly [legacy: string, canonical: string]> = [
+  [DISPATCH_SELF_COMMAND_ENV_LEGACY, DISPATCH_SELF_COMMAND_ENV],
+  [DISPATCH_SELF_ARGS_ENV_LEGACY, DISPATCH_SELF_ARGS_ENV],
+  [AGENT_MCP_REQUEST_TIMEOUT_ENV_LEGACY, AGENT_MCP_REQUEST_TIMEOUT_ENV],
+];
+
+/**
+ * Emit exactly ONE deprecation warning on STDERR (never stdout — stdout carries
+ * the CLI's JSON payload) when any legacy `ADHD_DISPATCH_AGENT_MCP_*` name is
+ * set, naming the canonical replacement for each. Silent when only canonical
+ * names are set.
+ */
+function warnLegacyAgentMcpEnv(env: NodeJS.ProcessEnv): void {
+  const used = LEGACY_AGENT_MCP_ENV.filter(([legacy]) => env[legacy]);
+  if (used.length === 0) return;
+  const detail = used.map(([legacy, canonical]) => `${legacy} -> ${canonical}`).join(', ');
+  process.stderr.write(
+    `dispatch-cli: DEPRECATED env var(s) in use (${detail}); the legacy ADHD_DISPATCH_AGENT_MCP_* names are a one-release fallback — set the ADHD_AGENT_MCP_* name instead.\n`
+  );
+}
+
 /**
  * Production `AgentMcpRunner` wiring — spawns agent-mcp via `npx -y
  * @adhd/agent-mcp` by default (matching agent-mcp's documented Quickstart).
@@ -423,9 +457,12 @@ export function buildProductionAgentMcpRunner(
   overrides: ProductionRunnerOverrides = {}
 ): AgentMcpRunner {
   const { command, args } = resolveAgentMcpLaunch(env);
-  const requestTimeoutMs = env['ADHD_DISPATCH_AGENT_MCP_REQUEST_TIMEOUT_MS']
-    ? Number(env['ADHD_DISPATCH_AGENT_MCP_REQUEST_TIMEOUT_MS'])
-    : DEFAULT_POLL.timeoutMs;
+  warnLegacyAgentMcpEnv(env);
+  // Canonical name first; the legacy name is a one-release FALLBACK (64e7ebe7).
+  const rawTimeout =
+    env[AGENT_MCP_REQUEST_TIMEOUT_ENV] ||
+    env[AGENT_MCP_REQUEST_TIMEOUT_ENV_LEGACY];
+  const requestTimeoutMs = rawTimeout ? Number(rawTimeout) : DEFAULT_POLL.timeoutMs;
   // The dispatching cwd: the spawned agent-mcp child's process.cwd(), against
   // which it resolves the agent's declarative nativeTooling at task time (D4/D9).
   // Read per call; NEVER resolved into a stored root.
