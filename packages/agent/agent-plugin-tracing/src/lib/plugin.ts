@@ -1,4 +1,4 @@
-import { initTelemetry, registerSnapshotSection, resolveProcessRole, snapshotMetrics } from '@adhd/sox-telemetry';
+import { currentRuntimeState, initTelemetry, otelReady as currentOtelReady, registerSnapshotSection, resolveProcessRole, snapshotMetrics } from '@adhd/sox-telemetry';
 import type { TelemetryHandle } from '@adhd/sox-telemetry';
 import type { IHookRegistry, Plugin, PluginContext } from '@adhd/agent-base-types';
 import { configSchema } from './config.js';
@@ -35,6 +35,17 @@ export interface TracingPluginOptions {
   snapshot?: Partial<SnapshotThrottleDeps>;
 }
 
+/** `service` the telemetry runtime reports until some composition root calls `initTelemetry`. */
+const UNINITIALISED_SERVICE = 'unlabeled';
+
+/**
+ * The runtime state object of the telemetry configuration a tracing plugin last closed. A closed
+ * configuration is not removed from the runtime (sox-telemetry keeps it until the next
+ * `initTelemetry`), so identity — not `service` — is what tells "someone else's live provider"
+ * apart from "my own, already disposed one".
+ */
+let closedRuntimeState: object | undefined;
+
 /**
  * Traces every agent operation observed through the hook registry into `@adhd/sox-telemetry`:
  * one durable span (start + finish/error) per session, task, model call, tool call, permission
@@ -47,6 +58,13 @@ export class TracingPlugin implements Plugin {
   readonly name = PLUGIN_NAME;
   /** The telemetry handle `install()` created (undefined until installed, or if init failed). */
   telemetry: TelemetryHandle | undefined;
+  /**
+   * True when `install()` found a telemetry provider this process had already initialised (the
+   * host, another plugin, an embedding app) and reused it instead of calling `initTelemetry` again.
+   * One provider per process: the adopted provider is never reconfigured and never closed by
+   * `dispose()`; `service` / `logSink` / `logDir` from this plugin's config do not apply to it.
+   */
+  adoptedExistingTelemetry = false;
   private readonly runtime: TraceRuntime;
   private unregisterSnapshot: (() => void) | undefined;
   private readonly throttle: SnapshotThrottle;
@@ -72,16 +90,25 @@ export class TracingPlugin implements Plugin {
     return this.throttle.flush();
   }
 
+  /** Where the process's durable sink writes (adopted or owned); `null` when no file sink is configured. */
+  logFilePath(): string | null {
+    return currentRuntimeState().sink?.plannedPath() ?? null;
+  }
+
   async install(hooks: IHookRegistry): Promise<void> {
+    const existing = currentRuntimeState();
+    this.adoptedExistingTelemetry = existing.service !== UNINITIALISED_SERVICE && existing !== closedRuntimeState;
     try {
-      this.telemetry = initTelemetry({
-        service: this.config.service,
-        role: resolveProcessRole('live-service'),
-        logSink: this.config.logSink,
-        ...(this.config.logDir !== undefined ? { logDir: this.config.logDir } : {}),
-      });
+      if (!this.adoptedExistingTelemetry) {
+        this.telemetry = initTelemetry({
+          service: this.config.service,
+          role: resolveProcessRole('live-service'),
+          logSink: this.config.logSink,
+          ...(this.config.logDir !== undefined ? { logDir: this.config.logDir } : {}),
+        });
+      }
       // The OTel SDK loads asynchronously; wait so the first span is not lost to bring-up.
-      await this.telemetry.otelReady();
+      await (this.telemetry?.otelReady() ?? currentOtelReady());
     } catch {
       /* telemetry must never prevent the host from starting */
     }
@@ -111,8 +138,11 @@ export class TracingPlugin implements Plugin {
     await this.runtime.closeAll();
     this.unregisterSnapshot?.();
     this.unregisterSnapshot = undefined;
-    this.telemetry?.close();
-    this.telemetry = undefined;
+    if (this.telemetry !== undefined) {
+      closedRuntimeState = currentRuntimeState();
+      this.telemetry.close();
+      this.telemetry = undefined;
+    }
   }
 }
 

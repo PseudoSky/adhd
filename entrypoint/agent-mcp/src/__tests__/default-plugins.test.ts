@@ -98,9 +98,12 @@ async function enforceFirstModelRequest(
  * / env caps stop being honoured.
  */
 describe("defaultPluginEntries — default-on budget plugin (5339c2e5)", () => {
-  it("returns the budget plugin by default, with a conservative call cap", () => {
+  it("returns the budget plugin by default (followed by the always-on tracing plugin), with a conservative call cap", () => {
     const entries = defaultPluginEntries({} as NodeJS.ProcessEnv);
-    expect(entries).toHaveLength(1);
+    expect(entries.map((e) => e.module)).toEqual([
+      DEFAULT_BUDGET_PLUGIN_MODULE,
+      "@adhd/agent-plugin-tracing",
+    ]);
     expect(entries[0]?.module).toBe(DEFAULT_BUDGET_PLUGIN_MODULE);
     const defaults = entries[0]?.config["defaults"] as {
       mode?: string;
@@ -192,16 +195,12 @@ describe("defaultPluginEntries — default-on budget plugin (5339c2e5)", () => {
     expect(rejected).toBe(false);
   });
 
-  it("is opt-OUT via ADHD_AGENT_DISABLE_BUDGET_PLUGIN=1", () => {
-    expect(
-      defaultPluginEntries({
-        ADHD_AGENT_DISABLE_BUDGET_PLUGIN: "1",
-      } as unknown as NodeJS.ProcessEnv)
-    ).toEqual([]);
-    expect(
-      defaultPluginEntries({
-        ADHD_AGENT_DISABLE_BUDGET_PLUGIN: "true",
-      } as unknown as NodeJS.ProcessEnv)
-    ).toEqual([]);
+  it("is opt-OUT of the BUDGET plugin via ADHD_AGENT_DISABLE_BUDGET_PLUGIN=1 — tracing stays (0f760dcd AC3)", () => {
+    for (const value of ["1", "true"]) {
+      const modules = defaultPluginEntries({
+        ADHD_AGENT_DISABLE_BUDGET_PLUGIN: value,
+      } as unknown as NodeJS.ProcessEnv).map((e) => e.module);
+      expect(modules).toEqual(["@adhd/agent-plugin-tracing"]);
+    }
   });
 });

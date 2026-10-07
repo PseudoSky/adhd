@@ -75,6 +75,10 @@ These env vars configure the server-wide default agent and provider credentials:
 
 **Provider credentials are excluded from the `@adhd/environment` config cascade.** `AgentMcpConfig` (`src/config.ts`) declares `db`, `logging`, `queue`, `server`, `transport`, `sse`, `plugins`, and `nativeTooling` as cascade-managed fields — no `providers`/secret field exists. Provider credentials resolve exclusively from `process.env` on the running server process, at agent-construction time, never from a config file layer (global/project/namespace). This repo's own `.mcp.json` entry for `agent-mcp` does not forward any `ADHD_AGENT_<PROVIDER>_SECRET` today — tracked as backlog `agent-mcp-001`.
 
+### Configuration: Tracing (default-on, typed config)
+
+`@adhd/agent-plugin-tracing` is a default plugin (`defaultPluginEntries()` in `src/config.ts`), loaded through the single default-plugin seam `src/plugins/load-defaults.ts`. Typed `tracing` config block (values only; **no enable/disable field or env var exists**): `tracing.service` (`ADHD_AGENT_TRACING_SERVICE`, default `agent-mcp`), `tracing.logSink` (`ADHD_AGENT_TRACING_LOG_SINK`, `file|stderr|none`, default `file`), `tracing.logDir` (`ADHD_AGENT_TRACING_LOG_DIR`, unset), `tracing.captureArgs` (`ADHD_AGENT_TRACING_CAPTURE_ARGS`, default `false`). Absent block ⇒ loaded with these defaults; invalid block ⇒ the loader skips the plugin and logs `Plugin config failed schema validation`. `ADHD_AGENT_DISABLE_BUDGET_PLUGIN` affects only the budget plugin. The plugin reuses an already-initialised `@adhd/sox-telemetry` provider rather than initialising a second one. Verify a sink with `scripts/audit_tracing.py`. Proven by `src/__tests__/tracing-default-load.test.ts` (unit) and `src/__tests__/integration/tracing-e2e.e2e.test.ts` (built server + real sink).
+
 ### Configuration: Native tooling environment variables
 
 The typed `nativeTooling` surface (ADR-0008 D10) is part of the `@adhd/environment` cascade. Each leaf has an explicit `ADHD_AGENT_NATIVE_TOOLING_*` env name (values, never feature switches — a member is disabled by setting it to `false` on the definition):
@@ -300,6 +304,7 @@ Do not document these as shipped features.
 
 - `@adhd/agent-engine-orchestrator` — orchestration engine
 - `@adhd/agent-store-runtime` — state persistence
+- `@adhd/agent-plugin-tracing` — default-loaded tracing plugin (spans + metrics into `@adhd/sox-telemetry`)
 - `@modelcontextprotocol/sdk` — MCP protocol implementation
 - `drizzle-orm`, `better-sqlite3` — database access
 - `pino` — logging

@@ -25,6 +25,7 @@ import { loadExternalPlugins } from "@adhd/agent-engine-orchestrator";
 import type { IHookRegistry } from "@adhd/agent-base-types";
 
 import { defaultPluginEntries, env } from "../config.js";
+import type { DefaultPluginEntry } from "../config.js";
 
 /**
  * agent-mcp's own package module directory (`src/` under source, `dist/src/`
@@ -45,6 +46,11 @@ export interface LoadDefaultPluginsOverrides {
   configPath?: string | null;
   /** Extra module-resolution bases; defaults to agent-mcp's own module dir. */
   resolveBases?: readonly string[];
+  /**
+   * Default entries to load; `undefined` ⇒ the live `defaultPluginEntries()`. Tests pass an entry
+   * list derived from `defaultPluginEntries()` with a throwaway tracing `logDir`.
+   */
+  defaultEntries?: DefaultPluginEntry[];
 }
 
 /**
@@ -68,6 +74,6 @@ export async function loadDefaultPlugins(
     env.config.plugins.configPath,
     env.config.plugins.entries as string[],
     logger,
-    defaultPluginEntries()
+    overrides.defaultEntries ?? defaultPluginEntries()
   );
 }

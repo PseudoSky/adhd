@@ -82,6 +82,18 @@ export interface AgentMcpConfig {
   };
   readonly plugins: { readonly configPath: string | undefined; readonly entries: readonly string[] };
   /**
+   * Typed config of the default-loaded `@adhd/agent-plugin-tracing` plugin (TRACE-4, backlog
+   * 0f760dcd). VALUES only — there is deliberately NO enable/disable switch: tracing is
+   * default-on (adhd ADR-0001 / sox ADR-0013). Field names and defaults mirror the plugin's own
+   * `configSchema`, which re-validates the block at load time.
+   */
+  readonly tracing: {
+    readonly service: string;
+    readonly logSink: string;
+    readonly logDir: string | undefined;
+    readonly captureArgs: boolean;
+  };
+  /**
    * The portable native-tooling config surface (ADR-0008 D10 / NAT-TOOL-7),
    * spread from `nativeToolingConfigFieldSpecs("ADHD_AGENT")`. TYPED CONFIG
    * ONLY — no feature-switch env var (adhd ADR-0001 / sox ADR-0013). Every leaf
@@ -303,6 +315,36 @@ export const agentMcpEnvironmentSpec: EnvironmentSpec<AgentMcpConfig> = {
       env: "ADHD_AGENT_PLUGINS",
       default: [],
       description: "Comma-separated external plugin entry paths.",
+    },
+    // TRACE-4 (backlog 0f760dcd) — typed config of the default-loaded tracing plugin. Values only,
+    // never a feature switch (no `*_ENABLED` field exists or may be added).
+    "tracing.service": {
+      type: "string",
+      env: "ADHD_AGENT_TRACING_SERVICE",
+      default: "agent-mcp",
+      description:
+        "Telemetry `service` resource attribute of the tracing plugin; also the default log directory name.",
+    },
+    "tracing.logSink": {
+      type: "string",
+      env: "ADHD_AGENT_TRACING_LOG_SINK",
+      default: "file",
+      enum: ["file", "stderr", "none"],
+      description:
+        "Where the tracing plugin's records land. `file` persists to `tracing.logDir` " +
+        "(default `~/.adhd/sox-ecosystem/<service>/logs`).",
+    },
+    "tracing.logDir": {
+      type: "string",
+      env: "ADHD_AGENT_TRACING_LOG_DIR",
+      description: "Override of the tracing file-sink directory. Unset by default.",
+    },
+    "tracing.captureArgs": {
+      type: "boolean",
+      env: "ADHD_AGENT_TRACING_CAPTURE_ARGS",
+      default: false,
+      description:
+        "Record (truncated) tool arguments verbatim instead of only their sha256 digest.",
     },
     // ADR-0008 D10 / NAT-TOOL-7 — the portable native-tooling config surface.
     // Built with this spec's `ADHD_AGENT` prefix so each field gets an explicit
@@ -596,6 +638,7 @@ export function toEngineConfig(): EngineConfig {
 // ============================================================================
 
 export const DEFAULT_BUDGET_PLUGIN_MODULE = "@adhd/agent-plugin-budget";
+export const DEFAULT_TRACING_PLUGIN_MODULE = "@adhd/agent-plugin-tracing";
 
 export interface DefaultPluginEntry {
   module: string;
@@ -603,14 +646,38 @@ export interface DefaultPluginEntry {
 }
 
 /**
- * The plugin(s) agent-mcp loads BY DEFAULT, before any `ADHD_AGENT_PLUGINS` /
+ * The typed `tracing` config block as the tracing plugin's `configSchema` wants it: only the keys
+ * that are set (an unset `logDir` is omitted, never `undefined` — the schema is `.strict()`).
+ * Exported for the tests; the plugin re-validates the result at load time.
+ */
+export function tracingPluginConfig(
+  tracing: AgentMcpConfig["tracing"]
+): Record<string, unknown> {
+  return {
+    service: tracing.service,
+    logSink: tracing.logSink,
+    ...(tracing.logDir !== undefined ? { logDir: tracing.logDir } : {}),
+    captureArgs: tracing.captureArgs,
+  };
+}
+
+/**
+ * The plugins agent-mcp loads BY DEFAULT, before any `ADHD_AGENT_PLUGINS` /
  * config-file entries — so an unattended `dispatch-cli` setup gets a spend cap
- * without the operator hand-authoring `agent-mcp.config.json` (backlog
- * 5339c2e5). Today this is exactly one entry: `@adhd/agent-plugin-budget`,
- * configured with a conservative, always-enforceable model-call cap (a
- * rate-independent axis, so it bites even with zero cost rates configured).
+ * and a durable trace without the operator hand-authoring
+ * `agent-mcp.config.json` (backlog 5339c2e5, 0f760dcd):
  *
- * Opt OUT with `ADHD_AGENT_DISABLE_BUDGET_PLUGIN=1`. Env knobs:
+ *  - `@adhd/agent-plugin-budget`, configured with a conservative,
+ *    always-enforceable model-call cap (a rate-independent axis, so it bites
+ *    even with zero cost rates configured).
+ *  - `@adhd/agent-plugin-tracing` (ALWAYS present), configured from the typed
+ *    `tracing.*` config block (`env.config.tracing`). There is NO enable/disable
+ *    switch: an absent block still loads it with the spec defaults, and an
+ *    invalid block makes the loader skip it with a logged reason. It reuses
+ *    the process's telemetry provider if one is already initialised.
+ *
+ * Opt OUT of the BUDGET plugin only with `ADHD_AGENT_DISABLE_BUDGET_PLUGIN=1`
+ * (this never affects tracing). Env knobs:
  *  - `ADHD_AGENT_BUDGET_MAX_CALLS` — cumulative model-call cap (default 500;
  *    ≤0 disables the call cap).
  *  - `ADHD_AGENT_BUDGET_COST_USD`  — optional USD cost cap; when set, flat
@@ -620,10 +687,15 @@ export interface DefaultPluginEntry {
  * overrides the default — the loader de-dupes by module and the user wins.
  */
 export function defaultPluginEntries(
-  processEnv: NodeJS.ProcessEnv = process.env
+  processEnv: NodeJS.ProcessEnv = process.env,
+  tracing: AgentMcpConfig["tracing"] = env.config.tracing
 ): DefaultPluginEntry[] {
+  const tracingEntry: DefaultPluginEntry = {
+    module: DEFAULT_TRACING_PLUGIN_MODULE,
+    config: tracingPluginConfig(tracing),
+  };
   const optOut = processEnv["ADHD_AGENT_DISABLE_BUDGET_PLUGIN"];
-  if (optOut === "1" || optOut === "true") return [];
+  if (optOut === "1" || optOut === "true") return [tracingEntry];
 
   const caps: Array<Record<string, unknown>> = [];
   const maxCalls = Number(processEnv["ADHD_AGENT_BUDGET_MAX_CALLS"] ?? "500");
@@ -654,5 +726,6 @@ export function defaultPluginEntries(
       module: DEFAULT_BUDGET_PLUGIN_MODULE,
       config: { defaults },
     },
+    tracingEntry,
   ];
 }

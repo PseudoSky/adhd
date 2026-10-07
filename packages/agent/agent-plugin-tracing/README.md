@@ -91,7 +91,24 @@ createPlugin(ctx, { extraMappings: [extra] });
 provider-failure family (`<domain>:attempt_failed|failed|tripped|recovered`) is added the same way:
 one `pointSpanMapping` per member key.
 
-## Not wired by default yet
+## Default-loaded by agent-mcp
 
-Loading this plugin from `@adhd/agent-mcp` (`defaultPluginEntries()` and the `tracing.*` config
-fields) is a separate change (TRACE-4).
+`@adhd/agent-mcp` loads this plugin by default (`defaultPluginEntries()` in its `src/config.ts`),
+configured from its typed `tracing.*` config block (`ADHD_AGENT_TRACING_SERVICE`, `_LOG_SINK`,
+`_LOG_DIR`, `_CAPTURE_ARGS` — values only, never a switch). An absent block loads the plugin with the
+defaults above; an invalid block makes the host loader skip it and log the validation issues.
+
+## One telemetry provider per process
+
+`install()` never provisions a second provider. If the process has already initialised
+`@adhd/sox-telemetry` (an embedding host, another plugin, apigen's tracing layer) the plugin
+**adopts** it: `plugin.adoptedExistingTelemetry` is `true`, `service` / `logSink` / `logDir` from this
+plugin's config do not apply, spans land in the host's sink, and `dispose()` leaves the host's
+provider open. When it provisions its own, `dispose()` closes it, and a later `install()` provisions
+afresh. `plugin.logFilePath()` reports where the process's sink writes either way.
+
+## Verifying a sink
+
+`python3 scripts/audit_tracing.py <sink-dir-or-file>...` (repo root) recomputes per-operation
+sample counts and durations from the JSONL records and exits non-zero when a declared span path has
+zero samples — the signal that the plugin silently stopped emitting for an operation.

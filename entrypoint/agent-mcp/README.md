@@ -67,6 +67,19 @@ The database (SQLite, agents/sessions/messages/usage) is stored in the resolved 
 | `ADHD_AGENT_MAX_DEPTH` | `3` | Max delegation depth (agent → child → grandchild) |
 | `ADHD_AGENT_DATABASE_PATH` | (auto-resolved) | Custom SQLite DB path; falls back to zero-config `~/.adhd/agent-mcp/production/data/agents.db` |
 
+### Tracing (default-on, typed config, no toggle)
+
+`@adhd/agent-plugin-tracing` is loaded by default alongside the budget plugin: every session, task, model call, tool call, permission decision and HITL suspend/resume becomes a durable span in `@adhd/sox-telemetry`'s JSONL sink (default `~/.adhd/sox-ecosystem/agent-mcp/logs`). There is **no enable/disable switch** — an absent `tracing` block still loads the plugin with defaults; an invalid block makes the loader skip it and log why. If the process already initialised a telemetry provider (an embedding host, apigen's tracing layer), the plugin reuses it instead of provisioning a second one.
+
+| Config key | Env var | Default | Purpose |
+|---|---|---|---|
+| `tracing.service` | `ADHD_AGENT_TRACING_SERVICE` | `agent-mcp` | Telemetry `service`; also names the log directory |
+| `tracing.logSink` | `ADHD_AGENT_TRACING_LOG_SINK` | `file` | `file` / `stderr` / `none` |
+| `tracing.logDir` | `ADHD_AGENT_TRACING_LOG_DIR` | `~/.adhd/sox-ecosystem/<service>/logs` | File-sink directory |
+| `tracing.captureArgs` | `ADHD_AGENT_TRACING_CAPTURE_ARGS` | `false` | Record truncated tool arguments (else only a sha256 digest) |
+
+Audit a sink with `python3 scripts/audit_tracing.py <sink-dir>`: it recomputes per-operation sample counts and durations and exits non-zero when a declared span path has zero samples.
+
 ## Providers and credentials
 
 `@adhd/agent-mcp` supports three provider `type`s (`packages/agent/agent-engine-orchestrator/src/validation/agent.ts`):

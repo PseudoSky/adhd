@@ -62,7 +62,8 @@ export default [
                         "{projectRoot}/vite.config.{js,ts,mjs,mts}"
                     ],
                     ignoredDependencies: [
-                        "@adhd/agent-plugin-budget"
+                        "@adhd/agent-plugin-budget",
+                        "@adhd/agent-plugin-tracing"
                     ]
                 }
             ]

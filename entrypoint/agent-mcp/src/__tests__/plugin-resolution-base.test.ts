@@ -8,6 +8,7 @@ import type { EngineLogger } from '@adhd/agent-engine-orchestrator';
 import { resolveSpecifier } from '@adhd/agent-engine-orchestrator';
 import type { IHookRegistry } from '@adhd/agent-base-types';
 
+import { defaultPluginEntries } from '../config.js';
 import { AGENT_MCP_PLUGIN_RESOLUTION_BASE, loadDefaultPlugins } from '../plugins/load-defaults.js';
 
 /**
@@ -97,7 +98,13 @@ describe('default budget plugin resolution from agent-mcp base (cc636860)', () =
     // A non-existent explicit config path = no operator config file loads
     // (hermetic — the developer's ~/.adhd config can never leak in).
     const noConfig = join(tmpdir(), 'cc636860-no-such-config.json');
-    await loadDefaultPlugins(hooks, {}, logger, { configPath: noConfig });
+    // Hermetic tracing: the default tracing entry with its sink off, so loading it never writes
+    // under the developer's real ~/.adhd.
+    const defaultEntries = defaultPluginEntries(
+      {} as NodeJS.ProcessEnv,
+      { service: 'agent-mcp', logSink: 'none', logDir: undefined, captureArgs: false }
+    );
+    await loadDefaultPlugins(hooks, {}, logger, { configPath: noConfig, defaultEntries });
 
     // The budget plugin's install() ran (pre:model_request enforcement is
     // uniquely its own).
@@ -113,5 +120,15 @@ describe('default budget plugin resolution from agent-mcp base (cc636860)', () =
     expect(
       logs.find((l) => l.args[0] === 'Plugin resolution failed — skipping')
     ).toBeUndefined();
+
+    // 0f760dcd AC1: the default TRACING plugin resolves from agent-mcp's own base and installs too.
+    expect(
+      logs.find(
+        (l) =>
+          l.args[0] === 'External plugin installed' &&
+          (l.msg as Record<string, unknown> | undefined)?.['plugin'] === 'agent-plugin-tracing'
+      )
+    ).toBeDefined();
+    expect(registered).toContainEqual({ hook: 'task:start', kind: 'register' });
   });
 });

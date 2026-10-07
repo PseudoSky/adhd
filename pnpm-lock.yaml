@@ -408,6 +408,9 @@ importers:
       '@adhd/agent-plugin-budget':
         specifier: ^0.2.5
         version: link:../../packages/agent/agent-plugin-budget
+      '@adhd/agent-plugin-tracing':
+        specifier: ^0.0.1
+        version: link:../../packages/agent/agent-plugin-tracing
       '@adhd/agent-store-prompts':
         specifier: ^2.2.3
         version: link:../../packages/agent/agent-store-prompts

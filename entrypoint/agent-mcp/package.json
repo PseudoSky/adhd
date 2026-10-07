@@ -29,6 +29,7 @@
     "@adhd/agent-base-types": "^2.3.5",
     "@adhd/agent-engine-compiler": "^2.2.8",
     "@adhd/agent-plugin-budget": "^0.2.5",
+    "@adhd/agent-plugin-tracing": "^0.0.1",
     "@adhd/agent-core-env": "^0.1.3",
     "@adhd/agent-core-native-tooling": "^0.0.2",
     "dotenv": "17.4.2",
