@@ -11,6 +11,17 @@ import type { EngineConfig, EngineLogger } from "../interfaces.js";
 export class McpClientRegistry {
     private readonly clients = new Map<string, IMcpClient>();
     private readonly connectPromises = new Map<string, Promise<void>>();
+    /**
+     * Startup failures `listAllTools` observed, keyed by resolved server name.
+     * `listAllTools` deliberately survives a dead server (the other servers' tools
+     * are still advertised), but it used to DROP the failure — so the model's first
+     * call to that server paid a SECOND full connect budget (60s + 60s = a -32001 at
+     * 120s; c9f0a791). The next `getOrCreateClient` for the server rethrows this
+     * recorded, named error immediately and clears it, so the budget is spent once
+     * and a later call still gets a fresh attempt (a server that recovers is not
+     * poisoned forever — see BUG-ORCH-002).
+     */
+    private readonly startupFailures = new Map<string, unknown>();
     private readonly toolTargets = new Map<string, { server: string; tool: string }>();
     private readonly logger: EngineLogger;
 
@@ -56,6 +67,12 @@ export class McpClientRegistry {
         const name = this.resolveServerName(rawName);
         const existing = this.clients.get(name);
         if (existing) return existing;
+
+        if (this.startupFailures.has(name)) {
+            const failure = this.startupFailures.get(name);
+            this.startupFailures.delete(name);
+            throw failure;
+        }
 
         const config = this.mcpServers[name];
         if (!config) {
@@ -161,6 +178,7 @@ export class McpClientRegistry {
                     allTools.push({ ...tool, name: advertised });
                 }
             } catch (error) {
+                this.startupFailures.set(serverName, error);
                 this.logger.warn(
                     { server: serverName, error },
                     "Failed to list tools from MCP server"
@@ -200,5 +218,6 @@ export class McpClientRegistry {
         await Promise.allSettled(closePromises);
         this.clients.clear();
         this.connectPromises.clear();
+        this.startupFailures.clear();
     }
 }

@@ -11,6 +11,7 @@ import {
   DISPATCH_SERVER_KEY,
   FS_SERVER,
   SHELL_SERVER,
+  resolveFsServerLaunch,
   wrapWithSandbox,
 } from './catalog.js';
 
@@ -250,13 +251,14 @@ function resolveFs(
   if (isMcpServerConfig(fs)) return { serverKey: FS_SERVER.key, config: { ...fs } };
 
   const overrides = fs === true || fs === undefined ? {} : fs;
+  const launch = resolveFsServerLaunch();
   const config: McpServerConfig = {
     transport: 'stdio',
-    command: FS_SERVER.command,
+    command: launch.command,
     // MULTI-ROOT: every resolved root becomes one argv entry — the reference fs
     // server accepts `process.argv.slice(2)` as its allowed-directory allow-list
     // (ADR-0008 D7). `roots` wins; else `[root]`; else `[callerCwd]` (resolveFsRoots).
-    args: [...FS_SERVER.args, ...resolveFsRoots(fs, ctx)],
+    args: [...launch.args, ...resolveFsRoots(fs, ctx)],
     cwd: ctx.cwd,
   };
   if (overrides.allowedTools) config.allowedTools = [...overrides.allowedTools];

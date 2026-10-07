@@ -12,6 +12,7 @@ import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { effectiveHitl } from '@adhd/agent-base-types';
 import type { AgentDefinition, McpServerConfig } from '@adhd/agent-base-types';
 import { SessionStore } from '@adhd/agent-store-runtime';
+import { resolveFsServerLaunch } from '@adhd/agent-core-native-tooling';
 
 import {
   allowedRootsFromResolvedConfig,
@@ -49,17 +50,15 @@ describe('resolveAgentMcpServers — task-time resolution (ADR-0008 D4)', () => 
 
     const fs = stdio(servers['fs']);
     expect(fs.command).toBe('srt'); // adopted srt wrapper is on by default (D7)
-    expect(fs.args).toEqual([
-      'npx',
-      '-y',
-      '@modelcontextprotocol/server-filesystem',
-      '/P',
-    ]);
+    // c9f0a791: the pinned dep launched with node — never `npx -y` resolution.
+    const fsLaunch = resolveFsServerLaunch();
+    expect(fs.args).toEqual([fsLaunch.command, ...fsLaunch.args, '/P']);
+    expect(fs.args).not.toContain('npx');
     expect(fs.cwd).toBe('/P');
 
     const shell = stdio(servers['shell']);
     expect(shell.cwd).toBe('/P');
-    expect(shell.args).toEqual(['uvx', 'mcp-shell-server']);
+    expect(shell.args).toEqual(['uvx', '--from', 'mcp-shell-server==1.1.12', 'mcp-shell-server']);
 
     // dispatch surfaces the REAL host-supplied agent-mcp server (never a wrapper).
     expect(servers['agent-mcp']).toEqual(dispatchSelf);
@@ -390,8 +389,10 @@ describe('multi-root / caller-cwd at the host boundary (ADR-0008 D4/D7/D8)', () 
     const atP = wrapper.read('a', '/P') as unknown as typeof multiRootDef;
     const atQ = wrapper.read('a', '/Q') as unknown as typeof multiRootDef;
 
-    expect(fsArgs(atP)).toEqual(['npx', '-y', '@modelcontextprotocol/server-filesystem', '/P/a', '/P/b']);
-    expect(fsArgs(atQ)).toEqual(['npx', '-y', '@modelcontextprotocol/server-filesystem', '/Q/a', '/Q/b']);
+    const fsLaunch = resolveFsServerLaunch();
+    const fsBase = [fsLaunch.command, ...fsLaunch.args];
+    expect(fsArgs(atP)).toEqual([...fsBase, '/P/a', '/P/b']);
+    expect(fsArgs(atQ)).toEqual([...fsBase, '/Q/a', '/Q/b']);
     // The definition is never mutated — portability (D4/D8).
     expect(JSON.stringify(multiRootDef)).toBe(snapshot);
   });

@@ -6,7 +6,10 @@ import {
   FS_SERVER,
   SHELL_SERVER,
   SRT_SANDBOX,
+  resolveFsServerLaunch,
 } from './catalog.js';
+import { existsSync } from 'node:fs';
+import { basename, isAbsolute, sep } from 'node:path';
 
 const dispatchSelf: McpServerConfig = {
   transport: 'stdio',
@@ -31,12 +34,46 @@ const unwrap = (s: Stdio): Stdio =>
 const fsServer = (servers: McpServerConfig[]): Stdio | undefined =>
   stdio(servers)
     .map(unwrap)
-    .find((s) => s.args?.includes('@modelcontextprotocol/server-filesystem'));
+    .find(
+      (s) => s.command === process.execPath && !!s.args?.[0]?.includes('server-filesystem')
+    );
 
 const shellServer = (servers: McpServerConfig[]): Stdio | undefined =>
   stdio(servers)
     .map(unwrap)
     .find((s) => s.command === 'uvx' && s.args?.includes('mcp-shell-server'));
+
+describe('c9f0a791 AC3 — builtin servers launch pinned, never via npx', () => {
+  it('c9f0a791 AC3: fs is `node <absolute bin inside the resolved package>` with no npx/-y; shell is version-pinned', () => {
+    const servers = resolveNativeTooling(
+      { fs: true, shell: true },
+      { cwd: '/p/a', sandbox: false }
+    );
+    const fs = stdio(servers).find((s) => s.args?.includes('/p/a') && s.command !== 'uvx')!;
+    expect(fs.command).toBe(process.execPath);
+    const bin = fs.args![0];
+    expect(isAbsolute(bin)).toBe(true);
+    expect(existsSync(bin)).toBe(true);
+    expect(bin).toContain(`${sep}@modelcontextprotocol${sep}server-filesystem${sep}`);
+    expect(fs.args).not.toContain('-y');
+    expect(fs.args!.map((a) => basename(a))).not.toContain('npx');
+    expect(basename(fs.command)).not.toBe('npx');
+    const shell = stdio(servers).find((s) => s.command === 'uvx')!;
+    expect(shell.args!.some((a) => a.includes('==1.1.12'))).toBe(true);
+    expect(shell.args).toEqual(['--from', 'mcp-shell-server==1.1.12', 'mcp-shell-server']);
+  });
+
+  it('c9f0a791 AC3: the catalog is the single producer — resolveFsServerLaunch matches the resolved config', () => {
+    const [fs] = stdio(
+      resolveNativeTooling({ fs: true, shell: false }, { cwd: '/p/a', sandbox: false })
+    );
+    expect([fs.command, ...fs.args!.slice(0, 1)]).toEqual([
+      resolveFsServerLaunch().command,
+      ...resolveFsServerLaunch().args,
+    ]);
+    expect(FS_SERVER.packageName).toBe('@modelcontextprotocol/server-filesystem');
+  });
+});
 
 describe('resolveNativeTooling — task-time resolution (ADR-0008 D2/D4)', () => {
   it('AC1: {fs:true,shell:true,dispatch:true} yields 3 servers rooted at the task cwd', () => {
@@ -214,9 +251,9 @@ describe('resolveNativeTooling — adopted srt sandbox wrapping (ADR-0008 D7)', 
       { cwd: '/p/a' }
     ) as [Stdio, Stdio];
     expect(fs.command).toBe('srt');
-    expect(fs.args?.slice(0, 2)).toEqual(['npx', '-y']);
+    expect(fs.args?.[0]).toBe(process.execPath);
     expect(shell.command).toBe('srt');
-    expect(shell.args).toEqual(['uvx', 'mcp-shell-server']);
+    expect(shell.args).toEqual(['uvx', '--from', 'mcp-shell-server==1.1.12', 'mcp-shell-server']);
   });
 
   it('sandbox:false leaves the builtins unwrapped', () => {
@@ -224,7 +261,7 @@ describe('resolveNativeTooling — adopted srt sandbox wrapping (ADR-0008 D7)', 
       { fs: true, shell: true },
       { cwd: '/p/a', sandbox: false }
     ) as [Stdio, Stdio];
-    expect(fs.command).toBe('npx');
+    expect(fs.command).toBe(process.execPath);
     expect(shell.command).toBe('uvx');
   });
 
@@ -245,7 +282,7 @@ describe('resolveNativeTooling — adopted srt sandbox wrapping (ADR-0008 D7)', 
       { cwd: '/p/a', srtSettingsPath: '/run/srt-run.json' }
     ) as [Stdio, Stdio];
     expect(fs.command).toBe('srt');
-    expect(fs.args?.slice(0, 4)).toEqual(['-s', '/run/srt-run.json', 'npx', '-y']);
+    expect(fs.args?.slice(0, 4)).toEqual(['-s', '/run/srt-run.json', process.execPath, resolveFsServerLaunch().args[0]]);
     expect(shell.command).toBe('srt');
     expect(shell.args?.slice(0, 3)).toEqual(['-s', '/run/srt-run.json', 'uvx']);
   });
@@ -256,6 +293,6 @@ describe('resolveNativeTooling — adopted srt sandbox wrapping (ADR-0008 D7)', 
       { cwd: '/p/a' }
     ) as [Stdio];
     expect(fs.command).toBe('srt');
-    expect(fs.args?.[0]).toBe('npx'); // no `-s` prefix
+    expect(fs.args?.[0]).toBe(process.execPath); // no `-s` prefix
   });
 });

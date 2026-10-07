@@ -166,8 +166,8 @@ carries no resolved root, so it is usable from any directory:
 
 | member | resolved default | notes |
 |---|---|---|
-| `fs` | `srt npx -y @modelcontextprotocol/server-filesystem <root…>` | multi-root; `false` omits it |
-| `shell` | `srt uvx mcp-shell-server` | allowlisted argv — never a shell string; `false` omits it |
+| `fs` | `srt node <pinned server-filesystem bin> <root…>` (pinned dependency, no `npx`) | multi-root; `false` omits it |
+| `shell` | `srt uvx --from mcp-shell-server==1.1.12 mcp-shell-server` | allowlisted argv — never a shell string; `false` omits it |
 | `dispatch` | the REAL agent-mcp server | so the agent can dispatch sub-agents; never a wrapper |
 | `hitl` | `true` | `false` hides `request_human_input` and prunes `suspend` from the ask chain |
 

@@ -173,8 +173,8 @@ the `dispatch` self floor.
 
 | member | default | resolved server (adopted) |
 |---|---|---|
-| `fs` | on | `srt npx -y @modelcontextprotocol/server-filesystem <cwd>` |
-| `shell` | on | `srt uvx mcp-shell-server` (allowlisted argv — never a shell string) |
+| `fs` | on | `srt node <pinned server-filesystem bin> <cwd>` (pinned dependency, no `npx`) |
+| `shell` | on | `srt uvx --from mcp-shell-server==1.1.12 mcp-shell-server` (allowlisted argv — never a shell string) |
 | `dispatch` | on | the REAL agent-mcp server (`agent-mcp`), handled in-process — never a wrapper |
 | `hitl` | `true` | HITL enablement; `false` hides `request_human_input` (ADR-0008 D6) |
 

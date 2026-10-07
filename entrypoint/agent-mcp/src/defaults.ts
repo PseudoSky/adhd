@@ -384,7 +384,8 @@ export interface BuildNativeToolingContextOptions {
 
 /**
  * Assemble the task-time context, injecting the local `node_modules/.bin` on
- * `PATH` so the `srt`-wrapped `npx`/`uvx` children resolve their launchers, and
+ * `PATH` so the `srt` launcher and the `uvx` shell child resolve (the fs server runs as
+ * `node <pinned bin>` and needs no PATH lookup, c9f0a791), and
  * (when the sandbox is on) threading the per-run `srt` settings path the host
  * provisioned at startup (`provisionRunSrtPolicy`, A3/A4) so the builtins spawn
  * with a per-spawn cwd allow via `srt -s` rather than the shared global file.

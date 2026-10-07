@@ -235,6 +235,13 @@ type McpServerTransportConfig =
        */
       cwd?: string;
       timeoutMs?: number;
+      /**
+       * Budget (ms) for the spawn + MCP `initialize` handshake and, separately,
+       * for the first `tools/list`. Exceeding it fails fast with an error naming
+       * the server, phase, elapsed ms and command (c9f0a791). Stdio only — the
+       * spawn cost is what a slow child inflates. Default 30000.
+       */
+      connectTimeoutMs?: number;
     }
   | {
       transport: 'http';

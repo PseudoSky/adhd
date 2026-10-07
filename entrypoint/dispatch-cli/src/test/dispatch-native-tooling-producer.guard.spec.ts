@@ -49,6 +49,9 @@ describe('NAT-TOOL-5 — the dispatch host is not a second fs/shell producer', (
   it('does not construct the builtin fs server outside the resolver catalog', () => {
     const re = /['"]-y['"]\s*,\s*['"]@modelcontextprotocol\/server-filesystem['"]/;
     expect(filesMatching(re)).toEqual([]);
+    // c9f0a791: the pinned-dep launch has ONE producer too (the resolver catalog).
+    const pinned = /packageName:\s*['"]@modelcontextprotocol\/server-filesystem['"]/;
+    expect(filesMatching(pinned)).toEqual([]);
   });
 
   it('does not construct the builtin shell command outside the resolver catalog', () => {

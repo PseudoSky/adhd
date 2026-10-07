@@ -89,14 +89,14 @@ export interface ProvisionedSrtPolicy {
 }
 
 /**
- * Domains the adopted servers need: PyPI for `uvx mcp-shell-server` and the
- * npm registry for `npx @modelcontextprotocol/server-filesystem` (ADR-0008 D7).
+ * Domains the adopted servers need: PyPI for the pinned `uvx mcp-shell-server`
+ * (ADR-0008 D7). The fs server needs NO network — it runs from the pinned
+ * dependency with `node` (c9f0a791), so the npm registry is deliberately absent.
  */
 export const DEFAULT_SRT_ALLOWED_DOMAINS: readonly string[] = [
   'pypi.org',
   '*.pypi.org',
   'files.pythonhosted.org',
-  'registry.npmjs.org',
 ];
 
 /**

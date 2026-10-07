@@ -23,6 +23,10 @@
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
+import { existsSync, readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import { dirname, resolve as resolvePath } from 'node:path';
+
 /** The three native tool members (ADR-0008 D1). */
 export const NATIVE_TOOL_NAMES = ['fs', 'shell', 'dispatch'] as const;
 export type NativeToolName = (typeof NATIVE_TOOL_NAMES)[number];
@@ -30,14 +34,70 @@ export type NativeToolName = (typeof NATIVE_TOOL_NAMES)[number];
 /** `mcpServers` key the dispatch self tools are surfaced under (agent-mcp's real server). */
 export const DISPATCH_SERVER_KEY = 'agent-mcp';
 
-/** Reference filesystem MCP server — ADOPTED, first cut (ADR-0008 D7). */
+/**
+ * Reference filesystem MCP server — ADOPTED, first cut (ADR-0008 D7).
+ *
+ * Launched DIRECTLY with `node <resolved bin>` (c9f0a791): a pinned runtime
+ * dependency of this package, never `npx -y …`. `npx` burns ~9s of CPU in
+ * `npm exec` per spawn (27-42s under load), which exceeded the MCP request
+ * budget on the first fs call. The bin is ESM, so it is executed by node, not
+ * required (this package itself stays CJS-only, ADR-0003).
+ */
 export const FS_SERVER = {
   /** `mcpServers` key the builtin fs server is mounted under. */
   key: 'fs',
-  command: 'npx',
-  /** Args preceding the resolved root: `npx -y @modelcontextprotocol/server-filesystem <root>`. */
-  args: ['-y', '@modelcontextprotocol/server-filesystem'],
+  /** npm package that ships the server; an EXACT-pinned dependency of this package. */
+  packageName: '@modelcontextprotocol/server-filesystem',
+  /** Key of the package's `bin` map naming the server entry. */
+  binName: 'mcp-server-filesystem',
 } as const;
+
+/** A resolved, directly-executable launch (`command` + the args preceding the roots). */
+export interface ResolvedFsLaunch {
+  command: string;
+  args: string[];
+}
+
+/**
+ * The ONE producer of the builtin fs launch (ADR-0008 D2 single-producer):
+ * `process.execPath` + the absolute path of the pinned package's bin, resolved
+ * from THIS package's own dependency tree (so it works from any caller cwd and
+ * in a published install). Resolution failure throws a loud error naming the
+ * package — there is deliberately NO fallback to `npx` (that fallback is the
+ * 27-42s spawn this replaces; c9f0a791).
+ */
+export function resolveFsServerLaunch(): ResolvedFsLaunch {
+  const req = createRequire(__filename);
+  const pkgJsonPath = (() => {
+    try {
+      return req.resolve(`${FS_SERVER.packageName}/package.json`);
+    } catch (cause) {
+      throw new Error(
+        `Cannot resolve the pinned filesystem MCP server "${FS_SERVER.packageName}" ` +
+          `(a dependency of @adhd/agent-core-native-tooling): ${(cause as Error).message}. ` +
+          'Reinstall dependencies; this package never falls back to npx.'
+      );
+    }
+  })();
+  const pkg = JSON.parse(readFileSync(pkgJsonPath, 'utf8')) as {
+    bin?: string | Record<string, string>;
+  };
+  const rel = typeof pkg.bin === 'string' ? pkg.bin : pkg.bin?.[FS_SERVER.binName];
+  if (!rel) {
+    throw new Error(
+      `"${FS_SERVER.packageName}" at ${pkgJsonPath} declares no bin "${FS_SERVER.binName}"; ` +
+        'cannot launch the builtin fs server.'
+    );
+  }
+  const bin = resolvePath(dirname(pkgJsonPath), rel);
+  if (!existsSync(bin)) {
+    throw new Error(
+      `"${FS_SERVER.packageName}" bin ${bin} does not exist; reinstall dependencies ` +
+        '(this package never falls back to npx).'
+    );
+  }
+  return { command: process.execPath, args: [bin] };
+}
 
 /**
  * Adopted argv-allowlist shell MCP server (`tumf/mcp-shell-server`, ADR-0008 D7).
@@ -49,10 +109,14 @@ export const FS_SERVER = {
  * v1.1.12). It exposes an ALLOW-list ONLY — there is no deny-list env, so the
  * harness must not pretend to pass one (ADR-0008 D5: no per-command deny).
  */
+/** Pinned PyPI version of the adopted shell server (verified against v1.1.12 sources). */
+const SHELL_SERVER_VERSION = '1.1.12';
+
 export const SHELL_SERVER = {
   key: 'shell',
   command: 'uvx',
-  args: ['mcp-shell-server'],
+  /** Version-pinned (`==1.1.12`): no registry resolution drift per spawn (c9f0a791). */
+  args: ['--from', `mcp-shell-server==${SHELL_SERVER_VERSION}`, 'mcp-shell-server'],
   /** The adopted server's single tool name (its `listTools` surface). */
   toolName: 'shell_execute',
   /** Env names the adopted server reads (argv allowlist passthrough; D5/D7). */
@@ -129,7 +193,18 @@ export interface NativeServerCatalogEntry {
 export const NATIVE_SERVER_CATALOG: Readonly<
   Record<NativeToolName, NativeServerCatalogEntry>
 > = {
-  fs: { name: 'fs', serverKey: FS_SERVER.key, command: FS_SERVER.command, args: FS_SERVER.args },
+  fs: {
+    name: 'fs',
+    serverKey: FS_SERVER.key,
+    // Lazy: resolving the pinned package at module load would make a broken
+    // install fail every import of this package, not just the fs spawn.
+    get command() {
+      return resolveFsServerLaunch().command;
+    },
+    get args() {
+      return resolveFsServerLaunch().args;
+    },
+  },
   shell: {
     name: 'shell',
     serverKey: SHELL_SERVER.key,

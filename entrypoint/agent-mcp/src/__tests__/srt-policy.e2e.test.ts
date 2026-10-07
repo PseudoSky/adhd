@@ -71,14 +71,17 @@ describe('provisionSrtPolicy (a5a2f1d4)', () => {
 
     const written = JSON.parse(await readFile(settingsPath, 'utf8')) as SrtShape;
     expect(written.filesystem?.allowWrite).toContain('/work/root');
-    // uv + npm caches must be writable for `uvx`/`npx` to initialize.
+    // uv cache must be writable for `uvx` to initialize (the `.npm` root is retained, harmless).
     expect(written.filesystem?.allowWrite?.some((p) => /\.cache[/\\]uv$/.test(p) || /\.npm$/.test(p))).toBe(
       true
     );
-    // PyPI (uvx) + npm registry (npx) must be reachable.
+    // PyPI (pinned uvx shell server) must be reachable; the npm registry must NOT
+    // be — the fs server runs from the pinned dependency, no `npx` fetch (c9f0a791).
     for (const domain of DEFAULT_SRT_ALLOWED_DOMAINS) {
       expect(written.network?.allowedDomains).toContain(domain);
     }
+    expect(DEFAULT_SRT_ALLOWED_DOMAINS).toContain('pypi.org');
+    expect(written.network?.allowedDomains).not.toContain('registry.npmjs.org');
     expect(isSrtPolicyProvisioned(settingsPath)).toBe(true);
   });
 

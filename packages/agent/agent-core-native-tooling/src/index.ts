@@ -23,6 +23,7 @@ export {
   NATIVE_SERVER_CATALOG,
   DISPATCH_SERVER_KEY,
   FS_SERVER,
+  resolveFsServerLaunch,
   SHELL_SERVER,
   SRT_SANDBOX,
   wrapWithSandbox,
