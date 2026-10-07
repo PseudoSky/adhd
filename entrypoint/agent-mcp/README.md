@@ -336,6 +336,25 @@ This release fixes six critical regressions from 2.0.0/2.0.1 related to context 
 
 **Impact:** Existing configs at the legacy path will load again. No action required.
 
+## Local dev server (`serve`, live reload)
+
+A long-running local server over the streamable-HTTP transport that restarts itself whenever the
+built `dist/` changes. It never builds and never touches any MCP client config.
+
+```bash
+npx nx run agent-mcp:serve                       # foreground supervisor (default port 47821); Ctrl-C stops it
+AGENT_MCP_SERVE_PORT=47822 npx nx run agent-mcp:serve   # other port (or: node entrypoint/agent-mcp/scripts/serve.mjs run --port=47822)
+npx nx run agent-mcp:serve-status                # exit 0 = running, 3 = not running
+npx nx run agent-mcp:serve-stop                  # SIGTERM the supervisor and its server
+```
+
+- Waits for `entrypoint/agent-mcp/dist/src/index.js` + `dist/package.json` (build with `npx nx affected -t build` / `agent-mcp:dist-manifest`); restarts (SIGTERM, then start) once `dist/` has been unchanged for 3s after any change (polled every 2s; `AGENT_MCP_SERVE_STABLE_MS`, `AGENT_MCP_SERVE_POLL_MS`).
+- URL `http://127.0.0.1:<port>/` (any path). Real `ADHD_AGENT_*` env/DB/registry paths pass through unchanged; `ADHD_AGENT_SSE_HOST` defaults to `127.0.0.1`.
+- pid and log: `tmp/agent-mcp/serve/serve-<port>.{pid,log}` (gitignored). A second `scripts/serve.mjs run` for the same port reports the running one instead of starting another.
+- The http transport accepts one MCP session per server process; a client must resume its session id across invocations (and re-initialize after a reload).
+- Nx serializes a task across processes: while `serve` runs, a second `nx run agent-mcp:serve` waits ("Waiting for agent-mcp:serve in another nx process"). Use `serve-status`, or call `node entrypoint/agent-mcp/scripts/serve.mjs run` for the report-and-exit behaviour.
+- Limitation: the MCP HTTP listener itself calls `listen(port)` without a host (`src/server.ts`), so it binds all interfaces; only the SSE/gateway listener is pinned to localhost. Localhost-only binding needs a `src/server.ts` change.
+
 ## Architecture & Security
 
 See [docs/architecture-and-security.md](./docs/architecture-and-security.md) for details on:

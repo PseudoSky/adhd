@@ -89,6 +89,34 @@
           ]
         }
       ]
+    },
+    "serve": {
+      "//": "Long-running live-reload dev server (scripts/serve.mjs). Deliberately NO dependsOn: it never builds, it waits for the existing {projectRoot}/dist and restarts when a build changes it. Port: --port=N or AGENT_MCP_SERVE_PORT (default 47821). Idempotent per port. pid/log under tmp/agent-mcp/serve/.",
+      "executor": "nx:run-commands",
+      "continuous": true,
+      "cache": false,
+      "options": {
+        "cwd": "{projectRoot}",
+        "command": "node scripts/serve.mjs run"
+      }
+    },
+    "serve-status": {
+      "//": "Reports the serve supervisor for the port (exit 0 running, 3 not).",
+      "executor": "nx:run-commands",
+      "cache": false,
+      "options": {
+        "cwd": "{projectRoot}",
+        "command": "node scripts/serve.mjs status"
+      }
+    },
+    "serve-stop": {
+      "//": "Stops the serve supervisor (and its server) for the port.",
+      "executor": "nx:run-commands",
+      "cache": false,
+      "options": {
+        "cwd": "{projectRoot}",
+        "command": "node scripts/serve.mjs stop"
+      }
     }
   }
 }
