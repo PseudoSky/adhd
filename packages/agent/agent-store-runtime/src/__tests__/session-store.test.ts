@@ -549,3 +549,75 @@ describe("SessionStore — atomic state transitions (S2)", () => {
         }
     });
 });
+
+describe("SessionStore session:closed (f376e27a)", () => {
+    function hookedStore(hooks: ConstructorParameters<typeof SessionStore>[1]) {
+        const db = makeTestDb();
+        const store = new SessionStore(
+            db as ConstructorParameters<typeof SessionStore>[0],
+            hooks
+        );
+        const def = sampleAgentDefinition();
+        const session = store.create({ agentName: def.name, agentDefinition: def });
+        return { store, session };
+    }
+
+    it("f376e27a AC1: close() emits session:closed once, carrying the closed session", () => {
+        const hooks = new HookRegistry();
+        const onClosed = vi.fn();
+        hooks.register("session:closed", onClosed);
+        const { store, session } = hookedStore(hooks);
+
+        const closed = store.close(session.id);
+
+        expect(onClosed).toHaveBeenCalledOnce();
+        const payload = onClosed.mock.calls[0][0].session;
+        expect(payload.id).toBe(session.id);
+        expect(payload.status).toBe("closed");
+        expect(payload.closedAt).toBe(closed.closedAt);
+    });
+
+    it("f376e27a AC1: a failed close (already closed / absent) emits nothing", () => {
+        const hooks = new HookRegistry();
+        const onClosed = vi.fn();
+        hooks.register("session:closed", onClosed);
+        const { store, session } = hookedStore(hooks);
+        store.close(session.id);
+        expectToolError(() => store.close(session.id), "SESSION_CLOSED");
+        expectToolError(() => store.close("missing"), "SESSION_NOT_FOUND");
+        expect(onClosed).toHaveBeenCalledOnce();
+    });
+
+    it("f376e27a AC2: a throwing handler cannot change close()'s outcome", () => {
+        const hooks = new HookRegistry();
+        hooks.register("session:closed", () => {
+            throw new Error("boom");
+        });
+        const { store, session } = hookedStore(hooks);
+        expect(store.close(session.id).status).toBe("closed");
+    });
+
+    it("f376e27a AC2: a registry whose emit throws or rejects cannot change close()'s outcome", () => {
+        const throwing = {
+            register: () => undefined,
+            registerEnforcement: () => undefined,
+            enforce: async () => undefined,
+            emit: (event: string) => {
+                if (event === "session:closed") throw new Error("sync boom");
+                return Promise.resolve();
+            },
+        } as unknown as ConstructorParameters<typeof SessionStore>[1];
+        const a = hookedStore(throwing);
+        expect(a.store.close(a.session.id).status).toBe("closed");
+
+        const rejecting = {
+            ...(throwing as object),
+            emit: (event: string) =>
+                event === "session:closed"
+                    ? Promise.reject(new Error("async boom"))
+                    : Promise.resolve(),
+        } as unknown as ConstructorParameters<typeof SessionStore>[1];
+        const b = hookedStore(rejecting);
+        expect(b.store.close(b.session.id).status).toBe("closed");
+    });
+});

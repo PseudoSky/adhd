@@ -5,6 +5,8 @@ import type {
   Session,
   AgentDefinition,
   TokenUsage,
+  PermissionAction,
+  AskResolution,
 } from './domain.js';
 
 export interface TaskStartPayload {
@@ -93,6 +95,62 @@ export interface BudgetBlockPayload {
   message: string;
 }
 
+/**
+ * The host permission gate's verdict for one tool call (observational — a
+ * handler can never alter the decision).
+ *
+ * `action` is the gate's raw verdict; `resolution` is what actually happened:
+ * `'allow'` when `action` is `'allow'`, otherwise the `AskResolution` link
+ * (`suspend` | `escalate` | `deny`) the ask chain settled on — or `'deny'`
+ * for a straight deny.
+ */
+export interface PermissionDecisionPayload {
+  executionContext: ExecutionContext;
+  /** MCP server (or native-tooling namespace) that owns the tool. */
+  server: string;
+  /** Bare tool name, without the server prefix. */
+  tool: string;
+  callId: string;
+  /** `<server>__<tool>`, the name the permission rules match against. */
+  qualifiedToolName: string;
+  action: PermissionAction;
+  resolution: 'allow' | AskResolution;
+  reason?: string;
+}
+/** Why a task was parked awaiting a human (or ancestor) answer. */
+export type HitlSuspendKind =
+  | 'request_human_input'
+  | 'permission_ask'
+  | 'escalation';
+/** A task suspended (`awaiting_input`) pending a human answer. */
+export interface HitlSuspendPayload {
+  executionContext: ExecutionContext;
+  kind: HitlSuspendKind;
+  /** The task that is parked (the escalated-to parent for `escalation`). */
+  parkedTaskId: string;
+  /** Opaque token a caller presents to `task_resume`. */
+  resumeToken: string;
+  /** For `escalation`: the child task whose ask was escalated. */
+  escalatedFrom?: string;
+}
+/** How a suspension ended. */
+export type HitlResumeOutcome =
+  | 'resumed'
+  | 'approved'
+  | 'declined'
+  | 'cancelled';
+/** A suspended task resumed (or was released) with the human's answer. */
+export interface HitlResumePayload {
+  executionContext: ExecutionContext;
+  /** Correlates with the matching `hitl:suspend`. */
+  parkedTaskId: string;
+  outcome: HitlResumeOutcome;
+}
+/** A session transitioned to `closed`. */
+export interface SessionClosedPayload {
+  session: Session;
+}
+
 export interface HookEventMap {
   'task:start': TaskStartPayload;
   'pre:model_request': PreModelRequestPayload;
@@ -127,6 +185,14 @@ export interface HookEventMap {
   'task:cancelled': TaskCancelledPayload;
   'session:created': SessionCreatedPayload;
   'agent:mutated': AgentMutatedPayload;
+  /** The host permission gate's verdict for a tool call. Observational only. */
+  'permission:decision': PermissionDecisionPayload;
+  /** A task parked in `awaiting_input` (ask suspension, human-input tool, or escalation). */
+  'hitl:suspend': HitlSuspendPayload;
+  /** A parked task was answered, approved, declined, or cancelled. */
+  'hitl:resume': HitlResumePayload;
+  /** A session transitioned to `closed`. */
+  'session:closed': SessionClosedPayload;
 }
 
 export type HookEvent = keyof HookEventMap;

@@ -183,3 +183,7 @@ packages/agent/*/tsconfig.tsbuildinfo
 
 # Manual .mcp.json backups (agent-created copies, not source)
 .mcp.json.bak-*
+
+# vite/vitest temp config timestamp files
+vite.config.*.timestamp*
+vitest.config.*.timestamp*

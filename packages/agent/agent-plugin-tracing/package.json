@@ -1,0 +1,47 @@
+{
+  "name": "@adhd/agent-plugin-tracing",
+  "version": "0.0.1",
+  "description": "Tracing plugin for @adhd/agent-mcp — emits durable spans and derived metrics for every agent operation (session, task, model call, tool call, permission decision, HITL suspend/resume) into @adhd/sox-telemetry",
+  "publishConfig": {
+    "access": "public"
+  },
+  "main": "./dist/index.js",
+  "typings": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "CHANGELOG.md"
+  ],
+  "peerDependencies": {
+    "@adhd/agent-base-types": "^2.3.3"
+  },
+  "dependencies": {
+    "@adhd/sox-telemetry": "^0.4.1",
+    "tslib": "^2.6.0",
+    "zod": "^4.4.3"
+  },
+  "keywords": [
+    "agent",
+    "tracing",
+    "telemetry",
+    "plugin",
+    "observability",
+    "typescript"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PseudoSky/adhd.git",
+    "directory": "packages/agent/agent-plugin-tracing"
+  },
+  "homepage": "https://github.com/PseudoSky/adhd/tree/main/packages/agent/agent-plugin-tracing#readme",
+  "bugs": {
+    "url": "https://github.com/PseudoSky/adhd/issues"
+  },
+  "devDependencies": {
+    "@adhd/agent-engine-orchestrator": "^2.3.3",
+    "@adhd/agent-store-runtime": "^2.2.3",
+    "@types/better-sqlite3": "^7.6.13",
+    "better-sqlite3": "12.10.0",
+    "drizzle-orm": "0.45.2"
+  }
+}
