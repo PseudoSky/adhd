@@ -565,7 +565,7 @@ export function deprecatedKindReplacement(name: string): string | undefined;
 Guarantees: the case-folded in-code replacement for a deprecated `kind` name,
 or `undefined` when the name is not one of `DEPRECATED_KIND_NAMES`.
 
-### `VALID_LOCATION_TYPES` — const (`catalog.ts:1525`)
+### `VALID_LOCATION_TYPES` — const (`catalog.ts:1535`)
 
 ```ts
 export const VALID_LOCATION_TYPES: readonly ILocationType[];
@@ -648,7 +648,7 @@ gate `supersedes`/`duplicate_of` use, with no `part_of`-specific code path.
 Re-adding the SAME parent is a no-op (`noop: true`). A multi-parent model would
 require changing this row's multiplicity, not special-casing `part_of`.
 
-### `resolveEdgeKindTx(tx, rel)` — function (`catalog.ts:819`)
+### `resolveEdgeKindTx(tx, rel)` — function (`catalog.ts:829`)
 
 ```ts
 export async function resolveEdgeKindTx(tx: AdapterTransaction, rel: string): Promise<IEdgeKindRule>;
@@ -663,7 +663,7 @@ row (corrupt or missing `meta` keys) is invalidated and replaced in the SAME
 `CatalogNotFoundError('edge_kind', rel)` if `rel` isn't in
 `EDGE_KIND_TABLE` at all.
 
-### `IProjectPolicy` — interface (`catalog.ts:887`)
+### `IProjectPolicy` — interface (`catalog.ts:897`)
 
 ```ts
 export interface IProjectPolicy {
@@ -717,7 +717,7 @@ minimum title-token Jaccard for the SECOND independent signal — cosine alone i
 never sufficient cross-project. All four are data (never env toggles) resolved
 by `resolveProjectPolicy` over `DEFAULT_PROJECT_POLICY`.
 
-### `resolveProjectPolicy(project)` — function (`catalog.ts:993`)
+### `resolveProjectPolicy(project)` — function (`catalog.ts:1003`)
 
 ```ts
 export function resolveProjectPolicy(project: IResolvedProjectRow): IProjectPolicy;
@@ -849,7 +849,7 @@ The ONE copy of §8.5's citation-sha rule (`create`/`transition`/`update`/
 by a `has_citation` edge; the ONE contract lives in the `citation.ts` leaf
 (`src/citation.ts`), which this module encodes to / decodes from.
 
-### `computeCitationSha(project, file, revision, allowedExternalRoots, siblingRoots?)` — function (`citation.ts:303`)
+### `computeCitationSha(project, file, revision, allowedExternalRoots, siblingRoots?)` — function (`citation.ts:304`)
 
 ```ts
 export async function computeCitationSha(
@@ -867,40 +867,40 @@ export async function computeCitationSha(
 working-tree read, canonical containment against the project root ∪
 `allowedExternalRoots`.
 
-### `computeCitationShas(project, citations, allowedExternalRoots, siblingRoots?)` — function (`citation.ts:351`)
+### `computeCitationShas(project, citations, allowedExternalRoots, siblingRoots?)` — function (`citation.ts:352`)
 
 The filesystem/git half of the pre-resolve, with NO policy gate — callable on
 its own by `update`'s diff-emitter, which defers the gate until it knows which
 citations are actually being added.
 
-### `assertCitationShasVerifiable(project, policy, citations, shas, verb)` — function (`citation.ts:386`)
+### `assertCitationShasVerifiable(project, policy, citations, shas, verb)` — function (`citation.ts:387`)
 
 Enforce `citationRequiresSha` over an already-computed sha list. Only where
 verification is possible (a known project `path`) is an `"unverified"` sha a
 hard `CitationUnverifiableError`; a path-less project records `sha:"unverified"`
 and logs the waiver.
 
-### `resolveCitationShas(project, policy, citations, siblingRoots, verb)` — function (`citation.ts:418`)
+### `resolveCitationShas(project, policy, citations, siblingRoots, verb)` — function (`citation.ts:419`)
 
 `computeCitationShas` + `assertCitationShasVerifiable` — compute AND gate every
 citation, in order.
 
-### `appendCitationTx(tx, handle, params)` — function (`citation.ts:440`)
+### `appendCitationTx(tx, handle, params)` — function (`citation.ts:441`)
 
 Mint ONE `citation` node + its `has_citation` edge against the issue, inside the
 caller's open `tx`. Never writes an audit row (the calling verb owns it).
 
-### `readLiveCitationsTx(tx, issueRowid)` — function (`citation.ts:500`)
+### `readLiveCitationsTx(tx, issueRowid)` — function (`citation.ts:509`)
 
 The LIVE citations currently attached to an issue, each with its `citationKey`
 (`file` + `lines`) — the "live set" `update`'s diff compares a desired set to.
 
-### `removeCitationTx(tx, params)` — function (`citation.ts:531`)
+### `removeCitationTx(tx, params)` — function (`citation.ts:540`)
 
 Bi-temporally invalidate ONE citation: its node (merged `invalidatedAt` /
 `invalidatedReason`) AND its `has_citation` edge. Never writes an audit row.
 
-### `IAddCitationInput` — interface (`citation.ts:600`)
+### `IAddCitationInput` — interface (`citation.ts:619`)
 
 ```ts
 export interface IAddCitationInput {
@@ -910,12 +910,12 @@ export interface IAddCitationInput {
 }
 ```
 
-### `addCitation(handle, input)` — function (`citation.ts:633`)
+### `addCitation(handle, input)` — function (`citation.ts:652`)
 
 One `immediate` transaction: resolve the issue → mint the citation node + edge →
 audit. The sha is computed before the transaction opens.
 
-### `IRemoveCitationInput` — interface (`citation.ts:709`)
+### `IRemoveCitationInput` — interface (`citation.ts:728`)
 
 ```ts
 export interface IRemoveCitationInput {
@@ -925,7 +925,7 @@ export interface IRemoveCitationInput {
 }
 ```
 
-### `removeCitation(handle, input)` — function (`citation.ts:736`)
+### `removeCitation(handle, input)` — function (`citation.ts:755`)
 
 One `immediate` transaction: resolve the citation by its OWN uid → invalidate
 the node + edge → audit. `CitationNotFoundError` when the uid is not a live

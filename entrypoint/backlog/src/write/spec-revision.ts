@@ -619,6 +619,29 @@ export async function readPointerRecord(
   };
 }
 
+/** The head spec revision's pointer identity plus its FRAGMENT body (B-AC9). */
+export interface ISpecRevisionFragment extends ISpecPointer {
+  /** The fragment appended at the head revision — byte-for-byte what `spec-append` wrote (the document is the fold over the chain). */
+  fragment: string;
+}
+
+/**
+ * Read-only fragment reader (B-AC9, ADR-0007 D7 additive): the head revision
+ * node's `content` — the FRAGMENT appended at that revision (`appendSpecRevision`
+ * writes it verbatim as the node's `content`), never re-encoded or trimmed.
+ * `undefined` when the item has no spec. No write path is touched.
+ */
+export async function readSpecRevisionFragment(
+  graph: GraphBackend,
+  uid: string
+): Promise<ISpecRevisionFragment | undefined> {
+  const pointer = await readSpecPointer(graph, uid);
+  if (!pointer) return undefined;
+  const node = await graph.getNodeByUid(pointer.revision_uid);
+  if (!node) return undefined;
+  return { ...pointer, fragment: node.content ?? '' };
+}
+
 /**
  * Current revision + its token for a work item (`undefined` if it has no spec).
  * Prefers the on-record pointer; falls back to the derived chain head so a

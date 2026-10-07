@@ -4,7 +4,7 @@
 
 import type { GraphBackend } from '@adhd/sox-graph-store';
 import { assertKnownIssueFields } from './card.js';
-import { assembleIssueCard } from './card.js';
+import { assembleIssueCardWithExtras } from './extra-fields.js';
 import { resolveIssueByUid } from './resolve.js';
 import { BacklogValidationError } from '../write/errors.js';
 import {
@@ -49,7 +49,7 @@ export async function getIssue(
       : undefined;
   // C6 — a single-item `get` derives its verdict through rung 3 by default
   // (the list views stay at rung 2); a caller may raise it via `deriveThrough`.
-  return assembleIssueCard(graph, issue, fields, {
+  return assembleIssueCardWithExtras(graph, issue, fields, {
     bounds,
     verdictRung: input.deriveThrough ?? 3,
   });

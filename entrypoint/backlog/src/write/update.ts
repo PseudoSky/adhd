@@ -1091,6 +1091,7 @@ export async function update(
               citationUid: row.uid,
               at: now,
               reason: 'removed via update citations diff',
+              handle,
             });
           }
         }

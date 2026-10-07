@@ -85,7 +85,12 @@ export type IIssuePseudoField =
   | 'obligations' // NEW (C4): the declared, typed requirements on this item
   | 'verdict' // NEW (C6): the derived actionability verdict (never stored)
   | 'spec' // NEW (C10): the work item's current spec revision pointer (never the body)
-  | 'similar'; // NEW (C9): reviewed `similar_to` links, both directions (advisory `duplicate_of` is NOT this field)
+  | 'similar' // NEW (C9): reviewed `similar_to` links, both directions (advisory `duplicate_of` is NOT this field)
+  | 'primaryOwner' // NEW (A-AC5): the single primary owning project+component (`owns_component`)
+  | 'memberships' // NEW (A-AC5): every component (and its project) the item belongs to — primary + citation-derived (`in_component`)
+  | 'supersededBy' // NEW (A-AC8): the successor uid of a retired SUPERSEDED item, or null
+  | 'supersedeReason' // NEW (A-AC8): the closed-enum reason recorded by the SUPERSEDED transition, or null
+  | 'specRevisionFragment'; // NEW (B-AC9): the head spec revision's FRAGMENT body, or null
 
 export type IIssueField = IIssuePlainField | IIssuePseudoField;
 
@@ -121,6 +126,11 @@ export const ISSUE_PSEUDO_FIELDS: readonly IIssuePseudoField[] = [
   'verdict',
   'spec',
   'similar',
+  'primaryOwner',
+  'memberships',
+  'supersededBy',
+  'supersedeReason',
+  'specRevisionFragment',
 ];
 
 const ISSUE_FIELD_SET: ReadonlySet<string> = new Set<string>([
@@ -375,6 +385,42 @@ export interface IIssueCard {
    * the reserved `duplicate_of` same-judgement relation.
    */
   similar?: ISimilarLinks;
+  /** A-AC5 — exactly ONE primary owner (the `owns_component` placement); `null` only for a malformed legacy node. */
+  primaryOwner?: IPrimaryOwner | null;
+  /** A-AC5 — every membership row: the primary first, then citation-derived (`in_component`). */
+  memberships?: IMembershipView[];
+  /** A-AC8 — the uid this item was superseded by (`supersedes` edge), or `null`. */
+  supersededBy?: string | null;
+  /** A-AC8 — the recorded SUPERSEDED reason (closed enum), or `null` when none was recorded. */
+  supersedeReason?: string | null;
+  /** B-AC9 — the head spec revision's fragment body (byte-for-byte what `spec-append` wrote), or `null` when the item has no spec. */
+  specRevisionFragment?: ISpecRevisionFragmentView | null;
+}
+
+/** The primary owner of an item — the project + component that `owns_component`/`owns_project` name. */
+export interface IPrimaryOwner {
+  projectUid: string;
+  projectName: string;
+  componentUid: string;
+  componentName: string;
+}
+
+/** One membership row (see `write/membership.ts`). */
+export interface IMembershipView {
+  componentUid: string;
+  componentName: string;
+  projectUid: string;
+  projectName: string;
+  via: 'primary' | 'citation';
+  citationUid?: string;
+}
+
+/** The head spec revision's fragment, with its pointer identity. */
+export interface ISpecRevisionFragmentView {
+  revision_uid: string;
+  revision_token: string;
+  revision_seq: number;
+  fragment: string;
 }
 
 /**
@@ -421,6 +467,10 @@ export interface IIssueFilter {
   project?: string;
   /** uid or name, scoped within `project`. */
   component?: string;
+  /** (A-AC5) ANY-of: items that BELONG to a project via any component membership (primary or citation-derived). `project` keeps primary-owner semantics. */
+  memberOfProject?: string | string[];
+  /** (A-AC5) ANY-of: items with a membership in any of these components. `component` keeps primary-owner semantics. */
+  memberOfComponent?: string | string[];
   kind?: string | string[];
   status?: string | string[] | 'open' | 'closed' | 'all';
   priority?: string | string[];

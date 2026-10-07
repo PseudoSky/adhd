@@ -8,6 +8,7 @@
  * copy of the pagination machinery.
  */
 
+import { assembleIssueCardsWithExtras } from './extra-fields.js';
 import type {
   GraphBackend,
   NodeFilter,
@@ -23,7 +24,6 @@ import {
   InvalidArgumentError,
 } from '../write/errors.js';
 import {
-  assembleIssueCards,
   assertKnownIssueFields,
   isStatusTerminal,
   resolveDependents,
@@ -32,6 +32,7 @@ import {
   getOutgoingEdges,
   intersectCandidateSets,
   resolveIssuePlacement,
+  resolveMembershipCandidates,
   resolveValidatedCatalogFilter,
   tryResolveComponentRef,
   tryResolveRef,
@@ -235,6 +236,23 @@ async function resolveEdgeScopedFilterIds(
       rel: 'owns_component',
     });
     perDimension.push(new Set(edges.map((e) => e.dst)));
+  }
+
+  if (filter.memberOfProject !== undefined) {
+    perDimension.push(
+      await resolveMembershipCandidates(graph, {
+        dimension: 'project',
+        refs: Array.isArray(filter.memberOfProject) ? filter.memberOfProject : [filter.memberOfProject],
+      })
+    );
+  }
+  if (filter.memberOfComponent !== undefined) {
+    perDimension.push(
+      await resolveMembershipCandidates(graph, {
+        dimension: 'component',
+        refs: Array.isArray(filter.memberOfComponent) ? filter.memberOfComponent : [filter.memberOfComponent],
+      })
+    );
   }
 
   if (filter.kind !== undefined) {
@@ -630,7 +648,7 @@ async function queryList(
     const scoreKindByUid = new Map<string, IScoreKind>(
       [...scoreByUid.keys()].map((uid) => [uid, scoreKind] as const)
     );
-    const items = await assembleIssueCards(
+    const items = await assembleIssueCardsWithExtras(
       graph,
       ordered,
       fields,
@@ -717,7 +735,7 @@ async function queryList(
   const page = hasMore ? nodes.slice(0, limit) : nodes;
   const nextCursor = hasMore ? String(page[page.length - 1].id) : undefined;
 
-  const items = await assembleIssueCards(graph, page, fields, undefined, undefined, {
+  const items = await assembleIssueCardsWithExtras(graph, page, fields, undefined, undefined, {
     rung: 2,
     onRung: handle.onVerdictRung,
   });
@@ -853,7 +871,7 @@ async function queryReady(
   }
   const hasMore = ready.length > limit;
   const page = hasMore ? ready.slice(0, limit) : ready;
-  const items = await assembleIssueCards(graph, page, fields, undefined, undefined, {
+  const items = await assembleIssueCardsWithExtras(graph, page, fields, undefined, undefined, {
     rung: 2,
     onRung: handle.onVerdictRung,
   });
@@ -884,7 +902,7 @@ async function queryStale(
   const nodes = await graph.queryNodes(nodeFilter as unknown as NodeFilter);
   const hasMore = nodes.length > limit;
   const page = hasMore ? nodes.slice(0, limit) : nodes;
-  const items = await assembleIssueCards(graph, page, fields, undefined, undefined, {
+  const items = await assembleIssueCardsWithExtras(graph, page, fields, undefined, undefined, {
     rung: 2,
     onRung: handle.onVerdictRung,
   });

@@ -84,6 +84,7 @@
  * this comment as evidence the shared resolver is still wrong — it is not.
  */
 
+import { assembleIssueCardsWithExtras } from '../extra-fields.js';
 import type {
   GraphBackend,
   NodeFilter,
@@ -95,7 +96,6 @@ import {
   InvalidArgumentError,
 } from '../../write/errors.js';
 import {
-  assembleIssueCards,
   assertKnownIssueFields,
   isStatusTerminal,
 } from '../card.js';
@@ -105,6 +105,7 @@ import {
   resolveValidatedCatalogFilter,
   tryResolveComponentRef,
   tryResolveRef,
+  resolveMembershipCandidates,
 } from '../resolve.js';
 import {
   DEFAULT_ISSUE_CARD_FIELDS,
@@ -193,6 +194,31 @@ async function resolveOpenClosedIds(
  * nothing") otherwise.
  */
 async function resolveOwnershipChainIds(
+  graph: GraphBackend,
+  filter: IIssueFilter
+): Promise<Set<number> | undefined> {
+  const primary = await resolvePrimaryOwnershipIds(graph, filter);
+  // (A-AC5) the n:m membership filters AND with the primary-owner ones and with
+  // each other — wired here so a semantic read never silently ignores them.
+  let result = primary;
+  for (const [dimension, value] of [
+    ['project', filter.memberOfProject],
+    ['component', filter.memberOfComponent],
+  ] as const) {
+    if (value === undefined) continue;
+    const members = await resolveMembershipCandidates(graph, {
+      dimension,
+      refs: Array.isArray(value) ? value : [value],
+    });
+    result =
+      result === undefined
+        ? members
+        : new Set([...result].filter((id) => members.has(id)));
+  }
+  return result;
+}
+
+async function resolvePrimaryOwnershipIds(
   graph: GraphBackend,
   filter: IIssueFilter
 ): Promise<Set<number> | undefined> {
@@ -670,7 +696,7 @@ export async function querySimilarViewWithMeta(
   const scoreKindByUid = new Map<string, 'rrf'>(
     [...scoreByUid.keys()].map((uid) => [uid, 'rrf'] as const)
   );
-  const items = await assembleIssueCards(
+  const items = await assembleIssueCardsWithExtras(
     graph,
     ordered,
     fields,

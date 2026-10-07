@@ -59,6 +59,7 @@ import {
   resolveProjectPolicy,
 } from './catalog.js';
 import { writeAudit } from './audit.js';
+import { reconcileMembershipTx } from './membership.js';
 import {
   CatalogNotFoundError,
   CitationNotFoundError,
@@ -479,6 +480,14 @@ export async function appendCitationTx(
     rule,
     typePolicy: handle.typePolicy,
   });
+  // (A-AC5 I3) the new citation may reach another component — derive the
+  // membership in the SAME transaction (create/addCitation/transition/update
+  // all funnel through here).
+  await reconcileMembershipTx(tx, handle, {
+    issueRowid: params.issueRowid,
+    issueUid: params.issueUid,
+    at: params.at,
+  });
   return citationNode;
 }
 
@@ -535,6 +544,8 @@ export async function removeCitationTx(
     citationUid: string;
     at: string;
     reason?: string;
+    /** The write handle — needed to re-derive the owning issue's membership once the citation is gone (A-AC5). */
+    handle: IWriteStoreHandle;
   }
 ): Promise<void> {
   const row = await getNodeByRowidTx(tx, params.citationRowid);
@@ -572,6 +583,14 @@ export async function removeCitationTx(
       reason: params.reason,
       at: params.at,
     });
+    const issue = await getNodeByRowidTx(tx, edge.src);
+    if (issue?.kind === 'issue') {
+      await reconcileMembershipTx(tx, params.handle, {
+        issueRowid: issue.rowid,
+        issueUid: issue.uid,
+        at: params.at,
+      });
+    }
   }
 }
 
@@ -768,6 +787,7 @@ export async function removeCitation(
       citationUid: citationRow.uid,
       at: now,
       reason: input.reason,
+      handle,
     });
 
     await writeAudit({

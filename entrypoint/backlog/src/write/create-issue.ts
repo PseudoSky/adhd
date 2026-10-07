@@ -34,6 +34,7 @@ import { writeAudit } from './audit.js';
 import { resolveSiblingProjectRootsTx } from './citation-path.js';
 import { type ICitation } from '../citation.js';
 import { appendCitationTx, resolveCitationShas } from './citation.js';
+import { reconcileMembershipTx } from './membership.js';
 import {
   composeEmbedText,
   scheduleIssueEmbedding,
@@ -1161,6 +1162,14 @@ export async function createIssue(
         rel: 'authored_by',
         rule: authoredByRule,
         typePolicy: handle.typePolicy,
+      });
+
+      // (A-AC5 I2) The primary placement is also a membership row, so
+      // membership reads need no special case for an issue that cites nothing.
+      await reconcileMembershipTx(tx, handle, {
+        issueRowid: issue.rowid,
+        issueUid: issue.uid,
+        at: now,
       });
 
       // Each citation is the SAME node+edge write `addCitation` performs,

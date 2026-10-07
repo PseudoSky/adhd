@@ -655,6 +655,16 @@ export const EDGE_KIND_TABLE: readonly IEdgeKindRule[] = [
     multiplicity: '1:n',
   },
   {
+    // A-AC5 / e54bd58b (S02.S2): the n:m MEMBERSHIP join — an issue belongs to
+    // every component its primary placement or its citations reach. INTERNAL:
+    // not on `relate`'s public rel union (ADR-0007 D4). `owns_component`
+    // remains the single primary owner; see `write/membership.ts`.
+    rel: 'in_component',
+    sourceKind: 'issue',
+    targetKind: 'component',
+    multiplicity: 'n:m',
+  },
+  {
     rel: 'has_kind',
     sourceKind: 'issue',
     targetKind: 'kind',
