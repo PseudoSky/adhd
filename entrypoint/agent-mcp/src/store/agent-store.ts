@@ -1,3 +1,5 @@
+import { isDeepStrictEqual } from 'node:util';
+
 import { eq } from 'drizzle-orm';
 
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
@@ -41,6 +43,14 @@ function mergeMcpServers(
     }
   }
   return next;
+}
+
+/** A definition minus the version/updatedAt bookkeeping, for no-op detection. */
+function definitionBody(def: AgentDefinition): Record<string, unknown> {
+  const body: Record<string, unknown> = { ...def };
+  delete body['version'];
+  delete body['updatedAt'];
+  return body;
 }
 
 export class AgentStore {
@@ -123,6 +133,17 @@ export class AgentStore {
       version: existing.version + 1,
       updatedAt: nowIso(),
     };
+
+    // No-op patch: when the merged definition is identical to the stored one
+    // (ignoring the version/updatedAt bookkeeping), do not bump the version,
+    // write, or emit a mutation hook.
+    if (isDeepStrictEqual(definitionBody(existing), definitionBody(updated))) {
+      logger.debug(
+        { agentName: input.name, version: existing.version },
+        'Agent update was a no-op; version unchanged'
+      );
+      return existing;
+    }
 
     this.db
       .update(agentsTable)
