@@ -45,8 +45,11 @@ export interface IImportAgentsResult {
 }
 
 export interface IImportAgentsOptions {
-  /** Provider written to `agent_create`/`agent_update`. Default: `claudecli`
-   *  (optionally carrying the persona's `model`). */
+  /** Provider written VERBATIM to `agent_create`/`agent_update`. Default:
+   *  none — the `provider` key is omitted, so the agent is un-welded from any
+   *  provider and the provider is chosen by the session/global binding at task
+   *  time (D-G(2); with no binding a task fails closed: `NO_PROVIDER_SELECTED`).
+   *  The persona's `model` is a Claude Code alias, never a provider model. */
   provider?: Record<string, unknown>;
   /** Default `mcpServers` written on create. Omitted ⇒ none. */
   mcpServers?: Record<string, unknown>;
@@ -183,14 +186,17 @@ function isAgentNotFound(err: unknown): boolean {
   );
 }
 
+/**
+ * The `provider` to store, or `undefined` for none. Only an explicit caller
+ * `override` is ever written (verbatim). There is deliberately NO implicit
+ * default: a hardcoded `{type:'claudecli'}` re-created the silent claudecli
+ * default that D-G(2) removed (5667dff8), and a persona `model` such as
+ * `sonnet` is a Claude Code alias, not a canonical model ref.
+ */
 function providerFor(
-  persona: IImportedPersona,
   override?: Record<string, unknown>
-): Record<string, unknown> {
-  if (override) return override;
-  const provider: Record<string, unknown> = { type: 'claudecli' };
-  if (persona.model) provider['model'] = persona.model;
-  return provider;
+): Record<string, unknown> | undefined {
+  return override;
 }
 
 /**
@@ -236,8 +242,16 @@ export async function importClaudeAgents(
     const definition: Record<string, unknown> = {
       description: persona.description,
       systemPrompt: persona.body,
-      provider: providerFor(persona, opts.provider),
     };
+    const provider = providerFor(opts.provider);
+    if (provider) definition['provider'] = provider;
+    if (persona.model && !provider) {
+      result.warnings.push(
+        `${file}: persona model ${JSON.stringify(persona.model)} not written — ` +
+          'no provider is stored; the provider/model is chosen by the session or ' +
+          'global binding at task time'
+      );
+    }
     if (opts.mcpServers) definition['mcpServers'] = opts.mcpServers;
 
     try {

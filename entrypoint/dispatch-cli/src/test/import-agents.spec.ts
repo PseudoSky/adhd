@@ -158,13 +158,34 @@ describe('importClaudeAgents (09e84a88)', () => {
     const reviewer = createFor('architect-reviewer');
     expect(reviewer?.args['systemPrompt']).toBe(REVIEWER_BODY);
     expect(reviewer?.args['description']).toBe('Reviews architecture');
-    expect(reviewer?.args['provider']).toEqual({ type: 'claudecli', model: 'sonnet' });
+    // import-agents-claudecli AC1: NO provider key (no implicit claudecli default).
+    expect(reviewer?.args).not.toHaveProperty('provider');
     expect(reviewer?.args['mcpServers']).toEqual({
       'memory-server': { transport: 'sse', url: 'http://x/sse' },
     });
 
-    // api-designer has no `model` → provider carries only the type.
-    expect(createFor('api-designer')?.args['provider']).toEqual({ type: 'claudecli' });
+    expect(createFor('api-designer')?.args).not.toHaveProperty('provider');
+    // import-agents-claudecli AC3: the persona `model` is surfaced, not written.
+    expect(result.warnings.some((w) => w.includes('architect-reviewer') && w.includes('"sonnet"') && w.includes('not written'))).toBe(true);
+    expect(JSON.stringify(client.calls)).not.toContain('claudecli');
+  });
+
+  it('import-agents-claudecli AC2: an explicit --provider override passes through verbatim, with no model warning', async () => {
+    const client = new FakeAgentMcpCaller();
+    const provider = { type: 'anthropic', model: 'claude_sonnet_4_6' };
+    const result = await importClaudeAgents(dir, client, { provider });
+
+    for (const c of client.calls.filter((x) => x.name === 'agent_create')) {
+      expect(c.args['provider']).toEqual(provider);
+    }
+    expect(result.warnings.filter((w) => w.includes('not written'))).toEqual([]);
+  });
+
+  it('import-agents-claudecli AC1: update patch carries no provider either (never clobbers a stored binding)', async () => {
+    const client = new FakeAgentMcpCaller(new Set(['architect-reviewer']));
+    await importClaudeAgents(dir, client);
+    const upd = client.calls.find((c) => c.name === 'agent_update');
+    expect((upd?.args['patch'] as Record<string, unknown>)).not.toHaveProperty('provider');
   });
 
   it('updates (never creates) a persona that already exists', async () => {

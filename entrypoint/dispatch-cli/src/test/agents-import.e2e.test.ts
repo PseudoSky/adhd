@@ -75,6 +75,7 @@ describe('09e84a88 — dispatch-cli agents import round-trips into a temp regist
 
     const imported = JSON.parse(res.stdout.trim()) as {
       created: string[];
+      warnings: string[];
       errors: Array<{ file: string; message: string }>;
     };
     expect(imported.errors).toEqual([]);
@@ -91,6 +92,10 @@ describe('09e84a88 — dispatch-cli agents import round-trips into a temp regist
         fullDefinition: true,
       });
       expect(def.systemPrompt).toBe(BODY);
+      // import-agents-claudecli AC1: the CLI import stored NO provider (no implicit
+      // claudecli default), and surfaced the persona `model` as a warning.
+      expect(def).not.toHaveProperty('provider');
+      expect(imported.warnings.some((w) => w.includes('"sonnet"'))).toBe(true);
 
       // Deleting the persona must leave NO fallback: a subsequent read is
       // AGENT_NOT_FOUND (the registry is the only source of truth).
