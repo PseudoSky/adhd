@@ -1,3 +1,13 @@
+## 0.1.4 (2026-10-07)
+
+### 🚀 Features
+
+- **nx-build:** release/CI/toolchain integrity gates (a4d346ae df9de4da 8c0c314e 255394d0 b83f167d 420a7051 e92e2b92 7b7d5e38 ddceb069) ([35bbcbf0](https://github.com/PseudoSky/adhd/commit/35bbcbf0))
+
+### ❤️ Thank You
+
+- pseudosky
+
 ## 0.1.3 (2026-10-06)
 
 ### 🚀 Features
