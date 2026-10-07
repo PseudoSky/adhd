@@ -62,6 +62,7 @@ import { renderIssueCardsMarkdown } from './markdown.js';
 import { catalogFor, catalogView } from './views/catalog.js';
 import { orphanedParents } from './views/stats.js';
 import { queryReservations } from './views/reservations.js';
+import { queryByCitationPath } from './views/by-citation-path.js';
 import { querySessions } from './views/sessions.js';
 import {
   listComponents,
@@ -1364,6 +1365,32 @@ async function dispatchQueryView(
   handle: IQueryStoreHandle,
   input: IIssueQueryInput
 ): Promise<IQueryIssuesOutcome> {
+  // B2 (ADR-0007 D7): the citation-by-path projection is selected by
+  // `projection`, not `view`, and short-circuits the view switch.
+  if (input.projection !== undefined) {
+    if (input.projection !== 'byCitationPath') {
+      throw new InvalidArgumentError(
+        'projection',
+        `must be "byCitationPath" (got ${JSON.stringify(input.projection)})`
+      );
+    }
+    const r = await queryByCitationPath(handle.graph, input);
+    return {
+      result: {
+        view: 'by-citation-path',
+        projection: 'byCitationPath',
+        path: r.path,
+        items: r.items,
+      },
+      meta: {
+        total: r.total,
+        total_relation: 'eq',
+        returned: r.items.length,
+        limit: r.limit,
+        has_more: r.hasMore,
+      },
+    };
+  }
   const view = input.view ?? 'list';
   switch (view) {
     case 'list': {

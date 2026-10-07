@@ -589,6 +589,10 @@ export interface IIssueQueryInput {
   overlapUids?: readonly string[];
   /** `view:'stale'` only — minutes since `claimedAt`; falls back to `project_policy.claim_stale_after_min` (default 30) when omitted. */
   staleAfterMin?: number;
+  /** B2 (ADR-0007 D7): when `'byCitationPath'`, the call is the citation-by-path projection — requires `path`, ignores `view`. */
+  projection?: 'byCitationPath';
+  /** `projection:'byCitationPath'` only — the path whose citing items are returned (absolute, or relative to each project root). */
+  path?: string;
   /** `view:'reservations'` only — the clock (ISO) a lease is judged live against; defaults to the current time. The ONLY clock seam, so a test proves lease expiry by injecting `now`, never by sleeping. */
   now?: string;
   /** C8 — `view:'catalogs'` only: narrow to one vocabulary catalog. Omitted ⇒ every catalog's terms (the same set `view:'kinds'` exposes). */
@@ -667,6 +671,19 @@ export type IIssueQueryResult =
   | { view: 'stale'; items: IIssueCard[] }
   | { view: 'similar'; items: IIssueCard[]; clusters?: ISimilarViewClusterBlock }
   | { view: 'overlap'; groups: IOverlapGroup[] }
+  | {
+      view: 'by-citation-path';
+      projection: 'byCitationPath';
+      path: string;
+      items: Array<{
+        uid: string;
+        title: string;
+        status: string;
+        citationUid: string;
+        line?: string;
+        verification: string;
+      }>;
+    }
   | { view: 'reservations'; items: IReservationRow[] }
   | { view: 'sessions'; items: ISessionSummary[] }
   | { view: 'registry-orphans'; findings: IRegistryFinding[]; total: number }
