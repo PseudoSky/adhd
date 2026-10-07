@@ -51,6 +51,8 @@ export interface ITimelineResult {
   touched: string[];
   hasMore: boolean;
   nextCursor?: string;
+  /** `true` only when descendant sessions exist below depth {@link MAX_SESSION_DEPTH} and were NOT walked — the child set is then incomplete, never silently so. */
+  truncated?: true;
 }
 
 export async function timeline(graph: GraphBackend, input: ITimelineInput): Promise<ITimelineResult> {
@@ -69,6 +71,7 @@ export async function timeline(graph: GraphBackend, input: ITimelineInput): Prom
   const include = input.includeChildren !== false;
   const set = new Set<string>([input.sessionId]);
   const children: string[] = [];
+  let truncated = false;
   if (include) {
     const byParent = new Map<string, string[]>();
     for (const [child, parent] of parents) byParent.set(parent, [...(byParent.get(parent) ?? []), child]);
@@ -85,6 +88,7 @@ export async function timeline(graph: GraphBackend, input: ITimelineInput): Prom
       }
       frontier = next;
     }
+    truncated = frontier.some((id) => (byParent.get(id) ?? []).some((c) => !set.has(c)));
   }
 
   const events = await loadOpEvents(graph, sessions, set);
@@ -117,6 +121,7 @@ export async function timeline(graph: GraphBackend, input: ITimelineInput): Prom
     ops: page.map(({ sessionId, agent, op, targetUid, delta, t }) => ({ sessionId, agent, op, targetUid, delta, t })),
     touched,
     hasMore,
+    ...(truncated ? { truncated: true as const } : {}),
     ...(hasMore && page.length > 0
       ? { nextCursor: `${page[page.length - 1]!.t}#${page[page.length - 1]!.rowid}` }
       : {}),

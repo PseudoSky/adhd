@@ -487,14 +487,22 @@ export class SingleValuedRelationConflictError extends BacklogWriteError {
   }
 }
 
+/** Why a citation has no real sha and `citationRequiresSha` refuses it. */
+export type CitationUnverifiableReason = 'target-missing' | 'revision-unresolved';
+
+const UNVERIFIABLE_REASON_TEXT: Record<CitationUnverifiableReason, string> = {
+  'target-missing': 'the target does not exist',
+  'revision-unresolved': 'the pinned revision does not contain it',
+};
+
 /**
  * A citation target does NOT EXIST (or its pinned revision does not contain it)
  * and `project_policy.citation_requires_sha` (default `true`) rejects
  * non-existent evidence. EXISTENCE is the gate (ADR-0007 breaking #8): an
  * existing file anywhere on the machine, an existing directory, a worktree-only
- * path and an abstract `url:`/`registry:`/`query:` anchor are all PERSISTED with
- * a recorded verification outcome, never refused. A PATH-LESS project cannot
- * hash its citations at all, so the gate is waived and `sha:"unverified"` is
+ * path, an abstract `url:`/`registry:`/`query:` anchor and a target over the
+ * size cap are all PERSISTED `unverified-with-reason`, never refused. A PATH-LESS
+ * project cannot hash its citations at all, so the gate is waived and `sha:"unverified"` is
  * persisted verbatim — `CitationUnverifiableError` is never thrown for it.
  */
 export class CitationUnverifiableError extends BacklogWriteError {
@@ -510,13 +518,11 @@ export class CitationUnverifiableError extends BacklogWriteError {
    */
   constructor(
     public readonly target: string,
-    public readonly reason: 'target-missing' | 'revision-unresolved' = 'target-missing'
+    public readonly reason: CitationUnverifiableReason = 'target-missing'
   ) {
     super(
       `Citation target "${target}" could not be verified and this project requires a real sha — ` +
-        (reason === 'revision-unresolved'
-          ? 'the pinned revision does not contain it'
-          : 'the target does not exist') +
+        UNVERIFIABLE_REASON_TEXT[reason] +
         '. Cite a path that exists (anywhere on this machine — project membership is not required), ' +
         'or set project_policy.citationRequiresSha to false.'
     );

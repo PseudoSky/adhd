@@ -11,7 +11,6 @@
  * (a path-less project can never verify, so the gate has nothing to reject).
  */
 import { describe, expect, it } from 'vitest';
-import { defaultCitationAllowedExternalRoots } from './citation-path.js';
 import {
   projectHasKnownPath,
   resolveProjectPolicy,
@@ -94,7 +93,7 @@ describe('resolveProjectPolicy — citationAllowedExternalRoots is validated, ne
       resolveProjectPolicy(
         project({ policy: { citationAllowedExternalRoots: '/etc' } })
       ).citationAllowedExternalRoots
-    ).toEqual(defaultCitationAllowedExternalRoots());
+    ).toEqual([]);
   });
 
   it('falls back to the default when the field is a non-array object', () => {
@@ -102,7 +101,7 @@ describe('resolveProjectPolicy — citationAllowedExternalRoots is validated, ne
       resolveProjectPolicy(
         project({ policy: { citationAllowedExternalRoots: { 0: '/etc' } } })
       ).citationAllowedExternalRoots
-    ).toEqual(defaultCitationAllowedExternalRoots());
+    ).toEqual([]);
   });
 
   it('falls back to the default when ANY element is not a string', () => {
@@ -110,13 +109,13 @@ describe('resolveProjectPolicy — citationAllowedExternalRoots is validated, ne
       resolveProjectPolicy(
         project({ policy: { citationAllowedExternalRoots: ['/ok', 42] } })
       ).citationAllowedExternalRoots
-    ).toEqual(defaultCitationAllowedExternalRoots());
+    ).toEqual([]);
   });
 
   it('defaults (lazily) when no policy object is present at all', () => {
     expect(
       resolveProjectPolicy(project({ path: '/repo' }))
         .citationAllowedExternalRoots
-    ).toEqual(defaultCitationAllowedExternalRoots());
+    ).toEqual([]);
   });
 });

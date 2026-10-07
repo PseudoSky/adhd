@@ -182,18 +182,6 @@ export function citationNodeMetadata(
   };
 }
 
-/**
- * Decode a `citation` node back into the contract + the server fields — the ONE
- * reader of the persisted citation encoding. Every field the write side
- * persists round-trips: `file`↔`target`, `lines`↔`line`, `context`↔`content`,
- * `symbol`, `blastRadius`, `revision`.
- *
- * Defensive on a malformed/legacy row (mirrors the mapping `query/card.ts`
- * previously hand-rolled, verbatim): a missing `sha` degrades to the
- * `"unverified"` sentinel (never a fabricated hash), and a missing `at` to the
- * node's `t_created`. A malformed `meta` never throws — the caller gets a
- * best-effort projection, never a crash.
- */
 /** The persisted outcome, or — for a legacy row that predates the field — derived from the `sha` sentinel. */
 function verificationFromMetadata(
   md: Record<string, unknown>
@@ -206,6 +194,18 @@ function verificationFromMetadata(
   return sha === 'unverified' ? 'unverified-with-reason' : 'verified';
 }
 
+/**
+ * Decode a `citation` node back into the contract + the server fields — the ONE
+ * reader of the persisted citation encoding. Every field the write side
+ * persists round-trips: `file`↔`target`, `lines`↔`line`, `context`↔`content`,
+ * `symbol`, `blastRadius`, `revision`.
+ *
+ * Defensive on a malformed/legacy row (mirrors the mapping `query/card.ts`
+ * previously hand-rolled, verbatim): a missing `sha` degrades to the
+ * `"unverified"` sentinel (never a fabricated hash), and a missing `at` to the
+ * node's `t_created`. A malformed `meta` never throws — the caller gets a
+ * best-effort projection, never a crash.
+ */
 export function citationFromNode(node: ICitationNodeView): ICitationRecord {
   const md = node.metadata ?? {};
   return {

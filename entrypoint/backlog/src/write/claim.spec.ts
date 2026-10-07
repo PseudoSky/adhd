@@ -25,8 +25,8 @@ describe("mocked: claim", () => {
   it.todo("mocked: release by the claimant: clears both fields, status:\"released\"");
   it.todo("mocked: release by a non-claimant, or on an unclaimed issue: status:\"release-noop\", no write, wasClaimedBy echoes the prior value");
   it.todo("mocked: renew by the claimant: bumps claimedAt, status:\"renewed\"");
-  it.todo("mocked: renew by a non-claimant: throws ClaimHeldError, never mutates");
-  it.todo("mocked: renew on an unclaimed issue: throws ClaimHeldError (SPEC.md §6.3.5 assigns this to the same outcome as \"held by someone else\")");
+  it.todo("mocked: renew by a non-claimant: throws ActorMismatchError (validation, actor_mismatch), never mutates");
+  it.todo("mocked: renew on an unclaimed issue: throws ActorMismatchError with no holder (SPEC.md §6.3.5: renew is not a claim attempt)");
   it.todo("mocked: IssueNotFoundError for a uid that does not resolve to a live issue");
   it.todo("mocked: IssueNotFoundError for a uid whose issue has already been soft-deleted (never re-claimable)");
   it.todo("mocked: InvalidArgumentError on missing/blank uid, by, or an out-of-vocabulary action");

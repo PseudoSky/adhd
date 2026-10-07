@@ -291,6 +291,7 @@ failures, and the CLI's process exit code is derived from `error.code`:
 | `item_not_found`      | 1    | the addressed issue `uid` does not exist                                                                         |
 | `invalid_argument`    | 2    | malformed flag or parameter shape                                                                                |
 | `validation`          | 2    | schema rejection — unknown filter key, unknown projection field, over-limit                                      |
+| `validation` (`details.reason:"actor_mismatch"`) | 2 | a `transition` or `renew` of an item whose live claim another actor holds (`heldBy`, `heldSince`); `claim` contention stays `conflict` |
 | `store_busy`          | 1    | store contention (busy/lease) — `details.retryable`/`retryAfterMs` say whether and how to retry; never hot-loop  |
 | `rag_not_configured`  | 1    | a semantic/similarity read with no embedding backend, or an empty vector space                                   |
 | `conflict`            | 1    | someone else holds the claim, a single-valued relation is taken, or a supersede raced                            |
@@ -1335,11 +1336,15 @@ semantics. An item citing evidence in two registered components across two
 projects is returned for BOTH projects and still has one primary owner.
 
 **Citations check existence, not membership.** An existing out-of-root file or
-worktree-only path is `verified`. A directory, a missing target, an unresolved
-`revision`, a path-less project or an abstract anchor (`url:`, `registry:`,
-`query:`) is persisted with `verification:"unverified-with-reason"` and
-`unverifiedReason`; `get {fields:["citations"]}` returns both. A missing target is
-still refused (`precondition_failed`) when the project requires a sha.
+worktree-only path is `verified`. Everything else that cannot be hashed is
+PERSISTED, never refused: a directory, a path-less project, an abstract anchor
+(`url:`, `registry:`, `query:` — `unverifiedReason:"abstract-anchor-unchecked"`)
+and a target over the 64 MiB hashing cap (`target-too-large`) are stored with
+`verification:"unverified-with-reason"` and `unverifiedReason`;
+`get {fields:["citations"]}` returns both fields, so an evidence-free citation is
+distinguishable from a content-hashed one. Only a missing target or an
+unresolved `revision` is refused (`precondition_failed`) when the project
+requires a sha.
 
 **SUPERSEDED.**
 

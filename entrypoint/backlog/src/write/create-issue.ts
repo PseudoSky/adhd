@@ -1185,6 +1185,14 @@ export async function createIssue(
           citation: citations[i],
           verification: citationShas[i]!,
           at: now,
+          deferMembershipReconcile: true,
+        });
+      }
+      if (citations.length > 0) {
+        await reconcileMembershipTx(tx, handle, {
+          issueRowid: issue.rowid,
+          issueUid: issue.uid,
+          at: now,
         });
       }
 

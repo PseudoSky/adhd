@@ -47,13 +47,13 @@ export const BACKLOG_ERROR_CODES = [
   'ambiguous_reference',
   /** Malformed flag or parameter shape — `InvalidArgumentError`. Exit 2. */
   'invalid_argument',
-  /** Schema rejection: unknown filter key, unknown projection field, over-limit — `BacklogValidationError`. Exit 2. */
+  /** Schema rejection: unknown filter key, unknown projection field, over-limit — `BacklogValidationError`; also a write verb whose actor does not match the live claim holder (`transition`/`renew` by a non-holder) — `ActorMismatchError`, `details.reason: 'actor_mismatch'`. Exit 2. */
   'validation',
   /** Store contention (busy/lease). `details.retryable === true` + `retryAfterMs` — `WriteContentionError`. Exit 1. */
   'store_busy',
   /** A semantic/anchor/similarity read with no embedding backend, or an empty vector space — `RagNotConfiguredError`. Exit 1. */
   'rag_not_configured',
-  /** Someone else holds the claim, a single-valued relation is taken, or a supersede raced — `ClaimHeldError`, `SingleValuedRelationConflictError`, `StaleSupersedeError`. Exit 1. */
+  /** A `claim` lease race (someone else holds the claim), a single-valued relation is taken, or a supersede raced — `ClaimHeldError`, `SingleValuedRelationConflictError`, `StaleSupersedeError`. Exit 1. */
   'conflict',
   /** A gate refused the write: a terminal transition missing its citation or note, or an unverifiable citation — `CitationRequiredError`, `NoteRequiredError`, `CitationUnverifiableError`. Exit 1. */
   'precondition_failed',
