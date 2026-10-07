@@ -43,12 +43,14 @@ import { fileURLToPath } from 'node:url';
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { resolveNativeTooling } from '@adhd/agent-core-native-tooling';
+import { resolveFsServerLaunch, resolveNativeTooling } from '@adhd/agent-core-native-tooling';
 import { StdioMcpClient } from '@adhd/agent-engine-orchestrator';
 import type { McpServerConfig } from '@adhd/agent-engine-orchestrator';
 import type { NativeToolingConfig } from '@adhd/agent-base-types';
 
 import { ensureBinDirOnPath, provisionSrtPolicy } from '../../srt-policy.js';
+
+const fsLaunch = resolveFsServerLaunch();
 
 type Stdio = Extract<McpServerConfig, { transport: 'stdio' }>;
 
@@ -123,9 +125,8 @@ describe.skipIf(!isLive)(
       expect(fs?.args).toEqual([
         '-s',
         srtSettings,
-        'npx',
-        '-y',
-        '@modelcontextprotocol/server-filesystem',
+        fsLaunch.command,
+        ...fsLaunch.args,
         cwd,
       ]);
 
@@ -200,9 +201,8 @@ describe.skipIf(!isLive)(
       expect(fs?.args).toEqual([
         '-s',
         srtSettings,
-        'npx',
-        '-y',
-        '@modelcontextprotocol/server-filesystem',
+        fsLaunch.command,
+        ...fsLaunch.args,
         a,
         b,
       ]);
@@ -248,7 +248,7 @@ describe.skipIf(!isLive)(
       expect(servers).toHaveLength(1);
       const shell = servers[0];
       expect(shell?.command).toBe('srt');
-      expect(shell?.args).toEqual(['-s', srtSettings, 'uvx', 'mcp-shell-server']);
+      expect(shell?.args).toEqual(['-s', srtSettings, 'uvx', '--from', 'mcp-shell-server==1.1.12', 'mcp-shell-server']);
       // D5/D7: the allow-lists are a passthrough of the adopted server's env.
       expect(shell?.env?.['ALLOW_COMMANDS']).toBe('echo');
       expect(shell?.env?.['ALLOW_PATTERNS']).toBe('pw.*');

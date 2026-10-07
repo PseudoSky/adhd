@@ -132,7 +132,7 @@ describe.skipIf(!isLive)(
       if (!shell) throw new Error('a stdio shell server must resolve');
       // D7: the builtin shell server is wrapped by the adopted `srt` sandbox.
       expect(shell.command).toBe('srt');
-      expect(shell.args).toEqual(['uvx', 'mcp-shell-server']);
+      expect(shell.args).toEqual(['uvx', '--from', 'mcp-shell-server==1.1.12', 'mcp-shell-server']);
       // D5/D7: the argv allowlist is a passthrough of the adopted server's env.
       expect(shell.env?.ALLOW_COMMANDS).toBe('echo,pwd,ls');
 
@@ -169,7 +169,7 @@ describe.skipIf(!isLive)(
       const shell = servers.find((s): s is Stdio => s.transport === 'stdio');
       if (!shell) throw new Error('a stdio shell server must resolve');
       expect(shell.command).toBe('srt');
-      expect(shell.args).toEqual(['uvx', 'mcp-shell-server']);
+      expect(shell.args).toEqual(['uvx', '--from', 'mcp-shell-server==1.1.12', 'mcp-shell-server']);
       // D5/D7: the pattern allow-list is a passthrough of the adopted server's
       // env — no exact names here, ONLY the regex.
       expect(shell.env?.ALLOW_PATTERNS).toBe('ec.*');

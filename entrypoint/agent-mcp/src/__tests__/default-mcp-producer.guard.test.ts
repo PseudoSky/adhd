@@ -7,7 +7,7 @@
  *
  *   1. `packages/agent/agent-core-native-tooling/src/lib/catalog.ts`
  *      (via `resolveNativeTooling`) — keys `fs`/`shell`, commands
- *      `npx …server-filesystem` / `uvx mcp-shell-server`.
+ *      `node <pinned server-filesystem bin>` / pinned `uvx mcp-shell-server==1.1.12`.
  *   2. `entrypoint/agent-mcp/src/defaults.ts` (via `buildDefaultMcpServers`) —
  *      keys `filesystem`/`shell`, commands `npx …server-filesystem` /
  *      `node <retired homegrown shell>`.
@@ -30,6 +30,7 @@ import { describe, expect, it } from 'vitest';
 import {
   resolveNativeToolingMap,
   FS_SERVER,
+  resolveFsServerLaunch,
   SHELL_SERVER,
   DISPATCH_SERVER_KEY,
 } from '@adhd/agent-core-native-tooling';
@@ -113,9 +114,11 @@ const filesMatching = (files: string[], re: RegExp): string[] =>
     .map((f) => relative(repoRoot, f));
 
 describe('NAT-TOOL-4 — exactly ONE producer of the builtin fs/shell servers', () => {
-  it('AC1: the fs argv literal `-y @modelcontextprotocol/server-filesystem` exists ONLY in catalog.ts', () => {
-    const re = /['"]-y['"]\s*,\s*['"]@modelcontextprotocol\/server-filesystem['"]/;
-    expect(filesMatching(PROD, re)).toEqual([relative(repoRoot, CATALOG)]);
+  it('AC1: the fs package literal is constructed ONLY in catalog.ts, and no production source launches it via `npx -y` (c9f0a791)', () => {
+    const pinned = /packageName:\s*['"]@modelcontextprotocol\/server-filesystem['"]/;
+    expect(filesMatching(PROD, pinned)).toEqual([relative(repoRoot, CATALOG)]);
+    const npxForm = /['"]-y['"]\s*,\s*['"]@modelcontextprotocol\/server-filesystem['"]/;
+    expect(filesMatching(PROD, npxForm)).toEqual([]);
   });
 
   it('AC1: no production source constructs the builtin shell outside catalog.ts', () => {
@@ -188,7 +191,7 @@ describe('NAT-TOOL-4 — exactly ONE producer of the builtin fs/shell servers', 
     const fs = map[FS_SERVER.key] as Stdio;
     const shell = map[SHELL_SERVER.key] as Stdio;
     // srt-wrapped by default (ADR-0008 D7): the real command is still in argv.
-    expect(fs.args).toContain(FS_SERVER.args[FS_SERVER.args.length - 1]);
-    expect(shell.args).toContain(SHELL_SERVER.args[0]);
+    expect(fs.args).toContain(resolveFsServerLaunch().args[0]);
+    expect(shell.args).toContain(SHELL_SERVER.args[1]);
   });
 });

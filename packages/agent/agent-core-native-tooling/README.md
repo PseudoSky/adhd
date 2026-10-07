@@ -45,8 +45,8 @@ command text would be best-effort, not a security boundary.
 
 | role | server | how it is used |
 |---|---|---|
-| filesystem | `@modelcontextprotocol/server-filesystem` (MIT) | `npx -y @modelcontextprotocol/server-filesystem <root>` |
-| shell | `tumf/mcp-shell-server` (MIT) | `uvx mcp-shell-server` — allowlisted command **NAMES as argv arrays**, never a shell string |
+| filesystem | `@modelcontextprotocol/server-filesystem` (MIT) | `node <pinned @modelcontextprotocol/server-filesystem bin> <root>` (exact-pinned dependency of this package, resolved by `resolveFsServerLaunch()`; never `npx`) |
+| shell | `tumf/mcp-shell-server` (MIT) | `uvx --from mcp-shell-server==1.1.12 mcp-shell-server` (version-pinned) — allowlisted command **NAMES as argv arrays**, never a shell string |
 | OS enforcement | `@anthropic-ai/sandbox-runtime` (`srt`, Apache-2.0) | wraps **both** servers: `srt <command> <args…>` |
 
 `unbash` is **dropped**; `rust-mcp-filesystem` is **deferred** (ADR-0008 D7).
