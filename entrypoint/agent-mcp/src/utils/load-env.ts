@@ -62,13 +62,17 @@ export function clearEmptyProviderSecrets(
  * user-facing docs already reference.
  */
 export function loadEnvHierarchy(cwd: string = process.cwd()): void {
+    // `quiet: true` on every load is REQUIRED, not cosmetic (backlog a0806529):
+    // dotenv >=17 prints `◇ injected env (N) from <file> // tip: …` via
+    // `console.log` — i.e. STDOUT — which is the MCP stdio JSON-RPC channel.
+    // Any non-JSON byte there corrupts the stream for strict hosts.
     // Blank-out empty forwarded secrets so they cannot shadow a real file value.
     clearEmptyProviderSecrets();
     // 3. ~/.adhd/.env — lowest precedence, load first without override flag so
     //    POSIX vars already in process.env (PATH, HOME, …) are not disturbed.
-    dotenvConfig({ path: path.join(os.homedir(), ".adhd", ".env") });
+    dotenvConfig({ path: path.join(os.homedir(), ".adhd", ".env"), quiet: true });
     // 2. <cwd>/.adhd/.env — project-specific beats global
-    dotenvConfig({ path: path.join(cwd, ".adhd", ".env"), override: true });
+    dotenvConfig({ path: path.join(cwd, ".adhd", ".env"), override: true, quiet: true });
     // 1. <cwd>/.env — highest precedence
-    dotenvConfig({ path: path.join(cwd, ".env"), override: true });
+    dotenvConfig({ path: path.join(cwd, ".env"), override: true, quiet: true });
 }
