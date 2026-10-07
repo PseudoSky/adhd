@@ -45,7 +45,6 @@ import {
   writeNodeTx,
 } from './tx.js';
 import { writeAudit } from './audit.js';
-import { defaultCitationAllowedExternalRoots } from './citation-path.js';
 import type {
   IComponentSummary,
   ILocationSummary,
@@ -931,9 +930,7 @@ export interface IProjectPolicy {
    * rejected, and an arbitrary absolute path outside every root is never
    * readable. Only the resulting `sha` is persisted — never file content.
    *
-   * This layer defaults to the EMPTY array, and {@link resolveProjectPolicy}'s
-   * injected runtime default (`defaultCitationAllowedExternalRoots()`) is ALSO
-   * empty — there is NO machine-global default root (BUG 62059b57 follow-up:
+   * This layer defaults to the EMPTY array — there is NO machine-global default root (BUG 62059b57 follow-up:
    * the store's `~/.adhd/backlog` data home is not citable). A project opts
    * into the external carve-out by naming roots here; an empty array (the
    * default, or an explicit `[]`) leaves it disabled. This is TYPED,
@@ -996,11 +993,7 @@ const DEFAULT_PROJECT_POLICY: IProjectPolicy = Object.freeze({
   transitionRequiresNote: true,
   citationRequired: false,
   citationRequiresSha: true,
-  // Frozen empty PLACEHOLDER, not the real default: `resolveProjectPolicy`
-  // injects `defaultCitationAllowedExternalRoots()` on every resolve rather
-  // than baking it into this module-load constant. The runtime default is also
-  // empty (no machine-global root), so an explicitly-empty policy array and the
-  // default coincide — both mean "no external roots".
+  // No machine-global default root: absent/malformed/empty all mean "no external roots".
   citationAllowedExternalRoots: Object.freeze([]),
   dedupeScanEnabled: true,
   dedupeThreshold: 0.8,
@@ -1029,10 +1022,7 @@ export function resolveProjectPolicy(
 ): IProjectPolicy {
   const raw = project.metadata?.policy;
   if (raw === null || typeof raw !== 'object')
-    return {
-      ...DEFAULT_PROJECT_POLICY,
-      citationAllowedExternalRoots: defaultCitationAllowedExternalRoots(),
-    };
+    return { ...DEFAULT_PROJECT_POLICY };
   const policy = raw as Partial<IProjectPolicy>;
   return {
     transitionRequiresNote:
@@ -1042,10 +1032,7 @@ export function resolveProjectPolicy(
       policy.citationRequired ?? DEFAULT_PROJECT_POLICY.citationRequired,
     citationRequiresSha:
       policy.citationRequiresSha ?? DEFAULT_PROJECT_POLICY.citationRequiresSha,
-    // Validated then injected on both branches (this one and the no-`policy`
-    // object branch above): a malformed value falls back to the runtime default
-    // rather than being spread, and `defaultCitationAllowedExternalRoots()` is
-    // read at CALL time, never frozen at module load.
+    // Validated: a malformed value falls back to the empty array rather than being spread.
     citationAllowedExternalRoots: resolveCitationAllowedExternalRoots(policy),
     defaultStatus: policy.defaultStatus,
     defaultKind: policy.defaultKind,
@@ -1096,9 +1083,9 @@ function resolveCitationAllowedExternalRoots(
   // type is a LIE at runtime — the value comes from parsed JSON — and this
   // guard is exactly what makes the runtime match the type.
   const raw: unknown = policy.citationAllowedExternalRoots;
-  if (raw === undefined) return defaultCitationAllowedExternalRoots();
+  if (raw === undefined) return [];
   if (!Array.isArray(raw) || !raw.every((root) => typeof root === 'string')) {
-    return defaultCitationAllowedExternalRoots();
+    return [];
   }
   return raw;
 }

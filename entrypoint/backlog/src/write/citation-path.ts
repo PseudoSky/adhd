@@ -49,36 +49,14 @@ import {
   sep,
 } from 'node:path';
 
-/**
- * The default external roots a project may cite from, used when the project's
- * own policy supplies no `citationAllowedExternalRoots`. This is the EMPTY
- * array: the runtime grants NO machine-global default root.
- *
- * Why: the runtime's own data home, `~/.adhd/backlog`, is the STORE's home,
- * not an evidence tree. It holds only the machine-global backlog database
- * (`production/data/backlog-v2.db`) and its snapshots (`production/backup-*`,
- * top-level `backup-*`/`backups/`), plus the `test/` store. Granting it as a
- * default root let a citation's `sha` read/hash surface resolve straight INTO
- * the shared backlog graph — the very graph the citation containment exists to
- * keep out of citation reads. The earlier narrowing from `~/.adhd` down to
- * `~/.adhd/backlog` (BUG 62059b57) stopped one directory too high (BUG
- * 62059b57 follow-up).
- *
- * This does NOT gut the carve-out MECHANISM: a project that genuinely needs a
- * specific external root (a machine tool, a globally-installed package's
- * `dist/**`) names it explicitly in `project_policy.citationAllowedExternalRoots`,
- * and that typed, per-project allowlist is unchanged. Only the unearned
- * machine-global default is gone.
- *
- * Deliberately a FUNCTION, called LAZILY by {@link resolveProjectPolicy} on
- * every policy resolve, never a module-level constant: the call surface stays
- * stable if a legitimate machine-global root is ever re-introduced, and every
- * caller keeps the lazy, per-resolve contract.
+/*
+ * There is NO machine-global default external citation root. The runtime's own
+ * data home, `~/.adhd/backlog`, is the STORE's home, not an evidence tree
+ * (BUG 62059b57); a project that genuinely needs an external root names it in
+ * `project_policy.citationAllowedExternalRoots`, and an absent or malformed
+ * value means "no external roots". (The former always-empty
+ * `defaultCitationAllowedExternalRoots()` indirection is gone — 82e2c109.)
  */
-export function defaultCitationAllowedExternalRoots(): string[] {
-  return [];
-}
-
 /**
  * Render `root` for a human-facing error message: `~`-anchored when it lies
  * under the current home directory, the bare absolute path otherwise. Keeps

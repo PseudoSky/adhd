@@ -32,6 +32,14 @@ describe('050ea18f A-AC1..3,14 — citation existence gate (real store, real fil
   let outside: string;
   let projectUid: string;
 
+  /** Abstract anchors carry no content hash, so `citationRequiresSha` (default true) refuses them (82e2c109); these rows exercise the persisted-outcome path, which needs the policy off. */
+  async function policyOff(): Promise<void> {
+    await tmp.store.adapter.executeRun('UPDATE node SET meta = ? WHERE uid = ?', [
+      JSON.stringify({ path: repo, policy: { citationRequiresSha: false } }),
+      projectUid,
+    ]);
+  }
+
   async function citationCount(): Promise<number> {
     const r = await tmp.store.adapter.executeGet<{ c: number }>(
       "SELECT COUNT(*) AS c FROM node WHERE kind = 'citation' AND t_invalid IS NULL"
@@ -123,6 +131,7 @@ describe('050ea18f A-AC1..3,14 — citation existence gate (real store, real fil
   });
 
   it('050ea18f A-AC2 — never drops: citation nodes persisted == citations passed, and get returns the outcome for each', async () => {
+    await policyOff();
     const real = join(outside, 'real.txt');
     writeFileSync(real, 'real\n');
     const before = await citationCount();
@@ -145,6 +154,7 @@ describe('050ea18f A-AC1..3,14 — citation existence gate (real store, real fil
     ['registry:npm/@adhd/backlog', 'registry'],
     ['query:status=open AND priority=high', 'query'],
   ])('050ea18f A-AC3 — abstract anchor %s is accepted, target_type=%s, outcome recorded (never a hard refusal)', async (anchor, kind) => {
+    await policyOff();
     const out = await create(anchor);
     expect(out.ok, JSON.stringify(out)).toBe(true);
     const [c] = await citationsOf((out as { data: { uid: string } }).data.uid);

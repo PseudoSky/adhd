@@ -21,43 +21,16 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { freshTmpDir } from '../test/helpers/tmp-store.js';
 import {
   canonicalizePath,
-  defaultCitationAllowedExternalRoots,
   displayExternalRoot,
   isMissingPathError,
   isPathWithin,
   resolveCitationTarget,
 } from './citation-path.js';
 
-describe('citation-path — defaultCitationAllowedExternalRoots', () => {
-  it('is [] — the runtime grants NO machine-global default external root', () => {
-    expect(defaultCitationAllowedExternalRoots()).toEqual([]);
-  });
-
-  it('is $HOME-INDEPENDENT: redirecting $HOME does not conjure a default root', () => {
-    // The default no longer reads `homedir()` (it is the empty array), so a
-    // per-invocation sandbox sees exactly the same surface. The function stays
-    // lazy so the call contract is unchanged if a root is ever re-introduced.
-    const original = process.env.HOME;
-    const fake = freshTmpDir('citation-path-home');
-    process.env.HOME = fake;
-    try {
-      expect(defaultCitationAllowedExternalRoots()).toEqual([]);
-    } finally {
-      if (original === undefined) delete process.env.HOME;
-      else process.env.HOME = original;
-      rmSync(fake, { recursive: true, force: true });
-    }
-  });
-
-  it('does NOT default to ~/.adhd, nor to the store home ~/.adhd/backlog (BUG 62059b57 + the store carve-out)', () => {
-    // Neither the machine-global secrets parent (`~/.adhd/.env`, every other
-    // project's DB) NOR the store's own data home (`~/.adhd/backlog`, which
-    // holds `production/data/backlog-v2.db` + its backups) may be inside the
-    // default surface. Asserted on the VALUE, not the shape.
-    const roots = defaultCitationAllowedExternalRoots();
-    expect(roots).not.toContain(join(homedir(), '.adhd'));
-    expect(roots).not.toContain(join(homedir(), '.adhd', 'backlog'));
-    expect(roots).toEqual([]);
+describe('citation-path — no vestigial default external root (82e2c109 AC2)', () => {
+  it('82e2c109 AC2 — the always-empty defaultCitationAllowedExternalRoots indirection is gone from the module', async () => {
+    const mod = (await import('./citation-path.js')) as Record<string, unknown>;
+    expect(mod['defaultCitationAllowedExternalRoots']).toBeUndefined();
   });
 });
 
@@ -221,7 +194,7 @@ describe('citation-path — resolveCitationTarget (canonical containment against
         const r = await resolveCitationTarget(
           projectRoot,
           target,
-          defaultCitationAllowedExternalRoots()
+          []
         );
         expect(r.inRoot).toBe(false);
         // The candidate is still RESOLVED — containment was computed against

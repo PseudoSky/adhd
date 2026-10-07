@@ -43,7 +43,8 @@
 
 import type { ISessionStamp } from './session-stamp.js';
 import { execFileSync } from 'node:child_process';
-import { readFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { createReadStream } from 'node:fs';
 import { isAbsolute, relative, resolve as resolvePath, sep } from 'node:path';
 import type { AdapterTransaction } from '@adhd/sox-store-adapter';
 import {
@@ -65,6 +66,7 @@ import {
   CatalogNotFoundError,
   CitationNotFoundError,
   CitationUnverifiableError,
+  type CitationUnverifiableReason,
   InvalidArgumentError,
   assertNotBareRoleLiteral,
   citationReadError,
@@ -232,7 +234,8 @@ export type CitationUnverifiedReason =
   | 'target-not-a-file'
   | 'revision-unresolved'
   | 'path-less-project'
-  | 'abstract-anchor-unchecked';
+  | 'abstract-anchor-unchecked'
+  | 'target-too-large';
 
 /** The verification outcome of ONE citation: a real `sha` (`verified`) or the `'unverified'` sentinel plus the reason. */
 export interface ICitationVerification {
@@ -241,6 +244,42 @@ export interface ICitationVerification {
   reason?: CitationUnverifiedReason;
   /** `path` | `url` | `registry` | `query`. */
   targetType: string;
+}
+
+/**
+ * Largest citation target (bytes) that is hashed. A cited file is read only to
+ * compute its sha, so there is no reason to load an arbitrarily large file (a
+ * database, a core dump, a disk image reachable through an allowed root) into
+ * the writer. Matches the `git show` buffer cap used for revision-pinned
+ * citations. A larger target is `target-too-large`, never hashed.
+ */
+export const MAX_CITATION_BYTES = 64 * 1024 * 1024;
+
+/** Thrown internally by {@link hashFileCapped} when the stream passes the cap. */
+class CitationTooLargeError extends Error {}
+
+/**
+ * sha256 of the file at `path`, STREAMED (constant memory) and aborted as soon
+ * as more than `maxBytes` have been read — so the cap holds even if the file
+ * grows between `stat` and read. Digest is byte-identical to hashing the whole
+ * buffer. Rejects with {@link CitationTooLargeError} past the cap; any fs error
+ * propagates for the caller's I/O taxonomy.
+ */
+async function hashFileCapped(path: string, maxBytes: number): Promise<string> {
+  const hash = createHash('sha256');
+  let total = 0;
+  const stream = createReadStream(path);
+  try {
+    for await (const chunk of stream) {
+      const buf = chunk as Buffer;
+      total += buf.length;
+      if (total > maxBytes) throw new CitationTooLargeError();
+      hash.update(buf);
+    }
+  } finally {
+    stream.destroy();
+  }
+  return hash.digest('hex');
 }
 
 const ABSTRACT_ANCHOR_RE = /^(url|registry|query):(.*)$/s;
@@ -307,7 +346,8 @@ export async function computeCitationSha(
   file: string,
   revision: string | undefined,
   allowedExternalRoots: readonly string[],
-  siblingRoots: readonly string[] = []
+  siblingRoots: readonly string[] = [],
+  maxBytes: number = MAX_CITATION_BYTES
 ): Promise<ICitationVerification> {
   const abstract = abstractAnchorVerification(file);
   if (abstract !== undefined) return abstract;
@@ -335,9 +375,13 @@ export async function computeCitationSha(
     if (target.kind === 'directory') return unverified('target-is-directory');
     if (target.kind === 'other') return unverified('target-not-a-file');
 
-    const content = await readFile(target.candidate);
-    return { sha: sha256Hex(content), outcome: 'verified', targetType: 'path' };
+    return {
+      sha: await hashFileCapped(target.candidate, maxBytes),
+      outcome: 'verified',
+      targetType: 'path',
+    };
   } catch (err) {
+    if (err instanceof CitationTooLargeError) return unverified('target-too-large');
     if (isMissingPathError(err)) return unverified('target-missing');
     throw citationReadError(err, file);
   }
@@ -394,14 +438,24 @@ export function assertCitationShasVerifiable(
 ): void {
   for (let i = 0; i < citations.length; i += 1) {
     const v = verifications[i]!;
-    // Only NON-EXISTENT evidence (a missing target, or a revision that does not
+    // Evidence that does not exist (a missing target, a revision that does not
     // resolve) is refused under `citationRequiresSha`; an existing target of any
-    // kind, a directory, an abstract anchor and a path-less project are all
-    // PERSISTED with their recorded outcome (A-AC1..3) — never refused-and-omitted.
-    const missing =
-      v.reason === 'target-missing' || v.reason === 'revision-unresolved';
-    if (missing && policy.citationRequiresSha && projectHasKnownPath(project)) {
-      throw new CitationUnverifiableError(citations[i]!.file, v.reason as 'target-missing' | 'revision-unresolved');
+    // kind, a directory and a path-less project are PERSISTED with their
+    // recorded outcome (A-AC1..3) — never refused-and-omitted.
+    // An abstract anchor (`url:`/`registry:`/`query:`) and an over-cap target
+    // carry NO content hash, so they are not evidence either: under
+    // `citationRequiresSha` they are refused too (82e2c109). With the policy
+    // off they are persisted with their recorded outcome, as before.
+    const refusable =
+      v.reason === 'target-missing' ||
+      v.reason === 'revision-unresolved' ||
+      v.reason === 'abstract-anchor-unchecked' ||
+      v.reason === 'target-too-large';
+    if (refusable && policy.citationRequiresSha && projectHasKnownPath(project)) {
+      throw new CitationUnverifiableError(
+        citations[i]!.file,
+        v.reason as CitationUnverifiableReason
+      );
     }
     if (v.reason === 'path-less-project' && policy.citationRequiresSha) {
       console.error(
