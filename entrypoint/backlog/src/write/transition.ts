@@ -82,7 +82,11 @@
 import type { AdapterTransaction } from '@adhd/sox-store-adapter';
 import { assertGitContextWithinCap } from './create-issue.js';
 import { type ICitation } from '../citation.js';
-import { appendCitationTx, resolveCitationShas } from './citation.js';
+import {
+  appendCitationTx,
+  resolveCitationShas,
+  type ICitationVerification,
+} from './citation.js';
 import {
   type IResolvedProjectRow,
   mintOrResolveStatusTx,
@@ -318,7 +322,7 @@ export async function transition(
   // doesn't need) — the SAME shared rule `createIssue`/`addCitation` run, never
   // a second copy, and never holding the write lock across a filesystem read
   // (§4c/§4b).
-  let citationShas: string[] = [];
+  let citationShas: ICitationVerification[] = [];
   if (citations.length > 0) {
     // Accepts an exact uid or a UNIQUE uid prefix — the same reference shape
     // `resolveLiveIssueTx` accepts inside the transaction below, so a caller
@@ -507,7 +511,7 @@ export async function transition(
         issueRowid: issueRow.rowid,
         issueUid: issueRow.uid,
         citation: citations[i],
-        sha: citationShas[i],
+        verification: citationShas[i]!,
         at: now,
       });
     }

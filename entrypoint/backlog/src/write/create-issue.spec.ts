@@ -404,31 +404,41 @@ describe('createIssue — citation sha gate applies only where verification is p
   // persisted `sha` back through direct SQL.
   // -------------------------------------------------------------------------
 
-  it('the DEFAULT external roots are EMPTY: a file under the store home ~/.adhd/backlog is rejected (BUG 62059b57 follow-up)', async () => {
+  // A-AC1 / 050ea18f (breaking #8): EXISTENCE, not project membership, decides
+  // verification. Every case below used to be REFUSED (a confinement rule);
+  // each is now PERSISTED with a real sha because the target exists. The one
+  // refusal that remains is a target that does not exist (covered above).
+
+  async function citeAndReadSha(
+    projectPath: string,
+    file: string,
+    name: string
+  ): Promise<unknown> {
+    const project = await upsertProject(store, { name, path: projectPath, by: 'filer' });
+    const created = await createIssue(store, {
+      project: project.uid,
+      title: `${name} citation`,
+      body: `existing target ${file} is verified wherever it lives`,
+      by: 'filer',
+      citations: [{ file }],
+    });
+    expect(created.created).toBe(true);
+    const issueRow = await readNode(store, created.uid!);
+    if (!issueRow) throw new Error('setup: issue not found after createIssue');
+    return persistedCitationSha(issueRow.rowid);
+  }
+
+  it('050ea18f A-AC1: an EXISTING file under the store home ~/.adhd/backlog is verified with a real sha (existence, not membership)', async () => {
     const fakeHome = freshTmpDir('citation-carveout-home');
     const storeDir = join(fakeHome, '.adhd', 'backlog', 'production', 'data');
     mkdirSync(storeDir, { recursive: true });
-    // The shared machine-global store itself — the exact residual a
-    // `[~/.adhd/backlog]` default left readable/citable.
     const evidence = join(storeDir, 'backlog-v2.db');
     writeFileSync(evidence, 'store-file-placeholder-bytes\n');
     const originalHome = process.env.HOME;
     process.env.HOME = fakeHome;
     try {
-      const project = await upsertProject(store, {
-        name: 'citation-carveout-store-project',
-        path: dir,
-        by: 'filer',
-      });
-      await expect(
-        createIssue(store, {
-          project: project.uid,
-          title: 'store-home citation',
-          body: 'the runtime grants no machine-global external root, so the store is not citable',
-          by: 'filer',
-          citations: [{ file: evidence }],
-        })
-      ).rejects.toThrow(CitationUnverifiableError);
+      const sha = await citeAndReadSha(dir, evidence, 'citation-existing-store-home');
+      expect(sha).toMatch(/^[0-9a-f]{64}$/);
     } finally {
       if (originalHome === undefined) delete process.env.HOME;
       else process.env.HOME = originalHome;
@@ -436,32 +446,17 @@ describe('createIssue — citation sha gate applies only where verification is p
     }
   });
 
-  it('BUG 62059b57: a file under the parent ~/.adhd (the machine secrets home) is rejected — not citable by any project', async () => {
+  it('050ea18f A-AC1: an EXISTING file under the parent ~/.adhd is verified with a real sha (no confinement refusal)', async () => {
     const fakeHome = freshTmpDir('citation-carveout-narrow-home');
     const adhdDir = join(fakeHome, '.adhd');
     mkdirSync(adhdDir, { recursive: true });
-    // A stand-in for the machine-global `~/.adhd/.env` and every other
-    // project's DB: neither `~/.adhd` nor its `backlog` child is a default
-    // root, so this must NOT become a readable/citable oracle.
-    const secret = join(adhdDir, 'env-like-evidence.ts');
-    writeFileSync(secret, 'SECRET=1\n');
+    const evidence = join(adhdDir, 'env-like-evidence.ts');
+    writeFileSync(evidence, 'SECRET=1\n');
     const originalHome = process.env.HOME;
     process.env.HOME = fakeHome;
     try {
-      const project = await upsertProject(store, {
-        name: 'citation-carveout-narrow-project',
-        path: dir,
-        by: 'filer',
-      });
-      await expect(
-        createIssue(store, {
-          project: project.uid,
-          title: 'parent-of-default-root citation',
-          body: '~/.adhd is not a default external root',
-          by: 'filer',
-          citations: [{ file: secret }],
-        })
-      ).rejects.toThrow(CitationUnverifiableError);
+      const sha = await citeAndReadSha(dir, evidence, 'citation-existing-parent-home');
+      expect(sha).toMatch(/^[0-9a-f]{64}$/);
     } finally {
       if (originalHome === undefined) delete process.env.HOME;
       else process.env.HOME = originalHome;
@@ -469,7 +464,7 @@ describe('createIssue — citation sha gate applies only where verification is p
     }
   });
 
-  it('a project-scoped policy root (citationAllowedExternalRoots) is accepted — the typed allowlist, never an env toggle', async () => {
+  it('a project-scoped policy root (citationAllowedExternalRoots) is still accepted — the schema field is informational, never required', async () => {
     const externalRoot = freshTmpDir('citation-carveout-explicit');
     const evidence = join(externalRoot, 'evidence.ts');
     writeFileSync(evidence, 'export const evidence = 1;\n');
@@ -479,9 +474,6 @@ describe('createIssue — citation sha gate applies only where verification is p
         path: dir,
         by: 'filer',
       });
-      // Overwrite the project's meta with an EXPLICIT policy root — proving
-      // the (now empty) default is not special-cased: ANY policy-configured
-      // root is accepted, and the carve-out MECHANISM is untouched.
       await store.adapter.executeRun('UPDATE node SET meta = ? WHERE uid = ?', [
         JSON.stringify({
           path: dir,
@@ -506,155 +498,82 @@ describe('createIssue — citation sha gate applies only where verification is p
     }
   });
 
-  it('NEGATIVE CONTROL: an arbitrary absolute path outside every allowed root (/etc/hosts) is still rejected — nothing written', async () => {
+  it('050ea18f A-AC1: an arbitrary EXISTING absolute path outside the project (/etc/hosts) is verified — and a MISSING one is still refused, nothing written', async () => {
     const project = await upsertProject(store, {
-      name: 'citation-carveout-negative-project',
+      name: 'citation-existing-abs-project',
       path: dir,
       by: 'filer',
     });
+    const created = await createIssue(store, {
+      project: project.uid,
+      title: 'arbitrary existing absolute path',
+      body: 'an existing absolute path outside the project is verified',
+      by: 'filer',
+      citations: [{ file: '/etc/hosts' }],
+    });
+    expect(created.created).toBe(true);
     const nodesBefore = await liveNodeCount();
     const edgesBefore = await liveEdgeCount();
     await expect(
       createIssue(store, {
         project: project.uid,
-        title: 'arbitrary absolute path',
-        body: 'an absolute path outside the project and every allowlisted root must not be citable',
+        title: 'arbitrary missing absolute path',
+        body: 'a path that does not exist is refused under citation_requires_sha',
         by: 'filer',
-        citations: [{ file: '/etc/hosts' }],
+        citations: [{ file: '/definitely/not/a/real/path-050ea18f.ts' }],
       })
     ).rejects.toThrow(CitationUnverifiableError);
     expect(await liveNodeCount()).toBe(nodesBefore);
     expect(await liveEdgeCount()).toBe(edgesBefore);
   });
 
-  it('a ".." traversal outside the project root is rejected even when the target file EXISTS', async () => {
+  it('050ea18f A-AC1: a ".." traversal to an EXISTING file outside the project root is verified', async () => {
     const projDir = join(dir, 'proj');
     mkdirSync(projDir, { recursive: true });
     writeFileSync(join(dir, 'outside.ts'), 'export const outside = 1;\n');
-    const project = await upsertProject(store, {
-      name: 'citation-carveout-traversal-project',
-      path: projDir,
-      by: 'filer',
-    });
-    await expect(
-      createIssue(store, {
-        project: project.uid,
-        title: 'traversal citation',
-        body: 'a relative ../ escape must not widen the read surface',
-        by: 'filer',
-        citations: [{ file: '../outside.ts' }],
-      })
-    ).rejects.toThrow(CitationUnverifiableError);
+    const sha = await citeAndReadSha(projDir, '../outside.ts', 'citation-existing-traversal');
+    expect(sha).toMatch(/^[0-9a-f]{64}$/);
   });
 
-  it('a symlink inside the project root that points OUTSIDE it is rejected (the escape the sibling item c6d90ddf names)', async () => {
+  it('050ea18f A-AC1: a symlink inside the project root pointing at an EXISTING outside file is verified (the sha is of the resolved target)', async () => {
     const projDir = join(dir, 'proj');
     mkdirSync(projDir, { recursive: true });
-    const secret = join(dir, 'secret.ts');
-    writeFileSync(secret, 'export const secret = 1;\n');
-    symlinkSync(secret, join(projDir, 'link.ts'));
-    const project = await upsertProject(store, {
-      name: 'citation-carveout-symlink-project',
-      path: projDir,
-      by: 'filer',
-    });
-    await expect(
-      createIssue(store, {
-        project: project.uid,
-        title: 'symlink escape citation',
-        body: 'a symlink inside the root must not let a citation read outside it',
-        by: 'filer',
-        citations: [{ file: 'link.ts' }],
-      })
-    ).rejects.toThrow(CitationUnverifiableError);
+    const target = join(dir, 'secret.ts');
+    writeFileSync(target, 'export const secret = 1;\n');
+    symlinkSync(target, join(projDir, 'link.ts'));
+    const sha = await citeAndReadSha(projDir, 'link.ts', 'citation-existing-symlink');
+    expect(sha).toBe(
+      createHash('sha256').update('export const secret = 1;\n').digest('hex')
+    );
   });
 
-  it('the rejection NAMES the allowed external roots and the policy field (the error is actionable)', async () => {
-    const fakeHome = freshTmpDir('citation-carveout-msg-home');
-    // A named, `~`-anchored root gives the message something concrete to name;
-    // the empty DEFAULT names the project root instead (see the next test).
-    const externalRoot = join(fakeHome, 'external-evidence');
-    mkdirSync(externalRoot, { recursive: true });
-    const originalHome = process.env.HOME;
-    process.env.HOME = fakeHome;
-    try {
-      const project = await upsertProject(store, {
-        name: 'citation-carveout-msg-project',
-        path: dir,
-        by: 'filer',
-      });
-      await store.adapter.executeRun('UPDATE node SET meta = ? WHERE uid = ?', [
-        JSON.stringify({
-          path: dir,
-          policy: { citationAllowedExternalRoots: [externalRoot] },
-        }),
-        project.uid,
-      ]);
-      let caught: unknown;
-      try {
-        await createIssue(store, {
-          project: project.uid,
-          title: 'unverifiable citation message',
-          body: 'the error must name the roots',
-          by: 'filer',
-          citations: [{ file: '/etc/hosts' }],
-        });
-      } catch (err) {
-        caught = err;
-      }
-      expect(caught).toBeInstanceOf(CitationUnverifiableError);
-      if (!(caught instanceof Error)) {
-        throw new Error(
-          'expected the rejection to be an Error instance carrying a message'
-        );
-      }
-      const message = caught.message;
-      expect(message).toContain('accepted only under:');
-      expect(message).toContain('~/external-evidence');
-      expect(message).toContain('project_policy.citationAllowedExternalRoots');
-    } finally {
-      if (originalHome === undefined) delete process.env.HOME;
-      else process.env.HOME = originalHome;
-      removeTestIssueStoreDir(fakeHome);
-    }
-  });
-
-  it('with an empty allowlist (explicit [], the same as the default), the rejection names the project root and says the policy array is empty — no dangling double space', async () => {
+  it('050ea18f A-AC1: the refusal of a MISSING target names the target, says it does not exist and names the policy field (actionable)', async () => {
     const project = await upsertProject(store, {
-      name: 'citation-carveout-empty-roots-project',
+      name: 'citation-missing-msg-project',
       path: dir,
       by: 'filer',
     });
-    // An explicit `[]` disables the carve-out; the rejection must still be
-    // actionable (name what IS accepted: the project root).
-    await store.adapter.executeRun('UPDATE node SET meta = ? WHERE uid = ?', [
-      JSON.stringify({
-        path: dir,
-        policy: { citationAllowedExternalRoots: [] },
-      }),
-      project.uid,
-    ]);
     let caught: unknown;
     try {
       await createIssue(store, {
         project: project.uid,
-        title: 'empty-allowlist citation message',
-        body: 'the error must name the project root when no external roots are allowed',
+        title: 'missing citation message',
+        body: 'the error must be actionable',
         by: 'filer',
-        citations: [{ file: '/etc/hosts' }],
+        citations: [{ file: 'no/such/file-050ea18f.ts' }],
       });
     } catch (err) {
       caught = err;
     }
     expect(caught).toBeInstanceOf(CitationUnverifiableError);
-    if (!(caught instanceof Error)) {
-      throw new Error('expected the rejection to be an Error instance');
-    }
-    expect(caught.message).toContain(
-      'accepted only under: the project root (project_policy.citationAllowedExternalRoots is empty)'
-    );
+    if (!(caught instanceof Error)) throw new Error('expected an Error instance');
+    expect(caught.message).toContain('no/such/file-050ea18f.ts');
+    expect(caught.message).toContain('the target does not exist');
+    expect(caught.message).toContain('project_policy.citationRequiresSha');
+    expect(caught.message).not.toContain('accepted only under');
   });
 });
+
 
 describe('createIssue — item-level gitContext disclosure provenance (SPEC.md §6.3.2/§6.5, DATA_MODEL.md §8)', () => {
   let dir: string;
@@ -872,7 +791,7 @@ describe('C3 — tool-owned and sibling-repo citation roots (AC3/AC4)', () => {
     writeFileSync(skillFile, '# skill\n');
     try {
       const r = await resolveCitationTarget(dir, skillFile, []);
-      expect(r.accepted).toBe(false);
+      expect(r.inRoot).toBe(false);
     } finally {
       removeTestIssueStoreDir(fakeHome);
     }
@@ -919,6 +838,6 @@ describe('C3 — tool-owned and sibling-repo citation roots (AC3/AC4)', () => {
     mkdirSync(dirB, { recursive: true });
     writeFileSync(join(dirB, 'e.txt'), 'x');
     const r = await resolveCitationTarget(dirA, join(dirB, 'e.txt'), []);
-    expect(r.accepted).toBe(false);
+    expect(r.inRoot).toBe(false);
   });
 });

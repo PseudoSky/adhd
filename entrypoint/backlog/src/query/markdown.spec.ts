@@ -32,6 +32,7 @@ describe('renderOneIssueCardMarkdown', () => {
           file: 'src/retry.ts',
           lines: '10-20',
           sha: 'abc123',
+          verification: 'verified' as const,
           at: '2026-01-01T00:00:00.000Z',
         },
       ],
@@ -45,7 +46,7 @@ describe('renderOneIssueCardMarkdown', () => {
       uid: 'x',
       title: 'No line range',
       citations: [
-        { uid: 'c1', file: 'src/retry.ts', sha: 'abc123', at: '2026-01-01T00:00:00.000Z' },
+        { uid: 'c1', file: 'src/retry.ts', sha: 'abc123', verification: 'verified' as const, at: '2026-01-01T00:00:00.000Z' },
       ],
     };
     const text = renderOneIssueCardMarkdown(card);
@@ -58,8 +59,8 @@ describe('renderOneIssueCardMarkdown', () => {
       title: 'Disclosed',
       gitContext: 'feat/backlog-hard-replacement @ 4bf902fc',
       citations: [
-        { uid: 'c1', file: 'src/retry.ts', lines: '10-20', sha: 'abc123', at: '2026-01-01T00:00:00.000Z' },
-        { uid: 'c2', file: 'src/other.ts', sha: 'def456', at: '2026-01-01T00:00:00.000Z' },
+        { uid: 'c1', file: 'src/retry.ts', lines: '10-20', sha: 'abc123', verification: 'verified' as const, at: '2026-01-01T00:00:00.000Z' },
+        { uid: 'c2', file: 'src/other.ts', sha: 'def456', verification: 'verified' as const, at: '2026-01-01T00:00:00.000Z' },
       ],
     });
     // The head element is the git context, bracketed on the `Citations:` line.
@@ -91,7 +92,7 @@ describe('renderOneIssueCardMarkdown', () => {
       uid: 'x',
       title: 't',
       citations: [
-        { uid: 'c1', file: 'src/retry.ts', sha: 'abc123', at: '2026-01-01T00:00:00.000Z' },
+        { uid: 'c1', file: 'src/retry.ts', sha: 'abc123', verification: 'verified' as const, at: '2026-01-01T00:00:00.000Z' },
       ],
     });
     expect(text).toContain('\nCitations:\n- [src/retry.ts sha:abc123]');

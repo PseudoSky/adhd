@@ -37,7 +37,7 @@
  * `target`/`sha`, never the bytes.
  */
 
-import { realpath } from 'node:fs/promises';
+import { realpath, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import {
   basename,
@@ -164,10 +164,14 @@ export async function canonicalizePath(p: string): Promise<string> {
 
 /** The outcome of {@link resolveCitationTarget}. */
 export interface IResolvedCitationTarget {
-  /** `true` iff the canonical candidate lies within the project root or one of `allowedRoots`. */
-  accepted: boolean;
-  /** The CANONICAL (symlink-resolved) absolute path — the exact path the caller should read. Returned even when `accepted` is `false`, for a caller that wants to report it. */
+  /** The CANONICAL (symlink-resolved) absolute path — the exact path the caller should read. */
   candidate: string;
+  /** `true` iff the canonical candidate lies within the project root or one of `allowedRoots` — INFORMATIONAL only: existence, not membership, decides verification (A-AC1). */
+  inRoot: boolean;
+  /** `stat` of the canonical candidate succeeded. */
+  exists: boolean;
+  /** What the canonical candidate is, or `'missing'`. */
+  kind: 'file' | 'directory' | 'other' | 'missing';
 }
 
 /**
@@ -194,10 +198,24 @@ export async function resolveCitationTarget(
   const roots = await Promise.all(
     [projectRoot, ...allowedRoots].map((root) => canonicalizePath(root))
   );
-  const accepted = roots.some((root) =>
+  const inRoot = roots.some((root) =>
     isPathWithin(root, canonicalCandidate)
   );
-  return { accepted, candidate: canonicalCandidate };
+  let kind: IResolvedCitationTarget['kind'] = 'missing';
+  try {
+    const st = await stat(canonicalCandidate);
+    if (st.isFile()) kind = 'file';
+    else if (st.isDirectory()) kind = 'directory';
+    else kind = 'other';
+  } catch (err) {
+    if (!isMissingPathError(err)) throw err;
+  }
+  return {
+    candidate: canonicalCandidate,
+    inRoot,
+    exists: kind !== 'missing',
+    kind,
+  };
 }
 
 /**

@@ -824,7 +824,7 @@ export interface IResolvedCitationTarget {
 }
 ```
 
-### `resolveCitationTarget(projectRoot, file, allowedRoots)` — function (`citation-path.ts:184`)
+### `resolveCitationTarget(projectRoot, file, allowedRoots)` — function (`citation-path.ts:188`)
 
 ```ts
 export async function resolveCitationTarget(
@@ -849,7 +849,7 @@ The ONE copy of §8.5's citation-sha rule (`create`/`transition`/`update`/
 by a `has_citation` edge; the ONE contract lives in the `citation.ts` leaf
 (`src/citation.ts`), which this module encodes to / decodes from.
 
-### `computeCitationSha(project, file, revision, allowedExternalRoots, siblingRoots?)` — function (`citation.ts:248`)
+### `computeCitationSha(project, file, revision, allowedExternalRoots, siblingRoots?)` — function (`citation.ts:303`)
 
 ```ts
 export async function computeCitationSha(
@@ -867,40 +867,40 @@ export async function computeCitationSha(
 working-tree read, canonical containment against the project root ∪
 `allowedExternalRoots`.
 
-### `computeCitationShas(project, citations, allowedExternalRoots, siblingRoots?)` — function (`citation.ts:287`)
+### `computeCitationShas(project, citations, allowedExternalRoots, siblingRoots?)` — function (`citation.ts:351`)
 
 The filesystem/git half of the pre-resolve, with NO policy gate — callable on
 its own by `update`'s diff-emitter, which defers the gate until it knows which
 citations are actually being added.
 
-### `assertCitationShasVerifiable(project, policy, citations, shas, verb)` — function (`citation.ts:322`)
+### `assertCitationShasVerifiable(project, policy, citations, shas, verb)` — function (`citation.ts:386`)
 
 Enforce `citationRequiresSha` over an already-computed sha list. Only where
 verification is possible (a known project `path`) is an `"unverified"` sha a
 hard `CitationUnverifiableError`; a path-less project records `sha:"unverified"`
 and logs the waiver.
 
-### `resolveCitationShas(project, policy, citations, siblingRoots, verb)` — function (`citation.ts:350`)
+### `resolveCitationShas(project, policy, citations, siblingRoots, verb)` — function (`citation.ts:418`)
 
 `computeCitationShas` + `assertCitationShasVerifiable` — compute AND gate every
 citation, in order.
 
-### `appendCitationTx(tx, handle, params)` — function (`citation.ts:372`)
+### `appendCitationTx(tx, handle, params)` — function (`citation.ts:440`)
 
 Mint ONE `citation` node + its `has_citation` edge against the issue, inside the
 caller's open `tx`. Never writes an audit row (the calling verb owns it).
 
-### `readLiveCitationsTx(tx, issueRowid)` — function (`citation.ts:421`)
+### `readLiveCitationsTx(tx, issueRowid)` — function (`citation.ts:500`)
 
 The LIVE citations currently attached to an issue, each with its `citationKey`
 (`file` + `lines`) — the "live set" `update`'s diff compares a desired set to.
 
-### `removeCitationTx(tx, params)` — function (`citation.ts:452`)
+### `removeCitationTx(tx, params)` — function (`citation.ts:531`)
 
 Bi-temporally invalidate ONE citation: its node (merged `invalidatedAt` /
 `invalidatedReason`) AND its `has_citation` edge. Never writes an audit row.
 
-### `IAddCitationInput` — interface (`citation.ts:521`)
+### `IAddCitationInput` — interface (`citation.ts:600`)
 
 ```ts
 export interface IAddCitationInput {
@@ -910,12 +910,12 @@ export interface IAddCitationInput {
 }
 ```
 
-### `addCitation(handle, input)` — function (`citation.ts:554`)
+### `addCitation(handle, input)` — function (`citation.ts:633`)
 
 One `immediate` transaction: resolve the issue → mint the citation node + edge →
 audit. The sha is computed before the transaction opens.
 
-### `IRemoveCitationInput` — interface (`citation.ts:626`)
+### `IRemoveCitationInput` — interface (`citation.ts:709`)
 
 ```ts
 export interface IRemoveCitationInput {
@@ -925,7 +925,7 @@ export interface IRemoveCitationInput {
 }
 ```
 
-### `removeCitation(handle, input)` — function (`citation.ts:653`)
+### `removeCitation(handle, input)` — function (`citation.ts:736`)
 
 One `immediate` transaction: resolve the citation by its OWN uid → invalidate
 the node + edge → audit. `CitationNotFoundError` when the uid is not a live
@@ -935,7 +935,7 @@ citation (absent, already removed, or a foreign kind).
 
 ## `errors.ts` (25 exports)
 
-### `WriteErrorCode` — type (`errors.ts:41`)
+### `WriteErrorCode` — type (`errors.ts:40`)
 
 ```ts
 export type WriteErrorCode = 'E_CONTENTION' | 'E_CONSTRAINT' | 'E_VALIDATION' | 'E_IO';
@@ -943,7 +943,7 @@ export type WriteErrorCode = 'E_CONTENTION' | 'E_CONSTRAINT' | 'E_VALIDATION' | 
 
 Guarantees: the closed code union every `IWriteError` carries.
 
-### `IWriteError` — interface (`errors.ts:55`)
+### `IWriteError` — interface (`errors.ts:54`)
 
 ```ts
 export interface IWriteError {
@@ -960,7 +960,7 @@ failure — never the shape a caller of a write verb receives directly (they
 only ever catch a named `BacklogWriteError` subclass). `cause` is never
 swallowed.
 
-### `BacklogWriteError` — abstract class (`errors.ts:71`)
+### `BacklogWriteError` — abstract class (`errors.ts:70`)
 
 ```ts
 export abstract class BacklogWriteError extends Error implements IWriteError {
@@ -976,7 +976,7 @@ Guarantees: common base for every transport-facing error the write layer
 throws. `tx.ts`'s retry loop uses `instanceof BacklogWriteError` to recognize
 an already-decided, terminal failure and rethrow it untouched.
 
-### `WriteContentionError` — class (`errors.ts:97`)
+### `WriteContentionError` — class (`errors.ts:96`)
 
 ```ts
 export class WriteContentionError extends BacklogWriteError {
@@ -990,7 +990,7 @@ Guarantees: thrown after `E_CONTENTION` exhausts the retry budget (3 total
 attempts). `retryable` stays `true` even on exhaustion — the caller, not the
 write layer, owns any retry beyond this bound.
 
-### `WriteIOError` — class (`errors.ts:126`)
+### `WriteIOError` — class (`errors.ts:125`)
 
 ```ts
 export class WriteIOError extends BacklogWriteError {
@@ -1015,7 +1015,7 @@ the `backlog.write.io_failure` telemetry event with `origin`
 (`transaction`|`citation_sha`), `retryable`, `error`, `error_code` and
 `stack`.
 
-### `StaleSupersedeError` — class (`errors.ts:215`)
+### `StaleSupersedeError` — class (`errors.ts:214`)
 
 ```ts
 export class StaleSupersedeError extends BacklogWriteError {
@@ -1029,7 +1029,7 @@ Guarantees: the one deliberate `E_CONSTRAINT` this spec's own CAS raises —
 thrown when `supersede`'s `is_superseded` guard affects zero rows (a
 concurrent writer already superseded the same target). Never retryable.
 
-### `CatalogNotFoundError` — class (`errors.ts:248`)
+### `CatalogNotFoundError` — class (`errors.ts:247`)
 
 ```ts
 export class CatalogNotFoundError extends BacklogWriteError {
@@ -1043,7 +1043,7 @@ Guarantees: thrown when a `project`/`component`/`kind`/`status`/`priority`/
 `agent`/`edge_kind` reference did not resolve — a uid-shaped ref with no live
 row, or a `project`/`component` name (neither is ever mint-on-miss).
 
-### `AmbiguousReferenceError` — class (`errors.ts:274`)
+### `AmbiguousReferenceError` — class (`errors.ts:273`)
 
 ```ts
 export class AmbiguousReferenceError extends BacklogWriteError {
@@ -1062,7 +1062,7 @@ disambiguate; the resolver NEVER auto-selects. Maps to the distinct envelope
 code `ambiguous_reference` (exit 1) — not `item_not_found` — so a caller can
 branch: a short reference is actionable, an absent uid is not.
 
-### `InvalidArgumentError` — class (`errors.ts:335`)
+### `InvalidArgumentError` — class (`errors.ts:334`)
 
 ```ts
 export class InvalidArgumentError extends BacklogWriteError {
@@ -1075,7 +1075,7 @@ export class InvalidArgumentError extends BacklogWriteError {
 Guarantees: thrown when a caller-supplied argument is missing, blank, or
 fails a project-declared invariant.
 
-### `IssueNotFoundError` — class (`errors.ts:349`)
+### `IssueNotFoundError` — class (`errors.ts:348`)
 
 ```ts
 export class IssueNotFoundError extends BacklogWriteError {
@@ -1087,7 +1087,7 @@ export class IssueNotFoundError extends BacklogWriteError {
 
 Guarantees: thrown when no live `issue` node carries the given `uid`.
 
-### `ClaimHeldError` — class (`errors.ts:375`)
+### `ClaimHeldError` — class (`errors.ts:374`)
 
 ```ts
 export class ClaimHeldError extends BacklogWriteError {
@@ -1100,7 +1100,7 @@ export class ClaimHeldError extends BacklogWriteError {
 Guarantees: thrown by `claim` when the lease is held by someone else, not yet
 stale, and the caller did not pass `force: true`.
 
-### `SingleValuedRelationConflictError` — class (`errors.ts:461`)
+### `SingleValuedRelationConflictError` — class (`errors.ts:460`)
 
 ```ts
 export class SingleValuedRelationConflictError extends BacklogWriteError {
@@ -1121,7 +1121,7 @@ resolve `cappedUid`/`conflictingUid` via different SQL joins, and named
 fields make a source/target field swap a compile error instead of a silent
 message-text bug.
 
-### `CitationUnverifiableError` — class (`errors.ts:507`)
+### `CitationUnverifiableError` — class (`errors.ts:500`)
 
 ```ts
 export class CitationUnverifiableError extends BacklogWriteError {
@@ -1145,7 +1145,7 @@ The message names the allowed external roots (`~`-anchored) and the
 rejection is actionable; with an empty allowlist (the default, or an explicit
 `[]`) it instead names the project root and says the policy array is empty.
 
-### `CitationTargetIsDirectoryError` — class (`errors.ts:553`)
+### `CitationTargetIsDirectoryError` — class (`errors.ts:536`)
 
 ```ts
 export class CitationTargetIsDirectoryError extends BacklogWriteError {
@@ -1161,7 +1161,7 @@ has no content to hash, so the payload can never succeed as-is; nothing is
 written. The mapping from a citation read error to this class or to
 `WriteIOError` lives in `errors.ts`'s `citationReadError` (56a2133e).
 
-### `NoteRequiredError` — class (`errors.ts:583`)
+### `NoteRequiredError` — class (`errors.ts:566`)
 
 ```ts
 export class NoteRequiredError extends BacklogWriteError {
@@ -1174,7 +1174,7 @@ export class NoteRequiredError extends BacklogWriteError {
 Guarantees: thrown by `transition` when `project_policy.transitionRequiresNote`
 (default `true`) is set and no `note` was given.
 
-### `CitationRequiredError` — class (`errors.ts:595`)
+### `CitationRequiredError` — class (`errors.ts:578`)
 
 ```ts
 export class CitationRequiredError extends BacklogWriteError {
@@ -1188,7 +1188,7 @@ Guarantees: thrown by `transition` when `project_policy.citationRequired`
 (default `false`) is set, the target status is terminal, and no citation was
 given.
 
-### `BacklogValidationError` — class (`errors.ts:618`)
+### `BacklogValidationError` — class (`errors.ts:601`)
 
 ```ts
 export class BacklogValidationError extends BacklogWriteError {
@@ -1203,7 +1203,7 @@ or an out-of-range/non-integral `limit`) — deliberately the SAME
 `E_VALIDATION`-class member of this same error union, not a parallel one, so
 a `query`/`get` caller catches it identically to any write-verb error.
 
-### `AnchorLocatorInvalidError` — class (`errors.ts:633`)
+### `AnchorLocatorInvalidError` — class (`errors.ts:616`)
 
 ```ts
 export class AnchorLocatorInvalidError extends BacklogWriteError {
@@ -1218,7 +1218,7 @@ Guarantees: a supplied anchor locator is outside the closed grammar
 is a bare `path:line` with no `digest`. A caller-input mistake — `E_VALIDATION`,
 never retryable; nothing is written.
 
-### `AttestationNotFoundError` — class (`errors.ts:652`)
+### `AttestationNotFoundError` — class (`errors.ts:635`)
 
 ```ts
 export class AttestationNotFoundError extends BacklogWriteError {
@@ -1233,7 +1233,7 @@ node. Distinct from `IssueNotFoundError` (an `issue` uid) and
 `CatalogNotFoundError`, so a caller can branch on the missing record kind;
 `E_VALIDATION`, never retryable.
 
-### `InvalidPredicateError` — class (`errors.ts:674`)
+### `InvalidPredicateError` — class (`errors.ts:657`)
 
 ```ts
 export class InvalidPredicateError extends BacklogWriteError {
@@ -1248,7 +1248,7 @@ predicate core — an unknown `op`, a missing/ill-typed leaf, an unexpected extr
 key, or `evidence.min < 1`. Raised before any transaction opens, so an invalid
 predicate never holds a write lock; `E_VALIDATION`, never retryable.
 
-### `ObligationNotFoundError` — class (`errors.ts:689`)
+### `ObligationNotFoundError` — class (`errors.ts:672`)
 
 ```ts
 export class ObligationNotFoundError extends BacklogWriteError {
@@ -1262,7 +1262,7 @@ Guarantees: thrown by `unobligate` when the named uid is not a live `obligation`
 node. Distinct from `IssueNotFoundError` / `AttestationNotFoundError`, so a
 caller can branch on the missing record kind; `E_VALIDATION`, never retryable.
 
-### `SpecRevisionConflictError` — class (`errors.ts:711`)
+### `SpecRevisionConflictError` — class (`errors.ts:694`)
 
 ```ts
 export class SpecRevisionConflictError extends BacklogWriteError {
@@ -1278,7 +1278,7 @@ EXPLICITLY to the envelope code `precondition_failed` in `api.ts`'s
 `ERROR_CLASS_TO_ENVELOPE_CODE` (AC6); the `E_VALIDATION` fallthrough would
 otherwise return `validation`. No write runs.
 
-### `classifyDriverError(err)` — function (`errors.ts:762`)
+### `classifyDriverError(err)` — function (`errors.ts:745`)
 
 ```ts
 export function classifyDriverError(err: unknown): IWriteError;
@@ -1293,7 +1293,7 @@ distinguishes a recognized-but-unclassified database error (`E_IO`,
 (`E_IO`, `retryable: false` — never retried, since it never even reached the
 driver).
 
-### `ObligationUnsatisfiedError(refusal)` — class (`errors.ts:844`)
+### `ObligationUnsatisfiedError(refusal)` — class (`errors.ts:827`)
 
 ```ts
 export class ObligationUnsatisfiedError extends BacklogWriteError {
@@ -1311,7 +1311,7 @@ envelope code `precondition_failed` (exit 1), with the structured refusal in
 a re-read shows the status unchanged. Never retryable. **Additive (C5)** —
 appended after every pre-existing export so no `CONTRACT.md` anchor shifted.
 
-### `OverrideNotPermittedError(obligationUid, actor)` — class (`errors.ts:864`)
+### `OverrideNotPermittedError(obligationUid, actor)` — class (`errors.ts:847`)
 
 ```ts
 export class OverrideNotPermittedError extends BacklogWriteError {
@@ -1328,7 +1328,7 @@ recorded reason (DESIGN §2 Primitive 3), never a configurable boolean. Maps to
 `precondition_failed`; never retryable. **Additive (C5)** — appended after every
 pre-existing export so no `CONTRACT.md` anchor shifted.
 
-### `CitationNotFoundError(uid)` — class (`errors.ts:926`)
+### `CitationNotFoundError(uid)` — class (`errors.ts:909`)
 
 ```ts
 export class CitationNotFoundError extends BacklogWriteError {
@@ -1344,7 +1344,7 @@ node — absent, already removed, or a uid naming a node of a different kind (th
 **Additive** — appended after every pre-existing export so no existing
 `CONTRACT.md` anchor shifted.
 
-### `IssueNotRestorableError(uid, reason)` — class (`errors.ts:945`)
+### `IssueNotRestorableError(uid, reason)` — class (`errors.ts:928`)
 
 ```ts
 export class IssueNotRestorableError extends BacklogWriteError {
@@ -1360,7 +1360,7 @@ superseded (`reason: 'superseded'`), or permanently `remove`d
 (`reason: 'permanently-removed'`). Maps to `precondition_failed`; nothing is
 written. **Additive** — appended after every pre-existing export.
 
-### `RemoveConfirmationRequiredError(uid)` — class (`errors.ts:973`)
+### `RemoveConfirmationRequiredError(uid)` — class (`errors.ts:956`)
 
 ```ts
 export class RemoveConfirmationRequiredError extends BacklogWriteError {
@@ -1375,7 +1375,7 @@ irreversible retire requires the explicit typed confirmation, refused before
 any write. Maps to `precondition_failed`. **Additive** — appended after every
 pre-existing export.
 
-### `ProductionWriteRefusedError(verb)` — class (`errors.ts:996`)
+### `ProductionWriteRefusedError(verb)` — class (`errors.ts:979`)
 
 ```ts
 export class ProductionWriteRefusedError extends BacklogWriteError {

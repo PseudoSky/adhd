@@ -1173,7 +1173,7 @@ export async function createIssue(
           issueRowid: issue.rowid,
           issueUid: issue.uid,
           citation: citations[i],
-          sha: citationShas[i],
+          verification: citationShas[i]!,
           at: now,
         });
       }

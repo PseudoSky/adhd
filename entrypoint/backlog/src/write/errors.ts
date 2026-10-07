@@ -35,7 +35,6 @@ import {
   isUniqueConstraintError,
 } from '@adhd/sox-store-adapter';
 import { log } from '@adhd/sox-telemetry';
-import { displayExternalRoot, toolOwnedCitationRoots } from './citation-path.js';
 
 /** The closed code union every {@link IWriteError} carries (SPEC.md §4c). */
 export type WriteErrorCode =
@@ -489,53 +488,37 @@ export class SingleValuedRelationConflictError extends BacklogWriteError {
 }
 
 /**
- * A citation's `sha` resolved to the `"unverified"` sentinel (§8.5's
- * two-branch rule) and `project_policy.citation_requires_sha` (default
- * `true`) rejects that. The gate applies only where verification is POSSIBLE:
- * the owning project has a non-empty filesystem `path`, and the cited file is
- * either missing OR resolves (canonically) outside the project root AND every
- * root in `project_policy.citationAllowedExternalRoots` (the carve-out, BUG
- * c6d35272). A PATH-LESS project cannot hash its citations at all, so the
- * gate is waived and `sha:"unverified"` is persisted verbatim —
- * `CitationUnverifiableError` is never thrown for it.
- *
- * The message NAMES the allowed external roots (`~`-anchored via
- * {@link displayExternalRoot}) and the policy field that controls them, so a
- * rejected filer can tell WHY the target was refused and what to add, rather
- * than only that "a real sha" was required.
+ * A citation target does NOT EXIST (or its pinned revision does not contain it)
+ * and `project_policy.citation_requires_sha` (default `true`) rejects
+ * non-existent evidence. EXISTENCE is the gate (ADR-0007 breaking #8): an
+ * existing file anywhere on the machine, an existing directory, a worktree-only
+ * path and an abstract `url:`/`registry:`/`query:` anchor are all PERSISTED with
+ * a recorded verification outcome, never refused. A PATH-LESS project cannot
+ * hash its citations at all, so the gate is waived and `sha:"unverified"` is
+ * persisted verbatim — `CitationUnverifiableError` is never thrown for it.
  */
 export class CitationUnverifiableError extends BacklogWriteError {
   readonly code = 'E_VALIDATION' as const;
   readonly retryable = false;
 
+  /**
+   * @param target The cited target as given.
+   * @param reason Why no real sha exists: `'target-missing'` (nothing at that
+   *   path) or `'revision-unresolved'` (the pinned revision does not contain
+   *   it). Existence — never project membership — is what the gate checks
+   *   (breaking #8), so no "allowed roots" advice applies any more.
+   */
   constructor(
     public readonly target: string,
-    public readonly allowedExternalRoots: readonly string[]
+    public readonly reason: 'target-missing' | 'revision-unresolved' = 'target-missing'
   ) {
-    // An EMPTY allowlist is a distinct, common case (an explicit
-    // `citationAllowedExternalRoots: []` disables the carve-out): rendering it
-    // as the bare `.join(', ')` of nothing left a dangling double space
-    // ("accepted only under:  (project_policy…)"). Say what IS accepted (the
-    // project root) and why there is nothing else.
-    const roots =
-      allowedExternalRoots.length === 0
-        ? 'the project root'
-        : allowedExternalRoots.map(displayExternalRoot).join(', ');
-    const policyNote =
-      allowedExternalRoots.length === 0
-        ? 'project_policy.citationAllowedExternalRoots is empty'
-        : 'project_policy.citationAllowedExternalRoots';
-    // The tool-owned roots are always accepted (C3), so a rejection that
-    // omits them is not actionable — append them to the diagnostic. Appended,
-    // never substituted: the existing prefix (and every assertion on it) is
-    // byte-for-byte preserved.
-    const toolRoots = toolOwnedCitationRoots()
-      .map(displayExternalRoot)
-      .join(', ');
     super(
       `Citation target "${target}" could not be verified and this project requires a real sha — ` +
-        `accepted only under: ${roots} (${policyNote}). ` +
-        `Tool-owned roots are always accepted: ${toolRoots}`
+        (reason === 'revision-unresolved'
+          ? 'the pinned revision does not contain it'
+          : 'the target does not exist') +
+        '. Cite a path that exists (anywhere on this machine — project membership is not required), ' +
+        'or set project_policy.citationRequiresSha to false.'
     );
   }
 }

@@ -17,6 +17,7 @@ import { openTmpStore, type TmpStore } from './test/helpers/tmp-store.js';
 import { buildBacklogEnv } from './env.js';
 import * as api from './api.js';
 import { BACKLOG_VERBS } from './vocabulary.js';
+import type { IOutcomeEnvelope } from './envelope.js';
 
 /** Verbs that take no uid reference (names, filters, or no input). */
 const NON_UID_VERBS = new Set([
@@ -103,9 +104,9 @@ describe('3a4a0405 A-AC10 — ambiguous uid prefix on every uid-taking verb', ()
     return { nodes: Number(n?.c), edges: Number(e?.c) };
   }
 
-  const must = <T extends { ok: boolean }>(r: T): T => {
+  const must = <T>(r: IOutcomeEnvelope<T>): { data: T } => {
     if (!r.ok) throw new Error(`fixture: ${JSON.stringify(r)}`);
-    return r;
+    return { data: r.data };
   };
 
   beforeEach(async () => {
