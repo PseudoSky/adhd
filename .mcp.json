@@ -3,16 +3,16 @@
     "agent-mcp-published": {
       "type": "stdio",
       "command": "npx",
-      "args": ["-y", "@adhd/agent-mcp@latest"],
+      "args": ["-y", "--prefer-online=false", "@adhd/agent-mcp@latest"],
       "env": {
         "ADHD_AGENT_DATABASE_PATH": "/Users/nix/.adhd/agent-mcp/production/data/agents.db",
         "ADHD_AGENT_REGISTRY_DB_PATH": "/Users/nix/.adhd/agent-registry/production/data/registry.db"
       }
     },
-    "backlog": {
+    "backlog-published": {
       "type": "stdio",
-      "command": "node",
-      "args": ["/Users/nix/dev/node/adhd/entrypoint/backlog/dist/index.js", "serve", "--transport", "mcp", "--allow-production-write"]
+      "command": "npx",
+      "args": ["-y", "--prefer-online=false", "@adhd/backlog@latest", "serve", "--transport", "mcp", "--allow-production-write"]
     }
   }
 }
