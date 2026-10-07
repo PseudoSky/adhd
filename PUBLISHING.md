@@ -431,7 +431,7 @@ is the only source of truth for what is published.
 `pnpm release:dry` is scoped and manifest-safe: it mints `RELEASE_RUN_TOKEN` and
 computes the scope via `computeChangedProjectSet`, exactly like `pnpm release`, so
 its `--dryRun` version/publish phases no longer run unscoped and the `publish`
-executor's manifest backstop no longer refuses them
+executor's manifest check (now advisory) no longer matters to them
 (`BUG-RELEASE-DRY-BLOCKED-BY-MANIFEST-BACKSTOP`). It is still only a PREVIEW of
 version/publish — it does not run GATE 2 (`clean-room-smoke`) or the global-CLI
 `sync-global`, so it is not proof a release works end-to-end. Use `pnpm release`
@@ -476,10 +476,14 @@ SAME scoped pipeline as `pnpm release` — never a bare `nx affected -t version`
 3. runs `npx nx run-many -t version --projects=$RELEASE_PROJECTS` and
    `npx nx run-many -t publish --projects=$RELEASE_PROJECTS --configuration=production`.
 
-A bare `nx affected -t publish` can never publish: the `publish` executor calls
-`checkPublishAllowed` FIRST and refuses any project absent from a fresh manifest,
-and the ONLY writer of that manifest is `computeChangedProjectSet` — which the
-bare targets never call. That required shape is asserted by
+A bare `nx affected -t publish` / `nx run-many -t publish` / `nx run <p>:publish` works
+on a clean checkout with no manifest: the `publish` executor decides by CONTENT against
+the registry first (identical to what npm holds -> successful no-op; built content
+differs or never published -> publish; same version but different content with no
+bump -> fails loudly telling you to run `nx run <p>:version`). The release manifest
+is now only an advisory scope note on a real publish; scoping a release (cost) is
+`pnpm release`'s job via `computeChangedProjectSet`. OTP: `NPM_CONFIG_OTP=<code> npx nx run <p>:publish`
+(or `--otp=<code>`) is passed to npm through the environment, never logged. That required shape is asserted by
 `tools/nx-plugins/build/ci-publish-wiring.spec.mjs`.
 
 `tools/nx-plugins/build/executors/publish/release-publish.mjs` is RETIRED — its own
