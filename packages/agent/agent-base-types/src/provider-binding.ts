@@ -1,4 +1,5 @@
 import type { ProviderEnvBlock, RetryConfig } from './domain.js';
+import type { TripwireConfig } from './provider-failure.js';
 
 /**
  * Canonical model identifier, e.g. `claude_sonnet_4_6`. Never a wire string:
@@ -9,6 +10,15 @@ export type ModelSlug = string;
 
 /** The closed set of provider families an agent/session/task can bind to. */
 export type ProviderType = 'anthropic' | 'openai' | 'claudecli';
+
+/**
+ * `RetryConfig` plus the retry window (provider-failure SPEC §2): bounds only
+ * *starting a new attempt* and backoff sleeps, never an in-flight healthy attempt.
+ */
+export interface BindingRetryConfig extends RetryConfig {
+  /** Default 120 000 ms. */
+  retryWindowMs?: number;
+}
 
 /**
  * A provider binding where every field is optional. This is the single shape
@@ -27,9 +37,16 @@ export interface PartialBinding {
   timeoutMs?: number;
   maxTokens?: number;
   temperature?: number;
-  retryConfig?: RetryConfig;
+  retryConfig?: BindingRetryConfig;
   env?: ProviderEnvBlock;
   baseURL?: string;
+  /**
+   * Operator-set id shared by every key under one spend limit (e.g. an OpenAI
+   * org/project id). Becomes `credentialScope`; absent => the key itself.
+   */
+  billingScope?: string;
+  /** Tripwire tuning (cooldown base/cap, probe lease); typed config, never env. */
+  tripwire?: TripwireConfig;
 }
 
 /**

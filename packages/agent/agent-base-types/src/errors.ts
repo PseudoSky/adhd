@@ -17,6 +17,14 @@ export type AgentMcpErrorCode =
   | 'PROVIDER_TIMEOUT'
   | 'PROVIDER_AUTH_ERROR'
   | 'PROVIDER_RATE_LIMITED'
+  // Provider-failure taxonomy (docs/plan/provider-failure/SPEC.md §1.2). `failure.class`
+  // is the source of truth; these codes are a compatibility projection.
+  | 'PROVIDER_BILLING'
+  | 'PROVIDER_OVERLOADED'
+  | 'PROVIDER_UNAVAILABLE'
+  | 'PROVIDER_INVALID_REQUEST'
+  | 'PROVIDER_CONTENT_POLICY'
+  | 'PROVIDER_PERMISSION'
   | 'BUDGET_EXCEEDED'
   | 'COMPOSED_PROMPT_NOT_FOUND'
   /**

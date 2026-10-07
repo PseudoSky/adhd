@@ -8,6 +8,12 @@ import type {
   PermissionAction,
   AskResolution,
 } from './domain.js';
+import type {
+  AttemptFailedPayload,
+  FailedPayload,
+  TrippedPayload,
+  RecoveredPayload,
+} from './failure-events.js';
 
 export interface TaskStartPayload {
   executionContext: ExecutionContext;
@@ -121,7 +127,9 @@ export interface PermissionDecisionPayload {
 export type HitlSuspendKind =
   | 'request_human_input'
   | 'permission_ask'
-  | 'escalation';
+  | 'escalation'
+  /** A credential-scoped provider failure (billing/auth/permission) parked for a human (provider-failure SPEC §6). */
+  | 'provider_blocked';
 /** A task suspended (`awaiting_input`) pending a human answer. */
 export interface HitlSuspendPayload {
   executionContext: ExecutionContext;
@@ -193,6 +201,14 @@ export interface HookEventMap {
   'hitl:resume': HitlResumePayload;
   /** A session transitioned to `closed`. */
   'session:closed': SessionClosedPayload;
+  /** A model-call attempt failed and will be retried or failed over (provider-failure SPEC §5.2). */
+  'provider:attempt_failed': AttemptFailedPayload<'provider'>;
+  /** A provider call ended: terminal, suspended, held, or refused by an open trip. */
+  'provider:failed': FailedPayload<'provider'>;
+  /** A provider/credential trip opened (system-wide tripwire). */
+  'provider:tripped': TrippedPayload<'provider'>;
+  /** A provider trip closed: probe ok, cleared by a controller, or expired. */
+  'provider:recovered': RecoveredPayload<'provider'>;
 }
 
 export type HookEvent = keyof HookEventMap;

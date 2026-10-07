@@ -4,6 +4,8 @@ export * from './domain.js';
 export * from './hooks.js';
 export * from './errors.js';
 export * from './model-context.js';
+export * from './provider-failure.js';
+export * from './failure-events.js';
 export { HookRegistry } from './registry.js';
 
 // Explicit re-export to ensure TaskStatus literals ("waiting", "awaiting_input") appear
@@ -48,3 +50,6 @@ export type {
   AskResolution,
 } from './domain.js';
 export { effectiveHitl } from './domain.js';
+
+// Provider-failure binding additions (provider-failure SPEC §2, §9.2).
+export type { BindingRetryConfig } from './provider-binding.js';
