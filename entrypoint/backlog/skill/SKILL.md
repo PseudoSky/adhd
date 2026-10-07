@@ -1347,7 +1347,7 @@ still refused (`precondition_failed`) when the project requires a sha.
 adhd-backlog transition --input '{"uid":"<retired>","by":"me","toStatus":"SUPERSEDED","note":"replaced","supersededBy":"<successor>","reason":"deliberate-plan-retirement"}'
 ```
 
-`reason` is optional and closed: `v1-to-v2-premise-deletion`,
+`reason` is optional and closed: `prior-model-premise-deletion`,
 `imported-never-transitioned`, `deliberate-plan-retirement`,
 `status-token-correction`, `obsolete-by-obsolescence` (anything else is
 `invalid_argument`; `reason`/`supersededBy` on a non-SUPERSEDED transition is also

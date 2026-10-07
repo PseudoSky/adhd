@@ -104,7 +104,7 @@ describe('91a8c640 B-AC6 — append-only op-event log', () => {
     expect(count.get('audit')).toBeGreaterThanOrEqual(1);
     const edge = await tmp.store.adapter.executeAll<{ n: number }>("SELECT COUNT(*) AS n FROM edge WHERE rel = 'in_session' AND t_invalid IS NULL");
     expect(Number(edge.rows[0]!.n)).toBe(1);
-    const card = data(await api.get(ctx, { uid: a, fields: ['auditTrail'] })) as { auditTrail: Array<Record<string, unknown>> };
+    const card = data(await api.get(ctx, { uid: a, fields: ['auditTrail'] })) as unknown as { auditTrail: Array<Record<string, unknown>> };
     for (const entry of card.auditTrail) {
       expect(Object.keys(entry).sort()).toEqual(expect.arrayContaining(['uid', 'actor', 'action', 'sha', 'at']));
       expect(entry).not.toHaveProperty('sessionId');

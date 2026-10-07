@@ -213,7 +213,7 @@ citation     kind='citation'
 transition   kind='transition'
   meta: { from_status, to_status, agent, note, sha, at, supersede_reason? }
   -- supersede_reason: the closed-enum reason of a SUPERSEDED transition
-  -- (v1-to-v2-premise-deletion | imported-never-transitioned |
+  -- (prior-model-premise-deletion | imported-never-transitioned |
   -- deliberate-plan-retirement | status-token-correction |
   -- obsolete-by-obsolescence); the successor rides a `supersedes` edge.
   -- sha = sha256 over the canonical (sorted-key) JSON serialization of
@@ -331,7 +331,7 @@ live issue has a live `in_component` to its primary component with
 `via:'primary'`; I3 every live `path` citation that resolves to a registered
 component (longest-prefix match on `location` rows / `component.meta.path`, at
 most one component per project) has a live `in_component` to it. The membership
-migration (`tools/migrate/membership-backfill.ts`) only ADDS rows; per-project
+backfill (`tools/backfill/membership-backfill.ts`) only ADDS rows; per-project
 counts keyed by primary owner are unchanged by construction.
 
 1. **Every transition requires** an agent, a `note` (unless the owning

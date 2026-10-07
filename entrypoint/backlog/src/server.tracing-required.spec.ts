@@ -138,7 +138,7 @@ describe('backlog is a REQUIRED, adhd-namespaced tracing consumer (FEAT-APIGEN-T
       // B-AC11 (55ba4178): CI always has the built tree, so a load failure there
       // is a real defect — FAIL, never skip. Locally the skip stays, with its
       // reason printed by the runner.
-      if (isCiRun()) throw new Error(`[CI] ${reason}`, { cause: err });
+      if (isCiRun()) throw Object.assign(new Error(`[CI] ${reason}`), { cause: err });
       ctx.skip(reason);
     }
     const { USE_PLUGINS } = mod!;

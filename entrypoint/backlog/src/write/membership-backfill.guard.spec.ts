@@ -7,7 +7,7 @@
  */
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { isProductionPath, parseArgs, productionStoreRoot } from '../../tools/migrate/membership-backfill.js';
+import { isProductionPath, parseArgs, productionStoreRoot } from '../../tools/backfill/membership-backfill.js';
 
 describe('e54bd58b A-AC5 membership-backfill runner guard', () => {
   const home = '/home/someone';

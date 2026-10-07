@@ -47,11 +47,11 @@ describe('7ef53d55 A-AC8 — SUPERSEDED nodes carry reason + successor-or-none',
     const a = await mk('a');
     const b = await mk('b');
     const c = await mk('c');
-    await api.transition(ctx, { uid: a, by: 'o', toStatus: 'SUPERSEDED', note: 'n', reason: 'v1-to-v2-premise-deletion', supersededBy: c });
+    await api.transition(ctx, { uid: a, by: 'o', toStatus: 'SUPERSEDED', note: 'n', reason: 'prior-model-premise-deletion', supersededBy: c });
     await api.transition(ctx, { uid: b, by: 'o', toStatus: 'SUPERSEDED', note: 'n', reason: 'imported-never-transitioned' });
     const rows = await superseded();
     const byUid = new Map(rows.map((r) => [r.uid, r]));
-    expect(byUid.get(a)).toMatchObject({ supersedeReason: 'v1-to-v2-premise-deletion', supersededBy: c });
+    expect(byUid.get(a)).toMatchObject({ supersedeReason: 'prior-model-premise-deletion', supersededBy: c });
     expect(byUid.get(b)).toMatchObject({ supersedeReason: 'imported-never-transitioned', supersededBy: null });
     expect(rows.filter((r) => r.supersedeReason === null)).toEqual([]);
   });

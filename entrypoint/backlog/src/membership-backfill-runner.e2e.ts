@@ -1,6 +1,6 @@
 /**
- * membership-backfill-runner.e2e.ts — e54bd58b A-AC5: the migration RUNNER as a
- * process. Drives `tools/migrate/membership-backfill.ts` through `tsx` against a
+ * membership-backfill-runner.e2e.ts — e54bd58b A-AC5: the backfill RUNNER as a
+ * process. Drives `tools/backfill/membership-backfill.ts` through `tsx` against a
  * legacy store (no `in_component` rows) and trusts the process exit codes:
  * dry-run 1 (pending), apply 0 with counts unchanged, re-run dry-run 0,
  * `--reverse <journal>` 0 restoring the pre-state, and the production guard
@@ -23,7 +23,7 @@ import type { IOutcomeEnvelope } from './envelope.js';
 
 const PKG = resolve(__dirname, '..');
 const TSX = resolve(PKG, '..', '..', 'node_modules', '.bin', 'tsx');
-const RUNNER = join(PKG, 'tools', 'migrate', 'membership-backfill.ts');
+const RUNNER = join(PKG, 'tools', 'backfill', 'membership-backfill.ts');
 
 function data<T>(r: IOutcomeEnvelope<T>): T {
   if (!r.ok) throw new Error(JSON.stringify(r));
@@ -90,7 +90,7 @@ describe('e54bd58b A-AC5 membership-backfill runner exit codes', () => {
       const again = run([dbPath], work, home);
       expect(again.status, again.stdout + again.stderr).toBe(0);
 
-      const journalDir = join(work, 'tmp', 'migrate');
+      const journalDir = join(work, 'tmp', 'backfill');
       const journal = join(journalDir, readdirSync(journalDir).find((f) => f.endsWith('.journal.json'))!);
       expect(JSON.parse(readFileSync(journal, 'utf8')).created).toHaveLength(2);
       const rev = run([dbPath, '--reverse', journal], work, home);

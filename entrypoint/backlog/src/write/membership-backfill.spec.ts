@@ -1,8 +1,8 @@
 /**
- * membership-backfill.spec.ts — e54bd58b A-AC5 (S02.S2) migration half: the
- * legacy 1:1 rows are migrated to `in_component` membership; on the REOPENED
- * store per-project issue counts keyed by primary owner equal the pre-migration
- * counts and every project's membership set is a SUPERSET of its pre-migration
+ * membership-backfill.spec.ts — e54bd58b A-AC5 (S02.S2) backfill half: the
+ * legacy 1:1 rows are backfilled to `in_component` membership; on the REOPENED
+ * store per-project issue counts keyed by primary owner equal the pre-backfill
+ * counts and every project's membership set is a SUPERSET of its pre-backfill
  * set (n:m adds, never drops).
  *
  * Real store + real api verbs; the legacy shape is produced by deleting every
@@ -34,7 +34,7 @@ function data<T>(r: IOutcomeEnvelope<T>): T {
   return r.data;
 }
 
-describe('e54bd58b A-AC5 — membership-row migration', () => {
+describe('e54bd58b A-AC5 — membership-row backfill', () => {
   let tmp: TmpStore;
   let ctx: api.BacklogCtx;
   let issues: string[];
@@ -80,7 +80,7 @@ describe('e54bd58b A-AC5 — membership-row migration', () => {
     await tmp.cleanup();
   });
 
-  it('e54bd58b A-AC5 migrates legacy rows: counts by primary unchanged, membership a superset, I1/I2 hold', async () => {
+  it('e54bd58b A-AC5 backfills legacy rows: counts by primary unchanged, membership a superset, I1/I2 hold', async () => {
     await makeLegacy();
     expect(await liveInComponent()).toBe(0);
     const before = await measureMembership(tmp.store);

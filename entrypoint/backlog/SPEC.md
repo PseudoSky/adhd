@@ -3087,7 +3087,7 @@ access control out of scope).
   `ambiguous_reference` with `error.details.candidates` and `details.ref`; reads
   follow the supersession chain, writes refuse a superseded uid naming the head.
 - **SUPERSEDED.** `transition {toStatus:"SUPERSEDED", supersededBy?, reason?}`:
-  `reason` is the closed enum `v1-to-v2-premise-deletion |
+  `reason` is the closed enum `prior-model-premise-deletion |
   imported-never-transitioned | deliberate-plan-retirement |
   status-token-correction | obsolete-by-obsolescence` (out-of-enum is
   `invalid_argument`); `supersededBy` writes a `supersedes` edge retired →

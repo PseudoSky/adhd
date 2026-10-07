@@ -1,6 +1,6 @@
 #!/usr/bin/env -S node
 /**
- * membership-backfill.ts — one-shot, reversible migration CLI that gives every
+ * membership-backfill.ts — one-shot, reversible backfill CLI that gives every
  * live issue its `in_component` membership rows (e54bd58b A-AC5, S02.S2). The
  * logic lives in `src/write/membership-backfill.ts`; this file is argv, the
  * production guard, plan/measurement reporting, journal persistence and exit
@@ -8,7 +8,7 @@
  *
  * Usage:
  *
- *   npx tsx tools/migrate/membership-backfill.ts <dbPath> [--apply|--reverse <journal.json>] [--allow-production-write]
+ *   npx tsx tools/backfill/membership-backfill.ts <dbPath> [--apply|--reverse <journal.json>] [--allow-production-write]
  *
  * Default mode is dry-run: plan, print, write NOTHING.
  *
@@ -26,7 +26,7 @@
  * `~/.adhd/backlog/production/` is refused unless `--allow-production-write` is
  * passed. A dry-run is always permitted. Take a verified backup first.
  *
- * The apply journal is written under `tmp/migrate/` (gitignored).
+ * The apply journal is written under `tmp/backfill/` (gitignored).
  */
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
@@ -101,7 +101,7 @@ export function parseArgs(argv: readonly string[]): IParsedArgs {
 }
 
 function writeJournal(journal: IMembershipBackfillJournal): string {
-  const dir = join(process.cwd(), 'tmp', 'migrate');
+  const dir = join(process.cwd(), 'tmp', 'backfill');
   mkdirSync(dir, { recursive: true });
   const path = join(dir, `membership-${new Date().toISOString().replace(/[:.]/g, '-')}.journal.json`);
   writeFileSync(path, `${JSON.stringify(journal, null, 2)}\n`, 'utf8');

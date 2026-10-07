@@ -128,7 +128,7 @@ import { evaluateTransitionGateTx, type IGateEvaluation } from './gate.js';
  * returns `warnings:["superseded-without-reason"]`.
  */
 export const SUPERSEDE_REASONS = [
-  'v1-to-v2-premise-deletion',
+  'prior-model-premise-deletion',
   'imported-never-transitioned',
   'deliberate-plan-retirement',
   'status-token-correction',

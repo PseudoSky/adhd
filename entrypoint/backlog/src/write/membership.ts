@@ -14,7 +14,7 @@
  * - **Project membership is derived**: component → `owns_project` parent. No
  *   project edge is stored.
  *
- * ## Invariants (the migration and the tests assert them)
+ * ## Invariants (the backfill and the tests assert them)
  *
  * - I1 every live issue has exactly one live `owns_component`.
  * - I2 every live issue has a live `in_component` to its primary component
@@ -31,7 +31,7 @@
  * calls {@link reconcileMembershipTx}: recompute the DESIRED membership from
  * scratch (primary + live citations) and diff it against the live
  * `in_component` edges — write the missing, relabel the changed, invalidate the
- * stale. Idempotent, so the migration reuses it verbatim and a re-run plans
+ * stale. Idempotent, so the backfill reuses it verbatim and a re-run plans
  * zero writes. A citation whose path matches NO registered component adds no
  * membership (never a wrong one: nothing auto-links without a registered
  * location).
@@ -178,7 +178,7 @@ export async function findComponentsForPathTx(
  * Recompute and persist the membership of ONE issue (see the module header).
  * Safe to call at any point after the issue's `owns_component` exists inside
  * the verb's own transaction; a no-op write-wise when nothing changed. Returns
- * the number of edge writes it made (the migration's "pending" measure).
+ * the number of edge writes it made (the backfill's "pending" measure).
  */
 export async function reconcileMembershipTx(
   tx: AdapterTransaction,

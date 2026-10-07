@@ -1,15 +1,15 @@
 /**
- * membership-backfill.ts — the reversible migration that gives every existing
+ * membership-backfill.ts — the reversible backfill that gives every existing
  * issue its `in_component` membership rows (e54bd58b A-AC5, S02.S2; the n:m
  * model lives in `membership.ts`). Modelled on `catalog-repair.ts`:
  * plan / apply / reverse, a journal that records exactly what was written, and
  * idempotency (a re-run plans zero writes).
  *
- * The migration only ADDS membership. It never writes, re-points or invalidates
+ * The backfill only ADDS membership. It never writes, re-points or invalidates
  * `owns_component`, so per-project issue counts keyed by primary owner are
  * unchanged by construction; {@link measureMembership} proves it by reading the
  * counts before and after. It reuses {@link reconcileMembershipTx} verbatim so
- * the migration and the live write hooks can never disagree about what a
+ * the backfill and the live write hooks can never disagree about what a
  * correct row set is.
  *
  * Batched (default 200 issues per `BEGIN IMMEDIATE`), resumable and safe under
@@ -58,7 +58,7 @@ export interface IMembershipBackfillPlan {
   pendingWrites: number;
 }
 
-/** Counts used to prove the migration neither dropped nor re-owned anything. */
+/** Counts used to prove the backfill neither dropped nor re-owned anything. */
 export interface IMembershipMeasurement {
   /** projectUid → issue count keyed by PRIMARY owner (`owns_component` → `owns_project`). */
   countsByPrimaryProject: Record<string, number>;

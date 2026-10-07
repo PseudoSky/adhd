@@ -560,6 +560,6 @@ append-only op-event, `claim`/`renew`/`release` persist a reservation, and
 one primary owner (`get {fields:["primaryOwner","memberships"]}`); citations check that
 the evidence exists, recording `unverified-with-reason` rather than dropping it; `transition`
 to SUPERSEDED takes an optional closed `reason` and `supersededBy`. See `skill/SKILL.md` §13
-and `SPEC.md`'s S02/S11 appendix. The membership migration is
-`tools/migrate/membership-backfill.ts` (dry-run by default; `--apply`, `--reverse <journal>`;
+and `SPEC.md`'s S02/S11 appendix. The membership backfill is
+`tools/backfill/membership-backfill.ts` (dry-run by default; `--apply`, `--reverse <journal>`;
 a path under `~/.adhd/backlog/production/` additionally requires `--allow-production-write`).
