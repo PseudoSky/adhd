@@ -22,6 +22,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 const require = createRequire(import.meta.url);
+// 50e8c966: git exports GIT_DIR/GIT_INDEX_FILE into hooks; they outrank `cwd`. Scrub per-spawn
+// (fixture helpers) AND process-wide (main() runs in-process and its git calls inherit process.env).
+const { cleanGitEnv, scrubProcessGitEnv } = require('../tools/nx-plugins/lib/git-env.js');
+scrubProcessGitEnv();
 const { main, classify } = require('./detect-mass-deletion.js');
 
 // ─── Pure classify() unit coverage ─────────────────────────────────────────
@@ -71,7 +75,7 @@ test('classify: threshold boundaries are configurable', () => {
 // ─── Integration: real disposable git repo, real CLI ──────────────────────
 
 function sh(cwd, args) {
-  return execFileSync('git', args, { cwd, encoding: 'utf8' });
+  return execFileSync('git', args, { cwd, encoding: 'utf8', env: cleanGitEnv() });
 }
 
 function makeRepo() {

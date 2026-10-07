@@ -40,6 +40,10 @@
 
 zero_sha="0000000000000000000000000000000000000000"
 hook_dir=$(dirname "$0")
+
+# 50e8c966: defense in depth against hook-exported GIT_* leaking into spec-spawned git.
+# shellcheck source=lib/git-env-guard.sh
+. "$hook_dir/lib/git-env-guard.sh"
 repo_root=$(cd "$hook_dir/.." && pwd)
 
 # The gate's affected-target list is canonicalised in ONE module
@@ -65,6 +69,9 @@ fi
 
 any_ref=0
 overall_status=0
+
+# 50e8c966: snapshot the shared repo config; verified after every ref's test run.
+guard_snapshot
 
 while read -r local_ref local_sha remote_ref remote_sha; do
   [ -z "$local_ref" ] && continue
@@ -120,12 +127,15 @@ while read -r local_ref local_sha remote_ref remote_sha; do
   status_file=$(mktemp 2>/dev/null || echo /tmp/adhd-pre-push-status.$$)
 
   if [ -n "$base" ]; then
-    { CI=true npx nx affected $flags --base="$base" --head="$local_sha" --output-style=stream-without-prefixes; echo $? > "$status_file"; } 2>&1 | tee "$timings_log"
+    { CI=true no_hook_git_env npx nx affected $flags --base="$base" --head="$local_sha" --output-style=stream-without-prefixes; echo $? > "$status_file"; } 2>&1 | tee "$timings_log"
   else
-    { CI=true npx nx affected $flags --head="$local_sha" --output-style=stream-without-prefixes; echo $? > "$status_file"; } 2>&1 | tee "$timings_log"
+    { CI=true no_hook_git_env npx nx affected $flags --head="$local_sha" --output-style=stream-without-prefixes; echo $? > "$status_file"; } 2>&1 | tee "$timings_log"
   fi
   # nx's TRUE status (the pipeline's status above is tee's, and is discarded).
   status=$(cat "$status_file" 2>/dev/null)
+  if ! guard_verify; then
+    exit 1
+  fi
   rm -f "$status_file" 2>/dev/null || true
 
   # Keep the newest 50 captures; drop the rest. Best-effort.

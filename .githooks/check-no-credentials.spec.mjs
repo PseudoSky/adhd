@@ -26,6 +26,8 @@ import { fileURLToPath } from 'node:url';
 
 const require = createRequire(import.meta.url);
 const pii = require('./lib/pii-rules.js');
+// 50e8c966: hook-exported GIT_DIR/GIT_INDEX_FILE must never reach a fixture git spawn.
+const { cleanGitEnv } = require('../tools/nx-plugins/lib/git-env.js');
 const SCANNER = fileURLToPath(new URL('./check-no-credentials.js', import.meta.url));
 
 /** A single-line JSON export of 30 person records with sensitive fields. */
@@ -48,7 +50,7 @@ function personDump() {
 
 function makeRepo() {
   const dir = mkdtempSync(join(tmpdir(), 'pii-scan-'));
-  const g = (...a) => execFileSync('git', a, { cwd: dir, stdio: 'pipe' });
+  const g = (...a) => execFileSync('git', a, { cwd: dir, stdio: 'pipe', env: cleanGitEnv() });
   g('init', '-q');
   g('config', 'user.email', 't@example.com');
   g('config', 'user.name', 'teeth');
@@ -58,7 +60,7 @@ function makeRepo() {
 
 /** Run the real CLI against `dir`; returns {status, stdout, stderr}. */
 function runCli(dir, args) {
-  const r = spawnSync('node', [SCANNER, ...args], { cwd: dir, encoding: 'utf8' });
+  const r = spawnSync('node', [SCANNER, ...args], { cwd: dir, encoding: 'utf8', env: cleanGitEnv() });
   return { status: r.status, stdout: r.stdout || '', stderr: r.stderr || '' };
 }
 
@@ -125,7 +127,7 @@ test('cli: blocks a staged single-line person dump via a pii: rule', () => {
     // far longer than the 4096-char skip threshold in the per-line loop.
     assert.ok(dump.length > 4096 && !dump.includes('\n'));
     writeFileSync(join(dir, 'export.json'), dump);
-    execFileSync('git', ['add', 'export.json'], { cwd: dir });
+    execFileSync('git', ['add', 'export.json'], { cwd: dir, env: cleanGitEnv() });
     const { status, stderr } = runCli(dir, ['--staged']);
     assert.equal(status, 1, `expected block, got ${status}\n${stderr}`);
     assert.match(stderr, /pii:structured-person-dump/);
@@ -138,7 +140,7 @@ test('cli: a deliberate fixture with the file-level pragma is allowed', () => {
   const dir = makeRepo();
   try {
     writeFileSync(join(dir, 'fixture.json'), `// pragma: allowlist pii\n${personDump()}`);
-    execFileSync('git', ['add', 'fixture.json'], { cwd: dir });
+    execFileSync('git', ['add', 'fixture.json'], { cwd: dir, env: cleanGitEnv() });
     const { status, stderr } = runCli(dir, ['--staged']);
     assert.equal(status, 0, `expected pass, got ${status}\n${stderr}`);
   } finally {
@@ -150,7 +152,7 @@ test('cli: ordinary staged source passes', () => {
   const dir = makeRepo();
   try {
     writeFileSync(join(dir, 'index.ts'), "export const x = 1; // dev@example.com\n");
-    execFileSync('git', ['add', 'index.ts'], { cwd: dir });
+    execFileSync('git', ['add', 'index.ts'], { cwd: dir, env: cleanGitEnv() });
     const { status, stderr } = runCli(dir, ['--staged']);
     assert.equal(status, 0, `expected pass, got ${status}\n${stderr}`);
   } finally {

@@ -27,6 +27,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 const require = createRequire(import.meta.url);
+// 50e8c966: hook-exported GIT_DIR/GIT_INDEX_FILE must never reach a fixture git spawn.
+// release-reset.js (the code under test) spawns git with process.env too, so scrub process-wide as well.
+const { cleanGitEnv, scrubProcessGitEnv } = require('../../lib/git-env.js');
+scrubProcessGitEnv();
 const { analyze, isVersionOnlyDiff, detectProjectReleaseState, applyRevert, topChangelogEntry } = require('./release-reset.js');
 
 // ─── Pure analyze() unit coverage ──────────────────────────────────────────
@@ -183,7 +187,7 @@ test('isVersionOnlyDiff: true only when the version line is the sole difference'
 // ─── Integration: real disposable git repo, real git commands ─────────────
 
 function sh(cwd, args) {
-  return execFileSync('git', args, { cwd, encoding: 'utf8' });
+  return execFileSync('git', args, { cwd, encoding: 'utf8', env: cleanGitEnv() });
 }
 
 function makeRepo() {

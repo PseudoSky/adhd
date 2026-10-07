@@ -11,6 +11,8 @@
  * that edit AC7 goes RED (documented in the ticket return).
  */
 import { execFileSync } from 'node:child_process';
+// 50e8c966: hook-exported GIT_DIR/GIT_INDEX_FILE must never reach a fixture git spawn.
+import { gitEnv } from '../test/helpers/git-env.js';
 import { createHash } from 'node:crypto';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -24,6 +26,7 @@ function git(cwd: string, args: string[]): string {
     cwd,
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'pipe'],
+    env: gitEnv(),
   });
 }
 

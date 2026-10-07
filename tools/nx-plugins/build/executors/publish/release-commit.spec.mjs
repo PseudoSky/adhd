@@ -17,12 +17,17 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, existsSync
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
+
+// 50e8c966: hook-exported GIT_DIR/GIT_INDEX_FILE must never reach a fixture git spawn
+// (nor the release-commit.mjs child, whose own git calls would inherit them).
+const { cleanGitEnv } = createRequire(import.meta.url)('../../../lib/git-env.js');
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const scriptPath = join(__dirname, 'release-commit.mjs');
 
 function sh(cmd, args, opts = {}) {
-  const res = spawnSync(cmd, args, { encoding: 'utf8', ...opts });
+  const res = spawnSync(cmd, args, { encoding: 'utf8', ...opts, env: cleanGitEnv(opts.env) });
   if (res.error) throw res.error;
   return res;
 }

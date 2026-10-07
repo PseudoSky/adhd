@@ -24,6 +24,8 @@
  * the documented defect and must turn the corresponding AC red.
  */
 import { execFileSync } from 'node:child_process';
+// 50e8c966: hook-exported GIT_DIR/GIT_INDEX_FILE must never reach a fixture git spawn.
+import { gitEnv } from '../test/helpers/git-env.js';
 import { createHash } from 'node:crypto';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -72,11 +74,10 @@ function git(cwd: string, args: string[]): string {
     cwd,
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'pipe'],
-    env: {
-      ...process.env,
+    env: gitEnv({
       GIT_AUTHOR_DATE: '2020-01-01T00:00:00Z',
       GIT_COMMITTER_DATE: '2020-01-01T00:00:00Z',
-    },
+    }),
   });
 }
 

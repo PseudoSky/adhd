@@ -78,6 +78,10 @@
 
 hook_dir=$(dirname "$0")
 
+# 50e8c966: defense in depth against hook-exported GIT_* leaking into spec-spawned git.
+# shellcheck source=lib/git-env-guard.sh
+. "$hook_dir/lib/git-env-guard.sh"
+
 # Nothing staged at all (of ANY status, including pure deletions) -> nothing
 # for any gate to check. Matches git's own no-op-commit behavior.
 if [ -z "$(git diff --cached --name-only)" ]; then
@@ -132,8 +136,15 @@ fi
 # package.json already sitting in the tree.
 pkg_status_before=$(git status --porcelain | grep -E 'package\.json$' || true)
 
-CI=true npx nx affected --target=lint --files="$files" --output-style=stream-without-prefixes >"$out" 2>&1
+# Gate 2 runs with the hook's GIT_* unset (50e8c966) — only Gate 1 needs the index var (it reads
+# the staged index), and Gate 0/this hook's own git calls keep the hook environment.
+guard_snapshot
+CI=true no_hook_git_env npx nx affected --target=lint --files="$files" --output-style=stream-without-prefixes >"$out" 2>&1
 status=$?
+if ! guard_verify; then
+  cat "$out"
+  exit 1
+fi
 
 pkg_status_after=$(git status --porcelain | grep -E 'package\.json$' || true)
 
@@ -171,7 +182,11 @@ fi
 # invocation per implicated project) — its own output IS the reproduce
 # instructions on failure, so it is allowed to print directly rather than
 # being captured through $out like the other gates.
-if ! printf '%s\n' "$staged" | node "$hook_dir/lib/run-staged-tests.mjs"; then
+printf '%s\n' "$staged" | no_hook_git_env node "$hook_dir/lib/run-staged-tests.mjs"
+tests_status=$?
+# Prove no spec leaked into the real repo config — BEFORE reporting the test verdict.
+guard_verify || exit 1
+if [ "$tests_status" -ne 0 ]; then
   echo "  (bypass in an emergency with: git commit --no-verify)"
   exit 1
 fi

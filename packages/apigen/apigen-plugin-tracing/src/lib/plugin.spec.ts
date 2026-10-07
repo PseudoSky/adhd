@@ -322,14 +322,31 @@ describe('apigen-plugin-tracing — worktree discriminator (classifyWorktree)', 
   let linkedRepo: string;
   let nonRepo: string;
 
+  // 50e8c966: git exports GIT_DIR/GIT_INDEX_FILE into hooks and they outrank `cwd`;
+  // a hook-run `git init`/`commit` here would otherwise write into the REAL repo.
+  // Scrub per-spawn AND process-wide (classifyWorktree() shells out to git inheriting
+  // process.env) — the ambient values are restored in afterAll.
+  const savedGitEnv: Record<string, string> = {};
+  const cleanGitEnv = (): NodeJS.ProcessEnv => {
+    const env: NodeJS.ProcessEnv = {};
+    for (const [k, v] of Object.entries(process.env)) if (!/^GIT_/.test(k)) env[k] = v;
+    return env;
+  };
+
   const runGit = (cwd: string, args: string[]): void => {
-    const r = spawnSync('git', args, { cwd, encoding: 'utf8' });
+    const r = spawnSync('git', args, { cwd, encoding: 'utf8', env: cleanGitEnv() });
     if (r.status !== 0) {
       throw new Error(`git ${args.join(' ')} failed in ${cwd}: ${r.stderr}`);
     }
   };
 
   beforeAll(() => {
+    for (const k of Object.keys(process.env)) {
+      if (/^GIT_/.test(k)) {
+        savedGitEnv[k] = process.env[k] as string;
+        delete process.env[k];
+      }
+    }
     base = mkdtempSync(join(tmpdir(), 'apigen-worktree-spec-'));
     mainRepo = join(base, 'main');
     linkedRepo = join(base, 'linked');
@@ -352,6 +369,7 @@ describe('apigen-plugin-tracing — worktree discriminator (classifyWorktree)', 
 
   afterAll(() => {
     process.chdir(originalCwd);
+    Object.assign(process.env, savedGitEnv);
     rmSync(base, { recursive: true, force: true });
   });
 

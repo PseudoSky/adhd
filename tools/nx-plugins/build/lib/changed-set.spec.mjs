@@ -25,6 +25,9 @@ import { execFileSync } from 'node:child_process';
 const require = createRequire(import.meta.url);
 const { computeChangedProjectSet, resolveBaseRef, resolveBaseRefFromPublishedState } = require('./changed-set.js');
 const { readReleaseManifest } = require('./release-manifest.js');
+// 50e8c966: scrub hook-exported GIT_* from fixture/real-repo git spawns.
+const { cleanGitEnv, scrubProcessGitEnv } = require('../../lib/git-env.js');
+scrubProcessGitEnv(); // changed-set.js (under test) also spawns git with process.env
 
 /** Build a throwaway publishable-project fixture (project.json + build target + non-private package.json). */
 function makeFixtureProject({ workspaceRoot, projectRoot, name, nxName, version }) {
@@ -255,10 +258,10 @@ test('resolveBaseRefFromPublishedState: picks the OLDEST resolvable ref, not the
   // clipped. Newest-wins would silently hide changes for anything published
   // at the earlier commit.
   const older = execFileSync('git', ['rev-list', '--max-count=1', '--skip=3', 'HEAD'], {
-    cwd: process.cwd(), encoding: 'utf8',
+    cwd: process.cwd(), encoding: 'utf8', env: cleanGitEnv(),
   }).trim();
   const newer = execFileSync('git', ['rev-parse', 'HEAD'], {
-    cwd: process.cwd(), encoding: 'utf8',
+    cwd: process.cwd(), encoding: 'utf8', env: cleanGitEnv(),
   }).trim();
   assert.notStrictEqual(older, newer, 'fixture precondition: need two distinct commits');
 
@@ -274,7 +277,7 @@ test('resolveBaseRefFromPublishedState: picks the OLDEST resolvable ref, not the
 
 test('resolveBaseRefFromPublishedState: skips refs that no longer resolve (rebase/squash guard)', () => {
   const real = execFileSync('git', ['rev-parse', 'HEAD'], {
-    cwd: process.cwd(), encoding: 'utf8',
+    cwd: process.cwd(), encoding: 'utf8', env: cleanGitEnv(),
   }).trim();
   // Well-formed 40-hex SHA that is not a commit in this repo — exactly what a
   // rebased-away ref looks like. It must be skipped, not thrown on, and must
@@ -314,7 +317,7 @@ test('resolveBaseRefFromPublishedState: returns null when NO usable ref exists, 
 
 test('resolveBaseRef: RELEASE_BASE_REF still outranks publishedFromRef', () => {
   const real = execFileSync('git', ['rev-parse', 'HEAD'], {
-    cwd: process.cwd(), encoding: 'utf8',
+    cwd: process.cwd(), encoding: 'utf8', env: cleanGitEnv(),
   }).trim();
   assert.strictEqual(
     resolveBaseRef({

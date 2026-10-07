@@ -66,6 +66,41 @@ Do not reorder these gates.
 
 Hooks must be executable (`chmod +x .githooks/<hook>`).
 
+### Hook-exported `GIT_*` must never reach a spec's git (50e8c966)
+
+Git exports `GIT_DIR` / `GIT_INDEX_FILE` (and sometimes `GIT_WORK_TREE`,
+`GIT_COMMON_DIR`, `GIT_PREFIX`) into every hook. From a linked worktree
+`GIT_DIR=<repo>/.git/worktrees/<name>`, and those variables **outrank `cwd`/`-C`**.
+A spec that ran `git init` / `git config` / `git commit` in an `mkdtemp` dir
+without scrubbing them wrote into the **real** repo (`core.bare=true`,
+repo-local `user.name`/`user.email`, ~22 fixture commits, a stray worktree) and
+still exited 0. Three layers now stop it:
+
+1. **Per-spawn scrub (the rule for every test/script author).** Pass
+   `env: cleanGitEnv()` from `tools/nx-plugins/lib/git-env.js` (plain CommonJS,
+   no dependencies, so `tools/nx-plugins` and `.githooks` specs can load it
+   before `pnpm install`). Specs whose code-under-test also spawns git call
+   `scrubProcessGitEnv()` once at the top. TypeScript projects cannot import
+   across Nx project roots, so each keeps a typed twin of the same ~8-line
+   contract (delete every `/^GIT_/` key) next to its tests — backlog:
+   `entrypoint/backlog/src/test/helpers/git-env.ts`; apigen:
+   `runGit`/`sanitizedGitEnv` in `apigen-engine-runtime/src/test-support/parity-harness.ts`.
+   No new package: a one-function helper has no importers to justify one.
+2. **Hook-level unset** (`lib/git-env-guard.sh`, sourced by `pre-commit` and
+   `pre-push`): `no_hook_git_env <cmd>` runs the lint/test/`nx affected`
+   invocations with those variables unset. Gate 0 and Gate 1 (secret-scan) keep
+   the hook environment on purpose — they read the staged index.
+3. **Tripwire**: `guard_snapshot` / `guard_verify` compare the shared repo
+   config before and after the tests and fail the hook with a `GIT-ENV-LEAK`
+   message if `core.bare` flipped to `true` or a repo-local `user.name` /
+   `user.email` appeared.
+
+Proof: `node --test .githooks/git-env-leak.spec.mjs` runs the four originally
+leaking specs as children under the exact worktree-hook environment against a
+throwaway repo and asserts its `.git/config` is byte-identical, `core.bare` is
+false, `git status` exits 0 and the refs are unchanged. It includes a leaky
+fixture proving the harness really detects corruption.
+
 ### Why `pre-commit` never runs `lint --fix` and never auto-stages (incident history)
 
 This hook used to run `nx affected -t lint --fix --skip-nx-cache` and then `git add`

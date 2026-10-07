@@ -12,6 +12,8 @@
  * body edit) and contrasting it.
  */
 import { execFileSync } from 'node:child_process';
+// 50e8c966: hook-exported GIT_DIR/GIT_INDEX_FILE must never reach a fixture git spawn.
+import { gitEnv } from '../test/helpers/git-env.js';
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import { rmSync, writeFileSync } from 'node:fs';
@@ -102,6 +104,7 @@ function git(cwd: string, args: string[]): void {
   execFileSync('git', args, {
     cwd,
     stdio: ['ignore', 'pipe', 'pipe'],
+    env: gitEnv(),
   });
 }
 

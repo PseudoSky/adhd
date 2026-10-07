@@ -12,6 +12,8 @@
  * AC6 proves `recheck` APPENDS (earlier checks copied forward verbatim).
  */
 import { execFileSync } from 'node:child_process';
+// 50e8c966: hook-exported GIT_DIR/GIT_INDEX_FILE must never reach a fixture git spawn.
+import { gitEnv } from '../test/helpers/git-env.js';
 import { createHash } from 'node:crypto';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -50,11 +52,10 @@ function git(cwd: string, args: string[]): string {
     // Backdate every commit to 2020 so "filed now, untouched since filing"
     // is genuinely true: git's `--since` is second-granular, and a commit in
     // the same second as the attestation would otherwise count as "changed".
-    env: {
-      ...process.env,
+    env: gitEnv({
       GIT_AUTHOR_DATE: '2020-01-01T00:00:00Z',
       GIT_COMMITTER_DATE: '2020-01-01T00:00:00Z',
-    },
+    }),
   });
 }
 
@@ -116,12 +117,13 @@ describe('attestation — attest/recheck (real store, real git repo)', () => {
       cwd: root,
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'pipe'],
+      env: gitEnv(),
     });
     execFileSync('git', ['commit', '-qm', `set ${rel} @ ${iso}`], {
       cwd: root,
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'pipe'],
-      env: { ...process.env, GIT_AUTHOR_DATE: iso, GIT_COMMITTER_DATE: iso },
+      env: gitEnv({ GIT_AUTHOR_DATE: iso, GIT_COMMITTER_DATE: iso }),
     });
   }
 

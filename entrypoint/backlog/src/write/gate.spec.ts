@@ -20,6 +20,8 @@
  * and the gate's `performed_check` derivation.
  */
 import { execFileSync } from 'node:child_process';
+// 50e8c966: hook-exported GIT_DIR/GIT_INDEX_FILE must never reach a fixture git spawn.
+import { gitEnv } from '../test/helpers/git-env.js';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { AdapterTransaction } from '@adhd/sox-store-adapter';
@@ -51,11 +53,10 @@ function git(cwd: string, args: string[]): string {
     cwd,
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'pipe'],
-    env: {
-      ...process.env,
+    env: gitEnv({
       GIT_AUTHOR_DATE: '2020-01-01T00:00:00Z',
       GIT_COMMITTER_DATE: '2020-01-01T00:00:00Z',
-    },
+    }),
   });
 }
 
