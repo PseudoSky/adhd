@@ -619,7 +619,7 @@ export function createServer(deps: ServerDeps): Server {
       {
         name: 'agent_create',
         description:
-          'Create a new stored agent definition. The response is a SUMMARY that omits the systemPrompt body (retrieve it explicitly with agent_read fullDefinition:true if needed).',
+          'Create a new stored agent definition. The provider accepts model, env, temperature, maxTokens, timeoutMs plus models (ordered fallback model ids), billingScope (shared spend-limit id), tripwire ({baseMs,maxMs,probeLeaseMs}) and retryConfig (retries,minTimeout,maxTimeout,factor,retryWindowMs). Input is strict: unknown provider keys are rejected; only the legacy keys apiKeyEnv/authTokenEnv are accepted and mapped to env.secret. The response is a SUMMARY that omits the systemPrompt body (retrieve it explicitly with agent_read fullDefinition:true if needed).',
         inputSchema: toMcpInputSchema(agentCreateInputSchema),
       },
       {
@@ -631,7 +631,7 @@ export function createServer(deps: ServerDeps): Server {
       {
         name: 'agent_update',
         description:
-          'Update a stored agent definition. The response includes openSessionsNotUpdated — the active session ids that will keep running on the pre-update snapshot. The default response is a SUMMARY that omits the systemPrompt body; pass fullDefinition:true to return the FULL definition including systemPrompt, or fields:["systemPrompt"] to request the body explicitly.',
+          'Update a stored agent definition via a partial patch. The patch is strict (unknown patch keys are rejected); patch.provider takes the same fields as agent_create: model, env, temperature, maxTokens, timeoutMs, models (ordered fallback model ids), billingScope (shared spend-limit id), tripwire ({baseMs,maxMs,probeLeaseMs}) and retryConfig (retries,minTimeout,maxTimeout,factor,retryWindowMs); legacy apiKeyEnv/authTokenEnv are accepted and mapped to env.secret, so an agent_read definition round-trips unchanged. The response includes openSessionsNotUpdated — the active session ids that will keep running on the pre-update snapshot. The default response is a SUMMARY that omits the systemPrompt body; pass fullDefinition:true to return the FULL definition including systemPrompt, or fields:["systemPrompt"] to request the body explicitly.',
         inputSchema: toMcpInputSchema(agentUpdateInputSchema),
       },
       {

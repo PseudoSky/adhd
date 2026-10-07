@@ -94,6 +94,23 @@ Audit a sink with `python3 scripts/audit_tracing.py <sink-dir>`: it recomputes p
 
 **Gemini is not implemented.** There is no `gemini` provider `type`, no Gemini provider adapter, and no `GOOGLE_API_KEY`/Gemini credential path — despite having appeared in older versions of this document.
 
+### Provider fields accepted by `agent_create` / `agent_update`
+
+`provider` is a discriminated union on `type` (`anthropic` | `openai` | `claudecli`). Besides `model`, `env`, `temperature`, `maxTokens`, `timeoutMs` (and `baseURL` for `openai`, `claudePath`/`allowedBuiltinTools`/`systemPromptIsAgentSpec` for `claudecli`), every variant accepts the provider-failure fields:
+
+| Field | Type | Meaning |
+|---|---|---|
+| `models` | `string[]` | Ordered fallback list of canonical model ids (e.g. `claude_sonnet_4_6`); tried in order when the primary model's attempt fails. |
+| `billingScope` | `string` | Operator-set id shared by every key under one spend limit (e.g. an org/project id). Becomes the credential scope; absent means the key itself is the scope. |
+| `tripwire` | `{ baseMs?, maxMs?, probeLeaseMs? }` (positive integers, ms) | Tripwire tuning: `baseMs` overrides the per-class cooldown base, `maxMs` caps the cooldown (default 15 minutes), `probeLeaseMs` is the half-open probe lease (default 120000). Typed config, never env. |
+| `retryConfig.retryWindowMs` | positive integer, ms | Added to `retryConfig` (`retries`, `minTimeout`, `maxTimeout`, `factor`, `retryWindowMs`). Bounds only *starting* a new attempt and backoff sleeps, never an in-flight healthy attempt. Default 120000. |
+
+`models`, `billingScope`, `tripwire`, and `retryConfig` are valid on `anthropic` and `openai`; `claudecli` accepts `models`, `billingScope`, and `tripwire`.
+
+**Strict input.** `agent_create` and `agent_update` reject unknown keys, in `provider` and in the `agent_update` `patch`, with a validation error rather than silently dropping them, so a typo can never be lost. Stored rows are read leniently so older definitions always load.
+
+**Legacy credential keys are accepted on input.** `apiKeyEnv` and `authTokenEnv` on a `provider` are mapped to `env.secret` (an explicit `env.secret` wins) and then validated like any other input, exactly as stored rows have always been normalized on read. An `agent_read` -> `agent_update` round trip of an existing definition therefore needs no rewriting. The legacy keys are not part of the advertised schema; prefer `env.secret` in new definitions. Any other unknown key is still rejected.
+
 ### Provider credentials are NOT declared `AgentMcpConfig` fields — but they DO resolve via a `.env` file cascade
 
 Most of agent-mcp's configuration (`db`, `logging`, `queue`, `server`, `transport`, `sse`, `plugins`) resolves through `@adhd/environment`'s file-based cascade (code defaults → global → project → env var), documented in `src/config.ts`. Provider-credential env vars are **not** declared fields of `AgentMcpConfig` and are not part of that specific cascade — they resolve via `env.resolveEnvName()` (`packages/environment/environment-core-node/src/environment.ts:317-320`), a direct `process.env` read gated only by an `ADHD_AGENT` prefix allowlist.

@@ -82,6 +82,34 @@ function buildProviderConfigSchema(strict: boolean) {
   ]);
 }
 
+/**
+ * Maps the legacy credential keys `apiKeyEnv` / `authTokenEnv` onto
+ * `env.secret` (an explicit `env.secret` wins) and drops the legacy keys.
+ * Shared by the stored-row shim (read path) and the agent_create /
+ * agent_update input path, so both map identically.
+ */
+function mapLegacyCredentialKeys(
+  r: Record<string, unknown>
+): Record<string, unknown> {
+  const apiKeyEnv = r['apiKeyEnv'] as string | undefined;
+  const authTokenEnv = r['authTokenEnv'] as string | undefined;
+  if (!apiKeyEnv && !authTokenEnv) return r;
+  const existingEnv =
+    typeof r['env'] === 'object' && r['env']
+      ? { ...(r['env'] as Record<string, unknown>) }
+      : {};
+  const next: Record<string, unknown> = {
+    ...r,
+    env: {
+      ...existingEnv,
+      secret: existingEnv['secret'] ?? apiKeyEnv ?? authTokenEnv,
+    },
+  };
+  delete next['apiKeyEnv'];
+  delete next['authTokenEnv'];
+  return next;
+}
+
 // Legacy normalize-on-load shim
 function legacyShim(raw: unknown): unknown {
   if (!raw || typeof raw !== 'object') return raw;
@@ -91,23 +119,7 @@ function legacyShim(raw: unknown): unknown {
     r = { ...r, type: 'openai' };
   }
 
-  const apiKeyEnv = r['apiKeyEnv'] as string | undefined;
-  const authTokenEnv = r['authTokenEnv'] as string | undefined;
-  if (apiKeyEnv || authTokenEnv) {
-    const existingEnv =
-      typeof r['env'] === 'object' && r['env']
-        ? { ...(r['env'] as Record<string, unknown>) }
-        : {};
-    r = {
-      ...r,
-      env: {
-        ...existingEnv,
-        secret: existingEnv['secret'] ?? apiKeyEnv ?? authTokenEnv,
-      },
-    };
-    delete r['apiKeyEnv'];
-    delete r['authTokenEnv'];
-  }
+  r = mapLegacyCredentialKeys(r);
 
   delete r['useClaudeOauth'];
   delete r['_useOauthIdentity'];
@@ -115,7 +127,21 @@ function legacyShim(raw: unknown): unknown {
   return r;
 }
 
-export const providerConfigSchema = buildProviderConfigSchema(true);
+/**
+ * Input-path shim: accepts ONLY the legacy credential keys `apiKeyEnv` /
+ * `authTokenEnv` (mapped to `env.secret`, exactly as the read path does) so a
+ * stored definition round-trips agent_read -> agent_update unchanged. Every
+ * other unknown key still reaches the strict schema and is rejected.
+ */
+function inputLegacyShim(raw: unknown): unknown {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return raw;
+  return mapLegacyCredentialKeys({ ...(raw as Record<string, unknown>) });
+}
+
+export const providerConfigSchema = z.preprocess(
+  inputLegacyShim,
+  buildProviderConfigSchema(true)
+);
 
 export const providerConfigStoredSchema = z.preprocess(
   legacyShim,
