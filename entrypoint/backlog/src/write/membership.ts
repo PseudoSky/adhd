@@ -39,7 +39,7 @@
 import { isAbsolute, join, resolve as resolvePath } from 'node:path';
 import type { AdapterTransaction } from '@adhd/sox-store-adapter';
 import { resolveEdgeKindTx } from './catalog.js';
-import { isPathWithin, type ISiblingRootExecutor } from './citation-path.js';
+import { canonicalizePath, isPathWithin, type ISiblingRootExecutor } from './citation-path.js';
 import {
   type IWriteStoreHandle,
   getNodeByRowidTx,
@@ -72,6 +72,21 @@ interface IDesired {
 function absoluteRoot(p: string, base: string | undefined): string | undefined {
   if (isAbsolute(p)) return p;
   return base === undefined ? undefined : join(base, p);
+}
+
+/**
+ * `p` made absolute and symlink-resolved (the same canonical form
+ * `reservation.ts` uses), so `/tmp/x` and `/private/tmp/x` — or a symlinked
+ * checkout and its real path — compare equal. An unreadable ancestor falls back
+ * to the plain absolute path: it must never block a write.
+ */
+export async function canonicalMembershipPath(p: string): Promise<string> {
+  const abs = resolvePath(p);
+  try {
+    return await canonicalizePath(abs);
+  } catch {
+    return abs;
+  }
 }
 
 /** Primary row first, then by component uid. */
@@ -143,7 +158,7 @@ export async function loadComponentRootIndexTx(exec: ISiblingRootExecutor): Prom
     const base = projectPath.get(info.projectUid);
     if (info.path !== undefined) {
       const abs = absoluteRoot(info.path, base);
-      if (abs !== undefined) roots.push({ componentUid: uid, root: resolvePath(abs) });
+      if (abs !== undefined) roots.push({ componentUid: uid, root: await canonicalMembershipPath(abs) });
     }
   }
   const { rows: locations } = await exec.executeAll<{ meta: string | null }>(
@@ -158,7 +173,7 @@ export async function loadComponentRootIndexTx(exec: ISiblingRootExecutor): Prom
     if (info === undefined) continue;
     const base = projectPath.get(info.projectUid);
     const abs = absoluteRoot(value, base);
-    if (abs !== undefined) roots.push({ componentUid, root: resolvePath(abs) });
+    if (abs !== undefined) roots.push({ componentUid, root: await canonicalMembershipPath(abs) });
   }
   return { roots, compInfo };
 }
@@ -171,6 +186,7 @@ export async function loadComponentRootIndexTx(exec: ISiblingRootExecutor): Prom
  * cross-project evidence the n:m model exists for. Pure, no I/O.
  */
 export function matchComponentsForPath(index: IComponentRootIndex, absPath: string): IComponentHit[] {
+  // `absPath` must already be canonical ({@link canonicalMembershipPath}); the index roots are.
   const target = resolvePath(absPath);
   const best = new Map<string, { componentUid: string; rootLen: number }>();
   for (const { componentUid, root } of index.roots) {
@@ -193,7 +209,7 @@ export async function findComponentsForPathTx(
   exec: ISiblingRootExecutor,
   absPath: string
 ): Promise<IComponentHit[]> {
-  return matchComponentsForPath(await loadComponentRootIndexTx(exec), absPath);
+  return matchComponentsForPath(await loadComponentRootIndexTx(exec), await canonicalMembershipPath(absPath));
 }
 
 /**
@@ -247,7 +263,7 @@ export async function reconcileMembershipTx(
     if (typeof target !== 'string' || target.length === 0) continue;
     const abs = absoluteRoot(target, projectRoot);
     if (abs === undefined) continue;
-    for (const hit of matchComponentsForPath(rootIndex!, abs)) {
+    for (const hit of matchComponentsForPath(rootIndex!, await canonicalMembershipPath(abs))) {
       if (desired.has(hit.componentRowid)) continue; // primary wins; first citation names the row
       desired.set(hit.componentRowid, {
         componentRowid: hit.componentRowid,

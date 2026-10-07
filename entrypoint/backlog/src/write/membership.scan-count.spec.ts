@@ -20,7 +20,7 @@ import { openTmpStore, type TmpStore } from '../test/helpers/tmp-store.js';
 import { buildBacklogEnv } from '../env.js';
 import * as api from '../api.js';
 import type { IOutcomeEnvelope } from '../envelope.js';
-import { findComponentsForPathTx, loadComponentRootIndexTx, matchComponentsForPath } from './membership.js';
+import { canonicalMembershipPath, findComponentsForPathTx, loadComponentRootIndexTx, matchComponentsForPath } from './membership.js';
 
 function data<T>(r: IOutcomeEnvelope<T>): T {
   if (!r.ok) throw new Error(JSON.stringify(r));
@@ -131,9 +131,9 @@ describe('3ef33aaf — membership reconcile is linear in citation count', () => 
   it('3ef33aaf AC2 — the preloaded root index returns exactly what the one-shot finder returns', async () => {
     const index = await loadComponentRootIndexTx(tmp.store.adapter);
     for (const f of [...files, join(dir, 'outside.ts'), '/nowhere/x.ts']) {
-      expect(matchComponentsForPath(index, f)).toEqual(await findComponentsForPathTx(tmp.store.adapter, f));
+      expect(matchComponentsForPath(index, await canonicalMembershipPath(f))).toEqual(await findComponentsForPathTx(tmp.store.adapter, f));
     }
-    expect(matchComponentsForPath(index, files[0]!).map((h) => h.componentUid)).toEqual([componentUid]);
+    expect(matchComponentsForPath(index, await canonicalMembershipPath(files[0]!)).map((h) => h.componentUid)).toEqual([componentUid]);
   });
 
   it('3ef33aaf AC3 — N citations in one file still yield one primary plus one citation membership row per reachable component', async () => {

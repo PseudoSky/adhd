@@ -514,8 +514,7 @@ export async function claim(
       };
     }
     // != by or unset — "renew is not a claim attempt" (SPEC.md §6.3.5) — throws unconditionally.
-    // See this function's own doc comment ("renew against an unclaimed issue") for the
-    // empty-string sentinel used when there is no real holder to report.
+    // `claimedBy` is `undefined` when nobody holds the claim; the error then reports no holder.
     throw new ActorMismatchError('renew', input.by, claimedBy, claimedAt);
   });
 }
