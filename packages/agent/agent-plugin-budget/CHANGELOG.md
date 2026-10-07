@@ -1,3 +1,13 @@
+## 0.2.5 (2026-10-07)
+
+### 🚀 Features
+
+- **agent-engine-orchestrator:** un-weld agent from provider; resolveSelection chain + session-held binding + fail-closed NO_PROVIDER_SELECTED (5ad2cf37 D-G(2)) ([b5f3f6d8](https://github.com/PseudoSky/adhd/commit/b5f3f6d8))
+
+### ❤️ Thank You
+
+- pseudosky
+
 ## 0.2.4 (2026-10-06)
 
 ### 🩹 Fixes

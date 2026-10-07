@@ -1,3 +1,19 @@
+## 2.3.5 (2026-10-07)
+
+### 🚀 Features
+
+- **agent-base-types:** add permission:decision, hitl:suspend, hitl:resume, session:closed hook events (da907b90 TRACE-1) ([b0ad7219](https://github.com/PseudoSky/adhd/commit/b0ad7219))
+- **agent-engine-orchestrator:** un-weld agent from provider; resolveSelection chain + session-held binding + fail-closed NO_PROVIDER_SELECTED (5ad2cf37 D-G(2)) ([b5f3f6d8](https://github.com/PseudoSky/adhd/commit/b5f3f6d8))
+- **agent-core-provider:** merge provider representations into one registry + shared PartialBinding (d3f1f787 D-G(1)) ([eabd654c](https://github.com/PseudoSky/adhd/commit/eabd654c))
+
+### 🩹 Fixes
+
+- **agent-mcp:** assert pinned node fs launch + pinned shell, drop npm registry from srt allowlist, connectTimeoutMs type, docs (c9f0a791) ([b9ab73bc](https://github.com/PseudoSky/adhd/commit/b9ab73bc))
+
+### ❤️ Thank You
+
+- pseudosky
+
 ## 2.3.4 (2026-10-06)
 
 ### 🚀 Features

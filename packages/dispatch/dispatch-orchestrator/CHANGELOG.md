@@ -1,3 +1,15 @@
+## 0.1.7 (2026-10-07)
+
+### 🚀 Features
+
+- **dispatch:** lane/grant validation, liveness heartbeats, duplicate-dispatch guard, evidence tooling (7ed25125 d794287f 65788fd8 025d3239 f613472b) ([9f556fd7](https://github.com/PseudoSky/adhd/commit/9f556fd7))
+- **dispatch-orchestrator:** drop implicit claudecli agent default (fail closed); document session_update + provider selection (5ad2cf37 D-G(2)) ([5667dff8](https://github.com/PseudoSky/adhd/commit/5667dff8))
+- **agent-core-provider:** merge provider representations into one registry + shared PartialBinding (d3f1f787 D-G(1)) ([eabd654c](https://github.com/PseudoSky/adhd/commit/eabd654c))
+
+### ❤️ Thank You
+
+- pseudosky
+
 ## 0.1.6 (2026-10-06)
 
 ### 🚀 Features

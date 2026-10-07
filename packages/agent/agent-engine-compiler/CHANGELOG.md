@@ -1,3 +1,14 @@
+## 2.2.8 (2026-10-07)
+
+### 🚀 Features
+
+- **nx-build:** release/CI/toolchain integrity gates (a4d346ae df9de4da 8c0c314e 255394d0 b83f167d 420a7051 e92e2b92 7b7d5e38 ddceb069) ([35bbcbf0](https://github.com/PseudoSky/adhd/commit/35bbcbf0))
+- **agent-core-provider:** merge provider representations into one registry + shared PartialBinding (d3f1f787 D-G(1)) ([eabd654c](https://github.com/PseudoSky/adhd/commit/eabd654c))
+
+### ❤️ Thank You
+
+- pseudosky
+
 ## 2.2.7 (2026-10-06)
 
 This was a version bump only for agent-engine-compiler to align it with other projects, there were no code changes.

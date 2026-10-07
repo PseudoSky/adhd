@@ -1,3 +1,20 @@
+## 0.1.7 (2026-10-07)
+
+### 🚀 Features
+
+- **dispatch:** lane/grant validation, liveness heartbeats, duplicate-dispatch guard, evidence tooling (7ed25125 d794287f 65788fd8 025d3239 f613472b) ([9f556fd7](https://github.com/PseudoSky/adhd/commit/9f556fd7))
+- **agent-core-provider:** merge provider representations into one registry + shared PartialBinding (d3f1f787 D-G(1)) ([eabd654c](https://github.com/PseudoSky/adhd/commit/eabd654c))
+
+### 🩹 Fixes
+
+- **dispatch-cli:** agents import stores no implicit claudecli provider (import-agents-claudecli) ([73fa0d69](https://github.com/PseudoSky/adhd/commit/73fa0d69))
+- **dispatch-cli:** canonical ADHD_AGENT_MCP_REQUEST_TIMEOUT_MS with legacy fallback + one stderr deprecation warning (64e7ebe7) ([d8e3526f](https://github.com/PseudoSky/adhd/commit/d8e3526f))
+- **agent-mcp:** assert pinned node fs launch + pinned shell, drop npm registry from srt allowlist, connectTimeoutMs type, docs (c9f0a791) ([b9ab73bc](https://github.com/PseudoSky/adhd/commit/b9ab73bc))
+
+### ❤️ Thank You
+
+- pseudosky
+
 ## 0.1.6 (2026-10-06)
 
 ### 🚀 Features

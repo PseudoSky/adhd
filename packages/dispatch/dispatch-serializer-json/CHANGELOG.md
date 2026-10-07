@@ -1,3 +1,13 @@
+## 0.1.4 (2026-10-07)
+
+### 🚀 Features
+
+- **agent-core-provider:** merge provider representations into one registry + shared PartialBinding (d3f1f787 D-G(1)) ([eabd654c](https://github.com/PseudoSky/adhd/commit/eabd654c))
+
+### ❤️ Thank You
+
+- pseudosky
+
 ## 0.1.2 (2026-09-26)
 
 ### 🚀 Features

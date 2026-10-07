@@ -1,3 +1,23 @@
+## 2.3.6 (2026-10-07)
+
+### 🚀 Features
+
+- **agent-engine-orchestrator:** ask escalation climbs transitively to the nearest interactive ancestor, root-terminal deny (fc466f0b) ([6bd3e4f6](https://github.com/PseudoSky/adhd/commit/6bd3e4f6))
+- **dispatch-orchestrator:** drop implicit claudecli agent default (fail closed); document session_update + provider selection (5ad2cf37 D-G(2)) ([5667dff8](https://github.com/PseudoSky/adhd/commit/5667dff8))
+- **agent-mcp:** session_update tool, host default provider tier, registry seeding + provider-selection e2e (5ad2cf37 D-G(2)) ([ef9f72e6](https://github.com/PseudoSky/adhd/commit/ef9f72e6))
+
+### 🩹 Fixes
+
+- **agent-engine-orchestrator:** reconstruct rootTaskId/callingAgentName on re-dispatch (0d77376f) ([90df4a43](https://github.com/PseudoSky/adhd/commit/90df4a43))
+- **agent-mcp:** silence dotenv banner on stdio stdout (a0806529) ([eae6661c](https://github.com/PseudoSky/adhd/commit/eae6661c))
+- **agent-mcp:** assert pinned node fs launch + pinned shell, drop npm registry from srt allowlist, connectTimeoutMs type, docs (c9f0a791) ([b9ab73bc](https://github.com/PseudoSky/adhd/commit/b9ab73bc))
+- **agent-mcp:** move gitnexus-singleton contract out of gitnexus-owned skill dir (2cd99264) ([ed73dec1](https://github.com/PseudoSky/adhd/commit/ed73dec1))
+- **agent-mcp:** union caller cwd into srt allowWrite when fs.root is explicit; add 48dc agent-portability e2e (7e854708, 33713d33) ([5fee7923](https://github.com/PseudoSky/adhd/commit/5fee7923))
+
+### ❤️ Thank You
+
+- pseudosky
+
 ## 2.3.5 (2026-10-06)
 
 ### 🩹 Fixes

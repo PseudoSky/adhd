@@ -1,3 +1,23 @@
+## 2.3.5 (2026-10-07)
+
+### 🚀 Features
+
+- **nx-build:** release/CI/toolchain integrity gates (a4d346ae df9de4da 8c0c314e 255394d0 b83f167d 420a7051 e92e2b92 7b7d5e38 ddceb069) ([35bbcbf0](https://github.com/PseudoSky/adhd/commit/35bbcbf0))
+- **agent-engine-orchestrator:** ask escalation climbs transitively to the nearest interactive ancestor, root-terminal deny (fc466f0b) ([6bd3e4f6](https://github.com/PseudoSky/adhd/commit/6bd3e4f6))
+- **agent-engine-orchestrator:** emit permission:decision, hitl:suspend, hitl:resume, session:closed (f376e27a TRACE-2) ([9f2e7dc5](https://github.com/PseudoSky/adhd/commit/9f2e7dc5))
+- **agent-engine-orchestrator:** un-weld agent from provider; resolveSelection chain + session-held binding + fail-closed NO_PROVIDER_SELECTED (5ad2cf37 D-G(2)) ([b5f3f6d8](https://github.com/PseudoSky/adhd/commit/b5f3f6d8))
+
+### 🩹 Fixes
+
+- **agent-engine-orchestrator:** reconstruct rootTaskId/callingAgentName on re-dispatch (0d77376f) ([90df4a43](https://github.com/PseudoSky/adhd/commit/90df4a43))
+- **agent-engine-orchestrator:** named fail-fast connectTimeoutMs, no doubled reconnect after listAllTools (c9f0a791) ([78104bf3](https://github.com/PseudoSky/adhd/commit/78104bf3))
+- **agent-store-runtime:** getSelection fails loudly on an unmigrated sessions table (aafd6561 e) ([423350ea](https://github.com/PseudoSky/adhd/commit/423350ea))
+- **agent-engine-orchestrator:** stop caller-cwd test 4 spawning a real npx MCP server ([9bcfa290](https://github.com/PseudoSky/adhd/commit/9bcfa290))
+
+### ❤️ Thank You
+
+- pseudosky
+
 ## 2.3.4 (2026-10-06)
 
 ### 🚀 Features

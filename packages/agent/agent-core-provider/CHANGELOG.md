@@ -1,3 +1,23 @@
+## 2.2.4 (2026-10-07)
+
+### 🚀 Features
+
+- **nx-build:** release/CI/toolchain integrity gates (a4d346ae df9de4da 8c0c314e 255394d0 b83f167d 420a7051 e92e2b92 7b7d5e38 ddceb069) ([35bbcbf0](https://github.com/PseudoSky/adhd/commit/35bbcbf0))
+- **agent-core-provider:** merge provider representations into one registry + shared PartialBinding (d3f1f787 D-G(1)) ([eabd654c](https://github.com/PseudoSky/adhd/commit/eabd654c))
+- **vite-plugins:** absorb perf/test-resolve-fix — test-time @adhd/* source resolution ([b2022986](https://github.com/PseudoSky/adhd/commit/b2022986))
+
+### 🩹 Fixes
+
+- **agent-store:** complete store-layer atomicity epic — 3 residual sites + JSDoc ([66531986](https://github.com/PseudoSky/adhd/commit/66531986))
+- **agent-store:** atomically arbitrate provider/binding/category/link uniqueness ([01313773](https://github.com/PseudoSky/adhd/commit/01313773))
+- **agent-store:** arbitrate transitions/uniqueness atomically with typed errors ([747115f0](https://github.com/PseudoSky/adhd/commit/747115f0))
+- **vite:** restore import.meta.url in CJS output under vite 8 ([9690844d](https://github.com/PseudoSky/adhd/commit/9690844d))
+- **nx:** finish the ESLint v9 flat-config migration and unblock the gate ([4ccdb53e](https://github.com/PseudoSky/adhd/commit/4ccdb53e))
+
+### ❤️ Thank You
+
+- pseudosky
+
 ## 2.2.1 (2026-09-24)
 
 

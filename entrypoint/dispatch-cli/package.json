@@ -1,23 +1,23 @@
 {
   "name": "@adhd/dispatch-cli",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "bin": {
     "dispatch-cli": "./dist/bin/cli.js"
   },
   "dependencies": {
-    "@adhd/backlog": "^1.0.9",
-    "@adhd/agent-base-types": "^2.3.4",
-    "@adhd/agent-core-native-tooling": "^0.0.1",
-    "@adhd/dispatch-serializer-json": "^0.1.3",
-    "@adhd/dispatch-orchestrator": "^0.1.6",
+    "@adhd/backlog": "^1.0.10",
+    "@adhd/agent-base-types": "^2.3.5",
+    "@adhd/agent-core-native-tooling": "^0.0.2",
+    "@adhd/dispatch-serializer-json": "^0.1.4",
+    "@adhd/dispatch-orchestrator": "^0.1.7",
     "@modelcontextprotocol/sdk": "1.29.0",
     "commander": "14.0.3",
-    "@adhd/dispatch-base-spec": "^0.1.6",
+    "@adhd/dispatch-base-spec": "^0.1.7",
     "@adhd/dispatch-core-client": "^0.1.3",
-    "@adhd/dispatch-core-optimizer": "^0.1.6"
+    "@adhd/dispatch-core-optimizer": "^0.1.7"
   },
   "devDependencies": {
-    "@adhd/agent-core-native-tooling": "^0.0.1"
+    "@adhd/agent-core-native-tooling": "^0.0.2"
   },
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",

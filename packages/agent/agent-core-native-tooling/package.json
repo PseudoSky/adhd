@@ -1,6 +1,6 @@
 {
   "name": "@adhd/agent-core-native-tooling",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Core resolver + thin tool-name permission matcher for the standardized, portable native toolset (fs/shell/dispatch) inherited by dispatched agents (ADR-0008). CommonJS-only (adhd ADR-0003).",
   "main": "./dist/index.js",
   "typings": "./dist/index.d.ts",
@@ -12,7 +12,7 @@
     "CHANGELOG.md"
   ],
   "dependencies": {
-    "@adhd/agent-base-types": "^2.3.4",
+    "@adhd/agent-base-types": "^2.3.5",
     "@anthropic-ai/sandbox-runtime": "^0.0.78",
     "@modelcontextprotocol/server-filesystem": "2026.7.10",
     "tslib": "^2.6.0"
