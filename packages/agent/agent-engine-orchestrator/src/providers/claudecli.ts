@@ -6,7 +6,7 @@ import { join } from "path";
 
 import { generateId } from "../utils/ids.js";
 import { nowIso } from "../utils/timestamps.js";
-import { resolveToolCallName } from "../clients/tool-naming.js";
+import { resolveToolCallName, normalizeToolName } from "../clients/tool-naming.js";
 import type { LLMProvider, ProviderChatRequest, ProviderChatResponse } from "./types.js";
 import type { McpServerConfig, ProviderConfig, Message } from "../validation/index.js";
 import { ToolError } from "../validation/errors.js";
@@ -97,6 +97,9 @@ interface ClaudeHttpMcpEntry {
 
 type ClaudeMcpEntry = ClaudeStdioMcpEntry | ClaudeHttpMcpEntry;
 
+/** Inline `--mcp-config` value for an agent that declares no MCP servers. */
+const EMPTY_MCP_CONFIG = JSON.stringify({ mcpServers: {} });
+
 // ─── history encoding ────────────────────────────────────────────────────────
 
 function buildUserMessage(messages: Message[]): string {
@@ -128,48 +131,41 @@ function buildUserMessage(messages: Message[]): string {
     return lines.join("\n");
 }
 
-// ─── built-in tool list ──────────────────────────────────────────────────────
-
-const CLAUDE_CODE_BUILTIN_TOOLS = [
-    "Bash",
-    "Edit",
-    "MultiEdit",
-    "Read",
-    "Write",
-    "Glob",
-    "Grep",
-    "LS",
-    "WebFetch",
-    "WebSearch",
-    "TodoRead",
-    "TodoWrite",
-    "NotebookRead",
-    "NotebookEdit",
-    "Task",
-] as const;
+// ─── built-in tool allowlist ─────────────────────────────────────────────────
 
 /**
- * Compute the effective allowed built-in set and the `--disallowedTools` argv
- * entries that must be passed to the `claude` CLI subprocess.
+ * Compute the effective allowed built-in set and the `--tools` argv entries that
+ * must be passed to the `claude` CLI subprocess.
+ *
+ * `--tools <list>` specifies the list of available tools from the built-in set;
+ * `--tools ""` disables all of them. An allowlist is used (not a
+ * `--disallowedTools` denylist) because the CLI's built-in surface keeps growing
+ * (Workflow, Skill, ScheduleWakeup, SendMessage, Cron*, Task*, Monitor, ...) and
+ * a denylist silently leaves every newer tool enabled for the agent.
  */
 export function computeClaudeBuiltinArgs(params: {
     compiledTools: string[] | undefined;
     allowedBuiltinTools: string[] | undefined;
-}): { effectiveAllowed: string[]; disallowedArgv: string[] } {
+}): { effectiveAllowed: string[]; toolsArgv: string[] } {
     const effectiveAllowed: string[] =
         params.compiledTools !== undefined
             ? params.compiledTools
             : (params.allowedBuiltinTools ?? []);
 
-    const allowed = new Set(effectiveAllowed);
-    const disallowed = CLAUDE_CODE_BUILTIN_TOOLS.filter(t => !allowed.has(t));
+    return { effectiveAllowed, toolsArgv: ["--tools", effectiveAllowed.join(",")] };
+}
 
-    const disallowedArgv: string[] = [];
-    for (const tool of disallowed) {
-        disallowedArgv.push("--disallowedTools", tool);
-    }
-
-    return { effectiveAllowed, disallowedArgv };
+/**
+ * True when the `tool_use` block named `name` is one the agent-mcp loop itself
+ * must execute: an `mcp__`-prefixed tool that the agent declared. Claude's own
+ * built-ins (Bash, Read, ...) are executed by the CLI inside its single `-p`
+ * invocation, so answering them with a synthetic `tool_result` would inject a
+ * spurious, duplicated (and, without a server, `is_error`) result.
+ */
+export function isLoopExecutedToolUse(name: string, declared: readonly string[] = []): boolean {
+    if (!name.startsWith("mcp__")) return false;
+    const wanted = normalizeToolName(name.slice("mcp__".length));
+    return declared.some((d) => normalizeToolName(d) === wanted);
 }
 
 // ─── agent-spec helpers ──────────────────────────────────────────────────────
@@ -310,12 +306,26 @@ export class ClaudeCliProvider implements LLMProvider {
         for (const [k, v] of Object.entries(this.config.subprocessEnv())) {
             result[k] = v;
         }
+        // Worker agents get a lean prompt: do not inject the operator's
+        // CLAUDE.md files or auto-memory into every task (measured -8k input
+        // tokens per `-p` run, ~53%). An explicit value (process env or host
+        // subprocessEnv) wins so an agent that needs them can opt back in.
+        for (const k of ["CLAUDE_CODE_DISABLE_CLAUDE_MDS", "CLAUDE_CODE_DISABLE_AUTO_MEMORY"]) {
+            if (result[k] === undefined) result[k] = "1";
+        }
         // Strip the enclosing Claude Code session's identity vars LAST, so a
         // host that (incorrectly) re-exports one via subprocessEnv() cannot
         // re-introduce it. See CLAUDE_SESSION_ENV_DENYLIST.
         return stripClaudeSessionEnv(result);
     }
 
+    /**
+     * Writes the agent's declared servers to a temp config file. Returns
+     * `undefined` when there are none; `chat` then passes `EMPTY_MCP_CONFIG`
+     * inline so that, paired with `--strict-mcp-config`, the spawned CLI never
+     * inherits the operator's own MCP set (which includes agent-mcp itself, a
+     * ~30 s CONNECT_TIMEOUT recursion).
+     */
     private async writeMcpConfigFile(): Promise<string | undefined> {
         const entries = Object.entries(this.mcpServers);
         if (entries.length === 0) return undefined;
@@ -349,9 +359,18 @@ export class ClaudeCliProvider implements LLMProvider {
             }
         }
 
-        const filePath = join(tmpdir(), `agent-mcp-claudecli-${Date.now()}.json`);
+        const filePath = join(tmpdir(), `agent-mcp-claudecli-${Date.now()}-${generateId()}.json`);
         await writeFile(filePath, JSON.stringify({ mcpServers: mapped }), "utf8");
         return filePath;
+    }
+
+    /** Whether to retain the spawned CLI's session transcript (default: no). */
+    private keepSessionTranscript(): boolean {
+        const opt = (this.providerConfig as { keepSessionTranscript?: unknown }).keepSessionTranscript;
+        if (typeof opt === "boolean") return opt;
+        const env = process.env["ADHD_AGENT_CLAUDECLI_KEEP_SESSION_TRANSCRIPT"]
+            ?? this.config.subprocessEnv?.()["ADHD_AGENT_CLAUDECLI_KEEP_SESSION_TRANSCRIPT"];
+        return env === "1" || env === "true";
     }
 
     private async writeAgentSpecDir(md: string): Promise<{ dir: string; agentName: string }> {
@@ -382,7 +401,7 @@ export class ClaudeCliProvider implements LLMProvider {
             agentSpecName = written.agentName;
         }
 
-        const { disallowedArgv } = computeClaudeBuiltinArgs({
+        const { toolsArgv } = computeClaudeBuiltinArgs({
             compiledTools: this.compiledTools,
             allowedBuiltinTools: this.providerConfig.allowedBuiltinTools,
         });
@@ -393,7 +412,15 @@ export class ClaudeCliProvider implements LLMProvider {
             "--input-format", "stream-json",
             "--output-format", "stream-json",
             "--verbose",
+            "--strict-mcp-config",
+            "--mcp-config", mcpConfigPath ?? EMPTY_MCP_CONFIG,
         ];
+
+        // Task transcripts are throwaway by default (each is a 200 KB+ JSONL in
+        // ~/.claude/projects). Opt in to keep them for diagnosis via the
+        // `keepSessionTranscript` provider option or
+        // ADHD_AGENT_CLAUDECLI_KEEP_SESSION_TRANSCRIPT=1.
+        if (!this.keepSessionTranscript()) args.push("--no-session-persistence");
 
         if (specMode && agentSpecDir && agentSpecName) {
             args.push(
@@ -408,15 +435,11 @@ export class ClaudeCliProvider implements LLMProvider {
                 );
             }
         } else {
-            args.push(...disallowedArgv);
+            args.push(...toolsArgv);
             if (systemPrompt) args.push("--system-prompt", systemPrompt);
         }
 
         if (this.providerConfig.model)   args.push("--model", this.providerConfig.model);
-
-        if (mcpConfigPath) {
-            args.push("--mcp-config", mcpConfigPath, "--strict-mcp-config");
-        }
 
         const subEnv = this.buildSubprocessEnv();
 
@@ -500,6 +523,11 @@ export class ClaudeCliProvider implements LLMProvider {
                     toolUseCount += toolUseBlocks.length;
 
                     for (const block of toolUseBlocks) {
+                        // CLI-internal built-ins (and MCP tools the agent did not
+                        // declare) are executed by claude itself; never answer them.
+                        if (!isLoopExecutedToolUse(block.name, (request.tools ?? []).map((t) => t.name))) {
+                            continue;
+                        }
                         let toolResultText: string;
                         let isError = false;
 
