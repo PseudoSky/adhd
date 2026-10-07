@@ -123,7 +123,12 @@ export interface Message {
   createdAt: string;
 }
 
-import type { ProviderSelection } from './provider-binding.js';
+import type {
+  BindingRetryConfig,
+  ModelSlug,
+  ProviderSelection,
+} from './provider-binding.js';
+import type { TripwireConfig } from './provider-failure.js';
 
 // Provider binding types (D-G(1)): one binding shape shared by agent, session,
 // task and the dispatch DAG. Defined in provider-binding.ts.
@@ -171,8 +176,15 @@ export type ProviderConfig =
       env?: ProviderEnvBlock;
       temperature?: number;
       maxTokens?: number;
+      /** Ordered fallback list of canonical model ids (provider-failure PF-1). */
+      models?: ModelSlug[];
+      /** Operator-set id shared by every key under one spend limit. */
+      billingScope?: string;
+      /** Tripwire tuning (cooldown base/cap, probe lease). */
+      tripwire?: TripwireConfig;
       timeoutMs?: number;
-      retryConfig?: RetryConfig;
+      /** Retry policy; `retryWindowMs` bounds starting new attempts. */
+      retryConfig?: BindingRetryConfig;
     }
   | {
       type: 'openai';
@@ -185,8 +197,15 @@ export type ProviderConfig =
       baseURL?: string;
       temperature?: number;
       maxTokens?: number;
+      /** Ordered fallback list of canonical model ids (provider-failure PF-1). */
+      models?: ModelSlug[];
+      /** Operator-set id shared by every key under one spend limit. */
+      billingScope?: string;
+      /** Tripwire tuning (cooldown base/cap, probe lease). */
+      tripwire?: TripwireConfig;
       timeoutMs?: number;
-      retryConfig?: RetryConfig;
+      /** Retry policy; `retryWindowMs` bounds starting new attempts. */
+      retryConfig?: BindingRetryConfig;
     }
   /** Uses the local `claude` CLI (Claude Code) as a subprocess provider. Works with any auth
    *  method already configured in Claude Code (subscription, API key, OAuth).
@@ -196,6 +215,12 @@ export type ProviderConfig =
   | {
       type: 'claudecli';
       model?: string;
+      /** Ordered fallback list of canonical model ids (provider-failure PF-1). */
+      models?: ModelSlug[];
+      /** Operator-set id shared by every key under one spend limit. */
+      billingScope?: string;
+      /** Tripwire tuning (cooldown base/cap, probe lease). */
+      tripwire?: TripwireConfig;
       claudePath?: string;
       timeoutMs?: number;
       /**
