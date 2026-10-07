@@ -15,6 +15,7 @@ The CLI wraps `src/api.ts`, a plain, JSDoc'd TypeScript functions surface where 
 | `eligible --dag-path <p>` | read-only | `DagClient.getEligibleMilestones()` — milestone slugs whose deps are complete per `dispatch_log`. |
 | `status --dag-path <p>` | read-only | Per-milestone `{ status, loggedOperationIds, tokensEstimated, tokensActual }`. A milestone whose sessioned task suspended for human input reports `status: "awaiting_input"` plus `awaitingInput: { taskId, resumeToken }` — resume it with agent-mcp's `task_resume`, then run a cycle, which reconciles the resumed task back into the DAG (re-runs the guard, marks the milestone complete — 48b14ec1). |
 | `run --dag-path <p> [--dry-run] [--allow-fs <actions>] [--tools-root <path>]` | **writes** the dag | Runs exactly one `@adhd/dispatch-orchestrator` scheduling cycle. |
+| `agents import <dir>` | **writes** the agent-mcp registry | Imports Claude Code subagent personas (`*.md`) via the real `agent_create`/`agent_update`. Stores **no `provider`** — an imported agent is un-welded from any provider, so a task with no session/global binding fails closed (`NO_PROVIDER_SELECTED`; bind one with `session_update`). The persona's `model` (e.g. `sonnet`, a Claude Code alias) is not written as a provider model; it is reported in the result's `warnings`. |
 | `calibrate --model-tier <Haiku\|Sonnet\|Opus>` | **writes** `~/.adhd/dispatch-calibration.json` | Fires a null-task dispatch to measure a baseline per-tier token cost ("B"). |
 
 ## Run the CLI
@@ -101,6 +102,21 @@ in (`createAgentsIfMissing: true`, minting its synthetic null-task agent).
 Neither path is exercised by this package's default-running tests, which
 call the DI'd `lib/core.ts` functions directly with an injected
 `MockAgentRunner` and a calibration path under `tmp/dispatch-cli/`.
+
+## Environment variables
+
+| Variable | Default | Effect |
+|---|---|---|
+| `ADHD_AGENT_MCP_COMMAND` | `npx` | Command that launches the agent-mcp child (and the `dispatch` self member). |
+| `ADHD_AGENT_MCP_ARGS` | `-y @adhd/agent-mcp@latest` | Whitespace-separated argv for that command. |
+| `ADHD_AGENT_MCP_REQUEST_TIMEOUT_MS` | the orchestrator poll budget | Per-call MCP request timeout (ms). |
+
+**Deprecated legacy names.** `ADHD_DISPATCH_AGENT_MCP_COMMAND`, `ADHD_DISPATCH_AGENT_MCP_ARGS`
+and `ADHD_DISPATCH_AGENT_MCP_REQUEST_TIMEOUT_MS` are honoured for one release as a
+**fallback** (the `ADHD_AGENT_MCP_*` name always wins when both are set). Using any of
+them prints exactly one `DEPRECATED` warning to **stderr** (never stdout, which carries the
+CLI's JSON) naming the new variable; setting only the new names prints nothing.
+Proven by `src/test/agent-mcp-env-rename.spec.ts` (64e7ebe7 AC1/AC2).
 
 ## Native tooling — declarative storage + task-time resolution (NAT-TOOL-5)
 

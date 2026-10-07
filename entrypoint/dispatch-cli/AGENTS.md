@@ -32,7 +32,18 @@ root `/P` then `/Q` while the stored JSON stays byte-identical.
   single-sourced from `buildDispatchSelf` (`@adhd/agent-core-native-tooling`), overridable
   by `ADHD_AGENT_MCP_COMMAND`/`ADHD_AGENT_MCP_ARGS`. The legacy
   `ADHD_DISPATCH_AGENT_MCP_COMMAND`/`_ARGS` names are honoured as a one-release FALLBACK
-  (canonical wins when both are set; #8). A third producer is caught by agent-mcp's
+  (canonical wins when both are set; #8). The request timeout follows the same rule:
+  `ADHD_AGENT_MCP_REQUEST_TIMEOUT_MS`, legacy `ADHD_DISPATCH_AGENT_MCP_REQUEST_TIMEOUT_MS`
+  as fallback. `buildProductionAgentMcpRunner` emits exactly ONE `DEPRECATED` warning on
+  STDERR (never stdout — stdout is the CLI's JSON) when any legacy name is set, naming the
+  new var (64e7ebe7; `src/test/agent-mcp-env-rename.spec.ts`).
+- `agents import` (`importClaudeAgents`) stores NO `provider` on created/updated agents
+  (D-G(2), 5667dff8: no implicit claudecli default). Only an explicit `opts.provider`
+  override is written, verbatim. A persona's `model` (a Claude Code alias like `sonnet`)
+  is never written as a provider model; it surfaces in `result.warnings`. An imported
+  agent therefore needs a session/global provider binding at task time, else
+  `NO_PROVIDER_SELECTED` (`import-agents-claudecli`; proven by
+  `src/test/import-agents-no-provider.e2e.test.ts` + `import-agents.spec.ts`). A third producer is caught by agent-mcp's
   one-producer guard, which scans `entrypoint/dispatch-cli/src`.
 - `AgentMcpRunner.ensureAgent` writes the declarative config on CREATE and
   performs NO write on reuse — `agent_update` is never called, so the stored
