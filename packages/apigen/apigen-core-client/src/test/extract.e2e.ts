@@ -17,6 +17,7 @@ import * as os from 'node:os';
 import { describe, it, expect, vi } from 'vitest';
 import Ajv from 'ajv';
 import { extract } from '../lib/extract';
+import { createExtractionSession } from '../lib/extraction-session';
 
 const fixture = (name: string) => path.resolve(__dirname, 'fixtures', name);
 
@@ -419,11 +420,18 @@ describe('extract — cross-shape invariants', () => {
       'reexport-chain-outer.ts',
       'reexport-wildcard-barrel.ts',
     ];
-    for (const f of fixtures) {
-      const ops = await extract({ sourceFile: fixture(f) });
-      for (const op of ops) {
-        expect(op.host).toBe('ts');
+    // One shared session: the 10 fixtures reuse a single ts-morph Project
+    // instead of cold-building 10 programs (the dominant cost of this test).
+    const session = createExtractionSession();
+    try {
+      for (const f of fixtures) {
+        const ops = await extract({ sourceFile: fixture(f), session });
+        for (const op of ops) {
+          expect(op.host).toBe('ts');
+        }
       }
+    } finally {
+      session.dispose();
     }
   });
 
