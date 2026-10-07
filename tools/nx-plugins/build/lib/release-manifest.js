@@ -187,7 +187,9 @@ function logOverride(workspaceRoot, entry) {
  *   now?: number,
  *   maxAgeMs?: number,
  * }} opts
- * @returns {{ allowed: boolean, forced: boolean, reason: string }}
+ * @returns {{ allowed: boolean, forced: boolean, reason: string, kind?: 'force-reason-missing'|'no-manifest'|'stale'|'out-of-scope' }}
+ *   `kind` classifies a refusal so a caller can decide how to treat it (the publish
+ *   executor treats every kind except 'force-reason-missing' as ADVISORY — see its header).
  */
 function checkPublishAllowed(opts) {
   if (!opts || !opts.workspaceRoot || !opts.projectName) {
@@ -207,6 +209,7 @@ function checkPublishAllowed(opts) {
       return {
         allowed: false,
         forced: false,
+        kind: 'force-reason-missing',
         reason:
           `RELEASE_FORCE_FULL_PUBLISH is set but RELEASE_FORCE_REASON is empty — a non-empty reason is required ` +
           `to bypass the release-manifest backstop (mirrors entrypoint/backlog's requiresReason convention for ` +
@@ -231,6 +234,7 @@ function checkPublishAllowed(opts) {
     return {
       allowed: false,
       forced: false,
+      kind: 'no-manifest',
       reason:
         `no release manifest found at ${MANIFEST_RELATIVE_PATH} — this publish executor only trusts a manifest ` +
         `written by tools/nx-plugins/build/lib/changed-set.js's computeChangedProjectSet (i.e. going through ` +
@@ -258,6 +262,7 @@ function checkPublishAllowed(opts) {
     return {
       allowed: false,
       forced: false,
+      kind: 'stale',
       reason:
         `release manifest at ${MANIFEST_RELATIVE_PATH} is stale (generated ${manifest.generatedAt}, ` +
         `${Math.round(age / 1000)}s ago, max age ${Math.round(maxAgeMs / 1000)}s) — refusing to publish ` +
@@ -271,6 +276,7 @@ function checkPublishAllowed(opts) {
     return {
       allowed: false,
       forced: false,
+      kind: 'out-of-scope',
       reason:
         `${projectName} is not listed in the release manifest's computed scope ` +
         `(${manifest.projectNames.length} project(s): ${manifest.projectNames.join(', ') || '(none)'}) — refusing ` +

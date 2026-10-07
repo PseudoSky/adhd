@@ -758,9 +758,28 @@ async function runVersion(options, context, rec) {
     console.error(`version: FAILED to rewrite version field in ${srcPkgPath}.`);
     return { success: false };
   }
+  // ATOMIC bump + changelog (PUB-AC4): the version write and the changelog
+  // entry are one logical step. If the changelog step fails after package.json
+  // was already bumped, the next run would see `source > published` ("release
+  // pending, no bump") and NEVER regenerate the missing entry — a half-applied
+  // release. So on failure restore package.json (and the changelog, if it
+  // existed) to their pre-run bytes, making the failed run a no-op.
+  const changelogPath = join(pkgRoot, 'CHANGELOG.md');
+  const changelogBefore = existsSync(changelogPath)
+    ? readFileSync(changelogPath, 'utf8')
+    : null;
   writeFileSync(srcPkgPath, replaced);
-  if (!(await writeChangelogEntry(context, projectRoot, next, false, rec)))
+  if (!(await writeChangelogEntry(context, projectRoot, next, false, rec))) {
+    writeFileSync(srcPkgPath, raw);
+    // A changelog that did not exist before is left as nx wrote it (a
+    // first-release file can only be removed by an fs removal this task does
+    // not perform); one that did exist is restored byte-for-byte.
+    if (changelogBefore !== null) writeFileSync(changelogPath, changelogBefore);
+    console.error(
+      `version: rolled back the ${version} -> ${next} bump of ${name} (changelog step failed) — the tree is as it was before this run; fix the error above and re-run.`
+    );
     return { success: false };
+  }
   // Own bump is applied; now reconcile dependency ranges against the
   // (topologically) already-settled versions of internal deps. Order is
   // safe either way — the fix only touches dependency-range fields, never

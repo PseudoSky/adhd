@@ -56,6 +56,7 @@ const { writeReleaseManifest, readReleaseManifest, OVERRIDE_LOG_RELATIVE_PATH } 
 function resetAll() {
   delete require.cache[implAbs];
   delete require.cache[npmRegistryAbs];
+  delete require.cache[require.resolve('../reconcile/reconcile-core.js')];
   delete require.cache[publishedStateAbs];
   delete require.cache[releaseManifestAbs];
   // publish-verify.js is DELIBERATELY not cache-busted so the reader stub below
@@ -110,7 +111,7 @@ function makeSpawnSyncMock(state) {
   };
 }
 
-test('(a) REFUSES to run npm publish when NO manifest exists at all', async (t) => {
+test('(a) NO manifest at all: a project whose build differs from the registry still PUBLISHES (advisory note, never a refusal)', async (t) => {
   const rootDir = mkdtempSync(join(tmpdir(), 'manifest-backstop-'));
   try {
     const distPkg = { name: '@adhd/pkg-b', version: '1.0.0' };
@@ -124,15 +125,15 @@ test('(a) REFUSES to run npm publish when NO manifest exists at all', async (t) 
     const publishImpl = loadFreshImpl();
 
     const result = await publishImpl({}, context);
-    assert.equal(result.success, false, 'must refuse without a manifest');
+    assert.equal(result.success, true, 'a raw publish with no manifest must not fail for bookkeeping');
     const publishCalls = state.calls.filter((c) => c.cmd === 'npm' && c.args[0] === 'publish');
-    assert.equal(publishCalls.length, 0, 'must NEVER invoke npm publish when no manifest exists');
+    assert.equal(publishCalls.length, 1, 'the (never-published) project must reach npm publish');
   } finally {
     rmSync(rootDir, { recursive: true, force: true });
   }
 });
 
-test('(a) REFUSES to run npm publish when a manifest exists but this project is NOT listed in it', async (t) => {
+test('(a) manifest exists but does NOT list this project: still PUBLISHES (advisory note, never a refusal)', async (t) => {
   const rootDir = mkdtempSync(join(tmpdir(), 'manifest-backstop-'));
   try {
     const distPkg = { name: '@adhd/pkg-b', version: '1.0.0' };
@@ -144,9 +145,9 @@ test('(a) REFUSES to run npm publish when a manifest exists but this project is 
     const publishImpl = loadFreshImpl();
 
     const result = await publishImpl({}, context);
-    assert.equal(result.success, false, 'must refuse when this project is out of the computed scope');
+    assert.equal(result.success, true, 'an out-of-scope manifest is advisory: the content differs from the registry, so it publishes');
     const publishCalls = state.calls.filter((c) => c.cmd === 'npm' && c.args[0] === 'publish');
-    assert.equal(publishCalls.length, 0);
+    assert.equal(publishCalls.length, 1);
   } finally {
     rmSync(rootDir, { recursive: true, force: true });
   }
@@ -286,7 +287,7 @@ test('(run-scoped) same RELEASE_RUN_TOKEN + a 2-HOUR-OLD manifest -> real npm pu
   }
 });
 
-test('(run-scoped) DIFFERENT RELEASE_RUN_TOKEN + a 2-hour-old manifest -> REFUSED, zero npm publish', async (t) => {
+test('(run-scoped) DIFFERENT RELEASE_RUN_TOKEN + a 2-hour-old manifest -> advisory only, still PUBLISHES', async (t) => {
   const rootDir = mkdtempSync(join(tmpdir(), 'manifest-backstop-'));
   const savedToken = process.env.RELEASE_RUN_TOKEN;
   try {
@@ -303,9 +304,9 @@ test('(run-scoped) DIFFERENT RELEASE_RUN_TOKEN + a 2-hour-old manifest -> REFUSE
     const publishImpl = loadFreshImpl();
 
     const result = await publishImpl({}, context);
-    assert.equal(result.success, false, 'a non-matching token must fall through to the stale refusal');
+    assert.equal(result.success, true, 'a stale manifest is advisory (the age gate no longer refuses a real publish)');
     const publishCalls = state.calls.filter((c) => c.cmd === 'npm' && c.args[0] === 'publish');
-    assert.equal(publishCalls.length, 0, 'must NEVER invoke npm publish on a token mismatch');
+    assert.equal(publishCalls.length, 1, 'the changed project reaches npm publish despite the stale manifest');
   } finally {
     if (savedToken === undefined) delete process.env.RELEASE_RUN_TOKEN;
     else process.env.RELEASE_RUN_TOKEN = savedToken;
@@ -313,7 +314,7 @@ test('(run-scoped) DIFFERENT RELEASE_RUN_TOKEN + a 2-hour-old manifest -> REFUSE
   }
 });
 
-test('(run-scoped) NEGATIVE CONTROL: a 2-hour-old TOKENED manifest with NO token in env still FAILS (the age gate was not simply deleted)', async (t) => {
+test('(run-scoped) a 2-hour-old TOKENED manifest with NO token in env is advisory only (checkPublishAllowed still classifies it stale; the executor no longer refuses)', async (t) => {
   const rootDir = mkdtempSync(join(tmpdir(), 'manifest-backstop-'));
   const savedToken = process.env.RELEASE_RUN_TOKEN;
   try {
@@ -332,11 +333,11 @@ test('(run-scoped) NEGATIVE CONTROL: a 2-hour-old TOKENED manifest with NO token
     const result = await publishImpl({}, context);
     assert.equal(
       result.success,
-      false,
-      'without a matching env token the manifest must still be measured against the age gate and refused when stale'
+      true,
+      'without a matching env token the stale manifest is only an advisory note for a project that really differs from the registry'
     );
     const publishCalls = state.calls.filter((c) => c.cmd === 'npm' && c.args[0] === 'publish');
-    assert.equal(publishCalls.length, 0, 'the negative control must never reach npm publish');
+    assert.equal(publishCalls.length, 1);
   } finally {
     if (savedToken === undefined) delete process.env.RELEASE_RUN_TOKEN;
     else process.env.RELEASE_RUN_TOKEN = savedToken;

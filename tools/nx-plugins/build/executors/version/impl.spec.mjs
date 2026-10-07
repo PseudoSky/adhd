@@ -1535,7 +1535,7 @@ test('dry run with real code drift (cache miss -> backfill still runs, but never
   }
 });
 
-test('changelog generation failure fails the whole version task (bump already landed, still surfaced as a failure) and never reaches range reconciliation', async (t) => {
+test('changelog generation failure fails the whole version task, rolls the bump back, and never reaches range reconciliation', async (t) => {
   const rootDir = mkdtempSync(join(tmpdir(), 'version-impl-'));
   try {
     // Give pkg-b a genuinely STALE internal range against a real sibling, so
@@ -1595,8 +1595,8 @@ test('changelog generation failure fails the whole version task (bump already la
     );
     assert.equal(
       after.version,
-      '1.0.1',
-      'the version write itself already landed before the changelog step — this is a surfaced failure, not a rollback'
+      '1.0.0',
+      'a changelog-step failure ROLLS BACK the version write (PUB-AC4): a bump with no changelog entry would otherwise be re-read next run as "release pending" and the entry never generated'
     );
     assert.equal(
       after.dependencies['@adhd/pkg-a'],

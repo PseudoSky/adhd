@@ -19,6 +19,7 @@ import child_process from 'node:child_process';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { createHash } from 'node:crypto';
 
 // BUG (flaky CPU-guard trips under real machine load, test:build-tools): this
 // file exercises the real `publish` executor end-to-end (only `spawnSync` is
@@ -50,13 +51,17 @@ process.env.ADHD_PUBLISH_VERIFY_INTERVAL_MS = '0';
 const require = createRequire(import.meta.url);
 const implAbs = require.resolve('./impl.js');
 const npmRegistryAbs = require.resolve('../../lib/npm-registry.js');
+// reconcile-core (settleExistingVersion) captures npm-registry's spawnSync at load, so it must be reloaded with it.
+const reconcileCoreAbs = require.resolve('../reconcile/reconcile-core.js');
 const publishedStateAbs = require.resolve('../../lib/published-state.js');
 const publishVerify = require('../../lib/publish-verify.js');
 const { writeReleaseManifest } = require('../../lib/release-manifest.js');
+const { normalizedHash } = require('../version/compare-published.js');
 
 function resetAll() {
   delete require.cache[implAbs];
   delete require.cache[npmRegistryAbs];
+  delete require.cache[reconcileCoreAbs];
   delete require.cache[publishedStateAbs];
   // publish-verify.js is DELIBERATELY not cache-busted: its module-level reader
   // seam (__setReadVersion) must survive a loadFreshImpl() reload so the offline
@@ -103,6 +108,9 @@ function makeSpawnSyncMock(state) {
     state.calls.push({ cmd, args });
     if (cmd === 'npm' && args[0] === 'publish') {
       return { status: state.publishStatus ?? 0, stdout: '', stderr: state.publishStderr ?? '' };
+    }
+    if (cmd === 'npm' && args[0] === 'view' && state.viewHandler) {
+      return state.viewHandler(args);
     }
     if (cmd === 'npm' && args[0] === 'view') {
       return { status: state.viewStatus ?? 1, stdout: state.viewStatus === 0 ? state.viewStdout ?? '' : '', stderr: '' };
@@ -154,8 +162,10 @@ test('cache HIT (already published at this version): ZERO network — skips with
   const rootDir = mkdtempSync(join(tmpdir(), 'publish-impl-'));
   try {
     const distPkg = { name: '@adhd/pkg-b', version: '1.0.0' };
-    const { context } = makeProject({ rootDir, name: 'pkg-b', projectRoot: 'packages/pkg-b', distPkg });
-    writePublishedState(rootDir, { '@adhd/pkg-b': { version: '1.0.0', normalizedHash: 'sha256:x', publishedIntegrity: 'sha512-x' } });
+    const { context, distDir } = makeProject({ rootDir, name: 'pkg-b', projectRoot: 'packages/pkg-b', distPkg });
+    // Same version AND same built content (the hash of the fixture dist): a no-op.
+    // (A cache hit with a DIFFERENT hash is no longer a silent skip — it fails loudly.)
+    writePublishedState(rootDir, { '@adhd/pkg-b': { version: '1.0.0', normalizedHash: normalizedHash(distDir), publishedIntegrity: 'sha512-x' } });
 
     const state = newState();
     t.mock.method(child_process, 'spawnSync', makeSpawnSyncMock(state));
@@ -206,9 +216,16 @@ test('"cannot publish over previously published version" is treated as SUCCESS a
     const distPkg = { name: '@adhd/pkg-b', version: '1.0.0' };
     const { context } = makeProject({ rootDir, name: 'pkg-b', projectRoot: 'packages/pkg-b', distPkg });
     // Cache doesn't know it yet (stale/behind), but the registry actually already has it.
+    // The version now ALSO has to be settled by CONTENT: the registry's integrity
+    // equals the locally packed tarball's (same bytes) -> identical -> success.
+    const localIntegrity = `sha512-${createHash('sha512').update('tgz-bytes\n').digest('base64')}`;
     const state = newState({
       publishStatus: 1,
       publishStderr: 'npm error 403 403 Forbidden - PUT https://registry.npmjs.org/@adhd%2fpkg-b - You cannot publish over the previously published versions: 1.0.0.',
+      viewHandler: (args) =>
+        args.includes('versions')
+          ? { status: 0, stdout: JSON.stringify(['1.0.0']), stderr: '' }
+          : { status: 0, stdout: `${localIntegrity}\n`, stderr: '' },
     });
     t.mock.method(child_process, 'spawnSync', makeSpawnSyncMock(state));
     const publishImpl = loadFreshImpl();
