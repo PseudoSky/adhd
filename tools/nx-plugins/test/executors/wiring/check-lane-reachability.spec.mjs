@@ -54,7 +54,7 @@ function baseFiles(overrides = {}) {
     'packages/foo/src/a.e2e.ts': '',
     // A valid single-array config so rule 7 (the repo-wide sweep) is silent on the base fixture.
     'packages/foo/vite.config.ts': 'export default {\n  plugins: [nxViteTsPaths()],\n};\n',
-    '.githooks/pre-push': 'flags=$(node "$repo_root/tools/gate/lane-gate.mjs")\n',
+    '.githooks/pre-push': 'flags=$(node "$repo_root/.githooks/lib/pre-push-flags.mjs")\n',
     '.github/workflows/pull-request.yml':
       'npx nx affected -t test --parallel=5\nnpx nx affected -t e2e --parallel=1\n',
     '.github/workflows/ci.yml':
@@ -148,9 +148,37 @@ test('rule 5 RED: a gate file stops invoking a GATE_TARGET', async () => {
   }
 });
 
-test('rule 5 RED: pre-push hard-codes flags instead of sourcing lane-gate.mjs', async () => {
+test('rule 5 RED: pre-push runs e2e (reads lane-gate.mjs directly, or names --target=e2e)', async () => {
+  for (const body of [
+    'flags=$(node "$repo_root/tools/gate/lane-gate.mjs")\n',
+    'flags=$(node "$repo_root/.githooks/lib/pre-push-flags.mjs")\nnpx nx affected --target=e2e\n',
+  ]) {
+    const { files } = baseFiles();
+    files['.githooks/pre-push'] = body;
+    const root = fixture(files);
+    try {
+      const res = await check(root);
+      assert.ok(hasRule(res, '5-pre-push-runs-e2e'), JSON.stringify(res.violations));
+    } finally {
+      close(root);
+    }
+  }
+});
+
+test('rule 5 RED: resolved pre-push targets include e2e or drop test', async () => {
+  const root = fixture(baseFiles().files);
+  try {
+    assert.ok(hasRule(await check(root, { prePushTargets: ['test', 'e2e'] }), '5-pre-push-runs-e2e'));
+    assert.ok(hasRule(await check(root, { prePushTargets: [] }), '5-pre-push-missing-test'));
+    assert.deepEqual((await check(root, { prePushTargets: ['test'] })).violations, []);
+  } finally {
+    close(root);
+  }
+});
+
+test('rule 5 RED: pre-push hard-codes flags instead of sourcing pre-push-flags.mjs', async () => {
   const { files } = baseFiles();
-  files['.githooks/pre-push'] = 'npx nx affected --target=test --target=e2e\n';
+  files['.githooks/pre-push'] = 'npx nx affected --target=test\n';
   const root = fixture(files);
   try {
     const res = await check(root);

@@ -36,7 +36,7 @@ push to `main` **and** on `pull_request`: `nx format:check` **range-scoped to th
 range** (`--base`/`--head`, never the frozen `NX_BASE` — see §3), then the lane-reachability gate, then
 `nx affected -t lint test build verify-dist-load`, then `e2e --parallel=1`. Locally,
 `.githooks/pre-commit` mirrors the early stages (mass-deletion guard → secret-scan → `nx affected -t
-lint` → staged-spec tests) and `.githooks/pre-push` adds the affected suite.
+lint` → staged-spec tests) and `.githooks/pre-push` adds the affected `test` suite (not `e2e`; CI runs that).
 
 **External status checks (installed GitHub Apps, not workflow steps):** DeepSource is configured by
 the committed `.deepsource.toml` and runs as the installed `deepsource-io` GitHub App check — no

@@ -18,7 +18,7 @@ A test that spawns a process (`child_process`, `StdioClientTransport`/`StdioMcpC
 
 ### D1 — Lane contract
 
-Unit `test` = no subprocess, no bound ports to real servers, fast, cacheable at `--parallel=5`. `e2e` = every suite that spawns a process or runs a real server; run with `--parallel=1` as its own pipeline stage (docs/PIPELINE.md:30; in ci.yml after `lint test build verify-dist-load`, docs/PIPELINE.md:36-37), never inside `nx test`; not env-gated (paid-third-party exception only, AGENTS.md §7); cached on content (`cache:true`, `inputs` containing `default`, no declared `outputs`); reached by the gate via `tools/gate/lane-gate.mjs` `GATE_TARGETS` and by `publish` / `nx-release-publish`.
+Unit `test` = no subprocess, no bound ports to real servers, fast, cacheable at `--parallel=5`. `e2e` = every suite that spawns a process or runs a real server; run with `--parallel=1` as its own pipeline stage (docs/PIPELINE.md:30; in ci.yml after `lint test build verify-dist-load`, docs/PIPELINE.md:36-37), never inside `nx test`; not env-gated (paid-third-party exception only, AGENTS.md §7); cached on content (`cache:true`, `inputs` containing `default`, no declared `outputs`); reached by CI via `tools/gate/lane-gate.mjs` `GATE_TARGETS` and by `publish` / `nx-release-publish`. The local `.githooks/pre-push` runs `test` only (`GATE_TARGETS` minus `PRE_PUSH_EXCLUDED` in `.githooks/lib/pre-push-flags.mjs`); agents run the full lane gate, e2e included, before a push (AGENTS.md "Gates are blocking").
 
 ### D2 — File convention and single source
 
@@ -57,3 +57,4 @@ apigen-* and `entrypoint/backlog` lanes and their `*.e2e.ts` convention; paid-se
 ## Provenance
 
 - 2026-10-06 — backlog 5b839b90. AC1 and AC2 are proven by tests citing them (`check-lane-reachability.spec.mjs`, `check-agent-lane-spawn.spec.mjs`). AC3 (moved e2e tests still run in the `e2e` lane, un-gated) and AC4 (this ADR, AGENTS.md and PIPELINE.md pointers) have no applicable unit test: AC3 is proven by the `nx affected -t e2e --parallel=1` run, AC4 by the documents themselves.
+- 2026-10-07 — dispatch-2026-10-04-b7d4. Local `pre-push` no longer runs `e2e`; CI still does. Proven by `.githooks/pre-push-e2e.spec.mjs`.

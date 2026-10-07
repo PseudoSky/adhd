@@ -36,10 +36,13 @@
  *      invoking the plugin's OWN `createNodes` and reading the resolved
  *      `publish.dependsOn` (never a re-implementation — a re-implementation
  *      would stay green when the plugin breaks, defeating the check).
- *   5. Every gate file (`.githooks/pre-push`, `.github/workflows/pull-request.yml`,
- *      `.github/workflows/ci.yml`) MUST invoke every target in `GATE_TARGETS`
- *      (imported from `tools/gate/lane-gate.mjs`). `.githooks/pre-push` must
- *      additionally DERIVE its flags from that module, not hard-code them.
+ *   5. Both CI workflows (`.github/workflows/pull-request.yml`, `ci.yml`) MUST
+ *      invoke every target in `GATE_TARGETS` (imported from `tools/gate/lane-gate.mjs`).
+ *      `.githooks/pre-push` runs `test` but NOT `e2e` (too heavy per push; CI and the
+ *      AGENTS.md pre-push gate cover it): it must DERIVE its flags from
+ *      `.githooks/lib/pre-push-flags.mjs` (GATE_TARGETS minus PRE_PUSH_EXCLUDED), must
+ *      not reference `lane-gate.mjs` or name `e2e` itself, and the resolved target
+ *      list must contain `test` and no `e2e`.
  *   6. Every project with a `tsconfig.spec.json` MUST have a target that
  *      COMPILES it (surfaces its type errors). This is a pre-existing,
  *      workspace-wide gap (only `entrypoint/backlog` wires `typecheck-spec`);
@@ -95,6 +98,14 @@ function argValue(name) {
   return i >= 0 ? process.argv[i + 1] : undefined;
 }
 
+const PRE_PUSH_FILE = '.githooks/pre-push';
+
+/** The targets the REAL pre-push hook resolves (`.githooks/lib/pre-push-flags.mjs`). */
+export async function loadPrePushTargets() {
+  const mod = await import(pathToFileURL(join(REPO_ROOT, '.githooks/lib/pre-push-flags.mjs')).href);
+  return mod.prePushTargets();
+}
+
 export async function loadGateTargets() {
   const mod = await import(pathToFileURL(join(REPO_ROOT, 'tools/gate/lane-gate.mjs')).href);
   return mod.GATE_TARGETS;
@@ -117,7 +128,7 @@ function dependsOnTargets(dependsOn) {
  * canonical-module reference (a `node … lane-gate.mjs` invocation produces the
  * whole `GATE_TARGETS` list at runtime).
  */
-function fileInvokesTarget(text, t) {
+function fileInvokesTarget(text, t, { canonical = true } = {}) {
   const body = text
     .split('\n')
     .filter((line) => !/^\s*#/.test(line))
@@ -129,7 +140,7 @@ function fileInvokesTarget(text, t) {
   const multiLines = body.match(/--targets=[^\n]*/g) ?? [];
   if (multiLines.some((line) => new RegExp(`(?:=|,)${t}(?:,|\\s|$)`).test(line))) return true;
   // Canonical module: the flags are produced from lane-gate.mjs at runtime.
-  if (/lane-gate\.mjs/.test(body) && /\bnode\b/.test(body)) return true;
+  if (canonical && /lane-gate\.mjs/.test(body) && /\bnode\b/.test(body)) return true;
   return false;
 }
 
@@ -141,7 +152,7 @@ function fileInvokesTarget(text, t) {
  * injecting a deliberately-broken plugin; production always passes the REAL
  * plugin (see `main`).
  */
-export async function runChecks({ workspaceRoot, gateTargets, createNodesFn, baseline: baselineOverride, agentLaneBaseline }) {
+export async function runChecks({ workspaceRoot, gateTargets, createNodesFn, baseline: baselineOverride, agentLaneBaseline, prePushTargets: prePushOverride }) {
   const violations = [];
   const add = (rule, detail) => violations.push({ rule, detail });
 
@@ -222,7 +233,8 @@ export async function runChecks({ workspaceRoot, gateTargets, createNodesFn, bas
     }
   }
 
-  // ---- rule 5: gate files invoke every GATE_TARGETS ----------------------
+  // ---- rule 5: CI gate files invoke every GATE_TARGETS; pre-push runs test, not e2e
+  const prePushTargets = prePushOverride ?? (await loadPrePushTargets());
   for (const rel of GATE_FILES) {
     const abs = join(workspaceRoot, rel);
     if (!existsSync(abs)) {
@@ -230,16 +242,35 @@ export async function runChecks({ workspaceRoot, gateTargets, createNodesFn, bas
       continue;
     }
     const text = readFileSync(abs, 'utf8');
+    if (rel === PRE_PUSH_FILE) {
+      const body = text
+        .split('\n')
+        .filter((line) => !/^\s*#/.test(line))
+        .join('\n');
+      if (!/pre-push-flags\.mjs/.test(body)) {
+        add(
+          '5-gate-not-canonical',
+          `${rel} — must DERIVE its flags from .githooks/lib/pre-push-flags.mjs (GATE_TARGETS minus PRE_PUSH_EXCLUDED), not hard-code \`--target=…\`.`,
+        );
+      }
+      for (const t of gateTargets.filter((g) => !prePushTargets.includes(g))) {
+        if (fileInvokesTarget(text, t, { canonical: false }) || /\bnode\b[^\n]*lane-gate\.mjs/.test(body)) {
+          add('5-pre-push-runs-e2e', `${rel} — runs the full gate (names \`${t}\` or reads lane-gate.mjs directly); pre-push must run GATE_TARGETS minus PRE_PUSH_EXCLUDED via pre-push-flags.mjs.`);
+          break;
+        }
+      }
+      if (!prePushTargets.includes('test')) {
+        add('5-pre-push-missing-test', `${rel} — resolved pre-push targets [${prePushTargets.join(', ')}] do not include \`test\`.`);
+      }
+      for (const t of prePushTargets.filter((x) => x === 'e2e')) {
+        add('5-pre-push-runs-e2e', `${rel} — resolved pre-push targets [${prePushTargets.join(', ')}] include \`${t}\`; the local hook must not run e2e (CI does).`);
+      }
+      continue;
+    }
     for (const t of gateTargets) {
       if (!fileInvokesTarget(text, t)) {
         add('5-gate-file-missing-target', `${rel} — does not invoke target \`${t}\` (GATE_TARGETS from tools/gate/lane-gate.mjs).`);
       }
-    }
-    if (rel === '.githooks/pre-push' && !/lane-gate\.mjs/.test(text)) {
-      add(
-        '5-gate-not-canonical',
-        `${rel} — must DERIVE its flags from tools/gate/lane-gate.mjs (not hard-code \`--target=…\`), so the hook and CI cannot drift.`,
-      );
     }
   }
 
@@ -320,14 +351,14 @@ async function main() {
     console.error('✖ lane reachability check FAILED — the push/CI gate is mis-wired:');
     for (const v of violations) console.error(`   [${v.rule}] ${v.detail}`);
     console.error('');
-    console.error('  The gate runs GATE_TARGETS from tools/gate/lane-gate.mjs; every gate file must reach');
-    console.error('  every target, every `e2e` lane must be cached, `test` must not re-couple `e2e`,');
+    console.error('  The gate runs GATE_TARGETS from tools/gate/lane-gate.mjs; both CI workflows must reach');
+    console.error('  every target (pre-push runs test, never e2e), every `e2e` lane must be cached, `test` must not re-couple `e2e`,');
     console.error('  `publish` must reach every declared `e2e` (tools/nx-plugins/build/plugin.js), and every');
     console.error('  `vite.config.ts` must declare exactly ONE `plugins:` array (check-vite-config-plugins.mjs).');
     process.exit(1);
   }
 
-  console.log(`✓ lane reachability OK — gate targets [${gateTargets.join(', ')}]; all gate files reach them; every e2e lane cached; publish reaches every declared e2e; every vite.config.ts single-array.`);
+  console.log(`✓ lane reachability OK — gate targets [${gateTargets.join(', ')}]; CI workflows reach them, pre-push runs test without e2e; every e2e lane cached; publish reaches every declared e2e; every vite.config.ts single-array.`);
 }
 
 // Only run when invoked directly (never when imported by a test).
