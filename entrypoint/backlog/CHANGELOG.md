@@ -13,6 +13,8 @@
 
 ### 🩹 Fixes
 
+- **backlog:** SPEC-SET S02.T1 now states the SUPERSEDED `reason` is optional from the closed 5-member enum (unknown value is `invalid_argument`, reasonless succeeds with `superseded-without-reason`), matching the shipped additive ADR-0007 behaviour; mandatory `reason` would need an owner-approved breaking-list amendment (ADR-0006 D6) (7130d457)
+
 - **backlog:** test-assertion guards with teeth, install verifies what it wrote, report artifacts free of machine-local constants (55ba4178, 5fd61857, 4a979cef, 2cf61846 B-AC11..13) ([456eda3e](https://github.com/PseudoSky/adhd/commit/456eda3e))
 - **githooks:** scrub hook-exported GIT_* from spec git spawns and guard the real repo config (50e8c966) ([ee788e22](https://github.com/PseudoSky/adhd/commit/ee788e22))
 - **backlog:** assert sandbox path never loads embeddings instead of a stopwatch (633cbaf6) ([b5c550f0](https://github.com/PseudoSky/adhd/commit/b5c550f0))
