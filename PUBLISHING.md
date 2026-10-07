@@ -175,10 +175,7 @@ For an NVM root, activate that node first (or run `<nvm-node>/bin/npm i -g …`)
 
 ## Big-release pre-flight — run the resource lanes explicitly
 
-A package's `e2e` lane — real subprocess spawns, bound-port HTTP/MCP servers, the real fastembed embedding model, CPU/memory hogs — is a **separate target/config** (e.g. `entrypoint/backlog`'s `src/**/*.e2e.ts`, collected by its `e2e` target and its `vitest.e2e.config.ts`). Whether it runs automatically is **per-package**, decided by that package's `test.dependsOn`:
-
-- **`entrypoint/backlog` wires `e2e` into `test.dependsOn`** (resolved: `test => ["lint","^build","build","assets","vocabulary-gate","typecheck-spec","e2e"]`), so its `e2e` lane **is** part of the fast gate — `nx affected -t test` (the pre-push hook and CI's `nx affected -t test` job) runs it — and, because both publish paths depend on `test` (`publish => ["test","^test","version","^publish","dist-manifest","verify-dist-load","publish-hygiene"]`, `nx-release-publish => ["build","test","verify-dist-load","dist-manifest","publish-hygiene"]`), it is also a **publish gate**. This is deliberate and load-bearing: the `.e2e.ts` suites were previously invisible to every gate (backlog `98142eab`, instance 2). **Do not remove `e2e` from `test.dependsOn`** — that re-creates the silent-green defect.
-- **The other 12 packages that declare an `e2e` target do not wire it into `test.dependsOn`** (resolved: e.g. `apigen-cli: test => ["lint","build","^build"]` with `e2e => ["build","apigen-java:package"]`). There it is in **no** target's `dependsOn` and never runs under `nx affected -t test` — run it explicitly before a release:
+A package's `e2e` lane — real subprocess spawns, bound-port HTTP/MCP servers, the real fastembed embedding model, CPU/memory hogs — is a **separate target/config** (e.g. `entrypoint/backlog`'s `src/**/*.e2e.ts`, collected by its `e2e` target and its `vitest.e2e.config.ts`). Whether it runs automatically is **per-package**, decided at the **gate level**. As of **2026-10-07 (owner decision),** `publish` does not depend on `e2e`, and packages' `test.dependsOn` must NOT include `e2e` — the resource-heavy lane is reached only through the **CI gate** (`tools/gate/lane-gate.mjs`). Run it explicitly before a release:
 
 ```bash
 npx nx run-many -t e2e            # every package that declares an e2e target
