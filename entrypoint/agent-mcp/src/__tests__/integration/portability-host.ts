@@ -136,6 +136,19 @@ export function pathWithoutNodeBins(pathValue = process.env['PATH'] ?? ''): stri
     .join(delimiter);
 }
 
+/**
+ * A fake `npx` for PATH-shim negative controls (c9f0a791 AC4): an executable that
+ * records its argv to `marker` and exits 99. Place `dir` FIRST on a server's PATH;
+ * a present `marker` proves something shelled out to `npx`.
+ */
+export function makeNpxShim(dir: string): { dir: string; marker: string } {
+  fs.mkdirSync(dir, { recursive: true });
+  const marker = path.join(dir, 'npx-invoked.marker');
+  const bin = path.join(dir, 'npx');
+  fs.writeFileSync(bin, `#!/bin/sh\necho "$@" >> '${marker}'\nexit 99\n`, { mode: 0o755 });
+  return { dir, marker };
+}
+
 /** True when `srt` is resolvable on `pathValue` (a loud precondition probe). */
 export function srtOnPath(pathValue: string): boolean {
   return (
@@ -150,6 +163,8 @@ export interface PortabilityHostOptions {
   scratch: string;
   /** Extra env for the server (e.g. the global allowed-root map). */
   env?: Record<string, string>;
+  /** Directory prepended to the server's PATH (e.g. a fake-`npx` shim dir). */
+  pathPrefix?: string;
   /** Keep ambient ADHD_AGENT_* (the live leg needs the DeepSeek secret). */
   keepAmbientAgentEnv?: boolean;
   /**
@@ -183,7 +198,7 @@ export async function startPortabilityHost(
     env[k] = v;
   }
   const srtSettingsPath = path.join(opts.scratch, 'srt-run-policy.json');
-  const hostPath = pathWithoutNodeBins();
+  const hostPath = [opts.pathPrefix, pathWithoutNodeBins()].filter(Boolean).join(delimiter);
   Object.assign(env, {
     PATH: hostPath,
     ADHD_AGENT_DATABASE_PATH: path.join(opts.scratch, 'agents.db'),

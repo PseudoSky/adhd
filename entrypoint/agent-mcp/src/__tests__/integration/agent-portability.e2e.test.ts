@@ -19,6 +19,12 @@
  * Prerequisites (npx, uvx, a built dist) FAIL LOUDLY; nothing here self-skips.
  * The paid-model leg lives in `agent-portability-live.e2e.test.ts` (NAT_TOOL_LIVE).
  *
+ * c9f0a791 AC7 — covering set only (QA static redundancy triage): the srt-discovery
+ * precheck, `home-nontmp` cases (a)(b)(c)(e)(f) and `space` cases (a)(e). `plain`/`deep`
+ * cwds sit under os.tmpdir() (already in srt's static allow-list) and add no branch the
+ * two kept cwds miss. c9f0a791 AC4 — a fake `npx` first on the server PATH proves no
+ * fs/shell task ever shells out to npx. c9f0a791 AC2 — three consecutive green runs.
+ *
  * Citations: ticket 7e854708 (was 99cb14a7) — AC6 "every resolved root is unioned
  * into the per-run srt policy's allowWrite"; the caller cwd is the spawned
  * builtins' process cwd and must be in that union even when `fs.root` is explicit.
@@ -29,9 +35,12 @@ import path from 'node:path';
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
+import { spawnSync } from 'node:child_process';
+
 import {
   FakeLlm,
   REPO_ROOT,
+  makeNpxShim,
   srtOnPath,
   startPortabilityHost,
   type PortabilityHost,
@@ -59,6 +68,7 @@ let homeRoot = '';
 let shared = '';
 let llm: FakeLlm;
 let host: PortabilityHost;
+let npxShim: { dir: string; marker: string };
 const fixtures: CwdFixture[] = [];
 
 function mkFixture(label: string, cwd: string, nonTmp: boolean, i: number): CwdFixture {
@@ -82,13 +92,11 @@ beforeAll(async () => {
   fs.mkdirSync(shared, { recursive: true });
   shared = real(shared);
 
-  // Distinct caller cwds, ALL outside the repo: plain, deep, with-space, and one
-  // that is NOT under the OS tmpdir (the static srt allow-list) — the 99cb14a7 case.
+  // Two caller cwds, BOTH outside the repo: one with whitespace (spawn/srt quoting)
+  // and one NOT under the OS tmpdir (the static srt allow-list) — the 99cb14a7 case.
   fixtures.push(
-    mkFixture('plain', path.join(tmpRoot, 'plain'), false, 0),
-    mkFixture('deep', path.join(tmpRoot, 'l1', 'l2', 'l3', 'l4', 'deep'), false, 1),
-    mkFixture('space', path.join(tmpRoot, 'dir with space'), false, 2),
-    mkFixture('home-nontmp', path.join(homeRoot, 'work'), true, 3)
+    mkFixture('space', path.join(tmpRoot, 'dir with space'), false, 0),
+    mkFixture('home-nontmp', path.join(homeRoot, 'work'), true, 1)
   );
   for (const f of fixtures) expect(f.cwd.startsWith(REPO_ROOT)).toBe(false);
 
@@ -96,9 +104,12 @@ beforeAll(async () => {
   await llm.start();
   const serverCwd = path.join(scratch, 'server-cwd');
   fs.mkdirSync(serverCwd, { recursive: true });
+  // c9f0a791 AC4: a fake `npx` FIRST on the server PATH (writes a marker, exits 99).
+  npxShim = makeNpxShim(path.join(scratch, 'npx-shim'));
   host = await startPortabilityHost({
     serverCwd,
     scratch,
+    pathPrefix: npxShim.dir,
     env: { ADHD_AGENT_NATIVE_TOOLING_FS_ALLOWED_ROOTS: `shared=${shared}` },
   });
 
@@ -176,12 +187,18 @@ describe('48dc-PORT agent portability across caller cwds (real built agent-mcp o
     expect(Array.isArray(policy.filesystem.allowWrite)).toBe(true);
   });
 
-  for (const idx of [0, 1, 2, 3]) {
-    const label = ['plain', 'deep', 'space', 'home-nontmp'][idx] ?? '';
+  // QA covering set (c9f0a791 AC7): which cases run against which cwd.
+  const COVERING: Record<string, string[]> = {
+    space: ['a', 'e'],
+    'home-nontmp': ['a', 'b', 'c', 'e', 'f'],
+  };
+  for (const idx of [0, 1]) {
+    const label = ['space', 'home-nontmp'][idx] ?? '';
+    const covers = (c: string) => COVERING[label]?.includes(c) ?? false;
     const f = () => fixtures[idx] as CwdFixture;
     const rec = (k: string, o: string) => results.push([label, k, o]);
 
-    it(`48dc-PORT AC1/AC2 [${label}] (a) cwd-relative fs root hint: create/write/read land under <cwd>/proj`, async () => {
+    if (covers('a')) it(`c9f0a791 AC7 / 48dc-PORT AC1/AC2 [${label}] (a) cwd-relative fs root hint: create/write/read land under <cwd>/proj`, async () => {
       const target = path.join(f().cwd, 'proj', 'sub', 'rel.txt');
       await runCase('port-rel', `rel-${idx}`, f().cwd, [
         [fsCall('create_directory', { path: path.join(f().cwd, 'proj', 'sub') })],
@@ -193,7 +210,7 @@ describe('48dc-PORT agent portability across caller cwds (real built agent-mcp o
       rec('(a) relative root', 'PASS bytes@cwd/proj');
     }, 300_000);
 
-    it(`48dc-PORT AC1/AC2 [${label}] (e) + 99cb14a7/7e854708 AC6 (d) explicit fs.root, caller cwd elsewhere: shell pwd == caller cwd and it can WRITE there`, async () => {
+    if (covers('e')) it(`c9f0a791 AC7 / 48dc-PORT AC1/AC2 [${label}] (e) + 99cb14a7/7e854708 AC6 (d) explicit fs.root, caller cwd elsewhere: shell pwd == caller cwd and it can WRITE there`, async () => {
       const marker = path.join(f().cwd, 'shell-wrote.txt');
       await runCase('port-rel', `shell-${idx}`, f().cwd, [
         [shCall(['pwd'])],
@@ -209,7 +226,7 @@ describe('48dc-PORT agent portability across caller cwds (real built agent-mcp o
       rec('(d/e) shell pwd + write', 'PASS pwd=cwd, wrote');
     }, 300_000);
 
-    it(`48dc-PORT AC1/AC2 [${label}] (b) alias root from the global allowed-root map ignores the caller cwd`, async () => {
+    if (covers('b')) it(`c9f0a791 AC7 / 48dc-PORT AC1/AC2 [${label}] (b) alias root from the global allowed-root map ignores the caller cwd`, async () => {
       const target = path.join(shared, `alias-${idx}.txt`);
       await runCase('port-alias', `alias-${idx}`, f().cwd, [
         [
@@ -223,7 +240,7 @@ describe('48dc-PORT agent portability across caller cwds (real built agent-mcp o
       rec('(b) alias root', 'PASS bytes@alias, cwd DENIED');
     }, 300_000);
 
-    it(`48dc-PORT AC1/AC2 [${label}] (c) multi-root {roots:[a,b]}: both writable, sibling <cwd>/c denied`, async () => {
+    if (covers('c')) it(`c9f0a791 AC7 / 48dc-PORT AC1/AC2 [${label}] (c) multi-root {roots:[a,b]}: both writable, sibling <cwd>/c denied`, async () => {
       await runCase('port-multi', `multi-${idx}`, f().cwd, [
         [
           fsCall('write_file', { path: path.join(f().cwd, 'a', 'm.txt'), content: `A${f().token}` }),
@@ -237,13 +254,20 @@ describe('48dc-PORT agent portability across caller cwds (real built agent-mcp o
       rec('(c) multi-root', 'PASS a,b written; c DENIED');
     }, 300_000);
 
-    it(`48dc-PORT AC1/AC2 [${label}] (f) outside-root read/write DENIED (no bytes leak, none written)`, async () => {
+    if (covers('f')) it(`c9f0a791 AC7 / 48dc-PORT AC1/AC2 [${label}] (f) outside-root read/write DENIED (no bytes leak, none written)`, async () => {
       const turns: ScriptedCall[] = [
         fsCall('write_file', { path: path.join(f().cwd, 'notproj.txt'), content: 'nope' }),
         fsCall('write_file', { path: path.join(f().outside, 'leak.txt'), content: 'nope' }),
         fsCall('read_text_file', { path: path.join(f().outside, 'secret.txt') }),
+        // Folded from the former standalone case (AC7): a SHELL write outside the
+        // caller cwd must be blocked by srt itself (non-tmp cwd) — sandbox active.
+        shCall(['touch', path.join(f().outside, 'shell-leak.txt')]),
       ];
       await runCase('port-rel', `deny-${idx}`, f().cwd, [turns]);
+      expect(
+        fs.existsSync(path.join(f().outside, 'shell-leak.txt')),
+        'srt must deny a shell write outside the allowed roots'
+      ).toBe(false);
       expect(fs.existsSync(path.join(f().cwd, 'notproj.txt'))).toBe(false);
       expect(fs.existsSync(path.join(f().outside, 'leak.txt'))).toBe(false);
       const fed = llm.resultsFor(`deny-${idx}`).join('\n');
@@ -253,11 +277,21 @@ describe('48dc-PORT agent portability across caller cwds (real built agent-mcp o
     }, 300_000);
   }
 
-  it('48dc-PORT AC3 / 99cb14a7 AC6: a shell write OUTSIDE the caller cwd is blocked by srt itself (non-tmp cwd) — sandbox active, not silently off', async () => {
-    const f = fixtures[3] as CwdFixture;
-    const leak = path.join(f.outside, 'shell-leak.txt');
-    await runCase('port-rel', 'shell-deny', f.cwd, [[shCall(['touch', leak])]]);
-    expect(fs.existsSync(leak), 'srt must deny a write outside the allowed roots').toBe(false);
-    results.push(['home-nontmp', '(f) outside denied (shell/srt)', 'DENIED by srt']);
+  it('c9f0a791 AC4: with a fake `npx` first on PATH, fs + shell tasks complete and npx is NEVER invoked', async () => {
+    // Teeth: the shim really is what `npx` resolves to on the server's PATH
+    // (a marker + exit 99), so an absent marker below means no spawn reached it.
+    const probe = spawnSync('sh', ['-c', 'npx --version'], { env: { PATH: host.path } });
+    expect(probe.status).toBe(99);
+    expect(fs.existsSync(npxShim.marker), 'shim must record a direct invocation').toBe(true);
+    fs.rmSync(npxShim.marker, { force: true });
+
+    const f = fixtures[1] as CwdFixture;
+    const target = path.join(f.cwd, 'proj', 'ac4.txt');
+    await runCase('port-rel', 'ac4-npx', f.cwd, [
+      [fsCall('write_file', { path: target, content: f.token })],
+      [shCall(['pwd'])],
+    ]);
+    expect(fs.readFileSync(target, 'utf8')).toBe(f.token);
+    expect(fs.existsSync(npxShim.marker), 'npx was invoked by a builtin spawn').toBe(false);
   }, 300_000);
 });

@@ -14,6 +14,12 @@
  *     with every `node_modules/.bin` stripped from PATH;
  *   - a real MCP client drives `agent_create` + `task{cwd}` over stdio;
  *   - the real srt-wrapped fs/shell builtins run; the scripted LLM is the only stub.
+ *
+ * c9f0a791 AC6 — the fresh install contains the pinned fs server's built entry
+ * (`node_modules/@modelcontextprotocol/server-filesystem/dist/index.js`) and the
+ * native tooling runs from a cwd OUTSIDE the repo under the REAL srt policy.
+ * c9f0a791 AC4 — a fake `npx` first on the installed server's PATH must never fire.
+ *
  * Needs the npm registry (third-party deps, as for any consumer) and npx/uvx;
  * missing prerequisites fail loudly.
  */
@@ -26,6 +32,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { installConsumer, installedBin, packClosure } from './consumer-install.js';
 import {
   FakeLlm,
+  makeNpxShim,
   srtOnPath,
   startPortabilityHost,
   type PortabilityHost,
@@ -51,7 +58,11 @@ let consumerNoSrt = '';
 let llm: FakeLlm;
 const hosts: PortabilityHost[] = [];
 
-async function startFrom(consumerDir: string, tag: string): Promise<PortabilityHost> {
+async function startFrom(
+  consumerDir: string,
+  tag: string,
+  pathPrefix?: string
+): Promise<PortabilityHost> {
   const s = path.join(scratch, tag);
   const serverCwd = path.join(s, 'server-cwd');
   fs.mkdirSync(serverCwd, { recursive: true });
@@ -59,6 +70,7 @@ async function startFrom(consumerDir: string, tag: string): Promise<PortabilityH
     serverCwd,
     scratch: s,
     entry: installedBin(consumerDir),
+    pathPrefix,
   });
   hosts.push(host);
   return host;
@@ -105,13 +117,26 @@ afterAll(async () => {
 });
 
 describe('94125709: packed, consumer-installed @adhd/agent-mcp and srt', () => {
-  it('94125709 AC1: installed (non-workspace) server finds srt off a stripped PATH and srt-wraps fs/shell children', async () => {
+  it('94125709 AC1 + c9f0a791 AC4/AC6: installed (non-workspace) server finds srt off a stripped PATH and srt-wraps fs/shell children', async () => {
     // Precondition: this really is a consumer install — a real directory, not a workspace symlink.
     const installed = path.join(consumer, 'node_modules', '@adhd', 'agent-mcp');
     expect(fs.lstatSync(installed).isSymbolicLink(), 'must not be a workspace symlink').toBe(false);
     expect(real(installed).startsWith(consumer)).toBe(true);
 
-    const host = await startFrom(consumer, 'ac1');
+    // c9f0a791 AC6: the pinned fs server's built entry is physically in the install.
+    const fsEntry = path.join(
+      consumer,
+      'node_modules',
+      '@modelcontextprotocol',
+      'server-filesystem',
+      'dist',
+      'index.js'
+    );
+    expect(fs.existsSync(fsEntry), `fresh install must contain ${fsEntry}`).toBe(true);
+
+    // c9f0a791 AC4: fake `npx` first on PATH — any builtin spawn through npx trips it.
+    const shim = makeNpxShim(path.join(scratch, 'npx-shim'));
+    const host = await startFrom(consumer, 'ac1', shim.dir);
     expect(srtOnPath(host.path), 'precondition: srt absent from the launch PATH').toBe(false);
     const created = await createAgent(host, 'consumer-agent');
     expect(created['_isError'], JSON.stringify(created)).toBeUndefined();
@@ -153,6 +178,9 @@ describe('94125709: packed, consumer-installed @adhd/agent-mcp and srt', () => {
       filesystem: { allowWrite: string[] };
     };
     expect(policy.filesystem.allowWrite).toContain(real(cwd));
+
+    // c9f0a791 AC4: the fs + shell tasks above completed with NO npx invocation.
+    expect(fs.existsSync(shim.marker), 'npx was invoked by a builtin spawn').toBe(false);
   }, 600_000);
 
   it('94125709 AC2: with srt absent from the install, the task fails LOUDLY naming srt — never silently unsandboxed', async () => {
