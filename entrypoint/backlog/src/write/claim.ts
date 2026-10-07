@@ -28,6 +28,7 @@
  * itself runs, issued against `tx`.
  */
 
+import type { ISessionStamp } from './session-stamp.js';
 import type { AdapterTransaction } from '@adhd/sox-store-adapter';
 import {
   type IProjectPolicy,
@@ -44,7 +45,8 @@ import {
   PreconditionRefusedError,
   assertNotBareRoleLiteral,
 } from './errors.js';
-import { claimAgeMinutes, extractClaimMeta, isClaimStale } from './claim-lease.js';
+import { claimAgeMinutes, extractClaimMeta, isClaimStale, leaseExpiryOf } from './claim-lease.js';
+import { collectReservationPathsTx, endReservationsTx, recordReservationTx } from './reservation.js';
 import { evaluateVerdictTx } from './gate.js';
 import { nextRevision } from './revision.js';
 import { resolveIssueStatusTx } from './issue-status.js';
@@ -57,7 +59,7 @@ import {
   resolveLiveIssueTx,
 } from './tx.js';
 
-export interface IClaimInput {
+export interface IClaimInput extends ISessionStamp {
   /** The `issue` uid to claim/release/renew (§6.3, an "Issue verb"). */
   uid: string;
   /** The claimant — the acting agent or person. REQUIRED on every action (§6.3's opening rule). */
@@ -65,6 +67,8 @@ export interface IClaimInput {
   action: 'claim' | 'release' | 'renew';
   /** Human-confirmed override of a NON-stale claim (§6.2). Only consulted on `action:'claim'` when the current claimant differs and the lease is not yet stale. */
   force?: boolean;
+  /** Additional paths to reserve explicitly (on top of the issue's live path citations). `action:'claim'`/`'renew'` only; canonicalised and recorded on the reservation. */
+  paths?: string[];
 }
 
 export interface IClaimOutcome {
@@ -271,6 +275,29 @@ export async function claim(
     const now = nowISO();
     const row = await resolveLiveIssueTx(tx, input.uid);
 
+    // B-AC1 (46cf1086 S11.R1): every success arm persists the reservation
+    // `{issueUid, paths[], holder, sessionId, claimedAt, leaseExpiry}` in THIS
+    // transaction (see write/reservation.ts).
+    const reserve = async (
+      mode: 'new' | 'refresh',
+      endReason?: 'reclaimed-stale'
+    ): Promise<void> => {
+      const leasePolicy = await resolveIssueProjectPolicyTx(tx, row.rowid);
+      const paths = await collectReservationPathsTx(tx, row.rowid, input.paths ?? []);
+      await recordReservationTx(tx, handle.typePolicy, {
+        issueRowid: row.rowid,
+        issueUid: row.uid,
+        holder: input.by,
+        ...(handle.session?.sessionId !== undefined ? { sessionId: handle.session.sessionId } : {}),
+        claimedAt: now,
+        leaseExpiry: leaseExpiryOf(now, leasePolicy.claimStaleAfterMin),
+        paths,
+        mode,
+        ...(endReason !== undefined ? { endReason } : {}),
+        at: now,
+      });
+    };
+
     const meta = { ...(row.metadata ?? {}) };
     const { claimedBy, claimedAt } = extractClaimMeta(meta);
 
@@ -331,6 +358,7 @@ export async function claim(
           note: forceNote,
           at: now,
         });
+        await reserve('new');
         return {
           uid: row.uid,
           status: 'claimed',
@@ -364,6 +392,7 @@ export async function claim(
               : `${forceNote} — re-affirmed (held)`,
           at: now,
         });
+        await reserve('refresh');
         return {
           uid: row.uid,
           status: 'held',
@@ -408,6 +437,7 @@ export async function claim(
           forceNote === undefined ? reclaimNote : `${forceNote} — ${reclaimNote}`,
         at: now,
       });
+      await reserve('new', 'reclaimed-stale');
       return {
         uid: row.uid,
         status: 'reclaimed-stale',
@@ -437,6 +467,7 @@ export async function claim(
           from: input.by,
           at: now,
         });
+        await endReservationsTx(tx, { issueRowid: row.rowid, reason: 'released', at: now });
         return { uid: row.uid, status: 'released' };
       }
       // != by or unset — "no write" per the rule table: no touch, no audit (nothing changed).
@@ -459,6 +490,7 @@ export async function claim(
         to: input.by,
         at: now,
       });
+      await reserve('refresh');
       return {
         uid: row.uid,
         status: 'renewed',

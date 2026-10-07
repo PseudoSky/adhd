@@ -22,6 +22,7 @@ import type { IOutcomeEnvelope } from './envelope.js';
 /** Verbs that take no uid reference (names, filters, or no input). */
 const NON_UID_VERBS = new Set([
   'query',
+  'timeline', // takes a sessionId, not an issue uid
   'priority-matrix',
   'open-curve',
   'report',

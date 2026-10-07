@@ -12,6 +12,7 @@
  * `writeNode`/`writeEdge`/`findOrCreateNode` themselves (§4c).
  */
 
+import type { ISessionStamp } from './session-stamp.js';
 import type { AdapterTransaction } from '@adhd/sox-store-adapter';
 import type { GraphBackend } from '@adhd/sox-graph-store';
 import type {
@@ -78,7 +79,7 @@ import {
  */
 export type { ICitation, ICitationInput } from '../citation.js';
 
-export interface ICreateIssueInput {
+export interface ICreateIssueInput extends ISessionStamp {
   title: string;
   body: string;
   /** uid or name — resolved per §6.1; REQUIRED (every issue has a component chain). NEVER minted by this verb (§1/§6.1). */

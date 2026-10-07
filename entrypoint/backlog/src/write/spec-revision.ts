@@ -22,6 +22,7 @@
  * revision node after creation, and never rewrites the ticket body.
  */
 
+import type { ISessionStamp } from './session-stamp.js';
 import type { GraphBackend, NodeRecord } from '@adhd/sox-graph-store';
 import type { AdapterTransaction } from '@adhd/sox-store-adapter';
 import { writeAudit } from './audit.js';
@@ -76,7 +77,7 @@ export interface ISpecRevisionMeta {
   appended_at: string;
 }
 
-export interface ISpecAppendInput {
+export interface ISpecAppendInput extends ISessionStamp {
   /** The ticket's logical id — any uid on its `SUPERSEDES` chain is resolved forward. */
   uid: string;
   /** The delta appended at this revision (becomes the node's `content`). */

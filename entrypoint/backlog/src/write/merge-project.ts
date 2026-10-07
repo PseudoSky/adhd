@@ -30,6 +30,7 @@
  * written, or nothing is.
  */
 
+import type { ISessionStamp } from './session-stamp.js';
 import type { AdapterTransaction } from '@adhd/sox-store-adapter';
 import type { ITxNodeRow, IWriteStoreHandle } from './tx.js';
 import {
@@ -93,7 +94,7 @@ async function resolveProjectUidRefTx(
   return row;
 }
 
-export interface IMergeProjectInput {
+export interface IMergeProjectInput extends ISessionStamp {
   /** The duplicate / retiring row — an exact uid. */
   fromUid: string;
   /** The canonical survivor — a uid or a name (resolved live). */
@@ -111,7 +112,7 @@ export interface IMergeProjectOutcome {
   retired: true;
 }
 
-export interface IRmProjectInput {
+export interface IRmProjectInput extends ISessionStamp {
   uid: string;
   reason: string;
   by: string;

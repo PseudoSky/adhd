@@ -22,6 +22,7 @@
  *   script in this task's scope.
  */
 
+import type { ISessionStamp } from './session-stamp.js';
 import type { AdapterTransaction } from '@adhd/sox-store-adapter';
 import {
   CaseVariantNameError,
@@ -665,6 +666,29 @@ export const EDGE_KIND_TABLE: readonly IEdgeKindRule[] = [
     multiplicity: 'n:m',
   },
   {
+    // B-AC5 / 91a8c640 (S11.S2): an append-only op-event belongs to exactly one
+    // session. INTERNAL (not on `relate`'s rel union); see `write/session.ts`.
+    rel: 'in_session',
+    sourceKind: 'op_event',
+    targetKind: 'session',
+    multiplicity: 'n:1',
+  },
+  {
+    // B-AC5: a session has at most one parent session (S1.1 under S1).
+    rel: 'child_of_session',
+    sourceKind: 'session',
+    targetKind: 'session',
+    multiplicity: 'n:1',
+  },
+  {
+    // B-AC1 / 46cf1086 (S11.R1): an issue's claim reservations — the live one
+    // and the ended history. INTERNAL; see `write/reservation.ts`.
+    rel: 'has_reservation',
+    sourceKind: 'issue',
+    targetKind: 'reservation',
+    multiplicity: '1:n',
+  },
+  {
     rel: 'has_kind',
     sourceKind: 'issue',
     targetKind: 'kind',
@@ -1133,7 +1157,7 @@ function mergeBusinessFields(
   return merged;
 }
 
-export interface IUpsertProjectInput {
+export interface IUpsertProjectInput extends ISessionStamp {
   /** The business key `project` is upserted by (§3a, §4). */
   name: string;
   path?: string;
@@ -1372,7 +1396,7 @@ export async function upsertProjectTx(
   };
 }
 
-export interface IUpsertComponentInput {
+export interface IUpsertComponentInput extends ISessionStamp {
   /** `project` reference — `uid` or `name` (§6.1's disambiguation-by-shape rule), resolved-ONLY, never minted. */
   project: string;
   /** The business key `component` is upserted by, scoped to `project` (§3a, §4: "upsert by `(project, name)`"). */
@@ -1538,7 +1562,7 @@ export const VALID_LOCATION_TYPES: readonly ILocationType[] = [
   'tool',
 ];
 
-export interface IUpsertLocationInput {
+export interface IUpsertLocationInput extends ISessionStamp {
   /**
    * `component` reference — `uid` or `name` (§6.1's disambiguation-by-shape
    * rule). A bare NAME is ambiguous on its own (component names are unique
@@ -1698,7 +1722,7 @@ export async function upsertLocation(
   });
 }
 
-export interface IRmLocationInput {
+export interface IRmLocationInput extends ISessionStamp {
   uid: string;
   /** The acting agent's or person's identity (§6.3's opening rule). REQUIRED. */
   by: string;

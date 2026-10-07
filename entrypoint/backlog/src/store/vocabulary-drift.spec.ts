@@ -3,7 +3,7 @@
  * source of truth so the two can never silently diverge.
  *
  * `store/vocabulary-guard.ts`'s `RECOGNIZED_NODE_KINDS` hand-duplicates the
- * 16-kind node vocabulary whose documented source of truth is
+ * 19-kind node vocabulary whose documented source of truth is
  * `write/tx.ts`'s `IWriteNodeTxInput.kind` doc comment ("The entity-type
  * discriminator — `project`/`component`/`location`/`issue`/`kind`/`edge_kind`/
  * `status`/`priority`/`agent`/`note`/`citation`/`transition`/`audit`/
@@ -62,10 +62,10 @@ function documentedWriteNodeKinds(): string[] {
 }
 
 describe('RECOGNIZED_NODE_KINDS ↔ write/tx.ts vocabulary pin (fail-closed drift guard)', () => {
-  it('is exactly the 16-kind vocabulary documented at IWriteNodeTxInput.kind', () => {
+  it('is exactly the 19-kind vocabulary documented at IWriteNodeTxInput.kind', () => {
     const documented = documentedWriteNodeKinds();
-    expect(documented).toHaveLength(16);
-    expect(RECOGNIZED_NODE_KINDS.size).toBe(16);
+    expect(documented).toHaveLength(19);
+    expect(RECOGNIZED_NODE_KINDS.size).toBe(19);
 
     // BOTH directions, so drift on either side is red: a kind added to tx.ts
     // but not the guard, AND a kind in the guard that tx.ts no longer names.

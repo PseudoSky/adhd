@@ -101,6 +101,9 @@ import {
 } from './write/bootstrap.js';
 import type { SemanticStoreMembers } from './write/bootstrap.js';
 import type { EmbeddingLiveConfig } from './write/embedding-config.js';
+import { sessionStampOf } from './write/session.js';
+import { SessionNotFoundError } from './query/views/sessions.js';
+import { timeline as timelineView, type ITimelineInput, type ITimelineResult } from './query/views/timeline.js';
 import { assertRecognizedStoreVocabulary } from './store/vocabulary-guard.js';
 import { assertCatalogInvariants } from './store/catalog-invariant-guard.js';
 
@@ -363,7 +366,8 @@ async function ensureSemanticReady(
  */
 async function writeHandle(
   ctx: BacklogCtx,
-  opts: { needsSemantic: boolean }
+  opts: { needsSemantic: boolean },
+  input?: unknown
 ): Promise<
   IWriteStoreHandle & IDuplicateScanHandle & { readonly graph: GraphBackend }
 > {
@@ -388,6 +392,9 @@ async function writeHandle(
     adapter: ctx.store.adapter,
     typePolicy: ctx.store.typePolicy,
     graph: ctx.store.graph,
+    // (B-AC5/B-AC6) The call's session stamp rides the handle; absent => the
+    // verb writes no session node and no op-event.
+    ...(sessionStampOf(input) !== undefined ? { session: sessionStampOf(input) } : {}),
     ...(search !== undefined ? { search } : {}),
     ...(embedding !== undefined ? { embedding } : {}),
     // (S02 AC14) The production-write gate travels with the handle; absent on a
@@ -483,6 +490,7 @@ const ERROR_CLASS_TO_ENVELOPE_CODE: ReadonlyArray<
   readonly [new (...args: never[]) => Error, BacklogErrorCode]
 > = [
   [IssueNotFoundError, 'item_not_found'],
+  [SessionNotFoundError, 'item_not_found'],
   [AttestationNotFoundError, 'item_not_found'],
   [ObligationNotFoundError, 'item_not_found'],
   [CitationNotFoundError, 'item_not_found'],
@@ -750,6 +758,22 @@ export async function partOfRollup(
 }
 
 /**
+ * Reconstruct what a session did, and what its child sessions did, from the
+ * append-only op-event log (91a8c640, S11.S3/S4). A session is opted into by
+ * passing `sessionId` (and optionally `parentSessionId`) on any mutating verb;
+ * `timeline` returns its agent, its start/end, its descendant session ids, the
+ * ordered ops (`create`/`transition`/`claim`/... with `from`/`to`/`note`
+ * deltas) and the distinct item uids it touched. An unknown session id is
+ * `item_not_found`.
+ */
+export async function timeline(
+  ctx: BacklogCtx,
+  input: ITimelineInput
+): Promise<IOutcomeEnvelope<ITimelineResult>> {
+  return envelope(async () => timelineView(ctx.store.graph, input));
+}
+
+/**
  * SPEC.md §5's `validAt` cumulative-open curve — for each sampled ISO-8601
  * instant in `input.at`, how many in-scope issues EXISTED then and, of those,
  * how many were reconstructed as OPEN then (never the issue's current status;
@@ -877,7 +901,7 @@ export async function create(
   input: ICreateIssueInput
 ): Promise<IOutcomeEnvelope<ICreateIssueResult>> {
   return envelope(async () =>
-    createIssue(await writeHandle(ctx, { needsSemantic: true }), input)
+    createIssue(await writeHandle(ctx, { needsSemantic: true }, input), input)
   );
 }
 
@@ -893,7 +917,7 @@ export async function update(
   input: IUpdateIssueInput
 ): Promise<IOutcomeEnvelope<IUpdateIssueOutcome>> {
   return envelope(async () =>
-    updateIssueOp(await writeHandle(ctx, { needsSemantic: true }), input)
+    updateIssueOp(await writeHandle(ctx, { needsSemantic: true }, input), input)
   );
 }
 
@@ -910,7 +934,7 @@ export async function addCitation(
   input: IAddCitationInput
 ): Promise<IOutcomeEnvelope<IAddCitationOutcome>> {
   return envelope(async () =>
-    addCitationOp(await writeHandle(ctx, { needsSemantic: false }), input)
+    addCitationOp(await writeHandle(ctx, { needsSemantic: false }, input), input)
   );
 }
 
@@ -924,7 +948,7 @@ export async function removeCitation(
   input: IRemoveCitationInput
 ): Promise<IOutcomeEnvelope<IRemoveCitationOutcome>> {
   return envelope(async () =>
-    removeCitationOp(await writeHandle(ctx, { needsSemantic: false }), input)
+    removeCitationOp(await writeHandle(ctx, { needsSemantic: false }, input), input)
   );
 }
 
@@ -935,7 +959,7 @@ export async function transition(
 ): Promise<IOutcomeEnvelope<ITransitionOutcome>> {
   try {
     const outcome = await transitionIssueOp(
-      await writeHandle(ctx, { needsSemantic: false }),
+      await writeHandle(ctx, { needsSemantic: false }, input),
       input
     );
     return okEnvelope(outcome, { warnings: outcome.warnings });
@@ -954,7 +978,7 @@ export async function attest(
   input: IAttestInput
 ): Promise<IOutcomeEnvelope<IAttestOutcome>> {
   return envelope(async () =>
-    attestOp(await writeHandle(ctx, { needsSemantic: false }), input)
+    attestOp(await writeHandle(ctx, { needsSemantic: false }, input), input)
   );
 }
 
@@ -967,7 +991,7 @@ export async function recheck(
   input: IRecheckInput
 ): Promise<IOutcomeEnvelope<IRecheckOutcome>> {
   return envelope(async () =>
-    recheckOp(await writeHandle(ctx, { needsSemantic: false }), input)
+    recheckOp(await writeHandle(ctx, { needsSemantic: false }, input), input)
   );
 }
 
@@ -984,7 +1008,7 @@ export async function obligate(
   input: IObligateInput
 ): Promise<IOutcomeEnvelope<IObligateOutcome>> {
   return envelope(async () =>
-    obligateOp(await writeHandle(ctx, { needsSemantic: false }), input)
+    obligateOp(await writeHandle(ctx, { needsSemantic: false }, input), input)
   );
 }
 
@@ -994,7 +1018,7 @@ export async function unobligate(
   input: IUnobligateInput
 ): Promise<IOutcomeEnvelope<IUnobligateOutcome>> {
   return envelope(async () =>
-    unobligateOp(await writeHandle(ctx, { needsSemantic: false }), input)
+    unobligateOp(await writeHandle(ctx, { needsSemantic: false }, input), input)
   );
 }
 
@@ -1011,7 +1035,7 @@ export async function specAppend(
   input: ISpecAppendInput
 ): Promise<IOutcomeEnvelope<ISpecAppendOutcome>> {
   return envelope(async () =>
-    appendSpecRevision(await writeHandle(ctx, { needsSemantic: false }), input)
+    appendSpecRevision(await writeHandle(ctx, { needsSemantic: false }, input), input)
   );
 }
 
@@ -1033,7 +1057,7 @@ export async function claim(
   input: IClaimInput
 ): Promise<IOutcomeEnvelope<IClaimOutcome>> {
   return envelope(async () =>
-    claimIssueOp(await writeHandle(ctx, { needsSemantic: false }), input)
+    claimIssueOp(await writeHandle(ctx, { needsSemantic: false }, input), input)
   );
 }
 
@@ -1043,7 +1067,7 @@ export async function relate(
   input: IRelateInput
 ): Promise<IOutcomeEnvelope<IRelateOutcome>> {
   return envelope(async () =>
-    relateIssueOp(await writeHandle(ctx, { needsSemantic: false }), input)
+    relateIssueOp(await writeHandle(ctx, { needsSemantic: false }, input), input)
   );
 }
 
@@ -1053,7 +1077,7 @@ export async function move(
   input: IMoveIssueInput
 ): Promise<IOutcomeEnvelope<IMoveIssueOutcome>> {
   return envelope(async () =>
-    moveIssueOp(await writeHandle(ctx, { needsSemantic: false }), input)
+    moveIssueOp(await writeHandle(ctx, { needsSemantic: false }, input), input)
   );
 }
 
@@ -1070,7 +1094,7 @@ async function softDelete(
   input: IDeleteIssueInput
 ): Promise<IOutcomeEnvelope<IDeleteIssueOutcome>> {
   return envelope(async () =>
-    deleteIssueOp(await writeHandle(ctx, { needsSemantic: false }), input)
+    deleteIssueOp(await writeHandle(ctx, { needsSemantic: false }, input), input)
   );
 }
 
@@ -1083,7 +1107,7 @@ export async function remove(
   input: IRemoveIssueInput
 ): Promise<IOutcomeEnvelope<IRemoveIssueOutcome>> {
   return envelope(async () =>
-    removeIssueOp(await writeHandle(ctx, { needsSemantic: false }), input)
+    removeIssueOp(await writeHandle(ctx, { needsSemantic: false }, input), input)
   );
 }
 
@@ -1096,7 +1120,7 @@ export async function restore(
   input: IRestoreIssueInput
 ): Promise<IOutcomeEnvelope<IRestoreIssueOutcome>> {
   return envelope(async () =>
-    restoreIssueOp(await writeHandle(ctx, { needsSemantic: false }), input)
+    restoreIssueOp(await writeHandle(ctx, { needsSemantic: false }, input), input)
   );
 }
 
@@ -1115,7 +1139,7 @@ export async function upsertProject(
   input: IUpsertProjectInput
 ): Promise<IOutcomeEnvelope<IUpsertProjectOutcome>> {
   return envelope(async () =>
-    upsertProjectOp(await writeHandle(ctx, { needsSemantic: false }), input)
+    upsertProjectOp(await writeHandle(ctx, { needsSemantic: false }, input), input)
   );
 }
 
@@ -1125,7 +1149,7 @@ export async function upsertComponent(
   input: IUpsertComponentInput
 ): Promise<IOutcomeEnvelope<IUpsertComponentOutcome>> {
   return envelope(async () =>
-    upsertComponentOp(await writeHandle(ctx, { needsSemantic: false }), input)
+    upsertComponentOp(await writeHandle(ctx, { needsSemantic: false }, input), input)
   );
 }
 
@@ -1140,7 +1164,7 @@ export async function upsertLocation(
   input: IUpsertLocationInput
 ): Promise<IOutcomeEnvelope<IUpsertLocationOutcome>> {
   return envelope(async () =>
-    upsertLocationOp(await writeHandle(ctx, { needsSemantic: false }), input)
+    upsertLocationOp(await writeHandle(ctx, { needsSemantic: false }, input), input)
   );
 }
 
@@ -1150,7 +1174,7 @@ export async function rmLocation(
   input: IRmLocationInput
 ): Promise<IOutcomeEnvelope<IRmLocationOutcome>> {
   return envelope(async () =>
-    rmLocationOp(await writeHandle(ctx, { needsSemantic: false }), input)
+    rmLocationOp(await writeHandle(ctx, { needsSemantic: false }, input), input)
   );
 }
 
@@ -1166,7 +1190,7 @@ export async function mergeProject(
   input: IMergeProjectInput
 ): Promise<IOutcomeEnvelope<IMergeProjectOutcome>> {
   return envelope(async () =>
-    mergeProjectOp(await writeHandle(ctx, { needsSemantic: false }), input)
+    mergeProjectOp(await writeHandle(ctx, { needsSemantic: false }, input), input)
   );
 }
 
@@ -1179,7 +1203,7 @@ export async function rmProject(
   input: IRmProjectInput
 ): Promise<IOutcomeEnvelope<{ uid: string; retired: true }>> {
   return envelope(async () =>
-    rmProjectOp(await writeHandle(ctx, { needsSemantic: false }), input)
+    rmProjectOp(await writeHandle(ctx, { needsSemantic: false }, input), input)
   );
 }
 

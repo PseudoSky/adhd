@@ -41,3 +41,14 @@ export function isClaimStale(
 ): boolean {
   return claimAgeMinutes(claimedAt, now) >= staleAfterMin;
 }
+
+/**
+ * The instant a lease taken at `claimedAt` stops being live: `claimedAt` plus
+ * the project's `claim_stale_after_min`. The ONE definition shared by the
+ * reservation record (`write/reservation.ts`) and its reader
+ * (`query/views/reservations.ts`), consistent with {@link isClaimStale}
+ * (`age >= staleAfterMin` <=> `now >= leaseExpiryOf(...)`).
+ */
+export function leaseExpiryOf(claimedAt: string, staleAfterMin: number): string {
+  return new Date(Date.parse(claimedAt) + staleAfterMin * 60_000).toISOString();
+}

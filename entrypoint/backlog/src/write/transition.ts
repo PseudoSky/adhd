@@ -79,6 +79,7 @@
  * also require for OTHER verbs).
  */
 
+import type { ISessionStamp } from './session-stamp.js';
 import type { AdapterTransaction } from '@adhd/sox-store-adapter';
 import { assertGitContextWithinCap } from './create-issue.js';
 import { type ICitation } from '../citation.js';
@@ -143,7 +144,7 @@ function isSupersededStatusName(name: string | undefined): boolean {
   return typeof name === 'string' && name.trim().toUpperCase() === 'SUPERSEDED';
 }
 
-export interface ITransitionInput {
+export interface ITransitionInput extends ISessionStamp {
   /** The `issue` uid to transition (§6.3, an "Issue verb"). */
   uid: string;
   /** The identity of the acting agent or person (§6.3's opening rule). REQUIRED. */

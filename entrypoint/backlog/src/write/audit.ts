@@ -34,6 +34,8 @@
 import type { AdapterTransaction } from '@adhd/sox-store-adapter';
 import type { TypePolicy } from '@adhd/sox-graph-store';
 import { resolveEdgeKindTx } from './catalog.js';
+import { appendOpEventTx } from './session.js';
+import { sessionOfTx } from './session-stamp.js';
 import {
   canonicalJSONStringify,
   nowISO,
@@ -113,6 +115,26 @@ export async function writeAudit(
     rule,
     typePolicy: input.typePolicy,
   });
+
+  // B-AC6 (91a8c640 S11.S2): the append-only op-event log. Written HERE — the
+  // one seam every mutating verb already passes through — and ONLY when the
+  // call carried a `sessionId`. It is a separate node kind with its own edge,
+  // NOT derived from `auditTrail`.
+  const session = sessionOfTx(input.tx);
+  if (session?.sessionId !== undefined) {
+    await appendOpEventTx(input.tx, input.typePolicy, {
+      session: { ...session, sessionId: session.sessionId },
+      agent: input.actor,
+      op: input.action,
+      targetUid: input.subjectUid,
+      delta: {
+        ...(input.from !== undefined ? { from: input.from } : {}),
+        ...(input.to !== undefined ? { to: input.to } : {}),
+        ...(input.note !== undefined ? { note: input.note } : {}),
+      },
+      at,
+    });
+  }
 
   return { rowid: audit.rowid, uid: audit.uid, sha };
 }

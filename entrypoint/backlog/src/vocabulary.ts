@@ -49,6 +49,7 @@
 export const BACKLOG_VERBS: readonly string[] = [
   'get',
   'query',
+  'timeline',
   'priority-matrix',
   'part-of-rollup',
   'open-curve',

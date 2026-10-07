@@ -47,6 +47,7 @@
  * node" does not apply here because nothing changed.
  */
 
+import type { ISessionStamp } from './session-stamp.js';
 import type { AdapterTransaction } from '@adhd/sox-store-adapter';
 import {
   type IResolvedCatalogRow,
@@ -66,7 +67,6 @@ import {
   type IWriteStoreHandle,
   executeWriteTransaction,
   getNodeByRowidTx,
-  getNodeByUidTx,
   invalidateEdgeTx,
   nowISO,
   writeEdgeTx,
@@ -74,7 +74,7 @@ import {
 } from './tx.js';
 import { nextRevision } from './revision.js';
 
-export interface IMoveIssueInput {
+export interface IMoveIssueInput extends ISessionStamp {
   /** The `issue` uid to move (§6.3, an "Issue verb"). */
   uid: string;
   /**

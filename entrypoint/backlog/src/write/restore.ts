@@ -27,6 +27,7 @@
  * again. Only a `delete` is reversible — a `remove` is not.
  */
 
+import type { ISessionStamp } from './session-stamp.js';
 import type { AdapterTransaction } from '@adhd/sox-store-adapter';
 import { writeAudit } from './audit.js';
 import {
@@ -45,7 +46,7 @@ import {
   resolveRestorableIssueTx,
 } from './tx.js';
 
-export interface IRestoreIssueInput {
+export interface IRestoreIssueInput extends ISessionStamp {
   /** Exact uid, or a unique uid prefix, of the soft-deleted issue to restore. */
   uid: string;
   /** The acting agent or person, as a name (§6.3's opening rule). REQUIRED. */

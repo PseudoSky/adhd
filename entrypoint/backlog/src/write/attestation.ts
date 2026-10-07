@@ -28,6 +28,7 @@
  * the citation-sha pre-resolve discipline in `create-issue.ts`/`transition.ts`.
  */
 
+import type { ISessionStamp } from './session-stamp.js';
 import { isAbsolute, relative, resolve as resolvePath } from 'node:path';
 import type { AdapterTransaction } from '@adhd/sox-store-adapter';
 import { resolveEdgeKindTx } from './catalog.js';
@@ -116,7 +117,7 @@ export interface IAttestClaim {
   body?: string;
 }
 
-export interface IAttestInput {
+export interface IAttestInput extends ISessionStamp {
   /** The LOGICAL subject: chain-head `uid` + the content `revision` observed. */
   subject: { id: string; revision: AttestRevisionRef };
   claim: IAttestClaim;
@@ -130,7 +131,7 @@ export interface IAttestOutcome {
   check: IAttestCheck;
 }
 
-export interface IRecheckInput {
+export interface IRecheckInput extends ISessionStamp {
   attestationUid: string;
   by: string;
 }

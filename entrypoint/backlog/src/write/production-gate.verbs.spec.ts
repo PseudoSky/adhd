@@ -25,6 +25,7 @@ import { BACKLOG_VERBS } from '../vocabulary.js';
 const READ_ONLY_VERBS = new Set([
   'get',
   'query',
+  'timeline',
   'priority-matrix',
   'part-of-rollup',
   'open-curve',

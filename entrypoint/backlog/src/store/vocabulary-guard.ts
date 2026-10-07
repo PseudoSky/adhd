@@ -76,6 +76,10 @@ export const RECOGNIZED_NODE_KINDS: ReadonlySet<string> = new Set([
   'audit',
   'attestation',
   'obligation',
+  // S11 — the shared session / op-event / reservation persistence (write/session.ts, write/reservation.ts).
+  'session',
+  'op_event',
+  'reservation',
   // C10 — an immutable spec REVISION object (DESIGN §12). Already live in the
   // store (the twelve existing specs); recognition is widened, not a new
   // artifact type minted.

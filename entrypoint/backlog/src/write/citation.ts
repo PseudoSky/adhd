@@ -41,6 +41,7 @@
  * gate is applied identically for every caller.
  */
 
+import type { ISessionStamp } from './session-stamp.js';
 import { execFileSync } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 import { isAbsolute, relative, resolve as resolvePath, sep } from 'node:path';
@@ -616,7 +617,7 @@ async function resolveCitationNodeTx(
   }
 }
 
-export interface IAddCitationInput {
+export interface IAddCitationInput extends ISessionStamp {
   /** The `issue` uid the citation is attached to. */
   uid: string;
   /** The citation to add — the SAME {@link ICitation} contract `create`/`transition` accept, including the optional `revision`. */
@@ -725,7 +726,7 @@ export async function addCitation(
   });
 }
 
-export interface IRemoveCitationInput {
+export interface IRemoveCitationInput extends ISessionStamp {
   /** The `citation` uid to soft-remove — the citation's OWN uid, never a `(target,line)` re-specification. */
   uid: string;
   /** The acting identity (§6.3's opening rule). REQUIRED. */

@@ -103,6 +103,7 @@
  * had, which was already validated when IT was set.
  */
 
+import type { ISessionStamp } from './session-stamp.js';
 import type { AdapterTransaction } from '@adhd/sox-store-adapter';
 import { citationKey, type ICitation } from '../citation.js';
 import {
@@ -147,7 +148,7 @@ import {
 } from './tx.js';
 import { nextRevision } from './revision.js';
 
-export interface IUpdateIssueInput {
+export interface IUpdateIssueInput extends ISessionStamp {
   /** The `issue` uid to update (§6.3, an "Issue verb"). */
   uid: string;
   /** The acting identity — an agent or a person (§6.3's opening rule). REQUIRED. */

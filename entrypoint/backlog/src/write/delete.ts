@@ -37,6 +37,7 @@
  * mistakenly retried) against the same `uid`.
  */
 
+import type { ISessionStamp } from './session-stamp.js';
 import type { AdapterTransaction } from '@adhd/sox-store-adapter';
 import { writeAudit } from './audit.js';
 import { scheduleIssueEmbedding } from './embedding-observer.js';
@@ -53,7 +54,7 @@ import {
   resolveLiveIssueTx,
 } from './tx.js';
 
-export interface IDeleteIssueInput {
+export interface IDeleteIssueInput extends ISessionStamp {
   uid: string;
   /** REQUIRED — the human-readable explanation for the invalidation, still a real requirement (§6.3.7). */
   reason: string;

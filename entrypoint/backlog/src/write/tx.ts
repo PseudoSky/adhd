@@ -26,6 +26,7 @@
 import type { AdapterTransaction, StoreAdapter } from '@adhd/sox-store-adapter';
 import type { TypePolicy } from '@adhd/sox-graph-store';
 import { randomUUID, createHash } from 'node:crypto';
+import { bindTxSession, type ISessionStamp } from './session-stamp.js';
 import {
   AmbiguousReferenceError,
   BacklogWriteError,
@@ -113,6 +114,12 @@ export interface IWriteStoreHandle {
    * Not part of the store identity; a per-call decoration.
    */
   readonly verb?: string;
+  /**
+   * (B-AC5/B-AC6) The session stamp of THIS call, set by the transport wrapper
+   * from the verb input's `sessionId`/`parentSessionId`. Absent => no session
+   * node and no op-event is written. Per-call decoration, like `verb`.
+   */
+  readonly session?: ISessionStamp;
   /**
    * §4b's on-write embedding substrate — OPTIONAL, mirroring
    * `IDuplicateScanHandle.search`'s own "never silently go dark, but also
@@ -457,7 +464,7 @@ export async function getNodeByRowidTx(
 }
 
 export interface IWriteNodeTxInput {
-  /** The entity-type discriminator — `project`/`component`/`location`/`issue`/`kind`/`edge_kind`/`status`/`priority`/`agent`/`note`/`citation`/`transition`/`audit`/`attestation`/`obligation`/`SPEC` (§3; the SPEC revision kind is added by C10, DESIGN §12). NEVER validated against a closed vocabulary here — the schema is open by design (§0 anti-antipattern 3); the write layer is the only composer of these literals. */
+  /** The entity-type discriminator — `project`/`component`/`location`/`issue`/`kind`/`edge_kind`/`status`/`priority`/`agent`/`note`/`citation`/`transition`/`audit`/`attestation`/`obligation`/`SPEC`/`session`/`op_event`/`reservation` (§3; the SPEC revision kind is added by C10, DESIGN §12; the last three are the S11 shared persistence, see write/session.ts and write/reservation.ts). NEVER validated against a closed vocabulary here — the schema is open by design (§0 anti-antipattern 3); the write layer is the only composer of these literals. */
   kind: string;
   /** The business name (`issue.title`, a catalog row's name, …). Omit for a node with no name (none currently exist in §3's table, but the column is nullable). */
   name?: string;
@@ -1074,9 +1081,13 @@ export async function executeWriteTransaction<T>(
   let attempt = 0;
   for (;;) {
     try {
-      return await handle.adapter.transaction(fn, {
-        mode: resolveTransactionMode(),
-      });
+      return await handle.adapter.transaction(
+        (tx: AdapterTransaction) => {
+          bindTxSession(tx, handle.session);
+          return fn(tx);
+        },
+        { mode: resolveTransactionMode() }
+      );
     } catch (err) {
       if (err instanceof BacklogWriteError) throw err;
 

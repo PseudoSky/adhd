@@ -471,6 +471,16 @@ export interface IIssueFilter {
   memberOfProject?: string | string[];
   /** (A-AC5) ANY-of: items with a membership in any of these components. `component` keeps primary-owner semantics. */
   memberOfComponent?: string | string[];
+  /** `view:'reservations'` only — keep reservations whose path equals this path or lies under it (segment-aware: `/a/b` matches `/a/b` and `/a/b/x`, never `/a/bc`). */
+  pathPrefix?: string;
+  /** `view:'reservations'` / `view:'sessions'` — the session id the reservation was taken under / the session itself. */
+  sessionId?: string;
+  /** `view:'reservations'` only — the claim holder. */
+  holder?: string;
+  /** `view:'sessions'` only — keep sessions whose agent is this. */
+  agent?: string;
+  /** `view:'sessions'` only — keep sessions whose parent session is this. */
+  parentSessionId?: string;
   kind?: string | string[];
   status?: string | string[] | 'open' | 'closed' | 'all';
   priority?: string | string[];
@@ -531,6 +541,8 @@ export type IIssueView =
   | 'stale'
   | 'similar'
   | 'overlap'
+  | 'reservations' // 46cf1086 — active claim reservations, store-wide, no uid needed
+  | 'sessions' // 91a8c640 — sessions (id, agent, startedAt, endedAt, parentSessionId)
   | 'registry-orphans' // 39799f8e — typed registry-integrity findings (duplicate project identity, component/project mismatch, empty project)
   | 'orphaned-parents' // S02 AC14 tail — terminal parents that still have open `part_of` descendants
   | 'projects'
@@ -577,6 +589,8 @@ export interface IIssueQueryInput {
   overlapUids?: readonly string[];
   /** `view:'stale'` only — minutes since `claimedAt`; falls back to `project_policy.claim_stale_after_min` (default 30) when omitted. */
   staleAfterMin?: number;
+  /** `view:'reservations'` only — the clock (ISO) a lease is judged live against; defaults to the current time. The ONLY clock seam, so a test proves lease expiry by injecting `now`, never by sleeping. */
+  now?: string;
   /** C8 — `view:'catalogs'` only: narrow to one vocabulary catalog. Omitted ⇒ every catalog's terms (the same set `view:'kinds'` exposes). */
   catalog?: CatalogKindName;
 }
@@ -653,6 +667,8 @@ export type IIssueQueryResult =
   | { view: 'stale'; items: IIssueCard[] }
   | { view: 'similar'; items: IIssueCard[]; clusters?: ISimilarViewClusterBlock }
   | { view: 'overlap'; groups: IOverlapGroup[] }
+  | { view: 'reservations'; items: IReservationRow[] }
+  | { view: 'sessions'; items: ISessionSummary[] }
   | { view: 'registry-orphans'; findings: IRegistryFinding[]; total: number }
   | { view: 'orphaned-parents'; items: IOrphanedParentItem[]; total: number; hasMore: boolean }
   | { view: 'projects'; items: IProjectSummary[] }
@@ -680,6 +696,25 @@ export interface IOrphanedParentItem {
   openChildren: number;
   /** Open descendant uids, capped at `ORPHANED_PARENT_SAMPLE` (5). */
   openChildUids: readonly string[];
+}
+
+/** One active reservation row — one per (reservation x path). */
+export interface IReservationRow {
+  path: string;
+  uid: string;
+  holder: string;
+  sessionId: string | null;
+  claimedAt: string;
+  leaseExpiry: string;
+}
+
+/** A session as listed by `view:'sessions'`. `endedAt` is the explicit end if recorded, else the time of the session's latest op-event. */
+export interface ISessionSummary {
+  sessionId: string;
+  agent: string;
+  startedAt: string;
+  endedAt: string | null;
+  parentSessionId: string | null;
 }
 
 /** One typed registry-integrity finding (`view:"registry-orphans"`). */

@@ -61,6 +61,8 @@ import { buildSimilarClusterBlock } from './similar-clusters.js';
 import { renderIssueCardsMarkdown } from './markdown.js';
 import { catalogFor, catalogView } from './views/catalog.js';
 import { orphanedParents } from './views/stats.js';
+import { queryReservations } from './views/reservations.js';
+import { querySessions } from './views/sessions.js';
 import {
   listComponents,
   listLocations,
@@ -200,7 +202,7 @@ async function resolveOpenClosedCandidates(
 }
 
 /** Resolve every edge-scoped filter dimension present in `filter` to its candidate set, then AND them together (SPEC.md §6.5 rules 3-4). Returns `undefined` when no edge-scoped filter was given at all (⇒ no `ids` restriction on the composed `NodeFilter`). */
-async function resolveEdgeScopedFilterIds(
+export async function resolveEdgeScopedFilterIds(
   graph: GraphBackend,
   filter: IIssueFilter | undefined
 ): Promise<Set<number> | undefined> {
@@ -1428,6 +1430,34 @@ async function dispatchQueryView(
       return {
         result: { view: 'overlap', groups: await queryOverlap(handle, input) },
       };
+    case 'reservations': {
+      const r = await queryReservations(handle.graph, input, (f) =>
+        resolveEdgeScopedFilterIds(handle.graph, f)
+      );
+      return {
+        result: { view: 'reservations', items: r.items },
+        meta: {
+          total: r.total,
+          total_relation: 'eq',
+          returned: r.items.length,
+          limit: r.limit,
+          has_more: r.hasMore,
+        },
+      };
+    }
+    case 'sessions': {
+      const r = await querySessions(handle.graph, input);
+      return {
+        result: { view: 'sessions', items: r.items },
+        meta: {
+          total: r.total,
+          total_relation: 'eq',
+          returned: r.items.length,
+          limit: r.limit,
+          has_more: r.hasMore,
+        },
+      };
+    }
     case 'registry-orphans': {
       const findings = await listRegistryFindings(handle.graph);
       return { result: { view: 'registry-orphans', findings, total: findings.length } };
