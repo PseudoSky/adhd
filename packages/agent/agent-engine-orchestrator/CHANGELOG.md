@@ -1,3 +1,13 @@
+## 2.3.6 (2026-10-07)
+
+### 🩹 Fixes
+
+- **agent-engine-orchestrator:** provider schema accepts PF-1 fields, strict provider/patch schemas, patch includes toolAdvertisement (a388103a, 96fd2773) ([49b8d3f0](https://github.com/PseudoSky/adhd/commit/49b8d3f0))
+
+### ❤️ Thank You
+
+- pseudosky
+
 ## 2.3.5 (2026-10-07)
 
 ### 🚀 Features

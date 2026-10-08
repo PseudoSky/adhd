@@ -12,7 +12,7 @@
     "CHANGELOG.md"
   ],
   "dependencies": {
-    "@adhd/agent-base-types": "^2.3.5",
+    "@adhd/agent-base-types": "^2.3.7",
     "@anthropic-ai/sandbox-runtime": "^0.0.78",
     "@modelcontextprotocol/server-filesystem": "2026.7.10",
     "tslib": "^2.6.0"

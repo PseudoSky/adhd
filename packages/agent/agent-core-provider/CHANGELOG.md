@@ -1,3 +1,13 @@
+## 2.2.5 (2026-10-07)
+
+### 🚀 Features
+
+- **agent-core-provider:** provider-failure classifier, heuristics, retry-after, cooldown (5e72d493 PF-1 AC1-AC8) ([4c5a3b6a](https://github.com/PseudoSky/adhd/commit/4c5a3b6a))
+
+### ❤️ Thank You
+
+- pseudosky
+
 ## 2.2.4 (2026-10-07)
 
 ### 🚀 Features

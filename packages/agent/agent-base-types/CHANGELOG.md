@@ -1,3 +1,26 @@
+## 2.3.7 (2026-10-07)
+
+### 🚀 Features
+
+- **agent-base-types:** ProviderConfig carries models/billingScope/tripwire and BindingRetryConfig (a388103a) ([97d24b93](https://github.com/PseudoSky/adhd/commit/97d24b93))
+- **agent-core-provider:** provider-failure classifier, heuristics, retry-after, cooldown (5e72d493 PF-1 AC1-AC8) ([4c5a3b6a](https://github.com/PseudoSky/adhd/commit/4c5a3b6a))
+- **agent-base-types:** provider-failure taxonomy, failure-event family, binding billingScope/tripwire/retryWindowMs (5e72d493 PF-1) ([77c883f2](https://github.com/PseudoSky/adhd/commit/77c883f2))
+
+### ❤️ Thank You
+
+- pseudosky
+
+## 2.3.6 (2026-10-07)
+
+### 🚀 Features
+
+- **agent-core-provider:** provider-failure classifier, heuristics, retry-after, cooldown (5e72d493 PF-1 AC1-AC8) ([4c5a3b6a](https://github.com/PseudoSky/adhd/commit/4c5a3b6a))
+- **agent-base-types:** provider-failure taxonomy, failure-event family, binding billingScope/tripwire/retryWindowMs (5e72d493 PF-1) ([77c883f2](https://github.com/PseudoSky/adhd/commit/77c883f2))
+
+### ❤️ Thank You
+
+- pseudosky
+
 ## 2.3.5 (2026-10-07)
 
 ### 🚀 Features

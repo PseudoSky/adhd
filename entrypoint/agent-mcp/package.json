@@ -18,25 +18,25 @@
   "dependencies": {
     "@adhd/agent-store-runtime": "^2.2.5",
     "@adhd/agent-store-prompts": "^2.2.3",
-    "@adhd/agent-engine-orchestrator": "^2.3.5",
+    "@adhd/agent-engine-orchestrator": "^2.3.6",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "pino": "^10.3.1",
     "drizzle-orm": "^0.45.2",
     "better-sqlite3": "^12.10.0",
     "zod": "^4.4.3",
-    "@adhd/environment": "^0.1.0",
+    "@adhd/environment": "^0.1.8",
     "@adhd/environment-base-spec": "^0.1.4",
-    "@adhd/agent-base-types": "^2.3.5",
+    "@adhd/agent-base-types": "^2.3.7",
     "@adhd/agent-engine-compiler": "^2.2.8",
     "@adhd/agent-plugin-budget": "^0.2.5",
-    "@adhd/agent-plugin-tracing": "^0.0.1",
-    "@adhd/agent-core-env": "^0.1.3",
+    "@adhd/agent-plugin-tracing": "^0.0.2",
+    "@adhd/agent-core-env": "^0.1.4",
     "@adhd/agent-core-native-tooling": "^0.0.2",
     "dotenv": "17.4.2",
     "tslib": "^2.3.0"
   },
   "devDependencies": {
-    "@adhd/agent-base-types": "^2.3.5"
+    "@adhd/agent-base-types": "^2.3.7"
   },
   "main": "./dist/src/index.js",
   "license": "MIT",

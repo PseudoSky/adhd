@@ -1,6 +1,6 @@
 {
   "name": "@adhd/agent-engine-orchestrator",
-  "version": "2.3.5",
+  "version": "2.3.6",
   "description": "Agent engine orchestrator — providers, clients, tools, plugins, and validation extracted from agent-mcp",
   "type": "module",
   "publishConfig": {
@@ -20,8 +20,8 @@
     "typecheck": "tsc -p tsconfig.lib.json --noEmit"
   },
   "dependencies": {
-    "@adhd/agent-base-types": "^2.3.5",
-    "@adhd/agent-core-provider": "^2.2.4",
+    "@adhd/agent-base-types": "^2.3.7",
+    "@adhd/agent-core-provider": "^2.2.5",
     "@adhd/agent-store-prompts": "^2.2.3",
     "@adhd/agent-store-runtime": "^2.2.5",
     "@anthropic-ai/sdk": "^0.96.0",
