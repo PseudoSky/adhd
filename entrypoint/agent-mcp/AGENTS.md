@@ -228,6 +228,10 @@ the `dispatch` self floor.
   the dispatching cwd and is passed via `srt -s` (`src/srt-policy.ts`; deferral `a5a2f1d4`),
   so the shared `~/.srt-settings.json` never accumulates a per-spawn path and the RMW is
   concurrency-safe (`ADHD_AGENT_SRT_SETTINGS` overrides the per-run settings path).
+  The static policy also carries a DEFAULT `filesystem.denyRead` of the credential paths
+  `~/.npmrc ~/.ssh ~/.aws ~/.config/gh ~/.netrc` (home-expanded `DEFAULT_SRT_DENY_READ` /
+  `defaultSrtDenyRead()`), UNIONED into any user `denyRead` — user entries are preserved
+  and de-duplicated, never clobbered (shell-policy S4 / AC7).
 - The server-wide `nativeTooling` config surface (`env.config.nativeTooling`, the
   `ADHD_AGENT_NATIVE_TOOLING_*` env vars) is merged **beneath** each agent's own
   `def.nativeTooling` at task time — the agent wins, and the merged value is carried on the
