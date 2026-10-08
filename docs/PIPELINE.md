@@ -20,7 +20,27 @@ source is authoritative, and this doc is the index that keeps the pieces togethe
   `peerDependencies` and `optionalDependencies` (npm name mapped to Nx project name through
   `project.json#name`); `devDependencies` are excluded because Nx graph edges carry no dependency
   kind and a graph-wide `^version`/`^publish` would fan out over devDependency and test-import edges.
-  `build`/`test` keep `^build` over the full graph, so `affected` and cache hashing are unchanged.
+  `build`/`test` keep `^build` over the full graph, so `affected` is unchanged by that ordering.
+- **Runtime-closure cache inputs (build, typecheck)** — for each publishable project
+  `tools/nx-plugins/build/plugin.js` computes the workspace projects whose SOURCE can reach the built
+  artifact (`tools/nx-plugins/build/lib/input-closure.js`): declared `dependencies`/`peerDependencies`/
+  `optionalDependencies`, positive `implicitDependencies`, and any project imported from non-test
+  production source (a devDependency imported from `src` is bundled into `dist`, so it stays hashed),
+  transitively; projects negated with `!name` are excluded. It emits that set as the per-project
+  `depsProduction` named input (literal `{workspaceRoot}/<root>/...` globs expanded from `nx.json`'s own
+  `production`/`manifest` definitions) and tags the project `inputs:runtime-closure`; the filtered
+  `nx.json` `targetDefaults` entries for `build`, `typecheck` and `@nx/vite:build` select
+  `["production","depsProduction"]` for tagged projects instead of `["production","^production"]`.
+  A named input cannot hold `^production` or `{input, projects}`, and `targetDefaults` outrank
+  plugin-inferred `inputs`, hence the tag + filter. `test` keeps `^production`: tests execute
+  dev-dependency source. Projects whose `typecheck`/`build` declare their own `inputs` in `project.json`
+  are untouched.
+- **`workspace-base-vite-paths`** — every `vite.config.*` imports it by relative path, which Nx reads as
+  a static edge that put its `build`+`typecheck` into every project's `^build`. The build plugin emits
+  `implicitDependencies: ["!workspace-base-vite-paths"]` for projects that reference it only from config
+  files; its `src` is hashed workspace-wide through `sharedGlobals` instead, so a change to it still
+  invalidates every cache and still marks every project affected (measured with
+  `nx show projects --affected --files=…`).
 - **"Affected by a change"** — nx `affected` against `defaultBase: "main"` (`nx.json`); the matched
   inputs are the declared `namedInputs` (`default`, `production`, `sharedGlobals`).
 - **Artifact per target** — `build` emits each project's `dist/`; `publish` publishes that `dist/`
@@ -78,7 +98,8 @@ and `vercel` apps post check suites; none gates a merge. DeepSource is **not use
   `sync-deps-check`, `test`, `assets`, `build-bin`, `vocabulary-gate`, `traceability`, backlog `build`
   (vite + `ir-artifact` bake, formerly uncached), `dispatch-cli:generate-cli` (declared
   `apigen-cli:build` dependency, outputs `dist/entrypoint/dispatch-cli/cli`), `dist-manifest`
-  (inputs: own `package.json`/`CHANGELOG.md` + dependency `package.json`s + `sharedGlobals`; outputs
+  (inputs: own `package.json`/`CHANGELOG.md` + the `package.json` of each declared RUNTIME workspace
+  dependency + `sharedGlobals`; outputs
   `dist/package.json`, `dist/CHANGELOG.md`), `verify-dist-load` and `publish-hygiene` (inputs: the
   on-disk outputs of `build`/`dist-manifest` via `dependentTasksOutputFiles`, `sharedGlobals` so an
   executor change invalidates a stale verdict, node/npm version, `VERIFY_DIST_LOAD_TIMEOUT_MS`).
@@ -197,6 +218,7 @@ and `vercel` apps post check suites; none gates a merge. DeepSource is **not use
 
 ## Provenance
 - `2026-10-07` — Added `agent-mcp:serve` / `serve-status` / `serve-stop` (run `dispatch-2026-10-06-48dc`, branch `feat/agent-mcp-serve-48dc`). Why: the dispatcher needs a local agent-mcp server over HTTP that reloads on dist rebuilds without being registered in any MCP client config; uncached, no `dependsOn` so it cannot trigger a build.
+- `2026-10-07` — Graph pass 2 (run `dispatch-2026-10-06-48dc`, branch `fix/graph2-48dc`; backlog `0b9505ff`, `c916591c`, `13c35ae0`, `e44c9080`, `dbdcb2cb`). §1 gains the runtime-closure input rule and the `workspace-base-vite-paths` edge removal; §4 `dist-manifest` inputs name each declared runtime dependency's `package.json` instead of `{fileset, dependencies: true}`. Why: Nx graph edges carry no dependency kind, so `^production` and `dependencies: true` hashed dev-only closures (`agent-plugin-tracing:build` 485 input files to 192, `dispatch-orchestrator` 526 to 212, `dispatch-cli` 1117 to 794; 52 of 63 publishable projects unchanged) and `workspace-base-vite-paths` build+typecheck sat in every project's task graph (`agent-plugin-tracing:test` 32 tasks to 30, `agent-mcp:test` 69 to 65). Also: the inert top-level `targetDependencies` key was removed from `nx.json` (absent from the nx schema, read by nothing); the `version` executor no longer rewrites `devDependencies` ranges (their dependency's `version` task is not ordered before it, and no gate checks them).
 - `2026-10-07` — Publish/version graph narrowed to runtime dependencies (run `dispatch-2026-10-06-48dc`, branch `fix/graph-48dc`). §1 documents the per-project `{projects, target}` ordering that replaced `^version`/`^test`/`^publish` in `plugin.js`. Why: `agent-plugin-tracing:publish` expanded to 193 tasks / 15 projects through devDependency and test-import edges; it is now 53 tasks, `:version` 61 to 35, `apigen-plugin-tracing:publish` 52 to 41. The `version` executor now maps `@adhd/*` names to projects through each project's `package.json#name` (`@adhd/environment` is `environment-core-node`), so its internal ranges are reconciled.
 - `2026-10-07` — Cache audit part 2 (run `dispatch-2026-10-06-48dc`, owner follow-up). §4: `nx-plugins:test` cached with audited inputs (was `cache:false`); `default` named input no longer hashes release-written `version`/internal ranges/`CHANGELOG.md` (`manifest` named input + per-project override), so the version phase no longer invalidates unchanged packages' caches; apigen-cli fixtures hashed by runtime input (`.nxignore` hid them). §5: `release-reset-check` moved from `version`+`publish` to `publish` only, made HEAD-aware (range-only edits are not orphan version bumps), review-only states warn and appear in the receipt instead of failing; the `safe = true` override was removed because it only let `--live` clobber hand-edited changelogs. `bug-nxassets-001` spec rewritten to the post-chmod-bin wiring. Evidence: the cache-dag report.
 - `2026-10-07` — Cache audit (run `dispatch-2026-10-06-48dc`, branch `fix/cache-dag-48dc`). §4 rewritten from measurements: backlog `build`, `dist-manifest`, `verify-dist-load`, `publish-hygiene`, `generate-cli` cached with declared inputs/outputs; `chmod-bin` removed from `assets`' dependsOn (bit guaranteed in `writeDistManifest`); `test` upstream-output glob narrowed to code files. Why: the previous text claimed `cache: true` on `@nx/vite:build`, `test`, `typecheck` only, and a second identical `build`/`test` run missed 29+ tasks. Evidence and negative controls: the cache-dag report.

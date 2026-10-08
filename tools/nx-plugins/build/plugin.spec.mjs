@@ -244,3 +244,87 @@ test('RED-equivalent: a publish.dependsOn that omits the conditional `e2e` fails
     'sanity check: the unconditional (pre-fix) publish.dependsOn must NOT satisfy the e2e-reachability assertion'
   );
 });
+
+// ---------------------------------------------------------------------------
+// Runtime-closure cache inputs (backlog 0b9505ff / c916591c / AC1-AC3).
+// ---------------------------------------------------------------------------
+
+/** Minimal nx.json carrying the named inputs the closure expansion derives from. */
+const FIXTURE_NX_JSON = {
+  namedInputs: {
+    default: ['{projectRoot}/**/*', '!{projectRoot}/dist/**', '!{projectRoot}/package.json', 'manifest', 'sharedGlobals'],
+    manifest: [{ json: '{projectRoot}/package.json', excludeFields: ['version'] }],
+    production: ['default', '!{projectRoot}/**/?(*.)+(spec|test).[jt]s?(x)?(.snap)'],
+    sharedGlobals: ['{workspaceRoot}/tsconfig.base.json'],
+  },
+};
+
+function writeSrc(workspaceRoot, projectRoot, rel, text) {
+  const abs = join(workspaceRoot, projectRoot, rel);
+  mkdirSync(join(abs, '..'), { recursive: true });
+  writeFileSync(abs, text);
+}
+
+test('createNodes: build/typecheck depsProduction hashes the RUNTIME closure plus dev deps imported from production source, never test-only dev deps', () => {
+  const workspaceRoot = mkdtempSync(join(tmpdir(), 'nx-build-closure-fixture-'));
+  try {
+    writeFileSync(join(workspaceRoot, 'nx.json'), JSON.stringify(FIXTURE_NX_JSON));
+    const mk = (dir, name, pkgExtra = {}) => makeFixtureProject({ workspaceRoot, projectRoot: `packages/fx/${dir}`, name, pkgExtra: { name: `@adhd/${name}`, ...pkgExtra } });
+    mk('runtime', 'fx-runtime');
+    mk('transitive', 'fx-transitive');
+    mk('bundled', 'fx-bundled');
+    mk('testonly', 'fx-testonly');
+    // fx-runtime itself depends on fx-transitive at runtime.
+    mk('runtime', 'fx-runtime', { dependencies: { '@adhd/fx-transitive': '^1.0.0' } });
+    const widget = mk('widget', 'fx-widget', {
+      dependencies: { '@adhd/fx-runtime': '^1.0.0' },
+      devDependencies: { '@adhd/fx-bundled': '^1.0.0', '@adhd/fx-testonly': '^1.0.0' },
+    });
+    const wRoot = 'packages/fx/widget';
+    writeSrc(workspaceRoot, wRoot, 'src/index.ts', "// mentions '@adhd/fx-testonly' only in a comment\nimport { b } from '@adhd/fx-bundled';\nexport const x = b;\n");
+    writeSrc(workspaceRoot, wRoot, 'src/index.spec.ts', "import '@adhd/fx-testonly';\n");
+    writeSrc(workspaceRoot, wRoot, 'src/test/harness.ts', "import '@adhd/fx-testonly';\n");
+
+    const files = ['runtime', 'transitive', 'bundled', 'testonly', 'widget'].map((d) => `packages/fx/${d}/package.json`);
+    const tuples = handler(files, {}, { workspaceRoot });
+    const result = tuples.find(([f]) => f === widget.slice(workspaceRoot.length + 1))[1];
+    const project = result.projects[wRoot];
+
+    assert.deepEqual(project.tags, ['inputs:runtime-closure']);
+    const globs = JSON.stringify(project.namedInputs.depsProduction);
+    for (const included of ['runtime', 'transitive', 'bundled']) {
+      assert.ok(globs.includes(`{workspaceRoot}/packages/fx/${included}/**/*`), `depsProduction must hash ${included}. Got: ${globs}`);
+    }
+    assert.ok(!globs.includes('packages/fx/testonly/'), `depsProduction must NOT hash a dev dependency only tests import. Got: ${globs}`);
+    // The dependency's own manifest input excludes ITS release-rewritten fields, like `^production` would.
+    assert.ok(project.namedInputs.depsProduction.some((i) => i && i.json === '{workspaceRoot}/packages/fx/runtime/package.json' && i.excludeFields.includes('version') && i.excludeFields.includes('dependencies.@adhd/fx-transitive')));
+
+    // dist-manifest: own manifest + each declared RUNTIME dependency's package.json only.
+    const dm = project.targets['dist-manifest'].inputs;
+    assert.ok(dm.includes('{workspaceRoot}/packages/fx/runtime/package.json'));
+    assert.ok(!dm.some((i) => typeof i === 'string' && (i.includes('/testonly/') || i.includes('/bundled/'))), `dist-manifest must not hash dev dependencies. Got: ${JSON.stringify(dm)}`);
+    assert.ok(!dm.some((i) => i && typeof i === 'object' && i.dependencies === true), 'dist-manifest must not use the graph-wide {fileset, dependencies: true} input (expands over devDependency edges)');
+  } finally {
+    rmSync(workspaceRoot, { recursive: true, force: true });
+  }
+});
+
+test('createNodes: a config-only workspace-base-vite-paths edge is removed from the graph; a source-level one is kept', () => {
+  const workspaceRoot = mkdtempSync(join(tmpdir(), 'nx-build-vitepaths-fixture-'));
+  try {
+    writeFileSync(join(workspaceRoot, 'nx.json'), JSON.stringify(FIXTURE_NX_JSON));
+    const vp = makeFixtureProject({ workspaceRoot, projectRoot: 'packages/workspace/workspace-base-vite-paths', name: 'workspace-base-vite-paths', pkgExtra: { name: '@adhd/workspace-base-vite-paths' } });
+    const cfg = makeFixtureProject({ workspaceRoot, projectRoot: 'packages/fx/cfg', name: 'fx-cfg', pkgExtra: { name: '@adhd/fx-cfg' } });
+    const src = makeFixtureProject({ workspaceRoot, projectRoot: 'packages/fx/src', name: 'fx-src', pkgExtra: { name: '@adhd/fx-src' } });
+    writeSrc(workspaceRoot, 'packages/fx/cfg', 'vite.config.ts', "import { projectCacheDir } from '../../workspace/workspace-base-vite-paths/src/index';\n");
+    writeSrc(workspaceRoot, 'packages/fx/cfg', 'src/index.ts', 'export const a = 1;\n');
+    writeSrc(workspaceRoot, 'packages/fx/src', 'src/index.ts', "import { projectCacheDir } from '../../../workspace/workspace-base-vite-paths/src/index';\nexport const a = projectCacheDir;\n");
+    const rel = (p) => p.slice(workspaceRoot.length + 1);
+    const tuples = handler([rel(vp), rel(cfg), rel(src)], {}, { workspaceRoot });
+    const byRoot = Object.fromEntries(tuples.flatMap(([, r]) => Object.entries(r.projects || {})));
+    assert.deepEqual(byRoot['packages/fx/cfg'].implicitDependencies, ['!workspace-base-vite-paths']);
+    assert.equal(byRoot['packages/fx/src'].implicitDependencies, undefined, 'a production-source import is a real dependency and must keep its edge');
+  } finally {
+    rmSync(workspaceRoot, { recursive: true, force: true });
+  }
+});

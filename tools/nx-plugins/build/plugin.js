@@ -4,6 +4,14 @@ const { existsSync, readFileSync } = require('node:fs');
 const { dirname, join } = require('node:path');
 const { hasBuildTarget, isPublishable } = require('./detect-target');
 const { isScratchPath } = require('../lib/scratch-root');
+const { buildWorkspaceIndex, createClosureResolver, expandProduction } = require('./lib/input-closure');
+/** Tag marking projects whose build/typecheck use the per-project `depsProduction` runtime closure (see nx.json targetDefaults). */
+const RUNTIME_CLOSURE_TAG = 'inputs:runtime-closure';
+/** npm name of the workspace helper every vite.config.* imports by relative path. */
+const VITE_PATHS_NAME = '@adhd/workspace-base-vite-paths';
+function readNxNamedInputs(workspaceRoot) {
+  try { return JSON.parse(readFileSync(join(workspaceRoot, 'nx.json'), 'utf8')).namedInputs || {}; } catch { return {}; }
+}
 /**
  * cache-dag item 3: fields of a publishable project's own package.json that the
  * release (`version` phase / `sync-deps`) rewrites WITHOUT any code change: the
@@ -29,6 +37,12 @@ function releaseRewrittenFields(workspaceRoot, projectRoot) {
     }
   }
   return fields;
+}
+/** True iff the project's package.json declares `depName` in ANY dependency section (dev included). */
+function wsIndexDeclares(workspaceRoot, projectRoot, depName) {
+  let pkg = {};
+  try { pkg = JSON.parse(readFileSync(join(workspaceRoot, projectRoot, 'package.json'), 'utf8')); } catch { return false; }
+  return ['dependencies', 'devDependencies', 'peerDependencies', 'optionalDependencies'].some((section) => Object.prototype.hasOwnProperty.call(pkg[section] || {}, depName));
 }
 function skip(p) { return p === '.' || p.startsWith('node_modules/') || p.includes('/node_modules/') || p.startsWith('dist/') || p.includes('/dist/') || isScratchPath(p); }
 /**
@@ -88,14 +102,30 @@ exports.runtimeInternalProjects = runtimeInternalProjects;
 exports.createNodes = ['**/package.json', (configFiles, _o, ctx) =>
 {
   const nameIndex = buildPackageNameIndex(ctx.workspaceRoot, configFiles);
+  const wsIndex = buildWorkspaceIndex(ctx.workspaceRoot, configFiles, skip);
+  const closures = createClosureResolver(ctx.workspaceRoot, wsIndex);
+  const namedInputs = readNxNamedInputs(ctx.workspaceRoot);
+  const vitePaths = wsIndex.byName.get(VITE_PATHS_NAME);
   return configFiles.map((pkgPath) =>
   {
     const projectRoot = dirname(pkgPath);
     if (skip(projectRoot)) return [pkgPath, {}];
     if (!existsSync(join(ctx.workspaceRoot, projectRoot, 'project.json'))) return [pkgPath, {}];
-    if (!hasBuildTarget(ctx.workspaceRoot, projectRoot)) return [pkgPath, {}];
+    // c916591c / AC3: every vite.config.* imports workspace-base-vite-paths by RELATIVE path, which
+    // Nx reads as a static project edge — dragging that project's build+typecheck into every
+    // project's `^build` task graph although only its SOURCE is read, at config-load time. When the
+    // edge is config-only (no production source file imports it and it is not declared), remove the
+    // graph edge; its source is hashed workspace-wide through nx.json `sharedGlobals` instead, and
+    // nx.json `implicitDependencies` keeps `affected` selecting every project when it changes.
+    const edgeToRemove = vitePaths && vitePaths.root !== projectRoot
+      && closures.importsAnywhere(projectRoot, vitePaths.root)
+      && !closures.importsFromSource(projectRoot, vitePaths.root)
+      && !closures.runtimeRoots(projectRoot).includes(vitePaths.root)
+      && !wsIndexDeclares(ctx.workspaceRoot, projectRoot, VITE_PATHS_NAME)
+      ? ['!' + vitePaths.project] : [];
+    if (!hasBuildTarget(ctx.workspaceRoot, projectRoot)) return [pkgPath, edgeToRemove.length ? { projects: { [projectRoot]: { implicitDependencies: edgeToRemove } } } : {}];
     // Private packages have no published artifact to verify/ship.
-    if (!isPublishable(ctx.workspaceRoot, projectRoot)) return [pkgPath, {}];
+    if (!isPublishable(ctx.workspaceRoot, projectRoot)) return [pkgPath, edgeToRemove.length ? { projects: { [projectRoot]: { implicitDependencies: edgeToRemove } } } : {}];
     // Runtime-only ordering (see runtimeInternalProjects): explicit per-project dependsOn
     // objects replace `^version` / `^test` / `^publish`, which expand over EVERY project-graph
     // edge including devDependency and test/vite-config import edges. `build`/`test`'s own
@@ -171,14 +201,34 @@ exports.createNodes = ['**/package.json', (configFiles, _o, ctx) =>
     // without ever re-reading the current rebase. The executor itself is
     // cheap (require/import of a handful of entries), so leaving it uncached
     // costs nothing.
+    // 0b9505ff / dbdcb2cb-family: build + typecheck hash the RUNTIME closure only (see
+    // lib/input-closure.js), never a dev-only dependency's source. Emitted only when nx.json
+    // defines `production` (the closure is expanded from it); the tag opts this project into the
+    // filtered nx.json targetDefaults entries that read `depsProduction`.
+    const closureRoots = namedInputs.production ? closures.closureRoots(projectRoot) : null;
+    const depsProduction = closureRoots
+      ? closureRoots.flatMap((depRoot) => expandProduction(
+        namedInputs,
+        depRoot,
+        releaseRewrittenFields(ctx.workspaceRoot, depRoot),
+        wsIndex.rootsByLength.filter((r) => r.startsWith(`${depRoot}/`))
+      ))
+      : null;
+    // dist-manifest reads only this project's package.json/CHANGELOG and the VERSIONS of the
+    // workspace packages it declares as runtime dependencies (generate-manifest resolves
+    // dependencies/peerDependencies/optionalDependencies; devDependencies are stripped).
+    const manifestDepInputs = closures.runtimeRoots(projectRoot).map((depRoot) => `{workspaceRoot}/${depRoot}/package.json`);
     return [pkgPath, {
       projects: {
         [projectRoot]: {
+          ...(depsProduction ? { tags: [RUNTIME_CLOSURE_TAG] } : {}),
+          ...(edgeToRemove.length ? { implicitDependencies: edgeToRemove } : {}),
           // Project-level override of the workspace `manifest` named input (nx.json):
           // see releaseRewrittenFields. A project-level named input replaces the
           // workspace one of the same name.
           namedInputs: {
             manifest: [{ json: '{projectRoot}/package.json', excludeFields: releaseRewrittenFields(ctx.workspaceRoot, projectRoot) }],
+            ...(depsProduction ? { depsProduction } : {}),
           },
           targets: {
             "version": { "executor": "@adhd/nx-build:version", "dependsOn": ["build", "assets", ...onDeps("version")], /*"cache": false */ },
@@ -188,9 +238,11 @@ exports.createNodes = ['**/package.json', (configFiles, _o, ctx) =>
             // CHANGELOG.md) — `generateDistManifest`/`assertResolvedInternalDeps` read nothing
             // else (no registry, clock or env). Those are exactly the declared inputs; build/assets
             // hashes fold in through `dependsOn`. A hit restores the two files it writes. The
-            // earlier "impractical cache key" claim (sibling versions) is answered by the
-            // `dependencies:true` package.json fileset. Experiment: negative controls in
-            // docs/PIPELINE.md §4 provenance / the cache-dag report.
+            // earlier "impractical cache key" claim (sibling versions) is answered by an explicit
+            // package.json input per declared RUNTIME workspace dependency (`manifestDepInputs`).
+            // It was `{fileset: package.json, dependencies: true}`, which Nx expands over every
+            // project-graph edge including devDependency edges (backlog c916591c). Experiment:
+            // negative controls in docs/PIPELINE.md §4 provenance / the cache-dag report.
             "dist-manifest": {
               "executor": "@adhd/nx-build:manifest",
               "dependsOn": ["build", "assets"],
@@ -198,7 +250,7 @@ exports.createNodes = ['**/package.json', (configFiles, _o, ctx) =>
               "inputs": [
                 "{projectRoot}/package.json",
                 "{projectRoot}/CHANGELOG.md",
-                { "fileset": "{projectRoot}/package.json", "dependencies": true },
+                ...manifestDepInputs,
                 "sharedGlobals"
               ],
               "outputs": ["{projectRoot}/dist/package.json", "{projectRoot}/dist/CHANGELOG.md"]

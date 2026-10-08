@@ -42,6 +42,8 @@
       "{workspaceRoot}/tools/vite-plugins/source-resolution.mjs",
       "{workspaceRoot}/tools/vite-plugins/vitest-pool-defaults.mjs",
       "{workspaceRoot}/tools/vite-plugins/copy-readme.mjs",
+      "{workspaceRoot}/packages/workspace/workspace-base-vite-paths/src/**/*",
+      "!{workspaceRoot}/packages/workspace/workspace-base-vite-paths/src/**/?(*.)+(spec|test).[jt]s?(x)",
       "{workspaceRoot}/tools/nx-plugins/build/**/*",
       "{workspaceRoot}/tools/nx-plugins/lint/**/*",
       "{workspaceRoot}/eslint.config.mjs",
@@ -193,11 +195,18 @@
     }
   },
   "targetDefaults": {
-    "@nx/vite:build": {
-      "cache": true,
-      "dependsOn": ["^build"],
-      "inputs": ["production", "^production"]
-    },
+    "@nx/vite:build": [
+      {
+        "cache": true,
+        "dependsOn": ["^build"],
+        "inputs": ["production", "^production"]
+      },
+      {
+        "//": "Publishable projects (tagged `inputs:runtime-closure` by tools/nx-plugins/build/plugin.js) hash only the RUNTIME closure of their dependencies — `depsProduction`, a per-project named input of literal globs — instead of `^production`, which widens over devDependency/test-only edges (0b9505ff). `test` keeps `^production` on purpose: tests execute dev-dependency source.",
+        "filter": { "projects": ["tag:inputs:runtime-closure"] },
+        "inputs": ["production", "depsProduction"]
+      }
+    ],
     "test": {
       "//": "`dependentTasksOutputFiles` closes backlog 62535ce7: a `test` target may `dependsOn` a task of a project OUTSIDE its Nx project graph — e.g. dispatch-cli spawns agent-mcp's BUILT entry as an external MCP boundary and names `agent-mcp:dist-manifest` in test.dependsOn, but imports nothing from agent-mcp, so `^production` never sees agent-mcp's source or dist. The task-dependsOn REBUILDS agent-mcp/dist, yet the consumer test's hash did not change and Nx served a STALE cached PASS across a real rebuild (reproduced in bucket-h). `transitive: true` is REQUIRED, not stylistic: the direct dependency `agent-mcp:dist-manifest` resolves NO outputs (its @adhd/nx-build:manifest executor declares none), so a non-transitive glob matches nothing — the artifact is materialized by the transitive `agent-mcp:build`, which declares `{projectRoot}/dist`. The glob is the CODE-bearing extensions only (cache-dag AC9): `dist/package.json`/README/CHANGELOG are rewritten in place by `assets`/`dist-manifest` concurrently with downstream hashing, so a `**/*` glob hashed a racy intermediate state and made `test` miss on a second identical run (29 of 67 `test` tasks measured); those files are pure functions of source inputs already in the hash (own `default`, deps' `^production`). The hasher restricts the match to files inside a declared output of an upstream task in the task graph.",
       "cache": true,
@@ -218,15 +227,27 @@
         "command": "vitest run --config {projectRoot}/vite.config.ts"
       }
     },
-    "build": {
-      "cache": true,
-      "dependsOn": ["^build", "typecheck"],
-      "inputs": ["production", "^production"]
-    },
-    "typecheck": {
-      "cache": true,
-      "inputs": ["production", "^production"]
-    },
+    "build": [
+      {
+        "cache": true,
+        "dependsOn": ["^build", "typecheck"],
+        "inputs": ["production", "^production"]
+      },
+      {
+        "filter": { "projects": ["tag:inputs:runtime-closure"] },
+        "inputs": ["production", "depsProduction"]
+      }
+    ],
+    "typecheck": [
+      {
+        "cache": true,
+        "inputs": ["production", "^production"]
+      },
+      {
+        "filter": { "projects": ["tag:inputs:runtime-closure"] },
+        "inputs": ["production", "depsProduction"]
+      }
+    ],
     "nx-release-publish": {
       "dependsOn": [
         "build",
@@ -242,14 +263,6 @@
       "cache": true,
       "dependsOn": ["sync-deps-check"]
     }
-  },
-  "targetDependencies": {
-    "build": [
-      {
-        "target": "build",
-        "projects": "dependencies"
-      }
-    ]
   },
   "release": {
     "projectsRelationship": "independent",
