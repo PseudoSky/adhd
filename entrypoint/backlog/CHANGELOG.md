@@ -1,3 +1,22 @@
+## 1.0.12 (2026-10-08)
+
+### 🚀 Features
+
+- **backlog:** spec-append mode amend|replace (a9966c3f, P7-L-AC006..AC011, AC018) ([c2021f53](https://github.com/PseudoSky/adhd/commit/c2021f53))
+
+### 🩹 Fixes
+
+- **backlog:** unify store-adapter consumers on adapter 0.13.3 / turso 0.8.2 (4b7fd623) ([6cfe7058](https://github.com/PseudoSky/adhd/commit/6cfe7058))
+- **backlog:** spec-append replace with no existing spec revision is invalid_argument (f612389c AC1/AC2) ([76466bb0](https://github.com/PseudoSky/adhd/commit/76466bb0))
+
+### ❤️ Thank You
+
+- pseudosky
+
+## 1.0.11 (2026-10-08)
+
+This was a version bump only for backlog to align it with other projects, there were no code changes.
+
 ## 1.0.10 (2026-10-07)
 
 ### 🚀 Features
