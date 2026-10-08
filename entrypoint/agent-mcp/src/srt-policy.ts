@@ -100,6 +100,27 @@ export const DEFAULT_SRT_ALLOWED_DOMAINS: readonly string[] = [
 ];
 
 /**
+ * Credential locations the wrapped (agent-reachable) `fs`/`shell` servers must
+ * never read (shell-policy spec S4 / AC7; compensating control C4). Home-expanded
+ * at call time and UNIONED into `filesystem.denyRead` — user entries are never
+ * clobbered. This is what blocks `cat ~/.npmrc` / `pnpm publish` credential reads
+ * that no command-name rule can express.
+ */
+export function defaultSrtDenyRead(): string[] {
+  const home = homedir();
+  return [
+    join(home, '.npmrc'),
+    join(home, '.ssh'),
+    join(home, '.aws'),
+    join(home, '.config', 'gh'),
+    join(home, '.netrc'),
+  ];
+}
+
+/** Static form of {@link defaultSrtDenyRead} for the host's own home directory. */
+export const DEFAULT_SRT_DENY_READ: readonly string[] = defaultSrtDenyRead();
+
+/**
  * Writable caches the wrapped servers initialize on first run (they are
  * default-DENIED by srt's built-in config). Existing dirs only — a path that
  * does not exist is still harmless, but we keep the policy lean.
@@ -338,7 +359,7 @@ function readExisting(path: string): SrtSettings {
 /**
  * Create — or additively merge into — an `srt` policy so the wrapped builtins
  * can spawn (ADR-0008 D7; deferral `a5a2f1d4`). Every pre-existing rule is
- * preserved; only the six allow-lists are unioned. Writes atomically
+ * preserved; the allow-lists and the default credential `denyRead` list are unioned. Writes atomically
  * (temp file + rename) so a concurrent reader never sees a half-written file.
  *
  * Idempotent: calling twice with the same inputs yields byte-identical bytes.
@@ -363,11 +384,13 @@ export function provisionSrtPolicy(
       union(DEFAULT_SRT_ALLOWED_DOMAINS, opts.allowedDomains ?? [])
     );
 
+    const denyRead = union(toArray(current.filesystem?.denyRead), defaultSrtDenyRead());
+
     const next: SrtSettings = {
       ...current,
       filesystem: {
         ...(current.filesystem ?? {}),
-        denyRead: toArray(current.filesystem?.denyRead),
+        denyRead,
         allowRead,
         allowWrite,
         denyWrite: toArray(current.filesystem?.denyWrite),

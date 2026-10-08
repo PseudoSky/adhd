@@ -221,7 +221,10 @@ as a flagged last-resort fallback.
 The `fs`/`shell` builtins are wrapped by `@anthropic-ai/sandbox-runtime` (`srt`).
 The host provisions a per-run policy carrying the dispatching cwd and passes it via
 `srt -s`, so the shared `~/.srt-settings.json` is never accumulated with a per-spawn
-path (`ADHD_AGENT_SRT_SETTINGS` overrides the per-run settings path). The server-wide
+path (`ADHD_AGENT_SRT_SETTINGS` overrides the per-run settings path). The static policy
+denies reads of credential paths by default (`~/.npmrc`, `~/.ssh`, `~/.aws`,
+`~/.config/gh`, `~/.netrc`), unioned into — never replacing — any `denyRead` entries you
+already have in `~/.srt-settings.json`. The server-wide
 `ADHD_AGENT_NATIVE_TOOLING_*` config is merged **beneath** each agent's own
 `nativeTooling` (the agent wins). **One producer:** the fs/shell launch commands live
 only in `@adhd/agent-core-native-tooling`'s catalog, and the agent-mcp self launch
