@@ -583,7 +583,7 @@ importers:
         specifier: ^0.2.0
         version: link:../../packages/apigen/apigen-plugin-tracing
       '@adhd/environment':
-        specifier: ^0.1.0
+        specifier: ^0.1.8
         version: link:../../packages/environment/environment-core-node
       '@adhd/environment-base-spec':
         specifier: ^0.1.4
