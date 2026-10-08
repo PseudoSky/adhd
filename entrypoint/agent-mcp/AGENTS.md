@@ -271,9 +271,14 @@ npx nx run agent-mcp:serve-stop                  # SIGTERM the supervisor and it
 - Waits for `entrypoint/agent-mcp/dist/src/index.js` + `dist/package.json` (build with `npx nx affected -t build` / `agent-mcp:dist-manifest`); restarts (SIGTERM, then start) once `dist/` has been unchanged for 3s after any change (polled every 2s; `AGENT_MCP_SERVE_STABLE_MS`, `AGENT_MCP_SERVE_POLL_MS`).
 - URL `http://127.0.0.1:<port>/` (any path). Real `ADHD_AGENT_*` env/DB/registry paths pass through unchanged; `ADHD_AGENT_SSE_HOST` defaults to `127.0.0.1`.
 - pid and log: `tmp/agent-mcp/serve/serve-<port>.{pid,log}` (gitignored). A second `scripts/serve.mjs run` for the same port reports the running one instead of starting another.
-- The http transport accepts one MCP session per server process; a client must resume its session id across invocations (and re-initialize after a reload).
+- The http transport serves many concurrent MCP sessions; after a reload the old `mcp-session-id` gets HTTP 404 and the client must re-initialize.
 - Nx serializes a task across processes: while `serve` runs, a second `nx run agent-mcp:serve` waits ("Waiting for agent-mcp:serve in another nx process"). Use `serve-status`, or call `node entrypoint/agent-mcp/scripts/serve.mjs run` for the report-and-exit behaviour.
-- Limitation: the MCP HTTP listener itself calls `listen(port)` without a host (`src/server.ts`), so it binds all interfaces; only the SSE/gateway listener is pinned to localhost. Localhost-only binding needs a `src/server.ts` change.
+- The MCP HTTP listener binds `ADHD_AGENT_HOST` (default `127.0.0.1`); the SSE/gateway listener binds `ADHD_AGENT_SSE_HOST` (default `127.0.0.1`).
+- `serve-status` / `serve-stop` read `AGENT_MCP_SERVE_PORT`; unset, they target 47821.
+- `dist/package.json` comes from `agent-mcp:dist-manifest`, not `build` (backlog 91601303).
+- Isolation for a throwaway: set `ADHD_AGENT_DATABASE_PATH`, `ADHD_AGENT_REGISTRY_DB_PATH` (the DB path variable does not redirect the registry DB, backlog 243002e0) and `ADHD_AGENT_SKIP_LEGACY_MIGRATION=true` (otherwise a new DB is seeded from the legacy `~/.adhd/agent-mcp/agents.db`). Process env beats `.env` files; the supervisor starts the server with `cwd` = checkout root.
+- A reload SIGTERMs the server without draining the queue; in-flight tasks can be cut (backlog 2353c2cc).
+- Local-testing procedure (MCP client calls, usage fields, tool advertisement, shell-policy PATH requirements): [docs/dev-server-local-testing.md](./docs/dev-server-local-testing.md). e2e is CI-only locally (backlog 8963c3cb).
 
 ## Live tests (env-gated — paid model)
 
