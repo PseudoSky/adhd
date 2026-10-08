@@ -382,7 +382,8 @@ function packageNameToProject(context) {
  *
  * The filesystem, unlike the in-memory graph snapshot, is always current by
  * the time this runs (that's exactly what `^version` guarantees). This
- * function re-reconciles every declared internal `@adhd/*` range directly
+ * function re-reconciles every declared internal `@adhd/*` RUNTIME range
+ * (dependencies / peerDependencies / optionalDependencies) directly
  * against each dependency's ON-DISK `package.json`, bypassing the cached
  * graph entirely. Per DEBT-BUILD-VERSION-SYNCDEPS-REDUNDANT-001 (b), this is
  * now the ONLY internal-range reconciliation `version` performs — the
@@ -435,9 +436,15 @@ function reconcileInternalRangesFromDisk(context, dryRun) {
   // map is now keyed `"<field>::<depName>"`, and the replace is applied only
   // within THIS field's own `{ ... }` block of the raw text — never spilling
   // into a sibling field that happens to share a dependency name.
+  // `devDependencies` is deliberately NOT reconciled (dbdcb2cb). The `version` task's
+  // topological ordering (plugin.js `onDeps("version")`) waits only for RUNTIME dependencies'
+  // `version` tasks, so a devDependency's on-disk version is not yet settled when this runs:
+  // reading it would pin a stale range, and rewriting it churns the working tree for a field no
+  // consumer installs (generate-manifest strips it from the published manifest) and no gate
+  // checks (`sync-deps-check` passes with a stale dev range — measured). Dev-edge ranges are
+  // repaired by the explicit `nx run <project>:sync-deps` / `nx affected -t sync-deps` pass.
   const depFields = [
     'dependencies',
-    'devDependencies',
     'peerDependencies',
     'optionalDependencies',
   ];
