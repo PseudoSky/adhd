@@ -1,3 +1,5 @@
+import openRouterSnapshot from './pricing.json' with { type: 'json' };
+
 export interface ModelRate {
   /** Full-price (cache-miss / uncached) input, $ per million tokens. */
   inputPerM: number;
@@ -20,6 +22,85 @@ export const RATE_CARD: Record<string, ModelRate> = {
   'deepseek-v4-flash': { inputPerM: 0.14, cacheReadPerM: 0.0028, cacheWritePerM: 0, outputPerM: 0.28 },
   'deepseek-v4-pro':   { inputPerM: 0.435, cacheReadPerM: 0.003625, cacheWritePerM: 0, outputPerM: 0.87 },
 };
+
+// 37f6c511 — OpenRouter price snapshot (pricing.json, GET https://openrouter.ai/api/v1/models).
+// Values are per-TOKEN USD strings; ModelRate is $/MILLION tokens. The conversion happens in
+// exactly one place (`perMillion`). Layering: RATE_CARD above holds vendor-verified direct rates
+// and keeps priority for every key/normalization it already resolved; the snapshot adds the
+// ~470 OpenRouter ids that previously priced as null. A model's `pricing.overrides` (time-of-day
+// pricing) is deliberately NOT applied — only the base prompt/completion/cache fields are.
+interface IOpenRouterPricing {
+  prompt?: string;
+  completion?: string;
+  input_cache_read?: string;
+  input_cache_write?: string;
+}
+interface IOpenRouterModel {
+  id: string;
+  name: string;
+  pricing: IOpenRouterPricing;
+}
+interface IOpenRouterSnapshot {
+  source: string;
+  fetched_at: string;
+  models: IOpenRouterModel[];
+}
+
+const SNAPSHOT = openRouterSnapshot as IOpenRouterSnapshot;
+
+/** Provenance of the committed OpenRouter snapshot (source URL + fetch timestamp). */
+export const PRICING_SNAPSHOT_META: { source: string; fetchedAt: string; modelCount: number } = {
+  source: SNAPSHOT.source,
+  fetchedAt: SNAPSHOT.fetched_at,
+  modelCount: SNAPSHOT.models.length,
+};
+
+/** $/token decimal string -> $/million tokens, cleaned of binary float noise. NaN when absent/invalid. */
+function perMillion(perToken: string | undefined): number {
+  if (perToken === undefined) return Number.NaN;
+  return Number((Number(perToken) * 1_000_000).toPrecision(12));
+}
+
+function openRouterRate(pricing: IOpenRouterPricing): ModelRate | undefined {
+  const inputPerM = perMillion(pricing.prompt);
+  const outputPerM = perMillion(pricing.completion);
+  // OpenRouter serves "-1" for routers with no fixed price; that is "unknown", never a rate.
+  if (!(inputPerM >= 0) || !(outputPerM >= 0)) return undefined;
+  const cacheRead = perMillion(pricing.input_cache_read);
+  const cacheWrite = perMillion(pricing.input_cache_write);
+  return {
+    inputPerM,
+    // No published cache-read price => cache hits bill as ordinary input.
+    cacheReadPerM: cacheRead >= 0 ? cacheRead : inputPerM,
+    cacheWritePerM: cacheWrite >= 0 ? cacheWrite : 0,
+    outputPerM,
+  };
+}
+
+const OPENROUTER_RATES: ReadonlyMap<string, ModelRate> = new Map(
+  SNAPSHOT.models.flatMap((m): Array<[string, ModelRate]> => {
+    const rate = openRouterRate(m.pricing);
+    return rate ? [[m.id.toLowerCase(), rate]] : [];
+  })
+);
+
+/**
+ * Explicit provider-model-name -> OpenRouter id aliases. An entry needs EVIDENCE of which
+ * OpenRouter model the provider's name denotes; a name match alone is not evidence.
+ *
+ * `deepseek-flash` (what the sox agents are configured with; provider type `openai`, DeepSeek
+ * secret) is intentionally NOT mapped: the provider does not capture the response `model`
+ * field and nothing persisted pins it to one revision. Candidates, with base prompt/completion
+ * $/token: `~deepseek/deepseek-flash-latest` (2.83e-8/1.2e-6), `deepseek/deepseek-v4-flash`
+ * (9.9e-9/1.28e-6), `deepseek/deepseek-v4-flash-0731` (1.8e-8/1.28e-6),
+ * `deepseek/deepseek-v4.1-flash` (3e-7/1.2e-6). Until one is established it prices as null.
+ */
+export const PROVIDER_MODEL_ALIASES: Readonly<Record<string, string>> = {};
+
+function lookupOpenRouterRate(model: string): ModelRate | undefined {
+  const aliased = PROVIDER_MODEL_ALIASES[model.trim().toLowerCase()] ?? model;
+  return OPENROUTER_RATES.get(aliased.trim().toLowerCase());
+}
 
 // agent-mcp-005 — real callers never pass a bare RATE_CARD key. usage-plugin.ts passes
 // whatever a human typed into an agent's `provider.model` config ("claude-haiku-4-5",
@@ -91,6 +172,9 @@ export function estimateCostUsd(
   usage: { uncachedInputTokens: number; cacheReadTokens: number; cacheCreationTokens: number; outputTokens: number }
 ): number | null {
   let rate: ModelRate | undefined = RATE_CARD[model];
+  // A full OpenRouter id ("deepseek/deepseek-v4.1-flash") is priced from the snapshot before the
+  // org-prefix-stripping normalization below would collapse it onto a different (bare) key.
+  if (!rate) rate = lookupOpenRouterRate(model);
   if (!rate) {
     for (const candidate of normalizeModelKeyCandidates(model)) {
       rate = RATE_CARD[candidate];

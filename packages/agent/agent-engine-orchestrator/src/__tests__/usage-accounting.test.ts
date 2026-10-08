@@ -415,5 +415,49 @@ describe("usage accounting — data capture (DEBT-AGENTMCP-ACCOUNTING-001)", () 
             // silently wrong").
             expect(row.est_cost_usd).toBeNull();
         });
+
+        // 37f6c511 AC4 — a model priced ONLY by the committed OpenRouter snapshot
+        // (deepseek/deepseek-v4.1-flash is absent from the vendor RATE_CARD) must now write a
+        // non-null, exact est_cost_usd through the real Orchestrator + UsagePlugin + sqlite.
+        it("37f6c511 AC4: an OpenRouter-snapshot-only model (deepseek/deepseek-v4.1-flash) writes the exact non-null est_cost_usd", async () => {
+            const { sqlite, db } = makeTestDb();
+            const taskId = generateId();
+            const ctx = makeCtx(taskId, "deepseek/deepseek-v4.1-flash");
+
+            const provider: LLMProvider = {
+                chat: async (): Promise<ProviderChatResponse> => {
+                    clock += 50;
+                    return {
+                        message: {
+                            id: generateId(),
+                            sessionId: ctx.sessionId,
+                            role: "assistant",
+                            content: "done",
+                            createdAt: nowIso(),
+                        },
+                        stopReason: "completed",
+                        usage: {
+                            inputTokens: 3500,
+                            outputTokens: 300,
+                            uncachedInputTokens: 1000,
+                            cacheReadTokens: 2000,
+                            cacheCreationTokens: 500,
+                        },
+                    };
+                },
+            };
+
+            await runTask({ db, ctx, provider, registry: emptyRegistry });
+
+            const row = sqlite
+                .prepare("SELECT est_cost_usd FROM task_usage WHERE task_id = ?")
+                .get(taskId) as { est_cost_usd: number | null };
+
+            // pricing.json: prompt 3e-7 ($0.30/M), input_cache_read 6e-9 ($0.006/M),
+            // completion 1.2e-6 ($1.20/M), no cache-write price (0):
+            // (1000*0.30 + 2000*0.006 + 500*0 + 300*1.20) / 1e6 = 672 / 1e6
+            expect(row.est_cost_usd).not.toBeNull();
+            expect(row.est_cost_usd).toBeCloseTo(0.000672, 12);
+        });
     });
 });

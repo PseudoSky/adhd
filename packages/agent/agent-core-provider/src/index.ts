@@ -54,7 +54,7 @@ export { SEEDED_PROVIDER_IDS } from './seed/index.js';
 export { MODEL_ROWS, SEEDED_MODEL_IDS } from './seed/index.js';
 export { BINDING_ROWS } from './seed/index.js';
 
-export { RATE_CARD, estimateCostUsd } from './pricing/rate-card.js';
+export { RATE_CARD, PROVIDER_MODEL_ALIASES, PRICING_SNAPSHOT_META, estimateCostUsd } from './pricing/rate-card.js';
 export type { ModelRate } from './pricing/rate-card.js';
 
 export * from './failure/index.js';
