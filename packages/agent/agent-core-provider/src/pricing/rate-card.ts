@@ -85,17 +85,21 @@ const OPENROUTER_RATES: ReadonlyMap<string, ModelRate> = new Map(
 );
 
 /**
- * Explicit provider-model-name -> OpenRouter id aliases. An entry needs EVIDENCE of which
- * OpenRouter model the provider's name denotes; a name match alone is not evidence.
+ * Explicit provider-model-name -> OpenRouter id aliases. OpenRouter ids are the canonical
+ * "true" model names for pricing.
  *
  * `deepseek-flash` (what the sox agents are configured with; provider type `openai`, DeepSeek
- * secret) is intentionally NOT mapped: the provider does not capture the response `model`
- * field and nothing persisted pins it to one revision. Candidates, with base prompt/completion
- * $/token: `~deepseek/deepseek-flash-latest` (2.83e-8/1.2e-6), `deepseek/deepseek-v4-flash`
- * (9.9e-9/1.28e-6), `deepseek/deepseek-v4-flash-0731` (1.8e-8/1.28e-6),
- * `deepseek/deepseek-v4.1-flash` (3e-7/1.2e-6). Until one is established it prices as null.
+ * secret) -> `deepseek/deepseek-v4.1-flash`. OWNER-DIRECTED ASSUMPTION (2026-10-08, ticket
+ * 37f6c511): the owner decided DeepSeek-direct `deepseek-flash` traffic is V4.1 Flash. It is NOT
+ * evidence-derived: the provider does not capture the response `model` field, so nothing persisted
+ * pins which revision served a call. Other candidates considered, base prompt/completion $/token:
+ * `~deepseek/deepseek-flash-latest` (2.83e-8/1.2e-6), `deepseek/deepseek-v4-flash`
+ * (9.9e-9/1.28e-6), `deepseek/deepseek-v4-flash-0731` (1.8e-8/1.28e-6). The proper fix — record
+ * the response model per turn and map by provider+model — is a separate HIGH feature (37f6c511).
  */
-export const PROVIDER_MODEL_ALIASES: Readonly<Record<string, string>> = {};
+export const PROVIDER_MODEL_ALIASES: Readonly<Record<string, string>> = {
+  'deepseek-flash': 'deepseek/deepseek-v4.1-flash',
+};
 
 function lookupOpenRouterRate(model: string): ModelRate | undefined {
   const aliased = PROVIDER_MODEL_ALIASES[model.trim().toLowerCase()] ?? model;

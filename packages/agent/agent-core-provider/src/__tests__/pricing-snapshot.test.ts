@@ -110,8 +110,19 @@ describe('37f6c511 AC3 — unknown models stay null, never 0', () => {
     expect(estimateCostUsd(router!.id, usage)).toBeNull();
   });
 
-  it('deepseek-flash has no alias yet (candidates documented in rate-card.ts) and prices as null', () => {
-    expect(PROVIDER_MODEL_ALIASES['deepseek-flash']).toBeUndefined();
-    expect(estimateCostUsd('deepseek-flash', usage)).toBeNull();
+  it('an unknown provider model name stays null even with aliases present', () => {
+    expect(PROVIDER_MODEL_ALIASES['deepseek-unknown']).toBeUndefined();
+    expect(estimateCostUsd('deepseek-unknown', usage)).toBeNull();
+  });
+});
+
+describe('37f6c511 AC2 — owner-directed provider alias deepseek-flash', () => {
+  it('deepseek-flash resolves to deepseek/deepseek-v4.1-flash and prices exactly', () => {
+    expect(PROVIDER_MODEL_ALIASES['deepseek-flash']).toBe('deepseek/deepseek-v4.1-flash');
+    // Hard-coded from snapshot rates: prompt 3e-7, input_cache_read 6e-9, completion 1.2e-6, no cache-write.
+    // 1000*3e-7 + 2000*6e-9 + 500*0 + 300*1.2e-6 = 3e-4 + 1.2e-5 + 3.6e-4 = 6.72e-4
+    expect(estimateCostUsd('deepseek-flash', usage)).toBeCloseTo(0.000672, 12);
+    // Case/whitespace-insensitive, same as the OpenRouter id lookup.
+    expect(estimateCostUsd(' DeepSeek-Flash ', usage)).toBeCloseTo(0.000672, 12);
   });
 });
