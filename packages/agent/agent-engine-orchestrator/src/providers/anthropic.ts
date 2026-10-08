@@ -310,6 +310,7 @@ export class AnthropicProvider implements LLMProvider {
                 message,
                 stopReason: toolCalls.length > 0 ? "tool_calls" : "completed",
                 rawUsage: sdkUsage,
+                responseModel: response.model || undefined,
                 usage: normaliseAnthropicUsage(
                     sdkUsage,
                     normalisedStopReason,

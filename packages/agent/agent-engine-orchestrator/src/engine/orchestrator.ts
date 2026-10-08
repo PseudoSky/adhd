@@ -725,6 +725,7 @@ export class Orchestrator {
           toolCallCount: reportedToolCallCount,
           modelCalls: providerResponse.reportedModelCalls,
           tokenUsage: providerResponse.usage,
+          responseModel: providerResponse.responseModel,
           computeMs,
         });
         await hooks.emit('message:appended', {
@@ -740,6 +741,7 @@ export class Orchestrator {
             hasContent: !!assistantMessage.content,
             toolCallCount: reportedToolCallCount,
             modelCalls: providerResponse.reportedModelCalls,
+            responseModel: providerResponse.responseModel,
             inputTokens: providerResponse.usage?.inputTokens,
             outputTokens: providerResponse.usage?.outputTokens,
             cacheReadTokens: providerResponse.usage?.cacheReadTokens,
