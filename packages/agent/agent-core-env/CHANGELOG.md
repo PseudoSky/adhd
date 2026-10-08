@@ -1,3 +1,13 @@
+## 0.1.5 (2026-10-08)
+
+### 🩹 Fixes
+
+- **agent-core-env:** declare `@adhd/sox-store-adapter` `^0.13.3` (Turso 0.8.2) in the published manifest, so installs can no longer resolve adapter 0.13.0 / Turso 0.7.2 and trigger the mixed-engine FTS drop/recreate (4b7fd623) ([6cfe7058](https://github.com/PseudoSky/adhd/commit/6cfe7058))
+
+### ❤️ Thank You
+
+- pseudosky
+
 ## 0.1.4 (2026-10-07)
 
 ### 🚀 Features
