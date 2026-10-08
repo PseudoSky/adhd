@@ -16,6 +16,7 @@ const PACKAGE_VERSION: string = (
 ).version;
 
 import { logger } from './logger.js';
+import { resolveBindHost } from './bind-host.js';
 import { env, toEngineConfig } from './config.js';
 import type { AgentStore } from './store/agent-store.js';
 import type {
@@ -973,7 +974,7 @@ export async function startServer(deps: ServerDeps): Promise<{
 
   if (transport === 'http') {
     const { createServer: createHttpServer } = await import('node:http');
-    const host = env.config.transport.host;
+    const host = resolveBindHost(env.config.transport.host, 'MCP http transport', logger);
 
     // S8 (backlog 5989ed90): one MCP session per `initialize`. The SDK's
     // StreamableHTTPServerTransport is single-session by construction (a second

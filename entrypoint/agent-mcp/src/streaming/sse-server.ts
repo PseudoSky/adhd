@@ -4,6 +4,7 @@ import { handleGetModels, handleChatCompletions, type GatewayDepsRef } from "./c
 import type { TaskStore } from "@adhd/agent-store-runtime";
 import { logger } from "../logger.js";
 import { env } from "../config.js";
+import { resolveBindHost } from "../bind-host.js";
 
 const KEEPALIVE_INTERVAL_MS = 15_000;
 const TERMINAL_STATUSES = ["completed", "failed", "cancelled"] as const;
@@ -37,6 +38,7 @@ export function startSseServer(
     host: string = env.config.sse.host,
     gatewayDepsRef?: GatewayDepsRef
 ): Promise<SseServerStartResult> {
+    host = resolveBindHost(host, "SSE/gateway server", logger);
     const server = http.createServer((req, res) => {
         const url = req.url ?? "";
         const method = req.method ?? "GET";

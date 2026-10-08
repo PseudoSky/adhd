@@ -176,7 +176,7 @@ async function startMcp(sourceFile: string) {
     options: {
       transport: 'sse',   // stdio | sse | streaming-http
       port: 3100,
-      host: '0.0.0.0',
+      host: '127.0.0.1', // loopback is the default; '0.0.0.0' exposes the server to the network (explicit opt-in)
       // Override tool descriptions per function (optional):
       // toolDescriptions: { greet: 'Say hello to a user' },
     },
@@ -227,7 +227,7 @@ async function startFastify(sourceFile: string) {
     outputDir: '',
     options: {
       port: 3200,
-      host: '0.0.0.0',
+      host: '127.0.0.1', // loopback is the default; '0.0.0.0' exposes the server to the network (explicit opt-in)
       routePrefix: '',
       // Mount plugins contributed as HTTP routes:
       usePlugins: [openapiPlugin, healthPlugin, loggerPlugin],

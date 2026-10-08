@@ -217,7 +217,7 @@ export function generate(input: PluginInput): PluginOutput {
 
   lines.push(``);
   lines.push(`app.use(router)`);
-  lines.push(`app.listen(${port})`);
+  lines.push(`app.listen(${port}, '127.0.0.1')`);
   lines.push(``);
   lines.push(`export default router`);
 

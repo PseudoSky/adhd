@@ -72,7 +72,7 @@ await apiFastifyPlugin.run({
   outputDir: '',
   options: {
     port: 3000,
-    host: '0.0.0.0',
+    host: '127.0.0.1', // loopback is the default; '0.0.0.0' exposes the server to the network (explicit opt-in)
     usePlugins: [
       healthPlugin,   // ← mounts GET /_meta/health
     ],

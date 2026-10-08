@@ -98,3 +98,9 @@ export {
 } from './lib/package-invoker';
 export type { UsePlugin, UseOptions } from './lib/package-invoker';
 export { dispatchForPlan } from './lib/dispatch-for-plan';
+export {
+  DEFAULT_LISTEN_HOST,
+  isLoopbackListenHost,
+  resolveListenHost,
+  warnIfNonLoopbackListen,
+} from './lib/bind-host';

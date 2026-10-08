@@ -87,6 +87,6 @@ mcpServer.setRequestHandler(CallToolRequestSchema, async (req) => {
 
 const mcpTransport = new ${TransportClass}({ sessionIdGenerator: undefined } as any)
 const httpServer = createServer((req, res) => (mcpTransport as any).handleRequest(req, res))
-httpServer.listen(${port}, () => console.error('MCP ${transport} server on port ${port}'))
+httpServer.listen(${port}, '127.0.0.1', () => console.error('MCP ${transport} server on port ${port}'))
 `;
 }

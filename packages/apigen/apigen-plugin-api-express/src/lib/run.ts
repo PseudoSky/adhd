@@ -11,6 +11,8 @@ import {
   LayerContext,
   readUseOptions,
   readUsePlugins,
+  resolveListenHost,
+  warnIfNonLoopbackListen,
 } from '@adhd/apigen-engine-runtime';
 import type {
   Call as RuntimeCall,
@@ -284,7 +286,7 @@ function collectMountedOperations(
 
 export async function run(input: RunInput): Promise<void> {
   const port = (input.options['port'] as number) ?? 3000;
-  const host = (input.options['host'] as string) ?? '127.0.0.1';
+  const host = resolveListenHost(input.options['host']);
   const routePrefix = (input.options['routePrefix'] as string) ?? '';
   const projection =
     (input.options['projection'] as ProjectionConfig | undefined) ?? {};
@@ -462,6 +464,7 @@ export async function run(input: RunInput): Promise<void> {
     }
   );
 
+  warnIfNonLoopbackListen(host, 'apigen express host', logger);
   const server: Server = await new Promise((resolve) => {
     const s = app.listen(port, host, () => resolve(s));
   });

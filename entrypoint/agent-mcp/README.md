@@ -68,9 +68,9 @@ The database (SQLite, agents/sessions/messages/usage) is stored in the resolved 
 | `ADHD_AGENT_DATABASE_PATH` | (auto-resolved) | Custom SQLite DB path; falls back to zero-config `~/.adhd/agent-mcp/production/data/agents.db` |
 | `ADHD_AGENT_TRANSPORT` | `stdio` | `stdio` or `http` (streamable HTTP). The `http` transport serves **many concurrent MCP sessions** from one process: each `initialize` opens its own session (routed by the `mcp-session-id` header); an unknown/expired session id gets HTTP 404 so the client re-initializes |
 | `ADHD_AGENT_PORT` | `3000` | Port for the `http` transport |
-| `ADHD_AGENT_HOST` | `127.0.0.1` | Interface the `http` transport binds. **Loopback by default** because the MCP surface is unauthenticated; set e.g. `0.0.0.0` explicitly to expose it to the network |
+| `ADHD_AGENT_HOST` | `127.0.0.1` | Interface the `http` transport binds. **Loopback by default** because the MCP surface is unauthenticated; set e.g. `0.0.0.0` explicitly to expose it to the network (the server then logs a `non-loopback` warning at startup; an empty value is treated as unset, never as "all interfaces"). Releases through 2.3.6 had no host default and bound every interface; fixed after 2.3.6 |
 | `ADHD_AGENT_SSE_PORT` | per-instance derived (explicit value honored) | Port the SSE / OpenAI-compat gateway tries first. If it is taken (concurrent instances are normal), the server falls back to an OS-assigned port **and logs one structured line** (`event: "sse.listening"` with `requestedPort`, `port`, `fellBack`, `streamBaseUrl`); task responses' `stream_url` always carries the bound port |
-| `ADHD_AGENT_SSE_HOST` | `127.0.0.1` | Interface the SSE / gateway server binds (loopback by default; explicit opt-in to bind elsewhere) |
+| `ADHD_AGENT_SSE_HOST` | `127.0.0.1` | Interface the SSE / gateway server binds (loopback by default; explicit opt-in to bind elsewhere, which logs the same `non-loopback` warning) |
 
 ### Tracing (default-on, typed config, no toggle)
 

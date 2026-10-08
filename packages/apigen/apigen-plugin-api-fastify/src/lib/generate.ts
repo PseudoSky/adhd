@@ -235,7 +235,7 @@ export function generate(input: GenerateInput): PluginOutput {
   lines.push(``);
   lines.push(`async function main(): Promise<void> {`);
   lines.push(`  try {`);
-  lines.push(`    await app.listen({ port: ${port} })`);
+  lines.push(`    await app.listen({ port: ${port}, host: 'localhost' })`);
   lines.push(`  } catch (err) {`);
   lines.push(`    app.log.error(err)`);
   lines.push(`    process.exit(1)`);

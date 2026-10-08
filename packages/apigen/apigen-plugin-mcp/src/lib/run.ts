@@ -43,6 +43,8 @@ import {
   LayerContext,
   readUseOptions,
   readUsePlugins,
+  resolveListenHost,
+  warnIfNonLoopbackListen,
   wrapMcpStructuredContent,
 } from '@adhd/apigen-engine-runtime';
 import { ApiError, MCP_ERROR_KIND, isApiError } from '@adhd/apigen-base-errors';
@@ -819,6 +821,7 @@ function listenOrReject(
     // Attach BEFORE listen(): a synchronous EADDRINUSE must never escape as an
     // unhandled 'error' event.
     httpServer.once('error', onError);
+    warnIfNonLoopbackListen(host, 'apigen mcp host', logger);
     httpServer.listen(port, host, () => {
       // Bind succeeded — drop the one-shot reject-listener and install a
       // persistent logger so later server-level errors are observability, not
@@ -919,7 +922,7 @@ export function awaitStdioClose(
 export async function run(input: RunInput): Promise<void> {
   const transport = (input.options['transport'] as string) ?? 'stdio';
   const port = (input.options['port'] as number) ?? 3000;
-  const host = (input.options['host'] as string) ?? '127.0.0.1';
+  const host = resolveListenHost(input.options['host']);
   // Fall back to a default stderr logger so logging never lands on stdout (the
   // stdio JSON-RPC channel) even when the CLI did not supply one.
   const logger = input.logger ?? createLogger();

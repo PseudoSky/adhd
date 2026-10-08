@@ -32,7 +32,7 @@ Becomes two MCP tools: `greet` (params: `{ data: { name: string } }`) and `add` 
 npx @adhd/apigen-cli run --source api.ts --type mcp
 
 # SSE transport (HTTP accessible)
-npx @adhd/apigen-cli run --source api.ts --type mcp --opt transport=sse --opt port=3100 --opt host=0.0.0.0
+npx @adhd/apigen-cli run --source api.ts --type mcp --opt transport=sse --opt port=3100 --opt host=127.0.0.1   # loopback is the default; host=0.0.0.0 is an explicit network opt-in
 
 # Streaming HTTP transport
 npx @adhd/apigen-cli run --source api.ts --type mcp --opt transport=streaming-http --opt port=3100

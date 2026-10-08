@@ -30,6 +30,8 @@ import {
   LayerContext,
   readUseOptions,
   readUsePlugins,
+  resolveListenHost,
+  warnIfNonLoopbackListen,
 } from '@adhd/apigen-engine-runtime';
 import type {
   FastifyInstance,
@@ -335,7 +337,7 @@ function collectMountedOperations(
 
 export async function run(input: RunInput): Promise<void> {
   const port = (input.options['port'] as number) ?? 3000;
-  const host = (input.options['host'] as string) ?? '127.0.0.1';
+  const host = resolveListenHost(input.options['host']);
   const routePrefix = (input.options['routePrefix'] as string) ?? '';
   const projection =
     (input.options['projection'] as ProjectionConfig | undefined) ?? {};
@@ -501,6 +503,7 @@ export async function run(input: RunInput): Promise<void> {
     }
   }
 
+  warnIfNonLoopbackListen(host, 'apigen fastify host', logger);
   await app.listen({ port, host });
   logger.info({ host, port }, `listening on http://${host}:${port}`);
   logRoutes(logger, routes);

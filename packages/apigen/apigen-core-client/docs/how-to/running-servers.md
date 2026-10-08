@@ -135,7 +135,7 @@ await mcpPlugin.run!({
   options: {
     transport: 'sse',  // ← HTTP-based SSE
     port: 3100,
-    host: '0.0.0.0',
+    host: '127.0.0.1', // loopback is the default; '0.0.0.0' exposes the server to the network (explicit opt-in)
   },
   signal: abort.signal,
   operations: ops,
@@ -202,7 +202,7 @@ async function main() {
     outputDir: '',
     options: {
       port: 3200,
-      host: '0.0.0.0',
+      host: '127.0.0.1', // loopback is the default; '0.0.0.0' exposes the server to the network (explicit opt-in)
       // Mount plugins contribute routes and middleware:
       usePlugins: [openapiPlugin, healthPlugin, loggerPlugin],
       // Plugin-specific options:
@@ -300,7 +300,7 @@ await apiExpressPlugin.run!({
   outputDir: '',
   options: {
     port: 3300,
-    host: '0.0.0.0',
+    host: '127.0.0.1', // loopback is the default; '0.0.0.0' exposes the server to the network (explicit opt-in)
     routePrefix: '',
     usePlugins: [healthPlugin, loggerPlugin],
   },

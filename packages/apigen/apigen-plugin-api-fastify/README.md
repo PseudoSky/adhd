@@ -98,7 +98,7 @@ async function start() {
     outputDir: '',
     options: {
       port: 3000,
-      host: '0.0.0.0',
+      host: '127.0.0.1', // loopback is the default; '0.0.0.0' exposes the server to the network (explicit opt-in)
       routePrefix: '',
       usePlugins: [openapiPlugin, healthPlugin],
       useOptions: {
