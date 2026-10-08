@@ -2,6 +2,26 @@
 
 export { SessionStore, estimateTokens, windowMessages } from './store/session-store.js';
 export { TaskStore } from './store/task-store.js';
+export {
+  PriceHistoryStore,
+  createPriceSource,
+  ANOMALY_HOLD_FACTOR,
+  ANOMALY_WARN_FACTOR,
+  ANOMALY_MAX_INPUT_PER_M,
+  SUPERSEDED_RUN_ERROR,
+} from './store/price-history-store.js';
+export type {
+  INewPriceRow,
+  IPriceRecordLike,
+  IPriceAnomaly,
+  IApplyResult,
+  IPullFinish,
+  ILedgerRow,
+  ILedgerSummary,
+  IClaimOptions,
+  ClaimResult,
+  PullStatus,
+} from './store/price-history-store.js';
 export { UsageClient } from './runtime/usage-client.js';
 export type { Scope, UsageTotals } from './runtime/usage-client.js';
 
