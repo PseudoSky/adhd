@@ -122,9 +122,10 @@ Most of agent-mcp's configuration (`db`, `logging`, `queue`, `server`, `transpor
 
 Critically, `process.env` is not just "whatever the spawning process happened to set." `src/config.ts` calls `loadEnvHierarchy()` (`src/utils/load-env.ts`) unconditionally at module load, **before** the `Environment` singleton is constructed or any secret is resolved. `loadEnvHierarchy()` populates `process.env` itself, least-specific first, via `dotenv`:
 
-1. `~/.adhd/.env` (no override)
-2. `<cwd>/.adhd/.env` (override: true)
-3. `<cwd>/.env` (override: true)
+1. `~/.adhd/.env` (lowest precedence)
+2. `<cwd>/.adhd/.env` (beats `~/.adhd/.env`)
+3. `<cwd>/.env` (beats both files above)
+4. **Variables already in `process.env` at launch** (highest precedence) — an explicit `ADHD_AGENT_*` value set by the spawning shell/host (e.g. `ADHD_AGENT_DATABASE_PATH`) is never overridden by any `.env` file. Files override files; no file overrides the process environment. An empty-string `ADHD_AGENT_*_SECRET` counts as unset, so a file can still supply it.
 
 So a provider secret defined in `~/.adhd/.env` resolves for **every** agent-mcp launch — regardless of what env block the spawning `.mcp.json` entry (or shell, or MCP host) forwards — because the server reads the file itself on startup. This mechanism was restored under `BUG-MCP-CREDENTIALS-001` after a prior refactor (commit `b38369f3`) deleted it; the restoration is landed in code today (`src/config.ts:27-37`, `src/utils/load-env.ts:19-37`).
 

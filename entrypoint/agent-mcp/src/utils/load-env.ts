@@ -30,9 +30,19 @@ export function clearEmptyProviderSecrets(
 /**
  * Load the `.env` hierarchy into `process.env` with most-specific wins:
  *
- *   1. `<cwd>/.env`            (highest precedence)
+ *   0. variables already in `process.env` when this function is called
+ *      (explicit process-level env, e.g. `ADHD_AGENT_DATABASE_PATH` set by the
+ *      spawning host/shell) — the MOST specific; NO `.env` file overrides them
+ *   1. `<cwd>/.env`
  *   2. `<cwd>/.adhd/.env`
  *   3. `~/.adhd/.env`          (lowest precedence)
+ *
+ * Files may override other files (more-specific file wins), but never a
+ * variable that was present in `process.env` before loading (backlog 76950870:
+ * a repo `.env` line `ADHD_AGENT_DATABASE_PATH=data/agent-mcp/agents-dev.db`
+ * silently beat an explicit production path in the launch environment). An
+ * empty-string `ADHD_AGENT_*_SECRET` is not "present" — see
+ * {@link clearEmptyProviderSecrets}.
  *
  * Each file is loaded only if it exists — missing files are silently skipped
  * by dotenv. Already-set vars from a more-specific file are not overridden by
@@ -68,6 +78,12 @@ export function loadEnvHierarchy(cwd: string = process.cwd()): void {
     // Any non-JSON byte there corrupts the stream for strict hosts.
     // Blank-out empty forwarded secrets so they cannot shadow a real file value.
     clearEmptyProviderSecrets();
+    // Snapshot the explicit process env BEFORE any file is read; it is
+    // re-applied after the file layering so no `.env` can override it.
+    const explicit = new Map<string, string>();
+    for (const [key, value] of Object.entries(process.env)) {
+        if (value !== undefined) explicit.set(key, value);
+    }
     // 3. ~/.adhd/.env — lowest precedence, load first without override flag so
     //    POSIX vars already in process.env (PATH, HOME, …) are not disturbed.
     dotenvConfig({ path: path.join(os.homedir(), ".adhd", ".env"), quiet: true });
@@ -75,4 +91,9 @@ export function loadEnvHierarchy(cwd: string = process.cwd()): void {
     dotenvConfig({ path: path.join(cwd, ".adhd", ".env"), override: true, quiet: true });
     // 1. <cwd>/.env — highest precedence
     dotenvConfig({ path: path.join(cwd, ".env"), override: true, quiet: true });
+    // 0. Explicit process env is the most specific layer: restore it over
+    //    whatever the override:true file loads wrote.
+    for (const [key, value] of explicit) {
+        process.env[key] = value;
+    }
 }

@@ -51,6 +51,8 @@ The server exposes these MCP tools:
 3. **Project config file** — `./.adhd/agent-mcp/config.yaml` (if present; scoped to git/`.adhd` marker)
 4. **Environment variables** — `ADHD_AGENT_*` names only (see below)
 
+`.env` files (`~/.adhd/.env` < `<cwd>/.adhd/.env` < `<cwd>/.env`) are loaded into `process.env` at startup by `loadEnvHierarchy()` (`src/utils/load-env.ts`), and **process env beats `.env` files**: a variable already set in the launching process's environment is never overridden by any `.env` file (files override only other files). An empty-string `ADHD_AGENT_*_SECRET` counts as unset.
+
 The zero-config DB path is resolved under the scope root:
 - **Scope** is auto-detected (walks up from `process.cwd()` looking for `.git`/`.adhd` markers) or forced via `ADHD_ENV_SCOPE=global`/`project`
 - **Global scope** (`~/.adhd/agent-mcp/production/data/agents.db` by default) — never the repo tree, even when inside one
