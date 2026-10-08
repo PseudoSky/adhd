@@ -66,8 +66,8 @@ describe('37f6c511 AC2 — snapshot-priced cost is exact', () => {
   it('cache-write tokens are billed at input_cache_write when the model publishes one', () => {
     // anthropic ids in the snapshot publish input_cache_write; derive expectation from the file
     const raw = JSON.parse(
-      readFileSync(fileURLToPath(new URL('../pricing/pricing.json', import.meta.url)), 'utf8')
-    ) as { models: Array<{ id: string; pricing: Record<string, string> }> };
+    readFileSync(fileURLToPath(new URL('../pricing/pricing.json', import.meta.url)), 'utf8')
+  ) as { models: Array<{ id: string; pricing: Record<string, string> }> };
     const m = raw.models.find((x) => x.pricing['input_cache_write'] && x.pricing['input_cache_read']);
     expect(m).toBeDefined();
     const p = m!.pricing as Record<string, string>;
@@ -103,8 +103,8 @@ describe('37f6c511 AC3 — unknown models stay null, never 0', () => {
 
   it('returns null for OpenRouter routers priced "-1" (no fixed price)', () => {
     const raw = JSON.parse(
-      readFileSync(fileURLToPath(new URL('../pricing/pricing.json', import.meta.url)), 'utf8')
-    ) as { models: Array<{ id: string; pricing: Record<string, string> }> };
+    readFileSync(fileURLToPath(new URL('../pricing/pricing.json', import.meta.url)), 'utf8')
+  ) as { models: Array<{ id: string; pricing: Record<string, string> }> };
     const router = raw.models.find((x) => x.pricing['prompt'] === '-1');
     expect(router).toBeDefined();
     expect(estimateCostUsd(router!.id, usage)).toBeNull();
@@ -118,7 +118,7 @@ describe('37f6c511 AC3 — unknown models stay null, never 0', () => {
 
 describe('37f6c511 AC2 — owner-directed provider alias deepseek-flash', () => {
   it('deepseek-flash resolves to deepseek/deepseek-v4.1-flash and prices exactly', () => {
-    expect(PROVIDER_MODEL_ALIASES['deepseek-flash']).toBe('deepseek/deepseek-v4.1-flash');
+    expect(PROVIDER_MODEL_ALIASES['deepseek-flash']?.target).toBe('deepseek/deepseek-v4.1-flash');
     // Hard-coded from snapshot rates: prompt 3e-7, input_cache_read 6e-9, completion 1.2e-6, no cache-write.
     // 1000*3e-7 + 2000*6e-9 + 500*0 + 300*1.2e-6 = 3e-4 + 1.2e-5 + 3.6e-4 = 6.72e-4
     expect(estimateCostUsd('deepseek-flash', usage)).toBeCloseTo(0.000672, 12);
