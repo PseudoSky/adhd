@@ -3078,3 +3078,124 @@ describe('5339c2e5 — global-scope caps accumulate across tasks (real drizzle h
     await expect(enforcePreModel(hooks, ctxB)).resolves.toBeUndefined();
   });
 });
+
+// ── df7c3af9 — policy/allowlist denials are not errors (architect verdict) ────
+//
+// Ticket df7c3af9: `onPostToolCall` incremented `errors` / `consecutiveErrors`
+// for ANY `isError: true` result, so an allowlist DENIAL — an ordinary, expected
+// refusal the agent may legitimately retry — burned the task's error budget like a
+// fault (five shell allowlist denials disabled every tool). Architect verdict:
+// denials are ordinary results, not errors; error caps bound FAULTS only.
+//
+// Discriminator: the engine flags such a result `isDenial: true` on the
+// `post:tool_call` payload (PostToolCallPayload.isDenial, set by the orchestrator
+// when the adopted shell server's "Command not allowed" refusal comes back). The
+// permission gate's own denials never emit post:tool_call (they are injected as
+// warning results and skipped before Phase 2), so this flag is the one denial shape
+// that reaches the plugin. The end-to-end proof through the real engine lives in
+// agent-engine-orchestrator's budget-denial-not-error.test.ts.
+describe('df7c3af9 policy denials are not errors', () => {
+  let hooks: HookRegistry;
+
+  beforeEach(() => {
+    hooks = new HookRegistry();
+  });
+
+  /** Emit a post:tool_call exactly as the engine shapes an allowlist denial. */
+  async function emitDenial(ctx: ExecutionContext, callId: string): Promise<void> {
+    await hooks.emit('post:tool_call', {
+      executionContext: ctx,
+      toolName: 'shell__shell_execute',
+      callId,
+      toolInput: {},
+      result:
+        "Tool 'shell_execute' on server 'shell' returned an error: [{\"type\":\"text\",\"text\":\"Command not allowed: frobnicate\"}]",
+      isError: true,
+      isDenial: true,
+      estResultTokens: 0,
+    });
+  }
+
+  it('df7c3af9 AC1 (also cites df7c3af9 AC3) — denial payloads never increment errors or consecutiveErrors and never trip an errors cap', async () => {
+    const plugin = await createPlugin({
+      db: null,
+      config: {
+        defaults: {
+          caps: [
+            { field: 'errors', maximum: 1, mode: 'block' },
+            { field: 'consecutiveErrors', maximum: 1, mode: 'block' },
+          ],
+        },
+      },
+    });
+    await plugin.install(hooks);
+    const ctx = makeCtx();
+
+    await hooks.emit('task:start', { executionContext: ctx, messages: [] });
+    for (let i = 0; i < 5; i++) await emitDenial(ctx, `call-d${i}`);
+
+    // Pre-fix each denial incremented BOTH counters (5 >= 1) so this rejects.
+    await expect(
+      enforcePreTool(hooks, ctx, 'shell__shell_execute', 'call-next')
+    ).resolves.toBeUndefined();
+  });
+
+  it('df7c3af9 AC1 — a denial between two faults neither counts nor resets the consecutive-error streak', async () => {
+    const plugin = await createPlugin({
+      db: null,
+      config: {
+        defaults: {
+          caps: [{ field: 'consecutiveErrors', maximum: 2, mode: 'block' }],
+        },
+      },
+    });
+    await plugin.install(hooks);
+    const ctx = makeCtx();
+
+    await hooks.emit('task:start', { executionContext: ctx, messages: [] });
+    await emitPostToolCall(hooks, ctx, 'shell__shell_execute', 'call-f1', true);
+    await emitDenial(ctx, 'call-d1');
+    await emitPostToolCall(hooks, ctx, 'shell__shell_execute', 'call-f2', true);
+
+    // fault, denial, fault → two consecutive FAULTS (the denial did not reset).
+    await expect(
+      enforcePreTool(hooks, ctx, 'shell__shell_execute', 'call-next')
+    ).rejects.toMatchObject({
+      isEnforcementError: true,
+      code: 'BUDGET_EXCEEDED',
+      message: expect.stringContaining('consecutiveErrors'),
+    });
+  });
+
+  it('df7c3af9 AC2 — genuine fault payloads still count, and a second task starts with errors reset to zero', async () => {
+    const plugin = await createPlugin({
+      db: null,
+      config: {
+        defaults: {
+          caps: [{ field: 'errors', maximum: 2, mode: 'block' }],
+        },
+      },
+    });
+    await plugin.install(hooks);
+    const ctx = makeCtx();
+
+    await hooks.emit('task:start', { executionContext: ctx, messages: [] });
+    await emitPostToolCall(hooks, ctx, 'shell__shell_execute', 'call-f1', true);
+    await emitPostToolCall(hooks, ctx, 'shell__shell_execute', 'call-f2', true);
+
+    await expect(
+      enforcePreTool(hooks, ctx, 'shell__shell_execute', 'call-f3')
+    ).rejects.toMatchObject({
+      isEnforcementError: true,
+      code: 'BUDGET_EXCEEDED',
+      message: expect.stringContaining('errors'),
+    });
+
+    // A SECOND task gets its own accumulator → errors reset to zero.
+    const ctx2 = makeCtx({ taskId: 'task-2' });
+    await hooks.emit('task:start', { executionContext: ctx2, messages: [] });
+    await expect(
+      enforcePreTool(hooks, ctx2, 'shell__shell_execute', 'call-f4')
+    ).resolves.toBeUndefined();
+  });
+});

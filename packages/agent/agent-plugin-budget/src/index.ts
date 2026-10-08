@@ -742,10 +742,19 @@ class BudgetPlugin implements Plugin {
    * Thrown-errors-only (owner lean, plan §3): `isError` is true at this
    * boundary only when the tool's callTool THREW (orchestrator.ts:718);
    * error-shaped non-throwing results are indistinguishable from success here.
+   *
+   * Denials are not faults (df7c3af9): a failed result flagged `isDenial` — an
+   * allowlist refusal such as the shell server's "Command not allowed" — is an
+   * ordinary result. It neither increments `errors` / `consecutiveErrors` nor
+   * resets the consecutive streak (it is not a success either). The permission
+   * gate's own denials never reach this hook at all (they are injected as warning
+   * results and skipped before Phase 2). Counters are per task: the accumulator is
+   * created at `task:start` and dropped on terminal.
    */
   private onPostToolCall(p: PostToolCallPayload): void {
     const acc = this.accumulators.get(p.executionContext.taskId);
     if (!acc) return;
+    if (p.isDenial === true) return;
     if (p.isError) {
       acc.errors += 1;
       acc.consecutiveErrors += 1;

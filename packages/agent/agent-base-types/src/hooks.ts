@@ -54,6 +54,14 @@ export interface PostToolCallPayload {
   result: unknown;
   isError: boolean;
   /**
+   * `true` when the failed result is a policy / allowlist DENIAL (e.g. the adopted
+   * shell server refusing a non-allowlisted command) rather than a fault. A denial
+   * is an ordinary, expected refusal the agent may legitimately retry, so
+   * fault-bounding consumers (the budget plugin's `errors` / `consecutiveErrors`
+   * caps) must not count it. Absent ⇒ not a denial (df7c3af9).
+   */
+  isDenial?: boolean;
+  /**
    * Token estimate for the FULL, untruncated tool result (tokenized before the
    * 500-char truncation applied to the stored `task_events.TOOL_RESULT.result` summary).
    */

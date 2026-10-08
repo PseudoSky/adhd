@@ -124,6 +124,27 @@ export function isPermissionApproval(input: string): boolean {
 }
 
 /**
+ * Marker the adopted argv-allowlist shell server (`mcp-shell-server`,
+ * `command_validator.py`) puts in the MCP `isError` result for a non-allowlisted
+ * command: `Command not allowed: <cmd>`. The MCP client wraps every `isError` result
+ * into a thrown `ToolError('MCP_CLIENT_ERROR', …)` that embeds the server text, so the
+ * text is the only signal that survives to the engine (df7c3af9).
+ */
+const ALLOWLIST_DENIAL_MARKER = /Command not allowed:/;
+
+/**
+ * True when a tool call failed because an allowlist DENIED it — a refusal, not a
+ * fault. Emitted as `isDenial` on `post:tool_call` so error-cap consumers skip it.
+ */
+function isAllowlistDenial(error: unknown): boolean {
+  return (
+    error instanceof ToolError &&
+    error.code === 'MCP_CLIENT_ERROR' &&
+    ALLOWLIST_DENIAL_MARKER.test(error.message)
+  );
+}
+
+/**
  * The typed refusal returned to the model when a native tool call is refused by
  * the permission gate (`PERMISSION_DENIED`) or when an `ask` fails closed
  * (`PERMISSION_ASK_DENIED`, ADR-0008 D6). Matches the `AgentMcpErrorCode` union.
@@ -1565,6 +1586,7 @@ export class Orchestrator {
 
             let toolResult: unknown;
             let isError = false;
+            let isDenial = false;
             try {
               const client = await registry.getClient(resolved.server);
               toolResult = await client.callTool(
@@ -1597,6 +1619,7 @@ export class Orchestrator {
                 throw error;
               }
               isError = true;
+              isDenial = isAllowlistDenial(error);
               toolResult =
                 error instanceof Error ? error.message : String(error);
               logger.warn(
@@ -1650,6 +1673,7 @@ export class Orchestrator {
               toolInput: toolCall.arguments,
               result: toolResult,
               isError,
+              ...(isDenial ? { isDenial: true } : {}),
               estResultTokens: toolCallEstResultTokens,
             });
 
