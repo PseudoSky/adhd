@@ -71,11 +71,23 @@ export interface ISpecRevisionMeta {
   revision_token: string;
   /** Predecessor revision uid (`null` for the base revision). */
   prev_revision: string | null;
+  /**
+   * `'replace'` when this revision's fragment IS the whole document (the fold
+   * stops here; earlier revisions stay in the chain unmodified). ABSENT for an
+   * `amend` — a chain written before replace existed carries no `mode` key and
+   * folds exactly as it always did (a9966c3f AC4).
+   */
+  mode?: 'replace';
   /** The long-form file export (Primitive 2). */
   anchor: ISpecAnchor;
   appended_by: string;
   appended_at: string;
 }
+
+/** The closed set of `spec-append` write modes (a9966c3f AC1). */
+export const SPEC_APPEND_MODES = ['amend', 'replace'] as const;
+/** `amend` appends the fragment to the folded document (default); `replace` makes the fragment the whole document. */
+export type SpecAppendWriteMode = (typeof SPEC_APPEND_MODES)[number];
 
 export interface ISpecAppendInput extends ISessionStamp {
   /** The ticket's logical id — any uid on its `SUPERSEDES` chain is resolved forward. */
@@ -86,6 +98,13 @@ export interface ISpecAppendInput extends ISessionStamp {
   anchor?: ISpecAnchor;
   /** REQUIRED CAS token — the revision uid the caller read (`''` when the ticket had no spec yet). */
   base_revision: string;
+  /**
+   * `'amend'` (default) appends `fragment` to the folded document; `'replace'`
+   * makes `fragment` the whole document (the fold restarts at this revision, so
+   * no prior copy remains in the folded document). Both require the
+   * `base_revision` CAS. A typed input field — never an environment toggle.
+   */
+  mode?: SpecAppendWriteMode;
   by: string;
 }
 
@@ -377,7 +396,41 @@ async function foldChainTx(
     seen.add(cursor.uid);
     contents.push(cursor.content);
     const prevUid = readStringMeta(cursor.metadata, 'prev_revision');
+    // A `replace` revision's fragment IS the whole document: the fold restarts
+    // here and everything before it is history, not content (a9966c3f AC1).
+    if (isReplaceRevision(cursor.metadata)) break;
     cursor = prevUid ? (await getNodeByUidTx(tx, prevUid)) ?? undefined : undefined;
+  }
+  return contents.reverse().join('');
+}
+
+/** True when a revision node's metadata marks it a `replace` (absent `mode` = legacy/amend). */
+function isReplaceRevision(meta: Record<string, unknown> | undefined): boolean {
+  return meta?.['mode'] === 'replace';
+}
+
+/**
+ * Read-only fold of the ticket's CURRENT spec document: the head revision's
+ * chain folded base→head, restarting at the newest `replace` revision.
+ * `undefined` when the ticket has no spec. Same fold the write path hashes into
+ * `revision_token`, so `sha256(document)` equals the head token (a9966c3f AC2).
+ */
+export async function readSpecFold(
+  graph: GraphBackend,
+  uid: string
+): Promise<string | undefined> {
+  const pointer = await readSpecPointer(graph, uid);
+  if (!pointer) return undefined;
+  const contents: string[] = [];
+  const seen = new Set<string>();
+  let cursor = await graph.getNodeByUid(pointer.revision_uid);
+  while (cursor) {
+    if (seen.has(cursor.uid)) break;
+    seen.add(cursor.uid);
+    contents.push(cursor.content ?? '');
+    if (isReplaceRevision(cursor.metadata)) break;
+    const prevUid = readStringMeta(cursor.metadata, 'prev_revision');
+    cursor = prevUid ? await graph.getNodeByUid(prevUid) : null;
   }
   return contents.reverse().join('');
 }
@@ -413,6 +466,13 @@ export async function appendSpecRevision(
     throw new InvalidArgumentError('by', 'is required');
   }
   assertNotBareRoleLiteral('by', input.by);
+  const writeMode: SpecAppendWriteMode = input.mode ?? 'amend';
+  if (!(SPEC_APPEND_MODES as readonly unknown[]).includes(writeMode)) {
+    throw new InvalidArgumentError(
+      'mode',
+      `must be one of ${SPEC_APPEND_MODES.join(', ')} (got ${JSON.stringify(input.mode)})`
+    );
+  }
 
   const mode = resolveAppendMode();
 
@@ -446,9 +506,11 @@ export async function appendSpecRevision(
     const revision_seq = currentSeq + 1;
     const prev_revision = currentRevision?.uid ?? null;
 
-    const priorFold = currentRevision
-      ? await foldChainTx(tx, currentRevision)
-      : '';
+    // A `replace` never reads the prior fold: its fragment is the document.
+    const priorFold =
+      currentRevision && writeMode !== 'replace'
+        ? await foldChainTx(tx, currentRevision)
+        : '';
     // 'snapshot' stores the FULL document (the O(N²) anti-pattern AC8's
     // negative control inverts); 'normal' stores only the fragment.
     const storedContent =
@@ -465,6 +527,8 @@ export async function appendSpecRevision(
       anchor,
       appended_by: input.by,
       appended_at: now,
+      // Only a replace records its mode: an amend's stored shape is unchanged.
+      ...(writeMode === 'replace' ? { mode: 'replace' as const } : {}),
     };
 
     const revision = await writeNodeTx(tx, {
