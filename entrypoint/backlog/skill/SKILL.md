@@ -849,9 +849,34 @@ holds is still current.
 - `base_revision` — REQUIRED CAS token: the current `spec_revision` uid the
   caller read, or `''` when the ticket has no spec yet. A stale value is
   refused with `precondition_failed` and NOTHING is written.
+- `mode?` — `"amend"` (default) or `"replace"`; see "Write modes" below. An
+  unknown value is `invalid_argument`. It is a typed input field, never an
+  environment toggle.
 
 Outcome: `{ uid (UNCHANGED), spec_revision (the NEW revision uid),
 spec_revision_token ('sha256:<hex>'), revision_seq }`.
+
+### Write modes — `amend` and `replace`
+
+Both modes require the `base_revision` CAS (a stale base is `precondition_failed`
+and writes nothing), and both advance the pointer to a NEW immutable revision.
+
+- `amend` (default) appends `fragment` to the folded document; it stores no
+  `mode` key, so its stored shape is byte-identical to a pre-`replace` chain, and
+  its token is `sha256:<hex>` of the prior fold plus the fragment.
+- `replace` makes `fragment` the WHOLE document: it stores `mode:"replace"`, the
+  fold restarts at that revision (earlier revisions stay in the chain,
+  unmodified, but no longer contribute), and its token is `sha256:<hex>` of the
+  folded document, i.e. of `fragment` alone.
+- Root-replace rule: a `replace` on an item with no spec revision is
+  `invalid_argument` and writes nothing — there is nothing to replace, so the
+  root revision must be an `amend` (`base_revision:""`). Fixed in commit
+  `76466bb0`.
+- `ADHD_BACKLOG_UNSAFE_SPEC_APPEND` (`force` | `snapshot`) is a documented-unsafe
+  negative-control switch for test runs only, never set in normal operation:
+  `force` bypasses the `base_revision` CAS and `snapshot` stores the full fold in
+  each revision instead of the fragment. A root `replace` is still refused
+  (`invalid_argument`) under both; an unrecognized value throws.
 
 ### `spec-check { uid, token? }`
 
