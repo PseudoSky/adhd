@@ -121,7 +121,7 @@ describe('spec-append mode amend|replace (a9966c3f, P7-L)', () => {
       const ctx: BacklogCtx = { store: apiStore, env: buildBacklogEnv({ adhdRoot: apiDir }) };
       const project = (await upsertProject(apiStore, { name: 'p7-api', by: 'filer' })).uid;
       const uid = (await createIssue(apiStore, { project, title: 'api', body: 'b', by: 'filer' })).uid!;
-      const r1 = await apiSpecAppend(ctx, { uid, fragment: 'one', base_revision: '', mode: 'replace', by: 'a:1' });
+      const r1 = await apiSpecAppend(ctx, { uid, fragment: 'one', base_revision: '', by: 'a:1' });
       expect(r1.ok).toBe(true);
       const rev1 = r1.ok ? r1.data.spec_revision : '';
       await apiSpecAppend(ctx, { uid, fragment: 'two', base_revision: rev1, by: 'a:1' });

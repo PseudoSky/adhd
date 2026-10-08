@@ -503,6 +503,16 @@ export async function appendSpecRevision(
       throw new SpecRevisionConflictError(input.base_revision, currentUid);
     }
 
+    // A replace supersedes an existing document; with no spec revision there is
+    // nothing to replace, so the root revision must be an amend. Refused before
+    // any write (f612389c AC1).
+    if (writeMode === 'replace' && !currentRevision) {
+      throw new InvalidArgumentError(
+        'mode',
+        "'replace' requires an existing spec revision; use 'amend' to create the root revision"
+      );
+    }
+
     const revision_seq = currentSeq + 1;
     const prev_revision = currentRevision?.uid ?? null;
 
