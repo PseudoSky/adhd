@@ -6,6 +6,8 @@ settings:
 
 overrides:
   estree-walker: 2.0.2
+  '@adhd/sox-store-adapter': ^0.13.3
+  '@tursodatabase/database': 0.8.2
   '@nx/devkit@18.3.4>nx': 18.3.4
 
 packageExtensionsChecksum: 0a1b277ec7c2255cc227bfa64108bd4d
@@ -599,8 +601,8 @@ importers:
         specifier: ^0.1.8
         version: 0.1.11
       '@adhd/sox-store-adapter':
-        specifier: ^0.13.0
-        version: 0.13.0
+        specifier: ^0.13.3
+        version: 0.13.3
       '@adhd/sox-telemetry':
         specifier: ^0.4.1
         version: 0.4.1
@@ -767,8 +769,8 @@ importers:
         specifier: ^0.1.8
         version: link:../../environment/environment-core-node
       '@adhd/sox-store-adapter':
-        specifier: ^0.13.0
-        version: 0.13.0
+        specifier: ^0.13.3
+        version: 0.13.3
       better-sqlite3:
         specifier: 12.10.0
         version: 12.10.0
@@ -1736,7 +1738,7 @@ packages:
     dependencies:
       '@adhd/sox-graph-store': 0.12.4
       '@adhd/sox-hybrid-search': 0.6.0
-      '@adhd/sox-store-adapter': 0.13.0
+      '@adhd/sox-store-adapter': 0.13.3
     optionalDependencies:
       '@adhd/sox-embedding-provider': 0.6.2
       '@adhd/sox-vector-store': 0.7.5
@@ -1753,16 +1755,6 @@ packages:
     dev: false
     optional: true
 
-  /@adhd/sox-store-adapter@0.13.0:
-    resolution: {integrity: sha512-3EJFwwbD7Kj28BvsY6Ox9upSJhT+SPCGm0GVBB5mmJVVWotmc120VxAU15muZMlDXFq4MSlvq2y97D5JKKag/A==}
-    engines: {node: '>=20'}
-    dependencies:
-      '@adhd/sox-telemetry': 0.3.2
-      '@tursodatabase/database': 0.7.2
-    optionalDependencies:
-      better-sqlite3: 12.10.0
-    dev: false
-
   /@adhd/sox-store-adapter@0.13.3:
     resolution: {integrity: sha512-LN0NZxqKvxkniRmHjg93Z1ZlKTLdEE0AGIeeh2HEFkKfD8VsvwB0HLKSRDjx1GbBMFgtwtMdzElp8ecLfJp7Ag==}
     engines: {node: '>=20'}
@@ -1776,6 +1768,7 @@ packages:
   /@adhd/sox-telemetry@0.3.2:
     resolution: {integrity: sha512-tJaQtJaHHaYw9KLpKQEJAfEzadh6dBm6ZZeVmr1XwJIKvp4Nu87cTvljHY75ZNFGVmg6SyFBy8SnmaACDCbvZg==}
     engines: {node: '>=20'}
+    requiresBuild: true
     dependencies:
       '@opentelemetry/api': 1.9.1
       '@opentelemetry/context-async-hooks': 2.10.0(@opentelemetry/api@1.9.1)
@@ -1784,6 +1777,7 @@ packages:
       '@opentelemetry/sdk-trace-base': 2.10.0(@opentelemetry/api@1.9.1)
       ulid: 2.4.0
     dev: false
+    optional: true
 
   /@adhd/sox-telemetry@0.4.1:
     resolution: {integrity: sha512-kcgbJMB92lFLNjuC4w9iV8TGK4HzDstcLhgwqVKaNyCtciYZXVxKqaqzm9ecE6YBKiMmFRr3tgmiKUW956Vpnw==}
@@ -1801,7 +1795,7 @@ packages:
     engines: {node: '>=22'}
     requiresBuild: true
     dependencies:
-      '@adhd/sox-store-adapter': 0.13.0
+      '@adhd/sox-store-adapter': 0.13.3
       '@lancedb/lancedb': 0.31.0(apache-arrow@18.1.0)
       apache-arrow: 18.1.0
       better-sqlite3: 12.10.0
@@ -11243,21 +11237,9 @@ packages:
     resolution: {integrity: sha512-vxhUy4J8lyeyinH7Azl1pdd43GJhZH/tP2weN8TntQblOY+A0XbT8DJk1/oCPuOOyg/Ja757rG0CgHcWC8OfMA==}
     dev: true
 
-  /@tursodatabase/database-common@0.7.2:
-    resolution: {integrity: sha512-c4uWaA5m7nyDemUrjvX6lQQ89cBxv1jCv7nmwq5JoagyXgbMxDeBfLcY7N5kn0oEcnD0Y+cf09S0wKEXKFKbfg==}
-    dev: false
-
   /@tursodatabase/database-common@0.8.2:
     resolution: {integrity: sha512-1G0n/ZDhQELm/lu/tOHUmJZsLBxSK2k8OVXqS/WPJD70wTaFjaWY8C4UBe/AjfOzkhE3qbiUUMRv4Fbt5cDnew==}
     dev: false
-
-  /@tursodatabase/database-darwin-arm64@0.7.2:
-    resolution: {integrity: sha512-pDYbrPnmsqzWsf21bQXXGKmGhcLdfQQVjx+yrpC/IboCue5o/h9fDZ1QFzQEP6CHRXXoc+pwQCyF8KBntI8fdA==}
-    cpu: [arm64]
-    os: [darwin]
-    requiresBuild: true
-    dev: false
-    optional: true
 
   /@tursodatabase/database-darwin-arm64@0.8.2:
     resolution: {integrity: sha512-evoB0K+ldrau0t3wZx/FgAGlM7/ummGY7UqkYnV8StfVnqR2P0/tpr3GEouANJWQfP1j59DtjUhlTfESp4L31Q==}
@@ -11267,25 +11249,9 @@ packages:
     dev: false
     optional: true
 
-  /@tursodatabase/database-linux-arm64-gnu@0.7.2:
-    resolution: {integrity: sha512-/Blz7cRssWh7dk8vGs7Cq3kupHOnI0GROAg+u9J4MD5U5ABAabJGN7iW5YQ16jZW35Bv2AkmJAyjvsCWdTyfTg==}
-    cpu: [arm64]
-    os: [linux]
-    requiresBuild: true
-    dev: false
-    optional: true
-
   /@tursodatabase/database-linux-arm64-gnu@0.8.2:
     resolution: {integrity: sha512-NYvjn1PbRZixPujIknGoax+aT0+XD+j0XrzcBdUjHXbJR/XlncgbHLxDiUMrRJ+86E2y4txAmYlJrARAr2MUPA==}
     cpu: [arm64]
-    os: [linux]
-    requiresBuild: true
-    dev: false
-    optional: true
-
-  /@tursodatabase/database-linux-x64-gnu@0.7.2:
-    resolution: {integrity: sha512-rXxInfTxKRPG3XeOAZvzJuX4wF+m9t9BjLbFnKU83Ad8ob2z88r1x+EV7IBzEFhz2FbvrRgriH7PhIEZ7Lx5ug==}
-    cpu: [x64]
     os: [linux]
     requiresBuild: true
     dev: false
@@ -11299,14 +11265,6 @@ packages:
     dev: false
     optional: true
 
-  /@tursodatabase/database-win32-x64-msvc@0.7.2:
-    resolution: {integrity: sha512-AUvN3KO1bZOpsXVofRIMM2+MJ6OghUhgK62t8/3Bsb0Zzt6PztaMvJrtaWI6u5Olx0WCfGdhaVKyegcjYPNAeA==}
-    cpu: [x64]
-    os: [win32]
-    requiresBuild: true
-    dev: false
-    optional: true
-
   /@tursodatabase/database-win32-x64-msvc@0.8.2:
     resolution: {integrity: sha512-/wsPLULURwCL7I2BJPYYHjOd9HssKN62oatXh4rnfVCWiD4bncGlNcZXE5Q2lGqdZUcVBEKIfBlEShOR8acaTg==}
     cpu: [x64]
@@ -11314,17 +11272,6 @@ packages:
     requiresBuild: true
     dev: false
     optional: true
-
-  /@tursodatabase/database@0.7.2:
-    resolution: {integrity: sha512-B84QicyDYnKt97qxgb7861cQQC26kuv/LkUlCnpxGs4tuGT9zgS2z/Mt+BkG/wOo1fB4rsSycOgGCbi0xU0YOQ==}
-    dependencies:
-      '@tursodatabase/database-common': 0.7.2
-    optionalDependencies:
-      '@tursodatabase/database-darwin-arm64': 0.7.2
-      '@tursodatabase/database-linux-arm64-gnu': 0.7.2
-      '@tursodatabase/database-linux-x64-gnu': 0.7.2
-      '@tursodatabase/database-win32-x64-msvc': 0.7.2
-    dev: false
 
   /@tursodatabase/database@0.8.2:
     resolution: {integrity: sha512-iz7uj5uM/pkOyKFYNW6Y4LnbzKntv74TpsVqOKNck9Jl4uyynnZodoxw72d4Hd41xfIuANzQa+0Pf9RRwGOVfQ==}

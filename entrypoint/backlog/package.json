@@ -1,6 +1,6 @@
 {
   "name": "@adhd/backlog",
-  "version": "1.0.10",
+  "version": "1.0.11",
   "bin": {
     "adhd-backlog": "./dist/index.js"
   },
@@ -15,13 +15,13 @@
     "@adhd/apigen-plugin-mcp": "^0.3.2",
     "@adhd/apigen-plugin-openapi": "^0.2.5",
     "@adhd/apigen-plugin-tracing": "^0.2.0",
-    "@adhd/environment": "^0.1.0",
+    "@adhd/environment": "^0.1.8",
     "@adhd/environment-base-spec": "^0.1.4",
     "@adhd/environment-builder": "^0.1.7",
     "@adhd/sox-graph-store": "^0.12.4",
     "@adhd/sox-hybrid-search": "^0.6.0",
     "@adhd/sox-semantic": "^0.1.8",
-    "@adhd/sox-store-adapter": "^0.13.0",
+    "@adhd/sox-store-adapter": "^0.13.3",
     "@adhd/sox-telemetry": "^0.4.1",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "ajv": "^8.20.0",
