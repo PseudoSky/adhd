@@ -1,6 +1,6 @@
 {
   "name": "@adhd/apigen-cli",
-  "version": "0.2.10",
+  "version": "0.2.11",
   "bin": {
     "apigen": "./dist/index.js"
   },

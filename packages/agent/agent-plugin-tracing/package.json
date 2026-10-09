@@ -1,6 +1,6 @@
 {
   "name": "@adhd/agent-plugin-tracing",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "Tracing plugin for @adhd/agent-mcp — emits durable spans and derived metrics for every agent operation (session, task, model call, tool call, permission decision, HITL suspend/resume) into @adhd/sox-telemetry",
   "publishConfig": {
     "access": "public"
@@ -12,7 +12,7 @@
     "CHANGELOG.md"
   ],
   "peerDependencies": {
-    "@adhd/agent-base-types": "^2.3.8"
+    "@adhd/agent-base-types": "^2.3.9"
   },
   "dependencies": {
     "@adhd/sox-telemetry": "^0.4.3",

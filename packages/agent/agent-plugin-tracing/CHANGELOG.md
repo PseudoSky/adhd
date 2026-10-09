@@ -1,3 +1,7 @@
+## 0.0.3 (2026-10-09)
+
+This was a version bump only for agent-plugin-tracing to align it with other projects, there were no code changes.
+
 ## Unreleased
 
 ### 🚀 Features
