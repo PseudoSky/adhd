@@ -35,3 +35,20 @@ Install, build, lint, typecheck, test, and `verify-dist-load` all work from a fr
 1. Owner publishes `@adhd/sox-telemetry@0.5.0` from the sox repo.
 2. Set `"@adhd/sox-telemetry": "^0.5.0"` in the tracing package, delete `vendor/`.
 3. `corepack pnpm install`, then re-run `nx affected -t lint,typecheck,typecheck-spec,test,build,verify-dist-load`.
+
+## Consumer-install e2e (0f3667fd BRIDGE-AC1)
+
+`entrypoint/agent-mcp/src/__tests__/integration/srt-consumer-install.e2e.test.ts` packs the
+`@adhd/*` closure and `npm install`s the tarballs into a clean directory, as a consumer would.
+
+- **Why bundling the telemetry into the plugin's dist was rejected:** it would ship a second,
+  unversioned copy of sox-telemetry inside `@adhd/agent-plugin-tracing`, defeating the
+  `globalThis` slot sharing (ADR-0018) and hiding the real dependency from consumers. Copying the
+  tarball into `dist/` as an asset also does not help: npm resolves the dependency's `file:` spec
+  before the parent tarball is extracted (`ENOENT .../node_modules/@adhd/agent-plugin-tracing/vendor/...`).
+- **How the e2e handles the nested `file:` spec:** the test copies the vendored tarball into the
+  consumer directory and writes an npm `overrides` entry
+  (`"@adhd/sox-telemetry": "file:<abs path to the copy>"`) in the consumer `package.json` before
+  `npm install`, so the nested spec resolves to a real file.
+- **Removal:** when `@adhd/sox-telemetry` is published on npm, delete `vendor/`, the `file:` spec,
+  and the `installConsumerWithVendor` override in that test (use `installConsumer` again).

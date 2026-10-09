@@ -20,6 +20,14 @@
  * native tooling runs from a cwd OUTSIDE the repo under the REAL srt policy.
  * c9f0a791 AC4 — a fake `npx` first on the installed server's PATH must never fire.
  *
+ * 0f3667fd BRIDGE-AC1 — @adhd/agent-plugin-tracing depends on the vendored
+ * `@adhd/sox-telemetry` via `file:./vendor/<tgz>`. npm resolves that nested
+ * `file:` spec relative to the not-yet-extracted parent tarball and fails with
+ * ENOENT. So the consumer here copies the vendored tarball next to itself and
+ * pins it with an npm `overrides` entry (absolute `file:` path) before
+ * installing. Removed once sox-telemetry is on npm — see
+ * entrypoint/agent-mcp/docs/vendored-sox-telemetry.md.
+ *
  * Needs the npm registry (third-party deps, as for any consumer) and npx/uvx;
  * missing prerequisites fail loudly.
  */
@@ -29,8 +37,11 @@ import path from 'node:path';
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { installConsumer, installedBin, packClosure } from './consumer-install.js';
+import { execFileSync } from 'node:child_process';
+
+import { installedBin, packClosure } from './consumer-install.js';
 import {
+  REPO_ROOT,
   FakeLlm,
   makeNpxShim,
   srtOnPath,
@@ -50,6 +61,42 @@ const fsCall = (tool: string, args: Record<string, unknown>): ScriptedCall => ({
   tool,
   args,
 });
+
+const VENDORED_SOX_TELEMETRY = path.join(
+  REPO_ROOT,
+  'packages',
+  'agent',
+  'agent-plugin-tracing',
+  'vendor',
+  'adhd-sox-telemetry-0.4.2-logchannel.03a776c8.tgz'
+);
+
+/**
+ * Like consumer-install's installConsumer, plus the 0f3667fd BRIDGE: the vendored
+ * sox-telemetry tarball is copied into the consumer and pinned by `overrides`.
+ */
+function installConsumerWithVendor(consumerDir: string, tarballs: string[]): string {
+  fs.mkdirSync(consumerDir, { recursive: true });
+  if (!fs.existsSync(VENDORED_SOX_TELEMETRY)) {
+    throw new Error(`vendored sox-telemetry tarball missing: ${VENDORED_SOX_TELEMETRY}`);
+  }
+  const vendored = path.join(consumerDir, path.basename(VENDORED_SOX_TELEMETRY));
+  fs.copyFileSync(VENDORED_SOX_TELEMETRY, vendored);
+  fs.writeFileSync(
+    path.join(consumerDir, 'package.json'),
+    JSON.stringify({
+      name: 'consumer-94125709',
+      version: '1.0.0',
+      private: true,
+      overrides: { '@adhd/sox-telemetry': `file:${vendored}` },
+    })
+  );
+  execFileSync('npm', ['install', '--no-audit', '--no-fund', '--loglevel=error', ...tarballs], {
+    cwd: consumerDir,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  return consumerDir;
+}
 
 let scratch = '';
 let homeRoot = '';
@@ -95,8 +142,8 @@ beforeAll(async () => {
   homeRoot = real(fs.mkdtempSync(path.join(os.homedir(), '.adhd', 'tmp', stamp)));
 
   const tarballs = packClosure(path.join(scratch, 'tarballs'));
-  consumer = installConsumer(path.join(scratch, 'consumer'), tarballs);
-  consumerNoSrt = installConsumer(path.join(scratch, 'consumer-no-srt'), tarballs);
+  consumer = installConsumerWithVendor(path.join(scratch, 'consumer'), tarballs);
+  consumerNoSrt = installConsumerWithVendor(path.join(scratch, 'consumer-no-srt'), tarballs);
   // The variant where srt is genuinely absent: no bin link, no package.
   fs.rmSync(path.join(consumerNoSrt, 'node_modules', '.bin', 'srt'), { force: true });
   fs.rmSync(path.join(consumerNoSrt, 'node_modules', '@anthropic-ai', 'sandbox-runtime'), {
@@ -117,7 +164,7 @@ afterAll(async () => {
 });
 
 describe('94125709: packed, consumer-installed @adhd/agent-mcp and srt', () => {
-  it('94125709 AC1 + c9f0a791 AC4/AC6: installed (non-workspace) server finds srt off a stripped PATH and srt-wraps fs/shell children', async () => {
+  it('0f3667fd BRIDGE-AC1 + 94125709 AC1 + c9f0a791 AC4/AC6: installed (non-workspace) server finds srt off a stripped PATH and srt-wraps fs/shell children', async () => {
     // Precondition: this really is a consumer install — a real directory, not a workspace symlink.
     const installed = path.join(consumer, 'node_modules', '@adhd', 'agent-mcp');
     expect(fs.lstatSync(installed).isSymbolicLink(), 'must not be a workspace symlink').toBe(false);
