@@ -110,6 +110,10 @@ export class SseMcpClient extends BaseHttpMcpClient {
     async connect(): Promise<void> {
         const url = new URL(this.config.url);
         const transport = new SSEClientTransport(url, {
+            // The SDK posts JSON-RPC requests through its own `fetch` option, not through
+            // `eventSourceInit.fetch` (GET stream only); route both through the wire seam so the
+            // HTTP-level records exist for POSTs too (c536ce29 FIX-L1).
+            ...sdkFetchOption(this.engineConfig),
             eventSourceInit: {
                 fetch: (input, init) =>
                     wireFetch(this.engineConfig)(input, {

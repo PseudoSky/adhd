@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readdirSync, realpathSync, rmSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, realpathSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, sep } from "node:path";
 import { Readable } from "stream";
@@ -66,16 +66,32 @@ afterEach(() => {
 /** Runs one spec-mode chat and reports what existed at spawn time (before cleanup). */
 async function chatAndObserve(tempDir: string | undefined) {
     const { spawn } = await import("child_process");
-    const seen: { args: string[]; rootEntries: string[]; mcpConfigExisted: boolean; mcpConfig: string } = {
+    const seen: {
+        args: string[]; rootEntries: string[]; mcpConfigExisted: boolean; mcpConfig: string;
+        modes: { root: number; mcpConfig: number; specDir: number; specFile: number };
+    } = {
         args: [], rootEntries: [], mcpConfigExisted: false, mcpConfig: "",
+        modes: { root: -1, mcpConfig: -1, specDir: -1, specFile: -1 },
     };
+    const mode = (p: string): number => (existsSync(p) ? statSync(p).mode & 0o777 : -1);
     (spawn as unknown as ReturnType<typeof vi.fn>).mockReset();
     (spawn as unknown as ReturnType<typeof vi.fn>).mockImplementation((_cmd: string, args: string[]) => {
         seen.args = args;
         const i = args.indexOf("--mcp-config");
         seen.mcpConfig = i >= 0 ? (args[i + 1] ?? "") : "";
         seen.mcpConfigExisted = seen.mcpConfig !== "" && existsSync(seen.mcpConfig);
-        if (tempDir !== undefined && existsSync(tempDir)) seen.rootEntries = readdirSync(tempDir).sort();
+        if (tempDir !== undefined && existsSync(tempDir)) {
+            seen.rootEntries = readdirSync(tempDir).sort();
+            seen.modes.root = mode(tempDir);
+            seen.modes.mcpConfig = mode(seen.mcpConfig);
+            const specName = seen.rootEntries.find((n) => n.startsWith("agent-mcp-spec-"));
+            if (specName) {
+                const specDir = join(tempDir, specName);
+                seen.modes.specDir = mode(join(specDir, ".claude", "agents"));
+                const f = readdirSync(join(specDir, ".claude", "agents"))[0];
+                if (f) seen.modes.specFile = mode(join(specDir, ".claude", "agents", f));
+            }
+        }
         return fakeProc();
     });
     const { ClaudeCliProvider } = await import("../providers/claudecli.js");
@@ -112,5 +128,26 @@ describe("c536ce29 S8B-AC2 claudecli temp files land under the injected namespac
         const before = strayInOsTmp();
         await expect(chatAndObserve(undefined)).rejects.toThrow(/wire\.tempDir/);
         expect(strayInOsTmp()).toEqual(before);
+    });
+
+    it("c536ce29 FIX-M3: credential-bearing scratch is owner-only (root 0700, files 0600), even under a permissive umask", async () => {
+        const prev = process.umask(0o000);
+        try {
+            const seen = await chatAndObserve(join(sandbox, "fresh", "temp"));
+            expect(seen.modes.root).toBe(0o700);
+            expect(seen.modes.mcpConfig).toBe(0o600);
+            expect(seen.modes.specDir).toBe(0o700);
+            expect(seen.modes.specFile).toBe(0o600);
+        } finally {
+            process.umask(prev);
+        }
+    });
+
+    it("c536ce29 FIX-M3: a pre-existing looser temp root is tightened to 0700", async () => {
+        const root = join(sandbox, "loose");
+        mkdirSync(root, { recursive: true });
+        chmodSync(root, 0o755);
+        const seen = await chatAndObserve(root);
+        expect(seen.modes.root).toBe(0o700);
     });
 });

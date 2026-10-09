@@ -83,4 +83,36 @@ describe("PriceHistoryStore 1h cache-write tier", () => {
         expect(changed.changedIds).toHaveLength(1);
         expect(store.latest("anthropic/claude-haiku-4.5")?.cacheWrite1hPerM).toBe(3);
     });
+
+    // c536ce29 FIX-L8: the review suspected `toPrecision(12)` on `n * 1e6` could make the stored 1h
+    // rate and the freshly parsed one disagree, producing a spurious "changed" row on every pull.
+    // Both sides derive from the same raw_json string through the same function, so they cannot;
+    // this proves it across values whose `n * 1e6` is not exactly representable in binary.
+    it("c536ce29 FIX-L8: re-observing the SAME feed value never appends a row, for float-awkward 1h rates", () => {
+        const claimed = store.claimPull(T0, { minIntervalMs: 24 * 3_600_000, runningTtlMs: 600_000, force: true, sourceUrl: "https://openrouter.ai/api/v1/models" });
+        if (!claimed.claimed) throw new Error("expected claim");
+        const cases: Array<[string, number]> = [
+            ["0.000002", 2],
+            ["0.0000075", 7.5],
+            ["0.00001", 10],
+            ["0.000000125", 0.125],
+            ["0.0000012345678901", 1.2345678901],
+            ["0.0000000000001", 0.0000001],
+            ["2e-6", 2],
+        ];
+        let at = Date.parse(T0);
+        for (const [perToken, perM] of cases) {
+            const row: INewPriceRow = { ...haiku(perToken), modelId: `anthropic/case-${perToken}` };
+            at += 1000;
+            const first = store.applyObservation(claimed.ledgerId, [row], new Date(at).toISOString(), new Set());
+            expect(first.newIds, perToken).toHaveLength(1);
+            expect(store.latest(row.modelId)?.cacheWrite1hPerM, perToken).toBe(perM);
+            for (let pull = 0; pull < 3; pull++) {
+                at += 1000;
+                const again = store.applyObservation(claimed.ledgerId, [row], new Date(at).toISOString(), new Set());
+                expect(again.unchangedCount, `${perToken} pull ${pull}`).toBe(1);
+                expect(again.changedIds, `${perToken} pull ${pull}`).toEqual([]);
+            }
+        }
+    });
 });

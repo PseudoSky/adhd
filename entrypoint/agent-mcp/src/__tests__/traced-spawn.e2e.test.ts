@@ -96,6 +96,30 @@ describe("c536ce29 TRC-AC5w tracedSpawn", () => {
         expect(await tc.rawText()).not.toContain("CANARY0123456789abcdef");
     });
 
+    it("c536ce29 FIX-L10: a payload sent via stdin.end(chunk) is logged exactly once and reaches the child unchanged", async () => {
+        const tc = makeTestChannel();
+        created.push(tc);
+        const child = tracedSpawn(tc.channel, spawn)(process.execPath, ["-e", SCRIPT], { stdio: ["pipe", "pipe", "pipe"] });
+        const out: Buffer[] = [];
+        child.stdout!.on("data", (d: Buffer) => out.push(d));
+        child.stdin!.write("part1;");
+        child.stdin!.end("final-chunk");
+        await new Promise<void>((resolve) => child.on("close", () => resolve()));
+        expect(Buffer.concat(out).toString()).toContain("echo:PART1;FINAL-CHUNK");
+        const stdinRec = (await tc.records()).filter((r) => r.event === "spawn.stdin");
+        expect(stdinRec.map((r) => r.body)).toEqual(["part1;", "final-chunk"]);
+    });
+
+    it("c536ce29 FIX-L10: end() with only a callback (or nothing) logs no stdin record", async () => {
+        const tc = makeTestChannel();
+        created.push(tc);
+        const child = tracedSpawn(tc.channel, spawn)(process.execPath, ["-e", SCRIPT], { stdio: ["pipe", "pipe", "pipe"] });
+        child.stdout!.resume();
+        await new Promise<void>((resolve) => child.stdin!.end(() => resolve()));
+        await new Promise<void>((resolve) => child.on("close", () => resolve()));
+        expect((await tc.records()).filter((r) => r.event === "spawn.stdin")).toEqual([]);
+    });
+
     it("c536ce29 TRC-AC5w: a signal-terminated child logs the signal and kill() still works", async () => {
         const tc = makeTestChannel();
         created.push(tc);

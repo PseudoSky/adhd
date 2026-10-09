@@ -19,7 +19,7 @@
  * channel's redactor at the sink. Nothing here ever throws into the caller.
  */
 import type { ChildProcess, spawn as nodeSpawn } from "node:child_process";
-
+import type { Writable } from "node:stream";
 import { BodyCapture, captureBody, currentLogContext, type LogChannel } from "@adhd/agent-plugin-tracing";
 
 import {
@@ -92,18 +92,28 @@ export function tracedSpawn(channel: ChannelSource, spawnImpl: SpawnFn, opts: IW
         const totals = { stdout: new BodyCapture({ maxBytes: 0 }), stderr: new BodyCapture({ maxBytes: 0 }) };
         let exited = false;
 
-        // Passive stdin observation: record each write, then call the original untouched.
+        // Passive stdin observation: record each write (and the final chunk passed to `end(chunk)`,
+        // which Node routes through an internal write rather than `stdin.write`), then call the
+        // original untouched.
         safely(() => {
             const stdin = child.stdin;
             if (!stdin) return;
-            const originalWrite = stdin.write;
-            stdin.write = function patchedWrite(this: typeof stdin, ...wargs: unknown[]): boolean {
+            const logStdin = (chunk: unknown, encoding: unknown): void =>
                 safely(() => {
-                    const bytes = toBytes(wargs[0], typeof wargs[1] === "string" ? wargs[1] : undefined);
+                    const bytes = toBytes(chunk, typeof encoding === "string" ? encoding : undefined);
                     if (bytes) emitRaw(ch, ctx, "spawn.stdin", { call_id: callId, body: captureBody(bytes, { maxBytes }) });
                 });
+            const originalWrite = stdin.write;
+            stdin.write = function patchedWrite(this: typeof stdin, ...wargs: unknown[]): boolean {
+                logStdin(wargs[0], wargs[1]);
                 return (originalWrite as (...a: unknown[]) => boolean).apply(this, wargs);
             } as typeof stdin.write;
+            const originalEnd = stdin.end;
+            stdin.end = function patchedEnd(this: Writable, ...eargs: unknown[]): Writable {
+                // `end(cb)` / `end(chunk, cb)` / `end(chunk, encoding, cb)`: a function is never the chunk.
+                if (typeof eargs[0] !== "function") logStdin(eargs[0], eargs[1]);
+                return (originalEnd as (...a: unknown[]) => Writable).apply(this, eargs);
+            } as typeof stdin.end;
         });
 
         // Passive stdout/stderr observation: wrap emit('data') so the streams' flow state is untouched.

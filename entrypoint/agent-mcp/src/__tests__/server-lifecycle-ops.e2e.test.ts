@@ -39,10 +39,10 @@ async function freePort(): Promise<number> {
 }
 
 /** Loads a fresh `server.js` under the http transport env (`env.config` is resolved at module load). */
-async function loadHttpServer(port: number): Promise<typeof import('../server.js')> {
+async function loadHttpServer(port: number, transport: 'http' | 'sse' = 'http'): Promise<typeof import('../server.js')> {
   const keys = ['ADHD_AGENT_TRANSPORT', 'ADHD_AGENT_PORT', 'ADHD_AGENT_HOST'] as const;
   const saved = keys.map((k) => process.env[k]);
-  process.env.ADHD_AGENT_TRANSPORT = 'http';
+  process.env.ADHD_AGENT_TRANSPORT = transport;
   process.env.ADHD_AGENT_PORT = String(port);
   process.env.ADHD_AGENT_HOST = '127.0.0.1';
   vi.resetModules();
@@ -121,5 +121,23 @@ describe('c536ce29 TRC-AC10 startServer lifecycle ops records', () => {
     expect(started.httpServer?.listening).toBe(true);
     await started.close();
     expect(started.httpServer?.listening).toBe(false);
+  });
+
+  it('c536ce29 FIX-L2: the sse-transport stdio fallback pairs server.listening with server.shutdown', async () => {
+    const port = await freePort();
+    const { startServer } = await loadHttpServer(port, 'sse');
+    const { deps, rig } = fixture();
+    const started = await startServer(deps);
+    let closed = false;
+    cleanups.push(async () => {
+      if (!closed) await started.close();
+    });
+    const before = (await rig.ops()).filter((r) => r.event.startsWith('server.'));
+    expect(before.map((r) => r.event)).toEqual(['server.listening']);
+    expect(before[0]).toMatchObject({ transport: 'sse' });
+    await started.close();
+    closed = true;
+    const after = (await rig.ops()).filter((r) => r.event.startsWith('server.'));
+    expect(after.map((r) => r.event)).toEqual(['server.listening', 'server.shutdown']);
   });
 });

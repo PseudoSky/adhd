@@ -6,6 +6,7 @@
  * hard-coded `~/.adhd/...` or repo-relative `./data/...` location. `db.path` is fed by
  * `ADHD_AGENT_DATABASE_PATH`, so that override keeps working.
  */
+import os from "node:os";
 import path from "node:path";
 
 import type { Environment } from "@adhd/environment";
@@ -21,4 +22,38 @@ export function resolveTailDbPath(
   target: Pick<Environment<AgentMcpConfig>, "config" | "files"> = operationalEnv
 ): string {
   return path.resolve(target.config.db.path ?? target.files["db"]);
+}
+
+/**
+ * Where `agent-mcp-tail` read from before it resolved through the environment cascade
+ * (c536ce29 FIX-L9). A DB left there by an older install is not read any more, so an empty or
+ * missing resolved DB points at it.
+ */
+export function legacyTailDbPath(home: string = os.homedir()): string {
+  return path.join(home, ".adhd", "agent-mcp", "agents.db");
+}
+
+/** Inputs of {@link tailDbHint}. */
+export interface ITailDbHintInput {
+  /** The DB path the tail resolved and read (or tried to). */
+  dbPath: string;
+  /** `missing` = no file at `dbPath`; `empty` = file exists but holds no task events. */
+  state: "missing" | "empty";
+  /** {@link legacyTailDbPath} (injectable for tests). */
+  legacyPath: string;
+  /** Whether a file exists at `legacyPath`. */
+  legacyExists: boolean;
+}
+
+/**
+ * The one-line operator hint printed when the tail has nothing to show: names the DB it looked at,
+ * points at a pre-cascade DB if one exists, and names the override that relocates the read.
+ */
+export function tailDbHint(i: ITailDbHintInput): string {
+  const what = i.state === "missing" ? `no database at ${i.dbPath}` : `no task events in ${i.dbPath}`;
+  const legacy =
+    i.legacyExists && path.resolve(i.legacyPath) !== path.resolve(i.dbPath)
+      ? ` An older install's database exists at ${i.legacyPath}: try ADHD_AGENT_DATABASE_PATH=${i.legacyPath}.`
+      : "";
+  return `Warning: ${what}.${legacy} Set ADHD_AGENT_DATABASE_PATH to read a different database.`;
 }

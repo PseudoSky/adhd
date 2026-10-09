@@ -8,8 +8,12 @@ silently stopped emitting for an operation it is supposed to trace.
 A *sample* is a terminal record (`<path>.finish` or `<path>.error`); `duration_ms` is read from it.
 `<path>.start` records are counted separately so a hung span (start without a terminal) is visible.
 
+Only the always-expected paths (session, task, model_call) must have samples by default; paths that
+occur only on a provider failure, budget threshold, HITL suspend or permission decision are reported
+but not required unless `--require-all` / `--declared` names them.
+
 Usage:
-    python3 scripts/audit_tracing.py SINK [SINK ...] [--declared a,b,c] [--json]
+    python3 scripts/audit_tracing.py SINK [SINK ...] [--declared a,b,c] [--require-all] [--json]
 
 SINK is a `.jsonl` file or a directory searched recursively for `*.jsonl`.
 
@@ -43,6 +47,23 @@ DECLARED_PATHS = (
     "agent.budget.warning",
     "agent.budget.block",
 )
+# Paths that occur only when something specific happens (a tool is invoked, a permission policy is consulted, a run is
+# suspended for human input, a provider attempt fails or its breaker trips/recovers, a budget
+# threshold is crossed). A healthy run legitimately has ZERO samples of these, so the default audit
+# does not fail on them; `--require-all` (or an explicit `--declared`) does.
+CONDITIONAL_PATHS = (
+    "agent.tool_call",
+    "agent.permission.decision",
+    "agent.hitl.suspend",
+    "agent.hitl.resume",
+    "agent.provider.attempt_failed",
+    "agent.provider.tripped",
+    "agent.provider.recovered",
+    "agent.budget.warning",
+    "agent.budget.block",
+)
+# Paths every traced run emits: the session, its task, and at least one model call (c536ce29 FIX-M1).
+ALWAYS_EXPECTED_PATHS = tuple(p for p in DECLARED_PATHS if p not in CONDITIONAL_PATHS)
 TERMINALS = ("finish", "error")
 
 
@@ -88,12 +109,13 @@ def audit(files: list[Path], declared: list[str]) -> dict:
                     samples[path].append(float(dur) if isinstance(dur, (int, float)) else 0.0)
                     if kind == "error":
                         errors[path] += 1
-    paths = sorted(set(declared) | set(starts) | set(samples))
+    paths = sorted(set(declared) | set(DECLARED_PATHS) | set(starts) | set(samples))
     ops = {}
     for p in paths:
         durs = samples.get(p, [])
         ops[p] = {
             "declared": p in declared,
+            "conditional": p in CONDITIONAL_PATHS,
             "starts": starts.get(p, 0),
             "count": len(durs),
             "errors": errors.get(p, 0),
@@ -108,10 +130,16 @@ def audit(files: list[Path], declared: list[str]) -> dict:
 def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("sinks", nargs="+", help="sink .jsonl file(s) or directories")
-    ap.add_argument("--declared", help="comma-separated span paths that MUST have samples (default: all core paths)")
+    ap.add_argument("--declared", help="comma-separated span paths that MUST have samples (default: the always-expected core paths)")
+    ap.add_argument("--require-all", action="store_true", help="require samples for every declared core path, including conditional ones (provider failure, budget, HITL, permission)")
     ap.add_argument("--json", action="store_true", help="emit the report as JSON")
     args = ap.parse_args(argv)
-    declared = [d.strip() for d in args.declared.split(",") if d.strip()] if args.declared else list(DECLARED_PATHS)
+    if args.declared:
+        declared = [d.strip() for d in args.declared.split(",") if d.strip()]
+    elif args.require_all:
+        declared = list(DECLARED_PATHS)
+    else:
+        declared = list(ALWAYS_EXPECTED_PATHS)
     try:
         files = iter_files(args.sinks)
     except (FileNotFoundError, OSError) as exc:

@@ -184,6 +184,8 @@ const ALLOWLIST: readonly IEntry[] = [
   { key: 'entrypoint/agent-mcp/src/db/client.ts :: fs.mkdirSync(directory, {', reason: 'parent dir of the environment-resolved DB path' },
   { key: 'entrypoint/agent-mcp/src/db/migrate-legacy.ts :: const effectiveHome = home ?? process.env[\'HOME\'] ?? os.homedir();', reason: 'read-only legacy DB migration source lookup' },
   { key: 'entrypoint/agent-mcp/src/db/migrate-legacy.ts :: return path.join(effectiveHome, ".adhd", "agent-mcp", "agents.db");', reason: 'read-only legacy DB migration source (pre-environment layout)' },
+  { key: 'entrypoint/agent-mcp/src/scripts/tail-db-path.ts :: export function legacyTailDbPath(home: string = os.homedir()): string {', reason: 'read-only: names the pre-cascade DB path in the tail hint (never written)' },
+  { key: 'entrypoint/agent-mcp/src/scripts/tail-db-path.ts :: return path.join(home, ".adhd", "agent-mcp", "agents.db");', reason: 'read-only: names the pre-cascade DB path in the tail hint (never written)' },
   { key: 'entrypoint/agent-mcp/src/install.ts :: mkdirSync(dirname(path), { recursive: true });', reason: 'install: user MCP client config writer' },
   { key: 'entrypoint/agent-mcp/src/install.ts :: writeFileSync(path, JSON.stringify(doc, null, 2) + \'\\n\', \'utf8\');', reason: 'install: user MCP client config writer' },
   { key: 'entrypoint/agent-mcp/src/install.ts :: const home = homeOverride ?? homedir();', count: 3, reason: 'install: locates client config files (test-overridable home)' },
@@ -207,11 +209,11 @@ const ALLOWLIST: readonly IEntry[] = [
   { key: 'packages/agent/agent-engine-orchestrator/src/plugins/loader.ts :: const nested = resolve(process.cwd(), \'.adhd\', \'agent-mcp\', \'config.json\');', reason: 'read-only config lookup' },
   { key: 'packages/agent/agent-engine-orchestrator/src/plugins/loader.ts :: const globalAdhd = resolve(homedir(), \'.adhd\', \'agent-mcp\', \'config.json\');', reason: 'read-only config lookup' },
   { key: 'packages/agent/agent-engine-orchestrator/src/plugins/loader.ts :: const globalLegacy = resolve(homedir(), \'.agent-mcp\', \'config.json\');', reason: 'read-only legacy config lookup' },
-  { key: 'packages/agent/agent-engine-orchestrator/src/providers/claudecli.ts :: await mkdir(root, { recursive: true });', reason: 'claudecli: creates the host-injected namespaced temp root (wire.tempDir)' },
-  { key: 'packages/agent/agent-engine-orchestrator/src/providers/claudecli.ts :: await writeFile(filePath, JSON.stringify({ mcpServers: mapped }), "utf8");', reason: 'claudecli: mcp-config written under the namespaced temp root' },
+  { key: 'packages/agent/agent-engine-orchestrator/src/providers/claudecli.ts :: await mkdir(root, { recursive: true, mode: 0o700 });', reason: 'claudecli: creates the host-injected namespaced temp root (wire.tempDir)' },
+  { key: 'packages/agent/agent-engine-orchestrator/src/providers/claudecli.ts :: await writeFile(filePath, JSON.stringify({ mcpServers: mapped }), { encoding: "utf8", mode: 0o600 });', reason: 'claudecli: mcp-config written under the namespaced temp root' },
   { key: 'packages/agent/agent-engine-orchestrator/src/providers/claudecli.ts :: const dir = await mkdtemp(join(await this.ensureTempRoot(), "agent-mcp-spec-"));', reason: 'claudecli: spec dir under the namespaced temp root' },
-  { key: 'packages/agent/agent-engine-orchestrator/src/providers/claudecli.ts :: await mkdir(agentsDir, { recursive: true });', reason: 'claudecli: inside the temp-root spec dir' },
-  { key: 'packages/agent/agent-engine-orchestrator/src/providers/claudecli.ts :: await writeFile(join(agentsDir, safeFile), content, "utf8");', reason: 'claudecli: inside the temp-root spec dir' },
+  { key: 'packages/agent/agent-engine-orchestrator/src/providers/claudecli.ts :: await mkdir(agentsDir, { recursive: true, mode: 0o700 });', reason: 'claudecli: inside the temp-root spec dir' },
+  { key: 'packages/agent/agent-engine-orchestrator/src/providers/claudecli.ts :: await writeFile(join(agentsDir, safeFile), content, { encoding: "utf8", mode: 0o600 });', reason: 'claudecli: inside the temp-root spec dir' },
 ];
 
 /**

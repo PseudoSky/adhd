@@ -106,7 +106,7 @@ All agent-mcp logs live under ONE environment-resolved root, `<logs>` = `~/.adhd
 
 `ADHD_AGENT_LOG_LEVEL` (`logging.level`, default `info`) is unchanged. These keys are values with defaults; this section covers the configuration surface (path resolution and defaults). Record emission into `api/` and `ops/` is delivered by the wirelog package and the provider/server seams of the same backlog item.
 
-Audit a sink with `python3 scripts/audit_tracing.py <sink-dir>`: it recomputes per-operation sample counts and durations and exits non-zero when a declared span path has zero samples.
+Audit a sink with `python3 scripts/audit_tracing.py <sink-dir>`: it recomputes per-operation sample counts and durations and exits non-zero when an always-expected span path (session, task, model_call) has zero samples; `--require-all` also demands the conditional tool-call, provider-failure, budget, HITL and permission paths.
 
 How to read, tail, query and cost-audit these logs (record shapes, correlation ids, `usage_query`, SQL, redaction, three worked traces taken from a live run): [docs/logging.md](./docs/logging.md).
 

@@ -1,6 +1,6 @@
 import type { ChildProcess } from "child_process";
 import readline from "readline";
-import { writeFile, unlink, mkdtemp, mkdir, rm } from "fs/promises";
+import { writeFile, unlink, mkdtemp, mkdir, rm, stat, chmod } from "fs/promises";
 import { join } from "path";
 
 import { generateId } from "../utils/ids.js";
@@ -361,7 +361,8 @@ export class ClaudeCliProvider implements LLMProvider {
         }
 
         const filePath = join(await this.ensureTempRoot(), `agent-mcp-claudecli-${Date.now()}-${generateId()}.json`);
-        await writeFile(filePath, JSON.stringify({ mcpServers: mapped }), "utf8");
+        // The mcp-config carries MCP server env + headers: owner-only (c536ce29 FIX-M3).
+        await writeFile(filePath, JSON.stringify({ mcpServers: mapped }), { encoding: "utf8", mode: 0o600 });
         return filePath;
     }
 
@@ -377,8 +378,10 @@ export class ClaudeCliProvider implements LLMProvider {
     /**
      * The directory for credential-bearing scratch (mcp-config, agent-spec). The host injects its
      * `@adhd/environment`-resolved namespaced temp root as `config.wire.tempDir` (c536ce29 / 03be90c3,
-     * S8B); only an embedder that supplies no seams falls back to the OS temp dir. Created on demand
-     * because the resolver is pure and creates nothing.
+     * S8B). There is NO OS-tmpdir fallback: an `EngineConfig` without `wire.tempDir` makes this throw,
+     * so every host must build its config through the wire seams (c536ce29 FIX-M2). Created on demand
+     * because the resolver is pure and creates nothing; the directory is owner-only (0o700) because it
+     * holds credential-bearing files, and a pre-existing looser directory is tightened (FIX-M3).
      */
     private async ensureTempRoot(): Promise<string> {
         const root = this.config.wire?.tempDir;
@@ -387,7 +390,10 @@ export class ClaudeCliProvider implements LLMProvider {
                 "claudecli provider requires EngineConfig.wire.tempDir (the host's namespaced temp root); there is no OS-tmpdir fallback"
             );
         }
-        await mkdir(root, { recursive: true });
+        await mkdir(root, { recursive: true, mode: 0o700 });
+        // `mkdir` applies `mode` only to directories it creates (and the umask can narrow it): tighten
+        // a pre-existing root that is group/world accessible.
+        if (((await stat(root)).mode & 0o077) !== 0) await chmod(root, 0o700);
         return root;
     }
 
@@ -395,9 +401,9 @@ export class ClaudeCliProvider implements LLMProvider {
         const { content, agentName } = normalizeAgentSpec(md);
         const dir = await mkdtemp(join(await this.ensureTempRoot(), "agent-mcp-spec-"));
         const agentsDir = join(dir, ".claude", "agents");
-        await mkdir(agentsDir, { recursive: true });
+        await mkdir(agentsDir, { recursive: true, mode: 0o700 });
         const safeFile = `${agentName.replace(/[^a-zA-Z0-9_-]/g, "_") || "agent"}.md`;
-        await writeFile(join(agentsDir, safeFile), content, "utf8");
+        await writeFile(join(agentsDir, safeFile), content, { encoding: "utf8", mode: 0o600 });
         return { dir, agentName };
     }
 

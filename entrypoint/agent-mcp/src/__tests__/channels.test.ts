@@ -226,6 +226,48 @@ describe('c536ce29 TRC-AC15 channel files land under the environment-resolved ro
     });
     expect(got.sort()).toEqual(['fixture-value-one', 'fixture-value-two']);
   });
+
+  it('c536ce29 FIX-L6 collectKnownSecrets does not register GIT_AUTHOR_*/SSH_AUTH_SOCK but still registers AUTH_TOKEN/AUTHORIZATION/OAUTH_TOKEN', () => {
+    const got = collectKnownSecrets({
+      GIT_AUTHOR_NAME: 'fixture-author-name', // pragma: allowlist secret
+      GIT_AUTHOR_EMAIL: 'fixture-author@example.invalid',
+      SSH_AUTH_SOCK: '/tmp/fixture-ssh-agent.sock',
+      AUTH_TOKEN: 'fixture-auth-token-v', // pragma: allowlist secret
+      AUTHORIZATION: 'fixture-authorization-v', // pragma: allowlist secret
+      OAUTH_TOKEN: 'fixture-oauth-token-v', // pragma: allowlist secret
+      HTTP_AUTH: 'fixture-http-auth-value', // pragma: allowlist secret
+    });
+    expect(got.sort()).toEqual([
+      'fixture-auth-token-v',
+      'fixture-authorization-v',
+      'fixture-http-auth-value',
+      'fixture-oauth-token-v',
+    ]);
+  });
+});
+
+describe('c536ce29 FIX-L7 initLogChannels reports options it discards', () => {
+  it('c536ce29 FIX-L7: a second call with different roots returns the first channels and writes a log.init_ignored warn to the ops channel; an identical call stays silent', async () => {
+    const { roots, env } = realEnv();
+    const first = initLogChannels({ roots, logging: env.config.logging, stderr: collector() });
+    expect(first.opsEnabled).toBe(true);
+
+    const same = initLogChannels({ roots, logging: env.config.logging, stderr: collector() });
+    expect(same).toBe(first);
+
+    const other = realEnv();
+    const second = initLogChannels({ roots: other.roots, logging: other.env.config.logging, stderr: collector() });
+    expect(second).toBe(first);
+    await first.flush();
+
+    const opsFiles = filesUnder(roots.ops).filter((f) => f.endsWith('.jsonl'));
+    const records = opsFiles.flatMap(readJsonl);
+    const ignored = records.filter((r) => r['event'] === 'log.init_ignored');
+    expect(ignored).toHaveLength(1);
+    expect(ignored[0]).toMatchObject({ level: 'warn', ignored_options: ['roots'] });
+    // The ignored roots were never created.
+    expect(filesUnder(other.roots.ops)).toEqual([]);
+  });
 });
 
 describe('c536ce29 W2-AC-A pino lines reach the ops channel AND stderr', () => {

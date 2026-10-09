@@ -35,7 +35,7 @@ overrides the production namespace is:
 | Raw wire log (`api`) | `~/.adhd/agent-mcp/production/logs/api/` |
 | Core-ops log (`ops`) | `~/.adhd/agent-mcp/production/logs/ops/` |
 | Spans and metrics (`trace`) | `~/.adhd/agent-mcp/production/logs/trace/` |
-| Credential-bearing scratch (claudecli mcp-config, agent spec, srt policy) | `~/.adhd/agent-mcp/production/temp/` |
+| Credential-bearing scratch (claudecli mcp-config, agent spec, srt policy) | `~/.adhd/agent-mcp/production/temp/` (directory `0700`, files `0600`) |
 | Dev-server pid and supervisor log | `<checkout>/tmp/agent-mcp/serve/serve-<port>.{pid,log}` |
 
 ```console
@@ -70,7 +70,7 @@ queue. Bodies are captured up to `logging.apiBodyMaxBytes` (4 MiB) with the sha2
 
 | `event` | Meaning | Notable fields |
 |---|---|---|
-| `http.request` / `http.response` | Outbound call to an HTTP provider (Anthropic API, OpenAI-compatible, the pricing feed) | `call_id`, `task_id`, `session_id`, `agent`, `method`, `url`, `headers` (secrets redacted), `body`; response: `status`, `ttfb_ms`, `latency_ms`, `chunk_count`, streamed `body` |
+| `http.request` / `http.response` | Outbound call to an HTTP provider (Anthropic API, OpenAI-compatible, the pricing feed) | `call_id`, `task_id`, `session_id`, `agent`, `method`, `url`, `headers` (secrets redacted), `body`; response: `status`, `ttfb_ms`, `latency_ms`, `chunk_count`, streamed `body` (a response past 64 MiB is cut off from logging with `drain_cancelled: true`; the caller still receives every byte) |
 | `spawn.start` / `spawn.stdin` / `spawn.stdout` / `spawn.exit` / `spawn.close` | A subprocess provider (the `claude` CLI) | `command`, `args`, per-line `body`, `code`, `duration_ms`, `stdout_bytes`, `stdout_sha256` |
 | `mcp.request` / `mcp.response` / `mcp.error` | Inbound MCP `tools/call` handled by the server | `tool`, `mcp_session_id`, `request_id`, `is_error`, `duration_ms`, `body` |
 | `http.inbound.request` / `http.inbound.response` | The streamable-HTTP and SSE routes | `route`, `method`, `url`, `status`, `body_bytes` |
@@ -176,6 +176,14 @@ $ rg --no-filename '"event":"pricing\.' $L/ops/agent-mcp.ops-2026-10-09.default.
 `src/scripts/agent-mcp-tail.ts` (bin `agent-mcp-tail`) reads the **database** (`task_events` joined
 to `task_usage`), not the log files. It resolves the DB path through the same environment cascade
 as the server, so with no overrides it reads production.
+
+**Default path change.** The tail used to default to `~/.adhd/agent-mcp/agents.db`; it now reads the
+environment-resolved store (`~/.adhd/agent-mcp/production/data/agents.db` with no overrides), the same
+file the server writes. A database an older install left at the old path is **not** read any more.
+When the resolved database is missing or holds no task events the tail says so, names the path it
+looked at, points at the old-path file if one exists, and names the override that relocates the read
+(`ADHD_AGENT_DATABASE_PATH=<path>`). A missing database is reported (exit 1), never created as a
+side effect of reading.
 
 | Flag | Effect |
 |---|---|
@@ -292,8 +300,9 @@ $ sqlite3 $D "SELECT (9994*1.0 + 0*0.1 + 4*5.0)/1e6"
 One redactor is shared by the `api` and `ops` channels (and the persisted pino lines):
 
 1. At start the server collects the **values** of every environment variable whose name matches
-   `SECRET|TOKEN|PASSWORD|PASSWD|CREDENTIAL|API_KEY|PRIVATE_KEY|AUTH` (`collectKnownSecrets` in
-   `src/wire/channels.ts`) and scrubs those values from every record, wherever they appear.
+   `SECRET|TOKEN|PASSWORD|PASSWD|CREDENTIAL|API_KEY|PRIVATE_KEY|AUTHORIZATION|AUTH_(KEY|HEADER|BEARER|SECRET|PASSWORD)|*_AUTH`
+   (`collectKnownSecrets` in `src/wire/channels.ts`; a bare `AUTH` substring is not enough, so
+   `GIT_AUTHOR_*` and `SSH_AUTH_SOCK` stay readable) and scrubs those values from every record, wherever they appear.
    Values that reach the process environment after the channels are created are not in that list; the scan below is the check.
 2. Sensitive headers are replaced by a placeholder carrying a short hash and the length, for example
    `"authorization": "[REDACTED:f1ffb24f:len=26]"`; the hash lets you tell two different keys apart

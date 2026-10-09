@@ -209,3 +209,32 @@ describe('c536ce29 TRC-AC26 — provider-failure and budget events map to record
     await plugin.dispose();
   });
 });
+
+describe('c536ce29 FIX-L3 — provider failure text is redacted before it reaches the trace sink', () => {
+  it('c536ce29 FIX-L3: a key fragment in failure.message is absent from every sink record', async () => {
+    const { hooks, plugin } = await installed();
+    const env = makeEnv(hooks);
+    const ctx = makeCtx(env);
+    const canary = 'sk-proj-' + 'Zq9XvB3nL7'.repeat(4);
+    const failure = {
+      v: 1, class: 'auth', scope: 'credential', retryable: false, resumable: false, confidence: 'certain',
+      providerType: 'openai', modelRef: 'm', wireModel: 'm', credentialKey: 'k', credentialScope: 'k',
+      message: `Incorrect API key provided: ${canary}`, source: 'http', attempts: [], hops: [], classifierVersion: 1, status: 401,
+    };
+    await hooks.emit('task:start', { executionContext: ctx } as never);
+    await hooks.emit('pre:model_request', { executionContext: ctx, messages: [], tools: [] } as never);
+    await hooks.emit('provider:failed', {
+      domain: 'provider', failure, correlationId: ctx.taskId, at: new Date().toISOString(), executionContext: ctx, disposition: 'terminal',
+    } as never);
+    await closeSession(hooks, env);
+
+    const recs = records(plugin);
+    const errored = recs.find((r) => r.event === 'agent.model_call.error');
+    expect(errored, 'model_call.error record exists').toBeDefined();
+    expect(JSON.stringify(errored)).toContain('Incorrect API key provided');
+    // Teeth: the canary is present in the input, so its absence is the redactor's doing.
+    expect(JSON.stringify(recs)).not.toContain(canary);
+    await plugin.dispose();
+  });
+});
+

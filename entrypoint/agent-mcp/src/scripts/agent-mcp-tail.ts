@@ -1,8 +1,9 @@
 #!/usr/bin/env node
+import { existsSync } from "node:fs";
 import { parseArgs } from "node:util";
 import Database from "better-sqlite3";
 
-import { resolveTailDbPath } from "./tail-db-path.js";
+import { legacyTailDbPath, resolveTailDbPath, tailDbHint } from "./tail-db-path.js";
 
 const { values: args } = parseArgs({
   options: {
@@ -343,9 +344,21 @@ if (!jsonOut) {
   console.log(`  --mode: ${follow ? "follow (polling)" : "one-shot"}`);
 }
 
+const hintFor = (state: "missing" | "empty"): string => {
+  const legacyPath = legacyTailDbPath();
+  return tailDbHint({ dbPath, state, legacyPath, legacyExists: existsSync(legacyPath) });
+};
+
+// A missing DB is reported, never created as a side effect of reading (c536ce29 FIX-L9).
+if (!existsSync(dbPath)) {
+  if (!jsonOut) console.error(hintFor("missing"));
+  process.exit(1);
+}
+
 const startDb = open();
 // Fails fast (as before) when the store has no task_events table.
-startDb.prepare("SELECT COUNT(*) as c FROM task_events").get();
+const count = startDb.prepare("SELECT COUNT(*) as c FROM task_events").get() as { c: number };
+if (count.c === 0 && !jsonOut) console.log(hintFor("empty"));
 startDb.close();
 
 if (follow) {

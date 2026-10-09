@@ -1,5 +1,5 @@
 import type { ExecutionContext, HookEvent, HookEventMap, IHookRegistry, ProviderFailure } from '@adhd/agent-base-types';
-import { newTraceId } from '@adhd/sox-telemetry';
+import { createRedactor, newTraceId } from '@adhd/sox-telemetry';
 import type { OtelAttributes } from '@adhd/sox-telemetry';
 import { openSpan, pointSpan } from './spans.js';
 import type { TraceRuntime } from './runtime.js';
@@ -181,13 +181,20 @@ const modelResponse = defineMapping('post:model_response', (p, rt) => {
 });
 
 /** Close the task's open model-call span as an ERROR (`agent.model_call.error`), once. */
+/**
+ * Provider SDK errors can embed key fragments ("Incorrect API key provided: sk-..."). Every error
+ * string that becomes span error text goes through the shared sox-telemetry redactor first
+ * (c536ce29 FIX-L3), so the trace sink never holds a credential the log channels would have scrubbed.
+ */
+const errorRedactor = createRedactor();
+
 function failModelCall(rt: TraceRuntime, ctx: ExecutionContext | undefined, error: string, attrs: OtelAttributes): void {
   if (ctx === undefined) return;
   const state = rt.task(ctx);
   const open = state?.model;
   if (state === undefined || open === undefined) return;
   state.model = undefined;
-  open.span.close({ attrs: { ...attrs, 'agent.outcome': 'error' }, error });
+  open.span.close({ attrs: { ...attrs, 'agent.outcome': 'error' }, error: errorRedactor.redactValue(error) });
   rt.counters.modelCall(0, 0, rt.now() - open.startedAt);
 }
 

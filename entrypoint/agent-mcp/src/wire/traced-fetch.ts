@@ -30,13 +30,24 @@ import {
     type LogChannel,
 } from "@adhd/agent-plugin-tracing";
 
-import { getLogChannels, noopLogChannel } from "./channels.js";
+import { getLogChannels, isNoopLogChannel } from "./channels.js";
 
 /** The first argument of `fetch`. */
 type FetchInput = Parameters<typeof fetch>[0];
 
 /** Default per-body capture cap, matching `logging.apiBodyMaxBytes`' default (4 MiB). */
 export const DEFAULT_BODY_MAX_BYTES = 4 * 1024 * 1024;
+
+/**
+ * Default ceiling on how many response bytes the logging clone may drain. `res.clone()` tees the
+ * stream, and a tee buffers every chunk for whichever branch is slower; the clone is drained
+ * eagerly, so a caller that reads slowly or never (an unconsumed long-lived SSE response) would
+ * otherwise make that buffer grow without bound. Past the ceiling the clone is cancelled — the
+ * caller's branch is then pulled on demand with normal back-pressure — and the record says so
+ * (`drain_cancelled: true`; `body_bytes`/`body_sha256` then describe only the bytes observed).
+ * Well above `bodyMaxBytes`, so the exact-digest contract holds for every realistic body.
+ */
+export const DEFAULT_BODY_DRAIN_MAX_BYTES = 64 * 1024 * 1024;
 
 /** Cap on the `chunk_timing` array of a streamed response (the count is always exact). */
 const MAX_CHUNK_TIMING_ENTRIES = 256;
@@ -45,6 +56,8 @@ const MAX_CHUNK_TIMING_ENTRIES = 256;
 export interface IWireOptions {
     /** Per-body capture cap in bytes. Default {@link DEFAULT_BODY_MAX_BYTES}. */
     bodyMaxBytes?: number;
+    /** Ceiling on bytes the logging clone drains before it is cancelled. Default {@link DEFAULT_BODY_DRAIN_MAX_BYTES}. */
+    bodyDrainMaxBytes?: number;
 }
 
 /** A channel, or a lazy resolver; `undefined` means "the process-wide api channel". */
@@ -55,20 +68,12 @@ export function newCallId(): string {
     return randomUUID();
 }
 
-let noopFingerprint: string | undefined;
-
 /**
- * True when `channel` is an inert channel (the `noopLogChannel()` shape): raw capture is skipped.
- * Detection is by the identity of the `logRaw` implementation source, which is cheap and works
- * for any inert channel produced by {@link noopLogChannel}.
+ * True when `channel` is an inert channel (one produced by {@link noopLogChannel}): raw capture is
+ * skipped. Detection is by object identity (a WeakSet marker), never by function source text.
  */
 export function isInertChannel(channel: LogChannel): boolean {
-    noopFingerprint ??= noopLogChannel().logRaw.toString();
-    try {
-        return channel.logRaw.toString() === noopFingerprint;
-    } catch {
-        return false;
-    }
+    return isNoopLogChannel(channel);
 }
 
 /** Resolves a {@link ChannelSource} to a concrete channel (default: the process-wide api channel). */
@@ -184,12 +189,15 @@ async function describeRequest(input: FetchInput, init: RequestInit | undefined,
 async function drainClone(
     clone: Response,
     maxBytes: number,
-    startedAt: number
-): Promise<{ captured: CapturedBody; chunks: number; timing: Array<[number, number]>; error?: unknown; aborted: boolean }> {
+    startedAt: number,
+    drainMaxBytes: number
+): Promise<{ captured: CapturedBody; chunks: number; timing: Array<[number, number]>; error?: unknown; aborted: boolean; drainCancelled: boolean }> {
     const capture = new BodyCapture({ maxBytes });
     const timing: Array<[number, number]> = [];
     let chunks = 0;
     let error: unknown;
+    let drainCancelled = false;
+    let seen = 0;
     if (clone.body) {
         const reader = clone.body.getReader();
         try {
@@ -199,13 +207,22 @@ async function drainClone(
                 chunks++;
                 capture.append(value);
                 if (timing.length < MAX_CHUNK_TIMING_ENTRIES) timing.push([Date.now() - startedAt, value.byteLength]);
+                seen += value.byteLength;
+                if (seen >= drainMaxBytes) {
+                    // Stop tee-buffering for the caller's branch (see DEFAULT_BODY_DRAIN_MAX_BYTES).
+                    drainCancelled = true;
+                    // Not awaited: a tee branch's cancel() settles only once BOTH branches are
+                    // cancelled, i.e. after the caller finishes with its own branch.
+                    void reader.cancel().catch(() => undefined);
+                    break;
+                }
             }
         } catch (err) {
             error = err;
         }
     }
     const aborted = error !== undefined && (error as { name?: string }).name === "AbortError";
-    return { captured: capture.finish(), chunks, timing, error, aborted };
+    return { captured: drainCancelled ? { ...capture.finish(), truncated: true } : capture.finish(), chunks, timing, error, aborted, drainCancelled };
 }
 
 /**
@@ -219,6 +236,7 @@ async function drainClone(
  */
 export function tracedFetch(channel?: ChannelSource, base?: typeof fetch, opts: IWireOptions = {}): typeof fetch {
     const maxBytes = opts.bodyMaxBytes ?? DEFAULT_BODY_MAX_BYTES;
+    const drainMaxBytes = opts.bodyDrainMaxBytes ?? DEFAULT_BODY_DRAIN_MAX_BYTES;
     return async function tracedFetchImpl(input: FetchInput, init?: RequestInit): Promise<Response> {
         const inner = base ?? globalThis.fetch;
         let ch: LogChannel;
@@ -266,7 +284,7 @@ export function tracedFetch(channel?: ChannelSource, base?: typeof fetch, opts: 
         const ttfb = Date.now() - startedAt;
         try {
             const clone = res.clone();
-            void drainClone(clone, maxBytes, startedAt)
+            void drainClone(clone, maxBytes, startedAt, drainMaxBytes)
                 .then((d) => {
                     emitRaw(ch, ctx, "http.response", {
                         call_id: callId,
@@ -279,6 +297,7 @@ export function tracedFetch(channel?: ChannelSource, base?: typeof fetch, opts: 
                         chunk_count: d.chunks,
                         chunk_timing: d.timing,
                         aborted: d.aborted,
+                        ...(d.drainCancelled ? { drain_cancelled: true } : {}),
                         ...(d.error !== undefined ? { error: describeError(d.error) } : {}),
                     });
                 })

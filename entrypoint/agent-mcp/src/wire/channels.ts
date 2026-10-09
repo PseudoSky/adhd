@@ -44,7 +44,12 @@ const KIB = 1024;
 const API_SYNC_MAX_BYTES = 64 * KIB;
 
 /** Env variable NAMES whose values are credentials: their values are registered as secrets. */
-const SECRET_ENV_NAME = /(SECRET|TOKEN|PASSWORD|PASSWD|CREDENTIAL|API_?KEY|PRIVATE_KEY|AUTH)/i;
+// `AUTH` alone is deliberately NOT a match: it would register `GIT_AUTHOR_*` (an email) and
+// `SSH_AUTH_SOCK` (a socket path) as secrets and scrub them from every log line. Credential-shaped
+// auth names still match: AUTH_TOKEN / OAUTH_TOKEN (TOKEN), AUTHORIZATION, AUTH_KEY|HEADER|BEARER|
+// SECRET|PASSWORD, and a trailing `_AUTH` segment (c536ce29 FIX-L6).
+const SECRET_ENV_NAME =
+    /(SECRET|TOKEN|PASSWORD|PASSWD|CREDENTIAL|API_?KEY|PRIVATE_KEY|AUTHORIZATION|AUTH_(KEY|HEADER|BEARER|SECRET|PASSWORD)|(^|_)AUTH$)/i;
 
 /** The pair of channels plus the facts callers need to report on them. */
 export interface IAgentMcpChannels {
@@ -82,9 +87,21 @@ export interface ICreateLogChannelsOptions {
     readonly stderr?: { write(chunk: string): unknown };
 }
 
+/**
+ * Identity registry of the channels {@link noopLogChannel} produced. Inertness is a property of
+ * the object, not of its source text, so minifiers/bundlers cannot break it and a look-alike
+ * channel is never mistaken for inert (c536ce29 FIX-L4).
+ */
+const INERT_CHANNELS = new WeakSet<LogChannel>();
+
+/** True only for a channel returned by {@link noopLogChannel}. */
+export function isNoopLogChannel(channel: LogChannel): boolean {
+    return INERT_CHANNELS.has(channel);
+}
+
 /** An inert channel: every call is a no-op. Lets call sites avoid branching on "is logging on". */
 export function noopLogChannel(): LogChannel {
-    return {
+    const channel: LogChannel = {
         logEvent: () => undefined,
         logRaw: () => undefined,
         destination: () => ({ write: () => undefined }),
@@ -93,6 +110,8 @@ export function noopLogChannel(): LogChannel {
         close: async () => undefined,
         stats: () => ({ written: 0, dropped: 0, serializeErrors: 0, rotated: 0, floodTripped: false }),
     };
+    INERT_CHANNELS.add(channel);
+    return channel;
 }
 
 /**
@@ -300,17 +319,53 @@ const INERT: IAgentMcpChannels = (() => {
     };
 })();
 
+let currentOpts: ICreateLogChannelsOptions | undefined;
+
+/** True when two option bags configure the channels identically (by identity, else by JSON value). */
+function sameChannelConfig(a: ICreateLogChannelsOptions, b: ICreateLogChannelsOptions): boolean {
+    for (const key of ["roots", "logging", "knownSecrets", "redactor"] as const) {
+        if (a[key] === b[key]) continue;
+        if (key === "redactor") return false;
+        try {
+            if (JSON.stringify(a[key]) === JSON.stringify(b[key])) continue;
+        } catch {
+            /* unserialisable: treat as different */
+        }
+        return false;
+    }
+    return true;
+}
+
 /**
  * Creates the channels from the live environment, installs them process-wide and late-attaches the
- * ops channel to the pino {@link logger}. Idempotent per process (a second call returns the first
- * result). Never throws.
+ * ops channel to the pino {@link logger}. Idempotent per process: a second call returns the first
+ * result and does NOT apply its `opts`. When those `opts` configure the channels differently
+ * (roots, logging, known secrets, redactor) the discarded request is reported as a `log.init_ignored`
+ * warn record on the installed ops channel, or on stderr when ops logging is off (c536ce29 FIX-L7).
+ * Never throws.
  *
  * @param opts forwarded to {@link createLogChannels}
  */
 export function initLogChannels(opts: ICreateLogChannelsOptions = {}): IAgentMcpChannels {
-    if (current) return current;
+    if (current) {
+        const first = currentOpts ?? {};
+        if (!sameChannelConfig(first, opts)) {
+            const changed = (["roots", "logging", "knownSecrets", "redactor"] as const).filter((k) => !sameChannelConfig({ [k]: first[k] }, { [k]: opts[k] }));
+            try {
+                if (current.opsEnabled) {
+                    current.ops.logEvent("log.init_ignored", { reason: "channels already initialised; options ignored", ignored_options: changed }, "warn");
+                } else {
+                    (opts.stderr ?? process.stderr).write(`[agent-mcp] initLogChannels called again with different ${changed.join("/")}; the first channels stay installed\n`);
+                }
+            } catch {
+                /* never throws */
+            }
+        }
+        return current;
+    }
     const channels = createLogChannels(opts);
     current = channels;
+    currentOpts = opts;
     if (channels.opsEnabled) attachOpsDestination(channels.ops.destination());
     return channels;
 }
@@ -322,6 +377,7 @@ export function initLogChannels(opts: ICreateLogChannelsOptions = {}): IAgentMcp
 export async function closeLogChannels(): Promise<void> {
     const channels = current;
     current = undefined;
+    currentOpts = undefined;
     attachOpsDestination(undefined);
     try {
         await channels?.close();

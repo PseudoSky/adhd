@@ -1218,6 +1218,9 @@ export async function startServer(deps: ServerDeps): Promise<{
 
     const unsubNotifications = wireTaskNotifications(server);
 
+    // Pairs with the `server.shutdown` below (c536ce29 FIX-L2).
+    announce(null, null);
+
     return {
       close: async () => {
         const closeStartedAtMs = Date.now();

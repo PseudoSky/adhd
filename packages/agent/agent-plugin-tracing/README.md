@@ -125,5 +125,6 @@ afresh. `plugin.logFilePath()` reports where the process's sink writes either wa
 ## Verifying a sink
 
 `python3 scripts/audit_tracing.py <sink-dir-or-file>...` (repo root) recomputes per-operation
-sample counts and durations from the JSONL records and exits non-zero when a declared span path has
-zero samples — the signal that the plugin silently stopped emitting for an operation.
+sample counts and durations from the JSONL records and exits non-zero when an always-expected span path (session, task,
+model_call) has zero samples (`--require-all` also demands the conditional provider-failure, budget, HITL
+and permission paths) — the signal that the plugin silently stopped emitting for an operation.

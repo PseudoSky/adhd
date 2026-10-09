@@ -21,6 +21,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { identityRedactor, withLogContext, type LogChannel } from "@adhd/agent-plugin-tracing";
 
 import { noopLogChannel } from "../wire/channels.js";
+import { isInertChannel } from "../wire/traced-fetch.js";
 import { redactUrl, tracedFetch } from "../wire/index.js";
 import { makeTestChannel, waitFor, type ITestChannel, type Rec } from "./wire-test-utils.js";
 
@@ -331,3 +332,47 @@ describe("c536ce29 TRC-AC9 tracedFetch errors, context and safety", () => {
         expect(seen[0]!.body.toString()).toBe("payload");
     });
 });
+
+describe("c536ce29 FIX-L5 the logging clone is bounded, the caller's body is untouched", () => {
+    it("c536ce29 FIX-L5: past bodyDrainMaxBytes the clone is cancelled (drain_cancelled), and a caller that reads late still gets every byte", async () => {
+        const chunk = Buffer.alloc(16 * 1024, "z");
+        const total = chunk.length * 8;
+        handler = (_q, res) => {
+            res.writeHead(200, { "content-type": "application/octet-stream" });
+            for (let i = 0; i < 8; i++) res.write(chunk);
+            res.end();
+        };
+        const f = tracedFetch(tc.channel, fetch, { bodyDrainMaxBytes: 32 * 1024 });
+        const res = await f(`${base}/slow-caller`);
+        // The caller has NOT read anything: the record must still arrive (the clone drained itself).
+        const rr = await responseRecord(tc);
+        expect(rr.drain_cancelled).toBe(true);
+        expect(rr.truncated).toBe(true);
+        expect(rr.body_bytes as number).toBeGreaterThanOrEqual(32 * 1024);
+        expect(rr.body_bytes as number).toBeLessThan(total);
+        // The caller's branch is complete and byte-exact regardless.
+        const got = Buffer.from(await res.arrayBuffer());
+        expect(got.length).toBe(total);
+        expect(got.equals(Buffer.concat(Array.from({ length: 8 }, () => chunk)))).toBe(true);
+    });
+
+    it("c536ce29 FIX-L5: below the drain ceiling nothing changes (no drain_cancelled, exact digest)", async () => {
+        handler = (_q, res) => res.end("small body");
+        const f = tracedFetch(tc.channel, fetch, { bodyDrainMaxBytes: 1024 });
+        await (await f(`${base}/small`)).text();
+        const rr = await responseRecord(tc);
+        expect(rr.drain_cancelled).toBeUndefined();
+        expect(rr.body_sha256).toBe(sha("small body"));
+    });
+});
+
+describe("c536ce29 FIX-L4 inert detection is by identity, not by function source text", () => {
+    it("c536ce29 FIX-L4: noopLogChannel() is inert; a look-alike whose logRaw is textually `() => undefined` is not", () => {
+        expect(isInertChannel(noopLogChannel())).toBe(true);
+        const lookAlike: LogChannel = { ...noopLogChannel(), logRaw: () => undefined };
+        expect(lookAlike.logRaw.toString()).toBe(noopLogChannel().logRaw.toString());
+        expect(isInertChannel(lookAlike)).toBe(false);
+        expect(isInertChannel(tc.channel)).toBe(false);
+    });
+});
+
