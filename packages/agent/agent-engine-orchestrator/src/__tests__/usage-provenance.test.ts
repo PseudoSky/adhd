@@ -72,6 +72,15 @@ function recordingLogger() {
   return { logger, warns };
 }
 
+/** Index into a fixture array, failing loudly (instead of a non-null assertion) when the index is out of range. */
+function required<T>(items: readonly T[], index: number): T {
+  const item = items[index];
+  if (item === undefined) {
+    throw new Error(`expected an item at index ${index}, array has ${items.length}`);
+  }
+  return item;
+}
+
 /** Drives `turns.length` model calls (all but the last request a tool) through the real engine. */
 async function runTask(opts: {
   db: ReturnType<typeof makeDb>["db"];
@@ -92,7 +101,7 @@ async function runTask(opts: {
   let i = 0;
   const provider: LLMProvider = {
     chat: async (): Promise<ProviderChatResponse> => {
-      const turn = opts.turns[i++]!;
+      const turn = required(opts.turns, i++);
       opts.setNow(turn.at);
       const last = i === opts.turns.length;
       return {
@@ -263,14 +272,14 @@ describe("UsagePlugin cost provenance write path", () => {
     expect(a.priced_cost_usd).toBe(0);
     expect(a.unpriced_tokens).toBe(330);
     expect(warns).toHaveLength(1);
-    expect(warns[0]!.ctx).toMatchObject({ model: "mystery-model-9000", responseModel: "mystery-9000-x" });
+    expect(required(warns, 0).ctx).toMatchObject({ model: "mystery-model-9000", responseModel: "mystery-9000-x" });
 
     // A second task on the same model stays quiet; a different unpriced model warns again.
     await runTask({ db, plugin, setNow, model: "mystery-model-9000", providerType: "anthropic", turns: [{ inputTokens: 1, outputTokens: 1, at: T0 }] });
     expect(warns).toHaveLength(1);
     await runTask({ db, plugin, setNow, model: "other-mystery", providerType: "anthropic", turns: [{ inputTokens: 1, outputTokens: 1, at: T0 }] });
     expect(warns).toHaveLength(2);
-    expect(warns[1]!.ctx).toMatchObject({ model: "other-mystery" });
+    expect(required(warns, 1).ctx).toMatchObject({ model: "other-mystery" });
   });
 
   it("1f1c8598 FS1-AC3: with no logger supplied the unpriced warning is still emitted (never swallowed by a silent default)", async () => {

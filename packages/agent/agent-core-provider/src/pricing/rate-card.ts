@@ -86,14 +86,17 @@ export interface IProviderModelAlias {
  * Explicit provider-model-name -> OpenRouter id aliases. OpenRouter ids are the canonical
  * "true" model names for pricing.
  *
+ * The anthropic and openai adapters capture the response `model` field as `responseModel` in the
+ * hook payload and `task_usage`. The alias applies only when a response model is absent or unknown
+ * (for example `claudecli`), and to legacy rows that predate that capture.
+ *
  * `deepseek-flash` (what the sox agents are configured with; provider type `openai`, DeepSeek
  * secret) -> `deepseek/deepseek-v4.1-flash`. OWNER-DIRECTED ASSUMPTION (2026-10-08, ticket
  * 37f6c511): the owner decided DeepSeek-direct `deepseek-flash` traffic is V4.1 Flash. It is NOT
- * evidence-derived: the provider does not capture the response `model` field, so nothing persisted
- * pins which revision served a call. Other candidates considered, base prompt/completion $/token:
+ * evidence-derived for legacy rows: they carry no response model, so nothing persisted pins which
+ * revision served those calls. Other candidates considered, base prompt/completion $/token:
  * `~deepseek/deepseek-flash-latest` (2.83e-8/1.2e-6), `deepseek/deepseek-v4-flash`
- * (9.9e-9/1.28e-6), `deepseek/deepseek-v4-flash-0731` (1.8e-8/1.28e-6). The proper fix — record
- * the response model per turn and map by provider+model — is a separate HIGH feature (37f6c511).
+ * (9.9e-9/1.28e-6), `deepseek/deepseek-v4-flash-0731` (1.8e-8/1.28e-6).
  */
 export const PROVIDER_MODEL_ALIASES: Readonly<Record<string, IProviderModelAlias>> = {
   'deepseek-flash': {

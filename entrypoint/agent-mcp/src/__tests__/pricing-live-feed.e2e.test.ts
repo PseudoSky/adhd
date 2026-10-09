@@ -1,5 +1,5 @@
 /**
- * 37f6c511 FS2-SMOKE (e2e lane, ADR-0009): the ONE real GET to https://openrouter.ai/api/v1/models
+ * 37f6c511 FS2-AC1 (e2e lane, ADR-0009): the ONE real GET to https://openrouter.ai/api/v1/models
  * through `runPricePull` into a throwaway DB. The endpoint is public and free, so per AGENTS.md
  * ("Live testing is mandatory") this runs by default and FAILS LOUDLY when the feed is
  * unreachable or its schema drifts. Structural assertions only (no price values):
@@ -17,7 +17,7 @@ import { createPricingService } from '../pricing/service.js';
 import { makeLogger, openDb } from './pricing-fixtures.js';
 
 describe('live OpenRouter feed (single real GET)', () => {
-  it('37f6c511 FS2-SMOKE: the real feed parses and applies against the bundled seed', async () => {
+  it('37f6c511 FS2-AC1: the real feed parses and applies against the bundled seed (e2e smoke)', async () => {
     const { db, sqlite } = openDb();
     try {
       const log = makeLogger();

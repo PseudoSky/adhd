@@ -80,7 +80,7 @@ describe('pricing tools over MCP', () => {
     expect(history.status.last_ok.ledger_id).toBe(refreshed.ledger_id);
   });
 
-  it('37f6c511: invalid input and a server without pricing wiring return an MCP error, not a crash', async () => {
+  it('37f6c511 FS2-AC19: invalid input and a server without pricing wiring return an MCP error, not a crash', async () => {
     const o = memDb();
     const withPricing = await connect({ pricing: createPricingService({ db: o.db, logger: makeLogger(), version: '1.0.0' }) }, o);
     const bad = await withPricing.callTool({ name: 'pricing_history', arguments: { model: 'a/b', from: 'not-a-date' } });
