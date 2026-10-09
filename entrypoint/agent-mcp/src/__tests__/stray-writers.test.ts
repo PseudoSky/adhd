@@ -1,0 +1,285 @@
+/**
+ * Stray-writer guard (backlog c536ce29, TRC-AC16, segment S8A).
+ *
+ * Owner requirement: "All logs need to be correctly written to ~/.adhd in their
+ * correctly namespaced locations." State/log files must be rooted at the
+ * `@adhd/environment`-resolved paths, never at ad-hoc `os.tmpdir()` /
+ * `os.homedir()` / hard-coded `.adhd` / `/tmp` / repo-relative `data` roots.
+ *
+ * This test statically scans the non-test source of `entrypoint/agent-mcp/src`
+ * and `packages/agent/<pkg>/src` for filesystem-write call sites and path-root
+ * escapes, and compares them with two explicit lists:
+ *
+ *  - ALLOWLIST: reviewed sites that are legitimate (each carries a reason).
+ *  - KNOWN_VIOLATIONS: today's real offenders, each naming the later segment
+ *    that fixes it. The test is green now, FAILS on any NEW site, and FAILS when
+ *    a KNOWN_VIOLATIONS entry no longer exists (forcing its removal once fixed).
+ *
+ * A site is identified by `<repo-relative path> :: <trimmed code line>` (comments
+ * and import statements are blanked first), so entries survive unrelated line
+ * shifts but a changed offending line must be re-reviewed.
+ */
+import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { dirname, join, relative, sep } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+import { describe, expect, it } from 'vitest';
+
+const here = dirname(fileURLToPath(import.meta.url)); // entrypoint/agent-mcp/src/__tests__
+const REPO_ROOT = join(here, '..', '..', '..', '..');
+
+/** A reviewed site; `count` (default 1) is how many identical lines the file holds. */
+interface IEntry {
+  readonly key: string;
+  readonly reason: string;
+  readonly count?: number;
+}
+
+/** One detector: a name and the regex that flags a (comment/import-stripped) line. */
+interface IDetector {
+  readonly name: string;
+  readonly pattern: RegExp;
+}
+
+const DETECTORS: readonly IDetector[] = [
+  {
+    name: 'fs-write-call',
+    pattern:
+      /\b(?:writeFile|writeFileSync|appendFile|appendFileSync|mkdir|mkdirSync|mkdtemp|mkdtempSync|createWriteStream|copyFile|copyFileSync|openSync|rename|renameSync)\s*\(/,
+  },
+  { name: 'os-tmpdir', pattern: /\btmpdir\s*\(/ },
+  { name: 'os-homedir', pattern: /\bhomedir\s*\(/ },
+  { name: 'adhd-literal', pattern: /['"`]\.adhd['"`]/ },
+  { name: 'tmp-literal', pattern: /['"`](?:\/private)?\/tmp\b/ },
+  { name: 'cwd-data-root', pattern: /process\.cwd\(\)[^\n]*['"`]data['"`]/ },
+];
+
+/** A flagged source line. */
+interface ISite {
+  readonly file: string;
+  readonly line: number;
+  readonly detectors: readonly string[];
+  /** Stable identity: `<file> :: <trimmed code>`. */
+  readonly key: string;
+}
+
+/**
+ * Blank comments and import/export-from statements, preserving every newline
+ * so line numbers stay valid. String/template literals are kept intact.
+ */
+export function stripNonCode(src: string): string {
+  let out = '';
+  let i = 0;
+  const n = src.length;
+  while (i < n) {
+    const c = src[i];
+    const d = src[i + 1];
+    if (c === '/' && d === '/') {
+      while (i < n && src[i] !== '\n') i++;
+    } else if (c === '/' && d === '*') {
+      i += 2;
+      while (i < n && !(src[i] === '*' && src[i + 1] === '/')) {
+        out += src[i] === '\n' ? '\n' : ' ';
+        i++;
+      }
+      i += 2;
+    } else if (c === '"' || c === "'" || c === '`') {
+      const quote = c;
+      out += c;
+      i++;
+      while (i < n && src[i] !== quote) {
+        if (src[i] === '\\') {
+          out += src[i];
+          i++;
+        }
+        if (quote !== '`' && src[i] === '\n') break;
+        out += src[i];
+        i++;
+      }
+      if (i < n) {
+        out += src[i];
+        i++;
+      }
+    } else {
+      out += c;
+      i++;
+    }
+  }
+  // Blank import / re-export statements (multi-line safe) but keep newlines.
+  return out.replace(
+    /^[ \t]*(?:import|export)\b[^;'"`]*?\bfrom\s*['"][^'"\n]+['"];?|^[ \t]*import\s*['"][^'"\n]+['"];?/gm,
+    (m) => m.replace(/[^\n]/g, ' '),
+  );
+}
+
+/** Scan one file's text; `file` is only used to build site keys. */
+export function scanSource(file: string, src: string): ISite[] {
+  const lines = stripNonCode(src).split('\n');
+  const sites: ISite[] = [];
+  lines.forEach((text, idx) => {
+    const hits = DETECTORS.filter((d) => d.pattern.test(text)).map((d) => d.name);
+    if (hits.length === 0) return;
+    sites.push({
+      file,
+      line: idx + 1,
+      detectors: hits,
+      key: `${file} :: ${text.trim().replace(/\s+/g, ' ')}`,
+    });
+  });
+  return sites;
+}
+
+function countKeys(sites: readonly ISite[]): Map<string, number> {
+  const m = new Map<string, number>();
+  for (const s of sites) m.set(s.key, (m.get(s.key) ?? 0) + 1);
+  return m;
+}
+
+function isScannable(name: string): boolean {
+  return (
+    /\.(?:ts|tsx|mts|cts|js|mjs|cjs)$/.test(name) &&
+    !/\.d\.ts$/.test(name) &&
+    !/\.(?:test|spec|e2e|fixture)\.|\.e2e\.(?:ts|js)$/.test(name)
+  );
+}
+
+function walk(dir: string, acc: string[] = []): string[] {
+  for (const name of readdirSync(dir).sort()) {
+    if (['__tests__', 'test', 'node_modules', 'dist'].includes(name)) continue;
+    const full = join(dir, name);
+    const st = statSync(full);
+    if (st.isDirectory()) walk(full, acc);
+    else if (isScannable(name)) acc.push(full);
+  }
+  return acc;
+}
+
+function scanRealSource(): ISite[] {
+  const roots = [join(REPO_ROOT, 'entrypoint', 'agent-mcp', 'src')];
+  const pkgDir = join(REPO_ROOT, 'packages', 'agent');
+  for (const pkg of readdirSync(pkgDir).sort()) {
+    const src = join(pkgDir, pkg, 'src');
+    try {
+      if (statSync(src).isDirectory()) roots.push(src);
+    } catch {
+      /* package without src/ */
+    }
+  }
+  const sites: ISite[] = [];
+  for (const root of roots) {
+    for (const file of walk(root)) {
+      const rel = relative(REPO_ROOT, file).split(sep).join('/');
+      sites.push(...scanSource(rel, readFileSync(file, 'utf8')));
+    }
+  }
+  return sites;
+}
+
+/**
+ * Reviewed, legitimate sites. Each is deliberately NOT a log/state writer into a
+ * stray root: user-config installers, read-only lookups, the environment-resolved
+ * DB open, explicit-outDir CLI codegen, or sandbox deny/allow lists.
+ */
+const ALLOWLIST: readonly IEntry[] = [
+  { key: 'entrypoint/agent-mcp/src/db/client.ts :: fs.mkdirSync(directory, {', reason: 'parent dir of the environment-resolved DB path' },
+  { key: 'entrypoint/agent-mcp/src/db/migrate-legacy.ts :: const effectiveHome = home ?? process.env[\'HOME\'] ?? os.homedir();', reason: 'read-only legacy DB migration source lookup' },
+  { key: 'entrypoint/agent-mcp/src/db/migrate-legacy.ts :: return path.join(effectiveHome, ".adhd", "agent-mcp", "agents.db");', reason: 'read-only legacy DB migration source (pre-environment layout)' },
+  { key: 'entrypoint/agent-mcp/src/install.ts :: mkdirSync(dirname(path), { recursive: true });', reason: 'install: user MCP client config writer' },
+  { key: 'entrypoint/agent-mcp/src/install.ts :: writeFileSync(path, JSON.stringify(doc, null, 2) + \'\\n\', \'utf8\');', reason: 'install: user MCP client config writer' },
+  { key: 'entrypoint/agent-mcp/src/install.ts :: const home = homeOverride ?? homedir();', count: 3, reason: 'install: locates client config files (test-overridable home)' },
+  { key: 'entrypoint/agent-mcp/src/install.ts :: mkdirSync(dirname(configPath), { recursive: true });', reason: 'install: user config writer' },
+  { key: 'entrypoint/agent-mcp/src/install.ts :: writeFileSync(configPath, updated, \'utf8\');', reason: 'install: user config writer' },
+  { key: 'entrypoint/agent-mcp/src/srt-policy.ts :: const home = homedir();', count: 2, reason: 'sandbox deny/allow path lists, not writes' },
+  { key: 'entrypoint/agent-mcp/src/srt-policy.ts :: tmpdir(),', reason: 'sandbox allow-write list entry, not a writer' },
+  { key: 'entrypoint/agent-mcp/src/srt-policy.ts :: mkdirSync(dirname(lockPath), { recursive: true });', reason: 'lock file beside the srt policy dir (root moves with the S8B fix of the srt dir)' },
+  { key: 'entrypoint/agent-mcp/src/srt-policy.ts :: fd = openSync(lockPath, \'wx\');', reason: 'O_EXCL lock beside the srt policy dir' },
+  { key: 'entrypoint/agent-mcp/src/srt-policy.ts :: return join(homedir(), \'.srt-settings.json\');', reason: 'third-party srt tool settings file (fixed location owned by srt)' },
+  { key: 'entrypoint/agent-mcp/src/srt-policy.ts :: mkdirSync(dirname(path), { recursive: true });', reason: 'srt settings atomic write' },
+  { key: 'entrypoint/agent-mcp/src/srt-policy.ts :: writeFileSync(tmp, JSON.stringify(next, null, 2), \'utf8\');', reason: 'srt settings atomic write' },
+  { key: 'entrypoint/agent-mcp/src/srt-policy.ts :: renameSync(tmp, path);', reason: 'srt settings atomic write' },
+  { key: 'entrypoint/agent-mcp/src/utils/load-env.ts :: dotenvConfig({ path: path.join(os.homedir(), ".adhd", ".env"), quiet: true });', reason: 'read-only .env hierarchy' },
+  { key: 'entrypoint/agent-mcp/src/utils/load-env.ts :: dotenvConfig({ path: path.join(cwd, ".adhd", ".env"), override: true, quiet: true });', reason: 'read-only .env hierarchy' },
+  { key: 'packages/agent/agent-core-env/src/open-registry-db.ts :: fs.mkdirSync(directory, { recursive: true });', reason: 'parent dir of the caller-supplied (environment-resolved) DB path' },
+  { key: 'packages/agent/agent-core-env/src/open-registry-store.ts :: fs.mkdirSync(directory, { recursive: true });', reason: 'parent dir of the caller-supplied (environment-resolved) DB path' },
+  { key: 'packages/agent/agent-engine-compiler/src/cli/compile.ts :: fs.mkdirSync(parent, { recursive: true });', reason: 'compile CLI: explicit user --out-dir' },
+  { key: 'packages/agent/agent-engine-compiler/src/cli/compile.ts :: fs.mkdirSync(args.outDir, { recursive: true });', reason: 'compile CLI: explicit user --out-dir' },
+  { key: 'packages/agent/agent-engine-compiler/src/cli/compile.ts :: fs.writeFileSync(dest, content, \'utf8\');', reason: 'compile CLI: explicit user --out-dir' },
+  { key: 'packages/agent/agent-engine-orchestrator/src/plugins/loader.ts :: const nested = resolve(process.cwd(), \'.adhd\', \'agent-mcp\', \'config.json\');', reason: 'read-only config lookup' },
+  { key: 'packages/agent/agent-engine-orchestrator/src/plugins/loader.ts :: const globalAdhd = resolve(homedir(), \'.adhd\', \'agent-mcp\', \'config.json\');', reason: 'read-only config lookup' },
+  { key: 'packages/agent/agent-engine-orchestrator/src/plugins/loader.ts :: const globalLegacy = resolve(homedir(), \'.agent-mcp\', \'config.json\');', reason: 'read-only legacy config lookup' },
+];
+
+/**
+ * Today's real stray writers. Each names the segment that fixes it; the entry must
+ * be deleted in that segment (TRC-AC16-c enforces this).
+ */
+const KNOWN_VIOLATIONS: readonly (IEntry & { readonly fixedBy: string })[] = [
+  { key: 'entrypoint/agent-mcp/src/scripts/agent-mcp-tail.ts :: ?? path.join(os.homedir(), ".adhd", "agent-mcp", "agents.db");', fixedBy: 'S8B: resolve via @adhd/environment, not a hard-coded home path', reason: 'hard-coded DB path' },
+  { key: 'entrypoint/agent-mcp/src/scripts/agent-mcp-tail.ts :: const devPath = path.join(process.cwd(), "data", "agent-mcp", "agents-dev.db");', fixedBy: 'S8B: repo-relative ./data default', reason: 'cwd data root' },
+  { key: 'entrypoint/agent-mcp/src/srt-policy.ts :: return join(homedir(), \'.adhd\', \'agent-mcp\', \'srt\');', fixedBy: 'S8B: srt dir from the environment-resolved data/logs root', reason: 'hard-coded .adhd root' },
+  { key: 'packages/agent/agent-engine-orchestrator/src/providers/claudecli.ts :: const filePath = join(tmpdir(), `agent-mcp-claudecli-${Date.now()}-${generateId()}.json`);', fixedBy: 'P1: temp mcp-config under <logs>/../temp', reason: 'os.tmpdir() stray writer' },
+  { key: 'packages/agent/agent-engine-orchestrator/src/providers/claudecli.ts :: await writeFile(filePath, JSON.stringify({ mcpServers: mapped }), "utf8");', fixedBy: 'P1: temp mcp-config under <logs>/../temp', reason: 'writes into os.tmpdir()' },
+  { key: 'packages/agent/agent-engine-orchestrator/src/providers/claudecli.ts :: const dir = await mkdtemp(join(tmpdir(), "agent-mcp-spec-"));', fixedBy: 'P1: spec dir under <logs>/../temp', reason: 'os.tmpdir() stray writer' },
+  { key: 'packages/agent/agent-engine-orchestrator/src/providers/claudecli.ts :: await mkdir(agentsDir, { recursive: true });', fixedBy: 'P1: spec dir under <logs>/../temp', reason: 'inside os.tmpdir() dir' },
+  { key: 'packages/agent/agent-engine-orchestrator/src/providers/claudecli.ts :: await writeFile(join(agentsDir, safeFile), content, "utf8");', fixedBy: 'P1: spec dir under <logs>/../temp', reason: 'inside os.tmpdir() dir' },
+];
+
+describe('c536ce29 TRC-AC16 stray-writer guard', () => {
+  it('TRC-AC16-a: flags a planted stray writer and passes clean source (negative control)', () => {
+    const planted = [
+      "import { writeFileSync } from 'node:fs';",
+      "import { tmpdir } from 'node:os';",
+      '// writeFileSync("/tmp/in-a-comment-is-ignored")',
+      'export function leak(): void {',
+      "  writeFileSync(`${tmpdir()}/agent-mcp.log`, 'x');",
+      '}',
+    ].join('\n');
+    const sites = scanSource('fixture/planted.ts', planted);
+    expect(sites.map((s) => s.line)).toEqual([5]);
+    expect(sites[0].detectors).toEqual(expect.arrayContaining(['fs-write-call', 'os-tmpdir']));
+
+    const planted2 = scanSource('fixture/p2.ts', "const p = join(h, '.adhd', 'x');\nconst q = '/tmp/x';\n");
+    expect(planted2.map((s) => s.detectors[0])).toEqual(['adhd-literal', 'tmp-literal']);
+
+    const clean = [
+      "import { writeFileSync } from 'node:fs';",
+      "import { Environment } from '@adhd/environment';",
+      '/* mkdirSync("/tmp") in a block comment */',
+      'export function ok(env: Environment): string {',
+      '  return env.paths.logs;',
+      '}',
+    ].join('\n');
+    expect(scanSource('fixture/clean.ts', clean)).toEqual([]);
+  });
+
+  it('TRC-AC16-b: real source flags exactly ALLOWLIST + KNOWN_VIOLATIONS (no more, no fewer)', () => {
+    const found = countKeys(scanRealSource());
+    const expected = new Map<string, number>();
+    for (const e of [...ALLOWLIST, ...KNOWN_VIOLATIONS]) expected.set(e.key, (expected.get(e.key) ?? 0) + (e.count ?? 1));
+    const unexpected = [...found].filter(([k, n]) => n > (expected.get(k) ?? 0)).map(([k]) => k).sort();
+    expect(unexpected, 'NEW stray writer(s): route through @adhd/environment paths or review into ALLOWLIST').toEqual([]);
+    const missing = [...expected].filter(([k, n]) => (found.get(k) ?? 0) < n).map(([k]) => k).sort();
+    expect(missing, 'stale ALLOWLIST/KNOWN_VIOLATIONS entry: remove it').toEqual([]);
+  });
+
+  it('TRC-AC16-b: a NEW identical-line duplicate of a reviewed site is also caught (count teeth)', () => {
+    const one = countKeys(scanSource('f.ts', 'const a = homedir();\n'));
+    const two = countKeys(scanSource('f.ts', 'const a = homedir();\nconst a = homedir();\n'));
+    expect([...one.values()]).toEqual([1]);
+    expect([...two.values()]).toEqual([2]);
+  });
+
+  it('TRC-AC16-c: a stale KNOWN_VIOLATIONS entry is detected as failing', () => {
+    const found = countKeys(scanRealSource());
+    const withStale = [...KNOWN_VIOLATIONS.map((k) => k.key), 'packages/agent/gone/src/x.ts :: writeFileSync(p, d)'];
+    expect(withStale.filter((k) => !found.has(k))).toEqual(['packages/agent/gone/src/x.ts :: writeFileSync(p, d)']);
+    // and the real list has none stale
+    expect(KNOWN_VIOLATIONS.map((k) => k.key).filter((k) => !found.has(k))).toEqual([]);
+    for (const k of KNOWN_VIOLATIONS) expect(k.fixedBy).toMatch(/^(S8B|P1)\b/);
+  });
+
+  it('dump (informational): lists current sites when STRAY_DUMP=1', () => {
+    if (process.env['STRAY_DUMP'] !== '1') return;
+    for (const s of scanRealSource()) console.log(`SITE ${s.key}`);
+  });
+});
