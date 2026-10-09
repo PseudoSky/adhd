@@ -160,7 +160,7 @@ describe('4d24f105 AC10.1 — SKILL.md is a short quick reference; the long tail
     expect(commands.length).toBeGreaterThanOrEqual(8);
     for (const cmd of commands) {
       const argv = tokenize(
-        cmd.replace(/^adhd-backlog /, '').replaceAll('<uid2>', uid2).replaceAll('<uid>', uid)
+        cmd.replace(/^adhd-backlog /, '').replace(/<uid2>/g, uid2).replace(/<uid>/g, uid)
       );
       const r = runBin(argv);
       const env = envelopeOf(r);
