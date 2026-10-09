@@ -37,6 +37,12 @@ export interface PostModelResponsePayload {
    */
   modelCalls?: number;
   tokenUsage?: TokenUsage;
+  /**
+   * Model id the provider says actually served this call (the response's own `model`
+   * field). Absent when the provider does not report one. Distinct from the configured
+   * model: an alias or router can resolve to a different concrete model.
+   */
+  responseModel?: string;
   /** MODEL_RESPONSE.created_at − MODEL_REQUEST.created_at for this turn's model call. */
   computeMs: number;
 }

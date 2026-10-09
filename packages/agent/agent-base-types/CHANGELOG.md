@@ -1,3 +1,13 @@
+## Unreleased
+
+### 🚀 Features
+
+- **`PostModelResponsePayload.responseModel?: string`** — the model id the provider says actually served the call (the response's own `model` field). Absent when the provider does not report one; distinct from the configured model, since an alias or router can resolve to a different concrete model. Captured by the `anthropic` and `openai` adapters (the latter covers DeepSeek-direct); the `claudecli` adapter does not report it. (1f1c8598) ([cfc9d936](https://github.com/PseudoSky/adhd/commit/cfc9d936))
+
+### Release note (owner)
+
+Additive optional field: minor bump recommended (2.3.7 to 2.4.0). Not bumped here.
+
 ## 2.3.7 (2026-10-07)
 
 ### 🚀 Features

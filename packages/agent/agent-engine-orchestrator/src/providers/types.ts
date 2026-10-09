@@ -44,6 +44,12 @@ export interface ProviderChatResponse {
    * ran several internal turns in one invocation (claudecli `num_turns`). Absent means 1.
    */
   reportedModelCalls?: number;
+  /**
+   * Model id the provider says actually served this call (`response.model`). Absent when
+   * the provider does not report one (claudecli: its `result` event has no verified
+   * single-model field, so it is deliberately left unset).
+   */
+  responseModel?: string;
 }
 
 export interface LLMProvider {

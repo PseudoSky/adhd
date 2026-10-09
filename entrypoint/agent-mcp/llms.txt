@@ -20,7 +20,8 @@ When run, @adhd/agent-mcp:
 - `agent_create(name, config)` — register a new agent with provider/model/policy
 - `task(agentName, prompt)` — send a prompt and run the agent until tool-loop ends
 - `result(taskId)` — retrieve task result and token usage
-- `usage_query(filter?, groupBy?)` — query usage across multiple tasks
+- `usage_query({task_id?, root_task_id?, agent_name?, since?, limit?, group_by?, grain?})` — query usage across multiple tasks; `group_by` = agent | model | provider | response_model
+- `pricing_refresh(accept?)` — pull live OpenRouter prices now (public feed, no API key); `pricing_history(model, from?, to?)` — observed price series + pull status
 - `task_cancel(taskId)` — cancel a running task
 - `agent_list()` — list all agents
 - `agent_delete(name)` — unregister agent (cascades to sessions as of 2.0.2)

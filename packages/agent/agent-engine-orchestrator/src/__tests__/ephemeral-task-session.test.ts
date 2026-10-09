@@ -1,4 +1,3 @@
-import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -15,6 +14,7 @@ import { DagEngine } from "../engine/dag-engine.js";
 import { Orchestrator } from "../engine/orchestrator.js";
 import type { EngineConfig, EngineLogger } from "../interfaces.js";
 import { nowIso } from "../utils/timestamps.js";
+import { createMigratedSqlite } from "./fixtures/real-schema-db.js";
 
 /**
  * Regression test for the ephemeral-task session-id bug: `runEphemeralTask`
@@ -52,85 +52,6 @@ vi.mock("openai", () => {
     }
     return { default: MockOpenAI };
 });
-
-const CREATE_TABLES_SQL = `
-CREATE TABLE IF NOT EXISTS sessions (
-    id TEXT PRIMARY KEY NOT NULL,
-    agent_name TEXT NOT NULL,
-    agent_version INTEGER NOT NULL,
-    agent_data TEXT NOT NULL,
-    status TEXT DEFAULT 'active' NOT NULL,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL,
-    closed_at TEXT,
-    composed_prompt_id TEXT
-);
-
-CREATE TABLE IF NOT EXISTS messages (
-    id TEXT PRIMARY KEY NOT NULL,
-    session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
-    role TEXT NOT NULL,
-    content TEXT,
-    tool_calls TEXT,
-    tool_results TEXT,
-    created_at TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS tasks (
-    id TEXT PRIMARY KEY NOT NULL,
-    session_id TEXT,
-    parent_task_id TEXT,
-    is_ephemeral INTEGER DEFAULT 0 NOT NULL,
-    recursion_depth INTEGER DEFAULT 0 NOT NULL,
-    status TEXT DEFAULT 'pending' NOT NULL,
-    prompt TEXT NOT NULL,
-    result TEXT,
-    error TEXT,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL,
-    completed_at TEXT,
-    cancelled_at TEXT,
-    depends_on TEXT,
-    on_upstream_failure TEXT,
-    inputs TEXT,
-    resume_token TEXT
-);
-
-CREATE TABLE IF NOT EXISTS task_events (
-    id TEXT PRIMARY KEY NOT NULL,
-    task_id TEXT NOT NULL,
-    type TEXT NOT NULL,
-    payload TEXT,
-    created_at TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS task_usage (
-    task_id TEXT PRIMARY KEY NOT NULL,
-    root_task_id TEXT,
-    agent_name TEXT NOT NULL,
-    provider_type TEXT NOT NULL,
-    model TEXT NOT NULL,
-    input_tokens INTEGER DEFAULT 0 NOT NULL,
-    output_tokens INTEGER DEFAULT 0 NOT NULL,
-    tool_call_count INTEGER DEFAULT 0 NOT NULL,
-    model_calls INTEGER DEFAULT 0 NOT NULL,
-    latency_ms INTEGER DEFAULT 0 NOT NULL,
-    is_complete INTEGER DEFAULT 0 NOT NULL,
-    stop_reason TEXT,
-    max_tokens INTEGER,
-    cache_read_input_tokens INTEGER,
-    cache_creation_input_tokens INTEGER,
-    uncached_input_tokens INTEGER,
-    reasoning_tokens INTEGER,
-    peak_context_tokens INTEGER,
-    peak_context_at INTEGER,
-    compute_ms INTEGER,
-    est_tool_result_tokens INTEGER,
-    est_cost_usd REAL,
-    created_at TEXT NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_task_usage_root_task_id ON task_usage (root_task_id);
-`;
 
 function makeTestAgentDefinition(): AgentDefinition {
     return {
@@ -187,8 +108,7 @@ function makeDeps(): {
     sessionStore: SessionStore;
     capturedSessionIds: string[];
 } {
-    const sqlite = new Database(":memory:");
-    sqlite.exec(CREATE_TABLES_SQL);
+    const sqlite = createMigratedSqlite();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const db = drizzle(sqlite) as any;
 

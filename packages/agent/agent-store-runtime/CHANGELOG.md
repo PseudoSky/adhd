@@ -1,3 +1,22 @@
+## Unreleased
+
+### 🚀 Features
+
+- **Append-only price history.** New tables `model_price_history` (BEFORE UPDATE/DELETE triggers abort; a correction is a new row, newest `observed_at` wins; unique on `(model_id, observed_at, source)`) and `price_pull_ledger` (one row per pull attempt: `running` | `ok` | `failed` | `rejected_shrink` | `rejected_invalid`). Schema in `src/db/schema.ts`, migration `0012_price_history_and_cost_provenance.sql` (shipped in `entrypoint/agent-mcp/drizzle`). (1f1c8598 37f6c511) ([bc340a5b](https://github.com/PseudoSky/adhd/commit/bc340a5b))
+- **`PriceHistoryStore`** with `priceAt(modelId, instantIso)` (as-of lookup: greatest `observed_at <= instant`; a turn that predates the first observation gets the earliest row flagged `beforeFirstObservation`), `latest`, `history(model, from?, to?)`, `seedBundled`, `claimPull`, `applyObservation`, `finishPull`, `lastLedger` (with `priceAgeHours`, not reset by a later failure). Multi-statement writes run in `BEGIN IMMEDIATE`, so several processes sharing one DB file serialise on the write lock. (37f6c511 1f1c8598) ([987b093f](https://github.com/PseudoSky/adhd/commit/987b093f))
+- **Anomaly rules** exported as `ANOMALY_HOLD_FACTOR` (20), `ANOMALY_WARN_FACTOR` (10) and `ANOMALY_MAX_INPUT_PER_M` (1000): a 20x move or an input above $1000/M is held unless the model id is in `accept`; a 10x move is applied with a `warn` anomaly. A differing price at an already-used instant is skipped with a `same_instant` anomaly. (37f6c511) ([987b093f](https://github.com/PseudoSky/adhd/commit/987b093f))
+- **`createPriceSource(db)`**, an as-of price source structurally assignable to core-provider's `IPriceSource`. (37f6c511) ([987b093f](https://github.com/PseudoSky/adhd/commit/987b093f))
+- **`task_usage` provenance columns** (nullable; legacy rows stay NULL = provenance unknown): `response_model`, `cost_basis`, `pricing_ref`, `cost_status`, `priced_cost_usd`, `unpriced_tokens`. (1f1c8598) ([bc340a5b](https://github.com/PseudoSky/adhd/commit/bc340a5b))
+
+### Known limits
+
+- A held anomaly needs a manual accept; nothing in this package applies one automatically.
+- Prices are as observed by the pulling server, not as effective at the vendor.
+
+### Release note (owner)
+
+Additive (new tables, nullable columns, new exports): minor bump recommended (2.2.5 to 2.3.0). Not bumped here.
+
 ## 2.2.5 (2026-10-07)
 
 ### 🚀 Features

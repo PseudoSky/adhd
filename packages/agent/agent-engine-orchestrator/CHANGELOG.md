@@ -1,3 +1,20 @@
+## Unreleased
+
+### 🚀 Features
+
+- **Response-model capture.** Provider adapters (`anthropic`, `openai`) return `responseModel`; the orchestrator forwards it on the `post:model_response` hook payload and the turn event. `claudecli` intentionally does not set it. (1f1c8598) ([cfc9d936](https://github.com/PseudoSky/adhd/commit/cfc9d936))
+- **Per-turn price provenance in `UsagePlugin`.** Each turn is priced as of its own instant through an as-of price source (`new UsagePlugin(db, logger?, {priceSource?, now?})`; default `createPriceSource(db)`) and records `response_model`, `cost_basis`, `pricing_ref`, `cost_status` (`priced` | `unpriced_model` | `partial`), `priced_cost_usd` and `unpriced_tokens` on `task_usage`. `est_cost_usd` is NULL as soon as any turn is unpriced, while `priced_cost_usd` keeps the priced portion. An unpriced model logs one WARN per provider and model per plugin instance (to stderr by default). (37f6c511 1f1c8598) ([1cb6a4a9](https://github.com/PseudoSky/adhd/commit/1cb6a4a9))
+- **`usage_query` read path.** New `group_by: "response_model"` (legacy rows without a captured model group under `(unknown)`); rows carry `response_model`, `cost_status`, `cost_basis` and `pricing_ref`; summaries carry `priced_cost_usd`, `unpriced_tasks`, `unpriced_turns` (exact count, on the un-grouped shape), `unpriced_tokens`, `unpriced_models`, `cost_bases` and `price_age_hours`. Example: `usage_query { "group_by": "response_model" }`. (37f6c511 1f1c8598) ([0d59e617](https://github.com/PseudoSky/adhd/commit/0d59e617))
+
+### Known limits
+
+- Provenance is `NULL` on rows written before this change (unknown, not unpriced) and they are not counted in `unpriced_tasks`.
+- DeepSeek-direct cost is an estimate from OpenRouter rates under the owner-assumed `deepseek-flash` alias; `claudecli` turns have no `response_model`.
+
+### Release note (owner)
+
+Additive (new optional hook field, new optional response fields, new `group_by` value, optional constructor argument): minor bump recommended (2.3.6 to 2.4.0). Not bumped here.
+
 ## 2.3.6 (2026-10-07)
 
 ### 🩹 Fixes

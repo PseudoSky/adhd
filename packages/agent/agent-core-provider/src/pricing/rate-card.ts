@@ -1,4 +1,6 @@
-import openRouterSnapshot from './pricing.json' with { type: 'json' };
+import { OPENROUTER_SNAPSHOT } from './pricing-snapshot.js';
+import { parseOpenRouterFeed, type IParsedFeed } from './feed.js';
+import type { CostBasis, ICostEstimate, IPriceSource, IUsageTokens } from './price-source.js';
 
 export interface ModelRate {
   /** Full-price (cache-miss / uncached) input, $ per million tokens. */
@@ -23,30 +25,13 @@ export const RATE_CARD: Record<string, ModelRate> = {
   'deepseek-v4-pro':   { inputPerM: 0.435, cacheReadPerM: 0.003625, cacheWritePerM: 0, outputPerM: 0.87 },
 };
 
-// 37f6c511 — OpenRouter price snapshot (pricing.json, GET https://openrouter.ai/api/v1/models).
+// 37f6c511 — OpenRouter price snapshot (pricing.json, projected to pricing-snapshot.ts, GET https://openrouter.ai/api/v1/models).
 // Values are per-TOKEN USD strings; ModelRate is $/MILLION tokens. The conversion happens in
-// exactly one place (`perMillion`). Layering: RATE_CARD above holds vendor-verified direct rates
-// and keeps priority for every key/normalization it already resolved; the snapshot adds the
+// exactly one place (`perMillion`, feed.ts). Layering: RATE_CARD above holds vendor-verified direct
+// rates and keeps priority for every key/normalization it already resolved; the snapshot adds the
 // ~470 OpenRouter ids that previously priced as null. A model's `pricing.overrides` (time-of-day
 // pricing) is deliberately NOT applied — only the base prompt/completion/cache fields are.
-interface IOpenRouterPricing {
-  prompt?: string;
-  completion?: string;
-  input_cache_read?: string;
-  input_cache_write?: string;
-}
-interface IOpenRouterModel {
-  id: string;
-  name: string;
-  pricing: IOpenRouterPricing;
-}
-interface IOpenRouterSnapshot {
-  source: string;
-  fetched_at: string;
-  models: IOpenRouterModel[];
-}
-
-const SNAPSHOT = openRouterSnapshot as IOpenRouterSnapshot;
+const SNAPSHOT = OPENROUTER_SNAPSHOT;
 
 /** Provenance of the committed OpenRouter snapshot (source URL + fetch timestamp). */
 export const PRICING_SNAPSHOT_META: { source: string; fetchedAt: string; modelCount: number } = {
@@ -55,55 +40,82 @@ export const PRICING_SNAPSHOT_META: { source: string; fetchedAt: string; modelCo
   modelCount: SNAPSHOT.models.length,
 };
 
-/** $/token decimal string -> $/million tokens, cleaned of binary float noise. NaN when absent/invalid. */
-function perMillion(perToken: string | undefined): number {
-  if (perToken === undefined) return Number.NaN;
-  return Number((Number(perToken) * 1_000_000).toPrecision(12));
-}
+const PARSED_SNAPSHOT: IParsedFeed = parseOpenRouterFeed(SNAPSHOT);
 
-function openRouterRate(pricing: IOpenRouterPricing): ModelRate | undefined {
-  const inputPerM = perMillion(pricing.prompt);
-  const outputPerM = perMillion(pricing.completion);
-  // OpenRouter serves "-1" for routers with no fixed price; that is "unknown", never a rate.
-  if (!(inputPerM >= 0) || !(outputPerM >= 0)) return undefined;
-  const cacheRead = perMillion(pricing.input_cache_read);
-  const cacheWrite = perMillion(pricing.input_cache_write);
+/**
+ * The committed snapshot parsed through the same validator as a live pull, for seeding a
+ * price-history store (`source:'bundled'`, observed at `fetchedAt`).
+ */
+export function parseBundledSnapshot(): { fetchedAt: string; source: string } & IParsedFeed {
   return {
-    inputPerM,
-    // No published cache-read price => cache hits bill as ordinary input.
-    cacheReadPerM: cacheRead >= 0 ? cacheRead : inputPerM,
-    cacheWritePerM: cacheWrite >= 0 ? cacheWrite : 0,
-    outputPerM,
+    fetchedAt: SNAPSHOT.fetched_at,
+    source: SNAPSHOT.source,
+    models: PARSED_SNAPSHOT.models.map((m) => ({ ...m })),
+    invalid: [...PARSED_SNAPSHOT.invalid],
   };
 }
 
+/** Routers (`-1`) are "unknown", never a rate: they are absent from this map. */
 const OPENROUTER_RATES: ReadonlyMap<string, ModelRate> = new Map(
-  SNAPSHOT.models.flatMap((m): Array<[string, ModelRate]> => {
-    const rate = openRouterRate(m.pricing);
-    return rate ? [[m.id.toLowerCase(), rate]] : [];
-  })
+  PARSED_SNAPSHOT.models.flatMap((m): Array<[string, ModelRate]> =>
+    m.kind === 'model' && m.inputPerM !== null && m.outputPerM !== null
+      ? [[m.modelId, {
+          inputPerM: m.inputPerM,
+          // No published cache-read price => cache hits bill as ordinary input.
+          cacheReadPerM: m.cacheReadPerM ?? m.inputPerM,
+          cacheWritePerM: m.cacheWritePerM ?? 0,
+          outputPerM: m.outputPerM,
+        }]]
+      : []
+  )
 );
+
+export interface IProviderModelAlias {
+  /** OpenRouter id the provider-side name is priced as. */
+  target: string;
+  /** Always `owner-assumption`: an alias is a decision, not evidence. */
+  basis: 'owner-assumption';
+  /** Date (YYYY-MM-DD) the owner set it. */
+  setAt: string;
+  setBy: string;
+  /** Backlog ticket that recorded the decision. */
+  ticket: string;
+}
 
 /**
  * Explicit provider-model-name -> OpenRouter id aliases. OpenRouter ids are the canonical
  * "true" model names for pricing.
  *
+ * The anthropic and openai adapters capture the response `model` field as `responseModel` in the
+ * hook payload and `task_usage`. The alias applies only when a response model is absent or unknown
+ * (for example `claudecli`), and to legacy rows that predate that capture.
+ *
  * `deepseek-flash` (what the sox agents are configured with; provider type `openai`, DeepSeek
  * secret) -> `deepseek/deepseek-v4.1-flash`. OWNER-DIRECTED ASSUMPTION (2026-10-08, ticket
  * 37f6c511): the owner decided DeepSeek-direct `deepseek-flash` traffic is V4.1 Flash. It is NOT
- * evidence-derived: the provider does not capture the response `model` field, so nothing persisted
- * pins which revision served a call. Other candidates considered, base prompt/completion $/token:
+ * evidence-derived for legacy rows: they carry no response model, so nothing persisted pins which
+ * revision served those calls. Other candidates considered, base prompt/completion $/token:
  * `~deepseek/deepseek-flash-latest` (2.83e-8/1.2e-6), `deepseek/deepseek-v4-flash`
- * (9.9e-9/1.28e-6), `deepseek/deepseek-v4-flash-0731` (1.8e-8/1.28e-6). The proper fix — record
- * the response model per turn and map by provider+model — is a separate HIGH feature (37f6c511).
+ * (9.9e-9/1.28e-6), `deepseek/deepseek-v4-flash-0731` (1.8e-8/1.28e-6).
  */
-export const PROVIDER_MODEL_ALIASES: Readonly<Record<string, string>> = {
-  'deepseek-flash': 'deepseek/deepseek-v4.1-flash',
+export const PROVIDER_MODEL_ALIASES: Readonly<Record<string, IProviderModelAlias>> = {
+  'deepseek-flash': {
+    target: 'deepseek/deepseek-v4.1-flash',
+    basis: 'owner-assumption',
+    setAt: '2026-10-08',
+    setBy: 'owner',
+    ticket: '37f6c511',
+  },
 };
 
-function lookupOpenRouterRate(model: string): ModelRate | undefined {
-  const aliased = PROVIDER_MODEL_ALIASES[model.trim().toLowerCase()] ?? model;
-  return OPENROUTER_RATES.get(aliased.trim().toLowerCase());
+/** Own-property check (target lib predates `Object.hasOwn`); guards `toString`-style prototype keys. */
+function hasOwn(obj: object, key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(obj, key);
+}
+
+function aliasFor(model: string): IProviderModelAlias | undefined {
+  const key = model.trim().toLowerCase();
+  return hasOwn(PROVIDER_MODEL_ALIASES, key) ? PROVIDER_MODEL_ALIASES[key] : undefined;
 }
 
 // agent-mcp-005 — real callers never pass a bare RATE_CARD key. usage-plugin.ts passes
@@ -150,43 +162,10 @@ function normalizeModelKeyCandidates(model: string): string[] {
   ];
 }
 
-/**
- * Resolve a real model string to its RATE_CARD family alias (e.g. "haiku", "claude-sonnet-5")
- * when no exact/normalized key matched. Token-matches against known family names so it
- * never fires on an unrelated model that merely contains a substring collision.
- */
-function resolveFamilyAlias(model: string): ModelRate | undefined {
-  const tokens = model.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
-  for (const [family, canonicalKey] of Object.entries(FAMILY_ALIASES)) {
-    if (tokens.includes(family)) return RATE_CARD[canonicalKey];
-  }
-  return undefined;
-}
+/** Latest-possible instant, used when a caller supplies a source but no `asOf`. */
+const FAR_FUTURE_ISO = '9999-12-31T23:59:59.999Z';
 
-/**
- * Estimate dollar cost for one model call (or a cumulative rollup, since cost is linear/additive
- * — this is valid to call with either a single turn's token counts or a pre-summed total).
- * `model` is normalized (see `normalizeModelKeyCandidates` / `resolveFamilyAlias`) against
- * real-world provider-reported and human-typed model strings before falling back to null.
- * Returns null (never 0) when the model has no rate-card entry (even after normalization) —
- * an unknown model's cost must never be silently reported as $0.
- */
-export function estimateCostUsd(
-  model: string,
-  usage: { uncachedInputTokens: number; cacheReadTokens: number; cacheCreationTokens: number; outputTokens: number }
-): number | null {
-  let rate: ModelRate | undefined = RATE_CARD[model];
-  // A full OpenRouter id ("deepseek/deepseek-v4.1-flash") is priced from the snapshot before the
-  // org-prefix-stripping normalization below would collapse it onto a different (bare) key.
-  if (!rate) rate = lookupOpenRouterRate(model);
-  if (!rate) {
-    for (const candidate of normalizeModelKeyCandidates(model)) {
-      rate = RATE_CARD[candidate];
-      if (rate) break;
-    }
-  }
-  if (!rate) rate = resolveFamilyAlias(model);
-  if (!rate) return null;
+function costOf(rate: ModelRate, usage: IUsageTokens): number {
   return (
     (usage.uncachedInputTokens * rate.inputPerM +
       usage.cacheReadTokens * rate.cacheReadPerM +
@@ -194,4 +173,100 @@ export function estimateCostUsd(
       usage.outputTokens * rate.outputPerM) /
     1_000_000
   );
+}
+
+const UNPRICED: ICostEstimate = {
+  costUsd: null,
+  status: 'unpriced_model',
+  basis: null,
+  pricingRef: null,
+  resolvedId: null,
+};
+
+function priced(rate: ModelRate, usage: IUsageTokens, basis: CostBasis, pricingRef: string, resolvedId: string): ICostEstimate {
+  return { costUsd: costOf(rate, usage), status: 'priced', basis, pricingRef, resolvedId };
+}
+
+function rateCardKey(model: string): string | undefined {
+  if (hasOwn(RATE_CARD, model)) return model;
+  for (const candidate of normalizeModelKeyCandidates(model)) {
+    if (hasOwn(RATE_CARD, candidate)) return candidate;
+  }
+  return undefined;
+}
+
+/**
+ * Estimate the dollar cost of one model call (or a pre-summed rollup — cost is linear) AND say
+ * how it was derived (1f1c8598). Pure: no clock, no I/O.
+ *
+ * Resolution order (unchanged from `estimateCostUsd`): exact RATE_CARD key (`vendor-direct`) >
+ * OpenRouter lookup (alias hit => `owner-assumption`, plain id => `openrouter-estimate`) >
+ * normalised RATE_CARD candidates (`vendor-direct`) > family alias (`vendor-direct`) > unpriced.
+ *
+ * With `opts.source`, the OpenRouter step asks `source.priceAt(id, asOf)` first (`asOf` defaults
+ * to "latest") and falls back to the bundled snapshot only when the source returns `undefined`.
+ * A source record of `kind:'router'` (or with null input/output rates) is final: unpriced, it
+ * never falls through to the bundled map or later steps.
+ *
+ * Unpriced => `costUsd: null` (never 0), `status:'unpriced_model'`.
+ */
+export function estimateCost(
+  model: string,
+  usage: IUsageTokens,
+  opts?: { asOf?: string; source?: IPriceSource }
+): ICostEstimate {
+  if (hasOwn(RATE_CARD, model)) {
+    return priced(RATE_CARD[model] as ModelRate, usage, 'vendor-direct', `rate-card:${model}`, model);
+  }
+
+  const alias = aliasFor(model);
+  const orId = (alias?.target ?? model).trim().toLowerCase();
+  const orBasis: CostBasis = alias ? alias.basis : 'openrouter-estimate';
+  if (opts?.source) {
+    const rec = opts.source.priceAt(orId, opts.asOf ?? FAR_FUTURE_ISO);
+    if (rec) {
+      if (rec.kind === 'router' || rec.inputPerM === null || rec.outputPerM === null) return UNPRICED;
+      return priced(
+        {
+          inputPerM: rec.inputPerM,
+          cacheReadPerM: rec.cacheReadPerM ?? rec.inputPerM,
+          cacheWritePerM: rec.cacheWritePerM ?? 0,
+          outputPerM: rec.outputPerM,
+        },
+        usage, orBasis, rec.id, orId
+      );
+    }
+  }
+  const bundled = OPENROUTER_RATES.get(orId);
+  if (bundled) {
+    return priced(bundled, usage, orBasis, `bundled:${SNAPSHOT.fetched_at}:${orId}`, orId);
+  }
+
+  // A full OpenRouter id ("deepseek/deepseek-v4.1-flash") is priced above before the
+  // org-prefix-stripping normalization below would collapse it onto a different (bare) key.
+  const key = rateCardKey(model);
+  if (key !== undefined) {
+    return priced(RATE_CARD[key] as ModelRate, usage, 'vendor-direct', `rate-card:${key}`, key);
+  }
+  const tokens = model.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+  for (const [family, canonicalKey] of Object.entries(FAMILY_ALIASES)) {
+    if (tokens.includes(family)) {
+      return priced(RATE_CARD[canonicalKey] as ModelRate, usage, 'vendor-direct', `rate-card:${canonicalKey}`, canonicalKey);
+    }
+  }
+  return UNPRICED;
+}
+
+/**
+ * Estimate dollar cost for one model call (or a cumulative rollup). Thin wrapper over
+ * {@link estimateCost} returning only the number: `null` (never 0) when the model has no rate
+ * (even after normalization) — an unknown model's cost must never be silently reported as $0.
+ * With no `opts` the result is identical to the pre-1f1c8598 behaviour.
+ */
+export function estimateCostUsd(
+  model: string,
+  usage: IUsageTokens,
+  opts?: { asOf?: string; source?: IPriceSource }
+): number | null {
+  return estimateCost(model, usage, opts).costUsd;
 }

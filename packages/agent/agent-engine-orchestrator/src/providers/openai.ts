@@ -212,6 +212,7 @@ export class OpenAIProvider implements LLMProvider {
                 message,
                 stopReason: toolCalls.length > 0 ? "tool_calls" : "completed",
                 rawUsage: sdkUsage,
+                responseModel: response.model || undefined,
                 usage: sdkUsage ? normaliseOpenAIUsage(sdkUsage, normalisedStopReason, this.providerConfig.maxTokens) : undefined,
             };
         };

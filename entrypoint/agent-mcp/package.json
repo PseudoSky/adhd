@@ -17,6 +17,7 @@
   ],
   "dependencies": {
     "@adhd/agent-store-runtime": "^2.2.5",
+    "@adhd/agent-core-provider": "^2.2.5",
     "@adhd/agent-store-prompts": "^2.2.3",
     "@adhd/agent-engine-orchestrator": "^2.3.6",
     "@modelcontextprotocol/sdk": "^1.29.0",

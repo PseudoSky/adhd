@@ -445,6 +445,32 @@ suite proves the resolved shape and the `agent_verify_mcp` path with no external
 fetch. The same record appears in this package's `AGENTS.md`, in
 `@adhd/agent-core-native-tooling`'s `README.md`/`AGENTS.md`, and in the test's header.
 
+## Live model prices (OpenRouter pull)
+
+Cost estimates are priced from an append-only price history, not a fixed table. On start the
+server seeds the bundled OpenRouter snapshot, then pulls the public
+`https://openrouter.ai/api/v1/models` feed once every 24 hours (immediately after start when the last
+successful pull is older than 24 hours). The request carries **no API key and no credentials**, makes one
+GET with a 30 s timeout, and retries once after `Retry-After` (capped at 120 s) on a network error, 5xx or 429.
+Several servers sharing one database coordinate through a ledger claim, so exactly one of them pulls.
+
+- A failed, invalid, empty or shrunk (< 50% of the previous model count) pull changes nothing and logs an
+  ERROR; the last good prices keep serving and `price_age_hours` keeps growing.
+- Only models whose price changed append a row, stamped with the observation time. The feed carries no
+  effective date, so the accuracy bound is the pull cadence (24 h).
+- A model moving >= 20x (or an input price above $1000/M) is held, logged as an ERROR and reported in
+  `anomalies`; call `pricing_refresh` with `accept:["<modelId>"]` to apply it. A 10x to 20x move is applied with a warning.
+- `pricing_refresh` pulls now; `pricing_history` returns a model's observed series and the pull status.
+- OpenRouter list prices are an estimate for agents billed elsewhere (for example DeepSeek direct):
+  `usage_query` reports `cost_basis` (`vendor-direct`, `openrouter-estimate`, `owner-assumption`).
+- Time-of-day / context-tier `pricing.overrides` are stored verbatim and applied to nothing.
+- `deepseek-flash` (DeepSeek reached through the `openai` provider type) is priced as OpenRouter's
+  `deepseek/deepseek-v4.1-flash`. That mapping is an owner assumption (`cost_basis: "owner-assumption"`,
+  ticket 37f6c511), not evidence: confirm it with `usage_query` `group_by:"response_model"`, which groups by the
+  model the provider reported serving each call. The `claudecli` provider does not report a response model, and
+  turns recorded before this feature group under `(unknown)`.
+- There is no setting to disable the daily pull; every server on a database that has not pulled in 24 hours attempts one.
+
 ## Limitations
 
 - **No OS-level sandboxing** — filesystem/network access is enforced by policy, not by OS isolation. A malicious or compromised agent can still access the host if the policy permits.
