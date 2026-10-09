@@ -76,16 +76,26 @@ describe('c536ce29 S8B-AC2 agent-mcp-tail resolves the production store through 
   it('c536ce29 S8B-AC2: an explicit db.path (ADHD_AGENT_DATABASE_PATH) still wins', () => {
     const env = makeEnv();
     const pinned = join(sandbox, 'pinned.db');
-    const p = resolveTailDbPath({ config: { ...env.config, db: { ...env.config.db, path: pinned } }, files: env.files });
+    const p = resolveTailDbPath({
+      config: { ...env.config, db: { ...env.config.db, path: pinned } },
+      files: env.files,
+      paths: env.paths,
+      provenance: { ...env.provenance, 'db.path': { source: 'env', scope: 'global', env: 'ADHD_AGENT_DATABASE_PATH' } },
+    });
     expect(p).toBe(pinned);
   });
 
-  it('c536ce29 S8B-AC2: a relative db.path is resolved against the process cwd to an absolute path', () => {
+  it('de046157 AC6.1: a relative db.path from the process environment is rejected, never resolved against the process cwd', () => {
     const env = makeEnv();
     const rel = join('data', 'agent-mcp', 'agents-dev.db');
-    const p = resolveTailDbPath({ config: { ...env.config, db: { ...env.config.db, path: rel } }, files: env.files });
-    expect(p).toBe(resolve(process.cwd(), rel));
-    expect(p.startsWith(sep)).toBe(true);
+    expect(() =>
+      resolveTailDbPath({
+        config: { ...env.config, db: { ...env.config.db, path: rel } },
+        files: env.files,
+        paths: env.paths,
+        provenance: { ...env.provenance, 'db.path': { source: 'env', scope: 'global', env: 'ADHD_AGENT_DATABASE_PATH' } },
+      })
+    ).toThrow(/absolute/);
   });
 });
 

@@ -5,6 +5,7 @@ import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 
 import { operationalEnv } from "../config.js";
+import { resolveStore } from "../config-store-path.js";
 import { applyLockingPragmas } from "@adhd/agent-core-env";
 import * as localSchema from "./schema.js";
 import * as runtimeSchema from "@adhd/agent-store-runtime";
@@ -19,7 +20,9 @@ import * as runtimeSchema from "@adhd/agent-store-runtime";
 // `db.path` still wins. Zero-config fallback: `operationalEnv.files.db` — the
 // user-global namespaced location `~/.adhd/agent-mcp/production/data/agents.db`
 // (ARCHITECTURE.md §6).
-const resolvedPath = path.resolve(operationalEnv.config.db.path ?? operationalEnv.files['db']);
+// BK6 (de046157): a RELATIVE path is never resolved against process.cwd() — see config-store-path.ts.
+export const resolvedStore = resolveStore(operationalEnv);
+const resolvedPath = resolvedStore.path;
 
 const directory = path.dirname(resolvedPath);
 

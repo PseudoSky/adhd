@@ -361,6 +361,10 @@ export interface IServerStartInfo {
     readonly spawnDepth?: number;
     /** The operational DB actually opened (ties the logs to the store). */
     readonly dbPath?: string | null;
+    /** Which layer selected the store (`env|cascade|default`; BK6 de046157). */
+    readonly storeSource?: string;
+    /** Derived store mode (`production|custom`; BK6 de046157). */
+    readonly storeMode?: string;
     /** The log directories in use (`resolveLogRoots()`). */
     readonly logRoots?: { readonly root: string; readonly api: string; readonly ops: string; readonly trace: string } | null;
 }
@@ -399,6 +403,8 @@ export function logServerStart(info: IServerStartInfo, channel: ChannelSource = 
             spawn_depth: info.spawnDepth ?? 0,
             api_log: info.apiLog,
             db_path: info.dbPath ?? null,
+            store_source: info.storeSource ?? null,
+            store_mode: info.storeMode ?? null,
             log_roots: info.logRoots ?? null,
         });
     } catch {

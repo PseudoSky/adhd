@@ -9,9 +9,8 @@
 import os from "node:os";
 import path from "node:path";
 
-import type { Environment } from "@adhd/environment";
-
-import { operationalEnv, type AgentMcpConfig } from "../config.js";
+import { operationalEnv } from "../config.js";
+import { resolveStore, type IStoreEnvironment } from "../config-store-path.js";
 
 /**
  * Absolute path of the operational agents DB.
@@ -19,9 +18,9 @@ import { operationalEnv, type AgentMcpConfig } from "../config.js";
  * @param target the Environment to resolve against (tests pass an isolated instance).
  */
 export function resolveTailDbPath(
-  target: Pick<Environment<AgentMcpConfig>, "config" | "files"> = operationalEnv
+  target: IStoreEnvironment = operationalEnv
 ): string {
-  return path.resolve(target.config.db.path ?? target.files["db"]);
+  return resolveStore(target).path;
 }
 
 /**

@@ -54,7 +54,7 @@ This starts a JSON-RPC server over stdio. Configure in your MCP host (e.g., Clau
 | **Project config** | `./.adhd/agent-mcp/config.yaml` | env only |
 | **Environment variables** | `ADHD_AGENT_*` names | none |
 
-The database (SQLite, agents/sessions/messages/usage) is stored in the resolved scope root, defaulting to `~/.adhd/agent-mcp/production/data/agents.db` (never the repo tree). Override via `ADHD_AGENT_DATABASE_PATH`.
+The database (SQLite, agents/sessions/messages/usage) is the **production store** unless you point elsewhere: `~/.adhd/agent-mcp/production/data/agents.db` (never the repo tree). The same store is used no matter which directory the server is launched from. A development database is just an explicit **absolute** `ADHD_AGENT_DATABASE_PATH` outside that directory; there is no mode switch. Resolution order: `ADHD_AGENT_DATABASE_PATH` in the process environment (or in `~/.adhd/.env`) > `db.path` in `~/.adhd/agent-mcp/production/config.yaml` > the production default. A relative path in the process environment is rejected at startup; a relative path in a config file is anchored to that file's directory, never to the launch directory. A `.env` found in the launch directory (`<cwd>/.env`, `<cwd>/.adhd/.env`) cannot select the store: such an assignment is ignored and a warning names the file. Every start logs one line, `store=<absolute path> mode=<production|custom> source=<env|cascade|default>` (`mode` is derived from the path, never configured). Any store may be opened by several agent-mcp processes at once (parallel-process enabled, ADR-0012).
 
 ### Common environment variables
 
@@ -66,7 +66,7 @@ The database (SQLite, agents/sessions/messages/usage) is stored in the resolved 
 | `ADHD_AGENT_MAX_TOOL_LOOPS` | `50` | Max tool-call iterations per task |
 | `ADHD_AGENT_TOOL_RESULT_MAX_CHARS` | `20000` | Max chars of one tool result the model sees (first 75% + marker + last 25%); `0` disables; invalid values fail at startup. See [logging.md](docs/logging.md#tool-result-size-cap-what-the-model-sees-vs-what-telemetry-measures) |
 | `ADHD_AGENT_MAX_DEPTH` | `3` | Max delegation depth (agent → child → grandchild) |
-| `ADHD_AGENT_DATABASE_PATH` | (auto-resolved) | Custom SQLite DB path; falls back to zero-config `~/.adhd/agent-mcp/production/data/agents.db` |
+| `ADHD_AGENT_DATABASE_PATH` | (auto-resolved) | Absolute path of a custom SQLite DB (a relative value is rejected at startup); unset = the production store `~/.adhd/agent-mcp/production/data/agents.db` |
 | `ADHD_AGENT_TRANSPORT` | `stdio` | `stdio` or `http` (streamable HTTP). The `http` transport serves **many concurrent MCP sessions** from one process: each `initialize` opens its own session (routed by the `mcp-session-id` header); an unknown/expired session id gets HTTP 404 so the client re-initializes |
 | `ADHD_AGENT_PORT` | `3000` | Port for the `http` transport |
 | `ADHD_AGENT_HOST` | `127.0.0.1` | Interface the `http` transport binds. **Loopback by default** because the MCP surface is unauthenticated; set e.g. `0.0.0.0` explicitly to expose it to the network (the server then logs a `non-loopback` warning at startup; an empty value is treated as unset, never as "all interfaces"). Releases through 2.3.6 had no host default and bound every interface; fixed after 2.3.6 |
@@ -151,6 +151,8 @@ Critically, `process.env` is not just "whatever the spawning process happened to
 1. `~/.adhd/.env` (lowest precedence)
 2. `<cwd>/.adhd/.env` (beats `~/.adhd/.env`)
 3. `<cwd>/.env` (beats both files above)
+
+   The two launch-directory files (2, 3) can **never** set `ADHD_AGENT_DATABASE_PATH`: that assignment is ignored with a warning, so the store does not change with the directory the server is started from. `~/.adhd/.env` may set it; a relative value there is anchored to `~/.adhd/`.
 4. **Variables already in `process.env` at launch** (highest precedence) — an explicit `ADHD_AGENT_*` value set by the spawning shell/host (e.g. `ADHD_AGENT_DATABASE_PATH`) is never overridden by any `.env` file. Files override files; no file overrides the process environment. An empty-string `ADHD_AGENT_*_SECRET` counts as unset, so a file can still supply it.
 
 So a provider secret defined in `~/.adhd/.env` resolves for **every** agent-mcp launch — regardless of what env block the spawning `.mcp.json` entry (or shell, or MCP host) forwards — because the server reads the file itself on startup. This mechanism was restored under `BUG-MCP-CREDENTIALS-001` after a prior refactor (commit `b38369f3`) deleted it; the restoration is landed in code today (`src/config.ts:27-37`, `src/utils/load-env.ts:19-37`).

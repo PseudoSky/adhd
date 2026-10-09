@@ -58,7 +58,7 @@ The server exposes these MCP tools:
 The zero-config DB path is resolved under the scope root:
 - **Scope** is auto-detected (walks up from `process.cwd()` looking for `.git`/`.adhd` markers) or forced via `ADHD_ENV_SCOPE=global`/`project`
 - **Global scope** (`~/.adhd/agent-mcp/production/data/agents.db` by default) — never the repo tree, even when inside one
-- **Overridable** via `ADHD_AGENT_DATABASE_PATH` env var (falls back to `env.files.db` location when unset)
+- **Overridable** only by an explicit **absolute** `ADHD_AGENT_DATABASE_PATH` (process env or `~/.adhd/.env`) or `db.path` in a system/global `config.yaml` (relative values there anchor to the file's directory); a relative process-env value is rejected at startup and a launch-directory `.env` cannot set it (`src/config-store-path.ts`, `src/utils/load-env.ts`). Unset = the production store. No mode toggle; startup logs `store=<abs> mode=<production|custom> source=<env|cascade|default>`
 
 Verified end-to-end in `src/__tests__/integration/real-environment.e2e.test.ts` (ENV-ADOPT-PROOF-000).
 
@@ -108,7 +108,7 @@ The rule map (`nativeTooling.*.permissions`) and `shell.env` are JSON objects wi
 
 ### Database
 
-- **Location:** zero-config default under the resolved scope root (never the repo tree), configurable via `ADHD_AGENT_DATABASE_PATH` (`src/config.ts` `"db.path"` field — falls back to `env.files.db` when unset)
+- **Location:** zero-config default under the resolved scope root (never the repo tree), configurable only through an explicit absolute `ADHD_AGENT_DATABASE_PATH` (`src/config.ts` `"db.path"` field, resolved by `src/config-store-path.ts` `resolveStore`; unset = production store, never cwd-dependent). Parallel-process enabled (ADR-0012): several processes may hold write connections to any store
 - **Tables:** `agents`, `sessions`, `messages`, `task_usage`, `migrations`
 - **Persistence:** All agents, conversations, and usage records persist across server restarts
 - **Migration:** `npm run db:migrate` (drizzle-kit auto-applied on server start as of 2.0.2). On boot the server also runs a one-time flat→namespaced legacy migration that copies rows from `~/.adhd/agent-mcp/agents.db` into the resolved store. Set `ADHD_AGENT_SKIP_LEGACY_MIGRATION=true` (config field `db.skipLegacyMigration`) to skip it entirely — the flat legacy store is then never read. Intended for hermetic test harnesses so a fresh scratch DB is not seeded from a developer's real store; normal servers should leave it unset.

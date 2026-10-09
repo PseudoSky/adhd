@@ -201,6 +201,8 @@ const ALLOWLIST: readonly IEntry[] = [
   { key: 'entrypoint/agent-mcp/src/srt-policy.ts :: renameSync(tmp, path);', reason: 'srt settings atomic write' },
   { key: 'entrypoint/agent-mcp/src/utils/load-env.ts :: dotenvConfig({ path: path.join(os.homedir(), ".adhd", ".env"), quiet: true });', reason: 'read-only .env hierarchy' },
   { key: 'entrypoint/agent-mcp/src/utils/load-env.ts :: dotenvConfig({ path: path.join(cwd, ".adhd", ".env"), override: true, quiet: true });', reason: 'read-only .env hierarchy' },
+  { key: 'entrypoint/agent-mcp/src/utils/load-env.ts :: const ENV_FILE_SEGMENTS = [".adhd", ".env"] as const;', reason: 'read-only .env hierarchy (de046157 store-path rule reads, never writes)' },
+  { key: 'entrypoint/agent-mcp/src/utils/load-env.ts :: const homeFile = ENV_FILE(os.homedir());', reason: 'read-only .env hierarchy (de046157 store-path rule reads, never writes)' },
   { key: 'packages/agent/agent-core-env/src/open-registry-db.ts :: fs.mkdirSync(directory, { recursive: true });', reason: 'parent dir of the caller-supplied (environment-resolved) DB path' },
   { key: 'packages/agent/agent-core-env/src/open-registry-store.ts :: fs.mkdirSync(directory, { recursive: true });', reason: 'parent dir of the caller-supplied (environment-resolved) DB path' },
   { key: 'packages/agent/agent-engine-compiler/src/cli/compile.ts :: fs.mkdirSync(parent, { recursive: true });', reason: 'compile CLI: explicit user --out-dir' },

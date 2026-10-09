@@ -50,7 +50,7 @@ Optional:
 - `ADHD_AGENT_LOGGING_API` — `on` (default) / `off`; off stops only raw API body capture (ops + trace stay on)
 - `ADHD_AGENT_LOGGING_API_BODY_MAX_BYTES` (4194304), `_API_ROTATE_BYTES` (67108864), `_API_RETENTION_DAYS` (14), `_API_MAX_DIR_BYTES` (2147483648), `_OPS_ROTATE_BYTES` (16777216), `_OPS_RETENTION_DAYS` (60), `_OPS_MAX_DIR_BYTES` (268435456), `_TRACE_RETENTION_DAYS` (30), `_TRACE_MAX_DIR_BYTES` (536870912), `_FLOOD_MAX_BYTES` (268435456), `_FLOOD_WINDOW_SECONDS` (600) — all `ADHD_AGENT_LOGGING_*`
 - `ADHD_AGENT_TRACING_LOG_DIR` — tracing sink dir (default `<logs>/trace`)
-- `ADHD_AGENT_DATABASE_PATH` — custom SQLite DB path (default: `~/.adhd/agent-mcp/production/data/agents.db`)
+- `ADHD_AGENT_DATABASE_PATH` — absolute path of a custom SQLite DB (default: the production store `~/.adhd/agent-mcp/production/data/agents.db`; relative values are rejected; a launch-directory `.env` cannot set it)
 
 ## 2.0.2 Highlights
 

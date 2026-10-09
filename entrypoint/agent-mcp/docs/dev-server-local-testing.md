@@ -118,8 +118,12 @@ touches outside its temp dir (observed in the startup log): `~/.srt-settings.jso
 `loadEnvHierarchy` (`src/utils/load-env.ts`, commit `e34fb60f`) resolves, most specific first:
 variables already in `process.env`, `<cwd>/.env`, `<cwd>/.adhd/.env`, `~/.adhd/.env`.
 **Process environment beats every `.env` file**, so an explicit `ADHD_AGENT_DATABASE_PATH` on
-the launch command cannot be redirected by a repo `.env` (which in this repo sets
-`ADHD_AGENT_DATABASE_PATH=data/agent-mcp/agents-dev.db`). Provider secrets
+the launch command cannot be redirected by a repo `.env`. Moreover, a `.env` in the launch
+directory cannot select the store at all: this repo's `.env` line
+`ADHD_AGENT_DATABASE_PATH=data/agent-mcp/agents-dev.db` is ignored (with a startup warning), so the
+server opens the production store from every directory. To use a development database, set an
+absolute `ADHD_AGENT_DATABASE_PATH` in the process environment (or `~/.adhd/.env`); a relative
+process-env value is rejected. Provider secrets
 (`ADHD_AGENT_<PROVIDER>_SECRET`) are read by the server itself from `~/.adhd/.env`; you do not
 forward them.
 

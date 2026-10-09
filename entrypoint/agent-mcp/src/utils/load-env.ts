@@ -1,6 +1,31 @@
+import { readFileSync } from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import { config as dotenvConfig } from "dotenv";
+import { config as dotenvConfig, parse as dotenvParse } from "dotenv";
+
+/**
+ * The operational-store variable. It is the one key whose `.env` sourcing is restricted (backlog
+ * de046157 BK6): see {@link loadEnvHierarchy}.
+ */
+export const STORE_PATH_ENV = "ADHD_AGENT_DATABASE_PATH";
+
+/** Injection points for {@link loadEnvHierarchy} (tests; production uses the defaults). */
+export interface ILoadEnvOptions {
+    /** Receives one human-readable line per ignored store-path assignment. Default: stderr. */
+    readonly warn?: (message: string) => void;
+}
+
+/** `<dir>/.adhd/.env` — the per-directory file name used by the project and home layers. */
+const ENV_FILE = (dir: string): string => path.join(dir, ...ENV_FILE_SEGMENTS);
+const ENV_FILE_SEGMENTS = [".adhd", ".env"] as const;
+
+function readDotenv(file: string): Record<string, string> {
+    try {
+        return dotenvParse(readFileSync(file));
+    } catch {
+        return {};
+    }
+}
 
 /**
  * Blank provider-secret env values are treated as UNSET before the hierarchy
@@ -49,6 +74,15 @@ export function clearEmptyProviderSecrets(
  * a less-specific one (load least-specific first; use `override:true` for each
  * successive, more-specific load).
  *
+ * STORE-PATH EXCEPTION (backlog de046157 BK6, F1): `<cwd>/.env` and `<cwd>/.adhd/.env` are DISCOVERED
+ * from the launch directory, so letting them select the operational store makes the store depend on
+ * where the server was started (the same server opened a dev DB from the repo root and the
+ * production DB from anywhere else). They therefore may NOT supply `ADHD_AGENT_DATABASE_PATH`: an
+ * assignment there is ignored with a warning naming the file. The store is selected by the process
+ * environment (absolute path) or `~/.adhd/.env` (cwd-independent; a relative value is anchored to
+ * that file's directory, never the cwd), else the production default. Every other key keeps the
+ * cwd-discovered layering above.
+ *
  * Call this once, before `config.ts` constructs the `Environment` singleton
  * or resolves any provider credential — see `config.ts`'s top-of-file import.
  *
@@ -71,7 +105,13 @@ export function clearEmptyProviderSecrets(
  * `getProviderConfig` call, and populates the exact same three files the
  * user-facing docs already reference.
  */
-export function loadEnvHierarchy(cwd: string = process.cwd()): void {
+export function loadEnvHierarchy(cwd: string = process.cwd(), options: ILoadEnvOptions = {}): void {
+    const warn =
+        options.warn ??
+        ((message: string): void => {
+            // stderr only: stdout is the MCP stdio JSON-RPC channel.
+            process.stderr.write(`agent-mcp: ${message}\n`);
+        });
     // `quiet: true` on every load is REQUIRED, not cosmetic (backlog a0806529):
     // dotenv >=17 prints `◇ injected env (N) from <file> // tip: …` via
     // `console.log` — i.e. STDOUT — which is the MCP stdio JSON-RPC channel.
@@ -95,5 +135,25 @@ export function loadEnvHierarchy(cwd: string = process.cwd()): void {
     //    whatever the override:true file loads wrote.
     for (const [key, value] of explicit) {
         process.env[key] = value;
+    }
+    // Store path: only the process env (restored above) or ~/.adhd/.env may supply it.
+    if (!explicit.has(STORE_PATH_ENV)) {
+        delete process.env[STORE_PATH_ENV];
+        const homeFile = ENV_FILE(os.homedir());
+        const fromHome = readDotenv(homeFile)[STORE_PATH_ENV];
+        if (fromHome !== undefined && fromHome !== "") {
+            process.env[STORE_PATH_ENV] = path.isAbsolute(fromHome)
+                ? path.normalize(fromHome)
+                : path.resolve(path.dirname(homeFile), fromHome);
+        }
+        for (const file of [ENV_FILE(cwd), path.join(cwd, ".env")]) {
+            if (readDotenv(file)[STORE_PATH_ENV] !== undefined) {
+                warn(
+                    `ignoring ${STORE_PATH_ENV} in ${file}: a launch-directory .env cannot select the operational ` +
+                        `store (it would change with the cwd). Set an absolute ${STORE_PATH_ENV} in the process ` +
+                        `environment or in ${homeFile}, or unset it to use the production store.`
+                );
+            }
+        }
     }
 }

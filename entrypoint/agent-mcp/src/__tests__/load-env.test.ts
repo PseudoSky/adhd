@@ -72,12 +72,11 @@ describe("loadEnvHierarchy precedence", () => {
     it("76950870 AC2: absent from process env, cwd .env still applies and beats lower file layers", () => {
         write(join(home, ".adhd", ".env"), "ADHD_AGENT_TEST_LAYER=home\nADHD_AGENT_TEST_ONLY_FILE=home-only\n");
         write(join(cwd, ".adhd", ".env"), "ADHD_AGENT_TEST_LAYER=project\n");
-        write(join(cwd, ".env"), "ADHD_AGENT_TEST_LAYER=cwd\nADHD_AGENT_DATABASE_PATH=cwd.db\n");
+        write(join(cwd, ".env"), "ADHD_AGENT_TEST_LAYER=cwd\n");
 
         loadEnvHierarchy(cwd);
 
         expect(process.env.ADHD_AGENT_TEST_LAYER).toBe("cwd");
-        expect(process.env.ADHD_AGENT_DATABASE_PATH).toBe("cwd.db");
         expect(process.env.ADHD_AGENT_TEST_ONLY_FILE).toBe("home-only");
     });
 

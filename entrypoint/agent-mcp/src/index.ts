@@ -7,7 +7,8 @@ import { realpathSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { db } from "./db/client.js";
+import { db, resolvedStore } from "./db/client.js";
+import { formatStoreLine } from "./config-store-path.js";
 import { runMigrations } from "./db/migrate.js";
 import { logger } from "./logger.js";
 import { initLogChannels, closeLogChannels } from "./wire/channels.js";
@@ -232,6 +233,12 @@ async function main() {
     // pino logger's persistent sink. Never throws; a bad log dir degrades to a one-line stderr notice.
     const logChannels = initLogChannels();
     const startedAtMs = Date.now();
+    // BK6 (de046157 AC6.2): one startup line naming the operational store, so a wrong-store launch is
+    // visible in the first stderr line. `mode` is derived from the path, never configured.
+    logger.info(
+        { store: resolvedStore.path, mode: resolvedStore.mode, source: resolvedStore.source },
+        formatStoreLine(resolvedStore)
+    );
     runMigrations();
 
     // Provision the adopted `srt` policy so the (default) srt-wrapped `fs`/
@@ -397,6 +404,8 @@ async function main() {
         version: PACKAGE_VERSION,
         apiLog: logChannels.apiEnabled ? "on" : "off",
         dbPath: dbPathOf(dbAny),
+        storeSource: resolvedStore.source,
+        storeMode: resolvedStore.mode,
         logRoots: logChannels.roots,
     });
 

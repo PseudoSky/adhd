@@ -372,7 +372,7 @@ All declared in `src/config.ts`; env names are `ADHD_AGENT_*`. Defaults need no 
 | `logging.traceRetentionDays` / `traceMaxDirBytes` | `..._TRACE_RETENTION_DAYS` / `_TRACE_MAX_DIR_BYTES` | 30 / 512 MiB | same for `trace/` |
 | `logging.floodMaxBytes` / `floodWindowSeconds` | `..._FLOOD_MAX_BYTES` / `_FLOOD_WINDOW_SECONDS` | 256 MiB / 600 | flood breaker: past the byte cap inside the window, `api` drops to digest-only records |
 | `tracing.service` / `logSink` / `logDir` | `ADHD_AGENT_TRACING_SERVICE` / `_LOG_SINK` / `_LOG_DIR` | `agent-mcp` / `file` / `<logs>/trace` | span sink (`file`, `stderr`, `none`) |
-| `db.path` | `ADHD_AGENT_DATABASE_PATH` | unset = `~/.adhd/agent-mcp/production/data/agents.db` | relocates the DB (and the tail CLI) |
+| `db.path` | `ADHD_AGENT_DATABASE_PATH` | unset = `~/.adhd/agent-mcp/production/data/agents.db` | relocates the DB (and the tail CLI); must be absolute (a relative process-env value is rejected; a relative config-file value anchors to that file's directory). The `server.start` ops record carries `db_path`, `store_source` (`env`/`cascade`/`default`) and `store_mode` (`production`/`custom`, derived), and stderr gets one `store=<abs> mode=<..> source=<..>` line at startup |
 
 These are taken from the source declarations; the env-override paths were not exercised against
 the production store, by design. Setting any of the four relocating variables (`DATABASE_PATH`,
