@@ -98,6 +98,7 @@ import {
   pricingRefreshInputSchema,
 } from './pricing/tools.js';
 import type { TaskStore } from '@adhd/agent-store-runtime';
+import { noteToolError, withApiLog, withHttpApiLog } from './wire/api-log.js';
 
 const taskResumeInputSchema = z.object({
   taskId: z.string().uuid().describe('ID of the awaiting_input task to resume'),
@@ -794,7 +795,7 @@ export function createServer(deps: ServerDeps): Server {
     ],
   }));
 
-  server.setRequestHandler(CallToolRequestSchema, async (request) => {
+  server.setRequestHandler(CallToolRequestSchema, withApiLog(async (request) => {
     const { name, arguments: args } = request.params;
 
     try {
@@ -988,9 +989,10 @@ export function createServer(deps: ServerDeps): Server {
           );
       }
     } catch (error) {
+      noteToolError(error); // raw api-log record carries the original error (c536ce29 TRC-AC23)
       return toMcpErrorContent(error);
     }
-  });
+  }));
 
   return server;
 }
@@ -1111,7 +1113,7 @@ export async function startServer(deps: ServerDeps): Promise<{
       return session;
     };
 
-    const httpServer = createHttpServer((req, res) => {
+    const httpServer = createHttpServer(withHttpApiLog('mcp-http', (req, res) => {
       void (async () => {
         try {
           const sidHeader = req.headers['mcp-session-id'];
@@ -1150,7 +1152,7 @@ export async function startServer(deps: ServerDeps): Promise<{
           sendJsonRpcError(res, 500, -32603, 'Internal server error');
         }
       })();
-    });
+    }));
 
     await new Promise<void>((resolve, reject) => {
       httpServer.once('error', reject);

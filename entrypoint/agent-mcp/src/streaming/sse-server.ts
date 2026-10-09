@@ -5,6 +5,7 @@ import type { TaskStore } from "@adhd/agent-store-runtime";
 import { logger } from "../logger.js";
 import { env } from "../config.js";
 import { resolveBindHost } from "../bind-host.js";
+import { withHttpApiLog } from "../wire/api-log.js";
 
 const KEEPALIVE_INTERVAL_MS = 15_000;
 const TERMINAL_STATUSES = ["completed", "failed", "cancelled"] as const;
@@ -39,7 +40,7 @@ export function startSseServer(
     gatewayDepsRef?: GatewayDepsRef
 ): Promise<SseServerStartResult> {
     host = resolveBindHost(host, "SSE/gateway server", logger);
-    const server = http.createServer((req, res) => {
+    const server = http.createServer(withHttpApiLog("sse-gateway", (req, res) => {
         const url = req.url ?? "";
         const method = req.method ?? "GET";
 
@@ -141,7 +142,7 @@ export function startSseServer(
         });
 
         req.on("close", cleanup);
-    });
+    }));
 
     return new Promise<SseServerStartResult>((resolve) => {
         let settled = false;
