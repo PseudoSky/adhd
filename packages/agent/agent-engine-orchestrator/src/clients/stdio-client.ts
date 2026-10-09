@@ -8,6 +8,7 @@ import type { McpStdioConfig } from "../validation/index.js";
 import { ToolError } from "../validation/errors.js";
 import type { IMcpClient } from "./types.js";
 import type { EngineLogger, EngineConfig } from "../interfaces.js";
+import { wrapMcpTransport } from "../providers/wire.js";
 
 /**
  * Default budget for the stdio spawn + `initialize` handshake and for the first
@@ -111,7 +112,12 @@ export class StdioMcpClient implements IMcpClient {
         const timeoutMs = this.connectTimeoutMs();
         const startedAt = performance.now();
         try {
-            await client.connect(transport, { timeout: timeoutMs });
+            // `transport` stays the inner StdioClientTransport (its `.process` is read below); only the
+            // wrapped view is handed to the client so JSON-RPC traffic is logged.
+            await client.connect(
+                wrapMcpTransport(this.config, transport, { server: this.serverName, transport: "stdio" }),
+                { timeout: timeoutMs }
+            );
         } catch (error) {
             // Reap the half-started child so a timed-out spawn never lingers.
             await this.close();

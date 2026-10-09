@@ -1,4 +1,4 @@
-import { spawn, type ChildProcess } from "child_process";
+import type { ChildProcess } from "child_process";
 import readline from "readline";
 import { writeFile, unlink, mkdtemp, mkdir, rm } from "fs/promises";
 import { tmpdir } from "os";
@@ -11,6 +11,7 @@ import type { LLMProvider, ProviderChatRequest, ProviderChatResponse } from "./t
 import type { McpServerConfig, ProviderConfig, Message } from "../validation/index.js";
 import { ToolError } from "../validation/errors.js";
 import type { EngineLogger, EngineConfig } from "../interfaces.js";
+import { wireSpawn } from "./wire.js";
 import { normaliseAnthropicUsage } from "./anthropic.js";
 
 type ClaudeCliConfig = Extract<ProviderConfig, { type: "claudecli" }>;
@@ -443,7 +444,7 @@ export class ClaudeCliProvider implements LLMProvider {
 
         const subEnv = this.buildSubprocessEnv();
 
-        const proc = spawn(claudePath, args, {
+        const proc = wireSpawn(this.config)(claudePath, args, {
             stdio: ["pipe", "pipe", "pipe"],
             env: subEnv,
             // ADR-0008 D9 / NAT-TOOL-3: run `claude` in the task-time dispatching

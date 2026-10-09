@@ -102,9 +102,9 @@ export class McpClientRegistry {
         if (config.transport === "stdio") {
             client = new StdioMcpClient(name, config, this.engineConfig, this.logger);
         } else if (config.transport === "http") {
-            client = new HttpMcpClient(name, config);
+            client = new HttpMcpClient(name, config, this.engineConfig);
         } else if (config.transport === "sse") {
-            client = new SseMcpClient(name, config);
+            client = new SseMcpClient(name, config, this.engineConfig);
         } else {
             const exhaustive: never = config;
             throw new Error(`Unknown MCP transport: ${(exhaustive as { transport: string }).transport}`);

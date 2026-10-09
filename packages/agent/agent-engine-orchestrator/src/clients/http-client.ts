@@ -6,11 +6,16 @@ import type { ToolDefinition } from "../providers/types.js";
 import type { McpHttpConfig, McpSseConfig } from "../validation/index.js";
 import { ToolError } from "../validation/errors.js";
 import type { IMcpClient } from "./types.js";
+import type { EngineConfig } from "../interfaces.js";
+import { sdkFetchOption, wireFetch, wrapMcpTransport } from "../providers/wire.js";
 
 abstract class BaseHttpMcpClient implements IMcpClient {
     protected client: Client | null = null;
 
-    constructor(protected readonly serverName: string) {}
+    constructor(
+        protected readonly serverName: string,
+        protected readonly engineConfig?: EngineConfig
+    ) {}
 
     async listTools(): Promise<ToolDefinition[]> {
         if (!this.client) {
@@ -65,14 +70,16 @@ abstract class BaseHttpMcpClient implements IMcpClient {
 export class HttpMcpClient extends BaseHttpMcpClient {
     constructor(
         serverName: string,
-        private readonly config: McpHttpConfig
+        private readonly config: McpHttpConfig,
+        engineConfig?: EngineConfig
     ) {
-        super(serverName);
+        super(serverName, engineConfig);
     }
 
     async connect(): Promise<void> {
         const url = new URL(this.config.url);
         const transport = new StreamableHTTPClientTransport(url, {
+            ...sdkFetchOption(this.engineConfig),
             requestInit: {
                 headers: this.config.headers as Record<string, string> | undefined,
                 signal: this.config.timeoutMs
@@ -87,16 +94,17 @@ export class HttpMcpClient extends BaseHttpMcpClient {
         );
 
         this.client = client;
-        await client.connect(transport);
+        await client.connect(wrapMcpTransport(this.engineConfig, transport, { server: this.serverName, transport: "streamable-http" }));
     }
 }
 
 export class SseMcpClient extends BaseHttpMcpClient {
     constructor(
         serverName: string,
-        private readonly config: McpSseConfig
+        private readonly config: McpSseConfig,
+        engineConfig?: EngineConfig
     ) {
-        super(serverName);
+        super(serverName, engineConfig);
     }
 
     async connect(): Promise<void> {
@@ -104,7 +112,7 @@ export class SseMcpClient extends BaseHttpMcpClient {
         const transport = new SSEClientTransport(url, {
             eventSourceInit: {
                 fetch: (input, init) =>
-                    fetch(input, {
+                    wireFetch(this.engineConfig)(input, {
                         ...init,
                         headers: {
                             ...(init?.headers as Record<string, string>),
@@ -123,6 +131,6 @@ export class SseMcpClient extends BaseHttpMcpClient {
         );
 
         this.client = client;
-        await client.connect(transport);
+        await client.connect(wrapMcpTransport(this.engineConfig, transport, { server: this.serverName, transport: "sse" }));
     }
 }

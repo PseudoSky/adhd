@@ -6,6 +6,7 @@ import { generateId } from "../utils/ids.js";
 import { nowIso } from "../utils/timestamps.js";
 import { resolveToolCallName } from "../clients/tool-naming.js";
 import { DEFAULT_PROVIDER_TIMEOUT_MS } from "../interfaces.js";
+import { sdkFetchOption } from "./wire.js";
 import type { EngineConfig } from "../interfaces.js";
 
 import type { ProviderConfig, Message, ToolCall } from "../validation/index.js";
@@ -154,6 +155,7 @@ export class OpenAIProvider implements LLMProvider {
             // for openai/DeepSeek agents with no explicit provider.timeoutMs
             // (backlog 36a73117 / post-merge bucket-B review).
             timeout: providerConfig.timeoutMs ?? DEFAULT_PROVIDER_TIMEOUT_MS,
+            ...sdkFetchOption(config),
         });
     }
 

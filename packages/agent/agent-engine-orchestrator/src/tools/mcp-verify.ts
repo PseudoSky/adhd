@@ -95,8 +95,8 @@ function createClient(
   if (config.transport === 'stdio') {
     return new StdioMcpClient(name, config, engineConfig, logger);
   }
-  if (config.transport === 'http') return new HttpMcpClient(name, config);
-  return new SseMcpClient(name, config);
+  if (config.transport === 'http') return new HttpMcpClient(name, config, engineConfig);
+  return new SseMcpClient(name, config, engineConfig);
 }
 
 function errorMessage(err: unknown): string {

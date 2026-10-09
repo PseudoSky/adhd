@@ -6,6 +6,7 @@ export type {
   EngineLogger,
   PermissionGate,
   PermissionDecisionContext,
+  WireSeams,
 } from './interfaces.js';
 
 // ── Engine ────────────────────────────────────────────────────────────────────

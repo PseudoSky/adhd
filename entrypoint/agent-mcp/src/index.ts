@@ -12,7 +12,8 @@ import { runMigrations } from "./db/migrate.js";
 import { logger } from "./logger.js";
 import { initLogChannels, closeLogChannels } from "./wire/channels.js";
 import { registerOpsLog, logServerStart, logServerStop } from "./ops-log.js";
-import { env, toEngineConfig, resolveInitialSsePort, setSseBoundPort } from "./config.js";
+import { env, resolveInitialSsePort, setSseBoundPort } from "./config.js";
+import { engineConfig } from "./wire/seams.js";
 import { AgentStore } from "./store/agent-store.js";
 import { loadDefaultPlugins } from "./plugins/load-defaults.js";
 
@@ -428,7 +429,7 @@ async function main() {
         },
         db: dbAny,
         dagEngine,
-        config: toEngineConfig(),
+        config: engineConfig(),
         logger,
         providerRegistry,
         emitTaskEvent: emitTaskEvent as NonNullable<Parameters<typeof enqueueExistingTask>[1]>["emitTaskEvent"],

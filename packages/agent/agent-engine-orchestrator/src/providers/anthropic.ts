@@ -11,6 +11,7 @@ import type { TokenUsage } from "@adhd/agent-base-types";
 import { ToolError } from "../validation/errors.js";
 import type { EngineLogger, EngineConfig } from "../interfaces.js";
 import { DEFAULT_PROVIDER_TIMEOUT_MS } from "../interfaces.js";
+import { sdkFetchOption } from "./wire.js";
 
 import type {
     LLMProvider,
@@ -94,7 +95,8 @@ interface AnthropicClientParts {
 
 function buildAnthropicClient(
     secret: string,
-    timeoutMs: number | undefined
+    timeoutMs: number | undefined,
+    config?: EngineConfig
 ): AnthropicClientParts {
     // Fall back to the raised per-call budget so the SDK client timeout never
     // undercuts the orchestrator's AbortSignal (which uses the same constant).
@@ -104,7 +106,7 @@ function buildAnthropicClient(
     const effectiveTimeout = timeoutMs ?? DEFAULT_PROVIDER_TIMEOUT_MS;
     if (secret.startsWith("sk-ant-api")) {
         return {
-            client: new Anthropic({ apiKey: secret, timeout: effectiveTimeout }),
+            client: new Anthropic({ apiKey: secret, timeout: effectiveTimeout, ...sdkFetchOption(config) }),
             useOauthIdentity: false,
         };
     }
@@ -113,6 +115,7 @@ function buildAnthropicClient(
         client: new Anthropic({
             authToken: secret,
             timeout: effectiveTimeout,
+            ...sdkFetchOption(config),
             ...(isOauth ? { defaultHeaders: { "anthropic-beta": "oauth-2025-04-20" } } : {}),
         }),
         useOauthIdentity: isOauth,
@@ -219,7 +222,8 @@ export class AnthropicProvider implements LLMProvider {
 
         const { client, useOauthIdentity } = buildAnthropicClient(
             resolved.secret,
-            providerConfig.timeoutMs
+            providerConfig.timeoutMs,
+            config
         );
 
         this.client = client;

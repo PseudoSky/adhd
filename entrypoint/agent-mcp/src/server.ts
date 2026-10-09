@@ -18,6 +18,7 @@ export const PACKAGE_VERSION: string = (
 import { logger } from './logger.js';
 import { resolveBindHost } from './bind-host.js';
 import { env, toEngineConfig } from './config.js';
+import { engineConfig } from './wire/seams.js';
 import type { AgentStore } from './store/agent-store.js';
 import type {
   InProcessToolDescriptor,
@@ -663,7 +664,7 @@ export function createServer(deps: ServerDeps): Server {
     inProcessHandler,
     db: deps.db,
     dagEngine: deps.dagEngine,
-    config: toEngineConfig(),
+    config: engineConfig(),
     logger: logger,
     providerRegistry: deps.providerRegistry,
     emitTaskEvent: emitTaskEvent as (event: { type: string; taskId: string; status?: string; result?: string | null; error?: string | null; toolName?: string; toolCallId?: string; input?: unknown; content?: unknown }) => void,
@@ -868,7 +869,7 @@ export function createServer(deps: ServerDeps): Server {
                 // A5: thread the SAME engine config + logger the registry uses,
                 // so a stdio verify spawns with the identical curated env as the
                 // task path (previously it spawned with none).
-                config: toEngineConfig(),
+                config: engineConfig(),
                 logger,
               }
             )

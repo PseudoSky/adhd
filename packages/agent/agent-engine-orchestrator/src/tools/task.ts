@@ -214,6 +214,8 @@ async function runEphemeralTask(
     config: deps.config,
     logger: deps.logger,
     registry: deps.providerRegistry,
+    hooks: deps.hooks,
+    executionContext,
   });
 
   const userMessage = {
@@ -419,6 +421,8 @@ export async function taskTool(
     config: deps.config,
     logger: deps.logger,
     registry: deps.providerRegistry,
+    hooks: deps.hooks,
+    executionContext,
   });
 
   const existingMessages = deps.sessionStore.getMessages(input.session_id);
@@ -755,6 +759,8 @@ export async function enqueueExistingTask(
     config: deps.config,
     logger: deps.logger,
     registry: deps.providerRegistry,
+    hooks: deps.hooks,
+    executionContext,
   });
 
   const existingMessages = deps.sessionStore.getMessages(task.sessionId);

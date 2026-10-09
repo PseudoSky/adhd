@@ -617,7 +617,7 @@ export class Orchestrator {
             selectionOf(executionContext).providerType,
             executionContext.agentDefinition.nativeWebTools !== false
           );
-          providerResponse = await provider.chat({
+          const callProvider = (): ReturnType<typeof provider.chat> => provider.chat({
             messages: messagesToSend,
             tools: advertisedTools.length > 0 ? advertisedTools : undefined,
             serverSideTools:
@@ -642,6 +642,17 @@ export class Orchestrator {
               }
             },
           });
+          // Attach task/session/agent ids to every raw wire record this call writes (TRC-AC2/3).
+          providerResponse = await (config.wire
+            ? config.wire.withContext(
+                {
+                  task_id: executionContext.taskId,
+                  session_id: executionContext.sessionId,
+                  agent: executionContext.agentName,
+                },
+                callProvider
+              )
+            : callProvider());
         } catch (error) {
           if (signal.aborted) {
             throw new ToolError('PROVIDER_ERROR', 'Task was cancelled');

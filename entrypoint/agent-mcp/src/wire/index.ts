@@ -8,3 +8,4 @@ export { tracedFetch, redactUrl, DEFAULT_BODY_MAX_BYTES, type IWireOptions, type
 export { tracedSpawn } from "./traced-spawn.js";
 export { TracedTransport, type ITransportMeta } from "./traced-transport.js";
 export { withApiLog, withHttpApiLog, noteToolError } from "./api-log.js";
+export { createWireSeams, getWireSeams, engineConfig } from "./seams.js";
