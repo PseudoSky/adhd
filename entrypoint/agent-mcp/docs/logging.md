@@ -258,8 +258,12 @@ Two different questions, two different columns, for every provider:
 | `peakContextTokens` (`peak_context_tokens`, `context_size` in `usage_query`) | PER-TURN high-water mark: the largest context any single model call saw (`input + cache_read + cache_creation` of one call). A MAX, never a sum. | Max over the task's model calls. | Max over the per-turn `assistant` events' `usage` in the CLI stream-json (the provider reports it as `TokenUsage.peakContextTokens`). The CLI's `result.usage` is a sum and is not used. |
 
 Example (recorded `claudecli` run B1, five CLI turns): `inputTokens` 36,589, `peakContextTokens` 9,149.
-A stream whose `assistant` events carry no usage falls back to `inputTokens`. `peakContextAt` is
-response-granular for `claudecli`: it marks the response, not the internal turn, that peaked. The
+A stream whose `assistant` events carry no usage falls back to `inputTokens`. `peakContextAt`
+(`peak_context_at`) is the 1-based model-call index at which the peak occurred, and it only moves
+when a response sets a strictly higher peak. For `claudecli` it is response-granular: a response
+folding N internal turns counts as N calls and `peakContextAt` is the last call index of the
+response that peaked, not the internal turn. Compaction decisions use the same per-response
+`peakContextTokens` (falling back to `inputTokens`), never the cumulative sum. The
 turn grain of `usage_query` reports the same per-turn peak as its `context_size`, and re-prices a
 multi-model `claudecli` response per model from the breakdown carried on its `MODEL_RESPONSE` event
 (`modelBreakdown`), so a turn's `est_cost_usd` equals the task row's.

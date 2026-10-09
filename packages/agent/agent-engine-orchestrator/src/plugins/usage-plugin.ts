@@ -378,7 +378,9 @@ export class UsagePlugin implements Plugin {
           reasoningTokens: tokenUsage?.reasoningTokens ?? null,
           // First call for this task: its input IS the peak so far.
           peakContextTokens: peakCandidate,
-          peakContextAt: 1,
+          // 1-based model-call index of the response that peaked. A first response folding N
+          // calls (claudecli) is call N: response-granular, as in the update path. (7ead5eaa AC4.6)
+          peakContextAt: modelCalls,
           // CUMULATIVE Σ turn compute_ms (DESIGN.md §6) — this call's is the first.
           computeMs,
           // First call for this task: whatever cost this turn produced (or NULL if
@@ -422,7 +424,9 @@ export class UsagePlugin implements Plugin {
             peakContextTokens: sql`MAX(COALESCE(${
               taskUsageTable.peakContextTokens
             }, 0), ${peakCandidate})`,
-            // Record WHICH call peaked, but only when this call is the new peak.
+            // Record WHICH call peaked (1-based model-call index; for a response that folds N
+            // calls it is the LAST call of that response), only when this response is a strictly
+            // new peak. (7ead5eaa AC4.6)
             peakContextAt: sql`CASE WHEN ${peakCandidate} > COALESCE(${
               taskUsageTable.peakContextTokens
             }, 0) THEN ${taskUsageTable.modelCalls} + ${modelCalls} ELSE ${taskUsageTable.peakContextAt} END`,

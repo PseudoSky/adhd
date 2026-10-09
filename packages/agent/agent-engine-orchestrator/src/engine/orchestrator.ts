@@ -736,9 +736,15 @@ export class Orchestrator {
           assistantMessage
         );
         currentMessages.push(assistantMessage);
-        // Record the provider's own context measurement to drive compaction decisions.
-        if (providerResponse.usage?.inputTokens !== undefined) {
-          lastReportedContext = providerResponse.usage.inputTokens;
+        // Record the provider's own context measurement to drive compaction decisions. Use the
+        // TRUE per-response context: `peakContextTokens` when the provider reports it (claudecli
+        // folds several CLI turns into one response whose `inputTokens` is their cumulative SUM,
+        // which would trigger compaction on an inflated number), else `inputTokens` (one call).
+        // (7ead5eaa AC4.5)
+        const reportedContext =
+          providerResponse.usage?.peakContextTokens ?? providerResponse.usage?.inputTokens;
+        if (reportedContext !== undefined) {
+          lastReportedContext = reportedContext;
         }
         // compute_ms: MODEL_RESPONSE.created_at - MODEL_REQUEST.created_at for this turn.
         const computeMs = Date.now() - modelCallStartedAt;
