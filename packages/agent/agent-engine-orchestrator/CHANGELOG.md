@@ -1,5 +1,9 @@
 ## Unreleased
 
+### 🐛 Bug Fixes
+
+- **Cache-write 1h tier.** `normaliseAnthropicUsage` carries `usage.cache_creation.ephemeral_1h_input_tokens` as `cacheCreation1hTokens`; `UsagePlugin` and the `usage_query` turn re-pricing pass it to `estimateCost`, and the `MODEL_RESPONSE` event payload records it, so stored `est_cost_usd` for a cold-cache `claudecli`/`anthropic` call matches the vendor total. 5-minute-only and unsplit usage is priced as before. (b726a987)
+
 ### 🚀 Features
 
 - **Response-model capture.** Provider adapters (`anthropic`, `openai`) return `responseModel`; the orchestrator forwards it on the `post:model_response` hook payload and the turn event. `claudecli` intentionally does not set it. (1f1c8598) ([cfc9d936](https://github.com/PseudoSky/adhd/commit/cfc9d936))

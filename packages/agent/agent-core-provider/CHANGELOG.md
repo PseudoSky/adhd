@@ -1,5 +1,9 @@
 ## Unreleased
 
+### 🐛 Bug Fixes
+
+- **Cache-write 1h tier.** `estimateCost` now prices cache writes by TTL tier: `IUsageTokens.cacheCreation1hTokens` (a subset of `cacheCreationTokens`) bills at the new optional `ModelRate.cacheWrite1hPerM` (Anthropic: 2x base input; set on every `claude_*` rate-card entry) or the price record's `cacheWrite1hPerM`; the rest, and unsplit usage, bills at the 5-minute `cacheWritePerM`. A model with no 1h rate falls back to its 5-minute rate. `parseOpenRouterFeed` now reads `input_cache_write_1h` into `IParsedModel.cacheWrite1hPerM`. All additions are optional, so existing callers are unchanged. The cold-cache haiku-4-5 call (10 uncached, 4670 1h-tier writes, 49 out) now costs 0.009595 USD instead of 0.0060925. (b726a987)
+
 ### 🚀 Features
 
 - **`estimateCost(model, usage, {asOf?, source?})`** returns `{costUsd, status, basis, pricingRef, resolvedId}`; `estimateCostUsd` is now a thin wrapper returning only `costUsd`. A model with no rate returns `costUsd: null` and `status: "unpriced_model"`, never 0. Resolution order: exact `RATE_CARD` key (`vendor-direct`), then OpenRouter (`source.priceAt(id, asOf)` first, bundled snapshot as fallback; an alias hit is `owner-assumption`, a plain id `openrouter-estimate`), then normalised `RATE_CARD` keys and family aliases (`vendor-direct`). A `kind: "router"` record is final: unpriced. With no `opts` the numeric result is unchanged. (1f1c8598 37f6c511) ([5f314528](https://github.com/PseudoSky/adhd/commit/5f314528))

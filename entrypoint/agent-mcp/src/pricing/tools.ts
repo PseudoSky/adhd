@@ -127,6 +127,7 @@ export function pricingHistory(
       input_per_m: r.inputPerM,
       cache_read_per_m: r.cacheReadPerM,
       cache_write_per_m: r.cacheWritePerM,
+      cache_write_1h_per_m: r.cacheWrite1hPerM,
       output_per_m: r.outputPerM,
       overrides_json: r.overridesJson,
     })),

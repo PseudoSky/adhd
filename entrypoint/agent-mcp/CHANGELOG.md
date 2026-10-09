@@ -1,5 +1,9 @@
 ## Unreleased
 
+### 🐛 Bug Fixes
+
+- **Cache-write 1h tier.** Cold-cache `claudecli` cache writes are priced at the 1-hour rate when usage reports `cache_creation.ephemeral_1h_input_tokens`, so `task_usage.est_cost_usd` matches the vendor `total_cost_usd` (0.009595 vs the old 0.0060925 in the audited example). `pricing_history` rows gain `cache_write_1h_per_m`. (b726a987)
+
 ### 🚀 Features
 
 - **Live model prices.** The server now prices usage from an append-only price history instead of a fixed table. On start it seeds the bundled OpenRouter snapshot (467 models, fetched 2026-10-08), then pulls the public `https://openrouter.ai/api/v1/models` feed every 24 hours (no API key, no credentials; 30 s timeout; one retry after `Retry-After`, capped at 120 s, on a network error, 5xx or 429). Several servers sharing one database coordinate through a ledger claim, so exactly one pulls. `PACKAGE_VERSION` is now exported from `server.ts` and sent in the pull's `User-Agent`. (37f6c511 1f1c8598) ([bcde95eb](https://github.com/PseudoSky/adhd/commit/bcde95eb))

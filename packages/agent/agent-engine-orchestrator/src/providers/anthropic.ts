@@ -59,6 +59,8 @@ export function normaliseAnthropicUsage(
         output_tokens: number;
         cache_read_input_tokens?: number | null;
         cache_creation_input_tokens?: number | null;
+        /** Per-TTL split of the cache writes; its `ephemeral_1h_input_tokens` is a subset of `cache_creation_input_tokens`. */
+        cache_creation?: { ephemeral_5m_input_tokens?: number | null; ephemeral_1h_input_tokens?: number | null } | null;
     },
     stopReason: string,
     maxTokens: number
@@ -66,6 +68,12 @@ export function normaliseAnthropicUsage(
     const cacheRead = sdkUsage.cache_read_input_tokens ?? 0;
     const cacheWrite = sdkUsage.cache_creation_input_tokens ?? 0;
     const uncached = sdkUsage.input_tokens;
+    // b726a987: the 1h-TTL subset of the cache writes is billed at the 1h rate. Clamp to the
+    // reported total so a malformed split can never price more write tokens than exist.
+    const write1h = Math.min(
+        Math.max(sdkUsage.cache_creation?.ephemeral_1h_input_tokens ?? 0, 0),
+        cacheWrite
+    );
 
     return {
         // Reconstruct the true total — do NOT pass Anthropic's headline through directly.
@@ -74,6 +82,7 @@ export function normaliseAnthropicUsage(
         uncachedInputTokens: uncached,
         cacheReadTokens: cacheRead,
         cacheCreationTokens: cacheWrite,
+        ...(write1h > 0 ? { cacheCreation1hTokens: write1h } : {}),
         stopReason,
         maxTokens,
     };

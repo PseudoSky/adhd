@@ -818,6 +818,7 @@ function deriveTurns(
         outputTokens?: number;
         cacheReadTokens?: number;
         cacheCreationTokens?: number;
+        cacheCreation1hTokens?: number;
         uncachedInputTokens?: number;
         reasoningTokens?: number;
         computeMs?: number;
@@ -837,7 +838,13 @@ function deriveTurns(
       const model = info.usage.model;
       const est = estimateCost(
         model,
-        { uncachedInputTokens, cacheReadTokens, cacheCreationTokens, outputTokens },
+        {
+          uncachedInputTokens,
+          cacheReadTokens,
+          cacheCreationTokens,
+          cacheCreation1hTokens: payload.cacheCreation1hTokens ?? 0,
+          outputTokens,
+        },
         { asOf: evt.createdAt, source }
       );
       const estCostUsd = est.costUsd;

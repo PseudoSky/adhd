@@ -149,6 +149,7 @@ export class UsagePlugin implements Plugin {
           uncachedInputTokens: tokenUsage?.uncachedInputTokens ?? 0,
           cacheReadTokens: tokenUsage?.cacheReadTokens ?? 0,
           cacheCreationTokens: tokenUsage?.cacheCreationTokens ?? 0,
+          cacheCreation1hTokens: tokenUsage?.cacheCreation1hTokens ?? 0,
           outputTokens,
         },
         { asOf: this.now(), source: this.source }

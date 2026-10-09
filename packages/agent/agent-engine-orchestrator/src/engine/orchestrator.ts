@@ -762,6 +762,8 @@ export class Orchestrator {
             outputTokens: providerResponse.usage?.outputTokens,
             cacheReadTokens: providerResponse.usage?.cacheReadTokens,
             cacheCreationTokens: providerResponse.usage?.cacheCreationTokens,
+            // b726a987: 1h-TTL subset of cacheCreationTokens (priced at the 1h rate on re-pricing).
+            cacheCreation1hTokens: providerResponse.usage?.cacheCreation1hTokens,
             // Provider-normalized full-price input (NOT derived here — the provider
             // layer already reconstructs this correctly per-provider, see
             // anthropic.ts/openai.ts `uncached`). Needed at turn grain so

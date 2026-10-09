@@ -14,6 +14,13 @@ export interface IUsageTokens {
   uncachedInputTokens: number;
   cacheReadTokens: number;
   cacheCreationTokens: number;
+  /**
+   * SUBSET of `cacheCreationTokens` written with the 1-hour TTL (Anthropic
+   * `cache_creation.ephemeral_1h_input_tokens`). Priced at the 1h cache-write rate; the remainder
+   * (`cacheCreationTokens - cacheCreation1hTokens`) at the 5-minute rate. Absent => unsplit (all
+   * 5-minute). Clamped to `[0, cacheCreationTokens]`. (b726a987)
+   */
+  cacheCreation1hTokens?: number;
   outputTokens: number;
 }
 
@@ -31,6 +38,8 @@ export interface IPriceRecord {
   inputPerM: number | null;
   cacheReadPerM: number | null;
   cacheWritePerM: number | null;
+  /** 1-hour cache-write tier ($/M), when the feed published `input_cache_write_1h`; absent/null => none. (b726a987) */
+  cacheWrite1hPerM?: number | null;
   outputPerM: number | null;
   source: 'bundled' | 'openrouter-live';
   /** True when the instant predates our first observation and the earliest row was used. */

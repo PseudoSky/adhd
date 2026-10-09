@@ -432,13 +432,16 @@ usage and the price table:
 | output | 49 | 5.00 | 0.000245 |
 | **Total** | | | **0.009595** |
 
-That equals the CLI's own `total_cost_usd` (0.009595). The stored `task_usage.priced_cost_usd` was
-**0.0060925**: it prices all 4670 cache-write tokens at the 5-minute rate (4670 x 1.25), because the
-rate card has one `cacheWritePerM` and no 1-hour tier. The difference, 0.0035025 USD (36.5% of the
-vendor figure), appears only on a cold prompt cache, when the CLI writes the cache with a 1-hour TTL;
-a warm re-run of the same task (cache read 4670 of 4680) priced exactly: 10 x 1.0 + 4670 x 0.1 +
-37 x 5.0 = 662 units = 0.000662 USD. Tracked as backlog `b726a987`. The OAuth task in trace 1 has no
-cache writes and is exact.
+That equals the CLI's own `total_cost_usd` (0.009595), and it is what `task_usage.est_cost_usd` now
+stores: usage that reports `cache_creation.ephemeral_1h_input_tokens` is priced with those tokens at
+the 1-hour cache-write rate (2x base input; `input_cache_write_1h` in the price history `raw_json`,
+`cacheWrite1hPerM` in the rate card) and the remaining cache-write tokens at the 5-minute rate. Usage that
+does not split tiers, and models with no published 1-hour rate, price every cache write at the
+5-minute rate. Before backlog `b726a987` was fixed the stored figure was 0.0060925: all 4670
+tokens were priced at the 5-minute rate (4670 x 1.25), 36.5% under the vendor figure on every cold
+prompt cache. A warm re-run of the same task (cache read 4670 of 4680) priced exactly: 10 x 1.0 +
+4670 x 0.1 + 37 x 5.0 = 662 units = 0.000662 USD. Rows written before the fix are not back-filled.
+The OAuth task in trace 1 has no cache writes and is exact.
 
 This is the general audit recipe: provider usage from `api`/`rawUsage` x rate row = expected cost;
 compare to `task_usage`; compare to any vendor-reported total.
@@ -448,7 +451,6 @@ compare to `task_usage`; compare to any vendor-reported total.
 Observed during the live verification above; each is filed in the backlog, none is fixed by this
 guide.
 
-- `b726a987`: cold-cache 1-hour cache writes are priced at the 5-minute rate (trace 3).
 - `e9c485e1`: `agent-mcp-tail` one-shot history prints the wall-clock time of the run, not the
   event's `created_at`, and the `MODEL_RESPONSE` row shows the prompt text instead of the reply.
 - `ddf26e2a`: `response_model` is null for `claudecli` tasks in `usage_query`; `agent.model_call.*`

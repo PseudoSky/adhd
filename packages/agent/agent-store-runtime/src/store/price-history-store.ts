@@ -49,6 +49,8 @@ export interface IPriceRecordLike {
   inputPerM: number | null;
   cacheReadPerM: number | null;
   cacheWritePerM: number | null;
+  /** 1-hour cache-write tier ($/M) read from the verbatim `raw_json` (`input_cache_write_1h`); null when unpublished. */
+  cacheWrite1hPerM: number | null;
   outputPerM: number | null;
   source: 'bundled' | 'openrouter-live';
   beforeFirstObservation?: boolean;
@@ -140,6 +142,22 @@ type LedgerRow = typeof pricePullLedgerTable.$inferSelect;
 
 const lc = (id: string): string => id.toLowerCase();
 
+/**
+ * `input_cache_write_1h` ($/token in the verbatim feed JSON) -> $/million, or null when the row
+ * carries no (valid, non-negative) 1h tier. Read from `raw_json`, the stored source of truth, so
+ * no schema column is needed; same conversion as core-provider's `perMillion`.
+ */
+function cacheWrite1hFromRaw(rawJson: string): number | null {
+  try {
+    const v = (JSON.parse(rawJson) as Record<string, unknown> | null)?.['input_cache_write_1h'];
+    if (v === undefined || v === null || (typeof v === 'string' && v.trim() === '')) return null;
+    const n = Number(v);
+    return Number.isFinite(n) && n >= 0 ? Number((n * 1_000_000).toPrecision(12)) : null;
+  } catch {
+    return null;
+  }
+}
+
 function toRecord(r: HistoryRow, beforeFirst?: boolean): IPriceRecordLike {
   const rec: IPriceRecordLike = {
     id: r.id,
@@ -149,6 +167,7 @@ function toRecord(r: HistoryRow, beforeFirst?: boolean): IPriceRecordLike {
     inputPerM: r.inputPerM,
     cacheReadPerM: r.cacheReadPerM,
     cacheWritePerM: r.cacheWritePerM,
+    cacheWrite1hPerM: cacheWrite1hFromRaw(r.rawJson),
     outputPerM: r.outputPerM,
     source: r.source === 'bundled' ? 'bundled' : 'openrouter-live',
     ledgerId: r.ledgerId,
@@ -168,6 +187,7 @@ function sameValue(a: IPriceRecordLike, b: INewPriceRow): boolean {
     a.inputPerM === b.inputPerM &&
     a.cacheReadPerM === b.cacheReadPerM &&
     a.cacheWritePerM === b.cacheWritePerM &&
+    a.cacheWrite1hPerM === cacheWrite1hFromRaw(b.rawJson) &&
     a.outputPerM === b.outputPerM &&
     a.overridesJson === b.overridesJson
   );

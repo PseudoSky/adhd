@@ -33,6 +33,13 @@ export interface TokenUsage {
   cacheReadTokens?: number;
   /** Cache-WRITE input. Billed at a premium on Anthropic (1.25x/2x) and OpenAI GPT-5.6+ (1.25x); free on DeepSeek/Gemini. */
   cacheCreationTokens?: number;
+  /**
+   * The SUBSET of `cacheCreationTokens` written with the 1-hour TTL (Anthropic
+   * `usage.cache_creation.ephemeral_1h_input_tokens`), billed at the 1h cache-write rate
+   * (2x base input) instead of the 5-minute rate. Absent/0 => every cache-write token is 5-minute
+   * (or the provider does not split tiers). Never additive to `inputTokens`. (b726a987)
+   */
+  cacheCreation1hTokens?: number;
   /** Reasoning tokens burned before visible output (reasoning models). Billed as output. */
   reasoningTokens?: number;
 }

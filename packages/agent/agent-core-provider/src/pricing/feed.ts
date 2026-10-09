@@ -18,6 +18,8 @@ export interface IParsedModel {
   inputPerM: number | null;
   cacheReadPerM: number | null;
   cacheWritePerM: number | null;
+  /** `input_cache_write_1h` ($/M); null when the feed does not publish a 1-hour tier. (b726a987) */
+  cacheWrite1hPerM?: number | null;
   outputPerM: number | null;
   /** Verbatim JSON of the model's `pricing` object minus `overrides` (float-dispute defence). */
   rawJson: string;
@@ -32,7 +34,7 @@ export interface IParsedFeed {
   invalid: string[];
 }
 
-type PriceField = 'prompt' | 'completion' | 'input_cache_read' | 'input_cache_write';
+type PriceField = 'prompt' | 'completion' | 'input_cache_read' | 'input_cache_write' | 'input_cache_write_1h';
 
 /** undefined = absent; NaN = present but not a finite number. */
 function readPerToken(pricing: Record<string, unknown>, field: PriceField): number | undefined {
@@ -91,6 +93,7 @@ export function parseOpenRouterFeed(json: unknown): IParsedFeed {
     }
     const cacheRead = readPerToken(p, 'input_cache_read');
     const cacheWrite = readPerToken(p, 'input_cache_write');
+    const cacheWrite1h = readPerToken(p, 'input_cache_write_1h');
     const bad: string[] = [];
     const check = (name: string, v: number | undefined, required: boolean): void => {
       if (v === undefined) {
@@ -103,6 +106,7 @@ export function parseOpenRouterFeed(json: unknown): IParsedFeed {
     check('completion', completion, true);
     check('input_cache_read', cacheRead, false);
     check('input_cache_write', cacheWrite, false);
+    check('input_cache_write_1h', cacheWrite1h, false);
     if (bad.length > 0) {
       invalid.push(`${id}: invalid price (${bad.join(', ')})`);
       continue;
@@ -113,6 +117,7 @@ export function parseOpenRouterFeed(json: unknown): IParsedFeed {
       inputPerM: perMillion(prompt as number),
       cacheReadPerM: cacheRead === undefined ? null : perMillion(cacheRead),
       cacheWritePerM: cacheWrite === undefined ? null : perMillion(cacheWrite),
+      cacheWrite1hPerM: cacheWrite1h === undefined ? null : perMillion(cacheWrite1h),
       outputPerM: perMillion(completion as number),
       rawJson,
       overridesJson,

@@ -25,10 +25,9 @@
  *     `npx nx run agent-mcp:dist-manifest`), the `claude` binary, and a configured
  *     ADHD_AGENT_ANTHROPIC_SECRET; any missing prerequisite FAILS the run (it never skips).
  *
- * Note on LIVE-AC3 [claudecli]: the corrected arithmetic prices a cold-cache 1-hour cache write at
- * `input_cache_write_1h`; the product prices it at the 5-minute rate (backlog b726a987), so this
- * assertion goes red on any run where the CLI writes the prompt cache. A warm-cache run (cache read,
- * no write) does not reach that path and passes.
+ * Note on LIVE-AC3 [claudecli]: the arithmetic prices a cold-cache 1-hour cache write at
+ * `input_cache_write_1h`, and the product does the same (backlog b726a987), so the stored cost
+ * matches on cold- and warm-cache runs alike.
  *
  * Run: AGENT_MCP_LIVE=1 npx vitest run --config entrypoint/agent-mcp/vitest.e2e.config.ts \
  *        entrypoint/agent-mcp/src/__tests__/live/tracing-live.e2e.test.ts

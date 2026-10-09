@@ -1,5 +1,9 @@
 ## Unreleased
 
+### 🐛 Bug Fixes
+
+- **Cache-write 1h tier.** `PriceHistoryStore.priceAt`/`latest`/`history` records expose `cacheWrite1hPerM`, read from the verbatim `raw_json` `input_cache_write_1h` (no schema change; null when unpublished). A feed update that changes only the 1h tier now appends a new row instead of being deduped as unchanged. (b726a987)
+
 ### 🚀 Features
 
 - **Append-only price history.** New tables `model_price_history` (BEFORE UPDATE/DELETE triggers abort; a correction is a new row, newest `observed_at` wins; unique on `(model_id, observed_at, source)`) and `price_pull_ledger` (one row per pull attempt: `running` | `ok` | `failed` | `rejected_shrink` | `rejected_invalid`). Schema in `src/db/schema.ts`, migration `0012_price_history_and_cost_provenance.sql` (shipped in `entrypoint/agent-mcp/drizzle`). (1f1c8598 37f6c511) ([bc340a5b](https://github.com/PseudoSky/adhd/commit/bc340a5b))

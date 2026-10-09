@@ -9,6 +9,12 @@ export interface ModelRate {
   cacheReadPerM: number;
   /** Cache-write/creation input (5-minute tier), $ per million tokens. */
   cacheWritePerM: number;
+  /**
+   * Cache-write/creation input, 1-HOUR tier, $ per million tokens (Anthropic: 2x base input).
+   * Optional: a model with no 1h rate bills its 1h-tier tokens at `cacheWritePerM` (the 5-minute
+   * rate) -- the documented fallback, never a fabricated number. (b726a987)
+   */
+  cacheWrite1hPerM?: number;
   /** Output tokens (reasoning_tokens is a SUBSET of this, never billed separately), $ per million tokens. */
   outputPerM: number;
 }
@@ -17,10 +23,10 @@ export interface ModelRate {
 // DeepSeek: api-docs.deepseek.com/quick_start/pricing). DeepSeek numbers cross-corroborated against
 // independent prior research. See memory episode 01KXPWEVY0DXBD75Y2MJ1QTY68.
 export const RATE_CARD: Record<string, ModelRate> = {
-  claude_sonnet_4_6: { inputPerM: 3.00, cacheReadPerM: 0.30, cacheWritePerM: 3.75, outputPerM: 15.00 },
-  claude_opus_4_8:   { inputPerM: 5.00, cacheReadPerM: 0.50, cacheWritePerM: 6.25, outputPerM: 25.00 },
-  claude_haiku_4_5:  { inputPerM: 1.00, cacheReadPerM: 0.10, cacheWritePerM: 1.25, outputPerM: 5.00 },
-  claude_fable_5:    { inputPerM: 10.00, cacheReadPerM: 1.00, cacheWritePerM: 12.50, outputPerM: 50.00 },
+  claude_sonnet_4_6: { inputPerM: 3.00, cacheReadPerM: 0.30, cacheWritePerM: 3.75, cacheWrite1hPerM: 6.00, outputPerM: 15.00 },
+  claude_opus_4_8:   { inputPerM: 5.00, cacheReadPerM: 0.50, cacheWritePerM: 6.25, cacheWrite1hPerM: 10.00, outputPerM: 25.00 },
+  claude_haiku_4_5:  { inputPerM: 1.00, cacheReadPerM: 0.10, cacheWritePerM: 1.25, cacheWrite1hPerM: 2.00, outputPerM: 5.00 },
+  claude_fable_5:    { inputPerM: 10.00, cacheReadPerM: 1.00, cacheWritePerM: 12.50, cacheWrite1hPerM: 20.00, outputPerM: 50.00 },
   'deepseek-v4-flash': { inputPerM: 0.14, cacheReadPerM: 0.0028, cacheWritePerM: 0, outputPerM: 0.28 },
   'deepseek-v4-pro':   { inputPerM: 0.435, cacheReadPerM: 0.003625, cacheWritePerM: 0, outputPerM: 0.87 },
 };
@@ -64,6 +70,7 @@ const OPENROUTER_RATES: ReadonlyMap<string, ModelRate> = new Map(
           // No published cache-read price => cache hits bill as ordinary input.
           cacheReadPerM: m.cacheReadPerM ?? m.inputPerM,
           cacheWritePerM: m.cacheWritePerM ?? 0,
+          ...(m.cacheWrite1hPerM != null ? { cacheWrite1hPerM: m.cacheWrite1hPerM } : {}),
           outputPerM: m.outputPerM,
         }]]
       : []
@@ -168,11 +175,20 @@ function normalizeModelKeyCandidates(model: string): string[] {
 /** Latest-possible instant, used when a caller supplies a source but no `asOf`. */
 const FAR_FUTURE_ISO = '9999-12-31T23:59:59.999Z';
 
+/**
+ * Cost of one usage. Cache-write tokens split by TTL tier (b726a987): the 1-hour subset
+ * (`cacheCreation1hTokens`, clamped to `[0, cacheCreationTokens]`) bills at `cacheWrite1hPerM`,
+ * falling back to the 5-minute `cacheWritePerM` when the model publishes no 1h rate; the rest
+ * bills at `cacheWritePerM`. Unsplit usage (no `cacheCreation1hTokens`) is all 5-minute.
+ */
 function costOf(rate: ModelRate, usage: IUsageTokens): number {
+  const write1h = Math.min(Math.max(usage.cacheCreation1hTokens ?? 0, 0), usage.cacheCreationTokens);
+  const write5m = usage.cacheCreationTokens - write1h;
   return (
     (usage.uncachedInputTokens * rate.inputPerM +
       usage.cacheReadTokens * rate.cacheReadPerM +
-      usage.cacheCreationTokens * rate.cacheWritePerM +
+      write5m * rate.cacheWritePerM +
+      write1h * (rate.cacheWrite1hPerM ?? rate.cacheWritePerM) +
       usage.outputTokens * rate.outputPerM) /
     1_000_000
   );
@@ -234,6 +250,7 @@ export function estimateCost(
           inputPerM: rec.inputPerM,
           cacheReadPerM: rec.cacheReadPerM ?? rec.inputPerM,
           cacheWritePerM: rec.cacheWritePerM ?? 0,
+          ...(rec.cacheWrite1hPerM != null ? { cacheWrite1hPerM: rec.cacheWrite1hPerM } : {}),
           outputPerM: rec.outputPerM,
         },
         usage, orBasis, rec.id, orId
