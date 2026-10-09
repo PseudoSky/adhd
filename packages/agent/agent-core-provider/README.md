@@ -71,6 +71,32 @@ registry.list(); // all providers;  registry.get('anthropic') // Provider | null
 The shared binding types (`PartialBinding`, `ProviderSelection`, `ModelSlug`,
 `ProviderType`) live in `@adhd/agent-base-types`.
 
+## Cost estimation
+
+`estimateCost` prices one call (or a pre-summed rollup) and says how the number was derived.
+Unpriced is `null`, never `0`.
+
+```typescript
+import { estimateCost, estimateCostUsd } from '@adhd/agent-core-provider';
+
+const usage = { uncachedInputTokens: 1_000_000, cacheReadTokens: 0, cacheCreationTokens: 0, outputTokens: 0 };
+estimateCost('claude_sonnet_4_6', usage);
+// { costUsd: 3, status: 'priced', basis: 'vendor-direct', pricingRef: 'rate-card:claude_sonnet_4_6', resolvedId: 'claude_sonnet_4_6' }
+estimateCostUsd('no-such-model', usage); // null
+```
+
+Resolution order: exact `RATE_CARD` key (`vendor-direct`), then OpenRouter (an alias hit is
+`owner-assumption`, a plain OpenRouter id is `openrouter-estimate`), then normalised `RATE_CARD` keys and
+family aliases (`vendor-direct`). Pass `{ asOf, source }` to price against an as-of `IPriceSource` (the
+price history kept by `@adhd/agent-store-runtime`); the bundled OpenRouter snapshot
+(`PRICING_SNAPSHOT_META`, 467 models fetched 2026-10-08) is the fallback. The snapshot is generated:
+edit `src/pricing/pricing.json`, run `nx run agent-core-provider:gen-pricing-snapshot`; a unit test fails if
+`pricing-snapshot.ts` drifts from the JSON.
+
+`PROVIDER_MODEL_ALIASES` maps a provider-side name to the OpenRouter id it is priced as. Each value is an
+object `{ target, basis: 'owner-assumption', setAt, setBy, ticket }`; today the only entry is
+`deepseek-flash` to `deepseek/deepseek-v4.1-flash`, an owner decision rather than evidence.
+
 ## Key exports
 
 | Export | Purpose |
@@ -80,6 +106,9 @@ The shared binding types (`PartialBinding`, `ProviderSelection`, `ModelSlug`,
 | `ModelStore` | Model definitions and capabilities |
 | `ToolFormatStore` | Tool format specifications per model |
 | `runMigrationsOn(db)` | Initialize database schema |
+| `estimateCost` / `estimateCostUsd` | Cost with provenance / cost number only (`null` when unpriced) |
+| `PROVIDER_MODEL_ALIASES`, `RATE_CARD`, `PRICING_SNAPSHOT_META` | Alias objects, vendor-direct rates, bundled snapshot metadata |
+| `parseOpenRouterFeed`, `parseBundledSnapshot`, `perMillion` | OpenRouter feed validation and per-token to per-million conversion |
 | Schema tables | Model bindings and platform definitions |
 
 ## Architecture

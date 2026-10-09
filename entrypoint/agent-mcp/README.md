@@ -441,6 +441,12 @@ Several servers sharing one database coordinate through a ledger claim, so exact
 - OpenRouter list prices are an estimate for agents billed elsewhere (for example DeepSeek direct):
   `usage_query` reports `cost_basis` (`vendor-direct`, `openrouter-estimate`, `owner-assumption`).
 - Time-of-day / context-tier `pricing.overrides` are stored verbatim and applied to nothing.
+- `deepseek-flash` (DeepSeek reached through the `openai` provider type) is priced as OpenRouter's
+  `deepseek/deepseek-v4.1-flash`. That mapping is an owner assumption (`cost_basis: "owner-assumption"`,
+  ticket 37f6c511), not evidence: confirm it with `usage_query` `group_by:"response_model"`, which groups by the
+  model the provider reported serving each call. The `claudecli` provider does not report a response model, and
+  turns recorded before this feature group under `(unknown)`.
+- There is no setting to disable the daily pull; every server on a database that has not pulled in 24 hours attempts one.
 
 ## Limitations
 
