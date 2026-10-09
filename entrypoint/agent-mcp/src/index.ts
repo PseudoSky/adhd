@@ -10,6 +10,8 @@ import { fileURLToPath } from "node:url";
 import { db } from "./db/client.js";
 import { runMigrations } from "./db/migrate.js";
 import { logger } from "./logger.js";
+import { initLogChannels, closeLogChannels } from "./wire/channels.js";
+import { registerOpsLog, logServerStart, logServerStop } from "./ops-log.js";
 import { env, toEngineConfig, resolveInitialSsePort, setSseBoundPort } from "./config.js";
 import { AgentStore } from "./store/agent-store.js";
 import { loadDefaultPlugins } from "./plugins/load-defaults.js";
@@ -225,6 +227,10 @@ function verifyAgentEnvRefs(agents: AgentDefinition[]): void {
 }
 
 async function main() {
+    // c536ce29: api + ops log channels (environment-resolved roots); the ops channel is also the
+    // pino logger's persistent sink. Never throws; a bad log dir degrades to a one-line stderr notice.
+    const logChannels = initLogChannels();
+    const startedAtMs = Date.now();
     runMigrations();
 
     // Provision the adopted `srt` policy so the (default) srt-wrapped `fs`/
@@ -257,6 +263,7 @@ async function main() {
     }
 
     const hooks = new HookRegistry();
+    registerOpsLog(hooks);
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const dbAny = db as any;
@@ -363,7 +370,7 @@ async function main() {
         ? createProviderRegistry(promptResolver.registryDb as Parameters<typeof createProviderRegistry>[0])
         : undefined;
 
-    const { close } = await startServer({
+    const { close, httpServer } = await startServer({
         agentStore,
         sessionStore,
         taskStore,
@@ -376,6 +383,18 @@ async function main() {
         promptResolver,
         providerRegistry,
         pricing,
+    });
+
+    const boundHttp = httpServer?.address();
+    const boundSse = sseServer?.address();
+    logServerStart({
+        transport: env.config.transport.kind,
+        bindHost: boundHttp && typeof boundHttp === "object" ? boundHttp.address : null,
+        port: boundHttp && typeof boundHttp === "object" ? boundHttp.port : null,
+        ssePort: boundSse && typeof boundSse === "object" ? boundSse.port : null,
+        instance: env.instanceId,
+        version: PACKAGE_VERSION,
+        apiLog: logChannels.apiEnabled ? "on" : "off",
     });
 
     // The DAG dispatch path resolves `nativeTooling` at task time against the
@@ -446,6 +465,7 @@ async function main() {
         // Clear the price scheduler and abort an in-flight pull first, so its
         // ledger row is closed and no timer outlives the server.
         pricing.stop();
+        logServerStop({ reason: "signal", signal, startedAtMs });
         await close();
         // Remove the per-run srt policy file this process created (best-effort;
         // never an operator override).
@@ -454,6 +474,7 @@ async function main() {
         if (activeSseServer) {
             await new Promise<void>(resolve => activeSseServer.close(() => resolve()));
         }
+        await closeLogChannels();
         process.exit(0);
     };
 
