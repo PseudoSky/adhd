@@ -87,8 +87,11 @@ export interface IProviderModelAlias {
  * "true" model names for pricing.
  *
  * The anthropic and openai adapters capture the response `model` field as `responseModel` in the
- * hook payload and `task_usage`. The alias applies only when a response model is absent or unknown
- * (for example `claudecli`), and to legacy rows that predate that capture.
+ * hook payload and `task_usage`, but `estimateCost` receives only the CONFIGURED model name. The
+ * alias therefore ALWAYS applies: every call is priced from the configured model (through this
+ * alias when one exists), whether or not a response model was reported. `responseModel` is
+ * recorded for grouping and provenance only and never changes the price. Pricing off
+ * `responseModel` when present is an open owner decision, not current behavior.
  *
  * `deepseek-flash` (what the sox agents are configured with; provider type `openai`, DeepSeek
  * secret) -> `deepseek/deepseek-v4.1-flash`. OWNER-DIRECTED ASSUMPTION (2026-10-08, ticket

@@ -240,12 +240,15 @@ export class UsagePlugin implements Plugin {
             }, 0) THEN ${taskUsageTable.modelCalls} + ${modelCalls} ELSE ${taskUsageTable.peakContextAt} END`,
             // CUMULATIVE Σ turn compute_ms — always additive, no special case (DESIGN.md §6).
             computeMs: sql`COALESCE(${taskUsageTable.computeMs}, 0) + ${computeMs}`,
-            // Additive when this turn priced; forced NULL once ANY turn's model has no
-            // rate-card entry — a partial sum would silently understate true cost, and
-            // NULL is the only value that can't be misread as "this task cost $X".
+            // Additive while every turn so far priced; forced NULL once ANY turn's model has no
+            // price and STICKY thereafter — a partial sum would silently understate true cost, and
+            // NULL is the only value that can't be misread as "this task cost $X". Stickiness keys
+            // off the stored cost_status (old-row value in SQLite's SET): 'partial' or
+            // 'unpriced_model' means an earlier turn was unpriced, so a later priced turn must not
+            // resurrect a non-NULL cost (it would count only the turns since the last NULL).
             estCostUsd:
               turnCost !== null
-                ? sql`COALESCE(${taskUsageTable.estCostUsd}, 0) + ${turnCost}`
+                ? sql`CASE WHEN ${taskUsageTable.costStatus} IS NULL OR ${taskUsageTable.costStatus} = 'priced' THEN COALESCE(${taskUsageTable.estCostUsd}, 0) + ${turnCost} ELSE NULL END`
                 : sql`NULL`,
             // Provider-reported model: last non-null wins.
             responseModel: sql`COALESCE(${responseModel}, ${taskUsageTable.responseModel})`,
