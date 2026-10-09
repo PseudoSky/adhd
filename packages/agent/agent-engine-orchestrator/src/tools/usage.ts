@@ -19,6 +19,8 @@ import {
   tasksTable,
 } from "@adhd/agent-store-runtime";
 import { estimateCost, type IPriceSource } from "@adhd/agent-core-provider";
+import type { ModelUsageEntry } from "@adhd/agent-base-types";
+import { priceModelBreakdown } from "../plugins/usage-plugin.js";
 import type {
   ContextSizeAt,
   GroupedUsageRow,
@@ -823,6 +825,10 @@ function deriveTurns(
         reasoningTokens?: number;
         computeMs?: number;
         responseModel?: string;
+        /** Per-model usage of a multi-model / alias-resolved response (claudecli), 79aebb26 BK8. */
+        modelBreakdown?: ModelUsageEntry[];
+        /** Largest single-turn context inside this response (claudecli), 7ead5eaa BK4. */
+        peakContextTokens?: number;
       };
       const inputTokens = payload.inputTokens ?? 0;
       const outputTokens = payload.outputTokens ?? 0;
@@ -836,20 +842,33 @@ function deriveTurns(
       const reasoningTokens = payload.reasoningTokens ?? 0;
       const computeMs = payload.computeMs ?? 0;
       const model = info.usage.model;
-      const est = estimateCost(
-        model,
-        {
-          uncachedInputTokens,
-          cacheReadTokens,
-          cacheCreationTokens,
-          cacheCreation1hTokens: payload.cacheCreation1hTokens ?? 0,
-          outputTokens,
-        },
-        // A task whose provider resolved concrete model ids (`model_breakdown_json`, 79aebb26 BK8)
-        // prices strictly, exactly like the write path: an id with no rate card is unpriced, never
-        // priced at a same-family model's rate.
-        { asOf: evt.createdAt, source, strict: info.usage.modelBreakdownJson != null }
-      );
+      // A multi-model response (claudecli `modelUsage`) carries its per-model breakdown on the event:
+      // re-price each model at its OWN rate card (strict, like the write path) and sum, instead of
+      // pricing the whole turn at the task's primary model. Events without a breakdown price the
+      // scalar totals at the task's model, as before. (79aebb26 BK8)
+      const breakdown = payload.modelBreakdown?.length ? payload.modelBreakdown : undefined;
+      const priced = breakdown ? priceModelBreakdown(breakdown, evt.createdAt, source) : undefined;
+      const est = priced
+        ? {
+            costUsd: priced.costUsd,
+            status: priced.status,
+            basis: priced.lastPriced?.basis ?? null,
+            pricingRef: priced.lastPriced?.pricingRef ?? null,
+          }
+        : estimateCost(
+            model,
+            {
+              uncachedInputTokens,
+              cacheReadTokens,
+              cacheCreationTokens,
+              cacheCreation1hTokens: payload.cacheCreation1hTokens ?? 0,
+              outputTokens,
+            },
+            // A task whose provider resolved concrete model ids (`model_breakdown_json`, 79aebb26 BK8)
+            // prices strictly, exactly like the write path: an id with no rate card is unpriced, never
+            // priced at a same-family model's rate.
+            { asOf: evt.createdAt, source, strict: info.usage.modelBreakdownJson != null }
+          );
       const estCostUsd = est.costUsd;
 
       const row: UsageRow = {
@@ -879,16 +898,23 @@ function deriveTurns(
         cost_status: est.status,
         cost_basis: est.basis,
         pricing_ref: est.pricingRef,
-        context_size: inputTokens, // trivial at turn grain — one call IS its own peak
+        // One call IS its own peak, except a response that folded several model turns (claudecli):
+        // then the provider-reported per-turn max (7ead5eaa BK4).
+        context_size: payload.peakContextTokens ?? inputTokens,
         context_size_at: contextSizeAtSelf(evt.taskId, callIndex),
       };
-      const unpriced = est.status === "unpriced_model";
+      const unpriced = priced ? priced.unpricedCount > 0 : est.status === "unpriced_model";
+      const unpricedModels = priced
+        ? priced.entries.filter((_, i) => priced.entryCosts[i] === null).map((e) => e.model)
+        : [model];
+      const turnUnpricedTokens = priced ? priced.unpricedTokens : inputTokens + outputTokens;
       ROW_COST.set(row, {
-        priced: estCostUsd ?? 0,
+        // A partly-priced multi-model turn keeps its priced portion (cost_usd itself is null).
+        priced: priced ? priced.pricedPortion : estCostUsd ?? 0,
         unpricedTurns: unpriced ? 1 : 0,
-        unpricedTokens: unpriced ? inputTokens + outputTokens : 0,
+        unpricedTokens: unpriced ? turnUnpricedTokens : 0,
         unpricedTaskIds: unpriced ? [evt.taskId] : [],
-        unpricedModels: unpriced ? [model] : [],
+        unpricedModels: unpriced ? unpricedModels : [],
         bases: est.basis ? [est.basis] : [],
       });
       rows.push(row);

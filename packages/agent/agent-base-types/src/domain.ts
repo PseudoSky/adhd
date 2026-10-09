@@ -56,6 +56,14 @@ export interface TokenUsage {
    * rate-card estimate. (79aebb26 BK8)
    */
   cliReportedCostUsd?: number;
+  /**
+   * The largest single-turn context (`input + cache_read + cache_creation` of ONE model call) that
+   * this response contained. Set by providers whose single response folds several internal model
+   * turns into one `inputTokens` SUM (claudecli: the max over the stream's per-turn `assistant`
+   * usage). Absent => the response is exactly one model call and `inputTokens` IS its context.
+   * Consumers that track peak context use `peakContextTokens ?? inputTokens`. (7ead5eaa BK4)
+   */
+  peakContextTokens?: number;
 }
 
 /** One model's share of a {@link TokenUsage} response (see {@link TokenUsage.modelBreakdown}). */

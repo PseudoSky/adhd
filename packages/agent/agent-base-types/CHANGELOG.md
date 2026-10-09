@@ -10,6 +10,7 @@ This was a version bump only for agent-base-types to align it with other project
 
 ### 🚀 Features
 
+- **`TokenUsage.peakContextTokens?: number`.** The largest single-turn context inside one response, for providers that fold several model turns into a summed `inputTokens` (claudecli). Optional and additive; consumers use `peakContextTokens ?? inputTokens`. (7ead5eaa)
 - **`TokenUsage.modelBreakdown?: ModelUsageEntry[]` and `TokenUsage.cliReportedCostUsd?: number`.** Per-model usage for providers whose single response can resolve an alias or span several models (claudecli `modelUsage`). Optional and additive. (79aebb26)
 
 ### 🐛 Bug Fixes

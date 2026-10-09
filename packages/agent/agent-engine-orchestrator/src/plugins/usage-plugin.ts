@@ -90,6 +90,68 @@ function statusOfEntries(unpricedCount: number, total: number): string {
   return unpricedCount === total ? 'unpriced_model' : 'partial';
 }
 
+/** A `modelBreakdown` priced entry-by-entry (strict: an id with no rate card is unpriced, never family-priced). */
+export interface IPricedBreakdown {
+  /** The breakdown entries, in order. */
+  entries: ModelUsageEntry[];
+  /** Per-entry estimate, parallel to `entries`. */
+  ests: ICostEstimate[];
+  /** Per-entry cost (null = unpriced), parallel to `entries`. */
+  entryCosts: Array<number | null>;
+  /** Sum of the priced entries (excludes unpriced ones). */
+  pricedPortion: number;
+  unpricedCount: number;
+  /** Tokens of the unpriced entries. */
+  unpricedTokens: number;
+  /** null as soon as any entry is unpriced (never a partial sum presented as the cost). */
+  costUsd: number | null;
+  /** `priced` | `unpriced_model` | `partial`. */
+  status: string;
+  /** The last priced estimate (basis + record pointer), if any entry priced. */
+  lastPriced: ICostEstimate | undefined;
+}
+
+/**
+ * Price a multi-model response entry by entry as of `asOf`. Shared by the write path
+ * ({@link UsagePlugin}) and the `usage_query` turn re-pricing so a turn re-priced from its
+ * MODEL_RESPONSE event equals the turn priced at write time. (79aebb26 BK8)
+ */
+export function priceModelBreakdown(
+  breakdown: readonly ModelUsageEntry[],
+  asOf: string,
+  source: IPriceSource
+): IPricedBreakdown {
+  const ests = breakdown.map((e) =>
+    estimateCost(
+      e.model,
+      {
+        uncachedInputTokens: e.uncachedInputTokens,
+        cacheReadTokens: e.cacheReadTokens,
+        cacheCreationTokens: e.cacheCreationTokens,
+        cacheCreation1hTokens: e.cacheCreation1hTokens,
+        outputTokens: e.outputTokens,
+      },
+      { asOf, source, strict: true }
+    )
+  );
+  const entryCosts = ests.map((est) => est.costUsd);
+  const unpricedCount = entryCosts.filter((c) => c === null).length;
+  const pricedPortion = entryCosts.reduce<number>((sum, c) => sum + (c ?? 0), 0);
+  return {
+    entries: [...breakdown],
+    ests,
+    entryCosts,
+    pricedPortion,
+    unpricedCount,
+    unpricedTokens: breakdown
+      .filter((_, i) => entryCosts[i] === null)
+      .reduce((sum, e) => sum + entryTokens(e), 0),
+    costUsd: unpricedCount === 0 ? pricedPortion : null,
+    status: statusOfEntries(unpricedCount, breakdown.length),
+    lastPriced: [...ests].reverse().find((est) => est.costUsd !== null),
+  };
+}
+
 /** Fold one turn's `incoming` entries (already priced) into the stored per-model totals. Pure. */
 function mergeBreakdown(
   storedJson: string | null | undefined,
@@ -183,6 +245,10 @@ export class UsagePlugin implements Plugin {
       const acc = this.accumulators.get(taskId);
 
       const inputTokens = tokenUsage?.inputTokens ?? 0;
+      // Peak CONTEXT of this response: a provider that folds several model turns into one summed
+      // `inputTokens` (claudecli) reports the true per-turn max; otherwise the one call IS the peak.
+      // `inputTokens` stays the cumulative, cache-inclusive sum for billing. (7ead5eaa BK4)
+      const peakCandidate = Math.max(tokenUsage?.peakContextTokens ?? 0, 0) || inputTokens;
       const outputTokens = tokenUsage?.outputTokens ?? 0;
       const toolCalls = toolCallCount ?? 0;
 
@@ -211,8 +277,6 @@ export class UsagePlugin implements Plugin {
       // the entries are summed. The task's `model` is then the resolved id with the most tokens and
       // the requested alias is kept in `requested_model`.
       let storedEntries: IStoredModelUsage[] = [];
-      let entryCosts: Array<number | null> = [];
-      let ests: ICostEstimate[] = [];
       let model = requestedModel;
       let turnCost: number | null;
       let pricedPortion: number;
@@ -223,40 +287,22 @@ export class UsagePlugin implements Plugin {
       if (breakdown) {
         const primary = breakdown.reduce((best, e) => (entryTokens(e) > entryTokens(best) ? e : best));
         model = primary.model;
-        const pricedEntries = breakdown.map((e) => ({
-          e,
-          est: estimateCost(
-            e.model,
-            {
-              uncachedInputTokens: e.uncachedInputTokens,
-              cacheReadTokens: e.cacheReadTokens,
-              cacheCreationTokens: e.cacheCreationTokens,
-              cacheCreation1hTokens: e.cacheCreation1hTokens,
-              outputTokens: e.outputTokens,
-            },
-            { asOf, source: this.source, strict: true }
-          ),
-        }));
-        ests = pricedEntries.map((p) => p.est);
-        entryCosts = ests.map((est) => est.costUsd);
-        storedEntries = pricedEntries.map(({ e, est }): IStoredModelUsage => ({
+        const priced = priceModelBreakdown(breakdown, asOf, this.source);
+        const ests = priced.ests;
+        storedEntries = breakdown.map((e, i): IStoredModelUsage => ({
           ...e,
-          pricedCostUsd: est.costUsd ?? 0,
-          costStatus: est.status,
-          ...(est.costUsd === null
+          pricedCostUsd: ests[i].costUsd ?? 0,
+          costStatus: ests[i].status,
+          ...(ests[i].costUsd === null
             ? { unpricedReason: `no rate card or price-history entry for resolved model "${e.model}"` }
             : {}),
         }));
-        pricedPortion = entryCosts.reduce<number>((sum, c) => sum + (c ?? 0), 0);
-        const unpricedCount = entryCosts.filter((c) => c === null).length;
-        unpricedTokenCount = breakdown
-          .filter((_, i) => entryCosts[i] === null)
-          .reduce((sum, e) => sum + entryTokens(e), 0);
-        turnCost = unpricedCount === 0 ? pricedPortion : null;
-        turnStatus = statusOfEntries(unpricedCount, breakdown.length);
-        const lastPriced = [...ests].reverse().find((est) => est.costUsd !== null);
-        turnBasis = lastPriced?.basis ?? null;
-        turnPricingRef = lastPriced?.pricingRef ?? null;
+        pricedPortion = priced.pricedPortion;
+        unpricedTokenCount = priced.unpricedTokens;
+        turnCost = priced.costUsd;
+        turnStatus = priced.status;
+        turnBasis = priced.lastPriced?.basis ?? null;
+        turnPricingRef = priced.lastPriced?.pricingRef ?? null;
       } else {
         const est = estimateCost(
           model,
@@ -331,7 +377,7 @@ export class UsagePlugin implements Plugin {
           uncachedInputTokens: tokenUsage?.uncachedInputTokens ?? null,
           reasoningTokens: tokenUsage?.reasoningTokens ?? null,
           // First call for this task: its input IS the peak so far.
-          peakContextTokens: inputTokens,
+          peakContextTokens: peakCandidate,
           peakContextAt: 1,
           // CUMULATIVE Σ turn compute_ms (DESIGN.md §6) — this call's is the first.
           computeMs,
@@ -375,9 +421,9 @@ export class UsagePlugin implements Plugin {
             // like a 715K context when the real high-water mark was 43K (FINDING-ORCH-007).
             peakContextTokens: sql`MAX(COALESCE(${
               taskUsageTable.peakContextTokens
-            }, 0), ${inputTokens})`,
+            }, 0), ${peakCandidate})`,
             // Record WHICH call peaked, but only when this call is the new peak.
-            peakContextAt: sql`CASE WHEN ${inputTokens} > COALESCE(${
+            peakContextAt: sql`CASE WHEN ${peakCandidate} > COALESCE(${
               taskUsageTable.peakContextTokens
             }, 0) THEN ${taskUsageTable.modelCalls} + ${modelCalls} ELSE ${taskUsageTable.peakContextAt} END`,
             // CUMULATIVE Σ turn compute_ms — always additive, no special case (DESIGN.md §6).

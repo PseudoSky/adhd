@@ -783,6 +783,17 @@ export class Orchestrator {
             // inputTokens - cacheReadTokens - cacheCreationTokens.
             uncachedInputTokens: providerResponse.usage?.uncachedInputTokens,
             reasoningTokens: providerResponse.usage?.reasoningTokens,
+            // Per-model usage when one response spans several models / resolved an alias (claudecli
+            // `modelUsage`): lets usage_query's turn grain re-price each model at its own rate card
+            // instead of pricing the whole turn at the task's primary model. (79aebb26 BK8)
+            ...(providerResponse.usage?.modelBreakdown?.length
+              ? { modelBreakdown: providerResponse.usage.modelBreakdown }
+              : {}),
+            // Largest single-turn context inside this response (claudecli folds several turns into
+            // one summed inputTokens); absent => inputTokens IS the context. (7ead5eaa BK4)
+            ...(providerResponse.usage?.peakContextTokens !== undefined
+              ? { peakContextTokens: providerResponse.usage.peakContextTokens }
+              : {}),
             rawUsage: providerResponse.rawUsage,
             computeMs,
           },

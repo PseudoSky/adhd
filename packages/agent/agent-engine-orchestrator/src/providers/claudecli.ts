@@ -96,7 +96,27 @@ interface ClaudeStreamAssistantEvent {
     message: {
         role: "assistant";
         content: Array<{ type: string } & Partial<ClaudeToolUseBlock>>;
+        /** Per-model-call usage of THIS turn (one entry per content block of the same message id, all equal). */
+        usage?: {
+            input_tokens?: number | null;
+            cache_read_input_tokens?: number | null;
+            cache_creation_input_tokens?: number | null;
+        };
     };
+}
+
+/**
+ * Context size of ONE model call from an `assistant` event's usage: uncached input + cache read +
+ * cache creation. This is what the model actually saw on that turn. The terminal `result.usage`
+ * is the SUM over every turn and must never be used as a context size (7ead5eaa BK4). Returns 0
+ * when the event carries no usage.
+ */
+function assistantTurnContextTokens(event: ClaudeStreamAssistantEvent): number {
+    const u = event.message?.usage;
+    if (!u) return 0;
+    return finiteNonNegative(u.input_tokens)
+        + finiteNonNegative(u.cache_read_input_tokens)
+        + finiteNonNegative(u.cache_creation_input_tokens);
 }
 
 type ClaudeStreamEvent =
@@ -597,6 +617,8 @@ export class ClaudeCliProvider implements LLMProvider {
             // tool_use blocks the CLI emitted (it runs its own tools inside the one invocation).
             // Usage-accounting only: NEVER surfaced as message.toolCalls, which the orchestrator would re-execute.
             let toolUseCount = 0;
+            // Largest single-turn context seen on the stream (7ead5eaa BK4): result.usage is a SUM over turns.
+            let peakTurnContext = 0;
 
             for await (const line of rl) {
                 if (request.signal?.aborted) {
@@ -639,6 +661,7 @@ export class ClaudeCliProvider implements LLMProvider {
                     );
 
                     toolUseCount += toolUseBlocks.length;
+                    peakTurnContext = Math.max(peakTurnContext, assistantTurnContextTokens(assistantEvent));
 
                     for (const block of toolUseBlocks) {
                         // CLI-internal built-ins (and MCP tools the agent did not
@@ -727,10 +750,11 @@ export class ClaudeCliProvider implements LLMProvider {
                     this.config.server?.defaultMaxTokens ?? 0
                 )
                 : undefined;
-            const usage = baseUsage && (resolved || typeof cliCost === "number")
+            const usage = baseUsage && (resolved || typeof cliCost === "number" || peakTurnContext > 0)
                 ? {
                     ...baseUsage,
                     ...(resolved ? { modelBreakdown: resolved.entries } : {}),
+                    ...(peakTurnContext > 0 ? { peakContextTokens: peakTurnContext } : {}),
                     ...(typeof cliCost === "number" && Number.isFinite(cliCost) ? { cliReportedCostUsd: cliCost } : {}),
                 }
                 : baseUsage;

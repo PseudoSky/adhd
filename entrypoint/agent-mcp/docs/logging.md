@@ -248,6 +248,22 @@ $ node call.mjs 47852 usage_query '{"agent_name":"live-trace-oauth","group_by":"
 Field semantics (`inputTokens` is cache-inclusive; `total_ms` is wall clock, `compute_ms` is model
 time) are in [dev-server-local-testing.md, "Reading usage correctly"](./dev-server-local-testing.md#reading-usage-correctly).
 
+#### Cumulative vs per-turn: `inputTokens` and `peakContextTokens`
+
+Two different questions, two different columns, for every provider:
+
+| Field (`task_usage` / `usage_query`) | Meaning | `anthropic` / `openai` / `deepseek` | `claudecli` |
+| --- | --- | --- | --- |
+| `inputTokens` (`input_tokens`) | CUMULATIVE, cache-inclusive input billed across the whole task (sum of uncached + cache read + cache write over every model call). Use it for volume and cost, never as a context size. | Sum over the task's model calls (one stream response per call). | The CLI's own sum over all of its internal turns (`result.usage`), reported as one response. |
+| `peakContextTokens` (`peak_context_tokens`, `context_size` in `usage_query`) | PER-TURN high-water mark: the largest context any single model call saw (`input + cache_read + cache_creation` of one call). A MAX, never a sum. | Max over the task's model calls. | Max over the per-turn `assistant` events' `usage` in the CLI stream-json (the provider reports it as `TokenUsage.peakContextTokens`). The CLI's `result.usage` is a sum and is not used. |
+
+Example (recorded `claudecli` run B1, five CLI turns): `inputTokens` 36,589, `peakContextTokens` 9,149.
+A stream whose `assistant` events carry no usage falls back to `inputTokens`. `peakContextAt` is
+response-granular for `claudecli`: it marks the response, not the internal turn, that peaked. The
+turn grain of `usage_query` reports the same per-turn peak as its `context_size`, and re-prices a
+multi-model `claudecli` response per model from the breakdown carried on its `MODEL_RESPONSE` event
+(`modelBreakdown`), so a turn's `est_cost_usd` equals the task row's.
+
 ### SQL against the store
 
 Read-only queries are safe while a server runs (WAL). The DB is shared by every instance, so
