@@ -55,6 +55,7 @@ import {
 import {
   provisionSrtPolicy,
   provisionRunSrtPolicy,
+  SrtPolicyConfigError,
   removeRunSrtPolicy,
 } from "./srt-policy.js";
 import { startSseServer } from "./streaming/sse-server.js";
@@ -264,6 +265,14 @@ async function main() {
             "Provisioned srt sandbox policy for native tooling (global static + per-run)"
         );
     } catch (err) {
+        if (err instanceof SrtPolicyConfigError) {
+            // BK7 SEC-F6: an invalid sandbox WRITE allow list is a security-config error, never a
+            // degraded start — refuse to boot (main().catch logs it fatal and exits 1).
+            throw new Error(
+                `Refusing to start: invalid srt sandbox policy configuration — ${err.message}`,
+                { cause: err }
+            );
+        }
         logger.warn(
             { err },
             "Could not provision the srt policy — srt-wrapped native servers may fail to spawn"

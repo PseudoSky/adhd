@@ -20,6 +20,7 @@ import {
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { OPEN_TYPE_POLICY } from './type-policy.js';
+import { quarantineUnsafeSidecars } from './sidecar-hardening.js';
 import { withImmediateRetry } from './immediate-retry.js';
 import { assertRecognizedStoreVocabulary } from './vocabulary-guard.js';
 import {
@@ -92,6 +93,11 @@ export async function openGraphBacklogStore(
     throw new RangeError(
       `openGraphBacklogStore: busyTimeoutMs must be a non-negative integer, got ${busyTimeoutMs}`
     );
+  }
+  // BK7 515a2b50 SEC-F2: drop planted symlink/hardlink sidecars (a sandboxed shell may write this
+  // directory) BEFORE the unsandboxed adapter opens/truncates through them.
+  for (const q of quarantineUnsafeSidecars(dbPath)) {
+    console.error(`[backlog] removed planted ${q.reason} sidecar ${q.path}`);
   }
   const adapter = await createStoreAdapter({ dbPath });
   // BUG-SOXGRAPH-002: the write-contention contract is adapter-owned —

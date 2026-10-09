@@ -37,16 +37,18 @@ import {
   mkdirSync,
   openSync,
   readFileSync,
+  realpathSync,
   renameSync,
   rmSync,
   statSync,
-  writeFileSync,
+  unlinkSync,
+  writeSync,
 } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
-import { delimiter, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { basename, delimiter, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { env as agentEnv, resolveLogRoots, type LogRoots } from './config.js';
+import { operationalEnv, resolveLogRoots, type LogRoots } from './config.js';
 
 /**
  * Path *value* override for the srt settings file (ADR-0008 D10: a path value
@@ -84,6 +86,17 @@ export interface ProvisionSrtPolicyOptions {
    * provision; pass `[]` to render a policy with no extra roots.
    */
   extraAllowWrite?: readonly string[];
+  /**
+   * Operator-declared additional trust roots under which `extraAllowWrite` entries may live
+   * (`agent.shell.sandbox.extraAllowWriteRoots`). Defaults to the resolved config value.
+   */
+  extraAllowWriteRoots?: readonly string[];
+  /**
+   * Apply the sandbox write extras (`extraAllowWrite` + the managed `denyWrite` set) to THIS file.
+   * Default `false`: the shared global `~/.srt-settings.json` (read by every bare `srt` the user
+   * runs) never receives them (BK7 SEC-F7); only the per-run file does (`provisionRunSrtPolicy`).
+   */
+  applySandboxExtras?: boolean;
   /** Extra network allow-list domains to union into `allowedDomains`. */
   allowedDomains?: string[];
 }
@@ -161,81 +174,217 @@ export function defaultSrtAllowWrite(): string[] {
 
 /**
  * Default value of `agent.shell.sandbox.extraAllowWrite` (backlog 515a2b50 / BK7): the backlog
- * store directory. `adhd-backlog` takes a store lease (and opens SQLite with `-wal`/`-shm`
- * sidecars) under it, so without a write allow every legitimate backlog verb fails EPERM under the
- * sandbox. Exactly this directory — never `~/.adhd`, never `$HOME` (least privilege).
+ * store's DATA directory. `adhd-backlog` takes its store lease and opens SQLite (`-wal`/`-shm`
+ * sidecars, `.sox-lease.d`) as siblings of the DB file in this directory — verified under real
+ * `srt` (`srt-policy-bk7.e2e.test.ts`) — so it is the minimum write allow a legitimate backlog verb
+ * needs. Deliberately NOT the whole `~/.adhd/backlog` tree: `production/config.yaml` (which can
+ * repoint the host's next unsandboxed `adhd-backlog` at an attacker-chosen DB), `backups/`, `cache/`
+ * and `test/` stay unwritable (SEC-F1).
  */
-export const DEFAULT_SRT_EXTRA_ALLOW_WRITE: readonly string[] = ['~/.adhd/backlog'];
+export const DEFAULT_SRT_EXTRA_ALLOW_WRITE: readonly string[] = ['~/.adhd/backlog/production/data'];
+
+/** Default value of `agent.shell.sandbox.extraAllowWriteRoots`: no extra trust roots. */
+export const DEFAULT_SRT_EXTRA_ALLOW_WRITE_ROOTS: readonly string[] = [];
+
+/**
+ * Backlog files the sandbox must NEVER write, emitted as `denyWrite` beside the data-dir allow
+ * (srt honors a deny inside an allowed dir — proven in `srt-policy-bk7.e2e.test.ts`). `~/`-form;
+ * expanded by {@link defaultSrtDenyWrite}.
+ */
+export const DEFAULT_SRT_BACKLOG_DENY_WRITE: readonly string[] = [
+  '~/.adhd/backlog/production/config.yaml',
+  '~/.adhd/backlog/production/backups',
+];
+
+/** Home-expanded {@link DEFAULT_SRT_BACKLOG_DENY_WRITE}. */
+export function defaultSrtDenyWrite(home: string = homedir()): string[] {
+  return DEFAULT_SRT_BACKLOG_DENY_WRITE.map((entry) => join(home, entry.slice(2)));
+}
 
 /** Thrown (fail loud) when `agent.shell.sandbox.extraAllowWrite` holds an unsafe entry. */
 export class SrtPolicyConfigError extends Error {
-  constructor(entry: unknown, reason: string) {
-    super(`agent.shell.sandbox.extraAllowWrite: invalid entry ${JSON.stringify(entry)}: ${reason}`);
+  constructor(entry: unknown, reason: string, key = 'agent.shell.sandbox.extraAllowWrite') {
+    super(`${key}: invalid entry ${JSON.stringify(entry)}: ${reason}`);
     this.name = 'SrtPolicyConfigError';
   }
 }
 
-/** True when `parent` equals `child` or is a path-ancestor of it. */
+/**
+ * Resolve `p` through symlinks: `realpath` of the LONGEST EXISTING prefix plus the (not yet
+ * existing) remainder. Pure of side effects; never throws for a missing leaf.
+ */
+export function resolveRealPrefix(p: string): string {
+  let head = resolve(p);
+  const rest: string[] = [];
+  for (;;) {
+    try {
+      return join(realpathSync.native(head), ...rest);
+    } catch {
+      const parent = dirname(head);
+      if (parent === head) return resolve(p);
+      rest.unshift(basename(head));
+      head = parent;
+    }
+  }
+}
+
+/**
+ * Comparison form of a path (SEC-F5): symlinks resolved, Unicode NFC-normalized, case-folded. The
+ * fold is applied on every platform (conservative: macOS/Windows volumes are case-insensitive, so
+ * `~/.SSH` IS `~/.ssh`; on Linux an over-rejection of a case variant is harmless).
+ */
+export function foldPath(p: string): string {
+  return resolveRealPrefix(p).normalize('NFC').toLowerCase();
+}
+
+/** True when `parent` equals `child` or is a path-ancestor of it (both already folded). */
 function isSameOrAncestor(parent: string, child: string): boolean {
   const rel = relative(parent, child);
   return rel === '' || (!rel.startsWith('..') && !isAbsolute(rel));
 }
 
+/** Home-relative locations the sandbox write allow may never touch, equal to, inside, or containing. */
+const PROTECTED_HOME_RELATIVE: readonly string[] = [
+  '.ssh',
+  '.aws',
+  '.gnupg',
+  '.claude',
+  '.config',
+  '.npmrc',
+  '.netrc',
+  '.gitconfig',
+  '.zshrc',
+  '.zshenv',
+  '.zprofile',
+  '.zlogin',
+  '.zlogout',
+  '.bashrc',
+  '.bash_profile',
+  '.bash_login',
+  '.bash_logout',
+  '.profile',
+  '.srt-settings.json',
+  '.adhd/agent-mcp',
+  '.adhd/tmp',
+  '.adhd/sox-ecosystem',
+  '.adhd/backlog/production/config.yaml',
+  '.adhd/backlog/production/backups',
+  'Library/LaunchAgents',
+];
+
+/** Extra inputs to {@link validateSrtExtraAllowWrite}. */
+export interface ValidateSrtExtraAllowWriteOptions {
+  /** Operator-declared trust roots (validated like entries, then used as additional allowlist roots). */
+  readonly extraRoots?: readonly string[];
+  /** Additional absolute paths that are protected (e.g. the resolved run-policy dir, the srt settings file). */
+  readonly protectedPaths?: readonly string[];
+}
+
+function expandHome(entry: string, home: string, key: string): string {
+  if (typeof entry !== 'string' || entry.trim() === '') {
+    throw new SrtPolicyConfigError(entry, 'must be a non-empty string', key);
+  }
+  if (entry.includes('\0')) throw new SrtPolicyConfigError(entry, 'NUL bytes are not allowed', key);
+  if (/[*?[\]{}]/.test(entry)) throw new SrtPolicyConfigError(entry, 'glob/wildcard characters are not allowed', key);
+  if (entry.split(/[\\/]/).includes('..')) throw new SrtPolicyConfigError(entry, "'..' segments are not allowed", key);
+  let expanded = entry;
+  if (entry === '~') expanded = home;
+  else if (entry.startsWith('~/')) expanded = join(home, entry.slice(2));
+  else if (entry.startsWith('~')) throw new SrtPolicyConfigError(entry, "only a leading '~/' is expanded", key);
+  if (!isAbsolute(expanded)) throw new SrtPolicyConfigError(entry, 'must be absolute (or start with ~/)', key);
+  return expanded;
+}
+
 /**
- * Validate + expand `agent.shell.sandbox.extraAllowWrite` entries (architect verdict Q5). Fail loud
- * with {@link SrtPolicyConfigError}; never silently drops an entry. Each entry must, after a leading
- * `~` expansion, be an absolute path that: has no `..` segment, has no glob metacharacters, lies
- * STRICTLY under the home directory (so is neither `$HOME` nor an ancestor of it), is not equal to
- * or an ancestor of `~/.adhd` or `~/.ssh`, and neither contains nor sits inside any `denyRead` path.
+ * Validate + expand `agent.shell.sandbox.extraAllowWrite` entries — an ALLOWLIST by construction
+ * (architect verdict Q5 amended by the BK7 security review SEC-F4/F5). Fail loud with
+ * {@link SrtPolicyConfigError}; never silently drops an entry. Every entry, after `~/` expansion,
+ * must:
+ *  - be absolute with no `..` segment, NUL byte, or glob metacharacter;
+ *  - resolve (symlinks followed, NFC + case-folded for comparison) to a STRICT descendant of
+ *    `~/.adhd/backlog`, or of (or equal to) an operator-declared trust root from
+ *    `agent.shell.sandbox.extraAllowWriteRoots`; an unrelated location is refused, not "allowed
+ *    unless listed";
+ *  - not equal, contain, or sit inside any protected location: `$HOME` and its ancestors, `~/.ssh`,
+ *    `~/.aws`, `~/.gnupg`, `~/.claude`, `~/.config`, shell rc files, `~/Library/LaunchAgents`,
+ *    `~/.srt-settings.json`, `~/.adhd/agent-mcp`, `~/.adhd/tmp` (the run-policy dir), the backlog
+ *    `config.yaml`/`backups`, the caller's `protectedPaths`, and every `denyRead` path.
+ * Operator trust roots are validated the same way and may not be (or contain) `~/.adhd`.
  *
  * @param entries raw configured entries (`~` allowed).
  * @param home the home directory (injectable for tests; defaults to `os.homedir()` at call time).
  * @param denyRead the credential deny list (defaults to {@link defaultSrtDenyRead}).
- * @returns the expanded, normalized, de-duplicated absolute paths.
+ * @param opts extra trust roots and protected paths.
+ * @returns the symlink-resolved, normalized, de-duplicated absolute paths (the ones srt will enforce).
  */
 export function validateSrtExtraAllowWrite(
   entries: readonly string[],
   home: string = homedir(),
-  denyRead: readonly string[] = defaultSrtDenyRead()
+  denyRead: readonly string[] = defaultSrtDenyRead(),
+  opts: ValidateSrtExtraAllowWriteOptions = {}
 ): string[] {
-  const protectedRoots = [join(home, '.adhd'), join(home, '.ssh')];
+  const homeFold = foldPath(home);
+  const adhdFold = foldPath(join(home, '.adhd'));
+  const protectedFolds = [
+    ...PROTECTED_HOME_RELATIVE.map((rel) => foldPath(join(home, rel))),
+    ...(opts.protectedPaths ?? []).map((p) => foldPath(p)),
+    ...denyRead.map((p) => foldPath(p)),
+  ];
+  const check = (entry: string, key: string): { real: string; fold: string } => {
+    const expanded = expandHome(entry, home, key);
+    const real = resolveRealPrefix(expanded);
+    const fold = foldPath(expanded);
+    if (!fold.startsWith(homeFold + sep) || fold === homeFold) {
+      throw new SrtPolicyConfigError(entry, `must be strictly under the home directory (${home})`, key);
+    }
+    for (const prot of protectedFolds) {
+      if (isSameOrAncestor(fold, prot) || isSameOrAncestor(prot, fold)) {
+        throw new SrtPolicyConfigError(entry, `must not be, contain, or sit inside the protected path ${prot}`, key);
+      }
+    }
+    return { real, fold };
+  };
+
+  const backlogFold = foldPath(join(home, '.adhd', 'backlog'));
+  const trustRoots: { fold: string; strict: boolean }[] = [{ fold: backlogFold, strict: true }];
+  for (const root of opts.extraRoots ?? []) {
+    const { fold } = check(root, 'agent.shell.sandbox.extraAllowWriteRoots');
+    if (isSameOrAncestor(adhdFold, fold) || isSameOrAncestor(fold, adhdFold)) {
+      throw new SrtPolicyConfigError(root, 'a trust root may not be (or contain) ~/.adhd', 'agent.shell.sandbox.extraAllowWriteRoots');
+    }
+    trustRoots.push({ fold, strict: false });
+  }
+
   const out: string[] = [];
   for (const entry of entries) {
-    if (typeof entry !== 'string' || entry.trim() === '') {
-      throw new SrtPolicyConfigError(entry, 'must be a non-empty string');
+    const { real, fold } = check(entry, 'agent.shell.sandbox.extraAllowWrite');
+    const allowed = trustRoots.some((r) => (r.strict ? fold !== r.fold && isSameOrAncestor(r.fold, fold) : isSameOrAncestor(r.fold, fold)));
+    if (!allowed) {
+      throw new SrtPolicyConfigError(
+        entry,
+        'must be inside ~/.adhd/backlog (e.g. ~/.adhd/backlog/production/data) or inside a root declared in ' +
+          'agent.shell.sandbox.extraAllowWriteRoots'
+      );
     }
-    if (/[*?[\]{}]/.test(entry)) throw new SrtPolicyConfigError(entry, 'glob/wildcard characters are not allowed');
-    if (entry.split(/[\\/]/).includes('..')) throw new SrtPolicyConfigError(entry, "'..' segments are not allowed");
-    let expanded = entry;
-    if (entry === '~') expanded = home;
-    else if (entry.startsWith('~/')) expanded = join(home, entry.slice(2));
-    else if (entry.startsWith('~')) throw new SrtPolicyConfigError(entry, "only a leading '~/' is expanded");
-    if (!isAbsolute(expanded)) throw new SrtPolicyConfigError(entry, 'must be absolute (or start with ~/)');
-    const path = resolve(expanded);
-    if (path !== home && !path.startsWith(home + sep)) {
-      throw new SrtPolicyConfigError(entry, `must be under the home directory (${home})`);
-    }
-    if (isSameOrAncestor(path, home)) throw new SrtPolicyConfigError(entry, 'must not be (or contain) the home directory');
-    for (const root of protectedRoots) {
-      if (isSameOrAncestor(path, root)) {
-        throw new SrtPolicyConfigError(entry, `must not be, or contain, ${root}`);
-      }
-    }
-    for (const denied of denyRead) {
-      if (isSameOrAncestor(path, denied) || isSameOrAncestor(denied, path)) {
-        throw new SrtPolicyConfigError(entry, `overlaps the denyRead path ${denied}`);
-      }
-    }
-    out.push(path);
+    out.push(real);
   }
   return [...new Set(out)];
 }
 
-/** The configured `agent.shell.sandbox.extraAllowWrite`, validated + expanded. */
+/**
+ * The configured `agent.shell.sandbox.extraAllowWrite`, validated + expanded. Read from
+ * {@link operationalEnv} (scope-forced `global`): a project-scope `config.yaml` under
+ * `ADHD_ENV_SCOPE=project` can NEVER widen the sandbox (SEC-F3). The run-policy dir and the srt
+ * settings file are protected from being allowed.
+ */
 export function resolveSrtExtraAllowWrite(
-  configured: readonly string[] | undefined = agentEnv.config.agent.shell.sandbox.extraAllowWrite
+  configured: readonly string[] | undefined = operationalEnv.config.agent.shell.sandbox.extraAllowWrite,
+  roots: readonly string[] | undefined = operationalEnv.config.agent.shell.sandbox.extraAllowWriteRoots
 ): string[] {
-  return validateSrtExtraAllowWrite(configured ?? DEFAULT_SRT_EXTRA_ALLOW_WRITE);
+  return validateSrtExtraAllowWrite(configured ?? DEFAULT_SRT_EXTRA_ALLOW_WRITE, homedir(), defaultSrtDenyRead(), {
+    extraRoots: roots ?? DEFAULT_SRT_EXTRA_ALLOW_WRITE_ROOTS,
+    protectedPaths: [srtRunPolicyDir(), resolveSrtSettingsPath()],
+  });
 }
 
 /**
@@ -290,7 +439,17 @@ export function provisionRunSrtPolicy(
   roots?: Pick<LogRoots, 'temp'>
 ): ProvisionedSrtPolicy {
   const path = resolveSrtRunSettingsPath(env, roots);
-  const result = provisionSrtPolicy({ settingsPath: path, allowWrite: [cwd] });
+  const override = Boolean(env[SRT_SETTINGS_ENV]);
+  // A per-run file WE own (`run-<pid>.json`, never an operator override) is rebuilt from scratch so a
+  // stale file left by a recycled pid can never carry an earlier, broader allow into this run.
+  if (!override) {
+    try {
+      rmSync(path, { force: true });
+    } catch {
+      /* ignore */
+    }
+  }
+  const result = provisionSrtPolicy({ settingsPath: path, allowWrite: [cwd], applySandboxExtras: true });
   activeRunSettingsPath = path;
   activeRunSettingsIsOverride = Boolean(env[SRT_SETTINGS_ENV]);
   appliedRunRoots.clear();
@@ -325,7 +484,7 @@ export function addRunSrtAllowWrite(roots: readonly string[]): void {
   if (roots.length === 0) return;
   const fresh = roots.filter((root) => !appliedRunRoots.has(root));
   if (fresh.length === 0) return;
-  provisionSrtPolicy({ settingsPath: activeRunSettingsPath, allowWrite: fresh });
+  provisionSrtPolicy({ settingsPath: activeRunSettingsPath, allowWrite: fresh, applySandboxExtras: true });
   for (const root of fresh) appliedRunRoots.add(root);
 }
 
@@ -372,7 +531,7 @@ function sleepSync(ms: number): void {
  */
 export function withSrtPolicyLock<T>(settingsPath: string, fn: () => T): T {
   const lockPath = srtPolicyLockPath(settingsPath);
-  mkdirSync(dirname(lockPath), { recursive: true });
+  mkdirSync(dirname(lockPath), { recursive: true, mode: 0o700 });
   const deadline = Date.now() + SRT_LOCK_TIMEOUT_MS;
   let fd: number | undefined;
   for (;;) {
@@ -442,6 +601,18 @@ function union(existing: readonly string[], extra: readonly string[]): string[] 
   return [...new Set([...existing, ...extra])];
 }
 
+interface IManaged {
+  extraAllowWrite: string[];
+  denyWrite: string[];
+}
+
+/** The host-managed entries recorded by the previous provision (see `adhdManaged`). */
+function readManaged(current: SrtSettings): IManaged {
+  const raw = current['adhdManaged'];
+  const obj = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+  return { extraAllowWrite: toArray(obj['extraAllowWrite']), denyWrite: toArray(obj['denyWrite']) };
+}
+
 function readExisting(path: string): SrtSettings {
   if (!existsSync(path)) return {};
   try {
@@ -452,6 +623,25 @@ function readExisting(path: string): SrtSettings {
     // itself refuses to run on an invalid file, so leaving it is worse.
     return {};
   }
+}
+
+/** Create `file` exclusively (`O_EXCL`, mode 0600), replacing a planted entry at that name; never follows a symlink. */
+function writeExclusive0600(file: string, data: string): void {
+  let fd: number | undefined;
+  for (let attempt = 0; fd === undefined; attempt++) {
+    try {
+      fd = openSync(file, 'wx', 0o600);
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== 'EEXIST' || attempt > 0) throw err;
+      unlinkSync(file); // removes a symlink itself, not what it points at
+    }
+  }
+  try {
+    writeSync(fd, data, null, 'utf8');
+  } finally {
+    closeSync(fd);
+  }
+  chmodSync(file, 0o600);
 }
 
 /**
@@ -472,12 +662,20 @@ export function provisionSrtPolicy(
     const existed = existsSync(path);
     const current = readExisting(path);
 
+    // Entries this host injected on an earlier provision (tracked under `adhdManaged`, a key srt
+    // ignores) are dropped first and recomputed, so narrowing/removing the config takes effect on
+    // the next provision instead of accumulating forever (SEC-F7). Operator-authored entries stay.
+    const prevManaged = readManaged(current);
+    const withoutManaged = (list: readonly string[], managed: readonly string[]): string[] =>
+      list.filter((entry) => !managed.includes(entry));
+    const managedExtra = opts.applySandboxExtras
+      ? resolveSrtExtraAllowWrite(opts.extraAllowWrite, opts.extraAllowWriteRoots)
+      : [];
+    const managedDeny = opts.applySandboxExtras ? defaultSrtDenyWrite() : [];
+
     const allowWrite = union(
-      toArray(current.filesystem?.allowWrite),
-      union(
-        defaultSrtAllowWrite(),
-        union(resolveSrtExtraAllowWrite(opts.extraAllowWrite), opts.allowWrite ?? [])
-      )
+      withoutManaged(toArray(current.filesystem?.allowWrite), prevManaged.extraAllowWrite),
+      union(defaultSrtAllowWrite(), union(managedExtra, opts.allowWrite ?? []))
     );
     const allowRead = union(toArray(current.filesystem?.allowRead), opts.allowRead ?? []);
     const allowedDomains = union(
@@ -486,6 +684,7 @@ export function provisionSrtPolicy(
     );
 
     const denyRead = union(toArray(current.filesystem?.denyRead), defaultSrtDenyRead());
+    const denyWrite = union(withoutManaged(toArray(current.filesystem?.denyWrite), prevManaged.denyWrite), managedDeny);
 
     const next: SrtSettings = {
       ...current,
@@ -494,14 +693,18 @@ export function provisionSrtPolicy(
         denyRead,
         allowRead,
         allowWrite,
-        denyWrite: toArray(current.filesystem?.denyWrite),
+        denyWrite,
       },
       network: {
         ...(current.network ?? {}),
         allowedDomains,
         deniedDomains: toArray(current.network?.deniedDomains),
       },
+      ...(managedExtra.length > 0 || managedDeny.length > 0
+        ? { adhdManaged: { extraAllowWrite: managedExtra, denyWrite: managedDeny } }
+        : {}),
     };
+    if (managedExtra.length === 0 && managedDeny.length === 0) delete next['adhdManaged'];
 
     const before = existed
       ? JSON.stringify(current)
@@ -510,11 +713,12 @@ export function provisionSrtPolicy(
     const updated = !existed || before !== after;
 
     if (updated) {
-      mkdirSync(dirname(path), { recursive: true });
+      mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
       const tmp = `${path}.tmp-${process.pid}-${Date.now()}`;
-      // 0600: the policy names credential deny paths and writable roots; owner-only (BK7 AC7.3).
-      writeFileSync(tmp, JSON.stringify(next, null, 2), { encoding: 'utf8', mode: 0o600 });
-      chmodSync(tmp, 0o600);
+      // 0600 + O_EXCL (BK7 AC7.3 / SEC-F8): the policy names credential deny paths and writable
+      // roots. `wx` never opens through a pre-planted symlink or reuses a pre-planted file; a planted
+      // entry at the predictable name is unlinked (the link, never its target) and the create retried.
+      writeExclusive0600(tmp, JSON.stringify(next, null, 2));
       renameSync(tmp, path);
     }
 

@@ -87,12 +87,20 @@ export interface AgentMcpConfig {
    * disables, error results <= 4000 chars are never truncated.
    *
    * `shell.sandbox.extraAllowWrite` (backlog 515a2b50 / BK7) lists extra WRITABLE roots for the
-   * srt-wrapped shell beyond the built-in caches/cwd; default `["~/.adhd/backlog"]` so
-   * `adhd-backlog` can take its store lease. Validated fail-loud in `srt-policy.ts`.
+   * srt-wrapped shell beyond the built-in caches/cwd; default `["~/.adhd/backlog/production/data"]`
+   * so `adhd-backlog` can take its store lease. `shell.sandbox.extraAllowWriteRoots` declares extra
+   * trust roots (default none) under which those entries may live. Both are validated fail-loud
+   * (allowlist, symlink/case/NFC-aware) in `srt-policy.ts` and read ONLY through the scope-pinned
+   * `operationalEnv` so a project `config.yaml` can never widen the sandbox.
    */
   readonly agent: {
     readonly toolResult: { readonly maxChars: string };
-    readonly shell: { readonly sandbox: { readonly extraAllowWrite: readonly string[] } };
+    readonly shell: {
+      readonly sandbox: {
+        readonly extraAllowWrite: readonly string[];
+        readonly extraAllowWriteRoots: readonly string[];
+      };
+    };
   };
   readonly server: {
     readonly maxDepth: number;
@@ -536,12 +544,24 @@ export const agentMcpEnvironmentSpec: EnvironmentSpec<AgentMcpConfig> = {
     "agent.shell.sandbox.extraAllowWrite": {
       type: "array",
       env: "ADHD_AGENT_SHELL_SANDBOX_EXTRA_ALLOW_WRITE",
-      default: ["~/.adhd/backlog"],
+      default: ["~/.adhd/backlog/production/data"],
       description:
         "Extra WRITABLE roots for the srt-sandboxed shell tool (comma-separated env / config-file " +
-        "array). `~/` is expanded. Default `~/.adhd/backlog` (the backlog lease + SQLite dir). Each " +
-        "entry must be absolute, under $HOME, not $HOME/~/.adhd/~/.ssh or an ancestor, not overlap a " +
-        "denyRead path, with no `..` or globs; an invalid entry fails loud at policy provisioning.",
+        "array). `~/` is expanded. Default `~/.adhd/backlog/production/data` (the backlog DB, WAL and " +
+        "lease dir). Allowlist: each entry must resolve (symlinks followed) to a strict descendant of " +
+        "~/.adhd/backlog or sit inside a root declared in `agent.shell.sandbox.extraAllowWriteRoots`, " +
+        "and never touch $HOME, ~/.ssh, ~/.claude, ~/.gnupg, ~/.config, shell rc files, the run-policy " +
+        "dir or a denyRead path; no `..` or globs. An invalid entry aborts startup. Read from the " +
+        "global scope only.",
+    },
+    "agent.shell.sandbox.extraAllowWriteRoots": {
+      type: "array",
+      env: "ADHD_AGENT_SHELL_SANDBOX_EXTRA_ALLOW_WRITE_ROOTS",
+      default: [],
+      description:
+        "Operator-declared extra trust roots under which `agent.shell.sandbox.extraAllowWrite` entries " +
+        "may live (e.g. a relocated backlog store). Validated like an entry and never ~/.adhd or an " +
+        "ancestor. Default none. Read from the global scope only.",
     },
     // ADR-0008 D10 / NAT-TOOL-7 — the portable native-tooling config surface.
     // Built with this spec's `ADHD_AGENT` prefix so each field gets an explicit

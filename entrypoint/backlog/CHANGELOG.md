@@ -6,6 +6,7 @@
 
 ### 🩹 Fixes
 
+- **backlog:** opening the store now unlinks planted symlink / hard-link sidecars (`-wal`, `-shm`, `-journal`, `-tshm*`, `.sox-lease.d`) next to the DB instead of operating through them. A sandboxed shell that can write the data dir could plant a `-wal` symlink and make the next unsandboxed `adhd-backlog` run truncate a file outside the sandbox (measured 7 bytes -> 0). The main DB file is never touched (515a2b50 SEC-F2).
 - **backlog:** the 86 KB `skill/SKILL.md` that every agent `cat`-ed whole is split: `SKILL.md` is now a ~3 KB quick reference (test-enforced <= 6 KB, every documented command line is executed against the built CLI) and the long-form reference moved, unabridged, to `skill/REFERENCE.md`, which `install-skill`/`install` now ship alongside it. The quick reference's examples are corrected to use a real `by` identity (`"claude:1"`, not a bare role word) (4d24f105 AC10.1)
 
 ## 1.0.14 (2026-10-09)

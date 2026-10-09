@@ -307,7 +307,8 @@ with `false` on the agent definition, not with an env toggle:
 | `ADHD_AGENT_NATIVE_TOOLING_DISPATCH_ALLOWED_TOOLS` | csv | dispatch (agent-mcp self) tool-name allowlist |
 | `ADHD_AGENT_NATIVE_TOOLING_DISPATCH_DISALLOWED_TOOLS` | csv | dispatch tool-name denylist (wins) |
 | `ADHD_AGENT_NATIVE_TOOLING_HITL` | bool | HITL enablement; default `true` |
-| `ADHD_AGENT_SHELL_SANDBOX_EXTRA_ALLOW_WRITE` | string[] | extra WRITABLE roots for the srt-sandboxed shell (config key `agent.shell.sandbox.extraAllowWrite`; `~/` expanded; default `~/.adhd/backlog` so `adhd-backlog` can take its store lease). Fail-loud validation: absolute under `$HOME`, never `$HOME`/`~/.adhd`/`~/.ssh` or an ancestor, no overlap with `denyRead`, no `..`, no globs |
+| `ADHD_AGENT_SHELL_SANDBOX_EXTRA_ALLOW_WRITE` | string[] | extra WRITABLE roots for the srt-sandboxed shell (config key `agent.shell.sandbox.extraAllowWrite`; `~/` expanded; default `~/.adhd/backlog/production/data` so `adhd-backlog` can take its store lease; the backlog `config.yaml` and `backups/` are always denied). Allowlist-validated, read from the global scope only; an invalid value aborts startup |
+| `ADHD_AGENT_SHELL_SANDBOX_EXTRA_ALLOW_WRITE_ROOTS` | string[] | operator-declared trust roots (config key `agent.shell.sandbox.extraAllowWriteRoots`, default none) under which `extraAllowWrite` entries may live, e.g. a relocated backlog store; never `~/.adhd` or a protected path |
 
 The retired authored-shell-server path override (the `server.mjs` fallback removed
 by NAT-TOOL-4) no longer resolves; shell configuration is `nativeTooling.shell.*`.

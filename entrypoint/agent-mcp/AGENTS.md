@@ -103,7 +103,8 @@ The typed `nativeTooling` surface (ADR-0008 D10) is part of the `@adhd/environme
 | `ADHD_AGENT_NATIVE_TOOLING_DISPATCH_ALLOWED_TOOLS` | csv | dispatch (agent-mcp self) tool-name allowlist |
 | `ADHD_AGENT_NATIVE_TOOLING_DISPATCH_DISALLOWED_TOOLS` | csv | dispatch tool-name denylist (wins) |
 | `ADHD_AGENT_NATIVE_TOOLING_HITL` | bool | HITL enablement; default `true` |
-| `ADHD_AGENT_SHELL_SANDBOX_EXTRA_ALLOW_WRITE` | string[] | extra WRITABLE roots for the srt-sandboxed shell (config key `agent.shell.sandbox.extraAllowWrite`; `~/` expanded; default `~/.adhd/backlog` so `adhd-backlog` can take its store lease). Fail-loud validation: absolute under `$HOME`, never `$HOME`/`~/.adhd`/`~/.ssh` or an ancestor, no overlap with `denyRead`, no `..`, no globs |
+| `ADHD_AGENT_SHELL_SANDBOX_EXTRA_ALLOW_WRITE` | string[] | extra WRITABLE roots for the srt-sandboxed shell (config key `agent.shell.sandbox.extraAllowWrite`; `~/` expanded; default `~/.adhd/backlog/production/data`). Allowlist: a strict descendant of `~/.adhd/backlog` or inside an `...EXTRA_ALLOW_WRITE_ROOTS` root, never a protected path (see the sandbox section below). Read from the GLOBAL scope only (`operationalEnv`); invalid => startup aborts |
+| `ADHD_AGENT_SHELL_SANDBOX_EXTRA_ALLOW_WRITE_ROOTS` | string[] | operator-declared trust roots for the entries above (config key `agent.shell.sandbox.extraAllowWriteRoots`; default none; e.g. a relocated backlog store). Validated like an entry and never `~/.adhd` or an ancestor |
 
 The rule map (`nativeTooling.*.permissions`) and `shell.env` are JSON objects with no flat `FieldSpec`, so they are authored on the agent definition, not set via env. The removed authored-shell-server path override is dead: `tools/mcp-shell/server.mjs` was deleted by NAT-TOOL-4 and shell configuration is `nativeTooling.shell.*`.
 
@@ -238,17 +239,44 @@ the `dispatch` self floor.
   `~/.npmrc ~/.ssh ~/.aws ~/.config/gh ~/.netrc` (home-expanded `DEFAULT_SRT_DENY_READ` /
   `defaultSrtDenyRead()`), UNIONED into any user `denyRead` — user entries are preserved
   and de-duplicated, never clobbered (shell-policy S4 / AC7).
-  The shell sandbox's WRITE allow list adds exactly `~/.adhd/backlog` by default
+  The shell sandbox's WRITE allow list adds exactly `~/.adhd/backlog/production/data` by default
   (`agent.shell.sandbox.extraAllowWrite`, `DEFAULT_SRT_EXTRA_ALLOW_WRITE`; backlog 515a2b50): the
-  `adhd-backlog` store lease + SQLite `-wal`/`-shm` sidecars live there, so without it every
-  legitimate backlog call fails EPERM under the sandbox. The directory allow covers the sidecars;
-  nothing broader (`~/.adhd`, `$HOME`) is allowed and `denyRead` is unchanged. Entries are
-  validated fail-loud by `validateSrtExtraAllowWrite` (absolute under `$HOME`, not `$HOME` /
-  `~/.adhd` / `~/.ssh` or an ancestor, no overlap with `denyRead`, no `..`, no globs). The per-run
-  policy file is written `0600`. Proofs: `src/__tests__/srt-policy-bk7.e2e.test.ts` (real `srt` +
-  the real built `adhd-backlog` bin against a scratch HOME) and `srt-policy-bk7.test.ts`. To point
-  the sandbox at a relocated backlog store (`ADHD_BACKLOG_DATABASE_PATH`), set the key to that
-  directory.
+  `adhd-backlog` store lease (`.sox-lease.d`), the SQLite DB and its `-wal`/`-shm`/`-tshm` sidecars are
+  siblings in that directory (verified under real `srt`), so without it every legitimate backlog call
+  fails EPERM under the sandbox. It is deliberately NOT the whole `~/.adhd/backlog` tree:
+  `production/config.yaml` (which can repoint the host's next unsandboxed `adhd-backlog` at another DB),
+  `backups/`, `cache/` and `test/` stay unwritable, and `config.yaml` + `backups` are also emitted as
+  `denyWrite` (srt honors a deny inside an allowed dir; proven by `srt-policy-bk7.e2e.test.ts`).
+  `denyRead` is unchanged. Rules, all enforced fail-loud by `validateSrtExtraAllowWrite`:
+  - ALLOWLIST: an entry must resolve to a strict descendant of `~/.adhd/backlog`, or sit inside an
+    operator-declared `agent.shell.sandbox.extraAllowWriteRoots` root (use it to point the sandbox at a
+    relocated store via `ADHD_BACKLOG_DATABASE_PATH`; a root may not be `~/.adhd` or an ancestor).
+  - PROTECTED: never `$HOME` or an ancestor, `~/.ssh`, `~/.aws`, `~/.gnupg`, `~/.claude`, `~/.config`,
+    shell rc files, `~/Library/LaunchAgents`, `~/.srt-settings.json`, `~/.adhd/agent-mcp`,
+    `~/.adhd/tmp` (the per-run policy dir), the resolved run-policy dir, any `denyRead` path; no `..`,
+    NUL or globs. Comparison is on the symlink-resolved path, NFC-normalized and case-folded
+    (`~/.SSH` is `~/.ssh`); the emitted path is the resolved one.
+  - SCOPE: the key is read from `operationalEnv` (global scope pinned), so a project-scope
+    `config.yaml` under `ADHD_ENV_SCOPE=project` can never widen the sandbox.
+  - FAILURE: an invalid value makes `agent-mcp` refuse to start (exit 1, message names the key and
+    entry); it is never downgraded to a warning.
+  - APPLICATION: the extras go into the PER-RUN policy file only (rebuilt from scratch each run), never
+    the shared global `~/.srt-settings.json`; entries the host injected earlier are tracked under
+    `adhdManaged` and dropped on the next provision, so narrowing the config takes effect.
+  The policy file is created `O_EXCL` + `0600` (a pre-planted file/symlink at the tmp name is replaced,
+  never written through) in `0700` directories.
+  Residual risk (documented, accepted): the sandbox can write the data dir, so it can corrupt or delete
+  the backlog DB/WAL (availability + integrity of the backlog, not confidentiality); true least
+  privilege would route sandboxed backlog access through the host-side `mcp__backlog__*` tools. The
+  confused-deputy path (a sandbox-planted `-wal`/`-shm`/`-journal`/`-tshm*`/`.sox-lease.d` symlink or
+  hard link making the next unsandboxed `adhd-backlog` truncate a file outside the sandbox — measured:
+  7 bytes -> 0) is closed on the host side by `quarantineUnsafeSidecars`
+  (`entrypoint/backlog/src/store/sidecar-hardening.ts`), which unlinks such links before the store
+  opens; a swap between that check and SQLite's open is a narrow remaining TOCTOU window, and the
+  main DB file is never touched (a user may legitimately symlink it). Proofs:
+  `srt-policy-bk7.e2e.test.ts` (real `srt` + the real built `adhd-backlog` bin, scratch HOME),
+  `srt-policy-bk7-boot.e2e.test.ts` (real built entrypoint refuses an invalid config),
+  `srt-policy-bk7.test.ts`, and `entrypoint/backlog/src/store/sidecar-hardening.spec.ts`.
 - The server-wide `nativeTooling` config surface (`env.config.nativeTooling`, the
   `ADHD_AGENT_NATIVE_TOOLING_*` env vars) is merged **beneath** each agent's own
   `def.nativeTooling` at task time — the agent wins, and the merged value is carried on the
