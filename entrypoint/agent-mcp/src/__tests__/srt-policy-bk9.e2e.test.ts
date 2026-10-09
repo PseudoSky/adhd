@@ -48,6 +48,7 @@ function policyFor(name: string, spill: boolean): string {
       settingsPath: path,
       applySandboxExtras: true,
       spillReadDir: spill ? spillDir : null,
+      spillTempRoot: temp,
     });
   } finally {
     if (prev === undefined) delete process.env['HOME'];

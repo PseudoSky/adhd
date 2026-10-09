@@ -33,15 +33,19 @@ afterEach(() => {
 });
 
 const DENY = () => [join(home, '.npmrc'), join(home, '.ssh'), join(home, '.aws')];
-const validate = (d: string) =>
-  validateSrtSpillReadDir(d, home, DENY(), { tempRoot: temp, protectedPaths: [join(temp, 'srt'), join(home, '.srt-settings.json')] });
+const validate = (d: string, trustRoots: readonly string[] = []) =>
+  validateSrtSpillReadDir(d, home, DENY(), {
+    tempRoot: temp,
+    protectedPaths: [join(temp, 'srt'), join(home, '.srt-settings.json')],
+    trustRoots,
+  });
 const read = (p: string) =>
   JSON.parse(readFileSync(p, 'utf8')) as { filesystem: { allowRead: string[]; allowWrite: string[] }; adhdManaged?: Record<string, string[]> };
 
 describe('9ed453c1 BK9 AC9.4 validateSrtSpillReadDir (fail loud)', () => {
   it('accepts the default <temp>/tool-results and returns the resolved path', () => {
     expect(validate(join(temp, 'tool-results'))).toBe(join(temp, 'tool-results'));
-    expect(validate('~/work/spill')).toBe(join(home, 'work', 'spill'));
+    expect(validate('~/work/spill', ['~/work'])).toBe(join(home, 'work', 'spill'));
   });
 
   it.each([
@@ -74,6 +78,74 @@ describe('9ed453c1 BK9 AC9.4 validateSrtSpillReadDir (fail loud)', () => {
   });
 });
 
+describe('9ed453c1 HARD-H3 validateSrtSpillReadDir is an allowlist (agent-mcp data/DB/logs never read-allowed)', () => {
+  const agentMcpHome = () => join(home, '.adhd', 'agent-mcp');
+  beforeEach(() => {
+    for (const d of ['production/data', 'production/logs', 'production/temp/tool-results/run-1']) {
+      mkdirSync(join(agentMcpHome(), d), { recursive: true });
+    }
+  });
+
+  it('accepts only the <temp>/tool-results subtree under the agent-mcp prefix (itself and descendants)', () => {
+    const spill = join(temp, 'tool-results');
+    expect(validate(spill)).toBe(spill);
+    expect(validate(join(spill, 'run-1'))).toBe(join(spill, 'run-1'));
+  });
+
+  it.each([
+    ['the agent-mcp data dir (holds the agent DB)', () => join(agentMcpHome(), 'production', 'data')],
+    ['a dir inside the data dir', () => join(agentMcpHome(), 'production', 'data', 'spill')],
+    ['the agent-mcp logs dir', () => join(agentMcpHome(), 'production', 'logs')],
+    ['the agent-mcp home itself', () => agentMcpHome()],
+    ['the env root above temp/data/logs', () => join(agentMcpHome(), 'production')],
+    ['a sibling of tool-results under the temp root', () => join(temp, 'scratch')],
+    ['the run-policy dir', () => join(temp, 'srt')],
+    ['an arbitrary non-allowlisted home dir (no trust root declared)', () => join(home, 'work', 'spill')],
+  ])('rejects %s', (_label, make) => {
+    expect(() => validate(make())).toThrow(SrtPolicyConfigError);
+  });
+
+  it('rejects a tool-results SYMLINK that points at the data dir (resolves outside the subtree)', () => {
+    rmSync(join(temp, 'tool-results'), { recursive: true, force: true });
+    symlinkSync(join(agentMcpHome(), 'production', 'data'), join(temp, 'tool-results'));
+    expect(() => validate(join(temp, 'tool-results'))).toThrow(SrtPolicyConfigError);
+    expect(() => validate(join(temp, 'tool-results', 'x'))).toThrow(SrtPolicyConfigError);
+  });
+
+  it('rejects a path under tool-results that is a symlink into the data dir', () => {
+    symlinkSync(join(agentMcpHome(), 'production', 'data'), join(temp, 'tool-results', 'sneaky'));
+    expect(() => validate(join(temp, 'tool-results', 'sneaky'))).toThrow(SrtPolicyConfigError);
+  });
+
+  it('provisioning with spillReadDir = the data dir (holding the agent DB) aborts and writes nothing', () => {
+    const path = join(dir, 'data-dir.json');
+    const dataDir = join(agentMcpHome(), 'production', 'data');
+    const prev = process.env['HOME'];
+    process.env['HOME'] = home;
+    try {
+      expect(() => provisionSrtPolicy({ settingsPath: path, applySandboxExtras: true, spillReadDir: dataDir, spillTempRoot: temp })).toThrow(
+        SrtPolicyConfigError
+      );
+    } finally {
+      if (prev === undefined) delete process.env['HOME'];
+      else process.env['HOME'] = prev;
+    }
+  });
+
+  it('without a tempRoot nothing under the agent-mcp prefix is accepted', () => {
+    expect(() => validateSrtSpillReadDir(join(temp, 'tool-results'), home, DENY())).toThrow(SrtPolicyConfigError);
+  });
+
+  it('operator trust roots admit their subtree but can never admit the agent-mcp data dir or ~/.adhd', () => {
+    expect(validate('~/work/spill', ['~/work'])).toBe(join(home, 'work', 'spill'));
+    expect(() => validate(join(agentMcpHome(), 'production', 'data'), ['~/work'])).toThrow(SrtPolicyConfigError);
+    expect(() => validate(join(agentMcpHome(), 'production', 'data'), ['~/.adhd'])).toThrow(SrtPolicyConfigError);
+    expect(() => validate(join(agentMcpHome(), 'production', 'data'), [agentMcpHome()])).toThrow(SrtPolicyConfigError);
+    expect(() => validate('~/work/spill', ['~'])).toThrow(SrtPolicyConfigError);
+    expect(() => validate('~/work/spill', ['~/.ssh'])).toThrow(SrtPolicyConfigError);
+  });
+});
+
 describe('9ed453c1 BK9 AC9.4 rendered policy: allowRead only when spill is enabled; writes never widened', () => {
   function withHome<T>(fn: () => T): T {
     const prev = process.env['HOME'];
@@ -89,7 +161,7 @@ describe('9ed453c1 BK9 AC9.4 rendered policy: allowRead only when spill is enabl
 
   it('spillReadDir given: the dir is in allowRead and NOT in allowWrite; tracked under adhdManaged', () => {
     const path = join(dir, 'on.json');
-    withHome(() => provisionSrtPolicy({ settingsPath: path, applySandboxExtras: true, spillReadDir: spillDir(), allowWrite: ['/work/cwd'] }));
+    withHome(() => provisionSrtPolicy({ settingsPath: path, applySandboxExtras: true, spillReadDir: spillDir(), spillTempRoot: temp, allowWrite: ['/work/cwd'] }));
     const s = read(path);
     expect(s.filesystem.allowRead).toEqual([spillDir()]);
     expect(s.filesystem.allowWrite).not.toContain(spillDir());
@@ -107,7 +179,7 @@ describe('9ed453c1 BK9 AC9.4 rendered policy: allowRead only when spill is enabl
 
   it('turning spill OFF on a re-provision removes the managed read allow but keeps operator-authored allowRead', () => {
     const path = join(dir, 'toggle.json');
-    withHome(() => provisionSrtPolicy({ settingsPath: path, applySandboxExtras: true, spillReadDir: spillDir(), allowRead: ['/opt/operator-read'] }));
+    withHome(() => provisionSrtPolicy({ settingsPath: path, applySandboxExtras: true, spillReadDir: spillDir(), spillTempRoot: temp, allowRead: ['/opt/operator-read'] }));
     expect(read(path).filesystem.allowRead.sort()).toEqual(['/opt/operator-read', spillDir()].sort());
     withHome(() => provisionSrtPolicy({ settingsPath: path, applySandboxExtras: true, spillReadDir: null }));
     expect(read(path).filesystem.allowRead).toEqual(['/opt/operator-read']);
@@ -121,7 +193,7 @@ describe('9ed453c1 BK9 AC9.4 rendered policy: allowRead only when spill is enabl
 
   it('an unsafe spillReadDir aborts the provision (fail loud, nothing written)', () => {
     const path = join(dir, 'bad.json');
-    expect(() => withHome(() => provisionSrtPolicy({ settingsPath: path, applySandboxExtras: true, spillReadDir: join(home, '.ssh') }))).toThrow(
+    expect(() => withHome(() => provisionSrtPolicy({ settingsPath: path, applySandboxExtras: true, spillReadDir: join(home, '.ssh'), spillTempRoot: temp }))).toThrow(
       SrtPolicyConfigError
     );
   });
@@ -130,13 +202,14 @@ describe('9ed453c1 BK9 AC9.4 rendered policy: allowRead only when spill is enabl
     const prevEnabled = process.env['ADHD_AGENT_TOOL_RESULT_SPILL_ENABLED'];
     const prevDir = process.env['ADHD_AGENT_TOOL_RESULT_SPILL_DIR'];
     try {
-      process.env['ADHD_AGENT_TOOL_RESULT_SPILL_DIR'] = join(dir, 'cfg-spill');
+      delete process.env['ADHD_AGENT_TOOL_RESULT_SPILL_DIR'];
       process.env['ADHD_AGENT_TOOL_RESULT_SPILL_ENABLED'] = 'true';
       vi.resetModules();
       let srt = await import('../srt-policy.js');
+      const { resolveLogRoots: liveRoots } = await import('../config.js');
       const onPath = join(dir, 'cfg-on.json');
       srt.provisionSrtPolicy({ settingsPath: onPath, applySandboxExtras: true });
-      expect(read(onPath).filesystem.allowRead).toEqual([join(realpathSync(dir), 'cfg-spill')]);
+      expect(read(onPath).filesystem.allowRead).toEqual([join(liveRoots().temp, 'tool-results')]);
 
       delete process.env['ADHD_AGENT_TOOL_RESULT_SPILL_ENABLED'];
       vi.resetModules();

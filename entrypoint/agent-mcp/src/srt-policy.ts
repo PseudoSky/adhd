@@ -104,6 +104,12 @@ export interface ProvisionSrtPolicyOptions {
    * {@link validateSrtSpillReadDir}) or `null` to render none. Read access only: never added to `allowWrite`.
    */
   spillReadDir?: string | null;
+  /**
+   * The agent-mcp temp root an explicit {@link spillReadDir} is validated against (its `<temp>/tool-results`
+   * subtree is the only agent-mcp location a spill read allow may name). Defaults to the live resolved temp
+   * root; tests running under a fake `$HOME` pass theirs. Ignored when `spillReadDir` is omitted.
+   */
+  spillTempRoot?: string;
   /** Extra network allow-list domains to union into `allowedDomains`. */
   allowedDomains?: string[];
 }
@@ -287,6 +293,11 @@ export interface ValidateSrtExtraAllowWriteOptions {
   readonly protectedPaths?: readonly string[];
 }
 
+/** Comparison form of `~/.adhd`, the root no operator trust root may be or contain. */
+function adhdHomeFold(home: string): string {
+  return foldPath(join(home, '.adhd'));
+}
+
 function expandHome(entry: string, home: string, key: string): string {
   if (typeof entry !== 'string' || entry.trim() === '') {
     throw new SrtPolicyConfigError(entry, 'must be a non-empty string', key);
@@ -331,7 +342,7 @@ export function validateSrtExtraAllowWrite(
   opts: ValidateSrtExtraAllowWriteOptions = {}
 ): string[] {
   const homeFold = foldPath(home);
-  const adhdFold = foldPath(join(home, '.adhd'));
+  const adhdFold = adhdHomeFold(home);
   const protectedFolds = [
     ...PROTECTED_HOME_RELATIVE.map((rel) => foldPath(join(home, rel))),
     ...(opts.protectedPaths ?? []).map((p) => foldPath(p)),
@@ -394,55 +405,95 @@ export function resolveSrtExtraAllowWrite(
   });
 }
 
+/** Extra inputs to {@link validateSrtSpillReadDir}. */
+export interface ValidateSrtSpillReadDirOptions {
+  /** The resolved agent-mcp namespaced temp root; the default spill subtree `<tempRoot>/tool-results` is derived from it. */
+  readonly tempRoot?: string;
+  /** Additional absolute paths that are protected (e.g. the resolved run-policy dir, the srt settings file). */
+  readonly protectedPaths?: readonly string[];
+  /** Operator-declared trust roots (`agent.shell.sandbox.extraAllowWriteRoots`), validated as in the BK7 validator. */
+  readonly trustRoots?: readonly string[];
+}
+
 /**
  * Validate the directory rendered as `filesystem.allowRead` for the tool-result spill (BK9). A read
  * allow is narrower than a write allow, but `allowRead` re-opens paths inside a `denyRead` region, so
- * the spill dir must never be, contain, or sit inside a credential location, the run-policy dir, or the
- * srt settings file, and must never contain `$HOME` or the credential-bearing agent-mcp temp root
- * (claudecli mcp-config / agent-spec scratch lives directly in it) — only a dedicated subdirectory of
- * that root, such as the default `<temp>/tool-results`, is acceptable. Fail loud with
- * {@link SrtPolicyConfigError}.
+ * this is an ALLOWLIST by construction (9ed453c1 HARD-H3), not a denylist with a blanket exemption. After
+ * `~/` expansion and symlink resolution the directory must be exactly one of:
+ *  - the agent-mcp tool-result spill subtree: `<tempRoot>/tool-results` itself or a descendant of it
+ *    (`tempRoot` is resolved, then `tool-results` appended, so a `tool-results` symlink pointing at the
+ *    data dir resolves OUTSIDE the subtree and is refused); or
+ *  - inside (or equal to) an operator-declared trust root from `agent.shell.sandbox.extraAllowWriteRoots`
+ *    (each strictly under `$HOME`, never protected, never `~/.adhd` or containing it).
+ * Anything else under `~/.adhd/agent-mcp` (the data dir holding the agent DB, logs, the temp root itself
+ * with its credential-bearing scratch, the run-policy dir) and every other location is refused. In all
+ * cases the dir may not be, contain, or sit inside a credential location, the srt settings file, a
+ * `denyRead` path, or `$HOME`. Fail loud with {@link SrtPolicyConfigError}.
  *
  * @param dir the configured spill directory (absolute; `~/` allowed).
  * @param home the home directory (injectable for tests).
  * @param denyRead the credential deny list.
- * @param opts `tempRoot` (must not be equal to / contained by the spill dir) and extra `protectedPaths`.
+ * @param opts `tempRoot`, extra `protectedPaths`, and operator `trustRoots`.
  * @returns the symlink-resolved absolute path srt will enforce.
  */
 export function validateSrtSpillReadDir(
   dir: string,
   home: string = homedir(),
   denyRead: readonly string[] = defaultSrtDenyRead(),
-  opts: { readonly tempRoot?: string; readonly protectedPaths?: readonly string[] } = {}
+  opts: ValidateSrtSpillReadDirOptions = {}
 ): string {
   const key = 'agent.toolResult.spill.dir';
+  const rootsKey = 'agent.shell.sandbox.extraAllowWriteRoots';
   const expanded = expandHome(dir, home, key);
   const real = resolveRealPrefix(expanded);
   const fold = foldPath(expanded);
-  // Credential locations: the spill dir may not be, contain, or sit inside them. `.adhd/agent-mcp` is
-  // exempt from the list because the default spill dir legitimately lives under it.
-  const secretFolds = [
-    ...PROTECTED_HOME_RELATIVE.filter((rel) => !rel.startsWith('.adhd/agent-mcp')).map((rel) => foldPath(join(home, rel))),
+  const homeFold = foldPath(home);
+  const adhdFold = adhdHomeFold(home);
+
+  const spillSubtree = opts.tempRoot === undefined ? undefined : join(foldPath(opts.tempRoot), 'tool-results');
+  const inSpillSubtree = spillSubtree !== undefined && isSameOrAncestor(spillSubtree, fold);
+
+  // Credential locations: the spill dir may not be, contain, or sit inside them. The agent-mcp home
+  // subtree (`.adhd/agent-mcp`) is a protected location EXCEPT for the allowlisted spill subtree above.
+  const protectedHome = PROTECTED_HOME_RELATIVE.filter((rel) => !(inSpillSubtree && rel === '.adhd/agent-mcp'));
+  const protectedFolds = [
+    ...protectedHome.map((rel) => foldPath(join(home, rel))),
     ...denyRead.map((p) => foldPath(p)),
     ...(opts.protectedPaths ?? []).map((p) => foldPath(p)),
   ];
-  for (const prot of secretFolds) {
+  for (const prot of protectedFolds) {
     if (isSameOrAncestor(fold, prot) || isSameOrAncestor(prot, fold)) {
       throw new SrtPolicyConfigError(dir, `must not be, contain, or sit inside the protected path ${prot}`, key);
     }
   }
-  const homeFold = foldPath(home);
   if (isSameOrAncestor(fold, homeFold)) {
     throw new SrtPolicyConfigError(dir, 'must not be (or contain) the home directory', key);
   }
-  if (opts.tempRoot !== undefined && isSameOrAncestor(fold, foldPath(opts.tempRoot))) {
-    throw new SrtPolicyConfigError(
-      dir,
-      'must be a dedicated subdirectory, not the agent-mcp temp root itself (it holds credential-bearing scratch)',
-      key
-    );
+
+  if (inSpillSubtree) return real;
+
+  for (const root of opts.trustRoots ?? []) {
+    const rootExpanded = expandHome(root, home, rootsKey);
+    const rootFold = foldPath(rootExpanded);
+    if (!rootFold.startsWith(homeFold + sep)) {
+      throw new SrtPolicyConfigError(root, `must be strictly under the home directory (${home})`, rootsKey);
+    }
+    if (isSameOrAncestor(adhdFold, rootFold) || isSameOrAncestor(rootFold, adhdFold)) {
+      throw new SrtPolicyConfigError(root, 'a trust root may not be (or contain) ~/.adhd', rootsKey);
+    }
+    for (const prot of protectedFolds) {
+      if (isSameOrAncestor(rootFold, prot) || isSameOrAncestor(prot, rootFold)) {
+        throw new SrtPolicyConfigError(root, `must not be, contain, or sit inside the protected path ${prot}`, rootsKey);
+      }
+    }
+    if (isSameOrAncestor(rootFold, fold)) return real;
   }
-  return real;
+  throw new SrtPolicyConfigError(
+    dir,
+    'must be inside the agent-mcp tool-result spill subtree (<temp>/tool-results) or inside a root declared in ' +
+      'agent.shell.sandbox.extraAllowWriteRoots (the agent-mcp data dir, logs, temp root and run-policy dir are never readable)',
+    key
+  );
 }
 
 /**
@@ -453,13 +504,17 @@ export function validateSrtSpillReadDir(
 export function resolveSrtSpillAllowRead(): string[] {
   const spill = resolveToolResultSpill();
   if (!spill.enabled) return [];
-  const roots = resolveLogRoots();
-  return [
-    validateSrtSpillReadDir(spill.dir, homedir(), defaultSrtDenyRead(), {
-      tempRoot: roots.temp,
-      protectedPaths: [srtRunPolicyDir(roots), resolveSrtSettingsPath()],
-    }),
-  ];
+  return [validateSpillReadDirInContext(spill)];
+}
+
+/** {@link validateSrtSpillReadDir} bound to the live temp root, protected paths and operator trust roots. */
+function validateSpillReadDirInContext(spill: { readonly dir: string }, tempRootOverride?: string): string {
+  const roots = tempRootOverride === undefined ? resolveLogRoots() : { ...resolveLogRoots(), temp: tempRootOverride };
+  return validateSrtSpillReadDir(spill.dir, homedir(), defaultSrtDenyRead(), {
+    tempRoot: roots.temp,
+    protectedPaths: [srtRunPolicyDir(roots), resolveSrtSettingsPath()],
+    trustRoots: operationalEnv.config.agent.shell.sandbox.extraAllowWriteRoots ?? DEFAULT_SRT_EXTRA_ALLOW_WRITE_ROOTS,
+  });
 }
 
 /**
@@ -752,7 +807,7 @@ export function provisionSrtPolicy(
     // BK9: the tool-result spill dir is READ-allowed only when spill is enabled (never in the global file).
     let managedRead: string[] = [];
     if (opts.applySandboxExtras && opts.spillReadDir !== null) {
-      managedRead = opts.spillReadDir === undefined ? resolveSrtSpillAllowRead() : [validateSrtSpillReadDir(opts.spillReadDir)];
+      managedRead = opts.spillReadDir === undefined ? resolveSrtSpillAllowRead() : [validateSpillReadDirInContext({ dir: opts.spillReadDir }, opts.spillTempRoot)];
     }
 
     const allowWrite = union(

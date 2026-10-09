@@ -2,7 +2,7 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, realpathSyn
 import { tmpdir } from "node:os";
 import { join, sep } from "node:path";
 import { Readable } from "stream";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { EngineConfig, EngineLogger } from "../interfaces.js";
 
@@ -54,6 +54,16 @@ function makeConfig(tempDir: string | undefined): EngineConfig {
         resolveEnvName: (() => undefined) as unknown as EngineConfig["resolveEnvName"],
     } as unknown as EngineConfig;
 }
+
+/**
+ * 9ed453c1 HARD-H2: the provider module graph is large; its first dynamic import is cold under
+ * parallel nx load and used to be charged to the first test's 5 s budget. Pay it once, here, with an
+ * explicit budget. Later `await import()` calls in chatAndObserve resolve from the module cache.
+ */
+const COLD_IMPORT_TIMEOUT_MS = 60_000;
+beforeAll(async () => {
+    await import("../providers/claudecli.js");
+}, COLD_IMPORT_TIMEOUT_MS);
 
 let sandbox: string;
 beforeEach(() => {

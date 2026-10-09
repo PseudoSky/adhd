@@ -128,13 +128,23 @@ beforeAll(async () => {
   await llm.start();
 }, 600_000);
 
+/**
+ * 9ed453c1 HARD-H1: teardown is NOT cheap — it closes the spawned hosts and deletes two full consumer
+ * installs (`node_modules` of the whole @adhd closure) plus the tarballs. Measured idle: ~3 s (setup is
+ * ~15 s and already carries its own 600 s budget). The vitest default hook budget is 10 s, which a
+ * loaded machine exceeds (observed "Hook timed out in 10000ms"). The budget below is ~40x the idle
+ * measurement; the work itself is made concurrent (hosts closed together, directories removed together)
+ * so load stretches it less. No sleeps: every step is awaited.
+ */
+const TEARDOWN_TIMEOUT_MS = 120_000;
+
 afterAll(async () => {
-  for (const h of hosts) await h.close();
+  await Promise.all(hosts.map((h) => h.close()));
   await llm?.stop();
-  for (const d of [scratch, homeRoot]) {
-    if (d) fs.rmSync(d, { recursive: true, force: true });
-  }
-});
+  await Promise.all(
+    [scratch, homeRoot].filter(Boolean).map((d) => fs.promises.rm(d, { recursive: true, force: true }))
+  );
+}, TEARDOWN_TIMEOUT_MS);
 
 describe('94125709: packed, consumer-installed @adhd/agent-mcp and srt', () => {
   it('0f3667fd BRIDGE-AC1 + 94125709 AC1 + c9f0a791 AC4/AC6: installed (non-workspace) server finds srt off a stripped PATH and srt-wraps fs/shell children', async () => {
