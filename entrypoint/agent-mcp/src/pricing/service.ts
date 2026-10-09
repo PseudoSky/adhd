@@ -13,8 +13,7 @@ import { startPriceScheduler, type IPriceScheduler, type ISchedulerOptions } fro
 
 export interface IPricingServiceOptions {
   /** Drizzle better-sqlite3 handle over the runtime DB (migrations already applied). */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  db: any;
+  db: ConstructorParameters<typeof PriceHistoryStore>[0];
   logger: IPullLogger;
   /** Package version for the feed `User-Agent`. */
   version: string;
