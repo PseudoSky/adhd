@@ -39,6 +39,10 @@ export const FETCH_TIMEOUT_MS = 30_000;
 export const DEFAULT_RETRY_WAIT_MS = 60_000;
 /** Upper bound on a server-requested `Retry-After`. */
 export const MAX_RETRY_WAIT_MS = 120_000;
+/** Cap on the response body read from the feed; a larger body fails the pull. */
+export const MAX_BODY_BYTES = 8 * 1024 * 1024;
+/** Minimum gap between FORCED pulls, measured from the last pull attempt of any status. */
+export const FORCED_MIN_INTERVAL_MS = 10 * 60_000;
 /** A feed with fewer than this fraction of the previous model count is rejected as a shrink. */
 export const SHRINK_MIN_RATIO = 0.5;
 
@@ -80,8 +84,8 @@ export interface IPullDeps {
 export interface IPullResult {
   /** `skipped` = not claimed (see `reason`); the rest mirror the ledger status. */
   status: 'ok' | 'skipped' | 'failed' | 'rejected_shrink' | 'rejected_invalid';
-  /** Why a pull was skipped: a fresh `ok` pull exists, or another process holds a live claim. */
-  reason?: 'fresh' | 'running';
+  /** Why a pull was skipped: a fresh `ok` pull exists, another process holds a live claim, or a forced pull came within {@link FORCED_MIN_INTERVAL_MS} of the last attempt. */
+  reason?: 'fresh' | 'running' | 'forced_too_soon';
   ledgerId?: string;
   /** Observation instant stamped on every row this pull appended. */
   fetchedAt?: string;
@@ -132,9 +136,49 @@ type Attempt =
   | { ok: true; body: string; httpStatus: number }
   | { ok: false; retryable: boolean; error: string; httpStatus?: number; retryAfterMs?: number };
 
+/**
+ * Read the body with a byte counter, aborting the request (and cancelling the stream) the moment
+ * more than {@link MAX_BODY_BYTES} have arrived, so an oversized or hostile body is never buffered whole.
+ */
+async function readCappedBody(
+  res: Response,
+  controller: AbortController
+): Promise<{ ok: true; body: string } | { ok: false; error: string }> {
+  const tooBig = (): { ok: false; error: string } => ({
+    ok: false,
+    error: `response body exceeds ${MAX_BODY_BYTES} bytes`,
+  });
+  const declared = Number(res.headers.get('content-length'));
+  if (Number.isFinite(declared) && declared > MAX_BODY_BYTES) {
+    controller.abort();
+    await res.body?.cancel().catch(() => undefined);
+    return tooBig();
+  }
+  if (!res.body) {
+    const text = await res.text();
+    return Buffer.byteLength(text) > MAX_BODY_BYTES ? tooBig() : { ok: true, body: text };
+  }
+  const reader = res.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > MAX_BODY_BYTES) {
+      controller.abort();
+      await reader.cancel().catch(() => undefined);
+      return tooBig();
+    }
+    chunks.push(value);
+  }
+  return { ok: true, body: Buffer.concat(chunks).toString('utf8') };
+}
+
 async function attemptFetch(deps: IPullDeps, url: string): Promise<Attempt> {
   const timeout = AbortSignal.timeout(FETCH_TIMEOUT_MS);
-  const signal = deps.signal ? AbortSignal.any([timeout, deps.signal]) : timeout;
+  const controller = new AbortController();
+  const signal = AbortSignal.any(deps.signal ? [timeout, deps.signal, controller.signal] : [timeout, controller.signal]);
   try {
     // No Authorization / Cookie header: the feed is public and must never see a credential.
     const res = await deps.fetchImpl(url, {
@@ -157,8 +201,9 @@ async function attemptFetch(deps: IPullDeps, url: string): Promise<Attempt> {
     if (!res.ok) {
       return { ok: false, retryable: false, error: `HTTP ${res.status}`, httpStatus: res.status };
     }
-    const body = await res.text();
-    return { ok: true, body, httpStatus: res.status };
+    const read = await readCappedBody(res, controller);
+    if (!read.ok) return { ok: false, retryable: false, error: read.error, httpStatus: res.status };
+    return { ok: true, body: read.body, httpStatus: res.status };
   } catch (err) {
     if (deps.signal?.aborted) return { ok: false, retryable: false, error: 'aborted: shutdown' };
     const msg = err instanceof Error ? err.message : String(err);
@@ -209,6 +254,7 @@ export async function runPricePull(deps: IPullDeps, opts: IPullOptions = {}): Pr
       minIntervalMs: PULL_MIN_INTERVAL_MS,
       runningTtlMs: RUNNING_TTL_MS,
       force: opts.force === true,
+      forcedMinIntervalMs: FORCED_MIN_INTERVAL_MS,
       sourceUrl: url,
     });
     if (!claim.claimed) {
@@ -228,7 +274,7 @@ export async function runPricePull(deps: IPullDeps, opts: IPullOptions = {}): Pr
   ): IPullResult => {
     const result = base({ status, ledgerId, ...extra });
     try {
-      deps.store.finishPull(ledgerId, {
+      const closed = deps.store.finishPull(ledgerId, {
         status,
         finishedAt: deps.now(),
         httpStatus: result.httpStatus ?? null,
@@ -240,6 +286,12 @@ export async function runPricePull(deps: IPullDeps, opts: IPullOptions = {}): Pr
         error: result.error ?? null,
         durationMs: result.durationMs,
       });
+      if (!closed) {
+        deps.logger.warn(
+          { ledgerId, status },
+          'pricing: ledger row was no longer running (superseded or already closed); outcome not recorded'
+        );
+      }
     } catch (err) {
       deps.logger.error({ err, ledgerId }, 'pricing: could not close the pull ledger row');
     }

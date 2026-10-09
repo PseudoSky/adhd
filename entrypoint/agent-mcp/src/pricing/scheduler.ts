@@ -23,6 +23,10 @@ import {
 export const DEFAULT_START_DELAY_MS = 5_000;
 /** Floor for a re-armed delay, so a skipped/instant result can never spin. */
 const MIN_REARM_MS = 60_000;
+/** Re-arm delay after a transient failure (`failed`, claim failure): retry soon, not after a full day. */
+export const TRANSIENT_FAILURE_REARM_MS = 2 * 3_600_000;
+/** Re-arm delay after a data-gate rejection (`rejected_*`): the feed content is bad, not the network. */
+export const REJECTED_REARM_MS = 6 * 3_600_000;
 
 export interface ITimers {
   setTimeout(fn: () => void, ms: number): unknown;
@@ -71,7 +75,7 @@ export function startPriceScheduler(deps: IPullDeps, options: ISchedulerOptions 
     (handle as { unref?: () => void } | null)?.unref?.();
   };
 
-  /** Delay until the next attempt, given the pull that just ran. */
+  /** Delay until the next attempt, given the pull that just ran (claim failures arrive as `failed`). */
   const nextDelay = (result: IPullResult): number => {
     if (result.status === 'skipped' && result.reason === 'running') return Math.max(MIN_REARM_MS, RUNNING_TTL_MS);
     if (result.status === 'skipped' && result.reason === 'fresh') {
@@ -80,6 +84,8 @@ export function startPriceScheduler(deps: IPullDeps, options: ISchedulerOptions 
         return Math.max(MIN_REARM_MS, Date.parse(lastOk.startedAt) + PULL_MIN_INTERVAL_MS - Date.parse(deps.now()));
       }
     }
+    if (result.status === 'failed') return TRANSIENT_FAILURE_REARM_MS;
+    if (result.status === 'rejected_shrink' || result.status === 'rejected_invalid') return REJECTED_REARM_MS;
     return intervalMs;
   };
 

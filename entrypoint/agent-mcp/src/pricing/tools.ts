@@ -20,6 +20,13 @@ export const pricingRefreshInputSchema = z.object({
     ),
 });
 
+/**
+ * Input of the IN-PROCESS (sub-agent) `pricing_refresh`: deliberately has NO `accept`. Releasing a
+ * held >= 20x anomaly is an operator decision and is only available on the top-level host tool.
+ * Strict, so a sub-agent passing `accept` gets a validation error instead of a silent no-op.
+ */
+export const pricingRefreshInProcessInputSchema = z.object({}).strict();
+
 export const pricingHistoryInputSchema = z.object({
   model: z.string().min(1).describe('OpenRouter model id, e.g. "deepseek/deepseek-v4.1-flash" (case-insensitive).'),
   from: isoInstant.optional().describe('Inclusive ISO-8601 lower bound on observed_at.'),
@@ -29,8 +36,13 @@ export const pricingHistoryInputSchema = z.object({
 export const PRICING_REFRESH_DESCRIPTION =
   'Pull live model prices from https://openrouter.ai/api/v1/models now (public feed, no API key), bypassing the 24h schedule. ' +
   'Appends a price-history row only for models whose price changed; a failed or rejected pull changes nothing and last good prices keep serving. ' +
-  `A price move of >= ${PRICE_ANOMALY_THRESHOLDS.holdFactor}x (or input > $${PRICE_ANOMALY_THRESHOLDS.maxInputPerM}/M) is HELD and reported in anomalies; pass accept:[modelId] on the next refresh to apply it. ` +
+  `Forced pulls are limited to one per 10 minutes. A price move of >= ${PRICE_ANOMALY_THRESHOLDS.holdFactor}x (or input > $${PRICE_ANOMALY_THRESHOLDS.maxInputPerM}/M) is HELD and reported in anomalies; pass accept:[modelId] on the next refresh to apply it. ` +
   'Returns {status, ledger_id, fetched_at, models, new, changed, unchanged, anomalies, duration_ms, error?}.';
+
+/** Sub-agent variant: no `accept` (an operator releases held prices from the top-level tool). */
+export const PRICING_REFRESH_IN_PROCESS_DESCRIPTION =
+  'Pull live model prices from https://openrouter.ai/api/v1/models now (public feed, no API key), bypassing the 24h schedule (at most one forced pull per 10 minutes). ' +
+  `Appends a price-history row only for models whose price changed; a failed or rejected pull changes nothing. A price move of >= ${PRICE_ANOMALY_THRESHOLDS.holdFactor}x is HELD and reported in anomalies; releasing a held price is an operator action and is not available here.`;
 
 export const PRICING_HISTORY_DESCRIPTION =
   'Observed price series for one model (observed_at order, $ per million tokens) with source and ledger_id, plus pull status ' +
@@ -42,6 +54,15 @@ export function pricingRefresh(
   service: Pick<IPricingService, 'refresh'>
 ): Promise<Record<string, unknown>> {
   return service.refresh(input.accept).then(toRefreshWire);
+}
+
+/** In-process (sub-agent) `pricing_refresh`: never forwards `accept`; rejects it at validation. */
+export async function pricingRefreshInProcess(
+  args: unknown,
+  service: Pick<IPricingService, 'refresh'>
+): Promise<Record<string, unknown>> {
+  pricingRefreshInProcessInputSchema.parse(args ?? {});
+  return toRefreshWire(await service.refresh(undefined));
 }
 
 function toRefreshWire(r: IPullResult): Record<string, unknown> {
