@@ -55,13 +55,8 @@ interface IEntry {
 }
 
 /** Reviewed exceptions: `<repo-relative path> :: <trimmed code line>`. */
-const ALLOWLIST: readonly IEntry[] = [
-  {
-    key: 'entrypoint/agent-mcp/src/pricing/service.ts :: fetchImpl: options.fetchImpl ?? ((...a) => globalThis.fetch(...a)),',
-    reason:
-      'pricing-feed pull, not provider/MCP egress; tracked with the pricing-hist branch (tracing-spec-v2 row 7). Production callers inject fetchImpl.',
-  },
-];
+/** Empty: the pricing feed fetch is routed through the wire seam (c536ce29 TRC-AC7). */
+const ALLOWLIST: readonly IEntry[] = [];
 
 export function stripNonCode(src: string): string {
   let out = '';

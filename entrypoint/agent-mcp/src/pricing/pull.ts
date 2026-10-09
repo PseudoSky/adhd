@@ -22,6 +22,8 @@ import {
   type PriceHistoryStore,
 } from '@adhd/agent-store-runtime';
 
+import { pricingOps, type OpsSource } from './ops.js';
+
 /** Public OpenRouter model feed (no API key required). */
 export const OPENROUTER_MODELS_URL = 'https://openrouter.ai/api/v1/models';
 /** Minimum gap between successful pulls. Pulled slightly under 24h so timer drift never trips the `fresh` gate. */
@@ -75,6 +77,8 @@ export interface IPullDeps {
   signal?: AbortSignal;
   /** Previous-model-count fallback for the shrink gate when no `ok` ledger row exists. Default: bundled snapshot count. */
   baselineModelCount?: number;
+  /** c536ce29 TRC-AC7: ops channel for `pricing.*` records. Default: the process-wide ops channel. */
+  ops?: OpsSource;
 }
 
 export interface IPullResult {
@@ -192,6 +196,9 @@ export async function runPricePull(deps: IPullDeps, opts: IPullOptions = {}): Pr
   const url = deps.url ?? OPENROUTER_MODELS_URL;
   const sleep = deps.sleep ?? defaultSleep;
   const startedAt = deps.now();
+  const ops = (event: string, fields: Record<string, unknown>, level?: 'info' | 'warn' | 'error'): void =>
+    pricingOps(deps.ops, event, fields, level);
+  const accepted = opts.accept ?? [];
   const base = (extra: Partial<IPullResult>): IPullResult => ({
     status: 'failed',
     models: 0,
@@ -213,12 +220,15 @@ export async function runPricePull(deps: IPullDeps, opts: IPullOptions = {}): Pr
     });
     if (!claim.claimed) {
       deps.logger.info({ reason: claim.reason }, 'pricing: pull skipped (not claimed)');
+      ops('pricing.pull.skipped', { reason: claim.reason, forced: opts.force === true, accept: accepted, url });
       return base({ status: 'skipped', reason: claim.reason });
     }
     ledgerId = claim.ledgerId;
+    ops('pricing.pull.start', { ledger_id: ledgerId, url, forced: opts.force === true, accept: accepted });
   } catch (err) {
     const error = `claim failed: ${err instanceof Error ? err.message : String(err)}`;
     deps.logger.error({ err }, 'pricing: could not claim the price pull; last good prices keep serving');
+    ops('pricing.pull.end', { status: 'failed', phase: 'claim', error, forced: opts.force === true, url }, 'error');
     return base({ error });
   }
 
@@ -249,6 +259,25 @@ export async function runPricePull(deps: IPullDeps, opts: IPullOptions = {}): Pr
         'pricing: live price pull did not update prices; last good prices keep serving'
       );
     }
+    ops(
+      'pricing.pull.end',
+      {
+        ledger_id: ledgerId,
+        status,
+        http_status: result.httpStatus ?? null,
+        models: result.models,
+        new: result.new,
+        changed: result.changed,
+        unchanged: result.unchanged,
+        anomalies: result.anomalies.length,
+        held: result.anomalies.filter((a) => a.severity === 'hold').length,
+        warned: result.anomalies.filter((a) => a.severity === 'warn').length,
+        accepted,
+        duration_ms: result.durationMs,
+        ...(result.error ? { error: result.error } : {}),
+      },
+      status === 'ok' ? 'info' : 'warn'
+    );
     return result;
   };
 
@@ -260,6 +289,7 @@ export async function runPricePull(deps: IPullDeps, opts: IPullOptions = {}): Pr
         { cause: attempt.error, waitMs: wait },
         'pricing: price feed request failed; retrying once'
       );
+      ops('pricing.pull.retry', { ledger_id: ledgerId, cause: attempt.error, wait_ms: wait }, 'warn');
       await sleep(wait, deps.signal);
       attempt = deps.signal?.aborted
         ? { ok: false, retryable: false, error: 'aborted: shutdown' }
@@ -306,6 +336,20 @@ export async function runPricePull(deps: IPullDeps, opts: IPullOptions = {}): Pr
       new Set(opts.accept ?? [])
     );
     for (const a of applied.anomalies) {
+      ops(
+        'pricing.anomaly',
+        {
+          ledger_id: ledgerId,
+          model_id: a.modelId,
+          severity: a.severity,
+          reason: a.reason,
+          field: a.field,
+          previous: a.previous,
+          observed: a.observed,
+          accepted: accepted.some((m) => m.toLowerCase() === a.modelId.toLowerCase()),
+        },
+        a.severity === 'hold' ? 'error' : 'warn'
+      );
       const log = a.severity === 'hold' ? deps.logger.error : deps.logger.warn;
       log.call(
         deps.logger,

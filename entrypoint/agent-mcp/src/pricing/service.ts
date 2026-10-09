@@ -5,9 +5,12 @@
  * The `UsagePlugin` and the `usage_query` read path price through `createPriceSource(db)` over the
  * SAME database, so rows this service appends are what they resolve as-of the turn.
  */
+import type { LogChannel } from '@adhd/agent-plugin-tracing';
 import { parseBundledSnapshot } from '@adhd/agent-core-provider';
 import { createPriceSource, PriceHistoryStore } from '@adhd/agent-store-runtime';
 
+import { tracedFetch } from '../wire/traced-fetch.js';
+import type { OpsSource } from './ops.js';
 import { runPricePull, toPriceRow, type IPullDeps, type IPullLogger, type IPullResult } from './pull.js';
 import { startPriceScheduler, type IPriceScheduler, type ISchedulerOptions } from './scheduler.js';
 
@@ -25,6 +28,12 @@ export interface IPricingServiceOptions {
   /** Shrink-gate baseline when no successful pull exists yet (default: bundled snapshot model count). */
   baselineModelCount?: number;
   scheduler?: ISchedulerOptions;
+  /**
+   * c536ce29 TRC-AC7: channels the service logs to. `ops` receives the `pricing.*` records and
+   * `api` the raw feed exchange. Default: the process-wide channels (resolved per call, inert
+   * when none is installed).
+   */
+  channels?: { ops?: OpsSource; api?: LogChannel | (() => LogChannel) };
 }
 
 export interface IPricingService {
@@ -47,13 +56,14 @@ export function createPricingService(options: IPricingServiceOptions): IPricingS
   const now = options.now ?? ((): string => new Date().toISOString());
   const pullDeps: IPullDeps = {
     store,
-    fetchImpl: options.fetchImpl ?? ((...a) => globalThis.fetch(...a)),
+    fetchImpl: options.fetchImpl ?? tracedFetch(options.channels?.api),
     now,
     sleep: options.sleep,
     logger: options.logger,
     version: options.version,
     url: options.url,
     baselineModelCount: options.baselineModelCount,
+    ops: options.channels?.ops,
   };
   let scheduler: IPriceScheduler | undefined;
   let stopped = false;

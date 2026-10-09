@@ -11,7 +11,7 @@ import { db } from "./db/client.js";
 import { runMigrations } from "./db/migrate.js";
 import { logger } from "./logger.js";
 import { initLogChannels, closeLogChannels } from "./wire/channels.js";
-import { registerOpsLog, logServerStart, logServerStop } from "./ops-log.js";
+import { registerOpsLog, logServerStart, logServerStop, dbPathOf } from "./ops-log.js";
 import { env, resolveInitialSsePort, setSseBoundPort } from "./config.js";
 import { engineConfig } from "./wire/seams.js";
 import { AgentStore } from "./store/agent-store.js";
@@ -396,6 +396,8 @@ async function main() {
         instance: env.instanceId,
         version: PACKAGE_VERSION,
         apiLog: logChannels.apiEnabled ? "on" : "off",
+        dbPath: dbPathOf(dbAny),
+        logRoots: logChannels.roots,
     });
 
     // The DAG dispatch path resolves `nativeTooling` at task time against the
@@ -466,7 +468,7 @@ async function main() {
         // Clear the price scheduler and abort an in-flight pull first, so its
         // ledger row is closed and no timer outlives the server.
         pricing.stop();
-        logServerStop({ reason: "signal", signal, startedAtMs });
+        logServerStop({ reason: "signal", signal, startedAtMs, dbPath: dbPathOf(dbAny) });
         await close();
         // Remove the per-run srt policy file this process created (best-effort;
         // never an operator override).

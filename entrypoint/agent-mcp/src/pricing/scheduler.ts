@@ -18,6 +18,7 @@ import {
   type IPullDeps,
   type IPullResult,
 } from './pull.js';
+import { pricingOps } from './ops.js';
 
 /** Delay before the start-up pull, so a fleet restart does not fire in the first instant. */
 export const DEFAULT_START_DELAY_MS = 5_000;
@@ -63,11 +64,12 @@ export function startPriceScheduler(deps: IPullDeps, options: ISchedulerOptions 
   let nextAt: string | null = null;
   let inFlight: Promise<void> = Promise.resolve();
 
-  const arm = (delayMs: number): void => {
+  const arm = (delayMs: number, why: string): void => {
     if (stopped) return;
     const ms = Math.max(0, Math.round(delayMs));
     nextAt = new Date(Date.parse(deps.now()) + ms).toISOString();
     handle = timers.setTimeout(tick, ms);
+    pricingOps(deps.ops, 'pricing.scheduler.rearm', { delay_ms: ms, next_at: nextAt, why });
     (handle as { unref?: () => void } | null)?.unref?.();
   };
 
@@ -97,7 +99,7 @@ export function startPriceScheduler(deps: IPullDeps, options: ISchedulerOptions 
         // runPricePull never throws; this guards the ledger read in nextDelay.
         deps.logger.error({ err }, 'pricing: scheduler tick failed; will retry next cycle');
       }
-      arm(delay);
+      arm(delay, 'after_pull');
     })();
   }
 
@@ -106,14 +108,15 @@ export function startPriceScheduler(deps: IPullDeps, options: ISchedulerOptions 
     const dueIn = lastOk
       ? Date.parse(lastOk.startedAt) + intervalMs - Date.parse(deps.now())
       : 0;
-    arm(dueIn > 0 ? dueIn : startDelayMs);
+    arm(dueIn > 0 ? dueIn : startDelayMs, dueIn > 0 ? 'last_ok_plus_interval' : 'startup_pull_due');
   } catch (err) {
     deps.logger.error({ err }, 'pricing: could not read the pull ledger; scheduling a start-up pull');
-    arm(startDelayMs);
+    arm(startDelayMs, 'ledger_unreadable');
   }
 
   return {
     stop(): void {
+      if (!stopped) pricingOps(deps.ops, 'pricing.scheduler.stop', { had_timer: handle !== undefined });
       stopped = true;
       if (handle !== undefined) timers.clearTimeout(handle);
       handle = undefined;

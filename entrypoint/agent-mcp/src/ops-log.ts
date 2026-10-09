@@ -329,6 +329,24 @@ export interface IServerStartInfo {
     readonly version: string;
     readonly apiLog: "on" | "off";
     readonly spawnDepth?: number;
+    /** The operational DB actually opened (ties the logs to the store). */
+    readonly dbPath?: string | null;
+    /** The log directories in use (`resolveLogRoots()`). */
+    readonly logRoots?: { readonly root: string; readonly api: string; readonly ops: string; readonly trace: string } | null;
+}
+
+/**
+ * The file path of the better-sqlite3 database behind a drizzle handle (`:memory:`/`null` when it
+ * cannot be determined). Reads `$client.name` (drizzle >= 0.3x) or `session.client.name`.
+ */
+export function dbPathOf(db: unknown): string | null {
+    try {
+        const d = db as { $client?: { name?: unknown }; session?: { client?: { name?: unknown } } };
+        const name = d.$client?.name ?? d.session?.client?.name;
+        return typeof name === "string" && name.length > 0 ? name : null;
+    } catch {
+        return null;
+    }
 }
 
 /**
@@ -340,6 +358,7 @@ export interface IServerStartInfo {
 export function logServerStart(info: IServerStartInfo, channel: ChannelSource = () => getLogChannels().ops): void {
     try {
         resolve(channel).logEvent("server.start", {
+            component: "server",
             transport: info.transport,
             bind_host: info.bindHost,
             port: info.port,
@@ -349,6 +368,8 @@ export function logServerStart(info: IServerStartInfo, channel: ChannelSource = 
             node: process.version,
             spawn_depth: info.spawnDepth ?? 0,
             api_log: info.apiLog,
+            db_path: info.dbPath ?? null,
+            log_roots: info.logRoots ?? null,
         });
     } catch {
         /* never throws */
@@ -362,13 +383,62 @@ export function logServerStart(info: IServerStartInfo, channel: ChannelSource = 
  * @param channel the ops channel; default: the process-wide one
  */
 export function logServerStop(
-    info: { readonly reason: string; readonly signal?: string; readonly startedAtMs: number },
+    info: { readonly reason: string; readonly signal?: string; readonly startedAtMs: number; readonly dbPath?: string | null },
     channel: ChannelSource = () => getLogChannels().ops
 ): void {
     try {
         resolve(channel).logEvent("server.stop", {
+            component: "server",
             reason: info.reason,
             signal: info.signal ?? null,
+            uptime_ms: Math.max(0, Date.now() - info.startedAtMs),
+            db_path: info.dbPath ?? null,
+        });
+    } catch {
+        /* never throws */
+    }
+}
+
+/**
+ * Emits `server.listening` once `startServer` has bound its transport: the facts a log reader
+ * needs to find the process and tie it to its store (`db_path`).
+ *
+ * @param info    what bound where
+ * @param channel the ops channel; default: the process-wide one
+ */
+export function logServerListening(
+    info: { readonly transport: string; readonly bindHost: string | null; readonly port: number | null; readonly dbPath: string | null },
+    channel: ChannelSource = () => getLogChannels().ops
+): void {
+    try {
+        resolve(channel).logEvent("server.listening", {
+            component: "server",
+            transport: info.transport,
+            bind_host: info.bindHost,
+            port: info.port,
+            db_path: info.dbPath,
+        });
+    } catch {
+        /* never throws */
+    }
+}
+
+/**
+ * Emits `server.shutdown`: the transport closed cleanly.
+ *
+ * @param info    which transport and store, and since when
+ * @param channel the ops channel; default: the process-wide one
+ */
+export function logServerShutdown(
+    info: { readonly transport: string; readonly dbPath: string | null; readonly startedAtMs: number; readonly signal?: string },
+    channel: ChannelSource = () => getLogChannels().ops
+): void {
+    try {
+        resolve(channel).logEvent("server.shutdown", {
+            component: "server",
+            transport: info.transport,
+            signal: info.signal ?? null,
+            db_path: info.dbPath,
             uptime_ms: Math.max(0, Date.now() - info.startedAtMs),
         });
     } catch {

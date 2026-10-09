@@ -19,6 +19,8 @@ import { logger } from './logger.js';
 import { resolveBindHost } from './bind-host.js';
 import { env, toEngineConfig } from './config.js';
 import { engineConfig } from './wire/seams.js';
+import { dbPathOf, logServerListening, logServerShutdown } from './ops-log.js';
+import type { LogChannel } from '@adhd/agent-plugin-tracing';
 import type { AgentStore } from './store/agent-store.js';
 import type {
   InProcessToolDescriptor,
@@ -136,6 +138,11 @@ export interface ServerDeps {
    * portable; defaults to `process.cwd()`.
    */
   resolveCwd?: () => string;
+  /**
+   * c536ce29 TRC-AC10: ops channel for the `server.listening` / `server.shutdown` records.
+   * Default: the process-wide ops channel (inert when none is installed).
+   */
+  opsChannel?: LogChannel | (() => LogChannel);
   /**
    * The REAL agent-mcp MCP server config surfaced as the `dispatch` member
    * (ADR-0008 D1); defaults to the documented `npx -y @adhd/agent-mcp` launch.
@@ -1026,6 +1033,12 @@ export async function startServer(deps: ServerDeps): Promise<{
   const server = createServer(deps);
   const transport = env.config.transport.kind;
   const port = env.config.transport.port;
+  const startedAtMs = Date.now();
+  const dbPath = dbPathOf(deps.db);
+  const ops = deps.opsChannel;
+  const announce = (bindHost: string | null, boundPort: number | null): void =>
+    logServerListening({ transport, bindHost, port: boundPort, dbPath }, ops);
+  const announceShutdown = (): void => logServerShutdown({ transport, dbPath, startedAtMs }, ops);
 
   if (transport === 'stdio') {
     const stdioTransport = new StdioServerTransport();
@@ -1034,11 +1047,13 @@ export async function startServer(deps: ServerDeps): Promise<{
     const unsubNotifications = wireTaskNotifications(server);
 
     logger.info({ transport: 'stdio' }, 'MCP server started');
+    announce(null, null);
 
     return {
       close: async () => {
         unsubNotifications();
         await server.close();
+        announceShutdown();
       },
     };
   }
@@ -1160,6 +1175,8 @@ export async function startServer(deps: ServerDeps): Promise<{
       httpServer.listen(port, host, () => {
         httpServer.off('error', reject);
         logger.info({ transport: 'http', host, port }, 'MCP server started');
+        const addr = httpServer.address();
+        announce(host, addr && typeof addr === 'object' ? addr.port : port);
         resolve();
       });
     });
@@ -1179,6 +1196,7 @@ export async function startServer(deps: ServerDeps): Promise<{
           httpServer.close((err) => (err ? reject(err) : resolve()));
           httpServer.closeAllConnections?.();
         });
+        announceShutdown();
       },
       httpServer,
     };
