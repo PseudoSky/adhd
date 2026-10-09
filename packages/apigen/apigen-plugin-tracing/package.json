@@ -3,7 +3,7 @@
   "version": "0.2.0",
   "dependencies": {
     "@adhd/apigen-core-client": "^0.3.4",
-    "@adhd/sox-telemetry": "^0.4.1"
+    "@adhd/sox-telemetry": "^0.4.3"
   },
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
@@ -11,9 +11,19 @@
   "publishConfig": {
     "access": "public"
   },
-  "files": ["dist", "CHANGELOG.md"],
+  "files": [
+    "dist",
+    "CHANGELOG.md"
+  ],
   "description": "Tracing plugin for apigen servers",
-  "keywords": ["tracing", "telemetry", "otel", "apigen", "plugin", "typescript"],
+  "keywords": [
+    "tracing",
+    "telemetry",
+    "otel",
+    "apigen",
+    "plugin",
+    "typescript"
+  ],
   "license": "MIT",
   "repository": {
     "type": "git",
