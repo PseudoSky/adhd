@@ -47,6 +47,28 @@ describe('37f6c511 FS2-AC1: per-token strings normalise to $/million', () => {
   });
 });
 
+describe('37f6c511 RV-A4: parseOpenRouterFeed per-million conversion goldens (single perMillion path)', () => {
+  it('37f6c511 RV-A4: fixture feed yields the exact golden $/million values and agrees with perMillion', () => {
+    const r = parseOpenRouterFeed(
+      feed(
+        m('a/one', { prompt: '0.0000003', completion: '0.0000012', input_cache_read: '0.000000006', input_cache_write: '0.00000375' }),
+        m('a/two', { prompt: '0.000003', completion: '0.000015' }),
+        m('a/three', { prompt: '0.000000099', completion: '0.00000128' })
+      )
+    );
+    expect(r.invalid).toEqual([]);
+    const got = r.models.map((x) => [x.modelId, x.inputPerM, x.cacheReadPerM, x.cacheWritePerM, x.outputPerM]);
+    expect(got).toEqual([
+      ['a/one', 0.3, 0.006, 3.75, 1.2],
+      ['a/two', 3, null, null, 15],
+      ['a/three', 0.099, null, null, 1.28],
+    ]);
+    expect(r.models[0]?.inputPerM).toBe(perMillion('0.0000003'));
+    expect(r.models[2]?.outputPerM).toBe(perMillion('0.00000128'));
+    expect(perMillion(0.0000003)).toBe(0.3);
+  });
+});
+
 describe('37f6c511 FS2-AC6: router -1 is kind=router with NULL rates', () => {
   it('prompt "-1" => router, every rate null, never a number', () => {
     const r = parseOpenRouterFeed(feed(m('openrouter/auto', { prompt: '-1', completion: '-1' })));

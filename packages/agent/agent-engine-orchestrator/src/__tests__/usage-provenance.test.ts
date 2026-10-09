@@ -371,3 +371,71 @@ describe("UsagePlugin cost provenance write path", () => {
     expect(warns).toHaveLength(0);
   });
 });
+
+describe("UsagePlugin est_cost_usd sticky-NULL (post-merge review bucket A)", () => {
+  const T3 = "2026-10-04T00:00:00.000Z";
+  const after = (t: string) => new Date(Date.parse(t) + 1000).toISOString();
+
+  it("37f6c511 RV-A1: priced -> unpriced -> priced keeps est_cost_usd NULL, cost_status partial, priced_cost_usd = both priced turns", async () => {
+    const { sqlite, db, history } = makeDb();
+    seedPrice(history, T0, { inputPerM: 0.2, outputPerM: 1.0 });
+    // The model turns into a router (unpriceable) at T2, then is priced again at T3.
+    db.insert(modelPriceHistoryTable)
+      .values({ id: generateId(), modelId: OR_ID, observedAt: T2, source: "openrouter-live", kind: "router", inputPerM: null, cacheReadPerM: null, cacheWritePerM: null, outputPerM: null, rawJson: "{}", overridesJson: null, ledgerId: null })
+      .run();
+    db.insert(modelPriceHistoryTable)
+      .values({ id: generateId(), modelId: OR_ID, observedAt: T3, source: "openrouter-live", kind: "model", inputPerM: 0.4, cacheReadPerM: null, cacheWritePerM: null, outputPerM: 2.0, rawJson: "{}", overridesJson: null, ledgerId: null })
+      .run();
+    const { plugin, setNow } = makePlugin(db);
+    const taskId = await runTask({
+      db, plugin, setNow, model: "deepseek-flash",
+      turns: [
+        { inputTokens: 1000, outputTokens: 500, at: T1 },
+        { inputTokens: 700, outputTokens: 30, at: after(T2) },
+        { inputTokens: 2000, outputTokens: 100, at: after(T3) },
+      ],
+    });
+    const row = rowOf(sqlite, taskId);
+    expect(row.est_cost_usd).toBeNull();
+    expect(row.cost_status).toBe("partial");
+    expect(row.priced_cost_usd).toBeCloseTo((1000 * 0.2 + 500 * 1.0 + 2000 * 0.4 + 100 * 2.0) / 1e6, 12);
+    expect(row.unpriced_tokens).toBe(730);
+  });
+
+  it("37f6c511 RV-A2: a single priced turn and all-priced turns still produce a non-null additive est_cost_usd", async () => {
+    const { sqlite, db, history } = makeDb();
+    seedPrice(history, T0, { inputPerM: 0.2, outputPerM: 1.0 });
+    const { plugin, setNow } = makePlugin(db);
+    const one = await runTask({ db, plugin, setNow, model: "deepseek-flash", turns: [{ inputTokens: 1000, outputTokens: 500, at: T1 }] });
+    expect(rowOf(sqlite, one).est_cost_usd).toBeCloseTo((1000 * 0.2 + 500 * 1.0) / 1e6, 12);
+    expect(rowOf(sqlite, one).cost_status).toBe("priced");
+    const many = await runTask({
+      db, plugin, setNow, model: "deepseek-flash",
+      turns: [
+        { inputTokens: 1000, outputTokens: 500, at: T1 },
+        { inputTokens: 2000, outputTokens: 100, at: T1 },
+        { inputTokens: 300, outputTokens: 50, at: T1 },
+      ],
+    });
+    const row = rowOf(sqlite, many);
+    expect(row.cost_status).toBe("priced");
+    expect(row.est_cost_usd).toBeCloseTo((3300 * 0.2 + 650 * 1.0) / 1e6, 12);
+    expect(row.est_cost_usd).toBeCloseTo(row.priced_cost_usd as number, 12);
+  });
+
+  it("37f6c511 RV-A3: an all-unpriced task keeps est_cost_usd NULL", async () => {
+    const { sqlite, db } = makeDb();
+    const { plugin, setNow } = makePlugin(db);
+    const taskId = await runTask({
+      db, plugin, setNow, model: "mystery-model-9000", providerType: "anthropic",
+      turns: [
+        { inputTokens: 10, outputTokens: 1, at: T0 },
+        { inputTokens: 20, outputTokens: 2, at: T0 },
+        { inputTokens: 30, outputTokens: 3, at: T0 },
+      ],
+    });
+    const row = rowOf(sqlite, taskId);
+    expect(row.est_cost_usd).toBeNull();
+    expect(row.cost_status).toBe("unpriced_model");
+  });
+});

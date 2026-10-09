@@ -3,8 +3,8 @@
  * returns normalised rows. This is the ONLY place per-token strings become $/million numbers.
  */
 
-/** $/token decimal string -> $/million tokens, cleaned of binary float noise. NaN when absent/invalid. */
-export function perMillion(perToken: string | undefined): number {
+/** $/token (decimal string or already-numeric) -> $/million tokens, cleaned of binary float noise. NaN when absent/invalid. */
+export function perMillion(perToken: string | number | undefined): number {
   if (perToken === undefined) return Number.NaN;
   return Number((Number(perToken) * 1_000_000).toPrecision(12));
 }
@@ -42,10 +42,6 @@ function readPerToken(pricing: Record<string, unknown>, field: PriceField): numb
   if (typeof v !== 'string' || v.trim() === '') return Number.NaN;
   const n = Number(v);
   return Number.isFinite(n) ? n : Number.NaN;
-}
-
-function toPerM(perToken: number): number {
-  return Number((perToken * 1_000_000).toPrecision(12));
 }
 
 /**
@@ -114,10 +110,10 @@ export function parseOpenRouterFeed(json: unknown): IParsedFeed {
     models.push({
       modelId,
       kind: 'model',
-      inputPerM: toPerM(prompt as number),
-      cacheReadPerM: cacheRead === undefined ? null : toPerM(cacheRead),
-      cacheWritePerM: cacheWrite === undefined ? null : toPerM(cacheWrite),
-      outputPerM: toPerM(completion as number),
+      inputPerM: perMillion(prompt as number),
+      cacheReadPerM: cacheRead === undefined ? null : perMillion(cacheRead),
+      cacheWritePerM: cacheWrite === undefined ? null : perMillion(cacheWrite),
+      outputPerM: perMillion(completion as number),
       rawJson,
       overridesJson,
     });

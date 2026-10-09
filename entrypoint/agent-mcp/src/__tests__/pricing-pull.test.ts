@@ -549,12 +549,12 @@ describe('scheduler', () => {
     expect(s.h.fetched.calls).toHaveLength(1); // no retry after shutdown
   });
 
-  it('37f6c511 FS2-AC9: a failed scheduled pull re-arms at the full interval (no hot loop)', async () => {
+  it('37f6c511 FS2-AC9 / RV-B3: a failed scheduled pull re-arms at the 2h transient backoff (no hot loop, not a full day)', async () => {
     const s = sched({ steps: [{ body: 'x', status: 500 }] });
     const sc = s.start({ startDelayMs: 10 });
     s.timers.fireNext();
     await sc.idle();
-    expect(s.timers.pending.map((p) => p.ms)).toEqual([PULL_INTERVAL_MS]);
+    expect(s.timers.pending.map((p) => p.ms)).toEqual([2 * HOUR]);
     sc.stop();
   });
 });

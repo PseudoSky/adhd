@@ -98,7 +98,10 @@ import {
   pricingHistory,
   pricingHistoryInputSchema,
   pricingRefresh,
+  pricingRefreshInProcess,
+  pricingRefreshInProcessInputSchema,
   pricingRefreshInputSchema,
+  PRICING_REFRESH_IN_PROCESS_DESCRIPTION,
 } from './pricing/tools.js';
 import type { TaskStore } from '@adhd/agent-store-runtime';
 import { noteToolError, withApiLog, withHttpApiLog } from './wire/api-log.js';
@@ -552,8 +555,8 @@ export function createServer(deps: ServerDeps): Server {
     },
     {
       name: 'pricing_refresh',
-      description: PRICING_REFRESH_DESCRIPTION,
-      inputSchema: toMcpInputSchema(pricingRefreshInputSchema),
+      description: PRICING_REFRESH_IN_PROCESS_DESCRIPTION,
+      inputSchema: toMcpInputSchema(pricingRefreshInProcessInputSchema),
     },
     {
       name: 'pricing_history',
@@ -601,7 +604,7 @@ export function createServer(deps: ServerDeps): Server {
       case 'usage_query':
         return runUsageQuery(deps.db, taskUsageInputSchema.parse(args ?? {}));
       case 'pricing_refresh':
-        return pricingRefresh(pricingRefreshInputSchema.parse(args ?? {}), requirePricing());
+        return pricingRefreshInProcess(args, requirePricing());
       case 'pricing_history':
         return pricingHistory(pricingHistoryInputSchema.parse(args), requirePricing());
       case 'guide':
