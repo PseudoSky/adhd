@@ -493,7 +493,9 @@ export class Orchestrator {
             const compacted = await compactMessages(
               currentMessages,
               async (toSummarise) => {
-                const summary = await provider.chat({
+                // c536ce29 TRC-AC26: tag the summariser's model call so wire/api records carry
+                // purpose:'compaction'. No wire seam => the plain call, unchanged.
+                const summarise = () => provider.chat({
                   messages: [
                     {
                       id: generateId(),
@@ -517,6 +519,9 @@ export class Orchestrator {
                   tools: undefined,
                   signal,
                 });
+                const summary = await (config.wire
+                  ? config.wire.withContext({ purpose: 'compaction' }, summarise)
+                  : summarise());
                 return summary.message.content ?? '';
               },
             );

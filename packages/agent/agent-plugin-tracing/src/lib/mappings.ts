@@ -1,4 +1,4 @@
-import type { ExecutionContext, HookEvent, HookEventMap, IHookRegistry } from '@adhd/agent-base-types';
+import type { ExecutionContext, HookEvent, HookEventMap, IHookRegistry, ProviderFailure } from '@adhd/agent-base-types';
 import { newTraceId } from '@adhd/sox-telemetry';
 import type { OtelAttributes } from '@adhd/sox-telemetry';
 import { openSpan, pointSpan } from './spans.js';
@@ -180,6 +180,83 @@ const modelResponse = defineMapping('post:model_response', (p, rt) => {
   rt.counters.modelCall(input, output, open === undefined ? undefined : rt.now() - open.startedAt);
 });
 
+/** Close the task's open model-call span as an ERROR (`agent.model_call.error`), once. */
+function failModelCall(rt: TraceRuntime, ctx: ExecutionContext | undefined, error: string, attrs: OtelAttributes): void {
+  if (ctx === undefined) return;
+  const state = rt.task(ctx);
+  const open = state?.model;
+  if (state === undefined || open === undefined) return;
+  state.model = undefined;
+  open.span.close({ attrs: { ...attrs, 'agent.outcome': 'error' }, error });
+  rt.counters.modelCall(0, 0, rt.now() - open.startedAt);
+}
+
+/** A point record for an event whose `executionContext` may be absent (trip-level events). */
+function pointFor(
+  rt: TraceRuntime,
+  name: string,
+  ctx: ExecutionContext | undefined,
+  attrs: OtelAttributes
+): void {
+  const traceId = ctx === undefined ? newTraceId() : rt.traceFor(ctx);
+  pointSpan(name, { ...(ctx === undefined ? { trace_id: traceId } : rt.taskAttrs(ctx, traceId)), ...attrs }, traceId);
+}
+
+const failureAttrs = (f: ProviderFailure): OtelAttributes => ({
+  'agent.provider.type': f.providerType,
+  'agent.provider.model': f.wireModel,
+  'agent.provider.failure_class': f.class,
+  'agent.provider.failure_scope': f.scope,
+  'agent.provider.retryable': f.retryable,
+  ...(f.status !== undefined ? { 'agent.provider.status': f.status } : {}),
+});
+
+// c536ce29 TRC-AC25: a terminal provider failure closes the open model call as an ERROR (never
+// left open / never "unclosed"); the decorator emits this before the orchestrator throws.
+const providerFailed = defineMapping('provider:failed', (p, rt) => {
+  failModelCall(rt, p.executionContext, `provider ${p.failure.class}: ${p.failure.message}`, {
+    ...failureAttrs(p.failure),
+    'agent.provider.disposition': p.disposition,
+  });
+});
+const providerAttemptFailed = defineMapping('provider:attempt_failed', (p, rt) =>
+  pointFor(rt, 'agent.provider.attempt_failed', p.executionContext, {
+    ...failureAttrs(p.failure),
+    'agent.provider.attempt': p.attempt,
+    'agent.provider.disposition': p.disposition,
+  })
+);
+const providerTripped = defineMapping('provider:tripped', (p, rt) =>
+  pointFor(rt, 'agent.provider.tripped', p.executionContext, {
+    ...failureAttrs(p.failure),
+    'agent.provider.trip_key': p.trip.key,
+  })
+);
+const providerRecovered = defineMapping('provider:recovered', (p, rt) =>
+  pointFor(rt, 'agent.provider.recovered', p.executionContext, {
+    ...failureAttrs(p.failure),
+    'agent.provider.trip_key': p.trip.key,
+    'agent.provider.recovery_reason': p.reason,
+  })
+);
+
+// c536ce29 TRC-AC26: budget notifications become records. A `block` is emitted from the
+// pre:model_request enforcement, after the model span opened and before any provider call, so it
+// also closes that span as an error.
+const budgetAttrs = (p: { field: string; maximum: number; current: number; message: string }): OtelAttributes => ({
+  'agent.budget.field': p.field,
+  'agent.budget.maximum': p.maximum,
+  'agent.budget.current': p.current,
+  'agent.budget.message': p.message,
+});
+const budgetWarning = defineMapping('budget:warning', (p, rt) =>
+  pointFor(rt, 'agent.budget.warning', p.executionContext, budgetAttrs(p))
+);
+const budgetBlock = defineMapping('budget:block', (p, rt) => {
+  pointFor(rt, 'agent.budget.block', p.executionContext, budgetAttrs(p));
+  failModelCall(rt, p.executionContext, `budget blocked: ${p.message}`, budgetAttrs(p));
+});
+
 const toolRequest = defineMapping('pre:tool_call', (p, rt) => {
   const ctx = p.executionContext;
   const state = rt.task(ctx);
@@ -268,6 +345,12 @@ export const CORE_MAPPINGS: readonly AnyEventMapping[] = [
   taskCancelled,
   modelRequest,
   modelResponse,
+  providerFailed,
+  providerAttemptFailed,
+  providerTripped,
+  providerRecovered,
+  budgetWarning,
+  budgetBlock,
   toolRequest,
   toolResponse,
   permissionDecision,

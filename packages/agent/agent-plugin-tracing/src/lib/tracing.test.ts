@@ -280,28 +280,24 @@ describe('negative controls — the assertions have teeth', () => {
 
 describe('forward compatibility — new event families are rows, not restructuring', () => {
   it('an extra pointSpanMapping on an existing event is traced with no change to the core table', async () => {
-    // Stand-in for a future family member (`<domain>:attempt_failed` …): any event key becomes a
-    // span by appending one mapping. `budget:block` is a real, already-typed hook event.
+    // Stand-in for a future family member: any event key becomes a span by appending one mapping.
+    // `message:appended` is a real, already-typed hook event with no core mapping.
     const extra = pointSpanMapping(
-      'budget:block',
-      'agent.budget.block',
-      (p) => ({ 'agent.budget.field': p.field, 'agent.budget.maximum': p.maximum }),
+      'message:appended',
+      'agent.message.appended',
+      (p) => ({ 'agent.message.role': p.message.role }),
       (p) => p.executionContext
     );
     const { hooks, plugin } = await installed({ extraMappings: [extra] });
     const env = makeEnv(hooks);
-    await hooks.emit('budget:block', {
+    await hooks.emit('message:appended', {
       executionContext: makeCtx(env),
-      field: 'cost',
-      maximum: 5,
-      current: 6,
-      message: 'over',
+      message: { id: 'm1', sessionId: env.sessionId, role: 'assistant', content: 'hi', createdAt: new Date().toISOString() },
     });
     const recs = records(plugin);
-    expect(spanCounts(recs, 'agent.budget.block')).toEqual({ start: 1, finish: 1, error: 0 });
-    expect(recs.find((r) => r.event === 'agent.budget.block.finish')).toMatchObject({
-      'agent.budget.field': 'cost',
-      'agent.budget.maximum': 5,
+    expect(spanCounts(recs, 'agent.message.appended')).toEqual({ start: 1, finish: 1, error: 0 });
+    expect(recs.find((r) => r.event === 'agent.message.appended.finish')).toMatchObject({
+      'agent.message.role': 'assistant',
     });
     await plugin.dispose();
   });

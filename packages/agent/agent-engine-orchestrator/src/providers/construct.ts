@@ -1,4 +1,4 @@
-import type { AgentDefinition, ExecutionContext, PartialBinding } from '@adhd/agent-base-types';
+import type { AgentDefinition, ExecutionContext, IHookRegistry, PartialBinding } from '@adhd/agent-base-types';
 import type { ProviderRegistry } from '@adhd/agent-core-provider';
 import type { EngineConfig, EngineLogger } from '../interfaces.js';
 import { createProvider } from './factory.js';
@@ -48,12 +48,20 @@ export function buildProviderForSelection(args: {
   config: EngineConfig;
   logger: EngineLogger;
   registry?: ProviderRegistry;
+  /** With `executionContext`, wraps the provider so failures emit `provider:failed`. */
+  hooks?: IHookRegistry;
+  executionContext?: ExecutionContext;
 }): LLMProvider {
   return createProvider(
     args.selection,
     args.agentDefinition.mcpServers,
     args.config,
     args.logger,
-    { registry: args.registry, claudecli: claudecliExtras(args.agentDefinition.provider) }
+    {
+      registry: args.registry,
+      claudecli: claudecliExtras(args.agentDefinition.provider),
+      hooks: args.hooks,
+      executionContext: args.executionContext,
+    }
   );
 }
