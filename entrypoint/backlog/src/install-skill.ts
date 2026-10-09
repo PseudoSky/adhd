@@ -22,6 +22,9 @@ import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+/** The long-form reference shipped next to `SKILL.md` (4d24f105 AC10.1). */
+export const SKILL_REFERENCE_FILE = 'REFERENCE.md';
+
 export type SkillHost = 'claude' | 'codex' | 'opencode';
 export type SkillScope = 'user' | 'project';
 
@@ -272,6 +275,15 @@ export function installSkillToHosts(
     version: string;
   };
 
+  // 4d24f105 AC10.1: SKILL.md is a short quick reference that links to a
+  // sibling long-form `REFERENCE.md`; ship it alongside so the link resolves
+  // in every host's skills directory. Absent sibling (a test override that
+  // supplies only a SKILL.md) is not an error.
+  const referenceSource = join(dirname(skillMdSource), SKILL_REFERENCE_FILE);
+  const referenceContent = existsSync(referenceSource)
+    ? readFileSync(referenceSource, 'utf8')
+    : undefined;
+
   const results: InstallSkillResult[] = [];
   for (const host of hosts) {
     const targetDir = join(
@@ -287,6 +299,15 @@ export function installSkillToHosts(
       throw new Error(
         `backlog install-skill: verification failed — ${targetSkillMd} does not contain the packaged skill after writing`
       );
+    }
+    if (referenceContent !== undefined) {
+      const targetReference = join(targetDir, SKILL_REFERENCE_FILE);
+      writeFileSync(targetReference, referenceContent, 'utf8');
+      if (readFileSync(targetReference, 'utf8') !== referenceContent) {
+        throw new Error(
+          `backlog install-skill: verification failed — ${targetReference} does not contain the packaged reference after writing`
+        );
+      }
     }
     writeFileSync(
       join(targetDir, 'extension.json'),

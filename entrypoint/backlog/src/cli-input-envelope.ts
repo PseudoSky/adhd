@@ -91,7 +91,7 @@ function parseObject(raw: string): Record<string, unknown> | undefined {
  * unrecognized command, so an unknown-command invocation keeps its existing
  * `not_found`/exit-4 behavior instead of being reclassified here.
  */
-function matchOperation(
+export function matchOperation(
   argv: readonly string[],
   operations: readonly Operation[]
 ): { op: Operation; path: string[] } | undefined {
@@ -190,4 +190,92 @@ export function renderCliInputEnvelopeMessage(
     `Pass the params directly, e.g. ` +
     `${violation.commandLabel} --input '${example}'`
   );
+}
+
+/** A stray positional argument on a verb that takes only `--input '<json>'`. */
+export interface ICliPositionalViolation {
+  /** The positional tokens found after the command path (before the first flag). */
+  positionals: string[];
+  /** The command as the CLI's help renders it (e.g. `backlog claim`). */
+  commandLabel: string;
+  /** Schema-derived bare-params example, JSON-encoded; `undefined` when no schema was found. */
+  exampleJson: string | undefined;
+}
+
+/**
+ * Detects positional tokens after a recognized verb. Every mounted verb takes
+ * its params through `--input '<json>'` only (the sole sugar, `get <uid>`, is
+ * translated earlier by {@link translateGetPositional}), so any positional that
+ * reaches dispatch used to die as the bare `Unexpected positional argument`
+ * with no remedy. Returns `undefined` for help, unrecognized commands (their
+ * `not_found` behavior is unchanged) and invocations with no stray positional.
+ * 4d24f105 AC10.2.
+ */
+export function detectCliPositionalViolation(
+  argv: readonly string[],
+  operations: readonly Operation[],
+  schemas: ComposedSchemas
+): ICliPositionalViolation | undefined {
+  if (argv.includes('--help') || argv.includes('-h')) return undefined;
+  const match = matchOperation(argv, operations);
+  if (!match) return undefined;
+  let end = 0;
+  while (end < argv.length && !(argv[end] as string).startsWith('-')) end++;
+  const positionals = argv.slice(match.path.length, end);
+  if (positionals.length === 0) return undefined;
+  const domain = domainSchemaFor(match.op, schemas);
+  return {
+    positionals: [...positionals],
+    commandLabel: match.path.join(' '),
+    exampleJson: domain
+      ? JSON.stringify(synthesizeExample(domain.schema, domain.root))
+      : undefined,
+  };
+}
+
+/** Renders the remedy: names the offending token and the exact working `--input` invocation. */
+export function renderCliPositionalMessage(
+  violation: ICliPositionalViolation
+): string {
+  const example = violation.exampleJson ?? '{ …the params… }';
+  const first = violation.positionals[0];
+  return (
+    `Unexpected positional argument: "${first}". \`${violation.commandLabel}\` ` +
+    `takes its params as JSON via --input, not positionals. ` +
+    `Run: adhd-backlog ${violation.commandLabel} --input '${example}'`
+  );
+}
+
+/** The usage line printed when `get` gets a malformed positional form. */
+export const GET_USAGE =
+  `adhd-backlog get <uid>   (sugar for: adhd-backlog get --input '{"uid":"<uid>"}')`;
+
+/** Result of {@link translateGetPositional}. */
+export type GetPositionalOutcome =
+  | { kind: 'passthrough' }
+  | { kind: 'argv'; argv: string[] }
+  | { kind: 'error'; message: string };
+
+/**
+ * `adhd-backlog get <uid>` sugar (4d24f105 AC10.2): rewrites the single
+ * positional into the `get --input '{"uid":"<uid>"}'` the mounted verb already
+ * accepts. Pure argv translation (like `search`): same store lifecycle, output
+ * and exit codes. A second positional is rejected with the working form;
+ * anything else (no positional, `--input`, `--help`) passes through untouched.
+ */
+export function translateGetPositional(
+  argv: readonly string[]
+): GetPositionalOutcome {
+  if (argv[0] !== 'get') return { kind: 'passthrough' };
+  const rest = argv.slice(1);
+  if (rest.includes('--help') || rest.includes('-h')) return { kind: 'passthrough' };
+  const first = rest[0];
+  if (first === undefined || first.startsWith('-')) return { kind: 'passthrough' };
+  if (rest.length > 1) {
+    return {
+      kind: 'error',
+      message: `Unexpected positional argument: "${rest[1]}". \`get\` takes exactly one uid. Run: ${GET_USAGE}`,
+    };
+  }
+  return { kind: 'argv', argv: ['get', '--input', JSON.stringify({ uid: first })] };
 }

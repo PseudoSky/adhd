@@ -58,7 +58,10 @@ import {
 import { errorEnvelope, exitCodeForEnvelope, isOutcomeEnvelope } from './envelope.js';
 import {
   detectCliInputEnvelopeViolation,
+  detectCliPositionalViolation,
   renderCliInputEnvelopeMessage,
+  renderCliPositionalMessage,
+  translateGetPositional,
 } from './cli-input-envelope.js';
 import { buildSearchArgv } from './search-shortcut.js';
 import { suggestClosestCatalogNames } from './query/resolve.js';
@@ -862,6 +865,21 @@ export async function runBacklogCli(
     searchArgv = outcome.argv;
   }
 
+  // `get <uid>` (4d24f105 AC10.2) is the same kind of argv translation:
+  // `get <uid>` -> `get --input '{"uid":"<uid>"}'`. A malformed positional
+  // form is rejected here with the exact working invocation.
+  if (searchArgv === undefined) {
+    const getOutcome = translateGetPositional(userArgvEarly);
+    if (getOutcome.kind === 'error') {
+      console.error(
+        JSON.stringify({ code: 'invalid_argument', message: getOutcome.message })
+      );
+      process.exitCode = 2;
+      return;
+    }
+    if (getOutcome.kind === 'argv') searchArgv = getOutcome.argv;
+  }
+
   // Opened lazily, at most once, only if `getCtx()` is actually invoked (a
   // dispatched command reaching a real function) — never for `--help`,
   // no-args, an unknown command, or a bad-flag rejection, all of which `run()`
@@ -968,6 +986,24 @@ export async function runBacklogCli(
       return;
     }
 
+    // Any other positional after a verb used to die as the bare `Unexpected
+    // positional argument` with no remedy (4d24f105 AC10.2); name the working
+    // `--input` form instead.
+    const positional = detectCliPositionalViolation(
+      prefixedArgv,
+      operations,
+      pkg.schemas
+    );
+    if (positional) {
+      const env = errorEnvelope(
+        'invalid_argument',
+        renderCliPositionalMessage(positional)
+      );
+      console.error(JSON.stringify(env));
+      process.exitCode = exitCodeForEnvelope(env);
+      return;
+    }
+
     await requireRun(cliPlugin)({
       packages: [pkg],
       operations,
@@ -1012,7 +1048,7 @@ export async function runBacklogCli(
       console.log(
         'See also: `adhd-backlog batch action` — run this SAME operation over ' +
           'many items in one call instead of N one-at-a-time invocations ' +
-          '(skill/SKILL.md §5).'
+          '(skill/REFERENCE.md §8).'
       );
     }
     // BUG-BACKLOG-QUERY-SIMILAR-ANCHOR-UNDOCUMENTED-001: `query`'s per-verb
@@ -1032,7 +1068,7 @@ export async function runBacklogCli(
           'throws invalid_argument.\n' +
           '  - view:"projects" | "components" | "locations" list the project/' +
           'component/location registry (optionally scoped by filter.project/' +
-          'filter.component) — see skill/SKILL.md §3a for worked examples.'
+          'filter.component) — see skill/REFERENCE.md §3a for worked examples.'
       );
     }
   } finally {

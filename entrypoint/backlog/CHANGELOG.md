@@ -1,3 +1,13 @@
+## Unreleased
+
+### 🚀 Features
+
+- **backlog:** `adhd-backlog get <uid>` works as sugar for `get --input '{"uid":"<uid>"}'` (full uid or 8+ hex prefix); any other positional after a verb now fails with `invalid_argument` (exit 2) and prints that verb's exact working `--input` invocation instead of the bare `Unexpected positional argument` (4d24f105 AC10.2)
+
+### 🩹 Fixes
+
+- **backlog:** the 86 KB `skill/SKILL.md` that every agent `cat`-ed whole is split: `SKILL.md` is now a ~3 KB quick reference (test-enforced <= 6 KB, every documented command line is executed against the built CLI) and the long-form reference moved, unabridged, to `skill/REFERENCE.md`, which `install-skill`/`install` now ship alongside it. The quick reference's examples are corrected to use a real `by` identity (`"claude:1"`, not a bare role word) (4d24f105 AC10.1)
+
 ## 1.0.14 (2026-10-09)
 
 This was a version bump only for backlog to align it with other projects, there were no code changes.

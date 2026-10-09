@@ -23,7 +23,9 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const read = (rel: string): string => readFileSync(join(ROOT, rel), 'utf8');
 const spec = read('SPEC.md');
 const dataModel = read('DATA_MODEL.md');
-const skill = read('skill/SKILL.md');
+// 4d24f105 AC10.1: the skill is split into a quick reference (SKILL.md) and the
+// long-form REFERENCE.md; every documented-surface check reads the pair.
+const skill = `${read('skill/SKILL.md')}\n${read('skill/REFERENCE.md')}`;
 const readme = read('README.md');
 
 describe('050ea18f A-AC4 — SPEC.md states the n:m rule', () => {

@@ -32,7 +32,7 @@ resolved by name or `uid`. File the project first — `create` never mints one.
 File every issue with the correct project **and component**: a component-less
 item lands on the project's reserved `(root)` component and is invisible to
 component-scoped queries. The agent-facing filing rules and the real misfiling
-hazards live in [`skill/SKILL.md` §4](skill/SKILL.md).
+hazards live in [`skill/REFERENCE.md` §4](skill/REFERENCE.md).
 
 ```bash
 adhd-backlog upsert-project --input '{
@@ -73,7 +73,7 @@ adhd-backlog create --input '{
 > (`"no-search-backend"` / `"no-embed-query"` / `"no-vector-scores"`) when the
 > pre-write dedupe scan could not run a calibrated comparison; both are absent
 > on a healthy scan and never imply the write failed. Full field notes are in
-> [`skill/SKILL.md` §3](skill/SKILL.md).
+> [`skill/REFERENCE.md` §3](skill/REFERENCE.md).
 
 Query for it:
 
@@ -230,7 +230,7 @@ writing nothing:
 `actionable` is tri-state (`true` / `false` / `"unknown"`) — `"unknown"` is
 never a green light. The full declare → read → refuse → attest → close
 workflow, the closed predicate grammar, and the permitted-override path are in
-[`skill/SKILL.md` §4](skill/SKILL.md).
+[`skill/REFERENCE.md` §4](skill/REFERENCE.md).
 
 ### 9. Compare-and-swap spec revisions
 
@@ -250,7 +250,7 @@ adhd-backlog spec-check --input '{"uid":"c79b52b0-…"}'
 { "ok": true, "data": { "current_revision": "58b5dfd8-…", "current_token": "sha256:d0bcba4a…", "state": "stale", "method": "none", "reason": "no-token-supplied" } }
 ```
 
-See [`skill/SKILL.md` §5](skill/SKILL.md) for the append/check worked example.
+See [`skill/REFERENCE.md` §5](skill/REFERENCE.md) for the append/check worked example.
 
 ### 10. Live catalogs and dependency-ordered plans
 
@@ -270,7 +270,7 @@ returns a plan's members topologically ordered by their `blocks` edges. Note
 the trap: the `catalog` selector is honoured only with `view:"catalogs"` —
 `{"catalog":"status"}` without it silently returns the ordinary `list` view
 (never catalog `terms`). See
-[`skill/SKILL.md` §6](skill/SKILL.md).
+[`skill/REFERENCE.md` §6](skill/REFERENCE.md).
 
 ## Command surface
 
@@ -329,10 +329,10 @@ stats/rollup ops are reads. `create`/`update`/`add-citation`/`remove-citation`/
 permanently retires one, `restore` reverses a `delete`);
 `attest`/`recheck` record anchored evidence,
 and `obligate`/`unobligate` declare or retire a typed requirement that gates a
-transition ([SKILL.md §4](skill/SKILL.md)); `specAppend`/`specCheck` advance
+transition ([REFERENCE.md §4](skill/REFERENCE.md)); `specAppend`/`specCheck` advance
 and verify a ticket's spec revisions, and a revision is annotated through
-`attest` with a `SPEC` subject + a `revision:` anchor ([SKILL.md
-§5](skill/SKILL.md)). The
+`attest` with a `SPEC` subject + a `revision:` anchor ([REFERENCE.md
+§5](skill/REFERENCE.md)). The
 `upsert*`/`rmLocation` verbs manage the **registry** (projects, components,
 locations), and `mergeProject`/`rmProject` collapse or retire project rows.
 `batch action` fans any one of them out over many items.
@@ -374,7 +374,7 @@ none of them is a filtered row set with an honest "how many matched" count.
 > or evidence. An item with an unsatisfied `block`-severity obligation
 > (`fields:["verdict"]` reports `actionable:false`) still appears in `ready`.
 > To find actionable work, read `fields:["verdict"]`; do not use `ready`.
-> Full definition: [`skill/SKILL.md` §3](skill/SKILL.md).
+> Full definition: [`skill/REFERENCE.md` §3](skill/REFERENCE.md).
 
 A derived `_score` always carries its provenance: `_score_kind` is `'rrf'`
 (the fused text+vec rank `view:'similar'` and semantic list reads use),
@@ -448,7 +448,7 @@ published/installed); on such a build `gitContext` may be rejected with
 `invalid_argument`, and the stats/rollup ops (`priority-matrix` /
 `part-of-rollup` / `open-curve` / `report`) and the obligation/spec verbs may be
 absent. Run `adhd-backlog --help` and compare it against
-[§1 of SKILL.md](skill/SKILL.md) if a documented field or verb is refused.
+[§1 of REFERENCE.md](skill/REFERENCE.md) if a documented field or verb is refused.
 
 ## Build & startup
 
@@ -539,7 +539,8 @@ semantic search unconfigured rather than failing to start.
 
 ## Further docs
 
-- [`skill/SKILL.md`](skill/SKILL.md) — the full agent-facing command surface, worked examples, and filing rules.
+- [`skill/SKILL.md`](skill/SKILL.md) — the one-screen agent quick reference (the verbs with exact `--input` forms; ≤ 6 KB, test-enforced).
+- [`skill/REFERENCE.md`](skill/REFERENCE.md) — the full agent-facing command surface, worked examples, and filing rules.
 - [`SPEC.md`](SPEC.md) — the functional specification: operation surface, status vocabulary, acceptance criteria.
 - [`DATA_MODEL.md`](DATA_MODEL.md) — the node/edge model this package reads and writes.
 - [`CHANGELOG.md`](CHANGELOG.md) — version history.
@@ -559,7 +560,7 @@ append-only op-event, `claim`/`renew`/`release` persist a reservation, and
 `query {projection:"byCitationPath", path}` are the store-wide reads. Placement is n:m with
 one primary owner (`get {fields:["primaryOwner","memberships"]}`); citations check that
 the evidence exists, recording `unverified-with-reason` rather than dropping it; `transition`
-to SUPERSEDED takes an optional closed `reason` and `supersededBy`. See `skill/SKILL.md` §13
+to SUPERSEDED takes an optional closed `reason` and `supersededBy`. See `skill/REFERENCE.md` §13
 and `SPEC.md`'s S02/S11 appendix. The membership backfill is
 `tools/backfill/membership-backfill.ts` (dry-run by default; `--apply`, `--reverse <journal>`;
 a path under `~/.adhd/backlog/production/` additionally requires `--allow-production-write`).

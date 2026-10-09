@@ -1,5 +1,5 @@
 /**
- * p7/I/spec-append-docs.p7.spec.ts — backlog item 518fbda9: SKILL.md documents
+ * p7/I/spec-append-docs.p7.spec.ts — backlog item 518fbda9: REFERENCE.md documents
  * spec-append `mode` (amend|replace), the root-replace rule and the
  * ADHD_BACKLOG_UNSAFE_SPEC_APPEND switch. Pure unit test: reads one file.
  */
@@ -8,7 +8,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
-const SKILL = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'skill', 'SKILL.md');
+const SKILL = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'skill', 'REFERENCE.md');
 
 /** The "Write modes" subsection, up to the next heading of the same or higher level. */
 function writeModesSection(): string {
