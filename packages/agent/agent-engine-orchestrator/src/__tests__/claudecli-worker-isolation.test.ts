@@ -1,4 +1,7 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Readable } from "stream";
 import type { EngineConfig, EngineLogger } from "../interfaces.js";
 import type { ProviderChatRequest } from "../providers/types.js";
@@ -54,8 +57,13 @@ function makeFakeProc(lines: string[] = [RESULT_LINE]) {
     return { proc, writes };
 }
 
+// claudecli requires the host-injected namespaced temp root (no os.tmpdir() fallback; c536ce29 S8B).
+const scratchRoot = mkdtempSync(join(tmpdir(), "98f9da19-claudecli-"));
+afterAll(() => rmSync(scratchRoot, { recursive: true, force: true }));
+
 function makeEngineConfig(subprocessEnv: Record<string, string> = {}): EngineConfig {
     return {
+        wire: { tempDir: scratchRoot },
         server: { contextLimit: 0, defaultMaxTokens: 8192 },
         queue: { concurrency: 1 },
         sse: { baseUrl: "" },

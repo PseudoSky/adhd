@@ -6,6 +6,8 @@ import { describe, expect, expectTypeOf, it } from "vitest";
 
 import type { EngineConfig } from "@adhd/agent-engine-orchestrator";
 
+import { resolveLogRoots } from "../config.js";
+import { createWireSeams } from "../wire/seams.js";
 import { tracedFetch, tracedSpawn, TracedTransport } from "../wire/index.js";
 import { noopLogChannel } from "../wire/channels.js";
 
@@ -32,5 +34,14 @@ describe("c536ce29 W1-AC-A WireSeams", () => {
         expectTypeOf(seams.spawn).toEqualTypeOf<SpawnFn>();
         expectTypeOf(seams.tempDir).toEqualTypeOf<string | undefined>();
         expect(seams.withContext({ a: 1 }, () => 5)).toBe(5);
+    });
+});
+
+describe("c536ce29 F1-AC-A host injects the namespaced temp root", () => {
+    it("c536ce29 F1-AC-A: createWireSeams sets tempDir to resolveLogRoots().temp (never the OS temp dir)", () => {
+        const seams = createWireSeams();
+        expect(seams.tempDir).toBe(resolveLogRoots().temp);
+        expect(seams.tempDir).toBeTruthy();
+        expect(createWireSeams({ tempDir: "/x/explicit" }).tempDir).toBe("/x/explicit");
     });
 });

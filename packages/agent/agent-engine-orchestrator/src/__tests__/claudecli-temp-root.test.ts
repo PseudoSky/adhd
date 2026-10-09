@@ -107,4 +107,10 @@ describe("c536ce29 S8B-AC2 claudecli temp files land under the injected namespac
         expect(seen.rootEntries.some((n) => n.startsWith("agent-mcp-spec-"))).toBe(true);
         expect(strayInOsTmp()).toEqual(before);
     });
+
+    it("c536ce29 S8B-AC2: without wire.tempDir the provider refuses (no os.tmpdir() fallback) and writes nothing to the OS temp dir", async () => {
+        const before = strayInOsTmp();
+        await expect(chatAndObserve(undefined)).rejects.toThrow(/wire\.tempDir/);
+        expect(strayInOsTmp()).toEqual(before);
+    });
 });

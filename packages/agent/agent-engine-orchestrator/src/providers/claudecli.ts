@@ -1,7 +1,6 @@
 import type { ChildProcess } from "child_process";
 import readline from "readline";
 import { writeFile, unlink, mkdtemp, mkdir, rm } from "fs/promises";
-import { tmpdir } from "os";
 import { join } from "path";
 
 import { generateId } from "../utils/ids.js";
@@ -381,7 +380,12 @@ export class ClaudeCliProvider implements LLMProvider {
      * because the resolver is pure and creates nothing.
      */
     private async ensureTempRoot(): Promise<string> {
-        const root = this.config.wire?.tempDir ?? tmpdir();
+        const root = this.config.wire?.tempDir;
+        if (!root) {
+            throw new Error(
+                "claudecli provider requires EngineConfig.wire.tempDir (the host's namespaced temp root); there is no OS-tmpdir fallback"
+            );
+        }
         await mkdir(root, { recursive: true });
         return root;
     }

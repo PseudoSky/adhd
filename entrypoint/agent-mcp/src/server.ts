@@ -1041,7 +1041,8 @@ export async function startServer(deps: ServerDeps): Promise<{
   const ops = deps.opsChannel;
   const announce = (bindHost: string | null, boundPort: number | null): void =>
     logServerListening({ transport, bindHost, port: boundPort, dbPath }, ops);
-  const announceShutdown = (): void => logServerShutdown({ transport, dbPath, startedAtMs }, ops);
+  const announceShutdown = (closeStartedAtMs: number): void =>
+    logServerShutdown({ transport, dbPath, startedAtMs, closeStartedAtMs }, ops);
 
   if (transport === 'stdio') {
     const stdioTransport = new StdioServerTransport();
@@ -1054,9 +1055,10 @@ export async function startServer(deps: ServerDeps): Promise<{
 
     return {
       close: async () => {
+        const closeStartedAtMs = Date.now();
         unsubNotifications();
         await server.close();
-        announceShutdown();
+        announceShutdown(closeStartedAtMs);
       },
     };
   }
@@ -1191,6 +1193,7 @@ export async function startServer(deps: ServerDeps): Promise<{
 
     return {
       close: async () => {
+        const closeStartedAtMs = Date.now();
         for (const [sid, s] of [...sessions]) {
           closeSession(sid);
           await s.server.close().catch(() => undefined);
@@ -1199,7 +1202,7 @@ export async function startServer(deps: ServerDeps): Promise<{
           httpServer.close((err) => (err ? reject(err) : resolve()));
           httpServer.closeAllConnections?.();
         });
-        announceShutdown();
+        announceShutdown(closeStartedAtMs);
       },
       httpServer,
     };
@@ -1217,8 +1220,10 @@ export async function startServer(deps: ServerDeps): Promise<{
 
     return {
       close: async () => {
+        const closeStartedAtMs = Date.now();
         unsubNotifications();
         await server.close();
+        announceShutdown(closeStartedAtMs);
       },
     };
   }

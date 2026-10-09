@@ -8,9 +8,18 @@
  * only until the terminal event of that task / call.
  *
  * Events (field `event`):
- *  `session.created|closed`, `dispatch.delegate`, `task.start|completed|failed|cancelled`,
- *  `turn.start|end`, `tool.call`, `tool.denied`, `cap.trip`, `hitl.suspend|resume`,
- *  `provider.error`, and — via {@link logServerStart} / {@link logServerStop} — `server.start|stop`.
+ *  hook-derived: `session.created|closed`, `dispatch.delegate`, `task.start|completed|failed|cancelled`,
+ *  `turn.start|end`, `tool.call`, `tool.denied`, `cap.trip`, `hitl.suspend|resume`, `provider.error`.
+ *  server lifecycle (component `server`): `server.start` ({@link logServerStart}, process booted),
+ *  `server.listening` ({@link logServerListening}, transport bound), `server.stop`
+ *  ({@link logServerStop}, a stop was REQUESTED: `reason` + `signal`, emitted first) and
+ *  `server.shutdown` ({@link logServerShutdown}, the transport finished closing: `duration_ms` of the
+ *  close plus total `uptime_ms`). One signal stop yields exactly one `server.stop` then one
+ *  `server.shutdown`; an embedder that closes without a signal yields `server.shutdown` alone.
+ *  pricing: `pricing.*` (see pricing/pull.ts).
+ *
+ * TRC-AC18: every record carries `component` (the event's domain prefix for hook events,
+ * `server` for lifecycle events) alongside the channel envelope `level`, `event`, `pid`, `stream`.
  *
  * Correlation ids are explicit fields (`session_id`, `task_id`, `root_task_id`, `parent_task_id`,
  * `agent`, `turn`, `call_id`) rather than ambient context, because hooks fire from the engine's own
@@ -28,6 +37,19 @@ import { getLogChannels } from "./wire/channels.js";
 export type ChannelSource = LogChannel | (() => LogChannel);
 
 const resolve = (src: ChannelSource): LogChannel => (typeof src === "function" ? src() : src);
+
+/**
+ * The `component` field of a hook-derived record: the domain prefix of its event name
+ * (`task.*` -> `task`, `tool.denied` -> `tool`, `cap.trip` -> `cap`), so every ops record carries
+ * `component` like the server records do (TRC-AC18).
+ */
+export const componentOf = (event: string): string => {
+    const i = event.indexOf(".");
+    return i < 0 ? event : event.slice(0, i);
+};
+
+/** The slice of {@link LogChannel} the hook handlers write through (adds `component`). */
+type OpsEmitter = Pick<LogChannel, "logEvent">;
 
 /** Per-task accumulator, dropped on the task's terminal event. */
 interface ITaskState {
@@ -90,9 +112,17 @@ export function registerOpsLog(
     const toolStart = new Map<string, number>();
 
     /** Runs `fn` against the live channel; swallows everything. */
-    const safely = (fn: (ch: LogChannel) => void): void => {
+    const safely = (fn: (ch: OpsEmitter) => void): void => {
         try {
-            fn(resolve(channel));
+            const live = resolve(channel);
+            fn({
+                logEvent: ((event: string, fields?: Record<string, unknown>, level?: string) =>
+                    (live.logEvent as (e: string, f: Record<string, unknown>, l?: string) => void)(
+                        event,
+                        { component: componentOf(event), ...fields },
+                        level
+                    )) as LogChannel["logEvent"],
+            });
         } catch {
             /* logging never takes the engine down */
         }
@@ -377,7 +407,7 @@ export function logServerStart(info: IServerStartInfo, channel: ChannelSource = 
 }
 
 /**
- * Emits `server.stop`.
+ * Emits `server.stop`: a stop was requested (emitted before the close begins).
  *
  * @param info    why, and since when
  * @param channel the ops channel; default: the process-wide one
@@ -424,21 +454,22 @@ export function logServerListening(
 }
 
 /**
- * Emits `server.shutdown`: the transport closed cleanly.
+ * Emits `server.shutdown`: the transport finished closing. Pairs with the earlier `server.stop`
+ * (which carries the signal/reason); this record carries completion facts only.
  *
- * @param info    which transport and store, and since when
+ * @param info    which transport and store, when the process started and when the close began
  * @param channel the ops channel; default: the process-wide one
  */
 export function logServerShutdown(
-    info: { readonly transport: string; readonly dbPath: string | null; readonly startedAtMs: number; readonly signal?: string },
+    info: { readonly transport: string; readonly dbPath: string | null; readonly startedAtMs: number; readonly closeStartedAtMs?: number },
     channel: ChannelSource = () => getLogChannels().ops
 ): void {
     try {
         resolve(channel).logEvent("server.shutdown", {
             component: "server",
             transport: info.transport,
-            signal: info.signal ?? null,
             db_path: info.dbPath,
+            duration_ms: Math.max(0, Date.now() - (info.closeStartedAtMs ?? Date.now())),
             uptime_ms: Math.max(0, Date.now() - info.startedAtMs),
         });
     } catch {

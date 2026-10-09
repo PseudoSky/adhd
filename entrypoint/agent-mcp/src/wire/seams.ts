@@ -8,15 +8,15 @@
  * constraint between seam construction and channel creation. With an inert channel every wrapper
  * is a pass-through (P1-AC-B).
  *
- * `tempDir` is intentionally NOT set: redirecting the claudecli temp files is a separate
- * concern (stray-writer cleanup) and an absent `tempDir` keeps today's behaviour.
+ * `tempDir` is the `@adhd/environment`-resolved namespaced temp root (`resolveLogRoots().temp`, pure -
+ * creates nothing); the claudecli provider requires it and creates it on demand (S8B, 03be90c3).
  */
 import { spawn } from "node:child_process";
 
 import type { WireSeams } from "@adhd/agent-engine-orchestrator";
 import { withLogContext } from "@adhd/agent-plugin-tracing";
 
-import { toEngineConfig } from "../config.js";
+import { resolveLogRoots, toEngineConfig } from "../config.js";
 import { tracedFetch } from "./traced-fetch.js";
 import { tracedSpawn } from "./traced-spawn.js";
 import { TracedTransport } from "./traced-transport.js";
@@ -25,7 +25,7 @@ let seams: WireSeams | undefined;
 
 /** Builds a fresh {@link WireSeams} over `globalThis.fetch` / `node:child_process` `spawn`. */
 export function createWireSeams(
-    base: { fetch?: typeof fetch; spawn?: typeof spawn } = {}
+    base: { fetch?: typeof fetch; spawn?: typeof spawn; tempDir?: string } = {}
 ): WireSeams {
     return {
         // `base` undefined => `globalThis.fetch` resolved per call (a replaced global is honoured).
@@ -33,6 +33,7 @@ export function createWireSeams(
         spawn: tracedSpawn(undefined, base.spawn ?? spawn),
         wrapTransport: (t, meta) => new TracedTransport(t, meta),
         withContext: (ctx, fn) => withLogContext(ctx, fn),
+        tempDir: base.tempDir ?? resolveLogRoots().temp,
     };
 }
 

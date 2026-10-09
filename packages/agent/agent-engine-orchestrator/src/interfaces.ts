@@ -94,7 +94,11 @@ export interface WireSeams {
   wrapTransport(t: Transport, meta: { server: string; transport: string }): Transport;
   /** Runs `fn` with `ctx` ids (session/task/turn/...) attached to every record logged inside it. */
   withContext<T>(ctx: Record<string, string | number | boolean | null | undefined>, fn: () => T): T;
-  /** Directory for ephemeral files (e.g. generated mcp-config); absent => the OS temp dir. */
+  /**
+   * Namespaced directory for ephemeral, credential-bearing files (claudecli mcp-config / agent-spec).
+   * Required when the claudecli provider runs (it throws without it - there is no OS-tmpdir
+   * fallback); other providers ignore it. The host sets it to its `@adhd/environment` temp root.
+   */
   tempDir?: string;
 }
 

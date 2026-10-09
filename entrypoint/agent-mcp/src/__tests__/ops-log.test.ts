@@ -37,7 +37,7 @@ import type {
 } from '@adhd/agent-engine-orchestrator';
 
 import { agentMcpEnvironmentSpec, resolveLogRoots, type AgentMcpConfig } from '../config.js';
-import { argsSha256, registerOpsLog, splitToolName } from '../ops-log.js';
+import { argsSha256, componentOf, registerOpsLog, splitToolName } from '../ops-log.js';
 import { AgentStore } from '../store/agent-store.js';
 import { createLogChannels, type IAgentMcpChannels } from '../wire/channels.js';
 import { Environment } from '@adhd/environment';
@@ -306,6 +306,51 @@ describe('c536ce29 TRC-AC11 denials are logged with the tool and the reason', ()
     expect(denied[0]).toMatchObject({ server: 'fs', tool: 'write_file', rule: 'permission', call_id: 'c-1', task_id: 't-perm' });
     expect(String(denied[0]?.['reason'])).toContain('deny');
     expect(denied[1]).toMatchObject({ call_id: 'c-2', resolution: 'suspend', reason: 'needs a human' });
+  });
+});
+
+describe('c536ce29 TRC-AC18 every ops record carries component, level, event, pid and stream', () => {
+  it('c536ce29 TRC-AC18: each hook-derived event name is emitted with component+level+event+pid+stream', async () => {
+    const { channels, events } = opsFixture();
+    const hooks = new HookRegistry();
+    registerOpsLog(hooks, () => channels.ops);
+    const ctx = { taskId: 't1', sessionId: 's1', agentName: 'a', parentTaskId: 'p1', rootTaskId: 'p1', recursionDepth: 1 } as unknown as ExecutionContext;
+    const emit = (e: Parameters<typeof hooks.emit>[0], p: Record<string, unknown>) => hooks.emit(e, p as never);
+    const session = { id: 's1', agentName: 'a', agentVersion: 1 };
+
+    await emit('session:created', { session });
+    await emit('task:start', { executionContext: ctx, messages: [] });
+    await emit('pre:model_request', { executionContext: ctx, messages: [], tools: [] });
+    await emit('post:model_response', { executionContext: ctx, stopReason: 'completed', toolCallCount: 0, computeMs: 1 });
+    await emit('pre:tool_call', { executionContext: ctx, callId: 'c1', toolName: 'shell__x', toolInput: {} });
+    await emit('post:tool_call', { executionContext: ctx, callId: 'c1', toolName: 'shell__x', toolInput: {}, isError: true, isDenial: true, result: 'Command not allowed: x', estResultTokens: 1 });
+    await emit('permission:decision', { executionContext: ctx, callId: 'c2', server: 'fs', tool: 'w', action: 'deny', resolution: 'deny' });
+    await emit('budget:warning', { executionContext: ctx, field: 'tokens', maximum: 1, current: 2, message: 'm' });
+    await emit('hitl:suspend', { executionContext: ctx, kind: 'ask', parkedTaskId: 'k1' });
+    await emit('hitl:resume', { executionContext: ctx, parkedTaskId: 'k1', outcome: 'approved' });
+    await emit('provider:failed', { executionContext: ctx, correlationId: 'x', failure: { providerType: 'p', wireModel: 'm', class: 'c', retryable: false }, disposition: 'give_up' });
+    await emit('task:completed', { executionContext: ctx, result: 'r' });
+    await emit('task:failed', { executionContext: { ...ctx, taskId: 't2' }, error: 'boom' });
+    await emit('task:cancelled', { executionContext: { ...ctx, taskId: 't3' } });
+    await emit('session:closed', { session });
+
+    const all = (await events()).filter((e) => !String(e['event']).startsWith('log.'));
+    const expected = [
+      'session.created', 'task.start', 'dispatch.delegate', 'turn.start', 'turn.end', 'tool.call', 'tool.denied',
+      'cap.trip', 'hitl.suspend', 'hitl.resume', 'provider.error', 'task.completed', 'task.failed', 'task.cancelled', 'session.closed',
+    ];
+    expect([...new Set(all.map((e) => e['event']))].sort()).toEqual([...expected].sort());
+    for (const e of all) {
+      expect(e).toMatchObject({
+        component: componentOf(String(e['event'])),
+        level: expect.stringMatching(/^(info|warn|error)$/),
+        event: expect.any(String),
+        pid: process.pid,
+        stream: 'agent-mcp.ops',
+      });
+    }
+    expect(componentOf('tool.denied')).toBe('tool');
+    expect(componentOf('bare')).toBe('bare');
   });
 });
 

@@ -218,13 +218,7 @@ const ALLOWLIST: readonly IEntry[] = [
  * Today's real stray writers. Each names the segment that fixes it; the entry must
  * be deleted in that segment (TRC-AC16-c enforces this).
  */
-const KNOWN_VIOLATIONS: readonly (IEntry & { readonly fixedBy: string })[] = [
-  {
-    key: 'packages/agent/agent-engine-orchestrator/src/providers/claudecli.ts :: const root = this.config.wire?.tempDir ?? tmpdir();',
-    fixedBy: 'S8B handoff: entrypoint/agent-mcp/src/wire/seams.ts createWireSeams must set tempDir: resolveLogRoots().temp (wire/** is owned by another bucket); then drop the OS-tmpdir fallback',
-    reason: 'engine falls back to os.tmpdir() until the host injects wire.tempDir',
-  },
-];
+const KNOWN_VIOLATIONS: readonly (IEntry & { readonly fixedBy: string })[] = [];
 
 describe('c536ce29 TRC-AC16 stray-writer guard', () => {
   it('TRC-AC16-a: flags a planted stray writer and passes clean source (negative control)', () => {
@@ -287,10 +281,13 @@ describe('c536ce29 TRC-AC16 stray-writer guard', () => {
 });
 
 describe('c536ce29 S8B-AC1 stray-writer guard keeps its teeth', () => {
-  it('c536ce29 S8B-AC1: only the documented claudecli OS-tmpdir fallback remains a known violation, and a stale/extra entry fails', () => {
-    expect(KNOWN_VIOLATIONS.map((k) => k.key)).toEqual([
-      'packages/agent/agent-engine-orchestrator/src/providers/claudecli.ts :: const root = this.config.wire?.tempDir ?? tmpdir();',
-    ]);
+  it('c536ce29 S8B-AC1: KNOWN_VIOLATIONS is empty, the claudecli OS-tmpdir fallback is gone, and a re-introduced one is detected', () => {
+    expect(KNOWN_VIOLATIONS).toEqual([]);
+    const fixed = 'const root = this.config.wire?.tempDir;\n';
+    expect(scanSource('packages/agent/agent-engine-orchestrator/src/providers/claudecli.ts', fixed)).toEqual([]);
+    const regressed = 'const root = this.config.wire?.tempDir ?? tmpdir();\n';
+    const sites = scanSource('packages/agent/agent-engine-orchestrator/src/providers/claudecli.ts', regressed);
+    expect(sites.map((s) => s.detectors)).toEqual([['os-tmpdir']]);
   });
 
   it('c536ce29 S8B-AC1: the scattered writers fixed in S8B are no longer detected, and a re-introduced raw writer is', () => {
