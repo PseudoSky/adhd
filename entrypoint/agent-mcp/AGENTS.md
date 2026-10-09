@@ -81,7 +81,7 @@ These env vars configure the server-wide default agent and provider credentials:
 
 ### Configuration: Tracing (default-on, typed config)
 
-**Log tree (c536ce29):** `agentMcpEnvironmentSpec.dirs` declares `logs` and `temp`, both `scope:'global'` + `share:'shared'` (the `logs`/`temp` kind default is per-instance, and `instanceId` is regenerated every start, so the default would mint an unbounded new tree per restart; the instance lives in file names instead). `resolveLogRoots()` returns `{root, api, ops, trace, temp}` from `operationalEnv` — never hard-code a log or scratch path, never use `os.tmpdir()`/`homedir()` for state. `logging.*` keys (`ADHD_AGENT_LOGGING_*`, see README "Log tree") are values with defaults; the only off-switch is `logging.api=off` (raw API bodies only; ops and trace stay on). Proven by `src/__tests__/wirelog-paths.test.ts`. Parallel-process safe by design (ADR-0012): each process writes only its own pid-named files.
+**Log tree (c536ce29):** `agentMcpEnvironmentSpec.dirs` declares `logs` and `temp`, both `scope:'global'` + `share:'shared'` (the `logs`/`temp` kind default is per-instance, and `instanceId` is regenerated every start, so the default would mint an unbounded new tree per restart; the instance lives in file names instead). `resolveLogRoots()` returns `{root, api, ops, trace, temp}` from `operationalEnv` — never hard-code a log or scratch path, never use `os.tmpdir()`/`homedir()` for state. `logging.*` keys (`ADHD_AGENT_LOGGING_*`, see README "Log tree") are values with defaults; the only off-switch is `logging.api=off` (raw API bodies only; ops and trace stay on). Proven by `src/__tests__/wirelog-paths.test.ts`. Reading and auditing the logs: [docs/logging.md](./docs/logging.md). Parallel-process safe by design (ADR-0012): each process writes only its own pid-named files.
 
 `@adhd/agent-plugin-tracing` is a default plugin (`defaultPluginEntries()` in `src/config.ts`), loaded through the single default-plugin seam `src/plugins/load-defaults.ts`. Typed `tracing` config block (values only; **no enable/disable field or env var exists**): `tracing.service` (`ADHD_AGENT_TRACING_SERVICE`, default `agent-mcp`), `tracing.logSink` (`ADHD_AGENT_TRACING_LOG_SINK`, `file|stderr|none`, default `file`), `tracing.logDir` (`ADHD_AGENT_TRACING_LOG_DIR`, unset in the FieldSpec; `defaultPluginEntries()` passes `<logs>/trace` = `~/.adhd/agent-mcp/<ns>/logs/trace` unless set — c536ce29), `tracing.captureArgs` (`ADHD_AGENT_TRACING_CAPTURE_ARGS`, default `false`). Absent block ⇒ loaded with these defaults; invalid block ⇒ the loader skips the plugin and logs `Plugin config failed schema validation`. `ADHD_AGENT_DISABLE_BUDGET_PLUGIN` affects only the budget plugin. The plugin reuses an already-initialised `@adhd/sox-telemetry` provider rather than initialising a second one. Verify a sink with `scripts/audit_tracing.py`. Proven by `src/__tests__/tracing-default-load.test.ts` (unit) and `src/__tests__/integration/tracing-e2e.e2e.test.ts` (built server + real sink).
 
@@ -293,6 +293,11 @@ permits. **Approved by:** pseudosky (repo owner). Gated files:
 reason is that a real model is a paid third-party service; skipping it in CI saves money
 and avoids an outside system. The same record is in this package's `README.md` and each
 test's header.
+
+A fourth, `src/__tests__/live/tracing-live.e2e.test.ts` (`AGENT_MCP_LIVE=1`, c536ce29 LIVE-AC1..AC5), drives the
+real `claude` CLI provider and a real Anthropic OAuth token through the real dev server on the **production store**
+(`~/.adhd/agent-mcp/production`; it refuses to run if any DB/log-dir override env var is set). Same gate
+reason; **approved by:** pseudosky (repo owner), by direct instruction on 2026-10-09. Guide: [docs/logging.md](./docs/logging.md).
 
 ## Native-tooling adoption gate (env-gated — external third-party server)
 

@@ -118,6 +118,7 @@ entrypoint/agent-mcp/
   docs/
     architecture-and-security.md     — detailed design (2.0.2+)
     provider-call-audit.md           — provider API audit
+    logging.md                       — where logs live, record shapes, correlation ids, tailing, usage/cost audit, redaction, live test
   CHANGELOG.md         — 2.0.2 release notes (2.0.2+)
   README.md            — quick-start guide (2.0.2+)
   AGENTS.md            — LLM-guiding facts (2.0.2+)

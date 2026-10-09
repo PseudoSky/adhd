@@ -108,6 +108,8 @@ All agent-mcp logs live under ONE environment-resolved root, `<logs>` = `~/.adhd
 
 Audit a sink with `python3 scripts/audit_tracing.py <sink-dir>`: it recomputes per-operation sample counts and durations and exits non-zero when a declared span path has zero samples.
 
+How to read, tail, query and cost-audit these logs (record shapes, correlation ids, `usage_query`, SQL, redaction, three worked traces taken from a live run): [docs/logging.md](./docs/logging.md).
+
 ## Providers and credentials
 
 `@adhd/agent-mcp` supports three provider `type`s (`packages/agent/agent-engine-orchestrator/src/validation/agent.ts`):
@@ -409,8 +411,9 @@ service, which CI cannot provide):
 | `src/__tests__/integration/live-budget.e2e.test.ts` | `AGENT_MCP_BUDGET_LIVE=1` | real provider (LM Studio / Anthropic) |
 | `src/__tests__/integration/live-dag.e2e.test.ts` | `AGENT_MCP_LIVE=1` | real provider (LM Studio / Anthropic) |
 | `src/__tests__/integration/live-oauth.e2e.test.ts` | `AGENT_MCP_LIVE=1` | real Anthropic OAuth |
+| `src/__tests__/live/tracing-live.e2e.test.ts` | `AGENT_MCP_LIVE=1` | real `claude` CLI + real Anthropic OAuth, real dev server, **production store** (c536ce29 LIVE-AC1..AC5) |
 
-**Approved by:** pseudosky (repo owner). Rationale: each calls a real, paid model the CI
+**Approved by:** pseudosky (repo owner); `tracing-live.e2e.test.ts` additionally by direct owner instruction on 2026-10-09 (run guide: [docs/logging.md](./docs/logging.md#proving-it-live-the-env-gated-test)). Rationale: each calls a real, paid model the CI
 cannot provide, so the gate saves money and avoids an outside system — the one qualifying
 reason. The default (unflagged) suite still exercises the orchestrator/tool paths with
 scripted providers; these live tests add real-model confirmation of model-independent
