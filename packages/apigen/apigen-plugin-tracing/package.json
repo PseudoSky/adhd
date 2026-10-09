@@ -2,7 +2,7 @@
   "name": "@adhd/apigen-plugin-tracing",
   "version": "0.2.0",
   "dependencies": {
-    "@adhd/apigen-core-client": "^0.3.3",
+    "@adhd/apigen-core-client": "^0.3.4",
     "@adhd/sox-telemetry": "^0.4.1"
   },
   "main": "./dist/index.js",

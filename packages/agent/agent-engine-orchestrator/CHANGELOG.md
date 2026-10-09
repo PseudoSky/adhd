@@ -19,6 +19,16 @@
 
 Additive (new optional hook field, new optional response fields, new `group_by` value, optional constructor argument): minor bump recommended (2.3.6 to 2.4.0). Not bumped here.
 
+## 2.3.7 (2026-10-08)
+
+### 🩹 Fixes
+
+- **agent-engine-orchestrator:** agent_create/agent_update input accepts legacy apiKeyEnv/authTokenEnv (mapped to env.secret); document PF-1 provider fields and strict input in agent-mcp (2eddcf91, 3864449b) ([3848205c](https://github.com/PseudoSky/adhd/commit/3848205c))
+
+### ❤️ Thank You
+
+- pseudosky
+
 ## 2.3.6 (2026-10-07)
 
 ### 🩹 Fixes

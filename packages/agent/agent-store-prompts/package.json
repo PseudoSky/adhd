@@ -22,7 +22,7 @@
     "db:migrate": "drizzle-kit migrate"
   },
   "dependencies": {
-    "@adhd/agent-core-env": "^0.1.4",
+    "@adhd/agent-core-env": "^0.1.5",
     "drizzle-orm": "0.45.2"
   },
   "devDependencies": {
