@@ -71,7 +71,8 @@
         "^build",
         "build",
         "dist-manifest",
-        "^dist-manifest"
+        "^dist-manifest",
+        { "projects": ["backlog"], "target": "build" }
       ],
       "options": {
         "cwd": ".",

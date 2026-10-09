@@ -108,11 +108,12 @@ describe('srt-policy default denyRead', () => {
       join(home, '.cache'),
       join(home, 'Library', 'Caches'),
       tmpdir(),
+      join(home, '.adhd', 'backlog'), // BK7 515a2b50: default agent.shell.sandbox.extraAllowWrite
       '/extra/root',
     ];
     expect(out.filesystem?.allowWrite).toEqual([...new Set(goldenAllowWrite)]);
     expect(defaultSrtAllowWrite()).toEqual(
-      expect.arrayContaining(goldenAllowWrite.slice(1, -1))
+      expect.arrayContaining(goldenAllowWrite.slice(1, -2))
     );
     expect(out.network?.allowedDomains).toEqual([
       'example.org',

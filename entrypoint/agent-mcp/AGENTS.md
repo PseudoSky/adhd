@@ -103,6 +103,7 @@ The typed `nativeTooling` surface (ADR-0008 D10) is part of the `@adhd/environme
 | `ADHD_AGENT_NATIVE_TOOLING_DISPATCH_ALLOWED_TOOLS` | csv | dispatch (agent-mcp self) tool-name allowlist |
 | `ADHD_AGENT_NATIVE_TOOLING_DISPATCH_DISALLOWED_TOOLS` | csv | dispatch tool-name denylist (wins) |
 | `ADHD_AGENT_NATIVE_TOOLING_HITL` | bool | HITL enablement; default `true` |
+| `ADHD_AGENT_SHELL_SANDBOX_EXTRA_ALLOW_WRITE` | string[] | extra WRITABLE roots for the srt-sandboxed shell (config key `agent.shell.sandbox.extraAllowWrite`; `~/` expanded; default `~/.adhd/backlog` so `adhd-backlog` can take its store lease). Fail-loud validation: absolute under `$HOME`, never `$HOME`/`~/.adhd`/`~/.ssh` or an ancestor, no overlap with `denyRead`, no `..`, no globs |
 
 The rule map (`nativeTooling.*.permissions`) and `shell.env` are JSON objects with no flat `FieldSpec`, so they are authored on the agent definition, not set via env. The removed authored-shell-server path override is dead: `tools/mcp-shell/server.mjs` was deleted by NAT-TOOL-4 and shell configuration is `nativeTooling.shell.*`.
 
@@ -237,6 +238,17 @@ the `dispatch` self floor.
   `~/.npmrc ~/.ssh ~/.aws ~/.config/gh ~/.netrc` (home-expanded `DEFAULT_SRT_DENY_READ` /
   `defaultSrtDenyRead()`), UNIONED into any user `denyRead` — user entries are preserved
   and de-duplicated, never clobbered (shell-policy S4 / AC7).
+  The shell sandbox's WRITE allow list adds exactly `~/.adhd/backlog` by default
+  (`agent.shell.sandbox.extraAllowWrite`, `DEFAULT_SRT_EXTRA_ALLOW_WRITE`; backlog 515a2b50): the
+  `adhd-backlog` store lease + SQLite `-wal`/`-shm` sidecars live there, so without it every
+  legitimate backlog call fails EPERM under the sandbox. The directory allow covers the sidecars;
+  nothing broader (`~/.adhd`, `$HOME`) is allowed and `denyRead` is unchanged. Entries are
+  validated fail-loud by `validateSrtExtraAllowWrite` (absolute under `$HOME`, not `$HOME` /
+  `~/.adhd` / `~/.ssh` or an ancestor, no overlap with `denyRead`, no `..`, no globs). The per-run
+  policy file is written `0600`. Proofs: `src/__tests__/srt-policy-bk7.e2e.test.ts` (real `srt` +
+  the real built `adhd-backlog` bin against a scratch HOME) and `srt-policy-bk7.test.ts`. To point
+  the sandbox at a relocated backlog store (`ADHD_BACKLOG_DATABASE_PATH`), set the key to that
+  directory.
 - The server-wide `nativeTooling` config surface (`env.config.nativeTooling`, the
   `ADHD_AGENT_NATIVE_TOOLING_*` env vars) is merged **beneath** each agent's own
   `def.nativeTooling` at task time — the agent wins, and the merged value is carried on the

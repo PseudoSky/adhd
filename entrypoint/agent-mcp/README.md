@@ -307,6 +307,7 @@ with `false` on the agent definition, not with an env toggle:
 | `ADHD_AGENT_NATIVE_TOOLING_DISPATCH_ALLOWED_TOOLS` | csv | dispatch (agent-mcp self) tool-name allowlist |
 | `ADHD_AGENT_NATIVE_TOOLING_DISPATCH_DISALLOWED_TOOLS` | csv | dispatch tool-name denylist (wins) |
 | `ADHD_AGENT_NATIVE_TOOLING_HITL` | bool | HITL enablement; default `true` |
+| `ADHD_AGENT_SHELL_SANDBOX_EXTRA_ALLOW_WRITE` | string[] | extra WRITABLE roots for the srt-sandboxed shell (config key `agent.shell.sandbox.extraAllowWrite`; `~/` expanded; default `~/.adhd/backlog` so `adhd-backlog` can take its store lease). Fail-loud validation: absolute under `$HOME`, never `$HOME`/`~/.adhd`/`~/.ssh` or an ancestor, no overlap with `denyRead`, no `..`, no globs |
 
 The retired authored-shell-server path override (the `server.mjs` fallback removed
 by NAT-TOOL-4) no longer resolves; shell configuration is `nativeTooling.shell.*`.

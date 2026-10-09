@@ -85,8 +85,15 @@ export interface AgentMcpConfig {
    * Agent-loop value knobs. `toolResult.maxChars` bounds the model-visible size of a single tool
    * result (backlog 3ad735bb): head+tail truncation with an in-band marker above the cap, `0`
    * disables, error results <= 4000 chars are never truncated.
+   *
+   * `shell.sandbox.extraAllowWrite` (backlog 515a2b50 / BK7) lists extra WRITABLE roots for the
+   * srt-wrapped shell beyond the built-in caches/cwd; default `["~/.adhd/backlog"]` so
+   * `adhd-backlog` can take its store lease. Validated fail-loud in `srt-policy.ts`.
    */
-  readonly agent: { readonly toolResult: { readonly maxChars: string } };
+  readonly agent: {
+    readonly toolResult: { readonly maxChars: string };
+    readonly shell: { readonly sandbox: { readonly extraAllowWrite: readonly string[] } };
+  };
   readonly server: {
     readonly maxDepth: number;
     readonly maxToolLoops: number;
@@ -525,6 +532,16 @@ export const agentMcpEnvironmentSpec: EnvironmentSpec<AgentMcpConfig> = {
       default: false,
       description:
         "Record (truncated) tool arguments verbatim instead of only their sha256 digest.",
+    },
+    "agent.shell.sandbox.extraAllowWrite": {
+      type: "array",
+      env: "ADHD_AGENT_SHELL_SANDBOX_EXTRA_ALLOW_WRITE",
+      default: ["~/.adhd/backlog"],
+      description:
+        "Extra WRITABLE roots for the srt-sandboxed shell tool (comma-separated env / config-file " +
+        "array). `~/` is expanded. Default `~/.adhd/backlog` (the backlog lease + SQLite dir). Each " +
+        "entry must be absolute, under $HOME, not $HOME/~/.adhd/~/.ssh or an ancestor, not overlap a " +
+        "denyRead path, with no `..` or globs; an invalid entry fails loud at policy provisioning.",
     },
     // ADR-0008 D10 / NAT-TOOL-7 — the portable native-tooling config surface.
     // Built with this spec's `ADHD_AGENT` prefix so each field gets an explicit
