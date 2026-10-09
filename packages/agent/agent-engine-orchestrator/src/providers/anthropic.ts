@@ -12,6 +12,7 @@ import { ToolError } from "../validation/errors.js";
 import type { EngineLogger, EngineConfig } from "../interfaces.js";
 import { DEFAULT_PROVIDER_TIMEOUT_MS } from "../interfaces.js";
 import { sdkFetchOption } from "./wire.js";
+import { applyCacheBreakpoints } from "./anthropic-cache.js";
 
 import type {
     LLMProvider,
@@ -202,12 +203,20 @@ export class AnthropicProvider implements LLMProvider {
     private readonly useOauthIdentity: boolean;
     private readonly logger: EngineLogger;
     private readonly config: EngineConfig;
+    private readonly promptCaching: boolean;
 
+    /**
+     * @param options.promptCaching Place prompt-cache breakpoints on requests (default `true`,
+     *   backlog ae62e6b0 BK3; placement rules in `./anthropic-cache.ts`). `false` reproduces the
+     *   pre-BK3 uncached request body; it exists as the negative control for the BK3 tests.
+     */
     constructor(
         providerConfig: Extract<ProviderConfig, { type: "anthropic" }>,
         config: EngineConfig,
-        logger: EngineLogger
+        logger: EngineLogger,
+        options: { promptCaching?: boolean } = {}
     ) {
+        this.promptCaching = options.promptCaching ?? true;
         this.providerConfig = providerConfig;
         this.config = config;
         this.logger = logger;
@@ -269,14 +278,29 @@ export class AnthropicProvider implements LLMProvider {
                 ...((request.serverSideTools ?? []) as unknown as Tool[]),
             ];
 
+            // BK3 (ae62e6b0): <=3 five-minute cache breakpoints, each guarded by the model's
+            // minimum cacheable prefix. The OAuth identity block (first system block) is protected.
+            const prepared = {
+                tools: mergedTools.length > 0 ? mergedTools : undefined,
+                system: effectiveSystem,
+                messages: toAnthropicMessages(request.messages),
+            };
+            const wire = this.promptCaching
+                ? applyCacheBreakpoints({
+                      model: effectiveModel,
+                      ...prepared,
+                      protectedLeadingSystemBlocks: this.useOauthIdentity ? 1 : 0,
+                  })
+                : prepared;
+
             const stream = this.client.messages.stream(
                 {
                     model: effectiveModel,
-                    system: effectiveSystem,
+                    system: wire.system,
                     temperature: this.providerConfig.temperature,
                     max_tokens: this.providerConfig.maxTokens ?? defaultMaxTokens(effectiveModel, this.config),
-                    messages: toAnthropicMessages(request.messages),
-                    tools: mergedTools.length > 0 ? mergedTools : undefined,
+                    messages: wire.messages,
+                    tools: wire.tools,
                 },
                 { signal: request.signal }
             );

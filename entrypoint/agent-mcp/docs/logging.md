@@ -484,6 +484,25 @@ The OAuth task in trace 1 has no cache writes and is exact.
 This is the general audit recipe: provider usage from `api`/`rawUsage` x rate row = expected cost;
 compare to `task_usage`; compare to any vendor-reported total.
 
+### Prompt caching on the `anthropic` provider (backlog `ae62e6b0`)
+
+The `anthropic` provider (API key or OAuth) places `cache_control: {"type":"ephemeral"}` breakpoints
+on every request, so multi-turn tasks read their stable prefix at the cache-read rate (0.1x input)
+instead of paying full input price every turn. Rules (`providers/anthropic-cache.ts`):
+
+- At most three breakpoints: the last `tools` entry, the last `system` block, and the last cacheable
+  content block of the final `messages` entry (it moves forward every turn). Thinking blocks and empty
+  text blocks never carry one; the OAuth identity system block stays first and unchanged.
+- 5-minute TTL only (no `ttl` field; TTLs are never mixed). A reply that reports
+  `cache_creation.ephemeral_1h_input_tokens` is still priced at the 1-hour rate as described above.
+- Per-breakpoint minimum-prefix guard: a breakpoint is added only if the estimated prefix through that
+  point is at least the model's minimum cacheable size (`claude-haiku-4-5` 4096, `claude-haiku-5-5` 512,
+  `claude-sonnet-4-6`/`claude-sonnet-5` 1024, `claude-opus-4-5`/`claude-opus-4-6` 4096, any other model
+  4096). Below it the request body is exactly what it was before, so short tasks (for example a 3.1k-token
+  prefix on Haiku 4.5) cost the same as ever; expect the saving on long sessions, not on short ones.
+- Verify on a real task: `task_usage.cache_creation_input_tokens` is greater than 0 on the first
+  qualifying turn and `cache_read_input_tokens` is roughly the previous turn's prefix on the next.
+
 ## Known gaps
 
 Observed during the live verification above; each is filed in the backlog, none is fixed by this

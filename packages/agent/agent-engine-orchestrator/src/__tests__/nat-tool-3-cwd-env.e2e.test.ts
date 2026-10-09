@@ -151,6 +151,8 @@ describe('NAT-TOOL-3 — cwd/env through the engine MCP client (ADR-0008 D9)', (
       undefined,
       engineConfig({
         cwd: dir,
+        // ecfdf523: claudecli has no os.tmpdir fallback; the host injects the namespaced temp root.
+        wire: { tempDir: freshDir('adhd-nat3-ac3-tmp-') } as EngineConfig['wire'],
         subprocessEnv: () => ({
           ADHD_FAKE_CLAUDE_OUT: selfOut,
           ADHD_FAKE_CLAUDE_CHILD_REPORT: childReport,
