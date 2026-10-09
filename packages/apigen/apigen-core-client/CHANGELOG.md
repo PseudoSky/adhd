@@ -1,3 +1,16 @@
+## 0.3.4 (2026-10-09)
+
+### 🩹 Fixes
+
+- **agent-mcp:** bind loopback 127.0.0.1 by default; apigen hosts and generated servers too (5989ed90) ([c079e826](https://github.com/PseudoSky/adhd/commit/c079e826))
+- **apigen-core-client:** make e2e lane robust to host load (lane timeout, deadlock-guard budget, shared session in inv.1) ([c8fa1cd4](https://github.com/PseudoSky/adhd/commit/c8fa1cd4))
+- **agent-mcp:** pin wildcard externals to real ranges ([9869db26](https://github.com/PseudoSky/adhd/commit/9869db26))
+- **workspace:** restore the publish gate's heavy lane and canonicalise the gate ([45532731](https://github.com/PseudoSky/adhd/commit/45532731))
+
+### ❤️ Thank You
+
+- pseudosky
+
 ## 0.3.2 (2026-09-26)
 
 ### 🚀 Features

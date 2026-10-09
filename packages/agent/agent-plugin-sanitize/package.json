@@ -21,7 +21,7 @@
     "CHANGELOG.md"
   ],
   "peerDependencies": {
-    "@adhd/agent-base-types": "^2.3.5"
+    "@adhd/agent-base-types": "^2.3.8"
   },
   "dependencies": {
     "zod": "^4.4.3"

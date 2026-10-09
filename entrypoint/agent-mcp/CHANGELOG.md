@@ -22,6 +22,23 @@
 
 All changes in this section are additive for `@adhd/agent-mcp` consumers (new tools, new optional response fields, additive migration): minor bump recommended (2.3.6 to 2.4.0). Not bumped here.
 
+## 2.3.7 (2026-10-08)
+
+### 🚀 Features
+
+- **agent-mcp:** default-load agent-plugin-tracing with typed tracing config, reuse existing telemetry provider, audit script + docs (0f760dcd, 5dff26e6) ([0891a3bc](https://github.com/PseudoSky/adhd/commit/0891a3bc))
+
+### 🩹 Fixes
+
+- **agent-mcp:** --help/--version/unknown-flag answered before any DB-opening import; prepare only sets core.hooksPath in the main checkout (3d6860dd, f2b26b12) ([9b881398](https://github.com/PseudoSky/adhd/commit/9b881398))
+- **agent-engine-orchestrator:** agent_create/agent_update input accepts legacy apiKeyEnv/authTokenEnv (mapped to env.secret); document PF-1 provider fields and strict input in agent-mcp (2eddcf91, 3864449b) ([3848205c](https://github.com/PseudoSky/adhd/commit/3848205c))
+- **agent-mcp:** agent_update is a no-op (no version bump/write) when the patch changes nothing (F-PERF-3) ([beb25964](https://github.com/PseudoSky/adhd/commit/beb25964))
+- **githooks:** pre-push runs test only, e2e stays CI-only; machine-check NAT_TOOL_LIVE gate tables (8963c3cb, 90d07610) ([b3106036](https://github.com/PseudoSky/adhd/commit/b3106036))
+
+### ❤️ Thank You
+
+- pseudosky
+
 ## 2.3.6 (2026-10-07)
 
 ### 🚀 Features

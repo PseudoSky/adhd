@@ -29,9 +29,9 @@
     "drizzle-orm": "0.45.2",
     "@adhd/agent-store-prompts": "^2.2.3",
     "@adhd/agent-store-tools": "^2.2.3",
-    "@adhd/agent-core-provider": "^2.2.5",
+    "@adhd/agent-core-provider": "^2.2.6",
     "@adhd/agent-core-policy": "^2.2.3",
-    "@adhd/agent-core-env": "^0.1.4"
+    "@adhd/agent-core-env": "^0.1.5"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",

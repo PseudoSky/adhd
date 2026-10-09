@@ -1,3 +1,13 @@
+## 2.2.6 (2026-10-09)
+
+### 🩹 Fixes
+
+- **agent-engine-orchestrator): sticky-NULL est_cost_usd once any turn is unpriced (37f6c511, 1f1c8598); refactor(agent-core-provider:** single perMillion conversion, correct alias JSDoc ([f2ab99fc](https://github.com/PseudoSky/adhd/commit/f2ab99fc))
+
+### ❤️ Thank You
+
+- pseudosky
+
 ## Unreleased
 
 ### 🚀 Features

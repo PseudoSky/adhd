@@ -9,9 +9,9 @@
   "devDependencies": {
     "@adhd/dispatch-core-optimizer": "^0.1.7",
     "@adhd/dispatch-serializer-json": "^0.1.4",
-    "@adhd/agent-engine-orchestrator": "^2.3.5",
+    "@adhd/agent-engine-orchestrator": "^2.3.7",
     "@adhd/agent-store-runtime": "^2.2.5",
-    "@adhd/agent-base-types": "^2.3.5",
+    "@adhd/agent-base-types": "^2.3.7",
     "better-sqlite3": "12.10.0",
     "drizzle-orm": "0.45.2"
   },

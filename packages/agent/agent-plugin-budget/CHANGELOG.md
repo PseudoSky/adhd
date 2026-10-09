@@ -1,3 +1,13 @@
+## 0.2.6 (2026-10-09)
+
+### 🩹 Fixes
+
+- **agent-plugin-budget:** policy denials are not errors (df7c3af9 AC1-AC3) ([293dce21](https://github.com/PseudoSky/adhd/commit/293dce21))
+
+### ❤️ Thank You
+
+- pseudosky
+
 ## 0.2.5 (2026-10-07)
 
 ### 🚀 Features

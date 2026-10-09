@@ -1,3 +1,13 @@
+## 0.2.8 (2026-10-09)
+
+### 🩹 Fixes
+
+- **agent-mcp:** bind loopback 127.0.0.1 by default; apigen hosts and generated servers too (5989ed90) ([c079e826](https://github.com/PseudoSky/adhd/commit/c079e826))
+
+### ❤️ Thank You
+
+- pseudosky
+
 ## 0.2.7 (2026-10-03)
 
 ### 🚀 Features

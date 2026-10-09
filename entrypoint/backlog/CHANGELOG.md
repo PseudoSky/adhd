@@ -1,3 +1,7 @@
+## 1.0.13 (2026-10-09)
+
+This was a version bump only for backlog to align it with other projects, there were no code changes.
+
 ## 1.0.12 (2026-10-08)
 
 ### 🚀 Features

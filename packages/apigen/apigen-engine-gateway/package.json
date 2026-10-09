@@ -6,7 +6,7 @@
   "typings": "./dist/index.d.ts",
   "dependencies": {
     "@adhd/apigen-base-errors": "^0.2.3",
-    "@adhd/apigen-core-client": "^0.3.3"
+    "@adhd/apigen-core-client": "^0.3.4"
   },
   "publishConfig": {
     "access": "public"

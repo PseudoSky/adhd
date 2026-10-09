@@ -1,3 +1,13 @@
+## 2.2.6 (2026-10-09)
+
+### 🩹 Fixes
+
+- **agent-store-runtime:** guard finishPull on running, warn on zero-boundary price moves, forced-claim floor (37f6c511, 9ae6927d) ([a017f3b3](https://github.com/PseudoSky/adhd/commit/a017f3b3))
+
+### ❤️ Thank You
+
+- pseudosky
+
 ## Unreleased
 
 ### 🚀 Features
