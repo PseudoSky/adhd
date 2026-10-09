@@ -115,12 +115,17 @@ export interface IClaimOptions {
   /** A `running` row younger than this blocks a new claim; older ones are superseded. */
   runningTtlMs: number;
   force: boolean;
+  /**
+   * With `force`, the minimum gap since the last pull attempt of ANY status started. Enforced inside
+   * the claim transaction, so concurrent processes cannot bypass it. Omitted = no forced floor.
+   */
+  forcedMinIntervalMs?: number;
   sourceUrl: string;
 }
 
 export type ClaimResult =
   | { claimed: true; ledgerId: string }
-  | { claimed: false; reason: 'fresh' | 'running' };
+  | { claimed: false; reason: 'fresh' | 'running' | 'forced_too_soon' };
 
 export interface ILedgerSummary {
   lastOk?: ILedgerRow;
@@ -168,9 +173,22 @@ function sameValue(a: IPriceRecordLike, b: INewPriceRow): boolean {
   );
 }
 
+/**
+ * Ratio of the larger to the smaller rate, or undefined when it is not defined: either side absent
+ * (null) or non-positive. A move across zero (0 -> >0 or >0 -> 0, e.g. a free tier appearing or a
+ * price disappearing) has no finite ratio; it is NOT silently ignored but reported by
+ * {@link zeroBoundaryMove} as a WARN (applied, never held), because a hold on every free-tier flip
+ * would stall legitimate feed updates while ignoring it would hide a real change.
+ */
 function moveFactor(prev: number | null, next: number | null): number | undefined {
   if (prev === null || next === null || prev <= 0 || next <= 0) return undefined;
   return Math.max(next / prev, prev / next);
+}
+
+/** True when the rate moved between exactly 0 and a positive value (either direction). */
+function zeroBoundaryMove(prev: number | null, next: number | null): boolean {
+  if (prev === null || next === null) return false;
+  return (prev === 0 && next > 0) || (prev > 0 && next === 0);
 }
 
 export class PriceHistoryStore {
@@ -229,7 +247,8 @@ export class PriceHistoryStore {
   /**
    * Atomically claim the right to run a pull (BEGIN IMMEDIATE). Not claimed when a `running`
    * row is younger than `runningTtlMs`, or (unless `force`) the last `ok` pull started less than
-   * `minIntervalMs` ago. Crashed `running` rows past the TTL are marked failed and superseded.
+   * `minIntervalMs` ago. A forced claim is refused (`forced_too_soon`) when any pull attempt started
+   * less than `forcedMinIntervalMs` ago. Crashed `running` rows past the TTL are marked failed and superseded.
    */
   claimPull(now: string, opts: IClaimOptions): ClaimResult {
     return this.db.transaction(
@@ -244,6 +263,17 @@ export class PriceHistoryStore {
         for (const r of running) {
           if (nowMs - Date.parse(r.startedAt) < opts.runningTtlMs) {
             return { claimed: false, reason: 'running' } as const;
+          }
+        }
+        if (opts.force && opts.forcedMinIntervalMs !== undefined) {
+          const lastAny = tx
+            .select()
+            .from(pricePullLedgerTable)
+            .orderBy(desc(pricePullLedgerTable.startedAt))
+            .limit(1)
+            .get();
+          if (lastAny && nowMs - Date.parse(lastAny.startedAt) < opts.forcedMinIntervalMs) {
+            return { claimed: false, reason: 'forced_too_soon' } as const;
           }
         }
         if (!opts.force) {
@@ -285,7 +315,8 @@ export class PriceHistoryStore {
    * kind/rates/overrides is `changed`; equal is `unchanged`. A move of {@link ANOMALY_HOLD_FACTOR}x or
    * more (input or output) or an input rate above {@link ANOMALY_MAX_INPUT_PER_M} is HELD
    * (not applied) unless its model id is in `accept`; a {@link ANOMALY_WARN_FACTOR}x move is applied
-   * with a `warn` anomaly.
+   * with a `warn` anomaly. A move between exactly 0 and a positive rate has no finite factor: it is
+   * applied with a `warn` anomaly and is never held.
    */
   applyObservation(
     ledgerId: string,
@@ -318,14 +349,22 @@ export class PriceHistoryStore {
           }
           if (prev) {
             for (const field of ['inputPerM', 'outputPerM'] as const) {
-              const factor = moveFactor(prev[field], row[field]);
-              if (factor === undefined) continue;
               const base = {
                 modelId,
                 field,
                 previous: prev[field] as number,
                 observed: row[field] as number,
               };
+              if (zeroBoundaryMove(prev[field], row[field])) {
+                anomalies.push({
+                  ...base,
+                  severity: 'warn',
+                  reason: `${field} moved from ${base.previous} to ${base.observed} (across zero; applied)`,
+                });
+                continue;
+              }
+              const factor = moveFactor(prev[field], row[field]);
+              if (factor === undefined) continue;
               if (factor >= ANOMALY_HOLD_FACTOR) {
                 hold = true;
                 anomalies.push({ ...base, severity: 'hold', reason: `${field} moved ${factor.toFixed(1)}x` });
@@ -374,9 +413,13 @@ export class PriceHistoryStore {
     );
   }
 
-  /** Close a pull's ledger row with its outcome. */
-  finishPull(ledgerId: string, f: IPullFinish): void {
-    this.db
+  /**
+   * Close a pull's ledger row with its outcome. Guarded by `status = 'running'`, so a late finisher
+   * can never overwrite a row that was superseded (marked `failed` by a newer claim) or already closed.
+   * @returns true when the row was closed; false when 0 rows changed (superseded / already closed).
+   */
+  finishPull(ledgerId: string, f: IPullFinish): boolean {
+    const res = this.db
       .update(pricePullLedgerTable)
       .set({
         status: f.status,
@@ -390,8 +433,9 @@ export class PriceHistoryStore {
         error: f.error ?? null,
         durationMs: f.durationMs ?? null,
       })
-      .where(eq(pricePullLedgerTable.id, ledgerId))
+      .where(and(eq(pricePullLedgerTable.id, ledgerId), eq(pricePullLedgerTable.status, 'running')))
       .run();
+    return res.changes > 0;
   }
 
   /**
