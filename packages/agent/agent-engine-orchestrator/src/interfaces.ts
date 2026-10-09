@@ -118,6 +118,14 @@ export interface EngineConfig {
     /** Default max_tokens for providers that don't set maxTokens in their config. */
     defaultMaxTokens: number;
   };
+  /**
+   * Model-visible tool-result bound (config key `agent.toolResult.maxChars`, env
+   * `ADHD_AGENT_TOOL_RESULT_MAX_CHARS`). Absent => 20000. `0` disables. See
+   * `engine/tool-result-cap.ts`.
+   */
+  toolResult?: {
+    maxChars: number;
+  };
   queue: {
     /** Max concurrent background tasks. */
     concurrency: number;

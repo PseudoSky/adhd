@@ -14,6 +14,11 @@ import { ToolError } from '../validation/errors.js';
 import { generateId } from '../utils/ids.js';
 import { nowIso } from '../utils/timestamps.js';
 import type { EngineConfig, EngineLogger } from '../interfaces.js';
+import {
+  capToolResult,
+  DEFAULT_TOOL_RESULT_MAX_CHARS,
+  validateToolResultMaxChars,
+} from './tool-result-cap.js';
 import { DEFAULT_PROVIDER_TIMEOUT_MS } from '../interfaces.js';
 import { selectionOf, wireModelOf } from '../providers/resolve-selection.js';
 
@@ -409,6 +414,10 @@ export class Orchestrator {
 
     const currentMessages: Message[] = [...input.messages];
     const contextLimit = config.server.contextLimit;
+    // Fails loud (RangeError) on a negative / NaN / non-integer cap.
+    const toolResultMaxChars = validateToolResultMaxChars(
+      config.toolResult?.maxChars ?? DEFAULT_TOOL_RESULT_MAX_CHARS
+    );
 
     const delegationSessions = new Set<string>();
     let taskSucceeded = false;
@@ -1657,6 +1666,16 @@ export class Orchestrator {
                 : JSON.stringify(toolResult);
             const toolCallEstResultTokens = encode(fullResultText).length;
 
+            // BK1 (3ad735bb): bound what the MODEL sees (and what the session
+            // history persists). Telemetry above and the 500-char summary below
+            // keep measuring the FULL result; `post:tool_call` also receives it.
+            const capOutcome = capToolResult(
+              toolResult,
+              isError,
+              toolResultMaxChars
+            );
+            const modelVisibleResult = capOutcome.result;
+
             const resultSummary =
               typeof toolResult === 'string'
                 ? toolResult.slice(0, 500)
@@ -1671,6 +1690,12 @@ export class Orchestrator {
                 isError,
                 result: resultSummary,
                 tool_call_est_result_tokens: toolCallEstResultTokens,
+                ...(capOutcome.truncated
+                  ? {
+                      truncated: true,
+                      original_chars: capOutcome.originalChars,
+                    }
+                  : {}),
               },
             });
 
@@ -1697,7 +1722,12 @@ export class Orchestrator {
               estResultTokens: toolCallEstResultTokens,
             });
 
-            return { toolCall, toolResult, isError, estResultTokens: toolCallEstResultTokens };
+            return {
+              toolCall,
+              toolResult: modelVisibleResult,
+              isError,
+              estResultTokens: toolCallEstResultTokens,
+            };
           })
         );
 

@@ -93,6 +93,11 @@ export interface HarnessOptions {
   /** Use an explicit DB path (for restart tests) */
   dbPath?: string;
   /**
+   * Override `EngineConfig.toolResult` (the model-visible tool-result cap,
+   * backlog 3ad735bb). Absent => the engine default (20000 chars).
+   */
+  toolResult?: { maxChars: number };
+  /**
    * Skip the automatic orphan-scan re-enqueue on build.
    * Prefer `defaultProvider` over this flag: that keeps the real scan
    * exercised while avoiding the external-provider race.
@@ -139,10 +144,12 @@ function testLogger(level: "silent" | "warn" = "silent"): EngineLogger {
  * `server.defaultMaxTokens` (8192) and `sse.port` (3001) spec defaults as
  * plain literals so this harness never touches real host state.
  */
-function testConfig(_opts: {
+function testConfig(opts: {
   serverMaxToolLoops?: number;
+  toolResult?: { maxChars: number };
 } = {}): EngineConfig {
   return {
+    ...(opts.toolResult ? { toolResult: opts.toolResult } : {}),
     server: {
       contextLimit: 0,
       defaultMaxTokens: 8192,
@@ -194,7 +201,7 @@ export async function buildHarness(opts: HarnessOptions = {}): Promise<Harness> 
   const sessionStore = new SessionStore(dbAny, hooks);
   const taskStore = new TaskStore(dbAny);
 
-  const config = testConfig({ serverMaxToolLoops: opts.serverMaxToolLoops });
+  const config = testConfig({ serverMaxToolLoops: opts.serverMaxToolLoops, toolResult: opts.toolResult });
   const logger = testLogger("silent");
 
   const queue = new BackgroundQueue(5, logger);

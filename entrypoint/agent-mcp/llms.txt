@@ -44,6 +44,7 @@ Optional:
 - `ADHD_AGENT_CONTEXT_LIMIT` — token limit; 0 (default) = disabled
 - `ADHD_AGENT_MAX_DEPTH` — max delegation depth (default: 3)
 - `ADHD_AGENT_MAX_TOOL_LOOPS` — max tool-call rounds (default: 50)
+- `ADHD_AGENT_TOOL_RESULT_MAX_CHARS` — max chars of one tool result shown to the model, head+tail truncated with a marker (default: 20000; 0 = disabled; invalid fails at startup)
 - `ADHD_AGENT_LOG_LEVEL` — logging level (default: info)
 - Log tree: `~/.adhd/agent-mcp/<namespace>/logs/{api,ops,trace}` (env-resolved, global scope, shared across restarts; scratch in `.../temp`). `ADHD_AGENT_LOGGING_DIR` overrides the root; `ADHD_AGENT_LOGGING_INSTANCE_LABEL` (default `default`) names files `<date>.<label>.<pid>.jsonl`.
 - `ADHD_AGENT_LOGGING_API` — `on` (default) / `off`; off stops only raw API body capture (ops + trace stay on)

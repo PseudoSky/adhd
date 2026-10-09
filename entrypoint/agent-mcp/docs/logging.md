@@ -295,6 +295,35 @@ $ sqlite3 $D "SELECT (9994*1.0 + 0*0.1 + 4*5.0)/1e6"
 0.010014
 ```
 
+## Tool-result size cap (what the model sees vs what telemetry measures)
+
+A tool result is appended to the conversation and re-sent to the provider on every later turn, so one oversize result is paid for on every remaining turn. The orchestrator bounds the **model-visible** copy once, right after the tool call (or its error) returns and before the tool message is appended, for every provider and for sub-agent (`agent-mcp__agent`) results alike.
+
+| Setting | Value |
+|---|---|
+| Config key | `agent.toolResult.maxChars` |
+| Env var | `ADHD_AGENT_TOOL_RESULT_MAX_CHARS` |
+| Default | `20000` (about 5k tokens) |
+| `0` | disables the cap (full result reaches the model) |
+| Invalid (`-1`, `1.5`, `abc`, `20000abc`, empty) | the server fails at startup with a `RangeError` naming the key; it never falls back silently |
+
+Above the cap the model sees the first `floor(cap * 0.75)` chars, a marker, and the last `cap - head` chars:
+
+```
+<head>
+[tool result truncated: showing first 15000 and last 5000 of 100000 chars; re-run with a narrower command (e.g. grep, head, sed -n 'a,bp')]
+<tail>
+```
+
+- The cap counts UTF-16 code units of the serialized result (`JSON.stringify` for object results); the marker is added outside the cap. Cuts never split a surrogate pair.
+- A result at or under the cap is delivered unchanged. An error result is never truncated while it is 4000 chars or fewer; above that it follows the cap, floored at 4000.
+- **Telemetry measures the full result.** `tool_call_est_result_tokens` on the `TOOL_RESULT` event, the `post:tool_call` hook payload (`result`, `estResultTokens`) and the SSE `tool_result` event carry the untruncated result. A truncated result adds `truncated: true` and `original_chars` to the `TOOL_RESULT` payload; the 500-char `result` summary is unchanged.
+- **Persisted history stores what the model saw.** The session message holds the truncated form, so a resumed or replayed session matches the model's view. The full text is not persisted.
+- `transform:tool_result` hooks run on the capped result.
+- Spill-to-file (the `claude` CLI saves an oversize result to a file and returns a stub) is not implemented; the cap is the fallback behaviour.
+
+Example: `ADHD_AGENT_TOOL_RESULT_MAX_CHARS=8000 agent-mcp` bounds each tool result to 8000 chars plus the marker. The proof is `src/__tests__/integration/tool-result-cap.e2e.test.ts` (real orchestrator, real stdio MCP server returning 100,000 chars, with a cap-disabled negative control).
+
 ## Redaction guarantees
 
 One redactor is shared by the `api` and `ops` channels (and the persisted pino lines):

@@ -11,6 +11,14 @@ export type {
 
 // ── Engine ────────────────────────────────────────────────────────────────────
 export { Orchestrator } from './engine/orchestrator.js';
+export {
+  capToolResult,
+  validateToolResultMaxChars,
+  parseToolResultMaxChars,
+  DEFAULT_TOOL_RESULT_MAX_CHARS,
+  ERROR_RESULT_FLOOR_CHARS,
+} from './engine/tool-result-cap.js';
+export type { ToolResultCapOutcome } from './engine/tool-result-cap.js';
 export type { OrchestratorRunInput, OrchestratorRunResult, OrchestratorTaskStore, OrchestratorSessionStore } from './engine/orchestrator.js';
 export { resolveHitl } from './engine/orchestrator.js';
 export { PolicyEngine } from './engine/policy.js';

@@ -64,6 +64,7 @@ The database (SQLite, agents/sessions/messages/usage) is stored in the resolved 
 | `ADHD_AGENT_MODEL` | `claude-opus-4-1` | Model identifier for the provider |
 | `ADHD_AGENT_CONTEXT_LIMIT` | `0` | Max context size in tokens; 0 = no limit (enforce only at provider ceiling) |
 | `ADHD_AGENT_MAX_TOOL_LOOPS` | `50` | Max tool-call iterations per task |
+| `ADHD_AGENT_TOOL_RESULT_MAX_CHARS` | `20000` | Max chars of one tool result the model sees (first 75% + marker + last 25%); `0` disables; invalid values fail at startup. See [logging.md](docs/logging.md#tool-result-size-cap-what-the-model-sees-vs-what-telemetry-measures) |
 | `ADHD_AGENT_MAX_DEPTH` | `3` | Max delegation depth (agent → child → grandchild) |
 | `ADHD_AGENT_DATABASE_PATH` | (auto-resolved) | Custom SQLite DB path; falls back to zero-config `~/.adhd/agent-mcp/production/data/agents.db` |
 | `ADHD_AGENT_TRANSPORT` | `stdio` | `stdio` or `http` (streamable HTTP). The `http` transport serves **many concurrent MCP sessions** from one process: each `initialize` opens its own session (routed by the `mcp-session-id` header); an unknown/expired session id gets HTTP 404 so the client re-initializes |

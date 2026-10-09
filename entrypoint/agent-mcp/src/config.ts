@@ -23,6 +23,7 @@ import { join } from "node:path";
 import { Environment } from "@adhd/environment";
 import { nativeToolingConfigFieldSpecs } from "@adhd/environment-base-spec";
 import type { EnvironmentSpec } from "@adhd/environment-base-spec";
+import { DEFAULT_TOOL_RESULT_MAX_CHARS, parseToolResultMaxChars } from "@adhd/agent-engine-orchestrator";
 import type { EngineConfig } from "@adhd/agent-engine-orchestrator";
 import type { PartialBinding } from "@adhd/agent-base-types";
 
@@ -80,6 +81,12 @@ export interface AgentMcpConfig {
     readonly floodWindowSeconds: number;
   };
   readonly queue: { readonly concurrency: number };
+  /**
+   * Agent-loop value knobs. `toolResult.maxChars` bounds the model-visible size of a single tool
+   * result (backlog 3ad735bb): head+tail truncation with an in-band marker above the cap, `0`
+   * disables, error results <= 4000 chars are never truncated.
+   */
+  readonly agent: { readonly toolResult: { readonly maxChars: string } };
   readonly server: {
     readonly maxDepth: number;
     readonly maxToolLoops: number;
@@ -348,6 +355,17 @@ export const agentMcpEnvironmentSpec: EnvironmentSpec<AgentMcpConfig> = {
       env: "ADHD_AGENT_QUEUE_CONCURRENCY",
       default: 5,
       minimum: 1,
+    },
+    // Declared `string` (not `integer`) on purpose: the cascade's integer coercion is `parseInt`,
+    // which silently turns "1.5" into 1 and "20000abc" into 20000 and so cannot fail loud on a
+    // malformed value. `toEngineConfig()` parses it strictly via `parseToolResultMaxChars`.
+    "agent.toolResult.maxChars": {
+      type: "string",
+      env: "ADHD_AGENT_TOOL_RESULT_MAX_CHARS",
+      default: String(DEFAULT_TOOL_RESULT_MAX_CHARS),
+      description:
+        "Max chars of one tool result the model sees (head 75% + tail 25% + a truncation marker). " +
+        "0 disables the cap; error results up to 4000 chars are never truncated.",
     },
     "server.maxDepth": {
       type: "integer",
@@ -818,6 +836,8 @@ export function toEngineConfig(): EngineConfig {
       defaultMaxTokens: env.config.server.defaultMaxTokens,
     },
     queue: { concurrency: env.config.queue.concurrency },
+    // Fails loud (RangeError) on a negative / NaN / non-integer / non-numeric cap, before any task runs.
+    toolResult: { maxChars: parseToolResultMaxChars(env.config.agent.toolResult.maxChars) },
     sse: {
       baseUrl: computeSseBaseUrl(env.config.sse.baseUrl, resolvedSseBoundPort, env.config.sse.port),
     },
