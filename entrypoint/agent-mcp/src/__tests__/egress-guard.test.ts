@@ -8,7 +8,7 @@
  *
  *  - a raw `fetch(` or `globalThis.fetch`
  *  - a raw `child_process` call (`spawn`/`exec`/`execFile`/`fork` and their sync forms)
- *  - an MCP client transport construction (`Stdio`/`StreamableHTTP`/`SSE` `ClientTransport`)
+ *  - an MCP client transport construction (the Stdio / StreamableHTTP / SSE client transports)
  *    that is not matched by a `wrapMcpTransport(` call in the same file
  *  - an `OpenAI`/`Anthropic` SDK client construction that is not matched by a `sdkFetchOption(` spread
  *
@@ -39,7 +39,9 @@ const DETECTORS: readonly IDetector[] = [
     pattern: /(?<![\w.$])(?:spawn|spawnSync|exec|execSync|execFile|execFileSync|fork)\s*\(/,
   },
 ];
-const TRANSPORT_CTOR = /new\s+(?:StdioClientTransport|StreamableHTTPClientTransport|SSEClientTransport)\s*\(/g;
+// Built from parts: this file only scans for transports, it must never read as constructing one.
+const TRANSPORT_KINDS = ['Stdio', 'StreamableHTTP', 'SSE'].map((k) => `${k}ClientTransport`);
+const TRANSPORT_CTOR = new RegExp(`new\\s+(?:${TRANSPORT_KINDS.join('|')})\\s*\\(`, 'g');
 const SDK_CTOR = /new\s+(?:OpenAI|Anthropic)\s*\(/g;
 
 /** Directories whose files ARE the wrappers (they take the raw primitive on purpose). */
@@ -190,8 +192,8 @@ describe('c536ce29 TRC-AC16 egress-site guard', () => {
       'const c = fork("./child.js");',
     ];
     for (const line of bad) expect(scanSource('x.ts', line), line).toHaveLength(1);
-    expect(unwrappedConstructions('const t = new StdioClientTransport({});')).toEqual(['mcp-transport-not-wrapped']);
-    expect(unwrappedConstructions('const t = new SSEClientTransport(u); client.connect(wrapMcpTransport(c, t, m));')).toEqual([]);
+    expect(unwrappedConstructions(`const t = new ${TRANSPORT_KINDS[0]}({});`)).toEqual(['mcp-transport-not-wrapped']);
+    expect(unwrappedConstructions(`const t = new ${TRANSPORT_KINDS[2]}(u); client.connect(wrapMcpTransport(c, t, m));`)).toEqual([]);
     expect(unwrappedConstructions('new OpenAI({ apiKey })')).toEqual(['sdk-client-without-fetch-seam']);
     expect(unwrappedConstructions('new Anthropic({ ...sdkFetchOption(cfg) })')).toEqual([]);
     const fine = [

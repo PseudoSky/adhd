@@ -5,7 +5,10 @@
  */
 import { spawn as nodeSpawn } from 'node:child_process';
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+
+// Nothing here may start a process: the module is mocked, so `nodeSpawn` is an inert stub.
+vi.mock('node:child_process', () => ({ spawn: vi.fn() }));
 
 import type { WireSeams } from '../interfaces.js';
 import { sdkFetchOption, wireFetch, wireSpawn, wrapMcpTransport } from '../providers/wire.js';
