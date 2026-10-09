@@ -360,7 +360,7 @@ export class ClaudeCliProvider implements LLMProvider {
             }
         }
 
-        const filePath = join(tmpdir(), `agent-mcp-claudecli-${Date.now()}-${generateId()}.json`);
+        const filePath = join(await this.ensureTempRoot(), `agent-mcp-claudecli-${Date.now()}-${generateId()}.json`);
         await writeFile(filePath, JSON.stringify({ mcpServers: mapped }), "utf8");
         return filePath;
     }
@@ -374,9 +374,21 @@ export class ClaudeCliProvider implements LLMProvider {
         return env === "1" || env === "true";
     }
 
+    /**
+     * The directory for credential-bearing scratch (mcp-config, agent-spec). The host injects its
+     * `@adhd/environment`-resolved namespaced temp root as `config.wire.tempDir` (c536ce29 / 03be90c3,
+     * S8B); only an embedder that supplies no seams falls back to the OS temp dir. Created on demand
+     * because the resolver is pure and creates nothing.
+     */
+    private async ensureTempRoot(): Promise<string> {
+        const root = this.config.wire?.tempDir ?? tmpdir();
+        await mkdir(root, { recursive: true });
+        return root;
+    }
+
     private async writeAgentSpecDir(md: string): Promise<{ dir: string; agentName: string }> {
         const { content, agentName } = normalizeAgentSpec(md);
-        const dir = await mkdtemp(join(tmpdir(), "agent-mcp-spec-"));
+        const dir = await mkdtemp(join(await this.ensureTempRoot(), "agent-mcp-spec-"));
         const agentsDir = join(dir, ".claude", "agents");
         await mkdir(agentsDir, { recursive: true });
         const safeFile = `${agentName.replace(/[^a-zA-Z0-9_-]/g, "_") || "agent"}.md`;

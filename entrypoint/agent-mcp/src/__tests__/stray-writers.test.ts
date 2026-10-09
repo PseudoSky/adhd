@@ -191,7 +191,7 @@ const ALLOWLIST: readonly IEntry[] = [
   { key: 'entrypoint/agent-mcp/src/install.ts :: writeFileSync(configPath, updated, \'utf8\');', reason: 'install: user config writer' },
   { key: 'entrypoint/agent-mcp/src/srt-policy.ts :: const home = homedir();', count: 2, reason: 'sandbox deny/allow path lists, not writes' },
   { key: 'entrypoint/agent-mcp/src/srt-policy.ts :: tmpdir(),', reason: 'sandbox allow-write list entry, not a writer' },
-  { key: 'entrypoint/agent-mcp/src/srt-policy.ts :: mkdirSync(dirname(lockPath), { recursive: true });', reason: 'lock file beside the srt policy dir (root moves with the S8B fix of the srt dir)' },
+  { key: 'entrypoint/agent-mcp/src/srt-policy.ts :: mkdirSync(dirname(lockPath), { recursive: true });', reason: 'lock file beside the srt policy dir (follows the srt settings path, which is under the namespaced temp root)' },
   { key: 'entrypoint/agent-mcp/src/srt-policy.ts :: fd = openSync(lockPath, \'wx\');', reason: 'O_EXCL lock beside the srt policy dir' },
   { key: 'entrypoint/agent-mcp/src/srt-policy.ts :: return join(homedir(), \'.srt-settings.json\');', reason: 'third-party srt tool settings file (fixed location owned by srt)' },
   { key: 'entrypoint/agent-mcp/src/srt-policy.ts :: mkdirSync(dirname(path), { recursive: true });', reason: 'srt settings atomic write' },
@@ -207,6 +207,11 @@ const ALLOWLIST: readonly IEntry[] = [
   { key: 'packages/agent/agent-engine-orchestrator/src/plugins/loader.ts :: const nested = resolve(process.cwd(), \'.adhd\', \'agent-mcp\', \'config.json\');', reason: 'read-only config lookup' },
   { key: 'packages/agent/agent-engine-orchestrator/src/plugins/loader.ts :: const globalAdhd = resolve(homedir(), \'.adhd\', \'agent-mcp\', \'config.json\');', reason: 'read-only config lookup' },
   { key: 'packages/agent/agent-engine-orchestrator/src/plugins/loader.ts :: const globalLegacy = resolve(homedir(), \'.agent-mcp\', \'config.json\');', reason: 'read-only legacy config lookup' },
+  { key: 'packages/agent/agent-engine-orchestrator/src/providers/claudecli.ts :: await mkdir(root, { recursive: true });', reason: 'claudecli: creates the host-injected namespaced temp root (wire.tempDir)' },
+  { key: 'packages/agent/agent-engine-orchestrator/src/providers/claudecli.ts :: await writeFile(filePath, JSON.stringify({ mcpServers: mapped }), "utf8");', reason: 'claudecli: mcp-config written under the namespaced temp root' },
+  { key: 'packages/agent/agent-engine-orchestrator/src/providers/claudecli.ts :: const dir = await mkdtemp(join(await this.ensureTempRoot(), "agent-mcp-spec-"));', reason: 'claudecli: spec dir under the namespaced temp root' },
+  { key: 'packages/agent/agent-engine-orchestrator/src/providers/claudecli.ts :: await mkdir(agentsDir, { recursive: true });', reason: 'claudecli: inside the temp-root spec dir' },
+  { key: 'packages/agent/agent-engine-orchestrator/src/providers/claudecli.ts :: await writeFile(join(agentsDir, safeFile), content, "utf8");', reason: 'claudecli: inside the temp-root spec dir' },
 ];
 
 /**
@@ -214,14 +219,11 @@ const ALLOWLIST: readonly IEntry[] = [
  * be deleted in that segment (TRC-AC16-c enforces this).
  */
 const KNOWN_VIOLATIONS: readonly (IEntry & { readonly fixedBy: string })[] = [
-  { key: 'entrypoint/agent-mcp/src/scripts/agent-mcp-tail.ts :: ?? path.join(os.homedir(), ".adhd", "agent-mcp", "agents.db");', fixedBy: 'S8B: resolve via @adhd/environment, not a hard-coded home path', reason: 'hard-coded DB path' },
-  { key: 'entrypoint/agent-mcp/src/scripts/agent-mcp-tail.ts :: const devPath = path.join(process.cwd(), "data", "agent-mcp", "agents-dev.db");', fixedBy: 'S8B: repo-relative ./data default', reason: 'cwd data root' },
-  { key: 'entrypoint/agent-mcp/src/srt-policy.ts :: return join(homedir(), \'.adhd\', \'agent-mcp\', \'srt\');', fixedBy: 'S8B: srt dir from the environment-resolved data/logs root', reason: 'hard-coded .adhd root' },
-  { key: 'packages/agent/agent-engine-orchestrator/src/providers/claudecli.ts :: const filePath = join(tmpdir(), `agent-mcp-claudecli-${Date.now()}-${generateId()}.json`);', fixedBy: 'P1: temp mcp-config under <logs>/../temp', reason: 'os.tmpdir() stray writer' },
-  { key: 'packages/agent/agent-engine-orchestrator/src/providers/claudecli.ts :: await writeFile(filePath, JSON.stringify({ mcpServers: mapped }), "utf8");', fixedBy: 'P1: temp mcp-config under <logs>/../temp', reason: 'writes into os.tmpdir()' },
-  { key: 'packages/agent/agent-engine-orchestrator/src/providers/claudecli.ts :: const dir = await mkdtemp(join(tmpdir(), "agent-mcp-spec-"));', fixedBy: 'P1: spec dir under <logs>/../temp', reason: 'os.tmpdir() stray writer' },
-  { key: 'packages/agent/agent-engine-orchestrator/src/providers/claudecli.ts :: await mkdir(agentsDir, { recursive: true });', fixedBy: 'P1: spec dir under <logs>/../temp', reason: 'inside os.tmpdir() dir' },
-  { key: 'packages/agent/agent-engine-orchestrator/src/providers/claudecli.ts :: await writeFile(join(agentsDir, safeFile), content, "utf8");', fixedBy: 'P1: spec dir under <logs>/../temp', reason: 'inside os.tmpdir() dir' },
+  {
+    key: 'packages/agent/agent-engine-orchestrator/src/providers/claudecli.ts :: const root = this.config.wire?.tempDir ?? tmpdir();',
+    fixedBy: 'S8B handoff: entrypoint/agent-mcp/src/wire/seams.ts createWireSeams must set tempDir: resolveLogRoots().temp (wire/** is owned by another bucket); then drop the OS-tmpdir fallback',
+    reason: 'engine falls back to os.tmpdir() until the host injects wire.tempDir',
+  },
 ];
 
 describe('c536ce29 TRC-AC16 stray-writer guard', () => {
@@ -281,5 +283,23 @@ describe('c536ce29 TRC-AC16 stray-writer guard', () => {
   it('dump (informational): lists current sites when STRAY_DUMP=1', () => {
     if (process.env['STRAY_DUMP'] !== '1') return;
     for (const s of scanRealSource()) console.log(`SITE ${s.key}`);
+  });
+});
+
+describe('c536ce29 S8B-AC1 stray-writer guard keeps its teeth', () => {
+  it('c536ce29 S8B-AC1: only the documented claudecli OS-tmpdir fallback remains a known violation, and a stale/extra entry fails', () => {
+    expect(KNOWN_VIOLATIONS.map((k) => k.key)).toEqual([
+      'packages/agent/agent-engine-orchestrator/src/providers/claudecli.ts :: const root = this.config.wire?.tempDir ?? tmpdir();',
+    ]);
+  });
+
+  it('c536ce29 S8B-AC1: the scattered writers fixed in S8B are no longer detected, and a re-introduced raw writer is', () => {
+    const fixedTail = 'const dbPath = resolveTailDbPath();\n';
+    expect(scanSource('entrypoint/agent-mcp/src/scripts/agent-mcp-tail.ts', fixedTail)).toEqual([]);
+    const fixedSrt = "export function srtRunPolicyDir(roots) {\n  return join(roots.temp, 'srt');\n}\n";
+    expect(scanSource('entrypoint/agent-mcp/src/srt-policy.ts', fixedSrt)).toEqual([]);
+    const regressed = "export function srtRunPolicyDir() {\n  return join(homedir(), '.adhd', 'agent-mcp', 'srt');\n}\n";
+    const sites = scanSource('entrypoint/agent-mcp/src/srt-policy.ts', regressed);
+    expect(sites.map((s) => s.detectors)).toEqual([expect.arrayContaining(['os-homedir', 'adhd-literal'])]);
   });
 });

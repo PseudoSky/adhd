@@ -1,9 +1,8 @@
 #!/usr/bin/env node
-import os from "node:os";
-import path from "node:path";
-import { existsSync } from "node:fs";
 import { parseArgs } from "node:util";
 import Database from "better-sqlite3";
+
+import { resolveTailDbPath } from "./tail-db-path.js";
 
 const { values: args } = parseArgs({
   options: {
@@ -26,8 +25,7 @@ const follow = args["follow"] as boolean;
 
 const defaultMaxLen = verbose ? 100000 : 2000;
 
-const dbPath = process.env["ADHD_AGENT_DATABASE_PATH"]
-  ?? path.join(os.homedir(), ".adhd", "agent-mcp", "agents.db");
+const dbPath = resolveTailDbPath();
 
 // In follow mode we replay history (0) or start from the live tail (-1);
 // in one-shot mode the full stored transcript is always the result set.
@@ -346,13 +344,8 @@ if (!jsonOut) {
 }
 
 const startDb = open();
-const count = startDb.prepare("SELECT COUNT(*) as c FROM task_events").get() as { c: number };
-if (count.c === 0) {
-  const devPath = path.join(process.cwd(), "data", "agent-mcp", "agents-dev.db");
-  if (existsSync(devPath) && !jsonOut) {
-    console.log("Warning: empty -- try ADHD_AGENT_DATABASE_PATH=" + devPath);
-  }
-}
+// Fails fast (as before) when the store has no task_events table.
+startDb.prepare("SELECT COUNT(*) as c FROM task_events").get();
 startDb.close();
 
 if (follow) {

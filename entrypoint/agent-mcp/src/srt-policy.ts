@@ -45,6 +45,8 @@ import { homedir, tmpdir } from 'node:os';
 import { delimiter, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { resolveLogRoots, type LogRoots } from './config.js';
+
 /**
  * Path *value* override for the srt settings file (ADR-0008 D10: a path value
  * is legitimate environment configuration — not an env feature toggle).
@@ -150,9 +152,15 @@ export function defaultSrtAllowWrite(): string[] {
   ];
 }
 
-/** Directory holding the per-run `srt` policy files (one per agent-mcp run). */
-export function srtRunPolicyDir(): string {
-  return join(homedir(), '.adhd', 'agent-mcp', 'srt');
+/**
+ * Directory holding the per-run `srt` policy files (one per agent-mcp run): `<temp>/srt` under the
+ * `@adhd/environment`-resolved namespaced temp root (c536ce29 / 03be90c3, S8B) — never a
+ * hard-coded home path.
+ *
+ * @param roots the resolved log/temp roots (tests pass an isolated set).
+ */
+export function srtRunPolicyDir(roots: Pick<LogRoots, 'temp'> = resolveLogRoots()): string {
+  return join(roots.temp, 'srt');
 }
 
 /**
@@ -162,10 +170,13 @@ export function srtRunPolicyDir(): string {
  * shared `~/.srt-settings.json`, so a dispatcher's cwd is never persisted into
  * the global file and no two runs contend for the same path.
  */
-export function resolveSrtRunSettingsPath(env: NodeJS.ProcessEnv = process.env): string {
+export function resolveSrtRunSettingsPath(
+  env: NodeJS.ProcessEnv = process.env,
+  roots?: Pick<LogRoots, 'temp'>
+): string {
   const override = env[SRT_SETTINGS_ENV];
   if (override) return override;
-  return join(srtRunPolicyDir(), `run-${process.pid}.json`);
+  return join(srtRunPolicyDir(roots), `run-${process.pid}.json`);
 }
 
 /** The run settings path provisioned by this process, if any. */
@@ -189,9 +200,10 @@ const appliedRunRoots = new Set<string>();
  */
 export function provisionRunSrtPolicy(
   cwd: string,
-  env: NodeJS.ProcessEnv = process.env
+  env: NodeJS.ProcessEnv = process.env,
+  roots?: Pick<LogRoots, 'temp'>
 ): ProvisionedSrtPolicy {
-  const path = resolveSrtRunSettingsPath(env);
+  const path = resolveSrtRunSettingsPath(env, roots);
   const result = provisionSrtPolicy({ settingsPath: path, allowWrite: [cwd] });
   activeRunSettingsPath = path;
   activeRunSettingsIsOverride = Boolean(env[SRT_SETTINGS_ENV]);
