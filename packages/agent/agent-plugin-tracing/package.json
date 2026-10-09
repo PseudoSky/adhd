@@ -15,7 +15,7 @@
     "@adhd/agent-base-types": "^2.3.7"
   },
   "dependencies": {
-    "@adhd/sox-telemetry": "^0.4.1",
+    "@adhd/sox-telemetry": "file:./vendor/adhd-sox-telemetry-0.4.2-logchannel.03a776c8.tgz",
     "tslib": "^2.6.0",
     "zod": "^4.4.3"
   },

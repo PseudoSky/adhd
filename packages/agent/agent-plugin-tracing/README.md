@@ -5,6 +5,21 @@ Durable traces and derived metrics for every agent operation in `@adhd/agent-mcp
 it subscribes to the hook registry, never alters a decision, and a failing telemetry sink can never
 fail a task.
 
+> **RELEASE-BLOCKED (c536ce29 TRC-AC21).** `@adhd/agent-plugin-tracing` -- and every dependent that
+> releases with it, e.g. `@adhd/agent-mcp` -- must not be published until `@adhd/sox-telemetry`
+> **0.5.0** is published from the sox repo. This package currently depends on a vendored, unpublished
+> build via `"@adhd/sox-telemetry": "file:./vendor/adhd-sox-telemetry-0.4.2-logchannel.03a776c8.tgz"`
+> (npm 0.4.2 version string, different bytes). Unblock (task V2, not yet scheduled): set `"^0.5.0"`,
+> delete `vendor/`, `corepack pnpm install`, re-run all gates. Checks that fail BY DESIGN until then:
+> `check-release-ranges`, `check-published-parity`, and `nx release publish` for these packages.
+> Other adhd consumers of sox-telemetry (backlog, apigen-*) stay on npm 0.4.1. See
+> `entrypoint/agent-mcp/docs/vendored-sox-telemetry.md`.
+
+The package index also re-exports the sox-telemetry log-channel API (`createLogChannel`,
+`createRedactor`, `identityRedactor`, `DEFAULT_REDACTION_RULES`, `BodyCapture`, `captureBody`,
+`withLogContext`, `currentLogContext` and the types `LogChannel`, `LogChannelOptions`, `Redactor`,
+`RedactionRule`, `RedactInput`, `CapturedBody`, `LogContext`).
+
 Tracing is **default-on**. There is no enable/disable switch (no `ADHD_AGENT_TRACING_ENABLED`, no
 `tracing.enabled`): a process that loads the plugin traces.
 

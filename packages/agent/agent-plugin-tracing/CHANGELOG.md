@@ -1,3 +1,13 @@
+## Unreleased
+
+### Release status
+
+- **RELEASE-BLOCKED** (c536ce29 TRC-AC21): depends on a vendored, unpublished `@adhd/sox-telemetry` (`file:./vendor/adhd-sox-telemetry-0.4.2-logchannel.03a776c8.tgz`). Do not publish this package, or `@adhd/agent-mcp`, until `@adhd/sox-telemetry@0.5.0` is released from the sox repo; then set `^0.5.0`, delete `vendor/`, reinstall, re-run gates. `check-release-ranges`, `check-published-parity` and `nx release publish` fail by design until then.
+
+### 🚀 Features
+
+- **agent-plugin-tracing:** re-export the sox-telemetry log-channel API (createLogChannel, createRedactor, identityRedactor, DEFAULT_REDACTION_RULES, BodyCapture, captureBody, withLogContext, currentLogContext + types) (c536ce29 TRC-AC21)
+
 ## 0.0.2 (2026-10-07)
 
 ### 🚀 Features
