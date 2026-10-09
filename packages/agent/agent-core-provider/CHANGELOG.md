@@ -14,6 +14,11 @@ This was a version bump only for agent-core-provider to align it with other proj
 
 ## Unreleased
 
+### 🚀 Features
+
+- **`claude_haiku_5_5` rate card.** `$0.10 / $0.01 / $0.125 / $0.20 / $0.50` per MTok (input / cache read / cache write 5m / cache write 1h / output), taken from the OpenRouter feed snapshot and reproducing the CLI's `total_cost_usd` for the recorded `--model haiku` run to 8 digits. Previously `claude-haiku-5-5` fell through to the haiku family alias and was priced at haiku-4-5's rates (about 10x too high). (79aebb26)
+- **`estimateCost(..., { strict: true })`.** Skips the family-alias fallback for provider-reported concrete ids: a concrete id with no rate card is unpriced instead of priced at the newest model of its family. Human-typed aliases keep the existing behaviour. (79aebb26)
+
 ### 🐛 Bug Fixes
 
 - **Cache-write 1h tier.** `estimateCost` now prices cache writes by TTL tier: `IUsageTokens.cacheCreation1hTokens` (a subset of `cacheCreationTokens`) bills at the new optional `ModelRate.cacheWrite1hPerM` (Anthropic: 2x base input; set on every `claude_*` rate-card entry) or the price record's `cacheWrite1hPerM`; the rest, and unsplit usage, bills at the 5-minute `cacheWritePerM`. A model with no 1h rate falls back to its 5-minute rate. `parseOpenRouterFeed` now reads `input_cache_write_1h` into `IParsedModel.cacheWrite1hPerM`. All additions are optional, so existing callers are unchanged. The cold-cache haiku-4-5 call (10 uncached, 4670 1h-tier writes, 49 out) now costs 0.009595 USD instead of 0.0060925. (b726a987)

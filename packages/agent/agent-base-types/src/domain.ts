@@ -42,6 +42,36 @@ export interface TokenUsage {
   cacheCreation1hTokens?: number;
   /** Reasoning tokens burned before visible output (reasoning models). Billed as output. */
   reasoningTokens?: number;
+  /**
+   * Per-model usage behind this response, for providers whose single response can span several
+   * models or resolve a requested alias to a concrete id (claudecli: `result.modelUsage`).
+   * When present, cost is priced PER ENTRY at that entry's own rate card and summed; an entry with
+   * no rate card is unpriced (never priced at another model's rate). Absent for providers that
+   * serve a response from exactly the configured model. (79aebb26 BK8)
+   */
+  modelBreakdown?: ModelUsageEntry[];
+  /**
+   * Dollar cost the provider itself reported for this response (claudecli `total_cost_usd`).
+   * Informational cross-check only: it is stored beside, and never substituted for, the
+   * rate-card estimate. (79aebb26 BK8)
+   */
+  cliReportedCostUsd?: number;
+}
+
+/** One model's share of a {@link TokenUsage} response (see {@link TokenUsage.modelBreakdown}). */
+export interface ModelUsageEntry {
+  /** Concrete model id the provider reports (e.g. `claude-haiku-5-5`), never a requested alias. */
+  model: string;
+  /** Full-price (cache-miss) input. */
+  uncachedInputTokens: number;
+  cacheReadTokens: number;
+  /** Cache-write input, all TTL tiers. */
+  cacheCreationTokens: number;
+  /** The 1-hour-TTL subset of `cacheCreationTokens`. */
+  cacheCreation1hTokens: number;
+  outputTokens: number;
+  /** Cost the provider reported for this model alone, when it reports one. */
+  reportedCostUsd?: number;
 }
 
 export type TaskStatus =

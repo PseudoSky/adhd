@@ -26,6 +26,14 @@ export const RATE_CARD: Record<string, ModelRate> = {
   claude_sonnet_4_6: { inputPerM: 3.00, cacheReadPerM: 0.30, cacheWritePerM: 3.75, cacheWrite1hPerM: 6.00, outputPerM: 15.00 },
   claude_opus_4_8:   { inputPerM: 5.00, cacheReadPerM: 0.50, cacheWritePerM: 6.25, cacheWrite1hPerM: 10.00, outputPerM: 25.00 },
   claude_haiku_4_5:  { inputPerM: 1.00, cacheReadPerM: 0.10, cacheWritePerM: 1.25, cacheWrite1hPerM: 2.00, outputPerM: 5.00 },
+  // 79aebb26 BK8. `claude --model haiku` resolves to claude-haiku-5-5 in the current CLI; it is ~10x cheaper
+  // than 4.5 per token, which is why the A0 run cost $0.0203 for ~96k context (priced at 4.5 it would be ~$0.2).
+  // Verifiable two ways: (1) the OpenRouter feed snapshot (pricing.json, fetched 2026-10-08) lists
+  // anthropic/claude-haiku-5.5 at prompt 1e-7 / completion 5e-7 / cache_read 1e-8 / cache_write 1.25e-7 /
+  // cache_write_1h 2e-7 per token; (2) these rates reproduce the CLI's own total_cost_usd for the recorded A0
+  // stream (0.02025881) to 8 digits. The feed's >100k-prompt 5x override tier is deliberately not applied
+  // (same rule as every other model).
+  claude_haiku_5_5:  { inputPerM: 0.10, cacheReadPerM: 0.01, cacheWritePerM: 0.125, cacheWrite1hPerM: 0.20, outputPerM: 0.50 },
   claude_fable_5:    { inputPerM: 10.00, cacheReadPerM: 1.00, cacheWritePerM: 12.50, cacheWrite1hPerM: 20.00, outputPerM: 50.00 },
   'deepseek-v4-flash': { inputPerM: 0.14, cacheReadPerM: 0.0028, cacheWritePerM: 0, outputPerM: 0.28 },
   'deepseek-v4-pro':   { inputPerM: 0.435, cacheReadPerM: 0.003625, cacheWritePerM: 0, outputPerM: 0.87 },
@@ -228,11 +236,16 @@ function rateCardKey(model: string): string | undefined {
  * never falls through to the bundled map or later steps.
  *
  * Unpriced => `costUsd: null` (never 0), `status:'unpriced_model'`.
+ *
+ * `opts.strict` (79aebb26 BK8) disables the family-alias step: use it when `model` is a CONCRETE id the
+ * provider reported (e.g. claudecli's `claude-haiku-5-5`). A concrete id that has no rate card must be
+ * unpriced, never priced at the newest known model of the same family (that is how `claude-haiku-5-5` was
+ * silently priced at haiku-4-5's rate). Human-typed aliases ("haiku", "sonnet") keep the non-strict fallback.
  */
 export function estimateCost(
   model: string,
   usage: IUsageTokens,
-  opts?: { asOf?: string; source?: IPriceSource }
+  opts?: { asOf?: string; source?: IPriceSource; strict?: boolean }
 ): ICostEstimate {
   if (hasOwn(RATE_CARD, model)) {
     return priced(RATE_CARD[model] as ModelRate, usage, 'vendor-direct', `rate-card:${model}`, model);
@@ -268,6 +281,7 @@ export function estimateCost(
   if (key !== undefined) {
     return priced(RATE_CARD[key] as ModelRate, usage, 'vendor-direct', `rate-card:${key}`, key);
   }
+  if (opts?.strict) return UNPRICED;
   const tokens = model.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
   for (const [family, canonicalKey] of Object.entries(FAMILY_ALIASES)) {
     if (tokens.includes(family)) {

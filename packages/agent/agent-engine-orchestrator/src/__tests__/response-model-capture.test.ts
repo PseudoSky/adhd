@@ -103,7 +103,7 @@ describe("1f1c8598 FS1-AC1: providers report the response model", () => {
     expect(res.responseModel).toBe("claude-sonnet-4-6-20260101");
   });
 
-  it("1f1c8598 FS1-AC1: ClaudeCliProvider leaves responseModel unset (modelUsage shape has no captured fixture)", async () => {
+  it("1f1c8598 FS1-AC1 / 79aebb26 AC8.1: ClaudeCliProvider surfaces the concrete id from result.modelUsage as responseModel (shape now verified by the recorded fixtures)", async () => {
     const { spawn } = await import("child_process");
     const stdout = new Readable({ read() {} });
     const proc = {
@@ -124,7 +124,7 @@ describe("1f1c8598 FS1-AC1: providers report the response model", () => {
           result: "OK",
           stop_reason: "end_turn",
           usage: { input_tokens: 1, output_tokens: 1 },
-          // Even a single-key modelUsage must not be trusted: the shape is unverified.
+          // Shape verified against the recorded claudecli-*.stream.jsonl fixtures (79aebb26 BK8).
           modelUsage: { "claude-haiku-4-5-20251001": { inputTokens: 1, outputTokens: 1 } },
         }) + "\n"
       );
@@ -141,7 +141,7 @@ describe("1f1c8598 FS1-AC1: providers report the response model", () => {
     );
     const res = await provider.chat(request);
     expect(res.message.content).toBe("OK");
-    expect(res.responseModel).toBeUndefined();
+    expect(res.responseModel).toBe("claude-haiku-4-5-20251001");
   });
 });
 

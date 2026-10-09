@@ -4,11 +4,12 @@ import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 
 import { taskUsageTable, createPriceSource } from "@adhd/agent-store-runtime";
 import { estimateCost } from "@adhd/agent-core-provider";
-import type { IPriceSource } from "@adhd/agent-core-provider";
+import type { ICostEstimate, IPriceSource } from "@adhd/agent-core-provider";
 import { nowIso } from '../utils/timestamps.js';
 import type { EngineLogger } from '../interfaces.js';
 import type {
   IHookRegistry,
+  ModelUsageEntry,
   Plugin,
   PostModelResponsePayload,
   PostToolCallPayload,
@@ -63,6 +64,63 @@ function defaultLogger(): EngineLogger {
     warn: (...args: unknown[]) => console.warn(...args),
     error: (...args: unknown[]) => console.error(...args),
   } as EngineLogger;
+}
+
+/** Tokens a breakdown entry represents, used to pick the entry that "is" the task's model. */
+function entryTokens(e: ModelUsageEntry): number {
+  return e.uncachedInputTokens + e.cacheReadTokens + e.cacheCreationTokens + e.outputTokens;
+}
+
+/**
+ * One model's cumulative share of a task, as persisted in `task_usage.model_breakdown_json`
+ * (79aebb26 BK8): the tokens it served, what was priced for it, and why if it could not be.
+ */
+export interface IStoredModelUsage extends ModelUsageEntry {
+  /** Cumulative priced cost for this model; excludes any unpriced turn. */
+  pricedCostUsd: number;
+  /** `priced` | `unpriced_model` | `partial` (some turns priced, some not). */
+  costStatus: string;
+  /** Why the model could not be priced; absent when every turn priced. */
+  unpricedReason?: string;
+}
+
+/** all priced => priced; none priced => unpriced_model; mixed => partial. */
+function statusOfEntries(unpricedCount: number, total: number): string {
+  if (unpricedCount === 0) return 'priced';
+  return unpricedCount === total ? 'unpriced_model' : 'partial';
+}
+
+/** Fold one turn's `incoming` entries (already priced) into the stored per-model totals. Pure. */
+function mergeBreakdown(
+  storedJson: string | null | undefined,
+  incoming: IStoredModelUsage[]
+): IStoredModelUsage[] {
+  let merged: IStoredModelUsage[] = [];
+  if (storedJson) {
+    try {
+      const parsed: unknown = JSON.parse(storedJson);
+      if (Array.isArray(parsed)) merged = parsed as IStoredModelUsage[];
+    } catch {
+      merged = [];
+    }
+  }
+  for (const e of incoming) {
+    const hit = merged.find((m) => m.model === e.model);
+    if (!hit) {
+      merged.push({ ...e });
+      continue;
+    }
+    hit.uncachedInputTokens += e.uncachedInputTokens;
+    hit.cacheReadTokens += e.cacheReadTokens;
+    hit.cacheCreationTokens += e.cacheCreationTokens;
+    hit.cacheCreation1hTokens += e.cacheCreation1hTokens;
+    hit.outputTokens += e.outputTokens;
+    hit.pricedCostUsd += e.pricedCostUsd;
+    if (e.reportedCostUsd !== undefined) hit.reportedCostUsd = (hit.reportedCostUsd ?? 0) + e.reportedCostUsd;
+    if (hit.costStatus !== e.costStatus) hit.costStatus = 'partial';
+    if (e.unpricedReason !== undefined) hit.unpricedReason = e.unpricedReason;
+  }
+  return merged;
 }
 
 export class UsagePlugin implements Plugin {
@@ -136,39 +194,119 @@ export class UsagePlugin implements Plugin {
         );
       }
 
-      const model = acc?.model ?? (wireModelOf(executionContext) || 'default');
+      // The model the task was REQUESTED with (agent config; may be an alias such as "haiku").
+      const requestedModel = acc?.model ?? (wireModelOf(executionContext) || 'default');
+      const breakdown = tokenUsage?.modelBreakdown?.length ? tokenUsage.modelBreakdown : undefined;
+      const asOf = this.now();
 
       // est_cost_usd: linear/additive, so valid to compute per-turn and sum. null
       // (never 0) when the model has no rate-card entry — never report an unknown
       // model's cost as $0.
       // Priced as-of THIS turn's instant against the price history (falls back to the bundled
       // snapshot / rate card inside estimateCost), and carries the basis + record pointer.
-      const est = estimateCost(
-        model,
-        {
-          uncachedInputTokens: tokenUsage?.uncachedInputTokens ?? 0,
-          cacheReadTokens: tokenUsage?.cacheReadTokens ?? 0,
-          cacheCreationTokens: tokenUsage?.cacheCreationTokens ?? 0,
-          cacheCreation1hTokens: tokenUsage?.cacheCreation1hTokens ?? 0,
-          outputTokens,
-        },
-        { asOf: this.now(), source: this.source }
-      );
-      const turnCost = est.costUsd;
+      //
+      // 79aebb26 BK8: when the provider reports WHICH concrete model(s) served the response
+      // (claudecli `modelUsage`), each entry is priced at its OWN rate card (strict: no family
+      // fallback, so an unknown concrete id is unpriced, never priced at another model's rate) and
+      // the entries are summed. The task's `model` is then the resolved id with the most tokens and
+      // the requested alias is kept in `requested_model`.
+      let storedEntries: IStoredModelUsage[] = [];
+      let entryCosts: Array<number | null> = [];
+      let ests: ICostEstimate[] = [];
+      let model = requestedModel;
+      let turnCost: number | null;
+      let pricedPortion: number;
+      let unpricedTokenCount: number;
+      let turnStatus: string;
+      let turnBasis: string | null;
+      let turnPricingRef: string | null;
+      if (breakdown) {
+        const primary = breakdown.reduce((best, e) => (entryTokens(e) > entryTokens(best) ? e : best));
+        model = primary.model;
+        const pricedEntries = breakdown.map((e) => ({
+          e,
+          est: estimateCost(
+            e.model,
+            {
+              uncachedInputTokens: e.uncachedInputTokens,
+              cacheReadTokens: e.cacheReadTokens,
+              cacheCreationTokens: e.cacheCreationTokens,
+              cacheCreation1hTokens: e.cacheCreation1hTokens,
+              outputTokens: e.outputTokens,
+            },
+            { asOf, source: this.source, strict: true }
+          ),
+        }));
+        ests = pricedEntries.map((p) => p.est);
+        entryCosts = ests.map((est) => est.costUsd);
+        storedEntries = pricedEntries.map(({ e, est }): IStoredModelUsage => ({
+          ...e,
+          pricedCostUsd: est.costUsd ?? 0,
+          costStatus: est.status,
+          ...(est.costUsd === null
+            ? { unpricedReason: `no rate card or price-history entry for resolved model "${e.model}"` }
+            : {}),
+        }));
+        pricedPortion = entryCosts.reduce<number>((sum, c) => sum + (c ?? 0), 0);
+        const unpricedCount = entryCosts.filter((c) => c === null).length;
+        unpricedTokenCount = breakdown
+          .filter((_, i) => entryCosts[i] === null)
+          .reduce((sum, e) => sum + entryTokens(e), 0);
+        turnCost = unpricedCount === 0 ? pricedPortion : null;
+        turnStatus = statusOfEntries(unpricedCount, breakdown.length);
+        const lastPriced = [...ests].reverse().find((est) => est.costUsd !== null);
+        turnBasis = lastPriced?.basis ?? null;
+        turnPricingRef = lastPriced?.pricingRef ?? null;
+      } else {
+        const est = estimateCost(
+          model,
+          {
+            uncachedInputTokens: tokenUsage?.uncachedInputTokens ?? 0,
+            cacheReadTokens: tokenUsage?.cacheReadTokens ?? 0,
+            cacheCreationTokens: tokenUsage?.cacheCreationTokens ?? 0,
+            cacheCreation1hTokens: tokenUsage?.cacheCreation1hTokens ?? 0,
+            outputTokens,
+          },
+          { asOf, source: this.source }
+        );
+        turnCost = est.costUsd;
+        pricedPortion = turnCost ?? 0;
+        unpricedTokenCount = turnCost !== null ? 0 : inputTokens + outputTokens;
+        turnStatus = est.status;
+        turnBasis = est.basis;
+        turnPricingRef = est.pricingRef;
+      }
       const turnPriced = turnCost !== null;
-      const responseModel = payload.responseModel ?? null;
+      const responseModel = payload.responseModel ?? (breakdown ? model : null);
+      const cliReportedCostUsd = tokenUsage?.cliReportedCostUsd;
       const providerType = acc?.providerType ?? selectionOf(executionContext).providerType;
 
       if (!turnPriced) {
-        const key = `${providerType}:${model}`;
-        if (!this.warnedUnpriced.has(key)) {
+        // Breakdown path: warn per UNPRICED resolved model (a priced sibling must not mask it).
+        const unpricedModels = breakdown
+          ? storedEntries.filter((e) => e.costStatus === 'unpriced_model').map((e) => e.model)
+          : [model];
+        for (const unpricedModel of unpricedModels) {
+          const key = `${providerType}:${unpricedModel}`;
+          if (this.warnedUnpriced.has(key)) continue;
           this.warnedUnpriced.add(key);
           this.logger.warn(
-            { model, providerType, responseModel },
-            `UsagePlugin: unpriced model "${model}" (${providerType}) has no rate-card or price-history entry; ` +
+            { model: unpricedModel, requestedModel, providerType, responseModel },
+            `UsagePlugin: unpriced model "${unpricedModel}" (${providerType}) has no rate-card or price-history entry; ` +
               'est_cost_usd is NULL for tasks that use it and its tokens are reported as unpriced_tokens'
           );
         }
+      }
+
+      // Cumulative per-model breakdown (read-merge-write: the plugin is the sole writer of this task's row).
+      let breakdownJson: string | null = null;
+      if (breakdown) {
+        const stored = this.db
+          .select({ json: taskUsageTable.modelBreakdownJson })
+          .from(taskUsageTable)
+          .where(eq(taskUsageTable.taskId, taskId))
+          .get() as { json: string | null } | undefined;
+        breakdownJson = JSON.stringify(mergeBreakdown(stored?.json, storedEntries));
       }
 
       this.db
@@ -179,6 +317,7 @@ export class UsagePlugin implements Plugin {
           agentName: acc?.agentName ?? executionContext.agentName,
           providerType,
           model,
+          requestedModel,
           inputTokens,
           outputTokens,
           toolCallCount: toolCalls,
@@ -202,11 +341,13 @@ export class UsagePlugin implements Plugin {
           // Provenance (1f1c8598 FS1): what served the call, which basis priced it, the price
           // record used, and an explicit status — an unpriced row is never just a silent NULL.
           responseModel,
-          costBasis: est.basis,
-          pricingRef: est.pricingRef,
-          costStatus: est.status,
-          pricedCostUsd: turnCost ?? 0,
-          unpricedTokens: turnPriced ? 0 : inputTokens + outputTokens,
+          costBasis: turnBasis,
+          pricingRef: turnPricingRef,
+          costStatus: turnStatus,
+          pricedCostUsd: pricedPortion,
+          unpricedTokens: unpricedTokenCount,
+          ...(cliReportedCostUsd !== undefined ? { cliReportedCostUsd } : {}),
+          ...(breakdownJson !== null ? { modelBreakdownJson: breakdownJson } : {}),
           createdAt: nowIso(),
         })
         .onConflictDoUpdate({
@@ -254,28 +395,38 @@ export class UsagePlugin implements Plugin {
             // Provider-reported model: last non-null wins.
             responseModel: sql`COALESCE(${responseModel}, ${taskUsageTable.responseModel})`,
             // Basis + record pointer describe the LAST PRICED turn; an unpriced turn keeps them.
-            costBasis: turnPriced
-              ? sql`${est.basis}`
+            costBasis: turnBasis !== null
+              ? sql`${turnBasis}`
               : sql`${taskUsageTable.costBasis}`,
-            pricingRef: turnPriced
-              ? sql`${est.pricingRef}`
+            pricingRef: turnPricingRef !== null
+              ? sql`${turnPricingRef}`
               : sql`${taskUsageTable.pricingRef}`,
             // Priced portion only: unpriced turns add 0 so a partial task still reports what
             // WAS priced next to its NULL est_cost_usd.
-            pricedCostUsd: sql`COALESCE(${taskUsageTable.pricedCostUsd}, 0) + ${turnCost ?? 0}`,
-            unpricedTokens: sql`COALESCE(${taskUsageTable.unpricedTokens}, 0) + ${
-              turnPriced ? 0 : inputTokens + outputTokens
-            }`,
+            pricedCostUsd: sql`COALESCE(${taskUsageTable.pricedCostUsd}, 0) + ${pricedPortion}`,
+            unpricedTokens: sql`COALESCE(${taskUsageTable.unpricedTokens}, 0) + ${unpricedTokenCount}`,
+            // CLI-reported cost is informational and additive; absent turns add nothing (NULL stays NULL).
+            ...(cliReportedCostUsd !== undefined
+              ? { cliReportedCostUsd: sql`COALESCE(${taskUsageTable.cliReportedCostUsd}, 0) + ${cliReportedCostUsd}` }
+              : {}),
+            ...(breakdownJson !== null ? { modelBreakdownJson: sql`${breakdownJson}` } : {}),
             // all priced => priced; all unpriced => unpriced_model; mixed => partial.
-            costStatus: turnPriced
-              ? sql`CASE WHEN ${taskUsageTable.costStatus} IS NULL OR ${taskUsageTable.costStatus} = 'priced' THEN 'priced' ELSE 'partial' END`
-              : sql`CASE WHEN ${taskUsageTable.costStatus} = 'unpriced_model' THEN 'unpriced_model' ELSE 'partial' END`,
+            costStatus: this.statusUpsert(turnStatus, turnPriced),
           },
         })
         .run();
     } catch (err) {
       this.logger.error({ err }, 'UsagePlugin: post:model_response handler failed');
     }
+  }
+
+  /** SQL for the running `cost_status` after folding a turn of `turnStatus` into the stored value. */
+  private statusUpsert(turnStatus: string, turnPriced: boolean): ReturnType<typeof sql> {
+    if (turnStatus === 'partial') return sql`'partial'`;
+    if (turnPriced) {
+      return sql`CASE WHEN ${taskUsageTable.costStatus} IS NULL OR ${taskUsageTable.costStatus} = 'priced' THEN 'priced' ELSE 'partial' END`;
+    }
+    return sql`CASE WHEN ${taskUsageTable.costStatus} = 'unpriced_model' THEN 'unpriced_model' ELSE 'partial' END`;
   }
 
   private onToolCall(payload: PostToolCallPayload): void {

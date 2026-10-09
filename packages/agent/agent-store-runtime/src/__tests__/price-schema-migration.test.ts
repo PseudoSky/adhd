@@ -82,10 +82,10 @@ describe("migration 0012: price history + cost provenance", () => {
         const journal = JSON.parse(
             readFileSync(join(REAL_FOLDER, "meta/_journal.json"), "utf8")
         ) as IJournal;
-        const last = journal.entries[journal.entries.length - 1];
-        expect(last.idx).toBe(12);
-        expect(last.tag).toBe("0012_price_history_and_cost_provenance");
-        expect(readdirSync(REAL_FOLDER)).toContain(`${last.tag}.sql`);
+        // Pinned to idx 12 (not "the last entry"): later additive migrations (0013, ...) follow it.
+        const entry = journal.entries.find((e) => e.idx === 12);
+        expect(entry?.tag).toBe("0012_price_history_and_cost_provenance");
+        expect(readdirSync(REAL_FOLDER)).toContain(`${entry?.tag}.sql`);
     });
 
     it("37f6c511 FS3-AC2: applies on an empty DB and creates the tables, indexes and triggers", () => {

@@ -8,6 +8,10 @@ This was a version bump only for agent-base-types to align it with other project
 
 ## Unreleased
 
+### 🚀 Features
+
+- **`TokenUsage.modelBreakdown?: ModelUsageEntry[]` and `TokenUsage.cliReportedCostUsd?: number`.** Per-model usage for providers whose single response can resolve an alias or span several models (claudecli `modelUsage`). Optional and additive. (79aebb26)
+
 ### 🐛 Bug Fixes
 
 - **Cache-write 1h tier.** `TokenUsage.cacheCreation1hTokens?: number`, the 1-hour-TTL subset of `cacheCreationTokens` (never additive to `inputTokens`). Optional and additive. (b726a987)

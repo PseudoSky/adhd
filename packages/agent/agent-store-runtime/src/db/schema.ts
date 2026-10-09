@@ -209,6 +209,15 @@ export const taskUsageTable = sqliteTable(
         pricedCostUsd: real("priced_cost_usd"),
         // CUMULATIVE Σ input+output tokens of turns whose model had no price.
         unpricedTokens: integer("unpriced_tokens"),
+        // ── Model resolution (79aebb26 BK8). Nullable: rows before migration 0013 read NULL.
+        // The model the task was REQUESTED with (agent config; may be an alias such as "haiku").
+        // `model` holds the concrete id the provider resolved it to when the provider reports one.
+        requestedModel: text("requested_model"),
+        // CUMULATIVE Σ of the provider-reported cost (claudecli total_cost_usd). Informational
+        // cross-check only; never substituted into est_cost_usd.
+        cliReportedCostUsd: real("cli_reported_cost_usd"),
+        // JSON array of per-resolved-model totals + per-model pricing status/reason (IStoredModelUsage).
+        modelBreakdownJson: text("model_breakdown_json"),
         createdAt: text("created_at").notNull(),
     },
     (table) => [

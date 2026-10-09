@@ -14,6 +14,10 @@ This was a version bump only for agent-store-runtime to align it with other proj
 
 ## Unreleased
 
+### 🚀 Features
+
+- **`task_usage` model resolution columns** (migration `0013_task_usage_model_resolution`, additive, nullable): `requested_model`, `cli_reported_cost_usd`, `model_breakdown_json`. Legacy rows read NULL. (79aebb26)
+
 ### 🐛 Bug Fixes
 
 - **Cache-write 1h tier.** `PriceHistoryStore.priceAt`/`latest`/`history` records expose `cacheWrite1hPerM`, read from the verbatim `raw_json` `input_cache_write_1h` (no schema change; null when unpublished). A feed update that changes only the 1h tier now appends a new row instead of being deduped as unchanged. (b726a987)

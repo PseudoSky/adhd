@@ -845,7 +845,10 @@ function deriveTurns(
           cacheCreation1hTokens: payload.cacheCreation1hTokens ?? 0,
           outputTokens,
         },
-        { asOf: evt.createdAt, source }
+        // A task whose provider resolved concrete model ids (`model_breakdown_json`, 79aebb26 BK8)
+        // prices strictly, exactly like the write path: an id with no rate card is unpriced, never
+        // priced at a same-family model's rate.
+        { asOf: evt.createdAt, source, strict: info.usage.modelBreakdownJson != null }
       );
       const estCostUsd = est.costUsd;
 

@@ -4,6 +4,10 @@ This was a version bump only for agent-mcp to align it with other projects, ther
 
 ## Unreleased
 
+### 🚀 Features
+
+- **`task_usage` records the resolved model.** For `claudecli` agents `model` is the concrete id the CLI reports (`--model haiku` -> `claude-haiku-5-5`), `requested_model` keeps the configured alias, and cost is priced against the resolved id (`claude-haiku-5-5` is ~10x cheaper than `claude-haiku-4-5`). New columns `requested_model`, `cli_reported_cost_usd`, `model_breakdown_json` (migration 0013). See `docs/logging.md`, "Cost and pricing data". Pin concrete ids for benchmarks; aliases move. (79aebb26)
+
 ### 🐛 Bug Fixes
 
 - **The store no longer depends on the launch directory.** A server started from the repo root with no overrides opened `data/agent-mcp/agents-dev.db` (the repo `.env` line `ADHD_AGENT_DATABASE_PATH=data/agent-mcp/agents-dev.db`, read relative to the cwd) while the same server launched from any other directory opened the production store `~/.adhd/agent-mcp/production/data/agents.db`. Now the production store is the default from every directory. `<cwd>/.env` and `<cwd>/.adhd/.env` can no longer set `ADHD_AGENT_DATABASE_PATH` (ignored, with a stderr warning naming the file); a relative `ADHD_AGENT_DATABASE_PATH` in the process environment fails startup (`must be an absolute path`) instead of resolving against the cwd; a relative path in `~/.adhd/.env` or the global `config.yaml` is anchored to that file's directory. Every start logs `store=<abs> mode=<production|custom> source=<env|cascade|default>`; `server.start` ops records gain `store_source` and `store_mode`; `mode` is derived from the path, there is no mode switch. (de046157)

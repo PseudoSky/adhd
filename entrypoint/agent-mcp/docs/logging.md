@@ -104,7 +104,7 @@ spans). Fields use dotted names: `agent.task_id`, `agent.session_id`, `agent.roo
 |---|---|
 | `tasks` | status, prompt, result, error, timestamps, `session_id` |
 | `task_events` | `MODEL_REQUEST`, `MODEL_RESPONSE` (with `rawUsage` verbatim from the provider), `TOOL_CALL`, `TOOL_ARG_COERCED`, `TOOL_RESULT`, `TASK_COMPLETED`, ... |
-| `task_usage` | one row per task: tokens (total, uncached, cache read, cache write), latency, `est_cost_usd`, `priced_cost_usd`, `cost_status`, `cost_basis`, `pricing_ref` |
+| `task_usage` | one row per task: tokens (total, uncached, cache read, cache write), latency, `est_cost_usd`, `priced_cost_usd`, `cost_status`, `cost_basis`, `pricing_ref`, `requested_model`, `cli_reported_cost_usd`, `model_breakdown_json` |
 | `model_price_history` | append-only price snapshots (`input_per_m`, `cache_read_per_m`, `cache_write_per_m`, `output_per_m`, `raw_json`) |
 | `price_pull_ledger` | one row per live price pull |
 
@@ -279,6 +279,21 @@ TASK_COMPLETED  {"result":"ok"}                                                 
   first-party models, `openrouter-estimate`, `owner-assumption`); `pricing_ref` points at it
   (`rate-card:<key>`, a `model_price_history` row id, or `bundled:<fetchedAt>:<id>`).
 - `cost_status` is `priced`, or unpriced with `unpriced_tokens` counting what could not be priced.
+- Model aliases move; pin concrete ids for benchmarks. `claude --model haiku` is an alias the CLI
+  resolves itself: in the recorded run it resolved to `claude-haiku-5-5`, which costs about a tenth of
+  `claude-haiku-4-5` per token (that run cost $0.0203 for ~96k context and an 85k 1-hour cache write; at
+  haiku-4-5's rates the same tokens would cost about $0.2). For a `claudecli` agent, `model` in
+  `task_usage` is the concrete id the CLI reports (`result.modelUsage` keys, falling back to the `init`
+  event's `model`) and `requested_model` keeps what the agent was configured with (`haiku`). To pin, set
+  the agent's provider model to a concrete id (`{"type":"claudecli","model":"claude-haiku-4-5"}`); it is
+  passed to `claude --model` verbatim.
+- Each resolved model is priced at its own rate card and the results are summed; `model` is the one with
+  the most tokens and `model_breakdown_json` records every one (tokens, priced cost, status, and the
+  reason when a model could not be priced). A resolved id with no rate card is `unpriced_model` with
+  `est_cost_usd` NULL, never priced at another model's rate. `cli_reported_cost_usd` stores the CLI's own
+  `total_cost_usd` as an informational cross-check; it is not used as the estimate. The recorded
+  `--model haiku` run reproduces that figure to 8 digits (`claude-haiku-5-5` card: $0.10 in, $0.01 cache
+  read, $0.125 / $0.20 cache write 5m / 1h, $0.50 out per MTok, from the OpenRouter feed snapshot).
 - `model_price_history` is append-only (triggers abort `UPDATE`/`DELETE`). A daily pull appends
   rows; an anomalous move (for example a 20x price change) is held, not applied, and logged as
   `pricing.anomaly` until accepted with `pricing_refresh accept:[...]`.
@@ -510,7 +525,7 @@ guide.
 
 - `e9c485e1`: `agent-mcp-tail` one-shot history prints the wall-clock time of the run, not the
   event's `created_at`, and the `MODEL_RESPONSE` row shows the prompt text instead of the reply.
-- `ddf26e2a`: `response_model` is null for `claudecli` tasks in `usage_query`; `agent.model_call.*`
+- `ddf26e2a`: `agent.model_call.*`
   spans have `parent_span_id: null`; `trace_id` is null on `ops`/`api` records so `task_id` is the
   only cross-channel key; `pricing_ref` names the in-code rate card, not the `model_price_history`
   row, so the exact price row used cannot be joined from `task_usage`.

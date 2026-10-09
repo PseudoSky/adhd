@@ -7,6 +7,7 @@ import { generateId } from "../utils/ids.js";
 import { nowIso } from "../utils/timestamps.js";
 import { resolveToolCallName, normalizeToolName } from "../clients/tool-naming.js";
 import type { LLMProvider, ProviderChatRequest, ProviderChatResponse } from "./types.js";
+import type { ModelUsageEntry } from "@adhd/agent-base-types";
 import type { McpServerConfig, ProviderConfig, Message } from "../validation/index.js";
 import { ToolError } from "../validation/errors.js";
 import type { EngineLogger, EngineConfig } from "../interfaces.js";
@@ -52,6 +53,12 @@ interface ClaudeStreamResultEvent {
     /** Model turns the CLI ran inside this single `-p` invocation. */
     num_turns?: number;
     total_cost_usd?: number;
+    /**
+     * Per-model breakdown keyed by the CONCRETE model id the CLI resolved (an alias such as
+     * `--model haiku` shows up here as `claude-haiku-5-5`). Verified against the recorded
+     * `claudecli-alias-haiku.stream.jsonl` fixture (79aebb26 BK8).
+     */
+    modelUsage?: Record<string, ClaudeModelUsage>;
     usage?: {
         input_tokens: number;
         output_tokens: number;
@@ -59,6 +66,22 @@ interface ClaudeStreamResultEvent {
         cache_creation_input_tokens?: number | null;
         cache_creation?: { ephemeral_5m_input_tokens?: number | null; ephemeral_1h_input_tokens?: number | null } | null;
     };
+}
+
+/** One `modelUsage` entry on the terminal `result` event. */
+interface ClaudeModelUsage {
+    inputTokens?: number;
+    outputTokens?: number;
+    cacheReadInputTokens?: number;
+    cacheCreationInputTokens?: number;
+    costUSD?: number;
+}
+
+/** The CLI's `system`/`init` event; `model` is the concrete id it resolved the `--model` value to. */
+interface ClaudeStreamInitEvent {
+    type: "system";
+    subtype: "init";
+    model?: string;
 }
 
 interface ClaudeToolUseBlock {
@@ -80,6 +103,68 @@ type ClaudeStreamEvent =
     | ClaudeStreamResultEvent
     | ClaudeStreamAssistantEvent
     | { type: string };
+
+// ─── model resolution (79aebb26 BK8) ─────────────────────────────────────────
+
+function finiteNonNegative(n: unknown): number {
+    return typeof n === "number" && Number.isFinite(n) && n > 0 ? n : 0;
+}
+
+/**
+ * Work out which concrete model(s) served a `claude -p` run, from what the CLI itself reports and
+ * nothing else (no alias table: aliases such as `haiku` move). Precedence:
+ *   1. `result.modelUsage` keys -> one entry per key, tokens exactly as the CLI reports them.
+ *   2. otherwise the `init` event's `model`, carrying the run's aggregate `usage`.
+ *   3. otherwise nothing (the caller leaves the response unresolved; the configured model is used).
+ *
+ * `modelUsage` carries no TTL split, so the run-wide 1-hour cache-write count (`usage.cache_creation`)
+ * is attributed to each model in proportion to its cache-write tokens (exact for the single-model
+ * case, which is every observed run).
+ */
+export function resolveCliModelUsage(
+    result: Pick<ClaudeStreamResultEvent, "modelUsage" | "usage">,
+    initModel: string | undefined
+): { responseModel: string; entries: ModelUsageEntry[] } | undefined {
+    const total1h = finiteNonNegative(result.usage?.cache_creation?.ephemeral_1h_input_tokens);
+    const keyed = Object.entries(result.modelUsage ?? {}).filter(
+        ([id, u]) => id.length > 0 && typeof u === "object" && u !== null
+    );
+
+    let entries: ModelUsageEntry[];
+    if (keyed.length > 0) {
+        const totalWrite = keyed.reduce((n, [, u]) => n + finiteNonNegative(u.cacheCreationInputTokens), 0);
+        entries = keyed.map(([id, u]) => {
+            const write = finiteNonNegative(u.cacheCreationInputTokens);
+            const share = totalWrite > 0 ? Math.min(write, Math.round((total1h * write) / totalWrite)) : 0;
+            return {
+                model: id,
+                uncachedInputTokens: finiteNonNegative(u.inputTokens),
+                cacheReadTokens: finiteNonNegative(u.cacheReadInputTokens),
+                cacheCreationTokens: write,
+                cacheCreation1hTokens: share,
+                outputTokens: finiteNonNegative(u.outputTokens),
+                ...(typeof u.costUSD === "number" && Number.isFinite(u.costUSD) ? { reportedCostUsd: u.costUSD } : {}),
+            };
+        });
+    } else if (initModel) {
+        const write = finiteNonNegative(result.usage?.cache_creation_input_tokens);
+        entries = [{
+            model: initModel,
+            uncachedInputTokens: finiteNonNegative(result.usage?.input_tokens),
+            cacheReadTokens: finiteNonNegative(result.usage?.cache_read_input_tokens),
+            cacheCreationTokens: write,
+            cacheCreation1hTokens: Math.min(write, total1h),
+            outputTokens: finiteNonNegative(result.usage?.output_tokens),
+        }];
+    } else {
+        return undefined;
+    }
+
+    const weight = (e: ModelUsageEntry): number =>
+        e.uncachedInputTokens + e.cacheReadTokens + e.cacheCreationTokens + e.outputTokens;
+    const primary = entries.reduce((best, e) => (weight(e) > weight(best) ? e : best));
+    return { responseModel: primary.model, entries };
+}
 
 // ─── MCP config format ───────────────────────────────────────────────────────
 
@@ -507,6 +592,8 @@ export class ClaudeCliProvider implements LLMProvider {
             let finalUsage: ClaudeStreamResultEvent["usage"];
             let finalStopReason: string | undefined;
             let finalNumTurns: number | undefined;
+            let finalResultEvent: ClaudeStreamResultEvent | undefined;
+            let initModel: string | undefined;
             // tool_use blocks the CLI emitted (it runs its own tools inside the one invocation).
             // Usage-accounting only: NEVER surfaced as message.toolCalls, which the orchestrator would re-execute.
             let toolUseCount = 0;
@@ -535,7 +622,14 @@ export class ClaudeCliProvider implements LLMProvider {
                     finalUsage = r.usage;
                     finalStopReason = r.stop_reason;
                     finalNumTurns = typeof r.num_turns === "number" && r.num_turns >= 1 ? r.num_turns : undefined;
+                    finalResultEvent = r;
                     break;
+                }
+
+                if (event.type === "system" && (event as ClaudeStreamInitEvent).subtype === "init") {
+                    const m = (event as ClaudeStreamInitEvent).model;
+                    if (typeof m === "string" && m.length > 0) initModel = m;
+                    continue;
                 }
 
                 if (event.type === "assistant") {
@@ -620,22 +714,35 @@ export class ClaudeCliProvider implements LLMProvider {
 
             const normalisedStopReason = CLI_STOP_REASON[finalStopReason ?? ""] ?? "unknown";
 
-            // responseModel is intentionally NOT set: the `result` event's per-model
-            // `modelUsage` breakdown has no captured fixture in this repo, and one `-p`
-            // invocation can fan out across several models, so no single id is verified.
+            // Resolve the concrete model from what the CLI reports (79aebb26 BK8): `--model haiku`
+            // is an alias that moves (claude-haiku-5-5 in the recorded fixture), so cost must be
+            // priced against the RESOLVED id, per `modelUsage` key. Unresolvable -> left unset and
+            // the configured model is used downstream.
+            const resolved = finalResultEvent ? resolveCliModelUsage(finalResultEvent, initModel) : undefined;
+            const cliCost = finalResultEvent?.total_cost_usd;
+            const baseUsage = finalUsage
+                ? normaliseAnthropicUsage(
+                    finalUsage,
+                    normalisedStopReason,
+                    this.config.server?.defaultMaxTokens ?? 0
+                )
+                : undefined;
+            const usage = baseUsage && (resolved || typeof cliCost === "number")
+                ? {
+                    ...baseUsage,
+                    ...(resolved ? { modelBreakdown: resolved.entries } : {}),
+                    ...(typeof cliCost === "number" && Number.isFinite(cliCost) ? { cliReportedCostUsd: cliCost } : {}),
+                }
+                : baseUsage;
+
             return {
                 message,
                 stopReason: "completed",
                 rawUsage: finalUsage,
                 reportedToolUses: toolUseCount,
                 reportedModelCalls: finalNumTurns,
-                usage: finalUsage
-                    ? normaliseAnthropicUsage(
-                        finalUsage,
-                        normalisedStopReason,
-                        this.config.server?.defaultMaxTokens ?? 0
-                    )
-                    : undefined,
+                ...(resolved ? { responseModel: resolved.responseModel } : {}),
+                usage,
             };
         } finally {
             request.signal?.removeEventListener("abort", onAbort);

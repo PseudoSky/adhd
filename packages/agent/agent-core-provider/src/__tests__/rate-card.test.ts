@@ -14,6 +14,7 @@ describe('RATE_CARD', () => {
         'claude_sonnet_4_6',
         'claude_opus_4_8',
         'claude_haiku_4_5',
+        'claude_haiku_5_5',
         'claude_fable_5',
         'deepseek-v4-flash',
         'deepseek-v4-pro',
