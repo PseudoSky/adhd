@@ -348,8 +348,20 @@ describe('tracing default-load, end to end (0f760dcd, 5dff26e6)', () => {
     const script = path.resolve(PACKAGE_ROOT, '..', '..', 'scripts', 'audit_tracing.py');
     const run = (...args: string[]) => spawnSync('python3', [script, ...args], { encoding: 'utf8' });
 
-    // Healthy: the sink this very run produced carries every declared path.
-    const healthy = run(logDir, '--json');
+    // This scenario drives the happy-path engine surface; the provider-failure and budget spans
+    // (agent.provider.*, agent.budget.*, c536ce29 P2-AC-A) need failing providers / spend caps, so
+    // the audit is pinned to the span set this run can produce via --declared.
+    const declared = [
+      'agent.session',
+      'agent.task',
+      'agent.model_call',
+      'agent.tool_call',
+      'agent.permission.decision',
+      'agent.hitl.suspend',
+      'agent.hitl.resume',
+    ].join(',');
+    // Healthy: the sink this very run produced carries every path it can produce.
+    const healthy = run(logDir, '--json', '--declared', declared);
     expect(healthy.status, healthy.stderr).toBe(0);
     const report = JSON.parse(healthy.stdout) as { zero_sample_declared: string[]; operations: Record<string, { count: number }> };
     expect(report.zero_sample_declared).toEqual([]);
@@ -364,7 +376,7 @@ describe('tracing default-load, end to end (0f760dcd, 5dff26e6)', () => {
     fs.mkdirSync(fixture, { recursive: true });
     const lines = onDisk.filter((r) => !r.event.startsWith('agent.hitl.resume')).map((r) => JSON.stringify(r));
     fs.writeFileSync(path.join(fixture, 'fixture.jsonl'), lines.join('\n') + '\n');
-    const broken = run(fixture);
+    const broken = run(fixture, '--declared', declared);
     expect(broken.status).toBe(1);
     expect(broken.stderr).toContain('agent.hitl.resume');
 
