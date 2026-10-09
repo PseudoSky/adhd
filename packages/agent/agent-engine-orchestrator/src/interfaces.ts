@@ -1,3 +1,7 @@
+import type { spawn } from 'node:child_process';
+
+import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
+
 import type { AgentDefinition, PermissionAction } from '@adhd/agent-base-types';
 
 /**
@@ -70,7 +74,33 @@ export type PermissionGate = (
  */
 export const DEFAULT_PROVIDER_TIMEOUT_MS = 300_000;
 
+/**
+ * The outbound-I/O seams the host injects so every API call the engine makes can be logged raw
+ * (backlog c536ce29). ADR-0006 dependency injection: the engine never imports the logging
+ * library; the host builds these (e.g. traced `fetch`/`spawn`) and the engine just calls them.
+ *
+ * When {@link EngineConfig.wire} is absent the engine uses the plain globals
+ * (`globalThis.fetch`, `node:child_process` `spawn`) and does no wire logging.
+ */
+export interface WireSeams {
+  /** Replacement for `globalThis.fetch` used by every provider HTTP call. */
+  fetch: typeof fetch;
+  /** Replacement for `child_process.spawn` used to launch subprocess providers/servers. */
+  spawn: typeof spawn;
+  /**
+   * Wraps an MCP client transport so its JSON-RPC traffic is logged. Must return a transport that
+   * behaves identically to `t` ( `meta` only labels the log records).
+   */
+  wrapTransport(t: Transport, meta: { server: string; transport: string }): Transport;
+  /** Runs `fn` with `ctx` ids (session/task/turn/...) attached to every record logged inside it. */
+  withContext<T>(ctx: Record<string, string | number | boolean | null | undefined>, fn: () => T): T;
+  /** Directory for ephemeral files (e.g. generated mcp-config); absent => the OS temp dir. */
+  tempDir?: string;
+}
+
 export interface EngineConfig {
+  /** Outbound-I/O seams (traced fetch/spawn/transport). Absent => plain globals, no wire logging. */
+  wire?: WireSeams;
   /**
    * The host-wide default binding — the `global` tier of the selection chain
    * `task ?? session ?? agent ?? global`. Unset (the default) means there is no
