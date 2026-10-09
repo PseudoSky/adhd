@@ -102,7 +102,15 @@ export interface IPullResult {
 export interface IPullOptions {
   /** Bypass the 24h gate (manual refresh). A live `running` claim by another process still blocks. */
   force?: boolean;
-  /** Model ids whose HELD anomaly is released by this pull (their new price is applied). */
+  /**
+   * Model ids whose HELD anomaly is released by this pull (their new price is applied).
+   *
+   * A NON-EMPTY list also exempts the pull from the {@link FORCED_MIN_INTERVAL_MS} forced-pull floor:
+   * it is the operator's review-and-release step right after a refresh reported a HELD anomaly, and
+   * the floor exists to stop sub-agent refresh loops. Sub-agents cannot supply `accept` (the
+   * in-process `pricing_refresh` rejects it and never forwards it), so they stay floored. The
+   * exemption does NOT bypass the `running` claim gate. An empty list is not an exemption.
+   */
   accept?: string[];
 }
 
@@ -254,7 +262,8 @@ export async function runPricePull(deps: IPullDeps, opts: IPullOptions = {}): Pr
       minIntervalMs: PULL_MIN_INTERVAL_MS,
       runningTtlMs: RUNNING_TTL_MS,
       force: opts.force === true,
-      forcedMinIntervalMs: FORCED_MIN_INTERVAL_MS,
+      // An accepting (operator release) pull skips the forced floor; see IPullOptions.accept.
+      forcedMinIntervalMs: (opts.accept?.length ?? 0) > 0 ? undefined : FORCED_MIN_INTERVAL_MS,
       sourceUrl: url,
     });
     if (!claim.claimed) {

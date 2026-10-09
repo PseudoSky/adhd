@@ -165,6 +165,34 @@ describe('forced-pull floor and the sub-agent surface', () => {
     expect(await runPricePull(h.deps, { force: true })).toMatchObject({ status: 'skipped', reason: 'forced_too_soon' });
   });
 
+  it('9ae6927d AC4-a: a forced pull HELD an anomaly; an immediate refresh with accept:[model] is not forced_too_soon and applies the held price', async () => {
+    const feed = (input: string) => feedOf(bulkFeed(3, { 'held/model': { prompt: input, completion: '0.000002' } }));
+    const h = harness([{ body: feed('0.000001') }, { body: feed('0.00002') }, { body: feed('0.00002') }]);
+    expect((await runPricePull(h.deps, { force: true })).status).toBe('ok');
+    h.clock.advance(11 * 60_000);
+    const held = await runPricePull(h.deps, { force: true });
+    expect(held.anomalies.find((a) => a.modelId === 'held/model')?.severity).toBe('hold');
+    expect(h.store.history('held/model').map((x) => x.inputPerM)).toEqual([1]);
+
+    h.clock.advance(60_000); // well inside the 10-minute forced floor
+    const released = await runPricePull(h.deps, { force: true, accept: ['held/model'] });
+    expect(released.reason).toBeUndefined();
+    expect(released.status).toBe('ok');
+    expect(h.store.history('held/model').map((x) => x.inputPerM)).toEqual([1, 20]);
+  });
+
+  it('9ae6927d AC4-b: a forced pull with an empty accept list is still floored, and accept never bypasses a live running claim', async () => {
+    const h = harness([okStep()]);
+    expect((await runPricePull(h.deps, { force: true })).status).toBe('ok');
+    h.clock.advance(60_000);
+    expect(await runPricePull(h.deps, { force: true, accept: [] })).toMatchObject({ status: 'skipped', reason: 'forced_too_soon' });
+    expect(h.fetched.calls).toHaveLength(1);
+    // A live `running` claim by another process still blocks an accepting pull.
+    const startedAt = h.clock.now();
+    h.store.claimPull(startedAt, { minIntervalMs: 0, runningTtlMs: 60 * 60_000, force: true, sourceUrl: 'x' });
+    expect(await runPricePull(h.deps, { force: true, accept: ['a/b'] })).toMatchObject({ status: 'skipped', reason: 'running' });
+  });
+
   function recorder(): { service: Pick<IPricingService, 'refresh'>; accepts: Array<string[] | undefined> } {
     const accepts: Array<string[] | undefined> = [];
     return {
