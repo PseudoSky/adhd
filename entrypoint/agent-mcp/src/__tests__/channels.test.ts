@@ -10,7 +10,7 @@
  *   c536ce29 W2-AC-B   an unwritable log dir never prevents startup and is reported once on stderr
  *
  * Real: the real `agentMcpEnvironmentSpec` resolved by a real `Environment` over isolated temp
- * dirs, the real vendored sox-telemetry log channel writing real files, the real pino logger.
+ * dirs, the real sox-telemetry log channel writing real files, the real pino logger.
  * Nothing is spawned.
  */
 import { mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';

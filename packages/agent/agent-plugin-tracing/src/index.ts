@@ -11,9 +11,8 @@ export type { AnyEventMapping, EventMapping } from './lib/mappings.js';
 export { TracingCounters } from './lib/counters.js';
 export type { TracingSnapshot, LatencySeries } from './lib/counters.js';
 
-// c536ce29 TRC-AC21: the improved (unpublished) @adhd/sox-telemetry log-channel API, re-exported
-// so agent-mcp consumes it through this package only. RELEASE-BLOCKED until sox-telemetry 0.5.0
-// is published; see README "Release status".
+// c536ce29 TRC-AC21: the @adhd/sox-telemetry (>=0.4.3) log-channel API, re-exported so
+// agent-mcp consumes it through this package only.
 export {
   createLogChannel,
   createRedactor,

@@ -1074,8 +1074,8 @@ importers:
         specifier: ^2.3.7
         version: link:../agent-base-types
       '@adhd/sox-telemetry':
-        specifier: file:./vendor/adhd-sox-telemetry-0.4.2-logchannel.03a776c8.tgz
-        version: file:packages/agent/agent-plugin-tracing/vendor/adhd-sox-telemetry-0.4.2-logchannel.03a776c8.tgz
+        specifier: ^0.4.3
+        version: 0.4.3
       tslib:
         specifier: ^2.6.0
         version: 2.8.1
@@ -1792,6 +1792,18 @@ packages:
       '@opentelemetry/sdk-metrics': 2.10.0(@opentelemetry/api@1.9.1)
       '@opentelemetry/sdk-trace-base': 2.10.0(@opentelemetry/api@1.9.1)
       ulid: 2.4.0
+
+  /@adhd/sox-telemetry@0.4.3:
+    resolution: {integrity: sha512-TBhmpnJ/kvBi64WOmnChqiBsQ3y7Cn+mwkZKdUcgCK7+soKyo1nepnlY4rH82pMXoKK8CbDKegjZbjz5iPhZmA==}
+    engines: {node: '>=20'}
+    dependencies:
+      '@opentelemetry/api': 1.9.1
+      '@opentelemetry/context-async-hooks': 2.10.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/resources': 2.10.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/sdk-metrics': 2.10.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/sdk-trace-base': 2.10.0(@opentelemetry/api@1.9.1)
+      ulid: 2.4.0
+    dev: false
 
   /@adhd/sox-vector-store@0.7.5:
     resolution: {integrity: sha512-4J9k81kBq6AZA1B/6UAwY2Oy540jpfxO0mHhL5B7GqSzEQRVpaSJV17z+ddKJqo6sMsudVOBidHSMCGPrIYTgA==}
@@ -26626,17 +26638,3 @@ packages:
 
   /zod@4.4.3:
     resolution: {integrity: sha512-ytENFjIJFl2UwYglde2jchW2Hwm4GJFLDiSXWdTrJQBIN9Fcyp7n4DhxJEiWNAJMV1/BqWfW/kkg71UDcHJyTQ==}
-
-  file:packages/agent/agent-plugin-tracing/vendor/adhd-sox-telemetry-0.4.2-logchannel.03a776c8.tgz:
-    resolution: {integrity: sha512-t0/RgPcfPyJE5G+h/Lsn17GbUC8tJPCkctFyOBkB+MZHreBft9DP7XmOjyGlWtd+9ddcOBHQo+SuwLhck3A7Pw==, tarball: file:packages/agent/agent-plugin-tracing/vendor/adhd-sox-telemetry-0.4.2-logchannel.03a776c8.tgz}
-    name: '@adhd/sox-telemetry'
-    version: 0.4.2
-    engines: {node: '>=20'}
-    dependencies:
-      '@opentelemetry/api': 1.9.1
-      '@opentelemetry/context-async-hooks': 2.10.0(@opentelemetry/api@1.9.1)
-      '@opentelemetry/resources': 2.10.0(@opentelemetry/api@1.9.1)
-      '@opentelemetry/sdk-metrics': 2.10.0(@opentelemetry/api@1.9.1)
-      '@opentelemetry/sdk-trace-base': 2.10.0(@opentelemetry/api@1.9.1)
-      ulid: 2.4.0
-    dev: false

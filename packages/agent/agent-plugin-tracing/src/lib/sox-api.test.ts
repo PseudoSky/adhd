@@ -14,10 +14,10 @@ import {
 } from '../index.js';
 
 /**
- * c536ce29 TRC-AC21-a: the vendored (unpublished) @adhd/sox-telemetry log-channel API is reachable
+ * c536ce29 TRC-AC21-a: the published @adhd/sox-telemetry log-channel API is reachable
  * through this package's public index, and the channel really redacts what it writes.
  */
-describe('c536ce29 TRC-AC21 vendored sox-telemetry log-channel API via the package index', () => {
+describe('c536ce29 TRC-AC21 sox-telemetry log-channel API via the package index', () => {
   let dir: string;
   beforeEach(() => {
     dir = mkdtempSync(join(tmpdir(), 'trc-ac21-'));
