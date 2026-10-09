@@ -62,7 +62,7 @@
  * `/private/var/...`, exercising the `/var` -> `/private/var` symlinked
  * ancestor), copies the built dist in as the package content, links the
  * runtime deps, creates the RELATIVE `.bin` symlink, and spawns
- * `node node_modules/.bin/agent-mcp --help` with `cwd` = the package root —
+ * `node node_modules/.bin/agent-mcp` with `cwd` = the package root —
  * the product's case (2) verbatim. It asserts the process does NOT exit 0
  * silently: the real HTTP transport port becomes reachable, the child stays
  * alive, and some boot output is produced.
@@ -407,10 +407,10 @@ describe("BUG-011: isMainModule guard must survive a symlinked launch", () => {
             const { pkg, fakeHome, port } = await buildNpmShapeScratchTree();
 
             // 4. The product's launch shape verbatim: RELATIVE .bin path, cwd =
-            //    the package root, --help as the arg (which the server ignores).
+            //    the package root, no arguments (`--help` is answered and exits before any server start).
             //    DEBT-AGENTMCP-TEST-ENV-LEAK-001: env built through buildChildEnv
             //    (strips every ambient ADHD_AGENT_* key).
-            child = spawn(process.execPath, ["node_modules/.bin/agent-mcp", "--help"], {
+            child = spawn(process.execPath, ["node_modules/.bin/agent-mcp"], {
                 cwd: pkg,
                 env: buildChildEnv(fakeHome, port),
                 stdio: ["ignore", "pipe", "pipe"],
@@ -463,7 +463,7 @@ describe("BUG-011: isMainModule guard must survive a symlinked launch", () => {
             // graph dies with ERR_MODULE_NOT_FOUND before the guard is evaluated.
             child = spawn(
                 process.execPath,
-                ["--preserve-symlinks-main", entryPath, "--help"],
+                ["--preserve-symlinks-main", entryPath],
                 {
                     cwd: pkg,
                     env: buildChildEnv(fakeHome, port),

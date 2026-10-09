@@ -63,7 +63,8 @@ function sinkRecords(dir: string): Rec[] {
         for (const line of fs.readFileSync(full, 'utf8').split('\n')) {
           if (line.trim().length === 0) continue;
           const rec = JSON.parse(line) as Rec;
-          if (rec.event.startsWith('agent.')) out.push(rec);
+          // ops/pino lines share the sink tree but carry no `event`; only agent.* spans are asserted on.
+          if (typeof rec.event === 'string' && rec.event.startsWith('agent.')) out.push(rec);
         }
       }
     }
