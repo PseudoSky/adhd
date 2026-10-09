@@ -16,8 +16,9 @@ describe('audit_tracing.py declared paths track CORE_MAPPINGS (5dff26e6 AC3)', (
   it('the script lists exactly the span names mappings.ts opens', () => {
     const declaredBlock = /DECLARED_PATHS = \(([\s\S]*?)\)/.exec(script)?.[1] ?? '';
     const declared = [...declaredBlock.matchAll(/"([a-z_.]+)"/g)].map((m) => m[1] as string).sort();
-    const emitted = [...mappings.matchAll(/(?:openSpan|pointSpan)\(\s*'(agent\.[a-z_.]+)'/g)].map((m) => m[1] as string);
-    // permission/hitl spans are opened through pointSpan with a literal; collect those too.
+    const emitted = [...mappings.matchAll(/(?:openSpan|pointSpan|pointFor)\(\s*(?:rt,\s*)?'(agent\.[a-z_.]+)'/g)].map((m) => m[1] as string);
+    // permission/hitl spans are opened through pointSpan with a literal, and the provider/budget
+    // point spans through pointFor(rt, '<name>', ...); collect those too.
     const literal = [...mappings.matchAll(/pointSpan\('(agent\.[a-z_.]+)'/g)].map((m) => m[1] as string);
     const all = [...new Set([...emitted, ...literal])].sort();
     expect(declared).toEqual(all);

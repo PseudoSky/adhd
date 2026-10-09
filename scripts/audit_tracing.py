@@ -37,6 +37,11 @@ DECLARED_PATHS = (
     "agent.permission.decision",
     "agent.hitl.suspend",
     "agent.hitl.resume",
+    "agent.provider.attempt_failed",
+    "agent.provider.tripped",
+    "agent.provider.recovered",
+    "agent.budget.warning",
+    "agent.budget.block",
 )
 TERMINALS = ("finish", "error")
 
