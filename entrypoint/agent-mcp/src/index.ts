@@ -39,7 +39,8 @@ import {
   enqueueExistingTask,
 } from "@adhd/agent-engine-orchestrator";
 
-import { startServer } from "./server.js";
+import { PACKAGE_VERSION, startServer } from "./server.js";
+import { createPricingService } from "./pricing/service.js";
 import {
   allowedRootsFromResolvedConfig,
   buildNativeToolingContext,
@@ -263,7 +264,13 @@ async function main() {
     const sessionStore = new SessionStore(dbAny, hooks);
     const taskStore = new TaskStore(dbAny);
 
-    const usagePlugin = new UsagePlugin(dbAny);
+    // 37f6c511: price history + live OpenRouter pull. Seeds the bundled snapshot, arms the daily
+    // scheduler (unref'd; cleared on shutdown) and hands the SAME as-of price source to the
+    // UsagePlugin that the usage read path builds over this DB.
+    const pricing = createPricingService({ db: dbAny, logger, version: PACKAGE_VERSION });
+    pricing.start();
+
+    const usagePlugin = new UsagePlugin(dbAny, logger, { priceSource: pricing.priceSource });
     await usagePlugin.install(hooks);
 
     // Resolves the default budget entry from agent-mcp's OWN module base
@@ -368,6 +375,7 @@ async function main() {
         dagEngine,
         promptResolver,
         providerRegistry,
+        pricing,
     });
 
     // The DAG dispatch path resolves `nativeTooling` at task time against the
@@ -435,6 +443,9 @@ async function main() {
 
     const shutdown = async (signal: string) => {
         logger.info({ signal }, "Server shutdown");
+        // Clear the price scheduler and abort an in-flight pull first, so its
+        // ledger row is closed and no timer outlives the server.
+        pricing.stop();
         await close();
         // Remove the per-run srt policy file this process created (best-effort;
         // never an operator override).

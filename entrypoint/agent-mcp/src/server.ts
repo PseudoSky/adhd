@@ -11,7 +11,7 @@ import { z } from 'zod';
 import type http from 'node:http';
 
 const _require = createRequire(import.meta.url);
-const PACKAGE_VERSION: string = (
+export const PACKAGE_VERSION: string = (
   _require('../package.json') as { version: string }
 ).version;
 
@@ -87,6 +87,15 @@ import type { PolicyEngine } from '@adhd/agent-engine-orchestrator';
 import type { DagEngine } from '@adhd/agent-engine-orchestrator';
 import type { PromptResolverDeps } from '@adhd/agent-engine-orchestrator';
 import type { SessionStore } from '@adhd/agent-store-runtime';
+import type { IPricingService } from './pricing/service.js';
+import {
+  PRICING_HISTORY_DESCRIPTION,
+  PRICING_REFRESH_DESCRIPTION,
+  pricingHistory,
+  pricingHistoryInputSchema,
+  pricingRefresh,
+  pricingRefreshInputSchema,
+} from './pricing/tools.js';
 import type { TaskStore } from '@adhd/agent-store-runtime';
 
 const taskResumeInputSchema = z.object({
@@ -129,6 +138,11 @@ export interface ServerDeps {
    * (ADR-0008 D1); defaults to the documented `npx -y @adhd/agent-mcp` launch.
    */
   dispatchSelf?: McpServerConfig;
+  /**
+   * Live price-history service (37f6c511) behind `pricing_refresh` / `pricing_history`.
+   * Absent (e.g. a test server with no host wiring) the two tools return a clear error.
+   */
+  pricing?: IPricingService;
 }
 
 const SESSION_UPDATE_DESCRIPTION =
@@ -209,6 +223,14 @@ export function toMcpInputSchema(
 
   return { type: 'object', properties: {} };
 }
+
+const USAGE_QUERY_DESCRIPTION =
+  'Query recorded token usage. Filters: task_id (returns full delegation subtree), root_task_id, agent_name, since (ISO-8601). ' +
+  "grain='session'|'task'|'turn' (default 'task') selects the aggregation unit — 'turn' is one model call, 'task' the current per-task cumulative rollup, 'session' sums every task in that session. " +
+  'Every grain returns the same flattened snake_case row shape (input_tokens, output_tokens, compute_ms, total_ms, est_cost_usd, context_size/context_size_at, etc.) plus a summed/maxed `summary` block. ' +
+  "Set group_by='agent'|'model'|'provider'|'response_model' instead to aggregate by that dimension (legacy shape: one row per group with taskCount/completedCount/failedCount/cancelledCount/avgLatencyMs) — group_by wins over grain when both are supplied; 'response_model' groups by the model the provider reported serving the call. " +
+  "Cost provenance: rows carry response_model, cost_status ('priced'|'unpriced_model'|'partial'; null on legacy rows), cost_basis ('vendor-direct'|'openrouter-estimate'|'owner-assumption') and pricing_ref; summaries carry priced_cost_usd, unpriced_tasks, unpriced_tokens, unpriced_models and price_age_hours. est_cost_usd is null (never 0) when a model has no price. " +
+  'Prices come from the observed price history (see pricing_history), applied as of each turn.';
 
 const USAGE_GUIDE = `
 # agent-mcp Usage Guide
@@ -351,6 +373,19 @@ instead — a distinct, orthogonal legacy shape (one row per group with \`taskCo
 \`completedCount\`/\`failedCount\`/\`cancelledCount\`/\`avgLatencyMs\`); \`group_by\` wins over
 \`grain\` if both are supplied.
 
+\`group_by='response_model'\` groups by the model the provider reported serving each call.
+
+### Cost provenance and prices
+
+\`est_cost_usd\` is an estimate and is \`null\` (never 0) when a model has no price; \`cost_status\`
+(\`priced\` | \`unpriced_model\` | \`partial\`), \`cost_basis\` (\`vendor-direct\` | \`openrouter-estimate\` |
+\`owner-assumption\`) and \`pricing_ref\` say how it was priced, and summaries report
+\`priced_cost_usd\`, \`unpriced_tasks\`, \`unpriced_tokens\`, \`unpriced_models\` and \`price_age_hours\`.
+
+Prices are OBSERVED from the public OpenRouter feed (no API key) once a day and applied as of each
+turn. \`pricing_history\` returns the observed series for a model and the pull status;
+\`pricing_refresh\` pulls now (a >= 20x price move is held until re-run with \`accept:[modelId]\`).
+
 ---
 
 ## Common errors
@@ -428,6 +463,13 @@ export function createServer(deps: ServerDeps): Server {
     nativeToolingContext
   );
 
+  const requirePricing = (): IPricingService => {
+    if (!deps.pricing) {
+      throw new ToolError('VALIDATION_ERROR', 'price history is not available on this server instance');
+    }
+    return deps.pricing;
+  };
+
   const server = new Server(
     { name: 'agent-mcp', version: PACKAGE_VERSION },
     { capabilities: { tools: {} } }
@@ -495,12 +537,18 @@ export function createServer(deps: ServerDeps): Server {
     },
     {
       name: 'usage_query',
-      description:
-        'Query recorded token usage. Filters: task_id (returns full delegation subtree), root_task_id, agent_name, since (ISO-8601). ' +
-        "grain='session'|'task'|'turn' (default 'task') selects the aggregation unit — 'turn' is one model call, 'task' the current per-task cumulative rollup, 'session' sums every task in that session. " +
-        'Every grain returns the same flattened snake_case row shape (input_tokens, output_tokens, compute_ms, total_ms, est_cost_usd, context_size/context_size_at, etc.) plus a summed/maxed `summary` block. ' +
-        "Set group_by='agent'|'model'|'provider' instead to aggregate by that dimension (legacy shape: one row per group with taskCount/completedCount/failedCount/cancelledCount/avgLatencyMs) — group_by wins over grain when both are supplied.",
+      description: USAGE_QUERY_DESCRIPTION,
       inputSchema: toMcpInputSchema(taskUsageInputSchema),
+    },
+    {
+      name: 'pricing_refresh',
+      description: PRICING_REFRESH_DESCRIPTION,
+      inputSchema: toMcpInputSchema(pricingRefreshInputSchema),
+    },
+    {
+      name: 'pricing_history',
+      description: PRICING_HISTORY_DESCRIPTION,
+      inputSchema: toMcpInputSchema(pricingHistoryInputSchema),
     },
     {
       name: 'guide',
@@ -542,6 +590,10 @@ export function createServer(deps: ServerDeps): Server {
         });
       case 'usage_query':
         return runUsageQuery(deps.db, taskUsageInputSchema.parse(args ?? {}));
+      case 'pricing_refresh':
+        return pricingRefresh(pricingRefreshInputSchema.parse(args ?? {}), requirePricing());
+      case 'pricing_history':
+        return pricingHistory(pricingHistoryInputSchema.parse(args), requirePricing());
       case 'guide':
         return USAGE_GUIDE;
       case 'task_list':
@@ -719,12 +771,18 @@ export function createServer(deps: ServerDeps): Server {
       },
       {
         name: 'usage_query',
-        description:
-          'Query recorded token usage. Filters: task_id (returns full delegation subtree), root_task_id, agent_name, since (ISO-8601). ' +
-          "grain='session'|'task'|'turn' (default 'task') selects the aggregation unit — 'turn' is one model call, 'task' the current per-task cumulative rollup, 'session' sums every task in that session. " +
-          'Every grain returns the same flattened snake_case row shape (input_tokens, output_tokens, compute_ms, total_ms, est_cost_usd, context_size/context_size_at, etc.) plus a summed/maxed `summary` block. ' +
-          "Set group_by='agent'|'model'|'provider' instead to aggregate by that dimension (legacy shape: one row per group with taskCount/completedCount/failedCount/cancelledCount/avgLatencyMs) — group_by wins over grain when both are supplied.",
+        description: USAGE_QUERY_DESCRIPTION,
         inputSchema: toMcpInputSchema(taskUsageInputSchema),
+      },
+      {
+        name: 'pricing_refresh',
+        description: PRICING_REFRESH_DESCRIPTION,
+        inputSchema: toMcpInputSchema(pricingRefreshInputSchema),
+      },
+      {
+        name: 'pricing_history',
+        description: PRICING_HISTORY_DESCRIPTION,
+        inputSchema: toMcpInputSchema(pricingHistoryInputSchema),
       },
       {
         name: 'guide',
@@ -908,6 +966,16 @@ export function createServer(deps: ServerDeps): Server {
         case 'usage_query':
           return toMcpContent(
             runUsageQuery(deps.db, taskUsageInputSchema.parse(args ?? {}))
+          );
+
+        case 'pricing_refresh':
+          return toMcpContent(
+            await pricingRefresh(pricingRefreshInputSchema.parse(args ?? {}), requirePricing())
+          );
+
+        case 'pricing_history':
+          return toMcpContent(
+            pricingHistory(pricingHistoryInputSchema.parse(args), requirePricing())
           );
 
         case 'guide':
