@@ -103,7 +103,7 @@ spans). Fields use dotted names: `agent.task_id`, `agent.session_id`, `agent.roo
 | Table | Holds |
 |---|---|
 | `tasks` | status, prompt, result, error, timestamps, `session_id` |
-| `task_events` | `MODEL_REQUEST`, `MODEL_RESPONSE` (with `rawUsage` verbatim from the provider), `TOOL_CALL`, `TOOL_RESULT`, `TASK_COMPLETED`, ... |
+| `task_events` | `MODEL_REQUEST`, `MODEL_RESPONSE` (with `rawUsage` verbatim from the provider), `TOOL_CALL`, `TOOL_ARG_COERCED`, `TOOL_RESULT`, `TASK_COMPLETED`, ... |
 | `task_usage` | one row per task: tokens (total, uncached, cache read, cache write), latency, `est_cost_usd`, `priced_cost_usd`, `cost_status`, `cost_basis`, `pricing_ref` |
 | `model_price_history` | append-only price snapshots (`input_per_m`, `cache_read_per_m`, `cache_write_per_m`, `output_per_m`, `raw_json`) |
 | `price_pull_ledger` | one row per live price pull |
@@ -514,3 +514,14 @@ guide.
   spans have `parent_span_id: null`; `trace_id` is null on `ops`/`api` records so `task_id` is the
   only cross-channel key; `pricing_ref` names the in-code rate card, not the `model_price_history`
   row, so the exact price row used cannot be joined from `task_usage`.
+
+## Stringified tool-argument coercion (`TOOL_ARG_COERCED`)
+
+Models occasionally send a structured argument as a JSON-encoded string, for example the shell tool's argv as `"command": "[\"adhd-backlog\", \"get\"]"` instead of `["adhd-backlog", "get"]`. Before `callTool`, the orchestrator checks each **top-level** argument against the tool's declared `input_schema` and repairs this one mistake:
+
+- A property is coerced only when its declared `type` is exactly `"array"` or `"object"` (no union type, `anyOf`, `oneOf`, `allOf`, `$ref` or `not`), the supplied value is a string, `JSON.parse` succeeds and yields that type, and, for an array declared with `items.type: "string"`, every element is a string.
+- `string`, `number`, `boolean`, union-typed and undeclared properties are never touched. Only one level is repaired; nested values are not.
+- Each coercion writes a `TOOL_ARG_COERCED` row to `task_events` with payload `{taskId, tool, property, from: "string", to: "array" | "object"}` and a `WARN` log line `TOOL_ARG_COERCED`. The `TOOL_CALL` event keeps the arguments exactly as the model sent them.
+- A string that does not coerce (`cat /etc/hosts` for an array property, an array containing a non-string element, JSON of the wrong type) is not sent to the tool. The model gets an error result naming the property, the declared type and a worked example, e.g. `Example: {"command": ["first", "second"]}`.
+
+`EngineConfig.toolArgCoercion.enabled` (default on) exists as a test switch for negative controls. The proof is `src/__tests__/integration/tool-arg-coercion.e2e.test.ts` (real orchestrator, real stdio MCP server declaring `command` as an array of strings, the captured failing payload, with a coercion-off negative control).

@@ -19,6 +19,12 @@ export {
   ERROR_RESULT_FLOOR_CHARS,
 } from './engine/tool-result-cap.js';
 export type { ToolResultCapOutcome } from './engine/tool-result-cap.js';
+export { coerceToolArguments } from './engine/tool-arg-coercion.js';
+export type {
+  ToolArgCoercion,
+  ToolArgCoercionOutcome,
+  ToolArgMismatch,
+} from './engine/tool-arg-coercion.js';
 export type { OrchestratorRunInput, OrchestratorRunResult, OrchestratorTaskStore, OrchestratorSessionStore } from './engine/orchestrator.js';
 export { resolveHitl } from './engine/orchestrator.js';
 export { PolicyEngine } from './engine/policy.js';

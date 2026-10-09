@@ -1,0 +1,35 @@
+{
+  "_comment": "Sanitized from C.da8018d9 OAuth run api log (backlog 114e014c / BK2): the shell tool schema as advertised, and the REAL failing tool_use input where Haiku stringified the argv array. Uid replaced.",
+  "tool": {
+    "name": "shell__shell_execute",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "command": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Command and its arguments as array"
+        },
+        "stdin": {
+          "type": "string",
+          "description": "Input to be passed to the command via stdin"
+        },
+        "directory": {
+          "type": "string"
+        },
+        "timeout": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "required": [
+        "command"
+      ]
+    }
+  },
+  "failingInput": {
+    "command": "[\"adhd-backlog\", \"backlog\", \"get\", \"--input\", \"{\\\"uid\\\":\\\"00000000-0000-4000-8000-000000000001\\\"}\"]"
+  }
+}

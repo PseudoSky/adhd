@@ -98,6 +98,11 @@ export interface HarnessOptions {
    */
   toolResult?: { maxChars: number };
   /**
+   * Override `EngineConfig.toolArgCoercion` (schema-driven stringified-argument
+   * tolerance, backlog 114e014c). Absent => engine default (enabled).
+   */
+  toolArgCoercion?: { enabled: boolean };
+  /**
    * Skip the automatic orphan-scan re-enqueue on build.
    * Prefer `defaultProvider` over this flag: that keeps the real scan
    * exercised while avoiding the external-provider race.
@@ -147,9 +152,11 @@ function testLogger(level: "silent" | "warn" = "silent"): EngineLogger {
 function testConfig(opts: {
   serverMaxToolLoops?: number;
   toolResult?: { maxChars: number };
+  toolArgCoercion?: { enabled: boolean };
 } = {}): EngineConfig {
   return {
     ...(opts.toolResult ? { toolResult: opts.toolResult } : {}),
+    ...(opts.toolArgCoercion ? { toolArgCoercion: opts.toolArgCoercion } : {}),
     server: {
       contextLimit: 0,
       defaultMaxTokens: 8192,
@@ -201,7 +208,7 @@ export async function buildHarness(opts: HarnessOptions = {}): Promise<Harness> 
   const sessionStore = new SessionStore(dbAny, hooks);
   const taskStore = new TaskStore(dbAny);
 
-  const config = testConfig({ serverMaxToolLoops: opts.serverMaxToolLoops, toolResult: opts.toolResult });
+  const config = testConfig({ serverMaxToolLoops: opts.serverMaxToolLoops, toolResult: opts.toolResult, toolArgCoercion: opts.toolArgCoercion });
   const logger = testLogger("silent");
 
   const queue = new BackgroundQueue(5, logger);

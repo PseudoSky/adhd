@@ -126,6 +126,14 @@ export interface EngineConfig {
   toolResult?: {
     maxChars: number;
   };
+  /**
+   * Schema-driven tolerance for stringified array/object tool arguments
+   * (backlog 114e014c, `engine/tool-arg-coercion.ts`). Absent => enabled.
+   * `enabled: false` is the negative-control switch for tests.
+   */
+  toolArgCoercion?: {
+    enabled: boolean;
+  };
   queue: {
     /** Max concurrent background tasks. */
     concurrency: number;

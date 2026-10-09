@@ -19,6 +19,7 @@ import {
   DEFAULT_TOOL_RESULT_MAX_CHARS,
   validateToolResultMaxChars,
 } from './tool-result-cap.js';
+import { coerceToolArguments } from './tool-arg-coercion.js';
 import { DEFAULT_PROVIDER_TIMEOUT_MS } from '../interfaces.js';
 import { selectionOf, wireModelOf } from '../providers/resolve-selection.js';
 
@@ -418,6 +419,8 @@ export class Orchestrator {
     const toolResultMaxChars = validateToolResultMaxChars(
       config.toolResult?.maxChars ?? DEFAULT_TOOL_RESULT_MAX_CHARS
     );
+
+    const toolArgCoercionEnabled = config.toolArgCoercion?.enabled !== false;
 
     const delegationSessions = new Set<string>();
     let taskSucceeded = false;
@@ -1617,10 +1620,51 @@ export class Orchestrator {
             let isError = false;
             let isDenial = false;
             try {
+              // BK2 (114e014c): tolerate a model stringifying an array/object
+              // argument, driven by the tool's declared input schema.
+              let callArguments: unknown = toolCall.arguments;
+              if (toolArgCoercionEnabled) {
+                const declared =
+                  tools.find((t) => t.name === qualifiedToolName) ??
+                  tools.find(
+                    (t) => t.name === `${toolCall.server}__${toolCall.tool}`
+                  );
+                const coerced = coerceToolArguments(
+                  declared?.inputSchema,
+                  toolCall.arguments
+                );
+                if (coerced.mismatch) {
+                  throw new Error(coerced.mismatch.message);
+                }
+                callArguments = coerced.arguments;
+                for (const c of coerced.coercions) {
+                  logger.warn(
+                    {
+                      taskId,
+                      tool: qualifiedToolName,
+                      property: c.property,
+                      from: c.from,
+                      to: c.to,
+                    },
+                    'TOOL_ARG_COERCED'
+                  );
+                  taskStore.appendEvent({
+                    taskId,
+                    type: 'TOOL_ARG_COERCED',
+                    payload: {
+                      taskId,
+                      tool: qualifiedToolName,
+                      property: c.property,
+                      from: c.from,
+                      to: c.to,
+                    },
+                  });
+                }
+              }
               const client = await registry.getClient(resolved.server);
               toolResult = await client.callTool(
                 resolved.tool,
-                toolCall.arguments,
+                callArguments,
                 composedSignal
               );
 

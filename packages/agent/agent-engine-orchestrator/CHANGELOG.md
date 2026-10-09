@@ -6,6 +6,7 @@ This was a version bump only for agent-engine-orchestrator to align it with othe
 
 ### 🐛 Bug Fixes
 
+- **Stringified array/object tool arguments are repaired.** Before `callTool` the orchestrator JSON-parses a string argument whose declared `input_schema` type is exactly `array` or `object` (top-level properties only, no union/`anyOf`/`oneOf`/`allOf`/`$ref`; arrays of string must parse to all strings). Each repair records a `TOOL_ARG_COERCED` event `{taskId, tool, property, from, to}` and a warning; a string that does not parse to the declared type is rejected without calling the tool, with an error naming the property, the declared type and a worked example. This removes the failure where Haiku sent the shell tool's argv as `"[\"adhd-backlog\", ...]"` three times in a row and exhausted the `consecutiveErrors` budget. `EngineConfig.toolArgCoercion.enabled` (default on) is the test switch; `TaskEventType` gains `TOOL_ARG_COERCED`; new exports `coerceToolArguments`, `ToolArgCoercion`, `ToolArgCoercionOutcome`, `ToolArgMismatch`. (114e014c)
 - **Cache-write 1h tier.** `normaliseAnthropicUsage` carries `usage.cache_creation.ephemeral_1h_input_tokens` as `cacheCreation1hTokens`; `UsagePlugin` and the `usage_query` turn re-pricing pass it to `estimateCost`, and the `MODEL_RESPONSE` event payload records it, so stored `est_cost_usd` for a cold-cache `claudecli`/`anthropic` call matches the vendor total. 5-minute-only and unsplit usage is priced as before. (b726a987)
 
 ### 🚀 Features

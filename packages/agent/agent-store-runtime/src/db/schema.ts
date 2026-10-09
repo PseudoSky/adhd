@@ -99,6 +99,7 @@ export const taskEventsTable = sqliteTable("task_events", {
             "MODEL_RESPONSE",
             "TOOL_CALL",
             "TOOL_RESULT",
+            "TOOL_ARG_COERCED",
             "TASK_COMPLETED",
             "TASK_FAILED",
             "TASK_CANCELLED"
