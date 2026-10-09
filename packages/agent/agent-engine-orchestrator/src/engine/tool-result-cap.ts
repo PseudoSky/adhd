@@ -95,7 +95,7 @@ const isLowSurrogate = (code: number): boolean => code >= 0xdc00 && code <= 0xdf
  * Serializes a tool result the way the model sees it.
  * Returns `undefined` when the value has no JSON form (e.g. `undefined`).
  */
-function serialize(result: unknown): string | undefined {
+export function serializeToolResult(result: unknown): string | undefined {
   if (typeof result === 'string') return result;
   return JSON.stringify(result);
 }
@@ -113,7 +113,7 @@ export function capToolResult(
   isError: boolean,
   maxChars: number
 ): ToolResultCapOutcome {
-  const text = serialize(result);
+  const text = serializeToolResult(result);
   if (text === undefined) {
     return { result, truncated: false, originalChars: 0 };
   }

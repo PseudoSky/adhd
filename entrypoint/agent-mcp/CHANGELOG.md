@@ -6,6 +6,7 @@ This was a version bump only for agent-mcp to align it with other projects, ther
 
 ### 🚀 Features
 
+- **Optional spill-to-file for oversize tool results (off by default).** `ADHD_AGENT_TOOL_RESULT_SPILL_ENABLED=true` (config key `agent.toolResult.spill.enabled`) writes a result the cap would truncate to `<temp>/tool-results/<taskId>/<callId>.txt` (`0600` file, `0700` dirs, `O_EXCL`, symlinks never followed, task dirs swept after `agent.toolResult.spill.ttlHours`, default 24) and shows the model a stub with the path, size and a 2000-char preview, like the `claude` CLI does. An unwritable dir falls back to the head+tail cap; a relative or invalid `agent.toolResult.spill.dir` fails startup. The per-run `srt` policy read-allows the spill directory only while spill is enabled and never write-allows it. `TOOL_RESULT` events gain `spilled` and `spill_path`. See `docs/logging.md`. (3ad735bb)
 - **`task_usage` records the resolved model.** For `claudecli` agents `model` is the concrete id the CLI reports (`--model haiku` -> `claude-haiku-5-5`), `requested_model` keeps the configured alias, and cost is priced against the resolved id (`claude-haiku-5-5` is ~10x cheaper than `claude-haiku-4-5`). New columns `requested_model`, `cli_reported_cost_usd`, `model_breakdown_json` (migration 0013). See `docs/logging.md`, "Cost and pricing data". Pin concrete ids for benchmarks; aliases move. (79aebb26)
 
 ### 🐛 Bug Fixes

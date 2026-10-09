@@ -358,9 +358,36 @@ Above the cap the model sees the first `floor(cap * 0.75)` chars, a marker, and 
 - **Telemetry measures the full result.** `tool_call_est_result_tokens` on the `TOOL_RESULT` event, the `post:tool_call` hook payload (`result`, `estResultTokens`) and the SSE `tool_result` event carry the untruncated result. A truncated result adds `truncated: true` and `original_chars` to the `TOOL_RESULT` payload; the 500-char `result` summary is unchanged.
 - **Persisted history stores what the model saw.** The session message holds the truncated form, so a resumed or replayed session matches the model's view. The full text is not persisted.
 - `transform:tool_result` hooks run on the capped result.
-- Spill-to-file (the `claude` CLI saves an oversize result to a file and returns a stub) is not implemented; the cap is the fallback behaviour.
+- Spill-to-file (the `claude` CLI saves an oversize result to a file and returns a stub) is available as an opt-in mode, off by default; see [Optional spill-to-file](#optional-spill-to-file-for-over-cap-tool-results). The cap is its fallback.
 
 Example: `ADHD_AGENT_TOOL_RESULT_MAX_CHARS=8000 agent-mcp` bounds each tool result to 8000 chars plus the marker. The proof is `src/__tests__/integration/tool-result-cap.e2e.test.ts` (real orchestrator, real stdio MCP server returning 100,000 chars, with a cap-disabled negative control).
+
+### Optional spill-to-file for over-cap tool results
+
+By default an over-cap result is head+tail truncated and the middle is gone. Turn spill on to keep the whole result recoverable, the way the `claude` CLI does (the CLI writes a result over 50,000 chars to disk and shows a ~2.3 KB stub; over about 100,000 chars it shows an error stub that also names a file; both thresholds count characters, not tokens; measured with Claude Code 2.1.296).
+
+| Setting | Config key | Env var | Default |
+|---|---|---|---|
+| Enable | `agent.toolResult.spill.enabled` | `ADHD_AGENT_TOOL_RESULT_SPILL_ENABLED` | `false` |
+| Directory | `agent.toolResult.spill.dir` | `ADHD_AGENT_TOOL_RESULT_SPILL_DIR` | `<temp>/tool-results` (the Environment-resolved agent-mcp temp root) |
+| Retention | `agent.toolResult.spill.ttlHours` | `ADHD_AGENT_TOOL_RESULT_SPILL_TTL_HOURS` | `24` |
+
+With spill enabled, a result the cap would truncate is written in full to `<dir>/<taskId>/<toolCallId>.txt` and the model sees:
+
+```
+[tool result too large: 100000 chars; full output saved to /Users/me/.adhd/agent-mcp/production/temp/tool-results/<taskId>/<callId>.txt. Read a range with the shell tool, e.g. sed -n 'A,Bp' '<that path>' | head -c N]
+Preview (first 2000 chars):
+<first 2000 chars>
+```
+
+- An MCP result made only of text blocks is written as plain text (real lines, so `sed -n '1000,1010p'` works); any other result is written as its JSON serialization.
+- Files are `0600` in `0700` directories, created with `O_EXCL` and no symlink following (a symlink planted at the file name is unlinked, never followed; a symlinked directory is refused). Task directories older than `ttlHours` are swept the first time a process spills.
+- If the directory is unwritable (or any spill step fails) the head+tail cap is used instead, with its marker, and a warning is logged. Spill never fails a task.
+- `TOOL_RESULT` events gain `spilled: true` and `spill_path` (plus the existing `truncated` and `original_chars`); usage telemetry still measures the full result.
+- A relative or invalid `dir`, or a bad `ttlHours`, fails startup (`RangeError` naming the key), whether or not spill is enabled. The keys are read from the global scope only.
+- **Sandbox.** When spill is enabled the per-run `srt` policy lists the spill directory under `filesystem.allowRead` (nothing is added to `allowWrite`), so the sandboxed shell tool can read the file named in the stub. The directory may not be, contain, or sit inside `$HOME`, a credential location, the run-policy directory, or the agent-mcp temp root itself (it holds credential-bearing scratch); the policy aborts startup on such a value. When spill is off nothing is rendered. The proofs are `tool-result-spill.e2e.test.ts` (real orchestrator and MCP server) and `srt-policy-bk9.e2e.test.ts` (real `srt`).
+
+Example: `ADHD_AGENT_TOOL_RESULT_SPILL_ENABLED=true agent-mcp`.
 
 ## Redaction guarantees
 

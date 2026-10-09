@@ -15,10 +15,10 @@ import { generateId } from '../utils/ids.js';
 import { nowIso } from '../utils/timestamps.js';
 import type { EngineConfig, EngineLogger } from '../interfaces.js';
 import {
-  capToolResult,
   DEFAULT_TOOL_RESULT_MAX_CHARS,
   validateToolResultMaxChars,
 } from './tool-result-cap.js';
+import { capOrSpillToolResult, resolveToolResultSpill } from './tool-result-spill.js';
 import { coerceToolArguments } from './tool-arg-coercion.js';
 import { DEFAULT_PROVIDER_TIMEOUT_MS } from '../interfaces.js';
 import { selectionOf, wireModelOf } from '../providers/resolve-selection.js';
@@ -419,6 +419,7 @@ export class Orchestrator {
     const toolResultMaxChars = validateToolResultMaxChars(
       config.toolResult?.maxChars ?? DEFAULT_TOOL_RESULT_MAX_CHARS
     );
+    const toolResultSpill = resolveToolResultSpill(config.toolResult?.spill);
 
     const toolArgCoercionEnabled = config.toolArgCoercion?.enabled !== false;
 
@@ -1730,11 +1731,19 @@ export class Orchestrator {
             // BK1 (3ad735bb): bound what the MODEL sees (and what the session
             // history persists). Telemetry above and the 500-char summary below
             // keep measuring the FULL result; `post:tool_call` also receives it.
-            const capOutcome = capToolResult(
-              toolResult,
+            const capOutcome = capOrSpillToolResult({
+              result: toolResult,
               isError,
-              toolResultMaxChars
-            );
+              maxChars: toolResultMaxChars,
+              spill: toolResultSpill,
+              taskId,
+              callId: toolCall.id,
+              onSpillError: (err) =>
+                logger.warn(
+                  { taskId, tool: qualifiedToolName, err },
+                  'Tool-result spill failed; using the head+tail cap'
+                ),
+            });
             const modelVisibleResult = capOutcome.result;
 
             const resultSummary =
@@ -1756,6 +1765,9 @@ export class Orchestrator {
                       truncated: true,
                       original_chars: capOutcome.originalChars,
                     }
+                  : {}),
+                ...(capOutcome.spilled
+                  ? { spilled: true, spill_path: capOutcome.spillPath }
                   : {}),
               },
             });

@@ -19,6 +19,25 @@ export {
   ERROR_RESULT_FLOOR_CHARS,
 } from './engine/tool-result-cap.js';
 export type { ToolResultCapOutcome } from './engine/tool-result-cap.js';
+export {
+  capOrSpillToolResult,
+  resolveToolResultSpill,
+  validateToolResultSpillDir,
+  parseToolResultSpillTtlHours,
+  writeToolResultSpillFile,
+  sweepToolResultSpill,
+  removeTaskSpill,
+  renderSpillStub,
+  DEFAULT_TOOL_RESULT_SPILL_TTL_HOURS,
+  SPILL_PREVIEW_CHARS,
+  TOOL_RESULT_SPILL_ENABLED_KEY,
+  TOOL_RESULT_SPILL_ENABLED_ENV,
+  TOOL_RESULT_SPILL_DIR_KEY,
+  TOOL_RESULT_SPILL_DIR_ENV,
+  TOOL_RESULT_SPILL_TTL_HOURS_KEY,
+  TOOL_RESULT_SPILL_TTL_HOURS_ENV,
+} from './engine/tool-result-spill.js';
+export type { ToolResultSpillConfig, ToolResultSpillOutcome } from './engine/tool-result-spill.js';
 export { coerceToolArguments } from './engine/tool-arg-coercion.js';
 export type {
   ToolArgCoercion,

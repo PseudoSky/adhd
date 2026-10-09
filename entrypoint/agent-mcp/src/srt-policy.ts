@@ -48,7 +48,7 @@ import { homedir, tmpdir } from 'node:os';
 import { basename, delimiter, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { operationalEnv, resolveLogRoots, type LogRoots } from './config.js';
+import { operationalEnv, resolveLogRoots, resolveToolResultSpill, type LogRoots } from './config.js';
 
 /**
  * Path *value* override for the srt settings file (ADR-0008 D10: a path value
@@ -97,6 +97,13 @@ export interface ProvisionSrtPolicyOptions {
    * runs) never receives them (BK7 SEC-F7); only the per-run file does (`provisionRunSrtPolicy`).
    */
   applySandboxExtras?: boolean;
+  /**
+   * The tool-result spill directory to render as `allowRead` (BK9, `agent.toolResult.spill.*`). Only
+   * applied with {@link applySandboxExtras}. Default (`undefined`): the resolved config — the dir when
+   * spill is ENABLED, nothing when it is off. Pass a string to force a dir (validated fail-loud by
+   * {@link validateSrtSpillReadDir}) or `null` to render none. Read access only: never added to `allowWrite`.
+   */
+  spillReadDir?: string | null;
   /** Extra network allow-list domains to union into `allowedDomains`. */
   allowedDomains?: string[];
 }
@@ -388,6 +395,74 @@ export function resolveSrtExtraAllowWrite(
 }
 
 /**
+ * Validate the directory rendered as `filesystem.allowRead` for the tool-result spill (BK9). A read
+ * allow is narrower than a write allow, but `allowRead` re-opens paths inside a `denyRead` region, so
+ * the spill dir must never be, contain, or sit inside a credential location, the run-policy dir, or the
+ * srt settings file, and must never contain `$HOME` or the credential-bearing agent-mcp temp root
+ * (claudecli mcp-config / agent-spec scratch lives directly in it) — only a dedicated subdirectory of
+ * that root, such as the default `<temp>/tool-results`, is acceptable. Fail loud with
+ * {@link SrtPolicyConfigError}.
+ *
+ * @param dir the configured spill directory (absolute; `~/` allowed).
+ * @param home the home directory (injectable for tests).
+ * @param denyRead the credential deny list.
+ * @param opts `tempRoot` (must not be equal to / contained by the spill dir) and extra `protectedPaths`.
+ * @returns the symlink-resolved absolute path srt will enforce.
+ */
+export function validateSrtSpillReadDir(
+  dir: string,
+  home: string = homedir(),
+  denyRead: readonly string[] = defaultSrtDenyRead(),
+  opts: { readonly tempRoot?: string; readonly protectedPaths?: readonly string[] } = {}
+): string {
+  const key = 'agent.toolResult.spill.dir';
+  const expanded = expandHome(dir, home, key);
+  const real = resolveRealPrefix(expanded);
+  const fold = foldPath(expanded);
+  // Credential locations: the spill dir may not be, contain, or sit inside them. `.adhd/agent-mcp` is
+  // exempt from the list because the default spill dir legitimately lives under it.
+  const secretFolds = [
+    ...PROTECTED_HOME_RELATIVE.filter((rel) => !rel.startsWith('.adhd/agent-mcp')).map((rel) => foldPath(join(home, rel))),
+    ...denyRead.map((p) => foldPath(p)),
+    ...(opts.protectedPaths ?? []).map((p) => foldPath(p)),
+  ];
+  for (const prot of secretFolds) {
+    if (isSameOrAncestor(fold, prot) || isSameOrAncestor(prot, fold)) {
+      throw new SrtPolicyConfigError(dir, `must not be, contain, or sit inside the protected path ${prot}`, key);
+    }
+  }
+  const homeFold = foldPath(home);
+  if (isSameOrAncestor(fold, homeFold)) {
+    throw new SrtPolicyConfigError(dir, 'must not be (or contain) the home directory', key);
+  }
+  if (opts.tempRoot !== undefined && isSameOrAncestor(fold, foldPath(opts.tempRoot))) {
+    throw new SrtPolicyConfigError(
+      dir,
+      'must be a dedicated subdirectory, not the agent-mcp temp root itself (it holds credential-bearing scratch)',
+      key
+    );
+  }
+  return real;
+}
+
+/**
+ * The tool-result spill directory to render as `allowRead`: `[dir]` when `agent.toolResult.spill.enabled`
+ * is on (validated), `[]` when it is off (nothing is rendered, and nothing from an earlier enabled run
+ * lingers — see `adhdManaged`). Read from the scope-pinned {@link operationalEnv}.
+ */
+export function resolveSrtSpillAllowRead(): string[] {
+  const spill = resolveToolResultSpill();
+  if (!spill.enabled) return [];
+  const roots = resolveLogRoots();
+  return [
+    validateSrtSpillReadDir(spill.dir, homedir(), defaultSrtDenyRead(), {
+      tempRoot: roots.temp,
+      protectedPaths: [srtRunPolicyDir(roots), resolveSrtSettingsPath()],
+    }),
+  ];
+}
+
+/**
  * Directory holding the per-run `srt` policy files (one per agent-mcp run): `<temp>/srt` under the
  * `@adhd/environment`-resolved namespaced temp root (c536ce29 / 03be90c3, S8B) — never a
  * hard-coded home path.
@@ -604,13 +679,15 @@ function union(existing: readonly string[], extra: readonly string[]): string[] 
 interface IManaged {
   extraAllowWrite: string[];
   denyWrite: string[];
+  /** Spill read-allows (BK9) injected by the previous provision. */
+  allowRead: string[];
 }
 
 /** The host-managed entries recorded by the previous provision (see `adhdManaged`). */
 function readManaged(current: SrtSettings): IManaged {
   const raw = current['adhdManaged'];
   const obj = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
-  return { extraAllowWrite: toArray(obj['extraAllowWrite']), denyWrite: toArray(obj['denyWrite']) };
+  return { extraAllowWrite: toArray(obj['extraAllowWrite']), denyWrite: toArray(obj['denyWrite']), allowRead: toArray(obj['allowRead']) };
 }
 
 function readExisting(path: string): SrtSettings {
@@ -672,12 +749,20 @@ export function provisionSrtPolicy(
       ? resolveSrtExtraAllowWrite(opts.extraAllowWrite, opts.extraAllowWriteRoots)
       : [];
     const managedDeny = opts.applySandboxExtras ? defaultSrtDenyWrite() : [];
+    // BK9: the tool-result spill dir is READ-allowed only when spill is enabled (never in the global file).
+    let managedRead: string[] = [];
+    if (opts.applySandboxExtras && opts.spillReadDir !== null) {
+      managedRead = opts.spillReadDir === undefined ? resolveSrtSpillAllowRead() : [validateSrtSpillReadDir(opts.spillReadDir)];
+    }
 
     const allowWrite = union(
       withoutManaged(toArray(current.filesystem?.allowWrite), prevManaged.extraAllowWrite),
       union(defaultSrtAllowWrite(), union(managedExtra, opts.allowWrite ?? []))
     );
-    const allowRead = union(toArray(current.filesystem?.allowRead), opts.allowRead ?? []);
+    const allowRead = union(
+      withoutManaged(toArray(current.filesystem?.allowRead), prevManaged.allowRead),
+      union(managedRead, opts.allowRead ?? [])
+    );
     const allowedDomains = union(
       toArray(current.network?.allowedDomains),
       union(DEFAULT_SRT_ALLOWED_DOMAINS, opts.allowedDomains ?? [])
@@ -700,11 +785,17 @@ export function provisionSrtPolicy(
         allowedDomains,
         deniedDomains: toArray(current.network?.deniedDomains),
       },
-      ...(managedExtra.length > 0 || managedDeny.length > 0
-        ? { adhdManaged: { extraAllowWrite: managedExtra, denyWrite: managedDeny } }
+      ...(managedExtra.length > 0 || managedDeny.length > 0 || managedRead.length > 0
+        ? {
+            adhdManaged: {
+              extraAllowWrite: managedExtra,
+              denyWrite: managedDeny,
+              ...(managedRead.length > 0 ? { allowRead: managedRead } : {}),
+            },
+          }
         : {}),
     };
-    if (managedExtra.length === 0 && managedDeny.length === 0) delete next['adhdManaged'];
+    if (managedExtra.length === 0 && managedDeny.length === 0 && managedRead.length === 0) delete next['adhdManaged'];
 
     const before = existed
       ? JSON.stringify(current)

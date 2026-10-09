@@ -23,7 +23,14 @@ import { join } from "node:path";
 import { Environment } from "@adhd/environment";
 import { nativeToolingConfigFieldSpecs } from "@adhd/environment-base-spec";
 import type { EnvironmentSpec } from "@adhd/environment-base-spec";
-import { DEFAULT_TOOL_RESULT_MAX_CHARS, parseToolResultMaxChars } from "@adhd/agent-engine-orchestrator";
+import {
+  DEFAULT_TOOL_RESULT_MAX_CHARS,
+  DEFAULT_TOOL_RESULT_SPILL_TTL_HOURS,
+  parseToolResultMaxChars,
+  parseToolResultSpillTtlHours,
+  validateToolResultSpillDir,
+  type ToolResultSpillConfig,
+} from "@adhd/agent-engine-orchestrator";
 import type { EngineConfig } from "@adhd/agent-engine-orchestrator";
 import type { PartialBinding } from "@adhd/agent-base-types";
 
@@ -94,7 +101,20 @@ export interface AgentMcpConfig {
    * `operationalEnv` so a project `config.yaml` can never widen the sandbox.
    */
   readonly agent: {
-    readonly toolResult: { readonly maxChars: string };
+    readonly toolResult: {
+      readonly maxChars: string;
+      /**
+       * Optional spill-to-file mode (backlog 3ad735bb / BK9, default OFF): an over-cap result is
+       * written in full under `dir` (default `<temp>/tool-results`) and the model sees a stub
+       * naming the file. `ttlHours` ages out per-task subdirectories. The srt policy renders `dir`
+       * as `allowRead` only when `enabled`.
+       */
+      readonly spill: {
+        readonly enabled: boolean;
+        readonly dir: string | undefined;
+        readonly ttlHours: string;
+      };
+    };
     readonly shell: {
       readonly sandbox: {
         readonly extraAllowWrite: readonly string[];
@@ -381,6 +401,29 @@ export const agentMcpEnvironmentSpec: EnvironmentSpec<AgentMcpConfig> = {
       description:
         "Max chars of one tool result the model sees (head 75% + tail 25% + a truncation marker). " +
         "0 disables the cap; error results up to 4000 chars are never truncated.",
+    },
+    "agent.toolResult.spill.enabled": {
+      type: "boolean",
+      env: "ADHD_AGENT_TOOL_RESULT_SPILL_ENABLED",
+      default: false,
+      description:
+        "Spill an over-cap tool result to a file instead of head+tail truncating it: the model sees a " +
+        "stub (path, size, 2000-char preview) and can read ranges with the shell tool. Default off. " +
+        "If the spill dir is unwritable the head+tail cap is used. Read from the global scope only.",
+    },
+    "agent.toolResult.spill.dir": {
+      type: "string",
+      env: "ADHD_AGENT_TOOL_RESULT_SPILL_DIR",
+      description:
+        "ABSOLUTE spill directory (relative paths and `..` fail at startup). Unset => `<temp>/tool-results` " +
+        "under the Environment-resolved agent-mcp temp root. Created 0700; files 0600. Read from the global scope only.",
+    },
+    // `string` for the same reason as `agent.toolResult.maxChars`: strict parse, no parseInt coercion.
+    "agent.toolResult.spill.ttlHours": {
+      type: "string",
+      env: "ADHD_AGENT_TOOL_RESULT_SPILL_TTL_HOURS",
+      default: String(DEFAULT_TOOL_RESULT_SPILL_TTL_HOURS),
+      description: "Hours after which a task's spill subdirectory is swept (positive integer).",
     },
     "server.maxDepth": {
       type: "integer",
@@ -857,6 +900,27 @@ function globalSelection(): PartialBinding | undefined {
 }
 
 /**
+ * Resolves the tool-result spill settings (BK9) from the scope-pinned {@link operationalEnv}, so a
+ * project `config.yaml` can never relocate the spill dir or widen the sandbox's read allow. Fails
+ * loud (RangeError) on a relative / invalid `dir` or `ttlHours`, whether or not spill is enabled.
+ * The engine and the srt policy both read this one function, so they always agree on the dir.
+ *
+ * @param target the Environment to resolve against (tests pass an isolated instance).
+ */
+export function resolveToolResultSpill(
+  target: Pick<Environment<AgentMcpConfig>, "paths" | "config"> = operationalEnv
+): ToolResultSpillConfig {
+  const cfg = target.config.agent.toolResult.spill;
+  const dir =
+    cfg.dir === undefined ? join(resolveLogRoots(target).temp, "tool-results") : validateToolResultSpillDir(cfg.dir);
+  return {
+    enabled: cfg.enabled === true,
+    dir,
+    ttlMs: parseToolResultSpillTtlHours(cfg.ttlHours) * 3_600_000,
+  };
+}
+
+/**
  * Builds the `EngineConfig`-shaped adapter the orchestrator layer (`server.ts`,
  * `index.ts`) is injected with — the engine MUST NOT import `config.ts`
  * directly (`packages/agent/agent-engine-orchestrator/src/interfaces.ts`).
@@ -874,7 +938,10 @@ export function toEngineConfig(): EngineConfig {
     },
     queue: { concurrency: env.config.queue.concurrency },
     // Fails loud (RangeError) on a negative / NaN / non-integer / non-numeric cap, before any task runs.
-    toolResult: { maxChars: parseToolResultMaxChars(env.config.agent.toolResult.maxChars) },
+    toolResult: {
+      maxChars: parseToolResultMaxChars(env.config.agent.toolResult.maxChars),
+      spill: resolveToolResultSpill(),
+    },
     sse: {
       baseUrl: computeSseBaseUrl(env.config.sse.baseUrl, resolvedSseBoundPort, env.config.sse.port),
     },

@@ -96,7 +96,7 @@ export interface HarnessOptions {
    * Override `EngineConfig.toolResult` (the model-visible tool-result cap,
    * backlog 3ad735bb). Absent => the engine default (20000 chars).
    */
-  toolResult?: { maxChars: number };
+  toolResult?: NonNullable<EngineConfig["toolResult"]>;
   /**
    * Override `EngineConfig.toolArgCoercion` (schema-driven stringified-argument
    * tolerance, backlog 114e014c). Absent => engine default (enabled).
@@ -151,7 +151,7 @@ function testLogger(level: "silent" | "warn" = "silent"): EngineLogger {
  */
 function testConfig(opts: {
   serverMaxToolLoops?: number;
-  toolResult?: { maxChars: number };
+  toolResult?: NonNullable<EngineConfig["toolResult"]>;
   toolArgCoercion?: { enabled: boolean };
 } = {}): EngineConfig {
   return {

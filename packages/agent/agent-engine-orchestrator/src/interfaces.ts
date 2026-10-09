@@ -125,6 +125,13 @@ export interface EngineConfig {
    */
   toolResult?: {
     maxChars: number;
+    /**
+     * Optional spill-to-file mode (config keys `agent.toolResult.spill.*`, default OFF): an
+     * over-cap result is written in full to `<dir>/<taskId>/<callId>.txt` and the model sees a
+     * short stub naming the path. Any spill failure falls back to the head+tail cap. See
+     * `engine/tool-result-spill.ts`.
+     */
+    spill?: import('./engine/tool-result-spill.js').ToolResultSpillConfig;
   };
   /**
    * Schema-driven tolerance for stringified array/object tool arguments
