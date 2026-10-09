@@ -18,6 +18,8 @@
  * `"ADHD_AGENT_MCP"` instead would silently break every provider credential
  * lookup and the agent-definition env-ref allowlist guard.
  */
+import { join } from "node:path";
+
 import { Environment } from "@adhd/environment";
 import { nativeToolingConfigFieldSpecs } from "@adhd/environment-base-spec";
 import type { EnvironmentSpec } from "@adhd/environment-base-spec";
@@ -53,7 +55,30 @@ export interface AgentMcpConfig {
      */
     readonly skipLegacyMigration: boolean;
   };
-  readonly logging: { readonly level: string };
+  /**
+   * Level + the wire/ops log tree (backlog c536ce29). VALUES only: the sole off-switch is
+   * `api` (`on|off`), which stops RAW API BODY capture and never touches ops/trace logs.
+   * Byte sizes are plain integers; retention is in days.
+   */
+  readonly logging: {
+    readonly level: string;
+    /** Override of the log root. Unset ⇒ `env.paths.logs` (`~/.adhd/agent-mcp/<ns>/logs`). */
+    readonly dir: string | undefined;
+    /** Stable per-deployment label embedded in log FILE NAMES (instanceId changes every start). */
+    readonly instanceLabel: string;
+    readonly api: "on" | "off";
+    readonly apiBodyMaxBytes: number;
+    readonly apiRotateBytes: number;
+    readonly apiRetentionDays: number;
+    readonly apiMaxDirBytes: number;
+    readonly opsRotateBytes: number;
+    readonly opsRetentionDays: number;
+    readonly opsMaxDirBytes: number;
+    readonly traceRetentionDays: number;
+    readonly traceMaxDirBytes: number;
+    readonly floodMaxBytes: number;
+    readonly floodWindowSeconds: number;
+  };
   readonly queue: { readonly concurrency: number };
   readonly server: {
     readonly maxDepth: number;
@@ -168,6 +193,19 @@ export const agentMcpEnvironmentSpec: EnvironmentSpec<AgentMcpConfig> = {
     // still wins over this default — this only changes what the ZERO-CONFIG
     // fallback resolves to when nothing else is set.
     data: { kind: "data", scope: "global" },
+    // c536ce29 (wire/ops tracing): the log tree and the claudecli scratch dir.
+    // Both are PINNED `scope:'global'` for the same reason as `data` above:
+    // `ADHD_ENV_SCOPE=project` (this repo's `.mcp.json`) must never put logs or
+    // credential-bearing scratch files inside a repo tree.
+    // Both are ALSO explicitly `share:'shared'`: the `logs`/`temp` kinds default
+    // to `per-instance` (DEFAULT_SHARE_BY_KIND), which appends `env.instanceId`
+    // to the path — and `generateInstanceId()` (environment-builder snapshot.ts)
+    // is `${pid}-${random}`, a NEW value on EVERY process start. A per-instance
+    // dir would therefore mint a fresh, never-swept tree per restart, so
+    // retention/size caps could not bound the aggregate. The instance dimension
+    // moves into FILE NAMES (`<date>.<logging.instanceLabel>.<pid>.jsonl`).
+    logs: { kind: "logs", scope: "global", share: "shared" },
+    temp: { kind: "temp", scope: "global", share: "shared" },
   },
   files: {
     // Zero-config default DB location — `env.files.db` — under the resolved
@@ -196,6 +234,114 @@ export const agentMcpEnvironmentSpec: EnvironmentSpec<AgentMcpConfig> = {
       env: "ADHD_AGENT_LOG_LEVEL",
       default: "info",
       enum: ["trace", "debug", "info", "warn", "error", "fatal", "silent"],
+    },
+    // c536ce29 — wire/ops log tree. VALUES with defaults; the only off-switch is `logging.api`,
+    // which disables raw API body capture and leaves ops/trace logs on.
+    "logging.dir": {
+      type: "string",
+      env: "ADHD_AGENT_LOGGING_DIR",
+      description:
+        "Override of the log root (contains api/, ops/, trace/). Unset by default — resolved " +
+        "through @adhd/environment to ~/.adhd/agent-mcp/<namespace>/logs (never the repo tree).",
+    },
+    "logging.instanceLabel": {
+      type: "string",
+      env: "ADHD_AGENT_LOGGING_INSTANCE_LABEL",
+      default: "default",
+      pattern: "^[A-Za-z0-9._-]{1,64}$",
+      description:
+        "Stable label embedded in log file names (<date>.<label>.<pid>.jsonl). The environment " +
+        "instanceId changes on every start, so the label is what keeps a long-lived deployment " +
+        "(e.g. `sox-dev`) greppable. Letters, digits, `.`, `_`, `-` only.",
+    },
+    "logging.api": {
+      type: "string",
+      env: "ADHD_AGENT_LOGGING_API",
+      default: "on",
+      enum: ["on", "off"],
+      description:
+        "Raw API wire logging (request/response bodies, spawn and MCP traffic) under <logs>/api. " +
+        "`off` stops ONLY api/ capture; ops/ and trace/ stay on and a `log.disabled` warning is " +
+        "emitted at every start so it cannot be left off silently.",
+    },
+    "logging.apiBodyMaxBytes": {
+      type: "integer",
+      env: "ADHD_AGENT_LOGGING_API_BODY_MAX_BYTES",
+      default: 4194304,
+      minimum: 0,
+      description: "Per-body capture cap in bytes (4 MiB). Larger bodies are truncated; sha256 of the full body is kept.",
+    },
+    "logging.apiRotateBytes": {
+      type: "integer",
+      env: "ADHD_AGENT_LOGGING_API_ROTATE_BYTES",
+      default: 67108864,
+      minimum: 1048576,
+      description: "Rotate an api/ file at this size in bytes (64 MiB); rotated files are gzipped.",
+    },
+    "logging.apiRetentionDays": {
+      type: "integer",
+      env: "ADHD_AGENT_LOGGING_API_RETENTION_DAYS",
+      default: 14,
+      minimum: 1,
+      description: "Delete api/ files older than this many days.",
+    },
+    "logging.apiMaxDirBytes": {
+      type: "integer",
+      env: "ADHD_AGENT_LOGGING_API_MAX_DIR_BYTES",
+      default: 2147483648,
+      minimum: 1048576,
+      description: "Cap on the total size of api/ in bytes (2 GiB); oldest files are removed first.",
+    },
+    "logging.opsRotateBytes": {
+      type: "integer",
+      env: "ADHD_AGENT_LOGGING_OPS_ROTATE_BYTES",
+      default: 16777216,
+      minimum: 1048576,
+      description: "Rotate an ops/ file at this size in bytes (16 MiB).",
+    },
+    "logging.opsRetentionDays": {
+      type: "integer",
+      env: "ADHD_AGENT_LOGGING_OPS_RETENTION_DAYS",
+      default: 60,
+      minimum: 1,
+      description: "Delete ops/ files older than this many days.",
+    },
+    "logging.opsMaxDirBytes": {
+      type: "integer",
+      env: "ADHD_AGENT_LOGGING_OPS_MAX_DIR_BYTES",
+      default: 268435456,
+      minimum: 1048576,
+      description: "Cap on the total size of ops/ in bytes (256 MiB).",
+    },
+    "logging.traceRetentionDays": {
+      type: "integer",
+      env: "ADHD_AGENT_LOGGING_TRACE_RETENTION_DAYS",
+      default: 30,
+      minimum: 1,
+      description: "Delete trace/ (sox-telemetry spans + metrics snapshots) files older than this many days.",
+    },
+    "logging.traceMaxDirBytes": {
+      type: "integer",
+      env: "ADHD_AGENT_LOGGING_TRACE_MAX_DIR_BYTES",
+      default: 536870912,
+      minimum: 1048576,
+      description: "Cap on the total size of trace/ in bytes (512 MiB).",
+    },
+    "logging.floodMaxBytes": {
+      type: "integer",
+      env: "ADHD_AGENT_LOGGING_FLOOD_MAX_BYTES",
+      default: 268435456,
+      minimum: 1048576,
+      description:
+        "Flood breaker: if one process writes more than this many bytes to api/ inside " +
+        "logging.floodWindowSeconds it drops to digest-only records (no bodies) until the window clears.",
+    },
+    "logging.floodWindowSeconds": {
+      type: "integer",
+      env: "ADHD_AGENT_LOGGING_FLOOD_WINDOW_SECONDS",
+      default: 600,
+      minimum: 1,
+      description: "Flood breaker window in seconds (10 minutes).",
     },
     "queue.concurrency": {
       type: "integer",
@@ -346,12 +492,14 @@ export const agentMcpEnvironmentSpec: EnvironmentSpec<AgentMcpConfig> = {
       enum: ["file", "stderr", "none"],
       description:
         "Where the tracing plugin's records land. `file` persists to `tracing.logDir` " +
-        "(default `~/.adhd/sox-ecosystem/<service>/logs`).",
+        "(default `<logs>/trace` = `~/.adhd/agent-mcp/<namespace>/logs/trace`).",
     },
     "tracing.logDir": {
       type: "string",
       env: "ADHD_AGENT_TRACING_LOG_DIR",
-      description: "Override of the tracing file-sink directory. Unset by default.",
+      description:
+        "Override of the tracing file-sink directory. Unset by default — agent-mcp then passes " +
+        "`<logs>/trace` (resolveLogRoots().trace, c536ce29) to the plugin.",
     },
     "tracing.captureArgs": {
       type: "boolean",
@@ -492,6 +640,48 @@ export const operationalEnv = new Environment<AgentMcpConfig>("agent-mcp", agent
   namespace: "production",
   scope: "global",
 });
+
+// ============================================================================
+// Log roots (backlog c536ce29 — wire/ops tracing)
+// ============================================================================
+
+/** Resolved, absolute directories of the wire/ops log tree plus the scratch dir. */
+export interface LogRoots {
+  /** The log root itself (`<logs>`): `logging.dir` if set, else `paths.logs`. */
+  readonly root: string;
+  /** Raw wire records (`api.*`). */
+  readonly api: string;
+  /** Structured core-ops events. */
+  readonly ops: string;
+  /** sox-telemetry spans + metrics snapshots (`tracing.logDir` default). */
+  readonly trace: string;
+  /** Credential-bearing scratch (claudecli mcp-config / agent-spec). */
+  readonly temp: string;
+}
+
+/**
+ * Resolves the log tree through the Environment cascade — never hard-coded. Defaults to
+ * {@link operationalEnv} (scope-forced `global`) so a project-scope `config.yaml` under
+ * `ADHD_ENV_SCOPE=project` can never relocate `logging.dir` into a repo tree, exactly the hole
+ * `operationalEnv` closes for `db.path`. Pure: creates nothing on disk.
+ *
+ * @param target the Environment to resolve against (tests pass an isolated instance).
+ */
+export function resolveLogRoots(
+  target: Pick<Environment<AgentMcpConfig>, "paths" | "config"> = operationalEnv
+): LogRoots {
+  const root = target.config.logging.dir ?? target.paths["logs"];
+  if (!root) throw new Error("agent-mcp environment spec declares no `logs` dir");
+  const temp = target.paths["temp"];
+  if (!temp) throw new Error("agent-mcp environment spec declares no `temp` dir");
+  return {
+    root,
+    api: join(root, "api"),
+    ops: join(root, "ops"),
+    trace: join(root, "trace"),
+    temp,
+  };
+}
 
 // ============================================================================
 // SSE port selection (BUG-AGENTMCP-SSE-PORT-CONTENTION-001)
@@ -690,6 +880,9 @@ export function tracingPluginConfig(
  *    invalid block makes the loader skip it with a logged reason. It reuses
  *    the process's telemetry provider if one is already initialised.
  *
+ * The tracing sink directory defaults to `<logs>/trace` (see {@link resolveLogRoots}) unless
+ * `tracing.logDir` is set; `traceDir` is the injectable default for tests.
+ *
  * Opt OUT of the BUDGET plugin only with `ADHD_AGENT_DISABLE_BUDGET_PLUGIN=1`
  * (this never affects tracing). Env knobs:
  *  - `ADHD_AGENT_BUDGET_MAX_CALLS` — cumulative model-call cap (default 500;
@@ -702,11 +895,16 @@ export function tracingPluginConfig(
  */
 export function defaultPluginEntries(
   processEnv: NodeJS.ProcessEnv = process.env,
-  tracing: AgentMcpConfig["tracing"] = env.config.tracing
+  tracing: AgentMcpConfig["tracing"] = env.config.tracing,
+  traceDir: string = resolveLogRoots().trace
 ): DefaultPluginEntry[] {
+  // c536ce29: the tracing file sink defaults to `<logs>/trace` (env-resolved), not the plugin's
+  // own `~/.adhd/sox-ecosystem/<service>/logs`. An operator-set `tracing.logDir` always wins.
+  const resolvedTracing: AgentMcpConfig["tracing"] =
+    tracing.logDir === undefined ? { ...tracing, logDir: traceDir } : tracing;
   const tracingEntry: DefaultPluginEntry = {
     module: DEFAULT_TRACING_PLUGIN_MODULE,
-    config: tracingPluginConfig(tracing),
+    config: tracingPluginConfig(resolvedTracing),
   };
   const optOut = processEnv["ADHD_AGENT_DISABLE_BUDGET_PLUGIN"];
   if (optOut === "1" || optOut === "true") return [tracingEntry];

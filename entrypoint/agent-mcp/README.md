@@ -74,14 +74,37 @@ The database (SQLite, agents/sessions/messages/usage) is stored in the resolved 
 
 ### Tracing (default-on, typed config, no toggle)
 
-`@adhd/agent-plugin-tracing` is loaded by default alongside the budget plugin: every session, task, model call, tool call, permission decision and HITL suspend/resume becomes a durable span in `@adhd/sox-telemetry`'s JSONL sink (default `~/.adhd/sox-ecosystem/agent-mcp/logs`). There is **no enable/disable switch** — an absent `tracing` block still loads the plugin with defaults; an invalid block makes the loader skip it and log why. If the process already initialised a telemetry provider (an embedding host, apigen's tracing layer), the plugin reuses it instead of provisioning a second one.
+`@adhd/agent-plugin-tracing` is loaded by default alongside the budget plugin: every session, task, model call, tool call, permission decision and HITL suspend/resume becomes a durable span in `@adhd/sox-telemetry`'s JSONL sink (default `~/.adhd/agent-mcp/<namespace>/logs/trace`, resolved through `@adhd/environment`; releases before this change wrote to `~/.adhd/sox-ecosystem/agent-mcp/logs`, so a reader of the old path must now set `ADHD_AGENT_TRACING_LOG_DIR`). There is **no enable/disable switch** — an absent `tracing` block still loads the plugin with defaults; an invalid block makes the loader skip it and log why. If the process already initialised a telemetry provider (an embedding host, apigen's tracing layer), the plugin reuses it instead of provisioning a second one.
 
 | Config key | Env var | Default | Purpose |
 |---|---|---|---|
-| `tracing.service` | `ADHD_AGENT_TRACING_SERVICE` | `agent-mcp` | Telemetry `service`; also names the log directory |
+| `tracing.service` | `ADHD_AGENT_TRACING_SERVICE` | `agent-mcp` | Telemetry `service` resource attribute |
 | `tracing.logSink` | `ADHD_AGENT_TRACING_LOG_SINK` | `file` | `file` / `stderr` / `none` |
-| `tracing.logDir` | `ADHD_AGENT_TRACING_LOG_DIR` | `~/.adhd/sox-ecosystem/<service>/logs` | File-sink directory |
+| `tracing.logDir` | `ADHD_AGENT_TRACING_LOG_DIR` | `<logs>/trace` = `~/.adhd/agent-mcp/<namespace>/logs/trace` | File-sink directory |
 | `tracing.captureArgs` | `ADHD_AGENT_TRACING_CAPTURE_ARGS` | `false` | Record truncated tool arguments (else only a sha256 digest) |
+
+### Log tree and `logging.*` config (backlog c536ce29)
+
+All agent-mcp logs live under ONE environment-resolved root, `<logs>` = `~/.adhd/agent-mcp/<namespace>/logs` (the `logs` dir of `agentMcpEnvironmentSpec`, pinned `scope: global` so `ADHD_ENV_SCOPE=project` never moves it into a repo, and `share: shared` so a restart does not create a new tree; the process instance is part of every FILE NAME instead: `<date>.<instanceLabel>.<pid>.jsonl`). Layout: `<logs>/api/` (raw wire records), `<logs>/ops/` (structured core-ops events), `<logs>/trace/` (spans, the `tracing.logDir` default). Claudecli scratch files use `~/.adhd/agent-mcp/<namespace>/temp/`. Resolve them in code with `resolveLogRoots()` (`src/config.ts`), never by hand-building a path.
+
+| Config key | Env var | Default | Purpose |
+|---|---|---|---|
+| `logging.dir` | `ADHD_AGENT_LOGGING_DIR` | unset (`<logs>`) | Explicit override of the log root |
+| `logging.instanceLabel` | `ADHD_AGENT_LOGGING_INSTANCE_LABEL` | `default` | Stable label in log file names (`[A-Za-z0-9._-]{1,64}`); the generated instanceId changes on every start |
+| `logging.api` | `ADHD_AGENT_LOGGING_API` | `on` | `on` / `off`. `off` stops ONLY raw API body capture under `api/`; ops and trace logs stay on |
+| `logging.apiBodyMaxBytes` | `ADHD_AGENT_LOGGING_API_BODY_MAX_BYTES` | `4194304` | Per-body capture cap (sha256 of the full body is kept) |
+| `logging.apiRotateBytes` | `ADHD_AGENT_LOGGING_API_ROTATE_BYTES` | `67108864` | api/ rotation size (rotated files gzipped) |
+| `logging.apiRetentionDays` | `ADHD_AGENT_LOGGING_API_RETENTION_DAYS` | `14` | api/ age retention |
+| `logging.apiMaxDirBytes` | `ADHD_AGENT_LOGGING_API_MAX_DIR_BYTES` | `2147483648` | api/ total size cap |
+| `logging.opsRotateBytes` | `ADHD_AGENT_LOGGING_OPS_ROTATE_BYTES` | `16777216` | ops/ rotation size |
+| `logging.opsRetentionDays` | `ADHD_AGENT_LOGGING_OPS_RETENTION_DAYS` | `60` | ops/ age retention |
+| `logging.opsMaxDirBytes` | `ADHD_AGENT_LOGGING_OPS_MAX_DIR_BYTES` | `268435456` | ops/ total size cap |
+| `logging.traceRetentionDays` | `ADHD_AGENT_LOGGING_TRACE_RETENTION_DAYS` | `30` | trace/ age retention |
+| `logging.traceMaxDirBytes` | `ADHD_AGENT_LOGGING_TRACE_MAX_DIR_BYTES` | `536870912` | trace/ total size cap |
+| `logging.floodMaxBytes` | `ADHD_AGENT_LOGGING_FLOOD_MAX_BYTES` | `268435456` | Per-process api/ bytes per window before the flood breaker drops bodies (digest-only) |
+| `logging.floodWindowSeconds` | `ADHD_AGENT_LOGGING_FLOOD_WINDOW_SECONDS` | `600` | Flood breaker window |
+
+`ADHD_AGENT_LOG_LEVEL` (`logging.level`, default `info`) is unchanged. These keys are values with defaults; this section covers the configuration surface (path resolution and defaults). Record emission into `api/` and `ops/` is delivered by the wirelog package and the provider/server seams of the same backlog item.
 
 Audit a sink with `python3 scripts/audit_tracing.py <sink-dir>`: it recomputes per-operation sample counts and durations and exits non-zero when a declared span path has zero samples.
 
