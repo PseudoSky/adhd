@@ -33,10 +33,10 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import type { EngineLogger, ExecutionContext, Orchestrator, TaskDeps, AgentCreateInput } from '@adhd/agent-engine-orchestrator';
+import type { ExecutionContext, Orchestrator, TaskDeps, AgentCreateInput } from '@adhd/agent-engine-orchestrator';
 
 import { defaultPluginEntries } from '../../config.js';
-import { loadDefaultPlugins } from '../../plugins/load-defaults.js';
+import { loadDefaultPluginsOrFail } from '../plugin-prereq.js';
 import { createServer } from '../../server.js';
 import { ScriptedProvider } from './scripted-provider.js';
 import { buildHarness, drainQueue, taskResume, taskTool, type Harness } from './harness.js';
@@ -95,7 +95,6 @@ function assertTaskSpanned(r: Rec[], taskId: string): void {
   }
 }
 
-const silentLogger: EngineLogger = { info: () => undefined, warn: () => undefined, error: () => undefined, debug: () => undefined };
 const SELF_SERVER = { 'agent-mcp': { transport: 'stdio' as const, command: 'agent-mcp' } };
 
 let root: string;
@@ -164,7 +163,7 @@ beforeAll(async () => {
   harness = await buildHarness();
   bare = await buildHarness();
   // The REAL default entries (tracing included), differing only in where the sink lives.
-  await loadDefaultPlugins(harness.hooks, harness.db, silentLogger, {
+  await loadDefaultPluginsOrFail(harness.hooks, harness.db, {
     configPath: path.join(root, 'no-such-config.json'),
     defaultEntries: defaultPluginEntries({} as NodeJS.ProcessEnv, { service: 'agent-mcp-e2e', logSink: 'file', logDir, captureArgs: false }),
   });

@@ -16,6 +16,8 @@
  *  `server.shutdown` ({@link logServerShutdown}, the transport finished closing: `duration_ms` of the
  *  close plus total `uptime_ms`). One signal stop yields exactly one `server.stop` then one
  *  `server.shutdown`; an embedder that closes without a signal yields `server.shutdown` alone.
+ *  plugins: `plugin.load_failed` ({@link logPluginLoadFailed}, component `plugin`: a default or
+ *  configured plugin was skipped at startup; carries `plugin`, `stage`, `reason`, `default`).
  *  pricing: `pricing.*` (see pricing/pull.ts).
  *
  * TRC-AC18: every record carries `component` (the event's domain prefix for hook events,
@@ -477,6 +479,31 @@ export function logServerShutdown(
             db_path: info.dbPath,
             duration_ms: Math.max(0, Date.now() - (info.closeStartedAtMs ?? Date.now())),
             uptime_ms: Math.max(0, Date.now() - info.startedAtMs),
+        });
+    } catch {
+        /* never throws */
+    }
+}
+
+/**
+ * Emits `plugin.load_failed`: a plugin entry (default or operator-configured) was skipped at
+ * startup, so its hooks are NOT registered (e.g. a missing tracing plugin means no spans).
+ *
+ * @param info    the module specifier, the load stage that failed, the cause, and whether the
+ *                entry was a host default
+ * @param channel the ops channel; default: the process-wide one
+ */
+export function logPluginLoadFailed(
+    info: { readonly plugin: string; readonly stage: string; readonly reason: string; readonly isDefault: boolean },
+    channel: ChannelSource = () => getLogChannels().ops
+): void {
+    try {
+        resolve(channel).logEvent("plugin.load_failed", {
+            component: "plugin",
+            plugin: info.plugin,
+            stage: info.stage,
+            reason: info.reason,
+            default: info.isDefault,
         });
     } catch {
         /* never throws */

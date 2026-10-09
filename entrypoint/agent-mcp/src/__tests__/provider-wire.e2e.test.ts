@@ -27,7 +27,7 @@ import { createProvider, StdioMcpClient, type EngineLogger } from "@adhd/agent-e
 import type { AgentCreateInput } from "@adhd/agent-engine-orchestrator";
 
 import { defaultPluginEntries, toEngineConfig } from "../config.js";
-import { loadDefaultPlugins } from "../plugins/load-defaults.js";
+import { loadDefaultPluginsOrFail } from "./plugin-prereq.js";
 import { createServer } from "../server.js";
 import { createWireSeams } from "../wire/seams.js";
 import { buildHarness, type Harness } from "./integration/harness.js";
@@ -50,7 +50,6 @@ const SECRET_ENV = "ADHD_AGENT_P1E2E_SECRET"; // env var NAME, not a credential 
 const ENV_CANARY = ["p1e2e", "ENVVALUEcanary0123456789"].join("-");
 const log: EngineLogger = { info: () => undefined, warn: () => undefined, error: () => undefined, debug: () => undefined };
 const messages = [{ id: "m1", sessionId: "s1", role: "user" as const, content: "ping", createdAt: new Date().toISOString() }];
-const silentLogger = log;
 
 const leaks: string[] = [];
 let ch: IChannelFixture | undefined;
@@ -177,7 +176,7 @@ describe("c536ce29 P1-AC-A: provider:failed is live in the production task path"
         fs.mkdirSync(TMP_ROOT, { recursive: true });
         root = fs.mkdtempSync(path.join(TMP_ROOT, "p1-ac-a-"));
         harness = await buildHarness();
-        await loadDefaultPlugins(harness.hooks, harness.db, silentLogger, {
+        await loadDefaultPluginsOrFail(harness.hooks, harness.db, {
             configPath: path.join(root, "no-such-config.json"),
             defaultEntries: defaultPluginEntries({} as NodeJS.ProcessEnv, {
                 service: "agent-mcp-p1",

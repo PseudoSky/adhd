@@ -85,6 +85,7 @@ queue. Bodies are captured up to `logging.apiBodyMaxBytes` (4 MiB) with the sha2
 | `turn.start` / `turn.end` | `turn`, `messages`, `tools`; end: `stop_reason`, `tool_calls`, `input_tokens`, `output_tokens`, `response_model`, `compute_ms`, `duration_ms` |
 | `tool.call`, `tool.denied`, `cap.trip`, `hitl.suspend`, `hitl.resume`, `provider.error`, `dispatch.delegate`, `session.created`, `session.closed` | task ids plus event-specific detail |
 | `task.completed` / `task.failed` / `task.cancelled` | `duration_ms`, `turns`, `input_tokens`, `output_tokens`, `result_chars` |
+| `plugin.load_failed` | `plugin` (module specifier), `stage` (`resolve`/`import`/`config`/`factory-missing`/`instantiate`/`install`), `reason`, `default` (true for a host default such as tracing/budget). The server keeps running without the plugin; stderr also gets one `WARNING: default plugin ... failed to load` line |
 | `pricing.pull.start`, `pricing.pull.end`, `pricing.anomaly`, `pricing.scheduler.*` | `ledger_id`, `models`, `changed`, `anomalies` |
 
 The persisted pino application log is also written to `ops` (lines with numeric `level`, `msg`,

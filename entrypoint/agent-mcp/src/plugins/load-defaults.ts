@@ -22,10 +22,12 @@ import { fileURLToPath } from "node:url";
 
 import type { EngineLogger } from "@adhd/agent-engine-orchestrator";
 import { loadExternalPlugins } from "@adhd/agent-engine-orchestrator";
+import type { PluginLoadFailure } from "@adhd/agent-engine-orchestrator";
 import type { IHookRegistry } from "@adhd/agent-base-types";
 
 import { defaultPluginEntries, env } from "../config.js";
 import type { DefaultPluginEntry } from "../config.js";
+import { logPluginLoadFailed, type ChannelSource } from "../ops-log.js";
 
 /**
  * agent-mcp's own package module directory (`src/` under source, `dist/src/`
@@ -51,6 +53,35 @@ export interface LoadDefaultPluginsOverrides {
    * list derived from `defaultPluginEntries()` with a throwaway tracing `logDir`.
    */
   defaultEntries?: DefaultPluginEntry[];
+  /** Where the skip warning is written; default `process.stderr`. Tests inject a collector. */
+  stderr?: Pick<NodeJS.WriteStream, "write">;
+  /** Ops channel for the `plugin.load_failed` record; default: the process-wide one. */
+  opsChannel?: ChannelSource;
+}
+
+/**
+ * Surfaces a skipped plugin on channels a quiet logger cannot drop: one stderr line plus a
+ * `plugin.load_failed` ops record. The server keeps running without the plugin (skip semantics);
+ * what changes is that a missing default (tracing, budget) can no longer be silent.
+ */
+export function reportPluginLoadFailure(
+  failure: PluginLoadFailure,
+  stderr: Pick<NodeJS.WriteStream, "write"> = process.stderr,
+  opsChannel?: ChannelSource
+): void {
+  const kind = failure.isDefault ? "default plugin" : "plugin";
+  try {
+    stderr.write(
+      `[agent-mcp] WARNING: ${kind} ${failure.specifier} failed to load (${failure.stage}): ${failure.reason}. ` +
+        `Its hooks are NOT registered; continuing without it.\n`
+    );
+  } catch {
+    /* never throws */
+  }
+  logPluginLoadFailed(
+    { plugin: failure.specifier, stage: failure.stage, reason: failure.reason, isDefault: failure.isDefault },
+    opsChannel
+  );
 }
 
 /**
@@ -70,6 +101,8 @@ export async function loadDefaultPlugins(
     {
       configPath: overrides.configPath,
       resolveBases: overrides.resolveBases ?? [AGENT_MCP_PLUGIN_RESOLUTION_BASE],
+      onPluginLoadFailed: (failure) =>
+        reportPluginLoadFailure(failure, overrides.stderr, overrides.opsChannel),
     },
     env.config.plugins.configPath,
     env.config.plugins.entries as string[],

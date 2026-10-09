@@ -96,6 +96,7 @@ export function findConfigFile(
 /**
  * Read, parse, and validate the agent-mcp config file.
  * @param configPathOverride — forwarded to findConfigFile
+ *   `onPluginLoadFailed` — per-skipped-entry callback (see {@link PluginLoadFailure})
  * @param configPathFromEnv — config.plugins.configPath injection
  * @param logger — injected logger
  */
@@ -173,6 +174,38 @@ export async function resolveSpecifier(
   );
 }
 
+// ── Load-failure surfacing ────────────────────────────────────────────────────
+
+/** The stage at which a plugin entry was skipped. */
+export type PluginLoadFailureStage =
+  | 'resolve'
+  | 'import'
+  | 'config'
+  | 'factory-missing'
+  | 'instantiate'
+  | 'install';
+
+/**
+ * One skipped plugin entry. Delivered to {@link PluginLoadFailureHandler} so an embedding host can
+ * surface the skip on a channel a quiet logger cannot drop (stderr, an ops record) — the loader's
+ * own `logger.error` is easily swallowed by a no-op logger, and a silently missing default plugin
+ * (e.g. tracing) is an invisible production failure (backlog c536ce29 E2E-PREREQ).
+ */
+export interface PluginLoadFailure {
+  readonly specifier: string;
+  readonly stage: PluginLoadFailureStage;
+  /** Human-readable cause (the error message or validation summary). */
+  readonly reason: string;
+  /** True when the entry came from the host's `defaultEntries` (not user config). */
+  readonly isDefault: boolean;
+}
+
+/** Called once per skipped plugin entry; must not throw (a throw is swallowed). */
+export type PluginLoadFailureHandler = (failure: PluginLoadFailure) => void;
+
+const reasonOf = (err: unknown): string =>
+  err instanceof Error ? err.message : String(err);
+
 // ── Single plugin load ────────────────────────────────────────────────────────
 
 async function loadOnePlugin(
@@ -180,15 +213,25 @@ async function loadOnePlugin(
   db: unknown,
   entry: PluginEntry,
   logger: EngineLogger,
-  resolveBases: readonly string[] = []
+  resolveBases: readonly string[] = [],
+  isDefault = false,
+  onFailure?: PluginLoadFailureHandler
 ): Promise<void> {
   const { module: specifier, config: rawConfig } = entry;
+  const fail = (stage: PluginLoadFailureStage, reason: string): void => {
+    try {
+      onFailure?.({ specifier, stage, reason, isDefault });
+    } catch {
+      // the handler is best-effort; a throwing handler must never abort the load loop
+    }
+  };
 
   let resolved: string;
   try {
     resolved = await resolveSpecifier(specifier, resolveBases);
   } catch (err) {
     logger.error({ specifier, err }, 'Plugin resolution failed — skipping');
+    fail('resolve', reasonOf(err));
     return;
   }
 
@@ -200,6 +243,7 @@ async function loadOnePlugin(
       { specifier, resolved, err },
       'Plugin import failed — skipping'
     );
+    fail('import', reasonOf(err));
     return;
   }
 
@@ -214,6 +258,7 @@ async function loadOnePlugin(
         'Plugin config failed schema validation — skipping. ' +
           "Fix the 'config' block for this plugin in your agent-mcp config file."
       );
+      fail('config', JSON.stringify(issues));
       return;
     }
     validatedConfig = result.data;
@@ -228,6 +273,7 @@ async function loadOnePlugin(
       'Plugin does not export a createPlugin factory (as default or named export) — skipping. ' +
         'Expected: export default function createPlugin(ctx): Plugin { ... }'
     );
+    fail('factory-missing', 'no createPlugin factory exported');
     return;
   }
 
@@ -240,6 +286,7 @@ async function loadOnePlugin(
       { specifier, err },
       'Plugin factory threw during instantiation — skipping'
     );
+    fail('instantiate', reasonOf(err));
     return;
   }
 
@@ -254,6 +301,7 @@ async function loadOnePlugin(
       { specifier, plugin: plugin.name, err },
       'Plugin install() threw — skipping'
     );
+    fail('install', reasonOf(err));
   }
 }
 
@@ -283,6 +331,12 @@ export async function loadExternalPlugins(
     configPath?: string | null;
     pluginEntries?: string[];
     resolveBases?: readonly string[];
+    /**
+     * Invoked once for every skipped entry (resolve/import/config/factory/instantiate/install),
+     * with `isDefault` distinguishing host defaults from user config. Lets the host surface a
+     * skip on stderr / an ops record independent of the injected logger's verbosity.
+     */
+    onPluginLoadFailed?: PluginLoadFailureHandler;
   },
   configPathFromEnv?: string,
   pluginEntriesFromEnv?: string[],
@@ -306,7 +360,16 @@ export async function loadExternalPlugins(
   const allEntries: PluginEntry[] = [...effectiveDefaults, ...userEntries];
   if (allEntries.length === 0) return;
 
+  const defaultSet = new Set<PluginEntry>(effectiveDefaults);
   for (const entry of allEntries) {
-    await loadOnePlugin(hooks, db, entry, log, overrides?.resolveBases ?? []);
+    await loadOnePlugin(
+      hooks,
+      db,
+      entry,
+      log,
+      overrides?.resolveBases ?? [],
+      defaultSet.has(entry),
+      overrides?.onPluginLoadFailed
+    );
   }
 }
