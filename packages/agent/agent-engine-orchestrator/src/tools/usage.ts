@@ -11,8 +11,14 @@ function mostSevereStr(a: string | undefined, b: string | undefined): string | u
 
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 
-import { taskEventsTable, taskUsageTable, tasksTable } from "@adhd/agent-store-runtime";
-import { estimateCostUsd } from "@adhd/agent-core-provider";
+import {
+  PriceHistoryStore,
+  createPriceSource,
+  taskEventsTable,
+  taskUsageTable,
+  tasksTable,
+} from "@adhd/agent-store-runtime";
+import { estimateCost, type IPriceSource } from "@adhd/agent-core-provider";
 import type {
   ContextSizeAt,
   GroupedUsageRow,
@@ -29,6 +35,151 @@ import type {
 export type Database = BetterSQLite3Database<any>;
 
 export type TaskUsageRow = typeof taskUsageTable.$inferSelect;
+
+/** Statuses (written by UsagePlugin, 1f1c8598) meaning "at least one turn had no price". */
+const UNPRICED_SQL = sql`('unpriced_model','partial')`;
+
+function isUnpricedStatus(status: string | null | undefined): boolean {
+  return status === "unpriced_model" || status === "partial";
+}
+
+/**
+ * Per-call as-of price lookup, memoised on `(modelId, asOf)`. The key MUST include the
+ * instant: a `modelId`-only key would reuse a stale price across a price change
+ * (37f6c511 FS3). This is the SAME lookup (`createPriceSource` + `estimateCost`) the
+ * write path uses, so a turn priced here equals the turn priced at write time.
+ */
+function memoPriceSource(db: Database): IPriceSource {
+  const source = createPriceSource(db);
+  const memo = new Map<string, ReturnType<IPriceSource["priceAt"]>>();
+  return {
+    priceAt(modelId, instantIso) {
+      const key = JSON.stringify([modelId, instantIso]);
+      if (memo.has(key)) return memo.get(key);
+      const rec = source.priceAt(modelId, instantIso);
+      memo.set(key, rec);
+      return rec;
+    },
+  };
+}
+
+/** Hours since the last successful price pull; null until a ledger row exists. */
+function priceAgeHours(db: Database): number | null {
+  return new PriceHistoryStore(db).lastLedger().priceAgeHours;
+}
+
+/** Cost provenance contributed by one output row; summed into the summary block. */
+interface IRowCost {
+  /** Priced portion of cost (never NULL). */
+  priced: number;
+  unpricedTurns: number;
+  unpricedTokens: number;
+  unpricedTaskIds: string[];
+  unpricedModels: string[];
+  bases: string[];
+}
+
+const ROW_COST = new WeakMap<UsageRow, IRowCost>();
+
+/** The additive provenance summary shared by every summary block. */
+interface ICostSummary {
+  priced_cost_usd: number;
+  unpriced_tasks: number;
+  unpriced_turns: number;
+  unpriced_tokens: number;
+  unpriced_models: string[];
+  cost_bases: string[];
+  price_age_hours: number | null;
+}
+
+function summariseCost(costs: Iterable<IRowCost | undefined>, ageHours: number | null): ICostSummary {
+  let priced = 0;
+  let turns = 0;
+  let tokens = 0;
+  const taskIds = new Set<string>();
+  const models = new Set<string>();
+  const bases = new Set<string>();
+  for (const c of costs) {
+    if (!c) continue;
+    priced += c.priced;
+    turns += c.unpricedTurns;
+    tokens += c.unpricedTokens;
+    c.unpricedTaskIds.forEach((t) => taskIds.add(t));
+    c.unpricedModels.forEach((m) => models.add(m));
+    c.bases.forEach((b) => bases.add(b));
+  }
+  return {
+    priced_cost_usd: priced,
+    unpriced_tasks: taskIds.size,
+    unpriced_turns: turns,
+    unpriced_tokens: tokens,
+    unpriced_models: [...models].sort(),
+    cost_bases: [...bases].sort(),
+    price_age_hours: ageHours,
+  };
+}
+
+/** `priced` when every contributing status is priced, `unpriced_model` when none is, else `partial`. Null when no status is known. */
+function mergeStatus(statuses: Array<string | null>): string | null {
+  const known = statuses.filter((s): s is string => s !== null);
+  if (known.length === 0) return null;
+  if (known.every((s) => s === "priced")) return "priced";
+  if (known.every((s) => s === "unpriced_model")) return "unpriced_model";
+  return "partial";
+}
+
+function singleOrNull(values: Array<string | null>): string | null {
+  const distinct = new Set(values.filter((v): v is string => v !== null));
+  return distinct.size === 1 ? [...distinct][0] : null;
+}
+
+interface ITaskUsageJoin {
+  usage: TaskUsageRow;
+  sessionId: string | null;
+}
+
+/**
+ * Exact count of unpriced turns per task. `unpriced_model` rows had every call unpriced
+ * (= `model_calls`); `partial` rows need the per-turn truth, so their MODEL_RESPONSE
+ * events are re-priced as-of event time (the same derivation the turn grain uses).
+ */
+function unpricedTurnCounts(
+  db: Database,
+  joins: ITaskUsageJoin[],
+  source: IPriceSource
+): Map<string, number> {
+  const counts = new Map<string, number>();
+  const partial = new Map<string, ITaskUsageJoin>();
+  for (const j of joins) {
+    if (j.usage.costStatus === "unpriced_model") {
+      counts.set(j.usage.taskId, (counts.get(j.usage.taskId) ?? 0) + (j.usage.modelCalls ?? 0));
+    } else if (j.usage.costStatus === "partial") {
+      partial.set(j.usage.taskId, j);
+    }
+  }
+  if (partial.size > 0) {
+    for (const turn of deriveTurns(db, partial, source)) {
+      if (turn.cost_status === "unpriced_model" && turn.task_id) {
+        counts.set(turn.task_id, (counts.get(turn.task_id) ?? 0) + 1);
+      }
+    }
+  }
+  return counts;
+}
+
+/** Provenance of a stored `task_usage` row, given its exact unpriced-turn count. */
+function storedRowCost(u: TaskUsageRow, unpricedTurns: number): IRowCost {
+  const unpriced = isUnpricedStatus(u.costStatus);
+  return {
+    // Legacy rows (cost_status NULL) never recorded the priced portion; their est_cost_usd IS it.
+    priced: u.pricedCostUsd ?? u.estCostUsd ?? 0,
+    unpricedTurns,
+    unpricedTokens: u.unpricedTokens ?? 0,
+    unpricedTaskIds: unpriced ? [u.taskId] : [],
+    unpricedModels: unpriced ? [u.model] : [],
+    bases: u.costBasis && u.costStatus !== "unpriced_model" ? [u.costBasis] : [],
+  };
+}
 
 export interface UsageQueryResult {
   rows: TaskUsageRow[];
@@ -47,6 +198,18 @@ export interface UsageQueryResult {
     totalReasoningTokens: number;
     /** PEAK single-call input across every row in scope (a MAX, not a SUM). */
     peakContextTokens: number;
+    /** 1f1c8598 S4b: priced portion of cost; explains a null total elsewhere. */
+    priced_cost_usd: number;
+    /** Tasks with `unpriced_model`/`partial` status (0, not absent, when none). */
+    unpriced_tasks: number;
+    /** Input+output tokens that could not be priced. */
+    unpriced_tokens: number;
+    /** Distinct configured model ids with unpriced work. */
+    unpriced_models: string[];
+    /** Exact unpriced model calls; present on the un-grouped (rows) shape only. */
+    unpriced_turns?: number;
+    /** Hours since the last successful price pull; null until a ledger exists. */
+    price_age_hours: number | null;
   };
 }
 
@@ -119,11 +282,15 @@ export function usageQuery(db: Database, input: TaskUsageInput): UsageQueryResul
   const limit = input?.limit ?? 50;
 
   if (input?.group_by) {
-    let groupCol: typeof taskUsageTable.model | typeof taskUsageTable.providerType | typeof taskUsageTable.agentName;
+    let groupCol: typeof taskUsageTable.model | typeof taskUsageTable.providerType | typeof taskUsageTable.agentName | SQL<string>;
     if (input.group_by === "model") {
         groupCol = taskUsageTable.model;
     } else if (input.group_by === "provider") {
         groupCol = taskUsageTable.providerType;
+    } else if (input.group_by === "response_model") {
+        // Provider-reported model (1f1c8598): lets the owner re-confirm the alias
+        // assumption from data. Legacy rows (no capture) bucket under "(unknown)".
+        groupCol = sql<string>`coalesce(${taskUsageTable.responseModel}, '(unknown)')`;
     } else {
         groupCol = taskUsageTable.agentName;
     }
@@ -149,6 +316,10 @@ export function usageQuery(db: Database, input: TaskUsageInput): UsageQueryResul
         reasoningTokens:    sql<number | null>`sum(${taskUsageTable.reasoningTokens})`,
         // MAX across the group, deliberately NOT a sum (FINDING-ORCH-007).
         peakContextTokens:  sql<number | null>`max(${taskUsageTable.peakContextTokens})`,
+        priced_cost_usd:    sql<number>`coalesce(sum(coalesce(${taskUsageTable.pricedCostUsd}, ${taskUsageTable.estCostUsd}, 0)), 0)`,
+        unpriced_tasks:     sql<number>`coalesce(sum(case when ${taskUsageTable.costStatus} in ${UNPRICED_SQL} then 1 else 0 end), 0)`,
+        unpriced_tokens:    sql<number>`coalesce(sum(${taskUsageTable.unpricedTokens}), 0)`,
+        unpriced_models_csv: sql<string | null>`group_concat(distinct case when ${taskUsageTable.costStatus} in ${UNPRICED_SQL} then ${taskUsageTable.model} end)`,
       })
       .from(taskUsageTable)
       .leftJoin(tasksTable, eq(taskUsageTable.taskId, tasksTable.id))
@@ -156,7 +327,11 @@ export function usageQuery(db: Database, input: TaskUsageInput): UsageQueryResul
       .groupBy(groupCol)
       .orderBy(desc(sql`sum(${taskUsageTable.inputTokens} + ${taskUsageTable.outputTokens})`))
       .limit(limit)
-      .all() as GroupedUsageRow[];
+      .all()
+      .map(({ unpriced_models_csv, ...g }) => ({
+        ...g,
+        unpriced_models: unpriced_models_csv ? unpriced_models_csv.split(",").sort() : [],
+      })) as GroupedUsageRow[];
 
     const totalInputTokens  = groups.reduce((n, r) => n + r.inputTokens, 0);
     const totalOutputTokens = groups.reduce((n, r) => n + r.outputTokens, 0);
@@ -169,6 +344,7 @@ export function usageQuery(db: Database, input: TaskUsageInput): UsageQueryResul
     const totalReasoningTokens = groups.reduce((n, r) => n + (r.reasoningTokens ?? 0), 0);
     // MAX across groups — deliberately NOT a sum.
     const peakContextTokens = groups.reduce((n, r) => Math.max(n, r.peakContextTokens ?? 0), 0);
+    const groupUnpricedModels = [...new Set(groups.flatMap((g) => g.unpriced_models))].sort();
 
     return {
       rows: [],
@@ -184,6 +360,11 @@ export function usageQuery(db: Database, input: TaskUsageInput): UsageQueryResul
         totalCacheCreationTokens,
         totalReasoningTokens,
         peakContextTokens,
+        priced_cost_usd: groups.reduce((n, r) => n + r.priced_cost_usd, 0),
+        unpriced_tasks: groups.reduce((n, r) => n + r.unpriced_tasks, 0),
+        unpriced_tokens: groups.reduce((n, r) => n + r.unpriced_tokens, 0),
+        unpriced_models: groupUnpricedModels,
+        price_age_hours: priceAgeHours(db),
       },
     };
   }
@@ -196,9 +377,24 @@ export function usageQuery(db: Database, input: TaskUsageInput): UsageQueryResul
     .limit(limit)
     .all();
 
+  const legacyCost = summariseCost(
+    (() => {
+      const joins = rows.map((usage) => ({ usage, sessionId: null }));
+      const counts = unpricedTurnCounts(db, joins, memoPriceSource(db));
+      return rows.map((r) => storedRowCost(r, counts.get(r.taskId) ?? 0));
+    })(),
+    priceAgeHours(db)
+  );
+
   return {
     rows,
     summary: {
+      priced_cost_usd: legacyCost.priced_cost_usd,
+      unpriced_tasks: legacyCost.unpriced_tasks,
+      unpriced_tokens: legacyCost.unpriced_tokens,
+      unpriced_models: legacyCost.unpriced_models,
+      unpriced_turns: legacyCost.unpriced_turns,
+      price_age_hours: legacyCost.price_age_hours,
       totalInputTokens: rows.reduce((n, r) => n + (r.inputTokens ?? 0), 0),
       totalOutputTokens: rows.reduce((n, r) => n + (r.outputTokens ?? 0), 0),
       totalToolCalls: rows.reduce((n, r) => n + (r.toolCallCount ?? 0), 0),
@@ -256,7 +452,7 @@ const ZERO_METRICS = {
 };
 
 /** Sums the 10 additive fields + MAXes context_size, across whatever grain of row is passed. */
-function summariseGrainRows(rows: UsageRow[]): UsageGrainSummary {
+function summariseGrainRows(rows: UsageRow[], ageHours: number | null): UsageGrainSummary {
   const totals = rows.reduce(
     (acc, r) => ({
       input_tokens: acc.input_tokens + r.input_tokens,
@@ -291,6 +487,7 @@ function summariseGrainRows(rows: UsageRow[]): UsageGrainSummary {
     row_count: rows.length,
     ...totals,
     est_cost_usd: rows.length === 0 ? null : estCostUsd,
+    ...summariseCost(rows.map((r) => ROW_COST.get(r)), ageHours),
     context_size,
     context_size_at,
   };
@@ -334,7 +531,7 @@ function taskScopeWhere(db: Database, input: TaskUsageInput): SQL | undefined {
 
 /** Task grain (§4): one row per `task_usage` entry — the pre-existing cumulative rollup,
  * just remapped onto the flattened snake_case row shape. */
-function taskGrainRows(db: Database, input: TaskUsageInput): UsageRow[] {
+function taskGrainRows(db: Database, input: TaskUsageInput, source: IPriceSource): UsageRow[] {
   const whereClause = taskScopeWhere(db, input);
   const limit = input?.limit ?? 50;
 
@@ -347,7 +544,10 @@ function taskGrainRows(db: Database, input: TaskUsageInput): UsageRow[] {
     .limit(limit)
     .all();
 
-  return joined.map(({ usage: r, sessionId }) => ({
+  const unpricedCounts = unpricedTurnCounts(db, joined, source);
+
+  return joined.map(({ usage: r, sessionId }) => {
+    const row: UsageRow = {
     session_id: sessionId ?? null,
     task_id: r.taskId,
     root_task_id: r.rootTaskId ?? null,
@@ -375,16 +575,24 @@ function taskGrainRows(db: Database, input: TaskUsageInput): UsageRow[] {
     total_ms: r.latencyMs ?? 0,
     tool_call_est_result_tokens: r.estToolResultTokens ?? 0,
     est_cost_usd: r.estCostUsd ?? null,
+    // Provenance (1f1c8598): NULL on legacy rows = "provenance unknown", never "unpriced".
+    response_model: r.responseModel ?? null,
+    cost_status: r.costStatus ?? null,
+    cost_basis: r.costBasis ?? null,
+    pricing_ref: r.pricingRef ?? null,
     context_size: r.peakContextTokens ?? 0,
     context_size_at: contextSizeAtSelf(r.taskId, r.peakContextAt ?? null),
-  }));
+    };
+    ROW_COST.set(row, storedRowCost(r, unpricedCounts.get(r.taskId) ?? 0));
+    return row;
+  });
 }
 
 /** Session grain (§4): Σ over every task in `tasks.session_id = X` — transitively Σ over
  * every turn in the session. Identity fields with no single value across the session
  * (task_id, agent_name, provider_type, model, stop_reason) are null; `context_size_at`
  * still identifies exactly which task/call produced the session's peak. */
-function sessionGrainRows(db: Database, input: TaskUsageInput): UsageRow[] {
+function sessionGrainRows(db: Database, input: TaskUsageInput, source: IPriceSource): UsageRow[] {
   const whereClause = taskScopeWhere(db, input);
 
   const joined = db
@@ -393,6 +601,12 @@ function sessionGrainRows(db: Database, input: TaskUsageInput): UsageRow[] {
     .innerJoin(tasksTable, eq(taskUsageTable.taskId, tasksTable.id))
     .where(whereClause)
     .all();
+
+  const unpricedCounts = unpricedTurnCounts(
+    db,
+    joined.map((j) => ({ usage: j.usage, sessionId: j.task.sessionId ?? null })),
+    source
+  );
 
   const bySession = new Map<string, typeof joined>();
   for (const row of joined) {
@@ -415,8 +629,24 @@ function sessionGrainRows(db: Database, input: TaskUsageInput): UsageRow[] {
     let context_size = 0;
     let context_size_at: ContextSizeAt = { task_id: group[0].usage.taskId, call_index: null };
     const totals = { ...ZERO_METRICS };
+    const sessionCost: IRowCost = {
+      priced: 0,
+      unpricedTurns: 0,
+      unpricedTokens: 0,
+      unpricedTaskIds: [],
+      unpricedModels: [],
+      bases: [],
+    };
 
     for (const { usage: u, task: t } of group) {
+      const taskCost = storedRowCost(u, unpricedCounts.get(u.taskId) ?? 0);
+      sessionCost.priced += taskCost.priced;
+      sessionCost.unpricedTurns += taskCost.unpricedTurns;
+      sessionCost.unpricedTokens += taskCost.unpricedTokens;
+      sessionCost.unpricedTaskIds.push(...taskCost.unpricedTaskIds);
+      sessionCost.unpricedModels.push(...taskCost.unpricedModels);
+      sessionCost.bases.push(...taskCost.bases);
+
       totals.input_tokens += u.inputTokens ?? 0;
       totals.output_tokens += u.outputTokens ?? 0;
       totals.uncached_input_tokens += u.uncachedInputTokens ?? 0;
@@ -458,7 +688,7 @@ function sessionGrainRows(db: Database, input: TaskUsageInput): UsageRow[] {
       group[0].task.createdAt
     );
 
-    rows.push({
+    const sessionRow: UsageRow = {
       session_id: sessionId,
       task_id: null,
       root_task_id: null,
@@ -472,9 +702,15 @@ function sessionGrainRows(db: Database, input: TaskUsageInput): UsageRow[] {
       ...totals,
       total_ms,
       est_cost_usd: estCostUsd,
+      response_model: singleOrNull(group.map((g) => g.usage.responseModel ?? null)),
+      cost_status: mergeStatus(group.map((g) => g.usage.costStatus ?? null)),
+      cost_basis: singleOrNull(group.map((g) => g.usage.costBasis ?? null)),
+      pricing_ref: null,
       context_size,
       context_size_at,
-    });
+    };
+    ROW_COST.set(sessionRow, sessionCost);
+    rows.push(sessionRow);
   }
 
   rows.sort(compareCreatedAtDesc);
@@ -494,7 +730,7 @@ interface TaskEventRow {
  * turn they were produced under by walking events in creation order per task and
  * accumulating `TOOL_RESULT`s between a `MODEL_RESPONSE` and the next `MODEL_REQUEST`
  * (or end of task) — mirroring exactly how the orchestrator interleaves them. */
-function turnGrainRows(db: Database, input: TaskUsageInput): UsageRow[] {
+function turnGrainRows(db: Database, input: TaskUsageInput, source: IPriceSource): UsageRow[] {
   const whereClause = taskScopeWhere(db, input);
 
   const taskInfo = db
@@ -506,7 +742,23 @@ function turnGrainRows(db: Database, input: TaskUsageInput): UsageRow[] {
 
   if (taskInfo.length === 0) return [];
 
-  const infoByTaskId = new Map(taskInfo.map((r) => [r.usage.taskId, r]));
+  const rows = deriveTurns(db, new Map(taskInfo.map((r) => [r.usage.taskId, r])), source);
+
+  const since = input?.since;
+  const filtered = since ? rows.filter((r) => r.created_at >= since) : rows;
+  filtered.sort(compareCreatedAtDesc);
+
+  const limit = input?.limit ?? 50;
+  return filtered.slice(0, limit);
+}
+
+/** One row per `MODEL_RESPONSE` event for the given tasks, each priced AS OF the event's
+ * own `created_at` through the same `estimateCost` + price source the write path uses. */
+function deriveTurns(
+  db: Database,
+  infoByTaskId: Map<string, ITaskUsageJoin>,
+  source: IPriceSource
+): UsageRow[] {
   const taskIds = [...infoByTaskId.keys()];
 
   const events = db
@@ -569,6 +821,7 @@ function turnGrainRows(db: Database, input: TaskUsageInput): UsageRow[] {
         uncachedInputTokens?: number;
         reasoningTokens?: number;
         computeMs?: number;
+        responseModel?: string;
       };
       const inputTokens = payload.inputTokens ?? 0;
       const outputTokens = payload.outputTokens ?? 0;
@@ -582,12 +835,12 @@ function turnGrainRows(db: Database, input: TaskUsageInput): UsageRow[] {
       const reasoningTokens = payload.reasoningTokens ?? 0;
       const computeMs = payload.computeMs ?? 0;
       const model = info.usage.model;
-      const estCostUsd = estimateCostUsd(model, {
-        uncachedInputTokens,
-        cacheReadTokens,
-        cacheCreationTokens,
-        outputTokens,
-      });
+      const est = estimateCost(
+        model,
+        { uncachedInputTokens, cacheReadTokens, cacheCreationTokens, outputTokens },
+        { asOf: evt.createdAt, source }
+      );
+      const estCostUsd = est.costUsd;
 
       const row: UsageRow = {
         session_id: info.sessionId ?? null,
@@ -612,9 +865,22 @@ function turnGrainRows(db: Database, input: TaskUsageInput): UsageRow[] {
         total_ms: computeMs, // trivial at turn grain — no gap within one call (DESIGN.md §4)
         tool_call_est_result_tokens: 0, // filled in by subsequent TOOL_RESULT events, if any
         est_cost_usd: estCostUsd,
+        response_model: payload.responseModel ?? null,
+        cost_status: est.status,
+        cost_basis: est.basis,
+        pricing_ref: est.pricingRef,
         context_size: inputTokens, // trivial at turn grain — one call IS its own peak
         context_size_at: contextSizeAtSelf(evt.taskId, callIndex),
       };
+      const unpriced = est.status === "unpriced_model";
+      ROW_COST.set(row, {
+        priced: estCostUsd ?? 0,
+        unpricedTurns: unpriced ? 1 : 0,
+        unpricedTokens: unpriced ? inputTokens + outputTokens : 0,
+        unpricedTaskIds: unpriced ? [evt.taskId] : [],
+        unpricedModels: unpriced ? [model] : [],
+        bases: est.basis ? [est.basis] : [],
+      });
       rows.push(row);
       lastResponseRow = row;
     } else if (evt.type === "TOOL_RESULT") {
@@ -625,13 +891,7 @@ function turnGrainRows(db: Database, input: TaskUsageInput): UsageRow[] {
     }
   }
   flush();
-
-  const since = input?.since;
-  const filtered = since ? rows.filter((r) => r.created_at >= since) : rows;
-  filtered.sort(compareCreatedAtDesc);
-
-  const limit = input?.limit ?? 50;
-  return filtered.slice(0, limit);
+  return rows;
 }
 
 /**
@@ -641,17 +901,18 @@ function turnGrainRows(db: Database, input: TaskUsageInput): UsageRow[] {
  */
 export function usageQueryByGrain(db: Database, input: TaskUsageInput): UsageGrainResponse {
   const grain: UsageGrain = input?.grain ?? "task";
+  const source = memoPriceSource(db);
   let rows: UsageRow[];
   switch (grain) {
     case "turn":
-      rows = turnGrainRows(db, input);
+      rows = turnGrainRows(db, input, source);
       break;
     case "session":
-      rows = sessionGrainRows(db, input);
+      rows = sessionGrainRows(db, input, source);
       break;
     default:
-      rows = taskGrainRows(db, input);
+      rows = taskGrainRows(db, input, source);
   }
 
-  return { grain, rows, summary: summariseGrainRows(rows) };
+  return { grain, rows, summary: summariseGrainRows(rows, priceAgeHours(db)) };
 }

@@ -12,7 +12,6 @@
  * Teeth: reverting the schema/store changes makes the filter/projection assertions
  * fail (keys reappear / counts change), not merely "look different".
  */
-import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import { beforeEach, describe, expect, it } from "vitest";
 
@@ -22,85 +21,10 @@ import type { AgentDefinition } from "@adhd/agent-base-types";
 
 import { projectTaskRecord, resultTool, taskList } from "../tools/task.js";
 import { nowIso } from "../utils/timestamps.js";
-
-const DDL = `
-CREATE TABLE sessions (
-  id TEXT PRIMARY KEY NOT NULL,
-  agent_name TEXT NOT NULL,
-  agent_version INTEGER NOT NULL,
-  agent_data TEXT NOT NULL,
-  status TEXT DEFAULT 'active' NOT NULL,
-  created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL,
-  closed_at TEXT,
-  composed_prompt_id TEXT
-);
-CREATE TABLE messages (
-  id TEXT PRIMARY KEY NOT NULL,
-  session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
-  role TEXT NOT NULL,
-  content TEXT,
-  tool_calls TEXT,
-  tool_results TEXT,
-  created_at TEXT NOT NULL
-);
-CREATE TABLE tasks (
-  id TEXT PRIMARY KEY NOT NULL,
-  session_id TEXT,
-  parent_task_id TEXT,
-  is_ephemeral INTEGER DEFAULT 0 NOT NULL,
-  recursion_depth INTEGER DEFAULT 0 NOT NULL,
-  status TEXT DEFAULT 'pending' NOT NULL,
-  prompt TEXT NOT NULL,
-  result TEXT,
-  error TEXT,
-  created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL,
-  completed_at TEXT,
-  cancelled_at TEXT,
-  depends_on TEXT,
-  on_upstream_failure TEXT,
-  inputs TEXT,
-  resume_token TEXT
-);
-CREATE TABLE task_events (
-  id TEXT PRIMARY KEY NOT NULL,
-  task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
-  type TEXT NOT NULL,
-  payload TEXT,
-  created_at TEXT NOT NULL
-);
-CREATE TABLE task_usage (
-  task_id TEXT PRIMARY KEY NOT NULL,
-  root_task_id TEXT,
-  agent_name TEXT NOT NULL,
-  provider_type TEXT NOT NULL,
-  model TEXT NOT NULL,
-  input_tokens INTEGER DEFAULT 0 NOT NULL,
-  output_tokens INTEGER DEFAULT 0 NOT NULL,
-  tool_call_count INTEGER DEFAULT 0 NOT NULL,
-  model_calls INTEGER DEFAULT 0 NOT NULL,
-  latency_ms INTEGER DEFAULT 0 NOT NULL,
-  is_complete INTEGER DEFAULT 0 NOT NULL,
-  stop_reason TEXT,
-  max_tokens INTEGER,
-  cache_read_input_tokens INTEGER,
-  cache_creation_input_tokens INTEGER,
-  uncached_input_tokens INTEGER,
-  reasoning_tokens INTEGER,
-  peak_context_tokens INTEGER,
-  peak_context_at INTEGER,
-  compute_ms INTEGER,
-  est_tool_result_tokens INTEGER,
-  est_cost_usd REAL,
-  created_at TEXT NOT NULL
-);
-`;
+import { createMigratedSqlite } from "./fixtures/real-schema-db.js";
 
 function makeDb() {
-  const sqlite = new Database(":memory:");
-  sqlite.pragma("foreign_keys = ON");
-  sqlite.exec(DDL);
+  const sqlite = createMigratedSqlite();
   return drizzle(sqlite, { schema });
 }
 

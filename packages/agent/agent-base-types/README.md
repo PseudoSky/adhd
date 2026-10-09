@@ -10,6 +10,7 @@ Shared TypeScript type definitions and schemas for the @adhd/agent-* family. Pro
 
 - **Core types** — Agent, Task, Session, Message, TaskEvent interfaces
 - **Token accounting** — TokenUsage interface with provider-neutral fields (2.0.2+)
+- **Response model** — `PostModelResponsePayload.responseModel` carries the model id the provider says served a call (absent when not reported)
 - **Validation schemas** — Zod schemas for agent config, task input, message validation
 - **Execution models** — Status enums, stop-reason normalization, error types
 - **MCP contract** — Tool input/output schemas for the 16 MCP tools

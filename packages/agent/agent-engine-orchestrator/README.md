@@ -12,6 +12,7 @@ Orchestration engine for @adhd/agent-mcp. Implements the core agent execution lo
 - **Provider adapters** — normalizes the three real provider types — `anthropic`, `openai` (which also covers OpenAI-compatible endpoints such as DeepSeek via an explicit `baseURL`), and `claudecli` (subprocess) — to a unified interface. There is no separate `deepseek` or `gemini` adapter.
 - **Context management** — implements append-only message history with intelligent collapse (2.0.2+)
 - **Token accounting** — provider-neutral usage tracking with cache-aware fields
+- **Cost provenance** — `UsagePlugin` prices each turn as of its own instant and records `response_model`, `cost_basis`, `pricing_ref` and `cost_status`; `usage_query` supports `group_by: "response_model"` and reports `priced_cost_usd`, `unpriced_*`, `cost_bases` and `price_age_hours`. `est_cost_usd` is `null` (never 0) for an unpriced model. `claudecli` reports no response model.
 - **Delegation supervision** — enforces delegation depth, budget caps, and permission inheritance for child agents
 - **Hook system** — pre/post interceptors for policy enforcement and observability
 

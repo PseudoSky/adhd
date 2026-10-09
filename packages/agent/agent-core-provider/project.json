@@ -90,6 +90,22 @@
         "^build",
         "typecheck-spec"
       ]
+    },
+    "gen-pricing-snapshot": {
+      "//": "Regenerates src/pricing/pricing-snapshot.ts from src/pricing/pricing.json (the single source of the OpenRouter data). The default-running pricing-snapshot-drift test fails if they diverge.",
+      "executor": "nx:run-commands",
+      "cache": true,
+      "inputs": [
+        "{projectRoot}/src/pricing/pricing.json",
+        "{projectRoot}/scripts/gen-pricing-snapshot.mjs"
+      ],
+      "outputs": [
+        "{projectRoot}/src/pricing/pricing-snapshot.ts"
+      ],
+      "options": {
+        "cwd": "{projectRoot}",
+        "command": "node scripts/gen-pricing-snapshot.mjs"
+      }
     }
   }
 }

@@ -1,3 +1,24 @@
+## Unreleased
+
+### 🚀 Features
+
+- **`estimateCost(model, usage, {asOf?, source?})`** returns `{costUsd, status, basis, pricingRef, resolvedId}`; `estimateCostUsd` is now a thin wrapper returning only `costUsd`. A model with no rate returns `costUsd: null` and `status: "unpriced_model"`, never 0. Resolution order: exact `RATE_CARD` key (`vendor-direct`), then OpenRouter (`source.priceAt(id, asOf)` first, bundled snapshot as fallback; an alias hit is `owner-assumption`, a plain id `openrouter-estimate`), then normalised `RATE_CARD` keys and family aliases (`vendor-direct`). A `kind: "router"` record is final: unpriced. With no `opts` the numeric result is unchanged. (1f1c8598 37f6c511) ([5f314528](https://github.com/PseudoSky/adhd/commit/5f314528))
+- **Bundled OpenRouter snapshot** (`pricing.json`, 467 models, fetched 2026-10-08) is now projected to a generated `pricing-snapshot.ts` by `nx run agent-core-provider:gen-pricing-snapshot`; the default-running `pricing-snapshot-drift` test fails if the two diverge. New exports: `parseBundledSnapshot`, `PRICING_SNAPSHOT_META`. (37f6c511) ([5f314528](https://github.com/PseudoSky/adhd/commit/5f314528))
+- **Feed parser and contracts:** `parseOpenRouterFeed`, `perMillion` (the single per-token to per-million conversion), and the types `IParsedFeed`, `IParsedModel`, `CostBasis`, `CostStatus`, `ICostEstimate`, `IPriceRecord`, `IPriceSource`, `IUsageTokens`. `pricing.overrides` (time-of-day pricing) is kept verbatim in `overridesJson` and never applied. (37f6c511 1f1c8598) ([5f314528](https://github.com/PseudoSky/adhd/commit/5f314528))
+
+### ⚠️ Changed export shape
+
+- **`PROVIDER_MODEL_ALIASES` values are now objects**, not strings: `{ target, basis: "owner-assumption", setAt, setBy, ticket }`. Before: `PROVIDER_MODEL_ALIASES["deepseek-flash"] === "deepseek/deepseek-v4.1-flash"`; now: `PROVIDER_MODEL_ALIASES["deepseek-flash"].target === "deepseek/deepseek-v4.1-flash"`. The new type is exported as `IProviderModelAlias`. (37f6c511) ([5f314528](https://github.com/PseudoSky/adhd/commit/5f314528))
+
+### Known limits
+
+- The `deepseek-flash` to `deepseek/deepseek-v4.1-flash` alias is an owner assumption, not evidence; DeepSeek-direct billing is estimated from OpenRouter rates.
+- The bundled snapshot is a point-in-time copy; fresher prices come from the price history that `@adhd/agent-mcp` maintains.
+
+### Release note (owner)
+
+Semver: the alias value-shape change is a breaking change to a public export, so strictly it is a major (2.2.5 to 3.0.0). But the string-valued `PROVIDER_MODEL_ALIASES` was introduced by commit 4f1e4427 (2026-10-08), after the 2.2.5 release commit 133a6090 (2026-10-07), and `published-state.json` still records 2.2.5; no published release ever carried the string shape. Against npm the change is therefore additive, and the repo convention (feat commits map to minor; `BREAKING CHANGE` maps to major) supports a minor bump (2.2.5 to 2.3.0). Recommendation: minor. If a release containing 4f1e4427 has been published since, bump major instead. Not bumped here.
+
 ## 2.2.5 (2026-10-07)
 
 ### 🚀 Features

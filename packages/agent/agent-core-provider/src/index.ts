@@ -54,7 +54,24 @@ export { SEEDED_PROVIDER_IDS } from './seed/index.js';
 export { MODEL_ROWS, SEEDED_MODEL_IDS } from './seed/index.js';
 export { BINDING_ROWS } from './seed/index.js';
 
-export { RATE_CARD, PROVIDER_MODEL_ALIASES, PRICING_SNAPSHOT_META, estimateCostUsd } from './pricing/rate-card.js';
-export type { ModelRate } from './pricing/rate-card.js';
+export {
+  RATE_CARD,
+  PROVIDER_MODEL_ALIASES,
+  PRICING_SNAPSHOT_META,
+  estimateCost,
+  estimateCostUsd,
+  parseBundledSnapshot,
+} from './pricing/rate-card.js';
+export type { ModelRate, IProviderModelAlias } from './pricing/rate-card.js';
+export { parseOpenRouterFeed, perMillion } from './pricing/feed.js';
+export type { IParsedFeed, IParsedModel } from './pricing/feed.js';
+export type {
+  CostBasis,
+  CostStatus,
+  ICostEstimate,
+  IPriceRecord,
+  IPriceSource,
+  IUsageTokens,
+} from './pricing/price-source.js';
 
 export * from './failure/index.js';

@@ -193,9 +193,84 @@ export const taskUsageTable = sqliteTable(
         // turn's model has no rate-card entry — an unknown model's cost must never
         // be silently reported as $0.
         estCostUsd: real("est_cost_usd"),
+        // ── Cost provenance (1f1c8598 / 37f6c511). All nullable: rows written before
+        // migration 0012 read NULL = "provenance unknown" (never back-filled).
+        // Model id the provider says actually served the call (response.model).
+        responseModel: text("response_model"),
+        // Which basis priced it: 'vendor-direct' | 'openrouter-estimate' | 'owner-assumption'.
+        costBasis: text("cost_basis"),
+        // Pointer to the price record used: 'rate-card:<key>' | history row id | 'bundled:<fetchedAt>:<id>'.
+        pricingRef: text("pricing_ref"),
+        // 'priced' | 'unpriced_model' | 'partial' (mixed priced/unpriced turns).
+        costStatus: text("cost_status"),
+        // CUMULATIVE Σ of the PRICED turns only (unpriced turns add 0), so a partial
+        // task still reports the portion that could be priced while est_cost_usd stays NULL.
+        pricedCostUsd: real("priced_cost_usd"),
+        // CUMULATIVE Σ input+output tokens of turns whose model had no price.
+        unpricedTokens: integer("unpriced_tokens"),
         createdAt: text("created_at").notNull(),
     },
     (table) => [
         index("idx_task_usage_root_task_id").on(table.rootTaskId),
     ]
+);
+
+// ──────────────────────────────────────────────
+// model_price_history  (append-only; UPDATE/DELETE blocked by triggers in 0012)
+// ──────────────────────────────────────────────
+/**
+ * Observation-time price history. Rates are USD per MILLION tokens, normalised to
+ * 12 significant digits by the single shared `perMillion` conversion. NULL = absent
+ * (or router); 0 = a real free price. Corrections are new rows; newest `observed_at` wins.
+ */
+export const modelPriceHistoryTable = sqliteTable(
+    "model_price_history",
+    {
+        id: text("id").primaryKey(),
+        modelId: text("model_id").notNull(),
+        observedAt: text("observed_at").notNull(),
+        // 'bundled' | 'openrouter-live'
+        source: text("source").notNull(),
+        // 'model' | 'router' (router => rates NULL => unpriced)
+        kind: text("kind").notNull().default("model"),
+        inputPerM: real("input_per_m"),
+        cacheReadPerM: real("cache_read_per_m"),
+        cacheWritePerM: real("cache_write_per_m"),
+        outputPerM: real("output_per_m"),
+        // Verbatim per-token pricing strings (float-dispute defence).
+        rawJson: text("raw_json").notNull(),
+        // Verbatim `pricing.overrides`; applied to nothing (phase 1).
+        overridesJson: text("overrides_json"),
+        // NULL for the bundled seed.
+        ledgerId: text("ledger_id"),
+    },
+    (table) => [
+        index("idx_price_history_model_observed").on(table.modelId, table.observedAt),
+        uniqueIndex("uq_price_history_obs").on(table.modelId, table.observedAt, table.source),
+    ]
+);
+
+// ──────────────────────────────────────────────
+// price_pull_ledger
+// ──────────────────────────────────────────────
+/** One row per live-price pull attempt (also the multi-process claim record). */
+export const pricePullLedgerTable = sqliteTable(
+    "price_pull_ledger",
+    {
+        id: text("id").primaryKey(),
+        startedAt: text("started_at").notNull(),
+        finishedAt: text("finished_at"),
+        // 'running' | 'ok' | 'failed' | 'rejected_shrink' | 'rejected_invalid'
+        status: text("status").notNull(),
+        httpStatus: integer("http_status"),
+        modelsSeen: integer("models_seen"),
+        newCount: integer("new_count"),
+        changedCount: integer("changed_count"),
+        unchangedCount: integer("unchanged_count"),
+        anomaliesJson: text("anomalies_json"),
+        error: text("error"),
+        durationMs: integer("duration_ms"),
+        sourceUrl: text("source_url").notNull(),
+    },
+    (table) => [index("idx_price_pull_ledger_started").on(table.startedAt)]
 );

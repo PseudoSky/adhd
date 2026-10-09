@@ -1,3 +1,27 @@
+## Unreleased
+
+### 🚀 Features
+
+- **Live model prices.** The server now prices usage from an append-only price history instead of a fixed table. On start it seeds the bundled OpenRouter snapshot (467 models, fetched 2026-10-08), then pulls the public `https://openrouter.ai/api/v1/models` feed every 24 hours (no API key, no credentials; 30 s timeout; one retry after `Retry-After`, capped at 120 s, on a network error, 5xx or 429). Several servers sharing one database coordinate through a ledger claim, so exactly one pulls. `PACKAGE_VERSION` is now exported from `server.ts` and sent in the pull's `User-Agent`. (37f6c511 1f1c8598) ([bcde95eb](https://github.com/PseudoSky/adhd/commit/bcde95eb))
+- **`pricing_refresh` tool** pulls now, bypassing the 24 h gate: `pricing_refresh { "accept": ["some/model-id"] }` returns `{status, ledger_id, fetched_at, models, new, changed, unchanged, anomalies, duration_ms, error?}`. A failed, invalid, empty or shrunk (under 50% of the previous model count) pull changes nothing, logs an ERROR, and the last good prices keep serving. (37f6c511) ([bcde95eb](https://github.com/PseudoSky/adhd/commit/bcde95eb))
+- **`pricing_history` tool** returns a model's observed price series ($ per million tokens, `observed_at` order, with `source` and `ledger_id`) plus pull status: `pricing_history { "model": "deepseek/deepseek-v4.1-flash" }` returns `{model, unit, rows, status: {last_ok, last_failed, price_age_hours, next_scheduled, anomaly_thresholds}}`. (37f6c511) ([bcde95eb](https://github.com/PseudoSky/adhd/commit/bcde95eb))
+- **Anomaly hold.** A price move of 20x or more (input or output, either direction) or an input price above $1000/M is held, not applied, and reported in `anomalies`; re-run `pricing_refresh` with `accept: [modelId]` to apply it. A 10x to 20x move is applied with a warning. (37f6c511) ([bcde95eb](https://github.com/PseudoSky/adhd/commit/bcde95eb))
+- **`usage_query` cost provenance and `group_by: "response_model"`.** Rows carry `response_model`, `cost_status` (`priced` | `unpriced_model` | `partial`), `cost_basis` (`vendor-direct` | `openrouter-estimate` | `owner-assumption`) and `pricing_ref`; summaries carry `priced_cost_usd`, `unpriced_tasks`, `unpriced_tokens`, `unpriced_models` and `price_age_hours`. `est_cost_usd` stays `null` (never 0) for an unpriced model. Example: `usage_query { "group_by": "response_model" }` groups spend by the model the provider reported serving each call. (37f6c511) ([0d59e617](https://github.com/PseudoSky/adhd/commit/0d59e617))
+- **Migration 0012** adds `model_price_history` (append-only, enforced by triggers), `price_pull_ledger`, and six nullable provenance columns on `task_usage`. It is additive; legacy rows keep NULL provenance. (1f1c8598 37f6c511) ([bc340a5b](https://github.com/PseudoSky/adhd/commit/bc340a5b))
+- **Host wiring:** the pricing service is created in `index.ts`, handed to `UsagePlugin` as its price source, passed to the server for the two tools, and stopped first on shutdown (the scheduler's timer is `unref`'d and an in-flight pull is aborted and its ledger row closed). (37f6c511) ([bcde95eb](https://github.com/PseudoSky/adhd/commit/bcde95eb))
+
+### Known limits
+
+- DeepSeek-direct traffic is billed by DeepSeek, not OpenRouter; its cost is an estimate from OpenRouter rates. `deepseek-flash` is priced as `deepseek/deepseek-v4.1-flash` under an owner-set assumption (`cost_basis: "owner-assumption"`, ticket 37f6c511). Use `group_by: "response_model"` to check which revision actually served the calls; the `claudecli` provider reports no response model.
+- A held anomaly stays unapplied until someone calls `pricing_refresh` with `accept`; the daily pull never accepts one on its own.
+- The feed carries no effective date, so a price is stamped with the time this server observed it; accuracy is bounded by the 24 h cadence. Time-of-day / tier `pricing.overrides` are stored verbatim and applied to nothing.
+- The real-socket pricing tests (`pricing-pull.e2e.test.ts`, `pricing-live-feed.e2e.test.ts`) exist, but the e2e lane is paused locally by owner decision (backlog 8963c3cb); the unit lane uses an injected fake `fetch`.
+- There is no setting to disable the daily pull.
+
+### Release note (owner)
+
+All changes in this section are additive for `@adhd/agent-mcp` consumers (new tools, new optional response fields, additive migration): minor bump recommended (2.3.6 to 2.4.0). Not bumped here.
+
 ## 2.3.6 (2026-10-07)
 
 ### 🚀 Features

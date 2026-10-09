@@ -596,6 +596,9 @@ export class ClaudeCliProvider implements LLMProvider {
 
             const normalisedStopReason = CLI_STOP_REASON[finalStopReason ?? ""] ?? "unknown";
 
+            // responseModel is intentionally NOT set: the `result` event's per-model
+            // `modelUsage` breakdown has no captured fixture in this repo, and one `-p`
+            // invocation can fan out across several models, so no single id is verified.
             return {
                 message,
                 stopReason: "completed",
