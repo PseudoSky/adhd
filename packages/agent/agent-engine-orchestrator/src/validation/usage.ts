@@ -17,7 +17,7 @@ export const taskUsageInputSchema = z
     since: z.string().datetime().optional(),
     include_incomplete: z.boolean().default(false),
     limit: z.number().int().positive().max(500).default(50),
-    group_by: z.enum(["agent", "model", "provider"]).optional(),
+    group_by: z.enum(["agent", "model", "provider", "response_model"]).optional(),
     /**
      * Grain-based query path (DESIGN.md §2-§4), additive alongside `group_by` — not
      * a replacement. Mutually exclusive with `group_by` in practice: when both are
@@ -51,6 +51,14 @@ export const groupedUsageRowSchema = z.object({
   reasoningTokens: z.number().int().nonnegative().nullable(),
   /** PEAK single-call input across the group (a MAX, not a SUM) — see peakContextTokens. */
   peakContextTokens: z.number().int().nonnegative().nullable(),
+  /** 1f1c8598 S4b: sum of the priced portion of cost across the group (never NULL; 0 when nothing priced). */
+  priced_cost_usd: z.number().nonnegative(),
+  /** Tasks whose cost_status is `unpriced_model` or `partial` (0, not absent, when none). Legacy NULL-status rows are not counted. */
+  unpriced_tasks: z.number().int().nonnegative(),
+  /** Input+output tokens that could not be priced. */
+  unpriced_tokens: z.number().int().nonnegative(),
+  /** Distinct configured model ids behind the unpriced/partial tasks. */
+  unpriced_models: z.array(z.string()),
 });
 export type GroupedUsageRow = z.infer<typeof groupedUsageRowSchema>;
 
@@ -135,6 +143,15 @@ export const usageRowSchema = z.object({
   /** null (never 0) once any contributing turn's model has no rate-card entry. */
   est_cost_usd: z.number().nullable(),
 
+  /** Provider-reported model that actually served the call(s); null when unreported or mixed. */
+  response_model: z.string().nullable(),
+  /** `priced` | `unpriced_model` | `partial`; null on legacy rows ("provenance unknown") or mixed-provenance session rows. */
+  cost_status: z.string().nullable(),
+  /** `vendor-direct` | `openrouter-estimate` | `owner-assumption`; null when unpriced / unknown / mixed. */
+  cost_basis: z.string().nullable(),
+  /** Price record that priced the (last priced) call; null when unpriced / unknown / session grain. */
+  pricing_ref: z.string().nullable(),
+
   context_size: z.number().int().nonnegative(),
   context_size_at: contextSizeAtSchema,
 });
@@ -155,6 +172,20 @@ export const usageGrainSummarySchema = z.object({
   total_ms: z.number().int().nonnegative(),
   tool_call_est_result_tokens: z.number().int().nonnegative(),
   est_cost_usd: z.number().nullable(),
+  /** Sum of the priced portion of cost; equals est_cost_usd when nothing is unpriced. Explains a null est_cost_usd. */
+  priced_cost_usd: z.number().nonnegative(),
+  /** Rows (tasks/sessions; at turn grain, distinct tasks) containing an unpriced turn. 0, not absent, when none. */
+  unpriced_tasks: z.number().int().nonnegative(),
+  /** Individual model calls that could not be priced (exact at every grain). */
+  unpriced_turns: z.number().int().nonnegative(),
+  /** Input+output tokens behind the unpriced turns. */
+  unpriced_tokens: z.number().int().nonnegative(),
+  /** Distinct configured model ids with at least one unpriced turn. */
+  unpriced_models: z.array(z.string()),
+  /** Distinct cost bases present among priced rows (e.g. vendor-direct, openrouter-estimate). */
+  cost_bases: z.array(z.string()),
+  /** Hours since the last successful price pull; null until a pull ledger row exists. */
+  price_age_hours: z.number().nonnegative().nullable(),
   context_size: z.number().int().nonnegative(),
   context_size_at: contextSizeAtSchema.nullable(),
 });
