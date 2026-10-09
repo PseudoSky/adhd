@@ -362,9 +362,14 @@ export function stripClaudeSessionEnv(
  */
 function terminateProcessTree(
     proc: ChildProcess,
-    signal: NodeJS.Signals = "SIGTERM"
+    signal: NodeJS.Signals = "SIGTERM",
+    opts: { force?: boolean } = {}
 ): void {
-    if (proc.exitCode !== null) return;
+    // `signalCode` covers a child that already died from a signal (exitCode stays
+    // null for those), so we never signal a reaped pid. `force` is used only by
+    // the SIGKILL escalation, where the leader may already be gone but a
+    // SIGTERM-ignoring grandchild in its process group is not (322a1efb AC2).
+    if (!opts.force && (proc.exitCode !== null || proc.signalCode !== null)) return;
     const pid = proc.pid;
     if (process.platform !== "win32" && typeof pid === "number" && pid > 0) {
         try {
@@ -374,11 +379,65 @@ function terminateProcessTree(
             // Group already gone, or not a group leader — fall through.
         }
     }
+    if (opts.force) return;
     try {
         proc.kill(signal);
     } catch {
         // Already dead — nothing to do.
     }
+}
+
+/**
+ * Bounded waits used when reaping a `claude` child after a SUCCESSFUL turn
+ * (backlog 322a1efb).
+ *
+ * After the stream's `result` line the CLI is still flushing/cleaning its
+ * session and exits on its own once stdin is closed. Signalling it at that
+ * moment kills it mid-exit (and, under CPU load, beats a well-behaved child's own
+ * `process.exit(0)`), so the success path waits for the child's own `exit` and
+ * only falls back to the group SIGTERM -> SIGKILL ladder if it never comes.
+ */
+export interface ClaudeCliReapTimings {
+    /** Ms to wait for the child's own exit after `result` before group SIGTERM. Default 5000. */
+    exitGraceMs: number;
+    /** Ms to wait after group SIGTERM before group SIGKILL. Default 2000. */
+    killEscalationMs: number;
+}
+
+/** Documented defaults for {@link ClaudeCliReapTimings}. */
+export const DEFAULT_CLAUDECLI_REAP_TIMINGS: ClaudeCliReapTimings = {
+    exitGraceMs: 5000,
+    killEscalationMs: 2000,
+};
+
+/**
+ * Reap a child after a successful turn WITHOUT delaying the caller and WITHOUT
+ * signalling a child that is exiting on its own: chat() has already produced its
+ * result, so the wait is detached (timers are unref'd and cancelled on `exit`).
+ * Ladder: own exit (grace) -> group SIGTERM -> (escalation) group SIGKILL, which
+ * retains the grandchild-leak protection of {@link terminateProcessTree}.
+ * Never throws.
+ */
+function reapAfterSuccess(proc: ChildProcess, timings: ClaudeCliReapTimings): void {
+    if (proc.exitCode !== null || proc.signalCode !== null) return;
+    // Keep draining so a child writing after `result` cannot block on a full pipe.
+    proc.stdout?.resume();
+    proc.stderr?.resume();
+    let escalation: NodeJS.Timeout | undefined;
+    const grace = setTimeout(() => {
+        terminateProcessTree(proc, "SIGTERM");
+        escalation = setTimeout(() => {
+            terminateProcessTree(proc, "SIGKILL", { force: true });
+        }, timings.killEscalationMs);
+        escalation.unref();
+    }, timings.exitGraceMs);
+    grace.unref();
+    proc.once("exit", () => {
+        // Exited on its own inside the grace window: nothing to signal. Once the
+        // SIGTERM has been sent the escalation stays armed so a SIGTERM-ignoring
+        // grandchild in the group is still SIGKILLed.
+        if (!escalation) clearTimeout(grace);
+    });
 }
 
 // ─── provider ────────────────────────────────────────────────────────────────
@@ -389,14 +448,17 @@ export class ClaudeCliProvider implements LLMProvider {
     private readonly compiledTools: string[] | undefined;
     private readonly logger: EngineLogger;
     private readonly config: EngineConfig;
+    private readonly reapTimings: ClaudeCliReapTimings;
 
     constructor(
         config: ClaudeCliConfig,
         mcpServers: Record<string, McpServerConfig> = {},
         compiledTools?: string[],
         engineConfig?: EngineConfig,
-        engineLogger?: EngineLogger
+        engineLogger?: EngineLogger,
+        reapTimings?: Partial<ClaudeCliReapTimings>
     ) {
+        this.reapTimings = { ...DEFAULT_CLAUDECLI_REAP_TIMINGS, ...reapTimings };
         this.providerConfig = config;
         this.mcpServers = mcpServers;
         this.compiledTools = compiledTools;
@@ -595,6 +657,9 @@ export class ClaudeCliProvider implements LLMProvider {
         });
 
         const onAbort = (): void => { terminateProcessTree(proc); };
+        // True only once a `result` was received and validated; error/abort paths
+        // leave it false and keep the immediate group SIGTERM (322a1efb AC3).
+        let cleanTurn = false;
         request.signal?.addEventListener("abort", onAbort, { once: true });
 
         try {
@@ -727,6 +792,9 @@ export class ClaudeCliProvider implements LLMProvider {
                 );
             }
 
+            // Success path reached: the child is exiting on its own (stdin closed).
+            cleanTurn = true;
+
             const message: Message = {
                 id: generateId(),
                 sessionId: "",
@@ -773,7 +841,10 @@ export class ClaudeCliProvider implements LLMProvider {
             rl.close();
             // Group-aware teardown: a bare proc.kill() would orphan the CLI's
             // own MCP-server/tool subprocesses. See terminateProcessTree.
-            terminateProcessTree(proc);
+            // Success: let the child exit on its own (bounded grace, detached --
+            // chat() is not delayed); error/abort: terminate immediately.
+            if (cleanTurn) reapAfterSuccess(proc, this.reapTimings);
+            else terminateProcessTree(proc);
             if (mcpConfigPath) {
                 unlink(mcpConfigPath).catch(() => { /* best-effort */ });
             }

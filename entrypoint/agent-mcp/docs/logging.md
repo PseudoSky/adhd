@@ -76,6 +76,8 @@ queue. Bodies are captured up to `logging.apiBodyMaxBytes` (4 MiB) with the sha2
 | `http.inbound.request` / `http.inbound.response` | The streamable-HTTP and SSE routes | `route`, `method`, `url`, `status`, `body_bytes` |
 | `mcp.send` / `mcp.recv` / `mcp.close` | Server-to-tool-server traffic (fs, shell, ...) | |
 
+`spawn.exit` also carries `signal`. After a successful `claude` turn the provider does not signal the child: it closes stdin and waits for the CLI to exit on its own, so a healthy turn logs `spawn.exit {code: 0, signal: null}`. Only a child that has not exited within the grace (default 5 s) is sent SIGTERM to its process group, then SIGKILL after a further 2 s (`ClaudeCliReapTimings`); an aborted or failed turn is SIGTERMed immediately. A `signal` of `SIGTERM`/`SIGKILL` on an otherwise successful turn therefore means the child hung (backlog 322a1efb).
+
 ### `ops` - what the engine decided (always on, `sync` durability, survives `kill -9`)
 
 | `event` | Fields beyond the envelope |

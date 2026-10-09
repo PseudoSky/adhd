@@ -40,6 +40,9 @@ function makeFakeProc(opts: { pid?: number; hang?: boolean } = {}) {
         // A "hang" proc must look alive (exitCode null) or terminateProcessTree
         // early-returns before signalling it.
         exitCode: (opts.hang ? null : 0) as number | null,
+        // Real ChildProcess exposes signalCode (null until a signal ends it); the
+        // provider's signal guard reads it (322a1efb).
+        signalCode: null as NodeJS.Signals | null,
         killed: false,
     };
     // A result event only if the test is not meant to hang.
