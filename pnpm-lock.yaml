@@ -408,7 +408,7 @@ importers:
         specifier: ^2.2.8
         version: link:../../packages/agent/agent-engine-compiler
       '@adhd/agent-engine-orchestrator':
-        specifier: ^2.3.9
+        specifier: ^2.3.10
         version: link:../../packages/agent/agent-engine-orchestrator
       '@adhd/agent-plugin-budget':
         specifier: ^0.2.7
