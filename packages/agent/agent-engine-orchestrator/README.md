@@ -58,6 +58,17 @@ const result = await orchestrator.run({
 - `src/engine/policy.ts` — `PolicyEngine` (depth / tool-loop / delegation-allowlist enforcement)
 - `src/plugins/` — hook system, config-file + default plugin loading
 
+## `anthropic` provider: prompt-cache breakpoints and server tools
+
+`providers/anthropic-cache.ts` places at most three 5-minute `cache_control` breakpoints (last tool, last
+system block, last message block), each only when the estimated prefix reaches the model's minimum
+cacheable size. The estimate is a lower bound. Server-executed tools (`web_search_*`, `web_fetch_*`)
+are tiny `{type,name}` stubs on the wire but the API expands them into full definitions, so
+`SERVER_TOOL_TOKEN_WEIGHTS` credits each its measured real weight (1090 tokens; measured on
+`claude-haiku-4-5`: the pair adds >= 2190 tokens of turn-1 input). Without that credit an agent whose
+real prefix was 6.1k tokens estimated at 2.4k and was never cached (`ebfe7421`). Prefixes with no server
+tool are estimated as before. Operator view: `entrypoint/agent-mcp/docs/logging.md`.
+
 ## `claudecli` provider: MCP tools run once, in the engine
 
 `claude` is never handed your MCP servers. For each `chat()` that advertises tools, the provider starts a loopback Streamable-HTTP MCP bridge (127.0.0.1, random bearer token, Host-checked, closed when the call ends) and writes a `--mcp-config` that points only at it, one route per server so tool names stay `mcp__<server>__<tool>`. Every `tools/call` claude makes goes through the engine's `executeTool`, so each tool executes exactly once, under the engine registry client's `cwd`/`env`/srt and server/tool allowlist. Advertising MCP tools without an `executeTool` callback fails with `PROVIDER_ERROR`. Claude's own built-in tools are unchanged (`--tools` allowlist).

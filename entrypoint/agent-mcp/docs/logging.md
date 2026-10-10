@@ -570,6 +570,11 @@ instead of paying full input price every turn. Rules (`providers/anthropic-cache
   `claude-sonnet-4-6`/`claude-sonnet-5` 1024, `claude-opus-4-5`/`claude-opus-4-6` 4096, any other model
   4096). Below it the request body is exactly what it was before, so short tasks (for example a 3.1k-token
   prefix on Haiku 4.5) cost the same as ever; expect the saving on long sessions, not on short ones.
+  The prefix estimate is a lower bound (a `gpt-tokenizer` count of the tools JSON, system text and
+  messages). Server-executed tools (`web_search_*`, `web_fetch_*`) are `{type,name}` stubs on the wire
+  that the API expands into full definitions, so each is credited its measured real weight (1090 tokens
+  each, rounded down from a measured >= 2190 for the pair; `ebfe7421`); a prefix with no server tool is
+  estimated exactly as before.
 - Verify on a real task: `task_usage.cache_creation_input_tokens` is greater than 0 on the first
   qualifying turn and `cache_read_input_tokens` is roughly the previous turn's prefix on the next.
 

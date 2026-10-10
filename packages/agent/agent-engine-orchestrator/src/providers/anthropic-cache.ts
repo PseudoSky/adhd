@@ -21,8 +21,16 @@
  *
  * Token estimation uses the repo's existing encoder (`gpt-tokenizer`, the same one the
  * orchestrator uses for tool-result telemetry). It tokenises text into FEWER tokens than Claude's
- * own tokenizer, so the estimate undercounts; an undercount only ever causes a skipped
- * breakpoint (the safe direction), never a premium paid on an uncacheable prefix.
+ * own tokenizer, so the estimate is a LOWER BOUND. An undercount is safe against paying a premium
+ * on an uncacheable prefix, but it is not free: it skips breakpoints the API would have honored.
+ * That cost is large for server tools (ebfe7421): a server-tool entry (`web_search_20250305`,
+ * `web_fetch_20250910`) is a ~30-token `{type,name}` stub on the wire, yet the API expands it
+ * server-side into a full tool definition that counts toward the cacheable prefix. Measured on
+ * claude-haiku-4-5 (agent-mcp `task`, identical agent with and without the two web tools): turn-1
+ * input 6,441-6,464 tokens with them vs 4,205-4,251 without, i.e. the pair adds at least 2,190
+ * real tokens while the stub JSON estimates at ~60. {@link SERVER_TOOL_TOKEN_WEIGHTS} adds that
+ * measured weight back (rounded DOWN, so the estimate stays a lower bound). Prefixes that carry
+ * no server tool are estimated exactly as before.
  */
 import { encode } from "gpt-tokenizer";
 import type {
@@ -77,6 +85,43 @@ function isCacheable(block: ContentBlockParam): block is CacheableBlock {
     if (block.type === "thinking" || block.type === "redacted_thinking") return false;
     if (block.type === "text" && block.text.length === 0) return false;
     return true;
+}
+
+/**
+ * Real prefix weight (tokens) the API adds for a server-executed tool, keyed by the tool's `type`
+ * prefix (the version suffix changes, the definition weight does not). Measured, not guessed: the
+ * web_search + web_fetch pair adds >= 2,190 tokens (see the module header), split evenly and
+ * rounded down because the per-tool split was not measured separately. A server-tool type absent
+ * from this table contributes 0 (the conservative lower bound: at worst a skipped breakpoint).
+ */
+export const SERVER_TOOL_TOKEN_WEIGHTS: ReadonlyArray<readonly [typePrefix: string, tokens: number]> = [
+    ["web_search_", 1090],
+    ["web_fetch_", 1090],
+];
+
+/** True for a type-tagged server-executed tool entry (anything that is not a custom `input_schema` tool). */
+function serverToolType(tool: Tool): string | undefined {
+    const type = (tool as { type?: unknown }).type;
+    return typeof type === "string" && type !== "custom" ? type : undefined;
+}
+
+/**
+ * Tokens the API adds to the prefix for the server tools in `tools`, beyond the stub JSON that
+ * `JSON.stringify(tools)` already accounts for. 0 when there are none.
+ */
+export function serverToolTokens(tools: readonly Tool[] | undefined): number {
+    let total = 0;
+    for (const tool of tools ?? []) {
+        const type = serverToolType(tool);
+        if (type === undefined) continue;
+        for (const [prefix, tokens] of SERVER_TOOL_TOKEN_WEIGHTS) {
+            if (type.startsWith(prefix)) {
+                total += tokens;
+                break;
+            }
+        }
+    }
+    return total;
 }
 
 function countTokens(text: string): number {
@@ -146,7 +191,8 @@ export function applyCacheBreakpoints(input: CacheBreakpointInput): CacheBreakpo
     let outMessages = messages;
 
     // Cumulative prefix, in the order the API renders it: tools -> system -> messages.
-    const toolsTokens = tools && tools.length > 0 ? countTokens(JSON.stringify(tools)) : 0;
+    const toolsTokens =
+        tools && tools.length > 0 ? countTokens(JSON.stringify(tools)) + serverToolTokens(tools) : 0;
     const systemTokens = toolsTokens + countTokens(systemText(system));
     const protectedBlocks = input.protectedLeadingSystemBlocks ?? 0;
 
