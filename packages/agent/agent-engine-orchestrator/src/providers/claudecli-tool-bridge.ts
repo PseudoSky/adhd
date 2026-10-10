@@ -56,6 +56,13 @@ export interface StartToolBridgeOptions {
      * chat carries on, instead of the whole turn hanging until the outer signal fires.
      */
     callTimeoutMs?: number;
+    /**
+     * Optional per-tool MCP `annotations` to advertise in `tools/list`. Unset (the default) advertises
+     * none, so behaviour is unchanged. Exists so the fdb35d6f spike can measure whether the claude CLI
+     * runs same-message calls concurrently when a tool carries `readOnlyHint`; see
+     * claudecli-parallel-dispatch.e2e.test.ts for the recorded finding before supplying one.
+     */
+    toolAnnotations?: (tool: string, def: ToolDefinition) => Record<string, unknown> | undefined;
 }
 
 const MAX_BODY_BYTES = 8 * 1024 * 1024;
@@ -174,11 +181,15 @@ export async function startToolBridge(opts: StartToolBridgeOptions): Promise<Too
             { capabilities: { tools: {} } }
         );
         server.setRequestHandler(ListToolsRequestSchema, async () => ({
-            tools: [...advertised.entries()].map(([tool, def]) => ({
-                name: tool,
-                description: def.description,
-                inputSchema: def.inputSchema as { type: "object"; [k: string]: unknown },
-            })),
+            tools: [...advertised.entries()].map(([tool, def]) => {
+                const annotations = opts.toolAnnotations?.(tool, def);
+                return {
+                    name: tool,
+                    description: def.description,
+                    inputSchema: def.inputSchema as { type: "object"; [k: string]: unknown },
+                    ...(annotations ? { annotations } : {}),
+                };
+            }),
         }));
         server.setRequestHandler(CallToolRequestSchema, async (request) => {
             const tool = request.params.name;
