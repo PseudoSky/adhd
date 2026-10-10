@@ -78,7 +78,8 @@ describe("9ed453c1 CACHE AC2: canonicalization is idempotent and semantics-prese
     expect(canonicalizeToolDefinitions([plain])).toEqual([plain]);
     expect(canonicalizeDescription("Allowed patterns: ")).toBe("Allowed patterns: ");
     expect(canonicalizeDescription("x\nAllowed commands: only")).toBe("x\nAllowed commands: only");
-    const noDesc = { name: "a__c", inputSchema: { type: "object" } } as ToolDefinition;
+    // runtime-defensive: a third-party server may omit the description
+    const noDesc = { name: "a__c", inputSchema: { type: "object" } } as unknown as ToolDefinition;
     expect(canonicalizeToolDefinitions([noDesc])).toEqual([noDesc]);
   });
 
