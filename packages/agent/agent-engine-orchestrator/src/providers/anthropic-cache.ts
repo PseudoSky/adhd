@@ -97,6 +97,16 @@ export function minCacheableTokens(model: string): number {
  */
 export const CACHE_GUARD_SAFETY_RATIO = 0.75;
 
+/**
+ * Documented estimator tolerance (ebfe7421 AC2): on every measured real request the whole-prefix
+ * estimate E satisfies `CACHE_ESTIMATE_LOWER_TOLERANCE * real <= E <= real` (never above the API's
+ * own `input_tokens`, so it stays a lower bound; never below 78% of it, so the 0.75 gate clears
+ * every real prefix at or above the model minimum). Measured ratios on the three haiku-4-5
+ * fixtures: 0.809 / 0.810 / 0.800. Enforced by `cacheguard-estimator-tolerance.test.ts`, which runs
+ * {@link estimatePrefixTokens} against the real logged request bodies.
+ */
+export const CACHE_ESTIMATE_LOWER_TOLERANCE = 0.78;
+
 /** The estimated-token threshold the guard compares against: `ceil(minCacheableTokens * 0.75)`. */
 export function cacheGuardThreshold(model: string): number {
     return Math.ceil(minCacheableTokens(model) * CACHE_GUARD_SAFETY_RATIO);
@@ -187,6 +197,34 @@ function systemText(system: string | TextBlockParam[] | undefined): string {
     return typeof system === "string" ? system : system.map(b => b.text).join("\n");
 }
 
+/** Estimated tokens for the `tools` block: stub JSON plus the server-tool expansion credit. 0 when empty. */
+export function estimateToolsTokens(tools: readonly Tool[] | undefined): number {
+    return tools && tools.length > 0 ? countTokens(JSON.stringify(tools)) + serverToolTokens(tools) : 0;
+}
+
+/** Cumulative prefix token estimates, in the order the API renders the request. */
+export interface PrefixTokenEstimate {
+    /** The tools block alone. */
+    tools: number;
+    /** tools + system. */
+    throughSystem: number;
+    /** tools + system + all messages (the whole prefix; what the messages breakpoint is gated on). */
+    total: number;
+}
+
+/**
+ * The pure estimator `applyCacheBreakpoints` gates every breakpoint on. Exported so the estimate
+ * can be compared with the API's real `input_tokens` (ebfe7421 AC2).
+ */
+export function estimatePrefixTokens(
+    input: Pick<CacheBreakpointInput, "tools" | "system" | "messages">,
+): PrefixTokenEstimate {
+    const tools = estimateToolsTokens(input.tools);
+    const throughSystem = tools + countTokens(systemText(input.system));
+    const total = throughSystem + input.messages.reduce((n, m) => n + countTokens(messageText(m)), 0);
+    return { tools, throughSystem, total };
+}
+
 export interface CacheBreakpointInput {
     model: string;
     tools: Tool[] | undefined;
@@ -220,9 +258,9 @@ export function applyCacheBreakpoints(input: CacheBreakpointInput): CacheBreakpo
     let outMessages = messages;
 
     // Cumulative prefix, in the order the API renders it: tools -> system -> messages.
-    const toolsTokens =
-        tools && tools.length > 0 ? countTokens(JSON.stringify(tools)) + serverToolTokens(tools) : 0;
-    const systemTokens = toolsTokens + countTokens(systemText(system));
+    const estimate = estimatePrefixTokens(input);
+    const toolsTokens = estimate.tools;
+    const systemTokens = estimate.throughSystem;
     const protectedBlocks = input.protectedLeadingSystemBlocks ?? 0;
 
     // 1. Last tools entry.
@@ -250,8 +288,7 @@ export function applyCacheBreakpoints(input: CacheBreakpointInput): CacheBreakpo
 
     // 3. Last cacheable content block of the final messages entry (moving breakpoint).
     if (messages.length > 0) {
-        const total = systemTokens + messages.reduce((n, m) => n + countTokens(messageText(m)), 0);
-        if (total >= min) {
+        if (estimate.total >= min) {
             const marked = markLastCacheableBlock(messages[messages.length - 1]);
             if (marked) {
                 outMessages = [...messages.slice(0, -1), marked];

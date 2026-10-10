@@ -81,6 +81,15 @@ the tokenizer ratio on text). With the exact `estimate >= minimum` gate, turns 2
 unknown model). The per-model minimum table is unchanged and an unknown model still assumes 4096. A prefix far
 below the minimum (about 1.5k tokens) and the real 3130-token turn 1 still place nothing.
 
+Estimator tolerance (`ebfe7421` AC2): the real tools-block count is not separately measurable (the API reports one
+`input_tokens` per request), so the tolerance is stated on the whole prefix, using the production estimator
+`estimatePrefixTokens` (the function `applyCacheBreakpoints` gates on) against the three real requests:
+`CACHE_ESTIMATE_LOWER_TOLERANCE * real <= estimate <= real` with the constant at 0.78. Measured ratios are 0.809 /
+0.810 / 0.800 (2532/3130, 3566/4404, 3770/4714). The upper bound keeps the estimate a lower bound; the lower bound
+(above the 0.75 gate ratio) means the gate clears every real prefix at or above the model minimum. The tools-block
+component is `countTokens(JSON.stringify(tools)) + serverToolTokens(tools)`; on this fixture the server-tool credit
+is 2180. Enforced by `src/__tests__/cacheguard-estimator-tolerance.test.ts`.
+
 Premium question: Anthropic's prompt-caching docs state that a prompt shorter than the model minimum is simply not
 cached (no cache write, no premium), which is why a margin is acceptable. The live confirmation of that claim
 (one small `claude-haiku-4-5` call with `cache_control` on a ~3.5k-token prefix, reading
