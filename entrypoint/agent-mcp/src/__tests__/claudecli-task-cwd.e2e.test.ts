@@ -5,8 +5,9 @@
  * Drives the REAL `task` MCP tool through the PRODUCTION `createServer` (resolving native-tooling
  * store, `engineConfig()` with the real wire seams, real orchestrator + queue + stores over the shipped
  * migrations) with a claudecli agent whose `claude` is a real stand-in executable
- * (`fake-claude-fs.mjs`). The stand-in is a genuine MCP client of the `fs` server the provider wrote
- * into --mcp-config, and answers roots/list with its OWN cwd the way Claude Code does. Nothing injects
+ * (`fake-claude-fs.mjs`). The stand-in is a genuine MCP client (Streamable-HTTP, bearer header from the
+ * config) of the loopback `fs` bridge entry the provider wrote into --mcp-config; the bridge executes the
+ * call through the engine. It also answers roots/list with its OWN cwd the way Claude Code does. Nothing injects
  * `EngineConfig.cwd`: the only cwd source is the `cwd` argument of the `task` call.
  *
  *   AC1  a `task` dispatched with cwd=/P spawns claude in /P, and in /Q on the next dispatch
@@ -38,6 +39,10 @@ const TMP_ROOT = path.resolve(here, "../../../../tmp/agent-mcp");
 interface IReport {
     cwd: string;
     servers: string[];
+    /** --mcp-config entry type per server name (since BRIDGE every entry is a loopback `http` bridge). */
+    entryTypes: Record<string, string>;
+    /** tools/call requests the stand-in issued through the bridge. */
+    toolCalls: number;
     text?: string;
     isError?: boolean;
     error?: string;
@@ -116,6 +121,12 @@ describe("9ed453c1 CWD: the task tool's cwd reaches claude and its fs server (pr
         // report is written to the host cwd and this file is never created in /P (readFileSync throws).
         expect(report.cwd).toBe(P);
         expect(report.servers).toContain("fs");
+        // BRIDGE: claude only ever sees loopback http entries, so the read below can only have been executed
+        // by the engine (request.executeTool -> the engine-spawned fs server), exactly once - claude has no
+        // command to spawn a second fs server from.
+        expect(report.entryTypes.fs).toBe("http");
+        expect(Object.values(report.entryTypes).every((t) => t === "http")).toBe(true);
+        expect(report.toolCalls).toBe(1);
         // REVERT-FAILING (AC5): claude's roots/list answer (its cwd) replaces the fs server's allow-list;
         // a mismatch with the argv root yields "Access denied" instead of the file text.
         expect(report.error).toBeUndefined();
