@@ -90,11 +90,19 @@ Estimator tolerance (`ebfe7421` AC2): the real tools-block count is not separate
 component is `countTokens(JSON.stringify(tools)) + serverToolTokens(tools)`; on this fixture the server-tool credit
 is 2180. Enforced by `src/__tests__/cacheguard-estimator-tolerance.test.ts`.
 
-Premium question: Anthropic's prompt-caching docs state that a prompt shorter than the model minimum is simply not
-cached (no cache write, no premium), which is why a margin is acceptable. The live confirmation of that claim
-(one small `claude-haiku-4-5` call with `cache_control` on a ~3.5k-token prefix, reading
-`usage.cache_creation_input_tokens`) is NOT yet recorded here: it was blocked by the credential policy of the
-session that implemented this change. Record the raw usage numbers in this section when it is run.
+Premium measurement (`ebfe7421` CG-AC3): a live run on `main` at `ca4851b5` against `claude-haiku-4-5` through the
+anthropic provider (no tools; `cache_control` marks placed on the system and messages by the guard; real prefix
+below the 4,096-token minimum) returned this usage per turn:
+
+- turn 1: `input_tokens` 3571, `cache_creation_input_tokens` 0, `cache_read_input_tokens` 0, `output_tokens` 5,
+  estimated cost 0.003596
+- turn 2: `input_tokens` 3590, `cache_creation_input_tokens` 0, `cache_read_input_tokens` 0, `output_tokens` 5,
+  estimated cost 0.003615
+
+A `cache_control` prefix below the model minimum is billed as ordinary input, with no cache-write premium. This
+is why the guard's margin is acceptable. Caveat: no same-prompt, no-breakpoint control exists, because the
+provider's `promptCaching` option is not reachable from any agent or server setting. The conclusion rests on the
+raw `cache_creation_input_tokens` of 0.
 
 ## `claudecli` provider: MCP tools run once, in the engine
 
