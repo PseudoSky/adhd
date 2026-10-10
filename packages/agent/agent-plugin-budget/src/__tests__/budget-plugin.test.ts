@@ -3227,7 +3227,7 @@ describe('9ed453c1 BUDGET-B1 — warn never blocks the tool path', () => {
       input: priorInput,
       output: priorOutput,
     });
-    const plugin = createPlugin({
+    const plugin = await createPlugin({
       db: real.db,
       config: pluginConfigSchema.parse(config),
     });
