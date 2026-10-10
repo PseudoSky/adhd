@@ -117,14 +117,14 @@ describe("3ad735bb AC1.5 tool-result cap through the real orchestrator + real st
         const r = await runOnce();
         const marker = r.seenByModel.match(/\[tool result truncated: showing first (\d+) and last (\d+) of (\d+) chars; re-run with a narrower command \(e\.g\. grep, head, sed -n 'a,bp'\)\]/);
         expect(marker, "marker must be present with the exact format").not.toBeNull();
-        expect(Number(marker?.[1])).toBe(15_000);
-        expect(Number(marker?.[2])).toBe(5_000);
+        expect(Number(marker?.[1])).toBe(4_500);
+        expect(Number(marker?.[2])).toBe(1_500);
         // The MCP client returns the content array ([{type:'text',text}]); the cap measures its
         // JSON serialization, which is what the model is shown.
         expect(Number(marker?.[3])).toBe(r.hookResultChars);
         expect(r.hookResultChars).toBeGreaterThanOrEqual(TOTAL);
-        // bounded: cap (20000) + marker + 2 joining newlines
-        expect(r.seenByModel.length).toBeLessThanOrEqual(20_000 + (marker?.[0].length ?? 0) + 2);
+        // bounded: cap (6000) + marker + 2 joining newlines
+        expect(r.seenByModel.length).toBeLessThanOrEqual(6_000 + (marker?.[0].length ?? 0) + 2);
         expect(r.seenByModel.length).toBeLessThan(r.hookResultChars / 4);
         // head and tail of the original survive
         expect(r.seenByModel).toContain("L000001:");

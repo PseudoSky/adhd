@@ -114,7 +114,7 @@ afterEach(() => {
 describe("9ed453c1 BK9 optional tool-result spill through the real orchestrator + real stdio MCP server", () => {
     it("AC9.1 default off: head+marker+tail, no spill fields, nothing on disk", async () => {
         const r = await runOnce();
-        expect(r.seenByModel).toMatch(/\[tool result truncated: showing first 15000 and last 5000 of \d+ chars/);
+        expect(r.seenByModel).toMatch(/\[tool result truncated: showing first 4500 and last 1500 of \d+ chars/);
         expect(r.toolResultEvent["spilled"]).toBeUndefined();
         expect(r.toolResultEvent["spill_path"]).toBeUndefined();
         expect(() => lstatSync(dir)).toThrow();
