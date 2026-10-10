@@ -19,7 +19,7 @@ import {
   validateToolResultMaxChars,
 } from './tool-result-cap.js';
 import { capOrSpillToolResult, resolveToolResultSpill } from './tool-result-spill.js';
-import { compactToolDefinitions } from './tool-schema-compact.js';
+import { canonicalizeToolDefinitions, compactToolDefinitions } from './tool-schema-compact.js';
 import { coerceToolArguments } from './tool-arg-coercion.js';
 import { DEFAULT_PROVIDER_TIMEOUT_MS } from '../interfaces.js';
 import { selectionOf, wireModelOf } from '../providers/resolve-selection.js';
@@ -440,7 +440,9 @@ export class Orchestrator {
 
       let finalContent = '';
 
-      const tools = await registry.listAllTools();
+      // 9ed453c1 CACHE: canonical order for server-rendered allow-lists so the serialized tools
+      // block (head of the cached prefix) is byte-stable across tasks and spawns.
+      const tools = canonicalizeToolDefinitions(await registry.listAllTools());
 
       // HITL enablement is `nativeTooling.hitl` (legacy alias `allowHumanInput`),
       // resolved by `effectiveHitl` and DEFAULT-ON (ADR-0008 D3/D6: `hitl`

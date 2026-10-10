@@ -193,3 +193,20 @@ describe("9ed453c1 CTX AC2: the claudecli bridge result is bounded by the BK1 ca
     expect((bridgeResult as string).length).toBe(BIG.length);
   });
 });
+
+describe("9ed453c1 CACHE: the orchestrator hands every provider a byte-stable tool block", () => {
+  const shellTool = (cmds: string[]): ToolDefinition => ({
+    name: "shell__shell_execute",
+    description: `Execute a shell command\n\nAllowed commands: ${cmds.join(", ")}\nAllowed patterns: `,
+    inputSchema: { type: "object", properties: { command: { type: "array", items: { type: "string" } } }, required: ["command"] },
+  });
+
+  it("9ed453c1 CACHE AC4: two tasks whose server rendered the allow-list in different orders advertise identical tools JSON", async () => {
+    const a = await drive({ tools: [shellTool(["ls", "cat", "echo", "pwd"])] });
+    const b = await drive({ tools: [shellTool(["pwd", "echo", "cat", "ls"])] });
+    expect(JSON.stringify(a.advertised)).toBe(JSON.stringify(b.advertised));
+    expect(JSON.stringify(a.advertised)).toContain("Allowed commands: cat, echo, ls, pwd");
+    // negative control: the raw definitions the registry returned for the two tasks differ
+    expect(JSON.stringify(shellTool(["ls", "cat", "echo", "pwd"]))).not.toBe(JSON.stringify(shellTool(["pwd", "echo", "cat", "ls"])));
+  });
+});

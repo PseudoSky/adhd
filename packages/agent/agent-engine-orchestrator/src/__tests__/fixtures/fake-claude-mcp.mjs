@@ -61,10 +61,13 @@ async function run(line) {
   const prompt = JSON.parse(JSON.parse(line).message.content);
   const clients = new Map();
   const toolNames = [];
+  const toolListing = {};
   for (const [name, entry] of Object.entries(mcpConfig.mcpServers ?? {})) {
     const client = await connect(name, entry);
     clients.set(name, client);
-    for (const t of (await client.listTools()).tools) toolNames.push(`mcp__${norm(name)}__${norm(t.name)}`);
+    const listed = (await client.listTools()).tools;
+    toolListing[name] = listed;
+    for (const t of listed) toolNames.push(`mcp__${norm(name)}__${norm(t.name)}`);
   }
   emit({ type: 'system', subtype: 'init', model: 'claude-haiku-4-5' });
   const mode = process.env.ADHD_FAKE_CLAUDE_MODE;
@@ -98,7 +101,7 @@ async function run(line) {
   }
   for (const c of clients.values()) await c.close().catch(noop);
   if (selfOut) {
-    writeFileSync(selfOut, JSON.stringify({ cwd: process.cwd(), mcpConfig, mcpConfigRaw: mcpConfigArg, configMode, toolNames, results }));
+    writeFileSync(selfOut, JSON.stringify({ cwd: process.cwd(), mcpConfig, mcpConfigRaw: mcpConfigArg, configMode, toolNames, toolListing, results }));
   }
   process.stdout.write(
     JSON.stringify({ type: 'result', subtype: 'success', is_error: false, result: results.map((r) => r.text).join('|') || 'OK', num_turns: results.length + 1 }) + '\n',

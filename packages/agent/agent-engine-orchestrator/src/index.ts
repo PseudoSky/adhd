@@ -56,7 +56,11 @@ export type { DagTaskStore, DagQueue } from './engine/dag-engine.js';
 export { resolveComposedPrompt, computeContextHash } from './engine/prompt-resolver.js';
 export type { ResolveInput, ResolveResult, CompileAgentFn, PromptResolverDeps } from './engine/prompt-resolver.js';
 export { renderToolPromptDoc, toNameOnlyTools } from './engine/tool-advertisement.js';
-export { compactToolDefinitions } from './engine/tool-schema-compact.js';
+export {
+  canonicalizeDescription,
+  canonicalizeToolDefinitions,
+  compactToolDefinitions,
+} from './engine/tool-schema-compact.js';
 export type { ToolAdvertisementMode } from './engine/tool-advertisement.js';
 
 // ── Providers ─────────────────────────────────────────────────────────────────
