@@ -423,6 +423,7 @@ export class ClaudeCliProvider implements LLMProvider {
     private readonly logger: EngineLogger;
     private readonly config: EngineConfig;
     private readonly reapTimings: ClaudeCliReapTimings;
+    private readonly startBridge: typeof startToolBridge;
 
     constructor(
         config: ClaudeCliConfig,
@@ -430,8 +431,11 @@ export class ClaudeCliProvider implements LLMProvider {
         compiledTools?: string[],
         engineConfig?: EngineConfig,
         engineLogger?: EngineLogger,
-        reapTimings?: Partial<ClaudeCliReapTimings>
+        reapTimings?: Partial<ClaudeCliReapTimings>,
+        /** Test seam: replaces the loopback bridge starter so unit tests bind no port. */
+        deps?: { startToolBridge?: typeof startToolBridge }
     ) {
+        this.startBridge = deps?.startToolBridge ?? startToolBridge;
         this.reapTimings = { ...DEFAULT_CLAUDECLI_REAP_TIMINGS, ...reapTimings };
         this.providerConfig = config;
         this.compiledTools = compiledTools;
@@ -472,8 +476,9 @@ export class ClaudeCliProvider implements LLMProvider {
      */
     private async writeMcpConfigFile(bridge: ToolBridge | undefined): Promise<string | undefined> {
         if (!bridge || bridge.serverNames.length === 0) return undefined;
+        const mapped = buildBridgeMcpConfig(bridge).mcpServers;
         const filePath = join(await this.ensureTempRoot(), `agent-mcp-claudecli-${Date.now()}-${generateId()}.json`);
-        await writeFile(filePath, JSON.stringify(buildBridgeMcpConfig(bridge)), { encoding: "utf8", mode: 0o600 });
+        await writeFile(filePath, JSON.stringify({ mcpServers: mapped }), { encoding: "utf8", mode: 0o600 });
         return filePath;
     }
 
@@ -532,7 +537,7 @@ export class ClaudeCliProvider implements LLMProvider {
             );
         }
         const bridge = advertised.length > 0 && request.executeTool
-            ? await startToolBridge({
+            ? await this.startBridge({
                 tools: advertised,
                 executeTool: request.executeTool,
                 signal: request.signal,

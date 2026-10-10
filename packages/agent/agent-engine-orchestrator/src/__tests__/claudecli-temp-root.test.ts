@@ -111,12 +111,18 @@ async function chatAndObserve(tempDir: string | undefined) {
         undefined,
         makeConfig(tempDir),
         logger,
+        undefined,
+        // 9ed453c1 BRIDGE: claude's mcp-config now holds the loopback bridge entries; the bridge
+        // itself is faked here so this unit test binds no port (real bridge: claudecli-tool-bridge.e2e).
+        { startToolBridge: async () => ({ baseUrl: "http://127.0.0.1:1", token: "t", serverNames: ["srv"], calls: () => 0, close: async () => {} }) },
     );
     await provider.chat({
         messages: [
             { role: "system", content: "---\nname: probe\ndescription: d\n---\nbody" },
             { role: "user", content: "hi" },
         ] as never,
+        tools: [{ name: "srv__t", description: "d", inputSchema: { type: "object" } }],
+        executeTool: async () => ({ result: "", isError: false }),
     });
     return seen;
 }

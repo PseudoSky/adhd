@@ -65,13 +65,19 @@ describe("c536ce29 F1-AC-A host-injected tempDir is where claudecli scratch land
             { srv: { transport: "stdio", command: "node", args: ["x.js"] } } as never,
             undefined,
             config,
-            { info: noop, warn: noop, error: noop, debug: noop }
+            { info: noop, warn: noop, error: noop, debug: noop },
+            undefined,
+            // 9ed453c1 BRIDGE: the mcp-config now holds loopback bridge entries; fake the bridge so
+            // this unit test binds no port (the real bridge is proven in the orchestrator's e2e lane).
+            { startToolBridge: async () => ({ baseUrl: "http://127.0.0.1:1", token: "t", serverNames: ["srv"], calls: () => 0, close: async () => undefined }) }
         );
         await provider.chat({
             messages: [
                 { role: "system", content: "---\nname: probe\ndescription: d\n---\nbody" },
                 { role: "user", content: "hi" },
             ] as never,
+            tools: [{ name: "srv__t", description: "d", inputSchema: { type: "object" } }],
+            executeTool: async () => ({ result: "", isError: false }),
         });
         expect(mcpConfig.startsWith(root + sep)).toBe(true);
         expect(entries.some((n) => n.startsWith("agent-mcp-claudecli-"))).toBe(true);
