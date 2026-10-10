@@ -1,4 +1,10 @@
 /**
+ * Mirrors the engine's `DEFAULT_TOOL_CALL_CONCURRENCY` (`@adhd/agent-engine-orchestrator`
+ * `interfaces.ts`; not re-exported from its barrel). The engine keeps its own defensive fallback.
+ */
+export const DEFAULT_TOOL_CALL_CONCURRENCY = 8;
+
+/**
  * `config.ts` — agent-mcp's zero-config `Environment<AgentMcpConfig>` (per
  * `packages/environment/ARCHITECTURE.md` §6, the reference consumer for the
  * redesigned `@adhd/environment`).
@@ -101,6 +107,11 @@ export interface AgentMcpConfig {
    * `operationalEnv` so a project `config.yaml` can never widen the sandbox.
    */
   readonly agent: {
+    /**
+     * Max same-turn tool calls in flight at once (backlog 668fae7a). Kept a `string` so the
+     * strict parse (`parseToolCallConcurrency`) can fail loud instead of `parseInt` coercion.
+     */
+    readonly toolCallConcurrency: string;
     readonly toolResult: {
       readonly maxChars: string;
       /**
@@ -394,6 +405,15 @@ export const agentMcpEnvironmentSpec: EnvironmentSpec<AgentMcpConfig> = {
     // Declared `string` (not `integer`) on purpose: the cascade's integer coercion is `parseInt`,
     // which silently turns "1.5" into 1 and "20000abc" into 20000 and so cannot fail loud on a
     // malformed value. `toEngineConfig()` parses it strictly via `parseToolResultMaxChars`.
+    // `string` for the same reason: strict parse via `parseToolCallConcurrency`, no parseInt coercion.
+    "agent.toolCallConcurrency": {
+      type: "string",
+      env: "ADHD_AGENT_TOOL_CALL_CONCURRENCY",
+      default: String(DEFAULT_TOOL_CALL_CONCURRENCY),
+      description:
+        "Max tool calls of one assistant turn executed concurrently (positive integer; calls beyond " +
+        "the limit wait, results keep call order). Malformed values fail at startup.",
+    },
     "agent.toolResult.maxChars": {
       type: "string",
       env: "ADHD_AGENT_TOOL_RESULT_MAX_CHARS",
@@ -921,6 +941,26 @@ export function resolveToolResultSpill(
 }
 
 /**
+ * Strictly parses `agent.toolCallConcurrency` / `ADHD_AGENT_TOOL_CALL_CONCURRENCY` (backlog 668fae7a).
+ *
+ * @param raw - the configured value (string from the cascade, or a number)
+ * @returns a positive integer
+ * @throws {RangeError} on anything that is not a plain positive integer (`0`, `-1`, `1.5`, `abc`, `8x`, empty)
+ */
+export function parseToolCallConcurrency(raw: unknown): number {
+  let text = "";
+  if (typeof raw === "string") text = raw.trim();
+  else if (typeof raw === "number") text = String(raw);
+  const n = /^\d+$/.test(text) ? Number(text) : Number.NaN;
+  if (!Number.isSafeInteger(n) || n < 1) {
+    throw new RangeError(
+      `agent.toolCallConcurrency (ADHD_AGENT_TOOL_CALL_CONCURRENCY) must be a positive integer, got ${JSON.stringify(raw)}`,
+    );
+  }
+  return n;
+}
+
+/**
  * Builds the `EngineConfig`-shaped adapter the orchestrator layer (`server.ts`,
  * `index.ts`) is injected with — the engine MUST NOT import `config.ts`
  * directly (`packages/agent/agent-engine-orchestrator/src/interfaces.ts`).
@@ -938,6 +978,7 @@ export function toEngineConfig(): EngineConfig {
     },
     queue: { concurrency: env.config.queue.concurrency },
     // Fails loud (RangeError) on a negative / NaN / non-integer / non-numeric cap, before any task runs.
+    toolCallConcurrency: parseToolCallConcurrency(env.config.agent.toolCallConcurrency),
     toolResult: {
       maxChars: parseToolResultMaxChars(env.config.agent.toolResult.maxChars),
       spill: resolveToolResultSpill(),
