@@ -21,7 +21,7 @@
     "CHANGELOG.md"
   ],
   "peerDependencies": {
-    "@adhd/agent-base-types": "^2.3.9"
+    "@adhd/agent-base-types": "^2.3.10"
   },
   "dependencies": {
     "drizzle-orm": "0.45.2",

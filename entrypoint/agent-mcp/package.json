@@ -1,6 +1,6 @@
 {
   "name": "@adhd/agent-mcp",
-  "version": "2.3.8",
+  "version": "2.3.9",
   "type": "module",
   "bin": {
     "agent-mcp": "./dist/src/index.js",
@@ -16,10 +16,10 @@
     "docs"
   ],
   "dependencies": {
-    "@adhd/agent-store-runtime": "^2.2.7",
-    "@adhd/agent-core-provider": "^2.2.7",
+    "@adhd/agent-store-runtime": "^2.2.8",
+    "@adhd/agent-core-provider": "^2.2.8",
     "@adhd/agent-store-prompts": "^2.2.3",
-    "@adhd/agent-engine-orchestrator": "^2.3.8",
+    "@adhd/agent-engine-orchestrator": "^2.3.9",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "pino": "^10.3.1",
     "drizzle-orm": "^0.45.2",
@@ -27,9 +27,9 @@
     "zod": "^4.4.3",
     "@adhd/environment": "^0.1.8",
     "@adhd/environment-base-spec": "^0.1.4",
-    "@adhd/agent-base-types": "^2.3.9",
+    "@adhd/agent-base-types": "^2.3.10",
     "@adhd/agent-engine-compiler": "^2.2.8",
-    "@adhd/agent-plugin-budget": "^0.2.6",
+    "@adhd/agent-plugin-budget": "^0.2.7",
     "@adhd/agent-plugin-tracing": "^0.0.3",
     "@adhd/agent-core-env": "^0.1.5",
     "@adhd/agent-core-native-tooling": "^0.0.2",

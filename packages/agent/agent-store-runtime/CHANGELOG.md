@@ -1,3 +1,13 @@
+## 2.2.8 (2026-10-10)
+
+### 🩹 Fixes
+
+- **agent-engine-orchestrator:** bridged claudecli calls get events, coercion and a per-call timeout; fail redispatch on a missing cwd; skip home file in store-path warning (9ed453c1 BLIND F4 F6 F8 F9) ([7adb975e](https://github.com/PseudoSky/adhd/commit/7adb975e))
+
+### ❤️ Thank You
+
+- pseudosky
+
 ## 2.2.7 (2026-10-09)
 
 This was a version bump only for agent-store-runtime to align it with other projects, there were no code changes.
