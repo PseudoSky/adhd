@@ -290,6 +290,17 @@ A worked definition — filesystem on, shell tool calls require approval, dispat
 }
 ```
 
+#### Line endings are preserved on edit and write
+
+The adopted filesystem server normalizes every file it writes to LF. agent-mcp
+restores the original line endings host-side: before an `fs` `edit_file` /
+`write_file` call it records whether the target is CRLF-only, and after a
+successful call it rewrites the file to CRLF if the server turned it into LF. Files
+that are LF-only, mixed, or new are left exactly as the server wrote them, and a
+failed call never touches the file. This is always on (no flag), fail-open (a hook
+error never changes a tool result), and idempotent across concurrent processes
+(8dd148cf).
+
 #### Native tooling environment variables
 
 Every `nativeTooling` leaf is a typed config field with an `ADHD_AGENT_*` env

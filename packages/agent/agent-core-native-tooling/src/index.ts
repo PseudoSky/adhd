@@ -18,6 +18,10 @@ export type { NativeResolveContext, ResolvedNativeServer } from './lib/resolver.
 
 export { matchPermission } from './lib/permissions.js';
 
+// Line-ending preservation for the adopted fs server's LF normalization (8dd148cf).
+export { classifyEol, restoreLineEndings } from './lib/eol.js';
+export type { EolClass } from './lib/eol.js';
+
 export {
   NATIVE_TOOL_NAMES,
   NATIVE_SERVER_CATALOG,

@@ -120,3 +120,10 @@ npx nx build agent-core-native-tooling
 ```bash
 npx nx test agent-core-native-tooling
 ```
+
+## Line-ending helpers
+
+`classifyEol(text)` returns `'crlf' | 'lf' | 'mixed' | 'none'`, and
+`restoreLineEndings(before, after)` re-applies a CRLF-only `before` to `after`
+(any other class returns `after` unchanged). agent-mcp uses them to undo the
+adopted filesystem server's CRLF-to-LF normalization (8dd148cf).

@@ -12,6 +12,7 @@ import { formatStoreLine } from "./config-store-path.js";
 import { runMigrations } from "./db/migrate.js";
 import { logger } from "./logger.js";
 import { initLogChannels, closeLogChannels } from "./wire/channels.js";
+import { registerEolPreserve } from "./eol-hook.js";
 import { registerOpsLog, logServerStart, logServerStop, dbPathOf } from "./ops-log.js";
 import { env, resolveInitialSsePort, setSseBoundPort } from "./config.js";
 import { engineConfig } from "./wire/seams.js";
@@ -281,6 +282,8 @@ async function main() {
 
     const hooks = new HookRegistry();
     registerOpsLog(hooks);
+    // 8dd148cf: keep CRLF files CRLF across the adopted fs server's LF-normalizing writes.
+    registerEolPreserve(hooks);
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const dbAny = db as any;
