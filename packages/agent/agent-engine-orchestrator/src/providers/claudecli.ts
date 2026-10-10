@@ -563,6 +563,7 @@ export class ClaudeCliProvider implements LLMProvider {
                 executeTool: request.executeTool,
                 signal: request.signal,
                 logger: this.logger,
+                callTimeoutMs: this.providerConfig.timeoutMs,
             })
             : undefined;
         try {

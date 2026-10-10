@@ -215,7 +215,7 @@ export class TaskStore {
                 onUpstreamFailure: row.on_upstream_failure ?? null,
                 inputs: row.inputs ? JSON.parse(row.inputs) : null,
                 resumeToken: row.resume_token ?? null,
-            cwd: row.cwd ?? null,
+                cwd: row.cwd ?? null,
             })
         );
     }

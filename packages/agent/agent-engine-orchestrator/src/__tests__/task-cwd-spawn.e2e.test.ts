@@ -15,7 +15,7 @@ import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 import { spawn as nodeSpawn } from "node:child_process";
-import { chmodSync, mkdtempSync, readFileSync, realpathSync, rmSync } from "node:fs";
+import { chmodSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -229,5 +229,33 @@ describe("9ed453c1 CWD: the task cwd reaches the spawned claude (ADR-0008 D9)", 
     await env.queue.onIdle();
     expect(env.taskStore.read(legacy.id).status).toBe("completed");
     expect(env.spawnCwd()).toBe(process.cwd());
+  });
+
+  it("9ed453c1 BLIND F9: a redispatch whose persisted cwd no longer exists fails the task hard, naming the directory, and never spawns", async () => {
+    const gone = freshDir("adhd-cwd-gone-");
+    const task = env.taskStore.create({ sessionId: env.sessionId, prompt: "G", cwd: gone });
+    rmSync(gone, { recursive: true, force: true });
+    await enqueueExistingTask(task.id, env.deps);
+    await env.queue.onIdle();
+    const after = env.taskStore.read(task.id);
+    expect(after.status).toBe("failed");
+    expect(after.error).toContain(gone);
+    expect(after.error).toMatch(/no longer exists/);
+    // Not an opaque spawn ENOENT, and no fallback to the host cwd: claude was never launched.
+    expect(after.error).not.toMatch(/ENOENT/);
+    expect(() => env.spawnCwd()).toThrow();
+  });
+
+  it("9ed453c1 BLIND F9: a persisted cwd that is a file (not a directory) is refused the same way", async () => {
+    const dir = freshDir("adhd-cwd-file-");
+    const file = join(dir, "not-a-dir.txt");
+    writeFileSync(file, "x");
+    const task = env.taskStore.create({ sessionId: env.sessionId, prompt: "F", cwd: file });
+    await enqueueExistingTask(task.id, env.deps);
+    await env.queue.onIdle();
+    const after = env.taskStore.read(task.id);
+    expect(after.status).toBe("failed");
+    expect(after.error).toContain(file);
+    expect(after.error).toMatch(/is not a directory/);
   });
 });

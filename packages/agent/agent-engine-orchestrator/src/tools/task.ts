@@ -1,4 +1,5 @@
 import PQueue from 'p-queue';
+import { statSync } from 'node:fs';
 import type { EngineConfig, EngineLogger } from '../interfaces.js';
 import type { BackgroundQueue } from '../engine/queue.js';
 import type { DagEngine } from '../engine/dag-engine.js';
@@ -735,6 +736,31 @@ export async function enqueueExistingTask(
     return;
   }
   const { selection, wireModel } = resolved;
+
+  // 9ed453c1 BLIND F9: the persisted dispatching cwd is replayed verbatim, so the directory may be
+  // gone by redispatch time (deleted worktree, restart after cleanup). Fail the task HARD with an
+  // attributable message naming the directory — never fall back to another cwd (the task would run
+  // against the wrong tree) and never leave it to an opaque spawn ENOENT.
+  if (task.cwd) {
+    let problem: string | undefined;
+    try {
+      if (!statSync(task.cwd).isDirectory()) problem = 'is not a directory';
+    } catch {
+      problem = 'no longer exists';
+    }
+    if (problem) {
+      const message =
+        `Task dispatching directory '${task.cwd}' ${problem}; cannot redispatch task ${taskId}. ` +
+        'Recreate the directory or create a new task with a valid cwd.';
+      deps.logger.warn({ taskId, cwd: task.cwd }, 'enqueueExistingTask: persisted cwd unusable');
+      try {
+        deps.taskStore.updateStatus(taskId, 'failed', { error: message });
+      } catch {
+        // Already terminal — ignore
+      }
+      return;
+    }
+  }
 
   const executionContext: ExecutionContext = {
     taskId,

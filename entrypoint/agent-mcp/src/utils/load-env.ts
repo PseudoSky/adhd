@@ -147,6 +147,9 @@ export function loadEnvHierarchy(cwd: string = process.cwd(), options: ILoadEnvO
                 : path.resolve(path.dirname(homeFile), fromHome);
         }
         for (const file of [ENV_FILE(cwd), path.join(cwd, ".env")]) {
+            // When the server starts in $HOME, `<cwd>/.adhd/.env` IS the home file, the one file
+            // allowed to set the store path (9ed453c1 BLIND F4); warning about it would be false.
+            if (path.resolve(file) === path.resolve(homeFile)) continue;
             if (readDotenv(file)[STORE_PATH_ENV] !== undefined) {
                 warn(
                     `ignoring ${STORE_PATH_ENV} in ${file}: a launch-directory .env cannot select the operational ` +

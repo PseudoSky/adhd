@@ -19,6 +19,7 @@ const argv = process.argv.slice(2);
 const flag = (n) => { const i = argv.indexOf(n); return i === -1 ? undefined : argv[i + 1]; };
 const norm = (s) => s.replace(/[^A-Za-z0-9_]/g, '_');
 
+// argv + env values are recorded so tests can prove no credential is ps-visible (9ed453c1 BLIND F6c).
 const mcpConfigArg = flag('--mcp-config');
 const stdinLog = process.env.ADHD_FAKE_CLAUDE_STDIN_LOG;
 const selfOut = process.env.ADHD_FAKE_CLAUDE_OUT;
@@ -72,7 +73,7 @@ async function run(line) {
   emit({ type: 'system', subtype: 'init', model: 'claude-haiku-4-5' });
   const mode = process.env.ADHD_FAKE_CLAUDE_MODE;
   if (mode === 'hang' || mode === 'fail') {
-    if (selfOut) writeFileSync(selfOut, JSON.stringify({ cwd: process.cwd(), mcpConfig, mcpConfigRaw: mcpConfigArg, configMode, toolNames, results: [] }));
+    if (selfOut) writeFileSync(selfOut, JSON.stringify({ cwd: process.cwd(), mcpConfig, mcpConfigRaw: mcpConfigArg, configMode, argv, envValues: Object.values(process.env), toolNames, results: [] }));
     if (mode === 'hang') { setInterval(noop, 1e6); return; }
     process.stdout.write(JSON.stringify({ type: 'result', subtype: 'error', is_error: true, result: 'boom' }) + '\n', () => process.exit(0));
     return;
@@ -101,7 +102,7 @@ async function run(line) {
   }
   for (const c of clients.values()) await c.close().catch(noop);
   if (selfOut) {
-    writeFileSync(selfOut, JSON.stringify({ cwd: process.cwd(), mcpConfig, mcpConfigRaw: mcpConfigArg, configMode, toolNames, toolListing, results }));
+    writeFileSync(selfOut, JSON.stringify({ cwd: process.cwd(), mcpConfig, mcpConfigRaw: mcpConfigArg, configMode, argv, envValues: Object.values(process.env), toolNames, toolListing, results }));
   }
   process.stdout.write(
     JSON.stringify({ type: 'result', subtype: 'success', is_error: false, result: results.map((r) => r.text).join('|') || 'OK', num_turns: results.length + 1 }) + '\n',

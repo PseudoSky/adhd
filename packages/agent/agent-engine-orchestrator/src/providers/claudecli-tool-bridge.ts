@@ -12,7 +12,7 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 
 import { resolveToolCallName } from "../clients/tool-naming.js";
-import type { EngineLogger } from "../interfaces.js";
+import { DEFAULT_PROVIDER_TIMEOUT_MS, type EngineLogger } from "../interfaces.js";
 import type { ProviderChatRequest, ToolDefinition } from "./types.js";
 
 /**
@@ -49,6 +49,13 @@ export interface StartToolBridgeOptions {
     executeTool: ExecuteTool;
     signal?: AbortSignal;
     logger: EngineLogger;
+    /**
+     * Upper bound for ONE `tools/call` (9ed453c1 BLIND F6a). Defaults to the engine's provider
+     * timeout ({@link DEFAULT_PROVIDER_TIMEOUT_MS}); claudecli passes the agent's
+     * `provider.timeoutMs`. When it elapses the model gets a clear `isError` MCP result and the
+     * chat carries on, instead of the whole turn hanging until the outer signal fires.
+     */
+    callTimeoutMs?: number;
 }
 
 const MAX_BODY_BYTES = 8 * 1024 * 1024;
@@ -155,6 +162,7 @@ function reply(res: ServerResponse, status: number, body: string, headers: Recor
  */
 export async function startToolBridge(opts: StartToolBridgeOptions): Promise<ToolBridge> {
     const { executeTool, logger } = opts;
+    const callTimeoutMs = opts.callTimeoutMs ?? DEFAULT_PROVIDER_TIMEOUT_MS;
     const byServer = groupToolsByServer(opts.tools);
     const token = randomBytes(32).toString("hex");
     let callCount = 0;
@@ -178,14 +186,29 @@ export async function startToolBridge(opts: StartToolBridgeOptions): Promise<Too
                 throw new McpError(ErrorCode.InvalidParams, `Unknown tool '${tool}' on server '${serverName}'`);
             }
             callCount += 1;
+            let timer: NodeJS.Timeout | undefined;
             try {
-                const { result, isError } = await executeTool(serverName, tool, request.params.arguments ?? {});
+                const timedOut = new Promise<never>((_, reject) => {
+                    timer = setTimeout(
+                        () => reject(new Error(
+                            `Tool '${tool}' on server '${serverName}' timed out after ${callTimeoutMs}ms ` +
+                            `(claudecli bridge per-call limit; raise provider.timeoutMs to allow longer tool calls)`
+                        )),
+                        callTimeoutMs
+                    );
+                });
+                const { result, isError } = await Promise.race([
+                    executeTool(serverName, tool, request.params.arguments ?? {}),
+                    timedOut,
+                ]);
                 return { content: toContent(result), isError };
             } catch (err) {
                 return {
                     content: [{ type: "text" as const, text: err instanceof Error ? err.message : String(err) }],
                     isError: true,
                 };
+            } finally {
+                if (timer) clearTimeout(timer);
             }
         });
         return server;

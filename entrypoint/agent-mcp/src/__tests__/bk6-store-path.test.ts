@@ -192,4 +192,21 @@ describe('de046157 AC6.1 loadEnvHierarchy: .env discovery never selects the stor
     expect(process.env[KEY]).toBe('/explicit/agents.db');
     expect(warnings).toEqual([]);
   });
+
+  it('9ed453c1 BLIND F4: starting in $HOME does not warn about ~/.adhd/.env (it is the one file allowed to set the store) and still applies it', () => {
+    const abs = join(sandbox, 'dev', 'home.db');
+    write(join(home, '.adhd', '.env'), `${KEY}=${abs}\n`);
+    const warnings: string[] = [];
+    loadEnvHierarchy(home, { warn: (m) => warnings.push(m) });
+    expect(warnings).toEqual([]);
+    expect(process.env[KEY]).toBe(abs);
+  });
+
+  it('9ed453c1 BLIND F4: starting in $HOME still warns about a $HOME/.env (a different, launch-directory file)', () => {
+    write(join(home, '.env'), `${KEY}=${REPO_DEV_VALUE}\n`);
+    const warnings: string[] = [];
+    loadEnvHierarchy(home, { warn: (m) => warnings.push(m) });
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain(join(home, '.env'));
+  });
 });

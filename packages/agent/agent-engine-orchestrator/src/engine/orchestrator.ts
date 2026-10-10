@@ -644,46 +644,124 @@ export class Orchestrator {
               serverSideTools.length > 0 ? serverSideTools : undefined,
             signal: composedSignal,
             executeTool: async (server, tool, args) => {
-              registry.assertToolAllowed?.(server, tool);
-              const client = await registry.getClient(server);
-              // 9ed453c1 CTX: the claudecli bridge never passes through the API-path cap
-              // below (the CLI runs its own tool loop), so bound what the CLI re-sends on
-              // every later turn here — the same BK1 head+tail cap/spill the API path uses.
-              const boundForModel = (
-                raw: unknown,
-                isErr: boolean
-              ): unknown => {
-                bridgeCallSeq += 1;
-                return capOrSpillToolResult({
-                  result: raw,
-                  isError: isErr,
-                  maxChars: toolResultMaxChars,
-                  spill: toolResultSpill,
+              // 9ed453c1 BLIND F6b: a bridged call gets the SAME observable treatment as an
+              // engine-native one — TOOL_CALL/TOOL_RESULT events (+ stream events), BK2 argument
+              // coercion, and the BK1/CTX head+tail cap/spill — because the CLI runs its own tool
+              // loop and never passes through the API-path executor below.
+              bridgeCallSeq += 1;
+              const callId = `bridge-${bridgeCallSeq}`;
+              const qualifiedToolName = `${server}__${tool}`;
+              emit({
+                type: 'tool_call',
+                taskId,
+                toolName: qualifiedToolName,
+                toolCallId: callId,
+                input: args,
+              });
+              taskStore.appendEvent({
+                taskId,
+                type: 'TOOL_CALL',
+                payload: {
+                  tool: qualifiedToolName,
+                  callId,
+                  arguments: JSON.stringify(args).slice(0, 500),
+                },
+              });
+              logger.info(
+                {
                   taskId,
-                  callId: `bridge-${bridgeCallSeq}`,
-                  onSpillError: (err) =>
-                    logger.warn(
-                      { taskId, tool: `${server}__${tool}`, err },
-                      'Tool-result spill failed; using the head+tail cap'
-                    ),
-                }).result;
-              };
+                  agentName: executionContext.agentName,
+                  tool: qualifiedToolName,
+                  callId,
+                },
+                'TOOL_CALL'
+              );
+
+              let rawResult: unknown;
+              let isErr = false;
               try {
-                const result = await client.callTool(
-                  tool,
-                  args,
-                  composedSignal
-                );
-                return { result: boundForModel(result, false), isError: false };
+                registry.assertToolAllowed?.(server, tool);
+                let callArguments: unknown = args;
+                if (toolArgCoercionEnabled) {
+                  const declared = tools.find((t) => t.name === qualifiedToolName);
+                  const coerced = coerceToolArguments(declared?.inputSchema, args);
+                  if (coerced.mismatch) {
+                    throw new Error(coerced.mismatch.message);
+                  }
+                  callArguments = coerced.arguments;
+                  for (const c of coerced.coercions) {
+                    logger.warn(
+                      {
+                        taskId,
+                        tool: qualifiedToolName,
+                        property: c.property,
+                        from: c.from,
+                        to: c.to,
+                      },
+                      'TOOL_ARG_COERCED'
+                    );
+                    taskStore.appendEvent({
+                      taskId,
+                      type: 'TOOL_ARG_COERCED',
+                      payload: {
+                        taskId,
+                        tool: qualifiedToolName,
+                        property: c.property,
+                        from: c.from,
+                        to: c.to,
+                      },
+                    });
+                  }
+                }
+                const client = await registry.getClient(server);
+                rawResult = await client.callTool(tool, callArguments, composedSignal);
               } catch (error) {
-                return {
-                  result: boundForModel(
-                    error instanceof Error ? error.message : String(error),
-                    true
-                  ),
-                  isError: true,
-                };
+                isErr = true;
+                rawResult = error instanceof Error ? error.message : String(error);
               }
+
+              const fullText =
+                typeof rawResult === 'string' ? rawResult : JSON.stringify(rawResult);
+              const estTokens = encode(fullText ?? '').length;
+              // 9ed453c1 CTX: bound what the CLI re-sends on every later turn.
+              const capOutcome = capOrSpillToolResult({
+                result: rawResult,
+                isError: isErr,
+                maxChars: toolResultMaxChars,
+                spill: toolResultSpill,
+                taskId,
+                callId,
+                onSpillError: (err) =>
+                  logger.warn(
+                    { taskId, tool: qualifiedToolName, err },
+                    'Tool-result spill failed; using the head+tail cap'
+                  ),
+              });
+              taskStore.appendEvent({
+                taskId,
+                type: 'TOOL_RESULT',
+                payload: {
+                  callId,
+                  tool: qualifiedToolName,
+                  isError: isErr,
+                  result: (fullText ?? '').slice(0, 500),
+                  tool_call_est_result_tokens: estTokens,
+                  ...(capOutcome.truncated
+                    ? { truncated: true, original_chars: capOutcome.originalChars }
+                    : {}),
+                  ...(capOutcome.spilled
+                    ? { spilled: true, spill_path: capOutcome.spillPath }
+                    : {}),
+                },
+              });
+              emit({
+                type: 'tool_result',
+                taskId,
+                toolCallId: callId,
+                content: capOutcome.result,
+              });
+              logger.debug({ taskId, tool: qualifiedToolName, isError: isErr }, 'TOOL_RESULT');
+              return { result: capOutcome.result, isError: isErr };
             },
           });
           // Attach task/session/agent ids to every raw wire record this call writes (TRC-AC2/3).

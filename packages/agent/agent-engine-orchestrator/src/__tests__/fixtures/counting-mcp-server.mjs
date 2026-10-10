@@ -6,6 +6,7 @@
 //   - `bump` is deliberately non-idempotent: it appends one line to $COUNTING_COUNTER_FILE and
 //     returns `seq=<n>` where n is the new line count      (how many times the tool executed)
 //   - `echo` returns args.text unchanged.
+//   - `count_items` returns n=<items.length> (n=-1 when `items` arrives as a non-array: argument-coercion probe).
 import { appendFileSync, readFileSync } from 'node:fs';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
@@ -25,6 +26,11 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       description: 'Return args.text.',
       inputSchema: { type: 'object', properties: { text: { type: 'string' } }, required: ['text'] },
     },
+    {
+      name: 'count_items',
+      description: 'Return n=<items.length>, or n=-1 when items is not an array.',
+      inputSchema: { type: 'object', properties: { items: { type: 'array', items: { type: 'string' } } }, required: ['items'] },
+    },
   ],
 }));
 
@@ -36,6 +42,7 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
     const seq = readFileSync(counterFile, 'utf8').split('\n').filter(Boolean).length;
     return { content: [{ type: 'text', text: `seq=${seq}` }] };
   }
+  if (name === 'count_items') return { content: [{ type: 'text', text: `n=${Array.isArray(args?.items) ? args.items.length : -1}` }] };
   if (name === 'echo') return { content: [{ type: 'text', text: String(args?.text ?? '') }] };
   return { content: [{ type: 'text', text: `unknown tool ${name}` }], isError: true };
 });

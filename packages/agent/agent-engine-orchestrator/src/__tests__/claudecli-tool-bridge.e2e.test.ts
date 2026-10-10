@@ -133,6 +133,8 @@ interface SelfRecord {
   mcpConfig: { mcpServers: Record<string, { type: string; url?: string; command?: string; headers?: Record<string, string>; env?: unknown }> };
   mcpConfigRaw: string;
   configMode: number | null;
+  argv: string[];
+  envValues: string[];
   toolNames: string[];
   results: Array<{ id: string; text: string; isError: boolean }>;
 }
@@ -378,4 +380,79 @@ describe('9ed453c1 BRIDGE — claudecli tools execute exactly once', () => {
       await h.registry.closeAll();
     }
   });
+
+  it('9ed453c1 BLIND F6a: a hung tool call is bounded per call — the model gets a clear isError result and the chat completes', async () => {
+    const h = await harness();
+    try {
+      const hung = vi.fn<ExecuteTool>(() => new Promise(() => { /* never settles */ }));
+      const provider = new ClaudeCliProvider(
+        { type: 'claudecli', claudePath: FAKE_CLAUDE, model: 'claude-haiku-4-5', timeoutMs: 400 },
+        {},
+        undefined,
+        h.engine,
+        logger
+      );
+      const started = Date.now();
+      await provider.chat({ messages: promptFor([{ server: 'counter', tool: 'bump' }]), tools: h.tools, executeTool: hung });
+      expect(hung).toHaveBeenCalledTimes(1);
+      const [result] = readSelf(h).results;
+      expect(result).toMatchObject({ isError: true });
+      expect(result!.text).toMatch(/Tool 'bump' on server 'counter' timed out after 400ms/);
+      // Bounded by the per-call limit, not by the 60s MCP-client default or the outer signal.
+      expect(Date.now() - started).toBeLessThan(20_000);
+    } finally {
+      await h.registry.closeAll();
+    }
+  }, 60_000);
+
+  it('9ed453c1 BLIND F6a: startToolBridge honours callTimeoutMs and a call that finishes in time is untouched', async () => {
+    const tools: ToolDefinition[] = [
+      { name: 'a__slow', description: 'slow', inputSchema: { type: 'object', properties: {} } },
+      { name: 'a__fast', description: 'fast', inputSchema: { type: 'object', properties: {} } },
+    ];
+    const bridge = await startToolBridge({
+      tools,
+      callTimeoutMs: 150,
+      logger,
+      executeTool: async (_s, tool) =>
+        tool === 'slow' ? new Promise(() => { /* never settles */ }) : { result: 'fast-ok', isError: false },
+    });
+    try {
+      const client = new Client({ name: 't', version: '1' });
+      await client.connect(new StreamableHTTPClientTransport(new URL(`${bridge.baseUrl}/mcp/a`), {
+        requestInit: { headers: { Authorization: `Bearer ${bridge.token}` } },
+      }));
+      const slow = await client.callTool({ name: 'slow', arguments: {} });
+      expect(slow.isError).toBe(true);
+      expect(JSON.stringify(slow.content)).toContain('timed out after 150ms');
+      const fast = await client.callTool({ name: 'fast', arguments: {} });
+      expect(fast.isError).not.toBe(true);
+      expect(JSON.stringify(fast.content)).toContain('fast-ok');
+      await client.close();
+    } finally {
+      await bridge.close();
+    }
+  }, 30_000);
+
+  it('9ed453c1 BLIND F6c: the bearer token is never in the spawned claude argv or env (ps-visible); --mcp-config is a 0600 file path', async () => {
+    const h = await harness();
+    try {
+      await h.provider.chat({ messages: promptFor([{ server: 'counter', tool: 'bump' }]), tools: h.tools, executeTool: h.executeSpy });
+      const self = readSelf(h);
+      const auth = self.mcpConfig.mcpServers['counter']!.headers?.['Authorization'] ?? '';
+      const token = auth.replace(/^Bearer /, '');
+      expect(token).toMatch(/^[0-9a-f]{64}$/);
+      // The token is in the config FILE (the only carrier) ...
+      expect(self.configMode).toBe(0o600);
+      // ... and --mcp-config's argv value is that file's path, never inline JSON.
+      const at = self.argv.indexOf('--mcp-config');
+      expect(at).toBeGreaterThanOrEqual(0);
+      expect(self.argv[at + 1]!.trimStart().startsWith('{')).toBe(false);
+      // REVERT-FAILING: passing the config inline (or exporting the token) puts it in argv/env.
+      expect(self.argv.join('\u0000')).not.toContain(token);
+      for (const v of self.envValues) expect(v).not.toContain(token);
+    } finally {
+      await h.registry.closeAll();
+    }
+  }, 60_000);
 });
