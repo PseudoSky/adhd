@@ -1276,10 +1276,9 @@ export class Orchestrator {
           failure: string
         ): Promise<void> => {
           try {
-            const usage: ProviderTokenUsage = partial.usage ?? {
-              inputTokens: 0,
-              outputTokens: 0,
-              unmeasured: true,
+            const usage: ProviderTokenUsage = {
+              ...(partial.usage ?? { inputTokens: 0, outputTokens: 0, unmeasured: true }),
+              stopReason: 'error',
             };
             const modelCalls = partial.usage ? partial.reportedModelCalls ?? 1 : 0;
             const toolCallCount = partial.reportedToolUses ?? 0;

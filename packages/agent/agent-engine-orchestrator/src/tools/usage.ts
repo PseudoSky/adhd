@@ -540,6 +540,27 @@ function taskScopeWhere(db: Database, input: TaskUsageInput): SQL | undefined {
   return filters.length > 0 ? and(...filters) : undefined;
 }
 
+/**
+ * Tasks (of `taskIds`) with at least one MODEL_RESPONSE whose usage is a lower bound (`usageLowerBound` on the
+ * event payload): the task/session grains derive `usage_lower_bound` from the same events the turn grain reads,
+ * so no column is needed. (afa37093 AC3)
+ */
+function lowerBoundTaskIds(db: Database, taskIds: string[]): Set<string> {
+  if (taskIds.length === 0) return new Set();
+  const hits = db
+    .selectDistinct({ taskId: taskEventsTable.taskId })
+    .from(taskEventsTable)
+    .where(
+      and(
+        inArray(taskEventsTable.taskId, taskIds),
+        eq(taskEventsTable.type, "MODEL_RESPONSE"),
+        sql`json_extract(${taskEventsTable.payload}, '$.usageLowerBound') = 1`
+      )
+    )
+    .all();
+  return new Set(hits.map((h) => h.taskId));
+}
+
 /** Task grain (§4): one row per `task_usage` entry — the pre-existing cumulative rollup,
  * just remapped onto the flattened snake_case row shape. */
 function taskGrainRows(db: Database, input: TaskUsageInput, source: IPriceSource): UsageRow[] {
@@ -556,6 +577,7 @@ function taskGrainRows(db: Database, input: TaskUsageInput, source: IPriceSource
     .all();
 
   const unpricedCounts = unpricedTurnCounts(db, joined, source);
+  const lowerBound = lowerBoundTaskIds(db, joined.map((j) => j.usage.taskId));
 
   return joined.map(({ usage: r, sessionId, taskStatus }) => {
     const row: UsageRow = {
@@ -600,6 +622,7 @@ function taskGrainRows(db: Database, input: TaskUsageInput, source: IPriceSource
     first_turn: null,
     per_turn: null,
     per_turn_truncated: false,
+    usage_lower_bound: lowerBound.has(r.taskId),
     };
     ROW_COST.set(row, storedRowCost(r, unpricedCounts.get(r.taskId) ?? 0));
     return row;
@@ -625,6 +648,7 @@ function sessionGrainRows(db: Database, input: TaskUsageInput, source: IPriceSou
     joined.map((j) => ({ usage: j.usage, sessionId: j.task.sessionId ?? null })),
     source
   );
+  const lowerBound = lowerBoundTaskIds(db, joined.map((j) => j.usage.taskId));
 
   const bySession = new Map<string, typeof joined>();
   for (const row of joined) {
@@ -737,6 +761,7 @@ function sessionGrainRows(db: Database, input: TaskUsageInput, source: IPriceSou
       first_turn: null,
       per_turn: null,
       per_turn_truncated: false,
+      usage_lower_bound: group.some((g) => lowerBound.has(g.usage.taskId)),
     };
     ROW_COST.set(sessionRow, sessionCost);
     rows.push(sessionRow);
@@ -865,6 +890,8 @@ function deriveTurns(
           contextTokens?: number;
         }>;
         perTurnUsageTruncated?: boolean;
+        /** Figures may undercount real spend (stream-rebuilt output tokens, folded unreported attempt). afa37093 */
+        usageLowerBound?: boolean;
         /** Provider-reported dollar cost of this response (claudecli total_cost_usd). 8333f755 */
         cliReportedCostUsd?: number;
         /** A zero-token placeholder for a run that reported nothing: cost UNKNOWN. afa37093 */
@@ -960,6 +987,7 @@ function deriveTurns(
         first_turn: perTurn ? perTurn[0] : null,
         per_turn: perTurn,
         per_turn_truncated: payload.perTurnUsageTruncated === true,
+        usage_lower_bound: payload.usageLowerBound === true,
       };
       const unpriced = unmeasured || (priced ? priced.unpricedCount > 0 : est.status === "unpriced_model");
       const unpricedModels = priced

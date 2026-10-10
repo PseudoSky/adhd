@@ -293,11 +293,34 @@ hook and `MODEL_RESPONSE` event as a normal turn (the event carries `failed: tru
 | --- | --- |
 | `claudecli` `is_error` result | the tokens and `total_cost_usd` the CLI put on that result |
 | a fatal governance error found during a bridged call (raised after `chat()` returned) | the CLI's full usage for the run |
-| timeout / cancel / crash after the CLI emitted usage | the sum of the per-call usage seen on the stream (priced; `cli_reported_cost_usd` stays `null`, the CLI never reported one) |
+| timeout / cancel / crash after the CLI emitted usage (or an `is_error` result with no usage of its own) | the sum of the per-call usage seen on the stream, priced, with `usage_lower_bound: true` (see below); `cli_reported_cost_usd` stays `null` unless the result carried `total_cost_usd` |
 | timeout / cancel / crash before any usage | a zero row with `cost_status: "unmeasured"` and `est_cost_usd: null` (the cost is UNKNOWN, never $0; counted in `unpriced_tasks`) |
 
-Every `usage_query` row carries `task_status` (`failed`, `cancelled`, ...) so these rows are visible as such. A
-spawn that never started (binary missing) spent nothing and records nothing.
+Every `usage_query` row carries `task_status` (`failed`, `cancelled`, ...) so these rows are visible as such, and the
+task's `stop_reason` reads `error` when no call finished normally. A spawn that never started (binary missing) spent
+nothing and records nothing.
+
+**Usage rebuilt from the stream is a lower bound, not an exact figure.** The CLI's `assistant` stream events carry
+each call's input and cache counts exactly, but their `output_tokens` is a mid-stream snapshot taken before the
+call finished (recorded run B1: the five snapshots sum to 14 output tokens, the CLI's own `result.usage` says
+998). A row built that way, or a success whose `result` carried no `usage`, therefore has exact input and cache
+figures and an UNDERCOUNTED output figure, so its `est_cost_usd` is a floor. Every such row is marked
+`usage_lower_bound: true` in `usage_query` (turn grain: from the `usageLowerBound` field of the `MODEL_RESPONSE`
+event; task and session grain: true if any contributing turn is). Rows built from the CLI's own `usage` are exact and
+carry `usage_lower_bound: false`. A success that reported no usage and left nothing on the stream to rebuild from is
+an `unmeasured` row (cost `null`), never a free run.
+
+**Retried requests count every attempt.** `claudecli` retries a transient fault (overloaded, rate limited) up to
+twice. An attempt that billed before failing has spent real tokens, so the request's usage is the SUM over all
+attempts, cache tiers and `cli_reported_cost_usd` included: added to the response when a later attempt succeeds,
+attached to the failure when none does. If one of the attempts started but reported nothing, the sum is flagged
+`usage_lower_bound: true` rather than presented as exact.
+
+**A measured task with a later unmeasured call.** When a task that already has measured turns later makes a call
+that spent resources but reported nothing (killed before any usage appeared), the task row becomes
+`cost_status: "partial"` and its `est_cost_usd` becomes `null` by design: a sum that silently omitted the unknown
+call could be misread as the task's cost. `priced_cost_usd` keeps the known part, `unpriced_tasks` counts the task,
+and the unmeasured call is a zero-token `unmeasured` row at turn grain.
 
 #### `usage_query` row fields for cross-checking cost
 

@@ -55,32 +55,66 @@ export interface IReplayResult {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   db: any;
   sqlite: ReturnType<typeof createMigratedSqlite>;
+  /** Number of times the provider spawned the CLI. */
+  spawnCount: () => number;
   taskId: string;
   taskStatus: () => string | undefined;
   modelResponseEvents: () => Array<Record<string, unknown>>;
   close: () => void;
 }
 
-/** Replay `stream` (one spawn). Never rejects: a failing run is reported in `error`. */
-export async function replayStream(stream: string, configuredModel = "claude-haiku-4-5"): Promise<IReplayResult> {
+/** Retry backoff that elapses instantly and deterministically (no wall time): `sleep` just advances the clock. */
+class InstantClock extends FakeClock {
+  override sleep(ms: number): Promise<void> {
+    this.sleeps.push(ms);
+    this.t += ms;
+    return Promise.resolve();
+  }
+}
+
+/** A spawn that never starts (binary missing): `error` ENOENT, no stdout. */
+export const SPAWN_ENOENT = Symbol("spawn-enoent");
+/** A spawn whose stdout closes having emitted nothing (started, died silently). */
+export const SPAWN_SILENT = Symbol("spawn-silent");
+export type SpawnScript = string | typeof SPAWN_ENOENT | typeof SPAWN_SILENT;
+
+/**
+ * Replay a transcript. A string is one spawn; an array scripts consecutive spawns (the provider's retry re-spawns),
+ * the last entry repeating if more spawns are made. Never rejects: a failing run is reported in `error`.
+ */
+export async function replayStream(streams: SpawnScript | SpawnScript[], configuredModel = "claude-haiku-4-5"): Promise<IReplayResult> {
+  const scripts = Array.isArray(streams) ? streams : [streams];
+  let spawns = 0;
   const { spawn } = await import("child_process");
   // The calling test file `vi.mock`s child_process, so `spawn` is a vitest mock fn (typed structurally: no vitest import here).
   const spawnMock = spawn as unknown as { mockReset(): void; mockImplementation(impl: () => unknown): void };
   spawnMock.mockReset();
   spawnMock.mockImplementation(() => {
+    const script = scripts[Math.min(spawns++, scripts.length - 1)] as SpawnScript;
     const stdout = new Readable({ read() {} });
-    queueMicrotask(() => {
-      stdout.push(stream);
-      stdout.push(null);
-    });
+    const enoent = script === SPAWN_ENOENT;
+    if (!enoent) {
+      queueMicrotask(() => {
+        if (typeof script === "string") stdout.push(script);
+        stdout.push(null);
+      });
+    }
     return {
       stdout,
       stdin: { write: () => true, end: () => {} },
       stderr: new Readable({ read() {} }),
-      on: () => {},
+      on: (event: string, cb: (e: Error) => void) => {
+        if (enoent && event === "error") {
+          queueMicrotask(() => {
+            cb(Object.assign(new Error("spawn claude ENOENT"), { code: "ENOENT" }));
+            stdout.push(null);
+          });
+        }
+      },
       once: () => {},
       kill: () => {},
-      exitCode: 0 as number | null,
+      exitCode: (enoent || script === SPAWN_SILENT ? 1 : 0) as number | null,
+      signalCode: null,
       killed: false,
     };
   });
@@ -114,7 +148,7 @@ export async function replayStream(stream: string, configuredModel = "claude-hai
   new UsagePlugin(db, silentLogger).install(hooks);
 
   const { ClaudeCliProvider } = await import("../../providers/claudecli.js");
-  const retryRuntime: RetryRuntime = { clock: new FakeClock(), rng: () => 0, registry: new TripRegistry() };
+  const retryRuntime: RetryRuntime = { clock: new InstantClock(), rng: () => 0, registry: new TripRegistry() };
   const provider = new ClaudeCliProvider(
     { type: "claudecli", model: configuredModel }, {}, undefined, engineConfig, silentLogger, undefined, { retryRuntime }
   );
@@ -148,6 +182,7 @@ export async function replayStream(stream: string, configuredModel = "claude-hai
     error,
     db,
     sqlite,
+    spawnCount: () => spawns,
     taskId,
     taskStatus: () => (sqlite.prepare("SELECT status FROM tasks WHERE id = ?").get(taskId) as { status: string } | undefined)?.status,
     modelResponseEvents: () =>

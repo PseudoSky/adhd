@@ -33,6 +33,8 @@ import { startToolBridge, buildBridgeMcpConfig, bridgeableTools, type ToolBridge
 import {
     MAX_PER_TURN_USAGE,
     attachPartialUsage,
+    mergePartialUsage,
+    mergeProviderUsage,
     readPartialUsage,
     type IProviderPartialUsage,
     type IProviderTurnUsage,
@@ -296,6 +298,24 @@ export function resolveCliModelUsage(
         e.uncachedInputTokens + e.cacheReadTokens + e.cacheCreationTokens + e.outputTokens;
     const primary = entries.reduce((best, e) => (weight(e) > weight(best) ? e : best));
     return { responseModel: primary.model, entries };
+}
+
+/**
+ * A later attempt succeeded after earlier ones failed having billed: the response's usage must carry that spend too,
+ * or the run's cost is undercounted by every retried attempt. Model calls add; tool uses do not (a retry only ever
+ * follows an attempt that ran no tool). (afa37093 AC3)
+ */
+export function foldFailedAttemptSpend(response: ProviderChatResponse, spent: IProviderPartialUsage): ProviderChatResponse {
+    let usage: ProviderTokenUsage | undefined;
+    if (response.usage && spent.usage) usage = mergeProviderUsage(spent.usage, response.usage);
+    else if (spent.usage) usage = { ...spent.usage, usageLowerBound: true };
+    else if (response.usage) usage = { ...response.usage, usageLowerBound: true };
+    const spentCalls = spent.reportedModelCalls;
+    return {
+        ...response,
+        ...(usage ? { usage } : {}),
+        ...(spentCalls !== undefined ? { reportedModelCalls: (response.reportedModelCalls ?? 0) + spentCalls } : {}),
+    };
 }
 
 // ─── MCP config format ───────────────────────────────────────────────────────
@@ -781,15 +801,18 @@ export class ClaudeCliProvider implements LLMProvider {
         const wireModel = this.providerConfig.model ?? "";
         const key = this.credentialKey();
         const timeoutMs = this.providerConfig.timeoutMs ?? DEFAULT_PROVIDER_TIMEOUT_MS;
-        // callWithRetry re-wraps the final failure in a fresh ProviderCallError, so the spend the failed
-        // spawn carried is captured here and re-attached to whatever finally propagates (afa37093).
-        let lastPartial: IProviderPartialUsage | undefined;
+        // callWithRetry re-wraps the final failure in a fresh ProviderCallError, and every retried attempt that
+        // failed after billing has spent real money. `spent` is the SUM over the attempts that actually carried a
+        // partial (a spawn that never started carries none and adds nothing); it is attached to whatever finally
+        // propagates, or folded into the response when a later attempt succeeds (afa37093 AC3).
+        let spent: IProviderPartialUsage | undefined;
         try {
-            return await callWithRetry(async () => {
+            const response = await callWithRetry(async () => {
                 try {
                     return await this.chatWithBridge(request, bridge);
                 } catch (err) {
-                    lastPartial = readPartialUsage(err) ?? lastPartial;
+                    const partial = readPartialUsage(err);
+                    if (partial) spent = mergePartialUsage(spent, partial);
                     throw err;
                 }
             }, {
@@ -805,8 +828,10 @@ export class ClaudeCliProvider implements LLMProvider {
                 onRetry: ({ attempt, failure, waitMs }) =>
                     this.logger.warn({ attempt, class: failure.class, waitMs }, "claudecli: transient failure, retrying"),
             });
+            return spent ? foldFailedAttemptSpend(response, spent) : response;
         } catch (err) {
-            if (lastPartial && !readPartialUsage(err)) attachPartialUsage(err, lastPartial);
+            // Replace (never stack on) whatever the final attempt attached: `spent` already includes it.
+            if (spent) attachPartialUsage(err, spent);
             throw err;
         }
     }
@@ -814,16 +839,21 @@ export class ClaudeCliProvider implements LLMProvider {
     /**
      * The response `usage` for a finished run: the CLI's own aggregate (`result.usage`), re-keyed to
      * the concrete model(s) it resolved, with the peak, first-turn and per-turn context the folded
-     * aggregate would otherwise discard (7ead5eaa BK4, debd934d). `undefined` when the CLI reported
-     * no usage and none could be rebuilt from the stream.
+     * aggregate would otherwise discard (7ead5eaa BK4, debd934d). When the CLI reported no `usage` the figures
+     * are rebuilt from the stream's per-turn `assistant` usage and marked `usageLowerBound` (their output
+     * tokens are mid-stream snapshots; input and cache figures are exact). `undefined` only when the CLI
+     * reported no usage AND the stream carried none to rebuild from -- callers decide what that means (a
+     * success becomes an unmeasured placeholder, never a free run).
      */
     private buildRunUsage(
         resultEvent: ClaudeStreamResultEvent | undefined,
-        rawUsage: ClaudeStreamResultEvent["usage"],
+        reportedUsage: ClaudeStreamResultEvent["usage"],
         normalisedStopReason: string,
         initModel: string | undefined,
         turns: CliTurnTracker
     ): ProviderTokenUsage | undefined {
+        const rebuilt = !reportedUsage && turns.count > 0;
+        const rawUsage = reportedUsage ?? (rebuilt ? turns.aggregateRaw() : undefined);
         if (!rawUsage) return undefined;
         const resolved = resultEvent ? resolveCliModelUsage({ ...resultEvent, usage: rawUsage }, initModel) : undefined;
         const cliCost = resultEvent?.total_cost_usd;
@@ -840,6 +870,7 @@ export class ClaudeCliProvider implements LLMProvider {
                 }
                 : {}),
             ...(typeof cliCost === "number" && Number.isFinite(cliCost) ? { cliReportedCostUsd: cliCost } : {}),
+            ...(rebuilt ? { usageLowerBound: true } : {}),
         };
     }
 
@@ -853,18 +884,17 @@ export class ClaudeCliProvider implements LLMProvider {
         initModel: string | undefined,
         turns: CliTurnTracker
     ): IProviderPartialUsage {
-        const fromResult = errorResult?.usage
-            ? this.buildRunUsage(errorResult, errorResult.usage, "unknown", initModel, turns)
-            : undefined;
-        const usage = fromResult ?? (turns.count > 0
+        // The CLI's own error result is authoritative; without its usage, rebuild from the stream turns (buildRunUsage
+        // marks that a lower bound) while still taking whatever else the result carries (total_cost_usd, modelUsage).
+        const usage = errorResult?.usage || turns.count > 0
             ? this.buildRunUsage(
-                { type: "result", subtype: "partial", is_error: true },
-                turns.aggregateRaw(),
+                errorResult ?? { type: "result", subtype: "partial", is_error: true },
+                errorResult?.usage,
                 "unknown",
                 initModel,
                 turns
             )
-            : undefined);
+            : undefined;
         let reportedModelCalls: number | undefined = turns.count > 0 ? turns.count : undefined;
         if (typeof errorResult?.num_turns === "number" && errorResult.num_turns >= 1) {
             reportedModelCalls = errorResult.num_turns;
@@ -1163,7 +1193,10 @@ export class ClaudeCliProvider implements LLMProvider {
             // priced against the RESOLVED id, per `modelUsage` key. Unresolvable -> left unset and
             // the configured model is used downstream.
             const resolved = finalResultEvent ? resolveCliModelUsage(finalResultEvent, initModel) : undefined;
-            const usage = this.buildRunUsage(finalResultEvent, finalUsage, normalisedStopReason, initModel, turns);
+            // A success the CLI reported no usage for (and whose stream carried none) still spent real tokens: an
+            // unmeasured placeholder (cost UNKNOWN) keeps the run from looking free. (afa37093 AC1/AC3)
+            const usage: ProviderTokenUsage = this.buildRunUsage(finalResultEvent, finalUsage, normalisedStopReason, initModel, turns)
+                ?? { inputTokens: 0, outputTokens: 0, unmeasured: true };
 
             return {
                 message,

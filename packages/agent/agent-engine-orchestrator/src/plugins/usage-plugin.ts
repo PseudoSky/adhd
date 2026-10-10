@@ -24,6 +24,8 @@ const SEVERITY: Record<string, number> = {
   length: 3,
   tool_calls: 2,
   stop: 1,
+  // A call that failed (afa37093): outranks `unknown` so a failed-only task reads `error`, but never masks a real finish.
+  error: 0.5,
   unknown: 0,
 };
 function mostSevere(

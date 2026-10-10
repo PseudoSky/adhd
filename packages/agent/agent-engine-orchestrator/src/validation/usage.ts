@@ -194,6 +194,13 @@ export const usageRowSchema = z.object({
   per_turn: z.array(usageTurnContextSchema).nullable(),
   /** True when the run had more calls than `per_turn` carries. */
   per_turn_truncated: z.boolean(),
+  /**
+   * True when this row's token figures may UNDERCOUNT real spend: usage rebuilt from a killed/failed claudecli
+   * run's stream (output tokens are mid-stream snapshots, a lower bound; input and cache figures are exact), or a
+   * retried request that folded in an attempt whose spend was never reported. Cost is then a lower bound too.
+   * At task/session grain: true if ANY contributing turn is. (afa37093 AC3)
+   */
+  usage_lower_bound: z.boolean(),
 });
 export type UsageRow = z.infer<typeof usageRowSchema>;
 

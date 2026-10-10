@@ -123,7 +123,7 @@ describe("ClaudeCliProvider — usage capture from the real result event", () =>
         expect(response.message.content).toBe("OK");
     });
 
-    it("degrades gracefully (no crash) when the result event has no usage field", async () => {
+    it("afa37093 AC3: a success whose result has no usage field and whose stream carried none is an UNMEASURED placeholder, never a free run", async () => {
         const { spawn } = await import("child_process");
         const stdout = new Readable({ read() {} });
         const stdin = { write: () => true, end: () => {} };
@@ -147,7 +147,7 @@ describe("ClaudeCliProvider — usage capture from the real result event", () =>
         );
 
         const response = await provider.chat(request);
-        expect(response.usage).toBeUndefined();
+        expect(response.usage).toEqual({ inputTokens: 0, outputTokens: 0, unmeasured: true });
         expect(response.rawUsage).toBeUndefined();
         expect(response.message.content).toBe("OK");
     });

@@ -81,6 +81,8 @@ export function buildModelResponsePayload(
     ...(mark.failed ? { failed: true } : {}),
     ...(mark.failure ? { failure: mark.failure } : {}),
     ...(u?.unmeasured ? { unmeasured: true } : {}),
+    // The figures may undercount real spend (stream-rebuilt output tokens, or a folded unreported attempt). afa37093
+    ...(u?.usageLowerBound ? { usageLowerBound: true } : {}),
     computeMs,
   };
 }
