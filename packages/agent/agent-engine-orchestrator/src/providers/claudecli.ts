@@ -4,10 +4,11 @@ import { writeFile, unlink, mkdtemp, mkdir, rm, stat, chmod } from "fs/promises"
 import { join } from "path";
 
 import { generateId } from "../utils/ids.js";
+import { capToolResult, serializeToolResult, DEFAULT_TOOL_RESULT_MAX_CHARS } from "../engine/tool-result-cap.js";
 import { nowIso } from "../utils/timestamps.js";
 import type { LLMProvider, ProviderChatRequest, ProviderChatResponse } from "./types.js";
 import type { ModelUsageEntry, PermissionAction } from "@adhd/agent-base-types";
-import type { McpServerConfig, ProviderConfig, Message } from "../validation/index.js";
+import type { McpServerConfig, ProviderConfig, Message, ToolResult } from "../validation/index.js";
 import { ToolError } from "../validation/errors.js";
 import type { EngineLogger, EngineConfig } from "../interfaces.js";
 import { DEFAULT_PROVIDER_TIMEOUT_MS } from "../interfaces.js";
@@ -328,7 +329,120 @@ const EMPTY_MCP_CONFIG = JSON.stringify({ mcpServers: {} });
 
 // ─── history encoding ────────────────────────────────────────────────────────
 
-function buildUserMessage(messages: Message[]): string {
+/**
+ * One tool use the CLI ran inside a single `claude -p` run, as persisted on the run's assistant message
+ * (`Message.toolResults[].result`). Tool calls the CLI executes are NOT orchestrator tool calls, so they are
+ * carried as `toolResults` (never `toolCalls`, which the orchestrator loop would execute again). The marker
+ * field lets {@link buildUserMessage} tell them from an ordinary tool result. (54499db1 AC1)
+ */
+export interface ICliToolTrace {
+    cliToolTrace: true;
+    /** The tool name exactly as the CLI reported it (`Bash`, `mcp__<server>__<tool>`). */
+    tool: string;
+    /** The call's input, bounded by the tool-result cap. */
+    arguments: unknown;
+    /** The tool's output, bounded by the tool-result cap. */
+    output: unknown;
+}
+
+/** Most tool uses one run records for replay; past it the oldest-first remainder is dropped (the count is kept). */
+export const MAX_CLI_TOOL_TRACE_ENTRIES = 100;
+
+function isCliToolTrace(v: unknown): v is ICliToolTrace {
+    return typeof v === "object" && v !== null && (v as { cliToolTrace?: unknown }).cliToolTrace === true;
+}
+
+function renderValue(v: unknown): string {
+    return serializeToolResult(v) ?? "";
+}
+
+/**
+ * Records the tool uses of one CLI run from its stream: `assistant` events carry the `tool_use` blocks,
+ * `user` events the matching `tool_result` blocks. Every recorded input and output is bounded by the same
+ * model-visible cap the API path applies (`agent.toolResult.maxChars`, `0` disables), so replaying a run's
+ * tool results can never exceed what the original turn could see. (54499db1 AC1/AC3)
+ */
+export class CliToolTraceRecorder {
+    private readonly pending = new Map<string, { tool: string; input: unknown }>();
+    private readonly done: ToolResult[] = [];
+    private total = 0;
+
+    constructor(private readonly maxChars: number = DEFAULT_TOOL_RESULT_MAX_CHARS) {}
+
+    /** Fold one `assistant` event's `tool_use` blocks in. */
+    recordUses(blocks: Array<{ id?: string; name?: string; input?: unknown }>): void {
+        for (const b of blocks) {
+            if (typeof b.id === "string" && typeof b.name === "string") {
+                this.pending.set(b.id, { tool: b.name, input: b.input });
+            }
+        }
+    }
+
+    /** Fold one `user` event's `tool_result` blocks in. Results with no known `tool_use` are ignored. */
+    recordResults(content: unknown): void {
+        if (!Array.isArray(content)) return;
+        for (const block of content as Array<Record<string, unknown>>) {
+            if (block?.["type"] !== "tool_result" || typeof block["tool_use_id"] !== "string") continue;
+            const use = this.pending.get(block["tool_use_id"]);
+            if (!use) continue;
+            this.pending.delete(block["tool_use_id"]);
+            this.total++;
+            if (this.done.length >= MAX_CLI_TOOL_TRACE_ENTRIES) continue;
+            const isError = block["is_error"] === true;
+            const raw = block["content"];
+            const output = Array.isArray(raw)
+                ? raw.map((p) => (typeof p === "object" && p !== null && typeof (p as { text?: unknown }).text === "string"
+                    ? (p as { text: string }).text
+                    : renderValue(p))).join("\n")
+                : raw;
+            const trace: ICliToolTrace = {
+                cliToolTrace: true,
+                tool: use.tool,
+                arguments: capToolResult(use.input, false, this.maxChars).result,
+                output: capToolResult(output, isError, this.maxChars).result,
+            };
+            this.done.push({ toolCallId: block["tool_use_id"], result: trace, isError });
+        }
+    }
+
+    /** The recorded tool uses in run order (empty when the run used no tools). */
+    results(): ToolResult[] {
+        return this.done;
+    }
+
+    /** Tool uses seen but not recorded because {@link MAX_CLI_TOOL_TRACE_ENTRIES} was reached. */
+    get dropped(): number {
+        return this.total - this.done.length;
+    }
+}
+
+function renderHistoryMessage(msg: Message): string[] {
+    const out: string[] = [];
+    if (msg.role === "assistant") {
+        // Tool uses the CLI ran inside this turn come first, as prior tool use and its result, then the answer.
+        for (const r of msg.toolResults ?? []) {
+            if (!isCliToolTrace(r.result)) continue;
+            out.push(`Assistant called tool ${r.result.tool}: ${renderValue(r.result.arguments)}`);
+            out.push(`Tool result (${r.result.tool}${r.isError ? ", error" : ""}): ${renderValue(r.result.output)}`);
+        }
+        out.push(`Assistant: ${msg.content ?? (msg.toolCalls ? `[called tools: ${msg.toolCalls.map(tc => tc.tool).join(", ")}]` : "")}`);
+        return out;
+    }
+    if (msg.role === "tool") {
+        const body = msg.content ?? (msg.toolResults ?? []).map((r) => renderValue(isCliToolTrace(r.result) ? r.result.output : r.result)).join("\n");
+        out.push(`Tool result: ${body}`);
+        return out;
+    }
+    out.push(`${msg.role === "user" ? "User" : "System"}: ${msg.content ?? ""}`);
+    return out;
+}
+
+/**
+ * Flatten a session into the single user message the CLI receives (every spawn is
+ * `--no-session-persistence`, so history is replayed as text). Earlier turns' tool uses and results are
+ * included as `Assistant called tool ...` / `Tool result (...)` lines. (54499db1 AC1)
+ */
+export function buildUserMessage(messages: Message[]): string {
     const nonSystem = messages.filter(m => m.role !== "system");
     if (nonSystem.length === 0) return "";
     if (nonSystem.length === 1) return nonSystem[0].content ?? "";
@@ -337,22 +451,7 @@ function buildUserMessage(messages: Message[]): string {
     const last = nonSystem[nonSystem.length - 1];
 
     const lines: string[] = ["[Conversation history]"];
-    for (const msg of history) {
-        let label: string;
-        if (msg.role === "user") {
-            label = "User";
-        } else if (msg.role === "assistant") {
-            label = "Assistant";
-        } else if (msg.role === "tool") {
-            label = "Tool result";
-        } else {
-            label = "System";
-        }
-        const body =
-            msg.content ??
-            (msg.toolCalls ? `[called tools: ${msg.toolCalls.map(tc => tc.tool).join(", ")}]` : "");
-        lines.push(`${label}: ${body}`);
-    }
+    for (const msg of history) lines.push(...renderHistoryMessage(msg));
     lines.push("", "[Current message]", last.content ?? "");
     return lines.join("\n");
 }
@@ -1063,6 +1162,7 @@ export class ClaudeCliProvider implements LLMProvider {
             // engine via the loopback bridge). Usage-accounting only: NEVER surfaced as message.toolCalls,
             // which the orchestrator would re-execute.
             let toolUseCount = 0;
+            const toolTrace = new CliToolTraceRecorder(this.config.toolResult?.maxChars ?? DEFAULT_TOOL_RESULT_MAX_CHARS);
 
             for await (const line of rl) {
                 if (request.signal?.aborted) {
@@ -1116,6 +1216,11 @@ export class ClaudeCliProvider implements LLMProvider {
                     continue;
                 }
 
+                if (event.type === "user") {
+                    toolTrace.recordResults((event as { message?: { content?: unknown } }).message?.content);
+                    continue;
+                }
+
                 if (event.type === "assistant") {
                     const assistantEvent = event as ClaudeStreamAssistantEvent;
                     const toolUseBlocks = (assistantEvent.message?.content ?? []).filter(
@@ -1123,6 +1228,7 @@ export class ClaudeCliProvider implements LLMProvider {
                     );
 
                     toolUseCount += toolUseBlocks.length;
+                    toolTrace.recordUses(toolUseBlocks);
                     turns.record(assistantEvent);
 
                     // claude runs these through the loopback bridge (engine executeTool); the loop
@@ -1183,6 +1289,8 @@ export class ClaudeCliProvider implements LLMProvider {
                 sessionId: "",
                 role: "assistant",
                 content: finalResult,
+                // The tool uses the CLI ran in this run, so a later task on the session can replay them (54499db1 AC1).
+                ...(toolTrace.results().length > 0 ? { toolResults: toolTrace.results() } : {}),
                 createdAt: nowIso(),
             };
 
