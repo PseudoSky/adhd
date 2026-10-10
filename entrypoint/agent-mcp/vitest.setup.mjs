@@ -10,7 +10,13 @@
  * parent environment is dropped before any test file loads. Tests that need a
  * value set it themselves inside the test body, which is unaffected: this runs
  * once per test file, before the file is imported.
+ *
+ * Exception: the explicit paid-model GATE flags below are test-selection switches, not
+ * product configuration, so they must survive (a gate wiped here could never be turned on).
+ * Each is documented with its owner in README.md / AGENTS.md ("Live tests") and in its test
+ * header: `ADHD_AGENT_LIVE_CACHE` (8ecaa160 AC1, owner pseudosky).
  */
+const KEEP_GATES = new Set(['ADHD_AGENT_LIVE_CACHE']);
 for (const key of Object.keys(process.env)) {
-  if (/^ADHD_AGENT_/.test(key)) delete process.env[key];
+  if (/^ADHD_AGENT_/.test(key) && !KEEP_GATES.has(key)) delete process.env[key];
 }

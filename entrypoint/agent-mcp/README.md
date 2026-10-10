@@ -410,7 +410,7 @@ See [docs/architecture-and-security.md](./docs/architecture-and-security.md) for
 
 ## Live tests (env-gated — paid model)
 
-Three end-to-end tests drive a **real** LLM/provider and are therefore gated behind
+Five end-to-end tests drive a **real** LLM/provider and are therefore gated behind
 env flags — the single exception AGENTS.md §7 permits (a paid/external third-party
 service, which CI cannot provide):
 
@@ -420,8 +420,9 @@ service, which CI cannot provide):
 | `src/__tests__/integration/live-dag.e2e.test.ts` | `AGENT_MCP_LIVE=1` | real provider (LM Studio / Anthropic) |
 | `src/__tests__/integration/live-oauth.e2e.test.ts` | `AGENT_MCP_LIVE=1` | real Anthropic OAuth |
 | `src/__tests__/live/tracing-live.e2e.test.ts` | `AGENT_MCP_LIVE=1` | real `claude` CLI + real Anthropic OAuth, real dev server, **production store** (c536ce29 LIVE-AC1..AC5) |
+| `src/__tests__/integration/live-cache-smoke.e2e.test.ts` | `ADHD_AGENT_LIVE_CACHE=1` | paid Anthropic `claude-haiku-4-5` via the product's own credential path (`ADHD_AGENT_ANTHROPIC_SECRET`); one task, ~3 model calls, isolated store under `tmp/agent-mcp/`; **owner pseudosky**, approved 2026-10-10 ("i don't care about the budget but do not burn the 5h window"); fail-closed 5h-window guard (refuses at utilization >= 0.60, status not `allowed`, or unreadable). Proves 8ecaa160 AC1 / ebfe7421 AC1 (closes ee3381d8). Its offline controls (negative control + guard teeth) run ungated. |
 
-**Approved by:** pseudosky (repo owner); `tracing-live.e2e.test.ts` additionally by direct owner instruction on 2026-10-09 (run guide: [docs/logging.md](./docs/logging.md#proving-it-live-the-env-gated-test)). Rationale: each calls a real, paid model the CI
+**Approved by:** pseudosky (repo owner); `live-cache-smoke.e2e.test.ts` (`ADHD_AGENT_LIVE_CACHE=1`) by direct owner instruction on 2026-10-10 under a hard rule never to burn the Anthropic 5-hour window (run from the repo root: `ADHD_AGENT_LIVE_CACHE=1 npx vitest run --config entrypoint/agent-mcp/vitest.e2e.config.ts live-cache-smoke` (not via `nx run`, whose cache is blind to the env var); unset it reports SKIPPED naming the gate and owner); `tracing-live.e2e.test.ts` additionally by direct owner instruction on 2026-10-09 (run guide: [docs/logging.md](./docs/logging.md#proving-it-live-the-env-gated-test)). Rationale: each calls a real, paid model the CI
 cannot provide, so the gate saves money and avoids an outside system — the one qualifying
 reason. The default (unflagged) suite still exercises the orchestrator/tool paths with
 scripted providers; these live tests add real-model confirmation of model-independent

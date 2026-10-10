@@ -342,6 +342,13 @@ real `claude` CLI provider and a real Anthropic OAuth token through the real dev
 (`~/.adhd/agent-mcp/production`; it refuses to run if any DB/log-dir override env var is set). Same gate
 reason; **approved by:** pseudosky (repo owner), by direct instruction on 2026-10-09. Guide: [docs/logging.md](./docs/logging.md).
 
+A fifth, `src/__tests__/integration/live-cache-smoke.e2e.test.ts` (`ADHD_AGENT_LIVE_CACHE=1`, 8ecaa160 AC1 / ebfe7421 AC1), drives the
+real built agent-mcp over stdio with a real MCP client on an isolated store under `tmp/agent-mcp/` and one paid
+`claude-haiku-4-5` task (~3 model calls) to prove a shell-only Anthropic turn with `web_search`/`web_fetch` advertised records
+`cache_creation` or `cache_read` tokens > 0. Same gate reason; **approved by:** pseudosky (repo owner), 2026-10-10, with the standing
+rule "do not burn the 5h window": the test refuses to run live (fail-closed) when the 5h window is not `allowed`, utilization is >= 0.60,
+or the state cannot be read. Unset, it is reported SKIPPED with the gate and owner named; its offline controls run ungated.
+
 ## Native-tooling adoption gate (env-gated — external third-party server)
 
 The ADR-0008 D7 upstream-server adoption is a **human-gated** decision
