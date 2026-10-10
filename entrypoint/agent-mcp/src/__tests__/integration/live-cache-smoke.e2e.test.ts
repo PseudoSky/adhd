@@ -194,23 +194,26 @@ describe('8ecaa160 AC1 / ebfe7421 AC1 — offline controls (assertion + window g
       expect(readingsFromLine(header, 'f')).toMatchObject([{ source: 'http-header', utilization: 0.08, status: 'allowed', resetsAtSec: 1791615000 }]);
       expect(readingsFromLine(stdout, 'f')).toMatchObject([{ source: 'rate_limit_event', utilization: 0.44, status: 'allowed', resetsAtSec: 1791595200 }]);
       expect(readingsFromLine('{"ts":"2026-10-10T11:59:00.000Z","event":"mcp.send"}', 'f')).toEqual([]);
-      // a seven_day-claim `allowed_warning` carries the 5h utilization AND the non-allowed status: refuse (fail-closed)
+      // a seven_day-claim `allowed_warning` with the 5h window allowed (< 0.60) proceeds; the 7d utilization is recorded
       const sevenDay = JSON.stringify({
         ts: '2026-10-10T11:59:30.000Z',
         event: 'spawn.stdout',
         line:
           '{"type":"rate_limit_event","rate_limit_info":{"status":"allowed_warning","resetsAt":1792047600,"rateLimitType":"seven_day","utilization":0.52,' +
-          '"unifiedWindows":{"five_hour":{"utilization":0.13,"resetsAt":1791633000},"seven_day":{"utilization":0.52,"resetsAt":1792047600}}}}',
+          '"unifiedWindows":{"five_hour":{"utilization":0.13,"resetsAt":1791640000},"seven_day":{"utilization":0.52,"resetsAt":1792047600}}}}',
       });
-      expect(readingsFromLine(sevenDay, 'f')).toMatchObject([{ source: 'rate_limit_event', utilization: 0.13, status: 'allowed_warning', resetsAtSec: 1791633000 }]);
-      expect(evaluateWindowGuard(readingsFromLine(sevenDay, 'f'), Date.parse('2026-10-10T12:00:00.000Z')).ok).toBe(false);
+      expect(readingsFromLine(sevenDay, 'f')).toMatchObject([{ source: 'rate_limit_event', utilization: 0.13, status: 'allowed', resetsAtSec: 1791640000, sevenDayUtilization: 0.52 }]);
+      expect(evaluateWindowGuard(readingsFromLine(sevenDay, 'f'), Date.parse('2026-10-10T12:00:00.000Z')).ok).toBe(true);
+      // ANY rejected (either window) refuses
+      const rejected7 = sevenDay.replace('allowed_warning', 'rejected');
+      expect(evaluateWindowGuard(readingsFromLine(rejected7, 'f'), Date.parse('2026-10-10T12:00:00.000Z')).ok).toBe(false);
       // ...and so is a five_hour warning
       const fiveHourWarn = JSON.stringify({
         ts: '2026-10-10T11:59:40.000Z',
         event: 'spawn.stdout',
         line:
-          '{"type":"rate_limit_event","rate_limit_info":{"status":"allowed_warning","resetsAt":1791633000,"rateLimitType":"five_hour",' +
-          '"unifiedWindows":{"five_hour":{"utilization":0.13,"resetsAt":1791633000}}}}',
+          '{"type":"rate_limit_event","rate_limit_info":{"status":"allowed_warning","resetsAt":1791640000,"rateLimitType":"five_hour",' +
+          '"unifiedWindows":{"five_hour":{"utilization":0.13,"resetsAt":1791640000}}}}',
       });
       expect(readingsFromLine(fiveHourWarn, 'f')).toMatchObject([{ status: 'allowed_warning' }]);
       expect(evaluateWindowGuard(readingsFromLine(fiveHourWarn, 'f'), Date.parse('2026-10-10T12:00:00.000Z')).ok).toBe(false);

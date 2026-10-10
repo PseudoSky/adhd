@@ -80,6 +80,8 @@ export interface IWindowReading {
   status: string;
   /** Epoch seconds at which this 5h window resets. */
   resetsAtSec: number;
+  /** 7-day window utilization when the line carries it (recorded, not gated). */
+  sevenDayUtilization?: number;
   file: string;
 }
 
@@ -120,11 +122,25 @@ export function readingsFromLine(line: string, file: string): IWindowReading[] {
     const util = num(String(h['anthropic-ratelimit-unified-5h-utilization']));
     const reset = num(String(h['anthropic-ratelimit-unified-5h-reset']));
     const s5h = String(h['anthropic-ratelimit-unified-5h-status'] ?? '');
-    const sUni = String(h['anthropic-ratelimit-unified-status'] ?? s5h);
-    // The stricter of the two statuses wins: anything but `allowed` is a refusal.
-    const status = s5h !== 'allowed' ? s5h : sUni;
+    const s7d = String(h['anthropic-ratelimit-unified-7d-status'] ?? '');
+    const sUni = String(h['anthropic-ratelimit-unified-status'] ?? '');
+    // 5h status must be `allowed`; `rejected` on ANY window refuses. A 7d/unified `allowed_warning`
+    // with the 5h window allowed does not block (dispatcher decision 2026-10-10).
+    const otherRejected = [s7d, sUni].includes('rejected');
+    let status = s5h;
+    if (s5h === 'allowed') status = otherRejected ? 'rejected' : 'allowed';
+    const util7 = num(String(h['anthropic-ratelimit-unified-7d-utilization']));
     if (!Number.isNaN(util) && !Number.isNaN(reset)) {
-      out.push({ source: 'http-header', ts, tsMs, utilization: util, status, resetsAtSec: reset, file });
+      out.push({
+        source: 'http-header',
+        ts,
+        tsMs,
+        utilization: util,
+        status,
+        resetsAtSec: reset,
+        file,
+        ...(Number.isNaN(util7) ? {} : { sevenDayUtilization: util7 }),
+      });
     }
   }
 
@@ -132,19 +148,24 @@ export function readingsFromLine(line: string, file: string): IWindowReading[] {
     // The `claude` stream line is JSON embedded (escaped) in a `spawn.stdout` record: match the
     // raw text rather than relying on which field carries it.
     const info = /rate_limit_info\\*":\{\\*"status\\*":\\*"([A-Za-z_]+)\\*"/.exec(line);
+    const claim = /rateLimitType\\*":\\*"([A-Za-z_]+)\\*"/.exec(line);
     const win = /five_hour\\*":\{\\*"utilization\\*":([0-9.]+),\\*"resetsAt\\*":(\d+)/.exec(line);
+    const win7 = /seven_day\\*":\{\\*"utilization\\*":([0-9.]+)/.exec(line);
     if (win) {
+      const raw = info?.[1] ?? 'unknown';
+      // `rate_limit_info.status` describes the REPRESENTATIVE window (`rateLimitType`). `rejected`
+      // on either window refuses; any other non-allowed status only counts when the claim is the
+      // 5h window (or unparseable: fail-closed). A seven_day `allowed_warning` leaves 5h `allowed`.
+      const status = raw === 'rejected' || !claim || claim[1] === 'five_hour' ? raw : 'allowed';
       out.push({
         source: 'rate_limit_event',
         ts,
         tsMs,
         utilization: num(win[1]),
-        // The raw stream status is kept as-is (fail-closed): `allowed_warning` on ANY claim, including
-        // a `seven_day` representative claim, is "status is not allowed" and refuses. The 5h
-        // utilization is still parsed from `unifiedWindows.five_hour` and still guarded.
-        status: info?.[1] ?? 'unknown',
+        status,
         resetsAtSec: num(win[2]),
         file,
+        ...(win7 ? { sevenDayUtilization: num(win7[1]) } : {}),
       });
     }
   }
@@ -213,7 +234,8 @@ export function evaluateWindowGuard(readings: readonly IWindowReading[], nowMs: 
 
 /** One-line rendering for the before/after record. */
 export function describeReading(r: IWindowReading): string {
-  return `${r.source} ts=${r.ts} 5h-utilization=${r.utilization} status=${r.status} resetsAt=${r.resetsAtSec}`;
+  const d7 = r.sevenDayUtilization === undefined ? '' : ` 7d-utilization=${r.sevenDayUtilization}`;
+  return `${r.source} ts=${r.ts} 5h-utilization=${r.utilization} 5h-status=${r.status} resetsAt=${r.resetsAtSec}${d7}`;
 }
 
 export interface IWireUsage {
