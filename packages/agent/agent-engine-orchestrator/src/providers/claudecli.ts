@@ -729,7 +729,7 @@ export function spawnFailureMessage(err: Error, binary: string, searchPath: stri
 interface ClaudeCliSessionRun {
     key: string;
     configKey: string;
-    configDir: string;
+    configDir: string | undefined;
     nonSystem: Message[];
     plan: ClaudeCliSessionPlan;
 }

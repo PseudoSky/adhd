@@ -24,7 +24,6 @@
  */
 import { createHash, randomUUID } from "node:crypto";
 import { readdirSync, rmSync } from "node:fs";
-import { homedir } from "node:os";
 import { join } from "node:path";
 
 import type { Message } from "@adhd/agent-base-types";
@@ -54,7 +53,7 @@ interface IRetained {
     ids: Set<string>;
     /** The newest fully-recorded transcript and exactly what it covers. */
     head?: { cliSessionId: string; hashes: string[]; configKey: string };
-    configDir: string;
+    configDir: string | undefined;
     lastUsedMs: number;
 }
 
@@ -68,13 +67,21 @@ export function sessionConfigKey(parts: Array<string | undefined>): string {
     return createHash("sha256").update(parts.map((p) => p ?? "\u0001").join("\u0000")).digest("hex");
 }
 
-/** The CLI's config dir, from the spawned child's environment (it decides where transcripts are written). */
-export function claudeConfigDir(env: Record<string, string | undefined>): string {
-    return env["CLAUDE_CONFIG_DIR"] ?? join(env["HOME"] ?? homedir(), ".claude");
+/**
+ * The CLI's config dir, from the spawned child's environment (it decides where transcripts are written).
+ * `undefined` when the environment names neither `CLAUDE_CONFIG_DIR` nor a home directory: transcripts then
+ * cannot be located, and cleanup is skipped rather than guessed.
+ */
+export function claudeConfigDir(env: Record<string, string | undefined>): string | undefined {
+    const explicit = env["CLAUDE_CONFIG_DIR"];
+    if (explicit) return explicit;
+    const home = env["HOME"] ?? env["USERPROFILE"];
+    return home ? join(home, ".claude") : undefined;
 }
 
 /** Remove the transcripts with these ids from every project dir under `configDir`. Best-effort, never throws. */
-export function removeTranscripts(configDir: string, ids: Iterable<string>): void {
+export function removeTranscripts(configDir: string | undefined, ids: Iterable<string>): void {
+    if (!configDir) return;
     const wanted = [...ids];
     if (wanted.length === 0) return;
     const projects = join(configDir, "projects");
@@ -104,7 +111,7 @@ export class ClaudeCliSessionRegistry {
      * non-system history INCLUDING the new message(s). Always registers the id a fresh plan will create, so a run
      * that fails mid-way still has its transcript cleaned up.
      */
-    plan(key: string, configKey: string, configDir: string, nonSystem: Message[]): ClaudeCliSessionPlan {
+    plan(key: string, configKey: string, configDir: string | undefined, nonSystem: Message[]): ClaudeCliSessionPlan {
         this.expire();
         const entry = this.sessions.get(key);
         const head = entry?.head;
@@ -128,7 +135,7 @@ export class ClaudeCliSessionRegistry {
     }
 
     /** Record that the transcript `cliSessionId` now covers `nonSystem` plus the assistant `reply`. */
-    commit(key: string, args: { configKey: string; configDir: string; cliSessionId: string; nonSystem: Message[]; reply: string }): void {
+    commit(key: string, args: { configKey: string; configDir: string | undefined; cliSessionId: string; nonSystem: Message[]; reply: string }): void {
         const entry = this.sessions.get(key) ?? this.create(key, args.configDir);
         entry.ids.add(args.cliSessionId);
         entry.configDir = args.configDir;
@@ -163,7 +170,7 @@ export class ClaudeCliSessionRegistry {
         for (const key of [...this.sessions.keys()]) this.release(key);
     }
 
-    private create(key: string, configDir: string): IRetained {
+    private create(key: string, configDir: string | undefined): IRetained {
         const entry: IRetained = { ids: new Set(), configDir, lastUsedMs: this.now() };
         this.sessions.set(key, entry);
         this.installExitHook();
