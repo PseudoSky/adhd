@@ -25,6 +25,8 @@ export class TaskStore {
         dependsOn?: string[];
         onUpstreamFailure?: "fail" | "skip";
         inputs?: Record<string, string>;
+        /** Dispatching cwd (ADR-0008 D4); persisted so a redispatch keeps it. */
+        cwd?: string;
         isEphemeral?: boolean;
         id?: string;
     }): Task {
@@ -44,6 +46,7 @@ export class TaskStore {
             depends_on: input.dependsOn ? JSON.stringify(input.dependsOn) : null,
             on_upstream_failure: input.onUpstreamFailure ?? null,
             inputs: input.inputs ? JSON.stringify(input.inputs) : null,
+            cwd: input.cwd ?? null,
             createdAt: now,
             updatedAt: now,
         }).run();
@@ -128,6 +131,7 @@ export class TaskStore {
             onUpstreamFailure: row.on_upstream_failure ?? null,
             inputs: row.inputs ? JSON.parse(row.inputs) : null,
             resumeToken: row.resume_token ?? null,
+            cwd: row.cwd ?? null,
         });
     }
 
@@ -211,6 +215,7 @@ export class TaskStore {
                 onUpstreamFailure: row.on_upstream_failure ?? null,
                 inputs: row.inputs ? JSON.parse(row.inputs) : null,
                 resumeToken: row.resume_token ?? null,
+            cwd: row.cwd ?? null,
             })
         );
     }

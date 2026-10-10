@@ -151,7 +151,7 @@ CREATE TABLE IF NOT EXISTS tasks (
   is_ephemeral INTEGER DEFAULT 0 NOT NULL, recursion_depth INTEGER DEFAULT 0 NOT NULL,
   status TEXT DEFAULT 'pending' NOT NULL, prompt TEXT NOT NULL, result TEXT, error TEXT,
   created_at TEXT NOT NULL, updated_at TEXT NOT NULL, completed_at TEXT, cancelled_at TEXT,
-  depends_on TEXT, on_upstream_failure TEXT, inputs TEXT, resume_token TEXT
+  depends_on TEXT, on_upstream_failure TEXT, inputs TEXT, resume_token TEXT, cwd TEXT
 );
 CREATE TABLE IF NOT EXISTS task_events (
   id TEXT PRIMARY KEY NOT NULL, task_id TEXT NOT NULL, type TEXT NOT NULL,

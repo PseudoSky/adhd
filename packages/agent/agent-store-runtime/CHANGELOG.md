@@ -20,6 +20,8 @@ This was a version bump only for agent-store-runtime to align it with other proj
 
 ### 🐛 Bug Fixes
 
+- **`tasks.cwd` is persisted.** `TaskStore.create({ cwd })` stores the dispatching cwd and `read`/`list` return it (`Task.cwd`, `null` for legacy rows) so a restart or DAG redispatch spawns the provider in the same cwd (9ed453c1 CWD; migration `0014_task_cwd` in agent-mcp).
+
 - **Cache-write 1h tier.** `PriceHistoryStore.priceAt`/`latest`/`history` records expose `cacheWrite1hPerM`, read from the verbatim `raw_json` `input_cache_write_1h` (no schema change; null when unpublished). A feed update that changes only the 1h tier now appends a new row instead of being deduped as unchanged. (b726a987)
 
 ### 🚀 Features

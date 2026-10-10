@@ -122,6 +122,8 @@ export interface Task {
   inputs?: Record<string, string> | null;
   // HITL suspension field
   resumeToken?: string | null;
+  /** Dispatching cwd (ADR-0008 D4); a restart/DAG redispatch spawns the provider here. */
+  cwd?: string | null;
 }
 
 export interface TaskEvent {

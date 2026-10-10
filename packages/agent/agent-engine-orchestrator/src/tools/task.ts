@@ -43,8 +43,10 @@ export interface TaskStore {
         dependsOn?: string[];
         onUpstreamFailure?: "fail" | "skip";
         isEphemeral?: boolean;
+        /** Dispatching cwd (ADR-0008 D4), persisted so a redispatch keeps it (9ed453c1 CWD). */
+        cwd?: string;
     }): { id: string; status: string; result?: string; error?: string };
-    read(taskId: string): { id: string; status: string; result?: string; error?: string; sessionId?: string | null; isEphemeral?: boolean; prompt: string; recursionDepth: number; parentTaskId?: string; inputs?: Record<string, string> | null };
+    read(taskId: string): { id: string; status: string; result?: string; error?: string; sessionId?: string | null; isEphemeral?: boolean; prompt: string; recursionDepth: number; parentTaskId?: string; inputs?: Record<string, string> | null; cwd?: string | null };
     updateStatus(taskId: string, status: string, fields?: Record<string, unknown>): void;
     list(filter: TaskListInput): Task[];
     cancel(taskId: string): void;
@@ -181,6 +183,8 @@ async function runEphemeralTask(
     prompt: input.prompt,
     parentTaskId: callerContext?.taskId,
     recursionDepth: (callerContext?.recursionDepth ?? -1) + 1,
+    // 9ed453c1 CWD: persist the dispatching cwd so a redispatch keeps it.
+    cwd: effectiveCwd,
     // Composition with the DAG ordering fields is recorded for ephemeral
     // tasks too (backlog 05cc1db4): `tasks_batch` enforces the ordering with
     // its wave scheduler, and the record must still reflect the declared
@@ -358,6 +362,8 @@ export async function taskTool(
     recursionDepth: (callerContext?.recursionDepth ?? -1) + 1,
     dependsOn: dependsOn.length > 0 ? dependsOn : undefined,
     onUpstreamFailure,
+    // 9ed453c1 CWD: persist the dispatching cwd so a DAG/restart redispatch keeps it.
+    cwd: effectiveCwd,
   });
 
   const sseBaseUrl = deps.config.sse.baseUrl;
@@ -746,6 +752,8 @@ export async function enqueueExistingTask(
     ...reconstructDelegationAttribution(task, deps),
     toolCallCount: 0,
     inputs: task.inputs ?? undefined,
+    // 9ed453c1 CWD: restore the persisted dispatching cwd (null for legacy rows).
+    cwd: task.cwd ?? undefined,
     selection,
     wireModel,
   };

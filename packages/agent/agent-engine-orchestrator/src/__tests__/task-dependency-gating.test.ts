@@ -104,7 +104,7 @@ CREATE TABLE tasks (
   depends_on TEXT,
   on_upstream_failure TEXT,
   inputs TEXT,
-  resume_token TEXT
+  resume_token TEXT, cwd TEXT
 );
 CREATE TABLE task_events (
   id TEXT PRIMARY KEY NOT NULL,

@@ -52,10 +52,19 @@ export function buildProviderForSelection(args: {
   hooks?: IHookRegistry;
   executionContext?: ExecutionContext;
 }): LLMProvider {
+  // 9ed453c1 CWD (ADR-0008 D9): the provider is spawned in the TASK-TIME
+  // dispatching cwd, not the host-global EngineConfig.cwd. `executionContext.cwd`
+  // is the effective cwd (caller-supplied, inherited from the parent, or the
+  // persisted cwd on a restart/DAG redispatch); absent => the host config stands.
+  const taskCwd = args.executionContext?.cwd;
+  const config: EngineConfig =
+    taskCwd !== undefined && taskCwd !== '' && taskCwd !== args.config.cwd
+      ? { ...args.config, cwd: taskCwd }
+      : args.config;
   return createProvider(
     args.selection,
     args.agentDefinition.mcpServers,
-    args.config,
+    config,
     args.logger,
     {
       registry: args.registry,

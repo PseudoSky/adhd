@@ -86,6 +86,7 @@ export const taskSchema = z.object({
   onUpstreamFailure: z.enum(['fail', 'skip']).optional().nullable(),
   inputs: z.record(z.string(), z.string()).optional().nullable(),
   resumeToken: z.string().uuid().optional().nullable(),
+  cwd: z.string().optional().nullable(),
 });
 
 export type { Task, TaskStatus, TaskEventType } from '@adhd/agent-base-types';

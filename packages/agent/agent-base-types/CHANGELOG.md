@@ -15,6 +15,8 @@ This was a version bump only for agent-base-types to align it with other project
 
 ### 🐛 Bug Fixes
 
+- **`Task.cwd?: string | null`** - the dispatching cwd persisted on a task (9ed453c1 CWD).
+
 - **Cache-write 1h tier.** `TokenUsage.cacheCreation1hTokens?: number`, the 1-hour-TTL subset of `cacheCreationTokens` (never additive to `inputTokens`). Optional and additive. (b726a987)
 
 ### 🚀 Features

@@ -63,7 +63,7 @@ CREATE TABLE IF NOT EXISTS tasks (
     depends_on TEXT,
     on_upstream_failure TEXT,
     inputs TEXT,
-    resume_token TEXT
+    resume_token TEXT, cwd TEXT
 );
 
 CREATE TABLE IF NOT EXISTS task_events (

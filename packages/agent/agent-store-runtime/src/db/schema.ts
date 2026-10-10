@@ -81,6 +81,9 @@ export const tasksTable = sqliteTable("tasks", {
     on_upstream_failure: text("on_upstream_failure"),
     inputs: text("inputs"),
     resume_token: text("resume_token"),
+    // 9ed453c1 CWD: the dispatching cwd (ADR-0008 D4), so a restart/DAG redispatch
+    // spawns the provider in the same cwd the task was dispatched with.
+    cwd: text("cwd"),
 });
 
 // ──────────────────────────────────────────────
