@@ -1,4 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import Database from 'better-sqlite3';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { SQLiteSyncDialect } from 'drizzle-orm/sqlite-core';
@@ -784,7 +786,7 @@ describe('per-tool overrides', () => {
     hooks = new HookRegistry();
   });
 
-  it('warning mode returns IToolWarning without failing task', async () => {
+  it('9ed453c1 BUDGET-B1 AC-W3 — soft-block mode returns IToolWarning without failing task (legacy tool-path behaviour, opt-in)', async () => {
     const plugin = createPlugin({
       db: null,
       config: pluginConfigSchema.parse({
@@ -794,7 +796,7 @@ describe('per-tool overrides', () => {
           overrides: {
             expensive_search: {
               caps: [{ field: 'toolCalls', maximum: 1 }],
-              mode: 'warning',
+              mode: 'soft-block',
             },
           },
         },
@@ -886,7 +888,7 @@ describe('per-tool overrides', () => {
     });
   });
 
-  it('custom cap message overrides default in warning mode', async () => {
+  it('custom cap message overrides default in soft-block mode (9ed453c1 BUDGET-B1 AC-W3)', async () => {
     const plugin = createPlugin({
       db: null,
       config: pluginConfigSchema.parse({
@@ -899,7 +901,7 @@ describe('per-tool overrides', () => {
                 {
                   field: 'toolCalls',
                   maximum: 1,
-                  mode: 'warning',
+                  mode: 'soft-block',
                   message: 'Consider using a cheaper alternative',
                 },
               ],
@@ -1459,7 +1461,9 @@ describe('cache-token double-count (BUG-ORCH-010)', () => {
     // The regression this guards against: the SQL summing cache columns on top of
     // input_tokens/output_tokens again.
     expect(windowSql).not.toMatch(/cache_read_input_tokens|cache_creation_input_tokens/);
-    expect(windowSql).toMatch(/input_tokens \+ output_tokens/);
+    // 9ed453c1 BUDGET-B1 AC-D1: an inputTokens window sums input only.
+    expect(windowSql).toMatch(/SUM\(input_tokens\)/);
+    expect(windowSql).not.toMatch(/output_tokens/);
   });
 });
 
@@ -1706,13 +1710,14 @@ describe('Packet A — cap.mode on the model path (budget:warning / budget:block
     });
 
     // Turn 1: under cap (current 0 < 1). Turn 2: warns (current 1 >= 1) and
-    // resolves, so the run proceeds. Third request: warns again, still resolves.
+    // resolves, so the run proceeds. Third request: still tripped, still resolves,
+    // but the (budget, task) latch means NO second event (9ed453c1 BUDGET-B1 AC-W5).
     await runTaskTurns(hooks, ctx, [
       { inputTokens: 10, outputTokens: 10 },
       { inputTokens: 10, outputTokens: 10 },
     ]);
     await expect(enforcePreModel(hooks, ctx)).resolves.toBeUndefined();
-    expect(warningCount).toBe(2);
+    expect(warningCount).toBe(1);
   });
 
   it('no handler registered → warning mode still resolves, block mode still rejects (event emission is a no-op)', async () => {
@@ -1766,7 +1771,7 @@ describe('Packet A — cap.mode on the model path (budget:warning / budget:block
     expect(warnings).toHaveLength(0);
   });
 
-  it('tool path: warning-mode tool cap emits budget:warning (symmetry) and still soft-blocks via IToolWarning', async () => {
+  it('9ed453c1 BUDGET-B1 AC-W3 — tool path: soft-block tool cap emits budget:warning (symmetry) and soft-blocks via IToolWarning', async () => {
     const plugin = createPlugin({
       db: null,
       config: pluginConfigSchema.parse({
@@ -1776,7 +1781,7 @@ describe('Packet A — cap.mode on the model path (budget:warning / budget:block
           overrides: {
             expensive_search: {
               caps: [{ field: 'toolCalls', maximum: 1 }],
-              mode: 'warning',
+              mode: 'soft-block',
             },
           },
         },
@@ -2447,7 +2452,7 @@ describe('Packet C — errors + consecutiveErrors caps', () => {
     });
   });
 
-  it('errors: 2 mode-less → warns (IToolWarning soft-block), does not block (ruling 5 default)', async () => {
+  it('9ed453c1 BUDGET-B1 AC-W1 — errors: 2 mode-less → warns only: no IToolWarning, no enforcement error, the call proceeds (default is warn)', async () => {
     const plugin = createPlugin({
       db: null,
       config: pluginConfigSchema.parse({
@@ -2464,16 +2469,10 @@ describe('Packet C — errors + consecutiveErrors caps', () => {
     await enforcePreTool(hooks, ctx, 'shell__run', 'call-2');
     await emitPostToolCall(hooks, ctx, 'shell__run', 'call-2', true);
 
-    // 3rd call: 2 >= 2, mode-less → warning (IToolWarning), NOT an
-    // IEnforcementError — the run continues with a soft-blocked call.
-    let caught: unknown;
-    try {
-      await enforcePreTool(hooks, ctx, 'shell__run', 'call-3');
-    } catch (e) {
-      caught = e;
-    }
-    expect(caught).toMatchObject({ isToolWarning: true, callId: 'call-3' });
-    expect(caught).not.toMatchObject({ isEnforcementError: true });
+    // 3rd call: 2 >= 2, mode-less → warn: enforcement RESOLVES (the tool executes).
+    await expect(
+      enforcePreTool(hooks, ctx, 'shell__run', 'call-3')
+    ).resolves.toBeUndefined();
   });
 
   it('all-success run never trips either cap', async () => {
@@ -2557,11 +2556,11 @@ describe('Packet C — errors + consecutiveErrors caps', () => {
     });
   });
 
-  it('NON-SELF-AMPLIFYING: a warning-mode errors cap never feeds its own counter (plan §3 verified paragraph)', async () => {
+  it('NON-SELF-AMPLIFYING: a soft-block-mode errors cap never feeds its own counter (plan §3 verified paragraph)', async () => {
     const plugin = createPlugin({
       db: null,
       config: pluginConfigSchema.parse({
-        defaults: { caps: [{ field: 'errors', maximum: 2, mode: 'warning' }] },
+        defaults: { caps: [{ field: 'errors', maximum: 2, mode: 'soft-block' }] },
       }),
     });
     await plugin.install(hooks);
@@ -3197,5 +3196,174 @@ describe('df7c3af9 policy denials are not errors', () => {
     await expect(
       enforcePreTool(hooks, ctx2, 'shell__shell_execute', 'call-f4')
     ).resolves.toBeUndefined();
+  });
+});
+
+// ── 9ed453c1 BUDGET-B1 — warn never blocks; soft-block opt-in; input-only windows ──
+//
+// Production symptom: a global `inputTokens` cap in `warning` mode soft-blocked a
+// tool call ("inputTokens limit is 500000, current value is 4201334"), and the
+// windowed `inputTokens` sum included OUTPUT tokens. Driven through the real
+// plugin + real HookRegistry + real better-sqlite3 task_usage rows (the real
+// orchestrator-level proof lives in agent-engine-orchestrator's
+// budget-warn-never-blocks.test.ts — this package cannot depend on the engine).
+describe('9ed453c1 BUDGET-B1 — warn never blocks the tool path', () => {
+  const WINDOWED_GLOBAL = (mode?: string, maximum = 500) => ({
+    defaults: {
+      scope: 'global',
+      ...(mode ? { mode } : {}),
+      caps: [
+        { field: 'inputTokens', maximum, window: 'PT24H', scope: 'global' },
+      ],
+    },
+  });
+
+  async function setup(config: unknown, priorInput = 100_000, priorOutput = 0) {
+    const hooks = new HookRegistry();
+    const real = makeRealBudgetDb();
+    real.addTaskUsage({
+      taskId: 'prior-task',
+      sessionId: 'prior-sess',
+      input: priorInput,
+      output: priorOutput,
+    });
+    const plugin = createPlugin({
+      db: real.db,
+      config: pluginConfigSchema.parse(config),
+    });
+    await plugin.install(hooks);
+    const warnings: BudgetWarningPayload[] = [];
+    hooks.register('budget:warning', (p) => {
+      warnings.push(p);
+    });
+    const ctx = makeCtx({ taskId: 'task-b1', sessionId: 'sess-b1' });
+    await hooks.emit('task:start', { executionContext: ctx, messages: [] });
+    return { hooks, ctx, warnings };
+  }
+
+  it('9ed453c1 BUDGET-B1 AC-W1 — a tripped warning-mode cap does not alter a tool call (no IToolWarning, no error)', async () => {
+    const { hooks, ctx, warnings } = await setup(WINDOWED_GLOBAL('warning'));
+    await expect(
+      enforcePreTool(hooks, ctx, 'shell__run', 'call-1')
+    ).resolves.toBeUndefined();
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatchObject({ field: 'inputTokens', maximum: 500, current: 100_000 });
+  });
+
+  it('9ed453c1 BUDGET-B1 AC-W1 — mode-less and `warn` alias behave identically (warn is the default)', async () => {
+    for (const mode of [undefined, 'warn']) {
+      const { hooks, ctx } = await setup(WINDOWED_GLOBAL(mode));
+      await expect(
+        enforcePreTool(hooks, ctx, 'shell__run', 'call-1')
+      ).resolves.toBeUndefined();
+    }
+  });
+
+  it('9ed453c1 BUDGET-B1 AC-W2 — a tripped warning-mode cap does not alter a model request', async () => {
+    const { hooks, ctx, warnings } = await setup(WINDOWED_GLOBAL('warning'));
+    await expect(enforcePreModel(hooks, ctx)).resolves.toBeUndefined();
+    expect(warnings).toHaveLength(1);
+  });
+
+  it('9ed453c1 BUDGET-B1 AC-W3 — soft-block mode reproduces the legacy tool-path IToolWarning (real sqlite)', async () => {
+    const { hooks, ctx, warnings } = await setup(WINDOWED_GLOBAL('soft-block'));
+    await expect(
+      enforcePreTool(hooks, ctx, 'shell__run', 'call-1')
+    ).rejects.toMatchObject({
+      isToolWarning: true,
+      toolName: 'shell__run',
+      callId: 'call-1',
+      message: expect.stringContaining('inputTokens limit is 500, current value is 100000'),
+    });
+    // legacy: event on every trip (no latch), model path is event-only
+    await expect(enforcePreModel(hooks, ctx)).resolves.toBeUndefined();
+    expect(warnings).toHaveLength(2);
+  });
+
+  it('9ed453c1 BUDGET-B1 AC-W4 — block mode throws BUDGET_EXCEEDED on both paths (real sqlite)', async () => {
+    const { hooks, ctx } = await setup(WINDOWED_GLOBAL('block'));
+    await expect(enforcePreModel(hooks, ctx)).rejects.toMatchObject({
+      isEnforcementError: true,
+      code: 'BUDGET_EXCEEDED',
+    });
+    await expect(
+      enforcePreTool(hooks, ctx, 'shell__run', 'call-1')
+    ).rejects.toMatchObject({ isEnforcementError: true, code: 'BUDGET_EXCEEDED' });
+  });
+
+  it('9ed453c1 BUDGET-B1 AC-W5 — exactly one budget:warning per (budget, task) across both paths, in the 4.6 format; a new task warns again', async () => {
+    const { hooks, ctx, warnings } = await setup(WINDOWED_GLOBAL('warning'));
+    await enforcePreModel(hooks, ctx);
+    await enforcePreTool(hooks, ctx, 'shell__run', 'call-1');
+    await enforcePreTool(hooks, ctx, 'shell__run', 'call-2');
+    await enforcePreModel(hooks, ctx);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0].message).toBe(
+      '[budget global-PT24H-inputTokens WARN] 100000 / 500 tokens ' +
+        '(20000%, window PT24H, scope global). Warning only; execution continues.'
+    );
+
+    const ctx2 = makeCtx({ taskId: 'task-b1-second', sessionId: 'sess-b1' });
+    await hooks.emit('task:start', { executionContext: ctx2, messages: [] });
+    await enforcePreTool(hooks, ctx2, 'shell__run', 'call-1');
+    await enforcePreTool(hooks, ctx2, 'shell__run', 'call-2');
+    expect(warnings).toHaveLength(2);
+  });
+
+  it('9ed453c1 BUDGET-B1 AC-W5 — a custom cap.message is the event message verbatim', async () => {
+    const { hooks, ctx, warnings } = await setup({
+      defaults: {
+        scope: 'global',
+        caps: [
+          { field: 'inputTokens', maximum: 500, window: 'PT24H', scope: 'global', message: 'custom words' },
+        ],
+      },
+    });
+    await enforcePreTool(hooks, ctx, 'shell__run', 'call-1');
+    expect(warnings[0].message).toBe('custom words');
+  });
+
+  it('9ed453c1 BUDGET-B1 AC-D1 (doc AC-C1) — a windowed inputTokens cap counts INPUT tokens only (input 100 / output 900 rows)', async () => {
+    // Cap 100: input-only sum = 100 → trips (>=). If output leaked in the sum is 1000.
+    const { hooks, ctx, warnings } = await setup(WINDOWED_GLOBAL('warning', 100), 100, 900);
+    await enforcePreTool(hooks, ctx, 'shell__run', 'call-1');
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatchObject({ field: 'inputTokens', maximum: 100, current: 100 });
+
+    // Cap 101 must NOT trip on 100 input tokens (old behaviour read 1000 and tripped).
+    const under = await setup(WINDOWED_GLOBAL('block', 101), 100, 900);
+    await expect(
+      enforcePreTool(under.hooks, under.ctx, 'shell__run', 'call-1')
+    ).resolves.toBeUndefined();
+    await expect(enforcePreModel(under.hooks, under.ctx)).resolves.toBeUndefined();
+  });
+
+  it('9ed453c1 BUDGET-B1 AC-D1 — a windowed outputTokens cap counts OUTPUT tokens only, and input+output caps on one scope/window do not share a value', async () => {
+    const { hooks, ctx, warnings } = await setup(
+      {
+        defaults: {
+          scope: 'global',
+          caps: [
+            { field: 'inputTokens', maximum: 100, window: 'PT24H', scope: 'global' },
+            { field: 'outputTokens', maximum: 900, window: 'PT24H', scope: 'global' },
+          ],
+        },
+      },
+      100,
+      900
+    );
+    await enforcePreTool(hooks, ctx, 'shell__run', 'call-1');
+    const byField = Object.fromEntries(warnings.map((w) => [w.field, w.current]));
+    expect(byField).toEqual({ inputTokens: 100, outputTokens: 900 });
+  });
+
+  it('9ed453c1 BUDGET-B1 AC-D2 — README documents warn / soft-block / block and no longer lists the removed `tokens` field as supported', () => {
+    const readme = readFileSync(
+      fileURLToPath(new URL('../../README.md', import.meta.url)),
+      'utf8'
+    );
+    expect(readme).toMatch(/soft-block/);
+    expect(readme).toMatch(/warning only|never (alters|blocks)/i);
+    expect(readme).not.toMatch(/\|\s*`tokens`\s*\|/);
   });
 });

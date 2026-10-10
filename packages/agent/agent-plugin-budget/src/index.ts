@@ -105,6 +105,22 @@ const TOOL_PATH_ONLY_FIELDS = new Set(['toolCalls', 'errors', 'consecutiveErrors
  *   - `errors`/`consecutiveErrors` REJECT `window` and non-task `scope`
  *     (Packet C — windowed/scoped error budgets are not expressible this wave).
  */
+/**
+ * Enforcement mode for a tripped cap (9ed453c1 BUDGET-B1).
+ *   - `warning` (alias `warn`, the default): emits `budget:warning` and NEVER
+ *     alters a model request or a tool call, on any path.
+ *   - `soft-block` (opt-in): on the TOOL path a trip is returned as an
+ *     IToolWarning (the call is skipped and the model sees the message); on the
+ *     model path it is event-only. This is the pre-B1 meaning of `warning`.
+ *   - `block`: throws BUDGET_EXCEEDED on both paths.
+ */
+const modeSchema = z.enum(['warning', 'warn', 'block', 'soft-block']);
+type NormalizedMode = 'warn' | 'soft-block' | 'block';
+function normalizeMode(raw: string | undefined): NormalizedMode {
+  if (raw === 'block' || raw === 'soft-block') return raw;
+  return 'warn';
+}
+
 const capSchema = z
   .object({
     field: z.enum(FIELD_NAMES),
@@ -112,7 +128,7 @@ const capSchema = z
     contextWindowFraction: z.number().min(0).max(1).optional(),
     window: z.string().optional(),
     scope: z.enum(['task', 'session', 'agent', 'global']).optional(),
-    mode: z.enum(['warning', 'block']).optional(),
+    mode: modeSchema.optional(),
     message: z.string().optional(),
   })
   .superRefine((cap, ctx) => {
@@ -203,7 +219,7 @@ export type Cap = z.infer<typeof capSchema>;
 
 const dimensionSchema = z.object({
   caps: z.array(capSchema).optional(),
-  mode: z.enum(['warning', 'block']).optional(),
+  mode: modeSchema.optional(),
   costPerInputToken: z.number().min(0).optional(),
   costPerOutputToken: z.number().min(0).optional(),
   // Cache-weighted cost rates (BUG-AGENTMCP-008). Default = costPerInputToken when
@@ -538,6 +554,8 @@ interface BudgetAccumulator {
   // this wave (schema rejects both).
   errors: number;
   consecutiveErrors: number;
+  /** Budgets that already emitted a warn-mode `budget:warning` for this task. */
+  warned: Set<string>;
 }
 
 interface UsageTotals {
@@ -554,6 +572,63 @@ interface UsageTotals {
   uncachedInputTokens: number;
   cacheReadTokens: number;
   cacheCreationTokens: number;
+}
+
+/**
+ * SQL column expression a windowed cap sums (9ed453c1 BUDGET-B1 AC-D1): an
+ * `inputTokens` window sums INPUT only, `outputTokens` OUTPUT only; any other
+ * windowed field keeps the legacy input+output total. Fixed literals only —
+ * never interpolates user input.
+ */
+function windowTokenColumn(field: string | undefined, prefix: string) {
+  if (field === 'inputTokens') return sql.raw(`${prefix}input_tokens`);
+  if (field === 'outputTokens') return sql.raw(`${prefix}output_tokens`);
+  return sql.raw(`${prefix}input_tokens + ${prefix}output_tokens`);
+}
+
+function unitFor(field: string): string {
+  switch (field) {
+    case 'inputTokens':
+    case 'outputTokens':
+    case 'context':
+      return 'tokens';
+    case 'cost':
+      return 'USD';
+    case 'wallClock':
+    case 'modelMs':
+      return 'ms';
+    case 'responseSize':
+      return 'chars';
+    default:
+      return 'count';
+  }
+}
+
+/**
+ * The warn-mode message (budget redesign doc section 4.6, the part knowable
+ * inside this plugin): budget id, mode, `current / limit` in the cap's unit,
+ * percent, window, scope, and the explicit "no call was blocked" line. Top
+ * contributors and unpriced-token counts need the v2 budget model (bucket B3/B4).
+ */
+function formatWarnMessage(
+  cap: Cap,
+  scope: string,
+  current: number,
+  limit: number,
+  toolName?: string
+): string {
+  const id = [toolName, scope, cap.window, cap.field]
+    .filter((x): x is string => !!x)
+    .join('-');
+  const unit = unitFor(cap.field);
+  const fmt = (n: number) =>
+    cap.field === 'cost' ? n.toFixed(4) : String(Math.round(n));
+  const pct = limit > 0 ? `${Math.round((current / limit) * 100)}%, ` : '';
+  const win = cap.window ? `window ${cap.window}, ` : '';
+  return (
+    `[budget ${id} WARN] ${fmt(current)} / ${fmt(limit)} ${unit} ` +
+    `(${pct}${win}scope ${scope}). Warning only; execution continues.`
+  );
 }
 
 // ── Plugin class ─────────────────────────────────────────────────────────────
@@ -668,6 +743,7 @@ class BudgetPlugin implements Plugin {
       toolCalls: new Map(),
       errors: 0,
       consecutiveErrors: 0,
+      warned: new Set(),
     });
   }
 
@@ -931,9 +1007,15 @@ class BudgetPlugin implements Plugin {
     scope: string,
     id: string,
     windowMs: number,
-    excludeTaskId?: string
+    excludeTaskId?: string,
+    field?: string
   ): number {
     if (!this.db) return 0;
+    // 9ed453c1 BUDGET-B1 AC-D1: an `inputTokens` window sums INPUT tokens only and
+    // an `outputTokens` window sums OUTPUT tokens only. Any other windowed field
+    // keeps the legacy input+output total (see BACKLOG: windowed non-token caps).
+    const tokenExpr = windowTokenColumn(field, '');
+    const tokenExprTu = windowTokenColumn(field, 'tu.');
     try {
       const db = this.db as BudgetDb;
       const since = new Date(Date.now() - windowMs).toISOString();
@@ -949,7 +1031,7 @@ class BudgetPlugin implements Plugin {
 
       if (scope === 'session') {
         row = db.get<Row>(sql`
-          SELECT COALESCE(SUM(tu.input_tokens + tu.output_tokens), 0) AS total
+          SELECT COALESCE(SUM(${tokenExprTu}), 0) AS total
           FROM task_usage tu
           JOIN tasks t ON tu.task_id = t.id
           WHERE t.session_id = ${id} AND tu.created_at >= ${since}
@@ -957,14 +1039,14 @@ class BudgetPlugin implements Plugin {
         `);
       } else if (scope === 'agent') {
         row = db.get<Row>(sql`
-          SELECT COALESCE(SUM(input_tokens + output_tokens), 0) AS total
+          SELECT COALESCE(SUM(${tokenExpr}), 0) AS total
           FROM task_usage
           WHERE agent_name = ${id} AND created_at >= ${since}
           ${excludeTaskId ? sql` AND task_id != ${excludeTaskId}` : sql``}
         `);
       } else if (scope === 'global') {
         row = db.get<Row>(sql`
-          SELECT COALESCE(SUM(input_tokens + output_tokens), 0) AS total
+          SELECT COALESCE(SUM(${tokenExpr}), 0) AS total
           FROM task_usage
           WHERE created_at >= ${since}
           ${excludeTaskId ? sql` AND task_id != ${excludeTaskId}` : sql``}
@@ -1006,7 +1088,7 @@ class BudgetPlugin implements Plugin {
    *
    * Makes exactly `U + W` DB queries where:
    *   U = number of unique non-task scopes across all caps (0..3)
-   *   W = number of unique (scope, window) pairs across all caps
+   *   W = number of unique (scope, window, field) triples across all caps
    *
    * Independent of cap count, agent count, session count, or history depth.
    *
@@ -1048,16 +1130,17 @@ class BudgetPlugin implements Plugin {
     const uniqueScopes = new Set<string>();
     const uniqueWindows = new Map<
       string,
-      { scope: string; windowMs: number }
+      { scope: string; field: string; windowMs: number }
     >();
     for (const cap of caps) {
       const scope = cap.scope ?? dimScope ?? 'task';
       if (scope !== 'task') uniqueScopes.add(scope);
       if (cap.window) {
-        const key = `${scope}:${cap.window}`;
+        const key = `${scope}:${cap.window}:${cap.field}`;
         if (!uniqueWindows.has(key)) {
           uniqueWindows.set(key, {
             scope,
+            field: cap.field,
             windowMs: parseIsoDuration(cap.window),
           });
         }
@@ -1084,11 +1167,17 @@ class BudgetPlugin implements Plugin {
       snap[`${scope}:cost`] = this.costFromTotals(t);
     }
 
-    for (const [key, { scope, windowMs }] of uniqueWindows) {
+    for (const [key, { scope, field, windowMs }] of uniqueWindows) {
       let scopeId = '';
       if (scope === 'session') scopeId = sessionId ?? '';
       else if (scope === 'agent') scopeId = agentName ?? '';
-      snap[key] = this.queryWindowTokens(scope, scopeId, windowMs, taskId);
+      snap[key] = this.queryWindowTokens(
+        scope,
+        scopeId,
+        windowMs,
+        taskId,
+        field
+      );
     }
 
     return snap;
@@ -1156,7 +1245,7 @@ class BudgetPlugin implements Plugin {
     }
 
     if (cap.window) {
-      base += snap[`${scope}:${cap.window}`] ?? 0;
+      base += snap[`${scope}:${cap.window}:${cap.field}`] ?? 0;
     }
 
     return base;
@@ -1199,6 +1288,45 @@ class BudgetPlugin implements Plugin {
   }
 
   /**
+   * Emit the warn-mode `budget:warning` for a tripped cap, at most ONCE per
+   * (budget, task) (9ed453c1 BUDGET-B1 AC-W5). A "budget" is the cap's identity
+   * (field, effective scope, window, limit; plus the tool for per-tool
+   * `toolCalls` caps), so the model path and the tool path share one latch and a
+   * tripped cap cannot spam one event per call. Notification only — never alters
+   * a call.
+   */
+  private async warnOnce(
+    ctx: ExecutionContext,
+    cap: Cap,
+    current: number,
+    limit: number,
+    dimScope: string | undefined,
+    toolName?: string
+  ): Promise<void> {
+    const scope = cap.scope ?? dimScope ?? 'task';
+    const key = [
+      cap.field,
+      scope,
+      cap.window ?? '',
+      limit,
+      cap.field === 'toolCalls' ? toolName ?? '' : '',
+    ].join('|');
+    const acc = this.accumulators.get(ctx.taskId);
+    if (acc) {
+      if (acc.warned.has(key)) return;
+      acc.warned.add(key);
+    }
+    await this.emitBudgetEvent(
+      'budget:warning',
+      ctx,
+      cap,
+      current,
+      limit,
+      cap.message ?? formatWarnMessage(cap, scope, current, limit, toolName)
+    );
+  }
+
+  /**
    * Resolve a cap's numeric limit. A `context` cap configured via
    * `contextWindowFraction` has no `maximum`: the limit is
    * `contextWindowFor(modelId) * fraction` (128K fallback for unknown models).
@@ -1233,8 +1361,13 @@ class BudgetPlugin implements Plugin {
     const limit = this.resolveCapLimit(cap, ctx);
     const current = this.getSnapshotValue(snap, cap, dimScope);
     if (current < limit) return;
-    const capMode = cap.mode ?? dimMode ?? 'warning';
-    if (capMode === 'warning') {
+    const capMode = normalizeMode(cap.mode ?? dimMode);
+    if (capMode === 'warn') {
+      await this.warnOnce(ctx, cap, current, limit, dimScope);
+      return;
+    }
+    if (capMode === 'soft-block') {
+      // Model path: soft-block is event-only (IToolWarning exists only for tools).
       await this.emitBudgetEvent('budget:warning', ctx, cap, current, limit);
       return;
     }
@@ -1325,9 +1458,23 @@ class BudgetPlugin implements Plugin {
           `tool "${toolName}": ${cap.field} limit is ${
             limit
           }, current value is ${Math.round(current)}`;
-        const capMode = cap.mode ?? mode ?? 'warning';
-        if (capMode === 'warning') {
-          // Notification only — the IToolWarning soft-block stays the action.
+        const capMode = normalizeMode(cap.mode ?? mode);
+        if (capMode === 'warn') {
+          // 9ed453c1 BUDGET-B1 AC-W1: warn NEVER alters the call — event only
+          // (once per budget per task), the tool executes.
+          await this.warnOnce(
+            executionContext,
+            cap,
+            current,
+            limit,
+            dimScope,
+            toolName
+          );
+          continue;
+        }
+        if (capMode === 'soft-block') {
+          // Opt-in legacy behaviour (the pre-B1 meaning of `warning`): the
+          // IToolWarning soft-block is the action; the event is notification.
           await this.emitBudgetEvent(
             'budget:warning',
             executionContext,

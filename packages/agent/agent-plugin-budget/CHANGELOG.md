@@ -1,3 +1,19 @@
+## 0.2.7 (2026-10-09)
+
+### ⚠️ Behaviour changes
+
+- **`warning` mode never alters a call.** On the tool path a tripped `warning`-mode cap used to throw an IToolWarning that skipped the tool; it now only emits `budget:warning` and the tool executes (matching the model path). Existing configs with `mode: "warning"` now warn only. (9ed453c1 BUDGET-B1)
+- **Windowed `inputTokens` / `outputTokens` caps count their own direction only.** The window query summed `input_tokens + output_tokens` for both, so a windowed `inputTokens` cap counted output tokens of history (the `current value is 4201334` against a 500000 cap). `inputTokens` now sums input only, `outputTokens` output only. (9ed453c1 BUDGET-B1)
+
+### 🚀 Features
+
+- **agent-plugin-budget:** opt-in `soft-block` mode reproduces the previous tool-path IToolWarning behaviour exactly; `warn` is accepted as an alias of `warning`. `block` still throws BUDGET_EXCEEDED on both paths. (9ed453c1 BUDGET-B1)
+- **agent-plugin-budget:** one `budget:warning` per (budget, task) in warn mode, with message `[budget <id> WARN] <current> / <limit> <unit> (<pct>%, window <w>, scope <s>). Warning only; execution continues.` (9ed453c1 BUDGET-B1)
+
+### 📖 Documentation
+
+- README: documents the modes table and migration note, and drops the removed `tokens` cap field / `maxTotalTokens` key from every example.
+
 ## 0.2.6 (2026-10-09)
 
 ### 🩹 Fixes
