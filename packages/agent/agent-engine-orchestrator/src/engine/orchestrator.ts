@@ -363,6 +363,12 @@ export interface OrchestratorRunResult {
   result: string;
 }
 
+/** ISO reset time a typed provider failure (ProviderCallError) carries, when the provider reported one. */
+function resetAtOf(err: ToolError): string | undefined {
+  const v = (err as ToolError & { resetAt?: unknown }).resetAt;
+  return typeof v === 'string' ? v : undefined;
+}
+
 /** Duck-type check */
 function isEnforcementError(err: unknown): err is IEnforcementError {
   return (
@@ -1494,6 +1500,15 @@ export class Orchestrator {
               `Provider call timed out after ${ms}ms. Increase timeoutMs on the agent's provider config.`
             );
           }
+          // A provider that already classified its failure throws a typed ToolError
+          // (ProviderCallError: code + data.class/retryable/resumable + resetAt). Propagate it
+          // UNCHANGED so the class-specific code and data reach the task error/events; re-deriving
+          // from status/message text below would flatten billing/overloaded to PROVIDER_ERROR and
+          // drop the reset time. The string rules below are only the fallback for untyped throws.
+          // (de6bee5d FLT-AC1)
+          if (error instanceof ToolError) {
+            throw error;
+          }
           if (
             error instanceof Error &&
             (error.constructor.name === 'AuthenticationError' ||
@@ -1615,6 +1630,10 @@ export class Orchestrator {
               ? { peakContextTokens: providerResponse.usage.peakContextTokens }
               : {}),
             rawUsage: providerResponse.rawUsage,
+            // Window warnings the call succeeded despite (claudecli allowed_warning). (de6bee5d FLT-4)
+            ...(providerResponse.limitWarnings?.length
+              ? { limitWarnings: providerResponse.limitWarnings }
+              : {}),
             computeMs,
           },
         });
@@ -2164,7 +2183,16 @@ export class Orchestrator {
         taskStore.appendEvent({
           taskId,
           type: 'TASK_FAILED',
-          payload: { error: errorMessage },
+          payload: {
+            error: errorMessage,
+            ...(error instanceof ToolError
+              ? {
+                  code: error.code,
+                  ...(error.data !== undefined ? { data: error.data } : {}),
+                  ...(resetAtOf(error) !== undefined ? { resetAt: resetAtOf(error) } : {}),
+                }
+              : {}),
+          },
         });
 
         logger.error(
