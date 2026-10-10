@@ -1865,7 +1865,7 @@ describe('Packet A — cap.mode on the model path (budget:warning / budget:block
   });
 
   it('699da472 AC3 — simultaneous calls cannot overshoot a toolCalls cap while a warn handler is parked', async () => {
-    const plugin = createPlugin({
+    const plugin = await createPlugin({
       db: null,
       config: pluginConfigSchema.parse({
         defaults: {},
@@ -1904,7 +1904,7 @@ describe('Packet A — cap.mode on the model path (budget:warning / budget:block
   });
 
   it('tool path: block-mode tool cap exceeded → budget:block emitted BEFORE the BUDGET_EXCEEDED throw', async () => {
-    const plugin = createPlugin({
+    const plugin = await createPlugin({
       db: null,
       config: pluginConfigSchema.parse({
         defaults: {},
