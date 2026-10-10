@@ -59,6 +59,7 @@ The zero-config DB path is resolved under the scope root:
 - **Scope** is auto-detected (walks up from `process.cwd()` looking for `.git`/`.adhd` markers) or forced via `ADHD_ENV_SCOPE=global`/`project`
 - **Global scope** (`~/.adhd/agent-mcp/production/data/agents.db` by default) — never the repo tree, even when inside one
 - **Overridable** only by an explicit **absolute** `ADHD_AGENT_DATABASE_PATH` (process env or `~/.adhd/.env`) or `db.path` in a system/global `config.yaml` (relative values there anchor to the file's directory); a relative process-env value is rejected at startup and a launch-directory `.env` cannot set it (`src/config-store-path.ts`, `src/utils/load-env.ts`). Unset = the production store. No mode toggle; startup logs `store=<abs> mode=<production|custom> source=<env|cascade|default>`
+- **Dev path must be ABSOLUTE in the process environment, `.env` included.** `nx` exports the repo-root `.env` into every task, so a relative `ADHD_AGENT_DATABASE_PATH` there is ignored with a warning in agent-mcp's own loader but rejected (`must be an absolute path`) when exported by `nx`. Use an absolute path in `.env`. The unit lane is hermetic (`vitest.setup.mjs` deletes inherited `ADHD_AGENT_*` before tests; a test that needs one sets it in its own body) and `verify-dist-load` scrubs `ADHD_*` from the child env, so a local `.env` can neither break nor mask the shipped-artifact checks.
 
 Verified end-to-end in `src/__tests__/integration/real-environment.e2e.test.ts` (ENV-ADOPT-PROOF-000).
 

@@ -73,6 +73,20 @@ const workspaceRoot = findRoot(__dirname);
 // load defect, so a timeout is a FAILURE, never a skip (see the header).
 const PROBE_TIMEOUT_MS = Number.parseInt(process.env.VERIFY_DIST_LOAD_TIMEOUT_MS ?? '', 10) || 15000;
 
+// Variables that exist only on a developer's machine / in the repo-root `.env` that
+// `nx` exports into every task, and that no real consumer of a published package
+// has set. The load probe must see the environment a CONSUMER has, otherwise a
+// local `.env` can make a shipped artifact look broken (e.g. a relative
+// `ADHD_AGENT_DATABASE_PATH` that the product rightly rejects at import time) or
+// mask a defect that only a clean environment exposes. Everything else (PATH, HOME,
+// NODE_*, ...) is kept so the child can still run. Extend this list, never the probe.
+const REPO_DEV_ENV_PATTERNS = [/^ADHD_/];
+
+/** Return a copy of `env` without repo-dev-config variables (see REPO_DEV_ENV_PATTERNS). */
+function consumerEnv(env) {
+  return Object.fromEntries(Object.entries(env).filter(([key]) => !REPO_DEV_ENV_PATTERNS.some((re) => re.test(key))));
+}
+
 // The out-of-process load probe. Loads one entry exactly as its package.json
 // field is consumed (`require` for a CJS entry, `import` for an ESM entry),
 // force-exits 0 on success (so an entry that leaves the event loop alive does
@@ -110,7 +124,7 @@ function probeLoadInSubprocess(entryAbs, mode) {
     timeout: PROBE_TIMEOUT_MS,
     killSignal: 'SIGKILL',
     env: {
-      ...process.env,
+      ...consumerEnv(process.env),
       VDL_MODE: mode,
       VDL_ENTRY_ABS: entryAbs,
       VDL_ENTRY_URL: pathToFileURL(entryAbs).href,

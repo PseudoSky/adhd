@@ -212,3 +212,34 @@ test('a bin-bearing package with a HANGING library entry FAILS via the bounded s
     rmSync(join(REPO_ROOT, rel), { recursive: true, force: true });
   }
 });
+
+test('consumer-environment fidelity: a relative ADHD_AGENT_DATABASE_PATH in the PARENT env (nx exports the repo .env) cannot make the load check fail — the probe runs with repo-dev env scrubbed, PATH/HOME kept', () => {
+  const rel = plantFixture('dev-env-scrub');
+  try {
+    writeFileSync(join(REPO_ROOT, rel, 'package.json'), JSON.stringify({ name: '@adhd/x', version: '1.0.0', main: './dist/index.js' }));
+    mkdirSync(join(REPO_ROOT, rel, 'dist'), { recursive: true });
+    // Mirrors the product's BK6 rule (agent-mcp config-store-path.ts): a relative
+    // path arriving via the real process environment throws at import time. It also
+    // proves non-dev variables survive the scrub (PATH, and an arbitrary consumer var).
+    writeFileSync(
+      join(REPO_ROOT, rel, 'dist', 'index.js'),
+      [
+        "const p = process.env.ADHD_AGENT_DATABASE_PATH;",
+        "if (p !== undefined) throw new Error('StorePathError: ADHD_AGENT_DATABASE_PATH=' + p + ' leaked into the consumer load');",
+        "if (process.env.ADHD_SOMETHING_ELSE !== undefined) throw new Error('ADHD_* leaked');",
+        "if (!process.env.PATH) throw new Error('PATH was scrubbed');",
+        "if (process.env.CONSUMER_VAR !== 'kept') throw new Error('non-ADHD variable was scrubbed');",
+        'module.exports = {};',
+      ].join('\n') + '\n'
+    );
+    writeFileSync(join(REPO_ROOT, rel, 'dist', 'package.json'), JSON.stringify({ name: '@adhd/x', version: '1.0.0', main: './index.js' }));
+    const res = runScript(rel, {
+      ADHD_AGENT_DATABASE_PATH: 'data/agent-mcp/agents-dev.db',
+      ADHD_SOMETHING_ELSE: '1',
+      CONSUMER_VAR: 'kept',
+    });
+    assert.equal(res.status, 0, `a developer .env must not affect the shipped-artifact verdict; stdout: ${res.stdout}, stderr: ${res.stderr}`);
+  } finally {
+    rmSync(join(REPO_ROOT, rel), { recursive: true, force: true });
+  }
+});

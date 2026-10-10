@@ -154,3 +154,7 @@ Pure transform tests: `pnpm test:build-tools`.
 ## Target chain summary
 
 `build → assets → { version (runtime-dep topological) | reconcile | dist-manifest → verify-dist-load → publish-hygiene → publish }` (wired in `plugin.js`). `version` and `reconcile` both read/populate the same `published-state.json` cache; `publish`'s existence-check reads it too, and its write-through keeps it current after every real publish. `reconcile` and `publish`'s write-through are the ONLY tasks that ever pull a tarball from npm — and `reconcile` only for a package whose local dist has actually diverged (integrity gate). `nx-release-publish` is Nx's own native task name, used only by the retired `nx release publish` command — this repo's real pipeline never invokes it (see `PUBLISHING.md`).
+
+### verify-dist-load environment
+
+The load probe runs the built entry in a child process with repo-dev configuration scrubbed from its environment (`REPO_DEV_ENV_PATTERNS` in `verify-dist-load.mjs`, currently `^ADHD_`), because `nx` exports the developer's repo-root `.env` into every task and a real consumer has none of it. `PATH`, `HOME` and every other variable are kept. Extend the pattern list, not the probe.

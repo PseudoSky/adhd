@@ -50,6 +50,8 @@ export default defineConfig({
     // same class of load-only timeout already fixed for apigen-plugin-ir-cache.
     ...vitestTestDefaults,
     globals: true,
+    // Hermetic against the repo-root .env that nx exports (drops inherited ADHD_AGENT_*).
+    setupFiles: ['./vitest.setup.mjs'],
     cache: {
       dir: '../../../node_modules/.vitest',
     },
