@@ -1,3 +1,7 @@
+## 2.3.11 (2026-10-10)
+
+This was a version bump only for agent-mcp to align it with other projects, there were no code changes.
+
 ## 2.3.10 (2026-10-10)
 
 This was a version bump only for agent-mcp to align it with other projects, there were no code changes.

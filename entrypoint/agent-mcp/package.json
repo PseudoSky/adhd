@@ -1,6 +1,6 @@
 {
   "name": "@adhd/agent-mcp",
-  "version": "2.3.10",
+  "version": "2.3.11",
   "type": "module",
   "bin": {
     "agent-mcp": "./dist/src/index.js",
@@ -19,7 +19,7 @@
     "@adhd/agent-store-runtime": "^2.2.8",
     "@adhd/agent-core-provider": "^2.2.8",
     "@adhd/agent-store-prompts": "^2.2.3",
-    "@adhd/agent-engine-orchestrator": "^2.3.10",
+    "@adhd/agent-engine-orchestrator": "^2.3.11",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "pino": "^10.3.1",
     "drizzle-orm": "^0.45.2",

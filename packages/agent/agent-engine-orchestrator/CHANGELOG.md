@@ -1,3 +1,17 @@
+## 2.3.11 (2026-10-10)
+
+### 🚀 Features
+
+- **agent-engine-orchestrator:** claudecli and anthropic classify 429/529/usage-window faults, retry transient ones with Retry-After backoff, fail fast on quota windows, share a per-credential limiter (de6bee5d 9ed453c1 FLT-AC1..AC6) ([3fac822e](https://github.com/PseudoSky/adhd/commit/3fac822e))
+
+### 🩹 Fixes
+
+- **agent-engine-orchestrator:** engine preserves typed provider failures (de6bee5d FLT-AC1) ([4b6f0c11](https://github.com/PseudoSky/adhd/commit/4b6f0c11))
+
+### ❤️ Thank You
+
+- pseudosky
+
 ## 2.3.10 (2026-10-10)
 
 This was a version bump only for agent-engine-orchestrator to align it with other projects, there were no code changes.
