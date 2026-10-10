@@ -50,11 +50,11 @@ afterEach(() => {
 });
 
 describe('3ad735bb AC1.3 agent.toolResult.maxChars through the Environment cascade (plan 9ed453c1)', () => {
-  it('defaults to 20000 with no env var and records default provenance', () => {
+  it('defaults to 6000 (9ed453c1 CTX AC3) with no env var and records default provenance', () => {
     const restore = withEnv(undefined);
     try {
       const env = mk();
-      expect(parseToolResultMaxChars(env.config.agent.toolResult.maxChars)).toBe(20_000);
+      expect(parseToolResultMaxChars(env.config.agent.toolResult.maxChars)).toBe(6_000);
       expect(env.get('provenance.agent.toolResult.maxChars')).toMatchObject({ source: 'default' });
     } finally {
       restore();
