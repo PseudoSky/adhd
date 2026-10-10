@@ -1,0 +1,96 @@
+{
+ "source": "agent-mcp api log 2026-10-10 http.request #2 (claude-haiku-4-5, task with shell_execute + web_search + web_fetch, OAuth 2-block system)",
+ "realInputTokens": 4404,
+ "request": {
+  "model": "claude-haiku-4-5",
+  "system": [
+   {
+    "type": "text",
+    "text": "You are Claude Code, Anthropic's official CLI for Claude."
+   },
+   {
+    "type": "text",
+    "text": "You are a concise assistant. Use your tools to answer."
+   }
+  ],
+  "tools": [
+   {
+    "name": "shell__shell_execute",
+    "description": "Execute a shell command\nAllowed commands: adhd-backlog, cat, echo, grep, head, ls, pwd, rg, tail, wc\nAllowed patterns: \nDefault timeout: 30s; maximum timeout: 300s; output cap: 1048576 bytes",
+    "input_schema": {
+     "type": "object",
+     "properties": {
+      "command": {
+       "type": "array",
+       "items": {
+        "type": "string"
+       },
+       "description": "Command and its arguments as array"
+      },
+      "stdin": {
+       "type": "string",
+       "description": "Input to be passed to the command via stdin"
+      },
+      "directory": {
+       "type": "string",
+       "description": "Optional working directory. Omit to use the MCP server process current working directory; relative paths are resolved from that same server process CWD."
+      },
+      "timeout": {
+       "type": "integer",
+       "description": "Maximum execution time in seconds; clamped to server maximum",
+       "minimum": 1
+      }
+     },
+     "required": [
+      "command"
+     ]
+    }
+   },
+   {
+    "type": "web_search_20250305",
+    "name": "web_search"
+   },
+   {
+    "type": "web_fetch_20250910",
+    "name": "web_fetch"
+   }
+  ],
+  "messages": [
+   {
+    "role": "user",
+    "content": "Use the backlog shell CLI (`adhd-backlog`; see entrypoint/backlog/skill/SKILL.md in /Users/nix/dev/node/adhd/.worktrees/cp-par3 for the exact `get`/query command and --input convention; a long REFERENCE.md sits next to it, read it only if needed) to fetch backlog item b726a987-ad5f-4e5d-9488-56b5ad053b34 and reply with exactly two lines: its title and its status."
+   },
+   {
+    "role": "assistant",
+    "content": [
+     {
+      "type": "text",
+      "text": "I'll help you fetch that backlog item. Let me first check the SKILL.md file to understand the correct command format."
+     },
+     {
+      "type": "tool_use",
+      "id": "toolu_01TzgEtbFLdRucpha14gwEjV",
+      "name": "shell_execute",
+      "input": {
+       "command": [
+        "cat",
+        "/Users/nix/dev/node/adhd/.worktrees/cp-par3/entrypoint/backlog/skill/SKILL.md"
+       ]
+      }
+     }
+    ]
+   },
+   {
+    "role": "user",
+    "content": [
+     {
+      "type": "tool_result",
+      "tool_use_id": "toolu_01TzgEtbFLdRucpha14gwEjV",
+      "content": "[{\"type\":\"text\",\"text\":\"---\\nname: backlog-usage\\ndescription: 'Use whenever filing, reading, claiming, transitioning, relating, or resolving a backlog issue \u2014 or registering a project/component/location \u2014 in ANY repo on this machine, via the `adhd-backlog` CLI / `mcp__backlog__*` tools, never by hand-editing a `BACKLOG.md` file. Examples: \\\"log this bug\\\", \\\"file a debt item for the flaky test\\\", \\\"claim that issue\\\", \\\"what''s still open in this repo\\\", \\\"where does this tool live\\\".'\\n---\\n\\n# `adhd-backlog` quick reference\\n\\nEvery verb takes ONE flag, `--input '<json>'` (a bare params object, not an\\n`{input:\u2026}` envelope; same params as `mcp__backlog__*`). Per-field flags do not\\nexist. Only `search \\\"<text>\\\"` and `get <uid>` accept positionals. `<uid>` is a\\nfull uid or a unique 8+ hex-char prefix. Success is `{\\\"ok\\\":true,\\\"data\\\":\u2026}`;\\nfailure is `{\\\"ok\\\":false,\\\"error\\\":{code,message}}` with a non-zero exit. Each\\nline below is run by a test, so it is copy-paste correct.\\n\\n```\\nadhd-backlog get <uid>\\nadhd-backlog get --input '{\\\"uid\\\":\\\"<uid>\\\"}'\\nadhd-backlog search \\\"flaky test\\\" --limit 5\\nadhd-backlog query --input '{\\\"filter\\\":{\\\"status\\\":\\\"open\\\",\\\"project\\\":\\\"demo\\\"},\\\"limit\\\":10}'\\nadhd-backlog create --input '{\\\"title\\\":\\\"Fix the flaky test\\\",\\\"body\\\":\\\"Why and where.\\\",\\\"project\\\":\\\"demo\\\",\\\"by\\\":\\\"claude:1\\\"}'\\nadhd-backlog claim --input '{\\\"uid\\\":\\\"<uid>\\\",\\\"by\\\":\\\"claude:1\\\",\\\"action\\\":\\\"claim\\\"}'\\nadhd-backlog transition --input '{\\\"uid\\\":\\\"<uid>\\\",\\\"by\\\":\\\"claude:1\\\",\\\"toStatus\\\":\\\"in-progress\\\",\\\"note\\\":\\\"started\\\"}'\\nadhd-backlog update --input '{\\\"uid\\\":\\\"<uid>\\\",\\\"by\\\":\\\"claude:1\\\",\\\"priority\\\":\\\"high\\\"}'\\nadhd-backlog relate --input '{\\\"sourceUid\\\":\\\"<uid>\\\",\\\"targetUid\\\":\\\"<uid2>\\\",\\\"rel\\\":\\\"blocks\\\",\\\"action\\\":\\\"add\\\",\\\"by\\\":\\\"claude:1\\\"}'\\nadhd-backlog transition --input '{\\\"uid\\\":\\\"<uid>\\\",\\\"by\\\":\\\"claude:1\\\",\\\"toStatus\\\":\\\"done\\\",\\\"note\\\":\\\"fixed in abc123\\\"}'\\n```\\n\\nRules that bite:\\n\\n- `by` is a real identity, `\\\"name:instance\\\"` (e.g. `\\\"claude:1\\\"`); a bare\\n  role word like `\\\"agent\\\"` is refused.\\n- File with the right `project` (and `component`); search before filing so you\\n  update an existing item instead of duplicating it.\\n- `update` with a `body` mints a successor uid (the old one reports a\\n  `conflict` naming the live one); re-read the uid from the result.\\n- Never edit `BACKLOG.md`; the graph is the source of truth.\\n- A wrong `--input` shape fails with `invalid_argument` and prints the exact\\n  working invocation; `adhd-backlog --help` lists every verb's live schema.\\n\\nOther verbs: `add-citation attest delete embedding-status lookup merge-project\\nmove obligate open-curve part-of-rollup priority-matrix recheck remove\\nremove-citation report restore rm-location rm-project spec-append spec-check\\ntimeline unobligate upsert-component upsert-location upsert-project` and\\n`batch action`.\\n\\n## Long reference (read only when the above is not enough)\\n\\n`REFERENCE.md`, in this directory next to this file, holds the complete 32-verb\\nreference: outcome envelopes and MCP tool names (\u00a72), worked examples for every\\nissue verb (\u00a73), obligations and the actionability verdict (\u00a74), spec revisions\\n(\u00a75), read views and catalogs (\u00a76), the project/component/location registry and\\nfiling rules (\u00a77), batch (\u00a78), citations (\u00a79), verifying writes (\u00a710), stats\\n(\u00a711), and sessions and reservations (\u00a713). Read only the section you need\\n(`rg -n '^## ' REFERENCE.md` lists them), never the whole file.\"}]",
+      "is_error": false
+     }
+    ]
+   }
+  ]
+ }
+}

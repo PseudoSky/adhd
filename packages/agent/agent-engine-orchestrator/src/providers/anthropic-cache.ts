@@ -12,17 +12,21 @@
  *    that nevertheless carries `ephemeral_1h` tokens is priced by the already-shipped
  *    `cacheCreation1hTokens` path (see `normaliseAnthropicUsage`).
  *  - PER-BREAKPOINT minimum-prefix guard: a breakpoint is added only when the cumulative prefix
- *    token estimate through that point is at least the model's minimum cacheable size. Below the
- *    minimum the API silently does not cache but a write premium is still risked, so the guard
- *    keeps short tasks exactly as cheap as they are today.
+ *    token estimate through that point is at least {@link CACHE_GUARD_SAFETY_RATIO} (0.75) of the
+ *    model's minimum cacheable size (see {@link cacheGuardThreshold}). Anthropic's prompt-caching
+ *    docs state that a prompt shorter than the model minimum is simply not cached (no cache write,
+ *    no write premium), so the guard's job is to avoid paying nothing for nothing, not to dodge a
+ *    penalty; the cost of a MISSED breakpoint (a cacheable prefix billed fully uncached on every
+ *    turn) is far larger than the cost of an unneeded one. The ratio absorbs the estimator's
+ *    undercount (ebfe7421 CG, below).
  *  - Thinking / redacted-thinking blocks and empty text blocks never carry a breakpoint.
  *  - The OAuth-mandated identity system block stays FIRST and byte-for-byte unchanged: it never
  *    receives a breakpoint and is never reordered.
  *
  * Token estimation uses the repo's existing encoder (`gpt-tokenizer`, the same one the
  * orchestrator uses for tool-result telemetry). It tokenises text into FEWER tokens than Claude's
- * own tokenizer, so the estimate is a LOWER BOUND. An undercount is safe against paying a premium
- * on an uncacheable prefix, but it is not free: it skips breakpoints the API would have honored.
+ * own tokenizer, so the estimate is a LOWER BOUND. An undercount never places a breakpoint the API
+ * would refuse, but it is not free: it skips breakpoints the API would have honored.
  * That cost is large for server tools (ebfe7421): a server-tool entry (`web_search_20250305`,
  * `web_fetch_20250910`) is a ~30-token `{type,name}` stub on the wire, yet the API expands it
  * server-side into a full tool definition that counts toward the cacheable prefix. Measured on
@@ -31,6 +35,18 @@
  * real tokens while the stub JSON estimates at ~60. {@link SERVER_TOOL_TOKEN_WEIGHTS} adds that
  * measured weight back (rounded DOWN, so the estimate stays a lower bound). Prefixes that carry
  * no server tool are estimated exactly as before.
+ *
+ * The estimate is still a lower bound after the server-tool weights (ebfe7421 CG follow-up).
+ * Three real turns of one claude-haiku-4-5 task (shell_execute + web_search_20250305 +
+ * web_fetch_20250910, OAuth two-block system, 1/3/5 messages) were logged by agent-mcp with the
+ * API's own `input_tokens`: 3130 / 4404 / 4714 against estimates of 2532 / 3566 / 3770, i.e. the
+ * estimate is 598 / 838 / 944 tokens (19.1% / 19.0% / 20.0% of the real count; worst 20%)
+ * short. The omitted weight is the fixed per-request tool overhead (~346 tokens per
+ * the docs), per-message framing (~30-36 tokens per message) and gpt-tokenizer's ~1.15-1.2 ratio
+ * against Claude's tokenizer on text. With the exact `>= min` gate turns 2 and 3 (real 4404 and
+ * 4714, both above the 4096 minimum) were never cached. A 0.75 ratio clears the worst observed
+ * undercount with margin: any prefix whose real size is at least the minimum has an estimate of at
+ * least ~80% of it.
  */
 import { encode } from "gpt-tokenizer";
 import type {
@@ -60,8 +76,9 @@ export const MIN_CACHEABLE_TOKENS: ReadonlyArray<readonly [prefix: string, minTo
 ];
 
 /**
- * The cacheable-prefix minimum for `model`. An unknown model gets the conservative 4096 so the
- * provider never risks a write premium on a prefix the API may refuse to cache.
+ * The cacheable-prefix minimum for `model`. An unknown model gets the conservative 4096 (the
+ * largest minimum in any current model family), so the guard threshold for an unrecognised model
+ * is never lower than for a known one.
  */
 export function minCacheableTokens(model: string): number {
     let best: { len: number; min: number } | undefined;
@@ -71,6 +88,18 @@ export function minCacheableTokens(model: string): number {
         }
     }
     return best?.min ?? UNKNOWN_MODEL_MIN_CACHEABLE_TOKENS;
+}
+
+/**
+ * Fraction of the model minimum that the (lower-bound) token estimate must reach before a
+ * breakpoint is placed. Calibrated from the measured worst undercount of 20% (ebfe7421 CG): a
+ * prefix the API counts at >= the minimum estimates at >= ~80% of it, which clears 0.75.
+ */
+export const CACHE_GUARD_SAFETY_RATIO = 0.75;
+
+/** The estimated-token threshold the guard compares against: `ceil(minCacheableTokens * 0.75)`. */
+export function cacheGuardThreshold(model: string): number {
+    return Math.ceil(minCacheableTokens(model) * CACHE_GUARD_SAFETY_RATIO);
 }
 
 /** The single breakpoint shape this provider ever emits: 5-minute TTL, no `ttl` field. */
@@ -184,7 +213,7 @@ export interface CacheBreakpointOutput {
  */
 export function applyCacheBreakpoints(input: CacheBreakpointInput): CacheBreakpointOutput {
     const { model, messages } = input;
-    const min = minCacheableTokens(model);
+    const min = cacheGuardThreshold(model);
     const placed: CacheBreakpointOutput["placed"] = [];
     let tools = input.tools;
     let system = input.system;

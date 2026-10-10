@@ -1,0 +1,65 @@
+{
+ "source": "agent-mcp api log 2026-10-10 http.request #1 (claude-haiku-4-5, task with shell_execute + web_search + web_fetch, OAuth 2-block system)",
+ "realInputTokens": 3130,
+ "request": {
+  "model": "claude-haiku-4-5",
+  "system": [
+   {
+    "type": "text",
+    "text": "You are Claude Code, Anthropic's official CLI for Claude."
+   },
+   {
+    "type": "text",
+    "text": "You are a concise assistant. Use your tools to answer."
+   }
+  ],
+  "tools": [
+   {
+    "name": "shell__shell_execute",
+    "description": "Execute a shell command\nAllowed commands: adhd-backlog, cat, echo, grep, head, ls, pwd, rg, tail, wc\nAllowed patterns: \nDefault timeout: 30s; maximum timeout: 300s; output cap: 1048576 bytes",
+    "input_schema": {
+     "type": "object",
+     "properties": {
+      "command": {
+       "type": "array",
+       "items": {
+        "type": "string"
+       },
+       "description": "Command and its arguments as array"
+      },
+      "stdin": {
+       "type": "string",
+       "description": "Input to be passed to the command via stdin"
+      },
+      "directory": {
+       "type": "string",
+       "description": "Optional working directory. Omit to use the MCP server process current working directory; relative paths are resolved from that same server process CWD."
+      },
+      "timeout": {
+       "type": "integer",
+       "description": "Maximum execution time in seconds; clamped to server maximum",
+       "minimum": 1
+      }
+     },
+     "required": [
+      "command"
+     ]
+    }
+   },
+   {
+    "type": "web_search_20250305",
+    "name": "web_search"
+   },
+   {
+    "type": "web_fetch_20250910",
+    "name": "web_fetch"
+   }
+  ],
+  "messages": [
+   {
+    "role": "user",
+    "content": "Use the backlog shell CLI (`adhd-backlog`; see entrypoint/backlog/skill/SKILL.md in /Users/nix/dev/node/adhd/.worktrees/cp-par3 for the exact `get`/query command and --input convention; a long REFERENCE.md sits next to it, read it only if needed) to fetch backlog item b726a987-ad5f-4e5d-9488-56b5ad053b34 and reply with exactly two lines: its title and its status."
+   }
+  ]
+ }
+}

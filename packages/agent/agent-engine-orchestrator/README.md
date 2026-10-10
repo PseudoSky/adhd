@@ -69,6 +69,24 @@ are tiny `{type,name}` stubs on the wire but the API expands them into full defi
 real prefix was 6.1k tokens estimated at 2.4k and was never cached (`ebfe7421`). Prefixes with no server
 tool are estimated as before. Operator view: `entrypoint/agent-mcp/docs/logging.md`.
 
+### Cache guard calibration (`ebfe7421` CG)
+
+The estimator is a `gpt-tokenizer` lower bound and stays short of the API after the server-tool credit. Three
+real `claude-haiku-4-5` turns (shell_execute + `web_search_20250305` + `web_fetch_20250910`, OAuth two-block
+system, 1/3/5 messages) were billed at `input_tokens` 3130 / 4404 / 4714 against estimates of 2532 / 3566 / 3770
+(598 / 838 / 944 short; worst 20% of the real count: fixed per-request tool overhead, per-message framing, and
+the tokenizer ratio on text). With the exact `estimate >= minimum` gate, turns 2 and 3 (both above Haiku 4.5's
+4096 minimum) were never cached. The guard therefore places a breakpoint when the estimate reaches
+`CACHE_GUARD_SAFETY_RATIO` (0.75) of the model minimum (`cacheGuardThreshold(model)`, 3072 for Haiku 4.5 and for an
+unknown model). The per-model minimum table is unchanged and an unknown model still assumes 4096. A prefix far
+below the minimum (about 1.5k tokens) and the real 3130-token turn 1 still place nothing.
+
+Premium question: Anthropic's prompt-caching docs state that a prompt shorter than the model minimum is simply not
+cached (no cache write, no premium), which is why a margin is acceptable. The live confirmation of that claim
+(one small `claude-haiku-4-5` call with `cache_control` on a ~3.5k-token prefix, reading
+`usage.cache_creation_input_tokens`) is NOT yet recorded here: it was blocked by the credential policy of the
+session that implemented this change. Record the raw usage numbers in this section when it is run.
+
 ## `claudecli` provider: MCP tools run once, in the engine
 
 `claude` is never handed your MCP servers. For each `chat()` that advertises tools, the provider starts a loopback Streamable-HTTP MCP bridge (127.0.0.1, random bearer token, Host-checked, closed when the call ends) and writes a `--mcp-config` that points only at it, one route per server so tool names stay `mcp__<server>__<tool>`. Every `tools/call` claude makes goes through the engine's `executeTool`, so each tool executes exactly once, under the engine registry client's `cwd`/`env`/srt and server/tool allowlist. Advertising MCP tools without an `executeTool` callback fails with `PROVIDER_ERROR`. Claude's own built-in tools are unchanged (`--tools` allowlist).
