@@ -6,7 +6,7 @@ import { join } from "path";
 import { generateId } from "../utils/ids.js";
 import { nowIso } from "../utils/timestamps.js";
 import type { LLMProvider, ProviderChatRequest, ProviderChatResponse } from "./types.js";
-import type { ModelUsageEntry } from "@adhd/agent-base-types";
+import type { ModelUsageEntry, PermissionAction } from "@adhd/agent-base-types";
 import type { McpServerConfig, ProviderConfig, Message } from "../validation/index.js";
 import { ToolError } from "../validation/errors.js";
 import type { EngineLogger, EngineConfig } from "../interfaces.js";
@@ -240,13 +240,55 @@ function buildUserMessage(messages: Message[]): string {
 export function computeClaudeBuiltinArgs(params: {
     compiledTools: string[] | undefined;
     allowedBuiltinTools: string[] | undefined;
-}): { effectiveAllowed: string[]; toolsArgv: string[] } {
-    const effectiveAllowed: string[] =
+    /**
+     * GOV (f9dadeaa): the engine's permission verdict per built-in (`claude-builtin.<Tool>`). A built-in
+     * whose verdict is not `'allow'` is WITHHELD from `--tools` (an `ask` cannot be answered inside the
+     * CLI's own loop, so it fails closed exactly like `deny`). Absent => no governance info.
+     */
+    builtinToolPolicy?: (tool: string) => PermissionAction;
+}): { effectiveAllowed: string[]; toolsArgv: string[]; withheld: Array<{ tool: string; verdict: PermissionAction }> } {
+    const requested: string[] =
         params.compiledTools !== undefined
             ? params.compiledTools
             : (params.allowedBuiltinTools ?? []);
 
-    return { effectiveAllowed, toolsArgv: ["--tools", effectiveAllowed.join(",")] };
+    const withheld: Array<{ tool: string; verdict: PermissionAction }> = [];
+    const effectiveAllowed = requested.filter((tool) => {
+        const verdict = params.builtinToolPolicy?.(tool) ?? "allow";
+        if (verdict === "allow") return true;
+        withheld.push({ tool, verdict });
+        return false;
+    });
+
+    return { effectiveAllowed, toolsArgv: ["--tools", effectiveAllowed.join(",")], withheld };
+}
+
+/**
+ * The CLI built-ins the agent-spec path can grant through the spec's own `tools:` header (which the
+ * engine cannot read), plus an unlisted probe name so a wildcard rule (`'*'`, `'claude-builtin.*'`)
+ * is noticed even for a built-in newer than this list.
+ */
+export const KNOWN_CLAUDE_BUILTINS: readonly string[] = [
+    "Bash", "Read", "Edit", "Write", "Glob", "Grep", "NotebookEdit", "WebFetch", "WebSearch",
+    "Task", "TodoWrite", "Skill", "Workflow", "SendMessage", "Monitor", "__unlisted_builtin__",
+];
+
+/**
+ * GOV (f9dadeaa): in agent-spec mode the engine cannot constrain the built-in set (`--tools` is
+ * not passed; the spec header governs), so a gate that would deny/ask ANY built-in cannot be honored.
+ * Returns the offending built-ins; the provider refuses to spawn rather than silently ignoring the gate.
+ */
+export function specModeGovernanceViolations(params: {
+    requested: readonly string[];
+    builtinToolPolicy?: (tool: string) => PermissionAction;
+}): Array<{ tool: string; verdict: PermissionAction }> {
+    if (!params.builtinToolPolicy) return [];
+    const out: Array<{ tool: string; verdict: PermissionAction }> = [];
+    for (const tool of new Set([...KNOWN_CLAUDE_BUILTINS, ...params.requested])) {
+        const verdict = params.builtinToolPolicy(tool);
+        if (verdict !== "allow") out.push({ tool, verdict });
+    }
+    return out;
 }
 
 // ─── agent-spec helpers ──────────────────────────────────────────────────────
@@ -559,6 +601,23 @@ export class ClaudeCliProvider implements LLMProvider {
         return { dir, agentName };
     }
 
+    /** Agent-spec mode cannot honor a gate that denies/asks any built-in: refuse to spawn (GOV f9dadeaa). */
+    private assertSpecModeGovernable(request: ProviderChatRequest): void {
+        const hasSystem = request.messages.some((m) => m.role === "system" && (m.content ?? "") !== "");
+        if (!(this.providerConfig.systemPromptIsAgentSpec === true && hasSystem)) return;
+        const violations = specModeGovernanceViolations({
+            requested: this.providerConfig.allowedBuiltinTools ?? [],
+            builtinToolPolicy: request.builtinToolPolicy,
+        });
+        if (violations.length === 0) return;
+        throw new Error(
+            "PROVIDER_ERROR: claudecli refuses to spawn in agent-spec mode (systemPromptIsAgentSpec): the permission gate " +
+            `does not allow the CLI built-in(s) ${violations.map((v) => `${v.tool}=${v.verdict}`).join(", ")}, ` +
+            "but the spec's `tools:` header (not the engine) decides which built-ins the CLI exposes, so the gate cannot be enforced. " +
+            "Use a non-spec claudecli agent with allowedBuiltinTools, or relax the claude-builtin.* permission rules."
+        );
+    }
+
     async chat(request: ProviderChatRequest): Promise<ProviderChatResponse> {
         // Exactly-once tool execution (9ed453c1 BRIDGE): claude reaches the agent's MCP tools ONLY
         // through a per-chat loopback bridge whose tools/call is `request.executeTool` (the engine's
@@ -567,6 +626,8 @@ export class ClaudeCliProvider implements LLMProvider {
         // Engine-internal pseudo-tools (`builtin__*`, e.g. request_human_input) are not MCP tools and
         // were never visible to claude; only real MCP-server tools go through the bridge.
         const advertised = bridgeableTools(request.tools ?? []);
+        // GOV (f9dadeaa): fail closed BEFORE any bridge/credential file exists.
+        this.assertSpecModeGovernable(request);
         if (advertised.length > 0 && !request.executeTool) {
             throw new Error(
                 "PROVIDER_ERROR: claudecli was given MCP tools but no executeTool callback; refusing to expose tools it cannot execute"
@@ -606,11 +667,23 @@ export class ClaudeCliProvider implements LLMProvider {
             agentSpecName = written.agentName;
         }
 
-        const { toolsArgv } = computeClaudeBuiltinArgs({
+        const { toolsArgv, withheld } = computeClaudeBuiltinArgs({
             compiledTools: this.compiledTools,
             allowedBuiltinTools: this.providerConfig.allowedBuiltinTools,
+            builtinToolPolicy: request.builtinToolPolicy,
         });
+        if (withheld.length > 0) {
+            this.logger.warn(
+                { withheld },
+                "claudecli: built-in tool(s) withheld from --tools by the permission gate (deny/ask both fail closed)",
+            );
+        }
 
+        // `--dangerously-skip-permissions` stays: headless `-p` has no one to answer a CLI permission
+        // prompt, and the bridged MCP tools would be refused without it. What bounds the CLI is NOT its
+        // permission mode but (a) `--tools <allowlist>` (only gate-allowed built-ins exist at all),
+        // (b) `--strict-mcp-config` + the loopback bridge (the ONLY MCP route, governed per call by the
+        // engine's governToolCall), and (c) the agent-spec refusal above. See README "Governance".
         const args: string[] = [
             "-p",
             "--dangerously-skip-permissions",

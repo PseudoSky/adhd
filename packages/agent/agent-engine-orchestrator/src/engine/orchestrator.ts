@@ -1,4 +1,5 @@
 import type { LLMProvider } from '../providers/types.js';
+import { CLAUDE_BUILTIN_SERVER } from '../providers/types.js';
 import { serverSideToolsForProvider } from '../providers/server-side-tools.js';
 import type { ExecutionContext, Message } from '../validation/index.js';
 import type {
@@ -149,6 +150,12 @@ function isAllowlistDenial(error: unknown): boolean {
     error.code === 'MCP_CLIENT_ERROR' &&
     ALLOWLIST_DENIAL_MARKER.test(error.message)
   );
+}
+
+/** Model-visible text for a fatal governance error: native `[CODE] message` for a ToolError. */
+function governanceErrorText(err: unknown): string {
+  if (err instanceof ToolError) return `[${err.code}] ${err.message}`;
+  return err instanceof Error ? err.message : String(err);
 }
 
 /**
@@ -427,6 +434,635 @@ export class Orchestrator {
     const delegationSessions = new Set<string>();
     // Per-task sequence for claudecli-bridge tool results (spill file names).
     let bridgeCallSeq = 0;
+
+    /**
+     * GOV (f9dadeaa): the per-call governance guard shared by the engine-native dispatch loop and the
+     * claudecli tool bridge. Runs, in order: permission gate (ADR-0008 D5/D6, incl. the `ask` chain) ->
+     * `pre:tool_call` emit + enforce -> `policy.check` -> `toolCallCount++`. Returns `refused` (a
+     * model-visible isError result) when the call must NOT execute; a thrown ToolError
+     * (BUDGET_EXCEEDED / MAX_TOOL_LOOPS_EXCEEDED / MAX_DEPTH_EXCEEDED / DELEGATION_NOT_ALLOWED) is fatal
+     * to the task, exactly as natively. `bridged` calls cannot suspend or escalate (the CLI's own tool
+     * loop is blocked inside the call), so an `ask` verdict fails closed with PERMISSION_ASK_DENIED.
+     */
+    type GovernedCall = { id: string; server: string; tool: string; arguments: unknown };
+    type GovernOutcome = {
+      resolved: { server: string; tool: string };
+      refused?: { result: unknown; isError: boolean };
+    };
+    const governToolCall = async (
+      tc: GovernedCall,
+      bridged: boolean
+    ): Promise<GovernOutcome> => {
+      const resolved = registry.resolveToolName?.(
+        `${tc.server}__${tc.tool}`
+      ) ?? { server: tc.server, tool: tc.tool };
+      const qualifiedToolName = `${resolved.server}__${resolved.tool}`;
+
+      // ── Permission gate (ADR-0008 D5/D6) — host-side, BEFORE pre:tool_call.
+      // The resolved permission map is evaluated over the tool NAME; `deny`
+      // is a typed refusal with no execution, `ask` runs the fixed chain
+      // (`suspend` → `escalate` → `deny`) below.
+      const permissionAction = config.permissionGate
+        ? config.permissionGate({
+            server: resolved.server,
+            tool: resolved.tool,
+            agentDefinition: executionContext.agentDefinition,
+          })
+        : 'allow';
+
+      // Observational verdict record (never alters the decision): `action`
+      // is the gate's raw verdict, `resolution` what the chain settled on.
+      const emitPermissionDecision = (
+        resolution: 'allow' | 'suspend' | 'escalate' | 'deny',
+        reason?: string
+      ): Promise<void> =>
+        emitObservational('permission:decision', {
+          executionContext,
+          server: resolved.server,
+          tool: resolved.tool,
+          callId: tc.id,
+          qualifiedToolName,
+          action: permissionAction,
+          resolution,
+          ...(reason !== undefined ? { reason } : {}),
+        });
+
+      if (permissionAction === 'allow') {
+        await emitPermissionDecision('allow');
+      }
+
+      if (permissionAction === 'deny') {
+        await emitPermissionDecision('deny');
+        taskStore.appendEvent({
+          taskId,
+          type: 'TOOL_CALL',
+          payload: {
+            tool: qualifiedToolName,
+            callId: tc.id,
+            permission: 'deny',
+            code: 'PERMISSION_DENIED',
+          },
+        });
+        return { resolved, refused: {
+          result: permissionRefusalResult(
+            resolved.server,
+            resolved.tool,
+            'PERMISSION_DENIED'
+          ),
+          isError: true,
+        } };
+      }
+
+      if (permissionAction === 'ask') {
+        // Fixed ask-resolution chain (ADR-0008 D6):
+        //   suspend  — iff HITL is enabled (`nativeTooling.hitl !== false`)
+        //              AND the suspension is answerable on this transport
+        //   escalate — iff a parent exists AND the child is within the
+        //              parent-chain depth bound; the ask climbs the parent
+        //              chain to the nearest INTERACTIVE ancestor (never
+        //              answered on the child). A chain with no interactive
+        //              ancestor denies AT the root (fc466f0b).
+        //   deny     — the fail-closed floor
+        //
+        // A synchronous call (one-shot `agent_name`, `background:false`) is
+        // blocked for its entire duration, so it can never receive the
+        // resumeToken: neither `suspend` nor `escalate` can be answered, and
+        // the ask degrades directly to `deny`. An unanswered ask NEVER hangs
+        // (ADR-0008 D6).
+        const hitlEnabled =
+          effectiveHitl(executionContext.agentDefinition) !== false;
+        const parentTaskId = executionContext.parentTaskId;
+        const recursionDepth = executionContext.recursionDepth ?? 0;
+        // Bounded escalation (ADR-0008 D6/D11): the ask may escalate only
+        // while the child's `recursionDepth` is strictly below
+        // `escalationMaxDepth`, and the climb visits at most that many
+        // ancestors. At/over the bound it fails closed — never unbounded,
+        // never a hang.
+        const withinEscalationBound = recursionDepth < escalationMaxDepth;
+        let walk: EscalationWalk | undefined;
+        let resolution: 'suspend' | 'escalate' | 'deny';
+        if (!suspensionAnswerable || bridged) resolution = 'deny';
+        else if (hitlEnabled) resolution = 'suspend';
+        else if (parentTaskId && withinEscalationBound) {
+          walk = walkEscalationChain(
+            taskStore,
+            sessionStore,
+            parentTaskId,
+            escalationMaxDepth
+          );
+          resolution = walk.kind === 'deliver' ? 'escalate' : 'deny';
+        } else resolution = 'deny';
+
+        if (resolution === 'deny') {
+          let reason: string;
+          if (bridged) {
+            reason =
+              'HITL suspend is not supported over the claudecli tool bridge (the CLI runs its own tool loop and cannot be parked); an ask verdict fails closed';
+          } else if (!suspensionAnswerable) {
+            reason = 'the synchronous call has no reachable approver';
+          } else if (walk?.kind === 'deny') {
+            // The climb ended in the fail-closed floor (root-terminal deny,
+            // hop cap, or a cyclic chain).
+            reason = walk.reason;
+            // Audit EVERY hop the ask visited: each passed ancestor records
+            // the forward, and the root records the terminal deny.
+            for (const hopId of walk.passed) {
+              taskStore.appendEvent({
+                taskId: hopId,
+                type: 'TOOL_CALL',
+                payload: {
+                  tool: qualifiedToolName,
+                  callId: tc.id,
+                  permission: 'ask',
+                  resolution: hopId === walk.rootId ? 'deny' : 'forward',
+                  escalatedFrom: taskId,
+                  ...(hopId === walk.rootId
+                    ? { code: 'PERMISSION_ASK_DENIED', reason }
+                    : {}),
+                },
+              });
+            }
+          } else if (parentTaskId) {
+            // A parent exists but the chain is too deep — the bound floored it.
+            reason = `escalation depth bound reached (depth ${recursionDepth} >= max ${escalationMaxDepth})`;
+          } else {
+            reason = 'HITL is disabled and the task has no parent';
+          }
+          await emitPermissionDecision('deny', reason);
+          taskStore.appendEvent({
+            taskId,
+            type: 'TOOL_CALL',
+            payload: {
+              tool: qualifiedToolName,
+              callId: tc.id,
+              permission: 'ask',
+              resolution: 'deny',
+              code: 'PERMISSION_ASK_DENIED',
+              reason,
+            },
+          });
+          return { resolved, refused: {
+            result: permissionRefusalResult(
+              resolved.server,
+              resolved.tool,
+              'PERMISSION_ASK_DENIED',
+              reason
+            ),
+            isError: true,
+          } };
+        }
+
+        if (resolution === 'suspend') {
+          // ── `suspend` — the CHILD itself is the decision surface ──────
+          // (sessioned HITL). Park the child in `awaiting_input` holding its
+          // own resumeToken; a caller resumes the child via `task_resume`.
+          const resumeToken = randomUUID();
+          let askAbortHandler: (() => void) | undefined;
+          const approvalPromise = new Promise<string>((resolve, reject) => {
+            hitlResolvers.set(taskId, resolve);
+            askAbortHandler = () => {
+              hitlResolvers.delete(taskId);
+              reject(
+                new ToolError(
+                  'PROVIDER_ERROR',
+                  'Task cancelled while awaiting permission approval'
+                )
+              );
+            };
+            signal.addEventListener('abort', askAbortHandler, { once: true });
+          });
+
+          try {
+            await taskStore.updateStatus(taskId, 'awaiting_input', {
+              resumeToken,
+            });
+          } catch (err) {
+            hitlResolvers.delete(taskId);
+            if (askAbortHandler)
+              signal.removeEventListener('abort', askAbortHandler);
+            void approvalPromise.catch(() => {});
+            throw err;
+          }
+          try {
+            emit({
+              type: 'status_change',
+              taskId,
+              status: 'awaiting_input',
+            });
+          } catch (err) {
+            logger.warn(
+              { taskId, err, status: 'awaiting_input' },
+              'Failed to emit awaiting_input status_change for permission ask; suspension continues'
+            );
+          }
+
+          taskStore.appendEvent({
+            taskId,
+            type: 'TOOL_CALL',
+            payload: {
+              tool: qualifiedToolName,
+              callId: tc.id,
+              permission: 'ask',
+              resolution: 'suspend',
+              resumeToken,
+            },
+          });
+
+          await emitPermissionDecision('suspend');
+          await emitObservational('hitl:suspend', {
+            executionContext,
+            kind: 'permission_ask',
+            parkedTaskId: taskId,
+            resumeToken,
+          });
+          let answer: string;
+          try {
+            answer = await approvalPromise.finally(() => {
+              if (askAbortHandler)
+                signal.removeEventListener('abort', askAbortHandler);
+            });
+          } catch (err) {
+            await emitObservational('hitl:resume', {
+              executionContext,
+              parkedTaskId: taskId,
+              outcome: 'cancelled',
+            });
+            throw err;
+          }
+          await emitObservational('hitl:resume', {
+            executionContext,
+            parkedTaskId: taskId,
+            outcome: isPermissionApproval(answer) ? 'approved' : 'declined',
+          });
+          await taskStore.updateStatus(taskId, 'running');
+          emit({ type: 'status_change', taskId, status: 'running' });
+
+          if (!isPermissionApproval(answer)) {
+            return { resolved, refused: {
+              result: permissionRefusalResult(
+                resolved.server,
+                resolved.tool,
+                'PERMISSION_ASK_DENIED',
+                'The approver declined.'
+              ),
+              isError: true,
+            } };
+          }
+          // Approved → fall through to pre:tool_call + policy.check + Phase 2.
+          // (No `continue` here — an approved `suspend` runs the tool exactly
+          // like an approved `escalate`; only a decline short-circuits above.)
+        }
+
+        // ── `escalate` — the nearest INTERACTIVE ANCESTOR is the surface ──
+        // The ask is DELIVERED to the ancestor the chain walk selected (the
+        // immediate parent when it is interactive): that ancestor is parked
+        // in `awaiting_input` holding the resumeToken, a resolver is
+        // registered under ITS task id, and the child waits. Non-interactive
+        // ancestors passed on the way are parked tokenless (and audited) so
+        // every hop is observable, then restored. The child is parked
+        // tokenless, so it can never approve its own ask. `task_resume` on
+        // the TARGET resolves the child's promise; on approval the child
+        // executes, on rejection it denies — exactly as if the target had
+        // answered. Bounded by `escalationMaxDepth` (checked above).
+        //
+        // This is an `else`, not a bare block: the `suspend` branch above no
+        // longer unconditionally `continue`s, so an APPROVED `suspend` must
+        // fall through to the execution phase — NOT into this escalation
+        // branch.
+        else {
+          const escalationWalk = walk as Extract<EscalationWalk, { kind: 'deliver' }>;
+          const parentId = escalationWalk.targetId;
+          const passedHops = escalationWalk.passed;
+
+          // One pending decision per task. If the parent already holds a
+          // pending escalation (two children asking at once), fail THIS ask
+          // closed rather than clobber the live resolver and hang the first.
+          if (hitlResolvers.has(parentId)) {
+            const reason = `the parent task '${parentId}' already has a pending approval request`;
+            await emitPermissionDecision('deny', reason);
+            taskStore.appendEvent({
+              taskId,
+              type: 'TOOL_CALL',
+              payload: {
+                tool: qualifiedToolName,
+                callId: tc.id,
+                permission: 'ask',
+                resolution: 'deny',
+                code: 'PERMISSION_ASK_DENIED',
+                reason,
+              },
+            });
+            return { resolved, refused: {
+              result: permissionRefusalResult(
+                resolved.server,
+                resolved.tool,
+                'PERMISSION_ASK_DENIED',
+                reason
+              ),
+              isError: true,
+            } };
+          }
+
+          // Remember each hop's pre-ask status (the target and every passed
+          // non-interactive ancestor) so it can be restored once the
+          // decision lands (best-effort; `read` is optional on the store).
+          const priorStatusOf = (id: string): string => {
+            try {
+              return taskStore.read?.(id)?.status ?? 'running';
+            } catch {
+              return 'running';
+            }
+          };
+          const parentPriorStatus = priorStatusOf(parentId);
+          const hopPriorStatus = new Map<string, string>(
+            passedHops.map((id) => [id, priorStatusOf(id)])
+          );
+          // Every ancestor actually parked so far, for restore-on-failure.
+          const parkedHops: string[] = [];
+
+          const resumeToken = randomUUID();
+          let askAbortHandler: (() => void) | undefined;
+          const approvalPromise = new Promise<string>((resolve, reject) => {
+            hitlResolvers.set(parentId, resolve);
+            askAbortHandler = () => {
+              hitlResolvers.delete(parentId);
+              reject(
+                new ToolError(
+                  'PROVIDER_ERROR',
+                  'Task cancelled while awaiting parent approval'
+                )
+              );
+            };
+            signal.addEventListener('abort', askAbortHandler, { once: true });
+          });
+
+          let parentParked = false;
+          try {
+            // Park the PARENT first — it owns the resumeToken and is the
+            // observable surface a caller answers.
+            await taskStore.updateStatus(parentId, 'awaiting_input', {
+              resumeToken,
+            });
+            parentParked = true;
+            emit({
+              type: 'status_change',
+              taskId: parentId,
+              status: 'awaiting_input',
+            });
+            // Park every passed non-interactive ancestor tokenless: each hop
+            // is observably waiting on the decision, but only the target
+            // holds the token, so no intermediate can answer the ask.
+            for (const hopId of passedHops) {
+              await taskStore.updateStatus(hopId, 'awaiting_input', {
+                resumeToken: null,
+              });
+              parkedHops.push(hopId);
+              emit({
+                type: 'status_change',
+                taskId: hopId,
+                status: 'awaiting_input',
+              });
+            }
+            // Park the CHILD tokenless (`resumeToken: null` CLEARS any stale
+            // token from an earlier suspend): the child is NOT directly
+            // resumable, so a child self-approve can never satisfy the ask.
+            await taskStore.updateStatus(taskId, 'awaiting_input', {
+              resumeToken: null,
+            });
+            emit({
+              type: 'status_change',
+              taskId,
+              status: 'awaiting_input',
+            });
+          } catch (err) {
+            hitlResolvers.delete(parentId);
+            if (askAbortHandler)
+              signal.removeEventListener('abort', askAbortHandler);
+            void approvalPromise.catch(() => {});
+            if (parentParked) {
+              try {
+                await taskStore.updateStatus(parentId, parentPriorStatus);
+                emit({
+                  type: 'status_change',
+                  taskId: parentId,
+                  status: parentPriorStatus,
+                });
+              } catch {
+                // parent row vanished — nothing to restore
+              }
+            }
+            for (const hopId of parkedHops) {
+              const prior = hopPriorStatus.get(hopId) ?? 'running';
+              try {
+                await taskStore.updateStatus(hopId, prior);
+                emit({ type: 'status_change', taskId: hopId, status: prior });
+              } catch {
+                // hop row vanished — nothing to restore
+              }
+            }
+            logger.warn(
+              { taskId, parentId, err },
+              'Failed to route permission ask to the parent task; failing closed'
+            );
+            const reason = `the parent task '${parentId}' could not be reached for approval`;
+            await emitPermissionDecision('deny', reason);
+            taskStore.appendEvent({
+              taskId,
+              type: 'TOOL_CALL',
+              payload: {
+                tool: qualifiedToolName,
+                callId: tc.id,
+                permission: 'ask',
+                resolution: 'deny',
+                code: 'PERMISSION_ASK_DENIED',
+                reason,
+              },
+            });
+            return { resolved, refused: {
+              result: permissionRefusalResult(
+                resolved.server,
+                resolved.tool,
+                'PERMISSION_ASK_DENIED',
+                reason
+              ),
+              isError: true,
+            } };
+          }
+
+          // Per-hop audit: each non-interactive ancestor the ask passed
+          // through records the forward (no token — not a decision surface).
+          for (const hopId of passedHops) {
+            taskStore.appendEvent({
+              taskId: hopId,
+              type: 'TOOL_CALL',
+              payload: {
+                tool: qualifiedToolName,
+                callId: tc.id,
+                permission: 'ask',
+                resolution: 'forward',
+                escalatedFrom: taskId,
+                escalatedTo: parentId,
+              },
+            });
+          }
+          // Child-side audit: the ask escalated TO the target ancestor.
+          // Deliberately carries NO resumeToken (the child is not the
+          // decision surface).
+          taskStore.appendEvent({
+            taskId,
+            type: 'TOOL_CALL',
+            payload: {
+              tool: qualifiedToolName,
+              callId: tc.id,
+              permission: 'ask',
+              resolution: 'escalate',
+              escalatedTo: parentId,
+            },
+          });
+          // Parent-side surface: the pending decision + its resumeToken.
+          taskStore.appendEvent({
+            taskId: parentId,
+            type: 'TOOL_CALL',
+            payload: {
+              tool: qualifiedToolName,
+              callId: tc.id,
+              permission: 'ask',
+              resolution: 'escalate',
+              escalatedFrom: taskId,
+              resumeToken,
+            },
+          });
+
+          // The decision, resolved by the PARENT. The restore of BOTH tasks
+          // lives in the `finally` so it runs on EVERY outcome — including a
+          // rejection (the child signal aborting / cancellation): without it a
+          // rejected `approvalPromise` would skip the restore entirely and
+          // strand the parent in `awaiting_input` holding a dead resumeToken.
+          await emitPermissionDecision('escalate');
+          await emitObservational('hitl:suspend', {
+            executionContext,
+            kind: 'escalation',
+            parkedTaskId: parentId,
+            resumeToken,
+            escalatedFrom: taskId,
+          });
+          try {
+            let answer: string;
+            try {
+              answer = await approvalPromise;
+            } catch (err) {
+              await emitObservational('hitl:resume', {
+                executionContext,
+                parkedTaskId: parentId,
+                outcome: 'cancelled',
+              });
+              throw err;
+            }
+            await emitObservational('hitl:resume', {
+              executionContext,
+              parkedTaskId: parentId,
+              outcome: isPermissionApproval(answer)
+                ? 'approved'
+                : 'declined',
+            });
+
+            if (!isPermissionApproval(answer)) {
+              return { resolved, refused: {
+                result: permissionRefusalResult(
+                  resolved.server,
+                  resolved.tool,
+                  'PERMISSION_ASK_DENIED',
+                  'The approver declined.'
+                ),
+                isError: true,
+              } };
+            }
+            // Approved → fall through to pre:tool_call + policy.check + Phase 2.
+          } finally {
+            if (askAbortHandler)
+              signal.removeEventListener('abort', askAbortHandler);
+
+            // Restore both. The child resumes either way; the parent returns
+            // to its pre-ask status so it is not left parked forever. Each
+            // write is guarded so one failure cannot prevent the other.
+            try {
+              await taskStore.updateStatus(taskId, 'running');
+              emit({ type: 'status_change', taskId, status: 'running' });
+            } catch (err) {
+              logger.warn(
+                { taskId, err },
+                'Failed to restore child task status after an escalated ask'
+              );
+            }
+            try {
+              await taskStore.updateStatus(parentId, parentPriorStatus);
+              emit({
+                type: 'status_change',
+                taskId: parentId,
+                status: parentPriorStatus,
+              });
+            } catch (err) {
+              logger.warn(
+                { taskId, parentId, err },
+                'Failed to restore parent task status after an escalated ask'
+              );
+            }
+            for (const hopId of passedHops) {
+              const prior = hopPriorStatus.get(hopId) ?? 'running';
+              try {
+                await taskStore.updateStatus(hopId, prior);
+                emit({ type: 'status_change', taskId: hopId, status: prior });
+              } catch (err) {
+                logger.warn(
+                  { taskId, hopId, err },
+                  'Failed to restore an intermediate ancestor status after an escalated ask'
+                );
+              }
+            }
+          }
+        }
+      }
+
+      await hooks.emit('pre:tool_call', {
+        executionContext,
+        toolName: qualifiedToolName,
+        callId: tc.id,
+        toolInput: tc.arguments,
+      });
+
+      try {
+        await hooks.enforce('pre:tool_call', {
+          executionContext,
+          toolName: qualifiedToolName,
+          callId: tc.id,
+          toolInput: tc.arguments,
+        });
+      } catch (err: unknown) {
+        const tw = err as IToolWarning;
+        if (tw?.isToolWarning === true) {
+          return { resolved, refused: {
+            result: { type: 'text', text: tw.message },
+            isError: true,
+          } };
+        }
+        if (isEnforcementError(err)) {
+          throw new ToolError('BUDGET_EXCEEDED', err.message);
+        }
+        throw err;
+      }
+
+      policy.check({
+        executionContext,
+        targetTool: qualifiedToolName,
+        targetAgentName:
+          qualifiedToolName === 'agent-mcp__agent'
+            ? (tc.arguments as { name?: string })?.name
+            : undefined,
+      });
+      executionContext.toolCallCount++;
+      return { resolved };
+    };
+
     let taskSucceeded = false;
 
     try {
@@ -619,6 +1255,10 @@ export class Orchestrator {
         }
 
         let providerResponse;
+        // GOV (f9dadeaa): the first fatal governance error a bridged call hit (cap / budget /
+        // delegation). The bridge can only hand the CLI an isError result, so the task-level failure
+        // the native path throws is re-thrown here once the provider call returns.
+        let bridgeFatal: unknown;
         try {
           const baseMessages =
             contextLimit > 0
@@ -643,6 +1283,14 @@ export class Orchestrator {
             serverSideTools:
               serverSideTools.length > 0 ? serverSideTools : undefined,
             signal: composedSignal,
+            builtinToolPolicy: (builtinTool) =>
+              config.permissionGate
+                ? config.permissionGate({
+                    server: CLAUDE_BUILTIN_SERVER,
+                    tool: builtinTool,
+                    agentDefinition: executionContext.agentDefinition,
+                  })
+                : 'allow',
             executeTool: async (server, tool, args) => {
               // 9ed453c1 BLIND F6b: a bridged call gets the SAME observable treatment as an
               // engine-native one — TOOL_CALL/TOOL_RESULT events (+ stream events), BK2 argument
@@ -679,11 +1327,39 @@ export class Orchestrator {
 
               let rawResult: unknown;
               let isErr = false;
+              let isDenial = false;
+
+              // GOV (f9dadeaa): the SAME per-call guard the native loop runs (permission gate ->
+              // pre:tool_call -> policy.check -> toolCallCount++), BEFORE any allowlist check or
+              // client call. A refusal is returned to the CLI as an isError result and never executes.
+              let refusal: { result: unknown; isError: boolean } | undefined;
+              let target = { server, tool };
               try {
-                registry.assertToolAllowed?.(server, tool);
+                if (bridgeFatal !== undefined) throw bridgeFatal;
+                const governed = await governToolCall(
+                  { id: callId, server, tool, arguments: args },
+                  true
+                );
+                target = governed.resolved;
+                refusal = governed.refused;
+              } catch (err) {
+                bridgeFatal ??= err;
+                refusal = {
+                  result: governanceErrorText(err),
+                  isError: true,
+                };
+              }
+
+              if (refusal) {
+                rawResult = refusal.result;
+                isErr = true;
+              } else try {
+                registry.assertToolAllowed?.(target.server, target.tool);
                 let callArguments: unknown = args;
                 if (toolArgCoercionEnabled) {
-                  const declared = tools.find((t) => t.name === qualifiedToolName);
+                  const declared =
+                    tools.find((t) => t.name === qualifiedToolName) ??
+                    tools.find((t) => t.name === `${target.server}__${target.tool}`);
                   const coerced = coerceToolArguments(declared?.inputSchema, args);
                   if (coerced.mismatch) {
                     throw new Error(coerced.mismatch.message);
@@ -713,10 +1389,11 @@ export class Orchestrator {
                     });
                   }
                 }
-                const client = await registry.getClient(server);
-                rawResult = await client.callTool(tool, callArguments, composedSignal);
+                const client = await registry.getClient(target.server);
+                rawResult = await client.callTool(target.tool, callArguments, composedSignal);
               } catch (error) {
                 isErr = true;
+                isDenial = isAllowlistDenial(error);
                 rawResult = error instanceof Error ? error.message : String(error);
               }
 
@@ -761,7 +1438,32 @@ export class Orchestrator {
                 content: capOutcome.result,
               });
               logger.debug({ taskId, tool: qualifiedToolName, isError: isErr }, 'TOOL_RESULT');
-              return { result: capOutcome.result, isError: isErr };
+
+              if (refusal) {
+                // Refused calls get no post:/transform: hooks — identical to the native path.
+                return { result: capOutcome.result, isError: isErr };
+              }
+              await hooks.emit('post:tool_call', {
+                executionContext,
+                toolName: `${target.server}__${target.tool}`,
+                callId,
+                toolInput: args,
+                result: rawResult,
+                isError: isErr,
+                ...(isDenial ? { isDenial: true } : {}),
+                estResultTokens: estTokens,
+              });
+              const transformPayload: PostToolCallPayload = {
+                executionContext,
+                toolName: `${target.server}__${target.tool}`,
+                callId,
+                toolInput: args,
+                result: capOutcome.result,
+                isError: isErr,
+                estResultTokens: estTokens,
+              };
+              await hooks.emit('transform:tool_result', transformPayload);
+              return { result: transformPayload.result, isError: transformPayload.isError };
             },
           });
           // Attach task/session/agent ids to every raw wire record this call writes (TRC-AC2/3).
@@ -776,6 +1478,7 @@ export class Orchestrator {
               )
             : callProvider());
         } catch (error) {
+          if (bridgeFatal !== undefined) throw bridgeFatal;
           if (signal.aborted) {
             throw new ToolError('PROVIDER_ERROR', 'Task was cancelled');
           }
@@ -835,6 +1538,7 @@ export class Orchestrator {
             }`
           );
         }
+        if (bridgeFatal !== undefined) throw bridgeFatal;
 
         const assistantMessage: Message = {
           ...providerResponse.message,
@@ -1089,617 +1793,14 @@ export class Orchestrator {
             continue;
           }
 
-          const resolved = registry.resolveToolName?.(
-            `${tc.server}__${tc.tool}`
-          ) ?? { server: tc.server, tool: tc.tool };
-          const qualifiedToolName = `${resolved.server}__${resolved.tool}`;
-
-          // ── Permission gate (ADR-0008 D5/D6) — host-side, BEFORE pre:tool_call.
-          // The resolved permission map is evaluated over the tool NAME; `deny`
-          // is a typed refusal with no execution, `ask` runs the fixed chain
-          // (`suspend` → `escalate` → `deny`) below.
-          const permissionAction = config.permissionGate
-            ? config.permissionGate({
-                server: resolved.server,
-                tool: resolved.tool,
-                agentDefinition: executionContext.agentDefinition,
-              })
-            : 'allow';
-
-          // Observational verdict record (never alters the decision): `action`
-          // is the gate's raw verdict, `resolution` what the chain settled on.
-          const emitPermissionDecision = (
-            resolution: 'allow' | 'suspend' | 'escalate' | 'deny',
-            reason?: string
-          ): Promise<void> =>
-            emitObservational('permission:decision', {
-              executionContext,
-              server: resolved.server,
-              tool: resolved.tool,
-              callId: tc.id,
-              qualifiedToolName,
-              action: permissionAction,
-              resolution,
-              ...(reason !== undefined ? { reason } : {}),
-            });
-
-          if (permissionAction === 'allow') {
-            await emitPermissionDecision('allow');
-          }
-
-          if (permissionAction === 'deny') {
-            await emitPermissionDecision('deny');
-            taskStore.appendEvent({
-              taskId,
-              type: 'TOOL_CALL',
-              payload: {
-                tool: qualifiedToolName,
-                callId: tc.id,
-                permission: 'deny',
-                code: 'PERMISSION_DENIED',
-              },
-            });
-            warningResults.set(tc.id, {
-              result: permissionRefusalResult(
-                resolved.server,
-                resolved.tool,
-                'PERMISSION_DENIED'
-              ),
-              isError: true,
-            });
+          const governed = await governToolCall(
+            { id: tc.id, server: tc.server, tool: tc.tool, arguments: tc.arguments },
+            false
+          );
+          if (governed.refused) {
+            warningResults.set(tc.id, governed.refused);
             continue;
           }
-
-          if (permissionAction === 'ask') {
-            // Fixed ask-resolution chain (ADR-0008 D6):
-            //   suspend  — iff HITL is enabled (`nativeTooling.hitl !== false`)
-            //              AND the suspension is answerable on this transport
-            //   escalate — iff a parent exists AND the child is within the
-            //              parent-chain depth bound; the ask climbs the parent
-            //              chain to the nearest INTERACTIVE ancestor (never
-            //              answered on the child). A chain with no interactive
-            //              ancestor denies AT the root (fc466f0b).
-            //   deny     — the fail-closed floor
-            //
-            // A synchronous call (one-shot `agent_name`, `background:false`) is
-            // blocked for its entire duration, so it can never receive the
-            // resumeToken: neither `suspend` nor `escalate` can be answered, and
-            // the ask degrades directly to `deny`. An unanswered ask NEVER hangs
-            // (ADR-0008 D6).
-            const hitlEnabled =
-              effectiveHitl(executionContext.agentDefinition) !== false;
-            const parentTaskId = executionContext.parentTaskId;
-            const recursionDepth = executionContext.recursionDepth ?? 0;
-            // Bounded escalation (ADR-0008 D6/D11): the ask may escalate only
-            // while the child's `recursionDepth` is strictly below
-            // `escalationMaxDepth`, and the climb visits at most that many
-            // ancestors. At/over the bound it fails closed — never unbounded,
-            // never a hang.
-            const withinEscalationBound = recursionDepth < escalationMaxDepth;
-            let walk: EscalationWalk | undefined;
-            let resolution: 'suspend' | 'escalate' | 'deny';
-            if (!suspensionAnswerable) resolution = 'deny';
-            else if (hitlEnabled) resolution = 'suspend';
-            else if (parentTaskId && withinEscalationBound) {
-              walk = walkEscalationChain(
-                taskStore,
-                sessionStore,
-                parentTaskId,
-                escalationMaxDepth
-              );
-              resolution = walk.kind === 'deliver' ? 'escalate' : 'deny';
-            } else resolution = 'deny';
-
-            if (resolution === 'deny') {
-              let reason: string;
-              if (!suspensionAnswerable) {
-                reason = 'the synchronous call has no reachable approver';
-              } else if (walk?.kind === 'deny') {
-                // The climb ended in the fail-closed floor (root-terminal deny,
-                // hop cap, or a cyclic chain).
-                reason = walk.reason;
-                // Audit EVERY hop the ask visited: each passed ancestor records
-                // the forward, and the root records the terminal deny.
-                for (const hopId of walk.passed) {
-                  taskStore.appendEvent({
-                    taskId: hopId,
-                    type: 'TOOL_CALL',
-                    payload: {
-                      tool: qualifiedToolName,
-                      callId: tc.id,
-                      permission: 'ask',
-                      resolution: hopId === walk.rootId ? 'deny' : 'forward',
-                      escalatedFrom: taskId,
-                      ...(hopId === walk.rootId
-                        ? { code: 'PERMISSION_ASK_DENIED', reason }
-                        : {}),
-                    },
-                  });
-                }
-              } else if (parentTaskId) {
-                // A parent exists but the chain is too deep — the bound floored it.
-                reason = `escalation depth bound reached (depth ${recursionDepth} >= max ${escalationMaxDepth})`;
-              } else {
-                reason = 'HITL is disabled and the task has no parent';
-              }
-              await emitPermissionDecision('deny', reason);
-              taskStore.appendEvent({
-                taskId,
-                type: 'TOOL_CALL',
-                payload: {
-                  tool: qualifiedToolName,
-                  callId: tc.id,
-                  permission: 'ask',
-                  resolution: 'deny',
-                  code: 'PERMISSION_ASK_DENIED',
-                  reason,
-                },
-              });
-              warningResults.set(tc.id, {
-                result: permissionRefusalResult(
-                  resolved.server,
-                  resolved.tool,
-                  'PERMISSION_ASK_DENIED',
-                  reason
-                ),
-                isError: true,
-              });
-              continue;
-            }
-
-            if (resolution === 'suspend') {
-              // ── `suspend` — the CHILD itself is the decision surface ──────
-              // (sessioned HITL). Park the child in `awaiting_input` holding its
-              // own resumeToken; a caller resumes the child via `task_resume`.
-              const resumeToken = randomUUID();
-              let askAbortHandler: (() => void) | undefined;
-              const approvalPromise = new Promise<string>((resolve, reject) => {
-                hitlResolvers.set(taskId, resolve);
-                askAbortHandler = () => {
-                  hitlResolvers.delete(taskId);
-                  reject(
-                    new ToolError(
-                      'PROVIDER_ERROR',
-                      'Task cancelled while awaiting permission approval'
-                    )
-                  );
-                };
-                signal.addEventListener('abort', askAbortHandler, { once: true });
-              });
-
-              try {
-                await taskStore.updateStatus(taskId, 'awaiting_input', {
-                  resumeToken,
-                });
-              } catch (err) {
-                hitlResolvers.delete(taskId);
-                if (askAbortHandler)
-                  signal.removeEventListener('abort', askAbortHandler);
-                void approvalPromise.catch(() => {});
-                throw err;
-              }
-              try {
-                emit({
-                  type: 'status_change',
-                  taskId,
-                  status: 'awaiting_input',
-                });
-              } catch (err) {
-                logger.warn(
-                  { taskId, err, status: 'awaiting_input' },
-                  'Failed to emit awaiting_input status_change for permission ask; suspension continues'
-                );
-              }
-
-              taskStore.appendEvent({
-                taskId,
-                type: 'TOOL_CALL',
-                payload: {
-                  tool: qualifiedToolName,
-                  callId: tc.id,
-                  permission: 'ask',
-                  resolution: 'suspend',
-                  resumeToken,
-                },
-              });
-
-              await emitPermissionDecision('suspend');
-              await emitObservational('hitl:suspend', {
-                executionContext,
-                kind: 'permission_ask',
-                parkedTaskId: taskId,
-                resumeToken,
-              });
-              let answer: string;
-              try {
-                answer = await approvalPromise.finally(() => {
-                  if (askAbortHandler)
-                    signal.removeEventListener('abort', askAbortHandler);
-                });
-              } catch (err) {
-                await emitObservational('hitl:resume', {
-                  executionContext,
-                  parkedTaskId: taskId,
-                  outcome: 'cancelled',
-                });
-                throw err;
-              }
-              await emitObservational('hitl:resume', {
-                executionContext,
-                parkedTaskId: taskId,
-                outcome: isPermissionApproval(answer) ? 'approved' : 'declined',
-              });
-              await taskStore.updateStatus(taskId, 'running');
-              emit({ type: 'status_change', taskId, status: 'running' });
-
-              if (!isPermissionApproval(answer)) {
-                warningResults.set(tc.id, {
-                  result: permissionRefusalResult(
-                    resolved.server,
-                    resolved.tool,
-                    'PERMISSION_ASK_DENIED',
-                    'The approver declined.'
-                  ),
-                  isError: true,
-                });
-                continue;
-              }
-              // Approved → fall through to pre:tool_call + policy.check + Phase 2.
-              // (No `continue` here — an approved `suspend` runs the tool exactly
-              // like an approved `escalate`; only a decline short-circuits above.)
-            }
-
-            // ── `escalate` — the nearest INTERACTIVE ANCESTOR is the surface ──
-            // The ask is DELIVERED to the ancestor the chain walk selected (the
-            // immediate parent when it is interactive): that ancestor is parked
-            // in `awaiting_input` holding the resumeToken, a resolver is
-            // registered under ITS task id, and the child waits. Non-interactive
-            // ancestors passed on the way are parked tokenless (and audited) so
-            // every hop is observable, then restored. The child is parked
-            // tokenless, so it can never approve its own ask. `task_resume` on
-            // the TARGET resolves the child's promise; on approval the child
-            // executes, on rejection it denies — exactly as if the target had
-            // answered. Bounded by `escalationMaxDepth` (checked above).
-            //
-            // This is an `else`, not a bare block: the `suspend` branch above no
-            // longer unconditionally `continue`s, so an APPROVED `suspend` must
-            // fall through to the execution phase — NOT into this escalation
-            // branch.
-            else {
-              const escalationWalk = walk as Extract<EscalationWalk, { kind: 'deliver' }>;
-              const parentId = escalationWalk.targetId;
-              const passedHops = escalationWalk.passed;
-
-              // One pending decision per task. If the parent already holds a
-              // pending escalation (two children asking at once), fail THIS ask
-              // closed rather than clobber the live resolver and hang the first.
-              if (hitlResolvers.has(parentId)) {
-                const reason = `the parent task '${parentId}' already has a pending approval request`;
-                await emitPermissionDecision('deny', reason);
-                taskStore.appendEvent({
-                  taskId,
-                  type: 'TOOL_CALL',
-                  payload: {
-                    tool: qualifiedToolName,
-                    callId: tc.id,
-                    permission: 'ask',
-                    resolution: 'deny',
-                    code: 'PERMISSION_ASK_DENIED',
-                    reason,
-                  },
-                });
-                warningResults.set(tc.id, {
-                  result: permissionRefusalResult(
-                    resolved.server,
-                    resolved.tool,
-                    'PERMISSION_ASK_DENIED',
-                    reason
-                  ),
-                  isError: true,
-                });
-                continue;
-              }
-
-              // Remember each hop's pre-ask status (the target and every passed
-              // non-interactive ancestor) so it can be restored once the
-              // decision lands (best-effort; `read` is optional on the store).
-              const priorStatusOf = (id: string): string => {
-                try {
-                  return taskStore.read?.(id)?.status ?? 'running';
-                } catch {
-                  return 'running';
-                }
-              };
-              const parentPriorStatus = priorStatusOf(parentId);
-              const hopPriorStatus = new Map<string, string>(
-                passedHops.map((id) => [id, priorStatusOf(id)])
-              );
-              // Every ancestor actually parked so far, for restore-on-failure.
-              const parkedHops: string[] = [];
-
-              const resumeToken = randomUUID();
-              let askAbortHandler: (() => void) | undefined;
-              const approvalPromise = new Promise<string>((resolve, reject) => {
-                hitlResolvers.set(parentId, resolve);
-                askAbortHandler = () => {
-                  hitlResolvers.delete(parentId);
-                  reject(
-                    new ToolError(
-                      'PROVIDER_ERROR',
-                      'Task cancelled while awaiting parent approval'
-                    )
-                  );
-                };
-                signal.addEventListener('abort', askAbortHandler, { once: true });
-              });
-
-              let parentParked = false;
-              try {
-                // Park the PARENT first — it owns the resumeToken and is the
-                // observable surface a caller answers.
-                await taskStore.updateStatus(parentId, 'awaiting_input', {
-                  resumeToken,
-                });
-                parentParked = true;
-                emit({
-                  type: 'status_change',
-                  taskId: parentId,
-                  status: 'awaiting_input',
-                });
-                // Park every passed non-interactive ancestor tokenless: each hop
-                // is observably waiting on the decision, but only the target
-                // holds the token, so no intermediate can answer the ask.
-                for (const hopId of passedHops) {
-                  await taskStore.updateStatus(hopId, 'awaiting_input', {
-                    resumeToken: null,
-                  });
-                  parkedHops.push(hopId);
-                  emit({
-                    type: 'status_change',
-                    taskId: hopId,
-                    status: 'awaiting_input',
-                  });
-                }
-                // Park the CHILD tokenless (`resumeToken: null` CLEARS any stale
-                // token from an earlier suspend): the child is NOT directly
-                // resumable, so a child self-approve can never satisfy the ask.
-                await taskStore.updateStatus(taskId, 'awaiting_input', {
-                  resumeToken: null,
-                });
-                emit({
-                  type: 'status_change',
-                  taskId,
-                  status: 'awaiting_input',
-                });
-              } catch (err) {
-                hitlResolvers.delete(parentId);
-                if (askAbortHandler)
-                  signal.removeEventListener('abort', askAbortHandler);
-                void approvalPromise.catch(() => {});
-                if (parentParked) {
-                  try {
-                    await taskStore.updateStatus(parentId, parentPriorStatus);
-                    emit({
-                      type: 'status_change',
-                      taskId: parentId,
-                      status: parentPriorStatus,
-                    });
-                  } catch {
-                    // parent row vanished — nothing to restore
-                  }
-                }
-                for (const hopId of parkedHops) {
-                  const prior = hopPriorStatus.get(hopId) ?? 'running';
-                  try {
-                    await taskStore.updateStatus(hopId, prior);
-                    emit({ type: 'status_change', taskId: hopId, status: prior });
-                  } catch {
-                    // hop row vanished — nothing to restore
-                  }
-                }
-                logger.warn(
-                  { taskId, parentId, err },
-                  'Failed to route permission ask to the parent task; failing closed'
-                );
-                const reason = `the parent task '${parentId}' could not be reached for approval`;
-                await emitPermissionDecision('deny', reason);
-                taskStore.appendEvent({
-                  taskId,
-                  type: 'TOOL_CALL',
-                  payload: {
-                    tool: qualifiedToolName,
-                    callId: tc.id,
-                    permission: 'ask',
-                    resolution: 'deny',
-                    code: 'PERMISSION_ASK_DENIED',
-                    reason,
-                  },
-                });
-                warningResults.set(tc.id, {
-                  result: permissionRefusalResult(
-                    resolved.server,
-                    resolved.tool,
-                    'PERMISSION_ASK_DENIED',
-                    reason
-                  ),
-                  isError: true,
-                });
-                continue;
-              }
-
-              // Per-hop audit: each non-interactive ancestor the ask passed
-              // through records the forward (no token — not a decision surface).
-              for (const hopId of passedHops) {
-                taskStore.appendEvent({
-                  taskId: hopId,
-                  type: 'TOOL_CALL',
-                  payload: {
-                    tool: qualifiedToolName,
-                    callId: tc.id,
-                    permission: 'ask',
-                    resolution: 'forward',
-                    escalatedFrom: taskId,
-                    escalatedTo: parentId,
-                  },
-                });
-              }
-              // Child-side audit: the ask escalated TO the target ancestor.
-              // Deliberately carries NO resumeToken (the child is not the
-              // decision surface).
-              taskStore.appendEvent({
-                taskId,
-                type: 'TOOL_CALL',
-                payload: {
-                  tool: qualifiedToolName,
-                  callId: tc.id,
-                  permission: 'ask',
-                  resolution: 'escalate',
-                  escalatedTo: parentId,
-                },
-              });
-              // Parent-side surface: the pending decision + its resumeToken.
-              taskStore.appendEvent({
-                taskId: parentId,
-                type: 'TOOL_CALL',
-                payload: {
-                  tool: qualifiedToolName,
-                  callId: tc.id,
-                  permission: 'ask',
-                  resolution: 'escalate',
-                  escalatedFrom: taskId,
-                  resumeToken,
-                },
-              });
-
-              // The decision, resolved by the PARENT. The restore of BOTH tasks
-              // lives in the `finally` so it runs on EVERY outcome — including a
-              // rejection (the child signal aborting / cancellation): without it a
-              // rejected `approvalPromise` would skip the restore entirely and
-              // strand the parent in `awaiting_input` holding a dead resumeToken.
-              await emitPermissionDecision('escalate');
-              await emitObservational('hitl:suspend', {
-                executionContext,
-                kind: 'escalation',
-                parkedTaskId: parentId,
-                resumeToken,
-                escalatedFrom: taskId,
-              });
-              try {
-                let answer: string;
-                try {
-                  answer = await approvalPromise;
-                } catch (err) {
-                  await emitObservational('hitl:resume', {
-                    executionContext,
-                    parkedTaskId: parentId,
-                    outcome: 'cancelled',
-                  });
-                  throw err;
-                }
-                await emitObservational('hitl:resume', {
-                  executionContext,
-                  parkedTaskId: parentId,
-                  outcome: isPermissionApproval(answer)
-                    ? 'approved'
-                    : 'declined',
-                });
-
-                if (!isPermissionApproval(answer)) {
-                  warningResults.set(tc.id, {
-                    result: permissionRefusalResult(
-                      resolved.server,
-                      resolved.tool,
-                      'PERMISSION_ASK_DENIED',
-                      'The approver declined.'
-                    ),
-                    isError: true,
-                  });
-                  continue;
-                }
-                // Approved → fall through to pre:tool_call + policy.check + Phase 2.
-              } finally {
-                if (askAbortHandler)
-                  signal.removeEventListener('abort', askAbortHandler);
-
-                // Restore both. The child resumes either way; the parent returns
-                // to its pre-ask status so it is not left parked forever. Each
-                // write is guarded so one failure cannot prevent the other.
-                try {
-                  await taskStore.updateStatus(taskId, 'running');
-                  emit({ type: 'status_change', taskId, status: 'running' });
-                } catch (err) {
-                  logger.warn(
-                    { taskId, err },
-                    'Failed to restore child task status after an escalated ask'
-                  );
-                }
-                try {
-                  await taskStore.updateStatus(parentId, parentPriorStatus);
-                  emit({
-                    type: 'status_change',
-                    taskId: parentId,
-                    status: parentPriorStatus,
-                  });
-                } catch (err) {
-                  logger.warn(
-                    { taskId, parentId, err },
-                    'Failed to restore parent task status after an escalated ask'
-                  );
-                }
-                for (const hopId of passedHops) {
-                  const prior = hopPriorStatus.get(hopId) ?? 'running';
-                  try {
-                    await taskStore.updateStatus(hopId, prior);
-                    emit({ type: 'status_change', taskId: hopId, status: prior });
-                  } catch (err) {
-                    logger.warn(
-                      { taskId, hopId, err },
-                      'Failed to restore an intermediate ancestor status after an escalated ask'
-                    );
-                  }
-                }
-              }
-            }
-          }
-
-          await hooks.emit('pre:tool_call', {
-            executionContext,
-            toolName: qualifiedToolName,
-            callId: tc.id,
-            toolInput: tc.arguments,
-          });
-
-          try {
-            await hooks.enforce('pre:tool_call', {
-              executionContext,
-              toolName: qualifiedToolName,
-              callId: tc.id,
-              toolInput: tc.arguments,
-            });
-          } catch (err: unknown) {
-            const tw = err as IToolWarning;
-            if (tw?.isToolWarning === true) {
-              warningResults.set(tc.id, {
-                result: { type: 'text', text: tw.message },
-                isError: true,
-              });
-              continue;
-            }
-            if (isEnforcementError(err)) {
-              throw new ToolError('BUDGET_EXCEEDED', err.message);
-            }
-            throw err;
-          }
-
-          policy.check({
-            executionContext,
-            targetTool: qualifiedToolName,
-            targetAgentName:
-              qualifiedToolName === 'agent-mcp__agent'
-                ? (tc.arguments as { name?: string })?.name
-                : undefined,
-          });
-          executionContext.toolCallCount++;
         }
 
         // Phase 2 — Promise.all concurrent execution

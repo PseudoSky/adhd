@@ -112,6 +112,15 @@ Tool results the CLI receives through the loopback bridge are bounded by the sam
 
 The CLI executes its own built-in tools inside the one invocation, so the adapter only answers `tool_use` blocks for `mcp__`-prefixed tools the agent declared.
 
+## `claudecli` provider: governance (permission gate, caps, hooks)
+
+The `claude` CLI runs its own tool loop, so its tool calls bypass the engine's dispatch loop. They are governed anyway (f9dadeaa):
+
+- **Bridged MCP tools** (every tool of the agent's `mcpServers`) pass through the same per-call guard as an API-path call, before the allowlist check and before the server is called: `permissionGate` (`deny` -> `PERMISSION_DENIED` result, never executed), `pre:tool_call`, `policy.check` + `toolCallCount++` (so `maxToolLoops`, recursion depth and delegation allowlists bound them), then `post:tool_call` and `transform:tool_result`. A cap/budget/delegation violation is returned to the CLI as an `isError` result `[MAX_TOOL_LOOPS_EXCEEDED] ...` and the task then fails with that same error, exactly like the native path.
+- **`ask` fails closed on the bridge.** A permission `ask` cannot be answered inside the CLI's loop (no HITL suspend or parent escalation over the bridge), so the call is refused with `PERMISSION_ASK_DENIED` ("HITL suspend is not supported over the claudecli tool bridge"). Use `allow` or `deny` for tools a claudecli agent may reach.
+- **CLI built-ins** (`Bash`, `Read`, `Edit`, `Write`, ...) are gated as server `claude-builtin` (rule `claude-builtin.Bash`, or `claude-builtin.*`; a bare `*` rule matches too). A built-in whose verdict is `deny` or `ask` is removed from the `--tools` allowlist, so it does not exist for the child. In `systemPromptIsAgentSpec` mode the spec's `tools:` header, not the engine, chooses built-ins, so a gate that denies/asks any built-in makes the provider **refuse to spawn** (`PROVIDER_ERROR ... refuses to spawn in agent-spec mode`) instead of ignoring the gate.
+- **`--dangerously-skip-permissions` is kept**, because headless `-p` has nobody to answer a CLI permission prompt. What it leaves reachable is exactly: the `--tools` allowlist above, the single loopback bridge (`--strict-mcp-config`), and nothing else. The CLI's own permission mode is not a control the engine relies on.
+
 ## Architecture
 
 - Part of the 6-package agent framework family

@@ -1,6 +1,13 @@
 import type { Message } from '../validation/index.js';
-import type { ToolDefinition, TokenUsage } from '@adhd/agent-base-types';
+import type { PermissionAction, ToolDefinition, TokenUsage } from '@adhd/agent-base-types';
 export type { ToolDefinition, TokenUsage };
+
+/**
+ * The server name the permission gate sees for the `claude` CLI's own built-in tools
+ * (`claude-builtin.Bash`, `claude-builtin.Read`, ...). Rules scope them like any server-qualified
+ * tool name (`'claude-builtin.*': 'deny'`); a `'*'` rule also matches them.
+ */
+export const CLAUDE_BUILTIN_SERVER = 'claude-builtin';
 
 /**
  * A provider-native (server-side) tool entry: emitted to the provider API as
@@ -20,6 +27,14 @@ export interface ProviderChatRequest {
   /** Provider-native type-tagged tools the provider executes server-side. */
   serverSideTools?: ServerSideTool[];
   signal?: AbortSignal;
+  /**
+   * GOV (f9dadeaa): the permission verdict for one provider-INTERNAL built-in tool (the `claude`
+   * CLI's Bash/Read/Edit/Write/...). The engine answers it from its `permissionGate` with
+   * `server = {@link CLAUDE_BUILTIN_SERVER}`. A provider that runs its own tool loop MUST NOT expose
+   * a built-in whose verdict is not `'allow'` (`'ask'` cannot be answered inside the provider's loop).
+   * Absent => no governance info (providers treat every built-in as allowed).
+   */
+  builtinToolPolicy?: (tool: string) => PermissionAction;
   executeTool?: (
     server: string,
     tool: string,
