@@ -18,6 +18,7 @@ import type { EngineConfig } from "../interfaces.js";
 import { TripRegistry } from "../providers/provider-failure.js";
 import type { ProviderChatRequest } from "../providers/types.js";
 import { FakeClock } from "./fixtures/fake-clock.js";
+import type { IReplayResult } from "./fixtures/claudecli-replay-harness.js";
 import { fixture, parseStream, replayStream, serializeStream, silentLogger } from "./fixtures/claudecli-replay-harness.js";
 
 vi.mock("child_process", () => ({ spawn: vi.fn() }));
@@ -42,7 +43,7 @@ interface ITaskUsage {
   input_tokens: number; output_tokens: number; model_calls: number; est_cost_usd: number | null;
   cost_status: string | null; cli_reported_cost_usd: number | null; is_complete: number; cache_creation_1h_tokens: number | null;
 }
-const usageRow = (sqlite: { prepare: (s: string) => { get: (...a: unknown[]) => unknown } }, taskId: string): ITaskUsage | undefined =>
+const usageRow = (sqlite: IReplayResult["sqlite"], taskId: string): ITaskUsage | undefined =>
   sqlite.prepare("SELECT * FROM task_usage WHERE task_id = ?").get(taskId) as ITaskUsage | undefined;
 
 describe("afa37093: usage of failed claudecli runs", () => {
