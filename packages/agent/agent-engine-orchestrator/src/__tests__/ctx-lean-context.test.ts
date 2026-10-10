@@ -165,9 +165,15 @@ describe("9ed453c1 CTX AC1: schema-lean tool advertisement", () => {
 });
 
 describe("9ed453c1 CTX AC2: the claudecli bridge result is bounded by the BK1 cap", () => {
-  const BIG = "h".repeat(5_000) + "m".repeat(75_000) + "t".repeat(4_000);
+  // a9b1e32c AC1: word-shaped filler (space-separated), NOT single-character runs. The orchestrator
+  // tokenizes the FULL result (`encode` from gpt-tokenizer) before capping; a 75 000-char run of one
+  // character is pathological for BPE merging and cost 3.2 s alone / 8.0 s under 8 concurrent
+  // processes on the first (cold) call, blowing vitest's 5000 ms limit. The same 84 KB as
+  // space-separated tokens encodes in ~4 ms (5-33 ms under the same load). Measured 2026-10-10,
+  // dispatch-2026-10-06-48dc. Section boundaries (5000 head / 75 000 middle / 4 000 tail) are preserved.
+  const BIG = "h ".repeat(2_499) + "h " + "m ".repeat(37_500) + "t ".repeat(1_999) + "t";
 
-  it("9ed453c1 CTX AC2: an 84 KB result reaches the CLI as head+tail within the default cap (+ marker)", async () => {
+  it("9ed453c1 CTX AC2 + a9b1e32c AC1: an 84 KB result reaches the CLI as head+tail within the default cap (+ marker)", async () => {
     const { bridgeResult } = await drive({ tools: [{ name: "s__big", description: "d", inputSchema: { type: "object", properties: {} } }], toolResult: BIG });
     const s = bridgeResult as string;
     expect(typeof s).toBe("string");
@@ -175,7 +181,7 @@ describe("9ed453c1 CTX AC2: the claudecli bridge result is bounded by the BK1 ca
     expect(s).toContain("[tool result truncated");
     expect(s.startsWith("h")).toBe(true);
     expect(s.endsWith("t")).toBe(true);
-    expect(s).not.toContain("m".repeat(1_000));
+    expect(s).not.toContain("m ".repeat(500));
   });
 
   it("9ed453c1 CTX AC2: a result under the cap is passed through untouched", async () => {
