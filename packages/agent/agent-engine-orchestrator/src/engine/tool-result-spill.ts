@@ -17,19 +17,33 @@
  *   the head+tail cap outcome is returned and `onSpillError` is told why.
  * - Hardening: dirs are created `0700` and verified to be real directories
  *   owned by this user (a symlinked dir is refused, never followed); files are
- *   created `0600` with `O_EXCL | O_NOFOLLOW` (a planted entry at the target
- *   name is unlinked — the link, never its target — and the create retried).
- * - Cleanup: {@link sweepToolResultSpill} removes task dirs older than the TTL
- *   (run once per process per dir on the first spill); {@link removeTaskSpill}
- *   removes one task's dir.
+ *   created `0600` with `O_EXCL | O_NOFOLLOW` (a planted symlink at the target
+ *   name is unlinked — the link, never its target — and the create retried; an
+ *   existing REGULAR file is never overwritten or unlinked: a new unique name is
+ *   chosen).
+ * - Names are collision-free by construction: an id that is already a safe
+ *   segment is used verbatim; any other id is sanitized and suffixed with `~` and
+ *   a hash of the raw id (`~` is not a safe-segment character, so the two forms
+ *   cannot meet).
+ * - Ownership: the spill dir is claimed with a root marker ({@link SPILL_ROOT_MARKER})
+ *   and each task dir with a task marker ({@link SPILL_TASK_MARKER}). A non-empty dir
+ *   with no root marker is FOREIGN and is refused (never used, never swept); the
+ *   sweep only ever removes marker-bearing task dirs it created, never anything else.
+ * - Cleanup: {@link sweepToolResultSpill} removes task dirs whose newest activity
+ *   (the task marker, refreshed on every spill, and the newest file inside) is older
+ *   than the TTL — i.e. the TTL runs "since the last spill in the task". It runs once
+ *   per process per dir on the first spill; {@link removeTaskSpill} removes one task's dir.
+ * - Size: the whole stub (header, quoted path, preview) fits within the effective cap.
  *
  * Telemetry is unaffected: callers keep measuring the FULL result.
  */
+import { createHash } from 'node:crypto';
 import {
   closeSync,
   constants,
   fchmodSync,
   fstatSync,
+  futimesSync,
   lstatSync,
   mkdirSync,
   openSync,
@@ -38,7 +52,7 @@ import {
   unlinkSync,
   writeSync,
 } from 'node:fs';
-import { isAbsolute, join, sep } from 'node:path';
+import { isAbsolute, join } from 'node:path';
 
 import {
   capToolResult,
@@ -63,8 +77,13 @@ export const TOOL_RESULT_SPILL_TTL_HOURS_ENV = 'ADHD_AGENT_TOOL_RESULT_SPILL_TTL
 /** Default TTL: a spill dir untouched for this long is swept. */
 export const DEFAULT_TOOL_RESULT_SPILL_TTL_HOURS = 24;
 
-/** Chars of the result shown inline in the stub. */
+/** Upper bound on the chars of the result shown inline in the stub (also bounded by the cap). */
 export const SPILL_PREVIEW_CHARS = 2_000;
+
+/** Marker file claiming a directory as a spill root; only a dir holding it (or an empty one) is used. */
+export const SPILL_ROOT_MARKER = '.adhd-spill-root';
+/** Marker file inside each task dir the spill created; the sweep removes only dirs holding it. */
+export const SPILL_TASK_MARKER = '.adhd-spill-task';
 
 /** Resolved spill settings handed to the engine (`EngineConfig.toolResult.spill`). */
 export interface ToolResultSpillConfig {
@@ -119,10 +138,16 @@ export function parseToolResultSpillTtlHours(raw: unknown): number {
   return n;
 }
 
-/** A path-segment-safe form of an id (never `.`/`..`, never a separator). */
+/**
+ * A path-segment-safe, collision-free form of an id (never `.`/`..`, never a separator, never a
+ * dotfile). An id that is already safe (`[A-Za-z0-9._-]`, leading alphanumeric, <= 128 chars) is used
+ * verbatim; any other id becomes `<sanitized>~<sha256(id)[0:16]>`. `~` is outside the safe alphabet, so
+ * a verbatim name can never equal a mangled one and two distinct raw ids never share a segment.
+ */
 function safeSegment(id: string): string {
-  const cleaned = id.replace(/[^A-Za-z0-9._-]/g, '_').replace(/^\.+$/, '_');
-  return cleaned === '' ? '_' : cleaned.slice(0, 128);
+  if (/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(id)) return id;
+  const cleaned = id.replace(/[^A-Za-z0-9._-]/g, '_').slice(0, 100) || '_';
+  return `${cleaned}~${createHash('sha256').update(id).digest('hex').slice(0, 16)}`;
 }
 
 const O_NOFOLLOW: number = (constants as { O_NOFOLLOW?: number }).O_NOFOLLOW ?? 0;
@@ -156,25 +181,97 @@ function tightenDirMode(dir: string): void {
   }
 }
 
+/** True iff `path` is a regular file (lstat: a symlink is NOT one). */
+function isRegularFile(path: string): boolean {
+  try {
+    return lstatSync(path).isFile();
+  } catch {
+    return false;
+  }
+}
+
+function foreignDirError(dir: string): RangeError {
+  return new RangeError(
+    `${TOOL_RESULT_SPILL_DIR_KEY} (${TOOL_RESULT_SPILL_DIR_ENV}) ${JSON.stringify(dir)} is not empty and was not created by the ` +
+      `tool-result spill (no ${SPILL_ROOT_MARKER} marker); refusing to use or sweep it. Point it at an empty or dedicated directory.`
+  );
+}
+
+/**
+ * Read-only check that `dir` may be used as a spill root: absent, an empty directory, or a directory
+ * already claimed with {@link SPILL_ROOT_MARKER}. A non-directory / symlink is left to the first spill,
+ * which refuses it. Creates nothing.
+ *
+ * @throws {RangeError} if `dir` is a non-empty directory that this spill did not create
+ */
+export function assertToolResultSpillDirUsable(dir: string): void {
+  let st;
+  try {
+    st = lstatSync(dir);
+  } catch {
+    return; // absent: created (and claimed) on the first spill
+  }
+  if (st.isSymbolicLink() || !st.isDirectory()) return;
+  if (isRegularFile(join(dir, SPILL_ROOT_MARKER))) return;
+  if (readdirSync(dir).length > 0) throw foreignDirError(dir);
+}
+
+/** Claim `dir` (already verified private) as a spill root, or throw if it is foreign. */
+function claimSpillRoot(dir: string): void {
+  if (isRegularFile(join(dir, SPILL_ROOT_MARKER))) return;
+  if (readdirSync(dir).length > 0) throw foreignDirError(dir);
+  try {
+    closeSync(openSync(join(dir, SPILL_ROOT_MARKER), constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | O_NOFOLLOW, 0o600));
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== 'EEXIST') throw err; // another process claimed it first
+  }
+}
+
+/** Create-or-refresh the task marker (never follows a symlink): its mtime is the task's last-spill time. */
+function touchTaskMarker(taskDir: string): void {
+  const fd = openSync(join(taskDir, SPILL_TASK_MARKER), constants.O_WRONLY | constants.O_CREAT | O_NOFOLLOW, 0o600);
+  try {
+    if (!fstatSync(fd).isFile()) throw new Error('spill task marker is not a regular file');
+    const now = new Date();
+    futimesSync(fd, now, now);
+  } finally {
+    closeSync(fd);
+  }
+}
+
 /**
  * Writes `text` to `<dir>/<taskId>/<callId>.txt` (dir 0700, file 0600, O_EXCL, no symlink following).
+ * Never overwrites an existing regular file: on a name clash a unique sibling name is chosen. Claims the
+ * dir on first use and refreshes the task marker on every write (see {@link sweepToolResultSpill}).
  *
  * @returns the absolute path of the written file
- * @throws on any I/O or safety failure (callers fall back to the cap)
+ * @throws on any I/O or safety failure, including a foreign (non-empty, unclaimed) dir (callers fall back to the cap)
  */
 export function writeToolResultSpillFile(dir: string, taskId: string, callId: string, text: string): string {
   ensurePrivateDir(dir, true);
+  claimSpillRoot(dir);
   const taskDir = join(dir, safeSegment(taskId));
   ensurePrivateDir(taskDir, false);
-  const file = join(taskDir, `${safeSegment(callId)}.txt`);
+  touchTaskMarker(taskDir); // before the write, so a concurrent sweep never sees a stale task mid-spill
+  const base = safeSegment(callId);
   const flags = constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | O_NOFOLLOW;
+  let file = join(taskDir, `${base}.txt`);
   let fd: number | undefined;
   for (let attempt = 0; fd === undefined; attempt++) {
     try {
       fd = openSync(file, flags, 0o600);
     } catch (err) {
-      if ((err as NodeJS.ErrnoException).code !== 'EEXIST' || attempt > 0) throw err;
-      unlinkSync(file); // removes a planted symlink/file itself, never what a link points at
+      if ((err as NodeJS.ErrnoException).code !== 'EEXIST' || attempt >= 1000) throw err;
+      let existing;
+      try {
+        existing = lstatSync(file);
+      } catch {
+        continue; // vanished between open and lstat: retry the same name
+      }
+      // A planted symlink / non-regular entry is removed (the link itself, never its target); a regular
+      // file is someone's content (another call, a colliding id on a case-insensitive fs): keep it.
+      if (existing.isFile()) file = join(taskDir, `${base}.${attempt + 1}.txt`);
+      else unlinkSync(file);
     }
   }
   try {
@@ -196,43 +293,65 @@ export function writeToolResultSpillFile(dir: string, taskId: string, callId: st
   return file;
 }
 
-/** Removes one task's spill directory. Never throws. */
+/** Removes one task's spill directory iff it carries the task marker (i.e. the spill created it). Never throws. */
 export function removeTaskSpill(dir: string, taskId: string): void {
   try {
     const taskDir = join(dir, safeSegment(taskId));
-    if (lstatSync(taskDir).isDirectory()) rmSync(taskDir, { recursive: true, force: true });
+    if (lstatSync(taskDir).isDirectory() && isRegularFile(join(taskDir, SPILL_TASK_MARKER))) {
+      rmSync(taskDir, { recursive: true, force: true });
+    }
   } catch {
     /* absent or unreadable: nothing to clean */
   }
 }
 
+/** Newest mtime (ms) of a task dir's marker, files and the dir itself; `undefined` if it is not a marker-bearing task dir. */
+function taskLastActivityMs(taskDir: string): number | undefined {
+  const dirStat = lstatSync(taskDir);
+  if (!dirStat.isDirectory()) return undefined;
+  const marker = lstatSync(join(taskDir, SPILL_TASK_MARKER));
+  if (!marker.isFile()) return undefined;
+  let newest = Math.max(dirStat.mtimeMs, marker.mtimeMs);
+  for (const name of readdirSync(taskDir)) {
+    try {
+      newest = Math.max(newest, lstatSync(join(taskDir, name)).mtimeMs);
+    } catch {
+      /* raced away */
+    }
+  }
+  return newest;
+}
+
 /**
- * Removes task directories directly under `dir` whose mtime is older than
- * `ttlMs`. Only real directories that are direct children are removed; a
- * symlink child is unlinked (never followed). Never throws.
+ * Removes the task directories the spill created under `dir` whose last activity is older than `ttlMs`.
+ * "Last activity" is the newest mtime of the task marker (refreshed on every spill in the task), the files
+ * inside it, and the dir itself, so the TTL runs from the LAST spill in a task, not its first.
  *
- * @returns the number of entries removed
+ * Ownership-gated: does nothing unless `dir` carries {@link SPILL_ROOT_MARKER}, and removes only direct
+ * children that are real directories holding {@link SPILL_TASK_MARKER}. Foreign files, directories and
+ * symlinks are left untouched; no symlink is ever followed. Never throws.
+ *
+ * @returns the number of task directories removed
  */
 export function sweepToolResultSpill(dir: string, ttlMs: number, now: number = Date.now()): number {
   let removed = 0;
   let names: string[];
   try {
+    if (!isRegularFile(join(dir, SPILL_ROOT_MARKER))) return 0;
     names = readdirSync(dir);
   } catch {
     return 0;
   }
   for (const name of names) {
-    if (name === '' || name === '.' || name === '..' || name.includes(sep)) continue;
+    if (name === '' || name === '.' || name === '..' || name === SPILL_ROOT_MARKER) continue;
     const child = join(dir, name);
     try {
-      const st = lstatSync(child);
-      if (now - st.mtimeMs <= ttlMs) continue;
-      if (st.isSymbolicLink()) unlinkSync(child);
-      else if (st.isDirectory()) rmSync(child, { recursive: true, force: true });
-      else continue;
+      const last = taskLastActivityMs(child);
+      if (last === undefined || now - last <= ttlMs) continue;
+      rmSync(child, { recursive: true, force: true });
       removed++;
     } catch {
-      /* raced with another process (ADR-0012: parallel processes share the dir) */
+      /* raced with another process (ADR-0012: parallel processes share the dir) or not a task dir */
     }
   }
   return removed;
@@ -271,23 +390,40 @@ function surrogateSafePreview(text: string, n: number): string {
   return text.slice(0, end);
 }
 
-/** The model-visible stub for a spilled result. */
+/** The model-visible stub for a spilled result (the path appears once, shell-quoted). */
 export function renderSpillStub(totalChars: number, path: string, preview: string): string {
   const quoted = `'${path.replace(/'/g, `'\\''`)}'`;
   return (
-    `[tool result too large: ${totalChars} chars; full output saved to ${path}. ` +
+    `[tool result too large: ${totalChars} chars; full output saved. ` +
     `Read a range with the shell tool, e.g. sed -n 'A,Bp' ${quoted} | head -c N]\n` +
     `Preview (first ${preview.length} chars):\n${preview}`
   );
 }
 
 /**
+ * Renders the stub with the largest preview (<= {@link SPILL_PREVIEW_CHARS}) such that the WHOLE stub is
+ * <= `cap` chars. When the fixed header plus path alone exceed `cap`, the preview is empty and the stub is
+ * that irreducible minimum (the path must stay recoverable).
+ */
+function budgetedSpillStub(text: string, path: string, cap: number): string {
+  let k = Math.max(0, Math.min(SPILL_PREVIEW_CHARS, cap - renderSpillStub(text.length, path, '').length));
+  for (;;) {
+    const stub = renderSpillStub(text.length, path, surrogateSafePreview(text, k));
+    if (stub.length <= cap || k === 0) return stub;
+    k = Math.max(0, k - (stub.length - cap));
+  }
+}
+
+/**
  * Normalizes `EngineConfig.toolResult.spill`: `undefined` when absent or
- * disabled, otherwise the config with its directory validated (fails loud).
+ * disabled, otherwise the config with its directory validated (fails loud) and proven not to be a foreign
+ * non-empty directory ({@link assertToolResultSpillDirUsable}).
  */
 export function resolveToolResultSpill(cfg: ToolResultSpillConfig | undefined): ToolResultSpillConfig | undefined {
   if (!cfg?.enabled) return undefined;
-  return { ...cfg, dir: validateToolResultSpillDir(cfg.dir) };
+  const dir = validateToolResultSpillDir(cfg.dir);
+  assertToolResultSpillDirUsable(dir);
+  return { ...cfg, dir };
 }
 
 /** Inputs to {@link capOrSpillToolResult}. */
@@ -321,9 +457,8 @@ export function capOrSpillToolResult(p: CapOrSpillParams): ToolResultSpillOutcom
     }
     const effectiveCap = p.isError ? Math.max(p.maxChars, ERROR_RESULT_FLOOR_CHARS) : p.maxChars;
     const path = writeToolResultSpillFile(p.spill.dir, p.taskId, p.callId, text);
-    const preview = surrogateSafePreview(text, Math.min(SPILL_PREVIEW_CHARS, effectiveCap));
     return {
-      result: renderSpillStub(text.length, path, preview),
+      result: budgetedSpillStub(text, path, effectiveCap),
       truncated: true,
       originalChars: serialized.length,
       spilled: true,

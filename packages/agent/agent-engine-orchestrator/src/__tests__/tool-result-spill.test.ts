@@ -25,12 +25,16 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { capToolResult } from '../engine/tool-result-cap.js';
 import {
   SPILL_PREVIEW_CHARS,
+  SPILL_ROOT_MARKER,
+  SPILL_TASK_MARKER,
+  assertToolResultSpillDirUsable,
   capOrSpillToolResult,
   parseToolResultSpillTtlHours,
   removeTaskSpill,
   resolveToolResultSpill,
   sweepToolResultSpill,
   validateToolResultSpillDir,
+  writeToolResultSpillFile,
   type ToolResultSpillConfig,
 } from '../engine/tool-result-spill.js';
 
@@ -45,6 +49,14 @@ const cfg = (over: Partial<ToolResultSpillConfig> = {}): ToolResultSpillConfig =
   ...over,
 });
 const mode = (p: string): number => lstatSync(p).mode & 0o777;
+/** Backdate a task dir's marker, files and the dir itself by `hours` (what a spill that long ago looked like). */
+const age = (taskDir: string, hours: number): void => {
+  const past = new Date(Date.now() - hours * 3_600_000);
+  for (const n of readdirSync(taskDir)) utimesSync(join(taskDir, n), past, past);
+  utimesSync(taskDir, past, past);
+};
+const spillOnce = (taskId: string, callId: string, text: string = big(30_000)) =>
+  capOrSpillToolResult({ result: text, isError: false, maxChars: 100, spill: cfg(), taskId, callId });
 const big = (n: number): string =>
   Array.from({ length: Math.ceil(n / 10) }, (_, i) => `L${String(i).padStart(8, '0')}\n`)
     .join('')
@@ -134,11 +146,13 @@ describe('9ed453c1 BK9 AC9.2 enabled: stub with path+size+preview; file holds th
     expect(lines[999]).toBe('L00000999');
   });
 
-  it('small caps bound the preview to the cap and never split a surrogate pair', () => {
+  it.each([350, 351, 352, 353])('cap %i: the whole stub fits the cap and the preview never splits a surrogate pair', (cap) => {
     const emoji = '😀'.repeat(300); // 600 UTF-16 units
-    const out = capOrSpillToolResult({ result: emoji, isError: false, maxChars: 101, spill: cfg(), taskId: 't', callId: 'c' });
-    const preview = (out.result as string).split('\n').slice(1).join('\n').replace(/^Preview \(first \d+ chars\):\n/, '');
-    expect(preview.length).toBeLessThanOrEqual(101);
+    const out = capOrSpillToolResult({ result: emoji, isError: false, maxChars: cap, spill: cfg(), taskId: 't', callId: 'c' });
+    const stub = out.result as string;
+    expect(stub.length).toBeLessThanOrEqual(cap);
+    const preview = stub.split('\n').slice(1).join('\n').replace(/^Preview \(first \d+ chars\):\n/, '');
+    expect(preview.length).toBeGreaterThan(0);
     const last = preview.charCodeAt(preview.length - 1);
     expect(last >= 0xd800 && last <= 0xdbff).toBe(false);
   });
@@ -209,6 +223,7 @@ describe('9ed453c1 BK9 AC9.5 permissions, symlinks, cleanup', () => {
     const victim = join(root, 'victim.txt');
     writeFileSync(victim, 'SECRET');
     mkdirSync(join(dir, 't'), { recursive: true, mode: 0o700 });
+    writeFileSync(join(dir, SPILL_ROOT_MARKER), ''); // a spill-claimed dir (the planted entries below are the attack)
     symlinkSync(victim, join(dir, 't', 'c.txt'));
     const text = big(30_000);
     const out = capOrSpillToolResult({ result: text, isError: false, maxChars: 100, spill: cfg(), taskId: 't', callId: 'c' });
@@ -225,6 +240,7 @@ describe('9ed453c1 BK9 AC9.5 permissions, symlinks, cleanup', () => {
     const victimDir = join(root, 'victim-dir');
     mkdirSync(victimDir);
     mkdirSync(dir, { mode: 0o700 });
+    writeFileSync(join(dir, SPILL_ROOT_MARKER), '');
     symlinkSync(victimDir, join(dir, 't'));
     const out = capOrSpillToolResult({ result: big(30_000), isError: false, maxChars: 100, spill: cfg(), taskId: 't', callId: 'c' });
     expect(out.spilled).toBeUndefined();
@@ -235,27 +251,185 @@ describe('9ed453c1 BK9 AC9.5 permissions, symlinks, cleanup', () => {
     capOrSpillToolResult({ result: big(30_000), isError: false, maxChars: 100, spill: cfg(), taskId: 'a', callId: 'c' });
     capOrSpillToolResult({ result: big(30_000), isError: false, maxChars: 100, spill: cfg(), taskId: 'b', callId: 'c' });
     removeTaskSpill(dir, 'a');
-    expect(readdirSync(dir)).toEqual(['b']);
+    expect(readdirSync(dir).sort()).toEqual([SPILL_ROOT_MARKER, 'b']);
     removeTaskSpill(dir, 'never-existed'); // no throw
   });
 
-  it('sweep removes only task dirs older than the TTL and never follows a symlink child', () => {
-    capOrSpillToolResult({ result: big(30_000), isError: false, maxChars: 100, spill: cfg(), taskId: 'old', callId: 'c' });
-    capOrSpillToolResult({ result: big(30_000), isError: false, maxChars: 100, spill: cfg(), taskId: 'fresh', callId: 'c' });
+  it('sweep removes only spill-created task dirs older than the TTL; a symlink child is neither followed nor removed', () => {
+    spillOnce('old', 'c');
+    spillOnce('fresh', 'c');
     const victim = join(root, 'victim');
     mkdirSync(victim);
     writeFileSync(join(victim, 'keep.txt'), 'keep');
     symlinkSync(victim, join(dir, 'link'));
-    const past = new Date(Date.now() - 48 * 3_600_000);
-    utimesSync(join(dir, 'old'), past, past);
-    // 'fresh' and the just-made symlink are younger than the TTL: only 'old' goes.
+    age(join(dir, 'old'), 48);
     expect(sweepToolResultSpill(dir, 24 * 3_600_000)).toBe(1);
-    expect(readdirSync(dir).sort()).toEqual(['fresh', 'link']);
-    // A later "now" ages the symlink out: the LINK is unlinked, its target is untouched.
-    sweepToolResultSpill(dir, 24 * 3_600_000, Date.now() + 25 * 3_600_000);
-    expect(readdirSync(dir)).not.toContain('link');
+    expect(readdirSync(dir).sort()).toEqual([SPILL_ROOT_MARKER, 'fresh', 'link']);
+    // Even far in the future the foreign symlink survives and its target is untouched.
+    sweepToolResultSpill(dir, 24 * 3_600_000, Date.now() + 100 * 3_600_000);
+    expect(readdirSync(dir)).toContain('link');
     expect(readFileSync(join(victim, 'keep.txt'), 'utf8')).toBe('keep');
     expect(sweepToolResultSpill(join(root, 'absent'), 1)).toBe(0);
+  });
+});
+
+describe('9ed453c1 BLIND F1 only spill-created entries are ever removed; foreign dirs are refused', () => {
+  const foreignTree = (base: string): void => {
+    mkdirSync(join(base, 'projects', 'deep'), { recursive: true });
+    writeFileSync(join(base, 'projects', 'deep', 'precious.txt'), 'precious');
+    writeFileSync(join(base, 'notes.txt'), 'notes');
+    const past = new Date(Date.now() - 1000 * 3_600_000);
+    for (const p of [join(base, 'projects', 'deep'), join(base, 'projects'), join(base, 'notes.txt')]) utimesSync(p, past, past);
+  };
+
+  it('a non-empty unclaimed dir full of old foreign entries survives a sweep untouched', () => {
+    mkdirSync(dir);
+    foreignTree(dir);
+    expect(sweepToolResultSpill(dir, 3_600_000)).toBe(0);
+    expect(readFileSync(join(dir, 'projects', 'deep', 'precious.txt'), 'utf8')).toBe('precious');
+    expect(readFileSync(join(dir, 'notes.txt'), 'utf8')).toBe('notes');
+  });
+
+  it('in a claimed dir, old foreign dirs/files (no task marker) survive while an old spill task dir goes', () => {
+    spillOnce('mine', 'c');
+    foreignTree(dir);
+    age(join(dir, 'mine'), 1000);
+    expect(sweepToolResultSpill(dir, 3_600_000)).toBe(1);
+    expect(readdirSync(dir).sort()).toEqual([SPILL_ROOT_MARKER, 'notes.txt', 'projects']);
+    expect(readFileSync(join(dir, 'projects', 'deep', 'precious.txt'), 'utf8')).toBe('precious');
+  });
+
+  it('a non-empty foreign dir is refused with a clear error at config resolution and at the first spill; nothing is written or removed', () => {
+    mkdirSync(dir);
+    foreignTree(dir);
+    expect(() => resolveToolResultSpill(cfg())).toThrow(/not empty and was not created by the tool-result spill/);
+    expect(() => assertToolResultSpillDirUsable(dir)).toThrow(RangeError);
+    expect(() => writeToolResultSpillFile(dir, 't', 'c', 'x')).toThrow(/refusing to use or sweep it/);
+    const errors: unknown[] = [];
+    const text = big(50_000);
+    const out = capOrSpillToolResult({
+      result: text, isError: false, maxChars: 20_000, spill: cfg(), taskId: 't', callId: 'c', onSpillError: (e) => errors.push(e),
+    });
+    expect(out.spilled).toBeUndefined();
+    expect(out).toEqual(capToolResult(text, false, 20_000));
+    expect(String(errors[0])).toMatch(/not empty and was not created/);
+    expect(readdirSync(dir).sort()).toEqual(['notes.txt', 'projects']);
+  });
+
+  it('absent, empty and claimed dirs are usable', () => {
+    expect(() => assertToolResultSpillDirUsable(dir)).not.toThrow();
+    mkdirSync(dir);
+    expect(() => resolveToolResultSpill(cfg())).not.toThrow();
+    spillOnce('t', 'c');
+    expect(existsSync(join(dir, SPILL_ROOT_MARKER))).toBe(true);
+    expect(() => resolveToolResultSpill(cfg())).not.toThrow();
+  });
+
+  it('removeTaskSpill refuses a foreign dir that merely shares the name', () => {
+    spillOnce('a', 'c');
+    mkdirSync(join(dir, 'theirs'));
+    writeFileSync(join(dir, 'theirs', 'x.txt'), 'x');
+    removeTaskSpill(dir, 'theirs');
+    expect(existsSync(join(dir, 'theirs', 'x.txt'))).toBe(true);
+    removeTaskSpill(dir, 'a');
+    expect(existsSync(join(dir, 'a'))).toBe(false);
+  });
+});
+
+describe('9ed453c1 BLIND F2 TTL runs from the last spill in the task', () => {
+  const TTL = 24 * 3_600_000;
+  it('a task that spilled once, ran past the TTL, then spilled again keeps its FIRST file', () => {
+    const first = spillOnce('long', 'call-1').spillPath as string;
+    age(join(dir, 'long'), 48); // 48h later the first spill looks 48h old...
+    const second = spillOnce('long', 'call-2').spillPath as string; // ...but the task spills again now
+    expect(sweepToolResultSpill(dir, TTL)).toBe(0);
+    expect(existsSync(first)).toBe(true);
+    expect(existsSync(second)).toBe(true);
+  });
+
+  it('control: a task with no further spill past the TTL is swept', () => {
+    const first = spillOnce('idle', 'call-1').spillPath as string;
+    age(join(dir, 'idle'), 48);
+    expect(sweepToolResultSpill(dir, TTL)).toBe(1);
+    expect(existsSync(first)).toBe(false);
+  });
+
+  it('a stale marker does not condemn a task whose newest file is recent', () => {
+    spillOnce('t', 'call-1');
+    utimesSync(join(dir, 't', SPILL_TASK_MARKER), new Date(0), new Date(0));
+    utimesSync(join(dir, 't'), new Date(0), new Date(0));
+    expect(sweepToolResultSpill(dir, TTL)).toBe(0);
+  });
+
+  it('every spill refreshes the task marker', () => {
+    spillOnce('t', 'call-1');
+    const marker = join(dir, 't', SPILL_TASK_MARKER);
+    utimesSync(marker, new Date(0), new Date(0));
+    spillOnce('t', 'call-2');
+    expect(lstatSync(marker).mtimeMs).toBeGreaterThan(Date.now() - 60_000);
+  });
+});
+
+describe('9ed453c1 BLIND F3 distinct ids never share a spill path', () => {
+  it('two raw ids that sanitize identically both keep their content (tasks and calls)', () => {
+    const a = capOrSpillToolResult({ result: 'A'.repeat(500), isError: false, maxChars: 100, spill: cfg(), taskId: 'a/b', callId: 'x y' });
+    const b = capOrSpillToolResult({ result: 'B'.repeat(500), isError: false, maxChars: 100, spill: cfg(), taskId: 'a:b', callId: 'x?y' });
+    expect(a.spillPath).not.toBe(b.spillPath);
+    expect(readFileSync(a.spillPath as string, 'utf8')).toBe('A'.repeat(500));
+    expect(readFileSync(b.spillPath as string, 'utf8')).toBe('B'.repeat(500));
+  });
+
+  it('two ids that differ only past the 128-char truncation stay distinct', () => {
+    const long = 'z'.repeat(200);
+    const a = spillOnce('t', `${long}1`, 'A'.repeat(500));
+    const b = spillOnce('t', `${long}2`, 'B'.repeat(500));
+    expect(readFileSync(a.spillPath as string, 'utf8')).toBe('A'.repeat(500));
+    expect(readFileSync(b.spillPath as string, 'utf8')).toBe('B'.repeat(500));
+  });
+
+  it('a safe id is used verbatim and cannot equal a mangled name', () => {
+    expect(spillOnce('task-1', 'call-1').spillPath).toBe(join(dir, 'task-1', 'call-1.txt'));
+    expect(spillOnce('t', 'a b').spillPath).toMatch(/a_b~[0-9a-f]{16}\.txt$/);
+    expect(spillOnce('t', 'a_b').spillPath).toBe(join(dir, 't', 'a_b.txt'));
+  });
+
+  it('an id that is a marker name cannot clobber a marker', () => {
+    const out = spillOnce(SPILL_ROOT_MARKER, SPILL_TASK_MARKER);
+    expect(out.spilled).toBe(true);
+    expect(lstatSync(join(dir, SPILL_ROOT_MARKER)).isFile()).toBe(true);
+  });
+
+  it('the same call id spilled twice never overwrites the first file', () => {
+    const first = spillOnce('t', 'c', 'FIRST'.repeat(100));
+    const second = spillOnce('t', 'c', 'SECOND'.repeat(100));
+    expect(second.spillPath).not.toBe(first.spillPath);
+    expect(readFileSync(first.spillPath as string, 'utf8')).toBe('FIRST'.repeat(100));
+    expect(readFileSync(second.spillPath as string, 'utf8')).toBe('SECOND'.repeat(100));
+  });
+});
+
+describe('9ed453c1 BLIND F5 the whole stub honours the cap', () => {
+  it.each([300, 301, 350, 500, 1_000, 2_000, 2_500, 5_000, 20_000])('cap %i: stub length <= cap', (cap) => {
+    const text = big(60_000);
+    const out = capOrSpillToolResult({ result: text, isError: false, maxChars: cap, spill: cfg(), taskId: 't', callId: `c${cap}` });
+    expect(out.spilled).toBe(true);
+    expect((out.result as string).length).toBeLessThanOrEqual(cap);
+    expect(readFileSync(out.spillPath as string, 'utf8')).toBe(text);
+  });
+
+  it('every cap from 300 to 20000 (sampled by prime stride) fits, and the preview fills the budget', () => {
+    const text = big(60_000);
+    for (let cap = 300; cap <= 20_000; cap += 97) {
+      const out = capOrSpillToolResult({ result: text, isError: false, maxChars: cap, spill: cfg(), taskId: 't', callId: `s${cap}` });
+      const stub = out.result as string;
+      expect(stub.length).toBeLessThanOrEqual(cap);
+      if (cap < 2_000) expect(cap - stub.length).toBeLessThan(5); // digit-count slack only
+    }
+  });
+
+  it('the stub names the path exactly once', () => {
+    const out = spillOnce('t', 'c');
+    expect((out.result as string).split(out.spillPath as string).length - 1).toBe(1);
   });
 });
 

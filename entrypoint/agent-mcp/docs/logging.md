@@ -375,13 +375,18 @@ By default an over-cap result is head+tail truncated and the middle is gone. Tur
 With spill enabled, a result the cap would truncate is written in full to `<dir>/<taskId>/<toolCallId>.txt` and the model sees:
 
 ```
-[tool result too large: 100000 chars; full output saved to /Users/me/.adhd/agent-mcp/production/temp/tool-results/<taskId>/<callId>.txt. Read a range with the shell tool, e.g. sed -n 'A,Bp' '<that path>' | head -c N]
+[tool result too large: 100000 chars; full output saved. Read a range with the shell tool, e.g. sed -n 'A,Bp' '/Users/me/.adhd/agent-mcp/production/temp/tool-results/<taskId>/<callId>.txt' | head -c N]
 Preview (first 2000 chars):
 <first 2000 chars>
 ```
 
+The whole stub (header, path and preview) is at most the cap (`agent.toolResult.maxChars`, or the error floor for error results); the preview shrinks to fit a small cap and is empty only when the header and path alone already exceed it. Unlike the head+tail truncation marker, nothing is added outside the cap.
+
 - An MCP result made only of text blocks is written as plain text (real lines, so `sed -n '1000,1010p'` works); any other result is written as its JSON serialization.
-- Files are `0600` in `0700` directories, created with `O_EXCL` and no symlink following (a symlink planted at the file name is unlinked, never followed; a symlinked directory is refused). Task directories older than `ttlHours` are swept the first time a process spills.
+- Files are `0600` in `0700` directories, created with `O_EXCL` and no symlink following (a symlink planted at the file name is unlinked, never followed; a symlinked directory is refused). An existing regular file is never overwritten or removed: a second spill under the same call id gets a unique sibling name (`<callId>.1.txt`).
+- Names are collision-free: an id made only of `A-Za-z0-9._-` (starting alphanumeric, at most 128 chars) is used as is; any other id is sanitized and suffixed `~<16 hex of sha256(id)>`, so two distinct ids never share a task directory or file.
+- **Ownership.** The spill directory is claimed with a `.adhd-spill-root` marker on first use and each task directory carries a `.adhd-spill-task` marker. A directory that is non-empty and has no root marker is foreign and is refused: startup fails (`RangeError`) when spill is enabled, and a spill into it falls back to the cap with a warning. Point `dir` at an empty or dedicated directory, never at a directory that holds other files (for example `~/work`). The sweep removes only marker-bearing task directories that the spill created; foreign files, directories and symlinks are never removed or followed.
+- **Retention** is measured from the last spill in a task: every spill refreshes the task marker, and a task directory is swept only when its marker and every file inside are older than `ttlHours`. The sweep runs the first time a process spills. A task that stops spilling for longer than `ttlHours` while its history still holds a stub loses those files, so size `ttlHours` above your longest task.
 - If the directory is unwritable (or any spill step fails) the head+tail cap is used instead, with its marker, and a warning is logged. Spill never fails a task.
 - `TOOL_RESULT` events gain `spilled: true` and `spill_path` (plus the existing `truncated` and `original_chars`); usage telemetry still measures the full result.
 - A relative or invalid `dir`, or a bad `ttlHours`, fails startup (`RangeError` naming the key), whether or not spill is enabled. The keys are read from the global scope only.
