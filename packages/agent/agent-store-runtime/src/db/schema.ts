@@ -170,6 +170,9 @@ export const taskUsageTable = sqliteTable(
         maxTokens: integer("max_tokens"),
         cacheReadTokens: integer("cache_read_input_tokens"),
         cacheCreationTokens: integer("cache_creation_input_tokens"),
+        // The 1-hour-TTL SUBSET of cache_creation_input_tokens (priced at 2x base input, vs 1.25x for the
+        // 5-minute tier). Nullable: rows written before migration 0015 read NULL = "not recorded" (8333f755 AC3).
+        cacheCreation1hTokens: integer("cache_creation_1h_tokens"),
         // Full-price (cache-miss) input. Cache-hit vs cache-miss is a 50x price difference
         // on deepseek-v4-flash, so this — not inputTokens — is what actually drives cost.
         uncachedInputTokens: integer("uncached_input_tokens"),

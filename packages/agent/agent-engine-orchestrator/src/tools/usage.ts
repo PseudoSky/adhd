@@ -31,6 +31,7 @@ import type {
   UsageGrainSummary,
   UsageRow,
   UsageSummary,
+  UsageTurnContext,
 } from "../validation/usage.js";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -39,10 +40,10 @@ export type Database = BetterSQLite3Database<any>;
 export type TaskUsageRow = typeof taskUsageTable.$inferSelect;
 
 /** Statuses (written by UsagePlugin, 1f1c8598) meaning "at least one turn had no price". */
-const UNPRICED_SQL = sql`('unpriced_model','partial')`;
+const UNPRICED_SQL = sql`('unpriced_model','partial','unmeasured')`;
 
 function isUnpricedStatus(status: string | null | undefined): boolean {
-  return status === "unpriced_model" || status === "partial";
+  return status === "unpriced_model" || status === "partial" || status === "unmeasured";
 }
 
 /**
@@ -127,6 +128,7 @@ function mergeStatus(statuses: Array<string | null>): string | null {
   if (known.length === 0) return null;
   if (known.every((s) => s === "priced")) return "priced";
   if (known.every((s) => s === "unpriced_model")) return "unpriced_model";
+  if (known.every((s) => s === "unmeasured")) return "unmeasured";
   return "partial";
 }
 
@@ -138,6 +140,8 @@ function singleOrNull(values: Array<string | null>): string | null {
 interface ITaskUsageJoin {
   usage: TaskUsageRow;
   sessionId: string | null;
+  /** `tasks.status` of the owning task; absent/null when not joined or the task row is gone. */
+  taskStatus?: string | null;
 }
 
 /**
@@ -155,13 +159,13 @@ function unpricedTurnCounts(
   for (const j of joins) {
     if (j.usage.costStatus === "unpriced_model") {
       counts.set(j.usage.taskId, (counts.get(j.usage.taskId) ?? 0) + (j.usage.modelCalls ?? 0));
-    } else if (j.usage.costStatus === "partial") {
+    } else if (j.usage.costStatus === "partial" || j.usage.costStatus === "unmeasured") {
       partial.set(j.usage.taskId, j);
     }
   }
   if (partial.size > 0) {
     for (const turn of deriveTurns(db, partial, source)) {
-      if (turn.cost_status === "unpriced_model" && turn.task_id) {
+      if ((turn.cost_status === "unpriced_model" || turn.cost_status === "unmeasured") && turn.task_id) {
         counts.set(turn.task_id, (counts.get(turn.task_id) ?? 0) + 1);
       }
     }
@@ -227,7 +231,7 @@ export interface UsageQueryResult {
  * identical token count (BUG-ORCH-009).
  */
 function summarise(rows: TaskUsageRow[]): UsageSummary {
-  return rows.reduce<UsageSummary>(
+  const summed = rows.reduce<UsageSummary>(
     (acc, row) => ({
       inputTokens: acc.inputTokens + (row.inputTokens ?? 0),
       outputTokens: acc.outputTokens + (row.outputTokens ?? 0),
@@ -241,6 +245,9 @@ function summarise(rows: TaskUsageRow[]): UsageSummary {
       reasoningTokens: acc.reasoningTokens + (row.reasoningTokens ?? 0),
       // MAX across rows — deliberately NOT a sum.
       peakContextTokens: Math.max(acc.peakContextTokens, row.peakContextTokens ?? 0),
+      // NULL (never 0) once ANY row's cost is unknown; a partial sum would understate true cost.
+      est_cost_usd:
+        acc.est_cost_usd === null || row.estCostUsd == null ? null : acc.est_cost_usd + row.estCostUsd,
     }),
     {
       inputTokens: 0,
@@ -253,8 +260,10 @@ function summarise(rows: TaskUsageRow[]): UsageSummary {
       cacheCreationTokens: 0,
       reasoningTokens: 0,
       peakContextTokens: 0,
+      est_cost_usd: 0,
     }
   );
+  return rows.length === 0 ? { ...summed, est_cost_usd: null } : summed;
 }
 
 export function usageQuery(db: Database, input: TaskUsageInput): UsageQueryResult {
@@ -538,7 +547,7 @@ function taskGrainRows(db: Database, input: TaskUsageInput, source: IPriceSource
   const limit = input?.limit ?? 50;
 
   const joined = db
-    .select({ usage: taskUsageTable, sessionId: tasksTable.sessionId })
+    .select({ usage: taskUsageTable, sessionId: tasksTable.sessionId, taskStatus: tasksTable.status })
     .from(taskUsageTable)
     .leftJoin(tasksTable, eq(taskUsageTable.taskId, tasksTable.id))
     .where(whereClause)
@@ -548,7 +557,7 @@ function taskGrainRows(db: Database, input: TaskUsageInput, source: IPriceSource
 
   const unpricedCounts = unpricedTurnCounts(db, joined, source);
 
-  return joined.map(({ usage: r, sessionId }) => {
+  return joined.map(({ usage: r, sessionId, taskStatus }) => {
     const row: UsageRow = {
     session_id: sessionId ?? null,
     task_id: r.taskId,
@@ -584,6 +593,13 @@ function taskGrainRows(db: Database, input: TaskUsageInput, source: IPriceSource
     pricing_ref: r.pricingRef ?? null,
     context_size: r.peakContextTokens ?? 0,
     context_size_at: contextSizeAtSelf(r.taskId, r.peakContextAt ?? null),
+    task_status: taskStatus ?? null,
+    requested_model: r.requestedModel ?? null,
+    cli_reported_cost_usd: r.cliReportedCostUsd ?? null,
+    cache_creation_1h_tokens: r.cacheCreation1hTokens ?? null,
+    first_turn: null,
+    per_turn: null,
+    per_turn_truncated: false,
     };
     ROW_COST.set(row, storedRowCost(r, unpricedCounts.get(r.taskId) ?? 0));
     return row;
@@ -710,6 +726,17 @@ function sessionGrainRows(db: Database, input: TaskUsageInput, source: IPriceSou
       pricing_ref: null,
       context_size,
       context_size_at,
+      task_status: null,
+      requested_model: singleOrNull(group.map((g) => g.usage.requestedModel ?? null)),
+      cli_reported_cost_usd: group.some((g) => g.usage.cliReportedCostUsd != null)
+        ? group.reduce((n, g) => n + (g.usage.cliReportedCostUsd ?? 0), 0)
+        : null,
+      cache_creation_1h_tokens: group.some((g) => g.usage.cacheCreation1hTokens != null)
+        ? group.reduce((n, g) => n + (g.usage.cacheCreation1hTokens ?? 0), 0)
+        : null,
+      first_turn: null,
+      per_turn: null,
+      per_turn_truncated: false,
     };
     ROW_COST.set(sessionRow, sessionCost);
     rows.push(sessionRow);
@@ -736,7 +763,7 @@ function turnGrainRows(db: Database, input: TaskUsageInput, source: IPriceSource
   const whereClause = taskScopeWhere(db, input);
 
   const taskInfo = db
-    .select({ usage: taskUsageTable, sessionId: tasksTable.sessionId })
+    .select({ usage: taskUsageTable, sessionId: tasksTable.sessionId, taskStatus: tasksTable.status })
     .from(taskUsageTable)
     .leftJoin(tasksTable, eq(taskUsageTable.taskId, tasksTable.id))
     .where(whereClause)
@@ -829,6 +856,19 @@ function deriveTurns(
         modelBreakdown?: ModelUsageEntry[];
         /** Largest single-turn context inside this response (claudecli), 7ead5eaa BK4. */
         peakContextTokens?: number;
+        /** Per-call context of a folded response (claudecli), bounded, earliest first. debd934d */
+        perTurnUsage?: Array<{
+          uncachedInputTokens?: number;
+          cacheReadTokens?: number;
+          cacheCreationTokens?: number;
+          outputTokens?: number;
+          contextTokens?: number;
+        }>;
+        perTurnUsageTruncated?: boolean;
+        /** Provider-reported dollar cost of this response (claudecli total_cost_usd). 8333f755 */
+        cliReportedCostUsd?: number;
+        /** A zero-token placeholder for a run that reported nothing: cost UNKNOWN. afa37093 */
+        unmeasured?: boolean;
       };
       const inputTokens = payload.inputTokens ?? 0;
       const outputTokens = payload.outputTokens ?? 0;
@@ -869,7 +909,18 @@ function deriveTurns(
             // priced at a same-family model's rate.
             { asOf: evt.createdAt, source, strict: info.usage.modelBreakdownJson != null }
           );
-      const estCostUsd = est.costUsd;
+      const unmeasured = payload.unmeasured === true;
+      // An unmeasured turn's cost is UNKNOWN: never the $0 that pricing zero tokens would yield. (afa37093 AC3)
+      const estCostUsd = unmeasured ? null : est.costUsd;
+      const perTurn: UsageTurnContext[] | null = payload.perTurnUsage?.length
+        ? payload.perTurnUsage.map((t) => ({
+            uncached_input_tokens: t.uncachedInputTokens ?? 0,
+            cache_read_tokens: t.cacheReadTokens ?? 0,
+            cache_creation_tokens: t.cacheCreationTokens ?? 0,
+            output_tokens: t.outputTokens ?? 0,
+            context_tokens: t.contextTokens ?? 0,
+          }))
+        : null;
 
       const row: UsageRow = {
         session_id: info.sessionId ?? null,
@@ -895,15 +946,22 @@ function deriveTurns(
         tool_call_est_result_tokens: 0, // filled in by subsequent TOOL_RESULT events, if any
         est_cost_usd: estCostUsd,
         response_model: payload.responseModel ?? null,
-        cost_status: est.status,
-        cost_basis: est.basis,
-        pricing_ref: est.pricingRef,
+        cost_status: unmeasured ? "unmeasured" : est.status,
+        cost_basis: unmeasured ? null : est.basis,
+        pricing_ref: unmeasured ? null : est.pricingRef,
         // One call IS its own peak, except a response that folded several model turns (claudecli):
         // then the provider-reported per-turn max (7ead5eaa BK4).
         context_size: payload.peakContextTokens ?? inputTokens,
         context_size_at: contextSizeAtSelf(evt.taskId, callIndex),
+        task_status: info.taskStatus ?? null,
+        requested_model: info.usage.requestedModel ?? null,
+        cli_reported_cost_usd: payload.cliReportedCostUsd ?? null,
+        cache_creation_1h_tokens: payload.cacheCreation1hTokens ?? null,
+        first_turn: perTurn ? perTurn[0] : null,
+        per_turn: perTurn,
+        per_turn_truncated: payload.perTurnUsageTruncated === true,
       };
-      const unpriced = priced ? priced.unpricedCount > 0 : est.status === "unpriced_model";
+      const unpriced = unmeasured || (priced ? priced.unpricedCount > 0 : est.status === "unpriced_model");
       const unpricedModels = priced
         ? priced.entries.filter((_, i) => priced.entryCosts[i] === null).map((e) => e.model)
         : [model];

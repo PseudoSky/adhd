@@ -80,6 +80,11 @@ export const usageSummarySchema = z.object({
   reasoningTokens: z.number().int().nonnegative(),
   /** PEAK single-call input — the real context high-water mark (a MAX, not a sum). */
   peakContextTokens: z.number().int().nonnegative(),
+  /**
+   * Estimated dollar cost (rate-card) summed over the rows in scope. null (never 0) when no row exists or any
+   * contributing row could not be priced / measured — the same rule as the grain rows. (8333f755 AC4)
+   */
+  est_cost_usd: z.number().nullable(),
 });
 
 export type UsageSummary = z.infer<typeof usageSummarySchema>;
@@ -107,6 +112,18 @@ export const contextSizeAtSchema = z.object({
   call_index: z.number().int().positive().nullable(),
 });
 export type ContextSizeAt = z.infer<typeof contextSizeAtSchema>;
+
+/** Context of one model call inside a folded response (claudecli), snake_case like the row. (debd934d) */
+export const usageTurnContextSchema = z.object({
+  /** Full-price (cache-miss) input of that call. */
+  uncached_input_tokens: z.number().int().nonnegative(),
+  cache_read_tokens: z.number().int().nonnegative(),
+  cache_creation_tokens: z.number().int().nonnegative(),
+  output_tokens: z.number().int().nonnegative(),
+  /** What the model saw on that call: uncached + cache_read + cache_creation. */
+  context_tokens: z.number().int().nonnegative(),
+});
+export type UsageTurnContext = z.infer<typeof usageTurnContextSchema>;
 
 /**
  * Same field set at every grain (DESIGN.md §3) — flattened, snake_case. Identity
@@ -145,7 +162,11 @@ export const usageRowSchema = z.object({
 
   /** Provider-reported model that actually served the call(s); null when unreported or mixed. */
   response_model: z.string().nullable(),
-  /** `priced` | `unpriced_model` | `partial`; null on legacy rows ("provenance unknown") or mixed-provenance session rows. */
+  /**
+   * `priced` | `unpriced_model` | `partial` | `unmeasured` (a run that spent resources but reported no usage:
+   * zero tokens, est_cost_usd null — its cost is UNKNOWN, never $0); null on legacy rows ("provenance unknown")
+   * or mixed-provenance session rows.
+   */
   cost_status: z.string().nullable(),
   /** `vendor-direct` | `openrouter-estimate` | `owner-assumption`; null when unpriced / unknown / mixed. */
   cost_basis: z.string().nullable(),
@@ -154,6 +175,25 @@ export const usageRowSchema = z.object({
 
   context_size: z.number().int().nonnegative(),
   context_size_at: contextSizeAtSchema,
+
+  /** Status of the owning task (`completed` | `failed` | `cancelled` ...); null at session grain or when the task row is gone. (afa37093 AC4) */
+  task_status: z.string().nullable(),
+  /** The model the task was REQUESTED with (may be an alias such as `haiku`); `model` is the resolved id. null at session grain when mixed / on legacy rows. (8333f755 AC2) */
+  requested_model: z.string().nullable(),
+  /** Dollar cost the provider itself reported (claudecli `total_cost_usd`), summed; null when the provider reports none. Cross-check against est_cost_usd. (8333f755 AC1) */
+  cli_reported_cost_usd: z.number().nullable(),
+  /** The 1-hour-TTL SUBSET of cache_creation_tokens (billed at 2x vs 1.25x). null = not recorded (legacy row). (8333f755 AC3) */
+  cache_creation_1h_tokens: z.number().int().nonnegative().nullable(),
+  /**
+   * Turn grain, folded responses (claudecli) only: context of the run's FIRST model call, whose
+   * cost/context gate `context_size` (a max) cannot give. null for single-call responses (their own
+   * input_tokens IS the first turn) and at task/session grain. (debd934d AC1)
+   */
+  first_turn: usageTurnContextSchema.nullable(),
+  /** Turn grain, folded responses only: per-call breakdown, bounded (earliest first). null otherwise. (debd934d AC2) */
+  per_turn: z.array(usageTurnContextSchema).nullable(),
+  /** True when the run had more calls than `per_turn` carries. */
+  per_turn_truncated: z.boolean(),
 });
 export type UsageRow = z.infer<typeof usageRowSchema>;
 

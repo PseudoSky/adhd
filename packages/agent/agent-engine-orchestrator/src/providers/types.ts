@@ -3,6 +3,8 @@ import type { PermissionAction, ToolDefinition, TokenUsage } from '@adhd/agent-b
 export type { ToolDefinition, TokenUsage };
 import type { ProviderLimitWarning } from './provider-failure.js';
 export type { ProviderLimitWarning };
+import type { ProviderTokenUsage } from './partial-usage.js';
+export type { ProviderTokenUsage };
 
 /**
  * The server name the permission gate sees for the `claude` CLI's own built-in tools
@@ -47,7 +49,7 @@ export interface ProviderChatRequest {
 export interface ProviderChatResponse {
   message: Message;
   stopReason: 'completed' | 'tool_calls';
-  usage?: TokenUsage;
+  usage?: ProviderTokenUsage;
   rawUsage?: unknown;
   /**
    * Usage-accounting only. Tool invocations the provider executed ITSELF inside this

@@ -6,6 +6,7 @@ import { taskUsageTable, createPriceSource } from "@adhd/agent-store-runtime";
 import { estimateCost } from "@adhd/agent-core-provider";
 import type { ICostEstimate, IPriceSource } from "@adhd/agent-core-provider";
 import { nowIso } from '../utils/timestamps.js';
+import type { ProviderTokenUsage } from '../providers/partial-usage.js';
 import type { EngineLogger } from '../interfaces.js';
 import type {
   IHookRegistry,
@@ -262,6 +263,10 @@ export class UsagePlugin implements Plugin {
 
       // The model the task was REQUESTED with (agent config; may be an alias such as "haiku").
       const requestedModel = acc?.model ?? (wireModelOf(executionContext) || 'default');
+      if ((tokenUsage as ProviderTokenUsage | undefined)?.unmeasured) {
+        this.recordUnmeasured(payload, acc, requestedModel);
+        return;
+      }
       const breakdown = tokenUsage?.modelBreakdown?.length ? tokenUsage.modelBreakdown : undefined;
       const asOf = this.now();
 
@@ -322,6 +327,11 @@ export class UsagePlugin implements Plugin {
         turnBasis = est.basis;
         turnPricingRef = est.pricingRef;
       }
+      // The 1-hour-TTL subset of this response's cache writes (8333f755 AC3): the response-level scalar, else
+      // the sum over the per-model entries a folded response carries.
+      const cacheCreation1h =
+        tokenUsage?.cacheCreation1hTokens ??
+        (breakdown ? breakdown.reduce((n, e) => n + e.cacheCreation1hTokens, 0) : 0);
       const turnPriced = turnCost !== null;
       const responseModel = payload.responseModel ?? (breakdown ? model : null);
       const cliReportedCostUsd = tokenUsage?.cliReportedCostUsd;
@@ -374,6 +384,7 @@ export class UsagePlugin implements Plugin {
           maxTokens: acc?.maxTokens ?? null,
           cacheReadTokens: tokenUsage?.cacheReadTokens ?? null,
           cacheCreationTokens: tokenUsage?.cacheCreationTokens ?? null,
+          cacheCreation1hTokens: cacheCreation1h,
           uncachedInputTokens: tokenUsage?.uncachedInputTokens ?? null,
           reasoningTokens: tokenUsage?.reasoningTokens ?? null,
           // First call for this task: its input IS the peak so far.
@@ -412,6 +423,9 @@ export class UsagePlugin implements Plugin {
             cacheCreationTokens: sql`COALESCE(${
               taskUsageTable.cacheCreationTokens
             }, 0) + ${tokenUsage?.cacheCreationTokens ?? 0}`,
+            cacheCreation1hTokens: sql`COALESCE(${
+              taskUsageTable.cacheCreation1hTokens
+            }, 0) + ${cacheCreation1h}`,
             uncachedInputTokens: sql`COALESCE(${
               taskUsageTable.uncachedInputTokens
             }, 0) + ${tokenUsage?.uncachedInputTokens ?? 0}`,
@@ -468,6 +482,57 @@ export class UsagePlugin implements Plugin {
     } catch (err) {
       this.logger.error({ err }, 'UsagePlugin: post:model_response handler failed');
     }
+  }
+
+  /**
+   * afa37093 AC3: a provider call that spent real resources but reported nothing (killed before any usage
+   * appeared). Its tokens and cost are UNKNOWN: the row is created (so the task is visible in `usage_query`)
+   * with zero tokens, a NULL `est_cost_usd` (never $0) and `cost_status = 'unmeasured'`. Folding into a task that
+   * already has measured turns degrades it to `partial` and makes its estimate NULL, exactly like an unpriced turn.
+   */
+  private recordUnmeasured(
+    payload: PostModelResponsePayload,
+    acc: Accumulator | undefined,
+    requestedModel: string
+  ): void {
+    const { executionContext, computeMs } = payload;
+    const taskId = executionContext.taskId;
+    const providerType = acc?.providerType ?? selectionOf(executionContext).providerType;
+    this.db
+      .insert(taskUsageTable)
+      .values({
+        taskId,
+        rootTaskId: acc?.rootTaskId ?? null,
+        agentName: acc?.agentName ?? executionContext.agentName,
+        providerType,
+        model: requestedModel,
+        requestedModel,
+        inputTokens: 0,
+        outputTokens: 0,
+        toolCallCount: 0,
+        modelCalls: 0,
+        latencyMs: 0,
+        isComplete: 0,
+        stopReason: acc?.mostSevereStopReason ?? 'unknown',
+        maxTokens: acc?.maxTokens ?? null,
+        peakContextTokens: 0,
+        peakContextAt: 0,
+        computeMs,
+        responseModel: payload.responseModel ?? null,
+        costStatus: 'unmeasured',
+        pricedCostUsd: 0,
+        unpricedTokens: 0,
+        createdAt: nowIso(),
+      })
+      .onConflictDoUpdate({
+        target: taskUsageTable.taskId,
+        set: {
+          computeMs: sql`COALESCE(${taskUsageTable.computeMs}, 0) + ${computeMs}`,
+          estCostUsd: sql`NULL`,
+          costStatus: sql`CASE WHEN ${taskUsageTable.costStatus} = 'unmeasured' THEN 'unmeasured' ELSE 'partial' END`,
+        },
+      })
+      .run();
   }
 
   /** SQL for the running `cost_status` after folding a turn of `turnStatus` into the stored value. */

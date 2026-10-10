@@ -30,6 +30,14 @@ import {
     type RetryRuntime,
 } from "./provider-failure.js";
 import { startToolBridge, buildBridgeMcpConfig, bridgeableTools, type ToolBridge } from "./claudecli-tool-bridge.js";
+import {
+    MAX_PER_TURN_USAGE,
+    attachPartialUsage,
+    readPartialUsage,
+    type IProviderPartialUsage,
+    type IProviderTurnUsage,
+    type ProviderTokenUsage,
+} from "./partial-usage.js";
 
 /** Bytes of stderr kept (tail) for fault reports. */
 const STDERR_TAIL_BYTES = 2000;
@@ -123,27 +131,104 @@ interface ClaudeStreamAssistantEvent {
     message: {
         role: "assistant";
         content: Array<{ type: string } & Partial<ClaudeToolUseBlock>>;
+        /** Id of the model call; every content block of one call carries the same id. */
+        id?: string;
         /** Per-model-call usage of THIS turn (one entry per content block of the same message id, all equal). */
         usage?: {
             input_tokens?: number | null;
+            output_tokens?: number | null;
             cache_read_input_tokens?: number | null;
             cache_creation_input_tokens?: number | null;
+            cache_creation?: { ephemeral_1h_input_tokens?: number | null } | null;
         };
     };
 }
 
 /**
- * Context size of ONE model call from an `assistant` event's usage: uncached input + cache read +
- * cache creation. This is what the model actually saw on that turn. The terminal `result.usage`
- * is the SUM over every turn and must never be used as a context size (7ead5eaa BK4). Returns 0
- * when the event carries no usage.
+ * Accumulates the CLI stream's per-model-call usage. The terminal `result.usage` is a SUM over every
+ * turn (never a context size, 7ead5eaa BK4); this keeps the turns themselves so the run's first-turn
+ * context (debd934d), per-turn breakdown, peak, and -- when the run dies before its `result` -- its
+ * real spend (afa37093) are all recoverable. Turns are keyed by message id (the CLI repeats one
+ * `assistant` event per content block of the same call); an event without an id is its own turn.
  */
-function assistantTurnContextTokens(event: ClaudeStreamAssistantEvent): number {
-    const u = event.message?.usage;
-    if (!u) return 0;
-    return finiteNonNegative(u.input_tokens)
-        + finiteNonNegative(u.cache_read_input_tokens)
-        + finiteNonNegative(u.cache_creation_input_tokens);
+export class CliTurnTracker {
+    private readonly turns = new Map<string, IProviderTurnUsage & { write1h: number }>();
+    private anon = 0;
+
+    /** Fold one `assistant` event in. Events carrying no usage are ignored. */
+    record(event: ClaudeStreamAssistantEvent): void {
+        const u = event.message?.usage;
+        if (!u) return;
+        const next = {
+            uncachedInputTokens: finiteNonNegative(u.input_tokens),
+            cacheReadTokens: finiteNonNegative(u.cache_read_input_tokens),
+            cacheCreationTokens: finiteNonNegative(u.cache_creation_input_tokens),
+            outputTokens: finiteNonNegative(u.output_tokens),
+            write1h: finiteNonNegative(u.cache_creation?.ephemeral_1h_input_tokens),
+            contextTokens: 0,
+        };
+        next.contextTokens = next.uncachedInputTokens + next.cacheReadTokens + next.cacheCreationTokens;
+        const id = typeof event.message?.id === "string" && event.message.id.length > 0
+            ? event.message.id
+            : `anon-${this.anon++}`;
+        const prev = this.turns.get(id);
+        this.turns.set(id, prev
+            ? {
+                uncachedInputTokens: Math.max(prev.uncachedInputTokens, next.uncachedInputTokens),
+                cacheReadTokens: Math.max(prev.cacheReadTokens, next.cacheReadTokens),
+                cacheCreationTokens: Math.max(prev.cacheCreationTokens, next.cacheCreationTokens),
+                outputTokens: Math.max(prev.outputTokens, next.outputTokens),
+                write1h: Math.max(prev.write1h, next.write1h),
+                contextTokens: Math.max(prev.contextTokens, next.contextTokens),
+            }
+            : next);
+    }
+
+    /** Distinct model calls seen. */
+    get count(): number {
+        return this.turns.size;
+    }
+
+    /** Largest single-turn context (0 when none). */
+    get peakContextTokens(): number {
+        let peak = 0;
+        for (const t of this.turns.values()) peak = Math.max(peak, t.contextTokens);
+        return peak;
+    }
+
+    /** Context of the first model call (0 when none). */
+    get firstTurnContextTokens(): number {
+        for (const t of this.turns.values()) return t.contextTokens;
+        return 0;
+    }
+
+    /** The first {@link MAX_PER_TURN_USAGE} turns, earliest first. */
+    perTurn(): { entries: IProviderTurnUsage[]; truncated: boolean } {
+        const all = [...this.turns.values()];
+        return {
+            entries: all.slice(0, MAX_PER_TURN_USAGE).map(({ write1h: _w, ...t }) => t),
+            truncated: all.length > MAX_PER_TURN_USAGE,
+        };
+    }
+
+    /** The run's usage reconstructed from its turns, in the CLI's raw `result.usage` shape. */
+    aggregateRaw(): NonNullable<ClaudeStreamResultEvent["usage"]> {
+        let input = 0, output = 0, read = 0, write = 0, write1h = 0;
+        for (const t of this.turns.values()) {
+            input += t.uncachedInputTokens;
+            output += t.outputTokens;
+            read += t.cacheReadTokens;
+            write += t.cacheCreationTokens;
+            write1h += t.write1h;
+        }
+        return {
+            input_tokens: input,
+            output_tokens: output,
+            cache_read_input_tokens: read,
+            cache_creation_input_tokens: write,
+            cache_creation: { ephemeral_1h_input_tokens: Math.min(write1h, write) },
+        };
+    }
 }
 
 type ClaudeStreamEvent =
@@ -696,19 +781,104 @@ export class ClaudeCliProvider implements LLMProvider {
         const wireModel = this.providerConfig.model ?? "";
         const key = this.credentialKey();
         const timeoutMs = this.providerConfig.timeoutMs ?? DEFAULT_PROVIDER_TIMEOUT_MS;
-        return callWithRetry(() => this.chatWithBridge(request, bridge), {
-            runtime: this.retryRuntime,
-            // The claudecli binding has no `retryConfig`: the designed-in defaults apply (<= 2 retries),
-            // and waiting is bounded by the call timeout.
-            policy: { ...DEFAULT_RETRY_POLICY, windowMs: timeoutMs },
-            target: { providerType: "claudecli", credentialScope: key, wireModel },
-            signal: request.signal,
-            // Only faults this adapter already classified are policy-managed; spawn failures, aborts and
-            // wiring errors keep their own error types and messages.
-            classify: (err) => (isProviderCallError(err) ? err.data : undefined),
-            onRetry: ({ attempt, failure, waitMs }) =>
-                this.logger.warn({ attempt, class: failure.class, waitMs }, "claudecli: transient failure, retrying"),
-        });
+        // callWithRetry re-wraps the final failure in a fresh ProviderCallError, so the spend the failed
+        // spawn carried is captured here and re-attached to whatever finally propagates (afa37093).
+        let lastPartial: IProviderPartialUsage | undefined;
+        try {
+            return await callWithRetry(async () => {
+                try {
+                    return await this.chatWithBridge(request, bridge);
+                } catch (err) {
+                    lastPartial = readPartialUsage(err) ?? lastPartial;
+                    throw err;
+                }
+            }, {
+                runtime: this.retryRuntime,
+                // The claudecli binding has no `retryConfig`: the designed-in defaults apply (<= 2 retries),
+                // and waiting is bounded by the call timeout.
+                policy: { ...DEFAULT_RETRY_POLICY, windowMs: timeoutMs },
+                target: { providerType: "claudecli", credentialScope: key, wireModel },
+                signal: request.signal,
+                // Only faults this adapter already classified are policy-managed; spawn failures, aborts and
+                // wiring errors keep their own error types and messages.
+                classify: (err) => (isProviderCallError(err) ? err.data : undefined),
+                onRetry: ({ attempt, failure, waitMs }) =>
+                    this.logger.warn({ attempt, class: failure.class, waitMs }, "claudecli: transient failure, retrying"),
+            });
+        } catch (err) {
+            if (lastPartial && !readPartialUsage(err)) attachPartialUsage(err, lastPartial);
+            throw err;
+        }
+    }
+
+    /**
+     * The response `usage` for a finished run: the CLI's own aggregate (`result.usage`), re-keyed to
+     * the concrete model(s) it resolved, with the peak, first-turn and per-turn context the folded
+     * aggregate would otherwise discard (7ead5eaa BK4, debd934d). `undefined` when the CLI reported
+     * no usage and none could be rebuilt from the stream.
+     */
+    private buildRunUsage(
+        resultEvent: ClaudeStreamResultEvent | undefined,
+        rawUsage: ClaudeStreamResultEvent["usage"],
+        normalisedStopReason: string,
+        initModel: string | undefined,
+        turns: CliTurnTracker
+    ): ProviderTokenUsage | undefined {
+        if (!rawUsage) return undefined;
+        const resolved = resultEvent ? resolveCliModelUsage({ ...resultEvent, usage: rawUsage }, initModel) : undefined;
+        const cliCost = resultEvent?.total_cost_usd;
+        const perTurn = turns.count > 0 ? turns.perTurn() : undefined;
+        return {
+            ...normaliseAnthropicUsage(rawUsage, normalisedStopReason, this.config.server?.defaultMaxTokens ?? 0),
+            ...(resolved ? { modelBreakdown: resolved.entries } : {}),
+            ...(turns.peakContextTokens > 0 ? { peakContextTokens: turns.peakContextTokens } : {}),
+            ...(perTurn && turns.firstTurnContextTokens > 0
+                ? {
+                    firstTurnContextTokens: turns.firstTurnContextTokens,
+                    perTurnUsage: perTurn.entries,
+                    ...(perTurn.truncated ? { perTurnUsageTruncated: true } : {}),
+                }
+                : {}),
+            ...(typeof cliCost === "number" && Number.isFinite(cliCost) ? { cliReportedCostUsd: cliCost } : {}),
+        };
+    }
+
+    /**
+     * What a run that threw had spent. Precedence: the CLI's own error `result` (tokens + its
+     * `total_cost_usd`, exactly as on success) -> the sum of the per-turn usage seen on the stream (a
+     * killed/timed-out run) -> nothing (`usage` absent; the engine records an UNMEASURED zero row).
+     */
+    private buildPartialUsage(
+        errorResult: ClaudeStreamResultEvent | undefined,
+        initModel: string | undefined,
+        turns: CliTurnTracker
+    ): IProviderPartialUsage {
+        const fromResult = errorResult?.usage
+            ? this.buildRunUsage(errorResult, errorResult.usage, "unknown", initModel, turns)
+            : undefined;
+        const usage = fromResult ?? (turns.count > 0
+            ? this.buildRunUsage(
+                { type: "result", subtype: "partial", is_error: true },
+                turns.aggregateRaw(),
+                "unknown",
+                initModel,
+                turns
+            )
+            : undefined);
+        let reportedModelCalls: number | undefined = turns.count > 0 ? turns.count : undefined;
+        if (typeof errorResult?.num_turns === "number" && errorResult.num_turns >= 1) {
+            reportedModelCalls = errorResult.num_turns;
+        }
+        const resolvedModel = usage?.modelBreakdown?.length
+            ? usage.modelBreakdown.reduce((best, e) => (e.outputTokens + e.cacheReadTokens + e.cacheCreationTokens + e.uncachedInputTokens
+                > best.outputTokens + best.cacheReadTokens + best.cacheCreationTokens + best.uncachedInputTokens ? e : best)).model
+            : undefined;
+        return {
+            ...(usage ? { usage } : {}),
+            ...(errorResult?.usage ? { rawUsage: errorResult.usage } : {}),
+            ...(reportedModelCalls !== undefined ? { reportedModelCalls } : {}),
+            ...(resolvedModel ? { responseModel: resolvedModel } : {}),
+        };
     }
 
     private async chatWithBridge(request: ProviderChatRequest, bridge: ToolBridge | undefined): Promise<ProviderChatResponse> {
@@ -808,6 +978,11 @@ export class ClaudeCliProvider implements LLMProvider {
         });
 
         const onAbort = (): void => { terminateProcessTree(proc); };
+        // Hoisted out of the try so the failure path can still report what the run spent (afa37093).
+        const turns = new CliTurnTracker();
+        let procError: Error | undefined;
+        let initModel: string | undefined;
+        let errorResultEvent: ClaudeStreamResultEvent | undefined;
         // True only once a `result` was received and validated; error/abort paths
         // leave it false and keep the immediate group SIGTERM (322a1efb AC3).
         let cleanTurn = false;
@@ -821,7 +996,6 @@ export class ClaudeCliProvider implements LLMProvider {
                 }) + "\n"
             );
 
-            let procError: Error | undefined;
             proc.on("error", (err) => { procError = err; });
 
             // FLT-3: never leave stderr undrained (a full pipe hangs the CLI) and keep a bounded,
@@ -855,13 +1029,10 @@ export class ClaudeCliProvider implements LLMProvider {
             let finalStopReason: string | undefined;
             let finalNumTurns: number | undefined;
             let finalResultEvent: ClaudeStreamResultEvent | undefined;
-            let initModel: string | undefined;
             // tool_use blocks the CLI emitted (built-ins run by the CLI; mcp__ tools run once by the
             // engine via the loopback bridge). Usage-accounting only: NEVER surfaced as message.toolCalls,
             // which the orchestrator would re-execute.
             let toolUseCount = 0;
-            // Largest single-turn context seen on the stream (7ead5eaa BK4): result.usage is a SUM over turns.
-            let peakTurnContext = 0;
 
             for await (const line of rl) {
                 if (request.signal?.aborted) {
@@ -893,6 +1064,8 @@ export class ClaudeCliProvider implements LLMProvider {
                 if (event.type === "result") {
                     const r = event as ClaudeStreamResultEvent;
                     if (r.is_error) {
+                        // The CLI reports what the failed run spent; keep it for the failure path (afa37093 AC1).
+                        errorResultEvent = r;
                         throw faultError({
                             errorResult: { text: r.result, apiErrorStatus: r.api_error_status },
                             rejected: rejectedLimit,
@@ -920,7 +1093,7 @@ export class ClaudeCliProvider implements LLMProvider {
                     );
 
                     toolUseCount += toolUseBlocks.length;
-                    peakTurnContext = Math.max(peakTurnContext, assistantTurnContextTokens(assistantEvent));
+                    turns.record(assistantEvent);
 
                     // claude runs these through the loopback bridge (engine executeTool); the loop
                     // only counts them. It never writes a tool_result back to claude's stdin.
@@ -990,22 +1163,7 @@ export class ClaudeCliProvider implements LLMProvider {
             // priced against the RESOLVED id, per `modelUsage` key. Unresolvable -> left unset and
             // the configured model is used downstream.
             const resolved = finalResultEvent ? resolveCliModelUsage(finalResultEvent, initModel) : undefined;
-            const cliCost = finalResultEvent?.total_cost_usd;
-            const baseUsage = finalUsage
-                ? normaliseAnthropicUsage(
-                    finalUsage,
-                    normalisedStopReason,
-                    this.config.server?.defaultMaxTokens ?? 0
-                )
-                : undefined;
-            const usage = baseUsage && (resolved || typeof cliCost === "number" || peakTurnContext > 0)
-                ? {
-                    ...baseUsage,
-                    ...(resolved ? { modelBreakdown: resolved.entries } : {}),
-                    ...(peakTurnContext > 0 ? { peakContextTokens: peakTurnContext } : {}),
-                    ...(typeof cliCost === "number" && Number.isFinite(cliCost) ? { cliReportedCostUsd: cliCost } : {}),
-                }
-                : baseUsage;
+            const usage = this.buildRunUsage(finalResultEvent, finalUsage, normalisedStopReason, initModel, turns);
 
             return {
                 message,
@@ -1017,6 +1175,15 @@ export class ClaudeCliProvider implements LLMProvider {
                 ...(resolved ? { responseModel: resolved.responseModel } : {}),
                 usage,
             };
+        } catch (err) {
+            // A run that never produced a response may still have spent real tokens: hand the engine
+            // what it can know, so failed/cancelled/timed-out runs are not recorded as free (afa37093).
+            // A spawn that never started (ENOENT/EACCES) spent nothing and carries no partial usage.
+            const neverStarted = procError !== undefined && turns.count === 0 && errorResultEvent === undefined;
+            if (!neverStarted) {
+                attachPartialUsage(err, this.buildPartialUsage(errorResultEvent, initModel, turns));
+            }
+            throw err;
         } finally {
             request.signal?.removeEventListener("abort", onAbort);
             rl.close();

@@ -24,6 +24,8 @@ import { canonicalizeToolDefinitions, compactToolDefinitions } from './tool-sche
 import { coerceToolArguments } from './tool-arg-coercion.js';
 import { DEFAULT_PROVIDER_TIMEOUT_MS } from '../interfaces.js';
 import { selectionOf, wireModelOf } from '../providers/resolve-selection.js';
+import { readPartialUsage, type IProviderPartialUsage, type ProviderTokenUsage } from '../providers/partial-usage.js';
+import { buildModelResponsePayload, sourceFromResponse } from './model-response-payload.js';
 
 import type { McpClientRegistry } from '../clients/registry.js';
 import type { PolicyEngine } from './policy.js';
@@ -1265,6 +1267,53 @@ export class Orchestrator {
         // delegation). The bridge can only hand the CLI an isError result, so the task-level failure
         // the native path throws is re-thrown here once the provider call returns.
         let bridgeFatal: unknown;
+        // afa37093: spend of a provider call that produced no usable response (CLI error result,
+        // abort, timeout, crash) or whose response is discarded (fatal governance error). Recorded through
+        // the SAME hook + MODEL_RESPONSE event a normal turn uses, so task_usage and every grain of
+        // usage_query see it; a call that reported nothing is recorded as an UNMEASURED zero row, never as free.
+        const recordDiscardedUsage = async (
+          partial: IProviderPartialUsage,
+          failure: string
+        ): Promise<void> => {
+          try {
+            const usage: ProviderTokenUsage = partial.usage ?? {
+              inputTokens: 0,
+              outputTokens: 0,
+              unmeasured: true,
+            };
+            const modelCalls = partial.usage ? partial.reportedModelCalls ?? 1 : 0;
+            const toolCallCount = partial.reportedToolUses ?? 0;
+            const failedComputeMs = Date.now() - modelCallStartedAt;
+            await hooks.emit('post:model_response', {
+              executionContext,
+              stopReason: 'error',
+              toolCallCount,
+              modelCalls,
+              tokenUsage: usage,
+              responseModel: partial.responseModel,
+              computeMs: failedComputeMs,
+            });
+            taskStore.appendEvent({
+              taskId,
+              type: 'MODEL_RESPONSE',
+              payload: buildModelResponsePayload(
+                {
+                  stopReason: 'error',
+                  hasContent: false,
+                  toolCallCount,
+                  modelCalls,
+                  responseModel: partial.responseModel,
+                  usage,
+                  rawUsage: partial.rawUsage,
+                },
+                failedComputeMs,
+                { failed: true, failure }
+              ),
+            });
+          } catch (recordErr) {
+            logger.warn({ taskId, err: recordErr }, 'Failed to record usage of a failed provider call');
+          }
+        };
         try {
           const baseMessages =
             contextLimit > 0
@@ -1484,6 +1533,14 @@ export class Orchestrator {
               )
             : callProvider());
         } catch (error) {
+          const spent = readPartialUsage(error);
+          if (spent) {
+            let failure = 'provider_error';
+            if (bridgeFatal !== undefined) failure = 'governance_fatal';
+            else if (signal.aborted) failure = 'cancelled';
+            else if (composedSignal.aborted) failure = 'timeout';
+            await recordDiscardedUsage(spent, failure);
+          }
           if (bridgeFatal !== undefined) throw bridgeFatal;
           if (signal.aborted) {
             throw new ToolError('PROVIDER_ERROR', 'Task was cancelled');
@@ -1553,7 +1610,25 @@ export class Orchestrator {
             }`
           );
         }
-        if (bridgeFatal !== undefined) throw bridgeFatal;
+        if (bridgeFatal !== undefined) {
+          // The CLI returned normally and was billed for the whole run; the engine discards the
+          // response for the fatal governance error but must still account the spend. (afa37093 AC2)
+          await recordDiscardedUsage(
+            {
+              ...(providerResponse.usage ? { usage: providerResponse.usage } : {}),
+              ...(providerResponse.rawUsage !== undefined ? { rawUsage: providerResponse.rawUsage } : {}),
+              ...(providerResponse.reportedToolUses !== undefined
+                ? { reportedToolUses: providerResponse.reportedToolUses }
+                : {}),
+              ...(providerResponse.reportedModelCalls !== undefined
+                ? { reportedModelCalls: providerResponse.reportedModelCalls }
+                : {}),
+              ...(providerResponse.responseModel ? { responseModel: providerResponse.responseModel } : {}),
+            },
+            'governance_fatal'
+          );
+          throw bridgeFatal;
+        }
 
         const assistantMessage: Message = {
           ...providerResponse.message,
@@ -1599,43 +1674,14 @@ export class Orchestrator {
         taskStore.appendEvent({
           taskId,
           type: 'MODEL_RESPONSE',
-          payload: {
-            stopReason: providerResponse.stopReason,
-            hasContent: !!assistantMessage.content,
-            toolCallCount: reportedToolCallCount,
-            modelCalls: providerResponse.reportedModelCalls,
-            responseModel: providerResponse.responseModel,
-            inputTokens: providerResponse.usage?.inputTokens,
-            outputTokens: providerResponse.usage?.outputTokens,
-            cacheReadTokens: providerResponse.usage?.cacheReadTokens,
-            cacheCreationTokens: providerResponse.usage?.cacheCreationTokens,
-            // b726a987: 1h-TTL subset of cacheCreationTokens (priced at the 1h rate on re-pricing).
-            cacheCreation1hTokens: providerResponse.usage?.cacheCreation1hTokens,
-            // Provider-normalized full-price input (NOT derived here — the provider
-            // layer already reconstructs this correctly per-provider, see
-            // anthropic.ts/openai.ts `uncached`). Needed at turn grain so
-            // usage_query's turn rows don't have to re-derive it from
-            // inputTokens - cacheReadTokens - cacheCreationTokens.
-            uncachedInputTokens: providerResponse.usage?.uncachedInputTokens,
-            reasoningTokens: providerResponse.usage?.reasoningTokens,
-            // Per-model usage when one response spans several models / resolved an alias (claudecli
-            // `modelUsage`): lets usage_query's turn grain re-price each model at its own rate card
-            // instead of pricing the whole turn at the task's primary model. (79aebb26 BK8)
-            ...(providerResponse.usage?.modelBreakdown?.length
-              ? { modelBreakdown: providerResponse.usage.modelBreakdown }
-              : {}),
-            // Largest single-turn context inside this response (claudecli folds several turns into
-            // one summed inputTokens); absent => inputTokens IS the context. (7ead5eaa BK4)
-            ...(providerResponse.usage?.peakContextTokens !== undefined
-              ? { peakContextTokens: providerResponse.usage.peakContextTokens }
-              : {}),
-            rawUsage: providerResponse.rawUsage,
-            // Window warnings the call succeeded despite (claudecli allowed_warning). (de6bee5d FLT-4)
-            ...(providerResponse.limitWarnings?.length
-              ? { limitWarnings: providerResponse.limitWarnings }
-              : {}),
-            computeMs,
-          },
+          payload: buildModelResponsePayload(
+            sourceFromResponse(
+              providerResponse,
+              reportedToolCallCount,
+              !!assistantMessage.content
+            ),
+            computeMs
+          ),
         });
 
         logger.debug(

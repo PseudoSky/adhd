@@ -61,7 +61,8 @@ describe("migration 0013: task_usage model resolution columns", () => {
       )
       .run();
 
-    migrate(drizzle(conn), { migrationsFolder: REAL_FOLDER });
+    // Up to 0013 only: later additive migrations (0015 cache_creation_1h_tokens) are covered by their own test.
+    migrate(drizzle(conn), { migrationsFolder: folderUpTo(scratch, 13) });
 
     const added = columnsOf(conn, "task_usage").filter((c) => !before.includes(c));
     expect(added.sort()).toEqual(["cli_reported_cost_usd", "model_breakdown_json", "requested_model"]);

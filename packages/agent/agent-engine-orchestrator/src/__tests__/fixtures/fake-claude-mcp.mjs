@@ -85,7 +85,14 @@ async function run(line) {
     const id = `toolu_${++n}`;
     emit({
       type: 'assistant',
-      message: { role: 'assistant', content: [{ type: 'tool_use', id, name: `mcp__${norm(call.server)}__${norm(call.tool)}`, input: call.args ?? {} }] },
+      message: {
+        role: 'assistant',
+        content: [{ type: 'tool_use', id, name: `mcp__${norm(call.server)}__${norm(call.tool)}`, input: call.args ?? {} }],
+        // ADHD_FAKE_CLAUDE_USAGE=1: report per-call usage like the real CLI (3 calls -> context 1010 / 1020 / 1030).
+        ...(process.env.ADHD_FAKE_CLAUDE_USAGE === '1'
+          ? { id: `msg_${n}`, usage: { input_tokens: 10, output_tokens: 5, cache_read_input_tokens: 1000 + (n - 1) * 10, cache_creation_input_tokens: 0 } }
+          : {}),
+      },
     });
     let text;
     let isError = false;
@@ -105,7 +112,12 @@ async function run(line) {
     writeFileSync(selfOut, JSON.stringify({ cwd: process.cwd(), mcpConfig, mcpConfigRaw: mcpConfigArg, configMode, argv, envValues: Object.values(process.env), toolNames, toolListing, results }));
   }
   process.stdout.write(
-    JSON.stringify({ type: 'result', subtype: 'success', is_error: false, result: results.map((r) => r.text).join('|') || 'OK', num_turns: results.length + 1 }) + '\n',
+    JSON.stringify({
+      type: 'result', subtype: 'success', is_error: false, result: results.map((r) => r.text).join('|') || 'OK', num_turns: results.length + 1,
+      ...(process.env.ADHD_FAKE_CLAUDE_USAGE === '1'
+        ? { total_cost_usd: 0.004, usage: { input_tokens: 10 * results.length, output_tokens: 5 * results.length, cache_read_input_tokens: 3030, cache_creation_input_tokens: 0 } }
+        : {}),
+    }) + '\n',
     () => process.exit(0)
   );
 }
