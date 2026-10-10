@@ -13,6 +13,10 @@ import { ToolError } from "../validation/errors.js";
 import type { EngineLogger, EngineConfig } from "../interfaces.js";
 import { DEFAULT_PROVIDER_TIMEOUT_MS } from "../interfaces.js";
 import { wireSpawn } from "./wire.js";
+import {
+    claudeCliSessions, claudeConfigDir, sessionConfigKey,
+    type ClaudeCliSessionPlan, type ClaudeCliSessionRegistry,
+} from "./claudecli-session.js";
 import { normaliseAnthropicUsage } from "./anthropic.js";
 import { scrubSecrets } from "@adhd/agent-core-provider";
 import {
@@ -93,6 +97,10 @@ interface ClaudeStreamResultEvent {
     subtype: string;
     is_error: boolean;
     result?: string;
+    /** The CLI session this run wrote to (a fork's NEW id when `--fork-session` was passed). */
+    session_id?: string;
+    /** Error strings on an `is_error` result (e.g. `No conversation found with session ID: ...`). */
+    errors?: string[];
     /**
      * HTTP status of the API error that ended the turn (present on `is_error` results; field name
      * verified in the claude 2.1.296 binary's result schema, value semantics from its use as a status).
@@ -449,8 +457,9 @@ function renderHistoryMessage(msg: Message): string[] {
 }
 
 /**
- * Flatten a session into the single user message the CLI receives (every spawn is
- * `--no-session-persistence`, so history is replayed as text). Earlier turns' tool uses and results are
+ * Flatten a session into the single user message the CLI receives when the CLI session is NOT
+ * resumed (an ephemeral / first / diverged run is `--no-session-persistence` or a fresh session, so history is
+ * replayed as text; a resumed run sends only the uncovered tail through this same function, b31e1fe5). Earlier turns' tool uses and results are
  * included as `Assistant called tool ...` / `Tool result (...)` lines. (54499db1 AC1)
  */
 export function buildUserMessage(messages: Message[]): string {
@@ -716,6 +725,22 @@ export function spawnFailureMessage(err: Error, binary: string, searchPath: stri
     return `Claude CLI could not be started: ${err.message}${code ? ` (${code})` : ""}. Binary: \`${binary}\`.`;
 }
 
+/** One spawn's session-continuity decision (b31e1fe5). */
+interface ClaudeCliSessionRun {
+    key: string;
+    configKey: string;
+    configDir: string;
+    nonSystem: Message[];
+    plan: ClaudeCliSessionPlan;
+}
+
+/** The CLI could not find the retained session to resume; the provider retries once with a full text replay. */
+class ResumeNotFoundError extends Error {
+    constructor(parentId: string) {
+        super(`PROVIDER_ERROR: claude CLI could not resume session ${parentId}`);
+    }
+}
+
 export class ClaudeCliProvider implements LLMProvider {
     private readonly providerConfig: ClaudeCliConfig;
     private readonly compiledTools: string[] | undefined;
@@ -724,6 +749,8 @@ export class ClaudeCliProvider implements LLMProvider {
     private readonly reapTimings: ClaudeCliReapTimings;
     private readonly startBridge: typeof startToolBridge;
     private readonly retryRuntime: RetryRuntime;
+    private readonly sessionKey: string | undefined;
+    private readonly sessions: ClaudeCliSessionRegistry;
 
     constructor(
         config: ClaudeCliConfig,
@@ -733,8 +760,20 @@ export class ClaudeCliProvider implements LLMProvider {
         engineLogger?: EngineLogger,
         reapTimings?: Partial<ClaudeCliReapTimings>,
         /** Test seam: replaces the loopback bridge starter so unit tests bind no port. */
-        deps?: { startToolBridge?: typeof startToolBridge; retryRuntime?: RetryRuntime }
+        deps?: {
+            startToolBridge?: typeof startToolBridge;
+            retryRuntime?: RetryRuntime;
+            /**
+             * The engine session this provider serves. When set, the CLI session is retained and the next task on
+             * the same engine session `--resume`s it instead of replaying the history as text (b31e1fe5).
+             */
+            sessionKey?: string;
+            /** Test seam: replaces the process-wide session registry. */
+            sessions?: ClaudeCliSessionRegistry;
+        }
     ) {
+        this.sessionKey = deps?.sessionKey;
+        this.sessions = deps?.sessions ?? claudeCliSessions;
         this.startBridge = deps?.startToolBridge ?? startToolBridge;
         this.retryRuntime = deps?.retryRuntime ?? defaultRetryRuntime();
         this.reapTimings = { ...DEFAULT_CLAUDECLI_REAP_TIMINGS, ...reapTimings };
@@ -1022,12 +1061,53 @@ export class ClaudeCliProvider implements LLMProvider {
         };
     }
 
+    /**
+     * Decide whether this call continues a retained CLI session (b31e1fe5) and run it. Session continuity is
+     * only for a sessioned, non-spec, non-diagnostic-transcript worker; everything else keeps the original
+     * `--no-session-persistence` + text-replay behaviour. A resume the CLI cannot find is retried ONCE as a
+     * fresh full replay (it fails before any tool runs, so the retry cannot repeat a side effect).
+     */
     private async chatWithBridge(request: ProviderChatRequest, bridge: ToolBridge | undefined): Promise<ProviderChatResponse> {
+        const key = this.sessionKey;
+        const nonSystem = request.messages.filter(m => m.role !== "system");
+        const systemPrompt = request.messages.filter(m => m.role === "system").map(m => m.content ?? "").join("\n") || undefined;
+        const specMode = this.providerConfig.systemPromptIsAgentSpec === true && !!systemPrompt;
+        const resumeOptOut = (this.providerConfig as { resumeSession?: unknown }).resumeSession === false;
+        if (!key || nonSystem.length === 0 || specMode || resumeOptOut || this.keepSessionTranscript()) {
+            return this.runCli(request, bridge, undefined);
+        }
+        const configDir = claudeConfigDir(this.buildSubprocessEnv());
+        const configKey = sessionConfigKey([
+            systemPrompt,
+            this.providerConfig.model,
+            this.config.cwd,
+            JSON.stringify(this.compiledTools ?? this.providerConfig.allowedBuiltinTools ?? null),
+        ]);
+        const attempt = (): ClaudeCliSessionRun => ({
+            key, configKey, configDir, nonSystem,
+            plan: this.sessions.plan(key, configKey, configDir, nonSystem),
+        });
+        let session = attempt();
+        try {
+            return await this.runCli(request, bridge, session);
+        } catch (err) {
+            if (!(err instanceof ResumeNotFoundError) || session.plan.mode !== "resume") throw err;
+            this.logger.warn({ parent: session.plan.parentId }, "claudecli: retained session not found; replaying history as text");
+            this.sessions.invalidate(key);
+            session = attempt();
+            return await this.runCli(request, bridge, session);
+        }
+    }
+
+    private async runCli(request: ProviderChatRequest, bridge: ToolBridge | undefined, session: ClaudeCliSessionRun | undefined): Promise<ProviderChatResponse> {
         const claudePath = this.providerConfig.claudePath ?? "claude";
 
         const systemMessages = request.messages.filter(m => m.role === "system");
         const systemPrompt = systemMessages.map(m => m.content ?? "").join("\n") || undefined;
-        const userMessage = buildUserMessage(request.messages);
+        // A resumed run already holds the covered history in its transcript: send only the new tail.
+        const userMessage = session?.plan.mode === "resume"
+            ? buildUserMessage(session.plan.tail)
+            : buildUserMessage(request.messages);
 
         const mcpConfigPath = await this.writeMcpConfigFile(bridge);
 
@@ -1071,7 +1151,14 @@ export class ClaudeCliProvider implements LLMProvider {
         // ~/.claude/projects). Opt in to keep them for diagnosis via the
         // `keepSessionTranscript` provider option or
         // ADHD_AGENT_CLAUDECLI_KEEP_SESSION_TRANSCRIPT=1.
-        if (!this.keepSessionTranscript()) args.push("--no-session-persistence");
+        if (session) {
+            // Retained session (b31e1fe5). A resume FORKS: the parent transcript is only read and this run writes
+            // its own new one, so concurrent tasks / processes never share a mutable file (ADR-0012).
+            if (session.plan.mode === "resume") args.push("--resume", session.plan.parentId, "--fork-session");
+            else args.push("--session-id", session.plan.newId);
+        } else if (!this.keepSessionTranscript()) {
+            args.push("--no-session-persistence");
+        }
 
         if (specMode && agentSpecDir && agentSpecName) {
             args.push(
@@ -1208,6 +1295,9 @@ export class ClaudeCliProvider implements LLMProvider {
                     if (r.is_error) {
                         // The CLI reports what the failed run spent; keep it for the failure path (afa37093 AC1).
                         errorResultEvent = r;
+                        if (session?.plan.mode === "resume" && toolUseCount === 0 && (r.errors ?? []).some((e) => /No conversation found/i.test(e))) {
+                            throw new ResumeNotFoundError(session.plan.parentId);
+                        }
                         throw faultError({
                             errorResult: { text: r.result, apiErrorStatus: r.api_error_status },
                             rejected: rejectedLimit,
@@ -1305,6 +1395,17 @@ export class ClaudeCliProvider implements LLMProvider {
                 ...(toolTrace.results().length > 0 ? { toolResults: toolTrace.results() } : {}),
                 createdAt: nowIso(),
             };
+
+            if (session) {
+                // A fresh run wrote the id we pinned; a fork reports its NEW id. No id => the head is not resumable.
+                const cliSessionId = finalResultEvent?.session_id ?? (session.plan.mode === "fresh" ? session.plan.newId : undefined);
+                if (cliSessionId) {
+                    this.sessions.commit(session.key, {
+                        configKey: session.configKey, configDir: session.configDir, cliSessionId,
+                        nonSystem: session.nonSystem, reply: finalResult,
+                    });
+                }
+            }
 
             const normalisedStopReason = CLI_STOP_REASON[finalStopReason ?? ""] ?? "unknown";
 

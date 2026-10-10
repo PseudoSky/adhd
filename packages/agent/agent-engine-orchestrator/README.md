@@ -171,12 +171,28 @@ The `claudecli` adapter spawns `claude -p` as a worker, not as an interactive se
 
 - `--strict-mcp-config` with `--mcp-config` set to the agent's own servers (an inline empty config when it declares none), so the child never loads the operator's MCP set (which includes agent-mcp itself).
 - `--tools <allowedBuiltinTools>` (an allowlist; no tools -> `--tools ""`), so no newer built-in (Workflow, Skill, SendMessage, Cron*, Task*, ...) is available. Ignored in `systemPromptIsAgentSpec` mode, where the spec's `tools:` header governs.
-- `--no-session-persistence`, so tasks do not write transcripts into `~/.claude/projects`. Keep them for diagnosis with `keepSessionTranscript: true` on the provider config or `ADHD_AGENT_CLAUDECLI_KEEP_SESSION_TRANSCRIPT=1`.
-- Session continuation is a text replay (the CLI keeps no transcript), but the replay carries earlier turns' tool use: each run's tool calls and results are stored on its assistant message (`toolResults`, never `toolCalls`) and replayed as `Assistant called tool ...` / `Tool result (...)` lines before that turn's answer, so a fact that only appeared in a phase-1 tool result is recallable in phase 2. Stored inputs and outputs are bounded by the tool-result cap (`agent.toolResult.maxChars` / `ADHD_AGENT_TOOL_RESULT_MAX_CHARS`, `0` disables) and at most 100 tool uses per run. (54499db1)
+- `--no-session-persistence` for a run with no engine session (and with `resumeSession: false` or `keepSessionTranscript`), so such tasks do not write transcripts into `~/.claude/projects`. Keep them for diagnosis with `keepSessionTranscript: true` on the provider config or `ADHD_AGENT_CLAUDECLI_KEEP_SESSION_TRANSCRIPT=1`.
+- Session continuation: see "Session continuity" below. Where it cannot resume, continuation is a text replay (the CLI keeps no transcript), and the replay carries earlier turns' tool use: each run's tool calls and results are stored on its assistant message (`toolResults`, never `toolCalls`) and replayed as `Assistant called tool ...` / `Tool result (...)` lines before that turn's answer, so a fact that only appeared in a phase-1 tool result is recallable in phase 2. Stored inputs and outputs are bounded by the tool-result cap (`agent.toolResult.maxChars` / `ADHD_AGENT_TOOL_RESULT_MAX_CHARS`, `0` disables) and at most 100 tool uses per run. (54499db1)
 - `CLAUDE_CODE_DISABLE_CLAUDE_MDS=1` and `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1` in the child env (unless already set explicitly), so the operator's CLAUDE.md files and auto-memory are not injected into every task.
 - `--setting-sources project` (non-spec mode), so the operator's user-level plugins, skills, agents and hooks are not listed into every task's first request (measured -953 input tokens per turn for a shell-only agent; 9ed453c1 CTX). Override with `settingSources` on the provider config (a comma list or array of `user|project|local`, or `"inherit"` for the CLI default) or `ADHD_AGENT_CLAUDECLI_SETTING_SOURCES`.
 
 Tool results the CLI receives through the loopback bridge are bounded by the same head+tail cap as the API path (`ADHD_AGENT_TOOL_RESULT_MAX_CHARS`, default 6000), so one oversized `cat` is not re-sent on every later turn of the CLI's own loop.
+
+### `claudecli` session continuity (b31e1fe5)
+
+A task on an engine session keeps its CLI session, and the next task on the same engine session resumes it instead of replaying the history as text. Measured on claude-haiku-4-5 (a ~6k-token first task, then a second task on the same session):
+
+| second task | cache_creation 1h | first-turn cache_read | first-turn context | cache_read / context |
+| --- | --- | --- | --- | --- |
+| text replay, `--no-session-persistence` (before) | 6,312 | 0 | 6,322 | 0.00 |
+| `--resume <id> --fork-session` (now) | 121 | 6,288 | 6,419 | 0.98 |
+
+How it behaves:
+
+- The engine session id (`ExecutionContext.sessionId`, threaded by `createProvider`) is the key. The first task runs `--session-id <fresh uuid>`; later tasks run `--resume <latest> --fork-session` and send **only the messages the transcript does not cover**.
+- Fork, never append: the parent transcript is only read, and every run writes its own new transcript, so concurrent tasks and concurrent agent-mcp processes never share a mutable file (ADR-0012).
+- The registry fingerprints the exact role+text history each transcript covers. Compaction, windowing, edited history, or a changed system prompt, model, cwd or tool allowlist fall back to the original text replay; a resume the CLI cannot find ("No conversation found") is retried once as a text replay. Agent-spec mode, `keepSessionTranscript`, `resumeSession: false` on the provider config, and runs without an engine session keep the original `--no-session-persistence` behaviour.
+- Retained state is per process. A transcript no live process can resume is garbage, so transcripts are deleted on `release()`, on LRU eviction (32 sessions), after 1h idle (the cache TTL), and at process exit. Another process, or a restart, simply starts cold.
 
 The CLI executes its own built-in tools inside the one invocation, so the adapter only answers `tool_use` blocks for `mcp__`-prefixed tools the agent declared.
 

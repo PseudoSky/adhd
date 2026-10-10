@@ -1,3 +1,9 @@
+## Unreleased
+
+### 🚀 Features
+
+- **agent-engine-orchestrator:** claudecli retains the CLI session per engine session and resumes it (`--resume --fork-session`, uncovered tail only) for follow-up tasks: second-task 1h cache write 6,312 -> 121 tokens, first-turn cache_read/context 0.00 -> 0.98 on claude-haiku-4-5; any history the transcript does not provably cover falls back to the text replay (b31e1fe5)
+
 ## 2.3.11 (2026-10-10)
 
 ### 🚀 Features
