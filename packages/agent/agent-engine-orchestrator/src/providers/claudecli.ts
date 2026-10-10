@@ -12,7 +12,7 @@ import { ToolError } from "../validation/errors.js";
 import type { EngineLogger, EngineConfig } from "../interfaces.js";
 import { wireSpawn } from "./wire.js";
 import { normaliseAnthropicUsage } from "./anthropic.js";
-import { startToolBridge, buildBridgeMcpConfig, type ToolBridge } from "./claudecli-tool-bridge.js";
+import { startToolBridge, buildBridgeMcpConfig, bridgeableTools, type ToolBridge } from "./claudecli-tool-bridge.js";
 
 type ClaudeCliConfig = Extract<ProviderConfig, { type: "claudecli" }>;
 
@@ -523,7 +523,9 @@ export class ClaudeCliProvider implements LLMProvider {
         // through a per-chat loopback bridge whose tools/call is `request.executeTool` (the engine's
         // registry client). Advertised tools with nothing to execute them is a wiring defect: fail
         // loud rather than hand the model tools that can only error.
-        const advertised = request.tools ?? [];
+        // Engine-internal pseudo-tools (`builtin__*`, e.g. request_human_input) are not MCP tools and
+        // were never visible to claude; only real MCP-server tools go through the bridge.
+        const advertised = bridgeableTools(request.tools ?? []);
         if (advertised.length > 0 && !request.executeTool) {
             throw new Error(
                 "PROVIDER_ERROR: claudecli was given MCP tools but no executeTool callback; refusing to expose tools it cannot execute"

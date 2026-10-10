@@ -144,3 +144,20 @@ describe("9ed453c1 BRIDGE AC-8 — bridge closed in finally", () => {
         expect(close).toHaveBeenCalledTimes(1);
     });
 });
+
+describe("9ed453c1 BRIDGE — engine builtin pseudo-tools are not bridged", () => {
+    it("9ed453c1 BRIDGE AC-6: builtin__request_human_input alone => no bridge, no fail-loud, inline empty config", async () => {
+        const builtinOnly = [
+            { name: "builtin__request_human_input", description: "d", inputSchema: { type: "object" } },
+        ] as NonNullable<ProviderChatRequest["tools"]>;
+        const { args } = await spawnedArgs({ messages: msgs, tools: builtinOnly });
+        expect(startToolBridge).not.toHaveBeenCalled();
+        expect(args![args!.indexOf("--mcp-config") + 1]).toBe('{"mcpServers":{}}');
+    });
+
+    it("9ed453c1 BRIDGE AC-6: bridgeableTools keeps MCP-server tools and drops builtin__*", async () => {
+        const { bridgeableTools } = await import("../providers/claudecli-tool-bridge.js");
+        expect(bridgeableTools([...tools, { name: "builtin__request_human_input", description: "d", inputSchema: {} }]).map((t) => t.name))
+            .toEqual(["counter__bump", "other__x"]);
+    });
+});

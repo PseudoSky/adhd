@@ -53,6 +53,18 @@ export interface StartToolBridgeOptions {
 
 const MAX_BODY_BYTES = 8 * 1024 * 1024;
 
+/**
+ * Server name the orchestrator gives its engine-internal pseudo-tools (`builtin__request_human_input`).
+ * They are handled by the orchestrator's own tool path (suspend/resume), never by `executeTool`, and
+ * claude has never been shown them, so the bridge must not expose them.
+ */
+export const ENGINE_BUILTIN_TOOL_SERVER = "builtin";
+
+/** The advertised tools the bridge can actually execute through `executeTool` (MCP-server tools only). */
+export function bridgeableTools(tools: readonly ToolDefinition[]): ToolDefinition[] {
+    return tools.filter((t) => resolveToolCallName(t.name, []).server !== ENGINE_BUILTIN_TOOL_SERVER);
+}
+
 /** Group the advertised tools by owning server (`server__tool` naming), original tool names kept. */
 export function groupToolsByServer(tools: readonly ToolDefinition[]): Map<string, Map<string, ToolDefinition>> {
     const byServer = new Map<string, Map<string, ToolDefinition>>();
