@@ -81,7 +81,7 @@ async function runWithCompaction(
   sqlite.pragma("foreign_keys = ON");
   sqlite.exec(`
     CREATE TABLE sessions (id TEXT PRIMARY KEY NOT NULL, agent_name TEXT NOT NULL, agent_version INTEGER NOT NULL, agent_data TEXT NOT NULL, status TEXT DEFAULT 'active' NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, closed_at TEXT, composed_prompt_id TEXT, provider_type TEXT, model_ref TEXT, models TEXT);
-    CREATE TABLE tasks (id TEXT PRIMARY KEY NOT NULL, session_id TEXT, parent_task_id TEXT, is_ephemeral INTEGER DEFAULT 0 NOT NULL, recursion_depth INTEGER DEFAULT 0 NOT NULL, status TEXT DEFAULT 'pending' NOT NULL, prompt TEXT NOT NULL, result TEXT, error TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, completed_at TEXT, cancelled_at TEXT, depends_on TEXT, on_upstream_failure TEXT, inputs TEXT, resume_token TEXT);
+    CREATE TABLE tasks (id TEXT PRIMARY KEY NOT NULL, session_id TEXT, parent_task_id TEXT, is_ephemeral INTEGER DEFAULT 0 NOT NULL, recursion_depth INTEGER DEFAULT 0 NOT NULL, status TEXT DEFAULT 'pending' NOT NULL, prompt TEXT NOT NULL, result TEXT, error TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, completed_at TEXT, cancelled_at TEXT, depends_on TEXT, on_upstream_failure TEXT, inputs TEXT, resume_token TEXT, cwd TEXT);
     CREATE TABLE task_events (id TEXT PRIMARY KEY NOT NULL, task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE, type TEXT NOT NULL, payload TEXT, created_at TEXT NOT NULL);
   `);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
