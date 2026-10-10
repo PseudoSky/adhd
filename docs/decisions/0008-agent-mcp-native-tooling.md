@@ -1,6 +1,6 @@
 # ADR-0008 — Standardized, portable native tooling for dispatched agents (fs / shell / dispatch)
 
-**Status:** ACCEPTED (owner-approved 2026-10-05; all six ratification questions resolved — see "Owner ratification (all six RESOLVED)").
+**Status:** ACCEPTED (owner-approved 2026-10-05; all six ratification questions resolved — see "Owner ratification (all six RESOLVED)"). **Amended 2026-10-10** — D7 and its dependents: catalog entries are defaults; tool selection follows a research, test, decide process (see "Amendment A1").
 **Owner:** pseudosky.
 **Supersedes:** nothing.
 **Drives:** the umbrella `532e44a4-e9c7-41c0-adda-b2823542f832` (FEAT-AGENTMCP-NATIVE-TOOLING) and its ten children — NAT-TOOL-1 `65d3ffa3`, NAT-TOOL-2 `efd234d7`, NAT-TOOL-3 `a1f7d795`, NAT-TOOL-4 `9ada962a`, NAT-TOOL-5 `65799fd5`, NAT-TOOL-6 `4c89ef9a`, NAT-TOOL-7 `0f624014`, NAT-TOOL-8 `01351dfc` (the human-gated adoption decision), NAT-TOOL-9 `c63fd05c`, NAT-TOOL-10 `e50abc41`. It settles the first-class `AgentDefinition.nativeTooling` contract, the core resolver package, the **thin** permission gate, the `ask`-resolution / escalation policy, the **sessioned-everything** model, and the session-retention meaning of `ephemeral`.
@@ -14,7 +14,7 @@ Three traps to avoid:
 
 1. **Resolution is task-time, and the stored definition is never mutated.** If you resolve once and persist the resolved `mcpServers`, you have destroyed portability and broken NAT-TOOL-4/5.
 2. **Every task is now sessioned, and `ask` is not resolved by session *existence*.** The noop-session path is retired (a one-shot `agent_name` dispatch creates a real session). `ask` resolves through a fixed chain — **suspend (iff `nativeTooling.hitl !== false`) → escalate-to-parent (v1: ONE hop to the immediate parent, iff one exists; the bounded climb to the root is tracked as `fc466f0b`) → deny (the floor)** — and `ephemeral` is a **session-retention CLASS** (`retention: 'ephemeral'|'retained'` + optional `ttlMs`), not an interactivity or HITL property. An unanswered `ask` **denies**, never hangs and never silently allows. `nativeTooling.hitl:false` (legacy `allowHumanInput`) hides `request_human_input` and prunes `suspend`; `askPolicy`/`ephemeralAskPolicy` are retired.
-3. **The harness owns the GATE, not the safety — and adopts, never authors, the fs/shell servers.** agent-mcp owns only the generic permission gate (hooks, HITL plumbing, **tool-NAME** allow/ask/deny, server-allowlist passthrough, fail-closed asks). It **must not** own dangerous-command catalogs or shell-command segmentation. Hard enforcement is **delegated** to `@anthropic-ai/sandbox-runtime` (`srt`, wrapping both servers), the shell argv allowlist (`tumf/mcp-shell-server`), and the reference fs server's root scoping. `unbash` is **dropped**; `tools/mcp-shell/server.mjs` is the **removed** thick layer, replaced by the adopted server — never grown.
+3. **The harness owns the GATE, not the safety — and the fs/shell servers in the catalog are replaceable defaults, not commitments.** agent-mcp owns only the generic permission gate (hooks, HITL plumbing, **tool-NAME** allow/ask/deny, server-allowlist passthrough, fail-closed asks). It **must not** own dangerous-command catalogs or shell-command segmentation. By default, hard enforcement is delegated to `@anthropic-ai/sandbox-runtime` (`srt`, wrapping both servers), the shell argv allowlist (`tumf/mcp-shell-server`), and the reference fs server's root scoping. When a concrete problem exists, tool choice follows D7: research alternatives, test them against the problem, then adopt the best or build in-house where the ROI justifies it. `unbash` is **dropped**; `tools/mcp-shell/server.mjs` is the **removed** thick layer.
 
 ## Context
 
@@ -63,7 +63,7 @@ Public surface:
 
 CORE, not a plugin: resolution is required by the host (`entrypoint/agent-mcp`) and the dispatch host (`entrypoint/dispatch-cli`), and is a primitive both depend on, not an optional extension (umbrella spec "Decision"). The `ask`-**resolution** policy (D6) is evaluated by the engine/host, which alone holds the session/parent graph; the core package exposes the permission *matching*, not the escalation routing.
 
-**There is deliberately no `segmentShellCommand` / command parser in this package.** Shell-command segmentation for safety is not the harness's job (D5); it belongs to the adopted server's argv allowlist and the OS sandbox.
+**There is deliberately no `segmentShellCommand` / command parser in this package.** Shell-command segmentation for safety is not the harness's job (D5); it belongs to the selected server's argv allowlist and the OS sandbox.
 
 ### D3 — Typed `nativeTooling` config: `{ fs?, shell?, dispatch?, hitl? }`
 
@@ -89,7 +89,7 @@ Each member means exactly one thing:
 
 - **`false`** — the builtin for that tool is **not** resolved (no server emitted).
 - **`true`** — the **standardized zero-override builtin** is resolved (the "zero-override case" of `BuiltinOptionOverrides`). `true` is an accepted **alias** and is **canonicalized internally to the override object** so the rest of the system deals with one representation. For `dispatch`, the builtin is the real agent-mcp server (D1).
-- **`BuiltinOptionOverrides`** — resolve the standardized builtin, with the given overrides (e.g. `fs.root`; `shell.allowCommands` — a passthrough of the adopted server's own argv allowlist, **not** a per-command permission map, D5).
+- **`BuiltinOptionOverrides`** — resolve the standardized builtin, with the given overrides (e.g. `fs.root`; `shell.allowCommands` — a passthrough of the selected server's own argv allowlist, **not** a per-command permission map, D5).
 - **`CustomMcpServerConfig`** — a full `McpServerConfig` **replaces** the builtin for that tool.
 
 The union is deliberately `boolean | …` (not `… | false`): `true` and `false` are both values, which keeps NAT-TOOL-1's `{fs:true,shell:true,dispatch:true}` ACs and its `boolean` typing intact while the canonical internal form is the override object. Zod validates the union so `{fs:{root:42}}` is rejected at the boundary (`agent-base-types/src/index.ts`, plus orchestrator-side validation where the definition is consumed, `packages/agent/agent-engine-orchestrator/src/interfaces.ts`). A definition with no server `cwd` still validates. The whole `nativeTooling` object survives a serialize → store → read round-trip.
@@ -113,7 +113,7 @@ In the shipped implementation the host (`entrypoint/agent-mcp/src/config.ts` `to
 - the **generic hook system + a single `pre:tool_call` enforcement hook** (already shipped);
 - the **HITL suspend/resume plumbing** as the **generic human-approval gate** (already shipped);
 - **tool-NAME allow/deny** (`matchPermission` matches the tool, never parses the command);
-- a **passthrough/surface of the adopted server's own allowlist** (config plumbing only — agent-mcp configures it and passes it through; it does not re-derive it);
+- a **passthrough/surface of the selected server's own allowlist** (config plumbing only — agent-mcp configures it and passes it through; it does not re-derive it);
 - **fail-closed asks**: a non-interactive dispatched subagent cannot answer an `ask`, so an unanswerable ask MUST resolve to a `deny` (D6) — never a hang, never an implicit allow.
 
 agent-mcp **MUST NOT** own:
@@ -181,23 +181,31 @@ interface SessionRetentionPolicy {
 
 Interactivity is determined by the HITL capability (`hitl !== false` → suspend is applicable) and by parenthood (escalate), never by ephemerality. A session can therefore be ephemeral *and* interactive, or retained *and* non-interactive. The former `nativeTooling.ephemeralAskPolicy` field is **deleted**; retention is a session/run property (`SessionRetentionPolicy` — `retention`, optional `ttlMs`), never a native-tooling field.
 
-### D7 — Adopt upstream MCP servers; never author new ones (human-gated)
+### D7 — The catalog lists default servers; tool choice is decided by research, test, and recorded evaluation (adoption human-gated)
 
-adhd **adopts** third-party MCP servers and authors only the thin resolver/config adapter (D2). The catalog:
+The catalog in `@adhd/agent-core-native-tooling` lists the **default** upstream MCP servers for each native tool member. Entries are defaults, not commitments: no member is bound to a specific server, package, or vendor, and nothing in this ADR obliges adhd to keep, pin, or extend any listed tool. The resolver/config adapter (D2) is the stable contract; the server behind each member is replaceable.
 
-| role | server | status |
-|---|---|---|
-| filesystem | `@modelcontextprotocol/server-filesystem` (MIT) | **adopt** — first cut |
-| shell | `tumf/mcp-shell-server` (MIT; allowlisted argv array, never a shell string; audit logs) | **adopt** — first cut |
-| OS enforcement | `@anthropic-ai/sandbox-runtime` (`srt`, Apache-2.0) — wraps **both** servers | **adopt** — first cut |
+**Process for a concrete problem.** When a catalog default fails a concrete need (a capability gap, a measured defect, a security or maintenance concern), the problem is resolved as follows:
+
+1. **Research** alternative tools (other upstream servers, a fix or option upstream, a swap) and the in-house option.
+2. **Test** each candidate against the concrete problem, with a measured result (for example: agent line-counting error rate against a native Read-style tool; latency; allowlist behavior).
+3. **Decide** on the evidence: adopt the best candidate, or build in-house when the measured ROI (cost to build and maintain versus the gain) justifies it. Record the evaluation (candidates, method, measurements, decision, owner) in the backlog item and, for a change of catalog default, in an amendment to this ADR.
+
+Upstream fix, swap, and in-house build are co-equal outcomes; none is preferred a priori. This satisfies `adhd ADR-0002` (correct the source, never work around a functional gap): the obligation is to fix the gap at the right layer, and the choice among those three routes is made on the evidence. Adopting any external tool still requires human approval per `AGENTS.md` ("get human approval before installing external tools"); building in-house is subject to the normal package-scaffolding and review rules. Harness-level boundaries are unchanged: whichever tool is chosen, the permission gate stays thin and agent-mcp does not own shell-command segmentation or dangerous-command catalogs (D5).
+
+Current defaults:
+
+| filesystem | `@modelcontextprotocol/server-filesystem` (MIT) | **default** — first cut |
+| shell | `tumf/mcp-shell-server` (MIT; allowlisted argv array, never a shell string; audit logs) | **default** — first cut |
+| OS enforcement | `@anthropic-ai/sandbox-runtime` (`srt`, Apache-2.0) — wraps **both** servers | **default** — first cut |
 | command segmentation | `unbash` (ISC, 0-dep) | **DROPPED** — see below |
 | read-only-roots alternative | `rust-mcp-filesystem` (read-only by default) | **deferred** |
 
-**`unbash` is dropped.** Adopting it *inside the harness* means the harness owns shell-command segmentation for safety — the exact responsibility this ADR delegates to the adopted server's argv allowlist and the OS sandbox (D5). It is only adoptable if the harness genuinely owns a command layer; it does not (`01M47253250MJNMN15QJ4V21RN`).
+**`unbash` is dropped.** Placing it *inside the harness* means the harness owns shell-command segmentation for safety — the exact responsibility this ADR delegates to the selected server's argv allowlist and the OS sandbox (D5). It is only adoptable if the harness genuinely owns a command layer; it does not (`01M47253250MJNMN15QJ4V21RN`).
 
-**The adopted shell server is not the permission gate.** `tumf/mcp-shell-server` gives **allowlisted argv + audit**, **not** opencode-style `allow | ask | deny`; the gate is agent-mcp's own (D5). The server is adopted for **safe execution** — command names as argv arrays, never a shell string, with timeout/output caps and an env allowlist.
+**The selected shell server is not the permission gate.** `tumf/mcp-shell-server` gives **allowlisted argv + audit**, **not** opencode-style `allow | ask | deny`; the gate is agent-mcp's own (D5). The server is the default for **safe execution** — command names as argv arrays, never a shell string, with timeout/output caps and an env allowlist.
 
-**This was a HUMAN-GATED decision (NAT-TOOL-8) — APPROVED 2026-10-05.** The approval is recorded with a **named owner (`pseudosky`) in all three of `README.md`, `AGENTS.md`, and the gated test header** (per the repo's live-testing/gating rule), and the adopted set is wired in `@adhd/agent-core-native-tooling` (`catalog.ts`). The authored shell server is retired — **removed, not grown** (Consequences). No bash-string ever reaches a shell: shell execution is allowlisted command **names as argv arrays**.
+**The current default set was a HUMAN-GATED decision (NAT-TOOL-8) — APPROVED 2026-10-05.** The approval is recorded with a **named owner (`pseudosky`) in all three of `README.md`, `AGENTS.md`, and the gated test header** (per the repo's live-testing/gating rule), and the default set is wired in `@adhd/agent-core-native-tooling` (`catalog.ts`). The authored shell server is retired — **removed, not grown** (Consequences). No bash-string ever reaches a shell: shell execution is allowlisted command **names as argv arrays**.
 
 ### D8 — Portable agent definitions
 
@@ -207,7 +215,7 @@ adhd **adopts** third-party MCP servers and authors only the thin resolver/confi
 
 - **`fs.root`/`fs.roots` are PORTABLE HINTS**, never host paths: a **named alias** into the GLOBAL allowed-root map, or a **cwd-relative subpath**. An **absolute** hint is REJECTED with a typed `NativeToolingRootError` (`ABSOLUTE_ROOT_NOT_PORTABLE`) — at the definition zod boundary AND in the resolver — and a `..` subpath that escapes the caller cwd is rejected (`ROOT_ESCAPES_CALLER_CWD`). This is what keeps the stored JSON byte-identical across fires. **`shell.root` is under the SAME contract** (`resolveRootHint`, the ONE `fsRootHintSchema` at the zod boundary): an alias maps, an absolute is rejected, and a `..` escape is rejected, exactly like `fs.root`. Its resolved value is the shell child's cwd and is unioned into the per-run `srt` policy alongside the fs roots, so an alias outside the dispatching cwd is not sandbox-denied.
 - **Containment is LEXICAL.** The `..`-escape check (`isWithin`) resolves paths as strings — it does not `realpath()` either side, because a hint may not exist on disk yet and the check is a pure, cheap portability guard. **Symlink-escape enforcement is `srt`'s job** (the OS sandbox scopes the spawned `fs`/`shell` children), and the reference fs server independently re-confines to its resolved root argv. The resolver is not the security boundary.
-- **Multi-root.** The adopted reference fs server accepts one allowed directory per argv entry; the resolver emits EVERY resolved root, and one producer (`resolveFsRoots(fs, ctx)`, `@adhd/agent-core-native-tooling`) feeds both the argv and the per-run `srt` policy. The host unions every resolved root (and the resolved `shell.root`) into that policy's `allowWrite`, so a read from a SECOND root is not sandbox-denied.
+- **Multi-root.** The default reference fs server accepts one allowed directory per argv entry; the resolver emits EVERY resolved root, and one producer (`resolveFsRoots(fs, ctx)`, `@adhd/agent-core-native-tooling`) feeds both the argv and the per-run `srt` policy. The host unions every resolved root (and the resolved `shell.root`) into that policy's `allowWrite`, so a read from a SECOND root is not sandbox-denied.
 - **The GLOBAL allowed-root map** (`alias → absolute path`) is the machine-specific, operator-owned surface — the ONLY place an absolute fs directory is configured. It lives in the global config (env `ADHD_AGENT_NATIVE_TOOLING_FS_ALLOWED_ROOTS` as `alias=path`, or the global `config.yaml`); a definition references `project`/`tmp` portably. This is the fs analogue of the provider registry (D-G SPEC).
 - **Caller-supplied cwd.** The `task`/`agent` MCP input carries a `cwd`; it is threaded from the MCP caller or INHERITED from a dispatching parent (`ExecutionContext.cwd`), and anchors resolution. `process.cwd()` is a **flagged** last-resort fallback (`cwdSource: 'host-fallback'` — "may not be the agent's cwd").
 
@@ -251,7 +259,7 @@ The fs and shell MCP servers, and their `nativeTooling` members, are **optional 
 - **the execution loop / interrupt-handling** (resume, suspend, cancellation) — agent-mcp owns it;
 - **tool-calling** (the MCP client seam, tool registration, dispatch self) — agent-mcp owns it;
 - **the generic permission gate + HITL plumbing** — agent-mcp owns it (D5);
-- **filesystem ease-of-use, shell ease-of-use, their argv allowlists, and OS enforcement** — **delegated** to adopted servers/`srt`, optional, replaceable, disable-able.
+- **filesystem ease-of-use, shell ease-of-use, their argv allowlists, and OS enforcement** — **delegated** to the selected servers/`srt` (today the catalog defaults), optional, replaceable, disable-able.
 
 Collapsing these (e.g. making the shell server load-bearing for the loop) would make a third-party server an un-ownable, un-disable-able dependency and blur the harness/safety boundary D5 draws.
 
@@ -262,19 +270,19 @@ Collapsing these (e.g. making the shell server load-bearing for the loop) would 
 - **Every task is sessioned, and `ephemeral` is retention, not interactivity.** The noop-session path is gone; any code or doc that equates ephemeral with "cannot answer an `ask`", or that resolves `ask` by session existence, is stale and must be corrected. Retention/GC and interactivity are orthogonal.
 - **`ask` always resolves and fails closed.** `deny` is the floor when neither HITL-capability (suspend) nor a parent (escalate) can answer; the default-`allow`-with-tool-name-`deny`-guardrails posture keeps the base toolset usable while an unanswered `ask` cannot hang or silently allow.
 - **Escalation must be bounded.** **v1 delivers the ask one hop to the immediate parent**; the intended transitive climb to the root is tracked as `fc466f0b`. An unbounded chain would allow an unbounded wait, so the policy carries an explicit bound (v1 parent-chain depth).
-- **The permission gate is thin, and the adopted server is not it.** agent-mcp owns the generic gate (hooks, HITL, tool-NAME allow/ask/deny, server-allowlist passthrough, fail-closed asks) and nothing more; a harness that pattern-matched command text or segmented commands would be best-effort, not a boundary, and is forbidden (D5). Enforcement is delegated to `srt`, the `tumf` argv allowlist, and the fs server's root scoping.
-- **`tools/mcp-shell/server.mjs` is the removed thick layer.** The former server was itself an instance of the thick layer (an `ALLOWED_COMMAND_PREFIXES` + `BLOCKED_PATTERNS` regex catalog over command text). Under this ADR it is **removed, not grown** — replaced by the adopted `tumf/mcp-shell-server` (argv allowlist + audit) wrapped by `srt`. Its removal was gated by NAT-TOOL-8's human approval (D7; approved 2026-10-05).
-- **The upstream dependency set is a supply-chain surface.** Adoption (D7) is gated precisely because it adds third-party code; the fs server's per-root read-only is Docker-only, and the shell server is explicitly **not** a sandbox — hence `srt` is adopted **in the first cut** (not held in reserve) to wrap both servers.
+- **The permission gate is thin, and the selected server is not it.** agent-mcp owns the generic gate (hooks, HITL, tool-NAME allow/ask/deny, server-allowlist passthrough, fail-closed asks) and nothing more; a harness that pattern-matched command text or segmented commands would be best-effort, not a boundary, and is forbidden (D5). Enforcement is delegated to the selected tools (today `srt`, the `tumf` argv allowlist, and the fs server's root scoping).
+- **`tools/mcp-shell/server.mjs` is the removed thick layer.** The former server was itself an instance of the thick layer (an `ALLOWED_COMMAND_PREFIXES` + `BLOCKED_PATTERNS` regex catalog over command text). Under this ADR it is **removed, not grown** — replaced by the default `tumf/mcp-shell-server` (argv allowlist + audit) wrapped by `srt`. Its removal was gated by NAT-TOOL-8's human approval (D7; approved 2026-10-05).
+- **The upstream dependency set is a supply-chain surface.** Adopting any external tool (D7) is human-gated precisely because it adds third-party code; the fs server's per-root read-only is Docker-only, and the shell server is explicitly **not** a sandbox — hence `srt` is a default **in the first cut** (not held in reserve) to wrap both servers.
 - **The permission semantics are settled, not carried.** Q1 ratified last-match-wins with terminal `deny`; both NAT-TOOL-2 and NAT-TOOL-6 ACs are aligned to it (Backlog reconciliation). No semantics conflict remains open.
 - **A new public package and new public types are a semantic-version concern** for `@adhd/agent-core-native-tooling` and `agent-base-types` (additive; D3 adds optional fields, and retires the never-shipped `askPolicy`/`ephemeralAskPolicy` names).
 
 ## Alternatives considered
 
-- **Author a first-party fs/shell MCP server.** **REJECTED.** A first-party shell server would duplicate `tumf/mcp-shell-server`'s allowlist/audit/hardening, and a first-party fs server would duplicate the reference server. The research's whole build-vs-integrate verdict is "integrate the servers; build only the thin adapter" (`01M46AWJ156GH74FY3K6G59M8M`).
+- **Author a first-party fs/shell MCP server, decided a priori.** **Not adopted as a standing rule, in either direction.** At ratification the research verdict was "integrate the servers; build only the thin adapter" (`01M46AWJ156GH74FY3K6G59M8M`) because a first-party shell server would have duplicated `tumf/mcp-shell-server`'s allowlist/audit/hardening. That verdict is the evaluation for the defaults, not a prohibition: an in-house implementation of any member is permitted whenever a recorded, measured evaluation (D7) shows its ROI exceeds upstream fix or swap.
 - **Author a wrapper for the `dispatch` surface.** **REJECTED.** It diverges from the real agent-mcp MCP surface consumers load and skips host wiring / dist resolution / tool registration; D1 requires pointing at the real server.
 - **Own dangerous-command detection / command segmentation in the harness (the thick layer).** **REJECTED.** A harness that pattern-matches command text is best-effort, not a security boundary; detection belongs to the server's argv allowlist and the OS sandbox (D5; `01M4724ZFSFWK182N4Y2HPMTTE`).
-- **Adopt `unbash` inside the harness for command segmentation.** **REJECTED.** It re-owns segmentation — the responsibility this ADR delegates — so it is dropped from the adopt set (D7).
-- **Adopt `tumf/mcp-shell-server` for its permission model.** **REJECTED as a rationale.** It ships allowlisted argv + audit, not `allow | ask | deny`; the permission gate is agent-mcp's own and thin (D5). The server is adopted for safe execution only.
+- **Put `unbash` (or any command segmenter) inside the harness.** **REJECTED.** It re-owns segmentation — the responsibility this ADR keeps out of the harness (D5) — so it is dropped from the catalog (D7).
+- **Select `tumf/mcp-shell-server` for its permission model.** **REJECTED as a rationale.** It ships allowlisted argv + audit, not `allow | ask | deny`; the permission gate is agent-mcp's own and thin (D5). The server is the default for safe execution only.
 - **Resolve the toolset once, at definition-creation time, and persist the resolved servers.** **REJECTED.** It is the exact portability failure this ADR removes: the stored definition would pin the root it was created in, so firing from `/Q` would leak `/P`. NAT-TOOL-4's negative control (reverting to definition-time resolution) turns the portability test RED.
 - **`ephemeral` = non-interactive / no-HITL.** **REJECTED.** `ephemeral` is a session-retention class; a session is stored whether or not it is ephemeral, and interactivity is decided by the HITL capability or a parent, not by ephemerality.
 - **Resolve `ask` by session existence.** **REJECTED.** Every task is sessioned, so existence is not a discriminator; applicability is the HITL capability (suspend) and parenthood (escalate).
@@ -330,6 +338,16 @@ All questions were resolved 2026-10-05. Per the owner's disposition — "merge o
 6. **Acceptance-gate negative controls (D11) — RESOLVED: the D11 set is the required RED set.**
 
 **Resolved and folded in earlier:** the `true` alias (D3 — kept); the `dispatch` field shape (D1 — agent-mcp's own real server, `dispatch: true` = that server).
+
+## Amendment A1 — 2026-10-10 (status: ACCEPTED, owner direction)
+
+**Scope:** D7, and the passages of the TL;DR, D1, D13, Consequences, and Alternatives that follow from it.
+
+**Decision.** The tools named in the catalog are defaults. adhd is not locked to any specific MCP server, package, or vendor for fs, shell, or OS enforcement. When a concrete problem exists, the process is: (1) research alternative tools; (2) test them against the concrete problem with a measured result; (3) adopt the best, or build in-house when the ROI justifies it, recording the evaluation. Upstream fix, swap, and in-house build are co-equal routes to satisfying `adhd ADR-0002`; none is preferred a priori. Adopting any external tool still requires human approval per `AGENTS.md`.
+
+**Reason.** Binding the architecture to specific third-party servers is a design flaw: it turns a replaceable dependency into a constraint on what adhd may build. The owner's direction (2026-10-10): remove anything that ties adhd to one specific MCP for a solution; research alternatives and test them against the concrete problem; building in-house is acceptable when the ROI supports it. The motivating case is the pinned `@modelcontextprotocol/server-filesystem` `read_text_file`, which returns no line numbers and has no offset/limit, so agents miscount lines (measured), unlike a native Read-style tool. Under this amendment that case is resolved by the D7 process, not by a standing prohibition on an in-process read tool.
+
+**Unchanged.** D5's thin gate (no command segmentation or dangerous-command catalogs in the harness), D13's layering (fs/shell are optional, replaceable integrations), the portable-definition contract (D2-D4, D8), and the 2026-10-05 approval of the current default set.
 
 ## References
 

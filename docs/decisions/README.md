@@ -38,7 +38,7 @@ This is what makes `AGENTS.md`'s parallel-process hard rule unambiguous: its `AD
 | [0005](./0005-data-query-engine-owns-grouping-aggregation-having.md) | The data-query-engine owns grouping, aggregation, and HAVING | ACCEPTED (2026-10-02; owner approval 2026-10-03) |
 | [0006](./0006-backlog-public-interface-freeze.md) | Backlog public interface freeze — verbs, envelope, naming | ACCEPTED (2026-10-05) — SUPERSEDED (in part) BY 0007 (breaking list only) |
 | [0007](./0007-backlog-target-public-interface.md) | Backlog target public interface — additive/breaking deltas (designated target record) | ACCEPTED (2026-10-05) |
-| [0008](./0008-agent-mcp-native-tooling.md) | Standardized, portable native tooling for dispatched agents (fs / shell / dispatch) | ACCEPTED (2026-10-05) |
+| [0008](./0008-agent-mcp-native-tooling.md) | Standardized, portable native tooling for dispatched agents (fs / shell / dispatch) | ACCEPTED (2026-10-05); amended 2026-10-10 (catalog = defaults; tool choice by research/test/decide) |
 | [0009](./0009-test-lanes-unit-vs-e2e.md) | Test lanes: unit `test` runs no subprocess; `e2e` owns every subprocess / real-server suite | ACCEPTED (2026-10-06) |
 | [0016](./0016-spec-append-fold-root.md) | Spec revisions: `amend` vs `replace` and the fold root | PROPOSED |
 

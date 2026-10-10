@@ -47,7 +47,9 @@ Public surface (`src/index.ts`):
 No command parser, no command segmentation, and no dangerous-command catalog.
 Hard enforcement is **delegated** to the adopted servers and `srt` (ADR-0008 D5/D7).
 
-## Adopted upstream servers (ADR-0008 D7)
+## Default upstream servers (ADR-0008 D7)
+
+The catalog entries are defaults, not commitments. For a concrete problem: research alternatives, test them against it with a measured result, then adopt the best or build in-house when ROI justifies it, and record the evaluation (ADR-0008 D7, Amendment A1). Adopting an external tool requires human approval.
 
 | role | server | invocation |
 |---|---|---|

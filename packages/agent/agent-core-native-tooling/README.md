@@ -41,7 +41,9 @@ dangerous-command catalog. Hard enforcement is delegated to the adopted servers
 `@anthropic-ai/sandbox-runtime` (ADR-0008 D5/D7). A harness that pattern-matched
 command text would be best-effort, not a security boundary.
 
-## Adopted upstream servers (ADR-0008 D7 — human-gated, APPROVED)
+## Default upstream servers (ADR-0008 D7 — current defaults, adoption human-approved)
+
+These are defaults, not commitments. When a concrete problem exists the tool is chosen by researching alternatives, testing them against the problem with a measured result, and adopting the best or building in-house where the ROI justifies it (ADR-0008 D7, Amendment A1). Adopting any external tool requires human approval.
 
 | role | server | how it is used |
 |---|---|---|
