@@ -74,6 +74,12 @@ jobs:
       # `test.dependsOn` re-couples `e2e`, that every `e2e` lane is cached, and
       # that `publish` reaches every declared `e2e`.
       - run: node tools/nx-plugins/test/executors/wiring/check-lane-reachability.mjs
+      # Lockfile freshness (backlog 4f26493e AC2): pnpm-lock.yaml must match every
+      # package.json. `pnpm install` above is already frozen under CI, but this
+      # step names the offending package.json/specifier, and the teeth step proves
+      # the gate goes red on a drifted fixture and regenerates green.
+      - run: npx nx run @adhd/source:check-lockfile-fresh
+      - run: npx nx run @adhd/source:lockfile-gate-teeth
       # Evidence tooling (backlog 65788fd8): check-suite-tree-state, commit-mine and
       # audit-closed-items, each with a negative control; the exit code gates.
       - name: Evidence tooling gates

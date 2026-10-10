@@ -1,5 +1,16 @@
 ## Unreleased
 
+### Fixed — stale `pnpm-lock.yaml` after a release: `release:commit` relocks, and a gate fails on drift (2026-10-10)
+
+`pnpm release` bumped 14 package versions and their dependents' ranges without regenerating `pnpm-lock.yaml`, so the release commit (`7b85fa37`) failed `pnpm install --frozen-lockfile` (`ERR_PNPM_OUTDATED_LOCKFILE`) until `88b49bf3` relocked it by hand (backlog 4f26493e, e98bb455).
+
+- **`pnpm release:commit` regenerates the lockfile.** When a `package.json` is dirty and the non-mutating probe (`pnpm install --frozen-lockfile --lockfile-only`) reports drift, it runs `pnpm install --lockfile-only --no-frozen-lockfile --prefer-offline`, re-probes, and stages `pnpm-lock.yaml` in the explicit pathspec. `release:commit:dry` lists it as would-stage and never writes. A failed relock aborts with nothing committed.
+- **New gate `nx run @adhd/source:check-lockfile-fresh`** (~0.4s, non-mutating): exits 1 naming the offending `package.json` and each drifted specifier. Wired into `.githooks/pre-push`, `ci.yml` and `pull-request.yml`; `lockfile-gate-teeth` proves it red/green with real pnpm.
+
+**Files:** `tools/nx-plugins/build/lib/lockfile-sync.js`, `tools/nx-plugins/build/executors/lockfile/*`, `tools/nx-plugins/build/executors/publish/release-commit.mjs`, `project.json`, `.githooks/pre-push`, `.github/workflows/{ci,pull-request}.yml`, `tools/nx-plugins/build/README.md`.
+
+**Tests:** `lockfile-sync.spec.mjs` (mocked spawns), `release-commit.spec.mjs` (pnpm-shim relock/dry-run/failure + negative control), `lockfile-gate.spec.mjs` (wiring), `lockfile-gate.e2e.spec.mjs` (real pnpm drift negative control on a scratch workspace and the real repo, restored in `finally`).
+
 ### Fixed — native-tooling resolver review findings: `shell.root` under the portable-hint contract, alias-map hardening, CSV pattern guard, srt-union hoist, one-process warn; legacy dispatch-self env fallback (2026-10-06)
 
 A static review of the ADR-0008 native-tooling port (`dispatch-2026-10-04-9c4e`) raised resolver/env/info findings; this lands the fixes.

@@ -74,6 +74,26 @@
         "description": "CI tree-clean gate (backlog e92e2b92): exits non-zero when `git status --porcelain` is non-empty. Invoked as the last step of the CI `main` job and the PR `test` job, so a job whose commands dirty a tracked file (or leave an untracked one) cannot go green. Uncached: it reads live working-tree state."
       }
     },
+    "check-lockfile-fresh": {
+      "executor": "nx:run-commands",
+      "cache": false,
+      "options": {
+        "command": "node tools/nx-plugins/build/executors/lockfile/check-lockfile-fresh.mjs"
+      },
+      "metadata": {
+        "description": "Lockfile freshness gate (backlog 4f26493e AC2): runs the non-mutating `pnpm install --frozen-lockfile --lockfile-only` (~0.4s) and exits non-zero when pnpm-lock.yaml has drifted from any package.json, naming the offending package.json and each drifted specifier (lockfile vs package.json). Invoked UNCONDITIONALLY by .githooks/pre-push and both CI workflows before the lanes. Uncached: it reads live package.json/lockfile state."
+      }
+    },
+    "lockfile-gate-teeth": {
+      "executor": "nx:run-commands",
+      "cache": false,
+      "options": {
+        "command": "node --test tools/nx-plugins/build/executors/lockfile/lockfile-gate.e2e.spec.mjs"
+      },
+      "metadata": {
+        "description": "E2E proof the lockfile gate has teeth (backlog 4f26493e AC2 / e98bb455 AC1): real `corepack pnpm` against a scratch workspace and a drifted real package.json (restored in finally) must turn the gate red, name the drift, leave pnpm-lock.yaml byte-identical, and regenerateLockfile must turn it green. Invoked by the CI `main` job."
+      }
+    },
     "check-published-parity": {
       "executor": "nx:run-commands",
       "cache": false,

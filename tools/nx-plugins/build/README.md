@@ -102,6 +102,35 @@ this package's entry from the dist it **just packed locally** (offline,
 immune to npm's own read-after-write propagation lag. See
 [`executors/publish/impl.js`](executors/publish/impl.js).
 
+### `pnpm-lock.yaml` is relocked by `release:commit` and gated everywhere
+
+`pnpm release` bumps package versions and dependents' ranges but never touches
+`pnpm-lock.yaml`, so the release commit used to leave
+`pnpm install --frozen-lockfile` failing with `ERR_PNPM_OUTDATED_LOCKFILE`
+(backlog e98bb455; `7b85fa37` was repaired by `88b49bf3`). Two pieces close it,
+both in [`lib/lockfile-sync.js`](lib/lockfile-sync.js):
+
+- **`pnpm release:commit` relocks.** When any `package.json` is dirty it first
+  runs the non-mutating probe `corepack pnpm install --frozen-lockfile
+  --lockfile-only`; on drift it runs `corepack pnpm install --lockfile-only
+  --no-frozen-lockfile --prefer-offline` (offline-safe: workspace packages are
+  re-linked from disk, the registry is only consulted for a genuinely new
+  spec), re-probes, and then stages `pnpm-lock.yaml` in the explicit pathspec
+  with the bumps. A failed relock aborts with a non-zero exit and commits
+  nothing. `pnpm release:commit:dry` runs only the probe and lists
+  `pnpm-lock.yaml` among the files it *would* stage; it never writes.
+- **A gate fails on a stale lockfile** (backlog 4f26493e).
+  `nx run @adhd/source:check-lockfile-fresh`
+  ([`executors/lockfile/check-lockfile-fresh.mjs`](executors/lockfile/check-lockfile-fresh.mjs))
+  runs the same probe (~0.4s, writes nothing) and exits 1 naming the offending
+  `package.json` and each drifted specifier (`@adhd/x: lockfile "^1.0.0" vs
+  package.json "^1.0.1"`). It runs unconditionally in `.githooks/pre-push` and
+  in both CI workflows (`ci.yml`, `pull-request.yml`) before the lanes;
+  `lockfile-gate-teeth` (CI `main` job) proves with real pnpm that a drifted
+  range turns it red and that regeneration turns it green.
+
+Repair by hand: `corepack pnpm install --lockfile-only --no-frozen-lockfile`.
+
 ### `published-state.json` is committed
 
 Like a lockfile, this file is source-controlled — it's the durable,

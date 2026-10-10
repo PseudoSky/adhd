@@ -25,7 +25,13 @@
  *     (the cache write-through from `reconcile`/`publish`)
  *   - `pnpm-lock.yaml` at the workspace root, IF modified (a release
  *     re-resolves workspace ranges, so the lockfile changes with it; a release
- *     that leaves it dirty is not a completed release — backlog a4d346ae)
+ *     that leaves it dirty is not a completed release — backlog a4d346ae).
+ *     The lockfile is REGENERATED here first (e98bb455 AC1): `pnpm release`
+ *     bumps versions/ranges but never relocks, so when any package.json is dirty
+ *     and a non-mutating `pnpm install --frozen-lockfile --lockfile-only` probe
+ *     reports drift, `pnpm install --lockfile-only --no-frozen-lockfile
+ *     --prefer-offline` rewrites it (lib/lockfile-sync.js). `--dry-run` never
+ *     writes: it runs only the probe and lists `pnpm-lock.yaml` as "would regenerate".
  *
  * Anything else dirty in the tree (unrelated in-flight work from another
  * agent/human) is left completely untouched — never staged, never touched.
@@ -41,6 +47,9 @@
 import { spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
+import { createRequire } from 'node:module';
+
+const { syncLockfileForRelease } = createRequire(import.meta.url)('../../lib/lockfile-sync.js');
 
 /**
  * Locate the workspace root by walking up from the CALLER's cwd to find
@@ -103,7 +112,12 @@ function isReleaseArtifact(relPath) {
   return isPkgJson || isChangelog;
 }
 
-function collectReleasePaths() {
+function collectReleasePaths({ dryRun = false } = {}) {
+  // e98bb455 AC1: relock BEFORE reading the dirty set so the regenerated
+  // pnpm-lock.yaml shows up in it (a dry run only probes and adds it below).
+  const sync = syncLockfileForRelease({ cwd: workspaceRoot, dirtyPaths: dirtyPaths(), dryRun });
+  if (sync.action === 'failed') throw new Error(`release-commit: lockfile sync FAILED — ${sync.message}`);
+  if (sync.action === 'regenerated') console.error('release-commit: regenerated pnpm-lock.yaml (pnpm install --lockfile-only)');
   const dirty = dirtyPaths();
   const paths = dirty.filter(isReleaseArtifact);
   if (dirty.includes('published-state.json')) paths.push('published-state.json');
@@ -111,7 +125,7 @@ function collectReleasePaths() {
   // `pnpm install` / `nx release` rewrite `pnpm-lock.yaml`. It is part of the
   // release output; leaving it out left the tree dirty after a "completed"
   // release (and the next agent's commit swept it in).
-  if (dirty.includes('pnpm-lock.yaml')) paths.push('pnpm-lock.yaml');
+  if (dirty.includes('pnpm-lock.yaml') || sync.action === 'would-regenerate') paths.push('pnpm-lock.yaml');
   return paths;
 }
 
@@ -149,7 +163,13 @@ function stagedOutside(intended) {
 
 function main() {
   const dryRun = process.argv.includes('--dry-run');
-  const paths = collectReleasePaths();
+  let paths;
+  try {
+    paths = collectReleasePaths({ dryRun });
+  } catch (err) {
+    console.error(err instanceof Error ? err.message : String(err));
+    return 1;
+  }
 
   if (paths.length === 0) {
     console.error('release-commit: nothing to commit — no bumped package.json/CHANGELOG.md or published-state.json changes found.');

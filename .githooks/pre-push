@@ -66,6 +66,18 @@ if ! node "$repo_root/tools/nx-plugins/test/executors/wiring/check-lane-reachabi
   exit 1
 fi
 
+# 4f26493e AC2: pnpm-lock.yaml must match every package.json. The non-mutating
+# `pnpm install --frozen-lockfile --lockfile-only` probe takes ~0.4s, so it runs
+# UNCONDITIONALLY (even a no-op push), and names the offending package.json /
+# specifier on drift. A release that bumped versions without relocking (7b85fa37)
+# is exactly what this stops from reaching origin. `pnpm release:commit` now
+# regenerates the lockfile itself (e98bb455 AC1).
+if ! node "$repo_root/tools/nx-plugins/build/executors/lockfile/check-lockfile-fresh.mjs"; then
+  echo ""
+  echo "✖ pre-push: pnpm-lock.yaml is stale. Run: corepack pnpm install --lockfile-only --no-frozen-lockfile, commit pnpm-lock.yaml, then re-push."
+  exit 1
+fi
+
 any_ref=0
 overall_status=0
 

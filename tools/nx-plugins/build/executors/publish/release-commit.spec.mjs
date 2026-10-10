@@ -255,12 +255,155 @@ test('a4d346ae C-AC1 NEGATIVE CONTROL: with the lockfile removed from the stage 
   const scratch = mkdtempSync(join(tmpdir(), 'release-commit-wrong-'));
   try {
     const src = readFileSync(scriptPath, 'utf8');
-    const wrong = src.replace(/if \(dirty\.includes\('pnpm-lock\.yaml'\)\) paths\.push\('pnpm-lock\.yaml'\);/, '');
+    const wrong = src
+      .replace(/if \(dirty\.includes\('pnpm-lock\.yaml'\) \|\| sync\.action === 'would-regenerate'\) paths\.push\('pnpm-lock\.yaml'\);/, '')
+      // the mutated copy lives in a scratch dir: make its relative lib require absolute
+      .replace("'../../lib/lockfile-sync.js'", JSON.stringify(join(__dirname, '..', '..', 'lib', 'lockfile-sync.js')));
     assert.notEqual(wrong, src, 'the mutation must actually remove the lockfile staging line');
+    assert.doesNotMatch(wrong, /paths\.push\('pnpm-lock\.yaml'\)/, 'the lockfile staging line must be gone');
     const wrongPath = join(scratch, 'release-commit-wrong.mjs');
     writeFileSync(wrongPath, wrong);
     assert.throws(() => assertLockfileReleased(wrongPath), /pnpm-lock\.yaml must be in the release commit|git status --porcelain must be empty|nothing to commit/);
   } finally {
     rmSync(scratch, { recursive: true, force: true });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// e98bb455 AC1 — release:commit regenerates the lockfile and stages it.
+// The ONLY mocked boundary is the `corepack pnpm` process spawn: a shell shim
+// earlier on PATH plays pnpm (stale until a `--no-frozen-lockfile` call relocks
+// it). git, the script, and the staging/commit logic are all real.
+// ---------------------------------------------------------------------------
+function makePnpmShim() {
+  const dir = mkdtempSync(join(tmpdir(), 'release-commit-shim-'));
+  const log = join(dir, 'calls.log');
+  const relocked = join(dir, 'relocked.marker');
+  const shim = join(dir, 'corepack');
+  writeFileSync(
+    shim,
+    [
+      '#!/bin/sh',
+      'echo "$*" >> "$SHIM_LOG"',
+      'case "$*" in',
+      '  *--no-frozen-lockfile*) [ -n "$SHIM_RELOCK_FAILS" ] && { echo "boom" >&2; exit 7; }; echo "relocked: true" >> pnpm-lock.yaml; : > "$SHIM_MARKER"; exit 0;;',
+      '  *--frozen-lockfile*) [ -f "$SHIM_MARKER" ] && exit 0; [ -n "$SHIM_ALREADY_FRESH" ] && exit 0;',
+      '     echo " ERR_PNPM_OUTDATED_LOCKFILE  Cannot install with \"frozen-lockfile\" because pnpm-lock.yaml is not up to date with packages/foo/foo-base-a/package.json" >&2',
+      `     echo "specifiers in the lockfile ({\"@x/dep\":\"^1.0.0\"}) don't match specs in package.json ({\"@x/dep\":\"^1.0.1\"})" >&2; exit 1;;`,
+      'esac',
+      'exit 0',
+      '',
+    ].join('\n'),
+    { mode: 0o755 }
+  );
+  const env = { ...process.env, PATH: `${dir}:${process.env.PATH}`, SHIM_LOG: log, SHIM_MARKER: relocked };
+  return { dir, log, env };
+}
+
+/** makeRepo() plus the pnpm-workspace.yaml marker that arms the relock step. */
+function makeWorkspaceRepo() {
+  const root = makeRepo();
+  writeFileSync(join(root, 'pnpm-workspace.yaml'), "packages:\n  - 'packages/*/*'\n");
+  sh('git', ['add', 'pnpm-workspace.yaml'], { cwd: root });
+  sh('git', ['commit', '-q', '-m', 'workspace marker'], { cwd: root });
+  return root;
+}
+
+const shimCalls = (shim) => (existsSync(shim.log) ? readFileSync(shim.log, 'utf8').trim().split('\n') : []);
+
+test('e98bb455 AC1: a real run regenerates a stale lockfile and commits it with the version bump', () => {
+  const root = makeWorkspaceRepo();
+  const shim = makePnpmShim();
+  try {
+    bump(root, 'packages/foo/foo-base-a/package.json', (s) => s.replace('1.0.0', '1.0.1'));
+    const res = sh('node', [scriptPath], { cwd: root, env: shim.env });
+    assert.equal(res.status, 0, res.stderr);
+    assert.match(res.stderr, /regenerated pnpm-lock\.yaml/);
+
+    const calls = shimCalls(shim);
+    assert.match(calls[0], /--frozen-lockfile --lockfile-only/, 'probe first (non-mutating)');
+    assert.ok(calls.some((c) => /--lockfile-only --no-frozen-lockfile --prefer-offline/.test(c)), 'then relock');
+
+    const files = sh('git', ['show', '--name-only', '--format=', 'HEAD'], { cwd: root }).stdout;
+    assert.match(files, /^pnpm-lock\.yaml$/m, 'pnpm-lock.yaml rides the release commit');
+    assert.match(files, /foo-base-a\/package\.json/);
+    assert.equal(porcelainStatus(root), '', 'tree is clean: the regenerated lockfile was committed');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+    rmSync(shim.dir, { recursive: true, force: true });
+  }
+});
+
+test('e98bb455 AC1: --dry-run lists pnpm-lock.yaml as would-stage but NEVER relocks (no write, no commit)', () => {
+  const root = makeWorkspaceRepo();
+  const shim = makePnpmShim();
+  try {
+    bump(root, 'packages/foo/foo-base-a/package.json', (s) => s.replace('1.0.0', '1.0.1'));
+    const before = porcelainStatus(root);
+    const res = sh('node', [scriptPath, '--dry-run'], { cwd: root, env: shim.env });
+    assert.equal(res.status, 0, res.stderr);
+    assert.match(res.stderr, /would stage 2 file/);
+    assert.match(res.stderr, /- pnpm-lock\.yaml/);
+    assert.equal(shimCalls(shim).filter((c) => /--no-frozen-lockfile/.test(c)).length, 0, 'dry-run must not call the mutating relock');
+    assert.equal(porcelainStatus(root), before);
+    assert.equal(gitLogSubjects(root).length, 2, 'no commit');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+    rmSync(shim.dir, { recursive: true, force: true });
+  }
+});
+
+test('e98bb455 AC1: an already-fresh lockfile is not rewritten and not staged', () => {
+  const root = makeWorkspaceRepo();
+  const shim = makePnpmShim();
+  try {
+    bump(root, 'packages/foo/foo-base-a/package.json', (s) => s.replace('1.0.0', '1.0.1'));
+    const res = sh('node', [scriptPath], { cwd: root, env: { ...shim.env, SHIM_ALREADY_FRESH: '1' } });
+    assert.equal(res.status, 0, res.stderr);
+    assert.equal(shimCalls(shim).filter((c) => /--no-frozen-lockfile/.test(c)).length, 0);
+    const files = sh('git', ['show', '--name-only', '--format=', 'HEAD'], { cwd: root }).stdout;
+    assert.doesNotMatch(files, /pnpm-lock\.yaml/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+    rmSync(shim.dir, { recursive: true, force: true });
+  }
+});
+
+test('e98bb455 AC1: a failing relock aborts loudly (exit non-zero, nothing committed)', () => {
+  const root = makeWorkspaceRepo();
+  const shim = makePnpmShim();
+  try {
+    bump(root, 'packages/foo/foo-base-a/package.json', (s) => s.replace('1.0.0', '1.0.1'));
+    const res = sh('node', [scriptPath], { cwd: root, env: { ...shim.env, SHIM_RELOCK_FAILS: '1' } });
+    assert.notEqual(res.status, 0);
+    assert.match(res.stderr, /lockfile sync FAILED/);
+    assert.equal(gitLogSubjects(root).length, 2, 'no release commit on a failed relock');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+    rmSync(shim.dir, { recursive: true, force: true });
+  }
+});
+
+test('e98bb455 AC1 NEGATIVE CONTROL: with the relock call removed the lockfile is NOT in the release commit', () => {
+  const scratch = mkdtempSync(join(tmpdir(), 'release-commit-norelock-'));
+  const root = makeWorkspaceRepo();
+  const shim = makePnpmShim();
+  try {
+    const src = readFileSync(scriptPath, 'utf8');
+    const wrong = src
+      .replace("syncLockfileForRelease({ cwd: workspaceRoot, dirtyPaths: dirtyPaths(), dryRun })", "{ action: 'skipped' }")
+      .replace("'../../lib/lockfile-sync.js'", JSON.stringify(join(__dirname, '..', '..', 'lib', 'lockfile-sync.js')));
+    assert.notEqual(wrong, src, 'the mutation must actually remove the relock call');
+    const wrongPath = join(scratch, 'release-commit-norelock.mjs');
+    writeFileSync(wrongPath, wrong);
+    bump(root, 'packages/foo/foo-base-a/package.json', (s) => s.replace('1.0.0', '1.0.1'));
+    const res = sh('node', [wrongPath], { cwd: root, env: shim.env });
+    assert.equal(res.status, 0, res.stderr);
+    const files = sh('git', ['show', '--name-only', '--format=', 'HEAD'], { cwd: root }).stdout;
+    assert.doesNotMatch(files, /pnpm-lock\.yaml/, 'the mutated script strands a stale lockfile — exactly the defect');
+  } finally {
+    rmSync(scratch, { recursive: true, force: true });
+    rmSync(root, { recursive: true, force: true });
+    rmSync(shim.dir, { recursive: true, force: true });
   }
 });

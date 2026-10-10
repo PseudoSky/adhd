@@ -129,6 +129,11 @@ jobs:
       - name: Lane reachability check
         run: node tools/nx-plugins/test/executors/wiring/check-lane-reachability.mjs
 
+      # Lockfile freshness (backlog 4f26493e AC2): names the package.json/specifier
+      # that drifted from pnpm-lock.yaml (see .githooks/pre-push).
+      - name: Lockfile freshness
+        run: npx nx run @adhd/source:check-lockfile-fresh
+
       # Two steps, not one: `e2e` is the resource-heavy lane (2026-09-28,
       # backlog-e2e-cache-separation; the lane list is canonicalised in
       # tools/gate/lane-gate.mjs — GATE_TARGETS = ['test','e2e']). It binds real
