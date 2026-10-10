@@ -191,7 +191,8 @@ describe("afa37093 AC1/AC3 / M3: a success with no result.usage never looks free
 
 describe("afa37093 AC3 / L8: attaching the spend marker can never replace the original error", () => {
   it("afa37093 AC3: frozen, sealed and non-extensible errors come back unchanged (no TypeError); an extensible one carries the marker", () => {
-    for (const lock of [Object.freeze, Object.seal, Object.preventExtensions] as const) {
+    const locks: Array<(e: Error) => Error> = [(e) => Object.freeze(e), (e) => Object.seal(e), (e) => Object.preventExtensions(e)];
+    for (const lock of locks) {
       const err = lock(new Error("original"));
       let returned: unknown;
       expect(() => { returned = attachPartialUsage(err, { reportedModelCalls: 1 }); }).not.toThrow();
