@@ -1,3 +1,13 @@
+## Unreleased
+
+### Bug Fixes
+
+- **agent-plugin-budget:** `pre:tool_call` no longer loses updates on the per-tool `toolCalls` counter. The counter was read before the cap loop and written back as `snapshot + 1` after awaits in the warn / soft-block / block branches, so two simultaneous calls undercounted and could both pass a full cap. The call is now reserved in one synchronous step and the reservation is released if the call is refused. (699da472 AC1, AC2)
+
+### Documentation
+
+- README: new Concurrency section documenting the spend-cap overshoot window under concurrent tool calls (bounded by `toolCallConcurrency - 1`, default 8). (699da472 AC3)
+
 ## 0.2.7 (2026-10-09)
 
 ### ⚠️ Behaviour changes

@@ -1818,6 +1818,91 @@ describe('Packet A — cap.mode on the model path (budget:warning / budget:block
     });
   });
 
+  it('699da472 AC1/AC2 — two simultaneous warn-mode calls for one tool both count (no lost update)', async () => {
+    const plugin = createPlugin({
+      db: null,
+      config: pluginConfigSchema.parse({
+        defaults: {},
+        tool: {
+          default: {},
+          overrides: {
+            racy_tool: {
+              // Cap A warns from the 2nd call on (awaits the warning event);
+              // cap B blocks once THREE calls have been counted.
+              caps: [
+                { field: 'toolCalls', maximum: 1, mode: 'warn' },
+                { field: 'toolCalls', maximum: 3, mode: 'block' },
+              ],
+            },
+          },
+        },
+      }),
+    });
+    await plugin.install(hooks);
+    const ctx = makeCtx();
+    await hooks.emit('task:start', { executionContext: ctx, messages: [] });
+
+    // Barrier: the warning handler parks the FIRST warn-mode call mid-loop
+    // (inside the await) until the second simultaneous call has finished.
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    hooks.register('budget:warning', async () => {
+      await gate;
+    });
+
+    await enforcePreTool(hooks, ctx, 'racy_tool', 'seed'); // count 0 -> 1
+    const first = enforcePreTool(hooks, ctx, 'racy_tool', 'a'); // parks in warn
+    const second = enforcePreTool(hooks, ctx, 'racy_tool', 'b'); // simultaneous
+    await second;
+    release();
+    await first;
+
+    // seed + a + b = 3 counted calls: the next call must hit the block cap.
+    // A lost update leaves the count at 2 and this call would wrongly pass.
+    await expect(
+      enforcePreTool(hooks, ctx, 'racy_tool', 'c'),
+    ).rejects.toMatchObject({ code: 'BUDGET_EXCEEDED' });
+  });
+
+  it('699da472 AC3 — simultaneous calls cannot overshoot a toolCalls cap while a warn handler is parked', async () => {
+    const plugin = createPlugin({
+      db: null,
+      config: pluginConfigSchema.parse({
+        defaults: {},
+        tool: {
+          default: {},
+          overrides: {
+            racy_tool: {
+              caps: [
+                { field: 'toolCalls', maximum: 0, mode: 'warn' },
+                { field: 'toolCalls', maximum: 2, mode: 'block' },
+              ],
+            },
+          },
+        },
+      }),
+    });
+    await plugin.install(hooks);
+    const ctx = makeCtx();
+    await hooks.emit('task:start', { executionContext: ctx, messages: [] });
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    hooks.register('budget:warning', async () => {
+      await gate;
+    });
+    const calls = [1, 2, 3, 4, 5].map((i) =>
+      enforcePreTool(hooks, ctx, 'racy_tool', `c${i}`).then(
+        () => 'ok',
+        () => 'blocked',
+      ),
+    );
+    await new Promise((r) => setTimeout(r, 0));
+    release();
+    const results = await Promise.all(calls);
+    expect(results.filter((r) => r === 'ok')).toHaveLength(2);
+    expect(results.filter((r) => r === 'blocked')).toHaveLength(3);
+  });
+
   it('tool path: block-mode tool cap exceeded → budget:block emitted BEFORE the BUDGET_EXCEEDED throw', async () => {
     const plugin = createPlugin({
       db: null,

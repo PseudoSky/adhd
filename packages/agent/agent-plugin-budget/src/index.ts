@@ -1436,7 +1436,47 @@ class BudgetPlugin implements Plugin {
     const toolCaps = caps.filter((c) => c.field !== 'context');
     if (toolCaps.length === 0) return;
 
+    // 699da472 AC1/AC2: read-and-reserve in ONE synchronous step, before any
+    // await in the cap loop. The pre-fix code read the counter here, awaited in
+    // the warn/soft-block/block branches, then wrote back `snapshot + 1` - two
+    // simultaneous calls both wrote N+1 (lost update) and could both pass a cap
+    // the first had already filled. `currentToolCalls` stays the pre-reservation
+    // value (the cap comparison is unchanged); the increment is released again
+    // if this call is refused (soft-block / block throw), so only calls that
+    // proceed are counted - the same observable semantics as before.
+    // The counter is in-process, per-task (acc), never persisted, so in-process
+    // atomicity is the whole story: this block runs to its first await without
+    // interleaving.
     const currentToolCalls = acc.toolCalls.get(toolName) ?? 0;
+    acc.toolCalls.set(toolName, currentToolCalls + 1);
+    try {
+      await this.enforcePreToolCaps(
+        p,
+        toolCaps,
+        mode,
+        dimScope,
+        acc,
+        currentToolCalls
+      );
+    } catch (e) {
+      acc.toolCalls.set(
+        toolName,
+        Math.max(0, (acc.toolCalls.get(toolName) ?? 1) - 1)
+      );
+      throw e;
+    }
+  }
+
+  /** Cap loop for {@link enforcePreTool}; throws to refuse the call. */
+  private async enforcePreToolCaps(
+    p: PreToolCallPayload,
+    toolCaps: Cap[],
+    mode: string | undefined,
+    dimScope: string | undefined,
+    acc: BudgetAccumulator,
+    currentToolCalls: number
+  ): Promise<void> {
+    const { toolName, callId, executionContext } = p;
     const snap = this.buildSnapshot(
       toolCaps,
       acc,
@@ -1503,8 +1543,6 @@ class BudgetPlugin implements Plugin {
         );
       }
     }
-
-    acc.toolCalls.set(toolName, currentToolCalls + 1);
   }
 
   // ── Enforcement: transform:tool_result (response size) ────────────────────

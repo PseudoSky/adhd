@@ -249,6 +249,12 @@ Enforcement makes exactly `U + W` DB queries per event where:
 
 Zero DB queries when no caps are configured. No per-cap scaling.
 
+## Concurrency
+
+The per-tool `toolCalls` counter is in-process and per-task; it is never persisted, so in-process atomicity is the whole story. `pre:tool_call` reserves the call (reads and increments the counter in one synchronous step, before any `await`), and releases the reservation if the call is refused (`soft-block` / `block`). Simultaneous calls to the same tool therefore each count exactly once, and a `toolCalls` cap cannot be overshot by calls that were in flight together, even when a `warn`-mode handler is awaiting. (699da472)
+
+Spend-style caps (`cost`, `inputTokens`, `outputTokens`, `context`, windowed and non-task scopes, and the task-level error counters) are different: they are read at `pre:tool_call` / `pre:model_call` and charged only after the call completes (`post:tool_call` / `post:model_call`). When the engine fans a turn's tool calls out concurrently, up to `toolCallConcurrency` calls (default 8) can pass the same pre-check before any of them is charged, so such a cap can be overshot by at most `toolCallConcurrency - 1` calls' worth of spend. Set `toolCallConcurrency: 1` for strict spend caps. Counters for non-`task` scopes are read from the shared SQLite store, which several processes may write concurrently, so those caps are likewise advisory at the granularity of the calls in flight across all processes.
+
 ## Testing
 
 ```bash
