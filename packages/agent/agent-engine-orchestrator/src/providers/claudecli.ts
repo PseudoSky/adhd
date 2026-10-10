@@ -417,6 +417,21 @@ function reapAfterSuccess(proc: ChildProcess, timings: ClaudeCliReapTimings): vo
 
 // ─── provider ────────────────────────────────────────────────────────────────
 
+/**
+ * The operator-facing message for a `claude` child that failed to start (b8372f5a). Names the
+ * binary and the PATH searched so a missing install is distinguishable from a logged-out CLI.
+ */
+export function spawnFailureMessage(err: Error, binary: string, searchPath: string | undefined): string {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === "ENOENT") {
+        return (
+            `Claude CLI could not be started: ${err.message}. The \`${binary}\` binary was not found ` +
+            `(PATH=${searchPath ?? "(unset)"}). Install Claude Code, put it on PATH, or set the provider's \`claudePath\`.`
+        );
+    }
+    return `Claude CLI could not be started: ${err.message}${code ? ` (${code})` : ""}. Binary: \`${binary}\`.`;
+}
+
 export class ClaudeCliProvider implements LLMProvider {
     private readonly providerConfig: ClaudeCliConfig;
     private readonly compiledTools: string[] | undefined;
@@ -736,6 +751,17 @@ export class ClaudeCliProvider implements LLMProvider {
             }
 
             proc.stdin.end();
+
+            // A spawn failure (binary missing from PATH -> ENOENT, not executable -> EACCES) emits
+            // `error` and closes stdout without a single line, so the in-loop check above never runs.
+            // Report it as what it is rather than as the empty-result auth error below (b8372f5a).
+            if (!finalResult && procError) {
+                throw new ToolError(
+                    "PROVIDER_ERROR",
+                    spawnFailureMessage(procError, claudePath, subEnv["PATH"] ?? process.env["PATH"]),
+                    { spawnErrorCode: (procError as NodeJS.ErrnoException).code }
+                );
+            }
 
             if (!finalResult) {
                 throw new ToolError(

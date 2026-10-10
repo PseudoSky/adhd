@@ -73,6 +73,13 @@ tool are estimated as before. Operator view: `entrypoint/agent-mcp/docs/logging.
 
 `claude` is never handed your MCP servers. For each `chat()` that advertises tools, the provider starts a loopback Streamable-HTTP MCP bridge (127.0.0.1, random bearer token, Host-checked, closed when the call ends) and writes a `--mcp-config` that points only at it, one route per server so tool names stay `mcp__<server>__<tool>`. Every `tools/call` claude makes goes through the engine's `executeTool`, so each tool executes exactly once, under the engine registry client's `cwd`/`env`/srt and server/tool allowlist. Advertising MCP tools without an `executeTool` callback fails with `PROVIDER_ERROR`. Claude's own built-in tools are unchanged (`--tools` allowlist).
 
+## `claudecli` provider: a missing binary is not an auth error
+
+If the `claude` child cannot start (not on `PATH` -> `spawn claude ENOENT`, or not executable), `chat()`
+rejects with `PROVIDER_ERROR` whose message names the binary and the `PATH` searched, and carries
+`data.spawnErrorCode`. `PROVIDER_AUTH_ERROR` ("returned empty result ... `claude auth status`") is reserved
+for a CLI that started but returned nothing. Set the provider's `claudePath` to point at a non-PATH install.
+
 ## `claudecli` provider: isolation defaults
 
 The `claudecli` adapter spawns `claude -p` as a worker, not as an interactive session. It always passes:
