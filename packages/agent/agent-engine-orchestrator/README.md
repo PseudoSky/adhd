@@ -109,6 +109,8 @@ raw `cache_creation_input_tokens` of 0.
 
 `claude` is never handed your MCP servers. For each `chat()` that advertises tools, the provider starts a loopback Streamable-HTTP MCP bridge (127.0.0.1, random bearer token, Host-checked, closed when the call ends) and writes a `--mcp-config` that points only at it, one route per server so tool names stay `mcp__<server>__<tool>`. Every `tools/call` claude makes goes through the engine's `executeTool`, so each tool executes exactly once, under the engine registry client's `cwd`/`env`/srt and server/tool allowlist. Advertising MCP tools without an `executeTool` callback fails with `PROVIDER_ERROR`. Claude's own built-in tools are unchanged (`--tools` allowlist).
 
+**Same-message concurrency (424b6362).** The CLI runs same-message MCP calls one at a time unless the tool advertises `readOnlyHint`. The bridge therefore advertises `{readOnlyHint:true}` for exactly the bare tool names `task`, `tasks_batch` and `agent` (`CONCURRENCY_HINT_TOOLS` in `src/providers/claudecli.ts`) so parallel delegation actually runs in parallel. This is a CLI concurrency hint only: those tools create isolated child tasks and are not non-mutating, every call is still governed (a `deny` verdict still denies), and the hint is never present on agent-mcp's own external `tools/list`. Proof: `claudecli-concurrency-hint*.test.ts`, `claudecli-parallel-dispatch.e2e.test.ts` (pinned to claude 2.1.296).
+
 ## `claudecli` provider: a missing binary is not an auth error
 
 If the `claude` child cannot start (not on `PATH` -> `spawn claude ENOENT`, or not executable), `chat()`

@@ -58,9 +58,9 @@ export interface StartToolBridgeOptions {
     callTimeoutMs?: number;
     /**
      * Optional per-tool MCP `annotations` to advertise in `tools/list`. Unset (the default) advertises
-     * none, so behaviour is unchanged. Exists so the fdb35d6f spike can measure whether the claude CLI
-     * runs same-message calls concurrently when a tool carries `readOnlyHint`; see
-     * claudecli-parallel-dispatch.e2e.test.ts for the recorded finding before supplying one.
+     * none. ClaudeCliProvider supplies `concurrencyHintAnnotations` (readOnlyHint on task / tasks_batch /
+     * agent only) because the claude CLI runs same-message MCP calls concurrently only for hinted tools;
+     * see CONCURRENCY_HINT_TOOLS in claudecli.ts and claudecli-parallel-dispatch.e2e.test.ts (424b6362).
      */
     toolAnnotations?: (tool: string, def: ToolDefinition) => Record<string, unknown> | undefined;
 }

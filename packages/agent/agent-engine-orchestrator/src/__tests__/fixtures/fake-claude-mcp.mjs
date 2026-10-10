@@ -80,9 +80,8 @@ async function run(line) {
   }
   const results = [];
   let n = 0;
-  for (const call of prompt.calls ?? []) {
+  const callOne = async (call, id, idx) => {
     const client = clients.get(call.server);
-    const id = `toolu_${++n}`;
     emit({
       type: 'assistant',
       message: {
@@ -90,7 +89,7 @@ async function run(line) {
         content: [{ type: 'tool_use', id, name: `mcp__${norm(call.server)}__${norm(call.tool)}`, input: call.args ?? {} }],
         // ADHD_FAKE_CLAUDE_USAGE=1: report per-call usage like the real CLI (3 calls -> context 1010 / 1020 / 1030).
         ...(process.env.ADHD_FAKE_CLAUDE_USAGE === '1'
-          ? { id: `msg_${n}`, usage: { input_tokens: 10, output_tokens: 5, cache_read_input_tokens: 1000 + (n - 1) * 10, cache_creation_input_tokens: 0 } }
+          ? { id: `msg_${idx}`, usage: { input_tokens: 10, output_tokens: 5, cache_read_input_tokens: 1000 + (idx - 1) * 10, cache_creation_input_tokens: 0 } }
           : {}),
       },
     });
@@ -104,8 +103,15 @@ async function run(line) {
       text = e instanceof Error ? e.message : String(e);
       isError = true;
     }
-    results.push({ id, text, isError });
+    results[idx - 1] = { id, text, isError };
     emit({ type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: id, content: [{ type: 'text', text }], is_error: isError }] } });
+  };
+  const calls = prompt.calls ?? [];
+  if (prompt.parallel === true) {
+    // 424b6362 AC6: issue every call SIMULTANEOUSLY (as the real CLI does for hinted same-message calls).
+    await Promise.all(calls.map((call, i) => callOne(call, `toolu_${i + 1}`, i + 1)));
+  } else {
+    for (const call of calls) { n += 1; await callOne(call, `toolu_${n}`, n); }
   }
   for (const c of clients.values()) await c.close().catch(noop);
   if (selfOut) {

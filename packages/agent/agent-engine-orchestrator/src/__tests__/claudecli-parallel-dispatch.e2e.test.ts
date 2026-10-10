@@ -1,5 +1,5 @@
 /**
- * claudecli-parallel-dispatch.e2e.test.ts — fdb35d6f (R3-PAR-B): does the real `claude` CLI run two
+ * claudecli-parallel-dispatch.e2e.test.ts — 424b6362 (R3-PAR-B): does the real `claude` CLI run two
  * same-message MCP tool calls concurrently through the claudecli loopback bridge, with and without
  * `annotations:{readOnlyHint:true}` advertised in ListTools?
  *
@@ -112,13 +112,13 @@ async function observe(withReadOnlyHint: boolean): Promise<Observation> {
   }
 }
 
-describe('fdb35d6f R3-PAR-B parallel dispatch through the real claude CLI', () => {
-  it('fdb35d6f AC1: claude binary is present (fails, never skips)', () => {
+describe('424b6362 R3-PAR-B parallel dispatch through the real claude CLI', () => {
+  it('424b6362 AC1: claude binary is present (fails, never skips)', () => {
     const r = spawnSync('claude', ['--version'], { encoding: 'utf8' });
     expect(r.status, 'claude CLI must be installed to run this suite').toBe(0);
   });
 
-  it('fdb35d6f AC1 spike: record overlap with and without readOnlyHint', { timeout: 240_000 }, async () => {
+  it('424b6362 AC1 spike: record overlap with and without readOnlyHint', { timeout: 240_000 }, async () => {
     const without = await observe(false);
     const withHint = await observe(true);
     // eslint-disable-next-line no-console
@@ -128,9 +128,9 @@ describe('fdb35d6f R3-PAR-B parallel dispatch through the real claude CLI', () =
       // The finding is only meaningful when the model really issued both calls in ONE message.
       expect(o.sameMessage, 'model must issue both calls in one assistant message').toBe(true);
     }
-    // Recorded finding (fdb35d6f, claude 2.1.296, haiku-4-5): the CLI serialises same-message calls
+    // Recorded finding (424b6362, claude 2.1.296, haiku-4-5): the CLI serialises same-message calls
     // to a server whose tools carry no readOnlyHint, and runs them concurrently when they do.
-    expect(without.overlapped, 'CLI now overlaps un-annotated MCP calls: revisit fdb35d6f').toBe(false);
-    expect(withHint.overlapped, 'CLI no longer overlaps readOnlyHint MCP calls: revisit fdb35d6f').toBe(true);
+    expect(without.overlapped, 'CLI now overlaps un-annotated MCP calls: revisit 424b6362').toBe(false);
+    expect(withHint.overlapped, 'CLI no longer overlaps readOnlyHint MCP calls: revisit 424b6362').toBe(true);
   });
 });

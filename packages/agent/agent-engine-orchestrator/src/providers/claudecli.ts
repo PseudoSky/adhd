@@ -42,6 +42,17 @@ import {
     type ProviderTokenUsage,
 } from "./partial-usage.js";
 
+/**
+ * readOnlyHint is a CLI concurrency hint only; these tools each create an isolated child task and are NOT non-mutating; the CLI serialises same-message MCP calls otherwise (fdb35d6f).
+ * Bare tool names (the part after `server__`). Never derived from the tool def/schema.
+ */
+export const CONCURRENCY_HINT_TOOLS: ReadonlySet<string> = new Set(["task", "tasks_batch", "agent"]);
+
+/** The bridge `toolAnnotations` hook (fdb35d6f AC4): `{readOnlyHint:true}` for CONCURRENCY_HINT_TOOLS, else undefined. */
+export function concurrencyHintAnnotations(tool: string): Record<string, unknown> | undefined {
+    return CONCURRENCY_HINT_TOOLS.has(tool) ? { readOnlyHint: true } : undefined;
+}
+
 /** Bytes of stderr kept (tail) for fault reports. */
 const STDERR_TAIL_BYTES = 2000;
 /** How long to wait for a stream-closed child to report its exit status on the failure path. */
@@ -873,6 +884,7 @@ export class ClaudeCliProvider implements LLMProvider {
                 signal: request.signal,
                 logger: this.logger,
                 callTimeoutMs: this.providerConfig.timeoutMs,
+                toolAnnotations: (tool) => concurrencyHintAnnotations(tool),
             })
             : undefined;
         try {
