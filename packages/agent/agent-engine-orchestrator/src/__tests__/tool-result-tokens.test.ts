@@ -121,7 +121,7 @@ async function runWithToolResult(toolResult: string) {
             calls++;
             return calls === 1
                 ? {
-                    message: { id: generateId(), sessionId: ctx.sessionId, role: "assistant", content: null,
+                    message: { id: generateId(), sessionId: ctx.sessionId, role: "assistant",
                         toolCalls: [{ id: generateId(), server: "test-server", tool: "echo", arguments: {} }], createdAt: nowIso() },
                     stopReason: "tool_calls",
                 }
@@ -146,7 +146,12 @@ async function runWithToolResult(toolResult: string) {
         signal: new AbortController().signal, taskId, hooks: new HookRegistry(),
     });
     const row = sqlite.prepare("SELECT payload FROM task_events WHERE task_id = ? AND type = 'TOOL_RESULT'").get(taskId) as { payload: string };
-    return JSON.parse(row.payload) as Record<string, unknown>;
+    return JSON.parse(row.payload) as {
+        tool_call_est_result_tokens: number;
+        tool_call_est_result_tokens_estimated?: boolean;
+        truncated?: boolean;
+        original_chars?: number;
+    };
 }
 
 describe("d89e20f4 AC1 orchestrator drive: 1,000,000-char run never reaches the tokenizer in full", () => {
@@ -154,7 +159,7 @@ describe("d89e20f4 AC1 orchestrator drive: 1,000,000-char run never reaches the 
         const payload = await runWithToolResult("h".repeat(1_000_000));
         expect(Math.max(...encodeArgLengths)).toBeLessThanOrEqual(TOOL_RESULT_SAMPLE_CHARS);
         expect(payload.tool_call_est_result_tokens_estimated).toBe(true);
-        expect(payload.tool_call_est_result_tokens as number).toBeGreaterThan(0);
+        expect(payload.tool_call_est_result_tokens).toBeGreaterThan(0);
         expect(payload.truncated).toBe(true);
         expect(payload.original_chars).toBe(1_000_000);
     });
@@ -163,6 +168,6 @@ describe("d89e20f4 AC1 orchestrator drive: 1,000,000-char run never reaches the 
         const text = Array.from({ length: 80 }, (_, i) => `tool output line ${i}: varied ${i * 7}`).join("\n");
         const payload = await runWithToolResult(text);
         expect(payload.tool_call_est_result_tokens).toBe(realEncode(text).length);
-        expect("tool_call_est_result_tokens_estimated" in payload).toBe(false);
+        expect(payload.tool_call_est_result_tokens_estimated).toBeUndefined();
     });
 });
