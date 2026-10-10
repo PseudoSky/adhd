@@ -200,3 +200,7 @@ The `claude` CLI runs its own tool loop, so its tool calls bypass the engine's d
 - Depended on by: `@adhd/agent-mcp`
 
 See `/entrypoint/agent-mcp/docs/architecture-and-security.md` for the full agent runtime architecture.
+
+## Tool-result token estimate
+
+`tool_call_est_result_tokens` on `TOOL_RESULT` events is exact for results of at most 20,000 chars and a head+tail-sample estimate above that (`tool_call_est_result_tokens_estimated: true`), so a huge single-character run cannot stall the event loop in the tokenizer (d89e20f4). See `src/engine/tool-result-tokens.ts` and `entrypoint/agent-mcp/docs/logging.md`.

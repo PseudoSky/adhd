@@ -9,7 +9,7 @@ import type {
   PostToolCallPayload,
 } from '@adhd/agent-base-types';
 import { effectiveHitl } from '@adhd/agent-base-types';
-import { encode } from 'gpt-tokenizer';
+import { estimateToolResultTokens } from './tool-result-tokens.js';
 import { randomUUID } from 'node:crypto';
 import { ToolError } from '../validation/errors.js';
 import { generateId } from '../utils/ids.js';
@@ -1454,7 +1454,8 @@ export class Orchestrator {
 
               const fullText =
                 typeof rawResult === 'string' ? rawResult : JSON.stringify(rawResult);
-              const estTokens = encode(fullText ?? '').length;
+              const { tokens: estTokens, estimated: estTokensEstimated } =
+                estimateToolResultTokens(fullText ?? '');
               // 9ed453c1 CTX: bound what the CLI re-sends on every later turn.
               const capOutcome = capOrSpillToolResult({
                 result: rawResult,
@@ -1478,6 +1479,9 @@ export class Orchestrator {
                   isError: isErr,
                   result: (fullText ?? '').slice(0, 500),
                   tool_call_est_result_tokens: estTokens,
+                  ...(estTokensEstimated
+                    ? { tool_call_est_result_tokens_estimated: true }
+                    : {}),
                   ...(capOutcome.truncated
                     ? { truncated: true, original_chars: capOutcome.originalChars }
                     : {}),
@@ -2006,7 +2010,10 @@ export class Orchestrator {
               typeof toolResult === 'string'
                 ? toolResult
                 : JSON.stringify(toolResult);
-            const toolCallEstResultTokens = encode(fullResultText).length;
+            const {
+              tokens: toolCallEstResultTokens,
+              estimated: toolCallEstResultTokensEstimated,
+            } = estimateToolResultTokens(fullResultText);
 
             // BK1 (3ad735bb): bound what the MODEL sees (and what the session
             // history persists). Telemetry above and the 500-char summary below
@@ -2040,6 +2047,9 @@ export class Orchestrator {
                 isError,
                 result: resultSummary,
                 tool_call_est_result_tokens: toolCallEstResultTokens,
+                ...(toolCallEstResultTokensEstimated
+                  ? { tool_call_est_result_tokens_estimated: true }
+                  : {}),
                 ...(capOutcome.truncated
                   ? {
                       truncated: true,
