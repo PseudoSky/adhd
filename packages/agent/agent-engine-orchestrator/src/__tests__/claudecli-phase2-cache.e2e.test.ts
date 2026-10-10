@@ -13,6 +13,7 @@
  * session: ratio 0.98, cache_creation 1h 121 tokens (-98%). This test fails if the ratio drops below 0.6.
  */
 import { spawnSync } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { existsSync, mkdtempSync, readdirSync, rmSync, rmdirSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
@@ -51,7 +52,7 @@ function filler(words: number): string {
 }
 
 const msg = (role: Message["role"], content: string): Message =>
-  ({ id: crypto.randomUUID(), sessionId: crypto.randomUUID(), role, content, createdAt: new Date().toISOString() });
+  ({ id: randomUUID(), sessionId: randomUUID(), role, content, createdAt: new Date().toISOString() });
 
 interface IUsage { input_tokens?: number; cache_read_input_tokens?: number; cache_creation_input_tokens?: number; cache_creation?: { ephemeral_1h_input_tokens?: number } }
 const context = (u: IUsage): number => (u.input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0);
