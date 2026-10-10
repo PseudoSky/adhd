@@ -3,7 +3,8 @@
  *
  * Thread `McpServerConfig.cwd` and the injected `subprocessEnv()` through the
  * engine's MCP client layer into the spawned stdio child, and run `claude` in
- * the configured task-time cwd so a claude-spawned MCP child inherits it.
+ * the configured task-time cwd (claude's built-ins need it; MCP servers are launched by the engine
+ * registry client only, not by claude — 9ed453c1 BRIDGE).
  *
  * Every acceptance criterion is proven by a REAL subprocess spawn (no mock of
  * the unit under test); each assertion FAILS if its fix is reverted, as noted
@@ -12,7 +13,7 @@
  * all real), so this suite runs by default with no paid service.
  */
 import { afterEach, describe, expect, it } from 'vitest';
-import { chmodSync, mkdtempSync, readFileSync, realpathSync, rmSync } from 'node:fs';
+import { chmodSync, existsSync, mkdtempSync, readFileSync, realpathSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -139,7 +140,7 @@ describe('NAT-TOOL-3 — cwd/env through the engine MCP client (ADR-0008 D9)', (
     }
   });
 
-  it('AC3: a claude-spawned MCP child inherits the configured cwd (real stub spawn)', async () => {
+  it('AC3: `claude` is spawned in the configured cwd and is handed no MCP child to launch (real stub spawn)', async () => {
     const dir = freshDir('adhd-nat3-ac3-');
     const selfOut = join(dir, 'claude-self.json');
     const childReport = join(dir, 'mcp-child-cwd.txt');
@@ -169,15 +170,16 @@ describe('NAT-TOOL-3 — cwd/env through the engine MCP client (ADR-0008 D9)', (
 
     const self = JSON.parse(readFileSync(selfOut, 'utf8')) as {
       cwd: string;
-      mcpConfig: { mcpServers: Record<string, { command: string }> };
+      mcpConfig: { mcpServers: Record<string, unknown> };
     };
-    // `claude` itself was spawned in the configured cwd...
+    // `claude` itself (whose built-in tools need it) was spawned in the configured cwd.
+    // REVERT-FAILING: drop `cwd: this.config.cwd` from the `claude` spawn -> this falls back to the
+    // vitest runner cwd.
     expect(self.cwd).toBe(dir);
-    // ...the MCP entry was emitted into the --mcp-config it received...
-    expect(self.mcpConfig.mcpServers['probe'].command).toBe(process.execPath);
-    // ...and the MCP child `claude` launched (with an INHERITED cwd) reports it.
-    // REVERT-FAILING: drop `cwd: this.config.cwd` from the `claude` spawn -> both
-    // `self.cwd` and the child's report fall back to the vitest runner cwd.
-    expect(readFileSync(childReport, 'utf8').trim()).toBe(dir);
+    // 9ed453c1 BRIDGE: claude launches NO MCP children any more (the engine registry client owns
+    // server launch and so owns cwd/env per AC1/AC2/AC4); with no advertised tools its config is empty,
+    // and so no child was launched to report an inherited cwd.
+    expect(self.mcpConfig.mcpServers).toEqual({});
+    expect(existsSync(childReport)).toBe(false);
   });
 });

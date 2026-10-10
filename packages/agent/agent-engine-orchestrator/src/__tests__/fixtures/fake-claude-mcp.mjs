@@ -1,0 +1,107 @@
+#!/usr/bin/env node
+// Stand-in for `claude -p --output-format stream-json` that behaves like the REAL CLI with
+// respect to MCP (9ed453c1 BRIDGE): it parses `--mcp-config`, connects an MCP client to EVERY
+// entry in it (stdio: spawn command/args/env; http/sse: the MCP SDK Streamable-HTTP client with
+// the entry's headers), and executes the tool calls the "model" (the prompt) asks for through
+// those connections. It then emits stream-json `assistant{tool_use}`, `user{tool_result}` (its own
+// result), and `result`. Every stdin line the provider writes is appended to
+// $ADHD_FAKE_CLAUDE_STDIN_LOG so a synthetic stdin tool_result is observable.
+//
+// The prompt is JSON: {"calls":[{"server":"counter","tool":"bump","args":{}}, ...]}.
+// Env: ADHD_FAKE_CLAUDE_OUT  = file receiving {cwd, mcpConfigRaw, mcpConfig, configMode, toolNames, results}
+//      ADHD_FAKE_CLAUDE_MODE = 'fail' (emit an is_error result) | 'hang' (connect, record, never answer)
+import { appendFileSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+
+const argv = process.argv.slice(2);
+const flag = (n) => { const i = argv.indexOf(n); return i === -1 ? undefined : argv[i + 1]; };
+const norm = (s) => s.replace(/[^A-Za-z0-9_]/g, '_');
+
+const mcpConfigArg = flag('--mcp-config');
+const stdinLog = process.env.ADHD_FAKE_CLAUDE_STDIN_LOG;
+const selfOut = process.env.ADHD_FAKE_CLAUDE_OUT;
+
+const inline = mcpConfigArg?.trimStart().startsWith('{');
+const mcpConfig = mcpConfigArg ? JSON.parse(inline ? mcpConfigArg : readFileSync(mcpConfigArg, 'utf8')) : { mcpServers: {} };
+const configMode = inline ? null : (statSync(mcpConfigArg).mode & 0o777);
+
+function noop() {
+  /* intentionally empty: keepalive / swallowed close error */
+}
+
+const emit = (obj) => process.stdout.write(JSON.stringify(obj) + '\n');
+
+let buffered = '';
+let handled = false;
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (chunk) => {
+  buffered += chunk;
+  let nl;
+  while ((nl = buffered.indexOf('\n')) !== -1) {
+    const line = buffered.slice(0, nl);
+    buffered = buffered.slice(nl + 1);
+    if (!line.trim()) continue;
+    if (stdinLog) appendFileSync(stdinLog, line + '\n');
+    if (!handled) { handled = true; void run(line); }
+  }
+});
+
+async function connect(name, entry) {
+  const client = new Client({ name: 'fake-claude', version: '1.0.0' });
+  const transport = entry.type === 'stdio'
+    ? new StdioClientTransport({ command: entry.command, args: entry.args ?? [], env: { ...process.env, ...(entry.env ?? {}) } })
+    : new StreamableHTTPClientTransport(new URL(entry.url), { requestInit: { headers: entry.headers ?? {} } });
+  await client.connect(transport);
+  return client;
+}
+
+async function run(line) {
+  const prompt = JSON.parse(JSON.parse(line).message.content);
+  const clients = new Map();
+  const toolNames = [];
+  for (const [name, entry] of Object.entries(mcpConfig.mcpServers ?? {})) {
+    const client = await connect(name, entry);
+    clients.set(name, client);
+    for (const t of (await client.listTools()).tools) toolNames.push(`mcp__${norm(name)}__${norm(t.name)}`);
+  }
+  emit({ type: 'system', subtype: 'init', model: 'claude-haiku-4-5' });
+  const mode = process.env.ADHD_FAKE_CLAUDE_MODE;
+  if (mode === 'hang' || mode === 'fail') {
+    if (selfOut) writeFileSync(selfOut, JSON.stringify({ cwd: process.cwd(), mcpConfig, mcpConfigRaw: mcpConfigArg, configMode, toolNames, results: [] }));
+    if (mode === 'hang') { setInterval(noop, 1e6); return; }
+    process.stdout.write(JSON.stringify({ type: 'result', subtype: 'error', is_error: true, result: 'boom' }) + '\n', () => process.exit(0));
+    return;
+  }
+  const results = [];
+  let n = 0;
+  for (const call of prompt.calls ?? []) {
+    const client = clients.get(call.server);
+    const id = `toolu_${++n}`;
+    emit({
+      type: 'assistant',
+      message: { role: 'assistant', content: [{ type: 'tool_use', id, name: `mcp__${norm(call.server)}__${norm(call.tool)}`, input: call.args ?? {} }] },
+    });
+    let text;
+    let isError = false;
+    try {
+      const r = await client.callTool({ name: call.tool, arguments: call.args ?? {} });
+      text = (r.content ?? []).map((b) => b.text ?? '').join('');
+      isError = r.isError === true;
+    } catch (e) {
+      text = e instanceof Error ? e.message : String(e);
+      isError = true;
+    }
+    results.push({ id, text, isError });
+    emit({ type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: id, content: [{ type: 'text', text }], is_error: isError }] } });
+  }
+  for (const c of clients.values()) await c.close().catch(noop);
+  if (selfOut) {
+    writeFileSync(selfOut, JSON.stringify({ cwd: process.cwd(), mcpConfig, mcpConfigRaw: mcpConfigArg, configMode, toolNames, results }));
+  }
+  process.stdout.write(
+    JSON.stringify({ type: 'result', subtype: 'success', is_error: false, result: results.map((r) => r.text).join('|') || 'OK', num_turns: results.length + 1 }) + '\n',
+    () => process.exit(0)
+  );
+}

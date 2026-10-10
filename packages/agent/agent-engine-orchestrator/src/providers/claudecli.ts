@@ -5,7 +5,6 @@ import { join } from "path";
 
 import { generateId } from "../utils/ids.js";
 import { nowIso } from "../utils/timestamps.js";
-import { resolveToolCallName, normalizeToolName } from "../clients/tool-naming.js";
 import type { LLMProvider, ProviderChatRequest, ProviderChatResponse } from "./types.js";
 import type { ModelUsageEntry } from "@adhd/agent-base-types";
 import type { McpServerConfig, ProviderConfig, Message } from "../validation/index.js";
@@ -13,6 +12,7 @@ import { ToolError } from "../validation/errors.js";
 import type { EngineLogger, EngineConfig } from "../interfaces.js";
 import { wireSpawn } from "./wire.js";
 import { normaliseAnthropicUsage } from "./anthropic.js";
+import { startToolBridge, buildBridgeMcpConfig, type ToolBridge } from "./claudecli-tool-bridge.js";
 
 type ClaudeCliConfig = Extract<ProviderConfig, { type: "claudecli" }>;
 
@@ -187,21 +187,9 @@ export function resolveCliModelUsage(
 }
 
 // ─── MCP config format ───────────────────────────────────────────────────────
-
-interface ClaudeStdioMcpEntry {
-    type: "stdio";
-    command: string;
-    args?: string[];
-    env?: Record<string, string>;
-}
-
-interface ClaudeHttpMcpEntry {
-    type: "http" | "sse";
-    url: string;
-    headers?: Record<string, string>;
-}
-
-type ClaudeMcpEntry = ClaudeStdioMcpEntry | ClaudeHttpMcpEntry;
+//
+// claude is never handed the agent's real MCP servers: its `--mcp-config` contains only the
+// per-chat loopback bridge entries (see claudecli-tool-bridge.ts, 9ed453c1 BRIDGE).
 
 /** Inline `--mcp-config` value for an agent that declares no MCP servers. */
 const EMPTY_MCP_CONFIG = JSON.stringify({ mcpServers: {} });
@@ -259,19 +247,6 @@ export function computeClaudeBuiltinArgs(params: {
             : (params.allowedBuiltinTools ?? []);
 
     return { effectiveAllowed, toolsArgv: ["--tools", effectiveAllowed.join(",")] };
-}
-
-/**
- * True when the `tool_use` block named `name` is one the agent-mcp loop itself
- * must execute: an `mcp__`-prefixed tool that the agent declared. Claude's own
- * built-ins (Bash, Read, ...) are executed by the CLI inside its single `-p`
- * invocation, so answering them with a synthetic `tool_result` would inject a
- * spurious, duplicated (and, without a server, `is_error`) result.
- */
-export function isLoopExecutedToolUse(name: string, declared: readonly string[] = []): boolean {
-    if (!name.startsWith("mcp__")) return false;
-    const wanted = normalizeToolName(name.slice("mcp__".length));
-    return declared.some((d) => normalizeToolName(d) === wanted);
 }
 
 // ─── agent-spec helpers ──────────────────────────────────────────────────────
@@ -444,7 +419,6 @@ function reapAfterSuccess(proc: ChildProcess, timings: ClaudeCliReapTimings): vo
 
 export class ClaudeCliProvider implements LLMProvider {
     private readonly providerConfig: ClaudeCliConfig;
-    private readonly mcpServers: Record<string, McpServerConfig>;
     private readonly compiledTools: string[] | undefined;
     private readonly logger: EngineLogger;
     private readonly config: EngineConfig;
@@ -452,7 +426,7 @@ export class ClaudeCliProvider implements LLMProvider {
 
     constructor(
         config: ClaudeCliConfig,
-        mcpServers: Record<string, McpServerConfig> = {},
+        _mcpServers: Record<string, McpServerConfig> = {},
         compiledTools?: string[],
         engineConfig?: EngineConfig,
         engineLogger?: EngineLogger,
@@ -460,7 +434,6 @@ export class ClaudeCliProvider implements LLMProvider {
     ) {
         this.reapTimings = { ...DEFAULT_CLAUDECLI_REAP_TIMINGS, ...reapTimings };
         this.providerConfig = config;
-        this.mcpServers = mcpServers;
         this.compiledTools = compiledTools;
         this.config = engineConfig ?? {} as EngineConfig;
         this.logger = engineLogger ?? { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} } as EngineLogger;
@@ -488,48 +461,19 @@ export class ClaudeCliProvider implements LLMProvider {
     }
 
     /**
-     * Writes the agent's declared servers to a temp config file. Returns
-     * `undefined` when there are none; `chat` then passes `EMPTY_MCP_CONFIG`
-     * inline so that, paired with `--strict-mcp-config`, the spawned CLI never
-     * inherits the operator's own MCP set (which includes agent-mcp itself, a
-     * ~30 s CONNECT_TIMEOUT recursion).
+     * Writes the bridge's http entries (one per advertised server) to a 0600 temp file. Returns
+     * `undefined` when no bridge was started; `chat` then passes `EMPTY_MCP_CONFIG` inline so that,
+     * paired with `--strict-mcp-config`, the spawned CLI never inherits the operator's own MCP set
+     * (which includes agent-mcp itself, a ~30 s CONNECT_TIMEOUT recursion).
+     *
+     * The real servers' command/env/headers are NOT written: the engine's registry client is the
+     * single owner of server launch (cwd, env, srt), so the only credential on disk is the
+     * per-chat loopback bearer token (c536ce29 FIX-M3: owner-only).
      */
-    private async writeMcpConfigFile(): Promise<string | undefined> {
-        const entries = Object.entries(this.mcpServers);
-        if (entries.length === 0) return undefined;
-
-        const mapped: Record<string, ClaudeMcpEntry> = {};
-
-        for (const [name, cfg] of entries) {
-            if (cfg.transport === "stdio") {
-                const entry: ClaudeStdioMcpEntry = {
-                    type: "stdio",
-                    command: cfg.command,
-                };
-                if (cfg.args?.length)  entry.args = cfg.args;
-                if (cfg.env && Object.keys(cfg.env).length) entry.env = cfg.env;
-                // NOTE (ADR-0008 D9 / NAT-TOOL-3): Claude Code's stdio MCP entry
-                // schema (`McpStdioServerConfig`, verified against the public
-                // Agent SDK type and CLI v2.1.289) has NO `cwd` field — only
-                // type/command/args/env/timeout/alwaysLoad. Emitting an unknown
-                // key risks the entry being skipped as a config error. So a
-                // per-server cwd is NOT conveyed here; instead `claude` itself is
-                // spawned with the configured engine cwd (see `chat`), and every
-                // MCP child it launches inherits that cwd.
-                mapped[name] = entry;
-            } else if (cfg.transport === "http" || cfg.transport === "sse") {
-                const entry: ClaudeHttpMcpEntry = {
-                    type: cfg.transport,
-                    url: cfg.url,
-                };
-                if (cfg.headers && Object.keys(cfg.headers).length) entry.headers = cfg.headers;
-                mapped[name] = entry;
-            }
-        }
-
+    private async writeMcpConfigFile(bridge: ToolBridge | undefined): Promise<string | undefined> {
+        if (!bridge || bridge.serverNames.length === 0) return undefined;
         const filePath = join(await this.ensureTempRoot(), `agent-mcp-claudecli-${Date.now()}-${generateId()}.json`);
-        // The mcp-config carries MCP server env + headers: owner-only (c536ce29 FIX-M3).
-        await writeFile(filePath, JSON.stringify({ mcpServers: mapped }), { encoding: "utf8", mode: 0o600 });
+        await writeFile(filePath, JSON.stringify(buildBridgeMcpConfig(bridge)), { encoding: "utf8", mode: 0o600 });
         return filePath;
     }
 
@@ -575,13 +519,39 @@ export class ClaudeCliProvider implements LLMProvider {
     }
 
     async chat(request: ProviderChatRequest): Promise<ProviderChatResponse> {
+        // Exactly-once tool execution (9ed453c1 BRIDGE): claude reaches the agent's MCP tools ONLY
+        // through a per-chat loopback bridge whose tools/call is `request.executeTool` (the engine's
+        // registry client). Advertised tools with nothing to execute them is a wiring defect: fail
+        // loud rather than hand the model tools that can only error.
+        const advertised = request.tools ?? [];
+        if (advertised.length > 0 && !request.executeTool) {
+            throw new Error(
+                "PROVIDER_ERROR: claudecli was given MCP tools but no executeTool callback; refusing to expose tools it cannot execute"
+            );
+        }
+        const bridge = advertised.length > 0 && request.executeTool
+            ? await startToolBridge({
+                tools: advertised,
+                executeTool: request.executeTool,
+                signal: request.signal,
+                logger: this.logger,
+            })
+            : undefined;
+        try {
+            return await this.chatWithBridge(request, bridge);
+        } finally {
+            await bridge?.close();
+        }
+    }
+
+    private async chatWithBridge(request: ProviderChatRequest, bridge: ToolBridge | undefined): Promise<ProviderChatResponse> {
         const claudePath = this.providerConfig.claudePath ?? "claude";
 
         const systemMessages = request.messages.filter(m => m.role === "system");
         const systemPrompt = systemMessages.map(m => m.content ?? "").join("\n") || undefined;
         const userMessage = buildUserMessage(request.messages);
 
-        const mcpConfigPath = await this.writeMcpConfigFile();
+        const mcpConfigPath = await this.writeMcpConfigFile(bridge);
 
         const specMode = this.providerConfig.systemPromptIsAgentSpec === true && !!systemPrompt;
         let agentSpecDir: string | undefined;
@@ -638,10 +608,10 @@ export class ClaudeCliProvider implements LLMProvider {
             stdio: ["pipe", "pipe", "pipe"],
             env: subEnv,
             // ADR-0008 D9 / NAT-TOOL-3: run `claude` in the task-time dispatching
-            // cwd. Claude Code spawns its stdio MCP servers as child processes
-            // with an inherited cwd (its config has no per-server `cwd`), so this
-            // is what makes a claude-spawned MCP child inherit the configured
-            // cwd. `undefined` -> claude inherits the parent process cwd.
+            // cwd (its built-in tools need it). MCP tools no longer inherit this cwd: claude
+            // launches no MCP children (9ed453c1 BRIDGE) — per-server cwd/env/srt come solely
+            // from the engine registry client that `executeTool` drives. `undefined` -> claude
+            // inherits the parent process cwd.
             cwd: this.config.cwd,
             // Own process group (POSIX) so terminateProcessTree can signal the
             // CLI *and* every subprocess it spawned (MCP servers, tools).
@@ -679,8 +649,9 @@ export class ClaudeCliProvider implements LLMProvider {
             let finalNumTurns: number | undefined;
             let finalResultEvent: ClaudeStreamResultEvent | undefined;
             let initModel: string | undefined;
-            // tool_use blocks the CLI emitted (it runs its own tools inside the one invocation).
-            // Usage-accounting only: NEVER surfaced as message.toolCalls, which the orchestrator would re-execute.
+            // tool_use blocks the CLI emitted (built-ins run by the CLI; mcp__ tools run once by the
+            // engine via the loopback bridge). Usage-accounting only: NEVER surfaced as message.toolCalls,
+            // which the orchestrator would re-execute.
             let toolUseCount = 0;
             // Largest single-turn context seen on the stream (7ead5eaa BK4): result.usage is a SUM over turns.
             let peakTurnContext = 0;
@@ -728,56 +699,8 @@ export class ClaudeCliProvider implements LLMProvider {
                     toolUseCount += toolUseBlocks.length;
                     peakTurnContext = Math.max(peakTurnContext, assistantTurnContextTokens(assistantEvent));
 
-                    for (const block of toolUseBlocks) {
-                        // CLI-internal built-ins (and MCP tools the agent did not
-                        // declare) are executed by claude itself; never answer them.
-                        if (!isLoopExecutedToolUse(block.name, (request.tools ?? []).map((t) => t.name))) {
-                            continue;
-                        }
-                        let toolResultText: string;
-                        let isError = false;
-
-                        if (request.executeTool) {
-                            let qualifiedName = block.name;
-                            if (qualifiedName.startsWith("mcp__")) {
-                                qualifiedName = qualifiedName.slice(5);
-                            }
-                            try {
-                                const { server, tool } = resolveToolCallName(
-                                    qualifiedName,
-                                    (request.tools ?? []).map((t) => t.name)
-                                );
-                                const { result, isError: err } = await request.executeTool(
-                                    server, tool, block.input
-                                );
-                                toolResultText = typeof result === "string"
-                                    ? result
-                                    : JSON.stringify(result);
-                                isError = err;
-                            } catch (err) {
-                                toolResultText = err instanceof Error ? err.message : String(err);
-                                isError = true;
-                            }
-                        } else {
-                            toolResultText = "Tool execution not available (no executeTool callback)";
-                            isError = true;
-                        }
-
-                        proc.stdin.write(
-                            JSON.stringify({
-                                type: "user",
-                                message: {
-                                    role: "user",
-                                    content: [{
-                                        type: "tool_result",
-                                        tool_use_id: block.id,
-                                        content: [{ type: "text", text: toolResultText }],
-                                        is_error: isError,
-                                    }],
-                                },
-                            }) + "\n"
-                        );
-                    }
+                    // claude runs these through the loopback bridge (engine executeTool); the loop
+                    // only counts them. It never writes a tool_result back to claude's stdin.
                 }
             }
 

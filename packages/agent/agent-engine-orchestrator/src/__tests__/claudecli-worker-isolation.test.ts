@@ -23,6 +23,18 @@ vi.mock("child_process", () => ({
     spawn: vi.fn(),
 }));
 
+// Unit lane: no port may be bound. The real bridge is exercised in claudecli-tool-bridge.e2e.test.ts.
+vi.mock("../providers/claudecli-tool-bridge.js", async (importOriginal) => ({
+    ...(await importOriginal<typeof import("../providers/claudecli-tool-bridge.js")>()),
+    startToolBridge: vi.fn(async (o: { tools: readonly { name: string }[] }) => ({
+        baseUrl: "http://127.0.0.1:1",
+        token: "t",
+        serverNames: [...new Set(o.tools.map((t) => t.name.split("__")[0]!))],
+        calls: () => 0,
+        close: async () => {},
+    })),
+}));
+
 const RESULT_LINE = JSON.stringify({
     type: "result", subtype: "success", is_error: false, result: "OK", num_turns: 1,
 });
@@ -203,7 +215,7 @@ describe("98f9da19 AC3 — session transcript persistence", () => {
     });
 });
 
-describe("98f9da19 AC4 — only agent-declared mcp__ tool_use is answered by the loop", () => {
+describe("98f9da19 AC4 / 9ed453c1 BRIDGE AC-3 — the loop never answers tool_use; claude's stdin carries only the prompt", () => {
     const tools = [
         { name: "files__read_doc", description: "d", inputSchema: { type: "object" } },
         { name: "my-srv__do-it", description: "d", inputSchema: { type: "object" } },
@@ -215,54 +227,46 @@ describe("98f9da19 AC4 — only agent-declared mcp__ tool_use is answered by the
             lines: [assistantLine(blocks), RESULT_LINE],
             request: { ...baseRequest, tools, executeTool },
         });
-        // writes[0] is the initial user prompt; the rest are synthetic tool_results.
-        const toolResults = writes.slice(1).map((w) => JSON.parse(w));
-        return { executeTool, toolResults };
+        return { executeTool, writes };
     }
 
-    it("98f9da19 AC4: declared mcp__ tool gets exactly one synthetic tool_result via executeTool", async () => {
-        const { executeTool, toolResults } = await drive([{ id: "tu_1", name: "mcp__files__read_doc" }]);
-        expect(executeTool).toHaveBeenCalledTimes(1);
-        expect(executeTool).toHaveBeenCalledWith("files", "read_doc", {});
-        expect(toolResults).toHaveLength(1);
-        expect(toolResults[0].message.content[0]).toMatchObject({
-            type: "tool_result", tool_use_id: "tu_1", is_error: false,
-        });
-    });
-
-    it("98f9da19 AC4: declared tool matches after name normalisation (hyphens -> underscores)", async () => {
-        const { executeTool, toolResults } = await drive([{ id: "tu_n", name: "mcp__my_srv__do_it" }]);
-        expect(executeTool).toHaveBeenCalledTimes(1);
-        expect(toolResults).toHaveLength(1);
-        expect(toolResults[0].message.content[0].tool_use_id).toBe("tu_n");
-    });
-
-    it("98f9da19 AC4: built-in (Bash) and undeclared MCP tools produce no synthetic tool_result", async () => {
-        const { executeTool, toolResults } = await drive([
-            { id: "tu_bash", name: "Bash" },
-            { id: "tu_other", name: "mcp__stranger__nuke" },
-        ]);
+    it("9ed453c1 BRIDGE AC-3: a declared mcp__ tool_use is NOT answered by the loop (no executeTool, no stdin tool_result)", async () => {
+        const { executeTool, writes } = await drive([{ id: "tu_1", name: "mcp__files__read_doc" }]);
+        // REVERT-FAILING: restoring the loop-execute branch calls executeTool and writes a tool_result.
         expect(executeTool).not.toHaveBeenCalled();
-        expect(toolResults).toEqual([]);
+        expect(writes).toHaveLength(1);
+        expect(writes.join("")).not.toContain("tool_result");
     });
 
-    it("98f9da19 AC4: mixed turn answers only the declared tool", async () => {
-        const { executeTool, toolResults } = await drive([
+    it("9ed453c1 BRIDGE AC-3: built-in, declared, normalised and undeclared tool_use in one turn all leave stdin untouched", async () => {
+        const { executeTool, writes } = await drive([
             { id: "tu_bash", name: "Bash" },
             { id: "tu_ok", name: "mcp__files__read_doc" },
+            { id: "tu_n", name: "mcp__my_srv__do_it" },
             { id: "tu_x", name: "mcp__stranger__nuke" },
         ]);
-        expect(executeTool).toHaveBeenCalledTimes(1);
-        expect(toolResults.map((r) => r.message.content[0].tool_use_id)).toEqual(["tu_ok"]);
+        expect(executeTool).not.toHaveBeenCalled();
+        expect(writes).toHaveLength(1);
     });
 
-    it("98f9da19 AC4: isLoopExecutedToolUse unit contract", async () => {
-        const { isLoopExecutedToolUse } = await import("../providers/claudecli.js");
-        expect(isLoopExecutedToolUse("Bash", ["Bash"])).toBe(false);
-        expect(isLoopExecutedToolUse("mcp__a__b", [])).toBe(false);
-        expect(isLoopExecutedToolUse("mcp__a__b")).toBe(false);
-        expect(isLoopExecutedToolUse("mcp__a__b", ["a__b"])).toBe(true);
-        expect(isLoopExecutedToolUse("mcp__a_b__c_d", ["a-b__c-d"])).toBe(true);
+    it("9ed453c1 BRIDGE AC-11: reportedToolUses counts every tool_use block; reportedModelCalls comes from num_turns", async () => {
+        const { spawn } = await import("child_process");
+        const { proc } = makeFakeProc([
+            assistantLine([{ id: "a", name: "mcp__files__read_doc" }, { id: "b", name: "Bash" }]),
+            assistantLine([{ id: "c", name: "mcp__my_srv__do_it" }]),
+            JSON.stringify({ type: "result", subtype: "success", is_error: false, result: "OK", num_turns: 4 }),
+        ]);
+        (spawn as unknown as ReturnType<typeof vi.fn>).mockReset();
+        (spawn as unknown as ReturnType<typeof vi.fn>).mockReturnValue(proc);
+        const { ClaudeCliProvider } = await import("../providers/claudecli.js");
+        const provider = new ClaudeCliProvider(
+            { type: "claudecli", model: "claude-haiku-4-5" } as never, {}, undefined, makeEngineConfig(), logger,
+        );
+        const res = await provider.chat({
+            ...baseRequest, tools, executeTool: vi.fn(async () => ({ result: "x", isError: false })),
+        });
+        expect(res.reportedToolUses).toBe(3);
+        expect(res.reportedModelCalls).toBe(4);
     });
 });
 

@@ -58,6 +58,10 @@ const result = await orchestrator.run({
 - `src/engine/policy.ts` — `PolicyEngine` (depth / tool-loop / delegation-allowlist enforcement)
 - `src/plugins/` — hook system, config-file + default plugin loading
 
+## `claudecli` provider: MCP tools run once, in the engine
+
+`claude` is never handed your MCP servers. For each `chat()` that advertises tools, the provider starts a loopback Streamable-HTTP MCP bridge (127.0.0.1, random bearer token, Host-checked, closed when the call ends) and writes a `--mcp-config` that points only at it, one route per server so tool names stay `mcp__<server>__<tool>`. Every `tools/call` claude makes goes through the engine's `executeTool`, so each tool executes exactly once, under the engine registry client's `cwd`/`env`/srt and server/tool allowlist. Advertising MCP tools without an `executeTool` callback fails with `PROVIDER_ERROR`. Claude's own built-in tools are unchanged (`--tools` allowlist).
+
 ## `claudecli` provider: isolation defaults
 
 The `claudecli` adapter spawns `claude -p` as a worker, not as an interactive session. It always passes:
