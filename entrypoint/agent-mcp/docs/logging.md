@@ -107,7 +107,7 @@ spans). Fields use dotted names: `agent.task_id`, `agent.session_id`, `agent.roo
 |---|---|
 | `tasks` | status, prompt, result, error, timestamps, `session_id` |
 | `task_events` | `MODEL_REQUEST`, `MODEL_RESPONSE` (with `rawUsage` verbatim from the provider), `TOOL_CALL`, `TOOL_ARG_COERCED`, `TOOL_RESULT`, `TASK_COMPLETED`, ... |
-| `task_usage` | one row per task: tokens (total, uncached, cache read, cache write), latency, `est_cost_usd`, `priced_cost_usd`, `cost_status`, `cost_basis`, `pricing_ref`, `requested_model`, `cli_reported_cost_usd`, `model_breakdown_json` |
+| `task_usage` | one row per task: tokens (total, uncached, cache read, cache write), latency, `est_cost_usd`, `priced_cost_usd`, `cost_status`, `cost_basis`, `pricing_ref`, `requested_model`, `cli_reported_cost_usd`, `cache_creation_1h_tokens` (the 1-hour-TTL subset of the cache writes; NULL on rows written before migration 0015), `model_breakdown_json` |
 | `model_price_history` | append-only price snapshots (`input_per_m`, `cache_read_per_m`, `cache_write_per_m`, `output_per_m`, `raw_json`) |
 | `price_pull_ledger` | one row per live price pull |
 
@@ -270,6 +270,42 @@ response that peaked, not the internal turn. Compaction decisions use the same p
 turn grain of `usage_query` reports the same per-turn peak as its `context_size`, and re-prices a
 multi-model `claudecli` response per model from the breakdown carried on its `MODEL_RESPONSE` event
 (`modelBreakdown`), so a turn's `est_cost_usd` equals the task row's.
+
+#### First-turn context and the per-call breakdown (`claudecli`)
+
+`peakContextTokens` is a max, so it cannot give the context of the FIRST model call, which the
+cost/context gate is defined on. A `claudecli` run folds N CLI model calls into one response, so its
+`MODEL_RESPONSE` event carries `firstTurnContextTokens` and a bounded `perTurnUsage` array (the first 64
+calls, one entry per distinct CLI message id: `uncachedInputTokens`, `cacheReadTokens`,
+`cacheCreationTokens`, `outputTokens`, `contextTokens`; `perTurnUsageTruncated: true` past 64).
+`usage_query` `grain: "turn"` projects them as `first_turn`, `per_turn` and `per_turn_truncated`
+(`first_turn` is `null` for single-call responses, whose own `input_tokens` is the first turn).
+Recorded run B1: `first_turn.context_tokens` 5,647 (10 uncached + 5,637 cache write), `context_size`
+9,149, `input_tokens` 36,589.
+
+#### Failed, cancelled and timed-out runs still cost something
+
+A run that never produces a response is recorded from what it spent, through the same `post:model_response`
+hook and `MODEL_RESPONSE` event as a normal turn (the event carries `failed: true` and `failure`:
+`provider_error` | `timeout` | `cancelled` | `governance_fatal`):
+
+| Run ended by | Recorded as |
+| --- | --- |
+| `claudecli` `is_error` result | the tokens and `total_cost_usd` the CLI put on that result |
+| a fatal governance error found during a bridged call (raised after `chat()` returned) | the CLI's full usage for the run |
+| timeout / cancel / crash after the CLI emitted usage | the sum of the per-call usage seen on the stream (priced; `cli_reported_cost_usd` stays `null`, the CLI never reported one) |
+| timeout / cancel / crash before any usage | a zero row with `cost_status: "unmeasured"` and `est_cost_usd: null` (the cost is UNKNOWN, never $0; counted in `unpriced_tasks`) |
+
+Every `usage_query` row carries `task_status` (`failed`, `cancelled`, ...) so these rows are visible as such. A
+spawn that never started (binary missing) spent nothing and records nothing.
+
+#### `usage_query` row fields for cross-checking cost
+
+`requested_model` (the alias the task asked for) sits beside `model` (the id the provider resolved it to);
+`cli_reported_cost_usd` is the provider's own dollar figure (`claudecli` `total_cost_usd`) for comparison with
+`est_cost_usd`; `cache_creation_1h_tokens` is the 1-hour-TTL subset of `cache_creation_tokens` (priced at 2x
+base input versus 1.25x for the 5-minute tier). The `usage` summary on `task` / `result` (`direct` and `subtree`)
+includes `est_cost_usd`, `null` when any contributing task could not be priced or measured.
 
 ### SQL against the store
 
