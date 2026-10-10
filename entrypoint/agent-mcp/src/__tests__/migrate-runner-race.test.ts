@@ -107,4 +107,91 @@ describe("8333f755 AC3: concurrent openers converge on the migrated schema", () 
     expect(() => runMigrationsOn(conn, drizzle(conn), root)).toThrow(/Failed to run the query .ALTR TABLE/);
     conn.close();
   });
+
+  /** A db whose Nth `BEGIN` (1-based) calls `onBegin(n)`; throwing from it makes that migrate attempt fail. */
+  function countingDb(file: string, onBegin: (n: number) => void) {
+    const conn = new Database(file);
+    const db = drizzle(conn);
+    const session = (db as unknown as { session: { run: (q: unknown) => unknown } }).session;
+    const run = session.run.bind(session);
+    let begins = 0;
+    session.run = (q: unknown) => {
+      const text = (q as { queryChunks?: Array<{ value?: string[] }> }).queryChunks?.[0]?.value?.[0];
+      if (text === "BEGIN") onBegin(++begins);
+      return run(q);
+    };
+    return { conn, db, begins: () => begins };
+  }
+  const migratedTo = (maxIdx: number): string => {
+    const file = join(mkdtempSync(join(tmpdir(), "adhd-mig-race-db-")), "agent.db");
+    dirs.push(file.replace(/\/agent\.db$/, ""));
+    const seed = new Database(file);
+    migrate(drizzle(seed), { migrationsFolder: folderUpTo(maxIdx) });
+    seed.close();
+    return file;
+  };
+
+  it("8333f755 AC3: a lost race backs off (jittered) before the retry instead of spinning", () => {
+    const file = migratedTo(14);
+    const sleeps: number[] = [];
+    const loser = racingDb(file, () => {
+      const rival = new Database(file);
+      migrate(drizzle(rival), { migrationsFolder: MIGRATIONS_FOLDER });
+      rival.close();
+    });
+    runMigrationsOn(loser.conn, loser.db, MIGRATIONS_FOLDER, { sleepMs: (ms) => sleeps.push(ms), random: () => 0.5 });
+    expect(sleeps).toEqual([5]); // one retry, floor(0.5 * base 10ms)
+    loser.conn.close();
+  });
+
+  it("8333f755 AC3: contention (SQLITE_BUSY) is retried with capped exponential jittered backoff, then converges", () => {
+    const file = migratedTo(14);
+    const sleeps: number[] = [];
+    const busy = countingDb(file, (n) => {
+      if (n <= 3) throw Object.assign(new Error("SQLITE_BUSY: database is locked"), { code: "SQLITE_BUSY" });
+    });
+    runMigrationsOn(busy.conn, busy.db, MIGRATIONS_FOLDER, { sleepMs: (ms) => sleeps.push(ms), random: () => 0.999 });
+    expect(sleeps).toEqual([9, 19, 39]); // 10ms, 20ms, 40ms windows, each jittered to just under the window
+    expect(busy.begins()).toBe(4);
+    busy.conn.close();
+  });
+
+  it("8333f755 AC3: persistent contention is bounded: 8 attempts, 7 sleeps, then the error surfaces", () => {
+    const file = migratedTo(14);
+    const sleeps: number[] = [];
+    const busy = countingDb(file, () => {
+      throw new Error("SQLITE_BUSY: database is locked");
+    });
+    expect(() => runMigrationsOn(busy.conn, busy.db, MIGRATIONS_FOLDER, { sleepMs: (ms) => sleeps.push(ms), random: () => 1 - Number.EPSILON })).toThrow(/SQLITE_BUSY/);
+    expect(busy.begins()).toBe(8);
+    expect(sleeps).toHaveLength(7);
+    expect(Math.max(...sleeps)).toBeLessThanOrEqual(250); // capped
+    busy.conn.close();
+  });
+
+  it("8333f755 AC3: drift (object exists but the ledger never recorded the migration) surfaces after ONE confirming retry, not eight", () => {
+    const file = migratedTo(14);
+    const prep = new Database(file);
+    prep.exec("ALTER TABLE task_usage ADD COLUMN cache_creation_1h_tokens integer"); // applied out of band: no ledger row
+    prep.close();
+    const sleeps: number[] = [];
+    const drifted = countingDb(file, (_n) => undefined);
+    let thrown: unknown;
+    try {
+      runMigrationsOn(drifted.conn, drifted.db, MIGRATIONS_FOLDER, { sleepMs: (ms) => sleeps.push(ms) });
+    } catch (e) {
+      thrown = e;
+    }
+    expect(String((thrown as { cause?: unknown }).cause)).toMatch(/duplicate column name/); // drizzle wraps the SQLite error as `cause`
+    expect(drifted.begins()).toBe(2); // the failing attempt + one confirming retry
+    expect(sleeps).toHaveLength(1);
+    drifted.conn.close();
+  });
+
+  it("8333f755 AC3: the race signatures are narrow -- a bare 'exists' in unrelated text is not a race", () => {
+    expect(isConcurrentMigrationRace(new Error("table task_usage already exists"))).toBe(true);
+    expect(isConcurrentMigrationRace(new Error("index idx_x already exists"))).toBe(true);
+    expect(isConcurrentMigrationRace(new Error("the agent already exists in the registry"))).toBe(false);
+    expect(isConcurrentMigrationRace(new Error("no such table: nowhere"))).toBe(false);
+  });
 });
