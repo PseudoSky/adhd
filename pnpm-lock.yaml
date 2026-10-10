@@ -393,7 +393,7 @@ importers:
   entrypoint/agent-mcp:
     dependencies:
       '@adhd/agent-base-types':
-        specifier: ^2.3.9
+        specifier: ^2.3.10
         version: link:../../packages/agent/agent-base-types
       '@adhd/agent-core-env':
         specifier: ^0.1.5
@@ -402,16 +402,16 @@ importers:
         specifier: ^0.0.2
         version: link:../../packages/agent/agent-core-native-tooling
       '@adhd/agent-core-provider':
-        specifier: ^2.2.7
+        specifier: ^2.2.8
         version: link:../../packages/agent/agent-core-provider
       '@adhd/agent-engine-compiler':
         specifier: ^2.2.8
         version: link:../../packages/agent/agent-engine-compiler
       '@adhd/agent-engine-orchestrator':
-        specifier: ^2.3.8
+        specifier: ^2.3.9
         version: link:../../packages/agent/agent-engine-orchestrator
       '@adhd/agent-plugin-budget':
-        specifier: ^0.2.6
+        specifier: ^0.2.7
         version: link:../../packages/agent/agent-plugin-budget
       '@adhd/agent-plugin-tracing':
         specifier: ^0.0.3
@@ -420,7 +420,7 @@ importers:
         specifier: ^2.2.3
         version: link:../../packages/agent/agent-store-prompts
       '@adhd/agent-store-runtime':
-        specifier: ^2.2.7
+        specifier: ^2.2.8
         version: link:../../packages/agent/agent-store-runtime
       '@adhd/environment':
         specifier: ^0.1.8
@@ -719,13 +719,13 @@ importers:
   entrypoint/dispatch-cli:
     dependencies:
       '@adhd/agent-base-types':
-        specifier: ^2.3.9
+        specifier: ^2.3.10
         version: link:../../packages/agent/agent-base-types
       '@adhd/agent-core-native-tooling':
         specifier: ^0.0.2
         version: link:../../packages/agent/agent-core-native-tooling
       '@adhd/backlog':
-        specifier: ^1.0.14
+        specifier: ^1.0.15
         version: link:../backlog
       '@adhd/dispatch-base-spec':
         specifier: ^0.1.7
@@ -806,7 +806,7 @@ importers:
   packages/agent/agent-core-native-tooling:
     dependencies:
       '@adhd/agent-base-types':
-        specifier: ^2.3.9
+        specifier: ^2.3.10
         version: link:../agent-base-types
       '@anthropic-ai/sandbox-runtime':
         specifier: ^0.0.78
@@ -837,7 +837,7 @@ importers:
   packages/agent/agent-core-policy:
     dependencies:
       '@adhd/agent-base-types':
-        specifier: ^2.3.9
+        specifier: ^2.3.10
         version: link:../agent-base-types
       drizzle-orm:
         specifier: 0.45.2
@@ -874,7 +874,7 @@ importers:
   packages/agent/agent-core-provider:
     dependencies:
       '@adhd/agent-base-types':
-        specifier: ^2.3.9
+        specifier: ^2.3.10
         version: link:../agent-base-types
       drizzle-orm:
         specifier: 0.45.2
@@ -914,7 +914,7 @@ importers:
         specifier: ^2.2.3
         version: link:../agent-core-policy
       '@adhd/agent-core-provider':
-        specifier: ^2.2.7
+        specifier: ^2.2.8
         version: link:../agent-core-provider
       '@adhd/agent-store-prompts':
         specifier: ^2.2.3
@@ -957,22 +957,22 @@ importers:
   packages/agent/agent-engine-orchestrator:
     dependencies:
       '@adhd/agent-base-types':
-        specifier: ^2.3.9
+        specifier: ^2.3.10
         version: link:../agent-base-types
       '@adhd/agent-core-provider':
-        specifier: ^2.2.7
+        specifier: ^2.2.8
         version: link:../agent-core-provider
       '@adhd/agent-engine-compiler':
         specifier: ^2.2.8
         version: link:../agent-engine-compiler
       '@adhd/agent-plugin-budget':
-        specifier: ^0.2.6
+        specifier: ^0.2.7
         version: link:../agent-plugin-budget
       '@adhd/agent-store-prompts':
         specifier: ^2.2.3
         version: link:../agent-store-prompts
       '@adhd/agent-store-runtime':
-        specifier: ^2.2.7
+        specifier: ^2.2.8
         version: link:../agent-store-runtime
       '@anthropic-ai/sdk':
         specifier: ^0.96.0
@@ -1043,7 +1043,7 @@ importers:
   packages/agent/agent-plugin-budget:
     dependencies:
       '@adhd/agent-base-types':
-        specifier: ^2.3.9
+        specifier: ^2.3.10
         version: link:../agent-base-types
       drizzle-orm:
         specifier: 0.45.2
@@ -1062,7 +1062,7 @@ importers:
   packages/agent/agent-plugin-sanitize:
     dependencies:
       '@adhd/agent-base-types':
-        specifier: ^2.3.9
+        specifier: ^2.3.10
         version: link:../agent-base-types
       zod:
         specifier: ^4.4.3
@@ -1071,7 +1071,7 @@ importers:
   packages/agent/agent-plugin-tracing:
     dependencies:
       '@adhd/agent-base-types':
-        specifier: ^2.3.9
+        specifier: ^2.3.10
         version: link:../agent-base-types
       '@adhd/sox-telemetry':
         specifier: ^0.4.3
@@ -1136,7 +1136,7 @@ importers:
   packages/agent/agent-store-runtime:
     dependencies:
       '@adhd/agent-base-types':
-        specifier: ^2.3.9
+        specifier: ^2.3.10
         version: link:../agent-base-types
       better-sqlite3:
         specifier: 12.10.0
@@ -1563,7 +1563,7 @@ importers:
   packages/dispatch/dispatch-base-spec:
     dependencies:
       '@adhd/agent-base-types':
-        specifier: ^2.3.9
+        specifier: ^2.3.10
         version: link:../../agent/agent-base-types
 
   packages/dispatch/dispatch-base-types: {}
