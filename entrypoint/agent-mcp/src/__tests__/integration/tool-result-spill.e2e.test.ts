@@ -126,7 +126,8 @@ describe("9ed453c1 BK9 optional tool-result spill through the real orchestrator 
         const expectedPath = path.join(dir, r.taskId, "call-big-1.txt");
         // the model sees the short stub, not 100k chars and not head+tail
         expect(r.seenByModel).toContain(expectedPath);
-        expect(r.seenByModel).toContain("full output saved to");
+        expect(r.seenByModel).toContain("full output saved.");
+        expect(r.seenByModel.split(expectedPath).length - 1).toBe(1); // 9ed453c1 BLIND F5: the path appears once
         expect(r.seenByModel).not.toContain("[tool result truncated");
         expect(r.seenByModel.length).toBeLessThan(3_000);
         expect(r.seenByModel).toContain("L000001:"); // preview
