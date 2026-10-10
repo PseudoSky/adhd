@@ -5,6 +5,17 @@
  *
  * Unit lane (ADR-0009): `child_process.spawn` is the only replaced boundary. The real-subprocess
  * proof (a genuinely absent binary through the real spawn path) is `claudecli-spawn-failure.e2e.test.ts`.
+ *
+ * Negative control (b8372f5a AC3), observed in worktree cp-nc-d1: reverting the fix by disabling the
+ * `if (!finalResult && procError)` PROVIDER_ERROR throw in providers/claudecli.ts (changed to
+ * `if (false && !finalResult && procError)`) turns this file red with
+ * `expected 'PROVIDER_AUTH_ERROR' to be 'PROVIDER_ERROR'` in exactly three tests:
+ *   - "b8372f5a D1-AC1: spawn ENOENT rejects with PROVIDER_ERROR naming ENOENT, the binary and the PATH"
+ *   - "b8372f5a D1-AC1: a configured claudePath is the binary named in the error"
+ *   - "b8372f5a D1-AC1: a non-ENOENT spawn failure (EACCES) is also PROVIDER_ERROR with its code, no PATH claim"
+ * (vitest exit 1, 3 failed | 2 passed), and the e2e counterpart fails with the same assertion in
+ * "b8372f5a D1-AC1: an absent binary rejects with PROVIDER_ERROR naming ENOENT" (exit 1, 1 failed).
+ * Restoring the file returns both to green (5/5 and 1/1, exit 0).
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Readable } from "stream";
