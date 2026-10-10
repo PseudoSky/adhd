@@ -4,6 +4,7 @@ import type {
   ProviderFailureProviderType,
 } from '@adhd/agent-base-types';
 import { classifyProviderError, type RawProviderError } from '@adhd/agent-core-provider';
+import { isProviderCallError } from './provider-failure.js';
 import type { LLMProvider, ProviderChatRequest, ProviderChatResponse } from './types.js';
 
 /** What the decorator needs to attribute a failure; all non-secret. */
@@ -71,7 +72,10 @@ export function withProviderHooks(inner: LLMProvider, opts: HookedProviderOption
         return await inner.chat(request);
       } catch (err) {
         try {
-          const failure = classifyProviderError(rawFromError(err, opts, request.signal?.aborted === true));
+          // An adapter-classified failure carries real credential identity; reclassifying from text would not.
+          const failure = isProviderCallError(err)
+            ? err.data
+            : classifyProviderError(rawFromError(err, opts, request.signal?.aborted === true));
           await opts.hooks.emit('provider:failed', {
             domain: 'provider',
             failure,

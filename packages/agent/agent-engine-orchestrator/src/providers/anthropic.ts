@@ -1,6 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { ContentBlockParam, MessageParam, Tool } from "@anthropic-ai/sdk/resources/messages";
-import pRetry from "p-retry";
 
 import { generateId } from "../utils/ids.js";
 import { nowIso } from "../utils/timestamps.js";
@@ -13,6 +12,15 @@ import type { EngineLogger, EngineConfig } from "../interfaces.js";
 import { DEFAULT_PROVIDER_TIMEOUT_MS } from "../interfaces.js";
 import { sdkFetchOption } from "./wire.js";
 import { applyCacheBreakpoints } from "./anthropic-cache.js";
+import {
+    DEFAULT_RETRY_POLICY,
+    ProviderCallError,
+    callWithRetry,
+    classifySdkError,
+    credentialKeyOf,
+    defaultRetryRuntime,
+    type RetryRuntime,
+} from "./provider-failure.js";
 
 import type {
     LLMProvider,
@@ -113,10 +121,14 @@ function buildAnthropicClient(
     // Previously `undefined` deferred to the SDK's own default; making it
     // explicit keeps openai and anthropic behavior identical (backlog 36a73117
     // / post-merge bucket-B review).
+    //
+    // `maxRetries: 0` (PF-2.AC1): the SDK's own default (2 retries of 408/409/429/5xx on its own real
+    // timers) would stack under `callWithRetry`, retry a quota 429 by status alone, and make the attempt
+    // count non-deterministic. `callWithRetry` (./provider-failure.ts) is the single retry owner.
     const effectiveTimeout = timeoutMs ?? DEFAULT_PROVIDER_TIMEOUT_MS;
     if (secret.startsWith("sk-ant-api")) {
         return {
-            client: new Anthropic({ apiKey: secret, timeout: effectiveTimeout, ...sdkFetchOption(config) }),
+            client: new Anthropic({ apiKey: secret, timeout: effectiveTimeout, maxRetries: 0, ...sdkFetchOption(config) }),
             useOauthIdentity: false,
         };
     }
@@ -125,6 +137,7 @@ function buildAnthropicClient(
         client: new Anthropic({
             authToken: secret,
             timeout: effectiveTimeout,
+            maxRetries: 0,
             ...sdkFetchOption(config),
             ...(isOauth ? { defaultHeaders: { "anthropic-beta": "oauth-2025-04-20" } } : {}),
         }),
@@ -204,8 +217,12 @@ export class AnthropicProvider implements LLMProvider {
     private readonly logger: EngineLogger;
     private readonly config: EngineConfig;
     private readonly promptCaching: boolean;
+    private readonly retryRuntime: RetryRuntime;
+    private readonly credentialKey: string;
 
     /**
+     * @param options.retryRuntime Clock / jitter RNG / trip registry for the fault policy (default: real
+     *   clock, `Math.random`, the process-wide registry). Tests inject fakes so no retry ever sleeps.
      * @param options.promptCaching Place prompt-cache breakpoints on requests (default `true`,
      *   backlog ae62e6b0 BK3; placement rules in `./anthropic-cache.ts`). `false` reproduces the
      *   pre-BK3 uncached request body; it exists as the negative control for the BK3 tests.
@@ -214,9 +231,15 @@ export class AnthropicProvider implements LLMProvider {
         providerConfig: Extract<ProviderConfig, { type: "anthropic" }>,
         config: EngineConfig,
         logger: EngineLogger,
-        options: { promptCaching?: boolean } = {}
+        options: { promptCaching?: boolean; retryRuntime?: RetryRuntime } = {}
     ) {
         this.promptCaching = options.promptCaching ?? true;
+        this.retryRuntime = options.retryRuntime ?? defaultRetryRuntime();
+        this.credentialKey = credentialKeyOf({
+            providerType: "anthropic",
+            baseURL: (providerConfig as { baseURL?: string }).baseURL,
+            secretEnvName: providerConfig.env?.secret,
+        });
         this.providerConfig = providerConfig;
         this.config = config;
         this.logger = logger;
@@ -356,28 +379,44 @@ export class AnthropicProvider implements LLMProvider {
             };
         };
 
-        if (retryConfig) {
-            return pRetry(run, {
-                retries: retryConfig.retries,
-                minTimeout: retryConfig.minTimeout,
-                maxTimeout: retryConfig.maxTimeout,
-                factor: retryConfig.factor,
-                onFailedAttempt: error => {
-                    if (request.signal?.aborted) {
-                        throw error;
-                    }
-                    if ("status" in error && (error as { status?: number }).status === 401) {
-                        throw new ToolError(
-                            "PROVIDER_AUTH_ERROR",
-                            `Anthropic authentication failed. ` +
-                            `Check ADHD_AGENT_ANTHROPIC_SECRET in your ~/.adhd/.env ` +
-                            `(run \`claude setup-token\` to obtain a fresh OAuth access token).`
-                        );
-                    }
+        const timeoutMs = this.providerConfig.timeoutMs ?? DEFAULT_PROVIDER_TIMEOUT_MS;
+        const wireModel = this.providerConfig.model ?? "";
+        const ctx = {
+            providerType: "anthropic" as const,
+            modelRef: wireModel,
+            wireModel,
+            credentialKey: this.credentialKey,
+            credentialScope: this.credentialKey,
+        };
+        try {
+            return await callWithRetry(() => run(), {
+                runtime: this.retryRuntime,
+                policy: {
+                    retries: retryConfig?.retries ?? DEFAULT_RETRY_POLICY.retries,
+                    minTimeout: retryConfig?.minTimeout ?? DEFAULT_RETRY_POLICY.minTimeout,
+                    maxTimeout: retryConfig?.maxTimeout ?? DEFAULT_RETRY_POLICY.maxTimeout,
+                    factor: retryConfig?.factor ?? DEFAULT_RETRY_POLICY.factor,
+                    // Waiting is bounded by the provider timeout (or a tighter operator window).
+                    windowMs: Math.min(timeoutMs, (retryConfig as { retryWindowMs?: number } | undefined)?.retryWindowMs ?? timeoutMs),
                 },
+                target: { providerType: "anthropic", credentialScope: ctx.credentialScope, wireModel },
+                signal: request.signal,
+                classify: (err) => classifySdkError(err, ctx, request.signal?.aborted === true),
+                onRetry: ({ attempt, failure, waitMs }) =>
+                    this.logger.warn({ attempt, class: failure.class, status: failure.status, waitMs }, "anthropic: transient failure, retrying"),
             });
+        } catch (err) {
+            if (err instanceof ProviderCallError && err.data.class === "auth") {
+                throw new ProviderCallError(
+                    err.data,
+                    `Anthropic authentication failed. ` +
+                    `Check ADHD_AGENT_ANTHROPIC_SECRET in your ~/.adhd/.env ` +
+                    `(run \`claude setup-token\` to obtain a fresh OAuth access token). ${err.message}`,
+                    undefined,
+                    { cause: err }
+                );
+            }
+            throw err;
         }
-
-        return run();
     }
 }

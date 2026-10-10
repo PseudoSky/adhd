@@ -115,6 +115,53 @@ rejects with `PROVIDER_ERROR` whose message names the binary and the `PATH` sear
 `data.spawnErrorCode`. `PROVIDER_AUTH_ERROR` ("returned empty result ... `claude auth status`") is reserved
 for a CLI that started but returned nothing. Set the provider's `claudePath` to point at a non-PATH install.
 
+## Provider faults and rate limits (`anthropic`, `claudecli`)
+
+Both adapters classify every failure with the PF-1 classifier (`@adhd/agent-core-provider`
+`classifyProviderError`) and throw a `ProviderCallError`: a `ToolError` whose `data` is the typed
+`ProviderFailure` (`class`, `retryable`, `resumable`, `retryAfterMs`, `credentialScope`, `source`) and whose
+`resetAt` is the ISO time a limit lifts. `providers/provider-failure.ts` is the single retry owner for these
+two adapters:
+
+- **Transient** (`rate_limited` 429, `overloaded` 529, `unavailable` 5xx): at most 2 retries (3 attempts),
+  waiting `max(Retry-After, full-jitter backoff)` (`retryConfig` overrides the defaults 500ms / 8s / x2 for
+  `anthropic`). Waiting is bounded by the provider `timeoutMs` (or `retryWindowMs`); an in-flight attempt is
+  never aborted by it.
+- **Quota, billing or usage-window limit** (a spend-limit 429, a `Retry-After` beyond 60s, a claudecli
+  `rate_limit_event` with `status: "rejected"`): **zero retries**; the call fails fast with the reset time in
+  the error message and `resetAt`.
+- **Abort / timeout**: never retried; claudecli kills the whole process group.
+- **After a tool ran** (claudecli built-ins or bridged MCP tools): never re-spawned.
+- The SDK's own retries are off (`maxRetries: 0`), so there is exactly one retry loop.
+- A claudecli `rate_limit_event` with `allowed_warning` is surfaced as `ProviderChatResponse.limitWarnings`
+  (and logged), not swallowed.
+- **Shared limiter, process-local.** A trip (a 429 wait, a quota/window limit) is remembered per credential
+  (`trip:<providerType>:<credentialScope>[:<wireModel>]`) so every concurrent task **in the same process**
+  pauses or fails fast instead of rediscovering it. It is not visible to other agent-mcp processes; the
+  cross-process store is `provider_trips` in the provider-failure SPEC (PF-3), not built yet.
+
+The engine's provider catch (`engine/orchestrator.ts`) still re-derives the task error code from text and
+drops `ToolError.data`; see `src/__tests__/flt-engine-surface.test.ts`.
+
+### Compatibility with native `claude -p`
+
+The native column is the CLI's **documented / observed-in-binary** behaviour, marked (doc), and was **not**
+re-exercised here (no live traffic was sent to trigger a limit). The agent-mcp column is pinned by
+`flt-anthropic-faults.test.ts`, `flt-claudecli-faults.test.ts` and `flt-claudecli-faults.e2e.test.ts`.
+
+| Situation | Native `claude -p` (doc) | agent-mcp `claudecli` | agent-mcp `anthropic` |
+|---|---|---|---|
+| Binary missing | shell `command not found`, exit 127 | `PROVIDER_ERROR` naming the binary and PATH (b8372f5a) | n/a |
+| Not logged in / 401 | error result, non-zero exit | exit 0 with no result: `PROVIDER_AUTH_ERROR` hint; any other evidence is reported as what it is | `PROVIDER_AUTH_ERROR`, never retried |
+| Non-zero exit, no result | non-zero exit, stderr text | `PROVIDER_ERROR` with exit code and scrubbed stderr tail | n/a |
+| Transient 429 | retries internally with backoff; result carries `api_error_status` | classified `rate_limited` (retryable); <= 2 re-spawns with backoff | `PROVIDER_RATE_LIMITED`; <= 2 retries after `Retry-After` |
+| 529 overloaded | retries internally; surfaces the status | `PROVIDER_OVERLOADED`, same bound | `PROVIDER_OVERLOADED`, same bound |
+| Usage window / quota | `rate_limit_event` `rejected` + error result naming the reset; no retry | `PROVIDER_RATE_LIMITED`, not retryable, reset time on the error; siblings fail fast | billing 429 / `Retry-After` > 60s: no retry, reset on the error |
+| Window warning | `rate_limit_event` `allowed_warning` | `limitWarnings` on the response + log | n/a |
+| Timeout | `API_TIMEOUT_MS`; no total cap in `-p` | `PROVIDER_TIMEOUT` (engine signal); group killed | `PROVIDER_TIMEOUT`; backoff bounded by `timeoutMs` |
+| Cancel | SIGINT stops the turn | abort kills the process group; no retry | abort rejects mid-backoff; no retry |
+| Truncated stream (no `result`) | non-zero exit | exit status + stderr reported; never an auth error unless exit 0 | SDK stream error classified (`unavailable`) |
+
 ## `claudecli` provider: isolation defaults
 
 The `claudecli` adapter spawns `claude -p` as a worker, not as an interactive session. It always passes:

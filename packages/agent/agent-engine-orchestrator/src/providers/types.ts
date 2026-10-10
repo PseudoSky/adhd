@@ -1,6 +1,8 @@
 import type { Message } from '../validation/index.js';
 import type { PermissionAction, ToolDefinition, TokenUsage } from '@adhd/agent-base-types';
 export type { ToolDefinition, TokenUsage };
+import type { ProviderLimitWarning } from './provider-failure.js';
+export type { ProviderLimitWarning };
 
 /**
  * The server name the permission gate sees for the `claude` CLI's own built-in tools
@@ -65,6 +67,11 @@ export interface ProviderChatResponse {
    * single-model field, so it is deliberately left unset).
    */
   responseModel?: string;
+  /**
+   * Usage-window / limit warnings the provider reported while the call still SUCCEEDED (claudecli
+   * `rate_limit_event` with `allowed_warning`). Surfaced, never swallowed (de6bee5d FLT-4).
+   */
+  limitWarnings?: ProviderLimitWarning[];
 }
 
 export interface LLMProvider {

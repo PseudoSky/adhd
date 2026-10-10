@@ -10,9 +10,31 @@ import type { ModelUsageEntry, PermissionAction } from "@adhd/agent-base-types";
 import type { McpServerConfig, ProviderConfig, Message } from "../validation/index.js";
 import { ToolError } from "../validation/errors.js";
 import type { EngineLogger, EngineConfig } from "../interfaces.js";
+import { DEFAULT_PROVIDER_TIMEOUT_MS } from "../interfaces.js";
 import { wireSpawn } from "./wire.js";
 import { normaliseAnthropicUsage } from "./anthropic.js";
+import { scrubSecrets } from "@adhd/agent-core-provider";
+import {
+    DEFAULT_RETRY_POLICY,
+    ProviderCallError,
+    callWithRetry,
+    classifyCliFault,
+    credentialKeyOf,
+    defaultRetryRuntime,
+    describeFailure,
+    isProviderCallError,
+    parseCliRateLimitEvent,
+    toLimitWarning,
+    type CliRateLimitInfo,
+    type ProviderLimitWarning,
+    type RetryRuntime,
+} from "./provider-failure.js";
 import { startToolBridge, buildBridgeMcpConfig, bridgeableTools, type ToolBridge } from "./claudecli-tool-bridge.js";
+
+/** Bytes of stderr kept (tail) for fault reports. */
+const STDERR_TAIL_BYTES = 2000;
+/** How long to wait for a stream-closed child to report its exit status on the failure path. */
+const EXIT_WAIT_MS = 1500;
 
 type ClaudeCliConfig = Extract<ProviderConfig, { type: "claudecli" }>;
 
@@ -49,6 +71,11 @@ interface ClaudeStreamResultEvent {
     subtype: string;
     is_error: boolean;
     result?: string;
+    /**
+     * HTTP status of the API error that ended the turn (present on `is_error` results; field name
+     * verified in the claude 2.1.296 binary's result schema, value semantics from its use as a status).
+     */
+    api_error_status?: number | null;
     stop_reason?: string;
     /** Model turns the CLI ran inside this single `-p` invocation. */
     num_turns?: number;
@@ -481,6 +508,7 @@ export class ClaudeCliProvider implements LLMProvider {
     private readonly config: EngineConfig;
     private readonly reapTimings: ClaudeCliReapTimings;
     private readonly startBridge: typeof startToolBridge;
+    private readonly retryRuntime: RetryRuntime;
 
     constructor(
         config: ClaudeCliConfig,
@@ -490,9 +518,10 @@ export class ClaudeCliProvider implements LLMProvider {
         engineLogger?: EngineLogger,
         reapTimings?: Partial<ClaudeCliReapTimings>,
         /** Test seam: replaces the loopback bridge starter so unit tests bind no port. */
-        deps?: { startToolBridge?: typeof startToolBridge }
+        deps?: { startToolBridge?: typeof startToolBridge; retryRuntime?: RetryRuntime }
     ) {
         this.startBridge = deps?.startToolBridge ?? startToolBridge;
+        this.retryRuntime = deps?.retryRuntime ?? defaultRetryRuntime();
         this.reapTimings = { ...DEFAULT_CLAUDECLI_REAP_TIMINGS, ...reapTimings };
         this.providerConfig = config;
         this.compiledTools = compiledTools;
@@ -643,10 +672,43 @@ export class ClaudeCliProvider implements LLMProvider {
             })
             : undefined;
         try {
-            return await this.chatWithBridge(request, bridge);
+            return await this.chatUnderFaultPolicy(request, bridge);
         } finally {
             await bridge?.close();
         }
+    }
+
+    /** Identity of the login this provider spends: binary + config dir. Non-secret (SPEC §1). */
+    private credentialKey(): string {
+        const env = this.buildSubprocessEnv();
+        return credentialKeyOf({
+            providerType: "claudecli",
+            secretEnvName: `${this.providerConfig.claudePath ?? "claude"}|${env["CLAUDE_CONFIG_DIR"] ?? env["HOME"] ?? ""}`,
+        });
+    }
+
+    /**
+     * FLT-1/2/3: run one spawn under the shared fault policy. A classified {@link ProviderCallError}
+     * is retried only if transient AND no tool ran (a re-spawn would repeat side effects); a usage-window
+     * limit is never retried and trips the process-local registry so sibling tasks fail fast.
+     */
+    private async chatUnderFaultPolicy(request: ProviderChatRequest, bridge: ToolBridge | undefined): Promise<ProviderChatResponse> {
+        const wireModel = this.providerConfig.model ?? "";
+        const key = this.credentialKey();
+        const timeoutMs = this.providerConfig.timeoutMs ?? DEFAULT_PROVIDER_TIMEOUT_MS;
+        return callWithRetry(() => this.chatWithBridge(request, bridge), {
+            runtime: this.retryRuntime,
+            // The claudecli binding has no `retryConfig`: the designed-in defaults apply (<= 2 retries),
+            // and waiting is bounded by the call timeout.
+            policy: { ...DEFAULT_RETRY_POLICY, windowMs: timeoutMs },
+            target: { providerType: "claudecli", credentialScope: key, wireModel },
+            signal: request.signal,
+            // Only faults this adapter already classified are policy-managed; spawn failures, aborts and
+            // wiring errors keep their own error types and messages.
+            classify: (err) => (isProviderCallError(err) ? err.data : undefined),
+            onRetry: ({ attempt, failure, waitMs }) =>
+                this.logger.warn({ attempt, class: failure.class, waitMs }, "claudecli: transient failure, retrying"),
+        });
     }
 
     private async chatWithBridge(request: ProviderChatRequest, bridge: ToolBridge | undefined): Promise<ProviderChatResponse> {
@@ -762,6 +824,32 @@ export class ClaudeCliProvider implements LLMProvider {
             let procError: Error | undefined;
             proc.on("error", (err) => { procError = err; });
 
+            // FLT-3: never leave stderr undrained (a full pipe hangs the CLI) and keep a bounded,
+            // scrubbed tail so a non-zero exit is reported with what the CLI said, not as an auth error.
+            let stderrTail = "";
+            proc.stderr?.on("data", (chunk: Buffer | string) => {
+                stderrTail = (stderrTail + chunk.toString()).slice(-STDERR_TAIL_BYTES);
+            });
+            let exitInfo: { code: number | null; signal: NodeJS.Signals | null } | undefined;
+            proc.on("exit", (code, signal) => { exitInfo = { code, signal }; });
+
+            // FLT-1/4: the CLI's usage-window events. `rejected` is a hard limit; the rest are warnings.
+            let rejectedLimit: CliRateLimitInfo | undefined;
+            const limitWarnings = new Map<string, ProviderLimitWarning>();
+            const cliCtx = {
+                providerType: "claudecli" as const,
+                modelRef: this.providerConfig.model ?? "",
+                wireModel: this.providerConfig.model ?? "",
+                credentialKey: this.credentialKey(),
+                credentialScope: this.credentialKey(),
+            };
+            const faultError = (
+                evidence: Parameters<typeof classifyCliFault>[0]
+            ): ProviderCallError | undefined => {
+                const hit = classifyCliFault(evidence, cliCtx, this.retryRuntime.clock.now());
+                return hit ? new ProviderCallError(hit.failure, describeFailure(hit.failure, hit.resetAtMs), hit.resetAtMs) : undefined;
+            };
+
             let finalResult = "";
             let finalUsage: ClaudeStreamResultEvent["usage"];
             let finalStopReason: string | undefined;
@@ -790,10 +878,26 @@ export class ClaudeCliProvider implements LLMProvider {
                     continue;
                 }
 
+                if (event.type === "rate_limit_event") {
+                    const info = parseCliRateLimitEvent(event);
+                    if (info) {
+                        if (info.status === "rejected") rejectedLimit = info;
+                        if (info.status !== "allowed") {
+                            limitWarnings.set(`${info.rateLimitType ?? ""}:${info.status}`, toLimitWarning(info));
+                            this.logger.warn({ rateLimit: info }, "claudecli: usage window limit event");
+                        }
+                    }
+                    continue;
+                }
+
                 if (event.type === "result") {
                     const r = event as ClaudeStreamResultEvent;
                     if (r.is_error) {
-                        throw new Error(`PROVIDER_ERROR: claude CLI returned error: ${r.result ?? "(no message)"}`);
+                        throw faultError({
+                            errorResult: { text: r.result, apiErrorStatus: r.api_error_status },
+                            rejected: rejectedLimit,
+                            toolUseEmitted: toolUseCount > 0,
+                        }) ?? new Error(`PROVIDER_ERROR: claude CLI returned error: ${r.result ?? "(no message)"}`);
                     }
                     finalResult = r.result ?? "";
                     finalUsage = r.usage;
@@ -825,6 +929,12 @@ export class ClaudeCliProvider implements LLMProvider {
 
             proc.stdin.end();
 
+            // Aborted/timed out (the signal's listener already terminated the process group): this is a
+            // cancellation, never an auth or CLI fault, and the caller must not retry it.
+            if (request.signal?.aborted) {
+                throw new Error("PROVIDER_ERROR: request aborted");
+            }
+
             // A spawn failure (binary missing from PATH -> ENOENT, not executable -> EACCES) emits
             // `error` and closes stdout without a single line, so the in-loop check above never runs.
             // Report it as what it is rather than as the empty-result auth error below (b8372f5a).
@@ -837,6 +947,23 @@ export class ClaudeCliProvider implements LLMProvider {
             }
 
             if (!finalResult) {
+                // No result: ask the exit status and stderr what happened before blaming auth (FLT-3).
+                if (exitInfo === undefined && proc.exitCode === null && proc.signalCode === null) {
+                    await new Promise<void>((resolve) => {
+                        const t = setTimeout(resolve, EXIT_WAIT_MS);
+                        proc.once("exit", () => { clearTimeout(t); resolve(); });
+                    });
+                }
+                const code = exitInfo?.code ?? proc.exitCode;
+                const sig = exitInfo?.signal ?? proc.signalCode;
+                const fault = faultError({
+                    rejected: rejectedLimit,
+                    exitCode: code,
+                    signal: sig,
+                    stderrTail: scrubSecrets(stderrTail),
+                    toolUseEmitted: toolUseCount > 0,
+                });
+                if (fault) throw fault;
                 throw new ToolError(
                     "PROVIDER_AUTH_ERROR",
                     "Claude CLI returned empty result. " +
@@ -886,6 +1013,7 @@ export class ClaudeCliProvider implements LLMProvider {
                 rawUsage: finalUsage,
                 reportedToolUses: toolUseCount,
                 reportedModelCalls: finalNumTurns,
+                ...(limitWarnings.size > 0 ? { limitWarnings: [...limitWarnings.values()] } : {}),
                 ...(resolved ? { responseModel: resolved.responseModel } : {}),
                 usage,
             };
