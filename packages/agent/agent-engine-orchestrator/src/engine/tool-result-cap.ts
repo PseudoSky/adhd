@@ -21,8 +21,12 @@
  * elsewhere; this module only produces the model-visible form.
  */
 
-/** Default cap: ~5k tokens of text. */
-export const DEFAULT_TOOL_RESULT_MAX_CHARS = 20_000;
+/**
+ * Default cap: ~1.7k tokens of text. Lowered from 20_000 (~5.7k tokens) by 9ed453c1 CTX: a single
+ * uncapped `cat` of an 86 KB file held a 3-turn task at 10.1k tokens of context per turn, whereas 6_000
+ * leaves the model the head+tail of the result and a pointer to narrow it (measured in the CTX report).
+ */
+export const DEFAULT_TOOL_RESULT_MAX_CHARS = 6_000;
 
 /** Error results up to this many chars are never truncated. */
 export const ERROR_RESULT_FLOOR_CHARS = 4_000;

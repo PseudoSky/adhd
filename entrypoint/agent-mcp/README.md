@@ -64,7 +64,7 @@ The database (SQLite, agents/sessions/messages/usage) is the **production store*
 | `ADHD_AGENT_MODEL` | `claude-opus-4-1` | Model identifier for the provider |
 | `ADHD_AGENT_CONTEXT_LIMIT` | `0` | Max context size in tokens; 0 = no limit (enforce only at provider ceiling) |
 | `ADHD_AGENT_MAX_TOOL_LOOPS` | `50` | Max tool-call iterations per task |
-| `ADHD_AGENT_TOOL_RESULT_MAX_CHARS` | `20000` | Max chars of one tool result the model sees (first 75% + marker + last 25%); `0` disables; invalid values fail at startup. See [logging.md](docs/logging.md#tool-result-size-cap-what-the-model-sees-vs-what-telemetry-measures) |
+| `ADHD_AGENT_TOOL_RESULT_MAX_CHARS` | `6000` | Max chars of one tool result the model sees (first 75% + marker + last 25%); `0` disables; invalid values fail at startup. See [logging.md](docs/logging.md#tool-result-size-cap-what-the-model-sees-vs-what-telemetry-measures) |
 | `ADHD_AGENT_TOOL_RESULT_SPILL_ENABLED` | `false` | Opt in to spilling an over-cap tool result to a file (the model sees a stub with the path and a 2000-char preview) instead of dropping its middle. Sibling keys: `ADHD_AGENT_TOOL_RESULT_SPILL_DIR` (absolute; default `<temp>/tool-results`), `ADHD_AGENT_TOOL_RESULT_SPILL_TTL_HOURS` (`24`). See [logging.md](docs/logging.md#optional-spill-to-file-for-over-cap-tool-results) |
 | `ADHD_AGENT_MAX_DEPTH` | `3` | Max delegation depth (agent → child → grandchild) |
 | `ADHD_AGENT_DATABASE_PATH` | (auto-resolved) | Absolute path of a custom SQLite DB (a relative value is rejected at startup); unset = the production store `~/.adhd/agent-mcp/production/data/agents.db` |

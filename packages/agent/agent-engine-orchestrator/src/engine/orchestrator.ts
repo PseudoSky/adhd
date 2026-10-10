@@ -19,6 +19,7 @@ import {
   validateToolResultMaxChars,
 } from './tool-result-cap.js';
 import { capOrSpillToolResult, resolveToolResultSpill } from './tool-result-spill.js';
+import { compactToolDefinitions } from './tool-schema-compact.js';
 import { coerceToolArguments } from './tool-arg-coercion.js';
 import { DEFAULT_PROVIDER_TIMEOUT_MS } from '../interfaces.js';
 import { selectionOf, wireModelOf } from '../providers/resolve-selection.js';
@@ -424,6 +425,8 @@ export class Orchestrator {
     const toolArgCoercionEnabled = config.toolArgCoercion?.enabled !== false;
 
     const delegationSessions = new Set<string>();
+    // Per-task sequence for claudecli-bridge tool results (spill file names).
+    let bridgeCallSeq = 0;
     let taskSucceeded = false;
 
     try {
@@ -460,7 +463,9 @@ export class Orchestrator {
           ? 'full'
           : (executionContext.agentDefinition.toolAdvertisement ?? 'full');
       const advertisedTools =
-        advertisementMode === 'names' ? toNameOnlyTools(tools) : tools;
+        advertisementMode === 'names'
+          ? toNameOnlyTools(tools)
+          : compactToolDefinitions(tools);
       const toolDocSystemMessage: Message | null = (() => {
         if (advertisementMode !== 'names' || tools.length === 0) return null;
         const doc = renderToolPromptDoc(tools);
@@ -639,17 +644,41 @@ export class Orchestrator {
             executeTool: async (server, tool, args) => {
               registry.assertToolAllowed?.(server, tool);
               const client = await registry.getClient(server);
+              // 9ed453c1 CTX: the claudecli bridge never passes through the API-path cap
+              // below (the CLI runs its own tool loop), so bound what the CLI re-sends on
+              // every later turn here — the same BK1 head+tail cap/spill the API path uses.
+              const boundForModel = (
+                raw: unknown,
+                isErr: boolean
+              ): unknown => {
+                bridgeCallSeq += 1;
+                return capOrSpillToolResult({
+                  result: raw,
+                  isError: isErr,
+                  maxChars: toolResultMaxChars,
+                  spill: toolResultSpill,
+                  taskId,
+                  callId: `bridge-${bridgeCallSeq}`,
+                  onSpillError: (err) =>
+                    logger.warn(
+                      { taskId, tool: `${server}__${tool}`, err },
+                      'Tool-result spill failed; using the head+tail cap'
+                    ),
+                }).result;
+              };
               try {
                 const result = await client.callTool(
                   tool,
                   args,
                   composedSignal
                 );
-                return { result, isError: false };
+                return { result: boundForModel(result, false), isError: false };
               } catch (error) {
                 return {
-                  result:
+                  result: boundForModel(
                     error instanceof Error ? error.message : String(error),
+                    true
+                  ),
                   isError: true,
                 };
               }

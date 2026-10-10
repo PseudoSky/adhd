@@ -16,23 +16,33 @@ const MARKER_RE =
   /\[tool result truncated: showing first (\d+) and last (\d+) of (\d+) chars; re-run with a narrower command \(e\.g\. grep, head, sed -n 'a,bp'\)\]/;
 
 describe('3ad735bb AC1.1 oversize result -> head+tail with exact marker', () => {
-  it('default cap is 20000 and splits 15000 head / 5000 tail', () => {
-    expect(DEFAULT_TOOL_RESULT_MAX_CHARS).toBe(20_000);
-    const text = 'a'.repeat(15_000) + 'M'.repeat(65_000) + 'z'.repeat(20_000);
+  it('default cap is 6000 and splits 4500 head / 1500 tail (9ed453c1 CTX AC3)', () => {
+    expect(DEFAULT_TOOL_RESULT_MAX_CHARS).toBe(6_000);
+    const text = 'a'.repeat(4_500) + 'M'.repeat(65_000) + 'z'.repeat(20_000);
     const out = capToolResult(text, false, DEFAULT_TOOL_RESULT_MAX_CHARS);
     expect(out.truncated).toBe(true);
-    expect(out.originalChars).toBe(100_000);
+    expect(out.originalChars).toBe(89_500);
     const s = out.result as string;
     const m = s.match(MARKER_RE);
     expect(m).not.toBeNull();
-    expect(m?.[1]).toBe('15000');
-    expect(m?.[2]).toBe('5000');
-    expect(m?.[3]).toBe('100000');
-    expect(s.startsWith('a'.repeat(15_000) + '\n[tool result truncated')).toBe(true);
-    expect(s.endsWith(']\n' + 'z'.repeat(5_000))).toBe(true);
+    expect(m?.[1]).toBe('4500');
+    expect(m?.[2]).toBe('1500');
+    expect(m?.[3]).toBe('89500');
+    expect(s.startsWith('a'.repeat(4_500) + '\n[tool result truncated')).toBe(true);
+    expect(s.endsWith(']\n' + 'z'.repeat(1_500))).toBe(true);
     expect(s).not.toContain('M');
     // marker is outside the cap: head + tail == cap exactly
-    expect(s.length).toBe(20_000 + (m?.[0].length ?? 0) + 2);
+    expect(s.length).toBe(6_000 + (m?.[0].length ?? 0) + 2);
+  });
+
+  it('9ed453c1 CTX AC3: the 86 KB SKILL.md `cat` that held a 3-turn task at 10.1k tokens now costs <= 2k tokens', () => {
+    const skill = 'x'.repeat(86_324);
+    const out = capToolResult(skill, false, DEFAULT_TOOL_RESULT_MAX_CHARS);
+    // ~3.5 chars/token for prose/markdown: the model-visible result must stay under 2k tokens.
+    expect((out.result as string).length / 3.5).toBeLessThan(2_000);
+    // negative control: the pre-CTX 20k default would not satisfy the same budget.
+    const old = capToolResult(skill, false, 20_000);
+    expect((old.result as string).length / 3.5).toBeGreaterThan(2_000);
   });
 
   it('serializes non-string results with JSON.stringify before capping', () => {

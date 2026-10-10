@@ -482,6 +482,27 @@ export class ClaudeCliProvider implements LLMProvider {
         return filePath;
     }
 
+    /**
+     * The `--setting-sources` value for a non-spec worker, or `undefined` to leave the CLI default
+     * (user + project + local). Default `project`: the operator's USER settings carry their plugins,
+     * skills, agents and hooks, which the CLI lists into the first request of EVERY task (measured
+     * -953 input tokens per turn, 2329 -> 1376 for a shell-only agent; 9ed453c1 CTX) and which a
+     * worker with its own `--system-prompt` never asked for. Opt back in with the provider option
+     * `settingSources` (`"inherit"` restores the CLI default; otherwise a comma list of
+     * user|project|local, or an array) or `ADHD_AGENT_CLAUDECLI_SETTING_SOURCES`.
+     */
+    private settingSources(): string | undefined {
+        const opt = (this.providerConfig as { settingSources?: unknown }).settingSources;
+        let fromOpt: string | undefined;
+        if (Array.isArray(opt)) fromOpt = opt.join(",");
+        else if (typeof opt === "string") fromOpt = opt;
+        const raw = fromOpt
+            ?? process.env["ADHD_AGENT_CLAUDECLI_SETTING_SOURCES"]
+            ?? this.config.subprocessEnv?.()["ADHD_AGENT_CLAUDECLI_SETTING_SOURCES"]
+            ?? "project";
+        return raw.trim() === "inherit" ? undefined : raw.trim();
+    }
+
     /** Whether to retain the spawned CLI's session transcript (default: no). */
     private keepSessionTranscript(): boolean {
         const opt = (this.providerConfig as { keepSessionTranscript?: unknown }).keepSessionTranscript;
@@ -604,6 +625,8 @@ export class ClaudeCliProvider implements LLMProvider {
             }
         } else {
             args.push(...toolsArgv);
+            const settingSources = this.settingSources();
+            if (settingSources !== undefined) args.push("--setting-sources", settingSources);
             if (systemPrompt) args.push("--system-prompt", systemPrompt);
         }
 

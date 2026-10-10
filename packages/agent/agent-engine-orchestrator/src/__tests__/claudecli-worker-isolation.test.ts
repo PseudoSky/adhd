@@ -120,7 +120,7 @@ async function run(opts: RunOpts = {}) {
 }
 
 const TRANSCRIPT_ENV = "ADHD_AGENT_CLAUDECLI_KEEP_SESSION_TRANSCRIPT";
-const ENV_KEYS = ["CLAUDE_CODE_DISABLE_CLAUDE_MDS", "CLAUDE_CODE_DISABLE_AUTO_MEMORY", TRANSCRIPT_ENV, "CLAUDE_CODE_BUILTIN_TOOLS"];
+const ENV_KEYS = ["ADHD_AGENT_CLAUDECLI_SETTING_SOURCES", "CLAUDE_CODE_DISABLE_CLAUDE_MDS", "CLAUDE_CODE_DISABLE_AUTO_MEMORY", TRANSCRIPT_ENV, "CLAUDE_CODE_BUILTIN_TOOLS"];
 
 let saved: Record<string, string | undefined>;
 beforeEach(() => {
@@ -212,6 +212,34 @@ describe("98f9da19 AC3 — session transcript persistence", () => {
         process.env[TRANSCRIPT_ENV] = "0";
         const { args } = await run();
         expect(args).toContain("--no-session-persistence");
+    });
+});
+
+describe("9ed453c1 CTX AC4 — lean settings sources for a worker (user plugins/skills/agents/hooks are not loaded)", () => {
+    const flag = (args: string[]): string | undefined => {
+        const i = args.indexOf("--setting-sources");
+        return i === -1 ? undefined : args[i + 1];
+    };
+
+    it("9ed453c1 CTX AC4: a worker defaults to --setting-sources project", async () => {
+        const { args } = await run();
+        expect(flag(args)).toBe("project");
+    });
+
+    it("9ed453c1 CTX AC4: provider option settingSources (string or array) is passed through", async () => {
+        expect(flag((await run({ providerConfig: { settingSources: "user,project" } })).args)).toBe("user,project");
+        expect(flag((await run({ providerConfig: { settingSources: ["project", "local"] } })).args)).toBe("project,local");
+    });
+
+    it("9ed453c1 CTX AC4: settingSources:\"inherit\" restores the CLI default (flag omitted)", async () => {
+        expect(flag((await run({ providerConfig: { settingSources: "inherit" } })).args)).toBeUndefined();
+    });
+
+    it("9ed453c1 CTX AC4: ADHD_AGENT_CLAUDECLI_SETTING_SOURCES is honoured; an explicit option wins over it", async () => {
+        process.env["ADHD_AGENT_CLAUDECLI_SETTING_SOURCES"] = "inherit";
+        expect(flag((await run()).args)).toBeUndefined();
+        expect(flag((await run({ providerConfig: { settingSources: "local" } })).args)).toBe("local");
+        delete process.env["ADHD_AGENT_CLAUDECLI_SETTING_SOURCES"];
     });
 });
 

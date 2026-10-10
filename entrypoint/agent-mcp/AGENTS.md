@@ -71,7 +71,7 @@ These env vars configure the server-wide default agent and provider credentials:
 | `ADHD_AGENT_PROVIDER` | string | `anthropic` | Yes (has a code default of `anthropic`) |
 | `ADHD_AGENT_MODEL` | string | `claude-opus-4-1` | Yes (has a code default) |
 | `ADHD_AGENT_CONTEXT_LIMIT` | number | `0` (default, disabled) | No |
-| `ADHD_AGENT_TOOL_RESULT_MAX_CHARS` | integer | `20000` (`0` disables; invalid fails at startup) | No |
+| `ADHD_AGENT_TOOL_RESULT_MAX_CHARS` | integer | `6000` (`0` disables; invalid fails at startup) | No |
 | `ADHD_AGENT_TOOL_RESULT_SPILL_ENABLED` | boolean | `false` (`true` spills over-cap results to a 0600 file under `ADHD_AGENT_TOOL_RESULT_SPILL_DIR`, default `<temp>/tool-results`, and the srt policy read-allows that dir) | No |
 | `ADHD_AGENT_ANTHROPIC_SECRET` | string | `sk-ant-oat...` or `sk-ant-api...` | If provider type=`anthropic` (`config.ts` `PROVIDER_DEFAULTS`) |
 | `ADHD_AGENT_OPENAI_SECRET` | string | (credential) | If provider type=`openai` (also covers OpenAI-compatible endpoints) |
