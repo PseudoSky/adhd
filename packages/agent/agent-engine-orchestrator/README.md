@@ -178,6 +178,10 @@ Tool results the CLI receives through the loopback bridge are bounded by the sam
 
 The CLI executes its own built-in tools inside the one invocation, so the adapter only answers `tool_use` blocks for `mcp__`-prefixed tools the agent declared.
 
+## Same-turn tool calls: bounded concurrency
+
+When a model emits several tool calls in one turn, the engine runs them concurrently through a concurrency-limited pool (`p-queue`). `EngineConfig.toolCallConcurrency` is the in-flight limit; absent, non-integer or `< 1` means `DEFAULT_TOOL_CALL_CONCURRENCY` (8). Results are appended in call order regardless of completion order, `request_human_input` calls never enter the pool, and one failing call does not cancel its siblings (a fatal engine error such as `MAX_DEPTH_EXCEEDED` still aborts the turn and drops calls that have not started). Each call works over its own locals, so the fan-out is safe under concurrent processes. The `task` tool's `background` default is unchanged. (35768ae8)
+
 ## `claudecli` provider: governance (permission gate, caps, hooks)
 
 The `claude` CLI runs its own tool loop, so its tool calls bypass the engine's dispatch loop. They are governed anyway (f9dadeaa):

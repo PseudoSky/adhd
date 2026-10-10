@@ -102,6 +102,9 @@ export interface WireSeams {
   tempDir?: string;
 }
 
+/** Default for {@link EngineConfig.toolCallConcurrency}. */
+export const DEFAULT_TOOL_CALL_CONCURRENCY = 8;
+
 export interface EngineConfig {
   /** Outbound-I/O seams (traced fetch/spawn/transport). Absent => plain globals, no wire logging. */
   wire?: WireSeams;
@@ -141,6 +144,15 @@ export interface EngineConfig {
   toolArgCoercion?: {
     enabled: boolean;
   };
+  /**
+   * Max same-turn tool calls the engine runs concurrently. A host sets it on the
+   * `EngineConfig` it passes to `run()`. Absent, non-integer or < 1 => 8
+   * ({@link DEFAULT_TOOL_CALL_CONCURRENCY}). Calls beyond the limit wait for a
+   * free slot; results keep call order; human-input (HITL) calls never enter
+   * the pool; one failing call does not cancel the others. Does not affect the
+   * `task` tool's `background` default.
+   */
+  toolCallConcurrency?: number;
   queue: {
     /** Max concurrent background tasks. */
     concurrency: number;

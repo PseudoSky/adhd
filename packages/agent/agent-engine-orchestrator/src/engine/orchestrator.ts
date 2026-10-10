@@ -22,7 +22,8 @@ import {
 import { capOrSpillToolResult, resolveToolResultSpill } from './tool-result-spill.js';
 import { canonicalizeToolDefinitions, compactToolDefinitions } from './tool-schema-compact.js';
 import { coerceToolArguments } from './tool-arg-coercion.js';
-import { DEFAULT_PROVIDER_TIMEOUT_MS } from '../interfaces.js';
+import { DEFAULT_PROVIDER_TIMEOUT_MS, DEFAULT_TOOL_CALL_CONCURRENCY } from '../interfaces.js';
+import PQueue from 'p-queue';
 import { selectionOf, wireModelOf } from '../providers/resolve-selection.js';
 import { readPartialUsage, type IProviderPartialUsage, type ProviderTokenUsage } from '../providers/partial-usage.js';
 import { buildModelResponsePayload, sourceFromResponse } from './model-response-payload.js';
@@ -1867,12 +1868,17 @@ export class Orchestrator {
           }
         }
 
-        // Phase 2 — Promise.all concurrent execution
+        // Phase 2 — concurrency-limited fan-out (35768ae8): same-turn calls run
+        // concurrently, at most `config.toolCallConcurrency` in flight (default
+        // DEFAULT_TOOL_CALL_CONCURRENCY); results keep call order. HITL calls
+        // were handled above and never enter the pool.
         const nonHitlToolCalls = toolCalls.filter(
           (tc) => tc.tool !== HITL_TOOL_NAME && !warningResults.has(tc.id)
         );
-        const toolResults = await Promise.all(
-          nonHitlToolCalls.map(async (toolCall) => {
+        const toolResults = await mapWithConcurrency(
+          nonHitlToolCalls,
+          config.toolCallConcurrency,
+          async (toolCall) => {
             const resolved = registry.resolveToolName?.(
               `${toolCall.server}__${toolCall.tool}`
             ) ?? { server: toolCall.server, tool: toolCall.tool };
@@ -2075,7 +2081,7 @@ export class Orchestrator {
               isError,
               estResultTokens: toolCallEstResultTokens,
             };
-          })
+          }
         );
 
         // Phase 3 — serial result append
@@ -2315,4 +2321,33 @@ export function windowMessages(messages: Message[], limit: number): Message[] {
     }
 
     return [...preserved, ...kept.flat()];
+}
+
+/**
+ * Runs `fn` over `items` with at most `limit` in flight and returns the results
+ * in INPUT order (35768ae8). `limit` falls back to
+ * {@link DEFAULT_TOOL_CALL_CONCURRENCY} when absent or not a positive integer.
+ * Each call is an independent pool task over its own locals (no shared mutable
+ * state). A throw (the engine's fatal tool codes) rejects the whole map exactly
+ * as `Promise.all` did, and additionally drops calls that have not started.
+ * Ordinary tool failures are caught inside `fn`, so they never cancel siblings.
+ */
+async function mapWithConcurrency<T, R>(
+  items: readonly T[],
+  limit: number | undefined,
+  fn: (item: T) => Promise<R>
+): Promise<R[]> {
+  const concurrency =
+    typeof limit === 'number' && Number.isInteger(limit) && limit >= 1
+      ? limit
+      : DEFAULT_TOOL_CALL_CONCURRENCY;
+  const pool = new PQueue({ concurrency });
+  try {
+    return await Promise.all(
+      items.map((item) => pool.add(() => fn(item)) as Promise<R>)
+    );
+  } catch (err) {
+    pool.clear();
+    throw err;
+  }
 }
