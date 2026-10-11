@@ -226,14 +226,18 @@ export const tasksBatchInputSchema = z
       .describe('Reuse one existing session per prompt; length must equal prompts.length'),
     prompts: z.preprocess(
       parseStringifiedArray,
-      z.array(z.string().min(1)).min(1)
-    ).describe('One prompt per dispatched task'),
-    concurrency: z
-      .preprocess(
-        parseIntegerString,
-        z.number().int().positive().max(64).optional()
-      )
-      .describe('Max tasks executing simultaneously (default 4)'),
+      z.array(z.string().min(1)).min(1).describe('One prompt per dispatched task')
+    ),
+    concurrency: z.preprocess(
+      parseIntegerString,
+      z
+        .number()
+        .int()
+        .positive()
+        .max(64)
+        .optional()
+        .describe('Max tasks executing simultaneously (default 4)')
+    ),
     depends_on: z
       .array(z.array(z.string().uuid()))
       .optional()

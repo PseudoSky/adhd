@@ -5,6 +5,7 @@
  * a stringified JSON array. The schema accepts those shapes and keeps rejecting
  * genuinely invalid input. Pure schema tests: no process, no network.
  */
+import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
@@ -69,5 +70,11 @@ describe('932604a0 R9 AC1-AC5 tasks_batch string-typed arguments', () => {
     expect(js.properties['prompts']?.type).toBe('array');
     expect(js.required ?? []).not.toContain('concurrency');
     expect(js.required ?? []).toContain('prompts');
+  });
+
+  it('932604a0 R9.AC5: advertised schema is byte-identical to the pre-change shape (same pin as 0d0004b8 R3-PAR-C, over the MCP-stripped form)', () => {
+    const { $schema: _drop, ...rest } = z.toJSONSchema(tasksBatchInputSchema) as Record<string, unknown>;
+    const sha = createHash('sha256').update(JSON.stringify(rest)).digest('hex');
+    expect(sha).toBe('84290017888a6cbbbb21d3cd329bc86ec14690e2d037a3a55fdc4c2ae99e2008');
   });
 });
