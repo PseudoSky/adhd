@@ -23,6 +23,13 @@ const root = mkdtempSync(join(tmpdir(), "b31e1fe5-"));
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 const configDir = join(root, "claude-config");
 
+// CLI session ids are UUIDs (95ee2a24 AC2: anything else is never retained, resumed or deleted).
+const C1 = "c1c1c1c1-1111-4111-8111-111111111111";
+const C2 = "c2c2c2c2-2222-4222-8222-222222222222";
+const E1 = "e1e1e1e1-1111-4111-8111-111111111111";
+const E2 = "e2e2e2e2-2222-4222-8222-222222222222";
+const E3 = "e3e3e3e3-3333-4333-8333-333333333333";
+
 const logger: EngineLogger = { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} };
 const engineConfig = {
   wire: { tempDir: root },
@@ -75,7 +82,7 @@ beforeEach(async () => { spawned.length = 0; scripts = []; await arm(); });
 describe("b31e1fe5 AC1: a follow-up task resumes the retained CLI session", () => {
   it("task 1 pins a session id and persists; task 2 forks it and sends only the new message", async () => {
     const sessions = new ClaudeCliSessionRegistry();
-    scripts = [[ok("first answer", "child-1")], [ok("second answer", "child-2")]];
+    scripts = [[ok("first answer", C1)], [ok("second answer", C2)]];
 
     await (await provider("S", sessions)).chat({ messages: [system("be terse"), user("task one")] });
     const t1 = spawned[0]!;
@@ -87,7 +94,7 @@ describe("b31e1fe5 AC1: a follow-up task resumes the retained CLI session", () =
       messages: [system("be terse"), user("task one"), assistant("first answer"), user("task two")],
     });
     const t2 = spawned[1]!;
-    expect(after(t2.args, "--resume")).toBe("child-1");
+    expect(after(t2.args, "--resume")).toBe(C1);
     expect(t2.args).toContain("--fork-session");
     expect(t2.args).not.toContain("--session-id");
     expect(t2.args).not.toContain("--no-session-persistence");
@@ -97,7 +104,7 @@ describe("b31e1fe5 AC1: a follow-up task resumes the retained CLI session", () =
     await (await provider("S", sessions)).chat({
       messages: [system("be terse"), user("task one"), assistant("first answer"), user("task two"), assistant("second answer"), user("task three")],
     });
-    expect(after(spawned[2]!.args, "--resume")).toBe("child-2");
+    expect(after(spawned[2]!.args, "--resume")).toBe(C2);
     expect(stdinText(spawned[2]!)).toBe("task three");
     sessions.releaseAll();
   });
@@ -115,7 +122,7 @@ describe("b31e1fe5 AC3: anything not provably covered falls back to the text rep
   const history = [system("be terse"), user("task one"), assistant("first answer"), user("task two")];
 
   async function afterFirstTask(sessions: ClaudeCliSessionRegistry): Promise<void> {
-    scripts = [[ok("first answer", "child-1")]];
+    scripts = [[ok("first answer", C1)]];
     await (await provider("S", sessions)).chat({ messages: [system("be terse"), user("task one")] });
     spawned.length = 0;
   }
@@ -165,11 +172,11 @@ describe("b31e1fe5 AC3: anything not provably covered falls back to the text rep
   it("a resume the CLI cannot find is retried once as a full text replay", async () => {
     const sessions = new ClaudeCliSessionRegistry();
     await afterFirstTask(sessions);
-    scripts = [[notFound], [ok("second answer", "child-2")]];
+    scripts = [[notFound], [ok("second answer", C2)]];
     const res = await (await provider("S", sessions)).chat({ messages: history });
     expect(res.message.content).toBe("second answer");
     expect(spawned).toHaveLength(2);
-    expect(after(spawned[0]!.args, "--resume")).toBe("child-1");
+    expect(after(spawned[0]!.args, "--resume")).toBe(C1);
     expectReplay(spawned[1]!);
     expect(spawned[1]!.args).toContain("--session-id");
     sessions.releaseAll();
@@ -181,9 +188,9 @@ describe("b31e1fe5 AC3: anything not provably covered falls back to the text rep
     scripts = [[JSON.stringify({ type: "result", subtype: "error", is_error: true, result: "boom" })]];
     await expect((await provider("S", sessions)).chat({ messages: history })).rejects.toThrow();
     spawned.length = 0;
-    scripts = [[ok("second answer", "child-2")]];
+    scripts = [[ok("second answer", C2)]];
     await (await provider("S", sessions)).chat({ messages: history });
-    expect(after(spawned[0]!.args, "--resume")).toBe("child-1"); // still the last good transcript
+    expect(after(spawned[0]!.args, "--resume")).toBe(C1); // still the last good transcript
     sessions.releaseAll();
   });
 });
@@ -216,10 +223,10 @@ describe("b31e1fe5: retained transcripts are not a leak", () => {
 
   it("release() deletes every transcript the session created", async () => {
     const sessions = new ClaudeCliSessionRegistry();
-    scripts = [[ok("a", "child-1")]];
+    scripts = [[ok("a", C1)]];
     await (await provider("S", sessions)).chat({ messages: [user("hi")] });
     const pinned = after(spawned[0]!.args, "--session-id")!;
-    const files = [transcript(pinned), transcript("child-1")];
+    const files = [transcript(pinned), transcript(C1)];
     sessions.release("S");
     for (const f of files) expect(existsSync(f)).toBe(false);
     expect(sessions.size).toBe(0);
@@ -228,9 +235,9 @@ describe("b31e1fe5: retained transcripts are not a leak", () => {
   it("LRU eviction and the idle TTL release old sessions", () => {
     let t = 0;
     const s = new ClaudeCliSessionRegistry(() => t, { idleTtlMs: 100, maxRetained: 2 });
-    const commit = (key: string, id: string): void => s.commit(key, { configKey: "k", configDir, cliSessionId: id, nonSystem: [user("x")], reply: "y" });
-    const files = ["e1", "e2", "e3"].map(transcript);
-    commit("one", "e1"); t = 1; commit("two", "e2"); t = 2; commit("three", "e3");
+    const commit = (key: string, id: string): void => { s.commit(key, { configKey: "k", configDir, cliSessionId: id, nonSystem: [user("x")], reply: "y" }); };
+    const files = [E1, E2, E3].map(transcript);
+    commit("one", E1); t = 1; commit("two", E2); t = 2; commit("three", E3);
     expect(s.size).toBe(2);
     expect(existsSync(files[0]!)).toBe(false); // oldest evicted, transcript removed
     t = 500; // idle past the TTL

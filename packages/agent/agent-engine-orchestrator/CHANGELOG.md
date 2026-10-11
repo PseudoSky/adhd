@@ -1,5 +1,9 @@
 ## Unreleased
 
+### 🩹 Fixes
+
+- **agent-engine-orchestrator:** claudecli readOnlyHint applies only to agent-mcp's own bridge route (a foreign server's `task` is no longer hinted); session ids are UUID-validated before they enter the transcript delete set; the resume key covers bridged tool names/descriptions/schemas, `--setting-sources`, permission mode and the gate-filtered built-in tools; orphan transcripts of dead processes are swept on provider start via per-process ledgers, SIGTERM/SIGINT release retained transcripts, never-resumed sessions are evicted first and `sessionResumable:false` retains nothing; the claude-version e2e pin is one explicit tripwire instead of a lane-wide failure (95ee2a24 AC1 AC2 AC3 AC4 AC5)
+
 ### 🚀 Features
 
 - **agent-engine-orchestrator:** claudecli retains the CLI session per engine session and resumes it (`--resume --fork-session`, uncovered tail only) for follow-up tasks: second-task 1h cache write 6,312 -> 121 tokens, first-turn cache_read/context 0.00 -> 0.98 on claude-haiku-4-5; any history the transcript does not provably cover falls back to the text replay (b31e1fe5)

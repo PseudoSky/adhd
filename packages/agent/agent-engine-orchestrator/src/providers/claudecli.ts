@@ -14,7 +14,7 @@ import type { EngineLogger, EngineConfig } from "../interfaces.js";
 import { DEFAULT_PROVIDER_TIMEOUT_MS } from "../interfaces.js";
 import { wireSpawn } from "./wire.js";
 import {
-    claudeCliSessions, claudeConfigDir, sessionConfigKey,
+    claudeCliSessions, claudeConfigDir, claudeCliResumeConfigKey, isCliSessionId,
     type ClaudeCliSessionPlan, type ClaudeCliSessionRegistry,
 } from "./claudecli-session.js";
 import { normaliseAnthropicUsage } from "./anthropic.js";
@@ -49,13 +49,25 @@ import {
 /**
  * readOnlyHint is a CLI concurrency hint only; these tools each create an isolated child task and are NOT non-mutating; the CLI serialises same-message MCP calls otherwise (fdb35d6f).
  * Bare tool names (the part after `server__`). Never derived from the tool def/schema.
+ * The names are only meaningful on agent-mcp's OWN server ({@link AGENT_MCP_SERVER_NAME}): a foreign server
+ * that happens to expose a tool called `task` is not hinted (95ee2a24 AC1).
  */
 export const CONCURRENCY_HINT_TOOLS: ReadonlySet<string> = new Set(["task", "tasks_batch", "agent"]);
 
-/** The bridge `toolAnnotations` hook (fdb35d6f AC4): `{readOnlyHint:true}` for CONCURRENCY_HINT_TOOLS, else undefined. */
-export function concurrencyHintAnnotations(tool: string): Record<string, unknown> | undefined {
-    return CONCURRENCY_HINT_TOOLS.has(tool) ? { readOnlyHint: true } : undefined;
+/** The server name agent-mcp's own tools are advertised under (`agent-mcp__task`, `mcp__agent-mcp__task`). */
+export const AGENT_MCP_SERVER_NAME = "agent-mcp";
+
+/**
+ * The bridge `toolAnnotations` hook (fdb35d6f AC4, 95ee2a24 AC1): `{readOnlyHint:true}` only when the tool is one of
+ * CONCURRENCY_HINT_TOOLS AND its bridge route is agent-mcp's own server; undefined for everything else, including a
+ * same-named tool on any other server.
+ */
+export function concurrencyHintAnnotations(tool: string, server: string): Record<string, unknown> | undefined {
+    return server === AGENT_MCP_SERVER_NAME && CONCURRENCY_HINT_TOOLS.has(tool) ? { readOnlyHint: true } : undefined;
 }
+
+/** The CLI permission mode every run uses; part of the resume key so a future change cannot resume a stale transcript. */
+export const CLAUDECLI_PERMISSION_MODE = "dangerously-skip-permissions";
 
 /** Bytes of stderr kept (tail) for fault reports. */
 const STDERR_TAIL_BYTES = 2000;
@@ -768,11 +780,17 @@ export class ClaudeCliProvider implements LLMProvider {
              * the same engine session `--resume`s it instead of replaying the history as text (b31e1fe5).
              */
             sessionKey?: string;
+            /**
+             * False when the caller knows this engine session can never get a second task (a one-shot dispatch):
+             * the run then keeps the original `--no-session-persistence` behaviour and no transcript is retained
+             * (95ee2a24 AC4). Default true.
+             */
+            sessionResumable?: boolean;
             /** Test seam: replaces the process-wide session registry. */
             sessions?: ClaudeCliSessionRegistry;
         }
     ) {
-        this.sessionKey = deps?.sessionKey;
+        this.sessionKey = deps?.sessionResumable === false ? undefined : deps?.sessionKey;
         this.sessions = deps?.sessions ?? claudeCliSessions;
         this.startBridge = deps?.startToolBridge ?? startToolBridge;
         this.retryRuntime = deps?.retryRuntime ?? defaultRetryRuntime();
@@ -923,7 +941,7 @@ export class ClaudeCliProvider implements LLMProvider {
                 signal: request.signal,
                 logger: this.logger,
                 callTimeoutMs: this.providerConfig.timeoutMs,
-                toolAnnotations: (tool) => concurrencyHintAnnotations(tool),
+                toolAnnotations: (tool, _def, server) => concurrencyHintAnnotations(tool, server),
             })
             : undefined;
         try {
@@ -1077,12 +1095,22 @@ export class ClaudeCliProvider implements LLMProvider {
             return this.runCli(request, bridge, undefined);
         }
         const configDir = claudeConfigDir(this.buildSubprocessEnv());
-        const configKey = sessionConfigKey([
+        const configKey = claudeCliResumeConfigKey({
             systemPrompt,
-            this.providerConfig.model,
-            this.config.cwd,
-            JSON.stringify(this.compiledTools ?? this.providerConfig.allowedBuiltinTools ?? null),
-        ]);
+            model: this.providerConfig.model,
+            cwd: this.config.cwd,
+            builtinTools: this.compiledTools ?? this.providerConfig.allowedBuiltinTools ?? null,
+            builtinToolsArgv: computeClaudeBuiltinArgs({
+                compiledTools: this.compiledTools,
+                allowedBuiltinTools: this.providerConfig.allowedBuiltinTools,
+                builtinToolPolicy: request.builtinToolPolicy,
+            }).toolsArgv,
+            bridgedTools: bridgeableTools(request.tools ?? []),
+            settingSources: this.settingSources(),
+            permissionMode: CLAUDECLI_PERMISSION_MODE,
+        });
+        // Drop transcripts a previous process of this host left behind when it died uncleanly (95ee2a24 AC4).
+        this.sessions.sweepOrphans(this.config.wire?.tempDir);
         const attempt = (): ClaudeCliSessionRun => ({
             key, configKey, configDir, nonSystem,
             plan: this.sessions.plan(key, configKey, configDir, nonSystem),
@@ -1139,7 +1167,7 @@ export class ClaudeCliProvider implements LLMProvider {
         // engine's governToolCall), and (c) the agent-spec refusal above. See README "Governance".
         const args: string[] = [
             "-p",
-            "--dangerously-skip-permissions",
+            `--${CLAUDECLI_PERMISSION_MODE}`,
             "--input-format", "stream-json",
             "--output-format", "stream-json",
             "--verbose",
@@ -1399,7 +1427,7 @@ export class ClaudeCliProvider implements LLMProvider {
             if (session) {
                 // A fresh run wrote the id we pinned; a fork reports its NEW id. No id => the head is not resumable.
                 const cliSessionId = finalResultEvent?.session_id ?? (session.plan.mode === "fresh" ? session.plan.newId : undefined);
-                if (cliSessionId) {
+                if (isCliSessionId(cliSessionId)) {
                     this.sessions.commit(session.key, {
                         configKey: session.configKey, configDir: session.configDir, cliSessionId,
                         nonSystem: session.nonSystem, reply: finalResult,

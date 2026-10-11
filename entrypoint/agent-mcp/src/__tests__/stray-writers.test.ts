@@ -229,6 +229,9 @@ const ALLOWLIST: readonly IEntry[] = [
   { key: 'packages/agent/agent-engine-orchestrator/src/providers/claudecli.ts :: const dir = await mkdtemp(join(await this.ensureTempRoot(), "agent-mcp-spec-"));', reason: 'claudecli: spec dir under the namespaced temp root' },
   { key: 'packages/agent/agent-engine-orchestrator/src/providers/claudecli.ts :: await mkdir(agentsDir, { recursive: true, mode: 0o700 });', reason: 'claudecli: inside the temp-root spec dir' },
   { key: 'packages/agent/agent-engine-orchestrator/src/providers/claudecli.ts :: await writeFile(join(agentsDir, safeFile), content, { encoding: "utf8", mode: 0o600 });', reason: 'claudecli: inside the temp-root spec dir' },
+  { key: 'packages/agent/agent-engine-orchestrator/src/providers/claudecli-session.ts :: mkdirSync(dir, { recursive: true, mode: 0o700 });', reason: 'claudecli session registry: orphan-sweep ledger under the host namespaced temp root (wire.tempDir) (95ee2a24 AC4)' },
+  { key: 'packages/agent/agent-engine-orchestrator/src/providers/claudecli-session.ts :: writeFileSync(tmp, JSON.stringify({ pid: this.proc.pid, entries }), { mode: 0o600 });', reason: 'claudecli session registry: orphan-sweep ledger under the host namespaced temp root (wire.tempDir) (95ee2a24 AC4)' },
+  { key: 'packages/agent/agent-engine-orchestrator/src/providers/claudecli-session.ts :: renameSync(tmp, file);', reason: 'claudecli session registry: orphan-sweep ledger under the host namespaced temp root (wire.tempDir) (95ee2a24 AC4)' },
 ];
 
 /**

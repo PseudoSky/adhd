@@ -59,10 +59,10 @@ export interface StartToolBridgeOptions {
     /**
      * Optional per-tool MCP `annotations` to advertise in `tools/list`. Unset (the default) advertises
      * none. ClaudeCliProvider supplies `concurrencyHintAnnotations` (readOnlyHint on task / tasks_batch /
-     * agent only) because the claude CLI runs same-message MCP calls concurrently only for hinted tools;
+     * agent only, and only on agent-mcp's own route) because the claude CLI runs same-message MCP calls concurrently only for hinted tools;
      * see CONCURRENCY_HINT_TOOLS in claudecli.ts and claudecli-parallel-dispatch.e2e.test.ts (424b6362).
      */
-    toolAnnotations?: (tool: string, def: ToolDefinition) => Record<string, unknown> | undefined;
+    toolAnnotations?: (tool: string, def: ToolDefinition, server: string) => Record<string, unknown> | undefined;
 }
 
 const MAX_BODY_BYTES = 8 * 1024 * 1024;
@@ -182,7 +182,7 @@ export async function startToolBridge(opts: StartToolBridgeOptions): Promise<Too
         );
         server.setRequestHandler(ListToolsRequestSchema, async () => ({
             tools: [...advertised.entries()].map(([tool, def]) => {
-                const annotations = opts.toolAnnotations?.(tool, def);
+                const annotations = opts.toolAnnotations?.(tool, def, serverName);
                 return {
                     name: tool,
                     description: def.description,

@@ -35,6 +35,11 @@ export function createProvider(
         claudecli?: ClaudecliExtras;
         hooks?: IHookRegistry;
         executionContext?: ExecutionContext;
+        /**
+         * claudecli only: false when this engine session can never get a second task (a one-shot dispatch), so no
+         * CLI transcript is retained for it (95ee2a24 AC4). Default true.
+         */
+        sessionResumable?: boolean;
     }
 ): LLMProvider {
     const wireModel = resolveWireModel(selection, options?.registry);
@@ -59,6 +64,7 @@ export function createProvider(
                 return new ClaudeCliProvider(providerConfig, mcpServers ?? {}, undefined, engineConfig, engineLogger, undefined, {
                     // b31e1fe5: tasks on one engine session share a retained CLI session (resumed, not replayed).
                     sessionKey: options?.executionContext?.sessionId || undefined,
+                    sessionResumable: options?.sessionResumable,
                 });
             case "openai":
                 return new OpenAIProvider(providerConfig, engineConfig ?? {} as EngineConfig);
