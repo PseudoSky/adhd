@@ -181,6 +181,8 @@ Caps are **additive** across dimensions — multiple caps targeting the same fie
 
 ### Cost pricing
 
+> **Dependency decision.** This plugin depends at runtime on `@adhd/agent-store-runtime` (for `createPriceSource(db)`, so the cap reads the same `model_price_history` as `usage_query`) in addition to `@adhd/agent-core-provider`. The repo tier table keeps plugins on base + core, but nothing enforces it for this package (`layer:logic` tag only; `nx lint` passes) and the dependency graph has no cycle (neither package reaches `agent-plugin-budget`). The only other plugin that touches the store, `agent-plugin-tracing`, also depends on `@adhd/agent-store-runtime` (as a devDependency). The exception is kept deliberately: plugins are constructed by `PluginFactory({ db, config })`, which carries no price source to inject, so the store import is the single way to price as `usage_query` does.
+
 The `cost` cap prices every model turn one of three ways, chosen by the top-level `pricing` key:
 
 | `pricing`            | Behaviour                                                                                                                                                                       |
@@ -196,6 +198,8 @@ Unpriceable models are never a silent $0: with flat rates configured the turn bi
 Per-agent and per-provider rate overrides (`agent.overrides.<name>.costPerInputToken`, `provider.overrides.<type>.costPerInputToken`, ...) are honoured and take precedence over `defaults`; the provider dimension keys on the resolved selection's provider type, then the agent's inline provider, then `unknown`.
 
 Scoped (`session` / `agent` / `global`) cost caps add the persisted `est_cost_usd` of the scope's other tasks when the scope bills by rate card, and the persisted token classes at the flat rates when flat pricing governs. Which basis governs is decided from the same merged dimension (defaults plus agent / provider overrides) that prices the current turn, so a scoped cost never mixes bases. A multi-model response with one unpriceable concrete id accrues its priced portion in memory, whereas the usage plugin stores that turn's `est_cost_usd` as NULL; scoped sums of persisted rows therefore undercount such partial turns.
+
+> **Migration note: the default changed.** `pricing` now defaults to `auto`. A `cost` cap with **no** `costPer*Token` rates used to price every turn at $0 and therefore never fired; it is now priced from the rate card and **enforces**. Operators with a hand-written `cost` cap and no rates will see it start tripping. To keep the old never-fires behaviour set `"pricing": "flat"` (the plugin emits one `budget:unpriced_model` event per task and model so the $0 is announced), or set explicit `costPer*Token` rates to keep flat pricing. Pinned by `budget-ratecard.test.ts` ("pp-d1 blind-review #3").
 
 > **Host default.** `agent-mcp`'s `ADHD_AGENT_BUDGET_COST_USD` now sets `pricing: "rate-card"` instead of injecting flat $3/$15 Sonnet rates. Non-Sonnet agents are priced at their own rates (a cache-warm DeepSeek run no longer trips the cap ~17x early). To keep the old flat pricing, set explicit `costPerInputToken` / `costPerOutputToken` in the budget plugin config.
 

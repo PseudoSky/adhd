@@ -729,3 +729,37 @@ describe(`cf7e0e5c review-L5/L6 -- one provider source for rates and caps; stric
     ).not.toThrow();
   });
 });
+
+// ── Default-change migration pin ─────────────────────────────────────────────
+
+describe('pp-d1 blind-review #3 -- a rate-less cost cap now enforces from the rate card (default pricing: auto)', () => {
+  const warmTurn: Turn = { uncached: 1_000, cacheRead: 99_000, output: 500 };
+  const cap = { field: 'cost', maximum: 0.01 };
+
+  async function turnsUntilTripped(config: unknown, max = 60): Promise<number> {
+    const ctx = makeCtx({
+      selection: { providerType: 'openai', modelRef: DEEPSEEK },
+      wireModel: DEEPSEEK,
+    });
+    const task = await startTask(config, ctx);
+    for (let n = 0; n < max; n += 1) {
+      if (await task.tripped()) return n;
+      await task.turn(warmTurn);
+    }
+    return max;
+  }
+
+  it('no `pricing`, no costPer*Token rates: the cap fires at the rate-card point (it used to accrue $0 and never fire)', async () => {
+    const turns = await turnsUntilTripped({ defaults: { mode: 'block', caps: [cap] } });
+    expect(turns).toBe(Math.floor(0.01 / cardCost(DEEPSEEK, warmTurn)) + 1);
+    expect(turns).toBeLessThan(60);
+  });
+
+  it("`pricing: 'flat'` is the opt-out that restores the old never-fires behaviour", async () => {
+    const turns = await turnsUntilTripped({
+      pricing: 'flat',
+      defaults: { mode: 'block', caps: [cap] },
+    });
+    expect(turns).toBe(60);
+  });
+});

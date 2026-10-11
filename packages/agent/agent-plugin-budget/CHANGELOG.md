@@ -4,12 +4,17 @@ This was a version bump only for agent-plugin-budget to align it with other proj
 
 ## Unreleased
 
+### ⚠️ Behaviour changes
+
+- **`pricing` defaults to `auto`: a rate-less `cost` cap now enforces.** A `cost` cap with no `costPer*Token` rates used to accrue $0 and never fire; it is now priced from the rate card. Set `pricing: "flat"` to restore the old behaviour. (pp-d1 blind-review #3)
+
 ### Bug Fixes
 
 - **agent-plugin-budget:** `pre:tool_call` no longer loses updates on the per-tool `toolCalls` counter. The counter was read before the cap loop and written back as `snapshot + 1` after awaits in the warn / soft-block / block branches, so two simultaneous calls undercounted and could both pass a full cap. The call is now reserved in one synchronous step and the reservation is released if the call is refused. (699da472 AC1, AC2)
 
 ### Documentation
 
+- README: records the `@adhd/agent-store-runtime` dependency decision (no cycle, lint-clean, tracing precedent). (pp-d1 blind-review #2)
 - README Concurrency: the `toolCallConcurrency - 1` spend-overshoot bound is scoped to the native tool-loop path; the `claudecli` bridge path is described honestly (governed per call, but not bounded by `toolCallConcurrency`), and the `toolCalls` reservation's over-refusal of a concurrent call (conservative, never over-allows) is documented. (b3999dfa AC1)
 - README: new Concurrency section documenting the spend-cap overshoot window under concurrent tool calls (bounded by `toolCallConcurrency - 1`, default 8). (699da472 AC3)
 
