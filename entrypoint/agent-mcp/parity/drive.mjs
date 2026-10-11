@@ -2,7 +2,7 @@
 // CLI-parity experiment driver (entrypoint/agent-mcp/parity). Private, unpublished measurement instrument. See README.md.
 //   node drive.mjs --self-check | --print-plan | --check-oracle | --check-lib | --dry-run | --live --yes   [options]
 // --self-check / --print-plan / --check-* make NO model call and run NO `claude` binary.
-// --live spends real quota and is hard-capped at MAX_MODEL_RUNS (6) model runs in total across all invocations (durable ledger).
+// --live spends real quota and is hard-capped at MAX_MODEL_RUNS (3: one run per arm) per round across all invocations (durable per-round ledger, --round R<n>).
 // --dry-run (owner-run only) drives all three arms end to end with fakes against the REAL built agent-mcp.
 import fs from 'node:fs';
 import os from 'node:os';
@@ -32,6 +32,8 @@ const readJson = (p) => JSON.parse(fs.readFileSync(p, 'utf8'));
 // ----------------------------------------------------------------------------------------------------------------
 // CLI
 // ----------------------------------------------------------------------------------------------------------------
+/** A round id names a tracked ledger file and a tmp directory: only `R<digits>` is accepted (no path separators, no `..`). */
+export const ROUND_RE = /^R\d+$/;
 function parseArgs(argv) {
   // Round 4: NO --arms / --batch / --keep-going: the plan is always the full seeded 6 runs, and the run cap lives in a durable ledger
   // that is keyed on nothing the command line can change (not --out, not --seed), so re-invoking differently cannot bypass it.
@@ -39,7 +41,7 @@ function parseArgs(argv) {
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]; const v = () => argv[++i];
     if (['--self-check', '--print-plan', '--check-oracle', '--check-lib', '--dry-run', '--live'].includes(a)) o.mode = a.slice(2);
-    else if (['preflight', 'verdict', 'grid'].includes(a)) o.mode = a; else if (a === '--round') o.round = v();
+    else if (['preflight', 'verdict', 'grid'].includes(a)) o.mode = a; else if (a === '--round') { o.round = v(); if (!ROUND_RE.test(o.round)) { console.error(`--round must match ${ROUND_RE} (it names the ledger file and the tmp dir), got ${JSON.stringify(o.round)}`); process.exit(2); } }
     else if (a === '--out') o.out = path.resolve(v()); else if (a === '--seed') o.seed = v(); else if (a === '--wt') o.wt = path.resolve(v()); else if (a === '--claude') o.claude = v();
     else if (a === '--yes') o.yes = true; else if (a === '--degraded') o.degraded = v();
     else { console.error(`unknown argument ${a}`); process.exit(2); }
@@ -158,7 +160,7 @@ function makeCtx(opts, plan, runDef, dry) {
   const outRoot = opts.out ?? path.join(tmpRoot(opts.round ?? ROUND), 'live/out');
   const runDir = path.join(outRoot, 'runs', spec.runId);
   // The arm's cwd must sit outside any repo / agent-instruction file (ancestorLeaks): repo-root tmp/ is inside this checkout, so it lives under the OS temp dir.
-  const work = opts.out ? path.join(outRoot, 'work', spec.runId) : path.join(os.tmpdir(), 'adhd-agent-mcp-parity', ROUND, 'work', spec.runId);
+  const work = opts.out ? path.join(outRoot, 'work', spec.runId) : path.join(os.tmpdir(), 'adhd-agent-mcp-parity', opts.round ?? ROUND, 'work', spec.runId);
   return { opts, dry, spec, runDef, runDir, work, repoDir: path.join(work, 'repo'), hiddenDir: path.join(work, 'hidden'), ticketFile: path.join(work, 'ticket.txt'),
     infoLog: path.join(work, 'info-calls.log'), prompts: F.prompts(), ledgerPath: LG.ledgerPathFor(opts.round ?? ROUND) };
 }
@@ -650,7 +652,7 @@ function summaryRows(records) {
 }
 function writeSummary(outDir, records, plan) {
   const rows = summaryRows(records);
-  const md = ['# Round 4 run summary', '', `Runs recorded: ${records.length} of ${plan.length}`, '', '| run | pass | fail | na | invalid | content | process | format | calls | turns | cost (authoritative) | first-turn ctx | cache_read tok (phase 1) | wall s | warnings |', '|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|',
+  const md = ['# Round run summary', '', `Runs recorded: ${records.length} of ${plan.length}`, '', '| run | pass | fail | na | invalid | content | process | format | calls | turns | cost (authoritative) | first-turn ctx | cache_read tok (phase 1) | wall s | warnings |', '|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|',
     ...rows.map((r) => `| ${r.run} | ${r.pass} | ${r.fail} | ${r.na} | ${r.invalid} | ${r.content} | ${r.process} | ${r.format} | ${r.calls} | ${r.turns} | ${fmtUsd(r.costUsd)} | ${r.firstTurnCtx ?? '-'} | ${r.cacheReadP1 ?? '-'} | ${r.wallS} | ${r.warnings} |`), ''];
   md.push('## Effective config per run (thinking equalised: OFF on every arm)', '', '| run | thinking (config) | thinking turns observed | provider / phase timeout (ms) | tool-result cap |', '|---|---|---|---|---|', ...rows.map((r) => `| ${r.run} | ${r.thinking} | ${r.thinkingTurns} | ${r.providerTimeout} | ${r.resultCap} |`), '');
   for (const r of records.filter((x) => x.score)) {
@@ -782,8 +784,8 @@ export function planText(opts) {
   const A = ctxOf('A'), B = ctxOf('B'), C = ctxOf('C');
   const cite = (re) => `drive.mjs:${lineOf(re)}`;
   const thinkingEnvStr = Object.entries(THINKING_OFF_ENV).map(([k, v]) => `${k}=${v}`).join(' ');
-  out.push(`ROUND ${ROUND} PLAN  seed=${opts.seed}  model=${MODEL}  (task: ONE real-world scenario "shopkit", 2 phases in one session; web fetch ${F.WEB_URL} -> heading "${F.WEB_HEADING}")`);
-  out.push(`model runs: ${plan.length} planned (one per arm, A first), serial, HARD CAP ${MAX_MODEL_RUNS} per round; ledger ${LEDGER_PATH} has used ${ledgerUsed()} of ${MAX_MODEL_RUNS}`);
+  out.push(`ROUND ${opts.round ?? ROUND} PLAN  seed=${opts.seed}  model=${MODEL}  (task: ONE real-world scenario "shopkit", 2 phases in one session; web fetch ${F.WEB_URL} -> heading "${F.WEB_HEADING}")`);
+  out.push(`model runs: ${plan.length} planned (one per arm, A first), serial, HARD CAP ${MAX_MODEL_RUNS} per round; ledger ${LG.ledgerPathFor(opts.round ?? ROUND)} has used ${ledgerUsed(LG.ledgerPathFor(opts.round ?? ROUND))} of ${MAX_MODEL_RUNS}`);
   out.push('', 'order (arm A first; B and C alternate between rounds):', ...plan.map((p) => `  ${p.position}. ${p.arm}${p.rep}`));
   out.push('', 'THINKING (identical in effect on every arm: OFF)');
   out.push(`  A  ${THINKING_MECHANISM.A}`, `       cited at ${cite(/^export function armAEnv/)} and the THINKING_OFF_ENV definition ${cite(/^export const THINKING_OFF_ENV/)}`, `       resolved spawn env: ${thinkingEnvStr}  (armAEnv has them: ${Object.keys(THINKING_OFF_ENV).every((k) => armAEnv(A)[k] === THINKING_OFF_ENV[k])})`, `       argv: claude ${argvA(A, '<mcp-config.json>', null).map((x) => (x.length > 60 ? x.slice(0, 57) + '...' : x)).join(' ')}`);
@@ -941,6 +943,8 @@ export async function selfCheck({ log = console.log, opts = parseArgs([]) } = {}
       fs.writeFileSync(lp, '{not json');
       chk('a corrupt ledger fails CLOSED (refuses to run)', refusesWith(() => LG.reserveRun(LR, { arm: 'A', runId: 'x', dir: ldir }), LG.LedgerError)); }
     chk('the production ledger path is tracked next to the driver, per round (not derived from --out/--seed)', LEDGER_PATH === path.join(HERE, 'ledger', `${ROUND}.json`));
+    { const bad = spawnSync(process.execPath, [SELF, '--print-plan', '--round', '../x'], { encoding: 'utf8' }); chk('--round ../x is rejected (the round names a ledger file and a tmp dir) -> exit 2', bad.status === 2, `status ${bad.status}`);
+      const r7 = spawnSync(process.execPath, [SELF, '--print-plan', '--round', 'R7'], { encoding: 'utf8' }); chk('--round R7 selects the R7 ledger and plan header (default stays R5)', r7.status === 0 && /ROUND R7 PLAN/.test(r7.stdout) && r7.stdout.includes(path.join('ledger', 'R7.json')), `status ${r7.status}`); }
     for (const flag of ['--arms', '--batch', '--keep-going', '--regen']) { const r = spawnSync(process.execPath, [SELF, flag, 'A'], { encoding: 'utf8' }); chk(`CLI rejects ${flag} (no way to slice the plan or bypass the cap) -> exit 2`, r.status === 2, `status ${r.status}`); }
     const noYes = spawnSync(process.execPath, [SELF, '--live'], { encoding: 'utf8' }); chk('--live without --yes exits 2 before doing anything', noYes.status === 2, `status ${noYes.status}`);
     // the live loop reaches the model only through rawRun (static)
@@ -1047,7 +1051,7 @@ async function main() {
   if (opts.mode === 'preflight') { process.exit(await runPreflightMode(opts)); }
   if (opts.mode === 'verdict' || opts.mode === 'grid') { process.exit(reportMode(opts)); }
   const dry = opts.mode === 'dry-run';
-  if (!dry && !opts.yes) { console.error('--live spends real model quota (hard cap 6 runs in total). Re-run with --yes to confirm.'); process.exit(2); }
+  if (!dry && !opts.yes) { console.error('--live spends real model quota (hard cap 3 runs per round). Re-run with --yes to confirm.'); process.exit(2); }
   opts.out = opts.out || path.join(tmpRoot(opts.round), dry ? 'dry/out' : 'live/out');
   if (!dry) {   // live: gates run BEFORE pacing and BEFORE any ledger reservation or `claude` spawn (R2.AC7); red => exit 3, nothing touched
     const g = await runLiveGates(opts);
