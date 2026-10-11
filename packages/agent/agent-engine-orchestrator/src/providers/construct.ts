@@ -51,6 +51,11 @@ export function buildProviderForSelection(args: {
   /** With `executionContext`, wraps the provider so failures emit `provider:failed`. */
   hooks?: IHookRegistry;
   executionContext?: ExecutionContext;
+  /**
+   * False for a one-shot/ephemeral dispatch, whose engine session never gets a second task: claudecli then
+   * retains no CLI transcript for it (95ee2a24 AC4, ad988fda AC6). Default true (session-bound).
+   */
+  sessionResumable?: boolean;
 }): LLMProvider {
   // 9ed453c1 CWD (ADR-0008 D9): the provider is spawned in the TASK-TIME
   // dispatching cwd, not the host-global EngineConfig.cwd. `executionContext.cwd`
@@ -71,6 +76,7 @@ export function buildProviderForSelection(args: {
       claudecli: claudecliExtras(args.agentDefinition.provider),
       hooks: args.hooks,
       executionContext: args.executionContext,
+      sessionResumable: args.sessionResumable,
     }
   );
 }

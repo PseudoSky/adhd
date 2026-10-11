@@ -2,6 +2,7 @@
 
 ### 🩹 Fixes
 
+- **agent-engine-orchestrator:** a one-shot (ephemeral `agent_name`) task now builds its provider with `sessionResumable:false` (via `buildProviderForSelection`), so claudecli retains no session transcript for it; session-bound tasks are unchanged. (ad988fda AC6, 95ee2a24 AC4)
 - **agent-engine-orchestrator:** claudecli readOnlyHint applies only to agent-mcp's own bridge route (a foreign server's `task` is no longer hinted); session ids are UUID-validated before they enter the transcript delete set; the resume key covers bridged tool names/descriptions/schemas, `--setting-sources`, permission mode and the gate-filtered built-in tools; orphan transcripts of dead processes are swept on provider start via per-process ledgers, SIGTERM/SIGINT release retained transcripts, never-resumed sessions are evicted first and `sessionResumable:false` retains nothing; the claude-version e2e pin is one explicit tripwire instead of a lane-wide failure (95ee2a24 AC1 AC2 AC3 AC4 AC5)
 
 ### 🚀 Features

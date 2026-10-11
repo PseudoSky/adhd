@@ -221,6 +221,8 @@ async function runEphemeralTask(
     registry: deps.providerRegistry,
     hooks: deps.hooks,
     executionContext,
+    // One-shot: no second task will ever resume this CLI session, so retain no transcript (95ee2a24 AC4).
+    sessionResumable: false,
   });
 
   const userMessage = {
