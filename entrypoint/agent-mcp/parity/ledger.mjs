@@ -1,0 +1,111 @@
+// PARITY-INSTRUMENT-ONLY
+// Per-round run ledger (R0.AC4, R0.AC8, R5.AC6). Tracked file parity/ledger/<round>.json, so the cap survives a fresh checkout.
+// Cap 3 runs (A, B, C); a 4th or later run needs `extraRunReason`. A live round needs a non-empty `approvedBy` (the owner message, quoted).
+// Arm A is reserved first; B and C are reserved only after A's correctness passed (void rule). Atomic write + lock; corrupt file fails closed.
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+export const RUN_CAP = 3;
+export const JUDGE_CAP = 3;
+export const LEDGER_DIR = path.join(HERE, 'ledger');
+export const ledgerPathFor = (round, dir = LEDGER_DIR) => path.join(dir, `${round}.json`);
+
+export class LedgerError extends Error { constructor(m) { super(m); this.name = 'LedgerError'; } }
+export class ModelRunCapError extends LedgerError { constructor(m) { super(m); this.name = 'ModelRunCapError'; } }
+
+const nowIso = () => new Date().toISOString();
+
+function withLock(file, fn) {
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const lock = `${file}.lock`; let fd = null;
+  for (let i = 0; i < 200 && fd == null; i++) {
+    try { fd = fs.openSync(lock, 'wx'); } catch (e) { if (e.code !== 'EEXIST') throw e; Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50); }
+  }
+  if (fd == null) throw new LedgerError(`could not take the ledger lock ${lock} (stale? remove it only if no driver is running): refusing (fail closed)`);
+  try { return fn(); } finally { try { fs.closeSync(fd); } catch { /* closed */ } try { fs.unlinkSync(lock); } catch { /* gone */ } }
+}
+
+/** A fresh, empty ledger object. */
+export function emptyLedger(round) {
+  return { round, cap: RUN_CAP, approvedBy: '', extraRunReason: '', runs: [], judgeCalls: [], scenarioSha: '', scopeChanges: [], armOrder: [], startedAt: null, armA: null };
+}
+
+/** Parse + validate a ledger document; throws LedgerError (fail closed) when it cannot be trusted. */
+export function parseLedger(text, where = 'ledger') {
+  let led;
+  try { led = JSON.parse(text); } catch (e) { throw new LedgerError(`${where} is unreadable (${e.message}): refusing (fail closed)`); }
+  if (!led || typeof led !== 'object' || !Array.isArray(led.runs) || !Array.isArray(led.judgeCalls)) throw new LedgerError(`${where} has no runs/judgeCalls arrays: refusing (fail closed)`);
+  return led;
+}
+
+export function readLedger(round, dir = LEDGER_DIR) {
+  const f = ledgerPathFor(round, dir);
+  if (!fs.existsSync(f)) return emptyLedger(round);
+  return parseLedger(fs.readFileSync(f, 'utf8'), f);
+}
+
+function writeAtomic(file, led) { const tmp = `${file}.${process.pid}.tmp`; fs.writeFileSync(tmp, JSON.stringify(led, null, 2) + '\n'); fs.renameSync(tmp, file); }
+
+/** Read-only precondition for a live round (no write): approvedBy present, cap not reached. Used by the gate before anything runs. */
+export function checkLedgerForLive(round, dir = LEDGER_DIR) {
+  const led = readLedger(round, dir);
+  const reasons = [];
+  if (!String(led.approvedBy || '').trim()) reasons.push('ledger.approvedBy is empty: a live round must be asked for and the owner message quoted in approvedBy');
+  if (led.runs.length >= RUN_CAP && !String(led.extraRunReason || '').trim()) reasons.push(`run cap ${led.runs.length}/${RUN_CAP} reached and extraRunReason is empty`);
+  return { ok: reasons.length === 0, reasons, ledger: led };
+}
+
+/** Set approvedBy / scenarioSha / scopeChanges on the round's ledger (creates it). */
+export function initRound(round, patch, dir = LEDGER_DIR) {
+  const f = ledgerPathFor(round, dir);
+  return withLock(f, () => {
+    const led = fs.existsSync(f) ? parseLedger(fs.readFileSync(f, 'utf8'), f) : emptyLedger(round);
+    Object.assign(led, patch); led.startedAt ??= nowIso();
+    writeAtomic(f, led); return led;
+  });
+}
+
+/**
+ * Reserve one agent run BEFORE anything is spawned.
+ * Rules: needs approvedBy; run 4+ needs extraRunReason; the first run must be arm A; B/C need A recorded as a genuine success.
+ */
+export function reserveRun(round, { arm, runId, dir = LEDGER_DIR }) {
+  const f = ledgerPathFor(round, dir);
+  return withLock(f, () => {
+    const led = fs.existsSync(f) ? parseLedger(fs.readFileSync(f, 'utf8'), f) : emptyLedger(round);
+    if (!String(led.approvedBy || '').trim()) throw new LedgerError(`ledger ${f}: approvedBy is empty: refusing ${runId}`);
+    if (led.runs.length >= RUN_CAP && !String(led.extraRunReason || '').trim()) throw new ModelRunCapError(`model-run cap reached: ${led.runs.length}/${RUN_CAP} (ledger ${f}); a 4th or later run needs extraRunReason; refusing ${runId}`);
+    if (led.runs.length === 0 && arm !== 'A') throw new LedgerError(`arm A runs first: refusing ${runId} (arm ${arm})`);
+    if (arm !== 'A' && !(led.armA && led.armA.genuine === true)) throw new LedgerError(`arm A did not genuinely succeed: the round is void, refusing ${runId}`);
+    led.runs.push({ runId, arm, at: nowIso(), pid: process.pid, ...(led.runs.length >= RUN_CAP ? { extra: true } : {}) });
+    if (!led.armOrder.includes(arm)) led.armOrder.push(arm);
+    writeAtomic(f, led);
+    return { used: led.runs.length, cap: RUN_CAP };
+  });
+}
+
+/** Record arm A's correctness verdict (void rule). `genuine` = every content item green, not INVALID, no defect signal. */
+export function recordArmA(round, genuine, detail = '', dir = LEDGER_DIR) {
+  const f = ledgerPathFor(round, dir);
+  return withLock(f, () => {
+    const led = fs.existsSync(f) ? parseLedger(fs.readFileSync(f, 'utf8'), f) : emptyLedger(round);
+    led.armA = { genuine: genuine === true, detail: String(detail).slice(0, 400), at: nowIso() };
+    writeAtomic(f, led); return led.armA;
+  });
+}
+
+/** Alternate the B/C order between rounds (A is always first). `roundIndex` is the round's numeric order. */
+export function armOrderFor(roundIndex) { return roundIndex % 2 === 0 ? ['A', 'B', 'C'] : ['A', 'C', 'B']; }
+
+/** Log a paid judge call (R5.AC6): at most JUDGE_CAP per round unless `reason` is given. Excluded from the run cap. */
+export function recordJudgeCall(round, call, { reason = '', dir = LEDGER_DIR } = {}) {
+  const f = ledgerPathFor(round, dir);
+  return withLock(f, () => {
+    const led = fs.existsSync(f) ? parseLedger(fs.readFileSync(f, 'utf8'), f) : emptyLedger(round);
+    if (led.judgeCalls.length >= JUDGE_CAP && !String(reason).trim()) throw new ModelRunCapError(`judge-call cap ${led.judgeCalls.length}/${JUDGE_CAP} reached without a documented reason`);
+    const rec = { arm: call.arm, modelId: call.modelId, inputTokens: call.inputTokens, outputTokens: call.outputTokens, costUsd: call.costUsd, briefSha: call.briefSha, at: nowIso(), ...(reason ? { reason } : {}) };
+    led.judgeCalls.push(rec); writeAtomic(f, led); return rec;
+  });
+}
