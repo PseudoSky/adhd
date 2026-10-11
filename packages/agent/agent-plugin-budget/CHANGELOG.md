@@ -1,3 +1,7 @@
+## 0.2.8 (2026-10-11)
+
+This was a version bump only for agent-plugin-budget to align it with other projects, there were no code changes.
+
 ## Unreleased
 
 ### Bug Fixes

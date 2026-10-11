@@ -12,10 +12,10 @@
     "publishedFromRef": "8c0514d62060a399b4267a50bb2fd898e277309e"
   },
   "@adhd/agent-core-native-tooling": {
-    "version": "0.0.2",
-    "normalizedHash": "sha256:64d72cbf2208c1b0d957253ad3e41edfbda4403d0606cae593e09c189b8641bd",
-    "publishedIntegrity": "sha512-9vn1VdAn91gkhObIcuMeP2rGFqtWhUZ4SW61msRFqS1lcx0FfFNDUa+wn4OJpj34KUb9CjZkuSp8QXE1LGCaPw==",
-    "publishedFromRef": "36715cc40f58c3dd36b4b2736a560b0f0e06a5a3"
+    "version": "0.0.3",
+    "normalizedHash": "sha256:756b8bc3dbb204be2d069b542fc1b2b669b8bf406e5bf334f4192869e883e27f",
+    "publishedIntegrity": "sha512-4uuhDarFIBYEv8rH45qRa6QgLKVjt1mrp6o05pkvG0vAFsGkYVbRRdeQ76Qrg7xfU1Q5/jiK/3hlNnnOdmr0yw==",
+    "publishedFromRef": "3d538c8a30a47ed454549b5e295378afb206cd17"
   },
   "@adhd/agent-core-policy": {
     "version": "2.2.3",
@@ -36,10 +36,10 @@
     "publishedFromRef": "b76b4bedadaaaf740b8658a19523e9fe03095e53"
   },
   "@adhd/agent-engine-orchestrator": {
-    "version": "2.3.11",
-    "normalizedHash": "sha256:273882f7e1ef79422ad7fff1dd60308090b974ce3ebb542dbfc572dbaad687c7",
-    "publishedIntegrity": "sha512-TwQjDa4zxgN81+hkRLfGvD8S7eTtVd6XE88bPmF76y6XgW5bkGyRnAYE+Z9qzS4FbSw5csSF7tm4XZsMnfxJZQ==",
-    "publishedFromRef": "cf58b97d265834453bd3469bf3e61e01fb23a9eb"
+    "version": "2.3.12",
+    "normalizedHash": "sha256:10e0f3dde5eaaa4058025c889daa414fe28bf2070cb964a99871250307573d7c",
+    "publishedIntegrity": "sha512-tGz5pZSNXx6Qt3VvV8ts3a/g3GICQ6AGwx1u0Be/qskaP/GgYjCBG/1hHZ6MgL4N1nryQK7Ro8RTJd6GnygIcQ==",
+    "publishedFromRef": "3d538c8a30a47ed454549b5e295378afb206cd17"
   },
   "@adhd/agent-generator-plugin": {
     "version": "0.1.6",
@@ -48,16 +48,16 @@
     "publishedFromRef": "a49d4fbe51581ba895a217105b27c18d65190c69"
   },
   "@adhd/agent-mcp": {
-    "version": "2.3.11",
-    "normalizedHash": "sha256:f04f113bdcd06eceab1459019cf96f81c756ccf0f87015bf88208b4d32af2a5b",
-    "publishedIntegrity": "sha512-pcpyM32z9Kggo7yzgNxvbbXbGfo0FyQ7/ch3LnHHEs7E62p2c4x+CHII2s6+YPJfPsP54wuw+JoiYH3jBNCdlg==",
-    "publishedFromRef": "cf58b97d265834453bd3469bf3e61e01fb23a9eb"
+    "version": "2.3.12",
+    "normalizedHash": "sha256:566faa78e47b5827d06665a241d2d691fe614e50b4a1150002d5e178e3f86d87",
+    "publishedIntegrity": "sha512-Pqq6+Gxo/aCfUTLcof1QF88zNS090YDIxztBUphMwQ0gaZbjWj1SSTnzQn3mZkKAvgjIvk7TpnlVkXnnzOcM1A==",
+    "publishedFromRef": "3d538c8a30a47ed454549b5e295378afb206cd17"
   },
   "@adhd/agent-plugin-budget": {
-    "version": "0.2.7",
-    "normalizedHash": "sha256:02f15c9e07c70f6b9dac541b825665dbaa6b8e7842bfa81213c620b5621c46d3",
-    "publishedIntegrity": "sha512-rBH25NWagOoL40WWqSC+GAnLIpjxTZDP90TACtaaB478qLT747H+nkYkPmHeMQUXmUyHT8jx+wUXjq6wdfT47Q==",
-    "publishedFromRef": "7adb975e5a3832a356c235c3892bd2d2640bf6e6"
+    "version": "0.2.8",
+    "normalizedHash": "sha256:7f21265a3c667308574e645e7fecd237d937ad20f5982320942d0c7b50b27c87",
+    "publishedIntegrity": "sha512-JM4K8RnDHGWhq4mkkuMkVlviBsg5IJpjX0BRPqQhkIYeONpUhdvMeZ2i3GL5sXiIcTlX4phPuF3LED+2/q4clw==",
+    "publishedFromRef": "3d538c8a30a47ed454549b5e295378afb206cd17"
   },
   "@adhd/agent-plugin-sanitize": {
     "version": "0.1.5",
@@ -78,10 +78,10 @@
     "publishedFromRef": "a1a6ba024c5526b930f97c5420e920639d14e110"
   },
   "@adhd/agent-store-runtime": {
-    "version": "2.2.8",
-    "normalizedHash": "sha256:f69869785587318ce214fa236356b65fa266c9739aa9bd3ba8bcbce8f22ea6ea",
-    "publishedIntegrity": "sha512-OCKv30pbaLcfzRqpgFl5rgTn+FkySBubJP5KPGKCOt4hIGadJZ2xKww/fbqRIEd2+3b1uparSKSrBCEA+4toOw==",
-    "publishedFromRef": "7adb975e5a3832a356c235c3892bd2d2640bf6e6"
+    "version": "2.2.9",
+    "normalizedHash": "sha256:10a095d1751d95e288104542d1355b3c8f4fcc240dbcfe9533618bddae5b9d10",
+    "publishedIntegrity": "sha512-0YEogmQj+H1jQaXep9qn0+1kJEKDGezdEEaAUJjgpcgxngc4Le6gK3ktz2KgfHPjoSEtfq8apgz1IpUEuVkQ8g==",
+    "publishedFromRef": "3d538c8a30a47ed454549b5e295378afb206cd17"
   },
   "@adhd/agent-store-tools": {
     "version": "2.2.3",

@@ -1,3 +1,13 @@
+## 0.0.3 (2026-10-11)
+
+### 🩹 Fixes
+
+- **agent-mcp:** preserve CRLF line endings across fs edit_file/write_file (8dd148cf R3-EOL AC1-AC4) ([ae270f99](https://github.com/PseudoSky/adhd/commit/ae270f99))
+
+### ❤️ Thank You
+
+- pseudosky
+
 ## 0.0.2 (2026-10-07)
 
 ### 🚀 Features

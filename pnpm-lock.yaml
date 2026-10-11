@@ -399,7 +399,7 @@ importers:
         specifier: ^0.1.5
         version: link:../../packages/agent/agent-core-env
       '@adhd/agent-core-native-tooling':
-        specifier: ^0.0.2
+        specifier: ^0.0.3
         version: link:../../packages/agent/agent-core-native-tooling
       '@adhd/agent-core-provider':
         specifier: ^2.2.8
@@ -408,10 +408,10 @@ importers:
         specifier: ^2.2.8
         version: link:../../packages/agent/agent-engine-compiler
       '@adhd/agent-engine-orchestrator':
-        specifier: ^2.3.11
+        specifier: ^2.3.12
         version: link:../../packages/agent/agent-engine-orchestrator
       '@adhd/agent-plugin-budget':
-        specifier: ^0.2.7
+        specifier: ^0.2.8
         version: link:../../packages/agent/agent-plugin-budget
       '@adhd/agent-plugin-tracing':
         specifier: ^0.0.3
@@ -420,7 +420,7 @@ importers:
         specifier: ^2.2.3
         version: link:../../packages/agent/agent-store-prompts
       '@adhd/agent-store-runtime':
-        specifier: ^2.2.8
+        specifier: ^2.2.9
         version: link:../../packages/agent/agent-store-runtime
       '@adhd/environment':
         specifier: ^0.1.8
@@ -722,7 +722,7 @@ importers:
         specifier: ^2.3.10
         version: link:../../packages/agent/agent-base-types
       '@adhd/agent-core-native-tooling':
-        specifier: ^0.0.2
+        specifier: ^0.0.3
         version: link:../../packages/agent/agent-core-native-tooling
       '@adhd/backlog':
         specifier: ^1.0.15
@@ -966,13 +966,13 @@ importers:
         specifier: ^2.2.8
         version: link:../agent-engine-compiler
       '@adhd/agent-plugin-budget':
-        specifier: ^0.2.7
+        specifier: ^0.2.8
         version: link:../agent-plugin-budget
       '@adhd/agent-store-prompts':
         specifier: ^2.2.3
         version: link:../agent-store-prompts
       '@adhd/agent-store-runtime':
-        specifier: ^2.2.8
+        specifier: ^2.2.9
         version: link:../agent-store-runtime
       '@anthropic-ai/sdk':
         specifier: ^0.96.0

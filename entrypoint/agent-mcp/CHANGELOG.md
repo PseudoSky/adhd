@@ -1,3 +1,13 @@
+## 2.3.12 (2026-10-11)
+
+### 🩹 Fixes
+
+- **agent-mcp:** add migration 0016 sql and its index test (ad988fda AC2) ([133c348b](https://github.com/PseudoSky/adhd/commit/133c348b))
+
+### ❤️ Thank You
+
+- pseudosky
+
 ## Unreleased
 
 ### 🩹 Fixes

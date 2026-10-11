@@ -1,3 +1,17 @@
+## 2.2.9 (2026-10-11)
+
+### 🚀 Features
+
+- **agent-engine-orchestrator:** first-turn context, failed-run usage and usage_query projections (debd934d afa37093 8333f755) ([0ea88328](https://github.com/PseudoSky/adhd/commit/0ea88328))
+
+### 🩹 Fixes
+
+- **agent-mcp:** roster lookup sorts and limits in SQL; index task_events(task_id,type) via migration 0016; migrate race tests use drizzle's public logger (ad988fda AC1 AC2 AC3 AC5) ([c8f75cf9](https://github.com/PseudoSky/adhd/commit/c8f75cf9))
+
+### ❤️ Thank You
+
+- pseudosky
+
 ## 2.2.8 (2026-10-10)
 
 ### 🩹 Fixes

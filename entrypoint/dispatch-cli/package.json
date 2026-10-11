@@ -7,7 +7,7 @@
   "dependencies": {
     "@adhd/backlog": "^1.0.15",
     "@adhd/agent-base-types": "^2.3.10",
-    "@adhd/agent-core-native-tooling": "^0.0.2",
+    "@adhd/agent-core-native-tooling": "^0.0.3",
     "@adhd/dispatch-serializer-json": "^0.1.4",
     "@adhd/dispatch-orchestrator": "^0.1.7",
     "@modelcontextprotocol/sdk": "1.29.0",
