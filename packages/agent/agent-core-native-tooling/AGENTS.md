@@ -58,7 +58,7 @@ The catalog entries are defaults, not commitments. For a concrete problem: resea
 | OS enforcement | `@anthropic-ai/sandbox-runtime` (`srt`, Apache-2.0) | wraps both: `srt <command> <args…>` |
 
 `unbash` is dropped; `rust-mcp-filesystem` is deferred. `resolveNativeTooling`
-wraps the `fs`/`shell` builtins with `srt` by default (`ctx.sandbox !== false`). With the sandbox on, the shell server env also carries `MCP_SHELL_CHILD_ENV_ALLOWLIST` naming the `srt`-injected proxy variables (`SHELL_PROXY_ENV_KEYS`), merged with any user value (from `shell.env` or `ctx.env`), so allowlisted egress works (0ba70e47; see README). Allowlisted commands that print their env will show the `srt`-injected local proxy address; host proxy credentials are overwritten by `srt` inside the sandbox.
+wraps the `fs`/`shell` builtins with `srt` by default (`ctx.sandbox !== false`). With the sandbox on, the shell server env also carries `MCP_SHELL_CHILD_ENV_ALLOWLIST` naming the `srt`-injected proxy variables (`SHELL_PROXY_ENV_KEYS`), merged with any user value (from `shell.env` or `ctx.env`), so allowlisted egress works (0ba70e47; see README). Allowlisted commands that print their env will show the `srt`-injected proxy URL (`srt.<id>:<token>@localhost:<port>`, a per-run sandbox-proxy credential, not a host one); host proxy credentials are overwritten by `srt` inside the sandbox (proven by `shell-egress.e2e.test.ts`).
 
 Verified against the adopted servers: the shell server's tool is `shell_execute`
 (arg `command: string[]`), and its allow-list env is `ALLOW_COMMANDS` /

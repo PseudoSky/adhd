@@ -80,8 +80,9 @@ MCP_SHELL_CHILD_ENV_ALLOWLIST=HTTP_PROXY,HTTPS_PROXY,ALL_PROXY,NO_PROXY,http_pro
 (the list is exported as `SHELL_PROXY_ENV_KEYS`; the env name as
 `SHELL_SERVER.envKeys.childEnvAllowlist`).
 
-Merge rule: a value you supply for `MCP_SHELL_CHILD_ENV_ALLOWLIST` — in
-`shell.env` or in the ambient `ctx.env` (both are kept) — is
+Merge rule: a value for `MCP_SHELL_CHILD_ENV_ALLOWLIST` is read from **both**
+`shell.env` and the ambient `ctx.env` (both are kept; concatenated `shell.env`
+first, then `ctx.env`, then the proxy variables) and is
 **merged, not replaced** — your entries come first (trimmed, empties dropped),
 the proxy variables are appended, and duplicates are removed, so
 `FOO,HTTP_PROXY` becomes `FOO,HTTP_PROXY,HTTPS_PROXY,ALL_PROXY,NO_PROXY,…`. With
@@ -89,11 +90,17 @@ the proxy variables are appended, and duplicates are removed, so
 and a user-supplied value is passed through untouched. A custom `McpServerConfig`
 `shell` replaces the builtin and is never modified.
 
-Exposure note: any allowlisted command that prints its environment (`env`,
-`printenv`, `sh -c …`) will now show the `srt`-injected local proxy address and
-port. Host proxy credentials are not forwarded: inside the sandbox `srt`
-overwrites any host `HTTP_PROXY` / `HTTPS_PROXY` value with its own local
-proxy address, so the children only ever see the `srt` one.
+Exposure note: any allowlisted command that prints its environment
+(`printenv`; the adopted server's default policy already rejects `env` and
+shells such as `sh -c …`) will now show the `srt`-injected proxy URL. That URL
+is `srt`'s own per-run endpoint (`http://srt.<id>:<token>@localhost:<port>`): the
+`<token>` is a credential for the sandbox's local egress proxy, scoped to that
+run and to the policy's `allowedDomains`, not a host credential. Host proxy
+credentials are not forwarded: inside the sandbox `srt`
+overwrites any host `HTTP_PROXY` / `HTTPS_PROXY` / `ALL_PROXY` value (and the
+lowercase twins) with its own, so the children only ever see the `srt` ones. This
+is proven end to end by the `e2e` lane (`shell-egress.e2e.test.ts`): a credentialed
+host proxy is injected and `printenv` inside the sandbox never shows it.
 
 The same variables are what let `srt` hosts reach an allowlisted domain; a host
 or domain not in the policy is still denied by `srt`, not by this setting.

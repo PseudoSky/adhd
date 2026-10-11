@@ -26,7 +26,7 @@
  * and it only starts if the child env carries the proxy variables.
  *
  * Teeth: the `control` test strips the allowlist from the resolved env and
- * asserts the SAME call no longer returns the body (it fails DNS) — so the
+ * asserts the SAME call no longer returns the body (a failure of any kind) — so the
  * suite goes red if the env line is ever removed or the server stops honouring
  * it. No env gate, no skip: a missing `srt`/`uvx` fails loudly (beforeAll).
  *
@@ -36,8 +36,12 @@
  * `/var/folders` write paths are added only on darwin. Whether srt's bwrap
  * layer needs further Linux-specific policy is untested.
  *
+ * Credential claim (0ba70e47 AC3b): a third case spawns the server with a credentialed
+ * host HTTP(S)/ALL_PROXY and asserts `printenv` inside the sandbox shows only srt's own
+ * proxy variables and never the host secret (proven red against the inverted assertion).
+ *
  * Determinism: host `*_PROXY` / `NO_PROXY` variables are stripped from every
- * spawn env; the policy's `parentProxy`/`noProxy` are the only proxy inputs.
+ * spawn env except in the credential case, which injects them on purpose; the policy's `parentProxy`/`noProxy` are the only proxy inputs.
  * Timeouts: each test's budget (`TEST_MS`) is strictly longer than the sum of
  * its inner bounded waits (initialize + tools/call), so the informative
  * RpcClient error (with server stderr) always fires before vitest's generic one.
@@ -69,18 +73,23 @@ type Stdio = Extract<McpServerConfig, { transport: 'stdio' }>;
 /** Minimal MCP stdio client: newline-delimited JSON-RPC, bounded waits. */
 class RpcClient {
   private buf = '';
-  private waiters = new Map<number, (m: any) => void>();
+  private pending = new Map<number, { res: (m: any) => void; rej: (e: Error) => void; timer: NodeJS.Timeout }>();
   private nextId = 1;
   private stderr = '';
+  /** stdout lines that were not valid JSON-RPC: kept for failure messages, otherwise ignored. */
+  private readonly diagnostics: string[] = [];
   private readonly exited: Promise<void>;
+  private resolveExited!: () => void;
   private hasExited = false;
+  /** Set once the child can never answer again (spawn failure or exit); every request rejects with it. */
+  private fatal?: Error;
   constructor(private readonly child: ChildProcessWithoutNullStreams) {
-    this.exited = new Promise<void>((ok) =>
-      child.once('exit', () => {
-        this.hasExited = true;
-        ok();
-      })
-    );
+    this.exited = new Promise<void>((ok) => (this.resolveExited = ok));
+    // Spawn failure (ENOENT/EACCES/...): Node emits 'error' and NEVER 'exit'.
+    child.once('error', (err) => this.die(new Error(`failed to spawn server: ${err.message}`)));
+    // One shared exit hook for the client's lifetime (no per-request listeners to leak).
+    child.once('exit', (code, signal) => this.die(new Error(`server exited (${code ?? signal})`)));
+    child.stdin.on('error', (err) => this.diagnostics.push(`stdin error: ${err.message}`));
     child.stdout.setEncoding('utf8');
     child.stderr.setEncoding('utf8');
     child.stderr.on('data', (d: string) => (this.stderr += d));
@@ -90,27 +99,50 @@ class RpcClient {
       while ((i = this.buf.indexOf('\n')) >= 0) {
         const line = this.buf.slice(0, i).trim();
         this.buf = this.buf.slice(i + 1);
-        if (!line.startsWith('{')) continue;
-        const msg = JSON.parse(line);
-        if (typeof msg.id === 'number') this.waiters.get(msg.id)?.(msg);
+        if (line === '') continue;
+        let msg: any;
+        try {
+          msg = JSON.parse(line);
+        } catch {
+          this.diagnostics.push(line);
+          continue;
+        }
+        if (msg && typeof msg.id === 'number') {
+          const p = this.pending.get(msg.id);
+          if (p) {
+            this.pending.delete(msg.id);
+            clearTimeout(p.timer);
+            p.res(msg);
+          }
+        }
       }
     });
   }
+  private context(): string {
+    return (
+      `server stderr:\n${this.stderr}\nnon-JSON stdout lines:\n${this.diagnostics.join('\n')}`
+    );
+  }
+  private die(err: Error): void {
+    if (this.hasExited) return;
+    this.hasExited = true;
+    this.fatal = err;
+    for (const [id, p] of this.pending) {
+      this.pending.delete(id);
+      clearTimeout(p.timer);
+      p.rej(new Error(`${err.message} before answering request #${id}; ${this.context()}`));
+    }
+    this.resolveExited();
+  }
   request(method: string, params: unknown, timeoutMs: number): Promise<any> {
+    if (this.fatal) return Promise.reject(new Error(`${this.fatal.message}; cannot send ${method}; ${this.context()}`));
     const id = this.nextId++;
     return new Promise((res, rej) => {
-      const t = setTimeout(
-        () => rej(new Error(`${method} timed out after ${timeoutMs}ms; server stderr:\n${this.stderr}`)),
-        timeoutMs
-      );
-      this.waiters.set(id, (m) => {
-        clearTimeout(t);
-        res(m);
-      });
-      this.child.once('exit', (code) => {
-        clearTimeout(t);
-        rej(new Error(`server exited (${code}) before answering ${method}; stderr:\n${this.stderr}`));
-      });
+      const timer = setTimeout(() => {
+        this.pending.delete(id);
+        rej(new Error(`${method} timed out after ${timeoutMs}ms; ${this.context()}`));
+      }, timeoutMs);
+      this.pending.set(id, { res, rej, timer });
       this.child.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n');
     });
   }
@@ -133,7 +165,7 @@ class RpcClient {
   }
   /** Await the wrapper's exit: SIGTERM the group, escalate to SIGKILL after a bounded deadline. */
   async close(): Promise<void> {
-    if (this.hasExited) return;
+    if (this.hasExited) return; // spawn failure / already exited: no exit event will ever come
     this.child.stdin.end();
     this.signalGroup('SIGTERM');
     const timer = setTimeout(() => this.signalGroup('SIGKILL'), TEARDOWN_GRACE_MS);
@@ -158,6 +190,9 @@ function hostEnvWithoutProxy(): NodeJS.ProcessEnv {
   return Object.fromEntries(Object.entries(process.env).filter(([k]) => !PROXY_VAR.test(k)));
 }
 
+/** The PATH every spawn in this file uses (repo `.bin` first), so prerequisites resolve exactly as the server does. */
+const SPAWN_PATH = `${REPO_BIN}${delimiter}${process.env.PATH ?? ''}`;
+
 function requireBinary(name: string, args: string[], env: NodeJS.ProcessEnv): void {
   const r = spawnSync(name, args, { env, encoding: 'utf8' });
   if (r.error || r.status !== 0) {
@@ -175,7 +210,7 @@ beforeAll(async () => {
   mkdirSync(cwd);
   mkdirSync(fakeHome);
 
-  const env = { ...hostEnvWithoutProxy(), PATH: `${REPO_BIN}${delimiter}${process.env.PATH ?? ''}` };
+  const env = { ...hostEnvWithoutProxy(), PATH: SPAWN_PATH };
   requireBinary('srt', ['--version'], env);
   requireBinary('uvx', ['--version'], env);
   if (process.platform === 'linux') {
@@ -230,9 +265,12 @@ afterAll(async () => {
 }, 4 * TEARDOWN_GRACE_MS);
 
 /** Resolve the shell builtin exactly as a host does, then spawn it. */
-async function startShell(mutate?: (cfg: Stdio) => void): Promise<RpcClient> {
+async function startShell(
+  mutate?: (cfg: Stdio) => void,
+  opts: { allowCommands?: string[]; hostEnv?: NodeJS.ProcessEnv } = {}
+): Promise<RpcClient> {
   const [shell] = resolveNativeTooling(
-    { fs: false, dispatch: false, shell: { allowCommands: ['curl'] } },
+    { fs: false, dispatch: false, shell: { allowCommands: opts.allowCommands ?? ['curl'] } },
     { cwd, srtSettingsPath: settingsPath }
   ) as Stdio[];
   expect(shell.command).toBe('srt'); // sandbox on by default
@@ -243,7 +281,8 @@ async function startShell(mutate?: (cfg: Stdio) => void): Promise<RpcClient> {
     detached: true, // own process group so teardown can signal grandchildren
     env: {
       ...hostEnvWithoutProxy(),
-      PATH: `${REPO_BIN}${delimiter}${process.env.PATH ?? ''}`,
+      ...(opts.hostEnv ?? {}),
+      PATH: SPAWN_PATH,
       HOME: fakeHome,
       // Keep uv's caches shared so the suite does not re-download per run.
       UV_CACHE_DIR: process.env.UV_CACHE_DIR ?? join(realHome, '.cache', 'uv'),
@@ -263,40 +302,134 @@ async function startShell(mutate?: (cfg: Stdio) => void): Promise<RpcClient> {
   return client;
 }
 
-async function curl(client: RpcClient): Promise<string> {
-  const r = await client.request(
-    'tools/call',
-    {
-      name: 'shell_execute',
-      arguments: { command: ['curl', '-sS', '--max-time', '20', `http://${ALLOWED_HOST}/`] },
-    },
-    CALL_MS
-  );
-  return JSON.stringify(r.result?.content ?? r);
+async function shellExecute(client: RpcClient, command: string[]): Promise<any> {
+  return client.request('tools/call', { name: 'shell_execute', arguments: { command } }, CALL_MS);
+}
+
+async function curl(client: RpcClient): Promise<any> {
+  return shellExecute(client, ['curl', '-sS', '--max-time', '20', `http://${ALLOWED_HOST}/`]);
+}
+
+/** The text a host would show for a tool result: every content block's text, or the raw error payload. */
+function toolText(r: any): string {
+  const blocks = r?.result?.content;
+  return Array.isArray(blocks) ? blocks.map((b: any) => String(b?.text ?? '')).join('\n') : JSON.stringify(r);
 }
 
 describe('0ba70e47 shell egress through real srt + real mcp-shell-server', () => {
   it(
     '0ba70e47 AC1 AC3b: shell_execute curl returns the page body (proxy env reaches the child)',
     async () => {
-      const out = await curl(await startShell());
+      const out = toolText(await curl(await startShell()));
       expect(out).toContain(BODY);
     },
     TEST_MS
   );
 
   it(
-    '0ba70e47 AC3b control: without MCP_SHELL_CHILD_ENV_ALLOWLIST the same call cannot resolve the host',
+    '0ba70e47 AC3b control: without MCP_SHELL_CHILD_ENV_ALLOWLIST the same call does not return the page',
     async () => {
-      const out = await curl(
+      const r = await curl(
         await startShell((cfg) => {
           const { MCP_SHELL_CHILD_ENV_ALLOWLIST: _dropped, ...rest } = cfg.env ?? {};
           cfg.env = rest;
         })
       );
+      const out = toolText(r);
+      // Failure of ANY kind counts: the page is absent. Never gate on one curl/seatbelt wording.
       expect(out).not.toContain(BODY);
-      expect(out).toMatch(/Could not resolve host/);
+      // Diagnostic only (non-fatal): known curl/seatbelt failure texts, so a reader can tell WHY it failed.
+      const known = /Could not resolve host|Couldn't resolve host|Operation not permitted|Connection refused|Failed to connect|timed out/i;
+      if (!known.test(out)) console.warn(`0ba70e47 control: failed without a recognised curl failure text; output was: ${out}`);
     },
     TEST_MS
   );
+
+  it(
+    '0ba70e47 AC3b: a host HTTP_PROXY / HTTPS_PROXY / ALL_PROXY carrying credentials never reaches the shell child (srt overwrites them)',
+    async () => {
+      const SECRET = 'SECRET-TOKEN-123';
+      const hostProxy = `http://user:${SECRET}@127.0.0.1:9`;
+      const hostEnv = {
+        HTTP_PROXY: hostProxy,
+        HTTPS_PROXY: hostProxy,
+        ALL_PROXY: hostProxy,
+        http_proxy: hostProxy,
+        https_proxy: hostProxy,
+        all_proxy: hostProxy,
+      };
+      const client = await startShell(undefined, { allowCommands: ['printenv'], hostEnv });
+      const out = toolText(await shellExecute(client, ['printenv']));
+      // Teeth: the child DID receive proxy variables (the passthrough works) and they
+      // are srt's own (`srt.<id>:<token>@localhost:<port>`), not the host's ...
+      for (const key of ['HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY', 'http_proxy', 'https_proxy', 'all_proxy']) {
+        expect(out, key).toMatch(new RegExp(`^${key}=http://srt\\.[^@\\s]+@localhost:\\d+$`, 'm'));
+      }
+      // ... and nothing of the host's credentialed value survives.
+      expect(out).not.toContain(SECRET);
+      expect(out).not.toContain('user:');
+      expect(out).not.toMatch(/127\.0\.0\.1:9(\D|$)/);
+    },
+    TEST_MS
+  );
+});
+
+/**
+ * RpcClient robustness (0ba70e47 AC3b review F2/F3/F4). Real child processes, no
+ * sleeps: each case settles on a process event.
+ */
+describe('0ba70e47 RpcClient harness fails informatively', () => {
+  const spawnNode = (script: string) =>
+    spawn(process.execPath, ['-e', script], { stdio: ['pipe', 'pipe', 'pipe'] });
+
+  it('0ba70e47 AC3b: a spawn failure (ENOENT) rejects the pending request with the error and close() resolves', async () => {
+    const child = spawn('no-such-binary-0ba70e47', [], { stdio: ['pipe', 'pipe', 'pipe'], env: { PATH: SPAWN_PATH } });
+    const client = new RpcClient(child);
+    await expect(client.request('initialize', {}, 10_000)).rejects.toThrow(/failed to spawn server: .*ENOENT/);
+    // later requests fail fast with the same fatal error instead of hanging to the timeout
+    await expect(client.request('tools/call', {}, 10_000)).rejects.toThrow(/ENOENT/);
+    await client.close(); // no 'exit' will ever come; must still resolve
+  });
+
+  it('0ba70e47 AC3b: a non-JSON stdout line is ignored and the real response still resolves', async () => {
+    const client = new RpcClient(
+      spawnNode(
+        `process.stdin.once('data', () => { console.log('{broken json'); console.log('plain banner');
+         console.log(JSON.stringify({ jsonrpc: '2.0', id: 1, result: { ok: true } })); setTimeout(() => process.exit(0), 50); });`
+      )
+    );
+    const r = await client.request('ping', {}, 10_000);
+    expect(r.result).toEqual({ ok: true });
+    await client.close();
+  });
+
+  it('0ba70e47 AC3b: when the server dies after emitting garbage, the rejection carries the garbage and stderr', async () => {
+    const client = new RpcClient(
+      spawnNode(
+        `process.stdin.once('data', () => { console.log('{broken json'); console.error('boom-on-stderr'); process.exit(3); });`
+      )
+    );
+    const err: Error = await client.request('ping', {}, 10_000).then(
+      () => {
+        throw new Error('expected rejection');
+      },
+      (e: Error) => e
+    );
+    expect(err.message).toMatch(/server exited \(3\)/);
+    expect(err.message).toContain('{broken json');
+    expect(err.message).toContain('boom-on-stderr');
+    await client.close();
+  });
+
+  it('0ba70e47 AC3b: settled requests leave no per-request exit listeners on the child', async () => {
+    const child = spawnNode(
+      `process.stdin.on('data', (d) => { for (const l of String(d).split('\\n').filter(Boolean)) {
+         const m = JSON.parse(l); console.log(JSON.stringify({ jsonrpc: '2.0', id: m.id, result: {} })); } });`
+    );
+    const client = new RpcClient(child);
+    const baseline = child.listenerCount('exit');
+    for (let i = 0; i < 25; i++) await client.request('ping', {}, 10_000);
+    expect(child.listenerCount('exit')).toBe(baseline);
+    await client.close();
+  });
 });
