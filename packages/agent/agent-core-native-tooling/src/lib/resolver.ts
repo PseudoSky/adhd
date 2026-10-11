@@ -344,7 +344,10 @@ function resolveShell(
   // the sandbox is off: there is no injected proxy to pass through.
   if (ctx.sandbox !== false) {
     const key = SHELL_SERVER.envKeys.childEnvAllowlist;
-    env[key] = mergeCsv(env[key], SHELL_PROXY_ENV_KEYS);
+    // A value may arrive via `shell.env` OR the ambient `ctx.env` (which
+    // `withBaseEnv` would otherwise let this key shadow); keep both.
+    const existing = [env[key], ctx.env?.[key]].filter(Boolean).join(',');
+    env[key] = mergeCsv(existing, SHELL_PROXY_ENV_KEYS);
   }
 
   const config: McpServerConfig = {

@@ -173,6 +173,35 @@ describe('resolveNativeTooling — task-time resolution (ADR-0008 D2/D4)', () =>
       expect(new Set(names).size).toBe(names.length);
     });
 
+    it('0ba70e47 AC3a: a value supplied via ctx.env is MERGED with the proxy keys, not replaced (M1)', () => {
+      const [shell] = resolveNativeTooling(
+        { fs: false, shell: true },
+        { cwd: '/p/a', env: { [KEY]: 'AMBIENT_ONE, HTTP_PROXY,' } }
+      ) as Stdio[];
+      const names = shell.env![KEY].split(',');
+      expect(names.slice(0, 2)).toEqual(['AMBIENT_ONE', 'HTTP_PROXY']);
+      expect(names).toEqual(expect.arrayContaining([...SHELL_PROXY_ENV_KEYS, 'AMBIENT_ONE']));
+      expect(new Set(names).size).toBe(names.length);
+    });
+
+    it('0ba70e47 AC3a: ctx.env and shell.env values for the allowlist are BOTH kept (shell.env first)', () => {
+      const [shell] = resolveNativeTooling(
+        { fs: false, shell: { env: { [KEY]: 'FROM_SHELL' } } },
+        { cwd: '/p/a', env: { [KEY]: 'FROM_CTX' } }
+      ) as Stdio[];
+      const names = shell.env![KEY].split(',');
+      expect(names.slice(0, 2)).toEqual(['FROM_SHELL', 'FROM_CTX']);
+      expect(names).toEqual(expect.arrayContaining([...SHELL_PROXY_ENV_KEYS]));
+    });
+
+    it('0ba70e47 AC3a: a ctx.env value with sandbox off is passed through untouched', () => {
+      const [shell] = resolveNativeTooling(
+        { fs: false, shell: true },
+        { cwd: '/p/a', sandbox: false, env: { [KEY]: 'FOO' } }
+      ) as Stdio[];
+      expect(shell.env![KEY]).toBe('FOO');
+    });
+
     it('0ba70e47 AC3a: a user value with sandbox off is passed through untouched', () => {
       expect(resolveShellEnv({ env: { [KEY]: 'FOO' } }, { sandbox: false })?.[KEY]).toBe('FOO');
     });
