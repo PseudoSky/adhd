@@ -28,6 +28,7 @@ import { selectionOf, wireModelOf } from '../providers/resolve-selection.js';
 import { readPartialUsage, type IProviderPartialUsage, type ProviderTokenUsage } from '../providers/partial-usage.js';
 import { buildModelResponsePayload, sourceFromResponse } from './model-response-payload.js';
 import { computeOverheadMs } from '../providers/call-timing.js';
+import { parseShellExitStatus } from './shell-exit-status.js';
 
 import type { McpClientRegistry } from '../clients/registry.js';
 import type { PolicyEngine } from './policy.js';
@@ -1467,6 +1468,8 @@ export class Orchestrator {
                 rawResult = error instanceof Error ? error.message : String(error);
               }
 
+              // 61358b6f: structured exit status from the shim trailer (success path only).
+              const exitStatus = isErr ? undefined : parseShellExitStatus(target.tool, rawResult);
               const fullText =
                 typeof rawResult === 'string' ? rawResult : JSON.stringify(rawResult);
               const { tokens: estTokens, estimated: estTokensEstimated } =
@@ -1492,6 +1495,7 @@ export class Orchestrator {
                   callId,
                   tool: qualifiedToolName,
                   isError: isErr,
+                  ...(exitStatus !== undefined ? { exitStatus } : {}),
                   result: (fullText ?? '').slice(0, 500),
                   tool_call_est_result_tokens: estTokens,
                   ...(estTokensEstimated
@@ -1525,6 +1529,7 @@ export class Orchestrator {
                 result: rawResult,
                 isError: isErr,
                 ...(isDenial ? { isDenial: true } : {}),
+                ...(exitStatus !== undefined ? { exitStatus } : {}),
                 estResultTokens: estTokens,
               });
               const transformPayload: PostToolCallPayload = {
@@ -2023,6 +2028,11 @@ export class Orchestrator {
               );
             }
 
+            // 61358b6f: structured exit status from the shim trailer (success path only).
+            const exitStatus = isError
+              ? undefined
+              : parseShellExitStatus(resolved.tool, toolResult);
+
             // Tokenize the FULL, untruncated result BEFORE the 500-char truncation
             // below — tokenizing the already-truncated summary would undercount
             // every large tool result (DESIGN.md §5).
@@ -2065,6 +2075,7 @@ export class Orchestrator {
                 callId: toolCall.id,
                 tool: qualifiedToolName,
                 isError,
+                ...(exitStatus !== undefined ? { exitStatus } : {}),
                 result: resultSummary,
                 tool_call_est_result_tokens: toolCallEstResultTokens,
                 ...(toolCallEstResultTokensEstimated
@@ -2102,6 +2113,7 @@ export class Orchestrator {
               result: toolResult,
               isError,
               ...(isDenial ? { isDenial: true } : {}),
+              ...(exitStatus !== undefined ? { exitStatus } : {}),
               estResultTokens: toolCallEstResultTokens,
             });
 

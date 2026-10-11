@@ -135,6 +135,11 @@ export const SHELL_SERVER = {
      * every allowlisted network call fails DNS inside the sandbox (0ba70e47).
      */
     childEnvAllowlist: 'MCP_SHELL_CHILD_ENV_ALLOWLIST',
+    /**
+     * Original `PATH` handed to the exit-status launcher (61358b6f). It travels
+     * through the server's own child-env allowlist, never a server patch.
+     */
+    origPath: 'ADHD_SHIM_ORIG_PATH',
   },
 } as const;
 

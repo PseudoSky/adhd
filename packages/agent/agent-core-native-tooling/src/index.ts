@@ -16,6 +16,19 @@ export {
 } from './lib/resolver.js';
 export type { NativeResolveContext, ResolvedNativeServer } from './lib/resolver.js';
 
+// Shell exit-status launcher (61358b6f): the unmodified shell server drops the exit
+// status; a PATH launcher dir reports non-zero exits as a `[exit status: N]` line.
+export {
+  EXIT_SHIM_ORIG_PATH_ENV,
+  EXIT_SHIM_PROTECTED,
+  LAUNCHER_SOURCE,
+  SHELL_EXIT_SENTINEL_RE,
+  formatExitSentinel,
+  isExitShimProtected,
+  prepareExitShimDir,
+} from './lib/exit-shim.js';
+export type { ExitShimDir } from './lib/exit-shim.js';
+
 export { matchPermission } from './lib/permissions.js';
 
 // Line-ending preservation for the adopted fs server's LF normalization (8dd148cf).

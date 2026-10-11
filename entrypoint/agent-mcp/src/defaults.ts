@@ -24,6 +24,7 @@ import {
   resolveFsRoots,
   resolveShellRoot,
   resolveNativeToolingMap,
+  prepareExitShimDir,
   DISPATCH_SELF_COMMAND_ENV,
   DISPATCH_SELF_ARGS_ENV,
 } from '@adhd/agent-core-native-tooling';
@@ -36,8 +37,12 @@ import type {
 } from '@adhd/agent-base-types';
 import type { PermissionGate } from '@adhd/agent-engine-orchestrator';
 
+import { join } from 'node:path';
+
+import { resolveLogRoots } from './config.js';
 import {
   addRunSrtAllowWrite,
+  addRunSrtReadOnlyDir,
   ensureBinDirOnPath,
   getSrtRunSettingsPath,
   resolveNativeBinDir,
@@ -90,6 +95,11 @@ export interface NativeToolingHostContext {
    * `~/.srt-settings.json`. Built by {@link buildNativeToolingContext}.
    */
   srtSettingsPath?: string;
+  /**
+   * Exit-status launcher directory (61358b6f) for the builtin shell server, built by
+   * {@link buildNativeToolingContext}. Absent ⇒ the legacy unwrapped shell (no `[exit status: N]`).
+   */
+  exitShim?: { dir: string; origPath: string };
   /**
    * Server-wide `nativeTooling` from the resolved `@adhd/environment` config
    * (`env.config.nativeTooling`) — merged BENEATH an agent's own
@@ -159,6 +169,7 @@ function toResolveContext(ctx: NativeToolingHostContext) {
     dispatchSelf: ctx.dispatchSelf,
     sandbox: ctx.sandbox,
     srtSettingsPath: ctx.srtSettingsPath,
+    exitShim: ctx.exitShim,
   };
 }
 
@@ -380,6 +391,52 @@ export interface BuildNativeToolingContextOptions {
   sandbox?: boolean;
   /** Server-wide `nativeTooling` merged beneath the agent's own (A1). */
   defaultNativeTooling?: NativeToolingConfig;
+  /**
+   * Parent directory for the exit-status launcher directory (61358b6f); pass
+   * {@link defaultExitShimRoot}() from a real host. OPT-IN: absent (or `false`) builds no shim and
+   * the shell then reports no `[exit status: N]` (so a bare unit call never writes under the
+   * operator's home). MUST lie outside every sandbox-writable root; the run policy also denies
+   * writes to the resulting directory.
+   */
+  exitShimRoot?: string | false;
+}
+
+/** The production exit-shim parent directory: `<agent-mcp temp root>/exit-shim` (61358b6f). */
+export function defaultExitShimRoot(): string {
+  return join(resolveLogRoots().temp, 'exit-shim');
+}
+
+/** Per-process memo: `rootDir\0origPath` → the prepared (idempotent, content-keyed) directory. */
+const exitShimMemo = new Map<string, { dir: string; origPath: string }>();
+
+/**
+ * The exit-status launcher directory for this process (61358b6f), created once per
+ * `(root, PATH)`. Under the sandbox it is made read-only inside the run policy. A failure to build
+ * it is reported on stderr and degrades to the legacy shell (no trailer) rather than failing the
+ * task: the shim adds telemetry, it is not an access control.
+ */
+function hostExitShim(
+  origPath: string | undefined,
+  opts: BuildNativeToolingContextOptions
+): { dir: string; origPath: string } | undefined {
+  if (!opts.exitShimRoot || !origPath) return undefined;
+  try {
+    const rootDir = opts.exitShimRoot;
+    const key = `${rootDir}\0${origPath}`;
+    let shim = exitShimMemo.get(key);
+    if (!shim) {
+      shim = prepareExitShimDir({ origPath, rootDir });
+      exitShimMemo.set(key, shim);
+    }
+    if (opts.sandbox !== false) addRunSrtReadOnlyDir(shim.dir);
+    return shim;
+  } catch (err) {
+    process.stderr.write(
+      `agent-mcp: exit-status shim unavailable (${err instanceof Error ? err.message : String(err)}); ` +
+        'shell results will not carry [exit status: N]\n'
+    );
+    return undefined;
+  }
 }
 
 /**
@@ -415,6 +472,7 @@ export function buildNativeToolingContext(
     env: Object.keys(env).length > 0 ? env : undefined,
     sandbox: opts.sandbox,
     srtSettingsPath,
+    exitShim: hostExitShim(path, opts),
     defaultNativeTooling: opts.defaultNativeTooling,
   };
 }

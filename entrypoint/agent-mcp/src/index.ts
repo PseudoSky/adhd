@@ -48,6 +48,7 @@ import { createPricingService } from "./pricing/service.js";
 import {
   allowedRootsFromResolvedConfig,
   buildNativeToolingContext,
+  defaultExitShimRoot,
   nativeToolingFromResolvedConfig,
   withResolvedNativeTooling,
   withResolvedNativeToolingSession,
@@ -430,7 +431,7 @@ async function main() {
         env.config.nativeTooling.fs.allowedRoots
     );
     const nativeToolingContext = (cwd?: string) =>
-        buildNativeToolingContext({ cwd, roots: allowedRoots, defaultNativeTooling });
+        buildNativeToolingContext({ cwd, roots: allowedRoots, defaultNativeTooling, exitShimRoot: defaultExitShimRoot() });
     const resolvingAgentStore = withResolvedNativeTooling(agentStore, nativeToolingContext);
     const resolvingSessionStore = withResolvedNativeToolingSession(sessionStore, nativeToolingContext);
 

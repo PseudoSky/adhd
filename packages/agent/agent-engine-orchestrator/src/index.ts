@@ -21,6 +21,11 @@ export {
 } from './engine/tool-result-cap.js';
 export type { ToolResultCapOutcome } from './engine/tool-result-cap.js';
 export {
+  SHELL_EXECUTE_TOOL,
+  SHELL_EXIT_SENTINEL_RE,
+  parseShellExitStatus,
+} from './engine/shell-exit-status.js';
+export {
   capOrSpillToolResult,
   resolveToolResultSpill,
   validateToolResultSpillDir,

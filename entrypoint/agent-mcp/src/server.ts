@@ -31,6 +31,7 @@ import { subscribeToTaskDone, emitTaskEvent } from './streaming/event-bus.js';
 import {
   allowedRootsFromResolvedConfig,
   buildNativeToolingContext,
+  defaultExitShimRoot,
   nativeToolingFromResolvedConfig,
   withResolvedNativeTooling,
   withResolvedNativeToolingSession,
@@ -470,6 +471,7 @@ export function createServer(deps: ServerDeps): Server {
       roots: allowedRoots,
       dispatchSelf: deps.dispatchSelf,
       defaultNativeTooling,
+      exitShimRoot: defaultExitShimRoot(),
     });
   };
   const resolvingAgentStore = withResolvedNativeTooling(

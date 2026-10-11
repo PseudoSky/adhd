@@ -112,6 +112,12 @@ export interface ProvisionSrtPolicyOptions {
   spillTempRoot?: string;
   /** Extra network allow-list domains to union into `allowedDomains`. */
   allowedDomains?: string[];
+  /**
+   * Extra paths to union into `denyWrite` (additive, NOT host-managed: later provisions of the same
+   * file keep them). Used for the exit-status shim directory (61358b6f), which the sandboxed shell
+   * must be able to execute but never modify.
+   */
+  denyWrite?: string[];
 }
 
 export interface ProvisionedSrtPolicy {
@@ -619,6 +625,21 @@ export function addRunSrtAllowWrite(roots: readonly string[]): void {
 }
 
 /**
+ * Make the exit-status shim directory (61358b6f) READABLE and EXECUTABLE but never WRITABLE inside the
+ * ACTIVE per-run `srt` policy: `allowRead` (so it stays reachable even under a `denyRead` region) and
+ * `denyWrite` (which `srt` honors even inside an `allowWrite` root, e.g. the temp dir), so the model
+ * cannot plant a launcher that every later command would run. Additive, idempotent, lock-guarded; a
+ * no-op when no per-run policy is active (bare `srt` / sandbox off).
+ */
+export function addRunSrtReadOnlyDir(dir: string): void {
+  if (!activeRunSettingsPath) return;
+  const key = `ro:${dir}`;
+  if (appliedRunRoots.has(key)) return;
+  provisionSrtPolicy({ settingsPath: activeRunSettingsPath, allowRead: [dir], denyWrite: [dir], applySandboxExtras: true });
+  appliedRunRoots.add(key);
+}
+
+/**
  * Forget + best-effort remove the per-run file WE created (never an operator
  * override). Call on shutdown so a run leaves no stale policy behind.
  */
@@ -824,7 +845,10 @@ export function provisionSrtPolicy(
     );
 
     const denyRead = union(toArray(current.filesystem?.denyRead), defaultSrtDenyRead());
-    const denyWrite = union(withoutManaged(toArray(current.filesystem?.denyWrite), prevManaged.denyWrite), managedDeny);
+    const denyWrite = union(
+      union(withoutManaged(toArray(current.filesystem?.denyWrite), prevManaged.denyWrite), managedDeny),
+      opts.denyWrite ?? []
+    );
 
     const next: SrtSettings = {
       ...current,

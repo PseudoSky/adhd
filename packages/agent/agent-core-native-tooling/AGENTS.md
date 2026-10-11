@@ -64,6 +64,11 @@ Verified against the adopted servers: the shell server's tool is `shell_execute`
 (arg `command: string[]`), and its allow-list env is `ALLOW_COMMANDS` /
 `ALLOWED_COMMANDS` / `ALLOW_PATTERNS` — it has **no** deny-list env.
 
+## Default shell allowlist and exit status (069316e5, 61358b6f)
+
+- `DEFAULT_SHELL_ALLOW_COMMANDS` (catalog) is emitted only when neither `allowCommands` nor `allowPatterns` is supplied; a caller list replaces it in full. Every entry must be accepted by the real server (it rejects `sed`/`node`/`python3`/`env`/`xargs`/interpreters by policy) — `default-shell-allowlist.e2e.test.ts` enforces it. See README "Default shell allowlist".
+- The server drops exit status; `exit-shim.ts` + `ctx.exitShim` recover it as a trailing `[exit status: N]` stderr line via a PATH launcher dir (server unmodified; allowlist still the server's). `SHELL_EXIT_SENTINEL_RE` is mirrored in `agent-engine-orchestrator` (`engine/shell-exit-status.ts`); agent-mcp's `shell-exit-status-contract.test.ts` pins them equal. Absolute-path allowlist entries bypass the shim (documented gap). See README "Shell exit status".
+
 ## Human-gated adoption (ADR-0008 D7 / NAT-TOOL-8) — APPROVED
 
 - **Approved by:** pseudosky (repo owner)

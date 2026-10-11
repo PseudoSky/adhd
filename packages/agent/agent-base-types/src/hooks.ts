@@ -81,6 +81,14 @@ export interface PostToolCallPayload {
    */
   isDenial?: boolean;
   /**
+   * The shell command's exit status (61358b6f), present only on a SUCCESSFUL
+   * `shell_execute` result whose last text part carries the exit shim's
+   * `[exit status: N]` trailer (i.e. a non-zero exit). A non-zero exit is not a
+   * fault, so `isError` is unchanged; absent ⇒ exit 0, a non-shell tool, or no
+   * shim. Also recorded on the persisted `TOOL_RESULT` event.
+   */
+  exitStatus?: number;
+  /**
    * Token estimate for the FULL, untruncated tool result (tokenized before the
    * 500-char truncation applied to the stored `task_events.TOOL_RESULT.result` summary).
    */
