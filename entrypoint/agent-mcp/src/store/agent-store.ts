@@ -109,7 +109,7 @@ export class AgentStore {
     if (!row) {
       throw new ToolError(
         'AGENT_NOT_FOUND',
-        `Agent '${name}' not found. ${this.describeRegisteredNames()}`
+        `Agent '${name}' not found. ${this.safeDescribeRegisteredNames()}`
       );
     }
 
@@ -219,6 +219,23 @@ export class AgentStore {
         ? ` (+${names.length - AGENT_NOT_FOUND_NAME_CAP} more; use \`agent_list\` for the full roster)`
         : '';
     return `Registered agents: ${shown}${more}.`;
+  }
+
+  /**
+   * {@link describeRegisteredNames} for an error message: the roster is a courtesy, so a failure reading it
+   * (locked DB, schema drift) must never replace the typed AGENT_NOT_FOUND the caller is owed. Falls back to
+   * pointing at `agent_list`. (b3999dfa AC5)
+   */
+  private safeDescribeRegisteredNames(): string {
+    try {
+      return this.describeRegisteredNames();
+    } catch (err) {
+      logger.warn(
+        { err: err instanceof Error ? err.message : String(err) },
+        'AGENT_NOT_FOUND roster lookup failed; replying without the roster'
+      );
+      return 'Use `agent_list` to see the registered agents.';
+    }
   }
 
   list(): AgentDefinition[] {

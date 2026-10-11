@@ -17,6 +17,10 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { MIGRATIONS_FOLDER, isConcurrentMigrationRace, runMigrationsOn } from "../db/migrate-runner.js";
+import { expectedLedgerRows, idxBeforeCacheCreation1h, tagAt } from "./fixtures/migration-journal.js";
+
+/** The schema every race test seeds: everything BEFORE the cache_creation_1h migration, derived from the journal. */
+const OLD = idxBeforeCacheCreation1h();
 
 const dirs: string[] = [];
 afterEach(() => {
@@ -61,7 +65,7 @@ describe("8333f755 AC3: concurrent openers converge on the migrated schema", () 
     const file = join(mkdtempSync(join(tmpdir(), "adhd-mig-race-db-")), "agent.db");
     dirs.push(file.replace(/\/agent\.db$/, ""));
     const seed = new Database(file);
-    migrate(drizzle(seed), { migrationsFolder: folderUpTo(14) });
+    migrate(drizzle(seed), { migrationsFolder: folderUpTo(OLD) });
     seed.close();
 
     const loser = racingDb(file, () => {
@@ -71,7 +75,7 @@ describe("8333f755 AC3: concurrent openers converge on the migrated schema", () 
     });
     expect(() => runMigrationsOn(loser.conn, loser.db)).not.toThrow();
     expect(columns(loser.conn).filter((c) => c === "cache_creation_1h_tokens")).toHaveLength(1);
-    expect((loser.conn.prepare("SELECT count(*) AS n FROM __drizzle_migrations").get() as { n: number }).n).toBe(16);
+    expect((loser.conn.prepare("SELECT count(*) AS n FROM __drizzle_migrations").get() as { n: number }).n).toBe(expectedLedgerRows());
     loser.conn.close();
   });
 
@@ -79,7 +83,7 @@ describe("8333f755 AC3: concurrent openers converge on the migrated schema", () 
     const file = join(mkdtempSync(join(tmpdir(), "adhd-mig-race-db-")), "agent.db");
     dirs.push(file.replace(/\/agent\.db$/, ""));
     const old = new Database(file);
-    migrate(drizzle(old), { migrationsFolder: folderUpTo(14) });
+    migrate(drizzle(old), { migrationsFolder: folderUpTo(OLD) });
     old
       .prepare("INSERT INTO task_usage (task_id, agent_name, provider_type, model, input_tokens, output_tokens, tool_call_count, model_calls, latency_ms, is_complete, stop_reason, created_at) VALUES ('t1','a','claudecli','haiku',1,1,0,1,0,1,'stop','2026-10-09T00:00:00.000Z')")
       .run();
@@ -101,8 +105,8 @@ describe("8333f755 AC3: concurrent openers converge on the migrated schema", () 
 
     const file = join(mkdtempSync(join(tmpdir(), "adhd-mig-race-db-")), "agent.db");
     dirs.push(file.replace(/\/agent\.db$/, ""));
-    const root = folderUpTo(14);
-    writeFileSync(join(root, "0014_task_cwd.sql"), "ALTR TABLE tasks ADD cwd text;");
+    const root = folderUpTo(OLD);
+    writeFileSync(join(root, `${tagAt(OLD)}.sql`), "ALTR TABLE tasks ADD cwd text;");
     const conn = new Database(file);
     expect(() => runMigrationsOn(conn, drizzle(conn), root)).toThrow(/Failed to run the query .ALTR TABLE/);
     conn.close();
@@ -132,7 +136,7 @@ describe("8333f755 AC3: concurrent openers converge on the migrated schema", () 
   };
 
   it("8333f755 AC3: a lost race backs off (jittered) before the retry instead of spinning", () => {
-    const file = migratedTo(14);
+    const file = migratedTo(OLD);
     const sleeps: number[] = [];
     const loser = racingDb(file, () => {
       const rival = new Database(file);
@@ -145,7 +149,7 @@ describe("8333f755 AC3: concurrent openers converge on the migrated schema", () 
   });
 
   it("8333f755 AC3: contention (SQLITE_BUSY) is retried with capped exponential jittered backoff, then converges", () => {
-    const file = migratedTo(14);
+    const file = migratedTo(OLD);
     const sleeps: number[] = [];
     const busy = countingDb(file, (n) => {
       if (n <= 3) throw Object.assign(new Error("SQLITE_BUSY: database is locked"), { code: "SQLITE_BUSY" });
@@ -157,7 +161,7 @@ describe("8333f755 AC3: concurrent openers converge on the migrated schema", () 
   });
 
   it("8333f755 AC3: persistent contention is bounded: 8 attempts, 7 sleeps, then the error surfaces", () => {
-    const file = migratedTo(14);
+    const file = migratedTo(OLD);
     const sleeps: number[] = [];
     const busy = countingDb(file, () => {
       throw new Error("SQLITE_BUSY: database is locked");
@@ -170,7 +174,7 @@ describe("8333f755 AC3: concurrent openers converge on the migrated schema", () 
   });
 
   it("8333f755 AC3: drift (object exists but the ledger never recorded the migration) surfaces after ONE confirming retry, not eight", () => {
-    const file = migratedTo(14);
+    const file = migratedTo(OLD);
     const prep = new Database(file);
     prep.exec("ALTER TABLE task_usage ADD COLUMN cache_creation_1h_tokens integer"); // applied out of band: no ledger row
     prep.close();
@@ -186,6 +190,17 @@ describe("8333f755 AC3: concurrent openers converge on the migrated schema", () 
     expect(drifted.begins()).toBe(2); // the failing attempt + one confirming retry
     expect(sleeps).toHaveLength(1);
     drifted.conn.close();
+  });
+
+  it("b3999dfa AC6: the seeded 'old schema' and the expected ledger size are derived from the journal, not hardcoded", () => {
+    const file = migratedTo(OLD);
+    const seeded = new Database(file);
+    expect(columns(seeded)).not.toContain("cache_creation_1h_tokens"); // OLD really is the schema before that migration
+    expect((seeded.prepare("SELECT count(*) AS n FROM __drizzle_migrations").get() as { n: number }).n).toBe(OLD + 1);
+    runMigrationsOn(seeded, drizzle(seeded));
+    expect(columns(seeded)).toContain("cache_creation_1h_tokens");
+    expect((seeded.prepare("SELECT count(*) AS n FROM __drizzle_migrations").get() as { n: number }).n).toBe(expectedLedgerRows());
+    seeded.close();
   });
 
   it("8333f755 AC3: the race signatures are narrow -- a bare 'exists' in unrelated text is not a race", () => {

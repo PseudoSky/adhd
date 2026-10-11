@@ -4,6 +4,12 @@
 
 - **agent-mcp:** the CRLF-preserving eol hook now rewrites via temp-file + rename preserving file mode, skips with a warning when a competing write lands mid-rewrite, bounds its pending-call map (1024 entries / 10 min TTL), and never reads files over 8 MiB; e2e covers an `isError:true` MCP result through the real engine (19354419 AC1 AC2 AC3 AC4 AC5)
 - **agent-mcp:** `AGENT_NOT_FOUND` now lists the registered agent names (sorted, capped at 20 with "+N more", names only — no system prompts), and the `agent` tool description says how to discover valid names (1b947d91 AC1 AC2 AC3)
+- **agent-mcp:** a failure while reading the registered-agent roster (locked database, schema drift) can no longer replace the `AGENT_NOT_FOUND` error: the typed error is still thrown, pointing at `agent_list`. The agent-tool-description test now drives both `agent` descriptors through the real server instead of regexing `server.ts`. (b3999dfa AC5)
+- **agent-mcp:** `llms.txt` states the real `ADHD_AGENT_TOOL_RESULT_MAX_CHARS` default (6000, not 20000). (b3999dfa AC4)
+
+### Documentation
+
+- AGENTS.md "Database Migrations" and `migrate-runner.ts` document that drizzle skips a migration whose journal `when` is not above the newest ledger entry; the migration tests now derive their seed point and expected ledger size from the journal and load `migrate-child.mjs` with `--experimental-strip-types`. `usage` summary `est_cost_usd` stays snake_case by decision, documented in `docs/logging.md`. (b3999dfa AC6 AC7 AC9)
 
 ## 2.3.11 (2026-10-10)
 

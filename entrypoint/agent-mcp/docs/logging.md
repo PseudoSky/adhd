@@ -328,7 +328,7 @@ and the unmeasured call is a zero-token `unmeasured` row at turn grain.
 `cli_reported_cost_usd` is the provider's own dollar figure (`claudecli` `total_cost_usd`) for comparison with
 `est_cost_usd`; `cache_creation_1h_tokens` is the 1-hour-TTL subset of `cache_creation_tokens` (priced at 2x
 base input versus 1.25x for the 5-minute tier). The `usage` summary on `task` / `result` (`direct` and `subtree`)
-includes `est_cost_usd`, `null` when any contributing task could not be priced or measured.
+includes `est_cost_usd`, `null` when any contributing task could not be priced or measured. It is snake_case beside the camelCase token counters (`inputTokens`, `peakContextTokens`) by decision: it is the same figure under the same name as the `usage_query` rows, their `summary` and the `task_usage.est_cost_usd` column, so one name follows a cost across every surface. (b3999dfa AC9)
 
 ### SQL against the store
 
