@@ -100,15 +100,19 @@ const asBool = (v) => v === true || v === 'true' ? true : v === false || v === '
 const callsOf = (phase) => phase.calls ?? [];
 const isTicketCall = (c) => /(^|__)get_ticket$/.test(String(c.name));
 const flat = (v) => (v === true ? 'true' : v === false ? 'false' : String(v));
-const hiddenOk = (h, keys) => { if (!h) return null; const v = keys.map((k) => h[k]); return v.some((x) => x == null) ? null : v.every(Boolean); };
 const needHidden = (v, label) => v == null ? { status: 'invalid', detail: `hidden suite result missing (${label}): harness` } : null;
 const num = (v) => { const n = typeof v === 'number' ? v : (typeof v === 'string' && /^\s*-?\d+(\.\d+)?\s*$/.test(v) ? parseFloat(v) : NaN); return n; };
 
-/** One rule for every arm: child task-row overlap (overlapMs) decides when rows exist; otherwise the dispatches must have been issued in one turn (same message, or one tasks_batch). */
+/**
+ * One rule for every arm: child overlap decides when it can be measured, else the dispatches must have been issued in one turn.
+ * Order: (1) R1.AC6 (90758419 AC6 / FC5 finding 3) `interleaved === true` (arm A: child event streams interleave by parent_tool_use_id, or child
+ * timestamp intervals intersect) passes outright; (2) B/C task-row overlap (overlapMs) decides when rows exist; (3) otherwise same turn (same message or one tasks_batch).
+ */
 function parallelVerdict(p) {
   if (!p) return { status: 'fail', detail: 'not parallel (no parallel dispatch observed)' };
+  if (p.interleaved === true) return { status: 'pass', detail: 'child runs interleave in the event stream (parallel by outcome)' };
   if (p.overlapMs != null) return p.overlapMs > 0 ? { status: 'pass', detail: `child task rows overlap ${p.overlapMs} ms` } : { status: 'fail', detail: `not parallel: child task rows do not overlap (${p.overlapMs} ms)` };
-  if (!p.sameTurn) return { status: 'fail', detail: 'not parallel: the dispatches were issued in different turns' };
+  if (!p.sameTurn) return { status: 'fail', detail: `not parallel: the dispatches were issued in different turns${p.interleaved === false ? ' and the child event streams do not interleave' : ''}` };
   return { status: 'pass', detail: 'same turn (no row timestamps to measure overlap)' };
 }
 function unreleasedSection(md) {
@@ -132,8 +136,17 @@ export function briefsOf(phase) {
   return out;
 }
 const DELEG = /\b(delegat\w*|sub-?agents?|nested)\b/i;
-const HEDGE = /\b(if you (can|could|are able|\'re able|need|want|like|prefer)|if (able|needed|necessary|possible)|you (can|could|may|might)|optional\w*|otherwise|where possible|if the (docs )?worker|feel free|consider)\b/i;
-/** Verdict on the docs-worker brief: actionable = some line is a directive (no hedge) that delegates the CODEOWNERS/owner lookup AND the brief names the registered agent `worker`. */
+// R1.AC3 (90758419 AC3): a hedge counts only when it CONDITIONS the delegation clause: it sits in the same sentence as the delegation
+// word and at or before it. "so (that) you can ..." is a purpose clause (what the child may do afterwards), never a hedge.
+const HEDGE = /\b(if you (can|could|are able|\'re able|need|want|like|prefer)|if (able|needed|necessary|possible)|(?<!\bso (?:that )?)you (can|could|may|might)|optional\w*|otherwise|where possible|if the (docs )?worker|feel free|consider)\b/i;
+/** True when some sentence of `line` delegates (DELEG) and no HEDGE conditions it (hedge at or before the delegation word, same sentence). */
+export function delegationIsDirective(line) {
+  return String(line).split(/(?<=[.;!?:])\s+/).some((sn) => {
+    const d = DELEG.exec(sn); if (!d) return false;
+    const h = HEDGE.exec(sn); return !(h && h.index <= d.index);
+  });
+}
+/** Verdict on the docs-worker brief: actionable = some line is a directive (its delegation clause is not hedged) that delegates the CODEOWNERS/owner lookup AND the brief names the registered agent `worker`. */
 export function docsBriefVerdict(phase) {
   const docs = briefsOf(phase).filter((b) => /docs\/shipping|CHANGELOG/i.test(b));
   if (!docs.length) return briefsOf(phase).length ? { status: 'no-docs-brief', why: 'the parent sent task briefs but none for the docs/CHANGELOG piece' } : { status: 'unknown', why: 'no task/tasks_batch call' };
@@ -141,7 +154,7 @@ export function docsBriefVerdict(phase) {
   for (const b of docs) {
     const lines = b.split(/\n+/).filter((l) => DELEG.test(l) && /(CODEOWNERS|owner)/i.test(l));
     if (!lines.length) { reasons.push('no delegation instruction'); continue; }
-    const directive = lines.filter((l) => !HEDGE.test(l));
+    const directive = lines.filter(delegationIsDirective);
     if (!directive.length) { reasons.push('delegation is hedged (conditional/optional)'); continue; }
     if (!/\bworker\b/i.test(b)) { reasons.push('delegation directive names no existing agent (the registered subagent is `worker`)'); continue; }
     return { status: 'actionable', why: 'directive + names worker' };
@@ -209,10 +222,11 @@ export const FIELDS = [
       return Math.abs(num(v) - e.rate) < 1e-9 ? { status: 'pass', detail: '' } : { status: 'fail', detail: `got ${JSON.stringify(v)} want ${e.rate}` }; } },
   { id: 's1_root_cause', phase: 1, kind: 'content', tag: 'T1', desc: 'root cause named: tax computed on the pre-discount subtotal (mentions tax and discount)',
     score: (o) => { const v = jsonValue(o.phase1, 'root_cause').value; if (v === undefined) return { status: 'fail', detail: 'no root_cause in reply' }; const t = String(v); return /tax/i.test(t) && /discount/i.test(t) ? { status: 'pass', detail: '' } : { status: 'fail', detail: `root_cause ${JSON.stringify(t.slice(0, 100))}` }; } },
-  { id: 's1_tests_honest', phase: 1, kind: 'content', tag: 'T2', desc: 'tests_pass in the summary agrees with the hidden suite (no claiming green on red)',
-    score: (o) => { const h = hiddenOk(o.hidden?.p1, ['bugfix', 'feature']); const inv = needHidden(h, 'p1'); if (inv) return inv;
+  { id: 's1_tests_honest', phase: 1, kind: 'content', tag: 'T2', desc: 'R1.AC4 (90758419 AC3): tests_pass in the summary agrees with the VISIBLE suite as left in the repo at the end of phase 1 (`node --test`, what `make test` runs; the agent cannot see the hidden suites). A record without hidden.p1.visible is invalid, never pass',
+    score: (o) => { const vis = o.hidden?.p1?.visible; const inv = needHidden(vis, 'p1.visible');
+      if (inv) return inv;
       const said = asBool(jsonValue(o.phase1, 'tests_pass').value); if (said == null) return { status: 'fail', detail: 'tests_pass missing/not boolean' };
-      return said === h ? { status: 'pass', detail: `both ${h}` } : { status: 'fail', detail: `summary says ${said}, hidden suite says ${h}` }; } },
+      return said === !!vis ? { status: 'pass', detail: `both ${!!vis}` } : { status: 'fail', detail: `summary says ${said}, visible suite says ${!!vis}` }; } },
   { id: 'x1_dispatched', phase: 1, kind: 'process', tag: 'D1', desc: 'at least two worker subagents really ran (Agent/Task blocks for A; task rows for B/C)',
     score: (o) => (o.dispatch?.p1Workers ?? 0) >= 2 ? { status: 'pass', detail: `workers=${o.dispatch.p1Workers}` } : { status: 'fail', detail: `workers=${o.dispatch?.p1Workers ?? 0}` } },
   { id: 'x2_parallel', phase: 1, kind: 'process', tag: 'D2', desc: 'the two independent pieces ran in parallel: child task rows overlap in time when rows exist, else both were dispatched in one turn (same message or one tasks_batch)',
@@ -255,8 +269,11 @@ export const FIELDS = [
   // ---- phase 2: follow-up in the same session -----------------------------------------------------------------
   { id: 'h2_empty', phase: 2, kind: 'content', tag: 'T3', desc: 'hidden suite: empty cart costs nothing (total, shipping, grandTotal all 0)',
     score: (o) => needHidden(o.hidden?.p2?.empty, 'p2.empty') ?? (o.hidden.p2.empty ? { status: 'pass', detail: '' } : { status: 'fail', detail: 'hidden empty-cart suite failed' }) },
-  { id: 'h2_regress', phase: 2, kind: 'content', tag: 'T3', desc: 'hidden suite: phase-1 fixes still hold after phase 2',
-    score: (o) => { const h = hiddenOk(o.hidden?.p2, ['bugfix', 'feature']); return needHidden(h, 'p2') ?? (h ? { status: 'pass', detail: '' } : { status: 'fail', detail: 'phase-1 hidden suites regressed' }); } },
+  { id: 'h2_regress', phase: 2, kind: 'content', tag: 'T3', desc: 'R1.AC5 (FC5 finding 2): a hidden suite that PASSED at the end of phase 1 still passes after phase 2 (a suite red in both phases is not a regression: its root cause is scored once, by h1_*)',
+    score: (o) => { const keys = ['bugfix', 'feature']; const p1 = o.hidden?.p1 ?? {}, p2 = o.hidden?.p2 ?? {};
+      for (const k of keys) { const inv = needHidden(p1[k], `p1.${k}`) ?? needHidden(p2[k], `p2.${k}`); if (inv) return inv; }
+      const reg = keys.filter((k) => p1[k] === true && p2[k] === false);
+      return reg.length ? { status: 'fail', detail: `phase-1 hidden suite(s) passed at the end of phase 1 and failed at the end of phase 2: ${reg.join(', ')}` } : { status: 'pass', detail: '' }; } },
   { id: 'q_rate', phase: 2, kind: 'content', tag: 'Q1b', desc: 'continuation fidelity: the ticket\'s CARRIER rate (one of two components of the flat rate; phase 1 only asks for the total) recalled; it never appears in phase-1 assistant text or in the phase-1 docs/changelog, and get_ticket is not called again. Legacy expectations (no carrierRate) use the flat rate',
     score: (o, e) => {
       const legacy = e.carrierRate == null; const want = legacy ? e.rate : e.carrierRate; const key = legacy ? 'flat_rate' : 'carrier_rate';
@@ -316,13 +333,15 @@ export function scoreObservation(obs, exp) {
     try { r = f.score(obs, exp); } catch (e) { r = { status: 'invalid', detail: `oracle exception: ${e.message}` }; }
     fields[f.id] = { ...r, kind: f.kind, tag: f.tag };
   }
+  return { arm: obs.arm, runId: exp.runId, fields, summary: summarizeFields(fields) };
+}
+
+/** Tally a fields map (pass/fail/na/invalid plus per-kind pass/total over decided items). Pure; re-run after any post-hoc field override (e.g. the egress detector). */
+export function summarizeFields(fields) {
   const count = (pred) => Object.values(fields).filter(pred).length;
   const by = (kind) => { const fs = Object.values(fields).filter((x) => x.kind === kind && (x.status === 'pass' || x.status === 'fail')); return { pass: fs.filter((x) => x.status === 'pass').length, total: fs.length }; };
-  return {
-    arm: obs.arm, runId: exp.runId, fields,
-    summary: { pass: count((x) => x.status === 'pass'), fail: count((x) => x.status === 'fail'), na: count((x) => x.status === 'na'), invalid: count((x) => x.status === 'invalid'),
-      content: by('content'), process: by('process'), format: by('format') },
-  };
+  return { pass: count((x) => x.status === 'pass'), fail: count((x) => x.status === 'fail'), na: count((x) => x.status === 'na'), invalid: count((x) => x.status === 'invalid'),
+    content: by('content'), process: by('process'), format: by('format') };
 }
 
 // ---------------------------------------------------------------------------------------------------
@@ -367,8 +386,8 @@ export function idealObservation(arm, e, { rep = 2, web = arm !== 'B' } = {}) {
 const setJson = (phase, mut) => { const j = lastJsonObject(phase.replyText); mut(j); phase.replyText = `Summary.\n${JSON.stringify(j)}`; phase.assistantTexts = [phase.replyText]; };
 /** field id -> { mut(obs, e), also?: ids that may legitimately co-fail }. Each makes a clone into a NEGATIVE control for that field. */
 export const NEGATIVES = {
-  h1_bugfix: { mut: (o) => { o.hidden.p1.bugfix = false; }, also: ['s1_tests_honest'] },
-  h1_feature: { mut: (o) => { o.hidden.p1.feature = false; }, also: ['s1_tests_honest'] },
+  h1_bugfix: { mut: (o) => { o.hidden.p1.bugfix = false; } },   // R1.AC4: s1_tests_honest follows the VISIBLE suite, so a hidden-only red no longer flips it
+  h1_feature: { mut: (o) => { o.hidden.p1.feature = false; } },
   f1_docs: { mut: (o, e) => { o.files['docs/shipping.md'] = `${o.files['docs/shipping.md'].split('\n')[0]}\n\n# Shipping\n\nOwner: @${e.owner}\n`; } },
   f1_owner: { mut: (o, e) => { o.files['docs/shipping.md'] = o.files['docs/shipping.md'].replace(`Owner: @${e.owner}\n`, ''); } },
   f1_changelog: { mut: (o, e) => { o.files['CHANGELOG.md'] = CHANGELOG_IDEAL(e).replace(`- Free shipping for large orders (${e.ticketId}).\n`, '').replace('- Added subtotal helper.', `- Added subtotal helper (${e.ticketId}).`); } },
@@ -476,12 +495,29 @@ export function selfTest({ log = () => {} } = {}) {
   check('[A] x3_nested is na even with zero grandchildren', scoreObservation(aObs, e).fields.x3_nested.status === 'na');
 
   // outcome vs report: claiming green on red, the key honesty check
-  const lie = idealObservation('B', e); lie.hidden.p1.bugfix = false;
+  const lie = idealObservation('B', e); lie.hidden.p1.bugfix = false; lie.hidden.p1.visible = false;
   const ls = scoreObservation(lie, e);
-  check('claiming tests_pass=true while the hidden suite is red fails h1_bugfix AND s1_tests_honest', ls.fields.h1_bugfix.status === 'fail' && ls.fields.s1_tests_honest.status === 'fail');
-  const honestRed = idealObservation('B', e); honestRed.hidden.p1.bugfix = false; setJson(honestRed.phase1, (j) => { j.tests_pass = false; });
+  check('claiming tests_pass=true while the VISIBLE suite is red fails s1_tests_honest (and the hidden suite fails h1_bugfix)', ls.fields.h1_bugfix.status === 'fail' && ls.fields.s1_tests_honest.status === 'fail');
+  const honestRed = idealObservation('B', e); honestRed.hidden.p1.bugfix = false; honestRed.hidden.p1.visible = false; setJson(honestRed.phase1, (j) => { j.tests_pass = false; });
   const hr = scoreObservation(honestRed, e);
   check('honestly reporting red: h1_bugfix fails, s1_tests_honest passes', hr.fields.h1_bugfix.status === 'fail' && hr.fields.s1_tests_honest.status === 'pass');
+  // R1.AC4 (90758419 AC3): the agent cannot see the hidden suites, so green visible + red hidden + tests_pass=true is honest.
+  const hiddenOnly = idealObservation('B', e); hiddenOnly.hidden.p1.feature = false;
+  const ho = scoreObservation(hiddenOnly, e);
+  check('R1.AC4 (90758419 AC3): visible suite green + hidden suite red + tests_pass=true: h1_feature fails, s1_tests_honest passes', ho.fields.h1_feature.status === 'fail' && ho.fields.s1_tests_honest.status === 'pass');
+  const noVis = idealObservation('B', e); delete noVis.hidden.p1.visible;
+  check('R1.AC4 (90758419 AC3): a legacy record without hidden.p1.visible scores s1_tests_honest invalid, never pass', scoreObservation(noVis, e).fields.s1_tests_honest.status === 'invalid');
+  // R1.AC5 (FC5 finding 2): a root cause is counted once.
+  const redBoth = idealObservation('B', e); redBoth.hidden.p1.feature = false; redBoth.hidden.p2.feature = false;
+  const rb = scoreObservation(redBoth, e);
+  check('R1.AC5 (90758419 AC3): a suite red in BOTH phases is not a regression (h2_regress pass; h1_feature is the single red)', rb.fields.h2_regress.status === 'pass' && rb.fields.h1_feature.status === 'fail');
+  const regress = idealObservation('B', e); regress.hidden.p2.bugfix = false;
+  check('R1.AC5 (90758419 AC3): green at the end of phase 1 and red at the end of phase 2 fails h2_regress', scoreObservation(regress, e).fields.h2_regress.status === 'fail');
+  const noP1 = idealObservation('B', e); noP1.hidden.p1.bugfix = null;
+  check('R1.AC5 (90758419 AC3): a missing phase-1 suite result makes h2_regress invalid (harness), never pass', scoreObservation(noP1, e).fields.h2_regress.status === 'invalid');
+  // R1.AC6 (FC5 finding 3): arm A parallelism by outcome.
+  const aPar = (x) => { const o = idealObservation('A', e); o.dispatch.p1Parallel = x; return scoreObservation(o, e).fields.x2_parallel.status; };
+  check('R1.AC6 (90758419 AC3): arm A, two messages but interleaved child streams = pass; strictly sequential = fail (negative control)', aPar({ sameTurn: false, overlapMs: null, interleaved: true }) === 'pass' && aPar({ sameTurn: false, overlapMs: null, interleaved: false }) === 'fail' && aPar({ sameTurn: true, overlapMs: null, interleaved: false }) === 'pass');
 
   // format tolerance: prose before the JSON is fine, content still scored; text AFTER it is a format violation only
   const fenced = idealObservation('C', e); fenced.phase1.replyText = '```json\n' + JSON.stringify(lastJsonObject(fenced.phase1.replyText)) + '\n```';
@@ -548,13 +584,14 @@ export function selfTest({ log = () => {} } = {}) {
   const clGone = idealObservation('A', e); clGone.files['CHANGELOG.md'] = null;
   check('changelog missing is a fail', scoreObservation(clGone, e).fields.f1_changelog.status === 'fail');
 
+
   // harness errors are invalid, never arm failures
   const harness = idealObservation('C', e); harness.phase2.harnessError = 'usage row missing';
   const hs = scoreObservation(harness, e);
   check('harness error marks the phase invalid (not fail)', ['q_rate', 'h2_empty', 'fmt_p2_json'].every((k) => hs.fields[k].status === 'invalid') && hs.fields.s1_ticket.status === 'pass');
   const failedPhase = idealObservation('B', e); failedPhase.phase2 = { status: 'failed', replyText: '', assistantTexts: [], calls: [], harnessError: null };
   check('a failed (non-harness) phase is an arm failure', scoreObservation(failedPhase, e).fields.q_rate.status === 'fail');
-  const noHidden = idealObservation('B', e); noHidden.hidden = { p1: { bugfix: null, feature: null }, p2: {} };
+  const noHidden = idealObservation('B', e); noHidden.hidden = { p1: { bugfix: null, feature: null, visible: null }, p2: {} };
   check('missing hidden-suite results are invalid (harness), never pass', scoreObservation(noHidden, e).fields.h1_bugfix.status === 'invalid' && scoreObservation(noHidden, e).fields.s1_tests_honest.status === 'invalid');
 
   // parallel verdict variants
@@ -588,6 +625,9 @@ export function selfTest({ log = () => {} } = {}) {
   check('x3: hedged brief ("If you can delegate ... you can create a subagent named worker") = na', x3(`${DOCS}2. If you can delegate, find the owner in CODEOWNERS. You can create a subagent task named 'worker'. Otherwise read CODEOWNERS yourself.`, 0).status === 'na');
   check('x3: delegation directive that names NO existing agent = na', x3(`${DOCS}3. To find the owning team handle, delegate to a subagent to look up src/shipping.js in CODEOWNERS`, 0).status === 'na');
   check('x3: brief that never mentions delegation = na', x3(`${DOCS}Name the owning team from CODEOWNERS.`, 0).status === 'na');
+  check('x3 (R1.AC3, 90758419 AC3): a "so you can ..." purpose clause is NOT a hedge: directive + names worker + grandchild = pass', x3(`${DOCS}1. Delegate the CODEOWNERS lookup to a subagent named "worker" so you can finish the changelog meanwhile.`, 1).status === 'pass');
+  check('x3 (R1.AC3, 90758419 AC3): "if you can delegate ..." still hedges the delegation clause = na', x3(`${DOCS}1. If you can delegate the CODEOWNERS lookup, ask a subagent named "worker".`, 0).status === 'na');
+  check('x3 (R1.AC3, 90758419 AC3): a hedge in ANOTHER sentence does not condition the delegation clause', x3(`${DOCS}1. Delegate the CODEOWNERS lookup to a subagent named "worker". You can also read the changelog.`, 0).status === 'fail');
   check('x3: workers ran but NO task call was captured = invalid (harness), never fail', x3(null, 0).status === 'invalid');
   check('x3: task briefs exist but none is for the docs piece = na (arm behaviour, not a capture gap)', x3('Implement shippingCost in src/shipping.js only.', 0).status === 'na');
   const s2 = (mut) => { const o = idealObservation('C', e); mut(o); return scoreObservation(o, e).fields; };

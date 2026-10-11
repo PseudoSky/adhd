@@ -429,6 +429,9 @@ function cliPhase(events, { prior = null, perProcess = false } = {}) {
 }
 function totalsOf(turns) { return L.sumNorm(turns); }
 
+/** Run-level call list for the detectors (parent AND worker calls, tool_use ids, phase, depth); results capped like the observation's. */
+function trimCalls(calls) { return calls.map((c) => ({ ...c, resultText: c.resultText == null ? null : String(c.resultText).slice(0, 600) })); }
+
 function analyzeA(ctx, raw) {
   const e = ctx.expected; const obs = { arm: 'A', rep: ctx.spec.rep, phase1: null, phase2: null, hidden: { p1: {}, p2: {} }, files: {}, capabilities: {}, models: [], cache: {}, dispatch: {}, attr: null };
   const metrics = { phases: [], warnings: [] };
@@ -457,8 +460,12 @@ function analyzeA(ctx, raw) {
   obs.files = { 'docs/shipping.md': raw.phases[0]?.files?.['docs/shipping.md'] ?? null, 'CHANGELOG.md': raw.phases[0]?.files?.['CHANGELOG.md'] ?? null, 'src/checkout.js': raw.phases[0]?.files?.['src/checkout.js'] ?? null, 'src/summary.js': raw.phases[0]?.files?.['src/summary.js'] ?? null, 'examples/usage.md': raw.phases[1]?.files?.['examples/usage.md'] ?? null };
   obs.capabilities = webCapability('A', ph[0]?.tools || []);
   obs.models = [...new Set(ph.filter(Boolean).flatMap((a) => a.models))];
-  obs.cache = { firstTurnCacheRead: ph[0]?.turns.find((t) => t.parent == null)?.cr ?? null, gapSeconds: null };
-  obs.dispatch = { p1Workers: ph[0]?.parallel.runs ?? 0, p1Grandchildren: null, p2Workers: ph[1]?.parallel.runs ?? 0, p1Parallel: ph[0] ? { sameTurn: ph[0].parallel.sameTurn, overlapMs: null } : null };
+  // R1.AC2 (90758419 AC1): cache-carry inputs (phase-1 last parent turn cache_read + cache_create; phase-2 first parent turn cache_read).
+  obs.cache = { firstTurnCacheRead: ph[0]?.turns.find((t) => t.parent == null)?.cr ?? null, gapSeconds: null, ...(ph[0] && ph[1] ? L.cacheCarryFromTurns(ph[0].turns, ph[1].turns) : {}) };
+  // R1.AC6 (90758419 AC3): arm A parallelism by outcome (interleaved child event streams); native Agent returns instantly so the outstanding-counter alone cannot see it.
+  const ci = ph[0] ? L.childrenInterleavedFromEvents(raw.phases[0].events || []) : null;
+  obs.dispatch = { p1Workers: ph[0]?.parallel.runs ?? 0, p1Grandchildren: null, p2Workers: ph[1]?.parallel.runs ?? 0, p1Parallel: ph[0] ? { sameTurn: ph[0].parallel.sameTurn, overlapMs: null, interleaved: ci.interleaved, interleaveBasis: ci.basis, children: ci.children } : null };
+  metrics.allCalls = trimCalls(ph.flatMap((a, i) => a ? L.allCallsFromCliStream(a.p).map((c) => ({ ...c, phase: i + 1 })) : []));
   if (ph[0]) { const parentOnly = sumUsd(ph[0].turns.filter((t) => t.parent == null)); obs.attr = { kind: 'native', childTurns: ph[0].turns.filter((t) => t.parent != null).length, cliCostUsd: ph[0].acc?.increment.usd ?? 0, parentOnlyUsd: parentOnly }; }
   metrics.thinkingBlocksAllTasks = ph.filter(Boolean).reduce((a, x) => a + x.turns.filter((t) => t.thinkingBlock).length, 0);   // parent + native subagent turns
   metrics.rateLimits = ph.filter(Boolean).flatMap((a) => a.rate).filter(Boolean);
@@ -494,12 +501,13 @@ function analyzeBC(ctx, raw) {
     return { http, turns, calls, parentTexts: http.flatMap((t) => t.sse?.texts || []), replyText: [...(http[http.length - 1]?.sse?.texts || [])].join('\n'), status: 'completed', models: [...new Set(http.map((t) => t.sse?.model).filter(Boolean))],
       tools: (http[0]?.body?.tools || []).map((t) => t.name || t.type), rate: http.map((t) => L.rateLimitFromHeaders(t.headers)), parallel: L.parallelFromHttpTurns(http), stopReasons: http.map((t) => t.sse?.stop), reqTruncated: http.some((t) => t.truncatedReq || t.truncatedResp) };
   };
-  const ph = [null, null];
+  const ph = [null, null]; const allCalls = [];
   raw.phases.forEach((pr, i) => {
     if (!pr.taskId) return;
     const root = pr.taskId; const kidsRows = descendants(root);
     const s = streamFor(root); ph[i] = s;
     const childStreams = kidsRows.map((k) => ({ task: k, s: streamFor(k.id) }));
+    allCalls.push(...s.calls.map((c) => ({ ...c, phase: i + 1, depth: 0 })), ...childStreams.flatMap((cs) => cs.s.calls.map((c) => ({ ...c, phase: i + 1, depth: cs.task.recursionDepth ?? 1 }))));
     const rows = rowsOf(raw.usage?.[i]?.byTask); const parentRow = rows.find((r) => r.task_id === root);
     const direct = parentRow ? parentRow.input_tokens + parentRow.output_tokens : null; const sum = raw.usage?.[i]?.byTask?.summary;
     const parentTurns = s.turns; const childTurnsAll = childStreams.flatMap((c) => c.s.turns);
@@ -531,7 +539,9 @@ function analyzeBC(ctx, raw) {
   const respModels = [...new Set(raw.usage?.flatMap((u) => rowsOf(u.byTask).map((r) => r.response_model)).filter(Boolean))];
   obs.models = [...new Set([...respModels, ...ph.filter(Boolean).flatMap((s) => s.models)])];
   const first = ph[0]; const firstTurn = first?.turns[0];
-  obs.cache = { firstTurnCacheRead: firstTurn?.cr ?? null, gapSeconds: null };
+  // R1.AC2 (90758419 AC1): B = cache numbers of the root-task streams; C = does the first phase-2 request contain the phase-1 get_ticket result (the cache fields stay unset for C so the oracle scores it on the request rule).
+  obs.cache = { firstTurnCacheRead: firstTurn?.cr ?? null, gapSeconds: null, ...(arm === 'B' && ph[0] && ph[1] ? L.cacheCarryFromTurns(ph[0].turns, ph[1].turns) : {}), ...(arm === 'C' && ph[0] && ph[1] ? { phase2FirstRequestHasTicket: L.ticketCarriedToPhase2(ph[0].http, ph[1].http) } : {}) };
+  metrics.allCalls = trimCalls(allCalls);
   const p1 = metrics.phases[0]; const p2 = metrics.phases[1];
   const depth1 = (p1?.children || []).filter((c) => c.depth === 1), depth2 = (p1?.children || []).filter((c) => c.depth >= 2);
   const ov = L.overlapMs(depth1.map((c) => ({ createdAt: c.createdAt, completedAt: c.completedAt })));
@@ -654,10 +664,16 @@ function writeSummary(outDir, records, plan) {
 /** Run every detector over the run's normalized tool calls; a DEFECT_SIGNAL or egress-silent-empty result is written to the record (R2.AC8, R6). */
 function annotateDetectors(record) {
   const ob = record.observation; if (!ob) return;
-  const calls = [...(ob.phase1?.calls ?? []), ...(ob.phase2?.calls ?? [])].map((c, i) => ({ id: c.id ?? c.callId ?? `c${i}`, tool: c.name ?? c.tool ?? '', args: c.args ?? c.input ?? c.argsKey ?? null, isError: !!(c.isError ?? c.error), text: c.resultText ?? '' }));
+  // Run-level calls (parent AND worker/child calls) from the analysis; observation calls (parent/root only) for records that lack them.
+  // Real call fields (lib.callsFromCliStream / callsFromHttpTurns): { id (tool_use id), name, input, isError (null = no result captured), resultText, seq }.
+  const src = record.metrics?.allCalls?.length ? record.metrics.allCalls : [...(ob.phase1?.calls ?? []).map((c) => ({ ...c, phase: 1 })), ...(ob.phase2?.calls ?? []).map((c) => ({ ...c, phase: 2 }))];
+  const calls = src.map((c, i) => ({ id: c.id ?? `p${c.phase ?? 0}c${c.seq ?? i}`, tool: c.name ?? '', args: c.input ?? null, isError: c.isError == null ? null : !!c.isError, text: c.resultText ?? null }));
   record.detectors = DT.runDetectors(calls);
   const eg = record.detectors.find((d) => d.detector === 'egress-silent-empty');
-  if (eg?.flagged && record.score?.fields?.w1_web) record.score.fields.w1_web = { ...record.score.fields.w1_web, status: 'invalid', detail: `INVALID(egress): blank web result(s) ${eg.callIds.join(', ')}` };
+  if (eg?.flagged && record.score?.fields?.w1_web) {
+    record.score.fields.w1_web = { ...record.score.fields.w1_web, status: 'invalid', detail: `INVALID(egress): blank web result(s) ${eg.callIds.join(', ')}` };
+    record.score.summary = O.summarizeFields(record.score.fields);   // the override must reach the tally GT.isGenuineSuccess / grid read
+  }
   if (record.detectors.some((d) => d.defectSignal)) record.defectSignal = record.detectors.filter((d) => d.defectSignal).map((d) => d.text);
 }
 
@@ -676,6 +692,7 @@ async function runPlan(opts, dry) {
     const { record, aborted } = await runOne(ctx, state);
     records.push(record); state.lastFinished[def.arm] = Date.parse(record.finishedAt || nowIso());
     annotateDetectors(record);
+    writeJson(path.join(ctx.runDir, 'record.json'), record);   // persist the annotation (detectors, egress override, defect signal); runOne wrote it before they ran
     if (def.arm === 'A' && !dry) {
       const genuine = GT.isGenuineSuccess(record);
       LG.recordArmA(opts.round ?? ROUND, genuine, genuine ? 'all content items green, no INVALID, no defect signal' : `content ${record.score?.summary?.content?.pass}/${record.score?.summary?.content?.total}, invalid ${record.score?.summary?.invalid}, defect ${!!record.defectSignal}`, path.dirname(ctx.ledgerPath));
@@ -701,7 +718,9 @@ export function checkOracle(log = console.log) {
   const src = fs.readFileSync(path.join(HERE, 'oracle.mjs'), 'utf8');
   const MUT = [
     ['h1_bugfix always passes', 'o.hidden.p1.bugfix ? { status: \'pass\'', 'true ? { status: \'pass\''],
-    ['s1_tests_honest ignores the hidden suite', 'return said === h ?', 'return true ?'],
+    ['s1_tests_honest ignores the visible suite', 'return said === !!vis ?', 'return true ?'],
+    ['h2_regress counts a suite red in both phases', 'p1[k] === true && p2[k] === false', 'p2[k] === false'],
+    ['x2 ignores interleaved child streams', 'if (p.interleaved === true) return', 'if (false) return'],
     ['q_rate ignores contamination in phase-1 text', 'if (mentions(p1text, want)) return', 'if (false) return'],
     ['q_rate ignores contamination via phase-1 files', 'if (mentions(o.files?.[f], want)) return', 'if (false) return'],
     ['q_rate probes the total, not the carrier rate', 'const want = legacy ? e.rate : e.carrierRate;', 'const want = e.rate;'],
@@ -730,7 +749,7 @@ export function checkOracle(log = console.log) {
     // Round 4 fixes: each new rule must be load-bearing
     ['w2 inspects only the first Source line again', "const docsAll = srcClaims(o.files?.['docs/shipping.md']);", "const docsAll = [srcClaim(o.files?.['docs/shipping.md'])].filter((x) => x != null);"],
     ['w2 treats Source: null as a claim again', 'const notAClaim = (v) => v == null || NO_VALUE.test(String(v)) || NOT_FETCHED.test(String(v));', 'const notAClaim = (v) => v == null || NOT_FETCHED.test(String(v));'],
-    ['x3 scores hedged briefs', 'const directive = lines.filter((l) => !HEDGE.test(l));', 'const directive = lines;'],
+    ['x3 scores hedged briefs', 'const directive = lines.filter(delegationIsDirective);', 'const directive = lines;'],
     ['x3 does not require the agent name', "if (!/\\bworker\\b/i.test(b)) { reasons.push", "if (false) { reasons.push"],
     ['x3 never na', "if (b.status !== 'actionable') return { status: 'na'", "if (false) return { status: 'na'"],
     ['s2 ignores the visible suite', 'if (tp !== !!vis) bad.push', 'if (false) bad.push'],

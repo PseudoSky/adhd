@@ -150,7 +150,14 @@ export function reconcileCliOutput(turns, wantOrResult) {
 export function callsFromCliStream(p) {
   return [...p.toolUses.values()].filter((t) => t.parent == null).map((t) => {
     const r = p.toolResults.get(t.id);
-    return { name: t.name, input: t.input, isError: r ? r.isError : null, resultText: r ? r.text : null, seq: t.seq };
+    return { id: t.id, name: t.name, input: t.input, isError: r ? r.isError : null, resultText: r ? r.text : null, seq: t.seq };
+  });
+}
+/** EVERY tool call of the stream, parent AND child (native subagent) level, with `depth` 0 for the parent and 1 for a child (R2.AC8 / R6 need the workers' calls too). */
+export function allCallsFromCliStream(p) {
+  return [...p.toolUses.values()].map((t) => {
+    const r = p.toolResults.get(t.id);
+    return { id: t.id, name: t.name, input: t.input, isError: r ? r.isError : null, resultText: r ? r.text : null, seq: t.seq, depth: t.parent == null ? 0 : 1 };
   });
 }
 
@@ -245,7 +252,7 @@ export function callsFromHttpTurns(turns) {
     const msgs = t.body?.messages || [];
     for (const m of msgs) if (Array.isArray(m.content)) for (const b of m.content) if (b.type === 'tool_result') results.set(b.tool_use_id, { isError: !!b.is_error, text: blockText(b.content) });
   }
-  for (const t of turns) for (const u of t.sse?.toolUses || []) { const r = results.get(u.id); calls.push({ name: u.name, input: u.input, isError: r ? r.isError : null, resultText: r ? r.text : null, server: u.server }); }
+  for (const t of turns) for (const u of t.sse?.toolUses || []) { const r = results.get(u.id); calls.push({ id: u.id, name: u.name, input: u.input, isError: r ? r.isError : null, resultText: r ? r.text : null, server: u.server }); }
   return calls;
 }
 export function rateLimitFromHeaders(h) {
@@ -417,6 +424,48 @@ export function parallelFromHttpTurns(turns) {
   let runs = 0, same = false;
   for (const t of turns) { const n = (t.sse?.toolUses || []).filter((u) => isRunName(u.name)).reduce((a, u) => a + runCount(u.name, u.input), 0); runs += n; if (n >= 2) same = true; }
   return { runs, sameTurn: same };
+}
+/**
+ * R1.AC6 (90758419 AC3): did >= 2 CHILD runs overlap, judged by outcome? `items` is the stream in order: `{ parent: <parent_tool_use_id|null>, ts?: <ms> }`.
+ * Native `Agent` returns "Async agent launched" instantly, so outstanding-counting cannot see parallelism; instead two children overlap when
+ * their event index ranges interleave (child 2 starts before child 1's last event and vice versa) or, when every event of both has a timestamp, when
+ * their time intervals intersect. Pure.
+ * @returns {{children:number, interleaved:boolean, basis:'timestamps'|'stream-order'}}
+ */
+export function childrenInterleaved(items) {
+  const r = new Map();
+  items.forEach((it, i) => { if (it.parent == null) return; const x = r.get(it.parent) ?? { first: i, last: i, t0: null, t1: null, ts: true }; x.last = i; if (Number.isFinite(it.ts)) { x.t0 = x.t0 == null ? it.ts : Math.min(x.t0, it.ts); x.t1 = x.t1 == null ? it.ts : Math.max(x.t1, it.ts); } else x.ts = false; r.set(it.parent, x); });
+  const ids = [...r.keys()]; let order = false, time = false, allTs = ids.length > 0;
+  for (const x of r.values()) if (!x.ts || x.t0 == null) allTs = false;
+  for (let i = 0; i < ids.length; i++) for (let j = i + 1; j < ids.length; j++) {
+    const a = r.get(ids[i]), b = r.get(ids[j]);
+    if (a.first < b.last && b.first < a.last) order = true;
+    if (allTs && a.t0 < b.t1 && b.t0 < a.t1) time = true;
+  }
+  return { children: ids.length, interleaved: allTs ? time : order, basis: allTs ? 'timestamps' : 'stream-order' };
+}
+/** `childrenInterleaved` over raw claude stream-json events (a child event carries `parent_tool_use_id`; `timestamp`/`ts` is used when present). */
+export function childrenInterleavedFromEvents(events) {
+  return childrenInterleaved(events.filter((e) => e && (e.type === 'assistant' || e.type === 'user')).map((e) => ({ parent: e.parent_tool_use_id ?? null, ts: Date.parse(e.timestamp ?? e.ts ?? '') })));
+}
+/**
+ * R1.AC2 (90758419 AC1) cache-carry inputs for arms A and B: the phase-1 LAST parent turn's cache_read + cache_create (NOT `ctx`, which also counts fresh input)
+ * and the phase-2 FIRST parent turn's cache_read. Turns are the normalised rows of `turnsFromCliStream` (`parent` null = main agent). Nulls when a phase has no parent turn.
+ */
+export function cacheCarryFromTurns(p1Turns, p2Turns) {
+  const par = (ts) => (ts || []).filter((t) => t.parent == null);
+  const last = par(p1Turns).slice(-1)[0], first = par(p2Turns)[0];
+  return { p1LastTurnCtx: last ? (last.cr || 0) + (last.w5m || 0) + (last.w1h || 0) + (last.wUntiered || 0) : null, p2FirstTurnCacheRead: first ? (first.cr || 0) : null };
+}
+/**
+ * R1.AC2 arm C: does the FIRST phase-2 request contain the phase-1 `get_ticket` result? `p1Http` / `p2Http` are the per-request records of
+ * `httpTurnsForTask` (`sse.toolUses[]` out, `body.messages[]` in). null when phase 1 made no get_ticket call or phase 2 has no request (no data, not a failure).
+ */
+export function ticketCarriedToPhase2(p1Http, p2Http) {
+  const ids = new Set((p1Http || []).flatMap((t) => t.sse?.toolUses || []).filter((u) => /(^|__)get_ticket$/.test(String(u.name))).map((u) => u.id));
+  const first = (p2Http || [])[0]; if (!ids.size || !first) return null;
+  for (const m of first.body?.messages || []) if (Array.isArray(m.content)) for (const b of m.content) if (b.type === 'tool_result' && ids.has(b.tool_use_id)) return true;
+  return false;
 }
 /** Time overlap of the given task rows (createdAt..completedAt ISO strings): min(completed) - max(created), ms. */
 export function overlapMs(rows) {

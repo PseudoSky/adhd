@@ -8,6 +8,8 @@ import { fileURLToPath } from 'node:url';
 import * as L from './lib.mjs';
 import * as F from './fixtures.mjs';
 import * as O from './oracle.mjs';
+import * as OLD from './golden/r4/oracle.r4.frozen.mjs';
+import * as DT from './detectors.mjs';
 import { buildPlan, ancestorLeaks, runHidden } from './drive.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -259,6 +261,63 @@ export async function runLibTests({ log = console.log } = {}) {
     const p = F.prompts(); const txt = p.phase1 + p.phase2;
     for (const bad of ['mcp__', 'agent-mcp', 'shell_execute', 'read_text_file', 'Bash', 'WebFetch', 'Task tool', 'Agent tool', 'session_id']) ok(!txt.includes(bad), `prompt names ${bad}`);
     eq(F.prompts(), p);
+  });
+
+
+  // ---- R1 (90758419): oracle fixes proven on the frozen R4 records (frozen R4 oracle = RED / old, current oracle = GREEN / new)
+  const g4 = (run) => JSON.parse(fs.readFileSync(path.join(HERE, 'golden/r4', `${run}.json`), 'utf8'));
+  const both = (run, mut = (o) => o) => { const r = g4(run); const ob = mut(structuredClone(r.observation)); return { old: OLD.scoreObservation(ob, r.expected).fields, cur: O.scoreObservation(ob, r.expected).fields }; };
+  const a1Events = () => JSON.parse(fs.readFileSync(path.join(HERE, 'golden/r4/A1.events.json'), 'utf8'));
+  await t('R1.AC4+AC5 (90758419 AC3): A1 s1_tests_honest and h2_regress were RED under the frozen oracle and are GREEN now (visible suite green at phase 1; h1_feature red in both phases is one root cause)', () => {
+    const f = both('A1'); eq([f.old.s1_tests_honest.status, f.cur.s1_tests_honest.status], ['fail', 'pass']); eq([f.old.h2_regress.status, f.cur.h2_regress.status], ['fail', 'pass']);
+  });
+  await t('R1.AC6 (90758419 AC3): A1 (two messages, interleaved children) scores x2_parallel pass from its events; a strictly sequential A run is the negative control', () => {
+    const ev = a1Events().filter((e) => e.phase === 1 && (e.type === 'assistant' || e.type === 'user')).map((e) => ({ parent: e.parent_tool_use_id }));
+    const ci = L.childrenInterleaved(ev); eq([ci.children, ci.interleaved], [2, true]);
+    const f = both('A1', (o) => { o.dispatch.p1Parallel = { ...o.dispatch.p1Parallel, interleaved: ci.interleaved }; return o; });
+    eq([f.old.x2_parallel.status, f.cur.x2_parallel.status], ['fail', 'pass']);
+    const seq = [{ parent: null }, { parent: 'a' }, { parent: 'a' }, { parent: null }, { parent: 'b' }, { parent: 'b' }];
+    eq(L.childrenInterleaved(seq).interleaved, false);
+    const fs2 = both('A1', (o) => { o.dispatch.p1Parallel = { sameTurn: false, overlapMs: null, interleaved: false }; return o; }); eq(fs2.cur.x2_parallel.status, 'fail');
+    eq(L.childrenInterleaved([{ parent: 'a', ts: 0 }, { parent: 'a', ts: 10 }, { parent: 'b', ts: 20 }, { parent: 'b', ts: 30 }]).interleaved, false, 'timestamps, sequential');
+    eq(L.childrenInterleaved([{ parent: 'a', ts: 0 }, { parent: 'b', ts: 5 }, { parent: 'a', ts: 10 }, { parent: 'b', ts: 30 }]).interleaved, true, 'timestamps, overlapping');
+    eq(L.childrenInterleavedFromEvents([{ type: 'assistant', parent_tool_use_id: 'a' }, { type: 'assistant', parent_tool_use_id: 'b' }, { type: 'user', parent_tool_use_id: 'a' }, { type: 'user', parent_tool_use_id: 'b' }]).interleaved, true, 'raw events');
+  });
+  await t('R1.AC7 (90758419 AC3): must-stay-red on the R4 records: A1 h1_feature/h2_empty/s2_honest and B1/B2 w1_web stay failed under the new oracle', () => {
+    for (const k of ['h1_feature', 'h2_empty', 's2_honest']) eq(both('A1').cur[k].status, 'fail', `A1 ${k}`);
+    for (const run of ['B1', 'B2']) eq(both(run).cur.w1_web.status, 'fail', `${run} w1_web`);
+  });
+  await t('R1.AC3 (90758419 AC3): x3 verdicts on the R4 briefs are unchanged by the purpose-clause rule (table: golden/r4/x3-briefs.md), and the rule flips exactly the purpose-clause brief', () => {
+    for (const run of ['B1', 'B2', 'C1', 'C2']) { const r = g4(run); eq(O.docsBriefVerdict(r.observation.phase1), OLD.docsBriefVerdict(r.observation.phase1), `${run} x3 brief verdict`); }
+    const purpose = { calls: [{ name: 'mcp__agent-mcp__task', input: { prompt: 'Write docs/shipping.md. Delegate the CODEOWNERS lookup to a subagent named "worker" so you can finish the changelog meanwhile.' } }] };
+    eq([OLD.docsBriefVerdict(purpose).status, O.docsBriefVerdict(purpose).status], ['not-actionable', 'actionable']);
+    const cond = { calls: [{ name: 'mcp__agent-mcp__task', input: { prompt: 'Write docs/shipping.md. If you can delegate the CODEOWNERS lookup, use a subagent named "worker".' } }] };
+    eq([OLD.docsBriefVerdict(cond).status, O.docsBriefVerdict(cond).status], ['not-actionable', 'not-actionable']);
+  });
+
+  // ---- R1.AC2 cache-carry capture and R2.AC8/R6 detector wiring on the REAL call shapes
+  await t('R1.AC2 (90758419 AC1): cacheCarryFromTurns uses the phase-1 last PARENT turn cache_read + cache_create (not fresh input) and the phase-2 first parent turn cache_read', () => {
+    const row = (parent, o) => ({ parent, in: 5, cr: 0, w5m: 0, w1h: 0, wUntiered: 0, out: 1, ...o });
+    const p1 = [row(null, { cr: 100, w1h: 20 }), row('child', { cr: 9999 }), row(null, { in: 777, cr: 20830 - 400, w1h: 300, w5m: 100 })];
+    const p2 = [row('child', { cr: 1 }), row(null, { cr: 20830 })];
+    eq(L.cacheCarryFromTurns(p1, p2), { p1LastTurnCtx: 20830, p2FirstTurnCacheRead: 20830 });
+    eq(L.cacheCarryFromTurns([], p2), { p1LastTurnCtx: null, p2FirstTurnCacheRead: 20830 });
+    const mk = (cr) => ({ ...g4('B1').observation, cache: { p1LastTurnCtx: 20830, p2FirstTurnCacheRead: cr } });
+    eq([O.scoreObservation(mk(20830), g4('B1').expected).fields.q_context_carry.status, O.scoreObservation(mk(100), g4('B1').expected).fields.q_context_carry.status], ['pass', 'fail']);
+  });
+  await t('R1.AC2 (90758419 AC1): ticketCarriedToPhase2 finds the phase-1 get_ticket tool_result in the first phase-2 request (arm C); null without data', () => {
+    const p1 = [{ sse: { toolUses: [{ id: 'tu1', name: 'r2info__get_ticket' }] } }];
+    const p2 = (id) => [{ body: { messages: [{ role: 'user', content: [{ type: 'tool_result', tool_use_id: id, content: 'x' }] }] } }, { body: { messages: [] } }];
+    eq([L.ticketCarriedToPhase2(p1, p2('tu1')), L.ticketCarriedToPhase2(p1, p2('other')), L.ticketCarriedToPhase2([], p2('tu1')), L.ticketCarriedToPhase2(p1, [])], [true, false, null, null]);
+  });
+  await t('R2.AC8 (50e21ed9 AC2): detectors read the real call shape ({id,name,input,isError,resultText}); the R4 B1/B2 silent curl results are flagged with tool_use-style ids, an uncaptured result (isError null) is not', () => {
+    const toCalls = (obs) => [...obs.phase1.calls, ...obs.phase2.calls].map((c, i) => ({ id: c.id ?? `c${i}`, tool: c.name, args: c.input, isError: c.isError == null ? null : !!c.isError, text: c.resultText ?? null }));
+    for (const run of ['B1', 'B2']) ok(DT.egressSilentEmpty(toCalls(g4(run).observation)).flagged, `${run} flagged`);
+    for (const run of ['A1', 'A2', 'C1', 'C2']) ok(!DT.egressSilentEmpty(toCalls(g4(run).observation)).flagged, `${run} not flagged`);
+    const curl = { id: 'tu9', tool: 'mcp__shell__shell_execute', args: { command: ['curl', 'https://example.com'] } };
+    ok(!DT.egressSilentEmpty([{ ...curl, isError: null, text: null }]).flagged, 'missing result is unknown');
+    eq(DT.egressSilentEmpty([{ ...curl, isError: false, text: '[{"type":"text","text":" "}]' }]).callIds, ['tu9']);
+    ok(!DT.egressSilentEmpty([{ ...curl, isError: false, text: '[{"type":"text","text":"<title>Example Domain</title>"}]' }]).flagged, 'real content is not blank');
   });
 
   fs.rmSync(tmp, { recursive: true, force: true });

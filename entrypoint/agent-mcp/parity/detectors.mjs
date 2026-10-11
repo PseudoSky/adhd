@@ -9,7 +9,13 @@ const SHELL_TOOL = /(^|__)(Bash|shell_execute|shell)$/;
 const WEB_SHELL_CMD = /\b(curl|wget)\b/;
 
 const argsText = (c) => { try { return typeof c.args === 'string' ? c.args : JSON.stringify(c.args ?? ''); } catch { return ''; } };
-const blank = (t) => t == null || String(t).replace(/\s+/g, '') === '' || /^\[\s*\]$/.test(String(t).trim());
+/** Blank = no text at all, or an MCP content array whose text items are all blank (C stores results as the JSON of the content array). A MISSING result (null) is handled by the callers: it is unknown, not silent-empty. */
+const blank = (t) => {
+  const s = String(t).trim();
+  if (s.replace(/\s+/g, '') === '') return true;
+  if (s.startsWith('[')) { try { const a = JSON.parse(s); if (Array.isArray(a)) return a.every((b) => b && typeof b === 'object' && (b.type === 'text' || b.type == null) ? String(b.text ?? '').trim() === '' : false); } catch { /* not JSON: real text */ } }
+  return false;
+};
 
 /** True when the call is a web result of any arm: a shipped fetch/search tool, or a shell fetch (curl/wget). */
 export function isWebCall(c) {
@@ -22,7 +28,8 @@ export function isWebCall(c) {
  * @returns {{detector:'egress-silent-empty', flagged:boolean, callIds:string[], w1_web:'INVALID(egress)'|null}}
  */
 export function egressSilentEmpty(calls) {
-  const ids = calls.filter((c) => isWebCall(c) && !c.isError && blank(c.text)).map((c) => c.id);
+  // isError === false AND a captured (non-null) result: a call whose result was never captured is unknown, never silent-empty.
+  const ids = calls.filter((c) => isWebCall(c) && c.isError === false && c.text != null && blank(c.text)).map((c) => c.id);
   return { detector: 'egress-silent-empty', flagged: ids.length > 0, callIds: ids, w1_web: ids.length ? 'INVALID(egress)' : null };
 }
 
