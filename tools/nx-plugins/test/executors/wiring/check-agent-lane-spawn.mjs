@@ -29,8 +29,9 @@
  *      must still exist in the unit lane; once moved/renamed the entry must be
  *      removed (the ratchet can only shrink).
  *   C. (e2e-test-not-excluded-from-unit) A project that ships `*.e2e.test.ts`
- *      files must keep them out of its unit lane: its `vite.config.ts` must
- *      reference `E2E_FILE_EXCLUDES` (otherwise vitest's `*.test.ts` include
+ *      files must keep them out of its unit lane: its vite config must
+ *      spread `E2E_FILE_EXCLUDES` into `test.exclude` (a comment or unused import
+ *      does not count) (otherwise vitest's `*.test.ts` include
  *      runs them in BOTH lanes).
  *
  * Agent family = packages/agent/*, entrypoint/agent-mcp, entrypoint/dispatch-cli.
@@ -103,6 +104,16 @@ export function spawnReason(rawSrc) {
   return undefined;
 }
 
+/**
+ * True when (comment-stripped) vite config text references `E2E_FILE_EXCLUDES`
+ * in a `exclude` position: `exclude: E2E_FILE_EXCLUDES` or a spread inside the
+ * `exclude: [ ... ]` array. A comment, an unused import, or a reference outside
+ * `exclude` does not satisfy it (0ba70e47 AC3b).
+ */
+export function excludesE2eFiles(strippedConfig) {
+  return /\bexclude\s*:\s*(?:\[[^\]]*\.\.\.\s*)?E2E_FILE_EXCLUDES\b/.test(strippedConfig);
+}
+
 export function collectAgentLaneSpawnViolations(workspaceRoot, baselineOverride) {
   const violations = [];
   const add = (rule, detail) => violations.push({ rule, detail });
@@ -137,9 +148,9 @@ export function collectAgentLaneSpawnViolations(workspaceRoot, baselineOverride)
       const text = ['vite.config.ts', 'vite.config.mts']
         .map((n) => join(workspaceRoot, root, n))
         .filter((f) => existsSync(f))
-        .map((f) => readFileSync(f, 'utf8'))
+        .map((f) => stripComments(readFileSync(f, 'utf8')))
         .join('\n');
-      if (!/E2E_FILE_EXCLUDES/.test(text)) {
+      if (!excludesE2eFiles(text)) {
         add(
           'C-e2e-test-not-excluded-from-unit',
           `${root} — ships *.e2e.test.ts but its vite config (vite.config.ts or .mts) does not exclude \`E2E_FILE_EXCLUDES\` (tools/vite-plugins/e2e-globs.mjs) from \`test.exclude\`, so they also run in the unit lane.`,

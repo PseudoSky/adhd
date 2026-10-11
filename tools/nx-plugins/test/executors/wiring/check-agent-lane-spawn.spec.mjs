@@ -158,6 +158,52 @@ test('C still fires when BOTH configs exist and neither excludes E2E_FILE_EXCLUD
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
+const cViolation = (cfg) => {
+  const root = fixture({
+    'packages/agent/agent-foo/src/x.e2e.test.ts': SPAWNING,
+    'packages/agent/agent-foo/vite.config.mts': cfg,
+  });
+  rmSync(join(root, 'packages/agent/agent-foo/vite.config.ts'));
+  try {
+    return rules(collectAgentLaneSpawnViolations(root, EMPTY_BASELINE));
+  } finally { rmSync(root, { recursive: true, force: true }); }
+};
+
+test('C fires when E2E_FILE_EXCLUDES appears only in a line comment (negative control) [0ba70e47 AC3b]', () => {
+  assert.deepEqual(cViolation('// TODO exclude: [...E2E_FILE_EXCLUDES]\nexport default { test: {} };\n'), ['C-e2e-test-not-excluded-from-unit']);
+});
+
+test('C fires when E2E_FILE_EXCLUDES appears only in a block comment (negative control) [0ba70e47 AC3b]', () => {
+  assert.deepEqual(cViolation('/* exclude: [...E2E_FILE_EXCLUDES] */\nexport default { test: {} };\n'), ['C-e2e-test-not-excluded-from-unit']);
+});
+
+test('C fires when E2E_FILE_EXCLUDES is an unused import (negative control) [0ba70e47 AC3b]', () => {
+  assert.deepEqual(
+    cViolation("import { E2E_FILE_EXCLUDES } from '../../../tools/vite-plugins/e2e-globs.mjs';\nexport default { test: { exclude: ['**/x'] } };\n"),
+    ['C-e2e-test-not-excluded-from-unit']
+  );
+});
+
+test('C fires when E2E_FILE_EXCLUDES is referenced outside test.exclude (negative control) [0ba70e47 AC3b]', () => {
+  assert.deepEqual(
+    cViolation("const unused = [...E2E_FILE_EXCLUDES];\nexport default { test: { include: ['a'], exclude: ['**/x'] } };\n"),
+    ['C-e2e-test-not-excluded-from-unit']
+  );
+});
+
+test('C accepts the real config shape: exclude: [...configDefaults.exclude, ...E2E_FILE_EXCLUDES] [0ba70e47 AC3b]', () => {
+  assert.deepEqual(
+    cViolation(
+      "import { E2E_FILE_EXCLUDES } from 'x';\n// Subprocess suites run in the e2e lane.\nexport default { test: {\n    exclude: [...configDefaults.exclude, ...E2E_FILE_EXCLUDES],\n  } };\n"
+    ),
+    []
+  );
+});
+
+test('C accepts a bare `exclude: E2E_FILE_EXCLUDES` [0ba70e47 AC3b]', () => {
+  assert.deepEqual(cViolation('export default { test: { exclude: E2E_FILE_EXCLUDES } };\n'), []);
+});
+
 test('B fires on a stale pendingMove entry and is silent while the file is still unit-lane [5b839b90 AC2]', () => {
   const root = fixture({ 'packages/agent/agent-foo/src/pending.test.ts': 'export {};\n' });
   try {
