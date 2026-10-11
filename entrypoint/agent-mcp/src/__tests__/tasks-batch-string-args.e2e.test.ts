@@ -16,24 +16,52 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import type { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import type { LLMProvider, ProviderChatResponse } from '@adhd/agent-engine-orchestrator';
+import type {
+  LLMProvider,
+  ProviderChatRequest,
+  ProviderChatResponse,
+} from '@adhd/agent-engine-orchestrator';
 import { generateId, nowIso } from '@adhd/agent-store-runtime';
 
 import { buildHarness, type Harness } from './integration/harness.js';
 import { createServer } from '../server.js';
 
-const provider: LLMProvider = {
-  chat: async (): Promise<ProviderChatResponse> => ({
-    message: {
-      id: generateId(),
-      sessionId: '',
-      role: 'assistant',
-      content: 'done',
-      createdAt: nowIso(),
+/**
+ * Scripted provider that records the last user prompt of every `chat()` call,
+ * tracks in-flight calls and their peak, and (when a gate is supplied) parks
+ * every call on the gate so the test observes the concurrency cap
+ * deterministically (latch, no sleeps).
+ */
+function recordingProvider(gate?: Promise<void>): {
+  provider: LLMProvider;
+  prompts: string[];
+  peak: () => number;
+} {
+  const prompts: string[] = [];
+  let active = 0;
+  let peak = 0;
+  const provider: LLMProvider = {
+    chat: async ({ messages }: ProviderChatRequest): Promise<ProviderChatResponse> => {
+      const lastUser = [...messages].reverse().find((m) => m.role === 'user');
+      prompts.push(lastUser?.content ?? '');
+      active++;
+      peak = Math.max(peak, active);
+      if (gate) await gate;
+      active--;
+      return {
+        message: {
+          id: generateId(),
+          sessionId: '',
+          role: 'assistant',
+          content: 'done',
+          createdAt: nowIso(),
+        },
+        stopReason: 'completed',
+      };
     },
-    stopReason: 'completed',
-  }),
-};
+  };
+  return { provider, prompts, peak: () => peak };
+}
 
 describe('932604a0 R9 tasks_batch string-typed arguments (real MCP client)', () => {
   let harness: Harness | undefined;
@@ -49,7 +77,7 @@ describe('932604a0 R9 tasks_batch string-typed arguments (real MCP client)', () 
     harness = undefined;
   });
 
-  async function connect(): Promise<Client> {
+  async function connect(provider: LLMProvider): Promise<Client> {
     harness = await buildHarness({ defaultProvider: provider });
     harness.agentStore.create({
       name: 'worker',
@@ -79,9 +107,14 @@ describe('932604a0 R9 tasks_batch string-typed arguments (real MCP client)', () 
     return client;
   }
 
-  it('932604a0 R9.AC4/AC6: the R4 C1 shape (concurrency "2", stringified prompts) is not an error', async () => {
-    const c = await connect();
-    const res = await c.callTool({
+  it('932604a0 R9.AC4/AC6: the R4 C1 shape dispatches the three decoded prompts with the cap of 2 enforced', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const { provider, prompts, peak } = recordingProvider(gate);
+    const c = await connect(provider);
+    const call = c.callTool({
       name: 'tasks_batch',
       arguments: {
         agent_name: 'worker',
@@ -89,6 +122,20 @@ describe('932604a0 R9 tasks_batch string-typed arguments (real MCP client)', () 
         prompts: '["first task","second task","third task"]',
       },
     });
+
+    // Wait (bounded, event-based) until the cap is reached, then give an
+    // over-cap task every chance to start before asserting it did not.
+    const deadline = Date.now() + 5000;
+    while (peak() < 2 && Date.now() < deadline) {
+      await new Promise((r) => setImmediate(r));
+    }
+    expect(peak()).toBe(2);
+    for (let i = 0; i < 5; i++) await new Promise((r) => setImmediate(r));
+    expect(peak()).toBe(2);
+    expect(prompts).toHaveLength(2);
+
+    release();
+    const res = await call;
     const text = (res.content as Array<{ text?: string }>)[0]?.text ?? '';
     expect(res.isError, text).toBeFalsy();
     const out = JSON.parse(text) as {
@@ -98,19 +145,36 @@ describe('932604a0 R9 tasks_batch string-typed arguments (real MCP client)', () 
     expect(out.concurrency).toBe(2);
     expect(out.results).toHaveLength(3);
     expect(out.results.every((r) => r.status === 'completed')).toBe(true);
+    expect(peak()).toBe(2);
+    expect([...prompts].sort()).toEqual(['first task', 'second task', 'third task']);
   });
 
-  it('932604a0 R9.AC3: malformed stringified prompts is still an error through the real server', async () => {
-    const c = await connect();
+  it('932604a0 R9.AC3: a non-numeric concurrency string is an error naming concurrency (prompts valid)', async () => {
+    const { provider } = recordingProvider();
+    const c = await connect(provider);
     const res = await c.callTool({
       name: 'tasks_batch',
-      arguments: { agent_name: 'worker', concurrency: 'abc', prompts: 'not json' },
+      arguments: { agent_name: 'worker', concurrency: 'abc', prompts: ['p'] },
     });
+    const text = (res.content as Array<{ text?: string }>)[0]?.text ?? '';
     expect(res.isError).toBe(true);
+    expect(text).toContain('concurrency must be an integer or an integer string');
+  });
+
+  it('932604a0 R9.AC3: malformed stringified prompts is an error naming prompts (concurrency valid)', async () => {
+    const { provider } = recordingProvider();
+    const c = await connect(provider);
+    const res = await c.callTool({
+      name: 'tasks_batch',
+      arguments: { agent_name: 'worker', concurrency: '2', prompts: 'not json' },
+    });
+    const text = (res.content as Array<{ text?: string }>)[0]?.text ?? '';
+    expect(res.isError).toBe(true);
+    expect(text).toContain('prompts must be an array or a JSON-array string');
   });
 
   it('932604a0 R9.AC5: tools/list still advertises concurrency as integer and prompts as array', async () => {
-    const c = await connect();
+    const c = await connect(recordingProvider().provider);
     const tool = (await c.listTools()).tools.find((t) => t.name === 'tasks_batch');
     const props = (tool?.inputSchema as { properties: Record<string, { type?: string }> }).properties;
     expect(props['concurrency']?.type).toBe('integer');

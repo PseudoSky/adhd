@@ -27,22 +27,80 @@ describe('932604a0 R9 AC1-AC5 tasks_batch string-typed arguments', () => {
     expect(tasksBatchInputSchema.parse(base).prompts).toEqual(['p1', 'p2']);
   });
 
-  it.each(['abc', '2.5', '0', '-1', '65', ''])(
-    '932604a0 R9.AC3: concurrency %j is still rejected',
-    (bad) => {
-      expect(tasksBatchInputSchema.safeParse({ ...base, concurrency: bad }).success).toBe(false);
+  /** Returns the first issue of a failed parse (fails the test if the parse succeeded). */
+  function firstIssue(input: Record<string, unknown>): { path: PropertyKey[]; message: string } {
+    const r = tasksBatchInputSchema.safeParse(input);
+    if (r.success) throw new Error('expected rejection, parse succeeded');
+    const issue = r.error.issues[0];
+    if (!issue) throw new Error('rejection carried no issues');
+    return { path: issue.path, message: issue.message };
+  }
+
+  it.each([
+    ['abc', 'concurrency must be an integer or an integer string'],
+    ['2.5', 'concurrency must be an integer or an integer string'],
+    ['', 'concurrency must be an integer or an integer string'],
+    ['0', '>0'],
+    ['-1', '>0'],
+    ['65', '<=64'],
+  ])(
+    '932604a0 R9.AC3: concurrency %j is still rejected at path [concurrency] (%s)',
+    (bad, fragment) => {
+      const issue = firstIssue({ ...base, concurrency: bad });
+      expect(issue.path).toEqual(['concurrency']);
+      expect(issue.message).toContain(fragment);
     }
   );
 
   it.each([
-    ['not JSON', 'not json'],
-    ['a JSON object', '{"a":1}'],
-    ['a JSON string', '"x"'],
-    ['an empty array', '[]'],
-    ['an array with an empty string', '["a",""]'],
-    ['an array with a non-string', '[1]'],
-  ])('932604a0 R9.AC3: prompts string that is %s is still rejected', (_name, bad) => {
-    expect(tasksBatchInputSchema.safeParse({ ...base, prompts: bad }).success).toBe(false);
+    ['not JSON', 'not json', 'prompts must be an array or a JSON-array string'],
+    ['a JSON object', '{"a":1}', 'prompts must be an array or a JSON-array string'],
+    ['a JSON string', '"x"', 'prompts must be an array or a JSON-array string'],
+    ['an empty array', '[]', '>=1'],
+    ['an array with an empty string', '["a",""]', '>=1'],
+    ['an array with a non-string', '[1]', 'string'],
+  ])('932604a0 R9.AC3: prompts string that is %s is still rejected at path [prompts]', (_name, bad, fragment) => {
+    const issue = firstIssue({ ...base, prompts: bad });
+    expect(issue.path[0]).toBe('prompts');
+    expect(issue.message).toContain(fragment);
+  });
+
+  it.each([
+    [' 2 ', 2],
+    ['+2', 2],
+    ['007', 7],
+  ])('932604a0 R9.AC1: concurrency %j (padding / sign / leading zeros) is accepted as %i', (raw, expected) => {
+    expect(tasksBatchInputSchema.parse({ ...base, concurrency: raw }).concurrency).toBe(expected);
+  });
+
+  it.each([
+    ['-0', 'a negative zero'],
+    ['1e2', 'exponent notation'],
+    ['Infinity', 'Infinity'],
+    ['NaN', 'NaN'],
+    ['99999999999999999999', 'a value beyond the max of 64'],
+    ['\u0662', 'an Arabic-Indic digit'],
+  ])('932604a0 R9.AC3: concurrency %j (%s) is rejected at path [concurrency]', (bad) => {
+    const issue = firstIssue({ ...base, concurrency: bad });
+    expect(issue.path).toEqual(['concurrency']);
+  });
+
+  it('932604a0 R9.AC3: the beyond-max string is rejected as too large, not as a type error', () => {
+    const message = firstIssue({ ...base, concurrency: '99999999999999999999' }).message;
+    expect(message).toContain('Too big');
+    expect(message).not.toContain('integer string');
+  });
+
+  it('932604a0 R9.AC2: a stringified array with surrounding whitespace is accepted', () => {
+    expect(
+      tasksBatchInputSchema.parse({ ...base, prompts: '  [ "x" ,\n "y" ]  ' }).prompts
+    ).toEqual(['x', 'y']);
+  });
+
+  it('932604a0 R9.AC3: a double-stringified array is rejected at path [prompts] with the type message', () => {
+    const issue = firstIssue({ ...base, prompts: JSON.stringify(JSON.stringify(['x'])) });
+    expect(issue.path).toEqual(['prompts']);
+    expect(issue.message).toBe('prompts must be an array or a JSON-array string');
   });
 
   it('932604a0 R9.AC3: native invalid values are still rejected', () => {

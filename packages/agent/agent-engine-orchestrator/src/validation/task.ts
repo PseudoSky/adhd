@@ -163,12 +163,20 @@ export type TaskListInput = z.infer<typeof taskListInputSchema>;
 export type TaskCancelInput = z.infer<typeof taskCancelInputSchema>;
 export type ResultInput = z.infer<typeof resultInputSchema>;
 
+/** Type-mismatch message for `tasks_batch.prompts` (error text only; the advertised JSON schema is unaffected). */
+const PROMPTS_TYPE_ERROR = 'prompts must be an array or a JSON-array string';
+
+/** Type-mismatch message for `tasks_batch.concurrency` (error text only; the advertised JSON schema is unaffected). */
+const CONCURRENCY_TYPE_ERROR = 'concurrency must be an integer or an integer string';
+
 /**
  * Tolerance pre-step for `tasks_batch.concurrency` (backlog 932604a0 R9): a
  * model may send the integer as a base-10 string (`"2"`). Only a string that
- * is exactly an optionally-signed run of digits is converted; anything else
- * (`"abc"`, `"2.5"`, `""`) is passed through untouched so the strict number
- * schema still rejects it. Range checks (positive, max 64) stay in the schema.
+ * is an optionally-signed run of ASCII digits, optionally padded with
+ * whitespace (`" 2 "`, `"+2"`, `"007"`), is converted; anything else (`"abc"`,
+ * `"2.5"`, `"1e2"`, `"NaN"`, `""`) is passed through untouched so the strict
+ * number schema still rejects it. Range checks (positive, max 64) stay in the
+ * schema.
  *
  * @param value - the raw `concurrency` argument.
  * @returns the number for an integer string, otherwise `value` unchanged.
@@ -226,12 +234,15 @@ export const tasksBatchInputSchema = z
       .describe('Reuse one existing session per prompt; length must equal prompts.length'),
     prompts: z.preprocess(
       parseStringifiedArray,
-      z.array(z.string().min(1)).min(1).describe('One prompt per dispatched task')
+      z
+        .array(z.string().min(1), { error: PROMPTS_TYPE_ERROR })
+        .min(1)
+        .describe('One prompt per dispatched task')
     ),
     concurrency: z.preprocess(
       parseIntegerString,
       z
-        .number()
+        .number({ error: CONCURRENCY_TYPE_ERROR })
         .int()
         .positive()
         .max(64)
