@@ -541,24 +541,43 @@ function taskScopeWhere(db: Database, input: TaskUsageInput): SQL | undefined {
 }
 
 /**
+ * Largest id list bound into one `IN (...)` clause. SQLite rejects a statement with more host parameters than
+ * `SQLITE_MAX_VARIABLE_NUMBER` ("too many SQL variables"; 999 on SQLite < 3.32, 32766 after), and a session or
+ * scope with thousands of tasks reaches it. 500 stays under both limits with room for the other bound values.
+ * (b3999dfa AC2)
+ */
+export const SQL_IN_CHUNK_SIZE = 500;
+
+/** Split `ids` into runs of at most {@link SQL_IN_CHUNK_SIZE}, sorted so concatenated per-chunk results stay grouped by id. */
+function chunkIds(ids: string[]): string[][] {
+  const sorted = [...ids].sort();
+  const chunks: string[][] = [];
+  for (let i = 0; i < sorted.length; i += SQL_IN_CHUNK_SIZE) chunks.push(sorted.slice(i, i + SQL_IN_CHUNK_SIZE));
+  return chunks;
+}
+
+/**
  * Tasks (of `taskIds`) with at least one MODEL_RESPONSE whose usage is a lower bound (`usageLowerBound` on the
  * event payload): the task/session grains derive `usage_lower_bound` from the same events the turn grain reads,
  * so no column is needed. (afa37093 AC3)
  */
 function lowerBoundTaskIds(db: Database, taskIds: string[]): Set<string> {
-  if (taskIds.length === 0) return new Set();
-  const hits = db
-    .selectDistinct({ taskId: taskEventsTable.taskId })
-    .from(taskEventsTable)
-    .where(
-      and(
-        inArray(taskEventsTable.taskId, taskIds),
-        eq(taskEventsTable.type, "MODEL_RESPONSE"),
-        sql`json_extract(${taskEventsTable.payload}, '$.usageLowerBound') = 1`
+  const out = new Set<string>();
+  for (const chunk of chunkIds(taskIds)) {
+    const hits = db
+      .selectDistinct({ taskId: taskEventsTable.taskId })
+      .from(taskEventsTable)
+      .where(
+        and(
+          inArray(taskEventsTable.taskId, chunk),
+          eq(taskEventsTable.type, "MODEL_RESPONSE"),
+          sql`json_extract(${taskEventsTable.payload}, '$.usageLowerBound') = 1`
+        )
       )
-    )
-    .all();
-  return new Set(hits.map((h) => h.taskId));
+      .all();
+    for (const h of hits) out.add(h.taskId);
+  }
+  return out;
 }
 
 /** Task grain (§4): one row per `task_usage` entry — the pre-existing cumulative rollup,
@@ -815,26 +834,30 @@ function deriveTurns(
 ): UsageRow[] {
   const taskIds = [...infoByTaskId.keys()];
 
-  const events = db
-    .select({
-      taskId: taskEventsTable.taskId,
-      type: taskEventsTable.type,
-      payload: taskEventsTable.payload,
-      createdAt: taskEventsTable.createdAt,
-    })
-    .from(taskEventsTable)
-    .where(
-      and(
-        inArray(taskEventsTable.taskId, taskIds),
-        or(
-          eq(taskEventsTable.type, "MODEL_REQUEST"),
-          eq(taskEventsTable.type, "MODEL_RESPONSE"),
-          eq(taskEventsTable.type, "TOOL_RESULT")
+  const events: TaskEventRow[] = [];
+  for (const chunk of chunkIds(taskIds)) {
+    const part = db
+      .select({
+        taskId: taskEventsTable.taskId,
+        type: taskEventsTable.type,
+        payload: taskEventsTable.payload,
+        createdAt: taskEventsTable.createdAt,
+      })
+      .from(taskEventsTable)
+      .where(
+        and(
+          inArray(taskEventsTable.taskId, chunk),
+          or(
+            eq(taskEventsTable.type, "MODEL_REQUEST"),
+            eq(taskEventsTable.type, "MODEL_RESPONSE"),
+            eq(taskEventsTable.type, "TOOL_RESULT")
+          )
         )
       )
-    )
-    .orderBy(taskEventsTable.taskId, taskEventsTable.createdAt)
-    .all() as TaskEventRow[];
+      .orderBy(taskEventsTable.taskId, taskEventsTable.createdAt)
+      .all() as TaskEventRow[];
+    for (const e of part) events.push(e);
+  }
 
   const rows: UsageRow[] = [];
   let currentTaskId: string | null = null;

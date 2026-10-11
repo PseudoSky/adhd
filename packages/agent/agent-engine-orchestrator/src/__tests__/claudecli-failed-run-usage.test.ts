@@ -103,6 +103,16 @@ describe("afa37093: usage of failed claudecli runs", () => {
     r.close();
   });
 
+  it("b3999dfa AC8: a task whose only response is unmeasured has stop_reason `error` on the task_usage row and at task and turn grain", async () => {
+    const noUsage = serializeStream(parseStream(failingB1({ keepUsage: false })).filter((e) => e.type !== "assistant"));
+    const r = await replayStream(noUsage);
+    const stored = r.sqlite.prepare("SELECT stop_reason, cost_status, model_calls FROM task_usage WHERE task_id = ?").get(r.taskId) as { stop_reason: string | null; cost_status: string | null; model_calls: number };
+    expect(stored).toMatchObject({ cost_status: "unmeasured", model_calls: 0, stop_reason: "error" });
+    expect(usageQueryByGrain(r.db, { include_incomplete: false, limit: 5, grain: "task" }).rows[0]?.stop_reason).toBe("error");
+    expect(usageQueryByGrain(r.db, { include_incomplete: false, limit: 5, grain: "turn" }).rows[0]?.stop_reason).toBe("error");
+    r.close();
+  });
+
   it("afa37093 AC1: a failed run's MODEL_RESPONSE event is marked failed so turn consumers can tell it from a completed turn", async () => {
     const r = await replayStream(failingB1({ keepUsage: true }));
     const [payload] = r.modelResponseEvents();

@@ -83,6 +83,12 @@ export const usageSummarySchema = z.object({
   /**
    * Estimated dollar cost (rate-card) summed over the rows in scope. null (never 0) when no row exists or any
    * contributing row could not be priced / measured — the same rule as the grain rows. (8333f755 AC4)
+   *
+   * The name is snake_case on purpose, unlike its camelCase siblings: it is the SAME figure under the SAME name
+   * as `est_cost_usd` on the `usage_query` rows and its grain `summary`, and the `task_usage.est_cost_usd`
+   * column, so one grep (or one dashboard field) follows a cost across every surface. Renaming it to
+   * `estCostUsd` would break that and the shipped wire contract. The token counters predate the cost fields and
+   * stay camelCase. (b3999dfa AC9)
    */
   est_cost_usd: z.number().nullable(),
 });

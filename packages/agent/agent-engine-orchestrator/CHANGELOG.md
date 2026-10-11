@@ -4,6 +4,10 @@
 
 - **agent-engine-orchestrator:** claudecli retains the CLI session per engine session and resumes it (`--resume --fork-session`, uncovered tail only) for follow-up tasks: second-task 1h cache write 6,312 -> 121 tokens, first-turn cache_read/context 0.00 -> 0.98 on claude-haiku-4-5; any history the transcript does not provably cover falls back to the text replay (b31e1fe5)
 
+### 🩹 Fixes
+
+- **agent-engine-orchestrator:** `usage_query` no longer fails with "too many SQL variables" for a scope with thousands of tasks: the task, session and turn grains bind task ids in chunks of 500 per `IN (...)`. New tests: a 33,000-task scope at all three grains (with a negative control), `mergeProviderUsage` handling every `TokenUsage` field (a new field fails typecheck until classified), and an unmeasured-only task recording `stop_reason: "error"`. The `est_cost_usd` snake_case naming in the usage summary is documented as deliberate. (b3999dfa AC2 AC3 AC8 AC9)
+
 ## 2.3.11 (2026-10-10)
 
 ### 🚀 Features
