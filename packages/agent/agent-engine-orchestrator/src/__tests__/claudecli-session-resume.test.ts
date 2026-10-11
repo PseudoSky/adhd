@@ -188,6 +188,23 @@ describe("b31e1fe5 AC3: anything not provably covered falls back to the text rep
   });
 });
 
+describe("b31e1fe5 AC1: createProvider threads the engine session id", () => {
+  it("a claudecli provider built from an execution context persists under that session (and one without a session does not)", async () => {
+    const { createProvider } = await import("../providers/factory.js");
+    const selection = { providerType: "claudecli", modelRef: "claude-haiku-4-5" } as never;
+    const withSession = createProvider(selection, {}, engineConfig, logger, { executionContext: { sessionId: "factory-session" } as never });
+    await withSession.chat({ messages: [user("hi")] });
+    expect(spawned[0]!.args).toContain("--session-id");
+    expect(spawned[0]!.args).not.toContain("--no-session-persistence");
+
+    const withoutSession = createProvider(selection, {}, engineConfig, logger);
+    await withoutSession.chat({ messages: [user("hi")] });
+    expect(spawned[1]!.args).toContain("--no-session-persistence");
+    const { claudeCliSessions } = await import("../providers/claudecli-session.js");
+    claudeCliSessions.releaseAll();
+  });
+});
+
 describe("b31e1fe5: retained transcripts are not a leak", () => {
   function transcript(id: string): string {
     const dir = join(configDir, "projects", "-some-cwd");

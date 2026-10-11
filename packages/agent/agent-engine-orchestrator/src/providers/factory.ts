@@ -58,7 +58,7 @@ export function createProvider(
             case "claudecli":
                 return new ClaudeCliProvider(providerConfig, mcpServers ?? {}, undefined, engineConfig, engineLogger, undefined, {
                     // b31e1fe5: tasks on one engine session share a retained CLI session (resumed, not replayed).
-                    sessionKey: executionContext?.sessionId || undefined,
+                    sessionKey: options?.executionContext?.sessionId || undefined,
                 });
             case "openai":
                 return new OpenAIProvider(providerConfig, engineConfig ?? {} as EngineConfig);
