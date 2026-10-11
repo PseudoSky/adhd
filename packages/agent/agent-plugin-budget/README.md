@@ -37,7 +37,7 @@ Each cap defines one limit. Fields:
 | `calls`        | count | all       | Number of LLM model calls                                                                                               |
 | `wallClock`    | ms    | task only | Wall-clock time from task start                                                                                         |
 | `modelMs`      | ms    | task only | Cumulative model response time                                                                                          |
-| `cost`         | USD   | all       | Estimated cost (requires `costPerInputToken` / `costPerOutputToken`)                                                    |
+| `cost`         | USD   | all       | Estimated cost; priced from the shared model rate card unless flat `costPer*Token` rates are set (see [Cost pricing](#cost-pricing))   |
 | `toolCalls`    | count | tool only | Per-tool call count                                                                                                     |
 | `responseSize` | chars | tool only | Raw response character length. Enforced at `transform:tool_result` — truncates (warning) or replaces with error (block) |
 
@@ -179,7 +179,27 @@ Caps are **additive** across dimensions — multiple caps targeting the same fie
 
 ## Cost estimation
 
-For the `cost` field, set token prices on the defaults dimension:
+### Cost pricing
+
+The `cost` cap prices every model turn one of two ways, chosen by the top-level `pricing` key:
+
+| `pricing`            | Behaviour                                                                                                                                                                       |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `auto` (default)     | Explicit flat `costPer*Token` rates win (defaults, or an agent / provider override). With none configured, the model-keyed rate card prices the turn.                          |
+| `rate-card`          | The rate card prices every turn; flat rates are ignored, except as the fallback for a model the card cannot price.                                                              |
+| `flat`               | Only the configured flat rates price a turn; the rate card is never read (no flat rates = cost 0, the pre-rate-card behaviour).                                                  |
+
+The rate card is `estimateCost` from `@adhd/agent-core-provider` -- the same model-keyed, provider-agnostic table `usage_query` reports `est_cost_usd` from. The model is resolved per turn as the provider's reported `responseModel`, else the resolved wire model (`selection.modelRef`), else the agent's inline model; multi-model responses (claudecli `modelUsage`) are priced entry by entry on each concrete model id. A DeepSeek agent on the `openai` adapter is therefore priced at DeepSeek's rates and a Sonnet agent at Sonnet's, with no per-provider configuration.
+
+Unpriceable models are never a silent $0: with flat rates configured the turn bills at them; otherwise it accrues nothing and the plugin emits one `budget:unpriced_model` event per task and model (payload: `model`, `field: "cost"`, `usedFlatRates`, `message`).
+
+Per-agent and per-provider rate overrides (`agent.overrides.<name>.costPerInputToken`, `provider.overrides.<type>.costPerInputToken`, ...) are honoured and take precedence over `defaults`; the provider dimension keys on the resolved selection's provider type, then the agent's inline provider, then `unknown`.
+
+Scoped (`session` / `agent` / `global`) cost caps add the persisted `est_cost_usd` of the scope's other tasks when the scope bills by rate card, and the persisted token classes at the flat rates when flat pricing governs.
+
+> **Host default.** `agent-mcp`'s `ADHD_AGENT_BUDGET_COST_USD` now sets `pricing: "rate-card"` instead of injecting flat $3/$15 Sonnet rates. Non-Sonnet agents are priced at their own rates (a cache-warm DeepSeek run no longer trips the cap ~17x early). To keep the old flat pricing, set explicit `costPerInputToken` / `costPerOutputToken` in the budget plugin config.
+
+For flat pricing, set token prices on the defaults dimension:
 
 ```json
 {

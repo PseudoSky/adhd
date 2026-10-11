@@ -1081,14 +1081,17 @@ export function defaultPluginEntries(
   // resolved per-task instead of globally (post-merge bucket-B review, MEDIUM).
   const defaults: Record<string, unknown> = { mode: "block", caps, scope: "global" };
 
+  let pricing: "rate-card" | undefined;
   const rawCost = processEnv["ADHD_AGENT_BUDGET_COST_USD"];
   if (rawCost !== undefined) {
     const costUsd = Number(rawCost);
     if (Number.isFinite(costUsd) && costUsd > 0) {
-      // Cost is only enforceable when per-token rates are known; supply flat
-      // defaults so a bare ADHD_AGENT_BUDGET_COST_USD produces a real cap.
-      defaults["costPerInputToken"] = 0.000003;
-      defaults["costPerOutputToken"] = 0.000015;
+      // Price the cap from the shared model-keyed rate card (the same table
+      // `usage_query` reports from), never one hardcoded flat Sonnet rate: a
+      // flat $3/$15 over-counted cache-warm DeepSeek/Haiku runs and tripped the
+      // cap far below real spend (cf7e0e5c). An operator who wants flat pricing
+      // sets explicit `costPer*Token` rates in the budget plugin config.
+      pricing = "rate-card";
       caps.push({ field: "cost", maximum: costUsd });
     }
   }
@@ -1096,7 +1099,7 @@ export function defaultPluginEntries(
   return [
     {
       module: DEFAULT_BUDGET_PLUGIN_MODULE,
-      config: { defaults },
+      config: pricing ? { defaults, pricing } : { defaults },
     },
     tracingEntry,
   ];

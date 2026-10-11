@@ -123,20 +123,29 @@ describe("defaultPluginEntries — default-on budget plugin (5339c2e5)", () => {
     expect(defaults.caps).toContainEqual({ field: "calls", maximum: 7 });
   });
 
-  it("adds an enforceable cost cap when ADHD_AGENT_BUDGET_COST_USD is set", () => {
+  it("cf7e0e5c-1b2b-4ee1-a3e2-dcc4a65043dd AC8 -- ADHD_AGENT_BUDGET_COST_USD adds a rate-card-priced cost cap, not hardcoded flat Sonnet rates", () => {
     const entries = defaultPluginEntries({
       ADHD_AGENT_BUDGET_COST_USD: "0.01",
     } as unknown as NodeJS.ProcessEnv);
-    const defaults = entries[0]?.config["defaults"] as {
+    const config = entries[0]?.config as Record<string, unknown>;
+    const defaults = config["defaults"] as {
       caps?: Array<{ field: string; maximum: number }>;
       costPerInputToken?: number;
       costPerOutputToken?: number;
     };
     expect(defaults.caps).toContainEqual({ field: "cost", maximum: 0.01 });
-    // Rates must be present, otherwise the plugin computes cost 0 and the cap
-    // could never fire — this is the "enforceable" half of the DoD.
-    expect(defaults.costPerInputToken).toBeGreaterThan(0);
-    expect(defaults.costPerOutputToken).toBeGreaterThan(0);
+    // The flat $3/$15 Sonnet rates are gone: they priced every model (DeepSeek,
+    // Haiku, ...) as Sonnet and tripped the cap far below real spend.
+    expect(defaults.costPerInputToken).toBeUndefined();
+    expect(defaults.costPerOutputToken).toBeUndefined();
+    // The cap is enforceable because the plugin prices from the rate card.
+    expect(config["pricing"]).toBe("rate-card");
+  });
+
+  it("cf7e0e5c AC8 -- without ADHD_AGENT_BUDGET_COST_USD no pricing key is emitted (calls cap only)", () => {
+    const config = defaultPluginEntries({} as NodeJS.ProcessEnv)[0]
+      ?.config as Record<string, unknown>;
+    expect(config["pricing"]).toBeUndefined();
   });
 
   it("the default caps resolve to GLOBAL scope (post-merge review: top-level scope was dropped)", async () => {

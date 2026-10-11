@@ -19,6 +19,7 @@ import type {
   ToolDefinition,
 } from '@adhd/agent-base-types';
 import { contextWindowFor } from '@adhd/agent-base-types';
+import { estimateCost } from '@adhd/agent-core-provider';
 
 /**
  * The database handle the engine loader actually passes as `ctx.db` — the live
@@ -92,7 +93,11 @@ const FIELD_NAMES = [
  * exposes an error signal — and therefore can only be enforced at the next
  * tool call. `enforcePreModel` filters these out of the model-path cap set.
  */
-const TOOL_PATH_ONLY_FIELDS = new Set(['toolCalls', 'errors', 'consecutiveErrors']);
+const TOOL_PATH_ONLY_FIELDS = new Set([
+  'toolCalls',
+  'errors',
+  'consecutiveErrors',
+]);
 
 /**
  * Cap schema. `maximum` is optional at the base level because a `context` cap may
@@ -263,7 +268,20 @@ const toolDimensionSchema = dimensionSchema
 
 // ── Full plugin config ───────────────────────────────────────────────────────
 
+/**
+ * How the `cost` cap prices a model turn (cf7e0e5c AC4):
+ *  - `auto` (default): explicit flat `costPer*Token` rates (defaults, or an
+ *    agent/provider override) win; with none configured the model-keyed rate
+ *    card (`estimateCost`, the same table `usage_query` uses) prices the turn.
+ *  - `rate-card`: the rate card prices every turn; flat rates are ignored
+ *    except as the fallback for a model the card cannot price.
+ *  - `flat`: only the configured flat rates price a turn; the card is never read.
+ */
+export const pricingModeSchema = z.enum(['auto', 'rate-card', 'flat']);
+export type PricingMode = z.infer<typeof pricingModeSchema>;
+
 export const pluginConfigSchema = z.object({
+  pricing: pricingModeSchema.optional(),
   defaults: dimensionSchema.optional(),
   agent: z
     .object({
@@ -433,14 +451,20 @@ function assertNoLegacyTokensConfig(raw: unknown): void {
 function normalizeConfig(raw: unknown): PluginConfig {
   assertNoLegacyTokensConfig(raw);
   const obj = raw as Record<string, unknown>;
+  // `pricing` alone (no flat cap keys) is a structured config too.
+  const onlyPricing =
+    obj['pricing'] !== undefined &&
+    Object.keys(obj).every((k) => k === 'pricing');
   if (
     obj['defaults'] !== undefined ||
     obj['agent'] !== undefined ||
     obj['provider'] !== undefined ||
-    obj['tool'] !== undefined
+    obj['tool'] !== undefined ||
+    onlyPricing
   ) {
     const parsed = pluginConfigSchema.parse(raw);
     return {
+      ...(parsed.pricing !== undefined ? { pricing: parsed.pricing } : {}),
       defaults: parsed.defaults ?? dimensionSchema.parse({}),
       agent: parsed.agent ?? { overrides: {} },
       provider: parsed.provider ?? { overrides: {} },
@@ -448,7 +472,9 @@ function normalizeConfig(raw: unknown): PluginConfig {
     };
   }
   // Flat format → dimension
+  const flatPricing = pricingModeSchema.safeParse(obj['pricing']);
   return {
+    ...(flatPricing.success ? { pricing: flatPricing.data } : {}),
     defaults: flatFieldsToDimension(obj),
     agent: { overrides: {} },
     provider: { overrides: {} },
@@ -462,7 +488,7 @@ function makeEnforcementError(
   limitName: string,
   limit: number,
   current: number,
-  message?: string
+  message?: string,
 ): IEnforcementError {
   return {
     isEnforcementError: true as const,
@@ -476,7 +502,7 @@ function makeEnforcementError(
 function makeToolWarning(
   toolName: string,
   callId: string,
-  message: string
+  message: string,
 ): IToolWarning {
   return { isToolWarning: true, toolName, callId, message };
 }
@@ -494,7 +520,7 @@ function makeToolWarning(
  */
 function estimateRequestContext(
   messages: readonly Message[],
-  tools: readonly ToolDefinition[]
+  tools: readonly ToolDefinition[],
 ): number {
   let chars = 0;
   for (const message of messages) {
@@ -537,6 +563,16 @@ interface BudgetAccumulator {
   cacheCreationTokens: number;
   inputTokens: number;
   outputTokens: number;
+  /**
+   * Token classes of the turns priced by the FLAT rates (cf7e0e5c). Cost of
+   * these is `costFromTotals(flat, rates)` -- byte-identical to the pre-rate-card
+   * formula. Turns priced by the rate card accrue into `rateCostUsd` instead.
+   */
+  flat: ClassTotals;
+  /** USD accrued from turns the rate card (`estimateCost`) priced. */
+  rateCostUsd: number;
+  /** Models already reported via `budget:unpriced_model` for this task. */
+  unpricedModels: Set<string>;
   // PEAK single-call input (tokens) across the task's model responses — the
   // 'context' cap's provider-reported high-water mark. NOT a sum: cumulative
   // input is billed volume, not context size (FINDING-ORCH-007 / PLAN-run-
@@ -558,7 +594,27 @@ interface BudgetAccumulator {
   warned: Set<string>;
 }
 
+/** The four token classes a flat-rate cost is billed from. */
+interface ClassTotals {
+  uncachedInputTokens: number;
+  cacheReadTokens: number;
+  cacheCreationTokens: number;
+  outputTokens: number;
+}
+
+/** Resolved flat $/token rates (cache rates already defaulted to the input rate). */
+interface FlatRates {
+  input: number;
+  output: number;
+  cacheRead: number;
+  cacheWrite: number;
+}
+
 interface UsageTotals {
+  /** Flat-priced classes for the scope (this task's flat turns + persisted rows when the scope bills flat). */
+  flat: ClassTotals;
+  /** Rate-card USD for the scope (this task's rate-priced turns + SUM(est_cost_usd) of persisted rows when the scope bills by card). */
+  rateCostUsd: number;
   inputTokens: number;
   outputTokens: number;
   modelCalls: number;
@@ -615,7 +671,7 @@ function formatWarnMessage(
   scope: string,
   current: number,
   limit: number,
-  toolName?: string
+  toolName?: string,
 ): string {
   const id = [toolName, scope, cap.window, cap.field]
     .filter((x): x is string => !!x)
@@ -629,6 +685,46 @@ function formatWarnMessage(
     `[budget ${id} WARN] ${fmt(current)} / ${fmt(limit)} ${unit} ` +
     `(${pct}${win}scope ${scope}). Warning only; execution continues.`
   );
+}
+
+// ── Pricing helpers (cf7e0e5c) ───────────────────────────────────────────────
+
+/**
+ * The provider type a budget dimension keys on (D5): the resolved selection's
+ * type first (task/session/agent/global chain), then the agent's inline
+ * provider block, `'unknown'` only as the last resort.
+ */
+function providerTypeOf(ctx: ExecutionContext): string {
+  return (
+    ctx.selection?.providerType ??
+    ctx.agentDefinition?.provider?.type ??
+    'unknown'
+  );
+}
+
+/** True when any flat `costPer*Token` rate is explicitly set on the dimension. */
+function hasFlatRates(d: DimensionConfig): boolean {
+  return (
+    d.costPerInputToken !== undefined ||
+    d.costPerOutputToken !== undefined ||
+    d.costPerCacheReadToken !== undefined ||
+    d.costPerCacheWriteToken !== undefined
+  );
+}
+
+/**
+ * Flat rates of a merged dimension. Cache rates default to the flat input rate
+ * (BUG-AGENTMCP-008): a config that never sets them bills every input token at
+ * `costPerInputToken`, exactly as before the cache-weighted fix.
+ */
+function flatRatesOf(d: DimensionConfig): FlatRates {
+  const input = d.costPerInputToken ?? 0;
+  return {
+    input,
+    output: d.costPerOutputToken ?? 0,
+    cacheRead: d.costPerCacheReadToken ?? input,
+    cacheWrite: d.costPerCacheWriteToken ?? input,
+  };
 }
 
 // ── Plugin class ─────────────────────────────────────────────────────────────
@@ -648,10 +744,6 @@ class BudgetPlugin implements Plugin {
   constructor(
     private readonly db: unknown,
     private readonly cfg: PluginConfig,
-    private readonly costPerInput = 0,
-    private readonly costPerOutput = 0,
-    private readonly costPerCacheRead = 0,
-    private readonly costPerCacheWrite = 0
   ) {}
 
   install(hooks: IHookRegistry): void {
@@ -708,7 +800,7 @@ class BudgetPlugin implements Plugin {
     });
 
     hooks.registerEnforcement('pre:model_request', (p) =>
-      this.enforcePreModel(p)
+      this.enforcePreModel(p),
     );
     hooks.registerEnforcement('pre:tool_call', (p) => this.enforcePreTool(p));
     hooks.register('transform:tool_result', (p) => {
@@ -724,8 +816,7 @@ class BudgetPlugin implements Plugin {
 
   private onTaskStart(p: TaskStartPayload): void {
     const { taskId, sessionId, agentName } = p.executionContext;
-    const providerType =
-      p.executionContext.agentDefinition?.provider?.type ?? 'unknown';
+    const providerType = providerTypeOf(p.executionContext);
     this.accumulators.set(taskId, {
       taskId,
       sessionId: sessionId ?? undefined,
@@ -737,6 +828,14 @@ class BudgetPlugin implements Plugin {
       cacheCreationTokens: 0,
       inputTokens: 0,
       outputTokens: 0,
+      flat: {
+        uncachedInputTokens: 0,
+        cacheReadTokens: 0,
+        cacheCreationTokens: 0,
+        outputTokens: 0,
+      },
+      rateCostUsd: 0,
+      unpricedModels: new Set(),
       peakContextTokens: 0,
       modelCalls: 0,
       totalModelMs: 0,
@@ -788,6 +887,13 @@ class BudgetPlugin implements Plugin {
       // BUG-ORCH-010 double-count); inputTokens IS the sum of the three classes.
       acc.inputTokens += uncached + read + creation;
       acc.outputTokens += usage.outputTokens ?? 0;
+      this.priceTurn(p, acc, {
+        uncachedInputTokens: uncached,
+        cacheReadTokens: read,
+        cacheCreationTokens: creation,
+        cacheCreation1hTokens: usage.cacheCreation1hTokens ?? 0,
+        outputTokens: usage.outputTokens ?? 0,
+      });
       // PEAK, not sum — byte-identical to usage-plugin's peakContextTokens
       // (usage-plugin.ts:143,172-181): the provider-reported total input of this
       // call is what the model actually saw. Cumulative input must never feed
@@ -799,6 +905,134 @@ class BudgetPlugin implements Plugin {
       acc.totalModelMs += Date.now() - acc.modelCallStartMs;
       acc.modelCallStartMs = undefined;
     }
+  }
+
+  /**
+   * Price one model turn and accrue it (cf7e0e5c). Precedence (D2): the flat
+   * rates resolved for this task's agent/provider (override > defaults) when
+   * `pricing` is `flat`, or `auto` with any flat rate configured; otherwise the
+   * model-keyed rate card. A turn the card cannot price falls back to the flat
+   * rates when configured, else accrues nothing and reports
+   * `budget:unpriced_model` once per task+model -- never a silent $0 (D3).
+   */
+  private priceTurn(
+    p: PostModelResponsePayload,
+    acc: BudgetAccumulator,
+    t: {
+      uncachedInputTokens: number;
+      cacheReadTokens: number;
+      cacheCreationTokens: number;
+      cacheCreation1hTokens: number;
+      outputTokens: number;
+    },
+  ): void {
+    const { explicit } = this.resolveRates(acc.agentName, acc.providerType);
+    const mode = this.cfg.pricing ?? 'auto';
+    const accrueFlat = (): void => {
+      acc.flat.uncachedInputTokens += t.uncachedInputTokens;
+      acc.flat.cacheReadTokens += t.cacheReadTokens;
+      acc.flat.cacheCreationTokens += t.cacheCreationTokens;
+      acc.flat.outputTokens += t.outputTokens;
+    };
+    if (mode === 'flat' || (mode === 'auto' && explicit)) {
+      accrueFlat();
+      return;
+    }
+
+    const asOf = new Date().toISOString();
+    const breakdown = p.tokenUsage?.modelBreakdown;
+    // Token classes the card could not price; with flat rates configured they
+    // bill flat (D3), otherwise they accrue nothing and are reported.
+    const unpricedClasses: ClassTotals[] = [];
+    const unpricedModels: string[] = [];
+    if (breakdown && breakdown.length > 0) {
+      // A multi-model response (claudecli `modelUsage`) is priced entry by
+      // entry on each concrete id, strict: same rule as the usage plugin, so
+      // the cap and `usage_query` agree.
+      for (const e of breakdown) {
+        const est = estimateCost(
+          e.model,
+          {
+            uncachedInputTokens: e.uncachedInputTokens,
+            cacheReadTokens: e.cacheReadTokens,
+            cacheCreationTokens: e.cacheCreationTokens,
+            cacheCreation1hTokens: e.cacheCreation1hTokens,
+            outputTokens: e.outputTokens,
+          },
+          { asOf, strict: true },
+        );
+        if (est.costUsd === null) {
+          unpricedModels.push(e.model);
+          unpricedClasses.push({
+            uncachedInputTokens: e.uncachedInputTokens,
+            cacheReadTokens: e.cacheReadTokens,
+            cacheCreationTokens: e.cacheCreationTokens,
+            outputTokens: e.outputTokens,
+          });
+        } else {
+          acc.rateCostUsd += est.costUsd;
+        }
+      }
+    } else {
+      const ctx = p.executionContext;
+      const model =
+        p.responseModel ??
+        ctx.wireModel ??
+        (ctx.selection?.modelRef || undefined) ??
+        ctx.agentDefinition?.provider?.model;
+      const est = model ? estimateCost(model, t, { asOf }) : undefined;
+      if (est && est.costUsd !== null) {
+        acc.rateCostUsd += est.costUsd;
+      } else {
+        unpricedModels.push(model ?? 'default');
+        unpricedClasses.push(t);
+      }
+    }
+
+    for (const model of unpricedModels) {
+      if (acc.unpricedModels.has(model)) continue;
+      acc.unpricedModels.add(model);
+      // Notification only: HookRegistry.emit swallows handler errors. The
+      // event name is not yet in HookEventMap (agent-base-types is outside
+      // this item's write-scope).
+      void (this.hooks as IHookRegistry | undefined)
+        ?.emit(
+          'budget:unpriced_model' as never,
+          {
+            executionContext: p.executionContext,
+            model,
+            field: 'cost',
+            usedFlatRates: explicit,
+            message:
+              `model "${model}" has no rate-card price; ` +
+              (explicit
+                ? 'billed at the configured flat rates'
+                : 'its spend is NOT counted toward the cost cap'),
+          } as never,
+        )
+        ?.catch(() => undefined);
+    }
+    if (explicit) {
+      for (const c of unpricedClasses) {
+        acc.flat.uncachedInputTokens += c.uncachedInputTokens;
+        acc.flat.cacheReadTokens += c.cacheReadTokens;
+        acc.flat.cacheCreationTokens += c.cacheCreationTokens;
+        acc.flat.outputTokens += c.outputTokens;
+      }
+    }
+  }
+
+  /**
+   * Flat $/token rates for a task's agent/provider (override > defaults), and
+   * whether ANY flat rate was explicitly configured (cf7e0e5c D2). Cache rates
+   * default to the input rate -- the pre-rate-card behaviour.
+   */
+  private resolveRates(
+    agentName: string,
+    providerType: string,
+  ): { rates: FlatRates; explicit: boolean } {
+    const { merged } = this.resolveDim(agentName, providerType);
+    return { rates: flatRatesOf(merged), explicit: hasFlatRates(merged) };
   }
 
   private onTerminal(taskId: string): void {
@@ -861,11 +1095,12 @@ class BudgetPlugin implements Plugin {
     return merged;
   }
 
-  private resolveCaps(
+  /** The fully merged dimension (caps, mode, scope AND rates) for a task or tool. */
+  private resolveDim(
     agentName: string,
     providerType: string,
-    toolName?: string
-  ): { caps: Cap[]; mode?: string; scope?: string } {
+    toolName?: string,
+  ): { merged: DimensionConfig } {
     const base = this.cfg.defaults;
     const agentDim = this.cfg.agent;
     const provDim = this.cfg.provider;
@@ -873,24 +1108,36 @@ class BudgetPlugin implements Plugin {
 
     if (toolName) {
       const toolOverride = toolDim?.overrides?.[toolName];
-      const merged = this.mergeDim([base, toolDim?.default, toolOverride]);
       return {
-        caps: merged.caps ?? [],
-        mode: merged.mode,
-        scope: merged.scope,
+        merged: this.mergeDim([base, toolDim?.default, toolOverride]),
       };
     }
 
     const agentOverride = agentDim?.overrides?.[agentName];
     const provOverride = provDim?.overrides?.[providerType];
-    const merged = this.mergeDim([
-      base,
-      agentDim?.default,
-      agentOverride,
-      provDim?.default,
-      provOverride,
-    ]);
-    return { caps: merged.caps ?? [], mode: merged.mode, scope: merged.scope };
+    return {
+      merged: this.mergeDim([
+        base,
+        agentDim?.default,
+        agentOverride,
+        provDim?.default,
+        provOverride,
+      ]),
+    };
+  }
+
+  private resolveCaps(
+    agentName: string,
+    providerType: string,
+    toolName?: string,
+  ): { caps: Cap[]; mode?: string; scope?: string; rates: FlatRates } {
+    const { merged } = this.resolveDim(agentName, providerType, toolName);
+    return {
+      caps: merged.caps ?? [],
+      mode: merged.mode,
+      scope: merged.scope,
+      rates: flatRatesOf(merged),
+    };
   }
 
   // ── Scope-aware DB queries ────────────────────────────────────────────────
@@ -899,11 +1146,14 @@ class BudgetPlugin implements Plugin {
     taskId: string,
     sessionId: string | undefined,
     agentName: string,
-    scope: string
+    scope: string,
+    needCost = true,
   ): UsageTotals {
     const acc = this.accumulators.get(taskId);
-    const inMem = acc
+    const inMem: UsageTotals = acc
       ? {
+          flat: { ...acc.flat },
+          rateCostUsd: acc.rateCostUsd,
           inputTokens: acc.inputTokens,
           outputTokens: acc.outputTokens,
           modelCalls: acc.modelCalls,
@@ -913,6 +1163,13 @@ class BudgetPlugin implements Plugin {
           cacheCreationTokens: acc.cacheCreationTokens,
         }
       : {
+          flat: {
+            uncachedInputTokens: 0,
+            cacheReadTokens: 0,
+            cacheCreationTokens: 0,
+            outputTokens: 0,
+          },
+          rateCostUsd: 0,
           inputTokens: 0,
           outputTokens: 0,
           modelCalls: 0,
@@ -935,6 +1192,12 @@ class BudgetPlugin implements Plugin {
       // row with no uncached split (uncached_input_tokens NULL) bills its residual
       // (input − cache-read − cache-writing) as uncached, mirroring the in-memory
       // "no split present" rule (onPostModelResponse).
+      // `est_cost_usd` is read only when the scope bills by rate card; a
+      // flat-priced scope never touches the column.
+      const estCost =
+        !needCost || this.scopeBillsFlat()
+          ? sql`0`
+          : sql`COALESCE(SUM(tu.est_cost_usd), 0)`;
       const SELECT = (from: SQL) => sql`
         SELECT
           COALESCE(SUM(tu.input_tokens), 0) AS input,
@@ -947,7 +1210,8 @@ class BudgetPlugin implements Plugin {
                             - COALESCE(tu.cache_creation_input_tokens, 0)
           )), 0) AS uncached,
           COALESCE(SUM(tu.cache_read_input_tokens), 0) AS cache_read,
-          COALESCE(SUM(tu.cache_creation_input_tokens), 0) AS cache_write
+          COALESCE(SUM(tu.cache_creation_input_tokens), 0) AS cache_write,
+          ${estCost} AS est_cost
         ${from}`;
       type Row = {
         input: number;
@@ -957,6 +1221,7 @@ class BudgetPlugin implements Plugin {
         uncached: number;
         cache_read: number;
         cache_write: number;
+        est_cost?: number;
       };
 
       let row: Row | undefined;
@@ -966,24 +1231,44 @@ class BudgetPlugin implements Plugin {
           SELECT(
             sql`FROM task_usage tu
                 JOIN tasks t ON tu.task_id = t.id
-                WHERE t.session_id = ${sessionId} AND tu.task_id != ${taskId}`
-          )
+                WHERE t.session_id = ${sessionId} AND tu.task_id != ${taskId}`,
+          ),
         );
       } else if (scope === 'agent') {
         row = db.get<Row>(
           SELECT(
             sql`FROM task_usage tu
-                WHERE tu.agent_name = ${agentName} AND tu.task_id != ${taskId}`
-          )
+                WHERE tu.agent_name = ${agentName} AND tu.task_id != ${taskId}`,
+          ),
         );
       } else if (scope === 'global') {
         row = db.get<Row>(
-          SELECT(sql`FROM task_usage tu WHERE tu.task_id != ${taskId}`)
+          SELECT(sql`FROM task_usage tu WHERE tu.task_id != ${taskId}`),
         );
       }
 
       if (row) {
+        // Persisted rows of the OTHER tasks in the scope bill on the plugin's
+        // basis: flat classes when flat pricing governs (pricing 'flat', or
+        // 'auto' with flat rates configured -- the legacy formula), else the
+        // per-turn USD the usage plugin already stored (est_cost_usd, the rate
+        // card's own number; NULL = unpriced = nothing).
+        const flatScope = this.scopeBillsFlat();
         return {
+          flat: flatScope
+            ? {
+                uncachedInputTokens:
+                  (row.uncached ?? 0) + inMem.flat.uncachedInputTokens,
+                cacheReadTokens:
+                  (row.cache_read ?? 0) + inMem.flat.cacheReadTokens,
+                cacheCreationTokens:
+                  (row.cache_write ?? 0) + inMem.flat.cacheCreationTokens,
+                outputTokens: (row.output ?? 0) + inMem.flat.outputTokens,
+              }
+            : inMem.flat,
+          rateCostUsd: flatScope
+            ? inMem.rateCostUsd
+            : (row.est_cost ?? 0) + inMem.rateCostUsd,
           inputTokens: (row.input ?? 0) + inMem.inputTokens,
           outputTokens: (row.output ?? 0) + inMem.outputTokens,
           modelCalls: (row.calls ?? 0) + inMem.modelCalls,
@@ -993,7 +1278,8 @@ class BudgetPlugin implements Plugin {
           peakContextTokens: Math.max(row.peak ?? 0, inMem.peakContextTokens),
           uncachedInputTokens: (row.uncached ?? 0) + inMem.uncachedInputTokens,
           cacheReadTokens: (row.cache_read ?? 0) + inMem.cacheReadTokens,
-          cacheCreationTokens: (row.cache_write ?? 0) + inMem.cacheCreationTokens,
+          cacheCreationTokens:
+            (row.cache_write ?? 0) + inMem.cacheCreationTokens,
         };
       }
     } catch {
@@ -1008,7 +1294,7 @@ class BudgetPlugin implements Plugin {
     id: string,
     windowMs: number,
     excludeTaskId?: string,
-    field?: string
+    field?: string,
   ): number {
     if (!this.db) return 0;
     // 9ed453c1 BUDGET-B1 AC-D1: an `inputTokens` window sums INPUT tokens only and
@@ -1069,18 +1355,25 @@ class BudgetPlugin implements Plugin {
    * cost (`queryScopeTotals` → `buildSnapshot`) so both are billed identically
    * and a scoped cost cap accumulates correctly across tasks (5339c2e5).
    */
-  private costFromTotals(t: {
-    uncachedInputTokens: number;
-    cacheReadTokens: number;
-    cacheCreationTokens: number;
-    outputTokens: number;
-  }): number {
+  private costFromTotals(
+    t: { flat: ClassTotals; rateCostUsd: number },
+    rates: FlatRates,
+  ): number {
     return (
-      t.uncachedInputTokens * this.costPerInput +
-      t.cacheReadTokens * this.costPerCacheRead +
-      t.cacheCreationTokens * this.costPerCacheWrite +
-      t.outputTokens * this.costPerOutput
+      t.flat.uncachedInputTokens * rates.input +
+      t.flat.cacheReadTokens * rates.cacheRead +
+      t.flat.cacheCreationTokens * rates.cacheWrite +
+      t.flat.outputTokens * rates.output +
+      t.rateCostUsd
     );
+  }
+
+  /** Whether flat rates (not the rate card) bill persisted rows of OTHER tasks in a scope. */
+  private scopeBillsFlat(): boolean {
+    const mode = this.cfg.pricing ?? 'auto';
+    if (mode === 'flat') return true;
+    if (mode === 'rate-card') return false;
+    return hasFlatRates(this.cfg.defaults ?? {});
   }
 
   /**
@@ -1103,7 +1396,7 @@ class BudgetPlugin implements Plugin {
     sessionId: string | undefined,
     agentName: string,
     dimScope?: string,
-    requestEstimate = 0
+    requestEstimate = 0,
   ): Record<string, number> {
     const snap: Record<string, number> = {};
 
@@ -1125,9 +1418,13 @@ class BudgetPlugin implements Plugin {
     // With costPerCacheReadToken/costPerCacheWriteToken unset (default = costPerInput),
     // this collapses to inputTokens × costPerInput + outputTokens × costPerOutput —
     // the exact flat formula that shipped before, byte-for-byte.
-    snap['cost'] = this.costFromTotals(acc);
+    snap['cost'] = this.costFromTotals(
+      { flat: acc.flat, rateCostUsd: acc.rateCostUsd },
+      this.resolveRates(acc.agentName, acc.providerType).rates,
+    );
 
     const uniqueScopes = new Set<string>();
+    const costScopes = new Set<string>();
     const uniqueWindows = new Map<
       string,
       { scope: string; field: string; windowMs: number }
@@ -1135,6 +1432,7 @@ class BudgetPlugin implements Plugin {
     for (const cap of caps) {
       const scope = cap.scope ?? dimScope ?? 'task';
       if (scope !== 'task') uniqueScopes.add(scope);
+      if (scope !== 'task' && cap.field === 'cost') costScopes.add(scope);
       if (cap.window) {
         const key = `${scope}:${cap.window}:${cap.field}`;
         if (!uniqueWindows.has(key)) {
@@ -1148,23 +1446,29 @@ class BudgetPlugin implements Plugin {
     }
 
     for (const scope of uniqueScopes) {
-      const t = this.queryScopeTotals(taskId, sessionId, agentName, scope);
+      const t = this.queryScopeTotals(
+        taskId,
+        sessionId,
+        agentName,
+        scope,
+        costScopes.has(scope),
+      );
       snap[`${scope}:inputTokens`] = t.inputTokens;
       snap[`${scope}:outputTokens`] = t.outputTokens;
       snap[`${scope}:calls`] = t.modelCalls;
       // Scoped 'context' = MAX(peak_context_tokens) across the task set; the
       // pending-request estimate also applies at scope level (the current task is
       // a member of the set).
-      snap[`${scope}:context`] = Math.max(
-        t.peakContextTokens,
-        requestEstimate
-      );
+      snap[`${scope}:context`] = Math.max(t.peakContextTokens, requestEstimate);
       // Scoped COST (5339c2e5): billed from the scope's persisted per-class token
       // totals at the SAME cache-weighted rates as the in-memory task cost, so a
       // `scope:'global'` cost cap accumulates across tasks instead of seeing only
       // the current task. (The persisted classes already include this task's
       // in-memory share — queryScopeTotals folds `inMem` in.)
-      snap[`${scope}:cost`] = this.costFromTotals(t);
+      snap[`${scope}:cost`] = this.costFromTotals(
+        t,
+        this.resolveRates(acc.agentName, acc.providerType).rates,
+      );
     }
 
     for (const [key, { scope, field, windowMs }] of uniqueWindows) {
@@ -1176,7 +1480,7 @@ class BudgetPlugin implements Plugin {
         scopeId,
         windowMs,
         taskId,
-        field
+        field,
       );
     }
 
@@ -1186,7 +1490,7 @@ class BudgetPlugin implements Plugin {
   private getSnapshotValue(
     snap: Record<string, number>,
     cap: Cap,
-    dimScope?: string
+    dimScope?: string,
   ): number {
     const scope = cap.scope ?? dimScope ?? 'task';
     // When cap has a window, historical data comes from the window query
@@ -1270,7 +1574,7 @@ class BudgetPlugin implements Plugin {
     cap: Cap,
     current: number,
     limit: number,
-    message?: string
+    message?: string,
   ): Promise<void> {
     if (!this.hooks) return;
     await this.hooks.emit(event, {
@@ -1282,7 +1586,7 @@ class BudgetPlugin implements Plugin {
         message ??
         cap.message ??
         `${cap.field} limit is ${limit}, current value is ${Math.round(
-          current
+          current,
         )}`,
     });
   }
@@ -1301,7 +1605,7 @@ class BudgetPlugin implements Plugin {
     current: number,
     limit: number,
     dimScope: string | undefined,
-    toolName?: string
+    toolName?: string,
   ): Promise<void> {
     const scope = cap.scope ?? dimScope ?? 'task';
     const key = [
@@ -1309,7 +1613,7 @@ class BudgetPlugin implements Plugin {
       scope,
       cap.window ?? '',
       limit,
-      cap.field === 'toolCalls' ? toolName ?? '' : '',
+      cap.field === 'toolCalls' ? (toolName ?? '') : '',
     ].join('|');
     const acc = this.accumulators.get(ctx.taskId);
     if (acc) {
@@ -1322,7 +1626,7 @@ class BudgetPlugin implements Plugin {
       cap,
       current,
       limit,
-      cap.message ?? formatWarnMessage(cap, scope, current, limit, toolName)
+      cap.message ?? formatWarnMessage(cap, scope, current, limit, toolName),
     );
   }
 
@@ -1341,7 +1645,7 @@ class BudgetPlugin implements Plugin {
       (ctx.selection?.modelRef || undefined) ??
       ctx.agentDefinition.provider?.model;
     return Math.floor(
-      contextWindowFor(model) * (cap.contextWindowFraction ?? 0)
+      contextWindowFor(model) * (cap.contextWindowFraction ?? 0),
     );
   }
 
@@ -1356,7 +1660,7 @@ class BudgetPlugin implements Plugin {
     snap: Record<string, number>,
     ctx: ExecutionContext,
     dimMode?: string,
-    dimScope?: string
+    dimScope?: string,
   ): Promise<void> {
     const limit = this.resolveCapLimit(cap, ctx);
     const current = this.getSnapshotValue(snap, cap, dimScope);
@@ -1379,23 +1683,21 @@ class BudgetPlugin implements Plugin {
 
   private async enforcePreModel(p: PreModelRequestPayload): Promise<void> {
     const { taskId, sessionId, agentName } = p.executionContext;
-    const providerType =
-      p.executionContext.agentDefinition?.provider?.type ?? 'unknown';
+    const providerType = providerTypeOf(p.executionContext);
     const acc = this.accumulators.get(taskId);
     if (!acc) return;
 
-    const { caps, mode: dimMode, scope: dimScope } = this.resolveCaps(
-      agentName,
-      providerType
-    );
+    const {
+      caps,
+      mode: dimMode,
+      scope: dimScope,
+    } = this.resolveCaps(agentName, providerType);
     // Tool-path-only caps are excluded here: 'toolCalls' is per-tool; the
     // Packet C error budget ('errors'/'consecutiveErrors') is counted at
     // post:tool_call — the only place the error signal exists — and enforced
     // on the tool path only (plan §3 Packet C). 'context' (peak request) is
     // model-path-only and stays in the evaluated set.
-    const modelCaps = caps.filter(
-      (c) => !TOOL_PATH_ONLY_FIELDS.has(c.field)
-    );
+    const modelCaps = caps.filter((c) => !TOOL_PATH_ONLY_FIELDS.has(c.field));
     if (modelCaps.length === 0) return;
 
     // One snapshot, one DB round-trip per unique scope/window. The tools-aware
@@ -1408,7 +1710,7 @@ class BudgetPlugin implements Plugin {
       sessionId,
       agentName,
       dimScope,
-      estimateRequestContext(p.messages, p.tools)
+      estimateRequestContext(p.messages, p.tools),
     );
     for (const cap of modelCaps) {
       await this.evaluateCap(cap, snap, p.executionContext, dimMode, dimScope);
@@ -1456,12 +1758,12 @@ class BudgetPlugin implements Plugin {
         mode,
         dimScope,
         acc,
-        currentToolCalls
+        currentToolCalls,
       );
     } catch (e) {
       acc.toolCalls.set(
         toolName,
-        Math.max(0, (acc.toolCalls.get(toolName) ?? 1) - 1)
+        Math.max(0, (acc.toolCalls.get(toolName) ?? 1) - 1),
       );
       throw e;
     }
@@ -1474,7 +1776,7 @@ class BudgetPlugin implements Plugin {
     mode: string | undefined,
     dimScope: string | undefined,
     acc: BudgetAccumulator,
-    currentToolCalls: number
+    currentToolCalls: number,
   ): Promise<void> {
     const { toolName, callId, executionContext } = p;
     const snap = this.buildSnapshot(
@@ -1483,7 +1785,7 @@ class BudgetPlugin implements Plugin {
       executionContext.taskId,
       executionContext.sessionId,
       executionContext.agentName,
-      dimScope
+      dimScope,
     );
 
     for (const cap of toolCaps) {
@@ -1508,7 +1810,7 @@ class BudgetPlugin implements Plugin {
             current,
             limit,
             dimScope,
-            toolName
+            toolName,
           );
           continue;
         }
@@ -1521,7 +1823,7 @@ class BudgetPlugin implements Plugin {
             cap,
             current,
             limit,
-            msg
+            msg,
           );
           throw makeToolWarning(toolName, callId, msg);
         }
@@ -1533,13 +1835,13 @@ class BudgetPlugin implements Plugin {
           cap,
           current,
           limit,
-          msg
+          msg,
         );
         throw makeEnforcementError(
           `tool:${toolName}:${cap.field}`,
           limit,
           current,
-          cap.message
+          cap.message,
         );
       }
     }
@@ -1629,13 +1931,7 @@ class BudgetPlugin implements Plugin {
 
 const createPlugin: PluginFactory = ({ db, config }: PluginContext): Plugin => {
   const pluginCfg = normalizeConfig(config);
-  const costIn = pluginCfg.defaults?.costPerInputToken ?? 0;
-  const costOut = pluginCfg.defaults?.costPerOutputToken ?? 0;
-  // Cache rates default to the flat input rate (BUG-AGENTMCP-008): a config that never
-  // sets them bills every input token at costPerInputToken — exactly as before the fix.
-  const costRead = pluginCfg.defaults?.costPerCacheReadToken ?? costIn;
-  const costWrite = pluginCfg.defaults?.costPerCacheWriteToken ?? costIn;
-  return new BudgetPlugin(db, pluginCfg, costIn, costOut, costRead, costWrite);
+  return new BudgetPlugin(db, pluginCfg);
 };
 
 export default createPlugin;
