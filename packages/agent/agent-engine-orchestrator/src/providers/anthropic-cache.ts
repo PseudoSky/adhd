@@ -48,7 +48,7 @@
  * undercount with margin: any prefix whose real size is at least the minimum has an estimate of at
  * least ~80% of it.
  */
-import { encode } from "gpt-tokenizer";
+import { boundedTokenCount } from "../engine/bounded-token-count.js";
 import type {
     CacheControlEphemeral,
     ContentBlockParam,
@@ -164,7 +164,7 @@ export function serverToolTokens(tools: readonly Tool[] | undefined): number {
 }
 
 function countTokens(text: string): number {
-    return text.length === 0 ? 0 : encode(text).length;
+    return text.length === 0 ? 0 : boundedTokenCount(text).tokens;
 }
 
 /** Model-visible text of one content block, for token estimation. */

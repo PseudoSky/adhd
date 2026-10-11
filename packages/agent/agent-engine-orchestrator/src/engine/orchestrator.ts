@@ -22,8 +22,8 @@ import {
 import { capOrSpillToolResult, resolveToolResultSpill } from './tool-result-spill.js';
 import { canonicalizeToolDefinitions, compactToolDefinitions } from './tool-schema-compact.js';
 import { coerceToolArguments } from './tool-arg-coercion.js';
-import { DEFAULT_PROVIDER_TIMEOUT_MS, DEFAULT_TOOL_CALL_CONCURRENCY } from '../interfaces.js';
-import PQueue from 'p-queue';
+import { DEFAULT_PROVIDER_TIMEOUT_MS } from '../interfaces.js';
+import { createToolLimiter } from './tool-limiter.js';
 import { selectionOf, wireModelOf } from '../providers/resolve-selection.js';
 import { readPartialUsage, type IProviderPartialUsage, type ProviderTokenUsage } from '../providers/partial-usage.js';
 import { buildModelResponsePayload, sourceFromResponse } from './model-response-payload.js';
@@ -443,6 +443,8 @@ export class Orchestrator {
     const delegationSessions = new Set<string>();
     // Per-task sequence for claudecli-bridge tool results (spill file names).
     let bridgeCallSeq = 0;
+    // ea8f6f92 G3: ONE per-task limiter shared by the native fan-out and the claudecli bridge.
+    const toolLimiter = createToolLimiter(config.toolCallConcurrency);
 
     /**
      * GOV (f9dadeaa): the per-call governance guard shared by the engine-native dispatch loop and the
@@ -1445,7 +1447,9 @@ export class Orchestrator {
                   }
                 }
                 const client = await registry.getClient(target.server);
-                rawResult = await client.callTool(target.tool, callArguments, composedSignal);
+                rawResult = await toolLimiter.run(() =>
+                  client.callTool(target.tool, callArguments, composedSignal)
+                );
               } catch (error) {
                 isErr = true;
                 isDenial = isAllowlistDenial(error);
@@ -1879,9 +1883,8 @@ export class Orchestrator {
         const nonHitlToolCalls = toolCalls.filter(
           (tc) => tc.tool !== HITL_TOOL_NAME && !warningResults.has(tc.id)
         );
-        const toolResults = await mapWithConcurrency(
+        const toolResults = await toolLimiter.map(
           nonHitlToolCalls,
-          config.toolCallConcurrency,
           async (toolCall) => {
             const resolved = registry.resolveToolName?.(
               `${toolCall.server}__${toolCall.tool}`
@@ -2331,41 +2334,4 @@ export function windowMessages(messages: Message[], limit: number): Message[] {
     }
 
     return [...preserved, ...kept.flat()];
-}
-
-/**
- * Runs `fn` over `items` with at most `limit` in flight and returns the results
- * in INPUT order (35768ae8). `limit` falls back to
- * {@link DEFAULT_TOOL_CALL_CONCURRENCY} when absent or not a positive integer.
- * Each call is an independent pool task over its own locals (no shared mutable
- * state). A throw (the engine's fatal tool codes) rejects the whole map exactly
- * as `Promise.all` did, and additionally drops calls that have not started
- * (the queue is cleared before the failing call frees its slot). Calls already
- * in flight are NOT aborted; they run to completion.
- * Ordinary tool failures are caught inside `fn`, so they never cancel siblings.
- */
-async function mapWithConcurrency<T, R>(
-  items: readonly T[],
-  limit: number | undefined,
-  fn: (item: T) => Promise<R>
-): Promise<R[]> {
-  const concurrency =
-    typeof limit === 'number' && Number.isInteger(limit) && limit >= 1
-      ? limit
-      : DEFAULT_TOOL_CALL_CONCURRENCY;
-  const pool = new PQueue({ concurrency });
-  // Clear the queue from INSIDE the failing task, before its slot frees: clearing
-  // only after Promise.all rejects loses the race with the pool promoting the
-  // next queued call the instant the failing one settles (a4235310 AC4).
-  const guarded = async (item: T): Promise<R> => {
-    try {
-      return await fn(item);
-    } catch (err) {
-      pool.clear();
-      throw err;
-    }
-  };
-  return Promise.all(
-    items.map((item) => pool.add(() => guarded(item)) as Promise<R>)
-  );
 }
