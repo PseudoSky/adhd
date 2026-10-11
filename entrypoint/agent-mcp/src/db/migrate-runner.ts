@@ -2,7 +2,7 @@ import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 
 /**
  * The shipped drizzle migrations. drizzle applies an entry only if its journal `when` exceeds the ledger's newest
- * `created_at`; entries 0007-0015 use hand-assigned `when` values (previous + 1), so a later migration stamped
+ * `created_at`; entries 0007-0016 use hand-assigned `when` values (previous + 1), so a later migration stamped
  * with a LOWER `when` than a shipped entry would be silently skipped. Keep each new entry's `when` above the last. See AGENTS.md
  * "Database Migrations". (b3999dfa AC7)
  */

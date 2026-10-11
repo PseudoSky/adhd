@@ -89,28 +89,32 @@ export const tasksTable = sqliteTable("tasks", {
 // ──────────────────────────────────────────────
 // task_events
 // ──────────────────────────────────────────────
-export const taskEventsTable = sqliteTable("task_events", {
-    id: text("id").primaryKey(),
-    taskId: text("task_id")
-        .notNull()
-        .references(() => tasksTable.id, {
-            onDelete: "cascade"
-        }),
-    type: text("type", {
-        enum: [
-            "MODEL_REQUEST",
-            "MODEL_RESPONSE",
-            "TOOL_CALL",
-            "TOOL_RESULT",
-            "TOOL_ARG_COERCED",
-            "TASK_COMPLETED",
-            "TASK_FAILED",
-            "TASK_CANCELLED"
-        ]
-    }).notNull(),
-    payload: text("payload"),
-    createdAt: text("created_at").notNull(),
-});
+export const taskEventsTable = sqliteTable(
+    "task_events",
+    {
+        id: text("id").primaryKey(),
+        taskId: text("task_id")
+            .notNull()
+            .references(() => tasksTable.id, {
+                onDelete: "cascade"
+            }),
+        type: text("type", {
+            enum: [
+                "MODEL_REQUEST",
+                "MODEL_RESPONSE",
+                "TOOL_CALL",
+                "TOOL_RESULT",
+                "TOOL_ARG_COERCED",
+                "TASK_COMPLETED",
+                "TASK_FAILED",
+                "TASK_CANCELLED"
+            ]
+        }).notNull(),
+        payload: text("payload"),
+        createdAt: text("created_at").notNull(),
+    },
+    (table) => [index("idx_task_events_task_id_type").on(table.taskId, table.type)]
+);
 
 // ──────────────────────────────────────────────
 // composed_prompts

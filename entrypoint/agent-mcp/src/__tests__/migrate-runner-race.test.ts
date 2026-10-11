@@ -7,6 +7,8 @@
  * exists (`duplicate column name`). This test makes that interleaving deterministic -- a rival connection runs the
  * whole migration at the exact instant the loser reaches its `BEGIN` -- and proves the loser converges instead of
  * failing. The real multi-process counterpart is migrate-runner-concurrency.e2e.test.ts.
+ *
+ * ad988fda AC3: the BEGIN hook uses drizzle's public `logger.logQuery` option, not drizzle internals.
  */
 import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
@@ -16,7 +18,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { MIGRATIONS_FOLDER, isConcurrentMigrationRace, runMigrationsOn } from "../db/migrate-runner.js";
+import { MIGRATIONS_FOLDER, classifyMigrationRace, isConcurrentMigrationRace, runMigrationsOn } from "../db/migrate-runner.js";
 import { expectedLedgerRows, idxBeforeCacheCreation1h, tagAt } from "./fixtures/migration-journal.js";
 
 /** The schema every race test seeds: everything BEFORE the cache_creation_1h migration, derived from the journal. */
@@ -45,18 +47,18 @@ const columns = (c: Database.Database): string[] =>
 /** Open `file`, and run `onFirstBegin` exactly once, at the moment drizzle opens its migration transaction. */
 function racingDb(file: string, onFirstBegin: () => void) {
   const conn = new Database(file);
-  const db = drizzle(conn);
-  const session = (db as unknown as { session: { run: (q: unknown) => unknown } }).session;
-  const run = session.run.bind(session);
   let fired = false;
-  session.run = (q: unknown) => {
-    const text = (q as { queryChunks?: Array<{ value?: string[] }> }).queryChunks?.[0]?.value?.[0];
-    if (!fired && text === "BEGIN") {
-      fired = true;
-      onFirstBegin();
-    }
-    return run(q);
-  };
+  // drizzle's public `logger` option is invoked with the SQL text just before each statement executes.
+  const db = drizzle(conn, {
+    logger: {
+      logQuery(query: string) {
+        if (!fired && query === "BEGIN") {
+          fired = true;
+          onFirstBegin();
+        }
+      },
+    },
+  });
   return { conn, db };
 }
 
@@ -115,15 +117,14 @@ describe("8333f755 AC3: concurrent openers converge on the migrated schema", () 
   /** A db whose Nth `BEGIN` (1-based) calls `onBegin(n)`; throwing from it makes that migrate attempt fail. */
   function countingDb(file: string, onBegin: (n: number) => void) {
     const conn = new Database(file);
-    const db = drizzle(conn);
-    const session = (db as unknown as { session: { run: (q: unknown) => unknown } }).session;
-    const run = session.run.bind(session);
     let begins = 0;
-    session.run = (q: unknown) => {
-      const text = (q as { queryChunks?: Array<{ value?: string[] }> }).queryChunks?.[0]?.value?.[0];
-      if (text === "BEGIN") onBegin(++begins);
-      return run(q);
-    };
+    const db = drizzle(conn, {
+      logger: {
+        logQuery(query: string) {
+          if (query === "BEGIN") onBegin(++begins);
+        },
+      },
+    });
     return { conn, db, begins: () => begins };
   }
   const migratedTo = (maxIdx: number): string => {
@@ -166,7 +167,15 @@ describe("8333f755 AC3: concurrent openers converge on the migrated schema", () 
     const busy = countingDb(file, () => {
       throw new Error("SQLITE_BUSY: database is locked");
     });
-    expect(() => runMigrationsOn(busy.conn, busy.db, MIGRATIONS_FOLDER, { sleepMs: (ms) => sleeps.push(ms), random: () => 1 - Number.EPSILON })).toThrow(/SQLITE_BUSY/);
+    let thrown: unknown;
+    try {
+      runMigrationsOn(busy.conn, busy.db, MIGRATIONS_FOLDER, { sleepMs: (ms) => sleeps.push(ms), random: () => 1 - Number.EPSILON });
+    } catch (e) {
+      thrown = e;
+    }
+    // drizzle wraps the failure in a "Failed to run the query 'BEGIN'" error; the SQLITE_BUSY is on its cause chain.
+    expect(thrown).toBeInstanceOf(Error);
+    expect(classifyMigrationRace(thrown)).toBe("contention");
     expect(busy.begins()).toBe(8);
     expect(sleeps).toHaveLength(7);
     expect(Math.max(...sleeps)).toBeLessThanOrEqual(250); // capped

@@ -1,6 +1,6 @@
 import { isDeepStrictEqual } from 'node:util';
 
-import { eq } from 'drizzle-orm';
+import { asc, count, eq } from 'drizzle-orm';
 
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 
@@ -204,20 +204,25 @@ export class AgentStore {
    * `name` column so system prompts/definitions are never read or leaked.
    */
   private describeRegisteredNames(): string {
+    // Sort + LIMIT in SQL (cap+1 rows tells us whether a "+N more" tail is needed); only then pay for a COUNT.
     const names = this.db
       .select({ name: agentsTable.name })
       .from(agentsTable)
+      .orderBy(asc(agentsTable.name))
+      .limit(AGENT_NOT_FOUND_NAME_CAP + 1)
       .all()
-      .map((r) => r.name)
-      .sort();
+      .map((r) => r.name);
     if (names.length === 0) {
       return 'No agents are registered; call `agent_create` first.';
     }
     const shown = names.slice(0, AGENT_NOT_FOUND_NAME_CAP).join(', ');
-    const more =
-      names.length > AGENT_NOT_FOUND_NAME_CAP
-        ? ` (+${names.length - AGENT_NOT_FOUND_NAME_CAP} more; use \`agent_list\` for the full roster)`
-        : '';
+    let more = '';
+    if (names.length > AGENT_NOT_FOUND_NAME_CAP) {
+      const total =
+        this.db.select({ n: count() }).from(agentsTable).get()?.n ??
+        names.length;
+      more = ` (+${total - AGENT_NOT_FOUND_NAME_CAP} more; use \`agent_list\` for the full roster)`;
+    }
     return `Registered agents: ${shown}${more}.`;
   }
 

@@ -559,7 +559,8 @@ function chunkIds(ids: string[]): string[][] {
 /**
  * Tasks (of `taskIds`) with at least one MODEL_RESPONSE whose usage is a lower bound (`usageLowerBound` on the
  * event payload): the task/session grains derive `usage_lower_bound` from the same events the turn grain reads,
- * so no column is needed. (afa37093 AC3)
+ * so no column is needed. The json_extract is not the cost (ad988fda AC2 measured 79.6ms vs 80.1ms without it);
+ * the task_id lookup is served by migration 0016's `idx_task_events_task_id_type`. (afa37093 AC3)
  */
 function lowerBoundTaskIds(db: Database, taskIds: string[]): Set<string> {
   const out = new Set<string>();

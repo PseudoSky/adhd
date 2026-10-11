@@ -2,6 +2,9 @@
 
 ### 🩹 Fixes
 
+- **agent-mcp:** `AGENT_NOT_FOUND` roster lookup sorts and LIMITs in SQL (selects `cap+1` names, a COUNT only when over the cap) instead of loading and sorting every name. (ad988fda AC1)
+- **agent-mcp:** migration `0016` indexes `task_events (task_id, type)`: per-task reads (usage_query's `usageLowerBound` derivation) full-scanned the table (80ms per 100-task lookup over 400k events, 0.08-0.33ms indexed; the `json_extract` itself cost nothing, so no stored column). (ad988fda AC2)
+- **agent-mcp:** the migrate-runner race tests hook `BEGIN` through drizzle's public `logger` option instead of its internal `queryChunks`. (ad988fda AC3)
 - **agent-mcp:** the CRLF-preserving eol hook now rewrites via temp-file + rename preserving file mode, skips with a warning when a competing write lands mid-rewrite, bounds its pending-call map (1024 entries / 10 min TTL), and never reads files over 8 MiB; e2e covers an `isError:true` MCP result through the real engine (19354419 AC1 AC2 AC3 AC4 AC5)
 - **agent-mcp:** `AGENT_NOT_FOUND` now lists the registered agent names (sorted, capped at 20 with "+N more", names only — no system prompts), and the `agent` tool description says how to discover valid names (1b947d91 AC1 AC2 AC3)
 - **agent-mcp:** a failure while reading the registered-agent roster (locked database, schema drift) can no longer replace the `AGENT_NOT_FOUND` error: the typed error is still thrown, pointing at `agent_list`. The agent-tool-description test now drives both `agent` descriptors through the real server instead of regexing `server.ts`. (b3999dfa AC5)

@@ -68,7 +68,7 @@ describe('1b947d91 AC1/AC3: AGENT_NOT_FOUND lists registered names', () => {
     expect(m).not.toContain('TOP-SECRET-PROMPT');
   });
 
-  it('caps the roster and reports "+N more"', () => {
+  it('ad988fda AC1: caps the roster (SQL ORDER BY + LIMIT cap+1) and reports "+N more"', () => {
     const total = AGENT_NOT_FOUND_NAME_CAP + 5;
     const pad = (i: number) => `agent-${String(i).padStart(3, '0')}`;
     for (let i = 0; i < total; i++) seed(pad(i));
