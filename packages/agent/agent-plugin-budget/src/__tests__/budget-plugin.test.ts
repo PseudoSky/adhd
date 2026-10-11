@@ -1887,7 +1887,11 @@ describe('Packet A — cap.mode on the model path (budget:warning / budget:block
     await hooks.emit('task:start', { executionContext: ctx, messages: [] });
     let release!: () => void;
     const gate = new Promise<void>((r) => (release = r));
+    // Latch (699da472 AC3): warn fires once per cap per task, so resolve when that one handler is parked; no timer.
+    let parked!: () => void;
+    const warnParked = new Promise<void>((r) => (parked = r));
     hooks.register('budget:warning', async () => {
+      parked();
       await gate;
     });
     const calls = [1, 2, 3, 4, 5].map((i) =>
@@ -1896,7 +1900,7 @@ describe('Packet A — cap.mode on the model path (budget:warning / budget:block
         () => 'blocked',
       ),
     );
-    await new Promise((r) => setTimeout(r, 0));
+    await warnParked;
     release();
     const results = await Promise.all(calls);
     expect(results.filter((r) => r === 'ok')).toHaveLength(2);
