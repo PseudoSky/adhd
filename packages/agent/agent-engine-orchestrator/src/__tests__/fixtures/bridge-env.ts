@@ -17,6 +17,7 @@ import * as schema from "@adhd/agent-store-runtime";
 import { SessionStore, TaskStore } from "@adhd/agent-store-runtime";
 import type { AgentDefinition } from "@adhd/agent-base-types";
 
+import type { InProcessToolDescriptor, InProcessToolHandler } from "../../clients/in-process.js";
 import type { TaskDeps } from "../../tools/task.js";
 import type { AgentStore } from "../../tools/agent-crud.js";
 import type { SessionStoreForTool } from "../../tools/session.js";
@@ -38,6 +39,12 @@ export interface IBridgeEnvOptions {
   /** Stdio MCP servers the agent may use (bridged to claude through the loopback bridge). */
   mcpServers: Record<string, { transport: "stdio"; command: string; args: string[]; env?: Record<string, string> }>;
   gate?: (c: { server: string; tool: string }) => "allow" | "deny" | "ask";
+  /**
+   * Tools served IN-PROCESS. The engine routes the server name `agent-mcp` to its own in-process client (it is the
+   * engine's self-reference), so a test that needs agent-mcp's own tool names (`task`, `agent`) must register them
+   * here and declare a placeholder `agent-mcp` entry in `mcpServers`; that entry is never spawned.
+   */
+  inProcess?: { descriptors: InProcessToolDescriptor[]; handler: InProcessToolHandler };
   maxLoops?: number;
   /** Extra env for the claude subprocess. */
   subprocessEnv?: Record<string, string>;
@@ -133,8 +140,8 @@ export function makeBridgeEnv(opts: IBridgeEnvOptions): IBridgeEnv {
     policy,
     hooks,
     selfUrl: undefined,
-    inProcessDescriptors: [],
-    inProcessHandler: async () => { throw new Error("no in-process tools registered in this test"); },
+    inProcessDescriptors: opts.inProcess?.descriptors ?? [],
+    inProcessHandler: opts.inProcess?.handler ?? (async () => { throw new Error("no in-process tools registered in this test"); }),
     db,
     dagEngine,
     config,

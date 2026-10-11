@@ -7,7 +7,7 @@
  *   McpClientRegistry -> stdio server chain, driven by a stand-in `claude` that fires its tool calls
  *   SIMULTANEOUSLY (fake-claude-mcp.mjs `parallel:true`). Per-run caps must be exact under that race.
  * - AC5 (tripwire): the REAL `claude` CLI (haiku-4-5; paid, but NOT env-gated: a handful of tiny
- *   turns) runs same-message `task` calls through the governed bridge. They must overlap (cross-process
+ *   turns) runs same-message `task` calls through the governed bridge. They must overlap (in-process promise
  *   latch, no sleeps) AND a deny verdict must still deny a hinted tool. The CLI version is tripwired so a
  *   behaviour flip on upgrade forces a revisit of CONCURRENCY_HINT_TOOLS -- via ONE
  *   explicit tripwire test (95ee2a24 AC5); every other test runs on any claude version.
@@ -15,7 +15,7 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -28,7 +28,6 @@ import type { EngineLogger } from "../interfaces.js";
 import { FAKE_CLAUDE, makeBridgeEnv, type IBridgeEnv } from "./fixtures/bridge-env.js";
 
 const COUNTING = fileURLToPath(new URL("./fixtures/counting-mcp-server.mjs", import.meta.url));
-const LATCH = fileURLToPath(new URL("./fixtures/latch-mcp-server.mjs", import.meta.url));
 /** claude CLI version the AC5 finding was recorded against; a different version must re-prove it. */
 const PINNED_CLAUDE_VERSION = "2.1.296";
 const logger: EngineLogger = { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} };
@@ -169,8 +168,40 @@ describe("95ee2a24 AC5: claude CLI version tripwire (the only version-pinned tes
 describe("424b6362 AC5: real claude CLI, governed bridge, hinted task-shaped tools (runs on any claude version)", () => {
   it("424b6362 AC5: same-message task calls overlap AND a deny verdict still denies the hinted agent tool", { timeout: 240_000, retry: 1 }, async () => {
     const work = freshDir("adhd-par-real-");
+    // agent-mcp's own tool names are served by the engine's in-process client (the server name `agent-mcp` is the
+    // engine's self-reference), so the latch lives in-process: a promise latch decides overlap, a failure-only
+    // deadline bounds it, nothing sleeps.
+    const started = new Set<string>();
+    const waiters: Array<() => void> = [];
+    const bothStarted = (): boolean => started.has("a") && started.has("b");
+    const inProcess = {
+      descriptors: ["task", "agent"].map((name) => ({
+        name, description: `Latch test tool ${name}. Pass id "a" or "b".`,
+        inputSchema: { type: "object", properties: { id: { type: "string" } }, required: ["id"] },
+      })),
+      handler: async (tool: string, args: unknown): Promise<unknown> => {
+        const id = String((args as { id?: unknown } | undefined)?.id ?? "");
+        if (tool === "agent") {
+          writeFileSync(join(work, "ran-agent"), id);
+          return { content: [{ type: "text", text: `agent ran ${id}` }] };
+        }
+        started.add(id);
+        for (const w of waiters.splice(0)) w();
+        let timer: NodeJS.Timeout | undefined;
+        if (!bothStarted()) {
+          await new Promise<void>((resolve) => {
+            waiters.push(resolve);
+            timer = setTimeout(resolve, 20_000); // failure-path bound only: serialised calls never see the peer
+          });
+        }
+        if (timer) clearTimeout(timer);
+        writeFileSync(join(work, `done-${id}`), JSON.stringify({ sawPeer: bothStarted() }));
+        return { content: [{ type: "text", text: `done ${id}` }] };
+      },
+    };
     const env = makeBridgeEnv({
-      mcpServers: { [AGENT_MCP_SERVER_NAME]: { transport: "stdio", command: process.execPath, args: [LATCH], env: { LATCH_DIR: work, LATCH_DEADLINE_MS: "20000" } } },
+      mcpServers: { [AGENT_MCP_SERVER_NAME]: { transport: "stdio", command: "never-spawned", args: [] } /* placeholder: agent-mcp is served in-process */ },
+      inProcess,
       gate: (c) => (c.tool === "agent" ? "deny" : "allow"),
       maxLoops: 8,
     });
