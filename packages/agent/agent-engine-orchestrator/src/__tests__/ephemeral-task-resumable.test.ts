@@ -90,6 +90,7 @@ function makeEngineConfig(): EngineConfig {
         getProviderConfig: () => ({ secret: "test-secret", baseURL: "http://localhost:0/v1", model: "gpt-4o-mini" }),
         subprocessEnv: () => ({}),
         isEnvNameAllowed: () => true,
+        resolveEnvName: () => undefined,
     };
 }
 
