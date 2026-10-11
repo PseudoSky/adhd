@@ -1,3 +1,16 @@
+## 0.0.4 (2026-10-11)
+
+### 🩹 Fixes
+
+- **agent-core-native-tooling:** e2e stays cached (lane rule 3) but hashes the srt version (0ba70e47 L6) ([023fe725](https://github.com/PseudoSky/adhd/commit/023fe725))
+- **agent-core-native-tooling:** e2e teardown/timeouts/determinism, uncached e2e, README exposure note, AC4 docs contract (0ba70e47) ([74a92137](https://github.com/PseudoSky/adhd/commit/74a92137))
+- **agent-core-native-tooling:** merge ctx.env allowlist value with proxy keys (0ba70e47 AC3a) ([fbc6adcd](https://github.com/PseudoSky/adhd/commit/fbc6adcd))
+- **agent-core-native-tooling:** pass srt proxy env through to the shell server children (0ba70e47 AC1 AC3 AC4) ([fcee9367](https://github.com/PseudoSky/adhd/commit/fcee9367))
+
+### ❤️ Thank You
+
+- pseudosky
+
 ## 0.0.3 (2026-10-11)
 
 ### 🩹 Fixes

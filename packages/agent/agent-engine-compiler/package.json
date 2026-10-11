@@ -29,7 +29,7 @@
     "drizzle-orm": "0.45.2",
     "@adhd/agent-store-prompts": "^2.2.3",
     "@adhd/agent-store-tools": "^2.2.3",
-    "@adhd/agent-core-provider": "^2.2.8",
+    "@adhd/agent-core-provider": "^2.2.9",
     "@adhd/agent-core-policy": "^2.2.3",
     "@adhd/agent-core-env": "^0.1.5"
   },

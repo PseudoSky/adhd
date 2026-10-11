@@ -399,10 +399,10 @@ importers:
         specifier: ^0.1.5
         version: link:../../packages/agent/agent-core-env
       '@adhd/agent-core-native-tooling':
-        specifier: ^0.0.3
+        specifier: ^0.0.4
         version: link:../../packages/agent/agent-core-native-tooling
       '@adhd/agent-core-provider':
-        specifier: ^2.2.8
+        specifier: ^2.2.9
         version: link:../../packages/agent/agent-core-provider
       '@adhd/agent-engine-compiler':
         specifier: ^2.2.8
@@ -722,10 +722,10 @@ importers:
         specifier: ^2.3.11
         version: link:../../packages/agent/agent-base-types
       '@adhd/agent-core-native-tooling':
-        specifier: ^0.0.3
+        specifier: ^0.0.4
         version: link:../../packages/agent/agent-core-native-tooling
       '@adhd/backlog':
-        specifier: ^1.0.15
+        specifier: ^1.0.16
         version: link:../backlog
       '@adhd/dispatch-base-spec':
         specifier: ^0.1.7
@@ -914,7 +914,7 @@ importers:
         specifier: ^2.2.3
         version: link:../agent-core-policy
       '@adhd/agent-core-provider':
-        specifier: ^2.2.8
+        specifier: ^2.2.9
         version: link:../agent-core-provider
       '@adhd/agent-store-prompts':
         specifier: ^2.2.3
@@ -960,7 +960,7 @@ importers:
         specifier: ^2.3.11
         version: link:../agent-base-types
       '@adhd/agent-core-provider':
-        specifier: ^2.2.8
+        specifier: ^2.2.9
         version: link:../agent-core-provider
       '@adhd/agent-engine-compiler':
         specifier: ^2.2.8
@@ -1046,7 +1046,7 @@ importers:
         specifier: ^2.3.11
         version: link:../agent-base-types
       '@adhd/agent-core-provider':
-        specifier: ^2.2.8
+        specifier: ^2.2.9
         version: link:../agent-core-provider
       '@adhd/agent-store-runtime':
         specifier: ^2.2.10

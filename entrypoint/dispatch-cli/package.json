@@ -1,13 +1,13 @@
 {
   "name": "@adhd/dispatch-cli",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "bin": {
     "dispatch-cli": "./dist/bin/cli.js"
   },
   "dependencies": {
-    "@adhd/backlog": "^1.0.15",
+    "@adhd/backlog": "^1.0.16",
     "@adhd/agent-base-types": "^2.3.11",
-    "@adhd/agent-core-native-tooling": "^0.0.3",
+    "@adhd/agent-core-native-tooling": "^0.0.4",
     "@adhd/dispatch-serializer-json": "^0.1.4",
     "@adhd/dispatch-orchestrator": "^0.1.7",
     "@modelcontextprotocol/sdk": "1.29.0",

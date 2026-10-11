@@ -12,10 +12,10 @@
     "publishedFromRef": "8c0514d62060a399b4267a50bb2fd898e277309e"
   },
   "@adhd/agent-core-native-tooling": {
-    "version": "0.0.3",
-    "normalizedHash": "sha256:756b8bc3dbb204be2d069b542fc1b2b669b8bf406e5bf334f4192869e883e27f",
-    "publishedIntegrity": "sha512-4uuhDarFIBYEv8rH45qRa6QgLKVjt1mrp6o05pkvG0vAFsGkYVbRRdeQ76Qrg7xfU1Q5/jiK/3hlNnnOdmr0yw==",
-    "publishedFromRef": "3d538c8a30a47ed454549b5e295378afb206cd17"
+    "version": "0.0.4",
+    "normalizedHash": "sha256:0e8c8a849c0ea4f0bd2bc6c8e668d41efc93da9e1377021b5b8739244b6d1c54",
+    "publishedIntegrity": "sha512-46WxBh8ELAW6+UWefBcpq0zcLGJq+7Z59JrJfP7yPjNUusXEyY7IAsET/KzMuQ9Pt5TCwCZisRgTLbpIWib4FA==",
+    "publishedFromRef": "ab8813cc6cf570e9fb2aa66e361ef5d365693682"
   },
   "@adhd/agent-core-policy": {
     "version": "2.2.3",
@@ -24,10 +24,10 @@
     "publishedFromRef": "a1a6ba024c5526b930f97c5420e920639d14e110"
   },
   "@adhd/agent-core-provider": {
-    "version": "2.2.8",
-    "normalizedHash": "sha256:1bca9ab8e76287f18c5f9070d2da9a204f779070b57dc9e684d5a4184b8bf78b",
-    "publishedIntegrity": "sha512-A5URT0jNfTIpAKYHmhqZeArFWEleWT/AhuIGCFl1bZeymhiWZOMmXW3EmL7+2Pfu8QLijdG6xXjl0oJQ69CUyw==",
-    "publishedFromRef": "7adb975e5a3832a356c235c3892bd2d2640bf6e6"
+    "version": "2.2.9",
+    "normalizedHash": "sha256:b3c5e3c23e1fe4856dafdca60296628a9e7e5adcb2dd7d686e4c05068ff84d44",
+    "publishedIntegrity": "sha512-Z1VbFtF3aj6gJuY64hJADLHabnV7TppUT+vqdhLV0qPYFpYScqjsrqQFi8YrRLNohwzOou1FzClal1ujCm/WVQ==",
+    "publishedFromRef": "ab8813cc6cf570e9fb2aa66e361ef5d365693682"
   },
   "@adhd/agent-engine-compiler": {
     "version": "2.2.8",
@@ -42,10 +42,10 @@
     "publishedFromRef": "b52b92eadbab607b7bbddc036a09de2ca3df84fd"
   },
   "@adhd/agent-generator-plugin": {
-    "version": "0.1.6",
-    "normalizedHash": "sha256:ced422344d7e31a32309365514deacda2e90f9cad77c136973475f56e5135775",
-    "publishedIntegrity": "sha512-xhyJdP4C6wQjpfR7uCQgxiL8mMrcmfVwOuCLzXrR4AM1d/75xJ48oh2zxi2CWKwIm9guLRaOHv8oUSg753PcUA==",
-    "publishedFromRef": "a49d4fbe51581ba895a217105b27c18d65190c69"
+    "version": "0.1.7",
+    "normalizedHash": "sha256:94456febe778d816d3973a975e66fb3f200d9062d5ff4b31ba09edfb4f10af21",
+    "publishedIntegrity": "sha512-3hZGXdPEJgrqfke/DwpTG0ZL0udPM04H5gau+nEIY9Ksny9U00P5A/xMaRStNXinRbMNbBGf3W1GhYneiHdhcA==",
+    "publishedFromRef": "ab8813cc6cf570e9fb2aa66e361ef5d365693682"
   },
   "@adhd/agent-mcp": {
     "version": "2.3.13",
@@ -156,10 +156,10 @@
     "publishedFromRef": "d0c78587993aecaf2e484b8400f33af8587d0c56"
   },
   "@adhd/apigen-generator-nx": {
-    "version": "0.1.5",
-    "normalizedHash": "sha256:bdb457cb65fc3ccf2b2c79c8385dad8dfc85755583733ff91712157b578af456",
-    "publishedIntegrity": "sha512-mHopcdhQ8y6qZLf1y+T+YrM0FIFDm99G9UXyXb00fgo1owt2YafBuTwYdfIAOPRtY+6INh269qzI96BlSl/+SQ==",
-    "publishedFromRef": "a49d4fbe51581ba895a217105b27c18d65190c69"
+    "version": "0.1.6",
+    "normalizedHash": "sha256:6da81533e86c6018f5c6e45a37a120e6a7859c7a45e7d47a5393aa1a33e597da",
+    "publishedIntegrity": "sha512-qunHdGG4WVi1hQ6KIG3L3bMPKYnPxHCfzfkqe7S+gCCuaKUvoBKx3a2kuIH+77efUO1FZTe9/xVeI+jB8hjfOA==",
+    "publishedFromRef": "ab8813cc6cf570e9fb2aa66e361ef5d365693682"
   },
   "@adhd/apigen-plugin-api-express": {
     "version": "0.2.8",
@@ -258,10 +258,10 @@
     "publishedFromRef": "a1a6ba024c5526b930f97c5420e920639d14e110"
   },
   "@adhd/backlog": {
-    "version": "1.0.15",
-    "normalizedHash": "sha256:25123fd0ca751e922aaefeade384cd7bffb83f9dfc14a93ab23074d35f1e4355",
-    "publishedIntegrity": "sha512-FEgRRmK7f9xvV5kfYKyO84Nv2xliETGYZfGSimiYS4qPeoib/URimRt/OiK2/MkcoZdrkPaLLDZThNHXF0+Y/g==",
-    "publishedFromRef": "7adb975e5a3832a356c235c3892bd2d2640bf6e6"
+    "version": "1.0.16",
+    "normalizedHash": "sha256:83a9a0ef81b0d1cfbd1229727d7b8feb5f9cc54838a29ff6098bbf1cac8b2226",
+    "publishedIntegrity": "sha512-72F6E+iDWELPmr1Xe+H6GwJy9DdkOSuocX4nNx+n8qO2hoIbGPukiEBY7sFakBHowTMu2EomdLEQEMxYht+9FA==",
+    "publishedFromRef": "ab8813cc6cf570e9fb2aa66e361ef5d365693682"
   },
   "@adhd/data-base-transforms": {
     "version": "2.3.4",
@@ -300,10 +300,10 @@
     "publishedFromRef": "a1a6ba024c5526b930f97c5420e920639d14e110"
   },
   "@adhd/dispatch-cli": {
-    "version": "0.1.7",
-    "normalizedHash": "sha256:d72d16d54593b5366c4419a6a97f48966d1b80cc810de0560d06678175ff4c36",
-    "publishedIntegrity": "sha512-lNbRyb1O+JEoFjhf4efyrm+jZMgkL0z7UZvmIj6e2zjuhy77D747e8P+aGi0Y+zAiS1sI5xeI/QrbDi8RA4h5g==",
-    "publishedFromRef": "d0c78587993aecaf2e484b8400f33af8587d0c56"
+    "version": "0.1.8",
+    "normalizedHash": "sha256:a78089f4e9ca464dcc5c412be2fa5fdbc7da2e3755f71f39ec4e24dde33b2fe6",
+    "publishedIntegrity": "sha512-jIIMAVLD4Cdcpr8b9Gf7N/Ig7MuxqoQ+eYo2CoDfpWFRl5J8uJ1xOflhJDcJKuBMiM2sd/UXDQxkwBSe73KwSQ==",
+    "publishedFromRef": "ab8813cc6cf570e9fb2aa66e361ef5d365693682"
   },
   "@adhd/dispatch-core-client": {
     "version": "0.1.3",

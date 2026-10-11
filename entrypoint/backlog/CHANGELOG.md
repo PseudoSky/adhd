@@ -1,3 +1,7 @@
+## 1.0.16 (2026-10-11)
+
+This was a version bump only for backlog to align it with other projects, there were no code changes.
+
 ## 1.0.15 (2026-10-10)
 
 This was a version bump only for backlog to align it with other projects, there were no code changes.

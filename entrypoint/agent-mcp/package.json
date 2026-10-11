@@ -17,7 +17,7 @@
   ],
   "dependencies": {
     "@adhd/agent-store-runtime": "^2.2.10",
-    "@adhd/agent-core-provider": "^2.2.8",
+    "@adhd/agent-core-provider": "^2.2.9",
     "@adhd/agent-store-prompts": "^2.2.3",
     "@adhd/agent-engine-orchestrator": "^2.3.13",
     "@modelcontextprotocol/sdk": "^1.29.0",
@@ -32,7 +32,7 @@
     "@adhd/agent-plugin-budget": "^0.2.9",
     "@adhd/agent-plugin-tracing": "^0.0.3",
     "@adhd/agent-core-env": "^0.1.5",
-    "@adhd/agent-core-native-tooling": "^0.0.3",
+    "@adhd/agent-core-native-tooling": "^0.0.4",
     "dotenv": "17.4.2",
     "tslib": "^2.3.0"
   },

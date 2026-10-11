@@ -1,6 +1,6 @@
 {
   "name": "@adhd/agent-core-native-tooling",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "description": "Core resolver + thin tool-name permission matcher for the standardized, portable native toolset (fs/shell/dispatch) inherited by dispatched agents (ADR-0008). CommonJS-only (adhd ADR-0003).",
   "main": "./dist/index.js",
   "typings": "./dist/index.d.ts",
