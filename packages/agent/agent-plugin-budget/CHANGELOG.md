@@ -6,6 +6,7 @@
 
 ### Documentation
 
+- README Concurrency: the `toolCallConcurrency - 1` spend-overshoot bound is scoped to the native tool-loop path; the `claudecli` bridge path is described honestly (governed per call, but not bounded by `toolCallConcurrency`), and the `toolCalls` reservation's over-refusal of a concurrent call (conservative, never over-allows) is documented. (b3999dfa AC1)
 - README: new Concurrency section documenting the spend-cap overshoot window under concurrent tool calls (bounded by `toolCallConcurrency - 1`, default 8). (699da472 AC3)
 
 ## 0.2.7 (2026-10-09)
