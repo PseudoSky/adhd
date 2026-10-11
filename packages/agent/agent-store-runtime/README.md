@@ -27,7 +27,7 @@ For store access (rare), the exported stores are `SessionStore`, `TaskStore` and
 - `agents` — registered agent configs
 - `sessions` — conversation instances
 - `messages` — chat history (role, content, tool_calls, tool_results)
-- `task_events` — MODEL_REQUEST, TOOL_CALL, TASK_COMPLETED events
+- `task_events` — MODEL_REQUEST, TOOL_CALL, TASK_COMPLETED events, plus the typed `budget:unpriced_model` and `provider:builtin_bypass` warnings (see [provider parity](../../../docs/agent/provider-parity.md#task-events))
 - `task_usage` — token counts, cost estimates, execution stats
 - `model_price_history` — append-only observed prices ($ per million tokens); BEFORE UPDATE/DELETE triggers abort, a correction is a new row
 - `price_pull_ledger` — one row per price-pull attempt (`running`, `ok`, `failed`, `rejected_shrink`, `rejected_invalid`)

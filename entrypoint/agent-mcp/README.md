@@ -123,6 +123,8 @@ How to read, tail, query and cost-audit these logs (record shapes, correlation i
 | `openai` | Yes — `ADHD_AGENT_OPENAI_SECRET` | Also the type to use for any OpenAI-*compatible* endpoint (e.g. DeepSeek): set `env.base_url` / `ADHD_AGENT_OPENAI_BASE_URL` to the provider's URL. DeepSeek additionally has its own default names, `ADHD_AGENT_DEEPSEEK_SECRET` / `ADHD_AGENT_DEEPSEEK_BASE_URL` / `ADHD_AGENT_DEEPSEEK_MODEL`, but they must be passed explicitly as an agent's `env.secret`/`env.base_url` override — there is no separate `"deepseek"` provider `type`. |
 | `claudecli` | No | Shells out to the already-authenticated `claude` CLI on the host instead of calling an API directly — nothing to configure here. Use this to avoid provider-credential wiring entirely. |
 
+Which engine behaviors (tool-call concurrency and its per-task limiter, token estimator, tool-result caps, EOL hook, session resume, budget pricing, `reasoningTokens`) apply to each provider, with code evidence: [docs/agent/provider-parity.md](../../docs/agent/provider-parity.md). Cost caps (`ADHD_AGENT_BUDGET_COST_USD`) price every provider from the shared model rate card; a model with no price emits a `budget:unpriced_model` task event, and a `claudecli` agent that enables CLI built-ins emits `provider:builtin_bypass` (both visible in `task_events`).
+
 **The bare SDK-style names `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` are never read anywhere in this codebase.** Only the `ADHD_AGENT_<PROVIDER>_SECRET` names above are honored.
 
 **Gemini is not implemented.** There is no `gemini` provider `type`, no Gemini provider adapter, and no `GOOGLE_API_KEY`/Gemini credential path — despite having appeared in older versions of this document.

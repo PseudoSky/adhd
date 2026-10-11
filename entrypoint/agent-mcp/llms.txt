@@ -45,6 +45,7 @@ Optional:
 - `ADHD_AGENT_MAX_DEPTH` — max delegation depth (default: 3)
 - `ADHD_AGENT_MAX_TOOL_LOOPS` — max tool-call rounds (default: 50)
 - `ADHD_AGENT_TOOL_CALL_CONCURRENCY` — max tool calls of one assistant turn run concurrently (default: 8; positive integer; invalid fails at startup)
+  - one per-task limiter bounds BOTH the native tool loop and the claudecli bridge; task events `budget:unpriced_model` and `provider:builtin_bypass` are persisted in `task_events`; see docs/agent/provider-parity.md
 - `ADHD_AGENT_TOOL_RESULT_MAX_CHARS` — max chars of one tool result shown to the model, head+tail truncated with a marker (default: 6000; 0 = disabled; invalid fails at startup)
 - `ADHD_AGENT_TOOL_RESULT_SPILL_ENABLED` — opt-in: write an over-cap tool result to a 0600 file and show the model a stub with the path instead of truncating (default: false; dir `ADHD_AGENT_TOOL_RESULT_SPILL_DIR`, ttl `ADHD_AGENT_TOOL_RESULT_SPILL_TTL_HOURS`)
 - `ADHD_AGENT_LOG_LEVEL` — logging level (default: info)

@@ -106,7 +106,7 @@ spans). Fields use dotted names: `agent.task_id`, `agent.session_id`, `agent.roo
 | Table | Holds |
 |---|---|
 | `tasks` | status, prompt, result, error, timestamps, `session_id` |
-| `task_events` | `MODEL_REQUEST`, `MODEL_RESPONSE` (with `rawUsage` verbatim from the provider), `TOOL_CALL`, `TOOL_ARG_COERCED`, `TOOL_RESULT`, `TASK_COMPLETED`, ... |
+| `task_events` | `MODEL_REQUEST`, `MODEL_RESPONSE` (with `rawUsage` verbatim from the provider), `TOOL_CALL`, `TOOL_ARG_COERCED`, `TOOL_RESULT`, `TASK_COMPLETED`, `budget:unpriced_model` (a cost-capped model had no rate-card price), `provider:builtin_bypass` (a claudecli agent enabled CLI built-ins that skip engine hooks), ... |
 | `task_usage` | one row per task: tokens (total, uncached, cache read, cache write), latency, `est_cost_usd`, `priced_cost_usd`, `cost_status`, `cost_basis`, `pricing_ref`, `requested_model`, `cli_reported_cost_usd`, `cache_creation_1h_tokens` (the 1-hour-TTL subset of the cache writes; NULL on rows written before migration 0015), `model_breakdown_json` |
 | `model_price_history` | append-only price snapshots (`input_per_m`, `cache_read_per_m`, `cache_write_per_m`, `output_per_m`, `raw_json`) |
 | `price_pull_ledger` | one row per live price pull |
