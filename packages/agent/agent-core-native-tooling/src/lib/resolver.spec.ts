@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import type { McpServerConfig, NativeToolingConfig } from '@adhd/agent-base-types';
 import { resolveNativeTooling, resolveNativeToolingMap } from './resolver.js';
 import {
+  DEFAULT_SHELL_ALLOW_COMMANDS,
   DISPATCH_SERVER_KEY,
   FS_SERVER,
   SHELL_PROXY_ENV_KEYS,
@@ -213,6 +214,38 @@ describe('resolveNativeTooling — task-time resolution (ADR-0008 D2/D4)', () =>
     it('0ba70e47 AC3a: a custom McpServerConfig shell replaces the builtin and gets no allowlist', () => {
       const custom: McpServerConfig = { transport: 'stdio', command: 'my-sh' };
       expect(resolveNativeTooling({ fs: false, shell: custom }, { cwd: '/p/a' })).toEqual([custom]);
+    });
+  });
+
+  describe('069316e5 default shell allowlist (DEFAULT_SHELL_ALLOW_COMMANDS)', () => {
+    const allowOf = (shell: NativeToolingConfig['shell']): string | undefined =>
+      shellServer(resolveNativeTooling({ fs: false, shell }, { cwd: '/p/a' }))!.env?.ALLOW_COMMANDS;
+
+    it('069316e5 AC1: the default is emitted when neither allowCommands nor allowPatterns is supplied', () => {
+      const expected = DEFAULT_SHELL_ALLOW_COMMANDS.join(',');
+      expect(allowOf(undefined)).toBe(expected);
+      expect(allowOf(true)).toBe(expected);
+      expect(allowOf({})).toBe(expected);
+      expect(allowOf({ timeoutMs: 5000 })).toBe(expected);
+      for (const name of ['git', 'node', 'pnpm', 'nx', 'python3', 'uv', 'rg', 'ls']) {
+        expect(expected.split(',')).toContain(name);
+      }
+    });
+
+    it('069316e5 AC2: a caller allowCommands list overrides the default in full (no merge)', () => {
+      expect(allowOf({ allowCommands: ['pwd'] })).toBe('pwd');
+      expect(allowOf({ allowCommands: ['curl'] })).toBe('curl');
+    });
+
+    it('069316e5 AC3: a supplied allowPatterns suppresses the default', () => {
+      expect(allowOf({ allowPatterns: ['ls.*'] })).toBeUndefined();
+    });
+
+    it('069316e5 AC4: curl/wget/ssh/scp/sudo/nc are absent from the default', () => {
+      for (const banned of ['curl', 'wget', 'ssh', 'scp', 'sudo', 'nc']) {
+        expect(DEFAULT_SHELL_ALLOW_COMMANDS).not.toContain(banned);
+        expect((allowOf(undefined) ?? '').split(',')).not.toContain(banned);
+      }
     });
   });
 

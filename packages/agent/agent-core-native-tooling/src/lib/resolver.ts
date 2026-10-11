@@ -8,6 +8,7 @@ import type {
   ShellToolConfig,
 } from '@adhd/agent-base-types';
 import {
+  DEFAULT_SHELL_ALLOW_COMMANDS,
   DISPATCH_SERVER_KEY,
   FS_SERVER,
   SHELL_PROXY_ENV_KEYS,
@@ -314,6 +315,10 @@ function resolveShell(
   const env: Record<string, string> = {};
   if (overrides.allowCommands?.length) {
     env[SHELL_SERVER.envKeys.allowCommands] = overrides.allowCommands.join(',');
+  } else if (!overrides.allowCommands && !overrides.allowPatterns) {
+    // Default allowlist (069316e5): only when the caller supplied NEITHER list.
+    // Any caller-supplied list (even an empty one) overrides it in full.
+    env[SHELL_SERVER.envKeys.allowCommands] = DEFAULT_SHELL_ALLOW_COMMANDS.join(',');
   }
   // Pattern allow-list passthrough (ADR-0008 D5): the adopted server `fullmatch`es
   // each regex against the command NAME (`re.fullmatch(pattern, command[0])`),

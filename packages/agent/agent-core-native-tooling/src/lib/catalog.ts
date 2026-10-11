@@ -139,6 +139,22 @@ export const SHELL_SERVER = {
 } as const;
 
 /**
+ * Default shell argv allowlist (069316e5; ADR-0008 D5 policy change, owner-approved).
+ * The single source: `resolveShell` emits it as `ALLOW_COMMANDS` ONLY when the
+ * caller supplies neither `allowCommands` nor `allowPatterns`; any caller-supplied
+ * list replaces it in full (never merged). Network and privilege tools (`curl`,
+ * `wget`, `ssh`, `scp`, `sudo`, `nc`) are deliberately absent — egress is opt-in.
+ */
+export const DEFAULT_SHELL_ALLOW_COMMANDS: readonly string[] = Object.freeze([
+  // file operations
+  'cat', 'ls', 'cp', 'mv', 'mkdir', 'rm', 'touch', 'head', 'tail', 'wc', 'sort',
+  'uniq', 'tr', 'cut', 'diff', 'sed', 'awk', 'grep', 'rg', 'echo', 'printf', 'pwd',
+  'test', 'true', 'false', 'basename', 'dirname', 'realpath', 'stat', 'tee', 'chmod',
+  // toolchains
+  'git', 'node', 'npm', 'pnpm', 'npx', 'nx', 'make', 'tsc', 'python3', 'uv',
+]);
+
+/**
  * The proxy variables `srt` injects into the sandboxed process so allowlisted
  * egress goes through its filtering proxy (upper and lower case: tools differ
  * on which they read). Emitted in `MCP_SHELL_CHILD_ENV_ALLOWLIST` whenever the

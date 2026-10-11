@@ -25,6 +25,7 @@ export type { EolClass } from './lib/eol.js';
 export {
   NATIVE_TOOL_NAMES,
   NATIVE_SERVER_CATALOG,
+  DEFAULT_SHELL_ALLOW_COMMANDS,
   DISPATCH_SERVER_KEY,
   FS_SERVER,
   resolveFsServerLaunch,
