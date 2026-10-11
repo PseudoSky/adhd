@@ -149,8 +149,8 @@ export async function runLibTests({ log = console.log } = {}) {
   });
 
   // ---- pacing
-  await t('pacing: thresholds 5h>=60%, 7d>=85%, bad status abort; warning counted', () => {
-    ok(L.pacingVerdict({ session_pct: 59, week_pct: 84 }).ok, 'under'); ok(!L.pacingVerdict({ session_pct: 60, week_pct: 0 }).ok, '5h'); ok(!L.pacingVerdict({ session_pct: 0, week_pct: 85 }).ok, '7d');
+  await t('pacing: thresholds 5h>=90%, no 7d check, bad status abort; warning counted', () => {
+    ok(L.pacingVerdict({ session_pct: 89, week_pct: 100 }).ok, 'under'); ok(!L.pacingVerdict({ session_pct: 90, week_pct: 0 }).ok, '5h'); ok(L.pacingVerdict({ session_pct: 0, week_pct: 100 }, [{ seven_day: { utilization: 1 } }]).ok, '7d ignored');
     ok(!L.pacingVerdict({ session_pct: 0, week_pct: 0 }, [{ status: 'rejected' }]).ok, 'status');
     eq(L.pacingVerdict({ session_pct: 0, week_pct: 0 }, [{ status: 'allowed_warning' }]).warnings, 1);
   });

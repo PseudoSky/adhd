@@ -396,11 +396,11 @@ export function thinkingVerdict(metrics) {
   const n = Math.max(parentTurns, allTasks);
   return { configured: 'off', observedThinkingTurns: n, parentTurns, allTasks, ok: n === 0 };
 }
-/** Pacing gate: read the 5h/7d window via `claude -p /usage` (0 model calls, asserted by L.readUsageWindow). Refuses at session usage >= 60%, and fails CLOSED when the reading cannot be taken or parsed. */
+/** Pacing gate: read the 5h/7d window via `claude -p /usage` (0 model calls, asserted by L.readUsageWindow). Refuses at 5h session usage >= 90% (the 7-day window is no longer checked), and fails CLOSED when the reading cannot be taken or parsed. */
 export function gatePacing(read, rateLimitsSeen = []) {
   let reading;
   try { reading = read(); } catch (e) { return { ok: false, reading: null, verdict: { ok: false, reasons: [`/usage unreadable: ${String(e.message || e).slice(0, 200)}`], warnings: 0 } }; }
-  if (!Number.isFinite(reading?.session_pct) || !Number.isFinite(reading?.week_pct)) return { ok: false, reading, verdict: { ok: false, reasons: ['/usage reading has no numeric session/week percentage'], warnings: 0 } };
+  if (!Number.isFinite(reading?.session_pct) ) return { ok: false, reading, verdict: { ok: false, reasons: ['/usage reading has no numeric session percentage'], warnings: 0 } };
   const verdict = L.pacingVerdict(reading, rateLimitsSeen);
   return { ok: verdict.ok, reading, verdict };
 }
@@ -850,7 +850,7 @@ export function planText(opts) {
   const cProv = providerFor(C, 'C');
   out.push(`  C  ${THINKING_MECHANISM.C}`, `       cited at ${cite(/^function providerFor/)} (provider keys: ${Object.keys(cProv).join(',')}; no thinking key) and anthropic.ts (rg "thinking": no match)`, `       provider: ${JSON.stringify(cProv)}`);
   out.push('', 'SHELL / WEB (B and C share one allowlist; A has unrestricted Bash)', `  B/C allowCommands: ${SHELL_ALLOW.join(',')}   (curl added in round 4; cited ${cite(/^export const SHELL_ALLOW/)})`, `  B/C srt network allowlist extension (per-run srt-policy.json, merged by provisionSrtPolicy): ${SRT_EXTRA_DOMAINS.join(',')}   (cited ${cite(/^export const SRT_EXTRA_DOMAINS/)})`, `  A tools: ${A_TOOLS}`, '  NOTE: arm C additionally exposes Anthropic server-side web tools (web_fetch/web_search) by default; B has curl only, A has Bash curl only. The web-fetch field (w1_web) is scored with one rule for every arm that can fetch; this tool-surface asymmetry is recorded, not equalised.');
-  out.push('', 'PACING', `  before EVERY live run: claude -p /usage (0 model calls asserted); refuse at 5h session >= ${L.PACING.fiveHourMax * 100}%, 7d >= ${L.PACING.sevenDayMax * 100}%, any non-allowed rate-limit status, or an unreadable reading (fail closed)`);
+  out.push('', 'PACING', `  before EVERY live run: claude -p /usage (0 model calls asserted); refuse at 5h session >= ${L.PACING.fiveHourMax * 100}% (no 7-day check), any non-allowed rate-limit status, or an unreadable reading (fail closed)`);
   const wtSha = spawnSync('git', ['-C', opts.wt, 'rev-parse', '--short', 'HEAD'], { encoding: 'utf8' }).stdout?.trim() || '(not a git checkout)';
   const dist = path.join(opts.wt, 'entrypoint/agent-mcp/dist/src/index.js'); const srcDir = path.join(opts.wt, 'entrypoint/agent-mcp/src');
   const mt = (p) => { try { return fs.statSync(p).mtime.toISOString(); } catch { return 'MISSING'; } };
@@ -1023,19 +1023,19 @@ export async function selfCheck({ log = console.log, opts = parseArgs([]) } = {}
     const noYes = spawnSync(process.execPath, [SELF, '--live'], { encoding: 'utf8' }); chk('--live without --yes exits 2 before doing anything', noYes.status === 2, `status ${noYes.status}`);
     // the live loop reaches the model only through rawRun (static)
     const src = fs.readFileSync(SELF, 'utf8');
-    { const fin = path.join(work, 'rec-finished.json'), abt = path.join(work, 'rec-aborted.json'); writeJson(fin, { runId: 'X', score: {} }); writeJson(abt, { runId: 'Y', aborted: ['5h utilisation 61% >= 60%'] });
+    { const fin = path.join(work, 'rec-finished.json'), abt = path.join(work, 'rec-aborted.json'); writeJson(fin, { runId: 'X', score: {} }); writeJson(abt, { runId: 'Y', aborted: ['5h utilisation 91% >= 90%'] });
       chk('resume: a finished record is skipped; a pacing/cap-ABORTED record (nothing ran) is retried; a missing/corrupt record is retried', isFinishedRecord(fin) && !isFinishedRecord(abt) && !isFinishedRecord(path.join(work, 'nope.json'))); }
     chk('every live model path goes through rawRun (runArmA/runArmBC are only invoked from rawRun)', (src.match(/(?<!function )\brunArm(A|BC)\(ctx\)/g) || []).length === 0 && /\(ctx\.executor \?\? \(ctx\.runDef\.arm === 'A' \? runArmA : runArmBC\)\)\(ctx\)/.test(src) && /reserveModelRun\(ctx\.spec\.runId/.test(src));
 
     // ============ pacing (item 5) ============
     log('--- pacing gate (stubbed readings; the real `claude -p /usage` is NOT run here) ---');
     const rd2 = (s5, w = 10) => () => ({ session_pct: s5, week_pct: w, resets: null, model_calls: 0 });
-    chk('session 59% -> run allowed', gatePacing(rd2(59)).ok === true);
-    chk('session 60% -> run refused (>= 60%)', gatePacing(rd2(60)).ok === false && /5h utilisation 60%/.test(gatePacing(rd2(60)).verdict.reasons.join()));
+    chk('AC1 session 89% -> run allowed', gatePacing(rd2(89)).ok === true);
+    chk('AC1 session 90% -> run refused (>= 90%)', gatePacing(rd2(90)).ok === false && /5h utilisation 90% >= 90%/.test(gatePacing(rd2(90)).verdict.reasons.join()));
     chk('session 0% -> allowed; 100% -> refused', gatePacing(rd2(0)).ok && !gatePacing(rd2(100)).ok);
     chk('/usage unreadable (throws) -> refused, fail closed', gatePacing(() => { throw new Error('could not parse session/week percentages from /usage output'); }).ok === false);
     chk('/usage reading with a non-numeric percentage -> refused', gatePacing(() => ({ session_pct: null, week_pct: 5 })).ok === false && gatePacing(() => ({ session_pct: NaN, week_pct: 5 })).ok === false);
-    chk('7-day window >= 85% -> refused even when the session is low', gatePacing(rd2(10, 85)).ok === false);
+    chk('AC2 7-day window at 100% -> NOT refused (weekly check removed)', gatePacing(rd2(10, 100)).ok === true && gatePacing(() => ({ session_pct: 10 })).ok === true);
     const usageSample = 'x\n[{"type":"assistant","message":{"content":[{"type":"text","text":"Current session: 42% used · resets 3pm\\nCurrent week (all models): 9% used"}]}},{"type":"result","num_turns":0,"total_cost_usd":0}]';
     const pu = L.parseUsageOutput(usageSample); chk('/usage parser reads session/week and 0 model calls from a sample payload', pu.session_pct === 42 && pu.week_pct === 9 && pu.model_calls === 0);
     chk('runOne calls the gate before every live run (static)', /const gate = gatePacing\(usageReading, state\.rateLimitsSeen\)/.test(src));

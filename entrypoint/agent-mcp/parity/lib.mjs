@@ -371,21 +371,19 @@ export function readUsageWindow({ claude = 'claude', model = 'claude-haiku-4-5' 
   if (r.status !== 0) throw new Error(`claude -p /usage exited ${r.status}: ${(r.stderr || '').slice(0, 200)}`);
   const u = parseUsageOutput(r.stdout);
   if (u.model_calls !== 0 || (u.cost_usd ?? 0) !== 0) throw new Error(`/usage made model calls (num_turns=${u.model_calls}, cost=${u.cost_usd}); refusing to continue`);
-  if (u.session_pct == null || u.week_pct == null) throw new Error('could not parse session/week percentages from /usage output');
+  if (u.session_pct == null) throw new Error('could not parse session percentage from /usage output');
   return { session_pct: u.session_pct, week_pct: u.week_pct, resets: u.resets, model_calls: 0, at: new Date().toISOString() };
 }
 
-/** Pacing verdict from a /usage reading and the rate-limit statuses seen so far. */
-export const PACING = { fiveHourMax: 0.60, sevenDayMax: 0.85, okStatuses: ['allowed', 'allowed_warning'] };
+/** Pacing verdict from a /usage reading and the rate-limit statuses seen so far. SCOPE-R5-pacing-gate: 5h threshold 90% (AC1); the 7-day check is removed (AC2); week_pct is informational only. */
+export const PACING = { fiveHourMax: 0.90, okStatuses: ['allowed', 'allowed_warning'] };
 export function pacingVerdict(reading, seenRateLimits = []) {
   const reasons = [];
   if (reading.session_pct / 100 >= PACING.fiveHourMax) reasons.push(`5h utilisation ${reading.session_pct}% >= ${PACING.fiveHourMax * 100}%`);
-  if (reading.week_pct / 100 >= PACING.sevenDayMax) reasons.push(`7d utilisation ${reading.week_pct}% >= ${PACING.sevenDayMax * 100}%`);
   for (const r of seenRateLimits) {
     if (!r) continue;
     if (r.status && !PACING.okStatuses.includes(r.status)) reasons.push(`rate-limit status ${r.status}`);
     if (r.five_hour?.utilization != null && r.five_hour.utilization >= PACING.fiveHourMax) reasons.push(`5h utilisation ${r.five_hour.utilization} >= ${PACING.fiveHourMax}`);
-    if (r.seven_day?.utilization != null && r.seven_day.utilization >= PACING.sevenDayMax) reasons.push(`7d utilisation ${r.seven_day.utilization} >= ${PACING.sevenDayMax}`);
   }
   return { ok: reasons.length === 0, reasons, warnings: seenRateLimits.filter((r) => r?.status === 'allowed_warning').length };
 }

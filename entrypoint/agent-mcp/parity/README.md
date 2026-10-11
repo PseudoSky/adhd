@@ -31,3 +31,7 @@ Raw output goes to repo-root `tmp/agent-mcp/parity/<round>/` (gitignored). The a
 
 ## Goldens
 `golden/legacy` (frozen round-3 oracle + fixtures, byte-identical), `golden/r4` (R4 observation/expected/score per run with the source sha256; `oracle.r4.frozen.mjs` is the R4 oracle before R1, one import path adjusted), `golden/selfcheck/round3`.
+
+## Pacing gate (SCOPE-R5-pacing-gate)
+
+Before every live run `drive.mjs` reads `claude -p /usage` (0 model calls, asserted). The run aborts with a recorded reason when the 5-hour window is at or above 90% (AC1), when any seen rate-limit status is not `allowed`/`allowed_warning`, or when the reading is unreadable (fail closed). The 7-day window is not checked (AC2); `week_pct` is still recorded in `pacing.before/after` for information only.
