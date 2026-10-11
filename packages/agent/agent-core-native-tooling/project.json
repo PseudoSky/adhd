@@ -80,7 +80,7 @@
       }
     },
     "e2e": {
-      "//": "Subprocess / real-server lane (backlog 5b839b90 AC1; docs/decisions/0009-test-lanes-unit-vs-e2e.md; 0ba70e47 AC3b). Runs ONLY src/**/*.e2e.ts and src/**/*.e2e.test.ts via vitest.e2e.config.ts; the unit `test` target excludes those files. Reached by the push/CI gate (`nx affected -t e2e --parallel=1`) and by `publish`/`nx-release-publish`. Its own pipeline stage, never in `nx test`; not env-gated. NOT cached (cache:false, 0ba70e47 L6): the result depends on uvx, PyPI reachability and the installed srt version, none of which are nx inputs, so a cached green could mask an external regression. Spawns the real `srt` (workspace dependency) and `uvx mcp-shell-server`; no built artifact of this project is executed (the suite imports src), so only ^build is needed.",
+      "//": "Subprocess / real-server lane (backlog 5b839b90 AC1; docs/decisions/0009-test-lanes-unit-vs-e2e.md; 0ba70e47 AC3b). Runs ONLY src/**/*.e2e.ts and src/**/*.e2e.test.ts via vitest.e2e.config.ts; the unit `test` target excludes those files. Reached by the push/CI gate (`nx affected -t e2e --parallel=1`) and by `publish`/`nx-release-publish`. Its own pipeline stage, never in `nx test`; not env-gated. CACHED because lane-reachability rule 3 (check-lane-reachability.mjs) requires every e2e lane to be `cache: true` with `default` in `inputs`; the srt version is hashed via externalDependencies (0ba70e47 L6), but uvx/PyPI state is not an nx input, so a cached green can mask an external regression there — rerun uncached by changing an input, never --skip-nx-cache. Spawns the real `srt` (workspace dependency) and `uvx mcp-shell-server`; no built artifact of this project is executed (the suite imports src), so only ^build is needed.",
       "executor": "nx:run-commands",
       "dependsOn": [
         "^build"
@@ -89,7 +89,17 @@
         "cwd": ".",
         "command": "vitest run --config {projectRoot}/vitest.e2e.config.ts"
       },
-      "cache": false
+      "cache": true,
+      "inputs": [
+        "default",
+        "^production",
+        {
+          "externalDependencies": [
+            "vitest",
+            "@anthropic-ai/sandbox-runtime"
+          ]
+        }
+      ]
     }
   }
 }
