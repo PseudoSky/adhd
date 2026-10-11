@@ -282,9 +282,10 @@ async function runEphemeralTask(
       signal: controller.signal,
       taskId,
       hooks: deps.hooks,
-      // A one-shot `agent_name` dispatch is SYNCHRONOUS: this call blocks until
-      // `run` resolves, so the caller can never receive a resumeToken. Hence no
-      // approver is reachable within the call — an `ask` must fail closed rather
+      // A one-shot `agent_name` dispatch has no reachable approver: a synchronous
+      // call blocks until `run` resolves and a `background:true` one returns only a
+      // task id, so the caller never receives a resumeToken. Hence no approver
+      // is reachable — an `ask` must fail closed rather
       // than suspend (ADR-0008 D6: an unanswered ask never hangs).
       suspensionAnswerable: false,
       emitTaskEvent: deps.emitTaskEvent,
@@ -303,6 +304,13 @@ async function runEphemeralTask(
       deps.sessionStore.close(sessionId);
     } catch {
       // already closed / absent — nothing to reclaim
+    }
+    // A background ephemeral task may be an upstream of a waiting task: dispatch it
+    // (mirrors the session path's `runTask` finally). Harmless for a synchronous run.
+    try {
+      await deps.dagEngine.dispatchReady(taskId);
+    } catch (err) {
+      deps.logger.warn({ taskId, err }, 'dispatchReady after ephemeral task failed');
     }
   }
   };
@@ -1040,12 +1048,12 @@ export function resultTool(
 const RESULT_WAIT_POLL_MS = 100;
 
 /** Task statuses at which {@link resultToolWait} stops waiting. */
-const RESULT_WAIT_TERMINAL = new Set(['completed', 'failed', 'cancelled']);
+const RESULT_WAIT_TERMINAL = new Set(['completed', 'failed', 'cancelled', 'awaiting_input']);
 
 /**
  * `result` with an optional bounded wait (P2). With `wait_ms` unset or 0 this is
  * exactly {@link resultTool}. Otherwise it re-reads the task until it reaches a
- * terminal state or `wait_ms` (capped at {@link RESULT_MAX_WAIT_MS}) elapses and
+ * terminal (or `awaiting_input`, which only a human can advance) state or `wait_ms` (clamped to {@link RESULT_MAX_WAIT_MS}) elapses and
  * returns the state at that moment — a timeout is not an error.
  *
  * @param input - the `result` input, including optional `wait_ms`.

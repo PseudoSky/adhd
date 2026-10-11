@@ -770,7 +770,7 @@ export function createServer(deps: ServerDeps): Server {
           'Composes with depends_on / on_upstream_failure; depends_on_indexes orders items within the batch. ' +
           'Exactly one of agent_name (one-shot ephemeral per prompt) or session_ids (reuse existing sessions) is required. ' +
           'Prefer this over sequential task calls: independent dispatches belong in ONE turn, and a list of prompts belongs in a single tasks_batch call. ' +
-          'Background pattern: start with background:true (returns {index, task_id, status:"pending"} per prompt; not combinable with depends_on), do your own work, then call result with wait_ms to collect each. Default is synchronous.',
+          'Background pattern: start with background:true (returns {index, task_id, status:"pending"} per prompt; not combinable with depends_on; concurrency is ignored because the server background queue controls execution), do your own work, then call result with wait_ms to collect each. Default is synchronous.',
         inputSchema: toMcpInputSchema(tasksBatchInputSchema),
       },
       {

@@ -1290,7 +1290,8 @@ export class Orchestrator {
             };
             const modelCalls = partial.usage ? partial.reportedModelCalls ?? 1 : 0;
             const toolCallCount = partial.reportedToolUses ?? 0;
-            const failedComputeMs = Date.now() - modelCallStartedAt;
+            const failedEndedAt = Date.now();
+            const failedComputeMs = failedEndedAt - modelCallStartedAt;
             await hooks.emit('post:model_response', {
               executionContext,
               stopReason: 'error',
@@ -1318,7 +1319,7 @@ export class Orchestrator {
                 callOverheadMs
               ),
             });
-            lastModelCallEndedAt = Date.now();
+            lastModelCallEndedAt = failedEndedAt;
           } catch (recordErr) {
             logger.warn({ taskId, err: recordErr }, 'Failed to record usage of a failed provider call');
           }
@@ -1668,7 +1669,9 @@ export class Orchestrator {
           lastReportedContext = reportedContext;
         }
         // compute_ms: MODEL_RESPONSE.created_at - MODEL_REQUEST.created_at for this turn.
-        const computeMs = Date.now() - modelCallStartedAt;
+        const callEndedAt = Date.now();
+        const computeMs = callEndedAt - modelCallStartedAt;
+        lastModelCallEndedAt = callEndedAt;
         // Prefer the provider's own count of tools it ran internally (claudecli); otherwise
         // the tool calls the orchestrator loop is about to execute. Accounting only —
         // loop control still keys off assistantMessage.toolCalls / executionContext.
@@ -1702,7 +1705,6 @@ export class Orchestrator {
             callOverheadMs
           ),
         });
-        lastModelCallEndedAt = Date.now();
 
         logger.debug(
           {

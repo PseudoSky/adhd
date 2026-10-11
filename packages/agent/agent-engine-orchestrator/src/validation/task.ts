@@ -166,10 +166,10 @@ export const resultInputSchema = z.object({
   fields: z.array(z.union([taskListFieldSchema, z.literal('usage')])).optional(),
   /**
    * P2 bounded wait: when set, `result` blocks until the task is terminal or
-   * `wait_ms` elapses (capped at {@link RESULT_MAX_WAIT_MS}), then returns the
+   * `wait_ms` elapses (clamped to {@link RESULT_MAX_WAIT_MS}, never rejected), then returns the
    * current state. Absent/0 keeps the immediate-read behaviour.
    */
-  wait_ms: z.number().int().nonnegative().max(RESULT_MAX_WAIT_MS).optional(),
+  wait_ms: z.number().int().nonnegative().optional(),
 });
 
 export type TaskToolInput = z.infer<typeof taskToolInputSchema>;
@@ -282,7 +282,7 @@ export const tasksBatchInputSchema = z
       .boolean()
       .optional()
       .describe(
-        'true = start every item in the background and return {index, task_id, status:"pending"} immediately; collect with result {task_id, wait_ms}. Not combinable with depends_on / depends_on_indexes. Default false (synchronous)'
+        'true = start every item in the background and return {index, task_id, status:"pending"} immediately; collect with result {task_id, wait_ms}. Not combinable with depends_on / depends_on_indexes; concurrency is ignored (the server background queue controls execution). Default false (synchronous)'
       ),
   })
   .superRefine((val, ctx) => {
