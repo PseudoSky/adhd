@@ -244,3 +244,7 @@ Not a parity blocker (architect verdict APPROVE, 2026-10-11): shell exit status.
 ### 2026-10-11T21:38:35Z — INSTRUMENT SPEC REVISED (architect a3a96e0942bc342c6; dispatcher)
 - docs/agent/parity/INSTRUMENT-SPEC.md rewritten: no new package; instrument in entrypoint/agent-mcp/parity/ with tests under src/parity-instrument/. Buckets R0-R9 (R0 replaces B0 63c8aba2; R1 amends B1 7fa23e51; R2 amends B2 e593b916; R3 replaces B3 6865f7ce; R4 metric model; R5 blind-judge quality; R6 repeated tool errors; R7 grid amends B4; R8 duration slot; R9 tasks_batch strict parse). Gates: cost and duration <= 1.02x A, quality >= 0.98x A, one run per arm, ledger cap 3, void iteration if A fails.
 - Open for the owner: gate quality on the aggregate or on each quality; judge model tier (architect proposed sonnet); arm A must run first, so arm order is not randomized. Tickets for R0-R9 not yet filed.
+
+### 2026-10-11T21:40:27Z — OWNER DECISIONS #3 applied to spec (dispatcher)
+- QUALITY GATE: "1 but the judge is haiku (all testing is haiku)" -> gate on the mean of the 8 quality scores >= 0.98 x native's mean on the same run; per-quality scores reported, not gated.
+- JUDGE: haiku. ARM ORDER: A first, then B and C; B and C alternate between rounds. Spec lines 43, 46, 110, 126, 127, 190-192 updated.

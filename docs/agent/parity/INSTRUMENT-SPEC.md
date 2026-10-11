@@ -40,10 +40,10 @@ Every parity/*.mjs has line 1 `// PARITY-INSTRUMENT-ONLY`. Guarantee (structural
 
 ## 3. Rules the instrument enforces (owner answers)
 
-* Runs: one run per arm per round (A, B, C), ledger cap 3. A fourth or further run needs a documented reason in LOG before it is reserved. Arm A runs first.
+* Runs: one run per arm per round (A, B, C), ledger cap 3. A fourth or further run needs a documented reason in LOG before it is reserved. Arm order: A runs first, then B and C; B and C alternate order between rounds; the order is recorded in the ledger.
 * Valid iteration: if arm A fails the task (any content item red, INVALID, or a defect signal), the iteration is void and unscored: B and C are not run, nothing enters the grid as a score, LOG records the void. Quality is assessed only for groups that genuinely succeeded.
 * Success of a variant: every content item passes (automatic oracle), not INVALID, no defect signal. One red variant makes the round red.
-* Compared goal metrics, each of B and C against A of the same iteration: cost (billed, authoritative; common-card shown beside it) <= 1.02 x A, duration (wall) <= 1.02 x A, quality (R5) >= 0.98 x A. Faster, cheaper, better pass. With n=1 per arm this cannot separate noise from regression; the verdict is a fixed threshold, not a significance claim. The threshold is a function argument, never an env switch.
+* Compared goal metrics, each of B and C against A of the same iteration: cost (billed, authoritative; common-card shown beside it) <= 1.02 x A, duration (wall) <= 1.02 x A, quality (R5) >= 0.98 x A, where quality is the mean of the 8 R5 scores for each arm compared to A's mean on the same run; per-quality scores are reported but not gated. Faster, cheaper, better pass. With n=1 per arm this cannot separate noise from regression; the verdict is a fixed threshold, not a significance claim. The threshold is a function argument, never an env switch.
 * Reported only, never gating: turns, tool calls, peak context. Repeated tool errors in a run are a defect signal (R6), read as a probable test or code bug.
 * Tools: arm A uses native tools only (no instrument-added path); B and C use only agent-mcp tools or MCP servers provided as shipped. The curl allowlist and the srt example.com entry (F29) are removed from the instrument unless they are a shipped default. An arm that cannot fetch the page fails w1_web, and that is recorded as a product finding.
 * Task prompt: byte-identical text for every arm, naming no tool or method. Scope may change per round; every change is a LOG entry before the round starts (R0.AC7).
@@ -107,7 +107,7 @@ Write-scope: `P/parity/fixtures.mjs` (prompts, ticketText), `P/parity/drive.mjs`
 
 ### R4 Metric model and verdict (NEW)
 Done: `node P/parity/drive.mjs verdict --round R<n>` prints, for B and C against A of the same iteration, cost ratio, duration ratio, quality ratio, PASS/FAIL per goal metric, and the report-only columns.
-* R4.AC1 gates: cost (billed) <= 1.02, duration <= 1.02, quality >= 0.98, all relative to A; thresholds are function arguments.
+* R4.AC1 gates: cost (billed) <= 1.02, duration <= 1.02, quality >= 0.98, all relative to A; quality is the mean of the 8 R5 scores, compared to A's mean on the same run; per-quality scores reported, not gated; thresholds are function arguments.
 * R4.AC2 turns, tool calls, peak context emitted as report-only; a unit test proves no code path fails a round on them.
 * R4.AC3 void rule: A not genuinely successful -> verdict `VOID`, no ratios.
 * R4.AC4 golden test on R4 (duration and cost only, quality is absent there): wall B 1.41 FAIL, C 1.77 FAIL; billed cost B 1.059 FAIL, C 0.927 PASS; common-card basis shown alongside.
@@ -123,8 +123,8 @@ Rubric (each quality scored 1-100 as an integer):
 * R5.AC1 judge brief (blind): the judge receives ONLY (a) the task spec: both prompt texts and the ticket text, verbatim; (b) the artifact: unified diff of the final repo against the scenario start plus new files; (c) the transcript normalized to role, text, tool category (shell/read/write/search/delegate/web) and results. Never given: arm id, provider, model, tool names that identify an arm, oracle results, cost, duration, thresholds, the other arm's output, or any instrument context. Arm labels are random per judging.
 * R5.AC2 normalizer strips identifying tokens (`claudecli`, `anthropic`, `agent-mcp`, `claude -p`, `mcp__`, session ids, model ids, CLI banners, tool-name spellings) and a unit test asserts the brief for every R4 golden contains none of them.
 * R5.AC3 judge output contract: one JSON object `{ "scores": { "<quality>": <int 1-100>, ... }, "notes": { "<quality>": "<one sentence>" } }` with exactly the 8 keys; parser rejects missing/extra/duplicate keys, non-integers, values < 1 or > 100, and text outside the JSON.
-* R5.AC4 aggregator: quality = mean of the 8 scores; ratio = arm quality / A quality; verdict gate in R4.AC1; per-quality scores always reported. Gate is on the aggregate (U6: owner may instead want every quality >= 0.98 x A).
-* R5.AC5 judge model: claude-sonnet (pinned model id recorded in the judge record). Reason: cheapest tier that is not the subject model (the arms run claude-haiku-4-5, and a judge at the subject's tier cannot reliably assess it); judge is invoked at temperature 0 where the API allows.
+* R5.AC4 aggregator: quality = mean of the 8 scores; ratio = arm quality / A quality (same run); gate per R4.AC1 on the ratio; per-quality scores always reported, never gated.
+* R5.AC5 judge model: Haiku (pinned model id recorded in the judge record), the cheapest tier, same as the arms; judge is invoked at temperature 0 where the API allows.
 * R5.AC6 judge calls are paid third-party calls: one call per judged arm per iteration (A, B, C, at most 3 per round); each logged in the ledger (`judgeCalls[]`: arm, model id, input/output tokens, cost) and in LOG; judge cost is excluded from the arm cost metric. Judge calls are not agent runs and do not consume the run cap, but are capped at 3 per round without a documented reason.
 * R5.AC7 the judge runs only after the oracle passes for A and for the judged arm (genuine success, no INVALID, no defect signal) and only when A passed; otherwise no judge call is made and quality is `n/a` (void or red arm).
 * R5.AC8 judge is invoked only by the driver in a live round (paid third-party exception; no env flag). Documented with the owner named in P/parity/README.md, the driver header and LOG (not in P/AGENTS.md, which is published).
@@ -187,9 +187,9 @@ Resolved by code: FC1, FC3, FC6, the three FC5 defects, FC4 (R3), the success an
 
 ## 7. Open owner decisions
 * U5 R2.AC1: whether a zero-model probe exists for the shipped web path of A and B is unknown until the spike runs.
-* U6 R5.AC4: quality gate on the aggregate (specified) or on every one of the 8 qualities >= 0.98 x A.
-* U7 R5.AC5: judge model tier claude-sonnet (specified); owner may name another.
-* U8 arm A first (specified, needed for the void rule) removes the randomized arm order of R2-R4; order effects are accepted.
+* U6 RESOLVED: gate is the mean of the 8 quality scores >= 0.98 x A's mean on the same run; per-quality scores reported, not gated.
+* U7 RESOLVED: judge model is Haiku (cheapest tier, same as the arms).
+* U8 RESOLVED: A runs first, then B and C; B and C alternate order between rounds; order recorded in the ledger.
 * D4 ticket wording (FC5): unchanged; adding "keep existing return properties" would make the task easier for every arm and hide the brief-fidelity signal.
 * Out of scope: BK5 625b611e gate text (25ce70b8 AC3) now follows from section 3; F32 exit status (0ba70e47 AC2, upstream PR tumf/mcp-shell-server#61).
 
