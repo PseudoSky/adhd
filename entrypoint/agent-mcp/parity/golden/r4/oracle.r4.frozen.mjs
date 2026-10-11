@@ -17,7 +17,7 @@
 // Statuses: pass | fail | na (field does not apply to this arm) | invalid (harness error or contaminated probe:
 // excluded from the arm's score, never counted as an arm failure).
 
-import { LEGACY_MARKER } from './fixtures.mjs';
+import { LEGACY_MARKER } from '../../fixtures.mjs';
 /** Every balanced top-level {...} span in `text` that parses to a plain object; returns them in order. */
 export function extractJsonObjects(text) {
   const out = [];

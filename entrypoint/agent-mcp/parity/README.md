@@ -1,0 +1,33 @@
+# CLI-parity instrument (private, unpublished)
+
+Line 1 of every `parity/*.mjs` is `// PARITY-INSTRUMENT-ONLY`. This directory is not in `tsconfig.lib.json` `include`, not in the build `cp` list, not in `package.json` `files`, and this README sits here (not at the package root) so the build's `cp *.md` skips it. Verification is `no-publish.e2e.test.ts` (walks `dist`, `npm pack --dry-run`, with a negative control).
+
+## Scenario and arms
+One scenario ("shopkit", two phases in one session; `fixtures.mjs`). One run per arm per round, ledger cap 3: **A** native `claude -p` (native default toolset only), **B** agent-mcp `claudecli` provider, **C** agent-mcp `anthropic` provider. B and C use only agent-mcp tools or MCP servers as shipped. The task prompt is byte-identical for every arm and names no tool or method (R3). Arm A runs first; B and C alternate order between rounds (`ledger.armOrderFor`). If A is not a genuine success (every content item green, not INVALID, no defect signal) the iteration is VOID: B and C are not run.
+
+## Commands (`node entrypoint/agent-mcp/parity/drive.mjs ...`)
+`--self-check` (no model call, no `claude`), `--print-plan`, `--check-oracle`, `--check-lib`, `preflight` (zero model calls, exit 0/3), `verdict --round R<n>`, `grid --round R<n>`, `--dry-run`, `--live --yes` (refuses, exit 3, unless every gate is green).
+
+## Gate order (deviation from R0.AC8)
+R0.AC8 lists `[pacing, ledger, scope, preflight]` but R2.AC7 requires the preflight to run before pacing (pacing spawns `claude /usage`) with zero spawns on red. Implemented order: `ledger` (read-only: `approvedBy` non-empty, cap) -> `scope` (scenarioSha vs previous round, LOG headings) -> `preflight` -> `pacing` (per-run `gatePacing` before each reservation) -> reservation. Any red or throwing gate exits 3 and leaves the ledger untouched.
+
+## Ledger (`ledger/<round>.json`, tracked)
+`runs[]`, `approvedBy` (the owner message, quoted; required for `--live`), `extraRunReason` (required for run 4+), `judgeCalls[]`, `scenarioSha`, `scopeChanges[]`, `armOrder`, `armA`. Scope-change rule: when `scenarioSha` differs from the previous round's, every `scopeChanges[]` id needs a LOG heading `### <timestamp> ... <id> ...` dated before the round's `startedAt`.
+
+## Web surface (R2.AC1, R3.AC6) - spike table
+| arm | shipped web tools | zero-model probe |
+|---|---|---|
+| A native | WebFetch, WebSearch (native default toolset) | none: WebFetch makes a hidden small-model call |
+| B claudecli | none exposed by agent-mcp; shell has no fetch command by default | none; the arm cannot fetch as shipped (w1_web fails, `webFinding: "arm cannot fetch"`, a product finding) |
+| C anthropic | server-side web_fetch / web_search | none: server-executed |
+U5 stays open until measured; the preflight is generic (`WEB_SURFACE[arm].probe`) and every unprobeable leg is `NOT_PROBEABLE`, covered by the silent-egress detector.
+
+## Metrics (R4) and quality (R5)
+Cost (billed, authoritative; common-card shown beside it) <= 1.02 x A, duration <= 1.02 x A, quality >= 0.98 x A (mean of 8 judged qualities). Turns, tool calls, peak context are report-only. n=1 per arm: fixed threshold, no significance claim. Billed vs common-card: billed uses the CLI `total_cost_usd` for A and tier-aware cache pricing for B/C; common-card prices all cache writes at the 5m rate.
+The judge (Haiku, `judge.mjs`) is a PAID third-party call. It runs only from the driver in a live round, after the oracle passed for A and the judged arm, with no env flag. Owner: the repository owner (skywinstonsk@gmail.com), recorded here, in the driver header and in the experiment LOG; it is deliberately not mentioned in the published `AGENTS.md`.
+
+## Output
+Raw output goes to repo-root `tmp/agent-mcp/parity/<round>/` (gitignored). The arm working directory lives under the OS temp dir (`adhd-agent-mcp-parity/<round>/work`) so no repo or agent-instruction file sits above it.
+
+## Goldens
+`golden/legacy` (frozen round-3 oracle + fixtures, byte-identical), `golden/r4` (R4 observation/expected/score per run with the source sha256; `oracle.r4.frozen.mjs` is the R4 oracle before R1, one import path adjusted), `golden/selfcheck/round3`.
