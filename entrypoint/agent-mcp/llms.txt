@@ -44,8 +44,7 @@ Optional:
 - `ADHD_AGENT_CONTEXT_LIMIT` — token limit; 0 (default) = disabled
 - `ADHD_AGENT_MAX_DEPTH` — max delegation depth (default: 3)
 - `ADHD_AGENT_MAX_TOOL_LOOPS` — max tool-call rounds (default: 50)
-- `ADHD_AGENT_TOOL_CALL_CONCURRENCY` — max tool calls of one assistant turn run concurrently (default: 8; positive integer; invalid fails at startup)
-  - one per-task limiter bounds BOTH the native tool loop and the claudecli bridge; task events `budget:unpriced_model` and `provider:builtin_bypass` are persisted in `task_events`; see docs/agent/provider-parity.md
+- `ADHD_AGENT_TOOL_CALL_CONCURRENCY` — max tool calls of one assistant turn run concurrently (default: 8; positive integer; invalid fails at startup; one per-task limiter bounds BOTH the native tool loop and the claudecli bridge)
 - `ADHD_AGENT_TOOL_RESULT_MAX_CHARS` — max chars of one tool result shown to the model, head+tail truncated with a marker (default: 6000; 0 = disabled; invalid fails at startup)
 - `ADHD_AGENT_TOOL_RESULT_SPILL_ENABLED` — opt-in: write an over-cap tool result to a 0600 file and show the model a stub with the path instead of truncating (default: false; dir `ADHD_AGENT_TOOL_RESULT_SPILL_DIR`, ttl `ADHD_AGENT_TOOL_RESULT_SPILL_TTL_HOURS`)
 - `ADHD_AGENT_LOG_LEVEL` — logging level (default: info)
@@ -54,6 +53,7 @@ Optional:
 - `ADHD_AGENT_LOGGING_API_BODY_MAX_BYTES` (4194304), `_API_ROTATE_BYTES` (67108864), `_API_RETENTION_DAYS` (14), `_API_MAX_DIR_BYTES` (2147483648), `_OPS_ROTATE_BYTES` (16777216), `_OPS_RETENTION_DAYS` (60), `_OPS_MAX_DIR_BYTES` (268435456), `_TRACE_RETENTION_DAYS` (30), `_TRACE_MAX_DIR_BYTES` (536870912), `_FLOOD_MAX_BYTES` (268435456), `_FLOOD_WINDOW_SECONDS` (600) — all `ADHD_AGENT_LOGGING_*`
 - `ADHD_AGENT_TRACING_LOG_DIR` — tracing sink dir (default `<logs>/trace`)
 - `ADHD_AGENT_DATABASE_PATH` — absolute path of a custom SQLite DB (default: the production store `~/.adhd/agent-mcp/production/data/agents.db`; relative values are rejected; a launch-directory `.env` cannot set it)
+- Task events: `budget:unpriced_model` and `provider:builtin_bypass` are persisted in `task_events` (not env-configured); see docs/agent/provider-parity.md
 
 ## 2.0.2 Highlights
 
