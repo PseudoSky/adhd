@@ -20,6 +20,8 @@ import type {
 } from '@adhd/agent-base-types';
 import { contextWindowFor } from '@adhd/agent-base-types';
 import { estimateCost } from '@adhd/agent-core-provider';
+import type { IPriceSource } from '@adhd/agent-core-provider';
+import { createPriceSource } from '@adhd/agent-store-runtime';
 
 /**
  * The database handle the engine loader actually passes as `ctx.db` — the live
@@ -472,9 +474,14 @@ function normalizeConfig(raw: unknown): PluginConfig {
     };
   }
   // Flat format → dimension
-  const flatPricing = pricingModeSchema.safeParse(obj['pricing']);
+  // Strict, like the structured branch: an invalid `pricing` throws rather
+  // than silently falling back to auto (review-L6).
+  const flatPricing =
+    obj['pricing'] !== undefined
+      ? pricingModeSchema.parse(obj['pricing'])
+      : undefined;
   return {
-    ...(flatPricing.success ? { pricing: flatPricing.data } : {}),
+    ...(flatPricing !== undefined ? { pricing: flatPricing } : {}),
     defaults: flatFieldsToDimension(obj),
     agent: { overrides: {} },
     provider: { overrides: {} },
@@ -744,6 +751,12 @@ class BudgetPlugin implements Plugin {
   constructor(
     private readonly db: unknown,
     private readonly cfg: PluginConfig,
+    /**
+     * As-of price-history source the rate card prices against -- the SAME
+     * source the UsagePlugin / `usage_query` read (cf7e0e5c review-M1), so a
+     * cost cap and `usage_query est_cost` agree. Absent => the bundled snapshot.
+     */
+    private readonly priceSource?: IPriceSource,
   ) {}
 
   install(hooks: IHookRegistry): void {
@@ -854,6 +867,9 @@ class BudgetPlugin implements Plugin {
   private onPostModelResponse(p: PostModelResponsePayload): void {
     const acc = this.accumulators.get(p.executionContext.taskId);
     if (!acc) return;
+    // One provider source for rates AND caps (cf7e0e5c review-L5): a mid-task
+    // fallback to another provider re-keys both together.
+    acc.providerType = providerTypeOf(p.executionContext);
     const usage = p.tokenUsage;
     if (usage) {
       // Per-class accumulation (BUG-AGENTMCP-008): providers already split input into
@@ -936,10 +952,22 @@ class BudgetPlugin implements Plugin {
     };
     if (mode === 'flat' || (mode === 'auto' && explicit)) {
       accrueFlat();
+      if (!explicit) {
+        // pricing:'flat' with no flat rate configured accrues $0; say so once
+        // per task+model rather than staying silent (D3, review-L4).
+        this.warnUnpriced(
+          p,
+          acc,
+          [this.requestedModelOf(p) ?? 'default'],
+          false,
+          'pricing is "flat" but no flat costPer*Token rate is configured; its spend is NOT counted toward the cost cap',
+        );
+      }
       return;
     }
 
     const asOf = new Date().toISOString();
+    const source = this.priceSource;
     const breakdown = p.tokenUsage?.modelBreakdown;
     // Token classes the card could not price; with flat rates configured they
     // bill flat (D3), otherwise they accrue nothing and are reported.
@@ -959,7 +987,7 @@ class BudgetPlugin implements Plugin {
             cacheCreation1hTokens: e.cacheCreation1hTokens,
             outputTokens: e.outputTokens,
           },
-          { asOf, strict: true },
+          { asOf, source, strict: true },
         );
         if (est.costUsd === null) {
           unpricedModels.push(e.model);
@@ -974,13 +1002,14 @@ class BudgetPlugin implements Plugin {
         }
       }
     } else {
-      const ctx = p.executionContext;
-      const model =
-        p.responseModel ??
-        ctx.wireModel ??
-        (ctx.selection?.modelRef || undefined) ??
-        ctx.agentDefinition?.provider?.model;
-      const est = model ? estimateCost(model, t, { asOf }) : undefined;
+      // The REQUESTED model, exactly as the UsagePlugin prices a non-breakdown
+      // turn (`acc.model = wireModelOf(ctx) || 'default'`), so cap and
+      // `usage_query` price the same model (review-M2). The provider's
+      // `responseModel` is deliberately not consulted.
+      const model = this.requestedModelOf(p);
+      const est = model
+        ? estimateCost(model, t, { asOf, source })
+        : undefined;
       if (est && est.costUsd !== null) {
         acc.rateCostUsd += est.costUsd;
       } else {
@@ -989,24 +1018,17 @@ class BudgetPlugin implements Plugin {
       }
     }
 
-    for (const model of unpricedModels) {
-      if (acc.unpricedModels.has(model)) continue;
-      acc.unpricedModels.add(model);
-      // Notification only: HookRegistry.emit swallows handler errors.
-      void (this.hooks as IHookRegistry | undefined)
-        ?.emit('budget:unpriced_model', {
-          executionContext: p.executionContext,
-          model,
-          field: 'cost',
-          usedFlatRates: explicit,
-          message:
-            `model "${model}" has no rate-card price; ` +
-            (explicit
-              ? 'billed at the configured flat rates'
-              : 'its spend is NOT counted toward the cost cap'),
-        })
-        ?.catch(() => undefined);
-    }
+    this.warnUnpriced(
+      p,
+      acc,
+      unpricedModels,
+      explicit,
+      (m) =>
+        `model "${m}" has no rate-card price; ` +
+        (explicit
+          ? 'billed at the configured flat rates'
+          : 'its spend is NOT counted toward the cost cap'),
+    );
     if (explicit) {
       for (const c of unpricedClasses) {
         acc.flat.uncachedInputTokens += c.uncachedInputTokens;
@@ -1014,6 +1036,44 @@ class BudgetPlugin implements Plugin {
         acc.flat.cacheCreationTokens += c.cacheCreationTokens;
         acc.flat.outputTokens += c.outputTokens;
       }
+    }
+  }
+
+  /**
+   * The requested model for a turn: the resolved wire model, else the
+   * selection's `modelRef`, else the agent's inline model. Same resolution as
+   * the UsagePlugin's `wireModelOf` (cf7e0e5c review-M2).
+   */
+  private requestedModelOf(p: PostModelResponsePayload): string | undefined {
+    const ctx = p.executionContext;
+    return (
+      ctx.wireModel ??
+      (ctx.selection?.modelRef || undefined) ??
+      ctx.agentDefinition?.provider?.model
+    );
+  }
+
+  /** Emit `budget:unpriced_model` once per task+model (notification only). */
+  private warnUnpriced(
+    p: PostModelResponsePayload,
+    acc: BudgetAccumulator,
+    models: string[],
+    usedFlatRates: boolean,
+    message: string | ((model: string) => string),
+  ): void {
+    for (const model of models) {
+      if (acc.unpricedModels.has(model)) continue;
+      acc.unpricedModels.add(model);
+      // HookRegistry.emit swallows handler errors.
+      void (this.hooks as IHookRegistry | undefined)
+        ?.emit('budget:unpriced_model', {
+          executionContext: p.executionContext,
+          model,
+          field: 'cost',
+          usedFlatRates,
+          message: typeof message === 'function' ? message(model) : message,
+        })
+        ?.catch(() => undefined);
     }
   }
 
@@ -1145,6 +1205,7 @@ class BudgetPlugin implements Plugin {
     needCost = true,
   ): UsageTotals {
     const acc = this.accumulators.get(taskId);
+    const scopeProviderType = acc?.providerType ?? 'unknown';
     const inMem: UsageTotals = acc
       ? {
           flat: { ...acc.flat },
@@ -1190,7 +1251,7 @@ class BudgetPlugin implements Plugin {
       // `est_cost_usd` is read only when the scope bills by rate card; a
       // flat-priced scope never touches the column.
       const estCost =
-        !needCost || this.scopeBillsFlat()
+        !needCost || this.scopeBillsFlat(agentName, scopeProviderType)
           ? sql`0`
           : sql`COALESCE(SUM(tu.est_cost_usd), 0)`;
       const SELECT = (from: SQL) => sql`
@@ -1248,7 +1309,7 @@ class BudgetPlugin implements Plugin {
         // 'auto' with flat rates configured -- the legacy formula), else the
         // per-turn USD the usage plugin already stored (est_cost_usd, the rate
         // card's own number; NULL = unpriced = nothing).
-        const flatScope = this.scopeBillsFlat();
+        const flatScope = this.scopeBillsFlat(agentName, scopeProviderType);
         return {
           flat: flatScope
             ? {
@@ -1364,11 +1425,13 @@ class BudgetPlugin implements Plugin {
   }
 
   /** Whether flat rates (not the rate card) bill persisted rows of OTHER tasks in a scope. */
-  private scopeBillsFlat(): boolean {
+  private scopeBillsFlat(agentName: string, providerType: string): boolean {
     const mode = this.cfg.pricing ?? 'auto';
     if (mode === 'flat') return true;
     if (mode === 'rate-card') return false;
-    return hasFlatRates(this.cfg.defaults ?? {});
+    // Same merged dimension priceTurn consults (defaults + agent/provider
+    // overrides), so a scoped cost never mixes bases (review-M3).
+    return this.resolveRates(agentName, providerType).explicit;
   }
 
   /**
@@ -1681,6 +1744,7 @@ class BudgetPlugin implements Plugin {
     const providerType = providerTypeOf(p.executionContext);
     const acc = this.accumulators.get(taskId);
     if (!acc) return;
+    acc.providerType = providerType;
 
     const {
       caps,
@@ -1924,9 +1988,35 @@ class BudgetPlugin implements Plugin {
 
 // ── Factory ───────────────────────────────────────────────────────────────────
 
+/**
+ * The as-of price-history source over the plugin's DB handle -- the one the
+ * UsagePlugin builds (`createPriceSource(db)`), so the cap prices as `usage_query`
+ * does. A handle without the price-history table (or no handle) degrades to the
+ * bundled snapshot rather than failing the turn.
+ */
+function priceSourceFor(db: unknown): IPriceSource | undefined {
+  if (!db) return undefined;
+  try {
+    const src = createPriceSource(db as Parameters<typeof createPriceSource>[0]);
+    return {
+      priceAt: (modelId, instantIso) => {
+        try {
+          return src.priceAt(modelId, instantIso) as ReturnType<
+            IPriceSource['priceAt']
+          >;
+        } catch {
+          return undefined;
+        }
+      },
+    };
+  } catch {
+    return undefined;
+  }
+}
+
 const createPlugin: PluginFactory = ({ db, config }: PluginContext): Plugin => {
   const pluginCfg = normalizeConfig(config);
-  return new BudgetPlugin(db, pluginCfg);
+  return new BudgetPlugin(db, pluginCfg, priceSourceFor(db));
 };
 
 export default createPlugin;

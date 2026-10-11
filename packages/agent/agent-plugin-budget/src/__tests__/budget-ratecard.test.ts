@@ -377,7 +377,10 @@ describe(`${TICKET} AC4 -- back-compat and the pricing modes`, () => {
     const noRates = await startTask(blockWith({}, { pricing: 'flat' }), ctx());
     await noRates.turn(turn);
     expect(await noRates.cost()).toBe(0);
-    expect(noRates.unpriced).toHaveLength(0);
+    // cf7e0e5c review-L4: the $0 is announced (once), never silent.
+    await new Promise((r) => setImmediate(r));
+    expect(noRates.unpriced).toHaveLength(1);
+    expect(noRates.unpriced[0]).toMatchObject({ field: 'cost', usedFlatRates: false });
   });
 
   it("pricing defaults to 'auto': flat rates present => flat; absent => rate card", async () => {
@@ -508,7 +511,20 @@ describe(`${TICKET} AC7 -- an unpriceable model is reported, never a silent $0`,
     const ctx = makeCtx({ wireModel: UNKNOWN });
     const task = await startTask(blockWith(), ctx);
     await task.turn(turn);
-    await task.turn({ ...turn, responseModel: 'acme-other-model' });
+    await task.turn({
+      uncached: 1_000,
+      output: 100,
+      breakdown: [
+        {
+          model: 'acme-other-model',
+          uncachedInputTokens: 1_000,
+          cacheReadTokens: 0,
+          cacheCreationTokens: 0,
+          cacheCreation1hTokens: 0,
+          outputTokens: 100,
+        },
+      ],
+    });
     await new Promise((r) => setImmediate(r));
     expect(task.unpriced.map((e) => e['model'])).toEqual([UNKNOWN, 'acme-other-model']);
   });
@@ -584,16 +600,132 @@ describe(`${TICKET} -- scoped cost accumulates the persisted per-turn rate-card 
       pricing: 'rate-card',
       defaults: { mode: 'block', scope: 'global', caps: [{ field: 'cost', maximum: 0.015 }] },
     };
-    const task = await startTask(cfg, makeCtx({ taskId: 'task-b' }), db);
+    const task = await startTask(cfg, makeCtx({ taskId: 'task-b', wireModel: SONNET }), db);
     expect(await task.tripped()).toBe(true);
 
     const { db: db2, add: add2 } = realDb();
     add2('task-a', 0.01);
     add2('task-null', null);
-    const ok = await startTask(cfg, makeCtx({ taskId: 'task-b' }), db2);
+    const ok = await startTask(cfg, makeCtx({ taskId: 'task-b', wireModel: SONNET }), db2);
     expect(await ok.tripped()).toBe(false);
     // task B's own in-memory spend folds in on top of the persisted total.
-    await ok.turn({ uncached: 10_000_000, output: 0, responseModel: SONNET });
+    await ok.turn({ uncached: 10_000_000, output: 0 });
     expect(await ok.tripped()).toBe(true);
+  });
+});
+
+// ── cf7e0e5c static review corrections (bucket C1) ───────────────────────────
+
+describe(`cf7e0e5c review-M1 -- the cap prices against the SAME price-history source as usage_query`, () => {
+  function historyDb(rows: Array<{ model: string; inputPerM: number; cacheReadPerM: number; cacheWritePerM: number; outputPerM: number }>) {
+    const sqlite = new Database(':memory:');
+    sqlite.exec(`CREATE TABLE model_price_history (
+      id TEXT PRIMARY KEY, model_id TEXT NOT NULL, observed_at TEXT NOT NULL, source TEXT NOT NULL,
+      kind TEXT NOT NULL DEFAULT 'model', input_per_m REAL, cache_read_per_m REAL, cache_write_per_m REAL,
+      output_per_m REAL, raw_json TEXT NOT NULL, overrides_json TEXT, ledger_id TEXT)`);
+    rows.forEach((r, i) =>
+      sqlite
+        .prepare(
+          `INSERT INTO model_price_history (id, model_id, observed_at, source, kind, input_per_m, cache_read_per_m, cache_write_per_m, output_per_m, raw_json)
+           VALUES (?, ?, '2000-01-01T00:00:00.000Z', 'openrouter-live', 'model', ?, ?, ?, ?, '{}')`
+        )
+        .run(`h${i}`, r.model, r.inputPerM, r.cacheReadPerM, r.cacheWritePerM, r.outputPerM)
+    );
+    return drizzle(sqlite);
+  }
+
+  it('a history record that differs from the bundled card prices the cap, matching estimateCost with the usage plugin\'s source', async () => {
+    // 10x the bundled Sonnet rates: only a plugin that reads the history source can reach this number.
+    const db = historyDb([{ model: SONNET, inputPerM: 30, cacheReadPerM: 3, cacheWritePerM: 37.5, outputPerM: 150 }]);
+    const task = await startTask(
+      blockWith(),
+      makeCtx({ wireModel: SONNET, selection: { providerType: 'anthropic', modelRef: SONNET } }),
+      db
+    );
+    await task.turn({ uncached: 10_000, output: 1_000 });
+    const expected = (10_000 * 30 + 1_000 * 150) / 1e6;
+    expect(Math.abs((await task.cost()) - expected)).toBeLessThan(1e-9);
+    expect(expected).toBeGreaterThan(cardCost(SONNET, { uncached: 10_000, output: 1_000 }) * 5);
+  });
+
+  it('a DB without the price-history table degrades to the bundled snapshot instead of failing', async () => {
+    const db = drizzle(new Database(':memory:'));
+    const task = await startTask(blockWith(), makeCtx({ wireModel: SONNET }), db);
+    const t: Turn = { uncached: 10_000, output: 1_000 };
+    await task.turn(t);
+    expect(Math.abs((await task.cost()) - cardCost(SONNET, t))).toBeLessThan(1e-9);
+  });
+});
+
+describe(`cf7e0e5c review-M2 -- the single-model path prices the REQUESTED model, as usage_query does`, () => {
+  it('a differing responseModel does not change which model the cap prices', async () => {
+    const t: Turn = { uncached: 10_000, cacheRead: 50_000, output: 1_000 };
+    const task = await startTask(blockWith(), makeCtx({ wireModel: DEEPSEEK }));
+    await task.turn({ ...t, responseModel: SONNET });
+    expect(Math.abs((await task.cost()) - cardCost(DEEPSEEK, t))).toBeLessThan(1e-9);
+    expect(Math.abs(cardCost(SONNET, t) - cardCost(DEEPSEEK, t))).toBeGreaterThan(1e-6);
+  });
+
+  it('an alias in the selection with no wireModel resolves via selection.modelRef (wireModelOf order)', async () => {
+    const t: Turn = { uncached: 5_000, output: 500 };
+    const task = await startTask(
+      blockWith(),
+      makeCtx({ selection: { providerType: 'openai', modelRef: DEEPSEEK } })
+    );
+    await task.turn({ ...t, responseModel: SONNET });
+    expect(Math.abs((await task.cost()) - cardCost(DEEPSEEK, t))).toBeLessThan(1e-9);
+  });
+});
+
+describe(`cf7e0e5c review-M3 -- a scoped cost never mixes pricing bases`, () => {
+  it('flat rates set only on an agent override make persisted rows of other tasks bill flat too', async () => {
+    const sqlite = new Database(':memory:');
+    sqlite.exec(`CREATE TABLE tasks (id TEXT PRIMARY KEY, session_id TEXT)`);
+    sqlite.exec(`CREATE TABLE task_usage (
+      task_id TEXT PRIMARY KEY, agent_name TEXT,
+      input_tokens INTEGER DEFAULT 0, output_tokens INTEGER DEFAULT 0,
+      model_calls INTEGER DEFAULT 0, peak_context_tokens INTEGER,
+      cache_read_input_tokens INTEGER, cache_creation_input_tokens INTEGER,
+      uncached_input_tokens INTEGER, est_cost_usd REAL, created_at TEXT)`);
+    sqlite.prepare(`INSERT INTO tasks (id, session_id) VALUES ('task-a', 's')`).run();
+    // Card-priced at $0.02, but 100 uncached input + 10 output at the override's flat rates = $0.5.
+    sqlite
+      .prepare(
+        `INSERT INTO task_usage (task_id, agent_name, input_tokens, output_tokens, model_calls, est_cost_usd, created_at)
+         VALUES ('task-a', 'special', 100, 10, 1, 0.02, ?)`
+      )
+      .run(new Date().toISOString());
+    const cfg = {
+      defaults: { mode: 'block', scope: 'global', caps: [{ field: 'cost', maximum: 0.3 }] },
+      agent: { overrides: { special: { costPerInputToken: 0.004, costPerOutputToken: 0.01 } } },
+    };
+    const special = await startTask(cfg, makeCtx({ taskId: 'task-b', agentName: 'special', wireModel: SONNET }), drizzle(sqlite));
+    expect(await special.tripped()).toBe(true);
+    // An agent with no override stays on the card basis for the same persisted rows.
+    const plain = await startTask(cfg, makeCtx({ taskId: 'task-c', agentName: 'plain', wireModel: SONNET }), drizzle(sqlite));
+    expect(await plain.tripped()).toBe(false);
+  });
+});
+
+describe(`cf7e0e5c review-L5/L6 -- one provider source for rates and caps; strict pricing in both config shapes`, () => {
+  it('a mid-task provider change re-keys the rate override together with the caps', async () => {
+    const ctx = makeCtx({ wireModel: DEEPSEEK, selection: { providerType: 'anthropic', modelRef: DEEPSEEK } });
+    const cfg = {
+      defaults: { mode: 'block' as const, caps: [COST_PROBE] },
+      provider: { overrides: { openai: { costPerInputToken: 0.000001, costPerOutputToken: 0.000002 } } },
+    };
+    const task = await startTask(cfg, ctx);
+    (ctx as unknown as { selection: unknown }).selection = { providerType: 'openai', modelRef: DEEPSEEK };
+    await task.turn({ uncached: 10_000, output: 1_000 });
+    expect(await task.cost()).toBe(10_000 * 0.000001 + 1_000 * 0.000002);
+  });
+
+  it('an invalid `pricing` in a flat-format config throws, like the structured format', () => {
+    expect(() =>
+      createPlugin({ db: null as never, config: { pricing: 'bogus', maxModelCalls: 5 } as never })
+    ).toThrow();
+    expect(() =>
+      createPlugin({ db: null as never, config: { pricing: 'rate-card', maxModelCalls: 5 } as never })
+    ).not.toThrow();
   });
 });

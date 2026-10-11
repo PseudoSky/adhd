@@ -181,21 +181,21 @@ Caps are **additive** across dimensions — multiple caps targeting the same fie
 
 ### Cost pricing
 
-The `cost` cap prices every model turn one of two ways, chosen by the top-level `pricing` key:
+The `cost` cap prices every model turn one of three ways, chosen by the top-level `pricing` key:
 
 | `pricing`            | Behaviour                                                                                                                                                                       |
 | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `auto` (default)     | Explicit flat `costPer*Token` rates win (defaults, or an agent / provider override). With none configured, the model-keyed rate card prices the turn.                          |
 | `rate-card`          | The rate card prices every turn; flat rates are ignored, except as the fallback for a model the card cannot price.                                                              |
-| `flat`               | Only the configured flat rates price a turn; the rate card is never read (no flat rates = cost 0, the pre-rate-card behaviour).                                                  |
+| `flat`               | Only the configured flat rates price a turn; the rate card is never read (no flat rates = cost 0, the pre-rate-card behaviour; the plugin emits one `budget:unpriced_model` event per task and model so this is never silent).                                                  |
 
-The rate card is `estimateCost` from `@adhd/agent-core-provider` -- the same model-keyed, provider-agnostic table `usage_query` reports `est_cost_usd` from. The model is resolved per turn as the provider's reported `responseModel`, else the resolved wire model (`selection.modelRef`), else the agent's inline model; multi-model responses (claudecli `modelUsage`) are priced entry by entry on each concrete model id. A DeepSeek agent on the `openai` adapter is therefore priced at DeepSeek's rates and a Sonnet agent at Sonnet's, with no per-provider configuration.
+The rate card is `estimateCost` from `@adhd/agent-core-provider` -- the same model-keyed, provider-agnostic table `usage_query` reports `est_cost_usd` from. The rate card is read as-of the turn against the same price-history source `usage_query` uses (the runtime DB's `model_price_history`, falling back to the bundled snapshot), so the cap and `usage_query` agree. The model is resolved per turn exactly as the usage plugin resolves it: the resolved wire model (`ctx.wireModel`, else `selection.modelRef`), else the agent's inline model -- the *requested* model; the provider's reported `responseModel` is not consulted; multi-model responses (claudecli `modelUsage`) are priced entry by entry on each concrete model id. A DeepSeek agent on the `openai` adapter is therefore priced at DeepSeek's rates and a Sonnet agent at Sonnet's, with no per-provider configuration.
 
 Unpriceable models are never a silent $0: with flat rates configured the turn bills at them; otherwise it accrues nothing and the plugin emits one `budget:unpriced_model` event per task and model (payload: `model`, `field: "cost"`, `usedFlatRates`, `message`).
 
 Per-agent and per-provider rate overrides (`agent.overrides.<name>.costPerInputToken`, `provider.overrides.<type>.costPerInputToken`, ...) are honoured and take precedence over `defaults`; the provider dimension keys on the resolved selection's provider type, then the agent's inline provider, then `unknown`.
 
-Scoped (`session` / `agent` / `global`) cost caps add the persisted `est_cost_usd` of the scope's other tasks when the scope bills by rate card, and the persisted token classes at the flat rates when flat pricing governs.
+Scoped (`session` / `agent` / `global`) cost caps add the persisted `est_cost_usd` of the scope's other tasks when the scope bills by rate card, and the persisted token classes at the flat rates when flat pricing governs. Which basis governs is decided from the same merged dimension (defaults plus agent / provider overrides) that prices the current turn, so a scoped cost never mixes bases. A multi-model response with one unpriceable concrete id accrues its priced portion in memory, whereas the usage plugin stores that turn's `est_cost_usd` as NULL; scoped sums of persisted rows therefore undercount such partial turns.
 
 > **Host default.** `agent-mcp`'s `ADHD_AGENT_BUDGET_COST_USD` now sets `pricing: "rate-card"` instead of injecting flat $3/$15 Sonnet rates. Non-Sonnet agents are priced at their own rates (a cache-warm DeepSeek run no longer trips the cap ~17x early). To keep the old flat pricing, set explicit `costPerInputToken` / `costPerOutputToken` in the budget plugin config.
 
