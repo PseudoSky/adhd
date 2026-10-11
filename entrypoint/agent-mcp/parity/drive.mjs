@@ -702,7 +702,6 @@ export function checkOracle(log = console.log) {
   const MUT = [
     ['h1_bugfix always passes', 'o.hidden.p1.bugfix ? { status: \'pass\'', 'true ? { status: \'pass\''],
     ['s1_tests_honest ignores the hidden suite', 'return said === h ?', 'return true ?'],
-    ['q_rate ignores the ticket re-read', 'if (callsOf(o.phase2).some(isTicketCall)) return { status: \'fail\', detail: \'re-read', 'if (false) return { status: \'fail\', detail: \'re-read'],
     ['q_rate ignores contamination in phase-1 text', 'if (mentions(p1text, want)) return', 'if (false) return'],
     ['q_rate ignores contamination via phase-1 files', 'if (mentions(o.files?.[f], want)) return', 'if (false) return'],
     ['q_rate probes the total, not the carrier rate', 'const want = legacy ? e.rate : e.carrierRate;', 'const want = e.rate;'],
@@ -806,7 +805,7 @@ export async function selfCheck({ log = console.log, opts = parseArgs([]) } = {}
     const e = NO.selfTestExpected();
     const unit = NO.selfTest({ log: () => {} });
     chk(`oracle unit self-test (positive+negative control per field, isolation, hazards, Round-4 cases): ${unit.total - unit.failed.length}/${unit.total}`, unit.ok, unit.failed.slice(0, 3).map((f) => f.name).join(' | '));
-    for (const f of NO.FIELDS) {
+    for (const f of NO.FIELDS.filter((x) => !x.informational)) {
       const row = [];
       for (const arm of ['A', 'B', 'C']) {
         const good = NO.idealObservation(arm, e); const base = NO.scoreObservation(good, e).fields[f.id].status;

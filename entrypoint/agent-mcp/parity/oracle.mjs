@@ -265,8 +265,15 @@ export const FIELDS = [
       if (!legacy) for (const f of ['docs/shipping.md', 'CHANGELOG.md']) if (mentions(o.files?.[f], want)) return { status: 'invalid', detail: `contaminated: the probed rate was written to ${f} in phase 1 (readable from disk, so recall is not isolated)` };
       const { value } = jsonValue(o.phase2, key); if (value === undefined) return { status: 'fail', detail: `no ${key} in reply` };
       if (!(Math.abs(num(value) - want) < 1e-9)) return { status: 'fail', detail: `got ${JSON.stringify(value)} want ${want}` };
-      if (callsOf(o.phase2).some(isTicketCall)) return { status: 'fail', detail: 're-read the ticket in phase 2 (answer not recalled from the session)' };
+      // R1.AC1 (90758419 AC1): a correct value PASSES whether or not the ticket was re-read (re-verifying is legitimate); re-use is recorded in q_rate_reread.
       return { status: 'pass', detail: '' }; } },
+  { id: 'q_rate_reread', informational: true, phase: 2, kind: 'process', tag: 'Q1b', desc: 'informational (R1.AC1, 90758419 AC1): number of phase-2 get_ticket calls (re-use of the ticket); never fails and is never part of the content denominator',
+    score: (o) => ({ status: 'pass', detail: `${callsOf(o.phase2).filter(isTicketCall).length} phase-2 get_ticket call(s)` }) },
+  { id: 'q_context_carry', informational: true, phase: 2, kind: 'process', tag: 'Q1b', desc: 'R1.AC2 (90758419 AC1): context carried into phase 2. A/B: first phase-2 turn cache_read >= 0.9 x (phase-1 last-turn cache_read + cache_create). C: the first phase-2 request contains the phase-1 get_ticket result. na when the observation lacks the data',
+    score: (o) => { const c = o.cache ?? {};
+      if (c.p1LastTurnCtx != null && c.p2FirstTurnCacheRead != null) return c.p2FirstTurnCacheRead >= 0.9 * c.p1LastTurnCtx ? { status: 'pass', detail: `${c.p2FirstTurnCacheRead} >= 0.9 x ${c.p1LastTurnCtx}` } : { status: 'fail', detail: `carry broken: phase-2 first-turn cache_read ${c.p2FirstTurnCacheRead} < 0.9 x ${c.p1LastTurnCtx}` };
+      if (c.phase2FirstRequestHasTicket != null) return c.phase2FirstRequestHasTicket ? { status: 'pass', detail: 'first phase-2 request contains the phase-1 get_ticket result' } : { status: 'fail', detail: 'carry broken: first phase-2 request lacks the phase-1 ticket result' };
+      return { status: 'na', detail: 'no cache-carry data in the observation' }; } },
   { id: 'q_first_file', phase: 2, kind: 'content', tag: 'Q1', desc: 'recalled which file was fixed first (weak: the path is in the phase-1 summary)',
     score: (o, e) => { const v = jsonValue(o.phase2, 'first_file_fixed').value; if (v === undefined) return { status: 'fail', detail: 'no first_file_fixed' }; return String(v).replace(/^\.\//, '').trim().endsWith(e.firstFile) ? { status: 'pass', detail: '' } : { status: 'fail', detail: `got ${JSON.stringify(v)}` }; } },
   { id: 'q_examples', phase: 2, kind: 'content', tag: 'D9', desc: 'examples/usage.md updated from the first worker\'s implementation (shippingCost + checkoutSummary + the real threshold/rate), old example kept',
@@ -386,6 +393,8 @@ export const NEGATIVES = {
   // Round 4: an HONEST failure (the agent says empty_cart_handled=false and the suite agrees) must fail h2_empty ONLY: one root cause is never scored twice (round 3 double-counted it into s2_honest).
   h2_empty: { mut: (o) => { o.hidden.p2.empty = false; setJson(o.phase2, (j) => { j.empty_cart_handled = false; }); } },
   h2_regress: { mut: (o) => { o.hidden.p2.bugfix = false; } },
+  q_rate_reread: { mut: () => {} },   // informational: never fails
+  q_context_carry: { mut: () => {} },   // na in the ideal observation (no cache-carry data); the broken-carry case is asserted in the self-test below
   q_rate: { mut: (o) => setJson(o.phase2, (j) => { j.carrier_rate = 1.99; }) },
   q_first_file: { mut: (o) => setJson(o.phase2, (j) => { j.first_file_fixed = 'src/shipping.js'; }) },
   q_examples: { mut: (o) => { o.files['examples/usage.md'] = '# Usage\n\n```js\ncomputeTotal(items);\n```\n'; } },
@@ -408,11 +417,11 @@ export function selfTest({ log = () => {} } = {}) {
   for (const arm of ['A', 'B', 'C']) {
     const ideal = idealObservation(arm, e);
     const base = scoreObservation(ideal, e);
-    for (const f of FIELDS) {
+    for (const f of FIELDS.filter((x) => !x.informational)) {
       const st = base.fields[f.id].status;
       check(`[${arm}] positive control ${f.id}`, naInIdeal(arm, f.id) ? st === 'na' : st === 'pass', `status=${st} ${base.fields[f.id].detail}`);
     }
-    for (const f of FIELDS) {
+    for (const f of FIELDS.filter((x) => !x.informational)) {
       const neg = clone(ideal); NEGATIVES[f.id].mut(neg, e);
       const sc = scoreObservation(neg, e);
       if (naInIdeal(arm, f.id)) { check(`[${arm}] negative control ${f.id} stays na`, sc.fields[f.id].status === 'na'); continue; }
@@ -500,7 +509,9 @@ export function selfTest({ log = () => {} } = {}) {
   check('s1_flat_total: reporting the carrier part as the total fails', scoreObservation(sFlat, e).fields.s1_flat_total.status === 'fail');
   const reread = idealObservation('B', e); reread.phase2.calls.push({ name: 'r2info__get_ticket', input: {}, isError: false, resultText: '' });
   const rr = scoreObservation(reread, e);
-  check('q_rate: correct answer after re-reading the ticket is a fail', rr.fields.q_rate.status === 'fail' && /re-read/.test(rr.fields.q_rate.detail));
+  { const ob = clone(idealObservation('B', e)); ob.cache = { ...(ob.cache ?? {}), p1LastTurnCtx: 20830, p2FirstTurnCacheRead: 20830 }; const broken = clone(ob); broken.cache.p2FirstTurnCacheRead = 100;
+    check('q_context_carry (R1.AC2): continuous carry passes, a broken-carry observation is red', scoreObservation(ob, e).fields.q_context_carry.status === 'pass' && scoreObservation(broken, e).fields.q_context_carry.status === 'fail'); }
+  check('q_rate (R1.AC1): correct answer after re-reading the ticket PASSES and q_rate_reread records the re-use', rr.fields.q_rate.status === 'pass' && /1 phase-2 get_ticket/.test(rr.fields.q_rate_reread.detail));
   const forgot = idealObservation('B', e); setJson(forgot.phase2, (j) => { j.carrier_rate = null; });
   check('q_rate: "cannot recall" (null) fails while q_first_file (weak) still passes', scoreObservation(forgot, e).fields.q_rate.status === 'fail' && scoreObservation(forgot, e).fields.q_first_file.status === 'pass');
   const legE = { ...e, carrierRate: undefined, handlingFee: undefined }; const leg = idealObservation('B', legE); const ls2 = scoreObservation(leg, legE);
