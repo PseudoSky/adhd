@@ -34,6 +34,7 @@ import {
     type ProviderLimitWarning,
     type RetryRuntime,
 } from "./provider-failure.js";
+import { buildBuiltinBypassEvent, type IBuiltinBypassEvent } from "./claudecli-bypass.js";
 import { startToolBridge, buildBridgeMcpConfig, bridgeableTools, type ToolBridge } from "./claudecli-tool-bridge.js";
 import {
     MAX_PER_TURN_USAGE,
@@ -763,6 +764,7 @@ export class ClaudeCliProvider implements LLMProvider {
     private readonly retryRuntime: RetryRuntime;
     private readonly sessionKey: string | undefined;
     private readonly sessions: ClaudeCliSessionRegistry;
+    private readonly onBuiltinBypass: ((event: IBuiltinBypassEvent) => void) | undefined;
 
     constructor(
         config: ClaudeCliConfig,
@@ -788,8 +790,14 @@ export class ClaudeCliProvider implements LLMProvider {
             sessionResumable?: boolean;
             /** Test seam: replaces the process-wide session registry. */
             sessions?: ClaudeCliSessionRegistry;
+            /**
+             * Receives the structured `provider:builtin_bypass` warning once per `chat()` when CLI built-ins are
+             * live (e0d71436 AC2/AC3). The warning is always also logged at `warn`.
+             */
+            onBuiltinBypass?: (event: IBuiltinBypassEvent) => void;
         }
     ) {
+        this.onBuiltinBypass = deps?.onBuiltinBypass;
         this.sessionKey = deps?.sessionResumable === false ? undefined : deps?.sessionKey;
         this.sessions = deps?.sessions ?? claudeCliSessions;
         this.startBridge = deps?.startToolBridge ?? startToolBridge;
@@ -919,6 +927,34 @@ export class ClaudeCliProvider implements LLMProvider {
         );
     }
 
+    /**
+     * Disclose (e0d71436 G4) that live CLI built-ins skip the engine's hooks / coercion / cap / estimator / pool.
+     * Silent for the default-deny case; never lists a built-in the gate withheld. Observational: never throws.
+     */
+    private reportBuiltinBypass(request: ProviderChatRequest): void {
+        try {
+            const systemPrompt = request.messages.filter((m) => m.role === "system").map((m) => m.content ?? "").join("\n");
+            const specMode = this.providerConfig.systemPromptIsAgentSpec === true && systemPrompt !== "";
+            const event = buildBuiltinBypassEvent(
+                specMode
+                    ? { effectiveAllowed: [], fromCompiledTools: false, specMd: systemPrompt }
+                    : {
+                        effectiveAllowed: computeClaudeBuiltinArgs({
+                            compiledTools: this.compiledTools,
+                            allowedBuiltinTools: this.providerConfig.allowedBuiltinTools,
+                            builtinToolPolicy: request.builtinToolPolicy,
+                        }).effectiveAllowed,
+                        fromCompiledTools: this.compiledTools !== undefined,
+                    },
+            );
+            if (!event) return;
+            this.logger.warn({ ...event }, `${event.event}: CLI built-in tools run outside the engine's tool pipeline`);
+            this.onBuiltinBypass?.(event);
+        } catch {
+            /* observational */
+        }
+    }
+
     async chat(request: ProviderChatRequest): Promise<ProviderChatResponse> {
         // Exactly-once tool execution (9ed453c1 BRIDGE): claude reaches the agent's MCP tools ONLY
         // through a per-chat loopback bridge whose tools/call is `request.executeTool` (the engine's
@@ -929,6 +965,7 @@ export class ClaudeCliProvider implements LLMProvider {
         const advertised = bridgeableTools(request.tools ?? []);
         // GOV (f9dadeaa): fail closed BEFORE any bridge/credential file exists.
         this.assertSpecModeGovernable(request);
+        this.reportBuiltinBypass(request);
         if (advertised.length > 0 && !request.executeTool) {
             throw new Error(
                 "PROVIDER_ERROR: claudecli was given MCP tools but no executeTool callback; refusing to expose tools it cannot execute"
