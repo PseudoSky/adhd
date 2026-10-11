@@ -9,15 +9,20 @@ export interface ITaskEventSink {
   }): void;
 }
 
+const registered = new WeakSet<IHookRegistry>();
+
 /**
  * Persist the operator-visible warning hook events as task events (20772a0b AC2/AC3), so a caller reading
  * `task_events` can see that a model is unpriced or that CLI built-ins bypass the engine pipeline.
  *
  * The task event `type` is the hook event name; the payload is the hook payload minus its
- * `executionContext` (which is the whole task and not event data). Register once per hook registry.
+ * `executionContext` (which is the whole task and not event data). Idempotent per hook registry (a repeat call is a no-op).
  * Observational: a failing sink is logged by `HookRegistry.emit` and never fails the task.
  */
 export function registerTaskEventHooks(hooks: IHookRegistry, taskStore: ITaskEventSink): void {
+  // Idempotent per registry: a second call would otherwise persist every event twice (20772a0b review-L3).
+  if (registered.has(hooks)) return;
+  registered.add(hooks);
   const persist =
     <E extends 'budget:unpriced_model' | 'provider:builtin_bypass'>(type: E) =>
     (p: HookEventMap[E]): void => {

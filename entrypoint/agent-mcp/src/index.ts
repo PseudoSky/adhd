@@ -12,8 +12,8 @@ import { formatStoreLine } from "./config-store-path.js";
 import { runMigrations } from "./db/migrate.js";
 import { logger } from "./logger.js";
 import { initLogChannels, closeLogChannels } from "./wire/channels.js";
-import { registerEolPreserve } from "./eol-hook.js";
-import { registerOpsLog, logServerStart, logServerStop, dbPathOf } from "./ops-log.js";
+import { createHostHooks } from "./host-hooks.js";
+import { logServerStart, logServerStop, dbPathOf } from "./ops-log.js";
 import { env, resolveInitialSsePort, setSseBoundPort } from "./config.js";
 import { engineConfig } from "./wire/seams.js";
 import { AgentStore } from "./store/agent-store.js";
@@ -38,10 +38,8 @@ import {
   BackgroundQueue,
   DagEngine,
   Orchestrator,
-  HookRegistry,
   PolicyEngine,
   UsagePlugin,
-  registerTaskEventHooks,
   enqueueExistingTask,
 } from "@adhd/agent-engine-orchestrator";
 
@@ -281,18 +279,14 @@ async function main() {
         );
     }
 
-    const hooks = new HookRegistry();
-    registerOpsLog(hooks);
-    // 8dd148cf: keep CRLF files CRLF across the adopted fs server's LF-normalizing writes.
-    registerEolPreserve(hooks);
-
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const dbAny = db as any;
+    const taskStore = new TaskStore(dbAny);
+    // ops log, 8dd148cf CRLF preservation, and 20772a0b typed task events (budget:unpriced_model,
+    // provider:builtin_bypass): all registered by the host-wiring seam so a test drives the same path.
+    const hooks = createHostHooks(taskStore);
     const agentStore = new AgentStore(dbAny, hooks);
     const sessionStore = new SessionStore(dbAny, hooks);
-    const taskStore = new TaskStore(dbAny);
-    // 20772a0b: persist budget:unpriced_model and provider:builtin_bypass as task events.
-    registerTaskEventHooks(hooks, taskStore);
 
     // 37f6c511: price history + live OpenRouter pull. Seeds the bundled snapshot, arms the daily
     // scheduler (unref'd; cleared on shutdown) and hands the SAME as-of price source to the

@@ -9,9 +9,14 @@
  *     `claude` binary) is faked.
  * Both are read back through `taskEventsTable`, the way `agent-mcp-tail` / the task events reader does.
  *
- * Teeth (AC4): the "without the bridge" cases run the identical scenario without `registerTaskEventHooks` and
- * assert NO event is persisted, so deleting the wiring (host `index.ts`, or the factory's `onBuiltinBypass`)
- * turns the positive cases red. Negative control also run by hand when authored; see the commit message.
+ * Host wiring (review-M1, 20772a0b): the hook registry under test is built by `createHostHooks`, the very
+ * function `main()` in `index.ts` obtains its registry from. The positive cases therefore go red if the host's
+ * `registerTaskEventHooks` registration is removed from that seam.
+ *
+ * Teeth (AC4, automated): the "without the bridge" cases run the identical scenario on a bare `HookRegistry`
+ * (no task-event registration) and assert NO event is persisted. That is the mutation: a positive case and its
+ * control share one scenario and differ only in the registration, so the pair cannot both pass unless the
+ * registration is what persists the event. The dedupe cases (review-L3/L4) pin once-per-task semantics.
  */
 import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 import Database from "better-sqlite3";
@@ -34,12 +39,20 @@ import {
 } from "@adhd/agent-engine-orchestrator";
 import * as schema from "@adhd/agent-store-runtime";
 import { TaskStore, taskEventsTable } from "@adhd/agent-store-runtime";
+import type { LogChannel } from "@adhd/agent-plugin-tracing";
+import { createHostHooks } from "../host-hooks.js";
 
 vi.mock("child_process", () => ({ spawn: vi.fn() }));
 
 const TICKET = "20772a0b-1a7e-4650-8e9d-c93101e0a1e4";
 const MIGRATIONS = resolve(dirname(fileURLToPath(import.meta.url)), "../../drizzle");
 const scratch = mkdtempSync(join(tmpdir(), "20772a0b-"));
+
+/** Ops-log sink: the host seam registers the ops log; its output is not under test here. */
+const opsChannel = { logEvent: () => undefined } as unknown as LogChannel;
+/** The registry a host builds (withBridge) versus one with no task-event registration (the control). */
+const hooksFor = (withBridge: boolean, taskStore: TaskStore) =>
+  withBridge ? createHostHooks(taskStore, opsChannel) : new HookRegistry();
 
 const open: Database.Database[] = [];
 afterEach(() => {
@@ -48,7 +61,7 @@ afterEach(() => {
 
 function makeDb() {
   const sqlite = new Database(":memory:");
-  sqlite.pragma("foreign_keys = OFF");
+  sqlite.pragma("foreign_keys = ON"); // production FK path: the task row must exist before its events
   open.push(sqlite);
   migrate(drizzle(sqlite), { migrationsFolder: MIGRATIONS });
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -93,8 +106,7 @@ async function runUnpricedTask(withBridge: boolean) {
   const ctx = ctxFor(taskId, "acme-unpriced-model-9000", "openai");
   taskStore.create({ sessionId: ctx.sessionId, prompt: "p", id: taskId });
 
-  const hooks = new HookRegistry();
-  if (withBridge) registerTaskEventHooks(hooks, taskStore);
+  const hooks = hooksFor(withBridge, taskStore);
   const { createPlugin, pluginConfigSchema } = await import("@adhd/agent-plugin-budget");
   await createPlugin({
     db,
@@ -163,7 +175,7 @@ function fakeProc() {
   return { stdout, stdin: { write: () => true, end: noop }, stderr: new Readable({ read: noop }), pid: undefined, on: noop, kill: noop, exitCode: 0, killed: false };
 }
 
-async function runClaudecliTask(opts: { withBridge: boolean; builtins?: string[] }) {
+async function runClaudecliTask(opts: { withBridge: boolean; builtins?: string[]; chats?: number; providers?: number }) {
   const { spawn } = await import("child_process");
   (spawn as unknown as ReturnType<typeof vi.fn>).mockReset();
   (spawn as unknown as ReturnType<typeof vi.fn>).mockReturnValue(fakeProc());
@@ -172,21 +184,27 @@ async function runClaudecliTask(opts: { withBridge: boolean; builtins?: string[]
   const taskId = crypto.randomUUID();
   const ctx = ctxFor(taskId, "claude-haiku-4-5", "claudecli");
   taskStore.create({ sessionId: ctx.sessionId, prompt: "p", id: taskId });
-  const hooks = new HookRegistry();
-  if (opts.withBridge) registerTaskEventHooks(hooks, taskStore);
+  const hooks = hooksFor(opts.withBridge, taskStore);
 
-  const provider = createProvider(
-    ctx.selection as never,
-    {},
-    { wire: { tempDir: scratch }, server: { contextLimit: 0, defaultMaxTokens: 1 }, subprocessEnv: () => ({}), resolveEnvName: () => undefined } as never,
-    { info: noop, warn: noop, error: noop, debug: noop } as never,
-    {
-      hooks,
-      executionContext: ctx,
-      claudecli: opts.builtins ? { allowedBuiltinTools: opts.builtins } : {},
+  // `providers` rebuilds the provider for the SAME task (resume / retry do); `chats` is the model turns per provider.
+  for (let i = 0; i < (opts.providers ?? 1); i += 1) {
+    (spawn as unknown as ReturnType<typeof vi.fn>).mockReturnValue(fakeProc());
+    const provider = createProvider(
+      ctx.selection as never,
+      {},
+      { wire: { tempDir: scratch }, server: { contextLimit: 0, defaultMaxTokens: 1 }, subprocessEnv: () => ({}), resolveEnvName: () => undefined } as never,
+      { info: noop, warn: noop, error: noop, debug: noop } as never,
+      {
+        hooks,
+        executionContext: ctx,
+        claudecli: opts.builtins ? { allowedBuiltinTools: opts.builtins } : {},
+      }
+    );
+    for (let c = 0; c < (opts.chats ?? 1); c += 1) {
+      (spawn as unknown as ReturnType<typeof vi.fn>).mockReturnValue(fakeProc());
+      await provider.chat({ messages: [{ role: "user", content: "go" }] } as never);
     }
-  );
-  await provider.chat({ messages: [{ role: "user", content: "go" }] } as never);
+  }
   return { db, taskId };
 }
 
@@ -201,6 +219,16 @@ describe(`${TICKET} AC3: opted-in CLI built-ins persist a provider:builtin_bypas
     expect(events[0]).not.toHaveProperty("executionContext");
   });
 
+  it(`${TICKET} AC3 (20772a0b review-L4, e0d71436 review-M2): three model turns on one task persist ONE bypass event`, async () => {
+    const { db, taskId } = await runClaudecliTask({ withBridge: true, builtins: ["Edit", "Bash"], chats: 3 });
+    expect(eventsOf(db, taskId, "provider:builtin_bypass")).toHaveLength(1);
+  });
+
+  it(`${TICKET} AC3 (review-L4): a provider rebuilt for the same task (resume/retry) does not persist a second event`, async () => {
+    const { db, taskId } = await runClaudecliTask({ withBridge: true, builtins: ["Edit", "Bash"], providers: 2, chats: 2 });
+    expect(eventsOf(db, taskId, "provider:builtin_bypass")).toHaveLength(1);
+  });
+
   it(`${TICKET} AC3: default-deny claudecli (no built-ins) persists no bypass event`, async () => {
     const { db, taskId } = await runClaudecliTask({ withBridge: true });
     expect(eventsOf(db, taskId, "provider:builtin_bypass")).toEqual([]);
@@ -209,6 +237,20 @@ describe(`${TICKET} AC3: opted-in CLI built-ins persist a provider:builtin_bypas
   it(`${TICKET} AC4 (teeth): without the task-event bridge nothing is persisted`, async () => {
     const { db, taskId } = await runClaudecliTask({ withBridge: false, builtins: ["Edit", "Bash"] });
     expect(eventsOf(db, taskId, "provider:builtin_bypass")).toEqual([]);
+  });
+});
+
+describe(`${TICKET} review-L3: registerTaskEventHooks is idempotent per registry`, () => {
+  it(`${TICKET} review-L3: registering twice persists each event once`, async () => {
+    const { db, taskStore } = makeDb();
+    const taskId = crypto.randomUUID();
+    const ctx = ctxFor(taskId, "claude-haiku-4-5", "claudecli");
+    taskStore.create({ sessionId: ctx.sessionId, prompt: "p", id: taskId });
+    const hooks = new HookRegistry();
+    registerTaskEventHooks(hooks, taskStore);
+    registerTaskEventHooks(hooks, taskStore);
+    await hooks.emit("provider:builtin_bypass", { executionContext: ctx, source: "allowedBuiltinTools", builtins: ["Edit"], skipped: [], advice: "a" });
+    expect(eventsOf(db, taskId, "provider:builtin_bypass")).toHaveLength(1);
   });
 });
 

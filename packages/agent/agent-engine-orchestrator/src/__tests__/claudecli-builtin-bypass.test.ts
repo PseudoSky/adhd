@@ -5,8 +5,8 @@
  *
  * Spawn-free unit lane: the REAL `ClaudeCliProvider.chat` runs with only `child_process.spawn` mocked.
  *
- * Teeth: removing the `reportBuiltinBypass(request)` call in `chat()` turns AC2 and AC3 red (negative
- * control run when this file was authored).
+ * Teeth: every positive case asserts the event/warn that only `reportBuiltinBypass(request)` in `chat()`
+ * produces (and AC1 asserts its absence for default-deny), so removing that call turns AC2 and AC3 red.
  */
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -33,13 +33,15 @@ function fakeProc() {
 }
 
 const warns: Array<{ obj: unknown; msg: string }> = [];
+const debugs: Array<{ obj: unknown; msg: string }> = [];
 const logger: EngineLogger = {
-  info() {}, error() {}, debug() {},
+  info() {}, error() {},
+  debug: ((obj: unknown, msg: string) => { debugs.push({ obj, msg }); }) as never,
   warn: ((obj: unknown, msg: string) => { warns.push({ obj, msg }); }) as never,
 };
-beforeEach(() => { warns.length = 0; });
+beforeEach(() => { warns.length = 0; debugs.length = 0; });
 
-async function run(opts: { allowed?: string[]; specMd?: string; policy?: (tool: string) => PermissionAction }) {
+async function run(opts: { allowed?: string[]; specMd?: string; policy?: (tool: string) => PermissionAction; chats?: number; onBypass?: (e: IBuiltinBypassEvent) => void }) {
   const { spawn } = await import("child_process");
   const spawnMock = spawn as unknown as ReturnType<typeof vi.fn>;
   spawnMock.mockReset();
@@ -51,13 +53,16 @@ async function run(opts: { allowed?: string[]; specMd?: string; policy?: (tool: 
     {}, undefined,
     { wire: { tempDir: scratchRoot }, server: { contextLimit: 0, defaultMaxTokens: 1 }, subprocessEnv: () => ({}), resolveEnvName: () => undefined } as unknown as EngineConfig,
     logger, undefined,
-    { onBuiltinBypass: (e) => events.push(e) },
+    { onBuiltinBypass: (e) => { events.push(e); opts.onBypass?.(e); } },
   );
   const messages = opts.specMd
     ? [{ role: "system", content: opts.specMd }, { role: "user", content: "go" }]
     : [{ role: "user", content: "go" }];
   const req = { messages, ...(opts.policy ? { builtinToolPolicy: opts.policy } : {}) } as unknown as ProviderChatRequest;
-  await provider.chat(req);
+  for (let i = 0; i < (opts.chats ?? 1); i += 1) {
+    spawnMock.mockReturnValue(fakeProc());
+    await provider.chat(req);
+  }
   const args = spawnMock.mock.calls[0]?.[1] as string[];
   return { args, events, bypassWarns: warns.filter((w) => w.msg.startsWith("provider:builtin_bypass")) };
 }
@@ -97,6 +102,20 @@ describe("e0d71436 AC2: opt-in built-ins are disclosed", () => {
   });
 });
 
+describe("e0d71436 review-M2: the disclosure is once per task, not once per model turn", () => {
+  it("e0d71436 review-M2: three chat() calls on one provider -> one event and one warn", async () => {
+    const r = await run({ allowed: ["Edit", "Bash"], chats: 3 });
+    expect(r.events).toHaveLength(1);
+    expect(r.bypassWarns).toHaveLength(1);
+  });
+
+  it("e0d71436 review-L5: a throwing onBuiltinBypass callback never fails chat() and is logged, not swallowed silently", async () => {
+    const r = await run({ allowed: ["Edit"], onBypass: () => { throw new Error("sink down"); } });
+    expect(r.args).toBeDefined(); // chat() completed
+    expect(debugs.some((d) => d.msg.includes("built-in bypass disclosure failed"))).toBe(true);
+  });
+});
+
 describe("e0d71436 AC3: agent-spec mode", () => {
   it("e0d71436-943e-4072-b210-a728cff402fe AC3: spec `tools:` header -> event with source agent-spec naming the header's tools", async () => {
     const r = await run({ specMd: "---\nname: s\ndescription: d\ntools: Bash, Edit\n---\nbody" });
@@ -109,6 +128,29 @@ describe("e0d71436 AC3: agent-spec mode", () => {
     const r = await run({ specMd: "---\nname: s\ndescription: d\n---\nbody" });
     expect(r.events[0]!.source).toBe("agent-spec");
     expect(r.events[0]!.builtins).toEqual(["*"]);
+  });
+
+  it("e0d71436 review-M1: block-style `tools:` list is disclosed (previously parsed as [] -> silently no warning)", async () => {
+    const r = await run({ specMd: "---\nname: s\ndescription: d\ntools:\n  - Bash\n  - \"Edit\"\n---\nbody" });
+    expect(r.events).toHaveLength(1);
+    expect(r.events[0]!.builtins).toEqual(["Bash", "Edit"]);
+    expect(r.bypassWarns).toHaveLength(1);
+  });
+
+  it("e0d71436 review-M1: an explicitly empty header (`tools: []`) discloses nothing", async () => {
+    const r = await run({ specMd: "---\nname: s\ndescription: d\ntools: []\n---\nbody" });
+    expect(r.events).toEqual([]);
+  });
+
+  it("e0d71436 review-M1/L6: parseSpecToolsHeader block lists (LF + CRLF), explicit empties, column-0 anchoring", () => {
+    expect(parseSpecToolsHeader("---\nname: s\ntools:\n  - Bash\n  - Edit # note\n\n  - Read\nmodel: x\n---\nb")).toEqual(["Bash", "Edit", "Read"]);
+    expect(parseSpecToolsHeader("---\r\nname: s\r\ntools:\r\n  - Bash\r\n  - Edit\r\n---\r\nb")).toEqual(["Bash", "Edit"]);
+    expect(parseSpecToolsHeader("---\ntools: []\n---\nb")).toEqual([]);
+    expect(parseSpecToolsHeader("---\ntools: \"\"\n---\nb")).toEqual([]);
+    // A bare `tools:` is YAML null, not an empty list: treated as an absent header (inherit everything).
+    expect(parseSpecToolsHeader("---\nname: s\ntools:\nmodel: x\n---\nb")).toBeUndefined();
+    // An indented `tools:` inside a block scalar is not the header.
+    expect(parseSpecToolsHeader("---\ndescription: |\n  tools: Bash\nname: s\n---\nb")).toBeUndefined();
   });
 
   it("e0d71436-943e-4072-b210-a728cff402fe AC3: parseSpecToolsHeader handles list/quoted/CRLF forms", () => {

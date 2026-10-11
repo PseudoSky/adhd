@@ -765,6 +765,8 @@ export class ClaudeCliProvider implements LLMProvider {
     private readonly sessionKey: string | undefined;
     private readonly sessions: ClaudeCliSessionRegistry;
     private readonly onBuiltinBypass: ((event: IBuiltinBypassEvent) => void) | undefined;
+    /** Signature of the last bypass disclosure, so the per-turn `chat()` calls of one task disclose it once. */
+    private lastBypassSignature: string | undefined;
 
     constructor(
         config: ClaudeCliConfig,
@@ -791,8 +793,10 @@ export class ClaudeCliProvider implements LLMProvider {
             /** Test seam: replaces the process-wide session registry. */
             sessions?: ClaudeCliSessionRegistry;
             /**
-             * Receives the structured `provider:builtin_bypass` warning once per `chat()` when CLI built-ins are
-             * live (e0d71436 AC2/AC3). The warning is always also logged at `warn`.
+             * Receives the structured `provider:builtin_bypass` warning when CLI built-ins are live (e0d71436
+             * AC2/AC3), once per provider instance (a task) for a given live built-in set: an agent loop calls
+             * `chat()` every model turn and must not repeat it (e0d71436 review-M2). The warning is always also
+             * logged at `warn`, under the same once-per-set rule.
              */
             onBuiltinBypass?: (event: IBuiltinBypassEvent) => void;
         }
@@ -933,26 +937,41 @@ export class ClaudeCliProvider implements LLMProvider {
      */
     private reportBuiltinBypass(request: ProviderChatRequest): void {
         try {
-            const systemPrompt = request.messages.filter((m) => m.role === "system").map((m) => m.content ?? "").join("\n");
-            const specMode = this.providerConfig.systemPromptIsAgentSpec === true && systemPrompt !== "";
+            const { systemPrompt, specMode } = this.resolveSpecMode(request.messages);
             const event = buildBuiltinBypassEvent(
                 specMode
                     ? { effectiveAllowed: [], fromCompiledTools: false, specMd: systemPrompt }
                     : {
-                        effectiveAllowed: computeClaudeBuiltinArgs({
-                            compiledTools: this.compiledTools,
-                            allowedBuiltinTools: this.providerConfig.allowedBuiltinTools,
-                            builtinToolPolicy: request.builtinToolPolicy,
-                        }).effectiveAllowed,
+                        effectiveAllowed: this.builtinArgsFor(request).effectiveAllowed,
                         fromCompiledTools: this.compiledTools !== undefined,
                     },
             );
             if (!event) return;
+            // e0d71436 review-M2: one disclosure per task (provider instance) and live built-in set.
+            const signature = `${event.source}|${event.builtins.join(",")}`;
+            if (signature === this.lastBypassSignature) return;
+            this.lastBypassSignature = signature;
             this.logger.warn({ ...event }, `${event.event}: CLI built-in tools run outside the engine's tool pipeline`);
             this.onBuiltinBypass?.(event);
-        } catch {
-            /* observational */
+        } catch (err) {
+            // Observational: never fail a chat() over a disclosure, but a throwing sink must not vanish (review-L5).
+            this.logger.debug({ err }, "claudecli: built-in bypass disclosure failed");
         }
+    }
+
+    /** The system prompt and whether this chat runs in agent-spec mode (one derivation for every call site). */
+    private resolveSpecMode(messages: ProviderChatRequest["messages"]): { systemPrompt: string | undefined; specMode: boolean } {
+        const systemPrompt = messages.filter((m) => m.role === "system").map((m) => m.content ?? "").join("\n") || undefined;
+        return { systemPrompt, specMode: this.providerConfig.systemPromptIsAgentSpec === true && !!systemPrompt };
+    }
+
+    /** The `--tools` argv / effective set / withheld list for this request (one derivation for every call site). */
+    private builtinArgsFor(request: ProviderChatRequest): ReturnType<typeof computeClaudeBuiltinArgs> {
+        return computeClaudeBuiltinArgs({
+            compiledTools: this.compiledTools,
+            allowedBuiltinTools: this.providerConfig.allowedBuiltinTools,
+            builtinToolPolicy: request.builtinToolPolicy,
+        });
     }
 
     async chat(request: ProviderChatRequest): Promise<ProviderChatResponse> {
@@ -1125,8 +1144,7 @@ export class ClaudeCliProvider implements LLMProvider {
     private async chatWithBridge(request: ProviderChatRequest, bridge: ToolBridge | undefined): Promise<ProviderChatResponse> {
         const key = this.sessionKey;
         const nonSystem = request.messages.filter(m => m.role !== "system");
-        const systemPrompt = request.messages.filter(m => m.role === "system").map(m => m.content ?? "").join("\n") || undefined;
-        const specMode = this.providerConfig.systemPromptIsAgentSpec === true && !!systemPrompt;
+        const { systemPrompt, specMode } = this.resolveSpecMode(request.messages);
         const resumeOptOut = (this.providerConfig as { resumeSession?: unknown }).resumeSession === false;
         if (!key || nonSystem.length === 0 || specMode || resumeOptOut || this.keepSessionTranscript()) {
             return this.runCli(request, bridge, undefined);
@@ -1137,11 +1155,7 @@ export class ClaudeCliProvider implements LLMProvider {
             model: this.providerConfig.model,
             cwd: this.config.cwd,
             builtinTools: this.compiledTools ?? this.providerConfig.allowedBuiltinTools ?? null,
-            builtinToolsArgv: computeClaudeBuiltinArgs({
-                compiledTools: this.compiledTools,
-                allowedBuiltinTools: this.providerConfig.allowedBuiltinTools,
-                builtinToolPolicy: request.builtinToolPolicy,
-            }).toolsArgv,
+            builtinToolsArgv: this.builtinArgsFor(request).toolsArgv,
             bridgedTools: bridgeableTools(request.tools ?? []),
             settingSources: this.settingSources(),
             permissionMode: CLAUDECLI_PERMISSION_MODE,
@@ -1167,8 +1181,7 @@ export class ClaudeCliProvider implements LLMProvider {
     private async runCli(request: ProviderChatRequest, bridge: ToolBridge | undefined, session: ClaudeCliSessionRun | undefined): Promise<ProviderChatResponse> {
         const claudePath = this.providerConfig.claudePath ?? "claude";
 
-        const systemMessages = request.messages.filter(m => m.role === "system");
-        const systemPrompt = systemMessages.map(m => m.content ?? "").join("\n") || undefined;
+        const { systemPrompt, specMode } = this.resolveSpecMode(request.messages);
         // A resumed run already holds the covered history in its transcript: send only the new tail.
         const userMessage = session?.plan.mode === "resume"
             ? buildUserMessage(session.plan.tail)
@@ -1176,7 +1189,6 @@ export class ClaudeCliProvider implements LLMProvider {
 
         const mcpConfigPath = await this.writeMcpConfigFile(bridge);
 
-        const specMode = this.providerConfig.systemPromptIsAgentSpec === true && !!systemPrompt;
         let agentSpecDir: string | undefined;
         let agentSpecName: string | undefined;
         if (specMode && systemPrompt) {
@@ -1185,11 +1197,7 @@ export class ClaudeCliProvider implements LLMProvider {
             agentSpecName = written.agentName;
         }
 
-        const { toolsArgv, withheld } = computeClaudeBuiltinArgs({
-            compiledTools: this.compiledTools,
-            allowedBuiltinTools: this.providerConfig.allowedBuiltinTools,
-            builtinToolPolicy: request.builtinToolPolicy,
-        });
+        const { toolsArgv, withheld } = this.builtinArgsFor(request);
         if (withheld.length > 0) {
             this.logger.warn(
                 { withheld },

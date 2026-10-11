@@ -8,6 +8,8 @@
  * `provider:builtin_bypass` warning that names exactly which built-ins are live and what they skip.
  */
 
+import type { ProviderBuiltinBypassSource } from "@adhd/agent-base-types";
+
 /** Event name of the warning (also the `logger.warn` message prefix). */
 export const BUILTIN_BYPASS_EVENT = "provider:builtin_bypass" as const;
 
@@ -20,8 +22,8 @@ export const BUILTIN_SKIPPED_BEHAVIOURS: readonly string[] = [
     "tool-call concurrency pool",
 ];
 
-/** Where the enabled built-in set came from. */
-export type BuiltinBypassSource = "allowedBuiltinTools" | "compiledTools" | "agent-spec";
+/** Where the enabled built-in set came from. One definition, shared with the `provider:builtin_bypass` hook payload. */
+export type BuiltinBypassSource = ProviderBuiltinBypassSource;
 
 /** The structured `provider:builtin_bypass` payload. */
 export interface IBuiltinBypassEvent {
@@ -38,18 +40,44 @@ export interface IBuiltinBypassEvent {
     advice: string;
 }
 
-/** Parse the `tools:` line out of an agent-spec's YAML front matter. `undefined` when there is no header. */
+const unquote = (t: string): string => t.trim().replace(/^["']|["']$/g, "");
+
+/**
+ * Parse the top-level `tools:` key out of an agent-spec's YAML front matter. `undefined` when there is no
+ * header (the CLI then inherits its full built-in set). Understands the inline forms (`tools: A, B`,
+ * `tools: [A, "B"]`) and the block form (`tools:` followed by `- A` lines). `[]` means the header is
+ * explicitly empty (`tools: []` / `tools: ""`), i.e. no built-ins.
+ *
+ * The key must start in column 0, so an indented `tools:` inside a block scalar or a nested map is never
+ * mistaken for the header (e0d71436 review-L6).
+ */
 export function parseSpecToolsHeader(md: string): string[] | undefined {
     const text = md.charCodeAt(0) === 0xfeff ? md.slice(1) : md;
     const block = /^---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/.exec(text);
     if (!block) return undefined;
-    const line = /^[ \t]*tools:[ \t]*(.*?)[ \t]*$/m.exec(block[1]);
-    if (!line) return undefined;
-    return line[1]
-        .replace(/^\[|\]$/g, "")
-        .split(",")
-        .map((t) => t.trim().replace(/^["']|["']$/g, ""))
-        .filter((t) => t !== "");
+    const lines = block[1].split(/\r?\n/);
+    const at = lines.findIndex((l) => /^tools:(?:[ \t]|$)/.test(l));
+    if (at === -1) return undefined;
+    const inline = lines[at].replace(/^tools:[ \t]*/, "").replace(/[ \t]+#.*$/, "").trim();
+    if (inline !== "") {
+        return inline
+            .replace(/^\[|\]$/g, "")
+            .split(",")
+            .map(unquote)
+            .filter((t) => t !== "");
+    }
+    // Block form: indented `- item` lines (blank/comment lines allowed between) until the next key.
+    const items: string[] = [];
+    for (const l of lines.slice(at + 1)) {
+        if (/^[ \t]*(?:#.*)?$/.test(l)) continue;
+        const item = /^[ \t]*-[ \t]+(.*?)[ \t]*$/.exec(l);
+        if (!item) break;
+        const name = unquote(item[1].replace(/[ \t]+#.*$/, ""));
+        if (name !== "") items.push(name);
+    }
+    // A bare `tools:` with no items is YAML null, not an explicit empty list: treat it as an absent header
+    // (inherit everything) so the disclosure errs on the side of warning.
+    return items.length > 0 ? items : undefined;
 }
 
 /**

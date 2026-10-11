@@ -4,6 +4,7 @@ import type { EngineConfig, EngineLogger } from "../interfaces.js";
 import type { McpServerConfig } from "../validation/index.js";
 import { AnthropicProvider } from "./anthropic.js";
 import { ClaudeCliProvider } from "./claudecli.js";
+import type { IBuiltinBypassEvent } from "./claudecli-bypass.js";
 import { withProviderHooks } from "./hooked-provider.js";
 import { OpenAIProvider } from "./openai.js";
 import {
@@ -12,6 +13,23 @@ import {
     type ClaudecliExtras,
 } from "./resolve-selection.js";
 import type { LLMProvider } from "./types.js";
+
+const BYPASS_SEEN_MAX = 4096;
+const bypassSeen = new WeakMap<IHookRegistry, Set<string>>();
+
+/** True the first time this (registry, task, live built-in set) is seen; bounded so a long-lived host cannot grow it. */
+function markBypassEmitted(hooks: IHookRegistry, taskId: string, event: IBuiltinBypassEvent): boolean {
+    let seen = bypassSeen.get(hooks);
+    if (!seen) {
+        seen = new Set();
+        bypassSeen.set(hooks, seen);
+    }
+    const key = `${taskId}|${event.source}|${event.builtins.join(",")}`;
+    if (seen.has(key)) return false;
+    if (seen.size >= BYPASS_SEEN_MAX) seen.delete(seen.values().next().value as string);
+    seen.add(key);
+    return true;
+}
 
 /**
  * Construct the LLM provider for a resolved {@link ProviderSelection}.
@@ -69,10 +87,13 @@ export function createProvider(
                     // `registerTaskEventHooks` persists as a task event. Needs both a registry and a task context.
                     ...(hooks !== undefined && executionContext !== undefined && {
                         onBuiltinBypass: (event) => {
+                            // Once per task (and live built-in set) even across provider instances for the same
+                            // task (resume / retry rebuild the provider) - 20772a0b review-L4, e0d71436 review-M2.
+                            if (!markBypassEmitted(hooks, executionContext.taskId, event)) return;
                             const { source, builtins, skipped, advice } = event;
-                            void hooks
+                            hooks
                                 .emit("provider:builtin_bypass", { executionContext, source, builtins, skipped, advice })
-                                .catch(() => undefined);
+                                .catch((err: unknown) => engineLogger?.debug({ err }, "provider:builtin_bypass emit failed"));
                         },
                     }),
                 });
