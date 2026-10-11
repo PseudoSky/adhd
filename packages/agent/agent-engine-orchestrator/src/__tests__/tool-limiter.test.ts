@@ -64,3 +64,50 @@ describe("ea8f6f92-d0db-426e-bf9d-bd7ba2fdd5ca AC1: one limiter bounds map() and
         expect(createToolLimiter(3).concurrency).toBe(3);
     });
 });
+
+describe("cf7e0e5c review-4: abort never releases a slot while the call is still in flight", () => {
+    it("cf7e0e5c review-4: limit 1, A running + unsettled, abort, enqueue B -> B does not start until A settles", async () => {
+        const limiter = createToolLimiter(1);
+        const ac = new AbortController();
+        const gateA = deferred();
+        const started: string[] = [];
+        const a = limiter.run(async () => { started.push("A"); await gateA.promise; }, ac.signal);
+        a.catch(() => undefined);
+        await settle();
+        expect(started).toEqual(["A"]);
+        ac.abort(new Error("cancelled"));
+        const b = limiter.run(async () => { started.push("B"); });
+        await settle();
+        // A's fn has not settled: the bound of 1 must still hold.
+        expect(started).toEqual(["A"]);
+        gateA.resolve();
+        await b;
+        expect(started).toEqual(["A", "B"]);
+    });
+
+    it("cf7e0e5c review-4: a call aborted while still queued never runs and rejects with the signal reason", async () => {
+        const limiter = createToolLimiter(1);
+        const ac = new AbortController();
+        const gate = deferred();
+        const ran: string[] = [];
+        const holder = limiter.run(async () => { await gate.promise; });
+        const queued = limiter.run(async () => { ran.push("queued"); }, ac.signal);
+        const reason = new Error("dropped");
+        ac.abort(reason);
+        await expect(queued).rejects.toBe(reason);
+        gate.resolve();
+        await holder;
+        await settle();
+        expect(ran).toEqual([]);
+    });
+
+    it("cf7e0e5c review-4: an already-aborted signal rejects without invoking fn", async () => {
+        const limiter = createToolLimiter(1);
+        const ac = new AbortController();
+        const reason = new Error("pre-aborted");
+        ac.abort(reason);
+        let ran = false;
+        await expect(limiter.run(async () => { ran = true; }, ac.signal)).rejects.toBe(reason);
+        expect(ran).toBe(false);
+    });
+});

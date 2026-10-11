@@ -8,7 +8,7 @@
  * `provider:builtin_bypass` warning that names exactly which built-ins are live and what they skip.
  */
 
-import type { ProviderBuiltinBypassSource } from "@adhd/agent-base-types";
+import type { PermissionAction, ProviderBuiltinBypassSource } from "@adhd/agent-base-types";
 
 /** Event name of the warning (also the `logger.warn` message prefix). */
 export const BUILTIN_BYPASS_EVENT = "provider:builtin_bypass" as const;
@@ -90,15 +90,23 @@ export function buildBuiltinBypassEvent(params: {
     effectiveAllowed: readonly string[];
     fromCompiledTools: boolean;
     specMd?: string;
+    /**
+     * Agent-spec path: the engine's per-built-in verdict (`claude-builtin.<Tool>`). A header-listed built-in
+     * whose verdict is not `'allow'` is never listed, the same filter `computeClaudeBuiltinArgs` applies to the
+     * `allowedBuiltinTools` path (cf7e0e5c review-5). The `['*']` fallback is kept: it is not a named built-in.
+     */
+    builtinToolPolicy?: (tool: string) => PermissionAction;
 }): IBuiltinBypassEvent | undefined {
     const advice = "Route file work through the bridged `fs__*` tools, which receive all of the above.";
     if (params.specMd !== undefined) {
         const header = parseSpecToolsHeader(params.specMd);
         if (header?.length === 0) return undefined;
+        const live = header?.filter((tool) => (params.builtinToolPolicy?.(tool) ?? "allow") === "allow");
+        if (live?.length === 0) return undefined;
         return {
             event: BUILTIN_BYPASS_EVENT,
             source: "agent-spec",
-            builtins: header ?? ["*"],
+            builtins: live ?? ["*"],
             skipped: [...BUILTIN_SKIPPED_BEHAVIOURS],
             advice,
         };

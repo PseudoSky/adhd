@@ -764,7 +764,7 @@ export class ClaudeCliProvider implements LLMProvider {
     private readonly retryRuntime: RetryRuntime;
     private readonly sessionKey: string | undefined;
     private readonly sessions: ClaudeCliSessionRegistry;
-    private readonly onBuiltinBypass: ((event: IBuiltinBypassEvent) => void) | undefined;
+    private readonly onBuiltinBypass: ((event: IBuiltinBypassEvent) => void | Promise<void>) | undefined;
     /** Signature of the last bypass disclosure, so the per-turn `chat()` calls of one task disclose it once. */
     private lastBypassSignature: string | undefined;
 
@@ -796,9 +796,11 @@ export class ClaudeCliProvider implements LLMProvider {
              * Receives the structured `provider:builtin_bypass` warning when CLI built-ins are live (e0d71436
              * AC2/AC3), once per provider instance (a task) for a given live built-in set: an agent loop calls
              * `chat()` every model turn and must not repeat it (e0d71436 review-M2). The warning is always also
-             * logged at `warn`, under the same once-per-set rule.
+             * logged at `warn`, under the same once-per-set rule. A returned promise is awaited before
+             * `chat()` proceeds, so a persisting sink has finished when the first CLI turn starts
+             * (cf7e0e5c review-6); a sink failure is logged and never fails the chat.
              */
-            onBuiltinBypass?: (event: IBuiltinBypassEvent) => void;
+            onBuiltinBypass?: (event: IBuiltinBypassEvent) => void | Promise<void>;
         }
     ) {
         this.onBuiltinBypass = deps?.onBuiltinBypass;
@@ -935,12 +937,12 @@ export class ClaudeCliProvider implements LLMProvider {
      * Disclose (e0d71436 G4) that live CLI built-ins skip the engine's hooks / coercion / cap / estimator / pool.
      * Silent for the default-deny case; never lists a built-in the gate withheld. Observational: never throws.
      */
-    private reportBuiltinBypass(request: ProviderChatRequest): void {
+    private async reportBuiltinBypass(request: ProviderChatRequest): Promise<void> {
         try {
             const { systemPrompt, specMode } = this.resolveSpecMode(request.messages);
             const event = buildBuiltinBypassEvent(
                 specMode
-                    ? { effectiveAllowed: [], fromCompiledTools: false, specMd: systemPrompt }
+                    ? { effectiveAllowed: [], fromCompiledTools: false, specMd: systemPrompt, builtinToolPolicy: request.builtinToolPolicy }
                     : {
                         effectiveAllowed: this.builtinArgsFor(request).effectiveAllowed,
                         fromCompiledTools: this.compiledTools !== undefined,
@@ -952,7 +954,7 @@ export class ClaudeCliProvider implements LLMProvider {
             if (signature === this.lastBypassSignature) return;
             this.lastBypassSignature = signature;
             this.logger.warn({ ...event }, `${event.event}: CLI built-in tools run outside the engine's tool pipeline`);
-            this.onBuiltinBypass?.(event);
+            await this.onBuiltinBypass?.(event);
         } catch (err) {
             // Observational: never fail a chat() over a disclosure, but a throwing sink must not vanish (review-L5).
             this.logger.debug({ err }, "claudecli: built-in bypass disclosure failed");
@@ -984,7 +986,7 @@ export class ClaudeCliProvider implements LLMProvider {
         const advertised = bridgeableTools(request.tools ?? []);
         // GOV (f9dadeaa): fail closed BEFORE any bridge/credential file exists.
         this.assertSpecModeGovernable(request);
-        this.reportBuiltinBypass(request);
+        await this.reportBuiltinBypass(request);
         if (advertised.length > 0 && !request.executeTool) {
             throw new Error(
                 "PROVIDER_ERROR: claudecli was given MCP tools but no executeTool callback; refusing to expose tools it cannot execute"

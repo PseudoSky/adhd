@@ -24,7 +24,9 @@ export interface IToolLimiter {
    * Runs `fn` once a slot is free; the slot is held until `fn` settles. When `signal` aborts while
    * the call is still queued, `fn` is never invoked and the returned promise rejects with the
    * signal's reason (a cancelled task's queued bridge calls are dropped, not run with a dead
-   * signal). A call already running is not interrupted here; its own client receives the signal.
+   * signal). A call already running is not interrupted here; its own client receives the signal,
+   * and its slot (and the returned promise) stay held until `fn` settles, so the in-flight bound
+   * holds across an abort.
    */
   run<T>(fn: () => Promise<T>, signal?: AbortSignal): Promise<T>;
   /**
@@ -49,8 +51,31 @@ export function createToolLimiter(limit: number | undefined): IToolLimiter {
   const pool = new PQueue({ concurrency });
   return {
     concurrency,
-    run: <T>(fn: () => Promise<T>, signal?: AbortSignal) =>
-      pool.add(fn, signal ? { signal } : undefined) as Promise<T>,
+    run: <T>(fn: () => Promise<T>, signal?: AbortSignal) => {
+      if (!signal) return pool.add(fn) as Promise<T>;
+      if (signal.aborted) return Promise.reject(signal.reason);
+      // The signal is deliberately NOT handed to p-queue: p-queue races a RUNNING operation against the
+      // signal, so an abort would free the slot while `fn` is still executing and let in-flight calls
+      // exceed the bound (cf7e0e5c review-4). Abort is handled here instead: a call still queued rejects
+      // at once and never starts; a running call keeps its slot until `fn` itself settles.
+      let started = false;
+      const task = pool.add(async () => {
+        signal.throwIfAborted();
+        started = true;
+        return fn();
+      }) as Promise<T>;
+      return new Promise<T>((resolve, reject) => {
+        const onAbort = () => {
+          if (!started) reject(signal.reason);
+        };
+        signal.addEventListener('abort', onAbort, { once: true });
+        const done = () => signal.removeEventListener('abort', onAbort);
+        task.then(
+          (v) => { done(); resolve(v); },
+          (e) => { done(); reject(e); }
+        );
+      });
+    },
     map: <T, R>(items: readonly T[], fn: (item: T) => Promise<R>) => {
       // Per-map abort flag set from INSIDE the failing task, before its slot frees, so the pool
       // cannot promote the next queued call first (a4235310 AC4). Not pool.clear(): the pool is

@@ -86,14 +86,19 @@ export function createProvider(
                     // 20772a0b AC3: surface the built-in bypass as a typed `provider:builtin_bypass` hook event, which
                     // `registerTaskEventHooks` persists as a task event. Needs both a registry and a task context.
                     ...(hooks !== undefined && executionContext !== undefined && {
-                        onBuiltinBypass: (event) => {
+                        onBuiltinBypass: async (event) => {
                             // Once per task (and live built-in set) even across provider instances for the same
                             // task (resume / retry rebuild the provider) - 20772a0b review-L4, e0d71436 review-M2.
+                            // The set is marked before the emit, so a failed (logged) emit is not retried: the
+                            // event is observational. The emit is AWAITED (the provider awaits this sink before
+                            // its first CLI turn), so persistence never races the caller (cf7e0e5c review-6).
                             if (!markBypassEmitted(hooks, executionContext.taskId, event)) return;
                             const { source, builtins, skipped, advice } = event;
-                            hooks
-                                .emit("provider:builtin_bypass", { executionContext, source, builtins, skipped, advice })
-                                .catch((err: unknown) => engineLogger?.debug({ err }, "provider:builtin_bypass emit failed"));
+                            try {
+                                await hooks.emit("provider:builtin_bypass", { executionContext, source, builtins, skipped, advice });
+                            } catch (err: unknown) {
+                                engineLogger?.debug({ err }, "provider:builtin_bypass emit failed");
+                            }
                         },
                     }),
                 });

@@ -124,6 +124,22 @@ describe("e0d71436 AC3: agent-spec mode", () => {
     expect(r.events[0]!.builtins).toEqual(["Bash", "Edit"]);
   });
 
+  it("cf7e0e5c review-5: agent-spec mode never lists a header built-in the permission gate withheld", async () => {
+    // `GatedTool` is outside KNOWN_CLAUDE_BUILTINS, so the spec-mode governance refusal does not fire; only the filter hides it.
+    const policy = (tool: string): PermissionAction => (tool === "GatedTool" ? "deny" : "allow");
+    const r = await run({ specMd: "---\nname: s\ndescription: d\ntools: Bash, GatedTool\n---\nbody", policy });
+    expect(r.events).toHaveLength(1);
+    expect(r.events[0]!.builtins).toEqual(["Bash"]);
+    expect(JSON.stringify(r.bypassWarns)).not.toContain("GatedTool");
+  });
+
+  it("cf7e0e5c review-5: agent-spec header whose every built-in is withheld discloses nothing", async () => {
+    const policy = (tool: string): PermissionAction => (tool === "GatedTool" ? "ask" : "allow");
+    const r = await run({ specMd: "---\nname: s\ndescription: d\ntools: GatedTool\n---\nbody", policy });
+    expect(r.events).toEqual([]);
+    expect(r.bypassWarns).toEqual([]);
+  });
+
   it("e0d71436-943e-4072-b210-a728cff402fe AC3: spec without a `tools:` header inherits everything -> builtins ['*']", async () => {
     const r = await run({ specMd: "---\nname: s\ndescription: d\n---\nbody" });
     expect(r.events[0]!.source).toBe("agent-spec");
