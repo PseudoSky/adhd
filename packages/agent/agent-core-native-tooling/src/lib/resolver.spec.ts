@@ -194,16 +194,13 @@ describe('resolveNativeTooling — task-time resolution (ADR-0008 D2/D4)', () =>
       expect(names).toEqual(expect.arrayContaining([...SHELL_PROXY_ENV_KEYS]));
     });
 
-    it('0ba70e47 AC3a: a ctx.env value with sandbox off is passed through untouched', () => {
+    it('0ba70e47 AC3a: sandbox off passes a user value (shell.env or ctx.env) through untouched', () => {
+      expect(resolveShellEnv({ env: { [KEY]: 'FOO' } }, { sandbox: false })?.[KEY]).toBe('FOO');
       const [shell] = resolveNativeTooling(
         { fs: false, shell: true },
-        { cwd: '/p/a', sandbox: false, env: { [KEY]: 'FOO' } }
+        { cwd: '/p/a', sandbox: false, env: { [KEY]: 'BAR' } }
       ) as Stdio[];
-      expect(shell.env![KEY]).toBe('FOO');
-    });
-
-    it('0ba70e47 AC3a: a user value with sandbox off is passed through untouched', () => {
-      expect(resolveShellEnv({ env: { [KEY]: 'FOO' } }, { sandbox: false })?.[KEY]).toBe('FOO');
+      expect(shell.env![KEY]).toBe('BAR');
     });
 
     it('0ba70e47 AC3a: coexists with allowCommands and other user env', () => {

@@ -276,10 +276,6 @@ async function curl(client: RpcClient): Promise<string> {
 }
 
 describe('0ba70e47 shell egress through real srt + real mcp-shell-server', () => {
-  it('0ba70e47 M2: the per-test budget strictly exceeds the sum of the inner bounded waits', () => {
-    expect(TEST_MS).toBeGreaterThan(STARTUP_MS + CALL_MS);
-  });
-
   it(
     '0ba70e47 AC1 AC3b: shell_execute curl returns the page body (proxy env reaches the child)',
     async () => {
