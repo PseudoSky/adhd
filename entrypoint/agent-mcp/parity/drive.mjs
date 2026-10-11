@@ -82,7 +82,7 @@ export const THINKING_MECHANISM = Object.freeze({
 });
 const MAX_TOOL_LOOPS = 40;                                                 // B/C; A (claude 2.1.296) has no --max-turns: recorded as an asymmetry
 // R3: no curl/wget on the allowlist. B and C use only agent-mcp tools or MCP servers as shipped (no instrument-added web path).
-export const SHELL_ALLOW = ['make', 'cat', 'ls', 'head', 'tail', 'grep', 'rg', 'wc', 'pwd', 'echo', 'sed', 'diff', 'sort', 'uniq', 'tr', 'cut', 'basename', 'dirname'];
+export const SHELL_ALLOW = ['make', 'cat', 'ls', 'head', 'tail', 'grep', 'rg', 'wc', 'pwd', 'echo', 'diff', 'sort', 'uniq', 'tr', 'cut', 'basename', 'dirname'];
 /** R3: the instrument adds NO srt domain (the per-run policy is written empty; agent-mcp's own defaults apply). */
 export const SRT_EXTRA_DOMAINS = [];
 /** R3: arm A runs the native default toolset (`claude --tools default`), nothing instrument-added. */

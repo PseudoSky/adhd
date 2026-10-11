@@ -51,8 +51,13 @@ function memDb(): ITestDb {
 
 const sha = (v: unknown): string => createHash('sha256').update(JSON.stringify(v)).digest('hex');
 
-/** sha256 of JSON.stringify(inputSchema) captured BEFORE the description change; must never move with wording. */
-const SCHEMA_SHA: Record<string, string> = { task: 'c90d23be2f9a1cc862c35219c9203727fa241af98159b485999e2f966dbd1569', tasks_batch: '84290017888a6cbbbb21d3cd329bc86ec14690e2d037a3a55fdc4c2ae99e2008' };
+/**
+ * sha256 of JSON.stringify(inputSchema); must never move with description wording.
+ * Re-pinned when adbf1c0b (P2 background ephemeral task / tasks_batch) legitimately added the
+ * optional `background` property to the ephemeral `task` mode and to `tasks_batch`; the previous
+ * pins were task c90d23be... and tasks_batch 84290017....
+ */
+const SCHEMA_SHA: Record<string, string> = { task: '5682476676ba467cbf51cb05495b8f19128853a365fd500a866bc71175a65c21', tasks_batch: '937970895910b1a63d4f811f891086bd0155893ce341516f144cf856458532d2' };
 
 describe('0d0004b8 R3-PAR-C parallel-dispatch guidance', () => {
   it('0d0004b8 AC1: task and tasks_batch descriptions carry the parallel guidance and the input-schema hashes are unchanged', async () => {

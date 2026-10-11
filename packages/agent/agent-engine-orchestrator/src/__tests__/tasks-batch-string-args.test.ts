@@ -130,9 +130,18 @@ describe('932604a0 R9 AC1-AC5 tasks_batch string-typed arguments', () => {
     expect(js.required ?? []).toContain('prompts');
   });
 
-  it('932604a0 R9.AC5: advertised schema is byte-identical to the pre-change shape (same pin as 0d0004b8 R3-PAR-C, over the MCP-stripped form)', () => {
-    const { $schema: _drop, ...rest } = z.toJSONSchema(tasksBatchInputSchema) as Record<string, unknown>;
-    const sha = createHash('sha256').update(JSON.stringify(rest)).digest('hex');
-    expect(sha).toBe('84290017888a6cbbbb21d3cd329bc86ec14690e2d037a3a55fdc4c2ae99e2008');
+  it('932604a0 R9.AC5: advertised schema is the pre-change shape plus exactly the P2 `background` property', () => {
+    // adbf1c0b (P2 background tasks_batch) legitimately added `background` to the schema and
+    // moved the pin; the pre-change hash (84290017...) is recovered by dropping that one property.
+    const { $schema: _drop, ...rest } = z.toJSONSchema(tasksBatchInputSchema) as Record<string, unknown> & {
+      properties: Record<string, unknown>;
+    };
+    const hash = (v: unknown): string => createHash('sha256').update(JSON.stringify(v)).digest('hex');
+    expect(hash(rest)).toBe('937970895910b1a63d4f811f891086bd0155893ce341516f144cf856458532d2');
+    const { background, ...otherProps } = rest.properties;
+    expect(background).toBeDefined();
+    expect(hash({ ...rest, properties: otherProps })).toBe(
+      '84290017888a6cbbbb21d3cd329bc86ec14690e2d037a3a55fdc4c2ae99e2008'
+    );
   });
 });
