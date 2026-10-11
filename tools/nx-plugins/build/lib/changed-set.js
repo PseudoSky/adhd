@@ -73,6 +73,15 @@ const { discoverReleaseSet } = require('./range-resolvability');
 const { readState } = require('./published-state');
 const { writeReleaseManifest } = require('./release-manifest');
 
+/** True when `candidate` should win a committer-time tie against `current`: it is an ancestor of it, else the smaller SHA. */
+function isOlderTie(workspaceRoot, candidate, current) {
+  const isAncestor = spawnSync('git', ['merge-base', '--is-ancestor', candidate, current], { cwd: workspaceRoot });
+  if (isAncestor.status === 0) return true;
+  const reverse = spawnSync('git', ['merge-base', '--is-ancestor', current, candidate], { cwd: workspaceRoot });
+  if (reverse.status === 0) return false;
+  return candidate.toLowerCase() < current.toLowerCase();
+}
+
 /**
  * Derive a base ref from the `publishedFromRef` breadcrumbs that
  * `executors/publish/impl.js` writes AFTER each confirmed publish.
@@ -124,7 +133,10 @@ function resolveBaseRefFromPublishedState({ workspaceRoot, publishedState }) {
     if (res.status !== 0) continue;
     const t = Number.parseInt(String(res.stdout).trim(), 10);
     if (!Number.isFinite(t)) continue;
-    if (t < oldestTime) {
+    // Committer time has one-second resolution, so commits made in the same second tie. A tie is broken by
+    // ancestry (the ancestor is the older one); unrelated tied commits fall back to the lexically smaller SHA so
+    // the answer never depends on object-key iteration order. (ad988fda AC4)
+    if (t < oldestTime || (t === oldestTime && oldest !== null && isOlderTie(workspaceRoot, ref, oldest))) {
       oldestTime = t;
       oldest = ref;
     }

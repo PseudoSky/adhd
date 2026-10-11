@@ -253,26 +253,61 @@ test('RED-equivalent: a resolver that ignores its inputs and always returns ever
 // compute an empty changed-set and publish nothing.
 // ---------------------------------------------------------------------------
 
-test('resolveBaseRefFromPublishedState: picks the OLDEST resolvable ref, not the newest', () => {
-  // Two real commits in this repo; older must win so no package's window is
-  // clipped. Newest-wins would silently hide changes for anything published
-  // at the earlier commit.
-  const older = execFileSync('git', ['rev-list', '--max-count=1', '--skip=3', 'HEAD'], {
-    cwd: process.cwd(), encoding: 'utf8', env: cleanGitEnv(),
-  }).trim();
-  const newer = execFileSync('git', ['rev-parse', 'HEAD'], {
-    cwd: process.cwd(), encoding: 'utf8', env: cleanGitEnv(),
-  }).trim();
-  assert.notStrictEqual(older, newer, 'fixture precondition: need two distinct commits');
-
-  const chosen = resolveBaseRefFromPublishedState({
-    workspaceRoot: process.cwd(),
-    publishedState: {
-      '@adhd/a': { version: '1.0.0', publishedFromRef: newer },
-      '@adhd/b': { version: '1.0.0', publishedFromRef: older },
-    },
+/** Build a throwaway repo with one empty commit per ISO date; returns its root and the commit SHAs in order. */
+function makeDatedRepo(dates) {
+  const root = mkdtempSync(join(tmpdir(), 'changed-set-dated-'));
+  const git = (args, date) =>
+    execFileSync('git', args, {
+      cwd: root, encoding: 'utf8',
+      env: { ...cleanGitEnv(), ...(date ? { GIT_AUTHOR_DATE: date, GIT_COMMITTER_DATE: date } : {}) },
+    }).trim();
+  git(['init', '-q']);
+  git(['config', 'user.email', 't@example.com']);
+  git(['config', 'user.name', 't']);
+  git(['config', 'commit.gpgsign', 'false']);
+  const shas = dates.map((d, i) => {
+    git(['commit', '-q', '--allow-empty', '-m', `c${i}`], d);
+    return git(['rev-parse', 'HEAD']);
   });
-  assert.strictEqual(chosen, older, 'must choose the oldest ref, never the newest');
+  return { root, shas };
+}
+
+test('resolveBaseRefFromPublishedState: picks the OLDEST resolvable ref, not the newest (ad988fda AC4)', () => {
+  // Explicit, distinct commit dates: older must win so no package's window is clipped. Newest-wins would
+  // silently hide changes for anything published at the earlier commit.
+  const { root, shas } = makeDatedRepo(['2026-01-01T00:00:00Z', '2026-01-02T00:00:00Z']);
+  try {
+    const [older, newer] = shas;
+    for (const order of [
+      { '@adhd/a': { version: '1.0.0', publishedFromRef: newer }, '@adhd/b': { version: '1.0.0', publishedFromRef: older } },
+      { '@adhd/b': { version: '1.0.0', publishedFromRef: older }, '@adhd/a': { version: '1.0.0', publishedFromRef: newer } },
+    ]) {
+      const chosen = resolveBaseRefFromPublishedState({ workspaceRoot: root, publishedState: order });
+      assert.strictEqual(chosen, older, 'must choose the oldest ref, never the newest, regardless of key order');
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('resolveBaseRefFromPublishedState: commits sharing a committer second resolve by ancestry, independent of key order (ad988fda AC4)', () => {
+  const same = '2026-01-01T00:00:00Z';
+  const { root, shas } = makeDatedRepo([same, same]);
+  try {
+    const [older, newer] = shas;
+    for (const state of [
+      { '@adhd/a': { version: '1.0.0', publishedFromRef: newer }, '@adhd/b': { version: '1.0.0', publishedFromRef: older } },
+      { '@adhd/b': { version: '1.0.0', publishedFromRef: older }, '@adhd/a': { version: '1.0.0', publishedFromRef: newer } },
+    ]) {
+      assert.strictEqual(
+        resolveBaseRefFromPublishedState({ workspaceRoot: root, publishedState: state }),
+        older,
+        'a same-second tie must go to the ancestor'
+      );
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test('resolveBaseRefFromPublishedState: skips refs that no longer resolve (rebase/squash guard)', () => {
