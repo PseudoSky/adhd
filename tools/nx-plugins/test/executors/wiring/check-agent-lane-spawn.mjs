@@ -131,12 +131,16 @@ export function collectAgentLaneSpawnViolations(workspaceRoot, baselineOverride)
       }
     }
     if (hasE2eTestFiles) {
-      const cfg = join(workspaceRoot, root, 'vite.config.ts');
-      const text = existsSync(cfg) ? readFileSync(cfg, 'utf8') : '';
+      // A project's vite config may be `.ts` or `.mts` (0ba70e47 AC3b: a config
+      // that needs ESM-only `import.meta.dirname` / ESM plugins must be `.mts`).
+      const cfg = ['vite.config.ts', 'vite.config.mts']
+        .map((n) => join(workspaceRoot, root, n))
+        .find((f) => existsSync(f));
+      const text = cfg ? readFileSync(cfg, 'utf8') : '';
       if (!/E2E_FILE_EXCLUDES/.test(text)) {
         add(
           'C-e2e-test-not-excluded-from-unit',
-          `${root} — ships *.e2e.test.ts but vite.config.ts does not exclude \`E2E_FILE_EXCLUDES\` (tools/vite-plugins/e2e-globs.mjs) from \`test.exclude\`, so they also run in the unit lane.`,
+          `${root} — ships *.e2e.test.ts but its vite config (vite.config.ts or .mts) does not exclude \`E2E_FILE_EXCLUDES\` (tools/vite-plugins/e2e-globs.mjs) from \`test.exclude\`, so they also run in the unit lane.`,
         );
       }
     }
