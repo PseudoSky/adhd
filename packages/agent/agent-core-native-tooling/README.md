@@ -80,13 +80,20 @@ MCP_SHELL_CHILD_ENV_ALLOWLIST=HTTP_PROXY,HTTPS_PROXY,ALL_PROXY,NO_PROXY,http_pro
 (the list is exported as `SHELL_PROXY_ENV_KEYS`; the env name as
 `SHELL_SERVER.envKeys.childEnvAllowlist`).
 
-Merge rule: a value you supply in `shell.env.MCP_SHELL_CHILD_ENV_ALLOWLIST` is
+Merge rule: a value you supply for `MCP_SHELL_CHILD_ENV_ALLOWLIST` — in
+`shell.env` or in the ambient `ctx.env` (both are kept) — is
 **merged, not replaced** — your entries come first (trimmed, empties dropped),
 the proxy variables are appended, and duplicates are removed, so
 `FOO,HTTP_PROXY` becomes `FOO,HTTP_PROXY,HTTPS_PROXY,ALL_PROXY,NO_PROXY,…`. With
 `sandbox: false` nothing is emitted (there is no injected proxy to pass through)
 and a user-supplied value is passed through untouched. A custom `McpServerConfig`
 `shell` replaces the builtin and is never modified.
+
+Exposure note: any allowlisted command that prints its environment (`env`,
+`printenv`, `sh -c …`) will now show the `srt`-injected local proxy address and
+port. Host proxy credentials are not forwarded: inside the sandbox `srt`
+overwrites any host `HTTP_PROXY` / `HTTPS_PROXY` value with its own local
+proxy address, so the children only ever see the `srt` one.
 
 The same variables are what let `srt` hosts reach an allowlisted domain; a host
 or domain not in the policy is still denied by `srt`, not by this setting.
@@ -161,8 +168,9 @@ npx nx run agent-core-native-tooling:e2e
 `src/lib/shell-egress.e2e.test.ts` (0ba70e47) drives the real `srt` plus the real
 `uvx mcp-shell-server==1.1.12` through `resolveNativeTooling`'s own output and
 calls `shell_execute curl` against a local HTTP server, asserting the body comes
-back. It needs `srt` (workspace dependency) and `uvx` on the machine and **fails
-loudly rather than skipping** if either is missing; a control test proves the
+back. It needs `srt` (workspace dependency) and `uvx` on the machine (plus
+`bwrap` and `socat` on Linux) and **fails loudly rather than skipping** if any is
+missing; a control test proves the
 same call cannot resolve the host without the allowlist. `srt` refuses
 destinations that resolve to the host itself, so the local server is wired in as
 `srt`'s `network.parentProxy` rather than curled directly.

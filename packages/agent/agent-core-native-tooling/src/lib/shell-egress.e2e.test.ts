@@ -30,6 +30,18 @@
  * suite goes red if the env line is ever removed or the server stops honouring
  * it. No env gate, no skip: a missing `srt`/`uvx` fails loudly (beforeAll).
  *
+ * Linux note (UNVERIFIED here — written defensively, never run on Linux):
+ * `requireBinary` also demands `bwrap` and `socat` on Linux so a missing
+ * prerequisite fails loudly; the macOS-only `/private/var/folders` and
+ * `/var/folders` write paths are added only on darwin. Whether srt's bwrap
+ * layer needs further Linux-specific policy is untested.
+ *
+ * Determinism: host `*_PROXY` / `NO_PROXY` variables are stripped from every
+ * spawn env; the policy's `parentProxy`/`noProxy` are the only proxy inputs.
+ * Timeouts: each test's budget (`TEST_MS`) is strictly longer than the sum of
+ * its inner bounded waits (initialize + tools/call), so the informative
+ * RpcClient error (with server stderr) always fires before vitest's generic one.
+ *
  * Lane: ADR-0009 (`e2e`, `nx run agent-core-native-tooling:e2e`). Own isolated
  * cwd + fake HOME; no paid third-party service.
  */
@@ -47,6 +59,10 @@ const BODY = 'E2E-0ba70e47-BODY';
 const ALLOWED_HOST = 'allowed.test';
 const REPO_BIN = resolve(__dirname, '../../../../../node_modules/.bin');
 const STARTUP_MS = 120_000; // cold uvx resolution of mcp-shell-server
+const CALL_MS = 60_000; // one shell_execute round trip
+const TEARDOWN_GRACE_MS = 5_000; // SIGTERM -> SIGKILL escalation deadline
+/** Per-test budget: strictly longer than initialize + tools/call (+ margin for spawn). */
+const TEST_MS = STARTUP_MS + CALL_MS + 30_000;
 
 type Stdio = Extract<McpServerConfig, { transport: 'stdio' }>;
 
@@ -56,7 +72,15 @@ class RpcClient {
   private waiters = new Map<number, (m: any) => void>();
   private nextId = 1;
   private stderr = '';
+  private readonly exited: Promise<void>;
+  private hasExited = false;
   constructor(private readonly child: ChildProcessWithoutNullStreams) {
+    this.exited = new Promise<void>((ok) =>
+      child.once('exit', () => {
+        this.hasExited = true;
+        ok();
+      })
+    );
     child.stdout.setEncoding('utf8');
     child.stderr.setEncoding('utf8');
     child.stderr.on('data', (d: string) => (this.stderr += d));
@@ -93,9 +117,31 @@ class RpcClient {
   notify(method: string): void {
     this.child.stdin.write(JSON.stringify({ jsonrpc: '2.0', method }) + '\n');
   }
-  close(): void {
+  /** Signal the whole process group (srt wrapper + uvx/python/bwrap grandchildren); ESRCH ignored. */
+  private signalGroup(sig: NodeJS.Signals): void {
+    const pid = this.child.pid;
+    if (pid === undefined) return;
+    try {
+      process.kill(-pid, sig);
+    } catch {
+      try {
+        this.child.kill(sig);
+      } catch {
+        /* already gone */
+      }
+    }
+  }
+  /** Await the wrapper's exit: SIGTERM the group, escalate to SIGKILL after a bounded deadline. */
+  async close(): Promise<void> {
+    if (this.hasExited) return;
     this.child.stdin.end();
-    this.child.kill('SIGTERM');
+    this.signalGroup('SIGTERM');
+    const timer = setTimeout(() => this.signalGroup('SIGKILL'), TEARDOWN_GRACE_MS);
+    try {
+      await this.exited;
+    } finally {
+      clearTimeout(timer);
+    }
   }
 }
 
@@ -105,6 +151,12 @@ let fakeHome: string;
 let settingsPath: string;
 let upstream: Server;
 const clients: RpcClient[] = [];
+
+/** Host proxy variables must never leak into the spawn env (srt falls back to them). */
+const PROXY_VAR = /^(https?|all|ftp|no)_proxy$/i;
+function hostEnvWithoutProxy(): NodeJS.ProcessEnv {
+  return Object.fromEntries(Object.entries(process.env).filter(([k]) => !PROXY_VAR.test(k)));
+}
 
 function requireBinary(name: string, args: string[], env: NodeJS.ProcessEnv): void {
   const r = spawnSync(name, args, { env, encoding: 'utf8' });
@@ -123,9 +175,13 @@ beforeAll(async () => {
   mkdirSync(cwd);
   mkdirSync(fakeHome);
 
-  const env = { ...process.env, PATH: `${REPO_BIN}${delimiter}${process.env.PATH ?? ''}` };
+  const env = { ...hostEnvWithoutProxy(), PATH: `${REPO_BIN}${delimiter}${process.env.PATH ?? ''}` };
   requireBinary('srt', ['--version'], env);
   requireBinary('uvx', ['--version'], env);
+  if (process.platform === 'linux') {
+    requireBinary('bwrap', ['--version'], env);
+    requireBinary('socat', ['-V'], env);
+  }
 
   // The local "internet": answers every proxied request with a known body.
   upstream = createServer((req, res) => {
@@ -158,8 +214,7 @@ beforeAll(async () => {
           join(realHome, '.local', 'share'),
           join(realHome, 'Library', 'Caches'),
           realpathSync(tmpdir()),
-          '/private/var/folders',
-          '/var/folders',
+          ...(process.platform === 'darwin' ? ['/private/var/folders', '/var/folders'] : []),
           '/tmp',
         ],
         denyWrite: [],
@@ -169,10 +224,10 @@ beforeAll(async () => {
 }, STARTUP_MS);
 
 afterAll(async () => {
-  for (const c of clients) c.close();
+  await Promise.all(clients.map((c) => c.close()));
   await new Promise<void>((ok) => (upstream ? upstream.close(() => ok()) : ok()));
   if (root) rmSync(root, { recursive: true, force: true });
-});
+}, 4 * TEARDOWN_GRACE_MS);
 
 /** Resolve the shell builtin exactly as a host does, then spawn it. */
 async function startShell(mutate?: (cfg: Stdio) => void): Promise<RpcClient> {
@@ -185,8 +240,9 @@ async function startShell(mutate?: (cfg: Stdio) => void): Promise<RpcClient> {
   const realHome = homedir();
   const child = spawn(shell.command, shell.args ?? [], {
     cwd,
+    detached: true, // own process group so teardown can signal grandchildren
     env: {
-      ...process.env,
+      ...hostEnvWithoutProxy(),
       PATH: `${REPO_BIN}${delimiter}${process.env.PATH ?? ''}`,
       HOME: fakeHome,
       // Keep uv's caches shared so the suite does not re-download per run.
@@ -214,19 +270,23 @@ async function curl(client: RpcClient): Promise<string> {
       name: 'shell_execute',
       arguments: { command: ['curl', '-sS', '--max-time', '20', `http://${ALLOWED_HOST}/`] },
     },
-    60_000
+    CALL_MS
   );
   return JSON.stringify(r.result?.content ?? r);
 }
 
 describe('0ba70e47 shell egress through real srt + real mcp-shell-server', () => {
+  it('0ba70e47 M2: the per-test budget strictly exceeds the sum of the inner bounded waits', () => {
+    expect(TEST_MS).toBeGreaterThan(STARTUP_MS + CALL_MS);
+  });
+
   it(
     '0ba70e47 AC1 AC3b: shell_execute curl returns the page body (proxy env reaches the child)',
     async () => {
       const out = await curl(await startShell());
       expect(out).toContain(BODY);
     },
-    STARTUP_MS
+    TEST_MS
   );
 
   it(
@@ -241,6 +301,6 @@ describe('0ba70e47 shell egress through real srt + real mcp-shell-server', () =>
       expect(out).not.toContain(BODY);
       expect(out).toMatch(/Could not resolve host/);
     },
-    STARTUP_MS
+    TEST_MS
   );
 });
