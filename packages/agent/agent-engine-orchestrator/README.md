@@ -187,6 +187,8 @@ A task on an engine session keeps its CLI session, and the next task on the same
 | text replay, `--no-session-persistence` (before) | 6,312 | 0 | 6,322 | 0.00 |
 | `--resume <id> --fork-session` (now) | 121 | 6,288 | 6,419 | 0.98 |
 
+Method and the alternative that was not built: the table is a real two-task session on claude-haiku-4-5 (a ~6k-token first prompt, one-word replies), read from the CLI result usage; `claudecli-phase2-cache.e2e.test.ts` re-measures it through the real provider on every e2e run (task 2: context 6,398, cache_read 6,251, 1h write 137, ratio 0.977). The other candidate, replaying history as structured prior turns over `--input-format stream-json`, was not built: `--resume` already leaves only the new tail uncached (121-137 tokens), so a byte-stable replayed prefix cannot improve on it, and a replay still re-writes any prefix whose bytes differ from what the first task cached.
+
 How it behaves:
 
 - The engine session id (`ExecutionContext.sessionId`, threaded by `createProvider`) is the key. The first task runs `--session-id <fresh uuid>`; later tasks run `--resume <latest> --fork-session` and send **only the messages the transcript does not cover**.
