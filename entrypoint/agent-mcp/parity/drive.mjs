@@ -21,6 +21,7 @@ import * as PF from './preflight.mjs';
 import * as MT from './metrics.mjs';
 import * as GR from './grid.mjs';
 import * as QL from './quality.mjs';
+import * as JG from './judge.mjs';
 import { ModelRunCapError } from './ledger.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -679,10 +680,59 @@ function annotateDetectors(record) {
   if (record.detectors.some((d) => d.defectSignal)) record.defectSignal = record.detectors.filter((d) => d.defectSignal).map((d) => d.text);
 }
 
+// ----------------------------------------------------------------------------------------------------------------
+// R5 judge wiring. PAID THIRD-PARTY CALL (claude-haiku-4-5), live rounds only, through an INJECTED client (opts.judgeClient); owner: see judge.mjs header.
+// ----------------------------------------------------------------------------------------------------------------
+/** Unified diff of the arm's final repo against the pristine scenario (R5.AC1(b)); paths are neutral `a/` `b/`. Pure file work + `git diff --no-index` (no model, no network). */
+export function repoDiff(spec, repoDir) {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'parity-diff-'));
+  try {
+    for (const [rel, content] of Object.entries(F.repoFiles(spec))) { const p = path.join(root, 'a', rel); fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, content); }
+    fs.cpSync(repoDir, path.join(root, 'b'), { recursive: true, filter: (src) => !/(^|\/)(\.git|node_modules)(\/|$)/.test(src) });
+    const r = spawnSync('git', ['diff', '--no-index', '--no-color', '--', 'a', 'b'], { cwd: root, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 });
+    if (r.status !== 0 && r.status !== 1) throw new Error(`git diff --no-index failed (${r.status}): ${String(r.stderr).slice(0, 200)}`);
+    return r.stdout;
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+}
+/** Transcript turns for the judge: per phase the prompt, the assistant's texts, every tool call (parent and worker) with its result, then the final reply. Text/call interleaving is not preserved by the capture. */
+export function transcriptFor(record, prompts) {
+  const ob = record.observation; const out = []; const all = record.metrics?.allCalls ?? [];
+  for (const [i, ph] of [[1, ob.phase1], [2, ob.phase2]]) {
+    out.push({ role: 'user', text: i === 1 ? prompts.phase1 : prompts.phase2 });
+    for (const t of ph.assistantTexts ?? []) out.push({ role: 'assistant', text: t });
+    const calls = all.some((c) => c.phase === i) ? all.filter((c) => c.phase === i) : (ph.calls ?? []);
+    for (const c of calls) out.push({ role: 'assistant', text: `${(c.depth ?? 0) > 0 ? '[worker] ' : ''}${JSON.stringify(c.input ?? {}).slice(0, 1500)}`, tool: c.name, result: c.resultText ?? '' });
+    out.push({ role: 'assistant', text: ph.replyText ?? '' });
+  }
+  return out;
+}
+/** A deterministic fake judge client for dry-runs (no model, no network): every quality scores 80. */
+export function fakeJudgeClient() {
+  const scores = Object.fromEntries(QL.RUBRIC.map((k) => [k, 80])), notes = Object.fromEntries(QL.RUBRIC.map((k) => [k, 'fake judge (dry-run)']));
+  return { async complete() { return { text: JSON.stringify({ scores, notes }), inputTokens: 0, outputTokens: 0 }; } };
+}
+/**
+ * Judge ONE finished run (R5.AC6-AC8): eligible only if arm A and this arm genuinely succeeded; the per-round judge cap is checked BEFORE the paid call;
+ * the call is logged in the ledger (live only) and the raw record is written to <judgeDir>/<arm>.json. Sets record.quality; never throws.
+ */
+export async function judgeRun({ ctx, record, aGenuine, dry, client, judgeDir }) {
+  const arm = record.arm; const genuine = GT.isGenuineSuccess(record);
+  if (!JG.judgeEligible({ aGenuine, armGenuine: genuine })) { record.quality = { status: 'n/a', reason: aGenuine ? 'arm not a genuine success (no judge call)' : 'arm A not a genuine success (no judge call)' }; return record.quality; }
+  const ledgerDir = path.dirname(ctx.ledgerPath); const round = path.basename(ctx.ledgerPath, '.json');
+  if (!dry) { const used = LG.readLedger(round, ledgerDir).judgeCalls.length; if (used >= LG.JUDGE_CAP) { record.quality = { status: 'n/a', reason: `judge-call cap ${used}/${LG.JUDGE_CAP} reached: no paid call made` }; return record.quality; } }
+  try {
+    const { brief, briefSha, label } = JG.buildBrief({ prompts: ctx.prompts, ticketText: F.ticketText(ctx.spec), diff: repoDiff(ctx.spec, ctx.repoDir), transcript: transcriptFor(record, ctx.prompts) });
+    const res = await JG.runJudge({ client, arm, brief, briefSha, outDir: judgeDir, onCall: dry ? undefined : (c) => LG.recordJudgeCall(round, c, { dir: ledgerDir }) });
+    record.quality = res.ok ? { status: 'scored', mean: QL.qualityMean(res.scores), scores: res.scores, briefSha, modelId: JG.JUDGE_MODEL, label, file: path.join(judgeDir, `${arm}.json`) } : { status: 'judge-error', code: res.code, briefSha, file: path.join(judgeDir, `${arm}.json`) };
+  } catch (e) { record.quality = { status: 'judge-failed', error: String(e?.message ?? e).slice(0, 300) }; }
+  return record.quality;
+}
+
 async function runPlan(opts, dry) {
   const plan = buildPlan(opts);
   fs.mkdirSync(opts.out, { recursive: true });
-  const state = { rateLimitsSeen: [], lastFinished: {} };
+  const state = { rateLimitsSeen: [], lastFinished: {}, aGenuine: false };
+  const judgeDir = dry ? path.join(opts.out, 'judge') : path.join(tmpRoot(opts.round), 'judge');
   const records = [];
   console.log(`${dry ? 'DRY-RUN (no model call)' : 'LIVE'} plan: ${plan.map((p) => `${p.arm}${p.rep}`).join(' -> ')}  out=${opts.out}`);
   for (const [i, def] of plan.entries()) {
@@ -699,6 +749,12 @@ async function runPlan(opts, dry) {
       const genuine = GT.isGenuineSuccess(record);
       LG.recordArmA(opts.round ?? ROUND, genuine, genuine ? 'all content items green, no INVALID, no defect signal' : `content ${record.score?.summary?.content?.pass}/${record.score?.summary?.content?.total}, invalid ${record.score?.summary?.invalid}, defect ${!!record.defectSignal}`, path.dirname(ctx.ledgerPath));
       if (!genuine) { console.log('ITERATION VOID: arm A did not genuinely succeed; B and C are not run and nothing enters the grid (record the void in the LOG)'); break; }
+    }
+    if (def.arm === 'A') state.aGenuine = GT.isGenuineSuccess(record);
+    if (record.score && !aborted && ctx.repoDir && fs.existsSync(ctx.repoDir)) {   // R5: blind judge, live round (or a dry-run with the fake client); the client is injected, never constructed from an env flag
+      const q = await judgeRun({ ctx, record, aGenuine: state.aGenuine, dry, client: opts.judgeClient ?? (dry ? fakeJudgeClient() : JG.liveJudgeClient()), judgeDir });
+      console.log(`${ctx.spec.runId}: quality ${q.status}${q.mean != null ? ` mean ${q.mean.toFixed(1)}` : ''}${q.reason ? ` (${q.reason})` : ''}`);
+      writeJson(path.join(ctx.runDir, 'record.json'), record);
     }
     if (state.breach) { console.log(`DRY-RUN EGRESS BREACH in ${ctx.spec.runId}: aborting`); record.aborted = [...(record.aborted || []), 'dry-run egress breach']; break; }
     if (aborted) { console.log(`ABORT before ${ctx.spec.runId}: ${record.aborted.join('; ')}`); break; }
@@ -942,6 +998,24 @@ export async function selfCheck({ log = console.log, opts = parseArgs([]) } = {}
       chk('the ledger is durable: a fresh read says 3 runs and a further reservation is refused', JSON.parse(fs.readFileSync(lp, 'utf8')).runs.length === 3 && refusesWith(() => LG.reserveRun(LR, { arm: 'C', runId: 'RT-Y', dir: ldir }), ModelRunCapError));
       fs.writeFileSync(lp, '{not json');
       chk('a corrupt ledger fails CLOSED (refuses to run)', refusesWith(() => LG.reserveRun(LR, { arm: 'A', runId: 'x', dir: ldir }), LG.LedgerError)); }
+    { // R5.AC6-AC8, AC12: judge wiring with an injected fake client (no model, no network); the cap is checked BEFORE the call.
+      const jd = path.join(work, 'judge-wiring'); const gdir = path.join(HERE, 'golden/r4'); const g = JSON.parse(fs.readFileSync(path.join(gdir, 'A2.json'), 'utf8'));
+      const spec = F.makeSpec({ seed: '20261011', arm: 'A', rep: 1 }); const repoDir = path.join(jd, 'repo'); F.writeFixture({ repoDir, hiddenDir: path.join(jd, 'hidden'), ticketFile: path.join(jd, 't.txt') }, spec);
+      const mkRec = () => ({ arm: 'A', runId: 'A1', observation: g.observation, score: O.scoreObservation(g.observation, g.expected), metrics: {} });
+      chk('judge wiring: the A2 golden is a genuine success (judge-eligible fixture)', GT.isGenuineSuccess(mkRec()));
+      let calls = 0; const client = { async complete({ model, temperature }) { calls++; const f = fakeJudgeClient(); const r = await f.complete(); r.inputTokens = 10; r.outputTokens = 5; r.model = model; r.temperature = temperature; return r; } };
+      const ldir = path.join(jd, 'ledger'); const lp = LG.ledgerPathFor('RJ', ldir); const ctxJ = { prompts: F.prompts(), spec, repoDir, ledgerPath: lp };
+      const rec1 = mkRec(); const q1 = await judgeRun({ ctx: ctxJ, record: rec1, aGenuine: true, dry: false, client, judgeDir: path.join(jd, 'out') });
+      chk('judge wiring: an eligible live arm is judged once, the call is logged in the ledger (judgeCalls[]) and the record file holds the brief hash + raw response (R5.AC6, AC12)', q1.status === 'scored' && calls === 1 && LG.readLedger('RJ', ldir).judgeCalls.length === 1 && (() => { const f = JSON.parse(fs.readFileSync(path.join(jd, 'out', 'A.json'), 'utf8')); return f.briefSha && f.rawResponse && f.modelId === 'claude-haiku-4-5'; })());
+      const q2 = await judgeRun({ ctx: ctxJ, record: mkRec(), aGenuine: false, dry: false, client, judgeDir: path.join(jd, 'out') });
+      chk('judge wiring: no judge call when arm A did not genuinely succeed (R5.AC7)', q2.status === 'n/a' && calls === 1);
+      LG.recordJudgeCall('RJ', { arm: 'B', modelId: 'm', inputTokens: 1, outputTokens: 1, costUsd: 0, briefSha: 'x' }, { dir: ldir }); LG.recordJudgeCall('RJ', { arm: 'C', modelId: 'm', inputTokens: 1, outputTokens: 1, costUsd: 0, briefSha: 'y' }, { dir: ldir });
+      const q3 = await judgeRun({ ctx: ctxJ, record: mkRec(), aGenuine: true, dry: false, client, judgeDir: path.join(jd, 'out') });
+      chk('judge wiring: the per-round judge cap is checked BEFORE the paid call (no call, no spend at 3/3)', q3.status === 'n/a' && /cap/.test(q3.reason) && calls === 1);
+      const dryLedger = path.join(jd, 'dry-ledger', 'RD.json'); const q4 = await judgeRun({ ctx: { ...ctxJ, ledgerPath: dryLedger }, record: mkRec(), aGenuine: true, dry: true, client, judgeDir: path.join(jd, 'dry-out') });
+      chk('judge wiring: a dry-run judges with the injected client and never touches the tracked ledger', q4.status === 'scored' && !fs.existsSync(dryLedger));
+      chk('judge wiring: the diff of the pristine fixture is empty and an edit shows as a unified diff', repoDiff(spec, repoDir) === '' && (() => { fs.appendFileSync(path.join(repoDir, 'src/shipping.js'), '// edited\n'); return /\+\/\/ edited/.test(repoDiff(spec, repoDir)); })());
+    }
     chk('the production ledger path is tracked next to the driver, per round (not derived from --out/--seed)', LEDGER_PATH === path.join(HERE, 'ledger', `${ROUND}.json`));
     { const bad = spawnSync(process.execPath, [SELF, '--print-plan', '--round', '../x'], { encoding: 'utf8' }); chk('--round ../x is rejected (the round names a ledger file and a tmp dir) -> exit 2', bad.status === 2, `status ${bad.status}`);
       const r7 = spawnSync(process.execPath, [SELF, '--print-plan', '--round', 'R7'], { encoding: 'utf8' }); chk('--round R7 selects the R7 ledger and plan header (default stays R5)', r7.status === 0 && /ROUND R7 PLAN/.test(r7.stdout) && r7.stdout.includes(path.join('ledger', 'R7.json')), `status ${r7.status}`); }

@@ -84,3 +84,21 @@ export async function runJudge({ client, arm, brief, briefSha, outDir, onCall })
   if (onCall) onCall({ arm, modelId: JUDGE_MODEL, inputTokens: record.inputTokens, outputTokens: record.outputTokens, costUsd: record.costUsd, briefSha });
   return parsed ? { ok: true, ...parsed, record } : { ok: false, code: record.error, record };
 }
+
+/**
+ * The LIVE judge client: one Anthropic Messages API call (paid third-party service, R5.AC8). Credentials come from ANTHROPIC_API_KEY (a credential, not a
+ * toggle); it fails loudly when the key is absent. Only the driver in an owner-approved live round constructs and passes it; nothing in unit or e2e does.
+ * @returns {{complete(args:{model:string,temperature:number,maxTokens:number,prompt:string}):Promise<{text:string,inputTokens:number,outputTokens:number}>}}
+ */
+export function liveJudgeClient({ apiKey = process.env.ANTHROPIC_API_KEY, fetchImpl = globalThis.fetch } = {}) {
+  return {
+    async complete({ model, temperature, maxTokens, prompt }) {
+      if (!apiKey) throw new Error('judge: ANTHROPIC_API_KEY is not set (the judge is a paid API call and has no other credential path)');
+      const res = await fetchImpl('https://api.anthropic.com/v1/messages', { method: 'POST', headers: { 'content-type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+        body: JSON.stringify({ model, temperature, max_tokens: maxTokens, messages: [{ role: 'user', content: prompt }] }) });
+      if (!res.ok) throw new Error(`judge: HTTP ${res.status} ${String(await res.text()).slice(0, 200)}`);
+      const b = await res.json();
+      return { text: (b.content ?? []).filter((x) => x.type === 'text').map((x) => x.text).join(''), inputTokens: b.usage?.input_tokens ?? 0, outputTokens: b.usage?.output_tokens ?? 0 };
+    },
+  };
+}
