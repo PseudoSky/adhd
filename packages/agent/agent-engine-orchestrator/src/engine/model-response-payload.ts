@@ -1,5 +1,6 @@
 import type { ProviderChatResponse, ProviderLimitWarning } from '../providers/types.js';
 import type { ProviderTokenUsage } from '../providers/partial-usage.js';
+import { callTimingFields } from '../providers/call-timing.js';
 
 /** The slice of a provider response (or of a failed call's partial usage) that becomes a MODEL_RESPONSE event. */
 export interface IModelResponseSource {
@@ -11,6 +12,8 @@ export interface IModelResponseSource {
   usage?: ProviderTokenUsage;
   rawUsage?: unknown;
   limitWarnings?: ProviderLimitWarning[];
+  /** P6: request start to first streamed byte (ms). */
+  ttfbMs?: number;
 }
 
 /** Adapt a successful provider response. `toolCallCount` is what the orchestrator accounts for this turn. */
@@ -28,6 +31,7 @@ export function sourceFromResponse(
     usage: response.usage,
     rawUsage: response.rawUsage,
     limitWarnings: response.limitWarnings,
+    ttfbMs: response.ttfbMs,
   };
 }
 
@@ -42,7 +46,8 @@ export function sourceFromResponse(
 export function buildModelResponsePayload(
   src: IModelResponseSource,
   computeMs: number,
-  mark: { failed?: boolean; failure?: string } = {}
+  mark: { failed?: boolean; failure?: string } = {},
+  overheadMs?: number
 ): Record<string, unknown> {
   const u = src.usage;
   return {
@@ -84,5 +89,7 @@ export function buildModelResponsePayload(
     // The figures may undercount real spend (stream-rebuilt output tokens, or a folded unreported attempt). afa37093
     ...(u?.usageLowerBound ? { usageLowerBound: true } : {}),
     computeMs,
+    // P6: additive per-call timing (ttfb_ms, overhead_ms); absent when unmeasured.
+    ...callTimingFields(src.ttfbMs, overheadMs),
   };
 }

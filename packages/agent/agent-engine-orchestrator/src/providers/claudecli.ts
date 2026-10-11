@@ -1,3 +1,4 @@
+import { createTtfbProbe } from "./call-timing.js";
 import type { ChildProcess } from "child_process";
 import readline from "readline";
 import { writeFile, unlink, mkdtemp, mkdir, rm, stat, chmod } from "fs/promises";
@@ -1291,7 +1292,10 @@ export class ClaudeCliProvider implements LLMProvider {
         let cleanTurn = false;
         request.signal?.addEventListener("abort", onAbort, { once: true });
 
+        // P6: request start = the user turn handed to the CLI; first byte = first non-init stream event.
+        const ttfbProbe = createTtfbProbe();
         try {
+            ttfbProbe.start();
             proc.stdin.write(
                 JSON.stringify({
                     type: "user",
@@ -1352,6 +1356,7 @@ export class ClaudeCliProvider implements LLMProvider {
                 } catch {
                     continue;
                 }
+                if (event.type !== "system") ttfbProbe.firstByte();
 
                 if (event.type === "rate_limit_event") {
                     const info = parseCliRateLimitEvent(event);
@@ -1500,6 +1505,7 @@ export class ClaudeCliProvider implements LLMProvider {
                 rawUsage: finalUsage,
                 reportedToolUses: toolUseCount,
                 reportedModelCalls: finalNumTurns,
+                ...(ttfbProbe.ttfbMs() !== undefined ? { ttfbMs: ttfbProbe.ttfbMs() } : {}),
                 ...(limitWarnings.size > 0 ? { limitWarnings: [...limitWarnings.values()] } : {}),
                 ...(resolved ? { responseModel: resolved.responseModel } : {}),
                 usage,

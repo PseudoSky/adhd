@@ -74,6 +74,11 @@ export interface ProviderChatResponse {
    * `rate_limit_event` with `allowed_warning`). Surfaced, never swallowed (de6bee5d FLT-4).
    */
   limitWarnings?: ProviderLimitWarning[];
+  /**
+   * P6: milliseconds from request start to the first streamed byte/event of the call that
+   * produced this response. Absent when the provider could not observe one.
+   */
+  ttfbMs?: number;
 }
 
 export interface LLMProvider {

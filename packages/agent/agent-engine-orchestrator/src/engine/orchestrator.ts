@@ -27,6 +27,7 @@ import { createToolLimiter } from './tool-limiter.js';
 import { selectionOf, wireModelOf } from '../providers/resolve-selection.js';
 import { readPartialUsage, type IProviderPartialUsage, type ProviderTokenUsage } from '../providers/partial-usage.js';
 import { buildModelResponsePayload, sourceFromResponse } from './model-response-payload.js';
+import { computeOverheadMs } from '../providers/call-timing.js';
 
 import type { McpClientRegistry } from '../clients/registry.js';
 import type { PolicyEngine } from './policy.js';
@@ -1137,6 +1138,8 @@ export class Orchestrator {
       // The provider's own reported prompt_tokens from the last call — the exact, free
       // ground truth for the real context size. Undefined before the first call.
       let lastReportedContext: number | undefined;
+      // P6: epoch ms the previous model call ended (undefined before the first call).
+      let lastModelCallEndedAt: number | undefined;
       const providerModel = wireModelOf(executionContext);
 
       let looping = true;
@@ -1225,6 +1228,8 @@ export class Orchestrator {
         // wall-clock `latency_ms` (see DESIGN.md §6). Captured right before the
         // MODEL_REQUEST event so it brackets exactly the provider.chat() call below.
         const modelCallStartedAt = Date.now();
+        // P6: engine time between the previous model call ending and this request starting.
+        const callOverheadMs = computeOverheadMs(lastModelCallEndedAt, modelCallStartedAt);
 
         taskStore.appendEvent({
           taskId,
@@ -1309,9 +1314,11 @@ export class Orchestrator {
                   rawUsage: partial.rawUsage,
                 },
                 failedComputeMs,
-                { failed: true, failure }
+                { failed: true, failure },
+                callOverheadMs
               ),
             });
+            lastModelCallEndedAt = Date.now();
           } catch (recordErr) {
             logger.warn({ taskId, err: recordErr }, 'Failed to record usage of a failed provider call');
           }
@@ -1690,9 +1697,12 @@ export class Orchestrator {
               reportedToolCallCount,
               !!assistantMessage.content
             ),
-            computeMs
+            computeMs,
+            {},
+            callOverheadMs
           ),
         });
+        lastModelCallEndedAt = Date.now();
 
         logger.debug(
           {

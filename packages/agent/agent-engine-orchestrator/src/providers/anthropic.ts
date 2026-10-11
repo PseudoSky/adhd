@@ -1,3 +1,4 @@
+import { createTtfbProbe } from "./call-timing.js";
 import Anthropic from "@anthropic-ai/sdk";
 import type { ContentBlockParam, MessageParam, Tool } from "@anthropic-ai/sdk/resources/messages";
 
@@ -316,6 +317,8 @@ export class AnthropicProvider implements LLMProvider {
                   })
                 : prepared;
 
+            const ttfbProbe = createTtfbProbe();
+            ttfbProbe.start();
             const stream = this.client.messages.stream(
                 {
                     model: effectiveModel,
@@ -327,7 +330,10 @@ export class AnthropicProvider implements LLMProvider {
                 },
                 { signal: request.signal }
             );
+            // P6: first streamed SSE event marks the time to first byte.
+            if (typeof stream.on === "function") stream.on("streamEvent", () => ttfbProbe.firstByte());
             const response = await stream.finalMessage();
+            const ttfbMs = ttfbProbe.ttfbMs();
 
             const toolCalls: ToolCall[] = [];
             const contentParts: string[] = [];
@@ -371,6 +377,7 @@ export class AnthropicProvider implements LLMProvider {
                 stopReason: toolCalls.length > 0 ? "tool_calls" : "completed",
                 rawUsage: sdkUsage,
                 responseModel: response.model || undefined,
+                ...(ttfbMs !== undefined ? { ttfbMs } : {}),
                 usage: normaliseAnthropicUsage(
                     sdkUsage,
                     normalisedStopReason,
