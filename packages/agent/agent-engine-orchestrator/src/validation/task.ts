@@ -80,6 +80,12 @@ const sessionModeSchema = z.object({
 const ephemeralModeSchema = z.object({
   agent_name: z.string().min(1),
   prompt: z.string().min(1),
+  /**
+   * P2 background dispatch: `true` returns `{task_id, status:'pending'}`
+   * immediately; the one-shot session is kept until the task is terminal and
+   * reclaimed only then. Default (absent/false) stays synchronous.
+   */
+  background: z.boolean().optional(),
   depends_on: z.array(z.string().uuid()).optional(),
   on_upstream_failure: z.enum(['fail', 'skip']).optional(),
   stream: z.boolean().optional(),
@@ -149,12 +155,21 @@ export const taskCancelInputSchema = z.object({
   task_id: z.string().uuid(),
 });
 
+/** Upper bound for `result.wait_ms` (kept under typical MCP client call timeouts). */
+export const RESULT_MAX_WAIT_MS = 55_000;
+
 export const resultInputSchema = z.object({
   task_id: z.string().uuid(),
   /** f2b004eb: project the returned task record (id always included). The special
    *  value `usage` may be named to keep the usage report; omit `fields` for the full
    *  task + usage payload. */
   fields: z.array(z.union([taskListFieldSchema, z.literal('usage')])).optional(),
+  /**
+   * P2 bounded wait: when set, `result` blocks until the task is terminal or
+   * `wait_ms` elapses (capped at {@link RESULT_MAX_WAIT_MS}), then returns the
+   * current state. Absent/0 keeps the immediate-read behaviour.
+   */
+  wait_ms: z.number().int().nonnegative().max(RESULT_MAX_WAIT_MS).optional(),
 });
 
 export type TaskToolInput = z.infer<typeof taskToolInputSchema>;
@@ -263,6 +278,12 @@ export const tasksBatchInputSchema = z
       .array(z.enum(['fail', 'skip']))
       .optional()
       .describe('Per-item upstream-failure policy; length must equal prompts.length'),
+    background: z
+      .boolean()
+      .optional()
+      .describe(
+        'true = start every item in the background and return {index, task_id, status:"pending"} immediately; collect with result {task_id, wait_ms}. Not combinable with depends_on / depends_on_indexes. Default false (synchronous)'
+      ),
   })
   .superRefine((val, ctx) => {
     const n = val.prompts.length;
@@ -288,6 +309,16 @@ export const tasksBatchInputSchema = z
         });
       }
     };
+    if (
+      val.background === true &&
+      (val.depends_on !== undefined || val.depends_on_indexes !== undefined)
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          'background:true cannot be combined with depends_on / depends_on_indexes (ordering needs synchronous waves)',
+      });
+    }
     parallel('depends_on', val.depends_on);
     parallel('depends_on_indexes', val.depends_on_indexes);
     parallel('on_upstream_failure', val.on_upstream_failure);

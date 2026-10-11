@@ -116,7 +116,7 @@ export type {
   AgentVerifyMcpDeps,
   McpServerVerification,
 } from './tools/mcp-verify.js';
-export { taskTool, taskList, taskCancel, taskResume, resultTool, enqueueExistingTask, tasksBatch, DEFAULT_BATCH_CONCURRENCY } from './tools/task.js';
+export { taskTool, taskList, taskCancel, taskResume, resultTool, resultToolWait, enqueueExistingTask, tasksBatch, DEFAULT_BATCH_CONCURRENCY } from './tools/task.js';
 export type { TaskDeps } from './tools/task.js';
 export { usageQuery, usageQueryByGrain, buildTaskUsageReport } from './tools/usage.js';
 export type { Database, UsageQueryResult, TaskUsageRow } from './tools/usage.js';

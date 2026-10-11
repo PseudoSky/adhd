@@ -29,6 +29,7 @@ import type {
   TasksBatchOutput,
 } from '../validation/index.js';
 import { ToolError } from '../validation/errors.js';
+import { RESULT_MAX_WAIT_MS } from '../validation/task.js';
 import { generateId } from '../utils/ids.js';
 import { nowIso } from '../utils/timestamps.js';
 import type { IHookRegistry } from '@adhd/agent-base-types';
@@ -115,6 +116,7 @@ async function runEphemeralTask(
   input: {
     agent_name: string;
     prompt: string;
+    background?: boolean;
     depends_on?: string[];
     on_upstream_failure?: 'fail' | 'skip';
     cwd?: string;
@@ -266,6 +268,7 @@ async function runEphemeralTask(
   const controller = new AbortController();
   deps.taskStore.registerCancellation(taskId, controller);
 
+  const runEphemeral = async (): Promise<void> => {
   try {
     await deps.orchestrator.run({
       executionContext,
@@ -302,6 +305,16 @@ async function runEphemeralTask(
       // already closed / absent — nothing to reclaim
     }
   }
+  };
+
+  // P2: background:true enqueues the run and returns at once; the one-shot
+  // session is closed by `runEphemeral`'s finally only after the task is terminal.
+  if (input.background === true) {
+    deps.queue.enqueue(taskId, runEphemeral);
+    deps.logger.info({ taskId, sessionId }, 'Ephemeral task enqueued for background execution');
+    return { task_id: taskId, status: 'pending' };
+  }
+  await runEphemeral();
 
   const finalTask = deps.taskStore.read(taskId);
   const usage = buildTaskUsageReport(deps.db, taskId);
@@ -591,7 +604,7 @@ export async function tasksBatch(
     const onUpstreamFailure = input.on_upstream_failure?.[i];
     const base = {
       prompt: input.prompts[i],
-      background: false,
+      background: input.background === true,
       ...(upstream.length > 0 ? { depends_on: upstream } : {}),
       ...(onUpstreamFailure ? { on_upstream_failure: onUpstreamFailure } : {}),
     };
@@ -1021,6 +1034,43 @@ export function resultTool(
     ) as ProjectedTaskResult;
   }
   return full;
+}
+
+/** Poll interval for {@link resultToolWait}. */
+const RESULT_WAIT_POLL_MS = 100;
+
+/** Task statuses at which {@link resultToolWait} stops waiting. */
+const RESULT_WAIT_TERMINAL = new Set(['completed', 'failed', 'cancelled']);
+
+/**
+ * `result` with an optional bounded wait (P2). With `wait_ms` unset or 0 this is
+ * exactly {@link resultTool}. Otherwise it re-reads the task until it reaches a
+ * terminal state or `wait_ms` (capped at {@link RESULT_MAX_WAIT_MS}) elapses and
+ * returns the state at that moment — a timeout is not an error.
+ *
+ * @param input - the `result` input, including optional `wait_ms`.
+ * @param deps - task store and db.
+ * @param sleep - injectable delay (tests); defaults to a timer.
+ * @param now - injectable clock (tests); defaults to `Date.now`.
+ */
+export async function resultToolWait(
+  input: ResultInput,
+  deps: Pick<TaskDeps, 'taskStore' | 'db'>,
+  sleep: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms)),
+  now: () => number = Date.now
+): Promise<(Task | ProjectedTask) & { usage?: TaskUsageReport }> {
+  const budget = Math.min(input.wait_ms ?? 0, RESULT_MAX_WAIT_MS);
+  if (budget > 0) {
+    const deadline = now() + budget;
+    for (;;) {
+      const status = deps.taskStore.read(input.task_id).status;
+      if (RESULT_WAIT_TERMINAL.has(status)) break;
+      const remaining = deadline - now();
+      if (remaining <= 0) break;
+      await sleep(Math.min(RESULT_WAIT_POLL_MS, remaining));
+    }
+  }
+  return resultTool(input, deps);
 }
 
 // Import Message for type used above
