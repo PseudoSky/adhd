@@ -5,7 +5,9 @@
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { DEFAULT_TOOL_CALL_CONCURRENCY, parseToolCallConcurrency } from "../config.js";
+import { DEFAULT_TOOL_CALL_CONCURRENCY } from "@adhd/agent-engine-orchestrator";
+
+import { parseToolCallConcurrency } from "../config.js";
 
 const ENV = "ADHD_AGENT_TOOL_CALL_CONCURRENCY";
 const prev = process.env[ENV];
@@ -27,6 +29,12 @@ async function freshConfig(value: string | undefined): Promise<typeof import("..
 describe("668fae7a AC1 agent.toolCallConcurrency through the cascade into the engine config", () => {
   it("the code default is 8", () => {
     expect(DEFAULT_TOOL_CALL_CONCURRENCY).toBe(8);
+  });
+
+  it("a4235310 AC5 the engine barrel is the single definition: config.ts re-declares nothing and its default resolves to the engine constant", async () => {
+    const mod = await freshConfig(undefined);
+    expect("DEFAULT_TOOL_CALL_CONCURRENCY" in mod).toBe(false);
+    expect(mod.toEngineConfig().toolCallConcurrency).toBe(DEFAULT_TOOL_CALL_CONCURRENCY);
   });
 
   it("668fae7a AC2 absent env resolves to the code default 8 with default provenance", async () => {

@@ -1,10 +1,4 @@
 /**
- * Mirrors the engine's `DEFAULT_TOOL_CALL_CONCURRENCY` (`@adhd/agent-engine-orchestrator`
- * `interfaces.ts`; not re-exported from its barrel). The engine keeps its own defensive fallback.
- */
-export const DEFAULT_TOOL_CALL_CONCURRENCY = 8;
-
-/**
  * `config.ts` — agent-mcp's zero-config `Environment<AgentMcpConfig>` (per
  * `packages/environment/ARCHITECTURE.md` §6, the reference consumer for the
  * redesigned `@adhd/environment`).
@@ -37,6 +31,7 @@ import {
   validateToolResultSpillDir,
   type ToolResultSpillConfig,
 } from "@adhd/agent-engine-orchestrator";
+import { DEFAULT_TOOL_CALL_CONCURRENCY } from "@adhd/agent-engine-orchestrator";
 import type { EngineConfig } from "@adhd/agent-engine-orchestrator";
 import type { PartialBinding } from "@adhd/agent-base-types";
 
