@@ -300,7 +300,11 @@ successful call it rewrites the file to CRLF if the server turned it into LF. Fi
 that are LF-only, mixed, or new are left exactly as the server wrote them, and a
 failed call never touches the file. This is always on (no flag), fail-open (a hook
 error never changes a tool result), and idempotent across concurrent processes
-(8dd148cf).
+(8dd148cf). The rewrite is a temp-file + rename that keeps the file's mode, and it is
+skipped with a warning on stderr if the file changed between the hook's read and its
+commit (a competing write is never overwritten). Files over 8 MiB are never read or
+rewritten, and in-flight bookkeeping is bounded (1024 calls, 10 minute TTL) so a call
+that never completes cannot leak (19354419).
 
 #### Native tooling environment variables
 

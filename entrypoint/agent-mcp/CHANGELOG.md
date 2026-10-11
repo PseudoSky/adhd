@@ -2,6 +2,7 @@
 
 ### 🩹 Fixes
 
+- **agent-mcp:** the CRLF-preserving eol hook now rewrites via temp-file + rename preserving file mode, skips with a warning when a competing write lands mid-rewrite, bounds its pending-call map (1024 entries / 10 min TTL), and never reads files over 8 MiB; e2e covers an `isError:true` MCP result through the real engine (19354419 AC1 AC2 AC3 AC4 AC5)
 - **agent-mcp:** `AGENT_NOT_FOUND` now lists the registered agent names (sorted, capped at 20 with "+N more", names only — no system prompts), and the `agent` tool description says how to discover valid names (1b947d91 AC1 AC2 AC3)
 
 ## 2.3.11 (2026-10-10)

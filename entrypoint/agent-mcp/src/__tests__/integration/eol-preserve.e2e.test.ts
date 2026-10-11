@@ -20,6 +20,8 @@ import type { ExecutionContext } from '@adhd/agent-base-types';
 import { resolveFsServerLaunch } from '@adhd/agent-core-native-tooling';
 import { HookRegistry, StdioMcpClient } from '@adhd/agent-engine-orchestrator';
 
+import { ScriptedProvider } from './scripted-provider.js';
+
 import { registerEolPreserve } from '../../eol-hook.js';
 
 const REPO_ROOT = fileURLToPath(new URL('../../../../..', import.meta.url));
@@ -133,4 +135,62 @@ describe('8dd148cf R3-EOL real fs server + real hooks', () => {
     await call('edit_file', { path: f, edits: [{ oldText: 'absent', newText: 'x' }] }, true);
     expect(await bytes(f)).toBe('one\r\ntwo\r\n');
   });
+});
+
+/**
+ * 19354419 AC5 — an MCP result with `isError: true` (a returned error, NOT a thrown
+ * transport exception) must reach the engine's `post:tool_call` as `isError: true`, and
+ * the hook must leave the CRLF bytes alone. Driven through the REAL orchestrator, a REAL
+ * stdio fs server and the REAL eol hooks; only the LLM is scripted.
+ */
+describe('19354419 AC5 isError MCP result through the real engine', () => {
+  async function runEngineEdit(
+    edit: { oldText: string; newText: string }
+  ): Promise<{ file: string; seen: Array<{ tool: string; isError: boolean }>; bytes: string }> {
+    const { buildHarness, createSessionAndAgent, enqueueTaskWithProvider, drainQueue } = await import('./harness.js');
+    const scratch = join(REPO_ROOT, 'tmp', 'agent-mcp');
+    await mkdir(scratch, { recursive: true });
+    const dir = await mkdtemp(join(scratch, 'eol-ac5-'));
+    const file = join(dir, 'f.txt');
+    await writeFile(file, 'one\r\ntwo\r\nthree\r\n');
+    const provider = new ScriptedProvider([
+      {
+        type: 'tool_calls',
+        toolCalls: [{ id: 'ac5-call', server: 'fs', tool: 'edit_file', arguments: { path: file, edits: [edit] } }],
+      },
+      { type: 'completed', content: 'done' },
+    ]);
+    const harness = await buildHarness({ defaultProvider: provider, skipOrphanScan: true });
+    try {
+      registerEolPreserve(harness.hooks);
+      const seen: Array<{ tool: string; isError: boolean }> = [];
+      harness.hooks.register('post:tool_call', (p: { toolName: string; isError: boolean }) => {
+        seen.push({ tool: p.toolName, isError: p.isError });
+      });
+      const launch = resolveFsServerLaunch();
+      const { sessionId } = await createSessionAndAgent(harness, provider, {
+        mcpServers: { fs: { transport: 'stdio', command: launch.command, args: [...launch.args, dir] } },
+      });
+      const out = await enqueueTaskWithProvider(harness, sessionId, 'edit the file', provider);
+      await drainQueue(harness.queue, 30_000);
+      const task = harness.taskStore.read(out.task_id);
+      expect(task.status, `task error: ${String(task.error)}`).toBe('completed');
+      return { file, seen, bytes: (await readFile(file)).toString('latin1') };
+    } finally {
+      await harness.teardown();
+      await rm(dir, { recursive: true, force: true });
+    }
+  }
+
+  it('19354419 AC5: a no-match edit (server returns isError:true) => post:tool_call.isError is true and the CRLF bytes are untouched', async () => {
+    const r = await runEngineEdit({ oldText: 'absent', newText: 'x' });
+    expect(r.seen).toEqual([{ tool: 'fs__edit_file', isError: true }]);
+    expect(r.bytes).toBe('one\r\ntwo\r\nthree\r\n');
+  }, 60_000);
+
+  it('19354419 AC5 control: a matching edit => post:tool_call.isError is false and CRLF is restored', async () => {
+    const r = await runEngineEdit({ oldText: 'two', newText: 'TWO' });
+    expect(r.seen).toEqual([{ tool: 'fs__edit_file', isError: false }]);
+    expect(r.bytes).toBe('one\r\nTWO\r\nthree\r\n');
+  }, 60_000);
 });
