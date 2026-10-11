@@ -1,3 +1,9 @@
+## Unreleased
+
+### 🩹 Fixes
+
+- **agent-mcp:** `AGENT_NOT_FOUND` now lists the registered agent names (sorted, capped at 20 with "+N more", names only — no system prompts), and the `agent` tool description says how to discover valid names (1b947d91 AC1 AC2 AC3)
+
 ## 2.3.11 (2026-10-10)
 
 This was a version bump only for agent-mcp to align it with other projects, there were no code changes.

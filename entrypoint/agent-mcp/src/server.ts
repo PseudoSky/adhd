@@ -405,7 +405,7 @@ turn. \`pricing_history\` returns the observed series for a model and the pull s
 
 | error code              | meaning |
 |-------------------------|---------|
-| AGENT_NOT_FOUND         | Call \`agent_create\` first |
+| AGENT_NOT_FOUND         | Unknown agent name; the error lists registered names (use \`agent_list\` for all), or call \`agent_create\` first |
 | AGENT_ALREADY_EXISTS    | Agent name already taken |
 | SESSION_NOT_FOUND       | Invalid or expired session_id |
 | SESSION_CLOSED          | Session was closed |
@@ -491,7 +491,8 @@ export function createServer(deps: ServerDeps): Server {
   const inProcessDescriptors: InProcessToolDescriptor[] = [
     {
       name: 'agent',
-      description: 'Instantiate a session for a named agent',
+      description:
+        'Instantiate a session for a named agent. If the name is unknown, the AGENT_NOT_FOUND error lists the registered agent names (sorted, capped at 20); `agent_list` returns the full roster when available to you.',
       inputSchema: toMcpInputSchema(agentToolInputSchema),
     },
     {
@@ -721,7 +722,8 @@ export function createServer(deps: ServerDeps): Server {
       },
       {
         name: 'agent',
-        description: 'Instantiate a stateful session for a named agent',
+        description:
+          'Instantiate a stateful session for a named agent. If the name is unknown, the AGENT_NOT_FOUND error lists the registered agent names (sorted, capped at 20); call `agent_list` for the full roster.',
         inputSchema: toMcpInputSchema(agentToolInputSchema),
       },
       {

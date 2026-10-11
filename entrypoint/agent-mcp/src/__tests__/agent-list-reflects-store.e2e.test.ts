@@ -183,4 +183,19 @@ describe('agent_list reflects the operational store (d31d2655, b6a02237)', () =>
     expect(phantom.isError).toBe(true);
     expect(phantom.content?.[0]?.text ?? '').toContain('AGENT_NOT_FOUND');
   });
+
+  // 1b947d91 AC1/AC3 — real built server, real store, real tool path.
+  it('1b947d91 AC3: AGENT_NOT_FOUND from the agent tool lists registered names, no prompts', async () => {
+    const res = await client.callTool({
+      name: 'agent',
+      arguments: { name: 'no-such-agent' },
+    });
+    expect(res.isError).toBe(true);
+    const text = res.content?.[0]?.text ?? '';
+    expect(text).toContain('AGENT_NOT_FOUND');
+    expect(text).toContain(
+      `Registered agents: ${[...SEEDED_NAMES].sort().join(', ')}`
+    );
+    expect(text).not.toContain('alpha-agent prompt');
+  });
 });

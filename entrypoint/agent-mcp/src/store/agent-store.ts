@@ -53,6 +53,9 @@ function definitionBody(def: AgentDefinition): Record<string, unknown> {
   return body;
 }
 
+/** Max registered names echoed in an AGENT_NOT_FOUND message (1b947d91 AC1). */
+export const AGENT_NOT_FOUND_NAME_CAP = 20;
+
 export class AgentStore {
   constructor(
     private readonly db: BetterSQLite3Database<Record<string, never>>,
@@ -104,7 +107,10 @@ export class AgentStore {
       .get();
 
     if (!row) {
-      throw new ToolError('AGENT_NOT_FOUND', `Agent '${name}' not found`);
+      throw new ToolError(
+        'AGENT_NOT_FOUND',
+        `Agent '${name}' not found. ${this.describeRegisteredNames()}`
+      );
     }
 
     return agentDefinitionStoredSchema.parse(JSON.parse(row.data));
@@ -190,6 +196,29 @@ export class AgentStore {
       agent: definition,
       operation: 'delete',
     });
+  }
+
+  /**
+   * Names-only roster for AGENT_NOT_FOUND (1b947d91 AC1): sorted, capped at
+   * {@link AGENT_NOT_FOUND_NAME_CAP} with a "+N more" tail. Selects only the
+   * `name` column so system prompts/definitions are never read or leaked.
+   */
+  private describeRegisteredNames(): string {
+    const names = this.db
+      .select({ name: agentsTable.name })
+      .from(agentsTable)
+      .all()
+      .map((r) => r.name)
+      .sort();
+    if (names.length === 0) {
+      return 'No agents are registered; call `agent_create` first.';
+    }
+    const shown = names.slice(0, AGENT_NOT_FOUND_NAME_CAP).join(', ');
+    const more =
+      names.length > AGENT_NOT_FOUND_NAME_CAP
+        ? ` (+${names.length - AGENT_NOT_FOUND_NAME_CAP} more; use \`agent_list\` for the full roster)`
+        : '';
+    return `Registered agents: ${shown}${more}.`;
   }
 
   list(): AgentDefinition[] {
