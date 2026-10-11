@@ -14,6 +14,13 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import * as L from './lib.mjs';
 import * as F from './fixtures.mjs';
 import * as O from './oracle.mjs';
+import * as LG from './ledger.mjs';
+import * as GT from './gate.mjs';
+import * as DT from './detectors.mjs';
+import * as PF from './preflight.mjs';
+import * as MT from './metrics.mjs';
+import * as GR from './grid.mjs';
+import { ModelRunCapError } from './ledger.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -49,9 +56,9 @@ export const DEFAULT_WT = REPO_ROOT;
 export const ROUND = "R5";
 export const tmpRoot = (round = ROUND) => path.join(REPO_ROOT, 'tmp', 'agent-mcp', 'parity', round);
 /** HARD CAP: total model runs (one run = one arm's full phase-1 + phase-2 session) this driver will ever start, across all invocations. */
-export const MAX_MODEL_RUNS = 6;
+export const MAX_MODEL_RUNS = LG.RUN_CAP;
 /** Durable run ledger: lives next to the driver, NOT under --out, so it cannot be dodged by changing arguments. */
-export const LEDGER_PATH = path.join(HERE, 'ledger', 'model-runs.json');
+export const LEDGER_PATH = LG.ledgerPathFor(ROUND);
 /**
  * ONE thinking setting for every arm: OFF.
  *  - Arm A (native `claude -p`): these two env vars are set in the spawn env of every `claude -p` turn (argvA has no thinking flag).
@@ -69,11 +76,18 @@ export const THINKING_MECHANISM = Object.freeze({
   C: 'no `thinking` request parameter is ever sent by the anthropic provider (anthropic.ts has no "thinking" parameter): off by construction',
 });
 const MAX_TOOL_LOOPS = 40;                                                 // B/C; A (claude 2.1.296) has no --max-turns: recorded as an asymmetry
-// Round 4: `curl` added (the task's web fetch needs a path for B and C; this list is shared by B and C through agentDef, so they get it equally).
-export const SHELL_ALLOW = ['make', 'cat', 'ls', 'head', 'tail', 'grep', 'rg', 'wc', 'pwd', 'echo', 'sed', 'diff', 'sort', 'uniq', 'tr', 'cut', 'basename', 'dirname', 'curl'];
-/** agent-mcp's srt sandbox allows only pypi by default (DEFAULT_SRT_ALLOWED_DOMAINS); without this the allowlisted curl gets a 403 CONNECT. Written into the per-run srt policy, which provisionSrtPolicy MERGES with. */
-export const SRT_EXTRA_DOMAINS = ['example.com'];
-const A_TOOLS = 'Bash,Read,Write,Edit,Glob,Grep,Agent';
+// R3: no curl/wget on the allowlist. B and C use only agent-mcp tools or MCP servers as shipped (no instrument-added web path).
+export const SHELL_ALLOW = ['make', 'cat', 'ls', 'head', 'tail', 'grep', 'rg', 'wc', 'pwd', 'echo', 'sed', 'diff', 'sort', 'uniq', 'tr', 'cut', 'basename', 'dirname'];
+/** R3: the instrument adds NO srt domain (the per-run policy is written empty; agent-mcp's own defaults apply). */
+export const SRT_EXTRA_DOMAINS = [];
+/** R3: arm A runs the native default toolset (`claude --tools default`), nothing instrument-added. */
+const A_TOOLS = 'default';
+/** Declared web surface per arm as shipped (R3.AC5/AC6, R2.AC1). `probe` is set only for a fetch tool reachable at zero model cost; none is, as of this port (U5 open). */
+export const WEB_SURFACE = Object.freeze({
+  A: { tools: ['WebFetch', 'WebSearch'], why: 'native WebFetch makes a hidden small-model call: not a zero-model probe' },
+  B: { tools: [], why: 'claudecli bridges only agent-mcp tools; the shipped shell exposes no fetch command by default (an arm that cannot fetch fails w1_web: product finding)' },
+  C: { tools: ['web_fetch', 'web_search'], why: 'server-executed by the API: not probeable at zero model cost' },
+});
 const WORKER_TOOLS = ['Bash', 'Read', 'Write', 'Edit', 'Glob', 'Grep'];
 const BUDGET_GUARD_USD = '1.50';
 const PHASE_TIMEOUT_MS = 20 * 60 * 1000;
@@ -354,31 +368,11 @@ async function prepare(ctx) {
 }
 
 // ----------------------------------------------------------------------------------------------------------------
-// HARD CAP: at most MAX_MODEL_RUNS model runs, ever (durable ledger, fail closed). Every live model-spawning path goes through rawRun().
-// ----------------------------------------------------------------------------------------------------------------
-export class ModelRunCapError extends Error { constructor(m) { super(m); this.name = 'ModelRunCapError'; } }
-function withLedgerLock(ledgerPath, fn) {
-  fs.mkdirSync(path.dirname(ledgerPath), { recursive: true });
-  const lock = `${ledgerPath}.lock`; let fd = null;
-  for (let i = 0; i < 200 && fd == null; i++) {                       // concurrent drivers (separate processes) serialise here
-    try { fd = fs.openSync(lock, 'wx'); } catch (e) { if (e.code !== 'EEXIST') throw e; Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50); }
-  }
-  if (fd == null) throw new ModelRunCapError(`could not take the ledger lock ${lock} (stale? remove it only if no driver is running): refusing (fail closed)`);
-  try { return fn(); } finally { try { fs.closeSync(fd); } catch { /* closed */ } try { fs.unlinkSync(lock); } catch { /* gone */ } }
-}
-/** Reserve one model run BEFORE anything is spawned. Throws ModelRunCapError when the cap is reached or the ledger cannot be trusted. */
-export function reserveModelRun(runId, { ledgerPath = LEDGER_PATH, cap = MAX_MODEL_RUNS } = {}) {
-  return withLedgerLock(ledgerPath, () => {
-    let led = { cap, runs: [] };
-    if (fs.existsSync(ledgerPath)) {
-      try { led = JSON.parse(fs.readFileSync(ledgerPath, 'utf8')); } catch (e) { throw new ModelRunCapError(`ledger ${ledgerPath} is unreadable (${e.message}): refusing (fail closed)`); }
-      if (!Array.isArray(led?.runs)) throw new ModelRunCapError(`ledger ${ledgerPath} has no runs array: refusing (fail closed)`);
-    }
-    if (led.runs.length >= cap) throw new ModelRunCapError(`model-run cap reached: ${led.runs.length}/${cap} runs already started (ledger ${ledgerPath}); refusing ${runId}`);
-    led.cap = cap; led.runs.push({ runId, at: nowIso(), pid: process.pid });
-    const tmp = `${ledgerPath}.${process.pid}.tmp`; fs.writeFileSync(tmp, JSON.stringify(led, null, 2)); fs.renameSync(tmp, ledgerPath);
-    return { used: led.runs.length, cap };
-  });
+// HARD CAP: at most RUN_CAP (3) agent runs per round (parity/ledger.mjs; tracked per-round file, fail closed). Every live model-spawning path goes through rawRun().
+/** Reserve one run BEFORE anything is spawned (delegates to ledger.reserveRun: approvedBy, A first, cap 3, extraRunReason for 4+). */
+export function reserveModelRun(runId, { ledgerPath = LEDGER_PATH } = {}) {
+  const round = path.basename(ledgerPath, '.json');
+  return LG.reserveRun(round, { arm: String(runId)[0], runId, dir: path.dirname(ledgerPath) });
 }
 async function rawRun(ctx) {
   // The cap is enforced HERE, before the fixture is even written and before any process that could call a model is spawned.
@@ -473,11 +467,11 @@ function analyzeA(ctx, raw) {
 
 /** Can this arm fetch a page at all? A web tool in its tool list, or (A) an unrestricted Bash, or a shell allowlist that admits curl/wget (B/C: SHELL_ALLOW). */
 function webCapability(arm, tools) {
+  // R3.AC4: no arm is exempt. w1_web is scored for every arm (web:true => scored); an arm that cannot fetch as shipped fails it
+  // and the record carries webFinding "arm cannot fetch" (a product finding, not an instrument defect).
   const names = tools.map(String);
-  if (names.some((t) => /(^|__)(web_fetch|web_search|WebFetch|WebSearch)$/.test(t))) return { web: true, webVia: 'tool' };
-  if (arm === 'A' && names.includes('Bash')) return { web: true, webVia: 'shell (unrestricted Bash; curl)' };
-  if (arm !== 'A' && SHELL_ALLOW.some((c) => /^(curl|wget)$/.test(c))) return { web: true, webVia: 'shell (allowlisted curl/wget)' };
-  return { web: false, webVia: null };
+  const canFetch = names.some((t) => /(^|__)(web_fetch|WebFetch)$/.test(t)) || (WEB_SURFACE[arm]?.tools ?? []).some((t) => /^(web_fetch|WebFetch)$/.test(t));
+  return { web: true, webVia: canFetch ? 'tool' : null, canFetch, webSurface: [...new Set([...(WEB_SURFACE[arm]?.tools ?? []), ...names.filter((t) => /(web_|Web)/.test(t))])] };
 }
 const rowsOf = (j) => (Array.isArray(j?.rows) ? j.rows : []);
 function analyzeBC(ctx, raw) {
@@ -586,6 +580,8 @@ async function runOne(ctx, state) {
     record.metrics = metrics; record.warnings.push(...metrics.warnings);
     // thinking invariant: thinking is configured OFF on every arm; any thinking block observed means the equalisation did not hold => the run is INVALID (not scored as an arm result)
     record.thinkingInvariant = thinkingVerdict(metrics);
+    record.webSurface = obs.capabilities?.webSurface ?? null;
+    if (obs.capabilities && obs.capabilities.canFetch === false) record.webFinding = 'arm cannot fetch';
     if (!record.thinkingInvariant.ok) record.invalidRun = [`thinking blocks observed (${record.thinkingInvariant.observedThinkingTurns}, parent turns ${record.thinkingInvariant.parentTurns}, all tasks ${record.thinkingInvariant.allTasks}) while thinking is configured OFF on every arm`];
     state.rateLimitsSeen.push(...(metrics.rateLimits || []).slice(-2));
     if (raw.storeLine && /mode=production/.test(raw.storeLine)) record.warnings.push(`SERVER REPORTS PRODUCTION STORE: ${raw.storeLine}`);
@@ -625,12 +621,10 @@ const arm0 = (ctx) => ctx.runDef.arm;
  * The seeded, randomised serial order of ALL 6 runs (2 per arm). Arms are shuffled with the seeded PRNG; within an arm the repetitions keep
  * their order (rep 1 before rep 2) so rep 1 is the cold run and rep 2 the warm one by construction. Deterministic in `seed` only.
  */
+/** One run per arm (section 3): A first, then B and C; B and C alternate order between rounds (ledger.armOrderFor). */
 export function buildPlan(opts) {
-  const r = F.rng(`${opts.seed}|order`);
-  const slots = ['A', 'A', 'B', 'B', 'C', 'C'];
-  for (let i = slots.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [slots[i], slots[j]] = [slots[j], slots[i]]; }
-  const seen = {};
-  return slots.map((arm, i) => { seen[arm] = (seen[arm] || 0) + 1; return { arm, rep: seen[arm], position: i + 1 }; });
+  const idx = Number.parseInt(String(opts.round ?? ROUND).replace(/[^0-9]/g, ''), 10) || 0;
+  return LG.armOrderFor(idx).map((arm, i) => ({ arm, rep: 1, position: i + 1 }));
 }
 const fmtUsd = (x) => x == null ? '-' : `$${x.toFixed(4)}`;
 function summaryRows(records) {
@@ -752,9 +746,9 @@ export function planText(opts) {
   const A = ctxOf('A'), B = ctxOf('B'), C = ctxOf('C');
   const cite = (re) => `drive.mjs:${lineOf(re)}`;
   const thinkingEnvStr = Object.entries(THINKING_OFF_ENV).map(([k, v]) => `${k}=${v}`).join(' ');
-  out.push(`ROUND 4 PLAN  seed=${opts.seed}  model=${MODEL}  (task: ONE real-world scenario "shopkit", 2 phases in one session; web fetch ${F.WEB_URL} -> heading "${F.WEB_HEADING}")`);
-  out.push(`model runs: ${plan.length} planned (2 per arm), serial, HARD CAP ${MAX_MODEL_RUNS} total across ALL invocations; ledger ${LEDGER_PATH} has used ${ledgerUsed()} of ${MAX_MODEL_RUNS}`);
-  out.push('', 'order (seeded shuffle of the 6 runs; within an arm rep 1 precedes rep 2):', ...plan.map((p) => `  ${p.position}. ${p.arm}${p.rep}`));
+  out.push(`ROUND ${ROUND} PLAN  seed=${opts.seed}  model=${MODEL}  (task: ONE real-world scenario "shopkit", 2 phases in one session; web fetch ${F.WEB_URL} -> heading "${F.WEB_HEADING}")`);
+  out.push(`model runs: ${plan.length} planned (one per arm, A first), serial, HARD CAP ${MAX_MODEL_RUNS} per round; ledger ${LEDGER_PATH} has used ${ledgerUsed()} of ${MAX_MODEL_RUNS}`);
+  out.push('', 'order (arm A first; B and C alternate between rounds):', ...plan.map((p) => `  ${p.position}. ${p.arm}${p.rep}`));
   out.push('', 'THINKING (identical in effect on every arm: OFF)');
   out.push(`  A  ${THINKING_MECHANISM.A}`, `       cited at ${cite(/^export function armAEnv/)} and the THINKING_OFF_ENV definition ${cite(/^export const THINKING_OFF_ENV/)}`, `       resolved spawn env: ${thinkingEnvStr}  (armAEnv has them: ${Object.keys(THINKING_OFF_ENV).every((k) => armAEnv(A)[k] === THINKING_OFF_ENV[k])})`, `       argv: claude ${argvA(A, '<mcp-config.json>', null).map((x) => (x.length > 60 ? x.slice(0, 57) + '...' : x)).join(' ')}`);
   const bEnv = serverEnv(B, '<store>', '<logs>');
@@ -894,20 +888,23 @@ export async function selfCheck({ log = console.log, opts = parseArgs([]) } = {}
       chk(`claude binary (${path.basename(claudeBin)}, read not run) knows both env switches and checks MAX_THINKING_TOKENS before alwaysThinkingEnabled`, has('CLAUDE_CODE_DISABLE_THINKING') && has('process.env.MAX_THINKING_TOKENS)return Dd(process.env.MAX_THINKING_TOKENS)>0?null:"MAX_THINKING_TOKENS";let{settings:e}=yg();return e.alwaysThinkingEnabled===!1?"alwaysThinkingEnabled":null'), 'env var wins over settings.json');
     } else chk('claude binary found for the static precedence check (skipped)', true, 'SKIP: claude not on PATH');
 
-    // ============ AC4: the 6-run hard cap ============
-    log('--- AC4: hard cap of 6 model runs ---');
-    const ledger = path.join(work, 'ledger', 'model-runs.json'); let executed = 0; const refused = [];
-    const fakeExec = async () => { executed++; return { phases: [] }; };
-    for (let i = 1; i <= MAX_MODEL_RUNS + 1; i++) {
-      const def = { arm: 'ABC'[i % 3], rep: 1 + (i > 3 ? 1 : 0) }; const cx = makeCtx({ ...opts, out: path.join(work, 'cap-out') }, [def], { arm: def.arm, rep: def.rep }, false); cx.ledgerPath = ledger; cx.executor = fakeExec; cx.runDef = { arm: def.arm, rep: def.rep };
-      cx.spec = { ...cx.spec, runId: `cap${i}` };
-      try { await rawRun(cx); } catch (err) { refused.push({ i, name: err.name, msg: err.message }); }
-    }
-    chk(`model runs 1-${MAX_MODEL_RUNS} execute (executor called ${executed}x) and the ${MAX_MODEL_RUNS + 1}th is refused with ModelRunCapError`, executed === MAX_MODEL_RUNS && refused.length === 1 && refused[0].i === MAX_MODEL_RUNS + 1 && refused[0].name === 'ModelRunCapError', refused.map((r) => r.msg).join(' | '));
-    chk('the ledger is durable: a fresh read still says 6/6 and a further reservation (a "new invocation") is refused', JSON.parse(fs.readFileSync(ledger, 'utf8')).runs.length === MAX_MODEL_RUNS && (() => { try { reserveModelRun('again', { ledgerPath: ledger }); return false; } catch (err) { return err instanceof ModelRunCapError; } })());
-    fs.writeFileSync(ledger, '{not json');
-    chk('a corrupt ledger fails CLOSED (refuses to run)', (() => { try { reserveModelRun('x', { ledgerPath: ledger }); return false; } catch (err) { return err instanceof ModelRunCapError; } })());
-    chk('the production ledger path is fixed next to the driver (not derived from --out/--seed)', LEDGER_PATH === path.join(HERE, 'ledger', 'model-runs.json'));
+    // ============ AC4: ledger (R0.AC4): cap 3, approvedBy, arm A first, void rule, extraRunReason, fail closed ============
+    log('--- AC4: per-round ledger (cap 3) ---');
+    { const ldir = path.join(work, 'ledger'); const LR = 'RT'; const lp = LG.ledgerPathFor(LR, ldir);
+      const refusesWith = (fn, cls) => { try { fn(); return false; } catch (err) { return cls ? err instanceof cls : true; } };
+      chk('a reservation without approvedBy is refused (a further live round must be asked for)', refusesWith(() => LG.reserveRun(LR, { arm: 'A', runId: 'RT-A', dir: ldir })));
+      LG.initRound(LR, { approvedBy: '"owner approves round RT"' }, ldir);
+      chk('arm B cannot run first (arm A runs first)', refusesWith(() => LG.reserveRun(LR, { arm: 'B', runId: 'RT-B', dir: ldir })));
+      LG.reserveRun(LR, { arm: 'A', runId: 'RT-A', dir: ldir });
+      chk('B and C are refused until arm A is recorded as a genuine success (void rule)', refusesWith(() => LG.reserveRun(LR, { arm: 'B', runId: 'RT-B', dir: ldir })));
+      LG.recordArmA(LR, false, 'content item red', ldir);
+      chk('after a failed arm A the round stays void: B is refused', refusesWith(() => LG.reserveRun(LR, { arm: 'B', runId: 'RT-B', dir: ldir })));
+      LG.recordArmA(LR, true, 'all green', ldir); LG.reserveRun(LR, { arm: 'B', runId: 'RT-B', dir: ldir }); LG.reserveRun(LR, { arm: 'C', runId: 'RT-C', dir: ldir });
+      chk('the 4th run is refused with ModelRunCapError unless extraRunReason is set', refusesWith(() => LG.reserveRun(LR, { arm: 'C', runId: 'RT-X', dir: ldir }), ModelRunCapError));
+      chk('the ledger is durable: a fresh read says 3 runs and a further reservation is refused', JSON.parse(fs.readFileSync(lp, 'utf8')).runs.length === 3 && refusesWith(() => LG.reserveRun(LR, { arm: 'C', runId: 'RT-Y', dir: ldir }), ModelRunCapError));
+      fs.writeFileSync(lp, '{not json');
+      chk('a corrupt ledger fails CLOSED (refuses to run)', refusesWith(() => LG.reserveRun(LR, { arm: 'A', runId: 'x', dir: ldir }), LG.LedgerError)); }
+    chk('the production ledger path is tracked next to the driver, per round (not derived from --out/--seed)', LEDGER_PATH === path.join(HERE, 'ledger', `${ROUND}.json`));
     for (const flag of ['--arms', '--batch', '--keep-going', '--regen']) { const r = spawnSync(process.execPath, [SELF, flag, 'A'], { encoding: 'utf8' }); chk(`CLI rejects ${flag} (no way to slice the plan or bypass the cap) -> exit 2`, r.status === 2, `status ${r.status}`); }
     const noYes = spawnSync(process.execPath, [SELF, '--live'], { encoding: 'utf8' }); chk('--live without --yes exits 2 before doing anything', noYes.status === 2, `status ${noYes.status}`);
     // the live loop reaches the model only through rawRun (static)
@@ -932,29 +929,18 @@ export async function selfCheck({ log = console.log, opts = parseArgs([]) } = {}
     // ============ plan, task set, curl ============
     log('--- plan / task set / shell ---');
     const p1 = buildPlan(opts), p1b = buildPlan({ ...opts });
-    chk('plan: 6 runs, 2 per arm, rep 1 before rep 2 within an arm, deterministic for the seed', p1.length === 6 && ['A', 'B', 'C'].every((a) => p1.filter((x) => x.arm === a).map((x) => x.rep).join() === '1,2') && JSON.stringify(p1) === JSON.stringify(p1b));
-    chk('plan: the order varies with the seed (randomised, not pinned)', new Set(['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((s6) => buildPlan({ seed: s6 }).map((x) => x.arm).join(''))).size > 3);
+    chk('plan: 3 runs, one per arm, arm A first, deterministic', p1.length === 3 && p1[0].arm === 'A' && ['A', 'B', 'C'].every((a) => p1.filter((x) => x.arm === a).length === 1) && JSON.stringify(p1) === JSON.stringify(p1b));
+    chk('plan: B and C alternate order between rounds', buildPlan({ round: 'R5' }).map((x) => x.arm).join('') !== buildPlan({ round: 'R6' }).map((x) => x.arm).join(''));
     chk('task set: exactly ONE scenario (one prompts() pair, one fixture generator) for every run', Object.keys(F.prompts()).join() === 'phase1,phase2' && new Set(p1.map((p) => F.makeSpec({ seed: opts.seed, ...p }).pkg.replace(/-.*/, ''))).size === 1);
     chk('web fetch is deterministic: the oracle heading is the fixed example.com title', F.WEB_URL === 'https://example.com' && F.WEB_HEADING === 'Example Domain');
-    chk('curl is on the shared B/C allowlist and the srt policy pre-write lists example.com', SHELL_ALLOW.includes('curl') && SRT_EXTRA_DOMAINS.includes('example.com') && webCapability('B', []).web === true && webCapability('C', []).web === true && webCapability('A', ['Bash']).web === true);
+    { const PR = F.prompts(); const sha = (t) => crypto.createHash('sha256').update(t).digest('hex'); const banned = /curl|WebFetch|web_fetch|web_search|WebSearch|shell|Bash|browse/i;
+      chk('R3.AC2 one prompt text for A, B and C (same sha) and none names a web tool or method', ['phase1', 'phase2'].every((k) => sha(PR[k]) === sha(F.prompts()[k])) && !banned.test(PR.phase1) && !banned.test(PR.phase2), `phase1 match: ${banned.exec(PR.phase1)?.[0]} phase2 match: ${banned.exec(PR.phase2)?.[0]}`);
+      chk('R3.AC1 phase 1 no longer opts out of fetching (fetch-it-yourself wording and the "could not fetch" null clause are gone)', !/fetch it yourself|if you have a way|or null if you could not fetch/.test(PR.phase1) && /read the web page the ticket links to/.test(PR.phase1));
+      chk('R3.AC3 SHELL_ALLOW has no curl/wget, SRT_EXTRA_DOMAINS has no example.com, A_TOOLS is the native default toolset', !SHELL_ALLOW.some((c) => /^(curl|wget)$/.test(c)) && !SRT_EXTRA_DOMAINS.includes('example.com') && A_TOOLS === 'default');
+      chk('R3.AC3 C does not set nativeWebTools:false; B/C allowCommands carry no curl|wget', agentDef(ctxC, 'worker', false).nativeWebTools !== false && !(agentDef(ctxB, 'worker', false).nativeTooling.shell.allowCommands.some((c) => /curl|wget/.test(c))));
+      chk('R3.AC4 w1_web is scored for every arm; an arm that cannot fetch gets webFinding', ['A', 'B', 'C'].every((a) => webCapability(a, []).web === true) && webCapability('B', []).canFetch === false);
+      chk('R3.AC5 every arm declares its web surface', ['A', 'B', 'C'].every((a) => Array.isArray(webCapability(a, []).webSurface))); }
     chk('B and C get the same shell allowlist object (agentDef is shared)', JSON.stringify(agentDef(ctxB, 'worker', false).nativeTooling) === JSON.stringify(agentDef(ctxC, 'worker', false).nativeTooling));
-    // the real agent-mcp policy merge keeps example.com (operator-authored) next to its pypi defaults, and the real srt then lets curl through (offline part first)
-    { const distSrt = path.join(opts.wt, 'entrypoint/agent-mcp/dist/src/srt-policy.js');
-      if (!fs.existsSync(distSrt)) chk('built agent-mcp srt-policy.js present for the policy-merge check (skipped)', true, `SKIP ${distSrt}`);
-      else {
-        const { provisionSrtPolicy } = await import(pathToFileURL(distSrt).href); const pol = path.join(work, 'srt-merge', 'srt-policy.json');
-        writeJson(pol, { network: { allowedDomains: [...SRT_EXTRA_DOMAINS], deniedDomains: [] } });
-        provisionSrtPolicy({ settingsPath: pol }); const merged = readJson(pol); const doms = merged.network?.allowedDomains || [];
-        chk(`provisionSrtPolicy (built dist) merges the pre-written policy: allowedDomains = ${doms.join(',')}`, doms.includes('example.com') && doms.includes('pypi.org'));
-        const srtBin = path.join(opts.wt, 'node_modules/.bin/srt'); const plain = spawnSync('curl', ['--silent', '--show-error', '--max-time', '10', '--output', '/dev/null', F.WEB_URL], { encoding: 'utf8' });
-        if (!fs.existsSync(srtBin)) chk('srt binary present for the sandboxed-curl check (skipped)', true, `SKIP ${srtBin}`);
-        else if (plain.status !== 0) chk('network reachable for the sandboxed-curl check (skipped)', true, `SKIP: plain curl to ${F.WEB_URL} exited ${plain.status}`);
-        else {
-          const viaSrt = (policy) => spawnSync(srtBin, ['-s', policy, 'curl', '--silent', '--show-error', '--max-time', '20', F.WEB_URL], { encoding: 'utf8', cwd: os.tmpdir() });   // agent-mcp's argv shape: srt -s <abs path> <cmd> <args>. NB srt's own parser consumes short flags anywhere (`curl -sS` is read as srt `-s` with value "S"), hence the long curl flags
-          const ok1 = viaSrt(pol); const bare = path.join(work, 'srt-merge', 'defaults-only.json'); writeJson(bare, { network: { allowedDomains: [], deniedDomains: [] } }); provisionSrtPolicy({ settingsPath: bare }); const no1 = viaSrt(bare);
-          chk(`srt -s <merged policy> curl ${F.WEB_URL} returns the page (heading "${F.WEB_HEADING}") and the same call with the agent-mcp DEFAULT policy (no example.com) is refused with a 403 CONNECT (proves srt enforces and the pre-write is what opens it)`, ok1.status === 0 && ok1.stdout.includes(F.WEB_HEADING) && no1.status !== 0 && /403|CONNECT/.test(no1.stderr), `with: exit ${ok1.status}; without: exit ${no1.status} ${String(no1.stderr).trim().slice(0, 80)}`);
-        }
-      } }
     const pp = spawnSync(process.execPath, [SELF, '--print-plan'], { encoding: 'utf8' }); chk('`--print-plan` runs offline and exits 0', pp.status === 0 && /THINKING/.test(pp.stdout), `status ${pp.status} ${String(pp.stderr).slice(0, 200)}`);
 
     // ============ the driver's own helper tests and the oracle mutation test ============
