@@ -1300,6 +1300,7 @@ export class Orchestrator {
               tokenUsage: usage,
               responseModel: partial.responseModel,
               computeMs: failedComputeMs,
+              ...(callOverheadMs !== undefined ? { overheadMs: callOverheadMs } : {}),
             });
             taskStore.appendEvent({
               taskId,
@@ -1685,6 +1686,8 @@ export class Orchestrator {
           tokenUsage: providerResponse.usage,
           responseModel: providerResponse.responseModel,
           computeMs,
+          ...(providerResponse.ttfbMs !== undefined ? { ttfbMs: providerResponse.ttfbMs } : {}),
+          ...(callOverheadMs !== undefined ? { overheadMs: callOverheadMs } : {}),
         });
         await hooks.emit('message:appended', {
           executionContext,

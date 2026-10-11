@@ -45,6 +45,19 @@ export interface PostModelResponsePayload {
   responseModel?: string;
   /** MODEL_RESPONSE.created_at − MODEL_REQUEST.created_at for this turn's model call. */
   computeMs: number;
+  /**
+   * Time to first byte: milliseconds from the provider request starting to its first streamed
+   * byte/event. Present only when the provider measured it (anthropic: first stream event;
+   * claudecli: first non-`system` CLI event); absent otherwise, never a guess. Same value as
+   * `MODEL_RESPONSE.payload.ttfb_ms`.
+   */
+  ttfbMs?: number;
+  /**
+   * Engine overhead before this call: milliseconds from the previous model call of the same task
+   * returning to this request starting (context assembly, tool execution, hooks, persistence).
+   * Absent for a task's first model call. Same value as `MODEL_RESPONSE.payload.overhead_ms`.
+   */
+  overheadMs?: number;
 }
 export interface PreToolCallPayload {
   executionContext: ExecutionContext;
