@@ -164,6 +164,43 @@ export type TaskCancelInput = z.infer<typeof taskCancelInputSchema>;
 export type ResultInput = z.infer<typeof resultInputSchema>;
 
 /**
+ * Tolerance pre-step for `tasks_batch.concurrency` (backlog 932604a0 R9): a
+ * model may send the integer as a base-10 string (`"2"`). Only a string that
+ * is exactly an optionally-signed run of digits is converted; anything else
+ * (`"abc"`, `"2.5"`, `""`) is passed through untouched so the strict number
+ * schema still rejects it. Range checks (positive, max 64) stay in the schema.
+ *
+ * @param value - the raw `concurrency` argument.
+ * @returns the number for an integer string, otherwise `value` unchanged.
+ */
+function parseIntegerString(value: unknown): unknown {
+  if (typeof value === 'string' && /^\s*[+-]?\d+\s*$/.test(value)) {
+    return Number(value);
+  }
+  return value;
+}
+
+/**
+ * Tolerance pre-step for `tasks_batch.prompts` (backlog 932604a0 R9): a model
+ * may send the array as a JSON string. Only a string that `JSON.parse`s to an
+ * array is replaced; malformed JSON or a non-array JSON value is passed
+ * through untouched so the strict array schema rejects it. Element rules
+ * (non-empty strings, non-empty array) stay in the schema.
+ *
+ * @param value - the raw `prompts` argument.
+ * @returns the decoded array for a stringified array, otherwise `value`.
+ */
+function parseStringifiedArray(value: unknown): unknown {
+  if (typeof value !== 'string') return value;
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : value;
+  } catch {
+    return value;
+  }
+}
+
+/**
  * `tasks_batch` (FEAT: native bulk/parallel task-dispatch primitive,
  * backlog 05cc1db4). Fans out N prompts in ONE call, honoring a concurrency
  * cap, so the caller never hand-maintains a session_id↔task_id mapping or
@@ -187,13 +224,15 @@ export const tasksBatchInputSchema = z
       .array(z.string().uuid())
       .optional()
       .describe('Reuse one existing session per prompt; length must equal prompts.length'),
-    prompts: z.array(z.string().min(1)).min(1).describe('One prompt per dispatched task'),
+    prompts: z.preprocess(
+      parseStringifiedArray,
+      z.array(z.string().min(1)).min(1)
+    ).describe('One prompt per dispatched task'),
     concurrency: z
-      .number()
-      .int()
-      .positive()
-      .max(64)
-      .optional()
+      .preprocess(
+        parseIntegerString,
+        z.number().int().positive().max(64).optional()
+      )
       .describe('Max tasks executing simultaneously (default 4)'),
     depends_on: z
       .array(z.array(z.string().uuid()))
