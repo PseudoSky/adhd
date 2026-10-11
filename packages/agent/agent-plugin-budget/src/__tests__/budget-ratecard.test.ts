@@ -442,7 +442,7 @@ describe(`${TICKET} AC5 -- the provider dimension keys on the resolved selection
 
 // ── AC6 ──────────────────────────────────────────────────────────────────────
 
-describe(`${TICKET} AC6 -- per-agent and per-provider rate overrides are honoured`, () => {
+describe(`${TICKET} AC6 (also cbe0b6ce: provider overrides.openai costPerInputToken/OutputToken honoured) -- per-agent and per-provider rate overrides are honoured`, () => {
   const turn: Turn = { uncached: 10_000, output: 1_000 };
   const base = { mode: 'block' as const, caps: [COST_PROBE], costPerInputToken: 0.000003, costPerOutputToken: 0.000015 };
 
@@ -458,7 +458,7 @@ describe(`${TICKET} AC6 -- per-agent and per-provider rate overrides are honoure
     expect(await overridden.cost()).toBe(10_000 * 0.00003 + 1_000 * 0.000015);
   });
 
-  it('a per-provider costPerInputToken override (selection-keyed) changes the priced cost', async () => {
+  it('cbe0b6ce: a per-provider costPerInputToken override (selection-keyed) changes the priced cost', async () => {
     const config = {
       defaults: base,
       provider: { overrides: { openai: { costPerInputToken: 0.0000001, costPerOutputToken: 0.0000002 } } },
