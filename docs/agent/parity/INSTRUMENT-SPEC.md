@@ -1,161 +1,199 @@
-# Instrument spec: CLI-parity round-5 blockers FC1, FC2, FC3, FC4, FC6 (+ FC5 instrument defects, grid score)
+# Instrument spec: CLI-parity round-5 (buckets R0-R9)
 
-Status: SPEC ONLY. Nothing implemented, no backlog items filed, no model arms run.
-Repo: /Users/nix/dev/node/adhd, main@ebd24f9c+. Evidence root SP = /private/tmp/claude-502/-Users-nix-dev-node-adhd/f118b5b4-5fc4-458b-9f31-9ac647bb0cab/scratchpad
+Status: SPEC ONLY. Nothing implemented, no model arms run. Owner answers of 2026-10-11 are folded in (EXPERIMENT-LOG section 7, entry "OWNER DECISIONS recorded" plus the follow-up answers on runs, valid iteration, quality, scope and web).
+Repo: /Users/nix/dev/node/adhd. Evidence root SP = /private/tmp/claude-502/-Users-nix-dev-node-adhd/f118b5b4-5fc4-458b-9f31-9ac647bb0cab/scratchpad
+Notation: P = /Users/nix/dev/node/adhd/entrypoint/agent-mcp. LOG = /Users/nix/dev/node/adhd/docs/agent/parity/EXPERIMENT-LOG.md.
 
 ## 0. Summary
 
-Move the throwaway round-4 instrument (SP/round4: drive.mjs 98 KB, oracle.mjs 65 KB, lib.mjs 31 KB, fixtures.mjs 17 KB, info-server, dryrun fakes, selfcheck observations, ledger) into ONE new private entrypoint package `entrypoint/agent-parity`, faithfully, with its self-check as tests. Then, on that base, in disjoint file scopes: (B1) fix the oracle (FC1 plus the three FC5 instrument defects), (B2) add a zero-model egress preflight that the driver runs and obeys (FC3, FC2), (B3) make web tooling symmetric (FC4, owner-gated), (B4) render each variant cell as icon + score. Raw output goes to gitignored `tmp/agent-parity/`; distilled results stay in docs/agent/parity/EXPERIMENT-LOG.md (dispatcher-written).
+Move the throwaway round-4 instrument (SP/round4: drive.mjs, oracle.mjs, lib.mjs, fixtures.mjs, info-server.mjs, dryrun fakes, ledger) INSIDE the existing package `entrypoint/agent-mcp`, in an unpublished directory `P/parity/`, with its tests in the package's existing unit and e2e lanes. No new package, no new Nx project, no tsconfig.base.json change. On that base: fix the oracle (R1); a web-path preflight and silent-egress detector (R2); one identical task prompt with each arm on its own shipped tools only (R3); a metric model that gates cost, duration and quality at +2% of native and reports turns, tool calls and peak context (R4); a blind-judge quality score (R5); a repeated-tool-error defect signal (R6); a grid (R7); a duration slot driven by the debug finding (R8); and a product fix for the tasks_batch strict parse (R9).
 
-This spec does NOT promise that no model run ever fails. A1 (R4) failed on model variance (parent mis-briefed the worker without reading summary.js); that stays a red result after the fixes (see B1 AC7). FC8 and FC7 remain owner matters.
+This spec does NOT promise that no model run ever fails. Model variance stays a red result.
 
 ## 1. Verified facts (read, not assumed)
 
 * The repo's existing "parity-harness" (packages/apigen/apigen-engine-runtime/src/test-support/parity-harness.ts, tsconfig.base.json:99; backlog 1f903927 resolved, b18099f7 resolved) is the apigen golden-fixture transport harness (captureGolden / assertParity / proveNegativeControl). It is a different domain and is NOT reusable here. b18099f7 shows its negative-control escaped scratch and ran git against the real repo (CRITICAL, resolved), so we do not borrow it. We reuse its precedent only: a cross-package test-only import goes through a tsconfig.base.json path, which we avoid by not sharing test code across packages.
-* Reusable, already in repo: `resolveNativeTooling` (packages/agent/agent-core-native-tooling/src/lib/resolver.ts:398; the catalog is the single producer of the shell launch literal, ADR-0008 D2); `@modelcontextprotocol/sdk` Client + StdioClientTransport (already used by drive.mjs loadSdk); `AgentDefinition.nativeWebTools?: boolean` (packages/agent/agent-base-types/src/domain.ts:585, `false` removes server-side web_search/web_fetch; negative control in entrypoint/agent-mcp/src/__tests__/integration/native-web-tools.e2e.test.ts). NOT reusable: `RpcClient` and the parentProxy stub inside shell-egress.e2e.test.ts (file-local, not exported); use the SDK client, and write a ~25-line local parentProxy stub in the new package (duplication accepted over cross-package test imports; extraction is an optional later item).
+* Reusable, already in repo: `resolveNativeTooling` (packages/agent/agent-core-native-tooling/src/lib/resolver.ts:398; the catalog is the single producer of the shell launch literal, ADR-0008 D2); `@modelcontextprotocol/sdk` Client + StdioClientTransport (already used by drive.mjs loadSdk); `AgentDefinition.nativeWebTools?: boolean` (packages/agent/agent-base-types/src/domain.ts:585, `false` removes server-side web_search/web_fetch; negative control in entrypoint/agent-mcp/src/__tests__/integration/native-web-tools.e2e.test.ts). NOT reusable: `RpcClient` and the parentProxy stub inside shell-egress.e2e.test.ts (file-local, not exported); use the SDK client, and write a ~25-line local parentProxy stub in P/parity (duplication accepted over cross-package test imports; extraction is an optional later item).
 * R4 ledger SP/round4/ledger/model-runs.json is at 6/6 (cap spent). R5 needs a fresh per-round ledger.
 * Backlog ACs (verbatim sources): 25ce70b8 AC1 driver/fixtures/oracle+README in repo, AC2 oracle defects fixed with tests, AC3 BK5 gate text (OUT OF SCOPE here: depends on owner decision FC7; 625b611e), AC4 tests cite uid+AC. 90758419 AC1 q_rate separates recall from re-use, AC2 preflight fails loudly, AC3 s1/x3 fixes with red-then-green cases, AC4 self-check cites uid+AC. 50e21ed9 AC2 web-symmetry definition + egress preflight implemented and tested. 0ba70e47 AC1 curl via shell_execute returns the page under srt (live), AC2 exit status visible (PENDING upstream, F32, not in this spec). 1207765d and 9063acac have NO ACs; tests cite them with the bucket AC id as `1207765d (bucket B0.AC4)`.
 
-## 2. Package decision (ADR-0002/0008 compliant)
+* Publication path: `P/package.json` `files` = dist, CHANGELOG.md, llms.txt, AGENTS.md, docs; PUBLISHING.md: publish packs `P/dist` only. `P/project.json` build = `tsc -p tsconfig.lib.json --outDir dist` then `cp P/*.md P/LICENSE dist/` and `cp -R P/docs dist/`. `P/tsconfig.lib.json` include = `src/**/*.ts`, exclude `src/**/*.test.ts`, `*.spec.ts`, `__tests__`. So a directory `P/parity/` that is not named `docs`, holds no `*.md` at the package root and is outside `src` cannot reach dist.
+* Lanes (ADR-0009, `tools/vite-plugins/e2e-globs.mjs`, `P/vite.config.ts:61`): unit include `src/**/*.{test,spec}.{js,mjs,cjs,ts,...}`, excludes `**/*.e2e.test.ts` and `**/*.e2e.ts`; e2e include is only `src/**/*.e2e.ts` and `src/**/*.e2e.test.ts` and runs with isolated cwd and fake HOME. `check-agent-lane-spawn.mjs` scans only `src/**`. Hence instrument code lives outside `src` and its tests live in `P/src/parity-instrument/`.
+* Prompt facts (SP/round4/fixtures.mjs prompts()): the phase-1 text is identical for every arm and names no web tool, but says "fetch it yourself if you have a way to" and the JSON key says "or null if you could not fetch it". The ticket says `see https://example.com`. The curl allowlist is NOT prompt-driven: `SHELL_ALLOW` (drive.mjs:69, contains `curl`) is applied to B and C by `agentDef` (drive.mjs:262) and the srt policy pre-write adds example.com (SRT_EXTRA_DOMAINS, drive.mjs:70/234, "F29"); arm A fetches by unrestricted Bash curl (`A_TOOLS` has no WebFetch); arm C runs server-side web_search/web_fetch at the product default. `webCapability()` (drive.mjs:469) feeds only the oracle.
+* The oracle has no quality score: FIELDS carry kind content/process/format and the summary ratio is content items passed (oracle.mjs:316).
+* R4 numbers (RESULT.md): wall A 92 s, B 130 s (+41%), C 163 s (+77%). Billed cost A 0.2088, B 0.2211 (+5.9%), C 0.1935 (-7.3%); common-card cost medians A 0.1877, B 0.1886, C 0.1935. A1 12/17 vs A2 17/17.
+* tasks_batch rejection (R4 C1): the model sent `concurrency` "2" (string) and a stringified prompts array; `P/src/server.ts:595-597` runs strict `tasksBatchInputSchema.parse(args)`, which rejected it (3 failed turns, about 9-10 s). The schema is `packages/agent/agent-engine-orchestrator/src/validation/task.ts:179` (`concurrency: z.number().int().positive().max(64).optional()`, `prompts: z.array(z.string().min(1)).min(1)`).
 
-New package is warranted. Home options: (a) inside entrypoint/agent-mcp: rejected, its build copies docs/ and src into the PUBLISHED dist and it would ship a paid-model driver plus 200 KB of fixtures; its test lane is already the heaviest. (b) packages/agent/agent-core-native-tooling: rejected, wrong tier (library below agent-mcp; the driver must run agent-mcp's built dist). (c) throwaway: rejected, that is the defect (25ce70b8). (d) new entrypoint (runner, AGENTS.md section 1: "A CLI / server / runner -> entrypoint/"). Chosen: (d), private (publish defaults false).
+## 2. Location and guaranteed non-publication
 
-Exact invocation (bare name; dry-run first, read the CREATE list, then re-run without it):
+Layout (all inside P, none in `src/` except tests):
 ```
-npx nx g @adhd/workspace-codegen-nx:entrypoint --name agent-parity --nxLayer entrypoints --platform node --dry-run
-npx nx g @adhd/workspace-codegen-nx:entrypoint --name agent-parity --nxLayer entrypoints --platform node
+P/parity/ drive.mjs oracle.mjs lib.mjs fixtures.mjs info-server.mjs ledger.mjs gate.mjs
+          metrics.mjs quality.mjs judge.mjs detectors.mjs preflight.mjs grid.mjs
+          README.md  (not at package root, so the build's `cp P/*.md` skips it)
+          golden/{legacy,r4}/**   ledger/<round>.json (tracked)   dryrun/**
+P/src/parity-instrument/*.test.mjs          (unit lane, spawns nothing)
+P/src/parity-instrument/*.e2e.test.ts       (e2e lane, isolated cwd + fake HOME)
+tmp/agent-mcp/parity/<round>/**             (raw output, gitignored; AGENTS.md section 10)
 ```
-No new repo-root folder (entrypoint/ exists). Raw output only under `tmp/agent-parity/<round>/` (gitignored, AGENTS.md section 10). Tracked state: `entrypoint/agent-parity/ledger/<round>.json` (cap must survive a fresh checkout; atomic write + lock as in reserveModelRun; R4's ledger committed as ledger/R4.json for history). Owner approval D6 below covers the new package + tracked ledger.
+Every parity/*.mjs has line 1 `// PARITY-INSTRUMENT-ONLY`. Guarantee (structural): `parity/` is not in `tsconfig.lib.json` include, not in the build `cp` list, not in `package.json` files, not under `P/docs`, and no `.md` for it sits at the package root. Verification: the e2e test `no-publish.e2e.test.ts` (spawn, so e2e; e2e `dependsOn` already builds) walks `P/dist` and asserts no path contains `parity` and no file contains the marker, then runs `npm pack --dry-run --json` in `P/dist` and asserts the same on the file list; its negative control copies dist to a temp dir, injects `parity/x.mjs` and requires the walker to go red. Published `P/AGENTS.md` and `P/docs` get no instrument text.
 
-Language: oracle, fixtures, lib, ledger, preflight, report = TypeScript (types in src/types.ts: Observation, Expectation, FieldResult, PreflightVerdict; shared interfaces prefixed `I` per AGENTS section 9). Driver split into modules (below). Behavior-preserving port first; refactors only where a bucket says so.
+## 3. Rules the instrument enforces (owner answers)
 
-Layout (B0 creates everything; later buckets own the files listed in section 4):
-```
-entrypoint/agent-parity/
-  README.md  AGENTS.md  project.json ...(generator)
-  src/types.ts
-  src/fixtures/{scenario,expectations,hidden-suite}.ts   src/lib/*.ts   src/oracle/{index,fields,brief}.ts
-  src/driver/{cli,plan,arms-a,arms-bc,agent-def,analyze,invariants,pacing,ledger,live}.ts
-  src/gate/index.ts            (round gate: pacing + ledger + preflight, fail closed)
-  src/preflight/index.ts       (B0: stub that returns RED "not implemented"; B2 replaces)
-  src/detectors/index.ts       (B0: exports []; B2 owns)
-  src/report/{summary,grid}.ts
-  src/dryrun/ (fake claude shim, fake anthropic, egress guard)   src/info-server.ts
-  test/**  e2e/parity.e2e.test.ts
-  test/golden/{round3,r4,legacy}/**
-```
+* Runs: one run per arm per round (A, B, C), ledger cap 3. A fourth or further run needs a documented reason in LOG before it is reserved. Arm A runs first.
+* Valid iteration: if arm A fails the task (any content item red, INVALID, or a defect signal), the iteration is void and unscored: B and C are not run, nothing enters the grid as a score, LOG records the void. Quality is assessed only for groups that genuinely succeeded.
+* Success of a variant: every content item passes (automatic oracle), not INVALID, no defect signal. One red variant makes the round red.
+* Compared goal metrics, each of B and C against A of the same iteration: cost (billed, authoritative; common-card shown beside it) <= 1.02 x A, duration (wall) <= 1.02 x A, quality (R5) >= 0.98 x A. Faster, cheaper, better pass. With n=1 per arm this cannot separate noise from regression; the verdict is a fixed threshold, not a significance claim. The threshold is a function argument, never an env switch.
+* Reported only, never gating: turns, tool calls, peak context. Repeated tool errors in a run are a defect signal (R6), read as a probable test or code bug.
+* Tools: arm A uses native tools only (no instrument-added path); B and C use only agent-mcp tools or MCP servers provided as shipped. The curl allowlist and the srt example.com entry (F29) are removed from the instrument unless they are a shipped default. An arm that cannot fetch the page fails w1_web, and that is recorded as a product finding.
+* Task prompt: byte-identical text for every arm, naming no tool or method. Scope may change per round; every change is a LOG entry before the round starts (R0.AC7).
 
-## 3. Buckets (each: done-state, ACs, tests)
+## 4. Buckets (each: done-state, ACs, tests)
 
-### B0 FC6: instrument in repo (25ce70b8 AC1/AC2/AC4, 1207765d)
-Done-state: clean checkout builds `agent-parity`; `--self-check` exits 0; the round-3-red/round-4-green oracle cases are unit tests; nothing references SP.
-* B0.AC1 (25ce70b8 AC1): package scaffolded via the generator; driver, fixtures, oracle, lib, info-server, dryrun fakes ported; README covers scenario, arm definitions (A native `claude -p`, B claudecli, C anthropic), criteria-in-force history, how to run each command, cost-basis definitions, and the tmp/ output convention. No path under /private/tmp or the scratchpad remains (`rg -n "private/tmp|scratchpad" entrypoint/agent-parity` returns nothing).
-* B0.AC2 (25ce70b8 AC2): the four R4 oracle fixes (w2 null, s2 double count, h2_empty over-spec, x3 HEDGE) carried over as-is and proven: frozen R3 oracle+fixtures (SP/round4/legacy/*) kept under test/golden/legacy/ (lint-ignored, header comment says frozen on purpose), scored against SP/round4/selfcheck/round3 observations (A1,B1,B2,C1,C2 + C2-repo, 264 KB): legacy oracle RED on the named fields, current oracle GREEN. Unit test.
-* B0.AC3 (1207765d, no AC id): every R4 record needed later is captured BEFORE the scratchpad is touched: from SP/round4/live/out/runs/{A1,A2,B1,B2,C1,C2}/record.json copy only `observation`, `expected`, `score` (about 40 KB each) to test/golden/r4/<run>.json with the sha256 of the source record.json in a header; for A1 additionally a reduced stream (event type, message id, parent_tool_use_id, tool names, tool_use ids only) to test/golden/r4/A1.events.json. Secret scan (`rg -n "sk-ant|Bearer |/Users/nix"` over test/golden) returns nothing; home paths rewritten to `<HOME>`.
-* B0.AC4 (25ce70b8 AC4): ledger: per-round file, cap 6, lock, fail closed on corrupt file; a unit test cites it. `--live` can never be reached without gate/index.ts passing.
-* B0.AC5 (25ce70b8 AC2/AC4): `--self-check` = selfCheckPure() (no spawn; also the unit test) + selfCheckSpawning() (claude binary read, hidden-suite `node --test` runs, process-tree sweep; e2e only). Output lines cite ticket+AC ids.
-* B0.AC6 seams for later buckets, each fail-closed: gate/index.ts runs [pacing, ledger, preflight]; preflight stub returns RED; detectors/index.ts exports [] and analyze calls every detector.
-Lane split (ADR-0009): unit tests mock `node:child_process`, the MCP SDK client/transport, `fs` of the real HOME, and any network; they never spawn. Anything that spawns is e2e.
-Tests: unit `test/**/*.test.ts` citing `25ce70b8 AC2` etc. E2E: ONE file `e2e/parity.e2e.test.ts`, ONE shared scaffold in beforeAll (tmp dir under tmp/agent-parity/e2e-<pid>, fake HOME, isolated cwd, per ADR-0009 D3) and every surface driven in that one run: `--print-plan`, `--self-check`, hidden-suite on the fixture repo, `--live` refusal (B2 adds the preflight legs to the same file). Minimum duration: build the CLI once, one scaffold, no per-test servers. Wire an `e2e` target with `vitest.e2e.config.ts` and E2E_FILE_EXCLUDES in vite.config.ts as the agent family does (tools/vite-plugins/e2e-globs.mjs, check-lane-reachability rule 8).
-Proof (raw exit codes):
-```
-npx nx run agent-parity:lint ; echo $?
-npx nx run agent-parity:typecheck ; echo $?          # and typecheck-spec if the target exists
-npx nx run agent-parity:test ; echo $?
-npx nx run agent-parity:build ; echo $?
-node entrypoint/agent-parity/dist/src/cli.js --self-check ; echo $?     # 0
-npx nx run agent-parity:e2e ; echo $?
-```
-Verify the dist entry path with `npx nx show project agent-parity` first (agent-mcp's pattern is dist/src/index.js).
+### R0 Relocate the instrument, unpublished; ledger and gate (REPLACES B0 63c8aba2; 25ce70b8 AC1/AC2/AC4, 1207765d)
+Done: on a clean checkout `node P/parity/drive.mjs --self-check` exits 0; the R3-red/R4-green oracle cases are unit tests; nothing references SP.
+* R0.AC1 faithful behavior-preserving port as plain `.mjs`; `rg -n "private/tmp|scratchpad" P/parity` has no hit; README covers scenario, arm definitions, criteria history, commands, cost basis, tmp convention.
+* R0.AC2 the four R4 oracle fixes (w2 null, s2 double count, h2_empty over-spec, x3 HEDGE) proven against the frozen R3 oracle copied verbatim to `P/parity/golden/legacy/` (lint-ignored): legacy RED on the named fields, current GREEN.
+* R0.AC3 R4 records captured BEFORE the scratchpad is touched: `observation`, `expected`, `score` per run to `P/parity/golden/r4/<run>.json` with the sha256 of the source record.json.
+* R0.AC4 ledger: tracked `P/parity/ledger/<round>.json`, cap 3, lock, atomic write, corrupt file fails closed; fields `runs[]`, `approvedBy` (the owner message quoted), `extraRunReason` (required for run 4+), `judgeCalls[]`, `scenarioSha`, `scopeChanges[]`. `--live` without non-empty `approvedBy` refuses (a further live round must be asked for).
+* R0.AC5 NON-PUBLICATION structural guarantee of section 2.
+* R0.AC6 NON-PUBLICATION verified by `no-publish.e2e.test.ts`, including the negative control.
+* R0.AC7 scope-change gate: `gate.mjs` computes `scenarioSha` over prompts() + ticketText() + fixtures expectations; if it differs from the previous round's ledger value, every `scopeChanges[]` id must match a heading `### <id>` in LOG dated before the round's `startedAt`; otherwise refuse (exit 3, ledger untouched). Unit test with a synthetic LOG: missing entry red, entry present green.
+* R0.AC8 gate order `[pacing, ledger, scope, preflight]` fail-closed; arm A first; B/C reserved only after A's correctness passes (void rule in section 3), unit-tested with a fake A failure.
+* R0.AC9 `--self-check` = selfCheckPure() (unit, no spawn) + selfCheckSpawning() (e2e only); output lines cite ticket+AC ids.
+* R0.AC10 `npx nx run agent-mcp:lint`, `:typecheck`, `:test`, `:e2e`, `:build` exit 0; lane-reachability rule 8 passes; `eslint` and `@nx/dependency-checks` accept `P/parity/*.mjs` (an override in `P/eslint.config.mjs` is the only permitted config touch, and only if lint needs it).
+Lane split (ADR-0009): unit tests mock `node:child_process`, the MCP SDK and the network; only `*.e2e.test.ts` spawn.
 
-### B1 FC1 (+FC5 instrument defects): oracle (90758419 AC1/AC3/AC4, 25ce70b8 AC2)
-Done-state: on the frozen R4 records the oracle is red where it should be and green where the old oracle was wrong; real failures stay red.
-* B1.AC1 (90758419 AC1) q_rate definition. FAIL iff the phase-2 value is missing/wrong, or the probed rate is contaminated (unchanged: invalid). A correct value PASSES whether or not the model re-read the ticket. New informational process field `q_rate_reread` (count of phase-2 get_ticket calls; never counted in the content denominator) records re-use. Reason: re-verifying is legitimate real-world behavior (R4 B1 4.50, B2 3.00 correct, context byte-continuous).
-* B1.AC2 (90758419 AC1) continuity is then tested structurally so recall is not left unmeasured: new process field `q_context_carry`: phase-2 first-turn cache_read >= 0.9 x (phase-1 last-turn cache_read + cache_create) for A/B (R4 evidence: B1 20830 -> 20830; A2 24855 -> 24855), and for C the first phase-2 request contains the phase-1 get_ticket result. Red on a synthetic broken-carry observation.
-* B1.AC3 (90758419 AC3) x3 HEDGE: a hedge counts only when it conditions the delegation clause (same clause, at or before the delegation verb). "so you can ..." purpose clauses do not hedge; "if you can delegate ..." does. Before editing, produce a table of every R4 brief (B1,B2,C1,C2 `na`/fail, from test/golden/r4) with old and new verdict; only flips caused by the purpose-clause pattern are allowed; the table is committed as test/golden/r4/x3-briefs.md and reviewed in the PR.
-* B1.AC4 (90758419 AC3 + FC5 finding 1) s1_tests_honest scored against the VISIBLE suite at the end of phase 1 (`node --test`, what `make test` runs), the same way s2_honest already is (oracle.mjs:278). Driver captures `hidden.p1.visible` (lives in B1's scope only through fixtures/hidden-suite.ts; driver call site is B0's runHidden, so B1 owns `src/fixtures/hidden-suite.ts` and B0 leaves p1 visible capture inside that module). Legacy records without it score `invalid`, never pass. A1's R4 golden gets `hidden.p1.visible=true`, annotated "derived from stream: make test 25/25 (SP/a1p1.txt:296-315)".
-* B1.AC5 (FC5 finding 2) h2_regress counts a root cause once: it fails only when a hidden suite that PASSED at end of phase 1 FAILS at end of phase 2. A1: feature red in both phases -> not a regression -> pass; h1_feature stays the single red for that cause.
-* B1.AC6 (FC5 finding 3) x2_parallel for arm A scored by outcome like B/C: two child runs overlap if their events interleave in stream order (events of child 2 appear between first and last event of child 1, keyed by parent_tool_use_id) or, when timestamps exist, if intervals intersect; "same assistant message" remains sufficient but not required. Native Agent returns "Async agent launched" instantly, which defeats the outstanding-counter (lib.mjs:401-413). A1 (two messages, interleaved children) -> pass; a synthetic strictly sequential A run -> fail (negative control).
-* B1.AC7 must-stay-red: A1 h1_feature, h2_empty, s2_honest stay RED (real model variance); B1/B2 w1_web stays red on the R4 records (they ran before the egress fix). Test asserts these exact fields so the fixes cannot launder real failures.
-* B1.AC8 (90758419 AC4) every new case's description cites `90758419 AC<n>` (or `25ce70b8 AC2`); each case has a red-then-green pair: frozen R4 oracle (test/golden/r4/oracle.r4.frozen.mjs, copied verbatim from SP/round4/oracle.mjs before edits) RED on the record, new oracle GREEN.
-Proof: `npx nx run agent-parity:test ; echo $?` (0) plus `node entrypoint/agent-parity/dist/src/cli.js --check-oracle ; echo $?` (0). Teeth: temporarily revert the q_rate rule in a throwaway copy and show the B1/B2 case turns red (recorded in the PR, not committed).
+### R1 Oracle fixes FC1 + FC5 (AMENDS B1 7fa23e51; 90758419 AC1/AC3/AC4, 25ce70b8 AC2)
+Done: on the frozen R4 records the oracle is red where it should be and green where the old oracle was wrong.
+* R1.AC1 q_rate FAILs only when the phase-2 value is missing/wrong or contaminated (invalid); a correct value passes whether or not the ticket was re-read; new informational `q_rate_reread`.
+* R1.AC2 `q_context_carry`: phase-2 first-turn cache_read >= 0.9 x (phase-1 last-turn cache_read + cache_create) for A/B; for C the first phase-2 request contains the phase-1 get_ticket result; red on a synthetic broken-carry observation.
+* R1.AC3 x3 HEDGE counts only when it conditions the delegation clause; committed table `golden/r4/x3-briefs.md` of old vs new verdicts for B1,B2,C1,C2.
+* R1.AC4 s1_tests_honest scored against the VISIBLE suite at end of phase 1; legacy records without `hidden.p1.visible` score invalid, never pass.
+* R1.AC5 h2_regress counts a root cause once.
+* R1.AC6 x2_parallel for arm A by outcome (interleaved children by parent_tool_use_id); sequential A run is the negative control.
+* R1.AC7 must-stay-red on R4 records: A1 h1_feature, h2_empty, s2_honest; B1/B2 w1_web.
+* R1.AC8 every case cites `90758419 AC<n>` or `25ce70b8 AC2` and has a frozen-oracle RED / new-oracle GREEN pair.
+Write-scope: `P/parity/oracle.mjs`, `P/parity/golden/r4/**` (adds), `P/src/parity-instrument/oracle-r1.test.mjs`. Depends on R0.
 
-### B2 FC3 + FC2: zero-model egress preflight (50e21ed9 AC2, 0ba70e47 AC1, 90758419 AC2)
-Design:
-* B2.AC1 (50e21ed9 AC2, 0ba70e47 AC1) Done-state: `agent-parity preflight` drives the built stack through the real srt path with no model call, exits 0 only if the page came back, and `--live` runs it first and refuses on red. Running it on the dev box verifies the 0.0.4 egress fix live (FC2) without a round.
-* B2.AC2 Real MCP client, not an import of server code: resolve `resolveNativeTooling` from the module agent-mcp's dist actually loads (`createRequire(<wt>/entrypoint/agent-mcp/dist/src/index.js).resolve('@adhd/agent-core-native-tooling')`; record resolved version, expect >= 0.0.4), call it with the exact B/C shell config (`nativeTooling.shell = { allowCommands: SHELL_ALLOW }`, sandbox on, `ADHD_AGENT_SRT_SETTINGS` = the per-run srt policy that already allows example.com), spawn the returned command/args/env with the official SDK `StdioClientTransport` + `Client`, `listTools`, then `callTool shell_execute` argv `["curl","-sS","--max-time","15","-L","<targetUrl>"]`.
-* B2.AC3 Legs: B and C share one launch literal (provider-independent resolver); the preflight resolves once per provider type and asserts deep-equal (if they ever diverge each gets its own server). Leg A: the same curl argv spawned directly with arm A's cleaned env (Bash on arm A is unsandboxed). With FC4 option O1 there is no server-side fetch left to test; under any option that keeps C's web_fetch it cannot be preflighted at zero model cost and the report says so.
+### R2 Web-path preflight and silent-egress detector (AMENDS B2 e593b916; 50e21ed9 AC2, 0ba70e47 AC1, 90758419 AC2)
+Done: before a live round, every shipped web path that can be probed with zero model calls is probed and must return the page; paths that cannot be probed are named and covered by the detector; a live round refuses on red.
+* R2.AC1 spike table (committed in README): per arm (A native toolset, B agent-mcp claudecli, C agent-mcp anthropic) what web tool the shipped configuration exposes and whether a zero-model probe exists. Unknown until measured (U5); C's server-side web_fetch is not probeable at zero model cost.
+* R2.AC2 for each probeable path: real MCP client (SDK `Client` + `StdioClientTransport`) against the built agent-mcp stack as shipped, no instrument-added allowlist entry or srt domain; `listTools` then one call to the fetch tool against the target URL.
+* R2.AC3 asserts per leg: tool listed; `isError` false; text >= 200 bytes; contains `<title>Example Domain</title>`; wall > 150 ms.
+* R2.AC4 FALSE-EMPTY: blank content with isError false is RED `EMPTY_FALSE_SUCCESS`; `curl: (6)`/"Could not resolve"/"blocked" is RED `EGRESS_DENIED`. Codes: GREEN, LAUNCH_FAIL, EMPTY_FALSE_SUCCESS, TOOL_ERROR, MARKER_MISSING, EGRESS_DENIED, TIMEOUT, NOT_PROBEABLE.
+* R2.AC5 CLI exit 0 only if every probeable leg is GREEN, else 3 (usage 2); JSON verdict on stdout.
+* R2.AC6 receipt `tmp/agent-mcp/parity/<round>/preflight-receipt.json` with agent-mcp dist sha, native-tooling version, srt version, policy sha, targetUrl, marker.
+* R2.AC7 `--live --yes` runs the preflight BEFORE pacing and BEFORE any ledger reservation; red -> exit 3, ledger byte-identical, a `claude` shim on PATH proves zero spawns.
+* R2.AC8 detector (`detectors.mjs`, egress-silent-empty): any web tool result (shipped fetch tool of any arm) that is blank with isError false marks that run's w1_web INVALID(egress) with call ids; tested red on a synthetic log shaped like R4 B1 api log lines 110-118.
+* R2.AC9 `PreflightSpec { targetUrl, marker, minBytes, minWallMs, worktree, timeoutMs }` is a function argument; no env flag toggles anything.
+* R2.AC10 unit table test (mocked SDK/child_process, no network): every verdict code and exit mapping.
+* R2.AC11 e2e GREEN against a local HTTP parentProxy stub (technique of shell-egress.e2e.test.ts; srt refuses loopback targets), where a probeable shell path exists as shipped.
+* R2.AC12 e2e NEGATIVE CONTROL: strip `MCP_SHELL_CHILD_ENV_ALLOWLIST` from the resolved env, the same call must be RED.
+* R2.AC13 missing srt/uvx fails loudly in beforeAll (no skip).
+* R2.AC14 operator proof (needs internet, not CI): `node P/parity/drive.mjs preflight ; echo $?` prints 0 on real example.com; paste the exit status into LOG.
+(Old B2.AC1-AC22 map: AC1-AC3 -> R2.AC1-AC2, AC4-AC12 -> AC3-AC5, AC13 -> AC6, AC14 -> AC7, AC15 -> AC8, AC16 -> AC9, AC17-AC21 -> AC10-AC13, AC22 -> AC14.)
+Write-scope: `P/parity/preflight.mjs`, `P/parity/detectors.mjs` (egress detector), `P/src/parity-instrument/preflight.test.mjs`, `P/src/parity-instrument/preflight.e2e.test.ts`. Depends on R0, R3.
 
-Asserts per leg (all must hold; each is one criterion):
-* B2.AC4 (1) launch ok and tool `shell_execute` listed.
-* B2.AC5 (2) result `isError` false.
-* B2.AC6 (3) text content non-empty, >= 200 bytes.
-* B2.AC7 (4) contains `<title>Example Domain</title>` (marker constant lives in fixtures WEB_HEADING).
-* B2.AC8 (5) wall time > 150 ms (R4's silent failures returned in 13-23 ms; a real TLS fetch cannot).
-* B2.AC9 (6) FALSE-EMPTY rule: `content == [] or all-blank` with `isError:false` is RED (code EMPTY_FALSE_SUCCESS), the exact R4 signature.
-* B2.AC10 (7) a `curl: (6)` / "Could not resolve" / "blocked" in text is RED (code EGRESS_DENIED).
-* B2.AC11 Verdict codes: GREEN, LAUNCH_FAIL, EMPTY_FALSE_SUCCESS, TOOL_ERROR, MARKER_MISSING, EGRESS_DENIED, LITERAL_DIVERGED, TIMEOUT.
-* B2.AC12 CLI exit 0 only if every leg GREEN, else 3 (usage errors 2). JSON verdict on stdout, human line per leg on stderr.
-* B2.AC13 Receipt written to tmp/agent-parity/<round>/preflight-receipt.json with identity {agent-mcp dist sha, native-tooling version, srt version, policy sha, SHELL_ALLOW sha, targetUrl, marker}.
-* B2.AC14 Driver refusal: `--live --yes` runs the preflight BEFORE pacing and BEFORE any ledger reservation; red -> print leg verdicts, exit 3, ledger untouched, claude never spawned.
-* B2.AC15 (50e21ed9 AC2) Second line of defense: `src/detectors/egress-silent-empty.ts` scans each run's tool-call log; any shell curl result that is `content:[]`/blank with isError false marks that run's `w1_web` INVALID(egress) with the call ids, instead of letting the model's fabrication score as a model fail (R4 B1/B2 signature). Tested red on a synthetic log shaped like the R4 B1 api log lines 110-118. Detector unit test cites `50e21ed9 AC2`.
-* B2.AC16 Config: `PreflightSpec { targetUrl, marker, minBytes, minWallMs, policyPath, allowCommands, worktree, timeoutMs }` is a function argument; no env flag toggles anything and the CLI has no test-only flags.
+### R3 One prompt, shipped tools only (REPLACES B3 6865f7ce / FC4 O1; 50e21ed9 AC2, 9063acac)
+Done: phase-1 and phase-2 prompt text is byte-identical across arms and names no tool or method; A runs native tools only; B and C run agent-mcp tools or provided MCPs as shipped.
+* R3.AC1 phase-1 text no longer opts out: "fetch it yourself if you have a way to" becomes "read the web page the ticket links to"; `web_heading` loses "or null if you could not fetch it". Scenario change -> LOG entry first (R0.AC7).
+* R3.AC2 unit test: one prompt string for A, B, C (same sha) and no match for `/curl|WebFetch|web_fetch|web_search|WebSearch|shell|Bash|browse/i`.
+* R3.AC3 `SHELL_ALLOW` loses `curl`, `SRT_EXTRA_DOMAINS` loses example.com, `A_TOOLS` is the native default toolset; unit test on the produced agent definitions: C does not set `nativeWebTools:false`, B/C `nativeTooling.shell.allowCommands` contains no `curl|wget`. If a shipped default grants curl or example.com, the test names that default and cites its source line.
+* R3.AC4 `webCapability()` no longer exempts any arm: w1_web is scored for every arm; an arm that cannot fetch fails w1_web and `record.webFinding = "arm cannot fetch"` is written (a product finding, not an instrument defect).
+* R3.AC5 each run records `webSurface` (the tool names actually exposed), reported not scored.
+* R3.AC6 README "web surface" section lists the per-arm shipped surface with source citations.
+Write-scope: `P/parity/fixtures.mjs` (prompts, ticketText), `P/parity/drive.mjs` (agentDef, A_TOOLS, SHELL_ALLOW, SRT_EXTRA_DOMAINS, webCapability), `P/src/parity-instrument/web-surface.test.mjs`. Depends on R0.
 
-Tests:
-* B2.AC17 (90758419 AC2, 50e21ed9 AC2, 0ba70e47 AC1) Unit (`test/preflight.test.ts`, mocks `@modelcontextprotocol/sdk` client/transport and `node:child_process`, no network): table of tool results -> verdict code, covering every code incl. `{content:[],isError:false}` -> EMPTY_FALSE_SUCCESS, 20 ms wall -> RED, launch literal B != C -> LITERAL_DIVERGED, exit-code mapping 0/3.
-* B2.AC18 E2E, same `e2e/parity.e2e.test.ts` and scaffold (no third-party network, no skip): local HTTP stub as srt `network.parentProxy` answering allowed.test with a known body (technique documented in shell-egress.e2e.test.ts: srt refuses loopback targets). Case: GREEN preflight against the stub (B/C share one real uvx mcp-shell-server start).
-* B2.AC19 E2E NEGATIVE CONTROL: same call with `MCP_SHELL_CHILD_ENV_ALLOWLIST` stripped from the resolved env must be RED (proves the gate has teeth and would have caught R4).
-* B2.AC20 E2E zero-spawn proof: `--live --yes` with the control config exits 3, ledger file byte-identical, and a `claude` shim on PATH that appends to a file proves zero spawns (file absent).
-* B2.AC21 Missing srt/uvx fails loudly in beforeAll.
-* B2.AC22 Operator proof of FC2 (not a CI test; needs internet): `node entrypoint/agent-parity/dist/src/cli.js preflight ; echo $?` must print 0 with real example.com. Paste that exit status into the experiment log.
-Proof: `npx nx run agent-parity:test ; echo $?`, `npx nx run agent-parity:e2e ; echo $?`, the operator command above.
+### R4 Metric model and verdict (NEW)
+Done: `node P/parity/drive.mjs verdict --round R<n>` prints, for B and C against A of the same iteration, cost ratio, duration ratio, quality ratio, PASS/FAIL per goal metric, and the report-only columns.
+* R4.AC1 gates: cost (billed) <= 1.02, duration <= 1.02, quality >= 0.98, all relative to A; thresholds are function arguments.
+* R4.AC2 turns, tool calls, peak context emitted as report-only; a unit test proves no code path fails a round on them.
+* R4.AC3 void rule: A not genuinely successful -> verdict `VOID`, no ratios.
+* R4.AC4 golden test on R4 (duration and cost only, quality is absent there): wall B 1.41 FAIL, C 1.77 FAIL; billed cost B 1.059 FAIL, C 0.927 PASS; common-card basis shown alongside.
+* R4.AC5 per-run duration decomposition recorded: time to first model event, summed model time, summed tool time, phase 1 vs phase 2, per-call time to first byte for A and B and C where the stream exposes it (input to R8).
+* R4.AC6 the verdict states plainly "n=1 per arm; fixed threshold, no significance claim".
+* R4.AC7 an extra run (ledger run 4+) is excluded from the verdict unless its `extraRunReason` is set.
+Write-scope: `P/parity/metrics.mjs`, `P/parity/lib.mjs` (cost/duration accessors), `P/src/parity-instrument/metrics.test.mjs`. Depends on R0, R5.
 
-### B3 FC4: web-tool symmetry (50e21ed9 AC2, 9063acac) , OWNER-GATED (D1)
-Current surface: A `--tools Bash,Read,Write,Edit,Glob,Grep,Agent` (no WebFetch; fetches by Bash curl, unrestricted). B claudecli `--tools ''` + shell builtin curl (allowlist, srt). C server-side web_search/web_fetch (default-on) plus shell curl; those add about 2.2k tokens per turn (9063acac; final-report-2: C-shell 0.56x vs 0.36x with `nativeWebTools:false`).
-Options:
-* O1 (RECOMMENDED): every arm fetches via curl; arm C gets `nativeWebTools:false`. Pros: identical tool surface and web path, so w1_web is like-for-like; only path the zero-model preflight can fully prove (all arms covered); removes the ~2.2k/turn overhead from the context/cost bands; a small, existing, tested knob. Cons: C is measured in a non-default config, so the result says nothing about the shipped default (whether the default should change is 9063acac, a separate owner decision); the cost/ctx verdict for C shifts favorably and must be labeled "C, web tools off".
-* O2: give A and B an equivalent hosted fetch. A: add WebFetch to `--tools` (its fetch involves an extra small-model call that A then bills); B: no mechanism today (`--tools ''`, bridge-only), needs a product change. Pros: keeps C default. Cons: new asymmetries, hidden model calls in A, product work, cannot be preflighted at zero model cost.
-* O3: keep each arm as shipped; add a `webSurface` column and score w1_web conditionally; run a second C config in a later round. Pros: no code change, honest about defaults. Cons: w1_web not like-for-like; cost/ctx comparison conflates web overhead with provider overhead; extra C runs exceed the 6-run per-round cap.
-ACs (for O1; O2/O3 get their own list if chosen): B3.AC1 (50e21ed9 AC2) agent-def sets `nativeWebTools:false` for arm C only, covered by a unit test on the produced agent definition; B3.AC2 run-validity invariant (like the thinking invariant): any observed web_search/web_fetch/WebFetch/WebSearch tool name in any arm marks the run INVALID, unit-tested red on a synthetic C log (C1 R4 api log shows a web_fetch result "Example Domain" as the red fixture); B3.AC3 README matrix of tool surface per arm; B3.AC4 e2e (same file): resolved agent definition sent to a fake provider shows no web tool entry for C. Proof: `npx nx run agent-parity:test ; echo $?`, `npx nx run agent-parity:e2e ; echo $?`.
+### R5 Quality: blind judge over a multi-quality rubric (NEW; replaces any deterministic quality score)
+Done: for an iteration where A and the arm genuinely succeeded, a blind judge scores code output AND transcript/reasoning on the rubric; quality is the unweighted mean; correctness stays automatic (the oracle).
+Rubric (each quality scored 1-100 as an integer):
+ 1 spec_conformance (code does what the task spec requires, including edge cases it names), 2 code_clarity (readability, naming, structure), 3 change_discipline (minimal, in-scope diff; no collateral edits), 4 verification (tests run and not weakened; claims checked), 5 docs_quality (shipping doc, CHANGELOG entry, usage examples are accurate and useful), 6 reasoning_soundness (transcript: root cause found by evidence, sound decomposition and delegation), 7 transcript_focus (no thrash, repeated dead ends, or redundant exploration), 8 report_fidelity (final summary claims match the artifacts).
+* R5.AC1 judge brief (blind): the judge receives ONLY (a) the task spec: both prompt texts and the ticket text, verbatim; (b) the artifact: unified diff of the final repo against the scenario start plus new files; (c) the transcript normalized to role, text, tool category (shell/read/write/search/delegate/web) and results. Never given: arm id, provider, model, tool names that identify an arm, oracle results, cost, duration, thresholds, the other arm's output, or any instrument context. Arm labels are random per judging.
+* R5.AC2 normalizer strips identifying tokens (`claudecli`, `anthropic`, `agent-mcp`, `claude -p`, `mcp__`, session ids, model ids, CLI banners, tool-name spellings) and a unit test asserts the brief for every R4 golden contains none of them.
+* R5.AC3 judge output contract: one JSON object `{ "scores": { "<quality>": <int 1-100>, ... }, "notes": { "<quality>": "<one sentence>" } }` with exactly the 8 keys; parser rejects missing/extra/duplicate keys, non-integers, values < 1 or > 100, and text outside the JSON.
+* R5.AC4 aggregator: quality = mean of the 8 scores; ratio = arm quality / A quality; verdict gate in R4.AC1; per-quality scores always reported. Gate is on the aggregate (U6: owner may instead want every quality >= 0.98 x A).
+* R5.AC5 judge model: claude-sonnet (pinned model id recorded in the judge record). Reason: cheapest tier that is not the subject model (the arms run claude-haiku-4-5, and a judge at the subject's tier cannot reliably assess it); judge is invoked at temperature 0 where the API allows.
+* R5.AC6 judge calls are paid third-party calls: one call per judged arm per iteration (A, B, C, at most 3 per round); each logged in the ledger (`judgeCalls[]`: arm, model id, input/output tokens, cost) and in LOG; judge cost is excluded from the arm cost metric. Judge calls are not agent runs and do not consume the run cap, but are capped at 3 per round without a documented reason.
+* R5.AC7 the judge runs only after the oracle passes for A and for the judged arm (genuine success, no INVALID, no defect signal) and only when A passed; otherwise no judge call is made and quality is `n/a` (void or red arm).
+* R5.AC8 judge is invoked only by the driver in a live round (paid third-party exception; no env flag). Documented with the owner named in P/parity/README.md, the driver header and LOG (not in P/AGENTS.md, which is published).
+* R5.AC9 deterministic fixture tests, no live judge anywhere in unit or e2e: valid fixtures aggregate to known means; each malformed output class of AC3 is rejected with a distinct error code; ratio boundary cases 0.979 (FAIL), 0.98 (PASS), 1.0, 1.2.
+* R5.AC10 blindness test: brief builder run on all R4 goldens in both arm orders yields identical briefs modulo the random label.
+* R5.AC11 teeth: a mutated parser that accepts out-of-range scores turns AC9 red (recorded in the PR, not committed).
+* R5.AC12 judge record stores the exact brief hash and raw judge response in `tmp/agent-mcp/parity/<round>/judge/<arm>.json`.
+Write-scope: `P/parity/quality.mjs` (rubric, parser, aggregator), `P/parity/judge.mjs` (brief builder, normalizer, call), `P/src/parity-instrument/quality.test.mjs`. Depends on R0.
 
-### B4 grid: variant result includes its score (owner direction)
-* B4.AC1: `renderGridCell(record)` returns `🟢 17/17` (all content items pass), `🔴 15/17`, `🟡 9/17` while running when a partial score exists else `🟡`, `⚪` not started; invalid runs `⛔ n/a`. Score = content items passed / content items applicable (denominator printed, since it differs across rounds). Unit table test, cites `25ce70b8 AC1`.
-* B4.AC2: `cli grid --round R5` prints the section-2 row of EXPERIMENT-LOG (six cells) from tmp/agent-parity/<round>/ records, so the dispatcher pastes it instead of hand-typing. Unit test with the R4 goldens must output `🔴 12/17 | 🟢 17/17 | 🔴 15/17 | 🔴 15/17 | 🟢 17/17 | 🟢 17/17` for A1 A2 B1 B2 C1 C2 (note: B1/B2 become 16/17 after B1.AC1; the test pins the recomputed values after the fix, and the old-oracle values via the frozen oracle).
-Proof: unit test exit 0.
+### R6 Repeated-tool-error defect signal (NEW)
+Done: a run with repeated tool errors is flagged DEFECT_SIGNAL with call ids and is not a success.
+* R6.AC1 PROPOSAL (thresholds not derived from repo data): flag when the same tool with normalized args returns isError >= 3 times, or isError rate > 25% over >= 8 calls.
+* R6.AC2 red on a synthetic log; the result on the R4 goldens (including C1's tasks_batch rejections) is stated, not assumed.
+* R6.AC3 the flag text reads "suspect a test or code bug", never "model failure".
+Write-scope: `P/parity/detectors.mjs` (tool-error detector; edited after R2 merges), `P/src/parity-instrument/tool-errors.test.mjs`. Depends on R0, R2.
 
-## 4. Write scopes (declared up front; disjoint among parallel buckets), executor, tier, order
+### R7 Grid and report (AMENDS B4)
+Done: the LOG section-2 row renders icon + score per variant and the three goal-metric verdicts for B and C.
+* R7.AC1 `renderGridCell`: 🟢 17/17, 🔴 15/17, 🟡 running, ⚪ not started, ⛔ n/a invalid, `VOID` for a void iteration; a defect-signal variant is 🔴.
+* R7.AC2 `grid --round` output equals the LOG row built from the R4 goldens (recomputed values pinned after R1).
+* R7.AC3 per-arm line `cost +x% / dur +y% / Q z%` from R4.
+Write-scope: `P/parity/grid.mjs`, `P/src/parity-instrument/grid.test.mjs`. Depends on R4, R5, R6.
 
-| Bucket | Executor | Model tier | Write scope (exclusive) | After |
-|---|---|---|---|---|
-| B0 | typescript (port) , fan-out per module via pipeline(): fixtures, lib, oracle, driver modules (each an independent bounded dispatch, shared src/types.ts written first) | sonnet | entrypoint/agent-parity/** (generator output), tsconfig.base.json only if the generator edits it | none |
-| B1 | typescript | sonnet | src/oracle/**, src/fixtures/hidden-suite.ts, src/fixtures/expectations.ts, test/oracle/**, test/golden/r4/** (adds only), CHANGELOG-free | B0 |
-| B2 | backend | sonnet | src/preflight/**, src/detectors/** (index.ts ownership transfers from B0), src/gate/preflight-gate.ts, test/preflight*.test.ts, e2e/parity.e2e.test.ts (preflight describe blocks appended; B0 owns the file's first blocks, B2 appends only after B0 merged, so single-writer at a time) | B0 |
-| B3 | backend | haiku (tiny, exact steps) after D1 | src/driver/agent-def.ts, src/driver/invariants.ts, README "web surface" section, test/web-surface.test.ts | B0, D1 |
-| B4 | typescript | haiku | src/report/grid.ts, src/driver/cli.ts (one added command case), test/report/grid.test.ts | B0 |
-Order: B0 -> {B1, B2, B4, B3} in parallel (file-disjoint: oracle / preflight+detectors+gate / report+cli / agent-def+invariants; e2e file appended by B2 and B3 sequentially: B3 after B2 for that file, or B3 adds its case in its own `e2e/web-surface.e2e.test.ts` to keep scopes disjoint; choose the latter) -> integration by the dispatcher.
-Integration gate (dispatcher, after merges): `npx nx affected -t lint,typecheck,typecheck-spec ; echo $?`; `npx nx run agent-parity:e2e ; echo $?`; pre-push test gate `npx nx affected --base=origin/main --head=HEAD $(node .githooks/lib/pre-push-flags.mjs) ; echo $?`; operator `agent-parity preflight ; echo $?` on the real network; `git status --porcelain` accounted for. Every executor's final message carries a `Gates:` list with command + exit code (AGENTS.md).
-Dispatch hygiene: B0 spans many files, so fan out one bounded dispatch per module; no executor loops over the whole port in one context.
+### R8 Duration slot (NEW; blocked on the `debug` finding)
+Debug finding (summary, no fix designed here): there is no single defect. Contributors are the model-turn count and per-call latency; the parent blocks on synchronous `task`/`tasks_batch` while native uses background subagents; failed tool calls and retries; and run-to-run variance. Arm C's per-call latency is unexplained pending per-call time to first byte for A and B.
+* R8.AC1 instrument supplies the data the finding awaits: per-call TTFB for A and B and C in the run record (provided by R4.AC5).
+* R8.AC2 each contributor above is attributed in the next round's record with seconds per contributor (turns x mean call latency, parent-blocked time on task/tasks_batch, time in failed calls and retries), so a fix is chosen on evidence.
+* R8.AC3 goal: R4 duration ratio for B and C <= 1.02 on an approved round; whatever change achieves it gets its own bucket and ACs after the finding is complete.
+Write-scope: instrument side only (`P/parity/lib.mjs` timing capture, shared with R4); product changes are out of this bucket. Depends on the debug finding, R4.
 
-## 5. Round-readiness forecast after these land
-Resolved by code: FC1, FC3, FC6, the three FC5 instrument defects, FC2 (verified live by the operator preflight, which must be pasted green into the log before R5 is declared). Still open and NOT code: FC4 (D1), FC7 (D2), FC8 (success definition), FC5 model variance (A1 can fail again). A non-empty forecast keeps R5 held per log section 0.4. Additional preemptive forecasts: (a) uvx/PyPI first-start latency inside preflight (timeout 120 s, same as the existing e2e STARTUP_MS); (b) srt policy drift between preflight and run (identity hash in the receipt, re-checked by gate); (c) A leg passes while B leg fails is a valid outcome and still blocks the round; (d) the egress detector protects mid-round hiccups only for w1_web, not other fields.
+### R9 Product fix: tasks_batch strict parse (NEW; backlog id to be assigned by backlog-operator, `<TASKS-BATCH-TICKET>`)
+Evidence: R4 C1 sent `concurrency: "2"` (string) and `prompts` as a stringified array; `P/src/server.ts:595-597` `tasksBatchInputSchema.parse(args)` rejected it, costing 3 failed turns (about 9-10 s).
+* R9.AC1 `tasksBatchInputSchema.parse` accepts `concurrency` given as a base-10 integer string and returns the number (`"2"` -> 2).
+* R9.AC2 it accepts `prompts` given as a JSON string that decodes to a non-empty array of non-empty strings and returns the array.
+* R9.AC3 unchanged rejections: `concurrency` "abc", "2.5", "0", "-1", "65"; `prompts` string that is not a JSON array or decodes to an empty array or contains an empty string; native values behave exactly as before (number 2, real array).
+* R9.AC4 the exact R4 C1 argument shape (stringified concurrency and stringified prompts plus `agent_name`) parses and `tasksBatch` receives `concurrency: 2` and the decoded array.
+* R9.AC5 the `tasks_batch` entry advertised by `tools/list` still describes `concurrency` as an integer and `prompts` as an array (test compares the advertised schema before and after, if it is derived from the zod schema; if not derived, the test states so).
+* R9.AC6 red-then-green: the unit test `describe('<TASKS-BATCH-TICKET> AC1-AC5 ...')` fails on the current strict schema and passes after the change; an e2e case (`*.e2e.test.ts`, real MCP client against the built server, isolated cwd and fake HOME) calls `tasks_batch` with the R4 C1 shape and asserts the result is not an error.
+Write-scope: `packages/agent/agent-engine-orchestrator/src/validation/task.ts` (tasksBatchInputSchema only), a colocated spec file in that package following its existing convention (confirm with `rg --files -g '*.spec.ts' packages/agent/agent-engine-orchestrator/src/validation`), `P/src/server.ts` only if the parse call site must change, `P/src/__tests__/tasks-batch-string-args.e2e.test.ts`. Gate: `npx nx affected -t lint,typecheck,typecheck-spec,test` because the orchestrator package has dependents (AGENTS.md section 5). This bucket changes shipped product code and needs the full release path; it is independent of R0-R8 and can start now.
 
-## 6. FC7 options for the owner (not chosen)
-Content band "equal or better", context and cost "at or below native":
-* N1 Point estimate, no tolerance: arm median content >= A median; ctx <= A median; cost <= A median. Literal reading. R4 would fail B cost by +0.5% (noise).
-* N2 Tolerance band: content >= A median minus 1 item (about 6%); ctx and cost <= 1.05 x A median; latency reported, not gated. Pros: tolerates measurement noise at the scale seen (A cost per-run spread 0.171-0.205, 18%; A content 12 and 17). Cons: 5% is still below A's own n=2 spread, so a verdict can flip on resampling.
-* N3 Noise-aware: n >= 5 per arm per scenario shape (exceeds the 6-run per-round cap, so 2-3 rounds), pass iff the bootstrap upper bound of (arm median - A median)/A is <= +5% for ctx and cost and the lower bound >= -1 item for content. Pros: only option that supports a statistical claim; cons: paid runs and the cap.
-Cost basis (R4 numbers): common-card estimate (all cache writes at 5m rate; A 0.1877, B +0.5%, C +3.1%) vs billed (A from CLI total_cost_usd, B/C tier-aware; A 0.2088, B +5.9%, C -7.3%). The verdict for C flips. Choices: (i) gate on common-card (reproducible, provider-neutral, undercharges the 1h cache tier), (ii) gate on billed (what is actually paid), (iii) gate on billed, report common-card informationally. 
-Latency stance: L1 not a criterion, report medians (R4 B +41%, C +77%); L2 gate wall <= 1.25 x A median; L3 gate only agent-mcp overhead (wall minus summed model-call time) <= a fixed seconds budget. These interact with D1: O1 lowers C's context and cost, so fix D1 before reading any band verdict.
+## 5. Write scopes, executors, order
+
+| Bucket | Executor / tier | Exclusive write scope | After |
+|---|---|---|---|
+| R0 | typescript, sonnet, fan out one bounded dispatch per module (fixtures, lib, oracle, driver, ledger/gate) | `P/parity/**` (port, ledger, gate, README, golden), `P/src/parity-instrument/{oracle,lib,ledger,gate}.test.mjs`, `no-publish.e2e.test.ts`, `parity.e2e.test.ts`, `P/eslint.config.mjs` only if lint needs it | none |
+| R1 | typescript, sonnet | `P/parity/oracle.mjs`, `P/parity/golden/r4/**`, `oracle-r1.test.mjs` | R0 |
+| R2 | backend, sonnet | `P/parity/preflight.mjs`, `P/parity/detectors.mjs`, `preflight.test.mjs`, `preflight.e2e.test.ts` | R0, R3 |
+| R3 | typescript, sonnet | `P/parity/fixtures.mjs`, `P/parity/drive.mjs` (agent definitions), `web-surface.test.mjs` | R0 |
+| R4 | typescript, sonnet | `P/parity/metrics.mjs`, `P/parity/lib.mjs`, `metrics.test.mjs` | R0, R5 |
+| R5 | typescript, sonnet | `P/parity/quality.mjs`, `P/parity/judge.mjs`, `quality.test.mjs` | R0 |
+| R6 | typescript, haiku | `P/parity/detectors.mjs` (after R2), `tool-errors.test.mjs` | R0, R2 |
+| R7 | typescript, haiku | `P/parity/grid.mjs`, `grid.test.mjs` | R4, R5, R6 |
+| R8 | blocked on `debug` | see R8 | debug finding, R4 |
+| R9 | typescript, sonnet | see R9 | none |
+Order: R0 -> {R1, R3, R5} in parallel -> {R2, R4} -> R6 -> R7; R8 after the debug finding; R9 any time. No bucket runs a live round.
+Integration gate (dispatcher, after merges): `npx nx affected -t lint,typecheck,typecheck-spec ; echo $?`; `npx nx run agent-mcp:e2e ; echo $?`; pre-push `npx nx affected --base=origin/main --head=HEAD $(node .githooks/lib/pre-push-flags.mjs) ; echo $?`; operator `node P/parity/drive.mjs preflight ; echo $?` on the real network; `git status --porcelain` accounted for. Every executor's final message carries a `Gates:` list with command + exit code.
+
+## 6. Round-readiness forecast after these land
+Resolved by code: FC1, FC3, FC6, the three FC5 defects, FC4 (R3), the success and metric definitions (section 3, R4), quality (R5). Still open and NOT code: model variance (A can fail; then the iteration is void and costs one run), R8 duration (B +41%, C +77% in R4 would fail the 1.02 gate), the web path when an arm cannot fetch as shipped (a product finding that keeps the round red). A non-empty forecast keeps R5 held per LOG section 0.4. Further forecasts: (a) uvx/PyPI first-start latency inside the preflight (timeout 120 s); (b) srt policy drift between preflight and run (identity hash in the receipt, re-checked by the gate); (c) judge variance at n=1, which the fixed threshold does not absorb; (d) the egress detector protects only web results, not other fields.
 
 ## 7. Open owner decisions
-* D1 FC4 web symmetry: O1 (recommended) / O2 / O3.
-* D2 FC7 bands: N1/N2/N3, cost basis (i/ii/iii), latency L1/L2/L3.
-* D3 prompt: add one sentence for the web item, e.g. "If you cannot fetch the page, write `Source: (not fetched)` and report web_heading null" (90758419 finding 6; B invented a heading in R4). Changes the scenario text, so R5 is not byte-comparable with R2-R4 on that item.
-* D4 ticket wording (FC5): the A1 variance came from the parent not reading summary.js; the ticket text stays untouched. Option only: add an explicit "keep existing return properties" line to the ticket. Not recommended: it makes the task easier for every arm and hides the brief-fidelity signal the scenario exists to measure.
-* D5 tracked per-round ledger under entrypoint/agent-parity/ledger/ (recommended) vs gitignored (cap resets on a fresh checkout).
-* D6 approve the new private package `entrypoint/agent-parity` (section 2).
-* Out of scope here: BK5 625b611e gate text (25ce70b8 AC3) pending D2; F32 exit status (0ba70e47 AC2, upstream PR tumf/mcp-shell-server#61); FC5/FC8 model variance.
+* U5 R2.AC1: whether a zero-model probe exists for the shipped web path of A and B is unknown until the spike runs.
+* U6 R5.AC4: quality gate on the aggregate (specified) or on every one of the 8 qualities >= 0.98 x A.
+* U7 R5.AC5: judge model tier claude-sonnet (specified); owner may name another.
+* U8 arm A first (specified, needed for the void rule) removes the randomized arm order of R2-R4; order effects are accepted.
+* D4 ticket wording (FC5): unchanged; adding "keep existing return properties" would make the task easier for every arm and hide the brief-fidelity signal.
+* Out of scope: BK5 625b611e gate text (25ce70b8 AC3) now follows from section 3; F32 exit status (0ba70e47 AC2, upstream PR tumf/mcp-shell-server#61).
 
 ## 8. Unfiled items this spec surfaces (dispatcher to file via backlog-operator)
-* Ticket 1207765d and 9063acac carry no ACs (tests cite bucket ids).
+* R9 tasks_batch strict parse (new bug; evidence in section 1).
+* Tickets 1207765d and 9063acac carry no ACs (tests cite bucket ids).
 * llms.txt Gemini/version staleness (from SP/parity-critical-path.md) remains unfiled.
