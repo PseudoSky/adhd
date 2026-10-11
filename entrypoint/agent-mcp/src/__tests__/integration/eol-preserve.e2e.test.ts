@@ -146,7 +146,7 @@ describe('8dd148cf R3-EOL real fs server + real hooks', () => {
 describe('19354419 AC5 isError MCP result through the real engine', () => {
   async function runEngineEdit(
     edit: { oldText: string; newText: string }
-  ): Promise<{ file: string; seen: Array<{ tool: string; isError: boolean }>; bytes: string }> {
+  ): Promise<{ file: string; seen: Array<{ tool: string; isError: boolean; result: string }>; bytes: string }> {
     const { buildHarness, createSessionAndAgent, enqueueTaskWithProvider, drainQueue } = await import('./harness.js');
     const scratch = join(REPO_ROOT, 'tmp', 'agent-mcp');
     await mkdir(scratch, { recursive: true });
@@ -163,9 +163,9 @@ describe('19354419 AC5 isError MCP result through the real engine', () => {
     const harness = await buildHarness({ defaultProvider: provider, skipOrphanScan: true });
     try {
       registerEolPreserve(harness.hooks);
-      const seen: Array<{ tool: string; isError: boolean }> = [];
-      harness.hooks.register('post:tool_call', (p: { toolName: string; isError: boolean }) => {
-        seen.push({ tool: p.toolName, isError: p.isError });
+      const seen: Array<{ tool: string; isError: boolean; result: string }> = [];
+      harness.hooks.register('post:tool_call', (p: { toolName: string; isError: boolean; result: unknown }) => {
+        seen.push({ tool: p.toolName, isError: p.isError, result: typeof p.result === 'string' ? p.result : JSON.stringify(p.result) });
       });
       const launch = resolveFsServerLaunch();
       const { sessionId } = await createSessionAndAgent(harness, provider, {
@@ -184,13 +184,20 @@ describe('19354419 AC5 isError MCP result through the real engine', () => {
 
   it('19354419 AC5: a no-match edit (server returns isError:true) => post:tool_call.isError is true and the CRLF bytes are untouched', async () => {
     const r = await runEngineEdit({ oldText: 'absent', newText: 'x' });
-    expect(r.seen).toEqual([{ tool: 'fs__edit_file', isError: true }]);
+    expect(r.seen).toHaveLength(1);
+    expect(r.seen[0]?.tool).toBe('fs__edit_file');
+    expect(r.seen[0]?.isError).toBe(true);
+    // Distinguishes a RETURNED MCP `isError:true` result (the client wraps it as "returned an
+    // error: <content>") from a transport/JSON-RPC failure: the server's own no-match message
+    // must be in the payload.
+    expect(r.seen[0]?.result).toContain('returned an error');
+    expect(r.seen[0]?.result).toContain('Could not find');
     expect(r.bytes).toBe('one\r\ntwo\r\nthree\r\n');
   }, 60_000);
 
   it('19354419 AC5 control: a matching edit => post:tool_call.isError is false and CRLF is restored', async () => {
     const r = await runEngineEdit({ oldText: 'two', newText: 'TWO' });
-    expect(r.seen).toEqual([{ tool: 'fs__edit_file', isError: false }]);
+    expect(r.seen.map((x) => [x.tool, x.isError])).toEqual([['fs__edit_file', false]]);
     expect(r.bytes).toBe('one\r\nTWO\r\nthree\r\n');
   }, 60_000);
 });

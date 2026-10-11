@@ -181,7 +181,8 @@ function scanRealSource(): ISite[] {
  * DB open, explicit-outDir CLI codegen, or sandbox deny/allow lists.
  */
 const ALLOWLIST: readonly IEntry[] = [
-  { key: 'entrypoint/agent-mcp/src/eol-hook.ts :: if (restored !== after) await writeFile(path, restored, \'utf8\');', reason: 'rewrites the USER workspace file the fs server just wrote, to restore its CRLF endings (8dd148cf); target is the tool call\'s own path, not an agent-mcp artifact' },
+  { key: 'entrypoint/agent-mcp/src/eol-hook.ts :: await writeFile(tmp, restored, { encoding: \'utf8\', flag: \'wx\', mode: st1.mode & 0o7777 });', reason: 'writes a sibling temp file next to the USER workspace file the fs server just wrote, to restore its CRLF endings atomically (8dd148cf, 19354419 AC1); target is the tool call\'s own path, not an agent-mcp artifact' },
+  { key: 'entrypoint/agent-mcp/src/eol-hook.ts :: await rename(tmp, path);', reason: 'commits the CRLF-restored temp file over the USER workspace file the fs server just wrote (8dd148cf, 19354419 AC1); target is the tool call\'s own path, not an agent-mcp artifact' },
   { key: 'entrypoint/agent-mcp/src/db/client.ts :: fs.mkdirSync(directory, {', reason: 'parent dir of the environment-resolved DB path' },
   { key: 'entrypoint/agent-mcp/src/db/migrate-legacy.ts :: const effectiveHome = home ?? process.env[\'HOME\'] ?? os.homedir();', reason: 'read-only legacy DB migration source lookup' },
   { key: 'entrypoint/agent-mcp/src/db/migrate-legacy.ts :: return path.join(effectiveHome, ".adhd", "agent-mcp", "agents.db");', reason: 'read-only legacy DB migration source (pre-environment layout)' },
