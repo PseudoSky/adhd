@@ -28,6 +28,7 @@ export {
   DISPATCH_SERVER_KEY,
   FS_SERVER,
   resolveFsServerLaunch,
+  SHELL_PROXY_ENV_KEYS,
   SHELL_SERVER,
   SRT_SANDBOX,
   wrapWithSandbox,

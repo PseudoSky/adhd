@@ -60,6 +60,37 @@ servers reach their own caches/registries (e.g. `~/.cache/uv` and PyPI for the
 shell server). Pass `{ sandbox: false }` where no policy is provisioned; hard
 enforcement then degrades to the shell argv allowlist and the fs root scoping.
 
+### Shell network egress under `srt`: proxy env passthrough (0ba70e47)
+
+`srt` confines network access by injecting `HTTP_PROXY` / `HTTPS_PROXY` /
+`ALL_PROXY` / `NO_PROXY` (and lowercase twins) into the sandboxed process; only
+domains in the policy's `allowedDomains` are reachable through that proxy. The
+adopted `mcp-shell-server` gives each command it spawns **`PATH` only** unless
+variables are named in `MCP_SHELL_CHILD_ENV_ALLOWLIST`, so without help an
+allowlisted `curl https://<allowed host>` fails DNS inside the sandbox (and, with
+`-s`, returns an empty result).
+
+When the sandbox is on (`ctx.sandbox !== false`, the default) the resolved shell
+server's `env` therefore carries
+
+```
+MCP_SHELL_CHILD_ENV_ALLOWLIST=HTTP_PROXY,HTTPS_PROXY,ALL_PROXY,NO_PROXY,http_proxy,https_proxy,all_proxy,no_proxy
+```
+
+(the list is exported as `SHELL_PROXY_ENV_KEYS`; the env name as
+`SHELL_SERVER.envKeys.childEnvAllowlist`).
+
+Merge rule: a value you supply in `shell.env.MCP_SHELL_CHILD_ENV_ALLOWLIST` is
+**merged, not replaced** — your entries come first (trimmed, empties dropped),
+the proxy variables are appended, and duplicates are removed, so
+`FOO,HTTP_PROXY` becomes `FOO,HTTP_PROXY,HTTPS_PROXY,ALL_PROXY,NO_PROXY,…`. With
+`sandbox: false` nothing is emitted (there is no injected proxy to pass through)
+and a user-supplied value is passed through untouched. A custom `McpServerConfig`
+`shell` replaces the builtin and is never modified.
+
+The same variables are what let `srt` hosts reach an allowlisted domain; a host
+or domain not in the policy is still denied by `srt`, not by this setting.
+
 **Human-gated adoption — approved.** The ADR-0008 D7 adoption above is a
 human-gated decision, recorded as APPROVED:
 **Approved by: pseudosky (repo owner), 2026-10-05**, under the owner directive
@@ -120,6 +151,21 @@ npx nx build agent-core-native-tooling
 ```bash
 npx nx test agent-core-native-tooling
 ```
+
+## Running the e2e lane
+
+```bash
+npx nx run agent-core-native-tooling:e2e
+```
+
+`src/lib/shell-egress.e2e.test.ts` (0ba70e47) drives the real `srt` plus the real
+`uvx mcp-shell-server==1.1.12` through `resolveNativeTooling`'s own output and
+calls `shell_execute curl` against a local HTTP server, asserting the body comes
+back. It needs `srt` (workspace dependency) and `uvx` on the machine and **fails
+loudly rather than skipping** if either is missing; a control test proves the
+same call cannot resolve the host without the allowlist. `srt` refuses
+destinations that resolve to the host itself, so the local server is wired in as
+`srt`'s `network.parentProxy` rather than curled directly.
 
 ## Line-ending helpers
 

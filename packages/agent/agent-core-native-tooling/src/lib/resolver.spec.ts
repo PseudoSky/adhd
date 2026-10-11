@@ -4,6 +4,7 @@ import { resolveNativeTooling, resolveNativeToolingMap } from './resolver.js';
 import {
   DISPATCH_SERVER_KEY,
   FS_SERVER,
+  SHELL_PROXY_ENV_KEYS,
   SHELL_SERVER,
   SRT_SANDBOX,
   resolveFsServerLaunch,
@@ -141,6 +142,52 @@ describe('resolveNativeTooling — task-time resolution (ADR-0008 D2/D4)', () =>
     // The adopted server is allow-list ONLY — a deny-list env does not exist, and
     // the harness must not emit a fictional one (ADR-0008 D5).
     expect(shell.env?.DENY_COMMANDS).toBeUndefined();
+  });
+
+  describe('0ba70e47 proxy env passthrough (MCP_SHELL_CHILD_ENV_ALLOWLIST)', () => {
+    const KEY = 'MCP_SHELL_CHILD_ENV_ALLOWLIST';
+    const resolveShellEnv = (
+      shell: NativeToolingConfig['shell'],
+      ctx: { sandbox?: boolean } = {}
+    ) => shellServer(resolveNativeTooling({ fs: false, shell }, { cwd: '/p/a', ...ctx }))!.env;
+
+    it('0ba70e47 AC3a: sandbox on (default) emits every proxy var, upper and lower case', () => {
+      for (const ctx of [{}, { sandbox: true }]) {
+        const names = (resolveShellEnv(true, ctx)?.[KEY] ?? '').split(',');
+        expect(names).toEqual([...SHELL_PROXY_ENV_KEYS]);
+        for (const k of ['HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY', 'NO_PROXY', 'http_proxy', 'https_proxy', 'all_proxy', 'no_proxy']) {
+          expect(names).toContain(k);
+        }
+      }
+    });
+
+    it('0ba70e47 AC3a: sandbox off emits no allowlist (no injected proxy to pass through)', () => {
+      expect(resolveShellEnv(true, { sandbox: false })?.[KEY]).toBeUndefined();
+    });
+
+    it('0ba70e47 AC3a: merges a user-supplied value — user entries kept first, de-duplicated, never dropped', () => {
+      const env = resolveShellEnv({ env: { [KEY]: 'FOO, HTTP_PROXY ,BAR,' } });
+      const names = env![KEY].split(',');
+      expect(names.slice(0, 3)).toEqual(['FOO', 'HTTP_PROXY', 'BAR']);
+      expect(names).toEqual(expect.arrayContaining([...SHELL_PROXY_ENV_KEYS, 'FOO', 'BAR']));
+      expect(new Set(names).size).toBe(names.length);
+    });
+
+    it('0ba70e47 AC3a: a user value with sandbox off is passed through untouched', () => {
+      expect(resolveShellEnv({ env: { [KEY]: 'FOO' } }, { sandbox: false })?.[KEY]).toBe('FOO');
+    });
+
+    it('0ba70e47 AC3a: coexists with allowCommands and other user env', () => {
+      const env = resolveShellEnv({ allowCommands: ['curl'], env: { X: '1' } });
+      expect(env?.ALLOW_COMMANDS).toBe('curl');
+      expect(env?.X).toBe('1');
+      expect(env?.[KEY]).toContain('HTTPS_PROXY');
+    });
+
+    it('0ba70e47 AC3a: a custom McpServerConfig shell replaces the builtin and gets no allowlist', () => {
+      const custom: McpServerConfig = { transport: 'stdio', command: 'my-sh' };
+      expect(resolveNativeTooling({ fs: false, shell: custom }, { cwd: '/p/a' })).toEqual([custom]);
+    });
   });
 
   it('AC1: shell.allowPatterns emits ALLOW_PATTERNS into the RESOLVED config (regex passthrough)', () => {

@@ -128,8 +128,32 @@ export const SHELL_SERVER = {
     /** Upper bound the per-call `timeout` is clamped to. */
     maxTimeoutSeconds: 'MCP_SHELL_MAX_TIMEOUT_SECONDS',
     outputLimitBytes: 'MCP_SHELL_OUTPUT_LIMIT_BYTES',
+    /**
+     * CSV of env var NAMES the server copies into each spawned command's
+     * environment. The server's default child env is `PATH` only, so without
+     * this the `srt`-injected proxy variables never reach `curl` et al. and
+     * every allowlisted network call fails DNS inside the sandbox (0ba70e47).
+     */
+    childEnvAllowlist: 'MCP_SHELL_CHILD_ENV_ALLOWLIST',
   },
 } as const;
+
+/**
+ * The proxy variables `srt` injects into the sandboxed process so allowlisted
+ * egress goes through its filtering proxy (upper and lower case: tools differ
+ * on which they read). Emitted in `MCP_SHELL_CHILD_ENV_ALLOWLIST` whenever the
+ * shell server runs under `srt` (0ba70e47 AC1).
+ */
+export const SHELL_PROXY_ENV_KEYS = [
+  'HTTP_PROXY',
+  'HTTPS_PROXY',
+  'ALL_PROXY',
+  'NO_PROXY',
+  'http_proxy',
+  'https_proxy',
+  'all_proxy',
+  'no_proxy',
+] as const;
 
 /**
  * Adopted OS-enforcement wrapper — `@anthropic-ai/sandbox-runtime` (`srt`,

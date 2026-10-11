@@ -10,6 +10,7 @@ import type {
 import {
   DISPATCH_SERVER_KEY,
   FS_SERVER,
+  SHELL_PROXY_ENV_KEYS,
   SHELL_SERVER,
   resolveFsServerLaunch,
   wrapWithSandbox,
@@ -288,6 +289,20 @@ export function resolveShellRoot(
   return resolveRootHint(overrides.root, ctx);
 }
 
+/** CSV-merge: `existing` entries first (trimmed, empties dropped), then `extra`, de-duplicated. */
+function mergeCsv(existing: string | undefined, extra: readonly string[]): string {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of [...(existing ? existing.split(',') : []), ...extra]) {
+    const name = raw.trim();
+    if (name && !seen.has(name)) {
+      seen.add(name);
+      out.push(name);
+    }
+  }
+  return out.join(',');
+}
+
 function resolveShell(
   shell: ShellToolConfig | undefined,
   ctx: NativeResolveContext
@@ -321,6 +336,16 @@ function resolveShell(
   // per-command deny semantics. Emitting a fictional `DENY_COMMANDS` var would
   // be ignored by the server.
   if (overrides.env) Object.assign(env, overrides.env);
+  // Proxy passthrough (0ba70e47 AC1/AC3): under `srt` the sandbox injects
+  // HTTP(S)_PROXY into the server process, but the adopted server hands its
+  // children `PATH` only, so allowlisted egress (`curl`) fails DNS. Name the
+  // proxy vars in the server's child-env allowlist. MERGED with a user-supplied
+  // value (user entries first, de-duplicated) — never overwritten. Absent when
+  // the sandbox is off: there is no injected proxy to pass through.
+  if (ctx.sandbox !== false) {
+    const key = SHELL_SERVER.envKeys.childEnvAllowlist;
+    env[key] = mergeCsv(env[key], SHELL_PROXY_ENV_KEYS);
+  }
 
   const config: McpServerConfig = {
     transport: 'stdio',

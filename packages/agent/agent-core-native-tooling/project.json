@@ -78,6 +78,27 @@
         "cwd": ".",
         "command": "vitest run --config packages/agent/agent-core-native-tooling/vite.config.mts"
       }
+    },
+    "e2e": {
+      "//": "Subprocess / real-server lane (backlog 5b839b90 AC1; docs/decisions/0009-test-lanes-unit-vs-e2e.md; 0ba70e47 AC3b). Runs ONLY src/**/*.e2e.ts and src/**/*.e2e.test.ts via vitest.e2e.config.ts; the unit `test` target excludes those files. Reached by the push/CI gate (`nx affected -t e2e --parallel=1`) and by `publish`/`nx-release-publish`. Its own pipeline stage, never in `nx test`; not env-gated. Spawns the real `srt` (workspace dependency) and `uvx mcp-shell-server`; no built artifact of this project is executed (the suite imports src), so only ^build is needed.",
+      "executor": "nx:run-commands",
+      "dependsOn": [
+        "^build"
+      ],
+      "options": {
+        "cwd": ".",
+        "command": "vitest run --config {projectRoot}/vitest.e2e.config.ts"
+      },
+      "cache": true,
+      "inputs": [
+        "default",
+        "^production",
+        {
+          "externalDependencies": [
+            "vitest"
+          ]
+        }
+      ]
     }
   }
 }

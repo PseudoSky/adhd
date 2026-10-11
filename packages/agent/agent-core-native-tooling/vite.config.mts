@@ -1,4 +1,5 @@
 /// <reference types='vitest' />
+import { configDefaults } from 'vitest/config';
 import { defineConfig } from 'vite';
 import dts from 'vite-plugin-dts';
 import * as path from 'path';
@@ -10,6 +11,7 @@ import {
 } from '../../workspace/workspace-base-vite-paths/src/index';
 import { importMetaUrlCjs } from '../../../tools/vite-plugins/import-meta-url-cjs.mjs';
 import { externalizeRealDeps } from '../../../tools/vite-plugins/externalize.mjs';
+import { E2E_FILE_EXCLUDES } from '../../../tools/vite-plugins/e2e-globs.mjs';
 import { nxCopyAssetsPlugin } from '@nx/vite/plugins/nx-copy-assets.plugin';
 
 export default defineConfig(() => ({
@@ -65,6 +67,8 @@ export default defineConfig(() => ({
     globals: true,
     environment: 'node',
     include: ['{src,tests}/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'],
+    // Subprocess suites (real srt + uvx) run in the `e2e` lane (ADR-0009).
+    exclude: [...configDefaults.exclude, ...E2E_FILE_EXCLUDES],
     reporters: ['default'],
     coverage: {
       reportsDirectory: projectCoverage(__dirname),
