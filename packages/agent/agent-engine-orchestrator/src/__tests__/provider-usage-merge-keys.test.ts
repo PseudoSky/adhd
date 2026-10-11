@@ -72,6 +72,11 @@ describe("b3999dfa AC3: mergeProviderUsage handles every TokenUsage field", () =
     // Every populated key is a classified key (a field added to the fixture but not the type would not compile either).
     for (const key of Object.keys(first) as (keyof ProviderTokenUsage)[]) expect(HANDLING[key], `unclassified ${key}`).toBeDefined();
 
+    // A field the fixture leaves unset would pass its branch vacuously (undefined === undefined).
+    for (const [key, how] of Object.entries(HANDLING) as [keyof ProviderTokenUsage, Handling][]) {
+      if (how !== "flag" && how !== "dropped-unless-both") expect(first[key], `fixture must populate ${key}`).toBeDefined();
+    }
+
     for (const [key, how] of Object.entries(HANDLING) as [keyof ProviderTokenUsage, Handling][]) {
       const a = first[key];
       const b = second[key];
