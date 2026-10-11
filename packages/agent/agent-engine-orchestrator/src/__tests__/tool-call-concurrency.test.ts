@@ -9,6 +9,7 @@ import { PolicyEngine } from '../engine/policy.js';
 import { nowIso } from '../utils/timestamps.js';
 import { generateId } from '../utils/ids.js';
 import type { LLMProvider, ProviderChatResponse, ToolDefinition } from '../providers/types.js';
+import { ToolError } from '../validation/errors.js';
 import type { ExecutionContext, Message } from '../validation/index.js';
 import type { McpClientRegistry } from '../clients/registry.js';
 import type { EngineConfig, EngineLogger } from '../interfaces.js';
@@ -21,6 +22,7 @@ import type { EngineConfig, EngineLogger } from '../interfaces.js';
  *  - 35768ae8 AC1: N=3 calls under limit>=3 are all in flight before any finishes.
  *  - 35768ae8 AC2: limit=2 over 5 calls peaks at exactly 2 in flight; result order == call order.
  *  - 35768ae8 AC3: one failing call does not cancel the others.
+ *  - a4235310 AC4: after a fatal error, queued calls never start; in-flight siblings run to completion.
  */
 
 const policy = { check: () => {} } as unknown as PolicyEngine;
@@ -235,5 +237,42 @@ describe('35768ae8 R3-PAR-ENG bounded same-turn tool-call fan-out (real engine)'
     expect(text[0]).toContain('ok0');
     expect(text[1]).toContain('boom');
     expect(text[2]).toContain('ok2');
+  });
+
+  it('a4235310 AC4 R3-PAR-ENG — a fatal error rejects the turn, never starts queued calls, and lets already-started siblings run to completion', async () => {
+    const started: number[] = [];
+    const allStarted = deferred();
+    const release = deferred();
+    const siblingFinished: number[] = [];
+    let settled = false;
+    const run = runTurn({
+      n: 4,
+      config: { toolCallConcurrency: 3 },
+      callTool: async (i) => {
+        started.push(i);
+        if (started.length === 3) allStarted.resolve();
+        await allStarted.promise;
+        if (i === 0) throw new ToolError('MAX_DEPTH_EXCEEDED', 'fatal');
+        await release.promise; // siblings are still in flight when the fatal call throws
+        siblingFinished.push(i);
+        return [{ type: 'text', text: `ok${i}` }];
+      },
+    }).then(
+      () => ({ rejected: false as const }),
+      (e: unknown) => ({ rejected: true as const, e })
+    );
+    void run.then(() => { settled = true; });
+    await settle();
+    // The turn aborted on the fatal call while siblings 1 and 2 are still parked.
+    expect(settled).toBe(true);
+    const outcome = await run;
+    expect(outcome.rejected).toBe(true);
+    expect(started.slice().sort()).toEqual([0, 1, 2]); // call 3 (queued) was dropped
+    expect(siblingFinished).toEqual([]);
+    // In-flight siblings are not aborted: once released they run to completion.
+    release.resolve();
+    await settle();
+    expect(siblingFinished.slice().sort()).toEqual([1, 2]);
+    expect(started).not.toContain(3);
   });
 });

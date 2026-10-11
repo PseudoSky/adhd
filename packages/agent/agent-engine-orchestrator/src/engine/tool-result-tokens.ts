@@ -12,13 +12,16 @@
  * Contract:
  * - Results of at most {@link TOOL_RESULT_EXACT_ENCODE_MAX_CHARS} chars are encoded
  *   in full: the figure equals `encode(text).length` exactly (3ad735bb AC1.4).
- * - Longer results encode only a head sample and a tail sample, each
- *   {@link TOOL_RESULT_SAMPLE_CHARS} chars, and scale the observed tokens/char
- *   ratio to the full length. The result is flagged `estimated: true`, and the
+ * - Longer results encode {@link TOOL_RESULT_SAMPLE_CHUNKS} equal chunks taken at
+ *   evenly spaced offsets across the WHOLE text (first chunk at the head, last
+ *   chunk at the tail), in total 2 * {@link TOOL_RESULT_SAMPLE_CHARS} chars, and
+ *   scale the observed tokens/char ratio to the full length. Spreading the
+ *   sample means a normal head and tail around a dense middle (base64, minified
+ *   JSON) is still represented in proportion (a4235310 M5). The result is flagged `estimated: true`, and the
  *   TOOL_RESULT event carries `tool_call_est_result_tokens_estimated: true`
  *   (absent when exact), mirroring how `usage_lower_bound` marks non-exact usage.
  * - The tokenizer is never handed more than 2 * TOOL_RESULT_SAMPLE_CHARS chars
- *   in the estimated path.
+ *   in the estimated path, and no single call more than one chunk.
  *
  * Pure and process-local: no shared state, safe under concurrent processes.
  */
@@ -29,6 +32,12 @@ export const TOOL_RESULT_EXACT_ENCODE_MAX_CHARS = 20_000;
 
 /** Chars encoded from each of the head and the tail of an oversize result. */
 export const TOOL_RESULT_SAMPLE_CHARS = 4_000;
+
+/** Number of evenly spaced chunks sampled from an oversize result. */
+export const TOOL_RESULT_SAMPLE_CHUNKS = 16;
+
+/** Chars per sampled chunk; chunks total 2 * {@link TOOL_RESULT_SAMPLE_CHARS}. */
+const CHUNK_CHARS = (2 * TOOL_RESULT_SAMPLE_CHARS) / TOOL_RESULT_SAMPLE_CHUNKS;
 
 export interface IToolResultTokenEstimate {
   tokens: number;
@@ -56,12 +65,19 @@ export function estimateToolResultTokens(
   if (text.length <= TOOL_RESULT_EXACT_ENCODE_MAX_CHARS) {
     return { tokens: encoder(text).length, estimated: false };
   }
-  const headEnd = safeIndex(text, TOOL_RESULT_SAMPLE_CHARS);
-  const tailStart = safeIndex(text, text.length - TOOL_RESULT_SAMPLE_CHARS);
-  const head = text.slice(0, headEnd);
-  const tail = text.slice(tailStart);
-  const sampleTokens = encoder(head).length + encoder(tail).length;
-  const sampleChars = head.length + tail.length;
+  const span = text.length - CHUNK_CHARS;
+  let sampleTokens = 0;
+  let sampleChars = 0;
+  for (let k = 0; k < TOOL_RESULT_SAMPLE_CHUNKS; k++) {
+    const start = safeIndex(
+      text,
+      Math.floor((span * k) / (TOOL_RESULT_SAMPLE_CHUNKS - 1))
+    );
+    const end = safeIndex(text, start + CHUNK_CHARS);
+    const chunk = text.slice(start, end);
+    sampleTokens += encoder(chunk).length;
+    sampleChars += chunk.length;
+  }
   return {
     tokens: Math.ceil((sampleTokens * text.length) / sampleChars),
     estimated: true,

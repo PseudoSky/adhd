@@ -1,6 +1,7 @@
 // barrel exports for @adhd/agent-engine-orchestrator
 
 // ── Interfaces ────────────────────────────────────────────────────────────────
+export { DEFAULT_TOOL_CALL_CONCURRENCY } from './interfaces.js';
 export type {
   EngineConfig,
   EngineLogger,

@@ -2,7 +2,7 @@
  * tool-result-tokens.test.ts — backlog d89e20f4 (orchestrator tokenized the FULL
  * tool result before the cap), related 3ad735bb AC1.4. Unit tests for the bounded
  * estimator plus a REAL Orchestrator + real TaskStore drive (only the LLM provider
- * boundary is mocked) proving a 1,000,000-char single-character run never reaches
+ * boundary is mocked) proving (a4235310 AC2: no wall-clock assertions) a 1,000,000-char single-character run never reaches
  * the tokenizer in full. Bounds are asserted deterministically (tokenizer argument
  * length), never by tight wall-clock.
  */
@@ -63,13 +63,6 @@ describe("d89e20f4 AC1 estimator bounds tokenizer input", () => {
         expect(Math.max(...seen)).toBeGreaterThan(TOOL_RESULT_SAMPLE_CHARS);
     });
 
-    it("real encoder on a 1,000,000-char run completes in generous time", () => {
-        const t0 = Date.now();
-        const out = estimateToolResultTokens("h".repeat(1_000_000));
-        expect(Date.now() - t0).toBeLessThan(5_000);
-        expect(out.estimated).toBe(true);
-    });
-
     it("scaled estimate is within 15% of the exact count for large ordinary text", () => {
         const text = Array.from({ length: 6000 }, (_, i) => `line ${i}: the quick brown fox ${i * 7} jumps`).join("\n");
         expect(text.length).toBeGreaterThan(TOOL_RESULT_EXACT_ENCODE_MAX_CHARS);
@@ -77,6 +70,39 @@ describe("d89e20f4 AC1 estimator bounds tokenizer input", () => {
         const est = estimateToolResultTokens(text);
         expect(est.estimated).toBe(true);
         expect(Math.abs(est.tokens - exact) / exact).toBeLessThan(0.15);
+    });
+
+    it("a4235310 AC1 dense middle (base64 blob) between normal head and tail is within 25% of the exact count (real tokenizer)", () => {
+        let seed = 12345;
+        const rnd = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 2 ** 32; };
+        const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+        const b64 = Array.from({ length: 60_000 }, () => alphabet[Math.floor(rnd() * 64)]).join("");
+        const prose = (n: number) => Array.from({ length: n }, (_, i) => `line ${i}: the quick brown fox jumps over the lazy dog`).join("\n");
+        const text = `${prose(300)}\n${b64}\n${prose(300)}`;
+        expect(text.length).toBeGreaterThan(TOOL_RESULT_EXACT_ENCODE_MAX_CHARS);
+        const exact = realEncode(text).length;
+        const est = estimateToolResultTokens(text);
+        expect(est.estimated).toBe(true);
+        expect(Math.abs(est.tokens - exact) / exact).toBeLessThan(0.25);
+    });
+
+    it("a4235310 AC1 NEGATIVE CONTROL: a head+tail-only sample misses the same dense middle by more than 25%", () => {
+        const dense = Array.from({ length: 60_000 }, (_, i) => String.fromCharCode(33 + ((i * 7919) % 90))).join("");
+        const prose = "the quick brown fox jumps over the lazy dog\n".repeat(400);
+        const text = `${prose}${dense}${prose}`;
+        const exact = realEncode(text).length;
+        const head = text.slice(0, TOOL_RESULT_SAMPLE_CHARS);
+        const tail = text.slice(-TOOL_RESULT_SAMPLE_CHARS);
+        const headTail = Math.ceil(((realEncode(head).length + realEncode(tail).length) * text.length) / (2 * TOOL_RESULT_SAMPLE_CHARS));
+        expect(Math.abs(headTail - exact) / exact).toBeGreaterThan(0.25);
+        expect(Math.abs(estimateToolResultTokens(text).tokens - exact) / exact).toBeLessThan(0.25);
+    });
+
+    it("a4235310 AC1 the stall bound holds for a dense middle: no tokenizer call exceeds one chunk, total within the sample bound", () => {
+        const seen: number[] = [];
+        estimateToolResultTokens("x".repeat(100_000) + "y".repeat(100_000), (s) => { seen.push(s.length); return realEncode(s); });
+        expect(Math.max(...seen)).toBeLessThanOrEqual(TOOL_RESULT_SAMPLE_CHARS);
+        expect(seen.reduce((a, b) => a + b, 0)).toBeLessThanOrEqual(SAMPLE_BOUND);
     });
 
     it("does not split a surrogate pair at a sample boundary", () => {
