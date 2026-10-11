@@ -992,24 +992,19 @@ class BudgetPlugin implements Plugin {
     for (const model of unpricedModels) {
       if (acc.unpricedModels.has(model)) continue;
       acc.unpricedModels.add(model);
-      // Notification only: HookRegistry.emit swallows handler errors. The
-      // event name is not yet in HookEventMap (agent-base-types is outside
-      // this item's write-scope).
+      // Notification only: HookRegistry.emit swallows handler errors.
       void (this.hooks as IHookRegistry | undefined)
-        ?.emit(
-          'budget:unpriced_model' as never,
-          {
-            executionContext: p.executionContext,
-            model,
-            field: 'cost',
-            usedFlatRates: explicit,
-            message:
-              `model "${model}" has no rate-card price; ` +
-              (explicit
-                ? 'billed at the configured flat rates'
-                : 'its spend is NOT counted toward the cost cap'),
-          } as never,
-        )
+        ?.emit('budget:unpriced_model', {
+          executionContext: p.executionContext,
+          model,
+          field: 'cost',
+          usedFlatRates: explicit,
+          message:
+            `model "${model}" has no rate-card price; ` +
+            (explicit
+              ? 'billed at the configured flat rates'
+              : 'its spend is NOT counted toward the cost cap'),
+        })
         ?.catch(() => undefined);
     }
     if (explicit) {

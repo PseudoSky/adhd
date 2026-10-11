@@ -40,6 +40,8 @@ type ProviderFailureEvents =
   | 'provider:failed'
   | 'provider:tripped'
   | 'provider:recovered';
+/** Added additively as typed, task-event-persisted warnings (20772a0b AC1). */
+type TaskEventWarningEvents = 'budget:unpriced_model' | 'provider:builtin_bypass';
 
 const ctx = {} as ExecutionContext;
 const session = {} as Session;
@@ -89,8 +91,12 @@ describe('da907b90 AC2 — the existing events are unchanged (additive-only)', (
   it('every pre-existing event is still a HookEvent with an unchanged key set', () => {
     expectTypeOf<ExistingEvents>().toExtend<HookEvent>();
     // Exactly existing ∪ new — nothing renamed, nothing removed, nothing extra.
-    expectTypeOf<HookEvent>().toEqualTypeOf<ExistingEvents | NewEvents | ProviderFailureEvents>();
-    expectTypeOf<Exclude<HookEvent, NewEvents | ProviderFailureEvents>>().toEqualTypeOf<ExistingEvents>();
+    expectTypeOf<HookEvent>().toEqualTypeOf<
+      ExistingEvents | NewEvents | ProviderFailureEvents | TaskEventWarningEvents
+    >();
+    expectTypeOf<
+      Exclude<HookEvent, NewEvents | ProviderFailureEvents | TaskEventWarningEvents>
+    >().toEqualTypeOf<ExistingEvents>();
   });
 
   it('a real HookRegistry still delivers a pre-existing event', async () => {

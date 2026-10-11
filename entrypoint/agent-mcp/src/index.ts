@@ -41,6 +41,7 @@ import {
   HookRegistry,
   PolicyEngine,
   UsagePlugin,
+  registerTaskEventHooks,
   enqueueExistingTask,
 } from "@adhd/agent-engine-orchestrator";
 
@@ -290,6 +291,8 @@ async function main() {
     const agentStore = new AgentStore(dbAny, hooks);
     const sessionStore = new SessionStore(dbAny, hooks);
     const taskStore = new TaskStore(dbAny);
+    // 20772a0b: persist budget:unpriced_model and provider:builtin_bypass as task events.
+    registerTaskEventHooks(hooks, taskStore);
 
     // 37f6c511: price history + live OpenRouter pull. Seeds the bundled snapshot, arms the daily
     // scheduler (unref'd; cleared on shutdown) and hands the SAME as-of price source to the

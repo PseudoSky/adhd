@@ -42,6 +42,8 @@ export const taskEventTypeSchema = z.enum([
   'TOOL_CALL',
   'TOOL_RESULT',
   'TOOL_ARG_COERCED',
+  'budget:unpriced_model',
+  'provider:builtin_bypass',
   'TASK_COMPLETED',
   'TASK_FAILED',
   'TASK_CANCELLED',

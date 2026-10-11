@@ -123,6 +123,42 @@ export interface BudgetBlockPayload {
 }
 
 /**
+ * A model had no rate-card price, so its spend could not be priced into the `cost` cap (20772a0b AC1).
+ * Emitted once per task+model by the budget plugin.
+ */
+export interface BudgetUnpricedModelPayload {
+  executionContext: ExecutionContext;
+  /** The model that could not be priced. */
+  model: string;
+  /** The budget field affected (always `cost`). */
+  field: 'cost';
+  /** True when configured flat rates billed the turn instead; false when its spend is NOT counted. */
+  usedFlatRates: boolean;
+  message: string;
+}
+
+/** Where the live claudecli built-in set came from. */
+export type ProviderBuiltinBypassSource =
+  | 'allowedBuiltinTools'
+  | 'compiledTools'
+  | 'agent-spec';
+
+/**
+ * A claudecli task exposes CLI built-in tools that run outside the engine's tool pipeline (20772a0b AC1,
+ * e0d71436 G4). Emitted once per `chat()` and only when at least one built-in is live.
+ */
+export interface ProviderBuiltinBypassPayload {
+  executionContext: ExecutionContext;
+  source: ProviderBuiltinBypassSource;
+  /** Built-ins the CLI exposes (`['*']` in agent-spec mode with no `tools:` header). */
+  builtins: string[];
+  /** Engine behaviours these built-ins skip. */
+  skipped: string[];
+  /** Recommended path. */
+  advice: string;
+}
+
+/**
  * The host permission gate's verdict for one tool call (observational — a
  * handler can never alter the decision).
  *
@@ -208,6 +244,16 @@ export interface HookEventMap {
    * remains the action; the event is the notification layer.
    */
   'budget:block': BudgetBlockPayload;
+  /**
+   * Emitted once per task+model when the budget `cost` cap meets a model with no rate-card price. A $-cap that
+   * cannot price is reported, never silently uncapped. Persisted as a `budget:unpriced_model` task event.
+   */
+  'budget:unpriced_model': BudgetUnpricedModelPayload;
+  /**
+   * Emitted when a claudecli task runs with CLI built-in tools live: they bypass the engine's hooks, argument
+   * coercion, result cap, token estimator and concurrency pool. Persisted as a `provider:builtin_bypass` task event.
+   */
+  'provider:builtin_bypass': ProviderBuiltinBypassPayload;
   'message:appended': MessageAppendedPayload;
   'task:completed': TaskCompletedPayload;
   'task:failed': TaskFailedPayload;

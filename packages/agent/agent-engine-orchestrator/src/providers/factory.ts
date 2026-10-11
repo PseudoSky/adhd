@@ -44,8 +44,8 @@ export function createProvider(
 ): LLMProvider {
     const wireModel = resolveWireModel(selection, options?.registry);
     const providerConfig = selectionToProviderConfig(selection, wireModel, options?.claudecli);
-    const provider = bareProvider();
     const { hooks, executionContext } = options ?? {};
+    const provider = bareProvider();
     return hooks !== undefined && executionContext !== undefined
         ? withProviderHooks(provider, {
               hooks,
@@ -65,6 +65,16 @@ export function createProvider(
                     // b31e1fe5: tasks on one engine session share a retained CLI session (resumed, not replayed).
                     sessionKey: options?.executionContext?.sessionId || undefined,
                     sessionResumable: options?.sessionResumable,
+                    // 20772a0b AC3: surface the built-in bypass as a typed `provider:builtin_bypass` hook event, which
+                    // `registerTaskEventHooks` persists as a task event. Needs both a registry and a task context.
+                    ...(hooks !== undefined && executionContext !== undefined && {
+                        onBuiltinBypass: (event) => {
+                            const { source, builtins, skipped, advice } = event;
+                            void hooks
+                                .emit("provider:builtin_bypass", { executionContext, source, builtins, skipped, advice })
+                                .catch(() => undefined);
+                        },
+                    }),
                 });
             case "openai":
                 return new OpenAIProvider(providerConfig, engineConfig ?? {} as EngineConfig);
