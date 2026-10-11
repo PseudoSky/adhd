@@ -47,7 +47,11 @@ _guard_read() { # <key> [--bool]
 GUARD_EXCLUDE_REFS=""
 guard_exclude_ref() { GUARD_EXCLUDE_REFS="$GUARD_EXCLUDE_REFS $1 "; }
 
-# "<refname> <sha>" for every ref this hook is entitled to treat as stable.
+# "<refname> <sha>" for every ref this hook is entitled to treat as stable,
+# BEFORE caller-named exclusions. Exclusions are applied at COMPARE time by
+# `_guard_apply_excludes`, never baked into a snapshot, so a ref excluded AFTER
+# `guard_snapshot` (pre-push learns the pushed ref from stdin, after the
+# snapshot) is dropped from BOTH sides of the diff (d80b7374).
 _guard_refs() {
   _gtop=$(git rev-parse --show-toplevel 2>/dev/null || true)
   _gother=$(git worktree list --porcelain 2>/dev/null | awk -v top="$_gtop" '
@@ -55,8 +59,16 @@ _guard_refs() {
     /^branch /   { if (wt != top) print substr($0, 8) }')
   git for-each-ref --format='%(refname) %(objectname)' 2>/dev/null | while read -r _rn _rs; do
     case "$_rn" in refs/remotes/*) continue ;; esac
-    case "$GUARD_EXCLUDE_REFS" in *" $_rn "*) continue ;; esac
     if [ -n "$_gother" ] && printf '%s\n' "$_gother" | grep -qxF "$_rn"; then continue; fi
+    printf '%s %s\n' "$_rn" "$_rs"
+  done
+}
+
+# Filters "<refname> <sha>" lines on stdin through the CURRENT exclusion list.
+_guard_apply_excludes() {
+  while read -r _rn _rs; do
+    [ -n "$_rn" ] || continue
+    case "$GUARD_EXCLUDE_REFS" in *" $_rn "*) continue ;; esac
     printf '%s %s\n' "$_rn" "$_rs"
   done
 }
@@ -100,9 +112,10 @@ guard_verify() {
   if [ -n "$_name" ] && [ "$_name" != "$GUARD_NAME_BEFORE" ]; then
     _leak="${_leak:+$_leak; }repo-local user.name set to '$_name'"
   fi
-  _refs_after=$(_guard_refs)
-  if [ "$_refs_after" != "$GUARD_REFS_BEFORE" ]; then
-    _leak="${_leak:+$_leak; }refs changed (-old +new): $(_guard_diff "$GUARD_REFS_BEFORE" "$_refs_after")"
+  _refs_before=$(printf '%s\n' "$GUARD_REFS_BEFORE" | _guard_apply_excludes)
+  _refs_after=$(_guard_refs | _guard_apply_excludes)
+  if [ "$_refs_after" != "$_refs_before" ]; then
+    _leak="${_leak:+$_leak; }refs changed (-old +new): $(_guard_diff "$_refs_before" "$_refs_after")"
   fi
   _wt_after=$(_guard_worktrees)
   if [ "$_wt_after" != "$GUARD_WT_BEFORE" ]; then

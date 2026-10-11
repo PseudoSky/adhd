@@ -35,7 +35,8 @@ const { cleanGitEnv } = require('../tools/nx-plugins/lib/git-env.js');
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(here, '..');
-const GUARD = join(here, 'lib', 'git-env-guard.sh');
+// GUARD_SH_UNDER_TEST lets a caller point the spec at another copy of the guard (red-proof runs against the pre-fix guard).
+const GUARD = process.env.GUARD_SH_UNDER_TEST || join(here, 'lib', 'git-env-guard.sh');
 
 /** The four specs proven to spawn git without a scrub (50e8c966). */
 const PROVEN_SPECS = [
@@ -270,6 +271,45 @@ test('f2836e29 AC2: guard_exclude_ref exempts the ref being pushed; other-worktr
   }
 });
 
+test("d80b7374 AC1+AC3: pre-push's REAL order (snapshot, THEN exclude the pushed ref, THEN verify) passes when the pushed ref is unchanged", () => {
+  const tip = headSha(R);
+  // `side` is in the BEFORE snapshot; the hook only learns it is the pushed ref afterwards (stdin loop).
+  const r = runGuard(`guard_snapshot\nguard_exclude_ref refs/heads/side\nguard_verify`);
+  assert.equal(r.status, 0, r.stderr);
+  assert.doesNotMatch(r.stderr, /GIT-ENV-LEAK/);
+  assert.equal(headSha(R), tip);
+});
+
+test('d80b7374 AC1: an excluded-after-snapshot ref that MOVES during the run is still exempt (the pushed ref may legitimately differ)', () => {
+  const tip = headSha(R);
+  const moved = git(R, [...IDENT, 'commit-tree', '-p', tip, '-m', 'moved', `${tip}^{tree}`]).trim();
+  const r = runGuard(
+    `guard_snapshot\nguard_exclude_ref refs/heads/side\ngit -C "${R}" update-ref refs/heads/side ${moved}\nguard_verify`
+  );
+  try {
+    assert.equal(r.status, 0, r.stderr);
+  } finally {
+    spawnSync('git', ['-C', R, 'update-ref', 'refs/heads/side', tip], { env: cleanGitEnv() });
+  }
+});
+
+test('d80b7374 AC2: negative control - exclusion applied after the snapshot still names a NON-excluded ref that moves', () => {
+  const tip = headSha(R);
+  const moved = git(R, [...IDENT, 'commit-tree', '-p', tip, '-m', 'moved', `${tip}^{tree}`]).trim();
+  git(R, ['branch', 'other-ref']);
+  const r = runGuard(
+    `guard_snapshot\nguard_exclude_ref refs/heads/side\ngit -C "${R}" update-ref refs/heads/other-ref ${moved}\nguard_verify`
+  );
+  try {
+    assert.equal(r.status, 1, 'a moved non-excluded ref must fail the hook');
+    assert.match(r.stderr, /GIT-ENV-LEAK/);
+    assert.match(r.stderr, /refs\/heads\/other-ref/);
+    assert.doesNotMatch(r.stderr, /refs\/heads\/side/, 'the excluded ref must not be blamed');
+  } finally {
+    spawnSync('git', ['-C', R, 'branch', '-D', 'other-ref'], { env: cleanGitEnv() });
+  }
+});
+
 test('f2836e29 AC2: guard_verify names a STRAY WORKTREE added during the run', () => {
   const stray = join(base, 'stray-wt');
   const r = runGuard(`guard_snapshot\ngit -C "${R}" worktree add -q "${stray}" -b stray-wt-branch\nguard_verify`);
@@ -341,4 +381,85 @@ test('f2836e29 AC1: in a --only commit the hook computes the staged list under t
 test('f2836e29 AC1 (negative control): computing the staged list AFTER the scrub reads the REAL index and wrongly includes b.txt, which is why the list is computed in the hook environment', () => {
   const r = onlyCommit('no_hook_git_env git diff --cached --name-only --diff-filter=ACMR');
   assert.deepEqual(r.probe.stdin.split('\n').sort(), ['a.txt', 'b.txt']);
+});
+
+// ─── d80b7374 AC4: the REAL pre-push script, driven by a real `git push` ─────
+
+/**
+ * Drives the actual `.githooks/pre-push` (+ lib/git-env-guard.sh, copied
+ * verbatim) via a real `git push` of a CHECKED-OUT branch to a scratch BARE
+ * remote, in a scratch clone with its own hook copy and scrubbed env.
+ *
+ * STUBBED (and only these): the three heavy gate commands the hook shells out
+ * to - tools/nx-plugins/.../check-lane-reachability.mjs and
+ * .../check-lockfile-fresh.mjs (both `exit 0`), and `npx` (a fake on PATH that
+ * records its argv and optionally runs ADHD_FAKE_NPX_SIDE_EFFECT, standing in
+ * for the nx test run). The guard stage - guard_snapshot, guard_exclude_ref in
+ * the stdin loop, guard_verify - is the real code, in the real order.
+ */
+function pushScenario({ sideEffect = '' } = {}) {
+  const id = Math.random().toString(36).slice(2);
+  const S = join(base, `push-${id}`);
+  const bare = join(S, 'remote.git');
+  const clone = join(S, 'clone');
+  const bin = join(S, 'bin');
+  mkdirSync(S);
+  mkdirSync(bin);
+  git(S, ['init', '-q', '--bare', 'remote.git']);
+  git(S, ['clone', '-q', 'remote.git', 'clone']);
+  git(clone, ['checkout', '-q', '-b', 'main']);
+  // Real hook + guard, copied. Gate tooling: pre-push-flags is real, backed by a minimal lane-gate.
+  mkdirSync(join(clone, '.githooks', 'lib'), { recursive: true });
+  for (const f of ['pre-push', 'lib/git-env-guard.sh', 'lib/pre-push-flags.mjs']) {
+    const src = f === 'lib/git-env-guard.sh' ? GUARD : join(here, f);
+    writeFileSync(join(clone, '.githooks', f), readFileSync(src), { mode: 0o755 });
+  }
+  mkdirSync(join(clone, 'tools', 'gate'), { recursive: true });
+  writeFileSync(join(clone, 'tools', 'gate', 'lane-gate.mjs'), "export const GATE_TARGETS = ['test'];\n");
+  for (const f of [
+    'tools/nx-plugins/test/executors/wiring/check-lane-reachability.mjs',
+    'tools/nx-plugins/build/executors/lockfile/check-lockfile-fresh.mjs',
+  ]) {
+    mkdirSync(dirname(join(clone, f)), { recursive: true });
+    writeFileSync(join(clone, f), 'process.exit(0);\n');
+  }
+  writeFileSync(
+    join(bin, 'npx'),
+    `#!/bin/sh\necho "$@" >> "${join(S, 'npx.log')}"\n${sideEffect}\nexit 0\n`,
+    { mode: 0o755 }
+  );
+  writeFileSync(join(clone, 'f.txt'), 'x\n');
+  git(clone, ['add', '.']);
+  git(clone, [...IDENT, 'commit', '-q', '-m', 'seed']);
+  git(clone, ['branch', 'side']);
+  git(clone, ['config', 'core.hooksPath', '.githooks']);
+  const push = spawnSync('git', [...IDENT, 'push', 'origin', 'main'], {
+    cwd: clone,
+    encoding: 'utf8',
+    env: cleanGitEnv(process.env, {
+      PATH: `${bin}:${process.env.PATH}`,
+      ADHD_TEST_TIMINGS_DIR: join(S, 'timings'),
+    }),
+  });
+  return { push, S, clone, bare };
+}
+
+test('d80b7374 AC4: a real `git push` of a checked-out branch passes the real pre-push guard stage (exit 0, no GIT-ENV-LEAK)', () => {
+  const { push, S, bare } = pushScenario();
+  assert.equal(push.status, 0, `${push.stdout}\n${push.stderr}`);
+  assert.doesNotMatch(push.stderr + push.stdout, /GIT-ENV-LEAK/);
+  assert.match(push.stdout + push.stderr, /pre-push: affected test clean/);
+  assert.ok(existsSync(join(S, 'npx.log')), 'the (stubbed) nx gate must have been invoked by the real hook');
+  assert.match(git(bare, ['for-each-ref', '--format=%(refname)']), /refs\/heads\/main/, 'push reached the bare remote');
+});
+
+test('d80b7374 AC4 negative control: the same real push is BLOCKED when the gate moves a non-pushed ref', () => {
+  const { push, bare } = pushScenario({
+    sideEffect:
+      'GIT_AUTHOR_NAME=a GIT_AUTHOR_EMAIL=a@b.c GIT_COMMITTER_NAME=a GIT_COMMITTER_EMAIL=a@b.c git update-ref refs/heads/side "$(git commit-tree -p HEAD -m leak HEAD^{tree})"',
+  });
+  assert.notEqual(push.status, 0, 'a leaked ref move must block the push');
+  assert.match(push.stderr, /GIT-ENV-LEAK/);
+  assert.match(push.stderr, /refs\/heads\/side/);
+  assert.doesNotMatch(git(bare, ['for-each-ref', '--format=%(refname)']), /refs\/heads\/main/, 'blocked push must not reach the remote');
 });
