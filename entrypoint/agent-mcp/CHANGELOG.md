@@ -1,3 +1,18 @@
+## 2.3.13 (2026-10-11)
+
+### 🚀 Features
+
+- **agent-engine-orchestrator:** persist budget:unpriced_model and provider:builtin_bypass as typed task events (20772a0b AC1 AC2 AC3 AC4) ([a6b1150b](https://github.com/PseudoSky/adhd/commit/a6b1150b))
+
+### 🩹 Fixes
+
+- **agent-engine-orchestrator:** parse block-style spec tools, disclose bypass once per task, host-wiring test seam (e0d71436 review-M1 M2, 20772a0b review-M1 M2 L3 L4) ([e14b93a4](https://github.com/PseudoSky/adhd/commit/e14b93a4))
+- **agent-plugin-budget:** price the cost cap on the shared rate card and honour provider/agent rate overrides (cf7e0e5c AC1-AC9, cbe0b6ce, ab65aa54) ([c8864b1b](https://github.com/PseudoSky/adhd/commit/c8864b1b))
+
+### ❤️ Thank You
+
+- pseudosky
+
 ## 2.3.12 (2026-10-11)
 
 ### 🩹 Fixes

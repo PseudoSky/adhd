@@ -1,3 +1,46 @@
+## 0.2.9 (2026-10-11)
+
+### 🚀 Features
+
+- **agent-engine-orchestrator:** persist budget:unpriced_model and provider:builtin_bypass as typed task events (20772a0b AC1 AC2 AC3 AC4) ([a6b1150b](https://github.com/PseudoSky/adhd/commit/a6b1150b))
+- **agent-engine-orchestrator:** un-weld agent from provider; resolveSelection chain + session-held binding + fail-closed NO_PROVIDER_SELECTED (5ad2cf37 D-G(2)) ([b5f3f6d8](https://github.com/PseudoSky/adhd/commit/b5f3f6d8))
+- **vite-plugins:** absorb perf/test-resolve-fix — test-time @adhd/* source resolution ([b2022986](https://github.com/PseudoSky/adhd/commit/b2022986))
+- **agent-plugin-budget:** add errors/consecutiveErrors caps + reject tool-scoped context (Packet C, plan §8.9) ([c5fbef89](https://github.com/PseudoSky/adhd/commit/c5fbef89))
+- **agent-plugin-budget:** rename tokens cap to context with peak semantics + contextWindowFraction (Packet B, BUG-AGENTMCP-009) ([0ec6c3f2](https://github.com/PseudoSky/adhd/commit/0ec6c3f2))
+- **release:** nx release independent versioning + verify-dist-load publish gate (Agent 2) ([b777b50b](https://github.com/PseudoSky/adhd/commit/b777b50b))
+- session batch — dispatch tool-exec + provider routing, publish hygiene, agent/env/apigen fixes ([91621210](https://github.com/PseudoSky/adhd/commit/91621210))
+
+### 🩹 Fixes
+
+- **agent-plugin-budget:** document the auto-pricing default change and the store-runtime dependency decision, pin the rate-less cost cap (pp-d1 blind-review #2 #3) ([#2](https://github.com/PseudoSky/adhd/issues/2), [#3](https://github.com/PseudoSky/adhd/issues/3))
+- **agent-plugin-budget:** price the cost cap on usage_query's source and requested model, one basis per scope (cf7e0e5c review-M1 M2 M3 L4 L5 L6) ([a390e6bb](https://github.com/PseudoSky/adhd/commit/a390e6bb))
+- **agent-plugin-budget:** price the cost cap on the shared rate card and honour provider/agent rate overrides (cf7e0e5c AC1-AC9, cbe0b6ce, ab65aa54) ([c8864b1b](https://github.com/PseudoSky/adhd/commit/c8864b1b))
+- **agent-plugin-budget:** reserve toolCalls counter atomically at pre:tool_call, document spend-cap overshoot window (699da472) ([ad887715](https://github.com/PseudoSky/adhd/commit/ad887715))
+- **agent-plugin-budget:** await createPlugin in BUDGET-B1 spec helper (9ed453c1 BUDGET-B1) ([031eac86](https://github.com/PseudoSky/adhd/commit/031eac86))
+- **agent-plugin-budget:** warn mode never alters a call; opt-in soft-block; windowed input/output caps sum their own direction (9ed453c1 BUDGET-B1) ([88c840ca](https://github.com/PseudoSky/adhd/commit/88c840ca))
+- **agent-plugin-budget:** policy denials are not errors (df7c3af9 AC1-AC3) ([293dce21](https://github.com/PseudoSky/adhd/commit/293dce21))
+- **agent-plugin-budget:** enforce global-scope caps via the drizzle handle + scoped cost ([6a2da60d](https://github.com/PseudoSky/adhd/commit/6a2da60d))
+- **agent-mcp:** pin wildcard externals to real ranges ([9869db26](https://github.com/PseudoSky/adhd/commit/9869db26))
+- **vite:** restore import.meta.url in CJS output under vite 8 ([9690844d](https://github.com/PseudoSky/adhd/commit/9690844d))
+- **nx:** finish the ESLint v9 flat-config migration and unblock the gate ([4ccdb53e](https://github.com/PseudoSky/adhd/commit/4ccdb53e))
+- **agent-plugin-budget:** reject windowed caps at task scope (F2 fold-in — silent no-op class, plan §8.9-precedent) ([57b1a7e1](https://github.com/PseudoSky/adhd/commit/57b1a7e1))
+- **agent-plugin-budget:** emit budget:block on tool path; add typecheck targets (Packet A review F1/F5) ([16c2252d](https://github.com/PseudoSky/adhd/commit/16c2252d))
+- **agent-plugin-budget:** honor cap.mode on the model path with budget:warning/budget:block events (Packet A) ([6017091c](https://github.com/PseudoSky/adhd/commit/6017091c))
+- **agent-plugin-budget:** cache-weighted cost enforcement (BUG-AGENTMCP-008) ([75929999](https://github.com/PseudoSky/adhd/commit/75929999))
+- **apigen-cli:** restore 2768 files mass-deleted by 6b36a38a (BUG-APIGEN-052) ([8202f672](https://github.com/PseudoSky/adhd/commit/8202f672))
+- **agent:** BUG-AGENTBASE-TSC-001 — drop composite:true from agent-plugin-{budget,sanitize} ([f88ec3e4](https://github.com/PseudoSky/adhd/commit/f88ec3e4))
+- **nx:** wire test targets into all 15 projects whose specs could never run (BUG-NXTEST-001) ([7616be8f](https://github.com/PseudoSky/adhd/commit/7616be8f))
+- **lint:** eliminate @typescript-eslint/no-explicit-any across 5 packages (LINT-ANY-001) ([6541313c](https://github.com/PseudoSky/adhd/commit/6541313c))
+- **agent:** update stale @adhd/agent-mcp-budget, agent-mcp-sanitize, agent-mcp-types references + clean tsconfig stale entries ([80016bf6](https://github.com/PseudoSky/adhd/commit/80016bf6))
+
+### 🔥 Performance
+
+- **test:** bound vitest thread pools to curb CPU oversubscription (DEBT-TEST-CPU-OVERSUBSCRIBED-001) ([5dad2e52](https://github.com/PseudoSky/adhd/commit/5dad2e52))
+
+### ❤️ Thank You
+
+- pseudosky
+
 ## 0.2.8 (2026-10-11)
 
 This was a version bump only for agent-plugin-budget to align it with other projects, there were no code changes.

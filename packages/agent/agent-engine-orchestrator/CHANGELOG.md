@@ -1,3 +1,21 @@
+## 2.3.13 (2026-10-11)
+
+### 🚀 Features
+
+- **agent-engine-orchestrator:** persist budget:unpriced_model and provider:builtin_bypass as typed task events (20772a0b AC1 AC2 AC3 AC4) ([a6b1150b](https://github.com/PseudoSky/adhd/commit/a6b1150b))
+- **agent-engine-orchestrator:** disclose claudecli built-in bypass of engine tool pipeline (e0d71436 AC1 AC2 AC3) ([bb5bc7e4](https://github.com/PseudoSky/adhd/commit/bb5bc7e4))
+
+### 🩹 Fixes
+
+- **agent-engine-orchestrator:** limiter keeps its slot across abort, spec-mode bypass honors the gate, bypass emit is awaited (cf7e0e5c review-4 review-5 review-6) ([4b0c0734](https://github.com/PseudoSky/adhd/commit/4b0c0734))
+- **agent-engine-orchestrator:** drop queued bridge calls on cancel, margin sampled cache-guard counts, real-task D6 + HITL limiter tests (ea8f6f92 B2 review M1-M4) ([a3ff1f81](https://github.com/PseudoSky/adhd/commit/a3ff1f81))
+- **agent-engine-orchestrator:** parse block-style spec tools, disclose bypass once per task, host-wiring test seam (e0d71436 review-M1 M2, 20772a0b review-M1 M2 L3 L4) ([e14b93a4](https://github.com/PseudoSky/adhd/commit/e14b93a4))
+- **agent-engine-orchestrator:** share one per-task tool limiter with the claudecli bridge and bound the cache-guard tokenizer (ea8f6f92 AC1 AC2 AC3 AC4 AC5) ([488a52cc](https://github.com/PseudoSky/adhd/commit/488a52cc))
+
+### ❤️ Thank You
+
+- pseudosky
+
 ## 2.3.12 (2026-10-11)
 
 This was a version bump only for agent-engine-orchestrator to align it with other projects, there were no code changes.

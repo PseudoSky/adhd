@@ -2,7 +2,7 @@
   "name": "@adhd/dispatch-base-spec",
   "version": "0.1.7",
   "dependencies": {
-    "@adhd/agent-base-types": "^2.3.10"
+    "@adhd/agent-base-types": "^2.3.11"
   },
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",

@@ -1,3 +1,13 @@
+## 2.3.11 (2026-10-11)
+
+### 🚀 Features
+
+- **agent-engine-orchestrator:** persist budget:unpriced_model and provider:builtin_bypass as typed task events (20772a0b AC1 AC2 AC3 AC4) ([a6b1150b](https://github.com/PseudoSky/adhd/commit/a6b1150b))
+
+### ❤️ Thank You
+
+- pseudosky
+
 ## 2.3.10 (2026-10-10)
 
 This was a version bump only for agent-base-types to align it with other projects, there were no code changes.
