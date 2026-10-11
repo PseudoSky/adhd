@@ -2339,7 +2339,9 @@ export function windowMessages(messages: Message[], limit: number): Message[] {
  * {@link DEFAULT_TOOL_CALL_CONCURRENCY} when absent or not a positive integer.
  * Each call is an independent pool task over its own locals (no shared mutable
  * state). A throw (the engine's fatal tool codes) rejects the whole map exactly
- * as `Promise.all` did, and additionally drops calls that have not started.
+ * as `Promise.all` did, and additionally drops calls that have not started
+ * (the queue is cleared before the failing call frees its slot). Calls already
+ * in flight are NOT aborted; they run to completion.
  * Ordinary tool failures are caught inside `fn`, so they never cancel siblings.
  */
 async function mapWithConcurrency<T, R>(
@@ -2352,12 +2354,18 @@ async function mapWithConcurrency<T, R>(
       ? limit
       : DEFAULT_TOOL_CALL_CONCURRENCY;
   const pool = new PQueue({ concurrency });
-  try {
-    return await Promise.all(
-      items.map((item) => pool.add(() => fn(item)) as Promise<R>)
-    );
-  } catch (err) {
-    pool.clear();
-    throw err;
-  }
+  // Clear the queue from INSIDE the failing task, before its slot frees: clearing
+  // only after Promise.all rejects loses the race with the pool promoting the
+  // next queued call the instant the failing one settles (a4235310 AC4).
+  const guarded = async (item: T): Promise<R> => {
+    try {
+      return await fn(item);
+    } catch (err) {
+      pool.clear();
+      throw err;
+    }
+  };
+  return Promise.all(
+    items.map((item) => pool.add(() => guarded(item)) as Promise<R>)
+  );
 }
