@@ -125,6 +125,39 @@ test('C still fires for a vite.config.mts-only project that lacks E2E_FILE_EXCLU
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
+test('C considers BOTH vite.config.ts and vite.config.mts: the exclude in the .mts is honored when a bare .ts also exists [0ba70e47 AC3b]', () => {
+  const root = fixture({
+    'packages/agent/agent-foo/src/x.e2e.test.ts': SPAWNING,
+    'packages/agent/agent-foo/vite.config.ts': 'export default { test: {} };\n',
+    'packages/agent/agent-foo/vite.config.mts': 'export default { test: { exclude: [...E2E_FILE_EXCLUDES] } };\n',
+  });
+  try {
+    assert.deepEqual(rules(collectAgentLaneSpawnViolations(root, EMPTY_BASELINE)), []);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test('C considers BOTH configs: the exclude in the .ts is honored when a bare .mts also exists [0ba70e47 AC3b]', () => {
+  const root = fixture({
+    'packages/agent/agent-foo/src/x.e2e.test.ts': SPAWNING,
+    'packages/agent/agent-foo/vite.config.ts': 'export default { test: { exclude: [...E2E_FILE_EXCLUDES] } };\n',
+    'packages/agent/agent-foo/vite.config.mts': 'export default { test: {} };\n',
+  });
+  try {
+    assert.deepEqual(rules(collectAgentLaneSpawnViolations(root, EMPTY_BASELINE)), []);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test('C still fires when BOTH configs exist and neither excludes E2E_FILE_EXCLUDES (negative control) [0ba70e47 AC3b]', () => {
+  const root = fixture({
+    'packages/agent/agent-foo/src/x.e2e.test.ts': SPAWNING,
+    'packages/agent/agent-foo/vite.config.ts': 'export default { test: {} };\n',
+    'packages/agent/agent-foo/vite.config.mts': 'export default { test: {} };\n',
+  });
+  try {
+    assert.deepEqual(rules(collectAgentLaneSpawnViolations(root, EMPTY_BASELINE)), ['C-e2e-test-not-excluded-from-unit']);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
 test('B fires on a stale pendingMove entry and is silent while the file is still unit-lane [5b839b90 AC2]', () => {
   const root = fixture({ 'packages/agent/agent-foo/src/pending.test.ts': 'export {};\n' });
   try {

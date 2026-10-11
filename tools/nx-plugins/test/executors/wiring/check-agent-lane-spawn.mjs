@@ -133,10 +133,12 @@ export function collectAgentLaneSpawnViolations(workspaceRoot, baselineOverride)
     if (hasE2eTestFiles) {
       // A project's vite config may be `.ts` or `.mts` (0ba70e47 AC3b: a config
       // that needs ESM-only `import.meta.dirname` / ESM plugins must be `.mts`).
-      const cfg = ['vite.config.ts', 'vite.config.mts']
+      // When BOTH exist, both are read (union): either may carry the exclude.
+      const text = ['vite.config.ts', 'vite.config.mts']
         .map((n) => join(workspaceRoot, root, n))
-        .find((f) => existsSync(f));
-      const text = cfg ? readFileSync(cfg, 'utf8') : '';
+        .filter((f) => existsSync(f))
+        .map((f) => readFileSync(f, 'utf8'))
+        .join('\n');
       if (!/E2E_FILE_EXCLUDES/.test(text)) {
         add(
           'C-e2e-test-not-excluded-from-unit',
