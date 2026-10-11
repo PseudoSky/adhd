@@ -20,6 +20,7 @@ import * as DT from './detectors.mjs';
 import * as PF from './preflight.mjs';
 import * as MT from './metrics.mjs';
 import * as GR from './grid.mjs';
+import * as QL from './quality.mjs';
 import { ModelRunCapError } from './ledger.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -34,10 +35,11 @@ const readJson = (p) => JSON.parse(fs.readFileSync(p, 'utf8'));
 function parseArgs(argv) {
   // Round 4: NO --arms / --batch / --keep-going: the plan is always the full seeded 6 runs, and the run cap lives in a durable ledger
   // that is keyed on nothing the command line can change (not --out, not --seed), so re-invoking differently cannot bypass it.
-  const o = { mode: null, out: null, seed: '20261011', wt: DEFAULT_WT, claude: 'claude', yes: false, degraded: null };
+  const o = { round: ROUND, mode: null, out: null, seed: '20261011', wt: DEFAULT_WT, claude: 'claude', yes: false, degraded: null };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]; const v = () => argv[++i];
     if (['--self-check', '--print-plan', '--check-oracle', '--check-lib', '--dry-run', '--live'].includes(a)) o.mode = a.slice(2);
+    else if (['preflight', 'verdict', 'grid'].includes(a)) o.mode = a; else if (a === '--round') o.round = v();
     else if (a === '--out') o.out = path.resolve(v()); else if (a === '--seed') o.seed = v(); else if (a === '--wt') o.wt = path.resolve(v()); else if (a === '--claude') o.claude = v();
     else if (a === '--yes') o.yes = true; else if (a === '--degraded') o.degraded = v();
     else { console.error(`unknown argument ${a}`); process.exit(2); }
@@ -153,12 +155,12 @@ async function sweepOwned(tag) {
 // ----------------------------------------------------------------------------------------------------------------
 function makeCtx(opts, plan, runDef, dry) {
   const spec = F.makeSpec({ seed: opts.seed, arm: runDef.arm, rep: runDef.rep });
-  const outRoot = opts.out ?? path.join(tmpRoot(), 'live/out');
+  const outRoot = opts.out ?? path.join(tmpRoot(opts.round ?? ROUND), 'live/out');
   const runDir = path.join(outRoot, 'runs', spec.runId);
   // The arm's cwd must sit outside any repo / agent-instruction file (ancestorLeaks): repo-root tmp/ is inside this checkout, so it lives under the OS temp dir.
   const work = opts.out ? path.join(outRoot, 'work', spec.runId) : path.join(os.tmpdir(), 'adhd-agent-mcp-parity', ROUND, 'work', spec.runId);
   return { opts, dry, spec, runDef, runDir, work, repoDir: path.join(work, 'repo'), hiddenDir: path.join(work, 'hidden'), ticketFile: path.join(work, 'ticket.txt'),
-    infoLog: path.join(work, 'info-calls.log'), prompts: F.prompts() };
+    infoLog: path.join(work, 'info-calls.log'), prompts: F.prompts(), ledgerPath: LG.ledgerPathFor(opts.round ?? ROUND) };
 }
 
 // ----------------------------------------------------------------------------------------------------------------
@@ -649,6 +651,16 @@ function writeSummary(outDir, records, plan) {
   return rows;
 }
 
+/** Run every detector over the run's normalized tool calls; a DEFECT_SIGNAL or egress-silent-empty result is written to the record (R2.AC8, R6). */
+function annotateDetectors(record) {
+  const ob = record.observation; if (!ob) return;
+  const calls = [...(ob.phase1?.calls ?? []), ...(ob.phase2?.calls ?? [])].map((c, i) => ({ id: c.id ?? c.callId ?? `c${i}`, tool: c.name ?? c.tool ?? '', args: c.args ?? c.input ?? c.argsKey ?? null, isError: !!(c.isError ?? c.error), text: c.resultText ?? '' }));
+  record.detectors = DT.runDetectors(calls);
+  const eg = record.detectors.find((d) => d.detector === 'egress-silent-empty');
+  if (eg?.flagged && record.score?.fields?.w1_web) record.score.fields.w1_web = { ...record.score.fields.w1_web, status: 'invalid', detail: `INVALID(egress): blank web result(s) ${eg.callIds.join(', ')}` };
+  if (record.detectors.some((d) => d.defectSignal)) record.defectSignal = record.detectors.filter((d) => d.defectSignal).map((d) => d.text);
+}
+
 async function runPlan(opts, dry) {
   const plan = buildPlan(opts);
   fs.mkdirSync(opts.out, { recursive: true });
@@ -663,6 +675,12 @@ async function runPlan(opts, dry) {
     if (def.rep === 2 && state.lastFinished[def.arm]) ctx.gapSeconds = Math.round((Date.now() - state.lastFinished[def.arm]) / 1000);
     const { record, aborted } = await runOne(ctx, state);
     records.push(record); state.lastFinished[def.arm] = Date.parse(record.finishedAt || nowIso());
+    annotateDetectors(record);
+    if (def.arm === 'A' && !dry) {
+      const genuine = GT.isGenuineSuccess(record);
+      LG.recordArmA(opts.round ?? ROUND, genuine, genuine ? 'all content items green, no INVALID, no defect signal' : `content ${record.score?.summary?.content?.pass}/${record.score?.summary?.content?.total}, invalid ${record.score?.summary?.invalid}, defect ${!!record.defectSignal}`, path.dirname(ctx.ledgerPath));
+      if (!genuine) { console.log('ITERATION VOID: arm A did not genuinely succeed; B and C are not run and nothing enters the grid (record the void in the LOG)'); break; }
+    }
     if (state.breach) { console.log(`DRY-RUN EGRESS BREACH in ${ctx.spec.runId}: aborting`); record.aborted = [...(record.aborted || []), 'dry-run egress breach']; break; }
     if (aborted) { console.log(`ABORT before ${ctx.spec.runId}: ${record.aborted.join('; ')}`); break; }
     if (record.invalidRun) console.log(`${ctx.spec.runId}: RUN INVALID: ${record.invalidRun.join('; ')}`);
@@ -954,6 +972,53 @@ export async function selfCheck({ log = console.log, opts = parseArgs([]) } = {}
   return { ok: failed.length === 0, total: results.length, failed };
 }
 
+const LOG_PATH = path.join(REPO_ROOT, 'docs/agent/parity/EXPERIMENT-LOG.md');
+export function currentScenarioSha() {
+  const spec = F.makeSpec({ seed: '20261011', arm: 'A', rep: 1 });
+  return GT.scenarioSha({ prompts: F.prompts(), ticketText: F.ticketText(spec), expectations: F.expectedOf(spec) });
+}
+function previousScenarioSha(round, dir = LG.LEDGER_DIR) {
+  const n = (r) => Number.parseInt(String(r).replace(/[^0-9]/g, ''), 10) || 0;
+  let files = []; try { files = fs.readdirSync(dir).filter((f) => /^R\d+\.json$/.test(f)).map((f) => f.slice(0, -5)); } catch { /* none */ }
+  for (const r of files.filter((x) => n(x) < n(round)).sort((a, b) => n(b) - n(a))) { try { const led = LG.readLedger(r, dir); if (led.scenarioSha) return led.scenarioSha; } catch { /* skip */ } }
+  return null;
+}
+async function preflightOnce(opts) {
+  const sdk = await loadSdk(opts.wt);
+  const res = await PF.runPreflight(WEB_SURFACE, PF.DEFAULT_SPEC, (leg, spec) => PF.probeLegViaSdk(sdk, leg, spec));
+  const receipt = PF.buildReceipt({ spec: PF.DEFAULT_SPEC, distEntry: path.join(opts.wt, 'entrypoint/agent-mcp/dist/src/index.js'), legs: res.legs });
+  PF.writeReceipt(tmpRoot(opts.round), receipt);
+  return res;
+}
+async function runPreflightMode(opts) {
+  const res = await preflightOnce(opts);
+  for (const l of res.legs) console.error(`preflight ${l.arm}: ${l.code} ${l.detail}`);
+  console.log(JSON.stringify(res, null, 2)); return res.exitCode;
+}
+/** Live gates in GT.GATE_ORDER (ledger, scope, preflight, pacing): all read-only or zero-model; any red or throwing gate refuses. */
+async function runLiveGates(opts) {
+  return GT.runGates({
+    ledger: () => { const r = LG.checkLedgerForLive(opts.round); return { ok: r.ok, reasons: r.reasons }; },
+    scope: () => { const led = LG.readLedger(opts.round); let logText = ''; try { logText = fs.readFileSync(LOG_PATH, 'utf8'); } catch { /* none */ }
+      return GT.checkScope({ scenarioSha: currentScenarioSha(), previousSha: led.scenarioSha || previousScenarioSha(opts.round), scopeChanges: led.scopeChanges, logText, startedAt: led.startedAt ?? new Date().toISOString() }); },
+    preflight: async () => { const r = await preflightOnce(opts); return { ok: r.ok, reasons: r.legs.filter((l) => l.code !== 'GREEN' && l.code !== 'NOT_PROBEABLE').map((l) => `${l.arm}: ${l.code} ${l.detail}`) }; },
+    pacing: () => ({ ok: true, reasons: [] }),   // the `claude -p /usage` reading is taken per run inside runOne (gatePacing), still before each reservation
+  });
+}
+function loadRoundRecords(round) {
+  const dir = path.join(tmpRoot(round), 'live/out/runs'); const by = {};
+  try { for (const d of fs.readdirSync(dir)) { try { const r = readJson(path.join(dir, d, 'record.json')); by[String(r.runId ?? d)[0]] = r; } catch { /* skip */ } } } catch { /* none */ }
+  return by;
+}
+/** `verdict --round` / `grid --round`: read-only over the round's records (and judge scores when present). */
+function reportMode(opts) {
+  const recs = loadRoundRecords(opts.round); const Q = (arm) => { try { return QL.qualityMean(readJson(path.join(tmpRoot(opts.round), 'judge', `${arm}.json`)).scores); } catch { return null; } };
+  const sums = {}; for (const a of Object.keys(recs)) sums[a] = MT.summarize(recs[a], { genuine: GT.isGenuineSuccess(recs[a]), quality: Q(a) });
+  const rv = MT.roundVerdict(sums);
+  if (rv.verdict === 'VOID') for (const a of Object.keys(recs)) recs[a] = { ...recs[a], state: 'void' };
+  if (opts.mode === 'grid') console.log(GR.renderGrid(recs, rv)); else console.log(MT.formatVerdict(rv));
+  return 0;
+}
 async function main() {
   const opts = parseArgs(process.argv.slice(2));
   if (!opts.mode) { console.error('usage: node drive.mjs --self-check | --print-plan | --check-oracle | --check-lib | --dry-run | --live --yes  [--out DIR] [--seed S] [--wt PATH] [--claude PATH]'); process.exit(2); }
@@ -961,9 +1026,17 @@ async function main() {
   if (opts.mode === 'check-oracle') { process.exit((await checkOracle()) ? 0 : 1); }
   if (opts.mode === 'check-lib') { const { runLibTests } = await import(pathToFileURL(path.join(HERE, 'libtest.mjs')).href); const r = await runLibTests({ log: console.log }); console.log(`lib self-test: ${r.ok ? 'PASS' : 'FAIL'} ${r.total - r.failed.length}/${r.total}`); process.exit(r.ok ? 0 : 1); }
   if (opts.mode === 'print-plan') { console.log(planText(opts)); return; }
+  if (opts.mode === 'preflight') { process.exit(await runPreflightMode(opts)); }
+  if (opts.mode === 'verdict' || opts.mode === 'grid') { process.exit(reportMode(opts)); }
   const dry = opts.mode === 'dry-run';
   if (!dry && !opts.yes) { console.error('--live spends real model quota (hard cap 6 runs in total). Re-run with --yes to confirm.'); process.exit(2); }
-  opts.out = opts.out || path.join(tmpRoot(), dry ? 'dry/out' : 'live/out');
+  opts.out = opts.out || path.join(tmpRoot(opts.round), dry ? 'dry/out' : 'live/out');
+  if (!dry) {   // live: gates run BEFORE pacing and BEFORE any ledger reservation or `claude` spawn (R2.AC7); red => exit 3, nothing touched
+    const g = await runLiveGates(opts);
+    for (const r of g.results) console.error(`gate ${r.gate}: ${r.ok ? 'GREEN' : 'RED'} ${(r.reasons ?? []).join('; ')}`);
+    if (!g.ok) { console.error(`LIVE REFUSED by gate ${g.failed} (exit 3); ledger untouched, no model call, no claude spawned`); process.exit(3); }
+    LG.initRound(opts.round, { scenarioSha: currentScenarioSha() });
+  }
   opts.realClaude = 'claude';
   if (dry) opts.claude = 'FAKE-SET-PER-RUN';
   const { records } = await runPlan(opts, dry);
