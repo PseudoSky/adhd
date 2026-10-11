@@ -149,14 +149,22 @@ export const SHELL_SERVER = {
  * caller supplies neither `allowCommands` nor `allowPatterns`; any caller-supplied
  * list replaces it in full (never merged). Network and privilege tools (`curl`,
  * `wget`, `ssh`, `scp`, `sudo`, `nc`) are deliberately absent — egress is opt-in.
+ *
+ * Every entry is a name the adopted server ACCEPTS under its own default policy
+ * (verified against the real `mcp-shell-server==1.1.12`, 61358b6f follow-through):
+ * the server rejects `sed`, `node`, `python3` (and `env`, `xargs`, `timeout`, `sh`,
+ * `bash`, other interpreters …) as "rejected by default security policy" even when
+ * allowlisted, so listing them only advertised commands that always fail. They
+ * are therefore NOT in the default; `default-shell-allowlist.e2e.test.ts` drives
+ * every entry through the real server so a rejected name cannot be re-added.
  */
 export const DEFAULT_SHELL_ALLOW_COMMANDS: readonly string[] = Object.freeze([
   // file operations
   'cat', 'ls', 'cp', 'mv', 'mkdir', 'rm', 'touch', 'head', 'tail', 'wc', 'sort',
-  'uniq', 'tr', 'cut', 'diff', 'sed', 'awk', 'grep', 'rg', 'echo', 'printf', 'pwd',
+  'uniq', 'tr', 'cut', 'diff', 'awk', 'grep', 'rg', 'echo', 'printf', 'pwd',
   'test', 'true', 'false', 'basename', 'dirname', 'realpath', 'stat', 'tee', 'chmod',
   // toolchains
-  'git', 'node', 'npm', 'pnpm', 'npx', 'nx', 'make', 'tsc', 'python3', 'uv',
+  'git', 'npm', 'pnpm', 'npx', 'nx', 'make', 'tsc', 'uv',
 ]);
 
 /**

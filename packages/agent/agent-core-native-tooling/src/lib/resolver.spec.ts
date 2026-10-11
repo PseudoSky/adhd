@@ -227,7 +227,7 @@ describe('resolveNativeTooling — task-time resolution (ADR-0008 D2/D4)', () =>
       expect(allowOf(true)).toBe(expected);
       expect(allowOf({})).toBe(expected);
       expect(allowOf({ timeoutMs: 5000 })).toBe(expected);
-      for (const name of ['git', 'node', 'pnpm', 'nx', 'python3', 'uv', 'rg', 'ls']) {
+      for (const name of ['git', 'pnpm', 'nx', 'uv', 'rg', 'ls']) {
         expect(expected.split(',')).toContain(name);
       }
     });

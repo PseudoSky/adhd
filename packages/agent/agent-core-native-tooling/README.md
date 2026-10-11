@@ -113,6 +113,38 @@ the gated live-test header
 (`entrypoint/agent-mcp/src/__tests__/integration/native-tooling-adoption.e2e.test.ts`).
 
 
+## Default shell allowlist (ADR-0008 D5 policy change)
+
+When a task's `shell` member supplies **neither** `allowCommands` **nor**
+`allowPatterns`, the resolver emits `DEFAULT_SHELL_ALLOW_COMMANDS` (exported from
+`catalog.ts`; the single source) as the adopted server's `ALLOW_COMMANDS`, so a
+bare `nativeTooling: { shell: true }` agent can do ordinary file and toolchain work
+(`cat ls cp mv mkdir rm touch head tail wc sort uniq tr cut diff awk grep rg echo
+printf pwd test true false basename dirname realpath stat tee chmod git npm pnpm
+npx nx make tsc uv`). The list is an owner-approved policy change (069316e5):
+before it, an unconfigured shell allowed nothing.
+
+Rules:
+
+- **Override.** Any caller-supplied `allowCommands` list — even an empty one —
+  replaces it in full; the two lists are never merged. Re-state any default you
+  still want.
+- **`allowPatterns` suppresses it.** Supplying `allowPatterns` (with or without
+  `allowCommands`) means the default is not emitted, so a pattern-only policy is
+  exactly the patterns.
+- **Exclusions.** Network and privilege tools — `curl`, `wget`, `ssh`, `scp`,
+  `sudo`, `nc` — are deliberately absent. Egress is opt-in: an agent that needs
+  `curl` lists it in `allowCommands` (and the `srt` policy's `allowedDomains`
+  decides which hosts are reachable).
+- **Names the server refuses are not listed.** `mcp-shell-server==1.1.12`
+  rejects `sed`, `node`, `python3` (and `env`, `xargs`, `timeout`, `nice`, `sh`,
+  `bash`, other interpreters, …) with *"Command rejected by default security
+  policy"* even when allowlisted, so advertising them only produced commands that
+  always fail. They were removed from the default after driving every entry
+  through the real server; `default-shell-allowlist.e2e.test.ts` re-checks the
+  whole list on every e2e run. The adopted server's default policy is not
+  something this package overrides (ADR-0008 D5).
+
 ## Shell exit status (61358b6f)
 
 The adopted server computes each command's exit status and drops it: a failing
