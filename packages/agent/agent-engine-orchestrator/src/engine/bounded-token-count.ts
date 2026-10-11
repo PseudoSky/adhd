@@ -31,7 +31,10 @@ import { encode } from 'gpt-tokenizer';
 /** Results up to this many chars are tokenized exactly (worst case ~150 ms on a pathological run). */
 export const BOUNDED_COUNT_EXACT_MAX_CHARS = 20_000;
 
-/** Chars encoded from each of the head and the tail of an oversize result. */
+/**
+ * Half the total sampled-char budget for an oversize result: the {@link BOUNDED_COUNT_SAMPLE_CHUNKS}
+ * evenly spaced chunks together cover 2 * this many chars (name kept for API stability).
+ */
 export const BOUNDED_COUNT_SAMPLE_CHARS = 4_000;
 
 /** Number of evenly spaced chunks sampled from an oversize result. */
@@ -54,7 +57,8 @@ function safeIndex(text: string, index: number): number {
 
 /**
  * Token count for arbitrary text: exact up to the threshold, a bounded
- * head+tail-sample estimate above it.
+ * estimate above it, scaled from {@link BOUNDED_COUNT_SAMPLE_CHUNKS} evenly spaced chunks
+ * (head, interior and tail alike).
  *
  * @param text the full text to count
  * @param encoder tokenizer (injectable for tests); defaults to gpt-tokenizer

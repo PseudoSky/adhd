@@ -20,8 +20,13 @@ import { DEFAULT_TOOL_CALL_CONCURRENCY } from '../interfaces.js';
 export interface IToolLimiter {
   /** Effective in-flight bound. */
   readonly concurrency: number;
-  /** Runs `fn` once a slot is free; the slot is held until `fn` settles. */
-  run<T>(fn: () => Promise<T>): Promise<T>;
+  /**
+   * Runs `fn` once a slot is free; the slot is held until `fn` settles. When `signal` aborts while
+   * the call is still queued, `fn` is never invoked and the returned promise rejects with the
+   * signal's reason (a cancelled task's queued bridge calls are dropped, not run with a dead
+   * signal). A call already running is not interrupted here; its own client receives the signal.
+   */
+  run<T>(fn: () => Promise<T>, signal?: AbortSignal): Promise<T>;
   /**
    * Runs `fn` over `items` through the limiter and returns results in INPUT order. A throw (the
    * engine's fatal tool codes) rejects the whole map exactly as `Promise.all` does and drops calls
@@ -44,7 +49,8 @@ export function createToolLimiter(limit: number | undefined): IToolLimiter {
   const pool = new PQueue({ concurrency });
   return {
     concurrency,
-    run: <T>(fn: () => Promise<T>) => pool.add(fn) as Promise<T>,
+    run: <T>(fn: () => Promise<T>, signal?: AbortSignal) =>
+      pool.add(fn, signal ? { signal } : undefined) as Promise<T>,
     map: <T, R>(items: readonly T[], fn: (item: T) => Promise<R>) => {
       // Per-map abort flag set from INSIDE the failing task, before its slot frees, so the pool
       // cannot promote the next queued call first (a4235310 AC4). Not pool.clear(): the pool is

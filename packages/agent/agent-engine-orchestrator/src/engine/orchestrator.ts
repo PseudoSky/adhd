@@ -1447,8 +1447,10 @@ export class Orchestrator {
                   }
                 }
                 const client = await registry.getClient(target.server);
-                rawResult = await toolLimiter.run(() =>
-                  client.callTool(target.tool, callArguments, composedSignal)
+                rawResult = await toolLimiter.run(
+                  () =>
+                    client.callTool(target.tool, callArguments, composedSignal),
+                  composedSignal
                 );
               } catch (error) {
                 isErr = true;

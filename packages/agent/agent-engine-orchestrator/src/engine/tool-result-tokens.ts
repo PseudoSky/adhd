@@ -23,7 +23,7 @@ import {
 /** Results up to this many chars are tokenized exactly. */
 export const TOOL_RESULT_EXACT_ENCODE_MAX_CHARS = BOUNDED_COUNT_EXACT_MAX_CHARS;
 
-/** Chars encoded from each of the head and the tail of an oversize result. */
+/** Half the total sampled-char budget for an oversize result (see `BOUNDED_COUNT_SAMPLE_CHARS`). */
 export const TOOL_RESULT_SAMPLE_CHARS = BOUNDED_COUNT_SAMPLE_CHARS;
 
 /** Number of evenly spaced chunks sampled from an oversize result. */

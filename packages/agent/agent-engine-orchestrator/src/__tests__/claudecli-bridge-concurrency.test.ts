@@ -8,7 +8,9 @@
  * sleeps.
  *
  *  - AC1: same-message bridged calls never exceed N in flight.
- *  - AC3 (D6): with N=1 a bridged `task` call that spawns a child task completes (no deadlock).
+ *  - AC3 (D6): with N=1 a bridged `task` call that spawns a child completes (no deadlock) - proven
+ *    through the real `taskTool` in claudecli-bridge-concurrency-task.test.ts (review B2-M2).
+ *  - Cancel (review B2-M1): a bridged call still queued when the task is cancelled never runs.
  *  - AC4: a permission-denied bridge call does not hold a slot.
  *  - AC5 (teeth): the AC1 assertion goes red if the bridge acquisition is reverted (see the
  *    negative-control note on the test; verified by reverting `toolLimiter.run` in orchestrator.ts).
@@ -76,6 +78,7 @@ async function runBridged(opts: {
     callTool: (toolName: string, args: unknown) => Promise<unknown>;
     tools?: ToolDefinition[];
     config?: Partial<EngineConfig>;
+    signal?: AbortSignal;
 }) {
     const ctx = makeCtx();
     const registry = {
@@ -86,7 +89,7 @@ async function runBridged(opts: {
     const user: Message = { id: generateId(), sessionId: ctx.sessionId, role: "user", content: "go", createdAt: nowIso() };
     return new Orchestrator().run({
         executionContext: ctx, messages: [user], registry, provider: opts.provider, policy, taskStore, sessionStore,
-        signal: new AbortController().signal, taskId: ctx.taskId, logger: silentLogger,
+        signal: opts.signal ?? new AbortController().signal, taskId: ctx.taskId, logger: silentLogger,
         config: { server: { contextLimit: 0, defaultMaxTokens: 8192 }, ...opts.config } as EngineConfig,
     });
 }
@@ -143,34 +146,6 @@ describe("ea8f6f92-d0db-426e-bf9d-bd7ba2fdd5ca AC1: bridged calls obey toolCallC
     });
 });
 
-describe("ea8f6f92-d0db-426e-bf9d-bd7ba2fdd5ca AC3: no deadlock when a bridged task spawns a child (D6)", () => {
-    it("ea8f6f92 AC3: with toolCallConcurrency=1 a bridged `task` call that runs a child task completes", async () => {
-        // The child is a separate Orchestrator.run with its OWN per-task limiter, exactly as the
-        // real `task` tool's child is; the parent holds the only slot while it runs.
-        let childRan = false;
-        const childProvider = cliProvider(async (exec) => {
-            await exec("lat", "work", { i: 0 }); // the child also uses a bridged call under limit 1
-        });
-        const run = runBridged({
-            config: { toolCallConcurrency: 1 },
-            tools: [tool("agent__task"), tool("lat__work")],
-            provider: cliProvider(async (exec) => {
-                await exec("agent", "task", {});
-            }),
-            callTool: async (toolName) => {
-                if (toolName === "task") {
-                    await runBridged({ provider: childProvider, config: { toolCallConcurrency: 1 }, callTool: async () => [{ type: "text", text: "leaf" }] });
-                    childRan = true;
-                }
-                return [{ type: "text", text: "ok" }];
-            },
-        });
-        const deadline = new Promise<never>((_, rej) => setTimeout(() => rej(new Error("deadlock: bridged task+child did not complete")), 10_000));
-        expect((await Promise.race([run, deadline])).result).toBe("done");
-        expect(childRan).toBe(true);
-    });
-});
-
 describe("ea8f6f92-d0db-426e-bf9d-bd7ba2fdd5ca AC4: refused bridge calls hold no slot", () => {
     it("ea8f6f92 AC4: with limit 1 a permission-denied call returns while another call holds the only slot", async () => {
         const hold = deferred();
@@ -202,5 +177,41 @@ describe("ea8f6f92-d0db-426e-bf9d-bd7ba2fdd5ca AC4: refused bridge calls hold no
         const deadline = new Promise<never>((_, rej) => setTimeout(() => rej(new Error("denied call waited on a slot")), 10_000));
         expect((await Promise.race([run, deadline])).result).toBe("done");
         expect(deniedReturned).toBe(true);
+    });
+});
+
+describe("ea8f6f92-d0db-426e-bf9d-bd7ba2fdd5ca review B2-M1: cancellation drops queued bridged calls", () => {
+    it("ea8f6f92 review-M1: a call queued behind the only slot never invokes the client after the task is cancelled", async () => {
+        const controller = new AbortController();
+        const holding = deferred();
+        const release = deferred();
+        const invoked: number[] = [];
+        let queuedOutcome: { isError?: boolean } | undefined;
+        const run = runBridged({
+            signal: controller.signal,
+            config: { toolCallConcurrency: 1 },
+            provider: cliProvider(async (exec) => {
+                const first = exec("lat", "work", { i: 0 });
+                await holding.promise; // call 0 owns the only slot
+                const queued = exec("lat", "work", { i: 1 }); // parked in the limiter queue
+                await settle();
+                controller.abort(); // cancel while call 1 is still queued
+                release.resolve(); // call 0 finishes; the freed slot must NOT run call 1
+                queuedOutcome = await queued;
+                await first;
+            }),
+            callTool: async (_t, a) => {
+                const i = (a as { i: number }).i;
+                invoked.push(i);
+                if (i === 0) {
+                    holding.resolve();
+                    await release.promise;
+                }
+                return [{ type: "text", text: "ok" }];
+            },
+        });
+        await run.catch(() => undefined); // a cancelled run may reject; the proof is what the client saw
+        expect(invoked).toEqual([0]);
+        expect(queuedOutcome?.isError).toBe(true);
     });
 });

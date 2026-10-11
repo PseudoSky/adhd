@@ -47,7 +47,19 @@
  * 4714, both above the 4096 minimum) were never cached. A 0.75 ratio clears the worst observed
  * undercount with margin: any prefix whose real size is at least the minimum has an estimate of at
  * least ~80% of it.
+ *
+ * Text longer than 20,000 chars is not encoded whole (ea8f6f92 AC1, event-loop
+ * stall on pathological runs): `boundedTokenCount` scales a sample, which can land either side of
+ * the true count on heterogeneous text (a dense middle the sample under-weights). The 80% bound
+ * above was measured on exactly-encoded prefixes, so a sampled figure would erode it and skip
+ * breakpoints the API would honor, the expensive error. {@link SAMPLED_ESTIMATE_MARGIN} therefore
+ * inflates a sampled figure so the sampled path errs toward placing a breakpoint (an unneeded one
+ * is free; a missed one bills the whole prefix uncached every turn). Exactly-encoded text is
+ * unchanged. (review ea8f6f92 B2-M4.)
  */
+// Layering note: `providers/` importing `engine/` is deliberate and acyclic. `bounded-token-count`
+// is a leaf module (only `gpt-tokenizer`), shared with `engine/tool-result-tokens`; it stays at its
+// published path (docs/agent/provider-parity.md, README cite it) rather than moving to `utils/`.
 import { boundedTokenCount } from "../engine/bounded-token-count.js";
 import type {
     CacheControlEphemeral,
@@ -163,8 +175,17 @@ export function serverToolTokens(tools: readonly Tool[] | undefined): number {
     return total;
 }
 
+/**
+ * Multiplier applied to a SAMPLED (not exactly encoded) token figure so sampling error cannot push
+ * the cache guard below the undercount margin {@link CACHE_GUARD_SAFETY_RATIO} was sized for.
+ * 1.25 is the inverse of the worst measured 80% undercount floor.
+ */
+export const SAMPLED_ESTIMATE_MARGIN = 1.25;
+
 function countTokens(text: string): number {
-    return text.length === 0 ? 0 : boundedTokenCount(text).tokens;
+    if (text.length === 0) return 0;
+    const { tokens, estimated } = boundedTokenCount(text);
+    return estimated ? Math.ceil(tokens * SAMPLED_ESTIMATE_MARGIN) : tokens;
 }
 
 /** Model-visible text of one content block, for token estimation. */
