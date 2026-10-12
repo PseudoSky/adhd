@@ -31,6 +31,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 
 - [mig-chrome-manager.1] Every manifest file exists, keeps every export, stays >=80% line-similar to the source, keeps its must-contain tokens.
 
+- [mig-chrome-manager.2] No .ts import specifiers, no reach into agent-search, no Runtime.evaluate/--enable-automation; every relative import resolves.
 ---
 
 ## Reservations
