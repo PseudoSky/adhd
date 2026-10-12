@@ -25,10 +25,10 @@
       "end_ref": "4816496bd96c8e8c6cb686afbf8ee827d02abd9f"
     },
     "deps-install": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-10-12T21:16:07.281Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "eb5f4f01e4f21fd5be2b8d897bec719fafc185e9",
       "end_ref": null
     },
     "mig-foundation": {
