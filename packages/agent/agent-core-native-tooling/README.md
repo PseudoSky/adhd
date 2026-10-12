@@ -121,7 +121,7 @@ When a task's `shell` member supplies **neither** `allowCommands` **nor**
 bare `nativeTooling: { shell: true }` agent can do ordinary file and toolchain work
 (`cat ls cp mv mkdir rm touch head tail wc sort uniq tr cut diff awk grep rg echo
 printf pwd test true false basename dirname realpath stat tee chmod git npm pnpm
-npx nx make tsc uv`). The list is an owner-approved policy change (069316e5):
+npx nx make tsc uv curl`). The list is an owner-approved policy change (069316e5):
 before it, an unconfigured shell allowed nothing.
 
 Rules:
@@ -132,10 +132,12 @@ Rules:
 - **`allowPatterns` suppresses it.** Supplying `allowPatterns` (with or without
   `allowCommands`) means the default is not emitted, so a pattern-only policy is
   exactly the patterns.
-- **Exclusions.** Network and privilege tools — `curl`, `wget`, `ssh`, `scp`,
-  `sudo`, `nc` — are deliberately absent. Egress is opt-in: an agent that needs
-  `curl` lists it in `allowCommands` (and the `srt` policy's `allowedDomains`
-  decides which hosts are reachable).
+- **Network tools.** `curl` is the one network tool in the default
+  (R5-WEB-SIMPLE AC1), so a default agent on any provider can fetch a page
+  (`curl -fsSL <url>`, `| head`, `-o <file>`; `|` and `>` are accepted as their own
+  argv items). `wget`, `ssh`, `scp`, `sudo` and `nc` are deliberately absent.
+  Whether `curl` can reach a host is the `srt` policy's call: agent-mcp's default
+  run policy is open egress; restrict it with `agent.shell.sandbox.allowedDomains`.
 - **Names the server refuses are not listed.** `mcp-shell-server==1.1.12`
   rejects `sed`, `node`, `python3` (and `env`, `xargs`, `timeout`, `nice`, `sh`,
   `bash`, other interpreters, …) with *"Command rejected by default security

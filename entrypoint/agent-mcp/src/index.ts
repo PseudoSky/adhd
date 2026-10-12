@@ -14,7 +14,7 @@ import { logger } from "./logger.js";
 import { initLogChannels, closeLogChannels } from "./wire/channels.js";
 import { createHostHooks } from "./host-hooks.js";
 import { logServerStart, logServerStop, dbPathOf } from "./ops-log.js";
-import { env, resolveInitialSsePort, setSseBoundPort } from "./config.js";
+import { env, operationalEnv, resolveInitialSsePort, setSseBoundPort } from "./config.js";
 import { engineConfig } from "./wire/seams.js";
 import { AgentStore } from "./store/agent-store.js";
 import { loadDefaultPlugins } from "./plugins/load-defaults.js";
@@ -59,6 +59,7 @@ import {
   SrtPolicyConfigError,
   removeRunSrtPolicy,
 } from "./srt-policy.js";
+import { startOpenEgressProxy, type OpenEgressProxy } from "./egress-proxy.js";
 import { startSseServer } from "./streaming/sse-server.js";
 import type { GatewayDepsRef } from "./streaming/chat-gateway.js";
 import { emitTaskEvent } from "./streaming/event-bus.js";
@@ -247,7 +248,13 @@ async function main() {
     // `shell` builtins can initialize their caches/registries and spawn
     // (ADR-0008 D7; deferral a5a2f1d4). Additive + idempotent — an existing
     // user policy is never clobbered.
+    // R5-WEB-SIMPLE AC2: default egress is OPEN — srt has no open mode, so its filtering is delegated
+    // to an allow-all loopback proxy. Not started when the operator restricted egress by config.
+    let egressProxy: OpenEgressProxy | undefined;
     try {
+        if (operationalEnv.config.agent.shell.sandbox.allowedDomains.length === 0) {
+            egressProxy = await startOpenEgressProxy();
+        }
         // The GLOBAL `~/.srt-settings.json` is provisioned STATIC-ONLY — the
         // per-spawn cwd is NEVER persisted into it (finding 535c1101 / A3(a));
         // it is only the fallback for a bare `srt` invocation. The dispatcher's
@@ -256,7 +263,12 @@ async function main() {
         // (A4). The child agent-mcp's `process.cwd()` IS the dispatching cwd
         // (D9), so the per-run file carries the right root.
         const globalPolicy = provisionSrtPolicy();
-        const runPolicy = provisionRunSrtPolicy(process.cwd());
+        const runPolicy = provisionRunSrtPolicy(process.cwd(), process.env, undefined, egressProxy?.port);
+        if (runPolicy.egress.mode === "restricted" && egressProxy) {
+            // The operator pinned its own network policy: the open proxy is not in use.
+            await egressProxy.close();
+            egressProxy = undefined;
+        }
         logger.info(
             {
                 globalPath: globalPolicy.path,
@@ -264,6 +276,12 @@ async function main() {
                 updated: runPolicy.updated,
             },
             "Provisioned srt sandbox policy for native tooling (global static + per-run)"
+        );
+        logger.info(
+            { egress: runPolicy.egress },
+            runPolicy.egress.mode === "open"
+                ? `Shell egress: open (allow-all loopback proxy 127.0.0.1:${runPolicy.egress.proxyPort}; restrict with agent.shell.sandbox.allowedDomains)`
+                : `Shell egress: restricted (${runPolicy.egress.domains} allowed domains)`
         );
     } catch (err) {
         if (err instanceof SrtPolicyConfigError) {
@@ -492,6 +510,7 @@ async function main() {
         // Remove the per-run srt policy file this process created (best-effort;
         // never an operator override).
         removeRunSrtPolicy();
+        await egressProxy?.close();
         const activeSseServer = sseServer;
         if (activeSseServer) {
             await new Promise<void>(resolve => activeSseServer.close(() => resolve()));

@@ -241,8 +241,10 @@ describe('resolveNativeTooling — task-time resolution (ADR-0008 D2/D4)', () =>
       expect(allowOf({ allowPatterns: ['ls.*'] })).toBeUndefined();
     });
 
-    it('069316e5 AC4: curl/wget/ssh/scp/sudo/nc are absent from the default', () => {
-      for (const banned of ['curl', 'wget', 'ssh', 'scp', 'sudo', 'nc']) {
+    it('R5-WEB-SIMPLE AC1: curl is in the emitted default; wget/ssh/scp/sudo/nc stay absent', () => {
+      expect(DEFAULT_SHELL_ALLOW_COMMANDS).toContain('curl');
+      expect((allowOf(undefined) ?? '').split(',')).toContain('curl');
+      for (const banned of ['wget', 'ssh', 'scp', 'sudo', 'nc']) {
         expect(DEFAULT_SHELL_ALLOW_COMMANDS).not.toContain(banned);
         expect((allowOf(undefined) ?? '').split(',')).not.toContain(banned);
       }

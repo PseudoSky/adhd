@@ -25,6 +25,10 @@
 
 ## Unreleased
 
+### 🚀 Features
+
+- **BEHAVIOUR CHANGE: the default shell can `curl`, and default shell egress is OPEN.** `curl` joins `DEFAULT_SHELL_ALLOW_COMMANDS` (`wget`, `ssh`, `scp`, `sudo`, `nc` stay out) and the per-run `srt` policy no longer limits the shell to PyPI: `srt` has no open mode (it rejects `*`, `*.com` and a missing `network` key), so agent-mcp starts a 127.0.0.1-only allow-all forward proxy and points `network.httpProxyPort` at it. Filesystem and credential denies are unchanged. A failed fetch (DNS, refused) exits non-zero and carries `[exit status: N]`. To restrict: set `agent.shell.sandbox.allowedDomains` (env `ADHD_AGENT_SHELL_SANDBOX_ALLOWED_DOMAINS`) to the hosts the shell may reach (PyPI is always kept for the pinned shell server), or pin your own policy with `ADHD_AGENT_SRT_SETTINGS` (any domain beyond the PyPI defaults or your own `httpProxyPort` keeps `srt`'s own filter); drop `curl` from the shell's `allowCommands` to remove the tool. Startup logs one `Shell egress: open|restricted` line. Limits: through the open proxy the sandboxed shell can also reach host loopback and LAN services (`srt`'s resolved-address check does not run for an external proxy), and `srt`'s own SOCKS proxy stays closed (`curl https://` uses the HTTP proxy); Linux bridging to an external proxy port is unverified. The shell and `write_file` tool descriptions now state their constraints (no parent-directory creation, no interpreters/`sed`, `curl -fsSL` for pages). **Release gate: ADR-0017 acceptance must land before this ships.** (R5-WEB-SIMPLE AC1-AC6)
+
 ### 🩹 Fixes
 
 - **agent-mcp:** `AGENT_NOT_FOUND` roster lookup sorts and LIMITs in SQL (selects `cap+1` names, a COUNT only when over the cap) instead of loading and sorting every name. (ad988fda AC1)

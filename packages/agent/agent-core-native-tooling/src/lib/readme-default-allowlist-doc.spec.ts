@@ -44,9 +44,11 @@ describe('README documents the default shell allowlist', () => {
     expect(s).toMatch(/suppress/i);
   });
 
-  it('names every excluded network/privilege tool', () => {
+  it('R5-WEB-SIMPLE AC1: README names curl as the one default network tool and every still-excluded tool', () => {
     const s = section();
-    for (const banned of ['curl', 'wget', 'ssh', 'scp', 'sudo', 'nc']) {
+    expect(s).toContain('`curl`');
+    expect(DEFAULT_SHELL_ALLOW_COMMANDS).toContain('curl');
+    for (const banned of ['wget', 'ssh', 'scp', 'sudo', 'nc']) {
       expect(s, banned).toContain(`\`${banned}\``);
       expect(DEFAULT_SHELL_ALLOW_COMMANDS).not.toContain(banned);
     }

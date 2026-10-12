@@ -7,7 +7,7 @@ An MCP (Model Context Protocol) server exposing a bounded, supervised agent runt
 `@adhd/agent-mcp` is an MCP server that:
 
 - **Runs agents as stateful processes** — each agent maintains conversation history, executes tools, and interacts with model providers (Anthropic, OpenAI, and OpenAI-compatible endpoints such as DeepSeek via an explicit `baseURL` override — see [Providers and credentials](#providers-and-credentials) below)
-- **Enforces runtime policies** — maximum delegation depth, token/cost budgets, filesystem scope, network allowlist, tool deny/allow filters
+- **Enforces runtime policies** — maximum delegation depth, token/cost budgets, filesystem scope, optional shell network allowlist (`agent.shell.sandbox.allowedDomains`; egress is open by default), tool deny/allow filters
 - **Persists state locally** — SQLite-backed storage for agents, sessions, messages, and execution traces
 - **Exposes a tool-call interface** — MCP clients call tools like `agent_create`, `task`, `result`, `task_cancel` to interact with the runtime
 - **Supports multi-turn delegation** — parent agents can spawn child agents with subset-of-parent permissions
@@ -330,6 +330,7 @@ with `false` on the agent definition, not with an env toggle:
 | `ADHD_AGENT_NATIVE_TOOLING_HITL` | bool | HITL enablement; default `true` |
 | `ADHD_AGENT_SHELL_SANDBOX_EXTRA_ALLOW_WRITE` | string[] | extra WRITABLE roots for the srt-sandboxed shell (config key `agent.shell.sandbox.extraAllowWrite`; `~/` expanded; default `~/.adhd/backlog/production/data` so `adhd-backlog` can take its store lease; the backlog `config.yaml` and `backups/` are always denied). Allowlist-validated, read from the global scope only; an invalid value aborts startup |
 | `ADHD_AGENT_SHELL_SANDBOX_EXTRA_ALLOW_WRITE_ROOTS` | string[] | operator-declared trust roots (config key `agent.shell.sandbox.extraAllowWriteRoots`, default none) under which `extraAllowWrite` entries may live, e.g. a relocated backlog store; never `~/.adhd` or a protected path |
+| `ADHD_AGENT_SHELL_SANDBOX_ALLOWED_DOMAINS` | string[] | restrict the srt-sandboxed shell's outbound network to these domains (config key `agent.shell.sandbox.allowedDomains`; `example.com`, `*.example.com`, optional `:port`). Default empty = OPEN egress: the default shell can `curl` any public site. Non-empty = ONLY these domains plus PyPI (the pinned shell server's own cold start). Read from the global scope only |
 
 The retired authored-shell-server path override (the `server.mjs` fallback removed
 by NAT-TOOL-4) no longer resolves; shell configuration is `nativeTooling.shell.*`.

@@ -147,8 +147,11 @@ export const SHELL_SERVER = {
  * Default shell argv allowlist (069316e5; ADR-0008 D5 policy change, owner-approved).
  * The single source: `resolveShell` emits it as `ALLOW_COMMANDS` ONLY when the
  * caller supplies neither `allowCommands` nor `allowPatterns`; any caller-supplied
- * list replaces it in full (never merged). Network and privilege tools (`curl`,
- * `wget`, `ssh`, `scp`, `sudo`, `nc`) are deliberately absent — egress is opt-in.
+ * list replaces it in full (never merged). `curl` is the ONE network tool in the
+ * default (R5-WEB-SIMPLE AC1: every provider can fetch a page through the shell);
+ * `wget`, `ssh`, `scp`, `sudo` and `nc` stay absent. Whether `curl` can reach the
+ * network is the srt egress policy's call (agent-mcp: open by default, restrict
+ * with `agent.shell.sandbox.allowedDomains`).
  *
  * Every entry is a name the adopted server ACCEPTS under its own default policy
  * (verified against the real `mcp-shell-server==1.1.12`, 61358b6f follow-through):
@@ -165,6 +168,8 @@ export const DEFAULT_SHELL_ALLOW_COMMANDS: readonly string[] = Object.freeze([
   'test', 'true', 'false', 'basename', 'dirname', 'realpath', 'stat', 'tee', 'chmod',
   // toolchains
   'git', 'npm', 'pnpm', 'npx', 'nx', 'make', 'tsc', 'uv',
+  // web fetch (R5-WEB-SIMPLE AC1): the one network tool in the default
+  'curl',
 ]);
 
 /**

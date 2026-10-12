@@ -19,6 +19,8 @@
  * prerequisite fails loudly, never skips. Lane: ADR-0009 (`e2e`).
  */
 import { spawn, spawnSync } from 'node:child_process';
+import { createServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { mkdtempSync, realpathSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { delimiter, join, resolve } from 'node:path';
@@ -42,7 +44,7 @@ const PROBE_ARGV: Record<string, string[]> = {
   true: [], false: [], basename: ['/a/b'], dirname: ['/a/b'], realpath: [NX], stat: [NX],
   tee: [`${NX}/x`], chmod: ['644', NX], git: ['--version'], npm: ['--version'],
   pnpm: ['--version'], npx: ['--version'], nx: ['--version'], make: ['--version'],
-  tsc: ['--version'], uv: ['--version'],
+  tsc: ['--version'], uv: ['--version'], curl: ['--version'],
 };
 
 type Stdio = Extract<McpServerConfig, { transport: 'stdio' }>;
@@ -90,6 +92,28 @@ describe('61358b6f every DEFAULT_SHELL_ALLOW_COMMANDS entry is accepted by the r
       expect(text).not.toMatch(POLICY_REJECTION);
     }, CALL_MS + 10_000);
   }
+
+  it('R5-WEB-SIMPLE AC1: the real server runs curl, `curl | head` and `curl -o` / `curl > file` (| and > as argv items) and returns the body', async () => {
+    const BODY = 'PROBE-BODY-0123456789-abcdefghij';
+    const web = createServer((_req, res) => res.end(BODY));
+    await new Promise<void>((ok) => web.listen(0, '127.0.0.1', ok));
+    const url = `http://127.0.0.1:${(web.address() as AddressInfo).port}/`;
+    const call = async (command: string[]): Promise<string> => {
+      const r = await client.request('tools/call', { name: 'shell_execute', arguments: { command, timeout: 8 } }, CALL_MS);
+      expect(r.result?.isError, JSON.stringify(r)).toBe(false);
+      return (r.result?.content ?? []).map((b: { text?: string }) => b.text ?? '').join('\n');
+    };
+    try {
+      expect(await call(['curl', '-sL', url])).toBe(BODY);
+      expect(await call(['curl', '-sL', url, '|', 'head', '-c', '10'])).toBe('PROBE-BODY');
+      await call(['curl', '-sL', '-o', 'out.html', url]);
+      expect(await call(['cat', 'out.html'])).toBe(BODY);
+      await call(['curl', '-sL', url, '>', 'out2.html']);
+      expect(await call(['cat', 'out2.html'])).toBe(BODY);
+    } finally {
+      await new Promise<void>((ok) => web.close(() => ok()));
+    }
+  }, CALL_MS * 8);
 
   it('61358b6f control: the server DOES reject sed, node and python3 (the entries this list used to carry)', async () => {
     // Teeth: the probe can see a policy rejection. These need an allowlist that includes them.

@@ -68,6 +68,8 @@ export interface SrtSettings {
   network?: {
     allowedDomains?: string[];
     deniedDomains?: string[];
+    /** External filtering proxy srt uses instead of its own (R5-WEB-SIMPLE AC2: the open-egress proxy). */
+    httpProxyPort?: number;
   };
   /** Any other srt setting (e.g. `windows`) is carried through untouched. */
   [key: string]: unknown;
@@ -110,8 +112,14 @@ export interface ProvisionSrtPolicyOptions {
    * root; tests running under a fake `$HOME` pass theirs. Ignored when `spillReadDir` is omitted.
    */
   spillTempRoot?: string;
-  /** Extra network allow-list domains to union into `allowedDomains`. */
+  /** Extra network allow-list domains to union into `allowedDomains`. Non-empty => egress is restricted. */
   allowedDomains?: string[];
+  /**
+   * R5-WEB-SIMPLE AC2: loopback port of the allow-all egress proxy ({@link startOpenEgressProxy}).
+   * Rendered as `network.httpProxyPort` ONLY when no operator restriction applies (see
+   * {@link operatorRestrictsEgress}); otherwise srt's own domain filter stays in force.
+   */
+  openEgressProxyPort?: number;
   /**
    * Extra paths to union into `denyWrite` (additive, NOT host-managed: later provisions of the same
    * file keep them). Used for the exit-status shim directory (61358b6f), which the sandboxed shell
@@ -127,6 +135,8 @@ export interface ProvisionedSrtPolicy {
   /** True when the file changed (created or a new rule was merged in). */
   updated: boolean;
   settings: SrtSettings;
+  /** R5-WEB-SIMPLE AC2: `open` (allow-all loopback proxy) or `restricted` (srt domain allow-list). */
+  egress: { mode: 'open'; proxyPort: number } | { mode: 'restricted'; domains: number };
 }
 
 /**
@@ -562,6 +572,9 @@ let activeRunSettingsIsOverride = false;
  */
 const appliedRunRoots = new Set<string>();
 
+/** The open-egress proxy port the run policy was provisioned with, re-applied by every later re-provision. */
+let activeOpenEgressPort: number | undefined;
+
 /**
  * Provision the per-run `srt` policy (static allow-list + this run's cwd) and
  * make it the active path the resolver passes via `srt -s`. Idempotent;
@@ -572,7 +585,8 @@ const appliedRunRoots = new Set<string>();
 export function provisionRunSrtPolicy(
   cwd: string,
   env: NodeJS.ProcessEnv = process.env,
-  roots?: Pick<LogRoots, 'temp'>
+  roots?: Pick<LogRoots, 'temp'>,
+  openEgressProxyPort?: number
 ): ProvisionedSrtPolicy {
   const path = resolveSrtRunSettingsPath(env, roots);
   const override = Boolean(env[SRT_SETTINGS_ENV]);
@@ -585,7 +599,8 @@ export function provisionRunSrtPolicy(
       /* ignore */
     }
   }
-  const result = provisionSrtPolicy({ settingsPath: path, allowWrite: [cwd], applySandboxExtras: true });
+  const result = provisionSrtPolicy({ settingsPath: path, allowWrite: [cwd], applySandboxExtras: true, openEgressProxyPort });
+  activeOpenEgressPort = openEgressProxyPort;
   activeRunSettingsPath = path;
   activeRunSettingsIsOverride = Boolean(env[SRT_SETTINGS_ENV]);
   appliedRunRoots.clear();
@@ -620,7 +635,7 @@ export function addRunSrtAllowWrite(roots: readonly string[]): void {
   if (roots.length === 0) return;
   const fresh = roots.filter((root) => !appliedRunRoots.has(root));
   if (fresh.length === 0) return;
-  provisionSrtPolicy({ settingsPath: activeRunSettingsPath, allowWrite: fresh, applySandboxExtras: true });
+  provisionSrtPolicy({ settingsPath: activeRunSettingsPath, allowWrite: fresh, applySandboxExtras: true, openEgressProxyPort: activeOpenEgressPort });
   for (const root of fresh) appliedRunRoots.add(root);
 }
 
@@ -635,7 +650,7 @@ export function addRunSrtReadOnlyDir(dir: string): void {
   if (!activeRunSettingsPath) return;
   const key = `ro:${dir}`;
   if (appliedRunRoots.has(key)) return;
-  provisionSrtPolicy({ settingsPath: activeRunSettingsPath, allowRead: [dir], denyWrite: [dir], applySandboxExtras: true });
+  provisionSrtPolicy({ settingsPath: activeRunSettingsPath, allowRead: [dir], denyWrite: [dir], applySandboxExtras: true, openEgressProxyPort: activeOpenEgressPort });
   appliedRunRoots.add(key);
 }
 
@@ -757,13 +772,21 @@ interface IManaged {
   denyWrite: string[];
   /** Spill read-allows (BK9) injected by the previous provision. */
   allowRead: string[];
+  /** The open-egress proxy port (R5-WEB-SIMPLE AC2) this host injected on the previous provision. */
+  httpProxyPort: number | undefined;
 }
 
 /** The host-managed entries recorded by the previous provision (see `adhdManaged`). */
 function readManaged(current: SrtSettings): IManaged {
   const raw = current['adhdManaged'];
   const obj = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
-  return { extraAllowWrite: toArray(obj['extraAllowWrite']), denyWrite: toArray(obj['denyWrite']), allowRead: toArray(obj['allowRead']) };
+  const port = obj['httpProxyPort'];
+  return {
+    extraAllowWrite: toArray(obj['extraAllowWrite']),
+    denyWrite: toArray(obj['denyWrite']),
+    allowRead: toArray(obj['allowRead']),
+    httpProxyPort: typeof port === 'number' ? port : undefined,
+  };
 }
 
 function readExisting(path: string): SrtSettings {
@@ -839,10 +862,23 @@ export function provisionSrtPolicy(
       withoutManaged(toArray(current.filesystem?.allowRead), prevManaged.allowRead),
       union(managedRead, opts.allowRead ?? [])
     );
+    const configuredDomains = opts.applySandboxExtras ? [...operationalEnv.config.agent.shell.sandbox.allowedDomains] : [];
     const allowedDomains = union(
       toArray(current.network?.allowedDomains),
-      union(DEFAULT_SRT_ALLOWED_DOMAINS, opts.allowedDomains ?? [])
+      union(DEFAULT_SRT_ALLOWED_DOMAINS, union(configuredDomains, opts.allowedDomains ?? []))
     );
+    // R5-WEB-SIMPLE AC2: egress is OPEN (srt delegates filtering to the allow-all loopback proxy) unless
+    // the operator restricted it: any domain beyond the PyPI defaults (config key, caller option, or
+    // already in an operator-pinned file) or an operator-authored `httpProxyPort` keeps srt's own filter.
+    const operatorProxy =
+      current.network?.httpProxyPort !== undefined && current.network.httpProxyPort !== prevManaged.httpProxyPort;
+    const restricted =
+      opts.openEgressProxyPort === undefined ||
+      operatorProxy ||
+      allowedDomains.some((d) => !DEFAULT_SRT_ALLOWED_DOMAINS.includes(d));
+    const proxyPort = restricted ? undefined : opts.openEgressProxyPort;
+    const { httpProxyPort: priorProxyPort, ...networkRest } = current.network ?? {};
+    void priorProxyPort;
 
     const denyRead = union(toArray(current.filesystem?.denyRead), defaultSrtDenyRead());
     const denyWrite = union(
@@ -860,21 +896,25 @@ export function provisionSrtPolicy(
         denyWrite,
       },
       network: {
-        ...(current.network ?? {}),
+        ...networkRest,
+        // An operator-authored proxy port survives; a port WE injected earlier is dropped unless re-applied.
+        ...(operatorProxy ? { httpProxyPort: current.network?.httpProxyPort } : {}),
         allowedDomains,
         deniedDomains: toArray(current.network?.deniedDomains),
+        ...(proxyPort !== undefined ? { httpProxyPort: proxyPort } : {}),
       },
-      ...(managedExtra.length > 0 || managedDeny.length > 0 || managedRead.length > 0
+      ...(managedExtra.length > 0 || managedDeny.length > 0 || managedRead.length > 0 || proxyPort !== undefined
         ? {
             adhdManaged: {
               extraAllowWrite: managedExtra,
               denyWrite: managedDeny,
               ...(managedRead.length > 0 ? { allowRead: managedRead } : {}),
+              ...(proxyPort !== undefined ? { httpProxyPort: proxyPort } : {}),
             },
           }
         : {}),
     };
-    if (managedExtra.length === 0 && managedDeny.length === 0 && managedRead.length === 0) delete next['adhdManaged'];
+    if (managedExtra.length === 0 && managedDeny.length === 0 && managedRead.length === 0 && proxyPort === undefined) delete next['adhdManaged'];
 
     const before = existed
       ? JSON.stringify(current)
@@ -892,7 +932,9 @@ export function provisionSrtPolicy(
       renameSync(tmp, path);
     }
 
-    return { path, created: !existed, updated, settings: next };
+    const egress: ProvisionedSrtPolicy['egress'] =
+      proxyPort !== undefined ? { mode: 'open', proxyPort } : { mode: 'restricted', domains: allowedDomains.length };
+    return { path, created: !existed, updated, settings: next, egress };
   });
 }
 

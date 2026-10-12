@@ -125,6 +125,8 @@ export interface AgentMcpConfig {
       readonly sandbox: {
         readonly extraAllowWrite: readonly string[];
         readonly extraAllowWriteRoots: readonly string[];
+        /** R5-WEB-SIMPLE AC2: non-empty => egress is RESTRICTED to these domains (+ PyPI); empty => open. */
+        readonly allowedDomains: readonly string[];
       };
     };
   };
@@ -611,6 +613,16 @@ export const agentMcpEnvironmentSpec: EnvironmentSpec<AgentMcpConfig> = {
         "and never touch $HOME, ~/.ssh, ~/.claude, ~/.gnupg, ~/.config, shell rc files, the run-policy " +
         "dir or a denyRead path; no `..` or globs. An invalid entry aborts startup. Read from the " +
         "global scope only.",
+    },
+    "agent.shell.sandbox.allowedDomains": {
+      type: "array",
+      env: "ADHD_AGENT_SHELL_SANDBOX_ALLOWED_DOMAINS",
+      default: [],
+      description:
+        "Restrict the srt-sandboxed shell's outbound network to these domains (comma-separated env / " +
+        "config-file array; `example.com`, `*.example.com`, optional `:port`). Default empty = OPEN egress " +
+        "(the default shell can `curl` any public site). When non-empty the shell reaches ONLY these domains " +
+        "plus PyPI (the pinned shell server's own cold start). Read from the global scope only.",
     },
     "agent.shell.sandbox.extraAllowWriteRoots": {
       type: "array",
