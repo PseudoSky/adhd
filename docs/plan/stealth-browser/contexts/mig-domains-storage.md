@@ -34,6 +34,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 
 - [mig-domains-storage.2] No .ts import specifiers, no reach into agent-search, no Runtime.evaluate/--enable-automation; every relative import resolves.
 - [mig-domains-storage.3] Only owned paths changed by [psm:mig-domains-storage] commits; agent-search source tree and main checkout node_modules untouched.
+- [mig-domains-storage.4] storage/helpers.ts still opens Chrome databases `mode=ro&immutable=1` (no file locking) and still exports openDb via helpers.
 ---
 
 ## Reservations

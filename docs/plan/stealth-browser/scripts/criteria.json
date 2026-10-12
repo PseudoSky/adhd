@@ -342,6 +342,15 @@
       "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py mig-domains-storage --only mig-domains-storage.3",
       "expect": "exit0",
       "cwd": "repo-root"
+    },
+    {
+      "id": "mig-domains-storage.4",
+      "phase": "migrate",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py mig-domains-storage --only mig-domains-storage.4",
+      "expect": "exit0",
+      "cwd": "repo-root"
     }
   ]
 }
