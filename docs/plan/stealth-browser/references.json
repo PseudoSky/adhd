@@ -1,1 +1,9 @@
-{}
+{
+  "runner-port": {
+    "anchor": "/Users/nix/dev/ai/scratch/agent-browser/adhd/",
+    "rule": "Behavior-preserving port: every export kept, >=80% line similarity after .ts->.js normalization, must-contain tokens present",
+    "discovered_via": "manual",
+    "shared_ref": "[ref:runner-port]",
+    "audit_check": "[audit-final.ref-runner-port]"
+  }
+}
