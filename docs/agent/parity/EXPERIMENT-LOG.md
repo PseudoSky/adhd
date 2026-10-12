@@ -463,3 +463,8 @@ Not a parity blocker (architect verdict APPROVE, 2026-10-11): shell exit status.
 ### 2026-10-12T07:22:49Z — SCOPE-R6B addendum 4: EFFORT LEVEL IS HIGH, NOT MEDIUM (dispatcher)
 - user-request (verbatim, owner, right after "equalize effort medium"): "high"
 - Dispatcher reading (structuring): the equalized effort level is high on A, B and C; this replaces the medium level in addendum 3 (that entry is kept as the record). Fact (a7da9f97): the API default effort is high, so arm C needs no parameter if the request is verified to carry none; A and B need an explicit high. Still verified on the wire via the capture proxy, and still reported not-applicable on all arms if claude-haiku-4-5 has no effort setting.
+
+### 2026-10-12T07:23:35Z — SCOPE-R6B-model-correction: "haiku" MEANS claude-haiku-5-5, NOT claude-haiku-4-5 (dispatcher)
+- user-request (verbatim, owner): "why the actual fuck are you using 4.5?"
+- Fact: every round R1-R6 pinned claude-haiku-4-5 (ledger PIN_MODEL, rate card claude_haiku_4_5, judge haiku-4-5). I carried that pin forward when the owner said "switching back to haiku" and never checked for a newer haiku. claude-haiku-5-5 exists: CLI 2.1.296 binary and ~/.claude/cache/model-catalog list it ("Haiku 5.5", effort options low/medium/high/xhigh/max); packages/agent/agent-core-provider/src/pricing/pricing.json has anthropic/claude-haiku-5.5. This entry supersedes the haiku-4-5 reading in SCOPE-R6B-model-haiku (kept as record).
+- Consequence (dispatcher, not yet owner-confirmed): R6 A1 and C1 ran on haiku-4-5, so they are not references for a haiku-5-5 B run. A valid comparison needs A, B and C on claude-haiku-5-5. Judge model not yet decided.
