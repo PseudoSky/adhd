@@ -470,6 +470,21 @@
       ],
       "context": "contexts/prod-errors.md",
       "notes": "executor=typescript-pro tier=sonnet/high"
+    },
+    "prod-examples": {
+      "kind": "work",
+      "phase": "surface",
+      "depends_on": [
+        "tracing-plugin"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py prod-examples",
+      "artifacts": [
+        "entrypoint/stealth-browser/examples/",
+        "entrypoint/stealth-browser/src/test/unit/examples/",
+        "entrypoint/stealth-browser/tsconfig.spec.json"
+      ],
+      "context": "contexts/prod-examples.md",
+      "notes": "executor=typescript-pro tier=sonnet/medium"
     }
   },
   "authored_with": {
