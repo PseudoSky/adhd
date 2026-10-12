@@ -45,6 +45,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 - [tests-e2e.4] E2E files cite ticket 8468f7b1 and valid [slug.N] ids.
 - [tests-e2e.5] `nx run stealth-browser:e2e` exits 0, takes >= 5s wall clock (real Chrome, not a vacuous run) and leaves the pre-existing 9222 listener (if any) untouched.
 - [tests-e2e.6] (PA2.1) The e2e seeds a cookie with a unique value on the real Chrome (Network.setCookie) and asserts getPageContext over BOTH the built MCP bin and the CLI returns the cookie name and count but never the value string.
+- [tests-e2e.7] (PA9.2, PA5.3) The e2e runs the real MCP bin with --verbose and asserts every stdout line parses as JSON-RPC while diagnostics appear only on stderr.
 ---
 
 ## Reservations
