@@ -38,6 +38,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 - [audit-final.6] [dod.6] structural: one blind review round, every finding resolved by one implementer, gates re-run green after resolution.
 - [audit-final.7] [dod.7] structural: docs marketing run PASS, README rewrite receipts-backed (docs-marketing-run and readme-rewrite checks re-run).
 - [audit-final.8] [dod.8] structural: the working tree under entrypoint/stealth-browser and docs/plan/stealth-browser is clean (everything committed) and the main checkout node_modules is untouched.
+- [audit-final.9] Every spec/e2e file cites ticket 8468f7b1 and a valid criterion id (final re-run of the citation rule).
 ---
 
 ## Reservations
