@@ -187,6 +187,15 @@ describe('R8-judge AC3: rejudgeRecord (the saved run, judged again once)', () =>
     expect(JSON.parse(fs.readFileSync(path.join(s.judgeDir, 'B.json'), 'utf8')).scores).toBeTruthy();
   });
 
+  it('the final-state check ignores the key ORDER of the recorded files (the live B1 record stores them in a different order than repoFilesOf)', async () => {
+    const s = savedRun();
+    const rec = JSON.parse(fs.readFileSync(s.recordPath, 'utf8'));
+    rec.observation.files = Object.fromEntries(Object.entries(rec.observation.files).reverse());
+    fs.writeFileSync(s.recordPath, JSON.stringify(rec));
+    const out = await D.rejudgeRecord({ ...s, round: 'RJR', client: okClient() });
+    expect(out.quality.status).toBe('scored');
+  });
+
   it('a second invocation on the now-scored record is refused BEFORE any call (no double spend)', async () => {
     const s = savedRun();
     await D.rejudgeRecord({ ...s, round: 'RJR', client: okClient() });

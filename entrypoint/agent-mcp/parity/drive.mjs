@@ -1505,7 +1505,8 @@ export async function rejudgeRecord({ round, recordPath, profile, judgeDir, ledg
   if (credential && !credential.present) throw new Error('rejudge: no judge credential (set ANTHROPIC_API_KEY or ADHD_AGENT_ANTHROPIC_SECRET in the environment or ~/.adhd/.env); the judge is a paid API call: no call made');
   if (!record.workDir) throw new Error(`rejudge: ${record.runId} has no workDir; cannot rebuild the artifact diff`);
   const repoDir = path.join(record.workDir, 'repo'); const recorded = record.observation?.files;
-  if (!recorded || JSON.stringify(repoFilesOf(repoDir)) !== JSON.stringify(recorded)) throw new Error(`rejudge: ${repoDir} does not match the final repo state recorded for ${record.runId} (observation.files): refusing to judge a different state: no call made`);
+  const now = repoFilesOf(repoDir);   // compared per file: the recorded key ORDER is not part of the state
+  if (!recorded || Object.keys(recorded).length !== Object.keys(now).length || Object.keys(recorded).some((k) => !(k in now) || now[k] !== recorded[k])) throw new Error(`rejudge: ${repoDir} does not match the final repo state recorded for ${record.runId} (observation.files): refusing to judge a different state: no call made`);
   const spec = F.makeSpec({ seed: record.seed, arm: record.arm, rep: record.rep, pin: profile.model });
   const waived = !!profile.arms && !profile.arms.includes('A');
   const aGenuine = waived ? true : LG.readLedger(round, path.dirname(ledgerPath)).armA?.genuine === true;
