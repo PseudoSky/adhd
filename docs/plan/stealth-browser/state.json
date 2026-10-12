@@ -116,10 +116,10 @@
       "end_ref": null
     },
     "tests-unit-extract": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-10-12T21:28:39.394Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "2abb36b5cb2845bff25e899a31908a9669482b83",
       "end_ref": null
     },
     "tests-unit-surface": {
