@@ -6,7 +6,8 @@
     "productization",
     "scaffold",
     "migrate",
-    "surface"
+    "surface",
+    "verify"
   ],
   "terminal": "done",
   "nodes": {},
