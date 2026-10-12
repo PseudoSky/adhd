@@ -19,6 +19,7 @@ import re
 import subprocess
 import sys
 import time
+import urllib.parse
 
 TOP = subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True).stdout.strip()
 os.chdir(TOP)
@@ -520,10 +521,21 @@ def _d4():
 
 @check("deps-install", 5)
 def _d5():
-    """The worktree has its OWN node_modules (real directory, not a symlink) and the three deps resolve from entrypoint/stealth-browser."""
+    """The worktree-root node_modules is a real directory (not a symlink) and each of the three deps resolves, by real Node ESM resolution run from entrypoint/stealth-browser, to a path inside this worktree (never the main checkout)."""
     real = os.path.isdir("node_modules") and not os.path.islink("node_modules")
-    res = all(exists(f"{P}/node_modules/{k}") for k in WANT_DEPS)
-    return real and res, f"real={real} resolved={res}"
+    wt = os.path.realpath(TOP)
+    main_nm = os.path.realpath(f"{MAIN}/node_modules") + os.sep
+    bad = []
+    for k in WANT_DEPS:
+        rc, out = sh(["node", "--input-type=module", "-e", f"console.log(import.meta.resolve({json.dumps(k)}))"], timeout=60, cwd=P)
+        url = out.strip().splitlines()[-1] if out.strip() else ""
+        if rc != 0 or not url.startswith("file://"):
+            bad.append(f"{k}: unresolved")
+            continue
+        path = os.path.realpath(urllib.parse.unquote(url[len("file://"):]))
+        if path.startswith(main_nm) or not (path + os.sep).startswith(wt + os.sep):
+            bad.append(f"{k}: resolves outside worktree ({path})")
+    return real and not bad, f"real={real} " + ("resolved in worktree" if not bad else "; ".join(bad))
 
 
 @check("deps-install", 6)
@@ -531,6 +543,18 @@ def _d6():
     """Main checkout node_modules untouched (.modules.yaml mtime == stamp) and only owned paths changed."""
     a, b = main_nm_untouched(), ownership_ok("deps-install")
     return a[0] and b[0], f"{a[1]} | {b[1]}"
+
+
+TEMP_IGNORE_MARK = "TEMPORARY(stealth-browser:deps-install)"
+
+
+@check("deps-install", 7)
+def _d7():
+    """eslint.config.mjs carries the documented TEMPORARY `@nx/dependency-checks` `ignoredDependencies` entry for node-html-parser, xpath and @xmldom/xmldom (removed again by mig-capture-parsers.6), so the dependency commit passes the pre-commit lint without bypassing hooks."""
+    t = read(f"{P}/eslint.config.mjs")
+    m = re.search(r"ignoredDependencies\s*:\s*\[([^\]]*)\]", t)
+    listed = set(re.findall(r"['\"]([^'\"]+)['\"]", m.group(1))) if m else set()
+    return set(WANT_DEPS) <= listed and TEMP_IGNORE_MARK in t, f"ignoredDependencies={sorted(listed)} marker={TEMP_IGNORE_MARK in t}"
 
 
 # ============================================================ migration buckets
@@ -578,6 +602,19 @@ def _mcp5():
     t = read(f"{P}/src/lib/parsers.ts")
     mods = set(re.findall(r"from\s+['\"]([^./'\"][^'\"]*)['\"]", t)) - {m for m in re.findall(r"from\s+['\"](node:[^'\"]+)['\"]", t)}
     return mods <= set(WANT_DEPS) and set(WANT_DEPS) <= set(pkg().get("dependencies", {})), f"imports={sorted(mods)}"
+
+
+@check("mig-capture-parsers", 6)
+def _mcp6():
+    """The temporary deps-install `ignoredDependencies` entry is gone from eslint.config.mjs (no marker, none of the three packages listed) and `nx run stealth-browser:lint` still exits 0 (@nx/dependency-checks now sees parsers.ts import them)."""
+    t = read(f"{P}/eslint.config.mjs")
+    if not t:
+        return False, "eslint.config.mjs missing"
+    still = TEMP_IGNORE_MARK in t or any(k in t for k in WANT_DEPS)
+    if still:
+        return False, "temporary ignoredDependencies entry still present in eslint.config.mjs"
+    rc, out = sh([NX, "run", f"{proj_name()}:lint"], timeout=900)
+    return rc == 0, f"lint rc={rc} " + out[-300:].replace("\n", " ")
 
 
 standard_port_checks("mig-chrome-manager", "chrome-manager")

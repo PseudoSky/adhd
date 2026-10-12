@@ -20,7 +20,7 @@ The capture layer (`bans`, `dom`, `network`, barrel) and the DOM/XPath parsers e
 
 - **Delta Spec:** Port every file listed for this bucket in `docs/plan/stealth-browser/scripts/port-manifest.json` (source `adhd/capture/*.ts, adhd/parsers.ts` -> destination under `entrypoint/stealth-browser/`). The port is BEHAVIOR-PRESERVING: copy, then adapt only (a) relative import specifiers to the new layout with `.js` extensions, (b) header comments that name the old repo layout. Every export of the source file must still be exported (guard compares export names) and each file must stay >= the manifest's `min_similarity` line-similar to its source (default 0.80). No `Runtime.evaluate`, no `--enable-automation`, no imports from agent-search, no committed `.js` twins. `capture/dom.ts` is carried verbatim but its header gets an `@deprecated` JSDoc line (Google-SERP walker; the source marks the root duplicate deprecated) so product can decide its fate at the hold point.
 
-- **Invariants:** `parsers.ts` third-party imports are exactly the three declared packages. [inv:esm-js-specifiers] [inv:stealth] [ref:runner-port] Also: [inv:shared-worktree] (commit only your own explicit paths, tag every commit `[psm:mig-capture-parsers]`), [inv:owned-paths-only], [inv:no-main-writes].
+- **Invariants:** `parsers.ts` third-party imports are exactly the three declared packages. `deps-install` left a TEMPORARY `ignoredDependencies` entry (marker `TEMPORARY(stealth-browser:deps-install)`) in `entrypoint/stealth-browser/eslint.config.mjs`; once `parsers.ts` imports the packages, REMOVE the whole entry and its comment (leave the rest of the `@nx/dependency-checks` options intact) and confirm `nx run stealth-browser:lint` exits 0 without it. Commit `parsers.ts` and the eslint removal together by explicit path. [inv:esm-js-specifiers] [inv:stealth] [ref:runner-port] Also: [inv:shared-worktree] (commit only your own explicit paths, tag every commit `[psm:mig-capture-parsers]`), [inv:owned-paths-only], [inv:no-main-writes].
 
 - **Validation:** `python3 docs/plan/stealth-browser/scripts/guard.py mig-capture-parsers` — runs every acceptance criterion below (red until the work is done); `--only mig-capture-parsers.N` runs one.
 
@@ -36,20 +36,21 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 - [mig-capture-parsers.3] Only owned paths changed by [psm:mig-capture-parsers] commits; agent-search source tree and main checkout node_modules untouched.
 - [mig-capture-parsers.4] capture/dom.ts is carried verbatim but marked @deprecated (Google-SERP walker; removal candidate for the product hold).
 - [mig-capture-parsers.5] Parser third-party imports are exactly node-html-parser, xpath and @xmldom/xmldom (declared in package.json by deps-install).
+- [mig-capture-parsers.6] The temporary deps-install `ignoredDependencies` entry is gone from eslint.config.mjs and `nx run stealth-browser:lint` still exits 0.
 ---
 
 ## Reservations
 
 ```text
 read_only:  ["/Users/nix/dev/ai/scratch/agent-browser/adhd/", "entrypoint/stealth-browser/src/lib/types.ts"]
-mutates:    ["entrypoint/stealth-browser/src/lib/capture/", "entrypoint/stealth-browser/src/lib/parsers.ts"]
+mutates:    ["entrypoint/stealth-browser/src/lib/capture/", "entrypoint/stealth-browser/src/lib/parsers.ts", "entrypoint/stealth-browser/eslint.config.mjs"]
 ```
 
 ---
 
 ## Contract Promise
 
-Added: `entrypoint/stealth-browser/src/lib/capture/*.ts`, `entrypoint/stealth-browser/src/lib/parsers.ts`. Modified: none. Deleted: none.
+Added: `entrypoint/stealth-browser/src/lib/capture/*.ts`, `entrypoint/stealth-browser/src/lib/parsers.ts`. Modified: `entrypoint/stealth-browser/eslint.config.mjs` (temporary ignore entry removed). Deleted: none.
 
 ---
 
@@ -58,7 +59,7 @@ Added: `entrypoint/stealth-browser/src/lib/capture/*.ts`, `entrypoint/stealth-br
 Every plan-file write is committed (R1). Work-product commits for this state, always by explicit path, always tagged `[psm:mig-capture-parsers]`:
 
 - [ ] After capture compiles -- commit: `feat(stealth-browser): migrate capture [psm:mig-capture-parsers]`
-- [ ] After parsers compile -- commit: `feat(stealth-browser): migrate parsers [psm:mig-capture-parsers]`
+- [ ] After parsers compile and the eslint `ignoredDependencies` entry is removed -- commit `parsers.ts` and `eslint.config.mjs` together by explicit path: `feat(stealth-browser): migrate parsers [psm:mig-capture-parsers]`
 - [ ] **After the guard passes** (mandatory) — commit the source changes and the `state.json` update together by explicit path.
 
 ---

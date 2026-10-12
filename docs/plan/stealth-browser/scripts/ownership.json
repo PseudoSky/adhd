@@ -14,6 +14,7 @@
  "deps-install": [
   "entrypoint/stealth-browser/package.json",
   "pnpm-lock.yaml",
+  "entrypoint/stealth-browser/eslint.config.mjs",
   "docs/plan/stealth-browser/APPROVALS.md"
  ],
  "mig-foundation": [
@@ -33,7 +34,8 @@
  ],
  "mig-capture-parsers": [
   "entrypoint/stealth-browser/src/lib/capture/",
-  "entrypoint/stealth-browser/src/lib/parsers.ts"
+  "entrypoint/stealth-browser/src/lib/parsers.ts",
+  "entrypoint/stealth-browser/eslint.config.mjs"
  ],
  "mig-queries": [
   "entrypoint/stealth-browser/src/lib/queries/"

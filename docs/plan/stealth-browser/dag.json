@@ -65,6 +65,7 @@
       "artifacts": [
         "entrypoint/stealth-browser/package.json",
         "pnpm-lock.yaml",
+        "entrypoint/stealth-browser/eslint.config.mjs",
         "docs/plan/stealth-browser/APPROVALS.md"
       ],
       "context": "contexts/deps-install.md",
@@ -134,7 +135,8 @@
       "guard": "python3 docs/plan/stealth-browser/scripts/guard.py mig-capture-parsers",
       "artifacts": [
         "entrypoint/stealth-browser/src/lib/capture/",
-        "entrypoint/stealth-browser/src/lib/parsers.ts"
+        "entrypoint/stealth-browser/src/lib/parsers.ts",
+        "entrypoint/stealth-browser/eslint.config.mjs"
       ],
       "context": "contexts/mig-capture-parsers.md",
       "notes": "executor=refactoring-specialist tier=sonnet/medium"

@@ -21,11 +21,11 @@ The three third-party libraries the parsers need (`node-html-parser`, `xpath`, `
 
 ## Semantic Distillation
 
-- **Primitive:** MODIFY `entrypoint/stealth-browser/package.json` and `pnpm-lock.yaml`; REPLACE the worktree node_modules symlink with a real install.
+- **Primitive:** MODIFY `entrypoint/stealth-browser/package.json`, `pnpm-lock.yaml` and `entrypoint/stealth-browser/eslint.config.mjs`; REPLACE the worktree node_modules symlink with a real install.
 
 - **Reference Pattern:** `/Users/nix/dev/ai/scratch/agent-browser/package.json` (dependency ranges), `/Users/nix/dev/ai/scratch/agent-browser/adhd/parsers.ts:17-26` (the only third-party imports in the runner).
 
-- **Delta Spec:** Precondition: `docs/plan/stealth-browser/APPROVALS.md` contains `DEP-APPROVAL: granted` and names the three packages (human-blocker hb-deps-approval; the scratch repo's `adhd/` had NONE of these declared, they are new to the workspace package). Then: remove the `node_modules` symlink; `pnpm install --frozen-lockfile=false --filter @adhd/stealth-browser...` is NOT used -- instead `pnpm add --filter @adhd/stealth-browser node-html-parser@^8.0.4 xpath@^0.0.34 @xmldom/xmldom@^0.9.10` from the worktree root with the pinned store (`pnpm config get store-dir` -> ~/Library/pnpm/store). Verify `git diff pnpm-lock.yaml` has zero removed lines.
+- **Delta Spec:** Precondition: `docs/plan/stealth-browser/APPROVALS.md` contains `DEP-APPROVAL: granted` and names the three packages (human-blocker hb-deps-approval; the scratch repo's `adhd/` had NONE of these declared, they are new to the workspace package). Then: remove the `node_modules` symlink; `pnpm install --frozen-lockfile=false --filter @adhd/stealth-browser...` is NOT used -- instead `pnpm add --filter @adhd/stealth-browser node-html-parser@^8.0.4 xpath@^0.0.34 @xmldom/xmldom@^0.9.10` from the worktree root with the pinned store (`pnpm config get store-dir` -> ~/Library/pnpm/store). Verify `git diff pnpm-lock.yaml` has zero removed lines. pnpm hoists the three packages into the worktree-ROOT `node_modules` (a real directory); there is no per-package `entrypoint/stealth-browser/node_modules`. Because no source imports them yet, the pre-commit `@nx/dependency-checks` lint would reject the dependency commit ("package is not used by stealth-browser"); hooks are never bypassed, so add to the `@nx/dependency-checks` options in `entrypoint/stealth-browser/eslint.config.mjs` `ignoredDependencies: ["node-html-parser", "xpath", "@xmldom/xmldom"]`, preceded by a comment containing the exact marker `TEMPORARY(stealth-browser:deps-install)` stating that `mig-capture-parsers` removes it once `parsers.ts` imports them.
 
 - **Invariants:** pnpm only ([inv:pnpm-only]); main checkout node_modules untouched ([inv:no-main-writes]); the only lockfile change is the new importer block plus any newly-resolved packages. Also: [inv:shared-worktree] (commit only your own explicit paths, tag every commit `[psm:deps-install]`), [inv:owned-paths-only], [inv:no-main-writes].
 
@@ -42,22 +42,23 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 - [deps-install.2] package.json dependencies pin exactly the three source ranges (node-html-parser ^8.0.4, xpath ^0.0.34, @xmldom/xmldom ^0.9.10).
 - [deps-install.3] pnpm-lock.yaml has an importers entry for entrypoint/stealth-browser listing all three deps.
 - [deps-install.4] The lockfile diff removes no existing line (no collateral version bumps): `git diff` of pnpm-lock.yaml has zero '-' lines.
-- [deps-install.5] The worktree has its OWN node_modules (real directory, not a symlink) and the three deps resolve from entrypoint/stealth-browser.
+- [deps-install.5] The worktree-root node_modules is a real directory (not a symlink) and each of the three deps resolves, by real Node ESM resolution run from entrypoint/stealth-browser, to a path inside this worktree (never the main checkout node_modules).
 - [deps-install.6] Main checkout node_modules untouched (.modules.yaml mtime == stamp) and only owned paths changed.
+- [deps-install.7] eslint.config.mjs carries the documented TEMPORARY `@nx/dependency-checks` `ignoredDependencies` entry (marker `TEMPORARY(stealth-browser:deps-install)`) for the three packages, so the dependency commit passes the pre-commit lint; `mig-capture-parsers.6` removes it.
 ---
 
 ## Reservations
 
 ```text
 read_only:  ["/Users/nix/dev/ai/scratch/agent-browser/package.json"]
-mutates:    ["entrypoint/stealth-browser/package.json", "pnpm-lock.yaml", "docs/plan/stealth-browser/APPROVALS.md"]
+mutates:    ["entrypoint/stealth-browser/package.json", "pnpm-lock.yaml", "entrypoint/stealth-browser/eslint.config.mjs", "docs/plan/stealth-browser/APPROVALS.md"]
 ```
 
 ---
 
 ## Contract Promise
 
-Added: three dependencies in package.json, importer block in pnpm-lock.yaml, real node_modules. Modified: none. Deleted: node_modules symlink.
+Added: three dependencies in package.json, importer block in pnpm-lock.yaml, real node_modules, a TEMPORARY `ignoredDependencies` entry in eslint.config.mjs. Modified: none. Deleted: node_modules symlink.
 
 ---
 
@@ -66,7 +67,7 @@ Added: three dependencies in package.json, importer block in pnpm-lock.yaml, rea
 Every plan-file write is committed (R1). Work-product commits for this state, always by explicit path, always tagged `[psm:deps-install]`:
 
 - [ ] After APPROVALS.md is verified -- no commit needed (human-provided)
-- [ ] After the install -- commit `entrypoint/stealth-browser/package.json` and `pnpm-lock.yaml` by explicit path: `feat(stealth-browser): declare parser dependencies [psm:deps-install]`
+- [ ] After the install and the eslint entry -- commit `entrypoint/stealth-browser/package.json`, `pnpm-lock.yaml` and `entrypoint/stealth-browser/eslint.config.mjs` by explicit path (pre-commit hooks run; never `--no-verify`): `feat(stealth-browser): declare parser dependencies [psm:deps-install]`
 - [ ] **After the guard passes** (mandatory) — commit the source changes and the `state.json` update together by explicit path.
 
 ---

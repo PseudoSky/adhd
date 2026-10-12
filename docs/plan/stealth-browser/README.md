@@ -41,12 +41,12 @@ Wave = dependency depth; states in one wave with no edge between them may run co
 | 0 | `productization-hold` | productization | review | product (sonnet/medium) | `docs/plan/stealth-browser/PRODUCT-REVIEW.md` | `guard.py productization-hold` |
 | 1 | `scaffold` | scaffold | work | platform-engineer (sonnet/medium) | `entrypoint/stealth-browser/`, `tsconfig.base.json`, `docs/plan/stealth-browser/evidence/` | `guard.py scaffold` |
 | 2 | `entrypoint-parity` | scaffold | work | platform-engineer (sonnet/medium) | `entrypoint/stealth-browser/*`, `docs/plan/stealth-browser/evidence/` | `guard.py entrypoint-parity` |
-| 3 | `deps-install` | scaffold | work | platform-engineer (sonnet/medium) | `entrypoint/stealth-browser/package.json`, `pnpm-lock.yaml`, `docs/plan/stealth-browser/APPROVALS.md` | `guard.py deps-install` |
+| 3 | `deps-install` | scaffold | work | platform-engineer (sonnet/medium) | `entrypoint/stealth-browser/package.json`, `pnpm-lock.yaml`, `entrypoint/stealth-browser/eslint.config.mjs`, `docs/plan/stealth-browser/APPROVALS.md` | `guard.py deps-install` |
 | 4 | `mig-foundation` | migrate | work | refactoring-specialist (sonnet/medium) | `entrypoint/stealth-browser/src/lib/types.ts`, `entrypoint/stealth-browser/src/lib/session.ts`, `entrypoint/stealth-browser/src/lib/helpers.ts` | `guard.py mig-foundation` |
 | 5 | `mig-cdp` | migrate | work | refactoring-specialist (sonnet/medium) | `entrypoint/stealth-browser/src/lib/cdp/` | `guard.py mig-cdp` |
 | 6 | `mig-chrome-manager` | migrate | work | refactoring-specialist (sonnet/medium) | `entrypoint/stealth-browser/src/lib/chrome-manager.ts` | `guard.py mig-chrome-manager` |
 | 6 | `mig-domains-storage` | migrate | work | refactoring-specialist (sonnet/medium) | `entrypoint/stealth-browser/src/lib/domains/`, `entrypoint/stealth-browser/src/lib/storage/` | `guard.py mig-domains-storage` |
-| 5 | `mig-capture-parsers` | migrate | work | refactoring-specialist (sonnet/medium) | `entrypoint/stealth-browser/src/lib/capture/`, `entrypoint/stealth-browser/src/lib/parsers.ts` | `guard.py mig-capture-parsers` |
+| 5 | `mig-capture-parsers` | migrate | work | refactoring-specialist (sonnet/medium) | `entrypoint/stealth-browser/src/lib/capture/`, `entrypoint/stealth-browser/src/lib/parsers.ts`, `entrypoint/stealth-browser/eslint.config.mjs` | `guard.py mig-capture-parsers` |
 | 7 | `mig-queries` | migrate | work | refactoring-specialist (sonnet/medium) | `entrypoint/stealth-browser/src/lib/queries/` | `guard.py mig-queries` |
 | 5 | `mig-docs` | migrate | work | refactoring-specialist (sonnet/low) | `entrypoint/stealth-browser/docs/reference/` | `guard.py mig-docs` |
 | 8 | `surface-api` | surface | work | typescript-pro (sonnet/high) | `entrypoint/stealth-browser/src/api.ts`, `entrypoint/stealth-browser/src/index.ts`, `docs/plan/stealth-browser/evidence/product-claims.json` | `guard.py surface-api` |
