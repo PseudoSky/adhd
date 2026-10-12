@@ -398,6 +398,19 @@
       ],
       "context": "contexts/readme-rewrite.md",
       "notes": "executor=content-marketer tier=sonnet/medium"
+    },
+    "audit-final": {
+      "kind": "audit",
+      "phase": "release",
+      "depends_on": [
+        "readme-rewrite"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py audit-final",
+      "artifacts": [
+        "docs/plan/stealth-browser/final-review.md"
+      ],
+      "context": "contexts/audit-final.md",
+      "notes": "executor=architect-reviewer tier=sonnet/high"
     }
   },
   "authored_with": {
