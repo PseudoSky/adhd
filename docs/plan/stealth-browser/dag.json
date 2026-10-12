@@ -9,7 +9,8 @@
     "surface",
     "verify",
     "review",
-    "remediate"
+    "remediate",
+    "docs"
   ],
   "terminal": "done",
   "nodes": {},
