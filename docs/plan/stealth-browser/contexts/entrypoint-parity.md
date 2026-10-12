@@ -35,6 +35,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 - [entrypoint-parity.3] `nx show project` lists every target present in both dispatch-cli and backlog (build, test, lint, typecheck, e2e, verify-dist-load...) and the dispatch-cli-only `build-bin`.
 - [entrypoint-parity.4] package.json carries the sibling publish metadata: repository.directory == entrypoint/stealth-browser, homepage, bugs, license, files, main/module/types, publishConfig.
 - [entrypoint-parity.5] `nx run stealth-browser:lint` exits 0 on the scaffold (tooling wired).
+- [entrypoint-parity.6] Only owned paths changed by [psm:entrypoint-parity] commits.
 ---
 
 ## Reservations
