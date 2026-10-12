@@ -1395,6 +1395,15 @@
       "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py entrypoint-parity --only entrypoint-parity.7",
       "expect": "exit0",
       "cwd": "repo-root"
+    },
+    {
+      "id": "surface-api.7",
+      "phase": "surface",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py surface-api --only surface-api.7",
+      "expect": "exit0",
+      "cwd": "repo-root"
     }
   ]
 }
