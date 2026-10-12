@@ -25,6 +25,21 @@
       ],
       "context": "contexts/productization-hold.md",
       "notes": "executor=product tier=sonnet/medium"
+    },
+    "scaffold": {
+      "kind": "work",
+      "phase": "scaffold",
+      "depends_on": [
+        "productization-hold"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py scaffold",
+      "artifacts": [
+        "entrypoint/stealth-browser/",
+        "tsconfig.base.json",
+        "docs/plan/stealth-browser/evidence/"
+      ],
+      "context": "contexts/scaffold.md",
+      "notes": "executor=platform-engineer tier=sonnet/medium"
     }
   },
   "authored_with": {

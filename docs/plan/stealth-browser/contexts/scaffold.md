@@ -1,6 +1,6 @@
 # scaffold — STATE_NAME
 
-**Phase:** scaffold · **Kind:** work · **Depends on:** none · **Guard:** `python3 docs/plan/stealth-browser/scripts/guard.py scaffold`
+**Phase:** scaffold · **Kind:** work · **Depends on:** productization-hold · **Guard:** `python3 docs/plan/stealth-browser/scripts/guard.py scaffold`
 
 ---
 
@@ -24,11 +24,11 @@ _No criteria yet._
 
 ```text
 read_only:  []
-mutates:    ["entrypoint/stealth-browser/"]
+mutates:    ["entrypoint/stealth-browser/", "tsconfig.base.json", "docs/plan/stealth-browser/evidence/"]
 ```
 
 ---
 
 ## Notes for executor
 
-<footguns, ordering constraints, non-obvious decisions>
+executor=platform-engineer tier=sonnet/medium
