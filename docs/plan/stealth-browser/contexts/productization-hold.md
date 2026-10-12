@@ -31,6 +31,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 
 - [productization-hold.1] PRODUCT-REVIEW.md exists with the line `STATUS: folded` (product's tasks are folded into the DAG).
 
+- [productization-hold.2] Every state listed on the `INSERTED:` line exists in dag.json with a non-empty depends_on; the line may be `INSERTED: none`.
 ---
 
 ## Reservations
