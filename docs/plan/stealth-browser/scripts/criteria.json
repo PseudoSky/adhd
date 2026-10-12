@@ -810,6 +810,15 @@
       "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py tests-e2e --only tests-e2e.3",
       "expect": "exit0",
       "cwd": "repo-root"
+    },
+    {
+      "id": "tests-e2e.4",
+      "phase": "verify",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py tests-e2e --only tests-e2e.4",
+      "expect": "exit0",
+      "cwd": "repo-root"
     }
   ]
 }
