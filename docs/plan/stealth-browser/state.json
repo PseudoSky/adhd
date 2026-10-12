@@ -60,11 +60,11 @@
       "end_ref": null
     },
     "mig-capture-parsers": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-10-12T21:26:00.731Z",
-      "done_at": null,
+      "done_at": "2026-10-12T21:28:39.184Z",
       "start_ref": "571723e1f5d3645b5ad0f5a94d4de46aec52c1e6",
-      "end_ref": null
+      "end_ref": "2a7e1884509338be7d17455d29f73a43472052d9"
     },
     "mig-queries": {
       "status": "pending",
@@ -338,6 +338,18 @@
       "audit_criteria_total": 4,
       "by": "pseudosky",
       "note": "cdp ported 5d651c6f; guard 0"
+    },
+    {
+      "ts": "2026-10-12T21:28:39.184Z",
+      "from": "mig-domains-storage",
+      "to": "mig-capture-parsers",
+      "start_ref": "571723e1f5d3645b5ad0f5a94d4de46aec52c1e6",
+      "end_ref": "2a7e1884509338be7d17455d29f73a43472052d9",
+      "audit_exit": 0,
+      "audit_criteria_passed": 6,
+      "audit_criteria_total": 6,
+      "by": "pseudosky",
+      "note": "capture+parsers e32b80fd; guard 0"
     }
   ],
   "amendment_log": [],
@@ -346,7 +358,7 @@
     "version": "0.8.35",
     "hash": "0b6bc1f3d70e"
   },
-  "current_state": "mig-domains-storage",
+  "current_state": "tests-unit-extract",
   "dod_provenance": {
     "confirmed_at": "2026-10-12T10:24:50.808Z",
     "by": "pseudosky",
