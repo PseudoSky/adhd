@@ -1501,7 +1501,10 @@ export function renderReport(root, rep, mode, round = ROUND) {
  */
 export async function rejudgeRecord({ round, recordPath, profile, judgeDir, ledgerPath, client, credential }) {
   const record = readJson(recordPath); const prior = record.quality;
-  if (prior?.status !== 'judge-failed') throw new Error(`rejudge: ${record.runId ?? recordPath} has quality ${JSON.stringify(prior?.status ?? null)}; only a judge-failed run is re-judged (a scored run is never judged twice; a judge-error run is repaired offline by --reparse-judge)`);
+  if (prior?.status === 'judge-error') {   // a paid reply that did not score: re-judge only when the saved raw reply genuinely cannot be repaired offline (that path costs nothing)
+    let repairable = false; try { QL.parseJudgeOutput(readJson(prior.file).rawResponse); repairable = true; } catch { /* not repairable */ }
+    if (repairable) throw new Error(`rejudge: ${record.runId} judge-error reply re-parses under the current parser; use --reparse-judge (no model call) instead of paying for a second judge call`);
+  } else if (prior?.status !== 'judge-failed') throw new Error(`rejudge: ${record.runId ?? recordPath} has quality ${JSON.stringify(prior?.status ?? null)}; only a judge-failed or unrepairable judge-error run is re-judged (a scored run is never judged twice)`);
   if (credential && !credential.present) throw new Error('rejudge: no judge credential (set ANTHROPIC_API_KEY or ADHD_AGENT_ANTHROPIC_SECRET in the environment or ~/.adhd/.env); the judge is a paid API call: no call made');
   if (!record.workDir) throw new Error(`rejudge: ${record.runId} has no workDir; cannot rebuild the artifact diff`);
   const repoDir = path.join(record.workDir, 'repo'); const recorded = record.observation?.files;
@@ -1511,9 +1514,9 @@ export async function rejudgeRecord({ round, recordPath, profile, judgeDir, ledg
   const waived = !!profile.arms && !profile.arms.includes('A');
   const aGenuine = waived ? true : LG.readLedger(round, path.dirname(ledgerPath)).armA?.genuine === true;
   const ctx = { prompts: F.prompts(), spec, repoDir, ledgerPath, profile };
-  const q = await judgeRun({ ctx, record, aGenuine, aWaived: waived, dry: false, client, judgeDir, ledgerNote: prior.error });
+  const q = await judgeRun({ ctx, record, aGenuine, aWaived: waived, dry: false, client, judgeDir, ledgerNote: prior.error ?? `judge-error ${prior.code}` });
   if (q.status === 'n/a') return { quality: q, written: false };
-  record.priorQuality = prior; writeJson(recordPath, record);
+  record.priorQuality = { ...prior, ...(record.priorQuality ? { priorQuality: record.priorQuality } : {}) }; writeJson(recordPath, record);
   return { quality: q, written: true };
 }
 /**

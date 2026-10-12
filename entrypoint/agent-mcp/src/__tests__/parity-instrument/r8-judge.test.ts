@@ -78,6 +78,31 @@ describe('R8-judge AC1: no temperature on the judge request', () => {
   });
 });
 
+describe('R8-judge AC1b: the token ceiling leaves room for a thinking-by-default judge model', () => {
+  it('JUDGE_MAX_TOKENS is at least 8000 and is what runJudge sends (negative control: the 1500 that truncated the R8 B1 re-judge mid-JSON)', async () => {
+    expect(J.JUDGE_MAX_TOKENS).toBeGreaterThanOrEqual(8000);
+    const sent: Array<Record<string, unknown>> = [];
+    await J.runJudge({ client: okClient(sent), arm: 'B', brief: 'b', briefSha: 'x', model: 'claude-haiku-5-5' });
+    expect(sent[0].maxTokens).toBe(J.JUDGE_MAX_TOKENS);
+  });
+
+  it('a reply cut off at max_tokens is named MAX_TOKENS (not NOT_JSON) and the record keeps stop_reason and the content block types', async () => {
+    const out = path.join(dir, 'o');
+    const client = { async complete() { return { text: '{"scores": {"spec_conformance', inputTokens: 20757, outputTokens: 1500, model: 'claude-haiku-5-5', stopReason: 'max_tokens', blockTypes: ['thinking', 'text'] }; } };
+    const r = await J.runJudge({ client, arm: 'B', brief: 'b', briefSha: 'x', outDir: out, model: 'claude-haiku-5-5' });
+    expect([r.ok, r.code]).toEqual([false, 'MAX_TOKENS']);
+    expect(JSON.parse(fs.readFileSync(path.join(out, 'B.json'), 'utf8'))).toMatchObject({ error: 'MAX_TOKENS', stopReason: 'max_tokens', blockTypes: ['thinking', 'text'] });
+    const bad = await J.runJudge({ client: { async complete() { return { text: 'sorry', inputTokens: 1, outputTokens: 1, stopReason: 'end_turn' }; } }, arm: 'B', brief: 'b', briefSha: 'x', model: 'm' });
+    expect(bad.code).toBe('NOT_JSON');   // negative control: an untruncated bad reply keeps its parser code
+  });
+
+  it('the live client returns the API stop_reason and the content block types', async () => {
+    const fetchImpl = async () => ({ ok: true, status: 200, text: async () => '', json: async () => ({ content: [{ type: 'thinking' }, { type: 'text', text: 'hi' }], usage: { input_tokens: 3, output_tokens: 4 }, model: 'claude-haiku-5-5', stop_reason: 'max_tokens' }) });
+    const reply = await J.liveJudgeClient({ apiKey: 'sk-ant-api03-SYNTHETIC', fetchImpl }).complete({ model: 'm', maxTokens: 5, prompt: 'p' }); // pragma: allowlist secret gitleaks:allow
+    expect(reply).toMatchObject({ text: 'hi', stopReason: 'max_tokens', blockTypes: ['thinking', 'text'] });
+  });
+});
+
 describe('R8-judge AC2: a judge failure is recorded, surfaced and not a success', () => {
   it('an upstream rejection is a judge-failed quality AND a ledger judgeCalls entry carrying status, error and paidCallAttempted (negative control: the pre-fix ledger stayed empty)', async () => {
     const lp = LG.ledgerPathFor('RJF', dir);
@@ -196,6 +221,25 @@ describe('R8-judge AC3: rejudgeRecord (the saved run, judged again once)', () =>
     expect(out.quality.status).toBe('scored');
   });
 
+  it('a judge-error run is re-judged only when its saved reply cannot be repaired offline (a repairable one is pointed at --reparse-judge, no call), and the failure chain is kept', async () => {
+    const s = savedRun({ quality: { status: 'judge-error', code: 'MAX_TOKENS', file: path.join(dir, 'judge', 'B.json') } });
+    fs.mkdirSync(path.join(dir, 'judge'), { recursive: true });
+    const valid: string = (await D.fakeJudgeClient().complete()).text;   // a parseable reply under the current parser
+    fs.writeFileSync(path.join(dir, 'judge', 'B.json'), JSON.stringify({ arm: 'B', rawResponse: valid, error: 'TEXT_OUTSIDE_JSON' }));
+    const sent: Array<Record<string, unknown>> = [];
+    await expect(D.rejudgeRecord({ ...s, round: 'RJR', client: okClient(sent) })).rejects.toThrow(/--reparse-judge/);
+    expect(sent).toEqual([]);
+    fs.writeFileSync(path.join(dir, 'judge', 'B.json'), JSON.stringify({ arm: 'B', rawResponse: '{"scores": {"spec_conformance', error: 'MAX_TOKENS' }));
+    const earlier = { status: 'judge-failed', error: HTTP_400 };
+    const rec = JSON.parse(fs.readFileSync(s.recordPath, 'utf8')); rec.priorQuality = earlier; fs.writeFileSync(s.recordPath, JSON.stringify(rec));
+    const out = await D.rejudgeRecord({ ...s, round: 'RJR', client: okClient(sent), judgeDir: path.join(dir, 'judge2') });
+    expect(out.quality.status).toBe('scored');
+    expect(sent).toHaveLength(1);
+    const after = JSON.parse(fs.readFileSync(s.recordPath, 'utf8'));
+    expect(after.priorQuality).toMatchObject({ status: 'judge-error', code: 'MAX_TOKENS', priorQuality: earlier });
+    expect(LG.readLedger('RJR', dir).judgeCalls[0].rejudgeOf).toMatch(/judge-error MAX_TOKENS/);
+  });
+
   it('a second invocation on the now-scored record is refused BEFORE any call (no double spend)', async () => {
     const s = savedRun();
     await D.rejudgeRecord({ ...s, round: 'RJR', client: okClient() });
@@ -205,8 +249,8 @@ describe('R8-judge AC3: rejudgeRecord (the saved run, judged again once)', () =>
     expect(LG.readLedger('RJR', dir).judgeCalls).toHaveLength(1);
   });
 
-  it('refuses a run that was not judge-failed (scored / n/a / judge-error use their own paths), and a repo that no longer matches the recorded final state (negative controls)', async () => {
-    for (const quality of [{ status: 'scored', mean: 1 }, { status: 'n/a', reason: 'x' }, { status: 'judge-error', code: 'NOT_JSON' }, undefined]) {
+  it('refuses a run that was not judge-failed (scored / n/a), and a repo that no longer matches the recorded final state (negative controls)', async () => {
+    for (const quality of [{ status: 'scored', mean: 1 }, { status: 'n/a', reason: 'x' }, undefined]) {
       const s = savedRun({ quality });
       const sent: Array<Record<string, unknown>> = [];
       await expect(D.rejudgeRecord({ ...s, round: 'RJR', client: okClient(sent) })).rejects.toThrow(/only a judge-failed/);

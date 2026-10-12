@@ -13,7 +13,11 @@ import { isModelAlias } from './ledger.mjs';
 import { rateCardFor } from './lib.mjs';
 
 export const JUDGE_MODEL = 'claude-haiku-4-5';          // pinned id recorded in every judge record (R5.AC5). SEPARATE from the arms' model pin (fixtures.mjs PIN_MODEL, claude-sonnet-5-5 since R7): the judge stays on the cheapest tier by owner direction (R7-model AC1)
-export const JUDGE_MAX_TOKENS = 1500;
+/**
+ * Output-token ceiling of one judge call. 1500 was enough for the bare 8-score JSON, but a model that thinks by default (claude-haiku-5-5) spends part of max_tokens on thinking
+ * blocks BEFORE the text: the R8 B1 re-judge hit the 1500 ceiling with only `{"scores": {"spec_conformance` as text (stop_reason max_tokens). 8000 leaves room for thinking AND the JSON.
+ */
+export const JUDGE_MAX_TOKENS = 8000;
 /**
  * R8-judge AC1: the judge request carries NO sampling parameters. Newer models (claude-haiku-5-5) reject `temperature` with HTTP 400 ("`temperature` is deprecated for this
  * model"), so it is omitted for every judge model rather than retried on a 400 (a retry would spend a second paid call on a string match). Judge scores are therefore ONE sample
@@ -112,7 +116,9 @@ export async function runJudge({ client, arm, brief, briefSha, outDir, onCall, b
   const reply = await client.complete({ model, maxTokens: JUDGE_MAX_TOKENS, prompt: brief });
   const resolved = reply.model ?? null;   // R8-model AC4: the id the API reported for the call; it prices the call and is what the record names
   const record = { arm, modelId: resolved ?? model, ...(modelRequested !== model || resolved ? { modelRequested, modelSent: model, modelResolved: resolved } : {}), briefFormat, briefSha, sampling: JUDGE_SAMPLING, rawResponse: reply.text, inputTokens: reply.inputTokens, outputTokens: reply.outputTokens, costUsd: judgeCostUsd(reply.inputTokens, reply.outputTokens, resolved ?? model) };
-  let parsed = null; try { parsed = parseJudgeOutput(reply.text); } catch (e) { record.error = e.code ?? String(e.message); }
+  if (reply.stopReason != null) record.stopReason = reply.stopReason;
+  if (reply.blockTypes != null) record.blockTypes = reply.blockTypes;
+  let parsed = null; try { parsed = parseJudgeOutput(reply.text); } catch (e) { record.error = reply.stopReason === 'max_tokens' ? 'MAX_TOKENS' : (e.code ?? String(e.message)); }   // a reply cut off by the token ceiling is named as such, not as NOT_JSON
   if (outDir) { fs.mkdirSync(outDir, { recursive: true }); fs.writeFileSync(path.join(outDir, `${arm}.json`), JSON.stringify({ ...record, ...(parsed ?? {}) }, null, 2)); }
   if (onCall) onCall({ arm, modelId: record.modelId, inputTokens: record.inputTokens, outputTokens: record.outputTokens, costUsd: record.costUsd, briefSha });
   return parsed ? { ok: true, ...parsed, record } : { ok: false, code: record.error, record };
@@ -176,7 +182,7 @@ export function judgeAuthShape(secret) {
  * (R5-harness AC6): ANTHROPIC_API_KEY, else ADHD_AGENT_ANTHROPIC_SECRET via process env / the .env cascade; the auth shape follows the token prefix.
  * It fails loudly (before any fetch) when no credential exists and never prints the secret. Only the driver in an owner-approved live round constructs it.
  * `temperature` is never sent, even if a caller still passes it (R8-judge AC1): the destructuring below does not read it, so it cannot reach the wire.
- * @returns {{complete(args:{model:string,maxTokens:number,prompt:string}):Promise<{text:string,inputTokens:number,outputTokens:number,model?:string|null}>}}
+ * @returns {{complete(args:{model:string,maxTokens:number,prompt:string}):Promise<{text:string,inputTokens:number,outputTokens:number,model?:string|null,stopReason?:string|null,blockTypes?:string[]}>}}
  */
 export function liveJudgeClient({ apiKey, env = process.env, cwd = process.cwd(), home = os.homedir(), fetchImpl = globalThis.fetch } = {}) {
   return {
@@ -188,7 +194,7 @@ export function liveJudgeClient({ apiKey, env = process.env, cwd = process.cwd()
         body: JSON.stringify({ model, max_tokens: maxTokens, ...(shape.system ? { system: shape.system } : {}), messages: [{ role: 'user', content: prompt }] }) });
       if (!res.ok) throw new Error(`judge: HTTP ${res.status} ${String(await res.text()).slice(0, 200)}`);
       const b = await res.json();
-      return { text: (b.content ?? []).filter((x) => x.type === 'text').map((x) => x.text).join(''), inputTokens: b.usage?.input_tokens ?? 0, outputTokens: b.usage?.output_tokens ?? 0, model: typeof b.model === 'string' ? b.model : null };
+      return { text: (b.content ?? []).filter((x) => x.type === 'text').map((x) => x.text).join(''), inputTokens: b.usage?.input_tokens ?? 0, outputTokens: b.usage?.output_tokens ?? 0, model: typeof b.model === 'string' ? b.model : null, stopReason: typeof b.stop_reason === 'string' ? b.stop_reason : null, blockTypes: (b.content ?? []).map((x) => x.type) };
     },
   };
 }
