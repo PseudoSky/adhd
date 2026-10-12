@@ -25,9 +25,9 @@ const leakDocs = (o: Obs): Obs => {
 };
 
 describe('SCOPE-R5-oracle-model-and-leak', () => {
-  it('AC-MODEL-1: haiku-5-5 only in modelUsage (sideModels), all turns haiku-4-5 => r1_model passes; one turn on haiku-5-5 fails (negative control)', () => {
+  it('AC-MODEL-1: haiku-5-5 only in modelUsage (sideModels), all turns on the pin => r1_model passes; one turn on haiku-5-5 fails (negative control)', () => {
     const o = ideal('A');
-    o.models = ['claude-haiku-4-5', 'claude-haiku-4-5-20251001'];
+    o.models = [e.pin, `${e.pin}-20261001`];
     o.sideModels = ['claude-haiku-5-5'];
     const f = score(o).r1_model;
     expect(f.status).toBe('pass');

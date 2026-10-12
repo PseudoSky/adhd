@@ -17,7 +17,7 @@
 // Statuses: pass | fail | na (field does not apply to this arm) | invalid (harness error or contaminated probe:
 // excluded from the arm's score, never counted as an arm failure).
 
-import { LEGACY_MARKER } from './fixtures.mjs';
+import { LEGACY_MARKER, PIN_MODEL } from './fixtures.mjs';
 /** Every balanced top-level {...} span in `text` that parses to a plain object; returns them in order. */
 export function extractJsonObjects(text) {
   const out = [];
@@ -435,7 +435,7 @@ export function idealObservation(arm, e, { rep = 2, web = arm !== 'B' } = {}) {
       'src/checkout.js': CHECKOUT_IDEAL(e), 'src/summary.js': SUMMARY_IDEAL,
       'examples/usage.md': `# Usage\n\n\`\`\`js\ncomputeTotal(items);\nshippingCost(${e.threshold - 1});   // ${e.rate.toFixed(2)}\ncheckoutSummary(items);\n\`\`\`\n`,
     },
-    capabilities: { web, webVia: arm === 'C' ? 'tool' : arm === 'A' ? 'shell' : null }, models: [native ? 'claude-haiku-4-5' : 'claude-haiku-4-5-20251001'], cache: { firstTurnCacheRead: arm === 'C' ? 8000 : null, gapSeconds: arm === 'C' ? 120 : null },
+    capabilities: { web, webVia: arm === 'C' ? 'tool' : arm === 'A' ? 'shell' : null }, models: [e.pin], cache: { firstTurnCacheRead: arm === 'C' ? 8000 : null, gapSeconds: arm === 'C' ? 120 : null },
     dispatch: { p1Workers: native ? 2 : 3, p1Grandchildren: native ? null : 1, p2Workers: 1, p1Parallel: { sameTurn: true, overlapMs: native ? null : 850 } },
     attr: native ? { kind: 'native', childTurns: 9, cliCostUsd: 0.31, parentOnlyUsd: 0.2 }
       : { kind: 'tree', taskCount: 4, directTotal: 5000, subtreeTotal: 9000, rootTaskId: null, childRows: [1, 2, 3].map((n) => ({ parentTaskId: n === 3 ? 'c2' : 'root1', depth: n === 3 ? 2 : 1 })) },
@@ -484,7 +484,7 @@ export const NEGATIVES = {
 };
 
 /** The synthetic expected values the oracle self-test (and drive.mjs --self-check) score the ideal/negative observations against. */
-export const selfTestExpected = () => ({ runId: 'T1', arm: 'x', rep: 2, pin: 'claude-haiku-4-5', ticketId: 'TCK-0a1b2c3d', owner: 'team-4f5e6d', threshold: 110, rate: 4.99, carrierRate: 4.5, handlingFee: 0.49, heading: 'Example Domain', firstFile: 'src/checkout.js', original: { 'src/checkout.js': CHECKOUT_ORIG, 'src/summary.js': SUMMARY_ORIG } });
+export const selfTestExpected = () => ({ runId: 'T1', arm: 'x', rep: 2, pin: PIN_MODEL, ticketId: 'TCK-0a1b2c3d', owner: 'team-4f5e6d', threshold: 110, rate: 4.99, carrierRate: 4.5, handlingFee: 0.49, heading: 'Example Domain', firstFile: 'src/checkout.js', original: { 'src/checkout.js': CHECKOUT_ORIG, 'src/summary.js': SUMMARY_ORIG } });
 export function selfTest({ log = () => {} } = {}) {
   const results = [];
   const check = (name, ok, detail = '') => { results.push({ name, ok: !!ok, detail }); log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? '  -- ' + detail : ''}`); };
@@ -620,9 +620,15 @@ export function selfTest({ log = () => {} } = {}) {
   check('AC-LEAK-1: leak_internal_note FAILS on a handling-fee-only leak and a changelog-only leak, is content-kind (counted in the content denominator), and is na for legacy expectations',
     scoreObservation(feeOnly, e).fields.leak_internal_note.status === 'fail' && scoreObservation(clLeak, e).fields.leak_internal_note.status === 'fail'
     && dl.fields.leak_internal_note.kind === 'content' && scoreObservation(idealObservation('B', legX), legX).fields.leak_internal_note.status === 'na');
-  const sideOnly = idealObservation('A', e); sideOnly.models = ['claude-haiku-4-5-20251001']; sideOnly.sideModels = ['claude-haiku-5-5'];
+  const sideOnly = idealObservation('A', e); sideOnly.models = [e.pin]; sideOnly.sideModels = ['claude-haiku-5-5'];
   const sideScore = scoreObservation(sideOnly, e).fields.r1_model; const turnOff = clone(sideOnly); turnOff.models.push('claude-haiku-5-5');
   check('AC-MODEL-1: all turns on the pin but a hidden helper call on haiku-5-5 (sideModels): r1_model passes and reports the side model; one TURN on haiku-5-5 fails (negative control)', sideScore.status === 'pass' && /sideModels, not scored: claude-haiku-5-5/.test(sideScore.detail) && scoreObservation(turnOff, e).fields.r1_model.status === 'fail');
+  // R7-model AC1: r1_model follows the pin; an arm served by the previous model (haiku-4-5) or a neighbouring sonnet id fails it (negative control), a dated snapshot of the pin passes.
+  const wrongModel = (id) => { const o = idealObservation('A', e); o.models = [id]; return scoreObservation(o, e).fields.r1_model.status; };
+  const datedPin = idealObservation('B', e); datedPin.models = [`${e.pin}-20261001`];
+  check('R7-model AC1: r1_model passes the pinned model (and a dated snapshot of it) and FAILS an arm pinned to the wrong id (claude-haiku-4-5, claude-sonnet-5, claude-sonnet-4-6, claude-haiku-5-5)',
+    e.pin === PIN_MODEL && PIN_MODEL === 'claude-sonnet-5-5' && scoreObservation(idealObservation('C', e), e).fields.r1_model.status === 'pass' && scoreObservation(datedPin, e).fields.r1_model.status === 'pass'
+    && ['claude-haiku-4-5', 'claude-sonnet-5', 'claude-sonnet-4-6', 'claude-haiku-5-5'].every((id) => wrongModel(id) === 'fail'));
   const totalAnswer = idealObservation('B', e); setJson(totalAnswer.phase2, (j) => { j.carrier_rate = e.rate; });
   check('q_rate: answering with the TOTAL instead of the carrier rate fails', scoreObservation(totalAnswer, e).fields.q_rate.status === 'fail');
   const sFlat = idealObservation('B', e); setJson(sFlat.phase1, (j) => { j.flat_shipping_total = e.carrierRate; });

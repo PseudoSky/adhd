@@ -1,0 +1,21 @@
+{
+  "round": "R7",
+  "cap": 3,
+  "approvedBy": "owner (2026-10-12): \"the experiment with sonnet instead of haiku\" -> new round R7, all three arms (A native claude -p, B agent-mcp claudecli, C agent-mcp anthropic) on claude-sonnet-5-5; judge stays claude-haiku-4-5; R6 (haiku) abandoned, records kept",
+  "extraRunReason": "",
+  "runs": [],
+  "judgeCalls": [],
+  "scenarioSha": "",
+  "scopeChanges": [
+    "SCOPE-R7-model-sonnet"
+  ],
+  "armOrder": [
+    "A",
+    "B",
+    "C"
+  ],
+  "startedAt": "2026-10-12T04:39:14.833Z",
+  "armA": null,
+  "releases": [],
+  "judgeCapReason": "cap 3 covers the A+B+C judge calls of one full R7 round (judge model claude-haiku-4-5, a pin separate from the arms)"
+}

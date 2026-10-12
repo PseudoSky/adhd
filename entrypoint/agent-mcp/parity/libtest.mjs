@@ -33,12 +33,30 @@ export async function runLibTests({ log = console.log } = {}) {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'r2-libtest-'));
 
   // ---- cost model
+  const HK = L.RATE_CARDS['claude-haiku-4-5'].rates;   // historical haiku tests price at the haiku card explicitly (the default card follows the pin)
   await t('cost: tiered pricing arithmetic', () => {
     const n = L.normUsage({ input_tokens: 1000, output_tokens: 200, cache_read_input_tokens: 10000, cache_creation_input_tokens: 3000, cache_creation: { ephemeral_5m_input_tokens: 1000, ephemeral_1h_input_tokens: 2000 } });
-    near(L.priceNorm(n).usd, 1000 * 1 / 1e6 + 200 * 5 / 1e6 + 10000 * 0.1 / 1e6 + 1000 * 1.25 / 1e6 + 2000 * 2 / 1e6, 1e-12);
+    near(L.priceNorm(n, HK).usd, 1000 * 1 / 1e6 + 200 * 5 / 1e6 + 10000 * 0.1 / 1e6 + 1000 * 1.25 / 1e6 + 2000 * 2 / 1e6, 1e-12);
+  });
+  // R7-model: model-parametric cost card, with negative controls.
+  await t('R7-model AC1: the pin is claude-sonnet-5-5 and the judge model is a SEPARATE pin (claude-haiku-4-5)', async () => {
+    eq(F.PIN_MODEL, 'claude-sonnet-5-5'); const J = await import('./judge.mjs'); eq(J.JUDGE_MODEL, 'claude-haiku-4-5'); ok(J.JUDGE_MODEL !== F.PIN_MODEL, 'judge model must not share the arm pin');
+    eq(F.makeSpec({ seed: 's', arm: 'A', rep: 1 }).pin, F.PIN_MODEL);
+  });
+  await t('R7-model AC3: the default rate card is the pinned model\'s; sonnet-5-5 is priced from the committed pricing.json snapshot ($2/$10, cache read 0.10, 5m 2.50, 1h 4.00 per M), not at haiku rates', () => {
+    eq(L.RATES_PER_M, L.RATE_CARDS['claude-sonnet-5-5'].rates); eq(L.RATES_PER_M, { input: 2.0, output: 10.0, cacheRead: 0.10, write5m: 2.5, write1h: 4.0 });
+    const n = L.normUsage({ input_tokens: 1e6, output_tokens: 1e6, cache_read_input_tokens: 1e6, cache_creation_input_tokens: 2e6, cache_creation: { ephemeral_5m_input_tokens: 1e6, ephemeral_1h_input_tokens: 1e6 } });
+    near(L.priceNorm(n).usd, 2 + 10 + 0.1 + 2.5 + 4, 1e-9); near(L.priceNorm(n, HK).usd, 1 + 5 + 0.1 + 1.25 + 2, 1e-9);   // negative control: the haiku card gives a different number
+    ok(/pricing\.json/.test(L.RATE_CARDS['claude-sonnet-5-5'].source), 'the card cites its source');
+    eq(L.rateCardFor('claude-sonnet-5-5-20260101')?.model, 'claude-sonnet-5-5');
+  });
+  await t('R7-model AC3: a model with no rate card is UNMEASURED, never priced at another model\'s rates (no invented price)', () => {
+    eq(L.rateCardFor('claude-sonnet-5'), null); eq(L.rateCardFor('claude-opus-9'), null);
+    const p = L.priceNorm(L.normUsage({ input_tokens: 5, output_tokens: 5 }), L.rateCardFor('claude-sonnet-5')?.rates ?? null);
+    eq(p.usd, null); ok(p.unmeasured === true, 'unmeasured flag'); eq(L.priceTokens({ in: 5 }, null), null); eq(L.unmeasuredNote('claude-opus-9'), 'unmeasured: no rate card for claude-opus-9');
   });
   await t('cost: untiered writes are flagged and priced at 5m, never 1h', () => {
-    const p = L.priceNorm(L.normUsage({ cache_creation_input_tokens: 1000000 }));
+    const p = L.priceNorm(L.normUsage({ cache_creation_input_tokens: 1000000 }), HK);
     ok(p.untieredFlag, 'flag'); near(p.usd, 1.25, 1e-9);
   });
   await t('cost: tier assertion fires for C-1h; for A only when the PARENT writes 5m (native subagents legitimately write 5m)', () => {
@@ -49,12 +67,12 @@ export async function runLibTests({ log = console.log } = {}) {
     ok(L.tierAssertion('B', { w1h: 0, w5m: 5, wUntiered: 0 }).length === 1, 'B 5m warns'); eq(L.tierAssertion('B', { w1h: 5, w5m: 0, wUntiered: 0 }), []);
   });
   await t('cost: A1 phase 1 = $0.239084 reproduced from modelUsage tokens (304 in, 17,995 out, 570,076 cache read, 20,537 5m + 33,063 1h writes) at haiku-4.5 list rates', () => {
-    near(L.priceTokens({ in: 304, out: 17995, cr: 570076, w5m: 20537, w1h: 33063 }), 0.239084, 5e-7);
+    near(L.priceTokens({ in: 304, out: 17995, cr: 570076, w5m: 20537, w1h: 33063 }, HK), 0.239084, 5e-7);
     const result = { total_cost_usd: 0.23908385, usage: { output_tokens: 2909 }, modelUsage: { 'claude-haiku-4-5': { inputTokens: 304, outputTokens: 17995, cacheReadInputTokens: 570076, cacheCreationInputTokens: 53600, costUSD: 0.23908385 } } };
     const acc = L.cliPhaseAccounting([result]); near(acc.increment.usd, 0.239084, 5e-7); eq(acc.increment.out, 17995);
-    near(L.priceTokens({ in: acc.increment.in, out: acc.increment.out, cr: acc.increment.cr, w5m: 20537, w1h: acc.increment.cw - 20537 }), acc.increment.usd, 5e-7, 'recompute vs CLI');
+    near(L.priceTokens({ in: acc.increment.in, out: acc.increment.out, cr: acc.increment.cr, w5m: 20537, w1h: acc.increment.cw - 20537 }, HK), acc.increment.usd, 5e-7, 'recompute vs CLI');
     // negative control: the old basis (result.usage.output_tokens, the parent's last segment) undercounts by exactly the Round 2 gap
-    const old = L.priceTokens({ in: 304, out: 2909, cr: 570076, w5m: 20537, w1h: 33063 }); near(0.239084 - old, 15086 * 5 / 1e6, 5e-7, 'old basis gap'); ok(old < 0.17, 'old basis was expected to undercount');
+    const old = L.priceTokens({ in: 304, out: 2909, cr: 570076, w5m: 20537, w1h: 33063 }, HK); near(0.239084 - old, 15086 * 5 / 1e6, 5e-7, 'old basis gap'); ok(old < 0.17, 'old basis was expected to undercount');
   });
   await t('cost: phase 2 of a resumed session is the INCREMENT over phase 1 (CLI cost and modelUsage are session-cumulative); several result events per phase use the last', () => {
     const mu = (i, o, cr, cw, usd) => ({ total_cost_usd: usd, modelUsage: { m: { inputTokens: i, outputTokens: o, cacheReadInputTokens: cr, cacheCreationInputTokens: cw, costUSD: usd } } });

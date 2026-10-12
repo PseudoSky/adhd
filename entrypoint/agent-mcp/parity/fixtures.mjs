@@ -19,7 +19,13 @@ export function rng(seedStr) {
 }
 export function hex(r, n) { let s = ''; while (s.length < n) s += Math.floor(r() * 16).toString(16); return s; }
 
-export const PIN_MODEL = 'claude-haiku-4-5';
+/**
+ * THE model under test, for all three arms (R7-model AC1). One pin: arm A `claude --model`, arm B claudecli `provider.model`, arm C anthropic `provider.model`,
+ * the oracle `pin` (r1_model), the cost card (lib.mjs RATE_CARDS) and /usage all derive from it. R7 moved it from claude-haiku-4-5 to claude-sonnet-5-5
+ * (owner: "the experiment with sonnet instead of haiku"). It is a first-party id with NO dated snapshot (claude 2.1.296 catalog: provider_ids.first_party =
+ * "claude-sonnet-5-5"); a response model that starts with the pin (a future dated snapshot) also passes r1_model. The JUDGE model is a separate pin: judge.mjs JUDGE_MODEL.
+ */
+export const PIN_MODEL = 'claude-sonnet-5-5';
 export const WEB_URL = 'https://example.com';
 export const WEB_HEADING = 'Example Domain';
 export const SYSTEM_PROMPT_BASE = 'You are a concise assistant. Use your tools to answer.';

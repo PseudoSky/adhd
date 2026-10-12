@@ -5,11 +5,32 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { spawnSync, execFileSync } from 'node:child_process';
+import { PIN_MODEL } from './fixtures.mjs';
 
 // ---------------------------------------------------------------------------------------------------
-// Cost model (LEARNINGS item 1): tier-aware cache writes. haiku-4.5 list rates, USD per million tokens.
+// Cost model (LEARNINGS item 1): tier-aware cache writes. USD per million tokens, keyed by the model under test (R7-model AC3).
+// The "common rate card" recompute prices every arm at ONE card chosen by the pinned model. A model with no card here is NEVER priced at another
+// model's rates: `rateCardFor` returns null, `priceNorm` returns usd null with `unmeasured`, and the recorded cost reads 'unmeasured: no rate card for <model>'.
+// Arm A's authoritative cost is the claude CLI's own total_cost_usd; the card is the cross-arm common denominator and the fallback.
 // ---------------------------------------------------------------------------------------------------
-export const RATES_PER_M = { input: 1.0, output: 5.0, cacheRead: 0.10, write5m: 1.25, write1h: 2.0 };
+export const RATE_CARDS = Object.freeze({
+  'claude-haiku-4-5': { rates: Object.freeze({ input: 1.0, output: 5.0, cacheRead: 0.10, write5m: 1.25, write1h: 2.0 }),
+    source: 'Anthropic list rates; packages/agent/agent-core-provider/src/pricing/rate-card.ts RATE_CARD.claude_haiku_4_5 (vendor-direct)' },
+  // R7-model: no vendor-direct RATE_CARD entry exists for claude_sonnet_5_5 (rate-card.ts has only claude_sonnet_4_6, $3/$15). The only committed Sonnet 5.5 price is the
+  // OpenRouter feed snapshot packages/agent/agent-core-provider/src/pricing/pricing.json, id anthropic/claude-sonnet-5.5 (fetched_at 2026-10-08T18:57:29Z): prompt 2e-6,
+  // completion 1e-5, input_cache_read 1e-7, input_cache_write 2.5e-6, input_cache_write_1h 4e-6 per token. It agrees with the claude CLI model catalog tag
+  // pricing:"tier_2_10_cache_read_0_10" (claude 2.1.296). Snapshot-sourced, NOT vendor-verified; no long-context override tier is applied.
+  'claude-sonnet-5-5': { rates: Object.freeze({ input: 2.0, output: 10.0, cacheRead: 0.10, write5m: 2.5, write1h: 4.0 }),
+    source: 'agent-core-provider pricing.json OpenRouter snapshot anthropic/claude-sonnet-5.5 fetched 2026-10-08 (snapshot-sourced, not vendor-verified)' },
+});
+/** The card for `model` (a dated snapshot suffix `-YYYYMMDD` is stripped), or null when none exists. Never falls back to another model. */
+export function rateCardFor(model) {
+  const k = String(model ?? '').replace(/-\d{8}$/, '');
+  return Object.prototype.hasOwnProperty.call(RATE_CARDS, k) ? { model: k, ...RATE_CARDS[k] } : null;
+}
+export const unmeasuredNote = (model) => `unmeasured: no rate card for ${model}`;
+/** Rates for the pinned model (null = unmeasured). Every default-rate recompute below uses this. */
+export const RATES_PER_M = rateCardFor(PIN_MODEL)?.rates ?? null;
 
 /** Normalise an Anthropic usage object into the fields the cost model prices. */
 export function normUsage(u) {
@@ -26,6 +47,7 @@ export function normUsage(u) {
 }
 /** Price a normalised usage. Untiered writes are priced at the 5m rate AND flagged (never silently 1h). */
 export function priceNorm(n, rates = RATES_PER_M) {
+  if (!rates) return { usd: null, parts: null, untieredFlag: n.wUntiered > 0, unmeasured: true };
   const parts = {
     input: n.in * rates.input / 1e6, cacheRead: n.cr * rates.cacheRead / 1e6,
     write5m: (n.w5m + n.wUntiered) * rates.write5m / 1e6, write1h: n.w1h * rates.write1h / 1e6, output: n.out * rates.output / 1e6,
@@ -142,6 +164,7 @@ export function cliPhaseAccounting(results, prior = null) {
 }
 /** Price explicit token counts (with the cache-write tier split) at list rates. */
 export function priceTokens({ in: i = 0, out = 0, cr = 0, w5m = 0, w1h = 0 }, rates = RATES_PER_M) {
+  if (!rates) return null;
   return (i * rates.input + out * rates.output + cr * rates.cacheRead + w5m * rates.write5m + w1h * rates.write1h) / 1e6;
 }
 /**
@@ -387,7 +410,7 @@ export function parseUsageOutput(stdout) {
   const m = txt.match(/Current session: (\d+)% used(?: · resets ([^\n]+))?/); const wk = txt.match(/Current week \(all models\): (\d+)% used/);
   return { session_pct: m ? +m[1] : null, resets: m?.[2] ?? null, week_pct: wk ? +wk[1] : null, model_calls: res?.num_turns ?? null, cost_usd: res?.total_cost_usd ?? null, text: txt };
 }
-export function readUsageWindow({ claude = 'claude', model = 'claude-haiku-4-5' } = {}) {
+export function readUsageWindow({ claude = 'claude', model = PIN_MODEL } = {}) {
   const r = spawnSync(claude, ['-p', '/usage', '--model', model, '--output-format', 'json'], { cwd: os.tmpdir(), env: cleanEnv(), encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 90000 });
   if (r.status !== 0) throw new Error(`claude -p /usage exited ${r.status}: ${(r.stderr || '').slice(0, 200)}`);
   const u = parseUsageOutput(r.stdout);

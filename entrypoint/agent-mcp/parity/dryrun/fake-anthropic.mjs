@@ -97,7 +97,7 @@ export function startFakeAnthropic({ mode = 'ideal', log = () => {} } = {}) {
       const delta = c.first ? (c.warm ? 0 : 8400) : 260; const u = { input_tokens: 5, cache_read_input_tokens: c.first ? (c.warm ? 8400 : 0) : c.ctx, cache_creation_input_tokens: delta, cache_creation: { ephemeral_5m_input_tokens: delta, ephemeral_1h_input_tokens: 0 }, output_tokens: 1 };
       c.ctx += delta + 5; c.first = false; c.turn++;
       const id = `msg_fake_${crypto.randomBytes(5).toString('hex')}`;
-      const parts = [ev('message_start', { type: 'message_start', message: { id, type: 'message', role: 'assistant', model: 'claude-haiku-4-5-20251001', content: [], stop_reason: null, stop_sequence: null, usage: u } })];
+      const parts = [ev('message_start', { type: 'message_start', message: { id, type: 'message', role: 'assistant', model: body.model || 'claude-sonnet-5-5', content: [], stop_reason: null, stop_sequence: null, usage: u } })];
       let bi = 0;
       for (const sb of c.serverBlocks.splice(0)) {      // server-executed web_fetch: server_tool_use + its result, inside this very response
         parts.push(ev('content_block_start', { type: 'content_block_start', index: bi, content_block: { type: 'server_tool_use', id: sb.id, name: 'web_fetch', input: {} } }),

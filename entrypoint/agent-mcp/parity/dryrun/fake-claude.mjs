@@ -23,7 +23,7 @@ const STATE = process.env.R2_FAKE_STATE || path.join(process.cwd(), '.r2-fake-st
 fs.mkdirSync(STATE, { recursive: true });
 const SDK = process.env.R2_SDK_ROOT;
 const MODE = process.env.R2_FAKE_MODE || 'ideal';
-const MODEL = flag('--model') || 'claude-haiku-4-5';
+const MODEL = flag('--model') || 'claude-sonnet-5-5';
 const mcpArg = flag('--mcp-config');
 const mcpConfig = mcpArg ? JSON.parse(mcpArg.trimStart().startsWith('{') ? mcpArg : fs.readFileSync(mcpArg, 'utf8')) : { mcpServers: {} };
 const bridge = Object.values(mcpConfig.mcpServers || {}).some((e) => e.type === 'http' || e.type === 'sse' || e.url);

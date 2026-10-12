@@ -10,7 +10,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { RUBRIC, RUBRIC_TEXT, parseJudgeOutput, qualityMean } from './quality.mjs';
 
-export const JUDGE_MODEL = 'claude-haiku-4-5';          // pinned id recorded in every judge record (R5.AC5); the cheapest tier, same as the arms
+export const JUDGE_MODEL = 'claude-haiku-4-5';          // pinned id recorded in every judge record (R5.AC5). SEPARATE from the arms' model pin (fixtures.mjs PIN_MODEL, claude-sonnet-5-5 since R7): the judge stays on the cheapest tier by owner direction (R7-model AC1)
 export const JUDGE_MAX_TOKENS = 1500;
 /**
  * Brief format version, recorded in every judge record. 1 = results of server-executed tools (web_fetch/web_search) were blank when never captured (every R5 judge
