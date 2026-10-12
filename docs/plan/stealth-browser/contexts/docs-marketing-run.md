@@ -34,6 +34,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 - [docs-marketing-run.2] docs/marketing/.catalog/review.md records a doc-reviewer verdict of PASS.
 - [docs-marketing-run.3] AGENTS.md, llms.txt, CHANGELOG.md (with a 0.0.1 migration entry) and README.md exist; no AI attribution lines anywhere in them.
 - [docs-marketing-run.4] Documentation-only: [psm:docs-marketing-run] commits touch only docs/, README.md, AGENTS.md, llms.txt, CHANGELOG.md (ownership).
+- [docs-marketing-run.5] Gate evidence of gates-rerun still matches the package source tree (docs run changed no src/).
 ---
 
 ## Reservations

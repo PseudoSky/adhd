@@ -1143,6 +1143,15 @@
       "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py docs-marketing-run --only docs-marketing-run.4",
       "expect": "exit0",
       "cwd": "repo-root"
+    },
+    {
+      "id": "docs-marketing-run.5",
+      "phase": "docs",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py docs-marketing-run --only docs-marketing-run.5",
+      "expect": "exit0",
+      "cwd": "repo-root"
     }
   ]
 }
