@@ -34,7 +34,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 
 - [prod-errors.1] (PA5.1) src/errors.ts defines an Error subclass with a stable `code` field covering CHROME_NOT_FOUND, PORT_IN_USE, NODE_TOO_OLD and CHROME_NOT_RUNNING, each with a remediation message naming the fix.
 
-- [prod-errors.2] (PA5.4) src/test/unit/errors/ has a unit test per code: each of the four codes is asserted (code and a remediation message), citing ticket 8468f7b1 and a valid criterion id of this state.
+- [prod-errors.2] (PA5.4) src/test/unit/errors/ has a unit test per code: each of the four codes is asserted (code and a remediation message), citing ticket 8468f7b1, a valid criterion id of this state and PA5.1 / PA5.4.
 - [prod-errors.3] Only owned paths changed by [psm:prod-errors] commits; errors.ts reads no process.env.
 ---
 

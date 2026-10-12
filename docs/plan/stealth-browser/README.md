@@ -34,7 +34,7 @@ The human's request approves exactly one new package, `entrypoint/stealth-browse
 
 ## States (34), waves, executors
 
-Wave = dependency depth; states in one wave with no edge between them may run concurrently, and `scripts/check-disjoint.py` proves their owned paths are disjoint (exit 0: 34 states, 67 concurrent pairs, 0 overlaps). Executors are best-fit, never general/claude; sonnet unless noted. The four `prod-*` states and the productization amendments were folded in from `PRODUCT-REVIEW.md` (tasks P1-P10, decisions D1-D5; P11 stays a backlog follow-up).
+Wave = dependency depth; states in one wave with no edge between them may run concurrently, and `scripts/check-disjoint.py` proves their owned paths are disjoint (exit 0: 34 states, 72 concurrent pairs, 0 overlaps). Executors are best-fit, never general/claude; sonnet unless noted. The four `prod-*` states and the productization amendments were folded in from `PRODUCT-REVIEW.md` (tasks P1-P10, decisions D1-D5; P11 stays a backlog follow-up).
 
 | Wave | State | Phase | Kind | Executor | Owned paths | Guard |
 |---|---|---|---|---|---|---|
@@ -50,25 +50,25 @@ Wave = dependency depth; states in one wave with no edge between them may run co
 | 7 | `mig-queries` | migrate | work | refactoring-specialist (sonnet/medium) | `entrypoint/stealth-browser/src/lib/queries/` | `guard.py mig-queries` |
 | 5 | `mig-docs` | migrate | work | refactoring-specialist (sonnet/low) | `entrypoint/stealth-browser/docs/reference/` | `guard.py mig-docs` |
 | 8 | `surface-api` | surface | work | typescript-pro (sonnet/high) | `entrypoint/stealth-browser/src/api.ts`, `entrypoint/stealth-browser/src/index.ts`, `docs/plan/stealth-browser/evidence/product-claims.json` | `guard.py surface-api` |
-| 9 | `prod-public-api` | surface | work | typescript-pro (sonnet/high) | `entrypoint/stealth-browser/src/legacy.ts`, `entrypoint/stealth-browser/src/index.ts`, `entrypoint/stealth-browser/src/test/unit/public-api/` | `guard.py prod-public-api` |
 | 9 | `prod-errors` | surface | work | typescript-pro (sonnet/high) | `entrypoint/stealth-browser/src/errors.ts`, `entrypoint/stealth-browser/src/test/unit/errors/` | `guard.py prod-errors` |
+| 9 | `prod-public-api` | surface | work | typescript-pro (sonnet/high) | `entrypoint/stealth-browser/src/legacy.ts`, `entrypoint/stealth-browser/src/index.ts`, `entrypoint/stealth-browser/src/test/unit/public-api/` | `guard.py prod-public-api` |
 | 10 | `surface-hosts` | surface | work | typescript-pro (sonnet/high) | `entrypoint/stealth-browser/src/server.ts`, `entrypoint/stealth-browser/src/cli.ts`, `entrypoint/stealth-browser/src/host-projection.ts` ... | `guard.py surface-hosts` |
 | 11 | `tracing-plugin` | surface | work | typescript-pro (sonnet/high) | `entrypoint/stealth-browser/src/tracing.ts`, `entrypoint/stealth-browser/src/server.ts`, `entrypoint/stealth-browser/src/cli.ts` ... | `guard.py tracing-plugin` |
 | 12 | `prod-examples` | surface | work | typescript-pro (sonnet/medium) | `entrypoint/stealth-browser/examples/`, `entrypoint/stealth-browser/src/test/unit/examples/`, `entrypoint/stealth-browser/tsconfig.spec.json` | `guard.py prod-examples` |
+| 13 | `prod-publish-readiness` | surface | work | platform-engineer (sonnet/medium) | `docs/plan/stealth-browser/evidence/publish-dry-run.txt`, `entrypoint/stealth-browser/package.json` | `guard.py prod-publish-readiness` |
 | 7 | `tests-unit-core` | verify | work | test-automator (sonnet/medium) | `entrypoint/stealth-browser/src/test/unit/foundation/`, `entrypoint/stealth-browser/src/test/unit/cdp/`, `entrypoint/stealth-browser/src/test/unit/chrome-manager/` | `guard.py tests-unit-core` |
 | 8 | `tests-unit-data` | verify | work | test-automator (sonnet/medium) | `entrypoint/stealth-browser/src/test/unit/domains-storage/`, `entrypoint/stealth-browser/src/test/unit/queries/` | `guard.py tests-unit-data` |
 | 6 | `tests-unit-extract` | verify | work | test-automator (sonnet/medium) | `entrypoint/stealth-browser/src/test/unit/capture-parsers/` | `guard.py tests-unit-extract` |
 | 11 | `tests-unit-surface` | verify | work | test-automator (sonnet/medium) | `entrypoint/stealth-browser/src/test/unit/surface/` | `guard.py tests-unit-surface` |
-| 13 | `tests-e2e` | verify | work | qa (sonnet/high) | `entrypoint/stealth-browser/src/test/e2e/` | `guard.py tests-e2e` |
-| 14 | `tracing-namespace-proof` | verify | work | test-automator (sonnet/high) | `entrypoint/stealth-browser/src/test/unit/tracing/tracing-namespace.spec.ts` | `guard.py tracing-namespace-proof` |
-| 15 | `gates-first` | verify | work | qa (sonnet/medium) | `docs/plan/stealth-browser/evidence/` | `guard.py gates-first` |
-| 16 | `review-prep` | review | work | qa (sonnet/low) | `docs/plan/stealth-browser/review/migration.diff`, `docs/plan/stealth-browser/review/INPUT.sha256`, `docs/plan/stealth-browser/review/BRIEF.txt` | `guard.py review-prep` |
-| 17 | `audit-migration-blind` | review | audit | code-reviewer (sonnet/high) | `docs/plan/stealth-browser/review/FINDINGS.json` | `guard.py audit-migration-blind` |
-| 18 | `resolve-findings` | remediate | work | typescript-pro (sonnet/high) | `entrypoint/stealth-browser/`, `docs/plan/stealth-browser/review/RESOLUTION.json` | `guard.py resolve-findings` |
-| 19 | `gates-rerun` | remediate | work | qa (sonnet/medium) | `docs/plan/stealth-browser/evidence/` | `guard.py gates-rerun` |
-| 20 | `docs-marketing-run` | docs | work | doc-steward (sonnet/medium) | `entrypoint/stealth-browser/docs/`, `entrypoint/stealth-browser/AGENTS.md`, `entrypoint/stealth-browser/llms.txt` ... | `guard.py docs-marketing-run` |
-| 21 | `readme-rewrite` | docs | work | content-marketer (sonnet/medium) | `entrypoint/stealth-browser/README.md` | `guard.py readme-rewrite` |
-| 22 | `prod-publish-readiness` | release | work | platform-engineer (sonnet/medium) | `docs/plan/stealth-browser/evidence/publish-dry-run.txt`, `entrypoint/stealth-browser/package.json` | `guard.py prod-publish-readiness` |
+| 14 | `tests-e2e` | verify | work | qa (sonnet/high) | `entrypoint/stealth-browser/src/test/e2e/` | `guard.py tests-e2e` |
+| 15 | `tracing-namespace-proof` | verify | work | test-automator (sonnet/high) | `entrypoint/stealth-browser/src/test/unit/tracing/tracing-namespace.spec.ts` | `guard.py tracing-namespace-proof` |
+| 16 | `gates-first` | verify | work | qa (sonnet/medium) | `docs/plan/stealth-browser/evidence/` | `guard.py gates-first` |
+| 17 | `review-prep` | review | work | qa (sonnet/low) | `docs/plan/stealth-browser/review/migration.diff`, `docs/plan/stealth-browser/review/INPUT.sha256`, `docs/plan/stealth-browser/review/BRIEF.txt` | `guard.py review-prep` |
+| 18 | `audit-migration-blind` | review | audit | code-reviewer (sonnet/high) | `docs/plan/stealth-browser/review/FINDINGS.json` | `guard.py audit-migration-blind` |
+| 19 | `resolve-findings` | remediate | work | typescript-pro (sonnet/high) | `entrypoint/stealth-browser/`, `docs/plan/stealth-browser/review/RESOLUTION.json` | `guard.py resolve-findings` |
+| 20 | `gates-rerun` | remediate | work | qa (sonnet/medium) | `docs/plan/stealth-browser/evidence/` | `guard.py gates-rerun` |
+| 21 | `docs-marketing-run` | docs | work | doc-steward (sonnet/medium) | `entrypoint/stealth-browser/docs/`, `entrypoint/stealth-browser/AGENTS.md`, `entrypoint/stealth-browser/llms.txt` ... | `guard.py docs-marketing-run` |
+| 22 | `readme-rewrite` | docs | work | content-marketer (sonnet/medium) | `entrypoint/stealth-browser/README.md` | `guard.py readme-rewrite` |
 | 23 | `audit-final` | release | audit | architect-reviewer (sonnet/high) | `docs/plan/stealth-browser/final-review.md` | `guard.py audit-final` |
 | 24 | `merge-readiness` | release | work | dispatcher (human/dispatcher) | `docs/plan/stealth-browser/RELEASE-DECISION.md` | `guard.py merge-readiness` |
 | 25 | `agent-search-cutover` | release | work | typescript-pro (sonnet/high) | `/Users/nix/dev/ai/scratch/agent-browser/adhd/`, `/Users/nix/dev/ai/scratch/agent-browser/cdp-query-client.ts`, `/Users/nix/dev/ai/scratch/agent-browser/search/queries/` ... | `guard.py agent-search-cutover` |
@@ -86,16 +86,16 @@ Wave = dependency depth; states in one wave with no edge between them may run co
 - Wave 10: `surface-hosts`
 - Wave 11: `tracing-plugin`, `tests-unit-surface`
 - Wave 12: `prod-examples`
-- Wave 13: `tests-e2e`
-- Wave 14: `tracing-namespace-proof`
-- Wave 15: `gates-first`
-- Wave 16: `review-prep`
-- Wave 17: `audit-migration-blind`
-- Wave 18: `resolve-findings`
-- Wave 19: `gates-rerun`
-- Wave 20: `docs-marketing-run`
-- Wave 21: `readme-rewrite`
-- Wave 22: `prod-publish-readiness`
+- Wave 13: `prod-publish-readiness`
+- Wave 14: `tests-e2e`
+- Wave 15: `tracing-namespace-proof`
+- Wave 16: `gates-first`
+- Wave 17: `review-prep`
+- Wave 18: `audit-migration-blind`
+- Wave 19: `resolve-findings`
+- Wave 20: `gates-rerun`
+- Wave 21: `docs-marketing-run`
+- Wave 22: `readme-rewrite`
 - Wave 23: `audit-final`
 - Wave 24: `merge-readiness`
 - Wave 25: `agent-search-cutover`
@@ -112,9 +112,9 @@ AC ids are cited in specs with the ticket id `8468f7b1`; the per-state guard ids
 
 `productization-hold` (executor `product`, phase `productization`) is the first state and a review hold point. Product reviewed SCOPE/DEMO/TOOLS and recorded its findings in `PRODUCT-REVIEW.md` (`STATUS: folded`, `INSERTED: prod-public-api, prod-errors, prod-examples, prod-publish-readiness`). The fold:
 
-- New states: `prod-public-api` (P3: `./legacy` subpath, stable-six root, tier tags; after `surface-api`), `prod-errors` (P5: structured errors; after `surface-api`), `prod-examples` (P7: after `tracing-plugin`, before `tests-e2e`), `prod-publish-readiness` (P10: after `readme-rewrite`, before `audit-final`).
-- Amended: `surface-api` (P1 input allowlist, P4 TSDoc, early evidence for the two claims product could not verify, D1 barrel criterion), `surface-hosts` (depends on `prod-public-api` and `prod-errors`; P1/P2/P3/P4/P5/P6 host work), `tracing-plugin` (P9 `--verbose`, namespace pinned to emitted keys, backlog 5152786d), `tests-unit-surface` (D4: depends on `surface-hosts`; host-level P1/P2 specs), `tests-e2e` (P2 live redaction, P9 stdout cleanliness), `docs-marketing-run` and `readme-rewrite` (P6/P8/P9 docs and the no-overclaim briefs, P10 stability policy), `merge-readiness` and `agent-search-cutover` (D3 main-checkout `dist/` build; D1 `./legacy` imports).
-- `prod-publish-readiness` follows `readme-rewrite` because the tarball must contain the final README and CHANGELOG; it is a dependency of `audit-final`, a descendant of `gates-first` (`productization-hold.3` accepts a dependency of `gates-first` or of its descendants).
+- New states: `prod-public-api` (P3: `./legacy` subpath, stable-six root, tier tags; after `surface-api`), `prod-errors` (P5: structured errors; after `surface-api`), `prod-examples` (P7: after `tracing-plugin`), `prod-publish-readiness` (P10: after `prod-examples`, before `tests-e2e`). Every prod-* state is an ancestor of `gates-first` (`productization-hold.3`).
+- Amended: `surface-api` (P1 input allowlist, P4 TSDoc, early evidence for the two claims product could not verify, D1 barrel criterion), `surface-hosts` (depends on `prod-public-api` and `prod-errors`; P1/P2/P3/P4/P5/P6 host work), `tracing-plugin` (P9 `--verbose`, namespace pinned to emitted keys, backlog 5152786d), `tests-unit-surface` (D4: depends on `surface-hosts`; host-level P1/P2 specs), `tests-e2e` (P2 live redaction, P9 stdout cleanliness), `docs-marketing-run` and `readme-rewrite` (P6/P8/P9 docs and the no-overclaim briefs, P10 stability policy), `audit-final` (`.9` tarball re-check), `merge-readiness` and `agent-search-cutover` (D3 main-checkout `dist/` build; D1 `./legacy` imports).
+- P10 is split across the gate: package metadata, version, engines, bins and the first tarball dry-run are `prod-publish-readiness` (upstream of `gates-first`); the tarball is re-checked against the final README and CHANGELOG by `audit-final.10`, and the README stability policy is `readme-rewrite.8`.
 - Insertion recipe for later items: add a new state with `plan-scaffold.js add-state`, then `set-reservation`, `add-criterion`, extend `scripts/ownership.json`, and make the intended successor depend on it. Existing slugs and criterion ids are never renamed. Re-run `check-disjoint.py` and `check-guards-red.py` after every insertion.
 
 ## Step 1c risk checkpoint

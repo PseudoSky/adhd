@@ -37,7 +37,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 - [prod-public-api.2] (PA3.2) src/index.ts exports no Google- or Search-named symbol and does not re-export ./legacy; src/legacy.ts exports every such old-barrel name (the union of both files still covers the old barrel).
 - [prod-public-api.3] (PA3.3, source level) src/legacy.ts exports SearchResultSource and src/index.ts exports the neutral alias PageSource; capture/dom.ts stays present (dod.4).
 - [prod-public-api.4] (PA3.5) Tier tags: every export statement in src/legacy.ts carries @deprecated and every export in src/index.ts other than the `./api.js` verbs carries @experimental in its TSDoc.
-- [prod-public-api.5] Specs cite ticket 8468f7b1 and a valid criterion id of this state; only owned paths changed by [psm:prod-public-api] commits.
+- [prod-public-api.5] Specs cite ticket 8468f7b1, a valid criterion id of this state and the PA ids they cover (PA3.1, PA3.5); only owned paths changed by [psm:prod-public-api] commits.
 ---
 
 ## Reservations

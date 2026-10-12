@@ -162,7 +162,7 @@ P1, P2 (safety) and P3 (naming) first, since they change types before hosts are 
 | P7 examples | prod-examples (new) | prod-examples.1-.5 (PA7.1-PA7.4) |
 | P8 responsible use | docs-marketing-run, readme-rewrite | docs-marketing-run.7 (PA8.1, PA8.2), docs-marketing-run.8 and readme-rewrite.7 (PA8.3), readme-rewrite.6 (PA8.2, PA8.4) |
 | P9 observability | tracing-plugin, tests-e2e, docs-marketing-run | tracing-plugin.7 (PA9.2), tests-e2e.7 (PA9.2), docs-marketing-run.9 (PA9.1) |
-| P10 publish readiness | prod-publish-readiness (new), readme-rewrite | prod-publish-readiness.1-.5 (PA10.1-PA10.5), readme-rewrite.8 (PA10.2) |
+| P10 publish readiness | prod-publish-readiness (new), audit-final, readme-rewrite | prod-publish-readiness.1-.5 (PA10.1-PA10.5), audit-final.10 (PA10.3 re-check on the final docs), readme-rewrite.8 (PA10.2 README policy) |
 | D3 main-checkout dist | merge-readiness, agent-search-cutover | merge-readiness.4, agent-search-cutover.6 |
 | D4 | tests-unit-surface depends on surface-hosts | tests-unit-surface.4 |
 | Unverified claims | surface-api.8 (evidence file), surface-hosts.7 and .12 (built-bin probes) | `evidence/product-claims.json` records whether launchChrome options reach the MCP schema and whether getPageContext returns cookie values, with file:line citations |
@@ -170,4 +170,4 @@ P1, P2 (safety) and P3 (naming) first, since they change types before hosts are 
 
 P11 is not in the DAG (D2). The D5 candidates stay out of the DAG and are filed in the backlog by the dispatcher.
 The word scan (PA8.3) covers README.md and docs/ except the ported `docs/reference/` protocol reference (CDP method names such as `setBypassCSP`) and generated `.catalog/` data.
-`prod-publish-readiness` follows `readme-rewrite` (the tarball needs the final README and CHANGELOG), so it is a dependency of `audit-final`, a descendant of `gates-first`; `productization-hold.3` is evaluated as "dependency of `gates-first` or of its descendants".
+Placement of P10: `prod-publish-readiness` sits after `prod-examples` and before `tests-e2e` so it is an ancestor of `gates-first` (`productization-hold.3`, no exceptions). The part of PA10.3 that needs the final README and CHANGELOG is re-checked after the docs states by `audit-final.10`; the README stability policy (PA10.2) is `readme-rewrite.8`. This differs from the review's stated "after readme-rewrite" placement and is the dispatcher's to confirm.

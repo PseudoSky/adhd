@@ -37,7 +37,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 - [prod-examples.2] (PA7.2) tsconfig.spec.json includes examples/ and `nx run stealth-browser:typecheck-spec` exits 0 with examples/library.ts importing the package.
 - [prod-examples.3] (PA7.3) examples/mcp-config.json parses as JSON with an mcpServers entry whose command/args name the `stealth-browser-mcp` bin declared in package.json.
 - [prod-examples.4] (PA7.4) The three examples use an explicit non-9222 port and never the default 9222.
-- [prod-examples.5] A spec under src/test/unit/examples/ asserts the examples (config JSON parses, bin name matches, port is non-9222), citing ticket 8468f7b1 and a valid criterion id of this state; only owned paths changed by [psm:prod-examples] commits.
+- [prod-examples.5] A spec under src/test/unit/examples/ asserts the examples (config JSON parses, bin name matches, port is non-9222), citing ticket 8468f7b1, a valid criterion id of this state and PA7.3 / PA7.4; only owned paths changed by [psm:prod-examples] commits.
 ---
 
 ## Reservations

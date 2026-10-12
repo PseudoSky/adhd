@@ -3694,6 +3694,8 @@
         "docs/plan/stealth-browser/PRODUCT-REVIEW.md",
         "docs/plan/stealth-browser/RELEASE-DECISION.md",
         "docs/plan/stealth-browser/evidence/",
+        "docs/plan/stealth-browser/evidence/naming-decision.md",
+        "docs/plan/stealth-browser/evidence/product-claims.json",
         "docs/plan/stealth-browser/evidence/publish-dry-run.txt",
         "docs/plan/stealth-browser/final-review.md",
         "docs/plan/stealth-browser/review/BRIEF.txt",
@@ -3715,6 +3717,7 @@
         "entrypoint/stealth-browser/src/api.ts",
         "entrypoint/stealth-browser/src/cli.ts",
         "entrypoint/stealth-browser/src/errors.ts",
+        "entrypoint/stealth-browser/src/host-projection.ts",
         "entrypoint/stealth-browser/src/index.ts",
         "entrypoint/stealth-browser/src/legacy.ts",
         "entrypoint/stealth-browser/src/lib/capture/",
@@ -3758,13 +3761,19 @@
         "docs/plan/stealth-browser/review/FINDINGS.json",
         "entrypoint/apigen-cli/",
         "entrypoint/backlog/",
+        "entrypoint/backlog/src/",
         "entrypoint/backlog/src/tracing.ts",
         "entrypoint/dispatch-cli/",
+        "entrypoint/dispatch-cli/bin/",
         "entrypoint/stealth-browser/",
         "entrypoint/stealth-browser/bin/",
         "entrypoint/stealth-browser/docs/",
         "entrypoint/stealth-browser/package.json",
         "entrypoint/stealth-browser/src/",
+        "entrypoint/stealth-browser/src/api.ts",
+        "entrypoint/stealth-browser/src/errors.ts",
+        "entrypoint/stealth-browser/src/index.ts",
+        "entrypoint/stealth-browser/src/legacy.ts",
         "entrypoint/stealth-browser/src/lib/",
         "entrypoint/stealth-browser/src/lib/cdp/",
         "entrypoint/stealth-browser/src/lib/domains/",
@@ -3888,6 +3897,7 @@
         },
         "surface-api": {
           "mutates": [
+            "docs/plan/stealth-browser/evidence/product-claims.json",
             "entrypoint/stealth-browser/src/api.ts",
             "entrypoint/stealth-browser/src/index.ts"
           ],
@@ -3899,12 +3909,21 @@
         },
         "surface-hosts": {
           "mutates": [
+            "docs/plan/stealth-browser/evidence/naming-decision.md",
             "entrypoint/stealth-browser/bin/",
             "entrypoint/stealth-browser/package.json",
             "entrypoint/stealth-browser/src/cli.ts",
+            "entrypoint/stealth-browser/src/host-projection.ts",
             "entrypoint/stealth-browser/src/server.ts"
           ],
-          "read_only": []
+          "read_only": [
+            "entrypoint/backlog/src/",
+            "entrypoint/dispatch-cli/bin/",
+            "entrypoint/stealth-browser/src/api.ts",
+            "entrypoint/stealth-browser/src/errors.ts",
+            "entrypoint/stealth-browser/src/index.ts",
+            "entrypoint/stealth-browser/src/legacy.ts"
+          ]
         },
         "tracing-plugin": {
           "mutates": [
@@ -3949,7 +3968,10 @@
           "mutates": [
             "entrypoint/stealth-browser/src/test/unit/surface/"
           ],
-          "read_only": []
+          "read_only": [
+            "entrypoint/stealth-browser/src/api.ts",
+            "entrypoint/stealth-browser/src/index.ts"
+          ]
         },
         "tests-e2e": {
           "mutates": [
@@ -4057,14 +4079,21 @@
             "entrypoint/stealth-browser/src/legacy.ts",
             "entrypoint/stealth-browser/src/test/unit/public-api/"
           ],
-          "read_only": []
+          "read_only": [
+            "/Users/nix/dev/ai/scratch/agent-browser/cdp-query-client.ts",
+            "entrypoint/stealth-browser/src/api.ts",
+            "entrypoint/stealth-browser/src/lib/"
+          ]
         },
         "prod-errors": {
           "mutates": [
             "entrypoint/stealth-browser/src/errors.ts",
             "entrypoint/stealth-browser/src/test/unit/errors/"
           ],
-          "read_only": []
+          "read_only": [
+            "entrypoint/stealth-browser/src/api.ts",
+            "entrypoint/stealth-browser/src/lib/"
+          ]
         },
         "prod-examples": {
           "mutates": [
@@ -4072,7 +4101,11 @@
             "entrypoint/stealth-browser/src/test/unit/examples/",
             "entrypoint/stealth-browser/tsconfig.spec.json"
           ],
-          "read_only": []
+          "read_only": [
+            "entrypoint/stealth-browser/bin/",
+            "entrypoint/stealth-browser/package.json",
+            "entrypoint/stealth-browser/src/"
+          ]
         },
         "prod-publish-readiness": {
           "mutates": [
@@ -4092,7 +4125,7 @@
       },
       "assumed_baseline": [],
       "depends_on": [],
-      "updated_at": "2026-10-12T10:34:55.509Z"
+      "updated_at": "2026-10-12T10:47:28.502Z"
     },
     {
       "plan": "task-dependency-dag",
@@ -4529,6 +4562,6 @@
       "updated_at": "2026-07-17T23:56:00.980Z"
     }
   ],
-  "updated_at": "2026-10-12T10:34:55.517Z",
+  "updated_at": "2026-10-12T10:47:28.510Z",
   "verified_at": null
 }

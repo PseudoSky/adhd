@@ -330,7 +330,7 @@ def _ph2():
 
 @check("productization-hold", 3)
 def _ph3():
-    """dag.json is acyclic after the insertions and every inserted prod-* state is a dependency of `gates-first` or of its descendants."""
+    """dag.json is acyclic after the insertions and every inserted prod-* state is an ancestor of `gates-first` (no exceptions)."""
     nodes = dag().get("nodes", {})
     seen, stack = set(), set()
 
@@ -352,10 +352,9 @@ def _ph3():
             for d in nodes.get(n, {}).get("depends_on", []):
                 memo[n] |= {d} | anc(d)
         return memo[n]
-    below = {n for n in nodes if "gates-first" in anc(n)} | {"gates-first"}
-    reach = set().union(*[anc(n) | {n} for n in below]) if "gates-first" in nodes else set()
+    reach = anc("gates-first") if "gates-first" in nodes else set()
     stray = sorted(n for n in nodes if n.startswith("prod-") and n not in reach)
-    return not stray, f"acyclic; prod-* states not on a path to gates-first or its descendants: {stray}"
+    return not stray, f"acyclic; prod-* states that are not ancestors of gates-first: {stray}"
 
 
 # ============================================================ S1 scaffold
@@ -1322,8 +1321,8 @@ def _af8():
     return st == "" and main_nm_untouched()[0], f"dirty: {st[:200]}"
 
 
-@check("audit-final", 9)
-def _af9():
+@check("audit-final", 10)
+def _af10():
     """Every spec/e2e file cites ticket 8468f7b1 and a valid criterion id (final re-run of the citation rule)."""
     files = [f for f in walk(f"{P}/src/test", (".ts",))]
     ids = criteria_ids()
@@ -1487,6 +1486,15 @@ def ensure_bin():
     if not _BIN_BUILT:
         _BIN_BUILT.append(sh([NX, "run", f"{proj_name()}:build-bin"], timeout=1200)[0])
     return _BIN_BUILT[0] == 0 and exists(f"{P}/dist/bin/mcp.js") and exists(f"{P}/dist/bin/cli.js")
+
+
+def port_open(port):
+    import socket
+    try:
+        with socket.create_connection(("127.0.0.1", port), timeout=1):
+            return True
+    except OSError:
+        return False
 
 
 def norm_name(s):
@@ -1719,11 +1727,11 @@ def _pp4():
 
 @check("prod-public-api", 5)
 def _pp5():
-    """Specs cite ticket 8468f7b1 and a valid criterion id of this state; only owned paths changed by [psm:prod-public-api] commits."""
+    """Specs cite ticket 8468f7b1, a valid criterion id of this state and the PA ids they cover (PA3.1, PA3.5); only owned paths changed by [psm:prod-public-api] commits."""
     t = "\n".join(read(f) for f in spec_files("unit/public-api"))
     ids = set(re.findall(r"\[(prod-public-api\.\d+)\]", t))
     o = ownership_ok("prod-public-api")
-    return TICKET in t and bool(ids & criteria_ids()) and o[0], o[1]
+    return TICKET in t and bool(ids & criteria_ids()) and "PA3.1" in t and "PA3.5" in t and o[0], o[1]
 
 
 # ---------------------------------------------------------------- prod-errors (P5)
@@ -1739,12 +1747,12 @@ def _pe1():
 
 @check("prod-errors", 2)
 def _pe2():
-    """(PA5.4) src/test/unit/errors/ has a unit test per code: each of the four codes is asserted (code and a remediation message), citing ticket 8468f7b1 and a valid criterion id of this state."""
+    """(PA5.4) src/test/unit/errors/ has a unit test per code: each of the four codes is asserted (code and a remediation message), citing ticket 8468f7b1, a valid criterion id of this state and PA5.1 / PA5.4."""
     specs = spec_files("unit/errors")
     t = "\n".join(read(f) for f in specs)
     miss = [c for c in ERR_CODES if t.count(c) < 1]
     ids = set(re.findall(r"\[(prod-errors\.\d+)\]", t))
-    return bool(specs) and not miss and t.count("message") >= len(ERR_CODES) and TICKET in t and bool(ids & criteria_ids()), f"specs={len(specs)} missing={miss}"
+    return bool(specs) and not miss and t.count("message") >= len(ERR_CODES) and TICKET in t and bool(ids & criteria_ids()) and "PA5.1" in t and "PA5.4" in t, f"specs={len(specs)} missing={miss}"
 
 
 @check("prod-errors", 3)
@@ -1757,17 +1765,22 @@ def _pe3():
 # ---------------------------------------------------------------- surface-hosts amendments (P1-P6)
 @check("surface-hosts", 7)
 def _sh7():
-    """(PA1.2, PA1.3) The built MCP bin's tools/list schema for launchChrome has no chromePath or extraArgs property, and a tools/call for launchChrome with extraArgs is rejected with no process spawned and no profile dir created."""
+    """(PA1.2, PA1.3) The built MCP bin's tools/list schema for launchChrome has no chromePath or extraArgs property, and a tools/call for launchChrome with extraArgs is rejected with no process spawned (port stays closed) and no profile dir created."""
     if not ensure_bin():
         return False, "build-bin failed"
-    marker = "/tmp/sb-guard-pa12-marker"
-    shutil_rm = sh(["rm", "-rf", marker])
-    r = mcp_full([], [("launchChrome", {"port": 19997, "extraArgs": [f"--user-data-dir={marker}"]})])
+    marker, prof, port = "/tmp/sb-guard-pa12-marker", "/tmp/sb-guard-pa12-profile", 19997
+    sh(["rm", "-rf", marker, prof])
+    try:
+        r = mcp_full([], [("launchChrome", {"port": port, "userDataDir": prof, "extraArgs": [f"--user-data-dir={marker}"]})])
+    finally:
+        if port_open(port):  # a host that dropped extraArgs instead of rejecting would have launched Chrome: shut down only what this probe launched
+            mcp_full([], [("shutdownChrome", {"port": port})])
     t = next((t for t in r["tools"] if norm_name(t["name"]).endswith("launchchrome")), None)
     props = set(((t or {}).get("inputSchema") or {}).get("properties", {}))
     resp = (r["calls"] or [{}])[0]
     rejected = bool(resp.get("error")) or bool((resp.get("result") or {}).get("isError"))
     spawned = exists(marker)
+    sh(["rm", "-rf", marker, prof])
     return bool(t) and not ({"chromePath", "extraArgs"} & props) and rejected and not spawned, f"props={sorted(props)} rejected={rejected} spawned={spawned}"
 
 
@@ -1924,12 +1937,12 @@ def _pex4():
 
 @check("prod-examples", 5)
 def _pex5():
-    """A spec under src/test/unit/examples/ asserts the examples (config JSON parses, bin name matches, port is non-9222), citing ticket 8468f7b1 and a valid criterion id of this state; only owned paths changed by [psm:prod-examples] commits."""
+    """A spec under src/test/unit/examples/ asserts the examples (config JSON parses, bin name matches, port is non-9222), citing ticket 8468f7b1, a valid criterion id of this state and PA7.3 / PA7.4; only owned paths changed by [psm:prod-examples] commits."""
     specs = spec_files("unit/examples")
     t = "\n".join(read(f) for f in specs)
     ids = set(re.findall(r"\[(prod-examples\.\d+)\]", t))
     o = ownership_ok("prod-examples")
-    return bool(specs) and TICKET in t and bool(ids & criteria_ids()) and o[0], o[1]
+    return bool(specs) and TICKET in t and bool(ids & criteria_ids()) and all(k in t for k in ("PA7.3", "PA7.4")) and o[0], o[1]
 
 
 # ---------------------------------------------------------------- tests (P1, P2, P9 coverage)
@@ -2026,19 +2039,17 @@ def _pr1():
 
 @check("prod-publish-readiness", 2)
 def _pr2():
-    """(PA10.2) The initial version is 0.x and the README states the stability policy."""
-    return str(pkg().get("version", "")).startswith("0.") and "0.x" in read(f"{P}/README.md"), f"version={pkg().get('version')}"
+    """(PA10.2) The initial version is 0.x (the README's stability policy is guarded by readme-rewrite.8, which runs after the docs states)."""
+    return str(pkg().get("version", "")).startswith("0."), f"version={pkg().get('version')}"
 
 
-@check("prod-publish-readiness", 3)
-def _pr3():
-    """(PA10.3) `npm pack --dry-run` against the built dist output lists README.md, CHANGELOG.md, bin/cli.js, bin/mcp.js and every exports target; the output is recorded in evidence/publish-dry-run.txt."""
-    rec = read(f"{PLAN}/evidence/publish-dry-run.txt")
+def tarball_missing():
+    """`npm pack --dry-run --json` in dist/: returns (rc, missing members) against README.md, CHANGELOG.md, both bins and every exports target of the dist manifest."""
     rc, o, e = run2(["npm", "pack", "--dry-run", "--json"], 300, cwd=f"{P}/dist")
     try:
         files = {f["path"] for f in json.loads(o)[0]["files"]}
     except (ValueError, KeyError, IndexError):
-        return False, f"npm pack --dry-run unreadable rc={rc} {e[-150:]}"
+        return rc, [f"npm pack --dry-run unreadable rc={rc} {e[-150:]}"]
     need = {"README.md", "CHANGELOG.md", "bin/cli.js", "bin/mcp.js"}
     dm = jread(f"{P}/dist/package.json", {}) or {}
     tg = set()
@@ -2050,8 +2061,22 @@ def _pr3():
             for v in x.values():
                 collect(v)
     collect(dm.get("exports") or {})
-    miss = sorted(need - files) + sorted(t for t in tg if t not in files)
+    return rc, sorted(need - files) + sorted(t for t in tg if t not in files)
+
+
+@check("prod-publish-readiness", 3)
+def _pr3():
+    """(PA10.3) `npm pack --dry-run` against the built dist output lists README.md, CHANGELOG.md, bin/cli.js, bin/mcp.js and every exports target; the output is recorded in evidence/publish-dry-run.txt."""
+    rc, miss = tarball_missing()
+    rec = read(f"{PLAN}/evidence/publish-dry-run.txt")
     return rc == 0 and not miss and bool(rec.strip()), f"missing from tarball: {miss}; evidence recorded={bool(rec.strip())}"
+
+
+@check("audit-final", 9)
+def _af9():
+    """(PA10.3, re-checked after the docs states) `npm pack --dry-run` against the final dist output still lists README.md, CHANGELOG.md, bin/cli.js, bin/mcp.js and every exports target, and the packed README is the rewritten one (it links docs/RESPONSIBLE-USE.md)."""
+    rc, miss = tarball_missing()
+    return rc == 0 and not miss and "docs/RESPONSIBLE-USE.md" in read(f"{P}/dist/README.md"), f"missing from tarball: {miss}"
 
 
 @check("prod-publish-readiness", 4)

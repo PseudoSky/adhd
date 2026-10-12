@@ -1,6 +1,6 @@
 # tests-e2e — WORK STATE
 
-**Phase:** verify · **Kind:** work · **Depends on:** tracing-plugin, prod-examples · **Guard:** `python3 docs/plan/stealth-browser/scripts/guard.py tests-e2e`
+**Phase:** verify · **Kind:** work · **Depends on:** tracing-plugin, prod-examples, prod-publish-readiness · **Guard:** `python3 docs/plan/stealth-browser/scripts/guard.py tests-e2e`
 **Executor:** `qa` (sonnet/high) · **Worktree:** `/Users/nix/dev/node/adhd/.worktrees/stealth-browser` on branch `stealth-browser` (shared by every state, [inv:shared-worktree], [inv:worktree-required], [inv:no-ai-attribution])
 **Parallel with:** tests-unit-core, tests-unit-data, tests-unit-extract, tests-unit-surface (disjoint owned paths, proven by `check-disjoint.py`)
 

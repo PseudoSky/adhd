@@ -36,7 +36,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 - [surface-hosts.4] `node dist/bin/cli.js --help` exits 0 and lists all six verbs (the apigen extraction does not crash on the zod/$ref class of failure).
 - [surface-hosts.5] `node dist/bin/cli.js chrome-status --json` (or the chromeStatus verb) against an unused port prints running=false with exit 0 - the CLI reaches the real library, not a stub.
 - [surface-hosts.6] Only owned paths changed by [psm:surface-hosts] commits.
-- [surface-hosts.7] (PA1.2, PA1.3) The built MCP bin's tools/list schema for launchChrome has no chromePath or extraArgs property, and a tools/call for launchChrome with extraArgs is rejected with no process spawned and no profile dir created.
+- [surface-hosts.7] (PA1.2, PA1.3) The built MCP bin's tools/list schema for launchChrome has no chromePath or extraArgs property, and a tools/call for launchChrome with extraArgs is rejected with no process spawned (port stays closed) and no profile dir created.
 - [surface-hosts.8] (PA2.1) src/host-projection.ts exports redactCookieValues (names and counts kept, value strings dropped) and BOTH src/server.ts and src/cli.ts route getPageContext output through it; the library result in api.ts is unchanged (parity).
 - [surface-hosts.9] (PA3.2, PA3.3, PA3.4) package.json exports a ./legacy subpath into dist; the built root index.d.ts exports no Google- or Search-named symbol; `@adhd/stealth-browser/legacy` resolves from the built package; `nx run stealth-browser:verify-dist-load` exits 0.
 - [surface-hosts.10] (PA4.1, PA4.2) tools/list returns a description of at least 40 characters for each of the six tools; `cli --help` and `cli launchChrome --help` each show a description and the default port 9222.
