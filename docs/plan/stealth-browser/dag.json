@@ -254,6 +254,19 @@
       ],
       "context": "contexts/tests-unit-extract.md",
       "notes": "executor=test-automator tier=sonnet/medium"
+    },
+    "tests-unit-surface": {
+      "kind": "work",
+      "phase": "verify",
+      "depends_on": [
+        "surface-api"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py tests-unit-surface",
+      "artifacts": [
+        "entrypoint/stealth-browser/src/test/unit/surface/"
+      ],
+      "context": "contexts/tests-unit-surface.md",
+      "notes": "executor=test-automator tier=sonnet/medium"
     }
   },
   "authored_with": {
