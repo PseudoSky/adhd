@@ -151,6 +151,19 @@
       ],
       "context": "contexts/mig-queries.md",
       "notes": "executor=refactoring-specialist tier=sonnet/medium"
+    },
+    "mig-docs": {
+      "kind": "work",
+      "phase": "migrate",
+      "depends_on": [
+        "mig-foundation"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py mig-docs",
+      "artifacts": [
+        "entrypoint/stealth-browser/docs/reference/"
+      ],
+      "context": "contexts/mig-docs.md",
+      "notes": "executor=refactoring-specialist tier=sonnet/low"
     }
   },
   "authored_with": {
