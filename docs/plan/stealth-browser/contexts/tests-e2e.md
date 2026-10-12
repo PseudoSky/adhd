@@ -40,6 +40,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 
 - [tests-e2e.1] ONE shared scaffold/teardown: exactly one beforeAll and one afterAll across src/test/e2e (harness.ts), shared by every surface.
 
+- [tests-e2e.2] All three surfaces are driven in the one run: describe blocks tagged [surface:library], [surface:cli] and [surface:mcp] (MCP via a real JSON-RPC stdio client against the built dist/bin/mcp.js).
 ---
 
 ## Reservations
