@@ -42,6 +42,8 @@ type ProviderFailureEvents =
   | 'provider:recovered';
 /** Added additively as typed, task-event-persisted warnings (20772a0b AC1). */
 type TaskEventWarningEvents = 'budget:unpriced_model' | 'provider:builtin_bypass';
+/** Added additively as a mutation-style persistence veto (R9-hist S5b). */
+type ServerResultPersistEvents = 'transform:server_result_persist';
 
 const ctx = {} as ExecutionContext;
 const session = {} as Session;
@@ -92,10 +94,20 @@ describe('da907b90 AC2 — the existing events are unchanged (additive-only)', (
     expectTypeOf<ExistingEvents>().toExtend<HookEvent>();
     // Exactly existing ∪ new — nothing renamed, nothing removed, nothing extra.
     expectTypeOf<HookEvent>().toEqualTypeOf<
-      ExistingEvents | NewEvents | ProviderFailureEvents | TaskEventWarningEvents
+      | ExistingEvents
+      | NewEvents
+      | ProviderFailureEvents
+      | TaskEventWarningEvents
+      | ServerResultPersistEvents
     >();
     expectTypeOf<
-      Exclude<HookEvent, NewEvents | ProviderFailureEvents | TaskEventWarningEvents>
+      Exclude<
+        HookEvent,
+        | NewEvents
+        | ProviderFailureEvents
+        | TaskEventWarningEvents
+        | ServerResultPersistEvents
+      >
     >().toEqualTypeOf<ExistingEvents>();
   });
 

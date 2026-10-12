@@ -237,6 +237,31 @@ export interface SessionClosedPayload {
   session: Session;
 }
 
+/**
+ * Persistence veto for the provider-native server-tool result bodies of one assistant message
+ * (R9-hist, Anthropic `web_fetch` / `web_search` results and their `server_tool_use` blocks).
+ *
+ * Server-tool results are executed by the provider, so they never pass through
+ * `transform:tool_result` and cannot be rewritten (the blocks are opaque and signed). A plugin that
+ * treats third-party content as untrusted therefore has exactly one lever: refuse to let it outlive
+ * the run that produced it. The orchestrator emits this event once per assistant message, before
+ * persisting its echo, with `persist: true`; a handler MUTATES the payload (passed by reference,
+ * same contract as `transform:tool_result`) and sets `persist = false` to veto. After `emit()`
+ * returns the orchestrator reads `persist`: `false` means the server-tool blocks of this message
+ * are replayed within the producing run only and are never stored.
+ *
+ * A handler may only veto: it must never set `persist` back to `true` (handlers run in
+ * registration order, so a later `true` would silently undo an earlier plugin's veto).
+ */
+export interface ServerResultPersistPayload {
+  sessionId: string;
+  agentName?: string;
+  /** Bytes of the server-tool blocks that would be persisted (0 means nothing to veto). */
+  serverBytes: number;
+  /** Starts `true`; set to `false` to prevent the server-tool blocks from being stored. */
+  persist: boolean;
+}
+
 export interface HookEventMap {
   'task:start': TaskStartPayload;
   'pre:model_request': PreModelRequestPayload;
@@ -252,6 +277,12 @@ export interface HookEventMap {
    * appended to the conversation history.
    */
   'transform:tool_result': PostToolCallPayload;
+  /**
+   * Mutation-style persistence veto for provider server-tool result bodies, emitted once per
+   * assistant message before its echo is stored. Handlers set `payload.persist = false` to keep
+   * the bodies in-run only. See `ServerResultPersistPayload`.
+   */
+  'transform:server_result_persist': ServerResultPersistPayload;
   /**
    * Emitted by budget plugins when a cap whose mode is "warning" (the default)
    * is exceeded on the model path. Enforcement resolves — the run continues.
