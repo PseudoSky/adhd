@@ -44,6 +44,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 - [gates-first.4] `nx run stealth-browser:test` exits 0 (unit lane, no subprocess)
 - [gates-first.5] `nx run stealth-browser:verify-dist-load` exits 0 (the built dist loads the way a consumer loads it)
 - [gates-first.6] `nx run stealth-browser:e2e` exits 0 (all surfaces, one run)
+- [gates-first.7] Every spec/e2e file cites ticket 8468f7b1 and a valid acceptance-criterion id; evidence JSON records every gate command and exit code
 ---
 
 ## Reservations
