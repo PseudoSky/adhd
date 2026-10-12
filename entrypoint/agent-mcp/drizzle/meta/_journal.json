@@ -120,6 +120,13 @@
       "when": 1782874595972,
       "tag": "0016_task_events_task_id_index",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "6",
+      "when": 1782874595973,
+      "tag": "0017_message_provider_echo",
+      "breakpoints": true
     }
   ]
 }
