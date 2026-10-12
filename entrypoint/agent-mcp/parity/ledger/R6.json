@@ -3,13 +3,59 @@
   "cap": 3,
   "approvedBy": "owner (2026-10-12): \"drop all restrictions until you get the system working. if there is a constraint like agent needs to create a parent directory first, put that in the fucking tool instructions we dont need to build more. think smarter please\" -> implementation pass, then implementer 2 unit tests + success check, then an experiment run; the parity loop continues until parity is confirmed",
   "extraRunReason": "",
-  "runs": [],
-  "judgeCalls": [],
+  "runs": [
+    {
+      "runId": "A1",
+      "arm": "A",
+      "at": "2026-10-12T04:29:43.962Z",
+      "pid": 25253
+    },
+    {
+      "runId": "B1",
+      "arm": "B",
+      "at": "2026-10-12T04:32:28.784Z",
+      "pid": 25253
+    },
+    {
+      "runId": "C1",
+      "arm": "C",
+      "at": "2026-10-12T04:35:39.094Z",
+      "pid": 25253
+    }
+  ],
+  "judgeCalls": [
+    {
+      "arm": "A",
+      "modelId": "claude-haiku-4-5",
+      "inputTokens": 21728,
+      "outputTokens": 484,
+      "costUsd": 0.024148,
+      "briefSha": "5ed981f104e0f87f219a04c9e60fa4c104755fc76be489d37aa032943c4d8787",
+      "at": "2026-10-12T04:32:08.502Z"
+    },
+    {
+      "arm": "C",
+      "modelId": "claude-haiku-4-5",
+      "inputTokens": 18198,
+      "outputTokens": 508,
+      "costUsd": 0.020738,
+      "briefSha": "90ca41b0008916f1d5154c39a9a7a43b2a255bfd9064467b829cc25e9da904f3",
+      "at": "2026-10-12T04:37:46.109Z"
+    }
+  ],
   "scenarioSha": "deedea872bc566abfec7c201e4713d6c01b78a7993cb8229907171dd8f889d61",
   "scopeChanges": [],
-  "armOrder": [],
+  "armOrder": [
+    "A",
+    "B",
+    "C"
+  ],
   "startedAt": "2026-10-12T04:17:51.939Z",
-  "armA": null,
+  "armA": {
+    "genuine": true,
+    "detail": "all content items green, no INVALID, no defect signal",
+    "at": "2026-10-12T04:32:01.864Z"
+  },
   "releases": [
     {
       "runId": "A1",
