@@ -31,6 +31,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 
 - [resolve-findings.1] RESOLUTION.json covers 100% of FINDINGS ids; every finding is `fixed` or `rejected` - none open or deferred.
 
+- [resolve-findings.2] Each `fixed` entry names a commit sha tagged [psm:resolve-findings] that touches the cited file; each `rejected` entry carries >=40 chars of evidence and a reproduction command.
 ---
 
 ## Reservations

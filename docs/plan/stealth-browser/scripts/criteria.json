@@ -1017,6 +1017,15 @@
       "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py resolve-findings --only resolve-findings.1",
       "expect": "exit0",
       "cwd": "repo-root"
+    },
+    {
+      "id": "resolve-findings.2",
+      "phase": "remediate",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py resolve-findings --only resolve-findings.2",
+      "expect": "exit0",
+      "cwd": "repo-root"
     }
   ]
 }
