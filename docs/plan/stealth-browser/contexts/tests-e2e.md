@@ -38,7 +38,7 @@ One end-to-end run drives ALL THREE surfaces (library, CLI, MCP stdio) against a
 
 Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/guard.py` (`python3 docs/plan/stealth-browser/scripts/guard.py tests-e2e --only tests-e2e.N`). None may be deferred. Tests written by this plan cite ticket `8468f7b1` and these ids ([inv:tests-cite]).
 
-_No criteria yet._
+- [tests-e2e.1] ONE shared scaffold/teardown: exactly one beforeAll and one afterAll across src/test/e2e (harness.ts), shared by every surface.
 
 ---
 
