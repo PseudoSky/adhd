@@ -1,20 +1,33 @@
-# review-prep — STATE_NAME
+# review-prep — WORK STATE
 
 **Phase:** review · **Kind:** work · **Depends on:** gates-first · **Guard:** `python3 docs/plan/stealth-browser/scripts/guard.py review-prep`
+**Executor:** `qa` (sonnet/low) · **Worktree:** `/Users/nix/dev/node/adhd/.worktrees/stealth-browser` on branch `stealth-browser` (shared by every state, [inv:shared-worktree])
 
 ---
 
 ## Goal
 
-<What is true after this state that was not true before?>
+The blind-review input is assembled: the migration diff and the one-word brief, with an integrity hash. The reviewer will receive nothing else.
+
+---
+
+## Semantic Distillation
+
+- **Primitive:** WRITE `docs/plan/stealth-browser/review/{migration.diff,INPUT.sha256,BRIEF.txt}`.
+
+- **Reference Pattern:** `git diff <scaffold start_ref>..HEAD -- entrypoint/stealth-browser tsconfig.base.json` (excludes docs/plan and the lockfile).
+
+- **Delta Spec:** `git diff $(jq -r .states.scaffold.start_ref docs/plan/stealth-browser/state.json) HEAD -- entrypoint/stealth-browser tsconfig.base.json > review/migration.diff`; `shasum -a 256 review/migration.diff | cut -d' ' -f1 > review/INPUT.sha256`; `printf 'Review\n' > review/BRIEF.txt`.
+
+- **Invariants:** Blind review: the reviewer gets the diff and the word `Review` -- no rationale, no plan, no prior findings ([inv:blind-review]). Also: [inv:shared-worktree] (commit only your own explicit paths, tag every commit `[psm:review-prep]`), [inv:owned-paths-only], [inv:no-main-writes].
+
+- **Validation:** `python3 docs/plan/stealth-browser/scripts/guard.py review-prep` — runs every acceptance criterion below (red until the work is done); `--only review-prep.N` runs one.
 
 ---
 
 ## Acceptance criteria
 
-<!-- Author criteria with `plan-scaffold.js add-criterion`. Each writes a
-     matching audit check ID so Check 3's ID-mirror holds. Do not hand-add
-     bare [slug.N] tokens here without a matching audit check. -->
+Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/guard.py` (`python3 docs/plan/stealth-browser/scripts/guard.py review-prep --only review-prep.N`). None may be deferred. Tests written by this plan cite ticket `8468f7b1` and these ids ([inv:tests-cite]).
 
 _No criteria yet._
 
@@ -29,6 +42,21 @@ mutates:    ["docs/plan/stealth-browser/review/migration.diff", "docs/plan/steal
 
 ---
 
+## Contract Promise
+
+Added: three files under `docs/plan/stealth-browser/review/`.
+
+---
+
+## Commit points
+
+Every plan-file write is committed (R1). Work-product commits for this state, always by explicit path, always tagged `[psm:review-prep]`:
+
+- [ ] After the three files exist -- commit by explicit path: `chore(stealth-browser): blind review input [psm:review-prep]`
+- [ ] **After the guard passes** (mandatory) — commit the source changes and the `state.json` update together by explicit path.
+
+---
+
 ## Notes for executor
 
-executor=qa tier=sonnet/low
+- Do not paste plan text, ticket text, the previous review or any hint into BRIEF.txt. The guard requires the file to be the single word.
