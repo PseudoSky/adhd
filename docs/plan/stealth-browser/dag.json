@@ -138,6 +138,19 @@
       ],
       "context": "contexts/mig-capture-parsers.md",
       "notes": "executor=refactoring-specialist tier=sonnet/medium"
+    },
+    "mig-queries": {
+      "kind": "work",
+      "phase": "migrate",
+      "depends_on": [
+        "mig-domains-storage"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py mig-queries",
+      "artifacts": [
+        "entrypoint/stealth-browser/src/lib/queries/"
+      ],
+      "context": "contexts/mig-queries.md",
+      "notes": "executor=refactoring-specialist tier=sonnet/medium"
     }
   },
   "authored_with": {
