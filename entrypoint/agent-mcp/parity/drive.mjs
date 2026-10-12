@@ -485,7 +485,7 @@ function totalsOf(turns) { return L.sumNorm(turns); }
 /** Run-level call list for the detectors (parent AND worker calls, tool_use ids, phase, depth); results capped like the observation's. */
 function trimCalls(calls) { return calls.map((c) => ({ ...c, resultText: c.resultText == null ? null : String(c.resultText).slice(0, 600) })); }
 
-function analyzeA(ctx, raw) {
+export function analyzeA(ctx, raw) {
   const e = ctx.expected; const obs = { arm: 'A', rep: ctx.spec.rep, phase1: null, phase2: null, hidden: { p1: {}, p2: {} }, files: {}, capabilities: {}, models: [], cache: {}, dispatch: {}, attr: null };
   const metrics = { phases: [], warnings: [] };
   const ph = [null, null]; let prior = null;
@@ -526,7 +526,7 @@ function analyzeA(ctx, raw) {
   metrics.rateLimits = ph.filter(Boolean).flatMap((a) => a.rate).filter(Boolean);
   metrics.initTools = ph[0]?.tools ?? [];
   metrics.phase2Evidence = { resumeInit: raw.phases[1]?.init ? { session_id: raw.phases[1].init.session_id, sameSession: raw.phases[1].init.session_id === raw.sid } : null };
-  return { obs, metrics };
+  return { obs: O.applyReplySelection(obs, e), metrics };   // R5-reply AC1: one reply-selection rule for every arm
 }
 
 /** Can this arm fetch a page at all? A web tool in its tool list, or (A) an unrestricted Bash, or a shell allowlist that admits curl/wget (B/C: SHELL_ALLOW). */
@@ -609,7 +609,7 @@ function analyzeBC(ctx, raw) {
   metrics.toolNamesServer = raw.toolNames;
   metrics.phase2Evidence = { stdin: ph[1]?.stdin ?? null, sessionId: raw.sessionId, storeLine: raw.storeLine };
   metrics.warnings.push(...(raw.preexisting ? [`agents pre-existed in the isolated store: ${raw.preexisting}`] : []));
-  return { obs, metrics };
+  return { obs: O.applyReplySelection(obs, e), metrics };   // R5-reply AC1: one reply-selection rule for every arm
 }
 
 // ----------------------------------------------------------------------------------------------------------------
@@ -947,6 +947,30 @@ export async function selfCheck({ log = console.log, opts = parseArgs([]) } = {}
     const e = NO.selfTestExpected();
     const unit = NO.selfTest({ log: () => {} });
     chk(`oracle unit self-test (positive+negative control per field, isolation, hazards, Round-4 cases): ${unit.total - unit.failed.length}/${unit.total}`, unit.ok, unit.failed.slice(0, 3).map((f) => f.name).join(' | '));
+    // R5-reply AC1/AC2: the REAL arm-A analysis path (analyzeA over a claude stream) shaped like attempt 5: the answer is assistant text 16, a notification turn is 17 and is also the final result frame.
+    {
+      const ex = NO.selfTestExpected(); const ideal = NO.idealObservation('A', ex);
+      const NOTE = '<system-reminder>\nUSD budget: $0.15/$1.5\n</system-reminder>\n\nThe docs worker has already finished; the JSON is already provided above.';
+      const asst = (i, text) => ({ type: 'assistant', parent_tool_use_id: null, message: { id: `m${i}`, model: 'claude-haiku-4-5', stop_reason: 'end_turn', usage: { input_tokens: 1, output_tokens: 1, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 }, content: [{ type: 'text', text }] } });
+      const mkEvents = () => [{ type: 'system', subtype: 'init', model: 'claude-haiku-4-5', tools: ['Bash'], session_id: 's' }, ...Array.from({ length: 16 }, (_, i) => asst(i, `step ${i}`)), asst(16, `Everything is complete.\n${ideal.phase1.replyText}`), asst(17, NOTE),
+        { type: 'result', subtype: 'success', is_error: false, result: NOTE, num_turns: 18, total_cost_usd: 0.1, usage: { output_tokens: 18 }, modelUsage: { 'claude-haiku-4-5': { inputTokens: 18, outputTokens: 18, cacheReadInputTokens: 0, cacheCreationInputTokens: 0, costUSD: 0.1 } } }];
+      const ev2 = [{ type: 'system', subtype: 'init', model: 'claude-haiku-4-5', tools: ['Bash'], session_id: 's' }, asst(100, ideal.phase2.replyText), { type: 'result', subtype: 'success', is_error: false, result: ideal.phase2.replyText, num_turns: 1, total_cost_usd: 0.2, usage: { output_tokens: 1 }, modelUsage: { 'claude-haiku-4-5': { inputTokens: 19, outputTokens: 19, cacheReadInputTokens: 0, cacheCreationInputTokens: 0, costUSD: 0.2 } } }];
+      const raw = { sid: 's', phases: [{ events: mkEvents(), sid: 's', code: 0, hidden: {}, files: {} }, { events: ev2, sid: 's', code: 0, hidden: {}, files: {} }] };
+      const { obs } = analyzeA({ expected: ex, spec: { rep: 2 } }, raw);
+      const sc = NO.scoreObservation(obs, ex).fields;
+      chk('R5-reply AC2: analyzeA picks assistant text 16 (via json) over the notification result frame and the parse-based items pass', obs.phase1.replySource?.index === 16 && obs.phase1.replySource?.via === 'json' && ['s1_ticket', 's1_owner', 's1_flat_total', 's1_json_keys', 'fmt_p1_json'].every((k) => sc[k].status === 'pass'), JSON.stringify(obs.phase1.replySource));
+      chk('R5-reply AC4: negative control, scoring on the last result frame (pre-fix selection) turns the same stream red', (() => { const bad = analyzeA({ expected: ex, spec: { rep: 2 } }, { ...raw, phases: raw.phases.map((p) => ({ ...p })) }).obs; bad.phase1.replyText = bad.phase1.replyTextRaw; return NO.scoreObservation(bad, ex).fields.s1_ticket.status === 'fail'; })());
+    }
+    // R5-reply AC3: the six R4 goldens (A/B/C x2) rescored OFFLINE with and without the reply selection give identical per-item results (and the same via-json choice).
+    {
+      const gdir = path.join(HERE, 'golden/r4'); const diffs = [];
+      for (const id of ['A1', 'A2', 'B1', 'B2', 'C1', 'C2']) {
+        const g = JSON.parse(fs.readFileSync(path.join(gdir, `${id}.json`), 'utf8'));
+        const before = NO.scoreObservation(clone(g.observation), g.expected); const after = NO.scoreObservation(NO.applyReplySelection(clone(g.observation), g.expected), g.expected);
+        for (const k of Object.keys(before.fields)) if (before.fields[k].status !== after.fields[k].status || before.fields[k].detail !== after.fields[k].detail) diffs.push(`${id}.${k}`);
+      }
+      chk('R5-reply AC3: rescoring the six R4 goldens with the reply selection gives an empty per-item diff', diffs.length === 0, diffs.join(','));
+    }
     for (const f of NO.FIELDS.filter((x) => !x.informational)) {
       const row = [];
       for (const arm of ['A', 'B', 'C']) {
