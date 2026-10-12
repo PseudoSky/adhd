@@ -5,7 +5,8 @@
   "phases": [
     "productization",
     "scaffold",
-    "migrate"
+    "migrate",
+    "surface"
   ],
   "terminal": "done",
   "nodes": {},
