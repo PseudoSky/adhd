@@ -328,6 +328,19 @@
       ],
       "context": "contexts/review-prep.md",
       "notes": "executor=qa tier=sonnet/low"
+    },
+    "audit-migration-blind": {
+      "kind": "audit",
+      "phase": "review",
+      "depends_on": [
+        "review-prep"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py audit-migration-blind",
+      "artifacts": [
+        "docs/plan/stealth-browser/review/FINDINGS.json"
+      ],
+      "context": "contexts/audit-migration-blind.md",
+      "notes": "executor=code-reviewer tier=sonnet/high"
     }
   },
   "authored_with": {
