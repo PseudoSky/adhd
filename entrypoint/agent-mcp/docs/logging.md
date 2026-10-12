@@ -256,7 +256,7 @@ time) are in [dev-server-local-testing.md, "Reading usage correctly"](./dev-serv
 When the Anthropic API pauses a long server-tool turn (`pause_turn`), the provider continues it inside
 one response and reports the number of requests it made. At task grain every continuation counts in
 `model_calls` (a paused turn that took 3 requests adds 3). The turn grain reports `1` per
-`MODEL_RESPONSE`, so a paused turn is one row there; the continuation count is the `modelCalls` field of
+`MODEL_RESPONSE`, so a paused turn is one row there; the turn's request count (the original request plus its continuations) is the `modelCalls` field of
 that event's payload (present only when the turn took more than one request). Each continuation also
 appends a `provider:pause_continued` event (`{ n }`) to `task_events`.
 
