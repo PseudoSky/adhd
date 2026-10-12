@@ -30,7 +30,7 @@ Unit specs exist for the foundation, CDP and ChromeManager modules, with all pro
 
 Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/guard.py` (`python3 docs/plan/stealth-browser/scripts/guard.py tests-unit-core --only tests-unit-core.N`). None may be deferred. Tests written by this plan cite ticket `8468f7b1` and these ids ([inv:tests-cite]).
 
-_No criteria yet._
+- [tests-unit-core.1] A spec file exists for every ported source module (index barrels and pure type files excluded).
 
 ---
 

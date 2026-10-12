@@ -621,6 +621,15 @@
       "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py tracing-plugin --only tracing-plugin.6",
       "expect": "exit0",
       "cwd": "repo-root"
+    },
+    {
+      "id": "tests-unit-core.1",
+      "phase": "verify",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py tests-unit-core --only tests-unit-core.1",
+      "expect": "exit0",
+      "cwd": "repo-root"
     }
   ]
 }
