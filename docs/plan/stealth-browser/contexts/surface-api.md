@@ -33,6 +33,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 
 - [surface-api.2] chromeStatus returns a type with NON-optional `managed: boolean` and the apigen oneOf-duplicate-boolean warning comment is preserved.
 - [surface-api.3] src/index.ts exports a superset of the old cdp-query-client.ts barrel (minus getLastSearchFromHistory) plus the six verbs.
+- [surface-api.4] api.ts and index.ts import nothing from agent-search, use .js specifiers, and every relative import resolves.
 ---
 
 ## Reservations
