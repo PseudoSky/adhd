@@ -882,6 +882,15 @@
       "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py gates-first --only gates-first.1",
       "expect": "exit0",
       "cwd": "repo-root"
+    },
+    {
+      "id": "gates-first.2",
+      "phase": "verify",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py gates-first --only gates-first.2",
+      "expect": "exit0",
+      "cwd": "repo-root"
     }
   ]
 }
