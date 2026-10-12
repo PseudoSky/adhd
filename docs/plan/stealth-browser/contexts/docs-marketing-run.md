@@ -29,7 +29,7 @@ A doc-steward marketing run has made the package documentation correct and recei
 
 Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/guard.py` (`python3 docs/plan/stealth-browser/scripts/guard.py docs-marketing-run --only docs-marketing-run.N`). None may be deferred. Tests written by this plan cite ticket `8468f7b1` and these ids ([inv:tests-cite]).
 
-_No criteria yet._
+- [docs-marketing-run.1] docs/marketing/.catalog/capabilities.json lists >= 6 `shipped` capabilities (the six verbs) each with a runnable receipt command; no entry lacks a status of shipped|roadmap|deprecated.
 
 ---
 
