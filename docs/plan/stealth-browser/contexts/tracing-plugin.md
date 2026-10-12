@@ -29,7 +29,7 @@ The apigen tracing plugin is mounted on every host under the `adhd` namespace, c
 
 Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/guard.py` (`python3 docs/plan/stealth-browser/scripts/guard.py tracing-plugin --only tracing-plugin.N`). None may be deferred. Tests written by this plan cite ticket `8468f7b1` and these ids ([inv:tests-cite]).
 
-_No criteria yet._
+- [tracing-plugin.1] src/tracing.ts configures `makeTracingPlugin({ serviceName: 'adhd' })` and exports `tracingPlugin`.
 
 ---
 
