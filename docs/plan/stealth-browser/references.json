@@ -19,5 +19,12 @@
     "discovered_via": "manual",
     "shared_ref": "[ref:entrypoint-structure]",
     "audit_check": "[audit-final.ref-entrypoint-structure]"
+  },
+  "apigen-host": {
+    "anchor": "entrypoint/backlog/src/server.ts",
+    "rule": "api.ts async verbs projected to MCP and CLI hosts through apigen plugins; hosts mount the shared plugin list",
+    "discovered_via": "manual",
+    "shared_ref": "[ref:apigen-host]",
+    "audit_check": "[audit-final.ref-apigen-host]"
   }
 }
