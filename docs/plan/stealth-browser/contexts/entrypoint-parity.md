@@ -33,6 +33,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 
 - [entrypoint-parity.2] project.json tags are a superset of the tags common to the three sibling entrypoints.
 - [entrypoint-parity.3] `nx show project` lists every target present in both dispatch-cli and backlog (build, test, lint, typecheck, e2e, verify-dist-load...) and the dispatch-cli-only `build-bin`.
+- [entrypoint-parity.4] package.json carries the sibling publish metadata: repository.directory == entrypoint/stealth-browser, homepage, bugs, license, files, main/module/types, publishConfig.
 ---
 
 ## Reservations
