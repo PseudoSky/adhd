@@ -35,6 +35,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 - [scaffold.3] entrypoint/stealth-browser/package.json name is exactly @adhd/stealth-browser and project.json exists.
 - [scaffold.4] tsconfig.base.json maps the @adhd/stealth-browser path alias (generator UPDATE).
 - [scaffold.5] Exactly ONE new project.json since main (the one approved package): entrypoint/stealth-browser/project.json.
+- [scaffold.6] Worktree node_modules is a symlink to the main checkout's and the main .modules.yaml mtime stamp is recorded.
 ---
 
 ## Reservations
