@@ -279,7 +279,8 @@
       "phase": "verify",
       "depends_on": [
         "tracing-plugin",
-        "prod-examples"
+        "prod-examples",
+        "prod-publish-readiness"
       ],
       "guard": "python3 docs/plan/stealth-browser/scripts/guard.py tests-e2e",
       "artifacts": [
