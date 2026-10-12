@@ -41,6 +41,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 
 - [gates-rerun.2] `nx run stealth-browser:typecheck` and `:typecheck-spec` exit 0
 - [gates-rerun.3] `nx run stealth-browser:build` and `:build-bin` exit 0 (dist/index.js plus dist/bin/*)
+- [gates-rerun.4] `nx run stealth-browser:test` exits 0 (unit lane, no subprocess)
 ---
 
 ## Reservations
