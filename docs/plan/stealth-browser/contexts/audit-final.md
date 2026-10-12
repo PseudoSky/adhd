@@ -1,6 +1,6 @@
 # audit-final — AUDIT STATE
 
-**Phase:** release · **Kind:** audit · **Depends on:** readme-rewrite, prod-publish-readiness · **Guard:** `python3 docs/plan/stealth-browser/scripts/guard.py audit-final`
+**Phase:** release · **Kind:** audit · **Depends on:** readme-rewrite · **Guard:** `python3 docs/plan/stealth-browser/scripts/guard.py audit-final`
 **Executor:** `architect-reviewer` (sonnet/high) · **Worktree:** `/Users/nix/dev/node/adhd/.worktrees/stealth-browser` on branch `stealth-browser` (shared by every state, [inv:shared-worktree], [inv:worktree-required], [inv:no-ai-attribution])
 
 ---
@@ -43,6 +43,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 - [audit-final.ref-entrypoint-structure] [ref:entrypoint-structure] top-level files, tags, package metadata conform to dispatch-cli/backlog/apigen-cli
 - [audit-final.ref-apigen-host] [ref:apigen-host] server.ts / cli.ts / bin hosts mirror entrypoint/backlog's apigen host shape
 - [audit-final.ref-runner-port] [ref:runner-port] behavior-preserving port conforms to agent-browser/adhd (exports, similarity, tokens)
+- [audit-final.10] x
 ---
 
 ## Reservations

@@ -1800,6 +1800,15 @@
       "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py agent-search-cutover --only agent-search-cutover.7",
       "expect": "exit0",
       "cwd": "repo-root"
+    },
+    {
+      "id": "audit-final.10",
+      "phase": "release",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py audit-final --only audit-final.10",
+      "expect": "exit0",
+      "cwd": "repo-root"
     }
   ]
 }
