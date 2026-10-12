@@ -37,6 +37,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 - [tracing-plugin.5] The `serviceName` literal is configured in exactly ONE non-test file (src/tracing.ts) - one namespace, one identity.
 - [tracing-plugin.6] `nx run stealth-browser:build-bin` exits 0 with tracing mounted; only owned paths changed by [psm:tracing-plugin] commits.
 - [tracing-plugin.7] (PA9.2) A --verbose flag exists on both hosts and diagnostics go to stderr only: the MCP host path (src/server.ts, bin/mcp.ts) has no console.log / process.stdout.write outside the JSON-RPC transport.
+- [tracing-plugin.8] Namespace pinned to what the code EMITS (backlog 5152786d: the apigen design notes still say apigen.*; the code does not): packages/apigen/apigen-plugin-tracing/src/lib/plugin.ts requires `serviceName: string`, builds keys as `${serviceName}.op` / `${serviceName}.transport` / `${serviceName}.op.error` and span names `${serviceName}.<op>`, and src/tracing.ts passes serviceName 'adhd' (so stealth-browser emits adhd.op / adhd.transport), regardless of what any design note claims.
 ---
 
 ## Reservations
