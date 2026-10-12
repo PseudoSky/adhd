@@ -611,7 +611,7 @@ export async function taskTool(
   } else {
     try {
       await runTask();
-    } catch (error) {
+    } catch {
       // Orchestrator already updated the task status
     }
 

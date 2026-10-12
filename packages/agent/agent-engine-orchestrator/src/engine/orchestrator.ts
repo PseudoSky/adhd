@@ -1434,8 +1434,12 @@ export class Orchestrator {
             if (signal.aborted) {
               throw new ToolError('PROVIDER_ERROR', 'Task was cancelled');
             }
+            // ENFORCE only, never `emit`: the observational `pre:model_request` handlers open and close
+            // per-turn records (tracing's `agent.model_call` span, ops-log's turn counter, the budget
+            // plugin's call timer) against the ONE `post:model_response` a paused turn produces, so an
+            // extra emit per continuation would split the turn and leave unpaired opens. Budget and
+            // USD caps live in the enforcement handlers, which keep no emit-set state.
             const requestPayload = { executionContext, messages: currentMessages, tools };
-            await hooks.emit('pre:model_request', requestPayload);
             try {
               await hooks.enforce('pre:model_request', requestPayload);
             } catch (err: unknown) {

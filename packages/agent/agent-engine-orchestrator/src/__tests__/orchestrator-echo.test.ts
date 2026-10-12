@@ -888,14 +888,19 @@ describe("R9-hist S5a AC6: pause_turn continuations are vetted per continuation 
     }
   }
 
-  it("R9-hist S5a AC6: continuations are counted in modelCalls, pre:model_request runs per continuation, and each is a provider:pause_continued event", async () => {
+  it("R9-hist S5a AC6: continuations are counted in modelCalls, pre:model_request is ENFORCED per continuation (emitted once per turn), and each is a provider:pause_continued event", async () => {
     const env = makeEnv();
+    let enforced = 0;
+    env.hooks.registerEnforcement("pre:model_request", async () => {
+      enforced += 1;
+    });
     const provider = new PausingProvider(2);
     const run = await runDirect(env, provider);
 
     expect(run.status).toBe("completed");
     expect(provider.requests).toBe(3);
-    expect(env.hooks.count("pre:model_request")).toBe(3); // the turn + 2 continuations
+    expect(enforced).toBe(3); // the turn + 2 continuations: every request is vetted
+    expect(env.hooks.count("pre:model_request")).toBe(1); // observers (tracing span, ops-log turn) see ONE turn, not one per continuation
     expect(taskEvents(env.sqlite, "provider:pause_continued").map((e) => e.parsed["n"])).toEqual([1, 2]);
     const response = env.hooks.emitted.find((e) => e.event === "post:model_response");
     expect((JSON.parse(response?.json ?? "{}") as { modelCalls?: number }).modelCalls).toBe(3);
