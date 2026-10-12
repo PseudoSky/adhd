@@ -3,7 +3,7 @@
 Line 1 of every `parity/*.mjs` is `// PARITY-INSTRUMENT-ONLY`. This directory is not in `tsconfig.lib.json` `include`, not in the build `cp` list, not in `package.json` `files`, and this README sits here (not at the package root) so the build's `cp *.md` skips it. Verification is `no-publish.e2e.test.ts` (walks `dist`, `npm pack --dry-run`, with a negative control).
 
 ## Scenario and arms
-One scenario ("shopkit", two phases in one session; `fixtures.mjs`). One run per arm per round, ledger cap 3: **A** native `claude -p` (native default toolset only), **B** agent-mcp `claudecli` provider, **C** agent-mcp `anthropic` provider. B and C use only agent-mcp tools or MCP servers as shipped. The task prompt is byte-identical for every arm and names no tool or method (R3). Arm A runs first; B and C alternate order between rounds (`ledger.armOrderFor`). If A is not a genuine success (every content item green, not INVALID, no defect signal) the iteration is VOID: B and C are not run.
+One scenario ("shopkit", two phases in one session; `fixtures.mjs`). One run per arm per round, ledger cap 3: **A** native `claude -p` (native default toolset only), **B** agent-mcp `claudecli` provider, **C** agent-mcp `anthropic` provider. B and C use only agent-mcp tools or MCP servers as shipped, with the PRODUCT DEFAULT shell allowlist and egress (R6-prep). The task prompt is byte-identical for every arm and names no tool or method (R3). Arm A runs first; B and C alternate order between rounds (`ledger.armOrderFor`). If A is not a genuine success (every content item green, not INVALID, no defect signal) the iteration is VOID: B and C are not run.
 
 ## Commands (`node entrypoint/agent-mcp/parity/drive.mjs ...`)
 `--self-check` (no model call, no `claude`), `--print-plan`, `--check-oracle`, `--check-lib`, `preflight` (zero model calls, exit 0/3), `verdict --round R<n>`, `grid --round R<n>`, `--dry-run`, `--live --yes` (refuses, exit 3, unless every gate is green).
@@ -18,7 +18,7 @@ R0.AC8 lists `[pacing, ledger, scope, preflight]` but R2.AC7 requires the prefli
 | arm | shipped web tools | zero-model probe |
 |---|---|---|
 | A native | WebFetch, WebSearch (native default toolset) | none: WebFetch makes a hidden small-model call |
-| B claudecli | none exposed by agent-mcp; shell has no fetch command by default | none; the arm cannot fetch as shipped (w1_web fails, `webFinding: "arm cannot fetch"`, a product finding) |
+| B claudecli | none exposed by agent-mcp; the product default shell allowlist includes `curl` and egress is open (R5-WEB-SIMPLE), so the shell is B's fetch path (`webVia: shell`) | none (not probeable) |
 | C anthropic | server-side web_fetch / web_search | none: server-executed |
 U5 stays open until measured; the preflight is generic (`WEB_SURFACE[arm].probe`) and every unprobeable leg is `NOT_PROBEABLE`, covered by the silent-egress detector.
 
@@ -49,6 +49,12 @@ A run is reserved only after fixture preparation succeeds, immediately before th
 
 ## Goldens
 `golden/legacy` (frozen round-3 oracle + fixtures, byte-identical), `golden/r4` (R4 observation/expected/score per run with the source sha256; `oracle.r4.frozen.mjs` is the R4 oracle before R1, one import path adjusted), `golden/selfcheck/round3`.
+
+## Shell allowlist and egress (R6-prep AC2, supersedes the R3 "no curl" rule)
+Owner direction: "drop all restrictions until you get the system working". B and C run the PRODUCT DEFAULT shell allowlist: `agentDef` sets `nativeTooling.shell: true` and passes no `allowCommands`/`allowPatterns`, so `DEFAULT_SHELL_ALLOW_COMMANDS` (which includes `curl`) applies. The instrument pre-writes no srt policy and adds no domain (`SRT_EXTRA_DOMAINS` stays empty); `ADHD_AGENT_SRT_SETTINGS` only points the server at an isolated, initially absent per-run file, which agent-mcp provisions with its default OPEN egress (allow-all loopback proxy). After each B/C run the driver reads the server's `Shell egress: open|restricted` startup line and the provisioned policy (`egressFactOf`) and records `record.shellEgress` ({mode, startupLine, policyMode, proxyPort}); a mode other than `open` adds a record warning. `--print-plan` states `Shell egress: open` and `effectiveConfig` carries `shellAllow`/`shellEgress`. The task prompt text is byte-identical for every arm and still names no tool or method; the scenario sha is unchanged (no scope change).
+
+## Peak context (R6-prep AC3)
+Peak context = max over phases of `phases[].tokens.total.ctx` (`metrics.peakContextOf`); report-only, never gating; shown in the verdict line and the grid metric line. Arm C per-turn context comes from the `message_start` usage (`lib.turnContextOf`); the billing usage (final `message_delta`, cumulative over server-tool iterations) is kept for cost only. `node entrypoint/agent-mcp/parity/rescore.mjs --round R5 --ctx` re-derives the context for a finished round with zero model calls into `<round>/rescore/ctx/` (new files only).
 
 ## Pacing gate (SCOPE-R5-pacing-gate)
 

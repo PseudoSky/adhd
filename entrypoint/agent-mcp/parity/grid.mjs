@@ -30,12 +30,14 @@ export function renderGridCell(rec) {
 export function renderGridRow(recordsByArm, order = ['A', 'B', 'C']) { return order.map((a) => renderGridCell(recordsByArm[a])).join(' | '); }
 
 const pct = (r) => (r == null || !Number.isFinite(r) ? 'n/a' : `${r >= 1 ? '+' : '-'}${Math.abs((r - 1) * 100).toFixed(0)}%`);
-/** Per-arm metric line `cost +x% / dur +y% / Q z%` from an R4 variantVerdict (R7.AC3). Q is the quality ratio as a percent of A. */
+/** Per-arm metric line `cost +x% / dur +y% / Q z% / peak ctx Nk vs A Mk` from an R4 variantVerdict (R7.AC3). Q is the quality ratio as a percent of A. */
 export function renderMetricLine(v) {
   if (!v || v.verdict === 'VOID') return 'VOID';
   if (v.verdict === 'EXCLUDED') return 'EXCLUDED';
   const q = v.goals.quality.ratio;
-  return `cost ${pct(v.goals.cost.ratio)} / dur ${pct(v.goals.duration.ratio)} / Q ${q == null ? 'n/a' : `${Math.round(q * 100)}%`}`;
+  const k = (n) => (Number.isFinite(n) ? `${(n / 1000).toFixed(1)}k` : 'n/a');
+  const pc = v.reportOnly?.peakContext;   // R6-prep AC3: report-only peak context (this arm / A), never gating
+  return `cost ${pct(v.goals.cost.ratio)} / dur ${pct(v.goals.duration.ratio)} / Q ${q == null ? 'n/a' : `${Math.round(q * 100)}%`}${pc ? ` / peak ctx ${k(pc.arm)} vs A ${k(pc.A)}` : ''}`;
 }
 
 /** Full `grid --round` text: the row plus a metric line per variant. */

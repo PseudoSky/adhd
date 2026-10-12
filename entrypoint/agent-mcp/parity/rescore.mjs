@@ -84,9 +84,46 @@ export function rescoreRound({ round = 'R5', out } = {}) {
   return { out, res, table };
 }
 
+/**
+ * R6-prep AC3: OFFLINE peak-context rescore (zero model calls). Records written before the fix carry `phases[].tokens.total.ctx` computed from the final
+ * message_delta usage, which is cumulative over server-tool iterations (arm C web_fetch turns ~2x). For arm C the per-turn context is recomputed from the
+ * stored `logs/api` http.response streams via message_start (`L.turnContextOf`) over the phase's task and its recorded children; A and B (CLI streams) keep
+ * their recorded value. Writes ONLY new files under `<out>` (default `<round>/rescore/ctx`): patched record copies, peak-ctx.json/.txt, verdict/grid per rep.
+ * It bases on the existing `<round>/rescore` records when present (so the earlier scorer corrections carry), else on the raw records. Raw records are never written.
+ */
+export function rescoreContext({ round = 'R5', out } = {}) {
+  const root = tmpRoot(round); const rawRuns = path.join(root, 'live/out/runs'); const baseRuns = fs.existsSync(path.join(root, 'rescore/live/out/runs')) ? path.join(root, 'rescore/live/out/runs') : rawRuns;
+  out = out ?? path.join(root, 'rescore', 'ctx');
+  const ids = fs.readdirSync(baseRuns).filter((d) => fs.existsSync(path.join(baseRuns, d, 'record.json'))).sort(); const peaks = []; const lines = ['peak context per run (in+cache read+cache write of the largest single request; report-only)', 'run   phase1(before->after)   phase2(before->after)   peak(before->after)   basis'];
+  for (const id of ids) {
+    const rec = readJson(path.join(baseRuns, id, 'record.json')); 
+    const api = rec.arm === 'C' ? L.findApiLogs(path.join(rawRuns, id, 'logs')) : [];
+    const phases = (rec.metrics?.phases ?? []).map((ph) => {
+      const was = ph.tokens?.total?.ctx ?? null; let now = was; let basis = rec.arm === 'C' ? 'recorded (no api log)' : 'recorded (CLI stream usage per message)';
+      if (rec.arm === 'C' && api.length) {
+        const turns = [ph.taskId, ...(ph.children ?? []).map((c) => c.id)].flatMap((t) => L.httpTurnsForTask(api, t)).filter((h) => h.sse);
+        if (turns.length) { now = Math.max(...turns.map((h) => L.turnContextOf(h.sse))); basis = `message_start over ${turns.length} turns`; }
+      }
+      return { ph, was, now, basis };
+    });
+    const patched = clone(rec); patched.metrics.phases.forEach((ph, i) => { if (ph.tokens?.total) ph.tokens.total.ctx = phases[i].now; });
+    patched.ctxRescore = { by: 'R6-prep AC3', basis: phases.map((x) => x.basis), before: phases.map((x) => x.was), after: phases.map((x) => x.now) };
+    const dir = path.join(out, 'live/out/runs', id); fs.mkdirSync(dir, { recursive: true }); fs.writeFileSync(path.join(dir, 'record.json'), JSON.stringify(patched, null, 2) + '\n');
+    const pk = (xs) => { const v = xs.filter(Number.isFinite); return v.length ? Math.max(...v) : null; };
+    peaks.push({ id, arm: rec.arm, rep: rec.rep, phases: phases.map((x) => ({ before: x.was, after: x.now, basis: x.basis })), peakBefore: pk(phases.map((x) => x.was)), peakAfter: pk(phases.map((x) => x.now)) });
+    const last = peaks[peaks.length - 1]; lines.push(`${id.padEnd(5)} ${phases.map((x) => `${x.was}->${x.now}`).join('   ').padEnd(46)} ${last.peakBefore}->${last.peakAfter}   ${phases[0]?.basis ?? ''}`);
+  }
+  for (const d of ['judge', 'judge-rep2']) copyDir(path.join(root, d), path.join(out, d));
+  fs.mkdirSync(out, { recursive: true });
+  fs.writeFileSync(path.join(out, 'peak-ctx.json'), JSON.stringify(peaks, null, 2) + '\n'); fs.writeFileSync(path.join(out, 'peak-ctx.txt'), lines.join('\n') + '\n');
+  for (const rep of [1, 2]) for (const mode of ['verdict', 'grid']) fs.writeFileSync(path.join(out, `${mode}-ctx-rep${rep}.txt`), renderReport(out, rep, mode, round) + '\n');
+  return { out, peaks };
+}
+
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const a = process.argv.slice(2); const o = {};
-  for (let i = 0; i < a.length; i++) { if (a[i] === '--round') o.round = a[++i]; else if (a[i] === '--out') o.out = path.resolve(a[++i]); else { console.error(`unknown argument ${a[i]}`); process.exit(2); } }
+  for (let i = 0; i < a.length; i++) { if (a[i] === '--round') o.round = a[++i]; else if (a[i] === '--out') o.out = path.resolve(a[++i]); else if (a[i] === '--ctx') continue; else { console.error(`unknown argument ${a[i]}`); process.exit(2); } }
+  if (process.argv.includes('--ctx')) { const o2 = { ...o }; const r2 = rescoreContext(o2); console.log(`context-rescored ${r2.peaks.length} records into ${r2.out}`); process.exit(0); }
   const r = rescoreRound(o);
   console.log(`rescored ${r.res.length} records into ${r.out}`);
   const bad = r.res.filter((x) => x.baseDiff.length); if (bad.length) { console.error(`fidelity baseline mismatch: ${bad.map((x) => `${x.id}[${x.baseDiff}]`).join(' ')}`); process.exit(3); }

@@ -176,13 +176,19 @@ export function allCallsFromCliStream(p) {
 // ---------------------------------------------------------------------------------------------------
 // Anthropic SSE (arm C http.response bodies)
 // ---------------------------------------------------------------------------------------------------
+/**
+ * R6-prep AC3: the CONTEXT a turn sent = the usage of the request as sampled, i.e. `message_start` (what the model read). The final `message_delta` usage is
+ * CUMULATIVE over a server-tool turn's internal sampling iterations (web_fetch re-reads the prefix), so it is the right basis for BILLING (`sse.usage`) but ~2x too
+ * large for context. Falls back to the billing usage when a stream carries no message_start. Pure.
+ */
+export function turnContextOf(sse) { return normUsage(sse?.startUsage ?? sse?.usage).ctx; }
 export function parseSse(text) {
-  const o = { id: null, model: null, usage: {}, stop: null, texts: [], toolUses: [], thinking: false, outputTokens: null, serverResults: new Map() };
+  const o = { id: null, model: null, usage: {}, startUsage: null, stop: null, texts: [], toolUses: [], thinking: false, outputTokens: null, serverResults: new Map() };
   const blocks = new Map();
   for (const line of String(text || '').split('\n')) {
     if (!line.startsWith('data:')) continue;
     let d; try { d = JSON.parse(line.slice(5).trim()); } catch { continue; }
-    if (d.type === 'message_start') { o.id = d.message.id; o.model = d.message.model; o.usage = { ...d.message.usage }; }
+    if (d.type === 'message_start') { o.id = d.message.id; o.model = d.message.model; o.usage = { ...d.message.usage }; o.startUsage = { ...d.message.usage }; }
     else if (d.type === 'content_block_start') { blocks.set(d.index, { type: d.content_block.type, name: d.content_block.name, id: d.content_block.id, json: '', text: '' }); if (d.content_block.type === 'thinking') o.thinking = true;
       if (/_tool_result$/.test(String(d.content_block.type)) && d.content_block.tool_use_id) o.serverResults.set(d.content_block.tool_use_id, { isError: /_tool_error$/.test(String(d.content_block.content?.type)), text: serverResultText(d.content_block.content) }); }
     else if (d.type === 'content_block_delta') {

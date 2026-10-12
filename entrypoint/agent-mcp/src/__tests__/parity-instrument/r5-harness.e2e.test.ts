@@ -11,7 +11,7 @@ import { PARITY_DIR } from './load';
  * R5-harness (e2e lane, subprocess): drives `drive.mjs main` through its real CLI up to and including the instrument's fake-claude dry-run shim.
  * No real model call: --dry-run uses the in-process fake Anthropic server and a fake `claude`, with the egress guard on. Runs in the e2e lane
  * (subprocess), unflagged. Owns round R97; cleans its tmp/ output and OS-temp work dirs.
- *   AC1 the default `--dry-run` (the exact path live runs share) completes: exit 0, no harnessFailure, no aborted record, work dir under os.tmpdir()
+ *   AC1 (R6-prep AC1) the default `--dry-run` (the exact path live runs share) completes: exit 0, no harnessFailure, no aborted record, work dir under os.tmpdir()
  *   AC2 an explicit in-repo --out is rejected by the ancestor-leak guard (exit 1, harnessFailure names the leak)
  */
 const DRIVE = path.join(PARITY_DIR, 'drive.mjs');
@@ -31,7 +31,14 @@ describe('R5-harness e2e', () => {
     const recs = records(path.join(OUT_DEFAULT, 'dry', 'out', 'runs'));
     expect(recs.length).toBe(3);
     for (const rec of recs) { expect(rec.harnessFailure).toBeUndefined(); expect(rec.aborted).toBeUndefined(); }
-    expect(fs.existsSync(path.join(WORK, 'work', 'A1', 'repo'))).toBe(true);
+    // R6-prep AC2: every agent-mcp (B/C) run records the egress mode the server actually provisioned; the product default is open.
+    for (const rec of recs.filter((x) => x.arm !== 'A')) { expect(rec.shellEgress?.mode, JSON.stringify(rec.shellEgress)).toBe('open'); expect(rec.config.shellAllow).toMatch(/product default/); }
+    // R6-prep AC1: assignWorkDir (drive.mjs) gives every attempt a never-used dir `work/<runId>-a<N>` (N = prior ledger entries + 1, bumped past dirs on disk).
+    // A dry-run has no ledger entries, so A1's first attempt is `A1-a1`; assert the contract (suffix pattern, repo present), not a hardcoded legacy name.
+    const attemptDirs = fs.readdirSync(path.join(WORK, 'work')).filter((d) => /^A1-a[1-9]\d*$/.test(d));
+    expect(attemptDirs.length, fs.readdirSync(path.join(WORK, 'work')).join(',')).toBeGreaterThan(0);
+    expect(attemptDirs.some((d) => fs.existsSync(path.join(WORK, 'work', d, 'repo')))).toBe(true);
+    expect(fs.existsSync(path.join(WORK, 'work', 'A1', 'repo')), 'legacy un-suffixed dir must not be used').toBe(false);
   }, 300_000);
 
   it('AC2: an explicit in-repo --out is still rejected loudly', () => {

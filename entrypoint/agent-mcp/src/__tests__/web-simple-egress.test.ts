@@ -11,7 +11,17 @@ import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { operationalEnv } from '../config.js';
 import { startOpenEgressProxy, type OpenEgressProxy } from '../egress-proxy.js';
-import { DEFAULT_SRT_ALLOWED_DOMAINS, defaultSrtDenyRead, provisionSrtPolicy, type SrtSettings } from '../srt-policy.js';
+import {
+  DEFAULT_SRT_ALLOWED_DOMAINS,
+  SRT_SETTINGS_ENV,
+  addRunSrtAllowWrite,
+  addRunSrtReadOnlyDir,
+  defaultSrtDenyRead,
+  provisionRunSrtPolicy,
+  provisionSrtPolicy,
+  removeRunSrtPolicy,
+  type SrtSettings,
+} from '../srt-policy.js';
 
 let dir: string;
 beforeAll(() => {
@@ -67,6 +77,40 @@ describe('R5-WEB-SIMPLE AC2 egress mode rendering', () => {
     const closed = policy(f);
     expect(closed.egress.mode).toBe('restricted');
     expect(closed.settings.network?.httpProxyPort).toBeUndefined();
+  });
+});
+
+describe('R6-prep AC2: later re-provisions of the run policy keep the open-egress port (provisionSrtPolicy dependents)', () => {
+  const runPolicy = (name: string, port?: number) => {
+    const file = join(dir, name);
+    const env = { [SRT_SETTINGS_ENV]: file } as NodeJS.ProcessEnv;
+    const result = provisionRunSrtPolicy(join(dir, 'cwd'), env, undefined, port);
+    return { file, result, port: () => (JSON.parse(readFileSync(file, 'utf8')) as SrtSettings).network?.httpProxyPort };
+  };
+
+  it('R6-prep AC2: provisionRunSrtPolicy with a port is open; addRunSrtAllowWrite and addRunSrtReadOnlyDir keep the port', () => {
+    const r = runPolicy('run-open.json', 45679);
+    try {
+      expect(r.result.egress).toEqual({ mode: 'open', proxyPort: 45679 });
+      addRunSrtAllowWrite([join(dir, 'second-root')]);
+      expect(r.port()).toBe(45679);
+      addRunSrtReadOnlyDir(join(dir, 'shim'));
+      expect(r.port()).toBe(45679);
+    } finally {
+      removeRunSrtPolicy();
+    }
+  });
+
+  it('R6-prep AC2 negative control: provisioned without a port the later re-provisions stay restricted (no httpProxyPort appears)', () => {
+    const r = runPolicy('run-restricted.json');
+    try {
+      expect(r.result.egress.mode).toBe('restricted');
+      addRunSrtAllowWrite([join(dir, 'another-root')]);
+      addRunSrtReadOnlyDir(join(dir, 'shim2'));
+      expect(r.port()).toBeUndefined();
+    } finally {
+      removeRunSrtPolicy();
+    }
   });
 });
 

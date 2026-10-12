@@ -13,6 +13,8 @@ import * as DT from './detectors.mjs';
 import * as QLt from './quality.mjs';
 import * as JGt from './judge.mjs';
 import { rescoreRecord } from './rescore.mjs';
+import * as MTt from './metrics.mjs';
+import * as GRt from './grid.mjs';
 import { buildPlan, ancestorLeaks, runHidden, transcriptFor, resultForJudge, gapSecondsSince } from './drive.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -438,6 +440,39 @@ export async function runLibTests({ log = console.log } = {}) {
     const r = rescoreRecord(rec, prior); eq([r.score.fields.x2_parallel.status, r.score.fields.c1_cache.status], ['pass', 'na']);
     const warm = rescoreRecord(mk(batch, 100_000, 0), prior); eq(warm.score.fields.c1_cache.status, 'fail');
     const seq = rescoreRecord(mk([kid('a', 0, 5000), kid('b', 6000, 12000)], 100_000, 5), prior); eq(seq.score.fields.x2_parallel.status, 'fail');
+  });
+
+
+  // ---- R6-prep AC3: peak context (real field) and C per-turn context from message_start
+  // Fixture numbers are the real R5 C1 phase-1 web_fetch turn (tmp/agent-mcp/parity/R5/live/out/runs/C1/logs/api): message_start cache_read 16,827 (ctx 17,730) vs the final
+  // message_delta cumulative over the server-tool iterations, cache_read 34,551 (ctx 35,654), web_fetch in the tool list.
+  const c1WebFetchTurn = [
+    'data: ' + JSON.stringify({ type: 'message_start', message: { id: 'm1', model: 'claude-haiku-4-5', usage: { input_tokens: 6, cache_creation_input_tokens: 897, cache_read_input_tokens: 16827, cache_creation: { ephemeral_5m_input_tokens: 897, ephemeral_1h_input_tokens: 0 }, output_tokens: 3 } } }),
+    'data: ' + JSON.stringify({ type: 'content_block_start', index: 0, content_block: { type: 'server_tool_use', id: 'srv1', name: 'web_fetch' } }), 'data: ' + JSON.stringify({ type: 'content_block_stop', index: 0 }),
+    'data: ' + JSON.stringify({ type: 'message_delta', delta: { stop_reason: 'tool_use' }, usage: { input_tokens: 13, cache_creation_input_tokens: 1090, cache_read_input_tokens: 34551, output_tokens: 232 } }), ''].join('\n');
+  await t('R6-prep AC3: a web_fetch turn reports context from message_start (17,730), not the cumulative message_delta (35,654); billing usage keeps the cumulative basis', () => {
+    const o = L.parseSse(c1WebFetchTurn);
+    eq(L.turnContextOf(o), 17730); eq(L.normUsage(o.usage).ctx, 35654);   // negative control: the pre-fix basis (usage) is exactly the inflated number
+    ok(L.normUsage(o.usage).cr === 34551 && L.normUsage(o.usage).out === 232, 'billing basis unchanged (cumulative cache_read, final output tokens)');
+    eq(L.turnContextOf({ usage: { input_tokens: 5, cache_read_input_tokens: 100 } }), 105);   // no message_start: falls back to the billing usage
+    eq(L.turnContextOf(null), 0);
+  });
+  await t('R6-prep AC3: drive.mjs builds arm C turns with turnContextOf (source guard, so the fixed basis is the one the record gets)', () => {
+    ok(/ctx: L\.turnContextOf\(t\.sse\)/.test(fs.readFileSync(path.join(HERE, 'drive.mjs'), 'utf8')), 'analyzeBC must override ctx with message_start context');
+  });
+  await t('R6-prep AC3: peakContextOf reads phases[].tokens.total.ctx (max over phases); null only when nothing is recorded', () => {
+    const rec = (a, b) => ({ metrics: { phases: [{ tokens: { total: { ctx: a } } }, { tokens: { total: { ctx: b } } }] } });
+    eq(MTt.peakContextOf(rec(21403, 26947)), 26947); eq(MTt.peakContextOf(rec(39869, 33390)), 39869);   // the R5 A1 / C1 true peaks (C1 after the message_start fix)
+    eq(MTt.peakContextOf({ metrics: { phases: [{ tokens: { total: {} } }] } }), null); eq(MTt.peakContextOf({}), null);
+    ok(MTt.peakContextOf(rec(1, 2)) !== null, 'negative control: the pre-fix reader returned null for exactly this shape');
+  });
+  await t('R6-prep AC3: peak context appears in the verdict line and the grid metric line (report-only, never gating)', () => {
+    const mk = (id, arm, peak, cost) => ({ runId: id, arm, wallMs: 1000, metrics: { phases: [{ costUsd: { total: cost, authoritative: cost }, turns: { parent: 1 }, calls: { total: 1 }, tokens: { total: { ctx: peak } } }] } });
+    const A = MTt.summarize(mk('A1', 'A', 39869, 1), { genuine: true, quality: 90 }), C = MTt.summarize(mk('C1', 'C', 26947, 1), { genuine: true, quality: 90 });
+    const rv = MTt.roundVerdict({ A, C });
+    ok(/peak ctx 26947\/39869/.test(MTt.formatVerdict(rv)), MTt.formatVerdict(rv));
+    ok(/peak ctx 26\.9k vs A 39\.9k/.test(GRt.renderGrid({}, rv)), GRt.renderGrid({}, rv));
+    eq(MTt.variantVerdict(A, { ...C, peakContext: 999999 }).verdict, MTt.variantVerdict(A, C).verdict);   // never gating
   });
 
   fs.rmSync(tmp, { recursive: true, force: true });

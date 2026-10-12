@@ -81,17 +81,31 @@ export const THINKING_MECHANISM = Object.freeze({
   C: 'no `thinking` request parameter is ever sent by the anthropic provider (anthropic.ts has no "thinking" parameter): off by construction',
 });
 const MAX_TOOL_LOOPS = 40;                                                 // B/C; A (claude 2.1.296) has no --max-turns: recorded as an asymmetry
-// R3: no curl/wget on the allowlist. B and C use only agent-mcp tools or MCP servers as shipped (no instrument-added web path).
-export const SHELL_ALLOW = ['make', 'cat', 'ls', 'head', 'tail', 'grep', 'rg', 'wc', 'pwd', 'echo', 'diff', 'sort', 'uniq', 'tr', 'cut', 'basename', 'dirname'];
-/** R3: the instrument adds NO srt domain (the per-run policy is written empty; agent-mcp's own defaults apply). */
+// R6-prep AC2 (owner direction: "drop all restrictions until you get the system working"): B and C run the PRODUCT DEFAULT shell allowlist
+// (agent-core-native-tooling DEFAULT_SHELL_ALLOW_COMMANDS, which includes curl). The instrument no longer passes allowCommands, so the product default applies.
+// This supersedes the R3 rule "no curl/wget on the allowlist". The task prompt still names no tool or method.
+export const SHELL_POLICY = 'product default (no instrument allowCommands override; includes curl)';
+/** R6-prep AC2: the instrument adds NO srt domain and pre-writes NO srt policy; agent-mcp's default (open egress via its allow-all loopback proxy) applies. */
 export const SRT_EXTRA_DOMAINS = [];
+/**
+ * R6-prep AC2: the egress mode a finished B/C run actually had, read from the server's own startup line ("Shell egress: open|restricted ...", index.ts)
+ * and cross-checked against the per-run srt policy file the server provisioned (adhdManaged.httpProxyPort present => open). Pure; fail-closed to 'unknown'.
+ */
+export function egressFactOf(srtPolicyText, stderrText) {
+  const line = (String(stderrText || '').match(/Shell egress: (open|restricted)[^\n"]*/) || [null])[0];
+  let pol = null; try { pol = JSON.parse(srtPolicyText); } catch { /* absent or unreadable */ }
+  const fromPolicy = pol ? (pol.adhdManaged?.httpProxyPort !== undefined && pol.network?.httpProxyPort === pol.adhdManaged.httpProxyPort ? 'open' : 'restricted') : null;
+  const fromLine = line ? (line.startsWith('Shell egress: open') ? 'open' : 'restricted') : null;
+  const mode = fromPolicy && fromLine && fromPolicy !== fromLine ? 'unknown' : (fromPolicy ?? fromLine ?? 'unknown');
+  return { mode, startupLine: line, policyMode: fromPolicy, proxyPort: pol?.adhdManaged?.httpProxyPort ?? null, allowedDomains: pol?.network?.allowedDomains ?? null };
+}
 /** R3: arm A runs the native default toolset (`claude --tools default`), nothing instrument-added. */
 const A_TOOLS = 'default';
 /** Declared web surface per arm as shipped (R3.AC5/AC6, R2.AC1). `probe` is set only for a fetch tool reachable at zero model cost; none is, as of this port (U5 open). */
 export const WEB_SURFACE = Object.freeze({
   A: { tools: ['WebFetch', 'WebSearch'], why: 'native WebFetch makes a hidden small-model call: not a zero-model probe' },
-  B: { tools: [], why: 'claudecli bridges only agent-mcp tools; the shipped shell exposes no fetch command by default (an arm that cannot fetch fails w1_web: product finding)' },
-  C: { tools: ['web_fetch', 'web_search'], why: 'server-executed by the API: not probeable at zero model cost' },
+  B: { tools: [], shellFetch: true, why: 'claudecli bridges only agent-mcp tools; since R5-WEB-SIMPLE the product default shell allowlist includes curl and egress is open, so the shell is B\'s fetch path (R6-prep AC2); not a zero-model probe' },
+  C: { tools: ['web_fetch', 'web_search'], shellFetch: true, why: 'server-executed by the API: not probeable at zero model cost' },
 });
 const WORKER_TOOLS = ['Bash', 'Read', 'Write', 'Edit', 'Glob', 'Grep'];
 const BUDGET_GUARD_USD = '1.50';
@@ -255,8 +269,8 @@ async function startServer(ctx) {
   if (!fs.existsSync(entry)) throw new Error(`built agent-mcp missing: ${entry} (run the nx build in the plan worktree)`);
   const store = path.join(ctx.runDir, 'store'); fs.mkdirSync(store, { recursive: true });
   const logs = path.join(ctx.runDir, 'logs');
-  // pre-write the per-run srt policy with NO instrument-added domain (R3: SRT_EXTRA_DOMAINS is empty, agent-mcp's own defaults apply; operator-authored entries are preserved by provisionSrtPolicy)
-  writeJson(path.join(ctx.runDir, 'srt-policy.json'), { network: { allowedDomains: [...SRT_EXTRA_DOMAINS], deniedDomains: [] } });
+  // R6-prep AC2: NO pre-written srt policy. ADHD_AGENT_SRT_SETTINGS only points the server at an isolated, initially absent per-run file; agent-mcp provisions it
+  // (default egress OPEN via its allow-all loopback proxy). The mode it picked is read back after the run (egressFactOf) and recorded.
   const env = serverEnv(ctx, store, logs);
   const stderrFile = path.join(ctx.runDir, 'server.stderr.txt'); let stderr = '';
   const transport = new StdioClientTransport({ command: process.execPath, args: [entry], env, cwd: os.tmpdir(), stderr: 'pipe' });
@@ -283,7 +297,7 @@ function providerFor(ctx, arm) {
 }
 function agentDef(ctx, name, parent) {
   const def = { name, description: parent ? 'Round 2 parent agent' : 'Round 2 worker subagent', provider: providerFor(ctx, ctx.runDef.arm), systemPrompt: ctx.spec.systemPrompt, maxToolLoops: MAX_TOOL_LOOPS,
-    nativeTooling: { fs: true, shell: { allowCommands: SHELL_ALLOW }, dispatch: true } };
+    nativeTooling: { fs: true, shell: true, dispatch: true } };   // shell: true => product default allowlist (R6-prep AC2)
   if (parent) def.mcpServers = { r2info: { transport: 'stdio', command: process.execPath, args: [path.join(HERE, 'info-server.mjs')], env: { R2_TICKET_FILE: ctx.ticketFile, R2_INFO_LOG: ctx.infoLog } } };
   return def;
 }
@@ -339,6 +353,7 @@ async function runArmBC(ctx) {
     res.allTasks = (await srv.call('task_list', { limit: 500 })).json ?? null;
   } finally {
     res.stderrTail = srv.getStderr().slice(-4000);
+    res.shellEgress = egressFactOf(readIf(path.join(ctx.runDir, 'srt-policy.json')), srv.getStderr());
     await srv.close();
   }
   return res;
@@ -529,13 +544,15 @@ export function analyzeA(ctx, raw) {
   return { obs: O.applyReplySelection(obs, e), metrics };   // R5-reply AC1: one reply-selection rule for every arm
 }
 
-/** Can this arm fetch a page at all? A web tool in its tool list, or (A) an unrestricted Bash, or a shell allowlist that admits curl/wget (B/C: SHELL_ALLOW). */
+/** Can this arm fetch a page at all? A web tool in its tool list, or (A) an unrestricted Bash, or a shell allowlist that admits curl/wget (B/C: the product default shell allowlist includes curl). */
 function webCapability(arm, tools) {
   // R3.AC4: no arm is exempt. w1_web is scored for every arm (web:true => scored); an arm that cannot fetch as shipped fails it
   // and the record carries webFinding "arm cannot fetch" (a product finding, not an instrument defect).
   const names = tools.map(String);
   const canFetch = names.some((t) => /(^|__)(web_fetch|WebFetch)$/.test(t)) || (WEB_SURFACE[arm]?.tools ?? []).some((t) => /^(web_fetch|WebFetch)$/.test(t));
-  return { web: true, webVia: canFetch ? 'tool' : null, canFetch, webSurface: [...new Set([...(WEB_SURFACE[arm]?.tools ?? []), ...names.filter((t) => /(web_|Web)/.test(t))])] };
+  // R6-prep AC2: B/C also fetch through the product-default shell (curl, open egress); A's unrestricted Bash is not declared here (it has native WebFetch).
+  const shellFetch = WEB_SURFACE[arm]?.shellFetch === true;
+  return { web: true, webVia: canFetch ? 'tool' : shellFetch ? 'shell' : null, canFetch: canFetch || shellFetch, webSurface: [...new Set([...(WEB_SURFACE[arm]?.tools ?? []), ...(shellFetch ? ['shell:curl'] : []), ...names.filter((t) => /(web_|Web)/.test(t))])] };
 }
 const rowsOf = (j) => (Array.isArray(j?.rows) ? j.rows : []);
 function analyzeBC(ctx, raw) {
@@ -551,7 +568,7 @@ function analyzeBC(ctx, raw) {
   const streamFor = (taskId) => {
     if (arm === 'B') { const c = L.cliEventsForTask(api, taskId); const a = cliPhase(c.events, { perProcess: true }); return { ...a, truncated: c.truncated, spawns: c.spawns, spawn: c.spawn, stdin: api.filter((x) => x.event === 'spawn.stdin' && x.task_id === taskId).map((x) => x.body) }; }
     const http = L.httpTurnsForTask(api, taskId);
-    const turns = http.map((t, i) => { const n = L.normUsage(t.sse?.usage); return { idx: i + 1, id: t.sse?.id, parent: null, model: t.sse?.model, ...n, stop: t.sse?.stop, tools: (t.sse?.toolUses || []).map((u) => u.name), thinkingBlock: !!t.sse?.thinking, usd: L.priceNorm(n).usd }; });
+    const turns = http.map((t, i) => { const n = L.normUsage(t.sse?.usage); return { idx: i + 1, id: t.sse?.id, parent: null, model: t.sse?.model, ...n, ctx: L.turnContextOf(t.sse), ctxBasis: t.sse?.startUsage ? 'message_start' : 'usage', stop: t.sse?.stop, tools: (t.sse?.toolUses || []).map((u) => u.name), thinkingBlock: !!t.sse?.thinking, usd: L.priceNorm(n).usd }; });
     const calls = L.callsFromHttpTurns(http);
     return { http, turns, calls, parentTexts: http.flatMap((t) => t.sse?.texts || []), replyText: [...(http[http.length - 1]?.sse?.texts || [])].join('\n'), status: 'completed', models: [...new Set(http.map((t) => t.sse?.model).filter(Boolean))],
       tools: (http[0]?.body?.tools || []).map((t) => t.name || t.type), rate: http.map((t) => L.rateLimitFromHeaders(t.headers)), parallel: L.parallelFromHttpTurns(http), stopReasons: http.map((t) => t.sse?.stop), reqTruncated: http.some((t) => t.truncatedReq || t.truncatedResp) };
@@ -657,6 +674,7 @@ async function runOne(ctx, state) {
     if (obs.capabilities && obs.capabilities.canFetch === false) record.webFinding = 'arm cannot fetch';
     if (!record.thinkingInvariant.ok) record.invalidRun = [`thinking blocks observed (${record.thinkingInvariant.observedThinkingTurns}, parent turns ${record.thinkingInvariant.parentTurns}, all tasks ${record.thinkingInvariant.allTasks}) while thinking is configured OFF on every arm`];
     state.rateLimitsSeen.push(...(metrics.rateLimits || []).slice(-2));
+    if (arm !== 'A') { record.shellEgress = raw.shellEgress ?? egressFactOf('', ''); if (record.shellEgress.mode !== 'open') record.warnings.push(`Shell egress is ${record.shellEgress.mode}, expected open (product default): ${JSON.stringify(record.shellEgress)}`); }
     if (raw.storeLine && /mode=production/.test(raw.storeLine)) record.warnings.push(`SERVER REPORTS PRODUCTION STORE: ${raw.storeLine}`);
   }
   if (ctx.dry) {
@@ -683,7 +701,7 @@ async function runOne(ctx, state) {
   return { record, aborted: false };
 }
 function effectiveConfig(ctx) {
-  return { model: MODEL, maxToolLoops: arm0(ctx) === 'A' ? 'n/a (claude 2.1.296 has no --max-turns; guard --max-budget-usd ' + BUDGET_GUARD_USD + ')' : MAX_TOOL_LOOPS, budgetMaxCalls: arm0(ctx) === 'A' ? 'n/a' : 0, shellAllow: arm0(ctx) === 'A' ? 'unrestricted Bash (bypassPermissions)' : SHELL_ALLOW, toolResultCap: arm0(ctx) === 'A' ? 'native (<=30k chars inline)' : 'agent-mcp default (6000 chars, head 75% / tail 25%)', providerTimeoutMs: arm0(ctx) === 'B' ? 1_200_000 : arm0(ctx) === 'C' ? 600_000 : `n/a (claude CLI; ${PHASE_TIMEOUT_MS} ms phase timeout)`, queueConcurrency: 'agent-mcp default', maxDepth: 'agent-mcp default (3)', thinking: `OFF: ${THINKING_MECHANISM[arm0(ctx)]}`, thinkingEnv: arm0(ctx) === 'C' ? {} : { ...THINKING_OFF_ENV }, phaseTimeoutMs: PHASE_TIMEOUT_MS };
+  return { model: MODEL, maxToolLoops: arm0(ctx) === 'A' ? 'n/a (claude 2.1.296 has no --max-turns; guard --max-budget-usd ' + BUDGET_GUARD_USD + ')' : MAX_TOOL_LOOPS, budgetMaxCalls: arm0(ctx) === 'A' ? 'n/a' : 0, shellAllow: arm0(ctx) === 'A' ? 'unrestricted Bash (bypassPermissions)' : SHELL_POLICY, shellEgress: arm0(ctx) === 'A' ? 'n/a (native Bash)' : 'open expected (product default); actual mode recorded in record.shellEgress', toolResultCap: arm0(ctx) === 'A' ? 'native (<=30k chars inline)' : 'agent-mcp default (6000 chars, head 75% / tail 25%)', providerTimeoutMs: arm0(ctx) === 'B' ? 1_200_000 : arm0(ctx) === 'C' ? 600_000 : `n/a (claude CLI; ${PHASE_TIMEOUT_MS} ms phase timeout)`, queueConcurrency: 'agent-mcp default', maxDepth: 'agent-mcp default (3)', thinking: `OFF: ${THINKING_MECHANISM[arm0(ctx)]}`, thinkingEnv: arm0(ctx) === 'C' ? {} : { ...THINKING_OFF_ENV }, phaseTimeoutMs: PHASE_TIMEOUT_MS };
 }
 const arm0 = (ctx) => ctx.runDef.arm;
 
@@ -951,7 +969,7 @@ export function planText(opts) {
   out.push(`  B  ${THINKING_MECHANISM.B}`, `       cited at ${cite(/^export function serverEnv/)} (spreads THINKING_OFF_ENV first) and packages/agent/agent-engine-orchestrator/src/providers/claudecli.ts:818-833 (buildSubprocessEnv copies process.env)`, `       resolved server env: ${Object.keys(THINKING_OFF_ENV).map((k) => `${k}=${bEnv[k]}`).join(' ')}`, `       provider: ${JSON.stringify(providerFor(B, 'B'))}`);
   const cProv = providerFor(C, 'C');
   out.push(`  C  ${THINKING_MECHANISM.C}`, `       cited at ${cite(/^function providerFor/)} (provider keys: ${Object.keys(cProv).join(',')}; no thinking key) and anthropic.ts (rg "thinking": no match)`, `       provider: ${JSON.stringify(cProv)}`);
-  out.push('', 'SHELL / WEB (B and C share one allowlist; A has unrestricted Bash)', `  B/C allowCommands: ${SHELL_ALLOW.join(',')}   (no curl/wget since R3; cited ${cite(/^export const SHELL_ALLOW/)})`, `  B/C srt network allowlist extension (per-run srt-policy.json, merged by provisionSrtPolicy): ${SRT_EXTRA_DOMAINS.join(',')}   (cited ${cite(/^export const SRT_EXTRA_DOMAINS/)})`, `  A tools: ${A_TOOLS}`, '  NOTE: arm C additionally exposes Anthropic server-side web tools (web_fetch/web_search) by default; B has no web tool as shipped, A has the native WebFetch/WebSearch. The web-fetch field (w1_web) is scored with one rule for every arm that can fetch; this tool-surface asymmetry is recorded, not equalised.');
+  out.push('', 'SHELL / WEB (B and C run the PRODUCT DEFAULT shell allowlist; A has unrestricted Bash)', `  B/C shell: ${SHELL_POLICY}   (cited ${cite(/^export const SHELL_POLICY/)}; supersedes the R3 "no curl" rule by owner direction, R6-prep AC2)`, '  Shell egress: open (product default: allow-all loopback proxy; no srt policy is pre-written). The actual mode is read back after each B/C run and recorded as record.shellEgress.', `  B/C srt network allowlist extension: ${SRT_EXTRA_DOMAINS.join(',') || '(none)'}   (cited ${cite(/^export const SRT_EXTRA_DOMAINS/)})`, `  A tools: ${A_TOOLS}`, '  NOTE: arm C additionally exposes Anthropic server-side web tools (web_fetch/web_search) by default; B has no web tool as shipped, A has the native WebFetch/WebSearch. The web-fetch field (w1_web) is scored with one rule for every arm that can fetch; this tool-surface asymmetry is recorded, not equalised.');
   out.push('', 'PACING', `  before EVERY live run: claude -p /usage (0 model calls asserted); refuse at 5h session >= ${L.PACING.fiveHourMax * 100}% (no 7-day check), any non-allowed rate-limit status, or an unreadable reading (fail closed)`);
   const wtSha = spawnSync('git', ['-C', opts.wt, 'rev-parse', '--short', 'HEAD'], { encoding: 'utf8' }).stdout?.trim() || '(not a git checkout)';
   const dist = path.join(opts.wt, 'entrypoint/agent-mcp/dist/src/index.js'); const srcDir = path.join(opts.wt, 'entrypoint/agent-mcp/src');
@@ -1227,9 +1245,13 @@ export async function selfCheck({ log = console.log, opts = parseArgs([]) } = {}
     { const PR = F.prompts(); const sha = (t) => crypto.createHash('sha256').update(t).digest('hex'); const banned = /curl|WebFetch|web_fetch|web_search|WebSearch|shell|Bash|browse/i;
       chk('R3.AC2 one prompt text for A, B and C (same sha) and none names a web tool or method', ['phase1', 'phase2'].every((k) => sha(PR[k]) === sha(F.prompts()[k])) && !banned.test(PR.phase1) && !banned.test(PR.phase2), `phase1 match: ${banned.exec(PR.phase1)?.[0]} phase2 match: ${banned.exec(PR.phase2)?.[0]}`);
       chk('R3.AC1 phase 1 no longer opts out of fetching (fetch-it-yourself wording and the "could not fetch" null clause are gone)', !/fetch it yourself|if you have a way|or null if you could not fetch/.test(PR.phase1) && /read the web page the ticket links to/.test(PR.phase1));
-      chk('R3.AC3 SHELL_ALLOW has no curl/wget, SRT_EXTRA_DOMAINS has no example.com, A_TOOLS is the native default toolset', !SHELL_ALLOW.some((c) => /^(curl|wget)$/.test(c)) && !SRT_EXTRA_DOMAINS.includes('example.com') && A_TOOLS === 'default');
-      chk('R3.AC3 C does not set nativeWebTools:false; B/C allowCommands carry no curl|wget', agentDef(ctxC, 'worker', false).nativeWebTools !== false && !(agentDef(ctxB, 'worker', false).nativeTooling.shell.allowCommands.some((c) => /curl|wget/.test(c))));
-      chk('R3.AC4 w1_web is scored for every arm; an arm that cannot fetch gets webFinding', ['A', 'B', 'C'].every((a) => webCapability(a, []).web === true) && webCapability('B', []).canFetch === false);
+      chk('R3.AC3/R6-prep AC2 B/C pass no instrument shell allowlist (product default applies), SRT_EXTRA_DOMAINS has no example.com, A_TOOLS is the native default toolset', typeof SHELL_POLICY === 'string' && /product default/.test(SHELL_POLICY) && !SRT_EXTRA_DOMAINS.includes('example.com') && A_TOOLS === 'default');
+      chk('R6-prep AC2 C does not set nativeWebTools:false; B/C agent defs carry NO allowCommands/allowPatterns override (product default shell)', agentDef(ctxC, 'worker', false).nativeWebTools !== false && [ctxB, ctxC].every((cx) => { const sh = agentDef(cx, 'worker', false).nativeTooling.shell; return sh === true || (sh && sh.allowCommands === undefined && sh.allowPatterns === undefined); }));
+      { const open = JSON.stringify({ network: { allowedDomains: ['pypi.org'], httpProxyPort: 4321 }, adhdManaged: { httpProxyPort: 4321 } }); const restricted = JSON.stringify({ network: { allowedDomains: ['pypi.org', 'example.com'] } });
+        const line = '{"msg":"Shell egress: open (allow-all loopback proxy 127.0.0.1:4321; restrict with agent.shell.sandbox.allowedDomains)"}';
+        chk('R6-prep AC2 egressFactOf reads open from the server line + policy, restricted from a restricted policy, unknown on disagreement/absence (negative controls)',
+          egressFactOf(open, line).mode === 'open' && egressFactOf(open, line).proxyPort === 4321 && egressFactOf(restricted, '').mode === 'restricted' && egressFactOf(restricted, line).mode === 'unknown' && egressFactOf('', '').mode === 'unknown' && egressFactOf('{', 'x').mode === 'unknown'); }
+      chk('R3.AC4 w1_web is scored for every arm; an arm that cannot fetch gets webFinding', ['A', 'B', 'C'].every((a) => webCapability(a, []).web === true) && webCapability('B', []).canFetch === true && webCapability('B', []).webVia === 'shell' && webCapability('C', []).webVia === 'tool' && new Set(['A', 'B', 'C']).size === 3);
       chk('R3.AC5 every arm declares its web surface', ['A', 'B', 'C'].every((a) => Array.isArray(webCapability(a, []).webSurface))); }
     chk('B and C get the same shell allowlist object (agentDef is shared)', JSON.stringify(agentDef(ctxB, 'worker', false).nativeTooling) === JSON.stringify(agentDef(ctxC, 'worker', false).nativeTooling));
     const pp = spawnSync(process.execPath, [SELF, '--print-plan'], { encoding: 'utf8' }); chk('`--print-plan` runs offline and exits 0', pp.status === 0 && /THINKING/.test(pp.stdout), `status ${pp.status} ${String(pp.stderr).slice(0, 200)}`);

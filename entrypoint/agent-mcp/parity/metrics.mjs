@@ -15,7 +15,8 @@ export function costCommonCard(rec) { return sum(rec?.metrics?.phases ?? [], (p)
 export function durationMs(rec) { return rec?.wallMs ?? null; }
 export function turnsOf(rec) { return sum(rec?.metrics?.phases ?? [], (p) => (p.turns?.parent || 0) + (p.turns?.child || 0)); }
 export function toolCallsOf(rec) { return sum(rec?.metrics?.phases ?? [], (p) => p.calls?.total); }
-export function peakContextOf(rec) { const v = (rec?.metrics?.phases ?? []).map((p) => p.peakContext ?? p.context?.peak ?? p.tokens?.peakCtx).filter(Number.isFinite); return v.length ? Math.max(...v) : null; }
+/** R6-prep AC3: peak context = max over phases of `phases[].tokens.total.ctx` (the field drive.mjs actually writes: max per-turn in+cache over parent and child turns). The old names are kept as fallbacks. */
+export function peakContextOf(rec) { const v = (rec?.metrics?.phases ?? []).map((p) => p.tokens?.total?.ctx ?? p.peakContext ?? p.context?.peak ?? p.tokens?.peakCtx).filter(Number.isFinite); return v.length ? Math.max(...v) : null; }
 
 /** Normalize a record into the summary the verdict consumes. `genuine` and `quality` are supplied by the gate/judge. */
 export function summarize(rec, { genuine, quality = null } = {}) {
