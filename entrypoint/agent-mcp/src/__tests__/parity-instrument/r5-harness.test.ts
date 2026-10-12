@@ -213,11 +213,11 @@ describe('R5-harness AC6 judge credential', () => {
     expect(JSON.stringify(r)).not.toContain('SYNTHETIC');
     expect(JSON.stringify(Object.entries(r))).not.toContain('SYNTHETIC');
   });
-  it('AC6: the presence gate is part of the live gate order, between scope and preflight, and red without a credential', async () => {
-    expect(GT.GATE_ORDER).toEqual(['ledger', 'scope', 'judgeCredential', 'preflight', 'pacing']);
+  it('AC6: the presence gate is part of the live gate order, between models and preflight, and red without a credential', async () => {
+    expect(GT.GATE_ORDER).toEqual(['ledger', 'scope', 'models', 'judgeCredential', 'preflight']);
     let spawned = 0;
     const green = () => ({ ok: true, reasons: [] });
-    const res = await GT.runGates({ ledger: green, scope: green, judgeCredential: () => ({ ok: JG.resolveJudgeCredential({ env: {}, home: mk(), cwd: mk() }).present, reasons: ['no judge credential'] }), preflight: () => { spawned++; return green(); }, pacing: () => { spawned++; return green(); } });
+    const res = await GT.runGates({ ledger: green, scope: green, models: green, judgeCredential: () => ({ ok: JG.resolveJudgeCredential({ env: {}, home: mk(), cwd: mk() }).present, reasons: ['no judge credential'] }), preflight: () => { spawned++; return green(); } });
     expect(res).toMatchObject({ ok: false, exitCode: 3, failed: 'judgeCredential' });
     expect(spawned).toBe(0);
   });

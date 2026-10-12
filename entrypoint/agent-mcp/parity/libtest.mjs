@@ -193,17 +193,6 @@ export async function runLibTests({ log = console.log } = {}) {
     eq(Object.keys(e).sort(), ['HOME', 'KEEP', 'PATH']);
   });
 
-  // ---- pacing
-  await t('pacing: thresholds 5h>=90%, no 7d check, bad status abort; warning counted', () => {
-    ok(L.pacingVerdict({ session_pct: 89, week_pct: 100 }).ok, 'under'); ok(!L.pacingVerdict({ session_pct: 90, week_pct: 0 }).ok, '5h'); ok(L.pacingVerdict({ session_pct: 0, week_pct: 100 }, [{ seven_day: { utilization: 1 } }]).ok, '7d ignored');
-    ok(!L.pacingVerdict({ session_pct: 0, week_pct: 0 }, [{ status: 'rejected' }]).ok, 'status');
-    eq(L.pacingVerdict({ session_pct: 0, week_pct: 0 }, [{ status: 'allowed_warning' }]).warnings, 1);
-  });
-  await t('pacing: /usage output parser', () => {
-    const out = JSON.stringify([{ type: 'assistant', message: { content: [{ text: 'Current session: 12% used · resets 3pm\nCurrent week (all models): 34% used' }] } }, { type: 'result', num_turns: 0, total_cost_usd: 0 }]);
-    const u = L.parseUsageOutput('noise\n' + out); eq([u.session_pct, u.week_pct, u.model_calls, u.cost_usd], [12, 34, 0, 0]);
-  });
-
   // ---- call metrics and dispatch evidence
   await t('metrics: wasted = calls after the last green test run; null when never green', () => {
     const c = (name, resultText) => ({ name, input: { n: Math.random() }, isError: false, resultText });

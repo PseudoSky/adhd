@@ -1,13 +1,14 @@
 // PARITY-INSTRUMENT-ONLY
 // Round gate (R0.AC7, R0.AC8, R2.AC7). Pure functions; every gate fails closed (a throw is a red gate).
-// Order (deviation from R0.AC8's literal [pacing, ledger, scope, preflight], see README "Gate order"): the read-only ledger check,
-// then scope, then the judge-credential presence check (no model call, so a round cannot pay for arms it cannot score), then preflight (zero model calls, must not spawn `claude`), then pacing (spawns `claude /usage`), then reservation.
+// Order (see README "Gate order"): the read-only ledger check, then scope, then the model-configuration check (the equal-model guard, SCOPE-R9-model-config: resolved
+// ids come from parity/experiment.json + PARITY_*, validated before any spend), then the judge-credential presence check (no model call, so a round cannot pay for arms it
+// cannot score), then preflight (zero model calls, must not spawn `claude`), then reservation.
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 
-export const GATE_ORDER = Object.freeze(['ledger', 'scope', 'judgeCredential', 'preflight', 'pacing']);
+export const GATE_ORDER = Object.freeze(['ledger', 'scope', 'models', 'judgeCredential', 'preflight']);
 
 const sha256 = (s) => crypto.createHash('sha256').update(s).digest('hex');
 

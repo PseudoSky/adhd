@@ -62,8 +62,11 @@ export const isModelAlias = (m) => typeof m === 'string' && m.trim() !== '' && !
  * R9-meas AC3: `pairedFixtures` (boolean, default false and absent from the parsed profile unless true) = the fixture VALUE stream is keyed `seed|run|rep` instead of `seed|run|arm|rep`, so A_n, B_n and C_n share every fixture value (fixtures.makeSpec `paired`).
  * R8-AC: `completedArms` = arms that already ran in this round and are KEPT (their runs must be in `led.runs`; they are never planned or reserved again, but they count against the cap),
  * `armModels` = a per-arm model that overrides `model` for that arm only (arm C calls the Messages API directly and cannot resolve an alias, so it is sent the concrete id the alias resolved to).
+ * SCOPE-R9-model-config: `modelConfig: "experiment"` takes every model (the arms and the judge) from parity/experiment.json plus the PARITY_* environment (experiment.mjs) instead of
+ * from this profile, so it is mutually exclusive with `model`, `judgeModel` and `armModels`. `modelDifferenceReason` (non-empty string, only with `modelConfig`) records a DELIBERATE,
+ * owner-approved model difference between the planned arms; without it the equal-model guard refuses a mismatch before any spend. Both keys are absent from the parsed profile unless set.
  * Fails CLOSED (LedgerError) on any malformed profile; returns null when the ledger carries none.
- * @returns {{arms:string[], completedArms:string[], armModels:Record<string,string>, armAWaiver:string|null, model:string|null, judgeModel:string|null, effort:string|null, capture:boolean, pairedFixtures?:true}|null}
+ * @returns {{arms:string[], completedArms:string[], armModels:Record<string,string>, armAWaiver:string|null, model:string|null, judgeModel:string|null, effort:string|null, capture:boolean, pairedFixtures?:true, modelConfig?:'experiment', modelDifferenceReason?:string}|null}
  */
 export function profileOf(led) {
   const p = led?.profile; if (p == null) return null;
@@ -77,6 +80,9 @@ export function profileOf(led) {
   if (p.effort != null && !EFFORT_LEVELS.includes(p.effort)) bad(`.effort ${JSON.stringify(p.effort)} is not one of ${EFFORT_LEVELS.join('|')}`);
   if (p.capture != null && typeof p.capture !== 'boolean') bad('.capture must be a boolean');
   if (p.pairedFixtures != null && typeof p.pairedFixtures !== 'boolean') bad('.pairedFixtures must be a boolean');   // R9-meas AC3
+  if (p.modelConfig != null && p.modelConfig !== 'experiment') bad(`.modelConfig ${JSON.stringify(p.modelConfig)} must be "experiment" (models from parity/experiment.json + PARITY_* env)`);   // SCOPE-R9-model-config
+  if (p.modelConfig != null) for (const k of ['model', 'judgeModel', 'armModels']) if (p[k] != null) bad(`.modelConfig "experiment" and .${k} are mutually exclusive: the models come from the experiment configuration, not from the profile`);
+  if (p.modelDifferenceReason != null && (p.modelConfig == null || typeof p.modelDifferenceReason !== 'string' || !p.modelDifferenceReason.trim())) bad('.modelDifferenceReason must be a non-empty string and is only valid with .modelConfig "experiment"');
   const completedArms = [];
   if (p.completedArms != null) {
     if (!Array.isArray(p.completedArms)) bad('.completedArms must be an array of A/B/C');
@@ -99,7 +105,8 @@ export function profileOf(led) {
     }
   }
   if (isModelAlias(p.model) && arms.includes('C') && !armModels.C) bad(`.model ${JSON.stringify(p.model)} is an alias the claude CLI resolves; arm C calls the Messages API directly with provider.model and an alias is not resolved there: use a concrete id for a round that includes C, or name one for C in .armModels`);
-  return { arms, completedArms, armModels, armAWaiver: waiver || null, model: p.model ?? null, judgeModel: p.judgeModel ?? null, effort: p.effort ?? null, capture: p.capture === true, ...(p.pairedFixtures === true ? { pairedFixtures: true } : {}) };
+  return { arms, completedArms, armModels, armAWaiver: waiver || null, model: p.model ?? null, judgeModel: p.judgeModel ?? null, effort: p.effort ?? null, capture: p.capture === true, ...(p.pairedFixtures === true ? { pairedFixtures: true } : {}),
+    ...(p.modelConfig != null ? { modelConfig: p.modelConfig } : {}), ...(p.modelDifferenceReason != null ? { modelDifferenceReason: p.modelDifferenceReason.trim() } : {}) };
 }
 
 /** Read-only precondition for a live round (no write): approvedBy present, cap not reached. Used by the gate before anything runs. */
@@ -127,7 +134,7 @@ export function initRound(round, patch, dir = LEDGER_DIR) {
  * Rules: needs approvedBy; run 4+ needs extraRunReason; the first run must be arm A; B/C need A recorded as a genuine success.
  * R8: a `profile` (profileOf) restricts the arms, caps the round at one run per profile arm, and, only when it omits arm A and records an armAWaiver, skips the two A rules.
  */
-export function reserveRun(round, { arm, runId, dir = LEDGER_DIR }) {
+export function reserveRun(round, { arm, runId, dir = LEDGER_DIR, model, modelSource }) {
   const f = ledgerPathFor(round, dir);
   return withLock(f, () => {
     const led = fs.existsSync(f) ? parseLedger(fs.readFileSync(f, 'utf8'), f) : emptyLedger(round);
@@ -141,7 +148,7 @@ export function reserveRun(round, { arm, runId, dir = LEDGER_DIR }) {
       if (led.runs.length === 0 && arm !== 'A') throw new LedgerError(`arm A runs first: refusing ${runId} (arm ${arm})`);
       if (arm !== 'A' && !(led.armA && led.armA.genuine === true)) throw new LedgerError(`arm A did not genuinely succeed: the round is void, refusing ${runId}`);
     }
-    led.runs.push({ runId, arm, at: nowIso(), pid: process.pid, ...(led.runs.length >= capOf(led) ? { extra: true } : {}) });
+    led.runs.push({ runId, arm, at: nowIso(), pid: process.pid, ...(led.runs.length >= capOf(led) ? { extra: true } : {}), ...(model ? { model, ...(modelSource ? { modelSource } : {}) } : {}) });   // SCOPE-R9-model-config: the resolved id (and where it came from) is on the ledger run entry
     if (!led.armOrder.includes(arm)) led.armOrder.push(arm);
     writeAtomic(f, led);
     return { used: led.runs.length, cap: capOf(led) };
@@ -227,7 +234,7 @@ export function recordJudgeCall(round, call, { reason = '', dir = LEDGER_DIR } =
     if (counts && used >= cap) throw new ModelRunCapError(`judge-call cap ${used}/${cap} reached (ledger judgeCapExtra/judgeCapReason bound the documented extension)`);
     const rec = { arm: call.arm, modelId: call.modelId, inputTokens: call.inputTokens, outputTokens: call.outputTokens, costUsd: call.costUsd, briefSha: call.briefSha, at: nowIso(), ...(reason ? { reason } : {}),
       ...(call.status ? { status: call.status } : {}), ...(call.error ? { error: String(call.error).slice(0, 300) } : {}), ...(call.paidCallAttempted === false ? { paidCallAttempted: false } : call.status ? { paidCallAttempted: true } : {}),
-      ...(call.rejudgeOf ? { rejudgeOf: String(call.rejudgeOf).slice(0, 300) } : {}) };
+      ...(call.rejudgeOf ? { rejudgeOf: String(call.rejudgeOf).slice(0, 300) } : {}), ...(call.modelSource ? { modelSource: call.modelSource } : {}) };
     led.judgeCalls.push(rec); writeAtomic(f, led); return rec;
   });
 }

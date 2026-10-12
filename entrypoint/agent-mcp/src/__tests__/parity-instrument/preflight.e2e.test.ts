@@ -7,7 +7,7 @@
  *     path), every unprobeable leg is NOT_PROBEABLE, and a receipt with the identity fields is written (R2.AC5, AC6);
  *   - `--live --yes` is REFUSED with exit 3 by the first red gate, the tracked ledger is byte-identical, and the shim was never executed (R2.AC7,
  *     R0.AC4, R0.AC7, R0.AC8): once for an unapproved round (ledger gate), once for an approved round whose scenario changed without a LOG entry
- *     (scope gate, which runs before preflight and pacing).
+ *     (scope gate, which runs before preflight).
  *
  * NOT covered here, and why (blocked by R3, reported to the dispatcher):
  *   - R2.AC11/AC12 (GREEN against a local parentProxy stub; negative control stripping MCP_SHELL_CHILD_ENV_ALLOWLIST) and the red-PREFLIGHT leg of

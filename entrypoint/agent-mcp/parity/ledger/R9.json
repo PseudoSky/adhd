@@ -22,13 +22,9 @@
       "A",
       "C"
     ],
-    "armModels": {
-      "C": "claude-haiku-5-5"
-    },
-    "model": "haiku",
-    "judgeModel": "haiku",
     "effort": "high",
     "capture": true,
-    "pairedFixtures": true
+    "pairedFixtures": true,
+    "modelConfig": "experiment"
   }
 }

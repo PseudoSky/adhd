@@ -1,10 +1,9 @@
 // PARITY-INSTRUMENT-ONLY
 // Round 2 driver helpers: cost model, stream / API-log parsers, call metrics, secret scan, process sweep,
-// env allowlist, /usage reader. Everything here is local and model-free.
+// env allowlist. Everything here is local and model-free.
 import fs from 'node:fs';
 import path from 'node:path';
-import os from 'node:os';
-import { spawnSync, execFileSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { PIN_MODEL } from './fixtures.mjs';
 
 // ---------------------------------------------------------------------------------------------------
@@ -526,38 +525,6 @@ export function cleanEnv(extra = {}, base = process.env) {
 }
 /** The two envs the claudecli provider sets for every worker (claudecli.ts buildSubprocessEnv). */
 export const CLAUDECLI_PROVIDER_ENVS = { CLAUDE_CODE_DISABLE_CLAUDE_MDS: '1', CLAUDE_CODE_DISABLE_AUTO_MEMORY: '1' };
-
-// ---------------------------------------------------------------------------------------------------
-// `claude -p /usage`: local command, 0 model calls (asserted every time)
-// ---------------------------------------------------------------------------------------------------
-export function parseUsageOutput(stdout) {
-  const s = String(stdout || ''); const d = JSON.parse(s.slice(s.indexOf('[')));
-  const asst = d.find((e) => e.type === 'assistant'); const res = d.find((e) => e.type === 'result');
-  const txt = asst?.message?.content?.[0]?.text ?? '';
-  const m = txt.match(/Current session: (\d+)% used(?: · resets ([^\n]+))?/); const wk = txt.match(/Current week \(all models\): (\d+)% used/);
-  return { session_pct: m ? +m[1] : null, resets: m?.[2] ?? null, week_pct: wk ? +wk[1] : null, model_calls: res?.num_turns ?? null, cost_usd: res?.total_cost_usd ?? null, text: txt };
-}
-export function readUsageWindow({ claude = 'claude', model = PIN_MODEL } = {}) {
-  const r = spawnSync(claude, ['-p', '/usage', '--model', model, '--output-format', 'json'], { cwd: os.tmpdir(), env: cleanEnv(), encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 90000 });
-  if (r.status !== 0) throw new Error(`claude -p /usage exited ${r.status}: ${(r.stderr || '').slice(0, 200)}`);
-  const u = parseUsageOutput(r.stdout);
-  if (u.model_calls !== 0 || (u.cost_usd ?? 0) !== 0) throw new Error(`/usage made model calls (num_turns=${u.model_calls}, cost=${u.cost_usd}); refusing to continue`);
-  if (u.session_pct == null) throw new Error('could not parse session percentage from /usage output');
-  return { session_pct: u.session_pct, week_pct: u.week_pct, resets: u.resets, model_calls: 0, at: new Date().toISOString() };
-}
-
-/** Pacing verdict from a /usage reading and the rate-limit statuses seen so far. SCOPE-R5-pacing-gate: 5h threshold 90% (AC1); the 7-day check is removed (AC2); week_pct is informational only. */
-export const PACING = { fiveHourMax: 0.90, okStatuses: ['allowed', 'allowed_warning'] };
-export function pacingVerdict(reading, seenRateLimits = []) {
-  const reasons = [];
-  if (reading.session_pct / 100 >= PACING.fiveHourMax) reasons.push(`5h utilisation ${reading.session_pct}% >= ${PACING.fiveHourMax * 100}%`);
-  for (const r of seenRateLimits) {
-    if (!r) continue;
-    if (r.status && !PACING.okStatuses.includes(r.status)) reasons.push(`rate-limit status ${r.status}`);
-    if (r.five_hour?.utilization != null && r.five_hour.utilization >= PACING.fiveHourMax) reasons.push(`5h utilisation ${r.five_hour.utilization} >= ${PACING.fiveHourMax}`);
-  }
-  return { ok: reasons.length === 0, reasons, warnings: seenRateLimits.filter((r) => r?.status === 'allowed_warning').length };
-}
 
 // ---------------------------------------------------------------------------------------------------
 // Dispatch evidence (added for the realistic-workflow task)

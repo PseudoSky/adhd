@@ -22,6 +22,7 @@ import * as MT from './metrics.mjs';
 import * as GR from './grid.mjs';
 import * as QL from './quality.mjs';
 import * as JG from './judge.mjs';
+import * as EX from './experiment.mjs';
 import * as CP from './capture-proxy.mjs';
 import * as WD from './wire-diff.mjs';
 import { ModelRunCapError } from './ledger.mjs';
@@ -73,21 +74,49 @@ export const LEDGER_PATH = LG.ledgerPathFor(ROUND);
  * `arms: null` = the default A,B,C plan.
  */
 export function defaultProfile() { return { arms: null, completedArms: [], armModels: {}, armAWaiver: null, model: F.PIN_MODEL, judgeModel: JG.JUDGE_MODEL, effort: null, capture: false, pairedFixtures: false, source: 'module pins (F.PIN_MODEL, JG.JUDGE_MODEL)' }; }
+/**
+ * SCOPE-R9-model-config: the pricing id a configured model id is priced by (its rate card's model, else the id itself): two ids that price identically compare equal in the equal-model guard.
+ */
+export const pricingIdOf = (id) => L.rateCardFor(id)?.model ?? id;
 export function roundProfile(opts = {}) {
   const round = opts.round ?? ROUND; const p = LG.profileOf(LG.readLedger(round, opts.ledgerDir ?? LG.LEDGER_DIR));   // throws LedgerError on a malformed profile (fail closed)
   const d = defaultProfile();
+  if (p?.modelConfig === 'experiment') {
+    // models are CONFIGURATION (parity/experiment.json + PARITY_* env, experiment.mjs), validated here BEFORE anything plans, gates, reserves or spends; throws ExperimentConfigError naming the key.
+    // Only a round that opts in reads the environment, so the PARITY_* variables cannot change what R5-R8 print or re-derive.
+    const ex = EX.resolveExperiment({ env: opts.env ?? process.env, file: opts.experimentFile });
+    return { ...d, ...p, model: ex.models[p.arms.includes('A') ? 'A' : p.arms[0]], judgeModel: ex.models.judge, models: ex.models, modelSources: ex.groups,
+      experiment: { file: ex.file, fileSource: ex.fileSource, sha256: ex.sha256 }, source: `parity/ledger/${round}.json profile (models: ${path.relative(HERE, ex.file) || ex.file})` };
+  }
   return p ? { ...d, ...p, model: p.model ?? d.model, judgeModel: p.judgeModel ?? d.judgeModel, source: `parity/ledger/${round}.json profile` } : d;
+}
+/** The model facts a record / reservation carries for ONE arm of a configured round (null for a profile that does not use the experiment configuration). */
+export function modelConfigFacts(profile, arm) {
+  if (!profile?.models) return null;
+  const g = profile.modelSources?.[arm]; const j = profile.modelSources?.judge;
+  return { id: profile.models[arm], provider: g?.provider ?? null, source: g?.source ?? null, envVar: g?.envVar ?? null, judge: { id: profile.models.judge, provider: j?.provider ?? null, source: j?.source ?? null, envVar: j?.envVar ?? null },
+    experimentFile: profile.experiment?.file ?? null, experimentSha256: profile.experiment?.sha256 ?? null, differenceAllowed: profile.modelDifferenceReason ?? null };
+}
+/**
+ * The equal-model guard, config level, run BEFORE any reservation or spend (live gate `models`, print-plan): the planned arms of an experiment-configured round must price as the same model.
+ * A legacy profile (R5-R8) has no resolved ids here and passes (its runtime armModelGuard is unchanged).
+ * @returns {{ok:boolean, reasons:string[], deliberate:string|null}}
+ */
+export function modelsGate(opts = {}) {
+  const prof = roundProfile(opts);
+  if (!prof.models) return { ok: true, reasons: [], deliberate: null };
+  return EX.modelConsistency({ arms: prof.arms, models: prof.models, pricingIdOf, differenceReason: prof.modelDifferenceReason ?? null });
 }
 /**
  * The fixture spec of ONE run (R9-meas AC3). The round profile carries the model pin (R8) and the pairing switch: with `profile.pairedFixtures` the value stream is keyed `seed|run|rep`, so
  * A_n, B_n and C_n of one pairing index share every fixture value; without it (every round before R9, and any round whose ledger profile does not say so) the R5-R8 per-arm stream is
  * used and the spec is byte-identical to what R8 wrote. Used by makeCtx AND the rejudge path so a saved run is re-derived the way it was run.
  */
-export function specFor({ seed, arm, rep, profile }) { return F.makeSpec({ seed, arm, rep, pin: profile?.model, paired: profile?.pairedFixtures === true }); }
+export function specFor({ seed, arm, rep, profile }) { return F.makeSpec({ seed, arm, rep, pin: profile?.models?.[arm] ?? profile?.model, paired: profile?.pairedFixtures === true }); }
 /** What a record says about its fixture value stream (R9-meas AC3): `record.fixtures`. */
 export function fixturesFact(profile) { const paired = profile?.pairedFixtures === true; return { paired, valueStream: paired ? 'seed|run|rep' : 'seed|run|arm|rep' }; }
 /** The model the run's arms are launched with: the profile's (an alias such as `haiku`, or a concrete id), else the module pin. */
-const modelOf = (ctx) => ctx.profile?.armModels?.[ctx.runDef?.arm] ?? ctx.profile?.model ?? MODEL;   // R8-AC: a per-arm model (arm C: the concrete id the alias resolved to) overrides the round model for that arm only
+const modelOf = (ctx) => ctx.profile?.models?.[ctx.runDef?.arm] ?? ctx.profile?.armModels?.[ctx.runDef?.arm] ?? ctx.profile?.model ?? MODEL;   // SCOPE-R9-model-config: the configured FULL id of this arm wins; R8-AC: a per-arm model (arm C: the concrete id the alias resolved to) overrides the round model for that arm only
 const effortOf = (ctx) => ctx.profile?.effort ?? null;
 /**
  * R8-effort: how the explicit effort level reaches each arm (probed 2026-10-12 with the real claude 2.1.296 behind the capture proxy and a local mock upstream, no model call:
@@ -484,9 +513,9 @@ async function prepare(ctx) {
 // ----------------------------------------------------------------------------------------------------------------
 // HARD CAP: at most RUN_CAP (3) agent runs per round (parity/ledger.mjs; tracked per-round file, fail closed). Every live model-spawning path goes through rawRun().
 /** Reserve one run BEFORE anything is spawned (delegates to ledger.reserveRun: approvedBy, A first, cap 3, extraRunReason for 4+). */
-export function reserveModelRun(runId, { ledgerPath = LEDGER_PATH } = {}) {
+export function reserveModelRun(runId, { ledgerPath = LEDGER_PATH, model, modelSource } = {}) {
   const round = path.basename(ledgerPath, '.json');
-  return LG.reserveRun(round, { arm: String(runId)[0], runId, dir: path.dirname(ledgerPath) });
+  return LG.reserveRun(round, { arm: String(runId)[0], runId, dir: path.dirname(ledgerPath), model, modelSource });
 }
 /**
  * R5-harness AC3/AC5: a live fault before the reservation (so before any spawn) is a harness fault, not a run: nothing is reserved, the record is marked `aborted`
@@ -553,14 +582,14 @@ async function rawRun(ctx) {
   // Deterministic, spawn-free preparation first: a fault here (R5-harness AC3) must not consume a ledger slot.
   await prepare(ctx);
   // The cap is enforced HERE, immediately before any process that could call a model is spawned.
-  if (!ctx.dry) ctx.modelRun = reserveModelRun(ctx.spec.runId, { ledgerPath: ctx.ledgerPath ?? LEDGER_PATH });
+  if (!ctx.dry) { const mc = modelConfigFacts(ctx.profile, ctx.runDef.arm); ctx.modelRun = reserveModelRun(ctx.spec.runId, { ledgerPath: ctx.ledgerPath ?? LEDGER_PATH, ...(mc ? { model: mc.id, modelSource: mc.envVar ? `env:${mc.envVar}` : 'json' } : {}) }); }
   if (ctx.dry) await setupFakes(ctx);
   if (ctx.opts.capture) await startCapture(ctx);
   try { return await (ctx.executor ?? (ctx.runDef.arm === 'A' ? runArmA : runArmBC))(ctx); }
   finally { if (ctx.capture) { await ctx.capture.close(); ctx.capture = null; } if (ctx.dry) await teardownFakes(ctx); }
 }
 
-/** Idempotent resume: a run is finished only if its record exists and was NOT aborted (a pacing/cap abort wrote a record but ran nothing, and must be retried once the window resets). */
+/** Idempotent resume: a run is finished only if its record exists and was NOT aborted (a cap or pre-spawn-fault abort wrote a record but ran nothing, and is retried). */
 export function isFinishedRecord(recordPath) { try { const r = readJson(recordPath); return !r.aborted; } catch { return false; } }
 /**
  * Thinking observation (R7-think AC1): REPORT-ONLY. Counts thinking blocks in any task of the run (parent or worker); it has no pass/fail verdict and never
@@ -569,14 +598,6 @@ export function isFinishedRecord(recordPath) { try { const r = readJson(recordPa
 export function thinkingObservation(metrics) {
   const parentTurns = (metrics.phases || []).reduce((a, m) => a + (m.thinkingTurns || 0), 0); const allTasks = metrics.thinkingBlocksAllTasks ?? 0;
   return { configured: THINKING_POLICY, observedThinkingTurns: Math.max(parentTurns, allTasks), parentTurns, allTasks };
-}
-/** Pacing gate: read the 5h/7d window via `claude -p /usage` (0 model calls, asserted by L.readUsageWindow). Refuses at 5h session usage >= 90% (the 7-day window is no longer checked), and fails CLOSED when the reading cannot be taken or parsed. */
-export function gatePacing(read, rateLimitsSeen = []) {
-  let reading;
-  try { reading = read(); } catch (e) { return { ok: false, reading: null, verdict: { ok: false, reasons: [`/usage unreadable: ${String(e.message || e).slice(0, 200)}`], warnings: 0 } }; }
-  if (!Number.isFinite(reading?.session_pct) ) return { ok: false, reading, verdict: { ok: false, reasons: ['/usage reading has no numeric session percentage'], warnings: 0 } };
-  const verdict = L.pacingVerdict(reading, rateLimitsSeen);
-  return { ok: verdict.ok, reading, verdict };
 }
 
 
@@ -752,13 +773,6 @@ function envReport(ctx) {
 async function runOne(ctx, state) {
   const arm = ctx.runDef.arm;
   const record = { runId: ctx.spec.runId, arm, rep: ctx.spec.rep, mode: ctx.dry ? 'dry-run' : 'live', seed: ctx.opts.seed, startedAt: nowIso(), env: envReport(ctx), config: effectiveConfig(ctx), warnings: [] };
-  // pacing: /usage is a local command (0 model calls, asserted); status from the rate-limit events/headers seen so far
-  const usageReading = () => ctx.dry && !process.env.R2_DRY_REAL_USAGE ? { session_pct: 0, week_pct: 0, resets: null, model_calls: 0, at: nowIso(), stubbed: true } : L.readUsageWindow({ claude: ctx.dry ? (ctx.opts.realClaude || 'claude') : ctx.opts.claude, model: modelOf(ctx) });
-  const gate = gatePacing(usageReading, state.rateLimitsSeen);
-  record.pacing = { before: gate.reading, verdict: gate.verdict };
-  const verdict = gate.verdict;
-  if (!verdict.ok && !ctx.dry) { record.aborted = verdict.reasons; writeJson(path.join(ctx.runDir, 'record.json'), record); return { record, aborted: true }; }
-  if (!verdict.ok && ctx.dry) record.warnings.push(`pacing would abort a live run: ${verdict.reasons.join('; ')}`);
   const fp0 = fingerprint(PROD_ROOT); const t0 = Date.now();
   let raw, analysis;
   try {
@@ -784,11 +798,11 @@ async function runOne(ctx, state) {
     // thinking: model default on every arm (R7-think AC1); the observation is a report-only record field, never an invalid/void rule
     record.thinking = thinkingObservation(metrics);
     const wire = wireFactsOf(ctx);
+    { const mc = modelConfigFacts(ctx.profile, arm); if (mc) record.modelConfig = mc; }   // SCOPE-R9-model-config: the configured id + source of this arm and the judge, on every record of a configured round
     record.model = modelFacts({ requested: modelOf(ctx), resolved: obs.models ?? [], sideModels: obs.sideModels ?? [], wire }); record.warnings.push(...record.model.warnings.map((w) => `MODEL: ${w}`));
     record.effort = effortFacts({ requested: effortOf(ctx), arm, wire }); if (record.effort.status === 'mismatch') record.warnings.push(`EFFORT MISMATCH: ${record.effort.detail}`);
     record.webSurface = obs.capabilities?.webSurface ?? null;
     if (obs.capabilities && obs.capabilities.canFetch === false) record.webFinding = 'arm cannot fetch';
-    state.rateLimitsSeen.push(...(metrics.rateLimits || []).slice(-2));
     if (arm !== 'A') { record.shellEgress = raw.shellEgress ?? egressFactOf('', ''); if (record.shellEgress.mode !== 'open') record.warnings.push(`Shell egress is ${record.shellEgress.mode}, expected open (product default): ${JSON.stringify(record.shellEgress)}`); }
     if (raw.storeLine && /mode=production/.test(raw.storeLine)) record.warnings.push(`SERVER REPORTS PRODUCTION STORE: ${raw.storeLine}`);
   }
@@ -808,7 +822,6 @@ async function runOne(ctx, state) {
   record.productionStore = { before: fp0, after: fp1, unchanged: fp0.sha256 === fp1.sha256, attributableTouches: attributable };
   if (attributable.length) record.warnings.push(`PRODUCTION STORE TOUCHED by this run: ${attributable.join(', ')}`);
   else if (!record.productionStore.unchanged) record.productionStore.note = 'fingerprint changed but nothing in it mentions this run: concurrent activity by the owner or other agents';
-  try { record.pacing.after = state.skipAfter ? null : usageReading(); } catch (e) { record.pacing.after = null; record.warnings.push(`post-run /usage reading failed: ${String(e.message).slice(0, 160)}`); }
   record.secretScan = { runDir: L.scanAndLock(ctx.runDir), work: L.scanAndLock(ctx.work) };
   if (record.secretScan.runDir.hits.length) record.warnings.push(`secret-shaped strings redacted in saved logs: ${JSON.stringify(record.secretScan.runDir.hits)}`);
   record.expected = { ...ctx.expected, original: undefined };
@@ -835,7 +848,7 @@ export function rederiveDurationReport(root, round = ROUND, rep = 1) {
   return `DURATION (R9-meas; wall is the graded metric, phase-sum is report-only and never gates) round ${round} rep ${rep}\n${MT.formatDurationTable(MT.rederiveDurations(recs, calls))}`;
 }
 function effectiveConfig(ctx) {
-  return { model: modelOf(ctx), ...(LG.isModelAlias(modelOf(ctx)) ? { modelResolution: `"${modelOf(ctx)}" is an alias the claude CLI resolves at run time; the resolved id is read from the response and recorded in record.model, and the run is priced by it` } : {}), ...(effortOf(ctx) ? { effort: `${effortOf(ctx)} explicit: ${EFFORT_MECHANISM[arm0(ctx)].replace('<level>', effortOf(ctx))}` } : {}), maxToolLoops: arm0(ctx) === 'A' ? 'n/a (claude 2.1.296 has no --max-turns; guard --max-budget-usd ' + BUDGET_GUARD_USD + ')' : MAX_TOOL_LOOPS, budgetMaxCalls: arm0(ctx) === 'A' ? 'n/a' : 0, shellAllow: arm0(ctx) === 'A' ? 'unrestricted Bash (bypassPermissions)' : SHELL_POLICY, shellEgress: arm0(ctx) === 'A' ? 'n/a (native Bash)' : 'open expected (product default); actual mode recorded in record.shellEgress', toolResultCap: arm0(ctx) === 'A' ? 'native (<=30k chars inline)' : 'agent-mcp default (6000 chars, head 75% / tail 25%)', providerTimeoutMs: arm0(ctx) === 'B' ? 1_200_000 : arm0(ctx) === 'C' ? 600_000 : `n/a (claude CLI; ${PHASE_TIMEOUT_MS} ms phase timeout)`, queueConcurrency: 'agent-mcp default', maxDepth: 'agent-mcp default (3)', thinking: `thinking: ${THINKING_POLICY} (${THINKING_MECHANISM[arm0(ctx)]})`, thinkingEnv: {}, phaseTimeoutMs: PHASE_TIMEOUT_MS, ...(ctx.opts?.capture ? { capture: `wire capture ON (capture-proxy.mjs, logs/wire): arm ${arm0(ctx)} model traffic is routed through a local pass-through proxy; bodies and timing are not altered` } : {}) };
+  return { model: modelOf(ctx), ...(ctx.profile?.models ? { modelConfig: modelConfigFacts(ctx.profile, arm0(ctx)) } : {}), ...(LG.isModelAlias(modelOf(ctx)) ? { modelResolution: `"${modelOf(ctx)}" is an alias the claude CLI resolves at run time; the resolved id is read from the response and recorded in record.model, and the run is priced by it` } : {}), ...(effortOf(ctx) ? { effort: `${effortOf(ctx)} explicit: ${EFFORT_MECHANISM[arm0(ctx)].replace('<level>', effortOf(ctx))}` } : {}), maxToolLoops: arm0(ctx) === 'A' ? 'n/a (claude 2.1.296 has no --max-turns; guard --max-budget-usd ' + BUDGET_GUARD_USD + ')' : MAX_TOOL_LOOPS, budgetMaxCalls: arm0(ctx) === 'A' ? 'n/a' : 0, shellAllow: arm0(ctx) === 'A' ? 'unrestricted Bash (bypassPermissions)' : SHELL_POLICY, shellEgress: arm0(ctx) === 'A' ? 'n/a (native Bash)' : 'open expected (product default); actual mode recorded in record.shellEgress', toolResultCap: arm0(ctx) === 'A' ? 'native (<=30k chars inline)' : 'agent-mcp default (6000 chars, head 75% / tail 25%)', providerTimeoutMs: arm0(ctx) === 'B' ? 1_200_000 : arm0(ctx) === 'C' ? 600_000 : `n/a (claude CLI; ${PHASE_TIMEOUT_MS} ms phase timeout)`, queueConcurrency: 'agent-mcp default', maxDepth: 'agent-mcp default (3)', thinking: `thinking: ${THINKING_POLICY} (${THINKING_MECHANISM[arm0(ctx)]})`, thinkingEnv: {}, phaseTimeoutMs: PHASE_TIMEOUT_MS, ...(ctx.opts?.capture ? { capture: `wire capture ON (capture-proxy.mjs, logs/wire): arm ${arm0(ctx)} model traffic is routed through a local pass-through proxy; bodies and timing are not altered` } : {}) };
 }
 const arm0 = (ctx) => ctx.runDef.arm;
 
@@ -946,15 +959,16 @@ export async function judgeRun({ ctx, record, aGenuine, aWaived = false, dry, cl
     const { brief, briefSha, label } = JG.buildBrief({ prompts: ctx.prompts, ticketText: F.ticketText(ctx.spec), diff: repoDiff(ctx.spec, ctx.repoDir), transcript: transcriptFor(record, ctx.prompts) });
     briefFormat = JG.BRIEF_FORMAT; attempt = { briefSha, modelId: null, sent: false };
     // R8-model AC4: the judge model is the round's judgeModel (an alias such as `haiku` is resolved from the concrete id(s) the arms reported; this throws, no paid call, when none exists)
-    const judgeRequested = ctx.profile?.judgeModel ?? JG.JUDGE_MODEL;
+    const judgeRequested = ctx.profile?.models?.judge ?? ctx.profile?.judgeModel ?? JG.JUDGE_MODEL;
+    const judgeSrc = ctx.profile?.modelSources?.judge; const modelSource = judgeSrc ? (judgeSrc.envVar ? `env:${judgeSrc.envVar}` : 'json') : undefined;   // SCOPE-R9-model-config: where the judge id came from, on the ledger call
     const judgeModel = JG.resolveJudgeModel(judgeRequested, [...(record.model?.resolved ?? []), ...(record.observation?.models ?? [])]);
     attempt.modelId = judgeModel; attempt.sent = true;
-    const res = await JG.runJudge({ client, arm, brief, briefSha, outDir: judgeDir, model: judgeModel, modelRequested: judgeRequested, onCall: dry ? undefined : (c) => LG.recordJudgeCall(round, { ...c, ...(ledgerNote ? { rejudgeOf: ledgerNote } : {}) }, { dir: ledgerDir, reason: capReason }) });
+    const res = await JG.runJudge({ client, arm, brief, briefSha, outDir: judgeDir, model: judgeModel, modelRequested: judgeRequested, onCall: dry ? undefined : (c) => LG.recordJudgeCall(round, { ...c, ...(modelSource ? { modelSource } : {}), ...(ledgerNote ? { rejudgeOf: ledgerNote } : {}) }, { dir: ledgerDir, reason: capReason }) });
     record.quality = res.ok ? { status: 'scored', mean: QL.qualityMean(res.scores), scores: res.scores, briefSha, briefFormat, modelId: res.record.modelId, ...(res.record.modelRequested && res.record.modelRequested !== res.record.modelId ? { modelRequested: res.record.modelRequested } : {}), ...(aWaived ? { armAWaived: ctx.profile?.armAWaiver ?? true } : {}), label, file: path.join(judgeDir, `${arm}.json`) } : { status: 'judge-error', code: res.code, briefSha, briefFormat, file: path.join(judgeDir, `${arm}.json`) };
   } catch (e) {
     record.quality = { status: 'judge-failed', error: String(e?.message ?? e).slice(0, 300) };
     if (!dry) {
-      try { LG.recordJudgeCall(round, { arm, modelId: attempt?.modelId ?? ctx.profile?.judgeModel ?? JG.JUDGE_MODEL, inputTokens: 0, outputTokens: 0, costUsd: null, briefSha: attempt?.briefSha ?? null, status: 'failed', error: record.quality.error, paidCallAttempted: attempt?.sent === true, ...(ledgerNote ? { rejudgeOf: ledgerNote } : {}) }, { dir: ledgerDir, reason: capReason }); }
+      try { LG.recordJudgeCall(round, { arm, modelId: attempt?.modelId ?? ctx.profile?.models?.judge ?? ctx.profile?.judgeModel ?? JG.JUDGE_MODEL, inputTokens: 0, outputTokens: 0, costUsd: null, briefSha: attempt?.briefSha ?? null, status: 'failed', error: record.quality.error, paidCallAttempted: attempt?.sent === true, ...(ledgerNote ? { rejudgeOf: ledgerNote } : {}) }, { dir: ledgerDir, reason: capReason }); }
       catch (le) { record.quality.ledgerError = String(le?.message ?? le).slice(0, 200); }
     }
   }
@@ -986,13 +1000,14 @@ export const judgeDirName = (rep) => (rep > 1 ? `judge-rep${rep}` : 'judge');
 export function gapSecondsSince(finishedMs, nowMs = Date.now()) { return Number.isFinite(finishedMs) ? Math.round((nowMs - finishedMs) / 1000) : null; }
 
 /**
- * R8-AC: the model guard for an arm that is sent a model of its own (`profile.armModels`, arm C: the concrete id the alias `haiku` resolves to). Arm C calls the Messages API directly, so the
+ * R8-AC: the model guard for an arm that is sent a model of its own (`profile.armModels`, arm C: the concrete id the alias `haiku` resolves to; SCOPE-R9-model-config: `profile.models`, the configured full id of every arm). Arm C calls the Messages API directly, so the
  * round only compares like with like if arm A's alias resolved to exactly that id. Checked BEFORE the arm is reserved or spawned: a mismatch, a second id, no id or no A record stops with no spawn
  * and no spend. Arms without an `armModels` entry (and arm A, the reference) always pass.
  * @returns {{ok:boolean, reasons:string[]}}
  */
 export function armModelGuard({ profile, arm, aRecord }) {
-  const want = profile?.armModels?.[arm]; if (!want || arm === 'A') return { ok: true, reasons: [] };
+  const want = profile?.models?.[arm] ?? profile?.armModels?.[arm]; if (!want || arm === 'A') return { ok: true, reasons: [] };
+  if (profile?.models && String(profile.modelDifferenceReason ?? '').trim()) return { ok: true, reasons: [] };   // SCOPE-R9-model-config: a deliberate, recorded difference (ledger.profile.modelDifferenceReason); the config-level guard has already passed it
   if (!aRecord) return { ok: false, reasons: [`arm ${arm} is sent ${want} but there is no arm A record to compare against: ${arm} not started (no spawn)`] };
   const got = aRecord.model?.resolved ?? [];
   if (got.length === 1 && got[0] === want) return { ok: true, reasons: [] };
@@ -1002,7 +1017,7 @@ export function armModelGuard({ profile, arm, aRecord }) {
 async function runPlan(opts, dry) {
   const plan = buildPlan(opts);
   fs.mkdirSync(opts.out, { recursive: true });
-  const state = { rateLimitsSeen: [], lastFinished: {}, aGenuine: false };
+  const state = { lastFinished: {}, aGenuine: false };
   const judgeDirOf = (rep) => dry ? path.join(opts.out, judgeDirName(rep)) : path.join(tmpRoot(opts.round), judgeDirName(rep));
   const records = [];
   const retryMode = plan.some((p) => p.retry);
@@ -1151,6 +1166,13 @@ export function planText(opts) {
     ...(Object.keys(prof.armModels).length ? [`  per-arm model: ${Object.entries(prof.armModels).map(([a, m]) => `${a} is sent ${m}`).join(', ')} (the Messages API does not resolve the alias); started only if arm A's alias resolves to the same id (armModelGuard, checked before any reservation)`] : []),
     ...(prof.arms.includes('A') ? ['  ARM-A GATE APPLIED: A runs first; every later arm is refused unless the ledger records A as a genuine success (all content items green); a failed A voids the round (exit 4) and the later arms are not run.'] : [`  ARM-A GATE NOT APPLIED (armAWaiver): ${prof.armAWaiver}`, '  The ledger armA stays null (nothing is faked); the judge treats the A gate as waived and records armAWaived on the quality record.']));
   if (plan.some((p) => p.retry)) out.push('', `RETRY PLAN (ledger.retryPlan, owner-directed; arm A is not rerun): ${plan.map((p) => `${p.arm}${p.rep}`).join(' -> ')}; extraRunReason: ${LG.readLedger(round).extraRunReason}`);
+  if (prof.models) {   // SCOPE-R9-model-config: the resolved model of every planned arm and the judge, with where each came from, and how it reaches the arm
+    const gate = modelsGate(opts); const flag = (arm) => { const c = ctxOf(arm); return arm === 'A' ? `claude -p ... --model ${argvA(c, '<mcp-config.json>', null)[argvA(c, '<mcp-config.json>', null).indexOf('--model') + 1]}  (argvA)` : `agent definition provider ${JSON.stringify({ type: providerFor(c, arm).type, model: providerFor(c, arm).model })}  (providerFor)`; };
+    out.push('', `MODELS (SCOPE-R9-model-config; configuration, not code: ${path.relative(REPO_ROOT, prof.experiment.file)} [${prof.experiment.fileSource}] sha256 ${prof.experiment.sha256.slice(0, 12)}; precedence per-group env > ${EX.ENV_ALL} > JSON; env overrides ${EX.ENV_FILE}, ${EX.ENV_ALL}, ${Object.values(EX.ENV_GROUP).join(', ')})`,
+      ...shown.map((a) => `  arm ${a}: provider ${prof.modelSources[a].provider}  model ${prof.models[a]}  source ${prof.modelSources[a].source}${prof.modelSources[a].envVar ? ` (${prof.modelSources[a].envVar})` : ' (parity/experiment.json default)'}  priced as ${pricingIdOf(prof.models[a])}${L.rateCardFor(prof.models[a]) ? '' : '  WARNING no rate card: cost unmeasured'}\n      reaches the arm as: ${flag(a)}`),
+      `  judge: provider ${prof.modelSources.judge.provider}  model ${prof.models.judge}  source ${prof.modelSources.judge.source}${prof.modelSources.judge.envVar ? ` (${prof.modelSources.judge.envVar})` : ' (parity/experiment.json default)'}`,
+      `  equal-model guard (before any spend): ${gate.ok ? (gate.deliberate ? `PASS by a deliberate recorded difference (${gate.deliberate})` : `PASS, arms [${shown.join(',')}] price as one model`) : `REFUSES: ${gate.reasons.join('; ')}`}; runtime guard: a later arm starts only if arm A's response model equals the id it is configured with (armModelGuard)`);
+  }
   out.push('', `FIXTURES: ${prof.pairedFixtures ? 'PAIRED (ledger.profile.pairedFixtures, R9-meas AC3): value stream seed|run|rep, so A_n, B_n and C_n share ticket id, owner, thresholds, rates, tax, visible cases and hidden suite; the system-prompt nonce stays per arm' : 'per-arm value stream seed|run|arm|rep (R5-R8 derivation, unchanged)'}`, `DURATION: wall (record.wallMs) is the graded metric; phase-sum (sum of phases[].wallMs) and the harness overhead split are reported beside it, never gating (R9-meas, owner: "Report both (Recommended)")`);
   out.push('', `order (${prof.arms ? 'ledger profile order' : 'arm A first; B and C alternate between rounds'}):`, ...plan.map((p) => `  ${p.position}. ${p.arm}${p.rep}`));
   out.push('', `THINKING: ${THINKING_POLICY} (R7-think AC1; arm${shown.length > 1 ? 's' : ''} ${shown.join(', ')} run${shown.length > 1 ? '' : 's'} the model's default thinking for ${prof.model}; thinking turns/blocks are a report-only metric: record.thinking, SUMMARY, verdict and grid lines; they never invalidate or void a run)`);
@@ -1169,7 +1191,6 @@ export function planText(opts) {
     ...shown.map((a) => { const cx = ctxOf(a); return `  ${a} routes ANTHROPIC_BASE_URL through /${a}/anthropic: ${JSON.stringify(Object.keys(captureEnv({ ...cx, capture: { baseUrl: (arm, pr) => `http://127.0.0.1:PORT/${arm}/${pr}` } })))}`; }));
   out.push('', `SHELL / WEB (${shown.filter((a) => a !== 'A').join('/') || 'no B/C arm'} run${shown.filter((a) => a !== 'A').length === 1 ? 's' : ''} the PRODUCT DEFAULT shell allowlist${has('A') ? '; A has unrestricted Bash' : ''})`, `  ${shown.filter((a) => a !== 'A').join('/')} shell: ${SHELL_POLICY}   (cited ${cite(/^export const SHELL_POLICY/)}; supersedes the R3 "no curl" rule by owner direction, R6-prep AC2)`, '  Shell egress: open (product default: allow-all loopback proxy; no srt policy is pre-written). The actual mode is read back after each B/C run and recorded as record.shellEgress.', `  ${shown.filter((a) => a !== 'A').join('/')} srt network allowlist extension: ${SRT_EXTRA_DOMAINS.join(',') || '(none)'}   (cited ${cite(/^export const SRT_EXTRA_DOMAINS/)})`, ...(has('A') ? [`  A tools: ${A_TOOLS}`] : []),
     `  WEB: ${[has('A') ? 'A has the native WebFetch/WebSearch' : null, has('B') ? 'B has the engine-executed web_fetch tool (R6B-web, advertised through the claudecli bridge) and the shell' : null, has('C') ? 'C additionally exposes Anthropic server-side web tools (web_fetch/web_search) by default' : null].filter(Boolean).join('; ')}. The web-fetch field (w1_web) is scored with one rule for every arm that can fetch; any tool-surface asymmetry is recorded, not equalised.`);
-  out.push('', 'PACING', `  before EVERY live run: claude -p /usage (0 model calls asserted); refuse at 5h session >= ${L.PACING.fiveHourMax * 100}% (no 7-day check), any non-allowed rate-limit status, or an unreadable reading (fail closed)`);
   const wtSha = spawnSync('git', ['-C', opts.wt, 'rev-parse', '--short', 'HEAD'], { encoding: 'utf8' }).stdout?.trim() || '(not a git checkout)';
   const dist = path.join(opts.wt, 'entrypoint/agent-mcp/dist/src/index.js'); const srcDir = path.join(opts.wt, 'entrypoint/agent-mcp/src');
   const mt = (p) => { try { return fs.statSync(p).mtime.toISOString(); } catch { return 'MISSING'; } };
@@ -1445,22 +1466,16 @@ export async function selfCheck({ log = console.log, opts = parseArgs([]) } = {}
     const noYes = spawnSync(process.execPath, [SELF, '--live'], { encoding: 'utf8' }); chk('--live without --yes exits 2 before doing anything', noYes.status === 2, `status ${noYes.status}`);
     // the live loop reaches the model only through rawRun (static)
     const src = fs.readFileSync(SELF, 'utf8');
-    { const fin = path.join(work, 'rec-finished.json'), abt = path.join(work, 'rec-aborted.json'); writeJson(fin, { runId: 'X', score: {} }); writeJson(abt, { runId: 'Y', aborted: ['5h utilisation 91% >= 90%'] });
-      chk('resume: a finished record is skipped; a pacing/cap-ABORTED record (nothing ran) is retried; a missing/corrupt record is retried', isFinishedRecord(fin) && !isFinishedRecord(abt) && !isFinishedRecord(path.join(work, 'nope.json'))); }
+    { const fin = path.join(work, 'rec-finished.json'), abt = path.join(work, 'rec-aborted.json'); writeJson(fin, { runId: 'X', score: {} }); writeJson(abt, { runId: 'Y', aborted: ['model-run cap reached: 3/3'] });
+      chk('resume: a finished record is skipped; a cap/pre-spawn-ABORTED record (nothing ran) is retried; a missing/corrupt record is retried', isFinishedRecord(fin) && !isFinishedRecord(abt) && !isFinishedRecord(path.join(work, 'nope.json'))); }
     chk('every live model path goes through rawRun (runArmA/runArmBC are only invoked from rawRun)', (src.match(/(?<!function )\brunArm(A|BC)\(ctx\)/g) || []).length === 0 && /\(ctx\.executor \?\? \(ctx\.runDef\.arm === 'A' \? runArmA : runArmBC\)\)\(ctx\)/.test(src) && /reserveModelRun\(ctx\.spec\.runId/.test(src));
 
-    // ============ pacing (item 5) ============
-    log('--- pacing gate (stubbed readings; the real `claude -p /usage` is NOT run here) ---');
-    const rd2 = (s5, w = 10) => () => ({ session_pct: s5, week_pct: w, resets: null, model_calls: 0 });
-    chk('AC1 session 89% -> run allowed', gatePacing(rd2(89)).ok === true);
-    chk('AC1 session 90% -> run refused (>= 90%)', gatePacing(rd2(90)).ok === false && /5h utilisation 90% >= 90%/.test(gatePacing(rd2(90)).verdict.reasons.join()));
-    chk('session 0% -> allowed; 100% -> refused', gatePacing(rd2(0)).ok && !gatePacing(rd2(100)).ok);
-    chk('/usage unreadable (throws) -> refused, fail closed', gatePacing(() => { throw new Error('could not parse session/week percentages from /usage output'); }).ok === false);
-    chk('/usage reading with a non-numeric percentage -> refused', gatePacing(() => ({ session_pct: null, week_pct: 5 })).ok === false && gatePacing(() => ({ session_pct: NaN, week_pct: 5 })).ok === false);
-    chk('AC2 7-day window at 100% -> NOT refused (weekly check removed)', gatePacing(rd2(10, 100)).ok === true && gatePacing(() => ({ session_pct: 10 })).ok === true);
-    const usageSample = 'x\n[{"type":"assistant","message":{"content":[{"type":"text","text":"Current session: 42% used · resets 3pm\\nCurrent week (all models): 9% used"}]}},{"type":"result","num_turns":0,"total_cost_usd":0}]';
-    const pu = L.parseUsageOutput(usageSample); chk('/usage parser reads session/week and 0 model calls from a sample payload', pu.session_pct === 42 && pu.week_pct === 9 && pu.model_calls === 0);
-    chk('runOne calls the gate before every live run (static)', /const gate = gatePacing\(usageReading, state\.rateLimitsSeen\)/.test(src));
+    // ============ no usage-window gate (SCOPE-R9-pacing-gate-removed) ============
+    log('--- no usage-window gate: nothing here reads the account usage window ---');
+    { const needle = new RegExp('(?<![\\w.])/' + 'usage(?![\\w.])'); const srcs = ['drive.mjs', 'lib.mjs', 'gate.mjs', 'judge.mjs', 'preflight.mjs', 'ledger.mjs'].map((f) => [f, fs.readFileSync(path.join(HERE, f), 'utf8')]);
+      const hits = srcs.filter(([, t]) => needle.test(t) || /gate[P]acing|read[U]sageWindow|pac[i]ngVerdict|parse[U]sageOutput/.test(t)).map(([f]) => f);
+      chk('PARITY-R9-cfg AC1: no source of the instrument refers to the usage-window reader or a throttle on it', hits.length === 0, hits.join(','));
+      chk('PARITY-R9-cfg AC1: the live gate order has no usage-window gate and the lib exports none', !GT.GATE_ORDER.includes('pac' + 'ing') && !('read' + 'UsageWindow' in L) && !('PAC' + 'ING' in L)); }
 
     // ============ plan, task set, web surface ============
     log('--- plan / task set / shell ---');
@@ -1518,15 +1533,19 @@ async function runPreflightMode(opts) {
   for (const l of res.legs) console.error(`preflight ${l.arm}: ${l.code} ${l.detail}`);
   console.log(JSON.stringify(res, null, 2)); return res.exitCode;
 }
-/** Live gates in GT.GATE_ORDER (ledger, scope, judgeCredential, preflight, pacing): all read-only or zero-model; any red or throwing gate refuses. */
-async function runLiveGates(opts) {
+/**
+ * Live gates in GT.GATE_ORDER (ledger, scope, models, judgeCredential, preflight): all read-only or zero-model; any red or throwing gate refuses.
+ * `deps.preflight` / `deps.judgeCredential` are injectable so a test can drive the real gate sequence without loading the SDK or reading credentials; the defaults are the real ones.
+ */
+export async function runLiveGates(opts, deps = {}) {
+  const preflight = deps.preflight ?? preflightOnce;
   return GT.runGates({
-    ledger: () => { const r = LG.checkLedgerForLive(opts.round); return { ok: r.ok, reasons: r.reasons }; },
-    scope: () => { const led = LG.readLedger(opts.round); let logText = ''; try { logText = fs.readFileSync(GT.resolveLogPath(REPO_ROOT), 'utf8'); } catch { /* none */ }   // the LOG lives in the MAIN checkout (a worktree's copy lacks the dispatcher's newest headings); resolved lazily so importing drive.mjs spawns nothing
-      return GT.checkScope({ scenarioSha: currentScenarioSha(), previousSha: led.scenarioSha || previousScenarioSha(opts.round), scopeChanges: led.scopeChanges, logText, startedAt: led.startedAt ?? new Date().toISOString() }); },
-    preflight: async () => { const r = await preflightOnce(opts); return { ok: r.ok, reasons: r.legs.filter((l) => l.code !== 'GREEN' && l.code !== 'NOT_PROBEABLE').map((l) => `${l.arm}: ${l.code} ${l.detail}`) }; },
-    judgeCredential: () => { const c = JG.resolveJudgeCredential(); return { ok: c.present, reasons: c.present ? [] : ['no judge credential (ANTHROPIC_API_KEY or ADHD_AGENT_ANTHROPIC_SECRET in env or ~/.adhd/.env): the paid judge would fail after the arms were paid for'] }; },   // presence only, no model call
-    pacing: () => ({ ok: true, reasons: [] }),   // the `claude -p /usage` reading is taken per run inside runOne (gatePacing), still before each reservation
+    ledger: () => { const r = LG.checkLedgerForLive(opts.round, opts.ledgerDir); return { ok: r.ok, reasons: r.reasons }; },
+    scope: () => { const led = LG.readLedger(opts.round, opts.ledgerDir); let logText = ''; try { logText = fs.readFileSync(GT.resolveLogPath(REPO_ROOT), 'utf8'); } catch { /* none */ }   // the LOG lives in the MAIN checkout (a worktree's copy lacks the dispatcher's newest headings); resolved lazily so importing drive.mjs spawns nothing
+      return GT.checkScope({ scenarioSha: currentScenarioSha(), previousSha: led.scenarioSha || previousScenarioSha(opts.round, opts.ledgerDir), scopeChanges: led.scopeChanges, logText, startedAt: led.startedAt ?? new Date().toISOString() }); },
+    models: () => modelsGate(opts),   // SCOPE-R9-model-config: the equal-model guard, config level, before any reservation or spend
+    preflight: async () => { const r = await preflight(opts); return { ok: r.ok, reasons: r.legs.filter((l) => l.code !== 'GREEN' && l.code !== 'NOT_PROBEABLE').map((l) => `${l.arm}: ${l.code} ${l.detail}`) }; },
+    judgeCredential: () => { const c = (deps.judgeCredential ?? JG.resolveJudgeCredential)(); return { ok: c.present, reasons: c.present ? [] : ['no judge credential (ANTHROPIC_API_KEY or ADHD_AGENT_ANTHROPIC_SECRET in env or ~/.adhd/.env): the paid judge would fail after the arms were paid for'] }; },   // presence only, no model call
   });
 }
 /** One record per arm letter for repetition `rep`: arm A is always the canonical A1; B and C are the run of that repetition (rep 1 = the original round, N = the owner-directed retry). */
@@ -1631,7 +1650,11 @@ function reparseJudgeMode(opts) {
 async function main() {
   const opts = parseArgs(process.argv.slice(2));
   if (!opts.mode) { console.error('usage: node drive.mjs --self-check | --print-plan | --check-oracle | --check-lib | --rederive-tools | --rederive-duration | --dry-run | --live --yes | --reparse-judge | --rejudge --run <id> --yes  [--out DIR] [--seed S] [--wt PATH] [--claude PATH] [--capture]'); process.exit(2); }
-  if (['dry-run', 'live', 'print-plan', 'preflight'].includes(opts.mode)) { const prof = roundProfile(opts); if (prof.capture) opts.capture = true; }   // R8: a profile that sets capture forces wire capture ON for the round (ledger.profile.capture); --capture stays the opt-in for every other round
+  if (['dry-run', 'live', 'print-plan', 'preflight'].includes(opts.mode)) {
+    // SCOPE-R9-model-config: an invalid experiment configuration (unknown key, empty / alias / opus id, bad env) refuses here, exit 2, before any gate, reservation, spawn or spend
+    let prof; try { prof = roundProfile(opts); } catch (e) { if (e instanceof EX.ExperimentConfigError) { console.error(`CONFIG REFUSED (exit 2, nothing planned, no model call): ${e.message}`); process.exit(2); } throw e; }
+    if (prof.capture) opts.capture = true;
+  }   // R8: a profile that sets capture forces wire capture ON for the round (ledger.profile.capture); --capture stays the opt-in for every other round
   if (opts.mode === 'self-check') { const r = await selfCheck({ opts }); process.exit(r.ok ? 0 : 1); }
   if (opts.mode === 'check-oracle') { process.exit((await checkOracle()) ? 0 : 1); }
   if (opts.mode === 'check-lib') { const { runLibTests } = await import(pathToFileURL(path.join(HERE, 'libtest.mjs')).href); const r = await runLibTests({ log: console.log }); console.log(`lib self-test: ${r.ok ? 'PASS' : 'FAIL'} ${r.total - r.failed.length}/${r.total}`); process.exit(r.ok ? 0 : 1); }
@@ -1646,13 +1669,12 @@ async function main() {
   if (!dry && !opts.yes) { console.error('--live spends real model quota (hard cap 3 runs per round). Re-run with --yes to confirm.'); process.exit(2); }
   opts.outExplicit = Boolean(opts.out);   // an operator-chosen --out puts the work dir under it (and ancestorLeaks then guards it); the default keeps work under os.tmpdir()
   opts.out = opts.out || path.join(tmpRoot(opts.round), dry ? 'dry/out' : 'live/out');
-  if (!dry) {   // live: gates run BEFORE pacing and BEFORE any ledger reservation or `claude` spawn (R2.AC7); red => exit 3, nothing touched
+  if (!dry) {   // live: gates run BEFORE any ledger reservation or `claude` spawn (R2.AC7); red => exit 3, nothing touched
     const g = await runLiveGates(opts);
     for (const r of g.results) console.error(`gate ${r.gate}: ${r.ok ? 'GREEN' : 'RED'} ${(r.reasons ?? []).join('; ')}`);
     if (!g.ok) { console.error(`LIVE REFUSED by gate ${g.failed} (exit 3); ledger untouched, no model call, no claude spawned`); process.exit(3); }
     LG.initRound(opts.round, { scenarioSha: currentScenarioSha() });
   }
-  opts.realClaude = 'claude';
   if (dry) opts.claude = 'FAKE-SET-PER-RUN';
   const res = await runPlan(opts, dry);
   process.exit(exitCodeFor(res));
