@@ -485,3 +485,11 @@ Not a parity blocker (architect verdict APPROVE, 2026-10-11): shell exit status.
 - B1 quality (single sample, judge haiku, model default sampling): mean 75.125 (spec 85, clarity 85, discipline 84, verification 80, docs 82, reasoning 70, focus 65, report_fidelity 50).
 - Comparability: R5/R6/R7 judge records were produced at temperature 0 and a 1500-token ceiling; they are not like-for-like with R8 judge records.
 - No same-model arm A exists for R8; this is not a parity verdict.
+
+## 2026-10-12T09:37:34Z SCOPE-R8-A-C-complete: run arms A and C on haiku with R8 settings; raw-proxy-log performance analysis
+
+- Owner direction: "do the other 2 on haiku same settings and report the full metric comparison: cost, tools, etc. Then have a performance agent analyze only the raw api proxy logs nothing else and compare the 3 then make recommendations for potential tuning. If filling in the other 2 successfully provides parity, dispatch the follow up and then compare again and follow the original flow for corrections and retest."
+- Scope: one run each of A (native claude -p) and C (agent-mcp anthropic provider), model alias haiku, effort high, thinking default, capture proxy ON for all arms, identical prompt and scenario sha as R8 B1, judge alias haiku (model default sampling, ceiling 8000). A runs first; C only if A's items pass (native-fails-no-iteration rule). B1 (R8) is retained as the B result; no B re-run.
+- Then: a performance agent reads only the raw proxy logs (logs/wire/proxy-<arm>-*.jsonl) for A, B, C and compares and recommends tuning. No other inputs.
+- Parity-conditional follow-up is dispatched only if the grid shows parity; otherwise the original loop (triage, architect after actual runs, product-impact check, implement, rerun) applies.
+- Judge scores remain single samples; comparison against R5/R6 judge records is not like-for-like.
