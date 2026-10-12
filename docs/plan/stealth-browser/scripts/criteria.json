@@ -279,6 +279,15 @@
       "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py mig-cdp --only mig-cdp.4",
       "expect": "exit0",
       "cwd": "repo-root"
+    },
+    {
+      "id": "mig-chrome-manager.1",
+      "phase": "migrate",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py mig-chrome-manager --only mig-chrome-manager.1",
+      "expect": "exit0",
+      "cwd": "repo-root"
     }
   ]
 }

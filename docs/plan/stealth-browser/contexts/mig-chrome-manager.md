@@ -29,7 +29,7 @@ The `ChromeManager` (launch-once, heartbeat, idle shutdown, three-tier safety) e
 
 Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/guard.py` (`python3 docs/plan/stealth-browser/scripts/guard.py mig-chrome-manager --only mig-chrome-manager.N`). None may be deferred. Tests written by this plan cite ticket `8468f7b1` and these ids ([inv:tests-cite]).
 
-_No criteria yet._
+- [mig-chrome-manager.1] Every manifest file exists, keeps every export, stays >=80% line-similar to the source, keeps its must-contain tokens.
 
 ---
 
