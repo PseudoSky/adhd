@@ -23,7 +23,7 @@ _No criteria yet._
 ## Reservations
 
 ```text
-read_only:  []
+read_only:  ["entrypoint/stealth-browser/README.md", "entrypoint/stealth-browser/CHANGELOG.md", "entrypoint/stealth-browser/dist/", "PUBLISHING.md"]
 mutates:    ["docs/plan/stealth-browser/evidence/publish-dry-run.txt", "entrypoint/stealth-browser/package.json"]
 ```
 
