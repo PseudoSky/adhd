@@ -42,7 +42,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 
 ```text
 read_only:  ["entrypoint/stealth-browser/src/api.ts", "entrypoint/stealth-browser/src/index.ts", "entrypoint/stealth-browser/src/legacy.ts", "entrypoint/stealth-browser/src/errors.ts", "entrypoint/backlog/src/", "entrypoint/dispatch-cli/bin/"]
-mutates:    ["entrypoint/stealth-browser/src/server.ts", "entrypoint/stealth-browser/src/cli.ts", "entrypoint/stealth-browser/src/host-projection.ts", "entrypoint/stealth-browser/bin/", "entrypoint/stealth-browser/package.json"]
+mutates:    ["entrypoint/stealth-browser/src/server.ts", "entrypoint/stealth-browser/src/cli.ts", "entrypoint/stealth-browser/src/host-projection.ts", "entrypoint/stealth-browser/bin/", "entrypoint/stealth-browser/package.json", "docs/plan/stealth-browser/evidence/naming-decision.md"]
 ```
 
 ---
