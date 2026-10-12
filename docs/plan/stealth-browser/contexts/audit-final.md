@@ -35,6 +35,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 - [audit-final.3] [dod.3] structural: tracing namespace is `adhd` - singleton never imported, serviceName configured once, every mount carries the plugin (tracing-plugin checks 1,2,3,5 re-run).
 - [audit-final.4] [ref:runner-port] behavior-preserving port conforms to agent-browser/adhd (exports, similarity, tokens)
 - [audit-final.5] [dod.5] structural: the live agent-search source tree is byte-identical to the scaffold-time baseline (cutover is the only state allowed to change it, and it runs after this audit).
+- [audit-final.6] [dod.6] structural: one blind review round, every finding resolved by one implementer, gates re-run green after resolution.
 ---
 
 ## Reservations
