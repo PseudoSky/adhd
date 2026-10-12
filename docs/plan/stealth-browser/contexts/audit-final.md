@@ -39,6 +39,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 - [audit-final.7] [dod.7] structural: docs marketing run PASS, README rewrite receipts-backed (docs-marketing-run and readme-rewrite checks re-run).
 - [audit-final.8] [dod.8] structural: the working tree under entrypoint/stealth-browser and docs/plan/stealth-browser is clean (everything committed) and the main checkout node_modules is untouched.
 - [audit-final.9] Every spec/e2e file cites ticket 8468f7b1 and a valid criterion id (final re-run of the citation rule).
+- [audit-final.ref-backlog-tracing] [ref:backlog-tracing] tracing.ts / usePlugins / no-singleton conformance with entrypoint/backlog/src/tracing.ts
 ---
 
 ## Reservations
