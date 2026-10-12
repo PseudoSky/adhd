@@ -729,6 +729,15 @@
       "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py tests-unit-extract --only tests-unit-extract.2",
       "expect": "exit0",
       "cwd": "repo-root"
+    },
+    {
+      "id": "tests-unit-extract.3",
+      "phase": "verify",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py tests-unit-extract --only tests-unit-extract.3",
+      "expect": "exit0",
+      "cwd": "repo-root"
     }
   ]
 }
