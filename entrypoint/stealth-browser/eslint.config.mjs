@@ -15,10 +15,7 @@ export default [
                 {
                     ignoredFiles: [
                         "{projectRoot}/vite.config.{js,ts,mjs,mts}"
-                    ],
-                    // TEMPORARY(stealth-browser:deps-install): the parser sources land in
-                    // mig-capture-parsers; that state removes this ignore (mig-capture-parsers.6).
-                    ignoredDependencies: ["node-html-parser", "xpath", "@xmldom/xmldom"]
+                    ]
                 }
             ]
         },
