@@ -1593,6 +1593,15 @@
       "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py prod-examples --only prod-examples.1",
       "expect": "exit0",
       "cwd": "repo-root"
+    },
+    {
+      "id": "prod-examples.2",
+      "phase": "surface",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py prod-examples --only prod-examples.2",
+      "expect": "exit0",
+      "cwd": "repo-root"
     }
   ]
 }
