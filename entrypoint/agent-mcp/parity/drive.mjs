@@ -88,12 +88,12 @@ const effortOf = (ctx) => ctx.profile?.effort ?? null;
  *  the request without it and the API default governed.
  */
 export const EFFORT_MECHANISM = Object.freeze({
-  A: 'claude -p --effort <level> (argvA)',
+  A: 'claude -p --effort <level> (argvA) AND CLAUDE_CODE_EFFORT_LEVEL=<level> in the claude -p spawn env (armAEnv; R8-AC: both, so in-process subagent requests are covered too)',
   B: 'CLAUDE_CODE_EFFORT_LEVEL=<level> in the agent-mcp server env, inherited by the claudecli child (serverEnv -> claudecli.ts buildSubprocessEnv)',
   C: 'provider.effort=<level> on the anthropic agent definition (parent and worker) -> providers/anthropic.ts sends it as the Messages API output_config.effort (R8-AC)',
 });
-/** The env that carries the explicit effort level to an arm ({} unless the round profile sets one; only B takes it through the environment). */
-export function effortEnv(ctx) { const e = effortOf(ctx); return e && ctx.runDef.arm === 'B' ? { CLAUDE_CODE_EFFORT_LEVEL: e } : {}; }
+/** The env that carries the explicit effort level to an arm ({} unless the round profile sets one). B takes it ONLY through the environment; A takes it through `--effort` AND the environment (R8-AC: belt and braces so the real CLI's in-process subagent requests carry it too); C takes a request field instead. */
+export function effortEnv(ctx) { const e = effortOf(ctx); return e && (ctx.runDef.arm === 'A' || ctx.runDef.arm === 'B') ? { CLAUDE_CODE_EFFORT_LEVEL: e } : {}; }
 /**
  * R7-think AC1 (owner direction, SCOPE-R7-thinking-default): thinking is NOT forced on any arm. Every arm runs the model's DEFAULT thinking behaviour.
  *  - Arm A (native `claude -p`): the spawn env carries no MAX_THINKING_TOKENS / CLAUDE_CODE_DISABLE_THINKING (lib.cleanEnv is an allowlist that does not pass them
@@ -262,7 +262,7 @@ export function captureEnv(ctx) {
   if (arm !== 'A') { env.ADHD_AGENT_OPENAI_BASE_URL = `${c.baseUrl(arm, 'openai')}/v1`; env.ADHD_AGENT_DEEPSEEK_BASE_URL = `${c.baseUrl(arm, 'deepseek')}/v1`; }
   return env;
 }
-export function armAEnv(ctx) { return L.cleanEnv({ ...L.CLAUDECLI_PROVIDER_ENVS, ...(ctx.dry ? ctx.fakeEnv : {}), ...captureEnv(ctx) }); }
+export function armAEnv(ctx) { return L.cleanEnv({ ...L.CLAUDECLI_PROVIDER_ENVS, ...(ctx.dry ? ctx.fakeEnv : {}), ...effortEnv(ctx), ...captureEnv(ctx) }); }
 async function runArmA(ctx) {
   const claude = ctx.opts.claude;
   const mcpPath = path.join(ctx.runDir, 'mcp-config.json'); writeJson(mcpPath, mcpConfigFor(ctx));
@@ -1131,7 +1131,7 @@ export function planText(opts) {
     out.push(`  C  ${THINKING_MECHANISM.C}`, `       cited at ${cite(/^function providerFor/)} (provider keys: ${Object.keys(cProv).join(',')}; no thinking key) and anthropic.ts (rg "thinking": no match)`, `       provider: ${JSON.stringify(cProv)}`); }
   if (prof.effort) {
     out.push('', `EFFORT: ${prof.effort} set explicitly (R8-effort; recorded in record.config.effort and record.effort, checked against output_config.effort in the captured request bodies when capture is on)`);
-    if (A) out.push(`  A  ${EFFORT_MECHANISM.A.replace('<level>', prof.effort)}   resolved argv carries: ${argvA(A, '<m>', null).join(' ').match(/--effort \S+/)?.[0] ?? '(NONE)'}`);
+    if (A) out.push(`  A  ${EFFORT_MECHANISM.A.replace('<level>', prof.effort)}   resolved argv carries: ${argvA(A, '<m>', null).join(' ').match(/--effort \S+/)?.[0] ?? '(NONE)'}; spawn env carries CLAUDE_CODE_EFFORT_LEVEL=${armAEnv(A).CLAUDE_CODE_EFFORT_LEVEL ?? '(NONE)'}`);
     if (B) out.push(`  B  ${EFFORT_MECHANISM.B.replace('<level>', prof.effort)}   resolved server env carries: CLAUDE_CODE_EFFORT_LEVEL=${serverEnv(B, '<store>', '<logs>').CLAUDE_CODE_EFFORT_LEVEL ?? '(NONE)'}`);
     if (C) out.push(`  C  ${EFFORT_MECHANISM.C}`);
   }

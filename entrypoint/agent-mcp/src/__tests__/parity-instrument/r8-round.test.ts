@@ -155,12 +155,19 @@ describe('R8-model', () => {
 describe('R8-effort', () => {
   const wire = (over: Record<string, unknown> = {}) => ({ requests: 7, mainRequests: 6, mainModels: ['claude-haiku-5-5'], mainEfforts: ['high'], sideEfforts: ['medium'], sideModels: ['claude-haiku-5-5'], ...over });
 
-  it('AC1: effortEnv sets CLAUDE_CODE_EFFORT_LEVEL for arm B only, and only when the profile names an effort (negative controls)', () => {
+  it('AC1: effortEnv sets CLAUDE_CODE_EFFORT_LEVEL for arms A and B (R8-AC: A also carries it so in-process subagent requests inherit the level, next to --effort), never for C, and only when the profile names an effort (negative controls)', () => {
     const ctx = (arm: string, effort: string | null) => ({ runDef: { arm }, profile: { effort } });
     expect(D.effortEnv(ctx('B', 'high'))).toEqual({ CLAUDE_CODE_EFFORT_LEVEL: 'high' });
-    expect(D.effortEnv(ctx('A', 'high'))).toEqual({});
-    expect(D.effortEnv(ctx('C', 'high'))).toEqual({});
+    expect(D.effortEnv(ctx('A', 'high'))).toEqual({ CLAUDE_CODE_EFFORT_LEVEL: 'high' });
+    expect(D.effortEnv(ctx('C', 'high'))).toEqual({});   // C's level is a request field (provider.effort), not an environment variable
+    expect(D.effortEnv(ctx('A', null))).toEqual({});
     expect(D.effortEnv(ctx('B', null))).toEqual({});
+  });
+
+  it('R8-AC AC1: the arm-A spawn env carries CLAUDE_CODE_EFFORT_LEVEL through the allowlist (lib.cleanEnv), and none when no effort is configured', () => {
+    const a = (effort: string | null) => D.armAEnv({ runDef: { arm: 'A' }, profile: { effort }, dry: false });
+    expect(a('high').CLAUDE_CODE_EFFORT_LEVEL).toBe('high');
+    expect(Object.keys(a(null))).not.toContain('CLAUDE_CODE_EFFORT_LEVEL');
   });
 
   it('AC2: effortFacts is verified only when EVERY tool-declaring request carried the level; side calls are listed apart; every other case has its own status', () => {
@@ -376,6 +383,7 @@ describe('R8-AC-effort', () => {
     expect(D.EFFORT_MECHANISM.C).toMatch(/output_config\.effort/);
     expect(D.EFFORT_MECHANISM.C).not.toMatch(/NOT SETTABLE/);
     expect(D.argvA(ctxFor('A'), '<m>', null).join(' ')).toMatch(/--effort high/);
+    expect(D.effortEnv(ctxFor('A'))).toEqual({ CLAUDE_CODE_EFFORT_LEVEL: 'high' });   // R8-AC: A carries the env next to --effort
     expect(D.effortEnv(ctxFor('B'))).toEqual({ CLAUDE_CODE_EFFORT_LEVEL: 'high' });
     expect(D.effortEnv(ctxFor('C'))).toEqual({});
   });
