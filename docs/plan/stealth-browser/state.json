@@ -18,11 +18,11 @@
       "end_ref": "2a7810a75a3984eee79e4a65237386164824aac9"
     },
     "entrypoint-parity": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-10-12T11:06:28.305Z",
-      "done_at": null,
+      "done_at": "2026-10-12T11:07:51.737Z",
       "start_ref": "ec858b3290e786dce0dd9ee535428312f4f6acce",
-      "end_ref": null
+      "end_ref": "4816496bd96c8e8c6cb686afbf8ee827d02abd9f"
     },
     "deps-install": {
       "status": "pending",
@@ -266,6 +266,18 @@
       "audit_criteria_total": 8,
       "by": "pseudosky",
       "note": "generator run: @adhd/stealth-browser at entrypoint/stealth-browser; commit 2a7810a7; guard 0"
+    },
+    {
+      "ts": "2026-10-12T11:07:51.737Z",
+      "from": "entrypoint-parity",
+      "to": "entrypoint-parity",
+      "start_ref": "ec858b3290e786dce0dd9ee535428312f4f6acce",
+      "end_ref": "4816496bd96c8e8c6cb686afbf8ee827d02abd9f",
+      "audit_exit": 0,
+      "audit_criteria_passed": 7,
+      "audit_criteria_total": 7,
+      "by": "pseudosky",
+      "note": "parity files/targets/metadata/engines added; guard 7/7 PASS, lint exit 0"
     }
   ],
   "amendment_log": [],
@@ -274,7 +286,7 @@
     "version": "0.8.35",
     "hash": "0b6bc1f3d70e"
   },
-  "current_state": "entrypoint-parity",
+  "current_state": "deps-install",
   "dod_provenance": {
     "confirmed_at": "2026-10-12T10:24:50.808Z",
     "by": "pseudosky",
