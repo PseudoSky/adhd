@@ -341,6 +341,20 @@
       ],
       "context": "contexts/audit-migration-blind.md",
       "notes": "executor=code-reviewer tier=sonnet/high"
+    },
+    "resolve-findings": {
+      "kind": "work",
+      "phase": "remediate",
+      "depends_on": [
+        "audit-migration-blind"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py resolve-findings",
+      "artifacts": [
+        "entrypoint/stealth-browser/",
+        "docs/plan/stealth-browser/review/RESOLUTION.json"
+      ],
+      "context": "contexts/resolve-findings.md",
+      "notes": "executor=typescript-pro tier=sonnet/high"
     }
   },
   "authored_with": {
