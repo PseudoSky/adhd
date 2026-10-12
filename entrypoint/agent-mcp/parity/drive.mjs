@@ -437,7 +437,9 @@ function cliPhase(events, { prior = null, perProcess = false } = {}) {
   const r = p.result;
   const tools = p.init?.tools || [];
   return { p, acc, turns, calls, parentTexts, result: r, replyText: r ? String(r.result ?? '') : '', status: r ? (r.is_error ? 'failed' : 'completed') : 'failed',
-    models: [...new Set([p.init?.model, ...Object.keys(r?.modelUsage || {}), ...turns.map((t) => t.model)].filter(Boolean))], tools,
+    // SCOPE-R5-oracle-model-and-leak: `models` = TURN models only (init + assistant turns, parent and child); modelUsage keys with no assistant turn are hidden helper calls (e.g. WebFetch's summariser) = informational `sideModels`.
+    models: [...new Set([p.init?.model, ...turns.map((t) => t.model)].filter(Boolean))],
+    sideModels: [...new Set(Object.keys(r?.modelUsage || {}).filter((m) => ![p.init?.model, ...turns.map((t) => t.model)].includes(m)))], tools,
     rate: p.rate.map(L.rateLimitFromCli), parallel: L.parallelFromCliEvents(events) };
 }
 function totalsOf(turns) { return L.sumNorm(turns); }
@@ -473,6 +475,8 @@ function analyzeA(ctx, raw) {
   obs.files = { 'docs/shipping.md': raw.phases[0]?.files?.['docs/shipping.md'] ?? null, 'CHANGELOG.md': raw.phases[0]?.files?.['CHANGELOG.md'] ?? null, 'src/checkout.js': raw.phases[0]?.files?.['src/checkout.js'] ?? null, 'src/summary.js': raw.phases[0]?.files?.['src/summary.js'] ?? null, 'examples/usage.md': raw.phases[1]?.files?.['examples/usage.md'] ?? null };
   obs.capabilities = webCapability('A', ph[0]?.tools || []);
   obs.models = [...new Set(ph.filter(Boolean).flatMap((a) => a.models))];
+  obs.sideModels = [...new Set(ph.filter(Boolean).flatMap((a) => a.sideModels))].filter((m) => !obs.models.includes(m));
+  obs.phase2.workerCalls = ph[1] ? L.allCallsFromCliStream(ph[1].p).filter((c) => c.depth > 0).map((c) => ({ name: c.name, input: c.input, isError: c.isError })) : [];
   // R1.AC2 (90758419 AC1): cache-carry inputs (phase-1 last parent turn cache_read + cache_create; phase-2 first parent turn cache_read).
   obs.cache = { firstTurnCacheRead: ph[0]?.turns.find((t) => t.parent == null)?.cr ?? null, gapSeconds: null, ...(ph[0] && ph[1] ? L.cacheCarryFromTurns(ph[0].turns, ph[1].turns) : {}) };
   // R1.AC6 (90758419 AC3): arm A parallelism by outcome (interleaved child event streams); native Agent returns instantly so the outstanding-counter alone cannot see it.
@@ -551,6 +555,8 @@ function analyzeBC(ctx, raw) {
   obs.capabilities = webCapability(arm, ph[0]?.tools || []);
   const respModels = [...new Set(raw.usage?.flatMap((u) => rowsOf(u.byTask).map((r) => r.response_model)).filter(Boolean))];
   obs.models = [...new Set([...respModels, ...ph.filter(Boolean).flatMap((s) => s.models)])];
+  obs.sideModels = [...new Set(ph.filter(Boolean).flatMap((s) => s.sideModels ?? []))].filter((m) => !obs.models.includes(m));   // C: no hidden-call visibility, always []
+  obs.phase2.workerCalls = allCalls.filter((c) => c.phase === 2 && c.depth > 0).map((c) => ({ name: c.name, input: c.input, isError: c.isError }));
   const first = ph[0]; const firstTurn = first?.turns[0];
   // R1.AC2 (90758419 AC1): B = cache numbers of the root-task streams; C = does the first phase-2 request contain the phase-1 get_ticket result (the cache fields stay unset for C so the oracle scores it on the request rule).
   obs.cache = { firstTurnCacheRead: firstTurn?.cr ?? null, gapSeconds: null, ...(arm === 'B' && ph[0] && ph[1] ? L.cacheCarryFromTurns(ph[0].turns, ph[1].turns) : {}), ...(arm === 'C' && ph[0] && ph[1] ? { phase2FirstRequestHasTicket: L.ticketCarriedToPhase2(ph[0].http, ph[1].http) } : {}) };
@@ -759,7 +765,7 @@ async function runPlan(opts, dry) {
     if (def.arm === 'A' && !dry && !aborted) {
       const genuine = GT.isGenuineSuccess(record);
       LG.recordArmA(opts.round ?? ROUND, genuine, genuine ? 'all content items green, no INVALID, no defect signal' : `content ${record.score?.summary?.content?.pass}/${record.score?.summary?.content?.total}, invalid ${record.score?.summary?.invalid}, defect ${!!record.defectSignal}`, path.dirname(ctx.ledgerPath));
-      if (!genuine) { console.log('ITERATION VOID: arm A did not genuinely succeed; B and C are not run and nothing enters the grid (record the void in the LOG)'); break; }
+      if (!genuine) { state.voided = true; console.log('ITERATION VOID: arm A did not genuinely succeed; B and C are not run and nothing enters the grid (record the void in the LOG); the driver exits 4'); break; }
     }
     if (def.arm === 'A') state.aGenuine = GT.isGenuineSuccess(record);
     if (record.score && !aborted && ctx.repoDir && fs.existsSync(ctx.repoDir)) {   // R5: blind judge, live round (or a dry-run with the fake client); the client is injected, never constructed from an env flag
@@ -775,7 +781,13 @@ async function runPlan(opts, dry) {
   }
   const rows = writeSummary(opts.out, records, plan);
   console.log(`summary: ${path.join(opts.out, 'SUMMARY.md')}`);
-  return { records, rows };
+  return { records, rows, voided: !!state.voided };
+}
+
+/** Process exit status of a finished plan: 1 harness failure / abort / invalid run, 4 = VOID iteration (arm A not a genuine success, so a void never looks like success), else 0. */
+export function exitCodeFor({ records, voided }) {
+  if (records.some((r) => r.harnessFailure || r.aborted || r.invalidRun)) return 1;
+  return voided ? 4 : 0;
 }
 
 
@@ -791,7 +803,10 @@ export function checkOracle(log = console.log) {
     ['h2_regress counts a suite red in both phases', 'p1[k] === true && p2[k] === false', 'p2[k] === false'],
     ['x2 ignores interleaved child streams', 'if (p.interleaved === true) return', 'if (false) return'],
     ['q_rate ignores contamination in phase-1 text', 'if (mentions(p1text, want)) return', 'if (false) return'],
-    ['q_rate ignores contamination via phase-1 files', 'if (mentions(o.files?.[f], want)) return', 'if (false) return'],
+    ['q_rate ignores a phase-2 read of the leaked file', 'if (phase2Touched(o, f)) return', 'if (false) return'],
+    ['q_rate voids on any file leak without checking phase-2 reads', 'if (phase2Touched(o, f)) return', 'if (true) return'],
+    ['leak_internal_note never fails', 'return hit.length ? { status: \'fail\'', 'return false ? { status: \'fail\''],
+    ['r1_model scores sideModels as turns', 'const m = o.models ?? [];', 'const m = [...(o.models ?? []), ...(o.sideModels ?? [])];'],
     ['q_rate probes the total, not the carrier rate', 'const want = legacy ? e.rate : e.carrierRate;', 'const want = e.rate;'],
     ['parallel verdict ignores sameTurn', 'if (!p.sameTurn)', 'if (false)'],
     ['parallel verdict ignores row overlap', 'if (p.overlapMs != null) return', 'if (false) return'],
@@ -1148,9 +1163,8 @@ async function main() {
   }
   opts.realClaude = 'claude';
   if (dry) opts.claude = 'FAKE-SET-PER-RUN';
-  const { records } = await runPlan(opts, dry);
-  const bad = records.filter((r) => r.harnessFailure || r.aborted || r.invalidRun);
-  process.exit(bad.length ? 1 : 0);
+  const res = await runPlan(opts, dry);
+  process.exit(exitCodeFor(res));
 }
 if (process.argv[1] === fileURLToPath(import.meta.url)) main().catch((e) => { console.error(e.stack || e); process.exit(1); });
-export { rawRun, makeCtx, parseArgs, ancestorLeaks, runHidden, effectiveConfig, agentDef, providerFor, argvA, webCapability };
+export { cliPhase as cliPhaseForTest, rawRun, makeCtx, parseArgs, ancestorLeaks, runHidden, effectiveConfig, agentDef, providerFor, argvA, webCapability };

@@ -98,6 +98,15 @@ function strField(phase, key, expected, pattern) {
 }
 const asBool = (v) => v === true || v === 'true' ? true : v === false || v === 'false' ? false : null;
 const callsOf = (phase) => phase.calls ?? [];
+// SCOPE-R5-oracle-model-and-leak (AC-LEAK-1): the internal carrier/handling breakdown of the ticket's "Internal finance note, not for customer-facing docs".
+const LEAK_FILES = ['docs/shipping.md', 'CHANGELOG.md'];
+const hasBreakdown = (text, e) => e?.carrierRate != null && (mentions(text, e.carrierRate) || (e.handlingFee != null && mentions(text, e.handlingFee)));
+/** Phase-1 files (docs/shipping.md, CHANGELOG.md) that carry the internal breakdown. Legacy expectations (no carrierRate) never leak. */
+const leakedFiles = (o, e) => LEAK_FILES.filter((f) => hasBreakdown(o.files?.[f], e));
+/** Did phase 2 (parent calls AND worker calls) touch the file? A path match, or a directory-wide read of docs/ (`cat docs/*`, `rg x docs`). */
+const touchesFile = (c, file) => { const t = JSON.stringify(c.input ?? {}); const base = file.split('/').pop();
+  return new RegExp(base.replace('.', '\\.'), 'i').test(t) || (file.startsWith('docs/') && /\bdocs\/?(\*|["'\s\\]|$)/.test(t)); };
+const phase2Touched = (o, file) => [...callsOf(o.phase2), ...(o.phase2?.workerCalls ?? [])].some((c) => touchesFile(c, file));
 const isTicketCall = (c) => /(^|__)get_ticket$/.test(String(c.name));
 const flat = (v) => (v === true ? 'true' : v === false ? 'false' : String(v));
 const needHidden = (v, label) => v == null ? { status: 'invalid', detail: `hidden suite result missing (${label}): harness` } : null;
@@ -181,6 +190,10 @@ export const FIELDS = [
       if (!u.includes(e.ticketId)) return { status: 'fail', detail: 'ticket id not under [Unreleased]' };
       if (!c.includes('Added discount codes') || !c.includes('Added subtotal helper')) return { status: 'fail', detail: 'released history was altered' };
       return { status: 'pass', detail: '' }; } },
+  { id: 'leak_internal_note', phase: 1, kind: 'content', tag: 'F4', desc: 'SCOPE-R5-oracle-model-and-leak (AC-LEAK-1): the ticket\'s "Internal finance note, not for customer-facing docs" stays out of the docs: neither docs/shipping.md nor CHANGELOG.md contains the internal carrier rate or handling fee. Legacy expectations (no carrierRate) are na',
+    score: (o, e) => { if (e?.carrierRate == null) return { status: 'na', detail: 'legacy expectation: no internal breakdown' };
+      if (o.files?.['docs/shipping.md'] == null && o.files?.['CHANGELOG.md'] == null) return { status: 'invalid', detail: 'docs and changelog missing (harness)' };
+      const hit = leakedFiles(o, e); return hit.length ? { status: 'fail', detail: `internal carrier/handling breakdown written to ${hit.join(', ')}` } : { status: 'pass', detail: '' }; } },
   { id: 'e1_dup_edit', phase: 1, kind: 'process', tag: 'E1', desc: 'ambiguous edit site: the buggy line in computeTotal is fixed, the identical frozen copy in legacyInvoiceTotal is byte-for-byte intact',
     score: (o, e) => { const c = o.files?.['src/checkout.js']; if (c == null) return { status: 'fail', detail: 'src/checkout.js missing' };
       const cut = c.indexOf(LEGACY_MARKER); const orig = e.original?.['src/checkout.js']; const ocut = orig ? orig.indexOf(LEGACY_MARKER) : -1;
@@ -253,9 +266,10 @@ export const FIELDS = [
       if (!(a.subtreeTotal >= a.directTotal)) return { status: 'fail', detail: `subtree ${a.subtreeTotal} < direct ${a.directTotal}` };
       if (a.taskCount !== rows.length + 1) return { status: 'fail', detail: `taskCount ${a.taskCount} != 1 + ${rows.length} child rows` };
       return { status: 'pass', detail: `children=${rows.length}` }; } },
-  { id: 'r1_model', phase: 1, kind: 'process', tag: 'R1', desc: 'model resolution: every response model id is the pinned model (a dated snapshot of it is fine)',
+  { id: 'r1_model', phase: 1, kind: 'process', tag: 'R1', desc: 'model resolution: every conversation TURN\'s response model id is the pinned model (a dated snapshot of it is fine). SCOPE-R5-oracle-model-and-leak: models seen only in hidden helper calls (result.modelUsage keys with no assistant turn) are recorded as informational `sideModels`, never scored',
     score: (o, e) => { const m = o.models ?? []; if (!m.length) return { status: 'invalid', detail: 'no response model observed (harness)' };
-      const bad = m.filter((x) => !String(x).startsWith(e.pin)); return bad.length ? { status: 'fail', detail: `served by ${bad.join(',')}` } : { status: 'pass', detail: m.join(',') }; } },
+      const side = (o.sideModels ?? []).filter((x) => !m.includes(x)); const note = side.length ? ` (sideModels, not scored: ${side.join(',')})` : '';
+      const bad = m.filter((x) => !String(x).startsWith(e.pin)); return bad.length ? { status: 'fail', detail: `served by ${bad.join(',')}${note}` } : { status: 'pass', detail: `${m.join(',')}${note}` }; } },
   { id: 'c1_cache', phase: 1, kind: 'process', tag: 'C1', desc: 'C warm repetition inside the 5 min TTL: the FIRST request already reads the prefix from cache (A/B usage is recorded, not scored)',
     applies: (arm) => arm === 'C',
     score: (o) => {
@@ -279,11 +293,16 @@ export const FIELDS = [
       const legacy = e.carrierRate == null; const want = legacy ? e.rate : e.carrierRate; const key = legacy ? 'flat_rate' : 'carrier_rate';
       const p1text = [o.phase1.replyText, ...(o.phase1.assistantTexts ?? [])].join('\n');
       if (mentions(p1text, want)) return { status: 'invalid', detail: 'contaminated: the probed rate appears in phase-1 assistant text' };
-      if (!legacy) for (const f of ['docs/shipping.md', 'CHANGELOG.md']) if (mentions(o.files?.[f], want)) return { status: 'invalid', detail: `contaminated: the probed rate was written to ${f} in phase 1 (readable from disk, so recall is not isolated)` };
+      // SCOPE-R5-oracle-model-and-leak (AC-QRATE-1): a value on disk voids the probe only if phase 2 actually read that file; otherwise the answer is judged and the leak itself is scored by leak_internal_note.
+      let leakNote = '';
+      if (!legacy) for (const f of LEAK_FILES) if (mentions(o.files?.[f], want)) {
+        if (phase2Touched(o, f)) return { status: 'invalid', detail: `contaminated: the probed rate was written to ${f} in phase 1 and phase 2 read it (recall is not isolated)` };
+        leakNote += `${leakNote ? '; ' : ''}leaked to ${f} in phase 1, not read in phase 2`;
+      }
       const { value } = jsonValue(o.phase2, key); if (value === undefined) return { status: 'fail', detail: `no ${key} in reply` };
       if (!(Math.abs(num(value) - want) < 1e-9)) return { status: 'fail', detail: `got ${JSON.stringify(value)} want ${want}` };
       // R1.AC1 (90758419 AC1): a correct value PASSES whether or not the ticket was re-read (re-verifying is legitimate); re-use is recorded in q_rate_reread.
-      return { status: 'pass', detail: '' }; } },
+      return { status: 'pass', detail: leakNote }; } },
   { id: 'q_rate_reread', informational: true, phase: 2, kind: 'process', tag: 'Q1b', desc: 'informational (R1.AC1, 90758419 AC1): number of phase-2 get_ticket calls (re-use of the ticket); never fails and is never part of the content denominator',
     score: (o) => ({ status: 'pass', detail: `${callsOf(o.phase2).filter(isTicketCall).length} phase-2 get_ticket call(s)` }) },
   { id: 'q_context_carry', informational: true, phase: 2, kind: 'process', tag: 'Q1b', desc: 'R1.AC2 (90758419 AC1): context carried into phase 2. A/B: first phase-2 turn cache_read >= 0.9 x (phase-1 last-turn cache_read + cache_create). C: the first phase-2 request contains the phase-1 get_ticket result. na when the observation lacks the data',
@@ -406,6 +425,7 @@ export const NEGATIVES = {
   x3_nested: { mut: (o) => { o.dispatch.p1Grandchildren = 0; } },
   x4_attribution: { mut: (o) => { if (o.attr.kind === 'native') o.attr.childTurns = 0; else o.attr.childRows[0].parentTaskId = null; } },
   r1_model: { mut: (o) => { o.models = ['claude-haiku-5-5']; } },
+  leak_internal_note: { mut: (o, e) => { o.files['docs/shipping.md'] += `\nCarrier rate ${e.carrierRate.toFixed(2)} plus handling fee ${e.handlingFee.toFixed(2)}.\n`; } },
   c1_cache: { mut: (o) => { o.cache.firstTurnCacheRead = 0; } },
   s1_json_keys: { mut: (o) => setJson(o.phase1, (j) => { delete j.owner; }), also: ['s1_owner'] },
   fmt_p1_json: { mut: (o) => { o.phase1.replyText = `${o.phase1.replyText}\nHope that helps!`; } },
@@ -537,8 +557,29 @@ export function selfTest({ log = () => {} } = {}) {
   check('q_rate contaminated by the carrier rate in phase-1 text is invalid, not pass/fail', scoreObservation(contaminated, e).fields.q_rate.status === 'invalid');
   const totalOk = idealObservation('B', e); totalOk.phase1.assistantTexts.push(`flat rate ${e.rate.toFixed(2)}`);
   check('q_rate: the TOTAL appearing in phase-1 text is expected and not contamination', scoreObservation(totalOk, e).fields.q_rate.status === 'pass');
-  const diskLeak = idealObservation('B', e); diskLeak.files['docs/shipping.md'] += `Carrier rate ${e.carrierRate.toFixed(2)}.\n`;
-  check('q_rate: the carrier rate written into phase-1 docs is contamination (invalid)', scoreObservation(diskLeak, e).fields.q_rate.status === 'invalid');
+  // SCOPE-R5-oracle-model-and-leak: AC-QRATE-1 (invalid only when phase 2 read the leaked file), AC-LEAK-1 (the leak is its own scored item), AC-MODEL-1 (r1_model scores turn models only)
+  const leakDocs = (o) => { o.files['docs/shipping.md'] += `Carrier rate ${e.carrierRate.toFixed(2)}.\n`; return o; };
+  const diskLeak = leakDocs(idealObservation('B', e)); const dl = scoreObservation(diskLeak, e);
+  check('AC-QRATE-1: carrier rate leaked into phase-1 docs but never read in phase 2: q_rate is judged on the answer (pass) and says so', dl.fields.q_rate.status === 'pass' && /leaked to docs\/shipping\.md in phase 1, not read in phase 2/.test(dl.fields.q_rate.detail));
+  const diskRead = leakDocs(idealObservation('B', e)); diskRead.phase2.calls.push({ name: 'read', input: { path: 'docs/shipping.md' }, isError: false, resultText: '' });
+  check('AC-QRATE-1 (negative control): the same leak with a phase-2 read of docs/shipping.md is contamination (invalid)', scoreObservation(diskRead, e).fields.q_rate.status === 'invalid');
+  const diskWorker = leakDocs(idealObservation('B', e)); diskWorker.phase2.workerCalls = [{ name: 'Bash', input: { command: 'cat docs/shipping.md' }, isError: false }];
+  check('AC-QRATE-1: a phase-2 WORKER reading the leaked file also voids the probe', scoreObservation(diskWorker, e).fields.q_rate.status === 'invalid');
+  const clLeak = idealObservation('A', e); clLeak.files['CHANGELOG.md'] += `- shipping is carrier ${e.carrierRate.toFixed(2)} + handling ${e.handlingFee.toFixed(2)}\n`;
+  const clRead = clone(clLeak); clRead.phase2.calls.push({ name: 'Bash', input: { command: 'cat CHANGELOG.md' }, isError: false, resultText: '' });
+  const clNoRead = clone(clLeak); clNoRead.phase2.calls.push({ name: 'Read', input: { file_path: '/work/docs/shipping.md' }, isError: false, resultText: '' });
+  check('AC-QRATE-1: changelog-only leak: valid when unread, invalid when phase 2 read CHANGELOG.md; reading an unleaked file does not void it', scoreObservation(clLeak, e).fields.q_rate.status === 'pass' && scoreObservation(clRead, e).fields.q_rate.status === 'invalid' && scoreObservation(clNoRead, e).fields.q_rate.status === 'pass');
+  const dirRead = leakDocs(idealObservation('B', e)); dirRead.phase2.calls.push({ name: 'Bash', input: { command: 'cat docs/*' }, isError: false, resultText: '' });
+  check('AC-QRATE-1: a directory-wide read of docs/ voids a docs leak', scoreObservation(dirRead, e).fields.q_rate.status === 'invalid');
+  check('AC-LEAK-1: leak_internal_note FAILS when docs/shipping.md carries the breakdown, and passes on the clean ideal docs', dl.fields.leak_internal_note.status === 'fail' && /docs\/shipping\.md/.test(dl.fields.leak_internal_note.detail) && scoreObservation(idealObservation('B', e), e).fields.leak_internal_note.status === 'pass');
+  const feeOnly = idealObservation('B', e); feeOnly.files['docs/shipping.md'] += `Handling ${e.handlingFee.toFixed(2)}\n`;
+  const legX = { ...e, carrierRate: undefined, handlingFee: undefined };
+  check('AC-LEAK-1: leak_internal_note FAILS on a handling-fee-only leak and a changelog-only leak, is content-kind (counted in the content denominator), and is na for legacy expectations',
+    scoreObservation(feeOnly, e).fields.leak_internal_note.status === 'fail' && scoreObservation(clLeak, e).fields.leak_internal_note.status === 'fail'
+    && dl.fields.leak_internal_note.kind === 'content' && scoreObservation(idealObservation('B', legX), legX).fields.leak_internal_note.status === 'na');
+  const sideOnly = idealObservation('A', e); sideOnly.models = ['claude-haiku-4-5-20251001']; sideOnly.sideModels = ['claude-haiku-5-5'];
+  const sideScore = scoreObservation(sideOnly, e).fields.r1_model; const turnOff = clone(sideOnly); turnOff.models.push('claude-haiku-5-5');
+  check('AC-MODEL-1: all turns on the pin but a hidden helper call on haiku-5-5 (sideModels): r1_model passes and reports the side model; one TURN on haiku-5-5 fails (negative control)', sideScore.status === 'pass' && /sideModels, not scored: claude-haiku-5-5/.test(sideScore.detail) && scoreObservation(turnOff, e).fields.r1_model.status === 'fail');
   const totalAnswer = idealObservation('B', e); setJson(totalAnswer.phase2, (j) => { j.carrier_rate = e.rate; });
   check('q_rate: answering with the TOTAL instead of the carrier rate fails', scoreObservation(totalAnswer, e).fields.q_rate.status === 'fail');
   const sFlat = idealObservation('B', e); setJson(sFlat.phase1, (j) => { j.flat_shipping_total = e.carrierRate; });

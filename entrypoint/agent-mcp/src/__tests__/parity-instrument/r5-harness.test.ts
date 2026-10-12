@@ -145,8 +145,7 @@ describe('R5-harness AC4 ledger.releaseRun is audited', () => {
   });
   it('AC4: the committed R5 ledger records the owner-authorized repair', () => {
     const led = LG.readLedger('R5');
-    expect(led.runs).toEqual([]);
-    expect(led.armA).toBeNull();
+    // The ledger moves on as the round proceeds (later attempts add runs); the audited repair must stay in releases[] whatever the live state is.
     expect(led.startedAt).toBeTruthy();
     expect(led.releases?.[0]).toMatchObject({ runId: 'A1' });
     expect(led.releases?.[0].reason).toMatch(/harness fault before any model call, 0 model calls, attempt 2/);
