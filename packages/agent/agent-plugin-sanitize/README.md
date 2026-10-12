@@ -1,6 +1,6 @@
 # @adhd/agent-plugin-sanitize
 
-Sub-agent output sanitization plugin for [@adhd/agent-mcp](https://github.com/anomalyco/adhd/tree/main/packages/ai/agent-mcp). Defends against prompt injection across agent boundaries by modifying delegation tool results before the parent model sees them.
+Sub-agent output sanitization plugin for [@adhd/agent-mcp](../../../entrypoint/agent-mcp/README.md). Defends against prompt injection across agent boundaries by modifying delegation tool results before the parent model sees them.
 
 ## Installation
 
@@ -96,8 +96,12 @@ If you need more than that, the opt-outs are:
 ### Hook contract (for plugin authors)
 
 `transform:server_result_persist` carries `{ sessionId, agentName?, serverBytes, persist }`
-and is emitted once per assistant message, before its provider-native blocks are stored,
-with `persist: true`. Handlers mutate the payload by reference, like
-`transform:tool_result`. A handler may only veto (`persist = false`); it must never set
-`persist` back to `true`, because handlers run in registration order and would undo an
-earlier plugin's veto.
+and is emitted once per assistant message that has server-tool result bytes to store
+(`serverBytes` is their size), before its provider-native blocks are stored, with
+`persist: true`. Handlers mutate the payload by reference, like `transform:tool_result`.
+The veto is sticky: the orchestrator ignores any later write of `persist = true` once a
+handler has set it to `false`, so registration order cannot undo it. If emitting the hook
+throws, the orchestrator fails closed and stores no server-tool results for that message.
+A vetoed message is still replayed with its server-tool results for the rest of the run
+that produced it. See the orchestrator's
+[Provider echo](../agent-engine-orchestrator/README.md#provider-echo-anthropic) section.

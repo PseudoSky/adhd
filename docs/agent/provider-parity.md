@@ -57,10 +57,12 @@ An unpriceable model is never a silent $0. With flat rates configured the turn b
 
 ## Task events
 
-Two typed event types are persisted in `task_events` alongside `MODEL_REQUEST`, `MODEL_RESPONSE`, `TOOL_CALL`, `TOOL_RESULT`, `TOOL_ARG_COERCED`, `TASK_COMPLETED`, `TASK_FAILED` and `TASK_CANCELLED` (`TaskEventType` in `packages/agent/agent-engine-orchestrator/src/validation/task.ts`; DB enum `packages/agent/agent-store-runtime/src/db/schema.ts`):
+Four typed event types are persisted in `task_events` alongside `MODEL_REQUEST`, `MODEL_RESPONSE`, `TOOL_CALL`, `TOOL_RESULT`, `TOOL_ARG_COERCED`, `TASK_COMPLETED`, `TASK_FAILED` and `TASK_CANCELLED` (`TaskEventType` in `packages/agent/agent-engine-orchestrator/src/validation/task.ts`; DB enum `packages/agent/agent-store-runtime/src/db/schema.ts`):
 
 - `budget:unpriced_model`: a model had no rate-card price during cost-cap accounting (above).
 - `provider:builtin_bypass`: a claudecli agent enabled CLI built-ins; emitted once per task (and live built-in set), not per model turn. Payload: `source` (`allowedBuiltinTools` | `compiledTools` | `agent-spec`), `builtins`, `skipped`, `advice`. Silent for the default-deny case. On the `allowedBuiltinTools` and `compiledTools` paths `builtins` is the post-gate set, so it never lists a built-in the permission gate withheld; on the `agent-spec` path it echoes the spec's `tools:` header (or `*` when the header cannot be parsed) without gate filtering.
+- `provider:history_degraded`: the Anthropic API rejected the replayed provider echo (thinking, server tool blocks); the provider retried once without it, so the call succeeded on legacy history. Payload: `reason` (`api_rejected_replay` followed by the block-type keywords the rejection named, never the API text), `echoedMessages` (assistant messages replayed with echoed blocks), `healed` (always `true`: the session's stored echo was deleted and echo stops for the rest of the run). Anthropic only. Details: `packages/agent/agent-engine-orchestrator/README.md#provider-echo-anthropic`.
+- `provider:pause_continued`: the Anthropic provider continued a `pause_turn` response after the `pre:model_request` budget check passed. Payload: `n` (1-based continuation number). The 5th consecutive pause fails the task with `PROVIDER_ERROR` instead of emitting a sixth request. Anthropic only.
 
 ## Built-ins (claudecli)
 
