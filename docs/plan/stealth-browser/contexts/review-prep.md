@@ -32,6 +32,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 - [review-prep.1] review/migration.diff exists, is non-empty and covers entrypoint/stealth-browser + tsconfig.base.json since the scaffold start_ref.
 
 - [review-prep.2] review/INPUT.sha256 equals sha256(migration.diff) and the diff contains no docs/plan or pnpm-lock paths (reviewer sees the migration only).
+- [review-prep.3] review/BRIEF.txt is exactly the single word `Review` (blind review: no context, rationale or review points).
 ---
 
 ## Reservations
