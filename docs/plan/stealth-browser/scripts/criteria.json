@@ -1692,6 +1692,15 @@
       "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py docs-marketing-run --only docs-marketing-run.9",
       "expect": "exit0",
       "cwd": "repo-root"
+    },
+    {
+      "id": "readme-rewrite.6",
+      "phase": "docs",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py readme-rewrite --only readme-rewrite.6",
+      "expect": "exit0",
+      "cwd": "repo-root"
     }
   ]
 }
