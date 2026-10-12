@@ -29,15 +29,36 @@ function rawKeys(text, name) {
 }
 
 /**
- * Parse the judge's raw reply. Contract: ONE JSON object { scores: {<8 keys>: int 1-100}, notes: {<8 keys>: string} } and nothing else.
+ * R5-judge AC1: accept EXACTLY ONE surrounding markdown code fence (opening "```" or "```json", closing "```") around the reply and nothing else outside it.
+ * Returns the trimmed inner text, or the input unchanged when it is not a complete single fence (so an unclosed fence, prose around a fence, or a second fence still fail downstream).
+ */
+function unfence(t) {
+  const m = /^```(?:json)?[ \t]*\r?\n([\s\S]*?)\r?\n?[ \t]*```$/.exec(t);
+  if (!m || m[1].includes('```')) return t;
+  return m[1].trim();
+}
+
+/** True when `t` (starting with "{") has a complete balanced top-level object followed by more non-whitespace text (e.g. two objects). */
+function secondValueFollows(t) {
+  let depth = 0, inStr = false, esc = false;
+  for (let i = 0; i < t.length; i++) { const ch = t[i];
+    if (inStr) { if (esc) esc = false; else if (ch === '\\') esc = true; else if (ch === '"') inStr = false; continue; }
+    if (ch === '"') inStr = true; else if (ch === '{') depth++; else if (ch === '}' && --depth === 0) return t.slice(i + 1).trim().length > 0;
+  }
+  return false;
+}
+
+/**
+ * Parse the judge's raw reply. Contract: ONE JSON object (optionally inside exactly one code fence, R5-judge AC1) { scores: {<8 keys>: int 1-100}, notes: {<8 keys>: string} } and nothing else.
  * Rejects with a distinct JudgeOutputError.code: NOT_JSON, TEXT_OUTSIDE_JSON, BAD_SHAPE, MISSING_KEY, EXTRA_KEY, DUPLICATE_KEY, NON_INTEGER, OUT_OF_RANGE.
  * @returns {{scores:Record<string,number>, notes:Record<string,string>}}
  */
-export function parseJudgeOutput(raw) {
+export function parseJudgeOutput(raw, _mutant) {
   const text = String(raw);
-  const t = text.trim();
+  // `_mutant` is TEST-ONLY (negative controls, R5-judge AC2): 'no-fence' removes the fence tolerance, 'wide' widens it to also accept prose around the JSON. Production callers never pass it.
+  const t = _mutant === 'no-fence' ? text.trim() : _mutant === 'wide' ? (text.slice(text.indexOf('{'), text.lastIndexOf('}') + 1) || text.trim()) : unfence(text.trim());
   if (!t.startsWith('{') || !t.endsWith('}')) { let probe = false; try { JSON.parse(t); probe = true; } catch { /* below */ } throw new JudgeOutputError(probe || /\{[\s\S]*\}/.test(t) ? 'TEXT_OUTSIDE_JSON' : 'NOT_JSON', 'the reply must be exactly one JSON object'); }
-  let obj; try { obj = JSON.parse(t); } catch (e) { throw new JudgeOutputError('NOT_JSON', e.message); }
+  let obj; try { obj = JSON.parse(t); } catch (e) { throw new JudgeOutputError(secondValueFollows(t) ? 'TEXT_OUTSIDE_JSON' : 'NOT_JSON', secondValueFollows(t) ? 'more than one JSON value in the reply' : e.message); }
   if (!obj || typeof obj !== 'object' || Array.isArray(obj) || typeof obj.scores !== 'object' || obj.scores === null || Array.isArray(obj.scores) || typeof obj.notes !== 'object' || obj.notes === null || Array.isArray(obj.notes)) throw new JudgeOutputError('BAD_SHAPE', 'need { "scores": {...}, "notes": {...} }');
   for (const part of ['scores', 'notes']) {
     const keys = rawKeys(t, part); const dup = keys.find((k, i) => keys.indexOf(k) !== i);

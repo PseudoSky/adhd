@@ -10,6 +10,8 @@ import * as F from './fixtures.mjs';
 import * as O from './oracle.mjs';
 import * as OLD from './golden/r4/oracle.r4.frozen.mjs';
 import * as DT from './detectors.mjs';
+import * as QLt from './quality.mjs';
+import * as JGt from './judge.mjs';
 import { buildPlan, ancestorLeaks, runHidden } from './drive.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -318,6 +320,42 @@ export async function runLibTests({ log = console.log } = {}) {
     ok(!DT.egressSilentEmpty([{ ...curl, isError: null, text: null }]).flagged, 'missing result is unknown');
     eq(DT.egressSilentEmpty([{ ...curl, isError: false, text: '[{"type":"text","text":" "}]' }]).callIds, ['tu9']);
     ok(!DT.egressSilentEmpty([{ ...curl, isError: false, text: '[{"type":"text","text":"<title>Example Domain</title>"}]' }]).flagged, 'real content is not blank');
+  });
+
+  // ---- R5-judge: fenced judge replies
+  const goodObj = () => ({ scores: Object.fromEntries(QLt.RUBRIC.map((k, i) => [k, 80 + i])), notes: Object.fromEntries(QLt.RUBRIC.map((k) => [k, `n ${k}`])) });
+  const goodJson = JSON.stringify(goodObj(), null, 2);
+  const codeOf = (raw, mut) => { try { QLt.parseJudgeOutput(raw, mut); return 'OK'; } catch (e) { return e.code; } };
+  await t('R5-judge AC1/AC2: unfenced and fenced (```json and bare ```) single objects parse to identical scores', () => {
+    const base = QLt.parseJudgeOutput(goodJson);
+    for (const raw of ['```json\n' + goodJson + '\n```', '```\n' + goodJson + '\n```', '  ```json\r\n' + goodJson + '\r\n```\n', '```json\n' + goodJson + '```']) eq(QLt.parseJudgeOutput(raw), base, JSON.stringify(raw.slice(0, 12)));
+  });
+  await t('R5-judge AC1/AC2: prose before/after, prose + fence, two objects, unclosed fence, double fence, nested garbage are all TEXT_OUTSIDE_JSON', () => {
+    const f = '```json\n' + goodJson + '\n```';
+    const cases = { 'prose before': 'Here you go:\n' + goodJson, 'prose after': goodJson + '\nHope that helps', 'prose + fence': 'Sure!\n' + f, 'fence + prose': f + '\nDone.', 'two objects': goodJson + '\n' + goodJson, 'two objects in fence': '```json\n' + goodJson + '\n' + goodJson + '\n```', 'unclosed fence': '```json\n' + goodJson, 'double fence': f + '\n' + f, 'garbage in fence': '```json\n{"scores": {}} trailing\n```' };
+    for (const [name, raw] of Object.entries(cases)) eq(codeOf(raw), 'TEXT_OUTSIDE_JSON', name);
+  });
+  await t('R5-judge AC1: schema validation is not loosened inside a fence (missing key, non-integer, out of range, non-string note, no object)', () => {
+    const fence = (o) => '```json\n' + JSON.stringify(o) + '\n```';
+    const miss = goodObj(); delete miss.scores.code_clarity; const frac = goodObj(); frac.scores.code_clarity = 80.5; const big = goodObj(); big.scores.code_clarity = 101; const note = goodObj(); note.notes.code_clarity = 3;
+    eq([codeOf(fence(miss)), codeOf(fence(frac)), codeOf(fence(big)), codeOf(fence(note)), codeOf('```json\nnope\n```')], ['MISSING_KEY', 'NON_INTEGER', 'OUT_OF_RANGE', 'BAD_SHAPE', 'NOT_JSON']);
+  });
+  await t('R5-judge AC2 negative control: removing the fence tolerance turns the fenced positive red; widening it to accept prose turns the prose negatives red', () => {
+    const f = '```json\n' + goodJson + '\n```';
+    ok(codeOf(f) === 'OK' && codeOf(f, 'no-fence') !== 'OK', 'without fence tolerance the fenced reply must be rejected');
+    ok(codeOf('Sure!\n' + f) === 'TEXT_OUTSIDE_JSON' && codeOf('Sure!\n' + f, 'wide') === 'OK', 'widened tolerance must accept prose (and the real parser must not)');
+    ok(codeOf(goodJson + '\nHope that helps', 'wide') === 'OK' && codeOf(goodJson + '\nHope that helps') === 'TEXT_OUTSIDE_JSON', 'prose after');
+  });
+  await t('R5-judge AC3: reparseJudgeRecord rewrites a fenced-failure record offline with reparsedFromRaw + originalError, leaves error-free and unparseable records alone, touches no ledger', () => {
+    const d = fs.mkdtempSync(path.join(tmp, 'rejudge-')); const fA = path.join(d, 'A.json'), fOk = path.join(d, 'B.json'), fBad = path.join(d, 'C.json');
+    fs.writeFileSync(fA, JSON.stringify({ arm: 'A', modelId: 'claude-haiku-4-5', briefSha: 'x', rawResponse: '```json\n' + goodJson + '\n```', error: 'TEXT_OUTSIDE_JSON' }));
+    fs.writeFileSync(fOk, JSON.stringify({ arm: 'B', rawResponse: goodJson, ...QLt.parseJudgeOutput(goodJson) }));
+    fs.writeFileSync(fBad, JSON.stringify({ arm: 'C', rawResponse: 'prose ' + goodJson, error: 'TEXT_OUTSIDE_JSON' }));
+    const r = [JGt.reparseJudgeRecord(fA), JGt.reparseJudgeRecord(fOk), JGt.reparseJudgeRecord(fBad)];
+    eq(r.map((x) => x.status), ['reparsed', 'skipped', 'still-invalid']);
+    const w = JSON.parse(fs.readFileSync(fA, 'utf8'));
+    ok(w.reparsedFromRaw === true && w.originalError === 'TEXT_OUTSIDE_JSON' && !('error' in w) && w.scores.spec_conformance === 80 && w.briefSha === 'x', 'rewritten record');
+    eq(JSON.parse(fs.readFileSync(fBad, 'utf8')).error, 'TEXT_OUTSIDE_JSON');
   });
 
   fs.rmSync(tmp, { recursive: true, force: true });

@@ -8,7 +8,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { RUBRIC, RUBRIC_TEXT, parseJudgeOutput } from './quality.mjs';
+import { RUBRIC, RUBRIC_TEXT, parseJudgeOutput, qualityMean } from './quality.mjs';
 
 export const JUDGE_MODEL = 'claude-haiku-4-5';          // pinned id recorded in every judge record (R5.AC5); the cheapest tier, same as the arms
 export const JUDGE_MAX_TOKENS = 1500;
@@ -84,6 +84,20 @@ export async function runJudge({ client, arm, brief, briefSha, outDir, onCall })
   if (outDir) { fs.mkdirSync(outDir, { recursive: true }); fs.writeFileSync(path.join(outDir, `${arm}.json`), JSON.stringify({ ...record, ...(parsed ?? {}) }, null, 2)); }
   if (onCall) onCall({ arm, modelId: JUDGE_MODEL, inputTokens: record.inputTokens, outputTokens: record.outputTokens, costUsd: record.costUsd, briefSha });
   return parsed ? { ok: true, ...parsed, record } : { ok: false, code: record.error, record };
+}
+
+/**
+ * R5-judge AC3: offline re-parse of a saved judge record (`<dir>/<arm>.json`) that failed to parse. NO model call and NO ledger write (judgeCalls is untouched: the paid call was already logged).
+ * Only records that carry `error` and `rawResponse` are re-parsed. On success the file gains `scores`, `notes`, `reparsedFromRaw: true`, `originalError` (the code it was rejected with) and loses `error`.
+ * @returns {{arm:string, status:'reparsed'|'skipped'|'still-invalid', code?:string, mean?:number, scores?:object}}
+ */
+export function reparseJudgeRecord(file) {
+  const rec = JSON.parse(fs.readFileSync(file, 'utf8')); const arm = rec.arm ?? path.basename(file, '.json');
+  if (!rec.error || typeof rec.rawResponse !== 'string') return { arm, status: 'skipped', code: rec.error ? 'NO_RAW' : 'ALREADY_SCORED' };
+  let parsed; try { parsed = parseJudgeOutput(rec.rawResponse); } catch (e) { return { arm, status: 'still-invalid', code: e.code ?? String(e.message) }; }
+  const { error, ...rest } = rec;
+  fs.writeFileSync(file, JSON.stringify({ ...rest, ...parsed, reparsedFromRaw: true, originalError: error }, null, 2));
+  return { arm, status: 'reparsed', mean: qualityMean(parsed.scores), scores: parsed.scores };
 }
 
 const CLAUDE_CODE_IDENTITY = "You are Claude Code, Anthropic's official CLI for Claude.";

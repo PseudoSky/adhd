@@ -41,7 +41,7 @@ function parseArgs(argv) {
   const o = { round: ROUND, mode: null, out: null, seed: '20261011', wt: DEFAULT_WT, claude: 'claude', yes: false, degraded: null };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]; const v = () => argv[++i];
-    if (['--self-check', '--print-plan', '--check-oracle', '--check-lib', '--dry-run', '--live'].includes(a)) o.mode = a.slice(2);
+    if (['--self-check', '--print-plan', '--check-oracle', '--check-lib', '--dry-run', '--live', '--reparse-judge'].includes(a)) o.mode = a.slice(2);
     else if (['preflight', 'verdict', 'grid'].includes(a)) o.mode = a; else if (a === '--round') { o.round = v(); if (!ROUND_RE.test(o.round)) { console.error(`--round must match ${ROUND_RE} (it names the ledger file and the tmp dir), got ${JSON.stringify(o.round)}`); process.exit(2); } }
     else if (a === '--out') { o.out = path.resolve(v()); o.outExplicit = true; } else if (a === '--seed') o.seed = v(); else if (a === '--wt') o.wt = path.resolve(v()); else if (a === '--claude') o.claude = v();
     else if (a === '--yes') o.yes = true; else if (a === '--degraded') o.degraded = v();
@@ -1226,12 +1226,32 @@ function reportMode(opts) {
   if (opts.mode === 'grid') console.log(GR.renderGrid(recs, rv)); else console.log(MT.formatVerdict(rv));
   return 0;
 }
+/**
+ * `--reparse-judge --round Rn` (R5-judge AC3): ZERO model calls, ledger untouched. Re-parses every saved judge record that failed to parse with the current parser,
+ * writes the scores back into <judgeDir>/<arm>.json (what verdict/grid read) and updates the arm's record.json quality block. Prints per-arm means and the C/A ratio vs the owner gate; never a round verdict.
+ */
+function reparseJudgeMode(opts) {
+  const jd = path.join(tmpRoot(opts.round), 'judge'); let files = []; try { files = fs.readdirSync(jd).filter((f) => /^[A-Z]\d*\.json$/.test(f)).sort(); } catch { /* none */ }
+  if (!files.length) { console.error(`no judge records under ${jd}`); return 1; }
+  for (const f of files) {
+    const r = JG.reparseJudgeRecord(path.join(jd, f)); const arm = r.arm;
+    console.log(`${arm}: ${r.status}${r.code ? ` (${r.code})` : ''}${r.mean != null ? ` mean ${r.mean.toFixed(3)}` : ''}`);
+    if (r.status !== 'reparsed') continue;
+    const dir = path.join(tmpRoot(opts.round), 'live/out/runs'); try { for (const d of fs.readdirSync(dir)) { if (!d.startsWith(arm)) continue; const rf = path.join(dir, d, 'record.json'); const rec = readJson(rf); if (rec.quality && rec.quality.status === 'judge-error') { rec.quality = { ...rec.quality, status: 'scored', mean: r.mean, scores: r.scores, reparsedFromRaw: true, originalError: rec.quality.code }; delete rec.quality.code; fs.writeFileSync(rf, JSON.stringify(rec, null, 2)); } } } catch { /* no run records */ }
+  }
+  const mean = (arm) => { try { return QL.qualityMean(readJson(path.join(jd, `${arm}.json`)).scores); } catch { return null; } };
+  const a = mean('A'), c = mean('C');
+  console.log(`judge means: A=${a == null ? 'n/a' : a.toFixed(3)} C=${c == null ? 'n/a' : c.toFixed(3)}`);
+  if (a != null && c != null) console.log(`C/A = ${(c / a).toFixed(4)} vs owner gate >= ${QL.QUALITY_GATE} (${c / a >= QL.QUALITY_GATE ? 'meets' : 'below'} the quality gate; no round verdict computed)`);
+  return 0;
+}
 async function main() {
   const opts = parseArgs(process.argv.slice(2));
-  if (!opts.mode) { console.error('usage: node drive.mjs --self-check | --print-plan | --check-oracle | --check-lib | --dry-run | --live --yes  [--out DIR] [--seed S] [--wt PATH] [--claude PATH]'); process.exit(2); }
+  if (!opts.mode) { console.error('usage: node drive.mjs --self-check | --print-plan | --check-oracle | --check-lib | --dry-run | --live --yes | --reparse-judge  [--out DIR] [--seed S] [--wt PATH] [--claude PATH]'); process.exit(2); }
   if (opts.mode === 'self-check') { const r = await selfCheck({ opts }); process.exit(r.ok ? 0 : 1); }
   if (opts.mode === 'check-oracle') { process.exit((await checkOracle()) ? 0 : 1); }
   if (opts.mode === 'check-lib') { const { runLibTests } = await import(pathToFileURL(path.join(HERE, 'libtest.mjs')).href); const r = await runLibTests({ log: console.log }); console.log(`lib self-test: ${r.ok ? 'PASS' : 'FAIL'} ${r.total - r.failed.length}/${r.total}`); process.exit(r.ok ? 0 : 1); }
+  if (opts.mode === 'reparse-judge') { process.exit(reparseJudgeMode(opts)); }
   if (opts.mode === 'print-plan') { console.log(planText(opts)); return; }
   if (opts.mode === 'preflight') { process.exit(await runPreflightMode(opts)); }
   if (opts.mode === 'verdict' || opts.mode === 'grid') { process.exit(reportMode(opts)); }
