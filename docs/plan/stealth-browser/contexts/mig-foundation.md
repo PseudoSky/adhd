@@ -33,6 +33,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 
 - [mig-foundation.2] No .ts import specifiers, no reach into agent-search, no Runtime.evaluate/--enable-automation; every relative import resolves.
 - [mig-foundation.3] Only owned paths changed by [psm:mig-foundation] commits; agent-search source tree and main checkout node_modules untouched.
+- [mig-foundation.4] session.ts exports getSessionId AND keeps the getSearchSessionId alias (identical function) for the agent-search cutover.
 ---
 
 ## Reservations
