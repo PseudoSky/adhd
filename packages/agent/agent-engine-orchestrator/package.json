@@ -21,6 +21,7 @@
   },
   "dependencies": {
     "@adhd/agent-base-types": "^2.3.11",
+    "@adhd/agent-core-native-tooling": "^0.0.4",
     "@adhd/agent-core-provider": "^2.2.9",
     "@adhd/agent-store-prompts": "^2.2.3",
     "@adhd/agent-store-runtime": "^2.2.10",

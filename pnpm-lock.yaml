@@ -959,6 +959,9 @@ importers:
       '@adhd/agent-base-types':
         specifier: ^2.3.11
         version: link:../agent-base-types
+      '@adhd/agent-core-native-tooling':
+        specifier: ^0.0.4
+        version: link:../agent-core-native-tooling
       '@adhd/agent-core-provider':
         specifier: ^2.2.9
         version: link:../agent-core-provider

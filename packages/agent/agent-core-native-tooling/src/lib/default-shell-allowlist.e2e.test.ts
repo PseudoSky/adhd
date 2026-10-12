@@ -131,6 +131,8 @@ describe('61358b6f every DEFAULT_SHELL_ALLOW_COMMANDS entry is accepted by the r
       const names = (r.result?.tools ?? []).map((t: { name: string }) => t.name);
       expect(names).toContain('write_file');
       expect(names).toContain('create_directory');
+      expect(names).toContain('edit_file');
+      console.log('EDIT_SCHEMA', JSON.stringify((r.result?.tools ?? []).find((t: { name: string }) => t.name === 'edit_file')));
     } finally {
       await fsClient.close();
     }
@@ -159,4 +161,30 @@ describe('61358b6f every DEFAULT_SHELL_ALLOW_COMMANDS entry is accepted by the r
       await rejecting.close();
     }
   }, STARTUP_MS + CALL_MS * 3);
+  it('R7-guidance AC1: title / heading extraction recipes from the tool guidance work on the real shell (curl | grep -o / head / cut / tr as argv items)', async () => {
+    const PAGE = '<!doctype html><html><head><title>Example Domain</title></head><body>\n<h1 class="x">Main Heading</h1>\n<h2>Sub One</h2><p>text</p></body></html>';
+    const NO_H1 = '<!doctype html><html><head><title>Only Title</title></head><body><p>This domain is for examples.</p></body></html>';
+    const web = createServer((req, res) => res.end(req.url === '/noh1' ? NO_H1 : PAGE));
+    await new Promise<void>((ok) => web.listen(0, '127.0.0.1', ok));
+    const base = `http://127.0.0.1:${(web.address() as AddressInfo).port}`;
+    const call = async (command: string[]): Promise<string> => {
+      const r = await client.request('tools/call', { name: 'shell_execute', arguments: { command, timeout: 8 } }, CALL_MS);
+      expect(r.result?.isError, JSON.stringify(r)).toBe(false);
+      return (r.result?.content ?? []).map((b: { text?: string }) => b.text ?? '').join('\n').trim();
+    };
+    try {
+      expect(await call(['curl', '-fsSL', `${base}/`, '|', 'grep', '-o', '<title>[^<]*'])).toBe('<title>Example Domain');
+      expect(await call(['curl', '-fsSL', `${base}/`, '|', 'grep', '-o', '<title>[^<]*', '|', 'cut', '-c8-'])).toBe('Example Domain');
+      expect(await call(['curl', '-fsSL', `${base}/`, '|', 'grep', '-oE', '<h[12][^>]*>[^<]*'])).toBe('<h1 class="x">Main Heading\n<h2>Sub One');
+      expect(await call(['curl', '-fsSL', `${base}/`, '|', 'grep', '-oE', '<h[12][^>]*>[^<]*', '|', 'head', '-n', '1'])).toBe('<h1 class="x">Main Heading');
+      // no <h1>: the heading grep prints nothing (exit 1, empty), the title grep still finds the title
+      const none = await client.request('tools/call', { name: 'shell_execute', arguments: { command: ['curl', '-fsSL', `${base}/noh1`, '|', 'grep', '-oE', '<h[12][^>]*>[^<]*'], timeout: 8 } }, CALL_MS);
+      const noneText = (none.result?.content ?? []).map((b: { text?: string }) => b.text ?? '').join('\n');
+      console.log('NOH1', JSON.stringify(none.result));
+      expect(noneText).not.toMatch(/<h[12]/);
+      expect(await call(['curl', '-fsSL', `${base}/noh1`, '|', 'grep', '-o', '<title>[^<]*'])).toBe('<title>Only Title');
+    } finally {
+      await new Promise<void>((ok) => web.close(() => ok()));
+    }
+  }, CALL_MS * 10);
 });
