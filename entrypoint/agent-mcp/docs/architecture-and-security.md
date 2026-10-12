@@ -393,7 +393,7 @@ Agent state recovery after a crash is partially implemented. Assume potential da
 2. **Model outputs are partially trusted** — we assume the model generally follows instructions, though creative prompt injection may bypass restrictions
 3. **Filesystem permissions are set correctly** — the host OS permissions are the outer boundary
 4. **Secrets in the environment are protected** — environment variables passed to agents are not logged or persisted in plaintext in messages
-5. **Network connectivity is configured safely** — the network allowlist is the primary control; no external proxy or WAF is assumed
+5. **Network connectivity is configured safely** — the sandboxed shell's egress is OPEN by default (an allow-all 127.0.0.1 forward proxy; through it the shell can also reach agent-mcp's own loopback listeners and the LAN). Set `agent.shell.sandbox.allowedDomains` (or pin an `ADHD_AGENT_SRT_SETTINGS` policy) to restrict it to an allowlist; no external WAF is assumed
 
 ## Related Documentation
 

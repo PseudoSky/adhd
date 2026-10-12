@@ -115,6 +115,27 @@ describe('61358b6f every DEFAULT_SHELL_ALLOW_COMMANDS entry is accepted by the r
     }
   }, CALL_MS * 8);
 
+  it('R5-WEB-SIMPLE AC4: the real fs server exposes write_file AND create_directory, the real shell exposes shell_execute (the names the tool guidance cites)', async () => {
+    const shellTools = await client.request('tools/list', {}, CALL_MS);
+    expect((shellTools.result?.tools ?? []).map((t: { name: string }) => t.name)).toContain('shell_execute');
+    const [fsServer] = resolveNativeTooling({ fs: true, shell: false, dispatch: false }, { cwd: root, sandbox: false }) as Stdio[];
+    const path = `${resolve(__dirname, '../../../../../node_modules/.bin')}${delimiter}${process.env.PATH ?? ''}`;
+    const child = spawn(fsServer.command, fsServer.args ?? [], {
+      cwd: root, detached: true, env: { ...process.env, PATH: path, ...(fsServer.env ?? {}) }, stdio: ['pipe', 'pipe', 'pipe'],
+    });
+    const fsClient = new RpcClient(child);
+    try {
+      await fsClient.request('initialize', { protocolVersion: '2025-11-25', capabilities: {}, clientInfo: { name: 'fs-names-e2e', version: '1' } }, STARTUP_MS);
+      fsClient.notify('notifications/initialized');
+      const r = await fsClient.request('tools/list', {}, CALL_MS);
+      const names = (r.result?.tools ?? []).map((t: { name: string }) => t.name);
+      expect(names).toContain('write_file');
+      expect(names).toContain('create_directory');
+    } finally {
+      await fsClient.close();
+    }
+  }, STARTUP_MS + CALL_MS * 2);
+
   it('61358b6f control: the server DOES reject sed, node and python3 (the entries this list used to carry)', async () => {
     // Teeth: the probe can see a policy rejection. These need an allowlist that includes them.
     const [shell] = resolveNativeTooling(

@@ -19,7 +19,7 @@
  * positive test pass, the control would also pass and go red.
  */
 import { spawn, spawnSync } from 'node:child_process';
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, realpathSync, rmSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { delimiter, join, resolve } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -89,8 +89,9 @@ afterAll(async () => {
 }, 4 * TEARDOWN_GRACE_MS);
 
 /** Provision the agent-mcp run policy (open when `port` is given) and spawn the DEFAULT shell as the engine would. */
-async function startDefaultShell(name: string, port: number | undefined): Promise<InstanceType<typeof RpcClient>> {
+async function startDefaultShell(name: string, port: number | undefined, operatorPolicy?: object): Promise<InstanceType<typeof RpcClient>> {
   const policyPath = join(root, `${name}-srt-policy.json`);
+  if (operatorPolicy) writeFileSync(policyPath, JSON.stringify(operatorPolicy));
   const env = { ...process.env, [SRT_SETTINGS_ENV]: policyPath };
   provisionRunSrtPolicy(cwd, env, undefined, port);
   const ctx = buildNativeToolingContext({ cwd, exitShimRoot: shimRoot });
@@ -149,6 +150,19 @@ describe('R5-WEB-SIMPLE the default shell can curl a public page', () => {
 
   it('R5-WEB-SIMPLE AC3 negative control: with egress closed (PyPI-only srt filter) the same https fetch exits non-zero with the trailer', async () => {
     const c = await startDefaultShell('closed', undefined);
+    const out = await shell(c, ['curl', '-sS', '--max-time', '20', 'https://example.com']);
+    expect(out).not.toContain('Example Domain');
+    const n = out.match(TRAILER)?.[1];
+    expect(n, out).toBeDefined();
+    expect(Number(n)).not.toBe(0);
+  }, TEST_MS);
+
+  it('R5-WEB-SIMPLE AC2 AC3 negative control via config: an operator-pinned policy naming a domain keeps srt\'s filter even WITH the open proxy offered', async () => {
+    const operator = {
+      network: { allowedDomains: ['example.org'], deniedDomains: [] },
+      filesystem: { denyRead: [], allowRead: [], allowWrite: [], denyWrite: [] },
+    };
+    const c = await startDefaultShell('pinned', proxy.port, operator);
     const out = await shell(c, ['curl', '-sS', '--max-time', '20', 'https://example.com']);
     expect(out).not.toContain('Example Domain');
     const n = out.match(TRAILER)?.[1];
