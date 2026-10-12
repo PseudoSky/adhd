@@ -7,6 +7,9 @@ import { StdioMcpClient } from "./stdio-client.js";
 import type { IMcpClient } from "./types.js";
 import { TOOL_NAME_SEPARATOR, normalizeToolName } from "./tool-naming.js";
 import type { EngineConfig, EngineLogger } from "../interfaces.js";
+import { selectionOf } from "../providers/resolve-selection.js";
+import { serverSideToolsForProvider } from "../providers/server-side-tools.js";
+import { WEB_FETCH_SERVER, WebFetchClient, webFetchAdvertised } from "../tools/web-fetch.js";
 
 export class McpClientRegistry {
     private readonly clients = new Map<string, IMcpClient>();
@@ -24,6 +27,13 @@ export class McpClientRegistry {
     private readonly startupFailures = new Map<string, unknown>();
     private readonly toolTargets = new Map<string, { server: string; tool: string }>();
     private readonly logger: EngineLogger;
+    /**
+     * Engine-native `web_fetch` (R6B-web AC2): present only when the agent's provider cannot take
+     * Anthropic's server-side web tools (claudecli, OpenAI-compatible) and `nativeWebTools` is not
+     * `false`. A provider that DOES get the server tools never sees this one, so its tool list is
+     * unchanged.
+     */
+    private readonly webFetch?: WebFetchClient;
 
     constructor(
         private readonly mcpServers: Record<string, McpServerConfig>,
@@ -41,6 +51,21 @@ export class McpClientRegistry {
         logger?: EngineLogger
     ) {
         this.logger = logger ?? { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} } as EngineLogger;
+        if (!this.mcpServers[WEB_FETCH_SERVER] && this.needsClientSideWebFetch()) {
+            this.webFetch = new WebFetchClient({
+                allowedDomains: engineConfig?.webFetch?.allowedDomains,
+                fetchImpl: engineConfig?.wire?.fetch,
+            });
+        }
+    }
+
+    private needsClientSideWebFetch(): boolean {
+        if (this.context?.agentDefinition?.nativeWebTools === false) return false;
+        try {
+            return serverSideToolsForProvider(selectionOf(this.context).providerType, true).length === 0;
+        } catch {
+            return false; // no provider selected: the engine fails closed elsewhere
+        }
     }
 
     private isSelfReferential(name: string, config: McpServerConfig): boolean {
@@ -67,6 +92,7 @@ export class McpClientRegistry {
         const name = this.resolveServerName(rawName);
         const existing = this.clients.get(name);
         if (existing) return existing;
+        if (this.webFetch && name === WEB_FETCH_SERVER) return this.webFetch;
 
         if (this.startupFailures.has(name)) {
             const failure = this.startupFailures.get(name);
@@ -184,6 +210,14 @@ export class McpClientRegistry {
                     "Failed to list tools from MCP server"
                 );
             }
+        }
+
+        if (this.webFetch) {
+            const advertised = webFetchAdvertised();
+            const target = { server: WEB_FETCH_SERVER, tool: advertised.name.slice(WEB_FETCH_SERVER.length + TOOL_NAME_SEPARATOR.length) };
+            this.toolTargets.set(advertised.name, target);
+            this.toolTargets.set(normalizeToolName(advertised.name), target);
+            allTools.push(advertised);
         }
 
         return allTools;

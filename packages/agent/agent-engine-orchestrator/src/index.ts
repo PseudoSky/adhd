@@ -141,3 +141,16 @@ export * from './validation/task.js';
 export * from './validation/usage.js';
 export * from './validation/execution.js';
 export * from './validation/errors.js';
+export {
+  WEB_FETCH_TOOL,
+  WEB_FETCH_SERVER,
+  WEB_FETCH_MAX_BYTES,
+  WEB_FETCH_MAX_TEXT_CHARS,
+  WEB_FETCH_TRUNCATION_MARKER,
+  WebFetchClient,
+  executeWebFetch,
+  extractHtml,
+  hostAllowed,
+  webFetchAdvertised,
+} from './tools/web-fetch.js';
+export type { WebFetchOptions } from './tools/web-fetch.js';

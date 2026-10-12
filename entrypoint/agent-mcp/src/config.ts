@@ -986,6 +986,11 @@ export function toEngineConfig(): EngineConfig {
     queue: { concurrency: env.config.queue.concurrency },
     // Fails loud (RangeError) on a negative / NaN / non-integer / non-numeric cap, before any task runs.
     toolCallConcurrency: parseToolCallConcurrency(env.config.agent.toolCallConcurrency),
+    // R6B-web AC2: the engine-native `web_fetch` honors the SAME egress allow-list as the sandboxed
+    // shell (`agent.shell.sandbox.allowedDomains`). Empty (the default) = open egress.
+    ...(env.config.agent.shell.sandbox.allowedDomains.length > 0
+      ? { webFetch: { allowedDomains: [...env.config.agent.shell.sandbox.allowedDomains] } }
+      : {}),
     toolResult: {
       maxChars: parseToolResultMaxChars(env.config.agent.toolResult.maxChars),
       spill: resolveToolResultSpill(),

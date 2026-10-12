@@ -193,8 +193,14 @@ it can run a real web search/fetch without any client-side executor. The tools
 are emitted as type-tagged entries (`{ type: 'web_search_20250305', name:
 'web_search' }`, `{ type: 'web_fetch_20250910', name: 'web_fetch' }`) and
 executed by the provider. Set `nativeWebTools: false` on the agent definition
-to opt out. Providers without native web tools (openai/claudecli) are
-unaffected.
+to opt out. Providers without native web tools (openai/claudecli) get the
+engine-executed `web_fetch` instead (R6B-web): one definition
+(`WEB_FETCH_TOOL` in `agent-engine-orchestrator/src/tools/web-fetch.ts`),
+advertised as `web__web_fetch` (`mcp__web__web_fetch` through the claudecli
+bridge), fetched by Node in the engine process, returning the same
+`web_fetch_result` shape the Anthropic tool returns. Egress follows
+`agent.shell.sandbox.allowedDomains` (empty = open). Anthropic agents are
+unchanged (no duplicate); `nativeWebTools: false` removes it everywhere.
 
 ### Native tooling for dispatched agents (ADR-0008 / NAT-TOOL-4/6)
 

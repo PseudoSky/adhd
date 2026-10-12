@@ -167,3 +167,15 @@ describe('DEFAULT_PERMISSION_RULES is a FROZEN shared baseline (B3, dispatch-202
     expect(DEFAULT_PERMISSION_RULES['*']).toBe('allow');
   });
 });
+
+describe('R6B-web AC2 — the production gate and egress wiring for the engine-native web_fetch', () => {
+  it('R6B-web AC2: the default gate allows web.web_fetch (a claudecli arm is not silently denied)', () => {
+    expect(defaultPermissionGate({ server: 'web', tool: 'web_fetch', agentDefinition: def({}) })).toBe('allow');
+    // control: the gate is the real matcher, an explicit deny on the server-qualified name wins
+    expect(evaluateNativePermission({ shell: { permissions: { 'web.*': 'deny' } } } as NativeToolingConfig, 'web', 'web_fetch')).toBe('deny');
+  });
+
+  it('R6B-web AC2: toEngineConfig passes no webFetch allow-list by default (open egress, like the shell sandbox)', () => {
+    expect(toEngineConfig().webFetch).toBeUndefined();
+  });
+});

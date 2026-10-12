@@ -1,3 +1,9 @@
+## Unreleased
+
+### 🚀 Features
+
+- **agent-engine-orchestrator:** engine-executed `web_fetch` tool for providers without Anthropic server tools (claudecli, OpenAI-compatible): one shared definition, same `web_fetch_result` shape, egress follows `agent.shell.sandbox.allowedDomains`, Anthropic tool list unchanged (R6B-web AC1-AC4)
+
 ## 2.3.13 (2026-10-11)
 
 ### 🚀 Features

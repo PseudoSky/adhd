@@ -153,6 +153,14 @@ export interface EngineConfig {
    * `task` tool's `background` default.
    */
   toolCallConcurrency?: number;
+  /**
+   * Engine-native `web_fetch` tool (`tools/web-fetch.ts`), advertised to providers that cannot take
+   * Anthropic's server-side web tools. `allowedDomains` is the egress allow-list (srt-style exact
+   * host or `*.suffix`); absent => open egress.
+   */
+  webFetch?: {
+    allowedDomains?: string[];
+  };
   queue: {
     /** Max concurrent background tasks. */
     concurrency: number;
