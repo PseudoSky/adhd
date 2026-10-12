@@ -53,11 +53,11 @@
       "end_ref": "ab610c7a4defc528f1a5690b6f6171ca110b666a"
     },
     "mig-domains-storage": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-10-12T21:28:08.715Z",
-      "done_at": null,
+      "done_at": "2026-10-12T21:30:20.274Z",
       "start_ref": "50be62c9e817379ead6f07f1cb37fbf210636279",
-      "end_ref": null
+      "end_ref": "ecdbcaf12bb457d420a861076c648dcf56865b3a"
     },
     "mig-capture-parsers": {
       "status": "complete",
@@ -362,6 +362,18 @@
       "audit_criteria_total": 4,
       "by": "pseudosky",
       "note": "chrome-manager landed in ab610c7a (index race swept into domains-storage commit); guard 0"
+    },
+    {
+      "ts": "2026-10-12T21:30:20.274Z",
+      "from": "tests-unit-core",
+      "to": "mig-domains-storage",
+      "start_ref": "50be62c9e817379ead6f07f1cb37fbf210636279",
+      "end_ref": "ecdbcaf12bb457d420a861076c648dcf56865b3a",
+      "audit_exit": 0,
+      "audit_criteria_passed": 4,
+      "audit_criteria_total": 4,
+      "by": "pseudosky",
+      "note": "domains+storage b8234c89; guard 0"
     }
   ],
   "amendment_log": [],
@@ -370,7 +382,7 @@
     "version": "0.8.35",
     "hash": "0b6bc1f3d70e"
   },
-  "current_state": "tests-unit-core",
+  "current_state": "mig-queries",
   "dod_provenance": {
     "confirmed_at": "2026-10-12T10:24:50.808Z",
     "by": "pseudosky",
