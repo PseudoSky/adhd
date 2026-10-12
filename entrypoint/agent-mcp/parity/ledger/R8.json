@@ -9,6 +9,18 @@
       "arm": "B",
       "at": "2026-10-12T08:13:21.613Z",
       "pid": 81983
+    },
+    {
+      "runId": "A1",
+      "arm": "A",
+      "at": "2026-10-12T10:02:47.563Z",
+      "pid": 74936
+    },
+    {
+      "runId": "C1",
+      "arm": "C",
+      "at": "2026-10-12T10:04:57.713Z",
+      "pid": 74936
     }
   ],
   "judgeCalls": [
@@ -31,6 +43,25 @@
       "briefSha": "0339bce12256cf6986184bc157908343c750c8ce97f772f4e937abbb3352be26",
       "at": "2026-10-12T08:39:25.673Z",
       "rejudgeOf": "judge-error NOT_JSON"
+    },
+    {
+      "arm": "A",
+      "modelId": "claude-haiku-5-5",
+      "inputTokens": 19850,
+      "outputTokens": 2741,
+      "costUsd": 0.0033555,
+      "briefSha": "9f2a2127b2126bb8e6b129f5fe93f5ea5ba900bb5a3e72521be2b817be573073",
+      "at": "2026-10-12T10:04:35.644Z"
+    },
+    {
+      "arm": "C",
+      "modelId": "claude-haiku-5-5",
+      "inputTokens": 25188,
+      "outputTokens": 2434,
+      "costUsd": 0.0037358,
+      "briefSha": "7fb779241fe049b15a13b56e10243ca0e5b35444449f46b7404160734287791a",
+      "at": "2026-10-12T10:07:19.519Z",
+      "reason": "cap 3 + 2 extra = 5: the two B1 calls (the first was rejected with HTTP 400 on `temperature`, the second was a truncated reply, R8-judge) already count; the A and C runs need one judge call each (judge model: the alias haiku, resolved from the concrete id the arms report before the call), which makes 4; the fifth is held for at most ONE --rejudge of a judge-failed A or C run"
     }
   ],
   "scenarioSha": "56956efb90fc213aaaca7dff6d94f731e94a7b69ad4295e66ddb5fd6e06e4a18",
@@ -42,10 +73,16 @@
     "SCOPE-R6B addendum"
   ],
   "armOrder": [
-    "B"
+    "B",
+    "A",
+    "C"
   ],
   "startedAt": "2026-10-12T07:47:30.000Z",
-  "armA": null,
+  "armA": {
+    "genuine": true,
+    "detail": "all content items green, no INVALID, no defect signal",
+    "at": "2026-10-12T10:04:21.901Z"
+  },
   "releases": [],
   "profile": {
     "arms": [
