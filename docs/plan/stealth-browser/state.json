@@ -18,10 +18,10 @@
       "end_ref": "2a7810a75a3984eee79e4a65237386164824aac9"
     },
     "entrypoint-parity": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-10-12T11:06:28.305Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "ec858b3290e786dce0dd9ee535428312f4f6acce",
       "end_ref": null
     },
     "deps-install": {
