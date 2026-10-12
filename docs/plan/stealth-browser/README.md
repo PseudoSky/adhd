@@ -31,3 +31,5 @@ Extract the Chrome/CDP runner from scratch/agent-browser/adhd into a new generat
   - observable: `tracing-namespace.spec.ts passes and FAILS when src/tracing.ts serviceName is flipped to apigen (guard mutation)`
   - negative-control: `mounting the package-level tracingPlugin singleton emits apigen.* records in the NEGATIVE-CONTROL case`
   - delivered-by: `tracing-plugin, tracing-namespace-proof`
+
+- `[dod.4]` **The migration is behavior-preserving: every manifest file keeps every export, stays >= 80% line-similar to its source, and keeps its stealth and read-only tokens (structural)** — The migration is behavior-preserving: every manifest file keeps every export, stays >= 80% line-similar to its source, and keeps its stealth and read-only tokens.
