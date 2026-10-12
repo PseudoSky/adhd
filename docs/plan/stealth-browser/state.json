@@ -221,5 +221,21 @@
     "version": "0.8.35",
     "hash": "0b6bc1f3d70e"
   },
-  "current_state": "productization-hold"
+  "current_state": "productization-hold",
+  "dod_provenance": {
+    "confirmed_at": "2026-10-12T10:24:50.808Z",
+    "by": "pseudosky",
+    "note": "DoD agreed with dispatcher brief: 9 clauses derived from the verbatim request and demo/DEMO.md",
+    "dod_ids": [
+      "dod.1",
+      "dod.2",
+      "dod.3",
+      "dod.4",
+      "dod.5",
+      "dod.6",
+      "dod.7",
+      "dod.8",
+      "dod.9"
+    ]
+  }
 }
