@@ -508,3 +508,11 @@ Not a parity blocker (architect verdict APPROVE, 2026-10-11): shell exit status.
 ## 2026-10-12T18:53:49Z SCOPE-R9-duration-metric and SCOPE-R9-paired-fixtures
 
 - Owner: "Report both (Recommended)": the old wall-clock metric stays the graded duration metric; phase-sum duration (with server-side wait) and paired fixtures (same fixture values for A_n and C_n) are added as additional reported metrics, pre-registered here before any R9 run. They do not replace the wall metric as the pass bar. R8 results are not restated.
+
+## 2026-10-12T20:21:42Z SCOPE-R9-echo-persistence: persistence design as built (worktree plan/parity-instrument, nothing merged)
+
+- Built per spec-v2: tier T (thinking, text, client tool_use; 128 KiB per message) and tier S (server_tool_use and results; 128 KiB per message, soft 4 MiB per session, all-or-nothing per session) persisted in table message_provider_echo (migration 0017). Defaults: echo.maxMessageBytes 131072, echo.maxSessionBytes 4194304, echo.serverResultTtlMinutes 10 (session-idle TTL; 0 = never persist tier S). Disk redirect for large results was rejected in the design (replay cost, not storage, is the limit; it loses atomicity).
+- Added: degrade-once to legacy history on a narrow echo rejection (self-heal deletes the session's echo rows, event provider:history_degraded), pause_turn continuation loop (5th consecutive pause fails with PROVIDER_ERROR, event provider:pause_continued, budget check per continuation), hook transform:server_result_persist (sanitize plugin vetoes when delegationOnly:false, veto sticky), echo metrics in MODEL_RESPONSE.
+- Worktree commits: 999dd07e, 47c21c41, b9ccaf37, 5d7ec795, 979d3ae7, 8dead130, eb7e5c8f, 8f61e86a, 184ce795, 15d7b698, eff0069b, 4c0d2baf, 6569b74e, 5679ba79, e2633126; docs (S8) in progress.
+- Evidence so far is offline only (contract fake, real provider/engine/store). The gated live test (ADHD_AGENT_LIVE_ECHO=1, owner nix (repo owner)) is written and has NOT been run. S3b (deferred-tail replay) is not built; it is gated on live item (f) or an owner waiver.
+- No R9 live run has started. The Stage 1 retest (A then C, paired fixtures, 2 runs plus 2 judge calls) needs its own scope entry and the owner's go before it spends anything.
