@@ -29,7 +29,7 @@ A binary spec proves the tracing namespace is correct: the configured plugin, dr
 
 Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/guard.py` (`python3 docs/plan/stealth-browser/scripts/guard.py tracing-namespace-proof --only tracing-namespace-proof.N`). None may be deferred. Tests written by this plan cite ticket `8468f7b1` and these ids ([inv:tests-cite]).
 
-_No criteria yet._
+- [tracing-namespace-proof.1] The spec drives the CONFIGURED layer against a real sox-telemetry file sink for a real stealth-browser verb and asserts every record event starts with `adhd.`.
 
 ---
 
