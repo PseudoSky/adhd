@@ -43,6 +43,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 - [agent-search-cutover.3] agent-browser still compiles: `pnpm run build` (tsc --noEmit) exits 0 and `pnpm run test:lifecycle` exits 0 against @adhd/stealth-browser.
 - [agent-search-cutover.4] The live MCP server still works through a REAL MCP stdio client: `node server.mjs` lists the search tools and chrome_status + list_providers return structured results.
 - [agent-search-cutover.5] Scratch repo hygiene: cutover commits are local-only (no push/upstream), staged by explicit path, and touch only agent-browser/adhd/, cdp-query-client.ts, search/queries/, package.json and the cutover docs.
+- [agent-search-cutover.6] (D3) Before consumption: a link: CONSUME target has a built dist (dist/index.js, dist/bin/cli.js, dist/bin/mcp.js) and `node dist/bin/cli.js --help` exits 0 there; agent-browser's node_modules/@adhd/stealth-browser/package.json exists.
 ---
 
 ## Reservations
