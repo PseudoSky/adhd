@@ -32,6 +32,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 - [surface-api.1] src/api.ts exports exactly the six chrome-runner verbs: chromeStatus, launchChrome, shutdownChrome, listPageTargets, checkChromeActivity, getPageContext (async functions only).
 
 - [surface-api.2] chromeStatus returns a type with NON-optional `managed: boolean` and the apigen oneOf-duplicate-boolean warning comment is preserved.
+- [surface-api.3] src/index.ts exports a superset of the old cdp-query-client.ts barrel (minus getLastSearchFromHistory) plus the six verbs.
 ---
 
 ## Reservations
