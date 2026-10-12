@@ -32,6 +32,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 
 - [tests-unit-surface.1] src/test/unit/surface/api.spec.ts and index.spec.ts exist and assert all six verbs and the index export superset.
 
+- [tests-unit-surface.2] Surface specs cite 8468f7b1 and a valid [surface-api.N] id; process/network boundaries are mocked.
 ---
 
 ## Reservations
