@@ -411,6 +411,19 @@
       ],
       "context": "contexts/audit-final.md",
       "notes": "executor=architect-reviewer tier=sonnet/high"
+    },
+    "merge-readiness": {
+      "kind": "work",
+      "phase": "release",
+      "depends_on": [
+        "audit-final"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py merge-readiness",
+      "artifacts": [
+        "docs/plan/stealth-browser/RELEASE-DECISION.md"
+      ],
+      "context": "contexts/merge-readiness.md",
+      "notes": "executor=dispatcher tier=human/dispatcher"
     }
   },
   "authored_with": {
