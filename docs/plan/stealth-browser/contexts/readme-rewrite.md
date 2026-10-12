@@ -31,6 +31,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 
 - [readme-rewrite.1] Only README.md changed by [psm:readme-rewrite] commits.
 
+- [readme-rewrite.2] README has a title, a tagline <= 120 chars, Quickstart, Features, Surfaces and Receipts sections and >= 2 fenced code blocks.
 ---
 
 ## Reservations
