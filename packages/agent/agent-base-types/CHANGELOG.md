@@ -1,3 +1,9 @@
+## Unreleased
+
+### 🚀 Features
+
+- **agent-base-types:** `IProviderEcho`: a side record (provider, producing model, verbatim ordered content blocks) for provider-native assistant content that must be sent back unchanged (thinking, server tool use and results). Deliberately not a field of `Message`, so hook payloads, tracing and UI projections never carry signatures or fetched page content. Additive type only. (R9-hist S0)
+
 ## 2.3.11 (2026-10-11)
 
 ### 🚀 Features

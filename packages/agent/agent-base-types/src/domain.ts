@@ -173,6 +173,27 @@ export interface Message {
   createdAt: string;
 }
 
+/**
+ * Provider-native assistant-turn content that cannot be rebuilt from {@link Message}
+ * (`content` + `toolCalls`) and that the provider API requires to be sent back verbatim:
+ * Anthropic `thinking` / `redacted_thinking` blocks (with their signatures), `server_tool_use`
+ * and the `*_tool_result` blocks the provider executed itself (`web_fetch_tool_result`, ...).
+ *
+ * Deliberately a SIDE record keyed by the assistant `Message.id`, never a field of {@link Message}:
+ * hook payloads (`message:appended`), tracing, the ops log and UI projections would otherwise carry
+ * multi-KB signatures and fetched third-party page content. The blocks are opaque and signed; callers
+ * must not rewrite them (the only permitted edit is the `tool_use.name` re-qualification a provider
+ * applies at replay time). Only the producing provider replays it (R9-hist).
+ */
+export interface IProviderEcho {
+  /** Only this provider replays the echo; any other provider ignores it. */
+  provider: 'anthropic';
+  /** Configured model string of the producing request (not `response.model`); a mismatch disables replay. */
+  model: string;
+  /** `response.content` verbatim, in order, JSON-serialisable. */
+  blocks: ReadonlyArray<Record<string, unknown>>;
+}
+
 import type {
   BindingRetryConfig,
   ModelSlug,

@@ -30,6 +30,7 @@ This was a version bump only for agent-engine-orchestrator to align it with othe
 
 ### 🚀 Features
 
+- **agent-engine-orchestrator:** provider contract gains the optional fields the Anthropic history-fidelity fix is built on (types only, no behavior change): `ProviderChatRequest.echoes` (provider-native assistant content to replay, keyed by assistant `Message.id`) and `beforeContinuation` (awaited before each provider-driven `pause_turn` continuation), and `ProviderChatResponse.echo`, `echoDegraded` and `echoReplay`; `IProviderEcho` is re-exported from `providers/types`. Providers that do not echo are unaffected. (R9-hist S0)
 - **agent-engine-orchestrator:** claudecli retains the CLI session per engine session and resumes it (`--resume --fork-session`, uncovered tail only) for follow-up tasks: second-task 1h cache write 6,312 -> 121 tokens, first-turn cache_read/context 0.00 -> 0.98 on claude-haiku-4-5; any history the transcript does not provably cover falls back to the text replay (b31e1fe5)
 
 ### 🩹 Fixes
