@@ -212,6 +212,21 @@
       ],
       "context": "contexts/tracing-plugin.md",
       "notes": "executor=typescript-pro tier=sonnet/high"
+    },
+    "tests-unit-core": {
+      "kind": "work",
+      "phase": "verify",
+      "depends_on": [
+        "mig-chrome-manager"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py tests-unit-core",
+      "artifacts": [
+        "entrypoint/stealth-browser/src/test/unit/foundation/",
+        "entrypoint/stealth-browser/src/test/unit/cdp/",
+        "entrypoint/stealth-browser/src/test/unit/chrome-manager/"
+      ],
+      "context": "contexts/tests-unit-core.md",
+      "notes": "executor=test-automator tier=sonnet/medium"
     }
   },
   "authored_with": {
