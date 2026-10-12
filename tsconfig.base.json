@@ -213,7 +213,8 @@
       ],
       "@adhd/agent-plugin-tracing": [
         "./packages/agent/agent-plugin-tracing/src/index.ts"
-      ]
+      ],
+      "@adhd/stealth-browser": ["./entrypoint/stealth-browser/src/index.ts"]
     }
   },
   "exclude": ["node_modules", "tmp"]
