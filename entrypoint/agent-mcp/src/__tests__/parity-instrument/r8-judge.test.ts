@@ -240,6 +240,24 @@ describe('R8-judge AC3: rejudgeRecord (the saved run, judged again once)', () =>
     expect(LG.readLedger('RJR', dir).judgeCalls[0].rejudgeOf).toMatch(/judge-error MAX_TOKENS/);
   });
 
+  it('the earlier judge record file survives a re-judge as <arm>.prior-<n>.json and priorQuality.file points at it; a cap-blocked re-judge leaves no stray copy', async () => {
+    const s = savedRun({ quality: { status: 'judge-error', code: 'MAX_TOKENS', file: path.join(dir, 'judge', 'B.json') } });
+    fs.mkdirSync(path.join(dir, 'judge'), { recursive: true });
+    fs.writeFileSync(path.join(dir, 'judge', 'B.json'), JSON.stringify({ arm: 'B', rawResponse: '{"scores": {"spec_conformance', error: 'MAX_TOKENS' }));
+    await D.rejudgeRecord({ ...s, round: 'RJR', client: okClient() });
+    const kept = path.join(dir, 'judge', 'B.prior-1.json');
+    expect(JSON.parse(fs.readFileSync(kept, 'utf8')).rawResponse).toBe('{"scores": {"spec_conformance');
+    expect(JSON.parse(fs.readFileSync(path.join(dir, 'judge', 'B.json'), 'utf8')).scores).toBeTruthy();
+    expect(JSON.parse(fs.readFileSync(s.recordPath, 'utf8')).priorQuality.file).toBe(kept);
+    // negative control: at the cap nothing is judged, the record and the judge file are untouched and no copy is left behind
+    const lp = LG.ledgerPathFor('RJZ', dir); for (let i = 0; i < 3; i++) LG.recordJudgeCall('RJZ', { arm: 'B', modelId: 'm', inputTokens: 1, outputTokens: 1, costUsd: 0, briefSha: 'x' }, { dir, reason: 'r' });
+    const s2 = savedRun({ quality: { status: 'judge-failed', error: HTTP_400 } });
+    fs.writeFileSync(path.join(dir, 'judge2.json'), '{}');
+    const out = await D.rejudgeRecord({ ...s2, round: 'RJZ', ledgerPath: lp, judgeDir: path.join(dir, 'judge'), client: okClient() });
+    expect(out).toMatchObject({ written: false, quality: { status: 'n/a' } });
+    expect(fs.existsSync(path.join(dir, 'judge', 'B.prior-2.json'))).toBe(false);
+  });
+
   it('a second invocation on the now-scored record is refused BEFORE any call (no double spend)', async () => {
     const s = savedRun();
     await D.rejudgeRecord({ ...s, round: 'RJR', client: okClient() });

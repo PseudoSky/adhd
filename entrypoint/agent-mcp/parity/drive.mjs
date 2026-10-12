@@ -1514,8 +1514,12 @@ export async function rejudgeRecord({ round, recordPath, profile, judgeDir, ledg
   const waived = !!profile.arms && !profile.arms.includes('A');
   const aGenuine = waived ? true : LG.readLedger(round, path.dirname(ledgerPath)).armA?.genuine === true;
   const ctx = { prompts: F.prompts(), spec, repoDir, ledgerPath, profile };
+  // the judge record file <judgeDir>/<arm>.json is overwritten by the new call: keep the earlier one (its rawResponse is the evidence of what failed) as <arm>.prior-<n>.json
+  const judgeFile = path.join(judgeDir, `${record.arm}.json`); let keptPrior = null;
+  if (fs.existsSync(judgeFile)) { let n = 1; while (fs.existsSync(path.join(judgeDir, `${record.arm}.prior-${n}.json`))) n++; keptPrior = path.join(judgeDir, `${record.arm}.prior-${n}.json`); fs.copyFileSync(judgeFile, keptPrior); }
   const q = await judgeRun({ ctx, record, aGenuine, aWaived: waived, dry: false, client, judgeDir, ledgerNote: prior.error ?? `judge-error ${prior.code}` });
-  if (q.status === 'n/a') return { quality: q, written: false };
+  if (q.status === 'n/a') { if (keptPrior) fs.rmSync(keptPrior); return { quality: q, written: false }; }
+  if (keptPrior && prior.file) prior.file = keptPrior;
   record.priorQuality = { ...prior, ...(record.priorQuality ? { priorQuality: record.priorQuality } : {}) }; writeJson(recordPath, record);
   return { quality: q, written: true };
 }
