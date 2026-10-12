@@ -1,0 +1,34 @@
+{
+  "round": "R9",
+  "cap": 2,
+  "approvedBy": "owner (2026-10-12), standing direction recorded in SCOPE-R9-stage1-retest: \"If filling in the other 2 successfully provides parity, dispatch the follow up and then compare again and follow the original flow for corrections and retest.\" -> round R9 Stage 1 retest is ONE run of arm A (native claude -p) FIRST, then ONE run of arm C (agent-mcp anthropic provider), alias haiku, effort high, thinking model default, wire capture ON, PAIRED fixtures (SCOPE-R9-paired-fixtures), identical prompt, exactly 2 judge calls (alias haiku, single sample); B is not run; no Stage 2; hard cap 2 arm runs + 2 judge calls (SCOPE-R9-product-fix, SCOPE-R9-duration-metric, SCOPE-R9-echo-persistence, SCOPE-R9-stage1-retest)",
+  "extraRunReason": "",
+  "runs": [],
+  "judgeCalls": [],
+  "scenarioSha": "",
+  "scopeChanges": [
+    "SCOPE-R9-product-fix",
+    "SCOPE-R9-duration-metric",
+    "SCOPE-R9-paired-fixtures",
+    "SCOPE-R9-echo-persistence",
+    "SCOPE-R9-stage1-retest"
+  ],
+  "armOrder": [],
+  "startedAt": null,
+  "armA": null,
+  "releases": [],
+  "profile": {
+    "arms": [
+      "A",
+      "C"
+    ],
+    "armModels": {
+      "C": "claude-haiku-5-5"
+    },
+    "model": "haiku",
+    "judgeModel": "haiku",
+    "effort": "high",
+    "capture": true,
+    "pairedFixtures": true
+  }
+}
