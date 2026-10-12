@@ -30,7 +30,7 @@ Unit specs prove the six verbs and the barrel: each verb delegates to the librar
 
 Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/guard.py` (`python3 docs/plan/stealth-browser/scripts/guard.py tests-unit-surface --only tests-unit-surface.N`). None may be deferred. Tests written by this plan cite ticket `8468f7b1` and these ids ([inv:tests-cite]).
 
-_No criteria yet._
+- [tests-unit-surface.1] src/test/unit/surface/api.spec.ts and index.spec.ts exist and assert all six verbs and the index export superset.
 
 ---
 

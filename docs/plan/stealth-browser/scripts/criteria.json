@@ -756,6 +756,15 @@
       "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py tests-unit-extract --only tests-unit-extract.5",
       "expect": "exit0",
       "cwd": "repo-root"
+    },
+    {
+      "id": "tests-unit-surface.1",
+      "phase": "verify",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py tests-unit-surface --only tests-unit-surface.1",
+      "expect": "exit0",
+      "cwd": "repo-root"
     }
   ]
 }
