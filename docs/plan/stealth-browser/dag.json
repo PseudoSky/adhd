@@ -84,6 +84,19 @@
       ],
       "context": "contexts/mig-foundation.md",
       "notes": "executor=refactoring-specialist tier=sonnet/medium"
+    },
+    "mig-cdp": {
+      "kind": "work",
+      "phase": "migrate",
+      "depends_on": [
+        "mig-foundation"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py mig-cdp",
+      "artifacts": [
+        "entrypoint/stealth-browser/src/lib/cdp/"
+      ],
+      "context": "contexts/mig-cdp.md",
+      "notes": "executor=refactoring-specialist tier=sonnet/medium"
     }
   },
   "authored_with": {
