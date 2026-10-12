@@ -4,10 +4,10 @@
   "dag": "dag.json",
   "states": {
     "productization-hold": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-10-12T10:52:26.244Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "424aa022cc47018b525b121b81f1c5061ba4f14f",
       "end_ref": null
     },
     "scaffold": {
