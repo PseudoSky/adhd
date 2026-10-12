@@ -41,7 +41,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 
 ```text
 read_only:  ["entrypoint/stealth-browser/src/tracing.ts", "entrypoint/stealth-browser/src/server.ts"]
-mutates:    ["entrypoint/stealth-browser/src/test/unit/tracing/"]
+mutates:    ["entrypoint/stealth-browser/src/test/unit/tracing/tracing-namespace.spec.ts"]
 ```
 
 ---
