@@ -30,7 +30,7 @@ Unit specs exist for capture (bans, dom, network) and parsers, using in-test HTM
 
 Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/guard.py` (`python3 docs/plan/stealth-browser/scripts/guard.py tests-unit-extract --only tests-unit-extract.N`). None may be deferred. Tests written by this plan cite ticket `8468f7b1` and these ids ([inv:tests-cite]).
 
-_No criteria yet._
+- [tests-unit-extract.1] A spec file exists for every ported source module (index barrels and pure type files excluded).
 
 ---
 
