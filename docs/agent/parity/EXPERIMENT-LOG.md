@@ -305,3 +305,7 @@ Not a parity blocker (architect verdict APPROVE, 2026-10-11): shell exit status.
 - Fact: the ledger R5.json (commit 1cf4f6cc) now records runs [A1] = 1 of 3 consumed although no model call was made. This is an accounting defect: a harness failure before any model call must not consume a run.
 - Fact: judge cannot run: ANTHROPIC_API_KEY unset; liveJudgeClient has no other credential path, while arm C (anthropic provider) runs without that key.
 - Triage: three instrument symptoms, root causes unknown; dispatched to debug with symptoms only.
+
+### 2026-10-12T00:01:58Z — R5 LEDGER REPAIR AUTHORIZED AND FAST-PATH FIX (owner direction: "fast iteration loop to get this corrected and back on track"; dispatcher)
+- Fact: R5 attempts 1 and 2 made 0 model calls. Attempt 2 wrongly consumed ledger run A1 (harness fault before spawn). Root causes proven (scratchpad debug-r5-harness.md): S1 opts.out treated as operator path -> in-repo work dir -> ancestorLeaks; S2 reservation before prepare() and no releaseRun; S3 judge lacks the ADHD_AGENT_ANTHROPIC_SECRET path.
+- Direction: fix S1-S3 now with the debug report's minimal fixes without waiting for the architect spec (it continues in parallel and its forecast list is used as pre-flight checks); repair ledger R5.json through an audited releaseRun with reason "harness fault before any model call, 0 model calls, attempt 2"; then retry R5 immediately. The repair is a ledger correction of a run that never executed, not an extra run: runs used stay 0 of 3.
