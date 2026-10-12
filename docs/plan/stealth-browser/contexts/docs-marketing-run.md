@@ -37,6 +37,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 - [docs-marketing-run.5] Gate evidence of gates-rerun still matches the package source tree (docs run changed no src/).
 - [docs-marketing-run.6] (PA6.2, PA6.3) docs/CONFIGURATION.md lists every default verbatim (port 9222, the Library/Application Support/Google/Chrome-CDP profile, /tmp/stealth-browser-heartbeat) and states macOS-first support with what is untested elsewhere.
 - [docs-marketing-run.7] (PA8.1, PA8.2) docs/RESPONSIBLE-USE.md covers site terms of service, robots.txt, rate limits, no CAPTCHA or ban evasion, and read-only access to the user's own profile and cookies; the docs define "stealth" as exactly the two concrete choices (no --enable-automation, no Runtime.evaluate).
+- [docs-marketing-run.8] (PA8.3) No README.md or docs/ prose (excluding the ported docs/reference/ protocol reference and generated .catalog data) contains the overclaim words undetectable, bypass, evade or anti-bot.
 ---
 
 ## Reservations
