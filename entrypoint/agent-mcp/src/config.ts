@@ -38,6 +38,13 @@ import type { PartialBinding } from "@adhd/agent-base-types";
 import { loadEnvHierarchy } from "./utils/load-env.js";
 import { defaultPermissionGate } from "./defaults.js";
 
+/** R9-hist S5c: default per-message cap on a persisted provider echo (128 KiB). */
+export const DEFAULT_ECHO_MAX_MESSAGE_BYTES = 131_072;
+/** R9-hist S5c: default soft per-session cap on persisted server-result bytes (4 MiB). */
+export const DEFAULT_ECHO_MAX_SESSION_BYTES = 4_194_304;
+/** R9-hist S5c: default minutes persisted server results stay replayable (5 min prompt cache + slack). */
+export const DEFAULT_ECHO_SERVER_RESULT_TTL_MINUTES = 10;
+
 // BUG-MCP-CREDENTIALS-001: populate `process.env` from the `.env` file
 // hierarchy (`~/.adhd/.env` → `<cwd>/.adhd/.env` → `<cwd>/.env`) BEFORE the
 // `Environment` singleton below is constructed and BEFORE any
@@ -129,6 +136,19 @@ export interface AgentMcpConfig {
         readonly allowedDomains: readonly string[];
       };
     };
+  };
+  /**
+   * R9-hist S5c: persistence limits for the Anthropic provider echo (`message_provider_echo`).
+   * Value limits, not feature switches. Kept `string` so the strict parse ({@link parseEchoCaps})
+   * can fail loud instead of the cascade's `parseInt` coercion (`"1.5"` -> 1).
+   */
+  readonly echo: {
+    /** Max bytes of one assistant message's persisted echo (default 131072 = 128 KiB). */
+    readonly maxMessageBytes: string;
+    /** Soft cap on persisted server-result (tier S) bytes per session (default 4194304 = 4 MiB). */
+    readonly maxSessionBytes: string;
+    /** Minutes persisted server results stay replayable after the session goes idle; 0 = never persist them. */
+    readonly serverResultTtlMinutes: string;
   };
   readonly server: {
     readonly maxDepth: number;
@@ -441,6 +461,34 @@ export const agentMcpEnvironmentSpec: EnvironmentSpec<AgentMcpConfig> = {
       env: "ADHD_AGENT_TOOL_RESULT_SPILL_TTL_HOURS",
       default: String(DEFAULT_TOOL_RESULT_SPILL_TTL_HOURS),
       description: "Hours after which a task's spill subdirectory is swept (positive integer).",
+    },
+    // R9-hist S5c. `string` (not `integer`) for the same reason as `agent.toolResult.maxChars`:
+    // the cascade's integer coercion is `parseInt`, which turns "1.5" into 1 and "10abc" into 10.
+    // `resolveEchoCaps()` / `parseEchoCaps()` parse strictly and reject negatives / non-numbers.
+    "echo.maxMessageBytes": {
+      type: "string",
+      env: "ADHD_AGENT_ECHO_MAX_MESSAGE_BYTES",
+      default: String(DEFAULT_ECHO_MAX_MESSAGE_BYTES),
+      description:
+        "Max bytes of one assistant message's persisted provider echo (thinking + server tool blocks). " +
+        "Over the cap, the message's server-result blocks are dropped whole; if the thinking tier alone is " +
+        "over it, nothing is persisted for that message. Non-negative integer; malformed values fail at startup.",
+    },
+    "echo.maxSessionBytes": {
+      type: "string",
+      env: "ADHD_AGENT_ECHO_MAX_SESSION_BYTES",
+      default: String(DEFAULT_ECHO_MAX_SESSION_BYTES),
+      description:
+        "Soft cap on the server-result (web_fetch/web_search body) bytes persisted per session. Once reached, " +
+        "new server results are not persisted (thinking blocks still are). Non-negative integer.",
+    },
+    "echo.serverResultTtlMinutes": {
+      type: "string",
+      env: "ADHD_AGENT_ECHO_SERVER_RESULT_TTL_MINUTES",
+      default: String(DEFAULT_ECHO_SERVER_RESULT_TTL_MINUTES),
+      description:
+        "Minutes of session idleness after which persisted server results (third-party page bodies) stop " +
+        "being replayed and are swept. 0 = never persist server results. Non-negative integer.",
     },
     "server.maxDepth": {
       type: "integer",
@@ -968,6 +1016,52 @@ export function parseToolCallConcurrency(raw: unknown): number {
 }
 
 /**
+ * Strictly parses one `echo.*` limit (text from the cascade / YAML, or a number).
+ *
+ * @param key - the config key, used in the error message
+ * @param envName - the env var that sets it, used in the error message
+ * @param raw - the configured value
+ * @returns a non-negative safe integer
+ * @throws {RangeError} on anything that is not a plain non-negative integer (`-1`, `1.5`, `abc`, `10x`, empty, `NaN`)
+ */
+export function parseEchoLimit(key: string, envName: string, raw: unknown): number {
+  let n = Number.NaN;
+  if (typeof raw === "string") {
+    const text = raw.trim();
+    if (/^\d+$/.test(text)) n = Number(text);
+  } else if (typeof raw === "number") {
+    n = raw;
+  }
+  if (!Number.isSafeInteger(n) || n < 0) {
+    throw new RangeError(`${key} (${envName}) must be a non-negative integer, got ${JSON.stringify(raw)}`);
+  }
+  return n;
+}
+
+/**
+ * Resolves the provider-echo persistence limits (R9-hist S5c) in the engine's {@link EchoCaps} shape
+ * (`serverResultTtlMs` is `serverResultTtlMinutes` converted; `<= 0` means server results are never
+ * persisted). Fails loud (RangeError) on a negative / non-numeric value, before any task runs.
+ *
+ * @param target - the Environment to resolve against (tests pass an isolated instance)
+ */
+export function resolveEchoCaps(
+  target: Pick<Environment<AgentMcpConfig>, "config"> = env
+): NonNullable<EngineConfig["echo"]> {
+  const cfg = target.config.echo;
+  return {
+    maxMessageBytes: parseEchoLimit("echo.maxMessageBytes", "ADHD_AGENT_ECHO_MAX_MESSAGE_BYTES", cfg.maxMessageBytes),
+    maxSessionBytes: parseEchoLimit("echo.maxSessionBytes", "ADHD_AGENT_ECHO_MAX_SESSION_BYTES", cfg.maxSessionBytes),
+    serverResultTtlMs:
+      parseEchoLimit(
+        "echo.serverResultTtlMinutes",
+        "ADHD_AGENT_ECHO_SERVER_RESULT_TTL_MINUTES",
+        cfg.serverResultTtlMinutes
+      ) * 60_000,
+  };
+}
+
+/**
  * Builds the `EngineConfig`-shaped adapter the orchestrator layer (`server.ts`,
  * `index.ts`) is injected with — the engine MUST NOT import `config.ts`
  * directly (`packages/agent/agent-engine-orchestrator/src/interfaces.ts`).
@@ -995,6 +1089,8 @@ export function toEngineConfig(): EngineConfig {
       maxChars: parseToolResultMaxChars(env.config.agent.toolResult.maxChars),
       spill: resolveToolResultSpill(),
     },
+    // R9-hist S5c: provider-echo persistence limits (fails loud on a malformed value).
+    echo: resolveEchoCaps(),
     sse: {
       baseUrl: computeSseBaseUrl(env.config.sse.baseUrl, resolvedSseBoundPort, env.config.sse.port),
     },

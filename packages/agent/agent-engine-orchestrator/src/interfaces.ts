@@ -137,6 +137,13 @@ export interface EngineConfig {
     spill?: import('./engine/tool-result-spill.js').ToolResultSpillConfig;
   };
   /**
+   * Provider-echo persistence limits (R9-hist; config keys `echo.*`). Absent => the orchestrator
+   * persists no provider echo. See `providers/anthropic-echo.ts` `partitionEcho`.
+   */
+  echo?: import('./providers/anthropic-echo.js').EchoCaps;
+  /** Wall-clock source in epoch ms (default `Date.now`); tests inject a fake so TTL logic never sleeps. */
+  now?: () => number;
+  /**
    * Schema-driven tolerance for stringified array/object tool arguments
    * (backlog 114e014c, `engine/tool-arg-coercion.ts`). Absent => enabled.
    * `enabled: false` is the negative-control switch for tests.
