@@ -35,6 +35,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 - [tracing-namespace-proof.3] The spec cites ticket 8468f7b1 and a valid [tracing-plugin.N] criterion id.
 - [tracing-namespace-proof.4] Mutation teeth: with serviceName flipped to 'apigen' in src/tracing.ts the spec FAILS (restored in a finally block); with the real file it PASSES.
 - [tracing-namespace-proof.5] Only owned paths changed by [psm:tracing-namespace-proof] commits; tracing.ts restored byte-for-byte (git diff clean).
+- [tracing-namespace-proof.6] The spec pins the namespace to the emitted attribute keys (backlog 5152786d): it asserts the records carry `adhd.op` and `adhd.transport` (the `${serviceName}.*` keys) and no `apigen.op` / `apigen.transport` key, and cites 5152786d in its header.
 ---
 
 ## Reservations
