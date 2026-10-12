@@ -117,6 +117,15 @@
       "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py entrypoint-parity --only entrypoint-parity.2",
       "expect": "exit0",
       "cwd": "repo-root"
+    },
+    {
+      "id": "entrypoint-parity.3",
+      "phase": "scaffold",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py entrypoint-parity --only entrypoint-parity.3",
+      "expect": "exit0",
+      "cwd": "repo-root"
     }
   ]
 }

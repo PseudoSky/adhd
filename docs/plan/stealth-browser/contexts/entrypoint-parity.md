@@ -32,6 +32,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 - [entrypoint-parity.1] Top-level tracked file set contains every file common to dispatch-cli, backlog and apigen-cli (eslint/vite/tsconfig.*/vitest.e2e/AGENTS/CHANGELOG/LICENSE...).
 
 - [entrypoint-parity.2] project.json tags are a superset of the tags common to the three sibling entrypoints.
+- [entrypoint-parity.3] `nx show project` lists every target present in both dispatch-cli and backlog (build, test, lint, typecheck, e2e, verify-dist-load...) and the dispatch-cli-only `build-bin`.
 ---
 
 ## Reservations
