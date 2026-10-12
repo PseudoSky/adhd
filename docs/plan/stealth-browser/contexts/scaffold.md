@@ -33,6 +33,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 
 - [scaffold.2] evidence/scaffold-run.txt records the REAL generator run: `Scaffolding stealth-browser at entrypoint/stealth-browser (@adhd/stealth-browser)` and no dryRun note.
 - [scaffold.3] entrypoint/stealth-browser/package.json name is exactly @adhd/stealth-browser and project.json exists.
+- [scaffold.4] tsconfig.base.json maps the @adhd/stealth-browser path alias (generator UPDATE).
 ---
 
 ## Reservations
