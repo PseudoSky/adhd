@@ -14,19 +14,7 @@
     "release"
   ],
   "terminal": "done",
-  "nodes": {
-    "productization-hold": {
-      "kind": "review",
-      "phase": "productization",
-      "depends_on": [],
-      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py productization-hold",
-      "artifacts": [
-        "docs/plan/stealth-browser/PRODUCT-REVIEW.md"
-      ],
-      "context": "contexts/productization-hold.md",
-      "notes": "test"
-    }
-  },
+  "nodes": {},
   "authored_with": {
     "plugin": "workflow",
     "version": "0.8.35",
