@@ -7,14 +7,15 @@
   "judgeCalls": [],
   "scenarioSha": "",
   "scopeChanges": [
-    "SCOPE-R7-model-sonnet"
+    "SCOPE-R7-model-sonnet",
+    "SCOPE-R7-thinking-default"
   ],
   "armOrder": [
     "A",
     "B",
     "C"
   ],
-  "startedAt": "2026-10-12T04:39:14.833Z",
+  "startedAt": "2026-10-12T04:53:55.326Z",
   "armA": null,
   "releases": [],
   "judgeCapReason": "cap 3 covers the A+B+C judge calls of one full R7 round (judge model claude-haiku-4-5, a pin separate from the arms)"
