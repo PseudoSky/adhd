@@ -313,6 +313,21 @@
       ],
       "context": "contexts/gates-first.md",
       "notes": "executor=qa tier=sonnet/medium"
+    },
+    "review-prep": {
+      "kind": "work",
+      "phase": "review",
+      "depends_on": [
+        "gates-first"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py review-prep",
+      "artifacts": [
+        "docs/plan/stealth-browser/review/migration.diff",
+        "docs/plan/stealth-browser/review/INPUT.sha256",
+        "docs/plan/stealth-browser/review/BRIEF.txt"
+      ],
+      "context": "contexts/review-prep.md",
+      "notes": "executor=qa tier=sonnet/low"
     }
   },
   "authored_with": {
