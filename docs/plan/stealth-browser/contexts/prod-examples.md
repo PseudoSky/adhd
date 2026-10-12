@@ -35,6 +35,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 - [prod-examples.1] (PA7.1) examples/library.ts, examples/cli.md and examples/mcp-config.json exist and are non-empty.
 
 - [prod-examples.2] (PA7.2) tsconfig.spec.json includes examples/ and `nx run stealth-browser:typecheck-spec` exits 0 with examples/library.ts importing the package.
+- [prod-examples.3] (PA7.3) examples/mcp-config.json parses as JSON with an mcpServers entry whose command/args name the `stealth-browser-mcp` bin declared in package.json.
 ---
 
 ## Reservations
