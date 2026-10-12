@@ -355,6 +355,19 @@
       ],
       "context": "contexts/resolve-findings.md",
       "notes": "executor=typescript-pro tier=sonnet/high"
+    },
+    "gates-rerun": {
+      "kind": "work",
+      "phase": "remediate",
+      "depends_on": [
+        "resolve-findings"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py gates-rerun",
+      "artifacts": [
+        "docs/plan/stealth-browser/evidence/"
+      ],
+      "context": "contexts/gates-rerun.md",
+      "notes": "executor=qa tier=sonnet/medium"
     }
   },
   "authored_with": {
