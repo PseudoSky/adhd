@@ -23,7 +23,7 @@ _No criteria yet._
 ## Reservations
 
 ```text
-read_only:  []
+read_only:  ["entrypoint/stealth-browser/src/api.ts", "entrypoint/stealth-browser/src/lib/"]
 mutates:    ["entrypoint/stealth-browser/src/errors.ts", "entrypoint/stealth-browser/src/test/unit/errors/"]
 ```
 
