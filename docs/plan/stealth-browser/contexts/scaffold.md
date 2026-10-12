@@ -1,7 +1,7 @@
 # scaffold — WORK STATE
 
 **Phase:** scaffold · **Kind:** work · **Depends on:** productization-hold · **Guard:** `python3 docs/plan/stealth-browser/scripts/guard.py scaffold`
-**Executor:** `platform-engineer` (sonnet/medium) · **Worktree:** `/Users/nix/dev/node/adhd/.worktrees/stealth-browser` on branch `stealth-browser` (shared by every state, [inv:shared-worktree])
+**Executor:** `platform-engineer` (sonnet/medium) · **Worktree:** `/Users/nix/dev/node/adhd/.worktrees/stealth-browser` on branch `stealth-browser` (shared by every state, [inv:shared-worktree], [inv:worktree-required], [inv:no-ai-attribution])
 
 ---
 

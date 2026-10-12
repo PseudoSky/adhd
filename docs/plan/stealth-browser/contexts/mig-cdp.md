@@ -1,7 +1,7 @@
 # mig-cdp — WORK STATE
 
 **Phase:** migrate · **Kind:** work · **Depends on:** mig-foundation · **Guard:** `python3 docs/plan/stealth-browser/scripts/guard.py mig-cdp`
-**Executor:** `refactoring-specialist` (sonnet/medium) · **Worktree:** `/Users/nix/dev/node/adhd/.worktrees/stealth-browser` on branch `stealth-browser` (shared by every state, [inv:shared-worktree])
+**Executor:** `refactoring-specialist` (sonnet/medium) · **Worktree:** `/Users/nix/dev/node/adhd/.worktrees/stealth-browser` on branch `stealth-browser` (shared by every state, [inv:shared-worktree], [inv:worktree-required], [inv:no-ai-attribution])
 
 ---
 

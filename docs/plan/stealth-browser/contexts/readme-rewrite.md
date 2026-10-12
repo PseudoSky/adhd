@@ -1,7 +1,7 @@
 # readme-rewrite — WORK STATE
 
 **Phase:** docs · **Kind:** work · **Depends on:** docs-marketing-run · **Guard:** `python3 docs/plan/stealth-browser/scripts/guard.py readme-rewrite`
-**Executor:** `content-marketer` (sonnet/medium) · **Worktree:** `/Users/nix/dev/node/adhd/.worktrees/stealth-browser` on branch `stealth-browser` (shared by every state, [inv:shared-worktree])
+**Executor:** `content-marketer` (sonnet/medium) · **Worktree:** `/Users/nix/dev/node/adhd/.worktrees/stealth-browser` on branch `stealth-browser` (shared by every state, [inv:shared-worktree], [inv:worktree-required], [inv:no-ai-attribution])
 
 ---
 

@@ -1,0 +1,272 @@
+[
+ {
+  "bucket": "foundation",
+  "src": "adhd/types.ts",
+  "dst": "src/lib/types.ts"
+ },
+ {
+  "bucket": "foundation",
+  "src": "adhd/session.ts",
+  "dst": "src/lib/session.ts",
+  "min_similarity": 0.75,
+  "require_exports": [
+   "getSessionId"
+  ]
+ },
+ {
+  "bucket": "foundation",
+  "src": "adhd/helpers.ts",
+  "dst": "src/lib/helpers.ts",
+  "must_contain": [
+   "immutable=1"
+  ]
+ },
+ {
+  "bucket": "cdp",
+  "src": "adhd/cdp-connection/src/browser.ts",
+  "dst": "src/lib/cdp/browser.ts"
+ },
+ {
+  "bucket": "cdp",
+  "src": "adhd/cdp-connection/src/monitor.ts",
+  "dst": "src/lib/cdp/monitor.ts"
+ },
+ {
+  "bucket": "cdp",
+  "src": "adhd/cdp-connection/src/session.ts",
+  "dst": "src/lib/cdp/session.ts"
+ },
+ {
+  "bucket": "cdp",
+  "src": "adhd/cdp-connection/src/settle.ts",
+  "dst": "src/lib/cdp/settle.ts"
+ },
+ {
+  "bucket": "cdp",
+  "src": "adhd/cdp-connection/src/shutdown.ts",
+  "dst": "src/lib/cdp/shutdown.ts"
+ },
+ {
+  "bucket": "cdp",
+  "src": "adhd/cdp-connection/src/targets.ts",
+  "dst": "src/lib/cdp/targets.ts"
+ },
+ {
+  "bucket": "cdp",
+  "src": "adhd/cdp-connection/index.ts",
+  "dst": "src/lib/cdp/index.ts"
+ },
+ {
+  "bucket": "chrome-manager",
+  "src": "adhd/chrome-manager.ts",
+  "dst": "src/lib/chrome-manager.ts",
+  "must_contain": [
+   "/tmp/stealth-browser-heartbeat",
+   "shutdownIfIdle"
+  ]
+ },
+ {
+  "bucket": "domains-storage",
+  "src": "adhd/domains/browser.ts",
+  "dst": "src/lib/domains/browser.ts"
+ },
+ {
+  "bucket": "domains-storage",
+  "src": "adhd/domains/index.ts",
+  "dst": "src/lib/domains/index.ts"
+ },
+ {
+  "bucket": "domains-storage",
+  "src": "adhd/domains/network.ts",
+  "dst": "src/lib/domains/network.ts"
+ },
+ {
+  "bucket": "domains-storage",
+  "src": "adhd/domains/page.ts",
+  "dst": "src/lib/domains/page.ts"
+ },
+ {
+  "bucket": "domains-storage",
+  "src": "adhd/domains/system.ts",
+  "dst": "src/lib/domains/system.ts"
+ },
+ {
+  "bucket": "domains-storage",
+  "src": "adhd/domains/target.ts",
+  "dst": "src/lib/domains/target.ts"
+ },
+ {
+  "bucket": "domains-storage",
+  "src": "adhd/domains/transport.ts",
+  "dst": "src/lib/domains/transport.ts"
+ },
+ {
+  "bucket": "domains-storage",
+  "src": "adhd/storage/bookmarks.ts",
+  "dst": "src/lib/storage/bookmarks.ts"
+ },
+ {
+  "bucket": "domains-storage",
+  "src": "adhd/storage/cookies.ts",
+  "dst": "src/lib/storage/cookies.ts"
+ },
+ {
+  "bucket": "domains-storage",
+  "src": "adhd/storage/helpers.ts",
+  "dst": "src/lib/storage/helpers.ts"
+ },
+ {
+  "bucket": "domains-storage",
+  "src": "adhd/storage/history.ts",
+  "dst": "src/lib/storage/history.ts"
+ },
+ {
+  "bucket": "domains-storage",
+  "src": "adhd/storage/index.ts",
+  "dst": "src/lib/storage/index.ts"
+ },
+ {
+  "bucket": "domains-storage",
+  "src": "adhd/storage/profile.ts",
+  "dst": "src/lib/storage/profile.ts"
+ },
+ {
+  "bucket": "capture-parsers",
+  "src": "adhd/capture/bans.ts",
+  "dst": "src/lib/capture/bans.ts"
+ },
+ {
+  "bucket": "capture-parsers",
+  "src": "adhd/capture/dom.ts",
+  "dst": "src/lib/capture/dom.ts"
+ },
+ {
+  "bucket": "capture-parsers",
+  "src": "adhd/capture/index.ts",
+  "dst": "src/lib/capture/index.ts"
+ },
+ {
+  "bucket": "capture-parsers",
+  "src": "adhd/capture/network.ts",
+  "dst": "src/lib/capture/network.ts"
+ },
+ {
+  "bucket": "capture-parsers",
+  "src": "adhd/parsers.ts",
+  "dst": "src/lib/parsers.ts",
+  "must_contain": [
+   "node-html-parser",
+   "@xmldom/xmldom",
+   "xpath"
+  ]
+ },
+ {
+  "bucket": "queries",
+  "src": "search/queries/activity.ts",
+  "dst": "src/lib/queries/activity.ts",
+  "min_similarity": 0.7
+ },
+ {
+  "bucket": "queries",
+  "src": "search/queries/context.ts",
+  "dst": "src/lib/queries/context.ts",
+  "min_similarity": 0.7
+ },
+ {
+  "bucket": "docs",
+  "src": "adhd/README.md",
+  "dst": "docs/reference/README.md",
+  "kind": "md",
+  "min_similarity": 0
+ },
+ {
+  "bucket": "docs",
+  "src": "adhd/docs/capture.md",
+  "dst": "docs/reference/capture.md",
+  "kind": "md"
+ },
+ {
+  "bucket": "docs",
+  "src": "adhd/docs/cdp.md",
+  "dst": "docs/reference/cdp.md",
+  "kind": "md"
+ },
+ {
+  "bucket": "docs",
+  "src": "adhd/docs/chrome-manager.md",
+  "dst": "docs/reference/chrome-manager.md",
+  "kind": "md"
+ },
+ {
+  "bucket": "docs",
+  "src": "adhd/docs/parsers.md",
+  "dst": "docs/reference/parsers.md",
+  "kind": "md"
+ },
+ {
+  "bucket": "docs",
+  "src": "adhd/docs/storage.md",
+  "dst": "docs/reference/storage.md",
+  "kind": "md"
+ },
+ {
+  "bucket": "docs",
+  "src": "adhd/cdp-connection/README.md",
+  "dst": "docs/reference/cdp-connection.md",
+  "kind": "md"
+ },
+ {
+  "bucket": "docs",
+  "src": "docs/cdp/README.md",
+  "dst": "docs/reference/cdp/README.md",
+  "kind": "md"
+ },
+ {
+  "bucket": "docs",
+  "src": "docs/cdp/api-reference.md",
+  "dst": "docs/reference/cdp/api-reference.md",
+  "kind": "md"
+ },
+ {
+  "bucket": "docs",
+  "src": "docs/cdp/domains.md",
+  "dst": "docs/reference/cdp/domains.md",
+  "kind": "md"
+ },
+ {
+  "bucket": "docs",
+  "src": "docs/cdp/history-db.md",
+  "dst": "docs/reference/cdp/history-db.md",
+  "kind": "md"
+ },
+ {
+  "bucket": "docs",
+  "src": "docs/cdp/monitoring.md",
+  "dst": "docs/reference/cdp/monitoring.md",
+  "kind": "md"
+ },
+ {
+  "bucket": "docs",
+  "src": "docs/cdp/protocol-overview.md",
+  "dst": "docs/reference/cdp/protocol-overview.md",
+  "kind": "md"
+ },
+ {
+  "bucket": "docs",
+  "src": "docs/cdp/target-domain.md",
+  "dst": "docs/reference/cdp/target-domain.md",
+  "kind": "md"
+ },
+ {
+  "bucket": "docs",
+  "src": "docs/cdp/target-timing.md",
+  "dst": "docs/reference/cdp/target-timing.md",
+  "kind": "md"
+ },
+ {
+  "bucket": "docs",
+  "src": "docs/cdp/usage.md",
+  "dst": "docs/reference/cdp/usage.md",
+  "kind": "md"
+ }
+]

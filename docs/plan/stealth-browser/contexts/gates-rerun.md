@@ -1,9 +1,9 @@
 # gates-rerun — WORK STATE
 
 **Phase:** remediate · **Kind:** work · **Depends on:** resolve-findings · **Guard:** `python3 docs/plan/stealth-browser/scripts/guard.py gates-rerun`
-**Executor:** `qa` (sonnet/medium) · **Worktree:** `/Users/nix/dev/node/adhd/.worktrees/stealth-browser` on branch `stealth-browser` (shared by every state, [inv:shared-worktree])
+**Executor:** `qa` (sonnet/medium) · **Worktree:** `/Users/nix/dev/node/adhd/.worktrees/stealth-browser` on branch `stealth-browser` (shared by every state, [inv:shared-worktree], [inv:worktree-required], [inv:no-ai-attribution])
 
-> **PREREQUISITE — human action required.** This state depends on `HB-CHROME-BINARY` from `human-blockers.json`. Before starting, verify:
+> **PREREQUISITE — human action required.** This state depends on `hb-chrome-binary` from `human-blockers.json`. Before starting, verify:
 >
 > ```bash
 > test -x "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
@@ -73,4 +73,4 @@ Every plan-file write is committed (R1). Work-product commits for this state, al
 
 ## Notes for executor
 
-- Needs Chrome for e2e (HB-CHROME-BINARY).
+- Needs Chrome for e2e (hb-chrome-binary).

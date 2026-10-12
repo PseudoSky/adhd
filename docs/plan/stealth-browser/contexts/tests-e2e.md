@@ -1,10 +1,10 @@
 # tests-e2e — WORK STATE
 
 **Phase:** verify · **Kind:** work · **Depends on:** tracing-plugin · **Guard:** `python3 docs/plan/stealth-browser/scripts/guard.py tests-e2e`
-**Executor:** `qa` (sonnet/high) · **Worktree:** `/Users/nix/dev/node/adhd/.worktrees/stealth-browser` on branch `stealth-browser` (shared by every state, [inv:shared-worktree])
+**Executor:** `qa` (sonnet/high) · **Worktree:** `/Users/nix/dev/node/adhd/.worktrees/stealth-browser` on branch `stealth-browser` (shared by every state, [inv:shared-worktree], [inv:worktree-required], [inv:no-ai-attribution])
 **Parallel with:** tests-unit-core, tests-unit-data, tests-unit-extract, tests-unit-surface (disjoint owned paths, proven by `check-disjoint.py`)
 
-> **PREREQUISITE — human action required.** This state depends on `HB-CHROME-BINARY` from `human-blockers.json`. Before starting, verify:
+> **PREREQUISITE — human action required.** This state depends on `hb-chrome-binary` from `human-blockers.json`. Before starting, verify:
 >
 > ```bash
 > test -x "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
@@ -75,4 +75,4 @@ Every plan-file write is committed (R1). Work-product commits for this state, al
 
 - Files must be named `*.e2e.test.ts` so the unit lane excludes them and the `e2e` lane includes them.
 - Needs the built bins: the `e2e` target dependsOn `build-bin` (set by entrypoint-parity).
-- HB-CHROME-BINARY gates this state: it needs a Chrome binary at the default path.
+- hb-chrome-binary gates this state: it needs a Chrome binary at the default path.

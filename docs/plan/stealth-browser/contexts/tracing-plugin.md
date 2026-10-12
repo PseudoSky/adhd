@@ -1,7 +1,7 @@
 # tracing-plugin — WORK STATE
 
 **Phase:** surface · **Kind:** work · **Depends on:** surface-hosts · **Guard:** `python3 docs/plan/stealth-browser/scripts/guard.py tracing-plugin`
-**Executor:** `typescript-pro` (sonnet/high) · **Worktree:** `/Users/nix/dev/node/adhd/.worktrees/stealth-browser` on branch `stealth-browser` (shared by every state, [inv:shared-worktree])
+**Executor:** `typescript-pro` (sonnet/high) · **Worktree:** `/Users/nix/dev/node/adhd/.worktrees/stealth-browser` on branch `stealth-browser` (shared by every state, [inv:shared-worktree], [inv:worktree-required], [inv:no-ai-attribution])
 
 ---
 

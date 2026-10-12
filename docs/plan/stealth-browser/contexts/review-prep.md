@@ -1,7 +1,7 @@
 # review-prep — WORK STATE
 
 **Phase:** review · **Kind:** work · **Depends on:** gates-first · **Guard:** `python3 docs/plan/stealth-browser/scripts/guard.py review-prep`
-**Executor:** `qa` (sonnet/low) · **Worktree:** `/Users/nix/dev/node/adhd/.worktrees/stealth-browser` on branch `stealth-browser` (shared by every state, [inv:shared-worktree])
+**Executor:** `qa` (sonnet/low) · **Worktree:** `/Users/nix/dev/node/adhd/.worktrees/stealth-browser` on branch `stealth-browser` (shared by every state, [inv:shared-worktree], [inv:worktree-required], [inv:no-ai-attribution])
 
 ---
 

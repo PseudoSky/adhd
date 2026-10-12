@@ -1,7 +1,7 @@
 # mig-domains-storage — WORK STATE
 
 **Phase:** migrate · **Kind:** work · **Depends on:** mig-cdp · **Guard:** `python3 docs/plan/stealth-browser/scripts/guard.py mig-domains-storage`
-**Executor:** `refactoring-specialist` (sonnet/medium) · **Worktree:** `/Users/nix/dev/node/adhd/.worktrees/stealth-browser` on branch `stealth-browser` (shared by every state, [inv:shared-worktree])
+**Executor:** `refactoring-specialist` (sonnet/medium) · **Worktree:** `/Users/nix/dev/node/adhd/.worktrees/stealth-browser` on branch `stealth-browser` (shared by every state, [inv:shared-worktree], [inv:worktree-required], [inv:no-ai-attribution])
 **Parallel with:** mig-chrome-manager, mig-capture-parsers, mig-docs (disjoint owned paths, proven by `check-disjoint.py`)
 
 ---
@@ -63,4 +63,4 @@ Every plan-file write is committed (R1). Work-product commits for this state, al
 
 ## Notes for executor
 
-- Storage readers use `better-sqlite3` -- check the source import and add it to deps only if the source actually imports it (it is a workspace dependency elsewhere; if missing from package.json raise to the dispatcher, do not install yourself).
+- Storage readers use the Node built-in `node:sqlite` (no npm dependency; Node >= 22.5, declared in package.json `engines` by entrypoint-parity). Do not add `better-sqlite3`.

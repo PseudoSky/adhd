@@ -1,7 +1,7 @@
 # tests-unit-core — WORK STATE
 
 **Phase:** verify · **Kind:** work · **Depends on:** mig-chrome-manager · **Guard:** `python3 docs/plan/stealth-browser/scripts/guard.py tests-unit-core`
-**Executor:** `test-automator` (sonnet/medium) · **Worktree:** `/Users/nix/dev/node/adhd/.worktrees/stealth-browser` on branch `stealth-browser` (shared by every state, [inv:shared-worktree])
+**Executor:** `test-automator` (sonnet/medium) · **Worktree:** `/Users/nix/dev/node/adhd/.worktrees/stealth-browser` on branch `stealth-browser` (shared by every state, [inv:shared-worktree], [inv:worktree-required], [inv:no-ai-attribution])
 **Parallel with:** tests-unit-data, tests-unit-extract, tests-unit-surface (when unblocked) (disjoint owned paths, proven by `check-disjoint.py`)
 
 ---

@@ -1,9 +1,9 @@
 # deps-install — WORK STATE
 
 **Phase:** scaffold · **Kind:** work · **Depends on:** entrypoint-parity · **Guard:** `python3 docs/plan/stealth-browser/scripts/guard.py deps-install`
-**Executor:** `platform-engineer` (sonnet/medium) · **Worktree:** `/Users/nix/dev/node/adhd/.worktrees/stealth-browser` on branch `stealth-browser` (shared by every state, [inv:shared-worktree])
+**Executor:** `platform-engineer` (sonnet/medium) · **Worktree:** `/Users/nix/dev/node/adhd/.worktrees/stealth-browser` on branch `stealth-browser` (shared by every state, [inv:shared-worktree], [inv:worktree-required], [inv:no-ai-attribution])
 
-> **PREREQUISITE — human action required.** This state depends on `HB-DEPS-APPROVAL` from `human-blockers.json`. Before starting, verify:
+> **PREREQUISITE — human action required.** This state depends on `hb-deps-approval` from `human-blockers.json`. Before starting, verify:
 >
 > ```bash
 > python3 docs/plan/stealth-browser/scripts/guard.py deps-install --only deps-install.1
@@ -25,7 +25,7 @@ The three third-party libraries the parsers need (`node-html-parser`, `xpath`, `
 
 - **Reference Pattern:** `/Users/nix/dev/ai/scratch/agent-browser/package.json` (dependency ranges), `/Users/nix/dev/ai/scratch/agent-browser/adhd/parsers.ts:17-26` (the only third-party imports in the runner).
 
-- **Delta Spec:** Precondition: `docs/plan/stealth-browser/APPROVALS.md` contains `DEP-APPROVAL: granted` and names the three packages (human-blocker HB-DEPS-APPROVAL; the scratch repo's `adhd/` had NONE of these declared, they are new to the workspace package). Then: remove the `node_modules` symlink; `pnpm install --frozen-lockfile=false --filter @adhd/stealth-browser...` is NOT used -- instead `pnpm add --filter @adhd/stealth-browser node-html-parser@^8.0.4 xpath@^0.0.34 @xmldom/xmldom@^0.9.10` from the worktree root with the pinned store (`pnpm config get store-dir` -> ~/Library/pnpm/store). Verify `git diff pnpm-lock.yaml` has zero removed lines.
+- **Delta Spec:** Precondition: `docs/plan/stealth-browser/APPROVALS.md` contains `DEP-APPROVAL: granted` and names the three packages (human-blocker hb-deps-approval; the scratch repo's `adhd/` had NONE of these declared, they are new to the workspace package). Then: remove the `node_modules` symlink; `pnpm install --frozen-lockfile=false --filter @adhd/stealth-browser...` is NOT used -- instead `pnpm add --filter @adhd/stealth-browser node-html-parser@^8.0.4 xpath@^0.0.34 @xmldom/xmldom@^0.9.10` from the worktree root with the pinned store (`pnpm config get store-dir` -> ~/Library/pnpm/store). Verify `git diff pnpm-lock.yaml` has zero removed lines.
 
 - **Invariants:** pnpm only ([inv:pnpm-only]); main checkout node_modules untouched ([inv:no-main-writes]); the only lockfile change is the new importer block plus any newly-resolved packages. Also: [inv:shared-worktree] (commit only your own explicit paths, tag every commit `[psm:deps-install]`), [inv:owned-paths-only], [inv:no-main-writes].
 

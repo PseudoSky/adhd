@@ -448,5 +448,10 @@
     "version": "0.8.35",
     "hash": "0b6bc1f3d70e"
   },
-  "goal": "Extract the Chrome/CDP runner from scratch/agent-browser/adhd into a new generator-built entrypoint package @adhd/stealth-browser, with apigen tracing under the adhd namespace"
+  "goal": "Extract the Chrome/CDP runner from scratch/agent-browser/adhd into a new generator-built entrypoint package @adhd/stealth-browser, with apigen tracing under the adhd namespace",
+  "demo": {
+    "source": "demo/DEMO.md",
+    "validate": "demo/UNRESOLVED.md",
+    "package_artifact": "entrypoint/stealth-browser/src/test/e2e/surfaces.e2e.test.ts"
+  }
 }

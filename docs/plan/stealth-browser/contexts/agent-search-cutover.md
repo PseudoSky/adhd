@@ -1,9 +1,9 @@
 # agent-search-cutover — WORK STATE
 
 **Phase:** release · **Kind:** work · **Depends on:** merge-readiness · **Guard:** `python3 docs/plan/stealth-browser/scripts/guard.py agent-search-cutover`
-**Executor:** `typescript-pro` (sonnet/high) · **Worktree:** `/Users/nix/dev/node/adhd/.worktrees/stealth-browser` on branch `stealth-browser` (shared by every state, [inv:shared-worktree])
+**Executor:** `typescript-pro` (sonnet/high) · **Worktree:** `/Users/nix/dev/node/adhd/.worktrees/stealth-browser` on branch `stealth-browser` (shared by every state, [inv:shared-worktree], [inv:worktree-required], [inv:no-ai-attribution])
 
-> **PREREQUISITE — human action required.** This state depends on `HB-RELEASE-DECISION` from `human-blockers.json`. Before starting, verify:
+> **PREREQUISITE — human action required.** This state depends on `hb-release-decision` from `human-blockers.json`. Before starting, verify:
 >
 > ```bash
 > python3 docs/plan/stealth-browser/scripts/guard.py merge-readiness --only merge-readiness.2

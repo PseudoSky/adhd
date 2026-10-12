@@ -1,9 +1,9 @@
 # gates-first — WORK STATE
 
 **Phase:** verify · **Kind:** work · **Depends on:** tests-unit-core, tests-unit-data, tests-unit-extract, tests-unit-surface, tracing-namespace-proof, tests-e2e, mig-docs · **Guard:** `python3 docs/plan/stealth-browser/scripts/guard.py gates-first`
-**Executor:** `qa` (sonnet/medium) · **Worktree:** `/Users/nix/dev/node/adhd/.worktrees/stealth-browser` on branch `stealth-browser` (shared by every state, [inv:shared-worktree])
+**Executor:** `qa` (sonnet/medium) · **Worktree:** `/Users/nix/dev/node/adhd/.worktrees/stealth-browser` on branch `stealth-browser` (shared by every state, [inv:shared-worktree], [inv:worktree-required], [inv:no-ai-attribution])
 
-> **PREREQUISITE — human action required.** This state depends on `HB-CHROME-BINARY` from `human-blockers.json`. Before starting, verify:
+> **PREREQUISITE — human action required.** This state depends on `hb-chrome-binary` from `human-blockers.json`. Before starting, verify:
 >
 > ```bash
 > test -x "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
@@ -74,4 +74,4 @@ Every plan-file write is committed (R1). Work-product commits for this state, al
 ## Notes for executor
 
 - This state writes only evidence; code fixes are made by re-opening the owning state via an amendment, so ownership stays clean.
-- The e2e gate needs Chrome (HB-CHROME-BINARY) and takes minutes.
+- The e2e gate needs Chrome (hb-chrome-binary) and takes minutes.

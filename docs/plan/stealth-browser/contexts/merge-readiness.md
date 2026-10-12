@@ -1,9 +1,9 @@
 # merge-readiness — WORK STATE
 
 **Phase:** release · **Kind:** work · **Depends on:** audit-final · **Guard:** `python3 docs/plan/stealth-browser/scripts/guard.py merge-readiness`
-**Executor:** `dispatcher` (human/dispatcher) · **Worktree:** `/Users/nix/dev/node/adhd/.worktrees/stealth-browser` on branch `stealth-browser` (shared by every state, [inv:shared-worktree])
+**Executor:** `dispatcher` (human/dispatcher) · **Worktree:** `/Users/nix/dev/node/adhd/.worktrees/stealth-browser` on branch `stealth-browser` (shared by every state, [inv:shared-worktree], [inv:worktree-required], [inv:no-ai-attribution])
 
-> **PREREQUISITE — human action required.** This state depends on `HB-RELEASE-DECISION` from `human-blockers.json`. Before starting, verify:
+> **PREREQUISITE — human action required.** This state depends on `hb-release-decision` from `human-blockers.json`. Before starting, verify:
 >
 > ```bash
 > python3 docs/plan/stealth-browser/scripts/guard.py merge-readiness --only merge-readiness.2
@@ -69,4 +69,4 @@ Every plan-file write is committed (R1). Work-product commits for this state, al
 
 ## Notes for executor
 
-- HB-RELEASE-DECISION is the gate; the plan never publishes on its own.
+- hb-release-decision is the gate; the plan never publishes on its own.

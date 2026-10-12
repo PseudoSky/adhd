@@ -1,7 +1,7 @@
 # productization-hold — REVIEW STATE
 
 **Phase:** productization · **Kind:** review · **Depends on:** none · **Guard:** `python3 docs/plan/stealth-browser/scripts/guard.py productization-hold`
-**Executor:** `product` (sonnet/medium) · **Worktree:** `/Users/nix/dev/node/adhd/.worktrees/stealth-browser` on branch `stealth-browser` (shared by every state, [inv:shared-worktree])
+**Executor:** `product` (sonnet/medium) · **Worktree:** `/Users/nix/dev/node/adhd/.worktrees/stealth-browser` on branch `stealth-browser` (shared by every state, [inv:shared-worktree], [inv:worktree-required], [inv:no-ai-attribution])
 
 ---
 

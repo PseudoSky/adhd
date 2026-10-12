@@ -1,7 +1,7 @@
 # docs-marketing-run — WORK STATE
 
 **Phase:** docs · **Kind:** work · **Depends on:** gates-rerun · **Guard:** `python3 docs/plan/stealth-browser/scripts/guard.py docs-marketing-run`
-**Executor:** `doc-steward` (sonnet/medium) · **Worktree:** `/Users/nix/dev/node/adhd/.worktrees/stealth-browser` on branch `stealth-browser` (shared by every state, [inv:shared-worktree])
+**Executor:** `doc-steward` (sonnet/medium) · **Worktree:** `/Users/nix/dev/node/adhd/.worktrees/stealth-browser` on branch `stealth-browser` (shared by every state, [inv:shared-worktree], [inv:worktree-required], [inv:no-ai-attribution])
 
 ---
 
@@ -63,4 +63,4 @@ Every plan-file write is committed (R1). Work-product commits for this state, al
 
 ## Notes for executor
 
-- The cartographer executes receipts: HB-CHROME-BINARY applies in spirit; run on a dedicated port, never 9222.
+- The cartographer executes receipts: hb-chrome-binary applies in spirit; run on a dedicated port, never 9222.
