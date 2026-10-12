@@ -81,6 +81,15 @@
       "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py scaffold --only scaffold.6",
       "expect": "exit0",
       "cwd": "repo-root"
+    },
+    {
+      "id": "scaffold.7",
+      "phase": "scaffold",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py scaffold --only scaffold.7",
+      "expect": "exit0",
+      "cwd": "repo-root"
     }
   ]
 }
