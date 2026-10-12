@@ -335,14 +335,124 @@ export function rateLimitFromCli(info) {
  * (a result containing `fail 0`), i.e. after the work was demonstrably done; null when the tests never went green.
  * `errors` = calls whose result was an error; `duplicates` = identical (name,input) repeats.
  */
-export function callMetrics(calls, _exp, _phase) {
+export function callMetrics(calls, exp, _phase) {
+  const advertised = exp?.advertisedTools ?? [];
+  const facts = calls.map((c) => toolNameFacts(c.name, advertised, { server: c.server === true }));
   let completeAt = null;
   calls.forEach((c, i) => { if (/(?:^|\s)fail 0\b/m.test(c.resultText || '') && /(^|__)(Bash|shell_execute|shell)$/.test(splitToolName(c.name).tool)) completeAt = i; });
+  // I-toolname: duplicates and byTool key on the CANONICAL tool name, so one tool reached through two spellings is one tool.
   const seen = new Set(); let dup = 0;
-  for (const c of calls) { const key = `${c.name}|${JSON.stringify(c.input)}`; if (seen.has(key)) dup++; seen.add(key); }
-  const byTool = {}; for (const c of calls) { const s = splitToolName(c.name); const k = s.server ? `${s.server}__${s.tool}` : s.tool; byTool[k] = (byTool[k] || 0) + 1; }
-  return { total: calls.length, errors: calls.filter((c) => c.isError === true).length, duplicates: dup, byTool, completeAt, wasted: completeAt == null ? null : calls.length - completeAt - 1 };
+  calls.forEach((c, i) => { const key = `${facts[i].canonical}|${JSON.stringify(c.input)}`; if (seen.has(key)) dup++; seen.add(key); });
+  return { total: calls.length, errors: calls.filter((c) => c.isError === true).length, duplicates: dup, ...toolTally(facts), completeAt, wasted: completeAt == null ? null : calls.length - completeAt - 1 };
 }
+
+// ---------------------------------------------------------------------------------------------------
+// I-toolname: one canonical identity for a tool across the three spellings the arms show the model.
+//   A  native built-ins            Bash, Read, Edit, Write, Agent, WebFetch ...            (kept as-is)
+//   B  claudecli bridged servers   mcp__<server>__<tool>                                    (mcp__ stripped)
+//   C  anthropic provider          <server>__<tool> (the model sometimes drops the prefix; the engine tolerates it)
+// Canonical form is `<server>__<tool>` for server tools and the native name for built-ins. The RAW spelling stays visible (rawNames,
+// bareNameCalls) so the product defect "the model emits a bare name" is measured, never normalised away.
+// ---------------------------------------------------------------------------------------------------
+/** Claude Code built-in tools are PascalCase and never `server__tool`; this set is documentation, the PascalCase test is the rule. */
+export const NATIVE_TOOLS = new Set(['Bash', 'Read', 'Edit', 'Write', 'MultiEdit', 'Glob', 'Grep', 'Agent', 'Task', 'WebFetch', 'WebSearch', 'NotebookEdit', 'TodoWrite', 'Skill', 'ToolSearch', 'TaskStop', 'TaskOutput', 'SendMessage', 'ListAgents', 'Monitor', 'Workflow']);
+const isNativeTool = (n) => NATIVE_TOOLS.has(n) || /^[A-Z][A-Za-z]*$/.test(n);
+const SERVER_WEB_TOOL = /^web_(fetch|search)$/;
+const stripMcp = (n) => String(n ?? '').replace(/^mcp__/, '');
+const advertisedNames = (advertised) => [...new Set((advertised || []).map((a) => stripMcp(typeof a === 'string' ? a : a?.name ?? a?.type)).filter(Boolean))];
+/**
+ * Everything known about one call's name. `advertised` = the tool names the model was shown (any spelling, `mcp__` allowed); `server` = the call was an
+ * Anthropic `server_tool_use`. kind: native | qualified | server_tool_use | bare_resolved (exactly one advertised `server__tool` ends in the bare name) |
+ * bare_ambiguous (several do: left bare, never guessed) | bare_unresolved (none, or nothing advertised). `bare` = the model dropped the server prefix of an
+ * advertised server tool (resolved or ambiguous); a server tool's own bare name (web_fetch) and native tools are never `bare`.
+ */
+export function toolNameFacts(name, advertised = [], { server = false } = {}) {
+  const raw = String(name ?? ''); const n = stripMcp(raw);
+  if (SERVER_WEB_TOOL.test(n) && (server || advertisedNames(advertised).includes(n))) return { raw, canonical: `web__${n}`, kind: 'server_tool_use', bare: false };
+  if (n.includes('__')) return { raw, canonical: n, kind: 'qualified', bare: false };
+  if (isNativeTool(n)) return { raw, canonical: n, kind: 'native', bare: false };
+  const hits = advertisedNames(advertised).filter((a) => { const i = a.lastIndexOf('__'); return i > 0 && a.slice(i + 2) === n; });
+  if (hits.length === 1) return { raw, canonical: hits[0], kind: 'bare_resolved', bare: true };
+  if (hits.length > 1) return { raw, canonical: n, kind: 'bare_ambiguous', bare: true };
+  return { raw, canonical: n, kind: 'bare_unresolved', bare: false };
+}
+/** The canonical tool name (see toolNameFacts). */
+export const canonicalToolName = (name, advertisedTools = [], opts = {}) => toolNameFacts(name, advertisedTools, opts).canonical;
+/** Counters over a list of toolNameFacts: byTool (canonical), rawNames (raw spelling -> count), bareNameCalls (+ per canonical tool), serverToolCalls, unresolvedBare. */
+function toolTally(facts) {
+  const byTool = {}, rawNames = {}, bareNameByTool = {}; let bareNameCalls = 0, serverToolCalls = 0, unresolvedBare = 0;
+  for (const f of facts) {
+    byTool[f.canonical] = (byTool[f.canonical] || 0) + 1; rawNames[f.raw] = (rawNames[f.raw] || 0) + 1;
+    if (f.bare) { bareNameCalls++; bareNameByTool[f.canonical] = (bareNameByTool[f.canonical] || 0) + 1; }
+    if (f.kind === 'server_tool_use') serverToolCalls++; else if (f.kind === 'bare_unresolved') unresolvedBare++;
+  }
+  return { byTool, bareNameCalls, bareNameByTool, serverToolCalls, unresolvedBare, rawNames };
+}
+
+/**
+ * One category taxonomy for the instrument's metrics.byCategory (drive.mjs). Used buckets keep their R5-R8 meaning; `collect` (agent-mcp `result`: B/C must
+ * poll a worker's result, A's Agent returns it inline) and `control` (administration, scheduling, session and harness tools nobody dispatches work through)
+ * are separate so `dispatch` stays comparable across arms. The judge's own toolCategory (judge.mjs) is a different taxonomy and is deliberately untouched.
+ */
+export const TOOL_CATEGORIES = Object.freeze([
+  ['dispatch', /(^|__)(Agent|Task|agent|task|tasks_batch)$/], ['collect', /(^|__)result$/], ['shell', /(^|__)(Bash|shell_execute|shell)$/],
+  ['edit', /(^|__)(Edit|edit_file|NotebookEdit)$/], ['write', /(^|__)(Write|write_file|create_directory|move_file)$/],
+  ['read', /(^|__)(Read|read_text_file|read_multiple_files|read_file|read_media_file)$/],
+  ['search', /(^|__)(Glob|Grep|search_files|directory_tree|list_directory|list_directory_with_sizes|list_allowed_directories|get_file_info)$/], ['mcp', /(^|__)get_ticket$/],
+  ['web', /web_(fetch|search)|WebFetch|WebSearch/],
+  ['control', /(^|__)(guide|pricing_history|pricing_refresh|usage_query|session_(clear|close|list|update)|task_(cancel|list|resume)|request_human_input|ToolSearch|Skill|TaskStop|TaskOutput|TodoWrite|AskUserQuestion|Cron(Create|Delete|List)|ScheduleWakeup|Monitor|PushNotification|RemoteTrigger|ReportFindings|SendMessage|ListAgents|EnterWorktree|ExitWorktree|DesignSync|Workflow)$/],
+]);
+/** Category of a tool name in any spelling; 'other' only for a tool the taxonomy does not know. */
+export function toolCategoryOf(name) {
+  const s = splitToolName(name); const base = s.server ? `${s.server}__${s.tool}` : s.tool;
+  for (const [c, re] of TOOL_CATEGORIES) if (re.test(base) || re.test(s.tool)) return c;
+  return 'other';
+}
+
+// ---------------------------------------------------------------------------------------------------
+// I-toolname: offline re-derivation of a saved run's tool counts at canonical level (read-only; writes nothing).
+// ---------------------------------------------------------------------------------------------------
+/**
+ * Tool-call rows of a saved run, one entry per model task (B/C) or CLI phase (A): `{ id, advertised, calls: [{ name, server, depth }] }` with `depth` 0
+ * for the root agent and 1 for a worker/subagent. Source: A `A.phase<N>.stream.jsonl`; B `spawn.stdout` streams in logs/api; C `http.*` events in logs/api.
+ * Root task ids come from record.json (metrics.phases[].taskId). Names and kinds only, no bodies.
+ */
+export function extractToolTasks(runDir, arm) {
+  const tasks = [];
+  if (arm === 'A') {
+    for (const ph of [1, 2]) {
+      const f = path.join(runDir, `A.phase${ph}.stream.jsonl`); if (!fs.existsSync(f)) continue;
+      const p = parseCliStream(parseJsonLines(fs.readFileSync(f, 'utf8')));
+      tasks.push({ id: `phase${ph}`, advertised: p.init?.tools || [], calls: [...p.toolUses.values()].map((t) => ({ name: t.name, server: false, depth: t.parent == null ? 0 : 1 })) });
+    }
+    return tasks;
+  }
+  const rec = JSON.parse(fs.readFileSync(path.join(runDir, 'record.json'), 'utf8'));
+  const roots = new Set((rec.metrics?.phases || []).map((p) => p.taskId).filter(Boolean));
+  const api = findApiLogs(path.join(runDir, 'logs'));
+  const ids = [...new Set(api.map((e) => e.task_id).filter(Boolean))].sort();
+  for (const id of ids) {
+    const depth = roots.has(id) ? 0 : 1;
+    if (arm === 'B') {
+      const p = parseCliStream(cliEventsForTask(api, id).events); if (!p.toolUses.size && !p.init) continue;
+      tasks.push({ id, advertised: p.init?.tools || [], calls: [...p.toolUses.values()].filter((t) => t.parent == null).map((t) => ({ name: t.name, server: false, depth })) });
+    } else {
+      const turns = httpTurnsForTask(api, id); if (!turns.length) continue;
+      const adv = turns.find((t) => (t.body?.tools || []).length)?.body?.tools || [];
+      tasks.push({ id, advertised: adv.map((t) => t.name || t.type), calls: callsFromHttpTurns(turns).map((c) => ({ name: c.name, server: c.server === true, depth })) });
+    }
+  }
+  return tasks;
+}
+/** Canonical-level counts over extractToolTasks rows. scope: 'all' (parent + workers) | 'parent' (depth 0 only). Also byCategory (drive's taxonomy). */
+export function toolCountsOf(tasks, { scope = 'all' } = {}) {
+  const facts = [];
+  for (const t of tasks) for (const c of t.calls) if (scope === 'all' || c.depth === 0) facts.push(toolNameFacts(c.name, t.advertised, { server: c.server === true }));
+  const byCategory = {}; for (const f of facts) { const k = toolCategoryOf(f.canonical); byCategory[k] = (byCategory[k] || 0) + 1; }
+  return { scope, total: facts.length, ...toolTally(facts), byCategory };
+}
+/** Re-derive a saved run's canonical tool counts from its own logs. Read-only. */
+export const rederiveToolCounts = (runDir, arm, opts) => toolCountsOf(extractToolTasks(runDir, arm), opts);
 
 // ---------------------------------------------------------------------------------------------------
 // Secret scan (node, not shell pipes). Never prints a match; redacts in place and counts per kind.

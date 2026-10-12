@@ -16,7 +16,7 @@ import { rescoreRecord } from './rescore.mjs';
 import * as MTt from './metrics.mjs';
 import * as GRt from './grid.mjs';
 import * as GTt from './gate.mjs';
-import { buildPlan, ancestorLeaks, runHidden, transcriptFor, resultForJudge, gapSecondsSince } from './drive.mjs';
+import { buildPlan, ancestorLeaks, runHidden, transcriptFor, resultForJudge, gapSecondsSince, categoryOf } from './drive.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROUND1 = path.join(HERE, 'golden/absent-round1.jsonl');
@@ -210,6 +210,50 @@ export async function runLibTests({ log = console.log } = {}) {
     eq(L.callMetrics([c('Bash', 'fail 3')]).wasted, null);
     eq(L.callMetrics([c('mcp__shell__shell_execute', 'fail 0')]).wasted, 0);
     ok(L.callMetrics([c('Read', 'fail 0')]).wasted === null, 'a Read result is not a test run');
+  });
+  // ---- I-toolname: one canonical tool identity across the three spellings (native / mcp__server__tool / server__tool / bare)
+  const TN = JSON.parse(fs.readFileSync(path.join(HERE, 'golden/r8/tool-names.json'), 'utf8'));   // names + kinds + advertised sets extracted from the saved R8 A1/B1/C1 runs
+  const ADV = ['shell__shell_execute', 'fs__read_text_file', 'agent-mcp__task', 'web_fetch', 'web_search'];
+  const tnCall = (name, extra = {}) => ({ name, input: { n: Math.random() }, isError: false, resultText: 'x', ...extra });
+  await t('I-toolname AC1: shell_execute, shell__shell_execute and mcp__shell__shell_execute are ONE byTool key; the bare spelling stays measurable (bareNameCalls, rawNames)', () => {
+    const m = L.callMetrics([tnCall('shell_execute'), tnCall('shell__shell_execute'), tnCall('mcp__shell__shell_execute')], { advertisedTools: ADV });
+    eq(m.byTool, { shell__shell_execute: 3 }); eq(m.bareNameCalls, 1); eq(m.bareNameByTool, { shell__shell_execute: 1 });
+    eq(m.rawNames, { shell_execute: 1, shell__shell_execute: 1, mcp__shell__shell_execute: 1 });
+    // negative control: the bare form resolves ONLY against the advertised list; with none it stays its own key and is counted unresolved, never guessed
+    const blind = L.callMetrics([tnCall('shell_execute'), tnCall('shell__shell_execute')], {});
+    eq(blind.byTool, { shell_execute: 1, shell__shell_execute: 1 }); eq([blind.bareNameCalls, blind.unresolvedBare], [0, 1]);
+    // two advertised tools share the bare name: ambiguous, left bare, still counted as a dropped prefix
+    const amb = L.callMetrics([tnCall('read_file')], { advertisedTools: ['fs__read_file', 'other__read_file'] });
+    eq(amb.byTool, { read_file: 1 }); eq(amb.bareNameCalls, 1);
+    // identical input through two spellings is one duplicate (it was invisible while the names differed)
+    const input = { command: 'ls' }; eq(L.callMetrics([{ name: 'shell_execute', input }, { name: 'shell__shell_execute', input }], { advertisedTools: ADV }).duplicates, 1);
+  });
+  await t('I-toolname AC1: the server-side web tool maps to the logical web tool and keeps its raw kind visible; a client-side web__web_fetch is the same key', () => {
+    const m = L.callMetrics([tnCall('web_fetch', { server: true }), tnCall('web_search', { server: true }), tnCall('mcp__web__web_fetch')], { advertisedTools: ADV });
+    eq(m.byTool, { web__web_fetch: 2, web__web_search: 1 }); eq(m.serverToolCalls, 2); eq(m.bareNameCalls, 0); eq(m.rawNames, { web_fetch: 1, web_search: 1, mcp__web__web_fetch: 1 });
+  });
+  await t('I-toolname AC2: native built-ins are unchanged (Bash/Read/Edit/Write/Agent/Task/WebFetch/WebSearch keep their name and are never "bare")', () => {
+    const names = ['Bash', 'Read', 'Edit', 'Write', 'Agent', 'Task', 'WebFetch', 'WebSearch', 'Glob', 'Grep'];
+    for (const n of names) { eq(L.canonicalToolName(n, ADV), n); eq(L.canonicalToolName(n, []), n); }
+    const m = L.callMetrics(names.map((n) => tnCall(n)), { advertisedTools: ADV }); eq(Object.keys(m.byTool).sort(), [...names].sort()); eq(m.bareNameCalls, 0);
+    eq(L.canonicalToolName('mcp__r2info__get_ticket', []), 'r2info__get_ticket');   // a bridged server tool loses only the mcp__ envelope
+  });
+  const ALL_ADVERTISED = [...new Set(Object.values(TN).flatMap((r) => r.tasks.flatMap((x) => x.advertised)))];
+  await t('I-toolname AC3: every tool advertised or called in the R8 A1/B1/C1 records maps to a non-"other" category (drive categoryOf), in every spelling', () => {
+    ok(ALL_ADVERTISED.length >= 60, `the fixture should carry the advertised sets of all three arms, got ${ALL_ADVERTISED.length}`);
+    const called = Object.values(TN).flatMap((r) => r.tasks.flatMap((x) => x.calls.map((c) => c.name)));
+    const other = [...new Set([...ALL_ADVERTISED, ...called])].filter((n) => categoryOf(n) === 'other'); eq(other, []);
+    eq([categoryOf('agent-mcp__result'), categoryOf('mcp__agent-mcp__result'), categoryOf('fs__create_directory'), categoryOf('shell_execute')], ['collect', 'collect', 'write', 'shell']);
+    eq(categoryOf('definitely_not_a_tool'), 'other');                                   // negative control: the taxonomy still says "other" for a tool it does not know
+    eq([categoryOf('Agent'), categoryOf('agent-mcp__task'), categoryOf('Bash'), categoryOf('web_fetch'), categoryOf('WebFetch')], ['dispatch', 'dispatch', 'shell', 'web', 'web']);   // used buckets keep their meaning
+  });
+  await t('I-toolname AC4: re-derived over the saved R8 C1 run the shell tool is ONE key, 13 calls of which 9 bare; A1 and B1 have no bare calls', () => {
+    const C = L.toolCountsOf(TN.C1.tasks); eq(C.byTool.shell__shell_execute, 13); eq(C.bareNameByTool, { shell__shell_execute: 9 }); eq(C.bareNameCalls, 9);
+    ok(!('shell_execute' in C.byTool), 'no bare shell key'); eq(C.serverToolCalls, 6); eq(C.byTool.web__web_fetch, 6); eq(C.unresolvedBare, 0); eq(C.total, 54);
+    eq(C.rawNames.shell_execute, 9); eq(C.rawNames.shell__shell_execute, 4);
+    const P = L.toolCountsOf(TN.C1.tasks, { scope: 'parent' }); eq([P.byTool.shell__shell_execute, P.bareNameCalls, P.total], [9, 8, 32]);   // record.json phases are parent-only: 8 bare + 1 prefixed
+    for (const id of ['A1', 'B1']) { const r = L.toolCountsOf(TN[id].tasks); eq(r.bareNameCalls, 0, id); eq(r.unresolvedBare, 0, id); }
+    eq(L.toolCountsOf(TN.B1.tasks).byTool.shell__shell_execute, 12); eq(L.toolCountsOf(TN.A1.tasks).byTool.Bash, 13);
   });
   await t('dispatch: only Agent/Task and agent-mcp task RUN a worker (agent merely opens a session)', () => {
     for (const n of ['Agent', 'Task', 'mcp__agent-mcp__task', 'agent-mcp__task']) ok(L.isRunName(n), n);

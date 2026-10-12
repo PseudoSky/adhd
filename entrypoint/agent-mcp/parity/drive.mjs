@@ -43,10 +43,11 @@ function parseArgs(argv) {
   const o = { round: ROUND, mode: null, out: null, seed: '20261011', wt: DEFAULT_WT, claude: 'claude', yes: false, degraded: null, rep: 1, capture: process.env.PARITY_CAPTURE === '1' };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]; const v = () => argv[++i];
-    if (['--self-check', '--print-plan', '--check-oracle', '--check-lib', '--dry-run', '--live', '--reparse-judge', '--rejudge'].includes(a)) o.mode = a.slice(2);
+    if (['--self-check', '--print-plan', '--check-oracle', '--check-lib', '--dry-run', '--live', '--reparse-judge', '--rejudge', '--rederive-tools'].includes(a)) o.mode = a.slice(2);
     else if (['preflight', 'verdict', 'grid'].includes(a)) o.mode = a; else if (a === '--round') { o.round = v(); if (!ROUND_RE.test(o.round)) { console.error(`--round must match ${ROUND_RE} (it names the ledger file and the tmp dir), got ${JSON.stringify(o.round)}`); process.exit(2); } }
     else if (a === '--out') { o.out = path.resolve(v()); o.outExplicit = true; } else if (a === '--seed') o.seed = v(); else if (a === '--wt') o.wt = path.resolve(v()); else if (a === '--claude') o.claude = v();
     else if (a === '--rep') { o.rep = Number.parseInt(v(), 10); if (!(o.rep >= 1)) { console.error('--rep must be an integer >= 1'); process.exit(2); } } else if (a === '--run') o.run = v(); else if (a === '--yes') o.yes = true; else if (a === '--capture') o.capture = true; else if (a === '--degraded') o.degraded = v();
+    else if (a === '--emit-fixture') o.emitFixture = true;
     else { console.error(`unknown argument ${a}`); process.exit(2); }
   }
   return o;
@@ -574,9 +575,8 @@ export function gatePacing(read, rateLimitsSeen = []) {
 // ----------------------------------------------------------------------------------------------------------------
 // Analysis (raw capture -> oracle observation + process metrics)
 // ----------------------------------------------------------------------------------------------------------------
-const CATEGORY = [['dispatch', /(^|__)(Agent|Task|agent|task)$/], ['shell', /(^|__)(Bash|shell_execute|shell)$/], ['edit', /(^|__)(Edit|edit_file)$/], ['write', /(^|__)(Write|write_file)$/], ['read', /(^|__)(Read|read_text_file|read_multiple_files|read_file)$/],
-  ['search', /(^|__)(Glob|Grep|search_files|directory_tree|list_directory|list_allowed_directories)$/], ['mcp', /(^|__)get_ticket$/], ['web', /web_(fetch|search)|WebFetch|WebSearch/]];
-const categoryOf = (name) => { const s = L.splitToolName(name); const base = s.server ? `${s.server}__${s.tool}` : s.tool; for (const [c, re] of CATEGORY) if (re.test(base) || re.test(s.tool)) return c; return 'other'; };
+/** I-toolname: the category of a tool in any spelling (lib.toolCategoryOf); 'other' only for a tool the taxonomy does not know. */
+export const categoryOf = (name) => L.toolCategoryOf(name);
 const tally = (calls) => { const t = {}; for (const c of calls) { const k = categoryOf(c.name); t[k] = (t[k] || 0) + 1; } return t; };
 const rd = (x, n = 6) => Math.round(x * 10 ** n) / 10 ** n;
 const sumUsd = (turns) => (turns.some((t) => t.usd == null) ? null : rd(turns.reduce((s, t) => s + t.usd, 0)));   // R7-model AC3: any unpriced turn (no rate card) makes the sum null = unmeasured, never a partial number
@@ -617,8 +617,8 @@ export function analyzeA(ctx, raw) {
     if (!a.result) metrics.warnings.push(`phase ${i + 1}: no result event (exit ${pr.code}, signal ${pr.sig}, timedOut ${pr.timedOut})`);
     const tot = totalsOf(a.turns);
     for (const w of L.tierAssertion('A', tot, totalsOf(parentTurns))) metrics.warnings.push(`phase ${i + 1}: ${w}`);
-    metrics.phases.push({ phase: i + 1, sessionId: pr.sid, wallMs: pr.wallMs, exit: pr.code, turns: { parent: parentTurns.length, child: childTurns.length }, calls: { total: a.calls.length, byCategory: tally(a.calls), ...L.callMetrics(a.calls, {}, i + 1) },
-      childCalls: L.callMetrics([...a.p.toolUses.values()].filter((t) => t.parent != null).map((t) => ({ name: t.name, input: t.input, isError: (a.p.toolResults.get(t.id) || {}).isError ?? null, resultText: (a.p.toolResults.get(t.id) || {}).text ?? null })), {}, i + 1).total,
+    metrics.phases.push({ phase: i + 1, sessionId: pr.sid, wallMs: pr.wallMs, exit: pr.code, turns: { parent: parentTurns.length, child: childTurns.length }, calls: { total: a.calls.length, byCategory: tally(a.calls), ...L.callMetrics(a.calls, { advertisedTools: a.tools }, i + 1) },
+      childCalls: L.callMetrics([...a.p.toolUses.values()].filter((t) => t.parent != null).map((t) => ({ name: t.name, input: t.input, isError: (a.p.toolResults.get(t.id) || {}).isError ?? null, resultText: (a.p.toolResults.get(t.id) || {}).text ?? null })), { advertisedTools: a.tools }, i + 1).total,
       tokens: { parent: totalsOf(parentTurns), child: totalsOf(childTurns), total: tot }, costUsd: { parent: sumUsd(parentTurns), child: sumUsd(childTurns), total: recompute, cliReported: cli, cliCumulative: a.acc?.cumulative.usd ?? null, authoritative: cli ?? recompute, source: cli != null ? 'claude CLI total_cost_usd increment' : 'tier-aware recompute' },
       firstTurnContext: parentTurns[0]?.ctx ?? null, stopReasons: [...new Set(a.turns.map((t) => t.stop).filter(Boolean))], resultStop: a.result?.stop_reason ?? null, numTurnsCli: a.result?.num_turns ?? null, thinkingTurns: a.turns.filter((t) => t.thinkingBlock).length,
       parallel: a.parallel, rate: a.rate.filter(Boolean).slice(-1)[0] ?? null, errorText: a.status === 'failed' ? String(a.result?.result ?? pr.stderr).slice(0, 500) : null, denials: a.p.denials.length });
@@ -694,7 +694,7 @@ function analyzeBC(ctx, raw) {
     const calls = s.calls; const runCalls = calls.filter((c) => L.isRunName(c.name));
     const rowsUsd = sum?.est_cost_usd ?? null;
     metrics.phases.push({ phase: i + 1, taskId: root, status: pr.status, wallMs: pr.wallMs, polls: pr.polls?.length, errorText: pr.errorText ?? null,
-      turns: { parent: parentTurns.length, child: childTurnsAll.length }, calls: { total: calls.length, byCategory: tally(calls), ...L.callMetrics(calls, {}, i + 1), runCalls: runCalls.length },
+      turns: { parent: parentTurns.length, child: childTurnsAll.length }, calls: { total: calls.length, byCategory: tally(calls), ...L.callMetrics(calls, { advertisedTools: s.tools }, i + 1), runCalls: runCalls.length },
       tokens: { parent: totalsOf(parentTurns), child: totalsOf(childTurnsAll), total: tot },
       costUsd: { parent: sumUsd(parentTurns), child: sumUsd(childTurnsAll), total: sumUsd(totalTurns), authoritative: sumUsd(totalTurns), repoEstimate: rowsUsd, cliReportedParent: parentRow?.cli_reported_cost_usd ?? null },
       firstTurnContext: parentTurns[0]?.ctx ?? null, firstTurnFromUsageQuery: firstUsage, stopReasons: [...new Set(parentTurns.map((t) => t.stop).filter(Boolean))],
@@ -1563,6 +1563,23 @@ async function rejudgeMode(opts) {
   } catch (e) { console.error(String(e?.message ?? e)); return 1; }
 }
 /**
+ * `--rederive-tools [--round Rn] [--run <id>] [--emit-fixture]` (I-toolname AC4): ZERO model calls, READ-ONLY. Re-derives each saved run's tool counts at CANONICAL level from
+ * its own logs (A stream files; B spawn.stdout; C http bodies) and prints them, parent+workers and parent-only. `--emit-fixture` prints the extracted per-task rows (names, kinds,
+ * advertised sets; no bodies) as JSON for parity/golden/r8/tool-names.json. Nothing is written.
+ */
+function rederiveToolsMode(opts) {
+  const runs = path.join(tmpRoot(opts.round), 'live/out/runs'); let ids = [];
+  try { ids = fs.readdirSync(runs).filter((d) => /^[ABC]\d+$/.test(d) && (!opts.run || d === opts.run)).sort(); } catch { /* none */ }
+  if (!ids.length) { console.error(`no runs under ${runs}`); return 1; }
+  const out = {};
+  for (const id of ids) {
+    const tasks = L.extractToolTasks(path.join(runs, id), id[0]);
+    out[id] = opts.emitFixture ? { arm: id[0], tasks } : { all: L.toolCountsOf(tasks), parent: L.toolCountsOf(tasks, { scope: 'parent' }) };
+  }
+  console.log(JSON.stringify(out, null, 2));
+  return 0;
+}
+/**
  * `--reparse-judge --round Rn` (R5-judge AC3): ZERO model calls, ledger untouched. Re-parses every saved judge record that failed to parse with the current parser,
  * writes the scores back into <judgeDir>/<arm>.json (what verdict/grid read) and updates the arm's record.json quality block. Prints per-arm means and the C/A ratio vs the owner gate; never a round verdict.
  */
@@ -1583,11 +1600,12 @@ function reparseJudgeMode(opts) {
 }
 async function main() {
   const opts = parseArgs(process.argv.slice(2));
-  if (!opts.mode) { console.error('usage: node drive.mjs --self-check | --print-plan | --check-oracle | --check-lib | --dry-run | --live --yes | --reparse-judge | --rejudge --run <id> --yes  [--out DIR] [--seed S] [--wt PATH] [--claude PATH] [--capture]'); process.exit(2); }
+  if (!opts.mode) { console.error('usage: node drive.mjs --self-check | --print-plan | --check-oracle | --check-lib | --rederive-tools | --dry-run | --live --yes | --reparse-judge | --rejudge --run <id> --yes  [--out DIR] [--seed S] [--wt PATH] [--claude PATH] [--capture]'); process.exit(2); }
   if (['dry-run', 'live', 'print-plan', 'preflight'].includes(opts.mode)) { const prof = roundProfile(opts); if (prof.capture) opts.capture = true; }   // R8: a profile that sets capture forces wire capture ON for the round (ledger.profile.capture); --capture stays the opt-in for every other round
   if (opts.mode === 'self-check') { const r = await selfCheck({ opts }); process.exit(r.ok ? 0 : 1); }
   if (opts.mode === 'check-oracle') { process.exit((await checkOracle()) ? 0 : 1); }
   if (opts.mode === 'check-lib') { const { runLibTests } = await import(pathToFileURL(path.join(HERE, 'libtest.mjs')).href); const r = await runLibTests({ log: console.log }); console.log(`lib self-test: ${r.ok ? 'PASS' : 'FAIL'} ${r.total - r.failed.length}/${r.total}`); process.exit(r.ok ? 0 : 1); }
+  if (opts.mode === 'rederive-tools') { process.exit(rederiveToolsMode(opts)); }
   if (opts.mode === 'reparse-judge') { process.exit(reparseJudgeMode(opts)); }
   if (opts.mode === 'rejudge') { process.exit(await rejudgeMode(opts)); }
   if (opts.mode === 'print-plan') { console.log(planText(opts)); return; }

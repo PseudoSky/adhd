@@ -6,7 +6,7 @@ Line 1 of every `parity/*.mjs` is `// PARITY-INSTRUMENT-ONLY`. This directory is
 One scenario ("shopkit", two phases in one session; `fixtures.mjs`). One run per arm per round, ledger cap 3: **A** native `claude -p` (native default toolset only), **B** agent-mcp `claudecli` provider, **C** agent-mcp `anthropic` provider. B and C use only agent-mcp tools or MCP servers as shipped, with the PRODUCT DEFAULT shell allowlist and egress (R6-prep). The task prompt is byte-identical for every arm and names no tool or method (R3). Arm A runs first; B and C alternate order between rounds (`ledger.armOrderFor`). If A is not a genuine success (every content item green, not INVALID, no defect signal) the iteration is VOID: B and C are not run.
 
 ## Commands (`node entrypoint/agent-mcp/parity/drive.mjs ...`)
-`--self-check` (no model call, no `claude`), `--print-plan`, `--check-oracle`, `--check-lib`, `preflight` (zero model calls, exit 0/3), `verdict --round R<n>`, `grid --round R<n>`, `--dry-run`, `--live --yes` (refuses, exit 3, unless every gate is green).
+`--self-check` (no model call, no `claude`), `--print-plan`, `--check-oracle`, `--check-lib`, `--rederive-tools [--round R<n>] [--run <id>] [--emit-fixture]` (zero model calls, read-only: canonical per-tool counts of saved runs, see Tool names), `preflight` (zero model calls, exit 0/3), `verdict --round R<n>`, `grid --round R<n>`, `--dry-run`, `--live --yes` (refuses, exit 3, unless every gate is green).
 
 ## Wire capture (R6B-proxy, opt-in)
 
@@ -111,3 +111,21 @@ Owner (2026-10-12): "just b". R8 started as ONE run of arm B on the model alias 
 - The real CLI honours `ANTHROPIC_BASE_URL` (observed: its request reached the proxy), so capture works for arms A and B as well as C.
 - Dry run: the fake claude resolves the alias to claude-haiku-5-5 and POSTs a request-shaped probe through `ANTHROPIC_BASE_URL`. With capture on, every arm gets the fake Anthropic upstream; the dry-run capture proxy can never be given a real upstream (`drive.captureUpstreams`: the fake or a discard sink on 127.0.0.1:9, even with `PARITY_UPSTREAM_*` set).
 - Live command (after the pacing gate and a rebuilt dist): `node entrypoint/agent-mcp/parity/drive.mjs --live --yes --round R8`.
+
+## Tool names (I-toolname)
+The same tool reaches the model under different names, so a raw tool name is NOT comparable across arms. The instrument keys per-tool counts on a canonical identity and keeps the raw spelling visible.
+
+| tool (logical) | A: native `claude -p` | B: agent-mcp `claudecli` (host: claude CLI) | C: agent-mcp `anthropic` (host: engine) | canonical key |
+|---|---|---|---|---|
+| shell | `Bash` | `mcp__shell__shell_execute` | `shell__shell_execute` (the model sometimes emits bare `shell_execute`) | A `Bash`; B/C `shell__shell_execute` |
+| read / edit / write files | `Read`, `Edit`, `Write` | `mcp__fs__read_text_file`, `mcp__fs__edit_file`, `mcp__fs__write_file`, ... | `fs__read_text_file`, `fs__edit_file`, `fs__write_file`, ... | A native name; B/C `fs__<tool>` |
+| dispatch a worker | `Agent` (advertised as `Task`) | `mcp__agent-mcp__task` | `agent-mcp__task` | A `Agent`; B/C `agent-mcp__task` |
+| collect a worker's result | inline in the `Agent` result | `mcp__agent-mcp__result` | `agent-mcp__result` | B/C `agent-mcp__result` (category `collect`) |
+| ticket lookup | `mcp__r2info__get_ticket` | `mcp__r2info__get_ticket` | `r2info__get_ticket` | `r2info__get_ticket` |
+| web fetch (differs in KIND) | native `WebFetch` | client-side engine tool `mcp__web__web_fetch` | Anthropic SERVER tool `web_fetch` (`server_tool_use`, executed by the API) | A `WebFetch`; B `web__web_fetch`; C `web__web_fetch` with `serverToolCalls` counting it |
+
+- Canonical form: strip `mcp__`; a native built-in (PascalCase, no `__`) keeps its name; a bare name that matches exactly one advertised `server__tool` resolves to it (`lib.canonicalToolName`, `lib.toolNameFacts`); an ambiguous or unadvertised bare name is left bare, never guessed. The advertised list is the arm's own: A/B the CLI `init.tools`, C the request `tools`.
+- Nothing is normalised away: `metrics.phases[].calls` carries `byTool` (canonical), `rawNames` (raw spelling -> count), `bareNameCalls` and `bareNameByTool` (calls where the model dropped the server prefix of an advertised tool; the product defect stays measurable), `serverToolCalls` (Anthropic server tools), `unresolvedBare`. A server tool's own bare name (`web_fetch`) and native tools are never counted as bare.
+- Comparability: per-tool counts compare across arms at the canonical-tool level (the same logical tool, e.g. shell) or at the category level (`byCategory`) ONLY, never by raw name. Arms use different tool surfaces by design (A: Claude Code built-ins; B/C: agent-mcp `fs`/`shell`/`agent-mcp`/`web` servers), so even canonical keys differ for read/edit/dispatch/web; compare those by category. Categories (`lib.TOOL_CATEGORIES`): dispatch, collect, shell, edit, write, read, search, mcp, web, control (administration, scheduling, session and harness tools nobody dispatches work through); `other` means a tool the taxonomy does not know. The judge keeps its own transcript taxonomy (`judge.toolCategory`), unchanged so the judge brief sha does not move.
+- Counting scope: `record.json` phase counts are the PARENT task only (A: parent turns; B/C: the root task of the phase). `drive.mjs --rederive-tools --round R8` re-derives counts over parent plus workers, and parent-only, from the saved logs (A stream files, B `spawn.stdout`, C `http.*` bodies) without writing anything. The committed fixture `golden/r8/tool-names.json` (names, kinds and advertised sets only) is its output for R8 and backs `--check-lib` and `src/__tests__/parity-instrument/tool-names.test.ts`.
+- R8 reading: C1 shell = one key, 13 calls, 9 of them bare (parent 8 of 9); A1 and B1 have no bare calls. Existing records are not rewritten: their `byTool` keep the raw-name keys they were written with; use `--rederive-tools` for canonical numbers.
