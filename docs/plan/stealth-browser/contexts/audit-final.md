@@ -31,6 +31,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 
 - [audit-final.1] [dod.1] structural: exactly one new package exists, entrypoint/stealth-browser, named @adhd/stealth-browser, built by the generator (scaffold evidence) and parity-clean.
 
+- [audit-final.2] [dod.2] behavioral: `nx run stealth-browser:verify-dist-load` and the e2e library/CLI/MCP surfaces pass on the final tree (gates-rerun evidence all green, tree == HEAD tree).
 ---
 
 ## Reservations
