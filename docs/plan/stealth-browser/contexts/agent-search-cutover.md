@@ -37,7 +37,7 @@ The live agent-search MCP source keeps working while consuming `@adhd/stealth-br
 
 Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/guard.py` (`python3 docs/plan/stealth-browser/scripts/guard.py agent-search-cutover --only agent-search-cutover.N`). None may be deferred. Tests written by this plan cite ticket `8468f7b1` and these ids ([inv:tests-cite]).
 
-_No criteria yet._
+- [agent-search-cutover.1] Preconditions: RELEASE-DECISION.md has `DECISION: publish|defer` and a `CONSUME:` line (`@adhd/stealth-browser@<version>` when published, `link:<abs path>` into the MERGED main checkout when deferred) and agent-browser/node_modules resolves @adhd/stealth-browser.
 
 ---
 

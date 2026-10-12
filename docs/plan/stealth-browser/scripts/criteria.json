@@ -1341,6 +1341,15 @@
       "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py merge-readiness --only merge-readiness.3",
       "expect": "exit0",
       "cwd": "repo-root"
+    },
+    {
+      "id": "agent-search-cutover.1",
+      "phase": "release",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py agent-search-cutover --only agent-search-cutover.1",
+      "expect": "exit0",
+      "cwd": "repo-root"
     }
   ]
 }
