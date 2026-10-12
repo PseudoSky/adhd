@@ -31,4 +31,4 @@ mutates:    ["docs/plan/stealth-browser/PRODUCT-REVIEW.md"]
 
 ## Notes for executor
 
-test
+executor=product tier=sonnet/medium

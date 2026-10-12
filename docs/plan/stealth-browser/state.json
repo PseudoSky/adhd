@@ -2,12 +2,21 @@
   "schema_version": 2,
   "title": "Migrate the agent-search chrome runner to @adhd/stealth-browser (entrypoint)",
   "dag": "dag.json",
-  "states": {},
+  "states": {
+    "productization-hold": {
+      "status": "pending",
+      "started_at": null,
+      "done_at": null,
+      "start_ref": null,
+      "end_ref": null
+    }
+  },
   "transition_log": [],
   "amendment_log": [],
   "authored_with": {
     "plugin": "workflow",
     "version": "0.8.35",
     "hash": "0b6bc1f3d70e"
-  }
+  },
+  "current_state": "productization-hold"
 }
