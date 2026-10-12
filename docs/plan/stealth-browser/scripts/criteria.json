@@ -558,6 +558,15 @@
       "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py surface-hosts --only surface-hosts.5",
       "expect": "exit0",
       "cwd": "repo-root"
+    },
+    {
+      "id": "surface-hosts.6",
+      "phase": "surface",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py surface-hosts --only surface-hosts.6",
+      "expect": "exit0",
+      "cwd": "repo-root"
     }
   ]
 }
