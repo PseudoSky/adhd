@@ -19,7 +19,7 @@ The apigen tracing plugin is mounted on every host under the `adhd` namespace, c
 
 - **Delta Spec:** `src/tracing.ts`: `import { makeTracingPlugin } from '@adhd/apigen-plugin-tracing'; export const tracingPlugin = makeTracingPlugin({ serviceName: 'adhd' });`. In `server.ts` and `cli.ts` import `tracingPlugin` from `./tracing.js` and include it in EVERY `usePlugins` array. NEVER import the package's own `tracingPlugin` singleton (that one is apigen-namespaced and would emit `apigen.*`). `serviceName` appears in no other non-test file. package.json adds `@adhd/apigen-plugin-tracing` and `@adhd/sox-telemetry` (workspace ranges matching backlog).
 
-- **Invariants:** [inv:trace-namespace]: namespace `adhd`, one configuration site, every host mounted. Also: [inv:shared-worktree] (commit only your own explicit paths, tag every commit `[psm:tracing-plugin]`), [inv:owned-paths-only], [inv:no-main-writes].
+- **Invariants:** [inv:trace-namespace]: namespace `adhd`, one configuration site, every host mounted. The namespace is pinned to what the CODE EMITS, not to the apigen design notes (backlog 5152786d records that `docs/apigen/design-notes/apigen-plugin-tracing-CONTRACT-FIX.md` and `-IMPLEMENTATION-SPEC.md` still claim reserved `apigen.*` keys while `plugin.ts` emits `${serviceName}.op`, `${serviceName}.transport`, `${serviceName}.op.error` and span `${serviceName}.<op>`; `tracing-plugin.8` asserts the emitting source). Diagnostics (P9): add a `--verbose` flag to both hosts that sends diagnostics to stderr only; the MCP bin's stdout carries JSON-RPC and nothing else (`tracing-plugin.7`; the live stdout check is `tests-e2e.7`). Also: [inv:shared-worktree] (commit only your own explicit paths, tag every commit `[psm:tracing-plugin]`), [inv:owned-paths-only], [inv:no-main-writes].
 
 - **Validation:** `python3 docs/plan/stealth-browser/scripts/guard.py tracing-plugin` — runs every acceptance criterion below (red until the work is done); `--only tracing-plugin.N` runs one.
 
@@ -66,5 +66,6 @@ Every plan-file write is committed (R1). Work-product commits for this state, al
 
 ## Notes for executor
 
+- Do not edit the apigen design notes here (backlog 5152786d owns that fix); if the code and a note disagree, the code wins and the guard says so.
 - Backlog item 5b98d3b2 (FEAT-AGENT-TRACING) is a different feature (agent-session tracing dashboards) and is OUT of scope; this state only wires the apigen plugin the request asked for.
 - The binary namespace proof is the NEXT concern (`tracing-namespace-proof`), after e2e (it flips tracing.ts temporarily and must not race a build).

@@ -17,9 +17,9 @@ The package has one public library surface: `src/index.ts` re-exports everything
 
 - **Reference Pattern:** `/Users/nix/dev/ai/scratch/agent-browser/cdp-query-client.ts` (42-line barrel), `/Users/nix/dev/ai/scratch/agent-browser/search-mcp-source.ts:454-495` (chromeStatus, launchChrome, shutdownChrome, listPageTargets, checkChromeActivity, getPageContext), `ChromeStatus` non-optional `managed` comment, `entrypoint/stealth-browser/../backlog/src/api.ts` for the apigen module shape ([ref:apigen-host]).
 
-- **Delta Spec:** `api.ts` exports ONLY async functions `chromeStatus, launchChrome, shutdownChrome, listPageTargets, checkChromeActivity, getPageContext` (plus their types). They are thin: construct a `ChromeManager` from typed options (host/port/profile; no `process.env` toggles) and delegate to the migrated library. Keep the `ChromeStatus.managed: boolean` NON-optional (the source comment explains the apigen oneOf duplicate-boolean failure on optional booleans). `index.ts` exports the library barrel (`ChromeManager`, `CdpClient`, `CdpSession`, `HistoryClient`, `CookieClient`, parsers, capture helpers, types) and `export * from './api.js'`.
+- **Delta Spec:** `api.ts` exports ONLY async functions `chromeStatus, launchChrome, shutdownChrome, listPageTargets, checkChromeActivity, getPageContext` (plus their types). They are thin: construct a `ChromeManager` from typed options (host/port/profile; no `process.env` toggles) and delegate to the migrated library. Keep the `ChromeStatus.managed: boolean` NON-optional (the source comment explains the apigen oneOf duplicate-boolean failure on optional booleans). `index.ts` exports the library barrel (`ChromeManager`, `CdpClient`, `CdpSession`, `HistoryClient`, `CookieClient`, parsers, capture helpers, types) and `export * from './api.js'`. Every verb carries a TSDoc description of at least 40 characters (the hosts surface it as the tool description, P4). BEFORE writing the verb types, resolve two claims product could not verify and record them with file:line evidence in `docs/plan/stealth-browser/evidence/product-claims.json`: (1) which option names the ported launch path accepts and that none of `chromePath`/`extraArgs` reaches the verb input (`launchChromeOptions`); (2) whether `getPageContext` returns cookie VALUES or only names (`getPageContextCookieValues.returnsValues`; when true the hosts must redact, when false the redaction tests become regression guards). Do not assume either answer: read `queries/context.ts`, `storage/cookies.ts` and the launch options and cite them.
 
-- **Invariants:** [inv:esm-js-specifiers]; no imports from agent-search; no `process.env` reads in api.ts; every old barrel name (except `getLastSearchFromHistory`) still resolves from `@adhd/stealth-browser`. Also: [inv:shared-worktree] (commit only your own explicit paths, tag every commit `[psm:surface-api]`), [inv:owned-paths-only], [inv:no-main-writes].
+- **Invariants:** [inv:esm-js-specifiers]; no imports from agent-search; no `process.env` reads in api.ts; every old barrel name (except `getLastSearchFromHistory`) still resolves from `@adhd/stealth-browser` OR from the `@adhd/stealth-browser/legacy` subpath (decision D1; `prod-public-api` splits the barrel afterwards and the union must stay complete). `launchChrome`'s verb input type exposes only `port` and `userDataDir` (PRODUCT-REVIEW.md P1): `chromePath` and `extraArgs` stay library-only options. Also: [inv:shared-worktree] (commit only your own explicit paths, tag every commit `[psm:surface-api]`), [inv:owned-paths-only], [inv:no-main-writes].
 
 - **Validation:** `python3 docs/plan/stealth-browser/scripts/guard.py surface-api` — runs every acceptance criterion below (red until the work is done); `--only surface-api.N` runs one.
 
@@ -32,7 +32,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 - [surface-api.1] src/api.ts exports exactly the six chrome-runner verbs: chromeStatus, launchChrome, shutdownChrome, listPageTargets, checkChromeActivity, getPageContext (async functions only).
 
 - [surface-api.2] chromeStatus returns a type with NON-optional `managed: boolean` and the apigen oneOf-duplicate-boolean warning comment is preserved.
-- [surface-api.3] src/index.ts exports a superset of the old cdp-query-client.ts barrel (minus getLastSearchFromHistory) plus the six verbs.
+- [surface-api.3] Every old cdp-query-client.ts barrel name (minus getLastSearchFromHistory) plus the six verbs resolves from the package root (src/index.ts) OR from the `@adhd/stealth-browser/legacy` subpath (src/legacy.ts), per productization decision D1.
 - [surface-api.4] api.ts and index.ts import nothing from agent-search, use .js specifiers, and every relative import resolves.
 - [surface-api.5] The ChromeManager is configured through typed options only (no process.env toggles) and uses port/host options, never a hard-coded 9222 in api.ts defaults without an override.
 - [surface-api.6] Only owned paths changed by [psm:surface-api] commits.
@@ -52,7 +52,7 @@ mutates:    ["entrypoint/stealth-browser/src/api.ts", "entrypoint/stealth-browse
 
 ## Contract Promise
 
-Added: `entrypoint/stealth-browser/src/api.ts`. Modified: `entrypoint/stealth-browser/src/index.ts` (generator placeholder -> barrel). Deleted: none.
+Added: `entrypoint/stealth-browser/src/api.ts`. Added: `docs/plan/stealth-browser/evidence/product-claims.json`. Modified: `entrypoint/stealth-browser/src/index.ts` (generator placeholder -> full barrel; `prod-public-api` later moves the search/Google names to `src/legacy.ts`). Deleted: none.
 
 ---
 

@@ -1,6 +1,6 @@
 # tests-e2e — WORK STATE
 
-**Phase:** verify · **Kind:** work · **Depends on:** tracing-plugin · **Guard:** `python3 docs/plan/stealth-browser/scripts/guard.py tests-e2e`
+**Phase:** verify · **Kind:** work · **Depends on:** tracing-plugin, prod-examples · **Guard:** `python3 docs/plan/stealth-browser/scripts/guard.py tests-e2e`
 **Executor:** `qa` (sonnet/high) · **Worktree:** `/Users/nix/dev/node/adhd/.worktrees/stealth-browser` on branch `stealth-browser` (shared by every state, [inv:shared-worktree], [inv:worktree-required], [inv:no-ai-attribution])
 **Parallel with:** tests-unit-core, tests-unit-data, tests-unit-extract, tests-unit-surface (disjoint owned paths, proven by `check-disjoint.py`)
 
@@ -26,7 +26,7 @@ One end-to-end run drives ALL THREE surfaces (library, CLI, MCP stdio) against a
 
 - **Reference Pattern:** `entrypoint/dispatch-cli/src/test/cli-smoke.e2e.test.ts` (built-bin e2e), `entrypoint/backlog/src/server.mcp.e2e.ts` (MCP stdio client), `/Users/nix/dev/ai/scratch/agent-browser/chrome-lifecycle-test.ts` (what the old lifecycle test covers).
 
-- **Delta Spec:** `harness.ts` has the single `beforeAll` (allocate a free port, temp user-data-dir, fake HOME/XDG, launch via the built `dist/bin/cli.js launchChrome`, wait ready) and the single `afterAll` (shutdown by the PID it launched; never `lsof`/`pkill`/`killall`, never port 9222). `surfaces.e2e.test.ts` has `describe('[surface:library]')`, `describe('[surface:cli]')`, `describe('[surface:mcp]')`: library calls the six verbs in-process; CLI spawns `node dist/bin/cli.js ...`; MCP spawns `dist/bin/mcp.js`, speaks JSON-RPC (initialize, tools/list, tools/call) and asserts the same results. The run also asserts the `adhd.*` trace record for one verb (cross-checks tracing under real hosts). No mocks.
+- **Delta Spec:** `harness.ts` has the single `beforeAll` (allocate a free port, temp user-data-dir, fake HOME/XDG, launch via the built `dist/bin/cli.js launchChrome`, wait ready) and the single `afterAll` (shutdown by the PID it launched; never `lsof`/`pkill`/`killall`, never port 9222). `surfaces.e2e.test.ts` has `describe('[surface:library]')`, `describe('[surface:cli]')`, `describe('[surface:mcp]')`: library calls the six verbs in-process; CLI spawns `node dist/bin/cli.js ...`; MCP spawns `dist/bin/mcp.js`, speaks JSON-RPC (initialize, tools/list, tools/call) and asserts the same results. The run also asserts the `adhd.*` trace record for one verb (cross-checks tracing under real hosts). Productization adds two live checks (PRODUCT-REVIEW.md): `[PA2.1]` seed a cookie with a unique value on the real Chrome via `Network.setCookie`, then assert `getPageContext` over the built MCP bin AND the CLI returns the cookie name and count but never the value string (settles by evidence whether the library ever returned values: see `evidence/product-claims.json`); `[PA9.2]` run the real MCP bin with `--verbose` and assert every stdout line is JSON-RPC (`JSON.parse` + `jsonrpc`) while diagnostics land on stderr. No mocks.
 
 - **Invariants:** [inv:e2e-shape] [inv:live-chrome] [inv:tests-cite]; the developer's live Chrome on 9222 is never touched (guard compares the 9222 listener before/after). Also: [inv:shared-worktree] (commit only your own explicit paths, tag every commit `[psm:tests-e2e]`), [inv:owned-paths-only], [inv:no-main-writes].
 

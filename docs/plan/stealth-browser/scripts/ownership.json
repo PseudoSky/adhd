@@ -43,13 +43,16 @@
  ],
  "surface-api": [
   "entrypoint/stealth-browser/src/api.ts",
-  "entrypoint/stealth-browser/src/index.ts"
+  "entrypoint/stealth-browser/src/index.ts",
+  "docs/plan/stealth-browser/evidence/product-claims.json"
  ],
  "surface-hosts": [
   "entrypoint/stealth-browser/src/server.ts",
   "entrypoint/stealth-browser/src/cli.ts",
+  "entrypoint/stealth-browser/src/host-projection.ts",
   "entrypoint/stealth-browser/bin/",
-  "entrypoint/stealth-browser/package.json"
+  "entrypoint/stealth-browser/package.json",
+  "docs/plan/stealth-browser/evidence/naming-decision.md"
  ],
  "tracing-plugin": [
   "entrypoint/stealth-browser/src/tracing.ts",
@@ -118,5 +121,23 @@
   "/Users/nix/dev/ai/scratch/agent-browser/search/queries/",
   "/Users/nix/dev/ai/scratch/agent-browser/package.json",
   "/Users/nix/dev/ai/scratch/agent-browser/search-mcp-source.ts"
+ ],
+ "prod-public-api": [
+  "entrypoint/stealth-browser/src/legacy.ts",
+  "entrypoint/stealth-browser/src/index.ts",
+  "entrypoint/stealth-browser/src/test/unit/public-api/"
+ ],
+ "prod-errors": [
+  "entrypoint/stealth-browser/src/errors.ts",
+  "entrypoint/stealth-browser/src/test/unit/errors/"
+ ],
+ "prod-examples": [
+  "entrypoint/stealth-browser/examples/",
+  "entrypoint/stealth-browser/src/test/unit/examples/",
+  "entrypoint/stealth-browser/tsconfig.spec.json"
+ ],
+ "prod-publish-readiness": [
+  "docs/plan/stealth-browser/evidence/publish-dry-run.txt",
+  "entrypoint/stealth-browser/package.json"
  ]
 }

@@ -1,5 +1,5 @@
-STATUS: pending-fold
-INSERTED: pending
+STATUS: folded
+INSERTED: prod-public-api, prod-errors, prod-examples, prod-publish-readiness
 
 # PRODUCT-REVIEW - @adhd/stealth-browser (plan 8468f7b1-8adc-4237-9986-21ea1e27c537)
 
@@ -148,3 +148,26 @@ P1, P2 (safety) and P3 (naming) first, since they change types before hosts are 
 4. docs-marketing-run and readme-rewrite both own README.md; sequential so safe, the later overwrite should be intentional.
 5. tests-unit-surface depended only on surface-api, so hosts/tracing were verified only by tests-e2e - resolved by D4.
 6. check-disjoint.py must be re-run after the insertions (not run during this review).
+
+## FOLD MAP (task -> state -> criterion ids)
+
+| Task | State(s) | Criteria (PA id carried in the criterion text) |
+|---|---|---|
+| P1 host input allowlist | surface-api, surface-hosts, tests-unit-surface, tests-e2e | surface-api.7 (PA1.1), surface-hosts.7 (PA1.2, PA1.3), tests-unit-surface.4 (PA1.2, PA1.3) |
+| P2 cookie redaction | surface-api, surface-hosts, tests-unit-surface, tests-e2e | surface-api.8 (claim evidence), surface-hosts.8 (PA2.1), tests-unit-surface.4 (PA2.2), tests-e2e.6 (PA2.1 live); PA2.3 held by dod.4 parity |
+| P3 public API tiers | prod-public-api (new), surface-api, surface-hosts, agent-search-cutover | prod-public-api.1-.4 (PA3.1, PA3.2, PA3.3, PA3.5), surface-api.3 (D1), surface-hosts.9 (PA3.2 built, PA3.3, PA3.4), agent-search-cutover.7 (D1) |
+| P4 ergonomics | surface-api, surface-hosts | surface-api.9 (PA4.1), surface-hosts.10 (PA4.1, PA4.2), surface-hosts.11 (PA4.3, PA4.4) |
+| P5 structured errors | prod-errors (new), surface-hosts | prod-errors.1 (PA5.1), prod-errors.2 (PA5.4), surface-hosts.12 (PA5.2, PA5.3, PA5.5) |
+| P6 configuration | surface-hosts, docs-marketing-run | surface-hosts.13 (PA6.1), docs-marketing-run.6 (PA6.2, PA6.3) |
+| P7 examples | prod-examples (new) | prod-examples.1-.5 (PA7.1-PA7.4) |
+| P8 responsible use | docs-marketing-run, readme-rewrite | docs-marketing-run.7 (PA8.1, PA8.2), docs-marketing-run.8 and readme-rewrite.7 (PA8.3), readme-rewrite.6 (PA8.2, PA8.4) |
+| P9 observability | tracing-plugin, tests-e2e, docs-marketing-run | tracing-plugin.7 (PA9.2), tests-e2e.7 (PA9.2), docs-marketing-run.9 (PA9.1) |
+| P10 publish readiness | prod-publish-readiness (new), readme-rewrite | prod-publish-readiness.1-.5 (PA10.1-PA10.5), readme-rewrite.8 (PA10.2) |
+| D3 main-checkout dist | merge-readiness, agent-search-cutover | merge-readiness.4, agent-search-cutover.6 |
+| D4 | tests-unit-surface depends on surface-hosts | tests-unit-surface.4 |
+| Unverified claims | surface-api.8 (evidence file), surface-hosts.7 and .12 (built-bin probes) | `evidence/product-claims.json` records whether launchChrome options reach the MCP schema and whether getPageContext returns cookie values, with file:line citations |
+| Namespace pin (backlog 5152786d) | tracing-plugin, tracing-namespace-proof | tracing-plugin.8, tracing-namespace-proof.6 |
+
+P11 is not in the DAG (D2). The D5 candidates stay out of the DAG and are filed in the backlog by the dispatcher.
+The word scan (PA8.3) covers README.md and docs/ except the ported `docs/reference/` protocol reference (CDP method names such as `setBypassCSP`) and generated `.catalog/` data.
+`prod-publish-readiness` follows `readme-rewrite` (the tarball needs the final README and CHANGELOG), so it is a dependency of `audit-final`, a descendant of `gates-first`; `productization-hold.3` is evaluated as "dependency of `gates-first` or of its descendants".

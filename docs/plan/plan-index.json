@@ -3694,6 +3694,7 @@
         "docs/plan/stealth-browser/PRODUCT-REVIEW.md",
         "docs/plan/stealth-browser/RELEASE-DECISION.md",
         "docs/plan/stealth-browser/evidence/",
+        "docs/plan/stealth-browser/evidence/publish-dry-run.txt",
         "docs/plan/stealth-browser/final-review.md",
         "docs/plan/stealth-browser/review/BRIEF.txt",
         "docs/plan/stealth-browser/review/FINDINGS.json",
@@ -3708,11 +3709,14 @@
         "entrypoint/stealth-browser/bin/",
         "entrypoint/stealth-browser/docs/",
         "entrypoint/stealth-browser/docs/reference/",
+        "entrypoint/stealth-browser/examples/",
         "entrypoint/stealth-browser/llms.txt",
         "entrypoint/stealth-browser/package.json",
         "entrypoint/stealth-browser/src/api.ts",
         "entrypoint/stealth-browser/src/cli.ts",
+        "entrypoint/stealth-browser/src/errors.ts",
         "entrypoint/stealth-browser/src/index.ts",
+        "entrypoint/stealth-browser/src/legacy.ts",
         "entrypoint/stealth-browser/src/lib/capture/",
         "entrypoint/stealth-browser/src/lib/cdp/",
         "entrypoint/stealth-browser/src/lib/chrome-manager.ts",
@@ -3729,11 +3733,15 @@
         "entrypoint/stealth-browser/src/test/unit/cdp/",
         "entrypoint/stealth-browser/src/test/unit/chrome-manager/",
         "entrypoint/stealth-browser/src/test/unit/domains-storage/",
+        "entrypoint/stealth-browser/src/test/unit/errors/",
+        "entrypoint/stealth-browser/src/test/unit/examples/",
         "entrypoint/stealth-browser/src/test/unit/foundation/",
+        "entrypoint/stealth-browser/src/test/unit/public-api/",
         "entrypoint/stealth-browser/src/test/unit/queries/",
         "entrypoint/stealth-browser/src/test/unit/surface/",
-        "entrypoint/stealth-browser/src/test/unit/tracing/",
+        "entrypoint/stealth-browser/src/test/unit/tracing/tracing-namespace.spec.ts",
         "entrypoint/stealth-browser/src/tracing.ts",
+        "entrypoint/stealth-browser/tsconfig.spec.json",
         "pnpm-lock.yaml",
         "tsconfig.base.json"
       ],
@@ -3750,17 +3758,13 @@
         "docs/plan/stealth-browser/review/FINDINGS.json",
         "entrypoint/apigen-cli/",
         "entrypoint/backlog/",
-        "entrypoint/backlog/src/",
         "entrypoint/backlog/src/tracing.ts",
         "entrypoint/dispatch-cli/",
-        "entrypoint/dispatch-cli/bin/",
         "entrypoint/stealth-browser/",
         "entrypoint/stealth-browser/bin/",
         "entrypoint/stealth-browser/docs/",
         "entrypoint/stealth-browser/package.json",
         "entrypoint/stealth-browser/src/",
-        "entrypoint/stealth-browser/src/api.ts",
-        "entrypoint/stealth-browser/src/index.ts",
         "entrypoint/stealth-browser/src/lib/",
         "entrypoint/stealth-browser/src/lib/cdp/",
         "entrypoint/stealth-browser/src/lib/domains/",
@@ -3900,12 +3904,7 @@
             "entrypoint/stealth-browser/src/cli.ts",
             "entrypoint/stealth-browser/src/server.ts"
           ],
-          "read_only": [
-            "entrypoint/backlog/src/",
-            "entrypoint/dispatch-cli/bin/",
-            "entrypoint/stealth-browser/src/api.ts",
-            "entrypoint/stealth-browser/src/index.ts"
-          ]
+          "read_only": []
         },
         "tracing-plugin": {
           "mutates": [
@@ -3950,23 +3949,17 @@
           "mutates": [
             "entrypoint/stealth-browser/src/test/unit/surface/"
           ],
-          "read_only": [
-            "entrypoint/stealth-browser/src/api.ts",
-            "entrypoint/stealth-browser/src/index.ts"
-          ]
+          "read_only": []
         },
         "tests-e2e": {
           "mutates": [
             "entrypoint/stealth-browser/src/test/e2e/"
           ],
-          "read_only": [
-            "entrypoint/stealth-browser/bin/",
-            "entrypoint/stealth-browser/src/"
-          ]
+          "read_only": []
         },
         "tracing-namespace-proof": {
           "mutates": [
-            "entrypoint/stealth-browser/src/test/unit/tracing/"
+            "entrypoint/stealth-browser/src/test/unit/tracing/tracing-namespace.spec.ts"
           ],
           "read_only": [
             "entrypoint/stealth-browser/src/server.ts",
@@ -4057,19 +4050,49 @@
             "/Users/nix/dev/ai/scratch/agent-browser/search/queries/"
           ],
           "read_only": []
+        },
+        "prod-public-api": {
+          "mutates": [
+            "entrypoint/stealth-browser/src/index.ts",
+            "entrypoint/stealth-browser/src/legacy.ts",
+            "entrypoint/stealth-browser/src/test/unit/public-api/"
+          ],
+          "read_only": []
+        },
+        "prod-errors": {
+          "mutates": [
+            "entrypoint/stealth-browser/src/errors.ts",
+            "entrypoint/stealth-browser/src/test/unit/errors/"
+          ],
+          "read_only": []
+        },
+        "prod-examples": {
+          "mutates": [
+            "entrypoint/stealth-browser/examples/",
+            "entrypoint/stealth-browser/src/test/unit/examples/",
+            "entrypoint/stealth-browser/tsconfig.spec.json"
+          ],
+          "read_only": []
+        },
+        "prod-publish-readiness": {
+          "mutates": [
+            "docs/plan/stealth-browser/evidence/publish-dry-run.txt",
+            "entrypoint/stealth-browser/package.json"
+          ],
+          "read_only": []
         }
       },
       "references": [],
       "interfaces": [],
       "demo": {
         "source": "demo/DEMO.md",
-        "present": false,
-        "validate": null,
-        "package_artifact": null
+        "present": true,
+        "validate": "demo/UNRESOLVED.md",
+        "package_artifact": "entrypoint/stealth-browser/src/test/e2e/surfaces.e2e.test.ts"
       },
       "assumed_baseline": [],
       "depends_on": [],
-      "updated_at": "2026-10-12T10:16:46.903Z"
+      "updated_at": "2026-10-12T10:34:55.509Z"
     },
     {
       "plan": "task-dependency-dag",
@@ -4506,6 +4529,6 @@
       "updated_at": "2026-07-17T23:56:00.980Z"
     }
   ],
-  "updated_at": "2026-10-12T10:16:46.911Z",
+  "updated_at": "2026-10-12T10:34:55.517Z",
   "verified_at": null
 }

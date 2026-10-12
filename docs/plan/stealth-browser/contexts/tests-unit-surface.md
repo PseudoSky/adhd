@@ -1,8 +1,8 @@
 # tests-unit-surface — WORK STATE
 
-**Phase:** verify · **Kind:** work · **Depends on:** surface-api · **Guard:** `python3 docs/plan/stealth-browser/scripts/guard.py tests-unit-surface`
+**Phase:** verify · **Kind:** work · **Depends on:** surface-api, surface-hosts · **Guard:** `python3 docs/plan/stealth-browser/scripts/guard.py tests-unit-surface`
 **Executor:** `test-automator` (sonnet/medium) · **Worktree:** `/Users/nix/dev/node/adhd/.worktrees/stealth-browser` on branch `stealth-browser` (shared by every state, [inv:shared-worktree], [inv:worktree-required], [inv:no-ai-attribution])
-**Parallel with:** tests-unit-core, tests-unit-data, tests-unit-extract, surface-hosts (disjoint owned paths, proven by `check-disjoint.py`)
+**Parallel with:** tests-unit-core, tests-unit-data, tests-unit-extract, tracing-plugin (disjoint owned paths, proven by `check-disjoint.py`)
 
 ---
 
@@ -18,7 +18,7 @@ Unit specs prove the six verbs and the barrel: each verb delegates to the librar
 
 - **Reference Pattern:** `entrypoint/stealth-browser/src/api.ts`, `entrypoint/stealth-browser/src/index.ts`, `/Users/nix/dev/ai/scratch/agent-browser/cdp-query-client.ts` (expected export names).
 
-- **Delta Spec:** `api.spec.ts` mocks `ChromeManager`/clients and asserts each verb's result (including `managed: boolean` always present). `index.spec.ts` asserts the named exports (`ChromeManager`, `CdpClient`, `HistoryClient`, `CookieClient`, the six verbs) exist.
+- **Delta Spec:** `api.spec.ts` mocks `ChromeManager`/clients and asserts each verb's result (including `managed: boolean` always present). `index.spec.ts` asserts the named exports (`ChromeManager`, `CdpClient`, `HistoryClient`, `CookieClient`, the six verbs) exist (root or `./legacy`). `host.spec.ts` (host-level, in-process, `child_process`/`ChromeManager` mocked, no subprocess) asserts, citing the PA ids: the generated `launchChrome` tools/list schema has no `chromePath`/`extraArgs` (PA1.3); a tools/call with `extraArgs` is rejected and spawns nothing (PA1.2); a fixture cookie value `SECRET123` is absent from the MCP JSON and the CLI stdout of `getPageContext` while names and counts remain (PA2.2). Build the host under test through the exported factories of `server.ts`/`cli.ts` and `host-projection.ts`; if none exist, record that as a `surface-hosts` defect instead of spawning a process.
 
 - **Invariants:** [inv:unit-purity] [inv:tests-cite]. Also: [inv:shared-worktree] (commit only your own explicit paths, tag every commit `[psm:tests-unit-surface]`), [inv:owned-paths-only], [inv:no-main-writes].
 

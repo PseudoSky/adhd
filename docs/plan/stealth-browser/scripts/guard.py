@@ -330,7 +330,7 @@ def _ph2():
 
 @check("productization-hold", 3)
 def _ph3():
-    """dag.json is acyclic after the productization insertions (no state depends on itself transitively)."""
+    """dag.json is acyclic after the insertions and every inserted prod-* state is a dependency of `gates-first` or of its descendants."""
     nodes = dag().get("nodes", {})
     seen, stack = set(), set()
 
@@ -345,7 +345,17 @@ def _ph3():
         return ok
     if not all(visit(n) for n in nodes):
         return False, "cycle in dag.json"
-    return True, "acyclic"
+
+    def anc(n, memo={}):
+        if n not in memo:
+            memo[n] = set()
+            for d in nodes.get(n, {}).get("depends_on", []):
+                memo[n] |= {d} | anc(d)
+        return memo[n]
+    below = {n for n in nodes if "gates-first" in anc(n)} | {"gates-first"}
+    reach = set().union(*[anc(n) | {n} for n in below]) if "gates-first" in nodes else set()
+    stray = sorted(n for n in nodes if n.startswith("prod-") and n not in reach)
+    return not stray, f"acyclic; prod-* states not on a path to gates-first or its descendants: {stray}"
 
 
 # ============================================================ S1 scaffold
@@ -646,10 +656,10 @@ def _sa2():
 
 @check("surface-api", 3)
 def _sa3():
-    """src/index.ts exports a superset of the old cdp-query-client.ts barrel (minus getLastSearchFromHistory) plus the six verbs."""
-    have = exports_of(read(f"{P}/src/index.ts"))
+    """Every old cdp-query-client.ts barrel name (minus getLastSearchFromHistory) plus the six verbs resolves from the package root (src/index.ts) OR from the `@adhd/stealth-browser/legacy` subpath (src/legacy.ts), per productization decision D1."""
+    have = exports_of(read(f"{P}/src/index.ts")) | exports_of(read(LEGACY_TS))
     miss = sorted((barrel_names() | set(VERBS)) - have)
-    return not miss, f"index.ts missing {miss}"
+    return not miss, f"index.ts + legacy.ts missing {miss}"
 
 
 @check("surface-api", 4)
@@ -1447,6 +1457,675 @@ _refcheck("audit-final.ref-apigen-host", _all(_sh1, _sh2, _t3),
           "[ref:apigen-host] server.ts / cli.ts / bin hosts mirror entrypoint/backlog's apigen host shape")
 _refcheck("audit-final.ref-runner-port", _af4,
           "[ref:runner-port] behavior-preserving port conforms to agent-browser/adhd (exports, similarity, tokens)")
+
+
+# ============================================================ productization fold (PRODUCT-REVIEW.md)
+# Every check below carries the PRODUCT-REVIEW.md task id (PAx.y) it enforces; all are red until the owning state's work is done.
+NAMES_RE = re.compile(r"google|search", re.I)
+BANNED_RE = re.compile(r"\b(undetectable|bypass(?:es|ed|ing)?|evad(?:e|es|ed|ing)|anti-bot)\b", re.I)
+LEGACY_TS = f"{P}/src/legacy.ts"
+ERR_CODES = ["CHROME_NOT_FOUND", "PORT_IN_USE", "NODE_TOO_OLD", "CHROME_NOT_RUNNING"]
+DEFAULTS = ["9222", "Library/Application Support/Google/Chrome-CDP", "/tmp/stealth-browser-heartbeat"]
+STEALTH_FLAGS = ("--enable-automation", "Runtime.evaluate")
+HOST_PORT_DEAD = "19999"
+
+
+def run2(cmd, timeout=60, cwd=None):
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, cwd=cwd)
+        return r.returncode, r.stdout or "", r.stderr or ""
+    except subprocess.TimeoutExpired:
+        return 124, "", f"timeout after {timeout}s"
+    except OSError as e:
+        return 127, "", repr(e)
+
+
+_BIN_BUILT = []
+
+
+def ensure_bin():
+    if not _BIN_BUILT:
+        _BIN_BUILT.append(sh([NX, "run", f"{proj_name()}:build-bin"], timeout=1200)[0])
+    return _BIN_BUILT[0] == 0 and exists(f"{P}/dist/bin/mcp.js") and exists(f"{P}/dist/bin/cli.js")
+
+
+def norm_name(s):
+    return re.sub(r"[^a-z]", "", s.lower())
+
+
+def kebab(v):
+    return re.sub(r"(?<!^)(?=[A-Z])", "-", v).lower()
+
+
+def mcp_full(args, calls, timeout=60):
+    """Real MCP stdio client against dist/bin/mcp.js: returns tools (full objects), every call response, and raw stdout lines."""
+    p = subprocess.Popen(["node", f"{P}/dist/bin/mcp.js", *args], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    out = {"tools": [], "calls": [], "stdout": []}
+
+    def rpc(i, method, params=None):
+        p.stdin.write(json.dumps({"jsonrpc": "2.0", "id": i, "method": method, "params": params or {}}) + "\n")
+        p.stdin.flush()
+        end = time.time() + timeout
+        while time.time() < end:
+            line = p.stdout.readline()
+            if not line:
+                break
+            out["stdout"].append(line)
+            try:
+                m = json.loads(line)
+            except ValueError:
+                continue
+            if m.get("id") == i:
+                return m
+        return {}
+    try:
+        rpc(1, "initialize", {"protocolVersion": "2024-11-05", "capabilities": {}, "clientInfo": {"name": "guard", "version": "0"}})
+        p.stdin.write(json.dumps({"jsonrpc": "2.0", "method": "notifications/initialized"}) + "\n")
+        out["tools"] = rpc(2, "tools/list").get("result", {}).get("tools", [])
+        for n, (verb, a) in enumerate(calls, 3):
+            t = next((t for t in out["tools"] if norm_name(t["name"]).endswith(norm_name(verb))), None)
+            out["calls"].append(rpc(n, "tools/call", {"name": t["name"], "arguments": a}) if t else {})
+    finally:
+        p.kill()
+    return out
+
+
+def cli_verb(verb, extra, timeout=60):
+    rc, o, e = 1, "", ""
+    for name in (verb, kebab(verb)):
+        rc, o, e = run2(["node", f"{P}/dist/bin/cli.js", name, *extra], timeout)
+        if "unknown command" not in (o + e).lower():
+            break
+    return rc, o, e
+
+
+def verb_sig(text, verb):
+    m = re.search(rf"((?:/\*\*(?:(?!\*/).)*\*/\s*)?)export\s+async\s+function\s+{verb}\s*\(([^)]*)\)", text, re.S)
+    return (m.group(1), m.group(2)) if m else (None, None)
+
+
+def verb_input_props(text, verb):
+    """Property names of a verb's input type (inline literal or a named interface/type in the same file); None when it cannot be read."""
+    _, params = verb_sig(text, verb)
+    if params is None:
+        return None
+    if not params.strip():
+        return set()
+    body = params
+    if "{" not in params:
+        m = re.search(r":\s*([A-Za-z_]\w*)", params)
+        if not m:
+            return None
+        name = m.group(1)
+        d = re.search(rf"(?:interface\s+{name}\b[^{{]*\{{(.*?)\n\}}|type\s+{name}\s*=\s*\{{(.*?)\n\}})", text, re.S)
+        if not d:
+            return None
+        body = d.group(1) or d.group(2)
+    return set(re.findall(r"(?:^|[{;,\n])\s*(\w+)\??\s*:", body))
+
+
+def tagged_exports(text, tag, skip=lambda line: False):
+    """Export statements (by first line) whose nearest preceding comment block carries `tag`; returns (total, untagged)."""
+    lines = text.splitlines()
+    total, bad = 0, []
+    for i, ln in enumerate(lines):
+        if not ln.startswith("export") or skip(ln):
+            continue
+        total += 1
+        j = i - 1
+        while j >= 0 and not lines[j].strip():
+            j -= 1
+        k, blob = j, []
+        while k >= 0 and (lines[k].strip().startswith(("*", "/*", "//")) or lines[k].strip().endswith("*/")):
+            blob.append(lines[k])
+            k -= 1
+        if tag not in "\n".join(blob):
+            bad.append(ln[:60])
+    return total, bad
+
+
+def doc_files():
+    """README.md + docs/** prose, excluding the faithfully-ported docs/reference/ CDP protocol reference and generated .catalog data."""
+    out = [f"{P}/README.md"] if exists(f"{P}/README.md") else []
+    for d, _, fs in os.walk(f"{P}/docs"):
+        if d.startswith(f"{P}/docs/reference") or "/.catalog" in d or "node_modules" in d:
+            continue
+        out += [os.path.join(d, f) for f in fs if f.endswith((".md", ".txt"))]
+    return sorted(out)
+
+
+def banned_hits(files):
+    hits = []
+    for f in files:
+        for i, ln in enumerate(read(f).splitlines(), 1):
+            m = BANNED_RE.search(ln)
+            if m:
+                hits.append(f"{f}:{i}:{m.group(0)}")
+    return hits
+
+
+def spec_files(sub):
+    return [f for f in walk(f"{P}/src/test/{sub}") if f.endswith((".spec.ts", ".test.ts"))]
+
+
+def dts_exports(path, seen=None):
+    seen = seen if seen is not None else set()
+    if path in seen or not exists(path):
+        return set()
+    seen.add(path)
+    t = read(path)
+    names = exports_of(t)
+    for rel in re.findall(r"export\s+\*\s+from\s+['\"](\.[^'\"]+)['\"]", t):
+        base = os.path.normpath(os.path.join(os.path.dirname(path), re.sub(r"\.js$", "", rel)))
+        if "legacy" in base:
+            continue
+        for cand in (base + ".d.ts", os.path.join(base, "index.d.ts")):
+            if exists(cand):
+                names |= dts_exports(cand, seen)
+                break
+    return names
+
+
+# ---------------------------------------------------------------- surface-api amendments (P1, P2, P4, early claims)
+@check("surface-api", 7)
+def _sa7():
+    """(PA1.1) The launchChrome verb's input type declares only `port` and `userDataDir`; chromePath and extraArgs stay library-only (never on an apigen-visible verb input)."""
+    props = verb_input_props(read(f"{P}/src/api.ts"), "launchChrome")
+    return props is not None and props <= {"port", "userDataDir"} and not ({"chromePath", "extraArgs"} & props), f"launchChrome input props={props}"
+
+
+@check("surface-api", 8)
+def _sa8():
+    """(product claims, resolved with evidence) evidence/product-claims.json records, with file:line citations that resolve and agree with the source: `launchChromeOptions` (library option names; `verbInputExposesChromePathOrExtraArgs` must be false) and `getPageContextCookieValues` (`returnsValues` boolean; when true `hostRedactionRequired` must be true)."""
+    d = jread(f"{PLAN}/evidence/product-claims.json", None)
+    if not isinstance(d, dict):
+        return False, "evidence/product-claims.json missing or not an object"
+    lc, ck = d.get("launchChromeOptions") or {}, d.get("getPageContextCookieValues") or {}
+    bad = []
+
+    def cite_ok(c):
+        m = re.match(r"^(.+?):(\d+)$", str(c or ""))
+        return bool(m) and exists(m.group(1)) and 1 <= int(m.group(2)) <= len(read(m.group(1)).splitlines())
+    if not (isinstance(lc.get("libraryOptionNames"), list) and lc["libraryOptionNames"]):
+        bad.append("launchChromeOptions.libraryOptionNames")
+    if lc.get("verbInputExposesChromePathOrExtraArgs") is not False:
+        bad.append("verbInputExposesChromePathOrExtraArgs must be false")
+    if not cite_ok(lc.get("evidence")):
+        bad.append("launchChromeOptions.evidence not file:line")
+    else:
+        src = read(re.match(r"^(.+?):\d+$", lc["evidence"]).group(1))
+        bad += [f"option {n} not in cited file" for n in lc.get("libraryOptionNames", []) if n not in src]
+    if not isinstance(ck.get("returnsValues"), bool):
+        bad.append("getPageContextCookieValues.returnsValues must be boolean")
+    elif ck["returnsValues"] and ck.get("hostRedactionRequired") is not True:
+        bad.append("returnsValues=true requires hostRedactionRequired=true")
+    if not cite_ok(ck.get("evidence")):
+        bad.append("getPageContextCookieValues.evidence not file:line")
+    return not bad, "; ".join(bad) or "ok"
+
+
+@check("surface-api", 9)
+def _sa9():
+    """(PA4.1) Each of the six verbs in src/api.ts has a TSDoc block whose description is at least 40 characters (the hosts surface it as the tool description)."""
+    t = read(f"{P}/src/api.ts")
+    short = []
+    for v in VERBS:
+        doc, _ = verb_sig(t, v)
+        txt = re.sub(r"^\s*/?\*+/?\s?|\*/", "", doc or "", flags=re.M)
+        txt = " ".join(x for x in txt.split() if not x.startswith("@"))
+        if len(txt) < 40:
+            short.append(v)
+    return not short, f"verbs without a >=40 char TSDoc: {short}"
+
+
+# ---------------------------------------------------------------- prod-public-api (P3)
+@check("prod-public-api", 1)
+def _pp1():
+    """(PA3.1) A public-API export snapshot spec under src/test/unit/public-api/ lists every root export of src/index.ts (and the six verbs) and fails on drift (toEqual / snapshot of the sorted export names)."""
+    names = exports_of(read(f"{P}/src/index.ts")) | set(VERBS)
+    specs = spec_files("unit/public-api")
+    t = "\n".join(read(f) for f in specs)
+    miss = sorted(n for n in names if n not in t)
+    return bool(specs) and not miss and re.search(r"toEqual|toMatchInlineSnapshot|toMatchSnapshot", t) is not None, f"specs={len(specs)} unlisted={miss}"
+
+
+@check("prod-public-api", 2)
+def _pp2():
+    """(PA3.2) src/index.ts exports no Google- or Search-named symbol and does not re-export ./legacy; src/legacy.ts exports every such old-barrel name (the union of both files still covers the old barrel)."""
+    idx, leg = read(f"{P}/src/index.ts"), read(LEGACY_TS)
+    if not idx or not leg:
+        return False, "index.ts or legacy.ts missing"
+    root_bad = sorted(n for n in exports_of(idx) if NAMES_RE.search(n))
+    star = re.findall(r"export\s+\*\s+from\s+['\"]([^'\"]+)", idx)
+    star_bad = [s for s in star if NAMES_RE.search(s) or "legacy" in s]
+    need = {n for n in barrel_names() if NAMES_RE.search(n)}
+    miss = sorted(need - exports_of(leg))
+    return not root_bad and not star_bad and not miss, f"root={root_bad} star={star_bad} legacy missing={miss}"
+
+
+@check("prod-public-api", 3)
+def _pp3():
+    """(PA3.3, source level) src/legacy.ts exports SearchResultSource and src/index.ts exports the neutral alias PageSource; capture/dom.ts stays present (dod.4)."""
+    return "SearchResultSource" in exports_of(read(LEGACY_TS)) and "PageSource" in exports_of(read(f"{P}/src/index.ts")) and exists(f"{P}/src/lib/capture/dom.ts"), "legacy/alias"
+
+
+@check("prod-public-api", 4)
+def _pp4():
+    """(PA3.5) Tier tags: every export statement in src/legacy.ts carries @deprecated and every export in src/index.ts other than the `./api.js` verbs carries @experimental in its TSDoc."""
+    lt, lbad = tagged_exports(read(LEGACY_TS), "@deprecated")
+    it, ibad = tagged_exports(read(f"{P}/src/index.ts"), "@experimental", skip=lambda ln: "./api.js" in ln)
+    return lt > 0 and not lbad and not ibad, f"legacy untagged={lbad[:3]} index untagged={ibad[:3]}"
+
+
+@check("prod-public-api", 5)
+def _pp5():
+    """Specs cite ticket 8468f7b1 and a valid criterion id of this state; only owned paths changed by [psm:prod-public-api] commits."""
+    t = "\n".join(read(f) for f in spec_files("unit/public-api"))
+    ids = set(re.findall(r"\[(prod-public-api\.\d+)\]", t))
+    o = ownership_ok("prod-public-api")
+    return TICKET in t and bool(ids & criteria_ids()) and o[0], o[1]
+
+
+# ---------------------------------------------------------------- prod-errors (P5)
+@check("prod-errors", 1)
+def _pe1():
+    """(PA5.1) src/errors.ts defines an Error subclass with a stable `code` field covering CHROME_NOT_FOUND, PORT_IN_USE, NODE_TOO_OLD and CHROME_NOT_RUNNING, each with a remediation message naming the fix."""
+    t = read(f"{P}/src/errors.ts")
+    miss = [c for c in ERR_CODES if c not in t]
+    cls = re.search(r"class\s+\w+\s+extends\s+Error", t) is not None and re.search(r"\bcode\b", t) is not None
+    fix = len(re.findall(r"""['"`][^'"`\n]*\b(install|set|use|run|upgrade|start|free|choose|launch|update)\b[^'"`\n]*['"`]""", t, re.I))
+    return cls and not miss and fix >= len(ERR_CODES), f"class={cls} missing={miss} remediation strings={fix}"
+
+
+@check("prod-errors", 2)
+def _pe2():
+    """(PA5.4) src/test/unit/errors/ has a unit test per code: each of the four codes is asserted (code and a remediation message), citing ticket 8468f7b1 and a valid criterion id of this state."""
+    specs = spec_files("unit/errors")
+    t = "\n".join(read(f) for f in specs)
+    miss = [c for c in ERR_CODES if t.count(c) < 1]
+    ids = set(re.findall(r"\[(prod-errors\.\d+)\]", t))
+    return bool(specs) and not miss and t.count("message") >= len(ERR_CODES) and TICKET in t and bool(ids & criteria_ids()), f"specs={len(specs)} missing={miss}"
+
+
+@check("prod-errors", 3)
+def _pe3():
+    """Only owned paths changed by [psm:prod-errors] commits; errors.ts reads no process.env."""
+    o = ownership_ok("prod-errors")
+    return o[0] and "process.env" not in read(f"{P}/src/errors.ts") and exists(f"{P}/src/errors.ts"), o[1]
+
+
+# ---------------------------------------------------------------- surface-hosts amendments (P1-P6)
+@check("surface-hosts", 7)
+def _sh7():
+    """(PA1.2, PA1.3) The built MCP bin's tools/list schema for launchChrome has no chromePath or extraArgs property, and a tools/call for launchChrome with extraArgs is rejected with no process spawned and no profile dir created."""
+    if not ensure_bin():
+        return False, "build-bin failed"
+    marker = "/tmp/sb-guard-pa12-marker"
+    shutil_rm = sh(["rm", "-rf", marker])
+    r = mcp_full([], [("launchChrome", {"port": 19997, "extraArgs": [f"--user-data-dir={marker}"]})])
+    t = next((t for t in r["tools"] if norm_name(t["name"]).endswith("launchchrome")), None)
+    props = set(((t or {}).get("inputSchema") or {}).get("properties", {}))
+    resp = (r["calls"] or [{}])[0]
+    rejected = bool(resp.get("error")) or bool((resp.get("result") or {}).get("isError"))
+    spawned = exists(marker)
+    return bool(t) and not ({"chromePath", "extraArgs"} & props) and rejected and not spawned, f"props={sorted(props)} rejected={rejected} spawned={spawned}"
+
+
+@check("surface-hosts", 8)
+def _sh8():
+    """(PA2.1) src/host-projection.ts exports redactCookieValues (names and counts kept, value strings dropped) and BOTH src/server.ts and src/cli.ts route getPageContext output through it; the library result in api.ts is unchanged (parity)."""
+    hp = read(f"{P}/src/host-projection.ts")
+    ok = "redactCookieValues" in exports_of(hp) and all("redactCookieValues" in read(f"{P}/src/{f}") and "host-projection" in read(f"{P}/src/{f}") for f in ("server.ts", "cli.ts"))
+    return ok and "redact" not in read(f"{P}/src/api.ts").lower(), "projection wiring"
+
+
+@check("surface-hosts", 9)
+def _sh9():
+    """(PA3.2, PA3.3, PA3.4) package.json exports a ./legacy subpath into dist; the built root index.d.ts exports no Google- or Search-named symbol; `@adhd/stealth-browser/legacy` resolves from the built package; `nx run stealth-browser:verify-dist-load` exits 0."""
+    if not ensure_bin():
+        return False, "build-bin failed"
+    ex = (pkg().get("exports") or {})
+    leg = ex.get("./legacy")
+    root_types = pkg().get("types") or pkg().get("typings") or "./dist/index.d.ts"
+    bad = sorted(n for n in dts_exports(os.path.normpath(f"{P}/{root_types}")) if NAMES_RE.search(n))
+    rc_r, _, err = run2(["node", "--input-type=module", "-e", "await import('@adhd/stealth-browser/legacy')"], 60, cwd=P)
+    rc_v, out = sh([NX, "run", f"{proj_name()}:verify-dist-load"], timeout=1200)
+    return bool(leg) and not bad and rc_r == 0 and rc_v == 0, f"legacy={leg} rootSearchNames={bad} resolve rc={rc_r} {err[-120:]} verify rc={rc_v}"
+
+
+@check("surface-hosts", 10)
+def _sh10():
+    """(PA4.1, PA4.2) tools/list returns a description of at least 40 characters for each of the six tools; `cli --help` and `cli launchChrome --help` each show a description and the default port 9222."""
+    if not ensure_bin():
+        return False, "build-bin failed"
+    r = mcp_full([], [])
+    short = []
+    for v in VERBS:
+        t = next((t for t in r["tools"] if norm_name(t["name"]).endswith(norm_name(v))), None)
+        if not t or len((t.get("description") or "").strip()) < 40:
+            short.append(v)
+    rc1, o1, e1 = run2(["node", f"{P}/dist/bin/cli.js", "--help"])
+    rc2, o2, e2 = cli_verb("launchChrome", ["--help"])
+    ok = rc1 == 0 and rc2 == 0 and "9222" in (o1 + e1) and "9222" in (o2 + e2) and len((o2 + e2).strip().splitlines()) >= 3
+    return not short and ok, f"short descriptions={short} help rc={rc1}/{rc2} port shown={'9222' in (o1 + e1)}/{'9222' in (o2 + e2)}"
+
+
+@check("surface-hosts", 11)
+def _sh11():
+    """(PA4.3, PA4.4, resolves U1/U2) evidence/naming-decision.md records `CLI-STYLE: camelCase|kebab-case`, `MCP-NAMES: <the six tool names>`, `U1: resolved` and `U2: resolved`; the built tools/list names and the CLI verb style match the record."""
+    d = read(f"{PLAN}/evidence/naming-decision.md")
+    style = re.search(r"^CLI-STYLE:\s*(camelCase|kebab-case)\s*$", d, re.M)
+    names = re.search(r"^MCP-NAMES:\s*(.+)$", d, re.M)
+    if not (style and names and re.search(r"^U1:\s*resolved", d, re.M) and re.search(r"^U2:\s*resolved", d, re.M)):
+        return False, "naming-decision.md incomplete"
+    if not ensure_bin():
+        return False, "build-bin failed"
+    declared = {x.strip() for x in names.group(1).split(",") if x.strip()}
+    live = {t["name"] for t in mcp_full([], [])["tools"]}
+    rc, o, e = run2(["node", f"{P}/dist/bin/cli.js", "--help"])
+    verbs_seen = all((v if style.group(1) == "camelCase" else kebab(v)) in (o + e) for v in VERBS)
+    return len(declared) == 6 and declared == live and verbs_seen, f"declared={sorted(declared)} live={sorted(live)} cliStyleMatches={verbs_seen}"
+
+
+@check("surface-hosts", 12)
+def _sh12():
+    """(PA5.2, PA5.3, PA5.5) bin/cli.ts and bin/mcp.ts preflight Node >= 22.5 with a one-line message; against a dead port the CLI exits non-zero with CHROME_NOT_RUNNING on stderr and no stack trace, and the MCP returns isError: true with the code in the content."""
+    pre = all(re.search(r"22[.,\s]+5", read(f"{P}/bin/{f}")) for f in ("cli.ts", "mcp.ts"))
+    if not ensure_bin():
+        return False, "build-bin failed"
+    rc, o, e = cli_verb("listPageTargets", ["--port", HOST_PORT_DEAD])
+    cli_ok = rc != 0 and "CHROME_NOT_RUNNING" in (o + e) and not re.search(r"\n\s+at\s+\S+.*[:(]\d+", e)
+    r = mcp_full([], [("listPageTargets", {"port": int(HOST_PORT_DEAD)})])
+    res = ((r["calls"] or [{}])[0].get("result") or {})
+    mcp_ok = res.get("isError") is True and "CHROME_NOT_RUNNING" in json.dumps(res.get("content"))
+    return pre and cli_ok and mcp_ok, f"preflight={pre} cli(rc={rc})={cli_ok} mcp={mcp_ok}"
+
+
+@check("surface-hosts", 13)
+def _sh13():
+    """(PA6.1) Both bins accept --port and --user-data-dir and print the defaults in --help (9222 and the Chrome-CDP profile path)."""
+    if not ensure_bin():
+        return False, "build-bin failed"
+    res = []
+    for b in ("cli", "mcp"):
+        rc, o, e = run2(["node", f"{P}/dist/bin/{b}.js", "--help"], 30)
+        t = o + e
+        res.append(rc == 0 and "--port" in t and "--user-data-dir" in t and "9222" in t and "Chrome-CDP" in t)
+    return all(res), f"cli,mcp help ok={res}"
+
+
+# ---------------------------------------------------------------- tracing amendments (P9, namespace pinned to emission, backlog 5152786d)
+@check("tracing-plugin", 7)
+def _t7():
+    """(PA9.2) A --verbose flag exists on both hosts and diagnostics go to stderr only: the MCP host path (src/server.ts, bin/mcp.ts) has no console.log / process.stdout.write outside the JSON-RPC transport."""
+    srcs = {f: read(f"{P}/{f}") for f in ("src/server.ts", "src/cli.ts", "bin/mcp.ts", "bin/cli.ts")}
+    flag = any("--verbose" in t or "verbose" in t for t in srcs.values())
+    leaks = [f for f in ("src/server.ts", "bin/mcp.ts") if re.search(r"console\.log\(|process\.stdout\.write\(", srcs[f])]
+    return flag and "verbose" in srcs["src/cli.ts"] + srcs["bin/cli.ts"] and not leaks, f"flag={flag} stdout leaks={leaks}"
+
+
+@check("tracing-plugin", 8)
+def _t8():
+    """Namespace pinned to what the code EMITS (backlog 5152786d: the apigen design notes still say apigen.*; the code does not): packages/apigen/apigen-plugin-tracing/src/lib/plugin.ts requires `serviceName: string`, builds keys as `${serviceName}.op` / `${serviceName}.transport` / `${serviceName}.op.error` and span names `${serviceName}.<op>`, and src/tracing.ts passes serviceName 'adhd' (so stealth-browser emits adhd.op / adhd.transport), regardless of what any design note claims."""
+    pl = read("packages/apigen/apigen-plugin-tracing/src/lib/plugin.ts")
+    emit = all(k in pl for k in ("serviceName: string", "`${serviceName}.op`", "`${serviceName}.transport`", "`${serviceName}.op.error`", "`${serviceName}.${call.operation.id}`"))
+    literal = re.search(r"\[\s*['\"]apigen\.(op|transport)['\"]\s*\]", pl) is not None
+    return emit and not literal and re.search(r"serviceName:\s*['\"]adhd['\"]", read(f"{P}/src/tracing.ts")) is not None, f"dynamic keys={emit} hardcoded apigen keys={literal}"
+
+
+@check("tracing-namespace-proof", 6)
+def _tn6():
+    """The spec pins the namespace to the emitted attribute keys (backlog 5152786d): it asserts the records carry `adhd.op` and `adhd.transport` (the `${serviceName}.*` keys) and no `apigen.op` / `apigen.transport` key, and cites 5152786d in its header."""
+    t = read(SPEC)
+    return all(k in t for k in ("adhd.op", "adhd.transport", "apigen.op", "apigen.transport", "5152786d")), "attribute keys pinned"
+
+
+# ---------------------------------------------------------------- prod-examples (P7)
+EX = f"{P}/examples"
+
+
+@check("prod-examples", 1)
+def _pex1():
+    """(PA7.1) examples/library.ts, examples/cli.md and examples/mcp-config.json exist and are non-empty."""
+    miss = [f for f in ("library.ts", "cli.md", "mcp-config.json") if not read(f"{EX}/{f}").strip()]
+    return not miss, f"missing/empty {miss}"
+
+
+@check("prod-examples", 2)
+def _pex2():
+    """(PA7.2) tsconfig.spec.json includes examples/ and `nx run stealth-browser:typecheck-spec` exits 0 with examples/library.ts importing the package."""
+    inc = "examples" in read(f"{P}/tsconfig.spec.json")
+    imp = re.search(r"from\s+['\"](@adhd/stealth-browser|\.\./src/index\.js)['\"]", read(f"{EX}/library.ts")) is not None
+    rc, out = sh([NX, "run", f"{proj_name()}:typecheck-spec"], timeout=1200) if inc and imp else (1, "")
+    return inc and imp and rc == 0, f"included={inc} imports={imp} rc={rc} {out[-150:]}"
+
+
+@check("prod-examples", 3)
+def _pex3():
+    """(PA7.3) examples/mcp-config.json parses as JSON with an mcpServers entry whose command/args name the `stealth-browser-mcp` bin declared in package.json."""
+    d = jread(f"{EX}/mcp-config.json", None)
+    bins = set((pkg().get("bin") or {}))
+    servers = (d or {}).get("mcpServers") or {}
+    named = any("stealth-browser-mcp" in json.dumps(v) for v in servers.values())
+    return bool(servers) and "stealth-browser-mcp" in bins and named, f"servers={list(servers)} bins={sorted(bins)}"
+
+
+@check("prod-examples", 4)
+def _pex4():
+    """(PA7.4) The three examples use an explicit non-9222 port and never the default 9222."""
+    bad = []
+    for f in ("library.ts", "cli.md", "mcp-config.json"):
+        t = read(f"{EX}/{f}")
+        ports = re.findall(r"port\W{0,6}(\d{4,5})", t, re.I)
+        if not ports or any(p == "9222" for p in ports) or re.search(r"(?<!\d)9222(?!\d)", t):
+            bad.append(f)
+    return not bad, f"examples without an explicit non-9222 port: {bad}"
+
+
+@check("prod-examples", 5)
+def _pex5():
+    """A spec under src/test/unit/examples/ asserts the examples (config JSON parses, bin name matches, port is non-9222), citing ticket 8468f7b1 and a valid criterion id of this state; only owned paths changed by [psm:prod-examples] commits."""
+    specs = spec_files("unit/examples")
+    t = "\n".join(read(f) for f in specs)
+    ids = set(re.findall(r"\[(prod-examples\.\d+)\]", t))
+    o = ownership_ok("prod-examples")
+    return bool(specs) and TICKET in t and bool(ids & criteria_ids()) and o[0], o[1]
+
+
+# ---------------------------------------------------------------- tests (P1, P2, P9 coverage)
+@check("tests-unit-surface", 4)
+def _tus4():
+    """(PA1.2, PA1.3, PA2.2) An in-process host spec under src/test/unit/surface/ (child_process / ChromeManager mocked, no subprocess) asserts: the launchChrome tools/list schema has no chromePath or extraArgs, a tools/call with extraArgs is rejected and spawns nothing, and the fixture cookie value SECRET123 is absent from the MCP JSON and the CLI stdout; it cites the PA ids and ticket 8468f7b1."""
+    t = "\n".join(read(f) for f in spec_files("unit/surface") if "host" in os.path.basename(f))
+    need = ("SECRET123", "chromePath", "extraArgs", "PA1.2", "PA1.3", "PA2.2", TICKET, "vi.mock")
+    miss = [k for k in need if k not in t]
+    return not miss and re.search(r"not\.toContain\(['\"]?SECRET123|not\.toMatch\(.*SECRET123", t) is not None, f"host spec missing {miss}"
+
+
+@check("tests-e2e", 6)
+def _te6():
+    """(PA2.1) The e2e seeds a cookie with a unique value on the real Chrome (Network.setCookie) and asserts getPageContext over BOTH the built MCP bin and the CLI returns the cookie name and count but never the value string."""
+    t = "\n".join(read(f) for f in walk(f"{P}/src/test/e2e"))
+    need = ("PA2.1", "setCookie", "getPageContext")
+    return all(k in t for k in need) and re.search(r"not\.toContain\(", t) is not None, f"missing {[k for k in need if k not in t]}"
+
+
+@check("tests-e2e", 7)
+def _te7():
+    """(PA9.2, PA5.3) The e2e runs the real MCP bin with --verbose and asserts every stdout line parses as JSON-RPC while diagnostics appear only on stderr."""
+    t = "\n".join(read(f) for f in walk(f"{P}/src/test/e2e"))
+    need = ("PA9.2", "--verbose", "jsonrpc", "JSON.parse", "stderr")
+    return all(k in t for k in need), f"missing {[k for k in need if k not in t]}"
+
+
+# ---------------------------------------------------------------- docs (P6, P8, P9)
+@check("docs-marketing-run", 6)
+def _dm6():
+    """(PA6.2, PA6.3) docs/CONFIGURATION.md lists every default verbatim (port 9222, the Library/Application Support/Google/Chrome-CDP profile, /tmp/stealth-browser-heartbeat) and states macOS-first support with what is untested elsewhere."""
+    t = read(f"{P}/docs/CONFIGURATION.md")
+    miss = [d for d in DEFAULTS if d not in t]
+    return not miss and "macOS" in t and re.search(r"untested|not tested|unsupported|not supported", t, re.I) is not None, f"missing {miss}"
+
+
+@check("docs-marketing-run", 7)
+def _dm7():
+    """(PA8.1, PA8.2) docs/RESPONSIBLE-USE.md covers site terms of service, robots.txt, rate limits, no CAPTCHA or ban evasion, and read-only access to the user's own profile and cookies; the docs define "stealth" as exactly the two concrete choices (no --enable-automation, no Runtime.evaluate)."""
+    t = read(f"{P}/docs/RESPONSIBLE-USE.md")
+    low = t.lower()
+    terms = ("terms of service", "robots.txt", "rate limit", "captcha", "read-only", "own profile")
+    miss = [k for k in terms if k not in low]
+    docs = "\n".join(read(f) for f in doc_files())
+    return bool(t) and not miss and all(f in docs for f in STEALTH_FLAGS) and "stealth" in docs.lower(), f"RESPONSIBLE-USE missing {miss}"
+
+
+@check("docs-marketing-run", 8)
+def _dm8():
+    """(PA8.3) No README.md or docs/ prose (excluding the ported docs/reference/ protocol reference and generated .catalog data) contains the overclaim words undetectable, bypass, evade or anti-bot."""
+    hits = banned_hits(doc_files())
+    return bool(doc_files()) and not hits, f"hits={hits[:5]}"
+
+
+@check("docs-marketing-run", 9)
+def _dm9():
+    """(PA9.1) docs/OBSERVABILITY.md documents adhd.<op>.start|finish|error records, how to enable the sink, the --verbose stderr diagnostics, and that the MCP bin writes only JSON-RPC to stdout."""
+    t = read(f"{P}/docs/OBSERVABILITY.md")
+    need = ("adhd.", ".start", ".finish", ".error", "sink", "--verbose", "stderr", "JSON-RPC", "stdout")
+    miss = [k for k in need if k not in t]
+    return not miss, f"missing {miss}"
+
+
+@check("readme-rewrite", 6)
+def _rr6():
+    """(PA8.2, PA8.4) README defines "stealth" as the two concrete choices (no --enable-automation, no Runtime.evaluate) and links docs/RESPONSIBLE-USE.md (the link resolves)."""
+    t = read(f"{P}/README.md")
+    return all(f in t for f in STEALTH_FLAGS) and "docs/RESPONSIBLE-USE.md" in t and exists(f"{P}/docs/RESPONSIBLE-USE.md"), "stealth definition + link"
+
+
+@check("readme-rewrite", 7)
+def _rr7():
+    """(PA8.3) README.md contains none of the overclaim words undetectable, bypass, evade, anti-bot."""
+    hits = banned_hits([f"{P}/README.md"])
+    return exists(f"{P}/README.md") and not hits, f"hits={hits[:5]}"
+
+
+@check("readme-rewrite", 8)
+def _rr8():
+    """(PA10.2) README states the stability policy: the package is 0.x, only the six verbs and their types are stable, everything else is experimental."""
+    t = read(f"{P}/README.md")
+    return "0.x" in t and re.search(r"stability|stable", t, re.I) is not None and "experimental" in t.lower(), "stability policy"
+
+
+# ---------------------------------------------------------------- prod-publish-readiness (P10)
+@check("prod-publish-readiness", 1)
+def _pr1():
+    """(PA10.1) package.json has description, keywords, license, publishConfig.access = public (matching dispatch-cli and backlog), files, and engines.node >= 22.5."""
+    p = pkg()
+    eng = (p.get("engines") or {}).get("node", "")
+    return all(p.get(k) for k in ("description", "keywords", "license", "files")) and (p.get("publishConfig") or {}).get("access") == "public" and "22.5" in eng, f"engines={eng}"
+
+
+@check("prod-publish-readiness", 2)
+def _pr2():
+    """(PA10.2) The initial version is 0.x and the README states the stability policy."""
+    return str(pkg().get("version", "")).startswith("0.") and "0.x" in read(f"{P}/README.md"), f"version={pkg().get('version')}"
+
+
+@check("prod-publish-readiness", 3)
+def _pr3():
+    """(PA10.3) `npm pack --dry-run` against the built dist output lists README.md, CHANGELOG.md, bin/cli.js, bin/mcp.js and every exports target; the output is recorded in evidence/publish-dry-run.txt."""
+    rec = read(f"{PLAN}/evidence/publish-dry-run.txt")
+    rc, o, e = run2(["npm", "pack", "--dry-run", "--json"], 300, cwd=f"{P}/dist")
+    try:
+        files = {f["path"] for f in json.loads(o)[0]["files"]}
+    except (ValueError, KeyError, IndexError):
+        return False, f"npm pack --dry-run unreadable rc={rc} {e[-150:]}"
+    need = {"README.md", "CHANGELOG.md", "bin/cli.js", "bin/mcp.js"}
+    dm = jread(f"{P}/dist/package.json", {}) or {}
+    tg = set()
+
+    def collect(x):
+        if isinstance(x, str):
+            tg.add(os.path.normpath(x))
+        elif isinstance(x, dict):
+            for v in x.values():
+                collect(v)
+    collect(dm.get("exports") or {})
+    miss = sorted(need - files) + sorted(t for t in tg if t not in files)
+    return rc == 0 and not miss and bool(rec.strip()), f"missing from tarball: {miss}; evidence recorded={bool(rec.strip())}"
+
+
+@check("prod-publish-readiness", 4)
+def _pr4():
+    """(PA10.4) dist/bin/cli.js and dist/bin/mcp.js start with a shebang and are executable."""
+    bad = []
+    for f in ("cli.js", "mcp.js"):
+        p = f"{P}/dist/bin/{f}"
+        if not (exists(p) and read(p).startswith("#!") and os.access(p, os.X_OK)):
+            bad.append(f)
+    return not bad, f"not shebang+executable: {bad}"
+
+
+@check("prod-publish-readiness", 5)
+def _pr5():
+    """(PA10.5) Every @adhd/* dependency is either a public workspace package (not private) or recorded as published in published-state.json."""
+    names = {}
+    for f in git("ls-files", "*package.json").splitlines():
+        d = jread(f, None)
+        if isinstance(d, dict) and d.get("name"):
+            names[d["name"]] = d
+    pub = jread("published-state.json", {}) or {}
+    p = pkg()
+    deps = {**(p.get("dependencies") or {}), **(p.get("peerDependencies") or {})}
+    bad = [n for n in deps if n.startswith("@adhd/") and not ((n in names and not names[n].get("private")) or n in pub or n in (pub.get("packages") or {}))]
+    return bool(deps) and not bad, f"unpublished/private deps: {bad}"
+
+
+@check("prod-publish-readiness", 6)
+def _pr6():
+    """Only owned paths changed by [psm:prod-publish-readiness] commits."""
+    return ownership_ok("prod-publish-readiness")
+
+
+# ---------------------------------------------------------------- release (D1, D3)
+def consume_link():
+    m = re.search(r"^CONSUME:\s*link:(/\S+)\s*$", read(f"{PLAN}/RELEASE-DECISION.md"), re.M)
+    return m.group(1) if m else None
+
+
+@check("merge-readiness", 4)
+def _mr4():
+    """(D3) When CONSUME is a link: into the merged main checkout, RELEASE-DECISION.md records `MAIN_BUILD: nx run stealth-browser:build-bin exit=0` (dist/ built in the merged main checkout by the dispatcher before the link is consumed) and that dist exists there; a published CONSUME needs no main build."""
+    t = read(f"{PLAN}/RELEASE-DECISION.md")
+    link = consume_link()
+    if not t:
+        return False, "RELEASE-DECISION.md missing"
+    if link is None:
+        return bool(re.search(r"^CONSUME:\s*@adhd/stealth-browser@\S+\s*$", t, re.M)), "published consume"
+    return bool(re.search(r"^MAIN_BUILD:\s*nx run stealth-browser:build-bin exit=0\s*$", t, re.M)) and exists(f"{link}/dist/bin/cli.js") and exists(f"{link}/dist/bin/mcp.js"), f"link={link}"
+
+
+@check("agent-search-cutover", 6)
+def _ac6():
+    """(D3) Before consumption: a link: CONSUME target has a built dist (dist/index.js, dist/bin/cli.js, dist/bin/mcp.js) and `node dist/bin/cli.js --help` exits 0 there; agent-browser's node_modules/@adhd/stealth-browser/package.json exists."""
+    link = consume_link()
+    if link is None:
+        return exists(f"{SRC}/node_modules/@adhd/stealth-browser/package.json"), "published consume resolves"
+    rc, _, _ = run2(["node", f"{link}/dist/bin/cli.js", "--help"], 60) if exists(f"{link}/dist/bin/cli.js") else (1, "", "")
+    return all(exists(f"{link}/dist/{f}") for f in ("index.js", "bin/cli.js", "bin/mcp.js")) and rc == 0 and exists(f"{SRC}/node_modules/@adhd/stealth-browser/package.json"), f"link={link} cli rc={rc}"
+
+
+@check("agent-search-cutover", 7)
+def _ac7():
+    """(D1) agent-browser imports the old search/Google-named barrel names from `@adhd/stealth-browser/legacy`, and no import from the bare root `@adhd/stealth-browser` names a Google- or Search-named symbol."""
+    bad, via_legacy = [], False
+    for f in walk(SRC):
+        t = read(f)
+        if "@adhd/stealth-browser/legacy" in t:
+            via_legacy = True
+        for names, spec in re.findall(r"(?:import|export)\s+(?:type\s+)?\{([^}]*)\}\s*from\s*['\"](@adhd/stealth-browser)['\"]", t):
+            bad += [f"{os.path.relpath(f, SRC)}:{n.strip()}" for n in names.split(",") if NAMES_RE.search(n)]
+    return via_legacy and not bad, f"legacy import={via_legacy} root imports of legacy names={bad[:5]}"
+
 
 
 def main():
