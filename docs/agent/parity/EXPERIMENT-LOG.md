@@ -472,3 +472,7 @@ Not a parity blocker (architect verdict APPROVE, 2026-10-11): shell exit status.
 ### 2026-10-12T07:24:45Z — SCOPE-R8-model-alias: THE MODEL IS THE ALIAS "haiku", NOT A VERSION PIN (dispatcher)
 - user-request (verbatim, owner): "can you not just put haiku, you're literally going to make me cry. you're wasting so much time"
 - Dispatcher reading (structuring): the experiment model on every arm and the judge is the alias haiku; no version id is hard-coded in the ledger pin. The resolved model id each arm actually used is read from the response and recorded in the run record, and priced by the resolved id. Effort high on all arms (addendum 4). Round R8 = A, B, C one run each, A first, B/C alternating, no references from R6 (resolved model may differ from R6's haiku-4-5).
+
+### 2026-10-12T07:25:55Z — SCOPE-R8-B-only: R8 RUNS ARM B ONLY (dispatcher)
+- user-request (verbatim, owner): "just b"
+- Dispatcher reading (structuring): R8 is one B run on the alias haiku, effort high, through the capture proxy. It replaces the A,B,C plan in SCOPE-R8-model-alias (entry kept as record). Owner direction waives the arm-A-first reference rule for this round. R6 A1 and C1 (haiku-4-5) are shown beside it as informational context only; the resolved model of R8 B is recorded and any mismatch is stated, not hidden. Flagged once to the owner: a B result without a same-model A is not a parity verdict.
