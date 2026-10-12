@@ -180,6 +180,22 @@
       ],
       "context": "contexts/surface-api.md",
       "notes": "executor=typescript-pro tier=sonnet/high"
+    },
+    "surface-hosts": {
+      "kind": "work",
+      "phase": "surface",
+      "depends_on": [
+        "surface-api"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py surface-hosts",
+      "artifacts": [
+        "entrypoint/stealth-browser/src/server.ts",
+        "entrypoint/stealth-browser/src/cli.ts",
+        "entrypoint/stealth-browser/bin/",
+        "entrypoint/stealth-browser/package.json"
+      ],
+      "context": "contexts/surface-hosts.md",
+      "notes": "executor=typescript-pro tier=sonnet/high"
     }
   },
   "authored_with": {
