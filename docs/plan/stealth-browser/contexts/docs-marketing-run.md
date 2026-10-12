@@ -31,6 +31,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 
 - [docs-marketing-run.1] docs/marketing/.catalog/capabilities.json lists >= 6 `shipped` capabilities (the six verbs) each with a runnable receipt command; no entry lacks a status of shipped|roadmap|deprecated.
 
+- [docs-marketing-run.2] docs/marketing/.catalog/review.md records a doc-reviewer verdict of PASS.
 ---
 
 ## Reservations
