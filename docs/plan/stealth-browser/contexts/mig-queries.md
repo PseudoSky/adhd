@@ -30,7 +30,7 @@ The two engine-agnostic activity queries (`activity.ts`, `context.ts`) that agen
 
 Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/guard.py` (`python3 docs/plan/stealth-browser/scripts/guard.py mig-queries --only mig-queries.N`). None may be deferred. Tests written by this plan cite ticket `8468f7b1` and these ids ([inv:tests-cite]).
 
-_No criteria yet._
+- [mig-queries.1] Every manifest file exists, keeps every export, stays >=80% line-similar to the source, keeps its must-contain tokens.
 
 ---
 
