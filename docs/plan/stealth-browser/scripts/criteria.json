@@ -1773,6 +1773,15 @@
       "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py prod-publish-readiness --only prod-publish-readiness.6",
       "expect": "exit0",
       "cwd": "repo-root"
+    },
+    {
+      "id": "merge-readiness.4",
+      "phase": "release",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py merge-readiness --only merge-readiness.4",
+      "expect": "exit0",
+      "cwd": "repo-root"
     }
   ]
 }
