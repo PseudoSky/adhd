@@ -164,6 +164,22 @@
       ],
       "context": "contexts/mig-docs.md",
       "notes": "executor=refactoring-specialist tier=sonnet/low"
+    },
+    "surface-api": {
+      "kind": "work",
+      "phase": "surface",
+      "depends_on": [
+        "mig-chrome-manager",
+        "mig-queries",
+        "mig-capture-parsers"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py surface-api",
+      "artifacts": [
+        "entrypoint/stealth-browser/src/api.ts",
+        "entrypoint/stealth-browser/src/index.ts"
+      ],
+      "context": "contexts/surface-api.md",
+      "notes": "executor=typescript-pro tier=sonnet/high"
     }
   },
   "authored_with": {
