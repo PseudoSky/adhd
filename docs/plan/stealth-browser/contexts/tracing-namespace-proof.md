@@ -34,6 +34,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 - [tracing-namespace-proof.2] The spec asserts no emitted record carries the `apigen.` prefix and contains a NEGATIVE-CONTROL case proving the package singleton would emit `apigen.`.
 - [tracing-namespace-proof.3] The spec cites ticket 8468f7b1 and a valid [tracing-plugin.N] criterion id.
 - [tracing-namespace-proof.4] Mutation teeth: with serviceName flipped to 'apigen' in src/tracing.ts the spec FAILS (restored in a finally block); with the real file it PASSES.
+- [tracing-namespace-proof.5] Only owned paths changed by [psm:tracing-namespace-proof] commits; tracing.ts restored byte-for-byte (git diff clean).
 ---
 
 ## Reservations
