@@ -53,3 +53,11 @@ A run is reserved only after fixture preparation succeeds, immediately before th
 ## Pacing gate (SCOPE-R5-pacing-gate)
 
 Before every live run `drive.mjs` reads `claude -p /usage` (0 model calls, asserted). The run aborts with a recorded reason when the 5-hour window is at or above 90% (AC1), when any seen rate-limit status is not `allowed`/`allowed_warning`, or when the reading is unreadable (fail closed). The 7-day window is not checked (AC2); `week_pct` is still recorded in `pacing.before/after` for information only.
+
+## Owner-directed retry (R5-retry, R5-resume)
+- `ledger.retryPlan` (e.g. `[{"arm":"B","rep":2},{"arm":"C","rep":2}]`) replaces the seeded plan; the CLI still cannot slice it. It is honoured only with a non-empty `extraRunReason` (the owner direction, quoted), never contains arm A (A1 is the native reference and is not rerun), and rejects rep 1, unknown arms and duplicates (`ledger.retryPlanOf`, fail closed). Run ids are `<arm><rep>` (B2, C2); fixtures are seeded by rep, so a rep-2 run is a different (same-shape) instance. `c1_cache` treats C rep 2 as a warm repetition inside the 5 minute TTL: a retry hours later cannot satisfy it (instrument artifact; a process item, not part of genuineness).
+- The loop stops at the first aborted or harness-failed retry arm (no loop).
+- `ledger.judgeCapExtra` + `ledger.judgeCapReason` raise the judge cap above 3 (`ledger.effectiveJudgeCap`); the extension is bounded, the reason is recorded on each extra call, and the cap is checked before the paid call.
+- Retry judge records go to `tmp/.../<round>/judge-rep<N>/<arm>.json`, never into `judge/`.
+- `verdict|grid --round R5 --rep 2` reports A1 vs the rep-2 B/C (read-only).
+- R5-resume AC1: on an idempotent resume (A skipped) or a plan without A, `state.aGenuine` is seeded from the finished A record AND the ledger `armA.genuine` (`seedAGenuine`); before this the judge was suppressed for later arms.

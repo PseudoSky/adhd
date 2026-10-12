@@ -2,7 +2,7 @@
   "round": "R5",
   "cap": 3,
   "approvedBy": "the implementation pass I described -> experiment run -> result analysis -> triage -> architect (accounting for all prior changes that did not achieve the goal as well and genesis of likely forecasted items) -> repeat. Until we confirm parity",
-  "extraRunReason": "",
+  "extraRunReason": "owner: \"The previous round may have failed because we hit the 5h limit. retry B & C\" (2026-10-12; retry plan B2 then C2, A1 stays the native reference)",
   "runs": [
     {
       "runId": "A1",
@@ -91,5 +91,17 @@
       "releasedAt": "2026-10-12T00:43:18.700Z",
       "pid": 27045
     }
-  ]
+  ],
+  "retryPlan": [
+    {
+      "arm": "B",
+      "rep": 2
+    },
+    {
+      "arm": "C",
+      "rep": 2
+    }
+  ],
+  "judgeCapExtra": 1,
+  "judgeCapReason": "owner: \"The previous round may have failed because we hit the 5h limit. retry B & C\" (2 judge calls needed for B2 and C2; 2 used of 3, so the effective cap is 4)"
 }

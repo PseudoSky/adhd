@@ -210,8 +210,8 @@ export async function runLibTests({ log = console.log } = {}) {
 
   // ---- plan / isolation
   await t('plan (R3+): 3 runs, one per arm, arm A first, deterministic, B/C alternate by round', () => {
-    for (const round of ['R5', 'R6']) { const p = buildPlan({ round }); eq(p.length, 3); eq(p[0].arm, 'A'); eq(buildPlan({ round }), p); for (const arm of ['A', 'B', 'C']) eq(p.filter((x) => x.arm === arm).length, 1); }
-    ok(buildPlan({ round: 'R5' }).map((x) => x.arm).join('') !== buildPlan({ round: 'R6' }).map((x) => x.arm).join(''), 'B/C order never alternates');
+    for (const round of ['R5', 'R6']) { const p = buildPlan({ round }, {}); eq(p.length, 3); eq(p[0].arm, 'A'); eq(buildPlan({ round }, {}), p); for (const arm of ['A', 'B', 'C']) eq(p.filter((x) => x.arm === arm).length, 1); }
+    ok(buildPlan({ round: 'R5' }, {}).map((x) => x.arm).join('') !== buildPlan({ round: 'R6' }, {}).map((x) => x.arm).join(''), 'B/C order never alternates');
   });
   await t('isolation: ancestorLeaks flags a .git / CLAUDE.md ancestor and passes a clean tree', () => {
     const clean = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'r2-anc-')), 'a', 'b'); fs.mkdirSync(clean, { recursive: true });

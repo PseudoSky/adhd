@@ -38,13 +38,13 @@ export const ROUND_RE = /^R\d+$/;
 function parseArgs(argv) {
   // Round 4: NO --arms / --batch / --keep-going: the plan is always the full seeded 6 runs, and the run cap lives in a durable ledger
   // that is keyed on nothing the command line can change (not --out, not --seed), so re-invoking differently cannot bypass it.
-  const o = { round: ROUND, mode: null, out: null, seed: '20261011', wt: DEFAULT_WT, claude: 'claude', yes: false, degraded: null };
+  const o = { round: ROUND, mode: null, out: null, seed: '20261011', wt: DEFAULT_WT, claude: 'claude', yes: false, degraded: null, rep: 1 };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]; const v = () => argv[++i];
     if (['--self-check', '--print-plan', '--check-oracle', '--check-lib', '--dry-run', '--live', '--reparse-judge'].includes(a)) o.mode = a.slice(2);
     else if (['preflight', 'verdict', 'grid'].includes(a)) o.mode = a; else if (a === '--round') { o.round = v(); if (!ROUND_RE.test(o.round)) { console.error(`--round must match ${ROUND_RE} (it names the ledger file and the tmp dir), got ${JSON.stringify(o.round)}`); process.exit(2); } }
     else if (a === '--out') { o.out = path.resolve(v()); o.outExplicit = true; } else if (a === '--seed') o.seed = v(); else if (a === '--wt') o.wt = path.resolve(v()); else if (a === '--claude') o.claude = v();
-    else if (a === '--yes') o.yes = true; else if (a === '--degraded') o.degraded = v();
+    else if (a === '--rep') { o.rep = Number.parseInt(v(), 10); if (!(o.rep >= 1)) { console.error('--rep must be an integer >= 1'); process.exit(2); } } else if (a === '--yes') o.yes = true; else if (a === '--degraded') o.degraded = v();
     else { console.error(`unknown argument ${a}`); process.exit(2); }
   }
   return o;
@@ -693,7 +693,11 @@ const arm0 = (ctx) => ctx.runDef.arm;
  * their order (rep 1 before rep 2) so rep 1 is the cold run and rep 2 the warm one by construction. Deterministic in `seed` only.
  */
 /** One run per arm (section 3): A first, then B and C; B and C alternate order between rounds (ledger.armOrderFor). */
-export function buildPlan(opts) {
+export function buildPlan(opts, ledger = null) {
+  // R5-retry: a ledger-carried `retryPlan` (owner-directed, needs extraRunReason, never arm A) replaces the seeded plan. The CLI still cannot slice it.
+  const led = ledger ?? (() => { try { return LG.readLedger(opts.round ?? ROUND); } catch { return null; } })();
+  const retry = led ? LG.retryPlanOf(led) : null;
+  if (retry) return retry.map((e, i) => ({ arm: e.arm, rep: e.rep, position: i + 1, retry: true }));
   const idx = Number.parseInt(String(opts.round ?? ROUND).replace(/[^0-9]/g, ''), 10) || 0;
   return LG.armOrderFor(idx).map((arm, i) => ({ arm, rep: 1, position: i + 1 }));
 }
@@ -775,26 +779,43 @@ export async function judgeRun({ ctx, record, aGenuine, dry, client, judgeDir })
   const arm = record.arm; const genuine = GT.isGenuineSuccess(record);
   if (!JG.judgeEligible({ aGenuine, armGenuine: genuine })) { record.quality = { status: 'n/a', reason: aGenuine ? 'arm not a genuine success (no judge call)' : 'arm A not a genuine success (no judge call)' }; return record.quality; }
   const ledgerDir = path.dirname(ctx.ledgerPath); const round = path.basename(ctx.ledgerPath, '.json');
-  if (!dry) { const used = LG.readLedger(round, ledgerDir).judgeCalls.length; if (used >= LG.JUDGE_CAP) { record.quality = { status: 'n/a', reason: `judge-call cap ${used}/${LG.JUDGE_CAP} reached: no paid call made` }; return record.quality; } }
+  let capReason = ''; if (!dry) { const led = LG.readLedger(round, ledgerDir); const used = led.judgeCalls.length; const cap = LG.effectiveJudgeCap(led); if (used >= cap) { record.quality = { status: 'n/a', reason: `judge-call cap ${used}/${cap} reached: no paid call made` }; return record.quality; } if (used >= LG.JUDGE_CAP) capReason = String(led.judgeCapReason); }
   try {
     const { brief, briefSha, label } = JG.buildBrief({ prompts: ctx.prompts, ticketText: F.ticketText(ctx.spec), diff: repoDiff(ctx.spec, ctx.repoDir), transcript: transcriptFor(record, ctx.prompts) });
-    const res = await JG.runJudge({ client, arm, brief, briefSha, outDir: judgeDir, onCall: dry ? undefined : (c) => LG.recordJudgeCall(round, c, { dir: ledgerDir }) });
+    const res = await JG.runJudge({ client, arm, brief, briefSha, outDir: judgeDir, onCall: dry ? undefined : (c) => LG.recordJudgeCall(round, c, { dir: ledgerDir, reason: capReason }) });
     record.quality = res.ok ? { status: 'scored', mean: QL.qualityMean(res.scores), scores: res.scores, briefSha, modelId: JG.JUDGE_MODEL, label, file: path.join(judgeDir, `${arm}.json`) } : { status: 'judge-error', code: res.code, briefSha, file: path.join(judgeDir, `${arm}.json`) };
   } catch (e) { record.quality = { status: 'judge-failed', error: String(e?.message ?? e).slice(0, 300) }; }
   return record.quality;
 }
 
+/**
+ * R5-resume AC1: whether arm A is a genuine success for the purpose of judging later arms, from A's finished record. Outside a dry-run the ledger's `armA.genuine`
+ * must agree (fail closed on any disagreement or a missing record). Used on an idempotent resume (A skipped) and for a retry plan that contains no A.
+ */
+export function seedAGenuine({ record, ledgerPath, dry = false }) {
+  if (!record || !GT.isGenuineSuccess(record)) return false;
+  if (dry) return true;
+  try { return LG.readLedger(path.basename(ledgerPath, '.json'), path.dirname(ledgerPath)).armA?.genuine === true; } catch { return false; }
+}
+/** Judge directory of a run: rep 1 keeps `judge/` (what verdict/grid read); a retry repetition writes `judge-rep<N>/` so earlier records are never overwritten. */
+export const judgeDirName = (rep) => (rep > 1 ? `judge-rep${rep}` : 'judge');
+
 async function runPlan(opts, dry) {
   const plan = buildPlan(opts);
   fs.mkdirSync(opts.out, { recursive: true });
   const state = { rateLimitsSeen: [], lastFinished: {}, aGenuine: false };
-  const judgeDir = dry ? path.join(opts.out, 'judge') : path.join(tmpRoot(opts.round), 'judge');
+  const judgeDirOf = (rep) => dry ? path.join(opts.out, judgeDirName(rep)) : path.join(tmpRoot(opts.round), judgeDirName(rep));
   const records = [];
+  const retryMode = plan.some((p) => p.retry);
+  if (!plan.some((p) => p.arm === 'A')) {   // R5-resume AC1: a plan without arm A (retry) judges against the canonical A1 record, seeded from the record AND the ledger
+    const aCtx = makeCtx({ ...opts }, plan, { arm: 'A', rep: 1 }, dry); const aPath = path.join(aCtx.runDir, 'record.json');
+    state.aGenuine = isFinishedRecord(aPath) ? seedAGenuine({ record: readJson(aPath), ledgerPath: aCtx.ledgerPath, dry }) : false;
+  }
   console.log(`${dry ? 'DRY-RUN (no model call)' : 'LIVE'} plan: ${plan.map((p) => `${p.arm}${p.rep}`).join(' -> ')}  out=${opts.out}`);
   for (const [i, def] of plan.entries()) {
     const ctx = makeCtx({ ...opts }, plan, def, dry);
     const done = path.join(ctx.runDir, 'record.json');
-    if (isFinishedRecord(done)) { const rec = readJson(done); records.push(rec); state.lastFinished[def.arm] = Date.parse(rec.finishedAt); console.log(`skip ${ctx.spec.runId}: record exists (idempotent resume)`); continue; }
+    if (isFinishedRecord(done)) { const rec = readJson(done); records.push(rec); state.lastFinished[def.arm] = Date.parse(rec.finishedAt); if (def.arm === 'A') state.aGenuine = seedAGenuine({ record: rec, ledgerPath: ctx.ledgerPath, dry }); console.log(`skip ${ctx.spec.runId}: record exists (idempotent resume)`); continue; }
     if (i > 0) await sleep(dry ? 300 : GAP_MS);
     if (def.rep === 2 && state.lastFinished[def.arm]) ctx.gapSeconds = Math.round((Date.now() - state.lastFinished[def.arm]) / 1000);
     const { record, aborted } = await runOne(ctx, state);
@@ -808,10 +829,11 @@ async function runPlan(opts, dry) {
     }
     if (def.arm === 'A') state.aGenuine = GT.isGenuineSuccess(record);
     if (record.score && !aborted && ctx.repoDir && fs.existsSync(ctx.repoDir)) {   // R5: blind judge, live round (or a dry-run with the fake client); the client is injected, never constructed from an env flag
-      const q = await judgeRun({ ctx, record, aGenuine: state.aGenuine, dry, client: opts.judgeClient ?? (dry ? fakeJudgeClient() : JG.liveJudgeClient()), judgeDir });
+      const q = await judgeRun({ ctx, record, aGenuine: state.aGenuine, dry, client: opts.judgeClient ?? (dry ? fakeJudgeClient() : JG.liveJudgeClient()), judgeDir: judgeDirOf(def.rep) });
       console.log(`${ctx.spec.runId}: quality ${q.status}${q.mean != null ? ` mean ${q.mean.toFixed(1)}` : ''}${q.reason ? ` (${q.reason})` : ''}`);
       writeJson(path.join(ctx.runDir, 'record.json'), record);
     }
+    if (retryMode && (aborted || record.harnessFailure)) { console.log(`RETRY STOPPED: ${ctx.spec.runId} ${aborted ? 'aborted' : 'harness failure'}; the remaining retry arms are not run (stop and report, no loop)`); break; }
     if (state.breach) { console.log(`DRY-RUN EGRESS BREACH in ${ctx.spec.runId}: aborting`); record.aborted = [...(record.aborted || []), 'dry-run egress breach']; break; }
     if (aborted) { console.log(`ABORT before ${ctx.spec.runId}: ${record.aborted.join('; ')}`); break; }
     if (record.invalidRun) console.log(`${ctx.spec.runId}: RUN INVALID: ${record.invalidRun.join('; ')}`);
@@ -901,12 +923,13 @@ function lineOf(re) { const L2 = fs.readFileSync(SELF, 'utf8').split('\n'); cons
 function ledgerUsed(ledgerPath = LEDGER_PATH) { try { return JSON.parse(fs.readFileSync(ledgerPath, 'utf8')).runs.length; } catch { return fs.existsSync(ledgerPath) ? 'UNREADABLE (runs refused)' : 0; } }
 export function planText(opts) {
   const plan = buildPlan(opts); const out = [];
-  const ctxOf = (arm) => makeCtx({ ...opts }, plan, plan.find((p) => p.arm === arm), false);
+  const ctxOf = (arm) => makeCtx({ ...opts }, plan, plan.find((p) => p.arm === arm) ?? { arm, rep: 1 }, false);
   const A = ctxOf('A'), B = ctxOf('B'), C = ctxOf('C');
   const cite = (re) => `drive.mjs:${lineOf(re)}`;
   const thinkingEnvStr = Object.entries(THINKING_OFF_ENV).map(([k, v]) => `${k}=${v}`).join(' ');
   out.push(`ROUND ${opts.round ?? ROUND} PLAN  seed=${opts.seed}  model=${MODEL}  (task: ONE real-world scenario "shopkit", 2 phases in one session; web fetch ${F.WEB_URL} -> heading "${F.WEB_HEADING}")`);
   out.push(`model runs: ${plan.length} planned (one per arm, A first), serial, HARD CAP ${MAX_MODEL_RUNS} per round; ledger ${LG.ledgerPathFor(opts.round ?? ROUND)} has used ${ledgerUsed(LG.ledgerPathFor(opts.round ?? ROUND))} of ${MAX_MODEL_RUNS}`);
+  if (plan.some((p) => p.retry)) out.push('', `RETRY PLAN (ledger.retryPlan, owner-directed; arm A is not rerun): ${plan.map((p) => `${p.arm}${p.rep}`).join(' -> ')}; extraRunReason: ${LG.readLedger(opts.round ?? ROUND).extraRunReason}`);
   out.push('', 'order (arm A first; B and C alternate between rounds):', ...plan.map((p) => `  ${p.position}. ${p.arm}${p.rep}`));
   out.push('', 'THINKING (identical in effect on every arm: OFF)');
   out.push(`  A  ${THINKING_MECHANISM.A}`, `       cited at ${cite(/^export function armAEnv/)} and the THINKING_OFF_ENV definition ${cite(/^export const THINKING_OFF_ENV/)}`, `       resolved spawn env: ${thinkingEnvStr}  (armAEnv has them: ${Object.keys(THINKING_OFF_ENV).every((k) => armAEnv(A)[k] === THINKING_OFF_ENV[k])})`, `       argv: claude ${argvA(A, '<mcp-config.json>', null).map((x) => (x.length > 60 ? x.slice(0, 57) + '...' : x)).join(' ')}`);
@@ -1039,7 +1062,7 @@ export async function selfCheck({ log = console.log, opts = parseArgs([]) } = {}
 
     // ============ AC3: thinking equalisation, proven from each arm's actual command/config ============
     log('--- AC3: thinking OFF on every arm ---');
-    const planObj = buildPlan(opts); const ctxA = makeCtx({ ...opts }, planObj, planObj.find((p) => p.arm === 'A'), false), ctxB = makeCtx({ ...opts }, planObj, planObj.find((p) => p.arm === 'B'), false), ctxC = makeCtx({ ...opts }, planObj, planObj.find((p) => p.arm === 'C'), false);
+    const planObj = buildPlan(opts, {}); const ctxA = makeCtx({ ...opts }, planObj, planObj.find((p) => p.arm === 'A'), false), ctxB = makeCtx({ ...opts }, planObj, planObj.find((p) => p.arm === 'B'), false), ctxC = makeCtx({ ...opts }, planObj, planObj.find((p) => p.arm === 'C'), false);
     const aEnv = armAEnv(ctxA), bEnv = serverEnv(ctxB, '<s>', '<l>'), cEnv = serverEnv(ctxC, '<s>', '<l>');
     chk('A: spawn env carries MAX_THINKING_TOKENS=0 and CLAUDE_CODE_DISABLE_THINKING=1', aEnv.MAX_THINKING_TOKENS === '0' && aEnv.CLAUDE_CODE_DISABLE_THINKING === '1');
     chk('A: argv has no thinking/effort flag that could override the env', !argvA(ctxA, 'm', null).some((x) => /think|effort/i.test(x)));
@@ -1105,6 +1128,36 @@ export async function selfCheck({ log = console.log, opts = parseArgs([]) } = {}
       chk('judge wiring: a dry-run judges with the injected client and never touches the tracked ledger', q4.status === 'scored' && !fs.existsSync(dryLedger));
       chk('judge wiring: the diff of the pristine fixture is empty and an edit shows as a unified diff', repoDiff(spec, repoDir) === '' && (() => { fs.appendFileSync(path.join(repoDir, 'src/shipping.js'), '// edited\n'); return /\+\/\/ edited/.test(repoDiff(spec, repoDir)); })());
     }
+    { // R5-resume AC1 + R5-retry: seeding aGenuine on an idempotent resume / retry plan, the ledger-carried retry plan, and the bounded judge-cap extension.
+      const refusesWith = (fn) => { try { fn(); return false; } catch { return true; } };
+      const rd = path.join(work, 'resume'); fs.mkdirSync(rd, { recursive: true }); const ldir = path.join(rd, 'ledger'); const lp = LG.ledgerPathFor('RR', ldir);
+      const g = JSON.parse(fs.readFileSync(path.join(HERE, 'golden/r4/A2.json'), 'utf8')); const genuineRec = { arm: 'A', runId: 'A1', observation: g.observation, score: O.scoreObservation(g.observation, g.expected), metrics: {} };
+      const badRec = { ...genuineRec, defectSignal: 'x' };
+      LG.initRound('RR', { approvedBy: 'selftest' }, ldir); LG.recordArmA('RR', true, 'all green', ldir);
+      chk('R5-resume AC1: a finished genuine A record with the ledger armA.genuine=true seeds aGenuine=true', seedAGenuine({ record: genuineRec, ledgerPath: lp }) === true);
+      chk('R5-resume AC1 negative control: a non-genuine A record, a missing record, or a ledger armA.genuine=false each leave aGenuine false (fail closed)', seedAGenuine({ record: badRec, ledgerPath: lp }) === false && seedAGenuine({ record: null, ledgerPath: lp }) === false && (() => { LG.recordArmA('RR', false, 'red', ldir); const r = seedAGenuine({ record: genuineRec, ledgerPath: lp }) === false; LG.recordArmA('RR', true, 'all green', ldir); return r; })());
+      chk('R5-resume AC1: a dry-run does not consult the ledger (record only)', seedAGenuine({ record: genuineRec, ledgerPath: path.join(rd, 'nope', 'RZ.json'), dry: true }) === true);
+      { const spec = F.makeSpec({ seed: '20261011', arm: 'A', rep: 1 }); const repoDir = path.join(rd, 'repo'); F.writeFixture({ repoDir, hiddenDir: path.join(rd, 'hidden'), ticketFile: path.join(rd, 't.txt') }, spec);
+        const ctxJ = { prompts: F.prompts(), spec, repoDir, ledgerPath: lp }; const client = fakeJudgeClient();
+        const seeded = await judgeRun({ ctx: ctxJ, record: { ...genuineRec }, aGenuine: seedAGenuine({ record: genuineRec, ledgerPath: lp }), dry: true, client, judgeDir: path.join(rd, 'out') });
+        const unseeded = await judgeRun({ ctx: ctxJ, record: { ...genuineRec }, aGenuine: false, dry: true, client, judgeDir: path.join(rd, 'out') });
+        chk('R5-resume AC1: with the seed a later genuine arm is judged; with the pre-fix unseeded state.aGenuine=false the same arm gets no judge (the defect)', seeded.status === 'scored' && unseeded.status === 'n/a'); }
+      { const src2 = fs.readFileSync(SELF, 'utf8'); chk('R5-resume AC1: the skipped-A branch calls seedAGenuine before continue', /state\.lastFinished\[def\.arm\] = Date\.parse\(rec\.finishedAt\); if \(def\.arm === 'A'\) state\.aGenuine = seedAGenuine\(\{ record: rec, ledgerPath: ctx\.ledgerPath, dry \}\);/.test(src2) && /if \(!plan\.some\(\(p\) => p\.arm === 'A'\)\)/.test(src2)); }
+      const led0 = LG.readLedger('RR', ldir);
+      chk('R5-retry: no retryPlan -> null (the seeded plan stands); a retryPlan without extraRunReason is refused', LG.retryPlanOf(led0) === null && refusesWith(() => LG.retryPlanOf({ ...led0, retryPlan: [{ arm: 'B', rep: 2 }] })));
+      chk('R5-retry: a retry plan may not contain arm A, rep 1, an unknown arm or a duplicate', ['A', 'X'].every((arm) => refusesWith(() => LG.retryPlanOf({ ...led0, extraRunReason: 'why', retryPlan: [{ arm, rep: 2 }] }))) && refusesWith(() => LG.retryPlanOf({ ...led0, extraRunReason: 'why', retryPlan: [{ arm: 'B', rep: 1 }] })) && refusesWith(() => LG.retryPlanOf({ ...led0, extraRunReason: 'why', retryPlan: [{ arm: 'B', rep: 2 }, { arm: 'B', rep: 2 }] })));
+      const ledR = { ...led0, extraRunReason: 'owner: retry B & C', retryPlan: [{ arm: 'B', rep: 2 }, { arm: 'C', rep: 2 }] };
+      chk('R5-retry: a valid retry plan is B2 then C2 (flagged retry), with no arm A', JSON.stringify(buildPlan({ round: 'R5' }, ledR).map((p) => `${p.arm}${p.rep}${p.retry ? 'r' : ''}`)) === '["B2r","C2r"]' && JSON.stringify(buildPlan({ round: 'R5' }, led0).map((p) => `${p.arm}${p.rep}`)) === '["A1","C1","B1"]');
+      chk('R5-retry: rep>1 judge records go to judge-rep<N>/, never into judge/ (earlier records are not overwritten)', judgeDirName(1) === 'judge' && judgeDirName(2) === 'judge-rep2');
+      const call = (arm) => ({ arm, modelId: 'm', inputTokens: 1, outputTokens: 1, costUsd: 0, briefSha: arm });
+      LG.recordJudgeCall('RR', call('A'), { dir: ldir }); LG.recordJudgeCall('RR', call('C'), { dir: ldir }); LG.recordJudgeCall('RR', call('B'), { dir: ldir });
+      chk('R5-retry: judge cap 3/3 without a documented extension: effective cap 3, a 4th call is refused', LG.effectiveJudgeCap(LG.readLedger('RR', ldir)) === 3 && refusesWith(() => LG.recordJudgeCall('RR', call('B'), { dir: ldir })));
+      LG.initRound('RR', { judgeCapExtra: 1 }, ldir);
+      chk('R5-retry: judgeCapExtra without judgeCapReason does not raise the cap', LG.effectiveJudgeCap(LG.readLedger('RR', ldir)) === 3);
+      LG.initRound('RR', { judgeCapReason: 'owner: retry B & C' }, ldir);
+      chk('R5-retry: judgeCapExtra=1 with a reason raises the cap to 4; the 4th call needs the reason and the 5th is refused', LG.effectiveJudgeCap(LG.readLedger('RR', ldir)) === 4 && refusesWith(() => LG.recordJudgeCall('RR', call('B'), { dir: ldir })) && (() => { LG.recordJudgeCall('RR', call('B'), { dir: ldir, reason: 'owner: retry B & C' }); return true; })() && refusesWith(() => LG.recordJudgeCall('RR', call('C'), { dir: ldir, reason: 'owner: retry B & C' })));
+      const q = await judgeRun({ ctx: { prompts: F.prompts(), spec: F.makeSpec({ seed: '20261011', arm: 'A', rep: 1 }), repoDir: path.join(rd, 'repo'), ledgerPath: lp }, record: { ...genuineRec }, aGenuine: true, dry: false, client: fakeJudgeClient(), judgeDir: path.join(rd, 'out') });
+      chk('R5-retry: judgeRun refuses a paid call at the effective cap (4/4) and makes none', q.status === 'n/a' && /4\/4/.test(q.reason)); }
     { // R5-workdir AC1-AC3: a re-attempt of a runId never inherits a prior attempt's files (R5 attempt 4's docs worker read attempt 3's docs/shipping.md).
       const refusesWith = (fn) => { try { fn(); return false; } catch { return true; } };
       const wd = path.join(work, 'workdir'); fs.mkdirSync(wd, { recursive: true }); const ldir = path.join(wd, 'ledger'); const lp = LG.ledgerPathFor('RW', ldir);
@@ -1152,9 +1205,9 @@ export async function selfCheck({ log = console.log, opts = parseArgs([]) } = {}
 
     // ============ plan, task set, curl ============
     log('--- plan / task set / shell ---');
-    const p1 = buildPlan(opts), p1b = buildPlan({ ...opts });
+    const p1 = buildPlan(opts, {}), p1b = buildPlan({ ...opts }, {});
     chk('plan: 3 runs, one per arm, arm A first, deterministic', p1.length === 3 && p1[0].arm === 'A' && ['A', 'B', 'C'].every((a) => p1.filter((x) => x.arm === a).length === 1) && JSON.stringify(p1) === JSON.stringify(p1b));
-    chk('plan: B and C alternate order between rounds', buildPlan({ round: 'R5' }).map((x) => x.arm).join('') !== buildPlan({ round: 'R6' }).map((x) => x.arm).join(''));
+    chk('plan: B and C alternate order between rounds', buildPlan({ round: 'R5' }, {}).map((x) => x.arm).join('') !== buildPlan({ round: 'R6' }, {}).map((x) => x.arm).join(''));
     chk('task set: exactly ONE scenario (one prompts() pair, one fixture generator) for every run', Object.keys(F.prompts()).join() === 'phase1,phase2' && new Set(p1.map((p) => F.makeSpec({ seed: opts.seed, ...p }).pkg.replace(/-.*/, ''))).size === 1);
     chk('web fetch is deterministic: the oracle heading is the fixed example.com title', F.WEB_URL === 'https://example.com' && F.WEB_HEADING === 'Example Domain');
     { const PR = F.prompts(); const sha = (t) => crypto.createHash('sha256').update(t).digest('hex'); const banned = /curl|WebFetch|web_fetch|web_search|WebSearch|shell|Bash|browse/i;
@@ -1212,14 +1265,15 @@ async function runLiveGates(opts) {
     pacing: () => ({ ok: true, reasons: [] }),   // the `claude -p /usage` reading is taken per run inside runOne (gatePacing), still before each reservation
   });
 }
-function loadRoundRecords(round) {
+/** One record per arm letter for repetition `rep`: arm A is always the canonical A1; B and C are the run of that repetition (rep 1 = the original round, N = the owner-directed retry). */
+function loadRoundRecords(round, rep = 1) {
   const dir = path.join(tmpRoot(round), 'live/out/runs'); const by = {};
-  try { for (const d of fs.readdirSync(dir)) { try { const r = readJson(path.join(dir, d, 'record.json')); by[String(r.runId ?? d)[0]] = r; } catch { /* skip */ } } } catch { /* none */ }
+  try { for (const d of fs.readdirSync(dir).sort()) { try { const r = readJson(path.join(dir, d, 'record.json')); const arm = String(r.arm ?? r.runId ?? d)[0]; const n = Number(r.rep ?? String(r.runId ?? d).slice(1)); if (arm === 'A' ? n === 1 : n === rep) by[arm] = r; } catch { /* skip */ } } } catch { /* none */ }
   return by;
 }
 /** `verdict --round` / `grid --round`: read-only over the round's records (and judge scores when present). */
 function reportMode(opts) {
-  const recs = loadRoundRecords(opts.round); const Q = (arm) => { try { return QL.qualityMean(readJson(path.join(tmpRoot(opts.round), 'judge', `${arm}.json`)).scores); } catch { return null; } };
+  const recs = loadRoundRecords(opts.round, opts.rep); const Q = (arm) => { try { return QL.qualityMean(readJson(path.join(tmpRoot(opts.round), judgeDirName(arm === 'A' ? 1 : opts.rep), `${arm}.json`)).scores); } catch { return null; } };
   const sums = {}; for (const a of Object.keys(recs)) sums[a] = MT.summarize(recs[a], { genuine: GT.isGenuineSuccess(recs[a]), quality: Q(a) });
   const rv = MT.roundVerdict(sums);
   if (rv.verdict === 'VOID') for (const a of Object.keys(recs)) recs[a] = { ...recs[a], state: 'void' };

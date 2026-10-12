@@ -118,6 +118,30 @@ export function recordArmA(round, genuine, detail = '', dir = LEDGER_DIR) {
   });
 }
 
+/**
+ * R5-retry: the owner-directed retry plan. `led.retryPlan` = [{arm:'B',rep:2},{arm:'C',rep:2}] replaces the seeded plan (the CLI still cannot slice it). It fails CLOSED:
+ * only with a non-empty `extraRunReason`, never arm A (A1 stays the native reference), rep >= 2 (rep 1 is the original run), no duplicate arm/rep.
+ * @returns {{arm:string, rep:number}[] | null} null when the ledger carries no retry plan.
+ */
+export function retryPlanOf(led) {
+  const rp = led?.retryPlan; if (rp == null || (Array.isArray(rp) && rp.length === 0)) return null;
+  if (!Array.isArray(rp)) throw new LedgerError('ledger.retryPlan must be an array: refusing (fail closed)');
+  if (!String(led.extraRunReason || '').trim()) throw new LedgerError('ledger.retryPlan needs a non-empty extraRunReason (the owner direction): refusing (fail closed)');
+  const seen = new Set();
+  for (const e of rp) {
+    if (!e || !['B', 'C'].includes(e.arm)) throw new LedgerError(`ledger.retryPlan entry ${JSON.stringify(e)}: only arms B and C can be retried (arm A is the native reference and is never rerun): refusing`);
+    if (!Number.isInteger(e.rep) || e.rep < 2) throw new LedgerError(`ledger.retryPlan entry ${JSON.stringify(e)}: rep must be an integer >= 2: refusing`);
+    const k = `${e.arm}${e.rep}`; if (seen.has(k)) throw new LedgerError(`ledger.retryPlan lists ${k} twice: refusing`); seen.add(k);
+  }
+  return rp.map((e) => ({ arm: e.arm, rep: e.rep }));
+}
+
+/** Judge-call cap in force: JUDGE_CAP, plus `judgeCapExtra` calls only when `judgeCapReason` is non-empty (the documented reason). */
+export function effectiveJudgeCap(led) {
+  const extra = Number.isInteger(led?.judgeCapExtra) && led.judgeCapExtra > 0 && String(led.judgeCapReason || '').trim() ? led.judgeCapExtra : 0;
+  return JUDGE_CAP + extra;
+}
+
 /** Alternate the B/C order between rounds (A is always first). `roundIndex` is the round's numeric order. */
 export function armOrderFor(roundIndex) { return roundIndex % 2 === 0 ? ['A', 'B', 'C'] : ['A', 'C', 'B']; }
 
@@ -126,7 +150,9 @@ export function recordJudgeCall(round, call, { reason = '', dir = LEDGER_DIR } =
   const f = ledgerPathFor(round, dir);
   return withLock(f, () => {
     const led = fs.existsSync(f) ? parseLedger(fs.readFileSync(f, 'utf8'), f) : emptyLedger(round);
+    const cap = effectiveJudgeCap(led);
     if (led.judgeCalls.length >= JUDGE_CAP && !String(reason).trim()) throw new ModelRunCapError(`judge-call cap ${led.judgeCalls.length}/${JUDGE_CAP} reached without a documented reason`);
+    if (led.judgeCalls.length >= cap) throw new ModelRunCapError(`judge-call cap ${led.judgeCalls.length}/${cap} reached (ledger judgeCapExtra/judgeCapReason bound the documented extension)`);
     const rec = { arm: call.arm, modelId: call.modelId, inputTokens: call.inputTokens, outputTokens: call.outputTokens, costUsd: call.costUsd, briefSha: call.briefSha, at: nowIso(), ...(reason ? { reason } : {}) };
     led.judgeCalls.push(rec); writeAtomic(f, led); return rec;
   });
