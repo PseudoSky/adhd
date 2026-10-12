@@ -97,6 +97,19 @@
       ],
       "context": "contexts/mig-cdp.md",
       "notes": "executor=refactoring-specialist tier=sonnet/medium"
+    },
+    "mig-chrome-manager": {
+      "kind": "work",
+      "phase": "migrate",
+      "depends_on": [
+        "mig-cdp"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py mig-chrome-manager",
+      "artifacts": [
+        "entrypoint/stealth-browser/src/lib/chrome-manager.ts"
+      ],
+      "context": "contexts/mig-chrome-manager.md",
+      "notes": "executor=refactoring-specialist tier=sonnet/medium"
     }
   },
   "authored_with": {
