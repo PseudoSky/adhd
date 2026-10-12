@@ -40,6 +40,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 - [gates-first.1] `nx run stealth-browser:lint` exits 0 (includes @nx/dependency-checks)
 
 - [gates-first.2] `nx run stealth-browser:typecheck` and `:typecheck-spec` exit 0
+- [gates-first.3] `nx run stealth-browser:build` and `:build-bin` exit 0 (dist/index.js plus dist/bin/*)
 ---
 
 ## Reservations
