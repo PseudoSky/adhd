@@ -37,7 +37,7 @@ All gates are green again after the findings were resolved; the evidence is agai
 
 Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/guard.py` (`python3 docs/plan/stealth-browser/scripts/guard.py gates-rerun --only gates-rerun.N`). None may be deferred. Tests written by this plan cite ticket `8468f7b1` and these ids ([inv:tests-cite]).
 
-_No criteria yet._
+- [gates-rerun.1] `nx run stealth-browser:lint` exits 0 (includes @nx/dependency-checks)
 
 ---
 
