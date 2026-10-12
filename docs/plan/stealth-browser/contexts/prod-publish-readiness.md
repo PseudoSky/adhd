@@ -37,6 +37,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 - [prod-publish-readiness.3] (PA10.3) `npm pack --dry-run` against the built dist output lists README.md, CHANGELOG.md, bin/cli.js, bin/mcp.js and every exports target; the output is recorded in evidence/publish-dry-run.txt.
 - [prod-publish-readiness.4] (PA10.4) dist/bin/cli.js and dist/bin/mcp.js start with a shebang and are executable.
 - [prod-publish-readiness.5] (PA10.5) Every @adhd/* dependency is either a public workspace package (not private) or recorded as published in published-state.json.
+- [prod-publish-readiness.6] Only owned paths changed by [psm:prod-publish-readiness] commits.
 ---
 
 ## Reservations
