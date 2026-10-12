@@ -261,7 +261,8 @@
       "kind": "work",
       "phase": "verify",
       "depends_on": [
-        "surface-api"
+        "surface-api",
+        "surface-hosts"
       ],
       "guard": "python3 docs/plan/stealth-browser/scripts/guard.py tests-unit-surface",
       "artifacts": [
