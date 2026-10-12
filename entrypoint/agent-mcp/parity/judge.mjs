@@ -6,6 +6,7 @@
 // The judge sees ONLY: the task spec (both prompts + ticket), the artifact diff, and the transcript normalized to role/text/tool category/results.
 import crypto from 'node:crypto';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { RUBRIC, RUBRIC_TEXT, parseJudgeOutput } from './quality.mjs';
 
@@ -85,17 +86,59 @@ export async function runJudge({ client, arm, brief, briefSha, outDir, onCall })
   return parsed ? { ok: true, ...parsed, record } : { ok: false, code: record.error, record };
 }
 
+const CLAUDE_CODE_IDENTITY = "You are Claude Code, Anthropic's official CLI for Claude.";
+const SECRET_KEY = 'ADHD_AGENT_ANTHROPIC_SECRET'; // pragma: allowlist secret
+
+/** Value of one KEY in a dotenv-style file (quotes stripped); null when the file or key is absent. Only the requested key is ever read out of the file. */
+function dotenvValue(file, key) {
+  let text; try { text = fs.readFileSync(file, 'utf8'); } catch { return null; }
+  let found = null;
+  for (const line of text.split(/\r?\n/)) {
+    const m = /^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$/.exec(line);
+    if (!m || m[1] !== key) continue;
+    let v = m[2]; if (/^(["']).*\1$/.test(v)) v = v.slice(1, -1); else v = v.replace(/\s+#.*$/, '');
+    found = v;
+  }
+  return found;
+}
+
 /**
- * The LIVE judge client: one Anthropic Messages API call (paid third-party service, R5.AC8). Credentials come from ANTHROPIC_API_KEY (a credential, not a
- * toggle); it fails loudly when the key is absent. Only the driver in an owner-approved live round constructs and passes it; nothing in unit or e2e does.
+ * Resolve the judge credential WITHOUT any network call and without exposing it: ANTHROPIC_API_KEY, else ADHD_AGENT_ANTHROPIC_SECRET (the credential arm C uses)
+ * from process env, then the agent-mcp .env cascade (<cwd>/.env, <cwd>/.adhd/.env, ~/.adhd/.env; most specific wins), exactly as config.getProviderConfig sees it.
+ * An empty value counts as unset. Returns `{ present, source }` plus a non-enumerable `secret`, so logging/JSON-serialising the result cannot leak it.
+ */
+export function resolveJudgeCredential({ env = process.env, cwd = process.cwd(), home = os.homedir() } = {}) {
+  const out = (secret, source) => { const r = { present: Boolean(secret), source: secret ? source : null }; Object.defineProperty(r, 'secret', { value: secret || null, enumerable: false }); return r; };
+  if (env.ANTHROPIC_API_KEY) return out(env.ANTHROPIC_API_KEY, 'ANTHROPIC_API_KEY (env)');
+  if (env[SECRET_KEY]) return out(env[SECRET_KEY], `${SECRET_KEY} (env)`);
+  for (const [file, label] of [[path.join(cwd, '.env'), '<cwd>/.env'], [path.join(cwd, '.adhd', '.env'), '<cwd>/.adhd/.env'], [path.join(home, '.adhd', '.env'), '~/.adhd/.env']]) {
+    const v = dotenvValue(file, SECRET_KEY); if (v) return out(v, `${SECRET_KEY} (${label})`);
+  }
+  return out(null, null);
+}
+
+/** Request headers + system blocks for a secret, chosen by token prefix exactly as providers/anthropic.ts buildAnthropicClient does. */
+export function judgeAuthShape(secret) {
+  const base = { 'content-type': 'application/json', 'anthropic-version': '2023-06-01' };
+  if (secret.startsWith('sk-ant-api')) return { headers: { ...base, 'x-api-key': secret }, system: undefined };
+  const oauth = secret.startsWith('sk-ant-oat');
+  return { headers: { ...base, authorization: `Bearer ${secret}`, ...(oauth ? { 'anthropic-beta': 'oauth-2025-04-20' } : {}) }, system: oauth ? [{ type: 'text', text: CLAUDE_CODE_IDENTITY }] : undefined };
+}
+
+/**
+ * The LIVE judge client: one Anthropic Messages API call (paid third-party service, R5.AC8). The credential is the arm-C credential path
+ * (R5-harness AC6): ANTHROPIC_API_KEY, else ADHD_AGENT_ANTHROPIC_SECRET via process env / the .env cascade; the auth shape follows the token prefix.
+ * It fails loudly (before any fetch) when no credential exists and never prints the secret. Only the driver in an owner-approved live round constructs it.
  * @returns {{complete(args:{model:string,temperature:number,maxTokens:number,prompt:string}):Promise<{text:string,inputTokens:number,outputTokens:number}>}}
  */
-export function liveJudgeClient({ apiKey = process.env.ANTHROPIC_API_KEY, fetchImpl = globalThis.fetch } = {}) {
+export function liveJudgeClient({ apiKey, env = process.env, cwd = process.cwd(), home = os.homedir(), fetchImpl = globalThis.fetch } = {}) {
   return {
     async complete({ model, temperature, maxTokens, prompt }) {
-      if (!apiKey) throw new Error('judge: ANTHROPIC_API_KEY is not set (the judge is a paid API call and has no other credential path)');
-      const res = await fetchImpl('https://api.anthropic.com/v1/messages', { method: 'POST', headers: { 'content-type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
-        body: JSON.stringify({ model, temperature, max_tokens: maxTokens, messages: [{ role: 'user', content: prompt }] }) });
+      const secret = apiKey || resolveJudgeCredential({ env, cwd, home }).secret;
+      if (!secret) throw new Error('judge: no credential (set ANTHROPIC_API_KEY or ADHD_AGENT_ANTHROPIC_SECRET in the environment or ~/.adhd/.env); the judge is a paid API call');
+      const shape = judgeAuthShape(secret);
+      const res = await fetchImpl('https://api.anthropic.com/v1/messages', { method: 'POST', headers: shape.headers,
+        body: JSON.stringify({ model, temperature, max_tokens: maxTokens, ...(shape.system ? { system: shape.system } : {}), messages: [{ role: 'user', content: prompt }] }) });
       if (!res.ok) throw new Error(`judge: HTTP ${res.status} ${String(await res.text()).slice(0, 200)}`);
       const b = await res.json();
       return { text: (b.content ?? []).filter((x) => x.type === 'text').map((x) => x.text).join(''), inputTokens: b.usage?.input_tokens ?? 0, outputTokens: b.usage?.output_tokens ?? 0 };

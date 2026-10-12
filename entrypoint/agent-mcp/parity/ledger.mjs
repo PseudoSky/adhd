@@ -29,7 +29,7 @@ function withLock(file, fn) {
 
 /** A fresh, empty ledger object. */
 export function emptyLedger(round) {
-  return { round, cap: RUN_CAP, approvedBy: '', extraRunReason: '', runs: [], judgeCalls: [], scenarioSha: '', scopeChanges: [], armOrder: [], startedAt: null, armA: null };
+  return { round, cap: RUN_CAP, approvedBy: '', extraRunReason: '', runs: [], judgeCalls: [], scenarioSha: '', scopeChanges: [], armOrder: [], startedAt: null, armA: null, releases: [] };
 }
 
 /** Parse + validate a ledger document; throws LedgerError (fail closed) when it cannot be trusted. */
@@ -83,6 +83,28 @@ export function reserveRun(round, { arm, runId, dir = LEDGER_DIR }) {
     if (!led.armOrder.includes(arm)) led.armOrder.push(arm);
     writeAtomic(f, led);
     return { used: led.runs.length, cap: RUN_CAP };
+  });
+}
+
+/**
+ * Release a reserved run that provably never reached a model (a harness fault before any spawn). Audited, never silent: the removed run entry and the
+ * reason are appended to `releases[]` (so the cap cannot be quietly dodged), the arm order is rebuilt from the remaining runs, and if the released run was
+ * arm A, `armA` is reset (a harness fault is not a model-variance void). `startedAt` is kept. A reason is mandatory; an unknown runId is refused.
+ */
+export function releaseRun(round, runId, reason, dir = LEDGER_DIR) {
+  if (!String(reason ?? '').trim()) throw new LedgerError(`releaseRun(${runId}): a non-empty reason is required`);
+  const f = ledgerPathFor(round, dir);
+  return withLock(f, () => {
+    const led = fs.existsSync(f) ? parseLedger(fs.readFileSync(f, 'utf8'), f) : emptyLedger(round);
+    const idx = led.runs.findIndex((r) => r.runId === runId);
+    if (idx < 0) throw new LedgerError(`releaseRun: ${runId} is not reserved in ${f}: refusing`);
+    const [run] = led.runs.splice(idx, 1);
+    if (!Array.isArray(led.releases)) led.releases = [];
+    led.releases.push({ runId, arm: run.arm, reservedAt: run.at, reason: String(reason), releasedAt: nowIso(), pid: process.pid });
+    if (run.arm === 'A') led.armA = null;
+    led.armOrder = led.armOrder.filter((a) => led.runs.some((r) => r.arm === a));
+    writeAtomic(f, led);
+    return { used: led.runs.length, cap: RUN_CAP, released: led.releases[led.releases.length - 1] };
   });
 }
 

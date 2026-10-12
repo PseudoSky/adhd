@@ -1,0 +1,45 @@
+import { spawnSync } from 'node:child_process';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+
+import { afterAll, describe, expect, it } from 'vitest';
+
+import { PARITY_DIR } from './load';
+
+/**
+ * R5-harness (e2e lane, subprocess): drives `drive.mjs main` through its real CLI up to and including the instrument's fake-claude dry-run shim.
+ * No real model call: --dry-run uses the in-process fake Anthropic server and a fake `claude`, with the egress guard on. Runs in the e2e lane
+ * (subprocess), unflagged. Owns round R97; cleans its tmp/ output and OS-temp work dirs.
+ *   AC1 the default `--dry-run` (the exact path live runs share) completes: exit 0, no harnessFailure, no aborted record, work dir under os.tmpdir()
+ *   AC2 an explicit in-repo --out is rejected by the ancestor-leak guard (exit 1, harnessFailure names the leak)
+ */
+const DRIVE = path.join(PARITY_DIR, 'drive.mjs');
+const REPO = path.resolve(PARITY_DIR, '..', '..', '..');
+const ROUND = 'R97';
+const OUT_DEFAULT = path.join(REPO, 'tmp', 'agent-mcp', 'parity', ROUND);
+const WORK = path.join(os.tmpdir(), 'adhd-agent-mcp-parity', ROUND);
+
+afterAll(() => { fs.rmSync(OUT_DEFAULT, { recursive: true, force: true }); fs.rmSync(WORK, { recursive: true, force: true }); });
+
+const records = (dir: string) => fs.readdirSync(dir).map((d) => JSON.parse(fs.readFileSync(path.join(dir, d, 'record.json'), 'utf8')));
+
+describe('R5-harness e2e', () => {
+  it('AC1: default --dry-run through main exits 0 with the work dir outside the repo', () => {
+    const r = spawnSync(process.execPath, [DRIVE, '--dry-run', '--round', ROUND], { cwd: REPO, encoding: 'utf8', timeout: 240_000 });
+    expect(r.status, r.stdout + r.stderr).toBe(0);
+    const recs = records(path.join(OUT_DEFAULT, 'dry', 'out', 'runs'));
+    expect(recs.length).toBe(3);
+    for (const rec of recs) { expect(rec.harnessFailure).toBeUndefined(); expect(rec.aborted).toBeUndefined(); }
+    expect(fs.existsSync(path.join(WORK, 'work', 'A1', 'repo'))).toBe(true);
+  }, 300_000);
+
+  it('AC2: an explicit in-repo --out is still rejected loudly', () => {
+    const out = path.join(OUT_DEFAULT, 'explicit-out');
+    const r = spawnSync(process.execPath, [DRIVE, '--dry-run', '--round', ROUND, '--out', out], { cwd: REPO, encoding: 'utf8', timeout: 240_000 });
+    expect(r.status).toBe(1);
+    const recs = records(path.join(out, 'runs'));
+    expect(recs.length).toBeGreaterThan(0);
+    expect(String(recs[0].harnessFailure)).toMatch(/fixture directory sits under agent-instruction\/repo files/);
+  }, 300_000);
+});

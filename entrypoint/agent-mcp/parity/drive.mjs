@@ -43,7 +43,7 @@ function parseArgs(argv) {
     const a = argv[i]; const v = () => argv[++i];
     if (['--self-check', '--print-plan', '--check-oracle', '--check-lib', '--dry-run', '--live'].includes(a)) o.mode = a.slice(2);
     else if (['preflight', 'verdict', 'grid'].includes(a)) o.mode = a; else if (a === '--round') { o.round = v(); if (!ROUND_RE.test(o.round)) { console.error(`--round must match ${ROUND_RE} (it names the ledger file and the tmp dir), got ${JSON.stringify(o.round)}`); process.exit(2); } }
-    else if (a === '--out') o.out = path.resolve(v()); else if (a === '--seed') o.seed = v(); else if (a === '--wt') o.wt = path.resolve(v()); else if (a === '--claude') o.claude = v();
+    else if (a === '--out') { o.out = path.resolve(v()); o.outExplicit = true; } else if (a === '--seed') o.seed = v(); else if (a === '--wt') o.wt = path.resolve(v()); else if (a === '--claude') o.claude = v();
     else if (a === '--yes') o.yes = true; else if (a === '--degraded') o.degraded = v();
     else { console.error(`unknown argument ${a}`); process.exit(2); }
   }
@@ -161,7 +161,7 @@ function makeCtx(opts, plan, runDef, dry) {
   const outRoot = opts.out ?? path.join(tmpRoot(opts.round ?? ROUND), 'live/out');
   const runDir = path.join(outRoot, 'runs', spec.runId);
   // The arm's cwd must sit outside any repo / agent-instruction file (ancestorLeaks): repo-root tmp/ is inside this checkout, so it lives under the OS temp dir.
-  const work = opts.out ? path.join(outRoot, 'work', spec.runId) : path.join(os.tmpdir(), 'adhd-agent-mcp-parity', opts.round ?? ROUND, 'work', spec.runId);
+  const work = opts.outExplicit ? path.join(outRoot, 'work', spec.runId) : path.join(os.tmpdir(), 'adhd-agent-mcp-parity', opts.round ?? ROUND, 'work', spec.runId);
   return { opts, dry, spec, runDef, runDir, work, repoDir: path.join(work, 'repo'), hiddenDir: path.join(work, 'hidden'), ticketFile: path.join(work, 'ticket.txt'),
     infoLog: path.join(work, 'info-calls.log'), prompts: F.prompts(), ledgerPath: LG.ledgerPathFor(opts.round ?? ROUND) };
 }
@@ -379,10 +379,20 @@ export function reserveModelRun(runId, { ledgerPath = LEDGER_PATH } = {}) {
   const round = path.basename(ledgerPath, '.json');
   return LG.reserveRun(round, { arm: String(runId)[0], runId, dir: path.dirname(ledgerPath) });
 }
+/**
+ * R5-harness AC3/AC5: a live fault before the reservation (so before any spawn) is a harness fault, not a run: nothing is reserved, the record is marked `aborted`
+ * (isFinishedRecord then retries the arm) and it is never recorded as an arm-A void. Returns true when the record was marked. A fault after the reservation is NOT marked (the run is spent).
+ */
+export function markPreSpawnFault(ctx, record, e) {
+  if (ctx.dry || ctx.modelRun) return false;
+  record.aborted = [`harness fault before any model call (nothing reserved, retryable): ${String(e?.message || e).slice(0, 300)}`];
+  return true;
+}
 async function rawRun(ctx) {
-  // The cap is enforced HERE, before the fixture is even written and before any process that could call a model is spawned.
-  if (!ctx.dry) ctx.modelRun = reserveModelRun(ctx.spec.runId, { ledgerPath: ctx.ledgerPath ?? LEDGER_PATH });
+  // Deterministic, spawn-free preparation first: a fault here (R5-harness AC3) must not consume a ledger slot.
   await prepare(ctx);
+  // The cap is enforced HERE, immediately before any process that could call a model is spawned.
+  if (!ctx.dry) ctx.modelRun = reserveModelRun(ctx.spec.runId, { ledgerPath: ctx.ledgerPath ?? LEDGER_PATH });
   if (ctx.dry) await setupFakes(ctx);
   try { return await (ctx.executor ?? (ctx.runDef.arm === 'A' ? runArmA : runArmBC))(ctx); }
   finally { if (ctx.dry) await teardownFakes(ctx); }
@@ -584,6 +594,7 @@ async function runOne(ctx, state) {
   } catch (e) {
     if (e instanceof ModelRunCapError) { record.aborted = [e.message]; writeJson(path.join(ctx.runDir, 'record.json'), record); return { record, aborted: true }; }
     record.harnessFailure = String(e.stack || e);
+    if (markPreSpawnFault(ctx, record, e)) { record.wallMs = Date.now() - t0; record.finishedAt = nowIso(); writeJson(path.join(ctx.runDir, 'record.json'), record); return { record, aborted: true }; }
   }
   record.wallMs = Date.now() - t0; record.finishedAt = nowIso();
   record.sweep = await sweepOwned(`after ${ctx.spec.runId}`);
@@ -745,7 +756,7 @@ async function runPlan(opts, dry) {
     records.push(record); state.lastFinished[def.arm] = Date.parse(record.finishedAt || nowIso());
     annotateDetectors(record);
     writeJson(path.join(ctx.runDir, 'record.json'), record);   // persist the annotation (detectors, egress override, defect signal); runOne wrote it before they ran
-    if (def.arm === 'A' && !dry) {
+    if (def.arm === 'A' && !dry && !aborted) {
       const genuine = GT.isGenuineSuccess(record);
       LG.recordArmA(opts.round ?? ROUND, genuine, genuine ? 'all content items green, no INVALID, no defect signal' : `content ${record.score?.summary?.content?.pass}/${record.score?.summary?.content?.total}, invalid ${record.score?.summary?.invalid}, defect ${!!record.defectSignal}`, path.dirname(ctx.ledgerPath));
       if (!genuine) { console.log('ITERATION VOID: arm A did not genuinely succeed; B and C are not run and nothing enters the grid (record the void in the LOG)'); break; }
@@ -1091,13 +1102,14 @@ async function runPreflightMode(opts) {
   for (const l of res.legs) console.error(`preflight ${l.arm}: ${l.code} ${l.detail}`);
   console.log(JSON.stringify(res, null, 2)); return res.exitCode;
 }
-/** Live gates in GT.GATE_ORDER (ledger, scope, preflight, pacing): all read-only or zero-model; any red or throwing gate refuses. */
+/** Live gates in GT.GATE_ORDER (ledger, scope, judgeCredential, preflight, pacing): all read-only or zero-model; any red or throwing gate refuses. */
 async function runLiveGates(opts) {
   return GT.runGates({
     ledger: () => { const r = LG.checkLedgerForLive(opts.round); return { ok: r.ok, reasons: r.reasons }; },
     scope: () => { const led = LG.readLedger(opts.round); let logText = ''; try { logText = fs.readFileSync(LOG_PATH, 'utf8'); } catch { /* none */ }
       return GT.checkScope({ scenarioSha: currentScenarioSha(), previousSha: led.scenarioSha || previousScenarioSha(opts.round), scopeChanges: led.scopeChanges, logText, startedAt: led.startedAt ?? new Date().toISOString() }); },
     preflight: async () => { const r = await preflightOnce(opts); return { ok: r.ok, reasons: r.legs.filter((l) => l.code !== 'GREEN' && l.code !== 'NOT_PROBEABLE').map((l) => `${l.arm}: ${l.code} ${l.detail}`) }; },
+    judgeCredential: () => { const c = JG.resolveJudgeCredential(); return { ok: c.present, reasons: c.present ? [] : ['no judge credential (ANTHROPIC_API_KEY or ADHD_AGENT_ANTHROPIC_SECRET in env or ~/.adhd/.env): the paid judge would fail after the arms were paid for'] }; },   // presence only, no model call
     pacing: () => ({ ok: true, reasons: [] }),   // the `claude -p /usage` reading is taken per run inside runOne (gatePacing), still before each reservation
   });
 }
@@ -1126,6 +1138,7 @@ async function main() {
   if (opts.mode === 'verdict' || opts.mode === 'grid') { process.exit(reportMode(opts)); }
   const dry = opts.mode === 'dry-run';
   if (!dry && !opts.yes) { console.error('--live spends real model quota (hard cap 3 runs per round). Re-run with --yes to confirm.'); process.exit(2); }
+  opts.outExplicit = Boolean(opts.out);   // an operator-chosen --out puts the work dir under it (and ancestorLeaks then guards it); the default keeps work under os.tmpdir()
   opts.out = opts.out || path.join(tmpRoot(opts.round), dry ? 'dry/out' : 'live/out');
   if (!dry) {   // live: gates run BEFORE pacing and BEFORE any ledger reservation or `claude` spawn (R2.AC7); red => exit 3, nothing touched
     const g = await runLiveGates(opts);

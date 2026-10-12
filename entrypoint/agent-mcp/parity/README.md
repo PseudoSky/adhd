@@ -9,7 +9,7 @@ One scenario ("shopkit", two phases in one session; `fixtures.mjs`). One run per
 `--self-check` (no model call, no `claude`), `--print-plan`, `--check-oracle`, `--check-lib`, `preflight` (zero model calls, exit 0/3), `verdict --round R<n>`, `grid --round R<n>`, `--dry-run`, `--live --yes` (refuses, exit 3, unless every gate is green).
 
 ## Gate order (deviation from R0.AC8)
-R0.AC8 lists `[pacing, ledger, scope, preflight]` but R2.AC7 requires the preflight to run before pacing (pacing spawns `claude /usage`) with zero spawns on red. Implemented order: `ledger` (read-only: `approvedBy` non-empty, cap) -> `scope` (scenarioSha vs previous round, LOG headings) -> `preflight` -> `pacing` (per-run `gatePacing` before each reservation) -> reservation. Any red or throwing gate exits 3 and leaves the ledger untouched.
+R0.AC8 lists `[pacing, ledger, scope, preflight]` but R2.AC7 requires the preflight to run before pacing (pacing spawns `claude /usage`) with zero spawns on red. Implemented order: `ledger` (read-only: `approvedBy` non-empty, cap) -> `scope` (scenarioSha vs previous round, LOG headings) -> `judgeCredential` (presence only, no model call: `ANTHROPIC_API_KEY` or `ADHD_AGENT_ANTHROPIC_SECRET` in env or the `.env` cascade) -> `preflight` -> `pacing` (per-run `gatePacing` before each reservation) -> reservation. Any red or throwing gate exits 3 and leaves the ledger untouched.
 
 ## Ledger (`ledger/<round>.json`, tracked)
 `runs[]`, `approvedBy` (the owner message, quoted; required for `--live`), `extraRunReason` (required for run 4+), `judgeCalls[]`, `scenarioSha`, `scopeChanges[]`, `armOrder`, `armA`. Scope-change rule: when `scenarioSha` differs from the previous round's, every `scopeChanges[]` id needs a LOG heading `### <timestamp> ... <id> ...` dated before the round's `startedAt`.
@@ -24,10 +24,13 @@ U5 stays open until measured; the preflight is generic (`WEB_SURFACE[arm].probe`
 
 ## Metrics (R4) and quality (R5)
 Cost (billed, authoritative; common-card shown beside it) <= 1.02 x A, duration <= 1.02 x A, quality >= 0.98 x A (mean of 8 judged qualities). Turns, tool calls, peak context are report-only. n=1 per arm: fixed threshold, no significance claim. Billed vs common-card: billed uses the CLI `total_cost_usd` for A and tier-aware cache pricing for B/C; common-card prices all cache writes at the 5m rate.
-The judge (Haiku, `judge.mjs`) is a PAID third-party call. It runs only from the driver in a live round, after the oracle passed for A and the judged arm, with no env flag. Owner: the repository owner (skywinstonsk@gmail.com), recorded here, in the driver header and in the experiment LOG; it is deliberately not mentioned in the published `AGENTS.md`.
+The judge (Haiku, `judge.mjs`) is a PAID third-party call; it authenticates with the arm-C credential path (`ANTHROPIC_API_KEY`, else `ADHD_AGENT_ANTHROPIC_SECRET` from env or the `.env` cascade; auth shape chosen by token prefix as `providers/anthropic.ts` does; the secret is never logged). It runs only from the driver in a live round, after the oracle passed for A and the judged arm, with no env flag. Owner: the repository owner (skywinstonsk@gmail.com), recorded here, in the driver header and in the experiment LOG; it is deliberately not mentioned in the published `AGENTS.md`.
 
 ## Output
-Raw output goes to repo-root `tmp/agent-mcp/parity/<round>/` (gitignored). The arm working directory lives under the OS temp dir (`adhd-agent-mcp-parity/<round>/work`) so no repo or agent-instruction file sits above it.
+Raw output goes to repo-root `tmp/agent-mcp/parity/<round>/` (gitignored). The arm working directory lives under the OS temp dir (`adhd-agent-mcp-parity/<round>/work`) so no repo or agent-instruction file sits above it; only an operator-supplied `--out` moves it under that directory (and `ancestorLeaks` then rejects an in-repo one).
+
+## Ledger releases (R5-harness)
+A run is reserved only after fixture preparation succeeds, immediately before the first model-capable spawn. A fault before that point records the arm as `aborted` (retryable) and consumes no run and never records arm A as a void. `ledger.releaseRun(round, runId, reason)` is the audited repair for a run that was reserved but provably never reached a model: it appends to `releases[]` and resets `armA` when A is released.
 
 ## Goldens
 `golden/legacy` (frozen round-3 oracle + fixtures, byte-identical), `golden/r4` (R4 observation/expected/score per run with the source sha256; `oracle.r4.frozen.mjs` is the R4 oracle before R1, one import path adjusted), `golden/selfcheck/round3`.
