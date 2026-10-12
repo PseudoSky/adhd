@@ -61,6 +61,12 @@ Every plan-file write is committed (R1). Work-product commits for this state, al
 
 ---
 
+## References & interfaces
+
+- [ref:backlog-tracing] — makeTracingPlugin({serviceName:'adhd'}) configured once in src/tracing.ts, mounted in every usePlugins array, package singleton never imported
+
+---
+
 ## Notes for executor
 
 - Runs AFTER tests-e2e on purpose: the guard temporarily rewrites `src/tracing.ts`, which a concurrent build/e2e would bake into dist.
