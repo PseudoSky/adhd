@@ -32,6 +32,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 - [tracing-namespace-proof.1] The spec drives the CONFIGURED layer against a real sox-telemetry file sink for a real stealth-browser verb and asserts every record event starts with `adhd.`.
 
 - [tracing-namespace-proof.2] The spec asserts no emitted record carries the `apigen.` prefix and contains a NEGATIVE-CONTROL case proving the package singleton would emit `apigen.`.
+- [tracing-namespace-proof.3] The spec cites ticket 8468f7b1 and a valid [tracing-plugin.N] criterion id.
 ---
 
 ## Reservations
