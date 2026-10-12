@@ -32,10 +32,10 @@
       "end_ref": "50c5b1bfb4e76016ee608ce6bdd5875fc3132ae7"
     },
     "mig-foundation": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-10-12T21:25:08.551Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "32e3fde89282f48b5f9e1f6c1f9070fc5c2d87f0",
       "end_ref": null
     },
     "mig-cdp": {
