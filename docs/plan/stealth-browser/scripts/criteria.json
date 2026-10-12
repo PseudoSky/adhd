@@ -1656,6 +1656,15 @@
       "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py tests-e2e --only tests-e2e.7",
       "expect": "exit0",
       "cwd": "repo-root"
+    },
+    {
+      "id": "docs-marketing-run.6",
+      "phase": "docs",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py docs-marketing-run --only docs-marketing-run.6",
+      "expect": "exit0",
+      "cwd": "repo-root"
     }
   ]
 }

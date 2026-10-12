@@ -35,6 +35,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 - [docs-marketing-run.3] AGENTS.md, llms.txt, CHANGELOG.md (with a 0.0.1 migration entry) and README.md exist; no AI attribution lines anywhere in them.
 - [docs-marketing-run.4] Documentation-only: [psm:docs-marketing-run] commits touch only docs/, README.md, AGENTS.md, llms.txt, CHANGELOG.md (ownership).
 - [docs-marketing-run.5] Gate evidence of gates-rerun still matches the package source tree (docs run changed no src/).
+- [docs-marketing-run.6] (PA6.2, PA6.3) docs/CONFIGURATION.md lists every default verbatim (port 9222, the Library/Application Support/Google/Chrome-CDP profile, /tmp/stealth-browser-heartbeat) and states macOS-first support with what is untested elsewhere.
 ---
 
 ## Reservations
