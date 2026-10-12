@@ -1,6 +1,6 @@
 // PARITY-INSTRUMENT-ONLY
 // CLI-parity experiment driver (entrypoint/agent-mcp/parity). Private, unpublished measurement instrument. See README.md.
-//   node drive.mjs --self-check | --print-plan | --check-oracle | --check-lib | --dry-run | --live --yes   [options]
+//   node drive.mjs --self-check | --print-plan | --check-oracle | --check-lib | --dry-run | --live --yes   [options]   (add --capture or PARITY_CAPTURE=1 to route model traffic through the wire-capture proxy, capture-proxy.mjs)
 // --self-check / --print-plan / --check-* make NO model call and run NO `claude` binary.
 // --live spends real quota and is hard-capped at MAX_MODEL_RUNS (3: one run per arm) per round across all invocations (durable per-round ledger, --round R<n>).
 // --dry-run (owner-run only) drives all three arms end to end with fakes against the REAL built agent-mcp.
@@ -22,6 +22,7 @@ import * as MT from './metrics.mjs';
 import * as GR from './grid.mjs';
 import * as QL from './quality.mjs';
 import * as JG from './judge.mjs';
+import * as CP from './capture-proxy.mjs';
 import { ModelRunCapError } from './ledger.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -38,13 +39,13 @@ export const ROUND_RE = /^R\d+$/;
 function parseArgs(argv) {
   // Round 4: NO --arms / --batch / --keep-going: the plan is always the full seeded 6 runs, and the run cap lives in a durable ledger
   // that is keyed on nothing the command line can change (not --out, not --seed), so re-invoking differently cannot bypass it.
-  const o = { round: ROUND, mode: null, out: null, seed: '20261011', wt: DEFAULT_WT, claude: 'claude', yes: false, degraded: null, rep: 1 };
+  const o = { round: ROUND, mode: null, out: null, seed: '20261011', wt: DEFAULT_WT, claude: 'claude', yes: false, degraded: null, rep: 1, capture: process.env.PARITY_CAPTURE === '1' };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]; const v = () => argv[++i];
     if (['--self-check', '--print-plan', '--check-oracle', '--check-lib', '--dry-run', '--live', '--reparse-judge'].includes(a)) o.mode = a.slice(2);
     else if (['preflight', 'verdict', 'grid'].includes(a)) o.mode = a; else if (a === '--round') { o.round = v(); if (!ROUND_RE.test(o.round)) { console.error(`--round must match ${ROUND_RE} (it names the ledger file and the tmp dir), got ${JSON.stringify(o.round)}`); process.exit(2); } }
     else if (a === '--out') { o.out = path.resolve(v()); o.outExplicit = true; } else if (a === '--seed') o.seed = v(); else if (a === '--wt') o.wt = path.resolve(v()); else if (a === '--claude') o.claude = v();
-    else if (a === '--rep') { o.rep = Number.parseInt(v(), 10); if (!(o.rep >= 1)) { console.error('--rep must be an integer >= 1'); process.exit(2); } } else if (a === '--yes') o.yes = true; else if (a === '--degraded') o.degraded = v();
+    else if (a === '--rep') { o.rep = Number.parseInt(v(), 10); if (!(o.rep >= 1)) { console.error('--rep must be an integer >= 1'); process.exit(2); } } else if (a === '--yes') o.yes = true; else if (a === '--capture') o.capture = true; else if (a === '--degraded') o.degraded = v();
     else { console.error(`unknown argument ${a}`); process.exit(2); }
   }
   return o;
@@ -217,7 +218,20 @@ function spawnClaudeTurn({ claude, argv, cwd, env, prompt, outFile, errFile, tim
   });
 }
 /** The exact env of every arm-A `claude -p` turn (thinking is the model default: no thinking variable is set). */
-export function armAEnv(ctx) { return L.cleanEnv({ ...L.CLAUDECLI_PROVIDER_ENVS, ...(ctx.dry ? ctx.fakeEnv : {}) }); }
+/**
+ * R6B-proxy AC4: the base-URL env that routes an arm's model traffic through the capture proxy ({} unless --capture / PARITY_CAPTURE=1 started one).
+ *  A: the `claude -p` spawn env.  B: the agent-mcp server env, copied into every claudecli child by claudecli.ts buildSubprocessEnv (process.env copy, lines 818-833).
+ *  C: the agent-mcp server env; the Anthropic SDK in providers/anthropic.ts buildAnthropicClient reads ANTHROPIC_BASE_URL itself (it never passes the resolved
+ *  ADHD_AGENT_ANTHROPIC_BASE_URL to the client, so that variable would be inert).  openai/deepseek base URLs carry /v1 because config.ts normalizeBaseUrl only adds it to a bare host.
+ */
+export function captureEnv(ctx) {
+  const c = ctx.capture; if (!c) return {};
+  const arm = ctx.runDef.arm;
+  const env = { ANTHROPIC_BASE_URL: c.baseUrl(arm, 'anthropic') };
+  if (arm !== 'A') { env.ADHD_AGENT_OPENAI_BASE_URL = `${c.baseUrl(arm, 'openai')}/v1`; env.ADHD_AGENT_DEEPSEEK_BASE_URL = `${c.baseUrl(arm, 'deepseek')}/v1`; }
+  return env;
+}
+export function armAEnv(ctx) { return L.cleanEnv({ ...L.CLAUDECLI_PROVIDER_ENVS, ...(ctx.dry ? ctx.fakeEnv : {}), ...captureEnv(ctx) }); }
 async function runArmA(ctx) {
   const claude = ctx.opts.claude;
   const mcpPath = path.join(ctx.runDir, 'mcp-config.json'); writeJson(mcpPath, mcpConfigFor(ctx));
@@ -260,6 +274,7 @@ export function serverEnv(ctx, store, logs) {
     ADHD_AGENT_BUDGET_MAX_CALLS: '0', ADHD_AGENT_SRT_SETTINGS: path.join(ctx.runDir, 'srt-policy.json'),
     ADHD_AGENT_NATIVE_TOOLING_FS_ALLOWED_ROOTS: JSON.stringify({ repo: ctx.repoDir }),
     ...(ctx.dry ? { ADHD_AGENT_ANTHROPIC_SECRET: 'dry-run-not-a-secret', ANTHROPIC_BASE_URL: ctx.fakeAnthropicUrl || 'http://127.0.0.1:9', NODE_OPTIONS: `--require ${path.join(HERE, 'dryrun/egress-guard.cjs')}`, R2_EGRESS_LOG: path.join(ctx.runDir, 'egress-blocked.log') } : {}),
+    ...captureEnv(ctx),
   });
 }
 async function startServer(ctx) {
@@ -440,14 +455,23 @@ export function markPreSpawnFault(ctx, record, e) {
   record.aborted = [`harness fault before any model call (nothing reserved, retryable): ${String(e?.message || e).slice(0, 300)}`];
   return true;
 }
+/** R6B-proxy AC4: start the capture proxy for this run (logs/wire), calibrate its overhead against a local mock, and keep the facts for the run record. */
+async function startCapture(ctx) {
+  const wire = path.join(ctx.runDir, 'logs', 'wire');
+  const upstreams = ctx.dry && ctx.fakeAnthropicUrl ? { anthropic: ctx.fakeAnthropicUrl } : CP.upstreamsFromEnv();
+  const overhead = await CP.measureOverhead({ outDir: path.join(ctx.runDir, 'logs', 'wire-calibration') });
+  ctx.capture = await CP.startCaptureProxy({ outDir: wire, upstreams, sessionId: ctx.spec.runId });
+  ctx.captureInfo = { on: true, outDir: wire, arm: ctx.runDef.arm, url: ctx.capture.url, upstreams: Object.fromEntries(Object.entries({ ...CP.upstreamsFromEnv({}), ...upstreams }).map(([k, v]) => [k, new URL(v).origin])), baseUrlEnv: Object.keys(captureEnv(ctx)), proxyOverheadP50Ms: overhead };
+}
 async function rawRun(ctx) {
   // Deterministic, spawn-free preparation first: a fault here (R5-harness AC3) must not consume a ledger slot.
   await prepare(ctx);
   // The cap is enforced HERE, immediately before any process that could call a model is spawned.
   if (!ctx.dry) ctx.modelRun = reserveModelRun(ctx.spec.runId, { ledgerPath: ctx.ledgerPath ?? LEDGER_PATH });
   if (ctx.dry) await setupFakes(ctx);
+  if (ctx.opts.capture) await startCapture(ctx);
   try { return await (ctx.executor ?? (ctx.runDef.arm === 'A' ? runArmA : runArmBC))(ctx); }
-  finally { if (ctx.dry) await teardownFakes(ctx); }
+  finally { if (ctx.capture) { await ctx.capture.close(); ctx.capture = null; } if (ctx.dry) await teardownFakes(ctx); }
 }
 
 /** Idempotent resume: a run is finished only if its record exists and was NOT aborted (a pacing/cap abort wrote a record but ran nothing, and must be retried once the window resets). */
@@ -660,6 +684,7 @@ async function runOne(ctx, state) {
     record.harnessFailure = String(e.stack || e);
     if (markPreSpawnFault(ctx, record, e)) { record.workDir = ctx.work; record.preManifest = ctx.preManifest ?? null; record.wallMs = Date.now() - t0; record.finishedAt = nowIso(); writeJson(path.join(ctx.runDir, 'record.json'), record); return { record, aborted: true }; }
   }
+  if (ctx.captureInfo) record.capture = ctx.captureInfo;
   record.workDir = ctx.work; record.preManifest = ctx.preManifest ?? null;
   record.wallMs = Date.now() - t0; record.finishedAt = nowIso();
   record.sweep = await sweepOwned(`after ${ctx.spec.runId}`);
@@ -701,7 +726,7 @@ async function runOne(ctx, state) {
   return { record, aborted: false };
 }
 function effectiveConfig(ctx) {
-  return { model: MODEL, maxToolLoops: arm0(ctx) === 'A' ? 'n/a (claude 2.1.296 has no --max-turns; guard --max-budget-usd ' + BUDGET_GUARD_USD + ')' : MAX_TOOL_LOOPS, budgetMaxCalls: arm0(ctx) === 'A' ? 'n/a' : 0, shellAllow: arm0(ctx) === 'A' ? 'unrestricted Bash (bypassPermissions)' : SHELL_POLICY, shellEgress: arm0(ctx) === 'A' ? 'n/a (native Bash)' : 'open expected (product default); actual mode recorded in record.shellEgress', toolResultCap: arm0(ctx) === 'A' ? 'native (<=30k chars inline)' : 'agent-mcp default (6000 chars, head 75% / tail 25%)', providerTimeoutMs: arm0(ctx) === 'B' ? 1_200_000 : arm0(ctx) === 'C' ? 600_000 : `n/a (claude CLI; ${PHASE_TIMEOUT_MS} ms phase timeout)`, queueConcurrency: 'agent-mcp default', maxDepth: 'agent-mcp default (3)', thinking: `thinking: ${THINKING_POLICY} (${THINKING_MECHANISM[arm0(ctx)]})`, thinkingEnv: {}, phaseTimeoutMs: PHASE_TIMEOUT_MS };
+  return { model: MODEL, maxToolLoops: arm0(ctx) === 'A' ? 'n/a (claude 2.1.296 has no --max-turns; guard --max-budget-usd ' + BUDGET_GUARD_USD + ')' : MAX_TOOL_LOOPS, budgetMaxCalls: arm0(ctx) === 'A' ? 'n/a' : 0, shellAllow: arm0(ctx) === 'A' ? 'unrestricted Bash (bypassPermissions)' : SHELL_POLICY, shellEgress: arm0(ctx) === 'A' ? 'n/a (native Bash)' : 'open expected (product default); actual mode recorded in record.shellEgress', toolResultCap: arm0(ctx) === 'A' ? 'native (<=30k chars inline)' : 'agent-mcp default (6000 chars, head 75% / tail 25%)', providerTimeoutMs: arm0(ctx) === 'B' ? 1_200_000 : arm0(ctx) === 'C' ? 600_000 : `n/a (claude CLI; ${PHASE_TIMEOUT_MS} ms phase timeout)`, queueConcurrency: 'agent-mcp default', maxDepth: 'agent-mcp default (3)', thinking: `thinking: ${THINKING_POLICY} (${THINKING_MECHANISM[arm0(ctx)]})`, thinkingEnv: {}, phaseTimeoutMs: PHASE_TIMEOUT_MS, ...(ctx.opts?.capture ? { capture: `wire capture ON (capture-proxy.mjs, logs/wire): arm ${arm0(ctx)} model traffic is routed through a local pass-through proxy; bodies and timing are not altered` } : {}) };
 }
 const arm0 = (ctx) => ctx.runDef.arm;
 
@@ -1107,6 +1132,8 @@ export async function selfCheck({ log = console.log, opts = parseArgs([]) } = {}
     chk('R7-think AC1: negative control, the check has teeth: an env that DID carry the forced-off variables is detected', !none({ MAX_THINKING_TOKENS: '0' }) && !none({ CLAUDE_CODE_DISABLE_THINKING: '1' }));
     chk('R7-think AC1: effectiveConfig states "thinking: model default on every arm; not forced" with the per-arm mechanism, and no arm reports OFF', ['A', 'B', 'C'].every((a) => { const cx = a === 'A' ? ctxA : a === 'B' ? ctxB : ctxC; const c = effectiveConfig(cx); return c.thinking.startsWith('thinking: model default on every arm; not forced') && c.thinking.includes(THINKING_MECHANISM[a]) && !/OFF/.test(c.thinking) && Object.keys(c.thinkingEnv).length === 0; }));
     // R7-model: ONE model pin reaches every arm and the oracle; the judge is a separate pin; thinking-off gap and the cost card are reported, not assumed.
+    chk('R6B-proxy AC4: capture is OFF by default (no capture env, no capture key in effectiveConfig) and --capture parses', Object.keys(captureEnv(ctxA)).length === 0 && !('capture' in effectiveConfig(ctxA)) && parseArgs(['--capture']).capture === true && parseArgs([]).capture === (process.env.PARITY_CAPTURE === '1'));
+    chk('R6B-proxy AC4: with a capture proxy, A/B/C route ANTHROPIC_BASE_URL through /<arm>/anthropic (A spawn env, B+C server env) and B/C also set the openai/deepseek base URLs', (() => { const cap = { baseUrl: (a, p) => `http://127.0.0.1:1/${a}/${p}` }; const [a, b, c] = [ctxA, ctxB, ctxC].map((x) => ({ ...x, capture: cap })); return armAEnv(a).ANTHROPIC_BASE_URL === 'http://127.0.0.1:1/A/anthropic' && serverEnv(b, '/s', '/l').ANTHROPIC_BASE_URL === 'http://127.0.0.1:1/B/anthropic' && serverEnv(c, '/s', '/l').ANTHROPIC_BASE_URL === 'http://127.0.0.1:1/C/anthropic' && serverEnv(c, '/s', '/l').ADHD_AGENT_OPENAI_BASE_URL === 'http://127.0.0.1:1/C/openai/v1' && serverEnv(b, '/s', '/l').ADHD_AGENT_DEEPSEEK_BASE_URL === 'http://127.0.0.1:1/B/deepseek/v1'; })());
     chk('R7-model AC1: MODEL is the single pin (fixtures PIN_MODEL = claude-sonnet-5-5) and reaches arm A argv --model, B claudecli provider.model, C anthropic provider.model and the oracle spec pin', (() => { const av = argvA(ctxA, '<mcp>', null); return MODEL === F.PIN_MODEL && MODEL === 'claude-sonnet-5-5' && av[av.indexOf('--model') + 1] === MODEL && providerFor(ctxB, 'B').model === MODEL && providerFor(ctxC, 'C').model === MODEL && ctxA.spec.pin === MODEL; })());
     chk('R7-model AC1: negative control, a spec/arm pinned to the previous model (claude-haiku-4-5) is not the pin and its r1_model result is FAIL', (() => { const e = { ...ctxA.spec, pin: MODEL }; const o = O.idealObservation('A', e); o.models = ['claude-haiku-4-5']; return O.scoreObservation(o, e).fields.r1_model.status === 'fail'; })());
     chk('R7-model AC1: the judge model is a distinct pin (JUDGE_MODEL = claude-haiku-4-5, not the arm MODEL)', JG.JUDGE_MODEL === 'claude-haiku-4-5' && JG.JUDGE_MODEL !== MODEL);
@@ -1342,7 +1369,7 @@ function reparseJudgeMode(opts) {
 }
 async function main() {
   const opts = parseArgs(process.argv.slice(2));
-  if (!opts.mode) { console.error('usage: node drive.mjs --self-check | --print-plan | --check-oracle | --check-lib | --dry-run | --live --yes | --reparse-judge  [--out DIR] [--seed S] [--wt PATH] [--claude PATH]'); process.exit(2); }
+  if (!opts.mode) { console.error('usage: node drive.mjs --self-check | --print-plan | --check-oracle | --check-lib | --dry-run | --live --yes | --reparse-judge  [--out DIR] [--seed S] [--wt PATH] [--claude PATH] [--capture]'); process.exit(2); }
   if (opts.mode === 'self-check') { const r = await selfCheck({ opts }); process.exit(r.ok ? 0 : 1); }
   if (opts.mode === 'check-oracle') { process.exit((await checkOracle()) ? 0 : 1); }
   if (opts.mode === 'check-lib') { const { runLibTests } = await import(pathToFileURL(path.join(HERE, 'libtest.mjs')).href); const r = await runLibTests({ log: console.log }); console.log(`lib self-test: ${r.ok ? 'PASS' : 'FAIL'} ${r.total - r.failed.length}/${r.total}`); process.exit(r.ok ? 0 : 1); }

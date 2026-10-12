@@ -2,6 +2,7 @@
 
 ### 🚀 Features
 
+- **agent-mcp:** parity wire capture: opt-in `drive.mjs --capture` routes arms A, B and C (and the openai/deepseek base URLs) through one local transparent logging proxy (`parity/capture-proxy.mjs`) writing `logs/wire/proxy-<arm>-<provider>.jsonl`, plus the offline `parity/wire-diff.mjs` reader that diffs the context each arm actually sent (R6B-proxy AC1-AC6)
 - **agent-engine-orchestrator:** engine-executed `web_fetch` tool for providers without Anthropic server tools (claudecli, OpenAI-compatible): one shared definition, same `web_fetch_result` shape, egress follows `agent.shell.sandbox.allowedDomains`, Anthropic tool list unchanged (R6B-web AC1-AC4)
 
 ## 2.3.13 (2026-10-11)
