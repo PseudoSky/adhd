@@ -36,6 +36,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 
 - [prod-examples.2] (PA7.2) tsconfig.spec.json includes examples/ and `nx run stealth-browser:typecheck-spec` exits 0 with examples/library.ts importing the package.
 - [prod-examples.3] (PA7.3) examples/mcp-config.json parses as JSON with an mcpServers entry whose command/args name the `stealth-browser-mcp` bin declared in package.json.
+- [prod-examples.4] (PA7.4) The three examples use an explicit non-9222 port and never the default 9222.
 ---
 
 ## Reservations
