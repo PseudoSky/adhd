@@ -43,6 +43,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 - [tests-e2e.2] All three surfaces are driven in the one run: describe blocks tagged [surface:library], [surface:cli] and [surface:mcp] (MCP via a real JSON-RPC stdio client against the built dist/bin/mcp.js).
 - [tests-e2e.3] No mocks in e2e (no vi.mock/vi.stubGlobal); real Chrome on a DEDICATED port with a temp profile and fake HOME; never the live 9222; teardown kills only the PID it launched (no lsof/pkill/killall).
 - [tests-e2e.4] E2E files cite ticket 8468f7b1 and valid [slug.N] ids.
+- [tests-e2e.5] `nx run stealth-browser:e2e` exits 0, takes >= 5s wall clock (real Chrome, not a vacuous run) and leaves the pre-existing 9222 listener (if any) untouched.
 ---
 
 ## Reservations
