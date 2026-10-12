@@ -445,3 +445,8 @@ Not a parity blocker (architect verdict APPROVE, 2026-10-11): shell exit status.
 ### 2026-10-12T06:50:45Z — SCOPE-R6B addendum: ONE LOGGING PROXY FOR ALL THREE ARMS (dispatcher)
 - user-request (verbatim, owner, sent mid-dispatch): "also use the same proxy for all 3"
 - Dispatcher reading (structuring): the local logging reverse proxy proposed in context-diff.md section 6 (ANTHROPIC_BASE_URL) is used by A, B and C so the request bodies each arm sends to the provider are captured in the same format and can be diffed. Capture only; no change to what is sent. Sequenced after the web-tool agent (shared worktree, overlapping nx gates, rule 24). If the owner meant the egress proxy instead, say so.
+
+### 2026-10-12T07:02:18Z — SCOPE-R6B addendum 2: THE PROXY COVERS ALL AGENT-MCP PROVIDERS (dispatcher)
+- user-request (verbatim, owner): "the proxy should also support the other providers of agent mcp"
+- Facts read: agent-mcp providers are anthropic, openai, deepseek (each with ADHD_AGENT_<P>_BASE_URL in entrypoint/agent-mcp/src/config.ts:651-654) and claudecli (spawns the claude CLI; reached via ANTHROPIC_BASE_URL). Existing wiretap scripts (tmp/agent-mcp-live/*/proxy.mjs) and ~/dev/ai/content-first/proxy/cf-proxy.mjs are DeepSeek/OpenAI-chat only.
+- Dispatcher reading (structuring): one capture proxy, path-routed per arm and provider, wire-transparent for Anthropic /v1/messages and OpenAI-compatible /v1/chat/completions (DeepSeek, OpenAI); per-request log in the raw_request/raw_response JSONL shape with arm label; never stores request headers; no rewriting.
