@@ -5,7 +5,7 @@
   "extraRunReason": "",
   "runs": [],
   "judgeCalls": [],
-  "scenarioSha": "",
+  "scenarioSha": "56956efb90fc213aaaca7dff6d94f731e94a7b69ad4295e66ddb5fd6e06e4a18",
   "scopeChanges": [
     "SCOPE-R9-product-fix",
     "SCOPE-R9-duration-metric",
@@ -14,7 +14,7 @@
     "SCOPE-R9-stage1-retest"
   ],
   "armOrder": [],
-  "startedAt": null,
+  "startedAt": "2026-10-12T20:37:09.841Z",
   "armA": null,
   "releases": [],
   "profile": {
