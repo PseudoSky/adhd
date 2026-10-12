@@ -35,6 +35,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 - [tracing-plugin.3] Every `usePlugins` array in src/server.ts and src/cli.ts (>=2 mounts) contains `tracingPlugin` imported from './tracing.js'.
 - [tracing-plugin.4] package.json depends on @adhd/apigen-plugin-tracing and @adhd/sox-telemetry (workspace-resolved ranges).
 - [tracing-plugin.5] The `serviceName` literal is configured in exactly ONE non-test file (src/tracing.ts) - one namespace, one identity.
+- [tracing-plugin.6] `nx run stealth-browser:build-bin` exits 0 with tracing mounted; only owned paths changed by [psm:tracing-plugin] commits.
 ---
 
 ## Reservations
