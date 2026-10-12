@@ -23,7 +23,7 @@ _No criteria yet._
 ## Reservations
 
 ```text
-read_only:  []
+read_only:  ["entrypoint/stealth-browser/src/", "entrypoint/stealth-browser/bin/", "entrypoint/stealth-browser/package.json"]
 mutates:    ["entrypoint/stealth-browser/examples/", "entrypoint/stealth-browser/src/test/unit/examples/", "entrypoint/stealth-browser/tsconfig.spec.json"]
 ```
 
