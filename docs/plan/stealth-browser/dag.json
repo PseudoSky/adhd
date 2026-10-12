@@ -8,7 +8,8 @@
     "migrate",
     "surface",
     "verify",
-    "review"
+    "review",
+    "remediate"
   ],
   "terminal": "done",
   "nodes": {},
