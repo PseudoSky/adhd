@@ -42,6 +42,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 - [audit-final.ref-backlog-tracing] [ref:backlog-tracing] tracing.ts / usePlugins / no-singleton conformance with entrypoint/backlog/src/tracing.ts
 - [audit-final.ref-entrypoint-structure] [ref:entrypoint-structure] top-level files, tags, package metadata conform to dispatch-cli/backlog/apigen-cli
 - [audit-final.ref-apigen-host] [ref:apigen-host] server.ts / cli.ts / bin hosts mirror entrypoint/backlog's apigen host shape
+- [audit-final.ref-runner-port] [ref:runner-port] behavior-preserving port conforms to agent-browser/adhd (exports, similarity, tokens)
 ---
 
 ## Reservations
