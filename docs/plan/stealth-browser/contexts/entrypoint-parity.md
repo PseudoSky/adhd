@@ -36,6 +36,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 - [entrypoint-parity.4] package.json carries the sibling publish metadata: repository.directory == entrypoint/stealth-browser, homepage, bugs, license, files, main/module/types, publishConfig.
 - [entrypoint-parity.5] `nx run stealth-browser:lint` exits 0 on the scaffold (tooling wired).
 - [entrypoint-parity.6] Only owned paths changed by [psm:entrypoint-parity] commits.
+- [entrypoint-parity.7] package.json declares `engines.node >= 22.5` (the migrated storage layer uses the built-in `node:sqlite`).
 ---
 
 ## Reservations
@@ -67,4 +68,5 @@ Every plan-file write is committed (R1). Work-product commits for this state, al
 
 - Compare with `git ls-files entrypoint/dispatch-cli | rg -v /` to see the top-level set. `guard.py entrypoint-parity` computes the common set across all three siblings; it is the authority.
 - `nx run stealth-browser:lint` must exit 0 on the empty package before any code lands (including @nx/dependency-checks).
+- Add `engines: { "node": ">=22.5" }`: the storage layer migrated later uses the built-in `node:sqlite`.
 - Owned paths are the top-level files only (`entrypoint/stealth-browser/*`); anything inside `src/`, `bin/`, `docs/` belongs to later states.
