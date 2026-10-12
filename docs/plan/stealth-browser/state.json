@@ -67,11 +67,11 @@
       "end_ref": "2a7e1884509338be7d17455d29f73a43472052d9"
     },
     "mig-queries": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-10-12T21:30:20.486Z",
-      "done_at": null,
+      "done_at": "2026-10-12T21:31:36.941Z",
       "start_ref": "a669469a9c777e2bcd95c0d4ee166b2691487cdb",
-      "end_ref": null
+      "end_ref": "f60f9ee72a27affa789d18a9280c456d7b9d1f53"
     },
     "mig-docs": {
       "status": "complete",
@@ -374,6 +374,18 @@
       "audit_criteria_total": 4,
       "by": "pseudosky",
       "note": "domains+storage b8234c89; guard 0"
+    },
+    {
+      "ts": "2026-10-12T21:31:36.941Z",
+      "from": "tests-unit-core",
+      "to": "mig-queries",
+      "start_ref": "a669469a9c777e2bcd95c0d4ee166b2691487cdb",
+      "end_ref": "f60f9ee72a27affa789d18a9280c456d7b9d1f53",
+      "audit_exit": 0,
+      "audit_criteria_passed": 4,
+      "audit_criteria_total": 4,
+      "by": "pseudosky",
+      "note": "queries f60f9ee7; guard 0"
     }
   ],
   "amendment_log": [],
@@ -382,7 +394,7 @@
     "version": "0.8.35",
     "hash": "0b6bc1f3d70e"
   },
-  "current_state": "tests-unit-core",
+  "current_state": "surface-api",
   "dod_provenance": {
     "confirmed_at": "2026-10-12T10:24:50.808Z",
     "by": "pseudosky",
