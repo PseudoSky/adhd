@@ -33,6 +33,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 
 - [audit-migration-blind.2] Every finding has id (F1..), severity in {blocker,major,minor,nit}, file, line, summary and evidence; or `no_findings: true` with a reviewer rationale.
 - [audit-migration-blind.3] Finding ids are unique and every cited file exists in the reviewed tree.
+- [audit-migration-blind.4] The package tree is unchanged since review-prep (tree sha in INPUT matches HEAD), so the review judged the code that gated green.
 ---
 
 ## Reservations
