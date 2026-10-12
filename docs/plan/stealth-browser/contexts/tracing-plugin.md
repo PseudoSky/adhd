@@ -30,7 +30,6 @@ The apigen tracing plugin is mounted on every host under the `adhd` namespace, c
 Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/guard.py` (`python3 docs/plan/stealth-browser/scripts/guard.py tracing-plugin --only tracing-plugin.N`). None may be deferred. Tests written by this plan cite ticket `8468f7b1` and these ids ([inv:tests-cite]).
 
 - [tracing-plugin.1] src/tracing.ts configures `makeTracingPlugin({ serviceName: 'adhd' })` and exports `tracingPlugin`.
-
 - [tracing-plugin.2] NO source file imports the apigen-namespaced `tracingPlugin` singleton from @adhd/apigen-plugin-tracing (only makeTracingPlugin).
 - [tracing-plugin.3] Every `usePlugins` array in src/server.ts and src/cli.ts (>=2 mounts) contains `tracingPlugin` imported from './tracing.js'.
 - [tracing-plugin.4] package.json depends on @adhd/apigen-plugin-tracing and @adhd/sox-telemetry (workspace-resolved ranges).
@@ -38,6 +37,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 - [tracing-plugin.6] `nx run stealth-browser:build-bin` exits 0 with tracing mounted; only owned paths changed by [psm:tracing-plugin] commits.
 - [tracing-plugin.7] (PA9.2) A --verbose flag exists on both hosts and diagnostics go to stderr only: the MCP host path (src/server.ts, bin/mcp.ts) has no console.log / process.stdout.write outside the JSON-RPC transport.
 - [tracing-plugin.8] Namespace pinned to what the code EMITS (backlog 5152786d: the apigen design notes still say apigen.*; the code does not): packages/apigen/apigen-plugin-tracing/src/lib/plugin.ts requires `serviceName: string`, builds keys as `${serviceName}.op` / `${serviceName}.transport` / `${serviceName}.op.error` and span names `${serviceName}.<op>`, and src/tracing.ts passes serviceName 'adhd' (so stealth-browser emits adhd.op / adhd.transport), regardless of what any design note claims.
+
 ---
 
 ## Reservations
@@ -68,4 +68,4 @@ Every plan-file write is committed (R1). Work-product commits for this state, al
 
 - Do not edit the apigen design notes here (backlog 5152786d owns that fix); if the code and a note disagree, the code wins and the guard says so.
 - Backlog item 5b98d3b2 (FEAT-AGENT-TRACING) is a different feature (agent-session tracing dashboards) and is OUT of scope; this state only wires the apigen plugin the request asked for.
-- The binary namespace proof is the NEXT concern (`tracing-namespace-proof`), after e2e (it flips tracing.ts temporarily and must not race a build).
+- The binary namespace proof is the NEXT concern (`tracing-namespace-proof`), after the tracing plugin (it flips tracing.ts temporarily and must not race a build).

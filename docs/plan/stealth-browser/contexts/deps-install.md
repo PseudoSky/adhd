@@ -38,13 +38,13 @@ The three third-party libraries the parsers need (`node-html-parser`, `xpath`, `
 Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/guard.py` (`python3 docs/plan/stealth-browser/scripts/guard.py deps-install --only deps-install.N`). None may be deferred. Tests written by this plan cite ticket `8468f7b1` and these ids ([inv:tests-cite]).
 
 - [deps-install.1] APPROVALS.md contains `DEP-APPROVAL: granted` naming node-html-parser, xpath and @xmldom/xmldom (human-blocker HB-DEPS).
-
 - [deps-install.2] package.json dependencies pin exactly the three source ranges (node-html-parser ^8.0.4, xpath ^0.0.34, @xmldom/xmldom ^0.9.10).
 - [deps-install.3] pnpm-lock.yaml has an importers entry for entrypoint/stealth-browser listing all three deps.
 - [deps-install.4] The lockfile diff removes no existing line (no collateral version bumps): `git diff` of pnpm-lock.yaml has zero '-' lines.
-- [deps-install.5] The worktree-root node_modules is a real directory (not a symlink) and each of the three deps resolves, by real Node ESM resolution run from entrypoint/stealth-browser, to a path inside this worktree (never the main checkout node_modules).
+- [deps-install.5] The worktree-root node_modules is a real directory (not a symlink) and each of the three deps resolves, by real Node ESM resolution run from entrypoint/stealth-browser, to a path inside this worktree (never the main checkout).
 - [deps-install.6] Main checkout node_modules untouched (.modules.yaml mtime == stamp) and only owned paths changed.
-- [deps-install.7] eslint.config.mjs carries the documented TEMPORARY `@nx/dependency-checks` `ignoredDependencies` entry (marker `TEMPORARY(stealth-browser:deps-install)`) for the three packages, so the dependency commit passes the pre-commit lint; `mig-capture-parsers.6` removes it.
+- [deps-install.7] Historical one-shot: the dependency commit carried the documented TEMPORARY `@nx/dependency-checks` `ignoredDependencies` entry (git history shows a [psm:deps-install] commit that introduced the marker); mig-capture-parsers.6 removed it again, so the live eslint config is not asserted.
+
 ---
 
 ## Reservations

@@ -1,6 +1,6 @@
 # tests-unit-extract — WORK STATE
 
-**Phase:** verify · **Kind:** work · **Depends on:** mig-capture-parsers · **Guard:** `python3 docs/plan/stealth-browser/scripts/guard.py tests-unit-extract`
+**Phase:** verify · **Kind:** work · **Depends on:** mig-capture-parsers, port-fixes · **Guard:** `python3 docs/plan/stealth-browser/scripts/guard.py tests-unit-extract`
 **Executor:** `test-automator` (sonnet/medium) · **Worktree:** `/Users/nix/dev/node/adhd/.worktrees/stealth-browser` on branch `stealth-browser` (shared by every state, [inv:shared-worktree], [inv:worktree-required], [inv:no-ai-attribution])
 **Parallel with:** tests-unit-core, tests-unit-data, tests-unit-surface (disjoint owned paths, proven by `check-disjoint.py`)
 
@@ -31,11 +31,12 @@ Unit specs exist for capture (bans, dom, network) and parsers, using in-test HTM
 Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/guard.py` (`python3 docs/plan/stealth-browser/scripts/guard.py tests-unit-extract --only tests-unit-extract.N`). None may be deferred. Tests written by this plan cite ticket `8468f7b1` and these ids ([inv:tests-cite]).
 
 - [tests-unit-extract.1] A spec file exists for every ported source module (index barrels and pure type files excluded).
-
 - [tests-unit-extract.2] Every spec cites ticket 8468f7b1 and at least one valid [slug.N] acceptance-criterion id.
 - [tests-unit-extract.3] Unit purity: specs touching process-spawning or network modules mock child_process/WebSocket/fetch (vi.mock or vi.stubGlobal); no spec reads the real Chrome profile.
 - [tests-unit-extract.4] Assertions have teeth: each spec has at least as many expect() calls as test cases and at least one negative/error-path case.
 - [tests-unit-extract.5] `nx run stealth-browser:test -- <own specs>` exits 0 and only owned paths changed by [psm:tests-unit-extract] commits.
+- [tests-unit-extract.6] [inv:no-features-removed] every failsafe-inventory row owned by tests-unit-extract is pinned: its pin file exists under src/test, cites the row id `[fs-NNN]` and contains the named test; the feature is kept (no row may be removed or narrowed).
+
 ---
 
 ## Reservations
@@ -67,3 +68,4 @@ Every plan-file write is committed (R1). Work-product commits for this state, al
 - Unit lane = no subprocess, no network, no real Chrome, no real profile. Mock `node:child_process`, `fetch`/`ws` WebSocket, and filesystem touch points with `vi.mock` / `vi.stubGlobal`. The guard greps for it ([inv:unit-purity]).
 - Each spec file name: `src/test/unit/<bucket>/<module>.spec.ts`; each file begins with a header comment that cites the ticket `8468f7b1` and at least one criterion id `[<state>.N]` ([inv:tests-cite]).
 - Have teeth: >= one expect per test and at least one error-path case per module (guard counts). Do not weaken the source to make a test pass.
+- `capture-upgrade` runs after this state and rewrites `capture-parsers/network.spec.ts` for the recorder pipeline; your capture specs protect the port until then.

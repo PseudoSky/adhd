@@ -30,14 +30,15 @@ The README is rewritten to be exciting and honest: a sharp tagline, quickstart f
 Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/guard.py` (`python3 docs/plan/stealth-browser/scripts/guard.py readme-rewrite --only readme-rewrite.N`). None may be deferred. Tests written by this plan cite ticket `8468f7b1` and these ids ([inv:tests-cite]).
 
 - [readme-rewrite.1] Only README.md changed by [psm:readme-rewrite] commits.
-
 - [readme-rewrite.2] README has a title, a tagline <= 120 chars, Quickstart, Features, Surfaces and Receipts sections and >= 2 fenced code blocks.
 - [readme-rewrite.3] Receipts: >= 5 `<!-- receipt:ID -->` markers and every ID resolves to a `shipped` entry in docs/marketing/.catalog/capabilities.json.
 - [readme-rewrite.4] Factual: no unverifiable superlatives (undetectable, unblockable, 100%, bypasses all, guaranteed); every `@adhd/stealth-browser` import specifier in code fences is a real package export.
 - [readme-rewrite.5] Relative links resolve and the install/quickstart commands name only bins declared in package.json.
 - [readme-rewrite.6] (PA8.2, PA8.4) README defines "stealth" as the two concrete choices (no --enable-automation, no Runtime.evaluate) and links docs/RESPONSIBLE-USE.md (the link resolves).
 - [readme-rewrite.7] (PA8.3) README.md contains none of the overclaim words undetectable, bypass, evade, anti-bot.
-- [readme-rewrite.8] (PA10.2) README states the stability policy: the package is 0.x, only the six verbs and their types are stable, everything else is experimental.
+- [readme-rewrite.8] (PA10.2, greenfield) README states the stability policy: the package is 0.x, the six verbs and their types are the stable surface, and the root namespaces (cdp, storage, capture, parsers, chromeManager) are experimental until 1.0.
+- [readme-rewrite.9] (user: implement the readme examples and genuine use cases) The README embeds or links EVERY examples/ file (path appears), includes at least six fenced `ts` blocks each of which is a snippet taken verbatim from an examples/ file, and links docs/ERRORS.md and docs/EXAMPLES.md.
+
 ---
 
 ## Reservations

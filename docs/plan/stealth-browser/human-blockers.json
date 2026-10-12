@@ -12,33 +12,32 @@
     "destination": "docs/plan/stealth-browser/APPROVALS.md",
     "blocks_at": "per-state"
   },
-  "hb-chrome-binary": {
-    "type": "external-resource",
-    "description": "A Chrome binary at the default macOS path, needed by the real-Chrome e2e lane",
-    "required_by": [
-      "tests-e2e",
-      "gates-first",
-      "gates-rerun"
-    ],
-    "verification": "test -x \"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome\"",
-    "status": "needed",
-    "owner": "human",
-    "how_to_provide": "Install Google Chrome (present on the dev machine)",
-    "destination": "/Applications",
-    "blocks_at": "per-state"
-  },
   "hb-release-decision": {
     "type": "manual-approval",
     "description": "Dispatcher decision to publish (per PUBLISHING.md) or defer the release; names what agent-search consumes",
     "required_by": [
       "merge-readiness",
-      "agent-search-cutover"
+      "agent-search-relink"
     ],
     "verification": "python3 docs/plan/stealth-browser/scripts/guard.py merge-readiness --only merge-readiness.2",
     "status": "needed",
     "owner": "dispatcher",
     "how_to_provide": "Write RELEASE-DECISION.md with DECISION: publish|defer, a CONSUME: line and the pre-push gate exit codes",
     "destination": "docs/plan/stealth-browser/RELEASE-DECISION.md",
+    "blocks_at": "per-state"
+  },
+  "hb-design-evaluations": {
+    "type": "manual-approval",
+    "description": "The two architect evaluations are recorded (EVALUATIONS.md, EVAL-store-adapter.md, EVAL-service-proxy.md) and folded into the capture-upgrade and chrome-lifecycle criteria; the provisional defaults they rest on are listed as OPEN-DECISIONS in EVALUATIONS.md and are reversible.",
+    "required_by": [
+      "capture-upgrade",
+      "chrome-lifecycle"
+    ],
+    "verification": "python3 docs/plan/stealth-browser/scripts/guard.py capture-upgrade --only capture-upgrade.11",
+    "status": "provided",
+    "owner": "dispatcher",
+    "how_to_provide": "Done: see EVALUATIONS.md (STATUS: recorded).",
+    "destination": "docs/plan/stealth-browser/EVALUATIONS.md",
     "blocks_at": "per-state"
   }
 }

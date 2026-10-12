@@ -30,13 +30,13 @@ The capture layer (`bans`, `dom`, `network`, barrel) and the DOM/XPath parsers e
 
 Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/guard.py` (`python3 docs/plan/stealth-browser/scripts/guard.py mig-capture-parsers --only mig-capture-parsers.N`). None may be deferred. Tests written by this plan cite ticket `8468f7b1` and these ids ([inv:tests-cite]).
 
-- [mig-capture-parsers.1] Every manifest file exists, keeps every export, stays >=80% line-similar to the source, keeps its must-contain tokens.
-
+- [mig-capture-parsers.1] Every manifest file exists, keeps every export (modulo the manifest's recorded allowed_renames/allowed_drops), stays >=80% line-similar to the scaffold-time source, keeps its must-contain tokens.
 - [mig-capture-parsers.2] No .ts import specifiers, no reach into agent-search, no Runtime.evaluate/--enable-automation; every relative import resolves.
 - [mig-capture-parsers.3] Only owned paths changed by [psm:mig-capture-parsers] commits; agent-search source tree and main checkout node_modules untouched.
-- [mig-capture-parsers.4] capture/dom.ts is carried verbatim but marked @deprecated (Google-SERP walker; removal candidate for the product hold).
+- [mig-capture-parsers.4] capture/dom.ts is carried over (present and non-trivial); port-fixes.8 owns its greenfield documentation.
 - [mig-capture-parsers.5] Parser third-party imports are exactly node-html-parser, xpath and @xmldom/xmldom (declared in package.json by deps-install).
-- [mig-capture-parsers.6] The temporary deps-install `ignoredDependencies` entry is gone from eslint.config.mjs and `nx run stealth-browser:lint` still exits 0.
+- [mig-capture-parsers.6] The temporary deps-install `ignoredDependencies` entry is gone from eslint.config.mjs (no marker, none of the three packages listed) and `nx run stealth-browser:lint` still exits 0 (@nx/dependency-checks now sees parsers.ts import them).
+
 ---
 
 ## Reservations

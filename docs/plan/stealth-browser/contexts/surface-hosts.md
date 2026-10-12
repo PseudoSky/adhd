@@ -1,6 +1,6 @@
 # surface-hosts — WORK STATE
 
-**Phase:** surface · **Kind:** work · **Depends on:** surface-api, prod-public-api, prod-errors · **Guard:** `python3 docs/plan/stealth-browser/scripts/guard.py surface-hosts`
+**Phase:** surface · **Kind:** work · **Depends on:** surface-api, chrome-lifecycle · **Guard:** `python3 docs/plan/stealth-browser/scripts/guard.py surface-hosts`
 **Executor:** `typescript-pro` (sonnet/high) · **Worktree:** `/Users/nix/dev/node/adhd/.worktrees/stealth-browser` on branch `stealth-browser` (shared by every state, [inv:shared-worktree], [inv:worktree-required], [inv:no-ai-attribution])
 
 ---
@@ -30,7 +30,6 @@ The same six verbs are reachable from three surfaces: the library (`src/index.ts
 Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/guard.py` (`python3 docs/plan/stealth-browser/scripts/guard.py surface-hosts --only surface-hosts.N`). None may be deferred. Tests written by this plan cite ticket `8468f7b1` and these ids ([inv:tests-cite]).
 
 - [surface-hosts.1] src/server.ts (MCP stdio host via @adhd/apigen-plugin-mcp), src/cli.ts and bin/cli.ts, bin/mcp.ts exist.
-
 - [surface-hosts.2] package.json declares bin entries stealth-browser and stealth-browser-mcp pointing into ./dist/bin/ and depends on the apigen core-client/engine-runtime/plugin-mcp/plugin-cli-output packages.
 - [surface-hosts.3] `nx run stealth-browser:build-bin` exits 0 and emits dist/bin/cli.js and dist/bin/mcp.js.
 - [surface-hosts.4] `node dist/bin/cli.js --help` exits 0 and lists all six verbs (the apigen extraction does not crash on the zod/$ref class of failure).
@@ -38,11 +37,12 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 - [surface-hosts.6] Only owned paths changed by [psm:surface-hosts] commits.
 - [surface-hosts.7] (PA1.2, PA1.3) The built MCP bin's tools/list schema for launchChrome has no chromePath or extraArgs property, and a tools/call for launchChrome with extraArgs is rejected with no process spawned (port stays closed) and no profile dir created.
 - [surface-hosts.8] (PA2.1) src/host-projection.ts exports redactCookieValues (names and counts kept, value strings dropped) and BOTH src/server.ts and src/cli.ts route getPageContext output through it; the library result in api.ts is unchanged (parity).
-- [surface-hosts.9] (PA3.2, PA3.3, PA3.4) package.json exports a ./legacy subpath into dist; the built root index.d.ts exports no Google- or Search-named symbol; `@adhd/stealth-browser/legacy` resolves from the built package; `nx run stealth-browser:verify-dist-load` exits 0.
+- [surface-hosts.9] (PA3.3, PA3.4, ADR-0003) package.json has NO `exports` map and NO `module` field, `main` is ./dist/index.js and `types` ./dist/index.d.ts; the built root index.d.ts (namespaces included) exports no Google- or Search-named symbol; `require()` of the built dist/index.js exposes the five namespaces and the six verbs; `nx run stealth-browser:verify-dist-load` exits 0.
 - [surface-hosts.10] (PA4.1, PA4.2) tools/list returns a description of at least 40 characters for each of the six tools; `cli --help` and `cli launchChrome --help` each show a description and the default port 9222.
 - [surface-hosts.11] (PA4.3, PA4.4, resolves U1/U2) evidence/naming-decision.md records `CLI-STYLE: camelCase|kebab-case`, `MCP-NAMES: <the six tool names>`, `U1: resolved` and `U2: resolved`; the built tools/list names and the CLI verb style match the record.
-- [surface-hosts.12] (PA5.2, PA5.3, PA5.5) bin/cli.ts and bin/mcp.ts preflight Node >= 22.5 with a one-line message; against a dead port the CLI exits non-zero with CHROME_NOT_RUNNING on stderr and no stack trace, and the MCP returns isError: true with the code in the content.
 - [surface-hosts.13] (PA6.1) Both bins accept --port and --user-data-dir and print the defaults in --help (9222 and the Chrome-CDP profile path).
+- [surface-hosts.14] (gap G2, F23 F24) the hosts wire the lifecycle: src/server.ts and src/cli.ts call `installProcessExitHooks` (from the lifecycle namespace) with the shared ChromeManager, the CLI accepts `--idle-shutdown <ms>` (default 120000) and `--keep-alive` mapped onto the ChromeManager options (`--keep-alive` disables the idle reaper, `reaper` detached by default), the MCP host installs the hooks with `stdinEof: true` (orphan detection), and both bins print the two flags and the defaults in --help.
+
 ---
 
 ## Reservations
@@ -76,3 +76,4 @@ Every plan-file write is committed (R1). Work-product commits for this state, al
 - Use dependency ranges and package names exactly as `entrypoint/backlog/package.json` resolves them in this workspace; `nx run stealth-browser:lint` enforces dependency-checks.
 - Early assertions: `surface-hosts.7` and `.12` probe the BUILT bins (tools/list schema, extraArgs rejection, dead-port error shape on port 19999/19997) so the two claims product could not verify (do launchChrome options reach the MCP schema; does getPageContext return cookie values) are settled by evidence, not assumption; read `evidence/product-claims.json` (from `surface-api.8`) first.
 - Do not launch a persistent Chrome in this state; `chromeStatus` against an unused port is the cheap probe.
+- Lifecycle wiring (surface-hosts.14, gap G2 of EVAL-service-proxy.md): `chrome-lifecycle` is now an ancestor. Call `lifecycle.installProcessExitHooks(manager, { stdinEof: true })` in the MCP host (orphan detection) and in the CLI, add `--idle-shutdown <ms>` (default 120000) and `--keep-alive` to the CLI and map them onto the ChromeManager options (`--keep-alive` turns the idle reaper off), and print `status()` (sibling warning) where the hosts report health. The hooks themselves live in the package (chrome-lifecycle.14); do not reimplement them.

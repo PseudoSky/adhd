@@ -1,145 +1,231 @@
 {
- "productization-hold": [
-  "docs/plan/stealth-browser/PRODUCT-REVIEW.md"
- ],
- "scaffold": [
-  "entrypoint/stealth-browser/",
-  "tsconfig.base.json",
-  "docs/plan/stealth-browser/evidence/"
- ],
- "entrypoint-parity": [
-  "entrypoint/stealth-browser/*",
-  "docs/plan/stealth-browser/evidence/"
- ],
- "deps-install": [
-  "entrypoint/stealth-browser/package.json",
-  "pnpm-lock.yaml",
-  "entrypoint/stealth-browser/eslint.config.mjs",
-  "docs/plan/stealth-browser/APPROVALS.md"
- ],
- "mig-foundation": [
-  "entrypoint/stealth-browser/src/lib/types.ts",
-  "entrypoint/stealth-browser/src/lib/session.ts",
-  "entrypoint/stealth-browser/src/lib/helpers.ts"
- ],
- "mig-cdp": [
-  "entrypoint/stealth-browser/src/lib/cdp/"
- ],
- "mig-chrome-manager": [
-  "entrypoint/stealth-browser/src/lib/chrome-manager.ts"
- ],
- "mig-domains-storage": [
-  "entrypoint/stealth-browser/src/lib/domains/",
-  "entrypoint/stealth-browser/src/lib/storage/"
- ],
- "mig-capture-parsers": [
-  "entrypoint/stealth-browser/src/lib/capture/",
-  "entrypoint/stealth-browser/src/lib/parsers.ts",
-  "entrypoint/stealth-browser/eslint.config.mjs"
- ],
- "mig-queries": [
-  "entrypoint/stealth-browser/src/lib/queries/"
- ],
- "mig-docs": [
-  "entrypoint/stealth-browser/docs/reference/"
- ],
- "surface-api": [
-  "entrypoint/stealth-browser/src/api.ts",
-  "entrypoint/stealth-browser/src/index.ts",
-  "docs/plan/stealth-browser/evidence/product-claims.json"
- ],
- "surface-hosts": [
-  "entrypoint/stealth-browser/src/server.ts",
-  "entrypoint/stealth-browser/src/cli.ts",
-  "entrypoint/stealth-browser/src/host-projection.ts",
-  "entrypoint/stealth-browser/bin/",
-  "entrypoint/stealth-browser/package.json",
-  "docs/plan/stealth-browser/evidence/naming-decision.md"
- ],
- "tracing-plugin": [
-  "entrypoint/stealth-browser/src/tracing.ts",
-  "entrypoint/stealth-browser/src/server.ts",
-  "entrypoint/stealth-browser/src/cli.ts",
-  "entrypoint/stealth-browser/package.json"
- ],
- "tracing-namespace-proof": [
-  "entrypoint/stealth-browser/src/test/unit/tracing/tracing-namespace.spec.ts"
- ],
- "tests-unit-core": [
-  "entrypoint/stealth-browser/src/test/unit/foundation/",
-  "entrypoint/stealth-browser/src/test/unit/cdp/",
-  "entrypoint/stealth-browser/src/test/unit/chrome-manager/"
- ],
- "tests-unit-data": [
-  "entrypoint/stealth-browser/src/test/unit/domains-storage/",
-  "entrypoint/stealth-browser/src/test/unit/queries/"
- ],
- "tests-unit-extract": [
-  "entrypoint/stealth-browser/src/test/unit/capture-parsers/"
- ],
- "tests-unit-surface": [
-  "entrypoint/stealth-browser/src/test/unit/surface/"
- ],
- "tests-e2e": [
-  "entrypoint/stealth-browser/src/test/e2e/"
- ],
- "gates-first": [
-  "docs/plan/stealth-browser/evidence/"
- ],
- "review-prep": [
-  "docs/plan/stealth-browser/review/migration.diff",
-  "docs/plan/stealth-browser/review/INPUT.sha256",
-  "docs/plan/stealth-browser/review/BRIEF.txt"
- ],
- "audit-migration-blind": [
-  "docs/plan/stealth-browser/review/FINDINGS.json"
- ],
- "resolve-findings": [
-  "entrypoint/stealth-browser/",
-  "docs/plan/stealth-browser/review/RESOLUTION.json"
- ],
- "gates-rerun": [
-  "docs/plan/stealth-browser/evidence/"
- ],
- "docs-marketing-run": [
-  "entrypoint/stealth-browser/docs/",
-  "entrypoint/stealth-browser/AGENTS.md",
-  "entrypoint/stealth-browser/llms.txt",
-  "entrypoint/stealth-browser/CHANGELOG.md",
-  "entrypoint/stealth-browser/README.md"
- ],
- "readme-rewrite": [
-  "entrypoint/stealth-browser/README.md"
- ],
- "audit-final": [
-  "docs/plan/stealth-browser/final-review.md"
- ],
- "merge-readiness": [
-  "docs/plan/stealth-browser/RELEASE-DECISION.md"
- ],
- "agent-search-cutover": [
-  "/Users/nix/dev/ai/scratch/agent-browser/adhd/",
-  "/Users/nix/dev/ai/scratch/agent-browser/cdp-query-client.ts",
-  "/Users/nix/dev/ai/scratch/agent-browser/search/queries/",
-  "/Users/nix/dev/ai/scratch/agent-browser/package.json",
-  "/Users/nix/dev/ai/scratch/agent-browser/search-mcp-source.ts"
- ],
- "prod-public-api": [
-  "entrypoint/stealth-browser/src/legacy.ts",
-  "entrypoint/stealth-browser/src/index.ts",
-  "entrypoint/stealth-browser/src/test/unit/public-api/"
- ],
- "prod-errors": [
-  "entrypoint/stealth-browser/src/errors.ts",
-  "entrypoint/stealth-browser/src/test/unit/errors/"
- ],
- "prod-examples": [
-  "entrypoint/stealth-browser/examples/",
-  "entrypoint/stealth-browser/src/test/unit/examples/",
-  "entrypoint/stealth-browser/tsconfig.spec.json"
- ],
- "prod-publish-readiness": [
-  "docs/plan/stealth-browser/evidence/publish-dry-run.txt",
-  "entrypoint/stealth-browser/package.json"
- ]
+  "productization-hold": [
+    "docs/plan/stealth-browser/PRODUCT-REVIEW.md"
+  ],
+  "scaffold": [
+    "entrypoint/stealth-browser/",
+    "tsconfig.base.json",
+    "docs/plan/stealth-browser/evidence/"
+  ],
+  "entrypoint-parity": [
+    "entrypoint/stealth-browser/*",
+    "docs/plan/stealth-browser/evidence/"
+  ],
+  "deps-install": [
+    "entrypoint/stealth-browser/package.json",
+    "pnpm-lock.yaml",
+    "entrypoint/stealth-browser/eslint.config.mjs",
+    "docs/plan/stealth-browser/APPROVALS.md"
+  ],
+  "mig-foundation": [
+    "entrypoint/stealth-browser/src/lib/types.ts",
+    "entrypoint/stealth-browser/src/lib/session.ts",
+    "entrypoint/stealth-browser/src/lib/helpers.ts"
+  ],
+  "mig-cdp": [
+    "entrypoint/stealth-browser/src/lib/cdp/"
+  ],
+  "mig-chrome-manager": [
+    "entrypoint/stealth-browser/src/lib/chrome-manager.ts"
+  ],
+  "mig-domains-storage": [
+    "entrypoint/stealth-browser/src/lib/domains/",
+    "entrypoint/stealth-browser/src/lib/storage/"
+  ],
+  "mig-capture-parsers": [
+    "entrypoint/stealth-browser/src/lib/capture/",
+    "entrypoint/stealth-browser/src/lib/parsers.ts",
+    "entrypoint/stealth-browser/eslint.config.mjs"
+  ],
+  "mig-queries": [
+    "entrypoint/stealth-browser/src/lib/queries/"
+  ],
+  "mig-docs": [
+    "entrypoint/stealth-browser/docs/reference/"
+  ],
+  "surface-api": [
+    "entrypoint/stealth-browser/src/api.ts",
+    "entrypoint/stealth-browser/src/index.ts",
+    "docs/plan/stealth-browser/evidence/product-claims.json"
+  ],
+  "surface-hosts": [
+    "entrypoint/stealth-browser/src/server.ts",
+    "entrypoint/stealth-browser/src/cli.ts",
+    "entrypoint/stealth-browser/src/host-projection.ts",
+    "entrypoint/stealth-browser/bin/",
+    "entrypoint/stealth-browser/package.json",
+    "docs/plan/stealth-browser/evidence/naming-decision.md"
+  ],
+  "tracing-plugin": [
+    "entrypoint/stealth-browser/src/tracing.ts",
+    "entrypoint/stealth-browser/src/server.ts",
+    "entrypoint/stealth-browser/src/cli.ts",
+    "entrypoint/stealth-browser/package.json"
+  ],
+  "tracing-namespace-proof": [
+    "entrypoint/stealth-browser/src/test/unit/tracing/tracing-namespace.spec.ts"
+  ],
+  "tests-unit-core": [
+    "entrypoint/stealth-browser/src/test/unit/foundation/",
+    "entrypoint/stealth-browser/src/test/unit/cdp/",
+    "entrypoint/stealth-browser/src/test/unit/chrome-manager/"
+  ],
+  "tests-unit-data": [
+    "entrypoint/stealth-browser/src/test/unit/domains-storage/",
+    "entrypoint/stealth-browser/src/test/unit/queries/"
+  ],
+  "tests-unit-extract": [
+    "entrypoint/stealth-browser/src/test/unit/capture-parsers/"
+  ],
+  "tests-unit-surface": [
+    "entrypoint/stealth-browser/src/test/unit/surface/"
+  ],
+  "gates-first": [
+    "docs/plan/stealth-browser/evidence/"
+  ],
+  "review-prep": [
+    "docs/plan/stealth-browser/review/migration.diff",
+    "docs/plan/stealth-browser/review/INPUT.sha256",
+    "docs/plan/stealth-browser/review/BRIEF.txt"
+  ],
+  "audit-migration-blind": [
+    "docs/plan/stealth-browser/review/FINDINGS.json"
+  ],
+  "resolve-findings": [
+    "entrypoint/stealth-browser/",
+    "docs/plan/stealth-browser/review/RESOLUTION.json"
+  ],
+  "gates-rerun": [
+    "docs/plan/stealth-browser/evidence/"
+  ],
+  "docs-marketing-run": [
+    "entrypoint/stealth-browser/docs/",
+    "entrypoint/stealth-browser/AGENTS.md",
+    "entrypoint/stealth-browser/llms.txt",
+    "entrypoint/stealth-browser/CHANGELOG.md",
+    "entrypoint/stealth-browser/README.md"
+  ],
+  "readme-rewrite": [
+    "entrypoint/stealth-browser/README.md"
+  ],
+  "audit-final": [
+    "docs/plan/stealth-browser/final-review.md"
+  ],
+  "merge-readiness": [
+    "docs/plan/stealth-browser/RELEASE-DECISION.md"
+  ],
+  "agent-search-cutover": [
+    "/Users/nix/dev/ai/scratch/agent-browser/adhd/",
+    "/Users/nix/dev/ai/scratch/agent-browser/cdp-query-client.ts",
+    "/Users/nix/dev/ai/scratch/agent-browser/cdp-search.ts",
+    "/Users/nix/dev/ai/scratch/agent-browser/chrome-lifecycle-test.ts",
+    "/Users/nix/dev/ai/scratch/agent-browser/network-capture.ts",
+    "/Users/nix/dev/ai/scratch/agent-browser/search-challenge.ts",
+    "/Users/nix/dev/ai/scratch/agent-browser/search-dom.ts",
+    "/Users/nix/dev/ai/scratch/agent-browser/search-fetch.ts",
+    "/Users/nix/dev/ai/scratch/agent-browser/search-guard-test.ts",
+    "/Users/nix/dev/ai/scratch/agent-browser/search-mcp-source.ts",
+    "/Users/nix/dev/ai/scratch/agent-browser/search-network.ts",
+    "/Users/nix/dev/ai/scratch/agent-browser/search-tripwire.ts",
+    "/Users/nix/dev/ai/scratch/agent-browser/search/queries/activity.ts",
+    "/Users/nix/dev/ai/scratch/agent-browser/search/queries/context.ts",
+    "/Users/nix/dev/ai/scratch/agent-browser/search/queries/last-search.ts",
+    "/Users/nix/dev/ai/scratch/agent-browser/package.json",
+    "/Users/nix/dev/ai/scratch/agent-browser/AGENTS.md",
+    "/Users/nix/dev/ai/scratch/agent-browser/SEARCH.md",
+    "/Users/nix/dev/ai/scratch/agent-browser/FEATURES.md",
+    "/Users/nix/dev/ai/scratch/agent-browser/FETCH.md",
+    "/Users/nix/dev/ai/scratch/agent-browser/docs/",
+    "/Users/nix/dev/node/adhd/.worktrees/stealth-browser/docs/plan/stealth-browser/evidence/"
+  ],
+  "prod-errors": [
+    "entrypoint/stealth-browser/src/errors.ts",
+    "entrypoint/stealth-browser/src/lib/",
+    "entrypoint/stealth-browser/src/server.ts",
+    "entrypoint/stealth-browser/src/cli.ts",
+    "entrypoint/stealth-browser/src/index.ts",
+    "entrypoint/stealth-browser/bin/",
+    "entrypoint/stealth-browser/docs/ERRORS.md",
+    "entrypoint/stealth-browser/src/test/unit/errors/"
+  ],
+  "prod-examples": [
+    "entrypoint/stealth-browser/examples/",
+    "entrypoint/stealth-browser/src/test/unit/examples/",
+    "entrypoint/stealth-browser/tsconfig.spec.json"
+  ],
+  "port-fixes": [
+    "entrypoint/stealth-browser/src/lib/",
+    "entrypoint/stealth-browser/vite.config.ts",
+    "entrypoint/stealth-browser/tsconfig.spec.json",
+    "entrypoint/stealth-browser/src/types/",
+    "entrypoint/stealth-browser/src/test/unit/chrome-manager/chrome-lifecycle.spec.ts",
+    "entrypoint/stealth-browser/src/test/unit/domains-storage/",
+    "entrypoint/stealth-browser/package.json",
+    "pnpm-lock.yaml"
+  ],
+  "capture-upgrade": [
+    "entrypoint/stealth-browser/src/lib/recording/",
+    "entrypoint/stealth-browser/src/lib/capture/network.ts",
+    "entrypoint/stealth-browser/src/lib/capture/index.ts",
+    "entrypoint/stealth-browser/src/test/unit/capture/",
+    "entrypoint/stealth-browser/src/test/unit/capture-parsers/network.spec.ts"
+  ],
+  "chrome-lifecycle": [
+    "entrypoint/stealth-browser/src/lib/lifecycle/",
+    "entrypoint/stealth-browser/src/lib/chrome-manager.ts",
+    "entrypoint/stealth-browser/src/lib/cdp/targets.ts",
+    "entrypoint/stealth-browser/src/test/unit/lifecycle/",
+    "entrypoint/stealth-browser/src/test/unit/chrome-manager/",
+    "entrypoint/stealth-browser/src/test/unit/cdp/targets.spec.ts",
+    "docs/plan/stealth-browser/evidence/lifecycle-definitions.md"
+  ],
+  "tests-use-cases": [
+    "entrypoint/stealth-browser/src/test/use-cases/",
+    "entrypoint/stealth-browser/src/test/support/profile-fixtures.ts",
+    "entrypoint/stealth-browser/src/test/support/page-fixtures.ts"
+  ],
+  "agent-search-relink": [
+    "/Users/nix/dev/ai/scratch/agent-browser/package.json",
+    "/Users/nix/dev/ai/scratch/agent-browser/pnpm-lock.yaml",
+    "/Users/nix/dev/ai/scratch/agent-browser/AGENTS.md",
+    "/Users/nix/dev/ai/scratch/agent-browser/docs/",
+    "/Users/nix/dev/node/adhd/.worktrees/stealth-browser/docs/plan/stealth-browser/evidence/"
+  ],
+  "audit-pre-review": [
+    "/Users/nix/dev/node/adhd/.worktrees/stealth-browser/docs/plan/stealth-browser/review/PRE-REVIEW.json",
+    "/Users/nix/dev/node/adhd/.worktrees/stealth-browser/docs/plan/stealth-browser/review/PRE-REVIEW.md"
+  ],
+  "audit-fixes": [
+    "entrypoint/stealth-browser/",
+    "/Users/nix/dev/node/adhd/.worktrees/stealth-browser/docs/plan/stealth-browser/review/PRE-REVIEW-RESOLUTION.json",
+    "/Users/nix/dev/ai/scratch/agent-browser/adhd/",
+    "/Users/nix/dev/ai/scratch/agent-browser/cdp-query-client.ts",
+    "/Users/nix/dev/ai/scratch/agent-browser/cdp-search.ts",
+    "/Users/nix/dev/ai/scratch/agent-browser/chrome-lifecycle-test.ts",
+    "/Users/nix/dev/ai/scratch/agent-browser/network-capture.ts",
+    "/Users/nix/dev/ai/scratch/agent-browser/search-challenge.ts",
+    "/Users/nix/dev/ai/scratch/agent-browser/search-dom.ts",
+    "/Users/nix/dev/ai/scratch/agent-browser/search-fetch.ts",
+    "/Users/nix/dev/ai/scratch/agent-browser/search-guard-test.ts",
+    "/Users/nix/dev/ai/scratch/agent-browser/search-mcp-source.ts",
+    "/Users/nix/dev/ai/scratch/agent-browser/search-network.ts",
+    "/Users/nix/dev/ai/scratch/agent-browser/search-tripwire.ts",
+    "/Users/nix/dev/ai/scratch/agent-browser/search/queries/activity.ts",
+    "/Users/nix/dev/ai/scratch/agent-browser/search/queries/context.ts",
+    "/Users/nix/dev/ai/scratch/agent-browser/search/queries/last-search.ts",
+    "/Users/nix/dev/ai/scratch/agent-browser/package.json",
+    "/Users/nix/dev/ai/scratch/agent-browser/AGENTS.md",
+    "/Users/nix/dev/ai/scratch/agent-browser/SEARCH.md",
+    "/Users/nix/dev/ai/scratch/agent-browser/FEATURES.md",
+    "/Users/nix/dev/ai/scratch/agent-browser/FETCH.md",
+    "/Users/nix/dev/ai/scratch/agent-browser/docs/"
+  ],
+  "cdp-test-harness": [
+    "entrypoint/stealth-browser/src/test/support/",
+    "entrypoint/stealth-browser/src/test/fixtures/cdp/",
+    "entrypoint/stealth-browser/src/test/unit/support/"
+  ],
+  "failsafe-inventory": [
+    "docs/plan/stealth-browser/evidence/failsafe-inventory.json"
+  ]
 }

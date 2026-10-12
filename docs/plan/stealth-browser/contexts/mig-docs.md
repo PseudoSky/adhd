@@ -31,9 +31,9 @@ The runner's reference documentation travels with the code under `docs/reference
 Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/guard.py` (`python3 docs/plan/stealth-browser/scripts/guard.py mig-docs --only mig-docs.N`). None may be deferred. Tests written by this plan cite ticket `8468f7b1` and these ids ([inv:tests-cite]).
 
 - [mig-docs.1] Every doc in the manifest (adhd/docs/*, adhd/README, cdp-connection README, docs/cdp/*) exists under docs/reference/ and is non-trivial.
-
 - [mig-docs.2] Relative markdown links inside docs/reference resolve and none point at @adhd/cdp-connection or agent-search files.
 - [mig-docs.3] Only owned paths changed by [psm:mig-docs] commits; source tree untouched.
+
 ---
 
 ## Reservations

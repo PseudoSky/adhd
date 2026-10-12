@@ -3,16 +3,6 @@
 **Phase:** remediate · **Kind:** work · **Depends on:** resolve-findings · **Guard:** `python3 docs/plan/stealth-browser/scripts/guard.py gates-rerun`
 **Executor:** `qa` (sonnet/medium) · **Worktree:** `/Users/nix/dev/node/adhd/.worktrees/stealth-browser` on branch `stealth-browser` (shared by every state, [inv:shared-worktree], [inv:worktree-required], [inv:no-ai-attribution])
 
-> **PREREQUISITE — human action required.** This state depends on `hb-chrome-binary` from `human-blockers.json`. Before starting, verify:
->
-> ```bash
-> test -x "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
-> ```
->
-> If it fails, **halt this state as `blocked` (not `failed`) and surface the blocker to the human.** Do not work around it.
-
----
-
 ## Goal
 
 All gates are green again after the findings were resolved; the evidence is against the post-fix tree.
@@ -38,13 +28,12 @@ All gates are green again after the findings were resolved; the evidence is agai
 Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/guard.py` (`python3 docs/plan/stealth-browser/scripts/guard.py gates-rerun --only gates-rerun.N`). None may be deferred. Tests written by this plan cite ticket `8468f7b1` and these ids ([inv:tests-cite]).
 
 - [gates-rerun.1] `nx run stealth-browser:lint` exits 0 (includes @nx/dependency-checks)
-
 - [gates-rerun.2] `nx run stealth-browser:typecheck` and `:typecheck-spec` exit 0
 - [gates-rerun.3] `nx run stealth-browser:build` and `:build-bin` exit 0 (dist/index.js plus dist/bin/*)
-- [gates-rerun.4] `nx run stealth-browser:test` exits 0 (unit lane, no subprocess)
+- [gates-rerun.4] `nx run stealth-browser:test` exits 0 (unit lane incl. the use-case suites; every spawner and third-party network call is mocked, no live Chrome)
 - [gates-rerun.5] `nx run stealth-browser:verify-dist-load` exits 0 (the built dist loads the way a consumer loads it)
-- [gates-rerun.6] `nx run stealth-browser:e2e` exits 0 (all surfaces, one run)
-- [gates-rerun.7] Every spec/e2e file cites ticket 8468f7b1 and a valid acceptance-criterion id; evidence JSON records every gate command and exit code
+- [gates-rerun.6] Every spec file cites ticket 8468f7b1 and a valid acceptance-criterion id; evidence JSON records every gate command and exit code
+
 ---
 
 ## Reservations
@@ -73,4 +62,4 @@ Every plan-file write is committed (R1). Work-product commits for this state, al
 
 ## Notes for executor
 
-- Needs Chrome for e2e (hb-chrome-binary).
+- No live-Chrome gate exists (user decision).

@@ -30,9 +30,9 @@ Product reviews this finished plan (README, SCOPE.md, USE_CASES.md, demo/DEMO.md
 Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/guard.py` (`python3 docs/plan/stealth-browser/scripts/guard.py productization-hold --only productization-hold.N`). None may be deferred. Tests written by this plan cite ticket `8468f7b1` and these ids ([inv:tests-cite]).
 
 - [productization-hold.1] PRODUCT-REVIEW.md exists with the line `STATUS: folded` (product's tasks are folded into the DAG).
-
 - [productization-hold.2] Every state listed on the `INSERTED:` line exists in dag.json with a non-empty depends_on; the line may be `INSERTED: none`.
 - [productization-hold.3] dag.json is acyclic after the insertions and every inserted prod-* state is an ancestor of `gates-first` (no exceptions).
+
 ---
 
 ## Reservations

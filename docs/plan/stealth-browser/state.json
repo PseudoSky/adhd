@@ -50,7 +50,7 @@
       "started_at": "2026-10-12T21:28:08.569Z",
       "done_at": "2026-10-12T21:29:48.651Z",
       "start_ref": "ff09ec5651641abac70fb9898374ce0d16e61690",
-      "end_ref": "ab610c7a4defc528f1a5690b6f6171ca110b666a"
+      "end_ref": "ecdbcaf12bb457d420a861076c648dcf56865b3a"
     },
     "mig-domains-storage": {
       "status": "complete",
@@ -81,10 +81,10 @@
       "end_ref": "80e30ef13e7f59bee88f432525e8a3b1e05c9757"
     },
     "surface-api": {
-      "status": "in_progress",
-      "started_at": "2026-10-12T21:31:37.174Z",
+      "status": "pending",
+      "started_at": null,
       "done_at": null,
-      "start_ref": "6573c15dc0e8e29f785e9ea6baa0ccc83d61439f",
+      "start_ref": null,
       "end_ref": null
     },
     "surface-hosts": {
@@ -102,34 +102,27 @@
       "end_ref": null
     },
     "tests-unit-core": {
-      "status": "in_progress",
-      "started_at": "2026-10-12T21:30:20.634Z",
-      "done_at": null,
-      "start_ref": "e04f49f45dc909f7980ff8b578df3e9e7435e477",
-      "end_ref": null
-    },
-    "tests-unit-data": {
-      "status": "in_progress",
-      "started_at": "2026-10-12T21:31:37.333Z",
-      "done_at": null,
-      "start_ref": "803d8b22897662f586f7fb8598e3485e94b60e1b",
-      "end_ref": null
-    },
-    "tests-unit-extract": {
-      "status": "in_progress",
-      "started_at": "2026-10-12T21:28:39.394Z",
-      "done_at": null,
-      "start_ref": "2abb36b5cb2845bff25e899a31908a9669482b83",
-      "end_ref": null
-    },
-    "tests-unit-surface": {
       "status": "pending",
       "started_at": null,
       "done_at": null,
       "start_ref": null,
       "end_ref": null
     },
-    "tests-e2e": {
+    "tests-unit-data": {
+      "status": "pending",
+      "started_at": null,
+      "done_at": null,
+      "start_ref": null,
+      "end_ref": null
+    },
+    "tests-unit-extract": {
+      "status": "pending",
+      "started_at": null,
+      "done_at": null,
+      "start_ref": null,
+      "end_ref": null
+    },
+    "tests-unit-surface": {
       "status": "pending",
       "started_at": null,
       "done_at": null,
@@ -213,13 +206,6 @@
       "start_ref": null,
       "end_ref": null
     },
-    "prod-public-api": {
-      "status": "pending",
-      "started_at": null,
-      "done_at": null,
-      "start_ref": null,
-      "end_ref": null
-    },
     "prod-errors": {
       "status": "pending",
       "started_at": null,
@@ -234,7 +220,63 @@
       "start_ref": null,
       "end_ref": null
     },
-    "prod-publish-readiness": {
+    "port-fixes": {
+      "status": "pending",
+      "started_at": null,
+      "done_at": null,
+      "start_ref": null,
+      "end_ref": null
+    },
+    "audit-pre-review": {
+      "status": "pending",
+      "started_at": null,
+      "done_at": null,
+      "start_ref": null,
+      "end_ref": null
+    },
+    "audit-fixes": {
+      "status": "pending",
+      "started_at": null,
+      "done_at": null,
+      "start_ref": null,
+      "end_ref": null
+    },
+    "capture-upgrade": {
+      "status": "pending",
+      "started_at": null,
+      "done_at": null,
+      "start_ref": null,
+      "end_ref": null
+    },
+    "chrome-lifecycle": {
+      "status": "pending",
+      "started_at": null,
+      "done_at": null,
+      "start_ref": null,
+      "end_ref": null
+    },
+    "tests-use-cases": {
+      "status": "pending",
+      "started_at": null,
+      "done_at": null,
+      "start_ref": null,
+      "end_ref": null
+    },
+    "agent-search-relink": {
+      "status": "pending",
+      "started_at": null,
+      "done_at": null,
+      "start_ref": null,
+      "end_ref": null
+    },
+    "cdp-test-harness": {
+      "status": "pending",
+      "started_at": null,
+      "done_at": null,
+      "start_ref": null,
+      "end_ref": null
+    },
+    "failsafe-inventory": {
       "status": "pending",
       "started_at": null,
       "done_at": null,
@@ -388,17 +430,94 @@
       "note": "queries f60f9ee7; guard 0"
     }
   ],
-  "amendment_log": [],
+  "amendment_log": [
+    {
+      "ts": "2026-10-12T23:49:33.292Z",
+      "state": "surface-api",
+      "class": "executor",
+      "type": "state-reset",
+      "reason": "plan-repair amendment 2026-10-12 (dispatch-2026-10-12-ca18): state reset from in_progress/premature completion to pending because its acceptance criteria and dependencies changed (port-fixes first, greenfield API, feature-level unit tests, lifecycle wiring); no executor was running",
+      "files_synced": [
+        "docs/plan/stealth-browser/state.json",
+        "docs/plan/stealth-browser/dag.json",
+        "docs/plan/stealth-browser/scripts/guard.py"
+      ],
+      "by": "pseudosky"
+    },
+    {
+      "ts": "2026-10-12T23:49:33.440Z",
+      "state": "tests-unit-core",
+      "class": "executor",
+      "type": "state-reset",
+      "reason": "plan-repair amendment 2026-10-12 (dispatch-2026-10-12-ca18): state reset from in_progress/premature completion to pending because its acceptance criteria and dependencies changed (port-fixes first, greenfield API, feature-level unit tests, lifecycle wiring); no executor was running",
+      "files_synced": [
+        "docs/plan/stealth-browser/state.json",
+        "docs/plan/stealth-browser/dag.json",
+        "docs/plan/stealth-browser/scripts/guard.py"
+      ],
+      "by": "pseudosky"
+    },
+    {
+      "ts": "2026-10-12T23:49:33.580Z",
+      "state": "tests-unit-data",
+      "class": "executor",
+      "type": "state-reset",
+      "reason": "plan-repair amendment 2026-10-12 (dispatch-2026-10-12-ca18): state reset from in_progress/premature completion to pending because its acceptance criteria and dependencies changed (port-fixes first, greenfield API, feature-level unit tests, lifecycle wiring); no executor was running",
+      "files_synced": [
+        "docs/plan/stealth-browser/state.json",
+        "docs/plan/stealth-browser/dag.json",
+        "docs/plan/stealth-browser/scripts/guard.py"
+      ],
+      "by": "pseudosky"
+    },
+    {
+      "ts": "2026-10-12T23:49:33.724Z",
+      "state": "tests-unit-extract",
+      "class": "executor",
+      "type": "state-reset",
+      "reason": "plan-repair amendment 2026-10-12 (dispatch-2026-10-12-ca18): state reset from in_progress/premature completion to pending because its acceptance criteria and dependencies changed (port-fixes first, greenfield API, feature-level unit tests, lifecycle wiring); no executor was running",
+      "files_synced": [
+        "docs/plan/stealth-browser/state.json",
+        "docs/plan/stealth-browser/dag.json",
+        "docs/plan/stealth-browser/scripts/guard.py"
+      ],
+      "by": "pseudosky"
+    },
+    {
+      "ts": "2026-10-12T23:49:33.868Z",
+      "state": "mig-chrome-manager",
+      "class": "executor",
+      "type": "end-ref-fix",
+      "reason": "plan-repair amendment 2026-10-12: end_ref corrected to ecdbcaf12bb457d420a861076c648dcf56865b3a (the migration commit that completed the state)",
+      "files_synced": [
+        "docs/plan/stealth-browser/state.json"
+      ],
+      "by": "pseudosky"
+    },
+    {
+      "ts": "2026-10-12T23:49:34.015Z",
+      "state": "failsafe-inventory",
+      "class": "executor",
+      "type": "state-added",
+      "reason": "plan-repair amendment 2026-10-12: failsafe-inventory, port-fixes, cdp-test-harness, capture-upgrade, chrome-lifecycle, prod-errors, prod-examples, tests-use-cases, audit-pre-review, audit-fixes and agent-search-relink added or reshaped; capture-upgrade and chrome-lifecycle folded to the final evaluated designs (EVAL-store-adapter.md, EVAL-service-proxy.md); surface-hosts now depends on chrome-lifecycle",
+      "files_synced": [
+        "docs/plan/stealth-browser/dag.json",
+        "docs/plan/stealth-browser/scripts/guard.py",
+        "docs/plan/stealth-browser/scripts/ownership.json"
+      ],
+      "by": "pseudosky"
+    }
+  ],
   "authored_with": {
     "plugin": "workflow",
     "version": "0.8.35",
     "hash": "0b6bc1f3d70e"
   },
-  "current_state": "tests-unit-data",
+  "current_state": "failsafe-inventory",
   "dod_provenance": {
-    "confirmed_at": "2026-10-12T10:24:50.808Z",
+    "confirmed_at": "2026-10-12T23:49:38.410Z",
     "by": "pseudosky",
-    "note": "DoD agreed with dispatcher brief: 9 clauses derived from the verbatim request and demo/DEMO.md",
+    "note": "plan-repair 2026-10-12: DoD regenerated from the amended DEMO (use-case unit suites, cutover, feature inventory)",
     "dod_ids": [
       "dod.1",
       "dod.2",

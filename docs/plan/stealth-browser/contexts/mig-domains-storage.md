@@ -30,11 +30,11 @@ The typed CDP domain wrappers (`browser, network, page, system, target, transpor
 
 Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/guard.py` (`python3 docs/plan/stealth-browser/scripts/guard.py mig-domains-storage --only mig-domains-storage.N`). None may be deferred. Tests written by this plan cite ticket `8468f7b1` and these ids ([inv:tests-cite]).
 
-- [mig-domains-storage.1] Every manifest file exists, keeps every export, stays >=80% line-similar to the source, keeps its must-contain tokens.
-
+- [mig-domains-storage.1] Every manifest file exists, keeps every export (modulo the manifest's recorded allowed_renames/allowed_drops), stays >=80% line-similar to the scaffold-time source, keeps its must-contain tokens.
 - [mig-domains-storage.2] No .ts import specifiers, no reach into agent-search, no Runtime.evaluate/--enable-automation; every relative import resolves.
 - [mig-domains-storage.3] Only owned paths changed by [psm:mig-domains-storage] commits; agent-search source tree and main checkout node_modules untouched.
 - [mig-domains-storage.4] storage/helpers.ts still opens Chrome databases `mode=ro&immutable=1` (no file locking) and still exports openDb via helpers.
+
 ---
 
 ## Reservations

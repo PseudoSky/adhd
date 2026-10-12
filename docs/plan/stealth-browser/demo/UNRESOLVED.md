@@ -13,7 +13,7 @@ Interfaces this demo had to guess, and scope gaps found while authoring. The pac
 
 ## Scope gaps & open questions
 
-- Whether product keeps `capture/dom.ts` (Google-specific walker, carried `@deprecated`): decided at `productization-hold`.
+- Whether product keeps `capture/dom.ts` (Google-specific walker, kept for dod.4 parity): decided at `productization-hold`.
 - Release mode (publish vs `link:` consumption) is the dispatcher's decision at `merge-readiness`; DEMO beat 5.7 demonstrates only the guarded post-condition.
-- The e2e needs a Chrome binary; `hb-chrome-binary` verifies it. CI without Chrome cannot run the e2e lane.
+- No Chrome binary is needed: the unit lane and the use-case suites run against an in-memory CDP harness, so CI without Chrome runs everything.
 - Version of the three parser dependencies is pinned to the scratch repo ranges (`node-html-parser ^8.0.4`, `xpath ^0.0.34`, `@xmldom/xmldom ^0.9.10`); human approval pending (`hb-deps-approval`).

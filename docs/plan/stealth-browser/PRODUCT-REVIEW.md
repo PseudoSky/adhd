@@ -1,19 +1,21 @@
 STATUS: folded
-INSERTED: prod-public-api, prod-errors, prod-examples, prod-publish-readiness
+INSERTED: prod-errors, prod-examples, tests-use-cases, capture-upgrade, chrome-lifecycle, cdp-test-harness
+RETIRED: prod-public-api (greenfield API: no legacy subpath, root namespaces + flat verbs), prod-publish-readiness (publish metadata and the tarball dry-run moved to gates-first.7-9)
 
 # PRODUCT-REVIEW - @adhd/stealth-browser (plan 8468f7b1-8adc-4237-9986-21ea1e27c537)
 
-## DECISIONS (dispatcher)
+## DECISIONS (dispatcher and user)
 
-- D1 (P3 vs surface-api): use the `./legacy` subpath. The root exports only the six verbs and their types. Amend surface-api's "every old barrel name resolves from root" criterion to resolve from root OR `@adhd/stealth-browser/legacy`. agent-search imports legacy names from the subpath at cutover.
-- D2 (P11): NOT added to the DAG, so the terminal state is unchanged. It becomes a backlog follow-up.
-- D3 (defect 3): add a criterion to merge-readiness or the cutover that builds `dist/` in the merged main checkout before `link:` consumption.
-- D4 (defect 5): `tests-unit-surface` gains a dependency on `surface-hosts`, and P1/P2 host-level tests live in its owned spec dir.
-- D5: the out-of-scope candidates stay out of the DAG, and the dispatcher files them in the backlog.
+- D1 (P3, greenfield): the package is new and public, so no consumer exists and there is no legacy, compatibility or deprecation surface. The root exports the library areas as namespaces (`cdp`, `storage`, `capture`, `parsers`, `chromeManager`, plus `recording` and `lifecycle`) and the six flat verbs. Source is corrected, never aliased (ADR-0002); `SearchResultSource` becomes `PageSource`, `getSearchSessionId` is dropped, `getLastSearchFromHistory` stays in agent-search. `prod-public-api` is retired; the export snapshot is `tests-unit-surface` and `prod-errors.7`.
+- D2 (P11): NOT added to the DAG. It becomes a backlog follow-up.
+- D3 (defect 3): `merge-readiness.4` builds `dist/` in the merged main checkout before any `link:` consumption; the required cutover runs earlier against a tarball (`agent-search-cutover`) and `agent-search-relink` consumes the release after merge.
+- D4 (defect 5): `tests-unit-surface` depends on `surface-hosts`; host-level P1/P2 tests live in its owned spec dir.
+- D5: the out-of-scope candidates stay out of the DAG, are filed in the backlog and are listed in `DEFERRED.md`.
+- User decisions (see `PRODUCTIZATION-CATALOG.md`): product's verdict is the default per item. Overrides: unit tests that simulate real use cases replace e2e (`tests-e2e` and `hb-chrome-binary` removed, `tests-use-cases` added); the agent-search migration substitutes for e2e and runs before the audit; typed errors cover 100% of failures (29 design-neutral codes plus design-added ones); examples cover every verb and namespace plus genuine use cases; the Chrome lifecycle (19dfb641) is built now as `chrome-lifecycle`, with `capture-upgrade` and the shared `cdp-test-harness`.
 
 ## Constraints honored
 
-- dod.4 and port-manifest.json require every export to stay exported and each file >=80% line-similar. No renames or deletes of ported symbols; every naming fix is additive (neutral alias + deprecation marker + subpath).
+- dod.4 and port-manifest.json require every export to stay exported and each file >=80% line-similar, except where the manifest records an allowed rename or drop (`SearchResultSource` to `PageSource`, `getSearchSessionId`) and the two rewrites with `min_similarity` 0 (`capture/network.ts`, `chrome-manager.ts`).
 - Only one new package is allowed.
 - surface-api.5 forbids env reads in api.ts: config stays typed options at library level, flags at the CLI/MCP host layer.
 - productization-hold.3: every inserted prod-* state must be an ancestor of gates-first.
@@ -40,7 +42,7 @@ INSERTED: prod-public-api, prod-errors, prod-examples, prod-publish-readiness
   - PA2.3: the library result is unchanged, so port-manifest.json parity holds.
 - Executor: typescript-pro.
 
-### P3. Public API surface and stability tiers [P0]
+### P3. Public API surface and stability tiers [P0] - RETIRED by D1 (greenfield); intent carried by surface-api.3, surface-api.10, tests-unit-surface and prod-errors.7
 - Why: search/Google leftovers in the generic layer: SearchResultSource (types.ts:201), searchDepth (types.ts:242), getSearchSessionId (session.ts:24), Google-specific capture/dom.ts and parsers.
 - Decisions: KEEP capture/dom.ts (manifest/dod.4). Remove Google and search-named symbols from the root barrel; export them from a `./legacy` subpath marked @deprecated (D1). Add neutral aliases (e.g. PageSource for SearchResultSource). searchDepth field name stays (frozen shape), documented. getSearchSessionId stays as the alias required by mig-foundation.4. Root exposes only the six verbs and their types as stable; everything else is @experimental.
 - Placement: new state prod-public-api after surface-api; surface-hosts depends on it. exports["./legacy"] is a one-line package.json edit made by surface-hosts. The src/index.ts edit is an amendment to surface-api's paths (sequential).
@@ -113,7 +115,7 @@ INSERTED: prod-public-api, prod-errors, prod-examples, prod-publish-readiness
   - PA9.2: a --verbose flag sends diagnostics to stderr only; a unit test asserts stdout stays JSON-RPC-clean.
 - Executor: typescript-pro, then doc-steward.
 
-### P10. Publish readiness and versioning [P1]
+### P10. Publish readiness and versioning [P1] - state retired; checks live in gates-first.7-9, audit-final.9 and readme-rewrite
 - Why: PUBLISHING.md is publish-from-dist; README, CHANGELOG and manifest must exist in dist/.
 - Placement: new state prod-publish-readiness after readme-rewrite, before audit-final. Release decision stays with the dispatcher at merge-readiness.
 - Owned paths: docs/plan/stealth-browser/evidence/publish-dry-run.txt, plus metadata fields in entrypoint/stealth-browser/package.json (earlier states are done; no concurrency).
@@ -153,21 +155,24 @@ P1, P2 (safety) and P3 (naming) first, since they change types before hosts are 
 
 | Task | State(s) | Criteria (PA id carried in the criterion text) |
 |---|---|---|
-| P1 host input allowlist | surface-api, surface-hosts, tests-unit-surface, tests-e2e | surface-api.7 (PA1.1), surface-hosts.7 (PA1.2, PA1.3), tests-unit-surface.4 (PA1.2, PA1.3) |
-| P2 cookie redaction | surface-api, surface-hosts, tests-unit-surface, tests-e2e | surface-api.8 (claim evidence), surface-hosts.8 (PA2.1), tests-unit-surface.4 (PA2.2), tests-e2e.6 (PA2.1 live); PA2.3 held by dod.4 parity |
-| P3 public API tiers | prod-public-api (new), surface-api, surface-hosts, agent-search-cutover | prod-public-api.1-.4 (PA3.1, PA3.2, PA3.3, PA3.5), surface-api.3 (D1), surface-hosts.9 (PA3.2 built, PA3.3, PA3.4), agent-search-cutover.7 (D1) |
+| P1 host input allowlist | surface-api, surface-hosts, tests-unit-surface, tests-use-cases | surface-api.7 (PA1.1), surface-hosts.7 (PA1.2, PA1.3), tests-unit-surface.4 (PA1.2, PA1.3) |
+| P2 cookie redaction | surface-api, surface-hosts, tests-unit-surface, tests-use-cases | surface-api.8 (claim evidence), surface-hosts.8 (PA2.1), tests-unit-surface.4 (PA2.2), tests-use-cases scenarios (PA2.1 simulated); PA2.3 held by dod.4 parity |
+| P3 public API (greenfield) | surface-api, tests-unit-surface, prod-errors | surface-api.3, surface-api.10, prod-errors.7 (root exports snapshot) |
 | P4 ergonomics | surface-api, surface-hosts | surface-api.9 (PA4.1), surface-hosts.10 (PA4.1, PA4.2), surface-hosts.11 (PA4.3, PA4.4) |
-| P5 structured errors | prod-errors (new), surface-hosts | prod-errors.1 (PA5.1), prod-errors.2 (PA5.4), surface-hosts.12 (PA5.2, PA5.3, PA5.5) |
+| P5 structured errors (100%) | prod-errors (new), surface-hosts | prod-errors.1-.8 (29 design-neutral codes plus design-added ones: PA5.1, PA5.4 and the capture and lifecycle codes), surface-hosts.12 (PA5.2, PA5.3, PA5.5) |
 | P6 configuration | surface-hosts, docs-marketing-run | surface-hosts.13 (PA6.1), docs-marketing-run.6 (PA6.2, PA6.3) |
-| P7 examples | prod-examples (new) | prod-examples.1-.5 (PA7.1-PA7.4) |
+| P7 examples (every verb and namespace) | prod-examples (new) | prod-examples.1-.6 (PA7.1-PA7.4) |
 | P8 responsible use | docs-marketing-run, readme-rewrite | docs-marketing-run.7 (PA8.1, PA8.2), docs-marketing-run.8 and readme-rewrite.7 (PA8.3), readme-rewrite.6 (PA8.2, PA8.4) |
-| P9 observability | tracing-plugin, tests-e2e, docs-marketing-run | tracing-plugin.7 (PA9.2), tests-e2e.7 (PA9.2), docs-marketing-run.9 (PA9.1) |
-| P10 publish readiness | prod-publish-readiness (new), audit-final, readme-rewrite | prod-publish-readiness.1-.5 (PA10.1-PA10.5), audit-final.10 (PA10.3 re-check on the final docs), readme-rewrite.8 (PA10.2 README policy) |
-| D3 main-checkout dist | merge-readiness, agent-search-cutover | merge-readiness.4, agent-search-cutover.6 |
+| P9 observability | tracing-plugin, tests-use-cases, docs-marketing-run | tracing-plugin.7 (PA9.2), tests-use-cases scenarios (PA9.2), docs-marketing-run.9 (PA9.1) |
+| P10 publish readiness | gates-first, audit-final, readme-rewrite | gates-first.7-9 (PA10.1-PA10.5), audit-final.9 (PA10.3 re-check on the final docs), readme-rewrite.8 (PA10.2 README policy) |
+| D3 main-checkout dist | merge-readiness, agent-search-relink | merge-readiness.4, agent-search-relink.1-4 |
+| User: simulated use cases instead of e2e | cdp-test-harness, tests-use-cases | cdp-test-harness.1-6, tests-use-cases.1-6 |
+| User: capture upgrade | capture-upgrade | capture-upgrade.1-28 (CU1-CU27 plus inventory pins) |
+| User: Chrome lifecycle (19dfb641) | chrome-lifecycle | chrome-lifecycle.1-27 (CL1-CL25 plus manager shape and inventory pins) |
 | D4 | tests-unit-surface depends on surface-hosts | tests-unit-surface.4 |
 | Unverified claims | surface-api.8 (evidence file), surface-hosts.7 and .12 (built-bin probes) | `evidence/product-claims.json` records whether launchChrome options reach the MCP schema and whether getPageContext returns cookie values, with file:line citations |
 | Namespace pin (backlog 5152786d) | tracing-plugin, tracing-namespace-proof | tracing-plugin.8, tracing-namespace-proof.6 |
 
-P11 is not in the DAG (D2). The D5 candidates stay out of the DAG and are filed in the backlog by the dispatcher.
+P11 is not in the DAG (D2). The D5 candidates stay out of the DAG and are listed in `DEFERRED.md`.
 The word scan (PA8.3) covers README.md and docs/ except the ported `docs/reference/` protocol reference (CDP method names such as `setBypassCSP`) and generated `.catalog/` data.
-Placement of P10: `prod-publish-readiness` sits after `prod-examples` and before `tests-e2e` so it is an ancestor of `gates-first` (`productization-hold.3`, no exceptions). The part of PA10.3 that needs the final README and CHANGELOG is re-checked after the docs states by `audit-final.10`; the README stability policy (PA10.2) is `readme-rewrite.8`. This differs from the review's stated "after readme-rewrite" placement and is the dispatcher's to confirm.
+Placement of P10: the package metadata, version, engines, bins and first tarball dry-run are `gates-first.7-9` (an ancestor of the review chain); the tarball is re-checked against the final README and CHANGELOG by `audit-final.9`, and the README stability policy is `readme-rewrite.8`.

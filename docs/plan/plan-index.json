@@ -3683,7 +3683,7 @@
     {
       "plan": "stealth-browser",
       "dir": "stealth-browser",
-      "status": "published",
+      "status": "in-progress",
       "mutate_set": [
         "/Users/nix/dev/ai/scratch/agent-browser/adhd/",
         "/Users/nix/dev/ai/scratch/agent-browser/cdp-query-client.ts",
@@ -3701,6 +3701,8 @@
         "docs/plan/stealth-browser/review/BRIEF.txt",
         "docs/plan/stealth-browser/review/FINDINGS.json",
         "docs/plan/stealth-browser/review/INPUT.sha256",
+        "docs/plan/stealth-browser/review/PRE-REVIEW-RESOLUTION.json",
+        "docs/plan/stealth-browser/review/PRE-REVIEW.md",
         "docs/plan/stealth-browser/review/RESOLUTION.json",
         "docs/plan/stealth-browser/review/migration.diff",
         "entrypoint/stealth-browser/",
@@ -3711,6 +3713,7 @@
         "entrypoint/stealth-browser/bin/",
         "entrypoint/stealth-browser/docs/",
         "entrypoint/stealth-browser/docs/reference/",
+        "entrypoint/stealth-browser/eslint.config.mjs",
         "entrypoint/stealth-browser/examples/",
         "entrypoint/stealth-browser/llms.txt",
         "entrypoint/stealth-browser/package.json",
@@ -3720,6 +3723,7 @@
         "entrypoint/stealth-browser/src/host-projection.ts",
         "entrypoint/stealth-browser/src/index.ts",
         "entrypoint/stealth-browser/src/legacy.ts",
+        "entrypoint/stealth-browser/src/lib/",
         "entrypoint/stealth-browser/src/lib/capture/",
         "entrypoint/stealth-browser/src/lib/cdp/",
         "entrypoint/stealth-browser/src/lib/chrome-manager.ts",
@@ -3735,6 +3739,7 @@
         "entrypoint/stealth-browser/src/test/unit/capture-parsers/",
         "entrypoint/stealth-browser/src/test/unit/cdp/",
         "entrypoint/stealth-browser/src/test/unit/chrome-manager/",
+        "entrypoint/stealth-browser/src/test/unit/chrome-manager/chrome-lifecycle.spec.ts",
         "entrypoint/stealth-browser/src/test/unit/domains-storage/",
         "entrypoint/stealth-browser/src/test/unit/errors/",
         "entrypoint/stealth-browser/src/test/unit/examples/",
@@ -3744,7 +3749,9 @@
         "entrypoint/stealth-browser/src/test/unit/surface/",
         "entrypoint/stealth-browser/src/test/unit/tracing/tracing-namespace.spec.ts",
         "entrypoint/stealth-browser/src/tracing.ts",
+        "entrypoint/stealth-browser/src/types/",
         "entrypoint/stealth-browser/tsconfig.spec.json",
+        "entrypoint/stealth-browser/vite.config.ts",
         "pnpm-lock.yaml",
         "tsconfig.base.json"
       ],
@@ -3766,7 +3773,10 @@
         "entrypoint/dispatch-cli/",
         "entrypoint/dispatch-cli/bin/",
         "entrypoint/stealth-browser/",
+        "entrypoint/stealth-browser/CHANGELOG.md",
+        "entrypoint/stealth-browser/README.md",
         "entrypoint/stealth-browser/bin/",
+        "entrypoint/stealth-browser/dist/",
         "entrypoint/stealth-browser/docs/",
         "entrypoint/stealth-browser/package.json",
         "entrypoint/stealth-browser/src/",
@@ -3816,6 +3826,7 @@
         "deps-install": {
           "mutates": [
             "docs/plan/stealth-browser/APPROVALS.md",
+            "entrypoint/stealth-browser/eslint.config.mjs",
             "entrypoint/stealth-browser/package.json",
             "pnpm-lock.yaml"
           ],
@@ -3867,6 +3878,7 @@
         },
         "mig-capture-parsers": {
           "mutates": [
+            "entrypoint/stealth-browser/eslint.config.mjs",
             "entrypoint/stealth-browser/src/lib/capture/",
             "entrypoint/stealth-browser/src/lib/parsers.ts"
           ],
@@ -3977,7 +3989,10 @@
           "mutates": [
             "entrypoint/stealth-browser/src/test/e2e/"
           ],
-          "read_only": []
+          "read_only": [
+            "entrypoint/stealth-browser/bin/",
+            "entrypoint/stealth-browser/src/"
+          ]
         },
         "tracing-namespace-proof": {
           "mutates": [
@@ -4112,6 +4127,35 @@
             "docs/plan/stealth-browser/evidence/publish-dry-run.txt",
             "entrypoint/stealth-browser/package.json"
           ],
+          "read_only": [
+            "PUBLISHING.md",
+            "entrypoint/stealth-browser/CHANGELOG.md",
+            "entrypoint/stealth-browser/README.md",
+            "entrypoint/stealth-browser/dist/"
+          ]
+        },
+        "port-fixes": {
+          "mutates": [
+            "entrypoint/stealth-browser/src/lib/",
+            "entrypoint/stealth-browser/src/test/unit/chrome-manager/chrome-lifecycle.spec.ts",
+            "entrypoint/stealth-browser/src/test/unit/domains-storage/",
+            "entrypoint/stealth-browser/src/types/",
+            "entrypoint/stealth-browser/tsconfig.spec.json",
+            "entrypoint/stealth-browser/vite.config.ts"
+          ],
+          "read_only": []
+        },
+        "audit-pre-review": {
+          "mutates": [
+            "docs/plan/stealth-browser/review/PRE-REVIEW.md"
+          ],
+          "read_only": []
+        },
+        "audit-fixes": {
+          "mutates": [
+            "docs/plan/stealth-browser/review/PRE-REVIEW-RESOLUTION.json",
+            "entrypoint/stealth-browser/"
+          ],
           "read_only": []
         }
       },
@@ -4125,7 +4169,7 @@
       },
       "assumed_baseline": [],
       "depends_on": [],
-      "updated_at": "2026-10-12T10:47:28.502Z"
+      "updated_at": "2026-10-12T22:45:50.947Z"
     },
     {
       "plan": "task-dependency-dag",
@@ -4562,6 +4606,6 @@
       "updated_at": "2026-07-17T23:56:00.980Z"
     }
   ],
-  "updated_at": "2026-10-12T10:47:28.510Z",
+  "updated_at": "2026-10-12T22:45:50.955Z",
   "verified_at": null
 }

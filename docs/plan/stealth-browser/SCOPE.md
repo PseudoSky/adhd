@@ -7,11 +7,13 @@ Verbatim request: "Inside agent search there is a plan to migrate the chrome run
 ## 1. Outcomes (falsifiable)
 
 1. `entrypoint/stealth-browser` exists, named `@adhd/stealth-browser`, produced by `npx nx g @adhd/workspace-codegen-nx:entrypoint --name stealth-browser --nxLayer entrypoints --platform node`, and has the same top-level files, tags, package metadata and nx targets that `dispatch-cli`, `backlog` and `apigen-cli` share. Proof: guard `entrypoint-parity.*`, `scaffold.*`.
-2. The six chrome-runner verbs (`chromeStatus`, `launchChrome`, `shutdownChrome`, `listPageTargets`, `checkChromeActivity`, `getPageContext`) work from the library, the `stealth-browser` CLI and the `stealth-browser-mcp` stdio server against a real Chrome, in ONE e2e run with one shared setup/teardown. Proof: `nx run stealth-browser:e2e` exit 0, >= 5 s.
+2. The six chrome-runner verbs (`chromeStatus`, `launchChrome`, `shutdownChrome`, `listPageTargets`, `checkChromeActivity`, `getPageContext`) work from the library, the `stealth-browser` CLI and the `stealth-browser-mcp` stdio server. Proof (user decision, no live-Chrome lane): at least 12 use-case unit suites that simulate real scenarios through the shared in-memory harness (`nx run stealth-browser:test -- src/test/use-cases`), plus the agent-search cutover against a real consumer. Only `chromeStatus`, `launchChrome` and `shutdownSearchChrome` exist in the runner source; the other verbs, the root namespaces and `getPageContext(targetId)` are new design.
 3. The apigen tracing plugin is mounted on every host under the `adhd` namespace (records `adhd.<op>.start|finish|error`, never `apigen.*`). Proof: `tracing-namespace-proof.*` incl. a mutation that flips the namespace and must fail the spec.
-4. The migration is behavior-preserving: every export of every migrated file is still exported, files stay >= 80% line-similar to the source, `--remote-debugging-port` stays, `--enable-automation` and `Runtime.evaluate` stay absent, SQLite stays read-only/immutable. Proof: `port-manifest.json` + guard `*.1/.2`.
-5. The live agent-search MCP source (`search-mcp-source.ts`, `server.mjs`) keeps working at every point, and after the guarded cutover consumes `@adhd/stealth-browser`. Proof: `source-baseline.txt` hash guard until cutover; stdio MCP probe after.
-6. Exactly one blind review round (diff + the word "Review"), one implementer resolving every finding, gates re-run green.
+4. Every FEATURE and FAILSAFE of the runner is preserved ([inv:no-features-removed]): the three idle-safety tiers including history recency and `checkHistory`, the O_EXCL launch lock, group kill, the newtab fix, livelock protection, cross-process coordination, isolated-page cleanup, ban detection, graceful capture outcomes, `--remote-debugging-port` kept, `--enable-automation` and `Runtime.evaluate` absent, SQLite read-only/immutable. Legacy code, names, file layout and legacy tests are NOT preserved (greenfield). Proof: `evidence/failsafe-inventory.json` (built first) with a new feature-level unit test per row; migration-time guards `mig-*.1/.2`.
+5. The live agent-search MCP source (`search-mcp-source.ts`, `server.mjs`) keeps working at every point; the baseline commit in `source-baseline.txt` is guarded until the first cutover commit. The required `agent-search-cutover` then runs agent-search on a tarball packed from this worktree (real directory in `node_modules`, no committed link, no lockfile change) and proves identical MCP behaviour through `node server.mjs --transport stdio` before and after; `agent-search-relink` switches to the released package after merge. Proof: `evidence/cutover-*.json`, `evidence/cutover-live-vs-recorded.md`.
+5a. Greenfield API: no legacy, compatibility or deprecated surface exists (`[inv:greenfield]`). Root namespaces `cdp`, `storage`, `capture`, `parsers`, `chromeManager`, `recording`, `lifecycle` plus six flat verbs. Every failure is a typed error (29 design-neutral codes plus any the sink and lifecycle designs add).
+5b. Capture and lifecycle are built in the package (user decision): `capture-upgrade` (one `NetworkRecorder` pipeline; the optional recording sink is a store-adapter sink, EVALUATIONS.md E1) and `chrome-lifecycle` (every existing lifecycle feature kept; race-free launch, reaper scope, launch circuit breaker, isolated-context cleanup; the engine is in-package behind `PresenceStore` and `ReaperLauncher` seams and the default reaper launcher reuses @adhd/sox-service-proxy, EVALUATIONS.md E2), both on the `cdp-test-harness`.
+6. A static non-blind pre-review audit (`audit-pre-review`) resolved by one implementer (`audit-fixes`), then exactly one blind review round (diff + the word "Review"), one implementer resolving every finding, gates re-run green; the final audit is script-only.
 7. A doc-steward marketing run passed review; a content-marketer README is receipts-backed.
 8. The branch is merge-ready (ff-only) with a dispatcher-recorded release decision.
 
@@ -25,15 +27,15 @@ Verbatim request: "Inside agent search there is a plan to migrate the chrome run
 
 **Evidence:** `adhd/` is self-contained - its only third-party imports are `node-html-parser`, `@xmldom/xmldom`, `xpath` at `adhd/parsers.ts:17-26`; no file under `adhd/` imports from outside it (verified by reading the import lines of every file). `cdp-query-client.ts` is a 42-line barrel over `adhd/`. The chrome verbs in `search-mcp-source.ts:454-495` delegate to `ChromeManager`/clients only. `last-search.ts` is search-specific (Google history keyword terms).
 
-**The existing agent-search plan is wrong on this boundary:** `docs/restructure-proposal.md` and `docs/dispatch-plan.md` describe an in-place restructure across six worktrees/branches (a different strategy from "one worktree, one branch, disjoint buckets"), keep search-named items in the generic layer, and plan a nested private `@adhd/cdp-connection` package plus committed `.js` twins (`adhd/cdp-connection/src/{browser,monitor,session,shutdown,targets}.js`). This plan keeps ONE package, drops the nested package and the twins, and uses a single shared branch.
+**The existing agent-search plan is wrong on this boundary:** `docs/restructure-proposal.md` and `docs/dispatch-plan.md` describe an in-place restructure across six worktrees/branches (a different strategy from "one worktree, one branch, disjoint buckets"), keep search-named items in the generic layer, and plan a nested private `@adhd/cdp-connection` package plus committed `.js` twins (`adhd/cdp-connection/src/{browser,monitor,session,shutdown,targets}.js`). This plan keeps ONE package, drops the nested package and the twins, and uses a single shared branch. The package is greenfield: search-named leftovers are corrected at the source (ADR-0002), not aliased; features and failsafes are preserved, legacy code is not.
 
 ### Not in scope
-- The sox-service-proxy self-reaping Chrome singleton (backlog `19dfb641`): the port preserves the heartbeat/IdleShutdown behavior verbatim; the redesign is follow-up work on the NEW package paths.
 - FEAT-AGENT-TRACING (`5b98d3b2`, an agent-side plugin in agent-mcp): different feature; only the apigen-side precedent `@adhd/apigen-plugin-tracing` is used here.
 - Environment/path survey gaps G1/G2 for `scratch-agent-search` (`docs/environment/adoption-survey/scratch/scratch-agent-search.md`).
 - Any second new package. The human approved exactly ONE: `entrypoint/stealth-browser`.
 - Publishing: the dispatcher decides in `merge-readiness` (PUBLISHING.md).
-- Renaming search-named leftovers (`SearchResultSource`, `getSearchSessionId` alias): a productization decision.
+- A second package for the lifecycle; proxy-backed presence (phase 2) and extending @adhd/sox-service-proxy itself (EVALUATIONS.md OD-10).
+- A live-Chrome e2e lane and any `./legacy` subpath. Items deferred by the user's decisions are listed in `DEFERRED.md`; the productization decisions in `PRODUCTIZATION-CATALOG.md`.
 
 ## 3. Constraints and assumptions
 
@@ -55,16 +57,21 @@ Verbatim request: "Inside agent search there is a plan to migrate the chrome run
 | Tracing namespace `adhd` via `makeTracingPlugin({serviceName:'adhd'})`, never the singleton | non-negotiable (backlog precedent) |
 | Nested `@adhd/cdp-connection` becomes `src/lib/cdp/` | non-negotiable (one-package approval) |
 | MCP/CLI hosts via apigen from `src/api.ts` | advisory (mirrors backlog; alternative: hand-rolled MCP) |
-| Unit specs at `src/test/unit/<bucket>/`, e2e at `src/test/e2e/*.e2e.test.ts` | advisory (keeps test buckets disjoint) |
-| Cutover gated behind release decision; consumption by published version or `link:` into merged main | advisory (dispatcher may choose) |
+| Unit specs at `src/test/unit/<bucket>/`, use-case suites at `src/test/use-cases/*.spec.ts`, harness at `src/test/support/` | advisory (keeps test buckets disjoint) |
+| Cutover runs before the audit against a tarball from this worktree; the post-release `link:`/published consumption is the separate dispatcher-gated `agent-search-relink` | non-negotiable (user decision) |
+| Greenfield: no legacy or compatibility surface | non-negotiable (user decision) |
+| Typed errors for 100% of failures; a runnable example per verb and namespace | non-negotiable (user decision) |
+| Chrome lifecycle (19dfb641) and the capture upgrade are built now; the sink (store adapter) and the lifecycle backbone (hybrid, service-proxy launcher) follow the recorded evaluations (EVALUATIONS.md) | non-negotiable (user decision) |
+| No feature or failsafe of the runner is removed; legacy code, names and tests are not preserved | non-negotiable (user decision) |
+| Prior comparison input for capture and lifecycle: `/Users/nix/dev/projects/reverse-apis/docs/marketing/.catalog/cross-repo-comparison.md` (reverse-apis) | informative |
 
 ## 5. Task breakdown
 
-30 bounded states in 9 phases - see README table and `dag.json`. Buckets: `scaffold`, `entrypoint-parity`, `deps-install` (serial); `mig-foundation` -> {`mig-cdp` -> {`mig-chrome-manager`, `mig-domains-storage` -> `mig-queries`}, `mig-capture-parsers`, `mig-docs`}; `surface-api` -> `surface-hosts` -> `tracing-plugin`; tests in four unit buckets + e2e + namespace proof; gates; blind review chain; docs chain; final audit; dispatcher merge; guarded cutover.
+40 bounded states in 10 phases - see the README table and `dag.json`. Buckets: `scaffold`, `entrypoint-parity`, `deps-install` (serial); `mig-foundation` -> {`mig-cdp` -> {`mig-chrome-manager`, `mig-domains-storage` -> `mig-queries`}, `mig-capture-parsers`, `mig-docs`}; `failsafe-inventory` (the feature/failsafe inventory, built first) then `port-fixes`; then in parallel `surface-api` -> `surface-hosts` -> `tracing-plugin`, the three unit buckets and `cdp-test-harness` -> {`capture-upgrade`, `chrome-lifecycle`}; `prod-errors`, `prod-examples`, `tests-use-cases`; the required `agent-search-cutover`; `audit-pre-review` -> `audit-fixes`; gates; the blind review chain; docs chain; final audit; dispatcher merge; `agent-search-relink`.
 
 ## 6. Verification criteria
 
-Every state has binary guard checks in `scripts/guard.py` (154 criteria, each runnable as `guard.py <slug> --only <slug.N>`); the DoD clauses `[dod.1..9]` are confirmed by `scripts/audit_dod.py`. Tests cite ticket `8468f7b1` and a criterion id. Unit tests mock process spawn and third-party-network libraries; e2e uses a dedicated port, temp profile, fake HOME.
+Every state has binary guard checks in `scripts/guard.py` (see criteria.json, each runnable as `guard.py <slug> --only <slug.N>`); the DoD clauses `[dod.1..9]` are confirmed by `scripts/audit_dod.py`. Tests cite ticket `8468f7b1` and a criterion id. Unit tests mock process spawn and third-party-network libraries and run against the in-memory harness (fixtures labelled `synthetic-protocol-conformant`); the cutover is the real-consumer proof.
 
 ## Pinned-vs-Resolve partition
 

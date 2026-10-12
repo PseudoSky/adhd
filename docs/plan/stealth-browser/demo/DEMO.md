@@ -120,7 +120,7 @@ PASS [entrypoint-parity.1] Top-level tracked file set contains every file common
 ```
 ✅ **Verify**
 - [ ] Exit status is 0.
-- [ ] `./node_modules/.bin/nx show project stealth-browser --json | jq '.targets|keys'` includes `build-bin`, `verify-dist-load`, `e2e`, `test`, `typecheck-spec`.
+- [ ] `./node_modules/.bin/nx show project stealth-browser --json | jq '.targets|keys'` includes `build-bin`, `verify-dist-load`, `test`, `typecheck-spec` (the generated `e2e` target stays unused).
 
 🔗 **Proves:** REQ-002
 📎 **Source:** `entrypoint/dispatch-cli/project.json` targets; `docs/plan/stealth-browser/scripts/guard.py` check `entrypoint-parity.1`.
@@ -288,29 +288,28 @@ curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:$PORT/json/version || 
 
 ---
 
-## 4 · The Climax - All Three Surfaces, One Run
+## 4 · The Climax - All Three Surfaces, Simulated End to End
 
-🎬 **Scene.** Dana runs the whole thing at once: one setup, one teardown, a real Chrome, the library, the CLI and the MCP server all asked the same questions - and a Chrome on 9222 that nobody touched.
+🎬 **Scene.** Dana runs every user scenario at once: the library, the CLI and the MCP host are all asked the same questions against an in-memory Chrome that speaks the protocol - a crashed Chrome recovered, a history audit, a cookie replay, a result page captured - and a Chrome on 9222 that nobody touched because nothing real is ever started.
 
 ▶️ **Do**
 ```bash
-./node_modules/.bin/nx run stealth-browser:e2e
+./node_modules/.bin/nx run stealth-browser:test -- src/test/use-cases
 ```
 👀 **Expect**
 ```
- ✓ [surface:library] ...
- ✓ [surface:cli] ...
- ✓ [surface:mcp] ...
- Test Files  ⟨N⟩ passed
- Duration  ⟨>= 5s⟩
+ ✓ Scenario: recover a crashed Chrome ...
+ ✓ Scenario: audit browsing history ...
+ ✓ Scenario: capture a result page over the network recorder ...
+ Test Files  ⟨N >= 12⟩ passed
 ```
 ✅ **Verify**
-- [ ] Exit status 0 and wall-clock duration at least 5 seconds.
-- [ ] Exactly one `beforeAll` and one `afterAll` exist under `entrypoint/stealth-browser/src/test/e2e/`.
-- [ ] `lsof -ti tcp:9222` prints the same PIDs before and after.
+- [ ] Exit status 0 and the lane finishes well under a minute (no socket, no subprocess, no network).
+- [ ] At least 12 scenario suites exist under `entrypoint/stealth-browser/src/test/use-cases/`, each opening `describe('Scenario: ...')`, and at least six typed error codes are asserted through them.
+- [ ] The agent-search cutover proof holds: `python3 docs/plan/stealth-browser/scripts/guard.py agent-search-cutover` exits 0.
 
 🔗 **Proves:** REQ-003 · REQ-004 · REQ-005 · REQ-008 · REQ-010 · CAP-001 · CAP-002 · CAP-003 · CAP-004 · CAP-005 · CAP-006
-📎 **Source:** `entrypoint/dispatch-cli/src/test/cli-smoke.e2e.test.ts` (e2e lane shape); guard `tests-e2e.1-5`.
+📎 **Source:** `entrypoint/stealth-browser/src/test/support/` (shared harness); guard `cdp-test-harness.1-6`, `tests-use-cases.1-6`, `agent-search-cutover.1-9`.
 
 ---
 
@@ -461,7 +460,7 @@ no-listener
 | REQ-007 | Stealth invariants preserved | 3.2.2, 5.2 | H/E | ☐ |
 | REQ-008 | Developer's Chrome on 9222 untouched | 3.2.7, 4, 6 | H/E | ☐ |
 | REQ-009 | Live agent-search source untouched, then cut over | 5.5, 5.6 | E/R | ☐ |
-| REQ-010 | One e2e run, one setup/teardown, disjoint buckets | 4, 5.4 | H/E | ☐ |
+| REQ-010 | Use-case unit suites on one shared harness, disjoint buckets | 4, 5.4 | H/E | ☐ |
 | REQ-011 | One blind review, one implementer | 5.7 | R | ☐ |
 | REQ-012 | Docs and README receipts-backed | 5.8 | R | ☐ |
 

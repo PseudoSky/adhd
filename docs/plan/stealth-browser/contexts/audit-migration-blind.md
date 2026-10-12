@@ -30,10 +30,10 @@ ONE blind review round: the reviewer sees only the migration diff and the word `
 Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/guard.py` (`python3 docs/plan/stealth-browser/scripts/guard.py audit-migration-blind --only audit-migration-blind.N`). None may be deferred. Tests written by this plan cite ticket `8468f7b1` and these ids ([inv:tests-cite]).
 
 - [audit-migration-blind.1] FINDINGS.json records exactly ONE review round whose reviewer_input_sha256 equals review/INPUT.sha256 and whose prompt was the word `Review`.
-
 - [audit-migration-blind.2] Every finding has id (F1..), severity in {blocker,major,minor,nit}, file, line, summary and evidence; or `no_findings: true` with a reviewer rationale.
 - [audit-migration-blind.3] Finding ids are unique and every cited file exists in the reviewed tree.
 - [audit-migration-blind.4] The package tree is unchanged since review-prep (tree sha in INPUT matches HEAD), so the review judged the code that gated green.
+
 ---
 
 ## Reservations

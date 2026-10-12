@@ -30,10 +30,11 @@ The blind-review input is assembled: the migration diff and the one-word brief, 
 Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/guard.py` (`python3 docs/plan/stealth-browser/scripts/guard.py review-prep --only review-prep.N`). None may be deferred. Tests written by this plan cite ticket `8468f7b1` and these ids ([inv:tests-cite]).
 
 - [review-prep.1] review/migration.diff exists, is non-empty and covers entrypoint/stealth-browser + tsconfig.base.json since the scaffold start_ref.
-
 - [review-prep.2] review/INPUT.sha256 equals sha256(migration.diff) and the diff contains no docs/plan or pnpm-lock paths (reviewer sees the migration only).
 - [review-prep.3] review/BRIEF.txt is exactly the single word `Review` (blind review: no context, rationale or review points).
 - [review-prep.4] Only owned paths changed by [psm:review-prep] commits; gates-first evidence tree matches the diffed tree.
+- [review-prep.5] Blind-review gate ([inv:no-features-removed]): every failsafe-inventory row is still pinned (pin file exists, cites its row id, contains the named test) before the review diff is cut; the review brief itself stays the single word `Review`.
+
 ---
 
 ## Reservations

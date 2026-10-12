@@ -17,7 +17,7 @@ Backlog plan item: `8468f7b1-8adc-4237-9986-21ea1e27c537`.
 | C7 | query activity and page context |
 | C8 | project verbs onto MCP and CLI hosts |
 | C9 | trace every verb under the `adhd` namespace |
-| C10 | run a real-Chrome e2e across all surfaces in one run |
+| C10 | simulate user scenarios across all surfaces in the unit lane (in-memory CDP server, filesystem and process table) |
 | C11 | verify ownership, port parity and gates mechanically |
 | C12 | publish or link the package for agent-search |
 
@@ -43,7 +43,7 @@ Backlog plan item: `8468f7b1-8adc-4237-9986-21ea1e27c537`.
 | G3 | The runner's three parser dependencies are not in the workspace dependency set |
 | G4 | The runner uses `.ts` import specifiers; the workspace needs `.js` ESM specifiers |
 | G5 | No tracing configuration for this package (C9) |
-| G6 | No e2e covering all three surfaces in one run (C10) |
+| G6 | No use-case simulation covering all three surfaces (C10) |
 | G7 | Nested `@adhd/cdp-connection` package and committed `.js` twins in the source; only one new package is approved |
 | G8 | Runner uses `node:sqlite`, which needs Node >= 22.5 and may not be declared in sibling `engines` |
 
@@ -58,7 +58,7 @@ Ladder: reuse-as-is, extend/wrap, buy/import, build, prototype-first, build-with
 | G3 | buy/import (`node-html-parser`, `xpath`, `@xmldom/xmldom`) | commodity parsers already used by the source; human approval gate `hb-deps-approval` |
 | G4 | extend/wrap (mechanical specifier rewrite, verified by `rel_imports_resolve`) | zero behavior change |
 | G5 | reuse-as-is (`makeTracingPlugin({serviceName:'adhd'})`, pattern of `backlog/src/tracing.ts`) | never the apigen-namespaced singleton |
-| G6 | build (one `surfaces.e2e.test.ts`, single beforeAll/afterAll) | no sibling covers library, CLI and MCP in one run |
+| G6 | build (`cdp-test-harness` plus `src/test/use-cases/*.spec.ts`) | no sibling simulates library, CLI and MCP scenarios in the unit lane |
 | G7 | extend/wrap (collapse into `src/lib/cdp/`, drop `.js` twins) | one-package approval |
 | G8 | reuse-as-is (declare `engines.node >= 22.5`; guard `entrypoint-parity.7`) | `@types/node` 25.9.5 already includes `node:sqlite`; Node v24.11.1 present |
 | C12 | prototype-first for the `link:` consumption path, publish decided by the dispatcher | release is out of the plan's authority |
@@ -74,7 +74,7 @@ Resolve-at-dispatch: exact option types are read from the ported source, not res
 | Tracing | `src/tracing.ts` exports one `tracingPlugin = makeTracingPlugin({serviceName:'adhd'})`, imported by every host; sink records are `adhd.<op>.start|finish|error`. |
 | Hosts | `bin/cli.ts` and `bin/mcp.ts` compiled by `build-bin` into `dist/bin/{cli,mcp}.js`; MCP is stdio JSON-RPC. Tool names are snake-cased verb names (U2 in `demo/UNRESOLVED.md`). |
 | `guard.py` | `python3 docs/plan/stealth-browser/scripts/guard.py <slug> [--only slug.N]`; exit status is the failed-check count; `--list` dumps the criteria as JSON. |
-| nx | `./node_modules/.bin/nx run stealth-browser:{lint,typecheck,typecheck-spec,build,build-bin,test,e2e,verify-dist-load}`; never raw `tsc`. |
+| nx | `./node_modules/.bin/nx run stealth-browser:{lint,typecheck,typecheck-spec,build,build-bin,test,verify-dist-load}`; never raw `tsc`. |
 
 ## 6. Dependency graph
 
@@ -88,4 +88,14 @@ C1 -> {C2-C7 migration, C8} ; C8 -> C9 ; C9 -> C10 ; C2-C7 -> C10 ; C10 and C11 
 | Guard and manifests | `python3 scripts/check-disjoint.py` exits 0 (30 states, 54 concurrent pairs, 0 overlaps) | 2026-10-12 |
 | Ported runner | `port-manifest.json` entries resolve against the source tree | 2026-10-12 (47 entries) |
 | Tracing | `tracing-namespace-proof.4` mutation | runs at execution time |
-| Chrome | `test -x "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"` (`hb-chrome-binary`) | runs at execution time |
+| Chrome | not required: no live-Chrome lane exists (user decision) | n/a |
+
+## 8. Amendment: recording sink and lifecycle dependencies (EVALUATIONS.md)
+
+| Capability | Provider | Verdict | Interface contract |
+|---|---|---|---|
+| persist captured exchanges | `@adhd/sox-store-adapter ^0.13.3` (ESM-only, owned) | reuse-as-is behind `StoreRecordingSink` | `createStoreAdapter({ dbPath })`; the sink uses `exec`, `executeRun`, `transaction(fn, { mode: 'immediate' })` through `Pick<StoreAdapter, ...>`; reached only through a lazy `await import()` in `openStoreRecordingSink`; top level has `import type` only (ADR-0003, Node 22.5-22.11 have no unflagged `require(esm)`) |
+| single-instance out-of-process reaper | `@adhd/sox-service-proxy ^0.5.0` (CommonJS, owned) | reuse-as-is behind `ServiceProxyReaperLauncher` | `ensureBackend({ socketPath, singletonKey, command, args, stderrLogPath })` with dispositions spawned, already-live, adopted-after-wait, failed; imported statically from `proxy-launcher.ts` only |
+| externalize both from the bundle | `tools/vite-plugins/externalize.mjs` `externalizeRealDeps(__dirname)` | reuse-as-is | used as `entrypoint/backlog/vite.config.ts` does; installed by `port-fixes` (port-fixes.12) |
+
+valid-as-of 2026-10-12 (module formats and exports read from the installed packages in the evaluations).

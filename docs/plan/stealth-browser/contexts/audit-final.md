@@ -30,20 +30,22 @@ Final audit: every Definition-of-Done clause is proven against the real tree, an
 Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/guard.py` (`python3 docs/plan/stealth-browser/scripts/guard.py audit-final --only audit-final.N`). None may be deferred. Tests written by this plan cite ticket `8468f7b1` and these ids ([inv:tests-cite]).
 
 - [audit-final.1] [dod.1] structural: exactly one new package exists, entrypoint/stealth-browser, named @adhd/stealth-browser, built by the generator (scaffold evidence) and parity-clean.
-
-- [audit-final.2] [dod.2] behavioral: `nx run stealth-browser:verify-dist-load` and the e2e library/CLI/MCP surfaces pass on the final tree (gates-rerun evidence all green, tree == HEAD tree).
+- [audit-final.2] [dod.2] behavioral: `nx run stealth-browser:verify-dist-load` and the use-case unit suites (library, CLI and MCP scenarios against the in-process fake CDP server) pass on the final tree, and the agent-search cutover proof holds (gates-rerun evidence all green, tree == HEAD tree).
 - [audit-final.3] [dod.3] structural: tracing namespace is `adhd` - singleton never imported, serviceName configured once, every mount carries the plugin (tracing-plugin checks 1,2,3,5 re-run).
 - [audit-final.4] [ref:runner-port] behavior-preserving port conforms to agent-browser/adhd (exports, similarity, tokens)
-- [audit-final.5] [dod.5] structural: the live agent-search source tree is byte-identical to the scaffold-time baseline (cutover is the only state allowed to change it, and it runs after this audit).
+- [audit-final.5] [dod.5] structural: the agent-search source tree was byte-identical to the scaffold-time baseline up to the first cutover commit, and only [psm:agent-search-cutover] commits touched agent-browser/adhd afterwards.
 - [audit-final.6] [dod.6] structural: one blind review round, every finding resolved by one implementer, gates re-run green after resolution.
 - [audit-final.7] [dod.7] structural: docs marketing run PASS, README rewrite receipts-backed (docs-marketing-run and readme-rewrite checks re-run).
 - [audit-final.8] [dod.8] structural: the working tree under entrypoint/stealth-browser and docs/plan/stealth-browser is clean (everything committed) and the main checkout node_modules is untouched.
-- [audit-final.9] Every spec/e2e file cites ticket 8468f7b1 and a valid criterion id (final re-run of the citation rule).
+- [audit-final.10] Every spec file cites ticket 8468f7b1 and a valid criterion id (final re-run of the citation rule).
+- [audit-final.11] Script-only audit (no reviewer agent): final-review.md records `AUDITOR: audit_dod.py (script-only)` and the verbatim `[dod.1]`..`[dod.8]` PASS lines printed by `audit_dod.py --phase final`, with `EXIT: 0`.
 - [audit-final.ref-backlog-tracing] [ref:backlog-tracing] tracing.ts / usePlugins / no-singleton conformance with entrypoint/backlog/src/tracing.ts
 - [audit-final.ref-entrypoint-structure] [ref:entrypoint-structure] top-level files, tags, package metadata conform to dispatch-cli/backlog/apigen-cli
 - [audit-final.ref-apigen-host] [ref:apigen-host] server.ts / cli.ts / bin hosts mirror entrypoint/backlog's apigen host shape
 - [audit-final.ref-runner-port] [ref:runner-port] behavior-preserving port conforms to agent-browser/adhd (exports, similarity, tokens)
-- [audit-final.10] Every spec/e2e file cites ticket 8468f7b1 and a valid criterion id (final re-run of the citation rule).
+- [audit-final.9] (PA10.3, re-checked after the docs states) `npm pack --dry-run` against the final dist output still lists README.md, CHANGELOG.md, bin/cli.js, bin/mcp.js, index.js and index.d.ts, and the packed README is the rewritten one (it links docs/RESPONSIBLE-USE.md).
+- [audit-final.12] [inv:no-features-removed] final re-check: every failsafe-inventory row is still pinned on the final tree and the inventory file is unchanged since failsafe-inventory (rows were never deleted: row count >= the count recorded at inventory time in evidence/failsafe-inventory.json `row_count`).
+
 ---
 
 ## Reservations
