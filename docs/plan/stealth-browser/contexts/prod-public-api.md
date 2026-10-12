@@ -35,6 +35,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 - [prod-public-api.1] (PA3.1) A public-API export snapshot spec under src/test/unit/public-api/ lists every root export of src/index.ts (and the six verbs) and fails on drift (toEqual / snapshot of the sorted export names).
 
 - [prod-public-api.2] (PA3.2) src/index.ts exports no Google- or Search-named symbol and does not re-export ./legacy; src/legacy.ts exports every such old-barrel name (the union of both files still covers the old barrel).
+- [prod-public-api.3] (PA3.3, source level) src/legacy.ts exports SearchResultSource and src/index.ts exports the neutral alias PageSource; capture/dom.ts stays present (dod.4).
 ---
 
 ## Reservations
