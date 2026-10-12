@@ -28,6 +28,13 @@
  *  - V5  every body is recorded in order, rejected ones included (`fake.requests`, raw string + parsed), and a body
  *        that is not a well-formed Messages request (not JSON, no `messages`, first turn not `user`, ...) is rejected.
  *
+ * Scope notes for consumers: (1) the thinking registry (what V4a/V4b compare against) belongs to ONE fake instance, so a
+ * test that spans several tasks / a store reopen must keep using the same fake or the replayed thinking reads as forged;
+ * (2) real API rules the fake does NOT enforce: non-empty text blocks, `tool_result` blocks first within a user turn,
+ * tool-name membership in `tools`, cache_control limits; a 200 here is therefore evidence about V1-V5 only;
+ * (3) fake-usage problems (unknown endpoint, non-streaming request, exhausted script) answer 404 / 501 / 500 and are
+ * listed in `fake.faults`, never in `rejections()`: assert `faults` is empty.
+ *
  * Like the real API, consecutive same-role messages are merged before V1-V4 are applied (the provider emits one
  * user message per tool result).
  *
@@ -139,8 +146,11 @@ export interface IFakeContext {
 export type FakeScript = readonly FakeStep[] | ((ctx: IFakeContext) => FakeStep);
 
 export interface IContractFakeOptions {
-  /** Models an intentional degrade / post-compaction history: V4b off (V4a stays on). */
-  allowThinkingOmission?: boolean;
+  /**
+   * Models an intentional degrade / post-compaction history: V4b off (V4a stays on). A function decides per request
+   * (`index` counts every request, as `fake.requests`), so a test can be strict before a degrade and lenient after it.
+   */
+  allowThinkingOmission?: boolean | ((ctx: { index: number }) => boolean);
   /** Builds the server result the fake returns for a server tool use. Default: {@link defaultServerResult}. */
   serverResult?: (use: { id: string; name: string; input: Record<string, unknown> }) => ISseServerResultBlock;
   model?: string;
@@ -506,7 +516,11 @@ export function makeContractFake(script: FakeScript, options: IContractFakeOptio
       return finish(errorResponse(400, "invalid_request_error", "V5: request body is not valid JSON"));
     }
 
-    const validation = validateMessagesRequest(parsed, { emittedTurns, allowThinkingOmission: options.allowThinkingOmission === true });
+    const omission = options.allowThinkingOmission;
+    const validation = validateMessagesRequest(parsed, {
+      emittedTurns,
+      allowThinkingOmission: typeof omission === "function" ? omission({ index }) : omission === true,
+    });
     record.violations.push(...validation.violations);
     if (validation.violations.length > 0) {
       const first = validation.violations[0]!;

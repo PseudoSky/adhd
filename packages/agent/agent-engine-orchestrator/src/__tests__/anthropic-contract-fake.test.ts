@@ -286,6 +286,13 @@ describe("R9-hist AC12 V4: thinking blocks are passed back unmodified", () => {
     await expectRejected(fake, body(user("go"), assistant(thinking("sig-A-tampered"), text("plan"), toolUse("t1")), user(toolResult("t1"))), "V4a");
   });
 
+  it("R9-hist AC12 V4b control: allowThinkingOmission may be a per-request function: strict before a degrade, lenient after it", async () => {
+    const { fake } = await firstTurn({ allowThinkingOmission: ({ index }) => index >= 2 });
+    const stripped = body(user("go"), assistant(text("plan"), toolUse("t1")), user(toolResult("t1")));
+    await expectRejected(fake, stripped, "V4b"); // request 1: still strict
+    await expectAccepted(fake, stripped); // request 2: omission now allowed
+  });
+
   it("R9-hist AC12 V4b control: a compacted-away turn imposes nothing (only turns present in the request are checked)", async () => {
     const { fake } = await firstTurn();
     await expectAccepted(fake, body(user("summary of earlier work"), assistant(text("understood")), user("continue")));
@@ -469,7 +476,7 @@ describe("R9-hist AC8: scripting (steps, functions, injected errors, stop reason
   });
 });
 
-describe("visibleHistory + normalizeMessages", () => {
+describe("R9-hist AC12 helpers: visibleHistory + normalizeMessages", () => {
   it("merges consecutive same-role messages and expands string content", () => {
     const merged = normalizeMessages([user("a"), user("b"), assistant(text("c")), assistant(text("d"))]);
     expect(merged.map(m => m.role)).toEqual(["user", "assistant"]);
