@@ -29,7 +29,7 @@ Product reviews this finished plan (README, SCOPE.md, USE_CASES.md, demo/DEMO.md
 
 Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/guard.py` (`python3 docs/plan/stealth-browser/scripts/guard.py productization-hold --only productization-hold.N`). None may be deferred. Tests written by this plan cite ticket `8468f7b1` and these ids ([inv:tests-cite]).
 
-_No criteria yet._
+- [productization-hold.1] PRODUCT-REVIEW.md exists with the line `STATUS: folded` (product's tasks are folded into the DAG).
 
 ---
 

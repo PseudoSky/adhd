@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "criteria": [
+    {
+      "id": "productization-hold.1",
+      "phase": "productization",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py productization-hold --only productization-hold.1",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    }
+  ]
+}
