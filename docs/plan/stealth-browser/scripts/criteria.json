@@ -459,6 +459,15 @@
       "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py mig-docs --only mig-docs.3",
       "expect": "exit0",
       "cwd": "repo-root"
+    },
+    {
+      "id": "surface-api.1",
+      "phase": "surface",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py surface-api --only surface-api.1",
+      "expect": "exit0",
+      "cwd": "repo-root"
     }
   ]
 }
