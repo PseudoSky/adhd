@@ -936,6 +936,15 @@
       "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py gates-first --only gates-first.7",
       "expect": "exit0",
       "cwd": "repo-root"
+    },
+    {
+      "id": "review-prep.1",
+      "phase": "review",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py review-prep --only review-prep.1",
+      "expect": "exit0",
+      "cwd": "repo-root"
     }
   ]
 }
