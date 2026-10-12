@@ -38,6 +38,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 - [surface-api.6] Only owned paths changed by [psm:surface-api] commits.
 - [surface-api.7] (PA1.1) The launchChrome verb's input type declares only `port` and `userDataDir`; chromePath and extraArgs stay library-only (never on an apigen-visible verb input).
 - [surface-api.8] (product claims, resolved with evidence) evidence/product-claims.json records, with file:line citations that resolve and agree with the source: `launchChromeOptions` (library option names; `verbInputExposesChromePathOrExtraArgs` must be false) and `getPageContextCookieValues` (`returnsValues` boolean; when true `hostRedactionRequired` must be true).
+- [surface-api.9] (PA4.1) Each of the six verbs in src/api.ts has a TSDoc block whose description is at least 40 characters (the hosts surface it as the tool description).
 ---
 
 ## Reservations
