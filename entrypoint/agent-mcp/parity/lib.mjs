@@ -62,6 +62,18 @@ export function splitToolName(name) {
   return i === -1 ? { server: null, tool: n } : { server: n.slice(0, i), tool: n.slice(i + 2) };
 }
 export const isDispatchName = (name) => { const s = splitToolName(name); return (s.server == null && /^(Agent|Task)$/.test(s.tool)) || (s.server != null && /^agent[-_]mcp$/.test(s.server) && /^(agent|task)$/.test(s.tool)); };
+/**
+ * R5-scorefix AC3: text of a server-executed tool result block's `content` (web_fetch_result: content.source.data; web_search_result[]: title/url/snippet lines;
+ * *_tool_result_error / *_tool_error: `ERROR <error_code>`). Strings and text-block arrays go through blockText. Returns '' when nothing readable is present.
+ */
+export function serverResultText(c) {
+  if (c == null) return '';
+  if (typeof c === 'string' || Array.isArray(c) && !c.some((b) => b && /^web_search_result$/.test(b.type))) return blockText(c);
+  if (Array.isArray(c)) return c.map((b) => [b.title, b.url, b.page_age].filter(Boolean).join(' | ')).join('\n');
+  if (/_error$/.test(String(c.type))) return `ERROR ${c.error_code ?? c.type}`;
+  const doc = c.content; const data = doc?.source?.data ?? (typeof doc === 'string' ? doc : blockText(doc));
+  return [c.url ? `url: ${c.url}` : '', data].filter(Boolean).join('\n');
+}
 export const blockText = (c) => typeof c === 'string' ? c : Array.isArray(c) ? c.map((b) => (b && typeof b.text === 'string') ? b.text : '').join('') : '';
 
 // ---------------------------------------------------------------------------------------------------
@@ -165,13 +177,14 @@ export function allCallsFromCliStream(p) {
 // Anthropic SSE (arm C http.response bodies)
 // ---------------------------------------------------------------------------------------------------
 export function parseSse(text) {
-  const o = { id: null, model: null, usage: {}, stop: null, texts: [], toolUses: [], thinking: false, outputTokens: null };
+  const o = { id: null, model: null, usage: {}, stop: null, texts: [], toolUses: [], thinking: false, outputTokens: null, serverResults: new Map() };
   const blocks = new Map();
   for (const line of String(text || '').split('\n')) {
     if (!line.startsWith('data:')) continue;
     let d; try { d = JSON.parse(line.slice(5).trim()); } catch { continue; }
     if (d.type === 'message_start') { o.id = d.message.id; o.model = d.message.model; o.usage = { ...d.message.usage }; }
-    else if (d.type === 'content_block_start') { blocks.set(d.index, { type: d.content_block.type, name: d.content_block.name, id: d.content_block.id, json: '', text: '' }); if (d.content_block.type === 'thinking') o.thinking = true; }
+    else if (d.type === 'content_block_start') { blocks.set(d.index, { type: d.content_block.type, name: d.content_block.name, id: d.content_block.id, json: '', text: '' }); if (d.content_block.type === 'thinking') o.thinking = true;
+      if (/_tool_result$/.test(String(d.content_block.type)) && d.content_block.tool_use_id) o.serverResults.set(d.content_block.tool_use_id, { isError: /_tool_error$/.test(String(d.content_block.content?.type)), text: serverResultText(d.content_block.content) }); }
     else if (d.type === 'content_block_delta') {
       const b = blocks.get(d.index); if (!b) continue;
       if (d.delta.type === 'text_delta') b.text += d.delta.text; else if (d.delta.type === 'input_json_delta') b.json += d.delta.partial_json;
@@ -251,7 +264,9 @@ export function callsFromHttpTurns(turns) {
   for (const t of turns) {
     const msgs = t.body?.messages || [];
     for (const m of msgs) if (Array.isArray(m.content)) for (const b of m.content) if (b.type === 'tool_result') results.set(b.tool_use_id, { isError: !!b.is_error, text: blockText(b.content) });
+      else if (/_tool_result$/.test(String(b.type)) && b.tool_use_id) results.set(b.tool_use_id, { isError: /_error$/.test(String(b.content?.type)), text: serverResultText(b.content) });   // R5-scorefix AC3: server-executed tool results round-trip in the assistant message
   }
+  for (const t of turns) for (const [id, r] of t.sse?.serverResults || []) if (!results.has(id)) results.set(id, r);
   for (const t of turns) for (const u of t.sse?.toolUses || []) { const r = results.get(u.id); calls.push({ id: u.id, name: u.name, input: u.input, isError: r ? r.isError : null, resultText: r ? r.text : null, server: u.server }); }
   return calls;
 }
@@ -470,4 +485,22 @@ export function overlapMs(rows) {
   const s = rows.map((r) => Date.parse(r.createdAt)), e = rows.map((r) => Date.parse(r.completedAt));
   if (rows.length < 2 || s.concat(e).some(Number.isNaN)) return null;
   return Math.min(...e) - Math.max(...s);
+}
+/** Task rows created within this many ms of each other belong to ONE dispatch group (a single tasks_batch call creates its rows within a few ms). */
+export const DISPATCH_GROUP_WINDOW_MS = 2000;
+/**
+ * R5-scorefix AC1: the overlap of the INTENDED parallel pair. Depth-1 rows are clustered into dispatch groups (single-link on createdAt, gap <= windowMs: one
+ * `tasks_batch` call creates its rows ~1 ms apart, a lone `task` call is a group of one). The intended pair is the FIRST group of two or more rows, and the
+ * overlap is the N-way min(completed) - max(created) of THAT group only, so extra model-chosen workers dispatched before or after it cannot turn a real
+ * overlap into a fail. When no group has two or more rows (every worker was dispatched on its own) the answer is the overlap of all rows, which is what a
+ * background-task run (separate turns, overlapping rows) needs and is negative for a truly sequential run.
+ * Returns { overlapMs: n|null, group: string[] (row ids of the scored rows), basis: 'first-batch-group' | 'all-rows' }.
+ */
+export function intendedPairOverlap(rows, windowMs = DISPATCH_GROUP_WINDOW_MS) {
+  const withT = rows.map((r, i) => ({ r, i, t: Date.parse(r.createdAt) })).filter((x) => !Number.isNaN(x.t)).sort((a, b) => a.t - b.t || a.i - b.i);
+  const groups = []; let prev = null;
+  for (const x of withT) { if (prev != null && x.t - prev <= windowMs) groups[groups.length - 1].push(x.r); else groups.push([x.r]); prev = x.t; }
+  const g = groups.find((x) => x.length >= 2);
+  const use = g ?? rows;
+  return { overlapMs: overlapMs(use.map((r) => ({ createdAt: r.createdAt, completedAt: r.completedAt }))), group: use.map((r) => r.id ?? null), basis: g ? 'first-batch-group' : 'all-rows' };
 }

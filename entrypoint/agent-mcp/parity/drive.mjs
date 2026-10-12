@@ -255,7 +255,7 @@ async function startServer(ctx) {
   if (!fs.existsSync(entry)) throw new Error(`built agent-mcp missing: ${entry} (run the nx build in the plan worktree)`);
   const store = path.join(ctx.runDir, 'store'); fs.mkdirSync(store, { recursive: true });
   const logs = path.join(ctx.runDir, 'logs');
-  // pre-write the per-run srt policy so the allowlisted curl can reach example.com (operator-authored entries are preserved by provisionSrtPolicy)
+  // pre-write the per-run srt policy with NO instrument-added domain (R3: SRT_EXTRA_DOMAINS is empty, agent-mcp's own defaults apply; operator-authored entries are preserved by provisionSrtPolicy)
   writeJson(path.join(ctx.runDir, 'srt-policy.json'), { network: { allowedDomains: [...SRT_EXTRA_DOMAINS], deniedDomains: [] } });
   const env = serverEnv(ctx, store, logs);
   const stderrFile = path.join(ctx.runDir, 'server.stderr.txt'); let stderr = '';
@@ -601,8 +601,10 @@ function analyzeBC(ctx, raw) {
   metrics.allCalls = trimCalls(allCalls);
   const p1 = metrics.phases[0]; const p2 = metrics.phases[1];
   const depth1 = (p1?.children || []).filter((c) => c.depth === 1), depth2 = (p1?.children || []).filter((c) => c.depth >= 2);
-  const ov = L.overlapMs(depth1.map((c) => ({ createdAt: c.createdAt, completedAt: c.completedAt })));
-  obs.dispatch = { p1Workers: depth1.length, p1Grandchildren: depth2.length, p2Workers: (p2?.children || []).filter((c) => c.depth === 1).length, p1Parallel: first ? { sameTurn: first.parallel.sameTurn, overlapMs: ov } : null };
+  // R5-scorefix AC1: score the INTENDED parallel pair (the first dispatch group of 2+ child rows), not an N-way intersection over every depth-1 row
+  const pair = L.intendedPairOverlap(depth1.map((c) => ({ id: c.id, createdAt: c.createdAt, completedAt: c.completedAt })));
+  const ov = pair.overlapMs;
+  obs.dispatch = { p1Workers: depth1.length, p1Grandchildren: depth2.length, p2Workers: (p2?.children || []).filter((c) => c.depth === 1).length, p1Parallel: first ? { sameTurn: first.parallel.sameTurn, overlapMs: ov, pairBasis: pair.basis, pairRows: pair.group } : null };
   if (p1) obs.attr = { kind: 'tree', taskCount: p1.subtree.taskCount, directTotal: p1.subtree.directTokens, subtreeTotal: p1.subtree.subtreeTokens, rootTaskId: null, childRows: (p1.children || []).map((c) => ({ parentTaskId: c.parent, depth: c.depth })) };
   metrics.rateLimits = ph.filter(Boolean).flatMap((s) => s.rate).filter(Boolean);
   metrics.initTools = first?.tools ?? [];
@@ -755,13 +757,15 @@ export function repoDiff(spec, repoDir) {
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 }
 /** Transcript turns for the judge: per phase the prompt, the assistant's texts, every tool call (parent and worker) with its result, then the final reply. Text/call interleaving is not preserved by the capture. */
+/** R5-scorefix AC3: what the judge sees for a call's result: the captured text, `(empty result)` for a captured empty string, and `(result not captured)` when none was recorded (never blank). */
+export function resultForJudge(c) { return c.resultText == null ? '(result not captured)' : String(c.resultText) === '' ? '(empty result)' : String(c.resultText); }
 export function transcriptFor(record, prompts) {
   const ob = record.observation; const out = []; const all = record.metrics?.allCalls ?? [];
   for (const [i, ph] of [[1, ob.phase1], [2, ob.phase2]]) {
     out.push({ role: 'user', text: i === 1 ? prompts.phase1 : prompts.phase2 });
     for (const t of ph.assistantTexts ?? []) out.push({ role: 'assistant', text: t });
     const calls = all.some((c) => c.phase === i) ? all.filter((c) => c.phase === i) : (ph.calls ?? []);
-    for (const c of calls) out.push({ role: 'assistant', text: `${(c.depth ?? 0) > 0 ? '[worker] ' : ''}${JSON.stringify(c.input ?? {}).slice(0, 1500)}`, tool: c.name, result: c.resultText ?? '' });
+    for (const c of calls) out.push({ role: 'assistant', text: `${(c.depth ?? 0) > 0 ? '[worker] ' : ''}${JSON.stringify(c.input ?? {}).slice(0, 1500)}`, tool: c.name, result: resultForJudge(c) });
     out.push({ role: 'assistant', text: ph.replyText ?? '' });
   }
   return out;
@@ -780,10 +784,12 @@ export async function judgeRun({ ctx, record, aGenuine, dry, client, judgeDir })
   if (!JG.judgeEligible({ aGenuine, armGenuine: genuine })) { record.quality = { status: 'n/a', reason: aGenuine ? 'arm not a genuine success (no judge call)' : 'arm A not a genuine success (no judge call)' }; return record.quality; }
   const ledgerDir = path.dirname(ctx.ledgerPath); const round = path.basename(ctx.ledgerPath, '.json');
   let capReason = ''; if (!dry) { const led = LG.readLedger(round, ledgerDir); const used = led.judgeCalls.length; const cap = LG.effectiveJudgeCap(led); if (used >= cap) { record.quality = { status: 'n/a', reason: `judge-call cap ${used}/${cap} reached: no paid call made` }; return record.quality; } if (used >= LG.JUDGE_CAP) capReason = String(led.judgeCapReason); }
+  let briefFormat;
   try {
     const { brief, briefSha, label } = JG.buildBrief({ prompts: ctx.prompts, ticketText: F.ticketText(ctx.spec), diff: repoDiff(ctx.spec, ctx.repoDir), transcript: transcriptFor(record, ctx.prompts) });
+    briefFormat = JG.BRIEF_FORMAT;
     const res = await JG.runJudge({ client, arm, brief, briefSha, outDir: judgeDir, onCall: dry ? undefined : (c) => LG.recordJudgeCall(round, c, { dir: ledgerDir, reason: capReason }) });
-    record.quality = res.ok ? { status: 'scored', mean: QL.qualityMean(res.scores), scores: res.scores, briefSha, modelId: JG.JUDGE_MODEL, label, file: path.join(judgeDir, `${arm}.json`) } : { status: 'judge-error', code: res.code, briefSha, file: path.join(judgeDir, `${arm}.json`) };
+    record.quality = res.ok ? { status: 'scored', mean: QL.qualityMean(res.scores), scores: res.scores, briefSha, briefFormat, modelId: JG.JUDGE_MODEL, label, file: path.join(judgeDir, `${arm}.json`) } : { status: 'judge-error', code: res.code, briefSha, briefFormat, file: path.join(judgeDir, `${arm}.json`) };
   } catch (e) { record.quality = { status: 'judge-failed', error: String(e?.message ?? e).slice(0, 300) }; }
   return record.quality;
 }
@@ -799,6 +805,9 @@ export function seedAGenuine({ record, ledgerPath, dry = false }) {
 }
 /** Judge directory of a run: rep 1 keeps `judge/` (what verdict/grid read); a retry repetition writes `judge-rep<N>/` so earlier records are never overwritten. */
 export const judgeDirName = (rep) => (rep > 1 ? `judge-rep${rep}` : 'judge');
+
+/** R5-scorefix AC2: whole seconds from a prior repetition's finish (ms epoch or NaN/undefined) to `nowMs`; null when the finish time is unknown. */
+export function gapSecondsSince(finishedMs, nowMs = Date.now()) { return Number.isFinite(finishedMs) ? Math.round((nowMs - finishedMs) / 1000) : null; }
 
 async function runPlan(opts, dry) {
   const plan = buildPlan(opts);
@@ -817,7 +826,11 @@ async function runPlan(opts, dry) {
     const done = path.join(ctx.runDir, 'record.json');
     if (isFinishedRecord(done)) { const rec = readJson(done); records.push(rec); state.lastFinished[def.arm] = Date.parse(rec.finishedAt); if (def.arm === 'A') state.aGenuine = seedAGenuine({ record: rec, ledgerPath: ctx.ledgerPath, dry }); console.log(`skip ${ctx.spec.runId}: record exists (idempotent resume)`); continue; }
     if (i > 0) await sleep(dry ? 300 : GAP_MS);
-    if (def.rep === 2 && state.lastFinished[def.arm]) ctx.gapSeconds = Math.round((Date.now() - state.lastFinished[def.arm]) / 1000);
+    if (def.rep === 2) {   // R5-scorefix AC2: the gap to rep 1 comes from the in-pass state, else from the rep-1 record.json on disk (a retry pass runs rep 2 alone)
+      let fin = state.lastFinished[def.arm];
+      if (!fin) { const p1 = path.join(makeCtx({ ...opts }, plan, { arm: def.arm, rep: 1 }, dry).runDir, 'record.json'); if (isFinishedRecord(p1)) fin = Date.parse(readJson(p1).finishedAt); }
+      ctx.gapSeconds = gapSecondsSince(fin);
+    }
     const { record, aborted } = await runOne(ctx, state);
     records.push(record); state.lastFinished[def.arm] = Date.parse(record.finishedAt || nowIso());
     annotateDetectors(record);
@@ -871,6 +884,7 @@ export function checkOracle(log = console.log) {
     ['q_rate probes the total, not the carrier rate', 'const want = legacy ? e.rate : e.carrierRate;', 'const want = e.rate;'],
     ['parallel verdict ignores sameTurn', 'if (!p.sameTurn)', 'if (false)'],
     ['parallel verdict ignores row overlap', 'if (p.overlapMs != null) return', 'if (false) return'],
+    ['R5-scorefix AC2: c1_cache ignores the TTL (cold-by-schedule never n/a)', 'c.gapSeconds > CACHE_TTL_SECONDS', 'false'],
     ['x1 accepts zero workers', '(o.dispatch?.p1Workers ?? 0) >= 2', '(o.dispatch?.p1Workers ?? 0) >= 0'],
     ['changelog accepts ticket anywhere', 'if (!u.includes(e.ticketId))', 'if (!c.includes(e.ticketId))'],
     ['format ignores text after the JSON', 'if (after) return', 'if (false) return'],
@@ -937,7 +951,7 @@ export function planText(opts) {
   out.push(`  B  ${THINKING_MECHANISM.B}`, `       cited at ${cite(/^export function serverEnv/)} (spreads THINKING_OFF_ENV first) and packages/agent/agent-engine-orchestrator/src/providers/claudecli.ts:818-833 (buildSubprocessEnv copies process.env)`, `       resolved server env: ${Object.keys(THINKING_OFF_ENV).map((k) => `${k}=${bEnv[k]}`).join(' ')}`, `       provider: ${JSON.stringify(providerFor(B, 'B'))}`);
   const cProv = providerFor(C, 'C');
   out.push(`  C  ${THINKING_MECHANISM.C}`, `       cited at ${cite(/^function providerFor/)} (provider keys: ${Object.keys(cProv).join(',')}; no thinking key) and anthropic.ts (rg "thinking": no match)`, `       provider: ${JSON.stringify(cProv)}`);
-  out.push('', 'SHELL / WEB (B and C share one allowlist; A has unrestricted Bash)', `  B/C allowCommands: ${SHELL_ALLOW.join(',')}   (curl added in round 4; cited ${cite(/^export const SHELL_ALLOW/)})`, `  B/C srt network allowlist extension (per-run srt-policy.json, merged by provisionSrtPolicy): ${SRT_EXTRA_DOMAINS.join(',')}   (cited ${cite(/^export const SRT_EXTRA_DOMAINS/)})`, `  A tools: ${A_TOOLS}`, '  NOTE: arm C additionally exposes Anthropic server-side web tools (web_fetch/web_search) by default; B has curl only, A has Bash curl only. The web-fetch field (w1_web) is scored with one rule for every arm that can fetch; this tool-surface asymmetry is recorded, not equalised.');
+  out.push('', 'SHELL / WEB (B and C share one allowlist; A has unrestricted Bash)', `  B/C allowCommands: ${SHELL_ALLOW.join(',')}   (no curl/wget since R3; cited ${cite(/^export const SHELL_ALLOW/)})`, `  B/C srt network allowlist extension (per-run srt-policy.json, merged by provisionSrtPolicy): ${SRT_EXTRA_DOMAINS.join(',')}   (cited ${cite(/^export const SRT_EXTRA_DOMAINS/)})`, `  A tools: ${A_TOOLS}`, '  NOTE: arm C additionally exposes Anthropic server-side web tools (web_fetch/web_search) by default; B has no web tool as shipped, A has the native WebFetch/WebSearch. The web-fetch field (w1_web) is scored with one rule for every arm that can fetch; this tool-surface asymmetry is recorded, not equalised.');
   out.push('', 'PACING', `  before EVERY live run: claude -p /usage (0 model calls asserted); refuse at 5h session >= ${L.PACING.fiveHourMax * 100}% (no 7-day check), any non-allowed rate-limit status, or an unreadable reading (fail closed)`);
   const wtSha = spawnSync('git', ['-C', opts.wt, 'rev-parse', '--short', 'HEAD'], { encoding: 'utf8' }).stdout?.trim() || '(not a git checkout)';
   const dist = path.join(opts.wt, 'entrypoint/agent-mcp/dist/src/index.js'); const srcDir = path.join(opts.wt, 'entrypoint/agent-mcp/src');
@@ -1203,7 +1217,7 @@ export async function selfCheck({ log = console.log, opts = parseArgs([]) } = {}
     const pu = L.parseUsageOutput(usageSample); chk('/usage parser reads session/week and 0 model calls from a sample payload', pu.session_pct === 42 && pu.week_pct === 9 && pu.model_calls === 0);
     chk('runOne calls the gate before every live run (static)', /const gate = gatePacing\(usageReading, state\.rateLimitsSeen\)/.test(src));
 
-    // ============ plan, task set, curl ============
+    // ============ plan, task set, web surface ============
     log('--- plan / task set / shell ---');
     const p1 = buildPlan(opts, {}), p1b = buildPlan({ ...opts }, {});
     chk('plan: 3 runs, one per arm, arm A first, deterministic', p1.length === 3 && p1[0].arm === 'A' && ['A', 'B', 'C'].every((a) => p1.filter((x) => x.arm === a).length === 1) && JSON.stringify(p1) === JSON.stringify(p1b));
@@ -1266,19 +1280,20 @@ async function runLiveGates(opts) {
   });
 }
 /** One record per arm letter for repetition `rep`: arm A is always the canonical A1; B and C are the run of that repetition (rep 1 = the original round, N = the owner-directed retry). */
-function loadRoundRecords(round, rep = 1) {
-  const dir = path.join(tmpRoot(round), 'live/out/runs'); const by = {};
+export function loadRoundRecords(round, rep = 1, root = tmpRoot(round)) {
+  const dir = path.join(root, 'live/out/runs'); const by = {};
   try { for (const d of fs.readdirSync(dir).sort()) { try { const r = readJson(path.join(dir, d, 'record.json')); const arm = String(r.arm ?? r.runId ?? d)[0]; const n = Number(r.rep ?? String(r.runId ?? d).slice(1)); if (arm === 'A' ? n === 1 : n === rep) by[arm] = r; } catch { /* skip */ } } } catch { /* none */ }
   return by;
 }
 /** `verdict --round` / `grid --round`: read-only over the round's records (and judge scores when present). */
-function reportMode(opts) {
-  const recs = loadRoundRecords(opts.round, opts.rep); const Q = (arm) => { try { return QL.qualityMean(readJson(path.join(tmpRoot(opts.round), judgeDirName(arm === 'A' ? 1 : opts.rep), `${arm}.json`)).scores); } catch { return null; } };
+function reportMode(opts) { console.log(renderReport(tmpRoot(opts.round), opts.rep, opts.mode, opts.round)); return 0; }
+/** The verdict or grid text over the records under `root` (`<root>/live/out/runs`, judge scores in `<root>/judge[-repN]`). R5-scorefix AC5 renders an offline rescore dir through this same path. */
+export function renderReport(root, rep, mode, round = ROUND) {
+  const recs = loadRoundRecords(round, rep, root); const Q = (arm) => { try { return QL.qualityMean(readJson(path.join(root, judgeDirName(arm === 'A' ? 1 : rep), `${arm}.json`)).scores); } catch { return null; } };
   const sums = {}; for (const a of Object.keys(recs)) sums[a] = MT.summarize(recs[a], { genuine: GT.isGenuineSuccess(recs[a]), quality: Q(a) });
   const rv = MT.roundVerdict(sums);
   if (rv.verdict === 'VOID') for (const a of Object.keys(recs)) recs[a] = { ...recs[a], state: 'void' };
-  if (opts.mode === 'grid') console.log(GR.renderGrid(recs, rv)); else console.log(MT.formatVerdict(rv));
-  return 0;
+  return mode === 'grid' ? GR.renderGrid(recs, rv) : MT.formatVerdict(rv);
 }
 /**
  * `--reparse-judge --round Rn` (R5-judge AC3): ZERO model calls, ledger untouched. Re-parses every saved judge record that failed to parse with the current parser,

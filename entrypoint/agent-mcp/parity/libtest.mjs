@@ -12,7 +12,8 @@ import * as OLD from './golden/r4/oracle.r4.frozen.mjs';
 import * as DT from './detectors.mjs';
 import * as QLt from './quality.mjs';
 import * as JGt from './judge.mjs';
-import { buildPlan, ancestorLeaks, runHidden } from './drive.mjs';
+import { rescoreRecord } from './rescore.mjs';
+import { buildPlan, ancestorLeaks, runHidden, transcriptFor, resultForJudge, gapSecondsSince } from './drive.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROUND1 = path.join(HERE, 'golden/absent-round1.jsonl');
@@ -356,6 +357,87 @@ export async function runLibTests({ log = console.log } = {}) {
     const w = JSON.parse(fs.readFileSync(fA, 'utf8'));
     ok(w.reparsedFromRaw === true && w.originalError === 'TEXT_OUTSIDE_JSON' && !('error' in w) && w.scores.spec_conformance === 80 && w.briefSha === 'x', 'rewritten record');
     eq(JSON.parse(fs.readFileSync(fBad, 'utf8')).error, 'TEXT_OUTSIDE_JSON');
+  });
+
+  // ---- R5-scorefix: intended-pair overlap, server-tool results, warm-repetition gap
+  const b1Rows = [['eb631cd6', '02:36:57.275', '02:37:01.183'], ['e5037f69', '02:37:12.331', '02:37:31.655'], ['7050391f', '02:37:12.332', '02:37:30.509'], ['1e7df863', '02:37:50.604', '02:37:55.463'], ['049d3a5c', '02:37:59.474', '02:38:13.094']]
+    .map(([id, c, e]) => ({ id, createdAt: `2026-10-12T${c}Z`, completedAt: `2026-10-12T${e}Z` }));
+  await t('R5-scorefix AC1: B1 five depth-1 rows score the intended pair e5037f69/7050391f at +18177 ms (the old N-way intersection was -58291 ms)', () => {
+    const r = L.intendedPairOverlap(b1Rows);
+    eq(r.overlapMs, 18177); eq(r.group, ['e5037f69', '7050391f']); eq(r.basis, 'first-batch-group');
+    eq(L.overlapMs(b1Rows), -58291, 'negative control: the pre-fix N-way intersection over every row');
+  });
+  await t('R5-scorefix AC1: truly sequential workers still fail (rows created apart, with and without extra workers), and extra workers cannot rescue it', () => {
+    const row = (id, c, e) => ({ id, createdAt: `2026-01-01T00:00:${c}Z`, completedAt: `2026-01-01T00:00:${e}Z` });
+    const together = [row('a', '00.000', '05.000'), row('b', '00.001', '12.000')];
+    ok(L.intendedPairOverlap(together).overlapMs > 0, 'rows created in one dispatch group and live at the same time overlap');
+    const apart = [row('a', '00.000', '05.000'), row('b', '06.000', '12.000')];
+    const r = L.intendedPairOverlap(apart); ok(r.overlapMs < 0 && r.basis === 'all-rows', 'sequential rows created apart: negative, scored over all rows');
+    const withExtra = [row('x', '30.000', '31.000'), ...apart];
+    ok(L.intendedPairOverlap(withExtra).overlapMs < 0, 'extra rows do not turn a sequential run into a pass');
+    const e = { runId: 'T', arm: 'B', rep: 2, pin: 'claude-haiku-4-5', ticketId: 'TCK-0a1b2c3d', owner: 'team-4f5e6d', threshold: 110, rate: 4.99, carrierRate: 4.5, handlingFee: 0.49, heading: 'Example Domain', firstFile: 'src/checkout.js', original: {} };
+    const verdictOf = (ms) => { const o = O.idealObservation('B', e); o.dispatch.p1Parallel = { sameTurn: true, overlapMs: ms }; return O.scoreObservation(o, e).fields.x2_parallel.status; };
+    eq([verdictOf(r.overlapMs), verdictOf(L.intendedPairOverlap(b1Rows).overlapMs)], ['fail', 'pass']);
+    eq(L.intendedPairOverlap([row('a', 'x', 'y'), row('b', 'x', 'y')]).overlapMs, null);
+  });
+  await t('R5-scorefix AC1: dispatch grouping: single-link within the window, a 2000 ms chain splits at the first larger gap, the first 2+ group is scored', () => {
+    const row = (id, c, e) => ({ id, createdAt: new Date(Date.parse('2026-01-01T00:00:00Z') + c).toISOString(), completedAt: new Date(Date.parse('2026-01-01T00:00:00Z') + e).toISOString() });
+    const rows = [row('lone', 0, 1000), row('p', 10000, 20000), row('q', 10500, 19000), row('r', 40000, 50000), row('s', 40001, 45000)];
+    const g = L.intendedPairOverlap(rows); eq(g.group, ['p', 'q']); eq(g.overlapMs, 19000 - 10500);
+    eq(L.intendedPairOverlap([row('a', 0, 10), row('b', 2001, 5000)]).basis, 'all-rows');
+  });
+  const sseLine = (o) => 'data: ' + JSON.stringify(o);
+  const serverSse = [sseLine({ type: 'message_start', message: { id: 'm', usage: {} } }),
+    sseLine({ type: 'content_block_start', index: 0, content_block: { type: 'server_tool_use', id: 'srv1', name: 'web_fetch' } }), sseLine({ type: 'content_block_delta', index: 0, delta: { type: 'input_json_delta', partial_json: '{"url":"https://example.com"}' } }), sseLine({ type: 'content_block_stop', index: 0 }),
+    sseLine({ type: 'content_block_start', index: 1, content_block: { type: 'web_fetch_tool_result', tool_use_id: 'srv1', content: { type: 'web_fetch_result', url: 'https://example.com', content: { type: 'document', source: { type: 'text', data: 'Source: Example Domain' } } } } }), sseLine({ type: 'content_block_stop', index: 1 }),
+    sseLine({ type: 'content_block_start', index: 2, content_block: { type: 'server_tool_use', id: 'srv2', name: 'web_search' } }), sseLine({ type: 'content_block_stop', index: 2 }),
+    sseLine({ type: 'content_block_start', index: 3, content_block: { type: 'web_search_tool_result', tool_use_id: 'srv2', content: [{ type: 'web_search_result', title: 'T1', url: 'https://t1.test', page_age: 'x' }] } }), sseLine({ type: 'content_block_stop', index: 3 }),
+    sseLine({ type: 'content_block_start', index: 4, content_block: { type: 'server_tool_use', id: 'srv3', name: 'web_fetch' } }), sseLine({ type: 'content_block_stop', index: 4 }),
+    sseLine({ type: 'content_block_start', index: 5, content_block: { type: 'web_fetch_tool_result', tool_use_id: 'srv3', content: { type: 'web_fetch_tool_error', error_code: 'url_not_accessible' } } }), sseLine({ type: 'content_block_stop', index: 5 }),
+    sseLine({ type: 'message_delta', delta: { stop_reason: 'end_turn' }, usage: { output_tokens: 5 } })].join('\n');
+  await t('R5-scorefix AC3: server-tool results (web_fetch document, web_search list, tool error) are captured from the response stream and pair onto the calls', () => {
+    const sse = L.parseSse(serverSse); eq(sse.toolUses.map((u) => u.id), ['srv1', 'srv2', 'srv3']);
+    const calls = L.callsFromHttpTurns([{ sse, body: { messages: [] } }]);
+    eq(calls.map((c) => [c.id, c.isError]), [['srv1', false], ['srv2', false], ['srv3', true]]);
+    ok(/Source: Example Domain/.test(calls[0].resultText) && /example\.com/.test(calls[0].resultText), 'fetch document text'); ok(/T1 \| https:\/\/t1\.test/.test(calls[1].resultText), 'search list'); eq(calls[2].resultText, 'ERROR url_not_accessible');
+    // the same blocks round-tripped inside the NEXT request's assistant message pair too (and win nothing over the stream)
+    const rt = L.callsFromHttpTurns([{ sse: { toolUses: [{ id: 'srv1', name: 'web_fetch', input: {}, server: true }] }, body: { messages: [] } }, { body: { messages: [{ role: 'assistant', content: [{ type: 'web_fetch_tool_result', tool_use_id: 'srv1', content: { type: 'web_fetch_result', content: { source: { data: 'rt text' } } } }] }] } }]);
+    eq(rt[0].resultText, 'rt text');
+    eq(L.callsFromHttpTurns([{ sse: { toolUses: [{ id: 'srv9', name: 'web_fetch', input: {}, server: true }] }, body: { messages: [] } }])[0].resultText, null, 'negative control: no captured block stays null');
+  });
+  await t('R5-scorefix AC3: the judge transcript renders captured server results, a marker for uncaptured ones, and (empty result) for a captured blank; never blank', () => {
+    const rec = { observation: { phase1: { replyText: 'r1' }, phase2: { replyText: 'r2' } }, metrics: { allCalls: [
+      { phase: 1, depth: 0, name: 'web_fetch', input: { url: 'u' }, resultText: 'Source: Example Domain', server: true }, { phase: 1, depth: 0, name: 'web_fetch', input: { url: 'v' }, resultText: null, server: true },
+      { phase: 2, depth: 0, name: 'shell', input: {}, resultText: '' }] } };
+    const turns = transcriptFor(rec, { phase1: 'p1', phase2: 'p2' }).filter((x) => x.tool);
+    eq(turns.map((x) => x.result), ['Source: Example Domain', '(result not captured)', '(empty result)']);
+    ok(turns.every((x) => x.result.trim() !== ''), 'never blank');
+    const norm = JGt.normalizeTranscript(turns); ok(norm[1].result === '(result not captured)', 'survives the judge normaliser'); eq(resultForJudge({ resultText: 'z'.repeat(5) }), 'zzzzz');
+  });
+  await t('R5-scorefix AC3: every judge record carries the brief format version (2 now; a record without it is the old blank-result format)', async () => {
+    eq(JGt.BRIEF_FORMAT, 2);
+    const d = fs.mkdtempSync(path.join(tmp, 'bf-'));
+    const client = { async complete() { return { text: 'not json', inputTokens: 1, outputTokens: 1 }; } };
+    const r = await JGt.runJudge({ client, arm: 'C', brief: 'b', briefSha: 's', outDir: d });
+    eq(r.ok, false); eq(JSON.parse(fs.readFileSync(path.join(d, 'C.json'), 'utf8')).briefFormat, 2);
+    const r1 = await JGt.runJudge({ client, arm: 'B', brief: 'b', briefSha: 's', outDir: d, briefFormat: 1 }); eq(JSON.parse(fs.readFileSync(path.join(d, 'B.json'), 'utf8')).briefFormat, 1); void r1;
+  });
+  await t('R5-scorefix AC2: gapSecondsSince seeds the rep-2 gap from a prior finish time (retry pass); unknown stays null', () => {
+    eq(gapSecondsSince(Date.parse('2026-10-12T00:48:08.000Z'), Date.parse('2026-10-12T02:54:37.000Z')), 7589); eq(gapSecondsSince(undefined), null); eq(gapSecondsSince(NaN), null);
+    eq(gapSecondsSince(Date.parse('2026-01-01T00:00:00Z'), Date.parse('2026-01-01T00:01:30Z')), 90);
+  });
+  await t('R5-scorefix AC5: rescoreRecord reproduces a stored score unpatched, then flips only x2_parallel (batch pair) and c1_cache (out-of-TTL gap); a within-TTL gap or a sequential run does not flip', () => {
+    const spec = F.makeSpec({ seed: '20261011', arm: 'C', rep: 2 }); const e = F.expectedOf(spec);
+    const mk = (kids, gapMs, cache0) => { const obs = O.idealObservation('C', e, { rep: 2 }); obs.dispatch.p1Parallel = { sameTurn: true, overlapMs: -50000 }; obs.cache = { firstTurnCacheRead: cache0, gapSeconds: null };
+      return { runId: 'C2', arm: 'C', rep: 2, seed: '20261011', startedAt: new Date(Date.parse('2026-01-01T00:00:00Z') + gapMs).toISOString(), expected: { ...e, original: undefined }, observation: obs, score: O.scoreObservation(obs, e), metrics: { phases: [{ children: kids }] } }; };
+    const kid = (id, c, d) => ({ id, depth: 1, createdAt: new Date(Date.parse('2026-01-01T00:00:00Z') + c).toISOString(), completedAt: new Date(Date.parse('2026-01-01T00:00:00Z') + d).toISOString() });
+    const prior = { finishedAt: '2026-01-01T00:00:00Z' };
+    const batch = [kid('x', 0, 1000), kid('p', 10000, 20000), kid('q', 10001, 19000)];
+    const rec = mk(batch, 7_000_000, 0);
+    eq(rescoreRecord(rec, prior, { patch: false }).score.fields.x2_parallel.status, rec.score.fields.x2_parallel.status);
+    const r = rescoreRecord(rec, prior); eq([r.score.fields.x2_parallel.status, r.score.fields.c1_cache.status], ['pass', 'na']);
+    const warm = rescoreRecord(mk(batch, 100_000, 0), prior); eq(warm.score.fields.c1_cache.status, 'fail');
+    const seq = rescoreRecord(mk([kid('a', 0, 5000), kid('b', 6000, 12000)], 100_000, 5), prior); eq(seq.score.fields.x2_parallel.status, 'fail');
   });
 
   fs.rmSync(tmp, { recursive: true, force: true });

@@ -12,6 +12,11 @@ import { RUBRIC, RUBRIC_TEXT, parseJudgeOutput, qualityMean } from './quality.mj
 
 export const JUDGE_MODEL = 'claude-haiku-4-5';          // pinned id recorded in every judge record (R5.AC5); the cheapest tier, same as the arms
 export const JUDGE_MAX_TOKENS = 1500;
+/**
+ * Brief format version, recorded in every judge record. 1 = results of server-executed tools (web_fetch/web_search) were blank when never captured (every R5 judge
+ * record has no briefFormat); 2 (R5-scorefix AC3) = those results are rendered when captured and a visible "(result not captured)" marker otherwise.
+ */
+export const BRIEF_FORMAT = 2;
 /** USD per million tokens for the pinned judge model (billing figure for ledger.judgeCalls; excluded from the arm cost metric). */
 export const JUDGE_PRICE_PER_MTOK = Object.freeze({ input: 1, output: 5 });
 
@@ -77,9 +82,9 @@ export function judgeCostUsd(inputTokens, outputTokens) { return (inputTokens * 
  * The caller (the driver, live round only) supplies the client; tests supply a fake. Logs the call via `onCall` (ledger) and writes the record.
  * @returns {Promise<{ok:true, scores, notes, record} | {ok:false, code:string, record}>}
  */
-export async function runJudge({ client, arm, brief, briefSha, outDir, onCall }) {
+export async function runJudge({ client, arm, brief, briefSha, outDir, onCall, briefFormat = BRIEF_FORMAT }) {
   const reply = await client.complete({ model: JUDGE_MODEL, temperature: 0, maxTokens: JUDGE_MAX_TOKENS, prompt: brief });
-  const record = { arm, modelId: JUDGE_MODEL, briefSha, rawResponse: reply.text, inputTokens: reply.inputTokens, outputTokens: reply.outputTokens, costUsd: judgeCostUsd(reply.inputTokens, reply.outputTokens) };
+  const record = { arm, modelId: JUDGE_MODEL, briefFormat, briefSha, rawResponse: reply.text, inputTokens: reply.inputTokens, outputTokens: reply.outputTokens, costUsd: judgeCostUsd(reply.inputTokens, reply.outputTokens) };
   let parsed = null; try { parsed = parseJudgeOutput(reply.text); } catch (e) { record.error = e.code ?? String(e.message); }
   if (outDir) { fs.mkdirSync(outDir, { recursive: true }); fs.writeFileSync(path.join(outDir, `${arm}.json`), JSON.stringify({ ...record, ...(parsed ?? {}) }, null, 2)); }
   if (onCall) onCall({ arm, modelId: JUDGE_MODEL, inputTokens: record.inputTokens, outputTokens: record.outputTokens, costUsd: record.costUsd, briefSha });

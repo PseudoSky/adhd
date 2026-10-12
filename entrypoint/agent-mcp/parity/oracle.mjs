@@ -147,6 +147,8 @@ const phase2Touched = (o, file) => [...callsOf(o.phase2), ...(o.phase2?.workerCa
 const isTicketCall = (c) => /(^|__)get_ticket$/.test(String(c.name));
 const flat = (v) => (v === true ? 'true' : v === false ? 'false' : String(v));
 const needHidden = (v, label) => v == null ? { status: 'invalid', detail: `hidden suite result missing (${label}): harness` } : null;
+/** Anthropic prompt-cache TTL the c1_cache warm-repetition rule is measured against. */
+export const CACHE_TTL_SECONDS = 300;
 const num = (v) => { const n = typeof v === 'number' ? v : (typeof v === 'string' && /^\s*-?\d+(\.\d+)?\s*$/.test(v) ? parseFloat(v) : NaN); return n; };
 
 /**
@@ -311,7 +313,8 @@ export const FIELDS = [
     applies: (arm) => arm === 'C',
     score: (o) => {
       if (o.rep !== 2) return { status: 'na', detail: 'cold repetition: no cross-run cache expected' };
-      const c = o.cache ?? {}; if (c.gapSeconds != null && c.gapSeconds > 300) return { status: 'invalid', detail: `gap ${c.gapSeconds}s exceeds the 5 min TTL` };
+      // R5-scorefix AC2: a warm repetition is required only when rep 2 started inside the cache TTL of rep 1; a later start is a cold repetition BY SCHEDULE, not a cache failure
+      const c = o.cache ?? {}; if (c.gapSeconds != null && c.gapSeconds > CACHE_TTL_SECONDS) return { status: 'na', detail: `cold repetition by schedule: rep 2 started ${c.gapSeconds}s after rep 1 (> ${CACHE_TTL_SECONDS}s TTL), no cross-run cache expected` };
       return (c.firstTurnCacheRead ?? 0) > 0 ? { status: 'pass', detail: `first-turn cache_read=${c.firstTurnCacheRead}` } : { status: 'fail', detail: `first-turn cache_read=${c.firstTurnCacheRead}` }; } },
   { id: 's1_json_keys', phase: 1, kind: 'format', tag: 'FMT', desc: 'final JSON object carries all phase-1 keys',
     score: (o, e) => { const j = lastJsonObject(o.phase1.replyText); if (!j) return { status: 'fail', detail: 'no JSON object in reply' }; const miss = keysP1(e).filter((k) => !(k in j)); return miss.length ? { status: 'fail', detail: `missing ${miss.join(',')}` } : { status: 'pass', detail: '' }; } },
@@ -533,7 +536,10 @@ export function selfTest({ log = () => {} } = {}) {
 
   // C1 cold repetition and out-of-TTL
   const cold = idealObservation('C', e, { rep: 1 }); check('[C] c1_cache is na on the cold repetition', scoreObservation(cold, e).fields.c1_cache.status === 'na');
-  const late = idealObservation('C', e); late.cache.gapSeconds = 400; check('[C] c1_cache invalid when the gap exceeds the TTL', scoreObservation(late, e).fields.c1_cache.status === 'invalid');
+  const late = idealObservation('C', e); late.cache.gapSeconds = 400; check('R5-scorefix AC2: [C] c1_cache is na (cold repetition by schedule) when the gap exceeds the TTL, even with a zero first-turn cache read', (() => { late.cache.firstTurnCacheRead = 0; const f = scoreObservation(late, e).fields.c1_cache; return f.status === 'na' && /by schedule/.test(f.detail); })());
+  const warm0 = idealObservation('C', e); warm0.cache.gapSeconds = 120; warm0.cache.firstTurnCacheRead = 0; check('R5-scorefix AC2: negative control, a zero first-turn cache read inside the TTL still fails', scoreObservation(warm0, e).fields.c1_cache.status === 'fail');
+  const warmOk = idealObservation('C', e); warmOk.cache.gapSeconds = 120; check('R5-scorefix AC2: inside the TTL with a cache read passes (same-pass behaviour unchanged)', scoreObservation(warmOk, e).fields.c1_cache.status === 'pass');
+  const gapNull = idealObservation('C', e); gapNull.cache.gapSeconds = null; gapNull.cache.firstTurnCacheRead = 0; check('R5-scorefix AC2: an unknown gap is not excused (fails on a zero cache read)', scoreObservation(gapNull, e).fields.c1_cache.status === 'fail');
 
   // edit hazards (ordinary maintainer pitfalls): outcome checks only
   const hz = (mut) => { const x = idealObservation('A', e); mut(x); return scoreObservation(x, e).fields; };
