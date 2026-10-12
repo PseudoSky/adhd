@@ -40,6 +40,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 - [agent-search-cutover.1] Preconditions: RELEASE-DECISION.md has `DECISION: publish|defer` and a `CONSUME:` line (`@adhd/stealth-browser@<version>` when published, `link:<abs path>` into the MERGED main checkout when deferred) and agent-browser/node_modules resolves @adhd/stealth-browser.
 
 - [agent-search-cutover.2] The chrome-runner implementation is GONE from agent-search: no `class CdpSession`, `class ChromeManager`, `class IdleShutdown` or `class HistoryClient` definition remains under agent-browser (thin consumer/shims only).
+- [agent-search-cutover.3] agent-browser still compiles: `pnpm run build` (tsc --noEmit) exits 0 and `pnpm run test:lifecycle` exits 0 against @adhd/stealth-browser.
 ---
 
 ## Reservations
