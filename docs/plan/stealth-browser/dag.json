@@ -456,6 +456,20 @@
       ],
       "context": "contexts/prod-public-api.md",
       "notes": "executor=typescript-pro tier=sonnet/high"
+    },
+    "prod-errors": {
+      "kind": "work",
+      "phase": "surface",
+      "depends_on": [
+        "surface-api"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py prod-errors",
+      "artifacts": [
+        "entrypoint/stealth-browser/src/errors.ts",
+        "entrypoint/stealth-browser/src/test/unit/errors/"
+      ],
+      "context": "contexts/prod-errors.md",
+      "notes": "executor=typescript-pro tier=sonnet/high"
     }
   },
   "authored_with": {
