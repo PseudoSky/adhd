@@ -1215,6 +1215,15 @@
       "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py audit-final --only audit-final.2",
       "expect": "exit0",
       "cwd": "repo-root"
+    },
+    {
+      "id": "audit-final.3",
+      "phase": "release",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py audit-final --only audit-final.3",
+      "expect": "exit0",
+      "cwd": "repo-root"
     }
   ]
 }
