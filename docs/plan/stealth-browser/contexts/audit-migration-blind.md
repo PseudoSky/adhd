@@ -29,7 +29,7 @@ ONE blind review round: the reviewer sees only the migration diff and the word `
 
 Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/guard.py` (`python3 docs/plan/stealth-browser/scripts/guard.py audit-migration-blind --only audit-migration-blind.N`). None may be deferred. Tests written by this plan cite ticket `8468f7b1` and these ids ([inv:tests-cite]).
 
-_No criteria yet._
+- [audit-migration-blind.1] FINDINGS.json records exactly ONE review round whose reviewer_input_sha256 equals review/INPUT.sha256 and whose prompt was the word `Review`.
 
 ---
 
