@@ -23,6 +23,7 @@ import * as GR from './grid.mjs';
 import * as QL from './quality.mjs';
 import * as JG from './judge.mjs';
 import * as CP from './capture-proxy.mjs';
+import * as WD from './wire-diff.mjs';
 import { ModelRunCapError } from './ledger.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -65,6 +66,33 @@ export const tmpRoot = (round = ROUND) => path.join(REPO_ROOT, 'tmp', 'agent-mcp
 export const MAX_MODEL_RUNS = LG.RUN_CAP;
 /** Durable run ledger: lives next to the driver, NOT under --out, so it cannot be dodged by changing arguments. */
 export const LEDGER_PATH = LG.ledgerPathFor(ROUND);
+/**
+ * R8 round profile (SCOPE-R8-model-alias, SCOPE-R8-B-only). The module pins (F.PIN_MODEL for the arms, JG.JUDGE_MODEL for the judge) stay the defaults of every round; a round whose
+ * tracked ledger carries a `profile` (ledger.profileOf, fail closed) re-points the arms, the model alias, the judge model, the explicit effort and wire capture for THAT round only.
+ * `arms: null` = the default A,B,C plan.
+ */
+export function defaultProfile() { return { arms: null, armAWaiver: null, model: F.PIN_MODEL, judgeModel: JG.JUDGE_MODEL, effort: null, capture: false, source: 'module pins (F.PIN_MODEL, JG.JUDGE_MODEL)' }; }
+export function roundProfile(opts = {}) {
+  const round = opts.round ?? ROUND; const p = LG.profileOf(LG.readLedger(round, opts.ledgerDir ?? LG.LEDGER_DIR));   // throws LedgerError on a malformed profile (fail closed)
+  const d = defaultProfile();
+  return p ? { ...d, ...p, model: p.model ?? d.model, judgeModel: p.judgeModel ?? d.judgeModel, source: `parity/ledger/${round}.json profile` } : d;
+}
+/** The model the run's arms are launched with: the profile's (an alias such as `haiku`, or a concrete id), else the module pin. */
+const modelOf = (ctx) => ctx.profile?.model ?? MODEL;
+const effortOf = (ctx) => ctx.profile?.effort ?? null;
+/**
+ * R8-effort: how the explicit effort level reaches each arm (probed 2026-10-12 with the real claude 2.1.296 behind the capture proxy and a local mock upstream, no model call:
+ * --effort high and CLAUDE_CODE_EFFORT_LEVEL=high both put `output_config: {"effort":"high"}` on the /v1/messages request; with neither the request carries "medium" for claude-haiku-5-5).
+ *  A: `claude -p --effort <level>` (argvA).  B: CLAUDE_CODE_EFFORT_LEVEL=<level> in the agent-mcp server env, inherited by every claudecli child (claudecli.ts buildSubprocessEnv copies process.env;
+ *  the session denylist does not list it); the engine adds no --effort flag.  C: NOT SETTABLE: providers/anthropic.ts builds the request without output_config / effort, so the API default governs.
+ */
+export const EFFORT_MECHANISM = Object.freeze({
+  A: 'claude -p --effort <level> (argvA)',
+  B: 'CLAUDE_CODE_EFFORT_LEVEL=<level> in the agent-mcp server env, inherited by the claudecli child (serverEnv -> claudecli.ts buildSubprocessEnv)',
+  C: 'NOT SETTABLE: providers/anthropic.ts sends no output_config/effort field; the API default governs (verify on the wire)',
+});
+/** The env that carries the explicit effort level to an arm ({} unless the round profile sets one; only B takes it through the environment). */
+export function effortEnv(ctx) { const e = effortOf(ctx); return e && ctx.runDef.arm === 'B' ? { CLAUDE_CODE_EFFORT_LEVEL: e } : {}; }
 /**
  * R7-think AC1 (owner direction, SCOPE-R7-thinking-default): thinking is NOT forced on any arm. Every arm runs the model's DEFAULT thinking behaviour.
  *  - Arm A (native `claude -p`): the spawn env carries no MAX_THINKING_TOKENS / CLAUDE_CODE_DISABLE_THINKING (lib.cleanEnv is an allowlist that does not pass them
@@ -172,12 +200,13 @@ async function sweepOwned(tag) {
 // Shared per-run context
 // ----------------------------------------------------------------------------------------------------------------
 function makeCtx(opts, plan, runDef, dry) {
-  const spec = F.makeSpec({ seed: opts.seed, arm: runDef.arm, rep: runDef.rep });
+  const profile = roundProfile(opts);
+  const spec = F.makeSpec({ seed: opts.seed, arm: runDef.arm, rep: runDef.rep, pin: profile.model });
   const outRoot = opts.out ?? path.join(tmpRoot(opts.round ?? ROUND), 'live/out');
   const runDir = path.join(outRoot, 'runs', spec.runId);
   // The arm's cwd must sit outside any repo / agent-instruction file (ancestorLeaks): repo-root tmp/ is inside this checkout, so it lives under the OS temp dir.
   const work = opts.outExplicit ? path.join(outRoot, 'work', spec.runId) : path.join(os.tmpdir(), 'adhd-agent-mcp-parity', opts.round ?? ROUND, 'work', spec.runId);
-  return { opts, dry, spec, runDef, runDir, work, repoDir: path.join(work, 'repo'), hiddenDir: path.join(work, 'hidden'), ticketFile: path.join(work, 'ticket.txt'),
+  return { opts, dry, spec, runDef, runDir, work, profile, repoDir: path.join(work, 'repo'), hiddenDir: path.join(work, 'hidden'), ticketFile: path.join(work, 'ticket.txt'),
     infoLog: path.join(work, 'info-calls.log'), prompts: F.prompts(), ledgerPath: LG.ledgerPathFor(opts.round ?? ROUND) };
 }
 
@@ -192,7 +221,8 @@ function agentsJson(ctx) {
 }
 function argvA(ctx, mcpPath, resumeSid) {
   const a = ['-p', '--dangerously-skip-permissions', '--input-format', 'stream-json', '--output-format', 'stream-json', '--verbose', '--strict-mcp-config', '--mcp-config', mcpPath,
-    '--tools', A_TOOLS, '--setting-sources', 'project', '--system-prompt', ctx.spec.systemPrompt, '--agents', JSON.stringify(agentsJson(ctx)), '--max-budget-usd', BUDGET_GUARD_USD, '--model', MODEL];
+    '--tools', A_TOOLS, '--setting-sources', 'project', '--system-prompt', ctx.spec.systemPrompt, '--agents', JSON.stringify(agentsJson(ctx)), '--max-budget-usd', BUDGET_GUARD_USD, '--model', modelOf(ctx)];
+  if (effortOf(ctx)) a.push('--effort', effortOf(ctx));
   if (resumeSid) a.push('--resume', resumeSid);
   return a;
 }
@@ -274,6 +304,7 @@ export function serverEnv(ctx, store, logs) {
     ADHD_AGENT_BUDGET_MAX_CALLS: '0', ADHD_AGENT_SRT_SETTINGS: path.join(ctx.runDir, 'srt-policy.json'),
     ADHD_AGENT_NATIVE_TOOLING_FS_ALLOWED_ROOTS: JSON.stringify({ repo: ctx.repoDir }),
     ...(ctx.dry ? { ADHD_AGENT_ANTHROPIC_SECRET: 'dry-run-not-a-secret', ANTHROPIC_BASE_URL: ctx.fakeAnthropicUrl || 'http://127.0.0.1:9', NODE_OPTIONS: `--require ${path.join(HERE, 'dryrun/egress-guard.cjs')}`, R2_EGRESS_LOG: path.join(ctx.runDir, 'egress-blocked.log') } : {}),
+    ...effortEnv(ctx),
     ...captureEnv(ctx),
   });
 }
@@ -305,8 +336,8 @@ async function startServer(ctx) {
 }
 
 function providerFor(ctx, arm) {
-  if (arm === 'B') return { type: 'claudecli', model: MODEL, claudePath: ctx.opts.claude, timeoutMs: 20 * 60 * 1000 };
-  const p = { type: 'anthropic', model: MODEL, timeoutMs: 10 * 60 * 1000 };
+  if (arm === 'B') return { type: 'claudecli', model: modelOf(ctx), claudePath: ctx.opts.claude, timeoutMs: 20 * 60 * 1000 };
+  const p = { type: 'anthropic', model: modelOf(ctx), timeoutMs: 10 * 60 * 1000 };
   return p;
 }
 function agentDef(ctx, name, parent) {
@@ -384,7 +415,7 @@ async function setupFakes(ctx) {
   ctx.opts = { ...ctx.opts, claude: shim };
   ctx.fakeEnv = {};
   ctx.fakeState = state;
-  if (ctx.runDef.arm === 'C') {
+  if (ctx.runDef.arm === 'C' || ctx.opts.capture) {   // with capture on, A/B also get the fake upstream so the fake claude's wire probe is answered locally, never by the real API
     const { startFakeAnthropic } = await import(pathToFileURL(path.join(HERE, 'dryrun/fake-anthropic.mjs')).href);
     ctx.fake = await startFakeAnthropic({ mode, log: () => {} }); ctx.fakeAnthropicUrl = ctx.fake.url;
   }
@@ -455,10 +486,55 @@ export function markPreSpawnFault(ctx, record, e) {
   record.aborted = [`harness fault before any model call (nothing reserved, retryable): ${String(e?.message || e).slice(0, 300)}`];
   return true;
 }
+/**
+ * R8-model AC1/AC3: what model a run actually used. `requested` is what the arm was launched with (an alias such as `haiku`, or a concrete id); `resolved` is the concrete id(s) the
+ * RESPONSES reported (turn models; hidden helper calls are `sideModels`); `wire` (capture on) carries the request-body models. The run is PRICED by the resolved id's rate card (lib.mjs
+ * ratesForModel); a resolved id with no card is unmeasured, never another model's price. Pure; the warnings are surfaced on the record, never a void rule.
+ */
+export function modelFacts({ requested, resolved = [], sideModels = [], wire = null }) {
+  const alias = LG.isModelAlias(requested); const warnings = [];
+  const pricing = resolved.map((m) => { const c = L.rateCardFor(m); return { model: m, card: c?.model ?? null, source: c?.source ?? null, tierOverrideNotApplied: c?.tierOverride ?? null }; });
+  if (!resolved.length) warnings.push(`no response model id was observed for requested model "${requested}": the run cannot be priced by its resolved id`);
+  if (alias) for (const m of resolved) if (!O.pinMatches(m, requested)) warnings.push(`resolved model ${m} is outside the family of the alias "${requested}"`);
+  if (resolved.length > 1) warnings.push(`more than one resolved model id answered the conversation turns: ${resolved.join(', ')}`);
+  for (const p of pricing) if (!p.card) warnings.push(`no rate card for resolved model ${p.model}: cost is unmeasured (R7-model AC3)`);
+  const wireMain = wire?.mainModels ?? [];
+  if (wire && wireMain.length && resolved.length && wireMain.some((m) => !resolved.includes(m))) warnings.push(`wire request model(s) [${wireMain.join(', ')}] differ from the response model(s) [${resolved.join(', ')}]`);
+  return { requested, alias, resolved, sideModels, wire: wire ? { mainModels: wire.mainModels, sideModels: wire.sideModels } : null, pricing, warnings };
+}
+/**
+ * R8-effort: the explicit effort the arm was configured with versus what the wire carried. Main requests (those declaring tools) are checked; the CLI's tool-less side calls are listed apart.
+ * status: not-requested | unverified (capture off) | unobserved (no request reached the proxy) | verified | mismatch | not-settable (arm C: no effort field exists, the API default governs).
+ */
+export function effortFacts({ requested, arm, wire = null }) {
+  const mechanism = requested ? EFFORT_MECHANISM[arm].replace('<level>', requested) : null; const base = { requested: requested ?? null, arm, mechanism, observed: wire ? wire.mainEfforts : null, sideObserved: wire ? wire.sideEfforts : null };
+  if (!requested) return { ...base, status: 'not-requested' };
+  if (!wire) return { ...base, status: 'unverified', detail: 'capture off: the configured mechanism was applied, nothing was observed on the wire' };
+  if (!wire.mainRequests) return { ...base, status: 'unobserved', detail: 'no tool-declaring model request reached the capture proxy' };
+  const all = wire.mainEfforts;
+  if (all.length && all.every((e) => e === requested)) return { ...base, status: 'verified', detail: `every one of ${wire.mainRequests} main request(s) carried effort ${requested}` };
+  if (arm === 'C' && all.every((e) => e == null)) return { ...base, status: 'not-settable', detail: `arm C sends no effort field (${wire.mainRequests} main request(s)); the API default governs, which is not necessarily ${requested}` };
+  return { ...base, status: 'mismatch', detail: `configured ${requested}, wire carried [${all.map((e) => e ?? 'none').join(', ')}] on ${wire.mainRequests} main request(s)` };
+}
+/** The wire facts of this run's arm from the capture logs (null when capture was off or nothing was written). */
+function wireFactsOf(ctx) {
+  if (!ctx.captureInfo?.outDir) return null;
+  try { const files = WD.resolveWireFiles([ctx.captureInfo.outDir]); if (!files.length) return null; return WD.wireFactsFor(WD.analyzeWire(files), ctx.runDef.arm); } catch { return null; }
+}
+/** Discard port: nothing listens there, so a dry-run proxy request that reaches it fails with a logged 502 instead of leaving the machine. */
+export const DRY_SINK = 'http://127.0.0.1:9';
+/**
+ * The upstreams the capture proxy forwards to. Live: the real provider endpoints (env overrides honoured). Dry-run: NEVER a real endpoint: the fake Anthropic server
+ * for anthropic when one is running, a discard sink otherwise and for openai/deepseek (the proxy lives in the driver process, outside the server's egress guard).
+ */
+export function captureUpstreams(ctx, env = process.env) {
+  if (!ctx.dry) return CP.upstreamsFromEnv(env);
+  return { anthropic: ctx.fakeAnthropicUrl || DRY_SINK, openai: DRY_SINK, deepseek: DRY_SINK };
+}
 /** R6B-proxy AC4: start the capture proxy for this run (logs/wire), calibrate its overhead against a local mock, and keep the facts for the run record. */
 async function startCapture(ctx) {
   const wire = path.join(ctx.runDir, 'logs', 'wire');
-  const upstreams = ctx.dry && ctx.fakeAnthropicUrl ? { anthropic: ctx.fakeAnthropicUrl } : CP.upstreamsFromEnv();
+  const upstreams = captureUpstreams(ctx);
   const overhead = await CP.measureOverhead({ outDir: path.join(ctx.runDir, 'logs', 'wire-calibration') });
   ctx.capture = await CP.startCaptureProxy({ outDir: wire, upstreams, sessionId: ctx.spec.runId });
   ctx.captureInfo = { on: true, outDir: wire, arm: ctx.runDef.arm, url: ctx.capture.url, upstreams: Object.fromEntries(Object.entries({ ...CP.upstreamsFromEnv({}), ...upstreams }).map(([k, v]) => [k, new URL(v).origin])), baseUrlEnv: Object.keys(captureEnv(ctx)), proxyOverheadP50Ms: overhead };
@@ -593,7 +669,7 @@ function analyzeBC(ctx, raw) {
   const streamFor = (taskId) => {
     if (arm === 'B') { const c = L.cliEventsForTask(api, taskId); const a = cliPhase(c.events, { perProcess: true }); return { ...a, truncated: c.truncated, spawns: c.spawns, spawn: c.spawn, stdin: api.filter((x) => x.event === 'spawn.stdin' && x.task_id === taskId).map((x) => x.body) }; }
     const http = L.httpTurnsForTask(api, taskId);
-    const turns = http.map((t, i) => { const n = L.normUsage(t.sse?.usage); return { idx: i + 1, id: t.sse?.id, parent: null, model: t.sse?.model, ...n, ctx: L.turnContextOf(t.sse), ctxBasis: t.sse?.startUsage ? 'message_start' : 'usage', stop: t.sse?.stop, tools: (t.sse?.toolUses || []).map((u) => u.name), thinkingBlock: !!t.sse?.thinking, usd: L.priceNorm(n).usd }; });
+    const turns = http.map((t, i) => { const n = L.normUsage(t.sse?.usage); return { idx: i + 1, id: t.sse?.id, parent: null, model: t.sse?.model, ...n, ctx: L.turnContextOf(t.sse), ctxBasis: t.sse?.startUsage ? 'message_start' : 'usage', stop: t.sse?.stop, tools: (t.sse?.toolUses || []).map((u) => u.name), thinkingBlock: !!t.sse?.thinking, usd: L.priceNorm(n, L.ratesForModel(t.sse?.model)).usd }; });
     const calls = L.callsFromHttpTurns(http);
     return { http, turns, calls, parentTexts: http.flatMap((t) => t.sse?.texts || []), replyText: [...(http[http.length - 1]?.sse?.texts || [])].join('\n'), status: 'completed', models: [...new Set(http.map((t) => t.sse?.model).filter(Boolean))],
       tools: (http[0]?.body?.tools || []).map((t) => t.name || t.type), rate: http.map((t) => L.rateLimitFromHeaders(t.headers)), parallel: L.parallelFromHttpTurns(http), stopReasons: http.map((t) => t.sse?.stop), reqTruncated: http.some((t) => t.truncatedReq || t.truncatedResp) };
@@ -668,7 +744,7 @@ async function runOne(ctx, state) {
   const arm = ctx.runDef.arm;
   const record = { runId: ctx.spec.runId, arm, rep: ctx.spec.rep, mode: ctx.dry ? 'dry-run' : 'live', seed: ctx.opts.seed, startedAt: nowIso(), env: envReport(ctx), config: effectiveConfig(ctx), warnings: [] };
   // pacing: /usage is a local command (0 model calls, asserted); status from the rate-limit events/headers seen so far
-  const usageReading = () => ctx.dry && !process.env.R2_DRY_REAL_USAGE ? { session_pct: 0, week_pct: 0, resets: null, model_calls: 0, at: nowIso(), stubbed: true } : L.readUsageWindow({ claude: ctx.dry ? (ctx.opts.realClaude || 'claude') : ctx.opts.claude, model: MODEL });
+  const usageReading = () => ctx.dry && !process.env.R2_DRY_REAL_USAGE ? { session_pct: 0, week_pct: 0, resets: null, model_calls: 0, at: nowIso(), stubbed: true } : L.readUsageWindow({ claude: ctx.dry ? (ctx.opts.realClaude || 'claude') : ctx.opts.claude, model: modelOf(ctx) });
   const gate = gatePacing(usageReading, state.rateLimitsSeen);
   record.pacing = { before: gate.reading, verdict: gate.verdict };
   const verdict = gate.verdict;
@@ -696,6 +772,9 @@ async function runOne(ctx, state) {
     record.metrics = metrics; record.warnings.push(...metrics.warnings);
     // thinking: model default on every arm (R7-think AC1); the observation is a report-only record field, never an invalid/void rule
     record.thinking = thinkingObservation(metrics);
+    const wire = wireFactsOf(ctx);
+    record.model = modelFacts({ requested: modelOf(ctx), resolved: obs.models ?? [], sideModels: obs.sideModels ?? [], wire }); record.warnings.push(...record.model.warnings.map((w) => `MODEL: ${w}`));
+    record.effort = effortFacts({ requested: effortOf(ctx), arm, wire }); if (record.effort.status === 'mismatch') record.warnings.push(`EFFORT MISMATCH: ${record.effort.detail}`);
     record.webSurface = obs.capabilities?.webSurface ?? null;
     if (obs.capabilities && obs.capabilities.canFetch === false) record.webFinding = 'arm cannot fetch';
     state.rateLimitsSeen.push(...(metrics.rateLimits || []).slice(-2));
@@ -726,7 +805,7 @@ async function runOne(ctx, state) {
   return { record, aborted: false };
 }
 function effectiveConfig(ctx) {
-  return { model: MODEL, maxToolLoops: arm0(ctx) === 'A' ? 'n/a (claude 2.1.296 has no --max-turns; guard --max-budget-usd ' + BUDGET_GUARD_USD + ')' : MAX_TOOL_LOOPS, budgetMaxCalls: arm0(ctx) === 'A' ? 'n/a' : 0, shellAllow: arm0(ctx) === 'A' ? 'unrestricted Bash (bypassPermissions)' : SHELL_POLICY, shellEgress: arm0(ctx) === 'A' ? 'n/a (native Bash)' : 'open expected (product default); actual mode recorded in record.shellEgress', toolResultCap: arm0(ctx) === 'A' ? 'native (<=30k chars inline)' : 'agent-mcp default (6000 chars, head 75% / tail 25%)', providerTimeoutMs: arm0(ctx) === 'B' ? 1_200_000 : arm0(ctx) === 'C' ? 600_000 : `n/a (claude CLI; ${PHASE_TIMEOUT_MS} ms phase timeout)`, queueConcurrency: 'agent-mcp default', maxDepth: 'agent-mcp default (3)', thinking: `thinking: ${THINKING_POLICY} (${THINKING_MECHANISM[arm0(ctx)]})`, thinkingEnv: {}, phaseTimeoutMs: PHASE_TIMEOUT_MS, ...(ctx.opts?.capture ? { capture: `wire capture ON (capture-proxy.mjs, logs/wire): arm ${arm0(ctx)} model traffic is routed through a local pass-through proxy; bodies and timing are not altered` } : {}) };
+  return { model: modelOf(ctx), ...(LG.isModelAlias(modelOf(ctx)) ? { modelResolution: `"${modelOf(ctx)}" is an alias the claude CLI resolves at run time; the resolved id is read from the response and recorded in record.model, and the run is priced by it` } : {}), ...(effortOf(ctx) ? { effort: `${effortOf(ctx)} explicit: ${EFFORT_MECHANISM[arm0(ctx)].replace('<level>', effortOf(ctx))}` } : {}), maxToolLoops: arm0(ctx) === 'A' ? 'n/a (claude 2.1.296 has no --max-turns; guard --max-budget-usd ' + BUDGET_GUARD_USD + ')' : MAX_TOOL_LOOPS, budgetMaxCalls: arm0(ctx) === 'A' ? 'n/a' : 0, shellAllow: arm0(ctx) === 'A' ? 'unrestricted Bash (bypassPermissions)' : SHELL_POLICY, shellEgress: arm0(ctx) === 'A' ? 'n/a (native Bash)' : 'open expected (product default); actual mode recorded in record.shellEgress', toolResultCap: arm0(ctx) === 'A' ? 'native (<=30k chars inline)' : 'agent-mcp default (6000 chars, head 75% / tail 25%)', providerTimeoutMs: arm0(ctx) === 'B' ? 1_200_000 : arm0(ctx) === 'C' ? 600_000 : `n/a (claude CLI; ${PHASE_TIMEOUT_MS} ms phase timeout)`, queueConcurrency: 'agent-mcp default', maxDepth: 'agent-mcp default (3)', thinking: `thinking: ${THINKING_POLICY} (${THINKING_MECHANISM[arm0(ctx)]})`, thinkingEnv: {}, phaseTimeoutMs: PHASE_TIMEOUT_MS, ...(ctx.opts?.capture ? { capture: `wire capture ON (capture-proxy.mjs, logs/wire): arm ${arm0(ctx)} model traffic is routed through a local pass-through proxy; bodies and timing are not altered` } : {}) };
 }
 const arm0 = (ctx) => ctx.runDef.arm;
 
@@ -743,6 +822,8 @@ export function buildPlan(opts, ledger = null) {
   const led = ledger ?? (() => { try { return LG.readLedger(opts.round ?? ROUND); } catch { return null; } })();
   const retry = led ? LG.retryPlanOf(led) : null;
   if (retry) return retry.map((e, i) => ({ arm: e.arm, rep: e.rep, position: i + 1, retry: true }));
+  const prof = roundProfile(opts);   // R8: the ledger profile names the arms of the round (B-only), in the order it lists them
+  if (prof.arms) return prof.arms.map((arm, i) => ({ arm, rep: 1, position: i + 1, profile: true }));
   const idx = Number.parseInt(String(opts.round ?? ROUND).replace(/[^0-9]/g, ''), 10) || 0;
   return LG.armOrderFor(idx).map((arm, i) => ({ arm, rep: 1, position: i + 1 }));
 }
@@ -752,7 +833,7 @@ function summaryRows(records) {
     const s = r.score.summary; const m = r.metrics?.phases || [];
     const sum = (f) => m.reduce((a, p) => a + (f(p) || 0), 0);
     return { run: r.runId, pass: s.pass, fail: s.fail, na: s.na, invalid: s.invalid, content: `${s.content.pass}/${s.content.total}`, process: `${s.process.pass}/${s.process.total}`, format: `${s.format.pass}/${s.format.total}`,
-      calls: sum((p) => p.calls?.total), turns: sum((p) => (p.turns?.parent || 0) + (p.turns?.child || 0)), costUsd: sum((p) => p.costUsd?.authoritative ?? p.costUsd?.total), costRecompute: sum((p) => p.costUsd?.total), thinking: r.config?.thinking ?? null, providerTimeout: r.config?.providerTimeoutMs ?? null, resultCap: r.config?.toolResultCap ?? null, thinkingTurns: sum((p) => p.thinkingTurns), firstTurnCtx: m[0]?.firstTurnContext ?? null,
+      calls: sum((p) => p.calls?.total), turns: sum((p) => (p.turns?.parent || 0) + (p.turns?.child || 0)), costUsd: sum((p) => p.costUsd?.authoritative ?? p.costUsd?.total), costRecompute: sum((p) => p.costUsd?.total), thinking: r.config?.thinking ?? null, modelRequested: r.model?.requested ?? null, modelResolved: (r.model?.resolved ?? []).join(',') || null, effort: r.effort ? `${r.effort.requested ?? '-'} (${r.effort.status})` : null, providerTimeout: r.config?.providerTimeoutMs ?? null, resultCap: r.config?.toolResultCap ?? null, thinkingTurns: sum((p) => p.thinkingTurns), firstTurnCtx: m[0]?.firstTurnContext ?? null,
       cacheReadP1: m[0]?.tokens?.total?.cr ?? null, wallS: Math.round((r.wallMs || 0) / 1000), warnings: r.warnings.length };
   });
 }
@@ -760,7 +841,7 @@ function writeSummary(outDir, records, plan) {
   const rows = summaryRows(records);
   const md = ['# Round run summary', '', `Runs recorded: ${records.length} of ${plan.length}`, '', '| run | pass | fail | na | invalid | content | process | format | calls | turns | cost (authoritative) | first-turn ctx | cache_read tok (phase 1) | wall s | warnings |', '|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|',
     ...rows.map((r) => `| ${r.run} | ${r.pass} | ${r.fail} | ${r.na} | ${r.invalid} | ${r.content} | ${r.process} | ${r.format} | ${r.calls} | ${r.turns} | ${fmtUsd(r.costUsd)} | ${r.firstTurnCtx ?? '-'} | ${r.cacheReadP1 ?? '-'} | ${r.wallS} | ${r.warnings} |`), ''];
-  md.push('## Effective config per run (thinking: model default on every arm; not forced; thinking turns are a report-only metric)', '', '| run | thinking (config) | thinking turns observed | provider / phase timeout (ms) | tool-result cap |', '|---|---|---|---|---|', ...rows.map((r) => `| ${r.run} | ${r.thinking} | ${r.thinkingTurns} | ${r.providerTimeout} | ${r.resultCap} |`), '');
+  md.push('## Effective config per run (thinking: model default on every arm; not forced; thinking turns are a report-only metric)', '', '| run | model requested -> resolved (priced by resolved) | effort (status) | thinking (config) | thinking turns observed | provider / phase timeout (ms) | tool-result cap |', '|---|---|---|---|---|---|---|', ...rows.map((r) => `| ${r.run} | ${r.modelRequested ?? '-'} -> ${r.modelResolved ?? '-'} | ${r.effort ?? '-'} | ${r.thinking} | ${r.thinkingTurns} | ${r.providerTimeout} | ${r.resultCap} |`), '');
   for (const r of records.filter((x) => x.score)) {
     md.push(`## ${r.runId}`, '', '| field | status | detail |', '|---|---|---|', ...Object.entries(r.score.fields).map(([k, v]) => `| ${k} | ${v.status} | ${String(v.detail).replace(/\|/g, '/').slice(0, 140)} |`), '');
     if (r.warnings.length) md.push('Warnings:', ...r.warnings.map((w) => `- ${w}`), '');
@@ -816,13 +897,13 @@ export function transcriptFor(record, prompts) {
 /** A deterministic fake judge client for dry-runs (no model, no network): every quality scores 80. */
 export function fakeJudgeClient() {
   const scores = Object.fromEntries(QL.RUBRIC.map((k) => [k, 80])), notes = Object.fromEntries(QL.RUBRIC.map((k) => [k, 'fake judge (dry-run)']));
-  return { async complete() { return { text: JSON.stringify({ scores, notes }), inputTokens: 0, outputTokens: 0 }; } };
+  return { async complete({ model } = {}) { return { text: JSON.stringify({ scores, notes }), inputTokens: 0, outputTokens: 0, model: model ?? null }; } };
 }
 /**
  * Judge ONE finished run (R5.AC6-AC8): eligible only if arm A and this arm genuinely succeeded; the per-round judge cap is checked BEFORE the paid call;
  * the call is logged in the ledger (live only) and the raw record is written to <judgeDir>/<arm>.json. Sets record.quality; never throws.
  */
-export async function judgeRun({ ctx, record, aGenuine, dry, client, judgeDir }) {
+export async function judgeRun({ ctx, record, aGenuine, aWaived = false, dry, client, judgeDir }) {
   const arm = record.arm; const genuine = GT.isGenuineSuccess(record);
   if (!JG.judgeEligible({ aGenuine, armGenuine: genuine })) { record.quality = { status: 'n/a', reason: aGenuine ? 'arm not a genuine success (no judge call)' : 'arm A not a genuine success (no judge call)' }; return record.quality; }
   const ledgerDir = path.dirname(ctx.ledgerPath); const round = path.basename(ctx.ledgerPath, '.json');
@@ -831,8 +912,11 @@ export async function judgeRun({ ctx, record, aGenuine, dry, client, judgeDir })
   try {
     const { brief, briefSha, label } = JG.buildBrief({ prompts: ctx.prompts, ticketText: F.ticketText(ctx.spec), diff: repoDiff(ctx.spec, ctx.repoDir), transcript: transcriptFor(record, ctx.prompts) });
     briefFormat = JG.BRIEF_FORMAT;
-    const res = await JG.runJudge({ client, arm, brief, briefSha, outDir: judgeDir, onCall: dry ? undefined : (c) => LG.recordJudgeCall(round, c, { dir: ledgerDir, reason: capReason }) });
-    record.quality = res.ok ? { status: 'scored', mean: QL.qualityMean(res.scores), scores: res.scores, briefSha, briefFormat, modelId: JG.JUDGE_MODEL, label, file: path.join(judgeDir, `${arm}.json`) } : { status: 'judge-error', code: res.code, briefSha, briefFormat, file: path.join(judgeDir, `${arm}.json`) };
+    // R8-model AC4: the judge model is the round's judgeModel (an alias such as `haiku` is resolved from the concrete id(s) the arms reported; this throws, no paid call, when none exists)
+    const judgeRequested = ctx.profile?.judgeModel ?? JG.JUDGE_MODEL;
+    const judgeModel = JG.resolveJudgeModel(judgeRequested, [...(record.model?.resolved ?? []), ...(record.observation?.models ?? [])]);
+    const res = await JG.runJudge({ client, arm, brief, briefSha, outDir: judgeDir, model: judgeModel, modelRequested: judgeRequested, onCall: dry ? undefined : (c) => LG.recordJudgeCall(round, c, { dir: ledgerDir, reason: capReason }) });
+    record.quality = res.ok ? { status: 'scored', mean: QL.qualityMean(res.scores), scores: res.scores, briefSha, briefFormat, modelId: res.record.modelId, ...(res.record.modelRequested && res.record.modelRequested !== res.record.modelId ? { modelRequested: res.record.modelRequested } : {}), ...(aWaived ? { armAWaived: ctx.profile?.armAWaiver ?? true } : {}), label, file: path.join(judgeDir, `${arm}.json`) } : { status: 'judge-error', code: res.code, briefSha, briefFormat, file: path.join(judgeDir, `${arm}.json`) };
   } catch (e) { record.quality = { status: 'judge-failed', error: String(e?.message ?? e).slice(0, 300) }; }
   return record.quality;
 }
@@ -859,7 +943,9 @@ async function runPlan(opts, dry) {
   const judgeDirOf = (rep) => dry ? path.join(opts.out, judgeDirName(rep)) : path.join(tmpRoot(opts.round), judgeDirName(rep));
   const records = [];
   const retryMode = plan.some((p) => p.retry);
-  if (!plan.some((p) => p.arm === 'A')) {   // R5-resume AC1: a plan without arm A (retry) judges against the canonical A1 record, seeded from the record AND the ledger
+  const profile = roundProfile(opts); const aWaived = !!profile.arms && !profile.arms.includes('A');
+  if (aWaived) { state.aGenuine = true; state.aWaived = true; console.log(`ARM-A GATE WAIVED (ledger.profile.armAWaiver): ${profile.armAWaiver}`); }   // recorded on every judged run; the ledger's armA is NOT faked
+  else if (!plan.some((p) => p.arm === 'A')) {   // R5-resume AC1: a plan without arm A (retry) judges against the canonical A1 record, seeded from the record AND the ledger
     const aCtx = makeCtx({ ...opts }, plan, { arm: 'A', rep: 1 }, dry); const aPath = path.join(aCtx.runDir, 'record.json');
     state.aGenuine = isFinishedRecord(aPath) ? seedAGenuine({ record: readJson(aPath), ledgerPath: aCtx.ledgerPath, dry }) : false;
   }
@@ -885,7 +971,7 @@ async function runPlan(opts, dry) {
     }
     if (def.arm === 'A') state.aGenuine = GT.isGenuineSuccess(record);
     if (record.score && !aborted && ctx.repoDir && fs.existsSync(ctx.repoDir)) {   // R5: blind judge, live round (or a dry-run with the fake client); the client is injected, never constructed from an env flag
-      const q = await judgeRun({ ctx, record, aGenuine: state.aGenuine, dry, client: opts.judgeClient ?? (dry ? fakeJudgeClient() : JG.liveJudgeClient()), judgeDir: judgeDirOf(def.rep) });
+      const q = await judgeRun({ ctx, record, aGenuine: state.aGenuine, aWaived: !!state.aWaived, dry, client: opts.judgeClient ?? (dry ? fakeJudgeClient() : JG.liveJudgeClient()), judgeDir: judgeDirOf(def.rep) });
       console.log(`${ctx.spec.runId}: quality ${q.status}${q.mean != null ? ` mean ${q.mean.toFixed(1)}` : ''}${q.reason ? ` (${q.reason})` : ''}`);
       writeJson(path.join(ctx.runDir, 'record.json'), record);
     }
@@ -937,7 +1023,8 @@ export function checkOracle(log = console.log) {
     ['honesty ignores a docs claim', 'if (docsClaim) return', 'if (false) return'],
     ['flat total check removed', 'Math.abs(num(v) - e.rate) < 1e-9 ? { status', 'true ? { status'],
     ['attribution ignores taskCount', 'if (a.taskCount !== rows.length + 1)', 'if (false)'],
-    ['model pin ignored', '!String(x).startsWith(e.pin)', 'false'],
+    ['model pin ignored', '!pinMatches(x, e.pin)', 'false'],
+    ['R8-model AC2: an alias pin accepts any claude family', 'm.startsWith(`claude-${p}-`)', "m.startsWith('claude-')"],
     ['cache check always passes', "(c.firstTurnCacheRead ?? 0) > 0 ?", 'true ?'],
     ['examples check ignores shippingCost', "if (!/shippingCost/.test(d)) miss.push", 'if (false) miss.push'],
     ['nested check ignores grandchildren', '(o.dispatch?.p1Grandchildren ?? 0) >= 1 ?', 'true ?'],
@@ -979,29 +1066,41 @@ const SELF = fileURLToPath(import.meta.url);
 function lineOf(re) { const L2 = fs.readFileSync(SELF, 'utf8').split('\n'); const i = L2.findIndex((l) => re.test(l)); return i === -1 ? null : i + 1; }
 function ledgerUsed(ledgerPath = LEDGER_PATH) { try { return JSON.parse(fs.readFileSync(ledgerPath, 'utf8')).runs.length; } catch { return fs.existsSync(ledgerPath) ? 'UNREADABLE (runs refused)' : 0; } }
 export function planText(opts) {
-  const plan = buildPlan(opts); const out = [];
-  const ctxOf = (arm) => makeCtx({ ...opts }, plan, plan.find((p) => p.arm === arm) ?? { arm, rep: 1 }, false);
-  const A = ctxOf('A'), B = ctxOf('B'), C = ctxOf('C');
+  const plan = buildPlan(opts); const out = []; const prof = roundProfile(opts); const round = opts.round ?? ROUND;
+  const arms = plan.map((p) => p.arm); const shown = prof.arms ?? ['A', 'B', 'C']; const has = (arm) => shown.includes(arm);   // sections are printed for the profile's arms only; a profile-less round describes all three arms
+  const ctxOf = (arm) => makeCtx({ ...opts, capture: opts.capture || prof.capture }, plan, plan.find((p) => p.arm === arm) ?? { arm, rep: 1 }, false);
+  const A = has('A') ? ctxOf('A') : null, B = has('B') ? ctxOf('B') : null, C = has('C') ? ctxOf('C') : null;
   const cite = (re) => `drive.mjs:${lineOf(re)}`;
   const THINKING_VARS = ['MAX_THINKING_TOKENS', 'CLAUDE_CODE_DISABLE_THINKING'];   // must be absent from every arm's env (thinking is the model default)
   const present = (env) => THINKING_VARS.filter((k) => env[k] !== undefined);
-  out.push(`ROUND ${opts.round ?? ROUND} PLAN  seed=${opts.seed}  model=${MODEL}  (task: ONE real-world scenario "shopkit", 2 phases in one session; web fetch ${F.WEB_URL} -> heading "${F.WEB_HEADING}")`);
-  out.push(`model runs: ${plan.length} planned (one per arm, A first), serial, HARD CAP ${MAX_MODEL_RUNS} per round; ledger ${LG.ledgerPathFor(opts.round ?? ROUND)} has used ${ledgerUsed(LG.ledgerPathFor(opts.round ?? ROUND))} of ${MAX_MODEL_RUNS}`);
-  if (plan.some((p) => p.retry)) out.push('', `RETRY PLAN (ledger.retryPlan, owner-directed; arm A is not rerun): ${plan.map((p) => `${p.arm}${p.rep}`).join(' -> ')}; extraRunReason: ${LG.readLedger(opts.round ?? ROUND).extraRunReason}`);
-  out.push('', 'order (arm A first; B and C alternate between rounds):', ...plan.map((p) => `  ${p.position}. ${p.arm}${p.rep}`));
-  out.push('', `THINKING: ${THINKING_POLICY} (R7-think AC1; arms A, B and C run the model's default thinking for ${MODEL}; thinking turns/blocks are a report-only metric: record.thinking, SUMMARY, verdict and grid lines; they never invalidate or void a run)`);
-  out.push(`  A  ${THINKING_MECHANISM.A}`, `       cited at ${cite(/^export function armAEnv/)}`, `       resolved spawn env thinking variables set: [${present(armAEnv(A)).join(',')}] (expected none)`, `       argv: claude ${argvA(A, '<mcp-config.json>', null).map((x) => (x.length > 60 ? x.slice(0, 57) + '...' : x)).join(' ')}`);
-  const bEnv = serverEnv(B, '<store>', '<logs>');
-  out.push(`  B  ${THINKING_MECHANISM.B}`, `       cited at ${cite(/^export function serverEnv/)} and packages/agent/agent-engine-orchestrator/src/providers/claudecli.ts:818-833 (buildSubprocessEnv copies process.env)`, `       resolved server env thinking variables set: [${present(bEnv).join(',')}] (expected none)`, `       provider: ${JSON.stringify(providerFor(B, 'B'))}`);
-  const cProv = providerFor(C, 'C');
-  out.push(`  C  ${THINKING_MECHANISM.C}`, `       cited at ${cite(/^function providerFor/)} (provider keys: ${Object.keys(cProv).join(',')}; no thinking key) and anthropic.ts (rg "thinking": no match)`, `       provider: ${JSON.stringify(cProv)}`);
-  out.push('', 'SHELL / WEB (B and C run the PRODUCT DEFAULT shell allowlist; A has unrestricted Bash)', `  B/C shell: ${SHELL_POLICY}   (cited ${cite(/^export const SHELL_POLICY/)}; supersedes the R3 "no curl" rule by owner direction, R6-prep AC2)`, '  Shell egress: open (product default: allow-all loopback proxy; no srt policy is pre-written). The actual mode is read back after each B/C run and recorded as record.shellEgress.', `  B/C srt network allowlist extension: ${SRT_EXTRA_DOMAINS.join(',') || '(none)'}   (cited ${cite(/^export const SRT_EXTRA_DOMAINS/)})`, `  A tools: ${A_TOOLS}`, '  NOTE: arm C additionally exposes Anthropic server-side web tools (web_fetch/web_search) by default; B has no web tool as shipped, A has the native WebFetch/WebSearch. The web-fetch field (w1_web) is scored with one rule for every arm that can fetch; this tool-surface asymmetry is recorded, not equalised.');
+  const led = LG.readLedger(round); const cap = LG.capOf(led);
+  out.push(`ROUND ${round} PLAN  seed=${opts.seed}  model=${prof.model}${LG.isModelAlias(prof.model) ? ' (ALIAS: resolved by the claude CLI at run time, recorded in record.model and used to price the run)' : ''}  (task: ONE real-world scenario "shopkit", 2 phases in one session; web fetch ${F.WEB_URL} -> heading "${F.WEB_HEADING}")`);
+  out.push(`model runs: ${plan.length} planned (${prof.arms ? `profile arms ${arms.join(',')}, one run each` : 'one per arm, A first'}), serial, HARD CAP ${cap} per round; ledger ${LG.ledgerPathFor(round)} has used ${ledgerUsed(LG.ledgerPathFor(round))} of ${cap}`);
+  if (prof.arms) out.push('', `ROUND PROFILE (${prof.source}): arms [${arms.join(',')}]  model ${prof.model}  judge model ${prof.judgeModel}${LG.isModelAlias(prof.judgeModel) ? ' (alias; resolved from the arm\'s reported id before the single judge call)' : ''}  effort ${prof.effort ?? '(not set)'}  wire capture ${prof.capture ? 'ON (forced by the profile)' : 'per --capture'}`,
+    ...(prof.arms.includes('A') ? [] : [`  ARM-A GATE NOT APPLIED (armAWaiver): ${prof.armAWaiver}`, '  The ledger armA stays null (nothing is faked); the judge treats the A gate as waived and records armAWaived on the quality record.']));
+  if (plan.some((p) => p.retry)) out.push('', `RETRY PLAN (ledger.retryPlan, owner-directed; arm A is not rerun): ${plan.map((p) => `${p.arm}${p.rep}`).join(' -> ')}; extraRunReason: ${LG.readLedger(round).extraRunReason}`);
+  out.push('', `order (${prof.arms ? 'ledger profile order' : 'arm A first; B and C alternate between rounds'}):`, ...plan.map((p) => `  ${p.position}. ${p.arm}${p.rep}`));
+  out.push('', `THINKING: ${THINKING_POLICY} (R7-think AC1; arm${shown.length > 1 ? 's' : ''} ${shown.join(', ')} run${shown.length > 1 ? '' : 's'} the model's default thinking for ${prof.model}; thinking turns/blocks are a report-only metric: record.thinking, SUMMARY, verdict and grid lines; they never invalidate or void a run)`);
+  if (A) out.push(`  A  ${THINKING_MECHANISM.A}`, `       cited at ${cite(/^export function armAEnv/)}`, `       resolved spawn env thinking variables set: [${present(armAEnv(A)).join(',')}] (expected none)`, `       argv: claude ${argvA(A, '<mcp-config.json>', null).map((x) => (x.length > 60 ? x.slice(0, 57) + '...' : x)).join(' ')}`);
+  if (B) { const bEnv = serverEnv(B, '<store>', '<logs>');
+    out.push(`  B  ${THINKING_MECHANISM.B}`, `       cited at ${cite(/^export function serverEnv/)} and packages/agent/agent-engine-orchestrator/src/providers/claudecli.ts:818-833 (buildSubprocessEnv copies process.env)`, `       resolved server env thinking variables set: [${present(bEnv).join(',')}] (expected none)`, `       provider: ${JSON.stringify(providerFor(B, 'B'))}`); }
+  if (C) { const cProv = providerFor(C, 'C');
+    out.push(`  C  ${THINKING_MECHANISM.C}`, `       cited at ${cite(/^function providerFor/)} (provider keys: ${Object.keys(cProv).join(',')}; no thinking key) and anthropic.ts (rg "thinking": no match)`, `       provider: ${JSON.stringify(cProv)}`); }
+  if (prof.effort) {
+    out.push('', `EFFORT: ${prof.effort} set explicitly (R8-effort; recorded in record.config.effort and record.effort, checked against output_config.effort in the captured request bodies when capture is on)`);
+    if (A) out.push(`  A  ${EFFORT_MECHANISM.A.replace('<level>', prof.effort)}   resolved argv carries: ${argvA(A, '<m>', null).join(' ').match(/--effort \S+/)?.[0] ?? '(NONE)'}`);
+    if (B) out.push(`  B  ${EFFORT_MECHANISM.B.replace('<level>', prof.effort)}   resolved server env carries: CLAUDE_CODE_EFFORT_LEVEL=${serverEnv(B, '<store>', '<logs>').CLAUDE_CODE_EFFORT_LEVEL ?? '(NONE)'}`);
+    if (C) out.push(`  C  ${EFFORT_MECHANISM.C}`);
+  }
+  if (opts.capture || prof.capture) { const cx = ctxOf(shown[0]); out.push('', `WIRE CAPTURE: ON (capture-proxy.mjs; logs under <run>/logs/wire/proxy-<arm>-<provider>.jsonl; request headers are never recorded; --capture is also accepted explicitly)`, `  ${shown[0]} routes ANTHROPIC_BASE_URL through /${shown[0]}/anthropic: ${JSON.stringify(Object.keys(captureEnv({ ...cx, capture: { baseUrl: (a, pr) => `http://127.0.0.1:PORT/${a}/${pr}` } })))}`); }
+  out.push('', `SHELL / WEB (${shown.filter((a) => a !== 'A').join('/') || 'no B/C arm'} run${shown.filter((a) => a !== 'A').length === 1 ? 's' : ''} the PRODUCT DEFAULT shell allowlist${has('A') ? '; A has unrestricted Bash' : ''})`, `  ${shown.filter((a) => a !== 'A').join('/')} shell: ${SHELL_POLICY}   (cited ${cite(/^export const SHELL_POLICY/)}; supersedes the R3 "no curl" rule by owner direction, R6-prep AC2)`, '  Shell egress: open (product default: allow-all loopback proxy; no srt policy is pre-written). The actual mode is read back after each B/C run and recorded as record.shellEgress.', `  ${shown.filter((a) => a !== 'A').join('/')} srt network allowlist extension: ${SRT_EXTRA_DOMAINS.join(',') || '(none)'}   (cited ${cite(/^export const SRT_EXTRA_DOMAINS/)})`, ...(has('A') ? [`  A tools: ${A_TOOLS}`] : []),
+    `  WEB: ${[has('A') ? 'A has the native WebFetch/WebSearch' : null, has('B') ? 'B has the engine-executed web_fetch tool (R6B-web, advertised through the claudecli bridge) and the shell' : null, has('C') ? 'C additionally exposes Anthropic server-side web tools (web_fetch/web_search) by default' : null].filter(Boolean).join('; ')}. The web-fetch field (w1_web) is scored with one rule for every arm that can fetch; any tool-surface asymmetry is recorded, not equalised.`);
   out.push('', 'PACING', `  before EVERY live run: claude -p /usage (0 model calls asserted); refuse at 5h session >= ${L.PACING.fiveHourMax * 100}% (no 7-day check), any non-allowed rate-limit status, or an unreadable reading (fail closed)`);
   const wtSha = spawnSync('git', ['-C', opts.wt, 'rev-parse', '--short', 'HEAD'], { encoding: 'utf8' }).stdout?.trim() || '(not a git checkout)';
   const dist = path.join(opts.wt, 'entrypoint/agent-mcp/dist/src/index.js'); const srcDir = path.join(opts.wt, 'entrypoint/agent-mcp/src');
   const mt = (p) => { try { return fs.statSync(p).mtime.toISOString(); } catch { return 'MISSING'; } };
   const newestSrc = (() => { let n = 0; const walk = (d) => { let es = []; try { es = fs.readdirSync(d, { withFileTypes: true }); } catch { return; } for (const e of es) { const p = path.join(d, e.name); if (e.isDirectory()) walk(p); else if (/\.ts$/.test(e.name)) n = Math.max(n, fs.statSync(p).mtimeMs); } }; walk(srcDir); return n ? new Date(n).toISOString() : 'n/a'; })();
-  out.push('', 'AGENT-MCP BUILD (arms B, C)', `  --wt ${opts.wt}  git ${wtSha}`, `  dist ${dist}  mtime ${mt(dist)}   newest src/*.ts mtime ${newestSrc}   ${mt(dist) !== 'MISSING' && newestSrc !== 'n/a' && mt(dist) < newestSrc ? 'WARNING: dist is OLDER than src (rebuild before a live run)' : 'dist is not older than src'}`);
+  out.push('', `AGENT-MCP BUILD (arms ${shown.filter((a) => a !== 'A').join(', ')})`, `  --wt ${opts.wt}  git ${wtSha}`, `  dist ${dist}  mtime ${mt(dist)}   newest src/*.ts mtime ${newestSrc}   ${mt(dist) !== 'MISSING' && newestSrc !== 'n/a' && mt(dist) < newestSrc ? 'WARNING: dist is OLDER than src (rebuild before a live run)' : 'dist is not older than src'}`);
   out.push('', 'ORACLES: hidden suites bugfix/feature/empty (empty asserts only what the phase-2 prompt states), visible suite, w2_web_honest (all Source lines, null is honest), s2_honest (visible suite + empty probe), x3_nested (na when the docs brief is not an actionable delegation). Run `node drive.mjs --self-check` for the red/green proof.');
   return out.join('\n');
 }
@@ -1134,7 +1233,9 @@ export async function selfCheck({ log = console.log, opts = parseArgs([]) } = {}
     // R7-model: ONE model pin reaches every arm and the oracle; the judge is a separate pin; thinking-off gap and the cost card are reported, not assumed.
     chk('R6B-proxy AC4: capture is OFF by default (no capture env, no capture key in effectiveConfig) and --capture parses', Object.keys(captureEnv(ctxA)).length === 0 && !('capture' in effectiveConfig(ctxA)) && parseArgs(['--capture']).capture === true && parseArgs([]).capture === (process.env.PARITY_CAPTURE === '1'));
     chk('R6B-proxy AC4: with a capture proxy, A/B/C route ANTHROPIC_BASE_URL through /<arm>/anthropic (A spawn env, B+C server env) and B/C also set the openai/deepseek base URLs', (() => { const cap = { baseUrl: (a, p) => `http://127.0.0.1:1/${a}/${p}` }; const [a, b, c] = [ctxA, ctxB, ctxC].map((x) => ({ ...x, capture: cap })); return armAEnv(a).ANTHROPIC_BASE_URL === 'http://127.0.0.1:1/A/anthropic' && serverEnv(b, '/s', '/l').ANTHROPIC_BASE_URL === 'http://127.0.0.1:1/B/anthropic' && serverEnv(c, '/s', '/l').ANTHROPIC_BASE_URL === 'http://127.0.0.1:1/C/anthropic' && serverEnv(c, '/s', '/l').ADHD_AGENT_OPENAI_BASE_URL === 'http://127.0.0.1:1/C/openai/v1' && serverEnv(b, '/s', '/l').ADHD_AGENT_DEEPSEEK_BASE_URL === 'http://127.0.0.1:1/B/deepseek/v1'; })());
-    chk('R7-model AC1: MODEL is the single pin (fixtures PIN_MODEL = claude-sonnet-5-5) and reaches arm A argv --model, B claudecli provider.model, C anthropic provider.model and the oracle spec pin', (() => { const av = argvA(ctxA, '<mcp>', null); return MODEL === F.PIN_MODEL && MODEL === 'claude-sonnet-5-5' && av[av.indexOf('--model') + 1] === MODEL && providerFor(ctxB, 'B').model === MODEL && providerFor(ctxC, 'C').model === MODEL && ctxA.spec.pin === MODEL; })());
+    chk('R8-capture AC1: a dry-run capture proxy never gets a real upstream (fake Anthropic or the discard sink for every provider, even with PARITY_UPSTREAM_* overrides); a live one does', (() => { const dry = captureUpstreams({ dry: true }, { PARITY_UPSTREAM_ANTHROPIC: 'https://api.anthropic.com' }); const wired = captureUpstreams({ dry: true, fakeAnthropicUrl: 'http://127.0.0.1:4242' }, {}); const live = captureUpstreams({ dry: false }, {}); return Object.values(dry).every((u) => new URL(u).hostname === '127.0.0.1') && wired.anthropic === 'http://127.0.0.1:4242' && new URL(live.anthropic).hostname === 'api.anthropic.com'; })());
+    chk('R8-profile AC1: the R8 profile is B-only haiku/high/capture and every other round keeps the module pins and the full plan', (() => { const p8 = roundProfile({ round: 'R8' }); const p7 = roundProfile({ round: 'R7' }); return p8.arms.join() === 'B' && p8.model === 'haiku' && p8.effort === 'high' && p8.capture === true && p7.arms === null && p7.model === F.PIN_MODEL && p7.effort === null && buildPlan({ round: 'R7' }).length === 3 && buildPlan({ round: 'R8' }).length === 1; })());
+    chk('R7-model AC1: MODEL is the single pin (fixtures PIN_MODEL = claude-sonnet-5-5) and reaches arm A argv --model,B claudecli provider.model, C anthropic provider.model and the oracle spec pin', (() => { const av = argvA(ctxA, '<mcp>', null); return MODEL === F.PIN_MODEL && MODEL === 'claude-sonnet-5-5' && av[av.indexOf('--model') + 1] === MODEL && providerFor(ctxB, 'B').model === MODEL && providerFor(ctxC, 'C').model === MODEL && ctxA.spec.pin === MODEL; })());
     chk('R7-model AC1: negative control, a spec/arm pinned to the previous model (claude-haiku-4-5) is not the pin and its r1_model result is FAIL', (() => { const e = { ...ctxA.spec, pin: MODEL }; const o = O.idealObservation('A', e); o.models = ['claude-haiku-4-5']; return O.scoreObservation(o, e).fields.r1_model.status === 'fail'; })());
     chk('R7-model AC1: the judge model is a distinct pin (JUDGE_MODEL = claude-haiku-4-5, not the arm MODEL)', JG.JUDGE_MODEL === 'claude-haiku-4-5' && JG.JUDGE_MODEL !== MODEL);
     chk('R7-think AC1: the plan text states thinking is the model default and carries no REQUESTED OFF / NOT ACHIEVABLE wording', (() => { const t = planText(opts); return t.includes('thinking: model default on every arm; not forced'.replace('thinking: ', '')) && /THINKING: model default on every arm; not forced/.test(t) && !/REQUESTED OFF|NOT ACHIEVABLE|MAX_THINKING_TOKENS=0/.test(t); })());
@@ -1190,7 +1291,18 @@ export async function selfCheck({ log = console.log, opts = parseArgs([]) } = {}
       chk('judge wiring: the per-round judge cap is checked BEFORE the paid call (no call, no spend at 3/3)', q3.status === 'n/a' && /cap/.test(q3.reason) && calls === 1);
       const dryLedger = path.join(jd, 'dry-ledger', 'RD.json'); const q4 = await judgeRun({ ctx: { ...ctxJ, ledgerPath: dryLedger }, record: mkRec(), aGenuine: true, dry: true, client, judgeDir: path.join(jd, 'dry-out') });
       chk('judge wiring: a dry-run judges with the injected client and never touches the tracked ledger', q4.status === 'scored' && !fs.existsSync(dryLedger));
-      chk('judge wiring: the diff of the pristine fixture is empty and an edit shows as a unified diff', repoDiff(spec, repoDir) === '' && (() => { fs.appendFileSync(path.join(repoDir, 'src/shipping.js'), '// edited\n'); return /\+\/\/ edited/.test(repoDiff(spec, repoDir)); })());
+      { // R8-model AC4 + R8-profile AC3: the alias judge path through the REAL judgeRun (live mode, injected client, tmp ledger): alias resolved from the arm's reported id, waiver recorded, priced by the resolved card
+        const sent = []; const c8 = { async complete({ model }) { sent.push(model); const r = await fakeJudgeClient().complete(); r.inputTokens = 1000; r.outputTokens = 500; r.model = 'claude-haiku-5-5'; return r; } };
+        const lp8 = LG.ledgerPathFor('RJ8', ldir); const prof8 = { judgeModel: 'haiku', arms: ['B'], armAWaiver: 'owner: "just b"' }; const ctx8 = { ...ctxJ, ledgerPath: lp8, profile: prof8 };
+        const q8 = await judgeRun({ ctx: ctx8, record: { ...mkRec(), model: { resolved: ['claude-haiku-5-5'] } }, aGenuine: true, aWaived: true, dry: false, client: c8, judgeDir: path.join(jd, 'out8') });
+        const call8 = LG.readLedger('RJ8', ldir).judgeCalls[0]; const card8 = L.rateCardFor('claude-haiku-5-5').rates;
+        chk('R8-model AC4: the alias judge model is resolved from the arm-reported id BEFORE the call (sent claude-haiku-5-5, not "haiku"), recorded as requested haiku, the A waiver is on the quality record, and the call is priced by the haiku-5-5 card', q8.status === 'scored' && sent.join() === 'claude-haiku-5-5' && q8.modelRequested === 'haiku' && q8.modelId === 'claude-haiku-5-5' && q8.armAWaived === prof8.armAWaiver && Math.abs(call8.costUsd - (1000 * card8.input + 500 * card8.output) / 1e6) < 1e-12);
+        const q9 = await judgeRun({ ctx: { ...ctx8, ledgerPath: LG.ledgerPathFor('RJ9', ldir) }, record: { ...mkRec(), observation: { ...g.observation, models: [] }, model: { resolved: [] } }, aGenuine: true, aWaived: true, dry: false, client: c8, judgeDir: path.join(jd, 'out9') });
+        chk('R8-model AC4: negative control, an alias judge model with no id reported by the arm records judge-failed and makes NO call', q9.status === 'judge-failed' && /no call made/.test(q9.error) && sent.length === 1);
+        const q10 = await judgeRun({ ctx: ctx8, record: { ...mkRec(), model: { resolved: ['claude-haiku-5-5'] } }, aGenuine: false, aWaived: true, dry: false, client: c8, judgeDir: path.join(jd, 'out10') });
+        chk('R8-profile AC3: negative control, the waiver does not make a non-genuine arm judgeable (aGenuine false -> n/a, no call)', q10.status === 'n/a' && sent.length === 1);
+      }
+      chk('judge wiring: the diff of the pristine fixture is empty and an edit shows as a unified diff',repoDiff(spec, repoDir) === '' && (() => { fs.appendFileSync(path.join(repoDir, 'src/shipping.js'), '// edited\n'); return /\+\/\/ edited/.test(repoDiff(spec, repoDir)); })());
     }
     { // R5-resume AC1 + R5-retry: seeding aGenuine on an idempotent resume / retry plan, the ledger-carried retry plan, and the bounded judge-cap extension.
       const refusesWith = (fn) => { try { fn(); return false; } catch { return true; } };
@@ -1309,9 +1421,11 @@ function previousScenarioSha(round, dir = LG.LEDGER_DIR) {
   for (const r of files.filter((x) => n(x) < n(round)).sort((a, b) => n(b) - n(a))) { try { const led = LG.readLedger(r, dir); if (led.scenarioSha) return led.scenarioSha; } catch { /* skip */ } }
   return null;
 }
+/** The web surface of only the arms the round runs (R8: a B-only round probes and prints B alone). */
+export function surfaceFor(opts) { const arms = roundProfile(opts).arms; return arms ? Object.fromEntries(Object.entries(WEB_SURFACE).filter(([a]) => arms.includes(a))) : WEB_SURFACE; }
 async function preflightOnce(opts) {
   const sdk = await loadSdk(opts.wt);
-  const res = await PF.runPreflight(WEB_SURFACE, PF.DEFAULT_SPEC, (leg, spec) => PF.probeLegViaSdk(sdk, leg, spec));
+  const res = await PF.runPreflight(surfaceFor(opts), PF.DEFAULT_SPEC, (leg, spec) => PF.probeLegViaSdk(sdk, leg, spec));
   const receipt = PF.buildReceipt({ spec: PF.DEFAULT_SPEC, distEntry: path.join(opts.wt, 'entrypoint/agent-mcp/dist/src/index.js'), legs: res.legs });
   PF.writeReceipt(tmpRoot(opts.round), receipt);
   return res;
@@ -1370,6 +1484,7 @@ function reparseJudgeMode(opts) {
 async function main() {
   const opts = parseArgs(process.argv.slice(2));
   if (!opts.mode) { console.error('usage: node drive.mjs --self-check | --print-plan | --check-oracle | --check-lib | --dry-run | --live --yes | --reparse-judge  [--out DIR] [--seed S] [--wt PATH] [--claude PATH] [--capture]'); process.exit(2); }
+  if (['dry-run', 'live', 'print-plan', 'preflight'].includes(opts.mode)) { const prof = roundProfile(opts); if (prof.capture) opts.capture = true; }   // R8: a profile that sets capture forces wire capture ON for the round (ledger.profile.capture); --capture stays the opt-in for every other round
   if (opts.mode === 'self-check') { const r = await selfCheck({ opts }); process.exit(r.ok ? 0 : 1); }
   if (opts.mode === 'check-oracle') { process.exit((await checkOracle()) ? 0 : 1); }
   if (opts.mode === 'check-lib') { const { runLibTests } = await import(pathToFileURL(path.join(HERE, 'libtest.mjs')).href); const r = await runLibTests({ log: console.log }); console.log(`lib self-test: ${r.ok ? 'PASS' : 'FAIL'} ${r.total - r.failed.length}/${r.total}`); process.exit(r.ok ? 0 : 1); }

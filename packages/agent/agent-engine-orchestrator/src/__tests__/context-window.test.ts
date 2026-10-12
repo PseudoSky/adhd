@@ -50,6 +50,14 @@ describe("contextWindowFor", () => {
         expect(contextWindowFor("claude-sonnet-4-6")).toBe(200_000);
         expect(contextWindowFor("claude-sonnet")).toBe(128_000);
     });
+    it("resolves the Haiku 5 family at its native 1M window, not the 128K fallback or the haiku-4 200K (R8-model AC3a)", () => {
+        expect(contextWindowFor("claude-haiku-5-5")).toBe(1_000_000);
+        expect(contextWindowFor("claude-haiku-5-5-20260101")).toBe(1_000_000);
+        // negative controls: the previous generation and the bare alias keep their values, so the entry is not a catch-all
+        expect(contextWindowFor("claude-haiku-4-5")).toBe(200_000);
+        expect(contextWindowFor("claude-haiku-4-5-20251001")).toBe(200_000);
+        expect(contextWindowFor("haiku")).toBe(128_000);
+    });
     it("falls back to a safe small window for unknown models (never 'infinite')", () => {
         expect(contextWindowFor("some-unknown-model")).toBe(128_000);
         expect(contextWindowFor(undefined)).toBe(128_000);

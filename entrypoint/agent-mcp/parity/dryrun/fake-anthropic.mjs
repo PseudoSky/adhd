@@ -76,6 +76,7 @@ export function startFakeAnthropic({ mode = 'ideal', log = () => {} } = {}) {
     stats.hosts.add(req.headers.host);
     let raw = ''; req.on('data', (d) => { raw += d; });
     req.on('end', async () => {
+      if (req.headers['x-r2-wire-probe']) { res.writeHead(200, { 'content-type': 'application/json' }); res.end('{}'); return; }   // R8: the fake claude's request-shaped probe (effort/model wire check): answered, never scripted, never counted
       if (req.method !== 'POST' || !/\/v1\/messages/.test(req.url)) { res.writeHead(404); res.end('{}'); return; }
       stats.requests++;
       let body; try { body = JSON.parse(raw); } catch { res.writeHead(400); res.end('{}'); return; }

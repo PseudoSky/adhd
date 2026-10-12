@@ -18,6 +18,16 @@
 // excluded from the arm's score, never counted as an arm failure).
 
 import { LEGACY_MARKER, PIN_MODEL } from './fixtures.mjs';
+
+/**
+ * R8-model AC2: does a response model id satisfy the model pin? A concrete pin matches itself and any dated snapshot of it (prefix). An ALIAS pin (no `claude-`
+ * prefix, e.g. `haiku`: the claude CLI resolves it at run time) matches a concrete id of that same family only (`claude-haiku-...`), never another family.
+ */
+export function pinMatches(model, pin) {
+  const m = String(model); const p = String(pin ?? '');
+  if (p !== '' && !p.startsWith('claude-')) return m.startsWith(`claude-${p}-`);   // alias pin: the concrete family it resolves into
+  return m.startsWith(p);
+}
 /** Every balanced top-level {...} span in `text` that parses to a plain object; returns them in order. */
 export function extractJsonObjects(text) {
   const out = [];
@@ -308,7 +318,7 @@ export const FIELDS = [
   { id: 'r1_model', phase: 1, kind: 'process', tag: 'R1', desc: 'model resolution: every conversation TURN\'s response model id is the pinned model (a dated snapshot of it is fine). SCOPE-R5-oracle-model-and-leak: models seen only in hidden helper calls (result.modelUsage keys with no assistant turn) are recorded as informational `sideModels`, never scored',
     score: (o, e) => { const m = o.models ?? []; if (!m.length) return { status: 'invalid', detail: 'no response model observed (harness)' };
       const side = (o.sideModels ?? []).filter((x) => !m.includes(x)); const note = side.length ? ` (sideModels, not scored: ${side.join(',')})` : '';
-      const bad = m.filter((x) => !String(x).startsWith(e.pin)); return bad.length ? { status: 'fail', detail: `served by ${bad.join(',')}${note}` } : { status: 'pass', detail: `${m.join(',')}${note}` }; } },
+      const bad = m.filter((x) => !pinMatches(x, e.pin)); return bad.length ? { status: 'fail', detail: `served by ${bad.join(',')}${note}` } : { status: 'pass', detail: `${m.join(',')}${note}` }; } },
   { id: 'c1_cache', phase: 1, kind: 'process', tag: 'C1', desc: 'C warm repetition inside the 5 min TTL: the FIRST request already reads the prefix from cache (A/B usage is recorded, not scored)',
     applies: (arm) => arm === 'C',
     score: (o) => {
@@ -629,6 +639,12 @@ export function selfTest({ log = () => {} } = {}) {
   check('R7-model AC1: r1_model passes the pinned model (and a dated snapshot of it) and FAILS an arm pinned to the wrong id (claude-haiku-4-5, claude-sonnet-5, claude-sonnet-4-6, claude-haiku-5-5)',
     e.pin === PIN_MODEL && PIN_MODEL === 'claude-sonnet-5-5' && scoreObservation(idealObservation('C', e), e).fields.r1_model.status === 'pass' && scoreObservation(datedPin, e).fields.r1_model.status === 'pass'
     && ['claude-haiku-4-5', 'claude-sonnet-5', 'claude-sonnet-4-6', 'claude-haiku-5-5'].every((id) => wrongModel(id) === 'fail'));
+  // R8-model AC2: an ALIAS pin (haiku) accepts the concrete id it resolved to (claude-haiku-5-5, and its dated snapshot) and rejects every other family and a pin-prefix lookalike.
+  const eAlias = { ...e, pin: 'haiku' }; const aliasModel = (id) => { const o = idealObservation('B', eAlias); o.models = Array.isArray(id) ? id : [id]; return scoreObservation(o, eAlias).fields.r1_model; };
+  check('R8-model AC2: r1_model with the alias pin "haiku" PASSES claude-haiku-5-5 (and a dated snapshot, and the previous haiku generation) and FAILS claude-sonnet-5-5, claude-opus-5-5, a lookalike and a turn mixing families',
+    ['claude-haiku-5-5', 'claude-haiku-5-5-20261001', 'claude-haiku-4-5'].every((id) => aliasModel(id).status === 'pass') && /claude-haiku-5-5/.test(aliasModel('claude-haiku-5-5').detail)
+    && ['claude-sonnet-5-5', 'claude-opus-5-5', 'claude-haikuX-1', 'haikuish'].every((id) => aliasModel(id).status === 'fail') && aliasModel(['claude-haiku-5-5', 'claude-sonnet-5-5']).status === 'fail');
+  check('R8-model AC2: pinMatches keeps the concrete-pin rule (prefix) and never lets a concrete pin act as an alias', pinMatches('claude-sonnet-5-5-2026', 'claude-sonnet-5-5') && !pinMatches('claude-sonnet-5', 'claude-sonnet-5-5') && !pinMatches('claude-haiku-5-5', 'claude-sonnet-5-5'));
   const totalAnswer = idealObservation('B', e); setJson(totalAnswer.phase2, (j) => { j.carrier_rate = e.rate; });
   check('q_rate: answering with the TOTAL instead of the carrier rate fails', scoreObservation(totalAnswer, e).fields.q_rate.status === 'fail');
   const sFlat = idealObservation('B', e); setJson(sFlat.phase1, (j) => { j.flat_shipping_total = e.carrierRate; });

@@ -44,6 +44,8 @@ const MODEL_MAX_TOKENS: [prefix: string, maxTokens: number][] = [
     // Sonnet 5 family: catalog `max_output_tokens.upper` 128000 (default 128000 on 5-5, 64000 on 5), claude 2.1.296 model catalog.
     ["claude-sonnet-5",         128_000],
     ["claude-sonnet-4",          64_000],
+    // Haiku 5 family: catalog `max_output_tokens: {default: 128000, upper: 128000}` for claude-haiku-5-5 (claude 2.1.296 baked model catalog).
+    ["claude-haiku-5",          128_000],
     ["claude-haiku-4",           64_000],
     ["claude-3-5-sonnet",         8_192],
     ["claude-3-5-haiku",          8_192],

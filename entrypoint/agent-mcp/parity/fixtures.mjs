@@ -35,7 +35,8 @@ export const CASE_COUNT = 25;     // visible test cases: all fail before the fix
  * Per-run values. The system-prompt nonce is shared by rep 1 and rep 2 of one arm (cold then warm prefix);
  * everything else is per run so a warm run cannot answer from a previous run's facts.
  */
-export function makeSpec(args) { const sp = baseSpec(args); return { ...sp, carrierRate: Math.round((sp.rate - sp.handlingFee) * 100) / 100 }; }
+/** `args.pin` (R8) overrides the model pin recorded on the spec (round profile); absent = PIN_MODEL. It does not enter the seeded RNG streams. */
+export function makeSpec(args) { const { pin, ...rest } = args; const sp = baseSpec(rest); return { ...sp, ...(pin ? { pin } : {}), carrierRate: Math.round((sp.rate - sp.handlingFee) * 100) / 100 }; }
 function baseSpec({ seed, arm, rep }) {
   const armRng = rng(`${seed}|sys|${arm}`);
   const r = rng(`${seed}|run|${arm}|${rep}`);

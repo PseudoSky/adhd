@@ -6,6 +6,8 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 
 export const CODES = Object.freeze(['GREEN', 'LAUNCH_FAIL', 'EMPTY_FALSE_SUCCESS', 'TOOL_ERROR', 'MARKER_MISSING', 'EGRESS_DENIED', 'TIMEOUT', 'NOT_PROBEABLE']);
 export const DEFAULT_SPEC = Object.freeze({ targetUrl: 'https://example.com', marker: '<title>Example Domain</title>', minBytes: 200, minWallMs: 150, timeoutMs: 120_000 });
@@ -85,4 +87,11 @@ export async function probeLegViaSdk(sdk, leg, spec) {
     return { launched: true, listed: true, isError: !!r.isError, text, wallMs: Date.now() - c0 };
   })();
   try { return await Promise.race([work, timeout]); } finally { try { await client?.close(); } catch { /* ignore */ } }
+}
+
+// CLI: `node preflight.mjs [--round R<n>] [--wt PATH]` runs the driver's zero-model preflight (drive.mjs `preflight`), which derives the legs from the round's ARMS
+// (a ledger profile such as R8's B-only narrows the legs to that arm). Exit 0 iff every probeable leg is GREEN, else 3 (usage errors 2). Zero model calls.
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  const r = spawnSync(process.execPath, [path.join(path.dirname(fileURLToPath(import.meta.url)), 'drive.mjs'), 'preflight', ...process.argv.slice(2)], { stdio: 'inherit' });
+  process.exit(r.status ?? 1);
 }

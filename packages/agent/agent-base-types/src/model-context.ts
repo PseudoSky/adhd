@@ -22,6 +22,9 @@ const CONTEXT_WINDOWS: [prefix: string, window: number][] = [
     // Sonnet 5 family (5, 5-5): native 1M window, no beta header (claude 2.1.296 model catalog `context.window: 1e6, native_1m: true`;
     // Anthropic Sonnet 5.5 migration guide: "larger context window, with no beta header"). Without this entry the family hit the 128K fallback.
     ['claude-sonnet-5', 1_000_000],
+    // Haiku 5 family (5-5): native 1M window (claude 2.1.296 baked model catalog, id claude-haiku-5-5: `context: {window: 1e6, native_1m: true, supports_1m_beta: true}`).
+    // Without this entry the family hit the 128K fallback (R8-model AC3).
+    ['claude-haiku-5', 1_000_000],
     ['claude-haiku-4', 200_000],
     ['claude-fable', 200_000],
     ['claude-3', 200_000],

@@ -1,0 +1,30 @@
+{
+  "round": "R8",
+  "cap": 3,
+  "approvedBy": "owner (2026-10-12): \"just b\" -> round R8 is ONE run of arm B (agent-mcp claudecli) on the model alias \"haiku\" (the judge is the alias too), effort high set explicitly, wire capture ON; the arm-A-first reference gate is waived for this round (SCOPE-R8-B-only); a B result without a same-model A is not a parity verdict",
+  "extraRunReason": "",
+  "runs": [],
+  "judgeCalls": [],
+  "scenarioSha": "",
+  "scopeChanges": [
+    "SCOPE-R8-model-alias",
+    "SCOPE-R8-B-only",
+    "SCOPE-R6B addendum 4",
+    "SCOPE-R6B addendum"
+  ],
+  "armOrder": [],
+  "startedAt": "2026-10-12T07:47:30.000Z",
+  "armA": null,
+  "releases": [],
+  "profile": {
+    "arms": [
+      "B"
+    ],
+    "armAWaiver": "owner (2026-10-12): \"just b\" (SCOPE-R8-B-only): R8 is one B run; the A-first reference rule is not applied; R6 A1/C1 (claude-haiku-4-5) are informational context only",
+    "model": "haiku",
+    "judgeModel": "haiku",
+    "effort": "high",
+    "capture": true
+  },
+  "judgeCapReason": "cap 3 covers the single judge call of the one R8 B run (judge model: the alias haiku, resolved from the concrete id B reports before the call)"
+}

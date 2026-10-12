@@ -38,7 +38,7 @@ const bytes = (v) => Buffer.byteLength(JSON.stringify(v ?? null));
 
 /** Normalise one request body (Anthropic /v1/messages or OpenAI chat/completions) to the comparable facts. */
 export function describeRequest(body) {
-  if (!body || typeof body !== 'object') return { kind: 'non-json', system: '', tools: [], toolsBytes: 0, messageCount: 0, messagesBytes: 0, model: null };
+  if (!body || typeof body !== 'object') return { kind: 'non-json', system: '', tools: [], toolsBytes: 0, messageCount: 0, messagesBytes: 0, model: null, effort: null, thinking: null };
   const isAnthropic = 'system' in body || (Array.isArray(body.messages) && body.max_tokens !== undefined && !Array.isArray(body.tools?.[0]?.function) && body.tools?.[0]?.type !== 'function');
   const msgs = Array.isArray(body.messages) ? body.messages : [];
   let system = ''; let nonSystem = msgs;
@@ -46,7 +46,10 @@ export function describeRequest(body) {
   else { const sys = msgs.filter((m) => m.role === 'system' || m.role === 'developer'); system = sys.map((m) => textOfContent(m.content)).join('\n'); nonSystem = msgs.filter((m) => m.role !== 'system' && m.role !== 'developer'); }
   const tools = Array.isArray(body.tools) ? body.tools : [];
   const names = tools.map((t) => t?.name ?? t?.function?.name ?? t?.type ?? '?');
-  return { kind: isAnthropic ? 'anthropic' : 'openai-chat', model: body.model ?? null, system, tools: names, toolsBytes: tools.length ? bytes(tools) : 0, messageCount: nonSystem.length, messagesBytes: bytes(nonSystem), systemBytes: Buffer.byteLength(system), stream: body.stream ?? null };
+  return { kind: isAnthropic ? 'anthropic' : 'openai-chat', model: body.model ?? null, system, tools: names, toolsBytes: tools.length ? bytes(tools) : 0, messageCount: nonSystem.length, messagesBytes: bytes(nonSystem), systemBytes: Buffer.byteLength(system), stream: body.stream ?? null,
+    // R8-effort: the reasoning-effort setting the request ACTUALLY carried. Anthropic /v1/messages: `output_config.effort` (the claude CLI 2.1.296 sends it for models with an effort setting, probed against a local mock
+    // upstream: --effort high or CLAUDE_CODE_EFFORT_LEVEL=high -> "high", unset -> the model default "medium" for claude-haiku-5-5). OpenAI chat: `reasoning_effort`. null = the request carries none.
+    effort: body.output_config?.effort ?? body.reasoning_effort ?? null, thinking: body.thinking?.type ?? (body.thinking ? 'set' : null), maxTokens: body.max_tokens ?? body.max_completion_tokens ?? null };
 }
 
 const usageFacts = (u) => {
@@ -81,6 +84,17 @@ export function analyzeWire(files) {
   return { arms };
 }
 
+/**
+ * R8-effort / R8-model: what the wire says about one arm. "Main" requests declare tools (the agent turns); the claude CLI's tool-less side calls (title, probes) are
+ * reported apart so they can never satisfy or fail an effort check. Efforts and models are distinct values in first-seen order.
+ * @returns {{requests:number, mainRequests:number, mainModels:string[], mainEfforts:(string|null)[], sideEfforts:(string|null)[], sideModels:string[]}}
+ */
+export function wireFactsFor(analysis, arm) {
+  const rs = analysis.arms[arm]?.requests ?? []; const main = rs.filter((r) => r.tools.length > 0); const side = rs.filter((r) => r.tools.length === 0);
+  const uniq = (xs) => [...new Set(xs)];
+  return { requests: rs.length, mainRequests: main.length, mainModels: uniq(main.map((r) => r.model).filter(Boolean)), mainEfforts: uniq(main.map((r) => r.effort)), sideEfforts: uniq(side.map((r) => r.effort)), sideModels: uniq(side.map((r) => r.model).filter(Boolean)) };
+}
+
 /** Side-by-side delta of the arms' first requests. */
 export function diffFirstRequests(analysis) {
   const names = Object.keys(analysis.arms).sort();
@@ -107,6 +121,7 @@ export function renderWireDiff(analysis) {
     if (!f) { out.push('   (no requests captured)', ''); continue; }
     out.push(`   first request (${f.provider} seq ${f.seq} ${f.path ?? ''}, model ${f.model}${f.redacted ? ', BODY REDACTED/UNPARSED' : ''})`,
       `   system: ${f.systemBytes ?? 0} bytes`, ...(f.system ? ['      | ' + f.system.slice(0, 600).replace(/\n/g, '\n      | ') + (f.system.length > 600 ? '\n      | ...[' + (f.system.length - 600) + ' more chars]' : '')] : []),
+      `   effort: ${f.effort ?? '(none sent)'}   thinking: ${f.thinking ?? '(none sent)'}   max_tokens: ${f.maxTokens ?? '-'}`,
       `   tools: ${f.tools.length} (${f.toolsBytes} bytes of tools JSON): ${f.tools.join(', ') || '(none)'}`,
       `   messages: ${f.messageCount} (${f.messagesBytes} bytes); request body ${f.requestBytes} bytes`);
     out.push('   per-turn usage:', '      #  prov       status  msgs  input  cacheRead  cacheCreate  output  ttfb ms  total ms');

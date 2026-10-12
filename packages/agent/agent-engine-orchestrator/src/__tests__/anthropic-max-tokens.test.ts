@@ -1,5 +1,5 @@
 /**
- * R7-think AC3b -- the anthropic provider's default max_tokens for the Sonnet 5 family comes from the model table
+ * R7-think AC3b / R8-model AC3b -- the anthropic provider's default max_tokens for the Sonnet 5 family (and the Haiku 5 family) comes from the model table
  * (catalog max_output_tokens.upper 128000), not the engine's small fallback. Also pins that the request body carries
  * no `thinking` field (the provider never forces thinking on or off; the API default for the model governs).
  * Real AnthropicProvider; only the SDK network boundary is mocked.
@@ -54,6 +54,14 @@ async function requestFor(model: string): Promise<Record<string, unknown>> {
 describe("R7-think AC3b: Sonnet 5 family max_tokens", () => {
   it.each(["claude-sonnet-5-5", "claude-sonnet-5-5-20260101", "claude-sonnet-5"])("%s uses 128000, not the engine fallback", async (model) => {
     expect((await requestFor(model))["max_tokens"]).toBe(128_000);
+  });
+
+  it.each(["claude-haiku-5-5", "claude-haiku-5-5-20260101"])("R8-model AC3b: %s uses 128000 (catalog max_output_tokens upper), not the haiku-4 64000", async (model) => {
+    expect((await requestFor(model))["max_tokens"]).toBe(128_000);
+  });
+
+  it("R8-model AC3b negative control: claude-haiku-4-5 keeps 64000, so the haiku-5 entry is not a catch-all", async () => {
+    expect((await requestFor("claude-haiku-4-5"))["max_tokens"]).toBe(64_000);
   });
 
   it("negative controls: neighbours keep their own values and an unknown model still takes the engine fallback", async () => {

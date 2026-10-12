@@ -9,6 +9,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { RUBRIC, RUBRIC_TEXT, parseJudgeOutput, qualityMean } from './quality.mjs';
+import { isModelAlias } from './ledger.mjs';
+import { rateCardFor } from './lib.mjs';
 
 export const JUDGE_MODEL = 'claude-haiku-4-5';          // pinned id recorded in every judge record (R5.AC5). SEPARATE from the arms' model pin (fixtures.mjs PIN_MODEL, claude-sonnet-5-5 since R7): the judge stays on the cheapest tier by owner direction (R7-model AC1)
 export const JUDGE_MAX_TOKENS = 1500;
@@ -75,19 +77,38 @@ export function buildBrief({ prompts, ticketText, diff, transcript, label = rand
 /** Eligibility (R5.AC7): judge only when A and the judged arm both genuinely succeeded. */
 export function judgeEligible({ aGenuine, armGenuine }) { return aGenuine === true && armGenuine === true; }
 
-export function judgeCostUsd(inputTokens, outputTokens) { return (inputTokens * JUDGE_PRICE_PER_MTOK.input + outputTokens * JUDGE_PRICE_PER_MTOK.output) / 1e6; }
+/**
+ * USD for one judge call. Without `model` the pinned judge's list price (JUDGE_PRICE_PER_MTOK). With `model` (R8-model AC4: the id the API reported, i.e. the RESOLVED
+ * id) the rate card of that id (lib.mjs RATE_CARDS); a model with no card is null (unmeasured), never another model's price.
+ */
+export function judgeCostUsd(inputTokens, outputTokens, model) {
+  if (model == null) return (inputTokens * JUDGE_PRICE_PER_MTOK.input + outputTokens * JUDGE_PRICE_PER_MTOK.output) / 1e6;
+  const r = rateCardFor(model)?.rates; return r ? (inputTokens * r.input + outputTokens * r.output) / 1e6 : null;
+}
+/**
+ * R8-model AC4: the id the judge call is SENT with. A concrete id is sent as is. An ALIAS (`haiku`) is a claude CLI shorthand the Messages API does not resolve, so it is
+ * resolved from the concrete ids the round's arms actually reported (`candidates`, first match of the `claude-<alias>-` family); with none to resolve from it THROWS (the
+ * driver records judge-failed, no paid call is made).
+ */
+export function resolveJudgeModel(requested, candidates = []) {
+  if (!isModelAlias(requested)) return requested;
+  const family = `claude-${requested}-`; const hit = candidates.map(String).find((m) => m.startsWith(family));
+  if (!hit) throw new Error(`judge: model alias "${requested}" is not a Messages API model id and no arm of this round reported a concrete ${family}* id to resolve it from: no call made`);
+  return hit;
+}
 
 /**
  * Run one judge call through an INJECTED client ({ complete({model, temperature, maxTokens, prompt}) => {text, inputTokens, outputTokens} }).
  * The caller (the driver, live round only) supplies the client; tests supply a fake. Logs the call via `onCall` (ledger) and writes the record.
  * @returns {Promise<{ok:true, scores, notes, record} | {ok:false, code:string, record}>}
  */
-export async function runJudge({ client, arm, brief, briefSha, outDir, onCall, briefFormat = BRIEF_FORMAT }) {
-  const reply = await client.complete({ model: JUDGE_MODEL, temperature: 0, maxTokens: JUDGE_MAX_TOKENS, prompt: brief });
-  const record = { arm, modelId: JUDGE_MODEL, briefFormat, briefSha, rawResponse: reply.text, inputTokens: reply.inputTokens, outputTokens: reply.outputTokens, costUsd: judgeCostUsd(reply.inputTokens, reply.outputTokens) };
+export async function runJudge({ client, arm, brief, briefSha, outDir, onCall, briefFormat = BRIEF_FORMAT, model = JUDGE_MODEL, modelRequested = model }) {
+  const reply = await client.complete({ model, temperature: 0, maxTokens: JUDGE_MAX_TOKENS, prompt: brief });
+  const resolved = reply.model ?? null;   // R8-model AC4: the id the API reported for the call; it prices the call and is what the record names
+  const record = { arm, modelId: resolved ?? model, ...(modelRequested !== model || resolved ? { modelRequested, modelSent: model, modelResolved: resolved } : {}), briefFormat, briefSha, rawResponse: reply.text, inputTokens: reply.inputTokens, outputTokens: reply.outputTokens, costUsd: judgeCostUsd(reply.inputTokens, reply.outputTokens, resolved ?? model) };
   let parsed = null; try { parsed = parseJudgeOutput(reply.text); } catch (e) { record.error = e.code ?? String(e.message); }
   if (outDir) { fs.mkdirSync(outDir, { recursive: true }); fs.writeFileSync(path.join(outDir, `${arm}.json`), JSON.stringify({ ...record, ...(parsed ?? {}) }, null, 2)); }
-  if (onCall) onCall({ arm, modelId: JUDGE_MODEL, inputTokens: record.inputTokens, outputTokens: record.outputTokens, costUsd: record.costUsd, briefSha });
+  if (onCall) onCall({ arm, modelId: record.modelId, inputTokens: record.inputTokens, outputTokens: record.outputTokens, costUsd: record.costUsd, briefSha });
   return parsed ? { ok: true, ...parsed, record } : { ok: false, code: record.error, record };
 }
 
@@ -148,7 +169,7 @@ export function judgeAuthShape(secret) {
  * The LIVE judge client: one Anthropic Messages API call (paid third-party service, R5.AC8). The credential is the arm-C credential path
  * (R5-harness AC6): ANTHROPIC_API_KEY, else ADHD_AGENT_ANTHROPIC_SECRET via process env / the .env cascade; the auth shape follows the token prefix.
  * It fails loudly (before any fetch) when no credential exists and never prints the secret. Only the driver in an owner-approved live round constructs it.
- * @returns {{complete(args:{model:string,temperature:number,maxTokens:number,prompt:string}):Promise<{text:string,inputTokens:number,outputTokens:number}>}}
+ * @returns {{complete(args:{model:string,temperature:number,maxTokens:number,prompt:string}):Promise<{text:string,inputTokens:number,outputTokens:number,model?:string|null}>}}
  */
 export function liveJudgeClient({ apiKey, env = process.env, cwd = process.cwd(), home = os.homedir(), fetchImpl = globalThis.fetch } = {}) {
   return {
@@ -160,7 +181,7 @@ export function liveJudgeClient({ apiKey, env = process.env, cwd = process.cwd()
         body: JSON.stringify({ model, temperature, max_tokens: maxTokens, ...(shape.system ? { system: shape.system } : {}), messages: [{ role: 'user', content: prompt }] }) });
       if (!res.ok) throw new Error(`judge: HTTP ${res.status} ${String(await res.text()).slice(0, 200)}`);
       const b = await res.json();
-      return { text: (b.content ?? []).filter((x) => x.type === 'text').map((x) => x.text).join(''), inputTokens: b.usage?.input_tokens ?? 0, outputTokens: b.usage?.output_tokens ?? 0 };
+      return { text: (b.content ?? []).filter((x) => x.type === 'text').map((x) => x.text).join(''), inputTokens: b.usage?.input_tokens ?? 0, outputTokens: b.usage?.output_tokens ?? 0, model: typeof b.model === 'string' ? b.model : null };
     },
   };
 }

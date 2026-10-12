@@ -23,7 +23,16 @@ const STATE = process.env.R2_FAKE_STATE || path.join(process.cwd(), '.r2-fake-st
 fs.mkdirSync(STATE, { recursive: true });
 const SDK = process.env.R2_SDK_ROOT;
 const MODE = process.env.R2_FAKE_MODE || 'ideal';
-const MODEL = flag('--model') || 'claude-sonnet-5-5';
+// R8-model: like the real CLI, a family alias resolves to the latest concrete id of the family (claude 2.1.296 baked catalog `latest_per_family`), and the resolved id is what every stream event reports.
+const ALIAS_TO_ID = { haiku: 'claude-haiku-5-5', sonnet: 'claude-sonnet-5-5', opus: 'claude-opus-5-5' };
+const MODEL = ALIAS_TO_ID[flag('--model')] ?? (flag('--model') || 'claude-sonnet-5-5');
+// R8-effort: the effort the real CLI puts on the wire (probed with claude 2.1.296 behind a mock upstream: `--effort` flag, else CLAUDE_CODE_EFFORT_LEVEL, else the model default `medium` for claude-haiku-5-5).
+const EFFORT = flag('--effort') ?? process.env.CLAUDE_CODE_EFFORT_LEVEL ?? 'medium';
+const wireProbe = async () => {   // one request-shaped POST through ANTHROPIC_BASE_URL (the capture proxy, or the fake upstream); the fake upstream answers x-r2-wire-probe requests with an empty 200 and never scripts them
+  const base = process.env.ANTHROPIC_BASE_URL; if (!base) return;
+  try { await fetch(`${base.replace(/\/$/, '')}/v1/messages`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-r2-wire-probe': '1' }, body: JSON.stringify({ model: MODEL, max_tokens: 1, stream: true, messages: [{ role: 'user', content: 'r2 fake wire probe' }], tools: [{ name: 'r2_probe_tool', input_schema: { type: 'object' } }], output_config: { effort: EFFORT }, thinking: { type: 'adaptive', display: 'omitted' } }) }); } catch { /* the probe is best effort */ }
+};
+await wireProbe();
 const mcpArg = flag('--mcp-config');
 const mcpConfig = mcpArg ? JSON.parse(mcpArg.trimStart().startsWith('{') ? mcpArg : fs.readFileSync(mcpArg, 'utf8')) : { mcpServers: {} };
 const bridge = Object.values(mcpConfig.mcpServers || {}).some((e) => e.type === 'http' || e.type === 'sse' || e.url);

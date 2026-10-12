@@ -22,6 +22,15 @@ export const RATE_CARDS = Object.freeze({
   // pricing:"tier_2_10_cache_read_0_10" (claude 2.1.296). Snapshot-sourced, NOT vendor-verified; no long-context override tier is applied.
   'claude-sonnet-5-5': { rates: Object.freeze({ input: 2.0, output: 10.0, cacheRead: 0.10, write5m: 2.5, write1h: 4.0 }),
     source: 'agent-core-provider pricing.json OpenRouter snapshot anthropic/claude-sonnet-5.5 fetched 2026-10-08 (snapshot-sourced, not vendor-verified)' },
+  // R8-model: Haiku 5.5. Like Sonnet 5.5 there is no vendor-direct RATE_CARD entry; the only committed price is the OpenRouter feed snapshot
+  // packages/agent/agent-core-provider/src/pricing/pricing.json, id anthropic/claude-haiku-5.5 (fetched_at 2026-10-08T18:57:29Z): prompt 1e-7, completion 5e-7,
+  // input_cache_read 1e-8, input_cache_write 1.25e-7, input_cache_write_1h 2e-7 per token. The same record carries a >=100k-prompt-token override tier
+  // (prompt 5e-7, completion 2.5e-6, cache read 5e-8, write 6.25e-7 / 1h 1e-6); like the product (rate-card.ts: overrides "stored, never applied") and the sonnet card
+  // it is NOT applied, but it is recorded here as `tierOverride` so a run whose requests exceed it can say so (record.model.pricing). Snapshot-sourced, NOT vendor-verified:
+  // the claude CLI's own total_cost_usd (arm A authoritative, arm B cliReportedParent) is the cross-check.
+  'claude-haiku-5-5': { rates: Object.freeze({ input: 0.10, output: 0.50, cacheRead: 0.01, write5m: 0.125, write1h: 0.20 }),
+    tierOverride: Object.freeze({ minPromptTokens: 100_000, rates: Object.freeze({ input: 0.50, output: 2.50, cacheRead: 0.05, write5m: 0.625, write1h: 1.0 }) }),
+    source: 'agent-core-provider pricing.json OpenRouter snapshot anthropic/claude-haiku-5.5 fetched 2026-10-08, the same rates as the product rate-card.ts claude_haiku_5_5 entry, which reproduces the CLI total_cost_usd of a recorded run to 8 digits (not vendor-docs-verified; >=100k-prompt-token override tier recorded, not applied)' },
 });
 /** The card for `model` (a dated snapshot suffix `-YYYYMMDD` is stripped), or null when none exists. Never falls back to another model. */
 export function rateCardFor(model) {
@@ -31,6 +40,14 @@ export function rateCardFor(model) {
 export const unmeasuredNote = (model) => `unmeasured: no rate card for ${model}`;
 /** Rates for the pinned model (null = unmeasured). Every default-rate recompute below uses this. */
 export const RATES_PER_M = rateCardFor(PIN_MODEL)?.rates ?? null;
+/**
+ * R8-model AC3: the rates a turn is priced at follows the model the RESPONSE reported (the resolved id when the run asked for an alias such as `haiku`), not the
+ * round's pin. No observed model (absent/empty) = `fallback` (the pin's rates); an observed model with no card = null (unmeasured), never another model's price.
+ */
+export function ratesForModel(model, fallback = RATES_PER_M) {
+  if (model == null || String(model).trim() === '') return fallback;
+  return rateCardFor(model)?.rates ?? null;
+}
 
 /** Normalise an Anthropic usage object into the fields the cost model prices. */
 export function normUsage(u) {
@@ -134,7 +151,7 @@ export function parseCliStream(events) {
 export function turnsFromCliStream(p) {
   return p.order.map((id, i) => {
     const r = p.msgs.get(id); const n = normUsage(r.usage);
-    return { idx: i + 1, id, parent: r.parent, model: r.model, ...n, stop: r.stop, tools: r.tools, thinkingBlock: r.thinking, usd: priceNorm(n).usd };
+    return { idx: i + 1, id, parent: r.parent, model: r.model, ...n, stop: r.stop, tools: r.tools, thinkingBlock: r.thinking, usd: priceNorm(n, ratesForModel(r.model)).usd };
   });
 }
 const ZERO_CUM = { usd: 0, in: 0, out: 0, cr: 0, cw: 0 };
@@ -179,7 +196,7 @@ export function reconcileCliOutput(turns, wantOrResult) {
   const have = turns.reduce((a, t) => a + t.out, 0);
   if (!(want > 0) || !turns.length || want === have) return turns;
   const f = have > 0 ? want / have : null;
-  return turns.map((t, i) => { const out = f != null ? t.out * f : (i === 0 ? want : 0); const n = { ...t, out, outScaled: true }; return { ...n, usd: priceNorm(n).usd }; });
+  return turns.map((t, i) => { const out = f != null ? t.out * f : (i === 0 ? want : 0); const n = { ...t, out, outScaled: true }; return { ...n, usd: priceNorm(n, ratesForModel(t.model)).usd }; });
 }
 /** Parent-level calls (parent === null) joined with their results, in order. */
 export function callsFromCliStream(p) {

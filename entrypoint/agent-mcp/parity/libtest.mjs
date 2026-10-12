@@ -56,6 +56,25 @@ export async function runLibTests({ log = console.log } = {}) {
     const p = L.priceNorm(L.normUsage({ input_tokens: 5, output_tokens: 5 }), L.rateCardFor('claude-sonnet-5')?.rates ?? null);
     eq(p.usd, null); ok(p.unmeasured === true, 'unmeasured flag'); eq(L.priceTokens({ in: 5 }, null), null); eq(L.unmeasuredNote('claude-opus-9'), 'unmeasured: no rate card for claude-opus-9');
   });
+  await t('R8-model AC3: claude-haiku-5-5 is priced from the committed pricing.json snapshot ($0.10/$0.50, cache read 0.01, 5m 0.125, 1h 0.20 per M), the >=100k override tier is recorded not applied, and neighbours keep their own card', () => {
+    const c = L.rateCardFor('claude-haiku-5-5'); eq(c?.rates, { input: 0.10, output: 0.50, cacheRead: 0.01, write5m: 0.125, write1h: 0.20 });
+    eq(c.tierOverride.minPromptTokens, 100000); ok(/anthropic\/claude-haiku-5\.5/.test(c.source) && /not applied/.test(c.source), 'the card cites its source and says the tier is not applied');
+    eq(L.rateCardFor('claude-haiku-5-5-20261001')?.model, 'claude-haiku-5-5');
+    const n = L.normUsage({ input_tokens: 1e6, output_tokens: 1e6, cache_read_input_tokens: 1e6, cache_creation_input_tokens: 2e6, cache_creation: { ephemeral_5m_input_tokens: 1e6, ephemeral_1h_input_tokens: 1e6 } });
+    near(L.priceNorm(n, c.rates).usd, 0.10 + 0.50 + 0.01 + 0.125 + 0.20, 1e-9); ok(Math.abs(L.priceNorm(n, c.rates).usd - L.priceNorm(n, HK).usd) > 1, 'negative control: the haiku-4-5 card is a different number');
+    eq(L.rateCardFor('claude-haiku-4-5').rates, HK);
+  });
+  await t('R8-model AC3: turns are priced by the model the RESPONSE reported (the resolved id), never the round pin; an observed model without a card is unmeasured; no observed model falls back to the pin', () => {
+    const usage = { input_tokens: 1e6, output_tokens: 1e6 };
+    const mk = (model) => ({ order: ['m1'], msgs: new Map([['m1', { model, parent: null, usage, stop: 'end_turn', tools: [], thinking: false }]]) });
+    const usdFor = (model) => L.turnsFromCliStream(mk(model))[0].usd;
+    near(usdFor('claude-haiku-5-5'), 0.10 + 0.50, 1e-9);                                  // resolved haiku id -> haiku-5-5 card, although the pin card is sonnet's
+    near(usdFor('claude-sonnet-5-5'), 2 + 10, 1e-9);
+    eq(usdFor('claude-opus-9'), null);                                                    // no card -> unmeasured, not the pin's price
+    near(usdFor(undefined), L.priceNorm(L.normUsage(usage)).usd, 1e-9);                   // no observed model -> the pin's default card
+    eq(L.ratesForModel('claude-haiku-5-5'), L.RATE_CARDS['claude-haiku-5-5'].rates); eq(L.ratesForModel('claude-opus-9'), null); eq(L.ratesForModel(''), L.RATES_PER_M);
+    const scaled = L.reconcileCliOutput([{ idx: 1, model: 'claude-haiku-5-5', in: 0, cr: 0, w5m: 0, w1h: 0, wUntiered: 0, out: 1 }], 1e6); near(scaled[0].usd, 0.50, 1e-9);
+  });
   await t('cost: untiered writes are flagged and priced at 5m, never 1h', () => {
     const p = L.priceNorm(L.normUsage({ cache_creation_input_tokens: 1000000 }), HK);
     ok(p.untieredFlag, 'flag'); near(p.usd, 1.25, 1e-9);

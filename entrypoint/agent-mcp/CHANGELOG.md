@@ -3,6 +3,8 @@
 ### 🚀 Features
 
 - **agent-mcp:** parity wire capture: opt-in `drive.mjs --capture` routes arms A, B and C (and the openai/deepseek base URLs) through one local transparent logging proxy (`parity/capture-proxy.mjs`) writing `logs/wire/proxy-<arm>-<provider>.jsonl`, plus the offline `parity/wire-diff.mjs` reader that diffs the context each arm actually sent (R6B-proxy AC1-AC6)
+- **agent-mcp:** parity R8 round profile (`ledger.profile`, fail closed): a B-only round on the model alias `haiku` with effort high set explicitly (`CLAUDE_CODE_EFFORT_LEVEL` for arm B, `--effort` for arm A, arm C not settable), wire capture forced on, the A-first gate waived on the record, requested->resolved model recorded and priced by the resolved id, judge model alias resolved from the arm's reported id, `preflight.mjs` CLI, and a dry-run capture proxy that can never reach a real upstream (R8-profile AC1-AC3, R8-model AC1-AC4, R8-effort AC1-AC3, R8-capture AC1)
+- **agent-engine-orchestrator, agent-base-types:** claude-haiku-5 model tables: 1M context window and 128k max output tokens (R8-model AC3)
 - **agent-engine-orchestrator:** engine-executed `web_fetch` tool for providers without Anthropic server tools (claudecli, OpenAI-compatible): one shared definition, same `web_fetch_result` shape, egress follows `agent.shell.sandbox.allowedDomains`, Anthropic tool list unchanged (R6B-web AC1-AC4)
 
 ## 2.3.13 (2026-10-11)
