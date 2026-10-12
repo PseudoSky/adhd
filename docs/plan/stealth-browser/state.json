@@ -53,10 +53,10 @@
       "end_ref": null
     },
     "mig-domains-storage": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-10-12T21:28:08.715Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "50be62c9e817379ead6f07f1cb37fbf210636279",
       "end_ref": null
     },
     "mig-capture-parsers": {
@@ -346,7 +346,7 @@
     "version": "0.8.35",
     "hash": "0b6bc1f3d70e"
   },
-  "current_state": "mig-chrome-manager",
+  "current_state": "mig-domains-storage",
   "dod_provenance": {
     "confirmed_at": "2026-10-12T10:24:50.808Z",
     "by": "pseudosky",
