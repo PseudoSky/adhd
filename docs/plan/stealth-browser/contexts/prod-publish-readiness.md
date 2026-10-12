@@ -34,6 +34,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 - [prod-publish-readiness.1] (PA10.1) package.json has description, keywords, license, publishConfig.access = public (matching dispatch-cli and backlog), files, and engines.node >= 22.5.
 
 - [prod-publish-readiness.2] (PA10.2) The initial version is 0.x and the README states the stability policy.
+- [prod-publish-readiness.3] (PA10.3) `npm pack --dry-run` against the built dist output lists README.md, CHANGELOG.md, bin/cli.js, bin/mcp.js and every exports target; the output is recorded in evidence/publish-dry-run.txt.
 ---
 
 ## Reservations
