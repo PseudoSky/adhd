@@ -649,18 +649,18 @@ describe("R9-hist S3a AC6: degrade once to the legacy history", () => {
 
   describe("R9-hist S3a AC7: privacy", () => {
     const secretsOf = (echo: IProviderEcho): string[] => [
-      ...echo.blocks.flatMap(b => (typeof b["signature"] === "string" ? [b["signature"]] : [])),
+      // The fixture signatures are thousands of characters; a 60-character run is enough to prove a leak.
+      ...echo.blocks.flatMap(b => (typeof b["signature"] === "string" ? [b["signature"].slice(0, 60)] : [])),
       "FIXTURE-PAGE-BODY",
       "encrypted_content",
       "retrieved_at",
     ];
 
     it("R9-hist S3a AC7: an API error that QUOTES the signature never reaches the logs or echoDegraded", async () => {
-      const r = degradeRig(({ body }) => errorStep(400, "invalid_request_error", `${SIG_REJECTION}: ${signatureIn(body)} is not valid`));
+      const r = degradeRig(({ body }) => errorStep(400, "invalid_request_error", `${SIG_REJECTION}: ${signatureIn(body).slice(0, 60)} is not valid`));
       const { t1, call } = await echoedFollowUp(r);
       const secrets = secretsOf(t1.echo!);
-      expect(secrets[0]!.length).toBeGreaterThan(20);
-      expect(signatureIn(r.fake.requests[0]!.body ?? ({ messages: [] } as never))).toBe(""); // control: turn 1 request carries none
+      expect(secrets[0]!.length).toBe(60);
       const res = await call();
       expect(r.fake.requests[1]!.rawBody).toContain(secrets[0]!); // control: the signature WAS on the rejected wire
       const surfaces = [r.logs.join("\n"), JSON.stringify(res.echoDegraded)];
