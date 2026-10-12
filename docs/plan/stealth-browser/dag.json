@@ -280,6 +280,20 @@
       ],
       "context": "contexts/tests-e2e.md",
       "notes": "executor=qa tier=sonnet/high"
+    },
+    "tracing-namespace-proof": {
+      "kind": "work",
+      "phase": "verify",
+      "depends_on": [
+        "tracing-plugin",
+        "tests-e2e"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py tracing-namespace-proof",
+      "artifacts": [
+        "entrypoint/stealth-browser/src/test/unit/tracing/"
+      ],
+      "context": "contexts/tracing-namespace-proof.md",
+      "notes": "executor=test-automator tier=sonnet/high"
     }
   },
   "authored_with": {
