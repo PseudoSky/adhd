@@ -12,5 +12,12 @@
     "discovered_via": "manual",
     "shared_ref": "[ref:backlog-tracing]",
     "audit_check": "[audit-final.ref-backlog-tracing]"
+  },
+  "entrypoint-structure": {
+    "anchor": "entrypoint/dispatch-cli/project.json",
+    "rule": "Top-level files, tags, package metadata and nx targets conform to the common set of dispatch-cli/backlog/apigen-cli",
+    "discovered_via": "manual",
+    "shared_ref": "[ref:entrypoint-structure]",
+    "audit_check": "[audit-final.ref-entrypoint-structure]"
   }
 }
