@@ -441,3 +441,7 @@ Not a parity blocker (architect verdict APPROVE, 2026-10-11): shell exit status.
 - user-request (verbatim, owner): "you are only retesting B. change b to contain the exact missing tool prompt and show me the delta"
 - Prior owner question that led here (verbatim): "b and c have the exact same tools, model, system prompt correct?" Fact: they do not; C carries a web fetch tool B lacks (R5 context diff, scratchpad/context-diff.md section 2).
 - Dispatcher reading (structuring): B's tool list gains the same web fetch tool C sees (same name, description, input schema), executed client-side so it works on every provider (owner: changes must function on the other providers too; no Anthropic-hosted tools). Delta = B-vs-C tool list before and after, plus the code diff. Only B is rerun; A1 and C1 from R6 (haiku) are the references. Reading of "retesting B": a haiku B rerun (R6 conditions) to compare with R6 A1/C1.
+
+### 2026-10-12T06:50:45Z — SCOPE-R6B addendum: ONE LOGGING PROXY FOR ALL THREE ARMS (dispatcher)
+- user-request (verbatim, owner, sent mid-dispatch): "also use the same proxy for all 3"
+- Dispatcher reading (structuring): the local logging reverse proxy proposed in context-diff.md section 6 (ANTHROPIC_BASE_URL) is used by A, B and C so the request bodies each arm sends to the provider are captured in the same format and can be diffed. Capture only; no change to what is sent. Sequenced after the web-tool agent (shared worktree, overlapping nx gates, rule 24). If the owner meant the egress proxy instead, say so.
