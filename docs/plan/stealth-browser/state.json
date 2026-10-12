@@ -39,10 +39,10 @@
       "end_ref": "d9d3e5dca94e2bc4469b0dc8e16e31997b3e7240"
     },
     "mig-cdp": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-10-12T21:26:00.890Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "a3c01e2250b200e57cb6d962fc3d4ba17eb652fb",
       "end_ref": null
     },
     "mig-chrome-manager": {
@@ -310,7 +310,7 @@
     "version": "0.8.35",
     "hash": "0b6bc1f3d70e"
   },
-  "current_state": "mig-capture-parsers",
+  "current_state": "mig-cdp",
   "dod_provenance": {
     "confirmed_at": "2026-10-12T10:24:50.808Z",
     "by": "pseudosky",
