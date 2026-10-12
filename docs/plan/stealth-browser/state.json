@@ -67,10 +67,10 @@
       "end_ref": "2a7e1884509338be7d17455d29f73a43472052d9"
     },
     "mig-queries": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-10-12T21:30:20.486Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "a669469a9c777e2bcd95c0d4ee166b2691487cdb",
       "end_ref": null
     },
     "mig-docs": {
