@@ -3,28 +3,15 @@
   "cap": 3,
   "approvedBy": "the implementation pass I described -> experiment run -> result analysis -> triage -> architect (accounting for all prior changes that did not achieve the goal as well and genesis of likely forecasted items) -> repeat. Until we confirm parity",
   "extraRunReason": "",
-  "runs": [
-    {
-      "runId": "A1",
-      "arm": "A",
-      "at": "2026-10-12T00:24:26.609Z",
-      "pid": 70542
-    }
-  ],
+  "runs": [],
   "judgeCalls": [],
   "scenarioSha": "deedea872bc566abfec7c201e4713d6c01b78a7993cb8229907171dd8f889d61",
   "scopeChanges": [
     "SCOPE-R3-prompt-wording"
   ],
-  "armOrder": [
-    "A"
-  ],
+  "armOrder": [],
   "startedAt": "2026-10-11T23:33:22.476Z",
-  "armA": {
-    "genuine": false,
-    "detail": "content 17/18, invalid 0, defect false",
-    "at": "2026-10-12T00:26:39.142Z"
-  },
+  "armA": null,
   "releases": [
     {
       "runId": "A1",
@@ -41,6 +28,14 @@
       "reason": "void iteration: native arm A not a genuine success; owner rule 'a run iteration is never considered started if the native group fails'; see EXPERIMENT-LOG SCOPE-R5-oracle-model-and-leak",
       "releasedAt": "2026-10-12T00:23:47.341Z",
       "pid": 68051
+    },
+    {
+      "runId": "A1",
+      "arm": "A",
+      "reservedAt": "2026-10-12T00:24:26.609Z",
+      "reason": "void iteration: attempt 4 A1 inherited attempt 3 docs/shipping.md from a reused work dir (harness fault, proven in debug-a-leak.md); fixed by R5-workdir (fresh work dir per attempt, prepare fails closed); owner: blocking bug fix and redo the run",
+      "releasedAt": "2026-10-12T00:33:53.576Z",
+      "pid": 95914
     }
   ]
 }
