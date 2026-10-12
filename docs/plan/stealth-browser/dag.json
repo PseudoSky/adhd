@@ -424,6 +424,23 @@
       ],
       "context": "contexts/merge-readiness.md",
       "notes": "executor=dispatcher tier=human/dispatcher"
+    },
+    "agent-search-cutover": {
+      "kind": "work",
+      "phase": "release",
+      "depends_on": [
+        "merge-readiness"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py agent-search-cutover",
+      "artifacts": [
+        "/Users/nix/dev/ai/scratch/agent-browser/adhd/",
+        "/Users/nix/dev/ai/scratch/agent-browser/cdp-query-client.ts",
+        "/Users/nix/dev/ai/scratch/agent-browser/search/queries/",
+        "/Users/nix/dev/ai/scratch/agent-browser/package.json",
+        "/Users/nix/dev/ai/scratch/agent-browser/search-mcp-source.ts"
+      ],
+      "context": "contexts/agent-search-cutover.md",
+      "notes": "executor=typescript-pro tier=sonnet/high"
     }
   },
   "authored_with": {
