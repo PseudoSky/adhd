@@ -228,3 +228,20 @@ See `/entrypoint/agent-mcp/docs/architecture-and-security.md` for the full agent
 ## Tool-result token estimate
 
 `tool_call_est_result_tokens` on `TOOL_RESULT` events is exact for results of at most 20,000 chars and a head+tail-sample estimate above that (`tool_call_est_result_tokens_estimated: true`), so a huge single-character run cannot stall the event loop in the tokenizer (d89e20f4). See `src/engine/tool-result-tokens.ts` and `entrypoint/agent-mcp/docs/logging.md`.
+
+## Live tests (env-gated, paid third-party model)
+
+| Test file | Gate | Calls | Owner |
+| --- | --- | --- | --- |
+| `src/__tests__/anthropic-echo-live.test.ts` | `ADHD_AGENT_LIVE_ECHO=1` (plus `ANTHROPIC_API_KEY`) | a real paid model, Anthropic `claude-haiku-5-5` at effort `high`; at most 6 requests per run (hard counter), `max_tokens` 4096, no retries; typical run 4 requests | **nix (repo owner)** |
+
+- **Why it is gated.** It calls a real paid model, the only gate reason the repo allows (root `AGENTS.md` section 7, "Live testing is mandatory"). Nothing else about it is gated: its offline half (request-cap, body-inspection and redaction controls, plus a full run of the same rig against the offline contract fake, and a check that this section, `AGENTS.md` and the file header all name the gate and the owner) runs in every `nx test`.
+- **Off by default and off in CI.** Unset, every live test is reported `SKIPPED` with a reason naming the gate and the owner, and the file makes no network call. Setting the gate without `ANTHROPIC_API_KEY` turns the suite red; there is no silent skip once enabled.
+- **What it proves** (R9-hist S7, spec-v2 AC13): the live API accepts the assistant history this package replays: (a) a real thinking turn with its signature byte for byte, (b) a real `server_tool_use` + `web_fetch_tool_result` pair including its `citations` / `caller` / `citations: null` shapes, (c) an empty `text` block dropped before the request, (d) a real `pause_turn` continuation when the model produces one (otherwise reported "not exercised", never faked), (e) the post-TTL shape with tier S stripped and tier T kept, and (f), informational and last, whether a dangling `server_tool_use` tail is accepted (this gates S3b).
+- **Privacy.** Assertions compare hashes, counts and block types only. The run prints no signature, page text, request body or key.
+- **How to run** (owner only, from the repo root; bypass nx, whose cache key is blind to the env var and can replay a cached SKIPPED):
+
+  ```bash
+  ADHD_AGENT_LIVE_ECHO=1 ANTHROPIC_API_KEY=<key> npx vitest run \
+    --config packages/agent/agent-engine-orchestrator/vite.config.ts anthropic-echo-live
+  ```
