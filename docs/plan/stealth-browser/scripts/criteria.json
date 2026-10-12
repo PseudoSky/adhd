@@ -693,6 +693,15 @@
       "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py tests-unit-data --only tests-unit-data.3",
       "expect": "exit0",
       "cwd": "repo-root"
+    },
+    {
+      "id": "tests-unit-data.4",
+      "phase": "verify",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py tests-unit-data --only tests-unit-data.4",
+      "expect": "exit0",
+      "cwd": "repo-root"
     }
   ]
 }
