@@ -35,6 +35,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 - [tests-unit-core.2] Every spec cites ticket 8468f7b1 and at least one valid [slug.N] acceptance-criterion id.
 - [tests-unit-core.3] Unit purity: specs touching process-spawning or network modules mock child_process/WebSocket/fetch (vi.mock or vi.stubGlobal); no spec reads the real Chrome profile.
 - [tests-unit-core.4] Assertions have teeth: each spec has at least as many expect() calls as test cases and at least one negative/error-path case.
+- [tests-unit-core.5] `nx run stealth-browser:test -- <own specs>` exits 0 and only owned paths changed by [psm:tests-unit-core] commits.
 ---
 
 ## Reservations
