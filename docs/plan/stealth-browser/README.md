@@ -12,4 +12,4 @@ Extract the Chrome/CDP runner from scratch/agent-browser/adhd into a new generat
 
 ## Definition of Done
 
-_No DoD clauses yet — author them with `plan-scaffold.js add-dod`._
+- `[dod.1]` **Exactly one new package exists, entrypoint/stealth-browser named @adhd/stealth-browser, produced by the workspace generator and structurally identical to the sibling entrypoints (structural)** — Exactly one new package exists, entrypoint/stealth-browser named @adhd/stealth-browser, produced by the workspace generator and structurally identical to the sibling entrypoints.
