@@ -26,5 +26,9 @@ Rules for agents:
   any of the three stops naming `ADHD_AGENT_LIVE_ECHO` and `nix (repo owner)`.
 - **Never print content.** The test asserts on hashes, counts and block types only; do not add output that includes a
   thinking signature, fetched page text, a request body or a key.
+- **Turn 1 diagnostics.** Turn 1 writes one `turn 1 diagnostics:` line (HTTP statuses, stop reason, block types and counts,
+  output tokens, elapsed ms, whether the sent request carried a `thinking` field, its `output_config.effort`, web_fetch pair
+  status) before it checks any prerequisite. The executed web_fetch pair is the only hard prerequisite of (b)(c)(e)(f); a
+  turn without a thinking block fails only item (a), as "NOT EXERCISED".
 - **Lane.** It makes plain HTTPS calls and spawns nothing, so it is a unit-lane file (`*.test.ts`) per
   `docs/decisions/0009-test-lanes-unit-vs-e2e.md`, not an `*.e2e.test.ts`.

@@ -1,3 +1,9 @@
+## Unreleased
+
+### 🩹 Fixes
+
+- **agent-engine-orchestrator:** live echo test (R9-hist S7b AC13) writes a safe turn 1 diagnostics line first, makes the executed web_fetch pair the only hard prerequisite of (b)(c)(e)(f), and fails only item (a) as NOT EXERCISED when no thinking block appears
+
 ## 2.3.13 (2026-10-11)
 
 ### 🚀 Features

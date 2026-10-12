@@ -26,7 +26,8 @@
  *    store meet the live API directly, so a rejection is attributable to the replayed history alone.
  *  - Turn 1 asks for one `web_fetch` of https://example.com; its echo is persisted and reloaded.
  *  - (a) replaying the real thinking turn: every replayed thinking signature is byte-identical to the captured one
- *        and the API returns no 400 (`echoDegraded` absent AND no 4xx on the wire);
+ *        and the API returns no 400 (`echoDegraded` absent AND no 4xx on the wire). A turn that carries no thinking
+ *        block fails ONLY this item, as "(a) NOT EXERCISED"; it never blocks (b)(c)(e)(f);
  *  - (b) replaying the real `server_tool_use` + `web_fetch_tool_result` pair, including the `citations` /
  *        `caller` / `citations: null` shapes exactly as the API emitted them, returns no 400;
  *  - (c) an empty `text` block injected into the replayed turn is dropped before the request and the request is accepted;
@@ -36,6 +37,14 @@
  *  - (f) the deferred-tail shape (a dangling `server_tool_use` as the final assistant message) is exercised LAST,
  *        through a raw SDK client (the provider's sanitiser would drop the tail), and reported separately as
  *        INFORMATIONAL: whether the API accepts it gates S3b; the test does not fail on either answer.
+ *
+ * Turn 1 prerequisites: the executed web_fetch pair (server_tool_use + a non-errored web_fetch_tool_result) is the
+ *            only hard prerequisite of (b)(c)(e)(f). Before any prerequisite is checked, turn 1 writes ONE diagnostics
+ *            line to the report: HTTP statuses, normalised stop_reason, ordered block types and per-type counts,
+ *            output_tokens, elapsed ms, whether the sent request carried a `thinking` field, its
+ *            `output_config.effort`, and the pair status. The provider has no public switch that sends `thinking`
+ *            (it sends `output_config.effort` only), so whether thinking blocks appear is the model's choice at
+ *            this effort; the diagnostics line records that fact rather than guessing.
  *
  * Redaction: assertions go through `check(boolean, safeMessage)` and compare hashes/counts only, so a failure never
  * prints a signature, page text, a request body or an API key. The summary lists block TYPES, counts, statuses and
@@ -93,7 +102,13 @@ const TTL_MS = 10 * 60_000;
 const CAPS: EchoCaps = { maxMessageBytes: 131_072, maxSessionBytes: 4_194_304, serverResultTtlMs: TTL_MS };
 const WEB_FETCH = { type: "web_fetch_20250910", name: "web_fetch" } as const;
 
-const PROMPT_FETCH = "Use the web_fetch tool exactly once on https://example.com, then say in one short sentence what that page is.";
+/**
+ * Asks for one fetch AND a small piece of reasoning over the fetched page (compare two counts), so a reasoning model
+ * has a reason to think after the tool result as well as before it. The answer is one sentence, well inside max_tokens.
+ */
+const PROMPT_FETCH =
+  "Use the web_fetch tool exactly once on https://example.com. Then reason it through briefly and answer in one sentence: " +
+  "does the page's main heading have more words, fewer words, or the same number of words as the page's first sentence of body text?";
 const PROMPT_FOLLOW_UP = "In five words or fewer, what was the main heading of that page?";
 const PROMPT_AFTER_TTL = "Without using any tool, reply with the single word: ready.";
 
@@ -142,13 +157,23 @@ const isServerBlock = (type: string): boolean => type === "server_tool_use" || t
 export interface IBodyFacts {
   model: string;
   effort: string | undefined;
+  /** True when the sent request carried a top-level `thinking` field (the field itself is never kept). */
+  thinkingOnWire: boolean;
+  /** The `thinking.type` value (e.g. "adaptive") when it is a short plain token, else undefined. */
+  thinkingType: string | undefined;
   assistant: IBlockFact[][];
+}
+
+/** A short plain token (type names, enum values) passes through; anything else becomes "?" so content cannot ride along. */
+export function safeToken(value: string): string {
+  return /^[A-Za-z0-9_.:-]{1,48}$/.test(value) ? value : "?";
 }
 
 export function inspectBody(body: string): IBodyFacts {
   const parsed = JSON.parse(body) as {
     model?: unknown;
     output_config?: { effort?: unknown };
+    thinking?: { type?: unknown } | null;
     messages?: Array<{ role?: unknown; content?: unknown }>;
   };
   const assistant = (parsed.messages ?? [])
@@ -160,7 +185,9 @@ export function inspectBody(body: string): IBodyFacts {
     );
   return {
     model: typeof parsed.model === "string" ? parsed.model : "",
-    effort: typeof parsed.output_config?.effort === "string" ? parsed.output_config.effort : undefined,
+    effort: typeof parsed.output_config?.effort === "string" ? safeToken(parsed.output_config.effort) : undefined,
+    thinkingOnWire: parsed.thinking !== undefined && parsed.thinking !== null,
+    thinkingType: typeof parsed.thinking?.type === "string" ? safeToken(parsed.thinking.type) : undefined,
     assistant,
   };
 }
@@ -229,11 +256,75 @@ function hasKey(value: unknown, key: string): boolean {
   return Object.entries(value).some(([k, v]) => k === key || hasKey(v, key));
 }
 
+/** Whether the executed web_fetch pair (the hard prerequisite of (b)(c)(e)(f)) is present in a captured turn. */
+export interface IPairStatus {
+  state: "ok" | "no_server_tool_use" | "no_result" | "errored";
+  /** The API's short error code when the fetch errored and the code is a plain token. */
+  errorCode?: string;
+}
+
+/** Classifies the captured blocks: a `server_tool_use` named web_fetch whose `web_fetch_tool_result` exists and is not an error. */
+export function fetchPairStatus(blocks: readonly Block[]): IPairStatus {
+  const uses = blocks.filter((b) => b["type"] === "server_tool_use" && b["name"] === "web_fetch");
+  if (uses.length === 0) return { state: "no_server_tool_use" };
+  let failure: IPairStatus = { state: "no_result" };
+  for (const use of uses) {
+    const result = blocks.find((b) => b["type"] === "web_fetch_tool_result" && b["tool_use_id"] === use["id"]);
+    if (result === undefined) continue;
+    const content = result["content"];
+    const contentType = typeof content === "object" && content !== null ? (content as Block)["type"] : undefined;
+    if (typeof contentType === "string" && contentType.includes("error")) {
+      const code = (content as Block)["error_code"];
+      failure = { state: "errored", ...(typeof code === "string" ? { errorCode: safeToken(code) } : {}) };
+      continue;
+    }
+    return { state: "ok" };
+  }
+  return failure;
+}
+
+/** Everything the turn 1 diagnostics line reports, reduced to types, counts, numbers and booleans. */
+export interface ITurnDiagnostics {
+  statuses: readonly number[];
+  stopReason: string | undefined;
+  blockTypes: readonly string[];
+  outputTokens: number | undefined;
+  modelCalls: number;
+  elapsedMs: number;
+  wire: { thinkingOnWire: boolean; thinkingType: string | undefined; effort: string | undefined } | undefined;
+  pair: IPairStatus;
+}
+
+const num = (n: number | undefined): string => (n !== undefined && Number.isFinite(n) ? String(Math.round(n)) : "unknown");
+
+/**
+ * The ONE diagnostics line for turn 1. Every string that reaches it passes through {@link safeToken} and every other
+ * value is a number or boolean, so no signature, page text, body or key can be printed through it.
+ */
+export function formatTurnDiagnostics(d: ITurnDiagnostics): string {
+  const types = d.blockTypes.map(safeToken);
+  const counts = new Map<string, number>();
+  for (const t of types) counts.set(t, (counts.get(t) ?? 0) + 1);
+  const countText = [...counts].map(([t, n]) => `${t}=${n}`).join(" ");
+  const wire =
+    d.wire === undefined
+      ? "no request reached the wire"
+      : `request thinking field ${d.wire.thinkingOnWire}${d.wire.thinkingType !== undefined ? ` (type ${safeToken(d.wire.thinkingType)})` : ""}, request output_config.effort ${d.wire.effort === undefined ? "absent" : safeToken(d.wire.effort)}`;
+  const pair = d.pair.state === "errored" && d.pair.errorCode !== undefined ? `errored (${safeToken(d.pair.errorCode)})` : d.pair.state;
+  return (
+    `turn 1 diagnostics: http [${d.statuses.join(",")}]; stop_reason ${d.stopReason === undefined ? "unknown" : safeToken(d.stopReason)}; ` +
+    `blocks [${types.join(", ")}]; counts {${countText}}; output_tokens ${num(d.outputTokens)}; model_calls ${d.modelCalls}; ` +
+    `elapsed ${num(d.elapsedMs)} ms; ${wire}; web_fetch pair ${pair}`
+  );
+}
+
 interface ITurnOne {
   user: Message;
   assistant: Message;
   response: ProviderChatResponse;
   captured: Block[];
+  /** True when the captured turn carries a thinking / redacted_thinking block. */
+  hasThinking: boolean;
 }
 
 export class EchoLiveRig {
@@ -248,6 +339,8 @@ export class EchoLiveRig {
   private readonly conns: Database.Database[] = [];
   private turnOne: ITurnOne | undefined;
   private reportedModelCalls = 0;
+  /** Set by {@link stepReplay}: the thinking signature hashes the capture carried vs the ones the replay sent. */
+  private replaySigs: { want: string[]; wire: string[] } | undefined;
 
   constructor(opts: { secret: string; realFetch: typeof fetch; maxRequests?: number }) {
     this.secret = opts.secret;
@@ -304,30 +397,75 @@ export class EchoLiveRig {
   }
 
   private requireTurnOne(): ITurnOne {
-    check(this.turnOne !== undefined, "turn 1 did not complete, so this item cannot run");
+    check(this.turnOne !== undefined, "blocked by turn 1 (it did not complete, so no request was made for this item)");
     return this.turnOne;
   }
 
-  /** Turn 1: one real web_fetch turn; persists user + assistant + echo through the real store, then reloads. */
+  /**
+   * Turn 1: one real web_fetch turn; persists user + assistant + echo through the real store, then reloads.
+   * The diagnostics line is written BEFORE any prerequisite is checked, so a failing turn still reports what it was.
+   * Hard prerequisites: HTTP success, not max_tokens, the executed web_fetch pair. Thinking is NOT one (see (a)).
+   */
   async stepFetchTurn(): Promise<void> {
     const user = message(this.sessionId, "user", PROMPT_FETCH);
-    const { result: res, facts } = await this.newFacts(this.facts.length, () =>
-      this.provider.chat({ messages: [user], serverSideTools: [WEB_FETCH] })
+    const before = this.facts.length;
+    const started = Date.now();
+    let res: ProviderChatResponse;
+    try {
+      res = await this.provider.chat({ messages: [user], serverSideTools: [WEB_FETCH] });
+    } catch (err) {
+      const sent = this.facts.slice(before);
+      const status = sent[0]?.status ?? 0;
+      this.note(
+        formatTurnDiagnostics({
+          statuses: sent.map((f) => f.status),
+          stopReason: undefined,
+          blockTypes: [],
+          outputTokens: undefined,
+          modelCalls: 0,
+          elapsedMs: Date.now() - started,
+          wire: sent[0] === undefined ? undefined : { thinkingOnWire: sent[0].thinkingOnWire, thinkingType: sent[0].thinkingType, effort: sent[0].effort },
+          pair: { state: "no_server_tool_use" },
+        })
+      );
+      const text = redactApiMessage((err as { message?: string }).message ?? "");
+      check(false, `turn 1 failed before a response was produced (${safeToken((err as { name?: string }).name ?? "Error")}, HTTP ${status}): ${text}`);
+    }
+    const elapsedMs = Date.now() - started;
+    const facts = this.facts.slice(before);
+    this.recordCalls(res);
+    const echoBlocks = res.echo === undefined ? undefined : (res.echo.blocks.map((b) => ({ ...b })) as Block[]);
+    // With no replay-relevant block there is no echo; the visible shape is then text and/or client tool_use only.
+    const blockTypes = echoBlocks !== undefined ? typesOf(echoBlocks) : [...(res.message.content ? ["text"] : []), ...(res.message.toolCalls ?? []).map(() => "tool_use")];
+    const pair = fetchPairStatus(echoBlocks ?? []);
+    this.note(
+      formatTurnDiagnostics({
+        statuses: facts.map((f) => f.status),
+        stopReason: res.usage?.stopReason,
+        blockTypes,
+        outputTokens: res.usage?.outputTokens,
+        modelCalls: res.reportedModelCalls ?? 1,
+        elapsedMs,
+        wire: facts[0] === undefined ? undefined : { thinkingOnWire: facts[0].thinkingOnWire, thinkingType: facts[0].thinkingType, effort: facts[0].effort },
+        pair,
+      })
     );
+
     check(facts.every((f) => f.status > 0 && f.status < 400), `turn 1 was rejected by the API (statuses ${facts.map((f) => f.status).join(",")})`);
     check(res.usage?.stopReason !== "length", "turn 1 stopped on max_tokens: inconclusive, re-run");
-    this.recordCalls(res);
-    check(res.echo !== undefined, "turn 1 produced no replay-relevant block (no thinking and no server tool): (a)/(b) NOT EXERCISED");
-    const captured = res.echo.blocks.map((b) => ({ ...b })) as Block[];
+    check(echoBlocks !== undefined, "turn 1 produced no executed web_fetch pair (no server_tool_use / web_fetch_tool_result in the response): (b)(c)(e)(f) are blocked by turn 1, (a) NOT EXERCISED");
+    check(pair.state === "ok", `turn 1 produced no executed web_fetch pair (pair status ${pair.state}${pair.errorCode !== undefined ? ` ${pair.errorCode}` : ""}): (b)(c)(e)(f) are blocked by turn 1`);
+    const captured = echoBlocks;
     const types = typesOf(captured);
-    check(types.includes("thinking") || types.includes("redacted_thinking"), "turn 1 produced no thinking block: (a) NOT EXERCISED");
-    check(types.includes("server_tool_use") && types.some((t) => t === "web_fetch_tool_result"), "turn 1 produced no executed web_fetch pair: (b) NOT EXERCISED");
+    const hasThinking = types.includes("thinking") || types.includes("redacted_thinking");
 
     const assistant: Message = { ...res.message, sessionId: this.sessionId };
     const store = this.reopenedStore();
     store.appendMessage(this.sessionId, user);
     store.appendMessage(this.sessionId, assistant);
-    const part = partitionEcho(res.echo, CAPS, store.getEchoSessionServerBytes(this.sessionId), true);
+    const echo = res.echo;
+    check(echo !== undefined, "turn 1 echo vanished after the pair check");
+    const part = partitionEcho(echo, CAPS, store.getEchoSessionServerBytes(this.sessionId), true);
     check(part.persist !== undefined, `partitionEcho refused to persist the real echo (${part.reason ?? "no reason"})`);
     store.appendMessageEcho(assistant.id, this.sessionId, part.persist.echo, part.persist.bytes, part.persist.serverBytes);
 
@@ -338,7 +476,7 @@ export class EchoLiveRig {
       sameList(reloaded.blocks.map((b) => blockFact(b as Block).hash), captured.map((b) => blockFact(b).hash)),
       "the persisted echo is not byte-identical to the captured echo after a store round trip"
     );
-    this.turnOne = { user, assistant, response: res, captured };
+    this.turnOne = { user, assistant, response: res, captured, hasThinking };
     this.note(`turn 1: statuses ${facts.map((f) => f.status).join(",")}; captured block types [${types.join(", ")}]; persisted ${part.persist.bytes} bytes (${part.persist.serverBytes} tier S)`);
     this.note(
       `shapes (b): web_fetch_tool_result has citations key ${hasKey(captured, "citations")}, citations:null ${hasNullKey(captured, "citations")}, ` +
@@ -370,14 +508,29 @@ export class EchoLiveRig {
     const want = t1.captured.filter((b) => !(b["type"] === "text" && b["text"] === "")).map(blockFact);
     check(sameList(wire.map((b) => b.hash), want.map((b) => b.hash)), "replay: the replayed assistant blocks are not byte-identical to the captured blocks (a)(b)");
     check(!wire.some((b) => b.emptyText), "replay: an empty text block reached the wire (c)");
-    const wantSigs = want.filter((b) => b.sigHash !== undefined).map((b) => b.sigHash);
-    const wireSigs = wire.filter((b) => b.sigHash !== undefined).map((b) => b.sigHash);
-    check(wantSigs.length > 0 && sameList(wireSigs as string[], wantSigs as string[]), "replay: thinking signatures on the wire differ from the captured ones (a)");
+    const wantSigs = want.filter((b) => b.sigHash !== undefined).map((b) => b.sigHash as string);
+    const wireSigs = wire.filter((b) => b.sigHash !== undefined).map((b) => b.sigHash as string);
+    this.replaySigs = { want: wantSigs, wire: wireSigs };
     this.note(
-      `(a) PASS: ${wantSigs.length} thinking signature(s) replayed byte-identical, no 400; ` +
-        `(b) PASS: server pair replayed byte-identical, no 400; (c) PASS: empty text block dropped before send, request accepted; ` +
+      `(b) PASS: server pair replayed byte-identical, no 400; (c) PASS: empty text block dropped before send, request accepted; ` +
         `wire types [${wire.map((b) => b.type).join(", ")}]; statuses ${facts.map((f) => f.status).join(",")}`
     );
+  }
+
+  /**
+   * (a): the replayed thinking signatures are byte-identical to the captured ones. Makes no request. A turn 1 without
+   * a thinking block fails ONLY here, worded "NOT EXERCISED", and leaves (b)(c)(e)(f) untouched.
+   */
+  stepThinkingReplay(): void {
+    const t1 = this.requireTurnOne();
+    if (!t1.hasThinking) {
+      this.note("(a) NOT EXERCISED: turn 1 produced no thinking block, so there was no signature to replay; (b)(c)(e)(f) ran without it");
+      check(false, "(a) NOT EXERCISED: turn 1 produced no thinking block (no signature to replay); this fails only item (a)");
+    }
+    check(this.replaySigs !== undefined, "blocked by the replay step (it did not complete, so no replayed signatures exist to compare)");
+    const { want, wire } = this.replaySigs;
+    check(want.length > 0 && sameList(wire, want), "replay: thinking signatures on the wire differ from the captured ones (a)");
+    this.note(`(a) PASS: ${want.length} thinking signature(s) replayed byte-identical, no 400`);
   }
 
   /** (e): tier S stripped by the store read (session idle past the TTL), tier T kept. */
@@ -387,7 +540,8 @@ export class EchoLiveRig {
     check(stripped !== undefined, "(e): nothing is left of the echo after the tier S strip, so the post-TTL shape cannot be exercised");
     const strippedTypes = typesOf(stripped.blocks as Block[]);
     check(!strippedTypes.some(isServerBlock), "(e): the store read left tier S blocks in an expired session");
-    check(strippedTypes.some((t) => t === "thinking" || t === "redacted_thinking"), "(e): the stripped echo kept no thinking block");
+    // Tier T is "thinking if the turn had any"; a turn without thinking keeps only its text, and (e) still runs on that.
+    check(!t1.hasThinking || strippedTypes.some((t) => t === "thinking" || t === "redacted_thinking"), "(e): the stripped echo kept no thinking block");
     const user3 = message(this.sessionId, "user", PROMPT_AFTER_TTL);
     const { result: res, facts } = await this.newFacts(this.facts.length, () =>
       this.provider.chat({
@@ -551,6 +705,7 @@ describe("R9-hist S7 -- offline controls for the gated live test (no network)", 
     try {
       await rig.stepFetchTurn();
       await rig.stepReplay();
+      rig.stepThinkingReplay();
       await rig.stepPostTtlReplay();
       rig.stepPauseReport();
       expect(fake.rejections()).toEqual([]);
@@ -586,6 +741,165 @@ describe("R9-hist S7 -- offline controls for the gated live test (no network)", 
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════
+// OFFLINE (S7b): turn 1 diagnostics and the split between the hard pair prerequisite and the soft thinking item.
+// ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════
+describe("R9-hist S7b AC13 -- turn 1 diagnostics and prerequisites (offline contract fake, no network)", () => {
+  const PAGE = "PAGE-BODY-SENTINEL";
+  const fetchStep = (extra: IFakeReply["blocks"] = []): FakeStep => ({
+    blocks: [
+      ...extra,
+      { type: "server_tool_use", id: "srvtoolu_s7b", name: "web_fetch", input: { url: "https://example.com" } },
+      { type: "text", text: `The heading has two words. ${PAGE}` },
+    ],
+  });
+
+  /** Streaming requests go to the contract fake; the non-streaming (f) probe gets a plain 200 so it can run offline. */
+  const withProbeAnswer = (fake: ReturnType<typeof makeContractFake>): typeof fetch =>
+    (async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+      const parsed = JSON.parse(String(init?.body)) as { stream?: boolean };
+      if (parsed.stream === true) return fake.fetch(input, init);
+      return new Response(
+        JSON.stringify({ id: "msg_probe", type: "message", role: "assistant", model: MODEL, content: [{ type: "text", text: "ok" }], stop_reason: "end_turn", stop_sequence: null, usage: { input_tokens: 1, output_tokens: 1 } }),
+        { status: 200, headers: { "content-type": "application/json" } }
+      );
+    }) as typeof fetch;
+
+  it("R9-hist S7b AC13 diagnostics: turn 1 reports statuses, stop reason, block types, counts, tokens, elapsed, wire thinking/effort and pair status, and nothing else", async () => {
+    const sig = "SIGSENTINEL" + "D".repeat(60);
+    const fake = makeContractFake([fetchStep([{ type: "thinking", thinking: "", signature: sig }])]);
+    const rig = new EchoLiveRig({ secret: "sk-ant-api-test-secret", realFetch: fake.fetch });
+    try {
+      await rig.stepFetchTurn();
+      const line = rig.report.find((l) => l.startsWith("turn 1 diagnostics:")) ?? "";
+      expect(line).toMatch(/http \[200\]/);
+      expect(line).toMatch(/stop_reason \S+/);
+      expect(line).toContain("blocks [thinking, server_tool_use, web_fetch_tool_result, text]");
+      expect(line).toContain("thinking=1");
+      expect(line).toContain("server_tool_use=1");
+      expect(line).toMatch(/output_tokens (\d+|unknown)/);
+      expect(line).toMatch(/elapsed \d+ ms/);
+      expect(line).toContain("request thinking field false");
+      expect(line).toContain(`request output_config.effort ${EFFORT}`);
+      expect(line).toContain("web_fetch pair ok");
+      // Negative control for the redaction promise: no signature, no page/answer text, no key anywhere in what is printed.
+      for (const secret of [sig, PAGE, "sk-ant-api-test-secret", "example.com"]) expect(rig.summary().includes(secret)).toBe(false);
+    } finally {
+      rig.dispose();
+    }
+  });
+
+  it("R9-hist S7b AC13 diagnostics negative control: hostile strings (a signature-like type, page text as a stop reason) cannot ride the diagnostics line", () => {
+    const hostileType = "SIGSENTINEL" + "Q".repeat(60);
+    const line = formatTurnDiagnostics({
+      statuses: [200],
+      stopReason: `${PAGE} with spaces`,
+      blockTypes: ["text", hostileType, `${PAGE} text`],
+      outputTokens: 12,
+      modelCalls: 1,
+      elapsedMs: 5,
+      wire: { thinkingOnWire: true, thinkingType: "adaptive", effort: `${PAGE} effort` },
+      pair: { state: "errored", errorCode: safeToken(`${PAGE} code`) },
+    });
+    expect(line.includes("SIGSENTINEL")).toBe(false);
+    expect(line.includes(PAGE)).toBe(false);
+    expect(line).toContain("blocks [text, ?, ?]");
+    expect(line).toContain("request thinking field true (type adaptive)");
+    expect(line).toContain("stop_reason ?");
+  });
+
+  it("R9-hist S7b AC13 request facts: a sent `thinking` field is reported as a boolean plus its plain type, an absent one as false", () => {
+    const withThinking = inspectBody(JSON.stringify({ model: MODEL, thinking: { type: "adaptive" }, output_config: { effort: "high" }, messages: [] }));
+    expect(withThinking.thinkingOnWire).toBe(true);
+    expect(withThinking.thinkingType).toBe("adaptive");
+    const without = inspectBody(JSON.stringify({ model: MODEL, messages: [] }));
+    expect(without.thinkingOnWire).toBe(false);
+    expect(without.thinkingType).toBeUndefined();
+  });
+
+  it("R9-hist S7b AC13 pair status: ok, no server_tool_use, no result and errored results are told apart", () => {
+    const use = { type: "server_tool_use", id: "srvtoolu_1", name: "web_fetch", input: {} };
+    expect(fetchPairStatus([{ type: "text", text: "x" }]).state).toBe("no_server_tool_use");
+    expect(fetchPairStatus([use]).state).toBe("no_result");
+    expect(fetchPairStatus([use, { type: "web_fetch_tool_result", tool_use_id: "other", content: { type: "web_fetch_result" } }]).state).toBe("no_result");
+    expect(fetchPairStatus([use, { type: "web_fetch_tool_result", tool_use_id: "srvtoolu_1", content: { type: "web_fetch_result" } }]).state).toBe("ok");
+    expect(fetchPairStatus([use, { type: "web_fetch_tool_result", tool_use_id: "srvtoolu_1", content: { type: "web_fetch_tool_result_error", error_code: "url_not_allowed" } }])).toEqual({
+      state: "errored",
+      errorCode: "url_not_allowed",
+    });
+  });
+
+  it("R9-hist S7b AC13 no thinking: only (a) fails (NOT EXERCISED); the pair, (b)(c), (e) and (f) still run and pass", async () => {
+    const fake = makeContractFake([fetchStep(), { blocks: [{ type: "text", text: "Example Domain" }] }, { blocks: [{ type: "text", text: "ready" }] }]);
+    const rig = new EchoLiveRig({ secret: "sk-ant-api-test-secret", realFetch: withProbeAnswer(fake) });
+    try {
+      await rig.stepFetchTurn();
+      await rig.stepReplay();
+      expect(() => rig.stepThinkingReplay()).toThrow(/\(a\) NOT EXERCISED: turn 1 produced no thinking block/);
+      await rig.stepPostTtlReplay();
+      await rig.stepDeferredTail();
+      rig.stepPauseReport();
+      expect(fake.rejections()).toEqual([]);
+      expect(fake.faults).toEqual([]);
+      const summary = rig.summary();
+      expect(summary).toMatch(/\(b\) PASS/);
+      expect(summary).toMatch(/\(e\) PASS/);
+      expect(summary).toMatch(/\(f\) INFORMATIONAL .*ACCEPTED/);
+      expect(summary).toMatch(/\(a\) NOT EXERCISED/);
+      expect(summary).not.toMatch(/\(a\) PASS/);
+      expect(rig.facts.length).toBe(4);
+    } finally {
+      rig.dispose();
+    }
+  });
+
+  it("R9-hist S7b AC13 thinking present: (a) passes after the replay, and fails loudly if the replay step never ran", async () => {
+    const sig = "SIGSENTINEL" + "T".repeat(60);
+    const fake = makeContractFake([fetchStep([{ type: "thinking", thinking: "", signature: sig }]), { blocks: [{ type: "text", text: "Example Domain" }] }]);
+    const rig = new EchoLiveRig({ secret: "sk-ant-api-test-secret", realFetch: fake.fetch });
+    try {
+      await rig.stepFetchTurn();
+      expect(() => rig.stepThinkingReplay()).toThrow(/blocked by the replay step/);
+      await rig.stepReplay();
+      rig.stepThinkingReplay();
+      expect(rig.summary()).toMatch(/\(a\) PASS: 1 thinking signature/);
+      expect(rig.summary().includes(sig)).toBe(false);
+    } finally {
+      rig.dispose();
+    }
+  });
+
+  it("R9-hist S7b AC13 no pair: turn 1 fails with its diagnostics, every later item reports blocked by turn 1, and no further request is sent", async () => {
+    const fake = makeContractFake([{ blocks: [{ type: "text", text: `I could not fetch it. ${PAGE}` }] }]);
+    const rig = new EchoLiveRig({ secret: "sk-ant-api-test-secret", realFetch: withProbeAnswer(fake) });
+    try {
+      await expect(rig.stepFetchTurn()).rejects.toThrow(/no executed web_fetch pair/);
+      expect(rig.report.some((l) => l.startsWith("turn 1 diagnostics:") && l.includes("blocks [text]") && l.includes("web_fetch pair no_server_tool_use"))).toBe(true);
+      expect(rig.summary().includes(PAGE)).toBe(false);
+      await expect(rig.stepReplay()).rejects.toThrow(/blocked by turn 1/);
+      await expect(rig.stepPostTtlReplay()).rejects.toThrow(/blocked by turn 1/);
+      await expect(rig.stepDeferredTail()).rejects.toThrow(/blocked by turn 1/);
+      expect(() => rig.stepThinkingReplay()).toThrow(/blocked by turn 1/);
+      expect(rig.facts.length).toBe(1);
+      expect(fake.requests.length).toBe(1);
+    } finally {
+      rig.dispose();
+    }
+  });
+
+  it("R9-hist S7b AC13 failed request: an API error on turn 1 still reports diagnostics (status, elapsed, wire facts) and sends no second request", async () => {
+    const fake = makeContractFake([{ error: { status: 400, type: "invalid_request_error", message: "model: not found" } }]);
+    const rig = new EchoLiveRig({ secret: "sk-ant-api-test-secret", realFetch: fake.fetch });
+    try {
+      await expect(rig.stepFetchTurn()).rejects.toThrow(/turn 1 failed before a response was produced/);
+      expect(rig.report.some((l) => l.startsWith("turn 1 diagnostics:") && l.includes("http [400]") && l.includes("request thinking field false"))).toBe(true);
+      expect(rig.facts.length).toBe(1);
+    } finally {
+      rig.dispose();
+    }
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════
 // LIVE: real paid calls. Skipped (with a reason naming the gate and the owner) unless ADHD_AGENT_LIVE_ECHO=1.
 // ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════
 liveDescribe(`R9-hist S7 AC13 -- LIVE Anthropic echo replay (${SKIP_REASON.replace("SKIPPED", "gated")})`, () => {
@@ -609,13 +923,17 @@ liveDescribe(`R9-hist S7 AC13 -- LIVE Anthropic echo replay (${SKIP_REASON.repla
     }
   });
 
-  it("turn 1: a real thinking + web_fetch turn is captured and survives a store round trip", async () => {
+  it("turn 1: a real executed web_fetch turn is captured and survives a store round trip (diagnostics line first)", async () => {
     await live().stepFetchTurn();
   }, 180_000);
 
-  it("(a)(b)(c): replaying the real turn byte-for-byte (empty text block dropped) returns no 400", async () => {
+  it("(b)(c): replaying the real turn byte-for-byte (empty text block dropped) returns no 400", async () => {
     await live().stepReplay();
   }, 180_000);
+
+  it("(a): the replayed thinking signatures are byte-identical (fails alone, as NOT EXERCISED, when turn 1 had no thinking block)", () => {
+    live().stepThinkingReplay();
+  });
 
   it("(e): the post-TTL shape (tier S stripped, tier T kept) returns no 400", async () => {
     await live().stepPostTtlReplay();
