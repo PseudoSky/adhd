@@ -39,11 +39,11 @@
       "end_ref": "d9d3e5dca94e2bc4469b0dc8e16e31997b3e7240"
     },
     "mig-cdp": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-10-12T21:26:00.890Z",
-      "done_at": null,
+      "done_at": "2026-10-12T21:28:08.356Z",
       "start_ref": "a3c01e2250b200e57cb6d962fc3d4ba17eb652fb",
-      "end_ref": null
+      "end_ref": "b6f382dd28d923426eb99ed8b2cb147a42b92ea4"
     },
     "mig-chrome-manager": {
       "status": "pending",
@@ -326,6 +326,18 @@
       "audit_criteria_total": 3,
       "by": "pseudosky",
       "note": "docs ported f4856619; guard 0"
+    },
+    {
+      "ts": "2026-10-12T21:28:08.356Z",
+      "from": "mig-docs",
+      "to": "mig-cdp",
+      "start_ref": "a3c01e2250b200e57cb6d962fc3d4ba17eb652fb",
+      "end_ref": "b6f382dd28d923426eb99ed8b2cb147a42b92ea4",
+      "audit_exit": 0,
+      "audit_criteria_passed": 4,
+      "audit_criteria_total": 4,
+      "by": "pseudosky",
+      "note": "cdp ported 5d651c6f; guard 0"
     }
   ],
   "amendment_log": [],
@@ -334,7 +346,7 @@
     "version": "0.8.35",
     "hash": "0b6bc1f3d70e"
   },
-  "current_state": "mig-docs",
+  "current_state": "mig-chrome-manager",
   "dod_provenance": {
     "confirmed_at": "2026-10-12T10:24:50.808Z",
     "by": "pseudosky",
