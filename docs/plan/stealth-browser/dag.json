@@ -227,6 +227,20 @@
       ],
       "context": "contexts/tests-unit-core.md",
       "notes": "executor=test-automator tier=sonnet/medium"
+    },
+    "tests-unit-data": {
+      "kind": "work",
+      "phase": "verify",
+      "depends_on": [
+        "mig-queries"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py tests-unit-data",
+      "artifacts": [
+        "entrypoint/stealth-browser/src/test/unit/domains-storage/",
+        "entrypoint/stealth-browser/src/test/unit/queries/"
+      ],
+      "context": "contexts/tests-unit-data.md",
+      "notes": "executor=test-automator tier=sonnet/medium"
     }
   },
   "authored_with": {
