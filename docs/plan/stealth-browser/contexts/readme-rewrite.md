@@ -36,6 +36,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 - [readme-rewrite.4] Factual: no unverifiable superlatives (undetectable, unblockable, 100%, bypasses all, guaranteed); every `@adhd/stealth-browser` import specifier in code fences is a real package export.
 - [readme-rewrite.5] Relative links resolve and the install/quickstart commands name only bins declared in package.json.
 - [readme-rewrite.6] (PA8.2, PA8.4) README defines "stealth" as the two concrete choices (no --enable-automation, no Runtime.evaluate) and links docs/RESPONSIBLE-USE.md (the link resolves).
+- [readme-rewrite.7] (PA8.3) README.md contains none of the overclaim words undetectable, bypass, evade, anti-bot.
 ---
 
 ## Reservations
