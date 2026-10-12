@@ -34,6 +34,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 
 - [mig-queries.2] No .ts import specifiers, no reach into agent-search, no Runtime.evaluate/--enable-automation; every relative import resolves.
 - [mig-queries.3] Only owned paths changed by [psm:mig-queries] commits; agent-search source tree and main checkout node_modules untouched.
+- [mig-queries.4] last-search.ts (search-engine specific) did NOT travel: no file named last-search under src/lib/queries.
 ---
 
 ## Reservations
