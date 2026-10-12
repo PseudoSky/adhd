@@ -426,3 +426,8 @@ Not a parity blocker (architect verdict APPROVE, 2026-10-11): shell exit status.
 - Judge variance note: arm A judge mean was 87.5 in R5 and 73.1 in R6 with the same arm and model; single-call judge noise is of the same order as the gap being gated.
 - Uncommitted instrument edits seen in the tree belong to the in-flight sonnet-switch dispatch (a8c37b2eaf162794a), not the R6 runner.
 - Next: read-only analysis of B1's w1_web/q_examples; verdict/grid for R6 after the sonnet switch lands.
+
+### 2026-10-12T04:46:11Z — SCOPE-R7-thinking-default: THINKING IS NOT FORCED OFF (dispatcher)
+- user-request (verbatim, owner): "why are you turning thinking off?"
+- Fact: thinking-off on every arm was instrument fix F27 (R4), made after R3 compared unequal thinking (A and B on, C off). No owner instruction for it is recorded. Fact (runner d652d417, read from the claude binary, not a live call): claude-sonnet-5-5 rejects disabled thinking, so forced-off is not achievable for it.
+- Dispatcher reading (structuring, not user text): R7 runs every arm with the model's default thinking; no arm forces thinking on or off; thinking turns are reported per run as a metric and no longer invalidate a run; C's effective default is verified or the gap reported. Product gaps that would skew sonnet-5-5 runs on B/C (context window fallback 128k vs 1M, anthropic MODEL_MAX_TOKENS entry, sonnet alias priced at the 4.6 card) are fixed in the same dispatch. Prior answer "Pin claude-sonnet-5 instead" was interrupted by the owner and is not applied.
