@@ -1719,6 +1719,15 @@
       "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py readme-rewrite --only readme-rewrite.8",
       "expect": "exit0",
       "cwd": "repo-root"
+    },
+    {
+      "id": "prod-publish-readiness.1",
+      "phase": "release",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py prod-publish-readiness --only prod-publish-readiness.1",
+      "expect": "exit0",
+      "cwd": "repo-root"
     }
   ]
 }
