@@ -3,28 +3,15 @@
   "cap": 3,
   "approvedBy": "the implementation pass I described -> experiment run -> result analysis -> triage -> architect (accounting for all prior changes that did not achieve the goal as well and genesis of likely forecasted items) -> repeat. Until we confirm parity",
   "extraRunReason": "",
-  "runs": [
-    {
-      "runId": "A1",
-      "arm": "A",
-      "at": "2026-10-12T00:09:22.653Z",
-      "pid": 81349
-    }
-  ],
+  "runs": [],
   "judgeCalls": [],
   "scenarioSha": "deedea872bc566abfec7c201e4713d6c01b78a7993cb8229907171dd8f889d61",
   "scopeChanges": [
     "SCOPE-R3-prompt-wording"
   ],
-  "armOrder": [
-    "A"
-  ],
+  "armOrder": [],
   "startedAt": "2026-10-11T23:33:22.476Z",
-  "armA": {
-    "genuine": false,
-    "detail": "content 16/16, invalid 1, defect false",
-    "at": "2026-10-12T00:11:42.926Z"
-  },
+  "armA": null,
   "releases": [
     {
       "runId": "A1",
@@ -33,6 +20,14 @@
       "reason": "harness fault before any model call, 0 model calls, attempt 2 (owner-authorized, EXPERIMENT-LOG ledger repair entry)",
       "releasedAt": "2026-10-12T00:05:00.346Z",
       "pid": 48006
+    },
+    {
+      "runId": "A1",
+      "arm": "A",
+      "reservedAt": "2026-10-12T00:09:22.653Z",
+      "reason": "void iteration: native arm A not a genuine success; owner rule 'a run iteration is never considered started if the native group fails'; see EXPERIMENT-LOG SCOPE-R5-oracle-model-and-leak",
+      "releasedAt": "2026-10-12T00:23:47.341Z",
+      "pid": 68051
     }
   ]
 }
