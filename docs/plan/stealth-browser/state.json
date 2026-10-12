@@ -11,10 +11,10 @@
       "end_ref": "641717a97afb3fdcb33894158d02faaa1639208f"
     },
     "scaffold": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-10-12T10:53:00.540Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "d6a92d68347fe9b36bd633eeadd2bc999fa82db8",
       "end_ref": null
     },
     "entrypoint-parity": {
