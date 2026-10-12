@@ -25,11 +25,11 @@
       "end_ref": "4816496bd96c8e8c6cb686afbf8ee827d02abd9f"
     },
     "deps-install": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-10-12T21:16:07.281Z",
-      "done_at": null,
+      "done_at": "2026-10-12T21:25:00.958Z",
       "start_ref": "eb5f4f01e4f21fd5be2b8d897bec719fafc185e9",
-      "end_ref": null
+      "end_ref": "50c5b1bfb4e76016ee608ce6bdd5875fc3132ae7"
     },
     "mig-foundation": {
       "status": "pending",
@@ -278,6 +278,18 @@
       "audit_criteria_total": 7,
       "by": "pseudosky",
       "note": "parity files/targets/metadata/engines added; guard 7/7 PASS, lint exit 0"
+    },
+    {
+      "ts": "2026-10-12T21:25:00.958Z",
+      "from": "deps-install",
+      "to": "deps-install",
+      "start_ref": "eb5f4f01e4f21fd5be2b8d897bec719fafc185e9",
+      "end_ref": "50c5b1bfb4e76016ee608ce6bdd5875fc3132ae7",
+      "audit_exit": 0,
+      "audit_criteria_passed": 7,
+      "audit_criteria_total": 7,
+      "by": "pseudosky",
+      "note": "deps declared, lockfile +34/-0, real node_modules, eslint temp ignore; guard 0 (commit 50c5b1bf)"
     }
   ],
   "amendment_log": [],
@@ -286,7 +298,7 @@
     "version": "0.8.35",
     "hash": "0b6bc1f3d70e"
   },
-  "current_state": "deps-install",
+  "current_state": "mig-foundation",
   "dod_provenance": {
     "confirmed_at": "2026-10-12T10:24:50.808Z",
     "by": "pseudosky",
