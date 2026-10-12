@@ -368,6 +368,23 @@
       ],
       "context": "contexts/gates-rerun.md",
       "notes": "executor=qa tier=sonnet/medium"
+    },
+    "docs-marketing-run": {
+      "kind": "work",
+      "phase": "docs",
+      "depends_on": [
+        "gates-rerun"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py docs-marketing-run",
+      "artifacts": [
+        "entrypoint/stealth-browser/docs/",
+        "entrypoint/stealth-browser/AGENTS.md",
+        "entrypoint/stealth-browser/llms.txt",
+        "entrypoint/stealth-browser/CHANGELOG.md",
+        "entrypoint/stealth-browser/README.md"
+      ],
+      "context": "contexts/docs-marketing-run.md",
+      "notes": "executor=doc-steward tier=sonnet/medium"
     }
   },
   "authored_with": {
