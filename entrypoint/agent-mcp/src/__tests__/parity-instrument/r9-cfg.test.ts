@@ -24,6 +24,8 @@ const D = await loadParity('drive.mjs');
 const LG = await loadParity('ledger.mjs');
 const GT = await loadParity('gate.mjs');
 const L = await loadParity('lib.mjs');
+const F = await loadParity('fixtures.mjs');
+const O = await loadParity('oracle.mjs');
 
 const cleanup: string[] = [];
 const mk = (p = 'r9cfg-') => { const d = fs.mkdtempSync(path.join(os.tmpdir(), p)); cleanup.push(d); return d; };
@@ -304,6 +306,45 @@ describe('PARITY-R9-cfg AC5: equal-model guard and recorded ids', () => {
     fs.writeFileSync(LG.ledgerPathFor('RX', plain), JSON.stringify({ ...LG.emptyLedger('RX'), approvedBy: 'o' }));
     LG.reserveRun('RX', { arm: 'A', runId: 'A1', dir: plain });
     expect(Object.keys(LG.readLedger('RX', plain).runs[0]).sort()).toEqual(['arm', 'at', 'pid', 'runId']);
+  });
+});
+
+describe('PARITY-R9-cfg AC5: the judge call carries the resolved id through the real judgeRun', () => {
+  const golden = JSON.parse(fs.readFileSync(path.join(PARITY_DIR, 'golden', 'r4', 'A2.json'), 'utf8'));
+  const setup = (env: Record<string, string>) => {
+    const { dir } = configuredLedger('R9', {});
+    const profile = D.roundProfile(optsFor('R9', dir, env));
+    const root = mk('r9cfg-judge-');
+    const spec = F.makeSpec({ seed: '20261011', arm: 'A', rep: 1 });
+    const repoDir = path.join(root, 'repo');
+    F.writeFixture({ repoDir, hiddenDir: path.join(root, 'hidden'), ticketFile: path.join(root, 't.txt') }, spec);
+    const record = () => ({ arm: 'A', runId: 'A1', observation: golden.observation, score: O.scoreObservation(golden.observation, golden.expected), metrics: {} });
+    return { dir, root, record, ctx: { prompts: F.prompts(), spec, repoDir, ledgerPath: LG.ledgerPathFor('R9', dir), profile } };
+  };
+
+  it('PARITY-R9-cfg AC5: a scored judge call is sent the configured judge id and the ledger entry records it with its source (json default and env override)', async () => {
+    for (const [env, id, source] of [[{}, HAIKU, 'json'], [{ PARITY_JUDGE_MODEL: OLD }, OLD, 'env:PARITY_JUDGE_MODEL'], [{ PARITY_MODEL: OLD }, OLD, 'env:PARITY_MODEL']] as const) {
+      const { dir, root, record, ctx } = setup(env);
+      const sent: string[] = [];
+      const client = { async complete({ model }: { model: string }) { sent.push(model); const r = await D.fakeJudgeClient().complete(); r.inputTokens = 10; r.outputTokens = 5; r.model = model; return r; } };
+      const rec = record();
+      const q = await D.judgeRun({ ctx, record: rec, aGenuine: true, dry: false, client, judgeDir: path.join(root, 'out') });
+      expect(q.status).toBe('scored');
+      expect(sent).toEqual([id]);
+      const calls = LG.readLedger('R9', dir).judgeCalls;
+      expect(calls).toHaveLength(1);
+      expect(calls[0]).toMatchObject({ arm: 'A', modelId: id, modelSource: source });
+    }
+  });
+
+  it('PARITY-R9-cfg AC5: a failed judge call is logged with the configured judge id and its source too', async () => {
+    const { dir, root, record, ctx } = setup({ PARITY_JUDGE_MODEL: OLD });
+    const client = { async complete() { throw new Error('judge endpoint rejected the request'); } };
+    const q = await D.judgeRun({ ctx, record: record(), aGenuine: true, dry: false, client, judgeDir: path.join(root, 'out') });
+    expect(q.status).toBe('judge-failed');
+    const calls = LG.readLedger('R9', dir).judgeCalls;
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toMatchObject({ status: 'failed', modelId: OLD, modelSource: 'env:PARITY_JUDGE_MODEL', paidCallAttempted: true });
   });
 });
 

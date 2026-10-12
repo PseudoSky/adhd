@@ -954,13 +954,13 @@ export async function judgeRun({ ctx, record, aGenuine, aWaived = false, dry, cl
   if (!JG.judgeEligible({ aGenuine, armGenuine: genuine })) { record.quality = { status: 'n/a', reason: aGenuine ? 'arm not a genuine success (no judge call)' : 'arm A not a genuine success (no judge call)' }; return record.quality; }
   const ledgerDir = path.dirname(ctx.ledgerPath); const round = path.basename(ctx.ledgerPath, '.json');
   let capReason = ''; if (!dry) { const led = LG.readLedger(round, ledgerDir); const used = LG.judgeCallsUsed(led); const cap = LG.effectiveJudgeCap(led); if (used >= cap) { record.quality = { status: 'n/a', reason: `judge-call cap ${used}/${cap} reached: no paid call made` }; return record.quality; } if (used >= LG.JUDGE_CAP) capReason = String(led.judgeCapReason); }
+  const judgeSrc = ctx.profile?.modelSources?.judge; const modelSource = judgeSrc ? (judgeSrc.envVar ? `env:${judgeSrc.envVar}` : 'json') : undefined;   // SCOPE-R9-model-config: where the judge id came from, on every ledger call (scored and failed)
   let briefFormat; let attempt = null;   // attempt = what a failure entry needs once a request is about to go out
   try {
     const { brief, briefSha, label } = JG.buildBrief({ prompts: ctx.prompts, ticketText: F.ticketText(ctx.spec), diff: repoDiff(ctx.spec, ctx.repoDir), transcript: transcriptFor(record, ctx.prompts) });
     briefFormat = JG.BRIEF_FORMAT; attempt = { briefSha, modelId: null, sent: false };
     // R8-model AC4: the judge model is the round's judgeModel (an alias such as `haiku` is resolved from the concrete id(s) the arms reported; this throws, no paid call, when none exists)
     const judgeRequested = ctx.profile?.models?.judge ?? ctx.profile?.judgeModel ?? JG.JUDGE_MODEL;
-    const judgeSrc = ctx.profile?.modelSources?.judge; const modelSource = judgeSrc ? (judgeSrc.envVar ? `env:${judgeSrc.envVar}` : 'json') : undefined;   // SCOPE-R9-model-config: where the judge id came from, on the ledger call
     const judgeModel = JG.resolveJudgeModel(judgeRequested, [...(record.model?.resolved ?? []), ...(record.observation?.models ?? [])]);
     attempt.modelId = judgeModel; attempt.sent = true;
     const res = await JG.runJudge({ client, arm, brief, briefSha, outDir: judgeDir, model: judgeModel, modelRequested: judgeRequested, onCall: dry ? undefined : (c) => LG.recordJudgeCall(round, { ...c, ...(modelSource ? { modelSource } : {}), ...(ledgerNote ? { rejudgeOf: ledgerNote } : {}) }, { dir: ledgerDir, reason: capReason }) });
@@ -968,7 +968,7 @@ export async function judgeRun({ ctx, record, aGenuine, aWaived = false, dry, cl
   } catch (e) {
     record.quality = { status: 'judge-failed', error: String(e?.message ?? e).slice(0, 300) };
     if (!dry) {
-      try { LG.recordJudgeCall(round, { arm, modelId: attempt?.modelId ?? ctx.profile?.models?.judge ?? ctx.profile?.judgeModel ?? JG.JUDGE_MODEL, inputTokens: 0, outputTokens: 0, costUsd: null, briefSha: attempt?.briefSha ?? null, status: 'failed', error: record.quality.error, paidCallAttempted: attempt?.sent === true, ...(ledgerNote ? { rejudgeOf: ledgerNote } : {}) }, { dir: ledgerDir, reason: capReason }); }
+      try { LG.recordJudgeCall(round, { arm, modelId: attempt?.modelId ?? ctx.profile?.models?.judge ?? ctx.profile?.judgeModel ?? JG.JUDGE_MODEL, inputTokens: 0, outputTokens: 0, costUsd: null, briefSha: attempt?.briefSha ?? null, status: 'failed', error: record.quality.error, paidCallAttempted: attempt?.sent === true, ...(modelSource ? { modelSource } : {}), ...(ledgerNote ? { rejudgeOf: ledgerNote } : {}) }, { dir: ledgerDir, reason: capReason }); }
       catch (le) { record.quality.ledgerError = String(le?.message ?? le).slice(0, 200); }
     }
   }
