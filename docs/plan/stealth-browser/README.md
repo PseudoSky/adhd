@@ -35,3 +35,5 @@ Extract the Chrome/CDP runner from scratch/agent-browser/adhd into a new generat
 - `[dod.4]` **The migration is behavior-preserving: every manifest file keeps every export, stays >= 80% line-similar to its source, and keeps its stealth and read-only tokens (structural)** — The migration is behavior-preserving: every manifest file keeps every export, stays >= 80% line-similar to its source, and keeps its stealth and read-only tokens.
 
 - `[dod.5]` **The live agent-search source tree is byte-identical to its baseline until the guarded cutover (structural)** — The live agent-search source tree is byte-identical to its baseline until the guarded cutover.
+
+- `[dod.6]` **One blind review round ran on the diff plus the word Review, one implementer resolved every finding, and all gates were re-run green (structural)** — One blind review round ran on the diff plus the word Review, one implementer resolved every finding, and all gates were re-run green.
