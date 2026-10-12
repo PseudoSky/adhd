@@ -1,1 +1,15 @@
-{}
+{
+  "hb-deps-approval": {
+    "type": "manual-approval",
+    "description": "Human approval to add node-html-parser, xpath and @xmldom/xmldom as dependencies of @adhd/stealth-browser (absent from the scratch runner adhd/ package; new to the workspace dependency set)",
+    "required_by": [
+      "deps-install"
+    ],
+    "verification": "python3 docs/plan/stealth-browser/scripts/guard.py deps-install --only deps-install.1",
+    "status": "needed",
+    "owner": "human",
+    "how_to_provide": "Write docs/plan/stealth-browser/APPROVALS.md containing the line 'DEP-APPROVAL: granted' and naming the three packages",
+    "destination": "docs/plan/stealth-browser/APPROVALS.md",
+    "blocks_at": "per-state"
+  }
+}
