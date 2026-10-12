@@ -15,6 +15,7 @@ import * as JGt from './judge.mjs';
 import { rescoreRecord } from './rescore.mjs';
 import * as MTt from './metrics.mjs';
 import * as GRt from './grid.mjs';
+import * as GTt from './gate.mjs';
 import { buildPlan, ancestorLeaks, runHidden, transcriptFor, resultForJudge, gapSecondsSince } from './drive.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -493,6 +494,31 @@ export async function runLibTests({ log = console.log } = {}) {
     eq(MTt.variantVerdict(A, { ...C, peakContext: 999999 }).verdict, MTt.variantVerdict(A, C).verdict);   // never gating
   });
 
+  await t('R7-think AC1: thinking turns are report-only in the summary, the verdict line and the grid metric line, and never change a verdict', () => {
+    const mk = (id, arm, th) => ({ runId: id, arm, wallMs: 1000, thinking: th == null ? undefined : { configured: 'model default on every arm; not forced', observedThinkingTurns: th, parentTurns: th, allTasks: th }, metrics: { phases: [{ costUsd: { total: 1, authoritative: 1 }, turns: { parent: 1 }, calls: { total: 1 }, tokens: { total: { ctx: 1000 } } }] } });
+    const A = MTt.summarize(mk('A1', 'A', 4), { genuine: true, quality: 90 }), C = MTt.summarize(mk('C1', 'C', 0), { genuine: true, quality: 90 });
+    eq(MTt.thinkingTurnsOf(mk('x', 'A', 7)), 7); eq(MTt.thinkingTurnsOf(mk('x', 'A', null)), null);
+    const rv = MTt.roundVerdict({ A, C });
+    ok(/thinking turns 0\/4/.test(MTt.formatVerdict(rv)), MTt.formatVerdict(rv));
+    ok(/thinking turns 0 vs A 4/.test(GRt.renderGrid({}, rv)), GRt.renderGrid({}, rv));
+    eq(MTt.variantVerdict(A, { ...C, thinkingTurns: 999 }).verdict, MTt.variantVerdict(A, C).verdict);   // never gating (negative control: a huge count does not flip the verdict)
+  });
+  // ---- R7-think AC4: the scope gate reads the LOG from the main checkout
+  await t('R7-think AC4: resolveLogPath reads the MAIN checkout LOG from a worktree (git common dir), falls back to the worktree copy, and the gate sees the main-tree heading', () => {
+    const rel = 'docs/agent/parity/EXPERIMENT-LOG.md';
+    const wt = '/main/.worktrees/x'; const main = path.join('/main', rel);
+    eq(GTt.resolveLogPath(wt, rel, { runGit: () => '/main/.git', exists: (f) => f === main }), main);
+    eq(GTt.resolveLogPath(wt, rel, { runGit: () => '/main/.git', exists: () => false }), path.join(wt, rel));          // main copy missing -> worktree copy
+    eq(GTt.resolveLogPath(wt, rel, { runGit: () => '', exists: () => true }), path.join(wt, rel));                      // git unavailable -> worktree copy
+    eq(GTt.resolveLogPath('/main', rel, { runGit: () => '.git', exists: () => true }), path.join('/main', rel));        // in the main tree itself
+    // real git: this very worktree resolves to a path whose repo root contains .git
+    const real = GTt.resolveLogPath(path.resolve(HERE, '../../..'));
+    ok(path.basename(real) === 'EXPERIMENT-LOG.md', real);
+    // gate end to end: a stale worktree LOG (no heading) is red; the main-tree LOG (heading dated before startedAt) is green
+    const sc = { scenarioSha: 'b', previousSha: 'a', scopeChanges: ['SCOPE-R7-thinking-default'], startedAt: '2026-10-12T05:00:00Z' };
+    ok(GTt.checkScope({ ...sc, logText: '### 2026-10-12T04:31:43Z - SCOPE-R7-model-sonnet: x' }).ok === false, 'negative control: stale LOG must be red');
+    ok(GTt.checkScope({ ...sc, logText: '### 2026-10-12T04:46:11Z - SCOPE-R7-thinking-default: x' }).ok === true, 'main LOG must be green');
+  });
   fs.rmSync(tmp, { recursive: true, force: true });
   const failed = results.filter((r) => !r.ok);
   return { ok: failed.length === 0, total: results.length, failed, results };

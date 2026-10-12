@@ -23,10 +23,18 @@ describe('parity metrics: variantVerdict', () => {
     expect(M.variantVerdict(A, sum({ costBilled: 1.03 })).verdict).toBe('FAIL');
   });
 
-  it('R4.AC2: turns, tool calls and peak context are report-only and never gate', () => {
+  it('R4.AC2: turns, tool calls, peak context and thinking turns are report-only and never gate', () => {
     const v = M.variantVerdict(A, sum({ turns: 500, toolCalls: 900, peakContext: 9e9 }));
     expect(v.verdict).toBe('PASS');
-    expect(v.reportOnly).toEqual({ turns: { arm: 500, A: 5 }, toolCalls: { arm: 900, A: 9 }, peakContext: { arm: 9e9, A: 1000 } });
+    expect(v.reportOnly).toEqual({ turns: { arm: 500, A: 5 }, toolCalls: { arm: 900, A: 9 }, peakContext: { arm: 9e9, A: 1000 }, thinkingTurns: { arm: null, A: null } });
+  });
+
+  it('R7-think AC1: thinking turns are carried report-only (arm / A) and an enormous count never changes the verdict', () => {
+    const v = M.variantVerdict({ ...A, thinkingTurns: 3 }, { ...sum({}), thinkingTurns: 9999 });
+    expect(v.reportOnly.thinkingTurns).toEqual({ arm: 9999, A: 3 });
+    expect(v.verdict).toBe(M.variantVerdict(A, sum({})).verdict);
+    expect(M.thinkingTurnsOf({ thinking: { observedThinkingTurns: 7 } })).toBe(7);
+    expect(M.thinkingTurnsOf({})).toBeNull();
   });
 
   it('R4.AC3: an A that did not genuinely succeed voids the iteration with no ratios', () => {

@@ -131,6 +131,24 @@ function hasOwn(obj: object, key: string): boolean {
   return Object.prototype.hasOwnProperty.call(obj, key);
 }
 
+/**
+ * Concrete Anthropic ids whose OpenRouter snapshot record uses a dotted version ("anthropic/claude-sonnet-5.5") that the
+ * hyphenated provider id ("claude-sonnet-5-5", also claudecli's / the API's dated "claude-sonnet-5-5-YYYYMMDD") can never
+ * match by string. Without this the id fell through to the FAMILY_ALIASES `sonnet` entry and was priced at the 4.6 card
+ * ($3/$15) instead of the snapshot's $2 in / $10 out / cache read 0.10 / write 5m 2.50 / 1h 4.00 per M (R7-think AC3c).
+ * Keyed by the date-stripped, lower-cased, org-prefix-stripped id. Resolves through the snapshot step, so the estimate is
+ * labelled `openrouter-estimate` (snapshot-sourced) with a `bundled:<fetchedAt>:<id>` pricingRef, never `vendor-direct`.
+ */
+const SNAPSHOT_ID_FOR_CONCRETE_MODEL: Readonly<Record<string, string>> = {
+  'claude-sonnet-5-5': 'anthropic/claude-sonnet-5.5',
+};
+
+function snapshotIdFor(model: string): string | undefined {
+  const raw = model.trim().toLowerCase();
+  const bare = (raw.includes('/') ? raw.slice(raw.lastIndexOf('/') + 1) : raw).replace(/[-_]\d{8}$/, '').replace(/_/g, '-');
+  return hasOwn(SNAPSHOT_ID_FOR_CONCRETE_MODEL, bare) ? SNAPSHOT_ID_FOR_CONCRETE_MODEL[bare] : undefined;
+}
+
 function aliasFor(model: string): IProviderModelAlias | undefined {
   const key = model.trim().toLowerCase();
   return hasOwn(PROVIDER_MODEL_ALIASES, key) ? PROVIDER_MODEL_ALIASES[key] : undefined;
@@ -149,7 +167,8 @@ function aliasFor(model: string): IProviderModelAlias | undefined {
 // for that family. NOTE: there is no verified `claude_sonnet_5` pricing yet (see rate-card
 // header for the sourcing rule — never fabricate a number), so "sonnet"/"claude-sonnet-5"
 // intentionally resolve to `claude_sonnet_4_6`, the newest *priced* sonnet entry, until a
-// cited claude_sonnet_5 rate is added to RATE_CARD.
+// cited claude_sonnet_5 rate is added to RATE_CARD. The concrete id "claude-sonnet-5-5" does NOT
+// take this fallback: it is priced from the bundled snapshot (SNAPSHOT_ID_FOR_CONCRETE_MODEL).
 const FAMILY_ALIASES: Record<string, keyof typeof RATE_CARD> = {
   sonnet: 'claude_sonnet_4_6',
   opus: 'claude_opus_4_8',
@@ -252,7 +271,7 @@ export function estimateCost(
   }
 
   const alias = aliasFor(model);
-  const orId = (alias?.target ?? model).trim().toLowerCase();
+  const orId = (alias?.target ?? snapshotIdFor(model) ?? model).trim().toLowerCase();
   const orBasis: CostBasis = alias ? alias.basis : 'openrouter-estimate';
   if (opts?.source) {
     const rec = opts.source.priceAt(orId, opts.asOf ?? FAR_FUTURE_ISO);

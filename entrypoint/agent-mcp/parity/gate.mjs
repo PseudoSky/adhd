@@ -3,6 +3,9 @@
 // Order (deviation from R0.AC8's literal [pacing, ledger, scope, preflight], see README "Gate order"): the read-only ledger check,
 // then scope, then the judge-credential presence check (no model call, so a round cannot pay for arms it cannot score), then preflight (zero model calls, must not spawn `claude`), then pacing (spawns `claude /usage`), then reservation.
 import crypto from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
+import { spawnSync } from 'node:child_process';
 
 export const GATE_ORDER = Object.freeze(['ledger', 'scope', 'judgeCredential', 'preflight', 'pacing']);
 
@@ -14,6 +17,21 @@ const sha256 = (s) => crypto.createHash('sha256').update(s).digest('hex');
  */
 export function scenarioSha({ prompts, ticketText, expectations }) {
   return sha256(JSON.stringify({ p1: prompts.phase1, p2: prompts.phase2, ticket: ticketText, expectations }));
+}
+
+/**
+ * Resolve the EXPERIMENT-LOG path the scope gate must read. The LOG is owned by the main checkout; a worktree's own copy is stale.
+ * `git rev-parse --git-common-dir` points at <main>/.git for every worktree, so its parent is the main checkout root. The main copy
+ * wins when it exists; otherwise the worktree copy (`<repoRoot>/<rel>`) is used. `runGit` / `exists` are injectable for tests.
+ */
+export function resolveLogPath(repoRoot, rel = 'docs/agent/parity/EXPERIMENT-LOG.md', { runGit, exists = fs.existsSync } = {}) {
+  const local = path.join(repoRoot, rel);
+  const git = runGit ?? ((args) => { const r = spawnSync('git', ['-C', repoRoot, ...args], { encoding: 'utf8' }); return r.status === 0 ? String(r.stdout).trim() : ''; });
+  let common = ''; try { common = git(['rev-parse', '--git-common-dir']); } catch { common = ''; }
+  if (!common) return local;
+  const mainRoot = path.dirname(path.resolve(repoRoot, common));
+  const main = path.join(mainRoot, rel);
+  return exists(main) ? main : local;
 }
 
 /** Parse LOG `### ` headings into { id-text, date }. A heading's date is its leading ISO timestamp. */

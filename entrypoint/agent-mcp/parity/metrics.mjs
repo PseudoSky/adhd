@@ -15,13 +15,15 @@ export function costCommonCard(rec) { return sum(rec?.metrics?.phases ?? [], (p)
 export function durationMs(rec) { return rec?.wallMs ?? null; }
 export function turnsOf(rec) { return sum(rec?.metrics?.phases ?? [], (p) => (p.turns?.parent || 0) + (p.turns?.child || 0)); }
 export function toolCallsOf(rec) { return sum(rec?.metrics?.phases ?? [], (p) => p.calls?.total); }
+/** Report-only thinking turns observed in the run (record.thinking.observedThinkingTurns, max of parent turns and all tasks); null when the record carries none. Never gating (R7-think AC1). */
+export function thinkingTurnsOf(rec) { const n = rec?.thinking?.observedThinkingTurns; return Number.isFinite(n) ? n : null; }
 /** R6-prep AC3: peak context = max over phases of `phases[].tokens.total.ctx` (the field drive.mjs actually writes: max per-turn in+cache over parent and child turns). The old names are kept as fallbacks. */
 export function peakContextOf(rec) { const v = (rec?.metrics?.phases ?? []).map((p) => p.tokens?.total?.ctx ?? p.peakContext ?? p.context?.peak ?? p.tokens?.peakCtx).filter(Number.isFinite); return v.length ? Math.max(...v) : null; }
 
 /** Normalize a record into the summary the verdict consumes. `genuine` and `quality` are supplied by the gate/judge. */
 export function summarize(rec, { genuine, quality = null } = {}) {
   return { runId: rec.runId, arm: rec.arm ?? String(rec.runId)[0], genuine: genuine === true, extra: !!rec.extra, extraRunReason: rec.extraRunReason ?? '',
-    costBilled: costBilled(rec), costCommon: costCommonCard(rec), wallMs: durationMs(rec), quality, turns: turnsOf(rec), toolCalls: toolCallsOf(rec), peakContext: peakContextOf(rec) };
+    costBilled: costBilled(rec), costCommon: costCommonCard(rec), wallMs: durationMs(rec), quality, turns: turnsOf(rec), toolCalls: toolCallsOf(rec), peakContext: peakContextOf(rec), thinkingTurns: thinkingTurnsOf(rec) };
 }
 
 const ratio = (x, a) => (Number.isFinite(x) && Number.isFinite(a) && a > 0 ? x / a : null);
@@ -38,7 +40,7 @@ export function variantVerdict(A, X, thresholds = DEFAULT_THRESHOLDS) {
   if (X.extra && !String(X.extraRunReason).trim()) return { arm: X.arm, verdict: 'EXCLUDED', reason: 'extra run without extraRunReason', note: N1_NOTE };
   const cost = ratio(X.costBilled, A.costBilled); const dur = ratio(X.wallMs, A.wallMs); const q = ratio(X.quality, A.quality);
   const goals = { cost: { ratio: cost, limit: t.cost, result: gate(cost, t.cost, 'max') }, duration: { ratio: dur, limit: t.duration, result: gate(dur, t.duration, 'max') }, quality: { ratio: q, limit: t.quality, result: gate(q, t.quality, 'min') } };
-  const reportOnly = { turns: { arm: X.turns, A: A.turns }, toolCalls: { arm: X.toolCalls, A: A.toolCalls }, peakContext: { arm: X.peakContext, A: A.peakContext } };
+  const reportOnly = { turns: { arm: X.turns, A: A.turns }, toolCalls: { arm: X.toolCalls, A: A.toolCalls }, peakContext: { arm: X.peakContext, A: A.peakContext }, thinkingTurns: { arm: X.thinkingTurns ?? null, A: A.thinkingTurns ?? null } };
   const commonCard = { ratio: ratio(X.costCommon, A.costCommon) };
   const gated = Object.values(goals).map((g) => g.result);
   const verdict = !X.genuine ? 'FAIL' : gated.includes('FAIL') ? 'FAIL' : 'PASS';
@@ -60,7 +62,7 @@ export function formatVerdict(rv) {
     if (v.verdict === 'VOID' || v.verdict === 'EXCLUDED') { lines.push(`${v.arm}: ${v.verdict} ${v.reason}`); continue; }
     const g = v.goals;
     lines.push(`${v.arm}: ${v.verdict} | cost ${g.cost.ratio?.toFixed(3) ?? 'n/a'} ${g.cost.result} (common-card ${v.commonCard.ratio?.toFixed(3) ?? 'n/a'}) | duration ${g.duration.ratio?.toFixed(3) ?? 'n/a'} ${g.duration.result} | quality ${g.quality.ratio?.toFixed(3) ?? 'n/a'} ${g.quality.result}`
-      + ` | report-only turns ${v.reportOnly.turns.arm}/${v.reportOnly.turns.A}, tool calls ${v.reportOnly.toolCalls.arm}/${v.reportOnly.toolCalls.A}, peak ctx ${v.reportOnly.peakContext.arm ?? 'n/a'}/${v.reportOnly.peakContext.A ?? 'n/a'}`);
+      + ` | report-only turns ${v.reportOnly.turns.arm}/${v.reportOnly.turns.A}, tool calls ${v.reportOnly.toolCalls.arm}/${v.reportOnly.toolCalls.A}, peak ctx ${v.reportOnly.peakContext.arm ?? 'n/a'}/${v.reportOnly.peakContext.A ?? 'n/a'}, thinking turns ${v.reportOnly.thinkingTurns?.arm ?? 'n/a'}/${v.reportOnly.thinkingTurns?.A ?? 'n/a'}`);
   }
   return lines.join('\n');
 }

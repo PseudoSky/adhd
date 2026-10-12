@@ -5,8 +5,8 @@ import { loadParity } from './load';
 /**
  * R7-model (EXPERIMENT-LOG SCOPE-R7-model-sonnet, owner: "the experiment with sonnet instead of haiku"): the model under test is ONE
  * pin shared by all three arms and the oracle; the judge model is a separate pin; the common rate card is model-keyed and never
- * borrows another model's price; the thinking-off gap for claude-sonnet-5-5 is recorded rather than assumed.
- * Acceptance ids: R7-model AC1 (pin), AC2 (thinking), AC3 (cost card).
+ * borrows another model's price; thinking is the model default on every arm (R7-think, SCOPE-R7-thinking-default).
+ * Acceptance ids: R7-model AC1 (pin), AC3 (cost card); R7-think AC1 (thinking default, report-only).
  */
 const F = await loadParity('fixtures.mjs');
 const L = await loadParity('lib.mjs');
@@ -50,10 +50,18 @@ describe('R7-model', () => {
     expect(L.unmeasuredNote('claude-sonnet-5')).toBe('unmeasured: no rate card for claude-sonnet-5');
   });
 
-  it('AC2: thinking-off is recorded as NOT achievable for claude-sonnet-5-5 (and achievable for haiku-4-5, unknown for others)', () => {
-    expect(D.thinkingOffAchievable('claude-sonnet-5-5')).toBe(false);
-    expect(D.thinkingOffAchievable('claude-haiku-4-5')).toBe(true);
-    expect(D.thinkingOffAchievable('claude-unknown-9')).toBeNull();
-    expect(D.THINKING_DISABLE_SUPPORT['claude-sonnet-5-5'].evidence).toContain('rejects_disabled_thinking');
+  it('R7-think AC1: thinking is the model default on every arm, not forced: no thinking-off constants remain and the policy text says so', () => {
+    expect(D.THINKING_POLICY).toBe('model default on every arm; not forced');
+    expect(D.THINKING_OFF_ENV).toBeUndefined();
+    expect(D.thinkingOffAchievable).toBeUndefined();
+    expect(D.thinkingVerdict).toBeUndefined();
+    for (const arm of ['A', 'B', 'C']) expect(D.THINKING_MECHANISM[arm]).toMatch(/^model default/);
+  });
+
+  it('R7-think AC1: the thinking observation is report-only (no ok/verdict), counts the max of parent and all-task thinking, and is the run-record field', () => {
+    const o = D.thinkingObservation({ phases: [{ thinkingTurns: 1 }, { thinkingTurns: 0 }], thinkingBlocksAllTasks: 3 });
+    expect(o).toEqual({ configured: D.THINKING_POLICY, observedThinkingTurns: 3, parentTurns: 1, allTasks: 3 });
+    expect(o).not.toHaveProperty('ok');
+    expect(D.thinkingObservation({ phases: [] }).observedThinkingTurns).toBe(0);
   });
 });

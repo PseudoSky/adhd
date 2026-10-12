@@ -36,8 +36,9 @@ export function renderMetricLine(v) {
   if (v.verdict === 'EXCLUDED') return 'EXCLUDED';
   const q = v.goals.quality.ratio;
   const k = (n) => (Number.isFinite(n) ? `${(n / 1000).toFixed(1)}k` : 'n/a');
+  const tt = v.reportOnly?.thinkingTurns;   // R7-think AC1: report-only thinking turns (this arm / A), never gating
   const pc = v.reportOnly?.peakContext;   // R6-prep AC3: report-only peak context (this arm / A), never gating
-  return `cost ${pct(v.goals.cost.ratio)} / dur ${pct(v.goals.duration.ratio)} / Q ${q == null ? 'n/a' : `${Math.round(q * 100)}%`}${pc ? ` / peak ctx ${k(pc.arm)} vs A ${k(pc.A)}` : ''}`;
+  return `cost ${pct(v.goals.cost.ratio)} / dur ${pct(v.goals.duration.ratio)} / Q ${q == null ? 'n/a' : `${Math.round(q * 100)}%`}${pc ? ` / peak ctx ${k(pc.arm)} vs A ${k(pc.A)}` : ''}${tt ? ` / thinking turns ${tt.arm ?? 'n/a'} vs A ${tt.A ?? 'n/a'}` : ''}`;
 }
 
 /** Full `grid --round` text: the row plus a metric line per variant. */

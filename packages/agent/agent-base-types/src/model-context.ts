@@ -19,6 +19,9 @@ const CONTEXT_WINDOWS: [prefix: string, window: number][] = [
     ['deepseek', 128_000],
     ['claude-opus-4', 200_000],
     ['claude-sonnet-4', 200_000],
+    // Sonnet 5 family (5, 5-5): native 1M window, no beta header (claude 2.1.296 model catalog `context.window: 1e6, native_1m: true`;
+    // Anthropic Sonnet 5.5 migration guide: "larger context window, with no beta header"). Without this entry the family hit the 128K fallback.
+    ['claude-sonnet-5', 1_000_000],
     ['claude-haiku-4', 200_000],
     ['claude-fable', 200_000],
     ['claude-3', 200_000],

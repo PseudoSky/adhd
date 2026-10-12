@@ -42,6 +42,14 @@ describe("contextWindowFor", () => {
         expect(contextWindowFor("claude-opus-4-8")).toBe(200_000);
         expect(contextWindowFor("gpt-4o-mini")).toBe(128_000);
     });
+    it("resolves the Sonnet 5 family at its native 1M window, not the 128K fallback or the sonnet-4 200K (R7-think AC3a)", () => {
+        expect(contextWindowFor("claude-sonnet-5-5")).toBe(1_000_000);
+        expect(contextWindowFor("claude-sonnet-5-5-20260101")).toBe(1_000_000);
+        expect(contextWindowFor("claude-sonnet-5")).toBe(1_000_000);
+        // negative controls: neighbours are unchanged, so the entry is not a catch-all
+        expect(contextWindowFor("claude-sonnet-4-6")).toBe(200_000);
+        expect(contextWindowFor("claude-sonnet")).toBe(128_000);
+    });
     it("falls back to a safe small window for unknown models (never 'infinite')", () => {
         expect(contextWindowFor("some-unknown-model")).toBe(128_000);
         expect(contextWindowFor(undefined)).toBe(128_000);

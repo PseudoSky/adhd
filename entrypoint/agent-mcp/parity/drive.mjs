@@ -65,36 +65,20 @@ export const MAX_MODEL_RUNS = LG.RUN_CAP;
 /** Durable run ledger: lives next to the driver, NOT under --out, so it cannot be dodged by changing arguments. */
 export const LEDGER_PATH = LG.ledgerPathFor(ROUND);
 /**
- * ONE thinking setting for every arm: OFF.
- *  - Arm A (native `claude -p`): these two env vars are set in the spawn env of every `claude -p` turn (argvA has no thinking flag).
- *    claude 2.1.296 `kyo()` checks env MAX_THINKING_TOKENS before settings `alwaysThinkingEnabled`, and CLAUDE_CODE_DISABLE_THINKING
- *    removes the thinking parameter from the request outright (binary strings, cited in README.md), so the operator's settings cannot re-enable it.
- *  - Arm B (agent-mcp claudecli provider): the same vars are put in the agent-mcp SERVER env; claudecli.ts buildSubprocessEnv() copies
- *    process.env into every `claude` it spawns (claudecli.ts:818-833), so parent and worker `claude -p` children get them.
- *  - Arm C (agent-mcp anthropic provider): the provider sets no `thinking` request parameter at all (rg "thinking" anthropic.ts: no hit), i.e. thinking is OFF by construction.
- * The live invariant is checked on every run: any thinking block observed in any arm marks the run INVALID.
+ * R7-think AC1 (owner direction, SCOPE-R7-thinking-default): thinking is NOT forced on any arm. Every arm runs the model's DEFAULT thinking behaviour.
+ *  - Arm A (native `claude -p`): the spawn env carries no MAX_THINKING_TOKENS / CLAUDE_CODE_DISABLE_THINKING (lib.cleanEnv is an allowlist that does not pass them
+ *    from the operator's shell either), and argvA has no thinking/effort flag.
+ *  - Arm B (agent-mcp claudecli provider): the agent-mcp server env carries neither variable; claudecli.ts buildSubprocessEnv() copies process.env into every `claude` child.
+ *  - Arm C (agent-mcp anthropic provider): the provider sends no `thinking` request field (anthropic.ts), so the API default for the model governs.
+ * Thinking is a measured, report-only metric: record.thinking = { configured, observedThinkingTurns, parentTurns, allTasks } (thinkingObservation), and the
+ * thinking-turn counts appear in SUMMARY.md, the verdict line and the grid metric line. It never invalidates, voids or gates a run.
  */
-export const THINKING_OFF_ENV = Object.freeze({ MAX_THINKING_TOKENS: '0', CLAUDE_CODE_DISABLE_THINKING: '1' });
+export const THINKING_POLICY = 'model default on every arm; not forced';
 export const THINKING_MECHANISM = Object.freeze({
-  A: 'env MAX_THINKING_TOKENS=0 + CLAUDE_CODE_DISABLE_THINKING=1 in the `claude -p` spawn env (spawnClaudeTurn env = cleanEnv({...CLAUDECLI_PROVIDER_ENVS, ...THINKING_OFF_ENV}))',
-  B: 'env MAX_THINKING_TOKENS=0 + CLAUDE_CODE_DISABLE_THINKING=1 in the agent-mcp server env, inherited by every claudecli `claude` child (claudecli.ts:818-833 copies process.env)',
-  C: 'no `thinking` request parameter is ever sent by the anthropic provider (anthropic.ts has no "thinking" parameter): off by construction ONLY for a model whose API default is thinking-off or which accepts an omitted parameter as off; see THINKING_DISABLE_SUPPORT',
+  A: 'model default (no MAX_THINKING_TOKENS / CLAUDE_CODE_DISABLE_THINKING in the `claude -p` spawn env; no thinking/effort flag in argv)',
+  B: 'model default (no MAX_THINKING_TOKENS / CLAUDE_CODE_DISABLE_THINKING in the agent-mcp server env, which every claudecli `claude` child inherits; claudecli.ts:818-833 copies process.env)',
+  C: 'model default (the anthropic provider sends no `thinking` request field; the API default for the model governs)',
 });
-/**
- * R7-model AC2: can thinking be turned OFF for the pinned model by the mechanism above? Evidence read from the claude 2.1.296 binary (model catalog + the request builder), not guessed.
- *  - claude-haiku-4-5: accepted disabled thinking; the env vars above make the CLI omit/disable the parameter (R1-R6).
- *  - claude-sonnet-5-5: catalog capabilities include `rejects_disabled_thinking`, `adaptive_thinking`, `org_locked_thinking`; `xRe()` (rejectsDisabled) is false only for the older ids
- *    (claude-3-*, opus-4-0/4-1/4-5/4-6/4-7/4-8/5, sonnet-4-0/4-5/4-6/5, haiku-4-5) and TRUE for sonnet-5-5. With CLAUDE_CODE_DISABLE_THINKING=1 or MAX_THINKING_TOKENS=0 the CLI then sends NO `thinking`
- *    field (it never sends {type:"disabled"} for such a model) and its own bookkeeping treats "no field + rejectsDisabled" as thinking ACTIVE. CLAUDE_CODE_DISABLE_ADAPTIVE_THINKING only applies to
- *    opus-4-6/sonnet-4-6. So arms A and B (same binary) cannot be proven thinking-off, and arm C (no `thinking` field) gets the API's server default for this model. Whether that default is adaptive thinking
- *    (or an outright error with the default effort "medium", binary string `effort_requires_thinking`) is only observable with a live call; the live invariant (any thinking block => run INVALID) stays enforced.
- */
-export const THINKING_DISABLE_SUPPORT = Object.freeze({
-  'claude-haiku-4-5': Object.freeze({ canDisable: true, evidence: 'claude 2.1.296 xRe(): claude-haiku-4-5 does not reject disabled thinking; the env vars disable it (R1-R6 runs)' }),
-  'claude-sonnet-5-5': Object.freeze({ canDisable: false, evidence: 'claude 2.1.296 catalog capabilities rejects_disabled_thinking + adaptive_thinking + org_locked_thinking; the env mechanism makes the CLI OMIT `thinking` (never {type:"disabled"}) and the API default for this model governs; arm C also sends no `thinking` field' }),
-});
-/** true / false when the evidence above says the pinned model can / cannot have thinking disabled; null = no evidence recorded for that model. */
-export const thinkingOffAchievable = (model = MODEL) => THINKING_DISABLE_SUPPORT[model]?.canDisable ?? null;
 const MAX_TOOL_LOOPS = 40;                                                 // B/C; A (claude 2.1.296) has no --max-turns: recorded as an asymmetry
 // R6-prep AC2 (owner direction: "drop all restrictions until you get the system working"): B and C run the PRODUCT DEFAULT shell allowlist
 // (agent-core-native-tooling DEFAULT_SHELL_ALLOW_COMMANDS, which includes curl). The instrument no longer passes allowCommands, so the product default applies.
@@ -232,8 +216,8 @@ function spawnClaudeTurn({ claude, argv, cwd, env, prompt, outFile, errFile, tim
     });
   });
 }
-/** The exact env of every arm-A `claude -p` turn (thinking OFF via THINKING_OFF_ENV). */
-export function armAEnv(ctx) { return L.cleanEnv({ ...L.CLAUDECLI_PROVIDER_ENVS, ...THINKING_OFF_ENV, ...(ctx.dry ? ctx.fakeEnv : {}) }); }
+/** The exact env of every arm-A `claude -p` turn (thinking is the model default: no thinking variable is set). */
+export function armAEnv(ctx) { return L.cleanEnv({ ...L.CLAUDECLI_PROVIDER_ENVS, ...(ctx.dry ? ctx.fakeEnv : {}) }); }
 async function runArmA(ctx) {
   const claude = ctx.opts.claude;
   const mcpPath = path.join(ctx.runDir, 'mcp-config.json'); writeJson(mcpPath, mcpConfigFor(ctx));
@@ -267,10 +251,9 @@ async function loadSdk(wt) {
 const tryJson = (t) => { try { return JSON.parse(t); } catch { return null; } };
 const textOf = (r) => (r?.content || []).map((c) => c.text ?? '').join('');
 
-/** The exact env of the agent-mcp server (arms B and C). For B it is inherited by every claudecli `claude` child (thinking OFF). */
+/** The exact env of the agent-mcp server (arms B and C). For B it is inherited by every claudecli `claude` child (thinking is the model default: no thinking variable is set). */
 export function serverEnv(ctx, store, logs) {
   return L.cleanEnv({
-    ...THINKING_OFF_ENV,
     ADHD_AGENT_DATABASE_PATH: path.join(store, 'agents.db'), ADHD_AGENT_REGISTRY_DB_PATH: path.join(store, 'registry.db'),
     ADHD_AGENT_TRANSPORT: 'stdio', ADHD_AGENT_SSE_ENABLED: 'false', ADHD_AGENT_SKIP_LEGACY_MIGRATION: 'true',
     ADHD_AGENT_LOGGING_DIR: logs, ADHD_AGENT_LOGGING_API: 'on', ADHD_AGENT_LOGGING_INSTANCE_LABEL: ctx.spec.runId,
@@ -469,11 +452,13 @@ async function rawRun(ctx) {
 
 /** Idempotent resume: a run is finished only if its record exists and was NOT aborted (a pacing/cap abort wrote a record but ran nothing, and must be retried once the window resets). */
 export function isFinishedRecord(recordPath) { try { const r = readJson(recordPath); return !r.aborted; } catch { return false; } }
-/** Thinking invariant: ANY thinking block in ANY task of the run (parent or worker) while thinking is configured OFF invalidates the run. */
-export function thinkingVerdict(metrics) {
+/**
+ * Thinking observation (R7-think AC1): REPORT-ONLY. Counts thinking blocks in any task of the run (parent or worker); it has no pass/fail verdict and never
+ * invalidates a run. `observedThinkingTurns` is the larger of the parent-phase count and the all-tasks count.
+ */
+export function thinkingObservation(metrics) {
   const parentTurns = (metrics.phases || []).reduce((a, m) => a + (m.thinkingTurns || 0), 0); const allTasks = metrics.thinkingBlocksAllTasks ?? 0;
-  const n = Math.max(parentTurns, allTasks);
-  return { configured: 'off', observedThinkingTurns: n, parentTurns, allTasks, ok: n === 0 };
+  return { configured: THINKING_POLICY, observedThinkingTurns: Math.max(parentTurns, allTasks), parentTurns, allTasks };
 }
 /** Pacing gate: read the 5h/7d window via `claude -p /usage` (0 model calls, asserted by L.readUsageWindow). Refuses at 5h session usage >= 90% (the 7-day window is no longer checked), and fails CLOSED when the reading cannot be taken or parsed. */
 export function gatePacing(read, rateLimitsSeen = []) {
@@ -684,11 +669,10 @@ async function runOne(ctx, state) {
     record.observation = { ...obs, phase1: { ...obs.phase1, calls: obs.phase1.calls.map((c) => ({ ...c, resultText: (c.resultText || '').slice(0, 600) })) }, phase2: { ...obs.phase2, calls: obs.phase2.calls.map((c) => ({ ...c, resultText: (c.resultText || '').slice(0, 600) })) } };
     record.score = O.scoreObservation(obs, ctx.expected);
     record.metrics = metrics; record.warnings.push(...metrics.warnings);
-    // thinking invariant: thinking is configured OFF on every arm; any thinking block observed means the equalisation did not hold => the run is INVALID (not scored as an arm result)
-    record.thinkingInvariant = thinkingVerdict(metrics);
+    // thinking: model default on every arm (R7-think AC1); the observation is a report-only record field, never an invalid/void rule
+    record.thinking = thinkingObservation(metrics);
     record.webSurface = obs.capabilities?.webSurface ?? null;
     if (obs.capabilities && obs.capabilities.canFetch === false) record.webFinding = 'arm cannot fetch';
-    if (!record.thinkingInvariant.ok) record.invalidRun = [`thinking blocks observed (${record.thinkingInvariant.observedThinkingTurns}, parent turns ${record.thinkingInvariant.parentTurns}, all tasks ${record.thinkingInvariant.allTasks}) while thinking is configured OFF on every arm`];
     state.rateLimitsSeen.push(...(metrics.rateLimits || []).slice(-2));
     if (arm !== 'A') { record.shellEgress = raw.shellEgress ?? egressFactOf('', ''); if (record.shellEgress.mode !== 'open') record.warnings.push(`Shell egress is ${record.shellEgress.mode}, expected open (product default): ${JSON.stringify(record.shellEgress)}`); }
     if (raw.storeLine && /mode=production/.test(raw.storeLine)) record.warnings.push(`SERVER REPORTS PRODUCTION STORE: ${raw.storeLine}`);
@@ -717,7 +701,7 @@ async function runOne(ctx, state) {
   return { record, aborted: false };
 }
 function effectiveConfig(ctx) {
-  return { model: MODEL, maxToolLoops: arm0(ctx) === 'A' ? 'n/a (claude 2.1.296 has no --max-turns; guard --max-budget-usd ' + BUDGET_GUARD_USD + ')' : MAX_TOOL_LOOPS, budgetMaxCalls: arm0(ctx) === 'A' ? 'n/a' : 0, shellAllow: arm0(ctx) === 'A' ? 'unrestricted Bash (bypassPermissions)' : SHELL_POLICY, shellEgress: arm0(ctx) === 'A' ? 'n/a (native Bash)' : 'open expected (product default); actual mode recorded in record.shellEgress', toolResultCap: arm0(ctx) === 'A' ? 'native (<=30k chars inline)' : 'agent-mcp default (6000 chars, head 75% / tail 25%)', providerTimeoutMs: arm0(ctx) === 'B' ? 1_200_000 : arm0(ctx) === 'C' ? 600_000 : `n/a (claude CLI; ${PHASE_TIMEOUT_MS} ms phase timeout)`, queueConcurrency: 'agent-mcp default', maxDepth: 'agent-mcp default (3)', thinking: `${thinkingOffAchievable() === false ? `OFF-REQUESTED (NOT ACHIEVABLE for ${MODEL}, see THINKING_DISABLE_SUPPORT)` : 'OFF'}: ${THINKING_MECHANISM[arm0(ctx)]}`, thinkingEnv: arm0(ctx) === 'C' ? {} : { ...THINKING_OFF_ENV }, phaseTimeoutMs: PHASE_TIMEOUT_MS };
+  return { model: MODEL, maxToolLoops: arm0(ctx) === 'A' ? 'n/a (claude 2.1.296 has no --max-turns; guard --max-budget-usd ' + BUDGET_GUARD_USD + ')' : MAX_TOOL_LOOPS, budgetMaxCalls: arm0(ctx) === 'A' ? 'n/a' : 0, shellAllow: arm0(ctx) === 'A' ? 'unrestricted Bash (bypassPermissions)' : SHELL_POLICY, shellEgress: arm0(ctx) === 'A' ? 'n/a (native Bash)' : 'open expected (product default); actual mode recorded in record.shellEgress', toolResultCap: arm0(ctx) === 'A' ? 'native (<=30k chars inline)' : 'agent-mcp default (6000 chars, head 75% / tail 25%)', providerTimeoutMs: arm0(ctx) === 'B' ? 1_200_000 : arm0(ctx) === 'C' ? 600_000 : `n/a (claude CLI; ${PHASE_TIMEOUT_MS} ms phase timeout)`, queueConcurrency: 'agent-mcp default', maxDepth: 'agent-mcp default (3)', thinking: `thinking: ${THINKING_POLICY} (${THINKING_MECHANISM[arm0(ctx)]})`, thinkingEnv: {}, phaseTimeoutMs: PHASE_TIMEOUT_MS };
 }
 const arm0 = (ctx) => ctx.runDef.arm;
 
@@ -751,7 +735,7 @@ function writeSummary(outDir, records, plan) {
   const rows = summaryRows(records);
   const md = ['# Round run summary', '', `Runs recorded: ${records.length} of ${plan.length}`, '', '| run | pass | fail | na | invalid | content | process | format | calls | turns | cost (authoritative) | first-turn ctx | cache_read tok (phase 1) | wall s | warnings |', '|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|',
     ...rows.map((r) => `| ${r.run} | ${r.pass} | ${r.fail} | ${r.na} | ${r.invalid} | ${r.content} | ${r.process} | ${r.format} | ${r.calls} | ${r.turns} | ${fmtUsd(r.costUsd)} | ${r.firstTurnCtx ?? '-'} | ${r.cacheReadP1 ?? '-'} | ${r.wallS} | ${r.warnings} |`), ''];
-  md.push('## Effective config per run (thinking equalised: OFF on every arm)', '', '| run | thinking (config) | thinking turns observed | provider / phase timeout (ms) | tool-result cap |', '|---|---|---|---|---|', ...rows.map((r) => `| ${r.run} | ${r.thinking} | ${r.thinkingTurns} | ${r.providerTimeout} | ${r.resultCap} |`), '');
+  md.push('## Effective config per run (thinking: model default on every arm; not forced; thinking turns are a report-only metric)', '', '| run | thinking (config) | thinking turns observed | provider / phase timeout (ms) | tool-result cap |', '|---|---|---|---|---|', ...rows.map((r) => `| ${r.run} | ${r.thinking} | ${r.thinkingTurns} | ${r.providerTimeout} | ${r.resultCap} |`), '');
   for (const r of records.filter((x) => x.score)) {
     md.push(`## ${r.runId}`, '', '| field | status | detail |', '|---|---|---|', ...Object.entries(r.score.fields).map(([k, v]) => `| ${k} | ${v.status} | ${String(v.detail).replace(/\|/g, '/').slice(0, 140)} |`), '');
     if (r.warnings.length) md.push('Warnings:', ...r.warnings.map((w) => `- ${w}`), '');
@@ -974,17 +958,16 @@ export function planText(opts) {
   const ctxOf = (arm) => makeCtx({ ...opts }, plan, plan.find((p) => p.arm === arm) ?? { arm, rep: 1 }, false);
   const A = ctxOf('A'), B = ctxOf('B'), C = ctxOf('C');
   const cite = (re) => `drive.mjs:${lineOf(re)}`;
-  const thinkingEnvStr = Object.entries(THINKING_OFF_ENV).map(([k, v]) => `${k}=${v}`).join(' ');
+  const THINKING_VARS = ['MAX_THINKING_TOKENS', 'CLAUDE_CODE_DISABLE_THINKING'];   // must be absent from every arm's env (thinking is the model default)
+  const present = (env) => THINKING_VARS.filter((k) => env[k] !== undefined);
   out.push(`ROUND ${opts.round ?? ROUND} PLAN  seed=${opts.seed}  model=${MODEL}  (task: ONE real-world scenario "shopkit", 2 phases in one session; web fetch ${F.WEB_URL} -> heading "${F.WEB_HEADING}")`);
   out.push(`model runs: ${plan.length} planned (one per arm, A first), serial, HARD CAP ${MAX_MODEL_RUNS} per round; ledger ${LG.ledgerPathFor(opts.round ?? ROUND)} has used ${ledgerUsed(LG.ledgerPathFor(opts.round ?? ROUND))} of ${MAX_MODEL_RUNS}`);
   if (plan.some((p) => p.retry)) out.push('', `RETRY PLAN (ledger.retryPlan, owner-directed; arm A is not rerun): ${plan.map((p) => `${p.arm}${p.rep}`).join(' -> ')}; extraRunReason: ${LG.readLedger(opts.round ?? ROUND).extraRunReason}`);
   out.push('', 'order (arm A first; B and C alternate between rounds):', ...plan.map((p) => `  ${p.position}. ${p.arm}${p.rep}`));
-  out.push('', thinkingOffAchievable() === false ? `THINKING: REQUESTED OFF on every arm, BUT NOT ACHIEVABLE for ${MODEL} (R7-model AC2)` : 'THINKING (identical in effect on every arm: OFF)');
-  if (thinkingOffAchievable() === false) out.push(`  !! ${THINKING_DISABLE_SUPPORT[MODEL].evidence}`, '  !! a live run needs an owner decision first (accept adaptive thinking on all arms as a recorded scope change, pin a model that accepts disabled thinking, or authorise one probe turn); any thinking block still marks the run INVALID (thinkingVerdict)');
-  else if (thinkingOffAchievable() === null) out.push(`  !! no thinking-disable evidence recorded for ${MODEL} (THINKING_DISABLE_SUPPORT): treat thinking-off as UNVERIFIED`);
-  out.push(`  A  ${THINKING_MECHANISM.A}`, `       cited at ${cite(/^export function armAEnv/)} and the THINKING_OFF_ENV definition ${cite(/^export const THINKING_OFF_ENV/)}`, `       resolved spawn env: ${thinkingEnvStr}  (armAEnv has them: ${Object.keys(THINKING_OFF_ENV).every((k) => armAEnv(A)[k] === THINKING_OFF_ENV[k])})`, `       argv: claude ${argvA(A, '<mcp-config.json>', null).map((x) => (x.length > 60 ? x.slice(0, 57) + '...' : x)).join(' ')}`);
+  out.push('', `THINKING: ${THINKING_POLICY} (R7-think AC1; arms A, B and C run the model's default thinking for ${MODEL}; thinking turns/blocks are a report-only metric: record.thinking, SUMMARY, verdict and grid lines; they never invalidate or void a run)`);
+  out.push(`  A  ${THINKING_MECHANISM.A}`, `       cited at ${cite(/^export function armAEnv/)}`, `       resolved spawn env thinking variables set: [${present(armAEnv(A)).join(',')}] (expected none)`, `       argv: claude ${argvA(A, '<mcp-config.json>', null).map((x) => (x.length > 60 ? x.slice(0, 57) + '...' : x)).join(' ')}`);
   const bEnv = serverEnv(B, '<store>', '<logs>');
-  out.push(`  B  ${THINKING_MECHANISM.B}`, `       cited at ${cite(/^export function serverEnv/)} (spreads THINKING_OFF_ENV first) and packages/agent/agent-engine-orchestrator/src/providers/claudecli.ts:818-833 (buildSubprocessEnv copies process.env)`, `       resolved server env: ${Object.keys(THINKING_OFF_ENV).map((k) => `${k}=${bEnv[k]}`).join(' ')}`, `       provider: ${JSON.stringify(providerFor(B, 'B'))}`);
+  out.push(`  B  ${THINKING_MECHANISM.B}`, `       cited at ${cite(/^export function serverEnv/)} and packages/agent/agent-engine-orchestrator/src/providers/claudecli.ts:818-833 (buildSubprocessEnv copies process.env)`, `       resolved server env thinking variables set: [${present(bEnv).join(',')}] (expected none)`, `       provider: ${JSON.stringify(providerFor(B, 'B'))}`);
   const cProv = providerFor(C, 'C');
   out.push(`  C  ${THINKING_MECHANISM.C}`, `       cited at ${cite(/^function providerFor/)} (provider keys: ${Object.keys(cProv).join(',')}; no thinking key) and anthropic.ts (rg "thinking": no match)`, `       provider: ${JSON.stringify(cProv)}`);
   out.push('', 'SHELL / WEB (B and C run the PRODUCT DEFAULT shell allowlist; A has unrestricted Bash)', `  B/C shell: ${SHELL_POLICY}   (cited ${cite(/^export const SHELL_POLICY/)}; supersedes the R3 "no curl" rule by owner direction, R6-prep AC2)`, '  Shell egress: open (product default: allow-all loopback proxy; no srt policy is pre-written). The actual mode is read back after each B/C run and recorded as record.shellEgress.', `  B/C srt network allowlist extension: ${SRT_EXTRA_DOMAINS.join(',') || '(none)'}   (cited ${cite(/^export const SRT_EXTRA_DOMAINS/)})`, `  A tools: ${A_TOOLS}`, '  NOTE: arm C additionally exposes Anthropic server-side web tools (web_fetch/web_search) by default; B has no web tool as shipped, A has the native WebFetch/WebSearch. The web-fetch field (w1_web) is scored with one rule for every arm that can fetch; this tool-surface asymmetry is recorded, not equalised.');
@@ -1110,23 +1093,26 @@ export async function selfCheck({ log = console.log, opts = parseArgs([]) } = {}
     // legacy copies are the round-3 files, byte for byte (so "red against the round-3 oracle" is proven, not claimed)
     const sha = (f) => crypto.createHash('sha256').update(fs.readFileSync(f)).digest('hex');
 
-    // ============ AC3: thinking equalisation, proven from each arm's actual command/config ============
-    log('--- AC3: thinking OFF on every arm ---');
+    // ============ R7-think AC1: thinking is the model default on every arm (not forced); the observation is report-only ============
+    log('--- R7-think AC1: thinking = model default on every arm ---');
     const planObj = buildPlan(opts, {}); const ctxA = makeCtx({ ...opts }, planObj, planObj.find((p) => p.arm === 'A'), false), ctxB = makeCtx({ ...opts }, planObj, planObj.find((p) => p.arm === 'B'), false), ctxC = makeCtx({ ...opts }, planObj, planObj.find((p) => p.arm === 'C'), false);
     const aEnv = armAEnv(ctxA), bEnv = serverEnv(ctxB, '<s>', '<l>'), cEnv = serverEnv(ctxC, '<s>', '<l>');
-    chk('A: spawn env carries MAX_THINKING_TOKENS=0 and CLAUDE_CODE_DISABLE_THINKING=1', aEnv.MAX_THINKING_TOKENS === '0' && aEnv.CLAUDE_CODE_DISABLE_THINKING === '1');
+    const THINK_VARS = ['MAX_THINKING_TOKENS', 'CLAUDE_CODE_DISABLE_THINKING']; const none = (env) => THINK_VARS.every((k) => !(k in env));
+    chk('R7-think AC1: A spawn env sets neither MAX_THINKING_TOKENS nor CLAUDE_CODE_DISABLE_THINKING', none(aEnv));
     chk('A: argv has no thinking/effort flag that could override the env', !argvA(ctxA, 'm', null).some((x) => /think|effort/i.test(x)));
-    chk('B: agent-mcp server env carries the same two vars', bEnv.MAX_THINKING_TOKENS === '0' && bEnv.CLAUDE_CODE_DISABLE_THINKING === '1');
+    chk('R7-think AC1: B agent-mcp server env sets neither thinking variable', none(bEnv));
     chk('B/C: provider configs carry no thinking key; C provider is the anthropic provider', !('thinking' in providerFor(ctxB, 'B')) && !('thinking' in providerFor(ctxC, 'C')) && providerFor(ctxC, 'C').type === 'anthropic' && providerFor(ctxB, 'B').type === 'claudecli');
-    chk('C: server env carries the (inert) vars too, so B and C servers are launched identically', cEnv.MAX_THINKING_TOKENS === '0');
-    chk('effectiveConfig reports thinking OFF with the mechanism for every arm (same constant the spawn code uses)', ['A', 'B', 'C'].every((a) => { const cx = a === 'A' ? ctxA : a === 'B' ? ctxB : ctxC; const c = effectiveConfig(cx); return /^OFF/.test(c.thinking) && c.thinking.includes(THINKING_MECHANISM[a]); }));
+    chk('R7-think AC1: C server env sets neither thinking variable (B and C servers are launched identically)', none(cEnv));
+    chk('R7-think AC1: negative control, an operator shell exporting MAX_THINKING_TOKENS=0 / CLAUDE_CODE_DISABLE_THINKING=1 does NOT leak into any arm env (cleanEnv allowlist)', (() => { const saved = [process.env.MAX_THINKING_TOKENS, process.env.CLAUDE_CODE_DISABLE_THINKING]; process.env.MAX_THINKING_TOKENS = '0'; process.env.CLAUDE_CODE_DISABLE_THINKING = '1'; try { return none(armAEnv(ctxA)) && none(serverEnv(ctxB, '<s>', '<l>')) && none(serverEnv(ctxC, '<s>', '<l>')); } finally { for (const [k, v] of [['MAX_THINKING_TOKENS', saved[0]], ['CLAUDE_CODE_DISABLE_THINKING', saved[1]]]) { if (v === undefined) delete process.env[k]; else process.env[k] = v; } } })());
+    chk('R7-think AC1: negative control, the check has teeth: an env that DID carry the forced-off variables is detected', !none({ MAX_THINKING_TOKENS: '0' }) && !none({ CLAUDE_CODE_DISABLE_THINKING: '1' }));
+    chk('R7-think AC1: effectiveConfig states "thinking: model default on every arm; not forced" with the per-arm mechanism, and no arm reports OFF', ['A', 'B', 'C'].every((a) => { const cx = a === 'A' ? ctxA : a === 'B' ? ctxB : ctxC; const c = effectiveConfig(cx); return c.thinking.startsWith('thinking: model default on every arm; not forced') && c.thinking.includes(THINKING_MECHANISM[a]) && !/OFF/.test(c.thinking) && Object.keys(c.thinkingEnv).length === 0; }));
     // R7-model: ONE model pin reaches every arm and the oracle; the judge is a separate pin; thinking-off gap and the cost card are reported, not assumed.
     chk('R7-model AC1: MODEL is the single pin (fixtures PIN_MODEL = claude-sonnet-5-5) and reaches arm A argv --model, B claudecli provider.model, C anthropic provider.model and the oracle spec pin', (() => { const av = argvA(ctxA, '<mcp>', null); return MODEL === F.PIN_MODEL && MODEL === 'claude-sonnet-5-5' && av[av.indexOf('--model') + 1] === MODEL && providerFor(ctxB, 'B').model === MODEL && providerFor(ctxC, 'C').model === MODEL && ctxA.spec.pin === MODEL; })());
     chk('R7-model AC1: negative control, a spec/arm pinned to the previous model (claude-haiku-4-5) is not the pin and its r1_model result is FAIL', (() => { const e = { ...ctxA.spec, pin: MODEL }; const o = O.idealObservation('A', e); o.models = ['claude-haiku-4-5']; return O.scoreObservation(o, e).fields.r1_model.status === 'fail'; })());
     chk('R7-model AC1: the judge model is a distinct pin (JUDGE_MODEL = claude-haiku-4-5, not the arm MODEL)', JG.JUDGE_MODEL === 'claude-haiku-4-5' && JG.JUDGE_MODEL !== MODEL);
-    chk('R7-model AC2: thinking-off is NOT achievable for claude-sonnet-5-5 (evidence recorded), is for claude-haiku-4-5, and the plan text says so; an unknown model reads null (unverified)', thinkingOffAchievable('claude-sonnet-5-5') === false && thinkingOffAchievable('claude-haiku-4-5') === true && thinkingOffAchievable('claude-unknown-9') === null && /NOT ACHIEVABLE for claude-sonnet-5-5/.test(planText(opts)) && effectiveConfig(ctxC).thinking.startsWith('OFF-REQUESTED'));
+    chk('R7-think AC1: the plan text states thinking is the model default and carries no REQUESTED OFF / NOT ACHIEVABLE wording', (() => { const t = planText(opts); return t.includes('thinking: model default on every arm; not forced'.replace('thinking: ', '')) && /THINKING: model default on every arm; not forced/.test(t) && !/REQUESTED OFF|NOT ACHIEVABLE|MAX_THINKING_TOKENS=0/.test(t); })());
     chk('R7-model AC3: the common rate card is the pinned model\'s snapshot-sourced card, and an unpriced model yields null (unmeasured), never a haiku/sonnet-4-6 price', L.rateCardFor(MODEL)?.rates === L.RATES_PER_M && sumUsd([{ usd: 1 }, { usd: null }]) === null && sumUsd([{ usd: 1 }, { usd: 2 }]) === 3);
-    chk('the plan text cites the exact config line for A, B and C', (() => { const t = planText(opts); return /THINKING/.test(t) && ['A  env MAX', 'B  env MAX', 'C  no `thinking`'].every((x) => t.includes(x)) && /drive\.mjs:\d+/.test(t); })());
+    chk('the plan text cites the exact config line for A, B and C', (() => { const t = planText(opts); return /THINKING/.test(t) && ['A  model default', 'B  model default', 'C  model default'].every((x) => t.includes(x)) && /drive\.mjs:\d+/.test(t); })());
     // the live invariant sees thinking in WORKER tasks too, not just the parent
     const thinkSse = 'data: {"type":"message_start","message":{"id":"m1","model":"' + MODEL + '","usage":{"input_tokens":1,"output_tokens":1}}}\ndata: {"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":""}}\ndata: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":5}}\n';
     const childStdout = JSON.stringify({ type: 'assistant', message: { id: 'w1', model: MODEL, content: [{ type: 'thinking', thinking: 'hmm' }, { type: 'text', text: 'done' }] } }) + '\n';
@@ -1134,21 +1120,16 @@ export async function selfCheck({ log = console.log, opts = parseArgs([]) } = {}
     const bChild = [...noThink, { event: 'spawn.stdout', task_id: 'worker-1', call_id: 'c1', body: childStdout }];
     const cChild = [{ event: 'http.response', task_id: 'parent', call_id: 'h0', body: 'data: {"type":"message_start","message":{"id":"m0","usage":{}}}\n' }, { event: 'http.response', task_id: 'worker-2', call_id: 'h1', body: thinkSse }];
     const parentOnlyMetrics = (api) => ({ phases: [{ thinkingTurns: 0 }], thinkingBlocksAllTasks: L.thinkingBlocksInApiLogs(api) });
-    chk('thinking invariant: no thinking anywhere -> run valid', thinkingVerdict(parentOnlyMetrics(noThink)).ok === true);
-    chk('thinking invariant: a thinking block only in a B WORKER task (parent clean) -> run INVALID', thinkingVerdict(parentOnlyMetrics(bChild)).ok === false && thinkingVerdict(parentOnlyMetrics(bChild)).allTasks === 1);
-    chk('thinking invariant: a thinking block only in a C WORKER task response (parent clean) -> run INVALID', thinkingVerdict(parentOnlyMetrics(cChild)).ok === false);
-    chk('thinking invariant: a thinking block in an arm-A stream (parent or native subagent) is counted by the same verdict', thinkingVerdict({ phases: [{ thinkingTurns: 0 }], thinkingBlocksAllTasks: 2 }).ok === false && thinkingVerdict({ phases: [{ thinkingTurns: 1 }] }).ok === false);
+    chk('R7-think AC1: no thinking anywhere -> observation 0, record field present', thinkingObservation(parentOnlyMetrics(noThink)).observedThinkingTurns === 0 && thinkingObservation(parentOnlyMetrics(noThink)).configured === THINKING_POLICY && !('ok' in thinkingObservation(parentOnlyMetrics(noThink))));
+    chk('R7-think AC1: a thinking block only in a B WORKER task (parent clean) is COUNTED (allTasks 1) and reported, never invalidating', thinkingObservation(parentOnlyMetrics(bChild)).allTasks === 1 && thinkingObservation(parentOnlyMetrics(bChild)).observedThinkingTurns === 1);
+    chk('R7-think AC1: a thinking block only in a C WORKER task response is counted', thinkingObservation(parentOnlyMetrics(cChild)).observedThinkingTurns === 1);
+    chk('R7-think AC1: arm-A parent / native-subagent thinking is counted by the same observation (max of parent and all-tasks)', thinkingObservation({ phases: [{ thinkingTurns: 0 }], thinkingBlocksAllTasks: 2 }).observedThinkingTurns === 2 && thinkingObservation({ phases: [{ thinkingTurns: 1 }] }).observedThinkingTurns === 1);
+    chk('R7-think AC1: thinking never makes a run INVALID or void: no `invalidRun = ...` line in drive.mjs mentions thinking (source guard)', !fs.readFileSync(SELF, 'utf8').split('\n').some((l) => /invalidRun\s*=/.test(l) && /thinking/i.test(l) && !l.includes('source guard')));
     // static evidence from the code and the claude binary (reads files only; executes nothing)
     const repoRoot = opts.wt;
     const cli = path.join(repoRoot, 'packages/agent/agent-engine-orchestrator/src/providers/claudecli.ts'); const anth = path.join(repoRoot, 'packages/agent/agent-engine-orchestrator/src/providers/anthropic.ts');
-    if (fs.existsSync(cli)) { const t = fs.readFileSync(cli, 'utf8'); chk('claudecli.ts buildSubprocessEnv copies process.env into the spawned claude (so the server env reaches B\'s children) and never deletes MAX_THINKING_TOKENS/CLAUDE_CODE_DISABLE_THINKING', /for \(const \[k, v\] of Object\.entries\(process\.env\)\)/.test(t) && !/MAX_THINKING_TOKENS|CLAUDE_CODE_DISABLE_THINKING/.test(t.replace(/\/\/.*$/gm, ''))); } else chk('claudecli.ts present for static check (skipped: not found)', true, `SKIP ${cli}`);
+    if (fs.existsSync(cli)) { const t = fs.readFileSync(cli, 'utf8'); chk('claudecli.ts buildSubprocessEnv copies process.env into the spawned claude and never sets or deletes MAX_THINKING_TOKENS/CLAUDE_CODE_DISABLE_THINKING (B inherits the thinking behaviour of its environment, which the driver leaves at the model default)', /for \(const \[k, v\] of Object\.entries\(process\.env\)\)/.test(t) && !/MAX_THINKING_TOKENS|CLAUDE_CODE_DISABLE_THINKING/.test(t.replace(/\/\/.*$/gm, ''))); } else chk('claudecli.ts present for static check (skipped: not found)', true, `SKIP ${cli}`);
     if (fs.existsSync(anth)) { const t = fs.readFileSync(anth, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, ''); chk('anthropic.ts (arm C provider) never sends a thinking request parameter', !/\bthinking\b/i.test(t)); } else chk('anthropic.ts present for static check (skipped: not found)', true, `SKIP ${anth}`);
-    const claudeBin = (() => { for (const d of String(process.env.PATH || '').split(path.delimiter)) { const p = path.join(d, 'claude'); try { if (fs.statSync(p).isFile()) return fs.realpathSync(p); } catch { /* next */ } } return null; })();
-    if (claudeBin) {
-      const buf = fs.readFileSync(claudeBin);
-      const has = (s2) => buf.includes(Buffer.from(s2));
-      chk(`claude binary (${path.basename(claudeBin)}, read not run) knows both env switches and checks MAX_THINKING_TOKENS before alwaysThinkingEnabled`, has('CLAUDE_CODE_DISABLE_THINKING') && has('process.env.MAX_THINKING_TOKENS)return Dd(process.env.MAX_THINKING_TOKENS)>0?null:"MAX_THINKING_TOKENS";let{settings:e}=yg();return e.alwaysThinkingEnabled===!1?"alwaysThinkingEnabled":null'), 'env var wins over settings.json');
-    } else chk('claude binary found for the static precedence check (skipped)', true, 'SKIP: claude not on PATH');
 
     // ============ AC4: ledger (R0.AC4): cap 3, approvedBy, arm A first, void rule, extraRunReason, fail closed ============
     log('--- AC4: per-round ledger (cap 3) ---');
@@ -1291,7 +1272,6 @@ export async function selfCheck({ log = console.log, opts = parseArgs([]) } = {}
   return { ok: failed.length === 0, total: results.length, failed };
 }
 
-const LOG_PATH = path.join(REPO_ROOT, 'docs/agent/parity/EXPERIMENT-LOG.md');
 export function currentScenarioSha() {
   const spec = F.makeSpec({ seed: '20261011', arm: 'A', rep: 1 });
   return GT.scenarioSha({ prompts: F.prompts(), ticketText: F.ticketText(spec), expectations: F.expectedOf(spec) });
@@ -1318,7 +1298,7 @@ async function runPreflightMode(opts) {
 async function runLiveGates(opts) {
   return GT.runGates({
     ledger: () => { const r = LG.checkLedgerForLive(opts.round); return { ok: r.ok, reasons: r.reasons }; },
-    scope: () => { const led = LG.readLedger(opts.round); let logText = ''; try { logText = fs.readFileSync(LOG_PATH, 'utf8'); } catch { /* none */ }
+    scope: () => { const led = LG.readLedger(opts.round); let logText = ''; try { logText = fs.readFileSync(GT.resolveLogPath(REPO_ROOT), 'utf8'); } catch { /* none */ }   // the LOG lives in the MAIN checkout (a worktree's copy lacks the dispatcher's newest headings); resolved lazily so importing drive.mjs spawns nothing
       return GT.checkScope({ scenarioSha: currentScenarioSha(), previousSha: led.scenarioSha || previousScenarioSha(opts.round), scopeChanges: led.scopeChanges, logText, startedAt: led.startedAt ?? new Date().toISOString() }); },
     preflight: async () => { const r = await preflightOnce(opts); return { ok: r.ok, reasons: r.legs.filter((l) => l.code !== 'GREEN' && l.code !== 'NOT_PROBEABLE').map((l) => `${l.arm}: ${l.code} ${l.detail}`) }; },
     judgeCredential: () => { const c = JG.resolveJudgeCredential(); return { ok: c.present, reasons: c.present ? [] : ['no judge credential (ANTHROPIC_API_KEY or ADHD_AGENT_ANTHROPIC_SECRET in env or ~/.adhd/.env): the paid judge would fail after the arms were paid for'] }; },   // presence only, no model call
