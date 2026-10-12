@@ -60,10 +60,10 @@
       "end_ref": null
     },
     "mig-capture-parsers": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-10-12T21:26:00.731Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "571723e1f5d3645b5ad0f5a94d4de46aec52c1e6",
       "end_ref": null
     },
     "mig-queries": {
@@ -310,7 +310,7 @@
     "version": "0.8.35",
     "hash": "0b6bc1f3d70e"
   },
-  "current_state": "mig-cdp",
+  "current_state": "mig-capture-parsers",
   "dod_provenance": {
     "confirmed_at": "2026-10-12T10:24:50.808Z",
     "by": "pseudosky",
