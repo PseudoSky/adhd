@@ -163,7 +163,23 @@ function toAnthropicTools(tools?: ToolDefinition[]): Tool[] | undefined {
     }));
 }
 
-function toAnthropicMessages(messages: Message[]): MessageParam[] {
+/**
+ * The name an echoed assistant `tool_use` block carries: the SAME `server__tool` string `toAnthropicTools` advertised
+ * (P1-toolname; OpenAI's `toOpenAIMessages` does the identical join). A stored ToolCall holds the resolved
+ * `{server, tool}` pair, so history must re-join it, not drop the prefix, or the model sees names it was never offered.
+ *
+ * A tool advertised WITHOUT a server prefix resolves (`resolveToolCallName`) to `{server: name, tool: name}`; it is
+ * echoed as the bare name, not `name__name`. The advertised set disambiguates that from a real `echo__echo` tool.
+ */
+function echoedToolName(tc: ToolCall, advertised: ReadonlySet<string>): string {
+    const qualified = `${tc.server}__${tc.tool}`;
+    if (advertised.has(qualified)) return qualified;
+    if (advertised.has(tc.tool)) return tc.tool;
+    return tc.server === tc.tool ? tc.tool : qualified;
+}
+
+function toAnthropicMessages(messages: Message[], advertisedToolNames: readonly string[] = []): MessageParam[] {
+    const advertised: ReadonlySet<string> = new Set(advertisedToolNames);
     const nonSystem = messages.filter(m => m.role !== "system");
 
     return nonSystem.map((message): MessageParam => {
@@ -194,7 +210,7 @@ function toAnthropicMessages(messages: Message[]): MessageParam[] {
                 contentBlocks.push({
                     type: "tool_use",
                     id: tc.id,
-                    name: tc.tool,
+                    name: echoedToolName(tc, advertised),
                     input: tc.arguments as Record<string, unknown>,
                 });
             }
@@ -311,7 +327,7 @@ export class AnthropicProvider implements LLMProvider {
             const prepared = {
                 tools: mergedTools.length > 0 ? mergedTools : undefined,
                 system: effectiveSystem,
-                messages: toAnthropicMessages(request.messages),
+                messages: toAnthropicMessages(request.messages, (request.tools ?? []).map(t => t.name)),
             };
             const wire = this.promptCaching
                 ? applyCacheBreakpoints({
