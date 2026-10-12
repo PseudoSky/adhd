@@ -10,7 +10,8 @@
     "verify",
     "review",
     "remediate",
-    "docs"
+    "docs",
+    "release"
   ],
   "terminal": "done",
   "nodes": {},
