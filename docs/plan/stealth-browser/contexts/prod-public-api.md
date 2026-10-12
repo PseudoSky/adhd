@@ -23,7 +23,7 @@ _No criteria yet._
 ## Reservations
 
 ```text
-read_only:  []
+read_only:  ["entrypoint/stealth-browser/src/api.ts", "entrypoint/stealth-browser/src/lib/", "/Users/nix/dev/ai/scratch/agent-browser/cdp-query-client.ts"]
 mutates:    ["entrypoint/stealth-browser/src/legacy.ts", "entrypoint/stealth-browser/src/index.ts", "entrypoint/stealth-browser/src/test/unit/public-api/"]
 ```
 
