@@ -3,28 +3,22 @@
   "cap": 3,
   "approvedBy": "owner (2026-10-12): \"drop all restrictions until you get the system working. if there is a constraint like agent needs to create a parent directory first, put that in the fucking tool instructions we dont need to build more. think smarter please\" -> implementation pass, then implementer 2 unit tests + success check, then an experiment run; the parity loop continues until parity is confirmed",
   "extraRunReason": "",
-  "runs": [
-    {
-      "runId": "A1",
-      "arm": "A",
-      "at": "2026-10-12T04:24:46.359Z",
-      "pid": 4592
-    }
-  ],
+  "runs": [],
   "judgeCalls": [],
   "scenarioSha": "deedea872bc566abfec7c201e4713d6c01b78a7993cb8229907171dd8f889d61",
   "scopeChanges": [],
-  "armOrder": [
-    "A",
-    "B",
-    "C"
-  ],
+  "armOrder": [],
   "startedAt": "2026-10-12T04:17:51.939Z",
-  "armA": {
-    "genuine": false,
-    "detail": "content 17/18, invalid 0, defect false",
-    "at": "2026-10-12T04:27:41.671Z"
-  },
-  "releases": [],
+  "armA": null,
+  "releases": [
+    {
+      "runId": "A1",
+      "arm": "A",
+      "reservedAt": "2026-10-12T04:24:46.359Z",
+      "reason": "Void iteration: native arm A1 not genuine (model-behaviour leak_internal_note); owner rule: iteration not started, native rerun. Prompts/ticket/oracle/thresholds unchanged.",
+      "releasedAt": "2026-10-12T04:29:18.056Z",
+      "pid": 22871
+    }
+  ],
   "judgeCapReason": "owner direction: parity loop continues after the product web-path change (see EXPERIMENT-LOG); cap 3 covers the A+B+C judge calls of one full round"
 }
