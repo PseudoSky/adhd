@@ -36,6 +36,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 - [gates-first.7] (PA10.1, PA10.2, PA10.4, PA10.5; folded from the retired publish-readiness state) package.json has description, keywords, license, files, publishConfig.access = public and engines.node >= 22.5, the version is 0.x, the built dist/bin/cli.js and mcp.js start with a shebang and are executable, and every @adhd/* dependency is a public workspace package or recorded in published-state.json.
 - [gates-first.8] (PA10.3) `npm pack --dry-run` against the built dist output lists README.md, CHANGELOG.md, bin/cli.js, bin/mcp.js, index.js and index.d.ts (the main/types/bin targets); the output is recorded in evidence/publish-dry-run.txt.
 - [gates-first.9] Only owned paths changed by [psm:gates-first] commits.
+- [gates-first.10] After a full build, neither owned package is inlined into dist (module-format proof for ADR-0003): no dist/**/*.js file defines `createStoreAdapter`, `ensureBackend`, `serveBackend` or `dialBackend`, dist references `@adhd/sox-service-proxy` as an external require, and no dist file `require`s `@adhd/sox-store-adapter` (it is reached only through a dynamic `import()`).
 
 ---
 

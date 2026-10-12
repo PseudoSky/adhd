@@ -11,7 +11,7 @@ RETIRED: prod-public-api (greenfield API: no legacy subpath, root namespaces + f
 - D3 (defect 3): `merge-readiness.4` builds `dist/` in the merged main checkout before any `link:` consumption; the required cutover runs earlier against a tarball (`agent-search-cutover`) and `agent-search-relink` consumes the release after merge.
 - D4 (defect 5): `tests-unit-surface` depends on `surface-hosts`; host-level P1/P2 tests live in its owned spec dir.
 - D5: the out-of-scope candidates stay out of the DAG, are filed in the backlog and are listed in `DEFERRED.md`.
-- User decisions (see `PRODUCTIZATION-CATALOG.md`): product's verdict is the default per item. Overrides: unit tests that simulate real use cases replace e2e (`tests-e2e` and `hb-chrome-binary` removed, `tests-use-cases` added); the agent-search migration substitutes for e2e and runs before the audit; typed errors cover 100% of failures (29 design-neutral codes plus design-added ones); examples cover every verb and namespace plus genuine use cases; the Chrome lifecycle (19dfb641) is built now as `chrome-lifecycle`, with `capture-upgrade` and the shared `cdp-test-harness`.
+- User decisions (see `PRODUCTIZATION-CATALOG.md`): product's verdict is the default per item. Overrides: unit tests that simulate real use cases replace e2e (`tests-e2e` and `hb-chrome-binary` removed, `tests-use-cases` added); the agent-search migration substitutes for e2e and runs before the audit; typed errors cover 100% of failures (33 codes: 4 host, 14 library, 8 capture, 7 lifecycle); examples cover every verb and namespace plus genuine use cases; the Chrome lifecycle (19dfb641) is built now as `chrome-lifecycle`, with `capture-upgrade` and the shared `cdp-test-harness`.
 
 ## Constraints honored
 
@@ -159,7 +159,7 @@ P1, P2 (safety) and P3 (naming) first, since they change types before hosts are 
 | P2 cookie redaction | surface-api, surface-hosts, tests-unit-surface, tests-use-cases | surface-api.8 (claim evidence), surface-hosts.8 (PA2.1), tests-unit-surface.4 (PA2.2), tests-use-cases scenarios (PA2.1 simulated); PA2.3 held by dod.4 parity |
 | P3 public API (greenfield) | surface-api, tests-unit-surface, prod-errors | surface-api.3, surface-api.10, prod-errors.7 (root exports snapshot) |
 | P4 ergonomics | surface-api, surface-hosts | surface-api.9 (PA4.1), surface-hosts.10 (PA4.1, PA4.2), surface-hosts.11 (PA4.3, PA4.4) |
-| P5 structured errors (100%) | prod-errors (new), surface-hosts | prod-errors.1-.8 (29 design-neutral codes plus design-added ones: PA5.1, PA5.4 and the capture and lifecycle codes), surface-hosts.12 (PA5.2, PA5.3, PA5.5) |
+| P5 structured errors (100%) | prod-errors (new), surface-hosts | prod-errors.1-.8 (33 codes: PA5.1, PA5.4 and the capture and lifecycle codes), surface-hosts.12 (PA5.2, PA5.3, PA5.5) |
 | P6 configuration | surface-hosts, docs-marketing-run | surface-hosts.13 (PA6.1), docs-marketing-run.6 (PA6.2, PA6.3) |
 | P7 examples (every verb and namespace) | prod-examples (new) | prod-examples.1-.6 (PA7.1-PA7.4) |
 | P8 responsible use | docs-marketing-run, readme-rewrite | docs-marketing-run.7 (PA8.1, PA8.2), docs-marketing-run.8 and readme-rewrite.7 (PA8.3), readme-rewrite.6 (PA8.2, PA8.4) |

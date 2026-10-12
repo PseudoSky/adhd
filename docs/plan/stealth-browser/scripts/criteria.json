@@ -1118,6 +1118,15 @@
       "cwd": "repo-root"
     },
     {
+      "id": "gates-first.10",
+      "phase": "verify",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py gates-first --only gates-first.10",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
       "id": "review-prep.1",
       "phase": "review",
       "tier": null,

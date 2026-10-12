@@ -647,7 +647,7 @@ standard_port_checks("mig-chrome-manager", "chrome-manager")
 
 @check("mig-chrome-manager", 4)
 def _mcm4():
-    """Behavior parity of the port at migration time: the three-tier safety shutdown (`shutdownIfIdle`) and the ChromeManagerOptions type are preserved; the cross-process coordination is a FEATURE whose mechanism (heartbeat file, lease registry or service proxy) is decided by the chrome-lifecycle evaluation and is pinned by the feature inventory, not by the heartbeat path."""
+    """Behavior parity of the port at migration time: the three-tier safety shutdown (`shutdownIfIdle`) and the ChromeManagerOptions type are preserved; the cross-process coordination is a FEATURE whose mechanism (heartbeat file, lease registry or service proxy) is rebuilt by chrome-lifecycle (EVALUATIONS.md E2) and is pinned by the feature inventory, not by the heartbeat path."""
     t = read(f"{P}/src/lib/chrome-manager.ts")
     return "ChromeManagerOptions" in exports_of(t) and "shutdownIfIdle" in t, "parity tokens"
 
@@ -1134,6 +1134,18 @@ def _gf8():
 def _gf9():
     """Only owned paths changed by [psm:gates-first] commits."""
     return ownership_ok("gates-first")
+
+@check("gates-first", 10)
+def _gf10():
+    """After a full build, neither owned package is inlined into dist (module-format proof for ADR-0003): no dist/**/*.js file defines `createStoreAdapter`, `ensureBackend`, `serveBackend` or `dialBackend`, dist references `@adhd/sox-service-proxy` as an external require, and no dist file `require`s `@adhd/sox-store-adapter` (it is reached only through a dynamic `import()`)."""
+    rc, out = sh([NX, "run", f"{proj_name()}:build"], timeout=1800)
+    files = walk(f"{P}/dist", (".js", ".cjs", ".mjs"))
+    txt = {f: read(f) for f in files}
+    inlined = [os.path.relpath(f, P) for f, t in txt.items() if re.search(r"function\s+(createStoreAdapter|ensureBackend|serveBackend|dialBackend)\b", t)]
+    req_store = [os.path.relpath(f, P) for f, t in txt.items() if re.search(r"require\(\s*['\"]@adhd/sox-store-adapter['\"]", t)]
+    proxy_ext = any("@adhd/sox-service-proxy" in t for t in txt.values())
+    return rc == 0 and bool(files) and not inlined and not req_store and proxy_ext, f"build rc={rc} files={len(files)} inlined={inlined} store require={req_store} proxy external={proxy_ext}"
+
 
 
 def resolution_done():
@@ -2052,7 +2064,7 @@ def _pf4():
 
 @check("port-fixes", 5)
 def _pf5():
-    """The scratch chrome-lifecycle-test.ts is ported as a unit/lifecycle spec: src/test/unit/chrome-manager/chrome-lifecycle.spec.ts covers all five scenarios (deferral does not stamp the deferrer's heartbeat, genuine activity stamps, stale sibling lets shutdown proceed, absent sibling proceeds, dead sibling PID is ignored), uses a temp heartbeat path and a dead CDP port (never the live /tmp/stealth-browser-heartbeat), cites ticket 8468f7b1 and a valid port-fixes.N id; chrome-lifecycle later replaces the heartbeat guarantee with its lease-based one."""
+    """The scratch chrome-lifecycle-test.ts is ported as a unit/lifecycle spec: src/test/unit/chrome-manager/chrome-lifecycle.spec.ts covers all five scenarios (deferral does not stamp the deferrer's heartbeat, genuine activity stamps, stale sibling lets shutdown proceed, absent sibling proceeds, dead sibling PID is ignored), uses a temp heartbeat path and a dead CDP port (never the live /tmp/stealth-browser-heartbeat), cites ticket 8468f7b1 and a valid port-fixes.N id; chrome-lifecycle later replaces the heartbeat mechanism with per-process presence records that keep the same behaviors."""
     t = read(f"{P}/src/test/unit/chrome-manager/chrome-lifecycle.spec.ts")
     need = ("shutdownIfIdle", "heartbeatPath", "mkdtemp", "bump", "livelock")
     live = re.search(r"['\"`]/tmp/stealth-browser-heartbeat['\"`]", t) is not None
@@ -2924,12 +2936,13 @@ def _cl14():
 
 @check("chrome-lifecycle", 15)
 def _cl15():
-    """CL15 (F24 N1 N5, gap G4) out-of-process reaper through the proxy launcher: src/lib/lifecycle/proxy-launcher.ts exports ServiceProxyReaperLauncher implementing `ReaperLauncher` (`ensure(cfg)` giving 'started' | 'already-running' | 'unavailable') over `ensureBackend` from @adhd/sox-service-proxy (imported statically, no dynamic import); reaper.spec.ts, with `vi.mock('@adhd/sox-service-proxy')`, proves the dispositions spawned, already-live and adopted-after-wait map to started or already-running and `failed` (including E_UDS_DIR_UNSAFE) maps to unavailable, a launcher giving unavailable leaves `ready()` successful with `status().reaper === false` and the in-process timers still apply, a reaper tick with all clients gone (kill -9: never released) reaps within TTL plus grace signalling only the recorded pid and start-time (none when the record is missing or mismatched), and the bound 'the next ready() of any process adopts or reaps' is tested as a rule; the reaper entry is `runChromeReaper(cfg)` and uses the same `decideReap` as the in-process path (one policy)."""
+    """CL15 (F24 N1 N5, gap G4) out-of-process reaper through the proxy launcher: src/lib/lifecycle/proxy-launcher.ts exports ServiceProxyReaperLauncher implementing `ReaperLauncher` (`ensure(cfg)` giving 'started' | 'already-running' | 'unavailable') over `ensureBackend` from @adhd/sox-service-proxy (imported statically, no dynamic import); reaper.spec.ts, with `vi.mock('@adhd/sox-service-proxy')`, proves the dispositions spawned, already-live and adopted-after-wait map to started or already-running and `failed` (including E_UDS_DIR_UNSAFE) maps to unavailable, a launcher giving unavailable leaves `ready()` successful with `status().reaper === false` and the in-process timers still apply, a reaper tick with all clients gone (kill -9: never released) reaps within TTL plus grace signalling only the recorded pid and start-time (none when the record is missing or mismatched), and the bound 'the next ready() of any process adopts or reaps' is tested as a rule; the child entry is `runChromeReaper(cfg)` in src/lib/lifecycle/reaper-entry.ts (it calls `serveBackend` with a ping handler, then `runReaper` from reaper.ts, which uses the same `decideReap` as the in-process path: one policy)."""
     p = read(f"{P}/src/lib/lifecycle/proxy-launcher.ts")
     r = read(f"{P}/src/lib/lifecycle/reaper.ts")
+    re_ = read(f"{P}/src/lib/lifecycle/reaper-entry.ts")
     ok, why = ac_spec("unit/lifecycle", "reaper.spec.ts", "chrome-lifecycle.15", ("vi.mock('@adhd/sox-service-proxy'", "ensureBackend", "spawned", "already-live", "adopted-after-wait", "E_UDS_DIR_UNSAFE", "REAPER_UNAVAILABLE"))
     return ("ServiceProxyReaperLauncher" in exports_of(p) and "ensureBackend" in p and re.search(r"from\s*['\"]@adhd/sox-service-proxy['\"]", p) is not None
-            and "runChromeReaper" in exports_of(r) and "decideReap" in r and ok), why
+            and "runChromeReaper" in exports_of(re_) and "serveBackend" in re_ and "runReaper" in exports_of(r) and "decideReap" in r and ok), why
 
 
 @check("chrome-lifecycle", 16)
@@ -2965,11 +2978,12 @@ _cl_spec(21, "best-effort.spec.ts", "CL21 (F26) best-effort I/O: best-effort.spe
 
 @check("chrome-lifecycle", 22)
 def _cl22():
-    """CL22 seam contract: src/test/unit/lifecycle/presence-contract.ts exports a contract suite that presence-contract.spec.ts runs against `FilePresenceStore`; `PresenceStore` and `ReaperLauncher` are the only two seams (decideReap, the tiers, the breaker, the isolated pages and the exit hooks never import the proxy package or a concrete store), so a proxy-backed presence store later passes the same suite and needs no change to the policy engine; a fake `ReaperLauncher` is substitutable in the manager tests."""
+    """CL22 seam contract: src/test/unit/lifecycle/presence-contract.ts exports a contract suite that presence-contract.spec.ts runs against `FilePresenceStore`; `PresenceStore` and `ReaperLauncher` are the only two seams, and only `proxy-launcher.ts` and `reaper-entry.ts` (the detached child's entry) import `@adhd/sox-service-proxy` (decideReap, the tiers, the breaker, the isolated pages, the exit hooks and the manager never import the proxy package or a concrete store), so a proxy-backed presence store later passes the same suite and needs no change to the policy engine; a fake `ReaperLauncher` is substitutable in the manager tests."""
     c = read(f"{P}/src/test/unit/lifecycle/presence-contract.ts")
     ok, why = ac_spec("unit/lifecycle", "presence-contract.spec.ts", "chrome-lifecycle.22", ("FilePresenceStore", "presence-contract"))
-    leak = [n for n in ("reap-policy", "launch-breaker", "isolated-page", "exit-hooks", "presence", "ownership") if PROXY_PKG in read(f"{P}/src/lib/lifecycle/{n}.ts")]
-    return bool(c.strip()) and ok and not leak and PROXY_PKG in read(f"{P}/src/lib/lifecycle/proxy-launcher.ts"), f"{why} proxy imported outside the launcher: {leak}"
+    allowed = {"proxy-launcher.ts", "reaper-entry.ts"}
+    leak = [os.path.basename(f) for f in walk(f"{P}/src/lib/lifecycle", (".ts",)) if os.path.basename(f) not in allowed and PROXY_PKG in read(f)] + [os.path.relpath(f, f"{P}/src/lib") for f in walk(f"{P}/src/lib", (".ts",)) if "/lifecycle/" not in f and PROXY_PKG in read(f)]
+    return bool(c.strip()) and ok and not leak and PROXY_PKG in read(f"{P}/src/lib/lifecycle/proxy-launcher.ts"), f"{why} proxy imported outside the launcher and the reaper entry: {leak}"
 
 
 @check("chrome-lifecycle", 23)

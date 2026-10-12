@@ -32,7 +32,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 - [mig-chrome-manager.1] Every manifest file exists, keeps every export (modulo the manifest's recorded allowed_renames/allowed_drops), stays >=80% line-similar to the scaffold-time source, keeps its must-contain tokens.
 - [mig-chrome-manager.2] No .ts import specifiers, no reach into agent-search, no Runtime.evaluate/--enable-automation; every relative import resolves.
 - [mig-chrome-manager.3] Only owned paths changed by [psm:mig-chrome-manager] commits; agent-search source tree and main checkout node_modules untouched.
-- [mig-chrome-manager.4] Behavior parity of the port at migration time: the three-tier safety shutdown (`shutdownIfIdle`) and the ChromeManagerOptions type are preserved; the cross-process coordination is a FEATURE whose mechanism (heartbeat file, lease registry or service proxy) is decided by the chrome-lifecycle evaluation and is pinned by the feature inventory, not by the heartbeat path.
+- [mig-chrome-manager.4] Behavior parity of the port at migration time: the three-tier safety shutdown (`shutdownIfIdle`) and the ChromeManagerOptions type are preserved; the cross-process coordination is a FEATURE whose mechanism (heartbeat file, lease registry or service proxy) is rebuilt by chrome-lifecycle (EVALUATIONS.md E2) and is pinned by the feature inventory, not by the heartbeat path.
 
 ---
 
