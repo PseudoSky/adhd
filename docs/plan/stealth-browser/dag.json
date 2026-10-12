@@ -69,6 +69,21 @@
       ],
       "context": "contexts/deps-install.md",
       "notes": "executor=platform-engineer tier=sonnet/medium"
+    },
+    "mig-foundation": {
+      "kind": "work",
+      "phase": "migrate",
+      "depends_on": [
+        "deps-install"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py mig-foundation",
+      "artifacts": [
+        "entrypoint/stealth-browser/src/lib/types.ts",
+        "entrypoint/stealth-browser/src/lib/session.ts",
+        "entrypoint/stealth-browser/src/lib/helpers.ts"
+      ],
+      "context": "contexts/mig-foundation.md",
+      "notes": "executor=refactoring-specialist tier=sonnet/medium"
     }
   },
   "authored_with": {
