@@ -40,6 +40,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 - [surface-hosts.8] (PA2.1) src/host-projection.ts exports redactCookieValues (names and counts kept, value strings dropped) and BOTH src/server.ts and src/cli.ts route getPageContext output through it; the library result in api.ts is unchanged (parity).
 - [surface-hosts.9] (PA3.2, PA3.3, PA3.4) package.json exports a ./legacy subpath into dist; the built root index.d.ts exports no Google- or Search-named symbol; `@adhd/stealth-browser/legacy` resolves from the built package; `nx run stealth-browser:verify-dist-load` exits 0.
 - [surface-hosts.10] (PA4.1, PA4.2) tools/list returns a description of at least 40 characters for each of the six tools; `cli --help` and `cli launchChrome --help` each show a description and the default port 9222.
+- [surface-hosts.11] (PA4.3, PA4.4, resolves U1/U2) evidence/naming-decision.md records `CLI-STYLE: camelCase|kebab-case`, `MCP-NAMES: <the six tool names>`, `U1: resolved` and `U2: resolved`; the built tools/list names and the CLI verb style match the record.
 ---
 
 ## Reservations
