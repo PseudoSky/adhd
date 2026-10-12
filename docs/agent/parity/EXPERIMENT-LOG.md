@@ -454,3 +454,8 @@ Not a parity blocker (architect verdict APPROVE, 2026-10-11): shell exit status.
 ### 2026-10-12T07:22:02Z — SCOPE-R6B-model-haiku: OWNER SWITCHES THE EXPERIMENT MODEL BACK TO HAIKU (dispatcher)
 - user-request (verbatim, owner): "switching back to haiku"
 - Dispatcher reading (structuring): the B-only retest (SCOPE-R6B-web-tool-parity) runs on claude-haiku-4-5, the model of the R6 A1 and C1 references. Judge stays haiku-4-5. R7 (sonnet-5-5) stays prepared and unrun; its ledger and the sonnet-5 product fixes (1eb61b08) are kept. Thinking stays the model default on every arm (SCOPE-R7-thinking-default); effort remains unrecorded and the owner decision on it is still open.
+
+### 2026-10-12T07:22:30Z — SCOPE-R6B addendum 3: EFFORT EQUALIZED AT MEDIUM (dispatcher)
+- user-request (verbatim, owner): "equalize effort medium"
+- Fact (a7da9f97, R7 work): CLI catalog default effort for sonnet-5-5 is medium, API default is high; the driver neither sets nor records effort. Whether claude-haiku-4-5 accepts an effort setting is NOT yet established.
+- Dispatcher reading (structuring): effort is set to medium explicitly on A, B and C and recorded in each run record; verified on the wire through the capture proxy (output_config in the request body) rather than assumed. If haiku-4-5 does not support effort, the setting is reported as not applicable on every arm and nothing is sent. Sequenced after the capture-proxy agent (both edit drive.mjs).
