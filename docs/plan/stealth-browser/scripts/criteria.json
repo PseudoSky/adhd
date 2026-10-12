@@ -198,6 +198,15 @@
       "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py deps-install --only deps-install.5",
       "expect": "exit0",
       "cwd": "repo-root"
+    },
+    {
+      "id": "deps-install.6",
+      "phase": "scaffold",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py deps-install --only deps-install.6",
+      "expect": "exit0",
+      "cwd": "repo-root"
     }
   ]
 }

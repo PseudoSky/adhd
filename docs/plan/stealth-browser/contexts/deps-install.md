@@ -43,6 +43,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 - [deps-install.3] pnpm-lock.yaml has an importers entry for entrypoint/stealth-browser listing all three deps.
 - [deps-install.4] The lockfile diff removes no existing line (no collateral version bumps): `git diff` of pnpm-lock.yaml has zero '-' lines.
 - [deps-install.5] The worktree has its OWN node_modules (real directory, not a symlink) and the three deps resolve from entrypoint/stealth-browser.
+- [deps-install.6] Main checkout node_modules untouched (.modules.yaml mtime == stamp) and only owned paths changed.
 ---
 
 ## Reservations
