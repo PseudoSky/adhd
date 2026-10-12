@@ -294,6 +294,25 @@
       ],
       "context": "contexts/tracing-namespace-proof.md",
       "notes": "executor=test-automator tier=sonnet/high"
+    },
+    "gates-first": {
+      "kind": "work",
+      "phase": "verify",
+      "depends_on": [
+        "tests-unit-core",
+        "tests-unit-data",
+        "tests-unit-extract",
+        "tests-unit-surface",
+        "tracing-namespace-proof",
+        "tests-e2e",
+        "mig-docs"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py gates-first",
+      "artifacts": [
+        "docs/plan/stealth-browser/evidence/"
+      ],
+      "context": "contexts/gates-first.md",
+      "notes": "executor=qa tier=sonnet/medium"
     }
   },
   "authored_with": {
