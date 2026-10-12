@@ -44,6 +44,8 @@ export const taskEventTypeSchema = z.enum([
   'TOOL_ARG_COERCED',
   'budget:unpriced_model',
   'provider:builtin_bypass',
+  'provider:history_degraded',
+  'provider:pause_continued',
   'TASK_COMPLETED',
   'TASK_FAILED',
   'TASK_CANCELLED',
