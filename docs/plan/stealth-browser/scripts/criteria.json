@@ -441,6 +441,15 @@
       "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py mig-docs --only mig-docs.1",
       "expect": "exit0",
       "cwd": "repo-root"
+    },
+    {
+      "id": "mig-docs.2",
+      "phase": "migrate",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py mig-docs --only mig-docs.2",
+      "expect": "exit0",
+      "cwd": "repo-root"
     }
   ]
 }

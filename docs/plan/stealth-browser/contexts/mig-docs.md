@@ -32,6 +32,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 
 - [mig-docs.1] Every doc in the manifest (adhd/docs/*, adhd/README, cdp-connection README, docs/cdp/*) exists under docs/reference/ and is non-trivial.
 
+- [mig-docs.2] Relative markdown links inside docs/reference resolve and none point at @adhd/cdp-connection or agent-search files.
 ---
 
 ## Reservations
