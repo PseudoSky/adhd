@@ -459,3 +459,7 @@ Not a parity blocker (architect verdict APPROVE, 2026-10-11): shell exit status.
 - user-request (verbatim, owner): "equalize effort medium"
 - Fact (a7da9f97, R7 work): CLI catalog default effort for sonnet-5-5 is medium, API default is high; the driver neither sets nor records effort. Whether claude-haiku-4-5 accepts an effort setting is NOT yet established.
 - Dispatcher reading (structuring): effort is set to medium explicitly on A, B and C and recorded in each run record; verified on the wire through the capture proxy (output_config in the request body) rather than assumed. If haiku-4-5 does not support effort, the setting is reported as not applicable on every arm and nothing is sent. Sequenced after the capture-proxy agent (both edit drive.mjs).
+
+### 2026-10-12T07:22:49Z — SCOPE-R6B addendum 4: EFFORT LEVEL IS HIGH, NOT MEDIUM (dispatcher)
+- user-request (verbatim, owner, right after "equalize effort medium"): "high"
+- Dispatcher reading (structuring): the equalized effort level is high on A, B and C; this replaces the medium level in addendum 3 (that entry is kept as the record). Fact (a7da9f97): the API default effort is high, so arm C needs no parameter if the request is verified to carry none; A and B need an explicit high. Still verified on the wire via the capture proxy, and still reported not-applicable on all arms if claude-haiku-4-5 has no effort setting.
