@@ -163,7 +163,7 @@ describe('R5-harness AC6 judge credential', () => {
     };
     return { calls, fetchImpl };
   };
-  const call = (c: { complete: (a: object) => Promise<unknown> }) => c.complete({ model: 'm', temperature: 0, maxTokens: 5, prompt: 'p' });
+  const call = (c: { complete: (a: object) => Promise<unknown> }) => c.complete({ model: 'm', maxTokens: 5, prompt: 'p' });
 
   it('AC6: ANTHROPIC_API_KEY keeps working (x-api-key)', async () => {
     const { calls, fetchImpl } = stubFetch();

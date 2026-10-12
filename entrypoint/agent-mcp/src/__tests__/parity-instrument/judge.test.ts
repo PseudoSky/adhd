@@ -136,7 +136,8 @@ describe('R5.AC10 blindness across arm orders', () => {
     const { brief: b, briefSha } = brief('A');
     const r = await J.runJudge({ client, arm: 'A', brief: b, briefSha, outDir: dir, onCall: (c: unknown) => calls.push(c) });
     expect(r.ok).toBe(true);
-    expect(seen[0]).toMatchObject({ model: 'claude-haiku-4-5', temperature: 0, maxTokens: J.JUDGE_MAX_TOKENS, prompt: b });
+    expect(seen[0]).toMatchObject({ model: 'claude-haiku-4-5', maxTokens: J.JUDGE_MAX_TOKENS, prompt: b });
+    expect(seen[0]).not.toHaveProperty('temperature');   // R8-judge AC1: newer judge models reject it with HTTP 400
     expect(calls).toHaveLength(1);
     expect(JSON.parse(fs.readFileSync(path.join(dir, 'A.json'), 'utf8')).briefSha).toBe(briefSha);
     const bad = await J.runJudge({ client: { complete: async () => ({ text: 'sorry, cannot', inputTokens: 1, outputTokens: 1 }) }, arm: 'B', brief: b, briefSha });

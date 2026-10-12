@@ -180,15 +180,27 @@ export function effectiveJudgeCap(led) {
 /** Alternate the B/C order between rounds (A is always first). `roundIndex` is the round's numeric order. */
 export function armOrderFor(roundIndex) { return roundIndex % 2 === 0 ? ['A', 'B', 'C'] : ['A', 'C', 'B']; }
 
-/** Log a paid judge call (R5.AC6): at most JUDGE_CAP per round unless `reason` is given. Excluded from the run cap. */
+/**
+ * Judge calls that count toward the cap: every entry EXCEPT one recorded with `paidCallAttempted: false` (a judge failure before any request left the harness, R8-judge AC2).
+ * A request that went out and was rejected or errored counts: the cap is a spend bound and a rejected request is not provably free (fail closed).
+ */
+export function judgeCallsUsed(led) { return led.judgeCalls.filter((c) => c?.paidCallAttempted !== false).length; }
+
+/**
+ * Log a judge call (R5.AC6): at most JUDGE_CAP per round unless `reason` is given. Excluded from the run cap.
+ * R8-judge AC2: a FAILED judge is logged too, as `{status:'failed', error, paidCallAttempted}` (tokens 0, cost null = unmeasured), so a judge-failed quality is never invisible in the ledger.
+ * A scored call carries no `status` (every pre-R8 entry is such a call). `rejudgeOf` names the earlier failure a re-judge replaces.
+ */
 export function recordJudgeCall(round, call, { reason = '', dir = LEDGER_DIR } = {}) {
   const f = ledgerPathFor(round, dir);
   return withLock(f, () => {
     const led = fs.existsSync(f) ? parseLedger(fs.readFileSync(f, 'utf8'), f) : emptyLedger(round);
-    const cap = effectiveJudgeCap(led);
-    if (led.judgeCalls.length >= JUDGE_CAP && !String(reason).trim()) throw new ModelRunCapError(`judge-call cap ${led.judgeCalls.length}/${JUDGE_CAP} reached without a documented reason`);
-    if (led.judgeCalls.length >= cap) throw new ModelRunCapError(`judge-call cap ${led.judgeCalls.length}/${cap} reached (ledger judgeCapExtra/judgeCapReason bound the documented extension)`);
-    const rec = { arm: call.arm, modelId: call.modelId, inputTokens: call.inputTokens, outputTokens: call.outputTokens, costUsd: call.costUsd, briefSha: call.briefSha, at: nowIso(), ...(reason ? { reason } : {}) };
+    const cap = effectiveJudgeCap(led); const used = judgeCallsUsed(led); const counts = call.paidCallAttempted !== false;
+    if (counts && used >= JUDGE_CAP && !String(reason).trim()) throw new ModelRunCapError(`judge-call cap ${used}/${JUDGE_CAP} reached without a documented reason`);
+    if (counts && used >= cap) throw new ModelRunCapError(`judge-call cap ${used}/${cap} reached (ledger judgeCapExtra/judgeCapReason bound the documented extension)`);
+    const rec = { arm: call.arm, modelId: call.modelId, inputTokens: call.inputTokens, outputTokens: call.outputTokens, costUsd: call.costUsd, briefSha: call.briefSha, at: nowIso(), ...(reason ? { reason } : {}),
+      ...(call.status ? { status: call.status } : {}), ...(call.error ? { error: String(call.error).slice(0, 300) } : {}), ...(call.paidCallAttempted === false ? { paidCallAttempted: false } : call.status ? { paidCallAttempted: true } : {}),
+      ...(call.rejudgeOf ? { rejudgeOf: String(call.rejudgeOf).slice(0, 300) } : {}) };
     led.judgeCalls.push(rec); writeAtomic(f, led); return rec;
   });
 }

@@ -15,6 +15,12 @@ import { rateCardFor } from './lib.mjs';
 export const JUDGE_MODEL = 'claude-haiku-4-5';          // pinned id recorded in every judge record (R5.AC5). SEPARATE from the arms' model pin (fixtures.mjs PIN_MODEL, claude-sonnet-5-5 since R7): the judge stays on the cheapest tier by owner direction (R7-model AC1)
 export const JUDGE_MAX_TOKENS = 1500;
 /**
+ * R8-judge AC1: the judge request carries NO sampling parameters. Newer models (claude-haiku-5-5) reject `temperature` with HTTP 400 ("`temperature` is deprecated for this
+ * model"), so it is omitted for every judge model rather than retried on a 400 (a retry would spend a second paid call on a string match). Judge scores are therefore ONE sample
+ * at the model's default sampling and a re-judge of the same brief can differ; this string is written into every judge record so the claim is never implied to be deterministic.
+ */
+export const JUDGE_SAMPLING = 'model default (temperature not sent)';
+/**
  * Brief format version, recorded in every judge record. 1 = results of server-executed tools (web_fetch/web_search) were blank when never captured (every R5 judge
  * record has no briefFormat); 2 (R5-scorefix AC3) = those results are rendered when captured and a visible "(result not captured)" marker otherwise.
  */
@@ -98,14 +104,14 @@ export function resolveJudgeModel(requested, candidates = []) {
 }
 
 /**
- * Run one judge call through an INJECTED client ({ complete({model, temperature, maxTokens, prompt}) => {text, inputTokens, outputTokens} }).
+ * Run one judge call through an INJECTED client ({ complete({model, maxTokens, prompt}) => {text, inputTokens, outputTokens} }); no `temperature` is passed (R8-judge AC1, JUDGE_SAMPLING).
  * The caller (the driver, live round only) supplies the client; tests supply a fake. Logs the call via `onCall` (ledger) and writes the record.
  * @returns {Promise<{ok:true, scores, notes, record} | {ok:false, code:string, record}>}
  */
 export async function runJudge({ client, arm, brief, briefSha, outDir, onCall, briefFormat = BRIEF_FORMAT, model = JUDGE_MODEL, modelRequested = model }) {
-  const reply = await client.complete({ model, temperature: 0, maxTokens: JUDGE_MAX_TOKENS, prompt: brief });
+  const reply = await client.complete({ model, maxTokens: JUDGE_MAX_TOKENS, prompt: brief });
   const resolved = reply.model ?? null;   // R8-model AC4: the id the API reported for the call; it prices the call and is what the record names
-  const record = { arm, modelId: resolved ?? model, ...(modelRequested !== model || resolved ? { modelRequested, modelSent: model, modelResolved: resolved } : {}), briefFormat, briefSha, rawResponse: reply.text, inputTokens: reply.inputTokens, outputTokens: reply.outputTokens, costUsd: judgeCostUsd(reply.inputTokens, reply.outputTokens, resolved ?? model) };
+  const record = { arm, modelId: resolved ?? model, ...(modelRequested !== model || resolved ? { modelRequested, modelSent: model, modelResolved: resolved } : {}), briefFormat, briefSha, sampling: JUDGE_SAMPLING, rawResponse: reply.text, inputTokens: reply.inputTokens, outputTokens: reply.outputTokens, costUsd: judgeCostUsd(reply.inputTokens, reply.outputTokens, resolved ?? model) };
   let parsed = null; try { parsed = parseJudgeOutput(reply.text); } catch (e) { record.error = e.code ?? String(e.message); }
   if (outDir) { fs.mkdirSync(outDir, { recursive: true }); fs.writeFileSync(path.join(outDir, `${arm}.json`), JSON.stringify({ ...record, ...(parsed ?? {}) }, null, 2)); }
   if (onCall) onCall({ arm, modelId: record.modelId, inputTokens: record.inputTokens, outputTokens: record.outputTokens, costUsd: record.costUsd, briefSha });
@@ -169,16 +175,17 @@ export function judgeAuthShape(secret) {
  * The LIVE judge client: one Anthropic Messages API call (paid third-party service, R5.AC8). The credential is the arm-C credential path
  * (R5-harness AC6): ANTHROPIC_API_KEY, else ADHD_AGENT_ANTHROPIC_SECRET via process env / the .env cascade; the auth shape follows the token prefix.
  * It fails loudly (before any fetch) when no credential exists and never prints the secret. Only the driver in an owner-approved live round constructs it.
- * @returns {{complete(args:{model:string,temperature:number,maxTokens:number,prompt:string}):Promise<{text:string,inputTokens:number,outputTokens:number,model?:string|null}>}}
+ * `temperature` is never sent, even if a caller still passes it (R8-judge AC1): the destructuring below does not read it, so it cannot reach the wire.
+ * @returns {{complete(args:{model:string,maxTokens:number,prompt:string}):Promise<{text:string,inputTokens:number,outputTokens:number,model?:string|null}>}}
  */
 export function liveJudgeClient({ apiKey, env = process.env, cwd = process.cwd(), home = os.homedir(), fetchImpl = globalThis.fetch } = {}) {
   return {
-    async complete({ model, temperature, maxTokens, prompt }) {
+    async complete({ model, maxTokens, prompt }) {
       const secret = apiKey || resolveJudgeCredential({ env, cwd, home }).secret;
       if (!secret) throw new Error('judge: no credential (set ANTHROPIC_API_KEY or ADHD_AGENT_ANTHROPIC_SECRET in the environment or ~/.adhd/.env); the judge is a paid API call');
       const shape = judgeAuthShape(secret);
       const res = await fetchImpl('https://api.anthropic.com/v1/messages', { method: 'POST', headers: shape.headers,
-        body: JSON.stringify({ model, temperature, max_tokens: maxTokens, ...(shape.system ? { system: shape.system } : {}), messages: [{ role: 'user', content: prompt }] }) });
+        body: JSON.stringify({ model, max_tokens: maxTokens, ...(shape.system ? { system: shape.system } : {}), messages: [{ role: 'user', content: prompt }] }) });
       if (!res.ok) throw new Error(`judge: HTTP ${res.status} ${String(await res.text()).slice(0, 200)}`);
       const b = await res.json();
       return { text: (b.content ?? []).filter((x) => x.type === 'text').map((x) => x.text).join(''), inputTokens: b.usage?.input_tokens ?? 0, outputTokens: b.usage?.output_tokens ?? 0, model: typeof b.model === 'string' ? b.model : null };

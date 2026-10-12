@@ -43,10 +43,10 @@ function parseArgs(argv) {
   const o = { round: ROUND, mode: null, out: null, seed: '20261011', wt: DEFAULT_WT, claude: 'claude', yes: false, degraded: null, rep: 1, capture: process.env.PARITY_CAPTURE === '1' };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]; const v = () => argv[++i];
-    if (['--self-check', '--print-plan', '--check-oracle', '--check-lib', '--dry-run', '--live', '--reparse-judge'].includes(a)) o.mode = a.slice(2);
+    if (['--self-check', '--print-plan', '--check-oracle', '--check-lib', '--dry-run', '--live', '--reparse-judge', '--rejudge'].includes(a)) o.mode = a.slice(2);
     else if (['preflight', 'verdict', 'grid'].includes(a)) o.mode = a; else if (a === '--round') { o.round = v(); if (!ROUND_RE.test(o.round)) { console.error(`--round must match ${ROUND_RE} (it names the ledger file and the tmp dir), got ${JSON.stringify(o.round)}`); process.exit(2); } }
     else if (a === '--out') { o.out = path.resolve(v()); o.outExplicit = true; } else if (a === '--seed') o.seed = v(); else if (a === '--wt') o.wt = path.resolve(v()); else if (a === '--claude') o.claude = v();
-    else if (a === '--rep') { o.rep = Number.parseInt(v(), 10); if (!(o.rep >= 1)) { console.error('--rep must be an integer >= 1'); process.exit(2); } } else if (a === '--yes') o.yes = true; else if (a === '--capture') o.capture = true; else if (a === '--degraded') o.degraded = v();
+    else if (a === '--rep') { o.rep = Number.parseInt(v(), 10); if (!(o.rep >= 1)) { console.error('--rep must be an integer >= 1'); process.exit(2); } } else if (a === '--run') o.run = v(); else if (a === '--yes') o.yes = true; else if (a === '--capture') o.capture = true; else if (a === '--degraded') o.degraded = v();
     else { console.error(`unknown argument ${a}`); process.exit(2); }
   }
   return o;
@@ -182,7 +182,7 @@ function productionTouches(root, sinceMs, needles) {
   walk(root); return hits;
 }
 const readIf = (p) => { try { return fs.readFileSync(p, 'utf8'); } catch { return null; } };
-const repoFilesOf = (repoDir) => Object.fromEntries(['docs/shipping.md', 'CHANGELOG.md', 'examples/usage.md', 'src/checkout.js', 'src/summary.js'].map((f) => [f, readIf(path.join(repoDir, f))]));
+export const repoFilesOf = (repoDir) => Object.fromEntries(['docs/shipping.md', 'CHANGELOG.md', 'examples/usage.md', 'src/checkout.js', 'src/summary.js'].map((f) => [f, readIf(path.join(repoDir, f))]));
 
 // ----------------------------------------------------------------------------------------------------------------
 // Process ownership
@@ -902,23 +902,42 @@ export function fakeJudgeClient() {
 /**
  * Judge ONE finished run (R5.AC6-AC8): eligible only if arm A and this arm genuinely succeeded; the per-round judge cap is checked BEFORE the paid call;
  * the call is logged in the ledger (live only) and the raw record is written to <judgeDir>/<arm>.json. Sets record.quality; never throws.
+ * R8-judge AC2: a judge failure (`judge-failed`: the request was rejected / errored, or none could be built) is ALSO logged in the ledger (live only) as a
+ * `status:'failed'` judgeCalls entry with the error and whether a request went out (`paidCallAttempted`); if even that write fails the quality carries `ledgerError`.
+ * `ledgerNote` (rejudge) is stored on the ledger entry as `rejudgeOf`.
  */
-export async function judgeRun({ ctx, record, aGenuine, aWaived = false, dry, client, judgeDir }) {
+export async function judgeRun({ ctx, record, aGenuine, aWaived = false, dry, client, judgeDir, ledgerNote }) {
   const arm = record.arm; const genuine = GT.isGenuineSuccess(record);
   if (!JG.judgeEligible({ aGenuine, armGenuine: genuine })) { record.quality = { status: 'n/a', reason: aGenuine ? 'arm not a genuine success (no judge call)' : 'arm A not a genuine success (no judge call)' }; return record.quality; }
   const ledgerDir = path.dirname(ctx.ledgerPath); const round = path.basename(ctx.ledgerPath, '.json');
-  let capReason = ''; if (!dry) { const led = LG.readLedger(round, ledgerDir); const used = led.judgeCalls.length; const cap = LG.effectiveJudgeCap(led); if (used >= cap) { record.quality = { status: 'n/a', reason: `judge-call cap ${used}/${cap} reached: no paid call made` }; return record.quality; } if (used >= LG.JUDGE_CAP) capReason = String(led.judgeCapReason); }
-  let briefFormat;
+  let capReason = ''; if (!dry) { const led = LG.readLedger(round, ledgerDir); const used = LG.judgeCallsUsed(led); const cap = LG.effectiveJudgeCap(led); if (used >= cap) { record.quality = { status: 'n/a', reason: `judge-call cap ${used}/${cap} reached: no paid call made` }; return record.quality; } if (used >= LG.JUDGE_CAP) capReason = String(led.judgeCapReason); }
+  let briefFormat; let attempt = null;   // attempt = what a failure entry needs once a request is about to go out
   try {
     const { brief, briefSha, label } = JG.buildBrief({ prompts: ctx.prompts, ticketText: F.ticketText(ctx.spec), diff: repoDiff(ctx.spec, ctx.repoDir), transcript: transcriptFor(record, ctx.prompts) });
-    briefFormat = JG.BRIEF_FORMAT;
+    briefFormat = JG.BRIEF_FORMAT; attempt = { briefSha, modelId: null, sent: false };
     // R8-model AC4: the judge model is the round's judgeModel (an alias such as `haiku` is resolved from the concrete id(s) the arms reported; this throws, no paid call, when none exists)
     const judgeRequested = ctx.profile?.judgeModel ?? JG.JUDGE_MODEL;
     const judgeModel = JG.resolveJudgeModel(judgeRequested, [...(record.model?.resolved ?? []), ...(record.observation?.models ?? [])]);
-    const res = await JG.runJudge({ client, arm, brief, briefSha, outDir: judgeDir, model: judgeModel, modelRequested: judgeRequested, onCall: dry ? undefined : (c) => LG.recordJudgeCall(round, c, { dir: ledgerDir, reason: capReason }) });
+    attempt.modelId = judgeModel; attempt.sent = true;
+    const res = await JG.runJudge({ client, arm, brief, briefSha, outDir: judgeDir, model: judgeModel, modelRequested: judgeRequested, onCall: dry ? undefined : (c) => LG.recordJudgeCall(round, { ...c, ...(ledgerNote ? { rejudgeOf: ledgerNote } : {}) }, { dir: ledgerDir, reason: capReason }) });
     record.quality = res.ok ? { status: 'scored', mean: QL.qualityMean(res.scores), scores: res.scores, briefSha, briefFormat, modelId: res.record.modelId, ...(res.record.modelRequested && res.record.modelRequested !== res.record.modelId ? { modelRequested: res.record.modelRequested } : {}), ...(aWaived ? { armAWaived: ctx.profile?.armAWaiver ?? true } : {}), label, file: path.join(judgeDir, `${arm}.json`) } : { status: 'judge-error', code: res.code, briefSha, briefFormat, file: path.join(judgeDir, `${arm}.json`) };
-  } catch (e) { record.quality = { status: 'judge-failed', error: String(e?.message ?? e).slice(0, 300) }; }
+  } catch (e) {
+    record.quality = { status: 'judge-failed', error: String(e?.message ?? e).slice(0, 300) };
+    if (!dry) {
+      try { LG.recordJudgeCall(round, { arm, modelId: attempt?.modelId ?? ctx.profile?.judgeModel ?? JG.JUDGE_MODEL, inputTokens: 0, outputTokens: 0, costUsd: null, briefSha: attempt?.briefSha ?? null, status: 'failed', error: record.quality.error, paidCallAttempted: attempt?.sent === true, ...(ledgerNote ? { rejudgeOf: ledgerNote } : {}) }, { dir: ledgerDir, reason: capReason }); }
+      catch (le) { record.quality.ledgerError = String(le?.message ?? le).slice(0, 200); }
+    }
+  }
   return record.quality;
+}
+
+/**
+ * The one-line console summary of a run's quality (R8-judge AC2): a failed judge names its error / code, so it cannot pass for "no judge" in the log.
+ * @param {string} runId @param {{status:string, mean?:number, reason?:string, error?:string, code?:string, ledgerError?:string}} q
+ */
+export function qualityLine(runId, q) {
+  const why = q.reason ?? (q.error ? `error: ${q.error}` : q.code ? `code: ${q.code}` : null);
+  return `${runId}: quality ${q.status}${q.mean != null ? ` mean ${q.mean.toFixed(1)}` : ''}${why ? ` (${why})` : ''}${q.ledgerError ? ` [ledger write failed: ${q.ledgerError}]` : ''}`;
 }
 
 /**
@@ -972,7 +991,7 @@ async function runPlan(opts, dry) {
     if (def.arm === 'A') state.aGenuine = GT.isGenuineSuccess(record);
     if (record.score && !aborted && ctx.repoDir && fs.existsSync(ctx.repoDir)) {   // R5: blind judge, live round (or a dry-run with the fake client); the client is injected, never constructed from an env flag
       const q = await judgeRun({ ctx, record, aGenuine: state.aGenuine, aWaived: !!state.aWaived, dry, client: opts.judgeClient ?? (dry ? fakeJudgeClient() : JG.liveJudgeClient()), judgeDir: judgeDirOf(def.rep) });
-      console.log(`${ctx.spec.runId}: quality ${q.status}${q.mean != null ? ` mean ${q.mean.toFixed(1)}` : ''}${q.reason ? ` (${q.reason})` : ''}`);
+      console.log(qualityLine(ctx.spec.runId, q));
       writeJson(path.join(ctx.runDir, 'record.json'), record);
     }
     if (retryMode && (aborted || record.harnessFailure)) { console.log(`RETRY STOPPED: ${ctx.spec.runId} ${aborted ? 'aborted' : 'harness failure'}; the remaining retry arms are not run (stop and report, no loop)`); break; }
@@ -987,10 +1006,13 @@ async function runPlan(opts, dry) {
   return { records, rows, voided: !!state.voided };
 }
 
-/** Process exit status of a finished plan: 1 harness failure / abort / invalid run, 4 = VOID iteration (arm A not a genuine success, so a void never looks like success), else 0. */
+/** Exit status when every run finished but a judge call failed (`judge-failed`: rejected / errored; `judge-error`: reply unparseable): the arms were paid for and the quality is MISSING, so it must not look like success (R8-judge AC2). */
+export const JUDGE_FAILED_EXIT = 5;
+/** Process exit status of a finished plan: 1 harness failure / abort / invalid run, 4 = VOID iteration (arm A not a genuine success, so a void never looks like success), 5 = a judge failed, else 0. */
 export function exitCodeFor({ records, voided }) {
   if (records.some((r) => r.harnessFailure || r.aborted || r.invalidRun)) return 1;
-  return voided ? 4 : 0;
+  if (voided) return 4;
+  return records.some((r) => r.quality?.status === 'judge-failed' || r.quality?.status === 'judge-error') ? JUDGE_FAILED_EXIT : 0;
 }
 
 
@@ -1301,6 +1323,13 @@ export async function selfCheck({ log = console.log, opts = parseArgs([]) } = {}
         chk('R8-model AC4: negative control, an alias judge model with no id reported by the arm records judge-failed and makes NO call', q9.status === 'judge-failed' && /no call made/.test(q9.error) && sent.length === 1);
         const q10 = await judgeRun({ ctx: ctx8, record: { ...mkRec(), model: { resolved: ['claude-haiku-5-5'] } }, aGenuine: false, aWaived: true, dry: false, client: c8, judgeDir: path.join(jd, 'out10') });
         chk('R8-profile AC3: negative control, the waiver does not make a non-genuine arm judgeable (aGenuine false -> n/a, no call)', q10.status === 'n/a' && sent.length === 1);
+        { // R8-judge AC1 + AC2: no temperature on the judge request; a rejected judge call is a judge-failed quality AND a ledger entry, the summary line names it and the exit code is non-zero
+          const seen = []; const rej = { async complete(a) { seen.push(a); throw new Error('judge: HTTP 400 `temperature` is deprecated for this model.'); } };
+          const lp11 = LG.ledgerPathFor('RJ11', ldir); const q11 = await judgeRun({ ctx: { ...ctx8, ledgerPath: lp11 }, record: { ...mkRec(), model: { resolved: ['claude-haiku-5-5'] } }, aGenuine: true, aWaived: true, dry: false, client: rej, judgeDir: path.join(jd, 'out11') });
+          const call11 = LG.readLedger('RJ11', ldir).judgeCalls[0]; await JG.runJudge({ client: { async complete(a) { seen.push(a); return fakeJudgeClient().complete(a); } }, arm: 'B', brief: 'b', briefSha: 'x', model: 'claude-haiku-5-5' });
+          chk('R8-judge AC1: the judge client receives no temperature (runJudge args)', seen.length === 2 && seen.every((a) => !('temperature' in a)));
+          chk('R8-judge AC2: a rejected judge call is judge-failed, is in the ledger as status failed + paidCallAttempted, shows in the summary line and exits non-zero', q11.status === 'judge-failed' && call11?.status === 'failed' && call11.paidCallAttempted === true && /HTTP 400/.test(call11.error) && /judge-failed.*HTTP 400/.test(qualityLine('B1', q11)) && exitCodeFor({ records: [{ quality: q11 }], voided: false }) === JUDGE_FAILED_EXIT);
+        }
       }
       chk('judge wiring: the diff of the pristine fixture is empty and an edit shows as a unified diff',repoDiff(spec, repoDir) === '' && (() => { fs.appendFileSync(path.join(repoDir, 'src/shipping.js'), '// edited\n'); return /\+\/\/ edited/.test(repoDiff(spec, repoDir)); })());
     }
@@ -1463,6 +1492,45 @@ export function renderReport(root, rep, mode, round = ROUND) {
   return mode === 'grid' ? GR.renderGrid(recs, rv) : MT.formatVerdict(rv);
 }
 /**
+ * R8-judge AC3: judge a SAVED run again, once, after its judge call failed (`quality.status === 'judge-failed'`). The arm is NOT re-run: the judge brief is rebuilt from the run
+ * record plus the run's own final repo (`record.workDir/repo`), which must still equal the recorded final files (`record.observation.files`) or the call is refused (it would judge
+ * a different state). Only `record.quality` changes (the failure is kept as `priorQuality`); `score`, `observation` and every metric are written back byte-for-byte. The call goes through
+ * the same `judgeRun` as a live round (cap check before the call, the resolved model, a ledger entry for success AND failure, the earlier error on the entry as `rejudgeOf`).
+ * Refuses, before any call, a record whose quality is anything but judge-failed (so a second invocation cannot spend twice) and a missing credential. A cap-blocked `n/a` leaves the record untouched.
+ * @returns {Promise<{quality:object, written:boolean}>}
+ */
+export async function rejudgeRecord({ round, recordPath, profile, judgeDir, ledgerPath, client, credential }) {
+  const record = readJson(recordPath); const prior = record.quality;
+  if (prior?.status !== 'judge-failed') throw new Error(`rejudge: ${record.runId ?? recordPath} has quality ${JSON.stringify(prior?.status ?? null)}; only a judge-failed run is re-judged (a scored run is never judged twice; a judge-error run is repaired offline by --reparse-judge)`);
+  if (credential && !credential.present) throw new Error('rejudge: no judge credential (set ANTHROPIC_API_KEY or ADHD_AGENT_ANTHROPIC_SECRET in the environment or ~/.adhd/.env); the judge is a paid API call: no call made');
+  if (!record.workDir) throw new Error(`rejudge: ${record.runId} has no workDir; cannot rebuild the artifact diff`);
+  const repoDir = path.join(record.workDir, 'repo'); const recorded = record.observation?.files;
+  if (!recorded || JSON.stringify(repoFilesOf(repoDir)) !== JSON.stringify(recorded)) throw new Error(`rejudge: ${repoDir} does not match the final repo state recorded for ${record.runId} (observation.files): refusing to judge a different state: no call made`);
+  const spec = F.makeSpec({ seed: record.seed, arm: record.arm, rep: record.rep, pin: profile.model });
+  const waived = !!profile.arms && !profile.arms.includes('A');
+  const aGenuine = waived ? true : LG.readLedger(round, path.dirname(ledgerPath)).armA?.genuine === true;
+  const ctx = { prompts: F.prompts(), spec, repoDir, ledgerPath, profile };
+  const q = await judgeRun({ ctx, record, aGenuine, aWaived: waived, dry: false, client, judgeDir, ledgerNote: prior.error });
+  if (q.status === 'n/a') return { quality: q, written: false };
+  record.priorQuality = prior; writeJson(recordPath, record);
+  return { quality: q, written: true };
+}
+/**
+ * `--rejudge --round Rn --run <id> --yes` (R8-judge AC3): ONE paid judge call for a saved judge-failed run, through the live judge client (the arm-C credential path). No arm is re-run.
+ * Exit 0 only when the re-judge scored; 5 (JUDGE_FAILED_EXIT) when the judge failed again, 1 on a refusal.
+ */
+async function rejudgeMode(opts) {
+  if (!opts.run || !/^[ABC]\d+$/.test(opts.run)) { console.error('--rejudge needs --run <arm><rep> (for example B1)'); return 2; }
+  if (!opts.yes) { console.error('--rejudge makes one PAID judge call. Re-run with --yes to confirm.'); return 2; }
+  const root = tmpRoot(opts.round); const recordPath = path.join(root, 'live/out/runs', opts.run, 'record.json');
+  const rec = readJson(recordPath);
+  try {
+    const r = await rejudgeRecord({ round: opts.round, recordPath, profile: roundProfile(opts), judgeDir: path.join(root, judgeDirName(rec.rep)), ledgerPath: LG.ledgerPathFor(opts.round), client: JG.liveJudgeClient(), credential: JG.resolveJudgeCredential() });
+    console.log(qualityLine(opts.run, r.quality)); console.log(r.written ? `record updated: ${recordPath} (quality replaced, prior failure kept as priorQuality)` : 'record NOT updated (no judge call was made)');
+    return r.quality.status === 'scored' ? 0 : r.quality.status === 'n/a' ? 1 : JUDGE_FAILED_EXIT;
+  } catch (e) { console.error(String(e?.message ?? e)); return 1; }
+}
+/**
  * `--reparse-judge --round Rn` (R5-judge AC3): ZERO model calls, ledger untouched. Re-parses every saved judge record that failed to parse with the current parser,
  * writes the scores back into <judgeDir>/<arm>.json (what verdict/grid read) and updates the arm's record.json quality block. Prints per-arm means and the C/A ratio vs the owner gate; never a round verdict.
  */
@@ -1483,12 +1551,13 @@ function reparseJudgeMode(opts) {
 }
 async function main() {
   const opts = parseArgs(process.argv.slice(2));
-  if (!opts.mode) { console.error('usage: node drive.mjs --self-check | --print-plan | --check-oracle | --check-lib | --dry-run | --live --yes | --reparse-judge  [--out DIR] [--seed S] [--wt PATH] [--claude PATH] [--capture]'); process.exit(2); }
+  if (!opts.mode) { console.error('usage: node drive.mjs --self-check | --print-plan | --check-oracle | --check-lib | --dry-run | --live --yes | --reparse-judge | --rejudge --run <id> --yes  [--out DIR] [--seed S] [--wt PATH] [--claude PATH] [--capture]'); process.exit(2); }
   if (['dry-run', 'live', 'print-plan', 'preflight'].includes(opts.mode)) { const prof = roundProfile(opts); if (prof.capture) opts.capture = true; }   // R8: a profile that sets capture forces wire capture ON for the round (ledger.profile.capture); --capture stays the opt-in for every other round
   if (opts.mode === 'self-check') { const r = await selfCheck({ opts }); process.exit(r.ok ? 0 : 1); }
   if (opts.mode === 'check-oracle') { process.exit((await checkOracle()) ? 0 : 1); }
   if (opts.mode === 'check-lib') { const { runLibTests } = await import(pathToFileURL(path.join(HERE, 'libtest.mjs')).href); const r = await runLibTests({ log: console.log }); console.log(`lib self-test: ${r.ok ? 'PASS' : 'FAIL'} ${r.total - r.failed.length}/${r.total}`); process.exit(r.ok ? 0 : 1); }
   if (opts.mode === 'reparse-judge') { process.exit(reparseJudgeMode(opts)); }
+  if (opts.mode === 'rejudge') { process.exit(await rejudgeMode(opts)); }
   if (opts.mode === 'print-plan') { console.log(planText(opts)); return; }
   if (opts.mode === 'preflight') { process.exit(await runPreflightMode(opts)); }
   if (opts.mode === 'verdict' || opts.mode === 'grid') { process.exit(reportMode(opts)); }

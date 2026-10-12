@@ -86,7 +86,8 @@ describe('R8-profile', () => {
     expect(p.armAWaiver).toContain('just b');
     expect(led.approvedBy).toContain('just b');
     expect(led.scopeChanges).toEqual(expect.arrayContaining(['SCOPE-R8-model-alias', 'SCOPE-R8-B-only']));
-    expect(led.runs).toEqual([]);   // no live run is recorded by the instrument change
+    expect(led.runs.length).toBeLessThanOrEqual(1);   // the profile caps the round at ONE run; the live R8 B1 run is recorded once it has happened
+    expect(led.runs.every((r: { arm: string }) => r.arm === 'B')).toBe(true);
   });
 
   it('AC3: roundProfile re-points R8 only; every other round keeps the module pins and the full A,B,C plan', () => {

@@ -40,6 +40,7 @@ describe('R8 e2e', () => {
   }, 150_000);
 
   it('AC3: the dry run records requested haiku -> resolved claude-haiku-5-5, effort verified on the wire, and a wire log that only ever hit the local fake', () => {
+    const ledgerFile = path.join(PARITY_DIR, 'ledger', 'R8.json'); const ledgerBefore = fs.readFileSync(ledgerFile, 'utf8');
     const r = spawnSync(process.execPath, [DRIVE, '--dry-run', '--round', 'R8', '--out', out], { cwd: REPO, encoding: 'utf8', timeout: 240_000 });
     expect(r.status, r.stdout + r.stderr).toBe(0);
     const runs = path.join(out, 'runs');
@@ -59,6 +60,6 @@ describe('R8 e2e', () => {
     expect(turns.every((t) => t.status === 200)).toBe(true);
     expect(fs.readFileSync(wire, 'utf8')).not.toMatch(/cloudflare|cf-ray/i);
     // the real R8 ledger is untouched by a dry run
-    expect(JSON.parse(fs.readFileSync(path.join(PARITY_DIR, 'ledger', 'R8.json'), 'utf8')).runs).toEqual([]);
+    expect(fs.readFileSync(ledgerFile, 'utf8')).toBe(ledgerBefore);   // byte-identical, whatever the live round has since recorded
   }, 300_000);
 });
