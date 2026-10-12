@@ -33,6 +33,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 
 - [readme-rewrite.2] README has a title, a tagline <= 120 chars, Quickstart, Features, Surfaces and Receipts sections and >= 2 fenced code blocks.
 - [readme-rewrite.3] Receipts: >= 5 `<!-- receipt:ID -->` markers and every ID resolves to a `shipped` entry in docs/marketing/.catalog/capabilities.json.
+- [readme-rewrite.4] Factual: no unverifiable superlatives (undetectable, unblockable, 100%, bypasses all, guaranteed); every `@adhd/stealth-browser` import specifier in code fences is a real package export.
 ---
 
 ## Reservations
