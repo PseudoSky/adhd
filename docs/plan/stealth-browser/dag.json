@@ -496,9 +496,9 @@
     },
     "prod-publish-readiness": {
       "kind": "work",
-      "phase": "release",
+      "phase": "surface",
       "depends_on": [
-        "readme-rewrite"
+        "prod-examples"
       ],
       "guard": "python3 docs/plan/stealth-browser/scripts/guard.py prod-publish-readiness",
       "artifacts": [
