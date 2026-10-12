@@ -277,10 +277,10 @@
       "end_ref": null
     },
     "failsafe-inventory": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-10-12T23:58:47.048Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "90be93d4a0ebf2fdf28d406029323566dcd7878b",
       "end_ref": null
     }
   },
