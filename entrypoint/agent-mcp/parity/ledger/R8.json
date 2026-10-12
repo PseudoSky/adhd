@@ -3,16 +3,46 @@
   "cap": 3,
   "approvedBy": "owner (2026-10-12): \"just b\" -> round R8 is ONE run of arm B (agent-mcp claudecli) on the model alias \"haiku\" (the judge is the alias too), effort high set explicitly, wire capture ON; the arm-A-first reference gate is waived for this round (SCOPE-R8-B-only); a B result without a same-model A is not a parity verdict",
   "extraRunReason": "",
-  "runs": [],
-  "judgeCalls": [],
-  "scenarioSha": "",
+  "runs": [
+    {
+      "runId": "B1",
+      "arm": "B",
+      "at": "2026-10-12T08:13:21.613Z",
+      "pid": 81983
+    }
+  ],
+  "judgeCalls": [
+    {
+      "arm": "B",
+      "modelId": "claude-haiku-5-5",
+      "inputTokens": 20757,
+      "outputTokens": 1500,
+      "costUsd": 0.0028257000000000004,
+      "briefSha": "3b685bcfe578ef768b92087d4a6f947ca3577084c0f80fb10541b85f4ba499c2",
+      "at": "2026-10-12T08:33:32.474Z",
+      "rejudgeOf": "judge: HTTP 400 {\"type\":\"error\",\"error\":{\"type\":\"invalid_request_error\",\"message\":\"`temperature` is deprecated for this model.\"},\"request_id\":\"req_011Cfx1WusMgajaBmAsTHfsC\"}"
+    },
+    {
+      "arm": "B",
+      "modelId": "claude-haiku-5-5",
+      "inputTokens": 20757,
+      "outputTokens": 2319,
+      "costUsd": 0.0032352,
+      "briefSha": "0339bce12256cf6986184bc157908343c750c8ce97f772f4e937abbb3352be26",
+      "at": "2026-10-12T08:39:25.673Z",
+      "rejudgeOf": "judge-error NOT_JSON"
+    }
+  ],
+  "scenarioSha": "56956efb90fc213aaaca7dff6d94f731e94a7b69ad4295e66ddb5fd6e06e4a18",
   "scopeChanges": [
     "SCOPE-R8-model-alias",
     "SCOPE-R8-B-only",
     "SCOPE-R6B addendum 4",
     "SCOPE-R6B addendum"
   ],
-  "armOrder": [],
+  "armOrder": [
+    "B"
+  ],
   "startedAt": "2026-10-12T07:47:30.000Z",
   "armA": null,
   "releases": [],
