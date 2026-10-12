@@ -2,7 +2,9 @@
   "schema_version": 2,
   "title": "Migrate the agent-search chrome runner to @adhd/stealth-browser (entrypoint)",
   "plan_kind": "brownfield",
-  "phases": [],
+  "phases": [
+    "productization"
+  ],
   "terminal": "done",
   "nodes": {},
   "authored_with": {
