@@ -11,11 +11,11 @@
       "end_ref": "641717a97afb3fdcb33894158d02faaa1639208f"
     },
     "scaffold": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-10-12T10:53:00.540Z",
-      "done_at": null,
+      "done_at": "2026-10-12T11:06:10.448Z",
       "start_ref": "d6a92d68347fe9b36bd633eeadd2bc999fa82db8",
-      "end_ref": null
+      "end_ref": "2a7810a75a3984eee79e4a65237386164824aac9"
     },
     "entrypoint-parity": {
       "status": "pending",
@@ -254,6 +254,18 @@
       "audit_criteria_total": 3,
       "by": "pseudosky",
       "note": "PRODUCT-REVIEW.md STATUS: folded, guard exit 0 (verified by orchestrator)"
+    },
+    {
+      "ts": "2026-10-12T11:06:10.448Z",
+      "from": "scaffold",
+      "to": "scaffold",
+      "start_ref": "d6a92d68347fe9b36bd633eeadd2bc999fa82db8",
+      "end_ref": "2a7810a75a3984eee79e4a65237386164824aac9",
+      "audit_exit": 0,
+      "audit_criteria_passed": 8,
+      "audit_criteria_total": 8,
+      "by": "pseudosky",
+      "note": "generator run: @adhd/stealth-browser at entrypoint/stealth-browser; commit 2a7810a7; guard 0"
     }
   ],
   "amendment_log": [],
@@ -262,7 +274,7 @@
     "version": "0.8.35",
     "hash": "0b6bc1f3d70e"
   },
-  "current_state": "scaffold",
+  "current_state": "entrypoint-parity",
   "dod_provenance": {
     "confirmed_at": "2026-10-12T10:24:50.808Z",
     "by": "pseudosky",
