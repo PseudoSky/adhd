@@ -33,6 +33,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 - [tests-unit-data.1] A spec file exists for every ported source module (index barrels and pure type files excluded).
 
 - [tests-unit-data.2] Every spec cites ticket 8468f7b1 and at least one valid [slug.N] acceptance-criterion id.
+- [tests-unit-data.3] Unit purity: specs touching process-spawning or network modules mock child_process/WebSocket/fetch (vi.mock or vi.stubGlobal); no spec reads the real Chrome profile.
 ---
 
 ## Reservations
