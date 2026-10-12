@@ -1323,6 +1323,15 @@
       "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py merge-readiness --only merge-readiness.1",
       "expect": "exit0",
       "cwd": "repo-root"
+    },
+    {
+      "id": "merge-readiness.2",
+      "phase": "release",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py merge-readiness --only merge-readiness.2",
+      "expect": "exit0",
+      "cwd": "repo-root"
     }
   ]
 }
