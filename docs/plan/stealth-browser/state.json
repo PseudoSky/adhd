@@ -46,10 +46,10 @@
       "end_ref": "b6f382dd28d923426eb99ed8b2cb147a42b92ea4"
     },
     "mig-chrome-manager": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-10-12T21:28:08.569Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "ff09ec5651641abac70fb9898374ce0d16e61690",
       "end_ref": null
     },
     "mig-domains-storage": {
