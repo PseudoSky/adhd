@@ -35,11 +35,20 @@ export const CASE_COUNT = 25;     // visible test cases: all fail before the fix
  * Per-run values. The system-prompt nonce is shared by rep 1 and rep 2 of one arm (cold then warm prefix);
  * everything else is per run so a warm run cannot answer from a previous run's facts.
  */
-/** `args.pin` (R8) overrides the model pin recorded on the spec (round profile); absent = PIN_MODEL. It does not enter the seeded RNG streams. */
-export function makeSpec(args) { const { pin, ...rest } = args; const sp = baseSpec(rest); return { ...sp, ...(pin ? { pin } : {}), carrierRate: Math.round((sp.rate - sp.handlingFee) * 100) / 100 }; }
-function baseSpec({ seed, arm, rep }) {
+/**
+ * `args.pin` (R8) overrides the model pin recorded on the spec (round profile); absent = PIN_MODEL. It does not enter the seeded RNG streams.
+ * `args.paired` (R9-meas AC3, `ledger.profile.pairedFixtures`) switches the VALUE stream (ticket id, owner, package, tax, threshold, shipping rate, handling fee) from
+ * `seed|run|arm|rep` to `seed|run|rep`: A_n, B_n and C_n of one pairing index n then share every fixture value. The system-prompt nonce stays per arm (its own stream),
+ * so identical prompts across arms still never share a prompt-cache prefix. The key `paired` appears on the spec ONLY when true: the default output is byte-identical to R5-R8.
+ */
+export function makeSpec(args) { const { pin, paired, ...rest } = args; const sp = baseSpec({ ...rest, paired: paired === true }); return { ...sp, ...(pin ? { pin } : {}), ...(paired === true ? { paired: true } : {}), carrierRate: Math.round((sp.rate - sp.handlingFee) * 100) / 100 }; }
+/** The seed string of the per-run VALUE stream: per arm (R5-R8) or, paired (R9-meas AC3), shared by every arm of the pairing index. */
+export function valueStreamKey({ seed, arm, rep, paired }) { return paired ? `${seed}|run|${rep}` : `${seed}|run|${arm}|${rep}`; }
+/** The `<arm>|` part of the cases/hidden stream keys: empty when the spec is paired (R9-meas AC3), so the stream is `seed|cases|rep` / `seed|hidden|rep`; unpaired keys are byte-identical to R5-R8. */
+const armPart = (spec) => (spec.paired === true ? '' : `${spec.arm}|`);
+function baseSpec({ seed, arm, rep, paired }) {
   const armRng = rng(`${seed}|sys|${arm}`);
-  const r = rng(`${seed}|run|${arm}|${rep}`);
+  const r = rng(valueStreamKey({ seed, arm, rep, paired }));
   const sysNonce = hex(armRng, 16);
   return {
     seed, arm, rep, runId: `${arm}${rep}`,
@@ -70,7 +79,7 @@ export function correctTotal(items, taxRate, code) {
   return roundCents(discounted + discounted * taxRate);
 }
 function cases(spec) {
-  const r = rng(`${spec.seed}|cases|${spec.arm}|${spec.rep}`);
+  const r = rng(`${spec.seed}|cases|${armPart(spec)}${spec.rep}`);   // paired (R9-meas AC3): the visible cases are shared by the arms of one pairing index too
   const codes = Object.keys(DISCOUNTS);
   const out = [];
   for (let i = 0; i < CASE_COUNT; i++) {
@@ -126,7 +135,7 @@ export function ticketText(spec) {
 /** Hidden tests: files in `hiddenDir` (OUTSIDE the repo); they import the repo at $R2_REPO. */
 export function hiddenTests(spec) {
   const pre = `import test from 'node:test';\nimport assert from 'node:assert/strict';\nimport { pathToFileURL } from 'node:url';\nimport path from 'node:path';\nconst repo = process.env.R2_REPO;\nconst load = (f) => import(pathToFileURL(path.join(repo, f)).href);\n`;
-  const r = rng(`${spec.seed}|hidden|${spec.arm}|${spec.rep}`);
+  const r = rng(`${spec.seed}|hidden|${armPart(spec)}${spec.rep}`);   // paired: so is the hidden suite
   const hc = Array.from({ length: 6 }, () => { const items = [{ price: roundCents(5 + Math.floor(r() * 9000) / 100), qty: 1 + Math.floor(r() * 5) }]; const code = Object.keys(DISCOUNTS)[Math.floor(r() * 3)]; return { items, code, expected: correctTotal(items, spec.taxRate, code) }; });
   const bugfix = `${pre}
 test('discount is applied before tax', async () => {

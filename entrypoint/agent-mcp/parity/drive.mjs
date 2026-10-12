@@ -43,7 +43,7 @@ function parseArgs(argv) {
   const o = { round: ROUND, mode: null, out: null, seed: '20261011', wt: DEFAULT_WT, claude: 'claude', yes: false, degraded: null, rep: 1, capture: process.env.PARITY_CAPTURE === '1' };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]; const v = () => argv[++i];
-    if (['--self-check', '--print-plan', '--check-oracle', '--check-lib', '--dry-run', '--live', '--reparse-judge', '--rejudge', '--rederive-tools'].includes(a)) o.mode = a.slice(2);
+    if (['--self-check', '--print-plan', '--check-oracle', '--check-lib', '--dry-run', '--live', '--reparse-judge', '--rejudge', '--rederive-tools', '--rederive-duration'].includes(a)) o.mode = a.slice(2);
     else if (['preflight', 'verdict', 'grid'].includes(a)) o.mode = a; else if (a === '--round') { o.round = v(); if (!ROUND_RE.test(o.round)) { console.error(`--round must match ${ROUND_RE} (it names the ledger file and the tmp dir), got ${JSON.stringify(o.round)}`); process.exit(2); } }
     else if (a === '--out') { o.out = path.resolve(v()); o.outExplicit = true; } else if (a === '--seed') o.seed = v(); else if (a === '--wt') o.wt = path.resolve(v()); else if (a === '--claude') o.claude = v();
     else if (a === '--rep') { o.rep = Number.parseInt(v(), 10); if (!(o.rep >= 1)) { console.error('--rep must be an integer >= 1'); process.exit(2); } } else if (a === '--run') o.run = v(); else if (a === '--yes') o.yes = true; else if (a === '--capture') o.capture = true; else if (a === '--degraded') o.degraded = v();
@@ -72,12 +72,20 @@ export const LEDGER_PATH = LG.ledgerPathFor(ROUND);
  * tracked ledger carries a `profile` (ledger.profileOf, fail closed) re-points the arms, the model alias, the judge model, the explicit effort and wire capture for THAT round only.
  * `arms: null` = the default A,B,C plan.
  */
-export function defaultProfile() { return { arms: null, completedArms: [], armModels: {}, armAWaiver: null, model: F.PIN_MODEL, judgeModel: JG.JUDGE_MODEL, effort: null, capture: false, source: 'module pins (F.PIN_MODEL, JG.JUDGE_MODEL)' }; }
+export function defaultProfile() { return { arms: null, completedArms: [], armModels: {}, armAWaiver: null, model: F.PIN_MODEL, judgeModel: JG.JUDGE_MODEL, effort: null, capture: false, pairedFixtures: false, source: 'module pins (F.PIN_MODEL, JG.JUDGE_MODEL)' }; }
 export function roundProfile(opts = {}) {
   const round = opts.round ?? ROUND; const p = LG.profileOf(LG.readLedger(round, opts.ledgerDir ?? LG.LEDGER_DIR));   // throws LedgerError on a malformed profile (fail closed)
   const d = defaultProfile();
   return p ? { ...d, ...p, model: p.model ?? d.model, judgeModel: p.judgeModel ?? d.judgeModel, source: `parity/ledger/${round}.json profile` } : d;
 }
+/**
+ * The fixture spec of ONE run (R9-meas AC3). The round profile carries the model pin (R8) and the pairing switch: with `profile.pairedFixtures` the value stream is keyed `seed|run|rep`, so
+ * A_n, B_n and C_n of one pairing index share every fixture value; without it (every round before R9, and any round whose ledger profile does not say so) the R5-R8 per-arm stream is
+ * used and the spec is byte-identical to what R8 wrote. Used by makeCtx AND the rejudge path so a saved run is re-derived the way it was run.
+ */
+export function specFor({ seed, arm, rep, profile }) { return F.makeSpec({ seed, arm, rep, pin: profile?.model, paired: profile?.pairedFixtures === true }); }
+/** What a record says about its fixture value stream (R9-meas AC3): `record.fixtures`. */
+export function fixturesFact(profile) { const paired = profile?.pairedFixtures === true; return { paired, valueStream: paired ? 'seed|run|rep' : 'seed|run|arm|rep' }; }
 /** The model the run's arms are launched with: the profile's (an alias such as `haiku`, or a concrete id), else the module pin. */
 const modelOf = (ctx) => ctx.profile?.armModels?.[ctx.runDef?.arm] ?? ctx.profile?.model ?? MODEL;   // R8-AC: a per-arm model (arm C: the concrete id the alias resolved to) overrides the round model for that arm only
 const effortOf = (ctx) => ctx.profile?.effort ?? null;
@@ -203,7 +211,7 @@ async function sweepOwned(tag) {
 // ----------------------------------------------------------------------------------------------------------------
 function makeCtx(opts, plan, runDef, dry) {
   const profile = roundProfile(opts);
-  const spec = F.makeSpec({ seed: opts.seed, arm: runDef.arm, rep: runDef.rep, pin: profile.model });
+  const spec = specFor({ seed: opts.seed, arm: runDef.arm, rep: runDef.rep, profile });
   const outRoot = opts.out ?? path.join(tmpRoot(opts.round ?? ROUND), 'live/out');
   const runDir = path.join(outRoot, 'runs', spec.runId);
   // The arm's cwd must sit outside any repo / agent-instruction file (ancestorLeaks): repo-root tmp/ is inside this checkout, so it lives under the OS temp dir.
@@ -392,7 +400,7 @@ async function runArmBC(ctx) {
       if (ph.status !== 'completed') break;
     }
     // accounting (read after the phases): subtree usage + task rows
-    await sleep(1500);
+    await sleep(MT.ACCOUNTING_SLEEP_MS);   // the one fixed pause of the harness; named so the duration overhead split (metrics.durationBreakdown) can attribute it
     res.taskRows = []; res.usage = [];
     for (const ph of res.phases) if (ph.taskId) {
       res.usage.push({ phase: ph.phase, taskId: ph.taskId, byTask: (await srv.call('usage_query', { task_id: ph.taskId, grain: 'task' })).json ?? null, byTurn: (await srv.call('usage_query', { task_id: ph.taskId, grain: 'turn' })).json ?? null });
@@ -771,6 +779,8 @@ async function runOne(ctx, state) {
     record.observation = { ...obs, phase1: { ...obs.phase1, calls: obs.phase1.calls.map((c) => ({ ...c, resultText: (c.resultText || '').slice(0, 600) })) }, phase2: { ...obs.phase2, calls: obs.phase2.calls.map((c) => ({ ...c, resultText: (c.resultText || '').slice(0, 600) })) } };
     record.score = O.scoreObservation(obs, ctx.expected);
     record.metrics = metrics; record.warnings.push(...metrics.warnings);
+    recordDuration(record, ctx.runDir);   // R9-meas AC1: phaseSumMs + the harness overhead split, beside the unchanged graded wallMs
+    record.fixtures = fixturesFact(ctx.profile);   // R9-meas AC3
     // thinking: model default on every arm (R7-think AC1); the observation is a report-only record field, never an invalid/void rule
     record.thinking = thinkingObservation(metrics);
     const wire = wireFactsOf(ctx);
@@ -805,6 +815,25 @@ async function runOne(ctx, state) {
   writeJson(path.join(ctx.runDir, 'record.json'), record);
   return { record, aborted: false };
 }
+/**
+ * R9-meas AC1: stamp `record.duration` (graded: 'wallMs', phaseSumMs, overheadMs and its split) from the record's own timings plus the run dir's `mcp-calls.json` when it exists (arms B/C).
+ * `record.wallMs` is NOT touched: it stays the graded duration. A missing or unreadable call log leaves the overhead explicitly unattributed.
+ */
+export function recordDuration(record, runDir) {
+  let calls = null; try { calls = JSON.parse(fs.readFileSync(path.join(runDir, 'mcp-calls.json'), 'utf8')); } catch { /* arm A, or no log */ }
+  record.duration = MT.durationBreakdown({ ...record, duration: undefined }, calls);
+  return record.duration;
+}
+/**
+ * `--rederive-duration [--round Rn] [--rep n]` (R9-meas AC1): ZERO model calls, READ-ONLY. Re-derives, from the saved records and call logs under `<root>/live/out/runs`, the wall (graded) and
+ * phase-sum durations of A, B and C, the harness overhead split, and B/A, C/A under BOTH metrics. Nothing is written (no record, summary, ledger or judge file).
+ */
+export function rederiveDurationReport(root, round = ROUND, rep = 1) {
+  const recs = loadRoundRecords(round, rep, root); const runs = path.join(root, 'live/out/runs'); const calls = {};
+  for (const [arm, r] of Object.entries(recs)) { try { calls[arm] = JSON.parse(fs.readFileSync(path.join(runs, r.runId ?? `${arm}${rep}`, 'mcp-calls.json'), 'utf8')); } catch { /* no log for this arm */ } }
+  if (!Object.keys(recs).length) return `no records under ${runs}`;
+  return `DURATION (R9-meas; wall is the graded metric, phase-sum is report-only and never gates) round ${round} rep ${rep}\n${MT.formatDurationTable(MT.rederiveDurations(recs, calls))}`;
+}
 function effectiveConfig(ctx) {
   return { model: modelOf(ctx), ...(LG.isModelAlias(modelOf(ctx)) ? { modelResolution: `"${modelOf(ctx)}" is an alias the claude CLI resolves at run time; the resolved id is read from the response and recorded in record.model, and the run is priced by it` } : {}), ...(effortOf(ctx) ? { effort: `${effortOf(ctx)} explicit: ${EFFORT_MECHANISM[arm0(ctx)].replace('<level>', effortOf(ctx))}` } : {}), maxToolLoops: arm0(ctx) === 'A' ? 'n/a (claude 2.1.296 has no --max-turns; guard --max-budget-usd ' + BUDGET_GUARD_USD + ')' : MAX_TOOL_LOOPS, budgetMaxCalls: arm0(ctx) === 'A' ? 'n/a' : 0, shellAllow: arm0(ctx) === 'A' ? 'unrestricted Bash (bypassPermissions)' : SHELL_POLICY, shellEgress: arm0(ctx) === 'A' ? 'n/a (native Bash)' : 'open expected (product default); actual mode recorded in record.shellEgress', toolResultCap: arm0(ctx) === 'A' ? 'native (<=30k chars inline)' : 'agent-mcp default (6000 chars, head 75% / tail 25%)', providerTimeoutMs: arm0(ctx) === 'B' ? 1_200_000 : arm0(ctx) === 'C' ? 600_000 : `n/a (claude CLI; ${PHASE_TIMEOUT_MS} ms phase timeout)`, queueConcurrency: 'agent-mcp default', maxDepth: 'agent-mcp default (3)', thinking: `thinking: ${THINKING_POLICY} (${THINKING_MECHANISM[arm0(ctx)]})`, thinkingEnv: {}, phaseTimeoutMs: PHASE_TIMEOUT_MS, ...(ctx.opts?.capture ? { capture: `wire capture ON (capture-proxy.mjs, logs/wire): arm ${arm0(ctx)} model traffic is routed through a local pass-through proxy; bodies and timing are not altered` } : {}) };
 }
@@ -835,13 +864,13 @@ function summaryRows(records) {
     const sum = (f) => m.reduce((a, p) => a + (f(p) || 0), 0);
     return { run: r.runId, pass: s.pass, fail: s.fail, na: s.na, invalid: s.invalid, content: `${s.content.pass}/${s.content.total}`, process: `${s.process.pass}/${s.process.total}`, format: `${s.format.pass}/${s.format.total}`,
       calls: sum((p) => p.calls?.total), turns: sum((p) => (p.turns?.parent || 0) + (p.turns?.child || 0)), costUsd: sum((p) => p.costUsd?.authoritative ?? p.costUsd?.total), costRecompute: sum((p) => p.costUsd?.total), thinking: r.config?.thinking ?? null, modelRequested: r.model?.requested ?? null, modelResolved: (r.model?.resolved ?? []).join(',') || null, effort: r.effort ? `${r.effort.requested ?? '-'} (${r.effort.status})` : null, providerTimeout: r.config?.providerTimeoutMs ?? null, resultCap: r.config?.toolResultCap ?? null, thinkingTurns: sum((p) => p.thinkingTurns), firstTurnCtx: m[0]?.firstTurnContext ?? null,
-      cacheReadP1: m[0]?.tokens?.total?.cr ?? null, wallS: Math.round((r.wallMs || 0) / 1000), warnings: r.warnings.length };
+      cacheReadP1: m[0]?.tokens?.total?.cr ?? null, wallS: Math.round((r.wallMs || 0) / 1000), phaseSumS: MT.phaseSumMs(r) == null ? null : Math.round(MT.phaseSumMs(r) / 1000), overheadS: MT.harnessOverheadMs(r) == null ? null : Math.round(MT.harnessOverheadMs(r) / 1000), warnings: r.warnings.length };
   });
 }
 function writeSummary(outDir, records, plan) {
   const rows = summaryRows(records);
-  const md = ['# Round run summary', '', `Runs recorded: ${records.length} of ${plan.length}`, '', '| run | pass | fail | na | invalid | content | process | format | calls | turns | cost (authoritative) | first-turn ctx | cache_read tok (phase 1) | wall s | warnings |', '|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|',
-    ...rows.map((r) => `| ${r.run} | ${r.pass} | ${r.fail} | ${r.na} | ${r.invalid} | ${r.content} | ${r.process} | ${r.format} | ${r.calls} | ${r.turns} | ${fmtUsd(r.costUsd)} | ${r.firstTurnCtx ?? '-'} | ${r.cacheReadP1 ?? '-'} | ${r.wallS} | ${r.warnings} |`), ''];
+  const md = ['# Round run summary', '', `Runs recorded: ${records.length} of ${plan.length}`, '', '| run | pass | fail | na | invalid | content | process | format | calls | turns | cost (authoritative) | first-turn ctx | cache_read tok (phase 1) | wall s (graded) | phase-sum s (report-only) | overhead s | warnings |', '|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|',
+    ...rows.map((r) => `| ${r.run} | ${r.pass} | ${r.fail} | ${r.na} | ${r.invalid} | ${r.content} | ${r.process} | ${r.format} | ${r.calls} | ${r.turns} | ${fmtUsd(r.costUsd)} | ${r.firstTurnCtx ?? '-'} | ${r.cacheReadP1 ?? '-'} | ${r.wallS} | ${r.phaseSumS ?? '-'} | ${r.overheadS ?? '-'} | ${r.warnings} |`), ''];
   md.push('## Effective config per run (thinking: model default on every arm; not forced; thinking turns are a report-only metric)', '', '| run | model requested -> resolved (priced by resolved) | effort (status) | thinking (config) | thinking turns observed | provider / phase timeout (ms) | tool-result cap |', '|---|---|---|---|---|---|---|', ...rows.map((r) => `| ${r.run} | ${r.modelRequested ?? '-'} -> ${r.modelResolved ?? '-'} | ${r.effort ?? '-'} | ${r.thinking} | ${r.thinkingTurns} | ${r.providerTimeout} | ${r.resultCap} |`), '');
   for (const r of records.filter((x) => x.score)) {
     md.push(`## ${r.runId}`, '', '| field | status | detail |', '|---|---|---|', ...Object.entries(r.score.fields).map(([k, v]) => `| ${k} | ${v.status} | ${String(v.detail).replace(/\|/g, '/').slice(0, 140)} |`), '');
@@ -1122,6 +1151,7 @@ export function planText(opts) {
     ...(Object.keys(prof.armModels).length ? [`  per-arm model: ${Object.entries(prof.armModels).map(([a, m]) => `${a} is sent ${m}`).join(', ')} (the Messages API does not resolve the alias); started only if arm A's alias resolves to the same id (armModelGuard, checked before any reservation)`] : []),
     ...(prof.arms.includes('A') ? ['  ARM-A GATE APPLIED: A runs first; every later arm is refused unless the ledger records A as a genuine success (all content items green); a failed A voids the round (exit 4) and the later arms are not run.'] : [`  ARM-A GATE NOT APPLIED (armAWaiver): ${prof.armAWaiver}`, '  The ledger armA stays null (nothing is faked); the judge treats the A gate as waived and records armAWaived on the quality record.']));
   if (plan.some((p) => p.retry)) out.push('', `RETRY PLAN (ledger.retryPlan, owner-directed; arm A is not rerun): ${plan.map((p) => `${p.arm}${p.rep}`).join(' -> ')}; extraRunReason: ${LG.readLedger(round).extraRunReason}`);
+  out.push('', `FIXTURES: ${prof.pairedFixtures ? 'PAIRED (ledger.profile.pairedFixtures, R9-meas AC3): value stream seed|run|rep, so A_n, B_n and C_n share ticket id, owner, thresholds, rates, tax, visible cases and hidden suite; the system-prompt nonce stays per arm' : 'per-arm value stream seed|run|arm|rep (R5-R8 derivation, unchanged)'}`, `DURATION: wall (record.wallMs) is the graded metric; phase-sum (sum of phases[].wallMs) and the harness overhead split are reported beside it, never gating (R9-meas, owner: "Report both (Recommended)")`);
   out.push('', `order (${prof.arms ? 'ledger profile order' : 'arm A first; B and C alternate between rounds'}):`, ...plan.map((p) => `  ${p.position}. ${p.arm}${p.rep}`));
   out.push('', `THINKING: ${THINKING_POLICY} (R7-think AC1; arm${shown.length > 1 ? 's' : ''} ${shown.join(', ')} run${shown.length > 1 ? '' : 's'} the model's default thinking for ${prof.model}; thinking turns/blocks are a report-only metric: record.thinking, SUMMARY, verdict and grid lines; they never invalidate or void a run)`);
   if (A) out.push(`  A  ${THINKING_MECHANISM.A}`, `       cited at ${cite(/^export function armAEnv/)}`, `       resolved spawn env thinking variables set: [${present(armAEnv(A)).join(',')}] (expected none)`, `       argv: claude ${argvA(A, '<mcp-config.json>', null).map((x) => (x.length > 60 ? x.slice(0, 57) + '...' : x)).join(' ')}`);
@@ -1534,7 +1564,7 @@ export async function rejudgeRecord({ round, recordPath, profile, judgeDir, ledg
   const repoDir = path.join(record.workDir, 'repo'); const recorded = record.observation?.files;
   const now = repoFilesOf(repoDir);   // compared per file: the recorded key ORDER is not part of the state
   if (!recorded || Object.keys(recorded).length !== Object.keys(now).length || Object.keys(recorded).some((k) => !(k in now) || now[k] !== recorded[k])) throw new Error(`rejudge: ${repoDir} does not match the final repo state recorded for ${record.runId} (observation.files): refusing to judge a different state: no call made`);
-  const spec = F.makeSpec({ seed: record.seed, arm: record.arm, rep: record.rep, pin: profile.model });
+  const spec = specFor({ seed: record.seed, arm: record.arm, rep: record.rep, profile });
   const waived = !!profile.arms && !profile.arms.includes('A');
   const aGenuine = waived ? true : LG.readLedger(round, path.dirname(ledgerPath)).armA?.genuine === true;
   const ctx = { prompts: F.prompts(), spec, repoDir, ledgerPath, profile };
@@ -1600,12 +1630,13 @@ function reparseJudgeMode(opts) {
 }
 async function main() {
   const opts = parseArgs(process.argv.slice(2));
-  if (!opts.mode) { console.error('usage: node drive.mjs --self-check | --print-plan | --check-oracle | --check-lib | --rederive-tools | --dry-run | --live --yes | --reparse-judge | --rejudge --run <id> --yes  [--out DIR] [--seed S] [--wt PATH] [--claude PATH] [--capture]'); process.exit(2); }
+  if (!opts.mode) { console.error('usage: node drive.mjs --self-check | --print-plan | --check-oracle | --check-lib | --rederive-tools | --rederive-duration | --dry-run | --live --yes | --reparse-judge | --rejudge --run <id> --yes  [--out DIR] [--seed S] [--wt PATH] [--claude PATH] [--capture]'); process.exit(2); }
   if (['dry-run', 'live', 'print-plan', 'preflight'].includes(opts.mode)) { const prof = roundProfile(opts); if (prof.capture) opts.capture = true; }   // R8: a profile that sets capture forces wire capture ON for the round (ledger.profile.capture); --capture stays the opt-in for every other round
   if (opts.mode === 'self-check') { const r = await selfCheck({ opts }); process.exit(r.ok ? 0 : 1); }
   if (opts.mode === 'check-oracle') { process.exit((await checkOracle()) ? 0 : 1); }
   if (opts.mode === 'check-lib') { const { runLibTests } = await import(pathToFileURL(path.join(HERE, 'libtest.mjs')).href); const r = await runLibTests({ log: console.log }); console.log(`lib self-test: ${r.ok ? 'PASS' : 'FAIL'} ${r.total - r.failed.length}/${r.total}`); process.exit(r.ok ? 0 : 1); }
   if (opts.mode === 'rederive-tools') { process.exit(rederiveToolsMode(opts)); }
+  if (opts.mode === 'rederive-duration') { const t = rederiveDurationReport(tmpRoot(opts.round), opts.round, opts.rep); console.log(t); process.exit(t.startsWith('no records') ? 1 : 0); }
   if (opts.mode === 'reparse-judge') { process.exit(reparseJudgeMode(opts)); }
   if (opts.mode === 'rejudge') { process.exit(await rejudgeMode(opts)); }
   if (opts.mode === 'print-plan') { console.log(planText(opts)); return; }
@@ -1627,4 +1658,4 @@ async function main() {
   process.exit(exitCodeFor(res));
 }
 if (process.argv[1] === fileURLToPath(import.meta.url)) main().catch((e) => { console.error(e.stack || e); process.exit(1); });
-export { cliPhase as cliPhaseForTest, rawRun, makeCtx, parseArgs, ancestorLeaks, runHidden, effectiveConfig, agentDef, providerFor, argvA, webCapability };
+export { cliPhase as cliPhaseForTest, summaryRows, writeSummary, rawRun, makeCtx, parseArgs, ancestorLeaks, runHidden, effectiveConfig, agentDef, providerFor, argvA, webCapability };

@@ -16,7 +16,9 @@ import { rescoreRecord } from './rescore.mjs';
 import * as MTt from './metrics.mjs';
 import * as GRt from './grid.mjs';
 import * as GTt from './gate.mjs';
-import { buildPlan, ancestorLeaks, runHidden, transcriptFor, resultForJudge, gapSecondsSince, categoryOf } from './drive.mjs';
+import { buildPlan, ancestorLeaks, runHidden, transcriptFor, resultForJudge, gapSecondsSince, categoryOf, specFor, fixturesFact, recordDuration, rederiveDurationReport, tmpRoot } from './drive.mjs';
+import * as LGt from './ledger.mjs';
+import crypto from 'node:crypto';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROUND1 = path.join(HERE, 'golden/absent-round1.jsonl');
@@ -581,6 +583,64 @@ export async function runLibTests({ log = console.log } = {}) {
     const sc = { scenarioSha: 'b', previousSha: 'a', scopeChanges: ['SCOPE-R7-thinking-default'], startedAt: '2026-10-12T05:00:00Z' };
     ok(GTt.checkScope({ ...sc, logText: '### 2026-10-12T04:31:43Z - SCOPE-R7-model-sonnet: x' }).ok === false, 'negative control: stale LOG must be red');
     ok(GTt.checkScope({ ...sc, logText: '### 2026-10-12T04:46:11Z - SCOPE-R7-thinking-default: x' }).ok === true, 'main LOG must be green');
+  });
+  // ---- R9-meas (owner: "Report both (Recommended)"): wall stays graded, phase-sum is added report-only, harness overhead is broken out, fixtures can be paired
+  const R8T = { A: { runId: 'A1', arm: 'A', wallMs: 85322, metrics: { phases: [{ wallMs: 52568 }, { wallMs: 32169 }] } }, B: { runId: 'B1', arm: 'B', wallMs: 81144, metrics: { phases: [{ wallMs: 47586 }, { wallMs: 30046 }] } }, C: { runId: 'C1', arm: 'C', wallMs: 121117, metrics: { phases: [{ wallMs: 70167 }, { wallMs: 47589 }] } } };   // saved R8 A1/B1/C1 timings
+  await t('R9-meas AC1: wallMs stays the graded duration, phaseSumMs = sum of phases[].wallMs, overhead = wall - phase-sum, ratios under both metrics (R8 A1/B1/C1)', () => {
+    eq(MTt.durationMs(R8T.C), 121117); eq(MTt.phaseSumMs(R8T.A), 84737); eq(MTt.phaseSumMs(R8T.B), 77632); eq(MTt.phaseSumMs(R8T.C), 117756);
+    eq(MTt.harnessOverheadMs(R8T.A), 585); eq(MTt.harnessOverheadMs(R8T.B), 3512); eq(MTt.harnessOverheadMs(R8T.C), 3361);
+    const rd = MTt.rederiveDurations(R8T);
+    near(rd.ratios.C.wall, 121117 / 85322, 1e-12); near(rd.ratios.C.phaseSum, 117756 / 84737, 1e-12); near(rd.ratios.B.wall, 81144 / 85322, 1e-12); near(rd.ratios.B.phaseSum, 77632 / 84737, 1e-12);
+    eq([rd.ratios.C.wall, rd.ratios.C.phaseSum, rd.ratios.B.wall, rd.ratios.B.phaseSum].map((x) => x.toFixed(3)).join(), '1.420,1.390,0.951,0.916');
+    eq(MTt.phaseSumMs({ wallMs: 9, metrics: { phases: [{ wallMs: 4 }, {}] } }), null);   // negative control: a missing phase is null, never a partial sum
+    eq(MTt.phaseSumMs({ wallMs: 9, metrics: { phases: [] } }), null); eq(MTt.rederiveDurations({ B: R8T.B }).ratios.B.wall, null);
+  });
+  await t('R9-meas AC1: durationBreakdown splits a B/C run into setup, submit, between phases, accounting wait (fixed sleep), queries, teardown that sum to the overhead; no call log = unattributed', () => {
+    const base = Date.parse('2026-10-12T10:00:00.000Z'); const c = (name, end, ms, args = {}, text = '{}') => ({ t: new Date(base + end).toISOString(), ms, name, args, text });
+    const calls = [c('agent_list', 9003, 3), c('task', 9030, 14, { prompt: 'p1' }, '{"task_id":"T1"}'), c('result', 79030, 3, { task_id: 'T1' }), c('task', 79300, 5, { prompt: 'p2' }, '{"task_id":"T2"}'), c('result', 125300, 4, { task_id: 'T2' }), c('usage_query', 127309, 9, { task_id: 'T1' }), c('task_list', 127330, 1, { session_id: 's' }, '[]')];
+    const rec = { runId: 'C1', wallMs: 135000, finishedAt: new Date(base + 135000).toISOString(), metrics: { phases: [{ taskId: 'T1', wallMs: 70000 }, { taskId: 'T2', wallMs: 46000 }] } };
+    const b = MTt.durationBreakdown(rec, calls); const o = b.overhead;
+    eq(b.phaseSumMs, 116000); eq(b.overheadMs, 19000); ok(o.attributed === true, 'attributed');
+    eq([o.setupMs, o.submitMs, o.betweenPhasesMs, o.accountingWaitMs, o.fixedSleepMs, o.hiddenAndReadsMs, o.queriesMs, o.teardownMs, o.residualMs].join(), '9016,19,265,2000,1500,500,30,7670,0');
+    eq(o.setupMs + o.submitMs + o.betweenPhasesMs + o.accountingWaitMs + o.queriesMs + o.teardownMs + o.residualMs, b.overheadMs);
+    eq(MTt.durationBreakdown(rec, null).overhead.attributed, false); eq(MTt.durationBreakdown(rec, null).overhead.unattributedMs, 19000);
+    eq(MTt.durationBreakdown({ ...rec, duration: { phaseSumMs: 1 } }, null).phaseSumMs, 1);   // a stored value wins
+    // recordDuration stamps the record from a run dir and leaves wallMs alone; no log = unattributed
+    const d = fs.mkdtempSync(path.join(tmp, 'r9dur-')); fs.writeFileSync(path.join(d, 'mcp-calls.json'), JSON.stringify(calls));
+    const r2 = JSON.parse(JSON.stringify(rec)); recordDuration(r2, d); eq(r2.wallMs, 135000); eq(r2.duration.overhead.attributed, true); eq(r2.duration.graded, 'wallMs');
+    const r3 = JSON.parse(JSON.stringify(rec)); recordDuration(r3, path.join(d, 'none')); eq(r3.duration.overhead.attributed, false);
+  });
+  await t('R9-meas AC1: --rederive-duration over the saved R8 records is read-only (directory snapshot incl. mtimes unchanged) and prints C/A 1.420 vs 1.390 and B/A 0.951 vs 0.916', () => {
+    const snap = (dir) => { const out = []; const walk = (x) => { for (const e of fs.readdirSync(x, { withFileTypes: true }).sort((a, b) => (a.name < b.name ? -1 : 1))) { const f = path.join(x, e.name); if (e.isDirectory()) walk(f); else { const st = fs.statSync(f); out.push(`${f} ${st.size} ${st.mtimeMs} ${crypto.createHash('sha256').update(fs.readFileSync(f)).digest('hex')}`); } } }; walk(dir); return out.join('\n'); };
+    const root = fs.mkdtempSync(path.join(tmp, 'r9rd-'));
+    for (const [arm, rec] of Object.entries(R8T)) { fs.mkdirSync(path.join(root, 'live/out/runs', `${arm}1`), { recursive: true }); fs.writeFileSync(path.join(root, 'live/out/runs', `${arm}1`, 'record.json'), JSON.stringify(rec)); }
+    const before = snap(root); const txt = rederiveDurationReport(root, 'R8', 1);
+    eq(snap(root), before); ok(/C\/A[^\n]*1\.420[^\n]*1\.390/.test(txt) && /B\/A[^\n]*0\.951[^\n]*0\.916/.test(txt), txt);
+    fs.appendFileSync(path.join(root, 'live/out/runs/A1/record.json'), ' '); ok(snap(root) !== before, 'negative control: the snapshot detects a write');
+    const real = tmpRoot('R8'); if (fs.existsSync(path.join(real, 'live/out/runs/C1/record.json'))) { const b2 = snap(real); ok(/C\/A[^\n]*1\.420[^\n]*1\.390/.test(rederiveDurationReport(real, 'R8', 1)), 'real R8 records'); eq(snap(real), b2); }   // the saved R8 records are optional local evidence (gitignored tmp/)
+  });
+  await t('R9-meas AC2: the phase-sum is reported beside the graded wall and never gates (wall over with phase-sum under = FAIL; the converse = PASS)', () => {
+    const sm = (o) => ({ runId: 'x', arm: 'B', genuine: true, extra: false, extraRunReason: '', costBilled: 1, costCommon: 1, wallMs: 1000, phaseSumMs: 1000, quality: 80, turns: 5, toolCalls: 9, peakContext: 1000, ...o });
+    const A = sm({ arm: 'A' });
+    const v1 = MTt.variantVerdict(A, sm({ arm: 'C', wallMs: 1100, phaseSumMs: 1010 })); eq(v1.goals.duration.result, 'FAIL'); eq(v1.verdict, 'FAIL'); eq(v1.durationPhaseSum.gating, false);
+    const v2 = MTt.variantVerdict(A, sm({ arm: 'C', wallMs: 1010, phaseSumMs: 1200 })); eq(v2.goals.duration.result, 'PASS'); eq(v2.verdict, 'PASS');
+    const txt = MTt.formatVerdict(MTt.roundVerdict({ A, B: sm({ wallMs: 1100, phaseSumMs: 1010 }) }));
+    ok(/duration wall \(graded\) 1\.100 FAIL, phase-sum \(report-only\) 1\.010/.test(txt), txt);
+    ok(/dur wall \+10% \(graded\) \/ phase-sum \+1% \(report-only\)/.test(GRt.renderMetricLine(v1)), GRt.renderMetricLine(v1));
+  });
+  await t('R9-meas AC3: paired fixtures share every value across arms for one n; unpaired is byte-identical to the pre-change generator; the nonce stays per arm; the profile switch fails closed', () => {
+    const seed = '20261011'; const keys = ['pkg', 'taxRate', 'threshold', 'rate', 'ticketId', 'owner', 'handlingFee', 'carrierRate'];
+    const [a, b, c] = ['A', 'B', 'C'].map((arm) => F.makeSpec({ seed, arm, rep: 1, paired: true }));
+    for (const k of keys) { eq(b[k], a[k]); eq(c[k], a[k]); }
+    eq(JSON.stringify(F.hiddenTests(c)), JSON.stringify(F.hiddenTests(a))); eq(JSON.stringify(F.repoFiles(c)), JSON.stringify(F.repoFiles(a)));
+    ok(new Set([a.sysNonce, b.sysNonce, c.sysNonce]).size === 3 && [a.runId, b.runId, c.runId].join() === 'A1,B1,C1', 'nonce and runId stay per arm');
+    const [ua, uc] = ['A', 'C'].map((arm) => F.makeSpec({ seed, arm, rep: 1 })); ok(ua.ticketId !== uc.ticketId && ua.threshold !== uc.threshold, 'negative control: unpaired arms differ'); ok(!('paired' in ua), 'no paired key by default');
+    const blob = (sp) => crypto.createHash('sha256').update(JSON.stringify({ spec: sp, repo: F.repoFiles(sp), hidden: F.hiddenTests(sp), ticket: F.ticketText(sp), exp: F.expectedOf(sp) })).digest('hex');
+    eq(blob(ua), '569178d17d6ab078489e4af282caee6bcc445a5a1aafaa8133052c7bac263a83'); eq(blob(F.makeSpec({ seed, arm: 'C', rep: 1 })), 'c36118d2b6c10021f4928aaaed59bf34eebd5c6137eb50e1cb18d680c3acf8cd');   // frozen from fixtures.mjs at HEAD before R9-meas
+    ok(!('pairedFixtures' in LGt.profileOf({ profile: { arms: ['A', 'C'], model: 'claude-haiku-5-5' } })), 'absent unless true'); eq(LGt.profileOf({ profile: { arms: ['A', 'C'], model: 'claude-haiku-5-5', pairedFixtures: true } }).pairedFixtures, true);
+    let threw = false; try { LGt.profileOf({ profile: { arms: ['A', 'C'], model: 'claude-haiku-5-5', pairedFixtures: 'yes' } }); } catch (e) { threw = e instanceof LGt.LedgerError; } ok(threw, 'non-boolean fails closed');
+    eq(specFor({ seed, arm: 'C', rep: 1, profile: { pairedFixtures: true } }).ticketId, a.ticketId); eq(specFor({ seed, arm: 'C', rep: 1, profile: {} }).ticketId, uc.ticketId);
+    eq(fixturesFact({ pairedFixtures: true }).valueStream, 'seed|run|rep'); eq(fixturesFact({}).valueStream, 'seed|run|arm|rep');
   });
   fs.rmSync(tmp, { recursive: true, force: true });
   const failed = results.filter((r) => !r.ok);

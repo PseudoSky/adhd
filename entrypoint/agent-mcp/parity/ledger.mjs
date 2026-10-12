@@ -59,10 +59,11 @@ export const isModelAlias = (m) => typeof m === 'string' && m.trim() !== '' && !
  * Fields: `arms` (subset of A,B,C, in run order), `armAWaiver` (REQUIRED, the owner direction quoted, whenever arm A is not in `arms`: the A-first
  * reference gate is then not applied, and the waiver is recorded instead of faking `armA.genuine`), `model` / `judgeModel` (a concrete id or an alias),
  * `effort` (low|medium|high|xhigh|max, set explicitly on every arm that can take it), `capture` (wire capture forced ON for the round).
+ * R9-meas AC3: `pairedFixtures` (boolean, default false and absent from the parsed profile unless true) = the fixture VALUE stream is keyed `seed|run|rep` instead of `seed|run|arm|rep`, so A_n, B_n and C_n share every fixture value (fixtures.makeSpec `paired`).
  * R8-AC: `completedArms` = arms that already ran in this round and are KEPT (their runs must be in `led.runs`; they are never planned or reserved again, but they count against the cap),
  * `armModels` = a per-arm model that overrides `model` for that arm only (arm C calls the Messages API directly and cannot resolve an alias, so it is sent the concrete id the alias resolved to).
  * Fails CLOSED (LedgerError) on any malformed profile; returns null when the ledger carries none.
- * @returns {{arms:string[], completedArms:string[], armModels:Record<string,string>, armAWaiver:string|null, model:string|null, judgeModel:string|null, effort:string|null, capture:boolean}|null}
+ * @returns {{arms:string[], completedArms:string[], armModels:Record<string,string>, armAWaiver:string|null, model:string|null, judgeModel:string|null, effort:string|null, capture:boolean, pairedFixtures?:true}|null}
  */
 export function profileOf(led) {
   const p = led?.profile; if (p == null) return null;
@@ -75,6 +76,7 @@ export function profileOf(led) {
   for (const k of ['model', 'judgeModel']) if (p[k] != null && (typeof p[k] !== 'string' || !p[k].trim())) bad(`.${k} must be a non-empty string`);
   if (p.effort != null && !EFFORT_LEVELS.includes(p.effort)) bad(`.effort ${JSON.stringify(p.effort)} is not one of ${EFFORT_LEVELS.join('|')}`);
   if (p.capture != null && typeof p.capture !== 'boolean') bad('.capture must be a boolean');
+  if (p.pairedFixtures != null && typeof p.pairedFixtures !== 'boolean') bad('.pairedFixtures must be a boolean');   // R9-meas AC3
   const completedArms = [];
   if (p.completedArms != null) {
     if (!Array.isArray(p.completedArms)) bad('.completedArms must be an array of A/B/C');
@@ -97,7 +99,7 @@ export function profileOf(led) {
     }
   }
   if (isModelAlias(p.model) && arms.includes('C') && !armModels.C) bad(`.model ${JSON.stringify(p.model)} is an alias the claude CLI resolves; arm C calls the Messages API directly with provider.model and an alias is not resolved there: use a concrete id for a round that includes C, or name one for C in .armModels`);
-  return { arms, completedArms, armModels, armAWaiver: waiver || null, model: p.model ?? null, judgeModel: p.judgeModel ?? null, effort: p.effort ?? null, capture: p.capture === true };
+  return { arms, completedArms, armModels, armAWaiver: waiver || null, model: p.model ?? null, judgeModel: p.judgeModel ?? null, effort: p.effort ?? null, capture: p.capture === true, ...(p.pairedFixtures === true ? { pairedFixtures: true } : {}) };
 }
 
 /** Read-only precondition for a live round (no write): approvedBy present, cap not reached. Used by the gate before anything runs. */
