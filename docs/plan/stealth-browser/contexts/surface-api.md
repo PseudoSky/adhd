@@ -37,6 +37,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 - [surface-api.5] The ChromeManager is configured through typed options only (no process.env toggles) and uses port/host options, never a hard-coded 9222 in api.ts defaults without an override.
 - [surface-api.6] Only owned paths changed by [psm:surface-api] commits.
 - [surface-api.7] (PA1.1) The launchChrome verb's input type declares only `port` and `userDataDir`; chromePath and extraArgs stay library-only (never on an apigen-visible verb input).
+- [surface-api.8] (product claims, resolved with evidence) evidence/product-claims.json records, with file:line citations that resolve and agree with the source: `launchChromeOptions` (library option names; `verbInputExposesChromePathOrExtraArgs` must be false) and `getPageContextCookieValues` (`returnsValues` boolean; when true `hostRedactionRequired` must be true).
 ---
 
 ## Reservations
