@@ -185,7 +185,9 @@
       "kind": "work",
       "phase": "surface",
       "depends_on": [
-        "surface-api"
+        "surface-api",
+        "prod-public-api",
+        "prod-errors"
       ],
       "guard": "python3 docs/plan/stealth-browser/scripts/guard.py surface-hosts",
       "artifacts": [
