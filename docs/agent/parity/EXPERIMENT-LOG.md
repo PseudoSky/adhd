@@ -476,3 +476,12 @@ Not a parity blocker (architect verdict APPROVE, 2026-10-11): shell exit status.
 ### 2026-10-12T07:25:55Z — SCOPE-R8-B-only: R8 RUNS ARM B ONLY (dispatcher)
 - user-request (verbatim, owner): "just b"
 - Dispatcher reading (structuring): R8 is one B run on the alias haiku, effort high, through the capture proxy. It replaces the A,B,C plan in SCOPE-R8-model-alias (entry kept as record). Owner direction waives the arm-A-first reference rule for this round. R6 A1 and C1 (haiku-4-5) are shown beside it as informational context only; the resolved model of R8 B is recorded and any mismatch is stated, not hidden. Flagged once to the owner: a B result without a same-model A is not a parity verdict.
+
+## 2026-10-12T08:43:55Z SCOPE-R8-judge-fix: judge sends no temperature, ceiling 8000, B1 re-judged
+
+- R8 B1 ran once (alias haiku -> claude-haiku-5-5, effort high verified on 27/27 requests, B only): items 32/0/3, cost $0.0250, 81.1 s, w1_web passed via mcp__web__web_fetch.
+- The judge call failed HTTP 400 (claude-haiku-5-5 rejects temperature), then a re-judge was truncated at the 1500-token ceiling. Fixed in worktree commits 3fd207ab, a0e3f7f9, 0c25bfe6, cb0ebe5c (judge sends no temperature; ceiling 8000; failures recorded in ledger judgeCalls; exit 5 on judge failure; --rejudge on saved output, no arm re-run).
+- Judge overrun disclosed: 3 requests reached the API (1 failed 400 unrecorded, 1 truncated, 1 scored); 2 are priced in the ledger ($0.0060609). Scope asked for 1 judge call.
+- B1 quality (single sample, judge haiku, model default sampling): mean 75.125 (spec 85, clarity 85, discipline 84, verification 80, docs 82, reasoning 70, focus 65, report_fidelity 50).
+- Comparability: R5/R6/R7 judge records were produced at temperature 0 and a 1500-token ceiling; they are not like-for-like with R8 judge records.
+- No same-model arm A exists for R8; this is not a parity verdict.
