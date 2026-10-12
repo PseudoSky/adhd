@@ -74,10 +74,10 @@
       "end_ref": null
     },
     "mig-docs": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-10-12T21:26:01.044Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "d175e7a1f049f80a9ff3c3aead4898bd19c259d5",
       "end_ref": null
     },
     "surface-api": {
@@ -310,7 +310,7 @@
     "version": "0.8.35",
     "hash": "0b6bc1f3d70e"
   },
-  "current_state": "mig-cdp",
+  "current_state": "mig-docs",
   "dod_provenance": {
     "confirmed_at": "2026-10-12T10:24:50.808Z",
     "by": "pseudosky",
