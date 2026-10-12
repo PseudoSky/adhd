@@ -81,10 +81,10 @@
       "end_ref": "80e30ef13e7f59bee88f432525e8a3b1e05c9757"
     },
     "surface-api": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-10-12T21:31:37.174Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "6573c15dc0e8e29f785e9ea6baa0ccc83d61439f",
       "end_ref": null
     },
     "surface-hosts": {
