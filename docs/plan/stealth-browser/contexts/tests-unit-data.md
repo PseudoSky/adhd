@@ -32,6 +32,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 
 - [tests-unit-data.1] A spec file exists for every ported source module (index barrels and pure type files excluded).
 
+- [tests-unit-data.2] Every spec cites ticket 8468f7b1 and at least one valid [slug.N] acceptance-criterion id.
 ---
 
 ## Reservations
