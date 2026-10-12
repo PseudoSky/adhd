@@ -29,7 +29,7 @@ ONE implementer resolves EVERY finding: each is `fixed` (with a commit that touc
 
 Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/guard.py` (`python3 docs/plan/stealth-browser/scripts/guard.py resolve-findings --only resolve-findings.N`). None may be deferred. Tests written by this plan cite ticket `8468f7b1` and these ids ([inv:tests-cite]).
 
-_No criteria yet._
+- [resolve-findings.1] RESOLUTION.json covers 100% of FINDINGS ids; every finding is `fixed` or `rejected` - none open or deferred.
 
 ---
 

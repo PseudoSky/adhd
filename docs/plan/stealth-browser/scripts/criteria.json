@@ -1008,6 +1008,15 @@
       "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py audit-migration-blind --only audit-migration-blind.4",
       "expect": "exit0",
       "cwd": "repo-root"
+    },
+    {
+      "id": "resolve-findings.1",
+      "phase": "remediate",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py resolve-findings --only resolve-findings.1",
+      "expect": "exit0",
+      "cwd": "repo-root"
     }
   ]
 }
