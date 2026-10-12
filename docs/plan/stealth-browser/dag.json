@@ -14,19 +14,7 @@
     "release"
   ],
   "terminal": "done",
-  "nodes": {
-    "scaffold": {
-      "kind": "work",
-      "phase": "scaffold",
-      "depends_on": [],
-      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py scaffold",
-      "artifacts": [
-        "entrypoint/stealth-browser/"
-      ],
-      "context": "contexts/scaffold.md",
-      "notes": ""
-    }
-  },
+  "nodes": {},
   "authored_with": {
     "plugin": "workflow",
     "version": "0.8.35",
