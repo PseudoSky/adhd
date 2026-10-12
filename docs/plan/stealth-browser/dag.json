@@ -176,7 +176,8 @@
       "guard": "python3 docs/plan/stealth-browser/scripts/guard.py surface-api",
       "artifacts": [
         "entrypoint/stealth-browser/src/api.ts",
-        "entrypoint/stealth-browser/src/index.ts"
+        "entrypoint/stealth-browser/src/index.ts",
+        "docs/plan/stealth-browser/evidence/product-claims.json"
       ],
       "context": "contexts/surface-api.md",
       "notes": "executor=typescript-pro tier=sonnet/high"

@@ -42,7 +42,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 
 ```text
 read_only:  ["entrypoint/stealth-browser/src/lib/", "/Users/nix/dev/ai/scratch/agent-browser/cdp-query-client.ts", "/Users/nix/dev/ai/scratch/agent-browser/search-mcp-source.ts"]
-mutates:    ["entrypoint/stealth-browser/src/api.ts", "entrypoint/stealth-browser/src/index.ts"]
+mutates:    ["entrypoint/stealth-browser/src/api.ts", "entrypoint/stealth-browser/src/index.ts", "docs/plan/stealth-browser/evidence/product-claims.json"]
 ```
 
 ---
