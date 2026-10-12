@@ -41,3 +41,12 @@ Extract the Chrome/CDP runner from scratch/agent-browser/adhd into a new generat
 - `[dod.7]` **The doc-steward marketing run passed review and the content-marketer README is receipts-backed (structural)** — The doc-steward marketing run passed review and the content-marketer README is receipts-backed.
 
 - `[dod.8]` **The branch is fully committed, main node_modules untouched, and ready to fast-forward with a recorded release decision (structural)** — The branch is fully committed, main node_modules untouched, and ready to fast-forward with a recorded release decision.
+
+- `[dod.9]` **After the cutover the live agent-search MCP server still serves chrome_status and list_providers while consuming @adhd/stealth-browser (behavioral)** — After the cutover the live agent-search MCP server still serves chrome_status and list_providers while consuming @adhd/stealth-browser.
+  - given: RELEASE-DECISION.md names a consumable @adhd/stealth-browser and agent-browser has it installed
+  - when: a real MCP stdio client starts node server.mjs and calls chrome_status and list_providers
+  - then: both calls return structured results and the runner implementation no longer exists under agent-browser
+  - entrypoint: `python3 docs/plan/stealth-browser/scripts/guard.py agent-search-cutover`
+  - observable: `guard exits 0: tools/list contains search, chrome_status returns a result, no class CdpSession/ChromeManager/IdleShutdown/HistoryClient definition remains`
+  - negative-control: `restoring adhd/ makes agent-search-cutover.2 fail`
+  - delivered-by: `agent-search-cutover`
