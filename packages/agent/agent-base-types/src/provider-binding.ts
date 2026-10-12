@@ -1,4 +1,4 @@
-import type { ProviderEnvBlock, RetryConfig } from './domain.js';
+import type { AnthropicEffort, ProviderEnvBlock, RetryConfig } from './domain.js';
 import type { TripwireConfig } from './provider-failure.js';
 
 /**
@@ -37,6 +37,8 @@ export interface PartialBinding {
   timeoutMs?: number;
   maxTokens?: number;
   temperature?: number;
+  /** Anthropic only: reasoning-effort level sent as `output_config.effort`; absent = the API default. */
+  effort?: AnthropicEffort;
   retryConfig?: BindingRetryConfig;
   env?: ProviderEnvBlock;
   baseURL?: string;

@@ -48,8 +48,8 @@ export function readLedger(round, dir = LEDGER_DIR) {
 
 function writeAtomic(file, led) { const tmp = `${file}.${process.pid}.tmp`; fs.writeFileSync(tmp, JSON.stringify(led, null, 2) + '\n'); fs.renameSync(tmp, file); }
 
-/** Run cap in force: one run per profile arm when the ledger carries a profile (R8: a B-only round is ONE run), else RUN_CAP. */
-export const capOf = (led) => { const p = profileOf(led); return p ? p.arms.length : RUN_CAP; };
+/** Run cap in force: one run per profile arm, plus one per arm already run and kept (`completedArms`, R8-AC: B1) when the ledger carries a profile, else RUN_CAP. */
+export const capOf = (led) => { const p = profileOf(led); return p ? p.arms.length + p.completedArms.length : RUN_CAP; };
 export const EFFORT_LEVELS = Object.freeze(['low', 'medium', 'high', 'xhigh', 'max']);
 const ARM_LETTERS = Object.freeze(['A', 'B', 'C']);
 /** A model value is an ALIAS (resolved by the claude CLI at run time, e.g. `haiku`) unless it is a concrete first-party id (`claude-...`). */
@@ -59,8 +59,10 @@ export const isModelAlias = (m) => typeof m === 'string' && m.trim() !== '' && !
  * Fields: `arms` (subset of A,B,C, in run order), `armAWaiver` (REQUIRED, the owner direction quoted, whenever arm A is not in `arms`: the A-first
  * reference gate is then not applied, and the waiver is recorded instead of faking `armA.genuine`), `model` / `judgeModel` (a concrete id or an alias),
  * `effort` (low|medium|high|xhigh|max, set explicitly on every arm that can take it), `capture` (wire capture forced ON for the round).
+ * R8-AC: `completedArms` = arms that already ran in this round and are KEPT (their runs must be in `led.runs`; they are never planned or reserved again, but they count against the cap),
+ * `armModels` = a per-arm model that overrides `model` for that arm only (arm C calls the Messages API directly and cannot resolve an alias, so it is sent the concrete id the alias resolved to).
  * Fails CLOSED (LedgerError) on any malformed profile; returns null when the ledger carries none.
- * @returns {{arms:string[], armAWaiver:string|null, model:string|null, judgeModel:string|null, effort:string|null, capture:boolean}|null}
+ * @returns {{arms:string[], completedArms:string[], armModels:Record<string,string>, armAWaiver:string|null, model:string|null, judgeModel:string|null, effort:string|null, capture:boolean}|null}
  */
 export function profileOf(led) {
   const p = led?.profile; if (p == null) return null;
@@ -73,8 +75,29 @@ export function profileOf(led) {
   for (const k of ['model', 'judgeModel']) if (p[k] != null && (typeof p[k] !== 'string' || !p[k].trim())) bad(`.${k} must be a non-empty string`);
   if (p.effort != null && !EFFORT_LEVELS.includes(p.effort)) bad(`.effort ${JSON.stringify(p.effort)} is not one of ${EFFORT_LEVELS.join('|')}`);
   if (p.capture != null && typeof p.capture !== 'boolean') bad('.capture must be a boolean');
-  if (isModelAlias(p.model) && arms.includes('C')) bad(`.model ${JSON.stringify(p.model)} is an alias the claude CLI resolves; arm C calls the Messages API directly with provider.model and an alias is not resolved there: use a concrete id for a round that includes C`);
-  return { arms, armAWaiver: waiver || null, model: p.model ?? null, judgeModel: p.judgeModel ?? null, effort: p.effort ?? null, capture: p.capture === true };
+  const completedArms = [];
+  if (p.completedArms != null) {
+    if (!Array.isArray(p.completedArms)) bad('.completedArms must be an array of A/B/C');
+    for (const a of p.completedArms) {
+      if (!ARM_LETTERS.includes(a)) bad(`.completedArms entry ${JSON.stringify(a)} is not one of A, B, C`);
+      if (completedArms.includes(a)) bad(`.completedArms lists ${a} twice`);
+      if (arms.includes(a)) bad(`.completedArms lists ${a}, which is also planned in .arms (an arm that already ran is never run again)`);
+      if (!(Array.isArray(led.runs) && led.runs.some((r) => r?.arm === a))) bad(`.completedArms lists ${a} but the ledger records no ${a} run: a completed arm must have its run on the record`);
+      completedArms.push(a);
+    }
+  }
+  const armModels = {};
+  if (p.armModels != null) {
+    if (typeof p.armModels !== 'object' || Array.isArray(p.armModels)) bad('.armModels must be an object of arm letter -> model');
+    for (const [a, m] of Object.entries(p.armModels)) {
+      if (!arms.includes(a)) bad(`.armModels names arm ${a}, which is not planned in .arms [${arms.join(',')}]`);
+      if (typeof m !== 'string' || !m.trim()) bad(`.armModels.${a} must be a non-empty string`);
+      if (a === 'C' && isModelAlias(m)) bad(`.armModels.C ${JSON.stringify(m)} is an alias; arm C calls the Messages API directly and an alias is not resolved there: use the concrete id`);
+      armModels[a] = m.trim();
+    }
+  }
+  if (isModelAlias(p.model) && arms.includes('C') && !armModels.C) bad(`.model ${JSON.stringify(p.model)} is an alias the claude CLI resolves; arm C calls the Messages API directly with provider.model and an alias is not resolved there: use a concrete id for a round that includes C, or name one for C in .armModels`);
+  return { arms, completedArms, armModels, armAWaiver: waiver || null, model: p.model ?? null, judgeModel: p.judgeModel ?? null, effort: p.effort ?? null, capture: p.capture === true };
 }
 
 /** Read-only precondition for a live round (no write): approvedBy present, cap not reached. Used by the gate before anything runs. */
@@ -109,7 +132,9 @@ export function reserveRun(round, { arm, runId, dir = LEDGER_DIR }) {
     if (!String(led.approvedBy || '').trim()) throw new LedgerError(`ledger ${f}: approvedBy is empty: refusing ${runId}`);
     if (led.runs.length >= capOf(led) && !String(led.extraRunReason || '').trim()) throw new ModelRunCapError(`model-run cap reached: ${led.runs.length}/${capOf(led)} (ledger ${f}); an extra run needs extraRunReason; refusing ${runId}`);
     const prof = profileOf(led);   // R8: a profile that omits arm A (with its recorded armAWaiver) is the ONLY way the A-first gate is not applied
+    if (prof && prof.completedArms.includes(arm)) throw new LedgerError(`arm ${arm} already ran in this round (ledger.profile.completedArms [${prof.completedArms.join(',')}], run ${led.runs.find((r) => r.arm === arm)?.runId}): an arm never runs twice; refusing ${runId}`);
     if (prof && !prof.arms.includes(arm)) throw new LedgerError(`arm ${arm} is not in ledger.profile.arms [${prof.arms.join(',')}]: refusing ${runId}`);
+    if (prof && led.runs.some((r) => r.arm === arm)) throw new LedgerError(`arm ${arm} already ran in this round (${led.runs.find((r) => r.arm === arm).runId} is reserved): an arm never runs twice; refusing ${runId}`);
     if (!(prof && !prof.arms.includes('A'))) {
       if (led.runs.length === 0 && arm !== 'A') throw new LedgerError(`arm A runs first: refusing ${runId} (arm ${arm})`);
       if (arm !== 'A' && !(led.armA && led.armA.genuine === true)) throw new LedgerError(`arm A did not genuinely succeed: the round is void, refusing ${runId}`);

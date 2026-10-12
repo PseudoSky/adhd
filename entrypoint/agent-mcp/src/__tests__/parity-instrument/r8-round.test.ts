@@ -11,6 +11,10 @@ import { loadParity, PARITY_DIR } from './load';
  * explicitly, wire capture ON, judge on the same alias. The round is re-pointed by `ledger.profile` WITHOUT touching the module pins, so R5/R7 keep theirs.
  * Acceptance ids: R8-profile AC1..AC3 (fail-closed profile, B-only reserve/cap, waiver on the record), R8-model AC1..AC4 (alias, pin match, resolved-id pricing,
  * judge model), R8-effort AC1..AC3 (mechanism, wire verification, driver record), R8-capture AC1 (a dry-run proxy can never reach a real upstream).
+ * R8-AC (ticket R8-AC, SCOPE-R8-A-C-complete; owner 2026-10-12): after B1 the round is completed with arms A (native claude -p) then C (agent-mcp anthropic provider), ONE run each, the same
+ * scenario sha, alias `haiku` (C calls the Messages API directly and needs the concrete id B1 resolved to), effort high on every arm, capture ON, the A-first gate APPLIED again.
+ * Acceptance ids: R8-AC-profile AC1..AC5 (completedArms / armModels, cap counts B1, A-first enforced by armA.genuine, the tracked ledger), R8-AC-model AC1..AC2 (C concrete id,
+ * same scenario sha, A/C model guard), R8-AC-effort AC1..AC3 (C carries effort on the wire; A and C route through the capture proxy by arm), R8-AC-plan AC1 (plan/preflight surface).
  * No model call, no network: pure functions plus a tmp ledger directory.
  */
 const LG = await loadParity('ledger.mjs');
@@ -34,7 +38,7 @@ const bProfile = (over: Record<string, unknown> = {}) => ({ arms: ['B'], armAWai
 describe('R8-profile', () => {
   it('AC1: profileOf returns null without a profile, parses a valid B-only profile, and fails CLOSED on every malformed variant (negative controls)', () => {
     expect(LG.profileOf({})).toBeNull();
-    expect(LG.profileOf({ profile: bProfile() })).toEqual({ arms: ['B'], armAWaiver: WAIVER, model: 'haiku', judgeModel: 'haiku', effort: 'high', capture: true });
+    expect(LG.profileOf({ profile: bProfile() })).toEqual({ arms: ['B'], completedArms: [], armModels: {}, armAWaiver: WAIVER, model: 'haiku', judgeModel: 'haiku', effort: 'high', capture: true });
     const bad: Array<[string, Record<string, unknown>]> = [
       ['not an object', 'x' as never],
       ['empty arms', bProfile({ arms: [] })],
@@ -79,24 +83,13 @@ describe('R8-profile', () => {
     expect(LG.checkLedgerForLive('R8', dir)).toMatchObject({ ok: true, reasons: [] });
   });
 
-  it('AC3: the tracked R8 ledger is a B-only haiku/high/capture profile whose approval quotes the owner and whose scope changes name the LOG headings', () => {
-    const led = JSON.parse(fs.readFileSync(path.join(PARITY_DIR, 'ledger', 'R8.json'), 'utf8'));
-    const p = LG.profileOf(led);
-    expect(p).toMatchObject({ arms: ['B'], model: 'haiku', judgeModel: 'haiku', effort: 'high', capture: true });
-    expect(p.armAWaiver).toContain('just b');
-    expect(led.approvedBy).toContain('just b');
-    expect(led.scopeChanges).toEqual(expect.arrayContaining(['SCOPE-R8-model-alias', 'SCOPE-R8-B-only']));
-    expect(led.runs.length).toBeLessThanOrEqual(1);   // the profile caps the round at ONE run; the live R8 B1 run is recorded once it has happened
-    expect(led.runs.every((r: { arm: string }) => r.arm === 'B')).toBe(true);
-  });
-
   it('AC3: roundProfile re-points R8 only; every other round keeps the module pins and the full A,B,C plan', () => {
-    expect(D.roundProfile({ round: 'R8' })).toMatchObject({ arms: ['B'], model: 'haiku', judgeModel: 'haiku', effort: 'high', capture: true });
+    expect(D.roundProfile({ round: 'R8' })).toMatchObject({ arms: ['A', 'C'], completedArms: ['B'], model: 'haiku', judgeModel: 'haiku', effort: 'high', capture: true });
     for (const r of ['R5', 'R7']) {
       const p = D.roundProfile({ round: r });
-      expect(p, r).toMatchObject({ arms: null, model: F.PIN_MODEL, judgeModel: J.JUDGE_MODEL, effort: null, capture: false });
+      expect(p, r).toMatchObject({ arms: null, completedArms: [], model: F.PIN_MODEL, judgeModel: J.JUDGE_MODEL, effort: null, capture: false });
     }
-    expect(D.buildPlan({ round: 'R8' }).map((e: { arm: string }) => e.arm)).toEqual(['B']);
+    expect(D.buildPlan({ round: 'R8' }).map((e: { arm: string }) => e.arm)).toEqual(['A', 'C']);
     expect(D.buildPlan({ round: 'R7' }).map((e: { arm: string }) => e.arm).sort()).toEqual(['A', 'B', 'C']);   // negative control: the default plan is untouched
   });
 });
@@ -177,7 +170,9 @@ describe('R8-effort', () => {
     expect(D.effortFacts({ requested: 'high', arm: 'B', wire: wire({ mainRequests: 0, mainEfforts: [] }) }).status).toBe('unobserved');
     expect(D.effortFacts({ requested: 'high', arm: 'B', wire: null }).status).toBe('unverified');
     expect(D.effortFacts({ requested: null, arm: 'B', wire: wire() }).status).toBe('not-requested');
-    expect(D.effortFacts({ requested: 'high', arm: 'C', wire: wire({ mainEfforts: [null] }) }).status).toBe('not-settable');
+    expect(D.effortFacts({ requested: 'high', arm: 'C', wire: wire({ mainEfforts: ['high'] }) }).status).toBe('verified');   // R8-AC-effort AC1: C is settable now (provider.effort -> output_config.effort)
+    expect(D.effortFacts({ requested: 'high', arm: 'C', wire: wire({ mainEfforts: [null] }) }).status).toBe('mismatch');   // negative control: a C request with no effort field is a mismatch, not "not settable"
+
     expect(D.effortFacts({ requested: 'high', arm: 'A', wire: wire({ mainEfforts: [null] }) }).status).toBe('mismatch');
   });
 
@@ -188,14 +183,17 @@ describe('R8-effort', () => {
     expect(WD.wireFactsFor(a, 'A')).toMatchObject({ requests: 0, mainRequests: 0 });
   });
 
-  it('AC3: the R8 plan text shows only arm B, the explicit effort mechanism, the alias model and capture ON, and cites the waiver', () => {
+  it('AC3: the R8 plan text shows arms A then C, the explicit effort mechanism for each, the alias model and capture ON; B1 is listed as already run, not planned', () => {
     const text: string = D.planText({ round: 'R8', seed: '20261011', wt: D.DEFAULT_WT, claude: 'claude', rep: 1, capture: false });
-    expect(text).toContain('arms [B]');
+    expect(text).toContain('arms [A,C]');
     expect(text).toContain('model=haiku (ALIAS');
-    expect(text).toContain('CLAUDE_CODE_EFFORT_LEVEL=high');
+    expect(text).toContain('--effort high');
+    expect(text).toContain('output_config.effort');
     expect(text).toContain('wire capture ON (forced by the profile)');
-    expect(text).toContain('ARM-A GATE NOT APPLIED');
-    expect(text).not.toMatch(/\n\s+[AC]1\b/);   // negative control: no A1 / C1 in the order
+    expect(text).toContain('ARM-A GATE APPLIED');
+    expect(text).toMatch(/\n\s+1\. A1\n\s+2\. C1\n/);
+    expect(text).not.toMatch(/\n\s+\d\. B1\n/);   // negative control: B1 is not in the order
+    expect(text).toContain('already run');
   });
 });
 
@@ -246,5 +244,146 @@ describe('R8-model judge path (the only paid call, driven through the real judge
     const notGenuine = await D.judgeRun({ ctx: mkCtx(LG.ledgerPathFor('RJ10', dir), dir), record: mkRec({ resolved: ['claude-haiku-5-5'] }), aGenuine: false, aWaived: true, dry: false, client: client(sent), judgeDir: path.join(dir, 'out10') });
     expect(notGenuine.status).toBe('n/a');
     expect(sent).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------
+// R8-AC: the A and C remainder of R8 after B1 (ticket R8-AC, SCOPE-R8-A-C-complete)
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------
+const HAIKU_ID = 'claude-haiku-5-5';
+/** The ledger profile of the A,C remainder: B1 is kept as run (completedArms), A and C are planned, C is sent the concrete id B1 resolved to. */
+const acProfile = (over: Record<string, unknown> = {}) => ({ arms: ['A', 'C'], completedArms: ['B'], armModels: { C: HAIKU_ID }, armAWaiver: WAIVER, model: 'haiku', judgeModel: 'haiku', effort: 'high', capture: true, ...over });
+const b1Run = { runId: 'B1', arm: 'B', at: '2026-10-12T08:13:21.613Z', pid: 1 };
+
+describe('R8-AC-profile', () => {
+  it('AC1: profileOf parses the A,C remainder (completedArms, armModels) and fails CLOSED on every malformed variant (negative controls)', () => {
+    const led = (profile: Record<string, unknown>, runs: unknown[] = [b1Run]) => ({ profile, runs });
+    expect(LG.profileOf(led(acProfile()))).toEqual({ arms: ['A', 'C'], completedArms: ['B'], armModels: { C: HAIKU_ID }, armAWaiver: WAIVER, model: 'haiku', judgeModel: 'haiku', effort: 'high', capture: true });
+    const bad: Array<[string, Record<string, unknown>, unknown[]?]> = [
+      ['completed arm also planned', acProfile({ completedArms: ['A'] })],
+      ['completed arm not a letter', acProfile({ completedArms: ['D'] })],
+      ['completed arm listed twice', acProfile({ completedArms: ['B', 'B'] })],
+      ['completed arm has NO recorded run in the ledger', acProfile(), []],
+      ['armModels is not an object', acProfile({ armModels: 'x' })],
+      ['armModels names an arm that is not planned', acProfile({ armModels: { C: HAIKU_ID, B: HAIKU_ID } })],
+      ['armModels value empty', acProfile({ armModels: { C: ' ' } })],
+      ['armModels.C is itself an alias (the Messages API does not resolve it)', acProfile({ armModels: { C: 'haiku' } })],
+      ['alias model with arm C and no armModels.C', acProfile({ armModels: undefined })],
+    ];
+    for (const [why, profile, runs] of bad) expect(() => LG.profileOf(led(profile, runs)), why).toThrow(LG.LedgerError);
+    expect(LG.profileOf({ profile: { arms: ['A', 'C'], model: 'claude-haiku-5-5' } }).completedArms).toEqual([]);   // optional fields default
+  });
+
+  it('AC2: the cap counts B1 (3 runs), B is refused as already run, C is refused until A is recorded genuine, a non-genuine A keeps C refused, an arm never runs twice', () => {
+    fs.writeFileSync(LG.ledgerPathFor('R8', dir), JSON.stringify({ ...LG.emptyLedger('R8'), approvedBy: 'owner', profile: acProfile(), runs: [b1Run], armOrder: ['B'] }));
+    expect(LG.capOf(LG.readLedger('R8', dir))).toBe(3);
+    expect(() => LG.reserveRun('R8', { arm: 'B', runId: 'B2', dir })).toThrow(/already ran|not in ledger.profile.arms/);
+    expect(() => LG.reserveRun('R8', { arm: 'C', runId: 'C1', dir })).toThrow(/arm A did not genuinely succeed/);   // A-first is enforced by armA, B1 being in runs
+    expect(LG.reserveRun('R8', { arm: 'A', runId: 'A1', dir })).toEqual({ used: 2, cap: 3 });
+    expect(() => LG.reserveRun('R8', { arm: 'A', runId: 'A2', dir })).toThrow(/already (ran|reserved)/);   // never an arm twice
+    LG.recordArmA('R8', false, 'content 3/5', dir);
+    expect(() => LG.reserveRun('R8', { arm: 'C', runId: 'C1', dir })).toThrow(/arm A did not genuinely succeed/);   // negative control: a failed A voids the rest
+    LG.recordArmA('R8', true, 'all green', dir);
+    expect(LG.reserveRun('R8', { arm: 'C', runId: 'C1', dir })).toEqual({ used: 3, cap: 3 });
+    expect(() => LG.reserveRun('R8', { arm: 'C', runId: 'C2', dir })).toThrow(/already (ran|reserved)|cap/);
+    expect(LG.readLedger('R8', dir).runs.map((r: { arm: string }) => r.arm)).toEqual(['B', 'A', 'C']);
+  });
+
+  it('AC2: the A-first gate is NOT waived by the A,C profile: the waiver text is history for the completed arm, planText/judge treat A as applied', () => {
+    const prof = D.roundProfile({ round: 'R8' });
+    expect(prof.arms).toContain('A');
+    expect(!!prof.arms && !prof.arms.includes('A')).toBe(false);   // the expression runPlan and rejudge use for "waived"
+  });
+
+  it('AC3: the judge cap leaves room for the A and the C judge call on top of the two B1 calls (negative control: bare JUDGE_CAP does not)', () => {
+    const led = JSON.parse(fs.readFileSync(path.join(PARITY_DIR, 'ledger', 'R8.json'), 'utf8'));
+    const b1Calls = led.judgeCalls.filter((c: { arm: string }) => c.arm === 'B').length;
+    expect(b1Calls + 2).toBeGreaterThan(LG.JUDGE_CAP);   // without an extra the C judge call would be refused AFTER its arm was paid for
+    expect(LG.effectiveJudgeCap(led)).toBeGreaterThanOrEqual(b1Calls + 2);
+    expect(String(led.judgeCapReason)).toMatch(/A and C/);
+  });
+
+  it('AC4: the tracked R8 ledger is the A,C remainder: B1 kept as the first and completed run, arms A then C, approval quotes the owner, scope changes name the LOG headings', () => {
+    const led = JSON.parse(fs.readFileSync(path.join(PARITY_DIR, 'ledger', 'R8.json'), 'utf8'));
+    const p = LG.profileOf(led);
+    expect(p).toMatchObject({ arms: ['A', 'C'], completedArms: ['B'], armModels: { C: HAIKU_ID }, model: 'haiku', judgeModel: 'haiku', effort: 'high', capture: true });
+    expect(led.approvedBy).toContain('just b');   // B1's original approval stays on the record
+    expect(led.approvedBy).toMatch(/arms A \(native claude -p\) then C/);   // and the A,C direction is recorded next to it
+    expect(led.scopeChanges).toEqual(expect.arrayContaining(['SCOPE-R8-model-alias', 'SCOPE-R8-B-only', 'SCOPE-R8-A-C-complete']));
+    expect(led.runs[0]).toMatchObject({ runId: 'B1', arm: 'B' });
+    expect(led.runs.length).toBeLessThanOrEqual(LG.capOf(led));
+    expect(led.runs.slice(1).map((r: { arm: string }) => r.arm).every((a: string, i: number) => a === ['A', 'C'][i])).toBe(true);   // anything run after B1 ran A first, then C
+  });
+
+  it('AC5: the B1 record, its judge calls and the scenario sha are untouched by the amendment', () => {
+    const led = JSON.parse(fs.readFileSync(path.join(PARITY_DIR, 'ledger', 'R8.json'), 'utf8'));
+    expect(led.runs[0]).toEqual({ runId: 'B1', arm: 'B', at: '2026-10-12T08:13:21.613Z', pid: 81983 });
+    expect(led.judgeCalls.slice(0, 2).map((c: { arm: string; modelId: string; briefSha: string }) => [c.arm, c.modelId, c.briefSha.slice(0, 8)])).toEqual([['B', HAIKU_ID, '3b685bcf'], ['B', HAIKU_ID, '0339bce1']]);
+    expect(led.scenarioSha).toBe('56956efb90fc213aaaca7dff6d94f731e94a7b69ad4295e66ddb5fd6e06e4a18');
+  });
+});
+
+describe('R8-AC-model', () => {
+  const ctxFor = (arm: string) => D.makeCtx({ round: 'R8', seed: '20261011', wt: D.DEFAULT_WT, claude: 'claude', rep: 1, out: path.join(dir, 'out') }, D.buildPlan({ round: 'R8' }), { arm, rep: 1 }, true);
+
+  it('AC1: A is launched with the alias, C with the concrete id (the Messages API does not resolve `haiku`), B would keep the alias; the spec pin stays the alias for every arm', () => {
+    expect(D.argvA(ctxFor('A'), '<m>', null)).toEqual(expect.arrayContaining(['--model', 'haiku']));
+    expect(D.providerFor(ctxFor('C'), 'C')).toMatchObject({ type: 'anthropic', model: HAIKU_ID });
+    expect(D.providerFor(ctxFor('B'), 'B')).toMatchObject({ type: 'claudecli', model: 'haiku' });   // an arm without its own model keeps the round alias
+    for (const arm of ['A', 'C']) expect(ctxFor(arm).spec.pin, arm).toBe('haiku');
+  });
+
+  it('AC1: the C run is recorded as requested claude-haiku-5-5 (a concrete id, no alias warning) and its config does not claim an alias resolution', () => {
+    const f = D.modelFacts({ requested: HAIKU_ID, resolved: [HAIKU_ID], wire: { mainModels: [HAIKU_ID], sideModels: [] } });
+    expect(f).toMatchObject({ requested: HAIKU_ID, alias: false, resolved: [HAIKU_ID], warnings: [] });
+    expect(D.effectiveConfig(ctxFor('C'))).toMatchObject({ model: HAIKU_ID });
+    expect(D.effectiveConfig(ctxFor('C')).modelResolution).toBeUndefined();
+    expect(D.effectiveConfig(ctxFor('A')).modelResolution).toMatch(/alias/);
+  });
+
+  it('AC1: the scenario sha of the A and C arms is the B1 run\'s sha (the model pin does not enter it)', () => {
+    const led = JSON.parse(fs.readFileSync(path.join(PARITY_DIR, 'ledger', 'R8.json'), 'utf8'));
+    expect(D.currentScenarioSha()).toBe(led.scenarioSha);
+    for (const arm of ['A', 'C']) expect(F.expectedOf(ctxFor(arm).spec).pin, arm).toBe('haiku');   // every planned arm is scored against the alias pin (r1_model accepts the claude-haiku-* family)
+  });
+
+  it('AC2: armModelGuard lets C start only when A answered with exactly the id C is sent; a different, a second or no id stops with no spawn (negative controls)', () => {
+    const prof = { arms: ['A', 'C'], armModels: { C: HAIKU_ID } };
+    const aRec = (resolved: string[]) => ({ model: { resolved } });
+    expect(D.armModelGuard({ profile: prof, arm: 'C', aRecord: aRec([HAIKU_ID]) })).toEqual({ ok: true, reasons: [] });
+    expect(D.armModelGuard({ profile: prof, arm: 'A', aRecord: null }).ok).toBe(true);   // the guard is about arms that name a concrete model
+    for (const resolved of [['claude-haiku-4-5'], [HAIKU_ID, 'claude-haiku-4-5'], []]) {
+      const g = D.armModelGuard({ profile: prof, arm: 'C', aRecord: aRec(resolved) });
+      expect(g.ok, resolved.join()).toBe(false);
+      expect(g.reasons.join(' ')).toMatch(/no spawn|not started/);
+    }
+    expect(D.armModelGuard({ profile: prof, arm: 'C', aRecord: null }).ok).toBe(false);
+  });
+});
+
+describe('R8-AC-effort', () => {
+  const ctxFor = (arm: string, effort: string | null = 'high') => ({ ...D.makeCtx({ round: 'R8', seed: '20261011', wt: D.DEFAULT_WT, claude: 'claude', rep: 1, out: path.join(dir, 'out') }, D.buildPlan({ round: 'R8' }), { arm, rep: 1 }, true), profile: { ...D.roundProfile({ round: 'R8' }), effort } });
+
+  it('AC1: arm C carries the effort as provider.effort (-> output_config.effort), on the agent definition of the parent AND the worker; none when no effort is configured (negative control)', () => {
+    expect(D.providerFor(ctxFor('C'), 'C')).toMatchObject({ type: 'anthropic', model: HAIKU_ID, effort: 'high' });
+    expect(D.agentDef(ctxFor('C'), 'worker', false).provider).toMatchObject({ effort: 'high' });
+    expect(D.agentDef(ctxFor('C'), 'parent', true).provider).toMatchObject({ effort: 'high' });
+    expect(Object.keys(D.providerFor(ctxFor('C', null), 'C'))).not.toContain('effort');
+    expect(Object.keys(D.providerFor(ctxFor('B'), 'B'))).not.toContain('effort');   // B uses the env mechanism, not a provider field
+  });
+
+  it('AC2: the C mechanism names the request field, A keeps --effort, B keeps the env', () => {
+    expect(D.EFFORT_MECHANISM.C).toMatch(/output_config\.effort/);
+    expect(D.EFFORT_MECHANISM.C).not.toMatch(/NOT SETTABLE/);
+    expect(D.argvA(ctxFor('A'), '<m>', null).join(' ')).toMatch(/--effort high/);
+    expect(D.effortEnv(ctxFor('B'))).toEqual({ CLAUDE_CODE_EFFORT_LEVEL: 'high' });
+    expect(D.effortEnv(ctxFor('C'))).toEqual({});
+  });
+
+  it('AC3: A and C reach the capture proxy through their own path <arm>/<provider>', () => {
+    const capture = { baseUrl: (a: string, p: string) => `http://127.0.0.1:1/${a}/${p}` };
+    expect(D.captureEnv({ runDef: { arm: 'A' }, capture }).ANTHROPIC_BASE_URL).toBe('http://127.0.0.1:1/A/anthropic');
+    expect(D.captureEnv({ runDef: { arm: 'C' }, capture }).ANTHROPIC_BASE_URL).toBe('http://127.0.0.1:1/C/anthropic');
+    expect(D.captureEnv({ runDef: { arm: 'C' }, capture: null })).toEqual({});
   });
 });

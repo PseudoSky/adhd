@@ -71,25 +71,26 @@ export const LEDGER_PATH = LG.ledgerPathFor(ROUND);
  * tracked ledger carries a `profile` (ledger.profileOf, fail closed) re-points the arms, the model alias, the judge model, the explicit effort and wire capture for THAT round only.
  * `arms: null` = the default A,B,C plan.
  */
-export function defaultProfile() { return { arms: null, armAWaiver: null, model: F.PIN_MODEL, judgeModel: JG.JUDGE_MODEL, effort: null, capture: false, source: 'module pins (F.PIN_MODEL, JG.JUDGE_MODEL)' }; }
+export function defaultProfile() { return { arms: null, completedArms: [], armModels: {}, armAWaiver: null, model: F.PIN_MODEL, judgeModel: JG.JUDGE_MODEL, effort: null, capture: false, source: 'module pins (F.PIN_MODEL, JG.JUDGE_MODEL)' }; }
 export function roundProfile(opts = {}) {
   const round = opts.round ?? ROUND; const p = LG.profileOf(LG.readLedger(round, opts.ledgerDir ?? LG.LEDGER_DIR));   // throws LedgerError on a malformed profile (fail closed)
   const d = defaultProfile();
   return p ? { ...d, ...p, model: p.model ?? d.model, judgeModel: p.judgeModel ?? d.judgeModel, source: `parity/ledger/${round}.json profile` } : d;
 }
 /** The model the run's arms are launched with: the profile's (an alias such as `haiku`, or a concrete id), else the module pin. */
-const modelOf = (ctx) => ctx.profile?.model ?? MODEL;
+const modelOf = (ctx) => ctx.profile?.armModels?.[ctx.runDef?.arm] ?? ctx.profile?.model ?? MODEL;   // R8-AC: a per-arm model (arm C: the concrete id the alias resolved to) overrides the round model for that arm only
 const effortOf = (ctx) => ctx.profile?.effort ?? null;
 /**
  * R8-effort: how the explicit effort level reaches each arm (probed 2026-10-12 with the real claude 2.1.296 behind the capture proxy and a local mock upstream, no model call:
  * --effort high and CLAUDE_CODE_EFFORT_LEVEL=high both put `output_config: {"effort":"high"}` on the /v1/messages request; with neither the request carries "medium" for claude-haiku-5-5).
  *  A: `claude -p --effort <level>` (argvA).  B: CLAUDE_CODE_EFFORT_LEVEL=<level> in the agent-mcp server env, inherited by every claudecli child (claudecli.ts buildSubprocessEnv copies process.env;
- *  the session denylist does not list it); the engine adds no --effort flag.  C: NOT SETTABLE: providers/anthropic.ts builds the request without output_config / effort, so the API default governs.
+ *  the session denylist does not list it); the engine adds no --effort flag.  C (R8-AC): the anthropic provider takes `effort` (agent definition provider.effort) and sends it as `output_config.effort`; before R8-AC it built
+ *  the request without it and the API default governed.
  */
 export const EFFORT_MECHANISM = Object.freeze({
   A: 'claude -p --effort <level> (argvA)',
   B: 'CLAUDE_CODE_EFFORT_LEVEL=<level> in the agent-mcp server env, inherited by the claudecli child (serverEnv -> claudecli.ts buildSubprocessEnv)',
-  C: 'NOT SETTABLE: providers/anthropic.ts sends no output_config/effort field; the API default governs (verify on the wire)',
+  C: 'provider.effort=<level> on the anthropic agent definition (parent and worker) -> providers/anthropic.ts sends it as the Messages API output_config.effort (R8-AC)',
 });
 /** The env that carries the explicit effort level to an arm ({} unless the round profile sets one; only B takes it through the environment). */
 export function effortEnv(ctx) { const e = effortOf(ctx); return e && ctx.runDef.arm === 'B' ? { CLAUDE_CODE_EFFORT_LEVEL: e } : {}; }
@@ -104,7 +105,7 @@ export function effortEnv(ctx) { const e = effortOf(ctx); return e && ctx.runDef
  */
 export const THINKING_POLICY = 'model default on every arm; not forced';
 export const THINKING_MECHANISM = Object.freeze({
-  A: 'model default (no MAX_THINKING_TOKENS / CLAUDE_CODE_DISABLE_THINKING in the `claude -p` spawn env; no thinking/effort flag in argv)',
+  A: 'model default (no MAX_THINKING_TOKENS / CLAUDE_CODE_DISABLE_THINKING in the `claude -p` spawn env; no thinking flag in argv; an explicit --effort level is set only by the round profile)',
   B: 'model default (no MAX_THINKING_TOKENS / CLAUDE_CODE_DISABLE_THINKING in the agent-mcp server env, which every claudecli `claude` child inherits; claudecli.ts:818-833 copies process.env)',
   C: 'model default (the anthropic provider sends no `thinking` request field; the API default for the model governs)',
 });
@@ -338,6 +339,7 @@ async function startServer(ctx) {
 function providerFor(ctx, arm) {
   if (arm === 'B') return { type: 'claudecli', model: modelOf(ctx), claudePath: ctx.opts.claude, timeoutMs: 20 * 60 * 1000 };
   const p = { type: 'anthropic', model: modelOf(ctx), timeoutMs: 10 * 60 * 1000 };
+  if (effortOf(ctx)) p.effort = effortOf(ctx);   // R8-AC: arm C's explicit effort is a request field (output_config.effort), the same level A and B carry
   return p;
 }
 function agentDef(ctx, name, parent) {
@@ -504,7 +506,7 @@ export function modelFacts({ requested, resolved = [], sideModels = [], wire = n
 }
 /**
  * R8-effort: the explicit effort the arm was configured with versus what the wire carried. Main requests (those declaring tools) are checked; the CLI's tool-less side calls are listed apart.
- * status: not-requested | unverified (capture off) | unobserved (no request reached the proxy) | verified | mismatch | not-settable (arm C: no effort field exists, the API default governs).
+ * status: not-requested | unverified (capture off) | unobserved (no request reached the proxy) | verified | mismatch (a request carried another level, or none: every arm, C included, is settable since R8-AC).
  */
 export function effortFacts({ requested, arm, wire = null }) {
   const mechanism = requested ? EFFORT_MECHANISM[arm].replace('<level>', requested) : null; const base = { requested: requested ?? null, arm, mechanism, observed: wire ? wire.mainEfforts : null, sideObserved: wire ? wire.sideEfforts : null };
@@ -513,7 +515,6 @@ export function effortFacts({ requested, arm, wire = null }) {
   if (!wire.mainRequests) return { ...base, status: 'unobserved', detail: 'no tool-declaring model request reached the capture proxy' };
   const all = wire.mainEfforts;
   if (all.length && all.every((e) => e === requested)) return { ...base, status: 'verified', detail: `every one of ${wire.mainRequests} main request(s) carried effort ${requested}` };
-  if (arm === 'C' && all.every((e) => e == null)) return { ...base, status: 'not-settable', detail: `arm C sends no effort field (${wire.mainRequests} main request(s)); the API default governs, which is not necessarily ${requested}` };
   return { ...base, status: 'mismatch', detail: `configured ${requested}, wire carried [${all.map((e) => e ?? 'none').join(', ')}] on ${wire.mainRequests} main request(s)` };
 }
 /** The wire facts of this run's arm from the capture logs (null when capture was off or nothing was written). */
@@ -955,6 +956,20 @@ export const judgeDirName = (rep) => (rep > 1 ? `judge-rep${rep}` : 'judge');
 /** R5-scorefix AC2: whole seconds from a prior repetition's finish (ms epoch or NaN/undefined) to `nowMs`; null when the finish time is unknown. */
 export function gapSecondsSince(finishedMs, nowMs = Date.now()) { return Number.isFinite(finishedMs) ? Math.round((nowMs - finishedMs) / 1000) : null; }
 
+/**
+ * R8-AC: the model guard for an arm that is sent a model of its own (`profile.armModels`, arm C: the concrete id the alias `haiku` resolves to). Arm C calls the Messages API directly, so the
+ * round only compares like with like if arm A's alias resolved to exactly that id. Checked BEFORE the arm is reserved or spawned: a mismatch, a second id, no id or no A record stops with no spawn
+ * and no spend. Arms without an `armModels` entry (and arm A, the reference) always pass.
+ * @returns {{ok:boolean, reasons:string[]}}
+ */
+export function armModelGuard({ profile, arm, aRecord }) {
+  const want = profile?.armModels?.[arm]; if (!want || arm === 'A') return { ok: true, reasons: [] };
+  if (!aRecord) return { ok: false, reasons: [`arm ${arm} is sent ${want} but there is no arm A record to compare against: ${arm} not started (no spawn)`] };
+  const got = aRecord.model?.resolved ?? [];
+  if (got.length === 1 && got[0] === want) return { ok: true, reasons: [] };
+  return { ok: false, reasons: [`arm ${arm} is sent ${want} but arm A's alias resolved to [${got.join(', ') || 'no model id'}]: ${arm} not started (no spawn), the arms would not run the same model`] };
+}
+
 async function runPlan(opts, dry) {
   const plan = buildPlan(opts);
   fs.mkdirSync(opts.out, { recursive: true });
@@ -972,7 +987,11 @@ async function runPlan(opts, dry) {
   for (const [i, def] of plan.entries()) {
     const ctx = makeCtx({ ...opts }, plan, def, dry);
     const done = path.join(ctx.runDir, 'record.json');
-    if (isFinishedRecord(done)) { const rec = readJson(done); records.push(rec); state.lastFinished[def.arm] = Date.parse(rec.finishedAt); if (def.arm === 'A') state.aGenuine = seedAGenuine({ record: rec, ledgerPath: ctx.ledgerPath, dry }); console.log(`skip ${ctx.spec.runId}: record exists (idempotent resume)`); continue; }
+    if (isFinishedRecord(done)) { const rec = readJson(done); records.push(rec); state.lastFinished[def.arm] = Date.parse(rec.finishedAt); if (def.arm === 'A') { state.aGenuine = seedAGenuine({ record: rec, ledgerPath: ctx.ledgerPath, dry }); state.aRecord = rec; } console.log(`skip ${ctx.spec.runId}: record exists (idempotent resume)`); continue; }
+    if (!aWaived) {   // R8-AC: an arm sent its own model starts only if arm A's alias resolved to that very id (before any reservation or spawn)
+      const g = armModelGuard({ profile, arm: def.arm, aRecord: state.aRecord ?? null });
+      if (!g.ok) { console.log(`MODEL GUARD: ${g.reasons.join('; ')}; the driver exits 4`); state.voided = true; state.modelGuard = g.reasons; break; }
+    }
     if (i > 0) await sleep(dry ? 300 : GAP_MS);
     if (def.rep === 2) {   // R5-scorefix AC2: the gap to rep 1 comes from the in-pass state, else from the rep-1 record.json on disk (a retry pass runs rep 2 alone)
       let fin = state.lastFinished[def.arm];
@@ -988,7 +1007,7 @@ async function runPlan(opts, dry) {
       LG.recordArmA(opts.round ?? ROUND, genuine, genuine ? 'all content items green, no INVALID, no defect signal' : `content ${record.score?.summary?.content?.pass}/${record.score?.summary?.content?.total}, invalid ${record.score?.summary?.invalid}, defect ${!!record.defectSignal}`, path.dirname(ctx.ledgerPath));
       if (!genuine) { state.voided = true; console.log('ITERATION VOID: arm A did not genuinely succeed; B and C are not run and nothing enters the grid (record the void in the LOG); the driver exits 4'); break; }
     }
-    if (def.arm === 'A') state.aGenuine = GT.isGenuineSuccess(record);
+    if (def.arm === 'A') { state.aGenuine = GT.isGenuineSuccess(record); state.aRecord = record; }
     if (record.score && !aborted && ctx.repoDir && fs.existsSync(ctx.repoDir)) {   // R5: blind judge, live round (or a dry-run with the fake client); the client is injected, never constructed from an env flag
       const q = await judgeRun({ ctx, record, aGenuine: state.aGenuine, aWaived: !!state.aWaived, dry, client: opts.judgeClient ?? (dry ? fakeJudgeClient() : JG.liveJudgeClient()), judgeDir: judgeDirOf(def.rep) });
       console.log(qualityLine(ctx.spec.runId, q));
@@ -1097,9 +1116,11 @@ export function planText(opts) {
   const present = (env) => THINKING_VARS.filter((k) => env[k] !== undefined);
   const led = LG.readLedger(round); const cap = LG.capOf(led);
   out.push(`ROUND ${round} PLAN  seed=${opts.seed}  model=${prof.model}${LG.isModelAlias(prof.model) ? ' (ALIAS: resolved by the claude CLI at run time, recorded in record.model and used to price the run)' : ''}  (task: ONE real-world scenario "shopkit", 2 phases in one session; web fetch ${F.WEB_URL} -> heading "${F.WEB_HEADING}")`);
-  out.push(`model runs: ${plan.length} planned (${prof.arms ? `profile arms ${arms.join(',')}, one run each` : 'one per arm, A first'}), serial, HARD CAP ${cap} per round; ledger ${LG.ledgerPathFor(round)} has used ${ledgerUsed(LG.ledgerPathFor(round))} of ${cap}`);
+  out.push(`model runs: ${plan.length} planned (${prof.arms ? `profile arms ${arms.join(',')}, one run each${prof.completedArms.length ? `; ${prof.completedArms.map((a) => `${a}1`).join(', ')} already run and kept, never re-run` : ''}` : 'one per arm, A first'}), serial, HARD CAP ${cap} per round; ledger ${LG.ledgerPathFor(round)} has used ${ledgerUsed(LG.ledgerPathFor(round))} of ${cap}`);
   if (prof.arms) out.push('', `ROUND PROFILE (${prof.source}): arms [${arms.join(',')}]  model ${prof.model}  judge model ${prof.judgeModel}${LG.isModelAlias(prof.judgeModel) ? ' (alias; resolved from the arm\'s reported id before the single judge call)' : ''}  effort ${prof.effort ?? '(not set)'}  wire capture ${prof.capture ? 'ON (forced by the profile)' : 'per --capture'}`,
-    ...(prof.arms.includes('A') ? [] : [`  ARM-A GATE NOT APPLIED (armAWaiver): ${prof.armAWaiver}`, '  The ledger armA stays null (nothing is faked); the judge treats the A gate as waived and records armAWaived on the quality record.']));
+    ...(prof.completedArms.length ? [`  already run (kept, not planned, counted in the cap): ${prof.completedArms.map((a) => LG.readLedger(round).runs.find((r) => r.arm === a)?.runId ?? `${a} (no run on record)`).join(', ')}`] : []),
+    ...(Object.keys(prof.armModels).length ? [`  per-arm model: ${Object.entries(prof.armModels).map(([a, m]) => `${a} is sent ${m}`).join(', ')} (the Messages API does not resolve the alias); started only if arm A's alias resolves to the same id (armModelGuard, checked before any reservation)`] : []),
+    ...(prof.arms.includes('A') ? ['  ARM-A GATE APPLIED: A runs first; every later arm is refused unless the ledger records A as a genuine success (all content items green); a failed A voids the round (exit 4) and the later arms are not run.'] : [`  ARM-A GATE NOT APPLIED (armAWaiver): ${prof.armAWaiver}`, '  The ledger armA stays null (nothing is faked); the judge treats the A gate as waived and records armAWaived on the quality record.']));
   if (plan.some((p) => p.retry)) out.push('', `RETRY PLAN (ledger.retryPlan, owner-directed; arm A is not rerun): ${plan.map((p) => `${p.arm}${p.rep}`).join(' -> ')}; extraRunReason: ${LG.readLedger(round).extraRunReason}`);
   out.push('', `order (${prof.arms ? 'ledger profile order' : 'arm A first; B and C alternate between rounds'}):`, ...plan.map((p) => `  ${p.position}. ${p.arm}${p.rep}`));
   out.push('', `THINKING: ${THINKING_POLICY} (R7-think AC1; arm${shown.length > 1 ? 's' : ''} ${shown.join(', ')} run${shown.length > 1 ? '' : 's'} the model's default thinking for ${prof.model}; thinking turns/blocks are a report-only metric: record.thinking, SUMMARY, verdict and grid lines; they never invalidate or void a run)`);
@@ -1114,7 +1135,8 @@ export function planText(opts) {
     if (B) out.push(`  B  ${EFFORT_MECHANISM.B.replace('<level>', prof.effort)}   resolved server env carries: CLAUDE_CODE_EFFORT_LEVEL=${serverEnv(B, '<store>', '<logs>').CLAUDE_CODE_EFFORT_LEVEL ?? '(NONE)'}`);
     if (C) out.push(`  C  ${EFFORT_MECHANISM.C}`);
   }
-  if (opts.capture || prof.capture) { const cx = ctxOf(shown[0]); out.push('', `WIRE CAPTURE: ON (capture-proxy.mjs; logs under <run>/logs/wire/proxy-<arm>-<provider>.jsonl; request headers are never recorded; --capture is also accepted explicitly)`, `  ${shown[0]} routes ANTHROPIC_BASE_URL through /${shown[0]}/anthropic: ${JSON.stringify(Object.keys(captureEnv({ ...cx, capture: { baseUrl: (a, pr) => `http://127.0.0.1:PORT/${a}/${pr}` } })))}`); }
+  if (opts.capture || prof.capture) out.push('', `WIRE CAPTURE: ON (capture-proxy.mjs; logs under <run>/logs/wire/proxy-<arm>-<provider>.jsonl; request headers are never recorded; --capture is also accepted explicitly)`,
+    ...shown.map((a) => { const cx = ctxOf(a); return `  ${a} routes ANTHROPIC_BASE_URL through /${a}/anthropic: ${JSON.stringify(Object.keys(captureEnv({ ...cx, capture: { baseUrl: (arm, pr) => `http://127.0.0.1:PORT/${arm}/${pr}` } })))}`; }));
   out.push('', `SHELL / WEB (${shown.filter((a) => a !== 'A').join('/') || 'no B/C arm'} run${shown.filter((a) => a !== 'A').length === 1 ? 's' : ''} the PRODUCT DEFAULT shell allowlist${has('A') ? '; A has unrestricted Bash' : ''})`, `  ${shown.filter((a) => a !== 'A').join('/')} shell: ${SHELL_POLICY}   (cited ${cite(/^export const SHELL_POLICY/)}; supersedes the R3 "no curl" rule by owner direction, R6-prep AC2)`, '  Shell egress: open (product default: allow-all loopback proxy; no srt policy is pre-written). The actual mode is read back after each B/C run and recorded as record.shellEgress.', `  ${shown.filter((a) => a !== 'A').join('/')} srt network allowlist extension: ${SRT_EXTRA_DOMAINS.join(',') || '(none)'}   (cited ${cite(/^export const SRT_EXTRA_DOMAINS/)})`, ...(has('A') ? [`  A tools: ${A_TOOLS}`] : []),
     `  WEB: ${[has('A') ? 'A has the native WebFetch/WebSearch' : null, has('B') ? 'B has the engine-executed web_fetch tool (R6B-web, advertised through the claudecli bridge) and the shell' : null, has('C') ? 'C additionally exposes Anthropic server-side web tools (web_fetch/web_search) by default' : null].filter(Boolean).join('; ')}. The web-fetch field (w1_web) is scored with one rule for every arm that can fetch; any tool-surface asymmetry is recorded, not equalised.`);
   out.push('', 'PACING', `  before EVERY live run: claude -p /usage (0 model calls asserted); refuse at 5h session >= ${L.PACING.fiveHourMax * 100}% (no 7-day check), any non-allowed rate-limit status, or an unreadable reading (fail closed)`);
@@ -1256,7 +1278,9 @@ export async function selfCheck({ log = console.log, opts = parseArgs([]) } = {}
     chk('R6B-proxy AC4: capture is OFF by default (no capture env, no capture key in effectiveConfig) and --capture parses', Object.keys(captureEnv(ctxA)).length === 0 && !('capture' in effectiveConfig(ctxA)) && parseArgs(['--capture']).capture === true && parseArgs([]).capture === (process.env.PARITY_CAPTURE === '1'));
     chk('R6B-proxy AC4: with a capture proxy, A/B/C route ANTHROPIC_BASE_URL through /<arm>/anthropic (A spawn env, B+C server env) and B/C also set the openai/deepseek base URLs', (() => { const cap = { baseUrl: (a, p) => `http://127.0.0.1:1/${a}/${p}` }; const [a, b, c] = [ctxA, ctxB, ctxC].map((x) => ({ ...x, capture: cap })); return armAEnv(a).ANTHROPIC_BASE_URL === 'http://127.0.0.1:1/A/anthropic' && serverEnv(b, '/s', '/l').ANTHROPIC_BASE_URL === 'http://127.0.0.1:1/B/anthropic' && serverEnv(c, '/s', '/l').ANTHROPIC_BASE_URL === 'http://127.0.0.1:1/C/anthropic' && serverEnv(c, '/s', '/l').ADHD_AGENT_OPENAI_BASE_URL === 'http://127.0.0.1:1/C/openai/v1' && serverEnv(b, '/s', '/l').ADHD_AGENT_DEEPSEEK_BASE_URL === 'http://127.0.0.1:1/B/deepseek/v1'; })());
     chk('R8-capture AC1: a dry-run capture proxy never gets a real upstream (fake Anthropic or the discard sink for every provider, even with PARITY_UPSTREAM_* overrides); a live one does', (() => { const dry = captureUpstreams({ dry: true }, { PARITY_UPSTREAM_ANTHROPIC: 'https://api.anthropic.com' }); const wired = captureUpstreams({ dry: true, fakeAnthropicUrl: 'http://127.0.0.1:4242' }, {}); const live = captureUpstreams({ dry: false }, {}); return Object.values(dry).every((u) => new URL(u).hostname === '127.0.0.1') && wired.anthropic === 'http://127.0.0.1:4242' && new URL(live.anthropic).hostname === 'api.anthropic.com'; })());
-    chk('R8-profile AC1: the R8 profile is B-only haiku/high/capture and every other round keeps the module pins and the full plan', (() => { const p8 = roundProfile({ round: 'R8' }); const p7 = roundProfile({ round: 'R7' }); return p8.arms.join() === 'B' && p8.model === 'haiku' && p8.effort === 'high' && p8.capture === true && p7.arms === null && p7.model === F.PIN_MODEL && p7.effort === null && buildPlan({ round: 'R7' }).length === 3 && buildPlan({ round: 'R8' }).length === 1; })());
+    chk('R8-profile AC1: the R8 profile is the A,C remainder (B1 kept) haiku/high/capture and every other round keeps the module pins and the full plan', (() => { const p8 = roundProfile({ round: 'R8' }); const p7 = roundProfile({ round: 'R7' }); return p8.arms.join() === 'A,C' && p8.completedArms.join() === 'B' && p8.armModels.C === 'claude-haiku-5-5' && p8.model === 'haiku' && p8.effort === 'high' && p8.capture === true && p7.arms === null && p7.model === F.PIN_MODEL && p7.effort === null && buildPlan({ round: 'R7' }).length === 3 && buildPlan({ round: 'R8' }).map((x) => x.arm).join() === 'A,C'; })());
+    chk('R8-AC: armModelGuard starts C only when A resolved to exactly the id C is sent (negative controls: another id, two ids, none, no A record)', (() => { const pr = { armModels: { C: 'claude-haiku-5-5' } }; const a = (r) => ({ model: { resolved: r } }); return armModelGuard({ profile: pr, arm: 'C', aRecord: a(['claude-haiku-5-5']) }).ok && !armModelGuard({ profile: pr, arm: 'C', aRecord: a(['claude-haiku-4-5']) }).ok && !armModelGuard({ profile: pr, arm: 'C', aRecord: a(['claude-haiku-5-5', 'claude-haiku-4-5']) }).ok && !armModelGuard({ profile: pr, arm: 'C', aRecord: a([]) }).ok && !armModelGuard({ profile: pr, arm: 'C', aRecord: null }).ok && armModelGuard({ profile: pr, arm: 'A', aRecord: null }).ok; })());
+    chk('R8-AC: arm C carries the explicit effort as provider.effort (the request field), arm B does not (env mechanism)', (() => { const cx = (arm) => ({ runDef: { arm }, profile: { model: 'haiku', armModels: { C: 'claude-haiku-5-5' }, effort: 'high' }, opts: {} }); return providerFor(cx('C'), 'C').effort === 'high' && providerFor(cx('C'), 'C').model === 'claude-haiku-5-5' && !('effort' in providerFor(cx('B'), 'B')); })());
     chk('R7-model AC1: MODEL is the single pin (fixtures PIN_MODEL = claude-sonnet-5-5) and reaches arm A argv --model,B claudecli provider.model, C anthropic provider.model and the oracle spec pin', (() => { const av = argvA(ctxA, '<mcp>', null); return MODEL === F.PIN_MODEL && MODEL === 'claude-sonnet-5-5' && av[av.indexOf('--model') + 1] === MODEL && providerFor(ctxB, 'B').model === MODEL && providerFor(ctxC, 'C').model === MODEL && ctxA.spec.pin === MODEL; })());
     chk('R7-model AC1: negative control, a spec/arm pinned to the previous model (claude-haiku-4-5) is not the pin and its r1_model result is FAIL', (() => { const e = { ...ctxA.spec, pin: MODEL }; const o = O.idealObservation('A', e); o.models = ['claude-haiku-4-5']; return O.scoreObservation(o, e).fields.r1_model.status === 'fail'; })());
     chk('R7-model AC1: the judge model is a distinct pin (JUDGE_MODEL = claude-haiku-4-5, not the arm MODEL)', JG.JUDGE_MODEL === 'claude-haiku-4-5' && JG.JUDGE_MODEL !== MODEL);
@@ -1347,7 +1371,7 @@ export async function selfCheck({ log = console.log, opts = parseArgs([]) } = {}
         const seeded = await judgeRun({ ctx: ctxJ, record: { ...genuineRec }, aGenuine: seedAGenuine({ record: genuineRec, ledgerPath: lp }), dry: true, client, judgeDir: path.join(rd, 'out') });
         const unseeded = await judgeRun({ ctx: ctxJ, record: { ...genuineRec }, aGenuine: false, dry: true, client, judgeDir: path.join(rd, 'out') });
         chk('R5-resume AC1: with the seed a later genuine arm is judged; with the pre-fix unseeded state.aGenuine=false the same arm gets no judge (the defect)', seeded.status === 'scored' && unseeded.status === 'n/a'); }
-      { const src2 = fs.readFileSync(SELF, 'utf8'); chk('R5-resume AC1: the skipped-A branch calls seedAGenuine before continue', /state\.lastFinished\[def\.arm\] = Date\.parse\(rec\.finishedAt\); if \(def\.arm === 'A'\) state\.aGenuine = seedAGenuine\(\{ record: rec, ledgerPath: ctx\.ledgerPath, dry \}\);/.test(src2) && /if \(!plan\.some\(\(p\) => p\.arm === 'A'\)\)/.test(src2)); }
+      { const src2 = fs.readFileSync(SELF, 'utf8'); chk('R5-resume AC1: the skipped-A branch calls seedAGenuine before continue', /state\.lastFinished\[def\.arm\] = Date\.parse\(rec\.finishedAt\); if \(def\.arm === 'A'\) \{ state\.aGenuine = seedAGenuine\(\{ record: rec, ledgerPath: ctx\.ledgerPath, dry \}\); state\.aRecord = rec; \}/.test(src2) && /if \(!plan\.some\(\(p\) => p\.arm === 'A'\)\)/.test(src2)); }
       const led0 = LG.readLedger('RR', ldir);
       chk('R5-retry: no retryPlan -> null (the seeded plan stands); a retryPlan without extraRunReason is refused', LG.retryPlanOf(led0) === null && refusesWith(() => LG.retryPlanOf({ ...led0, retryPlan: [{ arm: 'B', rep: 2 }] })));
       chk('R5-retry: a retry plan may not contain arm A, rep 1, an unknown arm or a duplicate', ['A', 'X'].every((arm) => refusesWith(() => LG.retryPlanOf({ ...led0, extraRunReason: 'why', retryPlan: [{ arm, rep: 2 }] }))) && refusesWith(() => LG.retryPlanOf({ ...led0, extraRunReason: 'why', retryPlan: [{ arm: 'B', rep: 1 }] })) && refusesWith(() => LG.retryPlanOf({ ...led0, extraRunReason: 'why', retryPlan: [{ arm: 'B', rep: 2 }, { arm: 'B', rep: 2 }] })));

@@ -217,6 +217,9 @@ export type ProviderEnvBlock = {
   model?: string;
 };
 
+/** Reasoning-effort levels the Anthropic Messages API accepts in `output_config.effort`. */
+export type AnthropicEffort = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+
 export type ProviderConfig =
   | {
       type: 'anthropic';
@@ -226,6 +229,8 @@ export type ProviderConfig =
       env?: ProviderEnvBlock;
       temperature?: number;
       maxTokens?: number;
+      /** Reasoning-effort level sent as the Messages API `output_config.effort`; absent = the API default for the model. */
+      effort?: AnthropicEffort;
       /** Ordered fallback list of canonical model ids (provider-failure PF-1). */
       models?: ModelSlug[];
       /** Operator-set id shared by every key under one spend limit. */

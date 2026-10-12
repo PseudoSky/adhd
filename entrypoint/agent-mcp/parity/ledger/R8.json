@@ -1,7 +1,7 @@
 {
   "round": "R8",
   "cap": 3,
-  "approvedBy": "owner (2026-10-12): \"just b\" -> round R8 is ONE run of arm B (agent-mcp claudecli) on the model alias \"haiku\" (the judge is the alias too), effort high set explicitly, wire capture ON; the arm-A-first reference gate is waived for this round (SCOPE-R8-B-only); a B result without a same-model A is not a parity verdict",
+  "approvedBy": "owner (2026-10-12): \"just b\" -> round R8 is ONE run of arm B (agent-mcp claudecli) on the model alias \"haiku\" (the judge is the alias too), effort high set explicitly, wire capture ON; the arm-A-first reference gate is waived for this round (SCOPE-R8-B-only); a B result without a same-model A is not a parity verdict | owner (2026-10-12), second direction (SCOPE-R8-A-C-complete): complete R8 with arms A (native claude -p) then C (agent-mcp anthropic provider), ONE run each, in the same round and with the same scenario sha as B1: alias haiku (C is sent the concrete id claude-haiku-5-5 that B1 resolved to), effort high on every arm, capture ON for every arm, judge alias haiku; B1 is kept and not re-run; the arm-A-first reference gate is applied again for A,C",
   "extraRunReason": "",
   "runs": [
     {
@@ -37,6 +37,7 @@
   "scopeChanges": [
     "SCOPE-R8-model-alias",
     "SCOPE-R8-B-only",
+    "SCOPE-R8-A-C-complete",
     "SCOPE-R6B addendum 4",
     "SCOPE-R6B addendum"
   ],
@@ -48,13 +49,21 @@
   "releases": [],
   "profile": {
     "arms": [
+      "A",
+      "C"
+    ],
+    "completedArms": [
       "B"
     ],
+    "armModels": {
+      "C": "claude-haiku-5-5"
+    },
     "armAWaiver": "owner (2026-10-12): \"just b\" (SCOPE-R8-B-only): R8 is one B run; the A-first reference rule is not applied; R6 A1/C1 (claude-haiku-4-5) are informational context only",
     "model": "haiku",
     "judgeModel": "haiku",
     "effort": "high",
     "capture": true
   },
-  "judgeCapReason": "cap 3 covers the single judge call of the one R8 B run (judge model: the alias haiku, resolved from the concrete id B reports before the call)"
+  "judgeCapReason": "cap 3 + 2 extra = 5: the two B1 calls (the first was rejected with HTTP 400 on `temperature`, the second was a truncated reply, R8-judge) already count; the A and C runs need one judge call each (judge model: the alias haiku, resolved from the concrete id the arms report before the call), which makes 4; the fifth is held for at most ONE --rejudge of a judge-failed A or C run",
+  "judgeCapExtra": 2
 }

@@ -55,6 +55,7 @@ function buildProviderConfigSchema(strict: boolean) {
       env: providerEnvBlockSchema,
       temperature: z.number().min(0).max(1).optional(),
       maxTokens: z.number().int().positive().optional(),
+      effort: z.enum(['low', 'medium', 'high', 'xhigh', 'max']).optional(),
       timeoutMs: z.number().int().positive().optional(),
       retryConfig: bindingRetryConfigSchema.optional(),
       ...failureBindingShape,

@@ -102,6 +102,9 @@ export function providerConfigToBinding(
   if (config.type === 'openai' && config.baseURL !== undefined) {
     binding.baseURL = config.baseURL;
   }
+  if (config.type === 'anthropic' && config.effort !== undefined) {
+    binding.effort = config.effort;
+  }
   return binding;
 }
 
@@ -172,6 +175,7 @@ export function selectionToProviderConfig(
         ...(selection.env !== undefined && { env: selection.env }),
         ...(selection.temperature !== undefined && { temperature: selection.temperature }),
         ...(selection.maxTokens !== undefined && { maxTokens: selection.maxTokens }),
+        ...(selection.effort !== undefined && { effort: selection.effort }),
         ...(selection.timeoutMs !== undefined && { timeoutMs: selection.timeoutMs }),
         ...(selection.retryConfig !== undefined && { retryConfig: selection.retryConfig }),
       };

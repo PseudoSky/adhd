@@ -131,7 +131,7 @@ Which engine behaviors (tool-call concurrency and its per-task limiter, token es
 
 ### Provider fields accepted by `agent_create` / `agent_update`
 
-`provider` is a discriminated union on `type` (`anthropic` | `openai` | `claudecli`). Besides `model`, `env`, `temperature`, `maxTokens`, `timeoutMs` (and `baseURL` for `openai`, `claudePath`/`allowedBuiltinTools`/`systemPromptIsAgentSpec` for `claudecli`), every variant accepts the provider-failure fields:
+`provider` is a discriminated union on `type` (`anthropic` | `openai` | `claudecli`). Besides `model`, `env`, `temperature`, `maxTokens`, `timeoutMs` (`effort` for `anthropic`: `low|medium|high|xhigh|max`, sent as the Messages API `output_config.effort`, absent = the API default for the model; and `baseURL` for `openai`, `claudePath`/`allowedBuiltinTools`/`systemPromptIsAgentSpec` for `claudecli`), every variant accepts the provider-failure fields:
 
 | Field | Type | Meaning |
 |---|---|---|

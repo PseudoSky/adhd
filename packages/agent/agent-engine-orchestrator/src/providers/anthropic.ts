@@ -331,6 +331,9 @@ export class AnthropicProvider implements LLMProvider {
                     max_tokens: this.providerConfig.maxTokens ?? defaultMaxTokens(effectiveModel, this.config),
                     messages: wire.messages,
                     tools: wire.tools,
+                    // R8-AC: an explicit reasoning-effort level rides as `output_config.effort`; unset sends no
+                    // `output_config` key at all, so the request is byte-identical to the pre-change body.
+                    ...(this.providerConfig.effort !== undefined && { output_config: { effort: this.providerConfig.effort } }),
                 },
                 { signal: request.signal }
             );
