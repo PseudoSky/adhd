@@ -498,3 +498,13 @@ Not a parity blocker (architect verdict APPROVE, 2026-10-11): shell exit status.
 
 - Owner direction: "tool names should not be inconsistent". Symptom (from the R8 A/C run report): arm C's record logs shell__shell_execute (4) and shell_execute (9) for the same tool; A, B and C use three naming schemes, so per-tool counts are not comparable across arms.
 - Action: root cause first (debug), then fix the cause (product or instrument, whichever owns it) with tests; no new live run is started by this entry. Any rerun needs its own scope entry.
+
+## 2026-10-12T18:53:49Z SCOPE-R9-product-fix: anthropic history fidelity (re-architected), owner answers
+
+- Evidence: R8 C1 duration +42.0% vs A; wire analysis shows AnthropicProvider drops thinking, server_tool_use and server result blocks from replayed history (3 of 6 server web_fetch calls never executed). Spec: scratchpad architect-c-duration/spec.md; product-impact check: product-impact.md (verbatim owner question applied).
+- Owner answers: (1) echo persistence: "Rearch - consider ttl or disk redirect for large results" -> architect re-specs H2 with TTL and disk redirect for large results plus the impact-check amendments (bounded, sanitize-aware, degrade visible/narrow, pause_turn safety, migration robustness, compaction interplay). (2) run budget: "The 3 can be parallel as they aren't the same tickets" -> read as: the three tickets (R9-hist, R9-pause, R9-meas) are implemented in parallel; retest budget stays Stage 1 only (A then C, 2 runs) until the owner says otherwise; no Stage 2. (3) metric: "Report both" -> see SCOPE-R9-duration-metric. (4) "I approve a fix, I do not approve ungated tests that run in ci automated tests that make actual provider calls" -> any real-provider test is env-gated and off in CI with documented owner; no live call is run beyond the Stage 1 R9 retest without a new owner say-so.
+- Fix is shipped on correctness evidence (wire mechanism checks), not conditional on the 2% duration bar.
+
+## 2026-10-12T18:53:49Z SCOPE-R9-duration-metric and SCOPE-R9-paired-fixtures
+
+- Owner: "Report both (Recommended)": the old wall-clock metric stays the graded duration metric; phase-sum duration (with server-side wait) and paired fixtures (same fixture values for A_n and C_n) are added as additional reported metrics, pre-registered here before any R9 run. They do not replace the wall metric as the pass bar. R8 results are not restated.
