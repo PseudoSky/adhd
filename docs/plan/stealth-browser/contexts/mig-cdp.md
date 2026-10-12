@@ -33,6 +33,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 
 - [mig-cdp.2] No .ts import specifiers, no reach into agent-search, no Runtime.evaluate/--enable-automation; every relative import resolves.
 - [mig-cdp.3] Only owned paths changed by [psm:mig-cdp] commits; agent-search source tree and main checkout node_modules untouched.
+- [mig-cdp.4] No compiled .js twins and no nested package.json/tsconfig under src/lib/cdp (the @adhd/cdp-connection sub-package does not travel).
 ---
 
 ## Reservations
