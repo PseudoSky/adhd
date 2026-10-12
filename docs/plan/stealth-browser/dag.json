@@ -54,6 +54,21 @@
       ],
       "context": "contexts/entrypoint-parity.md",
       "notes": "executor=platform-engineer tier=sonnet/medium"
+    },
+    "deps-install": {
+      "kind": "work",
+      "phase": "scaffold",
+      "depends_on": [
+        "entrypoint-parity"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py deps-install",
+      "artifacts": [
+        "entrypoint/stealth-browser/package.json",
+        "pnpm-lock.yaml",
+        "docs/plan/stealth-browser/APPROVALS.md"
+      ],
+      "context": "contexts/deps-install.md",
+      "notes": "executor=platform-engineer tier=sonnet/medium"
     }
   },
   "authored_with": {
