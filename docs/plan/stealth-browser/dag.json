@@ -196,6 +196,22 @@
       ],
       "context": "contexts/surface-hosts.md",
       "notes": "executor=typescript-pro tier=sonnet/high"
+    },
+    "tracing-plugin": {
+      "kind": "work",
+      "phase": "surface",
+      "depends_on": [
+        "surface-hosts"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py tracing-plugin",
+      "artifacts": [
+        "entrypoint/stealth-browser/src/tracing.ts",
+        "entrypoint/stealth-browser/src/server.ts",
+        "entrypoint/stealth-browser/src/cli.ts",
+        "entrypoint/stealth-browser/package.json"
+      ],
+      "context": "contexts/tracing-plugin.md",
+      "notes": "executor=typescript-pro tier=sonnet/high"
     }
   },
   "authored_with": {
