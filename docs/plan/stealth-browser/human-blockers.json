@@ -11,5 +11,20 @@
     "how_to_provide": "Write docs/plan/stealth-browser/APPROVALS.md containing the line 'DEP-APPROVAL: granted' and naming the three packages",
     "destination": "docs/plan/stealth-browser/APPROVALS.md",
     "blocks_at": "per-state"
+  },
+  "hb-chrome-binary": {
+    "type": "external-resource",
+    "description": "A Chrome binary at the default macOS path, needed by the real-Chrome e2e lane",
+    "required_by": [
+      "tests-e2e",
+      "gates-first",
+      "gates-rerun"
+    ],
+    "verification": "test -x \"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome\"",
+    "status": "needed",
+    "owner": "human",
+    "how_to_provide": "Install Google Chrome (present on the dev machine)",
+    "destination": "/Applications",
+    "blocks_at": "per-state"
   }
 }
