@@ -3,15 +3,54 @@
   "cap": 3,
   "approvedBy": "the implementation pass I described -> experiment run -> result analysis -> triage -> architect (accounting for all prior changes that did not achieve the goal as well and genesis of likely forecasted items) -> repeat. Until we confirm parity",
   "extraRunReason": "",
-  "runs": [],
-  "judgeCalls": [],
+  "runs": [
+    {
+      "runId": "A1",
+      "arm": "A",
+      "at": "2026-10-12T00:43:43.194Z",
+      "pid": 29348
+    },
+    {
+      "runId": "C1",
+      "arm": "C",
+      "at": "2026-10-12T00:46:05.028Z",
+      "pid": 29348
+    }
+  ],
+  "judgeCalls": [
+    {
+      "arm": "A",
+      "modelId": "claude-haiku-4-5",
+      "inputTokens": 23812,
+      "outputTokens": 461,
+      "costUsd": 0.026117,
+      "briefSha": "82bf2b516e17c80afde8ea8089aa78eafd4841b803c78e0293ca24fa24dd5c7b",
+      "at": "2026-10-12T00:45:45.005Z"
+    },
+    {
+      "arm": "C",
+      "modelId": "claude-haiku-4-5",
+      "inputTokens": 18584,
+      "outputTokens": 435,
+      "costUsd": 0.020759,
+      "briefSha": "b952afc79ba73cadecb41f5bb6f06e7a0cc0a81fa98bbbfa7de5445b645b0fc3",
+      "at": "2026-10-12T00:48:22.955Z"
+    }
+  ],
   "scenarioSha": "deedea872bc566abfec7c201e4713d6c01b78a7993cb8229907171dd8f889d61",
   "scopeChanges": [
     "SCOPE-R3-prompt-wording"
   ],
-  "armOrder": [],
+  "armOrder": [
+    "A",
+    "C"
+  ],
   "startedAt": "2026-10-11T23:33:22.476Z",
-  "armA": null,
+  "armA": {
+    "genuine": true,
+    "detail": "all content items green, no INVALID, no defect signal",
+    "at": "2026-10-12T00:45:38.514Z"
+  },
   "releases": [
     {
       "runId": "A1",
