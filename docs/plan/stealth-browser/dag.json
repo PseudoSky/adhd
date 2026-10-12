@@ -40,6 +40,20 @@
       ],
       "context": "contexts/scaffold.md",
       "notes": "executor=platform-engineer tier=sonnet/medium"
+    },
+    "entrypoint-parity": {
+      "kind": "work",
+      "phase": "scaffold",
+      "depends_on": [
+        "scaffold"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py entrypoint-parity",
+      "artifacts": [
+        "entrypoint/stealth-browser/*",
+        "docs/plan/stealth-browser/evidence/"
+      ],
+      "context": "contexts/entrypoint-parity.md",
+      "notes": "executor=platform-engineer tier=sonnet/medium"
     }
   },
   "authored_with": {
