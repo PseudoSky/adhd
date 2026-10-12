@@ -207,6 +207,15 @@
       "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py deps-install --only deps-install.6",
       "expect": "exit0",
       "cwd": "repo-root"
+    },
+    {
+      "id": "mig-foundation.1",
+      "phase": "migrate",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py mig-foundation --only mig-foundation.1",
+      "expect": "exit0",
+      "cwd": "repo-root"
     }
   ]
 }
