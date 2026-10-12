@@ -485,6 +485,20 @@
       ],
       "context": "contexts/prod-examples.md",
       "notes": "executor=typescript-pro tier=sonnet/medium"
+    },
+    "prod-publish-readiness": {
+      "kind": "work",
+      "phase": "release",
+      "depends_on": [
+        "readme-rewrite"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py prod-publish-readiness",
+      "artifacts": [
+        "docs/plan/stealth-browser/evidence/publish-dry-run.txt",
+        "entrypoint/stealth-browser/package.json"
+      ],
+      "context": "contexts/prod-publish-readiness.md",
+      "notes": "executor=platform-engineer tier=sonnet/medium"
     }
   },
   "authored_with": {
