@@ -407,7 +407,8 @@
       "kind": "audit",
       "phase": "release",
       "depends_on": [
-        "readme-rewrite"
+        "readme-rewrite",
+        "prod-publish-readiness"
       ],
       "guard": "python3 docs/plan/stealth-browser/scripts/guard.py audit-final",
       "artifacts": [
