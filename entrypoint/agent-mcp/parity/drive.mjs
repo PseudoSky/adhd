@@ -365,11 +365,49 @@ async function teardownFakes(ctx) { if (ctx.fake) await ctx.fake.close(); }
 // ----------------------------------------------------------------------------------------------------------------
 // One run
 // ----------------------------------------------------------------------------------------------------------------
+/** Every file under `dir` (posix-relative path -> sha256), skipping `.git`; sorted. The pre-phase-1 tree manifest (R5-workdir AC3). */
+export function treeManifest(dir) {
+  const out = {};
+  const walk = (d, rel) => { for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+    if (e.name === '.git' && rel === '') continue;
+    const r = rel ? `${rel}/${e.name}` : e.name; const f = path.join(d, e.name);
+    if (e.isDirectory()) walk(f, r); else out[r] = crypto.createHash('sha256').update(fs.readFileSync(f)).digest('hex'); } };
+  if (fs.existsSync(dir)) walk(dir, '');
+  return Object.fromEntries(Object.entries(out).sort(([a], [b]) => (a < b ? -1 : 1)));
+}
+/** Files in the repo dir that the fixture does not define (R5-workdir AC2). Empty means pristine. */
+export function strayFiles(repoDir, spec) {
+  const known = new Set(Object.keys(F.repoFiles(spec)));
+  return Object.keys(treeManifest(repoDir)).filter((f) => !known.has(f));
+}
+/** Fail closed: throws when the repo dir holds anything the fixture did not write (a prior attempt's output must never reach a new run). */
+export function assertPristineRepo(repoDir, spec) {
+  const stray = strayFiles(repoDir, spec);
+  if (stray.length) throw new Error(`work dir is not pristine: ${stray.length} file(s) outside the fixture (${stray.slice(0, 5).join(', ')}): refusing before any model spend (R5-workdir AC2)`);
+}
+/**
+ * R5-workdir AC1: each attempt of a runId gets a work dir that has never been used. The base is `.../work/<runId>`; the attempt suffix starts at the number of
+ * ledger entries (runs + releases) already recorded for the runId, so it survives restarts, and is then bumped past any dir that exists on disk. Nothing is deleted.
+ * `ctx.workFixed` is a test seam that keeps the dir the caller chose.
+ */
+export function assignWorkDir(ctx) {
+  if (ctx.workFixed) return ctx.work;
+  let n = 0;
+  try { const led = LG.parseLedger(fs.readFileSync(ctx.ledgerPath, 'utf8'), ctx.ledgerPath); n = led.runs.filter((r) => r.runId === ctx.spec.runId).length + (led.releases || []).filter((r) => r.runId === ctx.spec.runId).length; } catch { /* no ledger (dry-run): the on-disk bump below still guarantees freshness */ }
+  const base = path.join(path.dirname(ctx.work), ctx.spec.runId);
+  let work = `${base}-a${n + 1}`;
+  while (fs.existsSync(work)) { n += 1; work = `${base}-a${n + 1}`; }
+  ctx.work = work; ctx.repoDir = path.join(work, 'repo'); ctx.hiddenDir = path.join(work, 'hidden'); ctx.ticketFile = path.join(work, 'ticket.txt'); ctx.infoLog = path.join(work, 'info-calls.log');
+  return work;
+}
 async function prepare(ctx) {
   fs.mkdirSync(ctx.runDir, { recursive: true });
+  assignWorkDir(ctx);
   const leaks = ancestorLeaks(ctx.work);
   if (leaks.length) throw new Error(`fixture directory sits under agent-instruction/repo files: ${leaks.join(', ')}`);
   ctx.expected = F.writeFixture({ repoDir: ctx.repoDir, hiddenDir: ctx.hiddenDir, ticketFile: ctx.ticketFile }, ctx.spec);
+  assertPristineRepo(ctx.repoDir, ctx.spec);
+  ctx.preManifest = treeManifest(ctx.repoDir);
 }
 
 // ----------------------------------------------------------------------------------------------------------------
@@ -600,8 +638,9 @@ async function runOne(ctx, state) {
   } catch (e) {
     if (e instanceof ModelRunCapError) { record.aborted = [e.message]; writeJson(path.join(ctx.runDir, 'record.json'), record); return { record, aborted: true }; }
     record.harnessFailure = String(e.stack || e);
-    if (markPreSpawnFault(ctx, record, e)) { record.wallMs = Date.now() - t0; record.finishedAt = nowIso(); writeJson(path.join(ctx.runDir, 'record.json'), record); return { record, aborted: true }; }
+    if (markPreSpawnFault(ctx, record, e)) { record.workDir = ctx.work; record.preManifest = ctx.preManifest ?? null; record.wallMs = Date.now() - t0; record.finishedAt = nowIso(); writeJson(path.join(ctx.runDir, 'record.json'), record); return { record, aborted: true }; }
   }
+  record.workDir = ctx.work; record.preManifest = ctx.preManifest ?? null;
   record.wallMs = Date.now() - t0; record.finishedAt = nowIso();
   record.sweep = await sweepOwned(`after ${ctx.spec.runId}`);
   if (analysis) {
@@ -1041,6 +1080,27 @@ export async function selfCheck({ log = console.log, opts = parseArgs([]) } = {}
       const dryLedger = path.join(jd, 'dry-ledger', 'RD.json'); const q4 = await judgeRun({ ctx: { ...ctxJ, ledgerPath: dryLedger }, record: mkRec(), aGenuine: true, dry: true, client, judgeDir: path.join(jd, 'dry-out') });
       chk('judge wiring: a dry-run judges with the injected client and never touches the tracked ledger', q4.status === 'scored' && !fs.existsSync(dryLedger));
       chk('judge wiring: the diff of the pristine fixture is empty and an edit shows as a unified diff', repoDiff(spec, repoDir) === '' && (() => { fs.appendFileSync(path.join(repoDir, 'src/shipping.js'), '// edited\n'); return /\+\/\/ edited/.test(repoDiff(spec, repoDir)); })());
+    }
+    { // R5-workdir AC1-AC3: a re-attempt of a runId never inherits a prior attempt's files (R5 attempt 4's docs worker read attempt 3's docs/shipping.md).
+      const refusesWith = (fn) => { try { fn(); return false; } catch { return true; } };
+      const wd = path.join(work, 'workdir'); fs.mkdirSync(wd, { recursive: true }); const ldir = path.join(wd, 'ledger'); const lp = LG.ledgerPathFor('RW', ldir);
+      const spec = F.makeSpec({ seed: '20261011', arm: 'A', rep: 1 }); const breakdown = `Carrier rate: $${spec.carrierRate}\nHandling fee: $${spec.handlingFee}\n`;
+      const mkCtx = (name) => { const w = path.join(wd, name, 'work', spec.runId); return { opts: {}, dry: true, spec, runDef: { arm: 'A', rep: 1 }, runDir: path.join(wd, name, 'run'), work: w, repoDir: path.join(w, 'repo'), hiddenDir: path.join(w, 'hidden'), ticketFile: path.join(w, 'ticket.txt'), ledgerPath: lp }; };
+      const c1 = mkCtx('w'); await prepare(c1); fs.mkdirSync(path.join(c1.repoDir, 'docs'), { recursive: true }); fs.writeFileSync(path.join(c1.repoDir, 'docs/shipping.md'), breakdown);
+      const c2 = mkCtx('w'); await prepare(c2);
+      chk('R5-workdir AC1: two attempts of the same runId get distinct, fresh work dirs; the second has no docs/shipping.md and the first is not deleted', c1.work !== c2.work && !fs.existsSync(path.join(c2.repoDir, 'docs/shipping.md')) && fs.existsSync(path.join(c1.repoDir, 'docs/shipping.md')), `${path.basename(c1.work)} vs ${path.basename(c2.work)}`);
+      LG.initRound('RW', { approvedBy: 'selftest' }, ldir); LG.reserveRun('RW', { arm: 'A', runId: spec.runId, dir: ldir }); LG.releaseRun('RW', spec.runId, 'selftest release', ldir);
+      const c3 = mkCtx('w2'); assignWorkDir(c3); const c4 = mkCtx('w2'); fs.writeFileSync(lp, JSON.stringify({ ...LG.readLedger('RW', ldir), releases: [...LG.readLedger('RW', ldir).releases, { runId: spec.runId, arm: 'A', reason: 'x' }] })); assignWorkDir(c4);
+      chk('R5-workdir AC1: the attempt index is derived from the ledger (runs + releases), so it survives a restart', /-a2$/.test(c3.work) && /-a3$/.test(c4.work), `${path.basename(c3.work)}, ${path.basename(c4.work)}`);
+      const seeded = mkCtx('seed'); seeded.workFixed = true; fs.mkdirSync(path.join(seeded.work, 'repo/docs'), { recursive: true }); fs.writeFileSync(path.join(seeded.work, 'repo/docs/shipping.md'), breakdown);
+      let rejected = ''; try { await prepare(seeded); } catch (e) { rejected = String(e.message); }
+      chk('R5-workdir AC2: prepare() rejects a work dir whose repo holds docs/shipping.md with the breakdown, before any model spend', /not pristine/.test(rejected) && /docs\/shipping\.md/.test(rejected), rejected.slice(0, 120));
+      const faultRec = {}; chk('R5-workdir AC2: that rejection is a pre-spawn harness fault (nothing reserved, record aborted and retryable)', markPreSpawnFault({ dry: false, modelRun: undefined }, faultRec, new Error(rejected)) && /harness fault before any model call/.test(faultRec.aborted[0]));
+      // negative control: the pre-fix behaviour (writeFixture only, no guard) leaves the stray file in place and unnoticed; the guard is what makes it red.
+      const bypass = mkCtx('bypass'); bypass.workFixed = true; fs.mkdirSync(path.join(bypass.work, 'repo/docs'), { recursive: true }); fs.writeFileSync(path.join(bypass.work, 'repo/docs/shipping.md'), breakdown);
+      F.writeFixture({ repoDir: bypass.repoDir, hiddenDir: bypass.hiddenDir, ticketFile: bypass.ticketFile }, spec);
+      chk('R5-workdir AC2 negative control: with the guard bypassed (old writeFixture-only prepare) the stray breakdown survives into the run; assertPristineRepo is what catches it', fs.readFileSync(path.join(bypass.repoDir, 'docs/shipping.md'), 'utf8').includes('Handling fee') && refusesWith(() => assertPristineRepo(bypass.repoDir, spec)) && /assertPristineRepo\(ctx\.repoDir, ctx\.spec\)/.test(fs.readFileSync(SELF, 'utf8').split('async function prepare(ctx)')[1].split('\n}\n')[0]));
+      chk('R5-workdir AC3: prepare() stores a pre-phase-1 manifest of exactly the fixture files (path -> sha256)', JSON.stringify(Object.keys(c2.preManifest)) === JSON.stringify(Object.keys(F.repoFiles(spec)).sort()) && Object.values(c2.preManifest).every((h) => /^[0-9a-f]{64}$/.test(h)) && /record\.preManifest = ctx\.preManifest/.test(fs.readFileSync(SELF, 'utf8')));
     }
     chk('the production ledger path is tracked next to the driver, per round (not derived from --out/--seed)', LEDGER_PATH === path.join(HERE, 'ledger', `${ROUND}.json`));
     { const bad = spawnSync(process.execPath, [SELF, '--print-plan', '--round', '../x'], { encoding: 'utf8' }); chk('--round ../x is rejected (the round names a ledger file and a tmp dir) -> exit 2', bad.status === 2, `status ${bad.status}`);
