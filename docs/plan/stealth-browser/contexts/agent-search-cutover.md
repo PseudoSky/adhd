@@ -42,6 +42,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 - [agent-search-cutover.2] The chrome-runner implementation is GONE from agent-search: no `class CdpSession`, `class ChromeManager`, `class IdleShutdown` or `class HistoryClient` definition remains under agent-browser (thin consumer/shims only).
 - [agent-search-cutover.3] agent-browser still compiles: `pnpm run build` (tsc --noEmit) exits 0 and `pnpm run test:lifecycle` exits 0 against @adhd/stealth-browser.
 - [agent-search-cutover.4] The live MCP server still works through a REAL MCP stdio client: `node server.mjs` lists the search tools and chrome_status + list_providers return structured results.
+- [agent-search-cutover.5] Scratch repo hygiene: cutover commits are local-only (no push/upstream), staged by explicit path, and touch only agent-browser/adhd/, cdp-query-client.ts, search/queries/, package.json and the cutover docs.
 ---
 
 ## Reservations
