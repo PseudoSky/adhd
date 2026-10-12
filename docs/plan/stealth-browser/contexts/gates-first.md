@@ -37,7 +37,7 @@ Every gate is green on the migrated tree via nx: lint, typecheck, typecheck-spec
 
 Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/guard.py` (`python3 docs/plan/stealth-browser/scripts/guard.py gates-first --only gates-first.N`). None may be deferred. Tests written by this plan cite ticket `8468f7b1` and these ids ([inv:tests-cite]).
 
-_No criteria yet._
+- [gates-first.1] `nx run stealth-browser:lint` exits 0 (includes @nx/dependency-checks)
 
 ---
 
