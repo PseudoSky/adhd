@@ -124,6 +124,20 @@
       ],
       "context": "contexts/mig-domains-storage.md",
       "notes": "executor=refactoring-specialist tier=sonnet/medium"
+    },
+    "mig-capture-parsers": {
+      "kind": "work",
+      "phase": "migrate",
+      "depends_on": [
+        "mig-foundation"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py mig-capture-parsers",
+      "artifacts": [
+        "entrypoint/stealth-browser/src/lib/capture/",
+        "entrypoint/stealth-browser/src/lib/parsers.ts"
+      ],
+      "context": "contexts/mig-capture-parsers.md",
+      "notes": "executor=refactoring-specialist tier=sonnet/medium"
     }
   },
   "authored_with": {
