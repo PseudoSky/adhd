@@ -267,6 +267,19 @@
       ],
       "context": "contexts/tests-unit-surface.md",
       "notes": "executor=test-automator tier=sonnet/medium"
+    },
+    "tests-e2e": {
+      "kind": "work",
+      "phase": "verify",
+      "depends_on": [
+        "tracing-plugin"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py tests-e2e",
+      "artifacts": [
+        "entrypoint/stealth-browser/src/test/e2e/"
+      ],
+      "context": "contexts/tests-e2e.md",
+      "notes": "executor=qa tier=sonnet/high"
     }
   },
   "authored_with": {
