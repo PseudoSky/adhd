@@ -37,3 +37,5 @@ Extract the Chrome/CDP runner from scratch/agent-browser/adhd into a new generat
 - `[dod.5]` **The live agent-search source tree is byte-identical to its baseline until the guarded cutover (structural)** — The live agent-search source tree is byte-identical to its baseline until the guarded cutover.
 
 - `[dod.6]` **One blind review round ran on the diff plus the word Review, one implementer resolved every finding, and all gates were re-run green (structural)** — One blind review round ran on the diff plus the word Review, one implementer resolved every finding, and all gates were re-run green.
+
+- `[dod.7]` **The doc-steward marketing run passed review and the content-marketer README is receipts-backed (structural)** — The doc-steward marketing run passed review and the content-marketer README is receipts-backed.
