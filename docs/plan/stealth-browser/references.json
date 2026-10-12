@@ -5,5 +5,12 @@
     "discovered_via": "manual",
     "shared_ref": "[ref:runner-port]",
     "audit_check": "[audit-final.ref-runner-port]"
+  },
+  "backlog-tracing": {
+    "anchor": "entrypoint/backlog/src/tracing.ts:1",
+    "rule": "makeTracingPlugin({serviceName:'adhd'}) configured once in src/tracing.ts, mounted in every usePlugins array, package singleton never imported",
+    "discovered_via": "manual",
+    "shared_ref": "[ref:backlog-tracing]",
+    "audit_check": "[audit-final.ref-backlog-tracing]"
   }
 }
