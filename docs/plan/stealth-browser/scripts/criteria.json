@@ -1089,6 +1089,15 @@
       "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py gates-rerun --only gates-rerun.5",
       "expect": "exit0",
       "cwd": "repo-root"
+    },
+    {
+      "id": "gates-rerun.6",
+      "phase": "remediate",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py gates-rerun --only gates-rerun.6",
+      "expect": "exit0",
+      "cwd": "repo-root"
     }
   ]
 }

@@ -43,6 +43,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 - [gates-rerun.3] `nx run stealth-browser:build` and `:build-bin` exit 0 (dist/index.js plus dist/bin/*)
 - [gates-rerun.4] `nx run stealth-browser:test` exits 0 (unit lane, no subprocess)
 - [gates-rerun.5] `nx run stealth-browser:verify-dist-load` exits 0 (the built dist loads the way a consumer loads it)
+- [gates-rerun.6] `nx run stealth-browser:e2e` exits 0 (all surfaces, one run)
 ---
 
 ## Reservations
