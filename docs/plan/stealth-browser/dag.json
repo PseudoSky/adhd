@@ -275,7 +275,8 @@
       "kind": "work",
       "phase": "verify",
       "depends_on": [
-        "tracing-plugin"
+        "tracing-plugin",
+        "prod-examples"
       ],
       "guard": "python3 docs/plan/stealth-browser/scripts/guard.py tests-e2e",
       "artifacts": [
