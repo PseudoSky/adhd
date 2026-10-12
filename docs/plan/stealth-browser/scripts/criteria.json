@@ -963,6 +963,15 @@
       "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py review-prep --only review-prep.3",
       "expect": "exit0",
       "cwd": "repo-root"
+    },
+    {
+      "id": "review-prep.4",
+      "phase": "review",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py review-prep --only review-prep.4",
+      "expect": "exit0",
+      "cwd": "repo-root"
     }
   ]
 }
