@@ -37,7 +37,7 @@ DISPATCHER-OWNED. The branch is ready to fast-forward into main: the pre-push ga
 
 Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/guard.py` (`python3 docs/plan/stealth-browser/scripts/guard.py merge-readiness --only merge-readiness.N`). None may be deferred. Tests written by this plan cite ticket `8468f7b1` and these ids ([inv:tests-cite]).
 
-_No criteria yet._
+- [merge-readiness.1] HEAD is a fast-forward of main: `git merge-base --is-ancestor main HEAD` exits 0 (rebase onto main first if main moved).
 
 ---
 
