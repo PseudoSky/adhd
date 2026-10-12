@@ -73,6 +73,24 @@ export function groupIntoAtomicUnits(messages: Message[]): Message[][] {
     return units;
 }
 
+/**
+ * Estimated tokens of the provider-native echo (R9-hist) that will be replayed alongside `messages`
+ * (~4 chars/token over the JSON of each echoed message's blocks). Only echoes whose message is
+ * actually in `messages` count, so a compacted or windowed-out message contributes nothing.
+ */
+export function estimateEchoTokens(
+    messages: readonly Message[],
+    echoes: ReadonlyMap<string, { blocks: ReadonlyArray<Record<string, unknown>> }> | undefined,
+): number {
+    if (echoes === undefined || echoes.size === 0) return 0;
+    let chars = 0;
+    for (const m of messages) {
+        const echo = echoes.get(m.id);
+        if (echo !== undefined) chars += JSON.stringify(echo.blocks).length;
+    }
+    return chars / 4;
+}
+
 export interface CompactionDecision {
     /** Should we compact before the next model call? */
     shouldCompact: boolean;
@@ -89,18 +107,24 @@ export interface CompactionDecision {
  *
  * `reportedContextTokens` is the last call's true input size, or undefined before the
  * first call (in which case we fall back to a local estimate of the pending messages).
+ *
+ * `extraTokens` (R9-hist) is the estimated size of provider-native content the provider will replay
+ * on top of `pendingMessages` (echoed thinking / server-tool blocks, `estimateEchoTokens`). It enters
+ * ONLY the local-estimate path: once a call has reported its real prompt size, that figure already
+ * includes whatever was replayed and governs alone.
  */
 export function decideCompaction(
     reportedContextTokens: number | undefined,
     pendingMessages: Message[],
     model: string | undefined,
     triggerFraction: number = DEFAULT_COMPACTION_TRIGGER_FRACTION,
+    extraTokens = 0,
 ): CompactionDecision {
     const window = contextWindowFor(model);
     const threshold = Math.floor(window * triggerFraction);
     const realContext =
         reportedContextTokens ??
-        Math.ceil(pendingMessages.reduce((n, m) => n + estimateMessageTokens(m), 0));
+        Math.ceil(pendingMessages.reduce((n, m) => n + estimateMessageTokens(m), 0) + extraTokens);
     return { shouldCompact: realContext > threshold, window, threshold };
 }
 

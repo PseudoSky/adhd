@@ -5,8 +5,10 @@ import type { ExecutionContext, Message } from '../validation/index.js';
 import type {
   IHookRegistry,
   IEnforcementError,
+  IProviderEcho,
   IToolWarning,
   PostToolCallPayload,
+  ServerResultPersistPayload,
 } from '@adhd/agent-base-types';
 import { effectiveHitl } from '@adhd/agent-base-types';
 import { estimateToolResultTokens } from './tool-result-tokens.js';
@@ -30,6 +32,8 @@ import { readPartialUsage, type IProviderPartialUsage, type ProviderTokenUsage }
 import { buildModelResponsePayload, sourceFromResponse } from './model-response-payload.js';
 import { computeOverheadMs } from '../providers/call-timing.js';
 import { parseShellExitStatus } from './shell-exit-status.js';
+import { partitionEcho } from '../providers/anthropic-echo.js';
+import { isPauseTurnCapError } from '../providers/anthropic-pause.js';
 
 import type { McpClientRegistry } from '../clients/registry.js';
 import type { PolicyEngine } from './policy.js';
@@ -40,6 +44,7 @@ import {
 } from './tool-advertisement.js';
 import {
   estimateMessageTokens,
+  estimateEchoTokens,
   groupIntoAtomicUnits,
   decideCompaction,
   compactMessages,
@@ -244,6 +249,22 @@ export interface OrchestratorSessionStore {
      * there, exactly as the one-hop behaviour did.
      */
     getAgentDefinition?(sessionId: string): Parameters<typeof effectiveHitl>[0];
+    /**
+     * R9-hist provider echo persistence. All optional so minimal fakes compile; the real `SessionStore`
+     * implements them. Each is best-effort: the orchestrator isolates a throwing implementation
+     * (one WARN per process, then legacy history) and never lets it fail a task.
+     */
+    appendMessageEcho?(
+      messageId: string,
+      sessionId: string,
+      echo: IProviderEcho,
+      bytes: number,
+      serverBytes: number
+    ): void;
+    /** Tier S bytes already persisted for the session (soft per-session cap input). */
+    getEchoSessionServerBytes?(sessionId: string): number;
+    /** Drop every persisted echo of the session (self-heal after the API rejected a replay). */
+    deleteMessageEchoes?(sessionId: string): number;
 }
 
 /** Outcome of climbing the parent chain for an escalated `ask` (fc466f0b). */
@@ -363,6 +384,12 @@ export interface OrchestratorRunInput {
   logger?: EngineLogger;
   /** Injected config (replaces config.js import). */
   config?: EngineConfig;
+  /**
+   * R9-hist: provider-native assistant content loaded for the history in `messages`, keyed by the
+   * assistant `Message.id` (see `loadSessionEchoes` in `tools/task.ts`). The run extends it with the
+   * echoes of its own responses and hands it to the provider on every call. Absent => legacy history.
+   */
+  echoes?: ReadonlyMap<string, IProviderEcho>;
 }
 
 export interface OrchestratorRunResult {
@@ -382,6 +409,71 @@ function isEnforcementError(err: unknown): err is IEnforcementError {
     err !== null &&
     (err as IEnforcementError).isEnforcementError === true
   );
+}
+
+let echoFailureWarned = false;
+
+/**
+ * Echo persistence is best-effort (R9-hist): the FIRST failure per process logs one WARN and every later
+ * one is silent, so a missing table, a locked database or a corrupt row can neither fail a task nor spam
+ * the log. Only the operation and the error name/code are logged, never `err.message`: a `JSON.parse`
+ * error quotes the text it choked on, and echo blocks carry opaque signatures and fetched page text.
+ */
+export function warnEchoFailureOnce(logger: EngineLogger, op: string, err: unknown): void {
+  if (echoFailureWarned) return;
+  echoFailureWarned = true;
+  const code =
+    typeof err === 'object' && err !== null && typeof (err as { code?: unknown }).code === 'string'
+      ? (err as { code: string }).code
+      : undefined;
+  logger.warn(
+    {
+      op,
+      errorName: err instanceof Error ? err.name : typeof err,
+      ...(code !== undefined ? { errorCode: code } : {}),
+    },
+    'provider echo persistence failed; continuing with legacy history'
+  );
+}
+
+/** Test seam: re-arms the once-per-process echo failure WARN. */
+export function resetEchoFailureWarningForTests(): void {
+  echoFailureWarned = false;
+}
+
+/**
+ * The `transform:server_result_persist` payload with a LATCHING `persist`: it starts `true`, and a
+ * handler that sets it `false` vetoes persistence for good. `HookRegistry.emit` hands one mutable
+ * object to every handler in registration order, so with a plain boolean a later handler writing
+ * `true` would silently undo an earlier plugin's veto. Here a `true` write is ignored once vetoed
+ * (logical AND of every handler's verdict).
+ */
+function latchingPersistPayload(
+  base: Omit<ServerResultPersistPayload, 'persist'>
+): ServerResultPersistPayload {
+  let persist = true;
+  return Object.defineProperty({ ...base }, 'persist', {
+    enumerable: true,
+    get: () => persist,
+    set: (value: boolean) => {
+      if (value === false) persist = false;
+    },
+  }) as ServerResultPersistPayload;
+}
+
+/** The words of an API rejection that name which replayed block types it objected to. */
+const DEGRADED_REASON_KEYWORDS =
+  /thinking|signature|redacted|server_tool_use|tool_use_id|tool_result|web_fetch|web_search/gi;
+
+/**
+ * The `provider:history_degraded` event `reason`: a content-free classification built ONLY from the
+ * block-type keywords the API's rejection text names (`api_rejected_replay: thinking, signature`). The
+ * rejection text itself is never copied: an error message can quote the very signature, encrypted blob
+ * or fetched page it rejected, and none of that may reach `task_events`.
+ */
+function degradedReason(apiMessage: string): string {
+  const named = [...new Set((apiMessage.match(DEGRADED_REASON_KEYWORDS) ?? []).map((w) => w.toLowerCase()))];
+  return named.length > 0 ? `api_rejected_replay: ${named.join(', ')}` : 'api_rejected_replay';
 }
 
 const noopHooks: IHookRegistry = {
@@ -434,6 +526,10 @@ export class Orchestrator {
     };
 
     const currentMessages: Message[] = [...input.messages];
+    // R9-hist: provider-native assistant content to replay, by assistant message id. Grows with this
+    // run's own responses; cleared (and never refilled) once the API rejects a replay.
+    const echoes = new Map<string, IProviderEcho>(input.echoes ?? []);
+    let echoesDisabled = false;
     const contextLimit = config.server.contextLimit;
     // Fails loud (RangeError) on a negative / NaN / non-integer cap.
     const toolResultMaxChars = validateToolResultMaxChars(
@@ -1077,6 +1173,43 @@ export class Orchestrator {
       return { resolved };
     };
 
+    /**
+     * Persist one assistant message's echo (R9-hist). Tier T (thinking, text, client tool_use) always;
+     * tier S (server tool pairs) only when the TTL is on, the sticky `transform:server_result_persist`
+     * hook does not veto, and the size caps allow. Any storage failure is isolated: one WARN per
+     * process, the task carries on and later tasks fall back to legacy history.
+     */
+    const persistEcho = async (messageId: string, echo: IProviderEcho): Promise<void> => {
+      const caps = config.echo;
+      if (caps === undefined || sessionStore.appendMessageEcho === undefined) return;
+      try {
+        const sessionId = executionContext.sessionId;
+        const sessionServerBytes = sessionStore.getEchoSessionServerBytes?.(sessionId) ?? 0;
+        let partition = partitionEcho(echo, caps, sessionServerBytes, true);
+        if ((partition.persist?.serverBytes ?? 0) > 0) {
+          const payload = latchingPersistPayload({
+            sessionId,
+            agentName: executionContext.agentName,
+            serverBytes: partition.persist?.serverBytes ?? 0,
+          });
+          try {
+            await hooks.emit('transform:server_result_persist', payload);
+          } catch (err) {
+            // A failing registry must never leak untrusted tier S into storage: fail closed.
+            payload.persist = false;
+            logger.debug({ taskId, err }, 'transform:server_result_persist emit failed; tier S not persisted');
+          }
+          if (!payload.persist) partition = partitionEcho(echo, caps, sessionServerBytes, false);
+        }
+        const kept = partition.persist;
+        if (kept !== undefined) {
+          sessionStore.appendMessageEcho(messageId, sessionId, kept.echo, kept.bytes, kept.serverBytes);
+        }
+      } catch (err) {
+        warnEchoFailureOnce(logger, 'appendMessageEcho', err);
+      }
+    };
+
     let taskSucceeded = false;
 
     try {
@@ -1155,10 +1288,16 @@ export class Orchestrator {
         // the model's true window compact the middle into one summary — rarely, so the
         // cached prefix survives between compactions.
         {
+          // The first-call estimate counts the echo the provider will replay; once a call has reported
+          // the real prompt size that figure already includes it and governs alone.
           const decision = decideCompaction(
             lastReportedContext,
             currentMessages,
             providerModel,
+            undefined,
+            lastReportedContext === undefined && !echoesDisabled
+              ? estimateEchoTokens(currentMessages, echoes)
+              : 0,
           );
           if (decision.shouldCompact) {
             const before = currentMessages.length;
@@ -1190,6 +1329,7 @@ export class Orchestrator {
                   ],
                   tools: undefined,
                   signal,
+                  // R9-hist: the summariser is a plain-text call; it never carries echoes or continuations.
                 });
                 const summary = await (config.wire
                   ? config.wire.withContext({ purpose: 'compaction' }, summarise)
@@ -1200,6 +1340,11 @@ export class Orchestrator {
             if (compacted.length < before) {
               currentMessages.length = 0;
               currentMessages.push(...compacted);
+              // A compacted message no longer exists in the history, so its echo must not be replayed.
+              if (echoes.size > 0) {
+                const liveIds = new Set(currentMessages.map((m) => m.id));
+                for (const id of [...echoes.keys()]) if (!liveIds.has(id)) echoes.delete(id);
+              }
               lastReportedContext = undefined; // recompute against the compacted history
               logger.debug(
                 { taskId, before, after: currentMessages.length, window: decision.window },
@@ -1277,6 +1422,34 @@ export class Orchestrator {
         // delegation). The bridge can only hand the CLI an isError result, so the task-level failure
         // the native path throws is re-thrown here once the provider call returns.
         let bridgeFatal: unknown;
+        // R9-hist: the first error `beforeContinuation` rejected with (cancelled / budget cap / hook
+        // failure). Provider wrappers may re-classify an error thrown through `chat()`; the engine keeps
+        // the original and re-throws it, so the cap's identity (BUDGET_EXCEEDED) survives any wrapping.
+        let continuationFatal: unknown;
+        // Awaited by a provider that continues a paused turn (`pause_turn`) BEFORE each continuation
+        // request: abort check, then the same `pre:model_request` enforcement a normal turn gets (so a
+        // budget cap trips mid-loop), then the progress event.
+        const beforeContinuation = async (n: number): Promise<void> => {
+          try {
+            if (signal.aborted) {
+              throw new ToolError('PROVIDER_ERROR', 'Task was cancelled');
+            }
+            const requestPayload = { executionContext, messages: currentMessages, tools };
+            await hooks.emit('pre:model_request', requestPayload);
+            try {
+              await hooks.enforce('pre:model_request', requestPayload);
+            } catch (err: unknown) {
+              if (isEnforcementError(err)) {
+                throw new ToolError('BUDGET_EXCEEDED', err.message);
+              }
+              throw err;
+            }
+          } catch (err) {
+            continuationFatal ??= err;
+            throw err;
+          }
+          taskStore.appendEvent({ taskId, type: 'provider:pause_continued', payload: { n } });
+        };
         // afa37093: spend of a provider call that produced no usable response (CLI error result,
         // abort, timeout, crash) or whose response is discarded (fatal governance error). Recorded through
         // the SAME hook + MODEL_RESPONSE event a normal turn uses, so task_usage and every grain of
@@ -1351,6 +1524,10 @@ export class Orchestrator {
             serverSideTools:
               serverSideTools.length > 0 ? serverSideTools : undefined,
             signal: composedSignal,
+            // R9-hist: a copy, so a provider holding the map never sees later entries; omitted when empty
+            // so a request without echo is exactly the request it was.
+            ...(!echoesDisabled && echoes.size > 0 ? { echoes: new Map(echoes) } : {}),
+            beforeContinuation,
             builtinToolPolicy: (builtinTool) =>
               config.permissionGate
                 ? config.permissionGate({
@@ -1562,11 +1739,13 @@ export class Orchestrator {
           if (spent) {
             let failure = 'provider_error';
             if (bridgeFatal !== undefined) failure = 'governance_fatal';
+            else if (continuationFatal !== undefined) failure = signal.aborted ? 'cancelled' : 'governance_fatal';
             else if (signal.aborted) failure = 'cancelled';
             else if (composedSignal.aborted) failure = 'timeout';
             await recordDiscardedUsage(spent, failure);
           }
           if (bridgeFatal !== undefined) throw bridgeFatal;
+          if (continuationFatal !== undefined) throw continuationFatal;
           if (signal.aborted) {
             throw new ToolError('PROVIDER_ERROR', 'Task was cancelled');
           }
@@ -1588,6 +1767,18 @@ export class Orchestrator {
           // from status/message text below would flatten billing/overloaded to PROVIDER_ERROR and
           // drop the reset time. The string rules below are only the fallback for untyped throws.
           // (de6bee5d FLT-AC1)
+          // R9-hist: a turn still paused after the provider's continuation cap is a FAILED task, never a
+          // completed one. The cap error may arrive wrapped (a re-classifying wrapper keeps the marker in
+          // `data.kind` / `cause`), so normalise it to PROVIDER_ERROR here.
+          if (isPauseTurnCapError(error)) {
+            throw error instanceof ToolError && error.code === 'PROVIDER_ERROR'
+              ? error
+              : new ToolError(
+                  'PROVIDER_ERROR',
+                  error instanceof Error ? error.message : 'provider paused the turn without finishing',
+                  (error as { data?: unknown }).data
+                );
+          }
           if (error instanceof ToolError) {
             throw error;
           }
@@ -1635,6 +1826,7 @@ export class Orchestrator {
             }`
           );
         }
+        if (bridgeFatal === undefined && continuationFatal !== undefined) bridgeFatal = continuationFatal;
         if (bridgeFatal !== undefined) {
           // The CLI returned normally and was billed for the whole run; the engine discards the
           // response for the fatal governance error but must still account the spend. (afa37093 AC2)
@@ -1665,6 +1857,35 @@ export class Orchestrator {
           assistantMessage
         );
         currentMessages.push(assistantMessage);
+        // R9-hist: keep (and persist) the provider-native content of this turn, or, when the provider
+        // had to retry without the replay, stop echoing for the rest of the run and self-heal the session.
+        if (providerResponse.echoDegraded !== undefined && !echoesDisabled) {
+          echoesDisabled = true;
+          echoes.clear();
+          taskStore.appendEvent({
+            taskId,
+            type: 'provider:history_degraded',
+            payload: {
+              reason: degradedReason(providerResponse.echoDegraded.apiMessage),
+              echoedMessages: providerResponse.echoDegraded.echoedMessages,
+              healed: true,
+            },
+          });
+          logger.warn(
+            { taskId, echoedMessages: providerResponse.echoDegraded.echoedMessages },
+            'provider rejected the replayed history; retried without it and cleared the session echo'
+          );
+          try {
+            sessionStore.deleteMessageEchoes?.(executionContext.sessionId);
+          } catch (err) {
+            warnEchoFailureOnce(logger, 'deleteMessageEchoes', err);
+          }
+        } else if (providerResponse.echo !== undefined && !echoesDisabled) {
+          // The live run replays the full echo (never capped or expired mid-run: prefix stability); what
+          // is PERSISTED for later tasks is decided by the caps and the sanitize veto.
+          echoes.set(assistantMessage.id, providerResponse.echo);
+          await persistEcho(assistantMessage.id, providerResponse.echo);
+        }
         // Record the provider's own context measurement to drive compaction decisions. Use the
         // TRUE per-response context: `peakContextTokens` when the provider reports it (claudecli
         // folds several CLI turns into one response whose `inputTokens` is their cumulative SUM,

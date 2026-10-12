@@ -10,6 +10,8 @@ export type {
   WireSeams,
 } from './interfaces.js';
 
+export type { EchoCaps } from './providers/anthropic-echo.js';
+
 // ── Engine ────────────────────────────────────────────────────────────────────
 export { Orchestrator } from './engine/orchestrator.js';
 export {

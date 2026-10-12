@@ -4,7 +4,7 @@ import type { EngineConfig, EngineLogger } from '../interfaces.js';
 import type { BackgroundQueue } from '../engine/queue.js';
 import type { DagEngine } from '../engine/dag-engine.js';
 import type { Orchestrator } from '../engine/orchestrator.js';
-import { resolveHitl } from '../engine/orchestrator.js';
+import { resolveHitl, warnEchoFailureOnce } from '../engine/orchestrator.js';
 import type { PolicyEngine } from '../engine/policy.js';
 import type {
   InProcessToolDescriptor,
@@ -15,7 +15,7 @@ import type { ProviderRegistry } from '@adhd/agent-core-provider';
 import type { AgentStore } from './agent-crud.js';
 import type { SessionStoreForTool } from './session.js';
 import { McpClientRegistry } from '../clients/registry.js';
-import type { TaskStatus } from '@adhd/agent-base-types';
+import type { IProviderEcho, TaskStatus } from '@adhd/agent-base-types';
 import type {
   ExecutionContext,
   ResultInput,
@@ -78,6 +78,73 @@ export interface TaskDeps {
    */
   providerRegistry?: ProviderRegistry;
   emitTaskEvent?: (event: { type: string; taskId: string; status?: string; result?: string | null; error?: string | null; toolName?: string; toolCallId?: string; input?: unknown; content?: unknown }) => void;
+}
+
+/** The echo members of the real `SessionStore` that task start uses (optional: minimal fakes omit them). */
+interface IEchoSessionReader {
+  getMessageEchoes?(
+    sessionId: string,
+    messageIds: readonly string[],
+    idleMs: number,
+    ttlMs: number
+  ): Map<string, IProviderEcho>;
+  sweepEchoes?(nowMs: number, ttlMs: number): unknown;
+}
+
+/** Minimum gap between two echo sweeps by one process for one store (spec: once per 10 min). */
+const ECHO_SWEEP_INTERVAL_MS = 10 * 60_000;
+const lastEchoSweepAt = new WeakMap<object, number>();
+
+/**
+ * Load the persisted provider echo (R9-hist) for the assistant messages of an already loaded session
+ * history, so the next provider call replays them. Reads exactly those ids (never "all of the
+ * session"); `idleMs` is the time since the history's newest message, measured with the injected
+ * `config.now`, which lets the store strip expired tier S (server results) while keeping tier T.
+ *
+ * Best-effort, never fatal: no caps configured, a store without echo support, or any storage failure
+ * (one WARN per process) yields `undefined` and the task runs on legacy history. Also runs the
+ * throttled sweep that reclaims expired tier S, off the model-call path.
+ */
+export function loadSessionEchoes(
+  deps: Pick<TaskDeps, 'sessionStore' | 'config' | 'logger'>,
+  sessionId: string,
+  history: readonly unknown[]
+): ReadonlyMap<string, IProviderEcho> | undefined {
+  const caps = deps.config.echo;
+  const store = deps.sessionStore as unknown as IEchoSessionReader;
+  if (caps === undefined || typeof store.getMessageEchoes !== 'function') return undefined;
+  const nowMs = (deps.config.now ?? Date.now)();
+
+  if (typeof store.sweepEchoes === 'function') {
+    const last = lastEchoSweepAt.get(store);
+    if (last === undefined || nowMs - last >= ECHO_SWEEP_INTERVAL_MS) {
+      lastEchoSweepAt.set(store, nowMs);
+      try {
+        store.sweepEchoes(nowMs, caps.serverResultTtlMs);
+      } catch (err) {
+        warnEchoFailureOnce(deps.logger, 'sweepEchoes', err);
+      }
+    }
+  }
+
+  const assistantIds: string[] = [];
+  let newestMs = Number.NEGATIVE_INFINITY;
+  for (const raw of history) {
+    const m = raw as { id?: unknown; role?: unknown; createdAt?: unknown };
+    if (m.role === 'assistant' && typeof m.id === 'string') assistantIds.push(m.id);
+    const t = typeof m.createdAt === 'string' ? Date.parse(m.createdAt) : Number.NaN;
+    if (Number.isFinite(t) && t > newestMs) newestMs = t;
+  }
+  if (assistantIds.length === 0) return undefined;
+  // No readable timestamp: treat the session as idle (fail safe = tier S not replayed).
+  const idleMs = Number.isFinite(newestMs) ? Math.max(0, nowMs - newestMs) : Number.POSITIVE_INFINITY;
+  try {
+    const echoes = store.getMessageEchoes(sessionId, assistantIds, idleMs, caps.serverResultTtlMs);
+    return echoes.size > 0 ? echoes : undefined;
+  } catch (err) {
+    warnEchoFailureOnce(deps.logger, 'getMessageEchoes', err);
+    return undefined;
+  }
 }
 
 /** Task statuses a DAG upstream will never transition out of. */
@@ -456,6 +523,9 @@ export async function taskTool(
   });
 
   const existingMessages = deps.sessionStore.getMessages(input.session_id);
+  // R9-hist: computed from the history BEFORE this prompt is appended, so idle time is the gap since
+  // the session's last activity, not zero.
+  const echoes = loadSessionEchoes(deps, input.session_id, existingMessages);
   const userMessage = {
     id: generateId(),
     sessionId: input.session_id,
@@ -511,6 +581,7 @@ export async function taskTool(
         signal: controller.signal,
         taskId: task.id,
         hooks: deps.hooks,
+        ...(echoes !== undefined ? { echoes } : {}),
         suspensionAnswerable,
         emitTaskEvent: deps.emitTaskEvent,
         logger: deps.logger,
@@ -821,6 +892,7 @@ export async function enqueueExistingTask(
   });
 
   const existingMessages = deps.sessionStore.getMessages(task.sessionId);
+  const echoes = loadSessionEchoes(deps, task.sessionId, existingMessages);
   const userMessage = {
     id: generateId(),
     sessionId: task.sessionId,
@@ -867,6 +939,7 @@ export async function enqueueExistingTask(
         signal: controller.signal,
         taskId,
         hooks: deps.hooks,
+        ...(echoes !== undefined ? { echoes } : {}),
         emitTaskEvent: deps.emitTaskEvent,
         logger: deps.logger,
         config: deps.config,

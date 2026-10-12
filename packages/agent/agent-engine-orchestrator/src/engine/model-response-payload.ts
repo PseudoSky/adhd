@@ -14,6 +14,14 @@ export interface IModelResponseSource {
   limitWarnings?: ProviderLimitWarning[];
   /** P6: request start to first streamed byte (ms). */
   ttfbMs?: number;
+  /** R9-hist: content blocks of the provider-native echo captured from this response. */
+  echoBlocks?: number;
+  /** R9-hist: JSON byte length of the echo captured from this response. */
+  echoBytes?: number;
+  /** R9-hist: assistant messages replayed with echoed blocks in this request. */
+  echoReplayedMessages?: number;
+  /** R9-hist: JSON byte length of the blocks replayed in this request. */
+  echoReplayedBytes?: number;
 }
 
 /** Adapt a successful provider response. `toolCallCount` is what the orchestrator accounts for this turn. */
@@ -32,7 +40,26 @@ export function sourceFromResponse(
     rawUsage: response.rawUsage,
     limitWarnings: response.limitWarnings,
     ttfbMs: response.ttfbMs,
+    ...echoSourceFields(response),
   };
+}
+
+/**
+ * R9-hist inspectability: counts only, never block content (signatures and fetched pages stay in the
+ * echo table). Absent when the provider neither captured nor replayed an echo, so a payload for a
+ * response without echo is exactly what it was before.
+ */
+function echoSourceFields(response: ProviderChatResponse): Partial<IModelResponseSource> {
+  const fields: Partial<IModelResponseSource> = {};
+  if (response.echo !== undefined) {
+    fields.echoBlocks = response.echo.blocks.length;
+    fields.echoBytes = Buffer.byteLength(JSON.stringify(response.echo.blocks));
+  }
+  if (response.echoReplay !== undefined) {
+    fields.echoReplayedMessages = response.echoReplay.messages;
+    fields.echoReplayedBytes = response.echoReplay.bytes;
+  }
+  return fields;
 }
 
 /**
@@ -91,5 +118,10 @@ export function buildModelResponsePayload(
     computeMs,
     // P6: additive per-call timing (ttfb_ms, overhead_ms); absent when unmeasured.
     ...callTimingFields(src.ttfbMs, overheadMs),
+    // R9-hist: additive echo counts (absent when no echo was captured / replayed).
+    ...(src.echoBlocks !== undefined ? { echoBlocks: src.echoBlocks } : {}),
+    ...(src.echoBytes !== undefined ? { echoBytes: src.echoBytes } : {}),
+    ...(src.echoReplayedMessages !== undefined ? { echoReplayedMessages: src.echoReplayedMessages } : {}),
+    ...(src.echoReplayedBytes !== undefined ? { echoReplayedBytes: src.echoReplayedBytes } : {}),
   };
 }
