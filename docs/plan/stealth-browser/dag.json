@@ -241,6 +241,19 @@
       ],
       "context": "contexts/tests-unit-data.md",
       "notes": "executor=test-automator tier=sonnet/medium"
+    },
+    "tests-unit-extract": {
+      "kind": "work",
+      "phase": "verify",
+      "depends_on": [
+        "mig-capture-parsers"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py tests-unit-extract",
+      "artifacts": [
+        "entrypoint/stealth-browser/src/test/unit/capture-parsers/"
+      ],
+      "context": "contexts/tests-unit-extract.md",
+      "notes": "executor=test-automator tier=sonnet/medium"
     }
   },
   "authored_with": {
