@@ -493,3 +493,8 @@ Not a parity blocker (architect verdict APPROVE, 2026-10-11): shell exit status.
 - Then: a performance agent reads only the raw proxy logs (logs/wire/proxy-<arm>-*.jsonl) for A, B, C and compares and recommends tuning. No other inputs.
 - Parity-conditional follow-up is dispatched only if the grid shows parity; otherwise the original loop (triage, architect after actual runs, product-impact check, implement, rerun) applies.
 - Judge scores remain single samples; comparison against R5/R6 judge records is not like-for-like.
+
+## 2026-10-12T10:25:56Z SCOPE-R8-tool-name-consistency: tool names must not be inconsistent
+
+- Owner direction: "tool names should not be inconsistent". Symptom (from the R8 A/C run report): arm C's record logs shell__shell_execute (4) and shell_execute (9) for the same tool; A, B and C use three naming schemes, so per-tool counts are not comparable across arms.
+- Action: root cause first (debug), then fix the cause (product or instrument, whichever owns it) with tests; no new live run is started by this entry. Any rerun needs its own scope entry.
