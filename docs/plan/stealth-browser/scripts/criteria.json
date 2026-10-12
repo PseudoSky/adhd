@@ -585,6 +585,15 @@
       "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py tracing-plugin --only tracing-plugin.2",
       "expect": "exit0",
       "cwd": "repo-root"
+    },
+    {
+      "id": "tracing-plugin.3",
+      "phase": "surface",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py tracing-plugin --only tracing-plugin.3",
+      "expect": "exit0",
+      "cwd": "repo-root"
     }
   ]
 }
