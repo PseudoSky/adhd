@@ -450,3 +450,7 @@ Not a parity blocker (architect verdict APPROVE, 2026-10-11): shell exit status.
 - user-request (verbatim, owner): "the proxy should also support the other providers of agent mcp"
 - Facts read: agent-mcp providers are anthropic, openai, deepseek (each with ADHD_AGENT_<P>_BASE_URL in entrypoint/agent-mcp/src/config.ts:651-654) and claudecli (spawns the claude CLI; reached via ANTHROPIC_BASE_URL). Existing wiretap scripts (tmp/agent-mcp-live/*/proxy.mjs) and ~/dev/ai/content-first/proxy/cf-proxy.mjs are DeepSeek/OpenAI-chat only.
 - Dispatcher reading (structuring): one capture proxy, path-routed per arm and provider, wire-transparent for Anthropic /v1/messages and OpenAI-compatible /v1/chat/completions (DeepSeek, OpenAI); per-request log in the raw_request/raw_response JSONL shape with arm label; never stores request headers; no rewriting.
+
+### 2026-10-12T07:22:02Z — SCOPE-R6B-model-haiku: OWNER SWITCHES THE EXPERIMENT MODEL BACK TO HAIKU (dispatcher)
+- user-request (verbatim, owner): "switching back to haiku"
+- Dispatcher reading (structuring): the B-only retest (SCOPE-R6B-web-tool-parity) runs on claude-haiku-4-5, the model of the R6 A1 and C1 references. Judge stays haiku-4-5. R7 (sonnet-5-5) stays prepared and unrun; its ledger and the sonnet-5 product fixes (1eb61b08) are kept. Thinking stays the model default on every arm (SCOPE-R7-thinking-default); effort remains unrecorded and the owner decision on it is still open.
