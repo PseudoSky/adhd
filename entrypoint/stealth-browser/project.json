@@ -2,7 +2,7 @@
   "name": "stealth-browser",
   "$schema": "../../node_modules/nx/schemas/project-schema.json",
   "sourceRoot": "entrypoint/stealth-browser/src",
-  "projectType": "application",
+  "projectType": "library",
   "tags": [
     "domain:entrypoint",
     "pkg-kind:entrypoint",
@@ -12,11 +12,126 @@
     "access:domain"
   ],
   "targets": {
-    "build": {
+    "typecheck": {
       "executor": "nx:run-commands",
+      "cache": true,
+      "inputs": [
+        "default",
+        "^production",
+        {
+          "externalDependencies": [
+            "typescript"
+          ]
+        }
+      ],
       "options": {
-        "command": "tsc -p entrypoint/stealth-browser/tsconfig.json"
+        "command": "tsc -p entrypoint/stealth-browser/tsconfig.lib.json --noEmit"
       }
+    },
+    "build-bin": {
+      "dependsOn": [
+        "build",
+        "^build"
+      ],
+      "outputs": [
+        "{projectRoot}/dist/bin",
+        "{projectRoot}/dist/src"
+      ],
+      "options": {
+        "cwd": ".",
+        "command": "node node_modules/typescript/bin/tsc -p {projectRoot}/tsconfig.build-bin.json --outDir {projectRoot}/dist --rootDir {projectRoot} --baseUrl {projectRoot} --composite false --noEmitOnError"
+      }
+    },
+    "nx-release-publish": {
+      "dependsOn": [
+        "build",
+        "build-bin",
+        "test",
+        "verify-dist-load",
+        "dist-manifest",
+        "publish-hygiene"
+      ],
+      "options": {
+        "packageRoot": "{projectRoot}/dist"
+      }
+    },
+    "assets": {
+      "dependsOn": [
+        "build",
+        "build-bin"
+      ]
+    },
+    "dist-manifest": {
+      "dependsOn": [
+        "build",
+        "build-bin",
+        "assets"
+      ]
+    },
+    "verify-dist-load": {
+      "dependsOn": [
+        "build",
+        "build-bin",
+        "dist-manifest"
+      ]
+    },
+    "test": {
+      "dependsOn": [
+        "lint",
+        "^build",
+        "build-bin",
+        "typecheck-spec"
+      ]
+    },
+    "typecheck-spec": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "inputs": [
+        "default",
+        {
+          "externalDependencies": [
+            "typescript"
+          ]
+        }
+      ],
+      "options": {
+        "cwd": ".",
+        "command": "tsc -p entrypoint/stealth-browser/tsconfig.spec.json --noEmit"
+      }
+    },
+    "e2e": {
+      "executor": "nx:run-commands",
+      "dependsOn": [
+        "^build",
+        "build-bin"
+      ],
+      "options": {
+        "cwd": ".",
+        "command": "vitest run --config {projectRoot}/vitest.e2e.config.ts"
+      },
+      "cache": true,
+      "inputs": [
+        "default",
+        "^production",
+        {
+          "dependentTasksOutputFiles": "**/*",
+          "transitive": true
+        },
+        {
+          "externalDependencies": [
+            "vitest"
+          ]
+        }
+      ]
+    }
+  },
+  "release": {
+    "version": {
+      "currentVersionResolver": "git-tag",
+      "preserveLocalDependencyProtocols": false,
+      "manifestRootsToUpdate": [
+        "{projectRoot}"
+      ]
     }
   }
 }
