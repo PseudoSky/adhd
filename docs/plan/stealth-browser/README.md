@@ -22,3 +22,12 @@ Extract the Chrome/CDP runner from scratch/agent-browser/adhd into a new generat
   - observable: `vitest exit 0 with [surface:library], [surface:cli] and [surface:mcp] suites green and run duration >= 5 s`
   - negative-control: `the e2e fails if the MCP bin is absent or chromeStatus is pointed at an unused port and expected running=true`
   - delivered-by: `surface-api, surface-hosts, tests-e2e`
+
+- `[dod.3]` **Tracing is namespaced adhd: a real verb call emits adhd.<op>.start/finish records and never apigen.* records (behavioral)** — Tracing is namespaced adhd: a real verb call emits adhd.<op>.start/finish records and never apigen.* records.
+  - given: telemetry initialised against a temp file sink and the configured tracingPlugin mounted on the engine
+  - when: a stealth-browser verb is invoked through the engine
+  - then: every sink record event starts with adhd. and none starts with apigen.
+  - entrypoint: `nx run stealth-browser:test -- src/test/unit/tracing`
+  - observable: `tracing-namespace.spec.ts passes and FAILS when src/tracing.ts serviceName is flipped to apigen (guard mutation)`
+  - negative-control: `mounting the package-level tracingPlugin singleton emits apigen.* records in the NEGATIVE-CONTROL case`
+  - delivered-by: `tracing-plugin, tracing-namespace-proof`
