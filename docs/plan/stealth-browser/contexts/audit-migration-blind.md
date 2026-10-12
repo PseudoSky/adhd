@@ -32,6 +32,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 - [audit-migration-blind.1] FINDINGS.json records exactly ONE review round whose reviewer_input_sha256 equals review/INPUT.sha256 and whose prompt was the word `Review`.
 
 - [audit-migration-blind.2] Every finding has id (F1..), severity in {blocker,major,minor,nit}, file, line, summary and evidence; or `no_findings: true` with a reviewer rationale.
+- [audit-migration-blind.3] Finding ids are unique and every cited file exists in the reviewed tree.
 ---
 
 ## Reservations

@@ -990,6 +990,15 @@
       "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py audit-migration-blind --only audit-migration-blind.2",
       "expect": "exit0",
       "cwd": "repo-root"
+    },
+    {
+      "id": "audit-migration-blind.3",
+      "phase": "review",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py audit-migration-blind --only audit-migration-blind.3",
+      "expect": "exit0",
+      "cwd": "repo-root"
     }
   ]
 }
