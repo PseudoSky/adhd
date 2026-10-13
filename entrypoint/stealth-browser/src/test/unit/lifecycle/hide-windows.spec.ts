@@ -11,8 +11,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('node:fs', async () => (await import('./manager-world.js')).fsModule())
-vi.mock('../../../lib/cdp/browser.js', async () => (await import('./manager-world.js')).browserModule())
-vi.mock('../../../lib/cdp/targets.js', async () => (await import('./manager-world.js')).targetsModule())
+vi.mock('../../../lib/cdp/browser.js', async () => (await import('./manager-world.js')).browserModule(vi.fn))
+vi.mock('../../../lib/cdp/targets.js', async () => (await import('./manager-world.js')).targetsModule(vi.fn))
 vi.mock('@adhd/sox-service-proxy', async (orig) => (await import('./manager-world.js')).spModule(await orig<Record<string, unknown>>()))
 
 import { hideAllWindows } from '../../../lib/cdp/targets.js'

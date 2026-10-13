@@ -10,13 +10,14 @@
  * routes them here:
  *
  *   vi.mock('node:fs', async () => (await import('./manager-world.js')).fsModule())
- *   vi.mock('../../../lib/cdp/browser.js', async () => (await import('./manager-world.js')).browserModule())
- *   vi.mock('../../../lib/cdp/targets.js', async () => (await import('./manager-world.js')).targetsModule())
+ *   vi.mock('../../../lib/cdp/browser.js', async () => (await import('./manager-world.js')).browserModule(vi.fn))
+ *   vi.mock('../../../lib/cdp/targets.js', async () => (await import('./manager-world.js')).targetsModule(vi.fn))
  *   vi.mock('@adhd/sox-service-proxy', async (orig) => (await import('./manager-world.js')).spModule(await orig()))
  *
  * This module imports nothing under src/lib (a mock factory that imported a
- * mocked module would cycle); the manager/host builders live in
- * `manager-clients.ts`.
+ * mocked module would cycle) and nothing from the test runner (the dependency
+ * check treats non-spec files as package code): the spec passes its own `vi.fn`
+ * in, and the manager/host builders live in `manager-clients.ts`.
  *
  * The service-proxy mock keeps the real pure `createCircuitBreaker` and
  * `createIdleRetirer`; only the I/O entry points (ensure, dial, serve, the
@@ -24,7 +25,6 @@
  *
  * Ticket 8468f7b1 · plan state chrome-lifecycle ([chrome-lifecycle.22] [chrome-lifecycle.23]).
  */
-import { vi } from 'vitest'
 import { MemFs } from '../../support/mem-fs.js'
 
 export const PORT = 9333
@@ -128,10 +128,18 @@ export function fsModule(): Record<string, unknown> {
   return { ...mod, default: mod }
 }
 
+/**
+ * The calling spec's `vi.fn` (so module functions are spies the spec can
+ * assert on with `vi.mocked`), or the identity for plain functions.
+ */
+export type Spy = <T extends (...args: never[]) => unknown>(impl: T) => T
+
+const plain: Spy = (impl) => impl
+
 /** `cdp/browser.js`: launches and kills against the simulated Chrome. */
-export function browserModule(): Record<string, unknown> {
+export function browserModule(spy: Spy = plain): Record<string, unknown> {
   return {
-    ensureChromeRunning: vi.fn(async (opts: { port?: number } = {}) => {
+    ensureChromeRunning: spy(async (opts: { port?: number } = {}) => {
       const port = opts.port ?? 9222
       world.ensureCalls++
       if (world.chromeUp) return { pid: null, port, profileDir: '/profile' }
@@ -143,12 +151,12 @@ export function browserModule(): Record<string, unknown> {
       world.chromeUp = true
       return { pid, port, profileDir: '/profile' }
     }),
-    killChrome: vi.fn(async (port = 9222) => {
+    killChrome: spy(async (port = 9222) => {
       world.events.push(`kill:${port}`)
       if (world.failKill) throw new Error('kill EPERM')
       chromeGone()
     }),
-    killProcessGroup: vi.fn(async (pid: number) => {
+    killProcessGroup: spy(async (pid: number) => {
       world.events.push(`kill-group:${pid}`)
       chromeGone()
     }),
@@ -156,77 +164,81 @@ export function browserModule(): Record<string, unknown> {
 }
 
 /** `cdp/targets.js`: CDP probes and page operations against the simulated Chrome. */
-export function targetsModule(): Record<string, unknown> {
+export function targetsModule(spy: Spy = plain): Record<string, unknown> {
   const list = async () => {
     if (!world.chromeUp || world.listFails) throw new Error('connect ECONNREFUSED')
     return world.pages.map((p) => ({ id: p.id, type: 'page', url: p.url, title: '', webSocketDebuggerUrl: `ws://fake/${p.id}` }))
   }
   return {
-    isChromeReachable: vi.fn(async () => {
+    isChromeReachable: spy(async (_host: string) => {
       world.probes++
       return world.chromeUp
     }),
-    hideAllWindows: vi.fn(async () => {
+    hideAllWindows: spy(async (_host: string) => {
       world.events.push('hide')
       if (world.failHide) throw new Error('Browser.setWindowBounds failed')
     }),
-    closeAllPageTargets: vi.fn(async () => {
+    closeAllPageTargets: spy(async (_host: string) => {
       world.events.push('close-pages')
       if (world.failClose) throw new Error('close failed')
       world.pages = []
     }),
-    listPageTargetsOnly: vi.fn(list),
-    listPageTargets: vi.fn(list),
+    listPageTargetsOnly: spy(list),
+    listPageTargets: spy(list),
   }
 }
 
+export type EnsureBackendDouble = (opts: Record<string, unknown>) => Promise<{ disposition: string; detail: string; pid?: number; errorCode?: string }>
+
+/**
+ * The I/O entry points of `@adhd/sox-service-proxy`. `spModule` delegates to
+ * these at call time, so a spec replaces one (`sp.ensureBackend = vi.fn(...)`)
+ * to script or spy on it; `resetSp` restores the world-backed defaults.
+ */
 export interface SpDoubles {
-  ensurePrivateSocketDir: ReturnType<typeof vi.fn>
-  readProcessStartToken: ReturnType<typeof vi.fn>
-  isSameProcess: ReturnType<typeof vi.fn>
-  ensureBackend: ReturnType<typeof vi.fn>
-  dialBackend: ReturnType<typeof vi.fn>
-  serveBackend: ReturnType<typeof vi.fn>
+  ensurePrivateSocketDir: (dir: string, opts?: unknown) => void
+  readProcessStartToken: (pid: number) => string | null
+  isSameProcess: (pid: number, token: string | null | undefined) => boolean
+  ensureBackend: EnsureBackendDouble
+  dialBackend: (opts: Record<string, unknown>) => unknown
+  serveBackend: (opts: Record<string, unknown>) => Promise<unknown>
 }
 
-/** The I/O entry points of `@adhd/sox-service-proxy`, as spies (shared by `spModule`). */
-export const sp: SpDoubles = {
-  ensurePrivateSocketDir: vi.fn(),
-  readProcessStartToken: vi.fn(),
-  isSameProcess: vi.fn(),
-  ensureBackend: vi.fn(),
-  dialBackend: vi.fn(),
-  serveBackend: vi.fn(),
+function defaultSp(): SpDoubles {
+  return {
+    ensurePrivateSocketDir: (dir) => {
+      if (world.dirUnsafe) throw unsafeDirError(dir)
+      world.fs.mkdirSync(dir, { recursive: true })
+    },
+    readProcessStartToken: (pid) => world.procs.get(pid) ?? null,
+    isSameProcess: (pid, token) => token != null && world.procs.get(pid) === token,
+    ensureBackend: async () => ({ disposition: 'failed', detail: 'no reaper backend in this spec' }),
+    dialBackend: () => {
+      throw new Error('dialBackend is not scripted in this spec')
+    },
+    serveBackend: async () => {
+      throw new Error('serveBackend is not scripted in this spec')
+    },
+  }
 }
 
-/** Default behaviour of the service-proxy doubles over the world. */
+export const sp: SpDoubles = defaultSp()
+
+/** Restore the world-backed defaults of the service-proxy doubles. */
 export function resetSp(): void {
-  for (const f of Object.values(sp)) f.mockReset()
-  sp.ensurePrivateSocketDir.mockImplementation((dir: string) => {
-    if (world.dirUnsafe) throw unsafeDirError(dir)
-    world.fs.mkdirSync(dir, { recursive: true })
-  })
-  sp.readProcessStartToken.mockImplementation((pid: number) => world.procs.get(pid) ?? null)
-  sp.isSameProcess.mockImplementation((pid: number, token: string | null | undefined) => token != null && world.procs.get(pid) === token)
-  sp.ensureBackend.mockImplementation(async () => ({ disposition: 'failed', detail: 'no backend in this spec' }))
-  sp.dialBackend.mockImplementation(() => {
-    throw new Error('dialBackend is not scripted in this spec')
-  })
-  sp.serveBackend.mockImplementation(async () => {
-    throw new Error('serveBackend is not scripted in this spec')
-  })
+  Object.assign(sp, defaultSp())
 }
 
-/** `@adhd/sox-service-proxy` with the pure parts real and the I/O replaced. */
+/** `@adhd/sox-service-proxy` with the pure parts real (breaker, retirer, constants) and the I/O replaced. */
 export function spModule(orig: Record<string, unknown>): Record<string, unknown> {
   return {
     ...orig,
-    ensurePrivateSocketDir: (...a: unknown[]) => sp.ensurePrivateSocketDir(...a),
-    readProcessStartToken: (...a: unknown[]) => sp.readProcessStartToken(...a),
-    isSameProcess: (...a: unknown[]) => sp.isSameProcess(...a),
-    ensureBackend: (...a: unknown[]) => sp.ensureBackend(...a),
-    dialBackend: (...a: unknown[]) => sp.dialBackend(...a),
-    serveBackend: (...a: unknown[]) => sp.serveBackend(...a),
+    ensurePrivateSocketDir: (dir: string, o?: unknown) => sp.ensurePrivateSocketDir(dir, o),
+    readProcessStartToken: (pid: number) => sp.readProcessStartToken(pid),
+    isSameProcess: (pid: number, token: string | null | undefined) => sp.isSameProcess(pid, token),
+    ensureBackend: (o: Record<string, unknown>) => sp.ensureBackend(o),
+    dialBackend: (o: Record<string, unknown>) => sp.dialBackend(o),
+    serveBackend: (o: Record<string, unknown>) => sp.serveBackend(o),
   }
 }
 
