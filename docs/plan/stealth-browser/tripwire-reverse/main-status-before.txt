@@ -1,0 +1,8 @@
+ M AGENTS.md
+?? .claude/worktrees/
+?? .obsidian/
+?? .opencode/
+?? captures.db
+?? fatal.csv
+?? identity/
+?? packages/system/wingman-bridge/docs/

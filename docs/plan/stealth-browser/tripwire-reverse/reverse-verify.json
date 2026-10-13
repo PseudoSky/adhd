@@ -1,0 +1,122 @@
+{
+  "head": "9eef2afa88a72e4fcd92b848027c5c17df8eba7f",
+  "commands": {
+    "pnpm nx test request-builder": {
+      "exit": 0,
+      "argv": [
+        "pnpm",
+        "nx",
+        "test",
+        "request-builder",
+        "--skip-nx-cache"
+      ],
+      "log": "/private/tmp/claude-502/-Users-nix-dev-ai-scratch/c8273d10-b319-41df-99f1-5458418387f6/scratchpad/final2-pnpm-nx-test-request-builder.log",
+      "failed_tasks": [],
+      "tests_summary": [
+        "25 passed (25)"
+      ]
+    },
+    "pnpm nx run-many -t lint,test,build": {
+      "exit": 1,
+      "argv": [
+        "pnpm",
+        "nx",
+        "run-many",
+        "-t",
+        "lint,test,build",
+        "--skip-nx-cache"
+      ],
+      "log": "/private/tmp/claude-502/-Users-nix-dev-ai-scratch/c8273d10-b319-41df-99f1-5458418387f6/scratchpad/final2-pnpm-nx-run-many-t-lint-test-build.log",
+      "failed_tasks": [
+        "middleware-system:lint",
+        "test-utils:lint",
+        "auth-session:lint",
+        "service-system:lint",
+        "middleware-session:lint",
+        "rappi:lint",
+        "bumble:lint",
+        "airbnb:lint",
+        "tinder:lint",
+        "instagram:lint",
+        "AuthCookies:lint",
+        "wingman-bridge:test",
+        "wingman-bridge:lint",
+        "tools:lint"
+      ],
+      "tests_summary": [
+        "3 failed | 374 passed (377)",
+        "1 passed (1)",
+        "5 passed (5)"
+      ]
+    },
+    "pnpm nx e2e e2e-tests": {
+      "exit": 1,
+      "argv": [
+        "pnpm",
+        "nx",
+        "e2e",
+        "e2e-tests",
+        "--skip-nx-cache"
+      ],
+      "log": "/private/tmp/claude-502/-Users-nix-dev-ai-scratch/c8273d10-b319-41df-99f1-5458418387f6/scratchpad/final2-pnpm-nx-e2e-e2e-tests.log",
+      "failed_tasks": [
+        "e2e-tests:e2e"
+      ],
+      "tests_summary": [
+        "4 failed | 10 passed (14)",
+        "4 \u23af\u23af\u23af\u23af\u23af\u23af\u23af"
+      ]
+    },
+    "pnpm vitest run --config tools/unlock-tripwire/vite.config.ts": {
+      "exit": 0,
+      "argv": [
+        "pnpm",
+        "vitest",
+        "run",
+        "--config",
+        "tools/unlock-tripwire/vite.config.ts"
+      ],
+      "log": "/private/tmp/claude-502/-Users-nix-dev-ai-scratch/c8273d10-b319-41df-99f1-5458418387f6/scratchpad/final2-pnpm-vitest-run-config-tools-unlock-tripwire-vite-config-ts.log",
+      "failed_tasks": [],
+      "tests_summary": [
+        "5 passed (5)"
+      ]
+    }
+  },
+  "worktree": "/Users/nix/dev/projects/reverse-apis/.worktrees/tripwire-adopt",
+  "notes": "Exit codes are the real exit statuses of the commands at 'head'. run-many and e2e are red on lint (14 projects), wingman-bridge:test (3 tests, protect-real-data guard) and tinder e2e A-D; the same sets reproduce at d959c6a without this change (see baseline). request-builder:lint and request-builder:build, red at d959c6a, are green at head.",
+  "baseline": {
+    "commit": "d959c6a (git archive, scratchpad, same node_modules and gitignored data)",
+    "run-many -t lint,build": {
+      "exit": 1,
+      "failed_tasks": [
+        "middleware-system:lint",
+        "auth-session:lint",
+        "test-utils:lint",
+        "service-system:lint",
+        "middleware-session:lint",
+        "request-builder:build",
+        "request-builder:lint",
+        "airbnb:lint",
+        "bumble:lint",
+        "rappi:lint",
+        "tinder:lint",
+        "instagram:lint",
+        "AuthCookies:lint",
+        "wingman-bridge:lint",
+        "tools:lint"
+      ]
+    },
+    "nx test wingman-bridge": {
+      "exit": 1,
+      "tests": "3 failed | 374 passed (377)",
+      "cause": "Node 24 does not reflect fs patches into ESM named exports; async guard throws synchronously"
+    },
+    "nx e2e e2e-tests": {
+      "exit": 1,
+      "tests": "tinder.spec.ts 4 failed, 10 passed (14)",
+      "cause": "gitignored tinder /v2/profile exemplar carries include=boost,feature_access; adapter sends include=user"
+    },
+    "lint_summary_identical_to_head": true
+  }
+}
