@@ -2,10 +2,14 @@
  * @adhd/resilience-core-tripwire: a persistent kill-switch latch with a
  * lock-file protocol, fail-closed reads, an NDJSON audit trail and a
  * break-glass clear. Single entry point (no subpath exports).
+ *
+ * The runtime surface is exactly the API of the package specification
+ * (pinned by src/test/unit/api-surface.spec.ts), plus `createNodeFs`, the
+ * Node `FsPort` a caller needs to run `createFileStorage` on a real disk.
  */
-export { createTripwire, defaultRecoveryHint } from './lib/tripwire.js';
+export { createTripwire } from './lib/tripwire.js';
 export { adhdDataDir } from './lib/paths.js';
-export { CLEAR_METHODS, CONFIRM_TOKEN } from './lib/types.js';
+export { CONFIRM_TOKEN } from './lib/types.js';
 export type {
   AuditEvent,
   AuditEventName,
@@ -29,8 +33,6 @@ export type {
 } from './lib/types.js';
 export { defaultRedactor } from './lib/redact.js';
 export {
-  TRIPWIRE_ERROR_BRAND,
-  TRIPWIRE_ERROR_CODES,
   TripwireAbortedError,
   TripwireConfirmError,
   TripwireError,
@@ -46,7 +48,6 @@ export type {
   TrippedErrorInit,
 } from './lib/errors.js';
 export {
-  TRIPWIRE_KEY_PATTERN,
   createFileStorage,
   createMemoryStorage,
   createNodeFs,
@@ -68,8 +69,3 @@ export type {
   MemoryFsOptions,
   SchedulePicker,
 } from './lib/memory-fs.js';
-export {
-  AUDIT_LINE_MAX_BYTES,
-  DEFAULT_MAX_AUDIT_BYTES,
-  MIN_AUDIT_BYTES,
-} from './lib/audit.js';
