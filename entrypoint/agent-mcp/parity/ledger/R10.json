@@ -3,16 +3,61 @@
   "cap": 2,
   "approvedBy": "I approve your next 3 experiment rounds as long as you're making serious progress",
   "extraRunReason": "",
-  "runs": [],
-  "judgeCalls": [],
-  "scenarioSha": "",
+  "runs": [
+    {
+      "runId": "A1",
+      "arm": "A",
+      "at": "2026-10-13T08:13:51.041Z",
+      "pid": 63130,
+      "model": "claude-haiku-5-5",
+      "modelSource": "json"
+    },
+    {
+      "runId": "C1",
+      "arm": "C",
+      "at": "2026-10-13T08:15:35.290Z",
+      "pid": 63130,
+      "model": "claude-haiku-5-5",
+      "modelSource": "json"
+    }
+  ],
+  "judgeCalls": [
+    {
+      "arm": "A",
+      "modelId": "claude-haiku-5-5",
+      "inputTokens": 18513,
+      "outputTokens": 2877,
+      "costUsd": 0.0032898000000000003,
+      "briefSha": "485a1b779d7b90be503f42f5bf622353d92c33221bbc5272bfe964192a7324a7",
+      "at": "2026-10-13T08:15:21.914Z",
+      "modelSource": "json"
+    },
+    {
+      "arm": "C",
+      "modelId": "claude-haiku-5-5",
+      "inputTokens": 26602,
+      "outputTokens": 2767,
+      "costUsd": 0.0040437,
+      "briefSha": "f63e8541ddbbb1f6710042aa1b37a8dc94f6f3a95802d5360d3b37b8affdd655",
+      "at": "2026-10-13T08:17:45.549Z",
+      "modelSource": "json"
+    }
+  ],
+  "scenarioSha": "56956efb90fc213aaaca7dff6d94f731e94a7b69ad4295e66ddb5fd6e06e4a18",
   "scopeChanges": [
     "SCOPE-R10-prep",
     "SCOPE-R10-thinking-parity"
   ],
-  "armOrder": [],
-  "startedAt": null,
-  "armA": null,
+  "armOrder": [
+    "A",
+    "C"
+  ],
+  "startedAt": "2026-10-13T08:13:49.437Z",
+  "armA": {
+    "genuine": true,
+    "detail": "all content items green, no INVALID, no defect signal",
+    "at": "2026-10-13T08:15:08.297Z"
+  },
   "releases": [],
   "profile": {
     "arms": [
