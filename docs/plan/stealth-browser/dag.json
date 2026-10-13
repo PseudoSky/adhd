@@ -549,9 +549,9 @@
       ],
       "guard": "python3 docs/plan/stealth-browser/scripts/guard.py tests-use-cases",
       "artifacts": [
-        "entrypoint/stealth-browser/src/test/use-cases/",
-        "entrypoint/stealth-browser/src/test/support/profile-fixtures.ts",
-        "entrypoint/stealth-browser/src/test/support/page-fixtures.ts"
+        "packages/stealth/stealth-core-browser/src/test/use-cases/",
+        "packages/stealth/stealth-core-browser/src/test/support/profile-fixtures.ts",
+        "packages/stealth/stealth-core-browser/src/test/support/page-fixtures.ts"
       ],
       "context": "contexts/tests-use-cases.md",
       "notes": "executor=test-automator tier=sonnet/high; use-case unit suites replace the e2e lane (user decision)"
