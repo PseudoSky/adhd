@@ -40,6 +40,11 @@ export interface IRun {
   postPayloads: Array<{ result: unknown; noteAppended?: boolean; isError: boolean }>;
   appended: string[];
   observedRequest: string;
+  /** The observational `pre:model_request` payload of EVERY turn, serialized at emit time (turn order). */
+  observedRequests: string[];
+  /** `toolResultBytesIn` the engine reported on each `post:model_response` (turn order). */
+  toolResultBytesIn: Array<number | undefined>;
+  /** The persisted `TOOL_RESULT` task events, newline-joined. */
   toolResultEvent: string;
 }
 
@@ -53,6 +58,8 @@ export async function runCall(opts: {
   throws?: boolean;
   mcpServers?: Record<string, McpServerConfig>;
   hostHooks?: boolean;
+  /** The context's provider type (default `openai`); `claudecli` makes the engine treat executeTool calls as bridged. */
+  providerType?: "openai" | "anthropic" | "claudecli";
   /** Build a provider instead of the scripted one (e.g. a real adapter over a capturing wire.fetch). */
   makeProvider?: (info: { sessionId: string }) => LLMProvider;
 }): Promise<IRun> {
@@ -79,7 +86,7 @@ export async function runCall(opts: {
       createdAt: "2026-01-01T00:00:00Z",
       updatedAt: "2026-01-01T00:00:00Z",
     },
-    selection: { providerType: "openai", modelRef: "notes-test-model" },
+    selection: { providerType: opts.providerType ?? "openai", modelRef: "notes-test-model" },
     wireModel: "notes-test-model",
     recursionDepth: 0,
     toolCallCount: 0,
@@ -89,6 +96,11 @@ export async function runCall(opts: {
   const postPayloads: IRun["postPayloads"] = [];
   const appended: string[] = [];
   let observedRequest = "";
+  const observedRequests: string[] = [];
+  const toolResultBytesIn: Array<number | undefined> = [];
+  hooks.register("post:model_response", (p) => {
+    toolResultBytesIn.push(p.toolResultBytesIn);
+  });
   hooks.register("post:tool_call", (p) => {
     postPayloads.push({ result: p.result, noteAppended: p.noteAppended, isError: p.isError });
   });
@@ -97,6 +109,7 @@ export async function runCall(opts: {
   });
   hooks.register("pre:model_request", (p) => {
     observedRequest = JSON.stringify(p.messages);
+    observedRequests.push(observedRequest);
   });
 
   const requests: Message[][] = [];
@@ -160,6 +173,6 @@ export async function runCall(opts: {
     .filter((r: { type: string }) => r.type === "TOOL_RESULT")
     .map((r: { payload: string | null }) => r.payload ?? "")
     .join("\n");
-  return { secondRequest: requests[1], stored, postPayloads, appended, observedRequest, toolResultEvent: ev };
+  return { secondRequest: requests[1], stored, postPayloads, appended, observedRequest, observedRequests, toolResultBytesIn, toolResultEvent: ev };
 }
 

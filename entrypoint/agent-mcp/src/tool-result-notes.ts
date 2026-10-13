@@ -12,16 +12,31 @@
  *
  *  1. `post:tool_call` (observational) DECIDES: it sees the call's input, the raw result and the error flag,
  *     records `callId -> note` and sets `payload.noteAppended` (trace signal). It does not touch the result.
- *  2. An ENFORCEMENT handler on `pre:model_request` APPLIES: enforcement runs after every observational
- *     `pre:model_request` handler (tracing, ops log, embedders), so none of them sees the note, and it
- *     also runs before each `pause_turn` continuation. It replaces the affected message ELEMENT of the
- *     request's message array with a copy that carries the note. The original message object — the one the
- *     session store persisted and `message:appended` delivered — is never mutated, so stored history,
- *     `post:tool_call`/`TOOL_RESULT` payloads and a resumed session's history are byte-identical to what
- *     the tool returned.
+ *  2. An ENFORCEMENT handler on `pre:model_request` APPLIES. The engine hands enforcement handlers a COPY of
+ *     the history array (never its live `currentMessages`) and sends the provider whatever that copy holds
+ *     afterwards, so the handler replaces the affected message ELEMENT of the copy with a message that
+ *     carries the note. Nothing else ever sees a note: the original message objects (the ones the session
+ *     store persisted and `message:appended` delivered), the history array, the observational
+ *     `pre:model_request` payload (tracing, ops log, the compaction summariser) and the engine's
+ *     `toolResultBytesIn` all stay byte-identical to what the tool returned, on every turn, including the
+ *     turns after the call. The next request re-applies the same note to a fresh copy, so the request
+ *     prefix stays stable. A `pause_turn` continuation is enforced on a throwaway copy, so it cannot reach
+ *     the history either.
  *
  * `transform:tool_result` is deliberately NOT used: the orchestrator persists its output into the session
  * history, which is exactly what these notes must stay out of.
+ *
+ * claudecli: its tools run inside the CLI's own loop and come back through the engine's bridge as
+ * `executeTool` returns; the result the CLI streams back is what the engine persists as that turn's
+ * `toolResults`. A note added there would land in the history, and the history's CLI tool results are never
+ * `role: 'tool'` messages the request copy could carry a note on, so a claudecli call gets no note and
+ * `noteAppended` stays unset for it (the trace must not claim a delivery that cannot happen).
+ *
+ * `noteAppended` is written by the `post:tool_call` handler on the shared payload object, so a plugin that
+ * reads it from its own `post:tool_call` handler sees it only if this module's handler ran first, i.e. the
+ * host hooks must be registered on the registry before that plugin (`createHostHooks` runs before
+ * `loadDefaultPlugins`; `r10-s4-notes-history.test.ts` pins both sides of it). The registry has no handler priority, so the
+ * order is the only mechanism there is.
  *
  * Gates (a note is never added when any of these fails):
  *  - fs: the tool is `fs__write_file`/`fs__edit_file`, the result is not an error, the call is not a
@@ -44,7 +59,7 @@ import type {
   PreModelRequestPayload,
 } from '@adhd/agent-base-types';
 import { resolveFsServerLaunch } from '@adhd/agent-core-native-tooling';
-import { shellRejectionNote } from '@adhd/agent-engine-orchestrator';
+import { selectionOf, shellRejectionNote } from '@adhd/agent-engine-orchestrator';
 
 /** Note for a successful `fs__write_file`. Plain ASCII, factual, no instruction beyond not re-reading. */
 export const FS_WRITE_NOTE = '[Note: the file was written; there is no need to read it back to verify.]';
@@ -72,6 +87,18 @@ export interface IToolResultNotesOptions {
 export interface IToolResultNotesHandle {
   /** Number of `callId -> note` entries currently remembered. */
   size(): number;
+}
+
+/**
+ * True when the call ran over the claudecli bridge, where a note cannot reach the model (see the module
+ * header). Fails open (false) when the context's provider cannot be resolved: the engine always resolves it.
+ */
+function isBridgedProvider(executionContext: ExecutionContext): boolean {
+  try {
+    return selectionOf(executionContext).providerType === 'claudecli';
+  } catch {
+    return false;
+  }
 }
 
 let catalogFsBin: string | null | undefined;
@@ -177,7 +204,11 @@ export function noteFor(
   return undefined;
 }
 
-/** Apply the remembered notes to the tool-result messages of `messages` in place (element replacement only). */
+/**
+ * Apply the remembered notes to the tool-result messages of `messages` by element replacement only. `messages`
+ * MUST be the engine's per-request COPY of the history array (the `pre:model_request` enforcement payload),
+ * never the live history: this replaces elements of the array it is given and never mutates a message object.
+ */
 function applyNotes(messages: Message[], notes: ReadonlyMap<string, string>): void {
   for (let i = 0; i < messages.length; i++) {
     const m = messages[i];
@@ -211,6 +242,7 @@ export function registerToolResultNotes(
 
   hooks.register('post:tool_call', (p) => {
     try {
+      if (isBridgedProvider(p.executionContext)) return;
       const note = noteFor(p, isCatalogFs);
       if (note === undefined || !canCarryNote(p.result)) return;
       notes.delete(p.callId);

@@ -1464,10 +1464,15 @@ export class Orchestrator {
           tools,
         });
 
+        // Enforcement handlers get a COPY of the history array, never `currentMessages` itself: a handler
+        // may replace an element of the copy (the host's tool-result notes do) and what it leaves there is
+        // what the provider is sent, while the history (session store, observers, the compaction
+        // summariser, the next turn's windowing) keeps the messages exactly as the tools produced them.
+        const requestMessages: Message[] = [...currentMessages];
         try {
           await hooks.enforce('pre:model_request', {
             executionContext,
-            messages: currentMessages,
+            messages: requestMessages,
             tools,
           });
         } catch (err: unknown) {
@@ -1478,7 +1483,7 @@ export class Orchestrator {
         }
 
         let providerResponse;
-        // R10 S5b: model-visible tool-result bytes this request carries (set once the request history is final).
+        // R10 S5b: tool-result bytes of the request history, excluding host-added notes (set once the history is final).
         let toolResultBytesIn: number | undefined;
         // GOV (f9dadeaa): the first fatal governance error a bridged call hit (cap / budget /
         // delegation). The bridge can only hand the CLI an isError result, so the task-level failure
@@ -1501,7 +1506,9 @@ export class Orchestrator {
             // plugin's call timer) against the ONE `post:model_response` a paused turn produces, so an
             // extra emit per continuation would split the turn and leave unpaired opens. Budget and
             // USD caps live in the enforcement handlers, which keep no emit-set state.
-            const requestPayload = { executionContext, messages: currentMessages, tools };
+            // A throwaway copy: the continuation re-sends the request the provider already holds, so
+            // nothing an enforcement handler does to the array can (or should) reach `currentMessages`.
+            const requestPayload = { executionContext, messages: [...currentMessages], tools };
             try {
               await hooks.enforce('pre:model_request', requestPayload);
             } catch (err: unknown) {
@@ -1577,18 +1584,32 @@ export class Orchestrator {
           }
         };
         try {
-          const baseMessages =
-            contextLimit > 0
-              ? windowMessages(currentMessages, contextLimit)
-              : currentMessages;
-          let messagesToSend = baseMessages;
-          if (toolDocSystemMessage) {
-            messagesToSend =
-              baseMessages[0]?.role === 'system'
-                ? [toolDocSystemMessage, ...baseMessages.slice(1)]
-                : [toolDocSystemMessage, ...baseMessages];
+          const shapeForRequest = (history: Message[]): Message[] => {
+            const windowed =
+              contextLimit > 0 ? windowMessages(history, contextLimit) : history;
+            if (!toolDocSystemMessage) return windowed;
+            return windowed[0]?.role === 'system'
+              ? [toolDocSystemMessage, ...windowed.slice(1)]
+              : [toolDocSystemMessage, ...windowed];
+          };
+          // What every observer and the history hold: windowed and tool-doc'd from the real history.
+          const observedMessages = shapeForRequest(currentMessages);
+          // What the provider is sent: the same window with any element an enforcement handler replaced
+          // on the request copy swapped in (a handler that restructured the array instead is honoured as is).
+          const replaced = new Map<Message, Message>();
+          if (requestMessages.length === currentMessages.length) {
+            requestMessages.forEach((m, i) => {
+              if (m !== currentMessages[i]) replaced.set(currentMessages[i], m);
+            });
           }
-          toolResultBytesIn = toolResultBytesInOf(runSelection.providerType, messagesToSend);
+          let messagesToSend = observedMessages;
+          if (requestMessages.length !== currentMessages.length) {
+            messagesToSend = shapeForRequest(requestMessages);
+          } else if (replaced.size > 0) {
+            messagesToSend = observedMessages.map((m) => replaced.get(m) ?? m);
+          }
+          // Measured on the un-noted history so it matches `resultBytes`, which also excludes host notes.
+          toolResultBytesIn = toolResultBytesInOf(runSelection.providerType, observedMessages);
           // Provider-native web tools (default on, opt out via
           // nativeWebTools:false) — see server-side-tools.ts (backlog 1abd2d84).
           const serverSideTools = serverSideToolsForProvider(
@@ -2476,7 +2497,9 @@ export class Orchestrator {
               estResultTokens: toolCallEstResultTokens,
               // R10 trace signals. `resultBytes` is the model-visible text AFTER the size cap / spill
               // and BEFORE `transform:tool_result` and the provider wire encoding. `noteAppended` is
-              // deliberately absent: notes are added later by `transform:tool_result` hooks.
+              // deliberately absent: it is set by the host's own `post:tool_call` handler when it records
+              // a note, and the note itself is applied to the outgoing request copy at `pre:model_request`
+              // enforcement, so it never reaches `resultBytes`, the history or any observer.
               errorClass: classifyToolCallOutcome({
                 isError,
                 isDenial,
