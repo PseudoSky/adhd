@@ -9,6 +9,9 @@ import type {
 } from './ports.js';
 import { createPluginState } from './state.js';
 
+/** Where a failure happened; handed to `IPolicyLayerOptions.onError`. */
+export type PolicyErrorPhase = 'load' | 'decide' | 'timeout' | 'shape' | 'merge';
+
 /** Options for the policy Layer. */
 export interface IPolicyLayerOptions {
   /** An object, or a module specifier / path exporting `createDecider(options)`. */
@@ -16,8 +19,19 @@ export interface IPolicyLayerOptions {
   /** Options handed to `createDecider` when `decider` is a module reference. */
   readonly deciderOptions?: Readonly<Record<string, unknown>>;
   readonly ask?: IPolicyAskHandler;
-  /** Optional deadline for one decision. Expiry denies (LP-11). */
+  /**
+   * Optional deadline for one decision, in milliseconds. Must be a finite
+   * number greater than zero (anything else throws at construction). Expiry
+   * denies (LP-11) and aborts the `AbortSignal` handed to `decide`.
+   */
   readonly timeoutMs?: number;
+  /**
+   * Observes every fail-closed denial caused by an error. The client always
+   * receives the generic denial; this is where the operator sees the cause.
+   * Default: one stderr line naming the phase and error class (never argument
+   * values). A throwing handler is ignored.
+   */
+  readonly onError?: (error: unknown, info: { phase: PolicyErrorPhase }) => void;
 }
 
 type Transport = IPolicyDecideRequest['transport'];
@@ -25,11 +39,19 @@ type Attributes = NonNullable<IPolicyDecideRequest['attributes']>;
 
 /** Outcome of the decision phase; `next()` is only ever invoked on `allow`. */
 type Verdict =
-  | { readonly kind: 'allow'; readonly set?: Readonly<Record<string, unknown>> }
+  | { readonly kind: 'allow' }
   | { readonly kind: 'deny'; readonly reason: string };
 
 const DENY_FAILED: Verdict = { kind: 'deny', reason: 'policy decision failed' };
 const TRANSPORTS: readonly string[] = ['http', 'grpc', 'mcp', 'cli'];
+
+/** Thrown by the deadline so the failure is classified as `timeout`. */
+class PolicyTimeoutError extends Error {
+  constructor() {
+    super('policy decision timed out');
+    this.name = 'PolicyTimeoutError';
+  }
+}
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {
   if (v === null || typeof v !== 'object' || Array.isArray(v)) return false;
@@ -38,34 +60,69 @@ function isPlainObject(v: unknown): v is Record<string, unknown> {
 }
 
 /**
+ * Throw when `timeoutMs` is present but not a finite number greater than zero.
+ * Called at construction and at `--use` option capture, never per call.
+ */
+function assertTimeoutMs(timeoutMs: unknown): void {
+  if (timeoutMs === undefined) return;
+  if (typeof timeoutMs !== 'number' || !Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+    throw new ApiError(
+      'invalid_argument',
+      'apigen-plugin-policy: timeoutMs must be a finite number greater than 0'
+    );
+  }
+}
+
+/**
  * Validate `envelope.attributes` (D-18). Only string, finite number and
- * string[] values are accepted; any other shape yields `undefined` (no attributes).
+ * string[] values are accepted; any other shape yields `undefined` (no
+ * attributes). An own `__proto__` key rejects the whole object, and the result
+ * has a null prototype built with `defineProperty`, so a key can never reach
+ * `Object.prototype` or a prototype setter (L1).
  */
 function readAttributes(envelope: Record<string, unknown>): Attributes | undefined {
   const raw = envelope['attributes'];
   if (!isPlainObject(raw)) return undefined;
-  const out: Record<string, string | number | readonly string[]> = {};
+  if (Object.prototype.hasOwnProperty.call(raw, '__proto__')) return undefined;
+  const out: Record<string, string | number | readonly string[]> = Object.create(null);
   for (const key of Object.keys(raw)) {
     const v = raw[key];
+    let value: string | number | readonly string[];
     if (typeof v === 'string' || (typeof v === 'number' && Number.isFinite(v))) {
-      out[key] = v;
+      value = v;
     } else if (Array.isArray(v) && v.every((e) => typeof e === 'string')) {
-      out[key] = [...(v as string[])];
+      value = Object.freeze([...(v as string[])]);
     } else {
       return undefined;
     }
+    Object.defineProperty(out, key, {
+      value,
+      writable: true,
+      enumerable: true,
+      configurable: true,
+    });
   }
-  return out;
+  return Object.freeze(out);
 }
 
-/** Race `p` against a deadline; the timer is always cleared. */
-function withDeadline<T>(p: Promise<T>, timeoutMs: number | undefined): Promise<T> {
-  if (typeof timeoutMs !== 'number' || !Number.isFinite(timeoutMs) || timeoutMs <= 0) {
-    return p;
-  }
+/**
+ * Race `p` against a deadline; the timer is always cleared. On expiry the
+ * controller is aborted (so the decider can stop work) and the race rejects
+ * with a `PolicyTimeoutError`.
+ */
+function withDeadline<T>(
+  p: Promise<T>,
+  timeoutMs: number | undefined,
+  controller: AbortController | undefined
+): Promise<T> {
+  if (timeoutMs === undefined) return p;
   let timer: ReturnType<typeof setTimeout> | undefined;
   const deadline = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => reject(new Error('policy decision timed out')), timeoutMs);
+    timer = setTimeout(() => {
+      const err = new PolicyTimeoutError();
+      controller?.abort(err);
+      reject(err);
+    }, timeoutMs);
   });
   return Promise.race([p, deadline]).finally(() => clearTimeout(timer));
 }
@@ -91,22 +148,63 @@ function readDecision(raw: unknown): IPolicyDecision | undefined {
   return undefined;
 }
 
+/** Default `onError`: one stderr line, phase and error class only. */
+function defaultOnError(error: unknown, info: { phase: PolicyErrorPhase }): void {
+  const name = error instanceof Error ? error.name : typeof error;
+  process.stderr.write(`apigen-plugin-policy: ${info.phase} failure (${name}); call denied\n`);
+}
+
+/**
+ * Merge a decider's `set` over the call's domain arguments. `defineProperty`,
+ * not assignment: a `__proto__` key must become an own property, never reach
+ * the prototype setter. A non-extensible target throws `ApiError('internal')`.
+ */
+function mergeSet(domainArgs: Record<string, unknown>, set: Readonly<Record<string, unknown>>): void {
+  if (!Object.isExtensible(domainArgs)) {
+    throw new ApiError('internal', 'apigen-plugin-policy: call arguments cannot be modified');
+  }
+  try {
+    for (const key of Object.keys(set)) {
+      Object.defineProperty(domainArgs, key, {
+        value: set[key],
+        writable: true,
+        enumerable: true,
+        configurable: true,
+      });
+    }
+  } catch {
+    throw new ApiError('internal', 'apigen-plugin-policy: call arguments cannot be modified');
+  }
+}
+
 /**
  * Build the policy Layer plugin (LP-06..LP-17). Per call: resolve the decider
  * once (a load failure is memoised, so every call is then denied), map the
- * transport, build the request, race the decision against `timeoutMs`,
- * validate the answer, then `allow` merges `set` over `call.domainArgs` and
- * continues, `ask` consults the ask handler, `deny` throws
- * `ApiError('permission_denied')`. Every failure mode denies (fail closed).
+ * transport, build the request (frozen shallow copies of the arguments and
+ * envelope, so a decider cannot mutate the real call), race the decision
+ * against `timeoutMs` (expiry aborts the signal given to `decide`), validate
+ * the answer, then `allow` merges `set` over `call.domainArgs` and continues,
+ * `ask` consults the ask handler, `deny` throws `ApiError('permission_denied')`.
+ * Every failure mode denies (fail closed) and is reported to `onError`.
  * No state is held between calls (LP-13); streaming results pass through
  * untouched (LP-12).
  *
  * Ordering rule (LP-14): declare this layer AFTER any layer that writes
  * `call.envelope.attributes` (an auth layer), since it reads them there.
  *
- * @param options Decider, optional ask handler and decision deadline.
+ * @param options Decider, optional ask handler, decision deadline and error observer.
+ * @throws ApiError('invalid_argument') when `timeoutMs` is not a finite number > 0.
  */
 export function createPolicyLayerPlugin(options: IPolicyLayerOptions): UsePlugin {
+  assertTimeoutMs(options.timeoutMs);
+  const onError = options.onError ?? defaultOnError;
+  const report = (error: unknown, phase: PolicyErrorPhase): void => {
+    try {
+      onError(error, { phase });
+    } catch {
+      // An observer must never change the outcome.
+    }
+  };
   let deciderPromise: Promise<IPolicyDecider> | undefined;
   const resolveDecider = (): Promise<IPolicyDecider> => {
     deciderPromise ??= loadDecider(
@@ -117,38 +215,60 @@ export function createPolicyLayerPlugin(options: IPolicyLayerOptions): UsePlugin
   };
 
   async function decideCall(call: Call): Promise<Verdict> {
+    let phase: PolicyErrorPhase = 'load';
     try {
       const transport = call.transport as string;
       if (!TRANSPORTS.includes(transport)) {
         return { kind: 'deny', reason: 'unsupported transport' };
       }
       const envelope = call.envelope ?? {};
-      const request: IPolicyDecideRequest = {
+      const request: IPolicyDecideRequest = Object.freeze({
         tool: call.operation.id,
-        args: call.domainArgs,
-        envelope,
+        args: Object.freeze({ ...call.domainArgs }),
+        envelope: Object.freeze({ ...envelope }),
         transport: transport as Transport,
         attributes: readAttributes(envelope),
-      };
+      });
       const decider = await resolveDecider();
+      phase = 'decide';
+      const controller =
+        options.timeoutMs === undefined ? undefined : new AbortController();
+      let signal = call.signal;
+      if (controller !== undefined) {
+        signal =
+          call.signal === undefined
+            ? controller.signal
+            : AbortSignal.any([call.signal, controller.signal]);
+      }
       const raw = await withDeadline(
-        Promise.resolve(decider.decide(request, call.signal)),
-        options.timeoutMs
+        Promise.resolve(decider.decide(request, signal)),
+        options.timeoutMs,
+        controller
       );
+      phase = 'shape';
       const decision = readDecision(raw);
-      if (decision === undefined) return DENY_FAILED;
-      if (decision.decision === 'allow') return { kind: 'allow', set: decision.set };
+      if (decision === undefined) {
+        report(new Error('malformed decision'), 'shape');
+        return DENY_FAILED;
+      }
+      if (decision.decision === 'allow') {
+        phase = 'merge';
+        if (decision.set !== undefined) mergeSet(call.domainArgs, decision.set);
+        return { kind: 'allow' };
+      }
       if (decision.decision === 'ask') {
         if (options.ask === undefined) {
           return { kind: 'deny', reason: decision.reason ?? 'denied by policy' };
         }
+        phase = 'decide';
         const answer = await options.ask.ask(request, decision.reason);
         return answer === 'allow-once'
           ? { kind: 'allow' }
           : { kind: 'deny', reason: decision.reason ?? 'denied by policy' };
       }
       return { kind: 'deny', reason: decision.reason ?? 'denied by policy' };
-    } catch {
+    } catch (error) {
+      report(error, error instanceof PolicyTimeoutError ? 'timeout' : phase);
       return DENY_FAILED;
     }
   }
@@ -158,22 +278,9 @@ export function createPolicyLayerPlugin(options: IPolicyLayerOptions): UsePlugin
     capabilities: {
       layer: {
         layer: async (rawCall, next) => {
-          const call = rawCall as Call;
-          const verdict = await decideCall(call);
+          const verdict = await decideCall(rawCall as Call);
           if (verdict.kind === 'deny') {
             throw new ApiError('permission_denied', verdict.reason, { code: 'policy-denied' });
-          }
-          if (verdict.set !== undefined) {
-            for (const key of Object.keys(verdict.set)) {
-              // defineProperty, not assignment: a `__proto__` key must become
-              // an own property, never reach the prototype setter.
-              Object.defineProperty(call.domainArgs, key, {
-                value: verdict.set[key],
-                writable: true,
-                enumerable: true,
-                configurable: true,
-              });
-            }
           }
           return next();
         },
@@ -202,6 +309,10 @@ function delegate(): UsePlugin {
  * captures them and returns no operations; the `layer` capability then
  * delegates to a plugin built from the captured options. Without options the
  * layer throws `ApiError('internal')`, which fails the call (closed).
+ *
+ * One configuration per process: options are held in module scope, so every
+ * mount in a process shares the most recently captured options, and a mount
+ * that supplies none keeps them. Invalid options (`timeoutMs`) throw at capture.
  */
 const plugin: UsePlugin = {
   id: 'policy',
@@ -217,7 +328,12 @@ const plugin: UsePlugin = {
     },
     mount: {
       operations: (_descriptor, opts) => {
-        state.set((opts ?? undefined) as Parameters<typeof state.set>[0]);
+        // A later mount (the host mounts once per transport/instance) that
+        // carries no options must not erase the configuration already captured.
+        if (opts === undefined || opts === null) return [];
+        const captured = opts as Parameters<typeof state.set>[0];
+        assertTimeoutMs(captured?.timeoutMs);
+        state.set(captured);
         return [];
       },
     },
