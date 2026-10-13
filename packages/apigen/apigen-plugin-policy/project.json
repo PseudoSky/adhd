@@ -50,7 +50,12 @@
       }
     },
     "test": {
-      "dependsOn": ["lint", "^build", "typecheck-spec"]
+      "//": "Partial override: the command is overridden because this package's vitest config is `.mts` while the workspace targetDefaults hardcodes `.ts` (without it `nx run apigen-plugin-policy:test` fails to load the config and no test can run).",
+      "dependsOn": ["lint", "^build", "typecheck-spec"],
+      "options": {
+        "cwd": ".",
+        "command": "vitest run --config packages/apigen/apigen-plugin-policy/vite.config.mts"
+      }
     }
   }
 }
