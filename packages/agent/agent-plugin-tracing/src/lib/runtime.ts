@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { newTraceId } from '@adhd/sox-telemetry';
 import type { OtelAttributes } from '@adhd/sox-telemetry';
-import type { ExecutionContext } from '@adhd/agent-base-types';
+import type { ExecutionContext, PreToolCallPayload } from '@adhd/agent-base-types';
 import { TracingCounters } from './counters.js';
 import { OpenSpan } from './spans.js';
 
@@ -15,6 +15,12 @@ interface ToolSpan {
   span: OpenSpan;
   startedAt: number;
   tool: string;
+  /**
+   * The `pre:tool_call` payload object exactly as the engine emitted it. The engine completes
+   * `groupIndex` and `queuedMs` on this same object when the call actually starts, which is after the
+   * event fired, so the final values are read from it at `post:tool_call`, never at `pre:tool_call`.
+   */
+  pre: Pick<PreToolCallPayload, 'groupIndex' | 'queuedMs'>;
 }
 
 export interface TaskState {

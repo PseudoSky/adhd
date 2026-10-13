@@ -1,7 +1,7 @@
 import { readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ExecutionContext } from '@adhd/agent-base-types';
+import type { ExecutionContext, PreToolCallPayload } from '@adhd/agent-base-types';
 import { createPlugin } from '../index.js';
 import type { TracingPlugin } from '../index.js';
 import { unionMs } from './runtime.js';
@@ -66,8 +66,9 @@ describe('R10 S5 AC1 — a replayed hook sequence produces every spec-table attr
   const TABLE: ReadonlyArray<readonly [string, string, unknown]> = [
     ['agent.tool_call.start', 'agent.tool.concurrency_class', 'barrier'],
     ['agent.tool_call.start', 'agent.tool.turn_index', 0],
-    ['agent.tool_call.start', 'agent.tool.group_index', 1],
-    ['agent.tool_call.start', 'agent.tool.queued_ms', 17],
+    // group_index and queued_ms are engine-final only once the call has run, so they live on the finish record
+    ['agent.tool_call.finish', 'agent.tool.group_index', 1],
+    ['agent.tool_call.finish', 'agent.tool.queued_ms', 17],
     ['agent.tool_call.finish', 'agent.tool.error_class', 'policy_rejected'],
     ['agent.tool_call.finish', 'agent.tool.result_bytes', 77],
     ['agent.tool_call.finish', 'agent.tool.note_appended', true],
@@ -272,7 +273,11 @@ describe('R10 S5 AC1 — a replayed hook sequence produces every spec-table attr
     const ctx = ctxOf('t3');
     await hooks.emit('task:start', { executionContext: ctx } as never);
     for (const [callId, queuedMs] of [['a', 12], ['b', 0], ['c', undefined], ['d', 0.5]] as const) {
-      await hooks.emit('pre:tool_call', { executionContext: ctx, toolName: 'x__y', callId, toolInput: {}, ...(queuedMs === undefined ? {} : { queuedMs }) });
+      const pre = { executionContext: ctx, toolName: 'x__y', callId, toolInput: {} } as PreToolCallPayload;
+      await hooks.emit('pre:tool_call', pre);
+      // the engine completes queuedMs on the emitted payload object when the call starts, after the event fired
+      if (queuedMs !== undefined) pre.queuedMs = queuedMs;
+      await hooks.emit('post:tool_call', { executionContext: ctx, toolName: 'x__y', callId, toolInput: {}, result: {}, isError: false, estResultTokens: 1 });
     }
     const base = { executionContext: ctx, kind: 'task' as const, childTaskIds: ['k'], parentBlockedMs: 1 };
     await hooks.emit('dispatch:completed', { ...base, mode: 'sync' });

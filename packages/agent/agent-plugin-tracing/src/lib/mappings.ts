@@ -333,24 +333,31 @@ const toolRequest = defineMapping('pre:tool_call', (p, rt) => {
       ...definedAttrs({
         'agent.tool.concurrency_class': p.concurrencyClass,
         'agent.tool.turn_index': p.turnIndex,
-        'agent.tool.group_index': p.groupIndex,
-        'agent.tool.queued_ms': p.queuedMs === undefined ? undefined : Math.round(p.queuedMs),
+        // `group_index` and `queued_ms` are NOT read here: the engine fills both on this payload object
+        // when the call starts (after this event), so they are read from `pre` at `post:tool_call`.
       }),
     },
     state.traceId
   );
-  if (p.queuedMs !== undefined && p.queuedMs > 0) rt.counters.toolBarrierWait();
-  state.tools.set(p.callId, { span, startedAt: rt.now(), tool: p.toolName });
+  state.tools.set(p.callId, { span, startedAt: rt.now(), tool: p.toolName, pre: p });
 });
 
 const toolResponse = defineMapping('post:tool_call', (p, rt) => {
   const state = rt.task(p.executionContext);
   const open = state?.tools.get(p.callId);
   state?.tools.delete(p.callId);
+  // The engine-final scheduling figures, read from the kept `pre:tool_call` payload now that the call has
+  // run (see {@link ToolSpan.pre}). Absent when the engine reported none (a claudecli bridged call has no
+  // schedule): never a guessed 0.
+  const rawQueuedMs = open?.pre.queuedMs;
+  const queuedMs = rawQueuedMs === undefined ? undefined : Math.round(rawQueuedMs);
+  if (rawQueuedMs !== undefined && rawQueuedMs > 0) rt.counters.toolBarrierWait();
   const attrs: OtelAttributes = {
     'agent.tool.is_error': p.isError,
     'agent.tool.est_result_tokens': p.estResultTokens,
     ...definedAttrs({
+      'agent.tool.group_index': open?.pre.groupIndex,
+      'agent.tool.queued_ms': queuedMs,
       'agent.tool.error_class': p.errorClass,
       'agent.tool.result_bytes': p.resultBytes,
       'agent.tool.note_appended': p.noteAppended,

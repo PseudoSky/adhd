@@ -81,15 +81,15 @@ analysis: group by `agent.root_task_id` / `agent.task_id` / `agent.parent_task_i
 | --- | --- | --- |
 | `agent.tool_call.start` | `agent.tool.concurrency_class` | `safe` / `barrier` / `unordered`, as scheduled |
 | | `agent.tool.turn_index` | zero-based model turn whose response requested the call |
-| | `agent.tool.group_index` | ordered execution group the call ran in |
-| | `agent.tool.queued_ms` | ms the call waited for a slot / an earlier group before it started (barrier waits) |
-| `agent.tool_call.finish` / `.error` | `agent.tool.error_class` | `none` / `policy_rejected` / `arg_mismatch` / `arg_coerced` / `exit_nonzero` / `tool_error` |
+| `agent.tool_call.finish` / `.error` | `agent.tool.group_index` | ordered execution group the call actually ran in (engine-final: read from the `pre:tool_call` payload at `post:tool_call`, because the engine completes it when the call starts; a call refused by governance leaves the plan, so this can differ from the planned index); absent for a claudecli-bridged call |
+| | `agent.tool.queued_ms` | ms the call waited for a slot / an earlier group before it started (barrier waits); engine-final like `group_index`; absent for a claudecli-bridged call, never `0` |
+| | `agent.tool.error_class` | `none` / `policy_rejected` / `arg_mismatch` / `arg_coerced` / `exit_nonzero` / `tool_error` |
 | | `agent.tool.result_bytes` | model-visible bytes of the result |
 | | `agent.tool.note_appended` | the host appended a guidance note to the result |
 | `agent.model_call.finish` | `agent.model_call.ttfb_ms` | provider request start to first streamed byte (only where the provider measures it) |
 | | `agent.model_call.thinking_config` | Anthropic only: `none` (no `thinking` field sent; the model may still think, so read `thinking_blocks`) / `adaptive` / `disabled`; absent for OpenAI-compatible and claudecli calls |
 | | `agent.model_call.thinking_blocks` | Anthropic only: `thinking` + `redacted_thinking` blocks in the response (a count, never their text; `0` is a real zero there); absent for OpenAI-compatible and claudecli calls |
-| | `agent.model_call.tool_result_bytes_in` | Anthropic and OpenAI-compatible: UTF-8 bytes of the model-visible tool-result text in this request's history (the adapter's own wire conversion); absent for claudecli |
+| | `agent.model_call.tool_result_bytes_in` | Anthropic and OpenAI-compatible: UTF-8 bytes of the tool-result text in this request's history (the adapter's own wire conversion), excluding any host-added note; absent for claudecli |
 | | `agent.model_call.turn_index` | zero-based model call within its task (equals `agent.tool.turn_index` of the tool calls that response requested) |
 | `agent.task.startup.finish` | `agent.startup.mcp_connect_ms.<server>` | one attribute per MCP server key: connect + tool listing ms |
 | | `agent.startup.tools_ready_ms` | task start until the full tool list was ready |
