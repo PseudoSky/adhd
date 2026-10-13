@@ -855,6 +855,23 @@
       ],
       "context": "contexts/search-errors.md",
       "notes": "typescript-pro sonnet/high; StealthSearchError registry"
+    },
+    "search-port-providers": {
+      "kind": "work",
+      "phase": "migrate",
+      "depends_on": [
+        "search-errors"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py search-port-providers",
+      "artifacts": [
+        "entrypoint/stealth-search/src/lib/types.ts",
+        "entrypoint/stealth-search/src/lib/providers.ts",
+        "entrypoint/stealth-search/src/lib/utils.ts",
+        "entrypoint/stealth-search/src/lib/queries/last-search.ts",
+        "entrypoint/stealth-search/src/test/unit/providers/"
+      ],
+      "context": "contexts/search-port-providers.md",
+      "notes": "typescript-pro sonnet/high"
     }
   },
   "authored_with": {
