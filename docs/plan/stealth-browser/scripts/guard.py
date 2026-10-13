@@ -3336,7 +3336,7 @@ def _sh14():
 
 # ============================================================ service-proxy 0.6.0 consumption (sp-reaper-load-proof, sp-link, sp-reaper-smoke, sp-switch)
 SP_VERSION = "0.6.0"
-SP_TGZ_RE = re.compile(r"^file:(/Users/nix/\.cache/adhd-dev-tarballs/adhd-sox-service-proxy-0\.6\.0-[0-9a-f]{8}\.tgz)$")
+SP_TGZ_RE = re.compile(r"^file:(/Users/nix/\.cache/adhd-dev-tarballs/adhd-sox-service-proxy-0\.6\.0-[0-9a-f]{8}(?:-prerelease)?\.tgz)$")
 RLP = f"{SMOKE}/reaper-load-proof.md"
 SPL = f"{SMOKE}/sp-link.md"
 SPS = f"{SMOKE}/switch.md"
@@ -3455,7 +3455,7 @@ def _spl1():
 
 @check("sp-link", 2)
 def _spl2():
-    """The unreleased 0.6.0 resolves from a recorded dev tarball (or the registry once published): root package.json `pnpm.overrides["@adhd/sox-service-proxy"]` is `file:/Users/nix/.cache/adhd-dev-tarballs/adhd-sox-service-proxy-0.6.0-<sha8>.tgz`, that file exists and smoke/sp-link.md records `TARBALL_SHA256:` equal to its real sha256, `TARBALL_VERSION: 0.6.0` equal to the version inside the tarball, and `TARBALL_BUILD: pnpm pack` (never `npm pack`, which would leave a literal `workspace:^`); if 0.6.0 is already published the evidence records `REGISTRY: published`, the override is absent and the sp-switch state is verification-only."""
+    """The unreleased 0.6.0 resolves from a recorded dev tarball (or the registry once published): root package.json `pnpm.overrides["@adhd/sox-service-proxy"]` is `file:/Users/nix/.cache/adhd-dev-tarballs/adhd-sox-service-proxy-0.6.0-<sha8>[-prerelease].tgz`, that file exists and smoke/sp-link.md records `TARBALL_SHA256:` equal to its real sha256, `TARBALL_VERSION: 0.6.0` equal to the version inside the tarball, and `TARBALL_BUILD: pnpm pack` (never `npm pack`, which would leave a literal `workspace:^`); if 0.6.0 is already published the evidence records `REGISTRY: published`, the override is absent and the sp-switch state is verification-only."""
     t = read(SPL)
     if re.search(r"^REGISTRY:\s*published\s*$", t, re.M):
         return PROXY_PKG not in root_overrides() and sh(["npm", "view", f"{PROXY_PKG}@{SP_VERSION}", "version"], timeout=60)[0] == 0, "registry path"
