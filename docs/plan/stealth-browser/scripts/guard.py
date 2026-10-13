@@ -3490,16 +3490,23 @@ def _spl3():
     return re.search(r"@adhd/sox-service-proxy[@/:'\"\s]*\S*0\.6\.\d+", lock) is not None and ver == SP_VERSION and not miss, f"lock mentions 0.6.x={'0.6.' in lock} installed={ver} missing exports={miss} {e[-100:]}"
 
 
+def _sp_dist_probe():
+    """Build the package and probe dist/index.js for the proxy: returns (rc, requires, inlined, mentions)."""
+    rc, _ = sh([NX, "run", f"{proj_name()}:build"], timeout=1800)
+    dist = read(f"{P}/dist/index.js")
+    req = re.search(r"(?:require|import)\(\s*['\"]@adhd/sox-service-proxy['\"]", dist) is not None
+    inl = re.search(r"function\s+(ensureBackend|serveBackend|dialBackend)\b", dist) is not None
+    return rc, req, inl, "@adhd/sox-service-proxy" in dist
+
+
 @check("sp-link", 4)
 def _spl4():
-    """The dist keeps the proxy external: after `nx run stealth-browser:build` exits 0, dist/index.js contains a `require` (or dynamic `import()`) of `@adhd/sox-service-proxy` and no inlined definition of ensureBackend, serveBackend or dialBackend (vite.config.ts keeps `externalizeRealDeps(__dirname)`)."""
+    """The dist keeps the proxy external at link time: after `nx run stealth-browser:build` exits 0, dist/index.js has no inlined definition of ensureBackend, serveBackend or dialBackend, any reference to `@adhd/sox-service-proxy` in it is a `require` (or dynamic `import()`) and vite.config.ts keeps `externalizeRealDeps(__dirname)`. (That dist actually requires the package is asserted by sp-switch.5, after chrome-lifecycle has written lifecycle/sp.ts; sp-link may not touch src.)"""
     if sp_dep() == "" or not exists(SPL):
         return False, "dependency or evidence missing"
-    rc, out = sh([NX, "run", f"{proj_name()}:build"], timeout=1800)
-    dist = read(f"{P}/dist/index.js")
-    ext = re.search(r"(?:require|import)\(\s*['\"]@adhd/sox-service-proxy['\"]", dist) is not None
-    inl = re.search(r"function\s+(ensureBackend|serveBackend|dialBackend)\b", dist) is not None
-    return rc == 0 and ext and not inl and "externalizeRealDeps(__dirname)" in read(f"{P}/vite.config.ts"), f"build rc={rc} external={ext} inlined={inl}"
+    rc, req, inl, ment = _sp_dist_probe()
+    ok = rc == 0 and not inl and (req or not ment) and "externalizeRealDeps(__dirname)" in read(f"{P}/vite.config.ts")
+    return ok, f"build rc={rc} external={req} inlined={inl} referenced={ment}"
 
 
 @check("sp-link", 5)
@@ -3585,6 +3592,15 @@ def _sw4():
     since = ((state().get("states") or {}).get("sp-switch") or {}).get("start_ref")
     extra = manifest_line_changes(since, "package.json", "sp-switch")
     return o[0] and not extra, f"{o[1]} other root manifest lines changed={extra[:4]}"
+
+
+@check("sp-switch", 5)
+def _sw5():
+    """The built dist requires the proxy from the registry build: `lifecycle/sp.ts` exists, `nx run stealth-browser:build` exits 0, dist/index.js contains a `require` (or dynamic `import()`) of `@adhd/sox-service-proxy` and no inlined definition of ensureBackend, serveBackend or dialBackend."""
+    if not exists(f"{P}/src/lifecycle/sp.ts"):
+        return False, "src/lifecycle/sp.ts missing"
+    rc, req, inl, _ = _sp_dist_probe()
+    return rc == 0 and req and not inl, f"build rc={rc} external={req} inlined={inl}"
 
 
 # ============================================================ tripwire package (tripwire-scaffold .. tripwire-pack) and the reverse-apis adoption
