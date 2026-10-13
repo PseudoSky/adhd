@@ -15,7 +15,9 @@ import { dirname } from 'node:path';
 import type { FsPort } from './memory-fs.js';
 import type { AuditEvent } from './types.js';
 
+/** Default audit-log cap in bytes (5 MiB). */
 export const DEFAULT_MAX_AUDIT_BYTES = 5 * 1024 * 1024;
+/** Smallest audit cap `maxAuditBytes` is clamped to, in bytes. */
 export const MIN_AUDIT_BYTES = 100_000;
 /** Every audit line (including its newline) is shorter than this. */
 export const AUDIT_LINE_MAX_BYTES = 4096;
@@ -116,6 +118,7 @@ export interface AuditLog {
   append(line: string): Promise<void>;
 }
 
+/** Options of {@link createAuditLog}: log path, byte cap, filesystem port and unique-suffix source. */
 export interface AuditLogOptions {
   path: string;
   maxAuditBytes: number;

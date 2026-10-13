@@ -107,6 +107,7 @@ export type SchedulePicker = (
   step: number,
 ) => number;
 
+/** Options of {@link createMemoryFs}. */
 export interface MemoryFsOptions {
   clock?: () => number;
   /** When false, `link` fails with EPERM (hard links unsupported). */

@@ -21,6 +21,7 @@ export const TRIPWIRE_ERROR_CODES = [
   'TRIPWIRE_ABORTED',
 ] as const;
 
+/** The union of the stable tripwire error codes in `TRIPWIRE_ERROR_CODES`. */
 export type TripwireErrorCode = (typeof TRIPWIRE_ERROR_CODES)[number];
 
 const CODE_SET: ReadonlySet<string> = new Set(TRIPWIRE_ERROR_CODES);

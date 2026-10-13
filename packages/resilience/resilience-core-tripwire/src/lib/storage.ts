@@ -176,6 +176,7 @@ export function defaultNodeFs(): FsPort {
   return sharedNodeFs;
 }
 
+/** Options of {@link createFileStorage}. */
 export interface FileStorageOptions {
   stateDir: string;
   auditPath: string;
