@@ -32,8 +32,9 @@ export interface NodeTripwireIoOptions {
  * called. `question` writes the prompt to stderr and resolves with the
  * next input line, or `null` once the input has ended or closed (it never
  * hangs on EOF). One line reader is kept for the life of the io, so piped
- * answers are never lost between questions; it is paused between
- * questions so an idle prompt reader does not keep the process alive.
+ * answers are never lost between questions; between questions it is
+ * paused and the input handle unref'd, so an idle prompt reader does not
+ * keep the process alive after the last answer.
  */
 export function nodeTripwireIo(o: NodeTripwireIoOptions = {}): TripwireIo {
   const input: NodeIoInput = o.input ?? process.stdin;
@@ -42,6 +43,13 @@ export function nodeTripwireIo(o: NodeTripwireIoOptions = {}): TripwireIo {
   const env = o.env ?? process.env;
   const isTTY = o.isTTY ?? input.isTTY === true;
 
+  // A socket/TTY stdin keeps the event loop alive even while paused:
+  // unref it between questions so a finished CLI exits after its prompt.
+  const handle = input as { ref?: () => unknown; unref?: () => unknown };
+  const idle = (r: Interface): void => {
+    r.pause();
+    handle.unref?.();
+  };
   let rl: Interface | null = null;
   let closed = input.readableEnded === true || input.destroyed === true;
   const lines: string[] = [];
@@ -54,7 +62,7 @@ export function nodeTripwireIo(o: NodeTripwireIoOptions = {}): TripwireIo {
       const w = waiters.shift();
       if (w) w(line);
       else lines.push(line);
-      if (waiters.length === 0) r.pause();
+      if (waiters.length === 0) idle(r);
     });
     r.once('close', () => {
       closed = true;
@@ -74,6 +82,7 @@ export function nodeTripwireIo(o: NodeTripwireIoOptions = {}): TripwireIo {
       if (closed) return Promise.resolve(null);
       return new Promise<string | null>((resolve) => {
         waiters.push(resolve);
+        handle.ref?.();
         reader().resume();
       });
     },

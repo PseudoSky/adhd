@@ -79,6 +79,29 @@ describe('[tripwire-interactive.8] TW31 nodeTripwireIo', () => {
     });
 });
 
+describe('[tripwire-interactive.8] TW31 an idle prompt reader does not ' +
+  'keep the process alive', () => {
+  it('the input handle is ref\'d while a question waits and unref\'d after ' +
+    'the answer', async () => {
+    const calls: string[] = [];
+    const input = Object.assign(new PassThrough(), {
+      ref: () => calls.push('ref'),
+      unref: () => calls.push('unref'),
+    });
+    const { io } = make(input, true);
+    const p = io.question('1');
+    expect(calls).toEqual(['ref']);
+    input.write('a\n');
+    expect(await p).toBe('a');
+    expect(calls).toEqual(['ref', 'unref']);
+    const q = io.question('2');
+    input.write('b\n');
+    expect(await q).toBe('b');
+    expect(calls).toEqual(['ref', 'unref', 'ref', 'unref']);
+    input.end();
+  });
+});
+
 describe('[tripwire-interactive.2] TW25 EOF resolves null, never a hang',
   () => {
     it('an input already ended answers null', async () => {
