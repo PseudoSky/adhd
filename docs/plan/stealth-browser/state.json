@@ -221,10 +221,10 @@
       "end_ref": null
     },
     "port-fixes": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-10-13T00:06:33.704Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "0f71e50ef06b3bc5c5e529a137025e123cc58e2d",
       "end_ref": null
     },
     "audit-pre-review": {
