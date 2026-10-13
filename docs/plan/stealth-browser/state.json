@@ -312,10 +312,10 @@
       "end_ref": null
     },
     "tripwire-scaffold": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-10-13T01:11:41.521Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "ff6e8e9cc2a485ba795c0b49b88f5631143aae1e",
       "end_ref": null
     },
     "tripwire-core": {
@@ -1078,7 +1078,7 @@
     "version": "0.8.35",
     "hash": "0b6bc1f3d70e"
   },
-  "current_state": "capture-upgrade",
+  "current_state": "tripwire-scaffold",
   "dod_provenance": {
     "confirmed_at": "2026-10-12T23:49:38.410Z",
     "by": "pseudosky",
