@@ -16,7 +16,7 @@ A ticket is done only when every clause for its phase holds and the evidence (co
 7. One test file per demo scenario S1-S7 drives the public entry exactly as the demo does (library import; CLI via apigen `cliPlugin.run({options:{argv}})` in-process; Layer via the apigen host in-process; MCP serve via an in-memory transport and an injected `IProcessLauncher` fake). Each Gherkin scenario in the ticket maps to ≥1 test whose title carries the scenario name.
 8. Every test has teeth: for each behavior group a negative control was run (the production line removed or inverted) and shown red, then restored (recorded in Evidence).
 9. No sleeps, no network, writes only under `tmp/policy/`, cleans up in `finally`.
-10. `npx nx run-many -t test -p policy-core-client,policy,apigen-plugin-policy` exits 0. `e2e` is NOT run.
+10. `npx nx run policy:test` (and the same for `policy-core-client`, `apigen-plugin-policy`) exits 0, and `npx nx affected -t lint,typecheck,typecheck-spec,test` exits 0 on the branch. `e2e` is NOT run, and no unit-lane test starts a real subprocess: a process launcher is faked (`entrypoint/policy/src/test/helpers/fake-launcher.ts`), MCP traffic runs over an in-memory transport or PassThrough streams, and the http entry binds a loopback port inside the test process.
 
 ## Plan done
 11. `demo-policy-v1.md` UNKNOWNs are each closed (observed behavior recorded) or filed as backlog; demo commands that the tests cover match the built CLI.

@@ -77,3 +77,26 @@ Observations for T18 / follow-up (no code defect found by these tests):
 - Each failed command emits TWO stderr records: the apigen logger's `{"level":50,...}` pino line (straight to fd 2, default level `warn` still logs errors) and the cli plugin's `{"code","message","details"}` body. stdout is clean. Not changed.
 - `refusal reason` sentences for `ask` read `requires approval`; the word `ask` is carried by `details.decision.effect` only (D-15 text in T12 is satisfied through the error body).
 
+## Entrypoint proof (Phase C part 2, `entrypoint/policy/src/test/functional/`: `s7-mcp-json.spec.ts`, `s7-serve.spec.ts`, `s3-run-bin.spec.ts`, `s8-serve-handshake-and-precedence.spec.ts`, `http-entry.spec.ts`)
+
+In-process (unit lane): the verbs run through their real functions (`mcpJsonVerb`, `runVerb`, `serveVerb`) with injected `IVerbDeps`; the only fakes are the process launcher (`helpers/fake-launcher.ts`, `helpers/stub-mcp-upstream.ts`) and transports (SDK `Client` over `InMemoryTransport`, or the real `createStdioHostTransport` over `PassThrough` streams). `serveVerb` gained two optional deps for this (`hostTransport`, `handshakeTimeoutMs`; commit `6e27d320`). Details and negative controls per fix are in T13, T17 and T19.
+
+| Fix | Proven by | Negative control (mutation -> red) |
+|---|---|---|
+| E2 undo hash guard | edited file exit 2 untouched; `--force` restores; second undo idempotent; unreadable record needs `--force`; no backup exit 4 | NC-E2-1 hash check off: 1 red; NC-E2-2 record optional: 1 red; NC-E2-3 force ignored: 2 red; NC-E2-4 early return off: 1 red; NC-E2-5 record not written: 8 red |
+| E3 modes, atomic, symlink | backup and record 0600, 0640 kept, new inode and no temp residue, symlink written through | NC-E3-1 mode: 1 red; NC-E3-2 in-place write: 2 red; NC-E3-3 realpath off: 1 red; NC-E3-4 mode not kept: 1 red; NC-E3-5 backup rewritten: 1 red |
+| E4 signals only for verbs (through `runPolicyCli`) | `mcp-json` adds one SIGINT and one SIGTERM handler, `verify` adds none | NC-E4-1 handlers for every command: 1 red |
+| E5 serve teardown | host close, abort signal, upstream exit, real stdio `end` each end serve with exit 0 and leave the upstream process exited | NC-E5-1 `server.onclose` off: 11 red; NC-E5-2 `upstream.onClose` off: 1; NC-E5-3 abort listener off: 1; NC-E5-4 stdin end/close off: 1; NC-E5-5 dispose off: 3 |
+| E6 (start) | the real `entry/http.ts` serves on a loopback port, an ephemeral port, stops on the signal; bad port exit 2; port in use exit 1 | NC-HTTP-1 host: 8 red; NC-HTTP-2 port env ignored: 8 red; NC-HTTP-3 no signal handlers: 3 red |
+| E8 mcp-json init flags | unmatched `--only` exit 2 writing nothing; `--only` selection; wrapped under another spec reported, `--replace` rewrites; relative spec stored relative; flag pairing | NC-E8-1..6: 1 red each |
+| D-06 on `run`/`serve` | flag over env, never merged, `@file` re-read per call (also mid-session on `serve`), bad env only when sole source | NC-S8-3 env wins: 5 red; NC-S8-3b flag ignored: 12 red; NC-S3-6: 2 red; NC-S3-7 cached file: 6 red |
+| D-08 `--name` / `liar-name` | ids are `<alias>.<tool>`; upstream `serverInfo.name` ignored; default alias is the command basename; `run --name` exit 2 | NC-S7-3 upstream name used: 7 red; NC-S7-4 `--name` ignored: 6 red; NC-S3-4: 1 red |
+| gateway fix 1615953d (forced `set` reaches `tools/call`) and deny => upstream calls 0 | `serveVerb` end to end: tag forced over a caller value, added when omitted or when no arguments were sent; refused calls leave the stub's log empty; on `run` the forced `cwd`/`argv` reach the launcher | NC-S7-2: 1 red; NC-S7-1 Layer bypassed: 11 red; NC-S3-2 Layer dropped from the gate: 11 red |
+| D-08 handshake fails closed (T19 S8.2) | six failure shapes, exit 1, host never started, one launcher start | NC-S8-2 timeout not forwarded: 2 red |
+
+Observations for follow-up (no change made here):
+- `set: {'argv.0': ...}` is silently ignored; INTERFACES.md D-07 was corrected to say whole `argv` and `cwd` are forcible.
+- `installAbortOnSignals()` is evaluated before `startPolicyHttp`/`startPolicyMcp` validate their input, so a start-up failure leaves the two handlers installed until the process exits (harmless in the bin, which exits; visible only in-process).
+- `startPolicyHttp` does not pass a logger to the fastify plugin, so `ADHD_POLICY_LOG_LEVEL` does not silence its info lines (routes, requests) on stderr.
+- The `adhd-policy-mcp` entry has no in-process test yet.
+
