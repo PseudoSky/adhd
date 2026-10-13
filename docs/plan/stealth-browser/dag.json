@@ -954,6 +954,29 @@
       ],
       "context": "contexts/search-tracing.md",
       "notes": "typescript-pro sonnet/medium; apigen tracing namespace adhd plus the single initTelemetry"
+    },
+    "search-hosts": {
+      "kind": "work",
+      "phase": "surface",
+      "depends_on": [
+        "search-verbs",
+        "search-tracing",
+        "core-seam"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py search-hosts",
+      "artifacts": [
+        "entrypoint/stealth-search/src/server.ts",
+        "entrypoint/stealth-search/src/cli.ts",
+        "entrypoint/stealth-search/src/host-flags.ts",
+        "entrypoint/stealth-search/src/host-errors.ts",
+        "entrypoint/stealth-search/bin/",
+        "entrypoint/stealth-search/src/test/unit/hosts/",
+        "entrypoint/stealth-search/package.json",
+        "pnpm-lock.yaml",
+        "docs/plan/stealth-browser/evidence/naming-decision.md"
+      ],
+      "context": "contexts/search-hosts.md",
+      "notes": "typescript-pro sonnet/high; CLI and MCP hosts, O12 commander probe first"
     }
   },
   "authored_with": {
