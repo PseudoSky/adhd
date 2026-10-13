@@ -74,6 +74,13 @@ jobs:
       # `test.dependsOn` re-couples `e2e`, that every `e2e` lane is cached, and
       # that `publish` reaches every declared `e2e`.
       - run: node tools/nx-plugins/test/executors/wiring/check-lane-reachability.mjs
+      # G12 planning record (595965cc T43) over the pushed range; a new branch or a first push has no
+      # usable "before", so it checks the head commit alone.
+      - name: Planning record check (G12)
+        run: |
+          before="${{ github.event.before }}"
+          case "$before" in ""|0000000000000000000000000000000000000000) before="HEAD~1" ;; esac
+          node tools/nx-plugins/test/routing/test-routing.mjs check --range "$before..HEAD"
       # Lockfile freshness (backlog 4f26493e AC2): pnpm-lock.yaml must match every
       # package.json. `pnpm install` above is already frozen under CI, but this
       # step names the offending package.json/specifier, and the teeth step proves

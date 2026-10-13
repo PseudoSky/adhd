@@ -107,8 +107,11 @@ describe('595965cc T30.AC1 — the repository command table', () => {
 
   it('595965cc T30.AC1 a stage with unbound gates reports them as obligations, not passes', () => {
     const r = wrapper(['--step', 'F']);
-    assert.equal(r.report.summary.obligations.includes('G5'), true);
-    assert.equal(r.report.summary.passed, 0);
+    const { selected, passed, obligations } = r.report.summary;
+    assert.equal(obligations.includes('G5'), true);
+    // An obligation is never counted as a pass: every selected gate is either passed or an obligation.
+    assert.equal(passed, selected - obligations.length);
+    assert.ok(passed < selected, 'the obligation must not be among the passes');
   });
 });
 

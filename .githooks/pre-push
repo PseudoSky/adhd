@@ -107,6 +107,17 @@ while read -r local_ref local_sha remote_ref remote_sha; do
     fi
   fi
 
+  # 595965cc T43 (G12, STRATEGY 6.6): the change carries a rigor record, its recorded rigor is not below
+  # the rigor its paths and triggers derive, and a Standard or Deep change has a "not-testing" list.
+  # Commits authored before the IMPLEMENTATION's "Enforced from" date are exempt. Node built-ins only.
+  if [ -n "$base" ]; then
+    if ! node "$repo_root/tools/nx-plugins/test/routing/test-routing.mjs" check --range "$base..$local_sha"; then
+      echo ""
+      echo "✖ pre-push: G12 planning-record check failed for $base..$local_sha — add a '## Testing record' (class, rigor, triggers, not-testing) to a commit message in the range, or raise its rigor to the derived level above."
+      exit 1
+    fi
+  fi
+
   echo "→ pre-push: nx affected $flags  (base=${base:-<default>}  head=$local_sha, ref=$local_ref)"
 
   # ---------------------------------------------------------------------------

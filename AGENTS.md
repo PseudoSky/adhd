@@ -341,3 +341,28 @@ This project is indexed by GitNexus as **adhd** (41761 symbols, 62687 relationsh
 | Index, status, clean, wiki CLI commands | `.claude/skills/gitnexus/gitnexus-cli/SKILL.md` |
 
 <!-- gitnexus:end -->
+
+<!-- workspace-standards:testing:begin -->
+## Testing
+- Every change carries a testing record: class, derived rigor, triggers, not-testing list (`docs/standards/testing.md`).
+- Default test tier is S; a higher tier needs a gap statement: "cannot be observed at tier T-1 because ...".
+- Every new test has a header: failure mode, tier, item and criterion cited, red run.
+- The author of a test never approves it; an implementer never edits a test it did not author.
+- Task routing and role holders: the routing block and `roles.md`. Gates: the gates block.
+- Obtain a change's class, rigor, and playbook: `/workspace-standards run testing`.
+
+| capability | tool | usage |
+|---|---|---|
+| test-routing | workspace-standards | `/workspace-standards run testing` returns the class, rigor, and playbook of a change |
+
+| class | default rigor | author card |
+|---|---|---|
+| new-behavior | standard | author-new-behavior |
+| defect-fix | standard | author-regression |
+| refactor | light | characterize |
+| configuration | light | select-checks |
+| dependency | light | select-checks |
+| boundary-contract | deep | author-contract |
+| no-code | none | none |
+| test-maintenance | standard | maintain |
+<!-- workspace-standards:testing:end -->

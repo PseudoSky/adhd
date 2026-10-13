@@ -12,14 +12,14 @@
     { "id": "G9", "stage": ["D"], "mechanism": "mechanical", "bound-by": "T34" },
     { "id": "G10", "command": "npx nx affected -t verify-dist-load --base=${GATE_BASE:-origin/main}", "stage": ["D", "G"], "mechanism": "mechanical" },
     { "id": "G11", "stage": ["D"], "mechanism": "review", "bound-by": "T63" },
-    { "id": "G12", "stage": ["D"], "mechanism": "mechanical", "bound-by": "T43" }
+    { "id": "G12", "command": "node tools/nx-plugins/test/routing/test-routing.mjs check --range ${GATE_BASE:-origin/main}..HEAD", "stage": ["C", "D", "E", "F"], "mechanism": "mechanical" }
   ],
   "stages": {
     "B": { "invokes": ["G2", "G3"] },
-    "C": { "invokes": ["G1"] },
+    "C": { "invokes": ["G1", "G12"] },
     "D": { "invokes": ["G1", "G2", "G3", "G4", "G6", "G7", "G8", "G9", "G10", "G11", "G12"] },
-    "E": { "invokes": ["G1", "G2", "G3", "G4", "G5", "G7"] },
-    "F": { "invokes": ["G5"] },
+    "E": { "invokes": ["G1", "G2", "G3", "G4", "G5", "G7", "G12"] },
+    "F": { "invokes": ["G5", "G12"] },
     "G": { "invokes": ["G1", "G10"] }
   }
 }
