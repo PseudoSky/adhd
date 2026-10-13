@@ -109,11 +109,11 @@
       "end_ref": "70cd00ea6e03830ea20493da3ce87eb76e03e4f3"
     },
     "tests-unit-data": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-10-13T00:18:26.902Z",
-      "done_at": null,
+      "done_at": "2026-10-13T00:45:47.294Z",
       "start_ref": "c452d3a644e286005d86ccef3d2c84ad7f657139",
-      "end_ref": null
+      "end_ref": "64e5830a3e87ee887faed3519d280f5b4ff2cc80"
     },
     "tests-unit-extract": {
       "status": "complete",
@@ -476,6 +476,18 @@
       "audit_criteria_total": 6,
       "by": "pseudosky",
       "note": "guard 0 verified by orchestrator"
+    },
+    {
+      "ts": "2026-10-13T00:45:47.294Z",
+      "from": "tests-unit-core",
+      "to": "tests-unit-data",
+      "start_ref": "c452d3a644e286005d86ccef3d2c84ad7f657139",
+      "end_ref": "64e5830a3e87ee887faed3519d280f5b4ff2cc80",
+      "audit_exit": 0,
+      "audit_criteria_passed": 6,
+      "audit_criteria_total": 6,
+      "by": "pseudosky",
+      "note": "guard 0 verified by orchestrator"
     }
   ],
   "amendment_log": [
@@ -561,7 +573,7 @@
     "version": "0.8.35",
     "hash": "0b6bc1f3d70e"
   },
-  "current_state": "tests-unit-core",
+  "current_state": "tests-unit-data",
   "dod_provenance": {
     "confirmed_at": "2026-10-12T23:49:38.410Z",
     "by": "pseudosky",
