@@ -1,0 +1,59 @@
+# Coverage: demo beats to proving scenarios
+
+Tags are `@S<scenario>.<beat>` in the ticket's Gherkin. Scenario Outline rows count as one scenario.
+
+| Beat | Proven by | Note |
+|---|---|---|
+| B1.1 | T11 `@S1.1` | import starts nothing |
+| B1.2 | T11 `@S1.2` (happy + negative) | `no-match` for anonymous caller: merged into T12 `@S2.5` |
+| B1.3 | T11 `@S1.3` | |
+| B1.4 | merged into T16 `@S6.4` | same operation and assertions |
+| B2.0 | not tested: fixture | validity proven by T16 `@S6.1` |
+| B2.1 | T12 `@S2.1` | |
+| B2.2 | T12 `@S2.2` | |
+| B2.3 | T12 `@S2.3` | |
+| B2.4 | merged into T11 `@S1.2` | forced `set` is the same engine path; CLI only prints it |
+| B2.5 | T12 `@S2.5` | |
+| B2.6 | T12 `@S2.6` | |
+| B2.7 | merged into T12 `@S2.6` | outline row amount 90 |
+| B2.8 | merged into T12 `@S2.5` | outline row billing.refund |
+| B2.9 | T12 `@S2.9` | |
+| B3.0 | not tested: fixture | |
+| B3.1 | T13 `@S3.1` | also covers `--adhd-*` stripped |
+| B3.2 | T13 `@S3.2` | |
+| B3.3 | T13 `@S3.3` | |
+| B3.4 | merged into T13 `@S3.2` | deny-wins itself proven by T12 `@S2.2` |
+| B3.5 | merged into T13 `@S3.2` | empty attributes is guest; also T12 `@S2.5` |
+| B3.6 | T13 `@S3.6` | |
+| B4.1 | T14 `@S4.1` (4 scenarios) | includes B4.2 decisions across layers |
+| B5.0 | not tested: fixture | |
+| B5.1 | T15 `@S5.1` | |
+| B5.2 | T15 `@S5.2` | |
+| B5.3 | T15 `@S5.3` | |
+| B5.4 | merged into T15 `@S5.3` | outline row |
+| B5.5 | merged into T15 `@S5.3` | outline row |
+| B5.6 | T15 `@S5.6` | |
+| B5.7 | merged into T15 `@S5.1` | parent untouched is a Then-clause |
+| B6.1 | T16 `@S6.1` | |
+| B6.2 | T16 `@S6.2` | |
+| B6.3 | T16 `@S6.3` | |
+| B6.4 | T16 `@S6.4` | also B1.4 |
+| B6.5 | T16 `@S6.5` | |
+| B6.6 | T16 `@S6.6` | |
+| B6.7 | merged into T16 `@S6.6` | last Then-clause |
+| B7.0 | not tested: fixture | |
+| B7.1 | T17 `@S7.1` (2 scenarios) | wrap+no-op, undo |
+| B7.2 | T17 `@S7.2` (2 scenarios) | allowed+forced, refused |
+| B7.3 | T17 `@S7.3` | |
+
+## Spec behaviors with no demo beat (build gate only)
+
+| Behavior | Ticket | Why not tested |
+|---|---|---|
+| `createDecider` (SV-18) | T05 | demo excludes it; structural port checked by typecheck |
+| `show`, `doctor` | T05 | demo excludes them |
+| Layer decider failure/timeout/malformed fails closed | T07 | demo excludes the Layer standalone (U15) |
+| `serve` handshake failure is an error, no argv fallback (D-08) | T08 | not in demo |
+| `ADHD_POLICY_ATTRIBUTES` precedence (D-06) | T09 | demo uses only the flag |
+| Layer file discovery from disk (D-10) | T18 | demo passes layers explicitly; reconciled by observation |
+| `adhd-policy-mcp` / `-http` projections | T06 | demo excludes them |

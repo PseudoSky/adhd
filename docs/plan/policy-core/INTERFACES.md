@@ -28,6 +28,8 @@ Import edges: client → engine/environment only. Layer plugin ↛ client and cl
 | D-13 (U14) | `_within` over an empty list is false; relative or non-normalised paths are normalised against the call `cwd` when present, else compared as given after `path.posix.normalize`; non-existent paths are compared lexically (no fs access in core); implicit AND for multi-key objects; `_is_null` is a presence check. |
 | D-14 (U15) | The Layer receives its options (decider module + options) from `--use` options; if apigen hosts do not deliver them (LI-01), T07 documents the actual channel and the plugin also accepts options programmatically. |
 | D-15 (OD-16) | `ask` is `permission_denied` (exit 3) until apigen has an approval result (backlog 7e7eb01d). The Layer calls an optional `IPolicyAskHandler`; with none, `ask` ⇒ deny. |
+| D-16 | `IDraftOperation.hints` uses the MCP annotation names: `{readOnlyHint?: boolean; destructiveHint?: boolean}`. The demo's `hints.readOnly`/`hints.destructive` are corrected in T18. `inferred` entries follow D-09 exactly. |
+| D-17 | Refusal exit code is 3 everywhere (D-04); the demo's "non-zero" wording is tightened in T18. |
 
 ## 3. Per-ticket contract checklist
 - T02: every type in spec §2, §2.1, §2.2, §3, §4.2 exported from `src/spec`; two JSON Schemas (2020-12); a schema-vs-type test is a Phase C item.
