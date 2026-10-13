@@ -1,5 +1,5 @@
 import type { FilterExpression } from '../../spec';
-import { neutralizeAbsent } from './absent';
+import { falsifyAbsentFields, neutralizeAbsent } from './absent';
 import { compilePredicate } from './query';
 import type { RowPredicate } from './query';
 import { isWithinRoots } from './within';
@@ -72,6 +72,23 @@ export function matches(
     }
     const folded = rewriteOperators(neutralized, rowResolver(mutableRow));
     return compilePredicate(folded)(mutableRow) === true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * `matches` for a permission `context` (AT-10 / AT-12): a comparison on a field
+ * absent from `row` is false, including the negative operators (`_ne`, `_nin`,
+ * `_nlike`, `_is_null: true` is the one presence test and stays true). Used for
+ * context evaluation only; `args` rows keep plain engine semantics.
+ */
+export function matchesPresent(
+  row: Readonly<Record<string, unknown>>,
+  expression: FilterExpression
+): boolean {
+  try {
+    return matches(row, falsifyAbsentFields(row, expression));
   } catch {
     return false;
   }

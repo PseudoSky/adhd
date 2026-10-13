@@ -8,7 +8,7 @@ import type {
   IToolCall,
 } from '../../spec';
 import { resolveAttributes } from '../attributes/resolve';
-import { matches } from '../engine/matches';
+import { matches, matchesPresent } from '../engine/matches';
 import { selectPermissions } from './select';
 import { substitute } from './substitute';
 
@@ -71,7 +71,7 @@ export function evaluateDetailed(
     const considered: Considered[] = [];
     const hits: ICompiledPermission[] = [];
     for (const permission of selected) {
-      const contextMatched = permission.context === undefined || matches(contextRow, permission.context);
+      const contextMatched = permission.context === undefined || matchesPresent(contextRow, permission.context);
       if (!contextMatched) {
         considered.push({ id: permission.id, applicable: false, contextMatched: false, substituted: undefined });
         continue;
