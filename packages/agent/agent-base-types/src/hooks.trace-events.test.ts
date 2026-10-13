@@ -44,6 +44,8 @@ type ProviderFailureEvents =
 type TaskEventWarningEvents = 'budget:unpriced_model' | 'provider:builtin_bypass';
 /** Added additively as a mutation-style persistence veto (R9-hist S5b). */
 type ServerResultPersistEvents = 'transform:server_result_persist';
+/** Added additively as R10 trace signals (R10 S0). */
+type R10TraceEvents = 'task:startup' | 'dispatch:completed' | 'background:delivered';
 
 const ctx = {} as ExecutionContext;
 const session = {} as Session;
@@ -99,6 +101,7 @@ describe('da907b90 AC2 — the existing events are unchanged (additive-only)', (
       | ProviderFailureEvents
       | TaskEventWarningEvents
       | ServerResultPersistEvents
+      | R10TraceEvents
     >();
     expectTypeOf<
       Exclude<
@@ -107,6 +110,7 @@ describe('da907b90 AC2 — the existing events are unchanged (additive-only)', (
         | ProviderFailureEvents
         | TaskEventWarningEvents
         | ServerResultPersistEvents
+        | R10TraceEvents
       >
     >().toEqualTypeOf<ExistingEvents>();
   });

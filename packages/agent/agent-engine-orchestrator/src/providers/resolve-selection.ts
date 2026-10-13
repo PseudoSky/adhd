@@ -105,6 +105,9 @@ export function providerConfigToBinding(
   if (config.type === 'anthropic' && config.effort !== undefined) {
     binding.effort = config.effort;
   }
+  if (config.type === 'anthropic' && config.thinking !== undefined) {
+    binding.thinking = config.thinking;
+  }
   return binding;
 }
 
@@ -176,6 +179,7 @@ export function selectionToProviderConfig(
         ...(selection.temperature !== undefined && { temperature: selection.temperature }),
         ...(selection.maxTokens !== undefined && { maxTokens: selection.maxTokens }),
         ...(selection.effort !== undefined && { effort: selection.effort }),
+        ...(selection.thinking !== undefined && { thinking: selection.thinking }),
         ...(selection.timeoutMs !== undefined && { timeoutMs: selection.timeoutMs }),
         ...(selection.retryConfig !== undefined && { retryConfig: selection.retryConfig }),
       };

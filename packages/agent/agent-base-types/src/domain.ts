@@ -243,6 +243,18 @@ export type ProviderEnvBlock = {
 /** Reasoning-effort levels the Anthropic Messages API accepts in `output_config.effort`. */
 export type AnthropicEffort = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 
+/**
+ * Anthropic Messages API `thinking` request option, restricted to the values this product opts into.
+ * `adaptive` lets the model decide when and how deeply to think; `display` controls whether the
+ * thinking text is returned (`summarized`) or redacted with a signature kept for multi-turn
+ * continuity (`omitted`). Values follow the API reference (`ThinkingConfigAdaptive` /
+ * `ThinkingConfigDisabled`); the legacy `enabled` + `budget_tokens` form is deliberately not
+ * accepted. Unset by default: the provider sends no `thinking` field and the API default applies.
+ */
+export type IAnthropicThinking =
+  | { type: 'adaptive'; display?: 'summarized' | 'omitted' }
+  | { type: 'disabled' };
+
 export type ProviderConfig =
   | {
       type: 'anthropic';
@@ -254,6 +266,8 @@ export type ProviderConfig =
       maxTokens?: number;
       /** Reasoning-effort level sent as the Messages API `output_config.effort`; absent = the API default for the model. */
       effort?: AnthropicEffort;
+      /** Messages API `thinking` option; absent = no `thinking` field is sent (the API default). */
+      thinking?: IAnthropicThinking;
       /** Ordered fallback list of canonical model ids (provider-failure PF-1). */
       models?: ModelSlug[];
       /** Operator-set id shared by every key under one spend limit. */
@@ -689,6 +703,29 @@ export interface ToolDefinition {
   name: string;
   description: string;
   inputSchema: Record<string, unknown>;
+  /**
+   * MCP tool annotation hints (the server's `tools/list` `annotations`), carried for the
+   * engine's own decisions such as concurrency classification (`readOnlyHint === true` => safe
+   * to run concurrently). Absent means the server declared none.
+   *
+   * ENGINE-INTERNAL METADATA. It MUST NOT be serialized onto any provider wire request (the
+   * Anthropic/OpenAI/claudecli tool arrays are built from named fields only) and MUST NOT enter
+   * the canonical tool hash or any cache key derived from the advertised tool list: adding it
+   * would change the tool-list bytes, and so the cached prompt prefix, for every host
+   * (R10 product amendment P10 AC6). Any new provider adapter must keep mapping explicit fields
+   * rather than spreading a `ToolDefinition`.
+   */
+  annotations?: IToolAnnotations;
+}
+
+/** MCP tool annotation hints the engine reads. All optional; see `ToolDefinition.annotations`. */
+export interface IToolAnnotations {
+  /** The tool does not modify its environment. */
+  readOnlyHint?: boolean;
+  /** The tool may perform destructive updates (meaningful only when not read-only). */
+  destructiveHint?: boolean;
+  /** Repeating the call with the same arguments has no additional effect. */
+  idempotentHint?: boolean;
 }
 
 // ── Provider Adapter contract (agent-registry plan: agent-provider) ────────────

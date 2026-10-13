@@ -58,12 +58,45 @@ export interface PostModelResponsePayload {
    * Absent for a task's first model call. Same value as `MODEL_RESPONSE.payload.overhead_ms`.
    */
   overheadMs?: number;
+  /**
+   * The `thinking` configuration this call was sent with: `'none'` when the request carried no
+   * `thinking` field (the API default), else the configured `type`. Absent when the provider has
+   * no such option (R10 trace signal).
+   */
+  thinkingConfig?: 'none' | 'adaptive' | 'disabled';
+  /** Thinking content blocks (`thinking` and `redacted_thinking`) in this response. Absent when not measured. */
+  thinkingBlocks?: number;
+  /**
+   * Total bytes of tool-result content sent to the model in this request's history (the
+   * tool_result blocks the call carried in). Absent when not measured.
+   */
+  toolResultBytesIn?: number;
+  /** Zero-based index of this model call within its task. Absent when not tracked. */
+  turnIndex?: number;
 }
+/** Concurrency class a tool call was scheduled under (`unordered` = never gated by the limiter's ordering). */
+export type ToolCallConcurrencyClass = 'safe' | 'barrier' | 'unordered';
+/** Coarse outcome class of a tool call, for trace analysis. */
+export type ToolCallErrorClass =
+  | 'none'
+  | 'policy_rejected'
+  | 'arg_mismatch'
+  | 'arg_coerced'
+  | 'exit_nonzero'
+  | 'tool_error';
 export interface PreToolCallPayload {
   executionContext: ExecutionContext;
   toolName: string;
   callId: string;
   toolInput: unknown;
+  /** Class the call was scheduled under. Absent when the engine did not classify it. */
+  concurrencyClass?: ToolCallConcurrencyClass;
+  /** Zero-based index of the model turn whose response requested this call. */
+  turnIndex?: number;
+  /** Zero-based index of the ordered execution group the call ran in. */
+  groupIndex?: number;
+  /** Milliseconds the call waited for a concurrency slot or an earlier group before starting. */
+  queuedMs?: number;
 }
 export interface PostToolCallPayload {
   executionContext: ExecutionContext;
@@ -93,6 +126,12 @@ export interface PostToolCallPayload {
    * 500-char truncation applied to the stored `task_events.TOOL_RESULT.result` summary).
    */
   estResultTokens: number;
+  /** Outcome class of the call. Absent when the engine did not classify it. */
+  errorClass?: ToolCallErrorClass;
+  /** UTF-8 byte length of the full result content as returned by the tool. */
+  resultBytes?: number;
+  /** `true` when the host appended a guidance note to this result before it reached the model. */
+  noteAppended?: boolean;
 }
 export interface MessageAppendedPayload {
   executionContext: ExecutionContext;
@@ -236,6 +275,42 @@ export interface HitlResumePayload {
 export interface SessionClosedPayload {
   session: Session;
 }
+/** Where a task's startup wall time went (R10 trace signal), emitted once per task before its first model call. */
+export interface TaskStartupPayload {
+  executionContext: ExecutionContext;
+  /** Per MCP server: milliseconds to connect and list tools. */
+  mcpConnectMs: Record<string, number>;
+  /** Milliseconds from task start until the full tool list was ready. */
+  toolsReadyMs: number;
+  /** Milliseconds the task waited in the queue before starting. */
+  queueWaitMs: number;
+  /** Milliseconds spent resolving or creating the session. */
+  sessionMs: number;
+  /** Number of tools advertised to the model. */
+  toolCount: number;
+}
+/** A dispatching tool (`task`, `tasks_batch`, an agent task) finished handing work to child tasks. */
+export interface DispatchCompletedPayload {
+  executionContext: ExecutionContext;
+  kind: 'task' | 'tasks_batch' | 'agent_task';
+  mode: 'sync' | 'background';
+  childTaskIds: string[];
+  /** Milliseconds the parent was blocked by this dispatch (about 0 for `background`). */
+  parentBlockedMs: number;
+  /** Milliseconds spent waiting for the children, when the dispatch waited. */
+  waitMs?: number;
+}
+/**
+ * A background child's result reached its parent. Type only: no emitter exists yet
+ * (background auto-delivery is a later segment).
+ */
+export interface BackgroundDeliveredPayload {
+  executionContext: ExecutionContext;
+  childTaskId: string;
+  /** Milliseconds from the child finishing to the parent receiving the result. */
+  latencyMs: number;
+  consumedVia: 'delivery' | 'result';
+}
 
 /**
  * Persistence veto for the provider-native server-tool result bodies of one assistant message
@@ -320,6 +395,12 @@ export interface HookEventMap {
   'hitl:resume': HitlResumePayload;
   /** A session transitioned to `closed`. */
   'session:closed': SessionClosedPayload;
+  /** Task startup timing breakdown (R10). Observational. */
+  'task:startup': TaskStartupPayload;
+  /** A dispatching tool handed work to child tasks (R10). Observational. */
+  'dispatch:completed': DispatchCompletedPayload;
+  /** A background child's result reached its parent (R10). Type only: not emitted yet. */
+  'background:delivered': BackgroundDeliveredPayload;
   /** A model-call attempt failed and will be retried or failed over (provider-failure SPEC §5.2). */
   'provider:attempt_failed': AttemptFailedPayload<'provider'>;
   /** A provider call ended: terminal, suspended, held, or refused by an open trip. */

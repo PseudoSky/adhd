@@ -1,5 +1,7 @@
 import type { Message } from '../validation/index.js';
 import type { IProviderEcho, PermissionAction, ToolDefinition, TokenUsage } from '@adhd/agent-base-types';
+// `ToolDefinition` is declared in `@adhd/agent-base-types` (domain.ts). Its optional `annotations` are
+// engine-internal metadata and must never reach a provider wire request or the canonical tool hash.
 export type { ToolDefinition, TokenUsage, IProviderEcho };
 import type { ProviderLimitWarning } from './provider-failure.js';
 export type { ProviderLimitWarning };

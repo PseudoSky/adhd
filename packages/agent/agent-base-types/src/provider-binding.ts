@@ -1,4 +1,4 @@
-import type { AnthropicEffort, ProviderEnvBlock, RetryConfig } from './domain.js';
+import type { AnthropicEffort, IAnthropicThinking, ProviderEnvBlock, RetryConfig } from './domain.js';
 import type { TripwireConfig } from './provider-failure.js';
 
 /**
@@ -39,6 +39,8 @@ export interface PartialBinding {
   temperature?: number;
   /** Anthropic only: reasoning-effort level sent as `output_config.effort`; absent = the API default. */
   effort?: AnthropicEffort;
+  /** Anthropic only: Messages API `thinking` option; absent = no `thinking` field is sent. */
+  thinking?: IAnthropicThinking;
   retryConfig?: BindingRetryConfig;
   env?: ProviderEnvBlock;
   baseURL?: string;

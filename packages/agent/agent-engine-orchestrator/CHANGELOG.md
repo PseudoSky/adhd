@@ -1,5 +1,9 @@
 ## Unreleased
 
+### 🚀 Features
+
+- **agent-engine-orchestrator:** anthropic provider config accepts `thinking: { type: 'adaptive', display?: 'summarized' | 'omitted' } | { type: 'disabled' }` (validated strictly by `providerConfigSchema` / `providerConfigStoredSchema` via the new exported `anthropicThinkingSchema`; carried through `providerConfigToBinding` and `selectionToProviderConfig`). Validation and plumbing only: the request body is not changed, so there is no behaviour change until the wire segment lands. Tests pin that `ToolDefinition.annotations` never reaches the Anthropic or OpenAI request `tools` (byte-equal with and without). (R10 S0)
+
 ### 🩹 Fixes
 
 - **agent-engine-orchestrator:** live echo test (R9-hist S7b AC13) writes a safe turn 1 diagnostics line first, makes the executed web_fetch pair the only hard prerequisite of (b)(c)(e)(f), and fails only item (a) as NOT EXERCISED when no thinking block appears
