@@ -977,6 +977,19 @@
       ],
       "context": "contexts/search-hosts.md",
       "notes": "typescript-pro sonnet/high; CLI and MCP hosts, O12 commander probe first"
+    },
+    "search-usecases": {
+      "kind": "work",
+      "phase": "verify",
+      "depends_on": [
+        "search-hosts"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py search-usecases",
+      "artifacts": [
+        "entrypoint/stealth-search/src/test/use-cases/"
+      ],
+      "context": "contexts/search-usecases.md",
+      "notes": "typescript-pro sonnet/high; unit scenarios, no process spawn"
     }
   },
   "authored_with": {
