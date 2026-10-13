@@ -66,10 +66,10 @@ describe('8468f7b1 AC2 [tests-unit-core.1] getSessionId', () => {
     expect(a).not.toBe(b)
   })
 
-  it('exposes getSearchSessionId as an alias of getSessionId', async () => {
+  it('[port-fixes.7] exposes no legacy getSearchSessionId alias (greenfield)', async () => {
     const mod = await loadFresh()
-    expect(mod.getSearchSessionId).toBe(mod.getSessionId)
-    expect(mod.getSearchSessionId()).toBe(mod.getSessionId())
+    expect('getSearchSessionId' in mod).toBe(false)
+    expect(typeof mod.getSessionId()).toBe('string')
   })
 })
 
