@@ -62,6 +62,7 @@ describe('R11: the backlog-operator design, offline dry run against the real bui
   const ledgerFile = path.join(PARITY_DIR, 'ledger', 'R11.json');
   const ledgerBefore = fs.readFileSync(ledgerFile, 'utf8');
   const realWorktreesBefore = git(REPO, 'worktree', 'list', '--porcelain');
+  const r11BExistedBefore = fs.existsSync(path.join(path.dirname(REPO), 'r11-B'));   // the real R11 live round created it; the refusal must not change that
   let d: ReturnType<typeof dry>; let B: Rec; let C: Rec;
   beforeAll(() => { d = dry(); B = d.rec('B1'); C = d.rec('C1'); }, 480_000);
 
@@ -238,7 +239,7 @@ describe('R11: the backlog-operator design, offline dry run against the real bui
     const r = spawnSync(process.execPath, [DRIVE, '--live', '--round', 'R11'], { cwd: REPO, encoding: 'utf8', timeout: 60_000, env: env() });
     expect(r.status).toBe(2); expect(r.stderr).toMatch(/Re-run with --yes/);
     expect(fs.readFileSync(ledgerFile, 'utf8')).toBe(ledgerBefore);
-    expect(fs.existsSync(path.join(path.dirname(REPO), 'r11-B'))).toBe(false);
+    expect(fs.existsSync(path.join(path.dirname(REPO), 'r11-B'))).toBe(r11BExistedBefore);
     for (const m of ['verdict', 'grid']) { const v = spawnSync(process.execPath, [DRIVE, m, '--round', 'R11'], { cwd: REPO, encoding: 'utf8', timeout: 60_000, env: env() }); expect(v.status, m).toBe(2); expect(v.stderr).toMatch(/does not apply to design backlog-operator/); }
     expect(git(REPO, 'worktree', 'list', '--porcelain')).toBe(realWorktreesBefore);
   });
@@ -277,7 +278,7 @@ describe('R11: the backlog-operator design, offline dry run against the real bui
   }, 480_000);
 
   it('R11 AC7/AC12 negative control: without the sandbox widening the commit is refused, and the record names the refusal (Operation not permitted), the task, the agent and the last tool call', () => {
-    const m = mutant((src) => src.replace("return { ADHD_AGENT_SHELL_SANDBOX_EXTRA_ALLOW_WRITE_ROOTS: set.root, ADHD_AGENT_SHELL_SANDBOX_EXTRA_ALLOW_WRITE: [...keepDefaults, ...set.entries].join(',') };", 'return {};'));
+    const m = mutant((src) => src.replace("return { ADHD_AGENT_SHELL_SANDBOX_EXTRA_ALLOW_WRITE_ROOTS: [set.root, ...extraRoots].join(','), ADHD_AGENT_SHELL_SANDBOX_EXTRA_ALLOW_WRITE: [...keepDefaults, ...set.entries].join(',') };", 'return {};'));
     expect(m.r.status, m.stdout + m.r.stderr).toBe(0);
     for (const id of ['B1', 'C1']) {
       const r = m.rec(id);
