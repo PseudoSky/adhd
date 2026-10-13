@@ -12,7 +12,7 @@
  */
 
 import { execSync, spawn } from 'node:child_process'
-import { existsSync, mkdirSync, openSync, closeSync, unlinkSync, statSync } from 'node:fs'
+import { existsSync, mkdirSync, openSync, closeSync, unlinkSync } from 'node:fs'
 import { homedir, platform, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { isChromeReachable } from './targets.js'

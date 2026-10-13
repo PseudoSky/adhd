@@ -66,12 +66,12 @@ export async function captureNetworkResponse(
   const extraWaitMs = options.extraWaitMs ?? 0
 
   // Track what we need
-  let matchedRequest: InflightRequest | null = null
+  let matchedRequest = null as InflightRequest | null
   let matchError: string | null = null
 
   // Create a promise that resolves after extraWaitMs, picks the best
   // matching response from all captured bodies
-  const resultPromise = new Promise<void>((resolve, reject) => {
+  const resultPromise = new Promise<void>((resolve) => {
     const ws = new WebSocket(pageWsUrl)
     let nextId = 1
     const pending = new Map<number, (r: CdpResponse) => void>()
@@ -90,6 +90,7 @@ export async function captureNetworkResponse(
       }
       if (!matchedRequest && !matchError) matchError = 'timeout'
       if (resolveTimer) clearTimeout(resolveTimer)
+      clearTimeout(timeoutTimer)
       ws.close()
       resolve()
     }
@@ -112,8 +113,6 @@ export async function captureNetworkResponse(
     const allUrls = new Map<string, string>()
     // Buffer all captured responses — pick the best one after extraWaitMs
     const capturedBodies: Array<{ url: string; body: string }> = []
-
-    let bodyFetchPending = 0
 
     ws.addEventListener('message', (ev) => {
       if (timedOut) return
@@ -138,10 +137,8 @@ export async function captureNetworkResponse(
         const r = p as { requestId: string }
         if (!trackedRequestIds.has(r.requestId)) return
 
-        bodyFetchPending++
         const bodyId = nextId++
         pending.set(bodyId, (resp: CdpResponse) => {
-          bodyFetchPending--
           if (resp.error) return
           const result = resp.result as { body: string; base64Encoded: boolean } | undefined
           if (!result) return

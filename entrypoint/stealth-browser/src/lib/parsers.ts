@@ -3,14 +3,14 @@
  *
  * For HTML:
  *   xpath-based:   @xmldom/xmldom + xpath — no JS injection, pure server-side.
- *   class-based:   match elements by tag+class patterns — DEPRECATED.
- *   structural:    find results by structural markers — DEPRECATED.
+ *   class-based:   match elements by tag+class patterns (legacy).
+ *   structural:    find results by structural markers (legacy).
  *
  * For JSON — dot-path selectors.
  * No JS injection — all parsing is server-side.
  *
- * @deprecated The old CDP DOM walk and class-based regex parsers are deprecated.
- *             New code should use extractWithXpath() which uses @xmldom/xmldom + xpath.
+ * The class-based regex parsers are the legacy extraction path; extractWithXpath()
+ * (@xmldom/xmldom + xpath) is the preferred one.
  */
 
 import type { ParseResult, CaptureConfig } from './types.js'
@@ -188,10 +188,10 @@ function extractMeta(item: unknown, metaConfig: Record<string, string>): Record<
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// HTML — structural (Google, class-name-independent) — DEPRECATED
+// HTML — structural (Google, class-name-independent)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-/** @deprecated Use extractWithXpath() instead. */
+/** Structural (class-name-independent) Google-SERP extraction; extractWithXpath() is the preferred path. */
 export function extractStructural(body: string, capture: CaptureConfig): ParseResult[] {
   const doc = parse(body)
   const results: ParseResult[] = []
@@ -333,7 +333,8 @@ export function extractResultsFromHtml(body: string, capture: CaptureConfig): Pa
       while ((match = tRe.exec(body)) !== null) {
         const t = stripHtml(match[1]).trim().replace(/\s+/g, ' ')
         if (!t) continue
-        const nearest = hrefs.find((h) => h.index > match.index)
+        const matchIndex = match.index
+        const nearest = hrefs.find((h) => h.index > matchIndex)
         if (!nearest || seen.has(nearest.url)) continue
         seen.add(nearest.url)
         const snippet = extractSnippet(body, match.index, snippetPattern)
@@ -403,20 +404,4 @@ function normalizeUrl(raw: string): string {
   // unusable bare relative paths.
   if (raw.startsWith('/goto?url=')) return `https://www.google.com${raw}`
   return raw
-}
-
-/** Extract balanced content starting from any opening <div> tag. */
-function extractBalancedDiv(html: string, startIdx: number): string | null {
-  const openEnd = html.indexOf('>', startIdx)
-  if (openEnd < 0) return null
-  let depth = 1
-  let pos = openEnd + 1
-  while (depth > 0 && pos < html.length) {
-    const nextOpen = html.indexOf('<div', pos)
-    const nextClose = html.indexOf('</div>', pos)
-    if (nextClose < 0) return null
-    if (nextOpen >= 0 && nextOpen < nextClose) { depth++; pos = nextOpen + 4 }
-    else { depth--; pos = nextClose + 6 }
-  }
-  return html.slice(startIdx, pos)
 }

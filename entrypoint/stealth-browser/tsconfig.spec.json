@@ -8,7 +8,9 @@
       "vite/client",
       "node",
       "vitest"
-    ]
+    ],
+    "allowJs": true,
+    "checkJs": false
   },
   "include": [
     "vite.config.ts",

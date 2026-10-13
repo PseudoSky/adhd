@@ -8,13 +8,13 @@ export class TargetService {
     const res = await fetch(`http://${this.host}/json/list`)
     const raw = (await res.json()) as Record<string, unknown>[]
     return raw
-      .filter((t) => t.type === 'page')
+      .filter((t) => t['type'] === 'page')
       .map((t) => ({
-        targetId: t.id as string,
+        targetId: t['id'] as string,
         type: 'page' as const,
-        title: t.title as string,
-        url: t.url as string,
-        attached: (t.webSocketDebuggerUrl as string | undefined) != null,
+        title: t['title'] as string,
+        url: t['url'] as string,
+        attached: (t['webSocketDebuggerUrl'] as string | undefined) != null,
       }))
   }
 

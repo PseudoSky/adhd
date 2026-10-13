@@ -6,7 +6,10 @@
  *
  * No runtime script evaluation — uses CDP DOM API walk only.
  *
- * @deprecated Google-SERP walker carried verbatim from the source package; removal candidate for the product hold.
+ * This is a SERP-oriented walker: its structural mode (`extractStructuralFromDom`)
+ * targets Google search-result pages (anchors carrying `jsname`, class-independent),
+ * and the pattern mode walks any page against a caller-supplied DomPattern set.
+ * It is kept as a feature; whether it stays part of the public surface is a product call.
  */
 
 import type { CdpSession } from '../cdp/session.js'
@@ -124,9 +127,8 @@ function findChild(node: DomNode, pattern: DomPattern, depth = 4): DomNode | und
 function extractValue(container: DomNode, pattern: DomPattern & { attr?: string }): string {
   const el = findChild(container, pattern)
   if (!el) return ''
-  const p = pattern as DomNode['children'][0] & { attr?: string }
-  if (p.attr) {
-    const v = getAttr(el, p.attr)
+  if (pattern.attr) {
+    const v = getAttr(el, pattern.attr)
     return v ?? ''
   }
   return getText(el)

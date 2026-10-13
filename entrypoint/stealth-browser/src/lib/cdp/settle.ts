@@ -244,7 +244,6 @@ export async function awaitPageSettled(
   let graceElapsed = false
   let loadFired = false          // `load` seen for OUR loaderId — gates rung 2
   let latched: SettleSignal | null = null   // best lower rung seen before grace closed
-  let lastUiEventAt = Date.now()            // last reflow/LCP — drives ui-quiet
   let uiEvents = 0
   let uiTimer: ReturnType<typeof setTimeout> | null = null
   let done = false
@@ -333,8 +332,8 @@ export async function awaitPageSettled(
 
     // ─── Rungs 1/3/4: lifecycle, scoped to OUR navigation ───────────────────
     unsubs.push(session.on('Page.lifecycleEvent', (p) => {
-      const name = p.name as string
-      const evLoader = p.loaderId as string | undefined
+      const name = p['name'] as string
+      const evLoader = p['loaderId'] as string | undefined
 
       // ── The about:blank guard. Measured, not theoretical. ──
       // `Page.enable` REPLAYS the current document's full lifecycle, so a target
@@ -380,14 +379,13 @@ export async function awaitPageSettled(
     // Only track once `loaderId` is set (i.e. after our navigate), so the
     // target's initial about:blank still can't sneak in.
     unsubs.push(session.on('Page.frameNavigated', (p) => {
-      const frame = p.frame as { parentId?: string; loaderId?: string } | undefined
+      const frame = p['frame'] as { parentId?: string; loaderId?: string } | undefined
       if (!frame || frame.parentId) return          // main frame only, not iframes
       if (!loaderId || !frame.loaderId) return      // not armed yet → ignore about:blank
       if (frame.loaderId === loaderId) return
       loaderId = frame.loaderId                     // follow it
       loadFired = false                             // new document — re-gate rung 2
       latched = null
-      lastUiEventAt = Date.now()
     }))
 
     // ─── Rung: ui-quiet — "responses stopped changing the UI" ───────────────
@@ -415,7 +413,6 @@ export async function awaitPageSettled(
       }, uiQuietMs)
     }
     unsubs.push(session.on('PerformanceTimeline.timelineEventAdded', () => {
-      lastUiEventAt = Date.now()
       uiEvents++
       armUiQuiet()
     }))
