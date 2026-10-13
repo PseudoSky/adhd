@@ -242,11 +242,11 @@
       "end_ref": null
     },
     "capture-upgrade": {
-      "status": "complete",
+      "status": "in_progress",
       "started_at": "2026-10-13T00:47:02.086Z",
-      "done_at": "2026-10-13T01:24:32.167Z",
+      "done_at": null,
       "start_ref": "ff2288f08440685aa0e6e8aac1a697251ea64b37",
-      "end_ref": "dab7baeef7277b0151959bf1ce611396554b0665"
+      "end_ref": null
     },
     "chrome-lifecycle": {
       "status": "pending",
@@ -284,11 +284,11 @@
       "end_ref": "4894bdc5a49d6d645294d88bdb675162c05da6e9"
     },
     "sp-reaper-load-proof": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-10-13T01:11:42.070Z",
-      "done_at": null,
+      "done_at": "2026-10-13T01:25:16.050Z",
       "start_ref": "7c71eb9e736082e0117568472070444aa4f46006",
-      "end_ref": null
+      "end_ref": "962716de219d1f551a4b8f5cb133676cfacedb00"
     },
     "sp-link": {
       "status": "pending",
@@ -591,16 +591,16 @@
       "note": "guard 0 after plan amendment 27440178; verified by orchestrator"
     },
     {
-      "ts": "2026-10-13T01:24:32.167Z",
+      "ts": "2026-10-13T01:25:16.050Z",
       "from": "sp-link",
-      "to": "capture-upgrade",
-      "start_ref": "ff2288f08440685aa0e6e8aac1a697251ea64b37",
-      "end_ref": "dab7baeef7277b0151959bf1ce611396554b0665",
+      "to": "sp-reaper-load-proof",
+      "start_ref": "7c71eb9e736082e0117568472070444aa4f46006",
+      "end_ref": "962716de219d1f551a4b8f5cb133676cfacedb00",
       "audit_exit": 0,
-      "audit_criteria_passed": 28,
-      "audit_criteria_total": 28,
+      "audit_criteria_passed": 3,
+      "audit_criteria_total": 3,
       "by": "pseudosky",
-      "note": "guard 0 verified; CU1 unblocked by transport migration 6e42b23a"
+      "note": "dist loads via require from out-of-repo cwd; detached spawn form passes against scratch stub; VERDICT entry-path-ok; evidence commit 0a0d7937; re-recorded after stale-write repair"
     }
   ],
   "amendment_log": [
@@ -1102,7 +1102,7 @@
     "version": "0.8.35",
     "hash": "0b6bc1f3d70e"
   },
-  "current_state": "sp-link",
+  "current_state": "chrome-lifecycle",
   "dod_provenance": {
     "confirmed_at": "2026-10-12T23:49:38.410Z",
     "by": "pseudosky",
