@@ -284,10 +284,10 @@
       "end_ref": "4894bdc5a49d6d645294d88bdb675162c05da6e9"
     },
     "sp-reaper-load-proof": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-10-13T01:11:42.070Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "7c71eb9e736082e0117568472070444aa4f46006",
       "end_ref": null
     },
     "sp-link": {
@@ -1078,7 +1078,7 @@
     "version": "0.8.35",
     "hash": "0b6bc1f3d70e"
   },
-  "current_state": "tripwire-scaffold",
+  "current_state": "sp-reaper-load-proof",
   "dod_provenance": {
     "confirmed_at": "2026-10-12T23:49:38.410Z",
     "by": "pseudosky",
