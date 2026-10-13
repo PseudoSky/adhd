@@ -572,3 +572,10 @@ R9 wire capture: A and B sent thinking {"type":"adaptive"}; C sent no thinking f
 
 ### 2026-10-13T00:17:19Z — SCOPE-R10-prep: HEADING FOR THE LIVE SCOPE GATE (dispatcher)
 The scope entry dated 2026-10-13T00:17:19Z (harness measurement fairness, tracing-based evidence, product triage; owner direction) was written as a second-level heading, which the live scope gate (gate.mjs checkScope) does not read. This third-level heading carries that entry's own timestamp and points at it; no scope content changes.
+
+### 2026-10-13T08:19:18Z — R10 RESULT: A1 AND C1 RAN ONCE; C IS SLOWER AND COSTLIER THAN R9 (dispatcher)
+Command (manual, one run per arm, no retry): node entrypoint/agent-mcp/parity/drive.mjs --live --yes --round R10 (started 2026-10-13T08:13:49Z, exit 0). Ledger entrypoint/agent-mcp/parity/ledger/R10.json (runs A1, C1; judge calls 2). Raw outputs gitignored under tmp/agent-mcp/parity/R10/live/out/. All gates GREEN before the run; no THINKING MISMATCH (C requested {"type":"adaptive"}, wire carried it on 35 of 35 main requests); effort high verified on every main request.
+Grid: A 🟢 18/18, B ⚪ (not in profile), C 🟢 18/18. Tests: A 32 pass/0 fail/3 na, C 33 pass/0 fail/2 na.
+C/A: cost 1.189 (common-card 1.217), graded fair wall 1.450 (A 73.0 s, C 105.9 s), phase-sum 1.441, judge quality 0.930 (A 73.125, C 68.0). Verdict: ROUND FAIL (n=1 per arm). R9 reference (different timing profile): cost 0.966, wall 1.220, C not scored.
+Wall gap +32.891 s = phase 1 +4.882 + phase 2 +28.009, residual 0, lag 0. Trace (arm C): parent model_ms 32.8 s and 20.5 s; delegation sync 4 (parent_blocked 3.3, 17.0, 23.7, 27.3 s); child_prestart_ms 2-11 ms (startup, session and queue are NOT the gap); thinking_config=adaptive on all 35 model calls, thinking blocks C 30 vs A 13 (signature-only).
+Reading: the measured gap is model generation time inside C's workers and parent, not startup, queueing or harness time. Cause not yet diagnosed; triage (debug) dispatched. Per the owner's progress condition, R11 does not start until the cause of the regression is diagnosed and a product change aimed at it exists.
