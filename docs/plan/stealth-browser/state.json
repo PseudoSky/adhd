@@ -340,10 +340,10 @@
       "end_ref": "bce6edcffba55d74864cd877932afd35c89e1881"
     },
     "tripwire-pack": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-10-13T08:11:42.081Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "2d9bcf550ae143a87163554bcbcb31b6a7fd9419",
       "end_ref": null
     },
     "tripwire-reverse-migrate": {
