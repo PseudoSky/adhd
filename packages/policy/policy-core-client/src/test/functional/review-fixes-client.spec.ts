@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, utimes, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
@@ -288,6 +288,26 @@ describe('Feature: review fixes - the client fails closed and says why', () => {
         const edited = await ctx.policy();
         expect(edited).not.toBe(first);
         expect(edited.contentHash).not.toBe(first.contentHash);
+      });
+    });
+
+    it('@C8 touching a file without changing its text keeps the parsed layers: the source returns the same array', async () => {
+      await withTmpDir('cache-touch', async (dir) => {
+        const file = join(dir, 'global.yaml');
+        await writeFile(file, allowDoc('a.one'));
+        await utimes(file, new Date(1_000_000_000_000), new Date(1_000_000_000_000));
+        const { fs, reads } = countingFs();
+        const source = createFsLayerSource({ explicit: [file], fs });
+        const first = await source.load();
+        expect(await source.load()).toBe(first);
+        expect(reads).toHaveLength(1);
+
+        // A new modification time forces a read, but identical text reuses the remembered parse.
+        await utimes(file, new Date(2_000_000_000_000), new Date(2_000_000_000_000));
+        const touched = await source.load();
+        expect(reads).toHaveLength(2);
+        expect(touched).toBe(first);
+        expect(touched[0]).toBe(first[0]);
       });
     });
 

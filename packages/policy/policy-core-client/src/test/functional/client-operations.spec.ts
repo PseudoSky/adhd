@@ -108,6 +108,15 @@ describe('Feature: decisions across the global, project and local layers', () =>
     expect((failure as ApiError).code).toBe('internal');
     expect((failure as ApiError).message).toContain('policy failed to compile');
     expect((failure as ApiError).message).toContain('broken.yaml');
+
+    // An issue whose own message does not name the file still reports the layer source.
+    const noName = createPolicyClient({
+      layers: [layer('project', { version: 1, permissions: [{ tool: 'x.y', args: { a: { _nope: 1 } } }] }, 'ops.yaml')],
+    });
+    await expect(noName.evaluate({ tool: 'x.y' })).rejects.toMatchObject({
+      code: 'internal',
+      message: expect.stringContaining('[ops.yaml]'),
+    });
   });
 });
 
@@ -194,6 +203,22 @@ describe('Feature: attributes - supplied, defaulted and declared', () => {
     // `_ne` against an absent placeholder is false, not "everything differs from nothing".
     expect((await c.evaluate({ tool: 'f.other', args: { dir: 'x' } })).denial?.code).toBe('no-match');
     expect((await c.evaluate({ tool: 'f.other', args: { dir: 'x' }, attributes: { home: 'y' } })).effect).toBe('allow');
+  });
+
+  it('@A1.3 a deny whose regular expression comes from an absent attribute does not fire and does not error', async () => {
+    const c = createPolicyClient({
+      layers: [
+        layer('project', {
+          version: 1,
+          attributes: { pattern: 'name' },
+          permissions: [{ tool: 'f.rx' }, { tool: 'f.rx', effect: 'deny', args: { path: { _regex: '$attributes.pattern' } } }],
+        }),
+      ],
+    });
+    const absent = await c.evaluate({ tool: 'f.rx', args: { path: '/a/.env' } });
+    expect(absent.effect).toBe('allow');
+    expect(absent.denial).toBeUndefined();
+    expect((await c.evaluate({ tool: 'f.rx', args: { path: '/a/.env' }, attributes: { pattern: '\\.env$' } })).denial?.code).toBe('explicit-deny');
   });
 
   it('@A1.4 list-valued path arguments are within a root only when every element is', async () => {
