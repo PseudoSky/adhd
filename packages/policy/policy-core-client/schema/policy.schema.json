@@ -1,0 +1,125 @@
+{
+  "$defs": {
+    "attributeValue": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      ]
+    },
+    "defaultsRule": {
+      "additionalProperties": false,
+      "properties": {
+        "set": {
+          "additionalProperties": {
+            "$ref": "#/$defs/attributeValue"
+          },
+          "type": "object"
+        },
+        "where": {
+          "type": "object"
+        }
+      },
+      "required": [
+        "set"
+      ],
+      "type": "object"
+    },
+    "permission": {
+      "additionalProperties": false,
+      "properties": {
+        "args": {
+          "type": "object"
+        },
+        "context": {
+          "type": "object"
+        },
+        "effect": {
+          "enum": [
+            "allow",
+            "ask",
+            "deny"
+          ]
+        },
+        "set": {
+          "type": "object"
+        },
+        "tool": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "items": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "minItems": 1,
+              "type": "array"
+            }
+          ]
+        }
+      },
+      "required": [
+        "tool"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://adhd.dev/schema/policy-1.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "attributes": {
+      "additionalProperties": {
+        "enum": [
+          "name",
+          "names",
+          "paths",
+          "number"
+        ]
+      },
+      "type": "object"
+    },
+    "defaults": {
+      "items": {
+        "$ref": "#/$defs/defaultsRule"
+      },
+      "type": "array"
+    },
+    "permissions": {
+      "items": {
+        "$ref": "#/$defs/permission"
+      },
+      "type": "array"
+    },
+    "runtime": {
+      "additionalProperties": {
+        "enum": [
+          "number",
+          "name"
+        ]
+      },
+      "type": "object"
+    },
+    "version": {
+      "const": 1
+    }
+  },
+  "required": [
+    "version",
+    "permissions"
+  ],
+  "title": "ADHD policy document",
+  "type": "object"
+}

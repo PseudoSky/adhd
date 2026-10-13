@@ -1,1 +1,1 @@
-export * from './lib/policy-core-client';
+export * from './spec';

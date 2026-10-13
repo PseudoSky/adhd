@@ -24,7 +24,7 @@ export default defineConfig(() => ({
     importMetaUrlCjs(),
     nxViteTsPaths(),
     nxViteTsPathsPre(),
-    nxCopyAssetsPlugin(['*.md']),
+    nxCopyAssetsPlugin(['*.md', 'schema/*.json']),
     dts({
       entryRoot: 'src',
       tsconfigPath: path.join(import.meta.dirname, 'tsconfig.lib.json'),
