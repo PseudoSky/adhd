@@ -7,7 +7,7 @@
 
 ## Goal
 
-The package has one greenfield public surface at the root (`src/index.ts`, ADR-0003, no subpaths): the library areas as namespaces (`cdp`, `storage`, `capture`, `parsers`, `chromeManager`; `recording` and `lifecycle` are wired by `prod-errors` once they exist) plus the six flat verbs of `src/api.ts` (`chromeStatus`, `launchChrome`, `shutdownChrome`, `listPageTargets`, `checkChromeActivity`, `getPageContext`), the apigen-visible surface the CLI and MCP hosts project. No consumer of the old names exists, so nothing is aliased or deprecated.
+The package has one greenfield public surface at the root (`src/index.ts`, ADR-0003, no subpaths): the library areas as namespaces (`cdp`, `storage`, `capture`, `parsers`, `chromeManager`; `lifecycle` is wired by `surface-hosts` and `recording` by `prod-errors`) plus the six flat verbs of `src/api.ts` (`chromeStatus`, `launchChrome`, `shutdownChrome`, `listPageTargets`, `checkChromeActivity`, `getPageContext`), the apigen-visible surface the CLI and MCP hosts project. No consumer of the old names exists, so nothing is aliased or deprecated.
 
 ---
 
@@ -31,9 +31,9 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 
 - [surface-api.1] src/api.ts exports exactly the six chrome-runner verbs: chromeStatus, launchChrome, shutdownChrome, listPageTargets, checkChromeActivity, getPageContext (async functions only).
 - [surface-api.2] chromeStatus returns a type with NON-optional `managed: boolean` and the apigen oneOf-duplicate-boolean warning comment is preserved.
-- [surface-api.3] The package root (src/index.ts) is the greenfield public API, one root entry (ADR-0003, no subpaths): the five core library areas as namespace exports `cdp`, `storage`, `capture`, `parsers`, `chromeManager` (prod-errors adds `recording` and `lifecycle`) (`export * as <area> from './lib/...'`), `export * from './api.js'` for the six verbs, and `export type * from './lib/types.js'` for the shared types, optionally `export * from './errors.js'` (the typed errors); no default export and no other export statement; every name the agent-search consumer files import (the ~10 deep-imported cdp-connection names included) resolves inside its namespace.
+- [surface-api.3] The package root (src/index.ts) is the greenfield public API, one root entry (ADR-0003, no subpaths): the five core library areas as namespace exports `cdp`, `storage`, `capture`, `parsers`, `chromeManager` (surface-hosts adds `lifecycle`, prod-errors adds `recording`) (`export * as <area> from './lib/...'`), `export * from './api.js'` for the six verbs, and `export type * from './lib/types.js'` for the shared types, optionally `export * from './errors.js'` (the typed errors); no default export and no other export statement; every name the agent-search consumer files import (the ~10 deep-imported cdp-connection names included) resolves inside its namespace.
 - [surface-api.4] api.ts and index.ts import nothing from agent-search, use .js specifiers, and every relative import resolves.
-- [surface-api.5] The ChromeManager is configured through typed options only (no process.env toggles) and uses port/host options, never a hard-coded 9222 in api.ts defaults without an override.
+- [surface-api.5] The ChromeManager is configured through typed options only (no process.env toggles in src/api.ts or, once surface-hosts moves the manager map there, src/lib/managers.ts) and uses port/host options, never a hard-coded 9222 in api.ts defaults without an override; exactly one of those two files constructs it (`new ChromeManager(`), and when managers.ts exists api.ts reaches managers only through its managerFor.
 - [surface-api.6] Only owned paths changed by [psm:surface-api] commits.
 - [surface-api.7] (PA1.1) The launchChrome verb's input type declares only `port` and `userDataDir`; chromePath and extraArgs stay library-only (never on an apigen-visible verb input).
 - [surface-api.9] (PA4.1) Each of the six verbs in src/api.ts has a TSDoc block whose description is at least 40 characters (the hosts surface it as the tool description).
@@ -53,7 +53,7 @@ mutates:    ["entrypoint/stealth-browser/src/api.ts", "entrypoint/stealth-browse
 
 ## Contract Promise
 
-Added: `entrypoint/stealth-browser/src/api.ts`. Added: `docs/plan/stealth-browser/evidence/product-claims.json`. Modified: `entrypoint/stealth-browser/src/index.ts` (generator placeholder -> greenfield root namespaces; `prod-errors` later adds the errors, `recording` and `lifecycle` exports). Deleted: none.
+Added: `entrypoint/stealth-browser/src/api.ts`. Added: `docs/plan/stealth-browser/evidence/product-claims.json`. Modified: `entrypoint/stealth-browser/src/index.ts` (generator placeholder -> greenfield root namespaces; `surface-hosts` later adds the `lifecycle` export, `prod-errors` the errors and `recording` exports). Deleted: none.
 
 ---
 

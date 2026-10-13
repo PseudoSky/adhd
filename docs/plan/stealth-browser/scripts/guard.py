@@ -792,7 +792,7 @@ def _sa2():
 
 @check("surface-api", 3)
 def _sa3():
-    """The package root (src/index.ts) is the greenfield public API, one root entry (ADR-0003, no subpaths): the five core library areas as namespace exports `cdp`, `storage`, `capture`, `parsers`, `chromeManager` (prod-errors adds `recording` and `lifecycle`) (`export * as <area> from './lib/...'`), `export * from './api.js'` for the six verbs, and `export type * from './lib/types.js'` for the shared types, optionally `export * from './errors.js'` (the typed errors); no default export and no other export statement; every name the agent-search consumer files import (the ~10 deep-imported cdp-connection names included) resolves inside its namespace."""
+    """The package root (src/index.ts) is the greenfield public API, one root entry (ADR-0003, no subpaths): the five core library areas as namespace exports `cdp`, `storage`, `capture`, `parsers`, `chromeManager` (surface-hosts adds `lifecycle`, prod-errors adds `recording`) (`export * as <area> from './lib/...'`), `export * from './api.js'` for the six verbs, and `export type * from './lib/types.js'` for the shared types, optionally `export * from './errors.js'` (the typed errors); no default export and no other export statement; every name the agent-search consumer files import (the ~10 deep-imported cdp-connection names included) resolves inside its namespace."""
     idx = read(f"{P}/src/index.ts")
     ns = dict(NS_RE.findall(idx))
     if not (set(AREAS) <= set(ns) <= set(AREAS_ALL)):
@@ -822,9 +822,12 @@ def _sa4():
 
 @check("surface-api", 5)
 def _sa5():
-    """The ChromeManager is configured through typed options only (no process.env toggles) and uses port/host options, never a hard-coded 9222 in api.ts defaults without an override."""
+    """The ChromeManager is configured through typed options only (no process.env toggles in src/api.ts or, once surface-hosts moves the manager map there, src/lib/managers.ts) and uses port/host options, never a hard-coded 9222 in api.ts defaults without an override; exactly one of those two files constructs it (`new ChromeManager(`), and when managers.ts exists api.ts reaches managers only through its managerFor."""
     t = read(f"{P}/src/api.ts")
-    return "process.env" not in t and "ChromeManager" in t, "typed options"
+    m = read(f"{P}/src/lib/managers.ts")
+    sites = [f for f, x in (("api.ts", t), ("lib/managers.ts", m)) if "new ChromeManager(" in x]
+    routed = "ChromeManager" in t if not m.strip() else ("managerFor" in t and re.search(r"from\s*['\"]\./lib/managers\.js['\"]", t) is not None)
+    return "process.env" not in t + m and len(sites) == 1 and routed, f"typed options; construction sites={sites} routed={routed}"
 
 
 @check("surface-api", 6)
@@ -845,7 +848,7 @@ def _sh2():
     p = pkg()
     b = p.get("bin", {})
     d = p.get("dependencies", {})
-    need = ["@adhd/apigen-core-client", "@adhd/apigen-engine-runtime", "@adhd/apigen-plugin-mcp"]
+    need = ["@adhd/apigen-core-client", "@adhd/apigen-engine-runtime", "@adhd/apigen-plugin-mcp", "@adhd/apigen-plugin-cli-output"]
     return {"stealth-browser", "stealth-browser-mcp"} <= set(b) and all(v.startswith("./dist/") for v in b.values()) and all(n in d for n in need), f"bin={b}"
 
 
@@ -866,11 +869,11 @@ def _sh4():
 
 @check("surface-hosts", 5)
 def _sh5():
-    """`node dist/bin/cli.js chrome-status --json` (or the chromeStatus verb) against an unused port prints running=false with exit 0 - the CLI reaches the real library, not a stub."""
-    rc, out = sh(["node", f"{P}/dist/bin/cli.js", "chromeStatus"], timeout=120, env={"STEALTH_BROWSER_CDP_HOST": "127.0.0.1:19999"})
+    """`node dist/bin/cli.js chromeStatus --port 19999` (or `chrome-status --port 19999`) against the unused port 19999 prints running=false with exit 0 - the CLI reaches the real library through the `--port` flag (no environment variable), not a stub."""
+    rc, out = sh(["node", f"{P}/dist/bin/cli.js", "chromeStatus", "--port", "19999"], timeout=120)
     if rc != 0:
-        rc, out = sh(["node", f"{P}/dist/bin/cli.js", "chrome-status"], timeout=120, env={"STEALTH_BROWSER_CDP_HOST": "127.0.0.1:19999"})
-    return rc == 0 and "running" in out, out[-300:]
+        rc, out = sh(["node", f"{P}/dist/bin/cli.js", "chrome-status", "--port", "19999"], timeout=120)
+    return rc == 0 and re.search(r"running['\"]?\s*[:=]\s*false", out) is not None, out[-300:]
 
 
 @check("surface-hosts", 6)
@@ -1818,7 +1821,7 @@ def _sh8():
 
 @check("surface-hosts", 9)
 def _sh9():
-    """(PA3.3, PA3.4, ADR-0003) package.json has NO `exports` map and NO `module` field, `main` is ./dist/index.js and `types` ./dist/index.d.ts; the built root index.d.ts (namespaces included) exports no Google- or Search-named symbol; `require()` of the built dist/index.js exposes the five namespaces and the six verbs; `nx run stealth-browser:verify-dist-load` exits 0."""
+    """(PA3.3, PA3.4, ADR-0003) package.json has NO `exports` map and NO `module` field, `main` is ./dist/index.js and `types` ./dist/index.d.ts; the built root index.d.ts (namespaces included) exports no Google- or Search-named symbol; `require()` of the built dist/index.js exposes the five namespaces, the `lifecycle` namespace and the six verbs; `nx run stealth-browser:verify-dist-load` exits 0."""
     if not ensure_bin():
         return False, "build-bin failed"
     p = pkg()
@@ -1830,7 +1833,7 @@ def _sh9():
     except (ValueError, IndexError):
         keys = set()
     rc_v, out = sh([NX, "run", f"{proj_name()}:verify-dist-load"], timeout=1200)
-    return shape and not bad and rc_r == 0 and (set(AREAS) | set(VERBS)) <= keys and rc_v == 0, f"shape={shape} searchNames={bad} require rc={rc_r} keys={sorted(keys)} {e_r[-100:]} verify rc={rc_v}"
+    return shape and not bad and rc_r == 0 and (set(AREAS) | {"lifecycle"} | set(VERBS)) <= keys and rc_v == 0, f"shape={shape} searchNames={bad} require rc={rc_r} keys={sorted(keys)} {e_r[-100:]} verify rc={rc_v}"
 
 
 @check("surface-hosts", 10)
@@ -1923,10 +1926,10 @@ def _tus4():
 
 @check("tests-unit-surface", 5)
 def _tus5():
-    """(PA3.1, greenfield) A public-API export snapshot spec under src/test/unit/surface/ lists every root export name of src/index.ts (the five namespaces and the six verbs) and the member names of each namespace, and fails on drift (toEqual / inline snapshot of the sorted names); it cites ticket 8468f7b1, a valid tests-unit-surface.N id and PA3.1."""
+    """(PA3.1, greenfield) A public-API export snapshot spec under src/test/unit/surface/ lists every root export name of src/index.ts (the five core namespaces, the `lifecycle` namespace wired by surface-hosts and the six verbs) and the member names of each namespace, and fails on drift (toEqual / inline snapshot of the sorted names); it cites ticket 8468f7b1, a valid tests-unit-surface.N id and PA3.1."""
     specs = [f for f in spec_files("unit/surface") if "public-api" in os.path.basename(f)]
     t = "\n".join(read(f) for f in specs)
-    names = set(AREAS) | set(VERBS)
+    names = set(AREAS) | {"lifecycle"} | set(VERBS)
     miss = sorted(n for n in names if n not in t)
     ids = set(re.findall(r"\[(tests-unit-surface\.\d+)\]", t))
     return bool(specs) and not miss and re.search(r"toEqual|toMatchInlineSnapshot|toMatchSnapshot", t) is not None and TICKET in t and bool(ids & criteria_ids()) and "PA3.1" in t, f"specs={len(specs)} unlisted={miss}"
@@ -2354,7 +2357,7 @@ def _pe6():
 
 @check("prod-errors", 7)
 def _pe7():
-    """(amendment A3, greenfield root) src/index.ts exports the `recording` and `lifecycle` namespaces (`export * as recording from './lib/recording/index.js'`, `export * as lifecycle from './lib/lifecycle/index.js'`); `recording` exposes NetworkRecorder, CaptureError, MemoryRecordingSink, StoreRecordingSink, openStoreRecordingSink and redactHeaders, `capture` exposes captureAllNetworkResponses, `lifecycle` exposes LifecycleError, openIsolatedPage, withIsolatedPage, installProcessExitHooks, runChromeReaper and createProxyReaperLink (the detached reaper loads runChromeReaper through the package entry)."""
+    """(amendment A3, greenfield root) src/index.ts exports the `recording` namespace (added here) and the `lifecycle` namespace (wired by surface-hosts) (`export * as recording from './lib/recording/index.js'`, `export * as lifecycle from './lib/lifecycle/index.js'`); `recording` exposes NetworkRecorder, CaptureError, MemoryRecordingSink, StoreRecordingSink, openStoreRecordingSink and redactHeaders, `capture` exposes captureAllNetworkResponses, `lifecycle` exposes LifecycleError, openIsolatedPage, withIsolatedPage, installProcessExitHooks, runChromeReaper and createProxyReaperLink (the detached reaper loads runChromeReaper through the package entry)."""
     ns = dict(NS_RE.findall(read(f"{P}/src/index.ts")))
     wired = all(ns.get(a) and re.sub(r"\.js$", "", ns[a]) == "./" + AREAS_EXTRA[a] for a in AREAS_EXTRA)
     want = {"recording": {"NetworkRecorder", "CaptureError", "MemoryRecordingSink", "StoreRecordingSink", "openStoreRecordingSink", "redactHeaders"}, "capture": {"captureAllNetworkResponses"}, "lifecycle": {"LifecycleError", "openIsolatedPage", "withIsolatedPage", "installProcessExitHooks", "runChromeReaper", "createProxyReaperLink"}}
@@ -3164,7 +3167,7 @@ def _cl25():
 
 @check("chrome-lifecycle", 26)
 def _cl26():
-    """CL26 public shape of the manager: `ChromeManagerOptions` is exactly { cdpHost?, idleTimeoutMs? (default 120000), checkHistory? (default true), shutdownGraceMs? (default 30000), orphanWindowMs? (default 30000), stateDir?, reaperScope? ('launched-only' | 'port-occupant', default 'port-occupant'), link? (a `ReaperLink`), logger? }; `leaseDir`, `leaseTtlMs`, `reaper` ('detached' | 'in-process-only'), `presence`, `launcher` and `legacyHeartbeatPath` do not exist; the methods `ready`, `bump`, `shutdown`, `shutdownIfIdle`, `withBrowser`, `isReady` stay and `release()` and `status()` (`ChromeStatus`: ready, owned, processes, activeProcesses, httpPages, reaper (boolean), breaker, siblingWarning) are new; no activity file is written by the manager."""
+    """CL26 public shape of the manager: `ChromeManagerOptions` is exactly { cdpHost?, idleTimeoutMs? (default 120000), checkHistory? (default true), shutdownGraceMs? (default 30000), orphanWindowMs? (default 30000), stateDir?, reaperScope? ('launched-only' | 'port-occupant', default 'port-occupant'), link? (a `ReaperLink`), logger? } plus the two host options surface-hosts adds later (keepAlive?, entryPath?); `leaseDir`, `leaseTtlMs`, `reaper` ('detached' | 'in-process-only'), `presence`, `launcher` and `legacyHeartbeatPath` do not exist; the methods `ready`, `bump`, `shutdown`, `shutdownIfIdle`, `withBrowser`, `isReady` stay and `release()` and `status()` (`ChromeStatus`: ready, owned, processes, activeProcesses, httpPages, reaper (boolean), breaker, siblingWarning) are new; no activity file is written by the manager."""
     c = read(f"{P}/src/lib/chrome-manager.ts")
     t = code_lines(c)
     need = ["cdpHost", "idleTimeoutMs", "checkHistory", "shutdownGraceMs", "orphanWindowMs", "stateDir", "reaperScope", "link", "release", "status", "siblingWarning", "ReaperLink"]
@@ -3355,10 +3358,10 @@ def _pf12():
 
 @check("surface-hosts", 14)
 def _sh14():
-    """(gap G2, F23 F24) the hosts wire the lifecycle: src/server.ts and src/cli.ts call `installProcessExitHooks` (from the lifecycle namespace) with the shared ChromeManager, the CLI accepts `--idle-shutdown <ms>` (default 120000) and `--keep-alive` mapped onto the ChromeManager options (`--keep-alive` disables the idle reaper, `reaper` detached by default), the MCP host installs the hooks with `stdinEof: true` (orphan detection), and both bins print the two flags and the defaults in --help."""
+    """(gap G2, F23 F24) the hosts wire the lifecycle: src/server.ts and src/cli.ts call `installProcessExitHooks` (from the lifecycle namespace) with the shared manager seam `chromeExitTarget`, both hosts accept `--idle-shutdown <ms>` (default 120000) and `--keep-alive` and pass them to `configureManagers` as `idleTimeoutMs` and `keepAlive` (`--keep-alive` never arms the idle timer; every other shutdown path is unchanged), the MCP host installs the hooks with `stdinEof: true` (orphan detection), and both bins print the two flags and the defaults in --help."""
     sv, cl = read(f"{P}/src/server.ts"), read(f"{P}/src/cli.ts")
-    if not ("installProcessExitHooks" in sv and "installProcessExitHooks" in cl and "stdinEof" in sv):
-        return False, "exit hooks not wired in src/server.ts and src/cli.ts"
+    if not all(k in sv and k in cl for k in ("installProcessExitHooks", "chromeExitTarget", "configureManagers")) or "stdinEof" not in sv:
+        return False, "exit hooks / manager seam not wired in src/server.ts and src/cli.ts"
     if not ensure_bin():
         return False, "build-bin failed"
     h = []
@@ -3367,6 +3370,47 @@ def _sh14():
         t = o + e
         h.append(rc == 0 and "--idle-shutdown" in t and "--keep-alive" in t and "120000" in t)
     return "installProcessExitHooks" in sv and "installProcessExitHooks" in cl and "stdinEof" in sv and all(h), f"help flags ok={h}"
+
+
+SEAM = ("configureManagers", "managerFor", "chromeExitTarget")
+
+
+@check("surface-hosts", 15)
+def _sh15():
+    """(P7, P8) the manager seam is shared and reachable from the root: src/lib/managers.ts exports configureManagers, managerFor and chromeExitTarget and is the only non-test file under src/ that constructs a ChromeManager (`new ChromeManager(`); src/api.ts imports managerFor from './lib/managers.js' and neither file reads process.env; `ChromeManagerOptions` declares `keepAlive?` and `entryPath?` and chrome-manager.ts passes entryPath to createProxyReaperLink; src/index.ts exports `lifecycle` from './lib/lifecycle/index.js' and src/lib/lifecycle/index.ts re-exports from '../managers.js'; `require()` of the built dist/index.js exposes lifecycle.configureManagers, lifecycle.managerFor, lifecycle.chromeExitTarget, lifecycle.installProcessExitHooks and lifecycle.runChromeReaper."""
+    mg, api, cm = read(f"{P}/src/lib/managers.ts"), read(f"{P}/src/api.ts"), read(f"{P}/src/lib/chrome-manager.ts")
+    sites = [os.path.relpath(f, P) for f in walk(f"{P}/src", (".ts",)) if "/src/test/" not in f and "new ChromeManager(" in code_lines(read(f))]
+    seam = set(SEAM) <= exports_of(mg) and sites == ["src/lib/managers.ts"]
+    routed = "managerFor" in api and re.search(r"from\s*['\"]\./lib/managers\.js['\"]", api) is not None and "process.env" not in api + mg
+    opts = re.search(r"keepAlive\?\s*:", cm) is not None and re.search(r"entryPath\?\s*:", cm) is not None and re.search(r"createProxyReaperLink\(\{[^}]*entryPath", cm, re.S) is not None
+    ns = dict(NS_RE.findall(read(f"{P}/src/index.ts")))
+    barrel = re.search(r"from\s*['\"]\.\./managers\.js['\"]", read(f"{P}/src/lib/lifecycle/index.ts")) is not None
+    wired = re.sub(r"\.js$", "", ns.get("lifecycle", "")) == "./lib/lifecycle/index" and barrel
+    if not (seam and routed and opts and wired):
+        return False, f"seam={seam} (constructors {sites}) routed={routed} options={opts} root lifecycle wired={wired}"
+    if not ensure_bin():
+        return False, "build-bin failed"
+    rc, o, e = run2(["node", "-e", "const l=require(process.argv[1]).lifecycle||{};console.log(JSON.stringify(Object.keys(l)))", os.path.abspath(f"{P}/dist/index.js")], 60)
+    try:
+        keys = set(json.loads(o.strip().splitlines()[-1]))
+    except (ValueError, IndexError):
+        keys = set()
+    need = set(SEAM) | {"installProcessExitHooks", "runChromeReaper"}
+    return rc == 0 and need <= keys, f"require rc={rc} lifecycle missing {sorted(need - keys)} {e[-120:]}"
+
+
+@check("surface-hosts", 16)
+def _sh16():
+    """Host unit specs simulate real use in-process: spec files under src/test/unit/hosts/ cite ticket 8468f7b1 and [surface-hosts.16], import no node:child_process, and drive the real configureManagers, managerFor and chromeExitTarget (`keepAlive` true never arms the idle timer, `release()` and `shutdownIfIdle()` reach every live manager) and the host flag mapping of `--port`, `--user-data-dir`, `--idle-shutdown` and `--keep-alive`; `nx run stealth-browser:test -- src/test/unit/hosts` exits 0."""
+    specs = spec_files("unit/hosts")
+    t = "\n".join(read(f) for f in specs)
+    must = [*SEAM, "keepAlive", "release(", "shutdownIfIdle(", "--port", "--user-data-dir", "--idle-shutdown", "--keep-alive"]
+    miss = [m for m in must if m not in t]
+    spawn = re.search(r"['\"](?:node:)?child_process['\"]", t) is not None
+    if not specs or miss or spawn or TICKET not in t or "[surface-hosts.16]" not in t:
+        return False, f"specs={len(specs)} missing tokens {miss} child_process={spawn} cites={TICKET in t and '[surface-hosts.16]' in t}"
+    ok, why = run_unit("hosts")
+    return ok, why
 
 
 # ============================================================ service-proxy 0.6.0 consumption (sp-reaper-load-proof, sp-link, sp-reaper-smoke, sp-switch)
@@ -4051,7 +4095,7 @@ def _twp3():
 
 @check("tripwire-pack", 4)
 def _twp4():
-    """The lockfile change is importer-only: the [psm:tripwire-pack] commits touch pnpm-lock.yaml (if at all) without removing a single line, and only owned paths changed (pnpm-lock.yaml and evidence/tripwire/)."""
+    """The lockfile is untouched by this state: no [psm:tripwire-pack] commit removes a pnpm-lock.yaml line, and only owned paths changed (evidence/tripwire/ and the package's package.json, project.json and vite.config.ts; pnpm-lock.yaml is read-only here, its importer block was written by sp-link)."""
     o = ownership_ok("tripwire-pack")
     log = sh(["git", "log", "--format=%H%x1f%B%x1e"])[1]
     removed = []

@@ -200,7 +200,14 @@
         "entrypoint/stealth-browser/src/host-projection.ts",
         "entrypoint/stealth-browser/bin/",
         "entrypoint/stealth-browser/package.json",
-        "docs/plan/stealth-browser/evidence/naming-decision.md"
+        "docs/plan/stealth-browser/evidence/naming-decision.md",
+        "pnpm-lock.yaml",
+        "entrypoint/stealth-browser/src/lib/managers.ts",
+        "entrypoint/stealth-browser/src/api.ts",
+        "entrypoint/stealth-browser/src/lib/chrome-manager.ts",
+        "entrypoint/stealth-browser/src/lib/lifecycle/index.ts",
+        "entrypoint/stealth-browser/src/index.ts",
+        "entrypoint/stealth-browser/src/test/unit/hosts/"
       ],
       "context": "contexts/surface-hosts.md",
       "notes": "executor=typescript-pro tier=sonnet/high; waits for sp-link so the stealth-browser package.json owners are serialized"
@@ -828,7 +835,6 @@
       ],
       "guard": "python3 docs/plan/stealth-browser/scripts/guard.py tripwire-pack",
       "artifacts": [
-        "pnpm-lock.yaml",
         "docs/plan/stealth-browser/evidence/tripwire/",
         "packages/resilience/resilience-core-tripwire/package.json",
         "packages/resilience/resilience-core-tripwire/project.json",

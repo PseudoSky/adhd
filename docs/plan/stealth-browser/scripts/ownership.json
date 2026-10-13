@@ -54,7 +54,14 @@
     "entrypoint/stealth-browser/src/host-projection.ts",
     "entrypoint/stealth-browser/bin/",
     "entrypoint/stealth-browser/package.json",
-    "docs/plan/stealth-browser/evidence/naming-decision.md"
+    "docs/plan/stealth-browser/evidence/naming-decision.md",
+    "pnpm-lock.yaml",
+    "entrypoint/stealth-browser/src/lib/managers.ts",
+    "entrypoint/stealth-browser/src/api.ts",
+    "entrypoint/stealth-browser/src/lib/chrome-manager.ts",
+    "entrypoint/stealth-browser/src/lib/lifecycle/index.ts",
+    "entrypoint/stealth-browser/src/index.ts",
+    "entrypoint/stealth-browser/src/test/unit/hosts/"
   ],
   "tracing-plugin": [
     "entrypoint/stealth-browser/src/tracing.ts",
@@ -273,7 +280,6 @@
     "packages/resilience/resilience-core-tripwire/src/test/unit/readme-examples.spec.ts"
   ],
   "tripwire-pack": [
-    "pnpm-lock.yaml",
     "docs/plan/stealth-browser/evidence/tripwire/",
     "packages/resilience/resilience-core-tripwire/package.json",
     "packages/resilience/resilience-core-tripwire/project.json",
