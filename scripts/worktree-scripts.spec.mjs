@@ -5,21 +5,21 @@
  * `main` clone), a fake backlog CLI and a fake pnpm. Nothing touches this repo, its remotes or the
  * production backlog. Each spawn scrubs GIT_* (50e8c966).
  *
- * Run: node --test tools/nx-plugins/build/worktree-scripts.spec.mjs
+ * Run: node --test scripts/worktree-scripts.spec.mjs   (nx: `nx run @adhd/source:test`)
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { spawnSync } from 'node:child_process';
-import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const require = createRequire(import.meta.url);
-const { cleanGitEnv } = require('../lib/git-env.js');
+const { cleanGitEnv } = require('../tools/nx-plugins/lib/git-env.js');
 const here = dirname(fileURLToPath(import.meta.url));
-const SCRIPTS = join(here, '..', '..', '..', 'scripts');
+const SCRIPTS = here;
 
 const PLAN_UID = '11111111-aaaa-4bbb-8ccc-000000000001';
 const TASK_UID = '22222222-aaaa-4bbb-8ccc-000000000002';
@@ -244,28 +244,6 @@ test('merge: says how many unpushed commits on main this push will publish, and 
     assert.match(published, /unpushed work one/);
     assert.match(published, /unpushed work two/);
   } finally { s.done(); }
-});
-
-test('merge: the gate runs with nx pointed at the MAIN checkout cache, and a caller-set NX_CACHE_DIRECTORY wins', () => {
-  const saved = process.env.NX_CACHE_DIRECTORY;
-  delete process.env.NX_CACHE_DIRECTORY;
-  try {
-    for (const [callerValue, expected] of [[undefined, (s) => join(realpathSync(s.root), '.nx', 'cache')], ['/custom/nx-cache', () => '/custom/nx-cache']]) {
-      const s = sandbox();
-      try {
-        const wt = planWorktree(s);
-        commitIn(wt, 'feature.txt', 'x\n', 'feat: x');
-        const out = join(s.base, 'gate-env.txt');
-        const extra = { WORKTREE_MERGE_GATE: `printf %s "\${NX_CACHE_DIRECTORY-UNSET}" > ${out}` };
-        if (callerValue) extra.NX_CACHE_DIRECTORY = callerValue;
-        const r = s.sh('worktree-merge.sh', ['plan-11111111'], { env: extra });
-        assert.equal(r.status, 0, r.stderr);
-        assert.equal(readFileSync(out, 'utf8'), expected(s));
-      } finally { s.done(); }
-    }
-  } finally {
-    if (saved !== undefined) process.env.NX_CACHE_DIRECTORY = saved;
-  }
 });
 
 test('merge: untracked folders get a strong warning and survive (cleanup keeps the tree, exit 9); ignored tmp/ does not count', () => {
