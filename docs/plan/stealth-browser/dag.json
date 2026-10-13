@@ -384,6 +384,7 @@
       "kind": "work",
       "phase": "surface",
       "depends_on": [
+        "core-seam",
         "tests-unit-core",
         "tests-unit-data",
         "tests-unit-extract",
@@ -392,14 +393,11 @@
       ],
       "guard": "python3 docs/plan/stealth-browser/scripts/guard.py prod-errors",
       "artifacts": [
-        "entrypoint/stealth-browser/src/errors.ts",
-        "entrypoint/stealth-browser/src/lib/",
-        "entrypoint/stealth-browser/src/server.ts",
-        "entrypoint/stealth-browser/src/cli.ts",
-        "entrypoint/stealth-browser/src/index.ts",
-        "entrypoint/stealth-browser/bin/",
-        "entrypoint/stealth-browser/docs/ERRORS.md",
-        "entrypoint/stealth-browser/src/test/unit/errors/"
+        "packages/stealth/stealth-core-browser/src/errors.ts",
+        "packages/stealth/stealth-core-browser/src/lib/",
+        "packages/stealth/stealth-core-browser/src/index.ts",
+        "packages/stealth/stealth-core-browser/docs/ERRORS.md",
+        "packages/stealth/stealth-core-browser/src/test/unit/errors/"
       ],
       "context": "contexts/prod-errors.md",
       "notes": "executor=typescript-pro tier=sonnet/high; 100% typed errors (user decision): every lib throw site raises a StealthBrowserError code"
