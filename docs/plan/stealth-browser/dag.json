@@ -406,13 +406,14 @@
       "kind": "work",
       "phase": "surface",
       "depends_on": [
+        "core-seam",
         "prod-errors"
       ],
       "guard": "python3 docs/plan/stealth-browser/scripts/guard.py prod-examples",
       "artifacts": [
-        "entrypoint/stealth-browser/examples/",
-        "entrypoint/stealth-browser/src/test/unit/examples/",
-        "entrypoint/stealth-browser/tsconfig.spec.json"
+        "packages/stealth/stealth-core-browser/examples/",
+        "packages/stealth/stealth-core-browser/src/test/unit/examples/",
+        "packages/stealth/stealth-core-browser/tsconfig.spec.json"
       ],
       "context": "contexts/prod-examples.md",
       "notes": "executor=typescript-pro tier=sonnet/medium; a runnable example per verb and per namespace tied to real use cases (user decision)"
