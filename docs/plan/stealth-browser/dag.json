@@ -903,6 +903,22 @@
       ],
       "context": "contexts/search-port-engine.md",
       "notes": "typescript-pro sonnet/high"
+    },
+    "search-port-guards": {
+      "kind": "work",
+      "phase": "migrate",
+      "depends_on": [
+        "search-errors"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py search-port-guards",
+      "artifacts": [
+        "entrypoint/stealth-search/src/lib/guard.ts",
+        "entrypoint/stealth-search/src/lib/tripwire.ts",
+        "entrypoint/stealth-search/src/lib/config.ts",
+        "entrypoint/stealth-search/src/test/unit/guards/"
+      ],
+      "context": "contexts/search-port-guards.md",
+      "notes": "typescript-pro sonnet/high; tripwire adoption, cooldown, concurrency"
     }
   },
   "authored_with": {
