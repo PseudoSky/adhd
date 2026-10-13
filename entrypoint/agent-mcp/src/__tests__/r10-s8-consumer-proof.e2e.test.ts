@@ -235,11 +235,13 @@ describe.each(ADAPTERS)("R10 S8 consumer proof [%s]", (a) => {
       const d = first.tools.find((t) => t.name === name)?.description;
       expect(d?.startsWith(DELEGATION_DECISION_RULE), `${name} description leads with the rule`).toBe(true);
     }
-    // identical text on both adapters (the rule is one constant, not per-adapter wording)
+    // identical text on both adapters (the rule is one constant, not per-adapter wording); every tool is really offered
     const other = ADAPTERS.find((x) => x !== a) as AdapterKind;
     const otherFirst = req(other, scenario.deleg(other), 0);
     for (const name of ["agent-mcp__task", "agent-mcp__tasks_batch", "agent-mcp__result"]) {
-      expect(first.tools.find((t) => t.name === name)?.description, name).toBe(otherFirst.tools.find((t) => t.name === name)?.description);
+      const mine = first.tools.find((t) => t.name === name)?.description;
+      expect(typeof mine === "string" && mine.length > 0, `${name} is offered to the ${a} model`).toBe(true);
+      expect(mine, name).toBe(otherFirst.tools.find((t) => t.name === name)?.description);
     }
     // the sync task returned the finished child result inside the same turn
     expect(wireText(req(a, s, 1).toolResults[0].content)).toContain("child finished");
@@ -316,6 +318,8 @@ describe.each(ADAPTERS)("R10 S8 consumer proof [%s]", (a) => {
     const dispatches = traced("agent.dispatch.finish", d).filter((r) => r["agent.dispatch.kind"] === "agent_task");
     const sync = dispatches.find((r) => r["agent.dispatch.mode"] === "sync");
     const bg = dispatches.find((r) => r["agent.dispatch.mode"] === "background");
+    // the join key the instrument uses to pair the dispatch with its tool_call record (R10 S5b)
+    expect(sync?.["agent.dispatch.call_id"]).toBe(callId(scenario.deleg(a), 0, 0));
     expect(typeof sync?.["agent.dispatch.parent_blocked_ms"]).toBe("number");
     expect(sync?.["agent.dispatch.parent_blocked_ms"] as number).toBeGreaterThan(0);
     expect(sync?.["agent.dispatch.children"]).toBe(1);

@@ -381,7 +381,8 @@ export async function startScaffold(): Promise<IScaffold> {
           ? {
               type: "anthropic",
               model: "claude-haiku-5-5",
-              // no baseURL on an anthropic provider: the SDK client takes ANTHROPIC_BASE_URL (set below)
+              // no baseURL on an anthropic provider, and env.base_url is accepted but ignored (backlog f6b79f8d): the SDK
+              // client takes ANTHROPIC_BASE_URL (set below)
               env: { secret: "ADHD_AGENT_R10S8_KEY" },
               maxTokens: 4096,
               ...(spec.thinking ? { thinking: spec.thinking } : {}),
