@@ -336,11 +336,16 @@
       ],
       "guard": "python3 docs/plan/stealth-browser/scripts/guard.py docs-marketing-run",
       "artifacts": [
-        "entrypoint/stealth-browser/docs/",
-        "entrypoint/stealth-browser/AGENTS.md",
-        "entrypoint/stealth-browser/llms.txt",
-        "entrypoint/stealth-browser/CHANGELOG.md",
-        "entrypoint/stealth-browser/README.md"
+        "packages/stealth/stealth-core-browser/docs/",
+        "packages/stealth/stealth-core-browser/AGENTS.md",
+        "packages/stealth/stealth-core-browser/llms.txt",
+        "packages/stealth/stealth-core-browser/CHANGELOG.md",
+        "packages/stealth/stealth-core-browser/README.md",
+        "entrypoint/stealth-search/docs/",
+        "entrypoint/stealth-search/AGENTS.md",
+        "entrypoint/stealth-search/llms.txt",
+        "entrypoint/stealth-search/CHANGELOG.md",
+        "entrypoint/stealth-search/README.md"
       ],
       "context": "contexts/docs-marketing-run.md",
       "notes": "executor=doc-steward tier=sonnet/medium"
