@@ -277,11 +277,11 @@
       "end_ref": null
     },
     "failsafe-inventory": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-10-12T23:58:47.048Z",
-      "done_at": null,
+      "done_at": "2026-10-13T00:06:33.473Z",
       "start_ref": "90be93d4a0ebf2fdf28d406029323566dcd7878b",
-      "end_ref": null
+      "end_ref": "4894bdc5a49d6d645294d88bdb675162c05da6e9"
     }
   },
   "transition_log": [
@@ -428,6 +428,18 @@
       "audit_criteria_total": 4,
       "by": "pseudosky",
       "note": "queries f60f9ee7; guard 0"
+    },
+    {
+      "ts": "2026-10-13T00:06:33.473Z",
+      "from": "failsafe-inventory",
+      "to": "failsafe-inventory",
+      "start_ref": "90be93d4a0ebf2fdf28d406029323566dcd7878b",
+      "end_ref": "4894bdc5a49d6d645294d88bdb675162c05da6e9",
+      "audit_exit": 0,
+      "audit_criteria_passed": 5,
+      "audit_criteria_total": 5,
+      "by": "pseudosky",
+      "note": "inventory 209 rows, guard 0 (commit 4894bdc5)"
     }
   ],
   "amendment_log": [
@@ -513,7 +525,7 @@
     "version": "0.8.35",
     "hash": "0b6bc1f3d70e"
   },
-  "current_state": "failsafe-inventory",
+  "current_state": "port-fixes",
   "dod_provenance": {
     "confirmed_at": "2026-10-12T23:49:38.410Z",
     "by": "pseudosky",
