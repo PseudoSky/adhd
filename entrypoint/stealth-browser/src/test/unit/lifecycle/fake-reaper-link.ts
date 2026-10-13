@@ -9,6 +9,7 @@
  * connection to it. No socket, no process: the manager tests substitute these
  * through `ChromeManagerOptions.link`.
  */
+import { lifecycleErrors, type LifecycleError } from '../../../lib/lifecycle/errors.js'
 import type { ReaperLink } from '../../../lib/lifecycle/reaper-link.js'
 import type { ReapOutcome, ReaperHost, ReaperStatus, RpcResponse } from '../../../lib/lifecycle/reaper-host.js'
 
@@ -21,6 +22,8 @@ export class FakeReaperHub {
   host: ReaperHost | null = null
   /** False: `ensure` fails (e.g. the state dir is unsafe, E_UDS_DIR_UNSAFE). */
   available = true
+  /** The CDP port this hub's host serves (only used in error messages). */
+  port = 9333
   /** How many times a host was started (spawned). */
   spawns = 0
   private seq = 0
@@ -42,7 +45,7 @@ export class FakeReaperHub {
   connect(link: FakeReaperLink): string {
     const id = `c${++this.seq}`
     this.links.add(link)
-    this.host!.onClientConnect(id)
+    this.host?.onClientConnect(id)
     return id
   }
 
@@ -73,6 +76,7 @@ export class FakeReaperLink implements ReaperLink {
   /** Make the next operations reject/throw (a broken transport). */
   broken = false
   private conn: string | null = null
+  private failure: LifecycleError | null = null
 
   constructor(
     readonly hub: FakeReaperHub,
@@ -85,12 +89,22 @@ export class FakeReaperLink implements ReaperLink {
 
   async ensureAndHello(): Promise<boolean> {
     this.ensureCalls++
-    if (this.broken) return false
+    if (this.broken) return this.fail(new Error('fake transport broken'))
     if (this.conn) return true
-    if (!this.hub.ensure()) return false
+    if (!this.hub.ensure()) return this.fail(Object.assign(new Error('socket directory is not private'), { code: 'E_UDS_DIR_UNSAFE' }))
     this.conn = this.hub.connect(this)
     await this.hub.rpc(this.conn, 'hello', this.hello)
+    this.failure = null
     return true
+  }
+
+  lastError(): LifecycleError | null {
+    return this.failure
+  }
+
+  private fail(cause: Error): false {
+    this.failure = lifecycleErrors.reaperUnavailable(this.hub.port, cause)
+    return false
   }
 
   activity(): void {
