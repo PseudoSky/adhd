@@ -839,6 +839,22 @@
       ],
       "context": "contexts/search-inventory.md",
       "notes": "typescript-pro sonnet/high; search-side failsafe inventory"
+    },
+    "search-errors": {
+      "kind": "work",
+      "phase": "migrate",
+      "depends_on": [
+        "search-inventory",
+        "prod-errors"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py search-errors",
+      "artifacts": [
+        "entrypoint/stealth-search/src/errors.ts",
+        "entrypoint/stealth-search/src/test/unit/errors/",
+        "entrypoint/stealth-search/docs/ERRORS.md"
+      ],
+      "context": "contexts/search-errors.md",
+      "notes": "typescript-pro sonnet/high; StealthSearchError registry"
     }
   },
   "authored_with": {
