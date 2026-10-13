@@ -291,11 +291,11 @@
       "end_ref": "962716de219d1f551a4b8f5cb133676cfacedb00"
     },
     "sp-link": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-10-13T01:30:30.637Z",
-      "done_at": null,
+      "done_at": "2026-10-13T01:39:24.757Z",
       "start_ref": "692cb289831c887e8b99e3a03676d953fab45e9c",
-      "end_ref": null
+      "end_ref": "4344d048eb8ed67d4b2075f5c5519ff1927b9a59"
     },
     "sp-reaper-smoke": {
       "status": "pending",
@@ -625,6 +625,18 @@
       "audit_criteria_total": 5,
       "by": "pseudosky",
       "note": "generator-built @adhd/resilience-core-tripwire, resilience group, CJS manifest; commit 885d5aad; guard 5/5"
+    },
+    {
+      "ts": "2026-10-13T01:39:24.757Z",
+      "from": "sp-link",
+      "to": "sp-link",
+      "start_ref": "692cb289831c887e8b99e3a03676d953fab45e9c",
+      "end_ref": "4344d048eb8ed67d4b2075f5c5519ff1927b9a59",
+      "audit_exit": 0,
+      "audit_criteria_passed": 5,
+      "audit_criteria_total": 5,
+      "by": "pseudosky",
+      "note": "dep ~0.6.0 + root override to dev tarball (sha256 61d3ed54..., pnpm pack, 0.6.0); commit 4f7b0b4f; guard per-criterion PASS"
     }
   ],
   "amendment_log": [
