@@ -254,7 +254,8 @@
     "packages/resilience/resilience-core-tripwire/",
     "tsconfig.base.json",
     ".adhd/workspace.json",
-    "docs/plan/stealth-browser/evidence/tripwire/"
+    "docs/plan/stealth-browser/evidence/tripwire/",
+    "tools/nx-plugins/build/executors/typecheck-spec/resilience-core-tripwire.baseline.json"
   ],
   "tripwire-core": [
     "packages/resilience/resilience-core-tripwire/src/",

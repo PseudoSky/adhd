@@ -3373,12 +3373,39 @@ def local_specifiers():
     return bad
 
 
-def manifest_line_changes(since, path):
+def own_commits(slug):
+    """Commit shas since the state's start_ref whose message carries [psm:<slug>]: concurrent states commit to shared paths, so 'did this state touch X' must look only at its own commits."""
+    st = (state().get("states") or {}).get(slug) or {}
+    since = st.get("start_ref") or git("merge-base", "HEAD", "main")
+    log = sh(["git", "log", f"{since}..HEAD", "--format=%H%x1f%B%x1e"])[1]
+    out = []
+    for rec in log.split("\x1e"):
+        if "\x1f" not in rec:
+            continue
+        sha, body = rec.strip().split("\x1f", 1)
+        if f"[psm:{slug}]" in body:
+            out.append(sha)
+    return out
+
+
+def own_touched(slug, path):
+    """Files under `path` touched by the state's own [psm:<slug>] commits only."""
+    files = set()
+    for sha in own_commits(slug):
+        files.update(f for f in git("diff-tree", "--no-commit-id", "--name-only", "-r", sha, "--", path).splitlines() if f)
+    return sorted(files)
+
+
+def manifest_line_changes(since, path, slug=None):
     """Changed lines of `path` since `since`, ignoring trailing-comma moves and lines that mention the service-proxy package: what remains is a change to anything other than the one dependency/override line."""
     if not since:
         return ["(no start_ref)"]
     rem, add = set(), set()
-    for ln in git("diff", "-U0", since, "HEAD", "--", path).splitlines():
+    if slug:
+        diff = "\n".join(git("show", "-U0", "--format=", sha, "--", path) for sha in own_commits(slug))
+    else:
+        diff = git("diff", "-U0", since, "HEAD", "--", path)
+    for ln in diff.splitlines():
         if ln.startswith(("+++", "---")) or ln[:1] not in "+-" or not ln[1:].strip():
             continue
         (add if ln[0] == "+" else rem).add(ln[1:].strip().rstrip(","))
@@ -3411,8 +3438,8 @@ def _rlp3():
     """Only owned paths changed by [psm:sp-reaper-load-proof] commits (the single evidence file); no file under entrypoint/stealth-browser is modified and no scratch artifact is left in the repository."""
     o = ownership_ok("sp-reaper-load-proof")
     since = ((state().get("states") or {}).get("sp-reaper-load-proof") or {}).get("start_ref")
-    touched = git("diff", "--name-only", since, "HEAD", "--", P).splitlines() if since else []
-    return o[0] and not touched, f"{o[1]} package files touched since start: {touched[:5]}"
+    touched = own_touched("sp-reaper-load-proof", P) if since else []
+    return o[0] and not touched, f"{o[1]} package files touched by this state's commits: {touched[:5]}"
 
 
 # ---------------------------------------------------------------- sp-link
@@ -3480,8 +3507,8 @@ def _spl5():
     """Only owned paths changed by [psm:sp-link] commits (the stealth-browser package.json, the root package.json, pnpm-lock.yaml and smoke/sp-link.md); the stealth-browser package.json diff of those commits touches the one `@adhd/sox-service-proxy` dependency line only, and no file under entrypoint/stealth-browser/src is modified."""
     o = ownership_ok("sp-link")
     since = ((state().get("states") or {}).get("sp-link") or {}).get("start_ref")
-    src = git("diff", "--name-only", since, "HEAD", "--", f"{P}/src").splitlines() if since else []
-    other = manifest_line_changes(since, f"{P}/package.json")
+    src = own_touched("sp-link", f"{P}/src") if since else []
+    other = manifest_line_changes(since, f"{P}/package.json", "sp-link")
     return o[0] and not src and not other, f"{o[1]} src touched={src[:3]} other manifest lines={other[:4]}"
 
 
@@ -3518,7 +3545,7 @@ def _sps3():
     j = jread(SMK_JSON, {}) or {}
     o = ownership_ok("sp-reaper-smoke")
     since = ((state().get("states") or {}).get("sp-reaper-smoke") or {}).get("start_ref")
-    src = git("diff", "--name-only", since, "HEAD", "--", f"{P}/src").splitlines() if since else []
+    src = own_touched("sp-reaper-smoke", f"{P}/src") if since else []
     return re.search(r"^RUN: exit=0\s*$", t, re.M) is not None and re.search(r"[0-9a-f]{64}", t) is not None and "0.6." in t and j.get("ensure") == "spawned" and o[0] and not src, f"{o[1]} src touched={src[:3]}"
 
 
@@ -3535,7 +3562,7 @@ def _sw2():
     """The dev-tarball indirection is gone with no source change: root package.json `pnpm.overrides` has no `@adhd/sox-service-proxy` key, no @adhd/* dependency or override in the root, stealth-browser or tripwire manifests starts with `file:`, `link:` or `portal:`, pnpm-lock.yaml mentions neither `adhd-dev-tarballs` nor a `file:/Users` resolution and resolves @adhd/sox-service-proxy 0.6.x with an integrity hash, and `git diff` of entrypoint/stealth-browser/src since the state start is empty."""
     lock = read("pnpm-lock.yaml")
     since = ((state().get("states") or {}).get("sp-switch") or {}).get("start_ref")
-    src = git("diff", "--name-only", since, "HEAD", "--", f"{P}/src").splitlines() if since else ["(no start_ref)"]
+    src = own_touched("sp-switch", f"{P}/src") if since else ["(no start_ref)"]
     reg = re.search(r"/?@adhd/sox-service-proxy@0\.6\.\d+:\s*\n\s*resolution:\s*\{integrity:", lock) is not None
     return PROXY_PKG not in root_overrides() and not local_specifiers() and "adhd-dev-tarballs" not in lock and "file:/Users" not in lock and reg and not src, f"overrides={root_overrides().get(PROXY_PKG)} local specifiers={local_specifiers()} registry resolution={reg} src={src[:3]}"
 
@@ -3556,7 +3583,7 @@ def _sw4():
     """Only owned paths changed by [psm:sp-switch] commits (the root package.json, pnpm-lock.yaml and smoke/switch.md); the root package.json diff removes the single `@adhd/sox-service-proxy` override line and adds nothing else."""
     o = ownership_ok("sp-switch")
     since = ((state().get("states") or {}).get("sp-switch") or {}).get("start_ref")
-    extra = manifest_line_changes(since, "package.json")
+    extra = manifest_line_changes(since, "package.json", "sp-switch")
     return o[0] and not extra, f"{o[1]} other root manifest lines changed={extra[:4]}"
 
 
@@ -3643,23 +3670,28 @@ def _tws1():
 
 @check("tripwire-scaffold", 2)
 def _tws2():
-    """The package is generator-built (never hand-built): evidence/tripwire/scaffold-dry-run.txt holds the transcript of `npx nx g @adhd/workspace-codegen-nx:core --name=tripwire --group=resilience --nxLayer=shared --platform=node --access public --publish true --dry-run` with its CREATE list, packages/resilience/resilience-core-tripwire/project.json is named `resilience-core-tripwire`, and its tags contain exactly domain:resilience, pkg-kind:core, pkg-class:foundation, layer:shared, platform:node and access:public."""
+    """The package is generator-built (never hand-built): evidence/tripwire/scaffold-dry-run.txt holds the transcript of `npx nx g @adhd/workspace-codegen-nx:core --name=tripwire --group=resilience --nxLayer=shared --platform=node --access public --publish true --dry-run` with its CREATE list, packages/resilience/resilience-core-tripwire/project.json is named `resilience-core-tripwire`, and its tags are exactly domain:resilience, pkg-kind:core, pkg-class:foundation, layer:shared, platform:node and access:public, plus `publish:npm` (added by the mandated `--publish true`) and any `scope:*` tag."""
     t = read(f"{TW_EVID_DIR}/scaffold-dry-run.txt")
     pj = jread(f"{TW}/project.json", {}) or {}
     tags = set(pj.get("tags") or [])
     want = {"domain:resilience", "pkg-kind:core", "pkg-class:foundation", "layer:shared", "platform:node", "access:public"}
-    return ("--name=tripwire" in t and "--group=resilience" in t and "--dry-run" in t and "CREATE" in t and pj.get("name") == TW_NAME and want <= tags and not (tags - want - {t_ for t_ in tags if t_.startswith("scope:")})), f"name={pj.get('name')} tags={sorted(tags)}"
+    allowed = want | {"publish:npm"}
+    return ("--name=tripwire" in t and "--group=resilience" in t and "--dry-run" in t and "CREATE" in t and pj.get("name") == TW_NAME and want <= tags and not (tags - allowed - {t_ for t_ in tags if t_.startswith("scope:")})), f"name={pj.get('name')} tags={sorted(tags)}"
 
 
 @check("tripwire-scaffold", 3)
 def _tws3():
-    """The manifest has the ADR-0003 CJS-only shape: name @adhd/resilience-core-tripwire, version 0.1.0, `main` ./dist/index.js, `type` unset, no `module`, no `exports`, no `bin`, empty or absent `dependencies`, engines.node >= 20, publishConfig.access public, `files` containing dist and CHANGELOG.md; tsconfig.base.json maps the @adhd/resilience-core-tripwire alias; the vite config emits CJS only (no `es` format, no .mjs)."""
+    """The manifest has the ADR-0003 CJS-only shape: name @adhd/resilience-core-tripwire, version 0.1.0, `main` ./dist/index.js, `type` unset, no `module`, no `exports`, no `bin`, empty or absent `dependencies`, engines.node >= 20, publishConfig.access public, `files` containing dist and CHANGELOG.md; tsconfig.base.json maps the @adhd/resilience-core-tripwire alias; the vite config (vite.config.ts) emits CJS only: `formats` is exactly `['cjs']` (no `es`/`esm`) and `fileName` yields .js output (no `.mjs` fileName or output extension). Importing tools/vite-plugins/*.mjs helpers is allowed."""
     p = jread(f"{TW}/package.json", {}) or {}
     vite = read(f"{TW}/vite.config.ts")
     shape = (p.get("name") == TW_PKG and p.get("version") == "0.1.0" and p.get("main") == "./dist/index.js" and "type" not in p and "module" not in p and "exports" not in p and "bin" not in p
              and not (p.get("dependencies") or {}) and (p.get("publishConfig") or {}).get("access") == "public" and {"dist", "CHANGELOG.md"} <= set(p.get("files") or [])
              and re.search(r"(>=\s*)?(20|22)", (p.get("engines") or {}).get("node", "")) is not None)
-    cjs = bool(vite.strip()) and not re.search(r"formats?:\s*\[[^\]]*['\"]es['\"]", vite) and ".mjs" not in vite
+    fm = re.search(r"formats\s*:\s*\[([^\]]*)\]", vite)
+    fmts = re.findall(r"['\"]([A-Za-z]+)['\"]", fm.group(1)) if fm else []
+    fn = re.search(r"fileName\s*:\s*([^,\n}]+)", vite)
+    fn_s = fn.group(1) if fn else ""
+    cjs = bool(vite.strip()) and fmts == ["cjs"] and not re.search(r"\.mjs['\"`]|\bmjs\b|\.es\.|\.esm\.", fn_s)
     return shape and cjs and TW_PKG in read("tsconfig.base.json"), f"shape={shape} cjs-only vite={cjs} alias={TW_PKG in read('tsconfig.base.json')}"
 
 
