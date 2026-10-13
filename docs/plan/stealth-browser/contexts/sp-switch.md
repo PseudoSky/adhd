@@ -34,6 +34,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 - [sp-switch.3] The registry build passes the same gates: after the switch `nx run stealth-browser:build` and `nx run stealth-browser:test -- src/test/unit/lifecycle` exit 0, and smoke/switch.md records `BUILD: exit=0` and `LIFECYCLE-UNIT: exit=0`.
 - [sp-switch.4] Only owned paths changed by [psm:sp-switch] commits (the root package.json, pnpm-lock.yaml and smoke/switch.md); the root package.json diff removes the single `@adhd/sox-service-proxy` override line and adds nothing else.
 
+- [sp-switch.5] The built dist requires the proxy from the registry build: `lifecycle/sp.ts` exists, `nx run stealth-browser:build` exits 0, dist/index.js contains a `require` (or dynamic `import()`) of `@adhd/sox-service-proxy` and no inlined definition of ensureBackend, serveBackend or dialBackend.
 ---
 
 ## Reservations

@@ -3582,6 +3582,15 @@
       "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py tripwire-reverse-relink --only tripwire-reverse-relink.3",
       "expect": "exit0",
       "cwd": "repo-root"
+    },
+    {
+      "id": "sp-switch.5",
+      "phase": "verify",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py sp-switch --only sp-switch.5",
+      "expect": "exit0",
+      "cwd": "repo-root"
     }
   ]
 }
