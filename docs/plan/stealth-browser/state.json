@@ -244,9 +244,9 @@
     "capture-upgrade": {
       "status": "complete",
       "started_at": "2026-10-13T00:47:02.086Z",
-      "done_at": "2026-10-13T01:26:42.255Z",
+      "done_at": "2026-10-13T01:27:37.412Z",
       "start_ref": "ff2288f08440685aa0e6e8aac1a697251ea64b37",
-      "end_ref": "b20749415241c305d4368b14a1dd42c49673cc96"
+      "end_ref": "e47323299f075211ebb6ba7b4e125fe5be6d61dd"
     },
     "chrome-lifecycle": {
       "status": "pending",
@@ -312,11 +312,11 @@
       "end_ref": null
     },
     "tripwire-scaffold": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-10-13T01:11:41.521Z",
-      "done_at": null,
+      "done_at": "2026-10-13T01:29:10.822Z",
       "start_ref": "ff6e8e9cc2a485ba795c0b49b88f5631143aae1e",
-      "end_ref": null
+      "end_ref": "885d5aadde5744efd6391428ab69d9199e5765fa"
     },
     "tripwire-core": {
       "status": "pending",
@@ -603,16 +603,28 @@
       "note": "dist loads via require from out-of-repo cwd; detached spawn form passes against scratch stub; VERDICT entry-path-ok; evidence commit 0a0d7937; re-recorded after stale-write repair"
     },
     {
-      "ts": "2026-10-13T01:26:42.255Z",
+      "ts": "2026-10-13T01:27:37.412Z",
       "from": "chrome-lifecycle",
       "to": "capture-upgrade",
       "start_ref": "ff2288f08440685aa0e6e8aac1a697251ea64b37",
-      "end_ref": "b20749415241c305d4368b14a1dd42c49673cc96",
+      "end_ref": "e47323299f075211ebb6ba7b4e125fe5be6d61dd",
       "audit_exit": 0,
       "audit_criteria_passed": 28,
       "audit_criteria_total": 28,
       "by": "pseudosky",
-      "note": "CU1-CU28 NetworkRecorder pipeline, sinks, feature specs; commits 4344f3c6 ff6e8e9c; re-recorded after concurrent-write repair"
+      "note": "re-complete: guard 0; prior completion 56891b54 was overwritten by a concurrent state.json write"
+    },
+    {
+      "ts": "2026-10-13T01:29:10.822Z",
+      "from": "chrome-lifecycle",
+      "to": "tripwire-scaffold",
+      "start_ref": "ff6e8e9cc2a485ba795c0b49b88f5631143aae1e",
+      "end_ref": "885d5aadde5744efd6391428ab69d9199e5765fa",
+      "audit_exit": 0,
+      "audit_criteria_passed": 5,
+      "audit_criteria_total": 5,
+      "by": "pseudosky",
+      "note": "generator-built @adhd/resilience-core-tripwire, resilience group, CJS manifest; commit 885d5aad; guard 5/5"
     }
   ],
   "amendment_log": [
@@ -1131,6 +1143,6 @@
       "dod.9"
     ]
   },
-  "claimed_by": "plan-orchestrator-1791853833-24083",
-  "claimed_at": "2026-10-13T01:26:56.598Z"
+  "claimed_by": null,
+  "claimed_at": null
 }
