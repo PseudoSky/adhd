@@ -333,10 +333,10 @@
       "end_ref": "6f2a0c7ee34e8c9680b36c24862bf6bd733fa7ad"
     },
     "core-scaffold": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-10-13T09:44:03.445Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "0d66870ddf6edadec16454605a2f26bf3da03470",
       "end_ref": null
     },
     "core-seam": {
