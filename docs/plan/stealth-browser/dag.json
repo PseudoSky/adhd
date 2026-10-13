@@ -826,6 +826,19 @@
       ],
       "context": "contexts/search-scaffold.md",
       "notes": "typescript-pro sonnet/high; generator-built entrypoint @adhd/stealth-search with every dependency declared"
+    },
+    "search-inventory": {
+      "kind": "work",
+      "phase": "migrate",
+      "depends_on": [
+        "search-scaffold"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py search-inventory",
+      "artifacts": [
+        "docs/plan/stealth-browser/evidence/search-failsafe-inventory.json"
+      ],
+      "context": "contexts/search-inventory.md",
+      "notes": "typescript-pro sonnet/high; search-side failsafe inventory"
     }
   },
   "authored_with": {
