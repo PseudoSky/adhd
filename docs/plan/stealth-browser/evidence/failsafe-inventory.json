@@ -1,0 +1,4020 @@
+{
+  "schema": 1,
+  "baseline_commit": "4dc2b7ea09de237e8185808fa2822ca3838170ce",
+  "row_count": 209,
+  "rows": [
+    {
+      "id": "fs-001",
+      "feature": "Auto-start: ready() launches Chrome through the locked launcher when CDP is unreachable, on the manager's CDP port (default host 127.0.0.1:9222, port parsed from cdpHost); a launch failure is logged and rethrown to the caller.",
+      "tags": [
+        "verb"
+      ],
+      "source": {
+        "file": "adhd/chrome-manager.ts",
+        "line": 101,
+        "anchor": "await ensureChromeRunning({ port: this._port() })"
+      },
+      "owner_state": "chrome-lifecycle",
+      "pin": {
+        "file": "src/test/unit/lifecycle/launch.spec.ts",
+        "test": "auto-starts Chrome on first use on the configured port"
+      },
+      "eval_refs": [
+        "F1"
+      ]
+    },
+    {
+      "id": "fs-002",
+      "feature": "Default CDP host is 127.0.0.1:9222 and the port falls back to 9222 when cdpHost carries none.",
+      "tags": [],
+      "source": {
+        "file": "adhd/chrome-manager.ts",
+        "line": 69,
+        "anchor": "cdpHost: opts.cdpHost ?? '127.0.0.1:9222'"
+      },
+      "owner_state": "chrome-lifecycle",
+      "pin": {
+        "file": "src/test/unit/lifecycle/launch.spec.ts",
+        "test": "defaults to the shared Chrome on 127.0.0.1:9222"
+      },
+      "eval_refs": [
+        "F1"
+      ]
+    },
+    {
+      "id": "fs-003",
+      "feature": "Stale-ready self-heal: when ready() is true but Chrome no longer answers /json/version (another process killed the shared Chrome), ready() logs it and relaunches instead of trusting the flag.",
+      "tags": [
+        "cross-process"
+      ],
+      "source": {
+        "file": "adhd/chrome-manager.ts",
+        "line": 97,
+        "anchor": "stale _ready"
+      },
+      "owner_state": "chrome-lifecycle",
+      "pin": {
+        "file": "src/test/unit/lifecycle/launch.spec.ts",
+        "test": "relaunches when the shared Chrome was killed under a ready manager"
+      },
+      "eval_refs": [
+        "F3"
+      ]
+    },
+    {
+      "id": "fs-004",
+      "feature": "Fast path: a ready manager whose Chrome is still reachable returns immediately and refreshes its activity stamp without relaunching.",
+      "tags": [
+        "cross-process"
+      ],
+      "source": {
+        "file": "adhd/chrome-manager.ts",
+        "line": 93,
+        "anchor": "if (await isChromeReachable(this.opts.cdpHost)) {"
+      },
+      "owner_state": "chrome-lifecycle",
+      "pin": {
+        "file": "src/test/unit/lifecycle/launch.spec.ts",
+        "test": "fast path returns without relaunching"
+      },
+      "eval_refs": [
+        "F3"
+      ]
+    },
+    {
+      "id": "fs-005",
+      "feature": "After a fresh launch every Chrome window is minimized (hideAllWindows) so the default window never appears on screen; a hide failure is logged and rethrown.",
+      "tags": [
+        "targets"
+      ],
+      "source": {
+        "file": "adhd/chrome-manager.ts",
+        "line": 110,
+        "anchor": "await hideAllWindows(this.opts.cdpHost)"
+      },
+      "owner_state": "chrome-lifecycle",
+      "pin": {
+        "file": "src/test/unit/lifecycle/launch.spec.ts",
+        "test": "hides windows after a fresh launch"
+      },
+      "eval_refs": [
+        "F5"
+      ]
+    },
+    {
+      "id": "fs-006",
+      "feature": "The fast path deliberately does NOT re-hide windows, so a HITL window revealed for a human stays visible.",
+      "tags": [
+        "targets",
+        "isolated-page-cleanup"
+      ],
+      "source": {
+        "file": "adhd/chrome-manager.ts",
+        "line": 89,
+        "anchor": "On the fast path we deliberately do NOT re-hide windows"
+      },
+      "owner_state": "chrome-lifecycle",
+      "pin": {
+        "file": "src/test/unit/lifecycle/launch.spec.ts",
+        "test": "does not re-hide a revealed window on the fast path"
+      },
+      "eval_refs": [
+        "F5"
+      ]
+    },
+    {
+      "id": "fs-007",
+      "feature": "A successful ready() starts the idle timer and re-arms the idle window from the launch moment, then stamps activity.",
+      "tags": [
+        "idle-shutdown"
+      ],
+      "source": {
+        "file": "adhd/chrome-manager.ts",
+        "line": 117,
+        "anchor": "this._startIdleTimer()"
+      },
+      "owner_state": "chrome-lifecycle",
+      "pin": {
+        "file": "src/test/unit/lifecycle/idle-tiers.spec.ts",
+        "test": "arms a fresh idle window after launch"
+      },
+      "eval_refs": [
+        "F6"
+      ]
+    },
+    {
+      "id": "fs-008",
+      "feature": "The idle timer is created once (idempotent) and its expiry runs the SOFT shutdown path (_doShutdown(false)), never a forced kill.",
+      "tags": [
+        "idle-shutdown",
+        "safety-tier"
+      ],
+      "source": {
+        "file": "adhd/chrome-manager.ts",
+        "line": 242,
+        "anchor": "onShutdown: () => this._doShutdown(false)"
+      },
+      "owner_state": "chrome-lifecycle",
+      "pin": {
+        "file": "src/test/unit/lifecycle/idle-tiers.spec.ts",
+        "test": "idle expiry runs the soft shutdown path"
+      },
+      "eval_refs": [
+        "F6"
+      ]
+    },
+    {
+      "id": "fs-009",
+      "feature": "bump() resets the idle timer and stamps activity; it is a no-op before ready().",
+      "tags": [
+        "idle-shutdown"
+      ],
+      "source": {
+        "file": "adhd/chrome-manager.ts",
+        "line": 125,
+        "anchor": "if (!this.idle) return"
+      },
+      "owner_state": "chrome-lifecycle",
+      "pin": {
+        "file": "src/test/unit/lifecycle/idle-tiers.spec.ts",
+        "test": "bump re-arms the idle window"
+      },
+      "eval_refs": [
+        "F6"
+      ]
+    },
+    {
+      "id": "fs-010",
+      "feature": "withBrowser(fn) ensures Chrome is ready, runs fn, and bumps activity in a finally so a throwing fn still counts as activity.",
+      "tags": [
+        "idle-shutdown"
+      ],
+      "source": {
+        "file": "adhd/chrome-manager.ts",
+        "line": 168,
+        "anchor": "async withBrowser<T>(fn: () => Promise<T>): Promise<T> {"
+      },
+      "owner_state": "chrome-lifecycle",
+      "pin": {
+        "file": "src/test/unit/lifecycle/idle-tiers.spec.ts",
+        "test": "withBrowser bumps when fn throws"
+      },
+      "eval_refs": [
+        "F7"
+      ]
+    },
+    {
+      "id": "fs-011",
+      "feature": "isReady exposes whether this manager launched/verified Chrome (feeds chromeStatus.managed).",
+      "tags": [
+        "verb"
+      ],
+      "source": {
+        "file": "adhd/chrome-manager.ts",
+        "line": 177,
+        "anchor": "get isReady(): boolean {"
+      },
+      "owner_state": "chrome-lifecycle",
+      "pin": {
+        "file": "src/test/unit/lifecycle/launch.spec.ts",
+        "test": "isReady reflects the managed state"
+      },
+      "eval_refs": [
+        "F1"
+      ]
+    },
+    {
+      "id": "fs-012",
+      "feature": "Safety tier 1 (cross-process): an idle expiry or soft shutdown defers when any OTHER live process was active within the idle window.",
+      "tags": [
+        "safety-tier",
+        "cross-process",
+        "idle-shutdown"
+      ],
+      "source": {
+        "file": "adhd/chrome-manager.ts",
+        "line": 249,
+        "anchor": "if (this._isOtherProcessActive()) {"
+      },
+      "owner_state": "chrome-lifecycle",
+      "pin": {
+        "file": "src/test/unit/lifecycle/cross-process.spec.ts",
+        "test": "defers while a live sibling was active within the window"
+      },
+      "eval_refs": [
+        "F8"
+      ]
+    },
+    {
+      "id": "fs-013",
+      "feature": "Cross-process activity window equals idleTimeoutMs and the process's own entry is ignored.",
+      "tags": [
+        "cross-process",
+        "safety-tier"
+      ],
+      "source": {
+        "file": "adhd/chrome-manager.ts",
+        "line": 226,
+        "anchor": "if (pid === this.myPid) continue"
+      },
+      "owner_state": "chrome-lifecycle",
+      "pin": {
+        "file": "src/test/unit/lifecycle/cross-process.spec.ts",
+        "test": "ignores its own activity record and honours the window"
+      },
+      "eval_refs": [
+        "F8"
+      ]
+    },
+    {
+      "id": "fs-014",
+      "feature": "Activity records are written as pid plus timestamp and merged with the other processes' entries instead of overwriting them.",
+      "tags": [
+        "cross-process"
+      ],
+      "source": {
+        "file": "adhd/chrome-manager.ts",
+        "line": 192,
+        "anchor": "existing.set(this.myPid, Date.now())"
+      },
+      "owner_state": "chrome-lifecycle",
+      "pin": {
+        "file": "src/test/unit/lifecycle/cross-process.spec.ts",
+        "test": "merges its record with the siblings' records"
+      },
+      "eval_refs": [
+        "F8"
+      ]
+    },
+    {
+      "id": "fs-015",
+      "feature": "Dead processes are ignored: an activity record whose pid no longer exists (kill 0 fails) cannot hold Chrome open.",
+      "tags": [
+        "cross-process"
+      ],
+      "source": {
+        "file": "adhd/chrome-manager.ts",
+        "line": 213,
+        "anchor": "try { process.kill(pid, 0) } catch { continue }"
+      },
+      "owner_state": "chrome-lifecycle",
+      "pin": {
+        "file": "src/test/unit/lifecycle/cross-process.spec.ts",
+        "test": "ignores records of dead processes"
+      },
+      "eval_refs": [
+        "F8"
+      ]
+    },
+    {
+      "id": "fs-016",
+      "feature": "Malformed or missing coordination data is tolerated (no file, blank pid or timestamp, NaN) - the process simply treats itself as first.",
+      "tags": [
+        "cross-process"
+      ],
+      "source": {
+        "file": "adhd/chrome-manager.ts",
+        "line": 211,
+        "anchor": "if (isNaN(pid) || isNaN(ts)) continue"
+      },
+      "owner_state": "chrome-lifecycle",
+      "pin": {
+        "file": "src/test/unit/lifecycle/cross-process.spec.ts",
+        "test": "tolerates missing and malformed coordination data"
+      },
+      "eval_refs": [
+        "F26"
+      ]
+    },
+    {
+      "id": "fs-017",
+      "feature": "Best-effort coordination I/O: a failure writing the activity record never breaks the call.",
+      "tags": [
+        "cross-process"
+      ],
+      "source": {
+        "file": "adhd/chrome-manager.ts",
+        "line": 197,
+        "anchor": "} catch { /* best effort */ }"
+      },
+      "owner_state": "chrome-lifecycle",
+      "pin": {
+        "file": "src/test/unit/lifecycle/cross-process.spec.ts",
+        "test": "coordination write failures never break a call"
+      },
+      "eval_refs": [
+        "F26"
+      ]
+    },
+    {
+      "id": "fs-018",
+      "feature": "Livelock protection: _rearmIdle re-arms the timer WITHOUT advertising activity, so an idle process that only defers cannot keep its siblings alive.",
+      "tags": [
+        "livelock",
+        "cross-process",
+        "idle-shutdown"
+      ],
+      "source": {
+        "file": "adhd/chrome-manager.ts",
+        "line": 144,
+        "anchor": "private _rearmIdle(): void {"
+      },
+      "owner_state": "chrome-lifecycle",
+      "pin": {
+        "file": "src/test/unit/lifecycle/cross-process.spec.ts",
+        "test": "a deferring process does not advertise activity"
+      },
+      "eval_refs": [
+        "F9"
+      ]
+    },
+    {
+      "id": "fs-019",
+      "feature": "The sibling-deferral branch re-arms without stamping (the regression the scratch lifecycle test guards).",
+      "tags": [
+        "livelock",
+        "safety-tier"
+      ],
+      "source": {
+        "file": "adhd/chrome-manager.ts",
+        "line": 250,
+        "anchor": "this._rearmIdle()"
+      },
+      "owner_state": "chrome-lifecycle",
+      "pin": {
+        "file": "src/test/unit/lifecycle/cross-process.spec.ts",
+        "test": "two idle managers do not keep each other alive forever"
+      },
+      "eval_refs": [
+        "F9"
+      ]
+    },
+    {
+      "id": "fs-020",
+      "feature": "Safety tier 2 (page): an open http(s) document (captcha window, keepPage result) keeps Chrome alive, the timer is re-armed without stamping.",
+      "tags": [
+        "safety-tier",
+        "livelock"
+      ],
+      "source": {
+        "file": "adhd/chrome-manager.ts",
+        "line": 264,
+        "anchor": "const active = targets.filter((t) => t.url && isActiveWebTarget(t.url))"
+      },
+      "owner_state": "chrome-lifecycle",
+      "pin": {
+        "file": "src/test/unit/lifecycle/idle-tiers.spec.ts",
+        "test": "an open https page keeps Chrome alive"
+      },
+      "eval_refs": [
+        "F10"
+      ]
+    },
+    {
+      "id": "fs-021",
+      "feature": "Newtab fix: only http(s) URLs count as active, so chrome://newtab/, chrome-untrusted://, about:, devtools:// and extension pages never pin Chrome.",
+      "tags": [
+        "newtab-fix",
+        "safety-tier"
+      ],
+      "source": {
+        "file": "adhd/chrome-manager.ts",
+        "line": 55,
+        "anchor": "return /^https?:/i.test(url)"
+      },
+      "owner_state": "chrome-lifecycle",
+      "pin": {
+        "file": "src/test/unit/lifecycle/idle-tiers.spec.ts",
+        "test": "browser-internal targets never pin Chrome"
+      },
+      "eval_refs": [
+        "F11"
+      ]
+    },
+    {
+      "id": "fs-022",
+      "feature": "If CDP cannot be reached during the page check the shutdown proceeds instead of deferring forever.",
+      "tags": [
+        "safety-tier"
+      ],
+      "source": {
+        "file": "adhd/chrome-manager.ts",
+        "line": 270,
+        "anchor": "} catch { /* can't reach CDP — proceed */ }"
+      },
+      "owner_state": "chrome-lifecycle",
+      "pin": {
+        "file": "src/test/unit/lifecycle/idle-tiers.spec.ts",
+        "test": "proceeds when CDP is unreachable during the page check"
+      },
+      "eval_refs": [
+        "F12"
+      ]
+    },
+    {
+      "id": "fs-023",
+      "feature": "Safety tier 3 (history recency): a visit within the last 2 minutes keeps Chrome alive and re-arms the timer without stamping.",
+      "tags": [
+        "safety-tier",
+        "history-recency",
+        "livelock"
+      ],
+      "source": {
+        "file": "adhd/chrome-manager.ts",
+        "line": 275,
+        "anchor": "const recentlyUsed = this.history.isRecentlyUsed(2)"
+      },
+      "owner_state": "chrome-lifecycle",
+      "pin": {
+        "file": "src/test/unit/lifecycle/idle-tiers.spec.ts",
+        "test": "a recent history visit keeps Chrome alive"
+      },
+      "eval_refs": [
+        "F13"
+      ]
+    },
+    {
+      "id": "fs-024",
+      "feature": "checkHistory option: tier 3 runs only when checkHistory is true; the default is true.",
+      "tags": [
+        "history-recency",
+        "safety-tier"
+      ],
+      "source": {
+        "file": "adhd/chrome-manager.ts",
+        "line": 72,
+        "anchor": "checkHistory: opts.checkHistory ?? true"
+      },
+      "owner_state": "chrome-lifecycle",
+      "pin": {
+        "file": "src/test/unit/lifecycle/idle-tiers.spec.ts",
+        "test": "checkHistory defaults on and false skips the tier"
+      },
+      "eval_refs": [
+        "F13"
+      ]
+    },
+    {
+      "id": "fs-025",
+      "feature": "An unavailable history database (missing, locked, unreadable) skips tier 3 and the shutdown proceeds.",
+      "tags": [
+        "history-recency",
+        "readonly-sqlite",
+        "safety-tier"
+      ],
+      "source": {
+        "file": "adhd/chrome-manager.ts",
+        "line": 281,
+        "anchor": "} catch { /* history DB unavailable — proceed */ }"
+      },
+      "owner_state": "chrome-lifecycle",
+      "pin": {
+        "file": "src/test/unit/lifecycle/idle-tiers.spec.ts",
+        "test": "proceeds when the history database is unavailable"
+      },
+      "eval_refs": [
+        "F13"
+      ]
+    },
+    {
+      "id": "fs-026",
+      "feature": "Force shutdown(): cancels the timer and bypasses all three safety tiers.",
+      "tags": [
+        "idle-shutdown",
+        "safety-tier"
+      ],
+      "source": {
+        "file": "adhd/chrome-manager.ts",
+        "line": 151,
+        "anchor": "await this._doShutdown(true)"
+      },
+      "owner_state": "chrome-lifecycle",
+      "pin": {
+        "file": "src/test/unit/lifecycle/idle-tiers.spec.ts",
+        "test": "shutdown ignores every safety tier"
+      },
+      "eval_refs": [
+        "F14"
+      ]
+    },
+    {
+      "id": "fs-027",
+      "feature": "Soft shutdownIfIdle(): cancels the timer and closes Chrome only if genuinely idle, never a sibling's or a human's Chrome (safe for process-exit paths).",
+      "tags": [
+        "idle-shutdown",
+        "safety-tier",
+        "verb"
+      ],
+      "source": {
+        "file": "adhd/chrome-manager.ts",
+        "line": 164,
+        "anchor": "await this._doShutdown(false)"
+      },
+      "owner_state": "chrome-lifecycle",
+      "pin": {
+        "file": "src/test/unit/lifecycle/idle-tiers.spec.ts",
+        "test": "shutdownIfIdle defers to a sibling a page and history"
+      },
+      "eval_refs": [
+        "F15"
+      ]
+    },
+    {
+      "id": "fs-028",
+      "feature": "Ordered shutdown: close every page target first, then kill Chrome.",
+      "tags": [
+        "idle-shutdown"
+      ],
+      "source": {
+        "file": "adhd/chrome-manager.ts",
+        "line": 287,
+        "anchor": "await closeAllPageTargets(this.opts.cdpHost)"
+      },
+      "owner_state": "chrome-lifecycle",
+      "pin": {
+        "file": "src/test/unit/lifecycle/shutdown-sequence.spec.ts",
+        "test": "closes all pages before killing Chrome"
+      },
+      "eval_refs": [
+        "F16"
+      ]
+    },
+    {
+      "id": "fs-029",
+      "feature": "A failure while closing pages is logged and the kill still runs.",
+      "tags": [
+        "idle-shutdown"
+      ],
+      "source": {
+        "file": "adhd/chrome-manager.ts",
+        "line": 290,
+        "anchor": "Failed to close page targets during shutdown"
+      },
+      "owner_state": "chrome-lifecycle",
+      "pin": {
+        "file": "src/test/unit/lifecycle/shutdown-sequence.spec.ts",
+        "test": "a failing page close does not stop the kill"
+      },
+      "eval_refs": [
+        "F16"
+      ]
+    },
+    {
+      "id": "fs-030",
+      "feature": "A failure while killing Chrome is logged and swallowed (shutdown never throws for it).",
+      "tags": [
+        "idle-shutdown",
+        "group-kill"
+      ],
+      "source": {
+        "file": "adhd/chrome-manager.ts",
+        "line": 296,
+        "anchor": "Failed to kill Chrome during shutdown"
+      },
+      "owner_state": "chrome-lifecycle",
+      "pin": {
+        "file": "src/test/unit/lifecycle/shutdown-sequence.spec.ts",
+        "test": "a failing kill is logged and swallowed"
+      },
+      "eval_refs": [
+        "F16"
+      ]
+    },
+    {
+      "id": "fs-031",
+      "feature": "After a real shutdown the idle timer is dropped and ready is false, so a later ready() relaunches and arms a fresh timer.",
+      "tags": [
+        "idle-shutdown"
+      ],
+      "source": {
+        "file": "adhd/chrome-manager.ts",
+        "line": 302,
+        "anchor": "this._ready = false"
+      },
+      "owner_state": "chrome-lifecycle",
+      "pin": {
+        "file": "src/test/unit/lifecycle/shutdown-sequence.spec.ts",
+        "test": "state resets after a real shutdown"
+      },
+      "eval_refs": [
+        "F17"
+      ]
+    },
+    {
+      "id": "fs-032",
+      "feature": "launchChrome is idempotent: if CDP already answers on the port it returns alreadyRunning without spawning.",
+      "tags": [
+        "verb"
+      ],
+      "source": {
+        "file": "adhd/cdp-connection/src/browser.ts",
+        "line": 84,
+        "anchor": "return { pid: null, port, alreadyRunning: true, profileDir }"
+      },
+      "owner_state": "chrome-lifecycle",
+      "pin": {
+        "file": "src/test/unit/lifecycle/launch.spec.ts",
+        "test": "does not spawn when Chrome is already reachable"
+      },
+      "eval_refs": [
+        "F1"
+      ]
+    },
+    {
+      "id": "fs-033",
+      "feature": "ensureChromeRunning fast path: a reachable Chrome returns immediately with no lock and no spawn.",
+      "tags": [
+        "launch-lock-oexcl"
+      ],
+      "source": {
+        "file": "adhd/cdp-connection/src/browser.ts",
+        "line": 160,
+        "anchor": "return { pid: null, port, profileDir: resolvedProfile }"
+      },
+      "owner_state": "chrome-lifecycle",
+      "pin": {
+        "file": "src/test/unit/lifecycle/launch.spec.ts",
+        "test": "returns immediately when Chrome is reachable"
+      },
+      "eval_refs": [
+        "F1"
+      ]
+    },
+    {
+      "id": "fs-034",
+      "feature": "Launch lock (O_EXCL): the check-then-spawn window is serialised by an exclusive per-port lock file; eight concurrent starters produce exactly one spawn.",
+      "tags": [
+        "launch-lock-oexcl"
+      ],
+      "source": {
+        "file": "adhd/cdp-connection/src/browser.ts",
+        "line": 170,
+        "anchor": "fd = openSync(launchLockPath(port), 'wx')"
+      },
+      "owner_state": "chrome-lifecycle",
+      "pin": {
+        "file": "src/test/unit/lifecycle/launch.spec.ts",
+        "test": "eight concurrent starters spawn exactly one Chrome"
+      },
+      "eval_refs": [
+        "F4"
+      ]
+    },
+    {
+      "id": "fs-035",
+      "feature": "The lock file is per port (stealth-chrome-launch-<port>.lock under the temp dir).",
+      "tags": [
+        "launch-lock-oexcl"
+      ],
+      "source": {
+        "file": "adhd/cdp-connection/src/browser.ts",
+        "line": 140,
+        "anchor": "stealth-chrome-launch-${port}.lock"
+      },
+      "owner_state": "chrome-lifecycle",
+      "pin": {
+        "file": "src/test/unit/lifecycle/launch.spec.ts",
+        "test": "uses one lock per port"
+      },
+      "eval_refs": [
+        "F4"
+      ]
+    },
+    {
+      "id": "fs-036",
+      "feature": "The loser of the lock race waits, bounded to the stale window, polling every 250 ms for the winner's Chrome and returns as soon as it answers.",
+      "tags": [
+        "launch-lock-oexcl"
+      ],
+      "source": {
+        "file": "adhd/cdp-connection/src/browser.ts",
+        "line": 174,
+        "anchor": "await new Promise((r) => setTimeout(r, 250))"
+      },
+      "owner_state": "chrome-lifecycle",
+      "pin": {
+        "file": "src/test/unit/lifecycle/launch.spec.ts",
+        "test": "the loser waits for the winner's Chrome"
+      },
+      "eval_refs": [
+        "F4"
+      ]
+    },
+    {
+      "id": "fs-037",
+      "feature": "A launch lock older than 15 s is stale (its holder died mid-launch): the waiter removes it and takes the lock itself.",
+      "tags": [
+        "launch-lock-oexcl"
+      ],
+      "source": {
+        "file": "adhd/cdp-connection/src/browser.ts",
+        "line": 143,
+        "anchor": "const LAUNCH_LOCK_STALE_MS = 15_000"
+      },
+      "owner_state": "chrome-lifecycle",
+      "pin": {
+        "file": "src/test/unit/lifecycle/launch.spec.ts",
+        "test": "reclaims a launch lock older than 15 seconds"
+      },
+      "eval_refs": [
+        "F4"
+      ]
+    },
+    {
+      "id": "fs-038",
+      "feature": "Stale-lock reclaim removes the old lock and re-attempts O_EXCL; a failed second attempt proceeds lock-less rather than hanging.",
+      "tags": [
+        "launch-lock-oexcl"
+      ],
+      "source": {
+        "file": "adhd/cdp-connection/src/browser.ts",
+        "line": 179,
+        "anchor": "try { unlinkSync(launchLockPath(port)) } catch { /* already gone */ }"
+      },
+      "owner_state": "chrome-lifecycle",
+      "pin": {
+        "file": "src/test/unit/lifecycle/launch.spec.ts",
+        "test": "reclaiming a stale lock re-attempts the exclusive create"
+      },
+      "eval_refs": [
+        "F4"
+      ]
+    },
+    {
+      "id": "fs-039",
+      "feature": "Reachability is re-checked while holding the lock, because the winner may have just started Chrome.",
+      "tags": [
+        "launch-lock-oexcl"
+      ],
+      "source": {
+        "file": "adhd/cdp-connection/src/browser.ts",
+        "line": 184,
+        "anchor": "Re-check while holding the lock"
+      },
+      "owner_state": "chrome-lifecycle",
+      "pin": {
+        "file": "src/test/unit/lifecycle/launch.spec.ts",
+        "test": "re-checks reachability under the lock"
+      },
+      "eval_refs": [
+        "F4"
+      ]
+    },
+    {
+      "id": "fs-040",
+      "feature": "The lock is closed and removed in a finally on success and on launch failure.",
+      "tags": [
+        "launch-lock-oexcl"
+      ],
+      "source": {
+        "file": "adhd/cdp-connection/src/browser.ts",
+        "line": 192,
+        "anchor": "try { closeSync(fd) } catch { /* ignore */ }"
+      },
+      "owner_state": "chrome-lifecycle",
+      "pin": {
+        "file": "src/test/unit/lifecycle/launch.spec.ts",
+        "test": "releases the lock on success and on failure"
+      },
+      "eval_refs": [
+        "F4"
+      ]
+    },
+    {
+      "id": "fs-041",
+      "feature": "Launch is bounded: spawn then poll every 200 ms; CDP not answering within 10 s fails with a 'did not start CDP' error.",
+      "tags": [
+        "verb"
+      ],
+      "source": {
+        "file": "adhd/cdp-connection/src/browser.ts",
+        "line": 125,
+        "anchor": "const deadline = Date.now() + 10_000"
+      },
+      "owner_state": "chrome-lifecycle",
+      "pin": {
+        "file": "src/test/unit/lifecycle/launch.spec.ts",
+        "test": "fails when CDP never answers within 10 seconds"
+      },
+      "eval_refs": [
+        "F2"
+      ]
+    },
+    {
+      "id": "fs-042",
+      "feature": "Chrome is spawned detached with ignored stdio and unref'd so it outlives the launching process; the pid is remembered for later kill.",
+      "tags": [
+        "group-kill"
+      ],
+      "source": {
+        "file": "adhd/cdp-connection/src/browser.ts",
+        "line": 118,
+        "anchor": "detached: true,"
+      },
+      "owner_state": "chrome-lifecycle",
+      "pin": {
+        "file": "src/test/unit/lifecycle/launch.spec.ts",
+        "test": "spawns detached with ignored stdio and remembers the pid"
+      },
+      "eval_refs": [
+        "F18"
+      ]
+    },
+    {
+      "id": "fs-043",
+      "feature": "The quiet option suppresses the 'launching' diagnostic.",
+      "tags": [],
+      "source": {
+        "file": "adhd/cdp-connection/src/browser.ts",
+        "line": 188,
+        "anchor": "if (!opts.quiet) console.error"
+      },
+      "owner_state": "chrome-lifecycle",
+      "pin": {
+        "file": "src/test/unit/lifecycle/launch.spec.ts",
+        "test": "quiet suppresses the launch diagnostic"
+      },
+      "eval_refs": [
+        "F1"
+      ]
+    },
+    {
+      "id": "fs-044",
+      "feature": "Process-group kill: SIGTERM is sent to the whole group (negative pid) so Chrome's renderer/GPU Helpers die with the main process.",
+      "tags": [
+        "group-kill"
+      ],
+      "source": {
+        "file": "adhd/cdp-connection/src/browser.ts",
+        "line": 229,
+        "anchor": "killGroup(pid, 'SIGTERM')"
+      },
+      "owner_state": "chrome-lifecycle",
+      "pin": {
+        "file": "src/test/unit/lifecycle/kill.spec.ts",
+        "test": "sends SIGTERM to the whole process group"
+      },
+      "eval_refs": [
+        "F18"
+      ]
+    },
+    {
+      "id": "fs-045",
+      "feature": "killGroup falls back to a single-pid signal when the group signal cannot be delivered and reports whether either was delivered.",
+      "tags": [
+        "group-kill"
+      ],
+      "source": {
+        "file": "adhd/cdp-connection/src/browser.ts",
+        "line": 221,
+        "anchor": "function killGroup(pid: number, signal: NodeJS.Signals): boolean {"
+      },
+      "owner_state": "chrome-lifecycle",
+      "pin": {
+        "file": "src/test/unit/lifecycle/kill.spec.ts",
+        "test": "falls back to a single pid when the group is not addressable"
+      },
+      "eval_refs": [
+        "F18"
+      ]
+    },
+    {
+      "id": "fs-046",
+      "feature": "After SIGTERM the kill waits up to 5 s for the main pid to exit, then SIGKILLs the group even if the main already exited (orphaned Helpers).",
+      "tags": [
+        "group-kill"
+      ],
+      "source": {
+        "file": "adhd/cdp-connection/src/browser.ts",
+        "line": 239,
+        "anchor": "try { process.kill(-pid, 'SIGKILL') } catch { /* no group left */ }"
+      },
+      "owner_state": "chrome-lifecycle",
+      "pin": {
+        "file": "src/test/unit/lifecycle/kill.spec.ts",
+        "test": "SIGKILLs the group after 5 seconds and after the main exits"
+      },
+      "eval_refs": [
+        "F18"
+      ]
+    },
+    {
+      "id": "fs-047",
+      "feature": "The remembered launched pid is cleared after a kill so a second kill falls through to port lookup.",
+      "tags": [
+        "group-kill"
+      ],
+      "source": {
+        "file": "adhd/cdp-connection/src/browser.ts",
+        "line": 240,
+        "anchor": "launchedPid = null"
+      },
+      "owner_state": "chrome-lifecycle",
+      "pin": {
+        "file": "src/test/unit/lifecycle/kill.spec.ts",
+        "test": "clears the remembered pid after a kill"
+      },
+      "eval_refs": [
+        "F18"
+      ]
+    },
+    {
+      "id": "fs-048",
+      "feature": "Reaper scope: when this process did not launch Chrome, the port occupant is found with lsof (tcp:<port>) and killed so idle shutdown works regardless of who started Chrome.",
+      "tags": [
+        "reaper",
+        "group-kill"
+      ],
+      "source": {
+        "file": "adhd/cdp-connection/src/browser.ts",
+        "line": 248,
+        "anchor": "lsof -ti tcp:${port}"
+      },
+      "owner_state": "chrome-lifecycle",
+      "pin": {
+        "file": "src/test/unit/lifecycle/kill.spec.ts",
+        "test": "closes the port occupant found with lsof"
+      },
+      "eval_refs": [
+        "F19"
+      ]
+    },
+    {
+      "id": "fs-049",
+      "feature": "fuser <port>/tcp is the fallback when lsof is missing or finds nothing.",
+      "tags": [
+        "reaper"
+      ],
+      "source": {
+        "file": "adhd/cdp-connection/src/browser.ts",
+        "line": 252,
+        "anchor": "fuser ${port}/tcp"
+      },
+      "owner_state": "chrome-lifecycle",
+      "pin": {
+        "file": "src/test/unit/lifecycle/kill.spec.ts",
+        "test": "falls back to fuser when lsof finds nothing"
+      },
+      "eval_refs": [
+        "F19"
+      ]
+    },
+    {
+      "id": "fs-050",
+      "feature": "The occupant's process group is resolved with ps -o pgid= and the whole group is signalled (SIGTERM), keeping the pid when the lookup fails.",
+      "tags": [
+        "reaper",
+        "group-kill"
+      ],
+      "source": {
+        "file": "adhd/cdp-connection/src/browser.ts",
+        "line": 261,
+        "anchor": "ps -o pgid= -p ${pid}"
+      },
+      "owner_state": "chrome-lifecycle",
+      "pin": {
+        "file": "src/test/unit/lifecycle/kill.spec.ts",
+        "test": "signals the occupant's process group"
+      },
+      "eval_refs": [
+        "F19",
+        "F18"
+      ]
+    },
+    {
+      "id": "fs-051",
+      "feature": "The port-occupant kill waits up to 25 x 200 ms for the first pid to die, then SIGKILLs its group for lingering Helpers.",
+      "tags": [
+        "reaper",
+        "group-kill"
+      ],
+      "source": {
+        "file": "adhd/cdp-connection/src/browser.ts",
+        "line": 266,
+        "anchor": "for (let i = 0; i < 25; i++) {"
+      },
+      "owner_state": "chrome-lifecycle",
+      "pin": {
+        "file": "src/test/unit/lifecycle/kill.spec.ts",
+        "test": "SIGKILLs the occupant group when it lingers"
+      },
+      "eval_refs": [
+        "F19",
+        "F18"
+      ]
+    },
+    {
+      "id": "fs-052",
+      "feature": "No port occupant found (no lsof/fuser output) means the kill is a harmless no-op.",
+      "tags": [
+        "reaper"
+      ],
+      "source": {
+        "file": "adhd/cdp-connection/src/browser.ts",
+        "line": 255,
+        "anchor": "if (!pidStr) return"
+      },
+      "owner_state": "chrome-lifecycle",
+      "pin": {
+        "file": "src/test/unit/lifecycle/kill.spec.ts",
+        "test": "does nothing when no process owns the port"
+      },
+      "eval_refs": [
+        "F19"
+      ]
+    },
+    {
+      "id": "fs-053",
+      "feature": "Unreachable CDP produces an actionable error naming the host and surfacing the nested undici cause (ECONNREFUSED) rather than 'fetch failed'.",
+      "tags": [
+        "targets"
+      ],
+      "source": {
+        "file": "adhd/cdp-connection/src/targets.ts",
+        "line": 55,
+        "anchor": "CDP unreachable on ${cdpHost}"
+      },
+      "owner_state": "chrome-lifecycle",
+      "pin": {
+        "file": "src/test/unit/cdp/targets.spec.ts",
+        "test": "explains an unreachable CDP with the nested cause"
+      },
+      "eval_refs": [
+        "F2"
+      ]
+    },
+    {
+      "id": "fs-054",
+      "feature": "A non-2xx CDP HTTP answer is reported with the status and path ('Chrome may be starting or shutting down').",
+      "tags": [
+        "targets"
+      ],
+      "source": {
+        "file": "adhd/cdp-connection/src/targets.ts",
+        "line": 60,
+        "anchor": "returned HTTP ${res.status} for ${path}"
+      },
+      "owner_state": "chrome-lifecycle",
+      "pin": {
+        "file": "src/test/unit/cdp/targets.spec.ts",
+        "test": "reports a non-OK CDP HTTP status"
+      },
+      "eval_refs": [
+        "F2"
+      ]
+    },
+    {
+      "id": "fs-055",
+      "feature": "A non-JSON /json/version body is reported as a typed failure with the parse cause.",
+      "tags": [
+        "targets"
+      ],
+      "source": {
+        "file": "adhd/cdp-connection/src/targets.ts",
+        "line": 79,
+        "anchor": "returned a non-JSON /json/version response"
+      },
+      "owner_state": "chrome-lifecycle",
+      "pin": {
+        "file": "src/test/unit/cdp/targets.spec.ts",
+        "test": "reports a non-JSON version response"
+      },
+      "eval_refs": [
+        "F26"
+      ]
+    },
+    {
+      "id": "fs-056",
+      "feature": "isChromeReachable never throws: any failure means false.",
+      "tags": [
+        "targets"
+      ],
+      "source": {
+        "file": "adhd/cdp-connection/src/targets.ts",
+        "line": 91,
+        "anchor": "export async function isChromeReachable(cdpHost: string): Promise<boolean> {"
+      },
+      "owner_state": "chrome-lifecycle",
+      "pin": {
+        "file": "src/test/unit/cdp/targets.spec.ts",
+        "test": "isChromeReachable is false on any failure"
+      },
+      "eval_refs": [
+        "F3"
+      ]
+    },
+    {
+      "id": "fs-057",
+      "feature": "getChromeInfo maps /json/version to browser version, protocol version, user agent and the browser WebSocket URL.",
+      "tags": [
+        "targets",
+        "verb"
+      ],
+      "source": {
+        "file": "adhd/cdp-connection/src/targets.ts",
+        "line": 82,
+        "anchor": "browserWsUrl: v.webSocketDebuggerUrl,"
+      },
+      "owner_state": "chrome-lifecycle",
+      "pin": {
+        "file": "src/test/unit/cdp/targets.spec.ts",
+        "test": "maps /json/version into chrome info"
+      },
+      "eval_refs": [
+        "F1"
+      ]
+    },
+    {
+      "id": "fs-058",
+      "feature": "listPageTargets lists /json/list; the page-only variant keeps type === 'page' (drops service workers and background pages).",
+      "tags": [
+        "targets",
+        "verb"
+      ],
+      "source": {
+        "file": "adhd/cdp-connection/src/targets.ts",
+        "line": 111,
+        "anchor": "return all.filter((t) => t.type === 'page')"
+      },
+      "owner_state": "chrome-lifecycle",
+      "pin": {
+        "file": "src/test/unit/cdp/targets.spec.ts",
+        "test": "lists only page targets"
+      },
+      "eval_refs": [
+        "F10"
+      ]
+    },
+    {
+      "id": "fs-059",
+      "feature": "createPageTarget opens about:blank in the background by default (foreground option focuses) and polls /json/list up to 3 s for its WebSocket URL.",
+      "tags": [
+        "targets"
+      ],
+      "source": {
+        "file": "adhd/cdp-connection/src/targets.ts",
+        "line": 133,
+        "anchor": "background: !options.foreground,"
+      },
+      "owner_state": "chrome-lifecycle",
+      "pin": {
+        "file": "src/test/unit/cdp/targets.spec.ts",
+        "test": "creates a background page and waits for its socket"
+      },
+      "eval_refs": [
+        "F20"
+      ]
+    },
+    {
+      "id": "fs-060",
+      "feature": "createPageTarget fails with a typed error when the target never appears in /json/list within 3 s.",
+      "tags": [
+        "targets"
+      ],
+      "source": {
+        "file": "adhd/cdp-connection/src/targets.ts",
+        "line": 149,
+        "anchor": "not found in /json/list after 3s"
+      },
+      "owner_state": "chrome-lifecycle",
+      "pin": {
+        "file": "src/test/unit/cdp/targets.spec.ts",
+        "test": "fails when the new target never registers"
+      },
+      "eval_refs": [
+        "F21"
+      ]
+    },
+    {
+      "id": "fs-061",
+      "feature": "Isolated page contexts: Target.createBrowserContext gives a cookie-less, storage-less partition so pages render logged out.",
+      "tags": [
+        "isolated-page-cleanup",
+        "targets"
+      ],
+      "source": {
+        "file": "adhd/cdp-connection/src/targets.ts",
+        "line": 189,
+        "anchor": "'Target.createBrowserContext',"
+      },
+      "owner_state": "chrome-lifecycle",
+      "pin": {
+        "file": "src/test/unit/cdp/targets.spec.ts",
+        "test": "creates a cookie-less isolated context"
+      },
+      "eval_refs": [
+        "F20"
+      ]
+    },
+    {
+      "id": "fs-062",
+      "feature": "The isolated context is NOT disposeOnDetach: the creator connection closes right away and the context must survive until dispose().",
+      "tags": [
+        "isolated-page-cleanup",
+        "targets"
+      ],
+      "source": {
+        "file": "adhd/cdp-connection/src/targets.ts",
+        "line": 184,
+        "anchor": "NOT disposeOnDetach"
+      },
+      "owner_state": "chrome-lifecycle",
+      "pin": {
+        "file": "src/test/unit/cdp/targets.spec.ts",
+        "test": "the context survives the creator connection closing"
+      },
+      "eval_refs": [
+        "F20"
+      ]
+    },
+    {
+      "id": "fs-063",
+      "feature": "Isolated pages are background and minimized by default; foreground skips the minimize; a window-lookup failure is non-fatal.",
+      "tags": [
+        "isolated-page-cleanup",
+        "targets"
+      ],
+      "source": {
+        "file": "adhd/cdp-connection/src/targets.ts",
+        "line": 210,
+        "anchor": "bounds: { windowState: 'minimized' },"
+      },
+      "owner_state": "chrome-lifecycle",
+      "pin": {
+        "file": "src/test/unit/cdp/targets.spec.ts",
+        "test": "isolated pages are background and minimized by default"
+      },
+      "eval_refs": [
+        "F20"
+      ]
+    },
+    {
+      "id": "fs-064",
+      "feature": "reveal() brings the off-screen window on screen (normal state, set bounds) for human captcha solving; best effort and a no-op without a window id.",
+      "tags": [
+        "isolated-page-cleanup",
+        "targets"
+      ],
+      "source": {
+        "file": "adhd/cdp-connection/src/targets.ts",
+        "line": 226,
+        "anchor": "bounds: { left: 80, top: 80, width: 1100, height: 850, windowState: 'normal' },"
+      },
+      "owner_state": "chrome-lifecycle",
+      "pin": {
+        "file": "src/test/unit/cdp/targets.spec.ts",
+        "test": "reveal brings the window on screen"
+      },
+      "eval_refs": [
+        "F20"
+      ]
+    },
+    {
+      "id": "fs-065",
+      "feature": "dispose() reconnects and disposes the whole browser context (closing every target in it); best effort.",
+      "tags": [
+        "isolated-page-cleanup",
+        "targets"
+      ],
+      "source": {
+        "file": "adhd/cdp-connection/src/targets.ts",
+        "line": 238,
+        "anchor": "'Target.disposeBrowserContext'"
+      },
+      "owner_state": "chrome-lifecycle",
+      "pin": {
+        "file": "src/test/unit/cdp/targets.spec.ts",
+        "test": "dispose closes the whole context"
+      },
+      "eval_refs": [
+        "F20"
+      ]
+    },
+    {
+      "id": "fs-066",
+      "feature": "Isolated-create failure cleanup: when the new target never registers within 3 s the context is disposed before the error is thrown.",
+      "tags": [
+        "isolated-page-cleanup",
+        "targets"
+      ],
+      "source": {
+        "file": "adhd/cdp-connection/src/targets.ts",
+        "line": 252,
+        "anchor": "await dispose()"
+      },
+      "owner_state": "chrome-lifecycle",
+      "pin": {
+        "file": "src/test/unit/cdp/targets.spec.ts",
+        "test": "disposes the context when creation fails"
+      },
+      "eval_refs": [
+        "F21"
+      ]
+    },
+    {
+      "id": "fs-067",
+      "feature": "closePageTarget closes a target through a browser session with confirmation (Target.closeTarget) and never throws.",
+      "tags": [
+        "targets"
+      ],
+      "source": {
+        "file": "adhd/cdp-connection/src/targets.ts",
+        "line": 268,
+        "anchor": "await session.send('Target.closeTarget', { targetId })"
+      },
+      "owner_state": "chrome-lifecycle",
+      "pin": {
+        "file": "src/test/unit/cdp/targets.spec.ts",
+        "test": "closes a page target and never throws"
+      },
+      "eval_refs": [
+        "F16"
+      ]
+    },
+    {
+      "id": "fs-068",
+      "feature": "closeAllPageTargets closes every page target concurrently with allSettled so one failure never blocks the rest.",
+      "tags": [
+        "targets"
+      ],
+      "source": {
+        "file": "adhd/cdp-connection/src/targets.ts",
+        "line": 276,
+        "anchor": "await Promise.allSettled(targets.map((t) => closePageTarget(cdpHost, t.id)))"
+      },
+      "owner_state": "chrome-lifecycle",
+      "pin": {
+        "file": "src/test/unit/cdp/targets.spec.ts",
+        "test": "one failing close does not block the others"
+      },
+      "eval_refs": [
+        "F16"
+      ]
+    },
+    {
+      "id": "fs-069",
+      "feature": "hideAllWindows minimizes the window of every page target; a per-target failure is non-fatal.",
+      "tags": [
+        "targets"
+      ],
+      "source": {
+        "file": "adhd/cdp-connection/src/targets.ts",
+        "line": 292,
+        "anchor": "const { windowId } = await session.send<{ windowId: number }>('Browser.getWindowForTarget', { targetId: t.id })"
+      },
+      "owner_state": "chrome-lifecycle",
+      "pin": {
+        "file": "src/test/unit/cdp/targets.spec.ts",
+        "test": "hideAllWindows minimizes every page window"
+      },
+      "eval_refs": [
+        "F5"
+      ]
+    },
+    {
+      "id": "fs-070",
+      "feature": "Stealth flags: Chrome is launched with --remote-debugging-port and a dedicated --user-data-dir and WITHOUT --enable-automation, so it presents as a normal browser.",
+      "tags": [
+        "stealth-flags"
+      ],
+      "source": {
+        "file": "adhd/cdp-connection/src/browser.ts",
+        "line": 98,
+        "anchor": "const args = ["
+      },
+      "owner_state": "tests-unit-core",
+      "pin": {
+        "file": "src/test/unit/cdp/browser.spec.ts",
+        "test": "never passes --enable-automation"
+      },
+      "eval_refs": [
+        "F1"
+      ]
+    },
+    {
+      "id": "fs-071",
+      "feature": "--disable-backgrounding-occluded-windows is passed so minimized/background windows are not timer-throttled (Cloudflare managed challenges auto-clear); the detection trade-off is documented.",
+      "tags": [
+        "stealth-flags"
+      ],
+      "source": {
+        "file": "adhd/cdp-connection/src/browser.ts",
+        "line": 111,
+        "anchor": "'--disable-backgrounding-occluded-windows',"
+      },
+      "owner_state": "tests-unit-core",
+      "pin": {
+        "file": "src/test/unit/cdp/browser.spec.ts",
+        "test": "passes disable-backgrounding-occluded-windows"
+      },
+      "eval_refs": [
+        "F20"
+      ]
+    },
+    {
+      "id": "fs-072",
+      "feature": "--no-first-run, --start-minimized and --no-default-browser-check keep the launch quiet and unobtrusive.",
+      "tags": [
+        "stealth-flags"
+      ],
+      "source": {
+        "file": "adhd/cdp-connection/src/browser.ts",
+        "line": 102,
+        "anchor": "'--start-minimized',"
+      },
+      "owner_state": "tests-unit-core",
+      "pin": {
+        "file": "src/test/unit/cdp/browser.spec.ts",
+        "test": "launches minimized without first-run or default-browser prompts"
+      },
+      "eval_refs": [
+        "F5"
+      ]
+    },
+    {
+      "id": "fs-073",
+      "feature": "extraArgs are appended after the built-in flags.",
+      "tags": [
+        "stealth-flags"
+      ],
+      "source": {
+        "file": "adhd/cdp-connection/src/browser.ts",
+        "line": 113,
+        "anchor": "...(opts.extraArgs ?? []),"
+      },
+      "owner_state": "tests-unit-core",
+      "pin": {
+        "file": "src/test/unit/cdp/browser.spec.ts",
+        "test": "appends extraArgs after the built-in flags"
+      },
+      "eval_refs": [
+        "F1"
+      ]
+    },
+    {
+      "id": "fs-074",
+      "feature": "Chrome binary is resolved per platform (macOS app bundle, Linux which google-chrome/chromium/chromium-browser, Windows Program Files) and an explicit chromePath overrides it.",
+      "tags": [],
+      "source": {
+        "file": "adhd/cdp-connection/src/browser.ts",
+        "line": 39,
+        "anchor": "case 'darwin':"
+      },
+      "owner_state": "tests-unit-core",
+      "pin": {
+        "file": "src/test/unit/cdp/browser.spec.ts",
+        "test": "resolves the Chrome binary per platform"
+      },
+      "eval_refs": [
+        "F1"
+      ]
+    },
+    {
+      "id": "fs-075",
+      "feature": "A missing Chrome binary fails before any spawn with an actionable 'set CHROME_PATH or install Chrome' error.",
+      "tags": [],
+      "source": {
+        "file": "adhd/cdp-connection/src/browser.ts",
+        "line": 89,
+        "anchor": "Chrome binary not found at"
+      },
+      "owner_state": "tests-unit-core",
+      "pin": {
+        "file": "src/test/unit/cdp/browser.spec.ts",
+        "test": "fails before spawning when the binary is missing"
+      },
+      "eval_refs": [
+        "F1"
+      ]
+    },
+    {
+      "id": "fs-076",
+      "feature": "A dedicated profile directory (Chrome-CDP under Application Support) is created when absent so everyday browsing is never disturbed; profileDir overrides it.",
+      "tags": [
+        "readonly-sqlite"
+      ],
+      "source": {
+        "file": "adhd/cdp-connection/src/browser.ts",
+        "line": 53,
+        "anchor": "return join(base, 'Chrome-CDP')"
+      },
+      "owner_state": "tests-unit-core",
+      "pin": {
+        "file": "src/test/unit/cdp/browser.spec.ts",
+        "test": "uses a dedicated profile directory"
+      },
+      "eval_refs": [
+        "F1"
+      ]
+    },
+    {
+      "id": "fs-077",
+      "feature": "IdleShutdown fires onShutdown once the timeout (default 120000 ms) elapses without activity and reports a logger line.",
+      "tags": [
+        "idle-shutdown"
+      ],
+      "source": {
+        "file": "adhd/cdp-connection/src/shutdown.ts",
+        "line": 37,
+        "anchor": "this.timeoutMs = opts.timeoutMs ?? 120_000"
+      },
+      "owner_state": "tests-unit-core",
+      "pin": {
+        "file": "src/test/unit/cdp/shutdown.spec.ts",
+        "test": "fires after the idle timeout"
+      },
+      "eval_refs": [
+        "F6"
+      ]
+    },
+    {
+      "id": "fs-078",
+      "feature": "reset() re-arms even after a fire, so a relaunched Chrome is monitored again; fired reflects the last state.",
+      "tags": [
+        "idle-shutdown"
+      ],
+      "source": {
+        "file": "adhd/cdp-connection/src/shutdown.ts",
+        "line": 52,
+        "anchor": "this._fired = false"
+      },
+      "owner_state": "tests-unit-core",
+      "pin": {
+        "file": "src/test/unit/cdp/shutdown.spec.ts",
+        "test": "re-arms after it has fired"
+      },
+      "eval_refs": [
+        "F6"
+      ]
+    },
+    {
+      "id": "fs-079",
+      "feature": "The idle timer is unref'd so it never keeps the Node process alive.",
+      "tags": [
+        "idle-shutdown"
+      ],
+      "source": {
+        "file": "adhd/cdp-connection/src/shutdown.ts",
+        "line": 56,
+        "anchor": "this.timer.unref()"
+      },
+      "owner_state": "tests-unit-core",
+      "pin": {
+        "file": "src/test/unit/cdp/shutdown.spec.ts",
+        "test": "the idle timer is unref'd"
+      },
+      "eval_refs": [
+        "F6"
+      ]
+    },
+    {
+      "id": "fs-080",
+      "feature": "cancel() stops the timer without firing.",
+      "tags": [
+        "idle-shutdown"
+      ],
+      "source": {
+        "file": "adhd/cdp-connection/src/shutdown.ts",
+        "line": 61,
+        "anchor": "cancel(): void {"
+      },
+      "owner_state": "tests-unit-core",
+      "pin": {
+        "file": "src/test/unit/cdp/shutdown.spec.ts",
+        "test": "cancel stops the timer without firing"
+      },
+      "eval_refs": [
+        "F6"
+      ]
+    },
+    {
+      "id": "fs-081",
+      "feature": "An onShutdown handler error is logged and never escapes the timer callback.",
+      "tags": [
+        "idle-shutdown"
+      ],
+      "source": {
+        "file": "adhd/cdp-connection/src/shutdown.ts",
+        "line": 78,
+        "anchor": "[idle-shutdown] error:"
+      },
+      "owner_state": "tests-unit-core",
+      "pin": {
+        "file": "src/test/unit/cdp/shutdown.spec.ts",
+        "test": "a throwing shutdown handler is logged not thrown"
+      },
+      "eval_refs": [
+        "F26"
+      ]
+    },
+    {
+      "id": "fs-082",
+      "feature": "createPageTargetIdleShutdown closes page targets on expiry and optionally chains the Chrome shutdown.",
+      "tags": [
+        "idle-shutdown"
+      ],
+      "source": {
+        "file": "adhd/cdp-connection/src/shutdown.ts",
+        "line": 92,
+        "anchor": "export function createPageTargetIdleShutdown("
+      },
+      "owner_state": "tests-unit-core",
+      "pin": {
+        "file": "src/test/unit/cdp/shutdown.spec.ts",
+        "test": "closes page targets then optionally chains the Chrome shutdown"
+      },
+      "eval_refs": [
+        "F16"
+      ]
+    },
+    {
+      "id": "fs-083",
+      "feature": "connect() rejects with 'WebSocket connection failed' when the socket errors before opening.",
+      "tags": [
+        "session"
+      ],
+      "source": {
+        "file": "adhd/cdp-connection/src/session.ts",
+        "line": 43,
+        "anchor": "WebSocket connection failed"
+      },
+      "owner_state": "tests-unit-core",
+      "pin": {
+        "file": "src/test/unit/cdp/session.spec.ts",
+        "test": "rejects when the socket cannot open"
+      },
+      "eval_refs": [
+        "F2"
+      ]
+    },
+    {
+      "id": "fs-084",
+      "feature": "send() before connect rejects 'CdpSession not connected' instead of throwing.",
+      "tags": [
+        "session"
+      ],
+      "source": {
+        "file": "adhd/cdp-connection/src/session.ts",
+        "line": 87,
+        "anchor": "CdpSession not connected"
+      },
+      "owner_state": "tests-unit-core",
+      "pin": {
+        "file": "src/test/unit/cdp/session.spec.ts",
+        "test": "send rejects before the session is connected"
+      },
+      "eval_refs": [
+        "F26"
+      ]
+    },
+    {
+      "id": "fs-085",
+      "feature": "send() times out (default 30 s, configurable) with 'CDP timeout: <method> after <ms>ms' and releases the pending slot.",
+      "tags": [
+        "session"
+      ],
+      "source": {
+        "file": "adhd/cdp-connection/src/session.ts",
+        "line": 94,
+        "anchor": "CDP timeout: ${method} after ${timeoutMs}ms"
+      },
+      "owner_state": "tests-unit-core",
+      "pin": {
+        "file": "src/test/unit/cdp/session.spec.ts",
+        "test": "a command times out and frees its slot"
+      },
+      "eval_refs": [
+        "F2"
+      ]
+    },
+    {
+      "id": "fs-086",
+      "feature": "A synchronous ws.send failure rejects the command with 'CDP send failed' and cleans up its timer and pending entry.",
+      "tags": [
+        "session"
+      ],
+      "source": {
+        "file": "adhd/cdp-connection/src/session.ts",
+        "line": 107,
+        "anchor": "CDP send failed:"
+      },
+      "owner_state": "tests-unit-core",
+      "pin": {
+        "file": "src/test/unit/cdp/session.spec.ts",
+        "test": "a failing socket write rejects and cleans up"
+      },
+      "eval_refs": [
+        "F26"
+      ]
+    },
+    {
+      "id": "fs-087",
+      "feature": "CDP error responses reject with the protocol error message.",
+      "tags": [
+        "session"
+      ],
+      "source": {
+        "file": "adhd/cdp-connection/src/session.ts",
+        "line": 56,
+        "anchor": "if (msg.error) cb.reject(new Error(msg.error.message))"
+      },
+      "owner_state": "tests-unit-core",
+      "pin": {
+        "file": "src/test/unit/cdp/session.spec.ts",
+        "test": "a CDP error response rejects with its message"
+      },
+      "eval_refs": [
+        "F26"
+      ]
+    },
+    {
+      "id": "fs-088",
+      "feature": "Multiple handlers per event: a second on() for the same method does not displace the first (B-003); on() returns a per-handler unsubscribe.",
+      "tags": [
+        "session"
+      ],
+      "source": {
+        "file": "adhd/cdp-connection/src/session.ts",
+        "line": 122,
+        "anchor": "subs.add(handler)"
+      },
+      "owner_state": "tests-unit-core",
+      "pin": {
+        "file": "src/test/unit/cdp/session.spec.ts",
+        "test": "supports several handlers for one event"
+      },
+      "eval_refs": [
+        "F6"
+      ]
+    },
+    {
+      "id": "fs-089",
+      "feature": "One throwing event subscriber does not starve the other subscribers.",
+      "tags": [
+        "session"
+      ],
+      "source": {
+        "file": "adhd/cdp-connection/src/session.ts",
+        "line": 66,
+        "anchor": "a bad subscriber isn't the session's problem"
+      },
+      "owner_state": "tests-unit-core",
+      "pin": {
+        "file": "src/test/unit/cdp/session.spec.ts",
+        "test": "a throwing subscriber does not starve the others"
+      },
+      "eval_refs": [
+        "F26"
+      ]
+    },
+    {
+      "id": "fs-090",
+      "feature": "off(method) removes all handlers; off(method, handler) removes only that handler.",
+      "tags": [
+        "session"
+      ],
+      "source": {
+        "file": "adhd/cdp-connection/src/session.ts",
+        "line": 132,
+        "anchor": "if (!handler) { this.handlers.delete(method); return }"
+      },
+      "owner_state": "tests-unit-core",
+      "pin": {
+        "file": "src/test/unit/cdp/session.spec.ts",
+        "test": "off removes one handler or all"
+      },
+      "eval_refs": [
+        "F6"
+      ]
+    },
+    {
+      "id": "fs-091",
+      "feature": "A socket close rejects every pending command with 'WebSocket closed'; close() rejects them with 'Session closed' and clears handlers.",
+      "tags": [
+        "session"
+      ],
+      "source": {
+        "file": "adhd/cdp-connection/src/session.ts",
+        "line": 143,
+        "anchor": "for (const [, cb] of this.pending) cb.reject(new Error('Session closed'))"
+      },
+      "owner_state": "tests-unit-core",
+      "pin": {
+        "file": "src/test/unit/cdp/session.spec.ts",
+        "test": "closing rejects pending commands and clears handlers"
+      },
+      "eval_refs": [
+        "F26"
+      ]
+    },
+    {
+      "id": "fs-092",
+      "feature": "Human-pacing helpers: rand(min,max) inclusive, humanPause 600-1800 ms, shortPause 300-900 ms.",
+      "tags": [
+        "session"
+      ],
+      "source": {
+        "file": "adhd/cdp-connection/src/session.ts",
+        "line": 155,
+        "anchor": "export function humanPause(): Promise<void> {"
+      },
+      "owner_state": "tests-unit-core",
+      "pin": {
+        "file": "src/test/unit/cdp/session.spec.ts",
+        "test": "pause helpers stay within their ranges"
+      },
+      "eval_refs": [
+        "F1"
+      ]
+    },
+    {
+      "id": "fs-093",
+      "feature": "getSearchSessionId returns a lazily generated RFC 4122 v4 UUID that is stable for the process.",
+      "tags": [
+        "session"
+      ],
+      "source": {
+        "file": "adhd/session.ts",
+        "line": 24,
+        "anchor": "export function getSearchSessionId(): string {"
+      },
+      "owner_state": "tests-unit-core",
+      "pin": {
+        "file": "src/test/unit/foundation/session.spec.ts",
+        "test": "session id is a stable v4 uuid"
+      },
+      "eval_refs": [
+        "F1"
+      ]
+    },
+    {
+      "id": "fs-094",
+      "feature": "The UUID sets the v4 version and variant bits and groups hex as 8-4-4-4-12.",
+      "tags": [
+        "session"
+      ],
+      "source": {
+        "file": "adhd/session.ts",
+        "line": 15,
+        "anchor": "bits[6] = (bits[6] & 0x0f) | 0x40"
+      },
+      "owner_state": "tests-unit-core",
+      "pin": {
+        "file": "src/test/unit/foundation/session.spec.ts",
+        "test": "uuid has v4 version and variant bits"
+      },
+      "eval_refs": [
+        "F1"
+      ]
+    },
+    {
+      "id": "fs-095",
+      "feature": "BrowserSession tracks the browser targetIds opened in a session; currentBrowserSessionId is the most recent id or ''.",
+      "tags": [
+        "session"
+      ],
+      "source": {
+        "file": "adhd/session.ts",
+        "line": 39,
+        "anchor": "return this.targetIds.at(-1) ?? ''"
+      },
+      "owner_state": "tests-unit-core",
+      "pin": {
+        "file": "src/test/unit/foundation/session.spec.ts",
+        "test": "tracks the most recent target id"
+      },
+      "eval_refs": [
+        "F1"
+      ]
+    },
+    {
+      "id": "fs-096",
+      "feature": "getAll() returns a defensive copy of the tracked target ids.",
+      "tags": [
+        "session"
+      ],
+      "source": {
+        "file": "adhd/session.ts",
+        "line": 44,
+        "anchor": "return [...this.targetIds]"
+      },
+      "owner_state": "tests-unit-core",
+      "pin": {
+        "file": "src/test/unit/foundation/session.spec.ts",
+        "test": "getAll returns a copy"
+      },
+      "eval_refs": [
+        "F1"
+      ]
+    },
+    {
+      "id": "fs-097",
+      "feature": "awaitPageSettled requires `navigate` or `loaderId` and fails loudly otherwise (an unscoped wait lets about:blank win and returns a confident wrong snapshot).",
+      "tags": [
+        "settle"
+      ],
+      "source": {
+        "file": "adhd/cdp-connection/src/settle.ts",
+        "line": 224,
+        "anchor": "awaitPageSettled: pass `navigate`"
+      },
+      "owner_state": "tests-unit-core",
+      "pin": {
+        "file": "src/test/unit/cdp/settle.spec.ts",
+        "test": "refuses to run without navigate or loaderId"
+      },
+      "eval_refs": [
+        "F2"
+      ]
+    },
+    {
+      "id": "fs-098",
+      "feature": "The about:blank guard: every lifecycle event is ignored until the navigation's own loaderId is known, and events for other loaders are dropped.",
+      "tags": [
+        "settle"
+      ],
+      "source": {
+        "file": "adhd/cdp-connection/src/settle.ts",
+        "line": 353,
+        "anchor": "if (!loaderId) return"
+      },
+      "owner_state": "tests-unit-core",
+      "pin": {
+        "file": "src/test/unit/cdp/settle.spec.ts",
+        "test": "ignores about:blank lifecycle replays"
+      },
+      "eval_refs": [
+        "F2"
+      ]
+    },
+    {
+      "id": "fs-099",
+      "feature": "Rung 1: a networkIdle for our loader settles immediately with signal networkIdle.",
+      "tags": [
+        "settle"
+      ],
+      "source": {
+        "file": "adhd/cdp-connection/src/settle.ts",
+        "line": 359,
+        "anchor": "if (name === 'networkIdle' && allows('networkIdle'))"
+      },
+      "owner_state": "tests-unit-core",
+      "pin": {
+        "file": "src/test/unit/cdp/settle.spec.ts",
+        "test": "settles on networkIdle for our navigation"
+      },
+      "eval_refs": [
+        "F2"
+      ]
+    },
+    {
+      "id": "fs-100",
+      "feature": "Rung 2: inflight-zero (own counter) settles after inflightQuietMs of silence but only after `load` for our loader, so a mid-parse lull never counts.",
+      "tags": [
+        "settle"
+      ],
+      "source": {
+        "file": "adhd/cdp-connection/src/settle.ts",
+        "line": 320,
+        "anchor": "if (!loadFired) return"
+      },
+      "owner_state": "tests-unit-core",
+      "pin": {
+        "file": "src/test/unit/cdp/settle.spec.ts",
+        "test": "inflight-zero requires load first"
+      },
+      "eval_refs": [
+        "F2"
+      ]
+    },
+    {
+      "id": "fs-101",
+      "feature": "`load` never resolves a wait; the best lower rung (networkAlmostIdle) is latched before the grace window and used when grace closes.",
+      "tags": [
+        "settle"
+      ],
+      "source": {
+        "file": "adhd/cdp-connection/src/settle.ts",
+        "line": 178,
+        "anchor": "const LOWER_RUNGS: SettleSignal[] = ['networkAlmostIdle']"
+      },
+      "owner_state": "tests-unit-core",
+      "pin": {
+        "file": "src/test/unit/cdp/settle.spec.ts",
+        "test": "latches networkAlmostIdle until grace closes"
+      },
+      "eval_refs": [
+        "F2"
+      ]
+    },
+    {
+      "id": "fs-102",
+      "feature": "Rung 4: ui-quiet is a late rescue only after load and uiRescueAfterMs (min(5 s, deadline/2)) with a 1.5 s quiet window.",
+      "tags": [
+        "settle"
+      ],
+      "source": {
+        "file": "adhd/cdp-connection/src/settle.ts",
+        "line": 413,
+        "anchor": "if (Date.now() - t0 < uiRescueAfterMs) { armUiQuiet(); return }"
+      },
+      "owner_state": "tests-unit-core",
+      "pin": {
+        "file": "src/test/unit/cdp/settle.spec.ts",
+        "test": "ui-quiet only rescues after load and the rescue delay"
+      },
+      "eval_refs": [
+        "F2"
+      ]
+    },
+    {
+      "id": "fs-103",
+      "feature": "Rung 5: the deadline (default 15 s) is a circuit breaker; it resolves with settled:false and signal deadline, never silently.",
+      "tags": [
+        "settle"
+      ],
+      "source": {
+        "file": "adhd/cdp-connection/src/settle.ts",
+        "line": 286,
+        "anchor": "settleTimer = setTimeout(() => finish('deadline'), deadlineMs)"
+      },
+      "owner_state": "tests-unit-core",
+      "pin": {
+        "file": "src/test/unit/cdp/settle.spec.ts",
+        "test": "the deadline resolves unsettled"
+      },
+      "eval_refs": [
+        "F2"
+      ]
+    },
+    {
+      "id": "fs-104",
+      "feature": "Main-frame redirects are followed: a new loaderId re-scopes the wait, re-gates rung 2 and clears the latch; iframes are ignored.",
+      "tags": [
+        "settle"
+      ],
+      "source": {
+        "file": "adhd/cdp-connection/src/settle.ts",
+        "line": 387,
+        "anchor": "loaderId = frame.loaderId"
+      },
+      "owner_state": "tests-unit-core",
+      "pin": {
+        "file": "src/test/unit/cdp/settle.spec.ts",
+        "test": "follows a main-frame redirect"
+      },
+      "eval_refs": [
+        "F2"
+      ]
+    },
+    {
+      "id": "fs-105",
+      "feature": "An AbortSignal rejects the wait (already aborted rejects immediately) and unsubscribes.",
+      "tags": [
+        "settle"
+      ],
+      "source": {
+        "file": "adhd/cdp-connection/src/settle.ts",
+        "line": 276,
+        "anchor": "reject(abort.reason ?? new Error('aborted'))"
+      },
+      "owner_state": "tests-unit-core",
+      "pin": {
+        "file": "src/test/unit/cdp/settle.spec.ts",
+        "test": "an abort signal rejects the wait"
+      },
+      "eval_refs": [
+        "F26"
+      ]
+    },
+    {
+      "id": "fs-106",
+      "feature": "Page.navigate errorText rejects with 'Page.navigate failed: ...' and a navigate rejection rejects the wait.",
+      "tags": [
+        "settle"
+      ],
+      "source": {
+        "file": "adhd/cdp-connection/src/settle.ts",
+        "line": 429,
+        "anchor": "Page.navigate failed:"
+      },
+      "owner_state": "tests-unit-core",
+      "pin": {
+        "file": "src/test/unit/cdp/settle.spec.ts",
+        "test": "navigation failures reject the wait"
+      },
+      "eval_refs": [
+        "F26"
+      ]
+    },
+    {
+      "id": "fs-107",
+      "feature": "PerformanceTimeline.enable failure is non-fatal (older Chrome): ui-quiet simply never fires.",
+      "tags": [
+        "settle"
+      ],
+      "source": {
+        "file": "adhd/cdp-connection/src/settle.ts",
+        "line": 237,
+        "anchor": "older Chrome: ui-quiet simply never fires"
+      },
+      "owner_state": "tests-unit-core",
+      "pin": {
+        "file": "src/test/unit/cdp/settle.spec.ts",
+        "test": "a missing PerformanceTimeline does not fail the wait"
+      },
+      "eval_refs": [
+        "F26"
+      ]
+    },
+    {
+      "id": "fs-108",
+      "feature": "Subscribers are armed before Page.navigate is sent and every subscription and timer is released when the wait ends.",
+      "tags": [
+        "settle"
+      ],
+      "source": {
+        "file": "adhd/cdp-connection/src/settle.ts",
+        "line": 259,
+        "anchor": "for (const u of unsubs) u()"
+      },
+      "owner_state": "tests-unit-core",
+      "pin": {
+        "file": "src/test/unit/cdp/settle.spec.ts",
+        "test": "arms subscribers before navigating and releases them"
+      },
+      "eval_refs": [
+        "F2"
+      ]
+    },
+    {
+      "id": "fs-109",
+      "feature": "The settle path uses only out-of-band observers (Page/Network/lifecycle/PerformanceTimeline) and never Runtime.evaluate.",
+      "tags": [
+        "settle",
+        "stealth-flags"
+      ],
+      "source": {
+        "file": "adhd/cdp-connection/src/settle.ts",
+        "line": 104,
+        "anchor": "No `Runtime.evaluate`"
+      },
+      "owner_state": "tests-unit-core",
+      "pin": {
+        "file": "src/test/unit/cdp/settle.spec.ts",
+        "test": "never sends Runtime.evaluate"
+      },
+      "eval_refs": [
+        "F1"
+      ]
+    },
+    {
+      "id": "fs-110",
+      "feature": "collectResourceUsage gathers RSS, JS heap, DOM stats, model name and cores; each CDP failure is non-fatal and leaves zeros.",
+      "tags": [
+        "session"
+      ],
+      "source": {
+        "file": "adhd/cdp-connection/src/monitor.ts",
+        "line": 59,
+        "anchor": "export async function collectResourceUsage("
+      },
+      "owner_state": "tests-unit-core",
+      "pin": {
+        "file": "src/test/unit/cdp/monitor.spec.ts",
+        "test": "resource collection tolerates CDP failures"
+      },
+      "eval_refs": [
+        "F26"
+      ]
+    },
+    {
+      "id": "fs-111",
+      "feature": "Watermarks: defaults 500 MB RSS, 300 MB heap, 100 MB cache; over memory means shouldRestart.",
+      "tags": [
+        "session"
+      ],
+      "source": {
+        "file": "adhd/cdp-connection/src/monitor.ts",
+        "line": 119,
+        "anchor": "const maxRss = thresholds.maxRssMb ?? 500"
+      },
+      "owner_state": "tests-unit-core",
+      "pin": {
+        "file": "src/test/unit/cdp/monitor.spec.ts",
+        "test": "watermark thresholds default and trigger restart"
+      },
+      "eval_refs": [
+        "F6"
+      ]
+    },
+    {
+      "id": "fs-112",
+      "feature": "clearBrowserCache uses allSettled so one failing cleanup call never blocks the other.",
+      "tags": [
+        "session"
+      ],
+      "source": {
+        "file": "adhd/cdp-connection/src/monitor.ts",
+        "line": 137,
+        "anchor": "await Promise.allSettled(["
+      },
+      "owner_state": "tests-unit-core",
+      "pin": {
+        "file": "src/test/unit/cdp/monitor.spec.ts",
+        "test": "cache clearing tolerates a failing call"
+      },
+      "eval_refs": [
+        "F26"
+      ]
+    },
+    {
+      "id": "fs-113",
+      "feature": "formatResourceUsage renders a one-line RSS/heap/DOM/CPU summary.",
+      "tags": [
+        "session"
+      ],
+      "source": {
+        "file": "adhd/cdp-connection/src/monitor.ts",
+        "line": 145,
+        "anchor": "export function formatResourceUsage(usage: ResourceUsage): string {"
+      },
+      "owner_state": "tests-unit-core",
+      "pin": {
+        "file": "src/test/unit/cdp/monitor.spec.ts",
+        "test": "formats resource usage on one line"
+      },
+      "eval_refs": [
+        "F1"
+      ]
+    },
+    {
+      "id": "fs-114",
+      "feature": "Never retry a success: decideRetry answers shouldRetry:false for outcome success.",
+      "tags": [
+        "ban-detection",
+        "capture"
+      ],
+      "source": {
+        "file": "adhd/capture/bans.ts",
+        "line": 35,
+        "anchor": "already succeeded"
+      },
+      "owner_state": "tests-unit-extract",
+      "pin": {
+        "file": "src/test/unit/capture-parsers/bans.spec.ts",
+        "test": "never retries a success"
+      }
+    },
+    {
+      "id": "fs-115",
+      "feature": "Retries stop at config.maxAttempts.",
+      "tags": [
+        "ban-detection",
+        "capture"
+      ],
+      "source": {
+        "file": "adhd/capture/bans.ts",
+        "line": 39,
+        "anchor": "if (attempt >= config.maxAttempts) {"
+      },
+      "owner_state": "tests-unit-extract",
+      "pin": {
+        "file": "src/test/unit/capture-parsers/bans.spec.ts",
+        "test": "stops at the maximum attempts"
+      }
+    },
+    {
+      "id": "fs-116",
+      "feature": "hitl outcomes retry immediately (the user is solving the challenge by hand).",
+      "tags": [
+        "ban-detection",
+        "capture"
+      ],
+      "source": {
+        "file": "adhd/capture/bans.ts",
+        "line": 46,
+        "anchor": "hitl: user solving challenge"
+      },
+      "owner_state": "tests-unit-extract",
+      "pin": {
+        "file": "src/test/unit/capture-parsers/bans.spec.ts",
+        "test": "retries a hitl outcome immediately"
+      }
+    },
+    {
+      "id": "fs-117",
+      "feature": "captcha policy: onCaptcha hitl retries with no delay, abort stops, otherwise exponential backoff.",
+      "tags": [
+        "ban-detection",
+        "capture"
+      ],
+      "source": {
+        "file": "adhd/capture/bans.ts",
+        "line": 53,
+        "anchor": "captcha: abort configured"
+      },
+      "owner_state": "tests-unit-extract",
+      "pin": {
+        "file": "src/test/unit/capture-parsers/bans.spec.ts",
+        "test": "applies the captcha policy"
+      }
+    },
+    {
+      "id": "fs-118",
+      "feature": "rate_limited policy: abort stops, otherwise backoff with a 2.5 multiplier.",
+      "tags": [
+        "ban-detection",
+        "capture"
+      ],
+      "source": {
+        "file": "adhd/capture/bans.ts",
+        "line": 67,
+        "anchor": "backoff(attempt, config.baseDelayMs, 2.5)"
+      },
+      "owner_state": "tests-unit-extract",
+      "pin": {
+        "file": "src/test/unit/capture-parsers/bans.spec.ts",
+        "test": "backs off harder when rate limited"
+      }
+    },
+    {
+      "id": "fs-119",
+      "feature": "banned policy: onBan hitl retries immediately, otherwise no retry.",
+      "tags": [
+        "ban-detection",
+        "capture"
+      ],
+      "source": {
+        "file": "adhd/capture/bans.ts",
+        "line": 75,
+        "anchor": "banned: no retry"
+      },
+      "owner_state": "tests-unit-extract",
+      "pin": {
+        "file": "src/test/unit/capture-parsers/bans.spec.ts",
+        "test": "does not retry a ban unless hitl is configured"
+      }
+    },
+    {
+      "id": "fs-120",
+      "feature": "timeout policy: onTimeout abort stops, otherwise backoff retry; empty and error outcomes always back off and retry; an unknown outcome never retries.",
+      "tags": [
+        "ban-detection",
+        "capture"
+      ],
+      "source": {
+        "file": "adhd/capture/bans.ts",
+        "line": 96,
+        "anchor": "unknown outcome:"
+      },
+      "owner_state": "tests-unit-extract",
+      "pin": {
+        "file": "src/test/unit/capture-parsers/bans.spec.ts",
+        "test": "retries timeouts empties and errors and refuses unknown outcomes"
+      }
+    },
+    {
+      "id": "fs-121",
+      "feature": "Backoff is base x multiplier^attempt plus 0-30% jitter, capped at 30 s.",
+      "tags": [
+        "ban-detection",
+        "capture"
+      ],
+      "source": {
+        "file": "adhd/capture/bans.ts",
+        "line": 108,
+        "anchor": "return Math.min(Math.round(delay + jitter), 30_000)"
+      },
+      "owner_state": "tests-unit-extract",
+      "pin": {
+        "file": "src/test/unit/capture-parsers/bans.spec.ts",
+        "test": "backoff is exponential with jitter capped at 30 seconds"
+      }
+    },
+    {
+      "id": "fs-122",
+      "feature": "Ban detection: checkBans returns the first rule signal whose URL regex, status list or body regex matches, else null.",
+      "tags": [
+        "ban-detection",
+        "capture"
+      ],
+      "source": {
+        "file": "adhd/capture/bans.ts",
+        "line": 119,
+        "anchor": "export function checkBans(rules: BanRule[], ctx: BanCheckContext): BanSignal | null {"
+      },
+      "owner_state": "tests-unit-extract",
+      "pin": {
+        "file": "src/test/unit/capture-parsers/bans.spec.ts",
+        "test": "returns the first matching ban signal"
+      }
+    },
+    {
+      "id": "fs-123",
+      "feature": "Network capture resolves as soon as a matching response body is captured, after an extra wait (default 500 ms, extraWaitMs overrides) that restarts on every further body.",
+      "tags": [
+        "capture"
+      ],
+      "source": {
+        "file": "adhd/capture/network.ts",
+        "line": 157,
+        "anchor": "resolveTimer = setTimeout(finalize, extraWaitMs > 0 ? extraWaitMs : 500)"
+      },
+      "owner_state": "capture-upgrade",
+      "pin": {
+        "file": "src/test/unit/capture/network-capture.spec.ts",
+        "test": "resolves after the extra wait once a body is captured"
+      }
+    },
+    {
+      "id": "fs-124",
+      "feature": "Single winner: when several responses match, the largest body (the document) wins.",
+      "tags": [
+        "capture"
+      ],
+      "source": {
+        "file": "adhd/capture/network.ts",
+        "line": 88,
+        "anchor": "capturedBodies.reduce((a, b) => (a.body.length > b.body.length ? a : b))"
+      },
+      "owner_state": "capture-upgrade",
+      "pin": {
+        "file": "src/test/unit/capture/network-capture.spec.ts",
+        "test": "the largest matching body wins"
+      }
+    },
+    {
+      "id": "fs-125",
+      "feature": "Only requests whose URL matches urlPattern are tracked, fetched at loadingFinished through Network.getResponseBody.",
+      "tags": [
+        "capture"
+      ],
+      "source": {
+        "file": "adhd/capture/network.ts",
+        "line": 134,
+        "anchor": "if (urlPattern.test(r.request.url)) {"
+      },
+      "owner_state": "capture-upgrade",
+      "pin": {
+        "file": "src/test/unit/capture/network-capture.spec.ts",
+        "test": "captures only urls matching the pattern"
+      }
+    },
+    {
+      "id": "fs-126",
+      "feature": "Base64 response bodies are decoded to UTF-8; a failing getResponseBody is ignored.",
+      "tags": [
+        "capture"
+      ],
+      "source": {
+        "file": "adhd/capture/network.ts",
+        "line": 149,
+        "anchor": "Buffer.from(result.body, 'base64').toString('utf-8')"
+      },
+      "owner_state": "capture-upgrade",
+      "pin": {
+        "file": "src/test/unit/capture/network-capture.spec.ts",
+        "test": "decodes base64 bodies"
+      }
+    },
+    {
+      "id": "fs-127",
+      "feature": "Capture timeout (default 10 s) ends with a 'timeout' outcome when nothing matched.",
+      "tags": [
+        "capture"
+      ],
+      "source": {
+        "file": "adhd/capture/network.ts",
+        "line": 65,
+        "anchor": "const timeoutMs = options.timeoutMs ?? 10_000"
+      },
+      "owner_state": "capture-upgrade",
+      "pin": {
+        "file": "src/test/unit/capture/network-capture.spec.ts",
+        "test": "times out gracefully with no match"
+      }
+    },
+    {
+      "id": "fs-128",
+      "feature": "A WebSocket error ends the capture with a 'WebSocket error' outcome rather than hanging.",
+      "tags": [
+        "capture"
+      ],
+      "source": {
+        "file": "adhd/capture/network.ts",
+        "line": 168,
+        "anchor": "matchError = 'WebSocket error'"
+      },
+      "owner_state": "capture-upgrade",
+      "pin": {
+        "file": "src/test/unit/capture/network-capture.spec.ts",
+        "test": "a socket error ends the capture"
+      }
+    },
+    {
+      "id": "fs-129",
+      "feature": "Messages arriving after the timeout are ignored.",
+      "tags": [
+        "capture"
+      ],
+      "source": {
+        "file": "adhd/capture/network.ts",
+        "line": 119,
+        "anchor": "if (timedOut) return"
+      },
+      "owner_state": "capture-upgrade",
+      "pin": {
+        "file": "src/test/unit/capture/network-capture.spec.ts",
+        "test": "ignores events after the timeout"
+      }
+    },
+    {
+      "id": "fs-130",
+      "feature": "Page.enable, Network.enable and Page.navigate are issued on open; a failing command is logged and does not abort.",
+      "tags": [
+        "capture"
+      ],
+      "source": {
+        "file": "adhd/capture/network.ts",
+        "line": 105,
+        "anchor": "send('Page.enable')"
+      },
+      "owner_state": "capture-upgrade",
+      "pin": {
+        "file": "src/test/unit/capture/network-capture.spec.ts",
+        "test": "enables Page and Network then navigates"
+      }
+    },
+    {
+      "id": "fs-131",
+      "feature": "With nothing captured the call throws the recorded error, or 'No matching request captured'.",
+      "tags": [
+        "capture"
+      ],
+      "source": {
+        "file": "adhd/capture/network.ts",
+        "line": 184,
+        "anchor": "No matching request captured"
+      },
+      "owner_state": "capture-upgrade",
+      "pin": {
+        "file": "src/test/unit/capture/network-capture.spec.ts",
+        "test": "reports no matching request"
+      }
+    },
+    {
+      "id": "fs-132",
+      "feature": "Ban rules are applied to the winning response and a hit throws 'Ban detected: <signal>'.",
+      "tags": [
+        "capture",
+        "ban-detection"
+      ],
+      "source": {
+        "file": "adhd/capture/network.ts",
+        "line": 198,
+        "anchor": "Ban detected:"
+      },
+      "owner_state": "capture-upgrade",
+      "pin": {
+        "file": "src/test/unit/capture/network-capture.spec.ts",
+        "test": "ban rules reject the captured response"
+      }
+    },
+    {
+      "id": "fs-133",
+      "feature": "No Runtime.evaluate anywhere in the DOM walk: only CDP DOM API calls (getDocument, querySelector) are used.",
+      "tags": [
+        "capture",
+        "stealth-flags"
+      ],
+      "source": {
+        "file": "adhd/capture/dom.ts",
+        "line": 7,
+        "anchor": "No Runtime.evaluate"
+      },
+      "owner_state": "tests-unit-extract",
+      "pin": {
+        "file": "src/test/unit/capture-parsers/dom.spec.ts",
+        "test": "never sends Runtime.evaluate"
+      }
+    },
+    {
+      "id": "fs-134",
+      "feature": "walkDomTree navigates, waits for load (failure tolerated), waits for the waitFor selector, takes the full DOM and extracts.",
+      "tags": [
+        "capture"
+      ],
+      "source": {
+        "file": "adhd/capture/dom.ts",
+        "line": 29,
+        "anchor": "export async function walkDomTree("
+      },
+      "owner_state": "tests-unit-extract",
+      "pin": {
+        "file": "src/test/unit/capture-parsers/dom.spec.ts",
+        "test": "navigates waits and extracts from the full tree"
+      }
+    },
+    {
+      "id": "fs-135",
+      "feature": "waitForSelector polls DOM.querySelector with jittered delays until the deadline and then throws 'Timed out waiting for ...' with the last error.",
+      "tags": [
+        "capture"
+      ],
+      "source": {
+        "file": "adhd/capture/dom.ts",
+        "line": 357,
+        "anchor": "Timed out waiting for"
+      },
+      "owner_state": "tests-unit-extract",
+      "pin": {
+        "file": "src/test/unit/capture-parsers/dom.spec.ts",
+        "test": "times out waiting for the selector"
+      }
+    },
+    {
+      "id": "fs-136",
+      "feature": "DOM text extraction skips SCRIPT and STYLE nodes and collapses whitespace.",
+      "tags": [
+        "capture"
+      ],
+      "source": {
+        "file": "adhd/capture/dom.ts",
+        "line": 74,
+        "anchor": "if (child.nodeName === 'SCRIPT' || child.nodeName === 'STYLE') continue"
+      },
+      "owner_state": "tests-unit-extract",
+      "pin": {
+        "file": "src/test/unit/capture-parsers/dom.spec.ts",
+        "test": "text extraction skips script and style"
+      }
+    },
+    {
+      "id": "fs-137",
+      "feature": "Pattern matching: tag (or *), string or RegExp attribute values and a text regex all must match; findChild searches to depth 4.",
+      "tags": [
+        "capture"
+      ],
+      "source": {
+        "file": "adhd/capture/dom.ts",
+        "line": 94,
+        "anchor": "if (pattern.tag && pattern.tag !== '*' && node.nodeName !== pattern.tag) return false"
+      },
+      "owner_state": "tests-unit-extract",
+      "pin": {
+        "file": "src/test/unit/capture-parsers/dom.spec.ts",
+        "test": "matches tag attributes and text patterns"
+      }
+    },
+    {
+      "id": "fs-138",
+      "feature": "extractFromDom builds title, url (via normalizeUrl on a link attr), snippet and extra meta from container patterns and skips empty results.",
+      "tags": [
+        "capture"
+      ],
+      "source": {
+        "file": "adhd/capture/dom.ts",
+        "line": 296,
+        "anchor": "export function extractFromDom("
+      },
+      "owner_state": "tests-unit-extract",
+      "pin": {
+        "file": "src/test/unit/capture-parsers/dom.spec.ts",
+        "test": "extracts results from container patterns"
+      }
+    },
+    {
+      "id": "fs-139",
+      "feature": "normalizeUrl unwraps DuckDuckGo uddg, Google q= (non-http) and protocol-relative URLs.",
+      "tags": [
+        "capture"
+      ],
+      "source": {
+        "file": "adhd/capture/dom.ts",
+        "line": 147,
+        "anchor": "const ddgMatch = raw.match(/[?&]uddg=([^&]+)/)"
+      },
+      "owner_state": "tests-unit-extract",
+      "pin": {
+        "file": "src/test/unit/capture-parsers/dom.spec.ts",
+        "test": "normalizes redirect urls"
+      }
+    },
+    {
+      "id": "fs-140",
+      "feature": "FLAG-FOR-USER: search-provider leftover - the structural a[jsname] Google-SERP result-card walker (extractStructuralFromDom, selected by extractConfig.structural) is Google result-page specific and used only by agent-search's provider config; it is kept and pinned, not decided.",
+      "tags": [
+        "capture"
+      ],
+      "source": {
+        "file": "adhd/capture/dom.ts",
+        "line": 161,
+        "anchor": "function extractStructuralFromDom(domRoot: DomNode): ParseResult[] {"
+      },
+      "owner_state": "tests-unit-extract",
+      "pin": {
+        "file": "src/test/unit/capture-parsers/dom.spec.ts",
+        "test": "structural walker extracts Google result cards"
+      }
+    },
+    {
+      "id": "fs-141",
+      "feature": "Structural walker: only anchors whose wrapper div has exactly one div child count as results; non-results (timestamps, panels) are dropped; duplicates are skipped.",
+      "tags": [
+        "capture"
+      ],
+      "source": {
+        "file": "adhd/capture/dom.ts",
+        "line": 254,
+        "anchor": "return wrapper.children.length === 1 && wrapper.children[0].nodeName === 'DIV'"
+      },
+      "owner_state": "tests-unit-extract",
+      "pin": {
+        "file": "src/test/unit/capture-parsers/dom.spec.ts",
+        "test": "structural walker drops non-result anchors"
+      }
+    },
+    {
+      "id": "fs-142",
+      "feature": "DOM ban probe: detectBanInPage checks captcha/challenge selectors and reports 'captcha' on a hit; selector errors mean not found.",
+      "tags": [
+        "capture",
+        "ban-detection"
+      ],
+      "source": {
+        "file": "adhd/capture/dom.ts",
+        "line": 362,
+        "anchor": "export async function detectBanInPage("
+      },
+      "owner_state": "tests-unit-extract",
+      "pin": {
+        "file": "src/test/unit/capture-parsers/dom.spec.ts",
+        "test": "detects a captcha in the page"
+      }
+    },
+    {
+      "id": "fs-143",
+      "feature": "XPath extraction parses malformed HTML without throwing (a parse failure returns []).",
+      "tags": [
+        "parsers"
+      ],
+      "source": {
+        "file": "adhd/parsers.ts",
+        "line": 33,
+        "anchor": "new DOMParser({ onError: () => {} })"
+      },
+      "owner_state": "tests-unit-extract",
+      "pin": {
+        "file": "src/test/unit/capture-parsers/parsers.spec.ts",
+        "test": "xpath extraction survives malformed html"
+      }
+    },
+    {
+      "id": "fs-144",
+      "feature": "XPath extraction keeps a[jsname] anchors with the div>div structure, requires a heading title, normalizes whitespace and de-duplicates by URL.",
+      "tags": [
+        "parsers"
+      ],
+      "source": {
+        "file": "adhd/parsers.ts",
+        "line": 40,
+        "anchor": "const expr = "
+      },
+      "owner_state": "tests-unit-extract",
+      "pin": {
+        "file": "src/test/unit/capture-parsers/parsers.spec.ts",
+        "test": "xpath extraction returns deduplicated titled results"
+      }
+    },
+    {
+      "id": "fs-145",
+      "feature": "XPath snippet: walk up to a container with >=3 child nodes and take descriptive text (>60 chars, not the title, no http); fall back to remaining parent text.",
+      "tags": [
+        "parsers"
+      ],
+      "source": {
+        "file": "adhd/parsers.ts",
+        "line": 87,
+        "anchor": "Fallback: if no div container found"
+      },
+      "owner_state": "tests-unit-extract",
+      "pin": {
+        "file": "src/test/unit/capture-parsers/parsers.spec.ts",
+        "test": "xpath extraction finds a snippet with a fallback"
+      }
+    },
+    {
+      "id": "fs-146",
+      "feature": "JSON extraction resolves a dot path (or '*'), applies urlTemplate and meta field maps; invalid JSON or a non-array selector yields [].",
+      "tags": [
+        "parsers"
+      ],
+      "source": {
+        "file": "adhd/parsers.ts",
+        "line": 112,
+        "anchor": "export function extractResultsFromJson("
+      },
+      "owner_state": "tests-unit-extract",
+      "pin": {
+        "file": "src/test/unit/capture-parsers/parsers.spec.ts",
+        "test": "extracts results from json by dot path"
+      }
+    },
+    {
+      "id": "fs-147",
+      "feature": "resolvePath returns undefined through null or non-object steps and supports '*' as the whole object.",
+      "tags": [
+        "parsers"
+      ],
+      "source": {
+        "file": "adhd/parsers.ts",
+        "line": 368,
+        "anchor": "if (path === '*') return obj"
+      },
+      "owner_state": "tests-unit-extract",
+      "pin": {
+        "file": "src/test/unit/capture-parsers/parsers.spec.ts",
+        "test": "resolves dot paths safely"
+      }
+    },
+    {
+      "id": "fs-148",
+      "feature": "urlTemplate ({}) is applied to relative hrefs and bare ids before normalization.",
+      "tags": [
+        "parsers"
+      ],
+      "source": {
+        "file": "adhd/parsers.ts",
+        "line": 388,
+        "anchor": "return template ? template.replace('{}', url) : url"
+      },
+      "owner_state": "tests-unit-extract",
+      "pin": {
+        "file": "src/test/unit/capture-parsers/parsers.spec.ts",
+        "test": "applies the url template"
+      }
+    },
+    {
+      "id": "fs-149",
+      "feature": "Embedded JSON: reads <script type=application/json data-target> (default react-app.embeddedData), builds GitHub blob URLs from repo_nwo/ref_name/path, snippet lines stripped of HTML and capped at 500 chars.",
+      "tags": [
+        "parsers"
+      ],
+      "source": {
+        "file": "adhd/parsers.ts",
+        "line": 137,
+        "anchor": "export function extractResultsFromEmbeddedJson("
+      },
+      "owner_state": "tests-unit-extract",
+      "pin": {
+        "file": "src/test/unit/capture-parsers/parsers.spec.ts",
+        "test": "extracts embedded json results with github urls"
+      }
+    },
+    {
+      "id": "fs-150",
+      "feature": "Meta maps extract named fields per result.",
+      "tags": [
+        "parsers"
+      ],
+      "source": {
+        "file": "adhd/parsers.ts",
+        "line": 182,
+        "anchor": "function extractMeta("
+      },
+      "owner_state": "tests-unit-extract",
+      "pin": {
+        "file": "src/test/unit/capture-parsers/parsers.spec.ts",
+        "test": "extracts meta fields"
+      }
+    },
+    {
+      "id": "fs-151",
+      "feature": "Class-based HTML extraction: pass 1 (href on the title element) and pass 2 (href on a child anchor) with de-duplication and snippet lookup near the match.",
+      "tags": [
+        "parsers"
+      ],
+      "source": {
+        "file": "adhd/parsers.ts",
+        "line": 248,
+        "anchor": "export function extractResultsFromHtml("
+      },
+      "owner_state": "tests-unit-extract",
+      "pin": {
+        "file": "src/test/unit/capture-parsers/parsers.spec.ts",
+        "test": "class based extraction passes one and two"
+      }
+    },
+    {
+      "id": "fs-152",
+      "feature": "Wrapper-anchor pass: when the URL element encloses the title element (pypi), the title is taken from inside it (no off-by-one pairing).",
+      "tags": [
+        "parsers"
+      ],
+      "source": {
+        "file": "adhd/parsers.ts",
+        "line": 291,
+        "anchor": "Pass 2.5: wrapper anchor"
+      },
+      "owner_state": "tests-unit-extract",
+      "pin": {
+        "file": "src/test/unit/capture-parsers/parsers.spec.ts",
+        "test": "wrapper anchors pair titles with their own href"
+      }
+    },
+    {
+      "id": "fs-153",
+      "feature": "Separate title/link pass pairs each title with the nearest following href.",
+      "tags": [
+        "parsers"
+      ],
+      "source": {
+        "file": "adhd/parsers.ts",
+        "line": 318,
+        "anchor": "Pass 3: title and link on separate elements"
+      },
+      "owner_state": "tests-unit-extract",
+      "pin": {
+        "file": "src/test/unit/capture-parsers/parsers.spec.ts",
+        "test": "pairs a title with the nearest following link"
+      }
+    },
+    {
+      "id": "fs-154",
+      "feature": "Snippet lookup reads a window (-500/+5000 chars) after a match for the snippet tag/class.",
+      "tags": [
+        "parsers"
+      ],
+      "source": {
+        "file": "adhd/parsers.ts",
+        "line": 348,
+        "anchor": "function extractSnippet("
+      },
+      "owner_state": "tests-unit-extract",
+      "pin": {
+        "file": "src/test/unit/capture-parsers/parsers.spec.ts",
+        "test": "reads a snippet near the match"
+      }
+    },
+    {
+      "id": "fs-155",
+      "feature": "Structural HTML extraction (extractStructural, node-html-parser) finds a[jsname] result cards by structure.",
+      "tags": [
+        "parsers"
+      ],
+      "source": {
+        "file": "adhd/parsers.ts",
+        "line": 195,
+        "anchor": "export function extractStructural("
+      },
+      "owner_state": "tests-unit-extract",
+      "pin": {
+        "file": "src/test/unit/capture-parsers/parsers.spec.ts",
+        "test": "structural extraction finds jsname result cards"
+      }
+    },
+    {
+      "id": "fs-156",
+      "feature": "normalizeUrl unwraps uddg and q= redirects, completes // and /abs/ (arxiv) and absolutizes Google /goto?url= links.",
+      "tags": [
+        "parsers"
+      ],
+      "source": {
+        "file": "adhd/parsers.ts",
+        "line": 404,
+        "anchor": "if (raw.startsWith('/goto?url=')) return"
+      },
+      "owner_state": "tests-unit-extract",
+      "pin": {
+        "file": "src/test/unit/capture-parsers/parsers.spec.ts",
+        "test": "normalizeUrl handles redirect and relative forms"
+      }
+    },
+    {
+      "id": "fs-157",
+      "feature": "Chrome profile databases are opened read-only and immutable (file:...?mode=ro&immutable=1) so a running Chrome's locks are never contended and nothing is ever written.",
+      "tags": [
+        "readonly-sqlite",
+        "storage"
+      ],
+      "source": {
+        "file": "adhd/storage/helpers.ts",
+        "line": 5,
+        "anchor": "?mode=ro&immutable=1"
+      },
+      "owner_state": "tests-unit-data",
+      "pin": {
+        "file": "src/test/unit/domains-storage/storage.spec.ts",
+        "test": "opens databases read-only and immutable"
+      },
+      "eval_refs": [
+        "F13"
+      ]
+    },
+    {
+      "id": "fs-158",
+      "feature": "PRAGMA query_only = ON is set on every opened database as a second write guard.",
+      "tags": [
+        "readonly-sqlite",
+        "storage"
+      ],
+      "source": {
+        "file": "adhd/storage/helpers.ts",
+        "line": 7,
+        "anchor": "PRAGMA query_only = ON"
+      },
+      "owner_state": "tests-unit-data",
+      "pin": {
+        "file": "src/test/unit/domains-storage/storage.spec.ts",
+        "test": "sets query_only on every database"
+      },
+      "eval_refs": [
+        "F13"
+      ]
+    },
+    {
+      "id": "fs-159",
+      "feature": "Chrome timestamps (microseconds since 1601) convert to Unix seconds in SQL and to JS dates.",
+      "tags": [
+        "storage"
+      ],
+      "source": {
+        "file": "adhd/storage/helpers.ts",
+        "line": 12,
+        "anchor": "return `((${column} / 1000000) - 11644473600)`"
+      },
+      "owner_state": "tests-unit-data",
+      "pin": {
+        "file": "src/test/unit/domains-storage/storage.spec.ts",
+        "test": "converts chrome timestamps"
+      }
+    },
+    {
+      "id": "fs-160",
+      "feature": "Integer columns arrive as BigInt (readBigInts) and every consumer coerces them with Number() so results are plain numbers.",
+      "tags": [
+        "readonly-sqlite",
+        "storage"
+      ],
+      "source": {
+        "file": "adhd/storage/helpers.ts",
+        "line": 6,
+        "anchor": "readBigInts: true"
+      },
+      "owner_state": "port-fixes",
+      "pin": {
+        "file": "src/test/unit/domains-storage/port-fixes.spec.ts",
+        "test": "coerces bigint columns to numbers"
+      }
+    },
+    {
+      "id": "fs-161",
+      "feature": "History: the last visit and recent visits only include user-visible navigations (qualifier bit set, subframe and keyword-generated transitions excluded), newest first, paged.",
+      "tags": [
+        "storage"
+      ],
+      "source": {
+        "file": "adhd/storage/history.ts",
+        "line": 44,
+        "anchor": "AND (v.transition & 255) NOT IN (3, 4, 10)"
+      },
+      "owner_state": "tests-unit-data",
+      "pin": {
+        "file": "src/test/unit/domains-storage/history.spec.ts",
+        "test": "recent visits exclude subframe transitions"
+      }
+    },
+    {
+      "id": "fs-162",
+      "feature": "History recency: isRecentlyUsed(withinMinutes=2) is true only when the last visit is newer than the window; no visit means false.",
+      "tags": [
+        "history-recency",
+        "storage"
+      ],
+      "source": {
+        "file": "adhd/storage/history.ts",
+        "line": 72,
+        "anchor": "isRecentlyUsed(withinMinutes = 2): boolean {"
+      },
+      "owner_state": "tests-unit-data",
+      "pin": {
+        "file": "src/test/unit/domains-storage/history.spec.ts",
+        "test": "isRecentlyUsed honours the window and no visits"
+      },
+      "eval_refs": [
+        "F13"
+      ]
+    },
+    {
+      "id": "fs-163",
+      "feature": "The history database path is <profile>/Default/History with the default Chrome-CDP profile, and each query opens and closes the database.",
+      "tags": [
+        "history-recency",
+        "readonly-sqlite",
+        "storage"
+      ],
+      "source": {
+        "file": "adhd/storage/history.ts",
+        "line": 24,
+        "anchor": "this.dbPath = join(base, 'Default', 'History')"
+      },
+      "owner_state": "tests-unit-data",
+      "pin": {
+        "file": "src/test/unit/domains-storage/history.spec.ts",
+        "test": "derives the history path from the profile"
+      },
+      "eval_refs": [
+        "F13"
+      ]
+    },
+    {
+      "id": "fs-164",
+      "feature": "Redirect chain: recursive from_visit walk bounded to depth 32.",
+      "tags": [
+        "storage"
+      ],
+      "source": {
+        "file": "adhd/storage/history.ts",
+        "line": 87,
+        "anchor": "c.depth < 32"
+      },
+      "owner_state": "tests-unit-data",
+      "pin": {
+        "file": "src/test/unit/domains-storage/history.spec.ts",
+        "test": "redirect chains stop at depth 32"
+      }
+    },
+    {
+      "id": "fs-165",
+      "feature": "URL lookup by id or exact URL, and LIKE search over url and title ordered by last visit.",
+      "tags": [
+        "storage"
+      ],
+      "source": {
+        "file": "adhd/storage/history.ts",
+        "line": 101,
+        "anchor": "getUrlInfo(urlOrId: string | number): UrlInfo | null {"
+      },
+      "owner_state": "tests-unit-data",
+      "pin": {
+        "file": "src/test/unit/domains-storage/history.spec.ts",
+        "test": "looks up urls by id url and search"
+      }
+    },
+    {
+      "id": "fs-166",
+      "feature": "Visit statistics per day and the transition breakdown over a window (default 30 days).",
+      "tags": [
+        "storage"
+      ],
+      "source": {
+        "file": "adhd/storage/history.ts",
+        "line": 148,
+        "anchor": "getVisitStats(days = 30): VisitStat[] {"
+      },
+      "owner_state": "tests-unit-data",
+      "pin": {
+        "file": "src/test/unit/domains-storage/history.spec.ts",
+        "test": "aggregates visit statistics"
+      }
+    },
+    {
+      "id": "fs-167",
+      "feature": "Keyword search terms, journey clusters with visits, and content/context annotations by visit.",
+      "tags": [
+        "storage"
+      ],
+      "source": {
+        "file": "adhd/storage/history.ts",
+        "line": 212,
+        "anchor": "getClusterData(): ClusterInfo[] {"
+      },
+      "owner_state": "tests-unit-data",
+      "pin": {
+        "file": "src/test/unit/domains-storage/history.spec.ts",
+        "test": "reads clusters terms and annotations"
+      }
+    },
+    {
+      "id": "fs-168",
+      "feature": "Cookies are read from the read-only Cookies database, optionally filtered by host, newest access first, capped at 200, with secure/httpOnly/samesite/priority mapped.",
+      "tags": [
+        "storage",
+        "readonly-sqlite"
+      ],
+      "source": {
+        "file": "adhd/storage/cookies.ts",
+        "line": 28,
+        "anchor": "LIMIT 200"
+      },
+      "owner_state": "tests-unit-data",
+      "pin": {
+        "file": "src/test/unit/domains-storage/cookies.spec.ts",
+        "test": "reads cookies with host filter and limit"
+      }
+    },
+    {
+      "id": "fs-169",
+      "feature": "Session cookies (has_expires 0 / expires_utc 0) report expiresUtc null instead of a 1601-era date.",
+      "tags": [
+        "storage"
+      ],
+      "source": {
+        "file": "adhd/storage/cookies.ts",
+        "line": 38,
+        "anchor": "expiresUtc: r.expires_unix ?"
+      },
+      "owner_state": "port-fixes",
+      "pin": {
+        "file": "src/test/unit/domains-storage/port-fixes.spec.ts",
+        "test": "session cookies report a null expiry"
+      }
+    },
+    {
+      "id": "fs-170",
+      "feature": "Profile reads: top sites, favicons as base64, autofill (limit 100), search engines, preferences by dot path, extension ids, saved-credential presence; unreadable files degrade to empty values.",
+      "tags": [
+        "storage",
+        "readonly-sqlite"
+      ],
+      "source": {
+        "file": "adhd/storage/profile.ts",
+        "line": 7,
+        "anchor": "export class ProfileClient {"
+      },
+      "owner_state": "tests-unit-data",
+      "pin": {
+        "file": "src/test/unit/domains-storage/profile.spec.ts",
+        "test": "reads profile data and degrades to empty"
+      }
+    },
+    {
+      "id": "fs-171",
+      "feature": "getPreference resolves dot paths through the Preferences JSON and returns undefined for any miss or parse failure.",
+      "tags": [
+        "storage"
+      ],
+      "source": {
+        "file": "adhd/storage/profile.ts",
+        "line": 85,
+        "anchor": "getPreference<T = unknown>(key: string): T | undefined {"
+      },
+      "owner_state": "tests-unit-data",
+      "pin": {
+        "file": "src/test/unit/domains-storage/profile.spec.ts",
+        "test": "getPreference resolves dot paths"
+      }
+    },
+    {
+      "id": "fs-172",
+      "feature": "hasSavedCredentials only counts rows and never reads credentials; a failure means false.",
+      "tags": [
+        "storage",
+        "readonly-sqlite"
+      ],
+      "source": {
+        "file": "adhd/storage/profile.ts",
+        "line": 112,
+        "anchor": "SELECT COUNT(*) AS cnt FROM logins"
+      },
+      "owner_state": "tests-unit-data",
+      "pin": {
+        "file": "src/test/unit/domains-storage/profile.spec.ts",
+        "test": "counts saved credentials without reading them"
+      }
+    },
+    {
+      "id": "fs-173",
+      "feature": "Bookmarks: parses bookmark_bar/other/synced/managed roots into a tree (url vs folder, dates); a missing or invalid file yields [].",
+      "tags": [
+        "storage"
+      ],
+      "source": {
+        "file": "adhd/storage/bookmarks.ts",
+        "line": 21,
+        "anchor": "for (const key of ['bookmark_bar', 'other', 'synced', 'managed'] as const) {"
+      },
+      "owner_state": "tests-unit-data",
+      "pin": {
+        "file": "src/test/unit/domains-storage/bookmarks.spec.ts",
+        "test": "parses bookmark roots"
+      }
+    },
+    {
+      "id": "fs-174",
+      "feature": "searchBookmarks matches name or URL case-insensitively and returns the folder path; an empty query returns [].",
+      "tags": [
+        "storage"
+      ],
+      "source": {
+        "file": "adhd/storage/bookmarks.ts",
+        "line": 44,
+        "anchor": "if (!query) return []"
+      },
+      "owner_state": "tests-unit-data",
+      "pin": {
+        "file": "src/test/unit/domains-storage/bookmarks.spec.ts",
+        "test": "searches bookmarks with folder paths"
+      }
+    },
+    {
+      "id": "fs-175",
+      "feature": "Helpers: transitionName maps transition codes (unknown codes labelled), chromeProfileDir is the dedicated Chrome-CDP profile, chromeTimeToDate and hydrateVisit convert rows, notYet warns for unimplemented reads.",
+      "tags": [
+        "storage"
+      ],
+      "source": {
+        "file": "adhd/helpers.ts",
+        "line": 31,
+        "anchor": "export function transitionName(raw: number): string {"
+      },
+      "owner_state": "tests-unit-data",
+      "pin": {
+        "file": "src/test/unit/domains-storage/helpers.spec.ts",
+        "test": "maps transitions and hydrates visits"
+      }
+    },
+    {
+      "id": "fs-176",
+      "feature": "hydrateVisit converts visit duration to milliseconds and Unix seconds to a Date.",
+      "tags": [
+        "storage"
+      ],
+      "source": {
+        "file": "adhd/helpers.ts",
+        "line": 114,
+        "anchor": "visitDurationMs: Math.round(row.visit_duration / 1000),"
+      },
+      "owner_state": "tests-unit-data",
+      "pin": {
+        "file": "src/test/unit/domains-storage/helpers.spec.ts",
+        "test": "hydrateVisit converts durations and dates"
+      }
+    },
+    {
+      "id": "fs-177",
+      "feature": "cdpCall performs a one-shot browser-level CDP command and returns null on any failure; it times out after 10 s.",
+      "tags": [
+        "storage"
+      ],
+      "source": {
+        "file": "adhd/domains/transport.ts",
+        "line": 32,
+        "anchor": "reject(new Error('CDP timeout'))"
+      },
+      "owner_state": "tests-unit-data",
+      "pin": {
+        "file": "src/test/unit/domains-storage/domains.spec.ts",
+        "test": "cdpCall returns null on failure and times out"
+      }
+    },
+    {
+      "id": "fs-178",
+      "feature": "cdpCall sends the command only after the WebSocket is open (no ws.send before open).",
+      "tags": [
+        "storage"
+      ],
+      "source": {
+        "file": "adhd/domains/transport.ts",
+        "line": 20,
+        "anchor": "ws.send(JSON.stringify({ id, method, params }))"
+      },
+      "owner_state": "port-fixes",
+      "pin": {
+        "file": "src/test/unit/domains-storage/port-fixes.spec.ts",
+        "test": "waits for the socket to open before sending"
+      }
+    },
+    {
+      "id": "fs-179",
+      "feature": "TargetService lists page targets from /json/list mapped to id, title, url and attached, and exposes target info and activation.",
+      "tags": [
+        "storage",
+        "targets"
+      ],
+      "source": {
+        "file": "adhd/domains/target.ts",
+        "line": 7,
+        "anchor": "async listPageTargets(): Promise<CdpTargetInfo[]> {"
+      },
+      "owner_state": "tests-unit-data",
+      "pin": {
+        "file": "src/test/unit/domains-storage/domains.spec.ts",
+        "test": "lists page targets and target info"
+      }
+    },
+    {
+      "id": "fs-180",
+      "feature": "BrowserService.getVersion maps /json/version (null when unreachable); histograms, window bounds and command line degrade to empty.",
+      "tags": [
+        "storage"
+      ],
+      "source": {
+        "file": "adhd/domains/browser.ts",
+        "line": 7,
+        "anchor": "async getVersion(): Promise<ChromeVersion | null> {"
+      },
+      "owner_state": "tests-unit-data",
+      "pin": {
+        "file": "src/test/unit/domains-storage/domains.spec.ts",
+        "test": "reports the browser version or null"
+      }
+    },
+    {
+      "id": "fs-181",
+      "feature": "NetworkService, SystemService and PageService wrap cookies, system info, process info, DOM counters and page metrics, defaulting missing fields to ''/0 and degrading to null/[] on failure.",
+      "tags": [
+        "storage"
+      ],
+      "source": {
+        "file": "adhd/domains/page.ts",
+        "line": 34,
+        "anchor": "async getPageMetrics(targetId: string): Promise<PageMetrics | null> {"
+      },
+      "owner_state": "tests-unit-data",
+      "pin": {
+        "file": "src/test/unit/domains-storage/domains.spec.ts",
+        "test": "maps system network and page services"
+      }
+    },
+    {
+      "id": "fs-182",
+      "feature": "CdpClient is the facade over the five domain services with the default 127.0.0.1:9222 host.",
+      "tags": [
+        "storage"
+      ],
+      "source": {
+        "file": "adhd/domains/index.ts",
+        "line": 15,
+        "anchor": "constructor(host = '127.0.0.1:9222') {"
+      },
+      "owner_state": "tests-unit-data",
+      "pin": {
+        "file": "src/test/unit/domains-storage/domains.spec.ts",
+        "test": "the CdpClient facade delegates to the services"
+      }
+    },
+    {
+      "id": "fs-183",
+      "feature": "checkChromeActivity tolerates an unreachable CDP and an unavailable history DB (each logged) and still returns a result.",
+      "tags": [
+        "storage",
+        "readonly-sqlite"
+      ],
+      "source": {
+        "file": "search/queries/activity.ts",
+        "line": 16,
+        "anchor": "history unavailable:"
+      },
+      "owner_state": "tests-unit-data",
+      "pin": {
+        "file": "src/test/unit/queries/activity.spec.ts",
+        "test": "tolerates unreachable CDP and unavailable history"
+      }
+    },
+    {
+      "id": "fs-184",
+      "feature": "Activity result: active pages and their target ids, last visit, recentlyUsed within N minutes (default 2) and meta (checkedAt, cdpHost, profileDir).",
+      "tags": [
+        "storage",
+        "history-recency"
+      ],
+      "source": {
+        "file": "search/queries/activity.ts",
+        "line": 19,
+        "anchor": "const recentlyUsed = lastVisit"
+      },
+      "owner_state": "tests-unit-data",
+      "pin": {
+        "file": "src/test/unit/queries/activity.spec.ts",
+        "test": "reports activity within the recency window"
+      },
+      "eval_refs": [
+        "F13"
+      ]
+    },
+    {
+      "id": "fs-185",
+      "feature": "getPageContext returns null when the target is unknown.",
+      "tags": [
+        "storage"
+      ],
+      "source": {
+        "file": "search/queries/context.ts",
+        "line": 17,
+        "anchor": "if (!targetInfo?.url) return null"
+      },
+      "owner_state": "tests-unit-data",
+      "pin": {
+        "file": "src/test/unit/queries/context.spec.ts",
+        "test": "returns null for an unknown target"
+      }
+    },
+    {
+      "id": "fs-186",
+      "feature": "Page context counts the profile's cookies for the page hostname and reports history presence and visit count; each lookup is best effort.",
+      "tags": [
+        "storage",
+        "readonly-sqlite"
+      ],
+      "source": {
+        "file": "search/queries/context.ts",
+        "line": 26,
+        "anchor": "cookies.filter((c) => c.host.includes(hostname)).length"
+      },
+      "owner_state": "tests-unit-data",
+      "pin": {
+        "file": "src/test/unit/queries/context.spec.ts",
+        "test": "counts cookies and history visits for the page"
+      }
+    },
+    {
+      "id": "fs-187",
+      "feature": "chromeStatus reports running:false/managed:false when Chrome is unreachable and never throws for that.",
+      "tags": [
+        "verb"
+      ],
+      "source": {
+        "file": "search-mcp-source.ts",
+        "line": 457,
+        "anchor": "if (!reachable) return { running: false, managed: false }"
+      },
+      "owner_state": "tests-unit-surface",
+      "pin": {
+        "file": "src/test/unit/surface/verbs.spec.ts",
+        "test": "chromeStatus reports a stopped Chrome"
+      }
+    },
+    {
+      "id": "fs-188",
+      "feature": "chromeStatus reports running:true with the browser and protocol versions and managed = whether this process manages Chrome; `managed` is a required boolean so the MCP output schema validates.",
+      "tags": [
+        "verb"
+      ],
+      "source": {
+        "file": "search-mcp-source.ts",
+        "line": 463,
+        "anchor": "managed: chrome.isReady,"
+      },
+      "owner_state": "tests-unit-surface",
+      "pin": {
+        "file": "src/test/unit/surface/verbs.spec.ts",
+        "test": "chromeStatus reports version and managed"
+      }
+    },
+    {
+      "id": "fs-189",
+      "feature": "chromeStatus wraps an unexpected failure as 'Failed to check Chrome status: ...'.",
+      "tags": [
+        "verb"
+      ],
+      "source": {
+        "file": "search-mcp-source.ts",
+        "line": 468,
+        "anchor": "Failed to check Chrome status"
+      },
+      "owner_state": "tests-unit-surface",
+      "pin": {
+        "file": "src/test/unit/surface/verbs.spec.ts",
+        "test": "chromeStatus wraps unexpected failures"
+      }
+    },
+    {
+      "id": "fs-190",
+      "feature": "launchChrome verb: ensures Chrome is running and returns {ok:true}; failures are wrapped as 'Failed to launch Chrome: ...'.",
+      "tags": [
+        "verb"
+      ],
+      "source": {
+        "file": "search-mcp-source.ts",
+        "line": 472,
+        "anchor": "export async function launchChrome(): Promise<{ ok: boolean }> {"
+      },
+      "owner_state": "tests-unit-surface",
+      "pin": {
+        "file": "src/test/unit/surface/verbs.spec.ts",
+        "test": "launchChrome starts Chrome and wraps failures"
+      },
+      "eval_refs": [
+        "F1"
+      ]
+    },
+    {
+      "id": "fs-191",
+      "feature": "shutdownChrome verb: a best-effort SOFT shutdown (defers to siblings, open pages and recent history) that never throws.",
+      "tags": [
+        "verb",
+        "idle-shutdown",
+        "safety-tier"
+      ],
+      "source": {
+        "file": "search-mcp-source.ts",
+        "line": 491,
+        "anchor": "export async function shutdownSearchChrome(): Promise<void> {"
+      },
+      "owner_state": "tests-unit-surface",
+      "pin": {
+        "file": "src/test/unit/surface/verbs.spec.ts",
+        "test": "shutdownChrome is soft and never throws"
+      },
+      "eval_refs": [
+        "F15"
+      ]
+    },
+    {
+      "id": "fs-192",
+      "feature": "listPageTargets verb: lists the page targets (id, type, url, socket URL) of the running Chrome.",
+      "tags": [
+        "verb",
+        "targets"
+      ],
+      "source": {
+        "file": "adhd/cdp-connection/src/targets.ts",
+        "line": 103,
+        "anchor": "export async function listPageTargets(cdpHost: string): Promise<PageTargetInfo[]> {"
+      },
+      "owner_state": "tests-unit-surface",
+      "pin": {
+        "file": "src/test/unit/surface/verbs.spec.ts",
+        "test": "listPageTargets lists the page targets"
+      }
+    },
+    {
+      "id": "fs-193",
+      "feature": "checkChromeActivity verb: reports active pages and recent use over CDP and history.",
+      "tags": [
+        "verb"
+      ],
+      "source": {
+        "file": "search/queries/activity.ts",
+        "line": 5,
+        "anchor": "export async function checkChromeActivity("
+      },
+      "owner_state": "tests-unit-surface",
+      "pin": {
+        "file": "src/test/unit/surface/verbs.spec.ts",
+        "test": "checkChromeActivity reports page and history activity"
+      }
+    },
+    {
+      "id": "fs-194",
+      "feature": "getPageContext verb: reports a target's url, title, cookie count and history for the target id.",
+      "tags": [
+        "verb"
+      ],
+      "source": {
+        "file": "search/queries/context.ts",
+        "line": 14,
+        "anchor": "export async function getPageContext("
+      },
+      "owner_state": "tests-unit-surface",
+      "pin": {
+        "file": "src/test/unit/surface/verbs.spec.ts",
+        "test": "getPageContext reports a target's context"
+      }
+    },
+    {
+      "id": "fs-195",
+      "feature": "Consumer cleanup: the isolated page context is disposed in a finally unless keepPage or a HITL window needs it, and the manager is bumped there too.",
+      "tags": [
+        "isolated-page-cleanup"
+      ],
+      "source": {
+        "file": "search-mcp-source.ts",
+        "line": 371,
+        "anchor": "if (!keepPage && !hitlPreventDispose) {"
+      },
+      "owner_state": "tests-unit-surface",
+      "pin": {
+        "file": "src/test/unit/surface/consumer-cleanup.spec.ts",
+        "test": "disposes the isolated context in a finally"
+      },
+      "eval_refs": [
+        "F22"
+      ]
+    },
+    {
+      "id": "fs-196",
+      "feature": "Consumer cleanup: keepPage and a HITL outcome leave the context open (the human's captcha window must stay alive).",
+      "tags": [
+        "isolated-page-cleanup"
+      ],
+      "source": {
+        "file": "search-mcp-source.ts",
+        "line": 365,
+        "anchor": "hitlPreventDispose = true"
+      },
+      "owner_state": "tests-unit-surface",
+      "pin": {
+        "file": "src/test/unit/surface/consumer-cleanup.spec.ts",
+        "test": "keepPage and hitl leave the context open"
+      },
+      "eval_refs": [
+        "F22"
+      ]
+    },
+    {
+      "id": "fs-197",
+      "feature": "Consumer cleanup: when allocation succeeded but the inner try never ran (page.connect threw), the outer catch disposes the context so no tab leaks.",
+      "tags": [
+        "isolated-page-cleanup"
+      ],
+      "source": {
+        "file": "search-mcp-source.ts",
+        "line": 380,
+        "anchor": "if (ctx && !ctxDisposed) {"
+      },
+      "owner_state": "tests-unit-surface",
+      "pin": {
+        "file": "src/test/unit/surface/consumer-cleanup.spec.ts",
+        "test": "the outer catch disposes a leaked context"
+      },
+      "eval_refs": [
+        "F22"
+      ]
+    },
+    {
+      "id": "fs-198",
+      "feature": "Soft Chrome shutdown on a crash: uncaughtException and unhandledRejection run the soft shutdown once, then exit code 1.",
+      "tags": [
+        "idle-shutdown"
+      ],
+      "source": {
+        "file": "server.mjs",
+        "line": 155,
+        "anchor": "process.on('uncaughtException'"
+      },
+      "owner_state": "tests-unit-surface",
+      "pin": {
+        "file": "src/test/unit/surface/exit-hooks.spec.ts",
+        "test": "an uncaught exception runs the soft shutdown once"
+      },
+      "eval_refs": [
+        "F23"
+      ]
+    },
+    {
+      "id": "fs-199",
+      "feature": "The exit sequence runs only once even when several fatal events arrive.",
+      "tags": [
+        "idle-shutdown"
+      ],
+      "source": {
+        "file": "server.mjs",
+        "line": 147,
+        "anchor": "if (chromeExitStarted) return"
+      },
+      "owner_state": "tests-unit-surface",
+      "pin": {
+        "file": "src/test/unit/surface/exit-hooks.spec.ts",
+        "test": "runs the exit sequence only once"
+      },
+      "eval_refs": [
+        "F23"
+      ]
+    },
+    {
+      "id": "fs-200",
+      "feature": "SIGINT and SIGTERM trigger the soft Chrome shutdown, abort the server and are bounded by a 5 s force-exit deadline.",
+      "tags": [
+        "idle-shutdown"
+      ],
+      "source": {
+        "file": "server.mjs",
+        "line": 188,
+        "anchor": "process.on('SIGTERM', () => shutdown('SIGTERM'))"
+      },
+      "owner_state": "tests-unit-surface",
+      "pin": {
+        "file": "src/test/unit/surface/exit-hooks.spec.ts",
+        "test": "signals run the soft shutdown within five seconds"
+      },
+      "eval_refs": [
+        "F23"
+      ]
+    },
+    {
+      "id": "fs-201",
+      "feature": "The shutdown deadline: if shutdown exceeds 5 s the process force-exits with code 1.",
+      "tags": [
+        "idle-shutdown"
+      ],
+      "source": {
+        "file": "server.mjs",
+        "line": 174,
+        "anchor": "shutdown exceeded deadline after"
+      },
+      "owner_state": "tests-unit-surface",
+      "pin": {
+        "file": "src/test/unit/surface/exit-hooks.spec.ts",
+        "test": "forces exit when shutdown exceeds five seconds"
+      },
+      "eval_refs": [
+        "F23"
+      ]
+    },
+    {
+      "id": "fs-202",
+      "feature": "Orphan detection (stdio): stdin end/close means the client is gone, so after a 1 s grace the bounded shutdown runs; skipped on a TTY.",
+      "tags": [
+        "idle-shutdown"
+      ],
+      "source": {
+        "file": "server.mjs",
+        "line": 208,
+        "anchor": "process.stdin.on('end', onStdinEnd)"
+      },
+      "owner_state": "tests-unit-surface",
+      "pin": {
+        "file": "src/test/unit/surface/exit-hooks.spec.ts",
+        "test": "stdin end triggers the shutdown"
+      },
+      "eval_refs": [
+        "F23"
+      ]
+    },
+    {
+      "id": "fs-203",
+      "feature": "A fatal main() rejection takes the same graceful exit path.",
+      "tags": [
+        "idle-shutdown"
+      ],
+      "source": {
+        "file": "server.mjs",
+        "line": 241,
+        "anchor": "main().catch((err) => gracefulChromeExit(1, 'fatal', err))"
+      },
+      "owner_state": "tests-unit-surface",
+      "pin": {
+        "file": "src/test/unit/surface/exit-hooks.spec.ts",
+        "test": "a fatal main rejection exits gracefully"
+      },
+      "eval_refs": [
+        "F23"
+      ]
+    },
+    {
+      "id": "fs-204",
+      "feature": "CLI delayed reaper: after a search, --idle-shutdown <ms> (default 120000) spawns a detached process that closes Chrome after N ms so the CLI exits immediately.",
+      "tags": [
+        "reaper"
+      ],
+      "source": {
+        "file": "cdp-search.ts",
+        "line": 86,
+        "anchor": "--idle-shutdown <ms>"
+      },
+      "owner_state": "chrome-lifecycle",
+      "pin": {
+        "file": "src/test/unit/lifecycle/reaper.spec.ts",
+        "test": "a detached reaper closes Chrome after the idle delay"
+      },
+      "eval_refs": [
+        "F24"
+      ]
+    },
+    {
+      "id": "fs-205",
+      "feature": "--keep-alive opts out of the delayed reaper.",
+      "tags": [
+        "reaper"
+      ],
+      "source": {
+        "file": "cdp-search.ts",
+        "line": 85,
+        "anchor": "--keep-alive"
+      },
+      "owner_state": "chrome-lifecycle",
+      "pin": {
+        "file": "src/test/unit/lifecycle/reaper.spec.ts",
+        "test": "keep-alive disables the delayed reaper"
+      },
+      "eval_refs": [
+        "F24"
+      ]
+    },
+    {
+      "id": "fs-206",
+      "feature": "The reaper is a detached, unref'd child with ignored stdio that outlives the CLI.",
+      "tags": [
+        "reaper"
+      ],
+      "source": {
+        "file": "cdp-search.ts",
+        "line": 600,
+        "anchor": "const killer = spawn(process.execPath"
+      },
+      "owner_state": "chrome-lifecycle",
+      "pin": {
+        "file": "src/test/unit/lifecycle/reaper.spec.ts",
+        "test": "the reaper outlives the CLI"
+      },
+      "eval_refs": [
+        "F24"
+      ]
+    },
+    {
+      "id": "fs-207",
+      "feature": "The reaper's kill targets the TCP listener of the CDP port with SIGTERM.",
+      "tags": [
+        "reaper"
+      ],
+      "source": {
+        "file": "cdp-search.ts",
+        "line": 604,
+        "anchor": "lsof -ti tcp:${port}"
+      },
+      "owner_state": "chrome-lifecycle",
+      "pin": {
+        "file": "src/test/unit/lifecycle/reaper.spec.ts",
+        "test": "the reaper signals the port occupant"
+      },
+      "eval_refs": [
+        "F24",
+        "F19"
+      ]
+    },
+    {
+      "id": "fs-208",
+      "feature": "Sibling-instance diagnostic: warn loudly when MAX_SIBLINGS (default 4) or more sibling servers are alive; it only warns and never kills.",
+      "tags": [
+        "cross-process"
+      ],
+      "source": {
+        "file": "server.mjs",
+        "line": 118,
+        "anchor": "if (siblings.length >= MAX_SIBLINGS) {"
+      },
+      "owner_state": "chrome-lifecycle",
+      "pin": {
+        "file": "src/test/unit/lifecycle/reaper.spec.ts",
+        "test": "warns about many sibling instances without killing"
+      },
+      "eval_refs": [
+        "F25"
+      ]
+    },
+    {
+      "id": "fs-209",
+      "feature": "The pid registry drops dead pids, adds the live process, and removes it on exit; registry I/O is best effort.",
+      "tags": [
+        "cross-process"
+      ],
+      "source": {
+        "file": "server.mjs",
+        "line": 113,
+        "anchor": "try { process.kill(pid, 0); alive.add(pid) } catch { /* dead */ }"
+      },
+      "owner_state": "chrome-lifecycle",
+      "pin": {
+        "file": "src/test/unit/lifecycle/reaper.spec.ts",
+        "test": "maintains the live instance registry"
+      },
+      "eval_refs": [
+        "F25",
+        "F26"
+      ]
+    }
+  ]
+}
