@@ -75,6 +75,30 @@ describe('8468f7b1 AC2 [tests-unit-data.1] checkChromeActivity', () => {
     expect(r.recentlyUsed).toBe(false)
   })
 
+  it('[fs-183] tolerates unreachable CDP and unavailable history', async () => {
+    fake.pagesError = new Error('ECONNREFUSED')
+    fake.visitError = new Error('database is locked')
+    const r = await checkChromeActivity('h:1')
+    expect(r).toMatchObject({ activePages: 0, pageTargets: [], lastVisit: null, recentlyUsed: false })
+    expect(warn).toHaveBeenCalledTimes(2)
+    expect(warn).toHaveBeenCalledWith('[activity] CDP unreachable:', 'ECONNREFUSED')
+    expect(warn).toHaveBeenCalledWith('[activity] history unavailable:', 'database is locked')
+  })
+
+  it('[fs-184] reports activity within the recency window', async () => {
+    fake.pages = [{ targetId: 'A', url: 'https://a.test' }, { targetId: 'B', url: 'https://b.test' }]
+    fake.lastVisit = { visitTime: new Date(NOW.getTime() - 90_000) }
+    const r = await checkChromeActivity('h:9', 2)
+    expect(r.activePages).toBe(2)
+    expect(r.pageTargets).toEqual(['A', 'B'])
+    expect(r.recentlyUsed).toBe(true)
+    expect(r.lastVisit).toBe(fake.lastVisit)
+    expect(r.meta).toMatchObject({ cdpHost: 'h:9', profileDir: '/tmp/fake-profile', checkedAt: NOW.toISOString() })
+    // default window is 2 minutes; 3 minutes ago is outside it
+    fake.lastVisit = { visitTime: new Date(NOW.getTime() - 180_000) }
+    expect((await checkChromeActivity('h:9')).recentlyUsed).toBe(false)
+  })
+
   it('degrades to zero pages and warns when CDP is unreachable (error path)', async () => {
     fake.pagesError = new Error('ECONNREFUSED')
     const r = await checkChromeActivity('h:1')

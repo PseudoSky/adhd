@@ -56,6 +56,35 @@ describe('8468f7b1 AC2 [tests-unit-data.1] BookmarkClient', () => {
     expect(c.searchBookmarks('zzz-no-match')).toEqual([])
   })
 
+  it('[fs-173] parses bookmark roots', () => {
+    fx.json('Bookmarks', {
+      roots: {
+        bookmark_bar: { id: '1', name: 'Bar', type: 'folder', date_added: '13000000000000000', date_modified: '13000000001000000', children: [
+          { id: '2', name: 'Link', type: 'url', url: 'https://l.test' },
+        ] },
+        other: { id: '3', name: 'Other', type: 'folder', children: [] },
+        synced: { id: '4', name: 'Mobile', type: 'folder', children: [] },
+        managed: { id: '5', name: 'Managed', type: 'folder', children: [] },
+        sync_transaction_version: '7',
+      },
+    })
+    const nodes = new BookmarkClient(fx.root).getBookmarks()
+    expect(nodes.map((n) => n.name)).toEqual(['Bar', 'Other', 'Mobile', 'Managed'])
+    expect(nodes[0].type).toBe('folder')
+    expect(nodes[0].children?.[0]).toMatchObject({ type: 'url', url: 'https://l.test' })
+    expect(nodes[0].dateModified).toEqual(new Date(13_000_000_001_000))
+    fx.raw('Bookmarks', 'not json')
+    expect(new BookmarkClient(fx.root).getBookmarks()).toEqual([])
+  })
+
+  it('[fs-174] searches bookmarks with folder paths', () => {
+    const c = new BookmarkClient(fx.root)
+    expect(c.searchBookmarks('bEtA')).toEqual([{ name: 'Beta', url: 'https://beta.test', path: 'Bar > Sub' }])
+    expect(c.searchBookmarks('ALPHA.TEST/DOCS')).toEqual([{ name: 'Alpha Docs', url: 'https://alpha.test/docs', path: 'Bar' }])
+    expect(c.searchBookmarks('Sub')).toEqual([]) // folders themselves are not results
+    expect(c.searchBookmarks('')).toEqual([])
+  })
+
   it('returns [] when the Bookmarks file is missing (error path)', () => {
     const empty = makeProfile()
     try { expect(new BookmarkClient(empty.root).getBookmarks()).toEqual([]) } finally { empty.cleanup() }

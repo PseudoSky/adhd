@@ -123,6 +123,55 @@ describe('8468f7b1 AC2 [tests-unit-data.1] ProfileClient', () => {
     expect(new ProfileClient(fx.root).hasSavedCredentials()).toBe(false)
   })
 
+  it('[fs-170] reads profile data and degrades to empty', () => {
+    // a fresh profile with none of the files present: the tolerant readers degrade, never throw
+    const c = new ProfileClient(fx.root)
+    expect(c.getPreference('anything')).toBeUndefined()
+    expect(c.getExtensionIds()).toEqual([])
+    expect(c.hasSavedCredentials()).toBe(false)
+    expect(c.getOpenTabs()).toEqual([])
+    // populate: limit-100 autofill, search engines, extensions, preferences
+    const web = fx.db('Web Data', [
+      'CREATE TABLE autofill (name TEXT, value TEXT, count INTEGER, date_last_used INTEGER)',
+      'CREATE TABLE keywords (short_name TEXT, keyword TEXT, url TEXT)',
+    ])
+    const ins = web.prepare('INSERT INTO autofill VALUES (?,?,?,?)')
+    for (let i = 0; i < 130; i++) ins.run(`n${i}`, 'v', 1, i)
+    web.close()
+    expect(c.getAutofillData()).toHaveLength(100)
+    expect(c.getAutofillData()[0].name).toBe('n129') // newest first
+    expect(c.getSearchEngines()).toEqual([])
+    mkdirSync(join(fx.defaultDir, 'Extensions', 'ext1'), { recursive: true })
+    expect(c.getExtensionIds()).toEqual(['ext1'])
+    fx.json('Preferences', { a: { b: 1 } })
+    expect(c.getPreference<number>('a.b')).toBe(1)
+    // a missing database surfaces from the db-backed readers rather than returning silent garbage
+    expect(() => c.getTopSites()).toThrow()
+    expect(() => c.getFaviconData('https://a.test/')).toThrow()
+  })
+
+  it('[fs-171] getPreference resolves dot paths', () => {
+    fx.json('Preferences', { a: { b: { c: 'deep' }, list: [1, 2] }, flat: 0 })
+    const c = new ProfileClient(fx.root)
+    expect(c.getPreference<string>('a.b.c')).toBe('deep')
+    expect(c.getPreference<number>('flat')).toBe(0) // falsy values are returned
+    expect(c.getPreference('a.b')).toEqual({ c: 'deep' })
+    expect(c.getPreference('a.zzz.c')).toBeUndefined()
+    fx.raw('Preferences', '{broken')
+    expect(c.getPreference('a.b.c')).toBeUndefined()
+  })
+
+  it('[fs-172] counts saved credentials without reading them', () => {
+    const d = fx.db('Login Data', ['CREATE TABLE logins (origin_url TEXT, password_value BLOB)'])
+    d.prepare('INSERT INTO logins VALUES (?,?)').run('https://a.test', new Uint8Array([9, 9]))
+    d.close()
+    const c = new ProfileClient(fx.root)
+    expect(c.hasSavedCredentials()).toBe(true)
+    expect(typeof c.hasSavedCredentials()).toBe('boolean') // no credential material is exposed
+    fx.raw('Login Data', 'corrupt, not sqlite')
+    expect(c.hasSavedCredentials()).toBe(false) // failure means false
+  })
+
   it('fixture timestamps helper round-trips (sanity)', () => {
     expect(chromeMicros(0)).toBe(11644473600 * 1_000_000)
   })

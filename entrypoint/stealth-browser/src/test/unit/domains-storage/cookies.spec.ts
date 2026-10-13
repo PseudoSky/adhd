@@ -56,6 +56,23 @@ describe('8468f7b1 AC2 [tests-unit-data.1] CookieClient', () => {
     expect(rows[0].name).toBe('sid')
   })
 
+  it('[fs-168] reads cookies with host filter and limit', () => {
+    const w = fx.db('Cookies', [])
+    const ins = w.prepare('INSERT INTO cookies VALUES (?,?,?,?,?,?,?,?,?,?,?,?)')
+    for (let i = 0; i < 210; i++) ins.run(`bulk${i}`, 'v', 'bulk.test', '/', chromeMicros(1), chromeMicros(10_000 + i), 0, 0, 0, 0, 0, 0)
+    w.close()
+    const c = new CookieClient(fx.root)
+    const all = c.getCookies()
+    expect(all).toHaveLength(200) // hard cap
+    expect(all[0].name).toBe('bulk209') // newest access first
+    expect(c.getCookies('bulk.test')).toHaveLength(200)
+    expect(c.getCookies('a.test').map((x) => x.name)).toEqual(['sid'])
+    // secure / httpOnly / samesite / priority are mapped
+    expect(c.getCookies('a.test')[0]).toMatchObject({ isSecure: true, isHttpOnly: true, samesite: '1', priority: '1' })
+    expect(c.getCookies('b.test')[0]).toMatchObject({ isSecure: false, isHttpOnly: false })
+    expect(c.getCookies('absent.test')).toEqual([])
+  })
+
   it('throws when the Cookies database is missing (error path)', () => {
     const empty = makeProfile()
     try {

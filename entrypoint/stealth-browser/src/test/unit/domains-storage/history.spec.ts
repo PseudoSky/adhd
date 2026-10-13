@@ -4,6 +4,7 @@
  * SQLite fixture built in the OS temp dir; the real Chrome profile is never read.
  * Every test runs through the shipped read-only `readBigInts` opener (no opener mock).
  */
+import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { HistoryClient } from '../../../lib/storage/history.js'
@@ -160,6 +161,99 @@ describe('8468f7b1 AC2 [tests-unit-data.1] HistoryClient', () => {
       expect(e.visitId).toBeTypeOf('number')
     }
     expect(chain.map((e) => e.visitId)).toEqual([2, 1])
+  })
+
+  describe('feature pins (failsafe inventory) · 8468f7b1 AC tests-unit-data.6', () => {
+    const rw = (): ReturnType<Fixture['db']> => fx.db('History', [])
+
+    it('[fs-161] recent visits exclude subframe transitions', () => {
+      // A user browses: subframe, manual subframe, keyword-generated and unqualified visits are noise.
+      const w = rw()
+      const v = w.prepare('INSERT INTO visits VALUES (?,?,?,?,?,?,?)')
+      v.run(10, 1, chromeMicros(NOW - 10), 4 | 0x20000000, 0, 0, 0) // MANUAL_SUBFRAME
+      v.run(11, 1, chromeMicros(NOW - 9), 10 | 0x20000000, 0, 0, 0) // KEYWORD_GENERATED
+      v.run(12, 1, chromeMicros(NOW - 8), 0, 0, 0, 0) // qualifier bit missing
+      w.close()
+      const c = new HistoryClient(fx.root)
+      expect(c.getRecentVisits(50).map((x) => x.id)).toEqual([2, 1, 4]) // newest first, 3/10/11/12 filtered
+      expect(c.getRecentVisits(50).map((x) => x.transitionType)).not.toContain('AUTO_SUBFRAME')
+      expect(c.getLastVisit()?.id).toBe(2)
+      expect(c.getRecentVisits(1, 2).map((x) => x.id)).toEqual([4]) // paging
+    })
+
+    it('[fs-162] isRecentlyUsed honours the window and no visits', () => {
+      const c = new HistoryClient(fx.root)
+      expect(c.isRecentlyUsed()).toBe(true) // default 2 min window, last visit 100 s ago
+      expect(c.isRecentlyUsed(1)).toBe(false) // 100 s > 60 s
+      const w = rw()
+      w.exec('DELETE FROM visits')
+      w.close()
+      expect(c.isRecentlyUsed()).toBe(false)
+      expect(c.isRecentlyUsed(10_000)).toBe(false)
+    })
+
+    it('[fs-163] derives the history path from the profile', async () => {
+      const c = new HistoryClient(fx.root)
+      expect(c.path).toBe(join(fx.root, 'Default', 'History'))
+      expect(c.path.startsWith(fx.root)).toBe(true) // the injected profile, never the user's own
+      // each query opens and closes its own handle
+      const { DatabaseSync } = await import('node:sqlite')
+      const close = vi.spyOn(DatabaseSync.prototype, 'close')
+      try {
+        c.getLastVisit()
+        c.getUrlInfo(1)
+        c.searchUrls('a')
+        expect(close).toHaveBeenCalledTimes(3)
+      } finally { close.mockRestore() }
+    })
+
+    it('[fs-164] redirect chains stop at depth 32', () => {
+      const w = rw()
+      const v = w.prepare('INSERT INTO visits VALUES (?,?,?,?,?,?,?)')
+      v.run(100, 1, chromeMicros(NOW - 500), LINK, 0, 0, 0)
+      for (let i = 101; i <= 140; i++) v.run(i, 1, chromeMicros(NOW - 500 + i), LINK, i - 1, 0, 0)
+      w.close()
+      const chain = new HistoryClient(fx.root).getRedirectChain(140)
+      expect(chain).toHaveLength(33) // depth 0..32 inclusive, never the full 41-hop chain
+      expect(Math.max(...chain.map((e) => e.depth))).toBe(32)
+      expect(chain[0].visitId).toBe(140)
+      expect(chain[chain.length - 1]?.visitId).toBe(108)
+      expect(chain.map((e) => e.visitId)).not.toContain(100)
+    })
+
+    it('[fs-165] looks up urls by id url and search', () => {
+      const c = new HistoryClient(fx.root)
+      expect(c.getUrlInfo(1)?.url).toBe('https://a.test/')
+      expect(c.getUrlInfo('https://b.test/')?.id).toBe(2)
+      expect(c.getUrlInfo('https://b.test')).toBeNull() // exact match only
+      expect(c.searchUrls('Alp').map((u) => u.id)).toEqual([1]) // title LIKE
+      expect(c.searchUrls('frame.test').map((u) => u.id)).toEqual([3]) // url LIKE
+      expect(c.searchUrls('test').map((u) => u.id)).toEqual([3, 1, 2]) // last visit desc
+      expect(c.searchUrls('nothing-matches')).toEqual([])
+    })
+
+    it('[fs-166] aggregates visit statistics', () => {
+      const c = new HistoryClient(fx.root)
+      const stats = c.getVisitStats() // default 30 days
+      expect(stats).toHaveLength(1)
+      expect(stats[0]).toMatchObject({ visits: 3, uniqueUrls: 3 })
+      expect(stats[0].date).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+      expect(c.getVisitStats(60).reduce((n, s) => n + s.visits, 0)).toBe(4)
+      expect(c.getVisitStats(0)).toEqual([])
+      expect(c.getTransitionBreakdown()).toEqual({ LINK: 1, TYPED: 1, AUTO_SUBFRAME: 1 })
+    })
+
+    it('[fs-167] reads clusters terms and annotations', () => {
+      const c = new HistoryClient(fx.root)
+      expect(c.getSearchTermsForUrl('https://a.test/')).toEqual([{ term: 'Alpha Query', normalizedTerm: 'alpha query' }])
+      const clusters = c.getClusterData()
+      expect(clusters).toHaveLength(2)
+      expect(clusters[0].visits.map((x) => x.score)).toEqual([0.9, 0.4]) // ordered by score
+      expect(clusters[0].visits.every((x) => x.url.startsWith('https://'))).toBe(true)
+      expect(c.getContentAnnotations(2)).not.toBeNull()
+      expect(c.getContextAnnotations(2)).not.toBeNull()
+      expect(c.getContentAnnotations(777)).toBeNull()
+    })
   })
 
   it('throws when the History database is missing (error path)', () => {

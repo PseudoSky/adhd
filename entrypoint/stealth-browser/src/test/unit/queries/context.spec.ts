@@ -43,6 +43,23 @@ describe('8468f7b1 AC2 [tests-unit-data.1] getPageContext', () => {
     expect(await getPageContext('T')).toBeNull()
   })
 
+  it('[fs-185] returns null for an unknown target', async () => {
+    fake.info = null
+    expect(await getPageContext('missing-target', 'h:1')).toBeNull()
+    expect(fake.asked).toEqual(['missing-target']) // history is never consulted
+  })
+
+  it('[fs-186] counts cookies and history visits for the page', async () => {
+    fake.cookies = [{ host: 'www.a.test' }, { host: 'x.www.a.test' }, { host: 'elsewhere.test' }]
+    fake.urlInfo = { visitCount: 3 }
+    expect(await getPageContext('T')).toMatchObject({ cookieCount: 2, hasHistory: true, historyVisits: 3 })
+    // each lookup is best effort: a failing cookie store does not hide the history facts
+    fake.cookieError = true
+    expect(await getPageContext('T')).toMatchObject({ cookieCount: 0, hasHistory: true, historyVisits: 3 })
+    fake.historyError = true
+    expect(await getPageContext('T')).toMatchObject({ cookieCount: 0, hasHistory: false, historyVisits: 0 })
+  })
+
   it('returns null when the target has no url (error path)', async () => {
     fake.info = { targetId: 'T', url: '', title: '' }
     expect(await getPageContext('T')).toBeNull()

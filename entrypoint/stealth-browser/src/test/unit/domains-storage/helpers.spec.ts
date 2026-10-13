@@ -20,7 +20,45 @@ vi.mock('node:sqlite', () => ({
   },
 }))
 
+vi.mock('node:os', () => ({ homedir: () => '/fake/home' }))
+
 import { openDb, toUnixTimeSql } from '../../../lib/storage/helpers.js'
+import { chromeProfileDir, chromeTimeToDate, hydrateVisit, notYet, transitionName, type VisitRow } from '../../../lib/helpers.js'
+
+describe('8468f7b1 AC2 [tests-unit-data.6] lib/helpers feature pins', () => {
+  it('[fs-175] maps transitions and hydrates visits', () => {
+    expect(transitionName(0)).toBe('LINK')
+    expect(transitionName(1)).toBe('TYPED')
+    expect(transitionName(0x20000000 | 3)).toBe('AUTO_SUBFRAME') // qualifier bits ignored
+    expect(transitionName(99)).toBe('UNKNOWN(99)') // unknown codes labelled
+    expect(chromeProfileDir().startsWith('/fake/home/')).toBe(true)
+    expect(chromeProfileDir().endsWith('/Google/Chrome-CDP')).toBe(true) // dedicated profile, never the default Chrome dir
+    expect(chromeTimeToDate(11644473600 * 1_000_000).getTime()).toBe(0)
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    try {
+      notYet('someRead')
+      expect(warn).toHaveBeenCalledWith('[cdp-query] someRead is not yet implemented')
+    } finally { warn.mockRestore() }
+    const v = hydrateVisit({
+      id: BigInt(5), url_id: BigInt(2), url: 'https://a.test/', title: 'A', visit_time_unix: BigInt(1_800_000_000),
+      transition: BigInt(1 | 0x20000000), from_visit: BigInt(4), visit_duration: BigInt(2_000_000), opener_visit: BigInt(0),
+    })
+    expect(v).toMatchObject({ id: 5, urlId: 2, transitionType: 'TYPED', fromVisitId: 4, openerVisitId: 0, url: 'https://a.test/' })
+  })
+
+  it('[fs-176] hydrateVisit converts durations and dates', () => {
+    const row: VisitRow = {
+      id: 1, url_id: 1, url: 'u', title: 't', visit_time_unix: 1_700_000_000, transition: 0,
+      from_visit: 0, visit_duration: 1_500_400, opener_visit: 0,
+    }
+    const v = hydrateVisit(row)
+    expect(v.visitDurationMs).toBe(1500) // microseconds -> rounded milliseconds
+    expect(v.visitTimeUnix).toBe(1_700_000_000)
+    expect(v.visitTime.getTime()).toBe(1_700_000_000_000) // unix seconds -> Date
+    expect(typeof v.visitDurationMs).toBe('number')
+    expect(hydrateVisit({ ...row, visit_duration: 0 }).visitDurationMs).toBe(0)
+  })
+})
 
 describe('8468f7b1 AC2 [tests-unit-data.1] storage helpers', () => {
   beforeEach(() => { sqlite.uris.length = 0; sqlite.exec.mockReset(); sqlite.fail = false })
