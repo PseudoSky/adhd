@@ -81,10 +81,10 @@
       "end_ref": "80e30ef13e7f59bee88f432525e8a3b1e05c9757"
     },
     "surface-api": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-10-13T00:18:26.591Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "88a7f6a41f6c9a7a7f8749578563a63a744a0c0f",
       "end_ref": null
     },
     "surface-hosts": {
@@ -537,7 +537,7 @@
     "version": "0.8.35",
     "hash": "0b6bc1f3d70e"
   },
-  "current_state": "cdp-test-harness",
+  "current_state": "surface-api",
   "dod_provenance": {
     "confirmed_at": "2026-10-12T23:49:38.410Z",
     "by": "pseudosky",
