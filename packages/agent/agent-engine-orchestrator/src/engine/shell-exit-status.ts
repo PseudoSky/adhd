@@ -10,9 +10,11 @@
  * `isError` (a non-zero exit is not a fault: `grep` no-match, `diff`) and never
  * alters the model-visible text.
  *
- * The sentinel is mirrored, not imported: the engine does not depend on
- * native-tooling. `SHELL_EXIT_SENTINEL_RE` there and here are pinned equal by a
- * contract test in agent-mcp (which depends on both).
+ * The sentinel is mirrored here rather than imported, so this parser stays a
+ * self-contained pure function: the engine does depend on native-tooling (the
+ * default shell allowlist behind `native-tool-guidance.ts`), but not for this
+ * regex. `SHELL_EXIT_SENTINEL_RE` there and here are pinned equal by a contract
+ * test in agent-mcp (which depends on both).
  */
 
 /** The shell server's single tool name (its `listTools` surface). */

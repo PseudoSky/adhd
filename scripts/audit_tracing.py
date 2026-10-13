@@ -64,9 +64,9 @@ CONDITIONAL_PATHS = (
     "agent.provider.recovered",
     "agent.budget.warning",
     "agent.budget.block",
-    # R10 trace signals: startup is emitted by the engine once per task, a dispatch only when a task
-    # tool call completes, and delivery only by background auto-delivery (no emitter yet).
-    "agent.task.startup",
+    # R10 trace signals: a dispatch only when a task tool call completes, and delivery only by
+    # background auto-delivery (no emitter yet). `agent.task.startup` is NOT here: the engine emits it
+    # exactly once per task, so every traced run has one and a run without it is a regression.
     "agent.dispatch",
     "agent.background.delivered",
 )
