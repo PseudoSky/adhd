@@ -788,6 +788,26 @@
       ],
       "context": "contexts/core-scaffold.md",
       "notes": "typescript-pro sonnet/high; generator-built core library @adhd/stealth-core-browser, serialized rename owner"
+    },
+    "core-seam": {
+      "kind": "work",
+      "phase": "migrate",
+      "depends_on": [
+        "core-scaffold",
+        "chrome-lifecycle",
+        "sp-link"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py core-seam",
+      "artifacts": [
+        "packages/stealth/stealth-core-browser/src/lib/managers.ts",
+        "packages/stealth/stealth-core-browser/src/lib/chrome-manager.ts",
+        "packages/stealth/stealth-core-browser/src/lib/lifecycle/index.ts",
+        "packages/stealth/stealth-core-browser/src/index.ts",
+        "packages/stealth/stealth-core-browser/src/api.ts",
+        "packages/stealth/stealth-core-browser/src/test/unit/seam/"
+      ],
+      "context": "contexts/core-seam.md",
+      "notes": "typescript-pro sonnet/high; manager seam (configureManagers/managerFor/chromeExitTarget) moved out of the retired surface-hosts"
     }
   },
   "authored_with": {
