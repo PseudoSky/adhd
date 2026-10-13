@@ -3,13 +3,16 @@ import { JSONRPCMessageSchema } from '@modelcontextprotocol/sdk/types.js';
 import type { JSONRPCMessage } from '@modelcontextprotocol/sdk/types.js';
 import type { IProcessHandle } from './process';
 
+/** Largest unterminated stdout line (in characters) accepted before the transport errors and closes. */
+const MAX_LINE_CHARS = 8 * 1024 * 1024;
+
 /** How long `close()` waits for a SIGTERMed process before SIGKILL. */
 const KILL_GRACE_MS = 2000;
 
 /**
  * An SDK `Transport` over an {@link IProcessHandle}: newline-delimited JSON-RPC in
  * both directions. `close()` ends stdin and kills the process (SIGKILL after a short
- * grace). Stderr is surfaced only to `options.onStderr` for diagnostics; it is never
+ * grace). An unterminated stdout line over 8 Mi characters errors and closes the transport. Stderr is surfaced only to `options.onStderr` for diagnostics; it is never
  * parsed as protocol.
  */
 export function createLauncherTransport(
@@ -22,6 +25,7 @@ export function createLauncherTransport(
   const transport: Transport = {
     async start() {
       handle.onStdout((chunk) => {
+        if (closed) return;
         buffer += chunk;
         for (let nl = buffer.indexOf('\n'); nl >= 0; nl = buffer.indexOf('\n')) {
           const line = buffer.slice(0, nl).replace(/\r$/, '');
@@ -32,6 +36,11 @@ export function createLauncherTransport(
           } catch (e) {
             transport.onerror?.(e instanceof Error ? e : new Error(String(e)));
           }
+        }
+        if (buffer.length > MAX_LINE_CHARS) {
+          buffer = '';
+          transport.onerror?.(new Error(`upstream wrote a line over ${MAX_LINE_CHARS} characters without a newline`));
+          void transport.close();
         }
       });
       handle.onStderr((chunk) => options.onStderr?.(chunk));

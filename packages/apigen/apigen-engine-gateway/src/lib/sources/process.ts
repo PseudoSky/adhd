@@ -40,7 +40,40 @@ function bufferedChannel(): { push(chunk: string): void; subscribe(cb: (chunk: s
   };
 }
 
-function wrap(child: ChildProcess): IProcessHandle {
+/**
+ * Environment variables a started process inherits by default. Everything else in the
+ * parent environment (tokens, cloud credentials, ...) is withheld; a caller that needs
+ * more passes it through `spec.env`.
+ */
+const INHERITED_ENV = ['PATH', 'HOME', 'USER', 'LANG', 'LC_ALL', 'TMPDIR', 'TERM', 'SHELL'] as const;
+
+function childEnvironment(spec: IProcessSpec): Record<string, string> {
+  const env: Record<string, string> = {};
+  for (const key of INHERITED_ENV) {
+    const value = process.env[key];
+    if (value !== undefined) env[key] = value;
+  }
+  return { ...env, ...spec.env };
+}
+
+/** Signal the child's whole process group when it leads one (POSIX `detached`), else just the child. */
+function signalTree(child: ChildProcess, grouped: boolean, signal: 'SIGTERM' | 'SIGKILL'): void {
+  if (grouped && child.pid !== undefined) {
+    try {
+      process.kill(-child.pid, signal);
+      return;
+    } catch {
+      // the group is already gone or not signalable; fall through to the direct kill
+    }
+  }
+  try {
+    child.kill(signal);
+  } catch {
+    // already exited
+  }
+}
+
+function wrap(child: ChildProcess, grouped: boolean): IProcessHandle {
   const out = bufferedChannel();
   const err = bufferedChannel();
   child.stdout?.setEncoding('utf8');
@@ -49,6 +82,8 @@ function wrap(child: ChildProcess): IProcessHandle {
   child.stderr?.on('data', (c: string) => err.push(c));
   // A child that exits before reading stdin raises EPIPE; the exit status already reports it.
   child.stdin?.on('error', () => undefined);
+  // Spawn succeeded; later 'error' events (a failed kill, a stream fault) must never be unhandled.
+  child.on('error', () => undefined);
   const exited = new Promise<{ code: number | null; signal: string | null }>((resolve) => {
     // 'close' (not 'exit') fires after the stdio streams are drained, so no output is lost.
     child.once('close', (code, signal) => resolve({ code, signal }));
@@ -65,26 +100,28 @@ function wrap(child: ChildProcess): IProcessHandle {
     onStdout: (cb) => out.subscribe(cb),
     onStderr: (cb) => err.subscribe(cb),
     exited,
-    kill: (signal = 'SIGTERM') => {
-      child.kill(signal);
-    },
+    kill: (signal = 'SIGTERM') => signalTree(child, grouped, signal),
   };
 }
 
 /**
- * Default launcher: `child_process.spawn` with `shell: false`, piped stdio and
- * `env = process.env` overlaid by `spec.env`. Rejects `SourceError('spawn-failed')`
- * when the process cannot be started (for example the command does not exist).
+ * Default launcher: `child_process.spawn` with `shell: false`, piped stdio and an
+ * allowlisted environment (`PATH HOME USER LANG LC_ALL TMPDIR TERM SHELL`) overlaid by
+ * `spec.env`. On POSIX the child leads its own process group and `kill` signals the whole
+ * group, so grandchildren die with it. Rejects `SourceError('spawn-failed')` when the
+ * process cannot be started (for example the command does not exist).
  */
 export const nodeProcessLauncher: IProcessLauncher = {
   start(spec) {
     return new Promise<IProcessHandle>((resolve, reject) => {
       let child: ChildProcess;
+      const grouped = process.platform !== 'win32';
       try {
         child = spawn(spec.command, [...spec.args], {
           cwd: spec.cwd,
-          env: { ...process.env, ...spec.env },
+          env: childEnvironment(spec),
           shell: false,
+          detached: grouped,
           stdio: ['pipe', 'pipe', 'pipe'],
         });
       } catch (e) {
@@ -94,7 +131,7 @@ export const nodeProcessLauncher: IProcessLauncher = {
       child.once('error', (e) =>
         reject(new SourceError('spawn-failed', `cannot start ${spec.command}: ${e.message}`))
       );
-      child.once('spawn', () => resolve(wrap(child)));
+      child.once('spawn', () => resolve(wrap(child, grouped)));
     });
   },
 };
