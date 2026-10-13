@@ -484,7 +484,8 @@
       ],
       "guard": "python3 docs/plan/stealth-browser/scripts/guard.py audit-fixes",
       "artifacts": [
-        "entrypoint/stealth-browser/",
+        "packages/stealth/stealth-core-browser/",
+        "entrypoint/stealth-search/",
         "/Users/nix/dev/node/adhd/.worktrees/stealth-browser/docs/plan/stealth-browser/review/PRE-REVIEW-RESOLUTION.json",
         "/Users/nix/dev/ai/scratch/agent-browser/adhd/",
         "/Users/nix/dev/ai/scratch/agent-browser/cdp-query-client.ts",
