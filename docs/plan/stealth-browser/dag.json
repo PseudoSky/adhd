@@ -358,7 +358,8 @@
       ],
       "guard": "python3 docs/plan/stealth-browser/scripts/guard.py readme-rewrite",
       "artifacts": [
-        "entrypoint/stealth-browser/README.md"
+        "packages/stealth/stealth-core-browser/README.md",
+        "entrypoint/stealth-search/README.md"
       ],
       "context": "contexts/readme-rewrite.md",
       "notes": "executor=content-marketer tier=sonnet/medium"

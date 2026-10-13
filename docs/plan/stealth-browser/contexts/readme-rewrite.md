@@ -1,70 +1,34 @@
-# readme-rewrite — WORK STATE
+# readme-rewrite — STATE_NAME
 
 **Phase:** docs · **Kind:** work · **Depends on:** docs-marketing-run · **Guard:** `python3 docs/plan/stealth-browser/scripts/guard.py readme-rewrite`
-**Executor:** `content-marketer` (sonnet/medium) · **Worktree:** `/Users/nix/dev/node/adhd/.worktrees/stealth-browser` on branch `stealth-browser` (shared by every state, [inv:shared-worktree], [inv:worktree-required], [inv:no-ai-attribution])
 
 ---
 
 ## Goal
 
-The README is rewritten to be exciting and honest: a sharp tagline, quickstart for library/CLI/MCP, features, surfaces, and receipts that resolve to shipped capabilities.
-
----
-
-## Semantic Distillation
-
-- **Primitive:** REWRITE `entrypoint/stealth-browser/README.md` (only).
-
-- **Reference Pattern:** `entrypoint/stealth-browser/docs/marketing/.catalog/capabilities.json`, `entrypoint/stealth-browser/docs/marketing/` (evangelist copy if present), `entrypoint/stealth-browser/package.json` (bin names, exports).
-
-- **Delta Spec:** Sections: title, one-line `>` tagline (<= 120 chars), Quickstart, Features, Surfaces (library/CLI/MCP), Receipts (`<!-- receipt:ID -->` markers, >= 5, each resolving to a `shipped` capability). No unverifiable superlatives (undetectable, unblockable, 100%, bypasses all, guaranteed). Import specifiers and bin names must exist. Productization (PRODUCT-REVIEW.md P8/P10), **no-overclaim brief:** the README defines "stealth" as exactly two concrete choices (no `--enable-automation`, no `Runtime.evaluate`), never as undetectable; it never uses the words undetectable, bypass, evade or anti-bot; it links `docs/RESPONSIBLE-USE.md`; and it states the stability policy (package is 0.x; only the six verbs and their types are stable, everything else is experimental; `@adhd/stealth-browser/legacy` is deprecated). This state is the later writer of README.md after `docs-marketing-run`: the overwrite is intentional, so carry forward the CONFIGURATION/OBSERVABILITY links that the earlier baseline added.
-
-- **Invariants:** Docs/README paths only ([inv:owned-paths-only]); no AI-attribution lines. Also: [inv:shared-worktree] (commit only your own explicit paths, tag every commit `[psm:readme-rewrite]`), [inv:owned-paths-only], [inv:no-main-writes].
-
-- **Validation:** `python3 docs/plan/stealth-browser/scripts/guard.py readme-rewrite` — runs every acceptance criterion below (red until the work is done); `--only readme-rewrite.N` runs one.
+<What is true after this state that was not true before?>
 
 ---
 
 ## Acceptance criteria
 
-Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/guard.py` (`python3 docs/plan/stealth-browser/scripts/guard.py readme-rewrite --only readme-rewrite.N`). None may be deferred. Tests written by this plan cite ticket `8468f7b1` and these ids ([inv:tests-cite]).
+<!-- Author criteria with `plan-scaffold.js add-criterion`. Each writes a
+     matching audit check ID so Check 3's ID-mirror holds. Do not hand-add
+     bare [slug.N] tokens here without a matching audit check. -->
 
-- [readme-rewrite.1] Only README.md changed by [psm:readme-rewrite] commits.
-- [readme-rewrite.2] README has a title, a tagline <= 120 chars, Quickstart, Features, Surfaces and Receipts sections and >= 2 fenced code blocks.
-- [readme-rewrite.3] Receipts: >= 5 `<!-- receipt:ID -->` markers and every ID resolves to a `shipped` entry in docs/marketing/.catalog/capabilities.json.
-- [readme-rewrite.4] Factual: no unverifiable superlatives (undetectable, unblockable, 100%, bypasses all, guaranteed); every `@adhd/stealth-browser` import specifier in code fences is a real package export.
-- [readme-rewrite.5] Relative links resolve and the install/quickstart commands name only bins declared in package.json.
-- [readme-rewrite.6] (PA8.2, PA8.4) README defines "stealth" as the two concrete choices (no --enable-automation, no Runtime.evaluate) and links docs/RESPONSIBLE-USE.md (the link resolves).
-- [readme-rewrite.7] (PA8.3) README.md contains none of the overclaim words undetectable, bypass, evade, anti-bot.
-- [readme-rewrite.8] (PA10.2, greenfield) README states the stability policy: the package is 0.x, the six verbs and their types are the stable surface, and the root namespaces (cdp, storage, capture, parsers, chromeManager) are experimental until 1.0.
-- [readme-rewrite.9] (user: implement the readme examples and genuine use cases) The README embeds or links EVERY examples/ file (path appears), includes at least six fenced `ts` blocks each of which is a snippet taken verbatim from an examples/ file, and links docs/ERRORS.md and docs/EXAMPLES.md.
+_No criteria yet._
 
 ---
 
 ## Reservations
 
 ```text
-read_only:  ["entrypoint/stealth-browser/docs/", "entrypoint/stealth-browser/package.json"]
-mutates:    ["entrypoint/stealth-browser/README.md"]
+read_only:  []
+mutates:    ["packages/stealth/stealth-core-browser/README.md", "entrypoint/stealth-search/README.md"]
 ```
-
----
-
-## Contract Promise
-
-Modified: `entrypoint/stealth-browser/README.md`.
-
----
-
-## Commit points
-
-Every plan-file write is committed (R1). Work-product commits for this state, always by explicit path, always tagged `[psm:readme-rewrite]`:
-
-- [ ] After the rewrite -- commit by explicit path: `docs(stealth-browser): exciting README [psm:readme-rewrite]`
-- [ ] **After the guard passes** (mandatory) — commit the source changes and the `state.json` update together by explicit path.
 
 ---
 
 ## Notes for executor
 
-- Excitement comes from concrete capability and receipts, not adjectives. Roadmap items must be labelled as such or omitted.
+executor=content-marketer tier=sonnet/medium
