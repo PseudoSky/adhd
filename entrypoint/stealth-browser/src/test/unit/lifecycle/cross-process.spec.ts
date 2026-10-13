@@ -3,11 +3,33 @@
  * mechanism (one held connection per client to the reaper host; no shared
  * heartbeat file). The FEATURE of each row is unchanged; the mechanism that
  * provides it is the host registry (`createReaperHost`).
- * Ticket 8468f7b1 · [chrome-lifecycle.5] [chrome-lifecycle.6] [chrome-lifecycle.16] ·
- * inventory [fs-012] [fs-013] [fs-014] [fs-015] [fs-016] [fs-019]
+ * Ticket 8468f7b1 · [chrome-lifecycle.5] [chrome-lifecycle.6] [chrome-lifecycle.16] [chrome-lifecycle.21] ·
+ * inventory [fs-012] [fs-013] [fs-014] [fs-015] [fs-016] [fs-017] [fs-018] [fs-019]
+ *
+ * The host-level rows call `createReaperHost` directly (host-fixture); the
+ * client-side rows (fs-017, fs-018) drive real ChromeManagers on the simulated
+ * machine (manager-world). No socket, no process, no real port.
  */
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+
+vi.mock('node:fs', async () => (await import('./manager-world.js')).fsModule())
+vi.mock('../../../lib/cdp/browser.js', async () => (await import('./manager-world.js')).browserModule(vi.fn))
+vi.mock('../../../lib/cdp/targets.js', async () => (await import('./manager-world.js')).targetsModule(vi.fn))
+vi.mock('@adhd/sox-service-proxy', async (orig) => (await import('./manager-world.js')).spModule(await orig<Record<string, unknown>>()))
+
 import { GRACE, IDLE, makeHost, resultOf } from './host-fixture.js'
+import { IDLE as CLIENT_IDLE, openPage, resetSp, resetWorld, world } from './manager-world.js'
+import { client, makeHub } from './manager-clients.js'
+
+beforeEach(() => {
+  resetWorld()
+  resetSp()
+})
+
+afterEach(() => {
+  vi.useRealTimers()
+  vi.restoreAllMocks()
+})
 
 describe('8468f7b1 [chrome-lifecycle.5] cross-process coordination through the reaper host', () => {
   it('defers while a live sibling was active within the window', async () => {
@@ -108,5 +130,53 @@ describe('8468f7b1 [chrome-lifecycle.6] livelock protection on the host tick', (
     expect(reapedAt).not.toBeNull()
     expect(reapedAt! - start).toBeLessThanOrEqual(IDLE + GRACE + 5_000)
     expect(reapedAt! - start).toBeGreaterThanOrEqual(IDLE)
+  })
+})
+
+describe('8468f7b1 [chrome-lifecycle.21] coordination is best effort on the client', () => {
+  it('coordination write failures never break a call', async () => {
+    // [fs-017] a link whose sends fail, a dial that never comes up and an unsafe state dir never fail bump()/ready().
+    vi.useFakeTimers()
+    const hub = makeHub()
+    const c = client(hub, 11)
+    await c.manager.ready()
+    c.link.broken = true // activity / release / reapIfIdle now throw inside the transport
+    expect(() => c.manager.bump()).not.toThrow()
+    await expect(c.manager.ready()).resolves.toBeUndefined()
+    await expect(c.manager.withBrowser(async () => 42)).resolves.toBe(42)
+    await expect(c.manager.release()).resolves.toBeUndefined()
+
+    resetWorld()
+    const down = makeHub()
+    down.available = false // the reaper cannot be started
+    const d = client(down, 22)
+    await expect(d.manager.ready()).resolves.toBeUndefined()
+    expect(() => d.manager.bump()).not.toThrow()
+
+    resetWorld()
+    world.dirUnsafe = true
+    const u = client(makeHub(), 33)
+    await expect(u.manager.ready()).resolves.toBeUndefined()
+    expect(() => u.manager.bump()).not.toThrow()
+  })
+
+  it('a deferring process does not advertise activity', async () => {
+    // [fs-018] livelock protection: A's idle fires keep deferring to an open page; A never sends
+    // `activity` for them and its lastActivityAt on the host never moves.
+    vi.useFakeTimers()
+    const hub = makeHub()
+    const a = client(hub, 11)
+    const b = client(hub, 22)
+    await a.manager.ready()
+    await b.manager.ready()
+    openPage('https://captcha.example/')
+    const sent = a.link.activityCalls
+    const stamp = hub.host!.clients().find((x) => x.pid === 11)!.lastActivityAt
+    await vi.advanceTimersByTimeAsync(CLIENT_IDLE * 5)
+    expect(a.link.reapCalls).toBe(5)
+    expect(a.link.activityCalls).toBe(sent)
+    expect(hub.host!.clients().find((x) => x.pid === 11)!.lastActivityAt).toBe(stamp)
+    // B, equally idle, is not kept alive by A's deferrals either: its stamp never moved.
+    expect(hub.host!.clients().find((x) => x.pid === 22)!.lastActivityAt).toBe(stamp)
   })
 })
