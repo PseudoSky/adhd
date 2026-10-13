@@ -196,3 +196,24 @@ export function startMainIndexRefresh(root) {
     return `gitnexus refresh not started: ${e.message}`;
   }
 }
+
+/**
+ * Wait (bounded) for a gitnexus analyze running inside `treePath` to finish. The PostToolUse
+ * hook starts one detached in the worktree, and it recreates the directory and its skill files
+ * if the worktree is removed underneath it. An absent or TTL-expired `.reindex.lock` is idle.
+ * @param {string} treePath worktree root
+ * @param {number} timeoutMs give up after this long
+ * @returns {boolean} true when no live analyze holds the lock
+ */
+export function waitForIndexIdle(treePath, timeoutMs) {
+  const lock = join(treePath, '.gitnexus', '.reindex.lock');
+  const deadline = Date.now() + timeoutMs;
+  const held = () => {
+    try { return Date.now() - statSync(lock).mtimeMs < REINDEX_LOCK_TTL_MS; } catch { return false; }
+  };
+  while (held()) {
+    if (Date.now() >= deadline) return false;
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 250);
+  }
+  return true;
+}

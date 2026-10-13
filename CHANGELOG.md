@@ -1,5 +1,18 @@
 ## Unreleased
 
+### Changed — worktrees start warm: shared Nx cache, gitnexus index inherited from main, refreshed after merge, unregistered on cleanup (2026-10-13)
+
+New worktrees used to start with an empty Nx cache and a cold gitnexus index (24-82s per analyze, a 4m22s scripts-only merge gate).
+
+- **Nx cache shared across checkouts.** `nx.json` no longer pins `cacheDirectory`, so Nx 23 shares its cache and project-graph DB per user under `~/.nx/<workspace-id>`. Do not set `cacheDirectory`, `NX_CACHE_DIRECTORY`, `NX_WORKSPACE_DATA_DIRECTORY` or `NX_PROJECT_GRAPH_CACHE_DIRECTORY`; any of them turns sharing off. The scripts-only merge gate went from 399 tasks / 4m22s to 126 tasks (124 cache hits) / 25s.
+- **`worktree-setup.sh` inherits main's gitnexus index** (APFS clone, ~0.1s) and registers it with `gitnexus index .`, only when main's index is at the worktree's HEAD and no `.gitnexus/.reindex.lock` is held; otherwise it runs `gitnexus analyze --index-only` in the background. `WORKTREE_SEED_GITNEXUS=0` disables it.
+- **`worktree-merge` refreshes main's index** after a successful push (detached `gitnexus analyze --skip-agents-md --skip-skills` under the shared reindex lock, never affecting the exit code). `WORKTREE_REFRESH_GITNEXUS=0` disables it.
+- **`worktree-cleanup` unregisters the index** (`gitnexus remove <path> --force`), matches worktrees by directory name, and waits (default 120s, `WORKTREE_CLEANUP_INDEX_WAIT_MS`) for a running analyze in the tree before removing it, keeping the tree if the lock is still held (backlog a380bd4f). A lock older than 10 minutes is treated as abandoned.
+
+**Files:** `nx.json`, `scripts/worktree-setup.sh`, `scripts/worktree-merge.mjs`, `scripts/worktree-cleanup.mjs`, `scripts/lib/worktree-lib.mjs`, `WORKTREE_POLICY.md`.
+
+**Tests:** `scripts/worktree-scripts.spec.mjs` (29 tests: copy-when-current, stale/locked fallbacks, refresh under lock, unregister, live-lock keeps the tree, abandoned lock does not block); each guard proven red by a negative control.
+
 ### Fixed — stale `pnpm-lock.yaml` after a release: `release:commit` relocks, and a gate fails on drift (2026-10-10)
 
 `pnpm release` bumped 14 package versions and their dependents' ranges without regenerating `pnpm-lock.yaml`, so the release commit (`7b85fa37`) failed `pnpm install --frozen-lockfile` (`ERR_PNPM_OUTDATED_LOCKFILE`) until `88b49bf3` relocked it by hand (backlog 4f26493e, e98bb455).

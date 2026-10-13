@@ -24,7 +24,7 @@
  * Exit: 0 everything requested removed; 3 something kept; 4 stale/invalid force token; 2 usage.
  */
 import { spawnSync } from 'node:child_process';
-import { digest, fingerprint, git, samePath, isManagedWorktreePath, listWorktrees, mainRoot, matchTarget, porcelainPaths } from './lib/worktree-lib.mjs';
+import { digest, fingerprint, git, samePath, isManagedWorktreePath, listWorktrees, mainRoot, matchTarget, porcelainPaths, waitForIndexIdle } from './lib/worktree-lib.mjs';
 
 const MAIN_BRANCH = 'main';
 
@@ -105,7 +105,10 @@ function main() {
   const doForce = args.force !== null;
   const toRemove = [...removable, ...(doForce ? forceable : [])];
   const removed = [];
+  const indexWaitMs = Number(process.env.WORKTREE_CLEANUP_INDEX_WAIT_MS ?? 120000);
   for (const t of toRemove) {
+    // A gitnexus analyze still running in the tree would recreate it (and its skill files) after removal.
+    if (!waitForIndexIdle(t.path, indexWaitMs)) { kept.push({ tree: t, why: 'a gitnexus analyze is still running in it (.gitnexus/.reindex.lock); re-run cleanup when it finishes' }); continue; }
     const rm = git(['worktree', 'remove', ...(doForce ? ['--force'] : []), t.path], { cwd: root });
     if (rm.status !== 0) { kept.push({ tree: t, why: `git refused: ${rm.stderr.split('\n')[0]}` }); continue; }
     const notes = [];
