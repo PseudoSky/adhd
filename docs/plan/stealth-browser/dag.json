@@ -1019,6 +1019,27 @@
       ],
       "context": "contexts/tracing-log-validation.md",
       "notes": "general-purpose sonnet/medium; ONE validating agent reads the logs written by the built CLI and MCP hosts, no tests"
+    },
+    "search-cutover": {
+      "kind": "work",
+      "phase": "verify",
+      "depends_on": [
+        "search-usecases",
+        "search-examples",
+        "tracing-log-validation",
+        "tripwire-pack"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py search-cutover",
+      "artifacts": [
+        "docs/plan/stealth-browser/evidence/cutover/",
+        "/Users/nix/dev/ai/scratch/agent-browser/",
+        "/Users/nix/dev/ai/scratch/bin/scratch-agent-search",
+        "/Users/nix/dev/ai/scratch/bin/scratch-agent-search-serve",
+        "/Users/nix/dev/ai/scratch/bin/scratch-agent-search-mcp-cli",
+        "/Users/nix/dev/ai/scratch/docs/GIT-POLICY.md"
+      ],
+      "context": "contexts/search-cutover.md",
+      "notes": "typescript-pro sonnet/high; three-package tarball proof and scratch agent-browser removal"
     }
   },
   "authored_with": {
