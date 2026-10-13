@@ -2,15 +2,25 @@
  * Ticket 8468f7b1 - the public surface of the single entry point: the
  * runtime exports are pinned exactly (Object.keys of the index module), the
  * spec's types are exported, no exported name is consumer-specific
- * (`provider`, `client`) and the package has no subpath export.
- * Criteria: [tripwire-core.24] TW30.
+ * (`provider`, `client`) and the package has no subpath export. The
+ * interactive and CLI surface (interactiveGate, confirmSolved,
+ * runUnlockCli, renderStatusText, statusJsonLine, nodeTripwireIo) and its
+ * option and io types close the section-3 list.
+ * Criteria: [tripwire-core.24] TW30, [tripwire-interactive.8] TW30 TW31.
  */
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import * as index from '../../index';
 import type {
   ClearMethod,
   ClearOptions,
+  ConfirmSolvedOptions,
+  HitlInfo,
+  InteractiveGateOptions,
+  NodeTripwireIoOptions,
+  TripwireIo,
+  UnlockCliOptions,
+  UnlockExitCode,
   FsPort,
   GateResult,
   JsonValue,
@@ -40,14 +50,20 @@ describe('[tripwire-core.24] TW30 public surface', () => {
       'TripwireKeyError',
       'TripwireTrippedError',
       'adhdDataDir',
+      'confirmSolved',
       'createFileStorage',
       'createMemoryFs',
       'createMemoryStorage',
       'createNodeFs',
       'createTripwire',
       'defaultRedactor',
+      'interactiveGate',
       'isTripwireError',
       'isTripwireTrippedError',
+      'nodeTripwireIo',
+      'renderStatusText',
+      'runUnlockCli',
+      'statusJsonLine',
     ]);
     expect(index.CONFIRM_TOKEN).toBe('I-UNDERSTAND-THE-RISK');
     for (const k of Object.keys(index) as Array<keyof typeof index>) {
@@ -104,6 +120,54 @@ describe('[tripwire-core.24] TW30 public surface', () => {
     expect(shapes).toBeUndefined();
     expect([v, opts, status, warning].length).toBe(4);
     expect(typeof tw.trip).toBe('function');
+  });
+
+  it('[tripwire-interactive.8] the interactive surface is exported and ' +
+    'typed', async () => {
+    for (const fn of [
+      index.interactiveGate,
+      index.confirmSolved,
+      index.runUnlockCli,
+      index.renderStatusText,
+      index.statusJsonLine,
+      index.nodeTripwireIo,
+    ]) {
+      expect(typeof fn).toBe('function');
+    }
+    const io: TripwireIo = {
+      isTTY: false,
+      env: {},
+      question: () => Promise.resolve(null),
+      out: () => undefined,
+      err: () => undefined,
+    };
+    const info: HitlInfo = { reason: 'captcha', query: 'q' };
+    const gateOpts: InteractiveGateOptions = { keyLabel: 'Key' };
+    const solvedOpts: ConfirmSolvedOptions = { actor: 'a' };
+    const cliOpts: UnlockCliOptions = { usage: 'Usage: x <key>' };
+    const nodeOpts: NodeTripwireIoOptions = { env: {}, isTTY: false };
+    const code: UnlockExitCode = await index.runUnlockCli([], io, index
+      .createTripwire({
+        namespace: 'n',
+        stateDir: '/s',
+        fs: index.createMemoryFs(),
+      }), cliOpts);
+    expect(code).toBe(1);
+    expect([info, gateOpts, solvedOpts, nodeOpts].length).toBe(4);
+    expect(index.renderStatusText({})).toBe('No tripwires tripped.');
+  });
+
+  it('[tripwire-interactive.8] TW31 only node-io.ts touches the process ' +
+    'streams or environment', () => {
+    const lib = join(PKG_ROOT, 'src', 'lib');
+    const banned =
+      /process\.(env|stdin|stdout|stderr)|child_process|\bconsole\./;
+    const offenders = readdirSync(lib)
+      .filter((f) => f.endsWith('.ts') && f !== 'node-io.ts')
+      .filter((f) => banned.test(readFileSync(join(lib, f), 'utf8')));
+    expect(offenders).toEqual([]);
+    expect(banned.test(readFileSync(join(lib, 'node-io.ts'), 'utf8')))
+      .toBe(true);
   });
 
   it('the package has no subpath export and a single CJS entry', () => {
