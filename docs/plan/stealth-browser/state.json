@@ -319,11 +319,11 @@
       "end_ref": "885d5aadde5744efd6391428ab69d9199e5765fa"
     },
     "tripwire-core": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-10-13T01:29:18.282Z",
-      "done_at": null,
+      "done_at": "2026-10-13T07:29:40.921Z",
       "start_ref": "d95264fcf7c22c71fa4338eb0150300a8b084d8e",
-      "end_ref": null
+      "end_ref": "c74257e451719f01761ce477b6a819636cfc0fdb"
     },
     "tripwire-interactive": {
       "status": "pending",
@@ -637,6 +637,18 @@
       "audit_criteria_total": 5,
       "by": "pseudosky",
       "note": "dep ~0.6.0 + root override to dev tarball (sha256 61d3ed54..., pnpm pack, 0.6.0); commit 4f7b0b4f; guard per-criterion PASS"
+    },
+    {
+      "ts": "2026-10-13T07:29:40.921Z",
+      "from": "sp-link",
+      "to": "tripwire-core",
+      "start_ref": "d95264fcf7c22c71fa4338eb0150300a8b084d8e",
+      "end_ref": "c74257e451719f01761ce477b6a819636cfc0fdb",
+      "audit_exit": 0,
+      "audit_criteria_passed": 32,
+      "audit_criteria_total": 32,
+      "by": "pseudosky",
+      "note": "guard 0 (32/32) verified by orchestrator; commits 49afcf7f 8e4e3dda c74257e4"
     }
   ],
   "amendment_log": [
@@ -1138,7 +1150,7 @@
     "version": "0.8.35",
     "hash": "0b6bc1f3d70e"
   },
-  "current_state": "sp-link",
+  "current_state": "tripwire-interactive",
   "dod_provenance": {
     "confirmed_at": "2026-10-12T23:49:38.410Z",
     "by": "pseudosky",

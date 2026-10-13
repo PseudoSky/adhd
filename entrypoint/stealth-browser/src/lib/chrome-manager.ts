@@ -11,9 +11,11 @@
  * can never pin Chrome, and the host outlives every client, so Chrome is never
  * orphaned. There is no shared activity file.
  *
- * Livelock protection: `bump()` is the ONLY sender of `activity`. Idle fire and
- * `shutdownIfIdle()` ask the host (`reapIfIdle`) and, on keep / wait, re-arm the
- * timer and send nothing — so idle processes cannot keep each other alive.
+ * Livelock protection: only genuine use of Chrome sends `activity` (`bump()`,
+ * which `withBrowser` calls, and `ready()`, through one private sender). Idle
+ * fire and `shutdownIfIdle()` ask the host (`reapIfIdle`) and, on keep / wait,
+ * re-arm the timer and send nothing — so idle processes cannot keep each other
+ * alive.
  *
  * Degraded mode (decision D1): when the reaper cannot be started (an unsafe
  * state directory, `ensureBackend` failing with E_UDS_DIR_UNSAFE, ...) `ready()`
@@ -228,7 +230,9 @@ export class ChromeManager {
     this.wire()
     if (this._ready) {
       if (await isChromeReachable(this.cdpHost)) {
+        // Fast path: no relaunch, no re-hide; this use of Chrome is genuine activity.
         await this.ensureLink()
+        this.sendActivity()
         return
       }
       this.log('stale _ready — Chrome no longer reachable (killed by another process?); relaunching')
@@ -267,19 +271,15 @@ export class ChromeManager {
     // We just had activity (a launch) — re-arm the idle window from now.
     this.idle?.reset()
     await this.ensureLink()
+    this.sendActivity()
   }
 
   /** Real work happened: re-arm the idle timer and tell the reaper. Call after every CDP operation. */
   bump(): void {
     if (!this.idle) return
     this.idle.reset()
-    const link = this.link
-    if (link?.isUp()) {
-      try {
-        link.activity()
-      } catch (e) {
-        this.log(`activity not sent: ${errorMessage(e)}`)
-      }
+    if (this.link?.isUp()) {
+      this.sendActivity()
       return
     }
     // The link is down: reconnect (rate-limited) if Chrome is reachable, then report this activity.
@@ -289,7 +289,7 @@ export class ChromeManager {
     void (async () => {
       try {
         if (!(await isChromeReachable(this.cdpHost))) return
-        if (await this.ensureLink()) this.link?.activity()
+        if (await this.ensureLink()) this.sendActivity()
       } catch (e) {
         this.log(`reconnect failed: ${errorMessage(e)}`)
       }
@@ -372,7 +372,23 @@ export class ChromeManager {
     }
   }
 
-  // ── Idle ───────────────────────────────────────────────────────────────────
+  // ── Activity and idle ──────────────────────────────────────────────────────
+
+  /**
+   * The ONE place `activity` is sent: genuine use of Chrome (`ready()`,
+   * `bump()`, `withBrowser`) only. No deferral, tick or soft reap ever reaches
+   * it (livelock protection). Fire-and-forget; never throws.
+   */
+  private sendActivity(): void {
+    const link = this.link
+    if (!link?.isUp()) return
+    try {
+      link.activity()
+    } catch (e) {
+      this.log(`activity not sent: ${errorMessage(e)}`)
+    }
+  }
+
 
   private startIdleTimer(): void {
     if (this.idle) return
