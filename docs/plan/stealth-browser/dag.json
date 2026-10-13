@@ -636,6 +636,7 @@
       "phase": "verify",
       "depends_on": [
         "chrome-lifecycle",
+        "core-seam",
         "tripwire-pack"
       ],
       "guard": "python3 docs/plan/stealth-browser/scripts/guard.py sp-switch",
