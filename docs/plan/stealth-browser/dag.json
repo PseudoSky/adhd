@@ -767,7 +767,8 @@
         "packages/resilience/resilience-core-tripwire/",
         "tsconfig.base.json",
         ".adhd/workspace.json",
-        "docs/plan/stealth-browser/evidence/tripwire/"
+        "docs/plan/stealth-browser/evidence/tripwire/",
+        "tools/nx-plugins/build/executors/typecheck-spec/resilience-core-tripwire.baseline.json"
       ],
       "context": "contexts/tripwire-scaffold.md",
       "notes": "executor=typescript-pro tier=sonnet/medium; second approved package @adhd/resilience-core-tripwire (APPROVAL-tripwire.md, D1 new resilience group) generated with the workspace generator (core, --name=tripwire --group=resilience), ADR-0003 CJS-only manifest, version 0.1.0, zero dependencies; anchored on port-fixes so it is never concurrent with the evidence/-tree owners"
