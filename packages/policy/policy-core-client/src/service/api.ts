@@ -56,7 +56,7 @@ async function layersOf(ctx: IPolicyCtx, override: ILayerInput[] | undefined): P
  * hashes, counts, declared attributes, every error and warning. A policy that
  * does not compile is reported with `ok: false`, not thrown.
  */
-export async function compile(ctx: IPolicyCtx, input: { layers?: ILayerInput[] }): Promise<ICompileSummary> {
+export async function compile(ctx: IPolicyCtx, input?: { layers?: ILayerInput[] }): Promise<ICompileSummary> {
   const layers = await layersOf(ctx, input?.layers);
   const result = core.compile(layers);
   if (!result.ok) {
@@ -91,13 +91,13 @@ export async function compile(ctx: IPolicyCtx, input: { layers?: ILayerInput[] }
  * host maps to a non-zero exit; a policy file that cannot be read or parsed
  * fails the call with `internal`, naming the file.
  */
-export async function verify(ctx: IPolicyCtx, input: { layers?: ILayerInput[] }): Promise<IVerifyReport> {
+export async function verify(ctx: IPolicyCtx, input?: { layers?: ILayerInput[] }): Promise<IVerifyReport> {
   const layers = await layersOf(ctx, input?.layers);
   return verifyLayers(layers, { hasRuntimeProvider: ctx.runtime !== undefined });
 }
 
 /** Applies the policy defaults to the supplied attributes and reports where each value came from. */
-export async function resolve(ctx: IPolicyCtx, input: { attributes?: Attributes }): Promise<IResolved> {
+export async function resolve(ctx: IPolicyCtx, input?: { attributes?: Attributes }): Promise<IResolved> {
   return core.resolve(await ctx.policy(), input?.attributes);
 }
 
@@ -193,7 +193,7 @@ export async function explain(ctx: IPolicyCtx, input: IEvaluateInput): Promise<I
 }
 
 /** Shows the effective policy: layer sources, effective attributes with provenance, and every permission. */
-export async function show(ctx: IPolicyCtx, input: { attributes?: Attributes }): Promise<IEffectivePolicy> {
+export async function show(ctx: IPolicyCtx, input?: { attributes?: Attributes }): Promise<IEffectivePolicy> {
   const layers = await ctx.layers();
   const policy = await ctx.policy();
   const resolved = core.resolve(policy, input?.attributes);
@@ -256,12 +256,15 @@ export async function doctor(ctx: IPolicyCtx): Promise<IDoctorReport> {
 /**
  * Drafts a starting policy from a plain-data operation list (D-09, D-16): one
  * permission per operation, secret-path denies, and `inferred` notes for every
- * guess. Ignores the ctx; the result always compiles.
+ * guess. Ignores the ctx (the parameter is named `ctx` because the apigen
+ * extractor recognises the injected context by that exact name; any other name
+ * would surface it as a command-line argument); the result always compiles.
  */
 export async function draft(
-  _ctx: IPolicyCtx,
+  ctx: IPolicyCtx,
   input: { operations: IDraftOperation[]; options?: IDraftOptions }
 ): Promise<IDraftPolicy> {
+  void ctx;
   if (input === null || typeof input !== 'object' || !Array.isArray(input.operations)) {
     throw new ApiError('invalid_argument', 'operations must be an array');
   }
