@@ -1231,6 +1231,17 @@
         "docs/plan/stealth-browser/contexts/tracing-namespace-proof.md"
       ],
       "by": "pseudosky"
+    },
+    {
+      "ts": "2026-10-13T09:28:21.911Z",
+      "state": "agent-search-cutover",
+      "class": "executor",
+      "type": "retire-state",
+      "reason": "split amendment: superseded by search-cutover (three-package tarball proof, search ported onto the entrypoint)",
+      "files_synced": [
+        "docs/plan/stealth-browser/contexts/agent-search-cutover.md"
+      ],
+      "by": "pseudosky"
     }
   ],
   "authored_with": {
