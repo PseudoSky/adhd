@@ -139,6 +139,28 @@
       "metadata": {
         "description": "Evidence tooling gate (backlog 65788fd8 D-AC4): drives check-suite-tree-state, commit-mine and audit-closed-items as real processes against throwaway git repos; each tool has a negative control (a broken copy must go red). Exit code gates. Invoked by the CI `main` job."
       }
+    },
+    "test": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "dependsOn": [],
+      "options": {
+        "command": "node --test scripts/worktree-scripts.spec.mjs",
+        "cwd": "."
+      },
+      "inputs": [
+        "{workspaceRoot}/scripts/**/*",
+        "{workspaceRoot}/tools/nx-plugins/lib/git-env.js",
+        {
+          "runtime": "git --version"
+        },
+        {
+          "runtime": "node --version"
+        }
+      ],
+      "metadata": {
+        "description": "Runs the worktree lifecycle scripts' spec (scripts/worktree-scripts.spec.mjs) against throwaway repos. It lives with the scripts, in this project, on purpose: a spec under tools/nx-plugins/build belongs to @adhd/nx-build, which nearly every project depends on, so touching it made `nx affected -t test` run ~66 projects (~4.5 min) for a scripts-only change."
+      }
     }
   }
 }
