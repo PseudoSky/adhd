@@ -270,10 +270,10 @@
       "end_ref": null
     },
     "cdp-test-harness": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-10-13T00:18:26.441Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "82ea6d2102d50e8659d29f798f025eca592d3501",
       "end_ref": null
     },
     "failsafe-inventory": {
@@ -537,7 +537,7 @@
     "version": "0.8.35",
     "hash": "0b6bc1f3d70e"
   },
-  "current_state": "surface-api",
+  "current_state": "cdp-test-harness",
   "dod_provenance": {
     "confirmed_at": "2026-10-12T23:49:38.410Z",
     "by": "pseudosky",
