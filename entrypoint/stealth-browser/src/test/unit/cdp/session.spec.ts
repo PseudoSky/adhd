@@ -98,6 +98,41 @@ describe('8468f7b1 AC2 [tests-unit-core.1] CdpSession.connect', () => {
   })
 })
 
+describe('8468f7b1 [port-fixes.4] [capture-upgrade.1] CdpSession.connect open deadline', () => {
+  it('rejects and closes the socket when it never opens within timeoutMs', async () => {
+    vi.useFakeTimers()
+    const session = new CdpSession()
+    const p = session.connect('ws://fake/hang', 10_000)
+    const settled = p.then(() => 'ok', (e: Error) => e.message)
+    await vi.advanceTimersByTimeAsync(9_999)
+    expect(lastSocket().closed).toBe(false)
+    await vi.advanceTimersByTimeAsync(1)
+    await expect(settled).resolves.toContain('open timeout')
+    expect(lastSocket().closed).toBe(true)
+    expect(session.connected).toBe(false)
+  })
+
+  it('does not fire the deadline once the socket has opened', async () => {
+    vi.useFakeTimers()
+    const session = new CdpSession()
+    const p = session.connect('ws://fake/ok', 10_000)
+    lastSocket().emit('open')
+    await p
+    await vi.advanceTimersByTimeAsync(20_000)
+    expect(session.connected).toBe(true)
+    expect(lastSocket().closed).toBe(false)
+  })
+
+  it('rejects when the socket closes before opening, and closes it', async () => {
+    const session = new CdpSession()
+    const p = session.connect('ws://fake/closed-early')
+    lastSocket().emit('close')
+    await expect(p).rejects.toThrow('WebSocket connection failed')
+    expect(lastSocket().closed).toBe(true)
+    expect(session.connected).toBe(false)
+  })
+})
+
 describe('8468f7b1 AC2 [tests-unit-core.1] CdpSession.send', () => {
   it('[fs-084] send rejects before the session is connected: rejects when not connected (negative)', async () => {
     const session = new CdpSession()
