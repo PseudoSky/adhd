@@ -116,10 +116,10 @@
       "end_ref": null
     },
     "tests-unit-extract": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-10-13T00:18:27.053Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "2ae08b7bd932e0ddbbaf7817300ff0bddf4ae86b",
       "end_ref": null
     },
     "tests-unit-surface": {
@@ -537,7 +537,7 @@
     "version": "0.8.35",
     "hash": "0b6bc1f3d70e"
   },
-  "current_state": "tests-unit-data",
+  "current_state": "tests-unit-extract",
   "dod_provenance": {
     "confirmed_at": "2026-10-12T23:49:38.410Z",
     "by": "pseudosky",
