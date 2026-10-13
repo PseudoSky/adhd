@@ -808,6 +808,24 @@
       ],
       "context": "contexts/core-seam.md",
       "notes": "typescript-pro sonnet/high; manager seam (configureManagers/managerFor/chromeExitTarget) moved out of the retired surface-hosts"
+    },
+    "search-scaffold": {
+      "kind": "work",
+      "phase": "scaffold",
+      "depends_on": [
+        "core-scaffold",
+        "tripwire-pack"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py search-scaffold",
+      "artifacts": [
+        "entrypoint/stealth-search/",
+        "tsconfig.base.json",
+        "pnpm-lock.yaml",
+        "tools/nx-plugins/build/executors/typecheck-spec/stealth-search.baseline.json",
+        "docs/plan/stealth-browser/evidence/split/"
+      ],
+      "context": "contexts/search-scaffold.md",
+      "notes": "typescript-pro sonnet/high; generator-built entrypoint @adhd/stealth-search with every dependency declared"
     }
   },
   "authored_with": {
