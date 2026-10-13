@@ -734,7 +734,7 @@ NS_RE = re.compile(r"export\s+\*\s+as\s+(\w+)\s+from\s+['\"]([^'\"]+)['\"]")
 
 # The five library areas the package root exposes as namespaces (ADR-0003: one root entry, no exports map) and where each lives.
 AREAS = {"cdp": "lib/cdp/index", "storage": "lib/storage/index", "capture": "lib/capture/index", "parsers": "lib/parsers", "chromeManager": "lib/chrome-manager"}
-# Namespaces the capture-upgrade and chrome-lifecycle states add; prod-errors wires them into the package root.
+# Namespaces the capture-upgrade and chrome-lifecycle states add; surface-hosts wires `lifecycle` and prod-errors `recording` into the package root.
 AREAS_EXTRA = {"recording": "lib/recording/index", "lifecycle": "lib/lifecycle/index"}
 AREAS_ALL = {**AREAS, **AREAS_EXTRA}
 # Names the agent-search consumer files need from each area (the ~10 deep-imported cdp-connection names plus the barrel names it re-exported).
@@ -3382,7 +3382,7 @@ def _sh15():
     sites = [os.path.relpath(f, P) for f in walk(f"{P}/src", (".ts",)) if "/src/test/" not in f and "new ChromeManager(" in code_lines(read(f))]
     seam = set(SEAM) <= exports_of(mg) and sites == ["src/lib/managers.ts"]
     routed = "managerFor" in api and re.search(r"from\s*['\"]\./lib/managers\.js['\"]", api) is not None and "process.env" not in api + mg
-    opts = re.search(r"keepAlive\?\s*:", cm) is not None and re.search(r"entryPath\?\s*:", cm) is not None and re.search(r"createProxyReaperLink\(\{[^}]*entryPath", cm, re.S) is not None
+    opts = re.search(r"keepAlive\?\s*:", cm) is not None and re.search(r"entryPath\?\s*:", cm) is not None and re.search(r"createProxyReaperLink\(\{.{0,1500}?\bentryPath\b", cm, re.S) is not None
     ns = dict(NS_RE.findall(read(f"{P}/src/index.ts")))
     barrel = re.search(r"from\s*['\"]\.\./managers\.js['\"]", read(f"{P}/src/lib/lifecycle/index.ts")) is not None
     wired = re.sub(r"\.js$", "", ns.get("lifecycle", "")) == "./lib/lifecycle/index" and barrel
