@@ -170,6 +170,6 @@ describe('8468f7b1 AC port-fixes [port-fixes.5] ChromeManager idle-shutdown defe
     await mgr.shutdownIfIdle()
     mgr.bump()
     expect(heartbeatPath.startsWith(tmpdir())).toBe(true)
-    expect(heartbeatPath).not.toBe('/tmp/stealth-browser-heartbeat')
+    expect(heartbeatPath).not.toBe(join('/tmp', 'stealth-browser-heartbeat')) // the live shared path
   })
 })
