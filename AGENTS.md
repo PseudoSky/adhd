@@ -342,6 +342,19 @@ This project is indexed by GitNexus as **adhd** (41761 symbols, 62687 relationsh
 
 <!-- gitnexus:end -->
 
+## Capabilities
+
+Concrete bindings for the capability names agents use; an absent row means the capability is unavailable here. The managed Routing and Gates blocks below carry the `role-routing` and `gate-runner` rows.
+
+| capability | tool | usage |
+|---|---|---|
+| backlog | adhd-backlog | `entrypoint/backlog/skill/SKILL.md` |
+| code-intel | gitnexus | the GitNexus section of this file |
+| test-gates | `tools/nx-plugins/test/gates/run-gates.mjs` | one command per lifecycle step, all reading the table `docs/standards/testing.md` (binding table) and `tools/nx-plugins/test/gates/gates.table.json`: author loop `npx nx test <project>`; QA run `node tools/nx-plugins/test/gates/run-gates.mjs --step C`; final run `node tools/nx-plugins/test/gates/run-gates.mjs --step D`; mainline `GATE_FULL=1 node tools/nx-plugins/test/gates/run-gates.mjs --step E` (CI, after merge); release `GATE_FULL=1 node tools/nx-plugins/test/gates/run-gates.mjs --step G` (the release flow) |
+| test-routing | `tools/nx-plugins/test/routing/test-routing.mjs` | `node tools/nx-plugins/test/routing/test-routing.mjs route --class <class> --scope <path>...` prints the derived rigor, triggers, authorship, playbook and gates (exit 0), and exits non-zero for an unknown class (65), an inconsistent class and scope (1), or a Deep change with no coordinator or test author (3); `check --range <base>..<head>` is gate G12 |
+
+The Testing block's own `test-routing` row names the harness playbook resolver (`/workspace-standards run testing`); the row above is this repository's routing and rigor command.
+
 <!-- workspace-standards:testing:begin -->
 ## Testing
 - Every change carries a testing record: class, derived rigor, triggers, not-testing list (`docs/standards/testing.md`).
@@ -366,3 +379,78 @@ This project is indexed by GitNexus as **adhd** (41761 symbols, 62687 relationsh
 | no-code | none | none |
 | test-maintenance | standard | maintain |
 <!-- workspace-standards:testing:end -->
+
+<!-- workspace-standards:routing:begin -->
+## Routing
+This table wins over the dispatcher's own default rows: for every task it names, the agent in its agent column takes the work. The dispatcher's rows apply only to tasks this table does not name.
+
+### Task-to-agent routing
+| task | standard | role | agent |
+|---|---|---|---|
+| new-behavior | testing | test-author | _unbound_ |
+| defect-fix | testing | test-author | _unbound_ |
+| refactor | testing | test-author | _unbound_ |
+| configuration | testing | test-author | _unbound_ |
+| dependency | testing | test-author | _unbound_ |
+| boundary-contract | testing | test-author | _unbound_ |
+| no-code | testing | none | _no role_ |
+| test-maintenance | testing | test-author | _unbound_ |
+
+### Role holders
+| role | standard | holder | covered obligations |
+|---|---|---|---|
+| risk-owner | testing | _unbound_ | none |
+| classifier | testing | _unbound_ | none |
+| planner | testing | _unbound_ | none |
+| test-author | testing | _unbound_ | none |
+| implementer | testing | _unbound_ | none |
+| static-reviewer | testing | _unbound_ | none |
+| auditor | testing | _unbound_ | none |
+| triager | testing | _unbound_ | none |
+| verifier | testing | _unbound_ | none |
+| record-keeper | testing | _unbound_ | none |
+| strategy-owner | testing | _unbound_ | none |
+| mechanism-owner | testing | _unbound_ | none |
+| coordinator | testing | _unbound_ | none |
+
+### Capabilities
+| capability | tool | usage |
+|---|---|---|
+| role-routing | workspace-standards | `node <skill>/scripts/foundations.mjs review routing: each role resolves to the closest installed agent; drift and unbound roles are reported` |
+<!-- workspace-standards:routing:end -->
+
+<!-- workspace-standards:gates:begin -->
+## Gates
+### Gate registry
+| gate set | gate | mechanism | stage | bound | threshold |
+|---|---|---|---|---|---|
+| test-gates | G1 | mechanical | D, E, G | command | required tests pass; a quarantined test past its deadline fails the build |
+| test-gates | G2 | mechanical | D | command | every test belongs to exactly one tier and runs in at least one stage |
+| test-gates | G3 | mechanical | D | command | no test exceeds its tier ceiling |
+| test-gates | G4 | mechanical | D | command | every skip, todo, disabled, characterization marker and review-debt entry has a tracking item and an unexpired date |
+| test-gates | G5 | mechanical | D, F, G | command | at most 1% of a tier's runs flaky (starting value); no unrecorded retry |
+| test-gates | G6 | review | D | obligation | a defect fix carries a test that failed before the fix; every new behavioral test records a red run on a failed assertion |
+| test-gates | G7 | mechanical | D, E | command | per-test and per-stage budgets hold; p95 not more than 10% above the median of the previous five mainline runs (starting value) |
+| test-gates | G8 | mechanical | D, F | command | surviving mutants and uncovered lines in the changed code are reviewed; no repository-wide percentage target |
+| test-gates | G9 | mechanical | D | command | every tier P, H, or X test carries a valid fidelity-gap statement |
+| test-gates | G10 | mechanical | D, G | command | the built artifact loads and its primary journey runs as a consumer runs it |
+| test-gates | G11 | review | D | obligation | changes to test infrastructure and gates cite the strategy and the exception log |
+| test-gates | G12 | mechanical | D | command | every change has a class and rigor record; Standard and Deep have a not-testing list; every new test has a header |
+
+### Stage bindings
+| stage | gates |
+|---|---|
+| A | _none_ |
+| B | _none_ |
+| C | _none_ |
+| D | test-gates/G1, test-gates/G2, test-gates/G3, test-gates/G4, test-gates/G5, test-gates/G6, test-gates/G7, test-gates/G8, test-gates/G9, test-gates/G10, test-gates/G11, test-gates/G12 |
+| E | test-gates/G1, test-gates/G7 |
+| F | test-gates/G5, test-gates/G8 |
+| G | test-gates/G1, test-gates/G5, test-gates/G10 |
+| H | _none_ |
+
+### Gate runner
+| capability | tool | usage |
+|---|---|---|
+| gate-runner | workspace-standards | `node <skill>/engine/cli.mjs run --step <A-H> --class <class> --rigor <rigor> --changed <path> --root <repo>: one report for every gate set bound to the step; a standard adds no runner of its own` |
+<!-- workspace-standards:gates:end -->
