@@ -84,7 +84,10 @@ describe('R11 AC1: design selector', () => {
     expect(throws(() => LG.designOf({ ...led, profile: { ...led.profile, arms: ['A', 'B', 'C'] } }))).toMatch(/arm A is refused|does not run arm A/);
     expect(throws(() => LG.designOf({ ...led, profile: undefined }))).toMatch(/needs a ledger.profile/);
     expect(throws(() => LG.designOf({ ...led, profile: { ...led.profile, armAWaiver: '  ' } }))).toMatch(/armAWaiver/);
-    expect(LG.checkLedgerForLive('R11').ok).toBe(true);
+    // R11 is spent (its live round ran: B1 and C1 are recorded, cap 2/2): the tracked ledger is no longer live-ready, and a pristine copy of its design (no runs) is
+    expect(LG.checkLedgerForLive('R11')).toMatchObject({ ok: false, reasons: [expect.stringMatching(/run cap 2\/2 reached/)] });
+    const fresh = mk('r11-fresh-'); fs.writeFileSync(path.join(fresh, 'R11.json'), JSON.stringify({ ...led, runs: [], armOrder: [], startedAt: null }));
+    expect(LG.checkLedgerForLive('R11', fresh).ok).toBe(true);
     const dir = mk('r11-led-'); fs.writeFileSync(path.join(dir, 'R11.json'), JSON.stringify({ ...led, profile: { ...led.profile, arms: ['A', 'B', 'C'] } }));
     const live = LG.checkLedgerForLive('R11', dir);
     expect(live.ok).toBe(false);
