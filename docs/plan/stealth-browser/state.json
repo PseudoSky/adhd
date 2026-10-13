@@ -326,11 +326,11 @@
       "end_ref": "c74257e451719f01761ce477b6a819636cfc0fdb"
     },
     "tripwire-interactive": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-10-13T07:29:46.651Z",
-      "done_at": null,
+      "done_at": "2026-10-13T07:49:17.456Z",
       "start_ref": "6e0dbaf0236c343e1b98bf70e49d5f34216805d7",
-      "end_ref": null
+      "end_ref": "c234fcd20af2eb5c4edafbb9687e2ff971bf34f9"
     },
     "tripwire-docs": {
       "status": "pending",
@@ -649,6 +649,18 @@
       "audit_criteria_total": 32,
       "by": "pseudosky",
       "note": "guard 0 (32/32) verified by orchestrator; commits 49afcf7f 8e4e3dda c74257e4"
+    },
+    {
+      "ts": "2026-10-13T07:49:17.456Z",
+      "from": "tripwire-interactive",
+      "to": "tripwire-interactive",
+      "start_ref": "6e0dbaf0236c343e1b98bf70e49d5f34216805d7",
+      "end_ref": "c234fcd20af2eb5c4edafbb9687e2ff971bf34f9",
+      "audit_exit": 0,
+      "audit_criteria_passed": 9,
+      "audit_criteria_total": 9,
+      "by": "pseudosky",
+      "note": "guard 0 (9/9) verified by orchestrator; commits 105a7973 11002e85 c234fcd2"
     }
   ],
   "amendment_log": [
@@ -1150,7 +1162,7 @@
     "version": "0.8.35",
     "hash": "0b6bc1f3d70e"
   },
-  "current_state": "tripwire-interactive",
+  "current_state": "tripwire-docs",
   "dod_provenance": {
     "confirmed_at": "2026-10-12T23:49:38.410Z",
     "by": "pseudosky",
