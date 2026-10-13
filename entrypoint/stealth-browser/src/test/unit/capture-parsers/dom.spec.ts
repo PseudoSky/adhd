@@ -56,7 +56,7 @@ describe('8468f7b1 AC2 [tests-unit-extract.1] extractFromDom (pattern mode)', ()
     extra: { tag: { tag: 'A', attr: 'data-x' }, missing: { tag: 'SPAN' } },
   }
 
-  it('extracts title, normalised url, snippet and extra meta per container', () => {
+  it('[fs-138] extracts results from container patterns (title, normalised url, snippet, extra meta)', () => {
     const root = doc(item('res a', 'First', '//example.com/a', 'one'), item('res b', 'Second', '/l?uddg=https%3A%2F%2Fb.test%2F', 'two'))
     const out = extractFromDom(root, extractor)
     expect(out).toHaveLength(2)
@@ -91,11 +91,37 @@ describe('8468f7b1 AC2 [tests-unit-extract.1] extractFromDom (pattern mode)', ()
     expect(extractFromDom(doc(wrong), { container: { tag: 'LI', attrs: { class: 'exact' } }, title: { tag: 'H2' } })).toEqual([])
   })
 
-  it('applies text patterns to tags and the wildcard tag', () => {
+  it('[fs-137] matches tag attributes and text patterns (wildcard tag, regexp and string attrs)', () => {
     const root = doc(el('DIV', [], [el('B', [], [txt('keep me')]), el('B', [], [txt('drop')])]))
     const out = extractFromDom(root, { container: { tag: '*', text: /keep/ }, title: { tag: 'B', text: /keep/ } })
     expect(out.length).toBeGreaterThan(0)
     expect(out[0].title).toBe('keep me')
+    // string attribute must match exactly and a regexp attribute by pattern
+    const li = (cls: string) => el('LI', ['class', cls], [el('H2', [], [txt('T ' + cls)])])
+    const byString = extractFromDom(doc(li('exact'), li('exact-not')), { container: { tag: 'LI', attrs: { class: 'exact' } }, title: { tag: 'H2' } })
+    expect(byString.map((r) => r.title)).toEqual(['T exact'])
+    // a title nested below the container is found (findChild searches several levels deep)
+    const deep = el('LI', ['class', 'res'], [el('DIV', [], [el('DIV', [], [el('H2', [], [txt('Deep')])])])])
+    expect(extractFromDom(doc(deep), { container: { tag: 'LI' }, title: { tag: 'H2' } })[0].title).toBe('Deep')
+    // the text pattern rejects non-matching nodes
+    expect(extractFromDom(doc(el('B', [], [txt('nothing')])), { container: { tag: 'B', text: /absent/ }, title: { tag: 'B' } })).toEqual([])
+  })
+
+  it('[fs-136] text extraction skips script and style and collapses whitespace', () => {
+    const noisy = el('P', [], [txt('  hello   '), el('SCRIPT', [], [txt('track()')]), el('STYLE', [], [txt('a{}')]), txt('\n world ')])
+    const out = extractFromDom(doc(noisy), { container: { tag: 'P' } })
+    expect(out[0].title).toBe('hello world')
+    expect(out[0].title).not.toContain('track')
+    expect(out[0].title).not.toContain('a{}')
+  })
+
+  it('[fs-139] normalizes redirect urls (duckduckgo uddg, google q=, protocol-relative, absolute untouched)', () => {
+    const urlFor = (href: string) =>
+      extractFromDom(doc(el('LI', [], [el('A', ['href', href], [txt('x')])])), { container: { tag: 'LI' }, link: { tag: 'A', attr: 'href' } })[0].url
+    expect(urlFor('//duckduckgo.com/l/?uddg=https%3A%2F%2Ftarget.test%2Fp%3Fa%3D1&rut=zz')).toBe('https://target.test/p?a=1')
+    expect(urlFor('/url?q=https%3A%2F%2Fg.test%2F&sa=U')).toBe('https://g.test/')
+    expect(urlFor('//cdn.test/a')).toBe('https://cdn.test/a')
+    expect(urlFor('https://plain.test/?q=keep')).toBe('https://plain.test/?q=keep')
   })
 })
 
@@ -110,7 +136,7 @@ const walkStructural = (tree: N) => {
 }
 
 describe('8468f7b1 AC2 [tests-unit-extract.1] walkDomTree (structural mode)', () => {
-  it('finds a[jsname] results with heading titles, snippets and normalised urls', async () => {
+  it('[fs-140] structural walker extracts Google result cards (heading titles, snippets, normalised urls)', async () => {
     const root = doc(
       result('https://one.test/', 'Result One'),
       result('//two.test/x', 'Result Two', 'Another long enough descriptive text block sitting next to result two.'),
@@ -121,13 +147,13 @@ describe('8468f7b1 AC2 [tests-unit-extract.1] walkDomTree (structural mode)', ()
     expect(out[0].snippet).toBe(SNIPPET)
   })
 
-  it('de-duplicates by href', async () => {
+  it('[fs-141] structural walker skips duplicate hrefs', async () => {
     const out = await walkStructural(doc(result('https://dup.test/', 'A'), result('https://dup.test/', 'B')))
     expect(out).toHaveLength(1)
     expect(out[0].title).toBe('A')
   })
 
-  it('rejects anchors without jsname/href or without the div>div shape', async () => {
+  it('[fs-141] structural walker drops non-result anchors (no jsname/href, wrong div shape)', async () => {
     const noJs = el('A', ['href', 'https://x.test/'], [el('DIV', [], [el('DIV', [], [el('H3', [], [txt('t')])])])])
     const twoKids = el('A', ['jsname', 'a', 'href', 'https://y.test/'], [
       el('DIV', [], [el('DIV', [], [txt('title')]), el('DIV', [], [txt('crumb')])]),
@@ -167,7 +193,7 @@ describe('8468f7b1 AC2 [tests-unit-extract.1][tests-unit-extract.3] walkDomTree'
   }
   const opts = { navigateUrl: 'https://search.test/?q=a', waitFor: '#res', timeoutMs: 5_000 }
 
-  it('navigates, waits for the selector and extracts from the full tree', async () => {
+  it('[fs-134] navigates waits and extracts from the full tree (load failure tolerated)', async () => {
     const tree = doc(result('https://hit.test/', 'Hit'))
     const session = makeSession({
       'DOM.getDocument': (p) => (p['depth'] === -1 ? { root: tree } : { root: { nodeId: 1, nodeType: 9, nodeName: '#document' } }),
@@ -182,9 +208,35 @@ describe('8468f7b1 AC2 [tests-unit-extract.1][tests-unit-extract.3] walkDomTree'
     expect(methods.slice(0, 2)).toEqual(['Page.enable', 'Page.navigate'])
     expect(session.send).toHaveBeenCalledWith('Page.navigate', { url: opts.navigateUrl })
     expect(methods).not.toContain('Runtime.evaluate')
+    // order: navigate, then wait for the selector, then the full-depth document
+    expect(methods.indexOf('Page.navigate')).toBeLessThan(methods.indexOf('DOM.querySelector'))
+    expect(session.send).toHaveBeenCalledWith('DOM.getDocument', expect.objectContaining({ depth: -1 }))
   })
 
-  it('throws a timeout naming the selector and last error when it never appears', async () => {
+  it('[fs-133] never sends Runtime.evaluate (DOM API only), including on the failure path', async () => {
+    const tree = doc(result('https://hit.test/', 'Hit'))
+    const ok = makeSession({
+      'DOM.getDocument': (p) => (p['depth'] === -1 ? { root: tree } : { root: { nodeId: 1, nodeType: 9, nodeName: '#document' } }),
+      'DOM.querySelector': () => ({ nodeId: 42 }),
+    })
+    await walkDomTree(ok as never, opts, { structural: true })
+    const used = new Set(ok.send.mock.calls.map((c) => c[0]))
+    expect(used.has('Runtime.evaluate')).toBe(false)
+    expect([...used].every((m) => /^(Page|DOM)\./.test(m))).toBe(true)
+
+    vi.useFakeTimers()
+    const bad = makeSession({
+      'DOM.getDocument': () => ({ root: { nodeId: 1, nodeType: 9, nodeName: '#document' } }),
+      'DOM.querySelector': () => { throw new Error('nope') },
+    })
+    const p = walkDomTree(bad as never, { ...opts, timeoutMs: 500 }, {})
+    const assertion = expect(p).rejects.toThrow(/Timed out/)
+    await vi.advanceTimersByTimeAsync(3_000)
+    await assertion
+    expect(bad.send.mock.calls.map((c) => c[0])).not.toContain('Runtime.evaluate')
+  })
+
+  it('[fs-135] times out waiting for the selector, naming it and the last error', async () => {
     vi.useFakeTimers()
     vi.spyOn(Math, 'random').mockReturnValue(0)
     const session = makeSession({
@@ -201,7 +253,7 @@ describe('8468f7b1 AC2 [tests-unit-extract.1][tests-unit-extract.3] walkDomTree'
 })
 
 describe('8468f7b1 AC2 [tests-unit-extract.1] detectBanInPage', () => {
-  it('reports captcha when a ban selector resolves to a real node', async () => {
+  it('[fs-142] detects a captcha in the page when a ban selector resolves to a real node', async () => {
     const send = vi.fn(async (_m: string, p: Record<string, unknown>) => ({ nodeId: p['selector'] === '#captcha' ? 9 : 0 }))
     await expect(detectBanInPage({ send } as never, 1)).resolves.toBe('captcha')
   })
