@@ -183,8 +183,9 @@ export async function runLibTests({ log = console.log } = {}) {
     const bystander = spawn(process.execPath, ['-e', 'setInterval(()=>{},1000)'], { stdio: 'ignore' });
     const desc = L.descendantsOf([child.pid]).map((p) => p.pid); ok(desc.includes(grand), 'grandchild not found');
     ok(!desc.includes(bystander.pid), 'bystander counted as descendant');
-    const swept = await L.sweepPids([child.pid, ...desc], 300);
-    ok(swept.includes(child.pid) && swept.includes(grand), 'not swept'); await new Promise((r) => setTimeout(r, 300));
+    const reg = new L.OwnedRegistry(); ok(reg.add(child.pid), 'registry refused the child it spawned');   // PARITY-R10-prep AC4: ownership is recorded at spawn
+    const swept = await L.sweepPids([child.pid, ...desc, bystander.pid], 300, reg);
+    ok(swept.includes(child.pid) && swept.includes(grand), 'not swept'); ok(!swept.includes(bystander.pid) && swept.refused.some((r) => r.pid === bystander.pid), 'the unregistered bystander was not refused'); await new Promise((r) => setTimeout(r, 300));
     ok(!L.alive(child.pid) && !L.alive(grand), 'owned still alive'); ok(L.alive(bystander.pid), 'bystander was killed');
     bystander.kill('SIGKILL');
   });

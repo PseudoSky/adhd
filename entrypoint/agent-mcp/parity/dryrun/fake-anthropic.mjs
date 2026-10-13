@@ -26,7 +26,8 @@ const ev = (event, data) => `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`
 const parse = (t) => { try { return JSON.parse(t); } catch { return {}; } };
 
 const warmPrefixes = new Set();   // module scope: like the real prompt cache, it outlives one run (rep 2 reads what rep 1 wrote)
-export function startFakeAnthropic({ mode = 'ideal', log = () => {} } = {}) {
+// `thinking`: null (default; byte-identical to every earlier dry run) | 'omitted' (a thinking block with an EMPTY text and a signature, the shape claude-haiku-5-5 returns) | 'text' (a block that carries text).
+export function startFakeAnthropic({ mode = 'ideal', log = () => {}, thinking = null } = {}) {
   const convs = new Map();
   const stats = { requests: 0, bodies: [], toolNamesSeen: new Set(), hosts: new Set() };
   const pick = (tools, re) => tools.find((x) => re.test(x.name))?.name;
@@ -100,6 +101,12 @@ export function startFakeAnthropic({ mode = 'ideal', log = () => {} } = {}) {
       const id = `msg_fake_${crypto.randomBytes(5).toString('hex')}`;
       const parts = [ev('message_start', { type: 'message_start', message: { id, type: 'message', role: 'assistant', model: body.model || 'claude-sonnet-5-5', content: [], stop_reason: null, stop_sequence: null, usage: u } })];
       let bi = 0;
+      if (thinking) {   // PARITY-R10-prep AC3: a thinking block first, as the real API orders it; its signature is a dummy the evidence must never store
+        parts.push(ev('content_block_start', { type: 'content_block_start', index: bi, content_block: { type: 'thinking', thinking: '', signature: '' } }));
+        if (thinking === 'text') parts.push(ev('content_block_delta', { type: 'content_block_delta', index: bi, delta: { type: 'thinking_delta', thinking: 'fake reasoning text' } }));
+        parts.push(ev('content_block_delta', { type: 'content_block_delta', index: bi, delta: { type: 'signature_delta', signature: `FAKESIGNATURE${'A'.repeat(160)}` } }), ev('content_block_stop', { type: 'content_block_stop', index: bi }));
+        bi++;
+      }
       for (const sb of c.serverBlocks.splice(0)) {      // server-executed web_fetch: server_tool_use + its result, inside this very response
         parts.push(ev('content_block_start', { type: 'content_block_start', index: bi, content_block: { type: 'server_tool_use', id: sb.id, name: 'web_fetch', input: {} } }),
           ev('content_block_delta', { type: 'content_block_delta', index: bi, delta: { type: 'input_json_delta', partial_json: JSON.stringify({ url: sb.url }) } }), ev('content_block_stop', { type: 'content_block_stop', index: bi }));

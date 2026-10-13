@@ -25,6 +25,9 @@ import * as JG from './judge.mjs';
 import * as EX from './experiment.mjs';
 import * as CP from './capture-proxy.mjs';
 import * as WD from './wire-diff.mjs';
+import * as TM from './timing.mjs';
+import * as EV from './evidence.mjs';
+import * as AN from './analyze.mjs';
 import { ModelRunCapError } from './ledger.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -45,6 +48,7 @@ function parseArgs(argv) {
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]; const v = () => argv[++i];
     if (['--self-check', '--print-plan', '--check-oracle', '--check-lib', '--dry-run', '--live', '--reparse-judge', '--rejudge', '--rederive-tools', '--rederive-duration'].includes(a)) o.mode = a.slice(2);
+    else if (a === 'analyze') { o.mode = 'analyze'; o.rest = argv.slice(i + 1); break; }   // PARITY-R10-prep AC2: `analyze <round> <runA> <runC> [--section s]` | `analyze --emit-bundle <runDir> --arm X --out F`
     else if (['preflight', 'verdict', 'grid'].includes(a)) o.mode = a; else if (a === '--round') { o.round = v(); if (!ROUND_RE.test(o.round)) { console.error(`--round must match ${ROUND_RE} (it names the ledger file and the tmp dir), got ${JSON.stringify(o.round)}`); process.exit(2); } }
     else if (a === '--out') { o.out = path.resolve(v()); o.outExplicit = true; } else if (a === '--seed') o.seed = v(); else if (a === '--wt') o.wt = path.resolve(v()); else if (a === '--claude') o.claude = v();
     else if (a === '--rep') { o.rep = Number.parseInt(v(), 10); if (!(o.rep >= 1)) { console.error('--rep must be an integer >= 1'); process.exit(2); } } else if (a === '--run') o.run = v(); else if (a === '--yes') o.yes = true; else if (a === '--capture') o.capture = true; else if (a === '--degraded') o.degraded = v();
@@ -226,13 +230,11 @@ export const repoFilesOf = (repoDir) => Object.fromEntries(['docs/shipping.md', 
 // ----------------------------------------------------------------------------------------------------------------
 // Process ownership
 // ----------------------------------------------------------------------------------------------------------------
-const owned = new Set();
+const owned = new L.OwnedRegistry();   // PARITY-R10-prep AC4: only processes registered here (direct children of this driver) and their live descendants may ever be signalled
 async function sweepOwned(tag) {
-  const table = L.psTable();
-  const desc = L.descendantsOf([...owned], table).map((p) => p.pid);
-  const swept = await L.sweepPids([...owned, ...desc]);
+  const swept = await L.sweepPids([...L.signalAllowance(owned).allowed], 1500, owned);   // descendants are derived from the VALID owned roots; sweepPids re-validates every pid again
   owned.clear();
-  return { tag, swept };
+  return { tag, swept, refused: swept.refused };
 }
 
 // ----------------------------------------------------------------------------------------------------------------
@@ -246,8 +248,11 @@ function makeCtx(opts, plan, runDef, dry) {
   // The arm's cwd must sit outside any repo / agent-instruction file (ancestorLeaks): repo-root tmp/ is inside this checkout, so it lives under the OS temp dir.
   const work = opts.outExplicit ? path.join(outRoot, 'work', spec.runId) : path.join(os.tmpdir(), 'adhd-agent-mcp-parity', opts.round ?? ROUND, 'work', spec.runId);
   return { opts, dry, spec, runDef, runDir, work, profile, repoDir: path.join(work, 'repo'), hiddenDir: path.join(work, 'hidden'), ticketFile: path.join(work, 'ticket.txt'),
-    infoLog: path.join(work, 'info-calls.log'), prompts: F.prompts(), ledgerPath: LG.ledgerPathFor(opts.round ?? ROUND) };
+    infoLog: path.join(work, 'info-calls.log'), prompts: F.prompts(), ledgerPath: LG.ledgerPathFor(opts.round ?? ROUND),
+    fair: profile.fairTiming === true, trace: profile.traceEvidence === true, marks: [], boot: {} };   // PARITY-R10-prep: both flags are per-round ledger.profile switches, false for R5-R9
 }
+/** PARITY-R10-prep AC1: push a named timing mark (epoch ms) on a fair-timing run; a no-op for every other round. */
+const mark = (ctx, n, ms = Date.now()) => { if (ctx.fair) ctx.marks.push({ n, ms }); };
 
 // ----------------------------------------------------------------------------------------------------------------
 // ARM A: native `claude -p` (A-MATCHED flags), stream-json in/out, phase 2 via --resume
@@ -278,11 +283,13 @@ function spawnClaudeTurn({ claude, argv, cwd, env, prompt, outFile, errFile, tim
     });
     child.stderr.on('data', (d) => { err += d; });
     child.stdin.write(JSON.stringify({ type: 'user', message: { role: 'user', content: [{ type: 'text', text: prompt }] } }) + '\n');
-    const timer = setTimeout(() => { timedOut = true; try { process.kill(-child.pid, 'SIGTERM'); } catch { /* gone */ } }, timeoutMs);
+    let groupKill = null;
+    const timer = setTimeout(() => { timedOut = true; groupKill = L.killOwnedGroup(child.pid, 'SIGTERM', owned); }, timeoutMs);   // AC4: the group of an owned detached child only; refused (and recorded) otherwise
     child.on('close', (code, sig) => {
       clearTimeout(timer); if (buf.trim()) lines.push({ t: Date.now() - t0, line: buf });
       fs.writeFileSync(outFile, lines.map((l) => l.line).join('\n') + '\n'); fs.writeFileSync(errFile, err);
-      resolve({ code, sig, timedOut, resultSeen, lines, wallMs: Date.now() - t0, stderr: err });
+      const lineT = (needle) => lines.find((l) => l.line.includes(needle))?.t ?? null;   // PARITY-R10-prep AC1: when the result / init stream events arrived (ms after spawn)
+      resolve({ code, sig, timedOut, groupKill, resultSeen, lines, wallMs: Date.now() - t0, stderr: err, startedAt: t0, resultT: lineT('"type":"result"'), initT: lineT('"subtype":"init"') });
     });
   });
 }
@@ -311,14 +318,17 @@ async function runArmA(ctx) {
     const argv = argvA(ctx, mcpPath, phase === 2 ? sid : null); res.argv.push(argv);
     const prompt = phase === 1 ? ctx.prompts.phase1 : ctx.prompts.phase2;
     const t = await spawnClaudeTurn({ claude, argv, cwd: ctx.repoDir, env, prompt, outFile: path.join(ctx.runDir, `A.phase${phase}.stream.jsonl`), errFile: path.join(ctx.runDir, `A.phase${phase}.stderr.txt`), timeoutMs: PHASE_TIMEOUT_MS });
+    if (ctx.fair) { mark(ctx, `p${phase}.start`, t.startedAt); mark(ctx, `p${phase}.engineEnd`, t.startedAt + (t.resultT ?? t.wallMs)); mark(ctx, `p${phase}.observed`, t.startedAt + t.wallMs); ctx.boot[`p${phase}.initMs`] = t.initT; }
     const events = L.parseJsonLines(t.lines.map((l) => l.line).join('\n'));
     const init = events.find((e) => e.type === 'system' && e.subtype === 'init');
     if (phase === 1) sid = init?.session_id ?? events.find((e) => e.session_id)?.session_id ?? null;
     res.phases.push({ phase, ...t, events, init, sid: init?.session_id ?? sid, hidden: runHidden(ctx.hiddenDir, ctx.repoDir, phase === 1 ? ['bugfix', 'feature'] : ['bugfix', 'feature', 'empty']), files: repoFilesOf(ctx.repoDir) });
+    mark(ctx, `p${phase}.hiddenDone`);
     if (phase === 1 && !sid) break;
     if (t.timedOut || (!t.resultSeen && t.code !== 0)) break;
   }
   res.sid = sid;
+  mark(ctx, 'accounting.done');
   return res;
 }
 
@@ -345,6 +355,7 @@ export function serverEnv(ctx, store, logs) {
     ...(ctx.dry ? { ADHD_AGENT_ANTHROPIC_SECRET: 'dry-run-not-a-secret', ANTHROPIC_BASE_URL: ctx.fakeAnthropicUrl || 'http://127.0.0.1:9', NODE_OPTIONS: `--require ${path.join(HERE, 'dryrun/egress-guard.cjs')}`, R2_EGRESS_LOG: path.join(ctx.runDir, 'egress-blocked.log') } : {}),
     ...effortEnv(ctx),
     ...captureEnv(ctx),
+    ...(ctx.trace ? { ADHD_AGENT_TRACING_LOG_SINK: 'file', ADHD_AGENT_TRACING_LOG_DIR: path.join(logs, 'trace') } : {}),   // PARITY-R10-prep AC3: the agent-mcp tracing plugin has no on/off switch; the sink and directory are pinned explicitly so a changed default cannot drop the trace silently
   });
 }
 async function startServer(ctx) {
@@ -360,6 +371,7 @@ async function startServer(ctx) {
   const transport = new StdioClientTransport({ command: process.execPath, args: [entry], env, cwd: os.tmpdir(), stderr: 'pipe' });
   transport.stderr?.on('data', (d) => { stderr += d; });
   const client = new Client({ name: 'round2-driver', version: '1.0.0' }, { capabilities: {} });
+  const tBoot = Date.now();
   try { await client.connect(transport); } catch (e) { fs.writeFileSync(stderrFile, stderr); throw new Error(`agent-mcp failed to start: ${e.message}; stderr: ${stderr.slice(0, 800)}`); }
   if (transport.pid) owned.add(transport.pid);
   const calls = [];
@@ -370,7 +382,8 @@ async function startServer(ctx) {
     calls.push(rec);
     return { text, json: tryJson(text), isError: !!r?.isError || !!thrown, thrown };
   };
-  return { client, transport, call, calls, env, entry, stderrFile, getStderr: () => stderr, tools: (await client.listTools()).tools,
+  const tools = (await client.listTools()).tools; const bootMs = Date.now() - tBoot;   // PARITY-R10-prep AC1: server connect + tools/list, reported beside the timing split
+  return { client, transport, call, calls, env, entry, stderrFile, getStderr: () => stderr, tools, bootMs,
     close: async () => { try { await client.close(); } catch { /* ignore */ } fs.writeFileSync(stderrFile, stderr); writeJson(path.join(ctx.runDir, 'mcp-calls.json'), calls); } };
 }
 
@@ -397,6 +410,25 @@ async function waitTask(srv, taskId, deadlineMs) {
     await sleep(2500);
   }
 }
+/**
+ * PARITY-R10-prep AC1: the fair wait. `result {task_id, wait_ms}` blocks SERVER-side until the task is terminal (or wait_ms elapses), so the client observes completion the moment it happens
+ * (no 2.5 s poll cadence); the loop is bounded by `deadlineMs`. The graded end of the phase is the server's own `completedAt`, not this observation.
+ */
+async function waitTaskFair(srv, taskId, deadlineMs) {
+  const t0 = Date.now(); const polls = [];
+  for (;;) {
+    const r = await srv.call('result', { task_id: taskId, wait_ms: 30_000 }, 60_000);
+    const st = r.json?.status ?? null; polls.push(st);
+    if (st && TERMINAL.has(st)) return { r, polls, timedOut: false, wallMs: Date.now() - t0, observedAt: Date.now() };
+    if (Date.now() - t0 > deadlineMs) return { r, polls, timedOut: true, wallMs: Date.now() - t0, observedAt: Date.now() };
+  }
+}
+/** PARITY-R10-prep AC1: replaces the fixed accounting pause. Reads the per-turn usage rows of every phase task until two consecutive reads agree (bounded; the outcome is recorded). */
+async function settleUsage(srv, phases) {
+  const ids = phases.filter((p) => p.taskId).map((p) => p.taskId);
+  const s = await TM.waitUntilStable(async () => Promise.all(ids.map(async (id) => (await srv.call('usage_query', { task_id: id, grain: 'turn' })).json ?? null)), { intervalMs: 50, deadlineMs: 5000, isReady: (snap) => snap.every((x) => x != null) });
+  return { polls: s.polls, waitedMs: s.waitedMs, settled: s.settled, deadlineHit: s.deadlineHit };
+}
 async function runArmBC(ctx) {
   const arm = ctx.runDef.arm;
   const srv = await startServer(ctx);
@@ -421,22 +453,27 @@ async function runArmBC(ctx) {
       const t = await srv.call('task', { session_id: sessionId, prompt, background: true, cwd: ctx.repoDir }, 120_000);
       const taskId = t.json?.task_id; const ph = { phase, taskId, startMs: t0, submit: t.json ?? t.text };
       if (!taskId) { ph.harnessError = `task submit failed: ${t.text.slice(0, 300)}`; res.phases.push(ph); break; }
-      const w = await waitTask(srv, taskId, PHASE_TIMEOUT_MS);
+      const w = ctx.fair ? await waitTaskFair(srv, taskId, PHASE_TIMEOUT_MS) : await waitTask(srv, taskId, PHASE_TIMEOUT_MS);
+      if (ctx.fair) { const ce = Date.parse(w.r.json?.completedAt); const end = Math.min(Math.max(Number.isFinite(ce) ? ce : w.observedAt, t0), w.observedAt); mark(ctx, `p${phase}.start`, t0); mark(ctx, `p${phase}.engineEnd`, end); mark(ctx, `p${phase}.observed`, w.observedAt); }
       ph.final = w.r.json ?? w.r.text; ph.status = w.r.json?.status ?? null; ph.polls = w.polls; ph.timedOut = w.timedOut; ph.wallMs = w.wallMs;
       if (ph.status !== 'completed') { const again = await srv.call('result', { task_id: taskId }, 60_000); ph.errorText = again.text.slice(0, 2000); }
       ph.hidden = runHidden(ctx.hiddenDir, ctx.repoDir, phase === 1 ? ['bugfix', 'feature'] : ['bugfix', 'feature', 'empty']); ph.files = repoFilesOf(ctx.repoDir);
+      mark(ctx, `p${phase}.hiddenDone`);
       res.phases.push(ph);
       if (ph.status !== 'completed') break;
     }
     // accounting (read after the phases): subtree usage + task rows
-    await sleep(MT.ACCOUNTING_SLEEP_MS);   // the one fixed pause of the harness; named so the duration overhead split (metrics.durationBreakdown) can attribute it
+    if (ctx.fair) res.settle = await settleUsage(srv, res.phases);   // PARITY-R10-prep AC1: a bounded condition wait on the usage rows; no fixed sleep on a fair-timing round
+    else await sleep(MT.ACCOUNTING_SLEEP_MS);   // the one fixed pause of the harness; named so the duration overhead split (metrics.durationBreakdown) can attribute it
     res.taskRows = []; res.usage = [];
     for (const ph of res.phases) if (ph.taskId) {
       res.usage.push({ phase: ph.phase, taskId: ph.taskId, byTask: (await srv.call('usage_query', { task_id: ph.taskId, grain: 'task' })).json ?? null, byTurn: (await srv.call('usage_query', { task_id: ph.taskId, grain: 'turn' })).json ?? null });
     }
     res.taskList = (await srv.call('task_list', { session_id: sessionId, limit: 200 })).json ?? null;
     res.allTasks = (await srv.call('task_list', { limit: 500 })).json ?? null;
+    mark(ctx, 'accounting.done');
   } finally {
+    res.bootMs = srv.bootMs;
     res.stderrTail = srv.getStderr().slice(-4000);
     res.shellEgress = egressFactOf(readIf(path.join(ctx.runDir, 'srt-policy.json')), srv.getStderr());
     await srv.close();
@@ -457,7 +494,7 @@ async function setupFakes(ctx) {
   ctx.fakeState = state;
   if (ctx.runDef.arm === 'C' || ctx.opts.capture) {   // with capture on, A/B also get the fake upstream so the fake claude's wire probe is answered locally, never by the real API
     const { startFakeAnthropic } = await import(pathToFileURL(path.join(HERE, 'dryrun/fake-anthropic.mjs')).href);
-    ctx.fake = await startFakeAnthropic({ mode, log: () => {} }); ctx.fakeAnthropicUrl = ctx.fake.url;
+    ctx.fake = await startFakeAnthropic({ mode, log: () => {}, ...(ctx.trace ? { thinking: 'omitted' } : {}) }); ctx.fakeAnthropicUrl = ctx.fake.url;
   }
 }
 async function teardownFakes(ctx) { if (ctx.fake) await ctx.fake.close(); }
@@ -774,6 +811,7 @@ async function runOne(ctx, state) {
   const arm = ctx.runDef.arm;
   const record = { runId: ctx.spec.runId, arm, rep: ctx.spec.rep, mode: ctx.dry ? 'dry-run' : 'live', seed: ctx.opts.seed, startedAt: nowIso(), env: envReport(ctx), config: effectiveConfig(ctx), warnings: [] };
   const fp0 = fingerprint(PROD_ROOT); const t0 = Date.now();
+  mark(ctx, 'run.start', t0);
   let raw, analysis;
   try {
     raw = await rawRun(ctx);
@@ -785,7 +823,9 @@ async function runOne(ctx, state) {
   }
   if (ctx.captureInfo) record.capture = ctx.captureInfo;
   record.workDir = ctx.work; record.preManifest = ctx.preManifest ?? null;
+  mark(ctx, 'run.end');
   record.wallMs = Date.now() - t0; record.finishedAt = nowIso();
+  if (ctx.fair) record.fairTiming = { version: 1, marks: ctx.marks, boot: arm === 'A' ? ctx.boot : { serverConnectMs: raw?.bootMs ?? null }, settle: raw?.settle ?? null };
   record.sweep = await sweepOwned(`after ${ctx.spec.runId}`);
   if (analysis) {
     const { obs, metrics } = analysis;
@@ -794,6 +834,7 @@ async function runOne(ctx, state) {
     record.score = O.scoreObservation(obs, ctx.expected);
     record.metrics = metrics; record.warnings.push(...metrics.warnings);
     recordDuration(record, ctx.runDir);   // R9-meas AC1: phaseSumMs + the harness overhead split, beside the unchanged graded wallMs
+    if (ctx.trace) { try { record.evidence = EV.writeEvidence({ runDir: ctx.runDir, arm, record }); if (!record.evidence.leakScan.ok) record.warnings.push(`EVIDENCE LEAK SCAN: ${JSON.stringify(record.evidence.leakScan.kinds)}`); } catch (e) { record.warnings.push(`EVIDENCE not written: ${String(e.message || e)}`); } }   // PARITY-R10-prep AC3
     record.fixtures = fixturesFact(ctx.profile);   // R9-meas AC3
     // thinking: model default on every arm (R7-think AC1); the observation is a report-only record field, never an invalid/void rule
     record.thinking = thinkingObservation(metrics);
@@ -833,6 +874,10 @@ async function runOne(ctx, state) {
  * `record.wallMs` is NOT touched: it stays the graded duration. A missing or unreadable call log leaves the overhead explicitly unattributed.
  */
 export function recordDuration(record, runDir) {
+  if (record.fairTiming) {   // PARITY-R10-prep AC1: the graded wall becomes the sum of the prompt->final-result windows; the actual run wall is kept as runWallMs
+    record.runWallMs = record.wallMs; record.duration = MT.durationBreakdown({ ...record, duration: undefined }); if (!record.duration.timingError) record.wallMs = record.duration.wallMs;
+    return record.duration;
+  }
   let calls = null; try { calls = JSON.parse(fs.readFileSync(path.join(runDir, 'mcp-calls.json'), 'utf8')); } catch { /* arm A, or no log */ }
   record.duration = MT.durationBreakdown({ ...record, duration: undefined }, calls);
   return record.duration;
@@ -1173,7 +1218,7 @@ export function planText(opts) {
       `  judge: provider ${prof.modelSources.judge.provider}  model ${prof.models.judge}  source ${prof.modelSources.judge.source}${prof.modelSources.judge.envVar ? ` (${prof.modelSources.judge.envVar})` : ' (parity/experiment.json default)'}`,
       `  equal-model guard (before any spend): ${gate.ok ? (gate.deliberate ? `PASS by a deliberate recorded difference (${gate.deliberate})` : `PASS, arms [${shown.join(',')}] price as one model`) : `REFUSES: ${gate.reasons.join('; ')}`}; runtime guard: a later arm starts only if arm A's response model equals the id it is configured with (armModelGuard)`);
   }
-  out.push('', `FIXTURES: ${prof.pairedFixtures ? 'PAIRED (ledger.profile.pairedFixtures, R9-meas AC3): value stream seed|run|rep, so A_n, B_n and C_n share ticket id, owner, thresholds, rates, tax, visible cases and hidden suite; the system-prompt nonce stays per arm' : 'per-arm value stream seed|run|arm|rep (R5-R8 derivation, unchanged)'}`, `DURATION: wall (record.wallMs) is the graded metric; phase-sum (sum of phases[].wallMs) and the harness overhead split are reported beside it, never gating (R9-meas, owner: "Report both (Recommended)")`);
+  out.push('', `FIXTURES: ${prof.pairedFixtures ? 'PAIRED (ledger.profile.pairedFixtures, R9-meas AC3): value stream seed|run|rep, so A_n, B_n and C_n share ticket id, owner, thresholds, rates, tax, visible cases and hidden suite; the system-prompt nonce stays per arm' : 'per-arm value stream seed|run|arm|rep (R5-R8 derivation, unchanged)'}`, `DURATION: wall (record.wallMs) is the graded metric; phase-sum (sum of phases[].wallMs) and the harness overhead split are reported beside it, never gating (R9-meas, owner: "Report both (Recommended)")`, ...(prof.fairTiming ? [`TIMING: FAIR (ledger.profile.fairTiming, PARITY-R10-prep AC1): the graded wall is the sum of the per-phase windows prompt handed to the product -> the product's own final result (A: stdin write -> the result stream event; C: task submit -> the server's completedAt); no fixed sleep, no poll cadence (result wait_ms), usage accounting is a bounded condition wait; every other second is harness time, split into the same segments for every arm (setup, lag, verification, handoff, accounting, teardown) in record.duration`] : []), ...(prof.traceEvidence ? [`EVIDENCE: ON (ledger.profile.traceEvidence, AC3): each run writes evidence.json + evidence/threads.jsonl in its run dir (wire capture + API log + the agent-mcp tracing plugin, sink pinned to <logs>/trace); read it with drive.mjs analyze`] : []));
   out.push('', `order (${prof.arms ? 'ledger profile order' : 'arm A first; B and C alternate between rounds'}):`, ...plan.map((p) => `  ${p.position}. ${p.arm}${p.rep}`));
   out.push('', `THINKING: ${THINKING_POLICY} (R7-think AC1; arm${shown.length > 1 ? 's' : ''} ${shown.join(', ')} run${shown.length > 1 ? '' : 's'} the model's default thinking for ${prof.model}; thinking turns/blocks are a report-only metric: record.thinking, SUMMARY, verdict and grid lines; they never invalidate or void a run)`);
   if (A) out.push(`  A  ${THINKING_MECHANISM.A}`, `       cited at ${cite(/^export function armAEnv/)}`, `       resolved spawn env thinking variables set: [${present(armAEnv(A)).join(',')}] (expected none)`, `       argv: claude ${argvA(A, '<mcp-config.json>', null).map((x) => (x.length > 60 ? x.slice(0, 57) + '...' : x)).join(' ')}`);
@@ -1660,6 +1705,7 @@ async function main() {
   if (opts.mode === 'check-lib') { const { runLibTests } = await import(pathToFileURL(path.join(HERE, 'libtest.mjs')).href); const r = await runLibTests({ log: console.log }); console.log(`lib self-test: ${r.ok ? 'PASS' : 'FAIL'} ${r.total - r.failed.length}/${r.total}`); process.exit(r.ok ? 0 : 1); }
   if (opts.mode === 'rederive-tools') { process.exit(rederiveToolsMode(opts)); }
   if (opts.mode === 'rederive-duration') { const t = rederiveDurationReport(tmpRoot(opts.round), opts.round, opts.rep); console.log(t); process.exit(t.startsWith('no records') ? 1 : 0); }
+  if (opts.mode === 'analyze') { const r = AN.analyzeCli(opts.rest ?? [], { tmpRoot, loadRound: loadRoundRecords }); if (r.out) console.log(r.out); if (r.err) console.error(r.err); process.exit(r.code); }
   if (opts.mode === 'reparse-judge') { process.exit(reparseJudgeMode(opts)); }
   if (opts.mode === 'rejudge') { process.exit(await rejudgeMode(opts)); }
   if (opts.mode === 'print-plan') { console.log(planText(opts)); return; }

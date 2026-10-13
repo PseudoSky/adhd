@@ -488,11 +488,19 @@ export function scanAndLock(dir) {
 }
 
 // ---------------------------------------------------------------------------------------------------
-// Process tracking: only ever signal processes this driver spawned (or their descendants)
+// Process tracking: the driver may signal ONLY a process it spawned itself, or a descendant of one (PARITY-R10-prep AC4; README "What this harness may signal").
+//   A signal is sent iff ALL of these hold at the moment of the call (and again before a SIGKILL that follows a SIGTERM):
+//     1. the target pid is an integer > 1, is not this process, and is not an ANCESTOR of this process (the interactive claude session that launched the driver is one);
+//     2. the target is a registered ROOT (OwnedRegistry.add right after the spawn, which itself requires pid's ppid === this process) whose `ps` start time still equals the one recorded
+//        at registration (so a pid recycled by the OS to somebody else is not "ours"), or is a DESCENDANT of such a root, computed from the live process table at that moment;
+//     3. a process-group signal (kill(-pgid)) additionally needs: the group leader is a registered root that created the group (pgid === pid), the pgid is not this process's own group nor the
+//        group of any ancestor, and every member of the group is the leader or one of its descendants.
+//   There is no signal by process name or pattern anywhere; with no registry nothing is signalled (fail closed).
 // ---------------------------------------------------------------------------------------------------
+const LSTART_RE = /^\s*(\d+)\s+(\d+)\s+(\d+)\s+(\w{3}\s+\w{3}\s+\d+\s+\d\d:\d\d:\d\d\s+\d{4})\s+(.*)$/;
 export function psTable() {
-  const out = execFileSync('ps', ['-axo', 'pid=,ppid=,pgid=,command='], { encoding: 'utf8', maxBuffer: 1 << 26 });
-  return out.split('\n').map((l) => l.match(/^\s*(\d+)\s+(\d+)\s+(\d+)\s+(.*)$/)).filter(Boolean).map((m) => ({ pid: +m[1], ppid: +m[2], pgid: +m[3], command: m[4] }));
+  const out = execFileSync('ps', ['-axo', 'pid=,ppid=,pgid=,lstart=,command='], { encoding: 'utf8', maxBuffer: 1 << 26 });
+  return out.split('\n').map((l) => l.match(LSTART_RE)).filter(Boolean).map((m) => ({ pid: +m[1], ppid: +m[2], pgid: +m[3], lstart: m[4].replace(/\s+/g, ' '), command: m[5] }));
 }
 export function descendantsOf(rootPids, table = psTable()) {
   const kids = new Map(); for (const p of table) { if (!kids.has(p.ppid)) kids.set(p.ppid, []); kids.get(p.ppid).push(p); }
@@ -500,14 +508,79 @@ export function descendantsOf(rootPids, table = psTable()) {
   while (stack.length) { const pid = stack.pop(); for (const k of kids.get(pid) || []) if (!seen.has(k.pid)) { seen.add(k.pid); found.push(k); stack.push(k.pid); } }
   return found;
 }
-export const alive = (pid) => { try { process.kill(pid, 0); return true; } catch { return false; } };
-/** Kill (TERM then KILL) the given pids if still alive; never touches pids outside the list. Returns the swept pids. */
-export async function sweepPids(pids, graceMs = 1500) {
-  const live = [...new Set(pids)].filter(alive); const swept = [...live];
-  for (const p of live) { try { process.kill(p, 'SIGTERM'); } catch { /* gone */ } }
-  const t0 = Date.now(); while (Date.now() - t0 < graceMs && live.some(alive)) await new Promise((r) => setTimeout(r, 100));
-  for (const p of live) if (alive(p)) { try { process.kill(p, 'SIGKILL'); } catch { /* gone */ } }
+export const alive = (pid) => { if (!Number.isInteger(pid) || pid <= 1) return false; try { process.kill(pid, 0); return true; } catch { return false; } };   // signal 0 delivers nothing; it only probes existence
+/** pids of every ancestor of `pid` (parent, grandparent, ... up to 1), from the process table. */
+export function ancestorsOf(pid, table = psTable()) {
+  const byPid = new Map(table.map((p) => [p.pid, p])); const out = new Set(); let cur = byPid.get(pid)?.ppid; let guard = 0;
+  while (cur != null && cur > 0 && !out.has(cur) && guard++ < 1000) { out.add(cur); cur = byPid.get(cur)?.ppid; }
+  return out;
+}
+/** Registry of the processes THIS driver spawned. `add` refuses a pid that is not a direct child of this process or whose start time cannot be read (it then can never be signalled). */
+export class OwnedRegistry {
+  constructor(self = process.pid) { this.self = self; this.m = new Map(); this.rejected = []; }
+  add(pid, table = psTable()) {
+    const row = table.find((p) => p.pid === pid);
+    if (!Number.isInteger(pid) || pid <= 1 || !row || row.ppid !== this.self || !row.lstart) { this.rejected.push({ pid, reason: !row ? 'not in the process table' : row.ppid !== this.self ? `ppid ${row.ppid} is not this driver (${this.self})` : 'invalid pid or no start time' }); return false; }
+    this.m.set(pid, { pid, lstart: row.lstart, pgid: row.pgid }); return true;
+  }
+  has(pid) { return this.m.has(pid); }
+  get size() { return this.m.size; }
+  pids() { return [...this.m.keys()]; }
+  clear() { this.m.clear(); }
+  /** registered roots that are still the SAME process (alive, start time unchanged, still a child of this driver). */
+  validRoots(table = psTable()) { return [...this.m.values()].filter((e) => { const r = table.find((p) => p.pid === e.pid); return r && r.lstart === e.lstart && r.ppid === this.self; }).map((e) => e.pid); }
+}
+/** Everything that may be signalled right now (valid owned roots + their live descendants), minus the protected set. Pure over `table`. */
+export function signalAllowance(registry, table = psTable(), self = process.pid) {
+  const protectedPids = new Set([self, ...ancestorsOf(self, table)]);
+  const roots = registry.validRoots(table).filter((p) => !protectedPids.has(p)); const desc = descendantsOf(roots, table).filter((p) => !protectedPids.has(p.pid));
+  const lstart = new Map(table.map((p) => [p.pid, p.lstart])); const allowed = new Set([...roots, ...desc.map((p) => p.pid)]);
+  return { allowed, lstart, protectedPids, roots, descendants: desc.map((p) => p.pid) };
+}
+/** Refusal codes of the signal guards, in the order they are evaluated. */
+export const REFUSAL = Object.freeze({ PID_RANGE: 'pid-range', SELF: 'self', ANCESTOR: 'ancestor', NOT_OWNED: 'not-owned', RECYCLED: 'recycled', NOT_CHILD: 'not-child' });
+/**
+ * Why `pid` may NOT be signalled right now (a REFUSAL code), or null when it may. Guards, in order: pid range (integer > 1), this process, an ancestor of this process, a registered root whose start time
+ * changed (recycled pid), a registered root that is no longer a child of this driver, and anything that is neither a registered root nor a descendant of a valid one (not owned).
+ */
+export function refusalFor(pid, registry, table = psTable(), self = process.pid) {
+  if (!Number.isInteger(pid) || pid <= 1) return REFUSAL.PID_RANGE;
+  if (pid === self) return REFUSAL.SELF;
+  if (ancestorsOf(self, table).has(pid)) return REFUSAL.ANCESTOR;
+  const e = registry.m.get(pid); const row = table.find((p) => p.pid === pid);
+  if (e) { if (!row || row.lstart !== e.lstart) return REFUSAL.RECYCLED; if (row.ppid !== registry.self) return REFUSAL.NOT_CHILD; return null; }
+  if (descendantsOf(registry.validRoots(table), table).some((p) => p.pid === pid)) return null;
+  return REFUSAL.NOT_OWNED;
+}
+/** Kill (TERM, then KILL after `graceMs`) those of `pids` that are owned roots or their descendants; refuse every other pid. Re-validates identity before the KILL. Returns the swept pids; `.refused` lists `{pid, code}`. */
+export async function sweepPids(pids, graceMs = 1500, registry = null) {
+  const swept = []; swept.refused = [];
+  if (!(registry instanceof OwnedRegistry)) { for (const pid of new Set(pids)) swept.refused.push({ pid, code: 'no-registry' }); return swept; }
+  const table = psTable(); const targets = [];
+  for (const pid of new Set(pids)) { const code = refusalFor(pid, registry, table); if (code) swept.refused.push({ pid, code }); else if (alive(pid)) targets.push({ pid, lstart: table.find((p) => p.pid === pid)?.lstart }); }
+  for (const t of targets) { swept.push(t.pid); try { process.kill(t.pid, 'SIGTERM'); } catch { /* gone */ } }
+  const t0 = Date.now(); while (Date.now() - t0 < graceMs && targets.some((t) => alive(t.pid))) await new Promise((r) => setTimeout(r, 100));
+  const table2 = psTable();
+  for (const t of targets) if (alive(t.pid)) {
+    // identity re-check before the KILL: same start time, and every guard still passes
+    const code = refusalFor(t.pid, registry, table2); const same = table2.find((p) => p.pid === t.pid)?.lstart === t.lstart;
+    if (!code && same) { try { process.kill(t.pid, 'SIGKILL'); } catch { /* gone */ } } else swept.refused.push({ pid: t.pid, code: code ?? 'recycled-before-kill' });
+  }
   return swept;
+}
+/** SIGTERM the process GROUP of an owned, detached child (the `claude -p` turn). Refuses unless every rule in the header holds. @returns {{ok:boolean, code?:string}} */
+export function killOwnedGroup(pid, signal, registry, { table = psTable(), self = process.pid } = {}) {
+  const refuse = (code) => ({ ok: false, code });
+  if (!(registry instanceof OwnedRegistry)) return refuse('no-registry');
+  const base = refusalFor(pid, registry, table, self); if (base) return refuse(base);   // pid range, self, ancestor, recycled, not a child, not owned
+  if (!registry.m.has(pid)) return refuse(REFUSAL.NOT_OWNED);   // a group is signalled only through a registered ROOT, never through a descendant pid
+  const me = table.find((p) => p.pid === self); const row = table.find((p) => p.pid === pid);
+  if (!row || row.pgid !== pid) return refuse('not-group-leader');
+  const protPgids = new Set([me?.pgid, ...[...ancestorsOf(self, table)].map((a) => table.find((p) => p.pid === a)?.pgid)].filter((x) => x != null));
+  if (protPgids.has(pid)) return refuse('protected-group');
+  const desc = new Set(descendantsOf([pid], table).map((p) => p.pid));
+  if (table.some((p) => p.pgid === pid && p.pid !== pid && !desc.has(p.pid))) return refuse('foreign-group-member');
+  try { process.kill(-pid, signal); return { ok: true }; } catch (e) { return { ok: false, code: `kill-failed:${e?.code ?? e}` }; }
 }
 
 // ---------------------------------------------------------------------------------------------------

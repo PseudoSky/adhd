@@ -6,6 +6,8 @@
 // setup/teardown/fixed sleeps excluded) is reported beside it in every verdict / grid / summary and NEVER gates; the harness overhead is broken out (durationBreakdown).
 // Thresholds are function arguments, never an env switch. n=1 per arm: a fixed threshold, not a significance claim.
 
+import { fairDuration } from './timing.mjs';
+
 export const DEFAULT_THRESHOLDS = Object.freeze({ cost: 1.02, duration: 1.02, quality: 0.98 });
 export const N1_NOTE = 'n=1 per arm; fixed threshold, no significance claim';
 
@@ -33,6 +35,18 @@ export function phaseSumMs(rec) {
 /** Harness overhead = wall - phase sum (setup, submit, between-phase checks, fixed sleep, usage queries, teardown, analysis); null when either side is missing. */
 export function harnessOverheadMs(rec) { const w = durationMs(rec); const p = phaseSumMs(rec); return fin(w) && fin(p) ? w - p : null; }
 
+/**
+ * PARITY-R10-prep AC1 (timing.mjs): the duration facts of a fair-timing record. The graded wall is the sum of the per-phase windows (prompt handed to the product -> the product's own final result);
+ * every other second of the run is in `overhead`, split into the SAME segments for every arm (setup, lag, verification, handoff, accounting, teardown) with a residual that is 0 by construction.
+ * A mark set that is missing or out of order yields an explicit `timingError` and no invented numbers.
+ */
+function fairBreakdown(rec) {
+  const ft = rec.fairTiming; let f;
+  try { f = fairDuration(ft.marks); } catch (e) { return { graded: 'fairWallMs', fairTiming: true, wallMs: durationMs(rec), phaseSumMs: null, overheadMs: null, timingError: String(e.message), overhead: { attributed: false, unattributedMs: null } }; }
+  return { graded: 'fairWallMs', fairTiming: true, wallMs: f.wallMs, runWallMs: f.runWallMs, phaseSumMs: f.observedSumMs, overheadMs: f.overheadMs, windowsMs: f.windowsMs,
+    overhead: { attributed: true, fair: true, ...f.split, lagByPhaseMs: f.lagByPhaseMs }, boot: ft.boot ?? null, accountingSettle: ft.settle ?? null };
+}
+
 const tms = (c) => Date.parse(c?.t);
 const callStart = (c) => tms(c) - (fin(c?.ms) ? c.ms : 0);
 const tryJson = (t) => { try { return JSON.parse(t); } catch { return null; } };
@@ -47,6 +61,7 @@ const tryJson = (t) => { try { return JSON.parse(t); } catch { return null; } };
  * Pure; the record is not touched.
  */
 export function durationBreakdown(rec, calls = null) {
+  if (rec?.fairTiming) return fairBreakdown(rec);   // PARITY-R10-prep AC1: a record written under ledger.profile.fairTiming carries its marks; every older record takes the legacy path below, byte-identically
   const wallMs = durationMs(rec); const ps = phaseSumMs(rec); const ov = harnessOverheadMs(rec);
   const out = { graded: 'wallMs', wallMs: fin(wallMs) ? wallMs : null, phaseSumMs: ps, overheadMs: ov, overhead: { attributed: false, unattributedMs: ov } };
   if (!Array.isArray(calls) || !calls.length || ov == null || !rec?.finishedAt) return out;
@@ -97,6 +112,7 @@ export function formatDurationTable(rd) {
   for (const [arm, r] of Object.entries(rd.ratios)) L.push(`${arm}/A | wall (graded) ${r3(r.wall)} | phase-sum (report-only) ${r3(r.phaseSum)}`);
   for (const [arm, a] of Object.entries(rd.arms)) {
     const o = a.overhead; if (!o) continue;
+    if (o.fair) { L.push(`${a.runId ?? arm} overhead s (fair timing; graded wall = sum of the prompt->final-result windows): setup ${sec(o.setupMs)}, lag ${sec(o.lagMs)}, verification ${sec(o.verificationMs)}, handoff ${sec(o.handoffMs)}, accounting ${sec(o.accountingMs)}, teardown ${sec(o.teardownMs)}, residual ${sec(o.residualMs)}${a.boot ? ` | boot (inside the window for A, inside setup for B/C; reported, not subtracted) ${JSON.stringify(a.boot)}` : ''}`); continue; }
     if (!o.attributed) { L.push(`${a.runId ?? arm} overhead: unattributed ${sec(o.unattributedMs)} s (no call log; not split)`); continue; }
     L.push(`${a.runId ?? arm} overhead s: setup ${sec(o.setupMs)}, submit ${sec(o.submitMs)}, between phases ${sec(o.betweenPhasesMs)}, accounting wait ${sec(o.accountingWaitMs)} (fixed sleep ${sec(o.fixedSleepMs)} + hidden suite/reads ${sec(o.hiddenAndReadsMs)}), usage queries ${sec(o.queriesMs)}, teardown+analysis ${sec(o.teardownMs)}, residual ${sec(o.residualMs)}`
       + (fin(a.pollLagMs) ? ` | inside the phase sum: client poll lag ${sec(a.pollLagMs)} s (server-side task intervals sum to ${sec(a.serverSumMs)} s)` : ''));

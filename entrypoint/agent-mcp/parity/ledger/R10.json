@@ -1,0 +1,28 @@
+{
+  "round": "R10",
+  "cap": 2,
+  "approvedBy": "",
+  "extraRunReason": "",
+  "runs": [],
+  "judgeCalls": [],
+  "scenarioSha": "",
+  "scopeChanges": [
+    "SCOPE-R10-prep"
+  ],
+  "armOrder": [],
+  "startedAt": null,
+  "armA": null,
+  "releases": [],
+  "profile": {
+    "arms": [
+      "A",
+      "C"
+    ],
+    "effort": "high",
+    "capture": true,
+    "pairedFixtures": true,
+    "modelConfig": "experiment",
+    "fairTiming": true,
+    "traceEvidence": true
+  }
+}

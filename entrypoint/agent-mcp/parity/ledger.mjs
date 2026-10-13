@@ -62,6 +62,8 @@ export const isModelAlias = (m) => typeof m === 'string' && m.trim() !== '' && !
  * R9-meas AC3: `pairedFixtures` (boolean, default false and absent from the parsed profile unless true) = the fixture VALUE stream is keyed `seed|run|rep` instead of `seed|run|arm|rep`, so A_n, B_n and C_n share every fixture value (fixtures.makeSpec `paired`).
  * R8-AC: `completedArms` = arms that already ran in this round and are KEPT (their runs must be in `led.runs`; they are never planned or reserved again, but they count against the cap),
  * `armModels` = a per-arm model that overrides `model` for that arm only (arm C calls the Messages API directly and cannot resolve an alias, so it is sent the concrete id the alias resolved to).
+ * PARITY-R10-prep: `fairTiming` (boolean, absent unless true) = the graded duration is the sum of the prompt->final-result windows with one harness-time split for every arm (timing.mjs); `traceEvidence` (boolean, absent unless true)
+ * = the run writes evidence.json (+ evidence/threads.jsonl) from the wire capture, the API log and the agent-mcp tracing plugin (evidence.mjs) and pins the tracing sink explicitly. Both default to the legacy behaviour.
  * SCOPE-R9-model-config: `modelConfig: "experiment"` takes every model (the arms and the judge) from parity/experiment.json plus the PARITY_* environment (experiment.mjs) instead of
  * from this profile, so it is mutually exclusive with `model`, `judgeModel` and `armModels`. `modelDifferenceReason` (non-empty string, only with `modelConfig`) records a DELIBERATE,
  * owner-approved model difference between the planned arms; without it the equal-model guard refuses a mismatch before any spend. Both keys are absent from the parsed profile unless set.
@@ -80,6 +82,7 @@ export function profileOf(led) {
   if (p.effort != null && !EFFORT_LEVELS.includes(p.effort)) bad(`.effort ${JSON.stringify(p.effort)} is not one of ${EFFORT_LEVELS.join('|')}`);
   if (p.capture != null && typeof p.capture !== 'boolean') bad('.capture must be a boolean');
   if (p.pairedFixtures != null && typeof p.pairedFixtures !== 'boolean') bad('.pairedFixtures must be a boolean');   // R9-meas AC3
+  for (const k of ['fairTiming', 'traceEvidence']) if (p[k] != null && typeof p[k] !== 'boolean') bad(`.${k} must be a boolean`);   // PARITY-R10-prep AC1/AC3
   if (p.modelConfig != null && p.modelConfig !== 'experiment') bad(`.modelConfig ${JSON.stringify(p.modelConfig)} must be "experiment" (models from parity/experiment.json + PARITY_* env)`);   // SCOPE-R9-model-config
   if (p.modelConfig != null) for (const k of ['model', 'judgeModel', 'armModels']) if (p[k] != null) bad(`.modelConfig "experiment" and .${k} are mutually exclusive: the models come from the experiment configuration, not from the profile`);
   if (p.modelDifferenceReason != null && (p.modelConfig == null || typeof p.modelDifferenceReason !== 'string' || !p.modelDifferenceReason.trim())) bad('.modelDifferenceReason must be a non-empty string and is only valid with .modelConfig "experiment"');
@@ -105,7 +108,7 @@ export function profileOf(led) {
     }
   }
   if (isModelAlias(p.model) && arms.includes('C') && !armModels.C) bad(`.model ${JSON.stringify(p.model)} is an alias the claude CLI resolves; arm C calls the Messages API directly with provider.model and an alias is not resolved there: use a concrete id for a round that includes C, or name one for C in .armModels`);
-  return { arms, completedArms, armModels, armAWaiver: waiver || null, model: p.model ?? null, judgeModel: p.judgeModel ?? null, effort: p.effort ?? null, capture: p.capture === true, ...(p.pairedFixtures === true ? { pairedFixtures: true } : {}),
+  return { arms, completedArms, armModels, armAWaiver: waiver || null, model: p.model ?? null, judgeModel: p.judgeModel ?? null, effort: p.effort ?? null, capture: p.capture === true, ...(p.pairedFixtures === true ? { pairedFixtures: true } : {}), ...(p.fairTiming === true ? { fairTiming: true } : {}), ...(p.traceEvidence === true ? { traceEvidence: true } : {}),
     ...(p.modelConfig != null ? { modelConfig: p.modelConfig } : {}), ...(p.modelDifferenceReason != null ? { modelDifferenceReason: p.modelDifferenceReason.trim() } : {}) };
 }
 
