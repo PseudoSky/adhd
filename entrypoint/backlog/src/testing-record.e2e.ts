@@ -14,6 +14,12 @@
  *  - T35.AC4 An exception is an ordinary item: its body carries `expires:` and a `relates_to`
  *    relation to the item it excuses, both read back.
  *
+ * guards: a Testing record written through the CLI is lost, altered or unreadable after a store reopen
+ * tier: P
+ * gap: cannot be observed at tier S because the claim is about the built dist/index.js, a fresh process per call and a reopened store
+ * cites: 595965cc T35.AC1-AC4
+ * teeth: red when `get`/`query` return a body that differs from the one written, or when `obligate`/`relate` reject the documented shapes
+ *
  * Resource lane: proc — spawns the built dist/index.js as a child process.
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';

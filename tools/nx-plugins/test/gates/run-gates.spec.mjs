@@ -32,6 +32,10 @@ afterEach(() => {
   rmSync(tmp, { recursive: true, force: true });
 });
 
+// CI cannot provision the engine yet (backlog ca23e252): there the engine-driven cases are reported as
+// `todo` against that item, never as passes. Anywhere else a missing engine is a failure, never a skip.
+const ENGINE_TODO = process.env.CI && !findEngine().engine ? 'backlog ca23e252: CI cannot provision the gate engine' : false;
+
 const engine = () => {
   const { engine: found, tried } = findEngine();
   assert.ok(found, `the workspace-standards engine is not installed; run \`soxe install workspace-standards\` or set WORKSPACE_STANDARDS_ENGINE. Looked at: ${tried.join(', ')}`);
@@ -81,7 +85,7 @@ describe('595965cc T30.AC1 — the repository command table', () => {
     }
   });
 
-  it('595965cc T30.AC1 the engine accepts the table: completeness, liveness and reachability all exit 0', () => {
+  it('595965cc T30.AC1 the engine accepts the table: completeness, liveness and reachability all exit 0', { todo: ENGINE_TODO }, () => {
     const e = engine();
     for (const args of [['check', 'completeness', '--clauses', GATES.join(',')], ['check', 'liveness'], ['check', 'reachability']]) {
       const r = spawnSync(process.execPath, [e, ...args, '--root', REPO_ROOT, '--table', DEFAULT_TABLE, '--report', join(tmp, `${args[1]}.json`)], { encoding: 'utf8' });
@@ -89,7 +93,7 @@ describe('595965cc T30.AC1 — the repository command table', () => {
     }
   });
 
-  it('595965cc T30.AC1 stage B runs the static gates from the real table and writes one report', () => {
+  it('595965cc T30.AC1 stage B runs the static gates from the real table and writes one report', { todo: ENGINE_TODO }, () => {
     const r = wrapper(['--step', 'B']);
     const evidence = (r.report?.gates ?? []).filter((g) => g.outcome === 'fail').map((g) => {
       try {
@@ -105,7 +109,7 @@ describe('595965cc T30.AC1 — the repository command table', () => {
     assert.equal(r.report.summary.selected, 2);
   });
 
-  it('595965cc T30.AC1 a stage with unbound gates reports them as obligations, not passes', () => {
+  it('595965cc T30.AC1 a stage with unbound gates reports them as obligations, not passes', { todo: ENGINE_TODO }, () => {
     const r = wrapper(['--step', 'F']);
     const { selected, passed, obligations } = r.report.summary;
     assert.equal(obligations.includes('G5'), true);
@@ -128,14 +132,14 @@ function fixtureTable(rows) {
 }
 
 describe('595965cc T30.AC2/AC3 — exit status and naming a failure', () => {
-  it('595965cc T30.AC3 a seeded failing gate makes the wrapper exit non-zero and the report names it', () => {
+  it('595965cc T30.AC3 a seeded failing gate makes the wrapper exit non-zero and the report names it', { todo: ENGINE_TODO }, () => {
     const t = fixtureTable([['G1', 'node -e "process.exit(0)"'], ['G2', 'node -e "process.exit(1)"']]);
     const r = wrapper(['--step', 'B', '--table', t, '--root', tmp]);
     assert.notEqual(r.status, 0);
     assert.deepEqual(r.report.summary.failed, ['G2']);
   });
 
-  it('595965cc T30.AC2 the exit code is the worst gate\'s', () => {
+  it('595965cc T30.AC2 the exit code is the worst gate\'s', { todo: ENGINE_TODO }, () => {
     const t = fixtureTable([['G1', 'node -e "process.exit(0)"'], ['G2', 'node -e "process.exit(3)"'], ['G3', 'node -e "process.exit(2)"']]);
     const r = wrapper(['--step', 'B', '--table', t, '--root', tmp]);
     assert.equal(r.status, 3);
