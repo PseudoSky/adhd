@@ -865,7 +865,7 @@ describe("cafe9a17 AC2: the session's stored echoes are deleted only when the ec
   /** A REAL AnthropicProvider over the contract fake: turn 1 yields thinking+text, request 2 is `second`, then a plain reply. */
   function realProvider(second: FakeStep): LLMProvider {
     const steps: FakeStep[] = [
-      { blocks: [{ type: "thinking", thinking: "hm" }, { type: "text", text: "one" }] },
+      { blocks: [{ type: "thinking", thinking: "hm", signature: "sigcafe9a17" }, { type: "text", text: "one" }] },
       second,
       { blocks: [{ type: "text", text: "legacy ok" }] },
     ];
