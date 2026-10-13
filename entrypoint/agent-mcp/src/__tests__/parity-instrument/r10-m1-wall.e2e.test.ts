@@ -40,10 +40,16 @@ describe('R10 M1: wall attribution on a fresh real-server mock-provider run', ()
     const realEmits = ATTR_SPECS.map((s) => s.attr).filter((a) => !['agent.tool.queued_ms', 'agent.dispatch.wait_ms', 'agent.startup.queue_wait_ms', 'agent.startup.session_ms'].includes(a));
     for (const a of realEmits) { expect(r[a].seen, `${a} exercised by the real server`).toBeGreaterThan(0); expect(r[a].mismatches, a).toEqual([]); }
     expect(r['agent.startup.mcp_connect_ms.<server>'].seen).toBeGreaterThan(0); expect(r['agent.startup.mcp_connect_ms.<server>'].mismatches).toEqual([]);
-    // the attributes the real run did not emit stay absent in the bundle (null), never 0
+    // an attribute a raw record does not carry is null in the bundle (never 0); one it carries is equal (queue_wait_ms / session_ms appear when the product stamps them, wait_ms on `result` waits)
     const b = evidence('C1');
-    for (const t of b.trace.tasks) { expect(t.startup.queueWaitMs).toBeNull(); expect(t.startup.sessionMs).toBeNull(); }
-    for (const d of b.trace.dispatches) expect(d.waitMs).toBeNull();
+    for (const r of lines.filter((l) => l.event === 'agent.task.startup.finish')) {
+      const su = b.trace.tasks.find((t: { task: string }) => t.task === r['agent.task_id']).startup;
+      expect(su.queueWaitMs, String(r['agent.task_id'])).toBe(r['agent.startup.queue_wait_ms'] ?? null); expect(su.sessionMs, String(r['agent.task_id'])).toBe(r['agent.startup.session_ms'] ?? null);
+    }
+    for (const r of lines.filter((l) => l.event === 'agent.dispatch.finish')) {
+      const d = b.trace.dispatches.find((x: { task: string; callId: string }) => x.task === r['agent.task_id'] && x.callId === r['agent.dispatch.call_id']);
+      expect(d.waitMs).toBe(r['agent.dispatch.wait_ms'] ?? null);
+    }
   });
 
   it('R10 M1 AC2/AC7: `analyze --section wall` on the live bundles: A prints the native n/a line, C prints per-thread and per-dispatch numbers equal to the independent computation from the raw trace', () => {
