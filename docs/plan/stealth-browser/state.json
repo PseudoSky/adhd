@@ -102,10 +102,10 @@
       "end_ref": null
     },
     "tests-unit-core": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-10-13T00:18:26.746Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "13c0b7612ef5534a5dd0d870f283777dab00bb9e",
       "end_ref": null
     },
     "tests-unit-data": {
@@ -537,7 +537,7 @@
     "version": "0.8.35",
     "hash": "0b6bc1f3d70e"
   },
-  "current_state": "surface-api",
+  "current_state": "tests-unit-core",
   "dod_provenance": {
     "confirmed_at": "2026-10-12T23:49:38.410Z",
     "by": "pseudosky",
