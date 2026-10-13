@@ -1,4 +1,4 @@
-export { captureNetworkResponse } from './network.js'
+export { captureNetworkResponse, captureAllNetworkResponses } from './network.js'
 export { walkDomTree } from './dom.js'
 export { checkBans, decideRetry } from './bans.js'
 export type { CaptureOptions, CapturedResponse } from './network.js'

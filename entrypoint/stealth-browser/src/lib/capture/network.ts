@@ -1,206 +1,312 @@
 /**
- * stealth-browser/src/lib/capture/network.ts — Event-driven CDP network capture.
+ * @adhd/stealth-browser — src/lib/capture/network.ts
  *
- * Opens a raw CDP WebSocket to a page, subscribes to Network events,
- * captures every response matching a URL pattern, and returns the body.
+ * Event-driven CDP network capture: a thin wrapper over the one capture
+ * pipeline. It connects a `CdpSession`, attaches a `NetworkRecorder`,
+ * navigates, waits for the matching bodies and selects the answer.
  *
  * Flow:
- *   1. Connect via WebSocket to the page's webSocketDebuggerUrl
- *   2. Send Network.enable
- *   3. Subscribe to Network events
- *   4. Navigate
- *   5. Resolve AS SOON AS the matching response body is captured
- *      (no waiting for Page.loadEventFired — response arrives first)
- *   6. Return the captured response
+ *   1. connect a CdpSession to the page's webSocketDebuggerUrl (or use the one supplied)
+ *   2. Page.enable, then the recorder subscribes and sends Network.enable, then Page.navigate
+ *   3. every response whose request URL matches `urlPattern` (sticky across redirects) has its body fetched
+ *   4. resolve once a body has landed, `extraWaitMs` has passed without another body, and no body fetch is in flight
+ *   5. select (default: the largest body; ties go to the later capture), check ban rules on the selected response
  *
- * Speed: typically ~800ms for static HTML providers.
+ * Graceful outcomes: a timeout, a closed socket or a failed navigation with at least one captured body is a
+ * success; only an empty-handed capture throws a typed `CaptureError`. A recording sink is a pure observer:
+ * its failures are logged and never change what is returned or thrown.
+ *
+ * Ticket 8468f7b1 · plan state capture-upgrade [capture-upgrade.1] [capture-upgrade.4] [capture-upgrade.8] [capture-upgrade.9] [capture-upgrade.12].
  */
 
+import { CdpSession } from '../cdp/session.js'
+import { captureError, errorMessage, type CaptureError } from '../recording/errors.js'
+import { NetworkRecorder, decodeBody } from '../recording/network-recorder.js'
+import type { Headers, RecordedExchange, RecordedRequest, RecordingSink, RedirectHop } from '../recording/types.js'
 import type { BanRule } from '../types.js'
 import { checkBans } from './bans.js'
 
 export interface CaptureOptions {
   urlPattern: RegExp
+  /** Hard upper bound of the whole capture. Default 10_000. */
   timeoutMs?: number
+  /** Quiet period after the latest landed body before resolving. Default 0 = resolve at once. */
   extraWaitMs?: number
   banRules?: BanRule[]
   navigateUrl: string
+  /** Choose among the captured candidates (landing order). Default: the largest body, ties to the later capture. */
+  select?: (candidates: readonly RecordedExchange[]) => RecordedExchange | undefined
+  /** Optional persistence. Closed by the capture, also when it throws. */
+  sink?: RecordingSink
+  /** Applied to what the sink and `onExchange` receive. Default identity. */
+  redact?: (exchange: RecordedExchange) => RecordedExchange
+  onExchange?: (exchange: RecordedExchange) => void
+  /** Unsent sink envelopes kept before the newest is dropped. Default 1000. */
+  maxQueue?: number
+  recordingId?: string
+  /** Default console.error. */
+  logger?: (message: string) => void
+  /** Use this connected session instead of opening one. A supplied session is never closed. */
+  session?: CdpSession
 }
 
 export interface CapturedResponse {
   requestId: string
+  /** URL of the final hop (the request that produced the body), or `navigateUrl` when empty. */
   url: string
+  /** The REAL response status (ExtraInfo `statusCode` wins). */
   status: number
+  /** Decoded response text ('' when the response has no body). */
   body: string
-  responseHeaders?: Record<string, string>
-}
-
-interface CdpResponse {
-  id: number
-  result?: Record<string, unknown>
-  error?: { code: number; message: string }
-}
-
-interface CdpEvent {
+  /** Response headers (ExtraInfo merged). */
+  headers: Headers
+  /** Same object as `headers`; the name the runner has always exposed. */
+  responseHeaders: Headers
   method: string
-  params: Record<string, unknown>
+  requestHeaders: Headers
+  postData?: string
+  mimeType?: string
+  redirects: RedirectHop[]
+  durationMs?: number
+  exchange: RecordedExchange
 }
 
-interface InflightRequest {
-  requestId: string
-  url: string
-  method: string
-  status: number
-  responseHeaders?: Record<string, string>
-  responseBody?: string
-  base64Encoded?: boolean
-  finished: boolean
+type FinishReason = 'settled' | 'timeout' | 'closed' | 'connect-failed' | 'navigate-failed'
+
+const DEFAULT_TIMEOUT_MS = 10_000
+/** The session exposes `connected` but no close event, so a closed socket is noticed by polling. */
+const SESSION_POLL_MS = 50
+const MAX_NO_MATCH_URLS = 10
+
+const defaultLogger = (message: string): void => console.error(message)
+
+function firstStartedAt(ex: RecordedExchange): number {
+  const first: RecordedRequest = ex.redirects[0]?.request ?? ex.request
+  return first.startedAt
 }
 
-export async function captureNetworkResponse(
-  pageWsUrl: string,
-  options: CaptureOptions,
-): Promise<CapturedResponse> {
-  const urlPattern = options.urlPattern
-  const timeoutMs = options.timeoutMs ?? 10_000
+function largestBody(candidates: readonly RecordedExchange[]): RecordedExchange | undefined {
+  if (candidates.length === 0) return undefined
+  const len = (e: RecordedExchange): number => decodeBody(e.response).length
+  return candidates.reduce((a, b) => (len(a) > len(b) ? a : b))
+}
+
+function toCaptured(ex: RecordedExchange, navigateUrl: string): CapturedResponse {
+  const headers = ex.response?.headers ?? {}
+  return {
+    requestId: ex.requestId,
+    url: ex.url || navigateUrl,
+    status: ex.response?.status ?? 0,
+    body: decodeBody(ex.response),
+    headers,
+    responseHeaders: headers,
+    method: ex.request.method,
+    requestHeaders: ex.request.headers,
+    postData: ex.request.postData,
+    mimeType: ex.response?.mimeType,
+    redirects: ex.redirects,
+    durationMs: ex.durationMs,
+    exchange: ex,
+  }
+}
+
+function assertNoBan(options: CaptureOptions, captured: CapturedResponse): void {
+  if (!options.banRules || options.banRules.length === 0) return
+  const signal = checkBans(options.banRules, { url: captured.url, status: captured.status, body: captured.body })
+  if (signal) {
+    throw captureError('CAPTURE_BAN_DETECTED', `ban detected: ${signal}`, { detail: { signal, url: captured.url, status: captured.status } })
+  }
+}
+
+/** The one capture run behind both public functions. Resolves the candidates (landing order) or throws a CaptureError. */
+async function runCapture(pageWsUrl: string, options: CaptureOptions): Promise<RecordedExchange[]> {
+  const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS
   const extraWaitMs = options.extraWaitMs ?? 0
+  const logger = options.logger ?? defaultLogger
+  const ownsSession = options.session === undefined
+  const session = options.session ?? new CdpSession()
+  const pattern = options.urlPattern
 
-  // Track what we need
-  let matchedRequest = null as InflightRequest | null
-  let matchError: string | null = null
+  const recorder = new NetworkRecorder(session, {
+    filter: (url) => {
+      pattern.lastIndex = 0
+      return pattern.test(url)
+    },
+    sink: options.sink,
+    onExchange: options.onExchange,
+    redact: options.redact,
+    maxQueue: options.maxQueue,
+    recordingId: options.recordingId,
+    logger,
+  })
 
-  // Create a promise that resolves after extraWaitMs, picks the best
-  // matching response from all captured bodies
-  const resultPromise = new Promise<void>((resolve) => {
-    const ws = new WebSocket(pageWsUrl)
-    let nextId = 1
-    const pending = new Map<number, (r: CdpResponse) => void>()
-    let timedOut = false
-    let resolveTimer: ReturnType<typeof setTimeout> | null = null
-    let isResolved = false
+  const candidates: RecordedExchange[] = []
+  let finished = false
+  let reason: FinishReason | undefined
+  let connectCause: unknown
+  let navigateFailure: { cause?: unknown; errorText?: string } | undefined
+  let sessionOpened = false
+  let waitIdle = false
+  let debounceTimer: ReturnType<typeof setTimeout> | undefined
+  let resolveDone!: () => void
+  const done = new Promise<void>((resolve) => {
+    resolveDone = resolve
+  })
+  // Stage captured before anything async can add candidates after the verdict.
+  let snapshot: RecordedExchange[] = []
 
-    function finalize(): void {
-      if (isResolved) return
-      isResolved = true
-      // Pick the best response: prefer the largest body (typically the document HTML),
-      // then fallback to the first captured.
-      if (capturedBodies.length > 0) {
-        const best = capturedBodies.reduce((a, b) => (a.body.length > b.body.length ? a : b))
-        matchedRequest = { requestId: '', url: best.url, method: 'GET', status: 200, responseBody: best.body, base64Encoded: false, finished: true }
-      }
-      if (!matchedRequest && !matchError) matchError = 'timeout'
-      if (resolveTimer) clearTimeout(resolveTimer)
-      clearTimeout(timeoutTimer)
-      ws.close()
-      resolve()
+  const finalize = (r: FinishReason): void => {
+    if (finished) return
+    finished = true
+    reason = r
+    snapshot = [...candidates]
+    resolveDone()
+  }
+
+  /** NAVIGATE_FAILED only when navigation failed, nothing was captured and nothing is in flight. */
+  const nothingLeftAfterNavigateFailure = (): boolean =>
+    navigateFailure !== undefined && candidates.length === 0 && recorder.inflight() === 0 && recorder.pending() === 0
+  const checkNavigateFailure = (): void => {
+    if (nothingLeftAfterNavigateFailure()) finalize('navigate-failed')
+  }
+
+  /** Resolve unless a body fetch (bodyFetchPending in the recorder) is still in flight. */
+  const settleNow = (): void => {
+    if (finished) return
+    if (recorder.pending() > 0) {
+      waitIdle = true
+      return
     }
+    finalize('settled')
+  }
+  const armDebounce = (): void => {
+    waitIdle = false
+    if (debounceTimer) clearTimeout(debounceTimer)
+    debounceTimer = undefined
+    if (extraWaitMs > 0) debounceTimer = setTimeout(settleNow, extraWaitMs)
+    else settleNow()
+  }
 
-    const timeoutTimer = setTimeout(() => {
-      timedOut = true
-      if (!matchError) matchError = 'timeout'
-      finalize()
-    }, timeoutMs)
-
-    ws.addEventListener('open', () => {
-      // Enable Page + Network, then navigate
-      send('Page.enable').catch((e) => console.error('[capture] Page.enable:', e.message))
-      send('Network.enable').catch((e) => console.error('[capture] Network.enable:', e.message))
-      send('Page.navigate', { url: options.navigateUrl }).catch((e) => console.error('[capture] Page.navigate:', e.message))
-    })
-
-    // Track requestIds whose URLs match our pattern
-    const trackedRequestIds = new Set<string>()
-    const allUrls = new Map<string, string>()
-    // Buffer all captured responses — pick the best one after extraWaitMs
-    const capturedBodies: Array<{ url: string; body: string }> = []
-
-    ws.addEventListener('message', (ev) => {
-      if (timedOut) return
-      const msg = JSON.parse(String(ev.data)) as CdpResponse | CdpEvent
-
-      if ('id' in msg && typeof msg.id === 'number') {
-        const cb = pending.get(msg.id)
-        if (cb) { pending.delete(msg.id); cb(msg) }
-        return
-      }
-
-      const event = msg as CdpEvent
-      const p = event.params
-
-      if (event.method === 'Network.requestWillBeSent') {
-        const r = p as { requestId: string; request: { url: string; method: string } }
-        allUrls.set(r.requestId, r.request.url)
-        if (urlPattern.test(r.request.url)) {
-          trackedRequestIds.add(r.requestId)
-        }
-      } else if (event.method === 'Network.loadingFinished') {
-        const r = p as { requestId: string }
-        if (!trackedRequestIds.has(r.requestId)) return
-
-        const bodyId = nextId++
-        pending.set(bodyId, (resp: CdpResponse) => {
-          if (resp.error) return
-          const result = resp.result as { body: string; base64Encoded: boolean } | undefined
-          if (!result) return
-          const body = result.base64Encoded
-            ? Buffer.from(result.body, 'base64').toString('utf-8')
-            : result.body
-          capturedBodies.push({
-            url: allUrls.get(r.requestId) ?? '',
-            body,
-          })
-          // Resolve after extraWaitMs once we get at least one body
-          if (resolveTimer) clearTimeout(resolveTimer)
-          resolveTimer = setTimeout(finalize, extraWaitMs > 0 ? extraWaitMs : 500)
-        })
-        ws.send(JSON.stringify({
-          id: bodyId,
-          method: 'Network.getResponseBody',
-          params: { requestId: r.requestId },
-        }))
-      }
-    })
-
-    ws.addEventListener('error', () => {
-      if (!matchError) matchError = 'WebSocket error'
-      finalize()
-    })
-
-    function send(method: string, params: Record<string, unknown> = {}) {
-      return new Promise<Record<string, unknown>>((resolve, reject) => {
-        const id = nextId++
-        pending.set(id, (r) => r.error ? reject(new Error(r.error.message)) : resolve(r.result ?? {}))
-        try { ws.send(JSON.stringify({ id, method, params })) } catch { reject(new Error('ws closed')) }
-      })
+  recorder.onIdle(() => {
+    if (waitIdle) finalize('settled')
+    else checkNavigateFailure()
+  })
+  const offSettled = recorder.onSettled((ex) => {
+    if (finished) return
+    if (ex.state === 'finished' && ex.response?.body !== undefined) {
+      candidates.push(ex)
+      armDebounce()
+    } else {
+      checkNavigateFailure()
     }
   })
 
-  await resultPromise
+  const timeoutTimer = setTimeout(() => finalize('timeout'), timeoutMs)
+  const closePoll = setInterval(() => {
+    if (sessionOpened && !session.connected) finalize('closed')
+  }, SESSION_POLL_MS)
+  for (const t of [timeoutTimer, closePoll]) t.unref()
 
-  if (!matchedRequest) {
-    throw new Error(matchError ?? 'No matching request captured')
+  // Runs alongside the wait below; it never rejects and stops acting once the verdict is in.
+  void (async (): Promise<void> => {
+    try {
+      if (!session.connected) {
+        const connecting = session.connect(pageWsUrl)
+        connecting.catch(() => undefined) // a late rejection after the verdict is not unhandled
+        await Promise.race([connecting, done])
+        if (finished) return
+      }
+      sessionOpened = true
+      await session.send('Page.enable').catch((e: unknown) => logger(`[capture] Page.enable: ${errorMessage(e)}`))
+      if (finished) return
+      await recorder.start().catch((e: unknown) => logger(`[capture] Network.enable: ${errorMessage(e)}`))
+      if (finished) return
+      try {
+        const nav = await session.send<{ errorText?: string }>('Page.navigate', { url: options.navigateUrl })
+        if (nav.errorText) navigateFailure = { errorText: nav.errorText }
+      } catch (e) {
+        navigateFailure = { cause: e }
+        if (!finished) logger(`[capture] Page.navigate: ${errorMessage(e)}`)
+      }
+      if (navigateFailure && !finished) checkNavigateFailure()
+    } catch (e) {
+      if (!sessionOpened) {
+        connectCause = e
+        finalize('connect-failed')
+      } else if (!finished) {
+        logger(`[capture] setup: ${errorMessage(e)}`)
+      }
+    }
+  })()
+
+  try {
+    await done
+    if (snapshot.length > 0) return snapshot
+    throw failureFor(reason ?? 'timeout')
+  } finally {
+    clearTimeout(timeoutTimer)
+    clearInterval(closePoll)
+    if (debounceTimer) clearTimeout(debounceTimer)
+    recorder.onIdle(undefined)
+    offSettled()
+    finished = true
+    try {
+      await recorder.close()
+    } catch (e) {
+      // The sink is a pure observer: its loss is reported, never allowed to replace the capture outcome.
+      logger(`[capture] recording sink: ${errorMessage(e)}`)
+    }
+    if (ownsSession) session.close()
   }
 
-  const body = matchedRequest.responseBody ?? ''
-  const url = matchedRequest.url || options.navigateUrl
-
-  // Ban detection
-  if (options.banRules && options.banRules.length > 0) {
-    const banSignal = checkBans(options.banRules, {
-      url,
-      status: matchedRequest.status,
-      body,
-    })
-    if (banSignal) {
-      throw new Error(`Ban detected: ${banSignal}`)
+  function failureFor(r: FinishReason): CaptureError {
+    switch (r) {
+      case 'connect-failed':
+        return captureError('CAPTURE_CONNECT_FAILED', `cannot connect to ${pageWsUrl}: ${errorMessage(connectCause)}`, { cause: connectCause })
+      case 'navigate-failed':
+        return navigateError()
+      case 'closed':
+        return captureError('CAPTURE_SESSION_CLOSED', 'the CDP socket closed before any matching response was captured')
+      case 'timeout':
+      case 'settled':
+        if (nothingLeftAfterNavigateFailure()) return navigateError()
+        if (recorder.seenUrls().length > 0 && recorder.exchanges().length === 0) {
+          return captureError('CAPTURE_NO_MATCH', `no request matched ${String(pattern)}`, {
+            detail: { urls: recorder.seenUrls().slice(0, MAX_NO_MATCH_URLS) },
+          })
+        }
+        return captureError('CAPTURE_TIMEOUT', `nothing captured within ${timeoutMs}ms`, { detail: { timeoutMs } })
     }
   }
 
-  return {
-    requestId: matchedRequest.requestId,
-    url,
-    status: matchedRequest.status,
-    body,
-    responseHeaders: matchedRequest.responseHeaders,
+  function navigateError(): CaptureError {
+    const text = navigateFailure?.errorText ?? errorMessage(navigateFailure?.cause)
+    return captureError('CAPTURE_NAVIGATE_FAILED', `Page.navigate to ${options.navigateUrl} failed: ${text}`, {
+      cause: navigateFailure?.cause,
+      detail: { errorText: navigateFailure?.errorText },
+    })
   }
+}
+
+/** Capture the response selected among the matching ones (default: the largest body). */
+export async function captureNetworkResponse(pageWsUrl: string, options: CaptureOptions): Promise<CapturedResponse> {
+  const candidates = await runCapture(pageWsUrl, options)
+  const chosen = (options.select ?? largestBody)(candidates)
+  if (!chosen) {
+    throw captureError('CAPTURE_NO_MATCH', 'the selector chose none of the captured responses', {
+      detail: { urls: candidates.map((c) => c.url).slice(0, MAX_NO_MATCH_URLS) },
+    })
+  }
+  const captured = toCaptured(chosen, options.navigateUrl)
+  assertNoBan(options, captured)
+  return captured
+}
+
+/** Capture every matching finished response that has a body, ordered by start. Ban rules are checked on each. */
+export async function captureAllNetworkResponses(pageWsUrl: string, options: CaptureOptions): Promise<CapturedResponse[]> {
+  const candidates = await runCapture(pageWsUrl, options)
+  const ordered = [...candidates].sort((a, b) => firstStartedAt(a) - firstStartedAt(b))
+  const all = ordered.map((ex) => toCaptured(ex, options.navigateUrl))
+  for (const c of all) assertNoBan(options, c)
+  return all
 }
