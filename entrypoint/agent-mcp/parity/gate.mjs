@@ -9,6 +9,12 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 
 export const GATE_ORDER = Object.freeze(['ledger', 'scope', 'models', 'judgeCredential', 'preflight']);
+/**
+ * R11 AC1/AC6: the gates of a DESIGN round (ledger.design, backlog-operator): no judge and no web preflight exist there, so the judge-credential and web-preflight gates are replaced by the
+ * model-credential presence check and the design preflight (worktree path and branch free, roster files readable, backlog binary resolves, built agent-mcp present, claude binary for B). Same
+ * rules as GATE_ORDER: read-only or zero-model, any red or throwing gate refuses, nothing reserves a run before all pass.
+ */
+export const DESIGN_GATE_ORDER = Object.freeze(['ledger', 'scope', 'models', 'credential', 'designPreflight']);
 
 const sha256 = (s) => crypto.createHash('sha256').update(s).digest('hex');
 
@@ -69,9 +75,9 @@ export function checkScope({ scenarioSha: cur, previousSha, scopeChanges = [], l
  * Run the gates in GATE_ORDER; stop at the first red one. `gates` maps name -> () => {ok, reasons} | Promise.
  * A gate that throws, or returns a non-object, is red (fail closed). No gate may reserve a run; reservation happens after all pass.
  */
-export async function runGates(gates) {
+export async function runGates(gates, order = GATE_ORDER) {
   const results = [];
-  for (const name of GATE_ORDER) {
+  for (const name of order) {
     const g = gates[name];
     let r;
     try { r = g ? await g() : { ok: false, reasons: [`gate ${name} is not wired`] }; } catch (e) { r = { ok: false, reasons: [`gate ${name} threw: ${String(e?.message || e).slice(0, 200)}`] }; }

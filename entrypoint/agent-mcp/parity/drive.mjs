@@ -27,7 +27,7 @@ import * as CP from './capture-proxy.mjs';
 import * as WD from './wire-diff.mjs';
 import * as TM from './timing.mjs';
 import * as EV from './evidence.mjs';
-import * as AN from './analyze.mjs';
+import * as AN from './analyze.mjs'; import * as BO from './backlog-operator.mjs';   // BO: R11 design (same line as AN so no cited line number below shifts)
 import { ModelRunCapError } from './ledger.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -362,7 +362,7 @@ export function serverEnv(ctx, store, logs) {
     ADHD_AGENT_NATIVE_TOOLING_FS_ALLOWED_ROOTS: JSON.stringify({ repo: ctx.repoDir }),
     ...(ctx.dry ? { ADHD_AGENT_ANTHROPIC_SECRET: 'dry-run-not-a-secret', ANTHROPIC_BASE_URL: ctx.fakeAnthropicUrl || 'http://127.0.0.1:9', NODE_OPTIONS: `--require ${path.join(HERE, 'dryrun/egress-guard.cjs')}`, R2_EGRESS_LOG: path.join(ctx.runDir, 'egress-blocked.log') } : {}),
     ...effortEnv(ctx),
-    ...captureEnv(ctx),
+    ...captureEnv(ctx), ...(ctx.sandboxEnv ?? {}),   // sandboxEnv: R11 design only (backlog-operator.mjs sandboxWriteEnv); undefined for every other round, so R5-R10 server envs are unchanged
     ...(ctx.trace ? { ADHD_AGENT_TRACING_LOG_SINK: 'file', ADHD_AGENT_TRACING_LOG_DIR: path.join(logs, 'trace') } : {}),   // PARITY-R10-prep AC3: the agent-mcp tracing plugin has no on/off switch; the sink and directory are pinned explicitly so a changed default cannot drop the trace silently
   });
 }
@@ -497,13 +497,13 @@ async function setupFakes(ctx) {
   const mode = ctx.opts.degraded || 'ideal';
   const state = path.join(ctx.work, 'fake-state'); fs.mkdirSync(state, { recursive: true });
   const shim = path.join(ctx.work, 'claude-shim.sh');
-  fs.writeFileSync(shim, `#!/bin/sh\nexport R2_FAKE_STATE='${state}'\nexport R2_SDK_ROOT='${path.join(ctx.opts.wt, 'node_modules/@modelcontextprotocol/sdk/dist/esm')}'\nexport R2_FAKE_MODE='${mode}'\nexec '${process.execPath}' '${path.join(HERE, 'dryrun/fake-claude.mjs')}' "$@"\n`, { mode: 0o755 });
+  fs.writeFileSync(shim, `#!/bin/sh\nexport R2_FAKE_STATE='${state}'\nexport R2_SDK_ROOT='${path.join(ctx.opts.wt, 'node_modules/@modelcontextprotocol/sdk/dist/esm')}'\nexport R2_FAKE_MODE='${mode}'\n${ctx.design ? `export R2_FAKE_DESIGN='${ctx.design}'\n` : ''}exec '${process.execPath}' '${path.join(HERE, 'dryrun/fake-claude.mjs')}' "$@"\n`, { mode: 0o755 });
   ctx.opts = { ...ctx.opts, claude: shim };
   ctx.fakeEnv = {};
   ctx.fakeState = state;
   if (ctx.runDef.arm === 'C' || ctx.opts.capture) {   // with capture on, A/B also get the fake upstream so the fake claude's wire probe is answered locally, never by the real API
     const { startFakeAnthropic } = await import(pathToFileURL(path.join(HERE, 'dryrun/fake-anthropic.mjs')).href);
-    ctx.fake = await startFakeAnthropic({ mode, log: () => {}, ...(ctx.trace ? { thinking: 'omitted' } : {}) }); ctx.fakeAnthropicUrl = ctx.fake.url;
+    ctx.fake = await startFakeAnthropic({ mode, log: () => {}, ...(ctx.trace ? { thinking: 'omitted' } : {}), ...(ctx.design ? { design: ctx.design } : {}) }); ctx.fakeAnthropicUrl = ctx.fake.url;
   }
 }
 async function teardownFakes(ctx) { if (ctx.fake) await ctx.fake.close(); }
@@ -768,6 +768,18 @@ function webCapability(arm, tools) {
   return { web: true, webVia: canFetch ? 'tool' : shellFetch ? 'shell' : null, canFetch: canFetch || shellFetch, webSurface: [...new Set([...(WEB_SURFACE[arm]?.tools ?? []), ...(shellFetch ? ['shell:curl'] : []), ...names.filter((t) => /(web_|Web)/.test(t))])] };
 }
 const rowsOf = (j) => (Array.isArray(j?.rows) ? j.rows : []);
+/**
+ * The model-turn stream of ONE task, from the agent-mcp API log (arm B: the claude child's stream-json per spawn; arm C: the HTTP turns). Used by analyzeBC (every task of a phase) and by the
+ * R11 backlog-operator design (every task of the run), so both read a task the same way.
+ */
+export function streamForTask(arm, api, taskId) {
+  if (arm === 'B') { const c = L.cliEventsForTask(api, taskId); const a = cliPhase(c.events, { perProcess: true }); return { ...a, truncated: c.truncated, spawns: c.spawns, spawn: c.spawn, stdin: api.filter((x) => x.event === 'spawn.stdin' && x.task_id === taskId).map((x) => x.body) }; }
+  const http = L.httpTurnsForTask(api, taskId);
+  const turns = http.map((t, i) => { const n = L.normUsage(t.sse?.usage); return { idx: i + 1, id: t.sse?.id, parent: null, model: t.sse?.model, ...n, ctx: L.turnContextOf(t.sse), ctxBasis: t.sse?.startUsage ? 'message_start' : 'usage', stop: t.sse?.stop, tools: (t.sse?.toolUses || []).map((u) => u.name), thinkingBlock: !!t.sse?.thinking, usd: L.priceNorm(n, L.ratesForModel(t.sse?.model)).usd }; });
+  const calls = L.callsFromHttpTurns(http);
+  return { http, turns, calls, parentTexts: http.flatMap((t) => t.sse?.texts || []), replyText: [...(http[http.length - 1]?.sse?.texts || [])].join('\n'), status: 'completed', models: [...new Set(http.map((t) => t.sse?.model).filter(Boolean))],
+    tools: (http[0]?.body?.tools || []).map((t) => t.name || t.type), rate: http.map((t) => L.rateLimitFromHeaders(t.headers)), parallel: L.parallelFromHttpTurns(http), stopReasons: http.map((t) => t.sse?.stop), reqTruncated: http.some((t) => t.truncatedReq || t.truncatedResp) };
+}
 function analyzeBC(ctx, raw) {
   const arm = ctx.runDef.arm; const e = ctx.expected;
   const obs = { arm, rep: ctx.spec.rep, phase1: null, phase2: null, hidden: { p1: {}, p2: {} }, files: {}, capabilities: {}, models: [], cache: {}, dispatch: {}, attr: null };
@@ -778,14 +790,7 @@ function analyzeBC(ctx, raw) {
   const byId = new Map(tasks.map((t) => [t.id, t]));
   const kids = (id) => tasks.filter((t) => t.parentTaskId === id);
   const descendants = (id) => { const out = []; const st = [id]; while (st.length) { const x = st.pop(); for (const k of kids(x)) { out.push(k); st.push(k.id); } } return out; };
-  const streamFor = (taskId) => {
-    if (arm === 'B') { const c = L.cliEventsForTask(api, taskId); const a = cliPhase(c.events, { perProcess: true }); return { ...a, truncated: c.truncated, spawns: c.spawns, spawn: c.spawn, stdin: api.filter((x) => x.event === 'spawn.stdin' && x.task_id === taskId).map((x) => x.body) }; }
-    const http = L.httpTurnsForTask(api, taskId);
-    const turns = http.map((t, i) => { const n = L.normUsage(t.sse?.usage); return { idx: i + 1, id: t.sse?.id, parent: null, model: t.sse?.model, ...n, ctx: L.turnContextOf(t.sse), ctxBasis: t.sse?.startUsage ? 'message_start' : 'usage', stop: t.sse?.stop, tools: (t.sse?.toolUses || []).map((u) => u.name), thinkingBlock: !!t.sse?.thinking, usd: L.priceNorm(n, L.ratesForModel(t.sse?.model)).usd }; });
-    const calls = L.callsFromHttpTurns(http);
-    return { http, turns, calls, parentTexts: http.flatMap((t) => t.sse?.texts || []), replyText: [...(http[http.length - 1]?.sse?.texts || [])].join('\n'), status: 'completed', models: [...new Set(http.map((t) => t.sse?.model).filter(Boolean))],
-      tools: (http[0]?.body?.tools || []).map((t) => t.name || t.type), rate: http.map((t) => L.rateLimitFromHeaders(t.headers)), parallel: L.parallelFromHttpTurns(http), stopReasons: http.map((t) => t.sse?.stop), reqTruncated: http.some((t) => t.truncatedReq || t.truncatedResp) };
-  };
+  const streamFor = (taskId) => streamForTask(arm, api, taskId);
   const ph = [null, null]; const allCalls = [];
   raw.phases.forEach((pr, i) => {
     if (!pr.taskId) return;
@@ -1612,6 +1617,40 @@ export async function selfCheck({ log = console.log, opts = parseArgs([]) } = {}
     chk('B and C get the same shell allowlist object (agentDef is shared)', JSON.stringify(agentDef(ctxB, 'worker', false).nativeTooling) === JSON.stringify(agentDef(ctxC, 'worker', false).nativeTooling));
     const pp = spawnSync(process.execPath, [SELF, '--print-plan'], { encoding: 'utf8' }); chk('`--print-plan` runs offline and exits 0', pp.status === 0 && /THINKING/.test(pp.stdout), `status ${pp.status} ${String(pp.stderr).slice(0, 200)}`);
 
+    // ============ R11 design: backlog-operator (SCOPE-R11-backlog-operator-task) ============
+    log('--- R11 design backlog-operator: selector, verbatim prompt, read-only backlog, arm A refusal ---');
+    {
+      const r11 = (() => { try { return LG.readLedger('R11'); } catch { return null; } });
+      const led = r11();
+      chk('R11 AC1: ledger/R11.json declares design backlog-operator on arms B,C with cap 2 (a round without the key is the composite design)', !!led && LG.designOf(led) === 'backlog-operator' && LG.capOf(led) === 2 && ['R5', 'R6', 'R7', 'R8', 'R9', 'R10'].every((r) => LG.designOf(LG.readLedger(r)) === null), led ? `design ${led.design} cap ${LG.capOf(led)}` : 'no R11 ledger');
+      const tmpL = fs.mkdtempSync(path.join(os.tmpdir(), 'r11-selfcheck-ledger-'));
+      try {
+        fs.writeFileSync(path.join(tmpL, 'R11.json'), JSON.stringify({ ...(led ?? {}), runs: [], judgeCalls: [], armOrder: [], startedAt: null }));
+        let refusedA = false; try { LG.reserveRun('R11', { arm: 'A', runId: 'A1', dir: tmpL }); } catch (e) { refusedA = /arm A is not run in design/.test(e.message); }
+        const okB = (() => { try { return LG.reserveRun('R11', { arm: 'B', runId: 'B1', dir: tmpL }).cap === 2; } catch { return false; } })();
+        chk('R11 AC1: reserveRun refuses arm A in the design (no armAWaiver games) and reserves B without the A-first gate', refusedA && okB);
+      } finally { fs.rmSync(tmpL, { recursive: true, force: true }); }
+      const ownerSentence = BO.TASK_PROMPT;   // the ONE exported constant (R11 AC2); the self-check proves the payload carries exactly it and refuses a variant
+      const okPayload = (() => { try { return BO.assertVerbatimPayload(BO.taskPayload({ sessionId: 's', cwd: '/w' })); } catch { return false; } })();
+      const badPayload = (() => { try { BO.assertVerbatimPayload({ ...BO.taskPayload({ sessionId: 's', cwd: '/w' }), prompt: `${ownerSentence}.` }); return false; } catch { return true; } })();
+      const badSentence = (() => { try { BO.assertVerbatimPayload({ ...BO.taskPayload({ sessionId: 's', cwd: '/w' }), prompt: `${ownerSentence} Be careful.` }); return false; } catch { return true; } })();
+      chk('R11 AC2: the task payload carries TASK_PROMPT byte for byte; an appended sentence and an appended period (negative controls) are refused', okPayload === true && badPayload && badSentence);
+      const reader = BO.makeBacklogReader(async () => ({ ok: true }));
+      const refusals = await Promise.all(['create', 'update', 'transition', 'claim', 'delete'].map(async (v) => { try { await reader.call(v, {}); return false; } catch { return true; } }));
+      chk('R11 AC6: the harness backlog reader refuses every write verb and allows query/get', refusals.every(Boolean) && (await reader.call('query', {})).ok === true);
+      chk('R11 AC1: the design gate order replaces the judge-credential and web-preflight gates and ends in the design preflight', JSON.stringify(GT.DESIGN_GATE_ORDER) === JSON.stringify(['ledger', 'scope', 'models', 'credential', 'designPreflight']));
+      {   // R11 AC11/AC12: the flow-stage detector (flow-stages.mjs) on a synthetic complete run, then one negative control per class of absent or broken evidence
+        const FSG = await import('./flow-stages.mjs'); const t0 = Date.parse('2026-10-13T10:00:00Z'); const iso = (s2) => new Date(t0 + s2 * 1000).toISOString(); const ep = (s2) => Math.floor((t0 + s2 * 1000) / 1000);
+        const tr = { name: 'mcp__backlog__backlog_transition', input: { data: { input: { uid: 'u1' } } }, isError: false };
+        const tasks = [{ taskId: 'p', agent: 'performance', parentTaskId: null, status: 'completed', createdAt: iso(0), completedAt: iso(60), calls: [] }, { taskId: 'o1', agent: 'backlog-operator', sessionId: 's', parentTaskId: 'p', status: 'completed', createdAt: iso(1), completedAt: iso(20), calls: [] },
+          { taskId: 'r', agent: 'review', parentTaskId: 'p', status: 'completed', createdAt: iso(21), completedAt: iso(30), calls: [] }, { taskId: 'o2', agent: 'backlog-operator', sessionId: 's', parentTaskId: 'p', status: 'completed', createdAt: iso(50), completedAt: iso(55), calls: [tr] }];
+        const commits = [{ sha: 'a'.repeat(40), ts: ep(15), files: ['a.ts'] }, { sha: 'b'.repeat(40), ts: ep(40), files: ['a.ts'] }];
+        const item = { picked: 'u1', wasInReadyViewBefore: true, readySnapshotComplete: true, statusBefore: 'open', statusAfter: 'done', transitioned: true };
+        const full = FSG.detectFlow({ tasks, commits, item }); const noRevision = FSG.detectFlow({ tasks, commits: commits.slice(0, 1), item }); const noData = FSG.detectFlow({ tasks: null, commits: null, item: null });
+        chk('R11 AC11: the flow detector passes S1-S5 on a complete synthetic run, fails S4 and S5 when the revision commit is missing, and reports unknown (never pass) when all evidence is absent', full.flowComplete === true && noRevision.stages.S4.status === 'fail' && noRevision.stages.S5.status === 'fail' && noRevision.flowComplete === false && FSG.STAGE_IDS.every((x) => noData.stages[x].status === 'unknown') && noData.flowComplete === false, FSG.flowLine(noRevision));
+      }
+    }
+
     // ============ the driver's own helper tests and the oracle mutation test ============
     log('--- helper unit tests and oracle mutation test ---');
     const { runLibTests } = await import(pathToFileURL(path.join(HERE, 'libtest.mjs')).href); const lib = await runLibTests({ log: () => {} });
@@ -1761,8 +1800,83 @@ function reparseJudgeMode(opts) {
   if (a != null && c != null) console.log(`C/A = ${(c / a).toFixed(4)} vs owner gate >= ${QL.QUALITY_GATE} (${c / a >= QL.QUALITY_GATE ? 'meets' : 'below'} the quality gate; no round verdict computed)`);
   return 0;
 }
+
+// ----------------------------------------------------------------------------------------------------------------
+// R11 design "backlog-operator" (SCOPE-R11-backlog-operator-task): groups B and C, performance -> backlog-operator through agent-mcp, a worktree cwd per group (backlog-operator.mjs)
+// ----------------------------------------------------------------------------------------------------------------
+/** The injected host of backlog-operator.mjs: the SAME run machinery as the composite design (server, capture, wire/model/effort facts, owned-process sweep), so a group is measured the way R5-R10 arms were. */
+export const designHost = {
+  envReport, providerFor, effortOf, thinkingOf, modelConfigFacts, reserveModelRun, setupFakes, teardownFakes, startCapture, startServer, waitTaskFair, settleUsage, egressFactOf, readIf, sweepOwned,
+  wireFactsOf, wireThinkingOf, modelFacts, streamForTask, makeCtx, roundProfile, assignWorkDir,
+  /** Dry-run egress: what the server's egress guard blocked and which non-loopback hosts the API log shows (same rule as runOne). */
+  dryEgressFact(ctx) {
+    const blocked = readIf(path.join(ctx.runDir, 'egress-blocked.log'));
+    const urls = [...new Set(L.findApiLogs(path.join(ctx.runDir, 'logs')).filter((x) => x.event === 'http.request').map((x) => String(x.url)))];
+    const hostOf = (u) => { try { return new URL(u).hostname; } catch { return String(u); } };
+    const blockedHosts = blocked ? [...new Set(blocked.trim().split('\n').map((l) => l.split(' BLOCKED ')[1]))] : [];
+    return { blockedHosts, httpRequestUrls: urls, breach: [...new Set([...urls.map(hostOf), ...blockedHosts].filter((h) => h && h !== '127.0.0.1' && !/^(openrouter\.ai)$/.test(h)))] };
+  },
+};
+/** Where the roster agents (performance, backlog-operator) are read from: PARITY_AGENTS_DIR, else ~/.claude/agents. */
+export const designAgentsDir = (env = process.env) => env.PARITY_AGENTS_DIR || BO.DEFAULT_AGENTS_DIR;
+/**
+ * Live gates of a design round, in GT.DESIGN_GATE_ORDER (ledger, scope, models, credential, designPreflight). Same contract as runLiveGates: read-only or zero-model, any red or throwing
+ * gate refuses, nothing is reserved before all are green. `deps.preflight` / `deps.credential` are injectable (offline tests); the defaults are the real checks.
+ */
+export async function runDesignGates(opts, deps = {}) {
+  const arms = roundProfile(opts).arms;
+  const pendingArms = arms.filter((a) => !LG.readLedger(opts.round, opts.ledgerDir).runs.some((r) => r.arm === a));   // arms that already hold a ledger run keep their own worktree (the harness never removes it): only pending arms must find their path free
+  return GT.runGates({
+    ledger: () => { const r = LG.checkLedgerForLive(opts.round, opts.ledgerDir); return { ok: r.ok, reasons: r.reasons }; },
+    scope: () => { const led = LG.readLedger(opts.round, opts.ledgerDir); let logText = ''; try { logText = fs.readFileSync(GT.resolveLogPath(REPO_ROOT), 'utf8'); } catch { /* none */ }
+      const roster = BO.loadRoster({ dir: opts.agentsDir ?? designAgentsDir() });   // a missing roster file is a red gate (the gate runner turns the throw into a reason)
+      return GT.checkScope({ scenarioSha: BO.scenarioShaOf({ roster }), previousSha: led.scenarioSha || previousScenarioSha(opts.round, opts.ledgerDir), scopeChanges: led.scopeChanges, logText, startedAt: led.startedAt ?? new Date().toISOString() }); },
+    models: () => modelsGate(opts),
+    credential: () => { const c = (deps.credential ?? JG.resolveJudgeCredential)(); return { ok: c.present, reasons: c.present ? [] : ['no Anthropic credential (ANTHROPIC_API_KEY or ADHD_AGENT_ANTHROPIC_SECRET in env or ~/.adhd/.env): group C could not call the API after group B was paid for'] }; },   // presence only, no model call
+    designPreflight: () => (deps.preflight ?? ((o) => BO.designPreflight({ repoRoot: REPO_ROOT, round: o.round, arms, pendingArms, agentsDir: o.agentsDir ?? designAgentsDir(), distEntry: path.join(o.wt, 'entrypoint/agent-mcp/dist/src/index.js'), claude: o.claude })))(opts),
+  }, GT.DESIGN_GATE_ORDER);
+}
+/** Create a throwaway git repository for the DRY RUN (never the real checkout: the dry run must not occupy the live worktree paths). It lives under repo-root tmp/, NOT the OS temp dir, because the OS temp dir is srt-writable by default and would hide a sandbox refusal of `git commit` in a linked worktree. */
+export function makeDryRepo(round, env = process.env) {
+  const base = env.PARITY_DRY_REPO_BASE || path.join(tmpRoot(round), 'dry-repos');
+  fs.mkdirSync(base, { recursive: true });
+  const dir = fs.mkdtempSync(path.join(base, 'repo-'));
+  const g = (...a) => { const r = spawnSync('git', ['-C', dir, ...a], { encoding: 'utf8' }); if (r.status !== 0) throw new Error(`dry repo: git ${a.join(' ')}: ${r.stderr}`); return r.stdout.trim(); };
+  g('init', '-q', '-b', 'plan/dry'); g('config', 'user.name', 'parity dry run'); g('config', 'user.email', 'parity-dry-run@invalid'); g('config', 'commit.gpgsign', 'false');
+  fs.writeFileSync(path.join(dir, 'README.md'), 'dry-run repository for the R11 backlog-operator design\n'); g('add', 'README.md'); g('commit', '-q', '-m', 'dry run base');
+  return { dir: fs.realpathSync(dir), baseSha: g('rev-parse', 'HEAD'), baseBranch: 'plan/dry' };
+}
+/** Run the design round (dry: fakes + a throwaway repo and fake backlog; live: the real repo's worktrees and the production backlog behind the gates). Returns {exitCode,...}. */
+export async function runDesignMode(opts, dry, { log = console.log } = {}) {
+  const profile = roundProfile(opts); const agentsDir = opts.agentsDir ?? designAgentsDir();
+  const roster = BO.loadRoster({ dir: agentsDir });
+  let repoRoot; let mainRoot; let baseSha; let baseBranch; let binary = null; let reader = null;
+  if (dry) { const r = makeDryRepo(opts.round); repoRoot = r.dir; mainRoot = r.dir; baseSha = r.baseSha; baseBranch = r.baseBranch; }
+  else {
+    repoRoot = REPO_ROOT; mainRoot = BO.mainCheckoutOf(REPO_ROOT);
+    baseSha = spawnSync('git', ['-C', repoRoot, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).stdout.trim(); baseBranch = spawnSync('git', ['-C', repoRoot, 'rev-parse', '--abbrev-ref', 'HEAD'], { encoding: 'utf8' }).stdout.trim();
+    binary = BO.resolveBacklogBinary(); if (!binary) throw new BO.DesignError('adhd-backlog is not on PATH'); reader = BO.makeBacklogReader(BO.cliBacklogRunner({ binary: binary.path }));
+  }
+  const wtPlan = BO.worktreePlan({ round: opts.round, arms: profile.arms, mainRoot });
+  return BO.runDesignRound({ opts, dry, host: designHost, deps: { reader, repoRoot, mainRoot, baseSha, baseBranch, wtPlan, roster, binary, fakeItems: opts.fakeItems }, log });
+}
+/** `--print-plan --round R11`: what the design would run, with the worktree paths, groups and the verbatim prompt. Makes no model call and creates nothing. */
+export function designPlanText(opts) {
+  const profile = roundProfile(opts); const ledger = LG.readLedger(opts.round, opts.ledgerDir); const agentsDir = opts.agentsDir ?? designAgentsDir();
+  let roster = null; let rosterError = null; try { roster = BO.loadRoster({ dir: agentsDir }); } catch (e) { rosterError = String(e.message ?? e); }
+  const ctxs = Object.fromEntries(profile.arms.map((a) => [a, makeCtx({ ...opts }, null, { arm: a, rep: 1 }, true)]));
+  let mainRoot = null; try { mainRoot = BO.mainCheckoutOf(REPO_ROOT); } catch { /* not a git checkout */ }
+  const pf = (() => { try { return BO.designPreflight({ repoRoot: REPO_ROOT, round: opts.round, arms: profile.arms, agentsDir, distEntry: path.join(opts.wt, 'entrypoint/agent-mcp/dist/src/index.js'), claude: opts.claude, spawn: () => ({ status: 1, stdout: '', stderr: '' }) }).facts.hooks; } catch { return null; } })();   // facts only (no process is spawned by the injected spawn stub; git config reads are read-only)
+  return BO.planText({ round: opts.round, profile, ledger, roster, rosterError, repoRoot: REPO_ROOT, mainRoot, agentsDir,
+    hostFacts: { hooks: pf, providers: Object.fromEntries(profile.arms.map((a) => [a, providerFor(ctxs[a], a)])), models: Object.fromEntries(profile.arms.map((a) => [a, modelOf(ctxs[a])])), thinking: Object.fromEntries(profile.arms.map((a) => [a, thinkingOf(ctxs[a], a)])) } });
+}
+
 async function main() {
   const opts = parseArgs(process.argv.slice(2));
+  opts.agentsDir = process.env.PARITY_AGENTS_DIR || undefined;
+  const design = (() => { if (['self-check', 'check-oracle', 'check-lib'].includes(opts.mode) || opts.mode === 'analyze') return null; try { return BO.designOfRound(opts.round); } catch (e) { console.error(`CONFIG REFUSED (exit 2, nothing planned, no model call): ${e.message}`); process.exit(2); } })();
+  if (!opts.mode && design) opts.mode = 'dry-run';   // R11 AC9: a bare `--round R11` is the offline dry run (it can never spend: --live --yes is the only paid path)
+  if (design && ['verdict', 'grid', 'rejudge', 'reparse-judge', 'rederive-tools', 'rederive-duration', 'preflight'].includes(opts.mode)) { console.error(`${opts.mode} does not apply to design ${design} (round ${opts.round}): no judge, no oracle, no grid; use \`analyze ${opts.round} <runB> <runC>\``); process.exit(2); }
   if (!opts.mode) { console.error('usage: node drive.mjs --self-check | --print-plan | --check-oracle | --check-lib | --rederive-tools | --rederive-duration | --dry-run | --live --yes | --reparse-judge | --rejudge --run <id> --yes  [--out DIR] [--seed S] [--wt PATH] [--claude PATH] [--capture]'); process.exit(2); }
   if (['dry-run', 'live', 'print-plan', 'preflight'].includes(opts.mode)) {
     // SCOPE-R9-model-config: an invalid experiment configuration (unknown key, empty / alias / opus id, bad env) refuses here, exit 2, before any gate, reservation, spawn or spend
@@ -1774,13 +1888,30 @@ async function main() {
   if (opts.mode === 'check-lib') { const { runLibTests } = await import(pathToFileURL(path.join(HERE, 'libtest.mjs')).href); const r = await runLibTests({ log: console.log }); console.log(`lib self-test: ${r.ok ? 'PASS' : 'FAIL'} ${r.total - r.failed.length}/${r.total}`); process.exit(r.ok ? 0 : 1); }
   if (opts.mode === 'rederive-tools') { process.exit(rederiveToolsMode(opts)); }
   if (opts.mode === 'rederive-duration') { const t = rederiveDurationReport(tmpRoot(opts.round), opts.round, opts.rep); console.log(t); process.exit(t.startsWith('no records') ? 1 : 0); }
-  if (opts.mode === 'analyze') { const r = AN.analyzeCli(opts.rest ?? [], { tmpRoot, loadRound: loadRoundRecords }); if (r.out) console.log(r.out); if (r.err) console.error(r.err); process.exit(r.code); }
+  if (opts.mode === 'analyze') {
+    let dz = null; try { dz = BO.designOfRound(opts.rest?.[0]); } catch { dz = null; }
+    if (dz) { const r = BO.analyzeDesignCli(opts.rest, { tmpRoot }); if (r.out) console.log(r.out); if (r.err) console.error(r.err); process.exit(r.code); }
+    const r = AN.analyzeCli(opts.rest ?? [], { tmpRoot, loadRound: loadRoundRecords }); if (r.out) console.log(r.out); if (r.err) console.error(r.err); process.exit(r.code);
+  }
   if (opts.mode === 'reparse-judge') { process.exit(reparseJudgeMode(opts)); }
   if (opts.mode === 'rejudge') { process.exit(await rejudgeMode(opts)); }
-  if (opts.mode === 'print-plan') { console.log(planText(opts)); return; }
+  if (opts.mode === 'print-plan') { console.log(design ? designPlanText(opts) : planText(opts)); return; }
   if (opts.mode === 'preflight') { process.exit(await runPreflightMode(opts)); }
   if (opts.mode === 'verdict' || opts.mode === 'grid') { process.exit(reportMode(opts)); }
   const dry = opts.mode === 'dry-run';
+  if (design) {   // R11: the backlog-operator design has its own gates, runner and record; the composite plan below is untouched for every other round
+    opts.outExplicit = Boolean(opts.out); opts.out = opts.out || path.join(tmpRoot(opts.round), dry ? 'dry/out' : 'live/out');
+    if (!dry && !opts.yes) { console.error('--live spends real model quota (hard cap = one run per group) and works the REAL production backlog. Re-run with --yes to confirm.'); process.exit(2); }
+    if (!dry) {
+      const g = await runDesignGates(opts);
+      for (const r of g.results) console.error(`gate ${r.gate}: ${r.ok ? 'GREEN' : 'RED'} ${(r.reasons ?? []).join('; ')}`);
+      if (!g.ok) { console.error(`LIVE REFUSED by gate ${g.failed} (exit 3); ledger untouched, no model call, no claude spawned`); process.exit(3); }
+      LG.initRound(opts.round, { scenarioSha: BO.scenarioShaOf({ roster: BO.loadRoster({ dir: opts.agentsDir ?? designAgentsDir() }) }) });
+    }
+    if (dry) opts.claude = 'FAKE-SET-PER-RUN';
+    let res; try { res = await runDesignMode(opts, dry); } catch (e) { console.error(`${e instanceof BO.DesignError ? 'DESIGN REFUSED' : 'DESIGN FAULT'} (nothing was spent past this point): ${e.message}`); console.log(BO.PAUSE_LINE); process.exit(1); }
+    process.exit(res.exitCode);
+  }
   if (!dry && !opts.yes) { console.error('--live spends real model quota (hard cap 3 runs per round). Re-run with --yes to confirm.'); process.exit(2); }
   opts.outExplicit = Boolean(opts.out);   // an operator-chosen --out puts the work dir under it (and ancestorLeaks then guards it); the default keeps work under os.tmpdir()
   opts.out = opts.out || path.join(tmpRoot(opts.round), dry ? 'dry/out' : 'live/out');

@@ -32,8 +32,8 @@ describe('R10 dry run (fair timing + evidence)', () => {
     expect(fs.readdirSync(path.join(out, 'runs')).sort()).toEqual(['A1', 'C1']);
     for (const id of ['A1', 'C1']) expect(rec(id).harnessFailure, id).toBeUndefined();
     expect(fs.readFileSync(ledgerFile, 'utf8')).toBe(ledgerBefore);
-    // the dry run is never an approval: it neither reads approvedBy nor writes the ledger (byte-identical above). The tracked R10 ledger now carries the owner's recorded approval (R10 launch prep), so the old emptiness assertion is gone.
-    expect(JSON.parse(ledgerBefore).runs).toEqual([]);
+    // the dry run is never an approval: it neither reads approvedBy nor writes the ledger (byte-identical above). The tracked R10 ledger records the live round (A1 and C1, one run each), so the dry run must add nothing to it.
+    expect(JSON.parse(ledgerBefore).runs.map((x: { runId: string }) => x.runId)).toEqual(['A1', 'C1']);
   }, 480_000);
 
   it('AC1: the graded wall is the sum of the engine windows (not the run wall) for both arms; every segment is named and the partition has residual 0', () => {

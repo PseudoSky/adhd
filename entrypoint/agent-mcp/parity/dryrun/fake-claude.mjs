@@ -13,6 +13,7 @@ import { pathToFileURL, fileURLToPath } from 'node:url';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const { runRole, ROLE_RE } = await import(pathToFileURL(path.join(HERE, 'script.mjs')));
+const { runBoRole } = await import(pathToFileURL(path.join(HERE, 'script-bo.mjs')));   // R11 backlog-operator design: only when the shim exports R2_FAKE_DESIGN (the composite scenario never reaches it)
 const { priceUsage } = await import(pathToFileURL(path.join(HERE, '..', 'lib.mjs')));
 
 const argv = process.argv.slice(2);
@@ -152,6 +153,7 @@ function bridgeIo(prompt) {
   const cwd = process.cwd();
   const has = (srv, tool) => (toolLists[srv] || []).includes(tool);
   const parseJson = (t) => { try { return JSON.parse(t); } catch { return {}; } };
+  const sessionsByName = {};
   const callVia = async (srv, tool, input) => { const tuid = emitToolUse(mcpName(srv, tool), input, null); const r = await mcpCall(srv, tool, input); emitToolResult(tuid, r.text, r.isError, null); return r; };
   const parallelVia = async (calls) => {            // several tool_use blocks in ONE assistant message, executed concurrently
     const mid = `msg_fake_${++msgN}`;
@@ -162,6 +164,10 @@ function bridgeIo(prompt) {
   };
   return {
     cwd: async () => cwd, prompt, history: '', canDispatch: has('agent-mcp', 'agent'), canWeb: false,
+    tool: async (re, input) => {   // R11: call the bridged tool whose name matches `re` on whichever server offers it
+      for (const [srv, ts] of Object.entries(toolLists)) { const t = ts.find((x) => re.test(x)); if (t) return (await callVia(srv, t, input)).text; }
+      throw new Error(`fake: no bridged tool matches ${re}`);
+    },
     call: async (kind, a) => {
       if (kind === 'shell') return (await callVia('shell', 'shell_execute', { command: a.argv, directory: a.directory })).text;
       if (kind === 'read') return (await callVia('fs', 'read_text_file', { path: a.path })).text;
@@ -171,8 +177,12 @@ function bridgeIo(prompt) {
       if (kind === 'ticket') return (await callVia('r2info', 'get_ticket', {})).text;
       throw new Error(kind);
     },
+    sessions: sessionsByName,   // agent name -> the session this conversation last used for it (an item with `session` reuses one: "the same backlog operator")
     dispatchMany: async (items) => {
-      const sessions = (await parallelVia(items.map((it) => ({ srv: 'agent-mcp', tool: 'agent', input: { name: it.name, cwd } })))).map((r) => parseJson(r.text).session_id);
+      const fresh = items.map((it, i) => ({ it, i })).filter((x) => !x.it.session);
+      const made = fresh.length ? (await parallelVia(fresh.map((x) => ({ srv: 'agent-mcp', tool: 'agent', input: { name: x.it.name, cwd } })))).map((r) => parseJson(r.text).session_id) : [];
+      const sessions = items.map((it, i) => it.session ?? made[fresh.findIndex((x) => x.i === i)]);
+      items.forEach((it, i) => { sessionsByName[it.name] = sessions[i]; });
       const rs = await parallelVia(items.map((it, i) => ({ srv: 'agent-mcp', tool: 'task', input: { session_id: sessions[i], prompt: it.prompt, cwd } })));
       return rs.map((r) => { const j = parseJson(r.text); return String(j.result ?? r.text); });
     },
@@ -206,7 +216,8 @@ async function main(line) {
   const cur = cur0;
   const role = (cur.match(ROLE_RE) || [])[1] || 'parent';
   const phase = /^\s*Follow-up\./.test(cur) ? 2 : 1;
-  const reply = await runRole({ role, phase, io, mode: MODE });
+  const boDesign = process.env.R2_FAKE_DESIGN === 'backlog-operator';
+  const reply = boDesign ? await runBoRole({ role: Object.keys(toolLists).some((n) => /backlog/i.test(n)) ? 'bo-operator' : toolLists['agent-mcp'] ? 'bo-performance' : 'bo-review', io }) : await runRole({ role, phase, io, mode: MODE });
   emitFinal(reply, null);
   if (!bridge) fs.writeFileSync(path.join(STATE, `session-${sid}.json`), JSON.stringify({ memory: `${history}\n${sessionMemory.join('\n')}\n${reply}` }));
   // Like the real CLI, `total_cost_usd` and `modelUsage` are SESSION-cumulative on a resumed native session (usage is this turn only).

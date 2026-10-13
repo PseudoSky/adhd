@@ -112,12 +112,36 @@ export function profileOf(led) {
     ...(p.modelConfig != null ? { modelConfig: p.modelConfig } : {}), ...(p.modelDifferenceReason != null ? { modelDifferenceReason: p.modelDifferenceReason.trim() } : {}) };
 }
 
+/**
+ * R11 AC1: the experiment DESIGNS a round may declare at the ledger root (`design`). Absent = the original composite fixture scenario (rounds R5-R10 are untouched).
+ * `backlog-operator` (SCOPE-R11-backlog-operator-task, owner-directed) = the performance agent is handed the owner's one sentence and dispatches the backlog operator through agent-mcp.
+ */
+export const DESIGNS = Object.freeze(['backlog-operator']);
+/**
+ * The design a ledger declares, or null. Fails CLOSED: an unknown design value, or a design round whose profile is missing / lists arm A / has no recorded
+ * armAWaiver, throws a LedgerError with a message that names the rule. The design experiments run arms B and C ONLY (owner: "only arms b and c"); arm A never runs in them, and the
+ * A-first reference gate is bypassed for them by the owner waiver recorded in `profile.armAWaiver` (profileOf already refuses an A-less profile without one), never by a code default.
+ * @returns {string|null}
+ */
+export function designOf(led) {
+  const d = led?.design; if (d == null) return null;
+  const bad = (m) => { throw new LedgerError(`ledger.design ${JSON.stringify(d)} ${m}: refusing (fail closed)`); };
+  if (typeof d !== 'string' || !DESIGNS.includes(d)) bad(`is not a known design (${DESIGNS.join(', ')})`);
+  const p = profileOf(led);
+  if (!p) bad('needs a ledger.profile (arms B and C, the recorded owner waiver of the A-first gate)');
+  if (p.arms.includes('A') || p.completedArms.includes('A')) bad('does not run arm A: arm A is refused in this design (owner: only arms B and C); remove A from ledger.profile');
+  if (!p.armAWaiver) bad('needs ledger.profile.armAWaiver (the owner direction, quoted): the A-first gate is waived for this design on the record');
+  if (p.arms.some((a) => !['B', 'C'].includes(a))) bad('runs only arms B and C');
+  return d;
+}
+
 /** Read-only precondition for a live round (no write): approvedBy present, cap not reached. Used by the gate before anything runs. */
 export function checkLedgerForLive(round, dir = LEDGER_DIR) {
   const led = readLedger(round, dir);
   const reasons = [];
   if (!String(led.approvedBy || '').trim()) reasons.push('ledger.approvedBy is empty: a live round must be asked for and the owner message quoted in approvedBy');
   let cap = RUN_CAP; try { profileOf(led); cap = capOf(led); } catch (e) { reasons.push(e.message); }
+  try { designOf(led); } catch (e) { reasons.push(e.message); }   // R11 AC1: a design round that lists arm A, lacks the waiver or names an unknown design is refused before anything runs
   if (led.runs.length >= cap && !String(led.extraRunReason || '').trim()) reasons.push(`run cap ${led.runs.length}/${cap} reached and extraRunReason is empty`);
   return { ok: reasons.length === 0, reasons, ledger: led };
 }
@@ -143,6 +167,8 @@ export function reserveRun(round, { arm, runId, dir = LEDGER_DIR, model, modelSo
     const led = fs.existsSync(f) ? parseLedger(fs.readFileSync(f, 'utf8'), f) : emptyLedger(round);
     if (!String(led.approvedBy || '').trim()) throw new LedgerError(`ledger ${f}: approvedBy is empty: refusing ${runId}`);
     if (led.runs.length >= capOf(led) && !String(led.extraRunReason || '').trim()) throw new ModelRunCapError(`model-run cap reached: ${led.runs.length}/${capOf(led)} (ledger ${f}); an extra run needs extraRunReason; refusing ${runId}`);
+    designOf(led);   // R11 AC1: validates the design (throws LedgerError); arm A is then refused below by the profile (arms lists no A) with the design message
+    if (led.design != null && arm === 'A') throw new LedgerError(`arm A is not run in design ${led.design} (owner: only arms B and C): refusing ${runId}`);
     const prof = profileOf(led);   // R8: a profile that omits arm A (with its recorded armAWaiver) is the ONLY way the A-first gate is not applied
     if (prof && prof.completedArms.includes(arm)) throw new LedgerError(`arm ${arm} already ran in this round (ledger.profile.completedArms [${prof.completedArms.join(',')}], run ${led.runs.find((r) => r.arm === arm)?.runId}): an arm never runs twice; refusing ${runId}`);
     if (prof && !prof.arms.includes(arm)) throw new LedgerError(`arm ${arm} is not in ledger.profile.arms [${prof.arms.join(',')}]: refusing ${runId}`);

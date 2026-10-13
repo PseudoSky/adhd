@@ -187,20 +187,28 @@ describe('R10 LP AC4: the --self-check anthropic.ts guard', () => {
 describe('R10 LP AC5: the ledger precondition sees the owner approval', () => {
   const APPROVAL = "I approve your next 3 experiment rounds as long as you're making serious progress";
   const stubs = { preflight: async () => ({ ok: true, legs: [] }), judgeCredential: () => ({ present: true }) };
-  it('R10 LP AC5: the tracked R10 ledger records the owner message verbatim, keeps cap 2, lists both scope entries, and carries no run, no judge call and no start time', () => {
+  it('R10 LP AC5: the tracked R10 ledger records the owner message verbatim, keeps cap 2, lists both scope entries, and records the live round: A1 and C1 once each, one judge call each, a start time', () => {
     const led = JSON.parse(fs.readFileSync(path.join(PARITY_DIR, 'ledger', 'R10.json'), 'utf8'));
     expect(led.approvedBy).toBe(APPROVAL); expect(led.cap).toBe(2);
     expect(led.scopeChanges).toEqual(['SCOPE-R10-prep', 'SCOPE-R10-thinking-parity']);
-    expect(led.runs).toEqual([]); expect(led.judgeCalls).toEqual([]); expect(led.startedAt).toBeNull();
+    expect(led.runs.map((x: { runId: string }) => x.runId)).toEqual(['A1', 'C1']); expect(led.judgeCalls).toHaveLength(2); expect(typeof led.startedAt).toBe('string');
   });
-  it('R10 LP AC5: checkLedgerForLive (read-only precondition, no --live) is ok for R10 and the first live gate "ledger" is green', async () => {
+  it('R10 LP AC5: checkLedgerForLive (read-only precondition, no --live) refuses R10 now that its cap of 2 is spent (a spent round cannot be launched again), and the first live gate "ledger" is red; the ledger file is not touched', async () => {
     const before = fs.readFileSync(path.join(PARITY_DIR, 'ledger', 'R10.json'), 'utf8');
     const r = LG.checkLedgerForLive('R10');
     console.log(`R10 LP AC5 precondition: ${JSON.stringify({ ok: r.ok, reasons: r.reasons, approvedBy: r.ledger.approvedBy, cap: LG.capOf(r.ledger), runs: r.ledger.runs.length })}`);
-    expect(r.ok).toBe(true); expect(r.reasons).toEqual([]);
+    expect(r.ok).toBe(false); expect(r.reasons.join()).toMatch(/run cap 2\/2 reached/);
     const g = await D.runLiveGates({ round: 'R10' }, stubs);
-    expect(g.results[0]).toMatchObject({ gate: 'ledger', ok: true });
+    expect(g.results[0]).toMatchObject({ gate: 'ledger', ok: false });
     expect(fs.readFileSync(path.join(PARITY_DIR, 'ledger', 'R10.json'), 'utf8')).toBe(before);   // read-only
+  });
+  it('R10 LP AC5 (pre-launch shape): the same ledger with the live round removed passes the precondition and the first live gate is green (the approval alone is sufficient)', async () => {
+    const dir = mk(); const led = JSON.parse(fs.readFileSync(path.join(PARITY_DIR, 'ledger', 'R10.json'), 'utf8'));
+    fs.writeFileSync(path.join(dir, 'R10.json'), JSON.stringify({ ...led, runs: [], judgeCalls: [], armOrder: [], startedAt: null }));
+    const r = LG.checkLedgerForLive('R10', dir);
+    expect(r.ok).toBe(true); expect(r.reasons).toEqual([]);
+    const g = await D.runLiveGates({ round: 'R10', ledgerDir: dir }, stubs);
+    expect(g.results[0]).toMatchObject({ gate: 'ledger', ok: true });
   });
   it('R10 LP AC5 teeth: the same ledger with an empty approvedBy is refused by the precondition and by the live gate sequence (exit 3, failed "ledger")', async () => {
     const dir = mk(); const led = JSON.parse(fs.readFileSync(path.join(PARITY_DIR, 'ledger', 'R10.json'), 'utf8')); led.approvedBy = '';

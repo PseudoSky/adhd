@@ -1,0 +1,31 @@
+{
+  "round": "R11",
+  "design": "backlog-operator",
+  "cap": 2,
+  "approvedBy": "no, the experiment design I told you to use, where an agent dispatches backlog operator using agent mcp, gets a random ticket, implements it, etc. only arms b and c. those are the experiments I want you to run",
+  "extraRunReason": "",
+  "runs": [],
+  "judgeCalls": [],
+  "scenarioSha": "",
+  "scopeChanges": [
+    "SCOPE-R11-backlog-operator-task",
+    "SCOPE-R11-stop-condition",
+    "SCOPE-R11-prompt-update"
+  ],
+  "armOrder": [],
+  "startedAt": null,
+  "armA": null,
+  "releases": [],
+  "profile": {
+    "arms": [
+      "B",
+      "C"
+    ],
+    "armAWaiver": "no, the experiment design I told you to use, where an agent dispatches backlog operator using agent mcp, gets a random ticket, implements it, etc. only arms b and c. those are the experiments I want you to run (arm A is refused in design backlog-operator; the A-first reference gate is waived for this design by the owner, on the record; armA stays null)",
+    "effort": "high",
+    "capture": true,
+    "modelConfig": "experiment",
+    "fairTiming": true,
+    "traceEvidence": true
+  }
+}

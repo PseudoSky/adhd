@@ -386,6 +386,8 @@ real built agent-mcp over stdio with a real MCP client on an isolated store unde
 rule "do not burn the 5h window": the test refuses to run live (fail-closed) when the 5h window is not `allowed`, utilization is >= 0.60,
 or the state cannot be read. Unset, it is reported SKIPPED with the gate and owner named; its offline controls run ungated.
 
+A sixth, the parity instrument's R11 design (`parity/backlog-operator.mjs`, `node parity/drive.mjs --live --yes --round R11` run from this directory; SCOPE-R11-backlog-operator-task), runs two real-provider groups (B claudecli, C anthropic) that dispatch the `performance` agent, which delegates to `backlog-operator` and the read-only `review` agent through agent-mcp (select and implement, review, revise, transition: SCOPE-R11-prompt-update; the five flow stages are read from state by `parity/flow-stages.mjs`), from a git worktree cwd against the production backlog. Same gate reason (paid model); **approved by:** nix (repo owner), quoted in `parity/ledger/R11.json` `approvedBy`; hard cap 2 (one run per group), no retry, no CI or nx wiring, and its offline proofs (`r11-design.test.ts`, `r11-design.e2e.test.ts`, the `--round R11` dry run) run by default. The harness never writes the backlog and signals only processes it spawned. Details: `parity/README.md` "R11: the backlog-operator design".
+
 ## Native-tooling adoption gate (env-gated — external third-party server)
 
 The ADR-0008 D7 upstream-server adoption is a **human-gated** decision
