@@ -23,6 +23,7 @@
  *
  * Exit: 0 everything requested removed; 3 something kept; 4 stale/invalid force token; 2 usage.
  */
+import { spawnSync } from 'node:child_process';
 import { digest, fingerprint, git, samePath, isManagedWorktreePath, listWorktrees, mainRoot, matchTarget, porcelainPaths } from './lib/worktree-lib.mjs';
 
 const MAIN_BRANCH = 'main';
@@ -108,6 +109,12 @@ function main() {
     const rm = git(['worktree', 'remove', ...(doForce ? ['--force'] : []), t.path], { cwd: root });
     if (rm.status !== 0) { kept.push({ tree: t, why: `git refused: ${rm.stderr.split('\n')[0]}` }); continue; }
     const notes = [];
+    // Unregister the worktree's gitnexus index (documented `gitnexus remove`); the registry
+    // otherwise keeps a dead entry for every removed worktree. Best-effort, never fatal.
+    if (!process.env.WORKTREE_CLEANUP_NO_GITNEXUS) {
+      const gx = spawnSync('gitnexus', ['remove', t.path, '--force'], { stdio: 'ignore' });
+      if (gx.status === 0) notes.push('gitnexus index unregistered');
+    }
     if (t.branch) {
       const br = git(['branch', '-d', t.branch], { cwd: root });
       if (br.status !== 0) notes.push(`branch kept (${br.stderr.split('\n')[0]})`);

@@ -29,7 +29,7 @@
 import { spawnSync } from 'node:child_process';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { git, gitOk, gitVersionOk, isManagedWorktreePath, listWorktrees, mainRoot, matchTarget, porcelainPaths, samePath, shortIdsIn, ticketsIn } from './lib/worktree-lib.mjs';
+import { git, gitOk, gitVersionOk, isManagedWorktreePath, listWorktrees, mainRoot, matchTarget, porcelainPaths, samePath, shortIdsIn, startMainIndexRefresh, ticketsIn } from './lib/worktree-lib.mjs';
 
 const MAIN = 'main';
 const here = dirname(fileURLToPath(import.meta.url));
@@ -183,6 +183,8 @@ function main() {
       die(8, `push failed (exit ${push.status}). The merge commit ${sha} exists locally and cleanup was skipped. Fix the cause, run: git -C ${root} push origin ${MAIN}, then: scripts/worktree-cleanup.sh ${branch}`);
     }
   } else say('no origin remote: nothing to push');
+
+  say(startMainIndexRefresh(root));
 
   // ── 6. cleanup ────────────────────────────────────────────────────────────────────
   const code = cleanup(wt.path);

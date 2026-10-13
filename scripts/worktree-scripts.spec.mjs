@@ -122,15 +122,16 @@ test('cleanup: a worktree is addressable by its directory name even when the bra
   } finally { s.done(); }
 });
 
-// ── setup: gitnexus index seeding ────────────────────────────────────────────
-/** Puts a fake `gitnexus` first on PATH; it records its argv + cwd to <cwd>/tmp/fake-gitnexus.out. */
+// ── gitnexus index handling ──────────────────────────────────────────────────
+/** A fake `gitnexus` first on PATH. It appends "<args> @ <cwd>" to <base>/gx.log; `--version` exits 0. */
 function withFakeGitnexus(s) {
   const bin = join(s.base, 'bin');
   mkdirSync(bin, { recursive: true });
-  writeFileSync(join(bin, 'gitnexus'), '#!/bin/sh\nmkdir -p tmp\necho "$PWD $*" > tmp/fake-gitnexus.out\n');
+  writeFileSync(join(bin, 'gitnexus'), `#!/bin/sh\necho "$* @ $PWD" >> "${join(s.base, 'gx.log')}"\nexit 0\n`);
   chmodSync(join(bin, 'gitnexus'), 0o755);
   return { PATH: `${bin}:${process.env.PATH}` };
 }
+const gxLog = (s) => (existsSync(join(s.base, 'gx.log')) ? readFileSync(join(s.base, 'gx.log'), 'utf8').trim().split('\n').filter(Boolean) : []);
 const samePathStr = (a, b) => realpathSync(a) === realpathSync(b);
 /** Bounded wait (no sleep-based proof: it polls for the observable with a hard deadline). */
 function waitFor(pred, ms = 15000) {
@@ -138,28 +139,65 @@ function waitFor(pred, ms = 15000) {
   while (Date.now() < end) { if (pred()) return true; Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50); }
   return pred();
 }
+/** Main's .gitnexus with a marker file and meta.json recording `commit` (default: main's HEAD). */
+function mainIndex(s, commit = git(s.root, 'rev-parse', 'HEAD')) {
+  const dir = join(s.root, '.gitnexus');
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, 'meta.json'), JSON.stringify({ lastCommit: commit }));
+  writeFileSync(join(dir, 'lbug'), 'graph-bytes');
+  return dir;
+}
 
-test('setup: main\'s .gitnexus index is cloned into the new worktree and an incremental analyze is started there', () => {
+test('setup: main\'s index is current for the worktree\'s commit -> it is copied and REGISTERED with `gitnexus index` (no analyze)', () => {
   const s = sandbox();
   try {
-    mkdirSync(join(s.root, '.gitnexus'));
-    writeFileSync(join(s.root, '.gitnexus', 'meta.json'), '{"seed":"from-main"}');
+    mainIndex(s);
     const r = s.sh('worktree-setup.sh', ['--bl', '11111111'], { env: withFakeGitnexus(s) });
     assert.equal(r.status, 0, r.stderr);
     const dir = s.wt('plan-11111111');
-    assert.equal(readFileSync(join(dir, '.gitnexus', 'meta.json'), 'utf8'), '{"seed":"from-main"}', 'index cloned');
-    const out = join(dir, 'tmp', 'fake-gitnexus.out');
-    assert.ok(waitFor(() => existsSync(out)), 'analyze was started in the worktree');
-    const line = readFileSync(out, 'utf8').trim();
-    assert.match(line, /analyze --index-only/);
-    assert.ok(samePathStr(line.split(' ')[0], dir), `analyze ran in the worktree, got ${line}`);
+    assert.equal(readFileSync(join(dir, '.gitnexus', 'lbug'), 'utf8'), 'graph-bytes', 'index copied');
+    const log = gxLog(s);
+    assert.equal(log.length, 1, `exactly one gitnexus call, got ${JSON.stringify(log)}`);
+    assert.match(log[0], /^index \. @ /);
+    assert.ok(samePathStr(log[0].split(' @ ')[1], dir), 'registered from inside the worktree');
+    assert.match(r.stdout, /copied from main/);
   } finally { s.done(); }
 });
 
-test('setup: WORKTREE_SEED_GITNEXUS=0 and a missing main index both skip seeding without failing setup', () => {
+test('setup: main\'s index is at a different commit -> NOT copied; a standard background `analyze --index-only` runs in the worktree', () => {
   const s = sandbox();
   try {
-    mkdirSync(join(s.root, '.gitnexus'));
+    mainIndex(s, 'deadbeefdeadbeefdeadbeefdeadbeefdeadbeef');
+    const r = s.sh('worktree-setup.sh', ['--bl', '11111111'], { env: withFakeGitnexus(s) });
+    assert.equal(r.status, 0, r.stderr);
+    const dir = s.wt('plan-11111111');
+    assert.equal(existsSync(join(dir, '.gitnexus')), false, 'stale index is not copied');
+    assert.ok(waitFor(() => gxLog(s).length > 0), 'analyze started');
+    const log = gxLog(s);
+    assert.match(log[0], /^analyze --index-only +\. @ /);
+    assert.ok(samePathStr(log[0].split(' @ ')[1], dir));
+    assert.match(r.stdout, /not at this commit/);
+  } finally { s.done(); }
+});
+
+test('setup: main is re-indexing (lock held) -> NOT copied, so a half-written graph can never be captured; cold analyze runs instead', () => {
+  const s = sandbox();
+  try {
+    const idx = mainIndex(s);
+    writeFileSync(join(idx, '.reindex.lock'), '4242');
+    const r = s.sh('worktree-setup.sh', ['--bl', '11111111'], { env: withFakeGitnexus(s) });
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(existsSync(join(s.wt('plan-11111111'), '.gitnexus')), false);
+    assert.ok(waitFor(() => gxLog(s).length > 0));
+    assert.match(gxLog(s)[0], /^analyze --index-only/);
+    assert.match(r.stdout, /re-indexing right now/);
+  } finally { s.done(); }
+});
+
+test('setup: WORKTREE_SEED_GITNEXUS=0 and a missing main index never fail setup or touch gitnexus', () => {
+  const s = sandbox();
+  try {
+    mainIndex(s);
     const off = s.sh('worktree-setup.sh', ['--bl', '11111111'], { env: { ...withFakeGitnexus(s), WORKTREE_SEED_GITNEXUS: '0' } });
     assert.equal(off.status, 0, off.stderr);
     assert.equal(existsSync(join(s.wt('plan-11111111'), '.gitnexus')), false);
@@ -167,6 +205,7 @@ test('setup: WORKTREE_SEED_GITNEXUS=0 and a missing main index both skip seeding
     const none = s.sh('worktree-setup.sh', ['--bl', '22222222'], { env: withFakeGitnexus(s) });
     assert.equal(none.status, 0, none.stderr);
     assert.equal(existsSync(join(s.wt('task-22222222'), '.gitnexus')), false);
+    assert.equal(gxLog(s).length, 0, 'no gitnexus call at all: SEED=0 skips, and a repo whose main has no index does not use gitnexus');
   } finally { s.done(); }
 });
 
@@ -370,6 +409,41 @@ function mergedWorktree(s, name = 'plan-11111111') {
   return wt;
 }
 
+test('merge: after the push, main\'s index refresh starts in main, under the shared lock, and the lock is released when it ends', () => {
+  const s = sandbox();
+  try {
+    writeFileSync(join(s.root, '.gitignore'), '.worktrees\ntmp\nnode_modules\n.gitnexus\n');
+    git(s.root, 'commit', '-q', '-am', 'ignore index'); git(s.root, 'push', '-q', 'origin', 'main');
+    const idx = mainIndex(s);
+    const wt = planWorktree(s);
+    commitIn(wt, 'feature.txt', 'hello\n', 'feat(x): add feature');
+    const r = s.sh('worktree-merge.sh', ['plan-11111111'], { env: withFakeGitnexus(s) });
+    assert.equal(r.status, 0, r.stderr);
+    assert.match(r.stderr + r.stdout, /refreshing main's index in the background/);
+    const refresh = () => gxLog(s).find((l) => l.startsWith('analyze --skip-agents-md --skip-skills'));
+    assert.ok(waitFor(() => refresh()), `refresh ran, log: ${JSON.stringify(gxLog(s))}`);
+    assert.ok(samePathStr(refresh().split(' @ ')[1], s.root), 'ran in main, not the worktree');
+    assert.ok(waitFor(() => !existsSync(join(idx, '.reindex.lock'))), 'lock released when analyze ends');
+  } finally { s.done(); }
+});
+
+test('merge: a lock held by another reindex means no second analyze is started, and the merge still succeeds', () => {
+  const s = sandbox();
+  try {
+    writeFileSync(join(s.root, '.gitignore'), '.worktrees\ntmp\nnode_modules\n.gitnexus\n');
+    git(s.root, 'commit', '-q', '-am', 'ignore index'); git(s.root, 'push', '-q', 'origin', 'main');
+    const idx = mainIndex(s);
+    writeFileSync(join(idx, '.reindex.lock'), '4242');
+    const wt = planWorktree(s);
+    commitIn(wt, 'feature.txt', 'hello\n', 'feat(x): add feature');
+    const r = s.sh('worktree-merge.sh', ['plan-11111111'], { env: withFakeGitnexus(s) });
+    assert.equal(r.status, 0, r.stderr);
+    assert.match(r.stderr + r.stdout, /already re-indexing/);
+    assert.equal(gxLog(s).filter((l) => l.startsWith('analyze')).length, 0);
+    assert.equal(existsSync(join(idx, '.reindex.lock')), true, 'someone else\'s lock is left alone');
+  } finally { s.done(); }
+});
+
 test('cleanup: removes a merged clean worktree + its local and remote branch, selected by backlog id', () => {
   const s = sandbox();
   try {
@@ -381,6 +455,21 @@ test('cleanup: removes a merged clean worktree + its local and remote branch, se
     assert.equal(existsSync(wt), false);
     assert.equal(run('git', ['rev-parse', '--verify', '-q', 'plan-11111111'], { cwd: s.root }).status, 1);
     assert.equal(run('git', ['ls-remote', '--exit-code', '--heads', s.origin, 'plan-11111111']).status, 2, 'remote branch deleted');
+  } finally { s.done(); }
+});
+
+test('cleanup: removing a worktree also unregisters its gitnexus index (`gitnexus remove <path> --force`)', () => {
+  const s = sandbox();
+  try {
+    assert.equal(s.sh('worktree-setup.sh', ['plain']).status, 0);
+    const env = withFakeGitnexus(s);
+    const r = s.sh('worktree-cleanup.sh', ['plain'], { env });
+    assert.equal(r.status, 0, r.stdout + r.stderr);
+    const call = gxLog(s).find((l) => l.startsWith('remove '));
+    assert.ok(call, `gitnexus remove was called, log: ${JSON.stringify(gxLog(s))}`);
+    assert.ok(call.split(' ')[1].endsWith('/.worktrees/plain'), `removes the worktree's own path, got ${call}`);
+    assert.match(call, / --force @ /);
+    assert.match(r.stdout, /gitnexus index unregistered/);
   } finally { s.done(); }
 });
 
