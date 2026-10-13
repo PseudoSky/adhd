@@ -1005,6 +1005,20 @@
       ],
       "context": "contexts/search-examples.md",
       "notes": "typescript-pro sonnet/medium; runnable examples and README blocks"
+    },
+    "tracing-log-validation": {
+      "kind": "work",
+      "phase": "verify",
+      "depends_on": [
+        "search-hosts"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py tracing-log-validation",
+      "artifacts": [
+        "docs/plan/stealth-browser/evidence/tracing-log-validation.md",
+        "docs/plan/stealth-browser/evidence/tracing-log-validation.json"
+      ],
+      "context": "contexts/tracing-log-validation.md",
+      "notes": "general-purpose sonnet/medium; ONE validating agent reads the logs written by the built CLI and MCP hosts, no tests"
     }
   },
   "authored_with": {
