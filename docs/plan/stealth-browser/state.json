@@ -242,11 +242,11 @@
       "end_ref": null
     },
     "capture-upgrade": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-10-13T00:47:02.086Z",
-      "done_at": null,
+      "done_at": "2026-10-13T01:24:32.167Z",
       "start_ref": "ff2288f08440685aa0e6e8aac1a697251ea64b37",
-      "end_ref": null
+      "end_ref": "dab7baeef7277b0151959bf1ce611396554b0665"
     },
     "chrome-lifecycle": {
       "status": "pending",
@@ -589,6 +589,18 @@
       "audit_criteria_total": 10,
       "by": "pseudosky",
       "note": "guard 0 after plan amendment 27440178; verified by orchestrator"
+    },
+    {
+      "ts": "2026-10-13T01:24:32.167Z",
+      "from": "sp-link",
+      "to": "capture-upgrade",
+      "start_ref": "ff2288f08440685aa0e6e8aac1a697251ea64b37",
+      "end_ref": "dab7baeef7277b0151959bf1ce611396554b0665",
+      "audit_exit": 0,
+      "audit_criteria_passed": 28,
+      "audit_criteria_total": 28,
+      "by": "pseudosky",
+      "note": "guard 0 verified; CU1 unblocked by transport migration 6e42b23a"
     }
   ],
   "amendment_log": [
