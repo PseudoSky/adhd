@@ -569,3 +569,6 @@ Instrument changes since R9: fair graded wall (engine window, condition-wait acc
 
 ### 2026-10-13T08:05:59Z — SCOPE-R10-thinking-parity: ARM C SENDS THE SAME THINKING SETTING AS A (dispatcher)
 R9 wire capture: A and B sent thinking {"type":"adaptive"}; C sent no thinking field. From R10 the Anthropic-backed arm C is configured with provider.thinking {"type":"adaptive"} (parent and worker) through entrypoint/agent-mcp/parity/experiment.json (override PARITY_THINKING_C, JSON or "none"), applied only to rounds whose ledger lists this scope. Product default is unchanged (unset). Per-run record: thinkingFacts (requested vs wire on every main request). Arm A is reported not-controlled (the real CLI sends adaptive; the harness sets nothing). Thinking parity applies to Anthropic-backed arms only. Landed in 1a32ba81 (worktree plan/parity-instrument).
+
+### 2026-10-13T00:17:19Z — SCOPE-R10-prep: HEADING FOR THE LIVE SCOPE GATE (dispatcher)
+The scope entry dated 2026-10-13T00:17:19Z (harness measurement fairness, tracing-based evidence, product triage; owner direction) was written as a second-level heading, which the live scope gate (gate.mjs checkScope) does not read. This third-level heading carries that entry's own timestamp and points at it; no scope content changes.
