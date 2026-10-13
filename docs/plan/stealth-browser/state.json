@@ -291,10 +291,10 @@
       "end_ref": "962716de219d1f551a4b8f5cb133676cfacedb00"
     },
     "sp-link": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-10-13T01:30:30.637Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "692cb289831c887e8b99e3a03676d953fab45e9c",
       "end_ref": null
     },
     "sp-reaper-smoke": {
@@ -1126,7 +1126,7 @@
     "version": "0.8.35",
     "hash": "0b6bc1f3d70e"
   },
-  "current_state": "tripwire-core",
+  "current_state": "sp-link",
   "dod_provenance": {
     "confirmed_at": "2026-10-12T23:49:38.410Z",
     "by": "pseudosky",
