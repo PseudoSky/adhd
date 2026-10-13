@@ -13,7 +13,7 @@ Import edges: client → engine/environment only. Layer plugin ↛ client and cl
 ## 2. Decisions that close the demo's UNKNOWN list
 | ID | Decision |
 |---|---|
-| D-01 (U3) | The root exports the **service operations** with object input: `compile({layers})`, `evaluate({tool,args,attributes,runtime})`, `resolve`, `narrow`, `explain`, `check`, `verify`, `show`, `draft`, `doctor`. The positional `core` functions are internal (`src/core`, not importable). Demo S1 is rewritten to the object form in T18. |
+| D-01 (U3) | apigen operations take `ctx` as the first, schema-excluded parameter (verified: `entrypoint/backlog/src/api.ts` header; `createClient` supplies it per call). So `service/api.ts` exports `(ctx: IPolicyCtx, input) => Promise<result>` functions, and the **library entry** is `createPolicyClient(ctxOrLayers)` returning `IPolicyClient` whose methods take only `input` (object form: `client.evaluate({tool,args,attributes,runtime})`). `createMemoryCtx({layers,...})` builds a ctx with no environment. Positional `core` functions are internal (`src/core`, not importable). Demo S1 is rewritten to `createPolicyClient` in T18. |
 | D-02 (U4) | Permission id is `<layer>:<n>`, `n` 0-based within that layer's `permissions` array. `IDecision.matched` lists every permission whose tool, context and args matched (allow, ask and deny), in evaluation order (layer order, then file order). |
 | D-03 (U1) | Complex inputs (`args`, `attributes`, `request`, `layers`, `operations`, `options`) are JSON values. The CLI accepts whatever apigen's derived convention provides (JSON string or `@file`); T06 records the real form and T18 reconciles the demo. No hand-written flag parsing. |
 | D-04 (U7) | Every refusal is `ApiError permission_denied` → exit 3: `check` on deny/ask, `run`/`serve` refused calls. Malformed input is `invalid_argument` → exit 2. |
@@ -28,7 +28,7 @@ Import edges: client → engine/environment only. Layer plugin ↛ client and cl
 | D-13 (U14) | `_within` over an empty list is false; relative or non-normalised paths are normalised against the call `cwd` when present, else compared as given after `path.posix.normalize`; non-existent paths are compared lexically (no fs access in core); implicit AND for multi-key objects; `_is_null` is a presence check. |
 | D-14 (U15) | The Layer receives its options (decider module + options) from `--use` options; if apigen hosts do not deliver them (LI-01), T07 documents the actual channel and the plugin also accepts options programmatically. |
 | D-15 (OD-16) | `ask` is `permission_denied` (exit 3) until apigen has an approval result (backlog 7e7eb01d). The Layer calls an optional `IPolicyAskHandler`; with none, `ask` ⇒ deny. |
-| D-16 | `IDraftOperation.hints` uses the MCP annotation names: `{readOnlyHint?: boolean; destructiveHint?: boolean}`. The demo's `hints.readOnly`/`hints.destructive` are corrected in T18. `inferred` entries follow D-09 exactly. |
+| D-16 | `IDraftOperation` is exactly the plain-data shape in `spec/architect-interfaces-sources.md` section 4 (`name`, `args[]`, `hints.readOnly`/`hints.destructive`); `IDraftOptions` adds `readRootsAttribute?`/`writeRootsAttribute?`; the result's `inferred` entries are D-09's `{operation, argument, kind, reason}`. The demo's `hints.readOnly`/`hints.destructive` are correct as written. |
 | D-17 | Refusal exit code is 3 everywhere (D-04); the demo's "non-zero" wording is tightened in T18. |
 
 ## 3. Per-ticket contract checklist
@@ -40,3 +40,9 @@ Import edges: client → engine/environment only. Layer plugin ↛ client and cl
 - T07: spec `architect-interfaces-layer.md` §2-§3; failure/malformed/timeout ⇒ deny.
 - T08: `bin:` source per `architect-interfaces-sources.md` with D-07/D-08; `IProcessLauncher` port injectable (default spawns); `bin` is never executed during extraction unless `serve`/`run` was invoked.
 - T09: `run bin:<cmd> --spec f [--adhd-attributes x] -- args`; `serve <source> --spec f`; `mcp-json`; `--adhd-*` flags stripped before the child sees argv.
+
+## 4. Verified facts the file specs bind to
+- `Query` and `DataView` are exported from `@adhd/data-query-engine`; `new Query({where: expr}).where` is a synchronous compiled predicate `(row) => boolean` (`packages/data/data-query-engine/src/lib/query.ts:73-110`). `matches(row, expr)` is therefore `new Query({where: expr}).where!(row)`; this closes IF-01. An invalid operator throws `QueryValidationError` (`lib/errors.ts:11`) — `validateExpression` catches it.
+- `Layer = (call: Call, next: Next) => Promise<LayerResult>`; `Call` carries `operation.id`, `domainArgs`, `envelope`, `transport`, `signal?` (`apigen-engine-runtime/src/lib/invoke.ts:68-128`). A `--use` plugin is `UsePlugin = {id, capabilities?: {layer?: {layer(call, next)}}}` (`package-invoker.ts:36-80`); plug-in options ride on `options.useOptions[pluginId]` (`package-invoker.ts:86`).
+- `new ApiError(code, message, details?)`; `CLI_EXIT_CODE` maps codes to exit codes (`apigen-base-errors/src/lib/errors.ts:58-125`).
+- The CLI is mounted with `cliPlugin.run({packages:[pkg], operations, outputDir:'', options:{argv, usePlugins, exitCode?}})` where `pkg={id,version,schemas,importPath,fns,createClient}` (`entrypoint/backlog/src/cli.ts:1007-1040`, `server.ts:630-650`). `createClient` is called fresh per dispatch.

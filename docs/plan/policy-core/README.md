@@ -33,7 +33,7 @@ Not built (filed or already tracked): `remote:` sources (backlog f6bf8550), sand
 | A | T10 | READMEs, AGENTS.md, usage docs, CHANGELOGs | T05-T09 |
 | B | R1-R4 | Large-batch reviews: R1 client (after T05), R2 entrypoint (after T06+T09), R3 Layer (after T07), R4 apigen bin (after T08); fixes folded back | A |
 | C | T11-T17 | Functional tests, one ticket per demo scenario S1-S7 | B |
-| C | C | T19 | Safety-relevant failure-path tests (Layer fails closed, serve handshake failure, attribute precedence) | B |
+| C | T19 | Safety-relevant failure-path tests (Layer fails closed, serve handshake failure, attribute precedence) | Phase B |
 | C | T18 | Reconcile `demo-policy-v1.md` UNKNOWNs against the built CLI; final gates | T11-T17 |
 
 Parallelism: after T01, T02→T05 (chain), T07, T08 run in parallel. T06/T09 follow their inputs.
