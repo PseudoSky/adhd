@@ -576,11 +576,13 @@ def _d3():
 
 @check("deps-install", 4)
 def _d4():
-    """The lockfile diff removes no existing line (no collateral version bumps): `git diff` of pnpm-lock.yaml has zero '-' lines."""
+    """The lockfile diff removes no existing line (no collateral version bumps): the pnpm-lock.yaml diff of this state's own [psm:deps-install] commits has zero '-' lines (later states' lockfile changes are their own guards' concern)."""
     base = git("merge-base", "HEAD", "main")
-    d = git("diff", "-U0", f"{base}..HEAD", "--", "pnpm-lock.yaml")
+    log = sh(["git", "log", f"{base}..HEAD", "--format=%H%x1f%B%x1e", "--", "pnpm-lock.yaml"])[1]
+    own = [r.strip().split("\x1f", 1)[0] for r in log.split("\x1e") if "\x1f" in r and "[psm:deps-install]" in r]
+    d = "\n".join(git("show", "-U0", "--format=", sha, "--", "pnpm-lock.yaml") for sha in own)
     removed = [ln for ln in d.splitlines() if ln.startswith("-") and not ln.startswith("---")]
-    return not removed and bool(d), f"{len(removed)} removed lines"
+    return not removed and bool(d.strip()), f"{len(own)} own lockfile commit(s), {len(removed)} removed lines"
 
 
 @check("deps-install", 5)
