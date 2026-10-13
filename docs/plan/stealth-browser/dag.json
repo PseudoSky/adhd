@@ -990,6 +990,21 @@
       ],
       "context": "contexts/search-usecases.md",
       "notes": "typescript-pro sonnet/high; unit scenarios, no process spawn"
+    },
+    "search-examples": {
+      "kind": "work",
+      "phase": "verify",
+      "depends_on": [
+        "search-hosts"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py search-examples",
+      "artifacts": [
+        "entrypoint/stealth-search/examples/",
+        "entrypoint/stealth-search/src/test/unit/examples/",
+        "entrypoint/stealth-search/README.md"
+      ],
+      "context": "contexts/search-examples.md",
+      "notes": "typescript-pro sonnet/medium; runnable examples and README blocks"
     }
   },
   "authored_with": {

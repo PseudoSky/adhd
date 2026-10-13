@@ -422,6 +422,13 @@
       "done_at": null,
       "start_ref": null,
       "end_ref": null
+    },
+    "search-examples": {
+      "status": "pending",
+      "started_at": null,
+      "done_at": null,
+      "start_ref": null,
+      "end_ref": null
     }
   },
   "transition_log": [
