@@ -242,10 +242,10 @@
       "end_ref": null
     },
     "capture-upgrade": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-10-13T00:47:02.086Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "ff2288f08440685aa0e6e8aac1a697251ea64b37",
       "end_ref": null
     },
     "chrome-lifecycle": {
