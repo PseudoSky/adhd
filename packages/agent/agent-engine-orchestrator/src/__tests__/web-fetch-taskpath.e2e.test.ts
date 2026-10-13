@@ -22,7 +22,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createServer, type Server as HttpServer } from "node:http";
 import type { AddressInfo } from "node:net";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import * as schema from "@adhd/agent-store-runtime";
 import { SessionStore, TaskStore } from "@adhd/agent-store-runtime";
@@ -40,6 +40,19 @@ import { Orchestrator } from "../engine/orchestrator.js";
 import type { EngineConfig, EngineLogger } from "../interfaces.js";
 import { nowIso } from "../utils/timestamps.js";
 import { WEB_FETCH_TOOL } from "../tools/web-fetch.js";
+import { LAB_PUBLIC_IP, lab, labUrl } from "./fixtures/web-fetch-lab.js";
+
+// The fixture is on loopback, which the SSRF guard refuses by design (bc799330). It is addressed by a public-looking
+// name instead: see fixtures/web-fetch-lab.ts for exactly what is (and is not) substituted.
+vi.mock("node:dns/promises", async () => {
+  const { LAB_PUBLIC_IP: ip } = await import("./fixtures/web-fetch-lab.js");
+  return { lookup: async () => [{ address: ip, family: 4 }] };
+});
+vi.mock("node:http", async (orig) => {
+  const actual = await orig<typeof import("node:http")>();
+  const { labRequest } = await import("./fixtures/web-fetch-lab.js");
+  return { ...actual, request: labRequest(actual.request) };
+});
 
 const FAKE_CLAUDE = fileURLToPath(new URL("./fixtures/fake-claude-mcp.mjs", import.meta.url));
 const MIGRATIONS = fileURLToPath(new URL("../../../../../entrypoint/agent-mcp/drizzle", import.meta.url));
@@ -172,13 +185,17 @@ const PAGE =
   "<title>Task Path Title R6B</title></head><body><h1>Heading</h1><p>Task path body text.</p></body></html>";
 
 let fixture: HttpServer | undefined;
-async function fixtureUrl(): Promise<string> {
+/** Starts the fixture; returns the URL by its public-looking name (mapped to it by the lab) and by its loopback address. */
+async function fixtureUrls(): Promise<{ named: string; loopback: string }> {
   fixture = createServer((_req, res) => {
     res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
     res.end(PAGE);
   });
   await new Promise<void>((r) => fixture!.listen(0, "127.0.0.1", r));
-  return `http://127.0.0.1:${(fixture.address() as AddressInfo).port}/page`;
+  const port = (fixture.address() as AddressInfo).port;
+  lab.port = port;
+  lab.seen = [];
+  return { named: labUrl(port), loopback: `http://127.0.0.1:${port}/page` };
 }
 afterEach(async () => {
   if (fixture) await new Promise<void>((r) => fixture!.close(() => r()));
@@ -189,7 +206,7 @@ const call = (url: string): string => JSON.stringify({ calls: [{ server: "web", 
 
 describe("R6B-web AC4: web_fetch through the orchestrator task path (claudecli)", () => {
   it("R6B-web AC4: the bridge lists web_fetch byte-identical to the shared definition AFTER advertisement rewriting, and the fetch returns the fixture title and text", async () => {
-    const url = await fixtureUrl();
+    const url = (await fixtureUrls()).named;
     const env = makeEnv({ gate: () => "allow" });
     const out = await taskTool({ agent_name: "web-agent", prompt: call(url) }, env.deps);
     expect(out.status).toBe("completed");
@@ -202,10 +219,27 @@ describe("R6B-web AC4: web_fetch through the orchestrator task path (claudecli)"
     const parsed = JSON.parse(seen!.text) as { content: { title: string; source: { data: string } } };
     expect(parsed.content.title).toBe("Task Path Title R6B");
     expect(parsed.content.source.data).toContain("Task path body text.");
+    // bc799330 AC2: the real socket was opened to the validated public IP with the original name as Host.
+    expect(lab.seen.map((o) => o.host)).toEqual([LAB_PUBLIC_IP]);
+    expect((lab.seen[0]!.headers as Record<string, string>)["host"]).toBe(new URL(url).host);
+  }, 60_000);
+
+  it("bc799330 AC1/AC6: the same task-path call aimed at the fixture's LOOPBACK address is refused as a tool error naming the class, and nothing is fetched", async () => {
+    const { loopback } = await fixtureUrls();
+    let hits = 0;
+    fixture!.on("request", () => { hits += 1; });
+    const env = makeEnv({ gate: () => "allow" });
+    const out = await taskTool({ agent_name: "web-agent", prompt: call(loopback) }, env.deps);
+    expect(out.status).toBe("completed");
+    const [seen] = env.modelSaw();
+    expect(seen).toMatchObject({ isError: true });
+    expect(seen!.text).toMatch(/127\.0\.0\.1 is a loopback address/);
+    expect(hits).toBe(0);
+    expect(lab.seen).toHaveLength(0);
   }, 60_000);
 
   it("R6B-web AC4: the permission gate governs web_fetch (deny -> PERMISSION_DENIED, nothing fetched)", async () => {
-    const url = await fixtureUrl();
+    const url = (await fixtureUrls()).named;
     let hits = 0;
     fixture!.on("request", () => { hits += 1; });
     const env = makeEnv({ gate: (c) => (c.tool === "web_fetch" ? "deny" : "allow") });
@@ -218,7 +252,7 @@ describe("R6B-web AC4: web_fetch through the orchestrator task path (claudecli)"
   }, 60_000);
 
   it("R6B-web AC4: the configured egress allow-list is enforced on the task path", async () => {
-    const url = await fixtureUrl();
+    const url = (await fixtureUrls()).named;
     const env = makeEnv({ gate: () => "allow", webFetch: { allowedDomains: ["example.com"] } });
     const out = await taskTool({ agent_name: "web-agent", prompt: call(url) }, env.deps);
     expect(out.status).toBe("completed");

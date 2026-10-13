@@ -26,6 +26,7 @@ import {
   hostAllowed,
   webFetchAdvertised,
 } from '../tools/web-fetch.js';
+import { stubNet, type NetHandler } from './fixtures/web-fetch-net.js';
 import { bridgeableTools } from '../providers/claudecli-tool-bridge.js';
 import { ANTHROPIC_NATIVE_WEB_TOOLS } from '../providers/server-side-tools.js';
 
@@ -109,7 +110,7 @@ describe('R6B-web AC2 — executor shape and constraints (stub fetch, no network
     const html =
       '<html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>Example Domain</title>' +
       '<style>body{x:y}</style></head><body><h1>Example Domain</h1><p>This domain is for use in &amp; examples.</p></body></html>';
-    const out = await executeWebFetch({ url: 'https://example.com' }, { fetchImpl: async () => htmlResponse(html), now: fixed });
+    const out = await executeWebFetch({ url: 'https://example.com' }, { ...stubNet(async () => htmlResponse(html)), now: fixed });
     expect(out).toEqual({
       type: 'web_fetch_result',
       url: 'https://example.com/',
@@ -128,7 +129,7 @@ describe('R6B-web AC2 — executor shape and constraints (stub fetch, no network
 
   it('R6B-web AC2: output over the text cap ends with the explicit truncation marker', async () => {
     const big = `<title>t</title><p>${'x'.repeat(WEB_FETCH_MAX_TEXT_CHARS + 50)}</p>`;
-    const out = (await executeWebFetch({ url: 'http://a.test/' }, { fetchImpl: async () => htmlResponse(big), now: fixed })) as {
+    const out = (await executeWebFetch({ url: 'http://a.test/' }, { ...stubNet(async () => htmlResponse(big)), now: fixed })) as {
       content: { source: { data: string } };
     };
     expect(out.content.source.data.endsWith(WEB_FETCH_TRUNCATION_MARKER)).toBe(true);
@@ -136,30 +137,30 @@ describe('R6B-web AC2 — executor shape and constraints (stub fetch, no network
   });
 
   it('R6B-web AC2: a short page carries no truncation marker (negative control for the marker)', async () => {
-    const out = JSON.stringify(await executeWebFetch({ url: 'http://a.test/' }, { fetchImpl: async () => htmlResponse('<p>hi</p>') }));
+    const out = JSON.stringify(await executeWebFetch({ url: 'http://a.test/' }, { ...stubNet(async () => htmlResponse('<p>hi</p>')) }));
     expect(out).not.toContain('content truncated');
   });
 
   it('R6B-web AC2: non-http(s) URLs, bad input and non-2xx / binary responses are errors', async () => {
     const f = async () => htmlResponse('x');
-    await expect(executeWebFetch({ url: 'file:///etc/passwd' }, { fetchImpl: f })).rejects.toThrow(/only http and https/);
-    await expect(executeWebFetch({ url: 'nope' }, { fetchImpl: f })).rejects.toThrow(/valid absolute URL/);
-    await expect(executeWebFetch({}, { fetchImpl: f })).rejects.toThrow(/"url"/);
+    await expect(executeWebFetch({ url: 'file:///etc/passwd' }, { ...stubNet(f) })).rejects.toThrow(/only http and https/);
+    await expect(executeWebFetch({ url: 'nope' }, { ...stubNet(f) })).rejects.toThrow(/valid absolute URL/);
+    await expect(executeWebFetch({}, { ...stubNet(f) })).rejects.toThrow(/"url"/);
     await expect(
-      executeWebFetch({ url: 'http://a.test/' }, { fetchImpl: async () => new Response('no', { status: 404, statusText: 'Not Found' }) })
+      executeWebFetch({ url: 'http://a.test/' }, { ...stubNet(async () => new Response('no', { status: 404, statusText: 'Not Found' })) })
     ).rejects.toThrow(/HTTP 404/);
     await expect(
-      executeWebFetch({ url: 'http://a.test/' }, { fetchImpl: async () => new Response('x', { headers: { 'content-type': 'image/png' } }) })
+      executeWebFetch({ url: 'http://a.test/' }, { ...stubNet(async () => new Response('x', { headers: { 'content-type': 'image/png' } })) })
     ).rejects.toThrow(/unsupported content type/);
   });
 
   it('R6B-web AC2: egress policy denies a host outside allowedDomains and never calls fetch', async () => {
     let called = 0;
-    const f = (async () => { called += 1; return htmlResponse('x'); }) as unknown as typeof fetch;
-    await expect(executeWebFetch({ url: 'https://evil.test/' }, { allowedDomains: ['example.com'], fetchImpl: f })).rejects.toThrow(/egress denied/);
+    const f = (async () => { called += 1; return htmlResponse('x'); }) as unknown as NetHandler;
+    await expect(executeWebFetch({ url: 'https://evil.test/' }, { allowedDomains: ['example.com'], ...stubNet(f) })).rejects.toThrow(/egress denied/);
     expect(called).toBe(0);
     // control: the allowed host goes through
-    await executeWebFetch({ url: 'https://www.example.com/' }, { allowedDomains: ['*.example.com'], fetchImpl: f });
+    await executeWebFetch({ url: 'https://www.example.com/' }, { allowedDomains: ['*.example.com'], ...stubNet(f) });
     expect(called).toBe(1);
   });
 
@@ -167,8 +168,8 @@ describe('R6B-web AC2 — executor shape and constraints (stub fetch, no network
     const f = (async (u: URL | string) =>
       String(u).includes('example.com')
         ? new Response(null, { status: 302, headers: { location: 'https://evil.test/' } })
-        : htmlResponse('x')) as unknown as typeof fetch;
-    await expect(executeWebFetch({ url: 'https://example.com/' }, { allowedDomains: ['example.com'], fetchImpl: f })).rejects.toThrow(/egress denied: evil\.test/);
+        : htmlResponse('x')) as unknown as NetHandler;
+    await expect(executeWebFetch({ url: 'https://example.com/' }, { allowedDomains: ['example.com'], ...stubNet(f) })).rejects.toThrow(/egress denied: evil\.test/);
   });
 
   it('R6B-web AC2: hostAllowed matches exact, wildcard (not the bare suffix) and ignores :port', () => {
@@ -185,7 +186,7 @@ describe('R6B-web AC2 — executor shape and constraints (stub fetch, no network
   });
 
   it('R6B-web AC2: WebFetchClient lists exactly the shared tool and rejects unknown tools', async () => {
-    const c = new WebFetchClient({ fetchImpl: async () => htmlResponse('<p>x</p>') });
+    const c = new WebFetchClient({ ...stubNet(async () => htmlResponse('<p>x</p>')) });
     expect(await c.listTools()).toEqual([
       { name: WEB_FETCH_TOOL.name, description: WEB_FETCH_TOOL.description, inputSchema: WEB_FETCH_TOOL.inputSchema },
     ]);
@@ -195,13 +196,11 @@ describe('R6B-web AC2 — executor shape and constraints (stub fetch, no network
 
 describe('R6B-web AC2 — host egress config reaches the registry client', () => {
   it('R6B-web AC2: EngineConfig.webFetch.allowedDomains is enforced by the advertised tool', async () => {
-    const reg = registryFor('claudecli', {}, {
-      webFetch: { allowedDomains: ['example.com'] },
-      wire: { fetch: (async () => htmlResponse('<p>x</p>')) as unknown as typeof fetch } as never,
-    });
+    const reg = registryFor('claudecli', {}, { webFetch: { allowedDomains: ['example.com'] } });
     await reg.listAllTools();
     const client = await reg.getClient('web');
-    await expect(client.callTool('web_fetch', { url: 'https://evil.test/' })).rejects.toThrow(/egress denied/);
-    await expect(client.callTool('web_fetch', { url: 'https://example.com/' })).resolves.toMatchObject({ type: 'web_fetch_result' });
+    await expect(client.callTool('web_fetch', { url: 'https://evil.test/' })).rejects.toThrow(/egress denied: evil\.test is not in the allowed domains/);
+    // The allowed name is a success case only with the network seams stubbed; the registry builds the
+    // client without them, so the success half lives in web-fetch-adapters.test.ts (same chain, node:dns/http mocked).
   });
 });

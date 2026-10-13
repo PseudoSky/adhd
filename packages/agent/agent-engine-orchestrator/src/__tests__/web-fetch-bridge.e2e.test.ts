@@ -10,7 +10,7 @@
  * Negative control (recorded when authored): removing the registry registration makes both tests
  * red (`toolListing.web` is undefined and the call has no `web` route).
  */
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { chmodSync, mkdtempSync, readFileSync, realpathSync, rmSync } from 'node:fs';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
@@ -25,6 +25,19 @@ import type { EngineConfig, EngineLogger } from '../interfaces.js';
 import type { ProviderChatRequest } from '../providers/types.js';
 import type { ExecutionContext } from '../validation/index.js';
 import { WEB_FETCH_TOOL } from '../tools/web-fetch.js';
+import { LAB_PUBLIC_IP, lab, labUrl } from './fixtures/web-fetch-lab.js';
+
+// The fixture is on loopback, which the SSRF guard refuses by design (bc799330). It is addressed by a public-looking
+// name instead: see fixtures/web-fetch-lab.ts for exactly what is (and is not) substituted.
+vi.mock('node:dns/promises', async () => {
+  const { LAB_PUBLIC_IP: ip } = await import('./fixtures/web-fetch-lab.js');
+  return { lookup: async () => [{ address: ip, family: 4 }] };
+});
+vi.mock('node:http', async (orig) => {
+  const actual = await orig<typeof import('node:http')>();
+  const { labRequest } = await import('./fixtures/web-fetch-lab.js');
+  return { ...actual, request: labRequest(actual.request) };
+});
 
 const FAKE_CLAUDE = fileURLToPath(new URL('./fixtures/fake-claude-mcp.mjs', import.meta.url));
 const noopHandler: InProcessToolHandler = (async () => ({})) as unknown as InProcessToolHandler;
@@ -41,14 +54,21 @@ const PAGE =
   '<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1">' +
   '<title>Fixture Title R6B</title></head><body><h1>Fixture Heading</h1><p>Body text from the local fixture.</p></body></html>';
 
-async function fixtureServer(): Promise<string> {
+let hits = 0;
+/** Starts the fixture; returns its loopback URL (what a model could try) and the public-looking-name URL the lab maps to it. */
+async function fixtureServer(): Promise<{ loopbackUrl: string; namedUrl: string }> {
   const s = createServer((_req, res) => {
+    hits += 1;
     res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
     res.end(PAGE);
   });
   servers.push(s);
   await new Promise<void>((r) => s.listen(0, '127.0.0.1', r));
-  return `http://127.0.0.1:${(s.address() as AddressInfo).port}/page`;
+  const port = (s.address() as AddressInfo).port;
+  lab.port = port;
+  lab.seen = [];
+  hits = 0;
+  return { loopbackUrl: `http://127.0.0.1:${port}/page`, namedUrl: labUrl(port) };
 }
 
 async function runClaudecli(url: string) {
@@ -96,7 +116,7 @@ async function runClaudecli(url: string) {
 
 describe('R6B-web AC4 — claudecli bridge serves web_fetch', () => {
   it('R6B-web AC4: bridge tools/list returns web_fetch byte-identical to the shared definition, as mcp__web__web_fetch', async () => {
-    const self = await runClaudecli(await fixtureServer());
+    const self = await runClaudecli((await fixtureServer()).namedUrl);
     // NEGATIVE CONTROL: without the registry registration `toolListing.web` is undefined (red).
     expect(self.toolNames).toEqual(['mcp__web__web_fetch']);
     const listed = self.toolListing['web']![0]!;
@@ -107,7 +127,7 @@ describe('R6B-web AC4 — claudecli bridge serves web_fetch', () => {
   });
 
   it('R6B-web AC4: a tools/call against a local HTTP fixture returns the title and the text', async () => {
-    const url = await fixtureServer();
+    const { namedUrl: url } = await fixtureServer();
     const self = await runClaudecli(url);
     expect(self.results).toHaveLength(1);
     expect(self.results[0]!.isError).toBe(false);
@@ -120,6 +140,21 @@ describe('R6B-web AC4 — claudecli bridge serves web_fetch', () => {
     expect(body.content.source.data).toContain('title: Fixture Title R6B');
     expect(body.content.source.data).toContain('meta-viewport: width=device-width,initial-scale=1');
     expect(body.content.source.data).toContain('Body text from the local fixture.');
+    // bc799330 AC2 (real socket): the engine asked for the VALIDATED public IP, with the original name as Host.
+    expect(hits).toBe(1);
+    expect(lab.seen).toHaveLength(1);
+    expect(lab.seen[0]!.host).toBe(LAB_PUBLIC_IP);
+    expect((lab.seen[0]!.headers as Record<string, string>)['host']).toBe(new URL(url).host);
+  });
+
+  it('bc799330 AC1/AC6: through the real bridge a call to the fixture by its LOOPBACK address is refused as isError, naming the class, and the fixture is never hit', async () => {
+    const { loopbackUrl } = await fixtureServer();
+    const self = await runClaudecli(loopbackUrl);
+    expect(self.results).toHaveLength(1);
+    expect(self.results[0]!.isError).toBe(true);
+    expect(self.results[0]!.text).toMatch(/127\.0\.0\.1 is a loopback address/);
+    expect(hits).toBe(0);
+    expect(lab.seen).toHaveLength(0);
   });
 
   it('R6B-web AC4: a refused call surfaces as isError through the bridge (non-http scheme)', async () => {

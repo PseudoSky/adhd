@@ -15,6 +15,11 @@
 - **agent-engine-orchestrator, agent-base-types:** claude-haiku-5 model tables: 1M context window and 128k max output tokens (R8-model AC3)
 - **agent-engine-orchestrator:** engine-executed `web_fetch` tool for providers without Anthropic server tools (claudecli, OpenAI-compatible): one shared definition, same `web_fetch_result` shape, egress follows `agent.shell.sandbox.allowedDomains`, Anthropic tool list unchanged (R6B-web AC1-AC4)
 
+### 🩹 Fixes
+
+- **agent-engine-orchestrator:** the engine-executed `web_fetch` (claudecli and OpenAI-compatible providers) no longer reaches internal destinations (bc799330): every hop, including each redirect, is resolved once and refused, as a normal tool error naming the address class, when the host is or resolves to loopback, RFC1918, link-local (incl. 169.254.169.254), unspecified, unique-local (fc00::/7), shared-address, multicast or reserved space or an IPv4-mapped / NAT64 / 6to4 form of those, in open AND allow-listed mode (an allow-listed name resolving to a private address is refused too); the connection is made to the validated IP with the original name kept as `Host` / SNI, so there is no second resolution a DNS-rebinding answer could win. Behaviour change: a fetch of a local or intranet page, which used to work, is now refused; `WebFetchOptions.fetchImpl` (the wire-traced fetch the registry forwards) is deprecated and ignored because a fetch resolves again on its own, so `web_fetch` requests no longer appear in the wire log. Anthropic agents are unaffected (the server tool fetches from Anthropic)
+- **agent-engine-orchestrator:** `web_fetch` HTML extraction (`extractHtml`) is linear in page size (cbad68d4): the unbounded lazy regexes for comments, script/style/noscript/template/head/title blocks, tags and `<meta>` rescanned to end of input per unterminated opener, so a crafted 1 MB page blocked the shared event loop; replaced by forward-only scanners with a work counter. Extracted text, title and meta are unchanged (checked against the previous implementation on fixtures and 4000 random token soups)
+
 ## 2.3.13 (2026-10-11)
 
 ### 🚀 Features
