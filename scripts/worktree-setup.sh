@@ -1,9 +1,16 @@
 #!/usr/bin/env bash
 # worktree-setup.sh <name> [base-ref]
+# worktree-setup.sh --bl <backlog-id> [base-ref]
 #
 # Create a git worktree at <main-checkout>/.worktrees/<name> on a NEW branch
 # `${WORKTREE_BRANCH_PREFIX:-feat}/<name>` (from <base-ref>, default HEAD) and
 # give it its OWN installed node_modules (backlog 7b7d5e38 / 66fd78ee / 7cd6fc6f).
+#
+# With --bl the backlog item is looked up (WORKTREE_BACKLOG_CMD, default `adhd-backlog`)
+# and the worktree AND branch are both named `plan-<8hex>` (kind PLAN) or `task-<8hex>`
+# (any other kind), with no prefix. The item's uid and title are recorded in branch
+# config (adhd-backlog-uid / adhd-backlog-title) for scripts/worktree-merge.sh and
+# scripts/worktree-cleanup.sh. Merge and clean up with those scripts, never by hand.
 #
 # Why a real install and not a symlink or a copy of another tree's node_modules:
 #   - a symlinked node_modules is one inode shared by every worktree, so an
@@ -25,11 +32,38 @@
 #   WORKTREE_SETUP_PNPM     pnpm command (default: "corepack pnpm")
 set -euo pipefail
 
-usage() { echo "usage: scripts/worktree-setup.sh <name> [base-ref]" >&2; exit 2; }
+usage() {
+  echo "usage: scripts/worktree-setup.sh <name> [base-ref]" >&2
+  echo "       scripts/worktree-setup.sh --bl <backlog-id> [base-ref]" >&2
+  exit 2
+}
 
-[ $# -ge 1 ] && [ $# -le 2 ] || usage
-name="$1"
-base="${2:-HEAD}"
+# --bl <id> may appear anywhere; everything else is positional.
+bl=""
+positional=()
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --bl) [ $# -ge 2 ] || usage; bl="$2"; shift 2 ;;
+    -*) usage ;;
+    *) positional+=("$1"); shift ;;
+  esac
+done
+
+bl_uid="" bl_title=""
+if [ -n "$bl" ]; then
+  [ ${#positional[@]} -le 1 ] || usage
+  base="${positional[0]:-HEAD}"
+  script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  # prints: <name>\t<uid>\t<title>   (stdout only; the backlog CLI logs to stderr)
+  resolved="$(node "$script_dir/lib/worktree-resolve-bl.mjs" "$bl")" || { echo "worktree-setup: could not resolve backlog id '$bl'" >&2; exit 1; }
+  IFS=$'\t' read -r name bl_uid bl_title <<<"$resolved"
+  branch="$name"
+else
+  [ ${#positional[@]} -ge 1 ] && [ ${#positional[@]} -le 2 ] || usage
+  name="${positional[0]}"
+  base="${positional[1]:-HEAD}"
+  branch="${WORKTREE_BRANCH_PREFIX:-feat}/$name"
+fi
 case "$name" in
   ''|*/*|.*|*[[:space:]]*) echo "worktree-setup: <name> must be a plain directory name (no slash, dot-prefix or whitespace): '$name'" >&2; exit 2 ;;
 esac
@@ -39,7 +73,6 @@ esac
 common_dir="$(git rev-parse --path-format=absolute --git-common-dir)"
 main_root="$(dirname "$common_dir")"
 target="$main_root/.worktrees/$name"
-branch="${WORKTREE_BRANCH_PREFIX:-feat}/$name"
 pnpm_cmd="${WORKTREE_SETUP_PNPM:-corepack pnpm}"
 
 if [ -e "$target" ]; then
@@ -52,6 +85,10 @@ if git -C "$main_root" show-ref --verify --quiet "refs/heads/$branch"; then
 fi
 
 git -C "$main_root" worktree add "$target" -b "$branch" "$base"
+if [ -n "$bl_uid" ]; then
+  git -C "$main_root" config "branch.$branch.adhd-backlog-uid" "$bl_uid"
+  git -C "$main_root" config "branch.$branch.adhd-backlog-title" "$bl_title"
+fi
 
 (
   cd "$target"
