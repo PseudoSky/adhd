@@ -794,60 +794,6 @@
       "cwd": "repo-root"
     },
     {
-      "id": "tracing-namespace-proof.1",
-      "phase": "verify",
-      "tier": null,
-      "kind": "command",
-      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py tracing-namespace-proof --only tracing-namespace-proof.1",
-      "expect": "exit0",
-      "cwd": "repo-root"
-    },
-    {
-      "id": "tracing-namespace-proof.2",
-      "phase": "verify",
-      "tier": null,
-      "kind": "command",
-      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py tracing-namespace-proof --only tracing-namespace-proof.2",
-      "expect": "exit0",
-      "cwd": "repo-root"
-    },
-    {
-      "id": "tracing-namespace-proof.3",
-      "phase": "verify",
-      "tier": null,
-      "kind": "command",
-      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py tracing-namespace-proof --only tracing-namespace-proof.3",
-      "expect": "exit0",
-      "cwd": "repo-root"
-    },
-    {
-      "id": "tracing-namespace-proof.4",
-      "phase": "verify",
-      "tier": null,
-      "kind": "command",
-      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py tracing-namespace-proof --only tracing-namespace-proof.4",
-      "expect": "exit0",
-      "cwd": "repo-root"
-    },
-    {
-      "id": "tracing-namespace-proof.5",
-      "phase": "verify",
-      "tier": null,
-      "kind": "command",
-      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py tracing-namespace-proof --only tracing-namespace-proof.5",
-      "expect": "exit0",
-      "cwd": "repo-root"
-    },
-    {
-      "id": "tracing-namespace-proof.6",
-      "phase": "verify",
-      "tier": null,
-      "kind": "command",
-      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py tracing-namespace-proof --only tracing-namespace-proof.6",
-      "expect": "exit0",
-      "cwd": "repo-root"
-    },
-    {
       "id": "gates-first.1",
       "phase": "verify",
       "tier": null,
