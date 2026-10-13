@@ -822,7 +822,8 @@
       "depends_on": [
         "core-scaffold",
         "chrome-lifecycle",
-        "sp-link"
+        "sp-link",
+        "surface-api"
       ],
       "guard": "python3 docs/plan/stealth-browser/scripts/guard.py core-seam",
       "artifacts": [

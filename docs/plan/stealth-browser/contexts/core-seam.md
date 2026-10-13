@@ -1,6 +1,6 @@
 # core-seam — STATE_NAME
 
-**Phase:** migrate · **Kind:** work · **Depends on:** core-scaffold, chrome-lifecycle, sp-link · **Guard:** `python3 docs/plan/stealth-browser/scripts/guard.py core-seam`
+**Phase:** migrate · **Kind:** work · **Depends on:** core-scaffold, chrome-lifecycle, sp-link, surface-api · **Guard:** `python3 docs/plan/stealth-browser/scripts/guard.py core-seam`
 
 ---
 
