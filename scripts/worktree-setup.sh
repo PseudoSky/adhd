@@ -101,4 +101,24 @@ if [ -L "$target/node_modules" ] || [ ! -d "$target/node_modules" ]; then
   exit 1
 fi
 
+# Seed the gitnexus index so `gx` works here without a cold analyze (757f40d7).
+# gitnexus 1.6.5 keeps the index in <checkout>/.gitnexus and only collapses worktree
+# *names* to the repo's (GITNEXUS_HOME just moves the registry), so a new worktree
+# has no index. Clone main's (APFS clonefile / reflink: ~free) and run an incremental
+# analyze detached, which registers this worktree (~80s vs a cold full index).
+# Nx needs no seeding: with nx.json's cacheDirectory unpinned, Nx 23 shares one cache
+# + index DB per user across every checkout of the workspace.
+# Best-effort: never fails setup. WORKTREE_SEED_GITNEXUS=0 turns it off.
+if [ "${WORKTREE_SEED_GITNEXUS:-1}" != "0" ] && [ -d "$main_root/.gitnexus" ] && command -v gitnexus >/dev/null 2>&1; then
+  if [ -e "$main_root/.gitnexus/.reindex.lock" ]; then
+    echo "worktree-setup: gitnexus is indexing right now — skipped the index seed (run: cd $target && gitnexus analyze --index-only)"
+  elif { cp -cR "$main_root/.gitnexus" "$target/.gitnexus" 2>/dev/null || cp -R "$main_root/.gitnexus" "$target/.gitnexus" 2>/dev/null; }; then
+    mkdir -p "$target/tmp"
+    ( cd "$target" && nohup gitnexus analyze --index-only . >"$target/tmp/gitnexus-analyze.log" 2>&1 & ) 
+    echo "worktree-setup: gitnexus index cloned; registering in the background (log: $target/tmp/gitnexus-analyze.log, ~80s until gx answers)"
+  else
+    echo "worktree-setup: gitnexus index clone failed — run: cd $target && gitnexus analyze --index-only"
+  fi
+fi
+
 echo "worktree-setup: ready — $target (branch $branch, own node_modules)"

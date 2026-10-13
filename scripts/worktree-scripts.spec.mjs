@@ -11,7 +11,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { spawnSync } from 'node:child_process';
-import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -108,6 +108,65 @@ test('setup: the bare <name> form keeps its feat/<name> branch, and --bl togethe
     assert.equal(s.sh('worktree-setup.sh', ['plain']).status, 0);
     assert.equal(git(s.wt('plain'), 'branch', '--show-current'), 'feat/plain');
     assert.equal(s.sh('worktree-setup.sh', ['--bl', '11111111', 'extra', 'HEAD']).status, 2);
+  } finally { s.done(); }
+});
+
+test('cleanup: a worktree is addressable by its directory name even when the branch is feat/<name>', () => {
+  const s = sandbox();
+  try {
+    assert.equal(s.sh('worktree-setup.sh', ['plain']).status, 0);
+    const r = s.sh('worktree-cleanup.sh', ['plain']);
+    assert.equal(r.status, 0, r.stdout + r.stderr);
+    assert.match(r.stdout, /removed .*plain/);
+    assert.equal(existsSync(s.wt('plain')), false);
+  } finally { s.done(); }
+});
+
+// ── setup: gitnexus index seeding ────────────────────────────────────────────
+/** Puts a fake `gitnexus` first on PATH; it records its argv + cwd to <cwd>/tmp/fake-gitnexus.out. */
+function withFakeGitnexus(s) {
+  const bin = join(s.base, 'bin');
+  mkdirSync(bin, { recursive: true });
+  writeFileSync(join(bin, 'gitnexus'), '#!/bin/sh\nmkdir -p tmp\necho "$PWD $*" > tmp/fake-gitnexus.out\n');
+  chmodSync(join(bin, 'gitnexus'), 0o755);
+  return { PATH: `${bin}:${process.env.PATH}` };
+}
+const samePathStr = (a, b) => realpathSync(a) === realpathSync(b);
+/** Bounded wait (no sleep-based proof: it polls for the observable with a hard deadline). */
+function waitFor(pred, ms = 15000) {
+  const end = Date.now() + ms;
+  while (Date.now() < end) { if (pred()) return true; Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50); }
+  return pred();
+}
+
+test('setup: main\'s .gitnexus index is cloned into the new worktree and an incremental analyze is started there', () => {
+  const s = sandbox();
+  try {
+    mkdirSync(join(s.root, '.gitnexus'));
+    writeFileSync(join(s.root, '.gitnexus', 'meta.json'), '{"seed":"from-main"}');
+    const r = s.sh('worktree-setup.sh', ['--bl', '11111111'], { env: withFakeGitnexus(s) });
+    assert.equal(r.status, 0, r.stderr);
+    const dir = s.wt('plan-11111111');
+    assert.equal(readFileSync(join(dir, '.gitnexus', 'meta.json'), 'utf8'), '{"seed":"from-main"}', 'index cloned');
+    const out = join(dir, 'tmp', 'fake-gitnexus.out');
+    assert.ok(waitFor(() => existsSync(out)), 'analyze was started in the worktree');
+    const line = readFileSync(out, 'utf8').trim();
+    assert.match(line, /analyze --index-only/);
+    assert.ok(samePathStr(line.split(' ')[0], dir), `analyze ran in the worktree, got ${line}`);
+  } finally { s.done(); }
+});
+
+test('setup: WORKTREE_SEED_GITNEXUS=0 and a missing main index both skip seeding without failing setup', () => {
+  const s = sandbox();
+  try {
+    mkdirSync(join(s.root, '.gitnexus'));
+    const off = s.sh('worktree-setup.sh', ['--bl', '11111111'], { env: { ...withFakeGitnexus(s), WORKTREE_SEED_GITNEXUS: '0' } });
+    assert.equal(off.status, 0, off.stderr);
+    assert.equal(existsSync(join(s.wt('plan-11111111'), '.gitnexus')), false);
+    rmSync(join(s.root, '.gitnexus'), { recursive: true });
+    const none = s.sh('worktree-setup.sh', ['--bl', '22222222'], { env: withFakeGitnexus(s) });
+    assert.equal(none.status, 0, none.stderr);
+    assert.equal(existsSync(join(s.wt('task-22222222'), '.gitnexus')), false);
   } finally { s.done(); }
 });
 

@@ -8,7 +8,7 @@
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
-import { dirname, join, resolve, sep } from 'node:path';
+import { basename, dirname, join, resolve, sep } from 'node:path';
 import { lstatSync, realpathSync } from 'node:fs';
 
 const require = createRequire(import.meta.url);
@@ -144,6 +144,7 @@ export function matchTarget(root, all, target) {
   return all.filter((w) => {
     if (samePath(w.path, target)) return true;
     if (w.branch === target) return true;
+    if (!target.includes('/') && basename(w.path) === target) return true; // directory name, e.g. `probe-share`
     if (!isId) return false;
     const short = hex.slice(0, 8);
     if (w.branch === nameForBacklog(short, 'PLAN') || w.branch === nameForBacklog(short, 'TASK')) return true;
