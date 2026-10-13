@@ -185,39 +185,10 @@
       "context": "contexts/surface-api.md",
       "notes": "executor=typescript-pro tier=sonnet/high"
     },
-    "surface-hosts": {
-      "kind": "work",
-      "phase": "surface",
-      "depends_on": [
-        "surface-api",
-        "chrome-lifecycle",
-        "sp-link"
-      ],
-      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py surface-hosts",
-      "artifacts": [
-        "entrypoint/stealth-browser/src/server.ts",
-        "entrypoint/stealth-browser/src/cli.ts",
-        "entrypoint/stealth-browser/src/host-projection.ts",
-        "entrypoint/stealth-browser/bin/",
-        "entrypoint/stealth-browser/package.json",
-        "docs/plan/stealth-browser/evidence/naming-decision.md",
-        "pnpm-lock.yaml",
-        "entrypoint/stealth-browser/src/lib/managers.ts",
-        "entrypoint/stealth-browser/src/api.ts",
-        "entrypoint/stealth-browser/src/lib/chrome-manager.ts",
-        "entrypoint/stealth-browser/src/lib/lifecycle/index.ts",
-        "entrypoint/stealth-browser/src/index.ts",
-        "entrypoint/stealth-browser/src/test/unit/hosts/"
-      ],
-      "context": "contexts/surface-hosts.md",
-      "notes": "executor=typescript-pro tier=sonnet/high; waits for sp-link so the stealth-browser package.json owners are serialized"
-    },
     "tracing-plugin": {
       "kind": "work",
       "phase": "surface",
-      "depends_on": [
-        "surface-hosts"
-      ],
+      "depends_on": [],
       "guard": "python3 docs/plan/stealth-browser/scripts/guard.py tracing-plugin",
       "artifacts": [
         "entrypoint/stealth-browser/src/tracing.ts",
@@ -278,7 +249,6 @@
       "phase": "verify",
       "depends_on": [
         "surface-api",
-        "surface-hosts",
         "tracing-plugin"
       ],
       "guard": "python3 docs/plan/stealth-browser/scripts/guard.py tests-unit-surface",

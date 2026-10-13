@@ -87,13 +87,6 @@
       "start_ref": "88a7f6a41f6c9a7a7f8749578563a63a744a0c0f",
       "end_ref": "51d26ba6b0ddcff495aa4a3c7a84741cb2d727cb"
     },
-    "surface-hosts": {
-      "status": "in_progress",
-      "started_at": "2026-10-13T08:22:34.372Z",
-      "done_at": null,
-      "start_ref": "a8bc90dbdd80ba606e5dfdec9e2a966aa6b3c0a1",
-      "end_ref": null
-    },
     "tracing-plugin": {
       "status": "pending",
       "started_at": null,
