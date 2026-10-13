@@ -21,7 +21,7 @@ Derived from `SCOPE.md`. Every case has concrete inputs and an observable outcom
 | UC-15 | E | `decideRetry` with a 429/ban outcome and exhausted retries | Returns a stop decision; no infinite retry | tests-unit-extract |
 | UC-16 | E | `HistoryClient` against a profile whose SQLite file is held open by Chrome | Open uses `mode=ro&immutable=1`; no lock error | mig-domains-storage.4, tests-unit-data |
 | UC-17 | E | `parsers.ts` fed a malformed HTML fixture and an XPath that matches nothing | Empty result, no throw | tests-unit-extract |
-| UC-18 | E | Two processes call `ChromeManager.ready()`; one idles out | Heartbeat file `/tmp/stealth-browser-heartbeat` keeps Chrome alive while the other is active; shutdown only after both idle | mig-chrome-manager.4, tests-unit-core |
+| UC-18 | E | Two processes call `ChromeManager.ready()`; one idles out | The reaper host counts both live connections: Chrome stays alive while the other process is active; shutdown only after both idle (and a `kill -9` of one drops it at once) | mig-chrome-manager.4, tests-unit-core |
 | UC-19 | H | Tracing: one verb call with telemetry pointed at a temp file sink | Every record `event` starts with `adhd.`; none starts with `apigen.` | tracing-namespace-proof.1, .2 |
 | UC-20 | E | Mutation: `serviceName` flipped to `apigen` in `src/tracing.ts` | The namespace spec FAILS; file restored byte-for-byte | tracing-namespace-proof.4, .5 |
 | UC-21 | E | A developer's own Chrome is listening on 9222 while the full use-case lane runs | Same PID still listening on 9222 afterwards; the simulated lane never connects to a real port | tests-use-cases.3 |

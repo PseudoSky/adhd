@@ -1,6 +1,6 @@
 # gates-first — WORK STATE
 
-**Phase:** verify · **Kind:** work · **Depends on:** tests-unit-core, tests-unit-data, tests-unit-extract, tests-unit-surface, tracing-namespace-proof, tests-use-cases, agent-search-cutover, mig-docs, audit-fixes · **Guard:** `python3 docs/plan/stealth-browser/scripts/guard.py gates-first`
+**Phase:** verify · **Kind:** work · **Depends on:** tests-unit-core, tests-unit-data, tests-unit-extract, tests-unit-surface, tracing-namespace-proof, tests-use-cases, agent-search-cutover, mig-docs, audit-fixes, sp-switch, sp-reaper-smoke, tripwire-pack · **Guard:** `python3 docs/plan/stealth-browser/scripts/guard.py gates-first`
 **Executor:** `qa` (sonnet/medium) · **Worktree:** `/Users/nix/dev/node/adhd/.worktrees/stealth-browser` on branch `stealth-browser` (shared by every state, [inv:shared-worktree], [inv:worktree-required], [inv:no-ai-attribution])
 
 ## Goal
@@ -15,7 +15,7 @@ Every gate is green on the migrated tree via nx: lint, typecheck, typecheck-spec
 
 - **Reference Pattern:** Gate target names from `entrypoint/dispatch-cli/project.json`; the pre-push expectations in `/Users/nix/dev/node/adhd/CLAUDE.md`.
 
-- **Delta Spec:** Run `python3 docs/plan/stealth-browser/scripts/guard.py gates-first` -- it executes the eight nx targets and caches the result by git tree sha. Fix failures by returning to the owning state's bucket (a gate failure is a regression in this branch, not 'pre-existing'): lint/type errors in ported files are fixed in place within this state ONLY if the fix is mechanical and the file is listed below; otherwise record which state owns it and escalate.
+- **Delta Spec:** Run `python3 docs/plan/stealth-browser/scripts/guard.py gates-first` -- it executes the eight nx targets of `stealth-browser` AND the six nx targets of `resilience-core-tripwire` (lint, typecheck, typecheck-spec, test, build, verify-dist-load; evidence key `tw:<target>`, tree key `tw_tree`) and caches the results by git tree sha; it also proves the release hygiene of the manifests (no local specifier, the proxy dependency range `~0.6.0`). Fix failures by returning to the owning state's bucket (a gate failure is a regression in this branch, not 'pre-existing'): lint/type errors in ported files are fixed in place within this state ONLY if the fix is mechanical and the file is listed below; otherwise record which state owns it and escalate.
 
 - **Invariants:** Never run `tsc` directly (use nx). A red gate halts the plan; there is no deferral. Also: [inv:shared-worktree] (commit only your own explicit paths, tag every commit `[psm:gates-first]`), [inv:owned-paths-only], [inv:no-main-writes].
 
@@ -37,6 +37,8 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 - [gates-first.8] (PA10.3) `npm pack --dry-run` against the built dist output lists README.md, CHANGELOG.md, bin/cli.js, bin/mcp.js, index.js and index.d.ts (the main/types/bin targets); the output is recorded in evidence/publish-dry-run.txt.
 - [gates-first.9] Only owned paths changed by [psm:gates-first] commits.
 - [gates-first.10] After a full build, neither owned package is inlined into dist (module-format proof for ADR-0003): no dist/**/*.js file defines `createStoreAdapter`, `ensureBackend`, `serveBackend` or `dialBackend`, dist references `@adhd/sox-service-proxy` as an external require, and no dist file `require`s `@adhd/sox-store-adapter` (it is reached only through a dynamic `import()`).
+- [gates-first.11] `nx run resilience-core-tripwire:lint`, `:typecheck`, `:typecheck-spec`, `:test`, `:build` and `:verify-dist-load` exit 0 (the second approved package is gated with the first; evidence JSON records every command, its exit code and the tripwire tree sha `tw_tree`).
+- [gates-first.12] Release hygiene for the service proxy and the tripwire: no @adhd/* dependency, devDependency or override in the root, stealth-browser or tripwire manifests starts with `file:`, `link:` or `portal:`, no `pnpm.overrides["@adhd/sox-service-proxy"]` remains (sp-switch removed it), pnpm-lock.yaml has no `adhd-dev-tarballs` or `file:/Users` resolution, and the stealth-browser dependency on @adhd/sox-service-proxy is `~0.6.0`.
 
 ---
 

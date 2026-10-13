@@ -1,8 +1,8 @@
 # Migrate the agent-search chrome runner to @adhd/stealth-browser (entrypoint)
 
-Extract the Chrome/CDP runner from `scratch/agent-browser/adhd` into ONE new, generator-built entrypoint package, `@adhd/stealth-browser` (`entrypoint/stealth-browser`), exposing six verbs as a library, a CLI and an MCP stdio server, with apigen tracing under the `adhd` namespace.
+Extract the Chrome/CDP runner from `scratch/agent-browser/adhd` into a new, generator-built entrypoint package, `@adhd/stealth-browser` (`entrypoint/stealth-browser`), exposing six verbs as a library, a CLI and an MCP stdio server, with apigen tracing under the `adhd` namespace. The plan also builds a second package, `@adhd/resilience-core-tripwire` (`packages/resilience/resilience-core-tripwire`), the one tripwire that serves the three consumers (the reverse-apis request-builder gate, the reverse-apis unlock tool and the agent-search tripwire), and a single-pass Chrome lifecycle built directly on `@adhd/sox-service-proxy` 0.6.0.
 
-Backlog plan item: `8468f7b1-8adc-4237-9986-21ea1e27c537` (adhd, in_progress). Worktree `/Users/nix/dev/node/adhd/.worktrees/stealth-browser`, branch `stealth-browser` (cut from main `c6011647`). Authored artifacts: `SCOPE.md`, `USE_CASES.md`, `demo/DEMO.md`, `demo/UNRESOLVED.md`, `TOOLS.md`, `APPROVAL.md`.
+Backlog plan item: `8468f7b1-8adc-4237-9986-21ea1e27c537` (adhd, in_progress). Worktree `/Users/nix/dev/node/adhd/.worktrees/stealth-browser`, branch `stealth-browser` (cut from main `c6011647`). Authored artifacts: `SCOPE.md`, `USE_CASES.md`, `demo/DEMO.md`, `demo/UNRESOLVED.md`, `TOOLS.md`, `APPROVAL.md`, `APPROVAL-tripwire.md`, `SPEC-capture-and-lifecycle.md`, `SPEC-single-pass-lifecycle.md`, `SPEC-tripwire.md`.
 
 ## Consumer
 
@@ -14,7 +14,7 @@ Before: the Chrome/CDP runner lives inside `scratch/agent-browser/adhd/`, welded
 
 ## Boundary (the correct package)
 
-Migrates: `agent-browser/adhd/` (CDP connection, `chrome-manager.ts`, `capture/*`, `domains/*`, `storage/*`, `parsers.ts`, `helpers.ts`, `session.ts`, `types.ts`, `docs/*`), the engine-agnostic `search/queries/{activity,context}.ts`, and the six chrome verbs extracted from `search-mcp-source.ts:454-495`. Stays in agent-search (which then consumes `@adhd/stealth-browser`): providers, tripwire, `search`/`listProviders`, `search-challenge.ts`, `search-fetch.ts`, `search-dom.ts`, `last-search.ts`, `server.mjs`, and `search-mcp-source.ts` reduced to search verbs. Evidence: `adhd/` imports only `node-html-parser`, `xpath` and `@xmldom/xmldom` (`adhd/parsers.ts:17-26`) plus `node:*`; `cdp-query-client.ts` is a 42-line barrel over it. The existing agent-search plan (`docs/restructure-proposal.md`, `docs/dispatch-plan.md`) is wrong on strategy: it restructures in place across six branches, keeps search-named items in the generic layer, and plans a nested private `@adhd/cdp-connection` package plus committed `.js` twins. This plan keeps ONE package, one branch, and a single shared worktree. The package is greenfield: no consumers exist, so legacy code, names and tests are not preserved, while every FEATURE and FAILSAFE of the runner is preserved and pinned by a new unit test (`[inv:no-features-removed]`, `evidence/failsafe-inventory.json`). Only `chromeStatus`, `launchChrome` and `shutdownSearchChrome` exist in the runner source; the other verbs and the root namespaces are new design (`surface-api`). Full detail: `SCOPE.md`; every productization decision: `PRODUCTIZATION-CATALOG.md`; items left out: `DEFERRED.md`. Prior comparison input for the capture and lifecycle design: `/Users/nix/dev/projects/reverse-apis/docs/marketing/.catalog/cross-repo-comparison.md`.
+Migrates: `agent-browser/adhd/` (CDP connection, `chrome-manager.ts`, `capture/*`, `domains/*`, `storage/*`, `parsers.ts`, `helpers.ts`, `session.ts`, `types.ts`, `docs/*`), the engine-agnostic `search/queries/{activity,context}.ts`, and the six chrome verbs extracted from `search-mcp-source.ts:454-495`. Stays in agent-search (which then consumes `@adhd/stealth-browser`): providers, the tripwire adapter (the tripwire logic itself moves to `@adhd/resilience-core-tripwire`, which agent-search consumes in the same cutover), `search`/`listProviders`, `search-challenge.ts`, `search-fetch.ts`, `search-dom.ts`, `last-search.ts`, `server.mjs`, and `search-mcp-source.ts` reduced to search verbs. Evidence: `adhd/` imports only `node-html-parser`, `xpath` and `@xmldom/xmldom` (`adhd/parsers.ts:17-26`) plus `node:*`; `cdp-query-client.ts` is a 42-line barrel over it. The existing agent-search plan (`docs/restructure-proposal.md`, `docs/dispatch-plan.md`) is wrong on strategy: it restructures in place across six branches, keeps search-named items in the generic layer, and plans a nested private `@adhd/cdp-connection` package plus committed `.js` twins. This plan keeps ONE package, one branch, and a single shared worktree. The package is greenfield: no consumers exist, so legacy code, names and tests are not preserved, while every FEATURE and FAILSAFE of the runner is preserved and pinned by a new unit test (`[inv:no-features-removed]`, `evidence/failsafe-inventory.json`). Only `chromeStatus`, `launchChrome` and `shutdownSearchChrome` exist in the runner source; the other verbs and the root namespaces are new design (`surface-api`). Full detail: `SCOPE.md`; every productization decision: `PRODUCTIZATION-CATALOG.md`; items left out: `DEFERRED.md`. Prior comparison input for the capture and lifecycle design: `/Users/nix/dev/projects/reverse-apis/docs/marketing/.catalog/cross-repo-comparison.md`.
 
 ## Source package after migration
 
@@ -24,15 +24,15 @@ Until the first `agent-search-cutover` commit the scratch `agent-browser/adhd/` 
 
 - `8468f7b1-8adc-4237-9986-21ea1e27c537` (kind plan, in_progress, AC1-AC7): the parent of this plan; cites `restructure-proposal.md:1-8` and `dispatch-plan.md:1-8`. IN scope as the ticket every test cites.
 - `5b98d3b2-3894-4142-b899-540bad821a19` (FEAT-AGENT-TRACING, open P1): OUT of scope (unchanged). It is an agent-side plugin (`@adhd/agent-plugin-tracing`) for agent-mcp with new hook events (children TRACE-1..5). It cites `packages/apigen/apigen-plugin-tracing/src/lib/plugin.ts:6-14` only as precedent. Our tracing state uses the apigen side (`makeTracingPlugin`) and nothing from that item. Related open item `5152786d` (apigen tracing design docs stale after the serviceName namespacing change) is the namespacing context for `tracing-namespace-proof`.
-- `19dfb641-516f-445d-8fb1-28afbaa9b566` (self-reaping Chrome singleton, open feature): IN scope since the user's decision "build it now, there will not be a v3" (`PRODUCTIZATION-CATALOG.md`). The port (`mig-chrome-manager`) stays faithful; `chrome-lifecycle` then builds the lifecycle with every existing feature kept (idle-safety tiers incl. history recency and `checkHistory`, cross-process coordination, launch lock, group kill, newtab fix, livelock protection, isolated-page cleanup); the backbone is hybrid (in-package engine behind `PresenceStore` and `ReaperLauncher` seams, default launcher over `@adhd/sox-service-proxy`, `EVALUATIONS.md` E2). `agent-search-cutover` re-cites the item to the new package paths. Closed item `90ed0315` records that the reap fixes already exist in the ported code.
+- `19dfb641-516f-445d-8fb1-28afbaa9b566` (self-reaping Chrome singleton, open feature): IN scope since the user's decision "build it now, there will not be a v3" (`PRODUCTIZATION-CATALOG.md`). The port (`mig-chrome-manager`) stays faithful; `chrome-lifecycle` then builds the lifecycle with every existing feature kept (idle-safety tiers incl. history recency and `checkHistory`, cross-process coordination, launch lock, group kill, newtab fix, livelock protection, isolated-page cleanup); the design is single-pass (`SPEC-single-pass-lifecycle.md`): presence is one held connection per client to a reaper host built on `@adhd/sox-service-proxy` 0.6.0 (`dialBackend`, `serveBackend`, `createIdleRetirer`, `createCircuitBreaker`), one `ReaperLink` port, a pure `decideReap`, no presence registry and no heartbeat file. `agent-search-cutover` re-cites the item to the new package paths. Closed item `90ed0315` records that the reap fixes already exist in the ported code.
 - `5152786d-0243-41ab-b232-fff7fdcfd8f2` (apigen tracing design notes stale after the serviceName change, open debt): OUT of scope to fix here (the notes live in `docs/apigen/design-notes/`). IN scope as a pin: `tracing-plugin.8` and `tracing-namespace-proof.6` assert what `plugin.ts` actually emits (`${serviceName}.op`, `${serviceName}.transport`, `${serviceName}.op.error`) so this plan follows the code, not the stale notes.
 - Backlog component `24cfccf0-fa28-4fa8-af08-23d0c1c56978` is the registered home of `entrypoint/stealth-browser`; file follow-ups (the P11 learnings review and the PRODUCT-REVIEW.md out-of-scope candidates) against it.
 
-## ONE approved new package
+## TWO approved new packages
 
-The human's request approves exactly one new package, `entrypoint/stealth-browser`, built with `npx nx g @adhd/workspace-codegen-nx:entrypoint --name stealth-browser --nxLayer entrypoints --platform node` (dry-run first, bare name). No other package may be created (`[inv:one-new-package]`).
+The human's request approves `entrypoint/stealth-browser`, built with `npx nx g @adhd/workspace-codegen-nx:entrypoint --name stealth-browser --nxLayer entrypoints --platform node` (dry-run first, bare name), and, by the later verbatim request "Implement tripwire package in this plan covering all 3" (`APPROVAL-tripwire.md`), `packages/resilience/resilience-core-tripwire` (`@adhd/resilience-core-tripwire`, built with `npx nx g @adhd/workspace-codegen-nx:core --name=tripwire --group=resilience ...` after the new `resilience` workspace group is added, decision D1). No third package may be created (`[inv:one-new-package]`).
 
-## States (40), waves, executors
+## States (51), waves, executors
 
 Wave = dependency depth; states in one wave with no edge between them may run concurrently, and `scripts/check-disjoint.py` proves their owned paths are disjoint. Executors are best-fit, never general/claude; sonnet unless noted. The longest dependency chain has 30 states (productization-hold to agent-search-relink, through the failsafe inventory, the cdp harness, the chrome lifecycle, the surface, error, example, use-case and cutover states). The `prod-*` states and the productization amendments come from `PRODUCT-REVIEW.md`; the user's decisions on it (`PRODUCTIZATION-CATALOG.md`) removed the e2e lane and the publish-readiness state, added `capture-upgrade`, `chrome-lifecycle` (with their `cdp-test-harness`) and `tests-use-cases`, and made the agent-search cutover a required pre-audit state.
 
@@ -43,58 +43,69 @@ Wave = dependency depth; states in one wave with no edge between them may run co
 | 2 | `entrypoint-parity` | scaffold | work | platform-engineer (sonnet/medium) | `entrypoint/stealth-browser/*`, `docs/plan/stealth-browser/evidence/` | `guard.py entrypoint-parity` |
 | 3 | `deps-install` | scaffold | work | platform-engineer (sonnet/medium) | `entrypoint/stealth-browser/package.json`, `pnpm-lock.yaml`, `entrypoint/stealth-browser/eslint.config.mjs` ... | `guard.py deps-install` |
 | 4 | `mig-foundation` | migrate | work | refactoring-specialist (sonnet/medium) | `entrypoint/stealth-browser/src/lib/types.ts`, `entrypoint/stealth-browser/src/lib/session.ts`, `entrypoint/stealth-browser/src/lib/helpers.ts` | `guard.py mig-foundation` |
-| 5 | `mig-capture-parsers` | migrate | work | refactoring-specialist (sonnet/medium) | `entrypoint/stealth-browser/src/lib/capture/`, `entrypoint/stealth-browser/src/lib/parsers.ts`, `entrypoint/stealth-browser/eslint.config.mjs` | `guard.py mig-capture-parsers` |
 | 5 | `mig-cdp` | migrate | work | refactoring-specialist (sonnet/medium) | `entrypoint/stealth-browser/src/lib/cdp/` | `guard.py mig-cdp` |
+| 5 | `mig-capture-parsers` | migrate | work | refactoring-specialist (sonnet/medium) | `entrypoint/stealth-browser/src/lib/capture/`, `entrypoint/stealth-browser/src/lib/parsers.ts`, `entrypoint/stealth-browser/eslint.config.mjs` | `guard.py mig-capture-parsers` |
 | 5 | `mig-docs` | migrate | work | refactoring-specialist (sonnet/low) | `entrypoint/stealth-browser/docs/reference/` | `guard.py mig-docs` |
 | 6 | `mig-chrome-manager` | migrate | work | refactoring-specialist (sonnet/medium) | `entrypoint/stealth-browser/src/lib/chrome-manager.ts` | `guard.py mig-chrome-manager` |
 | 6 | `mig-domains-storage` | migrate | work | refactoring-specialist (sonnet/medium) | `entrypoint/stealth-browser/src/lib/domains/`, `entrypoint/stealth-browser/src/lib/storage/` | `guard.py mig-domains-storage` |
 | 7 | `mig-queries` | migrate | work | refactoring-specialist (sonnet/medium) | `entrypoint/stealth-browser/src/lib/queries/` | `guard.py mig-queries` |
 | 8 | `failsafe-inventory` | migrate | work | refactoring-specialist (sonnet/high) | `docs/plan/stealth-browser/evidence/failsafe-inventory.json` | `guard.py failsafe-inventory` |
 | 9 | `port-fixes` | migrate | work | typescript-pro (sonnet/high) | `entrypoint/stealth-browser/src/lib/`, `entrypoint/stealth-browser/vite.config.ts`, `entrypoint/stealth-browser/tsconfig.spec.json` ... | `guard.py port-fixes` |
-| 10 | `cdp-test-harness` | migrate | work | test-automator (sonnet/medium) | `entrypoint/stealth-browser/src/test/support/`, `entrypoint/stealth-browser/src/test/fixtures/cdp/`, `entrypoint/stealth-browser/src/test/unit/support/` | `guard.py cdp-test-harness` |
 | 10 | `surface-api` | surface | work | typescript-pro (sonnet/high) | `entrypoint/stealth-browser/src/api.ts`, `entrypoint/stealth-browser/src/index.ts`, `docs/plan/stealth-browser/evidence/product-claims.json` | `guard.py surface-api` |
 | 10 | `tests-unit-core` | verify | work | test-automator (sonnet/medium) | `entrypoint/stealth-browser/src/test/unit/foundation/`, `entrypoint/stealth-browser/src/test/unit/cdp/`, `entrypoint/stealth-browser/src/test/unit/chrome-manager/` | `guard.py tests-unit-core` |
 | 10 | `tests-unit-data` | verify | work | test-automator (sonnet/medium) | `entrypoint/stealth-browser/src/test/unit/domains-storage/`, `entrypoint/stealth-browser/src/test/unit/queries/` | `guard.py tests-unit-data` |
 | 10 | `tests-unit-extract` | verify | work | test-automator (sonnet/medium) | `entrypoint/stealth-browser/src/test/unit/capture-parsers/` | `guard.py tests-unit-extract` |
+| 10 | `cdp-test-harness` | migrate | work | test-automator (sonnet/medium) | `entrypoint/stealth-browser/src/test/support/`, `entrypoint/stealth-browser/src/test/fixtures/cdp/`, `entrypoint/stealth-browser/src/test/unit/support/` | `guard.py cdp-test-harness` |
+| 10 | `sp-reaper-load-proof` | migrate | work | typescript-pro (sonnet/medium) | `docs/plan/stealth-browser/smoke/reaper-load-proof.md` | `guard.py sp-reaper-load-proof` |
+| 10 | `sp-link` | migrate | work | devops-engineer (sonnet/medium) | `entrypoint/stealth-browser/package.json`, `package.json`, `pnpm-lock.yaml` ... | `guard.py sp-link` |
+| 10 | `tripwire-scaffold` | scaffold | work | typescript-pro (sonnet/medium) | `packages/resilience/resilience-core-tripwire/`, `tsconfig.base.json`, `.adhd/workspace.json` ... | `guard.py tripwire-scaffold` |
 | 11 | `capture-upgrade` | migrate | work | typescript-pro (sonnet/high) | `entrypoint/stealth-browser/src/lib/recording/`, `entrypoint/stealth-browser/src/lib/capture/network.ts`, `entrypoint/stealth-browser/src/lib/capture/index.ts` ... | `guard.py capture-upgrade` |
 | 11 | `chrome-lifecycle` | migrate | work | typescript-pro (sonnet/high) | `entrypoint/stealth-browser/src/lib/lifecycle/`, `entrypoint/stealth-browser/src/lib/chrome-manager.ts`, `entrypoint/stealth-browser/src/lib/cdp/targets.ts` ... | `guard.py chrome-lifecycle` |
+| 11 | `tripwire-core` | migrate | work | typescript-pro (sonnet/high) | `packages/resilience/resilience-core-tripwire/src/`, `packages/resilience/resilience-core-tripwire/*` | `guard.py tripwire-core` |
 | 12 | `surface-hosts` | surface | work | typescript-pro (sonnet/high) | `entrypoint/stealth-browser/src/server.ts`, `entrypoint/stealth-browser/src/cli.ts`, `entrypoint/stealth-browser/src/host-projection.ts` ... | `guard.py surface-hosts` |
+| 12 | `tripwire-interactive` | migrate | work | typescript-pro (sonnet/high) | `packages/resilience/resilience-core-tripwire/src/`, `packages/resilience/resilience-core-tripwire/*` | `guard.py tripwire-interactive` |
 | 13 | `tracing-plugin` | surface | work | typescript-pro (sonnet/high) | `entrypoint/stealth-browser/src/tracing.ts`, `entrypoint/stealth-browser/src/server.ts`, `entrypoint/stealth-browser/src/cli.ts` ... | `guard.py tracing-plugin` |
-| 14 | `prod-errors` | surface | work | typescript-pro (sonnet/high) | `entrypoint/stealth-browser/src/errors.ts`, `entrypoint/stealth-browser/src/lib/`, `entrypoint/stealth-browser/src/server.ts` ... | `guard.py prod-errors` |
+| 13 | `tripwire-docs` | docs | work | typescript-pro (sonnet/medium) | `packages/resilience/resilience-core-tripwire/README.md`, `packages/resilience/resilience-core-tripwire/CHANGELOG.md`, `packages/resilience/resilience-core-tripwire/docs/` ... | `guard.py tripwire-docs` |
 | 14 | `tests-unit-surface` | verify | work | test-automator (sonnet/medium) | `entrypoint/stealth-browser/src/test/unit/surface/` | `guard.py tests-unit-surface` |
 | 14 | `tracing-namespace-proof` | verify | work | test-automator (sonnet/high) | `entrypoint/stealth-browser/src/test/unit/tracing/tracing-namespace.spec.ts` | `guard.py tracing-namespace-proof` |
+| 14 | `prod-errors` | surface | work | typescript-pro (sonnet/high) | `entrypoint/stealth-browser/src/errors.ts`, `entrypoint/stealth-browser/src/lib/`, `entrypoint/stealth-browser/src/server.ts` ... | `guard.py prod-errors` |
+| 14 | `tripwire-pack` | verify | work | typescript-pro (sonnet/medium) | `pnpm-lock.yaml`, `docs/plan/stealth-browser/evidence/tripwire/`, `packages/resilience/resilience-core-tripwire/package.json` ... | `guard.py tripwire-pack` |
 | 15 | `prod-examples` | surface | work | typescript-pro (sonnet/medium) | `entrypoint/stealth-browser/examples/`, `entrypoint/stealth-browser/src/test/unit/examples/`, `entrypoint/stealth-browser/tsconfig.spec.json` | `guard.py prod-examples` |
+| 15 | `sp-reaper-smoke` | verify | work | qa (sonnet/medium) | `docs/plan/stealth-browser/smoke/reaper-smoke.mjs`, `docs/plan/stealth-browser/smoke/reaper-smoke.md`, `docs/plan/stealth-browser/smoke/reaper-smoke.json` | `guard.py sp-reaper-smoke` |
+| 15 | `sp-switch` | verify | work | devops-engineer (sonnet/medium) | `package.json`, `pnpm-lock.yaml`, `docs/plan/stealth-browser/smoke/switch.md` | `guard.py sp-switch` |
+| 15 | `tripwire-reverse-migrate` | migrate | work | typescript-pro (sonnet/high) | `/Users/nix/dev/projects/reverse-apis/.worktrees/tripwire-adopt/`, `/Users/nix/dev/projects/reverse-apis/.git/info/exclude`, `docs/plan/stealth-browser/tripwire-reverse/` | `guard.py tripwire-reverse-migrate` |
 | 16 | `tests-use-cases` | verify | work | test-automator (sonnet/high) | `entrypoint/stealth-browser/src/test/use-cases/`, `entrypoint/stealth-browser/src/test/support/profile-fixtures.ts`, `entrypoint/stealth-browser/src/test/support/page-fixtures.ts` | `guard.py tests-use-cases` |
 | 17 | `agent-search-cutover` | verify | work | typescript-pro (sonnet/high) | `/Users/nix/dev/ai/scratch/agent-browser/adhd/`, `/Users/nix/dev/ai/scratch/agent-browser/cdp-query-client.ts`, `/Users/nix/dev/ai/scratch/agent-browser/cdp-search.ts` ... | `guard.py agent-search-cutover` |
-| 18 | `audit-pre-review` | verify | audit | code-reviewer (sonnet/high) | `docs/plan/stealth-browser/review/PRE-REVIEW.json`, `docs/plan/stealth-browser/review/PRE-REVIEW.md` | `guard.py audit-pre-review` |
-| 19 | `audit-fixes` | verify | work | typescript-pro (sonnet/high) | `entrypoint/stealth-browser/`, `docs/plan/stealth-browser/review/PRE-REVIEW-RESOLUTION.json`, `/Users/nix/dev/ai/scratch/agent-browser/adhd/` ... | `guard.py audit-fixes` |
+| 18 | `audit-pre-review` | verify | audit | code-reviewer (sonnet/high) | `/Users/nix/dev/node/adhd/.worktrees/stealth-browser/docs/plan/stealth-browser/review/PRE-REVIEW.json`, `/Users/nix/dev/node/adhd/.worktrees/stealth-browser/docs/plan/stealth-browser/review/PRE-REVIEW.md` | `guard.py audit-pre-review` |
+| 19 | `audit-fixes` | verify | work | typescript-pro (sonnet/high) | `entrypoint/stealth-browser/`, `/Users/nix/dev/node/adhd/.worktrees/stealth-browser/docs/plan/stealth-browser/review/PRE-REVIEW-RESOLUTION.json`, `/Users/nix/dev/ai/scratch/agent-browser/adhd/` ... | `guard.py audit-fixes` |
 | 20 | `gates-first` | verify | work | qa (sonnet/medium) | `docs/plan/stealth-browser/evidence/` | `guard.py gates-first` |
 | 21 | `review-prep` | review | work | qa (sonnet/low) | `docs/plan/stealth-browser/review/migration.diff`, `docs/plan/stealth-browser/review/INPUT.sha256`, `docs/plan/stealth-browser/review/BRIEF.txt` | `guard.py review-prep` |
 | 22 | `audit-migration-blind` | review | audit | code-reviewer (sonnet/high) | `docs/plan/stealth-browser/review/FINDINGS.json` | `guard.py audit-migration-blind` |
-| 23 | `resolve-findings` | remediate | work | typescript-pro (sonnet/high) | `entrypoint/stealth-browser/`, `docs/plan/stealth-browser/review/RESOLUTION.json` | `guard.py resolve-findings` |
+| 23 | `resolve-findings` | remediate | work | typescript-pro (sonnet/high) | `entrypoint/stealth-browser/`, `docs/plan/stealth-browser/review/RESOLUTION.json`, `packages/resilience/resilience-core-tripwire/` | `guard.py resolve-findings` |
 | 24 | `gates-rerun` | remediate | work | qa (sonnet/medium) | `docs/plan/stealth-browser/evidence/` | `guard.py gates-rerun` |
 | 25 | `docs-marketing-run` | docs | work | doc-steward (sonnet/medium) | `entrypoint/stealth-browser/docs/`, `entrypoint/stealth-browser/AGENTS.md`, `entrypoint/stealth-browser/llms.txt` ... | `guard.py docs-marketing-run` |
 | 26 | `readme-rewrite` | docs | work | content-marketer (sonnet/medium) | `entrypoint/stealth-browser/README.md` | `guard.py readme-rewrite` |
 | 27 | `audit-final` | release | audit | script () | `docs/plan/stealth-browser/final-review.md` | `guard.py audit-final` |
 | 28 | `merge-readiness` | release | work | dispatcher (human/dispatcher) | `docs/plan/stealth-browser/RELEASE-DECISION.md` | `guard.py merge-readiness` |
 | 29 | `agent-search-relink` | release | work | typescript-pro (sonnet/medium) | `/Users/nix/dev/ai/scratch/agent-browser/package.json`, `/Users/nix/dev/ai/scratch/agent-browser/pnpm-lock.yaml`, `/Users/nix/dev/ai/scratch/agent-browser/AGENTS.md` ... | `guard.py agent-search-relink` |
+| 29 | `tripwire-reverse-relink` | release | work | typescript-pro (sonnet/medium) | `/Users/nix/dev/projects/reverse-apis/.worktrees/tripwire-adopt/package.json`, `/Users/nix/dev/projects/reverse-apis/.worktrees/tripwire-adopt/pnpm-lock.yaml`, `docs/plan/stealth-browser/tripwire-reverse/` | `guard.py tripwire-reverse-relink` |
 
 - Wave 0: `productization-hold`
 - Wave 1: `scaffold`
 - Wave 2: `entrypoint-parity`
 - Wave 3: `deps-install`
 - Wave 4: `mig-foundation`
-- Wave 5: `mig-capture-parsers`, `mig-cdp`, `mig-docs`
+- Wave 5: `mig-cdp`, `mig-capture-parsers`, `mig-docs`
 - Wave 6: `mig-chrome-manager`, `mig-domains-storage`
 - Wave 7: `mig-queries`
 - Wave 8: `failsafe-inventory`
 - Wave 9: `port-fixes`
-- Wave 10: `cdp-test-harness`, `surface-api`, `tests-unit-core`, `tests-unit-data`, `tests-unit-extract`
-- Wave 11: `capture-upgrade`, `chrome-lifecycle`
-- Wave 12: `surface-hosts`
-- Wave 13: `tracing-plugin`
-- Wave 14: `prod-errors`, `tests-unit-surface`, `tracing-namespace-proof`
-- Wave 15: `prod-examples`
+- Wave 10: `surface-api`, `tests-unit-core`, `tests-unit-data`, `tests-unit-extract`, `cdp-test-harness`, `sp-reaper-load-proof`, `sp-link`, `tripwire-scaffold`
+- Wave 11: `capture-upgrade`, `chrome-lifecycle`, `tripwire-core`
+- Wave 12: `surface-hosts`, `tripwire-interactive`
+- Wave 13: `tracing-plugin`, `tripwire-docs`
+- Wave 14: `tests-unit-surface`, `tracing-namespace-proof`, `prod-errors`, `tripwire-pack`
+- Wave 15: `prod-examples`, `sp-reaper-smoke`, `sp-switch`, `tripwire-reverse-migrate`
 - Wave 16: `tests-use-cases`
 - Wave 17: `agent-search-cutover`
 - Wave 18: `audit-pre-review`
@@ -108,7 +119,7 @@ Wave = dependency depth; states in one wave with no edge between them may run co
 - Wave 26: `readme-rewrite`
 - Wave 27: `audit-final`
 - Wave 28: `merge-readiness`
-- Wave 29: `agent-search-relink`
+- Wave 29: `agent-search-relink`, `tripwire-reverse-relink`
 
 ## Execution model
 
@@ -116,15 +127,15 @@ All agents work in the same worktree and branch (`stealth-browser`), in non-over
 
 ## Acceptance mapping (ticket AC1-AC7)
 
-AC ids are cited in specs with the ticket id `8468f7b1`; the per-state guard ids (`<slug>.N`) are the AC identifiers, mapped into `scripts/criteria.json` (see criteria.json). Coverage: package exists and is structurally identical (`scaffold.*`, `entrypoint-parity.*`, dod.1); behavior preserved and defects fixed at the source (`mig-*`, `port-fixes`, dod.4); six verbs on three surfaces proven by simulated scenarios (`surface-*`, `tests-use-cases`, dod.2); capture and lifecycle (`capture-upgrade.1-28` = CU1-CU27 plus the inventory pins, `chrome-lifecycle.1-27` = CL1-CL25 plus manager shape and inventory pins, `cdp-test-harness.1-6`); typed errors (`prod-errors`, 33 codes); tracing namespace (`tracing-*`, dod.3); source intact then cut over (`audit-final.5`, `agent-search-cutover`, dod.5, dod.9); review and remediation (dod.6); docs (dod.7); merge-readiness (dod.8).
+AC ids are cited in specs with the ticket id `8468f7b1`; the per-state guard ids (`<slug>.N`) are the AC identifiers, mapped into `scripts/criteria.json` (see criteria.json). Coverage: package exists and is structurally identical (`scaffold.*`, `entrypoint-parity.*`, dod.1); behavior preserved and defects fixed at the source (`mig-*`, `port-fixes`, dod.4); six verbs on three surfaces proven by simulated scenarios (`surface-*`, `tests-use-cases`, dod.2); capture and lifecycle (`capture-upgrade.1-28` = CU1-CU27 plus the inventory pins, `chrome-lifecycle.1-29` = CL1-CL29 (CL30 is `sp-reaper-smoke.1-3`) plus manager shape and inventory pins; `sp-reaper-load-proof`, `sp-link`, `sp-reaper-smoke` and `sp-switch` carry the proxy dependency, the entry-path proof and the real-process gate; `tripwire-*.N` carry TW1-TW38, `cdp-test-harness.1-6`); typed errors (`prod-errors`, 32 codes); tracing namespace (`tracing-*`, dod.3); source intact then cut over (`audit-final.5`, `agent-search-cutover`, dod.5, dod.9); review and remediation (dod.6); docs (dod.7); merge-readiness (dod.8).
 
 ## Productization hold point
 
-`productization-hold` (executor `product`, phase `productization`) is the first state and a review hold point. Product reviewed SCOPE/DEMO/TOOLS and recorded its findings in `PRODUCT-REVIEW.md`. The user then decided each item (`PRODUCTIZATION-CATALOG.md`): product's verdict is the default, with these overrides: unit tests that simulate real use cases replace the e2e lane; the agent-search cutover substitutes for e2e and runs before the audit; typed errors cover 100% of failures (33 codes: 4 host, 14 library, 8 capture, 7 lifecycle); examples cover every verb and namespace; the Chrome lifecycle (19dfb641) is built now. The resulting changes:
+`productization-hold` (executor `product`, phase `productization`) is the first state and a review hold point. Product reviewed SCOPE/DEMO/TOOLS and recorded its findings in `PRODUCT-REVIEW.md`. The user then decided each item (`PRODUCTIZATION-CATALOG.md`): product's verdict is the default, with these overrides: unit tests that simulate real use cases replace the e2e lane; the agent-search cutover substitutes for e2e and runs before the audit; typed errors cover 100% of failures (32 codes: 4 host, 14 library, 8 capture, 6 lifecycle); examples cover every verb and namespace; the Chrome lifecycle (19dfb641) is built now. The resulting changes:
 
 - Removed: `tests-e2e`, `prod-public-api` (the greenfield API has no legacy subpath), `prod-publish-readiness` (its checks moved to `gates-first.7-9`), and the human blocker `hb-chrome-binary`.
 - Added: `failsafe-inventory` (first, after the migration buckets), `port-fixes` (before the unit-test completions), `cdp-test-harness`, `capture-upgrade`, `chrome-lifecycle`, `tests-use-cases`, `audit-pre-review`, `audit-fixes`, and `agent-search-relink`.
-- Reshaped: `surface-api` (greenfield root namespaces + six flat verbs), `prod-errors` (33 codes, the `recording` and `lifecycle` exports), `prod-examples` (a runnable example per verb and per namespace), `agent-search-cutover` (tarball, live-vs-recorded, parity before and after, delegation to the recorder and lifecycle APIs, backlog resolution evidence), `audit-final` (script-only; `.9` and `.10` ids stable).
+- Reshaped: `surface-api` (greenfield root namespaces + six flat verbs), `prod-errors` (32 codes, the `recording` and `lifecycle` exports), `prod-examples` (a runnable example per verb and per namespace), `agent-search-cutover` (tarball, live-vs-recorded, parity before and after, delegation to the recorder and lifecycle APIs, backlog resolution evidence), `audit-final` (script-only; `.9` and `.10` ids stable).
 - Insertion recipe for later items: add a new state with `plan-scaffold.js add-state`, then `set-reservation`, `add-criterion`, extend `scripts/ownership.json`, and make the intended successor depend on it. Existing slugs and criterion ids are never renamed. Re-run `check-disjoint.py` and `check-guards-red.py` after every insertion.
 
 ## Step 1c risk checkpoint
@@ -133,9 +144,11 @@ Highest risks: (1) apigen extraction failing opaquely on the verb types (pinned 
 
 ## Open decisions
 
-`EVALUATIONS.md` lists OD-1..OD-11 with the default applied to each and how to reverse it (sink dependency weight, ADR-0001 D5, redaction default, the `extraWaitMs` default, lifecycle backbone, reaper scope, presence records, legacy heartbeat reader, the backlog 19dfb641 AC4 amendment, the service-proxy extension design, the `dom.ts` SERP walker).
+`EVALUATIONS.md` lists OD-1..OD-11 with the default applied to each and how to reverse it (sink dependency weight, ADR-0001 D5, redaction default, the `extraWaitMs` default, lifecycle design (now single-pass over the proxy), reaper scope, the backlog 19dfb641 AC4 amendment, the service-proxy extension design, the `dom.ts` SERP walker).
 
 ## Human action required before execution
+
+0. `hb-sp-release` (needed before `sp-link` and `sp-switch`): the `@adhd/sox-service-proxy` 0.6.0 dev tarball built in the sox-ecosystem `sp-lifecycle` worktree must exist at `/Users/nix/.cache/adhd-dev-tarballs/` (for `sp-link`), and 0.6.0 must be published (for `sp-switch`); publishing is a human go. `hb-tripwire-domain` is resolved (`APPROVAL-tripwire.md`).
 
 1. `hb-deps-approval`: write `docs/plan/stealth-browser/APPROVALS.md` with `DEP-APPROVAL: granted` naming `node-html-parser`, `xpath`, `@xmldom/xmldom` (gates `deps-install`; already granted).
 2. `hb-design-evaluations` (provided): the two architect evaluations are recorded in `EVALUATIONS.md`, `EVAL-store-adapter.md` and `EVAL-service-proxy.md` and folded into `capture-upgrade` and `chrome-lifecycle`. Their provisional defaults are the OPEN-DECISIONS OD-1..OD-11 of `EVALUATIONS.md` (all reversible), including the pending service-proxy extension design.
@@ -156,8 +169,8 @@ Run: `plan-orchestrator execute stealth-browser` (resume: `node $SKILL/scripts/s
 
 ## Definition of Done
 
-- `[dod.1]` **Exactly one new package exists, entrypoint/stealth-browser named @adhd/stealth-browser, produced by the workspace generator and structurally identical to the sibling entrypoints (structural)** — Exactly one new package exists, entrypoint/stealth-browser named @adhd/stealth-browser, produced by the workspace generator and structurally identical to the sibling entrypoints.
-  - delivered-by: `scaffold, entrypoint-parity, deps-install`
+- `[dod.1]` **Exactly the two approved new packages exist, both produced by the workspace generator: entrypoint/stealth-browser named @adhd/stealth-browser, structurally identical to the sibling entrypoints, and packages/resilience/resilience-core-tripwire named @adhd/resilience-core-tripwire, a zero-dependency CJS-only core package (structural)** — Exactly the two approved new packages exist, both produced by the workspace generator: entrypoint/stealth-browser named @adhd/stealth-browser, structurally identical to the sibling entrypoints, and packages/resilience/resilience-core-tripwire named @adhd/resilience-core-tripwire, a zero-dependency CJS-only core package.
+  - delivered-by: `scaffold, entrypoint-parity, deps-install, tripwire-scaffold, tripwire-pack, tripwire-core, tripwire-interactive, tripwire-docs, tripwire-reverse-migrate, tripwire-reverse-relink`
 
 - `[dod.2]` **The six chrome-runner verbs work from all three surfaces (library, CLI, MCP stdio), proven by use-case unit suites that simulate real scenarios and by the agent-search cutover (behavioral)** — The six chrome-runner verbs work from all three surfaces (library, CLI, MCP stdio).
   - given: the built package and the shared harness (in-memory CDP server, in-memory filesystem, fake process table, profile and page fixtures)
@@ -178,7 +191,7 @@ Run: `plan-orchestrator execute stealth-browser` (resume: `node $SKILL/scripts/s
   - delivered-by: `tracing-plugin, tracing-namespace-proof`
 
 - `[dod.4]` **The migration preserves every feature and failsafe of the runner: each row of the failsafe inventory is pinned by a feature-level unit test (structural)** — The migration preserves every feature and failsafe of the runner, each pinned by a unit test; legacy code and names are not preserved.
-  - delivered-by: `failsafe-inventory, mig-foundation, mig-cdp, mig-chrome-manager, mig-domains-storage, mig-capture-parsers, mig-queries, mig-docs, tests-unit-core, tests-unit-data, tests-unit-extract, tests-unit-surface, port-fixes`
+  - delivered-by: `failsafe-inventory, mig-foundation, mig-cdp, mig-chrome-manager, mig-domains-storage, mig-capture-parsers, mig-queries, mig-docs, tests-unit-core, tests-unit-data, tests-unit-extract, tests-unit-surface, port-fixes, sp-reaper-load-proof, sp-link, sp-reaper-smoke, sp-switch`
 
 - `[dod.5]` **The live agent-search source tree is byte-identical to its baseline commit up to the first cutover commit (structural)** — The live agent-search source tree is byte-identical to its baseline commit up to the first cutover commit.
   - delivered-by: `mig-foundation`

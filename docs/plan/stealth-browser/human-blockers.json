@@ -39,5 +39,32 @@
     "how_to_provide": "Done: see EVALUATIONS.md (STATUS: recorded).",
     "destination": "docs/plan/stealth-browser/EVALUATIONS.md",
     "blocks_at": "per-state"
+  },
+  "hb-tripwire-domain": {
+    "type": "manual-approval",
+    "description": "Human approval of the second package @adhd/resilience-core-tripwire and of the new `resilience` workspace group (decision D1), recorded with the verbatim request.",
+    "required_by": [
+      "tripwire-scaffold"
+    ],
+    "verification": "python3 docs/plan/stealth-browser/scripts/guard.py tripwire-scaffold --only tripwire-scaffold.1",
+    "status": "verified",
+    "owner": "human",
+    "how_to_provide": "docs/plan/stealth-browser/APPROVAL-tripwire.md quotes the verbatim request, the approver, the date and D1-D4",
+    "destination": "docs/plan/stealth-browser/APPROVAL-tripwire.md",
+    "blocks_at": "per-state"
+  },
+  "hb-sp-release": {
+    "type": "manual-approval",
+    "description": "Release of @adhd/sox-service-proxy 0.6.0 from the sox-ecosystem repository (a human go; publishing is never done by an executor). Until it is on the registry the stealth-browser package resolves 0.6.0 through the root pnpm.overrides dev tarball built from the sox-ecosystem sp-lifecycle worktree (`pnpm pack`), and sp-link needs that tarball.",
+    "required_by": [
+      "sp-link",
+      "sp-switch"
+    ],
+    "verification": "python3 docs/plan/stealth-browser/scripts/guard.py sp-switch --only sp-switch.1",
+    "status": "needed",
+    "owner": "human",
+    "how_to_provide": "sp-link: place the dev tarball /Users/nix/.cache/adhd-dev-tarballs/adhd-sox-service-proxy-0.6.0-<sha8>.tgz (built by the sox-ecosystem integrator). sp-switch: publish 0.6.0 so `npm view @adhd/sox-service-proxy@0.6.0 version` exits 0",
+    "destination": "/Users/nix/.cache/adhd-dev-tarballs/ (sp-link); npm registry (sp-switch)",
+    "blocks_at": "per-state"
   }
 }

@@ -1,6 +1,6 @@
 # gates-rerun — WORK STATE
 
-**Phase:** remediate · **Kind:** work · **Depends on:** resolve-findings · **Guard:** `python3 docs/plan/stealth-browser/scripts/guard.py gates-rerun`
+**Phase:** remediate · **Kind:** work · **Depends on:** resolve-findings, tripwire-pack · **Guard:** `python3 docs/plan/stealth-browser/scripts/guard.py gates-rerun`
 **Executor:** `qa` (sonnet/medium) · **Worktree:** `/Users/nix/dev/node/adhd/.worktrees/stealth-browser` on branch `stealth-browser` (shared by every state, [inv:shared-worktree], [inv:worktree-required], [inv:no-ai-attribution])
 
 ## Goal
@@ -15,7 +15,7 @@ All gates are green again after the findings were resolved; the evidence is agai
 
 - **Reference Pattern:** Same gate set as `gates-first`.
 
-- **Delta Spec:** `python3 docs/plan/stealth-browser/scripts/guard.py gates-rerun` (requires RESOLUTION.json).
+- **Delta Spec:** `python3 docs/plan/stealth-browser/scripts/guard.py gates-rerun` (requires RESOLUTION.json); it re-runs the stealth-browser targets and the six `resilience-core-tripwire` targets against the post-fix trees (evidence key `tw:<target>`, tree key `tw_tree`).
 
 - **Invariants:** A red gate returns control to resolve-findings via an amendment; never mark green on a red gate. Also: [inv:shared-worktree] (commit only your own explicit paths, tag every commit `[psm:gates-rerun]`), [inv:owned-paths-only], [inv:no-main-writes].
 
@@ -33,6 +33,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 - [gates-rerun.4] `nx run stealth-browser:test` exits 0 (unit lane incl. the use-case suites; every spawner and third-party network call is mocked, no live Chrome)
 - [gates-rerun.5] `nx run stealth-browser:verify-dist-load` exits 0 (the built dist loads the way a consumer loads it)
 - [gates-rerun.6] Every spec file cites ticket 8468f7b1 and a valid acceptance-criterion id; evidence JSON records every gate command and exit code
+- [gates-rerun.7] `nx run resilience-core-tripwire:lint`, `:typecheck`, `:typecheck-spec`, `:test`, `:build` and `:verify-dist-load` exit 0 (the second approved package is gated with the first; evidence JSON records every command, its exit code and the tripwire tree sha `tw_tree`).
 
 ---
 

@@ -26,5 +26,12 @@
     "discovered_via": "manual",
     "shared_ref": "[ref:apigen-host]",
     "audit_check": "[audit-final.ref-apigen-host]"
+  },
+  "tripwire-core": {
+    "anchor": "packages/resilience/resilience-core-tripwire/package.json:1",
+    "rule": "The second approved package conforms: zero dependencies, ADR-0003 CJS-only manifest (no module, no exports, no type), no process.env / process.stdin / child_process / console access in src/lib outside node-io.ts (TW31), README, CHANGELOG, docs/ERRORS.md and docs/RECOVERY.md present",
+    "discovered_via": "manual",
+    "shared_ref": "[ref:tripwire-core]",
+    "audit_check": "[audit-final.13]"
   }
 }

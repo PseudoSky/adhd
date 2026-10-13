@@ -190,7 +190,8 @@
       "phase": "surface",
       "depends_on": [
         "surface-api",
-        "chrome-lifecycle"
+        "chrome-lifecycle",
+        "sp-link"
       ],
       "guard": "python3 docs/plan/stealth-browser/scripts/guard.py surface-hosts",
       "artifacts": [
@@ -202,7 +203,7 @@
         "docs/plan/stealth-browser/evidence/naming-decision.md"
       ],
       "context": "contexts/surface-hosts.md",
-      "notes": "executor=typescript-pro tier=sonnet/high"
+      "notes": "executor=typescript-pro tier=sonnet/high; waits for sp-link so the stealth-browser package.json owners are serialized"
     },
     "tracing-plugin": {
       "kind": "work",
@@ -305,14 +306,17 @@
         "tests-use-cases",
         "agent-search-cutover",
         "mig-docs",
-        "audit-fixes"
+        "audit-fixes",
+        "sp-switch",
+        "sp-reaper-smoke",
+        "tripwire-pack"
       ],
       "guard": "python3 docs/plan/stealth-browser/scripts/guard.py gates-first",
       "artifacts": [
         "docs/plan/stealth-browser/evidence/"
       ],
       "context": "contexts/gates-first.md",
-      "notes": "executor=qa tier=sonnet/medium"
+      "notes": "executor=qa tier=sonnet/medium; also gates the tripwire package (gates-first.11) and the release hygiene of the manifests (gates-first.12)"
     },
     "review-prep": {
       "kind": "work",
@@ -351,7 +355,8 @@
       "guard": "python3 docs/plan/stealth-browser/scripts/guard.py resolve-findings",
       "artifacts": [
         "entrypoint/stealth-browser/",
-        "docs/plan/stealth-browser/review/RESOLUTION.json"
+        "docs/plan/stealth-browser/review/RESOLUTION.json",
+        "packages/resilience/resilience-core-tripwire/"
       ],
       "context": "contexts/resolve-findings.md",
       "notes": "executor=typescript-pro tier=sonnet/high"
@@ -360,14 +365,15 @@
       "kind": "work",
       "phase": "remediate",
       "depends_on": [
-        "resolve-findings"
+        "resolve-findings",
+        "tripwire-pack"
       ],
       "guard": "python3 docs/plan/stealth-browser/scripts/guard.py gates-rerun",
       "artifacts": [
         "docs/plan/stealth-browser/evidence/"
       ],
       "context": "contexts/gates-rerun.md",
-      "notes": "executor=qa tier=sonnet/medium"
+      "notes": "executor=qa tier=sonnet/medium; also gates the tripwire package (gates-rerun.7)"
     },
     "docs-marketing-run": {
       "kind": "work",
@@ -416,20 +422,22 @@
       "kind": "work",
       "phase": "release",
       "depends_on": [
-        "audit-final"
+        "audit-final",
+        "tripwire-reverse-migrate"
       ],
       "guard": "python3 docs/plan/stealth-browser/scripts/guard.py merge-readiness",
       "artifacts": [
         "docs/plan/stealth-browser/RELEASE-DECISION.md"
       ],
       "context": "contexts/merge-readiness.md",
-      "notes": "executor=dispatcher tier=human/dispatcher"
+      "notes": "executor=dispatcher tier=human/dispatcher; the release decision covers both packages (@adhd/stealth-browser and @adhd/resilience-core-tripwire) and waits for tripwire-reverse-migrate"
     },
     "agent-search-cutover": {
       "kind": "work",
       "phase": "verify",
       "depends_on": [
-        "tests-use-cases"
+        "tests-use-cases",
+        "tripwire-pack"
       ],
       "guard": "python3 docs/plan/stealth-browser/scripts/guard.py agent-search-cutover",
       "artifacts": [
@@ -457,7 +465,7 @@
         "/Users/nix/dev/node/adhd/.worktrees/stealth-browser/docs/plan/stealth-browser/evidence/"
       ],
       "context": "contexts/agent-search-cutover.md",
-      "notes": "executor=typescript-pro tier=sonnet/high; REQUIRED, runs before the audit against a tarball packed from this worktree; the post-release link:/published step is agent-search-relink"
+      "notes": "executor=typescript-pro tier=sonnet/high; REQUIRED, runs before the audit against a tarball packed from this worktree; the post-release link:/published step is agent-search-relink; also adopts @adhd/resilience-core-tripwire (search-tripwire.ts becomes a thin adapter; tarball installed as a real directory, range ^0.1.0 recorded) in the same pass, criteria .10-.13"
     },
     "prod-errors": {
       "kind": "work",
@@ -574,7 +582,8 @@
         "/Users/nix/dev/ai/scratch/agent-browser/SEARCH.md",
         "/Users/nix/dev/ai/scratch/agent-browser/FEATURES.md",
         "/Users/nix/dev/ai/scratch/agent-browser/FETCH.md",
-        "/Users/nix/dev/ai/scratch/agent-browser/docs/"
+        "/Users/nix/dev/ai/scratch/agent-browser/docs/",
+        "packages/resilience/resilience-core-tripwire/"
       ],
       "context": "contexts/audit-fixes.md",
       "notes": "executor=typescript-pro tier=sonnet/high; ONE implementer resolves every pre-review finding"
@@ -604,7 +613,8 @@
       "depends_on": [
         "cdp-test-harness",
         "port-fixes",
-        "tests-unit-core"
+        "tests-unit-core",
+        "sp-reaper-load-proof"
       ],
       "guard": "python3 docs/plan/stealth-browser/scripts/guard.py chrome-lifecycle",
       "artifacts": [
@@ -614,10 +624,11 @@
         "entrypoint/stealth-browser/src/test/unit/lifecycle/",
         "entrypoint/stealth-browser/src/test/unit/chrome-manager/",
         "entrypoint/stealth-browser/src/test/unit/cdp/targets.spec.ts",
-        "docs/plan/stealth-browser/evidence/lifecycle-definitions.md"
+        "docs/plan/stealth-browser/evidence/lifecycle-definitions.md",
+        "entrypoint/stealth-browser/src/lib/cdp/browser.ts"
       ],
       "context": "contexts/chrome-lifecycle.md",
-      "notes": "executor=typescript-pro tier=sonnet/high; hybrid design C of EVAL-service-proxy.md (in-package engine behind PresenceStore and ReaperLauncher, default ServiceProxyReaperLauncher over @adhd/sox-service-proxy, phase-1 per-process presence records), CL1-CL27; every pre-existing feature F1-F26 pinned; surface-hosts waits for this state to wire installProcessExitHooks"
+      "notes": "executor=typescript-pro tier=sonnet/high; single-pass design (single-pass-lifecycle-spec): connection-based presence over @adhd/sox-service-proxy 0.6.0 (dialBackend connection per client, reaper host with a connection map, pure decideReap, createCircuitBreaker + FileBreakerStore, ownership record with isSameProcess), one ReaperLink port, lifecycle/sp.ts the only importer of the package (precondition: sp-link complete), degraded mode D1, killProcessGroup extract-only export in cdp/browser.ts; CL1-CL29 (CL30 is sp-reaper-smoke.1); every pre-existing feature F1-F26 pinned (75 inventory rows); surface-hosts waits for this state to wire installProcessExitHooks"
     },
     "tests-use-cases": {
       "kind": "work",
@@ -682,6 +693,178 @@
       ],
       "context": "contexts/failsafe-inventory.md",
       "notes": "executor=refactoring-specialist tier=sonnet/high; builds the failsafe/functionality inventory FIRST ([inv:no-functionality-removed]); no package source is touched"
+    },
+    "sp-reaper-load-proof": {
+      "kind": "work",
+      "phase": "migrate",
+      "depends_on": [
+        "port-fixes"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py sp-reaper-load-proof",
+      "artifacts": [
+        "docs/plan/stealth-browser/smoke/reaper-load-proof.md"
+      ],
+      "context": "contexts/sp-reaper-load-proof.md",
+      "notes": "executor=typescript-pro tier=sonnet/medium; proves the riskiest assumption of the single-pass lifecycle before chrome-lifecycle is written: the built dist/index.js loads in a fresh CJS process from an unrelated cwd and the exact detached-reaper spawn form works against a stub lifecycle.runChromeReaper (scratch only, package source untouched); VERDICT entry-path-ok pins the form used by reaper-link.ts, needs-bin forces a bin entry owned by surface-hosts before chrome-lifecycle"
+    },
+    "sp-link": {
+      "kind": "work",
+      "phase": "migrate",
+      "depends_on": [
+        "port-fixes"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py sp-link",
+      "artifacts": [
+        "entrypoint/stealth-browser/package.json",
+        "package.json",
+        "pnpm-lock.yaml",
+        "docs/plan/stealth-browser/smoke/sp-link.md"
+      ],
+      "context": "contexts/sp-link.md",
+      "notes": "executor=devops-engineer tier=sonnet/medium; declares the final dependency @adhd/sox-service-proxy ~0.6.0 in the stealth-browser manifest and resolves the unreleased 0.6.0 through a root pnpm.overrides entry pointing at the dev tarball built by the sox-ecosystem sp-lifecycle worktree (pnpm pack, never npm pack); needs that tarball (human-gated upstream build); hard dependency of chrome-lifecycle step lifecycle/sp.ts (in-state precondition), surface-hosts, sp-reaper-smoke and tripwire-pack (serializes pnpm-lock.yaml)"
+    },
+    "sp-reaper-smoke": {
+      "kind": "work",
+      "phase": "verify",
+      "depends_on": [
+        "prod-errors",
+        "sp-link"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py sp-reaper-smoke",
+      "artifacts": [
+        "docs/plan/stealth-browser/smoke/reaper-smoke.mjs",
+        "docs/plan/stealth-browser/smoke/reaper-smoke.md",
+        "docs/plan/stealth-browser/smoke/reaper-smoke.json"
+      ],
+      "context": "contexts/sp-reaper-smoke.md",
+      "notes": "executor=qa tier=sonnet/medium; CL30 as a gate script: built dist, scratch stateDir, a closed CDP port; ensureBackend gives spawned, ping/hello/activity/status answer, the host retires on its own after orphanWindowMs=1s and removes its socket; proves the entry path, the lifecycle namespace export and the package externalization on real processes; never touches port 9222"
+    },
+    "sp-switch": {
+      "kind": "work",
+      "phase": "verify",
+      "depends_on": [
+        "chrome-lifecycle",
+        "tracing-plugin",
+        "tripwire-pack"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py sp-switch",
+      "artifacts": [
+        "package.json",
+        "pnpm-lock.yaml",
+        "docs/plan/stealth-browser/smoke/switch.md"
+      ],
+      "context": "contexts/sp-switch.md",
+      "notes": "executor=devops-engineer tier=sonnet/medium; human-gated (hb-sp-release): once @adhd/sox-service-proxy 0.6.0 is on the registry delete the root pnpm.overrides dev-tarball entry, pnpm install, prove the lockfile resolves from the registry and that build and the lifecycle unit lane pass with no source change; verification-only no-op when 0.6.0 was already published before sp-link"
+    },
+    "tripwire-scaffold": {
+      "kind": "work",
+      "phase": "scaffold",
+      "depends_on": [
+        "port-fixes"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py tripwire-scaffold",
+      "artifacts": [
+        "packages/resilience/resilience-core-tripwire/",
+        "tsconfig.base.json",
+        ".adhd/workspace.json",
+        "docs/plan/stealth-browser/evidence/tripwire/"
+      ],
+      "context": "contexts/tripwire-scaffold.md",
+      "notes": "executor=typescript-pro tier=sonnet/medium; second approved package @adhd/resilience-core-tripwire (APPROVAL-tripwire.md, D1 new resilience group) generated with the workspace generator (core, --name=tripwire --group=resilience), ADR-0003 CJS-only manifest, version 0.1.0, zero dependencies; anchored on port-fixes so it is never concurrent with the evidence/-tree owners"
+    },
+    "tripwire-core": {
+      "kind": "work",
+      "phase": "migrate",
+      "depends_on": [
+        "tripwire-scaffold"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py tripwire-core",
+      "artifacts": [
+        "packages/resilience/resilience-core-tripwire/src/",
+        "packages/resilience/resilience-core-tripwire/*"
+      ],
+      "context": "contexts/tripwire-core.md",
+      "notes": "executor=typescript-pro tier=sonnet/high; the unified tripwire core: TripwireStorage seam with fs and memory implementations, FsPort memory-fs interleaving harness, createTripwire (read, gate, assertOpen, trip, clear, resolve, status), errors with a code and a brand, defaultRedactor, NDJSON audit with capped atomic rotation, adhdDataDir; TW1-TW23, TW30-TW33, TW35-TW38 map to tripwire-core.1-32; zero dependencies, unit lane only"
+    },
+    "tripwire-interactive": {
+      "kind": "work",
+      "phase": "migrate",
+      "depends_on": [
+        "tripwire-core"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py tripwire-interactive",
+      "artifacts": [
+        "packages/resilience/resilience-core-tripwire/src/",
+        "packages/resilience/resilience-core-tripwire/*"
+      ],
+      "context": "contexts/tripwire-interactive.md",
+      "notes": "executor=typescript-pro tier=sonnet/high; interactiveGate, confirmSolved, runUnlockCli, renderStatusText, statusJsonLine and the single Node IO adapter nodeTripwireIo (TW24-TW28), the three consumer scenario suites, and the closed public-surface snapshot (TW30)"
+    },
+    "tripwire-docs": {
+      "kind": "work",
+      "phase": "docs",
+      "depends_on": [
+        "tripwire-interactive"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py tripwire-docs",
+      "artifacts": [
+        "packages/resilience/resilience-core-tripwire/README.md",
+        "packages/resilience/resilience-core-tripwire/CHANGELOG.md",
+        "packages/resilience/resilience-core-tripwire/docs/",
+        "packages/resilience/resilience-core-tripwire/src/test/unit/readme-examples.spec.ts"
+      ],
+      "context": "contexts/tripwire-docs.md",
+      "notes": "executor=typescript-pro tier=sonnet/medium; README with the three consumer recipes, docs/ERRORS.md, docs/RECOVERY.md (operator runbook with the break-glass rm), CHANGELOG 0.1.0, JSDoc on every export, README examples compiled through readme-examples.spec.ts (TW34)"
+    },
+    "tripwire-pack": {
+      "kind": "work",
+      "phase": "verify",
+      "depends_on": [
+        "tripwire-docs",
+        "port-fixes",
+        "sp-link"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py tripwire-pack",
+      "artifacts": [
+        "pnpm-lock.yaml",
+        "docs/plan/stealth-browser/evidence/tripwire/",
+        "packages/resilience/resilience-core-tripwire/package.json",
+        "packages/resilience/resilience-core-tripwire/project.json",
+        "packages/resilience/resilience-core-tripwire/vite.config.ts"
+      ],
+      "context": "contexts/tripwire-pack.md",
+      "notes": "executor=typescript-pro tier=sonnet/medium; runs lint, typecheck, typecheck-spec, test, build and verify-dist-load of the tripwire package (TW29), packs the consumer tarball outside every .worktrees/ and records its sha256 and packed_from_head, smoke-tests it from a CJS require and an ESM import (named-export detection), and records the importer-only lockfile change; depends on sp-link so the pnpm-lock.yaml owners are serialized"
+    },
+    "tripwire-reverse-migrate": {
+      "kind": "work",
+      "phase": "migrate",
+      "depends_on": [
+        "tripwire-pack"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py tripwire-reverse-migrate",
+      "artifacts": [
+        "/Users/nix/dev/projects/reverse-apis/.worktrees/tripwire-adopt/",
+        "/Users/nix/dev/projects/reverse-apis/.git/info/exclude",
+        "docs/plan/stealth-browser/tripwire-reverse/"
+      ],
+      "context": "contexts/tripwire-reverse-migrate.md",
+      "notes": "executor=typescript-pro tier=sonnet/high; cross-repo: adopts the tripwire in reverse-apis in the worktree .worktrees/tripwire-adopt on branch feat/tripwire-adopt (request-builder gate, unlock tool, reverse-auth, api packages, e2e harness, REARCHITECTURE section 12) against the tarball; lockfile unchanged until relink; main's dirty files untouched; verification results recorded in tripwire-reverse/reverse-verify.json"
+    },
+    "tripwire-reverse-relink": {
+      "kind": "work",
+      "phase": "release",
+      "depends_on": [
+        "merge-readiness",
+        "tripwire-reverse-migrate"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py tripwire-reverse-relink",
+      "artifacts": [
+        "/Users/nix/dev/projects/reverse-apis/.worktrees/tripwire-adopt/package.json",
+        "/Users/nix/dev/projects/reverse-apis/.worktrees/tripwire-adopt/pnpm-lock.yaml",
+        "docs/plan/stealth-browser/tripwire-reverse/"
+      ],
+      "context": "contexts/tripwire-reverse-relink.md",
+      "notes": "executor=typescript-pro tier=sonnet/medium; dispatcher-gated like agent-search-relink: after the release, pnpm add @adhd/resilience-core-tripwire@^0.1.0 in the reverse worktree, commit package.json and pnpm-lock.yaml, re-run the verification, ff-only merge feat/tripwire-adopt into reverse main and remove the worktree and branch"
     }
   },
   "authored_with": {

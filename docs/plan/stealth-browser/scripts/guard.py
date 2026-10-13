@@ -26,6 +26,12 @@ os.chdir(TOP)
 
 PLAN = "docs/plan/stealth-browser"
 P = "entrypoint/stealth-browser"
+TW = "packages/resilience/resilience-core-tripwire"
+TW_NAME = "resilience-core-tripwire"
+TW_PKG = "@adhd/resilience-core-tripwire"
+REVERSE = "/Users/nix/dev/projects/reverse-apis/.worktrees/tripwire-adopt"
+SMOKE = "docs/plan/stealth-browser/smoke"
+TWREV = "docs/plan/stealth-browser/tripwire-reverse"
 SRC = "/Users/nix/dev/ai/scratch/agent-browser"
 SCRATCH = "/Users/nix/dev/ai/scratch"
 MAIN = "/Users/nix/dev/node/adhd"
@@ -415,10 +421,10 @@ def _s4():
 
 @check("scaffold", 5)
 def _s5():
-    """Exactly ONE new project.json since main (the one approved package): entrypoint/stealth-browser/project.json."""
+    """Exactly the approved new project.json files since main: entrypoint/stealth-browser/project.json (required) and, once tripwire-scaffold has run, packages/resilience/resilience-core-tripwire/project.json (the second approved package); any other new project.json fails."""
     base = git("merge-base", "HEAD", "main")
     added = [f for f in git("diff", "--name-only", "--diff-filter=A", f"{base}..HEAD").splitlines() if f.endswith("project.json")]
-    return added == [f"{P}/project.json"], f"new project.json files: {added}"
+    return f"{P}/project.json" in added and set(added) <= {f"{P}/project.json", f"{TW}/project.json"} and len(added) == len(set(added)), f"new project.json files: {added}"
 
 
 @check("scaffold", 6)
@@ -647,7 +653,7 @@ standard_port_checks("mig-chrome-manager", "chrome-manager")
 
 @check("mig-chrome-manager", 4)
 def _mcm4():
-    """Behavior parity of the port at migration time: the three-tier safety shutdown (`shutdownIfIdle`) and the ChromeManagerOptions type are preserved; the cross-process coordination is a FEATURE whose mechanism (heartbeat file, lease registry or service proxy) is rebuilt by chrome-lifecycle (EVALUATIONS.md E2) and is pinned by the feature inventory, not by the heartbeat path."""
+    """Behavior parity of the port at migration time: the three-tier safety shutdown (`shutdownIfIdle`) and the ChromeManagerOptions type are preserved; the cross-process coordination is a FEATURE whose mechanism (heartbeat file) is replaced by chrome-lifecycle with connection-based presence through the service-proxy reaper link, and is pinned by the feature inventory, not by the heartbeat path."""
     t = read(f"{P}/src/lib/chrome-manager.ts")
     return "ChromeManagerOptions" in exports_of(t) and "shutdownIfIdle" in t, "parity tokens"
 
@@ -1053,16 +1059,20 @@ GATE_TARGETS = ["lint", "typecheck", "typecheck-spec", "build", "build-bin", "te
 
 
 def run_gates(evidence):
-    cur = tree_sha()
+    cur, twcur = tree_sha(), tw_tree_sha()
     cached = jread(evidence)
-    if cached and cached.get("tree") == cur and cached.get("all_green"):
+    if cached and cached.get("tree") == cur and cached.get("tw_tree") == twcur and cached.get("all_green"):
         return cached
     res = {}
     for t in GATE_TARGETS:
         t0 = time.time()
         rc, out = sh([NX, "run", f"{proj_name()}:{t}"], timeout=2400)
         res[t] = {"cmd": f"nx run {proj_name()}:{t}", "exit": rc, "seconds": round(time.time() - t0, 1), "tail": out[-300:]}
-    doc = {"tree": cur, "head": git("rev-parse", "HEAD"), "results": res, "all_green": all(v["exit"] == 0 for v in res.values())}
+    for t in TW_ALL_TARGETS:  # the second approved package is gated with the first
+        t0 = time.time()
+        rc, out = tw_nx(t, 2400)
+        res[f"tw:{t}"] = {"cmd": f"nx run {TW_NAME}:{t}", "exit": rc, "seconds": round(time.time() - t0, 1), "tail": out[-300:]}
+    doc = {"tree": cur, "tw_tree": twcur, "head": git("rev-parse", "HEAD"), "results": res, "all_green": all(v["exit"] == 0 for v in res.values())}
     os.makedirs(os.path.dirname(evidence), exist_ok=True)
     with open(evidence, "w", encoding="utf8") as f:
         json.dump(doc, f, indent=2)
@@ -1162,9 +1172,9 @@ REVIEW = f"{PLAN}/review"
 
 @check("review-prep", 1)
 def _rp1():
-    """review/migration.diff exists, is non-empty and covers entrypoint/stealth-browser + tsconfig.base.json since the scaffold start_ref."""
+    """review/migration.diff exists, is non-empty and covers entrypoint/stealth-browser, packages/resilience/resilience-core-tripwire and tsconfig.base.json since the scaffold start_ref (the blind review sees both approved packages; the consumer-repo diffs are not included)."""
     d = read(f"{REVIEW}/migration.diff")
-    return len(d) > 2000 and f"{P}/src" in d, f"diff bytes={len(d)}"
+    return len(d) > 2000 and f"{P}/src" in d and f"{TW}/src" in d, f"diff bytes={len(d)} covers tripwire={f'{TW}/src' in d}"
 
 
 @check("review-prep", 2)
@@ -1182,10 +1192,10 @@ def _rp3():
 
 @check("review-prep", 4)
 def _rp4():
-    """Only owned paths changed by [psm:review-prep] commits; gates-first evidence tree matches the diffed tree."""
+    """Only owned paths changed by [psm:review-prep] commits; gates-first evidence trees (stealth-browser and the tripwire package) match the diffed trees."""
     g = jread(f"{PLAN}/evidence/gates-first.json", {})
     o = ownership_ok("review-prep")
-    return o[0] and g.get("all_green") is True and g.get("tree") == tree_sha(), f"{o[1]} gates tree match={g.get('tree') == tree_sha()}"
+    return o[0] and g.get("all_green") is True and g.get("tree") == tree_sha() and g.get("tw_tree") == tw_tree_sha(), f"{o[1]} gates tree match={g.get('tree') == tree_sha()} tw tree match={g.get('tw_tree') == tw_tree_sha()}"
 
 
 def findings():
@@ -1306,9 +1316,9 @@ def _dm4():
 
 @check("docs-marketing-run", 5)
 def _dm5():
-    """Gate evidence of gates-rerun still matches the package source tree (docs run changed no src/)."""
+    """Gate evidence of gates-rerun still matches the package source trees (docs run changed no src/ of stealth-browser or of the tripwire package)."""
     g = jread(f"{PLAN}/evidence/gates-rerun.json", {})
-    files = git("diff", "--name-only", g.get("head", "HEAD"), "HEAD", "--", f"{P}/src", f"{P}/bin").splitlines()
+    files = git("diff", "--name-only", g.get("head", "HEAD"), "HEAD", "--", f"{P}/src", f"{P}/bin", f"{TW}/src").splitlines()
     return g.get("all_green") is True and not files, f"src changed since gates-rerun: {files[:5]}"
 
 
@@ -1369,15 +1379,16 @@ def _rw5():
 # ============================================================ final audit / merge / cutover
 @check("audit-final", 1)
 def _af1():
-    """[dod.1] structural: exactly one new package exists, entrypoint/stealth-browser, named @adhd/stealth-browser, built by the generator (scaffold evidence) and parity-clean."""
-    return _s3()[0] and _s5()[0] and _s2()[0] and _ep1()[0], "package + generator evidence + parity"
+    """[dod.1] structural: only the approved new packages exist: entrypoint/stealth-browser named @adhd/stealth-browser (built by the generator, parity-clean) and packages/resilience/resilience-core-tripwire named @adhd/resilience-core-tripwire (built by the generator, tripwire-scaffold evidence)."""
+    tw = jread(f"{TW}/package.json", {}) or {}
+    return _s3()[0] and _s5()[0] and _s2()[0] and _ep1()[0] and tw.get("name") == TW_PKG and exists(f"{TW}/project.json"), "package + generator evidence + parity + tripwire package"
 
 
 @check("audit-final", 2)
 def _af2():
     """[dod.2] behavioral: `nx run stealth-browser:verify-dist-load` and the use-case unit suites (library, CLI and MCP scenarios against the in-process fake CDP server) pass on the final tree, and the agent-search cutover proof holds (gates-rerun evidence all green, tree == HEAD tree)."""
     g = jread(f"{PLAN}/evidence/gates-rerun.json", {})
-    return g.get("all_green") is True and g.get("tree") == tree_sha(), f"gates tree {str(g.get('tree'))[:8]} vs {tree_sha()[:8]}"
+    return g.get("all_green") is True and g.get("tree") == tree_sha() and g.get("tw_tree") == tw_tree_sha(), f"gates tree {str(g.get('tree'))[:8]} vs {tree_sha()[:8]}; tripwire tree {str(g.get('tw_tree'))[:8]} vs {tw_tree_sha()[:8]}"
 
 
 @check("audit-final", 3)
@@ -1450,9 +1461,9 @@ def _mr2():
 
 @check("merge-readiness", 3)
 def _mr3():
-    """The tree gated by gates-rerun is the tree being merged and the worktree is clean."""
+    """The trees gated by gates-rerun (stealth-browser and the tripwire package) are the trees being merged and the worktree is clean."""
     g = jread(f"{PLAN}/evidence/gates-rerun.json", {})
-    return g.get("tree") == tree_sha() and git("status", "--porcelain", "--", P, PLAN) == "", "clean + gated"
+    return g.get("tree") == tree_sha() and g.get("tw_tree") == tw_tree_sha() and git("status", "--porcelain", "--", P, TW, PLAN) == "", "clean + gated"
 
 
 def mcp_session(cmd, cwd, calls, timeout=90):
@@ -1523,7 +1534,7 @@ ERR_CODE_LIB = ["CHROME_START_TIMEOUT", "CDP_UNREACHABLE", "CDP_BAD_RESPONSE", "
 # CaptureError (capture-upgrade, spec 5.5) and LifecycleError (chrome-lifecycle, spec 6.4) codes join the same registry (amendment A4)
 # final registries fixed by EVAL-store-adapter.md (CU10) and EVAL-service-proxy.md (CL20)
 CAPTURE_CODES = ["CAPTURE_CONNECT_FAILED", "CAPTURE_NAVIGATE_FAILED", "CAPTURE_TIMEOUT", "CAPTURE_NO_MATCH", "CAPTURE_BAN_DETECTED", "CAPTURE_SESSION_CLOSED", "CAPTURE_SINK_FAILED", "CAPTURE_SINK_UNAVAILABLE"]
-LIFECYCLE_CODES = ["LAUNCH_FAILED", "LAUNCH_LOCK_TIMEOUT", "CHROME_UNREACHABLE_AFTER_LAUNCH", "LAUNCH_CIRCUIT_OPEN", "PRESENCE_DIR_INSECURE", "REAPER_UNAVAILABLE", "ISOLATED_CONTEXT_FAILED"]
+LIFECYCLE_CODES = ["LAUNCH_FAILED", "LAUNCH_LOCK_TIMEOUT", "CHROME_UNREACHABLE_AFTER_LAUNCH", "LAUNCH_CIRCUIT_OPEN", "REAPER_UNAVAILABLE", "ISOLATED_CONTEXT_FAILED"]
 ERR_CODES = ERR_CODES_HOST + ERR_CODE_LIB + CAPTURE_CODES + LIFECYCLE_CODES
 
 
@@ -2064,11 +2075,12 @@ def _pf4():
 
 @check("port-fixes", 5)
 def _pf5():
-    """The scratch chrome-lifecycle-test.ts is ported as a unit/lifecycle spec: src/test/unit/chrome-manager/chrome-lifecycle.spec.ts covers all five scenarios (deferral does not stamp the deferrer's heartbeat, genuine activity stamps, stale sibling lets shutdown proceed, absent sibling proceeds, dead sibling PID is ignored), uses a temp heartbeat path and a dead CDP port (never the live /tmp/stealth-browser-heartbeat), cites ticket 8468f7b1 and a valid port-fixes.N id; chrome-lifecycle later replaces the heartbeat mechanism with per-process presence records that keep the same behaviors."""
+    """The scratch chrome-lifecycle-test.ts is ported as a unit/lifecycle spec: src/test/unit/chrome-manager/chrome-lifecycle.spec.ts covers all five scenarios (deferral does not stamp the deferrer's heartbeat, genuine activity stamps, stale sibling lets shutdown proceed, absent sibling proceeds, dead sibling PID is ignored), uses a temp heartbeat path and a dead CDP port (never the live /tmp/stealth-browser-heartbeat), cites ticket 8468f7b1 and a valid port-fixes.N id; chrome-lifecycle later replaces the heartbeat mechanism with connection-based presence through the reaper link and keeps the same behaviors (it then cites [chrome-lifecycle.N] and the heartbeat tokens are no longer required)."""
     t = read(f"{P}/src/test/unit/chrome-manager/chrome-lifecycle.spec.ts")
-    need = ("shutdownIfIdle", "heartbeatPath", "mkdtemp", "bump", "livelock")
+    lifecycle_shape = "[chrome-lifecycle." in t  # chrome-lifecycle rewrites this spec onto the reaper-link mechanism (connection presence, no heartbeat file)
+    need = ("shutdownIfIdle", "bump", "livelock") if lifecycle_shape else ("shutdownIfIdle", "heartbeatPath", "mkdtemp", "bump", "livelock")
     live = re.search(r"['\"`]/tmp/stealth-browser-heartbeat['\"`]", t) is not None
-    ids = set(re.findall(r"\[(port-fixes\.\d+)\]", t))
+    ids = set(re.findall(r"\[((?:port-fixes|chrome-lifecycle)\.\d+)\]", t))
     tok = True
     return all(k in t for k in need) and len(re.findall(r"\b(?:it|test)\(", t)) >= 5 and not live and TICKET in t and bool(ids & criteria_ids()) and tok, f"missing={[k for k in need if k not in t]} liveHeartbeat={live} token={tok}"
 
@@ -2247,7 +2259,7 @@ def untyped_throws():
 
 @check("prod-errors", 1)
 def _pe1():
-    """(PA5.1, widened to 100%) src/errors.ts defines one `StealthBrowserError extends Error` with a readonly stable `code`, an exported `ERROR_CODES` const naming EVERY failure mode of the library, an `exitCodeFor(code)` mapping and a remediation message per code; the codes are exactly the 33 enumerated from the code and the two specs (4 host codes CHROME_NOT_FOUND, PORT_IN_USE, NODE_TOO_OLD, CHROME_NOT_RUNNING; 14 library codes CHROME_START_TIMEOUT, CDP_UNREACHABLE, CDP_BAD_RESPONSE, TARGET_NOT_FOUND, CDP_CONNECT_FAILED, CDP_NOT_CONNECTED, CDP_TIMEOUT, CDP_REMOTE_ERROR, CDP_SESSION_CLOSED, CDP_SEND_FAILED, NAVIGATION_FAILED, PAGE_SETTLE_FAILED, OPERATION_ABORTED, SELECTOR_TIMEOUT; the 8 CaptureError codes CAPTURE_CONNECT_FAILED, CAPTURE_NAVIGATE_FAILED, CAPTURE_TIMEOUT, CAPTURE_NO_MATCH, CAPTURE_BAN_DETECTED, CAPTURE_SESSION_CLOSED, CAPTURE_SINK_FAILED, CAPTURE_SINK_UNAVAILABLE; the 7 LifecycleError codes LAUNCH_FAILED, LAUNCH_LOCK_TIMEOUT, CHROME_UNREACHABLE_AFTER_LAUNCH, LAUNCH_CIRCUIT_OPEN, PRESENCE_DIR_INSECURE, REAPER_UNAVAILABLE, ISOLATED_CONTEXT_FAILED), and every code's message names a concrete next step."""
+    """(PA5.1, widened to 100%) src/errors.ts defines one `StealthBrowserError extends Error` with a readonly stable `code`, an exported `ERROR_CODES` const naming EVERY failure mode of the library, an `exitCodeFor(code)` mapping and a remediation message per code; the codes are exactly the 32 enumerated from the code and the two specs (4 host codes CHROME_NOT_FOUND, PORT_IN_USE, NODE_TOO_OLD, CHROME_NOT_RUNNING; 14 library codes CHROME_START_TIMEOUT, CDP_UNREACHABLE, CDP_BAD_RESPONSE, TARGET_NOT_FOUND, CDP_CONNECT_FAILED, CDP_NOT_CONNECTED, CDP_TIMEOUT, CDP_REMOTE_ERROR, CDP_SESSION_CLOSED, CDP_SEND_FAILED, NAVIGATION_FAILED, PAGE_SETTLE_FAILED, OPERATION_ABORTED, SELECTOR_TIMEOUT; the 8 CaptureError codes CAPTURE_CONNECT_FAILED, CAPTURE_NAVIGATE_FAILED, CAPTURE_TIMEOUT, CAPTURE_NO_MATCH, CAPTURE_BAN_DETECTED, CAPTURE_SESSION_CLOSED, CAPTURE_SINK_FAILED, CAPTURE_SINK_UNAVAILABLE; the 6 LifecycleError codes LAUNCH_FAILED, LAUNCH_LOCK_TIMEOUT, CHROME_UNREACHABLE_AFTER_LAUNCH, LAUNCH_CIRCUIT_OPEN, REAPER_UNAVAILABLE, ISOLATED_CONTEXT_FAILED), and every code's message names a concrete next step."""
     t = read(f"{P}/src/errors.ts")
     miss = [c for c in all_codes() if c not in t]
     cls = re.search(r"class\s+StealthBrowserError\s+extends\s+Error", t) is not None and re.search(r"readonly\s+code", t) is not None
@@ -2258,7 +2270,7 @@ def _pe1():
 
 @check("prod-errors", 2)
 def _pe2():
-    """(PA5.4, widened) src/test/unit/errors/ has a unit test PER CODE: each code of the registry (all 33 codes) is asserted (`code` and a remediation message; CaptureError and LifecycleError instances are `instanceof StealthBrowserError`) and each of the 14 library codes is reached through the real library path (`rejects.toMatchObject({ code: '<CODE>' })` or `.code).toBe('<CODE>')` against the in-process fake server/stubs), citing ticket 8468f7b1, a valid prod-errors.N id and PA5.1 / PA5.4."""
+    """(PA5.4, widened) src/test/unit/errors/ has a unit test PER CODE: each code of the registry (all 32 codes) is asserted (`code` and a remediation message; CaptureError and LifecycleError instances are `instanceof StealthBrowserError`) and each of the 14 library codes is reached through the real library path (`rejects.toMatchObject({ code: '<CODE>' })` or `.code).toBe('<CODE>')` against the in-process fake server/stubs), citing ticket 8468f7b1, a valid prod-errors.N id and PA5.1 / PA5.4."""
     specs = spec_files("unit/errors")
     t = "\n".join(read(f) for f in specs)
     miss = [c for c in all_codes() if t.count(c) < 1]
@@ -2309,10 +2321,10 @@ def _pe6():
 
 @check("prod-errors", 7)
 def _pe7():
-    """(amendment A3, greenfield root) src/index.ts exports the `recording` and `lifecycle` namespaces (`export * as recording from './lib/recording/index.js'`, `export * as lifecycle from './lib/lifecycle/index.js'`); `recording` exposes NetworkRecorder, CaptureError, MemoryRecordingSink, StoreRecordingSink, openStoreRecordingSink and redactHeaders, `capture` exposes captureAllNetworkResponses, `lifecycle` exposes LifecycleError, openIsolatedPage, withIsolatedPage, installProcessExitHooks, FilePresenceStore, ServiceProxyReaperLauncher and runChromeReaper (the detached reaper loads it through the package entry)."""
+    """(amendment A3, greenfield root) src/index.ts exports the `recording` and `lifecycle` namespaces (`export * as recording from './lib/recording/index.js'`, `export * as lifecycle from './lib/lifecycle/index.js'`); `recording` exposes NetworkRecorder, CaptureError, MemoryRecordingSink, StoreRecordingSink, openStoreRecordingSink and redactHeaders, `capture` exposes captureAllNetworkResponses, `lifecycle` exposes LifecycleError, openIsolatedPage, withIsolatedPage, installProcessExitHooks, runChromeReaper and createProxyReaperLink (the detached reaper loads runChromeReaper through the package entry)."""
     ns = dict(NS_RE.findall(read(f"{P}/src/index.ts")))
     wired = all(ns.get(a) and re.sub(r"\.js$", "", ns[a]) == "./" + AREAS_EXTRA[a] for a in AREAS_EXTRA)
-    want = {"recording": {"NetworkRecorder", "CaptureError", "MemoryRecordingSink", "StoreRecordingSink", "openStoreRecordingSink", "redactHeaders"}, "capture": {"captureAllNetworkResponses"}, "lifecycle": {"LifecycleError", "openIsolatedPage", "withIsolatedPage", "installProcessExitHooks", "FilePresenceStore", "ServiceProxyReaperLauncher", "runChromeReaper"}}
+    want = {"recording": {"NetworkRecorder", "CaptureError", "MemoryRecordingSink", "StoreRecordingSink", "openStoreRecordingSink", "redactHeaders"}, "capture": {"captureAllNetworkResponses"}, "lifecycle": {"LifecycleError", "openIsolatedPage", "withIsolatedPage", "installProcessExitHooks", "runChromeReaper", "createProxyReaperLink"}}
     miss = {a: sorted(w - barrel_names_of(f"{P}/src/{AREAS_ALL[a]}.ts") - barrel_names_of(f"{P}/src/{AREAS_ALL[a]}/index.ts")) for a, w in want.items()}
     miss = {a: m for a, m in miss.items() if m}
     return wired and not miss, f"wired={wired} missing members {miss}"
@@ -2548,7 +2560,7 @@ def _ac2():
 
 @check("agent-search-cutover", 3)
 def _ac3():
-    """evidence/cutover-live-vs-recorded.md states precisely what is LIVE and what is only RECORDED: lines `LIVE:` (node_modules content = the tarball, with its sha256), `RECORDED:` (the committed agent-browser/package.json dependency range, which resolves only once released) and `NOT-CHANGED:` naming pnpm-lock.yaml in agent-browser and the adhd main checkout's pnpm-lock.yaml; agent-browser/package.json carries no `link:`/`file:` value and no .worktrees path, and the adhd main checkout lockfile is unmodified."""
+    """evidence/cutover-live-vs-recorded.md states precisely what is LIVE and what is only RECORDED: lines `LIVE:` (node_modules content = the tarballs, with the sha256 of the stealth-browser tarball AND of the @adhd/resilience-core-tripwire tarball), `RECORDED:` (the committed agent-browser/package.json dependency ranges, `@adhd/stealth-browser` and `@adhd/resilience-core-tripwire` at `^0.1.0`, which resolve only once released) and `NOT-CHANGED:` naming pnpm-lock.yaml in agent-browser and the adhd main checkout's pnpm-lock.yaml; agent-browser/package.json carries no `link:`/`file:` value and no .worktrees path, and the adhd main checkout lockfile is unmodified."""
     t = read(CUT_LIVE)
     pj = json.dumps(jread(f"{SRC}/package.json", {}) or {})
     dep = ((jread(f"{SRC}/package.json", {}) or {}).get("dependencies") or {}).get("@adhd/stealth-browser", "")
@@ -2556,7 +2568,9 @@ def _ac3():
     tg_sha = jread(CUT_EVID, {}).get("sha256", "x")
     clean = not re.search(r"link:|file:|\.worktrees", dep) and bool(dep) and ".worktrees" not in pj
     main_lock = git("status", "--porcelain", "--", "pnpm-lock.yaml", cwd=MAIN) == ""
-    return stated and tg_sha in t and clean and main_lock, f"stated={stated} sha cited={tg_sha in t} dep={dep!r} main lock clean={main_lock}"
+    tw_sha = (jread(TW_TARBALL, {}) or {}).get("sha256", "x")
+    tw_dep = ((jread(f"{SRC}/package.json", {}) or {}).get("dependencies") or {}).get(TW_PKG, "")
+    return stated and tg_sha in t and tw_sha in t and tw_dep == "^0.1.0" and clean and main_lock, f"stated={stated} sha cited={tg_sha in t} tripwire sha cited={tw_sha in t} dep={dep!r} tripwire dep={tw_dep!r} main lock clean={main_lock}"
 
 
 @check("agent-search-cutover", 4)
@@ -2622,6 +2636,65 @@ def _ac9():
     bad = [n for n in need if n not in items or items[n].get("status") not in ("resolved", "closed") or not (items[n].get("commit") or items[n].get("citation"))]
     return not bad, f"unrecorded or open: {bad}"
 
+CUT_TW_NM = f"{SRC}/node_modules/@adhd/resilience-core-tripwire"
+TW_ASYNC_EXPORTS = ["fireTripwire", "tripwireGate", "gateBlocked", "clearedTripwire", "resolvedTripwire", "readTripwire", "isTripwireTripped"]
+
+
+@check("agent-search-cutover", 10)
+def _ac10():
+    """The live agent-browser install of @adhd/resilience-core-tripwire IS the tarball recorded by tripwire-pack: agent-browser/node_modules/@adhd/resilience-core-tripwire is a real directory (not a symlink, not a link into .worktrees/), its package.json version is 0.1.0 and its dist/index.js is byte-identical to the tarball member."""
+    d = jread(TW_TARBALL, {}) or {}
+    tg = d.get("tarball", "")
+    if not (tg and exists(tg) and exists(CUT_TW_NM)):
+        return False, "tarball or install missing"
+    import tempfile
+    with tempfile.TemporaryDirectory() as tmp:
+        rc, _, e = run2(["tar", "-xzf", tg, "-C", tmp], 120)
+        a, b = f"{tmp}/package/dist/index.js", f"{CUT_TW_NM}/dist/index.js"
+        same = rc == 0 and exists(a) and exists(b) and open(a, "rb").read() == open(b, "rb").read()
+    ver = (jread(f"{CUT_TW_NM}/package.json", {}) or {}).get("version")
+    return not os.path.islink(CUT_TW_NM) and same and ver == "0.1.0", f"symlink={os.path.islink(CUT_TW_NM)} dist identical={same} version={ver}"
+
+
+@check("agent-search-cutover", 11)
+def _ac11():
+    """search-tripwire.ts is a thin adapter over the package: it imports @adhd/resilience-core-tripwire, contains no `renameSync`, `writeFileSync`, `appendFileSync` or `homedir()`, exports the async wrappers fireTripwire, tripwireGate, gateBlocked, clearedTripwire, resolvedTripwire, readTripwire and isTripwireTripped plus a concrete non-generic `interface TripwireRecord` (the apigen MCP output type), keeps the clearPolicy `open` and the 7200000 ms default TTL, and no other agent-browser source file writes a tripwire lock or audit file itself."""
+    t = read(f"{SRC}/search-tripwire.ts")
+    code = code_lines(t)
+    ex = exports_of(t)
+    stray = sh("rg -n --glob '*.ts' --glob '!node_modules' --glob '!adhd/' -e 'tripwire.*(writeFileSync|renameSync|appendFileSync)|(writeFileSync|renameSync|appendFileSync).*tripwire' " + SRC + " || true")[1].strip()
+    return (TW_PKG in t and not re.search(r"renameSync|writeFileSync|appendFileSync|homedir\(\)", code) and set(TW_ASYNC_EXPORTS) <= ex and re.search(r"interface\s+TripwireRecord\b", t) is not None
+            and "open" in t and "7_200_000" in t.replace("7200000", "7_200_000") and not stray), f"missing exports {sorted(set(TW_ASYNC_EXPORTS) - ex)} stray writers: {stray[:120]}"
+
+
+@check("agent-search-cutover", 12)
+def _ac12():
+    """Tripwire behavior parity through the real surfaces: evidence/cutover-parity.json gains a `tripwire` object with `before` (captured from the unmodified source before the first cutover commit) equal to `after` for (a) `--tripwire-status` stdout including the last JSON line against an empty and a seeded fixture SEARCH_ADHD_DATA_DIR (`status_cli.empty`, `status_cli.seeded`), (b) the MCP tripwireStatus / clearTripwire tool names and output-schema keys through `node server.mjs --transport stdio` (`mcp`, whose tool list equals a live re-run), and (c) `legacy_lock`: a seeded legacy-shaped lock blocks a search with outcome `hitl` and zero Chrome calls."""
+    t = (jread(CUT_PARITY, {}) or {}).get("tripwire") or {}
+    cli = t.get("status_cli") or {}
+    same = all(isinstance(cli.get(k), dict) and cli[k].get("before") not in (None, "") and cli[k].get("before") == cli[k].get("after") for k in ("empty", "seeded"))
+    mcp = t.get("mcp") or {}
+    mcp_same = bool(mcp.get("before")) and mcp.get("before") == mcp.get("after")
+    leg = t.get("legacy_lock") or {}
+    if not (same and mcp_same and leg.get("outcome") == "hitl" and leg.get("chrome_calls") == 0):
+        return False, f"status cli identical={same} mcp identical={mcp_same} legacy lock={leg}"
+    live = live_shape().get("tools")
+    return (mcp.get("after") or {}).get("tools") == live or mcp.get("after") == live, "mcp tool list equals a live re-run"
+
+
+@check("agent-search-cutover", 13)
+def _ac13():
+    """The guard test and the lifecycle test pass against the package and the audit lands under the fixture: `pnpm run test` (chrome-lifecycle-test.ts then search-guard-test.ts) exits 0 with SEARCH_ADHD_DATA_DIR pointing at a scratch directory, that directory contains audit.log afterwards, and the real ~/.adhd/reverse/data/audit.log was not modified by the run."""
+    import tempfile
+    real = os.path.expanduser("~/.adhd/reverse/data/audit.log")
+    before = os.stat(real).st_mtime_ns if exists(real) else None
+    with tempfile.TemporaryDirectory() as tmp:
+        rc, out = sh(["pnpm", "run", "test"], cwd=SRC, timeout=1200, env={"SEARCH_ADHD_DATA_DIR": tmp})
+        landed = exists(f"{tmp}/audit.log") and bool(read(f"{tmp}/audit.log").strip())
+    after = os.stat(real).st_mtime_ns if exists(real) else None
+    return rc == 0 and landed and before == after, f"pnpm run test rc={rc} audit.log in fixture dir={landed} real audit untouched={before == after}"
+
+
 @check("agent-search-relink", 1)
 def _ar1():
     """Post-merge second step: RELEASE-DECISION.md has `DECISION: publish|defer` and a `CONSUME:` line (`@adhd/stealth-browser@<version>` when published, `link:<abs path>` into the MERGED main checkout when deferred; never a .worktrees path) and agent-browser/package.json depends on it."""
@@ -2663,6 +2736,20 @@ def _ar4():
             sha = rec.strip().split("\x1f")[0]
             bad += [f for f in git("diff-tree", "--no-commit-id", "--name-only", "-r", sha, cwd=SCRATCH).splitlines() if not f.startswith(allowed)]
     return not bad and sh(["git", "rev-parse", "--abbrev-ref", "@{upstream}"], cwd=SCRATCH)[0] != 0, f"out-of-scope files {bad[:5]}"
+
+
+@check("agent-search-relink", 5)
+def _ar5():
+    """The tripwire dependency moves from the tarball to the registry range: agent-browser/package.json keeps `@adhd/resilience-core-tripwire` at `^0.1.0` (no link:/file:), agent-browser/pnpm-lock.yaml resolves it with an integrity hash and no tarball or file resolution, node_modules/@adhd/resilience-core-tripwire/package.json resolves, and `pnpm run test` (with a scratch SEARCH_ADHD_DATA_DIR) exits 0 against the registry build."""
+    import tempfile
+    dep = ((jread(f"{SRC}/package.json", {}) or {}).get("dependencies") or {}).get(TW_PKG, "")
+    lock = read(f"{SRC}/pnpm-lock.yaml")
+    reg = re.search(r"resilience-core-tripwire@0\.1\.\d+:\s*\n\s*resolution:\s*\{integrity:", lock) is not None
+    if not (dep == "^0.1.0" and reg and "file:" not in "".join(re.findall(r".*resilience-core-tripwire.*", lock)) and exists(f"{CUT_TW_NM}/package.json")):
+        return False, f"dep={dep!r} registry resolution={reg}"
+    with tempfile.TemporaryDirectory() as tmp:
+        rc, out = sh(["pnpm", "run", "test"], cwd=SRC, timeout=1200, env={"SEARCH_ADHD_DATA_DIR": tmp})
+    return rc == 0, f"pnpm run test rc={rc}"
 
 
 # ============================================================ cdp-test-harness (spec 4) / capture-upgrade (spec 5) / chrome-lifecycle (spec 6)
@@ -2891,8 +2978,14 @@ def _cu27():
     return len(dyn) == 1 and not top and SINK_PKG in (pkg.get("dependencies") or {}) and "externalizeRealDeps(__dirname)" in read(f"{P}/vite.config.ts") and dist_ok and ok, f"dynamic sites={len(dyn)} value imports={top} {why}"
 
 
-# ---------------------------------------------------------------- chrome-lifecycle (EVAL-service-proxy.md, option C with the proxy launcher)
+# ---------------------------------------------------------------- chrome-lifecycle (single-pass design: connection-based presence over @adhd/sox-service-proxy 0.6.0)
 PROXY_PKG = "@adhd/sox-service-proxy"
+SP_EXPORTS = ["ensureBackend", "serveBackend", "dialBackend", "backendSocketPath", "ensurePrivateSocketDir", "readProcessStartToken", "isSameProcess", "createIdleRetirer", "createCircuitBreaker"]
+GONE_LIFECYCLE_FILES = ["presence.ts", "proxy-launcher.ts", "reaper.ts", "legacy-heartbeat.ts"]
+
+
+def state_status(slug):
+    return ((state().get("states") or {}).get(slug) or {}).get("status")
 
 
 def _cl_spec(num, fname, doc, must, sub="unit/lifecycle"):
@@ -2905,15 +2998,30 @@ def _cl_spec(num, fname, doc, must, sub="unit/lifecycle"):
 _cl_spec(1, "concurrent-launch.spec.ts", "CL1 (F1 F2 F4) race-free launch: concurrent-launch.spec.ts runs 8 managers over one MemFs and proves exactly one spawn, the default host 127.0.0.1:9222, a CDP that never becomes ready within 10 s giving CHROME_UNREACHABLE_AFTER_LAUNCH, a loser waiting bounded for the winner, and a launch lock older than 15 s being reclaimed.", ("toHaveBeenCalledTimes(1)", "CHROME_UNREACHABLE_AFTER_LAUNCH", "9222"))
 _cl_spec(2, "relaunch.spec.ts", "CL2 (F3 F17) self-heal and reset: relaunch.spec.ts proves that after another process kills the shared Chrome the next `ready()` relaunches, and that after a real shutdown a later `ready()` relaunches and a fresh idle timer fires again.", ("ready()", "shutdown"))
 _cl_spec(3, "hide-windows.spec.ts", "CL3 (F5) a fresh launch hides windows and the fast path does not re-hide (a window revealed for a human stays visible); hide-windows.spec.ts proves both.", ("hideAllWindows",))
-_cl_spec(4, "idle-timer.spec.ts", "CL4 (F6 F7) activity-bumped idle timer: idle-timer.spec.ts proves `bump()` re-arms (no fire at 299 ms, fire at 300 ms), the timer re-arms after it fired, `withBrowser` bumps when `fn` throws, and timers are unref'd.", ("299", "300", "unref", "withBrowser"))
-_cl_spec(5, "cross-process.spec.ts", "CL5 (F8) cross-process coordination: cross-process.spec.ts proves process A defers when process B bumped within the idle window, reaps when B stayed silent past it, and ignores B when B is dead or its pid was reused (start-time token mismatch).", ("procStart", "bump"))
-_cl_spec(6, "no-livelock.spec.ts", "CL6 (F9) livelock protection: no-livelock.spec.ts proves two idle managers with zero http pages and history off never write presence while deferring (`bump()` is the only writer of `lastActivityAt`) and Chrome is reaped within idle plus grace.", ("lastActivityAt", "bump"))
-_cl_spec(7, "page-tier.spec.ts", "CL7 (F10 F11 F12) page tier: page-tier.spec.ts proves an open http and an open https page pin Chrome, `chrome://newtab/`, `about:blank`, `devtools://` and `chrome-untrusted://` targets do not, and an unreachable CDP during the check proceeds.", ("chrome://newtab/", "about:blank", "devtools://", "chrome-untrusted://"))
-_cl_spec(8, "history-tier.spec.ts", "CL8 (F13) history-recency tier: history-tier.spec.ts proves a visit within 2 minutes pins Chrome, `checkHistory: false` ignores history, a history database error proceeds, the default is on, and the tier is on when ANY live process enables it.", ("checkHistory",))
-_cl_spec(9, "shutdown-modes.spec.ts", "CL9 (F14 F15) shutdown modes: shutdown-modes.spec.ts proves `shutdown()` ignores every tier and `shutdownIfIdle()` defers to a sibling, to a page and to history.", ("shutdownIfIdle", "shutdown("))
-_cl_spec(10, "ordered-shutdown.spec.ts", "CL10 (F16) ordered shutdown: ordered-shutdown.spec.ts proves all page targets are closed (allSettled) before Chrome is killed and that a failing close or kill is logged and the rest still runs.", ("logger",))
-_cl_spec(11, "group-kill.spec.ts", "CL11 (F18) group kill: group-kill.spec.ts proves SIGTERM to the process group, a bounded wait, then SIGKILL to the group, with a fallback to the single pid when the group signal fails (FakeProc log).", ("SIGTERM", "SIGKILL"))
-_cl_spec(12, "reaper-scope.spec.ts", "CL12 (F19) reaper scope: reaper-scope.spec.ts proves scope `port-occupant` (default) signals the port occupant (lsof, then fuser, with its pgid) when no owner is recorded and only the matching pid and start-time when an owner record exists, and scope `launched-only` never signals an unrecorded process.", ("port-occupant", "launched-only", "lsof", "fuser", "procStart"))
+_cl_spec(4, "idle-timer.spec.ts", "CL4 (F6 F7) activity-bumped idle timer (client side): idle-timer.spec.ts proves `bump()` re-arms (no fire at 299 ms, fire at 300 ms), the timer re-arms after it fired, `withBrowser` bumps when `fn` throws, and timers are unref'd.", ("299", "300", "unref", "withBrowser"))
+_cl_spec(5, "reaper-host.spec.ts", "CL5 (F8) cross-process coordination in the reaper host: reaper-host.spec.ts calls `createReaperHost(deps).handler(req, { connectionId })` and `onClientDisconnect(id, reason)` directly (no sockets) and proves client A is deferred to when client B sent `activity` within the idle window, Chrome is reaped when B stayed silent past it, and B's disconnect (kill -9) drops B at once even when B's last activity was 1 s ago.", ("createReaperHost", "connectionId", "onClientDisconnect", "activity"))
+_cl_spec(6, "no-livelock.spec.ts", "CL6 (F9) livelock protection: no-livelock.spec.ts proves defer paths, host ticks and `reapIfIdle` leave every client's `lastActivityAt` unchanged (`activity` is the only writer, `bump()` the only sender) and two idle clients with zero http pages and history off are reaped within idle plus grace.", ("lastActivityAt", "bump", "reapIfIdle"))
+_cl_spec(7, "page-tier.spec.ts", "CL7 (F10 F11 F12) page tier (evaluated in the host): page-tier.spec.ts proves an open http and an open https page pin Chrome, `chrome://newtab/`, `about:blank`, `devtools://` and `chrome-untrusted://` targets do not, and an unreachable CDP during the check proceeds.", ("chrome://newtab/", "about:blank", "devtools://", "chrome-untrusted://"))
+_cl_spec(8, "history-tier.spec.ts", "CL8 (F13) history-recency tier: history-tier.spec.ts proves a visit within 2 minutes pins Chrome, `checkHistory: false` ignores history, a history database error proceeds, the default is on, and the tier is on when ANY connected client enables it (the `hello` message carries the flag).", ("checkHistory",))
+_cl_spec(9, "shutdown-modes.spec.ts", "CL9 (F14 F15) shutdown modes: shutdown-modes.spec.ts proves `shutdown()` ignores every tier and is local, and `shutdownIfIdle()` goes through the link (`reapIfIdle`, graceMs 0) and defers to a sibling, to a page and to history.", ("shutdownIfIdle", "shutdown(", "reapIfIdle"))
+_cl_spec(10, "ordered-shutdown.spec.ts", "CL10 (F16) ordered shutdown: ordered-shutdown.spec.ts proves all page targets are closed (allSettled) before Chrome is killed, in the host reap and in the force path, and that a failing close or kill is logged and the rest still runs.", ("logger",))
+
+
+@check("chrome-lifecycle", 11)
+def _cl11():
+    """CL11 (F18) group kill: src/lib/cdp/browser.ts exports `killProcessGroup(pid)` (extract-only: the SIGTERM-to-group, bounded wait, SIGKILL-to-group, single-pid fallback logic that the tracked-branch kill already used, moved to a named export), src/test/unit/cdp/browser.spec.ts is byte-identical to its content at the chrome-lifecycle start_ref (fallback: the tests-unit-core end_ref) and still green, and process-group.spec.ts proves `killProcessGroup` issues the same signal sequence as the tracked branch (SIGTERM, a bounded wait, SIGKILL, fallback to the single pid)."""
+    b = read(f"{P}/src/lib/cdp/browser.ts")
+    ok, why = ac_spec("unit/lifecycle", "process-group.spec.ts", "chrome-lifecycle.11", ("killProcessGroup", "SIGTERM", "SIGKILL"))
+    spec = f"{P}/src/test/unit/cdp/browser.spec.ts"
+    st = (state().get("states") or {})
+    ref = (st.get("chrome-lifecycle") or {}).get("start_ref") or (st.get("tests-unit-core") or {}).get("end_ref")
+    if not ref or not exists(spec):
+        return False, f"no baseline ref for browser.spec.ts (start_ref/end_ref unset) or file missing; {why}"
+    same = sh(["git", "diff", "--quiet", ref, "--", spec])[0] == 0 and git("status", "--porcelain", "--", spec) == ""
+    return "killProcessGroup" in exports_of(b) and same and ok, f"browser.spec.ts unchanged since {ref[:8]}={same}; {why}"
+
+
+_cl_spec(12, "reaper-scope.spec.ts", "CL12 (F19) reaper scope: reaper-scope.spec.ts proves scope `port-occupant` (default) signals the port occupant (lsof, then fuser, with its pgid) when no owner is recorded and only the matching pid when the owner record is valid (`isSameProcess(pid, procStart)`), and scope `launched-only` never signals an unrecorded process.", ("port-occupant", "launched-only", "lsof", "fuser", "procStart", "isSameProcess"))
 
 
 @check("chrome-lifecycle", 13)
@@ -2928,62 +3036,66 @@ def _cl13():
 
 @check("chrome-lifecycle", 14)
 def _cl14():
-    """CL14 (F23, gap G2) exit hooks: src/lib/lifecycle/exit-hooks.ts exports `installProcessExitHooks(manager, { forceExitMs = 5000, stdinEof, exit })` returning an uninstall function; exit-hooks.spec.ts proves each of exit, SIGINT, SIGTERM, uncaughtException, unhandledRejection and (opt-in) stdin end runs `release()` then the soft shutdown once, force-exits after 5000 ms, uses codes 130, 143 and 1, and uninstall removes the listeners (wiring into the hosts is surface-hosts.14)."""
+    """CL14 (F23, gap G2) exit hooks: src/lib/lifecycle/exit-hooks.ts exports `installProcessExitHooks(manager, { forceExitMs = 5000, stdinEof, exit })` returning an uninstall function; exit-hooks.spec.ts proves each of exit, SIGINT, SIGTERM, uncaughtException, unhandledRejection and (opt-in) stdin end runs `release()` (the link release) then the soft shutdown once, force-exits after 5000 ms, uses codes 130, 143 and 1, and uninstall removes the listeners (wiring into the hosts is surface-hosts.14)."""
     e = read(f"{P}/src/lib/lifecycle/exit-hooks.ts")
-    ok, why = ac_spec("unit/lifecycle", "exit-hooks.spec.ts", "chrome-lifecycle.14", ("SIGINT", "SIGTERM", "uncaughtException", "unhandledRejection", "stdin", "130", "143", "5000"))
+    ok, why = ac_spec("unit/lifecycle", "exit-hooks.spec.ts", "chrome-lifecycle.14", ("SIGINT", "SIGTERM", "uncaughtException", "unhandledRejection", "stdin", "130", "143", "5000", "release"))
     return "installProcessExitHooks" in exports_of(e) and ok, why
 
 
 @check("chrome-lifecycle", 15)
 def _cl15():
-    """CL15 (F24 N1 N5, gap G4) out-of-process reaper through the proxy launcher: src/lib/lifecycle/proxy-launcher.ts exports ServiceProxyReaperLauncher implementing `ReaperLauncher` (`ensure(cfg)` giving 'started' | 'already-running' | 'unavailable') over `ensureBackend` from @adhd/sox-service-proxy (imported statically, no dynamic import); reaper.spec.ts, with `vi.mock('@adhd/sox-service-proxy')`, proves the dispositions spawned, already-live and adopted-after-wait map to started or already-running and `failed` (including E_UDS_DIR_UNSAFE) maps to unavailable, a launcher giving unavailable leaves `ready()` successful with `status().reaper === false` and the in-process timers still apply, a reaper tick with all clients gone (kill -9: never released) reaps within TTL plus grace signalling only the recorded pid and start-time (none when the record is missing or mismatched), and the bound 'the next ready() of any process adopts or reaps' is tested as a rule; the child entry is `runChromeReaper(cfg)` in src/lib/lifecycle/reaper-entry.ts (it calls `serveBackend` with a ping handler, then `runReaper` from reaper.ts, which uses the same `decideReap` as the in-process path: one policy)."""
-    p = read(f"{P}/src/lib/lifecycle/proxy-launcher.ts")
-    r = read(f"{P}/src/lib/lifecycle/reaper.ts")
-    re_ = read(f"{P}/src/lib/lifecycle/reaper-entry.ts")
-    ok, why = ac_spec("unit/lifecycle", "reaper.spec.ts", "chrome-lifecycle.15", ("vi.mock('@adhd/sox-service-proxy'", "ensureBackend", "spawned", "already-live", "adopted-after-wait", "E_UDS_DIR_UNSAFE", "REAPER_UNAVAILABLE"))
-    return ("ServiceProxyReaperLauncher" in exports_of(p) and "ensureBackend" in p and re.search(r"from\s*['\"]@adhd/sox-service-proxy['\"]", p) is not None
-            and "runChromeReaper" in exports_of(re_) and "serveBackend" in re_ and "runReaper" in exports_of(r) and "decideReap" in r and ok), why
+    """CL15 (F24 N1 N5, gap G4) out-of-process reaper over the service proxy, requires sp-link complete: src/lib/lifecycle/reaper-link.ts exports the `ReaperLink` port and `createProxyReaperLink(cfg)` (ensure the reaper with `ensureBackend`, hold ONE `dialBackend` connection that sends `hello{pid,checkHistory}` on connect, then `activity`, `release`, `reapIfIdle`, `status`); src/lib/lifecycle/reaper-entry.ts exports `runChromeReaper(cfg)` (`serveBackend` with the host handler and connection hooks, `createIdleRetirer` over `orphanWindowMs`, a 5 s ticker); reaper-link.spec.ts and reaper-entry.spec.ts, with `vi.mock('@adhd/sox-service-proxy')`, prove the dispositions spawned, already-live and adopted-after-wait map to ok and `failed` (including E_UDS_DIR_UNSAFE) maps to REAPER_UNAVAILABLE (degraded mode), a hello is sent on connect, activity is fire-and-forget, a connection of a killed client (kill -9) is dropped by the host at once, and a host nobody uses retires after `orphanWindowMs` once Chrome is gone."""
+    if state_status("sp-link") != "complete":
+        return False, "sp-link is not complete: the tarball precondition for lifecycle/sp.ts is unmet"
+    link = read(f"{P}/src/lib/lifecycle/reaper-link.ts")
+    entry = read(f"{P}/src/lib/lifecycle/reaper-entry.ts")
+    host = read(f"{P}/src/lib/lifecycle/reaper-host.ts")
+    a, wa = ac_spec("unit/lifecycle", "reaper-link.spec.ts", "chrome-lifecycle.15", ("vi.mock('@adhd/sox-service-proxy'", "spawned", "already-live", "adopted-after-wait", "E_UDS_DIR_UNSAFE", "REAPER_UNAVAILABLE", "dialBackend", "hello"))
+    b, wb = ac_spec("unit/lifecycle", "reaper-entry.spec.ts", "chrome-lifecycle.15", ("vi.mock('@adhd/sox-service-proxy'", "serveBackend", "createIdleRetirer", "orphanWindowMs", "runChromeReaper"))
+    return ({"ReaperLink", "createProxyReaperLink"} <= exports_of(link) and "runChromeReaper" in exports_of(entry) and "serveBackend" in entry and "createIdleRetirer" in entry
+            and "createReaperHost" in exports_of(host) and "decideReap" in host and a and b), f"{wa}; {wb}"
 
 
 @check("chrome-lifecycle", 16)
 def _cl16():
-    """CL16 (N3, gap G4) presence: src/lib/lifecycle/presence.ts exports the `PresenceStore` / `PresenceHandle` interfaces and `FilePresenceStore` (one record file per process, atomic write, directory mode 0700 and own uid else PRESENCE_DIR_INSECURE, no file shared between processes, an unparsable file counts as dead); presence-eviction.spec.ts proves `list()` evicts dead, pid-reused (start-time mismatch) and TTL-expired records, `sweep()` returns the evicted, and a beating process survives."""
-    p = read(f"{P}/src/lib/lifecycle/presence.ts")
-    ok, why = ac_spec("unit/lifecycle", "presence-eviction.spec.ts", "chrome-lifecycle.16", ("procStart", "sweep", "PRESENCE_DIR_INSECURE"))
-    return {"FilePresenceStore"} <= exports_of(p) and "PresenceStore" in p and ok, why
+    """CL16 (N3, gap G4) connection registry: reaper-registry.spec.ts proves, against `createReaperHost` called directly, that `hello` registers a client under its `ctx.connectionId` (pid and checkHistory), `activity` updates only that client's `lastActivityAt` (host clock), a disconnect or `release` removes the client, an unknown method or malformed params answer a JSON-RPC error without changing the registry, and after a host restart the next `activity` re-registers the client; the registry is in memory only (no presence file, no lease)."""
+    ok, why = ac_spec("unit/lifecycle", "reaper-registry.spec.ts", "chrome-lifecycle.16", ("hello", "activity", "release", "onClientDisconnect", "connectionId"))
+    return ok and exists(f"{P}/src/lib/lifecycle/reaper-host.ts"), why
 
 
 @check("chrome-lifecycle", 17)
 def _cl17():
-    """CL17 (N4) launch circuit breaker: src/lib/lifecycle/launch-breaker.ts exports LaunchBreaker (file-backed, atomic rename; opens after 3 failures in 60 s and stays open 30 s); launch-breaker.spec.ts proves the 4th `ready()` throws LAUNCH_CIRCUIT_OPEN with `retryAfterMs` and no spawn, the breaker closes after the cool-off, success resets it and the state is shared across managers."""
+    """CL17 (N4) launch circuit breaker: src/lib/lifecycle/launch-breaker.ts builds the breaker on `createCircuitBreaker({ failureThreshold: 3, windowMs: 60_000, cooldownMs: 30_000, store })` with a stealth-owned `FileBreakerStore` (`<stateDir>/breaker-<port>.json`, atomic rename, best-effort); launch-breaker.spec.ts proves the 4th `ready()` throws LAUNCH_CIRCUIT_OPEN with `retryAfterMs` and no spawn, the breaker closes after the cool-off, success resets it and the state is shared across managers."""
     b = read(f"{P}/src/lib/lifecycle/launch-breaker.ts")
-    ok, why = ac_spec("unit/lifecycle", "launch-breaker.spec.ts", "chrome-lifecycle.17", ("LAUNCH_CIRCUIT_OPEN", "retryAfterMs"))
-    return "LaunchBreaker" in exports_of(b) and ok, why
+    ok, why = ac_spec("unit/lifecycle", "launch-breaker.spec.ts", "chrome-lifecycle.17", ("LAUNCH_CIRCUIT_OPEN", "retryAfterMs", "FileBreakerStore"))
+    return "FileBreakerStore" in exports_of(b) and "createCircuitBreaker" in b and all(x in b for x in ("failureThreshold", "60_000", "30_000")) and ok, why
 
 
-_cl_spec(18, "sibling-warning.spec.ts", "CL18 (F25) sibling diagnostic: sibling-warning.spec.ts proves `status().siblingWarning` is true at the threshold of live sibling records and that the diagnostic never kills anything.", ("siblingWarning", "status"))
-_cl_spec(19, "grace-exit.spec.ts", "CL19 (N2 N6) shared Chrome and grace: grace-exit.spec.ts proves N managers share one Chrome and that after the last `release()` Chrome exits within `shutdownGraceMs` (fake clock).", ("release", "shutdownGraceMs"))
+_cl_spec(18, "sibling-warning.spec.ts", "CL18 (F25) sibling diagnostic: sibling-warning.spec.ts proves `status().siblingWarning` (from the host `status` answer: connected clients at or above the threshold) is true at the threshold and that the diagnostic never kills anything.", ("siblingWarning", "status"))
+_cl_spec(19, "grace-exit.spec.ts", "CL19 (N2 N6) shared Chrome and grace: grace-exit.spec.ts proves N managers share one Chrome and that after the last client releases or disconnects, the host tick closes Chrome within `shutdownGraceMs` (fake clock).", ("release", "shutdownGraceMs"))
 
 
 @check("chrome-lifecycle", 20)
 def _cl20():
-    """CL20 typed lifecycle errors: src/lib/lifecycle/errors.ts exports LifecycleError with exactly the seven codes LAUNCH_FAILED, LAUNCH_LOCK_TIMEOUT, CHROME_UNREACHABLE_AFTER_LAUNCH, LAUNCH_CIRCUIT_OPEN, PRESENCE_DIR_INSECURE, REAPER_UNAVAILABLE and ISOLATED_CONTEXT_FAILED; errors.spec.ts reaches each with `cause` or `detail` (`retryAfterMs`, `port`, `path`) and a one-line message naming the fix."""
+    """CL20 typed lifecycle errors: src/lib/lifecycle/errors.ts exports LifecycleError with exactly the six codes LAUNCH_FAILED, LAUNCH_LOCK_TIMEOUT, CHROME_UNREACHABLE_AFTER_LAUNCH, LAUNCH_CIRCUIT_OPEN, REAPER_UNAVAILABLE and ISOLATED_CONTEXT_FAILED (PRESENCE_DIR_INSECURE does not exist: no presence file); errors.spec.ts reaches each with `cause` or `detail` (`retryAfterMs`, `port`, `path`) and a one-line message naming the fix."""
     e = read(f"{P}/src/lib/lifecycle/errors.ts")
     ok, why = ac_spec("unit/lifecycle", "errors.spec.ts", "chrome-lifecycle.20", tuple(LIFECYCLE_CODES))
-    return "LifecycleError" in exports_of(e) and all(c in e for c in LIFECYCLE_CODES) and ok, why
+    return "LifecycleError" in exports_of(e) and all(c in e for c in LIFECYCLE_CODES) and "PRESENCE_DIR_INSECURE" not in e and ok, why
 
 
-_cl_spec(21, "best-effort.spec.ts", "CL21 (F26) best-effort I/O: best-effort.spec.ts proves presence and ownership write failures never fail a call.", ("release",))
+_cl_spec(21, "best-effort.spec.ts", "CL21 (F26) best-effort I/O: best-effort.spec.ts proves ownership-record, breaker-store and state-dir failures never fail a call, and a reaper link failure never fails `bump()`, `release()` or `shutdown()`.", ("release", "ownership", "breaker"))
 
 
 @check("chrome-lifecycle", 22)
 def _cl22():
-    """CL22 seam contract: src/test/unit/lifecycle/presence-contract.ts exports a contract suite that presence-contract.spec.ts runs against `FilePresenceStore`; `PresenceStore` and `ReaperLauncher` are the only two seams, and only `proxy-launcher.ts` and `reaper-entry.ts` (the detached child's entry) import `@adhd/sox-service-proxy` (decideReap, the tiers, the breaker, the isolated pages, the exit hooks and the manager never import the proxy package or a concrete store), so a proxy-backed presence store later passes the same suite and needs no change to the policy engine; a fake `ReaperLauncher` is substitutable in the manager tests."""
-    c = read(f"{P}/src/test/unit/lifecycle/presence-contract.ts")
-    ok, why = ac_spec("unit/lifecycle", "presence-contract.spec.ts", "chrome-lifecycle.22", ("FilePresenceStore", "presence-contract"))
-    allowed = {"proxy-launcher.ts", "reaper-entry.ts"}
-    leak = [os.path.basename(f) for f in walk(f"{P}/src/lib/lifecycle", (".ts",)) if os.path.basename(f) not in allowed and PROXY_PKG in read(f)] + [os.path.relpath(f, f"{P}/src/lib") for f in walk(f"{P}/src/lib", (".ts",)) if "/lifecycle/" not in f and PROXY_PKG in read(f)]
-    return bool(c.strip()) and ok and not leak and PROXY_PKG in read(f"{P}/src/lib/lifecycle/proxy-launcher.ts"), f"{why} proxy imported outside the launcher and the reaper entry: {leak}"
+    """CL22 one seam: `ReaperLink` (src/lib/lifecycle/reaper-link.ts) is the only port (the real adapter `createProxyReaperLink` and a test fake at src/test/unit/lifecycle/fake-reaper-link.ts that the manager tests substitute); src/lib/lifecycle/sp.ts is the ONLY file under src/ that imports `@adhd/sox-service-proxy` (static import) and it re-exports at least ensureBackend, serveBackend, dialBackend, backendSocketPath, ensurePrivateSocketDir, readProcessStartToken, isSameProcess, createIdleRetirer and createCircuitBreaker; no `PresenceStore`, `FilePresenceStore` or `ReaperLauncher` identifier exists; decideReap, the tiers, the breaker, the isolated pages, the exit hooks and the manager never import the package directly."""
+    sp = read(f"{P}/src/lib/lifecycle/sp.ts")
+    fake = read(f"{P}/src/test/unit/lifecycle/fake-reaper-link.ts")
+    leak = [os.path.relpath(f, P) for f in walk(f"{P}/src/lib", (".ts",)) if os.path.basename(f) != "sp.ts" and PROXY_PKG in read(f)]
+    gone = [os.path.relpath(f, P) for f in walk(f"{P}/src", (".ts",)) if re.search(r"\b(PresenceStore|FilePresenceStore|ReaperLauncher)\b", code_lines(read(f)))]
+    link = read(f"{P}/src/lib/lifecycle/reaper-link.ts")
+    return (bool(fake.strip()) and re.search(r"from\s*['\"]@adhd/sox-service-proxy['\"]", sp) is not None and set(SP_EXPORTS) <= exports_of(sp)
+            and "ReaperLink" in exports_of(link) and not leak and not gone), f"proxy imported outside sp.ts: {leak}; legacy seam identifiers: {gone}; missing sp exports {sorted(set(SP_EXPORTS) - exports_of(sp))}"
 
 
 @check("chrome-lifecycle", 23)
@@ -2991,16 +3103,23 @@ def _cl23():
     """CL23 hygiene: `process.env` never appears in src/lib/lifecycle (no env toggles, ADR-0013), no spec under src/test/unit/lifecycle opens a socket or spawns a process (no unmocked node:net, node:http or child_process), only owned paths changed by [psm:chrome-lifecycle] commits, and `nx run stealth-browser:test -- src/test/unit/lifecycle` exits 0 without touching a real port 9222."""
     o = ownership_ok("chrome-lifecycle")
     specs = [f for f in walk(f"{P}/src/test/unit/lifecycle", (".ts",)) if re.search(r"from ['\"]node:(net|http)['\"]", read(f))]
+    if not walk(f"{P}/src/lib/lifecycle", (".ts",)):
+        return False, "no lifecycle sources yet"
     ok, why = run_unit("lifecycle")
     return o[0] and "process.env" not in lib_text("lifecycle") and not specs and ok, f"{o[1]} socket specs={specs} {why}"
 
 
 @check("chrome-lifecycle", 24)
 def _cl24():
-    """CL24 transitional safety (removable at cutover): src/lib/lifecycle/legacy-heartbeat.ts is a READ-ONLY reader (no write call) of the old agent-browser heartbeat file, enabled only by the explicit `legacyHeartbeatPath` constructor option, feeding live old servers into the same `others` input of `decideReap`; legacy-heartbeat.spec.ts proves an old server with a fresh `pid:ts` entry defers a reap, a stale or dead one does not, and with the option unset nothing is read."""
-    t = read(f"{P}/src/lib/lifecycle/legacy-heartbeat.ts")
-    ok, why = ac_spec("unit/lifecycle", "legacy-heartbeat.spec.ts", "chrome-lifecycle.24", ("legacyHeartbeatPath",))
-    return bool(t.strip()) and not re.search(r"writeFile|appendFile|rename\(|\.write\(", t) and ok, why
+    """CL24 mechanism absence (the feature is kept, the old mechanism is gone): no file `presence.ts`, `proxy-launcher.ts`, `reaper.ts` or `legacy-heartbeat.ts` exists under src/lib/lifecycle, and no non-comment line under src/lib mentions `heartbeatPath`, `legacyHeartbeatPath`, `stealth-browser-heartbeat`, `leaseDir`, `leaseTtlMs`, `PRESENCE_DIR_INSECURE` or a `process.kill(pid, 0)` presence probe; the manager writes no activity file (greenfield: no interim reader of the old agent-browser heartbeat)."""
+    present = [f for f in GONE_LIFECYCLE_FILES if exists(f"{P}/src/lib/lifecycle/{f}")]
+    hits = []
+    for f in lib_files():
+        t = code_lines(read(f))
+        for tok in ("heartbeatPath", "legacyHeartbeatPath", "stealth-browser-heartbeat", "leaseDir", "leaseTtlMs", "PRESENCE_DIR_INSECURE"):
+            if tok in t:
+                hits.append(f"{os.path.relpath(f, P)}:{tok}")
+    return exists(f"{P}/src/lib/lifecycle/reaper-host.ts") and not present and not hits, f"retired files present {present}; retired mechanism tokens {hits[:8]}"
 
 
 @check("chrome-lifecycle", 25)
@@ -3012,11 +3131,25 @@ def _cl25():
 
 @check("chrome-lifecycle", 26)
 def _cl26():
-    """CL26 public shape of the manager: `ChromeManagerOptions` has `cdpHost`, `idleTimeoutMs` (default 120000), `checkHistory` (default true), `shutdownGraceMs` (default 30000), `leaseDir`, `leaseTtlMs` (default 30000), `reaperScope` ('launched-only' | 'port-occupant', default 'port-occupant'), `reaper` ('detached' | 'in-process-only', default 'detached'), `presence`, `launcher`, `legacyHeartbeatPath` and `logger`; the methods `ready`, `bump`, `shutdown`, `shutdownIfIdle`, `withBrowser`, `isReady` stay and `release()` and `status()` (`ChromeStatus`: ready, owned, processes, activeProcesses, httpPages, reaper, breaker, siblingWarning) are new; no heartbeat file is written by the manager."""
+    """CL26 public shape of the manager: `ChromeManagerOptions` is exactly { cdpHost?, idleTimeoutMs? (default 120000), checkHistory? (default true), shutdownGraceMs? (default 30000), orphanWindowMs? (default 30000), stateDir?, reaperScope? ('launched-only' | 'port-occupant', default 'port-occupant'), link? (a `ReaperLink`), logger? }; `leaseDir`, `leaseTtlMs`, `reaper` ('detached' | 'in-process-only'), `presence`, `launcher` and `legacyHeartbeatPath` do not exist; the methods `ready`, `bump`, `shutdown`, `shutdownIfIdle`, `withBrowser`, `isReady` stay and `release()` and `status()` (`ChromeStatus`: ready, owned, processes, activeProcesses, httpPages, reaper (boolean), breaker, siblingWarning) are new; no activity file is written by the manager."""
     c = read(f"{P}/src/lib/chrome-manager.ts")
-    need = ["cdpHost", "idleTimeoutMs", "checkHistory", "shutdownGraceMs", "leaseDir", "leaseTtlMs", "reaperScope", "reaper", "presence", "launcher", "legacyHeartbeatPath", "release", "status", "siblingWarning"]
+    t = code_lines(c)
+    need = ["cdpHost", "idleTimeoutMs", "checkHistory", "shutdownGraceMs", "orphanWindowMs", "stateDir", "reaperScope", "link", "release", "status", "siblingWarning", "ReaperLink"]
     miss = [n for n in need if n not in c]
-    return not miss and "port-occupant" in c and "launched-only" in c and "in-process-only" in c, f"missing {miss}"
+    gone = [n for n in ("leaseDir", "leaseTtlMs", "legacyHeartbeatPath", "in-process-only") if n in t] + [n for n in ("presence", "launcher", "reaper") if re.search(rf"\b{n}\?\s*:", t)]
+    return not miss and not gone and "port-occupant" in c and "launched-only" in c, f"missing {miss}; retired options present {gone}"
+
+
+@check("chrome-lifecycle", 28)
+def _cl28():
+    """CL28 degraded mode (decision D1): degraded.spec.ts proves that when the reaper cannot be ensured (`ensureBackend` gives `failed`, including E_UDS_DIR_UNSAFE) or the state directory is unsafe, `ready()` still succeeds, `status().reaper` is false, the idle timer fires but never closes Chrome (it defers), force `shutdown()` still works, and exactly one warning is logged for the whole degraded session."""
+    return ac_spec("unit/lifecycle", "degraded.spec.ts", "chrome-lifecycle.28", ("degraded", "E_UDS_DIR_UNSAFE", "reaper", "warn", "toHaveBeenCalledTimes(1)", "shutdown("))
+
+
+@check("chrome-lifecycle", 29)
+def _cl29():
+    """CL29 no respawn loop: no-respawn.spec.ts proves that when the reaper retires with N idle clients still connected and Chrome gone, no client calls `ensure` (zero calls on disconnect), and that a re-ensure happens only on `ready()`, on a `bump()` or `withBrowser` settle while the link is down and Chrome is reachable, and on one retry of a previously failed ensure at idle fire."""
+    return ac_spec("unit/lifecycle", "no-respawn.spec.ts", "chrome-lifecycle.29", ("ensure", "toHaveBeenCalledTimes(0)", "ready(", "orphanWindowMs"))
 
 
 
@@ -3169,20 +3302,18 @@ def _fi5():
 
 @check("port-fixes", 12)
 def _pf12():
-    """Dependencies for the capture sink and the lifecycle reaper (no approval gate, both are owned packages): package.json `dependencies` lists @adhd/sox-store-adapter at ^0.13.3 and @adhd/sox-service-proxy (^0.5.0), vite.config.ts builds with `externalizeRealDeps(__dirname)` (imported from tools/vite-plugins/externalize.mjs) so neither package is inlined into dist, pnpm-lock.yaml resolves both, and `nx run stealth-browser:build` exits 0 with dist/index.js containing no inlined copy of either package (a `require` or dynamic `import()` of the name only)."""
+    """Dependencies for the capture sink (no approval gate, an owned package): package.json `dependencies` lists @adhd/sox-store-adapter at ^0.13.3, vite.config.ts builds with `externalizeRealDeps(__dirname)` (imported from tools/vite-plugins/externalize.mjs) so no workspace package is inlined into dist, pnpm-lock.yaml resolves the store adapter, and `nx run stealth-browser:build` exits 0 with dist/index.js containing no inlined copy of createStoreAdapter (a `require` or dynamic `import()` of the name only). The @adhd/sox-service-proxy dependency is declared exactly once, by sp-link."""
     pkg = jread(f"{P}/package.json", {}) or {}
     deps = pkg.get("dependencies") or {}
     lock = read("pnpm-lock.yaml")
     v = read(f"{P}/vite.config.ts")
-    static_ok = (deps.get("@adhd/sox-store-adapter", "").lstrip("^~").startswith("0.13") and "@adhd/sox-service-proxy" in deps and "externalizeRealDeps(__dirname)" in v
-                 and "sox-store-adapter" in lock and "sox-service-proxy" in lock)
+    static_ok = deps.get("@adhd/sox-store-adapter", "").lstrip("^~").startswith("0.13") and "externalizeRealDeps(__dirname)" in v and "sox-store-adapter" in lock
     if not static_ok:
-        return False, "dependencies, externalizeRealDeps or lockfile entries missing"
+        return False, "store-adapter dependency, externalizeRealDeps or lockfile entry missing"
     rc, out = sh([NX, "run", f"{proj_name()}:build"], timeout=1800)
     dist = read(f"{P}/dist/index.js")
-    inlined = ("function createStoreAdapter" in dist) or ("function ensureBackend" in dist)
-    return (deps.get("@adhd/sox-store-adapter", "").lstrip("^~") .startswith("0.13") and "@adhd/sox-service-proxy" in deps and "externalizeRealDeps(__dirname)" in v
-            and "sox-store-adapter" in lock and "sox-service-proxy" in lock and rc == 0 and not inlined), f"deps={ {k: deps.get(k) for k in ('@adhd/sox-store-adapter','@adhd/sox-service-proxy')} } build rc={rc} inlined={inlined}"
+    inlined = "function createStoreAdapter" in dist
+    return rc == 0 and not inlined, f"build rc={rc} inlined={inlined}"
 
 
 @check("surface-hosts", 14)
@@ -3199,6 +3330,852 @@ def _sh14():
         t = o + e
         h.append(rc == 0 and "--idle-shutdown" in t and "--keep-alive" in t and "120000" in t)
     return "installProcessExitHooks" in sv and "installProcessExitHooks" in cl and "stdinEof" in sv and all(h), f"help flags ok={h}"
+
+
+# ============================================================ service-proxy 0.6.0 consumption (sp-reaper-load-proof, sp-link, sp-reaper-smoke, sp-switch)
+SP_VERSION = "0.6.0"
+SP_TGZ_RE = re.compile(r"^file:(/Users/nix/\.cache/adhd-dev-tarballs/adhd-sox-service-proxy-0\.6\.0-[0-9a-f]{8}\.tgz)$")
+RLP = f"{SMOKE}/reaper-load-proof.md"
+SPL = f"{SMOKE}/sp-link.md"
+SPS = f"{SMOKE}/switch.md"
+SMK_JS = f"{SMOKE}/reaper-smoke.mjs"
+SMK_MD = f"{SMOKE}/reaper-smoke.md"
+SMK_JSON = f"{SMOKE}/reaper-smoke.json"
+
+
+def sha256_file(p):
+    try:
+        return hashlib.sha256(open(p, "rb").read()).hexdigest()
+    except OSError:
+        return ""
+
+
+def root_overrides():
+    return (((jread("package.json", {}) or {}).get("pnpm") or {}).get("overrides")) or {}
+
+
+def sp_dep():
+    return ((pkg().get("dependencies")) or {}).get(PROXY_PKG, "")
+
+
+def local_specifiers():
+    """`file:` / `link:` / `workspace:`-less local specifiers for any @adhd/* package in the root, stealth-browser and tripwire manifests (dependencies, devDependencies, peerDependencies, overrides)."""
+    bad = []
+    for f in ("package.json", f"{P}/package.json", f"{TW}/package.json"):
+        d = jread(f, {}) or {}
+        blocks = [d.get(k) or {} for k in ("dependencies", "devDependencies", "peerDependencies", "optionalDependencies")] + [((d.get("pnpm") or {}).get("overrides")) or {}]
+        for b in blocks:
+            for k, v in b.items():
+                if k.startswith("@adhd/") and isinstance(v, str) and re.match(r"^(file:|link:|portal:)", v):
+                    bad.append(f"{f}:{k}={v}")
+    return bad
+
+
+def manifest_line_changes(since, path):
+    """Changed lines of `path` since `since`, ignoring trailing-comma moves and lines that mention the service-proxy package: what remains is a change to anything other than the one dependency/override line."""
+    if not since:
+        return ["(no start_ref)"]
+    rem, add = set(), set()
+    for ln in git("diff", "-U0", since, "HEAD", "--", path).splitlines():
+        if ln.startswith(("+++", "---")) or ln[:1] not in "+-" or not ln[1:].strip():
+            continue
+        (add if ln[0] == "+" else rem).add(ln[1:].strip().rstrip(","))
+    return sorted(x for x in rem ^ add if PROXY_PKG not in x)
+
+
+# ---------------------------------------------------------------- sp-reaper-load-proof
+@check("sp-reaper-load-proof", 1)
+def _rlp1():
+    """The built package entry loads the way the detached reaper will load it: smoke/reaper-load-proof.md records `BUILD: nx run stealth-browser:build exit=0`, `LOAD: exit=0 typeof=object` produced by `node -e "const m=require(process.argv[1]); console.log(typeof m)" <abs>/entrypoint/stealth-browser/dist/index.js` run from a cwd OUTSIDE the repository (`LOAD-CWD: <path>`), with no top-level side effect (the process exits on its own: no CDP connection, no timer left), and `EXTERNAL: yes` (dist requires @adhd/sox-service-proxy instead of inlining it)."""
+    t = read(RLP)
+    cwd = re.search(r"^LOAD-CWD:\s*(/\S+)\s*$", t, re.M)
+    return (bool(re.search(r"^BUILD: nx run stealth-browser:build exit=0\s*$", t, re.M)) and bool(re.search(r"^LOAD: exit=0 typeof=object\s*$", t, re.M))
+            and bool(cwd) and not cwd.group(1).startswith(TOP) and bool(re.search(r"^EXTERNAL: yes\s*$", t, re.M))), f"{len(t)} bytes, cwd={cwd.group(1) if cwd else None}"
+
+
+@check("sp-reaper-load-proof", 2)
+def _rlp2():
+    """The exact spawn form is proven against a STUB namespace and the verdict is pinned: the evidence records `SPAWN: exit=0` for `process.execPath ['-e', 'require(process.argv[1]).lifecycle.runChromeReaper(JSON.parse(process.argv[2]))', <abs dist/index.js>, <json>]` (stub `lifecycle.runChromeReaper` added only in a scratch copy: the package source is untouched) and `VERDICT: entry-path-ok`; if the verdict is `VERDICT: needs-bin` an `ALTERNATIVE:` line names the `bin` entry that surface-hosts must own and chrome-lifecycle uses instead (the plan is then amended before chrome-lifecycle starts)."""
+    t = read(RLP)
+    form = "require(process.argv[1]).lifecycle.runChromeReaper(JSON.parse(process.argv[2]))" in t
+    ok = bool(re.search(r"^SPAWN: exit=0\s*$", t, re.M)) and form
+    v = re.search(r"^VERDICT:\s*(entry-path-ok|needs-bin)\s*$", t, re.M)
+    alt = (v and v.group(1) == "needs-bin") and bool(re.search(r"^ALTERNATIVE:\s*\S", t, re.M))
+    return ok and bool(v) and (v.group(1) == "entry-path-ok" or alt), f"spawn ok={ok} verdict={v.group(1) if v else None}"
+
+
+@check("sp-reaper-load-proof", 3)
+def _rlp3():
+    """Only owned paths changed by [psm:sp-reaper-load-proof] commits (the single evidence file); no file under entrypoint/stealth-browser is modified and no scratch artifact is left in the repository."""
+    o = ownership_ok("sp-reaper-load-proof")
+    since = ((state().get("states") or {}).get("sp-reaper-load-proof") or {}).get("start_ref")
+    touched = git("diff", "--name-only", since, "HEAD", "--", P).splitlines() if since else []
+    return o[0] and not touched, f"{o[1]} package files touched since start: {touched[:5]}"
+
+
+# ---------------------------------------------------------------- sp-link
+@check("sp-link", 1)
+def _spl1():
+    """The stealth-browser manifest is FINAL from day one: entrypoint/stealth-browser/package.json `dependencies["@adhd/sox-service-proxy"]` is exactly `~0.6.0` (tilde: patch floats, a 0.x minor does not) and no `file:` / `link:` / `portal:` specifier appears in it (the sole recorded fallback, `FALLBACK: dependency-value` in smoke/sp-link.md, puts the `file:` tarball spec in this one dependency value instead of the root override)."""
+    d = sp_dep()
+    fb = re.search(r"^FALLBACK:\s*dependency-value\s*$", read(SPL), re.M) is not None
+    if fb:
+        return bool(SP_TGZ_RE.match(d)), f"fallback dependency value={d!r}"
+    return d == "~0.6.0" and not [k for k, v in (pkg().get("dependencies") or {}).items() if str(v).startswith(("file:", "link:", "portal:"))], f"dependency={d!r}"
+
+
+@check("sp-link", 2)
+def _spl2():
+    """The unreleased 0.6.0 resolves from a recorded dev tarball (or the registry once published): root package.json `pnpm.overrides["@adhd/sox-service-proxy"]` is `file:/Users/nix/.cache/adhd-dev-tarballs/adhd-sox-service-proxy-0.6.0-<sha8>.tgz`, that file exists and smoke/sp-link.md records `TARBALL_SHA256:` equal to its real sha256, `TARBALL_VERSION: 0.6.0` equal to the version inside the tarball, and `TARBALL_BUILD: pnpm pack` (never `npm pack`, which would leave a literal `workspace:^`); if 0.6.0 is already published the evidence records `REGISTRY: published`, the override is absent and the sp-switch state is verification-only."""
+    t = read(SPL)
+    if re.search(r"^REGISTRY:\s*published\s*$", t, re.M):
+        return PROXY_PKG not in root_overrides() and sh(["npm", "view", f"{PROXY_PKG}@{SP_VERSION}", "version"], timeout=60)[0] == 0, "registry path"
+    ov = root_overrides().get(PROXY_PKG, "")
+    fb = re.search(r"^FALLBACK:\s*dependency-value\s*$", t, re.M) is not None
+    m = SP_TGZ_RE.match(sp_dep() if fb else ov)
+    if not m or not exists(m.group(1)):
+        return False, f"override/dependency {ov!r} is not an existing dev tarball"
+    sha = sha256_file(m.group(1))
+    ver = ""
+    rc, o, _ = run2(["tar", "-xzOf", m.group(1), "package/package.json"], 30)
+    if rc == 0:
+        try:
+            ver = json.loads(o).get("version", "")
+        except ValueError:
+            ver = ""
+    return (re.search(rf"^TARBALL_SHA256:\s*{sha}\s*$", t, re.M) is not None and ver == SP_VERSION and re.search(r"^TARBALL_VERSION:\s*0\.6\.0\s*$", t, re.M) is not None
+            and re.search(r"^TARBALL_BUILD:\s*pnpm pack\s*$", t, re.M) is not None and sha[:8] in m.group(1)), f"sha={sha[:12]} version in tarball={ver!r}"
+
+
+@check("sp-link", 3)
+def _spl3():
+    """The install is real: pnpm-lock.yaml resolves @adhd/sox-service-proxy to 0.6.0, the worktree's node_modules/@adhd/sox-service-proxy/package.json is version 0.6.0, and it exports every name lifecycle/sp.ts re-exports (ensureBackend, serveBackend, dialBackend, backendSocketPath, ensurePrivateSocketDir, readProcessStartToken, isSameProcess, createIdleRetirer, createCircuitBreaker)."""
+    lock = read("pnpm-lock.yaml")
+    ver = (jread(f"{P}/node_modules/@adhd/sox-service-proxy/package.json", {}) or jread("node_modules/@adhd/sox-service-proxy/package.json", {}) or {}).get("version")
+    rc, o, e = run2(["node", "-e", "const m=require('@adhd/sox-service-proxy');console.log(JSON.stringify(Object.keys(m)))"], 60, cwd=P)
+    try:
+        have = set(json.loads(o.strip().splitlines()[-1])) if rc == 0 and o.strip() else set()
+    except ValueError:
+        have = set()
+    miss = sorted(set(SP_EXPORTS) - have)
+    return re.search(r"@adhd/sox-service-proxy[@/:'\"\s]*\S*0\.6\.\d+", lock) is not None and ver == SP_VERSION and not miss, f"lock mentions 0.6.x={'0.6.' in lock} installed={ver} missing exports={miss} {e[-100:]}"
+
+
+@check("sp-link", 4)
+def _spl4():
+    """The dist keeps the proxy external: after `nx run stealth-browser:build` exits 0, dist/index.js contains a `require` (or dynamic `import()`) of `@adhd/sox-service-proxy` and no inlined definition of ensureBackend, serveBackend or dialBackend (vite.config.ts keeps `externalizeRealDeps(__dirname)`)."""
+    if sp_dep() == "" or not exists(SPL):
+        return False, "dependency or evidence missing"
+    rc, out = sh([NX, "run", f"{proj_name()}:build"], timeout=1800)
+    dist = read(f"{P}/dist/index.js")
+    ext = re.search(r"(?:require|import)\(\s*['\"]@adhd/sox-service-proxy['\"]", dist) is not None
+    inl = re.search(r"function\s+(ensureBackend|serveBackend|dialBackend)\b", dist) is not None
+    return rc == 0 and ext and not inl and "externalizeRealDeps(__dirname)" in read(f"{P}/vite.config.ts"), f"build rc={rc} external={ext} inlined={inl}"
+
+
+@check("sp-link", 5)
+def _spl5():
+    """Only owned paths changed by [psm:sp-link] commits (the stealth-browser package.json, the root package.json, pnpm-lock.yaml and smoke/sp-link.md); the stealth-browser package.json diff of those commits touches the one `@adhd/sox-service-proxy` dependency line only, and no file under entrypoint/stealth-browser/src is modified."""
+    o = ownership_ok("sp-link")
+    since = ((state().get("states") or {}).get("sp-link") or {}).get("start_ref")
+    src = git("diff", "--name-only", since, "HEAD", "--", f"{P}/src").splitlines() if since else []
+    other = manifest_line_changes(since, f"{P}/package.json")
+    return o[0] and not src and not other, f"{o[1]} src touched={src[:3]} other manifest lines={other[:4]}"
+
+
+# ---------------------------------------------------------------- sp-reaper-smoke (CL30)
+@check("sp-reaper-smoke", 1)
+def _sps1():
+    """CL30 the gate script exists and is safe: smoke/reaper-smoke.mjs creates every directory with `mkdtemp` under os.tmpdir() (scratch stateDir), uses a CLOSED CDP port chosen at run time, never mentions port 9222, never touches the user's Chrome profile, and drives the BUILT dist (`require` of dist/index.js and `lifecycle.runChromeReaper` through the package entry, spawned the way reaper-link spawns it)."""
+    t = read(SMK_JS)
+    return bool(t.strip()) and "mkdtemp" in t and "9222" not in t and "dist/index.js" in t and "runChromeReaper" in t and "ensureBackend" in t, f"{len(t)} bytes"
+
+
+@check("sp-reaper-smoke", 2)
+def _sps2():
+    """CL30 the real-process proof passes: `node smoke/reaper-smoke.mjs` (after `nx run stealth-browser:build` exits 0) exits 0 and its last stdout line is a JSON object with `ensure` = "spawned" and true values for `ping`, `hello`, `activity`, `status`, `entryLoaded` (the package entry exposes the `lifecycle` namespace), `retired` (the host retired on its own after `orphanWindowMs` = 1 s) and `socketRemoved`."""
+    if not exists(SMK_JS):
+        return False, "script missing"
+    b, _ = sh([NX, "run", f"{proj_name()}:build"], timeout=1800)
+    if b != 0:
+        return False, f"build rc={b}"
+    rc, o, e = run2(["node", SMK_JS], 180)
+    try:
+        res = json.loads(o.strip().splitlines()[-1]) if o.strip() else {}
+    except ValueError:
+        res = {}
+    need = ["ping", "hello", "activity", "status", "entryLoaded", "retired", "socketRemoved"]
+    bad = [k for k in need if res.get(k) is not True]
+    return rc == 0 and res.get("ensure") == "spawned" and not bad, f"rc={rc} ensure={res.get('ensure')} not true: {bad} {e[-120:]}"
+
+
+@check("sp-reaper-smoke", 3)
+def _sps3():
+    """The run is recorded and the state is read-only for the package: smoke/reaper-smoke.md records `RUN: exit=0`, the dist/index.js sha256 and the service-proxy version used, smoke/reaper-smoke.json holds the script output, only owned paths changed by [psm:sp-reaper-smoke] commits and no file under entrypoint/stealth-browser/src is modified."""
+    t = read(SMK_MD)
+    j = jread(SMK_JSON, {}) or {}
+    o = ownership_ok("sp-reaper-smoke")
+    since = ((state().get("states") or {}).get("sp-reaper-smoke") or {}).get("start_ref")
+    src = git("diff", "--name-only", since, "HEAD", "--", f"{P}/src").splitlines() if since else []
+    return re.search(r"^RUN: exit=0\s*$", t, re.M) is not None and re.search(r"[0-9a-f]{64}", t) is not None and "0.6." in t and j.get("ensure") == "spawned" and o[0] and not src, f"{o[1]} src touched={src[:3]}"
+
+
+# ---------------------------------------------------------------- sp-switch
+@check("sp-switch", 1)
+def _sw1():
+    """0.6.0 is on the registry: smoke/switch.md records `PUBLISHED: npm view @adhd/sox-service-proxy@0.6.0 version exit=0` with the printed version `0.6.0` (the human release go is hb-sp-release); when the state is a verification-only no-op the evidence says `NOOP: published before sp-link`."""
+    t = read(SPS)
+    return re.search(r"^PUBLISHED: npm view @adhd/sox-service-proxy@0\.6\.0 version exit=0\s*$", t, re.M) is not None and re.search(r"^VERSION:\s*0\.6\.0\s*$", t, re.M) is not None, f"{len(t)} bytes"
+
+
+@check("sp-switch", 2)
+def _sw2():
+    """The dev-tarball indirection is gone with no source change: root package.json `pnpm.overrides` has no `@adhd/sox-service-proxy` key, no @adhd/* dependency or override in the root, stealth-browser or tripwire manifests starts with `file:`, `link:` or `portal:`, pnpm-lock.yaml mentions neither `adhd-dev-tarballs` nor a `file:/Users` resolution and resolves @adhd/sox-service-proxy 0.6.x with an integrity hash, and `git diff` of entrypoint/stealth-browser/src since the state start is empty."""
+    lock = read("pnpm-lock.yaml")
+    since = ((state().get("states") or {}).get("sp-switch") or {}).get("start_ref")
+    src = git("diff", "--name-only", since, "HEAD", "--", f"{P}/src").splitlines() if since else ["(no start_ref)"]
+    reg = re.search(r"/?@adhd/sox-service-proxy@0\.6\.\d+:\s*\n\s*resolution:\s*\{integrity:", lock) is not None
+    return PROXY_PKG not in root_overrides() and not local_specifiers() and "adhd-dev-tarballs" not in lock and "file:/Users" not in lock and reg and not src, f"overrides={root_overrides().get(PROXY_PKG)} local specifiers={local_specifiers()} registry resolution={reg} src={src[:3]}"
+
+
+@check("sp-switch", 3)
+def _sw3():
+    """The registry build passes the same gates: after the switch `nx run stealth-browser:build` and `nx run stealth-browser:test -- src/test/unit/lifecycle` exit 0, and smoke/switch.md records `BUILD: exit=0` and `LIFECYCLE-UNIT: exit=0`."""
+    t = read(SPS)
+    if not (re.search(r"^BUILD: exit=0\s*$", t, re.M) and re.search(r"^LIFECYCLE-UNIT: exit=0\s*$", t, re.M)):
+        return False, "evidence missing"
+    b, _ = sh([NX, "run", f"{proj_name()}:build"], timeout=1800)
+    ok, why = run_unit("lifecycle")
+    return b == 0 and ok, f"build={b} {why}"
+
+
+@check("sp-switch", 4)
+def _sw4():
+    """Only owned paths changed by [psm:sp-switch] commits (the root package.json, pnpm-lock.yaml and smoke/switch.md); the root package.json diff removes the single `@adhd/sox-service-proxy` override line and adds nothing else."""
+    o = ownership_ok("sp-switch")
+    since = ((state().get("states") or {}).get("sp-switch") or {}).get("start_ref")
+    extra = manifest_line_changes(since, "package.json")
+    return o[0] and not extra, f"{o[1]} other root manifest lines changed={extra[:4]}"
+
+
+# ============================================================ tripwire package (tripwire-scaffold .. tripwire-pack) and the reverse-apis adoption
+TW_SRC = f"{TW}/src"
+TW_EVID_DIR = f"{PLAN}/evidence/tripwire"
+TW_TARBALL = f"{TW_EVID_DIR}/tripwire-tarball.json"
+TW_APPROVAL = f"{PLAN}/APPROVAL-tripwire.md"
+TW_REQUEST = "Implement tripwire package in this plan covering all 3"
+TW_ALL_TARGETS = ["lint", "typecheck", "typecheck-spec", "test", "build", "verify-dist-load"]
+
+
+def tw_tree_sha():
+    return git("rev-parse", f"HEAD:{TW}") if exists(TW) else ""
+
+
+def tw_nx(target, timeout=1800):
+    return sh([NX, "run", f"{TW_NAME}:{target}"], timeout=timeout)
+
+
+def tw_spec(fname, cid, must=()):
+    p = f"{TW}/src/test/unit/{fname}"
+    t = read(p)
+    miss = [m for m in must if m not in t]
+    return bool(t.strip()) and TICKET in t and f"[{cid}]" in t and not miss, f"{fname}: exists={bool(t.strip())} cites ticket={TICKET in t} id={f'[{cid}]' in t} missing tokens={miss}"
+
+
+def tw_lib_files():
+    return [f for f in walk(f"{TW}/src/lib", (".ts",)) if not f.endswith(".d.ts")]
+
+
+TW_BANNED = re.compile(r"process\.env|process\.stdin|process\.stdout|child_process|\bconsole\.")
+
+
+def tw_purity():
+    """TW31: no process.env/stdin/stdout, child_process or console.* in src/lib outside node-io.ts (the one Node IO adapter); no import of node:net/http/https/child_process anywhere in src."""
+    bad = []
+    for f in tw_lib_files():
+        if os.path.basename(f) == "node-io.ts":
+            continue
+        t = code_lines(read(f))
+        if TW_BANNED.search(t):
+            bad.append(os.path.relpath(f, TW))
+    net = [os.path.relpath(f, TW) for f in walk(TW_SRC, (".ts",)) if re.search(r"from ['\"]node:(net|http|https|child_process|dns|tls)['\"]|require\(['\"](child_process|net|http)['\"]\)", read(f))]
+    return bool(tw_lib_files()) and not bad and not net, f"banned access in {bad}; network/process imports in {net}; lib files={len(tw_lib_files())}"
+
+
+def tw_citations():
+    """TW35: every spec under src/test cites ticket 8468f7b1 and a tripwire criterion id [tripwire-<state>.N] or a TW id."""
+    specs = [f for f in walk(f"{TW}/src/test", (".ts",)) if f.endswith(".spec.ts")]
+    ids = criteria_ids()
+    bad = [os.path.relpath(f, TW) for f in specs if TICKET not in read(f) or not (set(re.findall(r"\[((?:tripwire-[a-z-]+)\.\d+)\]", read(f))) & ids)]
+    return bool(specs) and not bad, f"uncited specs {bad[:6]}"
+
+
+def tw_gate_run(evidence):
+    """Run the six tripwire nx targets once per tripwire tree and cache the result in `evidence`."""
+    cur = tw_tree_sha()
+    cached = jread(evidence)
+    if cached and cached.get("tw_tree") == cur and cached.get("all_green"):
+        return cached
+    res = {}
+    for t in TW_ALL_TARGETS:
+        t0 = time.time()
+        rc, out = tw_nx(t, 2400)
+        res[t] = {"cmd": f"nx run {TW_NAME}:{t}", "exit": rc, "seconds": round(time.time() - t0, 1), "tail": out[-300:]}
+    doc = {"tw_tree": cur, "head": git("rev-parse", "HEAD"), "results": res, "all_green": all(v["exit"] == 0 for v in res.values())}
+    os.makedirs(os.path.dirname(evidence), exist_ok=True)
+    with open(evidence, "w", encoding="utf8") as f:
+        json.dump(doc, f, indent=2)
+    return doc
+
+
+# ---------------------------------------------------------------- tripwire-scaffold
+@check("tripwire-scaffold", 1)
+def _tws1():
+    """Approval and domain are recorded before anything is generated: docs/plan/stealth-browser/APPROVAL-tripwire.md quotes the verbatim request `Implement tripwire package in this plan covering all 3`, names the approver and date and decisions D1 to D4, and .adhd/workspace.json has the `resilience` group (with a description) next to the existing groups."""
+    a = read(TW_APPROVAL)
+    ws = jread(".adhd/workspace.json", {}) or {}
+    grp = (ws.get("groups") or {}).get("resilience")
+    ok = TW_REQUEST in a and all(f"D{n}" in a for n in (1, 2, 3, 4)) and re.search(r"^APPROVER:\s*\S", a, re.M) is not None
+    return ok and isinstance(grp, dict) and bool(grp.get("description")), f"approval ok={ok} group={grp}"
+
+
+@check("tripwire-scaffold", 2)
+def _tws2():
+    """The package is generator-built (never hand-built): evidence/tripwire/scaffold-dry-run.txt holds the transcript of `npx nx g @adhd/workspace-codegen-nx:core --name=tripwire --group=resilience --nxLayer=shared --platform=node --access public --publish true --dry-run` with its CREATE list, packages/resilience/resilience-core-tripwire/project.json is named `resilience-core-tripwire`, and its tags contain exactly domain:resilience, pkg-kind:core, pkg-class:foundation, layer:shared, platform:node and access:public."""
+    t = read(f"{TW_EVID_DIR}/scaffold-dry-run.txt")
+    pj = jread(f"{TW}/project.json", {}) or {}
+    tags = set(pj.get("tags") or [])
+    want = {"domain:resilience", "pkg-kind:core", "pkg-class:foundation", "layer:shared", "platform:node", "access:public"}
+    return ("--name=tripwire" in t and "--group=resilience" in t and "--dry-run" in t and "CREATE" in t and pj.get("name") == TW_NAME and want <= tags and not (tags - want - {t_ for t_ in tags if t_.startswith("scope:")})), f"name={pj.get('name')} tags={sorted(tags)}"
+
+
+@check("tripwire-scaffold", 3)
+def _tws3():
+    """The manifest has the ADR-0003 CJS-only shape: name @adhd/resilience-core-tripwire, version 0.1.0, `main` ./dist/index.js, `type` unset, no `module`, no `exports`, no `bin`, empty or absent `dependencies`, engines.node >= 20, publishConfig.access public, `files` containing dist and CHANGELOG.md; tsconfig.base.json maps the @adhd/resilience-core-tripwire alias; the vite config emits CJS only (no `es` format, no .mjs)."""
+    p = jread(f"{TW}/package.json", {}) or {}
+    vite = read(f"{TW}/vite.config.ts")
+    shape = (p.get("name") == TW_PKG and p.get("version") == "0.1.0" and p.get("main") == "./dist/index.js" and "type" not in p and "module" not in p and "exports" not in p and "bin" not in p
+             and not (p.get("dependencies") or {}) and (p.get("publishConfig") or {}).get("access") == "public" and {"dist", "CHANGELOG.md"} <= set(p.get("files") or [])
+             and re.search(r"(>=\s*)?(20|22)", (p.get("engines") or {}).get("node", "")) is not None)
+    cjs = bool(vite.strip()) and not re.search(r"formats?:\s*\[[^\]]*['\"]es['\"]", vite) and ".mjs" not in vite
+    return shape and cjs and TW_PKG in read("tsconfig.base.json"), f"shape={shape} cjs-only vite={cjs} alias={TW_PKG in read('tsconfig.base.json')}"
+
+
+@check("tripwire-scaffold", 4)
+def _tws4():
+    """The empty skeleton builds: `nx run resilience-core-tripwire:typecheck` and `nx run resilience-core-tripwire:build` exit 0 (only the generated src/index.ts exists at this point)."""
+    if not exists(f"{TW}/project.json"):
+        return False, "project missing"
+    a, ao = tw_nx("typecheck")
+    b, bo = tw_nx("build")
+    return a == 0 and b == 0, f"typecheck={a} build={b} {ao[-100:]} {bo[-100:]}"
+
+
+@check("tripwire-scaffold", 5)
+def _tws5():
+    """Exactly two project.json files were added since main (stealth-browser and the tripwire package; the same rule as scaffold.5), only owned paths changed by [psm:tripwire-scaffold] commits (the tripwire package directory, tsconfig.base.json, .adhd/workspace.json and evidence/tripwire/), and no other workspace group or project was edited."""
+    o = ownership_ok("tripwire-scaffold")
+    return _s5()[0] and o[0] and exists(f"{TW}/project.json"), f"{o[1]} {_s5()[1]}"
+
+
+# ---------------------------------------------------------------- tripwire-core (TW1-TW23, TW30-33, TW35-38)
+TW_CORE_MAP = [
+    (1, "TW1", "tripwire.spec.ts", ("created", "tripwire-retripped"), "second `trip` on a tripped key returns `created: false`, the first record (reason, trippedAt, context) is untouched and `tripwire-retripped` is audited"),
+    (2, "TW2", "storage.spec.ts", (".tmp", "interleav"), "writes use unique tmp names (pid plus random); two interleaved writers never share a tmp name and a reader at any interleaving point sees complete JSON or ENOENT"),
+    (3, "TW3", "tripwire.spec.ts", ("unreadable", "EACCES", "EIO", "assertOpen"), "fail closed: ENOENT is clear; EACCES, EIO, an empty file, garbage JSON and a wrong schema are tripped with status `unreadable` and `assertOpen` throws"),
+    (4, "TW4", "legacy.spec.ts", ("lastStatus", "lastOperationId", "reverifiedAt", "blockedCount"), "legacy reverse-shaped and search-shaped locks (including the in-record blockedCount and reverifiedAt) are read and honored, extra fields land in `context` and the counts add"),
+    (5, "TW5", "tripwire.spec.ts", ("TRIPWIRE_INVALID_KEY",), "keys `..`, `a/b`, empty, 65 characters and a leading dot are rejected with TRIPWIRE_INVALID_KEY before any fs call"),
+    (6, "TW6", "storage.spec.ts", ("0o600", "0o700"), "lock, sidecar and audit files are 0600 and directories 0700, including pre-existing directories (chmod)"),
+    (7, "TW7", "redact.spec.ts", ("authorization", "cookie", "responseBody"), "redaction: denylisted header, cookie and token keys dropped, URL query secrets stripped, long strings truncated, a custom redactor composed after the default, `responseBody` never written, the audit never contains query text"),
+    (8, "TW8", "tripwire.spec.ts", ("sessionId", "trippedBy", "browserSessionId"), "context round-trips both consumers' fields (`lastStatus`, `lastOperationId` and `query`, `pageUrl`, `strategy`, `browserSessionId`, `lastOperation`) and `sessionId()` lands in `trippedBy`"),
+    (9, "TW9", "tripwire.spec.ts", ("gate", "open"), "`gate` on a clear key is open with zero writes and zero audit lines"),
+    (10, "TW10", "tripwire.spec.ts", ("tripwire-gate-blocked", "TripwireTrippedError", "recoveryHint"), "`gate` on a tripped key is closed, the count rises by one and `tripwire-gate-blocked` is audited; `assertOpen` throws TripwireTrippedError with key, reason, trippedAt Date, record, recoveryHint and code"),
+    (11, "TW11", "interleave.spec.ts", ("blockedCount",), "N interleaved gates give `blockedCount === N` exactly (no lost updates)"),
+    (12, "TW12", "interleave.spec.ts", ("gate", "clear"), "a block racing a clear never recreates the lock; after the clear the lock is absent"),
+    (13, "TW13", "expiry.spec.ts", ("tripwire-expired", "includeExpired", "ttlMs"), "with `expiry`, an older-than-TTL lock is open, lazily removed with one `tripwire-expired` audit; without `expiry` it never expires; `status` hides expired unless `includeExpired` (one rule for CLI and MCP)"),
+    (14, "TW14", "clear.spec.ts", ("TripwireConfirmError", "CONFIRM_TOKEN"), "`confirm-token` policy: a missing or wrong token throws TripwireConfirmError with the lock intact and no cleared audit; the correct token clears and the audit has method and actor"),
+    (15, "TW15", "clear.spec.ts", ("mcp-clear", "open"), "`open` policy clears without a token and audits method `mcp-clear`"),
+    (16, "TW16", "clear.spec.ts", ("cleared",), "clear on an absent lock returns `{ cleared: false }`, does not throw and audits nothing"),
+    (17, "TW17", "clear.spec.ts", ("priorClear",), "clear writes the marker; the next trip carries `priorClear` and the marker is consumed once"),
+    (18, "TW18", "clear.spec.ts", ("tripwire-resolved", "reverified"), "`resolve` audits `tripwire-resolved` with durationMs and blockedCount, then removes; the `reverified` flag appears on the cleared audit event"),
+    (19, "TW19", "audit.spec.ts", ("tripwire-fired", "tripwire-gate-blocked", "tripwire-cleared", "tripwire-resolved", "tripwire-expired", "tripwire-retripped"), "audit: one valid NDJSON line per event with ts, event, key and namespace; fired, gate-blocked, cleared, resolved, expired and retripped are all emitted; each line is under 4 KB"),
+    (20, "TW20", "audit.spec.ts", ("maxAuditBytes", "multibyte"), "audit cap: at or above `maxAuditBytes` the oldest half is dropped at a line boundary, byte-accurate with multibyte lines, the newest kept, the replace atomic, the log never above the cap after an append, and an append interleaved with rotation loses no complete line other than the dropped half"),
+    (21, "TW21", "audit.spec.ts", ("auditPath",), "audit dir is `dirname(auditPath)`; the default is under `stateDir`; an `auditPath` outside stateDir works; nothing is written under the real home"),
+    (22, "TW22", "audit.spec.ts", ("onWarning",), "an audit write failure never throws from `gate`, `trip` or `clear` and `onWarning` is called"),
+    (23, "TW23", "tripwire.spec.ts", ("persisted", "TRIPWIRE_IO"), "a persist failure on `trip` gives `persisted: false` and a TRIPWIRE_IO warning, and a same-process `gate` is still closed"),
+]
+
+
+def _mk_core(n, label, fname, must, text):
+    def fn():
+        return tw_spec(fname, f"tripwire-core.{n}", (label,) + tuple(must))
+    fn.__doc__ = f"{label} {text}; proven in src/test/unit/{fname} (cites ticket 8468f7b1, the id and {label})."
+    check("tripwire-core", n)(fn)
+
+
+for _row in TW_CORE_MAP:
+    _mk_core(*_row)
+
+
+@check("tripwire-core", 24)
+def _twc24():
+    """TW30 public surface: src/index.ts exports createTripwire, adhdDataDir, CONFIRM_TOKEN, defaultRedactor, TripwireTrippedError, TripwireConfirmError, TripwireAbortedError, isTripwireTrippedError, createMemoryFs, createFileStorage, createMemoryStorage and the types of the spec (Tripwire, TripwireOptions, TripwireRecord, TripwireSnapshot, TripwireStorage, FsPort, Redactor, ClearMethod, TripContext); no consumer-specific name (`provider`, `client`) appears in an exported type name; api-surface.spec.ts snapshots `Object.keys(require index)`; the package has no subpath export."""
+    idx = read(f"{TW_SRC}/index.ts")
+    names = barrel_names_of(f"{TW_SRC}/index.ts")
+    need = {"createTripwire", "adhdDataDir", "CONFIRM_TOKEN", "defaultRedactor", "TripwireTrippedError", "TripwireConfirmError", "TripwireAbortedError", "isTripwireTrippedError", "createMemoryFs", "createFileStorage", "createMemoryStorage",
+            "Tripwire", "TripwireOptions", "TripwireRecord", "TripwireSnapshot", "TripwireStorage", "FsPort", "Redactor", "ClearMethod", "TripContext"}
+    miss = sorted(need - names)
+    consumer = [n for n in names if re.search(r"provider|client", n, re.I)]
+    ok, why = tw_spec("api-surface.spec.ts", "tripwire-core.24", ("TW30", "Object.keys"))
+    return bool(idx.strip()) and not miss and not consumer and ok, f"missing exports {miss}; consumer-specific names {consumer}; {why}"
+
+
+@check("tripwire-core", 25)
+def _twc25():
+    """TW31 purity: no `process.env`, `process.stdin`, `process.stdout`, `child_process` or `console.*` appears in non-comment lines of packages/resilience/resilience-core-tripwire/src/lib outside node-io.ts, and no source file imports node:net, node:http, node:https or node:child_process; the package reads no environment variable (adhdDataDir takes `env` as a parameter)."""
+    return tw_purity()
+
+
+@check("tripwire-core", 26)
+def _twc26():
+    """TW32 errors: every error class has a stable `code` and a brand; errors.spec.ts proves `isTripwireTrippedError` is true for a structural clone standing in for an instance from a duplicate module copy, and each error's code is one of the registry (TRIPWIRE_TRIPPED, TRIPWIRE_CONFIRM_REQUIRED, TRIPWIRE_ABORTED, TRIPWIRE_INVALID_KEY, TRIPWIRE_IO)."""
+    e = read(f"{TW_SRC}/lib/errors.ts")
+    ok, why = tw_spec("errors.spec.ts", "tripwire-core.26", ("TW32", "isTripwireTrippedError", "brand"))
+    return all(c in e for c in ("TRIPWIRE_TRIPPED", "TRIPWIRE_CONFIRM_REQUIRED", "TRIPWIRE_ABORTED", "TRIPWIRE_INVALID_KEY", "TRIPWIRE_IO")) and ok, why
+
+
+@check("tripwire-core", 27)
+def _twc27():
+    """TW33 `TripwireTrippedError.fromRecord(record, { responseStatus, responseBody })` exposes typed `responseStatus` and `responseBody` fields; neither is ever serialized by `trip` or written to the lock or the audit (errors.spec.ts and redact.spec.ts)."""
+    return tw_spec("errors.spec.ts", "tripwire-core.27", ("TW33", "fromRecord", "responseStatus", "responseBody"))
+
+
+@check("tripwire-core", 28)
+def _twc28():
+    """TW35 every spec under src/test cites ticket 8468f7b1 and a [tripwire-<state>.N] criterion id plus a TW id, and no spec imports child_process, net or http."""
+    return tw_citations()
+
+
+@check("tripwire-core", 29)
+def _twc29():
+    """TW36 interleaving suite over the memory-fs hooks: trip/trip, gate/gate, gate/clear, clear/clear, trip/clear and audit rotate/append hold their invariants (TW1, TW11, TW12, TW20) in interleave.spec.ts."""
+    return tw_spec("interleave.spec.ts", "tripwire-core.29", ("TW36", "trip", "gate", "clear", "rotat"))
+
+
+@check("tripwire-core", 30)
+def _twc30():
+    """TW37 `adhdDataDir(['reverse','data'], { ADHD_HOME: '/x' })` is `/x/reverse/data`; with no env it is `<home>/.adhd/reverse/data`; the function is pure (paths.spec.ts)."""
+    return tw_spec("paths.spec.ts", "tripwire-core.30", ("TW37", "ADHD_HOME", "/x/reverse/data"))
+
+
+@check("tripwire-core", 31)
+def _twc31():
+    """TW38 the storage contract suite (storage-contract.spec.ts) runs identically on `createMemoryStorage`, `createFileStorage` over the memory fs and `createFileStorage` over a real `mkdtemp` directory; create-if-absent uses link with an `open wx` fallback (a memory fs that rejects `link` is covered)."""
+    return tw_spec("storage-contract.spec.ts", "tripwire-core.31", ("TW38", "createMemoryStorage", "createFileStorage", "mkdtemp", "link"))
+
+
+@check("tripwire-core", 32)
+def _twc32():
+    """The core builds and passes alone: the files src/lib/{types,errors,redact,paths,storage,memory-fs,audit,tripwire}.ts and src/index.ts exist, `nx run resilience-core-tripwire:typecheck`, `:typecheck-spec`, `:lint` and `:test` exit 0, and only owned paths changed by [psm:tripwire-core] commits."""
+    files = all(exists(f"{TW_SRC}/lib/{n}.ts") for n in ("types", "errors", "redact", "paths", "storage", "memory-fs", "audit", "tripwire")) and exists(f"{TW_SRC}/index.ts")
+    if not files:
+        return False, "core source files missing"
+    rcs = {t: tw_nx(t, 2400)[0] for t in ("typecheck", "typecheck-spec", "lint", "test")}
+    o = ownership_ok("tripwire-core")
+    return all(v == 0 for v in rcs.values()) and o[0], f"{rcs} {o[1]}"
+
+
+# ---------------------------------------------------------------- tripwire-interactive
+@check("tripwire-interactive", 1)
+def _twi1():
+    """TW24 `interactiveGate` (interactive.spec.ts): the banner content, `retry` / Enter / any other input gives reverified plus clear (method `hitl-retry`) and returns, `clear` gives `hitl-clear`, `abort` throws TripwireAbortedError with the lock kept, and each loop iteration counts one block."""
+    return tw_spec("interactive.spec.ts", "tripwire-interactive.1", ("TW24", "interactiveGate", "hitl-retry", "hitl-clear", "TripwireAbortedError"))
+
+
+@check("tripwire-interactive", 2)
+def _twi2():
+    """TW25 a non-TTY or a `question` that returns null (EOF) aborts with the lock kept and never hangs (interactive.spec.ts, fake io with no stdin)."""
+    return tw_spec("interactive.spec.ts", "tripwire-interactive.2", ("TW25", "null", "TripwireAbortedError"))
+
+
+@check("tripwire-interactive", 3)
+def _twi3():
+    """TW26 `confirmSolved`: Enter gives reverified plus cleared; `abort` throws TripwireAbortedError('HITL aborted by user') with the lock kept (interactive.spec.ts)."""
+    return tw_spec("interactive.spec.ts", "tripwire-interactive.3", ("TW26", "confirmSolved", "HITL aborted by user"))
+
+
+@check("tripwire-interactive", 4)
+def _twi4():
+    """TW27 `runUnlockCli` (cli.spec.ts and scenario-unlock-cli.spec.ts): no client prints usage and returns 1; no lock prints `no tripwire to unlock for X` and returns 0; reason, trippedAt, lastStatus and lastOperationId are printed with `(none)` fallbacks; an unparseable lock warns and proceeds; the TTY confirm path; the `CONFIRM` env path; a mismatch returns 1 with the lock kept; no TTY and no CONFIRM returns 1 with `No TTY`; a storage error returns 2; the audit method is `unlock-cli-tty` or `unlock-cli-env`."""
+    a, wa = tw_spec("cli.spec.ts", "tripwire-interactive.4", ("TW27", "runUnlockCli", "No TTY", "unlock-cli-tty", "unlock-cli-env", "(none)"))
+    b, wb = tw_spec("scenario-unlock-cli.spec.ts", "tripwire-interactive.4", ("TW27", "runUnlockCli"))
+    return a and b, f"{wa}; {wb}"
+
+
+@check("tripwire-interactive", 5)
+def _twi5():
+    """TW28 `renderStatusText` gives the per-provider layout and `No tripwires tripped.`; `statusJsonLine` is exactly `{"type":"tripwireStatus","status":{...}}`, is the last line of the status output, and the map is sparse with plain string keys (render.spec.ts)."""
+    return tw_spec("render.spec.ts", "tripwire-interactive.5", ("TW28", "renderStatusText", "statusJsonLine", "No tripwires tripped.", "tripwireStatus"))
+
+
+@check("tripwire-interactive", 6)
+def _twi6():
+    """Scenario suite for the request-builder consumer (scenario-request-builder.spec.ts): a 4xx trips the key, three following sends are blocked and counted, the confirm-token unlock clears it and the next send is open; a corrupt lock blocks; a second 4xx keeps the first record."""
+    return tw_spec("scenario-request-builder.spec.ts", "tripwire-interactive.6", ("assertOpen", "trip", "CONFIRM_TOKEN", "blockedCount"))
+
+
+@check("tripwire-interactive", 7)
+def _twi7():
+    """Scenario suite for the agent-search consumer (scenario-agent-search.spec.ts): a captcha trips the key, later searches get locked responses, the HITL loop offers retry, clear and abort, the TTL expiry removes the lock lazily with an audit line, and a successful search resolves the tripwire (`open` clear policy, expiry 2 h)."""
+    return tw_spec("scenario-agent-search.spec.ts", "tripwire-interactive.7", ("interactiveGate", "resolve", "ttlMs", "clearPolicy"))
+
+
+@check("tripwire-interactive", 8)
+def _twi8():
+    """The public surface is complete and closed: src/index.ts now also exports interactiveGate, confirmSolved, runUnlockCli, renderStatusText, statusJsonLine and nodeTripwireIo (plus their option and io types), api-surface.spec.ts snapshots exactly the section-3 export list (no consumer-specific names), and node-io.ts is the only file under src/lib that touches process.stdin, process.stdout or process.env (TW31)."""
+    names = barrel_names_of(f"{TW_SRC}/index.ts")
+    need = {"interactiveGate", "confirmSolved", "runUnlockCli", "renderStatusText", "statusJsonLine", "nodeTripwireIo"}
+    ok, why = tw_spec("api-surface.spec.ts", "tripwire-interactive.8", ("TW30", "interactiveGate", "runUnlockCli", "nodeTripwireIo"))
+    p = tw_purity()
+    return not (need - names) and ok and p[0] and exists(f"{TW_SRC}/lib/node-io.ts"), f"missing {sorted(need - names)}; {why}; {p[1]}"
+
+
+@check("tripwire-interactive", 9)
+def _twi9():
+    """The package builds and passes whole: `nx run resilience-core-tripwire:typecheck`, `:typecheck-spec`, `:lint` and `:test` exit 0, every spec still cites the ticket and a criterion id (TW35), and only owned paths changed by [psm:tripwire-interactive] commits."""
+    files = all(exists(f"{TW_SRC}/lib/{n}.ts") for n in ("interactive", "cli", "render", "node-io"))
+    if not files:
+        return False, "interactive source files missing"
+    rcs = {t: tw_nx(t, 2400)[0] for t in ("typecheck", "typecheck-spec", "lint", "test")}
+    o = ownership_ok("tripwire-interactive")
+    c = tw_citations()
+    return all(v == 0 for v in rcs.values()) and o[0] and c[0], f"{rcs} {o[1]} {c[1]}"
+
+
+# ---------------------------------------------------------------- tripwire-docs
+def tw_error_codes():
+    return sorted(set(re.findall(r"\bTRIPWIRE_[A-Z_]+\b", read(f"{TW_SRC}/lib/errors.ts"))))
+
+
+@check("tripwire-docs", 1)
+def _twd1():
+    """TW34 README.md has an install section, three consumer recipes (a gate in a request pipeline with `assertOpen`/`trip`, a HITL gate in a CLI with `interactiveGate`, an unlock bin in five lines with `runUnlockCli`), the stateDir / ADHD_HOME explanation, the two clear policies (`confirm-token`, `open`), the redaction rules and the local-disk (not NFS) caveat."""
+    t = read(f"{TW}/README.md")
+    need = ["createTripwire", "assertOpen", "trip(", "interactiveGate", "runUnlockCli", "ADHD_HOME", "stateDir", "confirm-token", "open", "defaultRedactor", "NFS"]
+    miss = [n for n in need if n not in t]
+    return len(t) > 2500 and not miss and re.search(r"^#+\s*install", t, re.I | re.M) is not None and len(re.findall(r"recipe", t, re.I)) >= 3, f"{len(t)} bytes, missing {miss}"
+
+
+@check("tripwire-docs", 2)
+def _twd2():
+    """TW34 docs/ERRORS.md lists every error code of src/lib/errors.ts with its class, its cause and its remediation, and docs/RECOVERY.md is the operator runbook: it names the break-glass `rm` of the lock file with the exact path layout (`<stateDir>/tripwire/<key>.lock`), how to read the audit log, the unlock bin and the `.blocked` and `.cleared` sidecars."""
+    codes = tw_error_codes()
+    e, r = read(f"{TW}/docs/ERRORS.md"), read(f"{TW}/docs/RECOVERY.md")
+    miss = [c for c in codes if c not in e]
+    return len(codes) >= 5 and not miss and "rm " in r and "tripwire/<key>.lock" in r and "audit" in r and ".blocked" in r and ".cleared" in r, f"codes={len(codes)} undocumented={miss}"
+
+
+@check("tripwire-docs", 3)
+def _twd3():
+    """TW34 CHANGELOG.md has a `0.1.0` entry listing the package's features, every exported function, class and constant under src/lib has a JSDoc block (the preceding non-empty line closes a `/** */` comment), and no document carries an AI attribution line (Generated with, Co-Authored-By, written by an AI)."""
+    ch = read(f"{TW}/CHANGELOG.md")
+    undoc = []
+    for f in tw_lib_files():
+        lines = read(f).splitlines()
+        for i, ln in enumerate(lines):
+            if re.match(r"export\s+(?:async\s+)?(?:function|class|const|interface|type)\s+\w+", ln):
+                j = i - 1
+                while j >= 0 and not lines[j].strip():
+                    j -= 1
+                if j < 0 or not lines[j].rstrip().endswith("*/"):
+                    undoc.append(f"{os.path.relpath(f, TW)}:{i + 1}")
+    docs = "".join(read(f"{TW}/{n}") for n in ("README.md", "CHANGELOG.md", "docs/ERRORS.md", "docs/RECOVERY.md"))
+    return "0.1.0" in ch and not undoc and not re.search(r"Generated with|Co-Authored-By|written by an AI", docs, re.I), f"undocumented exports {undoc[:6]}"
+
+
+@check("tripwire-docs", 4)
+def _twd4():
+    """README examples compile and run: src/test/unit/readme-examples.spec.ts cites ticket 8468f7b1 and its id, contains one test per fenced `ts` block of README.md (each README example is copied into the spec and exercised against the memory fs), and `nx run resilience-core-tripwire:typecheck-spec` and `:test` exit 0."""
+    readme = read(f"{TW}/README.md")
+    blocks = len(re.findall(r"^```(?:ts|typescript)\b", readme, re.M))
+    ok, why = tw_spec("readme-examples.spec.ts", "tripwire-docs.4", ("README",))
+    spec = read(f"{TW}/src/test/unit/readme-examples.spec.ts")
+    if not (ok and blocks >= 3 and len(re.findall(r"\b(?:it|test)\(", spec)) >= blocks):
+        return False, f"{why}; ts blocks={blocks}"
+    a, _ = tw_nx("typecheck-spec")
+    b, _ = tw_nx("test")
+    return a == 0 and b == 0, f"typecheck-spec={a} test={b}"
+
+
+@check("tripwire-docs", 5)
+def _twd5():
+    """Only owned paths changed by [psm:tripwire-docs] commits (README.md, CHANGELOG.md, docs/ and the readme-examples spec of the tripwire package); no other source file is modified."""
+    return ownership_ok("tripwire-docs")
+
+
+# ---------------------------------------------------------------- tripwire-pack
+TW_PACK = f"{TW_EVID_DIR}/pack-gates.json"
+
+
+@check("tripwire-pack", 1)
+def _twp1():
+    """TW29 the package gates are green: `nx run resilience-core-tripwire:lint`, `:typecheck`, `:typecheck-spec`, `:test`, `:build` and `:verify-dist-load` all exit 0 (evidence/tripwire/pack-gates.json records every command with its exit code and the tripwire tree sha), the manifest has no `module`, `exports` or `type`, zero `dependencies`, no .mjs file is emitted and `verify-dist-load` executes the built entry."""
+    if not exists(f"{TW_SRC}/index.ts") or not exists(f"{TW}/README.md"):
+        return False, "package not finished (tripwire-docs)"
+    doc = tw_gate_run(TW_PACK)
+    p = jread(f"{TW}/package.json", {}) or {}
+    mjs = [f for f in walk(f"{TW}/dist", (".mjs",))]
+    shape = "module" not in p and "exports" not in p and "type" not in p and not (p.get("dependencies") or {}) and p.get("main") == "./dist/index.js" and not mjs
+    bad = [k for k, v in doc["results"].items() if v["exit"] != 0]
+    return doc.get("all_green") is True and shape and not bad, f"failing {bad}; shape={shape} mjs={mjs[:2]}"
+
+
+@check("tripwire-pack", 2)
+def _twp2():
+    """The consumer tarball is recorded: evidence/tripwire/tripwire-tarball.json holds `tarball` (an absolute path outside every .worktrees/ directory, named tripwire-0.1.0.tgz), its `sha256`, `packed_from_head` (an ancestor of HEAD) and `packed_from_tree` (the tripwire tree sha at that commit), the `pack_cmd`, and the tarball lists package/dist/index.js, package/dist/index.d.ts, package/package.json, package/README.md and package/CHANGELOG.md and no .mjs member."""
+    d = jread(TW_TARBALL, {}) or {}
+    tg = d.get("tarball", "")
+    if not (tg and exists(tg) and "/.worktrees/" not in tg and tg.endswith("tripwire-0.1.0.tgz")):
+        return False, f"tarball missing, inside a worktree or misnamed: {tg!r}"
+    mem = tgz_members(tg)
+    need = {"package/dist/index.js", "package/dist/index.d.ts", "package/package.json", "package/README.md", "package/CHANGELOG.md"}
+    head = d.get("packed_from_head", "")
+    anc = bool(head) and sh(["git", "merge-base", "--is-ancestor", head, "HEAD"])[0] == 0
+    tree_ok = anc and git("rev-parse", f"{head}:{TW}") == d.get("packed_from_tree")
+    return sha256_file(tg) == d.get("sha256") and tree_ok and bool(d.get("pack_cmd")) and need <= mem and not [m for m in mem if m.endswith(".mjs")], f"sha ok={sha256_file(tg) == d.get('sha256')} tree ok={tree_ok} missing members={sorted(need - mem)}"
+
+
+@check("tripwire-pack", 3)
+def _twp3():
+    """The tarball works for both consumer module systems (R3, named-export detection): extracted into a scratch directory, `require()` of package/dist/index.js and an ES-module `import { createTripwire, CONFIRM_TOKEN, adhdDataDir, TripwireTrippedError, interactiveGate, runUnlockCli } from` the same file (a `type: module` consumer) both succeed and expose the named exports; the recorded `esm_smoke` in evidence/tripwire/tripwire-tarball.json is true."""
+    d = jread(TW_TARBALL, {}) or {}
+    tg = d.get("tarball", "")
+    if not (tg and exists(tg)):
+        return False, "tarball missing"
+    import tempfile
+    names = ["createTripwire", "CONFIRM_TOKEN", "adhdDataDir", "TripwireTrippedError", "interactiveGate", "runUnlockCli"]
+    with tempfile.TemporaryDirectory() as tmp:
+        rc, _, e = run2(["tar", "-xzf", tg, "-C", tmp], 120)
+        if rc != 0:
+            return False, f"tar failed {e[-100:]}"
+        entry = f"{tmp}/package/dist/index.js"
+        r1 = run2(["node", "-e", f"const m=require({json.dumps(entry)});for(const n of {json.dumps(names)}){{if(!(n in m))process.exit(3)}}"], 60)
+        r2 = run2(["node", "--input-type=module", "-e", f"import {{ {', '.join(names)} }} from {json.dumps('file://' + entry)}; if (typeof createTripwire !== 'function' || typeof CONFIRM_TOKEN !== 'string') process.exit(4)"], 60)
+    return r1[0] == 0 and r2[0] == 0 and d.get("esm_smoke") is True, f"require rc={r1[0]} {r1[2][-80:]}; esm import rc={r2[0]} {r2[2][-120:]}"
+
+
+@check("tripwire-pack", 4)
+def _twp4():
+    """The lockfile change is importer-only: the [psm:tripwire-pack] commits touch pnpm-lock.yaml (if at all) without removing a single line, and only owned paths changed (pnpm-lock.yaml and evidence/tripwire/)."""
+    o = ownership_ok("tripwire-pack")
+    log = sh(["git", "log", "--format=%H%x1f%B%x1e"])[1]
+    removed = []
+    for rec in log.split("\x1e"):
+        if "[psm:tripwire-pack]" in rec:
+            sha = rec.strip().split("\x1f")[0]
+            for ln in git("show", "-U0", "--format=", sha, "--", "pnpm-lock.yaml").splitlines():
+                if ln.startswith("-") and not ln.startswith("---"):
+                    removed.append(ln[:80])
+    return o[0] and not removed, f"{o[1]} removed lockfile lines {removed[:3]}"
+
+
+# ---------------------------------------------------------------- tripwire-reverse-migrate (cross-repo: reverse-apis worktree)
+REV_MAIN = "/Users/nix/dev/projects/reverse-apis"
+REV_VERIFY = f"{TWREV}/reverse-verify.json"
+LEGACY_NAMES = r"TripwireLockFile|defaultTripwirePath|isTripwireTripped|unlockTripwire|tripwirePath"
+
+
+def rev(*args):
+    return sh(["git", "-C", REVERSE, *args])[1].strip()
+
+
+@check("tripwire-reverse-migrate", 1)
+def _twm1():
+    """The adoption branch is isolated: /Users/nix/dev/projects/reverse-apis/.worktrees/tripwire-adopt is a worktree on branch `feat/tripwire-adopt`, `.worktrees/` is listed in the main checkout's .git/info/exclude (a local untracked file), and the main checkout's `git status --porcelain` equals the snapshot taken before the state started (docs/plan/stealth-browser/tripwire-reverse/main-status-before.txt): none of main's dirty files was touched and nothing was staged there."""
+    br = rev("rev-parse", "--abbrev-ref", "HEAD")
+    excl = ".worktrees/" in read(f"{REV_MAIN}/.git/info/exclude")
+    before = read(f"{TWREV}/main-status-before.txt")
+    now = sh(["git", "-C", REV_MAIN, "status", "--porcelain"])[1]
+    return br == "feat/tripwire-adopt" and excl and bool(before.strip()) and before.strip() == now.strip(), f"branch={br} excluded={excl} main status unchanged={before.strip() == now.strip()}"
+
+
+@check("tripwire-reverse-migrate", 2)
+def _twm2():
+    """The migration is complete: packages/system/request-builder/src/lib/tripwire.ts is deleted and request-tripwire.ts exists (it imports @adhd/resilience-core-tripwire, namespace `request-builder`, `confirm-token` policy, no expiry), send.ts gates through `assertOpen` and trips through `trip` then throws `TripwireTrippedError.fromRecord`, tools/unlock-tripwire/unlock-tripwire.ts calls `runUnlockCli` and reads `TRIPWIRE_DIR`, tools/reverse-auth/reverse-auth.ts uses `read` and `clear` of the package, the request-builder vite.config.ts lists the package in `external`, the root package.json depends on `@adhd/resilience-core-tripwire` `^0.1.0`, and `rg` for TripwireLockFile, defaultTripwirePath, isTripwireTripped, unlockTripwire and tripwirePath over *.ts returns nothing."""
+    rb = f"{REVERSE}/packages/system/request-builder"
+    rt = read(f"{rb}/src/lib/request-tripwire.ts")
+    send = read(f"{rb}/src/lib/send.ts")
+    un = read(f"{REVERSE}/tools/unlock-tripwire/unlock-tripwire.ts")
+    ra = read(f"{REVERSE}/tools/reverse-auth/reverse-auth.ts")
+    dep = ((jread(f"{REVERSE}/package.json", {}) or {}).get("dependencies") or {}).get(TW_PKG, "")
+    rc, out = sh(f"rg -n --glob '*.ts' --glob '!node_modules' --glob '!dist' -e '{LEGACY_NAMES}' {REVERSE} || true")
+    ok = (not exists(f"{rb}/src/lib/tripwire.ts") and TW_PKG in rt and "request-builder" in rt and "confirm-token" in rt and "assertOpen" in send and "fromRecord" in send
+          and "runUnlockCli" in un and "TRIPWIRE_DIR" in un and "TRIPWIRE_PATH" not in un and TW_PKG in ra and TW_PKG in read(f"{rb}/vite.config.ts") and dep == "^0.1.0")
+    return ok and out.strip() == "", f"structure ok={ok} legacy names: {out.strip()[:160]}"
+
+
+@check("tripwire-reverse-migrate", 3)
+def _twm3():
+    """The consumer runs the tarball build: the worktree's node_modules/@adhd/resilience-core-tripwire is a real directory (not a symlink, not a link into .worktrees/) whose dist/index.js is byte-identical to the member of the tarball recorded by tripwire-pack, and the worktree's pnpm-lock.yaml is identical to main's (the lockfile changes only at relink, because reverse CI uses --frozen-lockfile)."""
+    d = jread(TW_TARBALL, {}) or {}
+    tg = d.get("tarball", "")
+    nm = f"{REVERSE}/node_modules/@adhd/resilience-core-tripwire"
+    if not (tg and exists(tg) and exists(nm)):
+        return False, "tarball or install missing"
+    import tempfile
+    with tempfile.TemporaryDirectory() as tmp:
+        rc, _, e = run2(["tar", "-xzf", tg, "-C", tmp], 120)
+        a, b = f"{tmp}/package/dist/index.js", f"{nm}/dist/index.js"
+        same = rc == 0 and exists(a) and exists(b) and open(a, "rb").read() == open(b, "rb").read()
+    lock_same = sh(["git", "-C", REVERSE, "diff", "--quiet", "main", "--", "pnpm-lock.yaml"])[0] == 0
+    return not os.path.islink(nm) and same and lock_same, f"symlink={os.path.islink(nm)} dist identical={same} lockfile unchanged={lock_same}"
+
+
+@check("tripwire-reverse-migrate", 4)
+def _twm4():
+    """The regression bar is recorded for the current worktree head: docs/plan/stealth-browser/tripwire-reverse/reverse-verify.json holds `head` equal to the worktree HEAD and `commands` with exit 0 for `pnpm nx test request-builder` (the 21 request-builder tests plus the new block-count, audit and corrupt-lock tests), `pnpm nx run-many -t lint,test,build`, `pnpm nx e2e e2e-tests` and `pnpm vitest run --config tools/unlock-tripwire/vite.config.ts` (the 4 unlock spawn assertions with their exit codes unchanged)."""
+    d = jread(REV_VERIFY, {}) or {}
+    cmds = d.get("commands") or {}
+    want = ["pnpm nx test request-builder", "pnpm nx run-many -t lint,test,build", "pnpm nx e2e e2e-tests", "pnpm vitest run --config tools/unlock-tripwire/vite.config.ts"]
+    bad = [w for w in want if (cmds.get(w) or {}).get("exit") != 0]
+    return d.get("head") == rev("rev-parse", "HEAD") and not bad, f"head match={d.get('head') == rev('rev-parse', 'HEAD')} failing/missing {bad}"
+
+
+@check("tripwire-reverse-migrate", 5)
+def _twm5():
+    """The specs and docs carry the change: request-builder.spec.ts uses `createRequestTripwire({ tripwireDir })`, asserts the `<root>/tripwire/tinder.lock` layout, a blocked-count with the `tripwire-gate-blocked` audit line, and that a corrupt lock blocks; new or changed specs cite ticket 8468f7b1 and a tripwire-reverse-migrate.N or TW id; REARCHITECTURE.md section 12 describes the shipped design (key and lock layout, blockedCount, audit events, `confirm-token` policy) without historical commentary; the e2e harness reads the lock through `record.context.lastStatus`; the generator template emits `tripwireDir`."""
+    rb = f"{REVERSE}/packages/system/request-builder"
+    spec = read(f"{rb}/src/lib/request-builder.spec.ts")
+    ra = read(f"{REVERSE}/REARCHITECTURE.md")
+    h = read(f"{REVERSE}/packages/system/e2e-tests/src/lib/harness.ts")
+    gen = read(f"{REVERSE}/tools/generators/api-package/generator.ts")
+    sec = ra[ra.find("12"):] if "12" in ra else ""
+    ok = ("createRequestTripwire" in spec and "tripwireDir" in spec and "tinder.lock" in spec and "tripwire-gate-blocked" in spec and "corrupt" in spec.lower() and TICKET in spec
+          and all(k in ra for k in ("blockedCount", "tripwire-gate-blocked", "confirm-token")) and "context.lastStatus" in h and "tripwirePath" not in gen)
+    return ok, f"specs/docs ok={ok}"
+
+
+@check("tripwire-reverse-migrate", 6)
+def _twm6():
+    """Commit hygiene across repositories: [psm:tripwire-reverse-migrate] commits in the reverse worktree touch only files under packages/system/request-builder, packages/system/e2e-tests, packages/apis, tools/unlock-tripwire, tools/reverse-auth, tools/generators/api-package, REARCHITECTURE.md and package.json (never pnpm-lock.yaml or main's dirty files: AGENTS.md, captures.db, fatal.csv, identity/), and none was pushed (reverse-apis has no remote)."""
+    allowed = ("packages/system/request-builder/", "packages/system/e2e-tests/", "packages/apis/", "tools/unlock-tripwire/", "tools/reverse-auth/", "tools/generators/api-package/", "REARCHITECTURE.md", "package.json")
+    log = sh(["git", "-C", REVERSE, "log", "main..HEAD", "--format=%H%x1f%B%x1e"])[1]
+    bad, tagged = [], 0
+    for rec in log.split("\x1e"):
+        if "[psm:tripwire-reverse-migrate]" in rec:
+            tagged += 1
+            sha = rec.strip().split("\x1f")[0]
+            bad += [f for f in sh(["git", "-C", REVERSE, "diff-tree", "--no-commit-id", "--name-only", "-r", sha])[1].split() if not f.startswith(allowed)]
+    remotes = sh(["git", "-C", REV_MAIN, "remote"])[1].strip()
+    return tagged > 0 and not bad and remotes == "", f"tagged commits={tagged} out-of-scope files {bad[:5]} remotes={remotes!r}"
+
+
+# ---------------------------------------------------------------- tripwire-reverse-relink (after the release)
+REV_RELINK = f"{TWREV}/relink-verify.json"
+
+
+@check("tripwire-reverse-relink", 1)
+def _twr1():
+    """The dependency resolves from the registry: `npm view @adhd/resilience-core-tripwire@0.1.0 version` is recorded with exit 0 in tripwire-reverse/relink-verify.json, the reverse worktree's package.json depends on `^0.1.0`, and its pnpm-lock.yaml resolves @adhd/resilience-core-tripwire with an integrity hash and no `tarball:` / `file:` resolution."""
+    d = jread(REV_RELINK, {}) or {}
+    lock = read(f"{REVERSE}/pnpm-lock.yaml")
+    dep = ((jread(f"{REVERSE}/package.json", {}) or {}).get("dependencies") or {}).get(TW_PKG, "")
+    reg = re.search(r"resilience-core-tripwire@0\.1\.\d+:\s*\n\s*resolution:\s*\{integrity:", lock) is not None
+    return d.get("registry_view_exit") == 0 and dep == "^0.1.0" and reg and "file:" not in "".join(re.findall(r".*resilience-core-tripwire.*", lock)), f"view exit={d.get('registry_view_exit')} dep={dep!r} registry resolution={reg}"
+
+
+@check("tripwire-reverse-relink", 2)
+def _twr2():
+    """The verification is re-run on the registry build: relink-verify.json holds `head` equal to the worktree HEAD and exit 0 for the same four commands as tripwire-reverse-migrate.4 (request-builder tests, run-many lint,test,build, e2e-tests, the unlock spec)."""
+    d = jread(REV_RELINK, {}) or {}
+    cmds = d.get("commands") or {}
+    want = ["pnpm nx test request-builder", "pnpm nx run-many -t lint,test,build", "pnpm nx e2e e2e-tests", "pnpm vitest run --config tools/unlock-tripwire/vite.config.ts"]
+    bad = [w for w in want if (cmds.get(w) or {}).get("exit") != 0]
+    return d.get("head") == rev("rev-parse", "HEAD") and not bad, f"failing/missing {bad}"
+
+
+@check("tripwire-reverse-relink", 3)
+def _twr3():
+    """The branch is merged fast-forward and cleaned: relink-verify.json records `merged_sha`, that commit is an ancestor of reverse-apis main, `feat/tripwire-adopt` no longer exists and the worktree .worktrees/tripwire-adopt is removed; the [psm:tripwire-reverse-relink] commits touched only package.json and pnpm-lock.yaml."""
+    d = jread(REV_RELINK, {}) or {}
+    sha = d.get("merged_sha", "")
+    anc = bool(sha) and sh(["git", "-C", REV_MAIN, "merge-base", "--is-ancestor", sha, "main"])[0] == 0
+    gone = sh(["git", "-C", REV_MAIN, "branch", "--list", "feat/tripwire-adopt"])[1].strip() == "" and not exists(REVERSE)
+    log = sh(["git", "-C", REV_MAIN, "log", "main", "--format=%H%x1f%B%x1e"])[1]
+    bad = []
+    for rec in log.split("\x1e"):
+        if "[psm:tripwire-reverse-relink]" in rec:
+            s = rec.strip().split("\x1f")[0]
+            bad += [f for f in sh(["git", "-C", REV_MAIN, "diff-tree", "--no-commit-id", "--name-only", "-r", s])[1].split() if f not in ("package.json", "pnpm-lock.yaml")]
+    return anc and gone and not bad, f"ancestor={anc} cleaned={gone} out-of-scope files {bad[:4]}"
+
+
+# ---------------------------------------------------------------- tripwire package gates + manifest hygiene across the release states
+def gate_tw_check(slug, n, evidence, pre=None):
+    def fn():
+        if pre:
+            ok, why = pre()
+            if not ok:
+                return False, why
+        if not exists(f"{TW}/project.json"):
+            return False, "tripwire package missing"
+        doc = run_gates(evidence)
+        r = doc["results"]
+        bad = [t for t in TW_ALL_TARGETS if r.get(f"tw:{t}", {}).get("exit") != 0]
+        return not bad and doc.get("tw_tree") == tw_tree_sha(), f"failing {bad} {[r[f'tw:{t}']['tail'] for t in bad][:1]}"
+    fn.__doc__ = "`nx run resilience-core-tripwire:lint`, `:typecheck`, `:typecheck-spec`, `:test`, `:build` and `:verify-dist-load` exit 0 (the second approved package is gated with the first; evidence JSON records every command, its exit code and the tripwire tree sha `tw_tree`)."
+    CHECKS.setdefault(slug, []).append((f"{slug}.{n}", fn))
+
+
+gate_tw_check("gates-first", 11, f"{PLAN}/evidence/gates-first.json")
+gate_tw_check("gates-rerun", 7, f"{PLAN}/evidence/gates-rerun.json", pre=resolution_done)
+
+
+@check("gates-first", 12)
+def _gf12():
+    """Release hygiene for the service proxy and the tripwire: no @adhd/* dependency, devDependency or override in the root, stealth-browser or tripwire manifests starts with `file:`, `link:` or `portal:`, no `pnpm.overrides["@adhd/sox-service-proxy"]` remains (sp-switch removed it), pnpm-lock.yaml has no `adhd-dev-tarballs` or `file:/Users` resolution, and the stealth-browser dependency on @adhd/sox-service-proxy is `~0.6.0`."""
+    lock = read("pnpm-lock.yaml")
+    bad = local_specifiers()
+    return not bad and PROXY_PKG not in root_overrides() and "adhd-dev-tarballs" not in lock and "file:/Users" not in lock and sp_dep() == "~0.6.0", f"local specifiers {bad}; override={root_overrides().get(PROXY_PKG)}; dependency={sp_dep()!r}"
+
+
+@check("merge-readiness", 5)
+def _mr5():
+    """RELEASE-DECISION.md covers BOTH packages and the consumer: it names `@adhd/stealth-browser` and `@adhd/resilience-core-tripwire` with their versions (0.x) in the same release (one branch, one `pnpm release`), the reverse-apis branch `feat/tripwire-adopt` (merged only after the registry relink), and tripwire-reverse-migrate is complete."""
+    t = read(f"{PLAN}/RELEASE-DECISION.md")
+    return "@adhd/stealth-browser" in t and TW_PKG in t and "feat/tripwire-adopt" in t and state_status("tripwire-reverse-migrate") == "complete", f"both packages named={'@adhd/stealth-browser' in t and TW_PKG in t} branch named={'feat/tripwire-adopt' in t}"
+
+
+@check("merge-readiness", 6)
+def _mr6():
+    """The tree being merged carries no local specifier: no @adhd/* `file:` / `link:` / `portal:` value or service-proxy override in the root, stealth-browser or tripwire manifests, and no `adhd-dev-tarballs` or `file:/Users` text in pnpm-lock.yaml (a published manifest never carries a path)."""
+    lock = read("pnpm-lock.yaml")
+    bad = local_specifiers()
+    return not bad and PROXY_PKG not in root_overrides() and "adhd-dev-tarballs" not in lock and "file:/Users" not in lock and sp_dep() == "~0.6.0", f"local specifiers {bad}; stealth-browser proxy dependency={sp_dep()!r}"
+
+
+@check("docs-marketing-run", 11)
+def _dm11():
+    """The tripwire package is part of the docs surface: README.md, CHANGELOG.md (with a 0.1.0 entry), docs/ERRORS.md and docs/RECOVERY.md of packages/resilience/resilience-core-tripwire exist (written by tripwire-docs), carry no AI attribution lines (Generated with, Co-Authored-By, written by an AI), and the docs run changed nothing under the package's src/."""
+    names = ("README.md", "CHANGELOG.md", "docs/ERRORS.md", "docs/RECOVERY.md")
+    ok = all(exists(f"{TW}/{n}") for n in names) and "0.1.0" in read(f"{TW}/CHANGELOG.md")
+    ai = re.search(r"Generated with|Co-Authored-By|written by an AI", "".join(read(f"{TW}/{n}") for n in names), re.I)
+    g = jread(f"{PLAN}/evidence/gates-rerun.json", {})
+    files = git("diff", "--name-only", g.get("head", "HEAD"), "HEAD", "--", f"{TW}/src").splitlines()
+    return ok and not ai and not files, f"docs set={ok} ai attribution={bool(ai)} src changed={files[:3]}"
+
+
+@check("audit-final", 13)
+def _af13():
+    """[ref:tripwire-core] the second approved package conforms: @adhd/resilience-core-tripwire has zero dependencies, CJS-only manifest (no module, no exports, no type), no process.env / process.stdin / child_process / console access in src/lib outside node-io.ts (TW31), README, CHANGELOG, docs/ERRORS.md and docs/RECOVERY.md, no AI attribution line, and the gates-rerun evidence tripwire tree equals the HEAD tripwire tree."""
+    p = jread(f"{TW}/package.json", {}) or {}
+    pur = tw_purity()
+    names = ("README.md", "CHANGELOG.md", "docs/ERRORS.md", "docs/RECOVERY.md")
+    docs = all(exists(f"{TW}/{n}") for n in names)
+    ai = re.search(r"Generated with|Co-Authored-By|written by an AI", "".join(read(f"{TW}/{n}") for n in names), re.I)
+    g = jread(f"{PLAN}/evidence/gates-rerun.json", {})
+    return (p.get("name") == TW_PKG and not (p.get("dependencies") or {}) and "module" not in p and "exports" not in p and "type" not in p and pur[0] and docs and not ai
+            and g.get("tw_tree") == tw_tree_sha()), f"purity: {pur[1]} docs={docs} ai={bool(ai)}"
 
 
 def main():

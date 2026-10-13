@@ -1,6 +1,6 @@
 # surface-hosts — WORK STATE
 
-**Phase:** surface · **Kind:** work · **Depends on:** surface-api, chrome-lifecycle · **Guard:** `python3 docs/plan/stealth-browser/scripts/guard.py surface-hosts`
+**Phase:** surface · **Kind:** work · **Depends on:** surface-api, chrome-lifecycle, sp-link · **Guard:** `python3 docs/plan/stealth-browser/scripts/guard.py surface-hosts`
 **Executor:** `typescript-pro` (sonnet/high) · **Worktree:** `/Users/nix/dev/node/adhd/.worktrees/stealth-browser` on branch `stealth-browser` (shared by every state, [inv:shared-worktree], [inv:worktree-required], [inv:no-ai-attribution])
 
 ---
@@ -77,3 +77,5 @@ Every plan-file write is committed (R1). Work-product commits for this state, al
 - Early assertions: `surface-hosts.7` and `.12` probe the BUILT bins (tools/list schema, extraArgs rejection, dead-port error shape on port 19999/19997) so the two claims product could not verify (do launchChrome options reach the MCP schema; does getPageContext return cookie values) are settled by evidence, not assumption; read `evidence/product-claims.json` (from `surface-api.8`) first.
 - Do not launch a persistent Chrome in this state; `chromeStatus` against an unused port is the cheap probe.
 - Lifecycle wiring (surface-hosts.14, gap G2 of EVAL-service-proxy.md): `chrome-lifecycle` is now an ancestor. Call `lifecycle.installProcessExitHooks(manager, { stdinEof: true })` in the MCP host (orphan detection) and in the CLI, add `--idle-shutdown <ms>` (default 120000) and `--keep-alive` to the CLI and map them onto the ChromeManager options (`--keep-alive` turns the idle reaper off), and print `status()` (sibling warning) where the hosts report health. The hooks themselves live in the package (chrome-lifecycle.14); do not reimplement them.
+- `sp-link` is an ancestor on purpose: it is the single editor of the proxy dependency line, so the stealth-browser `package.json` owners are serialized. This state edits `bin`, `exports`/`module` removal and the apigen dependencies only; it never touches the `@adhd/sox-service-proxy` line.
+- The lifecycle wiring (`installProcessExitHooks`, `--idle-shutdown`, `--keep-alive`, `status()`) reads only the public manager shape of CL26 (`ChromeManagerOptions { cdpHost, idleTimeoutMs, checkHistory, shutdownGraceMs, orphanWindowMs, stateDir, reaperScope, link, logger }`, `release()`, `status()`); `--keep-alive` builds the manager so that it never asks the reaper host to reap.

@@ -33,6 +33,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 - [agent-search-relink.2] (D3) Before relinking: a link: CONSUME target has a built dist (dist/index.js, dist/bin/cli.js, dist/bin/mcp.js) and `node dist/bin/cli.js --help` exits 0 there; agent-browser's node_modules/@adhd/stealth-browser/package.json resolves.
 - [agent-search-relink.3] agent-browser builds and passes `pnpm run test:lifecycle` against the released/linked package, and the live MCP stdio shape still equals the cutover `after` shape in evidence/cutover-parity.json.
 - [agent-search-relink.4] Scratch hygiene for the relink: [psm:agent-search-relink] commits are local-only, staged by explicit path, and touch only agent-browser/package.json, agent-browser/pnpm-lock.yaml and the cutover docs.
+- [agent-search-relink.5] The tripwire dependency moves from the tarball to the registry range: agent-browser/package.json keeps `@adhd/resilience-core-tripwire` at `^0.1.0` (no link:/file:), agent-browser/pnpm-lock.yaml resolves it with an integrity hash and no tarball or file resolution, node_modules/@adhd/resilience-core-tripwire/package.json resolves, and `pnpm run test` (with a scratch SEARCH_ADHD_DATA_DIR) exits 0 against the registry build.
 
 ---
 
@@ -64,3 +65,4 @@ Every plan-file write is committed (R1). Work-product commits for this state, al
 
 - Blocked on the human/dispatcher release decision (`hb-release-decision`).
 - Never a `.worktrees` path in any committed value.
+- The relink also switches `@adhd/resilience-core-tripwire` from the packed tarball to the registry range `^0.1.0` (agent-search-relink.5): `pnpm-lock.yaml` resolves it with an integrity hash and no tarball resolution. The reverse-apis consumer is relinked by the separate state `tripwire-reverse-relink`.

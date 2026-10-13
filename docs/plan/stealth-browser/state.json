@@ -282,6 +282,83 @@
       "done_at": "2026-10-13T00:06:33.473Z",
       "start_ref": "90be93d4a0ebf2fdf28d406029323566dcd7878b",
       "end_ref": "4894bdc5a49d6d645294d88bdb675162c05da6e9"
+    },
+    "sp-reaper-load-proof": {
+      "status": "pending",
+      "started_at": null,
+      "done_at": null,
+      "start_ref": null,
+      "end_ref": null
+    },
+    "sp-link": {
+      "status": "pending",
+      "started_at": null,
+      "done_at": null,
+      "start_ref": null,
+      "end_ref": null
+    },
+    "sp-reaper-smoke": {
+      "status": "pending",
+      "started_at": null,
+      "done_at": null,
+      "start_ref": null,
+      "end_ref": null
+    },
+    "sp-switch": {
+      "status": "pending",
+      "started_at": null,
+      "done_at": null,
+      "start_ref": null,
+      "end_ref": null
+    },
+    "tripwire-scaffold": {
+      "status": "pending",
+      "started_at": null,
+      "done_at": null,
+      "start_ref": null,
+      "end_ref": null
+    },
+    "tripwire-core": {
+      "status": "pending",
+      "started_at": null,
+      "done_at": null,
+      "start_ref": null,
+      "end_ref": null
+    },
+    "tripwire-interactive": {
+      "status": "pending",
+      "started_at": null,
+      "done_at": null,
+      "start_ref": null,
+      "end_ref": null
+    },
+    "tripwire-docs": {
+      "status": "pending",
+      "started_at": null,
+      "done_at": null,
+      "start_ref": null,
+      "end_ref": null
+    },
+    "tripwire-pack": {
+      "status": "pending",
+      "started_at": null,
+      "done_at": null,
+      "start_ref": null,
+      "end_ref": null
+    },
+    "tripwire-reverse-migrate": {
+      "status": "pending",
+      "started_at": null,
+      "done_at": null,
+      "start_ref": null,
+      "end_ref": null
+    },
+    "tripwire-reverse-relink": {
+      "status": "pending",
+      "started_at": null,
+      "done_at": null,
+      "start_ref": null,
+      "end_ref": null
     }
   },
   "transition_log": [
@@ -578,6 +655,422 @@
         "docs/plan/stealth-browser/scripts/ownership.json"
       ],
       "by": "pseudosky"
+    },
+    {
+      "ts": "2026-10-13T01:03:10.307Z",
+      "state": "sp-reaper-load-proof",
+      "class": "executor",
+      "type": "state-added",
+      "reason": "plan-builder amendment 2026-10-12 (dispatch-2026-10-12-ca18, single-pass lifecycle + tripwire package): sp-reaper-load-proof added: proves the detached reaper entry path before chrome-lifecycle is written (hold edge)",
+      "files_synced": [
+        "docs/plan/stealth-browser/dag.json",
+        "docs/plan/stealth-browser/scripts/guard.py",
+        "docs/plan/stealth-browser/scripts/ownership.json",
+        "docs/plan/stealth-browser/scripts/criteria.json",
+        "docs/plan/stealth-browser/scripts/check-guards-red.py",
+        "docs/plan/stealth-browser/contexts/sp-reaper-load-proof.md"
+      ],
+      "by": "plan-builder"
+    },
+    {
+      "ts": "2026-10-13T01:03:10.307Z",
+      "state": "sp-link",
+      "class": "executor",
+      "type": "state-added",
+      "reason": "plan-builder amendment 2026-10-12 (dispatch-2026-10-12-ca18, single-pass lifecycle + tripwire package): sp-link added: declares @adhd/sox-service-proxy ~0.6.0 once, resolves the unreleased 0.6.0 through the dev tarball override",
+      "files_synced": [
+        "docs/plan/stealth-browser/dag.json",
+        "docs/plan/stealth-browser/scripts/guard.py",
+        "docs/plan/stealth-browser/scripts/ownership.json",
+        "docs/plan/stealth-browser/scripts/criteria.json",
+        "docs/plan/stealth-browser/scripts/check-guards-red.py",
+        "docs/plan/stealth-browser/contexts/sp-link.md"
+      ],
+      "by": "plan-builder"
+    },
+    {
+      "ts": "2026-10-13T01:03:10.307Z",
+      "state": "sp-reaper-smoke",
+      "class": "executor",
+      "type": "state-added",
+      "reason": "plan-builder amendment 2026-10-12 (dispatch-2026-10-12-ca18, single-pass lifecycle + tripwire package): sp-reaper-smoke added: CL30 real-process gate for the reaper host on the built dist",
+      "files_synced": [
+        "docs/plan/stealth-browser/dag.json",
+        "docs/plan/stealth-browser/scripts/guard.py",
+        "docs/plan/stealth-browser/scripts/ownership.json",
+        "docs/plan/stealth-browser/scripts/criteria.json",
+        "docs/plan/stealth-browser/scripts/check-guards-red.py",
+        "docs/plan/stealth-browser/contexts/sp-reaper-smoke.md"
+      ],
+      "by": "plan-builder"
+    },
+    {
+      "ts": "2026-10-13T01:03:10.307Z",
+      "state": "sp-switch",
+      "class": "executor",
+      "type": "state-added",
+      "reason": "plan-builder amendment 2026-10-12 (dispatch-2026-10-12-ca18, single-pass lifecycle + tripwire package): sp-switch added: removes the dev-tarball override once 0.6.0 is published (human-gated hb-sp-release)",
+      "files_synced": [
+        "docs/plan/stealth-browser/dag.json",
+        "docs/plan/stealth-browser/scripts/guard.py",
+        "docs/plan/stealth-browser/scripts/ownership.json",
+        "docs/plan/stealth-browser/scripts/criteria.json",
+        "docs/plan/stealth-browser/scripts/check-guards-red.py",
+        "docs/plan/stealth-browser/contexts/sp-switch.md"
+      ],
+      "by": "plan-builder"
+    },
+    {
+      "ts": "2026-10-13T01:03:10.307Z",
+      "state": "tripwire-scaffold",
+      "class": "executor",
+      "type": "state-added",
+      "reason": "plan-builder amendment 2026-10-12 (dispatch-2026-10-12-ca18, single-pass lifecycle + tripwire package): tripwire-scaffold added: second approved package @adhd/resilience-core-tripwire via the generator (new resilience group, D1)",
+      "files_synced": [
+        "docs/plan/stealth-browser/dag.json",
+        "docs/plan/stealth-browser/scripts/guard.py",
+        "docs/plan/stealth-browser/scripts/ownership.json",
+        "docs/plan/stealth-browser/scripts/criteria.json",
+        "docs/plan/stealth-browser/scripts/check-guards-red.py",
+        "docs/plan/stealth-browser/contexts/tripwire-scaffold.md"
+      ],
+      "by": "plan-builder"
+    },
+    {
+      "ts": "2026-10-13T01:03:10.307Z",
+      "state": "tripwire-core",
+      "class": "executor",
+      "type": "state-added",
+      "reason": "plan-builder amendment 2026-10-12 (dispatch-2026-10-12-ca18, single-pass lifecycle + tripwire package): tripwire-core added: unified tripwire core, TW1-TW23 and TW30-TW38",
+      "files_synced": [
+        "docs/plan/stealth-browser/dag.json",
+        "docs/plan/stealth-browser/scripts/guard.py",
+        "docs/plan/stealth-browser/scripts/ownership.json",
+        "docs/plan/stealth-browser/scripts/criteria.json",
+        "docs/plan/stealth-browser/scripts/check-guards-red.py",
+        "docs/plan/stealth-browser/contexts/tripwire-core.md"
+      ],
+      "by": "plan-builder"
+    },
+    {
+      "ts": "2026-10-13T01:03:10.307Z",
+      "state": "tripwire-interactive",
+      "class": "executor",
+      "type": "state-added",
+      "reason": "plan-builder amendment 2026-10-12 (dispatch-2026-10-12-ca18, single-pass lifecycle + tripwire package): tripwire-interactive added: HITL, unlock CLI and rendering with injected IO, scenario suites, closed public surface",
+      "files_synced": [
+        "docs/plan/stealth-browser/dag.json",
+        "docs/plan/stealth-browser/scripts/guard.py",
+        "docs/plan/stealth-browser/scripts/ownership.json",
+        "docs/plan/stealth-browser/scripts/criteria.json",
+        "docs/plan/stealth-browser/scripts/check-guards-red.py",
+        "docs/plan/stealth-browser/contexts/tripwire-interactive.md"
+      ],
+      "by": "plan-builder"
+    },
+    {
+      "ts": "2026-10-13T01:03:10.307Z",
+      "state": "tripwire-docs",
+      "class": "executor",
+      "type": "state-added",
+      "reason": "plan-builder amendment 2026-10-12 (dispatch-2026-10-12-ca18, single-pass lifecycle + tripwire package): tripwire-docs added: README, ERRORS, RECOVERY, CHANGELOG, compiled README examples",
+      "files_synced": [
+        "docs/plan/stealth-browser/dag.json",
+        "docs/plan/stealth-browser/scripts/guard.py",
+        "docs/plan/stealth-browser/scripts/ownership.json",
+        "docs/plan/stealth-browser/scripts/criteria.json",
+        "docs/plan/stealth-browser/scripts/check-guards-red.py",
+        "docs/plan/stealth-browser/contexts/tripwire-docs.md"
+      ],
+      "by": "plan-builder"
+    },
+    {
+      "ts": "2026-10-13T01:03:10.307Z",
+      "state": "tripwire-pack",
+      "class": "executor",
+      "type": "state-added",
+      "reason": "plan-builder amendment 2026-10-12 (dispatch-2026-10-12-ca18, single-pass lifecycle + tripwire package): tripwire-pack added: package gates, consumer tarball outside .worktrees, ESM/CJS smoke",
+      "files_synced": [
+        "docs/plan/stealth-browser/dag.json",
+        "docs/plan/stealth-browser/scripts/guard.py",
+        "docs/plan/stealth-browser/scripts/ownership.json",
+        "docs/plan/stealth-browser/scripts/criteria.json",
+        "docs/plan/stealth-browser/scripts/check-guards-red.py",
+        "docs/plan/stealth-browser/contexts/tripwire-pack.md"
+      ],
+      "by": "plan-builder"
+    },
+    {
+      "ts": "2026-10-13T01:03:10.307Z",
+      "state": "tripwire-reverse-migrate",
+      "class": "executor",
+      "type": "state-added",
+      "reason": "plan-builder amendment 2026-10-12 (dispatch-2026-10-12-ca18, single-pass lifecycle + tripwire package): tripwire-reverse-migrate added: consumers 1 and 2 adopt the package in reverse-apis (own worktree)",
+      "files_synced": [
+        "docs/plan/stealth-browser/dag.json",
+        "docs/plan/stealth-browser/scripts/guard.py",
+        "docs/plan/stealth-browser/scripts/ownership.json",
+        "docs/plan/stealth-browser/scripts/criteria.json",
+        "docs/plan/stealth-browser/scripts/check-guards-red.py",
+        "docs/plan/stealth-browser/contexts/tripwire-reverse-migrate.md"
+      ],
+      "by": "plan-builder"
+    },
+    {
+      "ts": "2026-10-13T01:03:10.307Z",
+      "state": "tripwire-reverse-relink",
+      "class": "executor",
+      "type": "state-added",
+      "reason": "plan-builder amendment 2026-10-12 (dispatch-2026-10-12-ca18, single-pass lifecycle + tripwire package): tripwire-reverse-relink added: post-release relink and ff merge in reverse-apis",
+      "files_synced": [
+        "docs/plan/stealth-browser/dag.json",
+        "docs/plan/stealth-browser/scripts/guard.py",
+        "docs/plan/stealth-browser/scripts/ownership.json",
+        "docs/plan/stealth-browser/scripts/criteria.json",
+        "docs/plan/stealth-browser/scripts/check-guards-red.py",
+        "docs/plan/stealth-browser/contexts/tripwire-reverse-relink.md"
+      ],
+      "by": "plan-builder"
+    },
+    {
+      "ts": "2026-10-13T01:03:10.307Z",
+      "state": "chrome-lifecycle",
+      "class": "executor",
+      "type": "state-changed",
+      "reason": "plan-builder amendment 2026-10-12 (dispatch-2026-10-12-ca18): depends_on += sp-reaper-load-proof; CL1-CL29 single-pass lifecycle over service-proxy 0.6.0; browser.ts extract-only ownership",
+      "files_synced": [
+        "docs/plan/stealth-browser/dag.json",
+        "docs/plan/stealth-browser/scripts/guard.py",
+        "docs/plan/stealth-browser/scripts/ownership.json",
+        "docs/plan/stealth-browser/scripts/criteria.json",
+        "docs/plan/stealth-browser/scripts/check-guards-red.py",
+        "docs/plan/stealth-browser/contexts/chrome-lifecycle.md"
+      ],
+      "by": "plan-builder"
+    },
+    {
+      "ts": "2026-10-13T01:03:10.307Z",
+      "state": "surface-hosts",
+      "class": "executor",
+      "type": "state-changed",
+      "reason": "plan-builder amendment 2026-10-12 (dispatch-2026-10-12-ca18): depends_on += sp-link",
+      "files_synced": [
+        "docs/plan/stealth-browser/dag.json",
+        "docs/plan/stealth-browser/scripts/guard.py",
+        "docs/plan/stealth-browser/scripts/ownership.json",
+        "docs/plan/stealth-browser/scripts/criteria.json",
+        "docs/plan/stealth-browser/scripts/check-guards-red.py",
+        "docs/plan/stealth-browser/contexts/surface-hosts.md"
+      ],
+      "by": "plan-builder"
+    },
+    {
+      "ts": "2026-10-13T01:03:10.307Z",
+      "state": "agent-search-cutover",
+      "class": "executor",
+      "type": "state-changed",
+      "reason": "plan-builder amendment 2026-10-12 (dispatch-2026-10-12-ca18): depends_on += tripwire-pack; criteria .10-.13 (tripwire adoption folded in)",
+      "files_synced": [
+        "docs/plan/stealth-browser/dag.json",
+        "docs/plan/stealth-browser/scripts/guard.py",
+        "docs/plan/stealth-browser/scripts/ownership.json",
+        "docs/plan/stealth-browser/scripts/criteria.json",
+        "docs/plan/stealth-browser/scripts/check-guards-red.py",
+        "docs/plan/stealth-browser/contexts/agent-search-cutover.md"
+      ],
+      "by": "plan-builder"
+    },
+    {
+      "ts": "2026-10-13T01:03:10.307Z",
+      "state": "gates-first",
+      "class": "executor",
+      "type": "state-changed",
+      "reason": "plan-builder amendment 2026-10-12 (dispatch-2026-10-12-ca18): depends_on += sp-switch, sp-reaper-smoke, tripwire-pack; criteria .11-.12",
+      "files_synced": [
+        "docs/plan/stealth-browser/dag.json",
+        "docs/plan/stealth-browser/scripts/guard.py",
+        "docs/plan/stealth-browser/scripts/ownership.json",
+        "docs/plan/stealth-browser/scripts/criteria.json",
+        "docs/plan/stealth-browser/scripts/check-guards-red.py",
+        "docs/plan/stealth-browser/contexts/gates-first.md"
+      ],
+      "by": "plan-builder"
+    },
+    {
+      "ts": "2026-10-13T01:03:10.307Z",
+      "state": "gates-rerun",
+      "class": "executor",
+      "type": "state-changed",
+      "reason": "plan-builder amendment 2026-10-12 (dispatch-2026-10-12-ca18): depends_on += tripwire-pack; criterion .7",
+      "files_synced": [
+        "docs/plan/stealth-browser/dag.json",
+        "docs/plan/stealth-browser/scripts/guard.py",
+        "docs/plan/stealth-browser/scripts/ownership.json",
+        "docs/plan/stealth-browser/scripts/criteria.json",
+        "docs/plan/stealth-browser/scripts/check-guards-red.py",
+        "docs/plan/stealth-browser/contexts/gates-rerun.md"
+      ],
+      "by": "plan-builder"
+    },
+    {
+      "ts": "2026-10-13T01:03:10.307Z",
+      "state": "merge-readiness",
+      "class": "executor",
+      "type": "state-changed",
+      "reason": "plan-builder amendment 2026-10-12 (dispatch-2026-10-12-ca18): depends_on += tripwire-reverse-migrate; criteria .5-.6 (both packages in the release decision)",
+      "files_synced": [
+        "docs/plan/stealth-browser/dag.json",
+        "docs/plan/stealth-browser/scripts/guard.py",
+        "docs/plan/stealth-browser/scripts/ownership.json",
+        "docs/plan/stealth-browser/scripts/criteria.json",
+        "docs/plan/stealth-browser/scripts/check-guards-red.py",
+        "docs/plan/stealth-browser/contexts/merge-readiness.md"
+      ],
+      "by": "plan-builder"
+    },
+    {
+      "ts": "2026-10-13T01:03:10.307Z",
+      "state": "resolve-findings",
+      "class": "executor",
+      "type": "state-changed",
+      "reason": "plan-builder amendment 2026-10-12 (dispatch-2026-10-12-ca18): owns the tripwire package directory",
+      "files_synced": [
+        "docs/plan/stealth-browser/dag.json",
+        "docs/plan/stealth-browser/scripts/guard.py",
+        "docs/plan/stealth-browser/scripts/ownership.json",
+        "docs/plan/stealth-browser/scripts/criteria.json",
+        "docs/plan/stealth-browser/scripts/check-guards-red.py",
+        "docs/plan/stealth-browser/contexts/resolve-findings.md"
+      ],
+      "by": "plan-builder"
+    },
+    {
+      "ts": "2026-10-13T01:03:10.307Z",
+      "state": "audit-fixes",
+      "class": "executor",
+      "type": "state-changed",
+      "reason": "plan-builder amendment 2026-10-12 (dispatch-2026-10-12-ca18): owns the tripwire package directory",
+      "files_synced": [
+        "docs/plan/stealth-browser/dag.json",
+        "docs/plan/stealth-browser/scripts/guard.py",
+        "docs/plan/stealth-browser/scripts/ownership.json",
+        "docs/plan/stealth-browser/scripts/criteria.json",
+        "docs/plan/stealth-browser/scripts/check-guards-red.py",
+        "docs/plan/stealth-browser/contexts/audit-fixes.md"
+      ],
+      "by": "plan-builder"
+    },
+    {
+      "ts": "2026-10-13T01:03:10.307Z",
+      "state": "port-fixes",
+      "class": "executor",
+      "type": "state-changed",
+      "reason": "plan-builder amendment 2026-10-12 (dispatch-2026-10-12-ca18): port-fixes.12 loses the proxy dependency (moved to sp-link); port-fixes.5 accepts the connection-based lifecycle spec",
+      "files_synced": [
+        "docs/plan/stealth-browser/dag.json",
+        "docs/plan/stealth-browser/scripts/guard.py",
+        "docs/plan/stealth-browser/scripts/ownership.json",
+        "docs/plan/stealth-browser/scripts/criteria.json",
+        "docs/plan/stealth-browser/scripts/check-guards-red.py",
+        "docs/plan/stealth-browser/contexts/port-fixes.md"
+      ],
+      "by": "plan-builder"
+    },
+    {
+      "ts": "2026-10-13T01:03:10.307Z",
+      "state": "prod-errors",
+      "class": "executor",
+      "type": "state-changed",
+      "reason": "plan-builder amendment 2026-10-12 (dispatch-2026-10-12-ca18): 32 codes (6 lifecycle codes); lifecycle namespace member list",
+      "files_synced": [
+        "docs/plan/stealth-browser/dag.json",
+        "docs/plan/stealth-browser/scripts/guard.py",
+        "docs/plan/stealth-browser/scripts/ownership.json",
+        "docs/plan/stealth-browser/scripts/criteria.json",
+        "docs/plan/stealth-browser/scripts/check-guards-red.py",
+        "docs/plan/stealth-browser/contexts/prod-errors.md"
+      ],
+      "by": "plan-builder"
+    },
+    {
+      "ts": "2026-10-13T01:03:10.307Z",
+      "state": "scaffold",
+      "class": "executor",
+      "type": "state-changed",
+      "reason": "plan-builder amendment 2026-10-12 (dispatch-2026-10-12-ca18): scaffold.5 accepts the second approved project.json",
+      "files_synced": [
+        "docs/plan/stealth-browser/dag.json",
+        "docs/plan/stealth-browser/scripts/guard.py",
+        "docs/plan/stealth-browser/scripts/ownership.json",
+        "docs/plan/stealth-browser/scripts/criteria.json",
+        "docs/plan/stealth-browser/scripts/check-guards-red.py",
+        "docs/plan/stealth-browser/contexts/scaffold.md"
+      ],
+      "by": "plan-builder"
+    },
+    {
+      "ts": "2026-10-13T01:03:10.307Z",
+      "state": "review-prep",
+      "class": "executor",
+      "type": "state-changed",
+      "reason": "plan-builder amendment 2026-10-12 (dispatch-2026-10-12-ca18): diff includes the tripwire package",
+      "files_synced": [
+        "docs/plan/stealth-browser/dag.json",
+        "docs/plan/stealth-browser/scripts/guard.py",
+        "docs/plan/stealth-browser/scripts/ownership.json",
+        "docs/plan/stealth-browser/scripts/criteria.json",
+        "docs/plan/stealth-browser/scripts/check-guards-red.py",
+        "docs/plan/stealth-browser/contexts/review-prep.md"
+      ],
+      "by": "plan-builder"
+    },
+    {
+      "ts": "2026-10-13T01:03:10.307Z",
+      "state": "docs-marketing-run",
+      "class": "executor",
+      "type": "state-changed",
+      "reason": "plan-builder amendment 2026-10-12 (dispatch-2026-10-12-ca18): criterion .11 (tripwire docs surface)",
+      "files_synced": [
+        "docs/plan/stealth-browser/dag.json",
+        "docs/plan/stealth-browser/scripts/guard.py",
+        "docs/plan/stealth-browser/scripts/ownership.json",
+        "docs/plan/stealth-browser/scripts/criteria.json",
+        "docs/plan/stealth-browser/scripts/check-guards-red.py",
+        "docs/plan/stealth-browser/contexts/docs-marketing-run.md"
+      ],
+      "by": "plan-builder"
+    },
+    {
+      "ts": "2026-10-13T01:03:10.307Z",
+      "state": "audit-final",
+      "class": "executor",
+      "type": "state-changed",
+      "reason": "plan-builder amendment 2026-10-12 (dispatch-2026-10-12-ca18): criteria .1 (two packages) and .13 ([ref:tripwire-core])",
+      "files_synced": [
+        "docs/plan/stealth-browser/dag.json",
+        "docs/plan/stealth-browser/scripts/guard.py",
+        "docs/plan/stealth-browser/scripts/ownership.json",
+        "docs/plan/stealth-browser/scripts/criteria.json",
+        "docs/plan/stealth-browser/scripts/check-guards-red.py",
+        "docs/plan/stealth-browser/contexts/audit-final.md"
+      ],
+      "by": "plan-builder"
+    },
+    {
+      "ts": "2026-10-13T01:03:10.307Z",
+      "state": "agent-search-relink",
+      "class": "executor",
+      "type": "state-changed",
+      "reason": "plan-builder amendment 2026-10-12 (dispatch-2026-10-12-ca18): criterion .5 (tripwire registry range)",
+      "files_synced": [
+        "docs/plan/stealth-browser/dag.json",
+        "docs/plan/stealth-browser/scripts/guard.py",
+        "docs/plan/stealth-browser/scripts/ownership.json",
+        "docs/plan/stealth-browser/scripts/criteria.json",
+        "docs/plan/stealth-browser/scripts/check-guards-red.py",
+        "docs/plan/stealth-browser/contexts/agent-search-relink.md"
+      ],
+      "by": "plan-builder"
     }
   ],
   "authored_with": {

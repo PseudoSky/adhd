@@ -21,16 +21,14 @@ Items the plan deliberately does not build. Each has an owner decision recorded 
 | FU-1 | reverse-apis `cdp-capture.ts` consumes the `@adhd/stealth-browser` recorder instead of its inline CdpSession | Cross-repo, owned by reverse-apis. |
 | FU-2 | WebSocket frame recording | No consumer asked; extend `RecordedExchange` later. |
 | FU-3 | Path normalisation and operation-key derivation | Reverse-API specific. |
-| FU-4 | Entity graph, exemplars, sequence discovery, tripwire/pacing four-gate, auth packages | Reverse-API scope, not a browser-automation concern. |
+| FU-4 | Entity graph, exemplars, sequence discovery, the pacing and sequencing gates, auth packages | Reverse-API scope, not a browser-automation concern. The tripwire itself is no longer deferred: it is `@adhd/resilience-core-tripwire`. |
 | FU-5 | Dev-only recorder writing real Chrome sessions into `*.cdp.json` (fixtures become `recorded`) | Needs a real Chrome; there is no live-Chrome lane. |
 | FU-6 | Loopback RFC 6455 fake CDP server | Violates unit purity. |
 | FU-7 | agent-browser BACKLOG hygiene: B-034/B-035 rows stale, B-036..B-039 absent | Folded into `agent-search-cutover.9` via the backlog graph; B-036..B-039 are defined in `evidence/lifecycle-definitions.md` (chrome-lifecycle.25). |
 | FU-8 | `7f881aa7` (attach to any Chrome on the port without a profile check; port-occupant kill fallback) | Only partly mitigated here. |
-| FU-9 | `ServiceProxyPresenceStore` implementing the `PresenceStore` seam on sox-service-proxy (phase 2: held dials, kernel-closed presence) | Needs upstream tickets U1 and U3; the seam and its contract suite (chrome-lifecycle.22) are built now. |
-| FU-10 | Remove the read-only reader of the old agent-browser heartbeat file (`legacyHeartbeatPath`, chrome-lifecycle.24) | Needed only until the cutover is relinked; remove after `agent-search-relink`. |
 | FU-11 | Consumer proof of the `StoreRecordingSink` DDL and INSERT OR REPLACE on the real Turso-backed adapter, plus a CI leg on Node 22.5-22.11 | No lane in this plan runs the real adapter or older Node versions. |
-| FU-12 | Real two-process proof that the detached reaper loads `dist/` through `lifecycle.runChromeReaper` and that `ensureBackend` keeps it single-instance | Needs a lane with processes and sockets; the unit lane mocks `ensureBackend`. |
-| FU-13 | Upstream tickets in the owned `@adhd/sox-service-proxy` repo: U1 connection id plus `onClientConnect` / `onClientDisconnect` on `serveBackend`; U2 housekeeping (close stale 72d980e5, README says node builtins only though it depends on listen-guard, the 0.5.0 tarball `dist/package.json` says 0.4.4, `ensureBackend` lock staleness uses bare `kill(pid, 0)` so a recycled pid keeps a lock alive until the 30 s TTL); U3 dial recovery after a backend restart (3d5da8f2, already filed) | Not filed by this plan; U1 and U3 gate FU-9. |
+| FU-12 | A stealth-browser `*.e2e.test.ts` lane for the real two-process kill -9 case | The detached host loading `dist/` is proven by `sp-reaper-load-proof` and `sp-reaper-smoke`, and kill -9 at library level by SP-K9 in service-proxy; a full e2e lane stays deferred by user decision. |
+| FU-13 | Upstream tickets in the owned `@adhd/sox-service-proxy` repo: U2 housekeeping (close stale 72d980e5, README says node builtins only though it depends on listen-guard, the 0.5.0 tarball `dist/package.json` says 0.4.4, `ensureBackend` lock staleness uses bare `kill(pid, 0)` so a recycled pid keeps a lock alive until the 30 s TTL) | Not filed by this plan. U1 and U3 ship in service-proxy 0.6.0 (consumed through `sp-link`); only the U2 housekeeping remains. |
 | FU-14 | Backlog 19dfb641 acceptance criterion 4 amendment (OD-9 in `EVALUATIONS.md`) | A backlog edit for the dispatcher; this plan does not edit the backlog. |
 
 ## Housekeeping

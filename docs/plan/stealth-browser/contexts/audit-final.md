@@ -17,7 +17,7 @@ Final audit: every Definition-of-Done clause is proven against the real tree, an
 
 - **Reference Pattern:** README Definition of Done; `scripts/guard.py audit-final` checks; references.json.
 
-- **Delta Spec:** Run `python3 docs/plan/stealth-browser/scripts/guard.py audit-final`. Tick `final-review.md` line by line only after the corresponding check passes. No deferrals.
+- **Delta Spec:** Run `python3 docs/plan/stealth-browser/scripts/guard.py audit-final`. Tick `final-review.md` line by line only after the corresponding check passes. No deferrals. The audit covers both approved packages: `[dod.1]` names `@adhd/stealth-browser` and `@adhd/resilience-core-tripwire`, and `[ref:tripwire-core]` (audit-final.13) checks the tripwire package's zero dependencies, CJS-only manifest, TW31 purity and documentation.
 
 - **Invariants:** Hold point: nothing advances to merge-readiness while any criterion fails. Also: [inv:shared-worktree] (commit only your own explicit paths, tag every commit `[psm:audit-final]`), [inv:owned-paths-only], [inv:no-main-writes].
 
@@ -29,7 +29,7 @@ Final audit: every Definition-of-Done clause is proven against the real tree, an
 
 Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/guard.py` (`python3 docs/plan/stealth-browser/scripts/guard.py audit-final --only audit-final.N`). None may be deferred. Tests written by this plan cite ticket `8468f7b1` and these ids ([inv:tests-cite]).
 
-- [audit-final.1] [dod.1] structural: exactly one new package exists, entrypoint/stealth-browser, named @adhd/stealth-browser, built by the generator (scaffold evidence) and parity-clean.
+- [audit-final.1] [dod.1] structural: only the approved new packages exist: entrypoint/stealth-browser named @adhd/stealth-browser (built by the generator, parity-clean) and packages/resilience/resilience-core-tripwire named @adhd/resilience-core-tripwire (built by the generator, tripwire-scaffold evidence).
 - [audit-final.2] [dod.2] behavioral: `nx run stealth-browser:verify-dist-load` and the use-case unit suites (library, CLI and MCP scenarios against the in-process fake CDP server) pass on the final tree, and the agent-search cutover proof holds (gates-rerun evidence all green, tree == HEAD tree).
 - [audit-final.3] [dod.3] structural: tracing namespace is `adhd` - singleton never imported, serviceName configured once, every mount carries the plugin (tracing-plugin checks 1,2,3,5 re-run).
 - [audit-final.4] [ref:runner-port] behavior-preserving port conforms to agent-browser/adhd (exports, similarity, tokens)
@@ -45,6 +45,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 - [audit-final.ref-runner-port] [ref:runner-port] behavior-preserving port conforms to agent-browser/adhd (exports, similarity, tokens)
 - [audit-final.9] (PA10.3, re-checked after the docs states) `npm pack --dry-run` against the final dist output still lists README.md, CHANGELOG.md, bin/cli.js, bin/mcp.js, index.js and index.d.ts, and the packed README is the rewritten one (it links docs/RESPONSIBLE-USE.md).
 - [audit-final.12] [inv:no-features-removed] final re-check: every failsafe-inventory row is still pinned on the final tree and the inventory file is unchanged since failsafe-inventory (rows were never deleted: row count >= the count recorded at inventory time in evidence/failsafe-inventory.json `row_count`).
+- [audit-final.13] [ref:tripwire-core] the second approved package conforms: @adhd/resilience-core-tripwire has zero dependencies, CJS-only manifest (no module, no exports, no type), no process.env / process.stdin / child_process / console access in src/lib outside node-io.ts (TW31), README, CHANGELOG, docs/ERRORS.md and docs/RECOVERY.md, no AI attribution line, and the gates-rerun evidence tripwire tree equals the HEAD tripwire tree.
 
 ---
 

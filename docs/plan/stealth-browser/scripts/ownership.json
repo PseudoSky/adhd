@@ -93,7 +93,8 @@
   ],
   "resolve-findings": [
     "entrypoint/stealth-browser/",
-    "docs/plan/stealth-browser/review/RESOLUTION.json"
+    "docs/plan/stealth-browser/review/RESOLUTION.json",
+    "packages/resilience/resilience-core-tripwire/"
   ],
   "gates-rerun": [
     "docs/plan/stealth-browser/evidence/"
@@ -177,7 +178,8 @@
     "entrypoint/stealth-browser/src/test/unit/lifecycle/",
     "entrypoint/stealth-browser/src/test/unit/chrome-manager/",
     "entrypoint/stealth-browser/src/test/unit/cdp/targets.spec.ts",
-    "docs/plan/stealth-browser/evidence/lifecycle-definitions.md"
+    "docs/plan/stealth-browser/evidence/lifecycle-definitions.md",
+    "entrypoint/stealth-browser/src/lib/cdp/browser.ts"
   ],
   "tests-use-cases": [
     "entrypoint/stealth-browser/src/test/use-cases/",
@@ -218,7 +220,8 @@
     "/Users/nix/dev/ai/scratch/agent-browser/SEARCH.md",
     "/Users/nix/dev/ai/scratch/agent-browser/FEATURES.md",
     "/Users/nix/dev/ai/scratch/agent-browser/FETCH.md",
-    "/Users/nix/dev/ai/scratch/agent-browser/docs/"
+    "/Users/nix/dev/ai/scratch/agent-browser/docs/",
+    "packages/resilience/resilience-core-tripwire/"
   ],
   "cdp-test-harness": [
     "entrypoint/stealth-browser/src/test/support/",
@@ -227,5 +230,61 @@
   ],
   "failsafe-inventory": [
     "docs/plan/stealth-browser/evidence/failsafe-inventory.json"
+  ],
+  "sp-reaper-load-proof": [
+    "docs/plan/stealth-browser/smoke/reaper-load-proof.md"
+  ],
+  "sp-link": [
+    "entrypoint/stealth-browser/package.json",
+    "package.json",
+    "pnpm-lock.yaml",
+    "docs/plan/stealth-browser/smoke/sp-link.md"
+  ],
+  "sp-reaper-smoke": [
+    "docs/plan/stealth-browser/smoke/reaper-smoke.mjs",
+    "docs/plan/stealth-browser/smoke/reaper-smoke.md",
+    "docs/plan/stealth-browser/smoke/reaper-smoke.json"
+  ],
+  "sp-switch": [
+    "package.json",
+    "pnpm-lock.yaml",
+    "docs/plan/stealth-browser/smoke/switch.md"
+  ],
+  "tripwire-scaffold": [
+    "packages/resilience/resilience-core-tripwire/",
+    "tsconfig.base.json",
+    ".adhd/workspace.json",
+    "docs/plan/stealth-browser/evidence/tripwire/"
+  ],
+  "tripwire-core": [
+    "packages/resilience/resilience-core-tripwire/src/",
+    "packages/resilience/resilience-core-tripwire/*"
+  ],
+  "tripwire-interactive": [
+    "packages/resilience/resilience-core-tripwire/src/",
+    "packages/resilience/resilience-core-tripwire/*"
+  ],
+  "tripwire-docs": [
+    "packages/resilience/resilience-core-tripwire/README.md",
+    "packages/resilience/resilience-core-tripwire/CHANGELOG.md",
+    "packages/resilience/resilience-core-tripwire/docs/",
+    "packages/resilience/resilience-core-tripwire/src/test/unit/readme-examples.spec.ts"
+  ],
+  "tripwire-pack": [
+    "pnpm-lock.yaml",
+    "docs/plan/stealth-browser/evidence/tripwire/",
+    "packages/resilience/resilience-core-tripwire/package.json",
+    "packages/resilience/resilience-core-tripwire/project.json",
+    "packages/resilience/resilience-core-tripwire/vite.config.ts"
+  ],
+  "tripwire-reverse-migrate": [
+    "/Users/nix/dev/projects/reverse-apis/.worktrees/tripwire-adopt/",
+    "/Users/nix/dev/projects/reverse-apis/.git/info/exclude",
+    "docs/plan/stealth-browser/tripwire-reverse/"
+  ],
+  "tripwire-reverse-relink": [
+    "/Users/nix/dev/projects/reverse-apis/.worktrees/tripwire-adopt/package.json",
+    "/Users/nix/dev/projects/reverse-apis/.worktrees/tripwire-adopt/pnpm-lock.yaml",
+    "docs/plan/stealth-browser/tripwire-reverse/"
   ]
 }

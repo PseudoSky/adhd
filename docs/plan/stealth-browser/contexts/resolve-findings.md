@@ -40,12 +40,14 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 
 ```text
 read_only:  ["docs/plan/stealth-browser/review/FINDINGS.json"]
-mutates:    ["entrypoint/stealth-browser/", "docs/plan/stealth-browser/review/RESOLUTION.json"]
+mutates:    ["entrypoint/stealth-browser/", "docs/plan/stealth-browser/review/RESOLUTION.json", "packages/resilience/resilience-core-tripwire/"]
 ```
 
 ---
 
 ## Contract Promise
+
+(Also may fix the second approved package under `packages/resilience/resilience-core-tripwire/` when a finding concerns it; the same one implementer resolves it, [inv:one-implementer].)
 
 Modified: files under `entrypoint/stealth-browser/`. Added: `review/RESOLUTION.json`. Deleted: as findings require.
 
