@@ -6,6 +6,9 @@
  * The runtime surface is exactly the API of the package specification
  * (pinned by src/test/unit/api-surface.spec.ts), plus `createNodeFs`, the
  * Node `FsPort` a caller needs to run `createFileStorage` on a real disk.
+ * The interactive and CLI surface (interactiveGate, confirmSolved,
+ * runUnlockCli, renderStatusText, statusJsonLine) takes an injected
+ * `TripwireIo`; nodeTripwireIo is the single Node adapter of it.
  */
 export { createTripwire } from './lib/tripwire.js';
 export { adhdDataDir } from './lib/paths.js';
@@ -57,6 +60,19 @@ export type {
   MemoryTripwireStorage,
   TripwireStorage,
 } from './lib/storage.js';
+export type { TripwireIo } from './lib/io.js';
+export { confirmSolved, interactiveGate } from './lib/interactive.js';
+export type {
+  ConfirmSolvedOptions,
+  HitlInfo,
+  InteractiveGateOptions,
+  InteractiveOptions,
+} from './lib/interactive.js';
+export { runUnlockCli } from './lib/cli.js';
+export type { UnlockCliOptions, UnlockExitCode } from './lib/cli.js';
+export { renderStatusText, statusJsonLine } from './lib/render.js';
+export { nodeTripwireIo } from './lib/node-io.js';
+export type { NodeIoInput, NodeTripwireIoOptions } from './lib/node-io.js';
 export { createMemoryFs } from './lib/memory-fs.js';
 export type {
   FsFailureRule,
