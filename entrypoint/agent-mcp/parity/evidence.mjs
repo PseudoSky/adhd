@@ -130,7 +130,7 @@ export function buildBundle(runDir, { arm, record = null, probes = null, redactS
     // one row per `agent.dispatch.finish` (`.start` carries the same attributes stamped at the same instant and is not an anchor); `childTaskIds` is the comma-joined attribute split
     dispatches: traceEv.filter((e) => e.event === 'agent.dispatch.finish' || e.event === 'agent.dispatch.error').map((e) => ({ task: e['agent.task_id'], parent: e['agent.parent_task_id'] ?? null, depth: e['agent.recursion_depth'] ?? null, endMs: Date.parse(e.ts),
       mode: e['agent.dispatch.mode'] ?? null, kind: e['agent.dispatch.kind'] ?? null, children: nz(e['agent.dispatch.children']),
-      childTaskIds: typeof e['agent.dispatch.child_task_ids'] === 'string' && e['agent.dispatch.child_task_ids'] !== '' ? e['agent.dispatch.child_task_ids'].split(',') : null,
+      childTaskIds: typeof e['agent.dispatch.child_task_ids'] === 'string' && e['agent.dispatch.child_task_ids'] !== '' ? e['agent.dispatch.child_task_ids'].split(',').map((x) => x.trim()).filter(Boolean) : null,
       parentBlockedMs: nz(e['agent.dispatch.parent_blocked_ms']), callId: e['agent.dispatch.call_id'] ?? null, waitMs: nz(e['agent.dispatch.wait_ms']) })) };
 
   // ---- wire rows -> redacted request rows + full output

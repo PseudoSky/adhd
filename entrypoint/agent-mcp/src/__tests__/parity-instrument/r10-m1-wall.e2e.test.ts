@@ -37,7 +37,7 @@ describe('R10 M1: wall attribution on a fresh real-server mock-provider run', ()
 
   it('R10 M1 AC1: every R10 attribute the real server wrote into logs/trace is present, and equal, in the evidence bundle (record by record)', () => {
     const lines = rawLines(traceOf('C1')[0]); const r = compareBundleToRaw(lines, evidence('C1'));
-    const realEmits = ATTR_SPECS.map((s) => s.attr).filter((a) => !['agent.tool.queued_ms', 'agent.dispatch.wait_ms', 'agent.startup.queue_wait_ms', 'agent.startup.session_ms'].includes(a));
+    const realEmits = ATTR_SPECS.map((s) => s.attr).filter((a) => !['agent.tool.queued_ms', 'agent.dispatch.wait_ms'].includes(a));   // queue_wait_ms / session_ms: stamped on dispatched children since R10 M2, so the real server carries them
     for (const a of realEmits) { expect(r[a].seen, `${a} exercised by the real server`).toBeGreaterThan(0); expect(r[a].mismatches, a).toEqual([]); }
     expect(r['agent.startup.mcp_connect_ms.<server>'].seen).toBeGreaterThan(0); expect(r['agent.startup.mcp_connect_ms.<server>'].mismatches).toEqual([]);
     // an attribute a raw record does not carry is null in the bundle (never 0); one it carries is equal (queue_wait_ms / session_ms appear when the product stamps them, wait_ms on `result` waits)
@@ -69,6 +69,8 @@ describe('R10 M1: wall attribution on a fresh real-server mock-provider run', ()
       const child = String(d['agent.dispatch.child_task_ids']); const l = rows.find((q) => q.includes(` | child ${child.slice(0, 8)} | `)) as string;
       expect(kv(l, 'child_prestart_ms'), child).toBe(String(expectedPrestart(lines, d, child)));
       expect(kv(l, 'parent_blocked_ms')).toBe(String(d['agent.dispatch.parent_blocked_ms']));
+      const su = lines.find((q) => q.event === 'agent.task.startup.finish' && q['agent.task_id'] === child) as Raw; const pre = expectedPrestart(lines, d, child);
+      expect(l).toContain(`child_prestart_ms=${pre} (queue_wait_ms=${su['agent.startup.queue_wait_ms']} + session_ms=${su['agent.startup.session_ms']} + remainder ${pre - (su['agent.startup.queue_wait_ms'] as number) - (su['agent.startup.session_ms'] as number)})`);
     }
   });
 

@@ -15,8 +15,9 @@ import {
  * properly implementing logging with the tracing module"). Unit lane: pure functions + in-process CLI over committed raw tracing-plugin output:
  *   - golden/r10/r10-m1-dryrun-C1.trace.jsonl   REAL: the tracing plugin's output of a mock-provider run through the real built server (drive.mjs --dry-run --round R10), filtered to the span records the reader uses
  *   - golden/r10/r10-m1-synthetic-C1.trace.jsonl SYNTHETIC (hand-built, record shape identical to the sink's): one sync and one background dispatch in ONE parent turn at clearly different start times,
- *                                               a `result` wait, barrier waits with queued_ms, startup queue_wait_ms/session_ms. The real server run emits none of queued_ms / wait_ms / queue_wait_ms /
- *                                               session_ms / a background dispatch, so those attributes are proven here from raw records and nowhere else.
+ *                                               a `result` wait, barrier waits with queued_ms, startup queue_wait_ms/session_ms. The committed dry-run golden was captured BEFORE R10 M2 (no queue_wait_ms /
+ *                                               session_ms on its children) and a mock-provider run emits no queued_ms, wait_ms or background dispatch, so those are proven here from raw records;
+ *                                               queue_wait_ms / session_ms are additionally proven from a FRESH real-server run in the e2e file.
  *   - golden/r10/m1-baseline/*.txt              the output of every pre-existing `analyze` section on the committed r9 goldens, captured BEFORE the M1 change (AC6 byte-identity)
  * The real-server end-to-end half (AC1/AC2/AC7 on a freshly produced trace, AC6 exit codes) is r10-m1-wall.e2e.test.ts.
  */
@@ -251,6 +252,43 @@ describe('R10 M1 AC7: arm A has no trace; the analysis never invents numbers for
     const out = AN.formatWall(empty);
     expect(out).toContain('no tracing-plugin output was captured'); expect(out).not.toContain('native arm');
     expect(await wallOf(synthetic)).toEqual(expect.arrayContaining([expect.stringContaining('tools_ready_ms=800')]));
+  });
+});
+
+describe('R10 M1 AC2: a tasks_batch dispatch (several children of ONE dispatching call)', () => {
+  const D1 = 'd1111111-1111-4111-8111-000000000004'; const D2 = 'd2222222-2222-4222-8222-000000000005';
+  const at = (ms: number) => `2026-10-13T10:00:0${Math.floor(ms / 1000)}.${String(ms % 1000).padStart(3, '0')}Z`;
+  const base: Raw = { level: 'info', service: 'agent-mcp', role: 'live-service', 'agent.session_id': 's', 'agent.root_task_id': P, 'agent.recursion_depth': 0 };
+  const batch: Raw[] = [
+    { ...base, ts: at(4000), event: 'agent.tool_call.start', 'agent.task_id': P, 'agent.name': 'r2-parent-C1', 'agent.tool.name': 'agent-mcp__tasks_batch', 'agent.tool.call_id': 'toolu_T', 'agent.tool.concurrency_class': 'unordered' },
+    { ...base, ts: at(4510), event: 'agent.tool_call.finish', 'agent.task_id': P, 'agent.name': 'r2-parent-C1', 'agent.tool.name': 'agent-mcp__tasks_batch', 'agent.tool.call_id': 'toolu_T', 'agent.tool.concurrency_class': 'unordered', 'agent.tool.is_error': false, duration_ms: 510 },
+    ...[[D1, 4020, 'queue_wait_ms'], [D2, 4055, 'queue_wait_ms']].flatMap(([id, t]) => [
+      { ...base, ts: at(t as number), event: 'agent.task.start', 'agent.task_id': id as string, 'agent.name': 'worker', 'agent.recursion_depth': 1, 'agent.parent_task_id': P },
+      { ...base, ts: at((t as number) + 300), event: 'agent.task.startup.finish', 'agent.task_id': id as string, 'agent.name': 'worker', 'agent.recursion_depth': 1, 'agent.parent_task_id': P, 'agent.startup.tools_ready_ms': 300, 'agent.startup.queue_wait_ms': id === D1 ? 4 : 30, 'agent.startup.session_ms': id === D1 ? 6 : 12, duration_ms: 0 },
+      { ...base, ts: at((t as number) + 400), event: 'agent.task.finish', 'agent.task_id': id as string, 'agent.name': 'worker', 'agent.recursion_depth': 1, 'agent.parent_task_id': P, duration_ms: 400, 'agent.outcome': 'completed', 'agent.task.model_ms': 20, 'agent.task.tool_ms': 30, 'agent.task.idle_ms': 350 },
+    ]),
+    { ...base, ts: at(4500), event: 'agent.dispatch.finish', 'agent.task_id': P, 'agent.name': 'r2-parent-C1', 'agent.dispatch.mode': 'sync', 'agent.dispatch.kind': 'tasks_batch', 'agent.dispatch.children': 2, 'agent.dispatch.child_task_ids': `${D1},${D2}`, 'agent.dispatch.parent_blocked_ms': 500, 'agent.dispatch.call_id': 'toolu_T' },
+  ];
+  it('R10 M1 AC2: every child of a tasks_batch gets child_prestart_ms from the SAME dispatching call, computed independently (20 and 55), and the split uses its own stamps', async () => {
+    const lines = [...synthetic, ...batch]; const rows = await wallOf(lines);
+    const d = batch.find((l) => l.event === 'agent.dispatch.finish') as Raw;
+    expect(expectedPrestart(lines, d, D1)).toBe(20); expect(expectedPrestart(lines, d, D2)).toBe(55);
+    const l1 = dispatchLine(rows, P, D1); const l2 = dispatchLine(rows, P, D2);
+    expect(kv(l1, 'child_prestart_ms')).toBe('20'); expect(kv(l2, 'child_prestart_ms')).toBe('55');
+    expect(l1).toContain('child_prestart_ms=20 (queue_wait_ms=4 + session_ms=6 + remainder 10)'); expect(l2).toContain('child_prestart_ms=55 (queue_wait_ms=30 + session_ms=12 + remainder 13)');
+    expect(l1).toContain(' | tasks_batch | sync | children=2 | '); expect(l2).toContain(' | tasks_batch | sync | children=2 | ');
+  });
+
+  it('R10 M1 AC3: a tasks_batch child with no task record is unmeasurable while its sibling is still measured', async () => {
+    const lines = [...synthetic, ...batch].filter((l) => !(l['agent.task_id'] === D2 && String(l.event).startsWith('agent.task.')));
+    const rows = await wallOf(lines);
+    expect(kv(dispatchLine(rows, P, D1), 'child_prestart_ms')).toBe('20');
+    expect(dispatchLine(rows, P, D2)).toMatch(/child_prestart_ms=unmeasurable \(child task d2222222 has no agent\.task record/);
+  });
+
+  it('R10 M1 AC1: the comma-joined child_task_ids become an array of ids in the bundle', async () => {
+    const b = await bundleOf([...synthetic, ...batch]);
+    expect(b.trace.dispatches.find((x: { kind: string }) => x.kind === 'tasks_batch').childTaskIds).toEqual([D1, D2]);
   });
 });
 

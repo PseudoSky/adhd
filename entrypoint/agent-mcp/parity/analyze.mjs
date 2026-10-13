@@ -285,7 +285,9 @@ export function formatWall(b) {
   L2.push('', 'dispatch | parent task | kind | mode | children | parent_blocked_ms | wait_ms | call_id | child | child_prestart_ms (child agent.task start - parent agent.tool_call start with id = call_id)');
   const dr = wallDispatchRows(b);
   for (const { d, child, prestart } of dr) {
-    const pre = d.kind === 'result' ? 'n/a (a result wait: no child started)' : prestart.ms != null ? String(prestart.ms) + (prestart.basis?.includes('end-minus-duration') ? ' (a start time derived as end minus duration)' : '') : `unmeasurable (${prestart.why})`;
+    const stamps = child ? (b.trace.tasks ?? []).find((t) => t.task === child)?.startup : null;   // the product's own queue_wait_ms / session_ms (R10 M2) split the measured pre-start span when BOTH were recorded
+    const split = prestart?.ms != null && fin(stamps?.queueWaitMs) && fin(stamps?.sessionMs) ? ` (queue_wait_ms=${stamps.queueWaitMs} + session_ms=${stamps.sessionMs} + remainder ${prestart.ms - stamps.queueWaitMs - stamps.sessionMs})` : '';
+    const pre = d.kind === 'result' ? 'n/a (a result wait: no child started)' : prestart.ms != null ? String(prestart.ms) + split + (prestart.basis?.includes('end-minus-duration') ? ' (a start time derived as end minus duration)' : '') : `unmeasurable (${prestart.why})`;
     L2.push(`${short(d.task)} | ${d.kind ?? '-'} | ${d.mode ?? '-'} | children=${d.children ?? 'n/a'} | parent_blocked_ms=${msOr(d.parentBlockedMs, 'not recorded')} | wait_ms=${msOr(d.waitMs, 'not recorded')} | call_id=${d.callId ?? 'n/a (absent)'} | child ${child ? short(child) : '-'} | child_prestart_ms=${pre}`);
   }
   if (!dr.length) L2.push('no agent.dispatch record in this trace');
