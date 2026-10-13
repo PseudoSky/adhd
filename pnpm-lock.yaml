@@ -764,6 +764,8 @@ importers:
         specifier: ^1.10.2
         version: 1.10.3
 
+  entrypoint/policy: {}
+
   packages/agent/agent-base-types: {}
 
   packages/agent/agent-core-env:
@@ -1491,6 +1493,15 @@ importers:
         specifier: ^0.3.4
         version: link:../apigen-core-client
 
+  packages/apigen/apigen-plugin-policy:
+    dependencies:
+      '@adhd/apigen-base-errors':
+        specifier: ^0.2.3
+        version: link:../apigen-base-errors
+      '@adhd/apigen-engine-runtime':
+        specifier: ^0.3.3
+        version: link:../apigen-engine-runtime
+
   packages/apigen/apigen-plugin-py-flask:
     dependencies:
       '@adhd/apigen-core-client':
@@ -1657,6 +1668,24 @@ importers:
       '@adhd/environment-builder':
         specifier: ^0.1.7
         version: link:../environment-builder
+
+  packages/policy/policy-core-client:
+    dependencies:
+      '@adhd/apigen-base-errors':
+        specifier: ^0.2.3
+        version: link:../../apigen/apigen-base-errors
+      '@adhd/data-query-engine':
+        specifier: ^2.3.10
+        version: link:../../data/data-query-engine
+      '@adhd/environment':
+        specifier: ^0.1.8
+        version: link:../../environment/environment-core-node
+      '@adhd/environment-base-spec':
+        specifier: ^0.1.4
+        version: link:../../environment/environment-base-spec
+      yaml:
+        specifier: ^1.10.2
+        version: 1.10.3
 
   packages/ui-react/ui-react-base-hooks:
     dependencies:
