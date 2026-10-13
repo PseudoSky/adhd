@@ -1040,6 +1040,26 @@
       ],
       "context": "contexts/search-cutover.md",
       "notes": "typescript-pro sonnet/high; three-package tarball proof and scratch agent-browser removal"
+    },
+    "consumer-relink": {
+      "kind": "work",
+      "phase": "release",
+      "depends_on": [
+        "merge-readiness"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py consumer-relink",
+      "artifacts": [
+        "docs/plan/stealth-browser/evidence/relink/",
+        "/Users/nix/.claude/agents/",
+        "/Users/nix/.config/opencode/",
+        "/Users/nix/dev/ai/sox-ecosystem/extensions/agents/",
+        "/Users/nix/dev/ai/sox-ecosystem/libs/host-registry/",
+        "/Users/nix/dev/ai/sox-ecosystem/tools/test-c1b17653-researcher-single-definition.mjs",
+        "/Users/nix/dev/ai/sox-ecosystem/docs/guidelines/authoring.md",
+        "/Users/nix/dev/ai/sox-ecosystem/docs/spec/cross-platform-install-rendering.md"
+      ],
+      "context": "contexts/consumer-relink.md",
+      "notes": "dispatcher-gated after publication in order tripwire, stealth-core-browser, stealth-search"
     }
   },
   "authored_with": {
