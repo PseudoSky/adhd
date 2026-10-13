@@ -249,10 +249,10 @@
       "end_ref": "e47323299f075211ebb6ba7b4e125fe5be6d61dd"
     },
     "chrome-lifecycle": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-10-13T01:29:18.133Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "8af7cff89daf9a09418e18d22ab25605fada2955",
       "end_ref": null
     },
     "tests-use-cases": {
