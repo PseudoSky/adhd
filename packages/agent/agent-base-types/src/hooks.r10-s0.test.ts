@@ -75,15 +75,16 @@ describe('R10 S0 AC3: task:startup, dispatch:completed and background:delivered 
       executionContext: ExecutionContext;
       mcpConnectMs: Record<string, number>;
       toolsReadyMs: number;
-      queueWaitMs: number;
-      sessionMs: number;
+      queueWaitMs?: number;
+      sessionMs?: number;
       toolCount: number;
     }>();
     expectTypeOf<DispatchCompletedPayload>().toEqualTypeOf<{
       executionContext: ExecutionContext;
-      kind: 'task' | 'tasks_batch' | 'agent_task';
+      kind: 'task' | 'tasks_batch' | 'agent_task' | 'result';
       mode: 'sync' | 'background';
       childTaskIds: string[];
+      toolCallId?: string;
       parentBlockedMs: number;
       waitMs?: number;
     }>();
@@ -106,9 +107,13 @@ describe('R10 S0 AC3: task:startup, dispatch:completed and background:delivered 
     const s: TaskStartupPayload = { executionContext: ctx, mcpConnectMs: { fs: 12 }, toolsReadyMs: 30, queueWaitMs: 1, sessionMs: 2, toolCount: 7 };
     const d: DispatchCompletedPayload = { executionContext: ctx, kind: 'task', mode: 'background', childTaskIds: ['t1'], parentBlockedMs: 0 };
     const b: BackgroundDeliveredPayload = { executionContext: ctx, childTaskId: 't1', latencyMs: 40, consumedVia: 'delivery' };
+    // R10 S5b AC2: the engine measures neither figure, so a payload without them is a valid TaskStartupPayload (no cast).
+    const unmeasured: TaskStartupPayload = { executionContext: ctx, mcpConnectMs: {}, toolsReadyMs: 30, toolCount: 7 };
+    await reg.emit('task:startup', unmeasured);
     await reg.emit('task:startup', s);
     await reg.emit('dispatch:completed', d);
     await reg.emit('background:delivered', b);
+    expect(startup).toHaveBeenCalledWith(unmeasured);
     expect(startup).toHaveBeenCalledWith(s);
     expect(dispatched).toHaveBeenCalledWith(d);
     expect(delivered).toHaveBeenCalledWith(b);

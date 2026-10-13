@@ -49,7 +49,7 @@ One span (`<name>.start` + `<name>.finish` | `<name>.error`, with `duration_ms`)
 | `agent.hitl.suspend`         | instantaneous, when a task parks awaiting a human      |
 | `agent.hitl.resume`          | instantaneous, carries `agent.hitl.wait_ms`            |
 | `agent.task.startup`         | instantaneous, `task:startup`: where a task's start-up time went |
-| `agent.dispatch`             | instantaneous, `dispatch:completed`: a `task` / `tasks_batch` / agent-task call finished handing work to child tasks |
+| `agent.dispatch`             | instantaneous, `dispatch:completed`: a `task` / `tasks_batch` / agent-task call finished handing work to child tasks, or a `result` call finished waiting on one |
 | `agent.background.delivered` | instantaneous, `background:delivered`: a background child's result reached its parent (the mapping ships; no engine emitter yet) |
 
 All spans of a delegation tree share one `trace_id`; identity is carried in `agent.session_id`,
@@ -87,20 +87,20 @@ analysis: group by `agent.root_task_id` / `agent.task_id` / `agent.parent_task_i
 | | `agent.tool.result_bytes` | model-visible bytes of the result |
 | | `agent.tool.note_appended` | the host appended a guidance note to the result |
 | `agent.model_call.finish` | `agent.model_call.ttfb_ms` | provider request start to first streamed byte (only where the provider measures it) |
-| | `agent.model_call.thinking_config` | `none` / `adaptive` / `disabled` |
-| | `agent.model_call.thinking_blocks` | thinking blocks in the response (a count, never their text) |
-| | `agent.model_call.tool_result_bytes_in` | bytes of tool-result content sent to the model in this request |
-| | `agent.model_call.turn_index` | zero-based model call within its task |
+| | `agent.model_call.thinking_config` | Anthropic only: `none` (no `thinking` field sent) / `adaptive` / `disabled`; absent for OpenAI-compatible and claudecli calls |
+| | `agent.model_call.thinking_blocks` | Anthropic only: `thinking` + `redacted_thinking` blocks in the response (a count, never their text; `0` is a real zero there); absent for OpenAI-compatible and claudecli calls |
+| | `agent.model_call.tool_result_bytes_in` | Anthropic and OpenAI-compatible: UTF-8 bytes of the model-visible tool-result text in this request's history (the adapter's own wire conversion); absent for claudecli |
+| | `agent.model_call.turn_index` | zero-based model call within its task (equals `agent.tool.turn_index` of the tool calls that response requested) |
 | `agent.task.startup.finish` | `agent.startup.mcp_connect_ms.<server>` | one attribute per MCP server key: connect + tool listing ms |
 | | `agent.startup.tools_ready_ms` | task start until the full tool list was ready |
-| | `agent.startup.queue_wait_ms`, `agent.startup.session_ms` | enqueue to run start; session resolution (present only when the engine measured them) |
+| | `agent.startup.queue_wait_ms`, `agent.startup.session_ms` | enqueue to run start; session resolution. Present only when the emitter measured them; the engine does not yet (it receives neither timestamp), so today they are absent, never a guessed `0` |
 | | `agent.startup.tools` | tools advertised to the model |
 | `agent.dispatch.finish` | `agent.dispatch.mode` | `sync` (parent waited for the children) / `background` |
-| | `agent.dispatch.kind` | `task` / `tasks_batch` / `agent_task` |
+| | `agent.dispatch.kind` | `task` / `tasks_batch` / `agent_task`; `result` = a `result` tool call that waited on an existing child (records `wait_ms`, starts no child, not counted as a dispatch) |
 | | `agent.dispatch.children`, `agent.dispatch.child_task_ids` | count and comma-joined ids; the children's records carry the same ids in `agent.task_id` |
 | | `agent.dispatch.parent_blocked_ms` | sync: wall time the parent spent inside the tool call; background: 0 |
 | | `agent.dispatch.wait_ms` | ms spent waiting for children, when the emitter reports it |
-| | `agent.dispatch.call_id` | the dispatching `agent.tool.call_id`, stamped only when exactly one dispatch tool call is open on the parent (concurrent dispatch calls are ambiguous: join on `child_task_ids`) |
+| | `agent.dispatch.call_id` | the dispatching `agent.tool.call_id`. The engine names it exactly (`toolCallId` on the hook), so concurrent dispatch calls on one parent each carry their own. Without a `toolCallId` (a direct REST call) it is inferred only when exactly one matching tool call is open, else absent |
 | `agent.background.delivered.finish` | `agent.background.child_task_id`, `.latency_ms`, `.consumed_via` | child terminal to delivered; `delivery` / `result` |
 | `agent.task.finish` | `agent.task.model_ms` | time inside the task's own model calls |
 | | `agent.task.tool_ms` | wall time with at least one tool call in flight (parallel calls counted once); a sync dispatch counts as tool time |
@@ -120,7 +120,8 @@ no first-byte probe and no cache fields, so those attributes are absent from its
 The provider-independent attributes (`stop_reason`, token counts, `compute_ms`, every tool-call signal,
 startup, dispatch, the `agent.task` wall-time split) are identical across providers. Proven per
 provider family (OpenAI Chat Completions and Anthropic Messages streaming, each through its real
-adapter over loopback HTTP) in `src/lib/r10-dispatch-trace.test.ts`.
+adapter over loopback HTTP) in `src/lib/r10-dispatch-trace.test.ts` and, for the engine-populated
+model-call signals and the exact dispatch `call_id`, `src/lib/r10-s5b-engine-trace.test.ts`.
 
 Content rule: no tool arguments, results, prompts or thinking text reach any attribute.
 `agent.tool.args_sha256` stays the only argument identity (the verbatim `agent.tool.args` exists only

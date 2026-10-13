@@ -8,13 +8,22 @@
  */
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { BackgroundQueue, DagEngine, PolicyEngine, taskTool, tasksBatch } from '@adhd/agent-engine-orchestrator';
+import { BackgroundQueue, DagEngine, PolicyEngine, resultToolWait, taskTool, tasksBatch } from '@adhd/agent-engine-orchestrator';
 import type { AgentStore, EngineConfig, LLMProvider, McpClientRegistry, ProviderChatResponse, TaskDeps } from '@adhd/agent-engine-orchestrator';
 import type { AgentDefinition, ExecutionContext } from '@adhd/agent-base-types';
 import { Orchestrator, engineConfig, makeCtx, makeEnv, runInput } from './harness.js';
 import type { Env } from './harness.js';
 
 const silent = { info: () => undefined, warn: () => undefined, error: () => undefined, debug: () => undefined };
+
+/** The JSON request body the adapter sent (`{}` when it was empty or not JSON). */
+function parseBody(chunks: Buffer[]): Record<string, unknown> {
+  try {
+    return JSON.parse(Buffer.concat(chunks).toString('utf8')) as Record<string, unknown>;
+  } catch {
+    return {};
+  }
+}
 
 /** What the loopback chat-completions server answers with for the n-th request (1-based). */
 export interface FakeReply {
@@ -34,15 +43,20 @@ export interface FakeOpenAI {
   baseURL: string;
   /** Number of chat-completion requests served. */
   requests(): number;
+  /** The parsed JSON body of every request served, in order (what the adapter actually put on the wire). */
+  bodies(): Array<Record<string, unknown>>;
   close(): Promise<void>;
 }
 
 /** Start the loopback OpenAI stand-in; `reply(n)` scripts the answer to the n-th request. */
 export async function startFakeOpenAI(reply: (n: number) => FakeReply): Promise<FakeOpenAI> {
   let served = 0;
+  const bodies: Array<Record<string, unknown>> = [];
   const server = createServer((req, res) => {
-    req.resume();
+    const chunks: Buffer[] = [];
+    req.on('data', (c: Buffer) => chunks.push(c));
     req.on('end', () => {
+      bodies.push(parseBody(chunks));
       served++;
       const { content, reasoning, signature, toolCall } = reply(served);
       res.setHeader('content-type', 'application/json');
@@ -81,6 +95,7 @@ export async function startFakeOpenAI(reply: (n: number) => FakeReply): Promise<
   return {
     baseURL: `http://127.0.0.1:${port}/v1`,
     requests: () => served,
+    bodies: () => bodies,
     close: () => new Promise<void>((resolve) => server.close(() => resolve())),
   };
 }
@@ -92,9 +107,12 @@ export async function startFakeOpenAI(reply: (n: number) => FakeReply): Promise<
 export async function startFakeAnthropic(reply: (n: number) => FakeReply): Promise<FakeOpenAI> {
   let served = 0;
   const frame = (event: string, data: unknown): string => `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+  const bodies: Array<Record<string, unknown>> = [];
   const server = createServer((req, res) => {
-    req.resume();
+    const chunks: Buffer[] = [];
+    req.on('data', (c: Buffer) => chunks.push(c));
     req.on('end', () => {
+      bodies.push(parseBody(chunks));
       served++;
       const { content, reasoning, signature, toolCall } = reply(served);
       let out = frame('message_start', {
@@ -132,6 +150,7 @@ export async function startFakeAnthropic(reply: (n: number) => FakeReply): Promi
   return {
     baseURL: `http://127.0.0.1:${port}`,
     requests: () => served,
+    bodies: () => bodies,
     close: () => new Promise<void>((resolve) => server.close(() => resolve())),
   };
 }
@@ -141,12 +160,21 @@ export function startFakeProvider(kind: ProviderKind, reply: (n: number) => Fake
   return kind === 'openai' ? startFakeOpenAI(reply) : startFakeAnthropic(reply);
 }
 
-function workerDefinition(kind: ProviderKind): AgentDefinition {
+/** Optional knobs of the dispatched worker. */
+export interface WorkerOptions {
+  /** The Anthropic `thinking` option the worker agent is configured with (ignored for the OpenAI family). */
+  thinking?: { type: 'adaptive'; display?: 'summarized' | 'omitted' } | { type: 'disabled' };
+}
+
+function workerDefinition(kind: ProviderKind, worker: WorkerOptions = {}): AgentDefinition {
   const now = new Date().toISOString();
   return {
     name: 'worker-agent',
     version: 1,
-    provider: kind === 'openai' ? { type: 'openai', model: 'gpt-4o-mini' } : { type: 'anthropic', model: 'claude-haiku-5-5' },
+    provider:
+      kind === 'openai'
+        ? { type: 'openai', model: 'gpt-4o-mini' }
+        : { type: 'anthropic', model: 'claude-haiku-5-5', ...(worker.thinking !== undefined ? { thinking: worker.thinking } : {}) },
     systemPrompt: 'You are a worker.',
     mcpServers: {},
     permissions: {},
@@ -156,8 +184,8 @@ function workerDefinition(kind: ProviderKind): AgentDefinition {
 }
 
 /** The real dispatch dependencies over `env`'s stores and hooks, with workers served by `baseURL`. */
-export function makeTaskDeps(env: Env, baseURL: string, kind: ProviderKind = 'openai'): TaskDeps {
-  const definition = workerDefinition(kind);
+export function makeTaskDeps(env: Env, baseURL: string, kind: ProviderKind = 'openai', worker: WorkerOptions = {}): TaskDeps {
+  const definition = workerDefinition(kind, worker);
   const agentStore: AgentStore = {
     create: () => definition,
     read: () => definition,
@@ -237,12 +265,20 @@ export function parentProvider(tool: string, args: Record<string, unknown>): LLM
   };
 }
 
+/** The in-process handler's routing for the three dispatch-class tools (`result` wired with hooks + the waiting parent, as the host does). */
+async function invokeDispatchTool(tool: string, args: never, deps: TaskDeps, ctx: ExecutionContext): Promise<unknown> {
+  if (tool === 'tasks_batch') return tasksBatch(args, deps, ctx);
+  if (tool === 'result') return resultToolWait(args, { taskStore: deps.taskStore, db: deps.db, hooks: deps.hooks, callerContext: ctx });
+  return taskTool(args, deps, ctx);
+}
+
 /** A registry whose in-process `agent-mcp` server routes `task` / `tasks_batch` to the REAL dispatch functions. */
 function dispatchRegistry(deps: TaskDeps, ctx: ExecutionContext, toolResults: unknown[], toolErrors: unknown[]): McpClientRegistry {
   return {
     listAllTools: async () => [
       { name: 'agent-mcp__task', description: 'dispatch', inputSchema: { type: 'object', properties: {} } },
       { name: 'agent-mcp__tasks_batch', description: 'dispatch many', inputSchema: { type: 'object', properties: {} } },
+      { name: 'agent-mcp__result', description: 'read or wait for a task result', inputSchema: { type: 'object', properties: {} } },
     ],
     resolveToolName: (name: string) => {
       const [server, tool] = name.split('__');
@@ -252,7 +288,7 @@ function dispatchRegistry(deps: TaskDeps, ctx: ExecutionContext, toolResults: un
     getClient: async () => ({
       callTool: async (tool: string, args: never) => {
         try {
-          const out = tool === 'tasks_batch' ? await tasksBatch(args, deps, ctx) : await taskTool(args, deps, ctx);
+          const out = await invokeDispatchTool(tool, args, deps, ctx);
           toolResults.push(out);
           return out;
         } catch (err) {
@@ -293,6 +329,57 @@ export async function runParentDispatch(
   const toolResults: unknown[] = [];
   const toolErrors: unknown[] = [];
   const input = runInput(env, parent, { gate: () => 'allow', provider: parentProvider(tool, args) });
+  const { result } = await new Orchestrator().run({ ...input, registry: dispatchRegistry(deps, parent, toolResults, toolErrors) });
+  return { env, deps, parent, result, toolResults, toolErrors };
+}
+
+/** One tool call of a scripted parent turn. */
+export interface ParentCall {
+  /** The model's tool call id (what `pre:tool_call` reports as `callId`). */
+  id: string;
+  tool: 'task' | 'tasks_batch' | 'result';
+  /** The call's arguments, or a function of the run so far (a later turn can name a child an earlier one created). */
+  args: Record<string, unknown> | ((run: { env: Env; parent: ExecutionContext }) => Record<string, unknown>);
+}
+
+/** A parent model that requests `turns[i]` (all calls of the turn together) on its i-th call, then completes. */
+export function scriptedParentProvider(turns: ParentCall[][], run: { env: Env; parent: ExecutionContext }): LLMProvider {
+  let turn = 0;
+  return {
+    chat: async (): Promise<ProviderChatResponse> => {
+      const calls = turns[turn];
+      turn++;
+      const base = { id: `p${turn}`, sessionId: 's', createdAt: new Date().toISOString() };
+      return (
+        calls !== undefined
+          ? {
+              message: { ...base, role: 'assistant', content: '', toolCalls: calls.map((c) => ({ id: c.id, server: 'agent-mcp', tool: c.tool, arguments: typeof c.args === 'function' ? c.args(run) : c.args })) },
+              stopReason: 'tool_calls',
+              usage: { inputTokens: 11, outputTokens: 3 },
+            }
+          : { message: { ...base, role: 'assistant', content: 'parent finished' }, stopReason: 'completed', usage: { inputTokens: 20, outputTokens: 5 } }
+      ) as ProviderChatResponse;
+    },
+  };
+}
+
+/**
+ * Like {@link runParentDispatch}, but the parent's model follows `turns` (several calls per turn, several turns),
+ * and the worker agent can be configured (`worker`).
+ */
+export async function runParentScript(
+  hooks: Env['hooks'],
+  baseURL: string,
+  turns: ParentCall[][],
+  kind: ProviderKind = 'openai',
+  worker: WorkerOptions = {}
+): Promise<DispatchRun> {
+  const env = makeEnv(hooks, { realSchema: true });
+  const parent = makeCtx(env);
+  const deps = makeTaskDeps(env, baseURL, kind, worker);
+  const toolResults: unknown[] = [];
+  const toolErrors: unknown[] = [];
+  const input = runInput(env, parent, { gate: () => 'allow', provider: scriptedParentProvider(turns, { env, parent }) });
   const { result } = await new Orchestrator().run({ ...input, registry: dispatchRegistry(deps, parent, toolResults, toolErrors) });
   return { env, deps, parent, result, toolResults, toolErrors };
 }

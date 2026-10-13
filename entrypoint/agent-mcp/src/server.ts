@@ -614,6 +614,9 @@ export function createServer(deps: ServerDeps): Server {
         return resultToolWait(resultInputSchema.parse(args), {
           taskStore: deps.taskStore,
           db: deps.db,
+          // R10 S5b: a `result` wait emits a dispatch-class event on the waiting parent.
+          hooks: deps.hooks,
+          callerContext: ctx,
         });
       case 'usage_query':
         return runUsageQuery(deps.db, taskUsageInputSchema.parse(args ?? {}));

@@ -30,6 +30,7 @@ import type {
 } from '../validation/index.js';
 import { ToolError } from '../validation/errors.js';
 import { RESULT_MAX_WAIT_MS } from '../validation/task.js';
+import { currentToolCallId } from '../engine/dispatch-call-scope.js';
 import { generateId } from '../utils/ids.js';
 import { nowIso } from '../utils/timestamps.js';
 import type { IHookRegistry } from '@adhd/agent-base-types';
@@ -414,21 +415,28 @@ async function emitDispatchCompleted(
   deps: Pick<TaskDeps, 'hooks'>,
   callerContext: ExecutionContext | undefined,
   dispatch: {
-    kind: 'task' | 'tasks_batch' | 'agent_task';
+    kind: 'task' | 'tasks_batch' | 'agent_task' | 'result';
     mode: 'sync' | 'background';
     childTaskIds: string[];
     /** `performance.now()` taken when the tool call began. */
     startedAt: number;
+    /** Milliseconds spent waiting for the children, when the call waited (a `result` wait). */
+    waitMs?: number;
   }
 ): Promise<void> {
   if (callerContext === undefined) return;
   try {
+    // R10 S5b: name the parent's tool call exactly (the engine scopes each tool invocation to its call id),
+    // so concurrent dispatch calls on one parent are told apart without a guess. Absent outside an engine call.
+    const toolCallId = currentToolCallId(callerContext.taskId);
     await deps.hooks.emit('dispatch:completed', {
       executionContext: callerContext,
       kind: dispatch.kind,
       mode: dispatch.mode,
       childTaskIds: dispatch.childTaskIds,
+      ...(toolCallId !== undefined ? { toolCallId } : {}),
       parentBlockedMs: dispatch.mode === 'sync' ? performance.now() - dispatch.startedAt : 0,
+      ...(dispatch.waitMs !== undefined ? { waitMs: dispatch.waitMs } : {}),
     });
   } catch {
     /* observational: never fail or alter a dispatch */
@@ -1197,12 +1205,17 @@ const RESULT_WAIT_TERMINAL = new Set(['completed', 'failed', 'cancelled', 'await
  */
 export async function resultToolWait(
   input: ResultInput,
-  deps: Pick<TaskDeps, 'taskStore' | 'db'>,
+  deps: Pick<TaskDeps, 'taskStore' | 'db'> & {
+    /** With `callerContext`: a wait emits `dispatch:completed` (`kind: 'result'`) on the waiting parent. */
+    hooks?: Pick<TaskDeps, 'hooks'>['hooks'];
+    callerContext?: ExecutionContext;
+  },
   sleep: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms)),
   now: () => number = Date.now
 ): Promise<(Task | ProjectedTask) & { usage?: TaskUsageReport }> {
   const budget = Math.min(input.wait_ms ?? 0, RESULT_MAX_WAIT_MS);
   if (budget > 0) {
+    const startedAt = performance.now();
     const deadline = now() + budget;
     for (;;) {
       const status = deps.taskStore.read(input.task_id).status;
@@ -1210,6 +1223,16 @@ export async function resultToolWait(
       const remaining = deadline - now();
       if (remaining <= 0) break;
       await sleep(Math.min(RESULT_WAIT_POLL_MS, remaining));
+    }
+    // R10 S5b: a wait is time the parent spent blocked on a child; record it (a wait-free read is not a wait).
+    if (deps.hooks !== undefined) {
+      await emitDispatchCompleted({ hooks: deps.hooks }, deps.callerContext, {
+        kind: 'result',
+        mode: 'sync',
+        childTaskIds: [input.task_id],
+        startedAt,
+        waitMs: performance.now() - startedAt,
+      });
     }
   }
   return resultTool(input, deps);

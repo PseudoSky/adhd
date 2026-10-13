@@ -282,19 +282,35 @@ export interface TaskStartupPayload {
   mcpConnectMs: Record<string, number>;
   /** Milliseconds from task start until the full tool list was ready. */
   toolsReadyMs: number;
-  /** Milliseconds the task waited in the queue before starting. */
-  queueWaitMs: number;
-  /** Milliseconds spent resolving or creating the session. */
-  sessionMs: number;
+  /**
+   * Milliseconds the task waited in the queue before starting. Optional: present only when the emitter
+   * measured it (enqueue to dequeue); absent otherwise, never a guess and never 0.
+   */
+  queueWaitMs?: number;
+  /**
+   * Milliseconds spent resolving or creating the session. Optional: present only when the emitter measured
+   * it; absent otherwise, never a guess and never 0.
+   */
+  sessionMs?: number;
   /** Number of tools advertised to the model. */
   toolCount: number;
 }
 /** A dispatching tool (`task`, `tasks_batch`, an agent task) finished handing work to child tasks. */
 export interface DispatchCompletedPayload {
   executionContext: ExecutionContext;
-  kind: 'task' | 'tasks_batch' | 'agent_task';
+  /**
+   * `task` / `tasks_batch` / `agent_task`: the call started child tasks. `result`: a `result` tool call that
+   * waited (`wait_ms`) for one existing child; it starts nothing, so it is not a dispatch in the counters.
+   */
+  kind: 'task' | 'tasks_batch' | 'agent_task' | 'result';
   mode: 'sync' | 'background';
   childTaskIds: string[];
+  /**
+   * The id of the parent's tool call (the model's `tool_use` / `tool_calls[].id`, or `bridge-N` for a claudecli
+   * bridged call) that made this dispatch, so concurrent dispatch calls on one parent are told apart exactly.
+   * Absent when the dispatch was not made through an engine tool call (e.g. a direct REST call).
+   */
+  toolCallId?: string;
   /** Milliseconds the parent was blocked by this dispatch (about 0 for `background`). */
   parentBlockedMs: number;
   /** Milliseconds spent waiting for the children, when the dispatch waited. */

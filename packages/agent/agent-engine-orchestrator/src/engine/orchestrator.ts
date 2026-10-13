@@ -7,6 +7,7 @@ import type {
   IEnforcementError,
   IProviderEcho,
   IToolWarning,
+  PostModelResponsePayload,
   PostToolCallPayload,
   PreToolCallPayload,
   ServerResultPersistPayload,
@@ -37,6 +38,8 @@ import { selectionOf, wireModelOf } from '../providers/resolve-selection.js';
 import { readPartialUsage, type IProviderPartialUsage, type ProviderTokenUsage } from '../providers/partial-usage.js';
 import { buildModelResponsePayload, sourceFromResponse } from './model-response-payload.js';
 import { computeOverheadMs } from '../providers/call-timing.js';
+import { runInToolCallScope } from './dispatch-call-scope.js';
+import { thinkingBlocksOf, thinkingConfigOf, toolResultBytesInOf } from './model-call-signals.js';
 import { parseShellExitStatus } from './shell-exit-status.js';
 import { partitionEcho } from '../providers/anthropic-echo.js';
 import { isPauseTurnCapError } from '../providers/anthropic-pause.js';
@@ -1263,15 +1266,17 @@ export class Orchestrator {
 
       // R10 P10: where this task's start-up time went. Observational: a failing handler never fails
       // the task. `queueWaitMs` and `sessionMs` are NOT in this payload: the engine receives neither
-      // the enqueue time nor the session-resolution time (both happen before `Orchestrator.run`), and
-      // the field is omitted rather than reported as a guess.
+      // the enqueue time nor the session-resolution time (both happen before `Orchestrator.run`, and
+      // the task row carries only `createdAt`, which for a synchronous or DAG-waiting task is not a queue
+      // wait), so the optional fields are omitted rather than reported as a guess.
       const startupTimings = registry.startupTimings?.();
-      await emitObservational('task:startup', {
+      const startupPayload: TaskStartupPayload = {
         executionContext,
         mcpConnectMs: startupTimings?.connectMs ?? {},
         toolsReadyMs: startupTimings?.toolsReadyMs ?? toolListingMs,
         toolCount: tools.length,
-      } as TaskStartupPayload);
+      };
+      await emitObservational('task:startup', startupPayload);
 
       // Default to 'full' JSON function-schemas — the contract models are trained on, and
       // what published 2.0.1 always sent. Full schemas are STATIC, so they sit in the cached
@@ -1311,6 +1316,8 @@ export class Orchestrator {
       // P6: epoch ms the previous model call ended (undefined before the first call).
       let lastModelCallEndedAt: number | undefined;
       const providerModel = wireModelOf(executionContext);
+      // R10 S5b: the provider family and `thinking` option this task's calls are made with (trace signals).
+      const runSelection = selectionOf(executionContext);
 
       let looping = true;
       // R10: zero-based index of the model call whose response requests a turn's tool calls.
@@ -1456,6 +1463,8 @@ export class Orchestrator {
         }
 
         let providerResponse;
+        // R10 S5b: model-visible tool-result bytes this request carries (set once the request history is final).
+        let toolResultBytesIn: number | undefined;
         // GOV (f9dadeaa): the first fatal governance error a bridged call hit (cap / budget /
         // delegation). The bridge can only hand the CLI an isError result, so the task-level failure
         // the native path throws is re-thrown here once the provider call returns.
@@ -1492,6 +1501,15 @@ export class Orchestrator {
           }
           taskStore.appendEvent({ taskId, type: 'provider:pause_continued', payload: { n } });
         };
+        // R10 S5b: the signals known from the request alone (the call may have failed before any response).
+        const requestSignals = (): Pick<PostModelResponsePayload, 'thinkingConfig' | 'toolResultBytesIn' | 'turnIndex'> => {
+          const thinkingConfig = thinkingConfigOf(runSelection.providerType, runSelection.thinking);
+          return {
+            turnIndex: toolTurnIndex,
+            ...(thinkingConfig !== undefined ? { thinkingConfig } : {}),
+            ...(toolResultBytesIn !== undefined ? { toolResultBytesIn } : {}),
+          };
+        };
         // afa37093: spend of a provider call that produced no usable response (CLI error result,
         // abort, timeout, crash) or whose response is discarded (fatal governance error). Recorded through
         // the SAME hook + MODEL_RESPONSE event a normal turn uses, so task_usage and every grain of
@@ -1518,6 +1536,7 @@ export class Orchestrator {
               responseModel: partial.responseModel,
               computeMs: failedComputeMs,
               ...(callOverheadMs !== undefined ? { overheadMs: callOverheadMs } : {}),
+              ...requestSignals(),
             });
             taskStore.appendEvent({
               taskId,
@@ -1554,6 +1573,7 @@ export class Orchestrator {
                 ? [toolDocSystemMessage, ...baseMessages.slice(1)]
                 : [toolDocSystemMessage, ...baseMessages];
           }
+          toolResultBytesIn = toolResultBytesInOf(runSelection.providerType, messagesToSend);
           // Provider-native web tools (default on, opt out via
           // nativeWebTools:false) — see server-side-tools.ts (backlog 1abd2d84).
           const serverSideTools = serverSideToolsForProvider(
@@ -1679,7 +1699,9 @@ export class Orchestrator {
                 const client = await registry.getClient(target.server);
                 rawResult = await toolLimiter.run(
                   () =>
-                    client.callTool(target.tool, callArguments, composedSignal),
+                    runInToolCallScope(taskId, callId, () =>
+                      client.callTool(target.tool, callArguments, composedSignal)
+                    ),
                   composedSignal
                 );
               } catch (error) {
@@ -1947,6 +1969,8 @@ export class Orchestrator {
         // loop control still keys off assistantMessage.toolCalls / executionContext.
         const reportedToolCallCount =
           providerResponse.reportedToolUses ?? assistantMessage.toolCalls?.length ?? 0;
+        // R10 S5b: count the response's thinking blocks (absent for a provider that cannot produce them).
+        const thinkingBlocks = thinkingBlocksOf(runSelection.providerType, providerResponse.echo);
         await hooks.emit('post:model_response', {
           executionContext,
           stopReason: providerResponse.stopReason,
@@ -1957,6 +1981,8 @@ export class Orchestrator {
           computeMs,
           ...(providerResponse.ttfbMs !== undefined ? { ttfbMs: providerResponse.ttfbMs } : {}),
           ...(callOverheadMs !== undefined ? { overheadMs: callOverheadMs } : {}),
+          ...requestSignals(),
+          ...(thinkingBlocks !== undefined ? { thinkingBlocks } : {}),
         });
         await hooks.emit('message:appended', {
           executionContext,
@@ -2307,10 +2333,10 @@ export class Orchestrator {
                 }
               }
               const client = await registry.getClient(resolved.server);
-              toolResult = await client.callTool(
-                resolved.tool,
-                callArguments,
-                composedSignal
+              // R10 S5b: the id of THIS tool call travels with the invocation so a dispatching tool can
+              // name it on `dispatch:completed` (concurrent calls on one parent share one context).
+              toolResult = await runInToolCallScope(taskId, toolCall.id, () =>
+                client.callTool(resolved.tool, callArguments, composedSignal)
               );
 
               if (

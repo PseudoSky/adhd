@@ -116,7 +116,7 @@ function toOpenAIMessages(messages: Message[]): ChatCompletionMessageParam[] {
  * per line in order, so nothing is dropped and the whole array is never JSON-encoded into a string; a string result
  * is verbatim; anything else is its JSON once.
  */
-function toOpenAIToolContent(result: unknown): string {
+export function toOpenAIToolContent(result: unknown): string {
     const text = mcpContentText(result);
     if (text !== undefined) return text;
     if (isMcpContentArray(result)) {

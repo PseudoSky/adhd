@@ -6,6 +6,7 @@ This was a version bump only for agent-plugin-tracing to align it with other pro
 
 ### 🚀 Features
 
+- **agent-plugin-tracing:** `agent.dispatch.call_id` is taken from the hook's `toolCallId` when the engine supplies it, which is correct under concurrent dispatch calls on one parent; the "exactly one open call" inference stays as the fallback when none is supplied. `dispatch:completed` with `kind: 'result'` (a `result` wait) records `agent.dispatch` with `wait_ms` and is not counted as a sync dispatch. README table updated for the engine-populated model-call signals. (R10 S5b)
 - **agent-plugin-tracing:** re-export the sox-telemetry log-channel API (createLogChannel, createRedactor, identityRedactor, DEFAULT_REDACTION_RULES, BodyCapture, captureBody, withLogContext, currentLogContext + types) (c536ce29 TRC-AC21)
 
 ## 0.0.2 (2026-10-07)

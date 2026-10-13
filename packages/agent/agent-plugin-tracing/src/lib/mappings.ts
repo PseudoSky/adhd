@@ -409,6 +409,9 @@ const hitlResume = defineMapping('hitl:resume', (p, rt) => {
 /** Tool names (after the `<server>__` prefix) that dispatch child tasks. */
 const DISPATCH_TOOLS: ReadonlySet<string> = new Set(['task', 'tasks_batch']);
 
+/** The tool names a `dispatch:completed` of `kind` can have come from (the fallback correlation set). */
+const toolsForKind = (kind: string): ReadonlySet<string> => (kind === 'result' ? new Set(['result']) : DISPATCH_TOOLS);
+
 /** A key segment safe to embed in an attribute name (server names come from configuration). */
 const attrKey = (segment: string): string => segment.replace(/[^A-Za-z0-9_-]/g, '_');
 
@@ -437,14 +440,23 @@ const taskStartup = defineMapping('task:startup', (p, rt) => {
 /**
  * `dispatch:completed`: a point span on the PARENT task (`executionContext` is the dispatching task)
  * carrying how long the parent was blocked and which child tasks it started; the children's own
- * records share `agent.task_id` with `agent.dispatch.child_task_ids`. When exactly one dispatch tool
- * call is open on the parent the span also carries its `agent.tool.call_id`; with concurrent dispatch
- * calls the correlation is ambiguous and the reader joins on child ids instead.
+ * records share `agent.task_id` with `agent.dispatch.child_task_ids`.
+ *
+ * `agent.dispatch.call_id` is the parent's `agent.tool.call_id` of the dispatching tool call. The engine
+ * names it exactly (`toolCallId`), which is correct under concurrent dispatch calls on one parent. When the
+ * emitter did not supply one (a direct REST call has none) the mapping falls back to the old inference: the
+ * id is stamped only when exactly one matching tool call is open on the parent, and left absent when the
+ * correlation would be a guess.
+ *
+ * `kind: 'result'` is a `result` tool call that waited on an existing child: it records the wait, starts no
+ * child, and is not counted as a dispatch.
  */
 const dispatchCompleted = defineMapping('dispatch:completed', (p, rt) => {
-  rt.counters.dispatch(p.mode);
+  if (p.kind !== 'result') rt.counters.dispatch(p.mode);
   const ctx = p.executionContext;
-  const open = [...(rt.tasks.get(ctx.taskId)?.tools.entries() ?? [])].filter(([, t]) => DISPATCH_TOOLS.has(t.tool.split('__').pop() ?? ''));
+  const candidates = toolsForKind(p.kind);
+  const open = [...(rt.tasks.get(ctx.taskId)?.tools.entries() ?? [])].filter(([, t]) => candidates.has(t.tool.split('__').pop() ?? ''));
+  const callId = p.toolCallId ?? (open.length === 1 ? open[0]?.[0] : undefined);
   pointFor(rt, 'agent.dispatch', ctx, {
     'agent.dispatch.mode': p.mode,
     'agent.dispatch.kind': p.kind,
@@ -453,7 +465,7 @@ const dispatchCompleted = defineMapping('dispatch:completed', (p, rt) => {
     'agent.dispatch.parent_blocked_ms': Math.round(p.parentBlockedMs),
     ...definedAttrs({
       'agent.dispatch.wait_ms': p.waitMs === undefined ? undefined : Math.round(p.waitMs),
-      'agent.dispatch.call_id': open.length === 1 ? open[0]?.[0] : undefined,
+      'agent.dispatch.call_id': callId,
     }),
   });
 });
