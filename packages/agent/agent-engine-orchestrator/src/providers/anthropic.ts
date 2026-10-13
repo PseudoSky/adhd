@@ -14,7 +14,7 @@ import { DEFAULT_PROVIDER_TIMEOUT_MS } from "../interfaces.js";
 import { sdkFetchOption } from "./wire.js";
 import { applyCacheBreakpoints } from "./anthropic-cache.js";
 import { toToolResultContent } from "./anthropic-tool-result.js";
-import { assistantBlocks, captureEcho, isEchoRejection, sanitizeServerToolPairs } from "./anthropic-echo.js";
+import { assistantBlocks, captureEcho, isEchoRejection, replayedEchoFamilies, sanitizeServerToolPairs, type EchoBlockFamily } from "./anthropic-echo.js";
 import { runWithPauseTurn, type IPauseCall } from "./anthropic-pause.js";
 import { type ProviderTokenUsage } from "./partial-usage.js";
 import {
@@ -415,6 +415,7 @@ export class AnthropicProvider implements LLMProvider {
         // What the current attempt replayed and which request of its pause loop was last sent: the degrade decision
         // below needs both (a rejection of a CONTINUATION is not a history fault: the history already passed call 0).
         let replayedMessages = 0;
+        let replayedFamilies: ReadonlySet<EchoBlockFamily> = new Set();
         let lastSentN = 0;
 
         /**
@@ -453,6 +454,7 @@ export class AnthropicProvider implements LLMProvider {
                 )
             );
             replayedMessages = replay.messages;
+            replayedFamilies = replayedEchoFamilies(messages);
 
             // BK3 (ae62e6b0): <=3 five-minute cache breakpoints, each guarded by the model's
             // minimum cacheable prefix. The OAuth identity block (first system block) is protected.
@@ -582,9 +584,10 @@ export class AnthropicProvider implements LLMProvider {
                 return await attempt(true);
             } catch (err) {
                 // H3 degrade-once: the API rejected the REPLAYED history (an `invalid_request` naming an echoed block
-                // type; a context-length rejection is not one). Retry exactly once with the legacy rebuild. Only a
+                // type that was actually replayed; a context-length rejection or a fault naming only client tool blocks is not one).
+                // Echoes are deleted by the engine only on `echoDegraded`, which is set solely after THIS retry succeeded. Retry exactly once with the legacy rebuild. Only a
                 // rejection of call 0 qualifies: a continuation carries the same history that call 0 already passed.
-                if (replayedMessages === 0 || lastSentN !== 0 || !isEchoRejection(err)) throw err;
+                if (replayedMessages === 0 || lastSentN !== 0 || !isEchoRejection(err, replayedFamilies)) throw err;
                 const detail = err as { message?: string; data?: { message?: string } };
                 const apiMessage = redactApiMessage(detail.data?.message ?? detail.message ?? "");
                 const echoedMessages = replayedMessages;

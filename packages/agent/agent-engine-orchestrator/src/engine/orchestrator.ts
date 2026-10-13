@@ -28,7 +28,7 @@ import {
 } from './tool-result-cap.js';
 import { capOrSpillToolResult, resolveToolResultSpill } from './tool-result-spill.js';
 import { canonicalizeToolDefinitions, compactToolDefinitions } from './tool-schema-compact.js';
-import { withNativeToolGuidance } from './native-tool-guidance.js';
+import { nativeGuidanceContextOf, withNativeToolGuidance } from './native-tool-guidance.js';
 import { coerceToolArguments } from './tool-arg-coercion.js';
 import { DEFAULT_PROVIDER_TIMEOUT_MS } from '../interfaces.js';
 import { createToolLimiter } from './tool-limiter.js';
@@ -1262,7 +1262,13 @@ export class Orchestrator {
       // 9ed453c1 CACHE: canonical order for server-rendered allow-lists so the serialized tools
       // block (head of the cached prefix) is byte-stable across tasks and spawns.
       const toolListingStartedAt = performance.now();
-      const tools = canonicalizeToolDefinitions(withNativeToolGuidance(await registry.listAllTools()));
+      const tools = canonicalizeToolDefinitions(
+        // cafe9a17 AC1: the guidance describes the EFFECTIVE shell/fs servers of this task, not the catalog defaults.
+        withNativeToolGuidance(
+          await registry.listAllTools(),
+          nativeGuidanceContextOf(executionContext.agentDefinition?.mcpServers)
+        )
+      );
       const toolListingMs = Math.max(0, Math.round(performance.now() - toolListingStartedAt));
 
       // HITL enablement is `nativeTooling.hitl` (legacy alias `allowHumanInput`),

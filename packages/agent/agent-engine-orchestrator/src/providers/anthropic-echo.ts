@@ -216,22 +216,57 @@ export function sanitizeServerToolPairs(messages: MessageParam[]): MessageParam[
 
 // ─── degrade matcher ─────────────────────────────────────────────────────────
 
-const ECHO_REJECTION_RE = /thinking|signature|redacted|server_tool_use|tool_use_id|tool_result|web_fetch|web_search/i;
-const CONTEXT_LENGTH_RE = /prompt is too long|context.?length|too many tokens|exceeds.*(context|maximum)/i;
+/** The two families of replayed block an echo can put on the wire (tier T `thinking`, tier S server blocks). */
+export type EchoBlockFamily = "thinking" | "server";
 
 /**
- * Whether `err` is the API rejecting the replayed history (so the caller may retry once without echoes): a
- * {@link ProviderCallError} of class `invalid_request` whose text names an echoed block type, and which is NOT a
- * length rejection. A context-length failure with echo present is not an echo fault; it keeps the engine's
- * `CONTEXT_WINDOW_EXCEEDED` handling and must not disable echo. 429 / 5xx / abort / non-provider errors are never
- * echo rejections.
+ * Echo-specific 400 shapes, per family. Each is vocabulary that only an ECHOED block can produce: a client
+ * `tool_use` / `tool_result` pair is rebuilt from the `Message`s on every request (echo or not), so a fault naming
+ * only those (an orphan `tool_use_id`, `tool_use` ids without a `tool_result`) is a genuine history fault the
+ * legacy rebuild would hit too. Server-tool CONFIGURATION errors (`max_uses`, a bad `web_fetch` option) name no echoed block.
  */
-export function isEchoRejection(err: unknown): boolean {
+const ECHO_REJECTION_SHAPES: ReadonlyArray<readonly [EchoBlockFamily, RegExp]> = [
+  // "Invalid `signature` in `thinking` block", "`redacted_thinking` block could not be verified",
+  // "thinking blocks in the latest assistant message cannot be modified"
+  ["thinking", /\b(?:redacted_)?thinking`?(?:\s+or\s+`?redacted_thinking`?)?\s+blocks?\b/i],
+  // "Expected `thinking` or `redacted_thinking`, but found `text`"
+  ["thinking", /\bexpected\s+`?(?:redacted_)?thinking\b/i],
+  // "`server_tool_use` block without a corresponding result", "unexpected tool_use_id found in `web_fetch_tool_result` blocks"
+  ["server", /\b(?:server_tool_use|mcp_tool_use)\b/i],
+  ["server", /\b\w+_tool_result\b/i],
+];
+const CONTEXT_LENGTH_RE = /prompt is too long|context.?length|too many tokens|exceeds.*(context|maximum)/i;
+
+/** Which echo families a set of wire messages replays (`thinking` / `redacted_thinking`; server use or `*_tool_result`). */
+export function replayedEchoFamilies(messages: readonly MessageParam[]): ReadonlySet<EchoBlockFamily> {
+  const out = new Set<EchoBlockFamily>();
+  for (const m of messages) {
+    if (m.role !== "assistant" || !Array.isArray(m.content)) continue;
+    for (const block of m.content as unknown[]) {
+      const t = typeOf(block);
+      if (t === "thinking" || t === "redacted_thinking") out.add("thinking");
+      else if (isTierS(block)) out.add("server");
+    }
+  }
+  return out;
+}
+
+/**
+ * Whether `err` is the API rejecting the replayed ECHOES (so the caller may retry once without them): a
+ * {@link ProviderCallError} of class `invalid_request` whose text matches an echo-specific 400 shape
+ * ({@link ECHO_REJECTION_SHAPES}), and which is NOT a length rejection. A bare mention of `tool_result`,
+ * `tool_use_id` or `web_search` is not enough: a genuine history fault must surface, not be "healed" by dropping
+ * the session's echoes. When `replayed` is given, the matched family must actually have been on the wire: an error
+ * naming a `thinking` block when no thinking block was replayed cannot have been caused by an echo.
+ * A context-length failure keeps the engine's `CONTEXT_WINDOW_EXCEEDED` handling. 429 / 5xx / abort / non-provider
+ * errors are never echo rejections.
+ */
+export function isEchoRejection(err: unknown, replayed?: ReadonlySet<EchoBlockFamily>): boolean {
   if (!isProviderCallError(err)) return false;
   if (err.data.class !== "invalid_request") return false;
   const text = `${err.message}\n${err.data.message ?? ""}`;
   if (CONTEXT_LENGTH_RE.test(text)) return false;
-  return ECHO_REJECTION_RE.test(text);
+  return ECHO_REJECTION_SHAPES.some(([family, re]) => re.test(text) && (replayed === undefined || replayed.has(family)));
 }
 
 // ─── persistence partition ───────────────────────────────────────────────────

@@ -29,6 +29,8 @@ import {
   assistantBlocks,
   captureEcho,
   isEchoRejection,
+  replayedEchoFamilies,
+  type EchoBlockFamily,
   partitionEcho,
   sanitizeServerToolPairs,
   stripServerBlocks,
@@ -425,7 +427,7 @@ describe("R9-hist AC17: isEchoRejection", () => {
     "unexpected `tool_use_id` found in `web_fetch_tool_result` blocks: srvtoolu_x",
     "`server_tool_use` block without a corresponding result",
     "web_search_tool_result block missing its server_tool_use",
-    "messages.4: tool_use ids were found without tool_result blocks immediately after",
+    "messages.2.content.1: Expected `thinking` or `redacted_thinking`, but found `text`. When `thinking` is enabled, a final `assistant` message must start with a thinking block",
   ])("R9-hist AC17: invalid_request naming an echoed block type is an echo rejection: %s", msg => {
     expect(isEchoRejection(failure("invalid_request", msg, 400))).toBe(true);
   });
@@ -439,6 +441,35 @@ describe("R9-hist AC17: isEchoRejection", () => {
     "context length exceeded: web_fetch_tool_result is huge",
   ])("R9-hist AC17: a length rejection is NOT an echo rejection even if it names an echoed block: %s", msg => {
     expect(isEchoRejection(failure("invalid_request", msg, 400))).toBe(false);
+  });
+
+  it.each([
+    "messages.4: tool_use ids were found without tool_result blocks immediately after",
+    "messages.2.content.0.tool_result: unexpected `tool_use_id` found in `tool_result` blocks: toolu_x",
+    "tools.0.web_search: max_uses must be a positive integer",
+    "tools.1.web_fetch_20250910: invalid allowed_domains",
+    "thinking.budget_tokens: Input should be greater than or equal to 1024",
+    "messages.1.content.0.tool_result.content: redacted",
+  ])("cafe9a17 AC2: a genuine history/config 400 that merely mentions a tool or thinking word is NOT an echo rejection: %s", msg => {
+    expect(isEchoRejection(failure("invalid_request", msg, 400))).toBe(false);
+  });
+
+  it("cafe9a17 AC2: the matched family must have been replayed (a thinking-block 400 with no thinking on the wire is not echo-caused)", () => {
+    const err = failure("invalid_request", "messages.3.content.0: Invalid `signature` in `thinking` block", 400);
+    expect(isEchoRejection(err, new Set<EchoBlockFamily>(["thinking"]))).toBe(true);
+    expect(isEchoRejection(err, new Set<EchoBlockFamily>())).toBe(false);
+    expect(isEchoRejection(err, new Set<EchoBlockFamily>(["server"]))).toBe(false);
+    const srv = failure("invalid_request", "unexpected tool_use_id found in `web_fetch_tool_result` blocks: srvtoolu_x", 400);
+    expect(isEchoRejection(srv, new Set<EchoBlockFamily>(["server"]))).toBe(true);
+    expect(isEchoRejection(srv, new Set<EchoBlockFamily>(["thinking"]))).toBe(false);
+  });
+
+  it("cafe9a17 AC2: replayedEchoFamilies reports exactly the echo families on the wire", () => {
+    const asst = (...content: unknown[]) => ({ role: "assistant", content }) as never;
+    expect([...replayedEchoFamilies([asst({ type: "text", text: "a" }, { type: "tool_use", id: "t", name: "n", input: {} })])]).toEqual([]);
+    expect([...replayedEchoFamilies([asst({ type: "redacted_thinking", data: "x" })])]).toEqual(["thinking"]);
+    expect([...replayedEchoFamilies([asst({ type: "server_tool_use", id: "s", name: "web_search", input: {} })])]).toEqual(["server"]);
+    expect([...replayedEchoFamilies([{ role: "user", content: [{ type: "tool_result", tool_use_id: "t", content: "x" }] } as never])]).toEqual([]);
   });
 
   it("R9-hist AC17: an invalid_request that names no echoed block type is not an echo rejection", () => {

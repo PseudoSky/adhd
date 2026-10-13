@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_SHELL_ALLOW_COMMANDS } from '@adhd/agent-core-native-tooling';
+import { DEFAULT_SHELL_ALLOW_COMMANDS, resolveNativeToolingMap } from '@adhd/agent-core-native-tooling';
 import {
   NATIVE_TOOL_GUIDANCE,
+  nativeGuidanceContextOf,
   SHELL_UNAVAILABLE_COMMANDS,
   shellGuidance,
   shellRejectionNote,
@@ -9,10 +10,17 @@ import {
 } from '../engine/native-tool-guidance.js';
 
 const schema = { type: 'object', properties: {} } as const;
+/** The guidance context of the host's default agent: catalog fs + shell, exit shim active. */
+const defaultCtx = nativeGuidanceContextOf(
+  resolveNativeToolingMap({}, { cwd: '/w', exitShim: { dir: '/shim/abc', origPath: '/usr/bin' } })
+);
 
 describe('R5-WEB-SIMPLE AC4 native tool guidance', () => {
   it('appends the shell constraints (curl, no interpreters) to shell__shell_execute', () => {
-    const [t] = withNativeToolGuidance([{ name: 'shell__shell_execute', description: 'Run a command', inputSchema: schema }]);
+    const [t] = withNativeToolGuidance(
+      [{ name: 'shell__shell_execute', description: 'Run a command', inputSchema: schema }],
+      defaultCtx
+    );
     expect(t.description).toMatch(/^Run a command\n\n/);
     expect(t.description).toContain('curl -fsSL');
     expect(t.description).toMatch(/NOT available[^;]*sed/);
@@ -20,14 +28,14 @@ describe('R5-WEB-SIMPLE AC4 native tool guidance', () => {
   });
 
   it('tells the model write_file does not create parent directories and names the real create_directory tool', () => {
-    const [t] = withNativeToolGuidance([{ name: 'fs__write_file', description: 'Write', inputSchema: schema }]);
+    const [t] = withNativeToolGuidance([{ name: 'fs__write_file', description: 'Write', inputSchema: schema }], defaultCtx);
     expect(t.description).toContain('NOT create missing parent directories');
     expect(t.description).toContain('fs__create_directory');
   });
 
   it('leaves every other tool untouched (negative control)', () => {
     const input = [{ name: 'fs__read_file', description: 'Read', inputSchema: schema }];
-    expect(withNativeToolGuidance(input)).toEqual(input);
+    expect(withNativeToolGuidance(input, defaultCtx)).toEqual(input);
     expect(Object.keys(NATIVE_TOOL_GUIDANCE).sort()).toEqual([
       'fs__edit_file',
       'fs__read_multiple_files',

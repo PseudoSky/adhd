@@ -615,6 +615,22 @@ describe("R9-hist S3a AC6: degrade once to the legacy history", () => {
     expect(r.fake.requests).toHaveLength(2);
   });
 
+  it.each([
+    "messages.2.content.0.tool_result: unexpected `tool_use_id` found in `tool_result` blocks: toolu_x",
+    "messages.1: tool_use ids were found without tool_result blocks immediately after",
+  ])(
+    "cafe9a17 AC2: a genuine client tool_result history 400 with echoes present => no legacy retry, the error surfaces, no echoDegraded (so the engine never deletes the echoes): %s",
+    async msg => {
+      const r = degradeRig(() => errorStep(400, "invalid_request_error", msg));
+      const { call } = await echoedFollowUp(r);
+      const err = await call().catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(ProviderCallError);
+      expect((err as Error).message).toContain("tool_");
+      expect(r.fake.requests.map(q => q.status)).toEqual([200, 400]); // turn 1 + the rejected request: NO legacy retry
+      expect(r.logs.join("")).not.toContain("without echoed blocks");
+    }
+  );
+
   it("R9-hist S3a AC6: a second rejection after the degrade surfaces, and there is no third request", async () => {
     const r = degradeRig(
       () => errorStep(400, "invalid_request_error", SIG_REJECTION),
