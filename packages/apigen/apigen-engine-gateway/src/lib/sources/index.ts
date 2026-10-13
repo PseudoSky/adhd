@@ -1,0 +1,12 @@
+export { SourceError } from './types';
+export type { SourceSpec, SourceIntent, IResolvedSource } from './types';
+export { parseSourceSpec } from './parse-source';
+export { nodeProcessLauncher } from './process';
+export type { IProcessSpec, IProcessHandle, IProcessLauncher } from './process';
+export { buildArgvOperation, createArgvInvoker, TRUNCATION_MARKER } from './argv-operation';
+export type { IArgvResult } from './argv-operation';
+export { createLauncherTransport } from './launcher-transport';
+export { resolveMcpStdioSource } from './mcp-source';
+export type { McpHints } from './mcp-source';
+export { resolveSource } from './resolve-source';
+export type { IResolveDeps } from './resolve-source';
