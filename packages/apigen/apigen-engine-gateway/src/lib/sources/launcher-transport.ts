@@ -55,7 +55,9 @@ export function createLauncherTransport(
       handle.stdin.write(`${JSON.stringify(message)}\n`);
     },
     async close() {
-      const wasClosed = closed;
+      // Already closed (a second close, or the process exited by itself): the process is
+      // gone, so signalling its pid or group again could hit a recycled one.
+      if (closed) return;
       closed = true;
       handle.stdin.end();
       handle.kill('SIGTERM');
@@ -69,7 +71,7 @@ export function createLauncherTransport(
       });
       await Promise.race([handle.exited.then(() => undefined), escalate]);
       if (timer) clearTimeout(timer);
-      if (!wasClosed) transport.onclose?.();
+      transport.onclose?.();
     },
   };
   return transport;
