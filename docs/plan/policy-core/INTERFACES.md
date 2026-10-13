@@ -30,6 +30,9 @@ Import edges: client → engine/environment only. Layer plugin ↛ client and cl
 | D-15 (OD-16) | `ask` is `permission_denied` (exit 3) until apigen has an approval result (backlog 7e7eb01d). The Layer calls an optional `IPolicyAskHandler`; with none, `ask` ⇒ deny. |
 | D-16 | `IDraftOperation` is exactly the plain-data shape in `spec/architect-interfaces-sources.md` section 4 (`name`, `args[]`, `hints.readOnly`/`hints.destructive`); `IDraftOptions` adds `readRootsAttribute?`/`writeRootsAttribute?`; the result's `inferred` entries are D-09's `{operation, argument, kind, reason}`. The demo's `hints.readOnly`/`hints.destructive` are correct as written. |
 | D-17 | Refusal exit code is 3 everywhere (D-04); the demo's "non-zero" wording is tightened in T18. |
+| D-18 | Envelope key for attributes is `attributes` (`call.envelope.attributes`), written only by an earlier layer (the wrapper's attributes layer or an auth layer); the policy Layer never accepts attributes from anywhere else. |
+| D-19 | `--use` options reach only a plugin's `mount.operations` capability (verified); the Layer plugin captures them there. The wrapper uses the programmatic `createPolicyLayerPlugin`. |
+| D-20 | The `bin:` source lives in `packages/apigen/apigen-engine-gateway` (existing package; OD-32), pending the T08 discovery's confirmation. |
 
 ## 3. Per-ticket contract checklist
 - T02: every type in spec §2, §2.1, §2.2, §3, §4.2 exported from `src/spec`; two JSON Schemas (2020-12); a schema-vs-type test is a Phase C item.
