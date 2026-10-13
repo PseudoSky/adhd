@@ -10,8 +10,9 @@
  *                  tracked changes; none of main's dirty paths overlap the branch's changes.
  *   2. conflicts   `git merge-tree` (read-only). On conflict: print a JSON report on stdout,
  *                  merge main INTO THE WORKTREE so the conflicts sit there for repair, exit 10.
- *   3. gate        run the pre-push test gate inside the worktree (the later push hook then
- *                  re-runs an identical, nx-cached target). Failure leaves main untouched.
+ *   3. gate        run the pre-push test gate inside the worktree, with nx pointed at the MAIN
+ *                  checkout's cache (NX_CACHE_DIRECTORY) so the later push hook re-uses its results.
+ *                  Failure leaves main untouched.
  *   4. merge       `git merge --no-ff` in the main checkout with a structured message.
  *   5. push        `git push origin main` — BEFORE cleanup. If it fails, cleanup is skipped.
  *   6. cleanup     scripts/worktree-cleanup.sh <worktree>.
@@ -90,11 +91,21 @@ function main() {
     }
   }
 
+  if (hasOrigin(root)) {
+    const unpushed = Number(gitOk(['rev-list', '--count', `origin/${MAIN}..${MAIN}`], { cwd: root }));
+    if (unpushed > 0) {
+      say(`NOTICE: ${MAIN} is ${unpushed} commit${unpushed === 1 ? '' : 's'} ahead of origin/${MAIN}. This push publishes them too, and the gate below tests them as well.`);
+    }
+  }
+
   const wtStatus = git(['status', '--porcelain'], { cwd: wt.path }).stdout;
   const tracked = wtStatus.split('\n').filter((l) => l && !l.startsWith('??'));
   const untracked = wtStatus.split('\n').filter((l) => l.startsWith('??')).map((l) => l.slice(3));
   if (tracked.length) {
-    die(3, `${wt.path} has uncommitted changes to tracked files — commit them first:\n  ${tracked.join('\n  ')}`);
+    const untrackedNote = untracked.length
+      ? `\nUntracked paths are also NOT in the merge until you \`git add\` and commit them (new files must be added explicitly):\n  ${untracked.join('\n  ')}`
+      : '';
+    die(3, `${wt.path} has uncommitted changes to tracked files — commit them first:\n  ${tracked.join('\n  ')}${untrackedNote}`);
   }
   if (untracked.length) {
     say('');
@@ -153,7 +164,7 @@ function main() {
     const sync = git(['merge', '--no-edit', MAIN], { cwd: wt.path });
     if (sync.status !== 0) die(1, `merging ${MAIN} into ${branch} failed unexpectedly: ${sync.stderr || sync.stdout}`);
   }
-  const gate = runGate(wt.path, hasOrigin(root) ? `origin/${MAIN}` : MAIN);
+  const gate = runGate(wt.path, hasOrigin(root) ? `origin/${MAIN}` : MAIN, root);
   if (gate !== 0) die(6, `the gate failed (exit ${gate}) in ${wt.path}; ${MAIN} was not touched. Fix it there and re-run.`);
 
   // ── 4. merge ──────────────────────────────────────────────────────────────────
@@ -182,13 +193,17 @@ function main() {
   process.exit(code === 3 ? 9 : code); // 9: merged and pushed, but cleanup kept the worktree
 }
 
-function runGate(cwd, base) {
+function runGate(cwd, base, root) {
   const override = process.env.WORKTREE_MERGE_GATE;
   if (override === '') return 0;
+  // nx's cacheDirectory is relative to each checkout, so a worktree gate would warm a cache that cleanup
+  // then deletes while the push hook (which runs in the main checkout) starts cold. Point the gate at the
+  // main checkout's cache: hashes do not depend on the checkout path, and entries are content-addressed.
+  const env = { ...process.env, NX_CACHE_DIRECTORY: process.env.NX_CACHE_DIRECTORY ?? join(root, '.nx', 'cache') };
   const cmd = override ?? `npx nx affected --base=${base} --head=HEAD $(node .githooks/lib/pre-push-flags.mjs)`;
   say(`gate: ${cmd}`);
   const t0 = Date.now();
-  const r = spawnSync('sh', ['-c', cmd], { cwd, stdio: ['ignore', 2, 2] });
+  const r = spawnSync('sh', ['-c', cmd], { cwd, env, stdio: ['ignore', 2, 2] });
   say(`gate finished in ${Math.round((Date.now() - t0) / 1000)}s (exit ${r.status})`);
   return r.status ?? 1;
 }

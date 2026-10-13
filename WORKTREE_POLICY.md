@@ -1,11 +1,11 @@
 # Worktree Policy
 
-Worktrees are created, merged, and cleaned up **only** with these scripts. Never by hand, and never by symlinking `node_modules`.
+All work that leaves the main checkout happens in a worktree, and worktrees are created, merged, and cleaned up **only** with these scripts. Never by hand, and never by symlinking `node_modules`.
 
-| Step   | Command                                                         |
-| ------ | --------------------------------------------------------------- |
-| Create | `scripts/worktree-setup.sh --bl <backlog-id>` (or `<name>`)     |
-| Merge  | `scripts/worktree-merge.sh <worktree \| branch \| backlog-id>`  |
-| Clean  | `scripts/worktree-cleanup.sh [<worktree \| branch \| id> ...]`  |
+1. **Create** — `scripts/worktree-setup.sh --bl <backlog-id>`. Ticket work gets `plan-<id>` / `task-<id>` as both directory and branch. Use `scripts/worktree-setup.sh <name>` only when no ticket exists.
+2. **Work** — edit and commit only inside `.worktrees/<name>`. Do not edit the main checkout for this work; changes already sitting in main belong in the worktree too, so copy them across and restore main's copy. Commit new files with an explicit `git add <path>`.
+3. **Merge** — `scripts/worktree-merge.sh <worktree | branch | backlog-id>`. It tests, merges, pushes, and cleans up in one run.
+4. **Follow the output** — when a script stops, do what it says and run it again.
+5. **Leftovers** — `scripts/worktree-cleanup.sh [<worktree | branch | backlog-id> ...]` removes merged, clean worktrees that merge left behind.
 
-Each script prints what to do next when it stops. Follow its output.
+Afterwards, add the changelog entries for the packages you changed and resolve the backlog item, citing the merge commit.

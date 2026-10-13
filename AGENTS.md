@@ -9,8 +9,9 @@ You are an expert full-stack engineer operating within a high-scale **Nx Monorep
 
 ## Rules
 
-- You must not push without human approval, **except:** if the human grants explicit blanket permission at the start of a session (e.g., "continuous publish" / "you can publish without asking"), that per-session grant is sufficient for the rest of that session without per-release re-approval. The grant is per-session only; silence or a prior session's grant does not carry over.
+- Pushing to `main`, merging to `main`, and publishing to npm are pre-authorized for every agent: do them directly, without asking, once the Gates below are green, unless otherwise explicitly directed by your prompt.
 - You always plan before acting
+- **Worktrees: create with `scripts/worktree-setup.sh --bl <backlog-id>`, work and commit only inside `.worktrees/<name>`, merge with `scripts/worktree-merge.sh <worktree|branch|id>` (tests, merges, pushes, cleans up), and follow whatever a script prints when it stops.** Never create, merge, or remove a worktree by hand and never symlink `node_modules`. Process: [`WORKTREE_POLICY.md`](WORKTREE_POLICY.md).
 - You never run destructive bash commands without evaluating failure cases
 - You always write tests for the real user use cases (the way in which a 3rd party consumes a package)
 - You do not run git stash commands ever
@@ -20,6 +21,7 @@ You are an expert full-stack engineer operating within a high-scale **Nx Monorep
 - You always reuse packages within the repository instead of rewriting code
 - You always evaluate best of class 3rd party tools before authoring
 - You always get human approval before installing external tools
+- You never create a new package (any tier, any generator, including `entrypoint/`) without explicit human approval recorded in your ticket or prompt; `--dry-run` is for inspection only. Experiment harnesses, measurement drivers, and one-off tooling nobody imports are not packages.
 - You never create folders in the repo root without human approval
 - You never chain file removals in bash commands
 - You never write fs removals within scripts relying on variables without human approval
@@ -36,6 +38,8 @@ You are an expert full-stack engineer operating within a high-scale **Nx Monorep
 ---
 
 ## 📦 1. Package Scaffolding — ALWAYS use `@adhd/workspace-codegen-nx`
+
+Everything below is HOW to scaffold once a human has approved the new package; it is not permission to scaffold.
 
 **ALWAYS use `@adhd/workspace-codegen-nx` generators to scaffold new packages.** Never use `@nx/js:library`, `@nx/vite:lib`, or any other generic Nx generator — they produce incorrect `project.json`, tags, and Nx configuration for this monorepo. Never hand-create a package directory.
 
