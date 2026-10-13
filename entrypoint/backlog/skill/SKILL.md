@@ -52,3 +52,34 @@ issue verb (§3), obligations and the actionability verdict (§4), spec revision
 filing rules (§7), batch (§8), citations (§9), verifying writes (§10), stats
 (§11), and sessions and reservations (§13). Read only the section you need
 (`rg -n '^## ' REFERENCE.md` lists them), never the whole file.
+
+## Testing record (a body convention; the backlog schema is unchanged)
+
+An item that changes behavior carries this section in its `body`. Read it back
+with `get` (`fields:["body"]`) or `query`; nothing validates it at the store.
+
+```text
+## Testing record
+change-class: new-behavior | defect-fix | refactor | configuration | dependency | boundary-contract | no-code | test-maintenance
+rigor: none | light | standard | deep
+triggers: <the triggers hit> | none
+ac: AC1 <criterion> ; AC2 <criterion> ; …
+not-testing: <failure modes left untested, and why> | none
+plan: <failure mode → tier → AC>
+expires: <date>
+```
+
+- `change-class` is one of the eight values. `rigor` is derived by the
+  repository's routing command and recorded, never chosen. `ac:` ids are stable
+  and are what tests cite. `expires:` appears only on exception items.
+- **Regression-test evidence (presence only).** Declare an evidence obligation
+  of the existing kind: `obligate` with `applies_to:{"to":"done"}`,
+  `requirement:{"op":"evidence","kind":"regression-test"}`, `on_fail:"warn"`
+  (`"block"` once the repository enforces it), then `attest` with
+  `claim:{"kind":"regression-test"}` and `anchor:{"locator":"path:<test file>",…}`
+  (the project path must be a git work tree to verify). The store checks that
+  evidence exists, not that it passes.
+- **Exceptions and retention work are ordinary items.** An exception carries an
+  `expires:` line in its Testing record and a `relates_to` relation to the item
+  it excuses. A retention ticket is an ordinary item citing its group's standing
+  review item.
