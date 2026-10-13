@@ -1,12 +1,12 @@
 # apigen conformance review: policy-core initiative
 
-Date: 2026-10-13. Reviewer: architect-reviewer (independent, read-only on source). Review baseline: branch `feat/policy-core`, the code as of `889522ec`, with the plan documents re-read at `a88b273b` (the commits in between change tests and docs only, not any reviewed source file). Every path below is relative to the worktree root `.worktrees/policy-core`, and every claim cites `file:line` that was opened and read.
+Date: 2026-10-13. Reviewer: architect-reviewer (independent, read-only on source). Review baseline: branch `feat/policy-core`, the code as of `889522ec`, with the plan documents re-read at `a88b273b`. Between those commits the only source change is `6e27d320`, which adds an injectable host transport and handshake timeout to `serve` (`entrypoint/policy/src/wrapper/verbs/deps.ts:12-15`, `serve.ts:46-53`). It does not change any finding below. Every path below is relative to the worktree root `.worktrees/policy-core`, and every claim cites `file:line` that was opened and read.
 
 **Question:** do the apigen-facing packages and plans from this initiative match the principles, structure and taxonomy of the apigen system, without one-off functionality or unique usage?
 
 **Short answer: partly.** The parts that ride the established seams conform: the CLI, MCP and HTTP surfaces of `@adhd/policy`, the `ctx`-first operation convention, the Layer's short-circuit, error and stream semantics, and the package tags. Three things do not:
 
-1. **The Layer cannot be configured through the documented `--use` channel.** No host populates per-plugin options, so the default export denies every call. The plugin works around this with a mount-capability hack and a module-scope singleton instead of fixing the contract gap.
+1. **The Layer cannot be configured through the documented `--use` channel.** apigen-cli never populates per-plugin options (only a programmatic embedder could pass them), so the default export loaded by `adhd-apigen --use` denies every call. The plugin works around this with a mount-capability hack and a module-scope singleton instead of fixing the contract gap.
 2. **All three new packages are ESM-only.** This contradicts accepted ADR-0003.
 3. **The `bin:` source work builds a parallel stack beside apigen's seams instead of on them.** It adds a bespoke MCP server, its own Layer composition, its own error type, hand-built operations with non-derived ids and a `run` verb that bypasses the CLI host. The owner's own direction (backlog f6bf8550) and the plan's own rule (T08 "do not build a stopgap shell") both rejected this shape.
 
@@ -49,7 +49,7 @@ Severity key: **BLOCKING** (taxonomy or contract violation that breaks a documen
   - The `layer` capability then delegates to a plugin built from that state (`plugin.ts:292-327`).
   - The README states "one configuration per process" (`README.md:34`).
 - **Evidence, part 2 (the channel it relies on does not exist):**
-  - Hosts pass `useOptions[plugin.id]` to `mount.operations` (`apigen-plugin-mcp/src/lib/run.ts:445`, `apigen-plugin-cli-output/src/lib/run.ts:586`, `apigen-plugin-api-fastify/src/lib/run.ts:323`), but **nothing fills `useOptions`**.
+  - Hosts pass `useOptions[plugin.id]` to `mount.operations` (`apigen-plugin-mcp/src/lib/run.ts:445`, `apigen-plugin-cli-output/src/lib/run.ts:586`, `apigen-plugin-api-fastify/src/lib/run.ts:323`), but **apigen-cli never fills `useOptions`**. Only a programmatic embedder that builds `options.useOptions` itself could reach this channel (`package-invoker.ts:121-124`).
   - `rg useOptions entrypoint/apigen-cli/src` has zero hits. `run.ts:321-324` sets only `options.usePlugins`, and `plugin.ts:357-363` says so explicitly.
 - **Consequence:** the README's own canonical command, `adhd-apigen run --use <auth layer> --use @adhd/apigen-plugin-policy --type mcp` (`README.md:22-26`), loads a plugin that throws `ApiError('internal', 'no decider configured')` on every call (`plugin.ts:296-299`). The only working path is the programmatic `createPolicyLayerPlugin`, which is what the wrapper uses (`entrypoint/policy/src/wrapper/gate.ts:46`).
 - **Cost:**
@@ -172,7 +172,7 @@ Severity key: **BLOCKING** (taxonomy or contract violation that breaks a documen
   - `IProcessLauncher` is a clean injectable port (`process.ts:22-25`).
   - `INHERITED_ENV` (`process.ts:48-57`) re-implements the MCP SDK's own `DEFAULT_INHERITED_ENV_VARS` and `getDefaultEnvironment()` (`node_modules/@modelcontextprotocol/sdk/dist/cjs/client/stdio.js:15-49`) with a different list. It has no Windows list, as the README admits (`README.md:56-57`), and no skip of `()`-prefixed function values.
   - Wrapped entries lose their declared env (open backlog c6ca91d6).
-  - None of the sources code implements `HostAdapter` (`gateway.ts:191-236`), even though an MCP upstream maps onto it one to one: `start` is spawn plus handshake, `ready` is handshake ok, `invoke` is `tools/call`, `onExit` is `onClose`, `stop` is `dispose`, and `hopCost` is 1. Restart, partial availability and deadlines (`gateway.ts:395-480`) are therefore not inherited. The aggregation assessment confirms this from the product side (`GATEWAY-AGGREGATION-ASSESSMENT.md:32-33`).
+  - None of the sources code implements `HostAdapter` (`gateway.ts:191-236`), even though an MCP upstream maps onto it one to one: `start` is spawn plus handshake, `ready` is handshake ok, `invoke` is `tools/call`, `onExit` is `onClose`, `stop` is `dispose`, and `hopCost` is 1. Restart, partial availability and deadlines (`gateway.ts:395-480`) are therefore not available to these sources. The aggregation assessment confirms this from the product side (`GATEWAY-AGGREGATION-ASSESSMENT.md:32-33`).
 - **Alternative:** Use `getDefaultEnvironment()` from the SDK as the base set (extend, do not fork). Wrap a resolved MCP upstream as `createMcpHostAdapter(source)` so `createGateway` supervises it.
 
 #### B6. `launcher-transport.ts`. Verdict: **CONFORMS-WITH-NOTES, NOTE**
@@ -271,7 +271,7 @@ Severity key: **BLOCKING** (taxonomy or contract violation that breaks a documen
 
 #### C6. `verbs/serve.ts`. Verdict: **DEVIATES, SHOULD-FIX** (inherits B8)
 
-- **Evidence:** It fronts the upstream with `serveMcpPassthrough` and `createStdioHostTransport` (`serve.ts:47-53`) and loads no tracing.
+- **Evidence:** It fronts the upstream with `serveMcpPassthrough` and, by default, `createStdioHostTransport` (`serve.ts:48-54` at `a88b273b`), and loads no tracing.
 
 #### C7. `gate.ts` and `attributes-layer.ts`: wrapper-side Layer wiring. Verdict: **CONFORMS-WITH-NOTES, NOTE**
 
