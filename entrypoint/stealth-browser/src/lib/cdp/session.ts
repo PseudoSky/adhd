@@ -33,14 +33,36 @@ export class CdpSession {
     return this._connected
   }
 
-  /** Connect to a CDP WebSocket endpoint. */
-  async connect(wsUrl: string): Promise<void> {
+  /**
+   * Connect to a CDP WebSocket endpoint.
+   * @param wsUrl WebSocket debugger URL
+   * @param timeoutMs Optional open deadline; omitted means wait indefinitely. On
+   *        timeout, error, or a close before open the socket is closed and the
+   *        promise rejects.
+   */
+  async connect(wsUrl: string, timeoutMs?: number): Promise<void> {
     this._ws = new WebSocket(wsUrl)
 
     await new Promise<void>((resolve, reject) => {
       const ws = this._ws!
-      ws.addEventListener('open', () => resolve(), { once: true })
-      ws.addEventListener('error', () => reject(new Error('WebSocket connection failed')), { once: true })
+      let timer: ReturnType<typeof setTimeout> | undefined
+      let settled = false
+      const settle = (err?: Error): void => {
+        if (settled) return
+        settled = true
+        if (timer !== undefined) clearTimeout(timer)
+        if (err) {
+          try { ws.close() } catch { /* ignore */ }
+          reject(err)
+        } else resolve()
+      }
+      if (timeoutMs !== undefined) {
+        timer = setTimeout(() => settle(new Error(`WebSocket open timeout after ${timeoutMs}ms`)), timeoutMs)
+      }
+      ws.addEventListener('open', () => settle(), { once: true })
+      ws.addEventListener('error', () => settle(new Error('WebSocket connection failed')), { once: true })
+      // A close before open is a failed connect, never a hang.
+      ws.addEventListener('close', () => settle(new Error('WebSocket connection failed')), { once: true })
     })
 
     this._connected = true

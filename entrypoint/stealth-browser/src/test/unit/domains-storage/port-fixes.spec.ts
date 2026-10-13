@@ -10,6 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { CookieClient } from '../../../lib/storage/cookies.js'
 import { HistoryClient } from '../../../lib/storage/history.js'
 import { cdpCall } from '../../../lib/domains/transport.js'
+import { FakeCdpServer } from '../../support/fake-cdp.js'
 import { chromeMicros, makeProfile, type Fixture } from './profile-fixture.js'
 
 const NOW = 1_800_000_000
@@ -73,38 +74,24 @@ describe('8468f7b1 AC port-fixes [port-fixes.3] [fs-169] session cookies', () =>
 })
 
 describe('8468f7b1 AC port-fixes [port-fixes.4] [fs-178] cdpCall waits for the socket to open', () => {
-  class OpeningSocket {
-    static last: OpeningSocket | null = null
-    readyState = 0
-    sentWhileConnecting = 0
-    sent: string[] = []
-    private l = new Map<string, Array<(e: { data: string }) => void>>()
-    constructor(public readonly url: string) {
-      OpeningSocket.last = this
-      setTimeout(() => { this.readyState = 1; this.emit('open', { data: '' }) }, 10)
-    }
-    addEventListener(t: string, fn: (e: { data: string }) => void) { this.l.set(t, [...(this.l.get(t) ?? []), fn]) }
-    removeEventListener(t: string, fn: (e: { data: string }) => void) { this.l.set(t, (this.l.get(t) ?? []).filter((x) => x !== fn)) }
-    send(raw: string) {
-      if (this.readyState !== 1) { this.sentWhileConnecting++; throw new Error('not open') }
-      this.sent.push(raw)
-      const { id } = JSON.parse(raw) as { id: number }
-      queueMicrotask(() => this.emit('message', { data: JSON.stringify({ id, result: { ok: true } }) }))
-    }
-    close() { this.readyState = 3 }
-    private emit(t: string, e: { data: string }) { (this.l.get(t) ?? []).forEach((f) => f(e)) }
-  }
+  // FakeCdpServer's socket opens on a later tick and throws on send-before-open, so a cdpCall that
+  // sent immediately would resolve null instead of the reply.
+  let restore: () => void
+  let server: FakeCdpServer
 
   beforeEach(() => {
+    server = new FakeCdpServer({
+      meta: { name: 'fs-178', origin: 'synthetic-protocol-conformant' },
+      steps: [{ when: { method: 'Browser.getVersion' }, reply: { result: { ok: true } } }],
+    })
+    restore = server.install()
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ json: async () => ({ webSocketDebuggerUrl: 'ws://127.0.0.1:1/devtools/browser/x' }) }))
-    vi.stubGlobal('WebSocket', OpeningSocket)
   })
-  afterEach(() => vi.unstubAllGlobals())
+  afterEach(() => { restore(); vi.unstubAllGlobals() })
 
   it('waits for the socket to open before sending', async () => {
     const out = await cdpCall<{ ok: boolean }>('h:1', 'Browser.getVersion')
     expect(out).toEqual({ ok: true })
-    expect(OpeningSocket.last?.sentWhileConnecting).toBe(0)
-    expect(OpeningSocket.last?.sent).toHaveLength(1)
+    expect(server.received.map((r) => r.method)).toEqual(['Browser.getVersion'])
   })
 })

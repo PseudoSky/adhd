@@ -2,65 +2,31 @@
  * stealth-browser/src/lib/domains/transport.ts — Shared CDP WebSocket transport.
  *
  * Wraps the common pattern: GET /json/version → open WS → wait for open → send command → receive response.
- * All domain services use this instead of duplicating WS logic.
+ * All domain services use this instead of duplicating WS logic. The socket itself is owned by
+ * CdpSession (cdp/session.ts), the single WebSocket opener under src/lib.
+ *
+ * Defect 3 (port-fixes.4): nothing is sent until the socket is open. CdpSession.connect resolves only
+ * once the socket's `open` event fires (readyState OPEN) and rejects on error, early close, or the
+ * 10 s deadline passed below; send() is reached only after that, and any rejection becomes null.
  */
+import { CdpSession } from '../cdp/session.js'
 
 const CDP_TIMEOUT_MS = 10_000
-const WS_OPEN = 1
-
-/** Resolve once the socket is open; reject if it errors or closes first. */
-function whenOpen(ws: WebSocket): Promise<void> {
-  return new Promise<void>((resolve, reject) => {
-    if (ws.readyState === WS_OPEN) { resolve(); return }
-    const onOpen = () => { cleanup(); resolve() }
-    const onFail = () => { cleanup(); reject(new Error('CDP socket failed to open')) }
-    const timer = setTimeout(() => { cleanup(); reject(new Error('CDP timeout')) }, CDP_TIMEOUT_MS)
-    function cleanup(): void {
-      clearTimeout(timer)
-      ws.removeEventListener('open', onOpen)
-      ws.removeEventListener('error', onFail)
-      ws.removeEventListener('close', onFail)
-    }
-    ws.addEventListener('open', onOpen)
-    ws.addEventListener('error', onFail)
-    ws.addEventListener('close', onFail)
-  })
-}
 
 export async function cdpCall<T = unknown>(
   host: string,
   method: string,
   params: Record<string, unknown> = {},
 ): Promise<T | null> {
+  const session = new CdpSession()
   try {
     const res = await fetch(`http://${host}/json/version`)
     const v = (await res.json()) as Record<string, string>
-    const ws = new WebSocket(v['webSocketDebuggerUrl'] as string)
-    try {
-      await whenOpen(ws)
-      const result = await new Promise<unknown>((resolve, reject) => {
-        const id = Math.floor(Math.random() * 1_000_000)
-        const handler = (ev: MessageEvent) => {
-          const d = JSON.parse(String(ev.data)) as Record<string, unknown>
-          if (d['id'] === id) {
-            ws.removeEventListener('message', handler)
-            clearTimeout(timer)
-            if (d['error']) reject(new Error((d['error'] as Record<string, unknown>)['message'] as string))
-            else resolve(d['result'])
-          }
-        }
-        const timer = setTimeout(() => {
-          ws.removeEventListener('message', handler)
-          reject(new Error('CDP timeout'))
-        }, CDP_TIMEOUT_MS)
-        ws.addEventListener('message', handler)
-        ws.send(JSON.stringify({ id, method, params }))
-      })
-      return result as T
-    } finally {
-      ws.close()
-    }
+    await session.connect(v['webSocketDebuggerUrl'] as string, CDP_TIMEOUT_MS)
+    return (await session.send(method, params, CDP_TIMEOUT_MS)) as T
   } catch {
     return null
+  } finally {
+    session.close()
   }
 }

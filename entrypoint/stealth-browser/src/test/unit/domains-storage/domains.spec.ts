@@ -7,6 +7,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { CdpClient } from '../../../lib/domains/index.js'
 import { cdpCall } from '../../../lib/domains/transport.js'
+import { FakeCdpServer } from '../../support/fake-cdp.js'
 
 type Reply = (req: { id: number; method: string; params: Record<string, unknown> }) => Record<string, unknown> | null
 type Listener = (ev: { data: string }) => void
@@ -63,11 +64,23 @@ describe('8468f7b1 AC2 [tests-unit-data.6] CDP domain services', () => {
   afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers() })
 
   it('[fs-177] cdpCall returns null on failure and times out', async () => {
-    FakeWebSocket.reply = () => ({ result: { ok: true } })
-    await expect(cdpCall('h:1', 'Browser.getVersion')).resolves.toEqual({ ok: true })
-    // protocol error -> null
-    FakeWebSocket.reply = () => ({ error: { message: 'No such target' } })
-    await expect(cdpCall('h:1', 'Target.activateTarget', { targetId: 'x' })).resolves.toBeNull()
+    // success and protocol error ride the shared CdpSession over the harness FakeCdpServer
+    const harness = new FakeCdpServer({
+      meta: { name: 'fs-177', origin: 'synthetic-protocol-conformant' },
+      steps: [
+        { when: { method: 'Browser.getVersion' }, reply: { result: { ok: true } } },
+        { when: { method: 'Target.activateTarget' }, reply: { error: { code: -32602, message: 'No such target' } } },
+      ],
+    })
+    const restore = harness.install()
+    try {
+      await expect(cdpCall('h:1', 'Browser.getVersion')).resolves.toEqual({ ok: true })
+      // protocol error -> null
+      await expect(cdpCall('h:1', 'Target.activateTarget', { targetId: 'x' })).resolves.toBeNull()
+    } finally {
+      restore()
+    }
+    vi.stubGlobal('WebSocket', FakeWebSocket)
     // unreachable browser -> null
     routes = {}
     await expect(cdpCall('h:1', 'Browser.getVersion')).resolves.toBeNull()
