@@ -11,7 +11,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { spawnSync } from 'node:child_process';
-import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -214,6 +214,58 @@ test('merge: uncommitted tracked changes in the worktree are refused (exit 3)', 
     assert.equal(r.status, 3, r.stderr);
     assert.match(r.stderr, /app\.txt/);
   } finally { s.done(); }
+});
+
+test('merge: the tracked-changes refusal also lists the untracked files, which are NOT in the merge until added', () => {
+  const s = sandbox();
+  try {
+    const wt = planWorktree(s);
+    writeFileSync(join(wt, 'app.txt'), 'modified\n');
+    writeFileSync(join(wt, 'brand-new.txt'), 'new deliverable\n');
+    const r = s.sh('worktree-merge.sh', ['plan-11111111']);
+    assert.equal(r.status, 3, r.stderr);
+    assert.match(r.stderr, /app\.txt/);
+    assert.match(r.stderr, /brand-new\.txt/);
+    assert.match(r.stderr, /git add/);
+  } finally { s.done(); }
+});
+
+test('merge: says how many unpushed commits on main this push will publish, and publishes them', () => {
+  const s = sandbox();
+  try {
+    const wt = planWorktree(s);
+    commitIn(wt, 'feature.txt', 'x\n', 'feat: x');
+    commitIn(s.root, 'other-1.txt', 'o\n', 'docs: unpushed work one');
+    commitIn(s.root, 'other-2.txt', 'o\n', 'docs: unpushed work two');
+    const r = s.sh('worktree-merge.sh', ['plan-11111111']);
+    assert.equal(r.status, 0, r.stderr);
+    assert.match(r.stderr, /NOTICE: main is 2 commits ahead of origin\/main/);
+    const published = git(s.origin, 'log', '--format=%s', 'main');
+    assert.match(published, /unpushed work one/);
+    assert.match(published, /unpushed work two/);
+  } finally { s.done(); }
+});
+
+test('merge: the gate runs with nx pointed at the MAIN checkout cache, and a caller-set NX_CACHE_DIRECTORY wins', () => {
+  const saved = process.env.NX_CACHE_DIRECTORY;
+  delete process.env.NX_CACHE_DIRECTORY;
+  try {
+    for (const [callerValue, expected] of [[undefined, (s) => join(realpathSync(s.root), '.nx', 'cache')], ['/custom/nx-cache', () => '/custom/nx-cache']]) {
+      const s = sandbox();
+      try {
+        const wt = planWorktree(s);
+        commitIn(wt, 'feature.txt', 'x\n', 'feat: x');
+        const out = join(s.base, 'gate-env.txt');
+        const extra = { WORKTREE_MERGE_GATE: `printf %s "\${NX_CACHE_DIRECTORY-UNSET}" > ${out}` };
+        if (callerValue) extra.NX_CACHE_DIRECTORY = callerValue;
+        const r = s.sh('worktree-merge.sh', ['plan-11111111'], { env: extra });
+        assert.equal(r.status, 0, r.stderr);
+        assert.equal(readFileSync(out, 'utf8'), expected(s));
+      } finally { s.done(); }
+    }
+  } finally {
+    if (saved !== undefined) process.env.NX_CACHE_DIRECTORY = saved;
+  }
 });
 
 test('merge: untracked folders get a strong warning and survive (cleanup keeps the tree, exit 9); ignored tmp/ does not count', () => {
