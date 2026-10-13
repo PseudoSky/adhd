@@ -2288,42 +2288,6 @@
       "cwd": "repo-root"
     },
     {
-      "id": "agent-search-relink.1",
-      "phase": "release",
-      "tier": null,
-      "kind": "command",
-      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py agent-search-relink --only agent-search-relink.1",
-      "expect": "exit0",
-      "cwd": "repo-root"
-    },
-    {
-      "id": "agent-search-relink.2",
-      "phase": "release",
-      "tier": null,
-      "kind": "command",
-      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py agent-search-relink --only agent-search-relink.2",
-      "expect": "exit0",
-      "cwd": "repo-root"
-    },
-    {
-      "id": "agent-search-relink.3",
-      "phase": "release",
-      "tier": null,
-      "kind": "command",
-      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py agent-search-relink --only agent-search-relink.3",
-      "expect": "exit0",
-      "cwd": "repo-root"
-    },
-    {
-      "id": "agent-search-relink.4",
-      "phase": "release",
-      "tier": null,
-      "kind": "command",
-      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py agent-search-relink --only agent-search-relink.4",
-      "expect": "exit0",
-      "cwd": "repo-root"
-    },
-    {
       "id": "cdp-test-harness.1",
       "phase": "migrate",
       "tier": null,
@@ -2482,15 +2446,6 @@
       "tier": null,
       "kind": "command",
       "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py merge-readiness --only merge-readiness.6",
-      "expect": "exit0",
-      "cwd": "repo-root"
-    },
-    {
-      "id": "agent-search-relink.5",
-      "phase": "release",
-      "tier": null,
-      "kind": "command",
-      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py agent-search-relink --only agent-search-relink.5",
       "expect": "exit0",
       "cwd": "repo-root"
     },

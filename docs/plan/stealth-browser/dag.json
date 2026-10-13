@@ -556,23 +556,6 @@
       "context": "contexts/tests-use-cases.md",
       "notes": "executor=test-automator tier=sonnet/high; use-case unit suites replace the e2e lane (user decision)"
     },
-    "agent-search-relink": {
-      "kind": "work",
-      "phase": "release",
-      "depends_on": [
-        "merge-readiness"
-      ],
-      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py agent-search-relink",
-      "artifacts": [
-        "/Users/nix/dev/ai/scratch/agent-browser/package.json",
-        "/Users/nix/dev/ai/scratch/agent-browser/pnpm-lock.yaml",
-        "/Users/nix/dev/ai/scratch/agent-browser/AGENTS.md",
-        "/Users/nix/dev/ai/scratch/agent-browser/docs/",
-        "/Users/nix/dev/node/adhd/.worktrees/stealth-browser/docs/plan/stealth-browser/evidence/"
-      ],
-      "context": "contexts/agent-search-relink.md",
-      "notes": "executor=typescript-pro tier=sonnet/medium; post-merge second step: link: or published consumption, dispatcher-gated"
-    },
     "cdp-test-harness": {
       "kind": "work",
       "phase": "migrate",

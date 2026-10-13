@@ -16,8 +16,7 @@
     "type": "manual-approval",
     "description": "Dispatcher decision to publish (per PUBLISHING.md) or defer the release; names what agent-search consumes",
     "required_by": [
-      "merge-readiness",
-      "agent-search-relink"
+      "merge-readiness"
     ],
     "verification": "python3 docs/plan/stealth-browser/scripts/guard.py merge-readiness --only merge-readiness.2",
     "status": "needed",
