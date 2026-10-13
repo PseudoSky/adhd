@@ -128,7 +128,9 @@ describe('[tripwire-core.6] TW6 files 0o600 and directories 0o700', () => {
     });
     await env.tw.gate('k');
     expect(env.mfs.modeOf(env.lockPath('k'))).toBe(0o600);
-    expect(env.mfs.modeOf(env.blockedPath('k'))).toBe(0o600);
+    const gen = JSON.parse(env.mfs.readText(env.lockPath('k')) as string)
+      .generation as string;
+    expect(env.mfs.modeOf(env.blockedPath('k', gen))).toBe(0o600);
     expect(env.mfs.modeOf(env.auditPath)).toBe(0o600);
     expect(env.mfs.modeOf(STATE_DIR)).toBe(0o700);
     expect(env.mfs.modeOf(`${STATE_DIR}/tripwire`)).toBe(0o700);

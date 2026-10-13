@@ -146,6 +146,52 @@ describe.each(factories)('[tripwire-core.31] TW38 contract: %s', (_n, make) => {
     expect(await h.storage.takeClearedMarker('k')).toBeNull();
   });
 
+  it('block counts are scoped to the generation of the live lock',
+    async () => {
+      const g1 = 'a'.repeat(24);
+      const g2 = 'b'.repeat(24);
+      await h.storage.createLockIfAbsent('k', JSON.stringify({ generation: g1 }));
+      for (let i = 0; i < 3; i += 1) await h.storage.incrementBlocked('k', g1);
+      // a block for another (dead) generation is discarded
+      await h.storage.incrementBlocked('k', g2);
+      await h.storage.incrementBlocked('k');
+      expect((await h.storage.blocked('k', g1)).count).toBe(3);
+      expect((await h.storage.blocked('k', g2)).count).toBe(0);
+      expect((await h.storage.blocked('k')).count).toBe(0);
+      await h.storage.removeLock('k');
+      expect((await h.storage.blocked('k', g1)).count).toBe(0);
+      // a late block for the removed generation leaves nothing behind
+      await h.storage.incrementBlocked('k', g1);
+      await h.storage.createLockIfAbsent('k', JSON.stringify({ generation: g2 }));
+      expect((await h.storage.blocked('k', g1)).count).toBe(0);
+      expect((await h.storage.blocked('k', g2)).count).toBe(0);
+    });
+
+  it('an invalid generation in the lock content is treated as none',
+    async () => {
+      await h.storage.createLockIfAbsent('k', JSON.stringify({
+        generation: '../../etc/passwd',
+      }));
+      await h.storage.incrementBlocked('k');
+      expect((await h.storage.blocked('k')).count).toBe(1);
+      await h.storage.removeLock('k');
+      expect((await h.storage.blocked('k')).count).toBe(0);
+    });
+
+  it('peek reads the marker; take with expected consumes only that one',
+    async () => {
+      expect(await h.storage.peekClearedMarker('k')).toBeNull();
+      await h.storage.writeClearedMarker('k', '{"m":1}');
+      expect(await h.storage.peekClearedMarker('k')).toBe('{"m":1}');
+      expect(await h.storage.peekClearedMarker('k')).toBe('{"m":1}');
+      // a newer marker is never consumed in place of the expected one
+      expect(await h.storage.takeClearedMarker('k', '{"m":0}')).toBeNull();
+      expect(await h.storage.peekClearedMarker('k')).toBe('{"m":1}');
+      expect(await h.storage.takeClearedMarker('k', '{"m":1}')).toBe('{"m":1}');
+      expect(await h.storage.peekClearedMarker('k')).toBeNull();
+      expect(await h.storage.takeClearedMarker('k', '{"m":1}')).toBeNull();
+    });
+
   it('listKeys lists locked keys only, sorted', async () => {
     await h.storage.createLockIfAbsent('b', '{}');
     await h.storage.createLockIfAbsent('a', '{}');

@@ -10,6 +10,7 @@
  *   even when the lock could not be written;
  * - audit writes are best-effort and reported through `onWarning`.
  */
+import { randomBytes } from 'node:crypto';
 import { userInfo } from 'node:os';
 import { join } from 'node:path';
 import { clampAuditBytes, formatAuditLine } from './audit.js';
@@ -23,6 +24,8 @@ import {
   assertValidKey,
   createFileStorage,
   defaultNodeFs,
+  GENERATION_PATTERN,
+  lockGeneration,
   type TripwireStorage,
 } from './storage.js';
 import {
@@ -43,7 +46,12 @@ import {
 } from './types.js';
 
 /** Fields of a legacy flat lock that are not moved into `context`. */
-const LEGACY_CORE_FIELDS = new Set(['reason', 'trippedAt', 'blockedCount']);
+const LEGACY_CORE_FIELDS = new Set([
+  'reason',
+  'trippedAt',
+  'blockedCount',
+  'generation',
+]);
 
 /** Internal snapshot: the public one plus count bookkeeping. */
 interface Snap extends TripwireSnapshot {
@@ -51,6 +59,8 @@ interface Snap extends TripwireSnapshot {
   fromLatch: boolean;
   /** The in-record (legacy) part of `blockedCount`. */
   legacyCount: number;
+  /** Generation of the lock on disk (scopes its block count). */
+  gen?: string;
 }
 
 interface LatchEntry {
@@ -170,6 +180,10 @@ export function parseLockRecord(
     if (prior) rec.priorClear = prior;
     if (typeof doc['recoveryHint'] === 'string') {
       rec.recoveryHint = doc['recoveryHint'];
+    }
+    const gen = doc['generation'];
+    if (typeof gen === 'string' && GENERATION_PATTERN.test(gen)) {
+      rec.generation = gen;
     }
     return rec;
   }
@@ -340,10 +354,12 @@ export function createTripwire<C extends TripContext = TripContext>(
         legacyCount: 0,
       };
     }
+    // The block count belongs to the generation of the lock on disk.
+    const gen = 'error' in lock ? undefined : lockGeneration(lock.raw);
     let count = 0;
     let lastAt: number | undefined;
     try {
-      const b = await storage.blocked(key);
+      const b = await storage.blocked(key, gen);
       count = b.count;
       lastAt = b.lastAt;
     } catch {
@@ -359,13 +375,15 @@ export function createTripwire<C extends TripContext = TripContext>(
       if (count > 0 && lastAt !== undefined) {
         r.lastBlockedAt = new Date(lastAt).toISOString();
       }
-      return {
+      const snap: Snap = {
         status,
         record: r,
         expired,
         fromLatch: false,
         legacyCount,
       };
+      if (gen !== undefined) snap.gen = gen;
+      return snap;
     };
     if ('error' in lock) {
       const code = (lock.error as { code?: unknown }).code;
@@ -459,8 +477,8 @@ export function createTripwire<C extends TripContext = TripContext>(
       held.blocked += 1;
     } else {
       try {
-        await storage.incrementBlocked(key);
-        const after = await storage.blocked(key);
+        await storage.incrementBlocked(key, snap.gen);
+        const after = await storage.blocked(key, snap.gen);
         count = snap.legacyCount + after.count;
         if (after.lastAt !== undefined) {
           record.lastBlockedAt = new Date(after.lastAt).toISOString();
@@ -483,12 +501,17 @@ export function createTripwire<C extends TripContext = TripContext>(
     };
   };
 
-  const consumeMarker = async (key: string): Promise<{
+  /**
+   * The cleared marker, read WITHOUT consuming it: only the trip whose
+   * create wins consumes it (see `trip`), so a losing concurrent trip can
+   * never take the annotation away from the lock that is actually written.
+   */
+  const peekMarker = async (key: string): Promise<{
     prior?: PriorClear;
     raw: string | null;
   }> => {
     try {
-      const raw = await storage.takeClearedMarker(key);
+      const raw = await storage.peekClearedMarker(key);
       if (raw === null) return { raw };
       let doc: unknown;
       try {
@@ -526,6 +549,7 @@ export function createTripwire<C extends TripContext = TripContext>(
       trippedAt: new Date(now).toISOString(),
       trippedBy: { pid: process.pid },
       blockedCount: 0,
+      generation: randomBytes(12).toString('hex'),
       context: redact(isPlainObject(input.context) ? input.context : {}),
     };
     if (sid !== undefined) record.trippedBy.sessionId = sid;
@@ -571,34 +595,21 @@ export function createTripwire<C extends TripContext = TripContext>(
       } else if (current.record) {
         return await retripped(current.record);
       }
-      marker = await consumeMarker(key);
+      marker = await peekMarker(key);
       if (marker.prior) record.priorClear = marker.prior;
       const created = await storage.createLockIfAbsent(
         key,
         JSON.stringify(record, null, 2) + '\n',
       );
       if (!created) {
-        if (marker.raw !== null) {
-          try {
-            await storage.writeClearedMarker(key, marker.raw);
-          } catch (e) {
-            warn('trip.marker', e, key);
-          }
-        }
         delete record.priorClear;
         const winner = await readDisk(key);
         return await retripped(winner.record ?? record);
       }
     } catch (e) {
-      // Not persisted: the latch keeps this process blocked.
+      // Not persisted: the latch keeps this process blocked. The marker
+      // was only read, so it is still there for the trip that persists.
       warn('trip.persist', e, key);
-      if (marker.raw !== null) {
-        try {
-          await storage.writeClearedMarker(key, marker.raw);
-        } catch {
-          // already reported through the persist warning
-        }
-      }
       await audit({
         event: 'tripwire-fired',
         key,
@@ -612,6 +623,15 @@ export function createTripwire<C extends TripContext = TripContext>(
         created: true,
         persisted: false,
       };
+    }
+    // This trip's lock carries the marker: consume exactly that marker (a
+    // newer one, written by a clear that raced in, is left in place).
+    if (marker.raw !== null) {
+      try {
+        await storage.takeClearedMarker(key, marker.raw);
+      } catch (e) {
+        warn('trip.marker', e, key);
+      }
     }
     release();
     await audit({

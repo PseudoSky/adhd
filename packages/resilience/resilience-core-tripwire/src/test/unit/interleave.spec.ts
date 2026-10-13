@@ -202,19 +202,8 @@ describe('[tripwire-core.29] TW36 trip/trip: exactly one trip creates', () => {
       { tag: 'B', until: (o) => o.op === 'stat' && o.path === lock },
       { tag: 'A', until: (o) => o.op === 'link' && o.path2 === lock },
       { tag: 'C', until: (o) =>
-        o.op === 'appendFile' && o.path === env.blockedPath('k') },
+        o.op === 'appendFile' && o.path.startsWith(env.blockedPath('k')) },
     ];
-    const picker: SchedulePicker = (pending) => {
-      let i = 0;
-      const phase = phases[0];
-      if (phase) {
-        const j = tags.findIndex((t) => t === phase.tag);
-        if (j >= 0) i = j;
-        if (phase.until(pending[i])) phases.shift();
-      }
-      tags.splice(i, 1);
-      return i;
-    };
     const results = await env.mfs.schedule<unknown>([
       () => a.trip('k', {
         reason: 'captcha',
@@ -229,7 +218,7 @@ describe('[tripwire-core.29] TW36 trip/trip: exactly one trip creates', () => {
         for (let i = 0; i < 40 && g.open; i += 1) g = await c.gate('k');
         return g;
       },
-    ], picker);
+    ], phasedPicker(phases, tags));
     expect(phases).toEqual([]);
     const [ra, rb, rc] = results.map(valueOf) as [
       { created: boolean },
@@ -242,6 +231,166 @@ describe('[tripwire-core.29] TW36 trip/trip: exactly one trip creates', () => {
     expect((await env.tw.read('k')).record?.blockedCount).toBe(1);
     expect(leftovers(env)).toEqual([]);
   });
+
+  it('a stale count of a dead lock never lands on the winner of a trip '
+    + 'race (scripted and random)', async () => {
+    const seedStale = (env: Env): void => {
+      // a late block of a removed legacy lock and of a removed generation
+      env.mfs.writeText(env.blockedPath('k'), '1', 0o600);
+      env.mfs.writeText(env.blockedPath('k', 'f'.repeat(24)), '11', 0o600);
+    };
+    await exploreRandom(async (pick) => {
+      const env = makeEnv();
+      seedStale(env);
+      const a = env.otherProcess();
+      const b = env.otherProcess();
+      const results = await env.mfs.schedule([
+        () => a.trip('k', {
+          reason: 'captcha',
+          context: {},
+        }),
+        () => b.trip('k', {
+          reason: 'banned',
+          context: {},
+        }),
+      ], pick);
+      expect(results.map(valueOf).filter((r) => r.created)).toHaveLength(1);
+      expect((await env.tw.read('k')).record?.blockedCount).toBe(0);
+      await env.tw.gate('k');
+      expect((await env.tw.read('k')).record?.blockedCount).toBe(1);
+    }, 150);
+    // scripted: the loser runs its whole create before the winner links
+    const env = makeEnv();
+    seedStale(env);
+    const tags: string[] = [];
+    const lock = env.lockPath('k');
+    const proc = (tag: string): Tripwire => createTripwire({
+      namespace: 'test-ns',
+      stateDir: STATE_DIR,
+      actor: 'tester',
+      clock: env.clock.fn,
+      fs: taggedView(env.mfs, tag, tags),
+    });
+    const phases: Array<{ tag: string; until: (o: FsOpRecord) => boolean }> = [
+      { tag: 'B', until: (o) => o.op === 'stat' && o.path === lock },
+      { tag: 'A', until: (o) => o.op === 'link' && o.path2 === lock },
+    ];
+    await env.mfs.schedule([
+      () => proc('A').trip('k', {
+        reason: 'captcha',
+        context: {},
+      }),
+      () => proc('B').trip('k', {
+        reason: 'banned',
+        context: {},
+      }),
+    ], phasedPicker(phases, tags));
+    expect(phases).toEqual([]);
+    expect((await env.tw.read('k')).record?.blockedCount).toBe(0);
+  }, SLOW);
+
+  it('[tripwire-core.29] TW17 under trip/trip: the lock that is written '
+    + 'carries priorClear and the marker is consumed exactly once',
+  async () => {
+    let raced = 0;
+    await explore(async (pick) => {
+      const env = makeEnv({ clearPolicy: 'open' });
+      await env.tw.trip('k', {
+        reason: 'captcha',
+        context: {},
+      });
+      await env.tw.clear('k', {
+        method: 'mcp-clear',
+        actor: 'op',
+      });
+      const marker = env.mfs.readText(env.markerPath('k'));
+      expect(marker).toBeDefined();
+      const a = env.otherProcess({ clearPolicy: 'open' });
+      const b = env.otherProcess({ clearPolicy: 'open' });
+      const opsBefore = env.mfs.ops.length;
+      const results = await env.mfs.schedule([
+        () => a.trip('k', {
+          reason: 'banned',
+          context: {},
+        }),
+        () => b.trip('k', {
+          reason: 'rate_limited',
+          context: {},
+        }),
+      ], pick);
+      const outs = results.map(valueOf);
+      const winner = outs.find((r) => r.created);
+      const onDisk = JSON.parse(env.mfs.readText(env.lockPath('k')) as string);
+      expect(onDisk.priorClear).toMatchObject({
+        method: 'mcp-clear',
+        actor: 'op',
+      });
+      expect(winner?.record.priorClear).toEqual(onDisk.priorClear);
+      expect(env.mfs.exists(env.markerPath('k'))).toBe(false);
+      expect(leftovers(env)).toEqual([]);
+      const peeks = env.mfs.ops.slice(opsBefore).filter((o) =>
+        o.op === 'readFile' && o.path === env.markerPath('k'));
+      if (peeks.length === 2) raced += 1;
+    }, 200, 200);
+    // both trips read the marker before either consumed it
+    expect(raced).toBeGreaterThan(0);
+  }, SLOW);
+
+  it('TW17: a clear racing in after the create keeps its newer marker',
+    async () => {
+      const env = makeEnv({ clearPolicy: 'open' });
+      await env.tw.trip('k', {
+        reason: 'captcha',
+        context: {},
+      });
+      await env.tw.clear('k', { method: 'hitl-clear' });
+      const tags: string[] = [];
+      const lock = env.lockPath('k');
+      const t = createTripwire({
+        namespace: 'test-ns',
+        stateDir: STATE_DIR,
+        clearPolicy: 'open',
+        actor: 'tester',
+        clock: env.clock.fn,
+        fs: taggedView(env.mfs, 'T', tags),
+      });
+      const c = createTripwire({
+        namespace: 'test-ns',
+        stateDir: STATE_DIR,
+        clearPolicy: 'open',
+        actor: 'tester',
+        clock: env.clock.fn,
+        fs: taggedView(env.mfs, 'C', tags),
+      });
+      // T creates its lock; C clears it (writing a newer marker) before
+      // T consumes the marker it read
+      const phases: Array<{ tag: string; until: (o: FsOpRecord) => boolean }> =
+        [
+          { tag: 'T', until: (o) => o.op === 'link' && o.path2 === lock },
+          { tag: 'C', until: (o) => o.op === 'rename' &&
+            o.path2 === env.markerPath('k') },
+        ];
+      env.clock.advance(5000);
+      const results = await env.mfs.schedule<unknown>([
+        () => t.trip('k', {
+          reason: 'banned',
+          context: {},
+        }),
+        () => c.clear('k', { method: 'mcp-clear' }),
+      ], phasedPicker(phases, tags));
+      expect(phases).toEqual([]);
+      expect((valueOf(results[0]) as { created: boolean }).created).toBe(true);
+      expect(valueOf(results[1])).toEqual({ cleared: true });
+      // the newer marker (from the racing clear) survives for the next trip
+      const left = JSON.parse(env.mfs.readText(env.markerPath('k')) as string);
+      expect(left.method).toBe('mcp-clear');
+      const next = await env.tw.trip('k', {
+        reason: 'x',
+        context: {},
+      });
+      expect(next.record.priorClear?.method).toBe('mcp-clear');
+      expect(leftovers(env)).toEqual([]);
+    });
 });
 
 /**
@@ -286,7 +435,8 @@ describe('[tripwire-core.11] TW11 gate/gate: blockedCount === N exactly', () => 
         reason: 'captcha',
         context: {},
       });
-      const lockBefore = env.mfs.readText(env.lockPath('k'));
+      const lockBefore = env.mfs.readText(env.lockPath('k')) as string;
+      const gen = JSON.parse(lockBefore).generation as string;
       const gates = Array.from({ length: N }, () => env.otherProcess());
       const results = await env.mfs.schedule(
         gates.map((g) => () => g.gate('k')),
@@ -295,7 +445,7 @@ describe('[tripwire-core.11] TW11 gate/gate: blockedCount === N exactly', () => 
       const outs = results.map(valueOf);
       expect(outs.every((g) => !g.open)).toBe(true);
       // the sidecar size is the count; the lock was never modified
-      expect(env.mfs.readBytes(env.blockedPath('k'))?.length).toBe(N);
+      expect(env.mfs.readBytes(env.blockedPath('k', gen))?.length).toBe(N);
       expect(env.mfs.readText(env.lockPath('k'))).toBe(lockBefore);
       expect((await env.tw.read('k')).record?.blockedCount).toBe(N);
       const audited = eventsOf(env, 'tripwire-gate-blocked')
@@ -357,7 +507,7 @@ describe('[tripwire-core.12] TW12 gate/clear: a block never recreates the lock',
           const rename = indexOfOp(raced, (o) =>
             o.op === 'rename' && o.path === env.lockPath('k'));
           const append = indexOfOp(raced, (o) =>
-            o.op === 'appendFile' && o.path === env.blockedPath('k'));
+            o.op === 'appendFile' && o.path.startsWith(env.blockedPath('k')));
           if (append > rename) lateAppend += 1;
           // a stale count left by a late block never leaks into a new trip
           const next = await env.tw.trip('k', {
@@ -367,6 +517,10 @@ describe('[tripwire-core.12] TW12 gate/clear: a block never recreates the lock',
           expect(next.created).toBe(true);
           expect((await env.tw.read('k')).record?.blockedCount).toBe(0);
           expect(leftovers(env)).toEqual([]);
+          // a block that landed after the removal cleaned itself up: no
+          // count file of the dead generation is left behind
+          expect(env.mfs.files().filter((f) => f.includes('.blocked')))
+            .toEqual([]);
         }, 200, 200);
         // the contested order (block counted after the lock was removed) ran
         expect(lateAppend).toBeGreaterThan(0);
@@ -536,3 +690,25 @@ describe('[tripwire-core.29] TW36 audit rotate/append (TW20 invariant)', () => {
     }, 150, 150);
   }, SLOW);
 });
+
+/**
+ * A picker that, phase by phase, runs only the operations of one tagged
+ * process until the phase's `until` operation has been released; then it
+ * releases operations in arrival order. Splices `tags` with the queue.
+ */
+function phasedPicker(
+  phases: Array<{ tag: string; until: (o: FsOpRecord) => boolean }>,
+  tags: string[],
+): SchedulePicker {
+  return (pending) => {
+    let i = 0;
+    const phase = phases[0];
+    if (phase) {
+      const j = tags.findIndex((t) => t === phase.tag);
+      if (j >= 0) i = j;
+      if (phase.until(pending[i])) phases.shift();
+    }
+    tags.splice(i, 1);
+    return i;
+  };
+}

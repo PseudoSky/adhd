@@ -83,6 +83,12 @@ export interface TripwireRecord<C extends TripContext = TripContext> {
   blockedCount: number;
   /** Time of the latest counted block (sidecar mtime). */
   lastBlockedAt?: string;
+  /**
+   * Random id of this trip (24 hex characters). It scopes the block count,
+   * so blocks counted for one trip of a key never leak into the next one.
+   * Absent on legacy locks.
+   */
+  generation?: string;
   priorClear?: PriorClear;
   recoveryHint?: string;
   /** Consumer forensic fields (redacted). */

@@ -69,7 +69,8 @@ export interface Env<C extends TripContext = TripContext> {
   /** An instance in a simulated other process (own latch). */
   otherProcess(over?: EnvOptions): Tripwire<C>;
   lockPath(key: string): string;
-  blockedPath(key: string): string;
+  /** The block sidecar of `key` (of lock generation `gen`, if given). */
+  blockedPath(key: string, gen?: string): string;
   markerPath(key: string): string;
   auditPath: string;
   /** Parsed audit lines. */
@@ -116,7 +117,8 @@ export function makeEnv<C extends TripContext = TripContext>(
     sameProcess: (o = {}) => base(sharedFs, o),
     otherProcess: (o = {}) => base(processView(mfs), o),
     lockPath: (k) => `${STATE_DIR}/tripwire/${k}.lock`,
-    blockedPath: (k) => `${STATE_DIR}/tripwire/${k}.blocked`,
+    blockedPath: (k, gen) =>
+      `${STATE_DIR}/tripwire/${k}.blocked${gen === undefined ? '' : `.${gen}`}`,
     markerPath: (k) => `${STATE_DIR}/tripwire/${k}.cleared`,
     auditPath,
     auditText: () => mfs.readText(auditPath) ?? '',

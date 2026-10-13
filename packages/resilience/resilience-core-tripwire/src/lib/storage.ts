@@ -3,9 +3,14 @@
  *
  * File layout under `<stateDir>/tripwire/`:
  * - `<key>.lock`    presence = tripped; JSON forensic record inside.
- * - `<key>.blocked` O_APPEND sidecar, one byte per counted block (its size
- *   is the count), so counting can never create or modify the lock.
- * - `<key>.cleared` marker left by a clear, consumed by the next trip.
+ * - `<key>.blocked.<generation>` O_APPEND sidecar of the lock whose record
+ *   carries that `generation` (a random hex id minted per trip), one byte
+ *   per counted block (its size is the count), so counting can never
+ *   create or modify the lock and a count can never leak from one trip of
+ *   a key into the next. A lock without a generation (legacy, unreadable)
+ *   uses `<key>.blocked`.
+ * - `<key>.cleared` marker left by a clear, consumed by the trip that
+ *   creates the next lock.
  *
  * Every write goes through a unique tmp name (`<path>.<pid>.<random>.tmp`)
  * that is fsynced before it is linked or renamed into place. Files are
@@ -18,23 +23,48 @@ import { createAuditLog, errCode } from './audit.js';
 import { TripwireKeyError } from './errors.js';
 import type { FsFileHandle, FsPort } from './memory-fs.js';
 
-/** Persistence used by `createTripwire`. Keys are pre-validated. */
+/**
+ * Persistence used by `createTripwire`. Keys are pre-validated.
+ *
+ * Block counts are scoped to a lock GENERATION: the `generation` field of
+ * the record (see {@link lockGeneration}); `undefined` is the generation
+ * of a lock that has none (legacy or unreadable).
+ */
 export interface TripwireStorage {
   /** The raw lock, `'absent'` (ENOENT only) or the read error. */
   readLock(
     key: string,
   ): Promise<{ raw: string; mtimeMs: number } | 'absent' | { error: Error }>;
-  /** Write the lock only when none exists; true = this call created it. */
+  /**
+   * Write the lock only when none exists; true = this call created it.
+   * Never touches a block count (a new generation starts at zero).
+   */
   createLockIfAbsent(key: string, raw: string): Promise<boolean>;
-  /** Remove the lock and its block count; null tombstone = was absent. */
+  /**
+   * Remove the lock and the block count of ITS generation; null tombstone
+   * = was absent.
+   */
   removeLock(key: string): Promise<{ tombstone: string | null }>;
-  /** Count one block without touching the lock. */
-  incrementBlocked(key: string): Promise<void>;
-  /** The block count and the time of the latest block. */
-  blocked(key: string): Promise<{ count: number; lastAt?: number }>;
+  /**
+   * Count one block for `generation` without touching the lock. A count
+   * whose generation is not the live lock's (the lock was removed or
+   * replaced meanwhile) is discarded, never left for a later lock.
+   */
+  incrementBlocked(key: string, generation?: string): Promise<void>;
+  /** The block count of `generation` and the time of its latest block. */
+  blocked(
+    key: string,
+    generation?: string,
+  ): Promise<{ count: number; lastAt?: number }>;
   writeClearedMarker(key: string, raw: string): Promise<void>;
-  /** Read and remove the marker atomically (consumed exactly once). */
-  takeClearedMarker(key: string): Promise<string | null>;
+  /** The marker content without consuming it (null when absent). */
+  peekClearedMarker(key: string): Promise<string | null>;
+  /**
+   * Read and remove the marker atomically (consumed exactly once). With
+   * `expected`, the marker is consumed only when its content equals it (a
+   * newer marker is left in place) and null is returned otherwise.
+   */
+  takeClearedMarker(key: string, expected?: string): Promise<string | null>;
   /** Keys that have a lock. */
   listKeys(): Promise<string[]>;
   /** Append one audit line. */
@@ -49,6 +79,28 @@ export function assertValidKey(key: unknown): asserts key is string {
   if (typeof key !== 'string' || !TRIPWIRE_KEY_PATTERN.test(key)) {
     throw new TripwireKeyError(key);
   }
+}
+
+/** A lock generation: 24 lowercase hex characters (96 random bits). */
+export const GENERATION_PATTERN = /^[0-9a-f]{24}$/;
+
+/**
+ * The generation of a raw lock: its `generation` field when it is a valid
+ * generation, else undefined (legacy, unreadable or tampered content).
+ * Lock content is untrusted; nothing else of it is interpreted here.
+ */
+export function lockGeneration(raw: string): string | undefined {
+  let doc: unknown;
+  try {
+    doc = JSON.parse(raw);
+  } catch {
+    return undefined;
+  }
+  if (typeof doc !== 'object' || doc === null || Array.isArray(doc)) {
+    return undefined;
+  }
+  const g = (doc as Record<string, unknown>)['generation'];
+  return typeof g === 'string' && GENERATION_PATTERN.test(g) ? g : undefined;
 }
 
 /** Subdirectory of `stateDir` holding the locks. */
@@ -146,7 +198,8 @@ export function createFileStorage(o: FileStorageOptions): TripwireStorage {
     uniqueSuffix: sfx,
   });
   const lockPath = (k: string): string => join(lockDir, `${k}.lock`);
-  const blockedPath = (k: string): string => join(lockDir, `${k}.blocked`);
+  const blockedPath = (k: string, gen?: string): string =>
+    join(lockDir, gen === undefined ? `${k}.blocked` : `${k}.blocked.${gen}`);
   const markerPath = (k: string): string => join(lockDir, `${k}.cleared`);
   let dirReady = false;
 
@@ -166,11 +219,17 @@ export function createFileStorage(o: FileStorageOptions): TripwireStorage {
     dirReady = true;
   };
 
-  const writeTmp = async (target: string, raw: string): Promise<string> => {
+  const bytesOf = (data: string | Uint8Array): Uint8Array =>
+    typeof data === 'string' ? enc.encode(data) : data;
+
+  const writeTmp = async (
+    target: string,
+    data: string | Uint8Array,
+  ): Promise<string> => {
     const tmp = `${target}.${sfx()}.tmp`;
     const h = await fs.openExclusive(tmp, FILE_MODE);
     try {
-      await h.write(enc.encode(raw));
+      await h.write(bytesOf(data));
       await h.sync();
     } finally {
       await h.close();
@@ -188,7 +247,10 @@ export function createFileStorage(o: FileStorageOptions): TripwireStorage {
     }
   };
 
-  const createDirect = async (p: string, raw: string): Promise<boolean> => {
+  const createDirect = async (
+    p: string,
+    data: string | Uint8Array,
+  ): Promise<boolean> => {
     let h: FsFileHandle;
     try {
       h = await fs.openExclusive(p, FILE_MODE);
@@ -197,7 +259,7 @@ export function createFileStorage(o: FileStorageOptions): TripwireStorage {
       throw e;
     }
     try {
-      await h.write(enc.encode(raw));
+      await h.write(bytesOf(data));
       await h.sync();
     } finally {
       await h.close();
@@ -206,30 +268,39 @@ export function createFileStorage(o: FileStorageOptions): TripwireStorage {
   };
 
   /**
-   * Rename the block sidecar aside; null when there is none (or it cannot
-   * be moved: the count is forensic only and must never fail a trip).
+   * Whether `generation` is the live lock's: false only when the lock is
+   * absent (ENOENT) or carries another generation; an unreadable lock
+   * keeps the count (it still blocks, so its blocks are real).
    */
-  const stashBlocked = async (key: string): Promise<string | null> => {
-    const aside = `${blockedPath(key)}.${sfx()}.stash`;
+  const isLiveGeneration = async (
+    key: string,
+    generation: string | undefined,
+  ): Promise<boolean> => {
+    let bytes: Uint8Array;
     try {
-      await fs.rename(blockedPath(key), aside);
-      return aside;
-    } catch {
-      return null;
+      bytes = await fs.readFile(lockPath(key));
+    } catch (e) {
+      return errCode(e) !== 'ENOENT';
     }
+    return lockGeneration(dec.decode(bytes)) === generation;
   };
 
-  /** Append a stashed count back onto the sidecar (best-effort). */
-  const restoreBlocked = async (key: string, aside: string): Promise<void> => {
+  /** Create-if-absent of `p` (unique tmp + fsync + link, wx fallback). */
+  const createIfAbsent = async (
+    p: string,
+    data: string | Uint8Array,
+  ): Promise<boolean> => {
+    const tmp = await writeTmp(p, data);
     try {
-      const bytes = await fs.readFile(aside);
-      if (bytes.length > 0) {
-        await fs.appendFile(blockedPath(key), bytes, FILE_MODE);
-      }
-    } catch {
-      // forensic count only; the lock itself is unaffected
+      await fs.link(tmp, p);
+      return true;
+    } catch (e) {
+      const code = errCode(e);
+      if (code === 'EEXIST') return false;
+      if (!code || !LINK_UNSUPPORTED.has(code)) throw e;
+      return await createDirect(p, data);
     } finally {
-      await ignore(fs.unlink(aside));
+      await ignore(fs.unlink(tmp));
     }
   };
 
@@ -261,34 +332,7 @@ export function createFileStorage(o: FileStorageOptions): TripwireStorage {
       await ensureDir();
       const p = lockPath(key);
       if (await exists(p)) return false;
-      // A gate that raced the previous clear may have left a count behind:
-      // move it aside BEFORE the create. When this call wins, every byte
-      // set aside predates the new lock (stale) and is dropped; when it
-      // loses, the bytes may be blocks counted on the winner's lock and
-      // are appended back, so a losing trip never erases a real count.
-      const stash = await stashBlocked(key);
-      let created = false;
-      try {
-        const tmp = await writeTmp(p, raw);
-        try {
-          await fs.link(tmp, p);
-          created = true;
-        } catch (e) {
-          const code = errCode(e);
-          if (code !== 'EEXIST') {
-            if (!code || !LINK_UNSUPPORTED.has(code)) throw e;
-            created = await createDirect(p, raw);
-          }
-        } finally {
-          await ignore(fs.unlink(tmp));
-        }
-        return created;
-      } finally {
-        if (stash !== null) {
-          if (created) await ignore(fs.unlink(stash));
-          else await restoreBlocked(key, stash);
-        }
-      }
+      return createIfAbsent(p, raw);
     },
 
     async removeLock(key) {
@@ -300,21 +344,35 @@ export function createFileStorage(o: FileStorageOptions): TripwireStorage {
         if (errCode(e) === 'ENOENT') return { tombstone: null };
         throw e;
       }
-      await ignore(fs.unlink(blockedPath(key)));
+      // The tombstone is ours alone: its generation names the dead count.
+      let gen: string | undefined;
+      try {
+        gen = lockGeneration(dec.decode(await fs.readFile(tomb)));
+      } catch {
+        gen = undefined;
+      }
+      await ignore(fs.unlink(blockedPath(key, gen)));
       await ignore(fs.unlink(tomb));
       return { tombstone: tomb };
     },
 
-    async incrementBlocked(key) {
+    async incrementBlocked(key, generation) {
       assertValidKey(key);
       await ensureDir();
-      await fs.appendFile(blockedPath(key), Uint8Array.of(0x31), FILE_MODE);
+      const p = blockedPath(key, generation);
+      await fs.appendFile(p, Uint8Array.of(0x31), FILE_MODE);
+      // A block that raced the removal of its lock landed after the
+      // removal cleaned the count up: drop the dead generation's sidecar
+      // so it can never be mistaken for a count of a later lock.
+      if (!(await isLiveGeneration(key, generation))) {
+        await ignore(fs.unlink(p));
+      }
     },
 
-    async blocked(key) {
+    async blocked(key, generation) {
       assertValidKey(key);
       try {
-        const st = await fs.stat(blockedPath(key));
+        const st = await fs.stat(blockedPath(key, generation));
         return {
           count: st.size,
           lastAt: st.mtimeMs,
@@ -338,7 +396,17 @@ export function createFileStorage(o: FileStorageOptions): TripwireStorage {
       }
     },
 
-    async takeClearedMarker(key) {
+    async peekClearedMarker(key) {
+      assertValidKey(key);
+      try {
+        return dec.decode(await fs.readFile(markerPath(key)));
+      } catch (e) {
+        if (errCode(e) === 'ENOENT') return null;
+        throw e;
+      }
+    },
+
+    async takeClearedMarker(key, expected) {
       assertValidKey(key);
       const taken = `${markerPath(key)}.${sfx()}.taken`;
       try {
@@ -348,7 +416,13 @@ export function createFileStorage(o: FileStorageOptions): TripwireStorage {
         throw e;
       }
       try {
-        return dec.decode(await fs.readFile(taken));
+        const bytes = await fs.readFile(taken);
+        const raw = dec.decode(bytes);
+        if (expected === undefined || raw === expected) return raw;
+        // A newer marker than the expected one: put it back, unless an
+        // even newer marker was written meanwhile (which then wins).
+        await ignore(createIfAbsent(markerPath(key), bytes));
+        return null;
       } finally {
         await ignore(fs.unlink(taken));
       }
@@ -393,6 +467,8 @@ export function createMemoryStorage(
   const blocked = new Map<string, { count: number; lastAt: number }>();
   const markers = new Map<string, string>();
   const auditLines: string[] = [];
+  const countKey = (key: string, gen?: string): string =>
+    `${key}\u0000${gen ?? ''}`;
   let tombs = 0;
   return {
     auditLines,
@@ -404,7 +480,6 @@ export function createMemoryStorage(
     async createLockIfAbsent(key, raw) {
       assertValidKey(key);
       if (locks.has(key)) return false;
-      blocked.delete(key);
       locks.set(key, {
         raw,
         mtimeMs: clock(),
@@ -413,33 +488,45 @@ export function createMemoryStorage(
     },
     async removeLock(key) {
       assertValidKey(key);
-      if (!locks.delete(key)) return { tombstone: null };
-      blocked.delete(key);
+      const l = locks.get(key);
+      if (!l) return { tombstone: null };
+      locks.delete(key);
+      blocked.delete(countKey(key, lockGeneration(l.raw)));
       tombs += 1;
       return { tombstone: `memory:${key}.${tombs}.tomb` };
     },
-    async incrementBlocked(key) {
+    async incrementBlocked(key, generation) {
       assertValidKey(key);
-      const cur = blocked.get(key);
-      blocked.set(key, {
+      const l = locks.get(key);
+      // only the live lock's generation is counted (atomic here)
+      if (!l || lockGeneration(l.raw) !== generation) return;
+      const ck = countKey(key, generation);
+      const cur = blocked.get(ck);
+      blocked.set(ck, {
         count: (cur?.count ?? 0) + 1,
         lastAt: clock(),
       });
     },
-    async blocked(key) {
+    async blocked(key, generation) {
       assertValidKey(key);
-      const cur = blocked.get(key);
+      const cur = blocked.get(countKey(key, generation));
       return cur ? { ...cur } : { count: 0 };
     },
     async writeClearedMarker(key, raw) {
       assertValidKey(key);
       markers.set(key, raw);
     },
-    async takeClearedMarker(key) {
+    async peekClearedMarker(key) {
+      assertValidKey(key);
+      return markers.get(key) ?? null;
+    },
+    async takeClearedMarker(key, expected) {
       assertValidKey(key);
       const raw = markers.get(key);
+      if (raw === undefined) return null;
+      if (expected !== undefined && raw !== expected) return null;
       markers.delete(key);
-      return raw ?? null;
+      return raw;
     },
     async listKeys() {
       return [...locks.keys()].sort();
