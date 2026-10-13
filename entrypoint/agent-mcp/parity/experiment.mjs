@@ -5,6 +5,14 @@
 //   1. the per-group variable   PARITY_MODEL_A | PARITY_MODEL_B | PARITY_MODEL_C | PARITY_JUDGE_MODEL
 //   2. PARITY_MODEL             (every group; all groups are Anthropic-backed)
 //   3. the JSON file            (parity/experiment.json, or the file named by PARITY_EXPERIMENT_FILE)
+// Thinking (SCOPE-R10-thinking-parity): group C (the agent-mcp anthropic provider) may carry an optional `thinking` object, exactly the product's provider.thinking
+// ({"type":"adaptive","display"?:"summarized"|"omitted"} or {"type":"disabled"}; strict, no `enabled` / `budget_tokens`). It exists so arm C's request asks the model
+// what the native arm's request asks. Absent = the provider sends no thinking field. Same precedence as the model ids, highest first:
+//   1. PARITY_THINKING_C        (a JSON object of the same shape, or the literal `none` to remove it; set-but-empty / malformed / wrong shape is refused)
+//   2. the JSON file's groups.C.thinking
+// Groups A and B (claude-cli / claudecli providers: the claude binary decides its own thinking) and the judge (the driver passes it no provider.thinking) refuse the key, and the
+// variables PARITY_THINKING_A / _B / _JUDGE / PARITY_THINKING are refused as unknown. The OpenAI / DeepSeek adapters are not arms of this experiment, so there is nothing to configure for them.
+// A round applies the resolved thinking only when its tracked ledger lists THINKING_SCOPE in scopeChanges (drive.mjs roundProfile), so rounds R5-R9 are unchanged by this file.
 // Validation is strict and fail-fast (ExperimentConfigError names the offending key): unknown keys, non-string / empty ids, aliases (`haiku`, `sonnet`, or any id
 // without the `claude-` prefix and a version digit) and any id containing `opus` (the owner forbids opus) are refused BEFORE a round plans, gates or spends anything.
 // A round opts in with `ledger.profile.modelConfig: "experiment"` (ledger.profileOf); rounds R5-R8 never read this module, so shell variables cannot change their output.
@@ -23,9 +31,14 @@ export const GROUP_PROVIDER = Object.freeze({ A: 'claude-cli', B: 'claudecli', C
 export const ENV_ALL = 'PARITY_MODEL';
 export const ENV_GROUP = Object.freeze({ A: 'PARITY_MODEL_A', B: 'PARITY_MODEL_B', C: 'PARITY_MODEL_C', judge: 'PARITY_JUDGE_MODEL' });
 export const ENV_FILE = 'PARITY_EXPERIMENT_FILE';
-const KNOWN_ENV = new Set([ENV_ALL, ENV_FILE, ...Object.values(ENV_GROUP)]);
 const ROOT_KEYS = new Set(['schema', 'description', 'groups']);
-const GROUP_KEYS = new Set(['provider', 'model']);
+const GROUP_KEYS = new Set(['provider', 'model', 'thinking']);
+/** The one group whose provider takes a `thinking` option (the agent-mcp anthropic provider arm). */
+export const THINKING_GROUPS = Object.freeze(['C']);
+export const ENV_THINKING = Object.freeze({ C: 'PARITY_THINKING_C' });
+/** The ledger scopeChanges entry that opts a round into applying the resolved thinking (SCOPE-R10-thinking-parity). */
+export const THINKING_SCOPE = 'SCOPE-R10-thinking-parity';
+const KNOWN_ENV = new Set([ENV_ALL, ENV_FILE, ...Object.values(ENV_GROUP), ...Object.values(ENV_THINKING)]);
 export const SCHEMA = 'parity-experiment/1';
 
 export class ExperimentConfigError extends Error { constructor(m) { super(`experiment config: ${m}`); this.name = 'ExperimentConfigError'; } }
@@ -45,6 +58,25 @@ export function validateModelId(id, key) {
   return m;
 }
 
+/**
+ * Validate a thinking option; returns a normalised copy. Mirrors the product's anthropicThinkingSchema (strict): {type:'adaptive', display?:'summarized'|'omitted'} | {type:'disabled'}.
+ * Throws ExperimentConfigError naming `key`.
+ */
+export function validateThinking(v, key) {
+  const bad = (why) => { throw new ExperimentConfigError(`${key}: ${why} (got ${JSON.stringify(v)})`); };
+  if (v === null || typeof v !== 'object' || Array.isArray(v)) bad('thinking must be an object such as {"type":"adaptive"} (or the literal none in the environment)');
+  for (const k of Object.keys(v)) if (k !== 'type' && k !== 'display') bad(`unknown thinking key "${k}" (allowed: type, display; the legacy enabled / budget_tokens form is not accepted)`);
+  if (v.type !== 'adaptive' && v.type !== 'disabled') bad('thinking.type must be "adaptive" or "disabled"');
+  if (v.display !== undefined) {
+    if (v.type !== 'adaptive') bad('thinking.display is only valid with type "adaptive"');
+    if (v.display !== 'summarized' && v.display !== 'omitted') bad('thinking.display must be "summarized" or "omitted"');
+  }
+  return v.display !== undefined ? { type: v.type, display: v.display } : { type: v.type };
+}
+
+/** Canonical one-line text of a thinking option (`none` for no option): the unit the wire comparison and the plan text use. */
+export const thinkingLabel = (t) => (t ? JSON.stringify(t.display !== undefined ? { type: t.type, display: t.display } : { type: t.type }) : 'none');
+
 /** Read and validate one experiment JSON file. `key` names where the path came from (for errors). */
 export function loadExperimentFile(file, key = 'experiment file') {
   let text; try { text = fs.readFileSync(file, 'utf8'); } catch (e) { throw new ExperimentConfigError(`${key}: cannot read ${file}: ${e.code ?? e.message}`); }
@@ -62,6 +94,10 @@ export function loadExperimentFile(file, key = 'experiment file') {
     for (const k of Object.keys(e)) if (!GROUP_KEYS.has(k)) bad(`groups.${g}: unknown key "${k}" (allowed: ${[...GROUP_KEYS].join(', ')})`);
     if (e.provider !== GROUP_PROVIDER[g]) bad(`groups.${g}.provider must be "${GROUP_PROVIDER[g]}", got ${JSON.stringify(e.provider)}`);
     groups[g] = { provider: e.provider, model: validateModelId(e.model, `groups.${g}.model`) };
+    if (e.thinking !== undefined) {
+      if (!THINKING_GROUPS.includes(g)) bad(`groups.${g}: "thinking" is not allowed on provider "${e.provider}": thinking parity applies to the Anthropic-backed agent-mcp arm (group ${THINKING_GROUPS.join(', ')}) only`);
+      groups[g].thinking = validateThinking(e.thinking, `groups.${g}.thinking`);
+    }
   }
   return { groups, sha256: crypto.createHash('sha256').update(text).digest('hex') };
 }
@@ -69,11 +105,14 @@ export function loadExperimentFile(file, key = 'experiment file') {
 /**
  * Resolve the experiment: the JSON file plus the environment overrides.
  * @param {{env?:Record<string,string|undefined>, file?:string}} [o] `file` (explicit) > env PARITY_EXPERIMENT_FILE > the shipped default.
- * @returns {{file:string, fileSource:'default'|'env'|'param', sha256:string, groups:Record<string,{provider:string, model:string, source:'json'|'env', envVar:string|null}>, models:Record<string,string>}}
+ * @returns {{file:string, fileSource:'default'|'env'|'param', sha256:string, groups:Record<string,{provider:string, model:string, source:'json'|'env', envVar:string|null}>, models:Record<string,string>, thinking:Record<string,{value:{type:string,display?:string}|null, source:'json'|'env', envVar:string|null}>}}
  */
 export function resolveExperiment({ env = process.env, file } = {}) {
   for (const k of Object.keys(env)) if (/^PARITY_(MODEL|JUDGE)(_.*)?$/.test(k) && !KNOWN_ENV.has(k)) {
     throw new ExperimentConfigError(`env ${k}: unknown group variable (known: ${[ENV_ALL, ...Object.values(ENV_GROUP)].join(', ')})`);
+  }
+  for (const k of Object.keys(env)) if (/^PARITY_THINKING(_.*)?$/.test(k) && !KNOWN_ENV.has(k)) {
+    throw new ExperimentConfigError(`env ${k}: unknown thinking variable (known: ${Object.values(ENV_THINKING).join(', ')}; thinking parity applies to the Anthropic-backed agent-mcp arm, group C, only)`);
   }
   const envFile = env[ENV_FILE];
   if (envFile !== undefined && !String(envFile).trim()) throw new ExperimentConfigError(`env ${ENV_FILE}: set but empty`);
@@ -91,7 +130,18 @@ export function resolveExperiment({ env = process.env, file } = {}) {
         : { provider: base.provider, model: base.model, source: 'json', envVar: null };
     models[g] = groups[g].model;
   }
-  return { file: chosen, fileSource, sha256: loaded.sha256, groups, models };
+  // thinking: per-group env (JSON or `none`) > the JSON file. Only THINKING_GROUPS; `value` null = no thinking field is requested.
+  const thinking = {};
+  for (const g of THINKING_GROUPS) {
+    const name = ENV_THINKING[g]; const raw = env[name]; const fromFile = loaded.groups[g].thinking ?? null;
+    if (raw === undefined) { thinking[g] = { value: fromFile, source: 'json', envVar: null }; continue; }
+    const t = String(raw).trim();
+    if (!t) throw new ExperimentConfigError(`env ${name}: set but empty (use a JSON object such as {"type":"adaptive"}, or the literal none)`);
+    if (t === 'none') { thinking[g] = { value: null, source: 'env', envVar: name }; continue; }
+    let parsed; try { parsed = JSON.parse(t); } catch (e) { throw new ExperimentConfigError(`env ${name}: not valid JSON and not the literal none (${e.message}) (got ${JSON.stringify(t)})`); }
+    thinking[g] = { value: validateThinking(parsed, `env ${name}`), source: 'env', envVar: name };
+  }
+  return { file: chosen, fileSource, sha256: loaded.sha256, groups, models, thinking };
 }
 
 /**
@@ -115,4 +165,10 @@ export function modelConsistency({ arms, models, pricingIdOf = (id) => id, diffe
 export function describeExperiment(ex, { arms = GROUPS.filter((g) => g !== 'judge'), indent = '  ' } = {}) {
   const row = (g) => `${indent}${g === 'judge' ? 'judge' : `arm ${g}`}: provider ${ex.groups[g].provider}  model ${ex.groups[g].model}  source ${ex.groups[g].source}${ex.groups[g].envVar ? ` (${ex.groups[g].envVar})` : ''}`;
   return [...arms.map(row), row('judge')];
+}
+
+/** Plan / record line for the resolved thinking of group C (SCOPE-R10-thinking-parity). */
+export function describeThinking(ex, { indent = '  ' } = {}) {
+  const t = ex.thinking?.C; if (!t) return [];
+  return [`${indent}arm C: provider.thinking ${thinkingLabel(t.value)}  source ${t.source}${t.envVar ? ` (${t.envVar})` : ' (parity/experiment.json default)'}`];
 }

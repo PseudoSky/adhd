@@ -1,13 +1,14 @@
 {
   "round": "R10",
   "cap": 2,
-  "approvedBy": "",
+  "approvedBy": "I approve your next 3 experiment rounds as long as you're making serious progress",
   "extraRunReason": "",
   "runs": [],
   "judgeCalls": [],
   "scenarioSha": "",
   "scopeChanges": [
-    "SCOPE-R10-prep"
+    "SCOPE-R10-prep",
+    "SCOPE-R10-thinking-parity"
   ],
   "armOrder": [],
   "startedAt": null,

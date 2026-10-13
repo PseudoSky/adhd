@@ -83,13 +83,16 @@ export function defaultProfile() { return { arms: null, completedArms: [], armMo
  */
 export const pricingIdOf = (id) => L.rateCardFor(id)?.model ?? id;
 export function roundProfile(opts = {}) {
-  const round = opts.round ?? ROUND; const p = LG.profileOf(LG.readLedger(round, opts.ledgerDir ?? LG.LEDGER_DIR));   // throws LedgerError on a malformed profile (fail closed)
+  const round = opts.round ?? ROUND; const led = LG.readLedger(round, opts.ledgerDir ?? LG.LEDGER_DIR); const p = LG.profileOf(led);   // throws LedgerError on a malformed profile (fail closed)
   const d = defaultProfile();
   if (p?.modelConfig === 'experiment') {
     // models are CONFIGURATION (parity/experiment.json + PARITY_* env, experiment.mjs), validated here BEFORE anything plans, gates, reserves or spends; throws ExperimentConfigError naming the key.
     // Only a round that opts in reads the environment, so the PARITY_* variables cannot change what R5-R8 print or re-derive.
     const ex = EX.resolveExperiment({ env: opts.env ?? process.env, file: opts.experimentFile });
+    // SCOPE-R10-thinking-parity: the configured thinking reaches arm C only for a round whose tracked ledger lists EX.THINKING_SCOPE, so R5-R9 keep sending no thinking field.
+    const thinkingOn = Array.isArray(led.scopeChanges) && led.scopeChanges.includes(EX.THINKING_SCOPE);
     return { ...d, ...p, model: ex.models[p.arms.includes('A') ? 'A' : p.arms[0]], judgeModel: ex.models.judge, models: ex.models, modelSources: ex.groups,
+      ...(thinkingOn ? { thinking: Object.fromEntries(Object.entries(ex.thinking).map(([g, t]) => [g, t.value])), thinkingSources: ex.thinking } : {}),
       experiment: { file: ex.file, fileSource: ex.fileSource, sha256: ex.sha256 }, source: `parity/ledger/${round}.json profile (models: ${path.relative(HERE, ex.file) || ex.file})` };
   }
   return p ? { ...d, ...p, model: p.model ?? d.model, judgeModel: p.judgeModel ?? d.judgeModel, source: `parity/ledger/${round}.json profile` } : d;
@@ -122,6 +125,11 @@ export function fixturesFact(profile) { const paired = profile?.pairedFixtures =
 /** The model the run's arms are launched with: the profile's (an alias such as `haiku`, or a concrete id), else the module pin. */
 const modelOf = (ctx) => ctx.profile?.models?.[ctx.runDef?.arm] ?? ctx.profile?.armModels?.[ctx.runDef?.arm] ?? ctx.profile?.model ?? MODEL;   // SCOPE-R9-model-config: the configured FULL id of this arm wins; R8-AC: a per-arm model (arm C: the concrete id the alias resolved to) overrides the round model for that arm only
 const effortOf = (ctx) => ctx.profile?.effort ?? null;
+/**
+ * SCOPE-R10-thinking-parity: the explicit `thinking` option (provider.thinking) the round asks arm C's model with, or null (no field). `undefined` for any arm the harness does not set it on
+ * (A and B: the claude binary decides its own; every round whose ledger does not list the scope): thinkingFacts reports those as observed-only.
+ */
+export const thinkingOf = (ctx, arm = ctx.runDef?.arm) => (ctx.profile?.thinking && arm in ctx.profile.thinking ? ctx.profile.thinking[arm] : undefined);
 /**
  * R8-effort: how the explicit effort level reaches each arm (probed 2026-10-12 with the real claude 2.1.296 behind the capture proxy and a local mock upstream, no model call:
  * --effort high and CLAUDE_CODE_EFFORT_LEVEL=high both put `output_config: {"effort":"high"}` on the /v1/messages request; with neither the request carries "medium" for claude-haiku-5-5).
@@ -391,6 +399,7 @@ function providerFor(ctx, arm) {
   if (arm === 'B') return { type: 'claudecli', model: modelOf(ctx), claudePath: ctx.opts.claude, timeoutMs: 20 * 60 * 1000 };
   const p = { type: 'anthropic', model: modelOf(ctx), timeoutMs: 10 * 60 * 1000 };
   if (effortOf(ctx)) p.effort = effortOf(ctx);   // R8-AC: arm C's explicit effort is a request field (output_config.effort), the same level A and B carry
+  if (thinkingOf(ctx, arm)) p.thinking = { ...thinkingOf(ctx, arm) };   // R10 S1 P7 / SCOPE-R10-thinking-parity: arm C asks the model what arm A's request asks (parent AND worker definitions both come through here)
   return p;
 }
 function agentDef(ctx, name, parent) {
@@ -591,6 +600,42 @@ export function effortFacts({ requested, arm, wire = null }) {
   const all = wire.mainEfforts;
   if (all.length && all.every((e) => e === requested)) return { ...base, status: 'verified', detail: `every one of ${wire.mainRequests} main request(s) carried effort ${requested}` };
   return { ...base, status: 'mismatch', detail: `configured ${requested}, wire carried [${all.map((e) => e ?? 'none').join(', ')}] on ${wire.mainRequests} main request(s)` };
+}
+/**
+ * Static guard over the source of providers/anthropic.ts (R10 S1 P7 ratified): the ONLY `thinking` the provider may put on a request is the conditional pass-through
+ * `...(this.providerConfig.thinking !== undefined && { thinking: this.providerConfig.thinking })`. It must be PRESENT exactly once (a file that lost it would silently send
+ * nothing, so arm C's explicit option would never reach the wire), conditional on `!== undefined` (an unconditional / `!== null` / `true &&` variant would send a thinking key when
+ * none was configured, or send `undefined`), and no other `thinking` token may remain once comments and that one expression are removed. Pure: takes the text, returns {ok, reasons}.
+ */
+export function anthropicThinkingGuard(source) {
+  const t = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+  const passthrough = /\.\.\.\(this\.providerConfig\.thinking !== undefined && \{ thinking: this\.providerConfig\.thinking \}\)/g;
+  const found = (t.match(passthrough) || []).length; const reasons = [];
+  if (found !== 1) reasons.push(`the conditional pass-through "...(this.providerConfig.thinking !== undefined && { thinking: this.providerConfig.thinking })" must appear exactly once, found ${found}`);
+  if (/\bthinking\b/i.test(t.replace(passthrough, ''))) reasons.push('a `thinking` token remains outside the conditional pass-through (an unconditional or differently-conditioned thinking parameter)');
+  return { ok: reasons.length === 0, reasons };
+}
+/**
+ * SCOPE-R10-thinking-parity: the `thinking` option arm C was configured with versus what its main (tool-declaring, workers included) requests carried on the wire.
+ * `requested`: the option object, `null` (an explicit "none": the round controls the arm and asks for no thinking field) or `undefined` (the harness does not set thinking on this arm).
+ * `wire`: wire-diff.wireThinkingFor() (null when capture was off). status: not-controlled (observed only; A and B run the claude binary's own thinking, which live is `adaptive`, so a
+ * difference is never a mismatch there) | unverified | unobserved | verified | mismatch. `match` is true/false only when the arm is controlled. `verdict` is the one-line summary.
+ */
+export function thinkingFacts({ requested, arm, wire = null }) {
+  const want = requested === undefined ? undefined : EX.thinkingLabel(requested);
+  const observed = wire ? wire.mainThinking.map((t) => t ?? 'none') : null; const sideObserved = wire ? wire.sideThinking.map((t) => t ?? 'none') : null;
+  const base = { arm, requested: want ?? null, controlled: requested !== undefined, observed, sideObserved, mainRequests: wire ? wire.mainRequests : null };
+  const out = (status, match, detail) => ({ ...base, status, match, detail, verdict: `thinking arm ${arm}: requested ${want ?? '(not set by the harness)'}, wire ${observed ? `[${observed.join(', ')}] on ${wire.mainRequests} main request(s)` : '(not captured)'}: ${match === true ? 'MATCH' : match === false ? 'MISMATCH' : status.toUpperCase()}` });
+  if (requested === undefined) return out('not-controlled', null, wire ? `not set by the harness; the wire carried [${observed.join(', ')}] on ${wire.mainRequests} main request(s)` : 'not set by the harness');
+  if (!wire) return out('unverified', null, 'capture off: the option was applied, nothing was observed on the wire');
+  if (!wire.mainRequests) return out('unobserved', null, 'no tool-declaring model request reached the capture proxy');
+  if (observed.every((t) => t === want)) return out('verified', true, `every one of ${wire.mainRequests} main request(s) carried thinking ${want}`);
+  return out('mismatch', false, `requested thinking ${want}, wire carried [${observed.join(', ')}] on ${wire.mainRequests} main request(s)`);
+}
+/** The wire thinking facts of this run's arm from the capture logs (null when capture was off or nothing was written). */
+function wireThinkingOf(ctx) {
+  if (!ctx.captureInfo?.outDir) return null;
+  try { const files = WD.resolveWireFiles([ctx.captureInfo.outDir]); if (!files.length) return null; return WD.wireThinkingFor(WD.analyzeWire(files), ctx.runDef.arm); } catch { return null; }
 }
 /** The wire facts of this run's arm from the capture logs (null when capture was off or nothing was written). */
 function wireFactsOf(ctx) {
@@ -842,6 +887,10 @@ async function runOne(ctx, state) {
     { const mc = modelConfigFacts(ctx.profile, arm); if (mc) record.modelConfig = mc; }   // SCOPE-R9-model-config: the configured id + source of this arm and the judge, on every record of a configured round
     record.model = modelFacts({ requested: modelOf(ctx), resolved: obs.models ?? [], sideModels: obs.sideModels ?? [], wire }); record.warnings.push(...record.model.warnings.map((w) => `MODEL: ${w}`));
     record.effort = effortFacts({ requested: effortOf(ctx), arm, wire }); if (record.effort.status === 'mismatch') record.warnings.push(`EFFORT MISMATCH: ${record.effort.detail}`);
+    if (ctx.profile?.thinking) {   // SCOPE-R10-thinking-parity: only a round that lists the scope records the comparison, for every arm (A and B observed-only); R5-R9 records are unchanged
+      record.thinkingFacts = thinkingFacts({ requested: thinkingOf(ctx), arm, wire: wireThinkingOf(ctx) }); console.log(`  ${record.thinkingFacts.verdict}`);
+      if (record.thinkingFacts.status === 'mismatch') record.warnings.push(`THINKING MISMATCH: ${record.thinkingFacts.detail}`);
+    }
     record.webSurface = obs.capabilities?.webSurface ?? null;
     if (obs.capabilities && obs.capabilities.canFetch === false) record.webFinding = 'arm cannot fetch';
     if (arm !== 'A') { record.shellEgress = raw.shellEgress ?? egressFactOf('', ''); if (record.shellEgress.mode !== 'open') record.warnings.push(`Shell egress is ${record.shellEgress.mode}, expected open (product default): ${JSON.stringify(record.shellEgress)}`); }
@@ -892,8 +941,14 @@ export function rederiveDurationReport(root, round = ROUND, rep = 1) {
   if (!Object.keys(recs).length) return `no records under ${runs}`;
   return `DURATION (R9-meas; wall is the graded metric, phase-sum is report-only and never gates) round ${round} rep ${rep}\n${MT.formatDurationTable(MT.rederiveDurations(recs, calls))}`;
 }
+/** effectiveConfig.thinking: the R7 policy text, except arm C of a round that lists SCOPE-R10-thinking-parity, which states the explicit option it sends (the other arms keep the model default). */
+function thinkingConfigText(ctx) {
+  const arm = arm0(ctx);
+  if (arm === 'C' && thinkingOf(ctx, 'C') !== undefined) return `thinking: arm C explicit ${EX.thinkingLabel(thinkingOf(ctx, 'C'))} (provider.thinking -> Messages API thinking; ${EX.THINKING_SCOPE}; the same setting arm A's native request carries); arms A and B keep the claude binary's own default`;
+  return `thinking: ${THINKING_POLICY} (${THINKING_MECHANISM[arm]})`;
+}
 function effectiveConfig(ctx) {
-  return { model: modelOf(ctx), ...(ctx.profile?.models ? { modelConfig: modelConfigFacts(ctx.profile, arm0(ctx)) } : {}), ...(LG.isModelAlias(modelOf(ctx)) ? { modelResolution: `"${modelOf(ctx)}" is an alias the claude CLI resolves at run time; the resolved id is read from the response and recorded in record.model, and the run is priced by it` } : {}), ...(effortOf(ctx) ? { effort: `${effortOf(ctx)} explicit: ${EFFORT_MECHANISM[arm0(ctx)].replace('<level>', effortOf(ctx))}` } : {}), maxToolLoops: arm0(ctx) === 'A' ? 'n/a (claude 2.1.296 has no --max-turns; guard --max-budget-usd ' + BUDGET_GUARD_USD + ')' : MAX_TOOL_LOOPS, budgetMaxCalls: arm0(ctx) === 'A' ? 'n/a' : 0, shellAllow: arm0(ctx) === 'A' ? 'unrestricted Bash (bypassPermissions)' : SHELL_POLICY, shellEgress: arm0(ctx) === 'A' ? 'n/a (native Bash)' : 'open expected (product default); actual mode recorded in record.shellEgress', toolResultCap: arm0(ctx) === 'A' ? 'native (<=30k chars inline)' : 'agent-mcp default (6000 chars, head 75% / tail 25%)', providerTimeoutMs: arm0(ctx) === 'B' ? 1_200_000 : arm0(ctx) === 'C' ? 600_000 : `n/a (claude CLI; ${PHASE_TIMEOUT_MS} ms phase timeout)`, queueConcurrency: 'agent-mcp default', maxDepth: 'agent-mcp default (3)', thinking: `thinking: ${THINKING_POLICY} (${THINKING_MECHANISM[arm0(ctx)]})`, thinkingEnv: {}, phaseTimeoutMs: PHASE_TIMEOUT_MS, ...(ctx.opts?.capture ? { capture: `wire capture ON (capture-proxy.mjs, logs/wire): arm ${arm0(ctx)} model traffic is routed through a local pass-through proxy; bodies and timing are not altered` } : {}) };
+  return { model: modelOf(ctx), ...(ctx.profile?.models ? { modelConfig: modelConfigFacts(ctx.profile, arm0(ctx)) } : {}), ...(LG.isModelAlias(modelOf(ctx)) ? { modelResolution: `"${modelOf(ctx)}" is an alias the claude CLI resolves at run time; the resolved id is read from the response and recorded in record.model, and the run is priced by it` } : {}), ...(effortOf(ctx) ? { effort: `${effortOf(ctx)} explicit: ${EFFORT_MECHANISM[arm0(ctx)].replace('<level>', effortOf(ctx))}` } : {}), maxToolLoops: arm0(ctx) === 'A' ? 'n/a (claude 2.1.296 has no --max-turns; guard --max-budget-usd ' + BUDGET_GUARD_USD + ')' : MAX_TOOL_LOOPS, budgetMaxCalls: arm0(ctx) === 'A' ? 'n/a' : 0, shellAllow: arm0(ctx) === 'A' ? 'unrestricted Bash (bypassPermissions)' : SHELL_POLICY, shellEgress: arm0(ctx) === 'A' ? 'n/a (native Bash)' : 'open expected (product default); actual mode recorded in record.shellEgress', toolResultCap: arm0(ctx) === 'A' ? 'native (<=30k chars inline)' : 'agent-mcp default (6000 chars, head 75% / tail 25%)', providerTimeoutMs: arm0(ctx) === 'B' ? 1_200_000 : arm0(ctx) === 'C' ? 600_000 : `n/a (claude CLI; ${PHASE_TIMEOUT_MS} ms phase timeout)`, queueConcurrency: 'agent-mcp default', maxDepth: 'agent-mcp default (3)', thinking: thinkingConfigText(ctx), thinkingEnv: {}, phaseTimeoutMs: PHASE_TIMEOUT_MS, ...(ctx.opts?.capture ? { capture: `wire capture ON (capture-proxy.mjs, logs/wire): arm ${arm0(ctx)} model traffic is routed through a local pass-through proxy; bodies and timing are not altered` } : {}) };
 }
 const arm0 = (ctx) => ctx.runDef.arm;
 
@@ -1225,7 +1280,11 @@ export function planText(opts) {
   if (B) { const bEnv = serverEnv(B, '<store>', '<logs>');
     out.push(`  B  ${THINKING_MECHANISM.B}`, `       cited at ${cite(/^export function serverEnv/)} and packages/agent/agent-engine-orchestrator/src/providers/claudecli.ts:818-833 (buildSubprocessEnv copies process.env)`, `       resolved server env thinking variables set: [${present(bEnv).join(',')}] (expected none)`, `       provider: ${JSON.stringify(providerFor(B, 'B'))}`); }
   if (C) { const cProv = providerFor(C, 'C');
-    out.push(`  C  ${THINKING_MECHANISM.C}`, `       cited at ${cite(/^function providerFor/)} (provider keys: ${Object.keys(cProv).join(',')}; no thinking key) and anthropic.ts (rg "thinking": no match)`, `       provider: ${JSON.stringify(cProv)}`); }
+    if (thinkingOf(C, 'C') !== undefined) {   // SCOPE-R10-thinking-parity: this round sends arm C's thinking explicitly (parent and worker definitions), the same setting arm A's native request carries
+      out.push(`  C  EXPLICIT ${EX.thinkingLabel(thinkingOf(C, 'C'))} (${EX.THINKING_SCOPE}): provider.thinking on the anthropic agent definition, parent AND worker; anthropic.ts spreads it into the Messages API request only when set`, `       cited at ${cite(/^function providerFor/)} (provider keys: ${Object.keys(cProv).join(',')}) and anthropic.ts (the conditional pass-through)`, `       provider: ${JSON.stringify(cProv)}`,
+        `       source: ${Object.entries(prof.thinkingSources ?? {}).map(([g, t]) => `${g} ${t.source}${t.envVar ? ` (${t.envVar})` : ' (parity/experiment.json)'}`).join('; ')}; precedence ${EX.ENV_THINKING.C} > JSON; applies to the Anthropic-backed arm C only (A and B are the claude binary's own thinking; OpenAI / DeepSeek are not arms of this experiment)`,
+        `       verification: record.thinkingFacts compares the requested option with the \`thinking\` of every main (tool-declaring) request on the wire and flags a mismatch (needs capture; the profile forces it)`); }
+    else out.push(`  C  ${THINKING_MECHANISM.C}`, `       cited at ${cite(/^function providerFor/)} (provider keys: ${Object.keys(cProv).join(',')}; no thinking key) and anthropic.ts (rg "thinking": no match)`, `       provider: ${JSON.stringify(cProv)}`); }
   if (prof.effort) {
     out.push('', `EFFORT: ${prof.effort} set explicitly (R8-effort; recorded in record.config.effort and record.effort, checked against output_config.effort in the captured request bodies when capture is on)`);
     if (A) out.push(`  A  ${EFFORT_MECHANISM.A.replace('<level>', prof.effort)}   resolved argv carries: ${argvA(A, '<m>', null).join(' ').match(/--effort \S+/)?.[0] ?? '(NONE)'}; spawn env carries CLAUDE_CODE_EFFORT_LEVEL=${armAEnv(A).CLAUDE_CODE_EFFORT_LEVEL ?? '(NONE)'}`);
@@ -1399,7 +1458,17 @@ export async function selfCheck({ log = console.log, opts = parseArgs([]) } = {}
     const repoRoot = opts.wt;
     const cli = path.join(repoRoot, 'packages/agent/agent-engine-orchestrator/src/providers/claudecli.ts'); const anth = path.join(repoRoot, 'packages/agent/agent-engine-orchestrator/src/providers/anthropic.ts');
     if (fs.existsSync(cli)) { const t = fs.readFileSync(cli, 'utf8'); chk('claudecli.ts buildSubprocessEnv copies process.env into the spawned claude and never sets or deletes MAX_THINKING_TOKENS/CLAUDE_CODE_DISABLE_THINKING (B inherits the thinking behaviour of its environment, which the driver leaves at the model default)', /for \(const \[k, v\] of Object\.entries\(process\.env\)\)/.test(t) && !/MAX_THINKING_TOKENS|CLAUDE_CODE_DISABLE_THINKING/.test(t.replace(/\/\/.*$/gm, ''))); } else chk('claudecli.ts present for static check (skipped: not found)', true, `SKIP ${cli}`);
-    if (fs.existsSync(anth)) { const t = fs.readFileSync(anth, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, ''); const passthrough = /\.\.\.\(this\.providerConfig\.thinking !== undefined && \{ thinking: this\.providerConfig\.thinking \}\)/; chk('anthropic.ts (arm C provider) sends a thinking request parameter ONLY as the explicit providerConfig.thinking pass-through (R10 S1 P7: unset sends no thinking key) and nowhere else', !/\bthinking\b/i.test(t.replace(passthrough, ''))); } else chk('anthropic.ts present for static check (skipped: not found)', true, `SKIP ${anth}`);
+    if (fs.existsSync(anth)) { const g = anthropicThinkingGuard(fs.readFileSync(anth, 'utf8')); chk('anthropic.ts (arm C provider) sends a thinking request parameter ONLY as the explicit providerConfig.thinking pass-through, present exactly once and conditional on providerConfig.thinking !== undefined (R10 S1 P7: unset sends no thinking key), and nowhere else', g.ok, g.reasons.join('; ')); } else chk('anthropic.ts present for static check (skipped: not found)', true, `SKIP ${anth}`);
+    { // R10 LP AC4: the guard has teeth on synthetic sources (no packages/** file is touched): only the conditional pass-through, exactly once, is accepted
+      const pass = '...(this.providerConfig.thinking !== undefined && { thinking: this.providerConfig.thinking })'; const base = (x) => `const body = { model, ${x} };`;
+      chk('R10 LP AC4: anthropicThinkingGuard accepts the conditional pass-through once and refuses an unconditional key, `!== null`, `true &&`, a removed pass-through and a duplicate', anthropicThinkingGuard(base(pass)).ok && !anthropicThinkingGuard(base('thinking: this.providerConfig.thinking')).ok
+        && !anthropicThinkingGuard(base(pass.replace('!== undefined', '!== null'))).ok && !anthropicThinkingGuard(base('...(true && { thinking: this.providerConfig.thinking })')).ok && !anthropicThinkingGuard(base('')).ok && !anthropicThinkingGuard(base(`${pass}, ${pass}`)).ok);
+      chk('R10 LP AC3: thinkingFacts flags a worker request that lost the option (mismatch), matches none/none and adaptive/adaptive, and never mismatches an uncontrolled arm', (() => {
+        const w = (...t) => ({ mainRequests: t.length, mainThinking: [...new Set(t)], sideThinking: [] }); const a = '{"type":"adaptive"}';
+        return thinkingFacts({ requested: { type: 'adaptive' }, arm: 'C', wire: w(a) }).match === true && thinkingFacts({ requested: { type: 'adaptive' }, arm: 'C', wire: w(a, null) }).match === false
+          && thinkingFacts({ requested: null, arm: 'C', wire: w(null) }).match === true && thinkingFacts({ requested: undefined, arm: 'A', wire: w(a) }).status === 'not-controlled';
+      })());
+    }
 
     // ============ AC4: ledger (R0.AC4): cap 3, approvedBy, arm A first, void rule, extraRunReason, fail closed ============
     log('--- AC4: per-round ledger (cap 3) ---');

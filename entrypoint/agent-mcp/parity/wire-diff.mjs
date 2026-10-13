@@ -95,6 +95,35 @@ export function wireFactsFor(analysis, arm) {
   return { requests: rs.length, mainRequests: main.length, mainModels: uniq(main.map((r) => r.model).filter(Boolean)), mainEfforts: uniq(main.map((r) => r.effort)), sideEfforts: uniq(side.map((r) => r.effort)), sideModels: uniq(side.map((r) => r.model).filter(Boolean)) };
 }
 
+/** Canonical text of the `thinking` option a request body carried (`type` first, other keys sorted: equal options are equal text, whatever the sender's key order; the same form experiment.mjs thinkingLabel prints); null when the request carries none. */
+export function canonThinking(t) {
+  if (t === undefined || t === null) return null;
+  if (typeof t !== 'object' || Array.isArray(t)) return JSON.stringify(t);
+  const keys = Object.keys(t).sort((a, b) => (a === 'type' ? -1 : b === 'type' ? 1 : a < b ? -1 : a > b ? 1 : 0));
+  return JSON.stringify(Object.fromEntries(keys.map((k) => [k, t[k]])));
+}
+
+/**
+ * R10 thinking parity: the pure core of `wireThinkingFor`. `bodies` are parsed request bodies in capture order; "main" requests declare tools (the agent turns, workers included),
+ * the rest are side calls. The FULL `thinking` object is compared (so `display` counts), as canonical text per request, in first-seen order. Kept apart from `wireFactsFor`
+ * so that function's shape (pinned by the R8 tests) is unchanged.
+ * @returns {{requests:number, mainRequests:number, mainThinking:(string|null)[], sideThinking:(string|null)[]}}
+ */
+export function summarizeThinking(bodies) {
+  const uniq = (xs) => [...new Set(xs)];
+  const bs = bodies.filter((b) => b && typeof b === 'object');
+  const hasTools = (b) => (Array.isArray(b.tools) ? b.tools.length : 0) > 0;
+  const main = bs.filter(hasTools); const side = bs.filter((b) => !hasTools(b));
+  return { requests: bs.length, mainRequests: main.length, mainThinking: uniq(main.map((b) => canonThinking(b.thinking))), sideThinking: uniq(side.map((b) => canonThinking(b.thinking))) };
+}
+
+/** What the wire says one arm's requests carried as `thinking` (reads the raw request bodies of that arm's capture files named by the analysis). */
+export function wireThinkingFor(analysis, arm) {
+  const bodies = [];
+  for (const file of analysis.arms[arm]?.files ?? []) for (const e of readEvents(file)) if (e.type === 'raw_request' && e.body) bodies.push(e.body);
+  return summarizeThinking(bodies);
+}
+
 /** Side-by-side delta of the arms' first requests. */
 export function diffFirstRequests(analysis) {
   const names = Object.keys(analysis.arms).sort();

@@ -1,10 +1,10 @@
 {
   "schema": "parity-experiment/1",
-  "description": "Models under test, as configuration (SCOPE-R9-model-config). One group per arm plus the judge: provider and FULL model id. Every group is Anthropic-backed and shares the same full id by default. Override with PARITY_MODEL (all groups) or PARITY_MODEL_A / PARITY_MODEL_B / PARITY_MODEL_C / PARITY_JUDGE_MODEL (one group); point PARITY_EXPERIMENT_FILE at another file of this shape. Precedence: per-group env > PARITY_MODEL > this file. Full ids only: no aliases (haiku, sonnet), no opus.",
+  "description": "Models under test, as configuration (SCOPE-R9-model-config). One group per arm plus the judge: provider and FULL model id. Every group is Anthropic-backed and shares the same full id by default. Override with PARITY_MODEL (all groups) or PARITY_MODEL_A / PARITY_MODEL_B / PARITY_MODEL_C / PARITY_JUDGE_MODEL (one group); point PARITY_EXPERIMENT_FILE at another file of this shape. Precedence: per-group env > PARITY_MODEL > this file. Full ids only: no aliases (haiku, sonnet), no opus. Group C also carries thinking {\"type\":\"adaptive\"} (SCOPE-R10-thinking-parity): the native arm A asks the model with adaptive thinking, so arm C's request must too; override with PARITY_THINKING_C (a JSON object, or none to remove it); only group C accepts the key (A and B are the claude binary's own thinking, the judge is passed none); applied only by a round whose ledger lists SCOPE-R10-thinking-parity.",
   "groups": {
     "A": { "provider": "claude-cli", "model": "claude-haiku-5-5" },
     "B": { "provider": "claudecli", "model": "claude-haiku-5-5" },
-    "C": { "provider": "anthropic", "model": "claude-haiku-5-5" },
+    "C": { "provider": "anthropic", "model": "claude-haiku-5-5", "thinking": { "type": "adaptive" } },
     "judge": { "provider": "anthropic", "model": "claude-haiku-5-5" }
   }
 }

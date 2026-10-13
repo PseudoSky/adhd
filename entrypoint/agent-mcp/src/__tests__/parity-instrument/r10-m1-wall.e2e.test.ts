@@ -76,7 +76,11 @@ describe('R10 M1: wall attribution on a fresh real-server mock-provider run', ()
 
   it('R10 M1 AC4: the live model-call table prints thinking_config and thinking_blocks together, labelled', () => {
     const rows = wallBlock(wall, 'C1'); const n = rawLines(traceOf('C1')[0]).filter((l) => l.event === 'agent.model_call.finish').length;
-    expect(rows.filter((r) => r.includes('thinking_config=none (no thinking field sent (API default; may still think)) | thinking_blocks=1'))).toHaveLength(n);
+    // R10 launch prep (SCOPE-R10-thinking-parity): the R10 round now sends thinking {type:'adaptive'} on arm C, so the product's trace reports thinking_config=adaptive on every call; the
+    // `none (no thinking field sent ...)` label is still proven against the unmodified-config fixture in r10-m1-wall.test.ts
+    expect(n).toBeGreaterThan(0);
+    expect(rows.filter((r) => r.includes('| thinking_config=adaptive | thinking_blocks=1 |'))).toHaveLength(n);
+    expect(rows.filter((r) => r.includes('| thinking_config=none'))).toHaveLength(0);
   });
 });
 
