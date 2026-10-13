@@ -14,6 +14,7 @@ import {
 import { writeBakedIr } from './ir';
 import { buildPolicyPackage } from './package';
 import { prefixCommand, resolveCommandPrefix } from './prefix';
+import { installAbortOnSignals } from './signals';
 import { initPolicyTelemetry } from './telemetry';
 import { tracingPlugin } from './tracing';
 import { dispatchVerb } from './verbs/index';
@@ -91,6 +92,7 @@ export async function runPolicyCli(argv: readonly string[], deps: IPolicyMountDe
     env: process.env,
     stdout: (text) => void process.stdout.write(text),
     stderr: (text) => void process.stderr.write(text),
+    signal: installAbortOnSignals(),
   });
   if (verb.handled) {
     process.exitCode = verb.exitCode ?? 0;

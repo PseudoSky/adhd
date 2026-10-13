@@ -60,7 +60,7 @@ function dereferenceSchema(schema: unknown): unknown {
 }
 
 /** The version in this package's own `package.json` (next to the bundle once published, one level up from `dist/` in the repo). */
-function readPolicyVersion(): string {
+export function readPolicyVersion(): string {
   for (const candidate of [join(policyDistDir(), 'package.json'), join(policyDistDir(), '..', 'package.json')]) {
     try {
       if (existsSync(candidate)) {

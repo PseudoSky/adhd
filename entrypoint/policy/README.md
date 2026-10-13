@@ -23,6 +23,22 @@ adhd-policy verify
 
 The policy is found by walking up from the working directory for `workspace-policy.yaml` (then the user-global `global.yaml`, then a built-in deny-all default). The source is announced once on stderr as `policy: <path>`; `ADHD_POLICY_FILES` overrides discovery.
 
+## Fronting an unmodified command or MCP server
+
+These verbs load the apigen policy Layer in front of a command or server you do not control. `--spec <file>` (repeatable, layers by position global, project, local) names the policy; `--adhd-attributes <json|@file>` (else `ADHD_POLICY_ATTRIBUTES`) names who is asking. `--adhd-*` flags are consumed here and never reach the child.
+
+```bash
+# Run one command; refused calls exit 3 and the command never starts
+adhd-policy run bin:touch --spec gate.yaml --adhd-attributes @attrs.json -- file.txt
+
+# Serve an upstream MCP server (stdio) behind the policy; refusals reach the host as isError tool results
+adhd-policy serve bin:node --spec gate.yaml -- ./server.js
+
+# Point an existing .mcp.json entry at `adhd-policy serve`, and put it back byte for byte
+adhd-policy mcp-json init --spec gate.yaml
+adhd-policy mcp-json --undo
+```
+
 ## Exit codes
 
 | Code | Meaning |
