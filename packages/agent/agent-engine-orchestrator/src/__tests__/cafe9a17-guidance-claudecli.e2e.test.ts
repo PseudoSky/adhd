@@ -98,20 +98,20 @@ const resolved = (cfg: NativeToolingConfig, shim: boolean): Record<string, McpSe
   resolveNativeToolingMap(cfg, { cwd: "/w", ...(shim ? { exitShim: { dir: "/shim/abc", origPath: "/usr/bin:/bin" } } : {}) });
 
 describe("cafe9a17 AC1/AC3 [claudecli bridge]: the description the CLI reads matches the effective servers", () => {
-  it("cafe9a17 AC1 [claudecli]: default catalog + shim => default allowlist, exit-status promise, fs note", async () => {
+  it("cafe9a17 AC1, cafe9a17 AC3 [claudecli]: default catalog + shim => default allowlist, exit-status promise, fs note", async () => {
     const d = await bridgeDescriptions(resolved({}, true));
     expect(d["shell__shell_execute"]).toContain(`Available commands: ${DEFAULT_SHELL_ALLOW_COMMANDS.join(" ")}.`);
     expect(d["shell__shell_execute"]).toContain("[exit status: N]");
     expect(d["fs__write_file"]).toContain("NOT create missing parent directories");
   });
 
-  it("cafe9a17 AC1 [claudecli]: allowCommands override without a shim => only those commands, no exit-status promise", async () => {
+  it("cafe9a17 AC1, cafe9a17 AC3 [claudecli]: allowCommands override without a shim => only those commands, no exit-status promise", async () => {
     const d = await bridgeDescriptions(resolved({ shell: { allowCommands: ["cat", "ls"] } }, false));
     expect(d["shell__shell_execute"]).toContain("Available commands: cat ls.");
     expect(d["shell__shell_execute"]).not.toMatch(/curl|\[exit status: N\]/);
   });
 
-  it("cafe9a17 AC1 [claudecli]: custom shell and fs servers => no catalog claims and no fs notes", async () => {
+  it("cafe9a17 AC1, cafe9a17 AC3 [claudecli]: custom shell and fs servers => no catalog claims and no fs notes", async () => {
     const d = await bridgeDescriptions({
       shell: { transport: "stdio", command: "my-shell-server" },
       fs: { transport: "stdio", command: "my-fs-server" },

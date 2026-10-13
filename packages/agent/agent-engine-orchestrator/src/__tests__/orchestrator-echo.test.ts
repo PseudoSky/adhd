@@ -39,6 +39,7 @@ import type { AgentStore } from "../tools/agent-crud.js";
 import type { SessionStoreForTool } from "../tools/session.js";
 import { usageQueryByGrain } from "../tools/usage.js";
 import { PauseTurnCapError } from "../providers/anthropic-pause.js";
+import { AnthropicProvider } from "../providers/anthropic.js";
 import type { EchoCaps } from "../providers/anthropic-echo.js";
 import type { LLMProvider, ProviderChatRequest, ProviderChatResponse } from "../providers/types.js";
 import type { McpClientRegistry } from "../clients/registry.js";
@@ -48,6 +49,7 @@ import type { Message } from "../validation/index.js";
 import { generateId } from "../utils/ids.js";
 import { nowIso } from "../utils/timestamps.js";
 import { REAL_MIGRATIONS_FOLDER } from "./fixtures/real-schema-db.js";
+import { makeContractFake, type FakeStep } from "./fixtures/anthropic-contract-fake.js";
 
 // taskTool builds its provider through this seam; the scripted fake is the ONLY thing substituted.
 const hoisted = vi.hoisted(() => ({ provider: undefined as LLMProvider | undefined }));
@@ -855,6 +857,57 @@ describe("R9-hist S5a AC5: a rejected replay degrades once and heals the session
     const run = await runDirect(env, new ScriptedProvider([turn({ content: "done", echoDegraded: { apiMessage: REJECTION, echoedMessages: 1 } })]));
     expect(run.status).toBe("completed");
     expect(env.log.warnsAbout(ECHO_WARN)).toBe(1);
+  });
+});
+
+// ════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+describe("cafe9a17 AC2: the session's stored echoes are deleted only when the echo was the proven cause", () => {
+  /** A REAL AnthropicProvider over the contract fake: turn 1 yields thinking+text, request 2 is `second`, then a plain reply. */
+  function realProvider(second: FakeStep): LLMProvider {
+    const steps: FakeStep[] = [
+      { blocks: [{ type: "thinking", thinking: "hm" }, { type: "text", text: "one" }] },
+      second,
+      { blocks: [{ type: "text", text: "legacy ok" }] },
+    ];
+    const fake = makeContractFake(({ index }) => steps[Math.min(index, steps.length - 1)]!, {
+      allowThinkingOmission: ({ index }) => index >= 2,
+    });
+    const config = {
+      ...engineConfig(CAPS),
+      wire: { fetch: fake.fetch },
+      getProviderConfig: () => ({ secret: "sk-ant-api-test", model: "claude-haiku-5-5" }),
+    } as unknown as EngineConfig;
+    return new AnthropicProvider({ type: "anthropic", model: "claude-haiku-5-5" } as never, config, env0Logger());
+  }
+  const env0Logger = (): EngineLogger => recordingLogger().logger;
+  const reject = (message: string): FakeStep => ({ error: { status: 400, type: "invalid_request_error", message } });
+
+  it("cafe9a17 AC2: an unrelated tool_result 400 on the follow-up does not retry and does NOT delete the stored echoes", async () => {
+    const env = makeEnv();
+    hoisted.provider = realProvider(reject("messages.2.content.0.tool_result: unexpected `tool_use_id` found in `tool_result` blocks: toolu_x"));
+    const deleteSpy = vi.spyOn(env.store, "deleteMessageEchoes");
+
+    expect((await runTask(env, "a")).status).toBe("completed");
+    expect(echoRows(env.sqlite)).toHaveLength(1); // turn 1's thinking echo is stored
+    await runTask(env, "b").catch(() => undefined); // the rejected follow-up fails the task
+
+    expect(deleteSpy).not.toHaveBeenCalled();
+    expect(echoRows(env.sqlite)).toHaveLength(1);
+    expect(taskEvents(env.sqlite, "provider:history_degraded")).toHaveLength(0);
+  });
+
+  it("cafe9a17 AC2: a thinking-signature 400 whose echo-free retry SUCCEEDS deletes the stored echoes exactly once", async () => {
+    const env = makeEnv();
+    hoisted.provider = realProvider(reject("messages.1.content.0: Invalid `signature` in `thinking` block"));
+    const deleteSpy = vi.spyOn(env.store, "deleteMessageEchoes");
+
+    expect((await runTask(env, "a")).status).toBe("completed");
+    expect(echoRows(env.sqlite)).toHaveLength(1);
+    expect((await runTask(env, "b")).status).toBe("completed");
+
+    expect(deleteSpy).toHaveBeenCalledTimes(1);
+    expect(echoRows(env.sqlite)).toHaveLength(0);
+    expect(taskEvents(env.sqlite, "provider:history_degraded")).toHaveLength(1);
   });
 });
 

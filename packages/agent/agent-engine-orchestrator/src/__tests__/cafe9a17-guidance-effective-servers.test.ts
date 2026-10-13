@@ -223,7 +223,7 @@ describe("cafe9a17 AC1: withNativeToolGuidance output per effective configuratio
 // -- both adapters, through the real Orchestrator ------------------------------------------------------------------
 
 describe.each(ADAPTERS)("cafe9a17 AC1/AC3 adapter wire: %s", (_name, makeProvider) => {
-  it("cafe9a17 AC1 [default catalog + shim]: lists the default allowlist, promises exit status, carries the fs notes", async () => {
+  it("cafe9a17 AC1, cafe9a17 AC3 [default catalog + shim]: lists the default allowlist, promises exit status, carries the fs notes", async () => {
     const d = await wireDescriptions(makeProvider, resolved({}, true));
     expect(d["shell__shell_execute"]).toContain(`Available commands: ${DEFAULT_SHELL_ALLOW_COMMANDS.join(" ")}.`);
     expect(d["shell__shell_execute"]).toContain(EXIT_STATUS);
@@ -232,7 +232,7 @@ describe.each(ADAPTERS)("cafe9a17 AC1/AC3 adapter wire: %s", (_name, makeProvide
     expect(d["fs__read_text_file"]).toContain("Line endings");
   });
 
-  it("cafe9a17 AC1 [allowCommands override, no shim]: lists only the overridden commands, no recipes for unlisted ones, no exit-status promise", async () => {
+  it("cafe9a17 AC1, cafe9a17 AC3 [allowCommands override, no shim]: lists only the overridden commands, no recipes for unlisted ones, no exit-status promise", async () => {
     const d = await wireDescriptions(makeProvider, resolved(CAT_LS, false));
     const shell = d["shell__shell_execute"];
     expect(shell).toContain("Available commands: cat ls.");
@@ -242,7 +242,7 @@ describe.each(ADAPTERS)("cafe9a17 AC1/AC3 adapter wire: %s", (_name, makeProvide
     expect(shell).toContain(ORDERING);
   });
 
-  it("cafe9a17 AC1 [custom shell server]: no command list, no catalog policy claims, no exit-status promise; the engine ordering rule stays", async () => {
+  it("cafe9a17 AC1, cafe9a17 AC3 [custom shell server]: no command list, no catalog policy claims, no exit-status promise; the engine ordering rule stays", async () => {
     const d = await wireDescriptions(makeProvider, { ...resolved({}, true), shell: customShell });
     const shell = d["shell__shell_execute"];
     expect(shell).not.toMatch(/Available commands|NOT available|curl|argv list/);
@@ -250,7 +250,7 @@ describe.each(ADAPTERS)("cafe9a17 AC1/AC3 adapter wire: %s", (_name, makeProvide
     expect(shell).toContain(ORDERING);
   });
 
-  it("cafe9a17 AC1 [custom fs server]: none of the fs notes; the catalog fs server keeps them", async () => {
+  it("cafe9a17 AC1, cafe9a17 AC3 [custom fs server]: none of the fs notes; the catalog fs server keeps them", async () => {
     const d = await wireDescriptions(makeProvider, { ...resolved({}, true), fs: customFs });
     expect(d["fs__write_file"]).toBe("Write a file");
     expect(d["fs__edit_file"]).toBe("Edit a file");
@@ -258,9 +258,38 @@ describe.each(ADAPTERS)("cafe9a17 AC1/AC3 adapter wire: %s", (_name, makeProvide
     expect(d["shell__shell_execute"]).toContain("Available commands:"); // the shell side is unaffected by the fs server
   });
 
-  it("cafe9a17 AC1 [config unknown: no mcpServers]: fails closed on this wire too", async () => {
+  it("cafe9a17 AC1, cafe9a17 AC3 [config unknown: no mcpServers]: fails closed on this wire too", async () => {
     const d = await wireDescriptions(makeProvider, {});
     expect(d["shell__shell_execute"]).not.toMatch(/Available commands|exit status/);
     expect(d["fs__write_file"]).toBe("Write a file");
+  });
+});
+
+// -- AC3: the echo degrade is an Anthropic-native mechanism ---------------------------------------------------------
+
+describe("cafe9a17 AC3: the echo degrade applies to the anthropic adapter only", () => {
+  it("cafe9a17 AC3 [openai-compatible]: request.echoes are ignored and an echo-shaped 400 is a plain error: one request, no retry, no echoDegraded", async () => {
+    const bodies: unknown[] = [];
+    const fetchSeam: typeof fetch = async (_u, init) => {
+      bodies.push(JSON.parse(String(init?.body)));
+      return new Response(
+        JSON.stringify({ error: { message: "messages.1.content.0: Invalid `signature` in `thinking` block", type: "invalid_request_error" } }),
+        { status: 400, headers: { "content-type": "application/json" } }
+      );
+    };
+    const config = {
+      server: { contextLimit: 0, defaultMaxTokens: 8192 },
+      wire: { fetch: fetchSeam },
+      getProviderConfig: () => ({ secret: "sk-test", model: "deepseek-flash", baseURL: "http://localhost:1/v1" }),
+    };
+    const provider = new OpenAIProvider({ type: "openai", model: "deepseek-flash" } as never, config as never);
+    const echoes = new Map([["a1", { provider: "anthropic", model: "m", blocks: [{ type: "thinking", thinking: "t", signature: "s" }] }]]);
+    const user = { id: "u1", role: "user", content: "go" };
+    const assistant = { id: "a1", role: "assistant", content: "hi" };
+    const result = await provider.chat({ messages: [user, assistant, { id: "u2", role: "user", content: "more" }] as never, echoes } as never).catch((e: unknown) => e);
+    expect(result).toBeInstanceOf(Error);
+    expect(bodies).toHaveLength(1);
+    expect(JSON.stringify(bodies[0])).not.toContain("thinking");
+    expect((result as { echoDegraded?: unknown }).echoDegraded).toBeUndefined();
   });
 });
