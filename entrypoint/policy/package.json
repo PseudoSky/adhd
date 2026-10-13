@@ -1,5 +1,35 @@
 {
   "name": "@adhd/policy",
   "version": "0.0.1",
-  "private": true
+  "type": "module",
+  "bin": {
+    "adhd-policy": "./dist/cli.js",
+    "adhd-policy-mcp": "./dist/mcp.js",
+    "adhd-policy-http": "./dist/http.js"
+  },
+  "dependencies": {
+    "@adhd/apigen-base-errors": "^0.2.3",
+    "@adhd/apigen-core-client": "^0.3.4",
+    "@adhd/apigen-engine-naming": "^0.2.5",
+    "@adhd/apigen-engine-runtime": "^0.3.3",
+    "@adhd/apigen-plugin-api-fastify": "^0.2.8",
+    "@adhd/apigen-plugin-cli-output": "^0.2.8",
+    "@adhd/apigen-plugin-mcp": "^0.3.3",
+    "@adhd/apigen-plugin-tracing": "^0.2.0",
+    "@adhd/policy-core-client": "^0.0.1",
+    "@adhd/sox-telemetry": "^0.4.3"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist"
+  ],
+  "description": "Policy for tool calls: adhd-policy command line, MCP server and loopback HTTP server over @adhd/policy-core-client",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PseudoSky/adhd.git",
+    "directory": "entrypoint/policy"
+  }
 }

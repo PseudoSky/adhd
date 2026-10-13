@@ -13,10 +13,61 @@
   ],
   "targets": {
     "build": {
+      "//": "ONE target emits the three bin bundles AND the baked operations artifact (dist/api.ir.json). The second command runs the freshly built bin's hidden `ir-artifact` subcommand, which extracts the client's built service/api.d.ts (so ^build of policy-core-client is required) and writes the artifact beside the bundles in the SAME dist/. Mirrors entrypoint/backlog's build.",
       "executor": "nx:run-commands",
+      "cache": true,
+      "outputs": [
+        "{projectRoot}/dist"
+      ],
+      "dependsOn": [
+        "^build",
+        "typecheck"
+      ],
+      "inputs": [
+        "production",
+        "^production"
+      ],
       "options": {
-        "command": "tsc -p entrypoint/policy/tsconfig.json"
+        "cwd": "{projectRoot}",
+        "command": "vite build && node dist/cli.js ir-artifact --out dist/api.ir.json"
       }
+    },
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "inputs": [
+        "default",
+        "^production",
+        {
+          "externalDependencies": [
+            "typescript"
+          ]
+        }
+      ],
+      "options": {
+        "command": "tsc -p entrypoint/policy/tsconfig.lib.json --noEmit"
+      }
+    },
+    "nx-release-publish": {
+      "dependsOn": [
+        "build",
+        "test",
+        "verify-dist-load",
+        "dist-manifest",
+        "publish-hygiene"
+      ],
+      "options": {
+        "packageRoot": "{projectRoot}/dist"
+      }
+    }
+  },
+  "release": {
+    "version": {
+      "currentVersionResolver": "git-tag",
+      "preserveLocalDependencyProtocols": false,
+      "manifestRootsToUpdate": [
+        "{projectRoot}"
+      ]
     }
   }
 }
