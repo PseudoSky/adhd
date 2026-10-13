@@ -15,6 +15,8 @@ import type { IAttributesSource } from './attributes-source';
 export interface IGateDeps {
   readonly specFiles: readonly string[];
   readonly cwd: string;
+  /** Walk-up ceiling for project policy discovery (the user's home directory). */
+  readonly stopAt?: string;
   readonly attributes: IAttributesSource;
   readonly ports?: { runtime?: IRuntimeProvider; audit?: IAuditSink };
   /** Receives `policy: <path|built-in>` once the policy source is known (D-12). */
@@ -31,6 +33,7 @@ export async function buildGate(deps: IGateDeps): Promise<{ usePlugins: UsePlugi
   let announced: string | undefined;
   const ctx = createPolicyCtx(env, {
     cwd: deps.cwd,
+    ...(deps.stopAt !== undefined ? { stopAt: deps.stopAt } : {}),
     ...(deps.specFiles.length > 0 ? { explicit: deps.specFiles.map((file) => resolve(deps.cwd, file)) } : {}),
     ...(deps.ports ?? {}),
     onSource: (label) => {

@@ -2,70 +2,16 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { composeSchemas, type Operation } from '@adhd/apigen-core-client';
 import { policyOperations, type IPolicyCtx } from '@adhd/policy-core-client';
+import { dereferenceSchema } from './dereference';
 import { extractPolicyOperations, locateClientApi, policyDistDir } from './ir';
 
-/**
- * Inlines every `$ref` against the `definitions` / `$defs` collected from the
- * whole schema, then drops them. apigen run-mode dispatch cannot resolve a
- * `$ref` (its resolver is a throwing stub), so no `$ref` may reach
- * `composeSchemas` / `dispatch`. Same algorithm as
- * `entrypoint/backlog/src/server.ts` (`dereferenceSchema`); the policy
- * operation types are acyclic, so this terminates.
- */
-function dereferenceSchema(schema: unknown): unknown {
-  if (!schema || typeof schema !== 'object') return schema;
-  const definitions: Record<string, unknown> = {};
-  const collect = (node: unknown): void => {
-    if (Array.isArray(node)) {
-      for (const item of node) collect(item);
-      return;
-    }
-    if (!node || typeof node !== 'object') return;
-    const obj = node as Record<string, unknown>;
-    for (const key of ['definitions', '$defs']) {
-      const defs = obj[key];
-      if (defs && typeof defs === 'object' && !Array.isArray(defs)) {
-        for (const [name, def] of Object.entries(defs as Record<string, unknown>)) {
-          if (!(name in definitions)) definitions[name] = def;
-        }
-      }
-    }
-    for (const [key, value] of Object.entries(obj)) {
-      if (key === 'definitions' || key === '$defs') continue;
-      collect(value);
-    }
-  };
-  collect(schema);
-  collect(definitions);
-  if (Object.keys(definitions).length === 0) return schema;
-
-  const inline = (node: unknown, seen: ReadonlySet<string>): unknown => {
-    if (Array.isArray(node)) return node.map((item) => inline(item, seen));
-    if (!node || typeof node !== 'object') return node;
-    const obj = node as Record<string, unknown>;
-    const ref = obj['$ref'];
-    if (typeof ref === 'string') {
-      const name = ref.replace(/^#\/(?:definitions|\$defs)\//, '');
-      if (seen.has(name) || !(name in definitions)) return {};
-      return inline(definitions[name], new Set([...seen, name]));
-    }
-    const out: Record<string, unknown> = {};
-    for (const [key, value] of Object.entries(obj)) {
-      if (key === 'definitions' || key === '$defs') continue;
-      out[key] = inline(value, seen);
-    }
-    return out;
-  };
-  return inline(schema, new Set());
-}
-
-/** The version in this package's own `package.json` (next to the bundle once published, one level up from `dist/` in the repo). */
+/** The version in this package's own `package.json` (next to the bundle once published, one level up from `dist/` in the repo); the manifest must be `@adhd/policy`'s own. */
 export function readPolicyVersion(): string {
   for (const candidate of [join(policyDistDir(), 'package.json'), join(policyDistDir(), '..', 'package.json')]) {
     try {
       if (existsSync(candidate)) {
-        const version = (JSON.parse(readFileSync(candidate, 'utf8')) as { version?: unknown }).version;
-        if (typeof version === 'string') return version;
+        const manifest = JSON.parse(readFileSync(candidate, 'utf8')) as { name?: unknown; version?: unknown };
+        if (manifest.name === '@adhd/policy' && typeof manifest.version === 'string') return manifest.version;
       }
     } catch {
       // try the next candidate

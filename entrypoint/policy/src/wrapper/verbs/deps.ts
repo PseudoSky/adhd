@@ -3,6 +3,8 @@ import type { IProcessLauncher } from '@adhd/apigen-engine-gateway';
 /** Ports shared by every wrapper verb. Nothing here reads `process.*`; the mount passes it in. */
 export interface IVerbDeps {
   readonly cwd: string;
+  /** The user's home directory: the walk-up ceiling for project policy discovery (C7). */
+  readonly home?: string;
   readonly env: Readonly<Record<string, string | undefined>>;
   /** Spawns the upstream command; defaults to the gateway's real launcher (a sandbox supplies a confining one). */
   readonly launcher?: IProcessLauncher;

@@ -1,7 +1,7 @@
 import { ApiError } from '@adhd/apigen-base-errors';
 import { parseSourceSpec, resolveSource } from '@adhd/apigen-engine-gateway';
 import { adaptCoreLayer, createInvoker, LayerContext } from '@adhd/apigen-engine-runtime';
-import { createAttributesSource } from '../attributes-source';
+import { attributesFromFlags } from '../attributes-from-flags';
 import { splitPolicyArgv } from '../flags';
 import { buildGate } from '../gate';
 import type { IVerbDeps } from './deps';
@@ -28,16 +28,14 @@ export async function runVerb(argv: readonly string[], deps: IVerbDeps): Promise
     if (spec.kind !== 'bin') {
       throw new ApiError('invalid_argument', 'run needs a bin:<command> source');
     }
-    const attributes = createAttributesSource({
-      ...(split.attributes !== undefined ? { flag: split.attributes } : {}),
-      ...(deps.env['ADHD_POLICY_ATTRIBUTES'] !== undefined ? { env: deps.env['ADHD_POLICY_ATTRIBUTES'] } : {}),
-      cwd: deps.cwd,
-      ...(deps.readFile !== undefined ? { readFile: deps.readFile } : {}),
-    });
-    await attributes.read();
+    if (split.name !== undefined) {
+      throw new ApiError('invalid_argument', '--name applies to serve only');
+    }
+    const attributes = await attributesFromFlags(split, deps);
     const gate = await buildGate({
       specFiles: split.specFiles,
       cwd: deps.cwd,
+      ...(deps.home !== undefined ? { stopAt: deps.home } : {}),
       attributes,
       onNote: (line) => deps.stderr(`${line}\n`),
     });
