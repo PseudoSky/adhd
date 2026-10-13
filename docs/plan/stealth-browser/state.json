@@ -319,10 +319,10 @@
       "end_ref": "885d5aadde5744efd6391428ab69d9199e5765fa"
     },
     "tripwire-core": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-10-13T01:29:18.282Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "d95264fcf7c22c71fa4338eb0150300a8b084d8e",
       "end_ref": null
     },
     "tripwire-interactive": {
@@ -1126,7 +1126,7 @@
     "version": "0.8.35",
     "hash": "0b6bc1f3d70e"
   },
-  "current_state": "chrome-lifecycle",
+  "current_state": "tripwire-core",
   "dod_provenance": {
     "confirmed_at": "2026-10-12T23:49:38.410Z",
     "by": "pseudosky",
