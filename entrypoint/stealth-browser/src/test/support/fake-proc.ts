@@ -5,7 +5,7 @@
  * `FakeProc` simulates liveness (`pidAlive`), process identity (`procStart`,
  * the start-time token that distinguishes a recycled pid), signal delivery
  * (`kill(pid | -pgid, signal)`, logged, never touches a real process) and a
- * recording `spawn`. Nothing here imports child_process.
+ * recording `spawn`. Nothing here touches a real process.
  */
 
 export interface SpawnCall {
