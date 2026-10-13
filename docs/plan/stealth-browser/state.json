@@ -361,10 +361,10 @@
       "end_ref": null
     },
     "split-plan-repair": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-10-13T09:21:05.569Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "5c07337fe460f053a5ab793884e28bc0f79db6a6",
       "end_ref": null
     }
   },
@@ -1205,7 +1205,7 @@
     "version": "0.8.35",
     "hash": "0b6bc1f3d70e"
   },
-  "current_state": "tripwire-reverse-migrate",
+  "current_state": "split-plan-repair",
   "dod_provenance": {
     "confirmed_at": "2026-10-12T23:49:38.410Z",
     "by": "pseudosky",
