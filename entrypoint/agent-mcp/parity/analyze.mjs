@@ -2,7 +2,7 @@
 // Analysis commands (SCOPE-R10-prep, PARITY-R10-prep AC2). They replace the throwaway reader scripts of the R9 triage (combo/agg/threads/calls/timeline/t3*.cjs). Every function is PURE over redacted
 // evidence bundles (evidence.mjs `parity-evidence/1`), deterministic, model-free and read-only; the CLI only resolves which bundles to read.
 //
-//   node drive.mjs analyze <round> <runA> <runC> [--section gap|threads|blocking|surplus|tools|contamination|rt|all]
+//   node drive.mjs analyze <round> <runA> <runC> [--section gap|threads|blocking|surplus|tools|contamination|rt|evidence|wall|all]
 //   node drive.mjs analyze --emit-bundle <runDir> [--arm A|B|C] [--out FILE] [--redact-spans]     (writes the redacted bundle; the committed golden fixture is made this way)
 //   <runA>/<runC> = a run id under tmp/agent-mcp/parity/<round>/live/out/runs (evidence.json when present, else built on the fly from the logs) or a path to a bundle .json.
 //
@@ -200,7 +200,106 @@ export function formatEvidence(b) {
     `delegation | sync ${d.filter((x) => x === 'sync').length} | background ${d.filter((x) => x === 'background').length}`].join('\n');
 }
 
-const SECTIONS = ['gap', 'threads', 'blocking', 'surplus', 'tools', 'contamination', 'rt', 'evidence'];
+// ---------------------------------------------------------------------------------------------------
+// 5. Wall attribution from the R10 trace signals (R10 M1). Pure over a bundle's `trace` (evidence.mjs: tasks / dispatches / toolCalls / modelCalls). The rule that runs through all of it:
+//    a quantity the trace does not carry is printed as an explicit marker, NEVER as 0 and never as a guess ("I cannot tell why" is answered by the trace or by an explicit "not recorded").
+// ---------------------------------------------------------------------------------------------------
+export const NATIVE_NO_TRACE = 'n/a (native arm has no trace)';
+export const THINKING_NONE_LABEL = 'no thinking field sent (API default; may still think)';
+const ms = (x) => (fin(x) ? String(Math.round(x)) : null);
+const msOr = (x, why) => ms(x) ?? `n/a (${why})`;
+const short = (id) => (id ? String(id).slice(0, 8) : '-');
+
+/**
+ * child_prestart_ms of ONE child of ONE dispatch = the child's `agent.task` start minus the start of the parent's `agent.tool_call` whose call id equals `agent.dispatch.call_id`; the child is found
+ * through `agent.dispatch.child_task_ids`. Anything missing, or an impossible order, returns `{ms:null, why}`: never 0, never a nearest-neighbour guess.
+ * @returns {{ms:number}|{ms:null, why:string}}
+ */
+export function childPrestart(trace, dispatch, childId) {
+  if (!dispatch.callId) return { ms: null, why: 'agent.dispatch.call_id absent: the dispatching tool_call cannot be identified' };
+  if (!childId) return { ms: null, why: 'agent.dispatch.child_task_ids absent: the child cannot be identified' };
+  const call = (trace.toolCalls ?? []).find((x) => x.callId === dispatch.callId && x.task === dispatch.task);
+  if (!call) return { ms: null, why: `no agent.tool_call record with call id ${dispatch.callId} on the dispatching task` };
+  if (!fin(call.startMs)) return { ms: null, why: 'the dispatching tool_call has no start time' };
+  const child = (trace.tasks ?? []).find((t) => t.task === childId);
+  if (!child) return { ms: null, why: `child task ${short(childId)} has no agent.task record in the trace` };
+  if (!fin(child.startMs)) return { ms: null, why: 'the child agent.task has no start time' };
+  const d = child.startMs - call.startMs;
+  if (d < 0) return { ms: null, why: `the child task starts ${-d} ms BEFORE the dispatching tool_call: clock or join inconsistent` };
+  return { ms: d, basis: [call.startFrom, child.startFrom] };
+}
+
+/** Whether the bundle's trace carries any R10 wall-attribution attribute at all (bundles made before R10, e.g. the committed r9 goldens, do not). */
+export function hasWallSignals(b) {
+  const t = b.trace; if (!t?.available) return false;
+  return (t.dispatches ?? []).length > 0 || (t.tasks ?? []).some((x) => x.modelMs != null || x.toolMs != null || x.idleMs != null || x.startup != null) || (t.modelCalls ?? []).some((m) => m.thinkingConfig != null || m.thinkingBlocks != null);
+}
+
+/** One row per task thread (ordered by start): startup, summed queued_ms, model/tool/idle and idle net of the startup span. */
+export function wallTaskRows(b) {
+  const t = b.trace; const tasks = [...(t.tasks ?? [])].sort((x, y) => (x.startMs ?? 0) - (y.startMs ?? 0));
+  return tasks.map((k) => {
+    const calls = (t.toolCalls ?? []).filter((c) => c.task === k.task); const q = calls.filter((c) => c.queuedMs != null);
+    const tr = k.startup?.toolsReadyMs ?? null; const idle = k.idleMs ?? null;
+    return { task: k.task, name: k.name, depth: k.depth, parent: k.parent, wallMs: k.durMs, outcome: k.outcome, startup: k.startup,
+      queuedMs: q.length ? sum(q.map((c) => c.queuedMs)) : null, queuedCalls: q.length, toolCalls: calls.length,
+      modelMs: k.modelMs, toolMs: k.toolMs, idleMs: idle, startupMs: tr, unexplainedMs: idle != null && tr != null ? idle - tr : null };
+  });
+}
+
+/** One row per (dispatch, child); a dispatch that started no child (kind `result`) is one row with `child: null`. */
+export function wallDispatchRows(b) {
+  const t = b.trace; const rows = [];
+  for (const d of t.dispatches ?? []) {
+    const kids = d.kind === 'result' ? [] : d.childTaskIds ?? [null];
+    if (!kids.length) rows.push({ d, child: null, prestart: null });
+    for (const c of kids) rows.push({ d, child: c, prestart: childPrestart(t, d, c) });
+  }
+  return rows.sort((x, y) => x.d.endMs - y.d.endMs);
+}
+
+/** Model calls grouped by task thread (threads in start order), each thread in call order. */
+export function wallModelRows(b) {
+  const order = new Map([...(b.trace.tasks ?? [])].sort((x, y) => (x.startMs ?? 0) - (y.startMs ?? 0)).map((t, i) => [t.task, i]));
+  return [...(b.trace.modelCalls ?? [])].sort((x, y) => (order.get(x.task) ?? 1e9) - (order.get(y.task) ?? 1e9) || x.endMs - y.endMs).map((m) => ({ ...m }));
+}
+const thinkingText = (m) => {
+  const cfg = m.thinkingConfig == null ? 'n/a (not reported by this provider)' : m.thinkingConfig === 'none' ? `none (${THINKING_NONE_LABEL})` : m.thinkingConfig;
+  return `thinking_config=${cfg} | thinking_blocks=${m.thinkingBlocks == null ? 'n/a (not reported by this provider)' : m.thinkingBlocks}`;
+};
+
+/** The wall-attribution report of ONE bundle. */
+export function formatWall(b) {
+  const head = `== WALL ATTRIBUTION ${b.runId} (${b.arm}) ==`;
+  if (b.arm === 'A') return `${head}\n${NATIVE_NO_TRACE}`;
+  if (!b.trace?.available) return `${head}\nn/a (no tracing-plugin output was captured for this run: logs/trace is missing or empty)`;
+  if (!hasWallSignals(b)) return `${head}\nn/a (the trace holds none of the R10 wall-attribution attributes: this bundle predates them, or the product did not emit them)`;
+  const L2 = [head, 'task thread | name | depth | parent | wall_ms | startup tools_ready_ms (connect_ms per server; queue_wait_ms; session_ms) | queued_ms summed over barrier waits | model_ms | tool_ms | idle_ms as reported | idle_ms net of startup (tools_ready_ms) = unexplained_idle_ms'];
+  for (const r of wallTaskRows(b)) {
+    const su = r.startup; const connect = su ? Object.entries(su.mcpConnectMs).map(([k, v]) => `${k}=${v}`).join(', ') : '';
+    const startup = su ? `tools_ready_ms=${msOr(su.toolsReadyMs, 'not recorded')} (connect_ms: ${connect || 'none recorded'}; queue_wait_ms=${msOr(su.queueWaitMs, 'not recorded')}; session_ms=${msOr(su.sessionMs, 'not recorded')})` : 'tools_ready_ms=n/a (no agent.task.startup record)';
+    const queued = r.queuedMs != null ? `queued_ms_sum=${r.queuedMs} (${r.queuedCalls} of ${r.toolCalls} tool calls recorded queued_ms)` : `queued_ms_sum=n/a (0 of ${r.toolCalls} tool calls recorded queued_ms)`;
+    const net = r.unexplainedMs != null ? `idle_ms=${r.idleMs} = startup ${r.startupMs} + unexplained ${r.unexplainedMs}` : `idle_ms=${msOr(r.idleMs, 'not recorded')} = unattributable (${r.idleMs == null ? 'idle_ms' : 'tools_ready_ms'} not recorded)`;
+    L2.push(`${short(r.task)} | ${r.name ?? '-'} | ${r.depth ?? '-'} | ${short(r.parent)} | wall_ms=${msOr(r.wallMs, 'not recorded')} | ${startup} | ${queued} | model_ms=${msOr(r.modelMs, 'not recorded')} | tool_ms=${msOr(r.toolMs, 'not recorded')} | ${net}`);
+  }
+  L2.push('', 'dispatch | parent task | kind | mode | children | parent_blocked_ms | wait_ms | call_id | child | child_prestart_ms (child agent.task start - parent agent.tool_call start with id = call_id)');
+  const dr = wallDispatchRows(b);
+  for (const { d, child, prestart } of dr) {
+    const pre = d.kind === 'result' ? 'n/a (a result wait: no child started)' : prestart.ms != null ? String(prestart.ms) + (prestart.basis?.includes('end-minus-duration') ? ' (a start time derived as end minus duration)' : '') : `unmeasurable (${prestart.why})`;
+    L2.push(`${short(d.task)} | ${d.kind ?? '-'} | ${d.mode ?? '-'} | children=${d.children ?? 'n/a'} | parent_blocked_ms=${msOr(d.parentBlockedMs, 'not recorded')} | wait_ms=${msOr(d.waitMs, 'not recorded')} | call_id=${d.callId ?? 'n/a (absent)'} | child ${child ? short(child) : '-'} | child_prestart_ms=${pre}`);
+  }
+  if (!dr.length) L2.push('no agent.dispatch record in this trace');
+  const meas = dr.filter((x) => x.prestart?.ms != null); const unm = dr.filter((x) => x.d.kind !== 'result' && x.prestart && x.prestart.ms == null);
+  L2.push(`child_prestart_ms measured for ${meas.length} child(ren)${meas.length ? `, total ${sum(meas.map((x) => x.prestart.ms))}` : ''}; unmeasurable for ${unm.length}`);
+  const mc = wallModelRows(b); L2.push('', 'model call | task | turn | duration_ms | ttfb_ms | thinking_config + thinking_blocks (read together) | tool_result_bytes_in');
+  for (const m of mc) L2.push(`${short(m.task)} | turn ${m.turnIndex ?? '-'} | duration_ms=${msOr(m.durMs, 'not recorded')} | ttfb_ms=${msOr(m.ttfbMs, 'not reported')} | ${thinkingText(m)} | tool_result_bytes_in=${m.toolResultBytesIn ?? 'n/a (not reported)'}`);
+  if (!mc.length) L2.push('no agent.model_call record in this trace');
+  const noneThink = mc.filter((m) => m.thinkingConfig === 'none' && (m.thinkingBlocks ?? 0) > 0);
+  L2.push(`model calls ${mc.length} | with thinking_config=none AND thinking_blocks>0: ${noneThink.length}${noneThink.length ? ' (the request carried no thinking field and the model still returned thinking blocks)' : ''}`);
+  return L2.join('\n');
+}
+
+const SECTIONS = ['gap', 'threads', 'blocking', 'surplus', 'tools', 'contamination', 'rt', 'evidence', 'wall'];
 /** The whole report for a pair of bundles (A first). */
 export function formatReport(A, C, sections = ['all']) {
   const want = (s) => sections.includes('all') || sections.includes(s); const out = [];
@@ -212,6 +311,7 @@ export function formatReport(A, C, sections = ['all']) {
   if (want('tools')) out.push(formatTools(A, C));
   if (want('contamination')) out.push(formatContamination(A), formatContamination(C));
   if (want('rt')) out.push(formatRt(A), formatRt(C));
+  if (want('wall')) out.push(formatWall(A), formatWall(C));   // appended LAST: `all` stays a byte-identical prefix-extension of the pre-R10-M1 output
   return out.join('\n\n');
 }
 
@@ -237,7 +337,7 @@ export function analyzeCli(args, io) {
       return { code: 0, out: text };
     }
     const pos = args.filter((a, i) => !a.startsWith('--') && !(i > 0 && args[i - 1] === '--section'));
-    if (pos.length < 3) return { code: 2, err: 'usage: analyze <round> <runA> <runC> [--section gap|threads|blocking|surplus|tools|contamination|rt|evidence|all]  |  analyze --emit-bundle <runDir> [--arm X] [--out FILE] [--redact-spans]' };
+    if (pos.length < 3) return { code: 2, err: 'usage: analyze <round> <runA> <runC> [--section gap|threads|blocking|surplus|tools|contamination|rt|evidence|wall|all]  |  analyze --emit-bundle <runDir> [--arm X] [--out FILE] [--redact-spans]' };
     const sec = flag('--section') ?? 'all'; if (sec !== 'all' && !SECTIONS.includes(sec)) return { code: 2, err: `unknown --section ${sec}` };
     const [round, ra, rc] = pos; return { code: 0, out: formatReport(resolveBundle(ra, round, io), resolveBundle(rc, round, io), [sec]) };
   } catch (e) { return { code: 1, err: String(e.message || e) }; }

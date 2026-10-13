@@ -3,7 +3,8 @@
 //   - the WIRE capture (logs/wire/proxy-<arm>-anthropic.jsonl, arms A and C): every /v1/messages request body and SSE response -> threads, tools offered, thinking blocks, tool_use inputs, usage;
 //   - the agent-mcp API log (logs/api/*.jsonl, arm C): http.request rows carry task_id / session_id / agent, joined to the wire by body sha256 -> the exact thread key of each request;
 //   - the agent-mcp TRACING plugin output (logs/trace/*.jsonl, arm C; the plugin is always on, the driver pins its sink and directory): tool_call / model_call / task spans with durations,
-//     recursion depth and call ids -> tool timings, same-turn overlap, parent blocking time;
+//     recursion depth and call ids -> tool timings, same-turn overlap, parent blocking time; and (R10 M1) the wall-attribution signals: tool concurrency class + queued_ms, model-call thinking_config / thinking_blocks,
+//     task startup (tools_ready_ms, per-server connect, queue_wait_ms / session_ms when present), dispatch (mode, kind, children, child_task_ids, parent_blocked_ms, call_id, wait_ms) and task model_ms / tool_ms / idle_ms;
 //   - mcp-calls.json (arms B, C): the driver's own MCP calls -> task windows (createdAt / completedAt), phase task ids.
 // Redaction: the bundle holds NO page text, NO prompt text, NO tool result text, NO thinking text and NO signature (not even a hash). Thinking is recorded as presence + length + a state:
 //   'omitted' (a thinking block whose text is empty: the API returned only a signature, so NOBODY may conclude anything from the absence of text), 'text' (the API returned text), and the
@@ -106,10 +107,31 @@ export function buildBundle(runDir, { arm, record = null, probes = null, redactS
   // ---- trace (arm C): spans with durations, depth, call ids. No arguments, no results.
   const depthOf = new Map(); const agentOf = new Map();
   for (const e of traceEv) { const t = e['agent.task_id']; if (t) { if (e['agent.recursion_depth'] != null) depthOf.set(t, e['agent.recursion_depth']); if (e['agent.name']) agentOf.set(t, e['agent.name']); } }
+  // R10 M1 AC1: the wall-attribution signals (tracing README "Wall-time attribution signals"). Every optional attribute is carried as its value when the emitter wrote it and as `null` when the
+  // record does not carry it: an ABSENT attribute is never turned into 0 (the product's own rule), and the reader prints `null` as "not recorded".
+  const nz = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+  const startKey = (e) => `${e['agent.task_id']}\u0000${e['agent.tool.call_id']}`;
+  const toolStart = new Map(traceEv.filter((e) => e.event === 'agent.tool_call.start').map((e) => [startKey(e), e]));   // `queued_ms` is written on the START record; the start `ts` is the real start (not end - duration)
+  const taskStart = new Map(traceEv.filter((e) => e.event === 'agent.task.start').map((e) => [e['agent.task_id'], e]));
+  const startupOf = (e) => { const connect = {}; for (const [k, v] of Object.entries(e)) if (k.startsWith('agent.startup.mcp_connect_ms.') && nz(v) != null) connect[k.slice('agent.startup.mcp_connect_ms.'.length)] = v; return { toolsReadyMs: nz(e['agent.startup.tools_ready_ms']), mcpConnectMs: connect, queueWaitMs: nz(e['agent.startup.queue_wait_ms']), sessionMs: nz(e['agent.startup.session_ms']), tools: nz(e['agent.startup.tools']) }; };
+  const startups = new Map(traceEv.filter((e) => e.event === 'agent.task.startup.finish').map((e) => [e['agent.task_id'], startupOf(e)]));
   const trace = { available: traceEv.length > 0,
-    toolCalls: traceEv.filter((e) => e.event === 'agent.tool_call.finish' || e.event === 'agent.tool_call.error').map((e) => ({ task: e['agent.task_id'], depth: e['agent.recursion_depth'] ?? null, name: e['agent.tool.name'], callId: e['agent.tool.call_id'], endMs: Date.parse(e.ts), durMs: e.duration_ms ?? null, isError: e['agent.tool.is_error'] === true })),
-    modelCalls: traceEv.filter((e) => e.event === 'agent.model_call.finish').map((e) => ({ task: e['agent.task_id'], depth: e['agent.recursion_depth'] ?? null, endMs: Date.parse(e.ts), durMs: e.duration_ms ?? null, tools: e['agent.model_call.tools'] ?? null, stop: e['agent.model_call.stop_reason'] ?? null, toolCalls: e['agent.model_call.tool_calls'] ?? null, out: e['agent.model_call.output_tokens'] ?? null })),
-    tasks: traceEv.filter((e) => e.event === 'agent.task.finish').map((e) => ({ task: e['agent.task_id'], depth: e['agent.recursion_depth'] ?? null, name: e['agent.name'], outcome: e['agent.outcome'] ?? null, durMs: e.duration_ms ?? null, endMs: Date.parse(e.ts) })) };
+    toolCalls: traceEv.filter((e) => e.event === 'agent.tool_call.finish' || e.event === 'agent.tool_call.error').map((e) => { const s = toolStart.get(startKey(e)); const endMs = Date.parse(e.ts); const durMs = e.duration_ms ?? null;
+      return { task: e['agent.task_id'], depth: e['agent.recursion_depth'] ?? null, name: e['agent.tool.name'], callId: e['agent.tool.call_id'], endMs, durMs, isError: e['agent.tool.is_error'] === true,
+        startMs: s ? Date.parse(s.ts) : durMs != null ? endMs - durMs : null, startFrom: s ? 'start-record' : durMs != null ? 'end-minus-duration' : null,
+        concurrencyClass: e['agent.tool.concurrency_class'] ?? s?.['agent.tool.concurrency_class'] ?? null, queuedMs: nz(s?.['agent.tool.queued_ms'] ?? e['agent.tool.queued_ms']),
+        turnIndex: nz(e['agent.tool.turn_index'] ?? s?.['agent.tool.turn_index']), groupIndex: nz(e['agent.tool.group_index'] ?? s?.['agent.tool.group_index']) }; }),
+    modelCalls: traceEv.filter((e) => e.event === 'agent.model_call.finish').map((e) => ({ task: e['agent.task_id'], depth: e['agent.recursion_depth'] ?? null, endMs: Date.parse(e.ts), durMs: e.duration_ms ?? null, tools: e['agent.model_call.tools'] ?? null, stop: e['agent.model_call.stop_reason'] ?? null, toolCalls: e['agent.model_call.tool_calls'] ?? null, out: e['agent.model_call.output_tokens'] ?? null,
+      thinkingConfig: e['agent.model_call.thinking_config'] ?? null, thinkingBlocks: nz(e['agent.model_call.thinking_blocks']), ttfbMs: nz(e['agent.model_call.ttfb_ms']), toolResultBytesIn: nz(e['agent.model_call.tool_result_bytes_in']), turnIndex: nz(e['agent.model_call.turn_index']) })),
+    tasks: traceEv.filter((e) => e.event === 'agent.task.finish').map((e) => { const s = taskStart.get(e['agent.task_id']); const endMs = Date.parse(e.ts); const durMs = e.duration_ms ?? null;
+      return { task: e['agent.task_id'], depth: e['agent.recursion_depth'] ?? null, name: e['agent.name'], outcome: e['agent.outcome'] ?? null, durMs, endMs,
+        parent: e['agent.parent_task_id'] ?? null, startMs: s ? Date.parse(s.ts) : durMs != null ? endMs - durMs : null, startFrom: s ? 'start-record' : durMs != null ? 'end-minus-duration' : null,
+        modelMs: nz(e['agent.task.model_ms']), toolMs: nz(e['agent.task.tool_ms']), idleMs: nz(e['agent.task.idle_ms']), startup: startups.get(e['agent.task_id']) ?? null }; }),
+    // one row per `agent.dispatch.finish` (`.start` carries the same attributes stamped at the same instant and is not an anchor); `childTaskIds` is the comma-joined attribute split
+    dispatches: traceEv.filter((e) => e.event === 'agent.dispatch.finish' || e.event === 'agent.dispatch.error').map((e) => ({ task: e['agent.task_id'], parent: e['agent.parent_task_id'] ?? null, depth: e['agent.recursion_depth'] ?? null, endMs: Date.parse(e.ts),
+      mode: e['agent.dispatch.mode'] ?? null, kind: e['agent.dispatch.kind'] ?? null, children: nz(e['agent.dispatch.children']),
+      childTaskIds: typeof e['agent.dispatch.child_task_ids'] === 'string' && e['agent.dispatch.child_task_ids'] !== '' ? e['agent.dispatch.child_task_ids'].split(',') : null,
+      parentBlockedMs: nz(e['agent.dispatch.parent_blocked_ms']), callId: e['agent.dispatch.call_id'] ?? null, waitMs: nz(e['agent.dispatch.wait_ms']) })) };
 
   // ---- wire rows -> redacted request rows + full output
   const rows = wire.rows; const gen = new Map(); const lastLen = new Map(); const full = []; const requests = [];

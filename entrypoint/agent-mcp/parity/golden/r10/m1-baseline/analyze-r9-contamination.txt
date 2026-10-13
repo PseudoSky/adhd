@@ -1,0 +1,15 @@
+== CONTAMINATION A1 (A; probes: carrierRate) ==
+probe | thread | role | phase | request seq | channel | tool | minimal span
+carrierRate | 999ea5a3 | parent | 1 | 6 | response.toolInput | Agent | [4 chars]
+carrierRate | 04a7f8a3 | worker | 1 | 9 | request.brief | - | [4 chars]
+carrierRate | 999ea5a3 | parent | 2 | 29 | response.text | - | [4 chars]
+carrierRate | 999ea5a3 | parent | 2 | 29 | response.text | - | [3 chars]
+matches 4 | in PARENT assistant text of phase 1 (the q_rate invalid rule, oracle.mjs q_rate) 0
+
+== CONTAMINATION C1 (C; probes: carrierRate) ==
+probe | thread | role | phase | request seq | channel | tool | minimal span
+carrierRate | e95d6621 | parent | 1 | 2 | request.toolResult | - | [4 chars]
+carrierRate | e95d6621 | parent | 1 | 25 | response.text | - | [4 chars]
+carrierRate | e95d6621 | parent | 2 | 34 | response.text | - | [4 chars]
+carrierRate | e95d6621 | parent | 2 | 34 | response.text | - | [3 chars]
+matches 4 | in PARENT assistant text of phase 1 (the q_rate invalid rule, oracle.mjs q_rate) 1 at request seq 25
