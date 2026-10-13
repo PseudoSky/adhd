@@ -1,4 +1,4 @@
-import { mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdir, rm, rmdir, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createPolicyLayerPlugin } from '../index';
@@ -241,6 +241,10 @@ describe('Feature: A decider given as a module reference is loaded once and a br
     } finally {
       delete (globalThis as Record<string, unknown>)['__policyLayerTest'];
       await rm(dir, { recursive: true, force: true });
+      // Remove the scratch root once empty so an empty `tmp/apigen-plugin-policy` is not left behind (non-recursive: never removes anything else).
+      await rmdir(SCRATCH_ROOT).catch((error: NodeJS.ErrnoException) => {
+        if (error.code !== 'ENOTEMPTY' && error.code !== 'ENOENT') throw error;
+      });
     }
   }
 
