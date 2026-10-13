@@ -10,6 +10,7 @@ import type {
   IDraftPolicy,
   IEffectivePolicy,
   IExplanation,
+  ICompiledPolicy,
   ILayerInput,
   INarrowOutcome,
   INarrowRequest,
@@ -96,10 +97,61 @@ export async function verify(ctx: IPolicyCtx, input?: { layers?: ILayerInput[] }
   return verifyLayers(layers, { hasRuntimeProvider: ctx.runtime !== undefined });
 }
 
-/** Applies the policy defaults to the supplied attributes and reports where each value came from. */
+/**
+ * Applies the policy defaults to the supplied attributes and reports where each
+ * value came from. A defaults rule that cannot be evaluated fails the call with
+ * `ApiError('internal', ...)` naming the rule; it is never skipped.
+ */
 export async function resolve(ctx: IPolicyCtx, input?: { attributes?: Attributes }): Promise<IResolved> {
-  return core.resolve(await ctx.policy(), input?.attributes);
+  return resolveOrThrow(await ctx.policy(), input?.attributes);
 }
+
+function resolveOrThrow(policy: ICompiledPolicy, attributes: Attributes | undefined): IResolved {
+  try {
+    return core.resolve(policy, attributes);
+  } catch (error) {
+    throw new ApiError('internal', `policy could not resolve attributes: ${describeError(error)}`);
+  }
+}
+
+/** The resolved attributes, or `undefined` when a defaults rule cannot be evaluated (the core then denies `eval-error`). */
+function tryResolve(policy: ICompiledPolicy, attributes: Attributes | undefined): IResolved | undefined {
+  try {
+    return core.resolve(policy, attributes);
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Writes one redacted audit entry (names only). Everything that can throw (the
+ * clock, the name extraction, the sink) is inside the try: the sink is
+ * observational and can never alter or block a decision.
+ */
+function recordAudit(
+  ctx: IPolicyCtx,
+  tool: string,
+  decision: IDecision,
+  attributeNames: () => readonly string[]
+): void {
+  if (ctx.audit === undefined) return;
+  try {
+    const entry: IAuditEntry = {
+      at: ctx.now(),
+      tool,
+      effect: decision.effect,
+      matched: decision.matched,
+      ...(decision.denial !== undefined ? { denialCode: decision.denial.code } : {}),
+      attributeNames: attributeNames(),
+    };
+    ctx.audit.record(entry);
+  } catch {
+    // The audit sink is observational; it can never alter or block a decision.
+  }
+}
+
+const suppliedNames = (attributes: Attributes | undefined): readonly string[] =>
+  attributes !== null && typeof attributes === 'object' ? Object.keys(attributes) : [];
 
 /**
  * Computes the attributes of a child that is handed less authority than its
@@ -135,30 +187,30 @@ async function observeRuntime(
  * Decides one tool call: deny beats ask beats allow, and no match is deny.
  * Runtime values come from `input.runtime`, else one `observe` call on the ctx
  * provider. Records one redacted audit entry (names only) when the ctx has a
- * sink; a failing sink never changes the decision. A policy that cannot load
- * rejects (`internal`); it never allows.
+ * sink; a failing sink or clock never changes the decision. A policy that cannot
+ * load rejects (`internal`) and is audited as a deny `eval-error`; it never allows.
+ * A rule that cannot be evaluated (for example an invalid regular expression
+ * supplied through an attribute) denies `eval-error`, naming the permission.
  */
 export async function evaluate(ctx: IPolicyCtx, input: IEvaluateInput): Promise<IDecision> {
   requireCall(input);
-  const policy = await ctx.policy();
-  const attributes = core.resolve(policy, input.attributes).attributes;
-  const runtime = await observeRuntime(ctx, input, attributes);
-  const decision = core.evaluate(policy, { tool: input.tool, args: input.args ?? {} }, input.attributes, runtime);
-  if (ctx.audit !== undefined) {
-    const entry: IAuditEntry = {
-      at: ctx.now(),
-      tool: input.tool,
-      effect: decision.effect,
-      matched: decision.matched,
-      ...(decision.denial !== undefined ? { denialCode: decision.denial.code } : {}),
-      attributeNames: Object.keys(attributes),
-    };
-    try {
-      ctx.audit.record(entry);
-    } catch {
-      // The audit sink is observational; it can never alter or block a decision.
-    }
+  let policy: ICompiledPolicy;
+  try {
+    policy = await ctx.policy();
+  } catch (error) {
+    // A policy that cannot load or compile never yields a decision, but the refusal is audited.
+    recordAudit(
+      ctx,
+      input.tool,
+      { effect: 'deny', set: {}, matched: [], denial: { code: 'eval-error', reason: describeError(error) } },
+      () => suppliedNames(input.attributes)
+    );
+    throw error;
   }
+  const resolved = tryResolve(policy, input.attributes);
+  const runtime = await observeRuntime(ctx, input, resolved?.attributes ?? {});
+  const decision = core.evaluate(policy, { tool: input.tool, args: input.args ?? {} }, input.attributes, runtime, resolved);
+  recordAudit(ctx, input.tool, decision, () => Object.keys(resolved?.attributes ?? {}));
   return decision;
 }
 
@@ -187,16 +239,16 @@ export async function check(ctx: IPolicyCtx, input: IEvaluateInput): Promise<IDe
 export async function explain(ctx: IPolicyCtx, input: IEvaluateInput): Promise<IExplanation> {
   requireCall(input);
   const policy = await ctx.policy();
-  const attributes = core.resolve(policy, input.attributes).attributes;
-  const runtime = await observeRuntime(ctx, input, attributes);
-  return core.explain(policy, { tool: input.tool, args: input.args ?? {} }, input.attributes, runtime);
+  const resolved = tryResolve(policy, input.attributes);
+  const runtime = await observeRuntime(ctx, input, resolved?.attributes ?? {});
+  return core.explain(policy, { tool: input.tool, args: input.args ?? {} }, input.attributes, runtime, resolved);
 }
 
 /** Shows the effective policy: layer sources, effective attributes with provenance, and every permission. */
 export async function show(ctx: IPolicyCtx, input?: { attributes?: Attributes }): Promise<IEffectivePolicy> {
   const layers = await ctx.layers();
   const policy = await ctx.policy();
-  const resolved = core.resolve(policy, input?.attributes);
+  const resolved = resolveOrThrow(policy, input?.attributes);
   return {
     sources: layers.map((layer) => ({ layer: layer.name, source: layer.source })),
     attributes: resolved.attributes,

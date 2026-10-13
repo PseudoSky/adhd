@@ -30,7 +30,8 @@ function absoluteStrings(value: unknown): boolean {
 
 /**
  * Merges the `attributes:` / `runtime:` blocks across layers (the same name
- * with a different kind is a `schema` issue), then checks, collecting EVERY
+ * with a different kind is a `schema` issue; an attribute named `runtime` or
+ * starting with `$` is a reserved-name `schema` issue), then checks, collecting EVERY
  * issue (D-05):
  * - every attribute named by `where`, `context`, `$attributes.*` placeholders
  *   and `defaults[].set` is declared (`undeclared-attribute`), with a value of
@@ -69,6 +70,10 @@ export function checkDeclarations(input: {
   input.ordered.forEach((layer, li) => {
     const doc = input.documents[li];
     for (const [name, kind] of Object.entries(doc.attributes ?? {})) {
+      if (name === 'runtime' || name.startsWith('$')) {
+        err('schema', layer.name, `/attributes/${name}`,
+          `attribute name "${name}" is reserved (\`runtime\` is the provider-supplied row; names starting with "$" are internal)`);
+      }
       if (Object.prototype.hasOwnProperty.call(attributes, name) && attributes[name] !== kind) {
         err('schema', layer.name, `/attributes/${name}`,
           `attribute "${name}" is declared as ${kind} here but as ${attributes[name]} in another layer`);

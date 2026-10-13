@@ -1,16 +1,21 @@
-import type { ICompiledPolicy } from '../../spec';
+import type { FilterExpression, ICompiledPolicy } from '../../spec';
 import { COMPILED_SCHEMA } from '../../spec';
 import { canonicalize } from '../canonical/canonical';
 import { deepClone, deepFreeze } from '../canonical/clone';
 import { sha256Hex } from '../canonical/sha256';
+import { validateExpression } from '../engine/validate';
 import { PolicyLoadError } from '../errors';
 import { validateSchema } from '../schema/validate';
 
 /**
  * Loads a stored compiled policy (CL-13). Validates against `COMPILED_SCHEMA`
  * (code `malformed`), requires `schemaVersion === 1` (`schema-version`) and
- * recomputes `contentHash` (`hash-mismatch`). Returns a deep-frozen copy.
- * Throws {@link PolicyLoadError}; it never falls back to a weaker policy.
+ * recomputes `contentHash` (`hash-mismatch`; this detects corruption, not
+ * tampering: anyone who can edit the file can recompute the hash), then checks
+ * that every stored expression passes `validateExpression` (an unsupported
+ * operator is `malformed`) and that every `index` entry points at an existing
+ * permission. Returns a deep-frozen copy. Throws {@link PolicyLoadError}; it
+ * never falls back to a weaker policy.
  */
 export function loadCompiled(json: unknown): ICompiledPolicy {
   if (json === null || typeof json !== 'object' || Array.isArray(json)) {
@@ -35,5 +40,37 @@ export function loadCompiled(json: unknown): ICompiledPolicy {
   if (sha256Hex(canonicalize(body)) !== contentHash) {
     throw new PolicyLoadError('hash-mismatch', 'compiled policy contentHash does not match its content');
   }
+  const policy = copy as unknown as ICompiledPolicy;
+  checkExpressions(policy);
+  checkIndex(policy);
   return deepFreeze(copy) as unknown as ICompiledPolicy;
+}
+
+function checkExpressions(policy: ICompiledPolicy): void {
+  const check = (where: string, expression: FilterExpression | undefined): void => {
+    if (expression === undefined) return;
+    const bad = validateExpression(expression, '');
+    if (bad.length > 0) {
+      throw new PolicyLoadError('malformed', `compiled policy is malformed at ${where}: unsupported or invalid expression at ${bad[0] === '' ? '/' : bad[0]}`);
+    }
+  };
+  policy.permissions.forEach((permission, i) => {
+    check(`/permissions/${i}/context`, permission.context);
+    check(`/permissions/${i}/args`, permission.args);
+  });
+  policy.defaults.forEach((rule, i) => check(`/defaults/${i}/where`, rule.where));
+}
+
+function checkIndex(policy: ICompiledPolicy): void {
+  const count = policy.permissions.length;
+  const inRange = (n: unknown): boolean => typeof n === 'number' && Number.isInteger(n) && n >= 0 && n < count;
+  const lists: [string, readonly unknown[]][] = [
+    ...Object.entries(policy.index.exact).map(([tool, rules]) => [`/index/exact/${tool}`, rules] as [string, readonly unknown[]]),
+    ...policy.index.patterns.map((pattern, i) => [`/index/patterns/${i}/rules`, pattern.rules] as [string, readonly unknown[]]),
+  ];
+  for (const [where, rules] of lists) {
+    if (!rules.every(inRange)) {
+      throw new PolicyLoadError('malformed', `compiled policy is malformed at ${where}: an index entry does not point at a permission (0..${count - 1})`);
+    }
+  }
 }

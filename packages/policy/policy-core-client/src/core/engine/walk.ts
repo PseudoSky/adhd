@@ -15,6 +15,8 @@ const LOGICAL = new Set(['_and', '_or', '_not']);
 /** Constant-true / constant-false nodes. They address a field no row carries. */
 const CONST_TRUE = { _ne: 1 } as const;
 const CONST_FALSE = { _eq: 1 } as const;
+/** A slot node: true when the row carries the slot's boolean (set per row by the caller). */
+const SLOT_TRUE = { _eq: true } as const;
 
 const isPlainObject = (v: unknown): v is Record<string, unknown> =>
   v !== null && typeof v === 'object' && !Array.isArray(v);
@@ -27,12 +29,20 @@ const isPlainObject = (v: unknown): v is Record<string, unknown> =>
  * which the engine rejects. Returns a NEW expression; the input is untouched.
  * This is how operators the engine lacks or implements differently
  * (`_within`, array `_contained_in`) and absent placeholders stay outside it.
+ *
+ * With `options.slots` every decided operator becomes a SLOT instead
+ * (`{ '$$s<N>': { _eq: true } }`, N counting decisions in call order, regardless
+ * of the boolean `resolve` returned): the result is a row-independent template
+ * the caller compiles once, then supplies `$$s<N>` per row.
  */
 export function rewriteOperators(
   expression: FilterExpression,
-  resolve: OperatorResolver
+  resolve: OperatorResolver,
+  options?: { readonly slots?: boolean }
 ): FilterExpression {
   let counter = 0;
+  let slotCounter = 0;
+  const slots = options?.slots === true;
   const constName = (): string => `$$c${counter++}`;
 
   const processNode = (node: Record<string, unknown>): Record<string, unknown> => {
@@ -70,6 +80,7 @@ export function rewriteOperators(
       } else if (key.startsWith('_')) {
         const decided = resolve(path.join('.'), key, member);
         if (decided === undefined) rest[key] = member;
+        else if (slots) hoist[`$$s${slotCounter++}`] = SLOT_TRUE;
         else hoist[constName()] = decided ? CONST_TRUE : CONST_FALSE;
       } else if (isPlainObject(member)) {
         const nested = processField([...path, key], member, hoist);

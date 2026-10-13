@@ -4,10 +4,12 @@ import type {
   ICompiledPolicy,
   IDecision,
   IExplanation,
+  IResolved,
   IRuntimeValues,
   IToolCall,
 } from '../../spec';
 import { resolveAttributes } from '../attributes/resolve';
+import { describeThrown } from '../errors';
 import { matches, matchesPresent } from '../engine/matches';
 import { selectPermissions } from './select';
 import { substitute } from './substitute';
@@ -37,12 +39,21 @@ const deny = (
  * `set` is `{}` on deny. Never reads the clock, environment or filesystem.
  * `considered` lists EVERY permission selected by tool (D-12), with
  * `substituted` set only for applicable permissions that have `args`.
+ *
+ * A permission whose `context` or `args` cannot be evaluated (an uncompilable
+ * regular expression, including one supplied through an attribute) denies the
+ * whole call `eval-error` with a reason naming the permission id: a `deny` rule
+ * that cannot be evaluated must never read as "does not match" (FC-01).
+ * `resolved` is an internal optimisation: a caller that already ran
+ * `resolveAttributes(policy, attributes)` passes the result so it is not
+ * computed twice; it must be exactly that result.
  */
 export function evaluateDetailed(
   policy: ICompiledPolicy,
   call: IToolCall,
   attributes?: Attributes,
-  runtime?: IRuntimeValues
+  runtime?: IRuntimeValues,
+  resolved?: IResolved
 ): IExplanation {
   try {
     if (call === null || typeof call !== 'object' || typeof call.tool !== 'string' || call.tool === '') {
@@ -62,7 +73,7 @@ export function evaluateDetailed(
       };
     }
 
-    const effective = resolveAttributes(policy, attributes).attributes;
+    const effective = (resolved ?? resolveAttributes(policy, attributes)).attributes;
     const contextRow: Record<string, unknown> = { ...effective };
     if (runtime !== undefined) contextRow['runtime'] = runtime;
     const argsRow: Record<string, unknown> =
@@ -71,19 +82,35 @@ export function evaluateDetailed(
     const considered: Considered[] = [];
     const hits: ICompiledPermission[] = [];
     for (const permission of selected) {
-      const contextMatched = permission.context === undefined || matchesPresent(contextRow, permission.context);
-      if (!contextMatched) {
-        considered.push({ id: permission.id, applicable: false, contextMatched: false, substituted: undefined });
-        continue;
+      try {
+        const contextMatched = permission.context === undefined || matchesPresent(contextRow, permission.context);
+        if (!contextMatched) {
+          considered.push({ id: permission.id, applicable: false, contextMatched: false, substituted: undefined });
+          continue;
+        }
+        let argsMatched = true;
+        let substituted: Considered['substituted'];
+        if (permission.args !== undefined) {
+          substituted = substitute(permission.args, effective).expression;
+          argsMatched = matches(argsRow, substituted);
+        }
+        considered.push({ id: permission.id, applicable: true, contextMatched: true, argsMatched, substituted });
+        if (argsMatched) hits.push(permission);
+      } catch (error) {
+        const reviewed = new Set(considered.map((c) => c.id));
+        return {
+          decision: deny(
+            'eval-error',
+            `permission ${permission.id} could not be evaluated: ${describeThrown(error)}`
+          ),
+          considered: [
+            ...considered,
+            ...selected
+              .filter((p) => !reviewed.has(p.id))
+              .map((p) => ({ id: p.id, applicable: false, substituted: undefined })),
+          ],
+        };
       }
-      let argsMatched = true;
-      let substituted: Considered['substituted'];
-      if (permission.args !== undefined) {
-        substituted = substitute(permission.args, effective).expression;
-        argsMatched = matches(argsRow, substituted);
-      }
-      considered.push({ id: permission.id, applicable: true, contextMatched: true, argsMatched, substituted });
-      if (argsMatched) hits.push(permission);
     }
 
     const matched = hits.map((p) => p.id);
@@ -124,7 +151,7 @@ export function evaluateDetailed(
     return { decision: { effect, set, matched }, considered };
   } catch (error) {
     return {
-      decision: deny('eval-error', `evaluation failed closed: ${error instanceof Error ? error.message : String(error)}`),
+      decision: deny('eval-error', `evaluation failed closed: ${describeThrown(error)}`),
       considered: [],
     };
   }
@@ -135,7 +162,8 @@ export function evaluate(
   policy: ICompiledPolicy,
   call: IToolCall,
   attributes?: Attributes,
-  runtime?: IRuntimeValues
+  runtime?: IRuntimeValues,
+  resolved?: IResolved
 ): IDecision {
-  return evaluateDetailed(policy, call, attributes, runtime).decision;
+  return evaluateDetailed(policy, call, attributes, runtime, resolved).decision;
 }

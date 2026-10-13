@@ -15,11 +15,14 @@ type Schema = Readonly<Record<string, unknown>>;
 const isObject = (v: unknown): v is Record<string, unknown> =>
   v !== null && typeof v === 'object' && !Array.isArray(v);
 
+/** Own-property test: `constructor`, `toString` and friends are never schema members. */
+const own = (o: object, key: string): boolean => Object.prototype.hasOwnProperty.call(o, key);
+
 function resolveRef(root: Schema, ref: string): Schema {
   if (!ref.startsWith('#/')) throw new Error(`unsupported $ref ${ref}`);
   let node: unknown = root;
   for (const part of ref.slice(2).split('/')) {
-    node = isObject(node) ? node[part] : undefined;
+    node = isObject(node) && own(node, part) ? node[part] : undefined;
   }
   if (!isObject(node)) throw new Error(`unresolvable $ref ${ref}`);
   return node;
@@ -99,12 +102,12 @@ function check(root: Schema, node: Schema, v: unknown, path: string, out: ISchem
       : {};
     if (Array.isArray(node['required'])) {
       for (const key of node['required'] as string[]) {
-        if (!(key in v)) out.push({ path: `${path}/${key}`, message: 'is required' });
+        if (!own(v, key)) out.push({ path: `${path}/${key}`, message: 'is required' });
       }
     }
     for (const [key, member] of Object.entries(v)) {
       const memberPath = `${path}/${key}`;
-      if (key in properties) {
+      if (own(properties, key)) {
         check(root, properties[key], member, memberPath, out);
       } else if (node['additionalProperties'] === false) {
         out.push({ path: memberPath, message: `unknown key "${key}"` });

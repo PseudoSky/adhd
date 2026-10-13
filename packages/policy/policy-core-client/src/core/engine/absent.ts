@@ -47,12 +47,14 @@ const LOGICAL_KEYS = new Set(['_and', '_or', '_not']);
 const isPlain = (v: unknown): v is Record<string, unknown> =>
   v !== null && typeof v === 'object' && !Array.isArray(v);
 
+const own = (o: object, key: string): boolean => Object.prototype.hasOwnProperty.call(o, key);
+
 /** True when `path` (an exact key, else a dotted walk) resolves to a defined value in `row`. */
 function hasPath(row: unknown, path: string): boolean {
-  if (isPlain(row) && path in row) return row[path] !== undefined;
+  if (isPlain(row) && own(row, path)) return row[path] !== undefined;
   let current: unknown = row;
   for (const segment of path.split('.')) {
-    if (!isPlain(current) || !(segment in current)) return false;
+    if (!isPlain(current) || !own(current, segment)) return false;
     current = current[segment];
   }
   return current !== undefined;

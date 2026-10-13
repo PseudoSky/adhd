@@ -26,8 +26,11 @@ const has = (o: object, k: string): boolean => Object.prototype.hasOwnProperty.c
  *    `grant` -> `grant`; neither -> the parent's value.
  * 4. `only[key]` must lie within the add result (`only-outside`, MG-07) and
  *    replaces it (MG-05); `grant` applies before `only` (MG-06).
- * 5. Every completed, non-supplied key must lie within the parent
- *    (`exceeds-parent`, MG-08/MG-09: refused, never clamped).
+ * 5. Every completed key must lie within the parent (`exceeds-parent`,
+ *    MG-08/MG-09: refused, never clamped). This includes SUPPLIED keys the
+ *    policy narrows (a key in `narrowingCovered`): a supplied value is final but
+ *    cannot exceed the parent, and a parent that lacks the key refuses it. A
+ *    supplied key no narrowing check covers (e.g. `role`) passes through.
  *
  * A refusal names the variable and the rule (EX-04).
  */
@@ -83,12 +86,23 @@ export function narrowAttributes(
     const child: Record<string, AttributeValue> = {};
     for (const key of completedKeys) {
       const kind = policy.attributes[key];
-      if (suppliedKeys.has(key)) {
-        setOwn(child, key, S[key]);
-        continue;
-      }
       const parentValue =
         has(parentValues, key) && valueMatchesKind(kind, parentValues[key]) ? parentValues[key] : undefined;
+      if (suppliedKeys.has(key)) {
+        // A supplied value is final, but it is still a request for authority: a key
+        // the policy narrows must lie within the parent (C1); other keys (e.g. `role`) pass through.
+        if (covered.has(key)) {
+          if (!valueMatchesKind(kind, S[key])) {
+            return refuse(key, 'type', `"${key}" in the supplied attributes must be a ${kind} value`);
+          }
+          if (parentValue === undefined || !isWithin(kind, S[key], parentValue)) {
+            return refuse(key, 'exceeds-parent', `"${key}" is supplied by the child request but would exceed the parent's authority`);
+          }
+        }
+        const supplied = S[key];
+        setOwn(child, key, Array.isArray(supplied) ? [...supplied] : supplied);
+        continue;
+      }
       const inS = has(S, key);
       const inGrant = has(grant, key);
       let add: AttributeValue | undefined;

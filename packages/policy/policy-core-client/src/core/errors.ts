@@ -36,3 +36,28 @@ export class PolicyCompileError extends Error {
     this.issues = issues;
   }
 }
+
+/**
+ * Thrown by core operations that cannot decide because a rule could not be
+ * evaluated (an uncompilable regular expression, an engine error). `evaluate`
+ * catches it and denies `eval-error`; operations that return data (`resolve`,
+ * `show`) surface it to the caller, who must treat it as a failure, never as
+ * "the rule did not apply".
+ */
+export class PolicyEvalError extends Error {
+  /** Id of the permission or defaults rule that could not be evaluated. */
+  readonly ruleId: string;
+
+  constructor(ruleId: string, message: string) {
+    super(message);
+    this.name = 'PolicyEvalError';
+    this.ruleId = ruleId;
+  }
+}
+
+/** Short, single-line description of a thrown value for a denial reason. */
+export function describeThrown(error: unknown): string {
+  const text = error instanceof Error ? error.message : String(error);
+  const line = text.split('\n')[0];
+  return line.length > 200 ? `${line.slice(0, 200)}...` : line;
+}
