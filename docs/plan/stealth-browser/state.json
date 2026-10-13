@@ -270,11 +270,11 @@
       "end_ref": null
     },
     "cdp-test-harness": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-10-13T00:18:26.441Z",
-      "done_at": null,
+      "done_at": "2026-10-13T00:46:56.990Z",
       "start_ref": "82ea6d2102d50e8659d29f798f025eca592d3501",
-      "end_ref": null
+      "end_ref": "852b7aad496ab1de86d6f8c61968d937ee50e034"
     },
     "failsafe-inventory": {
       "status": "complete",
@@ -488,6 +488,18 @@
       "audit_criteria_total": 6,
       "by": "pseudosky",
       "note": "guard 0 verified by orchestrator"
+    },
+    {
+      "ts": "2026-10-13T00:46:56.990Z",
+      "from": "tests-unit-data",
+      "to": "cdp-test-harness",
+      "start_ref": "82ea6d2102d50e8659d29f798f025eca592d3501",
+      "end_ref": "852b7aad496ab1de86d6f8c61968d937ee50e034",
+      "audit_exit": 0,
+      "audit_criteria_passed": 6,
+      "audit_criteria_total": 6,
+      "by": "pseudosky",
+      "note": "guard 0 verified by orchestrator"
     }
   ],
   "amendment_log": [
@@ -573,7 +585,7 @@
     "version": "0.8.35",
     "hash": "0b6bc1f3d70e"
   },
-  "current_state": "tests-unit-data",
+  "current_state": "capture-upgrade",
   "dod_provenance": {
     "confirmed_at": "2026-10-12T23:49:38.410Z",
     "by": "pseudosky",
