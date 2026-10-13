@@ -13,6 +13,7 @@ import type { EngineLogger, EngineConfig } from "../interfaces.js";
 import { DEFAULT_PROVIDER_TIMEOUT_MS } from "../interfaces.js";
 import { sdkFetchOption } from "./wire.js";
 import { applyCacheBreakpoints } from "./anthropic-cache.js";
+import { toToolResultContent } from "./anthropic-tool-result.js";
 import { assistantBlocks, captureEcho, isEchoRejection, sanitizeServerToolPairs } from "./anthropic-echo.js";
 import { runWithPauseTurn, type IPauseCall } from "./anthropic-pause.js";
 import { type ProviderTokenUsage } from "./partial-usage.js";
@@ -224,7 +225,8 @@ function toAnthropicMessages(
                     {
                         type: "tool_result",
                         tool_use_id: toolResult.toolCallId,
-                        content: JSON.stringify(toolResult.result),
+                        // R10 S1 P5: the text the model should read, never a JSON string of the MCP content array.
+                        content: toToolResultContent(toolResult.result),
                         is_error: toolResult.isError,
                     },
                 ],
@@ -482,6 +484,9 @@ export class AnthropicProvider implements LLMProvider {
                         // R8-AC: an explicit reasoning-effort level rides as `output_config.effort`; unset sends no
                         // `output_config` key at all, so the request is byte-identical to the pre-change body.
                         ...(this.providerConfig.effort !== undefined && { output_config: { effort: this.providerConfig.effort } }),
+                        // R10 S1 P7: an explicit `thinking` option rides verbatim; unset sends no `thinking` key at all,
+                        // so the request is byte-identical to the pre-change body (the API default applies).
+                        ...(this.providerConfig.thinking !== undefined && { thinking: this.providerConfig.thinking }),
                     },
                     { signal: request.signal }
                 );

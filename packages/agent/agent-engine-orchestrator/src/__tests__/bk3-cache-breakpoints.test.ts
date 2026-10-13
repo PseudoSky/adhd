@@ -109,7 +109,7 @@ describe("ae62e6b0 AC3.1: breakpoint positions at or above the minimum", () => {
     const turn2: MessageParam[] = [
       ...req.messages,
       { role: "assistant", content: [{ type: "tool_use", id: "tu1", name: "alpha", input: {} }] },
-      { role: "user", content: [{ type: "tool_result", tool_use_id: "tu1", content: '"result"' }] },
+      { role: "user", content: [{ type: "tool_result", tool_use_id: "tu1", content: "result" }] },
     ];
     const out = applyCacheBreakpoints({ model: HAIKU, ...req, messages: turn2 });
     expect(out.placed).toContain("messages");

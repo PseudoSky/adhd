@@ -7,6 +7,7 @@ import { nowIso } from "../utils/timestamps.js";
 import { resolveToolCallName } from "../clients/tool-naming.js";
 import { DEFAULT_PROVIDER_TIMEOUT_MS } from "../interfaces.js";
 import { sdkFetchOption } from "./wire.js";
+import { isMcpContentArray, mcpContentText } from "../engine/tool-result-cap.js";
 import type { EngineConfig } from "../interfaces.js";
 
 import type { ProviderConfig, Message, ToolCall } from "../validation/index.js";
@@ -96,7 +97,7 @@ function toOpenAIMessages(messages: Message[]): ChatCompletionMessageParam[] {
                 return {
                     role: "tool",
                     tool_call_id: toolResult.toolCallId,
-                    content: JSON.stringify(toolResult.result),
+                    content: toOpenAIToolContent(toolResult.result),
                 };
             }
             default: {
@@ -105,6 +106,27 @@ function toOpenAIMessages(messages: Message[]): ChatCompletionMessageParam[] {
             }
         }
     });
+}
+
+/**
+ * The `role:"tool"` message content for a stored tool result. OpenAI-compatible APIs (DeepSeek included) take a
+ * plain string here, never a content-part array (R10 S1 P5-A2). An MCP array of text blocks is sent as its text
+ * (non-empty block texts joined by a newline); an MCP array that also holds a non-text block is sent as one string in
+ * which each text block is its raw text and each other block (image, audio, resource, ...) is that block's JSON, one
+ * per line in order, so nothing is dropped and the whole array is never JSON-encoded into a string; a string result
+ * is verbatim; anything else is its JSON once.
+ */
+function toOpenAIToolContent(result: unknown): string {
+    const text = mcpContentText(result);
+    if (text !== undefined) return text;
+    if (isMcpContentArray(result)) {
+        return result
+            .map(b => (b.type === "text" ? (b["text"] as string) : JSON.stringify(b)))
+            .filter(t => t !== "")
+            .join("\n");
+    }
+    if (typeof result === "string") return result;
+    return JSON.stringify(result) ?? "";
 }
 
 function toOpenAITools(tools?: ToolDefinition[]): ChatCompletionTool[] | undefined {

@@ -133,10 +133,18 @@ describe("R9-hist S3a AC2: no echo => the request bytes are unchanged (goldens r
   const G1_BODY =
     '{"model":"claude-haiku-5-5","system":"be brief","max_tokens":128000,"messages":[{"role":"user","content":"hi"},{"role":"assistant","content":"hello"},{"role":"user","content":"again"}],"stream":true}';
   const G2_UNCACHED_BODY =
-    '{"model":"claude-haiku-5-5","max_tokens":128000,"messages":[{"role":"user","content":"run it"},{"role":"assistant","content":[{"type":"text","text":"running"},{"type":"tool_use","id":"toolu_1","name":"shell__shell_execute","input":{"command":"ls"}},{"type":"tool_use","id":"toolu_2","name":"plain","input":{}}]},{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_1","content":"\\"a\\"","is_error":false}]},{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_2","content":"\\"b\\"","is_error":false}]}],"tools":[{"name":"shell__shell_execute","description":"shell__shell_execute","input_schema":{"type":"object","properties":{}}},{"name":"plain","description":"plain","input_schema":{"type":"object","properties":{}}},{"type":"web_search_20250305","name":"web_search"},{"type":"web_fetch_20250910","name":"web_fetch"}],"stream":true}';
-  const G2_CACHED_SHA = "e36b236ceb06426f24151ed8411ea9eb72e609a6c06550026471e4bf6ddc1ef5";
-  const G5_CACHED_SHA = "575fcd200347eace36126d54254faa02610cc3b30265690cef63130ee8536d60";
-  const G5_UNCACHED_SHA = "0d34d9aed58748a3227c00f5942539e3091e7a781d132569e5c58989a2f4ca30";
+    '{"model":"claude-haiku-5-5","max_tokens":128000,"messages":[{"role":"user","content":"run it"},{"role":"assistant","content":[{"type":"text","text":"running"},{"type":"tool_use","id":"toolu_1","name":"shell__shell_execute","input":{"command":"ls"}},{"type":"tool_use","id":"toolu_2","name":"plain","input":{}}]},{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_1","content":"a","is_error":false}]},{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_2","content":"b","is_error":false}]}],"tools":[{"name":"shell__shell_execute","description":"shell__shell_execute","input_schema":{"type":"object","properties":{}}},{"name":"plain","description":"plain","input_schema":{"type":"object","properties":{}}},{"type":"web_search_20250305","name":"web_search"},{"type":"web_fetch_20250910","name":"web_fetch"}],"stream":true}';
+  // R10 S1 AC7 (deliberate re-baseline): P5 stops double-encoding tool results, so a stored result "a" now reaches the wire
+  // as content "a" (it was content "\"a\"": the JSON of a string, inside a JSON body). That is the ONLY byte change in
+  // these goldens. The pre-P5 SHAs are kept as PRE_P5_*: each test re-encodes the new body's tool_result content back to the
+  // old shape and requires the OLD sha, which proves no other byte of the request moved.
+  const G2_CACHED_SHA = "1bf3ea511b4d96d7bb08228b39ad5d4c667a5efa430732f270f31e368f98f543";
+  const G5_CACHED_SHA = "4bd35ff76f1f69078d9bbd51b71f3112da9f304b08e7397948600fbdfc3939e8";
+  const G5_UNCACHED_SHA = "6c4c00f20b7a3e721e7f5d661ba08ea514b513489fb89093a3be8773625ab16e";
+  const PRE_P5_G2_CACHED_SHA = "e36b236ceb06426f24151ed8411ea9eb72e609a6c06550026471e4bf6ddc1ef5";
+  const PRE_P5_G5_CACHED_SHA = "575fcd200347eace36126d54254faa02610cc3b30265690cef63130ee8536d60";
+  const PRE_P5_G5_UNCACHED_SHA = "0d34d9aed58748a3227c00f5942539e3091e7a781d132569e5c58989a2f4ca30";
+  const reDoubleEncode = (body: string): string => body.replace(/"content":"([ab])"/g, (_m, c: string) => `"content":"\\"${c}\\""`);
 
   const g1Messages = [
     { id: "a", role: "system", content: "be brief" },
@@ -165,13 +173,19 @@ describe("R9-hist S3a AC2: no echo => the request bytes are unchanged (goldens r
   it("R9-hist S3a AC2: a multi tool-call history with server tools is byte-identical, cache breakpoints on and off", async () => {
     const extra = { tools: g2Tools, serverSideTools: g2Server };
     expect(await rawBody(toolHistory, extra, false)).toBe(G2_UNCACHED_BODY);
-    expect(sha(await rawBody(toolHistory, extra, true))).toBe(G2_CACHED_SHA);
+    const cached = await rawBody(toolHistory, extra, true);
+    expect(sha(cached)).toBe(G2_CACHED_SHA);
+    expect(sha(reDoubleEncode(cached))).toBe(PRE_P5_G2_CACHED_SHA);
   });
 
   it("R9-hist S3a AC2: a large history that triggers the system + messages cache breakpoints is byte-identical", async () => {
     const extra = { tools: g2Tools };
-    expect(sha(await rawBody(g5Messages, extra, true))).toBe(G5_CACHED_SHA);
-    expect(sha(await rawBody(g5Messages, extra, false))).toBe(G5_UNCACHED_SHA);
+    const cached = await rawBody(g5Messages, extra, true);
+    const uncached = await rawBody(g5Messages, extra, false);
+    expect(sha(cached)).toBe(G5_CACHED_SHA);
+    expect(sha(uncached)).toBe(G5_UNCACHED_SHA);
+    expect(sha(reDoubleEncode(cached))).toBe(PRE_P5_G5_CACHED_SHA);
+    expect(sha(reDoubleEncode(uncached))).toBe(PRE_P5_G5_UNCACHED_SHA);
   });
 
   const unusable: Array<[string, ReadonlyMap<string, IProviderEcho>]> = [
