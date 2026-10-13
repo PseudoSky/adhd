@@ -27,10 +27,12 @@ export interface IStubNet {
  * @param handler answers a request with a `Response` (the stand-in for the remote server)
  * @param dns     hostname -> addresses; a missing host resolves to {@link PUBLIC_IP}. A function is called per
  *                resolution (to model a rebinding answer that changes between calls).
+ * @param connectErrors address -> errno code (e.g. `ECONNREFUSED`): a connection to that address fails before any response
  */
 export function stubNet(
   handler: NetHandler,
-  dns: Record<string, string[]> | ((host: string, call: number) => string[]) = {}
+  dns: Record<string, string[]> | ((host: string, call: number) => string[]) = {},
+  connectErrors: Record<string, string> = {}
 ): IStubNet {
   const resolved: string[] = [];
   const requests: IStubNet['requests'] = [];
@@ -48,6 +50,8 @@ export function stubNet(
     req.end = () => {
       void (async () => {
         try {
+          const code = connectErrors[String(options.host)];
+          if (code) throw Object.assign(new Error(`connect ${code} ${String(options.host)}`), { code });
           const hostHeader = String((options.headers as Record<string, string>)['host']);
           const res = await handler(new URL(`${options.protocol}//${hostHeader}${options.path ?? '/'}`), options);
           const body = Buffer.from(await res.arrayBuffer());

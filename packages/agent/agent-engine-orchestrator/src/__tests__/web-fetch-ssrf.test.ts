@@ -14,9 +14,10 @@
  * function are injected (fixtures/web-fetch-net.ts). Negative controls (validation removed => these go red) are
  * run by the dispatch harness against this file; see the return block of dispatch 48dc.
  */
+import { brotliCompressSync, deflateSync, gzipSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
 
-import { classifyAddress, executeWebFetch } from '../tools/web-fetch.js';
+import { WEB_FETCH_MAX_BYTES, WEB_FETCH_TRUNCATION_MARKER, classifyAddress, executeWebFetch } from '../tools/web-fetch.js';
 import { PUBLIC_IP, stubNet } from './fixtures/web-fetch-net.js';
 
 const page = (html = '<title>t</title><p>hello</p>') => new Response(html, { status: 200, headers: { 'content-type': 'text/html' } });
@@ -202,6 +203,34 @@ describe('bc799330 AC2: the connection is pinned to the validated IP and every h
   });
 });
 
+describe('bc799330 AC2: failover stays inside the validated addresses', () => {
+  const V6 = '2606:4700:4700::1111';
+  const V4 = '93.184.216.34';
+
+  it('bc799330 AC2: an unreachable first address falls over to the next VALIDATED address with no second resolution', async () => {
+    const net = stubNet(async () => page('<p>via v4</p>'), { 'dual.example.com': [V6, V4] }, { [V6]: 'ENETUNREACH' });
+    const out = (await executeWebFetch({ url: 'http://dual.example.com/' }, net)) as { content: { source: { data: string } } };
+    expect(out.content.source.data).toContain('via v4');
+    expect(net.resolved).toEqual(['dual.example.com']);
+    expect(net.requests.map((r) => r.host)).toEqual([V6, V4]);
+  });
+
+  it('bc799330 AC2: a PRIVATE sibling in the answer still refuses the hop before any connection (failover cannot reach it)', async () => {
+    const net = stubNet(async () => page(), { 'dual.example.com': [V6, '10.0.0.1'] }, { [V6]: 'ENETUNREACH' });
+    await expect(executeWebFetch({ url: 'http://dual.example.com/' }, net)).rejects.toThrow(/10\.0\.0\.1.*private/);
+    expect(net.requests).toHaveLength(0);
+  });
+
+  it('bc799330 AC2: a non-connect failure (reset) is not retried on another address, and when every address fails the last error surfaces', async () => {
+    const reset = stubNet(async () => page(), { 'dual.example.com': [V6, V4] }, { [V6]: 'ECONNRESET' });
+    await expect(executeWebFetch({ url: 'http://dual.example.com/' }, reset)).rejects.toThrow(/ECONNRESET/);
+    expect(reset.requests).toHaveLength(1);
+    const all = stubNet(async () => page(), { 'dual.example.com': [V6, V4] }, { [V6]: 'ECONNREFUSED', [V4]: 'EHOSTUNREACH' });
+    await expect(executeWebFetch({ url: 'http://dual.example.com/' }, all)).rejects.toThrow(/EHOSTUNREACH/);
+    expect(all.requests).toHaveLength(2);
+  });
+});
+
 describe('bc799330 AC3: the allow-list narrows names, it never authorises an internal address', () => {
   it('bc799330 AC3: an allow-listed hostname that resolves to a private address is refused (exact entry)', async () => {
     await expectRefused('https://intranet.corp.example/', /intranet\.corp\.example resolves to 192\.168\.0\.10, which is a private \(RFC1918\) address/, {
@@ -241,6 +270,35 @@ describe('bc799330 AC3: the allow-list narrows names, it never authorises an int
 });
 
 describe('bc799330 AC5: ordinary public pages are unaffected', () => {
+  const HTML = '<html><head><title>Zipped</title></head><body><p>compressed body &amp; more</p></body></html>';
+  const encoded = (enc: string, bytes: Buffer): Response => new Response(bytes, { status: 200, headers: { 'content-type': 'text/html', 'content-encoding': enc, 'content-length': String(bytes.length) } });
+  const dataOf = async (r: Response): Promise<string> =>
+    ((await executeWebFetch({ url: 'https://example.com/' }, stubNet(async () => r))) as { content: { source: { data: string } } }).content.source.data;
+
+  it.each([
+    ['gzip', (b: Buffer) => gzipSync(b)],
+    ['x-gzip', (b: Buffer) => gzipSync(b)],
+    ['deflate', (b: Buffer) => deflateSync(b)],
+    ['br', (b: Buffer) => brotliCompressSync(b)],
+  ])('bc799330 AC5: a %s-encoded page (the request advertises gzip, deflate, br as fetch did) is decoded to the same result as the plain page', async (enc, compress) => {
+    const plain = await dataOf(page(HTML));
+    expect(await dataOf(encoded(enc, compress(Buffer.from(HTML))))).toBe(plain);
+    expect(plain).toContain('compressed body & more');
+  });
+
+  it('bc799330 AC5: an unsupported or corrupt content-encoding is a tool error, not garbage text', async () => {
+    await expect(dataOf(encoded('zstd', Buffer.from(HTML)))).rejects.toThrow(/unsupported content-encoding zstd/);
+    await expect(dataOf(encoded('gzip', Buffer.from('this is not gzip')))).rejects.toThrow();
+  });
+
+  it('bc799330 AC5: a compression bomb is bounded by the byte cap applied after decompression', async () => {
+    const bomb = gzipSync(Buffer.alloc(64 * 1024 * 1024, 0x61)); // 64 MiB of "a", tiny on the wire
+    expect(bomb.length).toBeLessThan(1024 * 1024);
+    const data = await dataOf(new Response(bomb, { status: 200, headers: { 'content-type': 'text/plain', 'content-encoding': 'gzip' } }));
+    expect(data.endsWith(WEB_FETCH_TRUNCATION_MARKER)).toBe(true);
+    expect(data.length).toBeLessThan(WEB_FETCH_MAX_BYTES);
+  });
+
   it('bc799330 AC5: a public page resolves, connects, extracts and returns the Anthropic-shaped result', async () => {
     const net = stubNet(async () => page('<html><head><meta name="description" content="d &amp; e"><title>T</title></head><body><p>Body</p></body></html>'));
     const out = await executeWebFetch({ url: 'https://example.com/' }, { ...net, now: () => new Date('2026-10-13T00:00:00.000Z') });

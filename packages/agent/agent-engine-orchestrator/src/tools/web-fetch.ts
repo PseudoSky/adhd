@@ -34,6 +34,8 @@ import { request as httpRequest } from 'node:http';
 import { request as httpsRequest } from 'node:https';
 import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
+import type { Readable, Transform } from 'node:stream';
+import { createBrotliDecompress, createGunzip, createInflate } from 'node:zlib';
 
 import type { InProcessToolDescriptor } from '../clients/in-process.js';
 import type { IMcpClient } from '../clients/types.js';
@@ -466,11 +468,12 @@ const defaultResolve: WebFetchResolver = async (hostname) =>
   (await lookup(hostname, { all: true, verbatim: true })).map((a) => ({ address: a.address, family: a.family === 6 ? 6 : 4 }));
 
 /**
- * Resolve `url`'s host ONCE and return the address to connect to, refusing the hop when ANY
- * returned address is non-public (a name that answers with a mix is still refused: the connection
- * must not be able to land on the private one). An IP-literal host skips DNS but is classified.
+ * Resolve `url`'s host ONCE and return the addresses it may be connected to, refusing the hop when
+ * ANY returned address is non-public (a name that answers with a mix is still refused: the
+ * connection must not be able to land on the private one). An IP-literal host skips DNS but is
+ * classified.
  */
-async function resolveEgressTarget(url: URL, resolve: WebFetchResolver): Promise<IResolvedAddress> {
+async function resolveEgressTargets(url: URL, resolve: WebFetchResolver): Promise<ReadonlyArray<IResolvedAddress>> {
   const host = url.hostname.replace(/^\[|\]$/g, '');
   const literal = isIP(host);
   const addrs: ReadonlyArray<IResolvedAddress> = literal
@@ -486,56 +489,104 @@ async function resolveEgressTarget(url: URL, resolve: WebFetchResolver): Promise
       );
     }
   }
-  return addrs[0]!;
+  return addrs;
 }
 
 /** Idle-socket timeout of one request, so a silent server cannot hold the shared event loop's tool slot forever. */
 export const WEB_FETCH_IDLE_TIMEOUT_MS = 30_000;
 
 /**
- * `res` as a web `ReadableStream`, with back-pressure and a cancel that destroys the socket.
- * Hand-rolled instead of `Readable.toWeb` because that adapter can enqueue a chunk that was already
- * buffered when the consumer cancelled (a redirect hop or an unsupported content type cancels the
- * body at once), which throws "Controller is already closed" as an UNCAUGHT exception in the host.
+ * `source` (the response, possibly through a decompressor) as a web `ReadableStream`, with
+ * back-pressure and a cancel that tears down the socket. Hand-rolled instead of `Readable.toWeb`
+ * because that adapter can enqueue a chunk that was already buffered when the consumer cancelled (a
+ * redirect hop or an unsupported content type cancels the body at once), which throws "Controller
+ * is already closed" as an UNCAUGHT exception in the host.
  */
-function bodyStream(res: IncomingMessage): ReadableStream<Uint8Array> {
+function bodyStream(source: Readable, res: IncomingMessage): ReadableStream<Uint8Array> {
   let closed = false;
   return new ReadableStream<Uint8Array>({
     start(controller) {
-      res.on('data', (chunk: Buffer) => {
+      source.on('data', (chunk: Buffer) => {
         if (closed) return;
         controller.enqueue(chunk);
-        if ((controller.desiredSize ?? 1) <= 0) res.pause();
+        if ((controller.desiredSize ?? 1) <= 0) source.pause();
       });
-      res.on('end', () => {
+      source.on('end', () => {
         if (closed) return;
         closed = true;
         controller.close();
       });
-      res.on('error', (e: Error) => {
+      source.on('error', (e: Error) => {
         if (closed) return;
         closed = true;
         controller.error(e);
+        res.destroy();
       });
-      res.on('close', () => {
+      source.on('close', () => {
         if (closed) return;
         closed = true;
         controller.error(new Error('web_fetch: connection closed before the response completed'));
       });
     },
     pull() {
-      res.resume();
+      source.resume();
     },
     cancel() {
       closed = true;
+      source.destroy();
       res.destroy();
     },
   });
 }
 
+/**
+ * The response body stream with any `Content-Encoding` undone (the request advertises gzip, deflate
+ * and br, as `fetch` did). The byte cap in {@link readCapped} applies AFTER decompression and a
+ * paused consumer pauses the decompressor, so a compression bomb stays bounded by that cap.
+ */
+function decodedSource(res: IncomingMessage): { source: Readable; decoded: boolean } {
+  const enc = String(res.headers['content-encoding'] ?? 'identity').trim().toLowerCase();
+  if (enc === '' || enc === 'identity') return { source: res, decoded: false };
+  const make: Record<string, () => Transform> = {
+    gzip: createGunzip,
+    'x-gzip': createGunzip,
+    deflate: createInflate,
+    br: createBrotliDecompress,
+  };
+  const create = make[enc];
+  if (!create) throw new Error(`web_fetch: unsupported content-encoding ${enc}`);
+  const inflater = create();
+  res.on('error', (e) => inflater.destroy(e));
+  res.pipe(inflater);
+  return { source: inflater, decoded: true };
+}
+
 const NULL_BODY_STATUS = new Set([101, 204, 205, 304]);
 
 const defaultRequest: WebFetchRequestFn = (o) => (o.protocol === 'https:' ? httpsRequest(o) : httpRequest(o));
+
+/** Connect errors worth trying the next validated address for (the failure happened before any response). */
+const RETRYABLE_CONNECT_ERRORS = new Set(['ECONNREFUSED', 'EHOSTUNREACH', 'ENETUNREACH', 'ETIMEDOUT', 'EADDRNOTAVAIL']);
+/** Upper bound on addresses tried for one hop. */
+const MAX_CONNECT_ATTEMPTS = 4;
+
+/**
+ * {@link pinnedGet} against each validated address in resolver order until one connects. Only the
+ * addresses {@link resolveEgressTargets} already validated are ever tried, so failover (an IPv6
+ * answer that is unreachable, then its IPv4 sibling) never costs a second resolution.
+ */
+async function getFromAny(url: URL, targets: ReadonlyArray<IResolvedAddress>, request: WebFetchRequestFn, signal?: AbortSignal): Promise<Response> {
+  let last: unknown;
+  for (const target of targets.slice(0, MAX_CONNECT_ATTEMPTS)) {
+    try {
+      return await pinnedGet(url, target, request, signal);
+    } catch (e) {
+      last = e;
+      if (!RETRYABLE_CONNECT_ERRORS.has((e as NodeJS.ErrnoException | undefined)?.code ?? '')) throw e;
+    }
+  }
+  throw last;
+}
 
 /**
  * One GET to `url`, connected to `target.address` (the validated IP) with the original name kept in
@@ -557,7 +608,7 @@ function pinnedGet(url: URL, target: IResolvedAddress, request: WebFetchRequestF
       headers: {
         host: url.host,
         accept: 'text/html,text/plain,*/*;q=0.5',
-        'accept-encoding': 'identity',
+        'accept-encoding': 'gzip, deflate, br',
         'user-agent': 'agent-mcp-web-fetch',
       },
       ...(url.protocol === 'https:' && !isIP(hostLiteral) ? { servername: hostLiteral } : {}),
@@ -569,13 +620,16 @@ function pinnedGet(url: URL, target: IResolvedAddress, request: WebFetchRequestF
     req.once('error', reject);
     req.once('response', (res: IncomingMessage) => {
       try {
+        const status = res.statusCode ?? 502;
+        const nullBody = NULL_BODY_STATUS.has(status);
+        const { source, decoded } = nullBody ? { source: res, decoded: false } : decodedSource(res);
         const headers = new Headers();
         for (const [k, v] of Object.entries(res.headers)) {
+          if (decoded && (k === 'content-encoding' || k === 'content-length')) continue; // describe the wire bytes, not the decoded body
           if (Array.isArray(v)) v.forEach((x) => headers.append(k, x));
           else if (v !== undefined) headers.set(k, v);
         }
-        const status = res.statusCode ?? 502;
-        const body = NULL_BODY_STATUS.has(status) ? null : bodyStream(res);
+        const body = nullBody ? null : bodyStream(source, res);
         if (body === null) res.resume();
         resolveResponse(new Response(body, { status, statusText: res.statusMessage ?? '', headers }));
       } catch (e) {
@@ -618,8 +672,8 @@ export async function executeWebFetch(args: unknown, opts: WebFetchOptions = {})
   let res: Response | undefined;
   for (let hop = 0; hop <= 5; hop += 1) {
     checkHost(url);
-    const target = await resolveEgressTarget(url, resolve);
-    res = await pinnedGet(url, target, request, opts.signal);
+    const targets = await resolveEgressTargets(url, resolve);
+    res = await getFromAny(url, targets, request, opts.signal);
     const loc = res.status >= 300 && res.status < 400 ? res.headers.get('location') : null;
     if (!loc) break;
     await res.body?.cancel().catch(() => undefined);
