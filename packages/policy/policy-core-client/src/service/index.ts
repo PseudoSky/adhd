@@ -9,7 +9,7 @@ export { createCtx, createMemoryCtx } from './ctx';
 export type { IPolicyCtx } from './ctx';
 export { createPolicyCtx } from './ctx-env';
 export { createFsLayerSource, createMemoryLayerSource, nodePolicyFs, BUILTIN_DEFAULT_SOURCE, BUILTIN_DEFAULT_DOCUMENT } from './config/layer-source';
-export type { IPolicyFs, IFsLayerSourceOptions } from './config/layer-source';
+export type { IPolicyFs, IPolicyFileStat, IFsLayerSourceOptions } from './config/layer-source';
 export { policyEnvironmentSpec, buildPolicyEnv } from './config/env-spec';
 export type { IPolicyConfig } from './config/env-spec';
 export { parsePolicyYaml, stringifyPolicyYaml } from './config/yaml';

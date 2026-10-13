@@ -80,7 +80,7 @@ export interface IDraftOperation {
 export interface IDraftOptions {
   /** Label used in comments/messages. */
   readonly source: string;
-  /** Replaces the built-in secret list when set (LIKE-style patterns: `%` matches any run, `_` one character). */
+  /** Replaces the built-in secret list when set (LIKE-style patterns: `%` matches any run of characters, `_` is a literal underscore). */
   readonly secretPatterns?: readonly string[];
   /** Default 'read_roots'. */
   readonly readRootsAttribute?: string;

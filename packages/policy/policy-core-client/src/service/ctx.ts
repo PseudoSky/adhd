@@ -1,5 +1,6 @@
 import { ApiError } from '@adhd/apigen-base-errors';
 import { createPolicyMemo } from '../core';
+import { isStableLayers } from './stable-layers';
 import type { IAuditSink, ICompiledPolicy, ILayerInput, ILayerSource, IPolicyIssue, IRuntimeProvider } from '../spec';
 
 /** What every operation receives first; schema-excluded by apigen. */
@@ -34,7 +35,9 @@ function sourceOf(issue: IPolicyIssue, layers: readonly ILayerInput[]): string {
  * Builds a ctx over ANY `ILayerSource` with one compile memo per ctx. Lazy:
  * nothing is read until a thunk is awaited (IN-14). Layers are re-read on every
  * call, so an edited file is picked up; the memo is keyed by the input hash, so
- * unchanged layers do not recompile.
+ * unchanged layers do not recompile. When a source returns the identity-stable
+ * layer array it returned last time (the filesystem source does while no file
+ * changed), `policy()` returns the previous compiled policy without hashing.
  */
 export function createCtx(input: {
   source: ILayerSource;
@@ -54,8 +57,10 @@ export function createCtx(input: {
       );
     }
   };
+  let last: { readonly layers: readonly ILayerInput[]; readonly policy: ICompiledPolicy } | undefined;
   const policy = async (): Promise<ICompiledPolicy> => {
     const loaded = await layers();
+    if (last?.layers === loaded && isStableLayers(loaded)) return last.policy;
     const result = memo.load(loaded);
     if (!result.ok) {
       const first = result.errors[0];
@@ -66,6 +71,7 @@ export function createCtx(input: {
         { errors: result.errors }
       );
     }
+    if (isStableLayers(loaded)) last = { layers: loaded, policy: result.policy };
     return result.policy;
   };
   return {

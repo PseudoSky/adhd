@@ -30,6 +30,8 @@ export function createPolicyCtx(
     runtime?: IRuntimeProvider;
     audit?: IAuditSink;
     cwd?: string;
+    /** Walk-up ceiling (inclusive); pass the user's home directory. See `IFsLayerSourceOptions.stopAt`. */
+    stopAt?: string;
     explicit?: readonly string[];
     onSource?: (label: string) => void;
   }
@@ -42,6 +44,7 @@ export function createPolicyCtx(
   const explicit = ports?.explicit !== undefined && ports.explicit.length > 0 ? ports.explicit : fromSetting;
   const source = createFsLayerSource({
     ...(ports?.cwd !== undefined ? { cwd: ports.cwd } : {}),
+    ...(ports?.stopAt !== undefined ? { stopAt: ports.stopAt } : {}),
     ...(explicit !== undefined && explicit.length > 0 ? { explicit } : {}),
     globalFile: env.files['global'],
     localFile: env.files['local'],
