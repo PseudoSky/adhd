@@ -2,7 +2,6 @@
   "$schema": "./node_modules/nx/schemas/nx-schema.json",
   "useDaemonProcess": false,
   "defaultBase": "main",
-  "cacheDirectory": ".nx/cache",
   "sync": {
     "disabledTaskSyncGenerators": ["@nx/js:typescript-sync"]
   },
