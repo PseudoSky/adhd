@@ -89,7 +89,7 @@ describe('8468f7b1 AC2 [tests-unit-core.1] CdpSession.connect', () => {
     expect(session.connected).toBe(true)
   })
 
-  it('rejects with a clear message when the socket errors before open (error path)', async () => {
+  it('[fs-083] rejects when the socket cannot open: rejects with a clear message when the socket errors before open (error path)', async () => {
     const session = new CdpSession()
     const p = session.connect('ws://fake/refused')
     lastSocket().emit('error')
@@ -99,7 +99,7 @@ describe('8468f7b1 AC2 [tests-unit-core.1] CdpSession.connect', () => {
 })
 
 describe('8468f7b1 AC2 [tests-unit-core.1] CdpSession.send', () => {
-  it('rejects when not connected (negative)', async () => {
+  it('[fs-084] send rejects before the session is connected: rejects when not connected (negative)', async () => {
     const session = new CdpSession()
     await expect(session.send('Page.enable')).rejects.toThrow('CdpSession not connected')
     expect(FakeWebSocket.instances).toHaveLength(0)
@@ -137,7 +137,7 @@ describe('8468f7b1 AC2 [tests-unit-core.1] CdpSession.send', () => {
     expect((await b).v).toBe(2)
   })
 
-  it('rejects with the protocol error message on an error response', async () => {
+  it('[fs-087] a CDP error response rejects with its message: rejects with the protocol error message on an error response', async () => {
     const { session, ws } = await connected()
     const p = session.send('Bogus.method')
     ws.reply({ id: 1, error: { code: -32601, message: "'Bogus.method' wasn't found" } })
@@ -152,7 +152,7 @@ describe('8468f7b1 AC2 [tests-unit-core.1] CdpSession.send', () => {
     await expect(p).resolves.toEqual({ ok: true })
   })
 
-  it('times out with a descriptive error (default 30s)', async () => {
+  it('[fs-085] a command times out and frees its slot: times out with a descriptive error (default 30s)', async () => {
     vi.useFakeTimers()
     const { session } = await connected()
     const p = session.send('Page.navigate')
@@ -172,7 +172,7 @@ describe('8468f7b1 AC2 [tests-unit-core.1] CdpSession.send', () => {
     expect(() => ws.reply({ id: 1, result: {} })).not.toThrow()
   })
 
-  it('rejects with "CDP send failed" when the socket throws on send', async () => {
+  it('[fs-086] a failing socket write rejects and cleans up: rejects with "CDP send failed" when the socket throws on send', async () => {
     const { session } = await connected()
     FakeWebSocket.throwOnSend = new Error('socket gone')
     await expect(session.send('Page.enable')).rejects.toThrow('CDP send failed: socket gone')
@@ -188,7 +188,7 @@ describe('8468f7b1 AC2 [tests-unit-core.1] CdpSession events', () => {
     expect(handler).toHaveBeenCalledWith({ requestId: 'r1' })
   })
 
-  it('supports multiple handlers per method (B-003) — a second on() does not displace the first', async () => {
+  it('[fs-088] supports several handlers for one event: supports multiple handlers per method (B-003) — a second on() does not displace the first', async () => {
     const { session, ws } = await connected()
     const a = vi.fn()
     const b = vi.fn()
@@ -199,7 +199,7 @@ describe('8468f7b1 AC2 [tests-unit-core.1] CdpSession events', () => {
     expect(b).toHaveBeenCalledTimes(1)
   })
 
-  it('a throwing subscriber does not starve the others', async () => {
+  it('[fs-089] a throwing subscriber does not starve the others: a throwing subscriber does not starve the others', async () => {
     const { session, ws } = await connected()
     const bad = vi.fn(() => {
       throw new Error('subscriber bug')
@@ -223,7 +223,7 @@ describe('8468f7b1 AC2 [tests-unit-core.1] CdpSession events', () => {
     expect(b).toHaveBeenCalledTimes(1)
   })
 
-  it('off(method, handler) removes one handler; off(method) removes them all', async () => {
+  it('[fs-090] off removes one handler or all: off(method, handler) removes one handler; off(method) removes them all', async () => {
     const { session, ws } = await connected()
     const a = vi.fn()
     const b = vi.fn()
@@ -251,7 +251,7 @@ describe('8468f7b1 AC2 [tests-unit-core.1] CdpSession events', () => {
 })
 
 describe('8468f7b1 AC2 [tests-unit-core.1] CdpSession lifecycle', () => {
-  it('close() closes the socket, rejects pending sends and clears handlers', async () => {
+  it('[fs-091] closing rejects pending commands and clears handlers: close() closes the socket, rejects pending sends and clears handlers', async () => {
     const { session, ws } = await connected()
     const handler = vi.fn()
     session.on('E', handler)
@@ -289,7 +289,7 @@ describe('8468f7b1 AC2 [tests-unit-core.1] CdpSession lifecycle', () => {
 })
 
 describe('8468f7b1 AC2 [tests-unit-core.1] rand / humanPause / shortPause', () => {
-  it('rand maps Math.random onto the inclusive range', () => {
+  it('[fs-092] pause helpers stay within their ranges: rand maps Math.random onto the inclusive range', () => {
     const spy = vi.spyOn(Math, 'random')
     spy.mockReturnValue(0)
     expect(rand(5, 9)).toBe(5)

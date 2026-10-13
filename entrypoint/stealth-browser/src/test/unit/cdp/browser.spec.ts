@@ -98,7 +98,7 @@ describe('8468f7b1 AC2 [tests-unit-core.1] launchChrome', () => {
     expect(m.spawn).not.toHaveBeenCalled()
   })
 
-  it('spawns with --remote-debugging-port and WITHOUT --enable-automation', async () => {
+  it('[fs-070] never passes --enable-automation: spawns with --remote-debugging-port and WITHOUT --enable-automation', async () => {
     const mod = await loadFresh()
     await launchTracked(mod, 4242)
     expect(m.spawn).toHaveBeenCalledTimes(1)
@@ -111,7 +111,22 @@ describe('8468f7b1 AC2 [tests-unit-core.1] launchChrome', () => {
     expect(opts).toMatchObject({ stdio: 'ignore', detached: true })
   })
 
-  it('passes the stealth-preserving defaults and appends extraArgs last', async () => {
+  it('[fs-071] passes disable-backgrounding-occluded-windows so minimized windows are not timer-throttled', async () => {
+    const mod = await loadFresh()
+    await launchTracked(mod, 11)
+    const args = m.spawn.mock.calls[0][1] as string[]
+    expect(args).toContain('--disable-backgrounding-occluded-windows')
+  })
+
+  it('[fs-072] launches minimized without first-run or default-browser prompts', async () => {
+    const mod = await loadFresh()
+    await launchTracked(mod, 12)
+    const args = m.spawn.mock.calls[0][1] as string[]
+    expect(args).toEqual(expect.arrayContaining(['--no-first-run', '--start-minimized', '--no-default-browser-check']))
+    expect(args).not.toContain('--enable-automation')
+  })
+
+  it('[fs-073] appends extraArgs after the built-in flags', async () => {
     const mod = await loadFresh()
     m.spawn.mockReturnValue(fakeChild(1))
     m.isChromeReachable.mockResolvedValueOnce(false).mockResolvedValue(true)
@@ -119,8 +134,8 @@ describe('8468f7b1 AC2 [tests-unit-core.1] launchChrome', () => {
     await vi.advanceTimersByTimeAsync(250)
     await p
     const args = m.spawn.mock.calls[0][1] as string[]
-    expect(args).toEqual(expect.arrayContaining(['--no-first-run', '--start-minimized', '--disable-backgrounding-occluded-windows', '--no-default-browser-check']))
     expect(args.slice(-2)).toEqual(['--foo', '--bar=1'])
+    expect(args.indexOf('--foo')).toBeGreaterThan(args.indexOf('--no-default-browser-check'))
   })
 
   it('detaches the child (unref) and returns its pid once CDP answers', async () => {
@@ -153,26 +168,37 @@ describe('8468f7b1 AC2 [tests-unit-core.1] launchChrome', () => {
     await assertion
   })
 
-  it('rejects with an actionable message when the binary is missing (negative)', async () => {
+  it('[fs-075] fails before spawning when the binary is missing: rejects with an actionable message when the binary is missing (negative)', async () => {
     const { launchChrome } = await loadFresh()
     m.existsSync.mockReturnValue(false)
     await expect(launchChrome({ port: PORT, chromePath: CHROME, profileDir: PROFILE })).rejects.toThrow(
       `Chrome binary not found at "${CHROME}"`,
     )
+    await expect(launchChrome({ port: PORT, chromePath: CHROME, profileDir: PROFILE })).rejects.toThrow('CHROME_PATH')
     expect(m.spawn).not.toHaveBeenCalled()
   })
 
-  it('derives the profile dir from the mocked HOME when none is given', async () => {
+  it('[fs-076] uses a dedicated profile directory: derives the profile dir from the mocked HOME when none is given', async () => {
     const { launchChrome } = await loadFresh()
     m.isChromeReachable.mockResolvedValue(true)
     const r = await launchChrome({ port: PORT, chromePath: CHROME })
     expect(r.profileDir.startsWith('/fake/home/')).toBe(true)
     expect(r.profileDir.endsWith('Chrome-CDP')).toBe(true)
     expect(m.mkdirSync).toHaveBeenCalledWith(expect.stringMatching(/^\/fake\/home\//), { recursive: true })
+    expect(r.profileDir).not.toContain('/fake/home/.config/google-chrome')
   })
 })
 
-describe('8468f7b1 AC2 [tests-unit-core.1] default Chrome binary per platform', () => {
+describe('8468f7b1 AC2 [tests-unit-core.1] [fs-074] resolves the Chrome binary per platform', () => {
+  it('[fs-074] an explicit chromePath overrides the per-platform default', async () => {
+    const mod = await loadFresh()
+    m.platform.mockReturnValue('linux')
+    await launchTracked(mod, 13)
+    expect(m.spawn.mock.calls[0][0]).toBe(CHROME)
+    expect(m.execSync).not.toHaveBeenCalled()
+  })
+
+
   async function missingMessage(): Promise<string> {
     const { launchChrome } = await loadFresh()
     m.existsSync.mockReturnValue(false)

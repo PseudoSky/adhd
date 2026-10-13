@@ -15,7 +15,7 @@ describe('8468f7b1 AC2 [tests-unit-core.1] IdleShutdown', () => {
     vi.useRealTimers()
   })
 
-  it('fires onShutdown once the default 120s idle window elapses', async () => {
+  it('[fs-077] fires after the idle timeout: fires onShutdown once the default 120s idle window elapses', async () => {
     const onShutdown = vi.fn(async () => undefined)
     const idle = new IdleShutdown({ onShutdown })
     await vi.advanceTimersByTimeAsync(119_999)
@@ -44,7 +44,7 @@ describe('8468f7b1 AC2 [tests-unit-core.1] IdleShutdown', () => {
     expect(onShutdown).toHaveBeenCalledTimes(1)
   })
 
-  it('cancel() stops the timer without firing', async () => {
+  it('[fs-080] cancel stops the timer without firing: cancel() stops the timer without firing', async () => {
     const onShutdown = vi.fn(async () => undefined)
     const idle = new IdleShutdown({ timeoutMs: 1000, onShutdown })
     idle.cancel()
@@ -53,7 +53,7 @@ describe('8468f7b1 AC2 [tests-unit-core.1] IdleShutdown', () => {
     expect(idle.fired).toBe(false)
   })
 
-  it('re-arms after a fire so a relaunched browser is auto-shut-down again', async () => {
+  it('[fs-078] re-arms after it has fired: re-arms after a fire so a relaunched browser is auto-shut-down again', async () => {
     const onShutdown = vi.fn(async () => undefined)
     const idle = new IdleShutdown({ timeoutMs: 1000, onShutdown })
     await vi.advanceTimersByTimeAsync(1000)
@@ -64,7 +64,7 @@ describe('8468f7b1 AC2 [tests-unit-core.1] IdleShutdown', () => {
     expect(onShutdown).toHaveBeenCalledTimes(2)
   })
 
-  it('swallows an onShutdown rejection and logs it (error path)', async () => {
+  it('[fs-081] a throwing shutdown handler is logged not thrown: swallows an onShutdown rejection and logs it (error path)', async () => {
     const logger = vi.fn()
     const idle = new IdleShutdown({
       timeoutMs: 100,
@@ -84,7 +84,7 @@ describe('8468f7b1 AC2 [tests-unit-core.1] IdleShutdown', () => {
     expect(idle.fired).toBe(true)
   })
 
-  it('unrefs its timer so a pending idle window cannot hold the process open', () => {
+  it(`[fs-079] the idle timer is unref'd: unrefs its timer so a pending idle window cannot hold the process open`, () => {
     const unref = vi.fn()
     const realSetTimeout = globalThis.setTimeout
     const spy = vi.spyOn(globalThis, 'setTimeout').mockImplementation(((fn: () => void, ms?: number) => {
@@ -116,7 +116,7 @@ describe('8468f7b1 AC2 [tests-unit-core.1] createPageTargetIdleShutdown', () => 
     expect(onShutdown).not.toHaveBeenCalled()
   })
 
-  it('also runs the Chrome shutdown callback when shutDownChrome is set', async () => {
+  it('[fs-082] closes page targets then optionally chains the Chrome shutdown: also runs the Chrome shutdown callback when shutDownChrome is set', async () => {
     const order: string[] = []
     createPageTargetIdleShutdown(
       async () => { order.push('targets') },

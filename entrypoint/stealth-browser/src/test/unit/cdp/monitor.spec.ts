@@ -84,7 +84,7 @@ describe('8468f7b1 AC2 [tests-unit-core.1] collectResourceUsage', () => {
     expect(send).not.toHaveBeenCalledWith('Performance.getMetrics')
   })
 
-  it('tolerates every CDP call failing (non-fatal) and still reports cores', async () => {
+  it('[fs-110] resource collection tolerates CDP failures: tolerates every CDP call failing (non-fatal) and still reports cores', async () => {
     const boom = (): never => {
       throw new Error('cdp unavailable')
     }
@@ -119,7 +119,7 @@ describe('8468f7b1 AC2 [tests-unit-core.1] checkWatermark', () => {
     expect(r).toMatchObject({ overMemory: false, overCache: false, shouldRestart: false })
   })
 
-  it('flags RSS above the default and requests a restart', () => {
+  it('[fs-111] watermark thresholds default and trigger restart: flags RSS above the default and requests a restart', () => {
     const r = checkWatermark(usage({ rssMb: 501 }))
     expect(r.overMemory).toBe(true)
     expect(r.shouldRestart).toBe(true)
@@ -166,7 +166,7 @@ describe('8468f7b1 AC2 [tests-unit-core.1] clearBrowserCache', () => {
     expect(calls.map(([m]) => m)).toContain('Network.clearBrowserCache')
   })
 
-  it('does not reject when a clear call fails (allSettled, error path)', async () => {
+  it('[fs-112] cache clearing tolerates a failing call: does not reject when a clear call fails (allSettled, error path)', async () => {
     const { session } = fakeSession(() => {
       throw new Error('no storage domain')
     })
@@ -175,7 +175,7 @@ describe('8468f7b1 AC2 [tests-unit-core.1] clearBrowserCache', () => {
 })
 
 describe('8468f7b1 AC2 [tests-unit-core.1] formatResourceUsage', () => {
-  it('renders a single pipe-separated line', () => {
+  it('[fs-113] formats resource usage on one line: renders a single pipe-separated line', () => {
     const line = formatResourceUsage(usage({ rssMb: 123.6, heapUsedMb: 10.4, heapTotalMb: 20.5 }))
     expect(line).toBe('RSS: 124MB | heap: 10/21MB | DOM: 12 nodes | CPU: Fake CPU (4 cores)')
   })

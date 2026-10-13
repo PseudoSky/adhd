@@ -26,7 +26,7 @@ describe('8468f7b1 AC2 [tests-unit-core.1] getSessionId', () => {
     expect(getSessionId()).toMatch(UUID_V4)
   })
 
-  it('is lazily generated once and stable across calls', async () => {
+  it('[fs-093] session id is a stable v4 uuid: is lazily generated once and stable across calls', async () => {
     const getRandomValues = vi.fn(<T extends ArrayBufferView | null>(arr: T): T => arr)
     vi.stubGlobal('crypto', { getRandomValues })
     const { getSessionId } = await loadFresh()
@@ -36,7 +36,7 @@ describe('8468f7b1 AC2 [tests-unit-core.1] getSessionId', () => {
     expect(getRandomValues).toHaveBeenCalledTimes(1)
   })
 
-  it('stamps the version and variant bits and groups the hex as 8-4-4-4-12', async () => {
+  it('[fs-094] uuid has v4 version and variant bits: stamps the version and variant bits and groups the hex as 8-4-4-4-12', async () => {
     vi.stubGlobal('crypto', { getRandomValues: <T extends ArrayBufferView | null>(arr: T): T => arr })
     const { getSessionId } = await loadFresh()
     expect(getSessionId()).toBe('00000000-0000-4000-8000-000000000000')
@@ -85,7 +85,7 @@ describe('8468f7b1 AC2 [tests-unit-core.1] BrowserSession', () => {
     expect(s.getAll()).toEqual([])
   })
 
-  it('tracks targets in order and exposes the most recent one', () => {
+  it('[fs-095] tracks the most recent target id: tracks targets in order and exposes the most recent one', () => {
     const s = new mod.BrowserSession()
     s.track('t1')
     s.track('t2')
@@ -93,7 +93,7 @@ describe('8468f7b1 AC2 [tests-unit-core.1] BrowserSession', () => {
     expect(s.getAll()).toEqual(['t1', 't2'])
   })
 
-  it('getAll returns a defensive copy (mutating it does not alter the session)', () => {
+  it('[fs-096] getAll returns a copy: getAll returns a defensive copy (mutating it does not alter the session)', () => {
     const s = new mod.BrowserSession()
     s.track('t1')
     const copy = s.getAll()

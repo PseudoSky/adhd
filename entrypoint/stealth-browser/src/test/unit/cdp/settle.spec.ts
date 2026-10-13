@@ -89,7 +89,7 @@ afterEach(() => {
 })
 
 describe('8468f7b1 AC2 [tests-unit-core.1] awaitPageSettled — arming', () => {
-  it('rejects when neither navigate nor loaderId is given (about:blank trap guard)', async () => {
+  it('[fs-097] refuses to run without navigate or loaderId: rejects when neither navigate nor loaderId is given (about:blank trap guard)', async () => {
     const f = makeFake()
     await expect(awaitPageSettled(f.session)).rejects.toThrow('pass `navigate` (preferred) or `loaderId`')
     expect(f.send).not.toHaveBeenCalled()
@@ -113,7 +113,7 @@ describe('8468f7b1 AC2 [tests-unit-core.1] awaitPageSettled — arming', () => {
     expect(t.settled()).toBe(true)
   })
 
-  it('never uses Runtime.evaluate', async () => {
+  it('[fs-109] never sends Runtime.evaluate: never uses Runtime.evaluate', async () => {
     const f = makeFake()
     const t = track(awaitPageSettled(f.session, { navigate: 'https://react.test/' }))
     await arm()
@@ -123,7 +123,7 @@ describe('8468f7b1 AC2 [tests-unit-core.1] awaitPageSettled — arming', () => {
     expect(t.settled()).toBe(true)
   })
 
-  it('survives a Chrome without PerformanceTimeline (older Chrome)', async () => {
+  it('[fs-107] a missing PerformanceTimeline does not fail the wait: survives a Chrome without PerformanceTimeline (older Chrome)', async () => {
     const f = makeFake({ perfTimelineFails: true })
     const t = track(awaitPageSettled(f.session, { navigate: 'https://react.test/' }))
     await arm()
@@ -134,7 +134,7 @@ describe('8468f7b1 AC2 [tests-unit-core.1] awaitPageSettled — arming', () => {
 })
 
 describe('8468f7b1 AC2 [tests-unit-core.1] awaitPageSettled — rungs', () => {
-  it('rung 1: resolves on networkIdle for OUR loaderId and reports the scoping', async () => {
+  it('[fs-099] settles on networkIdle for our navigation: rung 1: resolves on networkIdle for OUR loaderId and reports the scoping', async () => {
     const f = makeFake()
     const t = track(awaitPageSettled(f.session, { navigate: 'https://react.test/' }))
     await arm()
@@ -165,7 +165,7 @@ describe('8468f7b1 AC2 [tests-unit-core.1] awaitPageSettled — rungs', () => {
     expect(t.result()).toMatchObject({ signal: 'deadline', settled: false })
   })
 
-  it('ignores every lifecycle event until the navigate loaderId is known', async () => {
+  it('[fs-098] ignores about:blank lifecycle replays: ignores every lifecycle event until the navigate loaderId is known', async () => {
     const f = makeFake()
     // Fire an event synchronously after arming but before Page.navigate has resolved.
     const t = track(awaitPageSettled(f.session, { navigate: 'https://react.test/', deadlineMs: 2000 }))
@@ -189,7 +189,7 @@ describe('8468f7b1 AC2 [tests-unit-core.1] awaitPageSettled — rungs', () => {
     expect(t.result()).toMatchObject({ signal: 'inflight-zero', settled: true, inflight: 0, requests: 1 })
   })
 
-  it('rung 2 is gated on load: a mid-parse lull does not settle (negative)', async () => {
+  it('[fs-100] inflight-zero requires load first: rung 2 is gated on load: a mid-parse lull does not settle (negative)', async () => {
     const f = makeFake()
     const t = track(awaitPageSettled(f.session, { navigate: 'https://react.test/', deadlineMs: 3000 }))
     await arm()
@@ -217,7 +217,7 @@ describe('8468f7b1 AC2 [tests-unit-core.1] awaitPageSettled — rungs', () => {
     expect(t.result()).toMatchObject({ signal: 'inflight-zero', requests: 2 })
   })
 
-  it('rung 3: a networkAlmostIdle seen before grace is latched and used when grace closes', async () => {
+  it('[fs-101] latches networkAlmostIdle until grace closes: rung 3: a networkAlmostIdle seen before grace is latched and used when grace closes', async () => {
     const f = makeFake()
     const t = track(awaitPageSettled(f.session, { navigate: 'https://react.test/', graceMs: 1500 }))
     await arm()
@@ -249,7 +249,7 @@ describe('8468f7b1 AC2 [tests-unit-core.1] awaitPageSettled — rungs', () => {
     expect(t.result()?.signal).not.toBe('load')
   })
 
-  it('rung 4: ui-quiet rescues a loaded page only after uiRescueAfterMs', async () => {
+  it('[fs-102] ui-quiet only rescues after load and the rescue delay: rung 4: ui-quiet rescues a loaded page only after uiRescueAfterMs', async () => {
     const f = makeFake()
     const t = track(awaitPageSettled(f.session, { navigate: 'https://react.test/', uiQuietMs: 1000, uiRescueAfterMs: 3000 }))
     await arm()
@@ -275,7 +275,7 @@ describe('8468f7b1 AC2 [tests-unit-core.1] awaitPageSettled — rungs', () => {
     expect(t.result()).toMatchObject({ signal: 'ui-quiet', uiEvents: 1 })
   })
 
-  it('rung 5: the deadline circuit breaker reports settled:false', async () => {
+  it('[fs-103] the deadline resolves unsettled: rung 5: the deadline circuit breaker reports settled:false', async () => {
     const f = makeFake()
     const t = track(awaitPageSettled(f.session, { navigate: 'https://react.test/', deadlineMs: 1200 }))
     await arm()
@@ -325,7 +325,7 @@ describe('8468f7b1 AC2 [tests-unit-core.1] awaitPageSettled — rungs', () => {
 })
 
 describe('8468f7b1 AC2 [tests-unit-core.1] awaitPageSettled — redirects', () => {
-  it('follows a main-frame redirect to its new loaderId and re-gates rung 2', async () => {
+  it('[fs-104] follows a main-frame redirect: follows a main-frame redirect to its new loaderId and re-gates rung 2', async () => {
     const f = makeFake()
     const t = track(awaitPageSettled(f.session, { navigate: 'https://redirect.test/' }))
     await arm()
@@ -365,7 +365,7 @@ describe('8468f7b1 AC2 [tests-unit-core.1] awaitPageSettled — redirects', () =
 })
 
 describe('8468f7b1 AC2 [tests-unit-core.1] awaitPageSettled — failure and cleanup', () => {
-  it('rejects when Page.navigate reports an errorText', async () => {
+  it('[fs-106] navigation failures reject the wait: rejects when Page.navigate reports an errorText', async () => {
     const f = makeFake({ navigateResult: { errorText: 'net::ERR_NAME_NOT_RESOLVED' } })
     const p = awaitPageSettled(f.session, { navigate: 'https://nope.invalid/' })
     const assertion = expect(p).rejects.toThrow('Page.navigate failed: net::ERR_NAME_NOT_RESOLVED')
@@ -393,7 +393,7 @@ describe('8468f7b1 AC2 [tests-unit-core.1] awaitPageSettled — failure and clea
     await assertion
   })
 
-  it('rejects with the abort reason when aborted mid-wait and unsubscribes', async () => {
+  it('[fs-105] an abort signal rejects the wait: rejects with the abort reason when aborted mid-wait and unsubscribes', async () => {
     const f = makeFake()
     const ctl = new AbortController()
     const p = awaitPageSettled(f.session, { navigate: 'https://react.test/', abort: ctl.signal })
@@ -404,7 +404,7 @@ describe('8468f7b1 AC2 [tests-unit-core.1] awaitPageSettled — failure and clea
     expect(f.listenerCount()).toBe(0)
   })
 
-  it('unsubscribes every listener once settled', async () => {
+  it('[fs-108] arms subscribers before navigating and releases them: unsubscribes every listener once settled', async () => {
     const f = makeFake()
     const t = track(awaitPageSettled(f.session, { navigate: 'https://react.test/' }))
     await arm()
