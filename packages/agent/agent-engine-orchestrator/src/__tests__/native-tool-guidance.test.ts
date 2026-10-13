@@ -4,6 +4,7 @@ import {
   NATIVE_TOOL_GUIDANCE,
   SHELL_UNAVAILABLE_COMMANDS,
   shellGuidance,
+  shellRejectionNote,
   withNativeToolGuidance,
 } from '../engine/native-tool-guidance.js';
 
@@ -27,7 +28,13 @@ describe('R5-WEB-SIMPLE AC4 native tool guidance', () => {
   it('leaves every other tool untouched (negative control)', () => {
     const input = [{ name: 'fs__read_file', description: 'Read', inputSchema: schema }];
     expect(withNativeToolGuidance(input)).toEqual(input);
-    expect(Object.keys(NATIVE_TOOL_GUIDANCE).sort()).toEqual(['fs__write_file', 'shell__shell_execute']);
+    expect(Object.keys(NATIVE_TOOL_GUIDANCE).sort()).toEqual([
+      'fs__edit_file',
+      'fs__read_multiple_files',
+      'fs__read_text_file',
+      'fs__write_file',
+      'shell__shell_execute',
+    ]);
   });
 });
 
@@ -73,5 +80,54 @@ describe('R7-guidance shell guidance', () => {
   it('R7-guidance AC3: write_file parent-directory guidance is kept', () => {
     expect(NATIVE_TOOL_GUIDANCE['fs__write_file']).toContain('NOT create missing parent directories');
     expect(NATIVE_TOOL_GUIDANCE['fs__write_file']).toContain('fs__create_directory');
+  });
+});
+
+describe('R10 S4 P3/P4 guidance text', () => {
+  const shell = NATIVE_TOOL_GUIDANCE['shell__shell_execute'];
+
+  it('R10 S4 AC3: shell guidance leads with the argv sentence, then the NOT-available sentence naming the policy and the alternatives', () => {
+    expect(shell.startsWith('Default shell: the command is an argv list, not a shell line;')).toBe(true);
+    const argvAt = shell.indexOf('argv list');
+    const notAt = shell.indexOf('NOT available (always rejected):');
+    const availAt = shell.indexOf('Available commands:');
+    expect(argvAt).toBeGreaterThanOrEqual(0);
+    expect(notAt).toBeGreaterThan(argvAt);
+    expect(availAt).toBeGreaterThan(notAt);
+    expect(shell).toContain("default security policy");
+    expect(shell).toMatch(/allowed runner \(npm, pnpm, npx, nx, make, uv\)/);
+    // no repo-specific target is named
+    expect(shell).not.toMatch(/make test|npm test|npm run/);
+  });
+
+  it('R10 S4 AC3: a runner absent from the allowlist is never named (generated, not hand-typed)', () => {
+    expect(shellGuidance(['cat', 'ls', 'curl'])).not.toMatch(/allowed runner/);
+    expect(shellGuidance(['cat', 'npm'])).toContain('allowed runner (npm)');
+  });
+
+  it('R10 S4 AC3: the rejection recovery note names the policy, the command, the unavailable set and the alternatives', () => {
+    const note = shellRejectionNote('python3');
+    expect(note).toContain('"python3" is rejected by the shell server\'s default security policy');
+    for (const c of SHELL_UNAVAILABLE_COMMANDS) expect(note).toContain(c);
+    expect(note).toContain('fs__edit_file');
+    expect(note).toMatch(/allowed runner \(npm, pnpm, npx, nx, make, uv\)/);
+    expect(note).not.toMatch(/make test|npm test|npm run|node -e/);
+  });
+
+  it('R10 S4 P3: write_file keeps the accurate parent-directory statement (no same-turn claim before ordering ships) and says no read-back is needed', () => {
+    const w = NATIVE_TOOL_GUIDANCE['fs__write_file'];
+    expect(w).toContain('Does NOT create missing parent directories: call `fs__create_directory`');
+    expect(w).not.toMatch(/same turn|same reply|one turn/i);
+    expect(w).toContain('needs no read-back');
+  });
+
+  it('R10 S4 P3: the edit and read tools carry the line-ending sentence, free of display claims', () => {
+    for (const k of ['fs__edit_file', 'fs__read_text_file', 'fs__read_multiple_files']) {
+      const t = NATIVE_TOOL_GUIDANCE[k];
+      expect(t, k).toMatch(/CRLF and LF (files )?alike/);
+      expect(t, k).toContain('`\\r`');
+      expect(t, k).not.toMatch(/shown|displayed|visible/);
+    }
+    expect(NATIVE_TOOL_GUIDANCE['fs__edit_file']).toContain('needs no read-back');
   });
 });

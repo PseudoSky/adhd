@@ -136,7 +136,7 @@ There are exactly three provider `type`s in code (`packages/agent/agent-engine-o
 
 ### Provider fields accepted by `agent_create` / `agent_update`
 
-`provider` is a discriminated union on `type` (`anthropic` | `openai` | `claudecli`). Besides `model`, `env`, `temperature`, `maxTokens`, `timeoutMs` (`effort` for `anthropic`: `low|medium|high|xhigh|max`, sent as the Messages API `output_config.effort`, absent = the API default for the model; and `baseURL` for `openai`, `claudePath`/`allowedBuiltinTools`/`systemPromptIsAgentSpec` for `claudecli`), every variant accepts the provider-failure fields:
+`provider` is a discriminated union on `type` (`anthropic` | `openai` | `claudecli`). Besides `model`, `env`, `temperature`, `maxTokens`, `timeoutMs` (`effort` for `anthropic`: `low|medium|high|xhigh|max`, sent as the Messages API `output_config.effort`, absent = the API default for the model; `thinking` for `anthropic`: `{ type: adaptive|disabled, display?: summarized|omitted }` (`display` only with `adaptive`), sent as the Messages API `thinking` field, absent = the API default, strict like the other provider keys; and `baseURL` for `openai`, `claudePath`/`allowedBuiltinTools`/`systemPromptIsAgentSpec` for `claudecli`), every variant accepts the provider-failure fields:
 
 | Field | Type | Meaning |
 |---|---|---|
@@ -305,6 +305,32 @@ the `dispatch` self floor.
 
 The authored `tools/mcp-shell/server.mjs` thick layer was **removed** by NAT-TOOL-4 (ADR-0008
 D5/D7); the adopted `tumf/mcp-shell-server` (`uvx mcp-shell-server`) replaces it.
+
+### Model-visible tool-result notes (fs write/edit, shell policy rejection)
+
+Two short, factual notes are added to what the **model** sees of a tool result, never to anything
+stored or observed:
+
+- after a successful `fs__write_file` / non-dry-run `fs__edit_file` by the adopted (catalog) `fs` server:
+  "the file was written; there is no need to read it back to verify". No note on an error, on `dryRun`
+  (nothing is applied), or when `fs` is a custom server that replaced the builtin.
+- after the adopted shell server rejects a command by its default security policy (`node`, `python3`,
+  `sed`, `sh`, `bash`, `env` are always rejected, even if allowlisted): a recovery line that names the
+  policy and says to use the fs tools for file edits and reads, or the project's own scripts through an
+  allowed runner. The shell allowlist itself is unchanged.
+
+The note is applied to the outgoing model request only (`tool-result-notes.ts`): the session history,
+the `post:tool_call` / `TOOL_RESULT` payloads and `message:appended` keep the server's exact text, and a
+post-call payload carries `noteAppended: true`. Because the note is not stored, a session resumed in another
+process sends the result without it (safe; one prompt-cache miss). The notes ride the engine's own provider loop (`anthropic`, `openai`); a `claudecli` agent runs its tools inside the CLI's loop, which does not pass through `pre:model_request`, so it gets no note.
+
+### Delegation: synchronous by default, background results must be collected
+
+The `task`, `tasks_batch` and `result` descriptions (and the usage guide) lead with one shared rule
+(`delegation-text.ts`): `task` / `tasks_batch` are synchronous by default and return the finished result;
+use `background: true` only when you have independent work to do meanwhile, and then you **must** call
+`result` (with `wait_ms`) to collect it before your answer depends on it, because background results are
+not delivered automatically.
 
 ### Delegation (Agent → Child Agent)
 
