@@ -33,6 +33,7 @@ Import edges: client → engine/environment only. Layer plugin ↛ client and cl
 | D-18 | Envelope key for attributes is `attributes` (`call.envelope.attributes`), written only by an earlier layer (the wrapper's attributes layer or an auth layer); the policy Layer never accepts attributes from anywhere else. |
 | D-19 | `--use` options reach only a plugin's `mount.operations` capability (verified); the Layer plugin captures them there. The wrapper uses the programmatic `createPolicyLayerPlugin`. |
 | D-20 | The `bin:` source lives in `packages/apigen/apigen-engine-gateway` (existing package; OD-32), pending the T08 discovery's confirmation. |
+| D-21 | `serve` over a `bin:` MCP source uses the gateway's `serveMcpPassthrough` (SDK Server + `createInvoker` + Layers), not `mcpPlugin.run`, so tool names, flat arguments and results reach an unmodified MCP host unchanged. A passthrough/flat-args mode in `apigen-plugin-mcp` is the alternative, filed as backlog, not built. |
 
 ## 3. Per-ticket contract checklist
 - T02: every type in spec §2, §2.1, §2.2, §3, §4.2 exported from `src/spec`; two JSON Schemas (2020-12); a schema-vs-type test is a Phase C item.
