@@ -7,3 +7,7 @@ export { loadCompiled } from './compile/load';
 export { createPolicyMemo } from './memo/memo';
 export type { IPolicyMemo } from './memo/memo';
 export { PolicyLoadError, PolicyCompileError } from './errors';
+export { evaluate, evaluateDetailed } from './evaluate/evaluate';
+export { explain } from './evaluate/explain';
+export { resolveAttributes as resolve } from './attributes/resolve';
+export { narrowAttributes as narrow } from './attributes/narrow';
