@@ -249,7 +249,7 @@ Principles:
 const EXTENSION_MAP: ReadonlyMap<string, PluginLanguage>;
 export function languageOfSource(file: string): PluginLanguage | undefined;
 
-// AFTER (additive; languageOfSource kept as a wrapper, it is a published export)
+// AFTER (additive; EXTENSION_MAP and languageOfSource unchanged, the resolver calls them)
 export type AssetKind = 'code' | 'schema-document' | 'endpoint' | 'executable';
 /** Translator id == ExtractCall.host. Code translators reuse PluginLanguage values. */
 export type TranslatorId = PluginLanguage | 'argv' | 'mcp' | 'openapi' | 'graphql' | 'jsonschema';
@@ -268,7 +268,11 @@ export interface ISourceResolution {
   readonly reference: string;
   readonly locator: SourceLocator;
   readonly asset: AssetKind;
-  readonly translator: TranslatorId;
+  /**
+   * Absent only for an executable with no `protocol` option. The resolver is pure
+   * and never sees the caller's verb, so the caller fills this in (3e).
+   */
+  readonly translator?: TranslatorId;
   readonly binding: BindingSpec;
   readonly options: Readonly<Record<string, string>>;  // per-source options (3e/§5); {} today
 }
@@ -296,14 +300,15 @@ export function resolveSourceReference(
 | `x.py` | `code`, `py`, `local-host py` | unchanged |
 | `x.java` | `code`, `java`, `local-host java` | unchanged |
 | `x.rs` / `x.go` | `code`, `rust` / `go`, `local-host` | unchanged mapping. Consumers still reject them for lack of an extractor or plugin. |
-| `bin:<cmd>` | `executable`, translator from option `protocol` (`argv` default; `mcp` → MCP), `process` | same parse as `parse-source.ts:12-24` |
+| `bin:<cmd>` | `executable`, `process`. The translator comes from the `protocol` option (`argv` or `mcp`). With no option it is left unset, and the caller supplies the default from its verb (3e). | same parse as `parse-source.ts:12-24` |
 | `remote:<url>`, `http(s)://…` | `{ok:false, code:'unsupported'}` "remote sources are not implemented yet" | today `remote` throws in the resolver (`resolve-source.ts:50-51`) and is an unknown extension in apigen-cli |
 | `.json` / `.yaml` / `.yml` / `.graphql` | `unsupported` "schema-document sources are not implemented yet" | today an unrecognised extension |
-| any other path, with a probe, `isExecutable` | `executable`, `argv`, `process` | today an error |
+| any other path, with a probe, `isExecutable` | `executable`, `process`, translator unset (as for `bin:` with no option) | today an error |
 | anything else | `invalid-reference`, listing the accepted forms | today an error (`serve.ts:216-221`) |
 
 **Back-compat.**
-- `languageOfSource(f)` returns `r.ok && r.value.asset === 'code' ? r.value.translator : undefined`. That is byte-identical for every row of `source-language.spec.ts`. One assumption needs checking: `rs`/`go` are `PluginLanguage`, so the existing expectations hold. Only the rg hits at `:28-107` were seen, not the full expectations.
+- `EXTENSION_MAP` and `languageOfSource` stay exactly as they are. The resolver calls `languageOfSource` at its code-extension step; the dependency never runs the other way.
+- Back-compat therefore holds by construction. `languageOfSource('https://x/a.ts')` still returns `'ts'`, because `languageOfSource` never consults the resolver's URL step.
 - `pluginConsumesSource`/`sourcesForPlugin` stay as they are. They have no production caller (1.2).
 
 **Tests:** extend `apigen-core-client/src/test/source-language.spec.ts` (default `test` lane). Add `source-reference.spec.ts` for the table above. Every row must fail if the order of the detection steps (§5.5) is changed.
@@ -316,7 +321,10 @@ export function resolveSourceReference(
 | `serve.ts:207-259` | `languageOfSource(source)`; `DEFAULT_PLUGIN_FOR_LANGUAGE[language]` | `const r = resolveSourceReference(source)`. Non-code assets and `!r.ok` throw `--source ${src}: ${message}`. `Host.language = r.value.translator`. The table is documented as "default projection+binding plugin per translator". The error text lists `.java`. |
 | `run.ts:358-379` | The pipeline is chosen by `effectiveLanguage(plugin)` | Resolve the source first. If `r.value.translator !== effectiveLanguage(plugin)`, fail early: `--type ${id} hosts ${lang} sources; --source ${src} is ${translator}`. Today that case fails late, inside the plugin (`py-flask/plugin.ts:192-196`) or in `detectLang`. The pipeline choice itself is unchanged. |
 
-- **Back-compat:** identical for every valid input. Only error timing and wording change for inputs that already failed.
+- **Back-compat:** identical for every valid input. Only error timing and wording change, and only for inputs that already failed.
+  - A URL-shaped `--source` (`https://x/a.ts`) is now classified as a URL and reported as `unsupported`.
+  - Today such a value goes through `path.resolve` into a nonexistent local path. In the TS path it then fails inside extraction or import.
+  - So the change affects only an input that already failed downstream.
 - **Blast radius:**
   - `resolveHosts` ← `startServe` (`serve.ts:1455`).
   - `detectLang` ← `extractSource` (`orchestrator.ts:318`).
@@ -377,10 +385,13 @@ const ops = await createExtractInvokerFromPlugins(usePluginObjects, translate, e
 ```
 
 - The registry **is** the `runExtractor` terminal that `extract-invoker.ts:118-133` describes ("run the real extractor for `call.host`"). It is not a new capability.
-- **Optional, recommended:** register `py` with `runExtractorEmitJson` (`python-env/src/lib/run-extractor.ts:42-82`; apigen-cli already depends on `@adhd/apigen-python-env`, `package.json:27`).
-  - This alone makes `generate --source api.py --type openapi|jsonschema|mcp-…` work, and puts Python under ir-cache.
-  - The proof spawns Python, so its test is `*.e2e.ts` (adhd ADR-0009).
-  - `py-flask`/`py-grpc` keep extracting inside `run()` until a later cleanup (`transport-serve-core-refactor.md` Phase 3, read at `:170-176`).
+- **Optional, recommended:** register `py` with `runExtractorEmitJson` (`python-env/src/lib/run-extractor.ts:42-82`; apigen-cli already depends on `@adhd/apigen-python-env`, `package.json:27`). This puts Python under ir-cache and in `descriptor.operations`.
+- **Scope of the Python claim (unverified end to end).** Registering the translator is not enough by itself. `buildDescriptor` (`orchestrator.ts:435-610`) has three TS assumptions that the Python branch must handle:
+  - `extractSource`'s TS branch resolves a tsconfig and a tsconfig-derived namespace (`:321-324`). A Python branch must take `entry.namespace` or a folder default instead.
+  - The per-source `exportMode` filter classifies ops by TS path shape (`opMatchesExportMode`, applied at `:571`). It must be skipped for non-TS translators.
+  - `packageSchemas[...].importPath` is the source file (`:559`). A target that **emits code importing `importPath`** would import a `.py` file. Only projections that read schemas or operations alone (`openapi`, `jsonschema`) can be claimed until each target is checked. The same translator/target compatibility guard as 3b's `run` check must reject the rest.
+- The proof spawns Python, so its test is `*.e2e.ts` (adhd ADR-0009).
+- `py-flask`/`py-grpc` keep extracting inside `run()` until a later cleanup (`transport-serve-core-refactor.md` Phase 3, read at `:170-176`).
 - **Tests:** `orchestrator.spec.ts` / `orchestrator.e2e.ts`. The `:858` `['ts','ts']` assertion stays true.
 
 ### 3e. Gateway sources and adhd-policy on the same path (NOW)
@@ -388,7 +399,7 @@ const ops = await createExtractInvokerFromPlugins(usePluginObjects, translate, e
 | File | Change | Moved, kept or deleted |
 |---|---|---|
 | `sources/parse-source.ts` | `parseSourceSpec(text)` maps `resolveSourceReference(text)` back to `SourceSpec` for back-compat, or is deleted once the two policy verbs call the resolver directly | Moved to core-client |
-| `sources/resolve-source.ts:44-104` | Keyed by **translator**, not intent. `resolveSource(resolution, deps)` dispatches `'argv'` → argv, `'mcp'` → MCP. `intent` is kept only as the default for a missing `protocol` option (`run` → `argv`, `serve` → `mcp`), so D-07/D-08 behaviour is unchanged. `file` returns typed `unsupported` with "use adhd-apigen" (`:52-53` today). | Kept, re-keyed |
+| `sources/resolve-source.ts:44-104` | Keyed by **translator**, not intent. `resolveSource(resolution, deps)` dispatches `'argv'` → argv and `'mcp'` → MCP. When `resolution.translator` is unset (an executable with no `protocol` option, 3a), `intent` fills it in: `run` → `argv`, `serve` → `mcp`. That is the only remaining use of `intent`, and it keeps D-07/D-08 behaviour unchanged. `file` returns typed `unsupported` with "use adhd-apigen" (`:52-53` today). | Kept, re-keyed |
 | `sources/mcp-source.ts:151-231` | Extract the pure translator `operationsFromMcpTools(rawTools, name, onWarn) → {operations, skipped, hints, tools}`. `resolveMcpStdioSource` becomes locator (spawn) + `client` binding + a call to that translator. The remote MCP URL later reuses the translator unchanged. | Split, no deletion |
 | `sources/argv-operation.ts` | `host`/`binding` values only (3c) | Kept |
 | `sources/types.ts` | `IResolvedSource` gains `binding: BindingSpec`. `SourceIntent` stays until the decision on BA-6/E1-E2 (section 4). | Kept |
@@ -574,20 +585,20 @@ Each step is a pure function of the string plus the probe.
 
 ---
 
-## 7. Findings: bugs and drift found while tracing (not filed by this read-only run)
+## 7. Findings: bugs and drift found while tracing
 
-| ID | Finding | Evidence |
-|---|---|---|
-| F-1 | `generate`/`run` through the orchestrator reject `.py`/`.java` although a Python and a Java translator exist. Python and Java IR cannot reach openapi, jsonschema, mcp or ts-types projections, or ir-cache. | `orchestrator.ts:185-193`, `:318-359`; `py-flask/plugin.ts:203-209`, `:374-377` |
-| F-2 | Host vocabulary drift: the Python extractor emits `host: "python"`, while `PluginLanguage` and `py-flask`'s own `Descriptor` say `'py'`. `createGateway` would mis-route Python ops. | `extractor.py:467`; `types.ts:122`; `py-flask/plugin.ts:234`; `gateway.ts:591` |
-| F-3 | Foreign ops claim `host: 'ts'` (argv, MCP) | `argv-operation.ts:43`; `mcp-source.ts:192` |
-| F-4 | `descriptor.schema.json` is `additionalProperties:false` yet lacks `hasCtx`, so it rejects real TS ops. Nothing loads it, so the drift is invisible. | `descriptor.schema.json:7-21`; `descriptor.ts:251` |
-| F-5 | Three source detectors with three supported sets. `serve`'s error message omits `.java`; `.rs`/`.go` map to a language with no extractor and no default plugin. | `source-language.ts:27-41`; `orchestrator.ts:185-194`; `parse-source.ts:11-42`; `serve.ts:91-95`, `:216-221` |
-| F-6 | `apigen-core-client` is tagged `platform:shared` but imports `node:path`, `node:fs` and `node:module` | `project.json:15-18`; `source-language.ts:13`; `extraction-session.ts:38`; `esm-require.ts:30` (rg hit) |
-| F-7 | SPEC says the `Call` carries `operation.host`; for package ops it carries `{id}` only | `SPEC.md:535-536`; `dispatch-for-plan.ts:94` |
-| F-8 | Stale docs: `OutputPlugin.language` says "all first-party plugins declare `'ts'`"; `source-language.ts` says its helpers route serve's files, but `pluginConsumesSource`/`sourcesForPlugin` have no production caller | `types.ts:134-136`; `source-language.ts:2-8`, `:115-150` |
-| F-9 | gitnexus index misses `resolveHosts`←`startServe`, `detectLang`←`extractSource`, `resolveMcpStdioSource`←`resolveSource` | `serve.ts:1455`; `orchestrator.ts:318`; `resolve-source.ts:57` |
-| F-10 | The gateway barrel's marker string names the package `@adhd/apigen-gateway`; the package is `@adhd/apigen-engine-gateway` | `apigen-engine-gateway/src/index.ts:1`; `package.json:2` |
+| ID | Finding | Evidence | Backlog |
+|---|---|---|---|
+| F-1 | `generate`/`run` through the orchestrator reject `.py`/`.java` although a Python and a Java translator exist. Python and Java IR cannot reach openapi, jsonschema, mcp or ts-types projections, or ir-cache. | `orchestrator.ts:185-193`, `:318-359`; `py-flask/plugin.ts:203-209`, `:374-377` | f7f25391 |
+| F-2 | Host vocabulary drift: the Python extractor emits `host: "python"`, while `PluginLanguage` and `py-flask`'s own `Descriptor` say `'py'`. `createGateway` would mis-route Python ops. | `extractor.py:467`; `types.ts:122`; `py-flask/plugin.ts:234`; `gateway.ts:591` | 103b16f0 (relates 819100bd) |
+| F-3 | Foreign ops claim `host: 'ts'` (argv, MCP) | `argv-operation.ts:43`; `mcp-source.ts:192` | c62f9b13 (citation added) |
+| F-4 | `descriptor.schema.json` is `additionalProperties:false` yet lacks `hasCtx`, so it rejects real TS ops. Nothing loads it, so the drift is invisible. | `descriptor.schema.json:7-21`; `descriptor.ts:251` | c5cf9472 |
+| F-5 | Three source detectors with three supported sets. `serve`'s error message omits `.java`; `.rs`/`.go` map to a language with no extractor and no default plugin. | `source-language.ts:27-41`; `orchestrator.ts:185-194`; `parse-source.ts:11-42`; `serve.ts:91-95`, `:216-221` | f168f4ef (relates f6bf8550) |
+| F-6 | `apigen-core-client` is tagged `platform:shared` but imports `node:path`, `node:fs` and `node:module` | `project.json:15-18`; `source-language.ts:13`; `extraction-session.ts:38`; `esm-require.ts:30` (rg hit) | 5cbde2a7 (relates 25c1d7ef) |
+| F-7 | SPEC says the `Call` carries `operation.host`; for package ops it carries `{id}` only | `SPEC.md:535-536`; `dispatch-for-plan.ts:94` | 15ec76ac |
+| F-8 | Stale docs: `OutputPlugin.language` says "all first-party plugins declare `'ts'`"; `source-language.ts` says its helpers route serve's files, but `pluginConsumesSource`/`sourcesForPlugin` have no production caller | `types.ts:134-136`; `source-language.ts:2-8`, `:115-150` | 5ec6e8bf |
+| F-9 | gitnexus index misses `resolveHosts`←`startServe`, `detectLang`←`extractSource`, `resolveMcpStdioSource`←`resolveSource` | `serve.ts:1455`; `orchestrator.ts:318`; `resolve-source.ts:57` | not filed (gitnexus index gap, not a repo defect) |
+| F-10 | The gateway barrel's marker string names the package `@adhd/apigen-gateway`; the package is `@adhd/apigen-engine-gateway` | `apigen-engine-gateway/src/index.ts:1`; `package.json:2` | 2b7cd592 |
 
 ---
 
@@ -603,12 +614,12 @@ Sizes are estimates, based on the measured files: `source-language.ts` 150 lines
 | # | Step | Now or deferred | Risk | Files touched | ≈ LOC |
 |---|---|---|---|---|---|
 | 0 | ADR + SPEC wording for the seven primitives and the `host` (producer) / `binding` (key) split. Correct SPEC `:535-536` and §4 `hasCtx`. | NOW | none (docs) | ADR (new), `docs/decisions/README.md`, `SPEC.md`, `transport-serve-core-refactor.md` | 150 |
-| 1 | `resolveSourceReference` + types in core-client. `languageOfSource` becomes a wrapper. Pure, with the probe port. (3a) | NOW | LOW (additive; published export unchanged) | `source-language.ts`, `index.ts`, 2 specs | 180 src + 200 test |
+| 1 | `resolveSourceReference` + types in core-client. It calls the unchanged `languageOfSource` at its extension step. Pure, with the probe port. (3a) | NOW | LOW (additive; published export unchanged) | `source-language.ts`, `index.ts`, 2 specs | 180 src + 200 test |
 | 2 | apigen-cli uses it: `extractSource`, `resolveHosts`, an early plugin/source mismatch check in `run`. `detectLang` becomes a wrapper. (3b) | NOW | LOW (errors only) | `orchestrator.ts`, `serve.ts`, `run.ts`, 2 to 3 specs | 50 src + 80 test |
 | 3 | `Operation.binding?` + `descriptor.schema.json` (`binding`, `hasCtx`); the gateway routes `binding ?? host`; argv/MCP producers get `host:'argv'|'mcp'` and their binding keys. (3c) | NOW | LOW (optional field; no reader changes meaning) | `descriptor.ts`, `descriptor.schema.json`, `gateway.ts`, `argv-operation.ts`, `mcp-source.ts`, `gateway.spec.ts` | 30 src + 50 test |
 | 4 | Translator registry at the orchestrator's extract terminal (TS only; identical output). (3d) | NOW | LOW | `orchestrator.ts`, spec | 30 + 30 |
 | 5 | Gateway + adhd-policy: the verbs call the resolver; `resolveSource` is keyed by translator (intent is only the default); split `operationsFromMcpTools` out of `resolveMcpStdioSource`; node probe exported. (3e) | NOW | MEDIUM (touches the D-07/D-08 paths; parity proven by `s3`/`s7`/`s8`) | `parse-source.ts`, `resolve-source.ts`, `mcp-source.ts`, `types.ts`, new `source-probe.ts`, `verbs/run.ts`, `verbs/serve.ts`, specs | 120 src + 120 test |
-| 6 | Register the `py` translator (`runExtractorEmitJson`) at the terminal, so `generate --source x.py` works and Python gains ir-cache. Proof in `*.e2e.ts`. | NOW-optional (recommended; closes F-1) | MEDIUM (spawns Python) | `orchestrator.ts`, an e2e spec | 40 + 80 |
+| 6 | Register the `py` translator (`runExtractorEmitJson`) at the terminal, with the three `buildDescriptor` guards from 3d (namespace without tsconfig, no TS export-mode filter, translator/target compatibility). This makes `generate --source x.py --type openapi\|jsonschema` work and puts Python under ir-cache. Other targets are rejected until each one is checked. Proof in `*.e2e.ts`. | NOW-optional (recommended; closes F-1 for schema projections) | MEDIUM (spawns Python; end-to-end unverified) | `orchestrator.ts`, `generate.ts`, an e2e spec | 80 + 120 |
 | 7 | Binding-aware dispatch terminal (D1); then adhd-apigen accepts `bin:` (argv translator + process binding) for `run --type cli|mcp|api-fastify` | DEFERRED (first consumer: bin in adhd-apigen) | MEDIUM | `apigen-engine-runtime` `invoke.ts`/`package-invoker.ts`, `run.ts`, specs | 150 + 150 |
 | 8 | Remote locator + materialisation + asset re-delegation + trust rules (D2, D3); MCP-HTTP `HostAdapter`; OpenAPI translator (D4) | DEFERRED (the remote extractor) | HIGH | core-client, gateway, apigen-cli | 600+ |
 
