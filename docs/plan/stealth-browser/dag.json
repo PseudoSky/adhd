@@ -625,7 +625,8 @@
         "entrypoint/stealth-browser/src/test/unit/chrome-manager/",
         "entrypoint/stealth-browser/src/test/unit/cdp/targets.spec.ts",
         "docs/plan/stealth-browser/evidence/lifecycle-definitions.md",
-        "entrypoint/stealth-browser/src/lib/cdp/browser.ts"
+        "entrypoint/stealth-browser/src/lib/cdp/browser.ts",
+        "entrypoint/stealth-browser/src/lib/runtime-deps.ts"
       ],
       "context": "contexts/chrome-lifecycle.md",
       "notes": "executor=typescript-pro tier=sonnet/high; single-pass design (single-pass-lifecycle-spec): connection-based presence over @adhd/sox-service-proxy 0.6.0 (dialBackend connection per client, reaper host with a connection map, pure decideReap, createCircuitBreaker + FileBreakerStore, ownership record with isSameProcess), one ReaperLink port, lifecycle/sp.ts the only importer of the package (precondition: sp-link complete), degraded mode D1, killProcessGroup extract-only export in cdp/browser.ts; CL1-CL29 (CL30 is sp-reaper-smoke.1); every pre-existing feature F1-F26 pinned (75 inventory rows); surface-hosts waits for this state to wire installProcessExitHooks"

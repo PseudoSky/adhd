@@ -99,6 +99,19 @@ def dag():
     return jread(f"{PLAN}/dag.json", {})
 
 
+def dag_descendants(slug):
+    """Every state that has `slug` as a (transitive) dag ancestor."""
+    nodes = (dag() or {}).get("nodes", {})
+    out, grew = set(), True
+    while grew:
+        grew = False
+        for n, v in nodes.items():
+            if n not in out and any(d == slug or d in out for d in v.get("depends_on", [])):
+                out.add(n)
+                grew = True
+    return out
+
+
 def state():
     return jread(f"{PLAN}/state.json", {})
 
@@ -274,8 +287,25 @@ def ported_files(bucket):
     return [f"{P}/{e['dst']}" for e in entries(bucket) if e.get("kind", "ts") == "ts"]
 
 
-def port_check(bucket, strict=False, final=False):
-    """strict=False is the migration-time check (the port still carries the source names); strict=True is the corrected tree after port-fixes (greenfield renames and require_exports enforced)."""
+def migration_snapshot(slug, path):
+    """The content of `path` as the migration state `slug` committed it, when a later commit of another state has changed it since; None while the
+    latest commit touching the file is the migration's own (or the migration has not committed it yet), so the live tree is measured then."""
+    if not slug:
+        return None
+    log = sh(["git", "log", "--format=%H%x1f%B%x1e", "--", path])[1]
+    recs = [r.strip().split("\x1f", 1) for r in log.split("\x1e") if "\x1f" in r]
+    if not recs or f"[psm:{slug}]" in recs[0][1]:
+        return None
+    for sha, body in recs:
+        if f"[psm:{slug}]" in body:
+            return git("show", f"{sha}:{path}")
+    return None
+
+
+def port_check(bucket, strict=False, final=False, slug=None):
+    """strict=False is the migration-time check (the port still carries the source names); strict=True is the corrected tree after port-fixes (greenfield renames and require_exports enforced).
+    Line similarity is a migration-time property: once a later state's greenfield commit changes a ported file it is measured on the migration's own
+    committed snapshot (non-regressing, still proves the port was faithful), while exports and must_contain tokens stay enforced on the live tree."""
     bad = []
     for e in entries(bucket):
         dst = f"{P}/{e['dst']}"
@@ -299,9 +329,10 @@ def port_check(bucket, strict=False, final=False):
         for extra in (e.get("require_exports", []) if strict else []):
             if extra not in exports_of(d):
                 bad.append(f"{e['dst']} must export {extra}")
-        ratio = difflib.SequenceMatcher(None, norm_for_diff(s), norm_for_diff(d), autojunk=False).ratio()
+        snap = migration_snapshot(slug, dst)
+        ratio = difflib.SequenceMatcher(None, norm_for_diff(s), norm_for_diff(d if snap is None else snap), autojunk=False).ratio()
         if ratio < e.get("min_similarity", 0.80) and not e.get("rewritten_by"):  # a file rewritten by capture-upgrade / chrome-lifecycle is held to the feature inventory instead of line similarity (greenfield: no legacy-code guard)
-            bad.append(f"{e['dst']} similarity {ratio:.2f} < {e.get('min_similarity', 0.80)} (behavior-preserving port)")
+            bad.append(f"{e['dst']} similarity {ratio:.2f} < {e.get('min_similarity', 0.80)} (behavior-preserving port{'' if snap is None else ', measured at the ' + slug + ' commit'})")
         for tok in e.get("must_contain", []):
             if tok not in d:
                 bad.append(f"{e['dst']} lost token {tok!r}")
@@ -318,8 +349,8 @@ def standard_port_checks(slug, bucket, extra=None):
     """AC .1 port parity, .2 hygiene + resolvable imports, .3 ownership/source/main untouched."""
     @check(slug, 1)
     def _c1():
-        """Every manifest file exists, keeps every export (modulo the manifest's recorded allowed_renames/allowed_drops), stays >=80% line-similar to the scaffold-time source, keeps its must-contain tokens."""
-        return port_check(bucket)
+        """Every manifest file exists, keeps every export (modulo the manifest's recorded allowed_renames/allowed_drops), was >=80% line-similar to the scaffold-time source as this state committed it (a later state's greenfield edit does not re-open it), keeps its must-contain tokens."""
+        return port_check(bucket, slug=slug)
 
     @check(slug, 2)
     def _c2():
@@ -3236,12 +3267,14 @@ for _slug, _n, _owner in (("tests-unit-core", 6, "tests-unit-core"), ("tests-uni
             if owner != "chrome-lifecycle":
                 return ok, why
             tagged = [r for r in inventory_rows() if set(r.get("tags", [])) & {"reaper", "cross-process", "history-recency", "idle-shutdown", "safety-tier", "livelock", "launch-lock-oexcl", "group-kill", "newtab-fix"}]
-            bad = [r["id"] for r in tagged if not row_pinned(r)]
+            later = dag_descendants("chrome-lifecycle")
+            deferred = sorted(r["id"] for r in tagged if r.get("owner_state") in later)
+            bad = [r["id"] for r in tagged if r.get("owner_state") not in later and not row_pinned(r)]
             lib = "\n".join(read(x) for x in walk(f"{P}/src/lib", (".ts",)))
-            return ok and len(tagged) >= 8 and not bad and "checkHistory" in lib, f"{why}; lifecycle-tagged rows={len(tagged)} unpinned={bad} checkHistory={'checkHistory' in lib}"
+            return ok and len(tagged) >= 8 and not bad and "checkHistory" in lib, f"{why}; lifecycle-tagged rows={len(tagged)} unpinned={bad} deferred-to-descendant-owner={deferred} checkHistory={'checkHistory' in lib}"
         fn.__doc__ = (f"[inv:no-features-removed] every failsafe-inventory row owned by {owner} is pinned: its pin file exists under src/test, cites the row id `[fs-NNN]` and contains the named test; "
                       "the feature is kept (no row may be removed or narrowed)."
-                      + (" Every row tagged reaper, cross-process, history-recency, idle-shutdown, safety-tier, livelock, launch-lock-oexcl, group-kill or newtab-fix (at least 8) is pinned, and the history-recency tier with its `checkHistory` option remains." if owner == "chrome-lifecycle" else ""))
+                      + (" Every row tagged reaper, cross-process, history-recency, idle-shutdown, safety-tier, livelock, launch-lock-oexcl, group-kill or newtab-fix (at least 8) is pinned, except a row whose owner_state has chrome-lifecycle as a dag ancestor (its pin file cannot exist yet; it is pinned at its owner's own inventory criterion and again at review-prep.5, audit-pre-review.5 and audit-final.12, which check every row), and the history-recency tier with its `checkHistory` option remains." if owner == "chrome-lifecycle" else ""))
         return fn
     check(_slug, _n)(_mk(_owner))
 

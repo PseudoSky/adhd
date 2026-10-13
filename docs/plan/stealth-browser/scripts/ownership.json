@@ -179,7 +179,8 @@
     "entrypoint/stealth-browser/src/test/unit/chrome-manager/",
     "entrypoint/stealth-browser/src/test/unit/cdp/targets.spec.ts",
     "docs/plan/stealth-browser/evidence/lifecycle-definitions.md",
-    "entrypoint/stealth-browser/src/lib/cdp/browser.ts"
+    "entrypoint/stealth-browser/src/lib/cdp/browser.ts",
+    "entrypoint/stealth-browser/src/lib/runtime-deps.ts"
   ],
   "tests-use-cases": [
     "entrypoint/stealth-browser/src/test/use-cases/",
