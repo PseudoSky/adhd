@@ -15,7 +15,7 @@
  * asserted to have actually been called (the degraded path is not reached by
  * a short-circuit). Simulated machine (manager-world); no socket, no process.
  */
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
 
 vi.mock('node:fs', async () => (await import('./manager-world.js')).fsModule())
 vi.mock('../../../lib/cdp/browser.js', async () => (await import('./manager-world.js')).browserModule(vi.fn))
@@ -27,7 +27,7 @@ import { HOST, PORT, resetSp, resetWorld, sp, STATE_DIR, world } from './manager
 
 const IDLE = 300
 
-let warn: ReturnType<typeof vi.fn>
+let warn: Mock<(msg: string) => void>
 let logs: string[]
 
 function degradedManager(): ChromeManager {
@@ -99,7 +99,7 @@ describe('8468f7b1 [chrome-lifecycle.28] ensureBackend fails with E_UDS_DIR_UNSA
     m.bump()
     await vi.advanceTimersByTimeAsync(IDLE * 3)
     await m.shutdownIfIdle()
-    expect(sp.ensureBackend.mock.calls.length).toBeGreaterThan(1)
+    expect(vi.mocked(sp.ensureBackend).mock.calls.length).toBeGreaterThan(1)
     expect(warn).toHaveBeenCalledTimes(1)
     expect(warn.mock.calls[0]![0]).toMatch(/^warning: reaper unavailable, running degraded/)
     expect(warn.mock.calls[0]![0]).toMatch(/E_UDS_DIR_UNSAFE|not private|0700/)

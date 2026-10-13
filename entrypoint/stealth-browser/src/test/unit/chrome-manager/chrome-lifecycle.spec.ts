@@ -1,175 +1,119 @@
 /**
- * Lifecycle spec for the idle-shutdown deferral contract of ChromeManager, ported from the scratch
- * `chrome-lifecycle-test.ts` (five scenarios). Ticket 8468f7b1 AC port-fixes ·
- * criteria [port-fixes.5] [port-fixes.8] (livelock guard; stale, absent and dead sibling handling).
+ * The five idle-shutdown deferral scenarios of the scratch chrome-lifecycle
+ * test (port-fixes), re-proven on the connection-based mechanism: every
+ * ChromeManager holds one connection to the reaper host of its port; the host
+ * keeps the registry of connected clients and their last `activity`. No shared
+ * activity file exists anywhere.
+ * Ticket 8468f7b1 · [port-fixes.5] [port-fixes.8] [chrome-lifecycle.5] [chrome-lifecycle.6]
  *
- * ── The invariant under test (regression guard for the mutual-deferral livelock)
- *   A process that REFUSES to shut Chrome down because a sibling is active must re-arm its own idle
- *   timer WITHOUT writing its own cross-process heartbeat (`_rearmIdle`). Writing it from a merely
- *   deferring process makes that process look active to its siblings, so every idle process keeps
- *   every other one alive forever and the shared Chrome is never reaped. The heartbeat is written
- *   only by genuine activity (`bump()`).
+ * The invariant under test (regression guard for the mutual-deferral livelock):
+ * a process that REFUSES to close Chrome because a sibling is active re-arms its
+ * own idle timer WITHOUT advertising activity; only genuine use (`bump()`)
+ * stamps it. Otherwise every idle process keeps every other one alive forever.
  *
- * ── Hermeticity (nothing real is touched)
- *   - The heartbeat is a throwaway file under an `mkdtemp` directory, never /tmp/stealth-browser-heartbeat.
- *   - The CDP host is a dead port; `fetch` is stubbed to refuse the connection, and the Chrome
- *     lifecycle modules (cdp/browser, cdp/targets) are mocked, so the "proceed to shut down" branch
- *     spawns nothing, signals nothing and never connects to the live 9222 Chrome.
- *   - Sibling processes are synthetic PIDs; `process.kill(pid, 0)` is replaced by a liveness table
- *     (no real signal is ever sent).
- *   - The idle timer is injected directly (private field) so no `ready()` / Chrome launch is needed.
+ *   1. deferral to an active sibling does not stamp the deferrer (livelock guard)
+ *   2. genuine activity (bump) still stamps, alongside the sibling
+ *   3. a STALE sibling does not hold Chrome alive, and only the configured CDP port is probed
+ *   4. no sibling at all: shutdown proceeds
+ *   5. a DEAD sibling (killed, its connection closed) is ignored
+ *
+ * Simulated machine (../lifecycle/manager-world): fake clock, scripted Chrome on
+ * port 9333, the real reaper host behind a FakeReaperLink, MemFs for every
+ * file. No socket, no process, and port 9222 is never contacted.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
 
-const m = vi.hoisted(() => ({
-  ensureChromeRunning: vi.fn(),
-  killChrome: vi.fn(),
-  closeAllPageTargets: vi.fn(),
-  hideAllWindows: vi.fn(),
-  isChromeReachable: vi.fn(),
-}))
+vi.mock('node:fs', async () => (await import('../lifecycle/manager-world.js')).fsModule())
+vi.mock('../../../lib/cdp/browser.js', async () => (await import('../lifecycle/manager-world.js')).browserModule(vi.fn))
+vi.mock('../../../lib/cdp/targets.js', async () => (await import('../lifecycle/manager-world.js')).targetsModule(vi.fn))
+vi.mock('@adhd/sox-service-proxy', async (orig) => (await import('../lifecycle/manager-world.js')).spModule(await orig<Record<string, unknown>>()))
 
-vi.mock('../../../lib/cdp/browser.js', () => ({
-  ensureChromeRunning: m.ensureChromeRunning,
-  killChrome: m.killChrome,
-}))
-vi.mock('../../../lib/cdp/targets.js', () => ({
-  closeAllPageTargets: m.closeAllPageTargets,
-  hideAllWindows: m.hideAllWindows,
-  isChromeReachable: m.isChromeReachable,
-}))
-
-import { ChromeManager } from '../../../lib/chrome-manager.js'
-import { IdleShutdown } from '../../../lib/cdp/shutdown.js'
-
-const DEAD_HOST = '127.0.0.1:19922' // never reachable: no real Chrome is touched
-const IDLE_WINDOW = 120_000
-const SIBLING_PID = 424_242 // live, idle sibling (synthetic)
-const DEAD_PID = 424_243 // crashed sibling (synthetic)
-
-let tmp: string
-let heartbeatPath: string
-let alive: Set<number>
-let fetchMock: ReturnType<typeof vi.fn>
-
-/** Parse the heartbeat file into pid -> timestamp. */
-function readHeartbeat(path: string): Map<number, number> {
-  const map = new Map<number, number>()
-  try {
-    for (const line of readFileSync(path, 'utf8').trim().split('\n')) {
-      const [p, t] = line.split(':')
-      if (!p || !t) continue
-      map.set(parseInt(p, 10), parseInt(t, 10))
-    }
-  } catch { /* absent */ }
-  return map
-}
-
-/** Write a heartbeat file containing a single `<pid>:<ts>` entry. */
-function seedHeartbeat(path: string, pid: number, ts: number): void {
-  writeFileSync(path, `${pid}:${ts}\n`, 'utf8')
-}
-
-/** Manager with an injected idle timer (bump() early-returns when idle is null) and a temp heartbeat. */
-function makeManager(): ChromeManager {
-  const mgr = new ChromeManager({
-    cdpHost: DEAD_HOST,
-    heartbeatPath,
-    idleTimeoutMs: IDLE_WINDOW,
-    checkHistory: false,
-    logger: () => { /* quiet */ },
-  })
-  ;(mgr as unknown as { idle: IdleShutdown | null }).idle = new IdleShutdown({ timeoutMs: IDLE_WINDOW })
-  return mgr
-}
-
-/** True when the manager took the shutdown path (`_doShutdown` nulls `idle`). */
-function shutDownProceeded(mgr: ChromeManager): boolean {
-  return (mgr as unknown as { idle: IdleShutdown | null }).idle === null
-}
+import { ensureChromeRunning } from '../../../lib/cdp/browser.js'
+import { isChromeReachable } from '../../../lib/cdp/targets.js'
+import { client, makeHub } from '../lifecycle/manager-clients.js'
+import { HOST, IDLE, PORT, resetSp, resetWorld, STATE_DIR, world } from '../lifecycle/manager-world.js'
 
 beforeEach(() => {
-  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
-  for (const fn of Object.values(m)) fn.mockReset()
-  m.closeAllPageTargets.mockResolvedValue(undefined)
-  m.killChrome.mockResolvedValue(undefined)
-  tmp = mkdtempSync(join(tmpdir(), 'chrome-lifecycle-spec-'))
-  heartbeatPath = join(tmp, 'stealth-browser-heartbeat')
-  alive = new Set([process.pid, SIBLING_PID])
-  vi.spyOn(process, 'kill').mockImplementation(((pid: number, sig?: string | number) => {
-    if (sig === 0 && !alive.has(pid)) throw Object.assign(new Error('ESRCH'), { code: 'ESRCH' })
-    return true
-  }) as typeof process.kill)
-  fetchMock = vi.fn().mockRejectedValue(Object.assign(new Error('fetch failed'), { cause: { code: 'ECONNREFUSED' } }))
-  vi.stubGlobal('fetch', fetchMock)
+  vi.useFakeTimers()
+  resetWorld()
+  resetSp()
+  vi.mocked(isChromeReachable).mockClear()
+  vi.mocked(ensureChromeRunning).mockClear()
 })
 
 afterEach(() => {
   vi.useRealTimers()
-  vi.unstubAllGlobals()
   vi.restoreAllMocks()
-  rmSync(tmp, { recursive: true, force: true })
 })
 
-describe('8468f7b1 AC port-fixes [port-fixes.5] ChromeManager idle-shutdown deferral (livelock guard)', () => {
-  it('1. deferral to an active sibling does not stamp the deferrer heartbeat (livelock guard)', async () => {
-    seedHeartbeat(heartbeatPath, SIBLING_PID, Date.now())
-    const mgr = makeManager()
-    await mgr.shutdownIfIdle() // sibling is active -> defer
-    const after = readHeartbeat(heartbeatPath)
-    expect(shutDownProceeded(mgr)).toBe(false)
-    expect(after.has(SIBLING_PID)).toBe(true)
-    expect(after.has(process.pid)).toBe(false)
-    // Deferred before touching Chrome at all.
-    expect(m.killChrome).not.toHaveBeenCalled()
-    expect(fetchMock).not.toHaveBeenCalled()
+async function pair() {
+  const hub = makeHub()
+  const me = client(hub, 11)
+  const sibling = client(hub, 22)
+  await me.manager.ready()
+  await sibling.manager.ready()
+  const stampOf = (pid: number) => hub.host!.clients().find((c) => c.pid === pid)?.lastActivityAt ?? null
+  return { hub, me, sibling, stampOf }
+}
+
+describe('8468f7b1 [port-fixes.5] [chrome-lifecycle.6] ChromeManager idle-shutdown deferral (livelock guard)', () => {
+  it('1. deferral to an active sibling does not stamp the deferrer (livelock guard)', async () => {
+    const { me, sibling, stampOf } = await pair()
+    await vi.advanceTimersByTimeAsync(IDLE / 2)
+    sibling.manager.bump()
+    const mine = stampOf(11)
+    const sent = me.link.activityCalls
+    await me.manager.shutdownIfIdle()
+    expect(world.chromeUp).toBe(true)
+    expect(stampOf(11)).toBe(mine)
+    expect(me.link.activityCalls).toBe(sent)
   })
 
-  it('2. genuine activity (bump) still stamps the heartbeat, alongside the sibling', () => {
-    seedHeartbeat(heartbeatPath, SIBLING_PID, Date.now())
-    const mgr = makeManager()
-    mgr.bump() // real search activity
-    const hb = readHeartbeat(heartbeatPath)
-    expect(hb.has(process.pid)).toBe(true)
-    expect(hb.has(SIBLING_PID)).toBe(true)
+  it('2. genuine activity (bump) still stamps, alongside the sibling', async () => {
+    const { me, sibling, stampOf } = await pair()
+    await vi.advanceTimersByTimeAsync(100)
+    sibling.manager.bump()
+    await vi.advanceTimersByTimeAsync(100)
+    me.manager.bump()
+    expect(stampOf(11)).toBe(Date.now())
+    expect(stampOf(22)).toBe(Date.now() - 100)
   })
 
-  it('3. a STALE sibling does not hold Chrome alive: shutdown proceeds and the dead CDP port is probed, not 9222', async () => {
-    seedHeartbeat(heartbeatPath, SIBLING_PID, Date.now() - IDLE_WINDOW - 5_000)
-    const mgr = makeManager()
-    await mgr.shutdownIfIdle()
-    expect(shutDownProceeded(mgr)).toBe(true)
-    expect(readHeartbeat(heartbeatPath).has(process.pid)).toBe(false)
-    expect(fetchMock).toHaveBeenCalled()
-    for (const call of fetchMock.mock.calls) expect(String(call[0])).toContain(DEAD_HOST)
-    expect(m.closeAllPageTargets).toHaveBeenCalledWith(DEAD_HOST)
-    expect(m.killChrome).toHaveBeenCalledWith(19922)
+  it('3. a STALE sibling does not hold Chrome alive: shutdown proceeds and only the configured CDP port is probed', async () => {
+    const { me, sibling } = await pair()
+    await sibling.manager.shutdownIfIdle() // the sibling defers to me once, then goes quiet (its timer is cancelled)
+    expect(world.chromeUp).toBe(true)
+    await vi.advanceTimersByTimeAsync(IDLE + 1) // ...past the window
+    await me.manager.shutdownIfIdle()
+    expect(world.chromeUp).toBe(false)
+    // Every CDP touch was the configured (simulated) port, never the shared 9222.
+    expect(vi.mocked(ensureChromeRunning).mock.calls.map((c) => c[0])).toEqual([{ port: PORT }, { port: PORT }])
+    for (const [host] of vi.mocked(isChromeReachable).mock.calls) expect(host).toBe(HOST)
   })
 
-  it('4. no sibling at all (absent heartbeat file): shutdown proceeds', async () => {
-    const mgr = makeManager()
-    await mgr.shutdownIfIdle()
-    expect(shutDownProceeded(mgr)).toBe(true)
-    expect(m.killChrome).toHaveBeenCalledTimes(1)
+  it('4. no sibling at all: shutdown proceeds', async () => {
+    const me = client(makeHub(), 11)
+    await me.manager.ready()
+    await me.manager.shutdownIfIdle()
+    expect(world.chromeUp).toBe(false)
+    expect(me.manager.isReady).toBe(false)
   })
 
-  it('5. a fresh stamp from a DEAD sibling PID is ignored: a crashed sibling cannot block shutdown forever', async () => {
-    seedHeartbeat(heartbeatPath, DEAD_PID, Date.now()) // fresh stamp, but the process is gone
-    const mgr = makeManager()
-    await mgr.shutdownIfIdle()
-    expect(shutDownProceeded(mgr)).toBe(true)
-    expect(m.killChrome).toHaveBeenCalledTimes(1)
+  it('5. a DEAD sibling is ignored: a crashed sibling cannot block shutdown forever', async () => {
+    const { hub, me, sibling } = await pair()
+    sibling.manager.bump() // fresh activity...
+    sibling.link.kill9() // ...then the sibling process is killed: its connection closes, no release
+    expect(hub.host!.clients().map((c) => c.pid)).toEqual([11])
+    await me.manager.shutdownIfIdle()
+    expect(world.chromeUp).toBe(false)
   })
 
-  it('never reads or writes the live shared heartbeat path during any scenario', async () => {
-    seedHeartbeat(heartbeatPath, SIBLING_PID, Date.now())
-    const mgr = makeManager()
-    await mgr.shutdownIfIdle()
-    mgr.bump()
-    expect(heartbeatPath.startsWith(tmpdir())).toBe(true)
-    expect(heartbeatPath).not.toBe(join('/tmp', 'stealth-browser-heartbeat')) // the live shared path
+  it('never writes an activity file: the private state dir holds only the owner record and the breaker', async () => {
+    const { me, sibling } = await pair()
+    me.manager.bump()
+    sibling.manager.bump()
+    await me.manager.shutdownIfIdle()
+    expect(world.fs.readdirSync('/tmp')).toEqual([])
+    expect(world.fs.readdirSync(STATE_DIR).filter((f) => !/^chrome-\d+\.json$|^breaker-\d+\.json$/.test(f))).toEqual([])
   })
 })
