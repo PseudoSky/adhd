@@ -6,7 +6,7 @@ import { performance } from "node:perf_hooks";
 import type { ToolDefinition } from "../providers/types.js";
 import type { McpStdioConfig } from "../validation/index.js";
 import { ToolError } from "../validation/errors.js";
-import type { IMcpClient } from "./types.js";
+import { annotationsOf, type IMcpClient } from "./types.js";
 import type { EngineLogger, EngineConfig } from "../interfaces.js";
 import { wrapMcpTransport } from "../providers/wire.js";
 
@@ -160,6 +160,7 @@ export class StdioMcpClient implements IMcpClient {
                 type: "object",
                 properties: {},
             },
+            ...annotationsOf(tool),
         }));
     }
 

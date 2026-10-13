@@ -1,3 +1,5 @@
+import { performance } from "node:perf_hooks";
+
 import type { ToolDefinition } from "../providers/types.js";
 import type { ExecutionContext, McpServerConfig } from "../validation/index.js";
 import type { InProcessToolDescriptor, InProcessToolHandler } from "./in-process.js";
@@ -6,10 +8,41 @@ import { HttpMcpClient, SseMcpClient } from "./http-client.js";
 import { StdioMcpClient } from "./stdio-client.js";
 import type { IMcpClient } from "./types.js";
 import { TOOL_NAME_SEPARATOR, normalizeToolName } from "./tool-naming.js";
+import { classifyTool, type ToolConcurrencyClass } from "../engine/tool-class.js";
 import type { EngineConfig, EngineLogger } from "../interfaces.js";
 import { selectionOf } from "../providers/resolve-selection.js";
 import { serverSideToolsForProvider } from "../providers/server-side-tools.js";
 import { WEB_FETCH_SERVER, WebFetchClient, webFetchAdvertised } from "../tools/web-fetch.js";
+
+/**
+ * How many MCP servers `listAllTools` connects at once when the caller does not say (R10 S3).
+ * A task configures a handful of servers (fs, shell, agent-mcp, a few user servers); 4 starts them
+ * all at once in the common case while keeping a large user config (many cold `npx` spawns that
+ * contend on the npm cache and on CPU under the sandbox) from launching dozens of processes in the
+ * same instant.
+ */
+export const DEFAULT_MCP_CONNECT_CONCURRENCY = 4;
+
+/** Hard ceiling for the connect concurrency: a larger request is clamped to this. */
+export const MAX_MCP_CONNECT_CONCURRENCY = 8;
+
+/** Resolves a requested connect concurrency: a positive integer, clamped to the ceiling; else the default. */
+export function resolveMcpConnectConcurrency(requested: number | undefined): number {
+    return typeof requested === "number" && Number.isInteger(requested) && requested >= 1
+        ? Math.min(requested, MAX_MCP_CONNECT_CONCURRENCY)
+        : DEFAULT_MCP_CONNECT_CONCURRENCY;
+}
+
+/** The builtin file-system server key (agent-core-native-tooling `FS_SERVER.key`). */
+const FS_SERVER_KEY = "fs";
+
+/** Per-server startup timings of the latest `listAllTools` (R10 S3). */
+export interface IRegistryStartupTimings {
+    /** Per configured server key: milliseconds to connect AND list tools (failed servers included). */
+    connectMs: Record<string, number>;
+    /** Milliseconds `listAllTools` took in total: until every server's tools were ready (or had failed). */
+    toolsReadyMs: number;
+}
 
 export class McpClientRegistry {
     private readonly clients = new Map<string, IMcpClient>();
@@ -26,6 +59,10 @@ export class McpClientRegistry {
      */
     private readonly startupFailures = new Map<string, unknown>();
     private readonly toolTargets = new Map<string, { server: string; tool: string }>();
+    /** Advertised definitions of the latest `listAllTools`, by `server` then `tool` (for {@link toolClass}). */
+    private readonly toolDefs = new Map<string, ToolDefinition>();
+    private timings: IRegistryStartupTimings = { connectMs: {}, toolsReadyMs: 0 };
+    private readonly connectConcurrency: number;
     private readonly logger: EngineLogger;
     /**
      * Engine-native `web_fetch` (R6B-web AC2): present only when the agent's provider cannot take
@@ -48,8 +85,16 @@ export class McpClientRegistry {
          * omits it gets the pre-existing behavior (no injected child env).
          */
         private readonly engineConfig?: EngineConfig,
-        logger?: EngineLogger
+        logger?: EngineLogger,
+        options?: {
+            /**
+             * Servers connected at once by `listAllTools`. Positive integer, clamped to
+             * {@link MAX_MCP_CONNECT_CONCURRENCY}; default {@link DEFAULT_MCP_CONNECT_CONCURRENCY}.
+             */
+            connectConcurrency?: number;
+        }
     ) {
+        this.connectConcurrency = resolveMcpConnectConcurrency(options?.connectConcurrency);
         this.logger = logger ?? { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} } as EngineLogger;
         if (!this.mcpServers[WEB_FETCH_SERVER] && this.needsClientSideWebFetch()) {
             this.webFetch = new WebFetchClient({
@@ -185,42 +230,125 @@ export class McpClientRegistry {
         }
     }
 
+    /**
+     * Connects every configured server and lists its tools.
+     *
+     * Servers are connected CONCURRENTLY (at most `connectConcurrency` at a time; R10 S3): they used
+     * to be connected one after another for every task, so worker start-up paid the sum of every
+     * server's spawn time. Concurrency changes only WHEN work happens; the result is assembled in
+     * configured server-key order after all outcomes are in, so the tool list, the routing table and
+     * the failure warnings are identical to the serial walk whatever order the servers finish in. A
+     * server that fails is isolated exactly as before: its error is recorded for the model's first
+     * call (see `startupFailures`), a warning is logged, and the other servers' tools are advertised.
+     */
     async listAllTools(): Promise<ToolDefinition[]> {
-        const allTools: ToolDefinition[] = [];
+        const startedAt = performance.now();
+        const serverNames = Object.keys(this.mcpServers);
+        const connectMs: Record<string, number> = {};
 
-        for (const serverName of Object.keys(this.mcpServers)) {
+        type Outcome = { ok: true; tools: ToolDefinition[] } | { ok: false; error: unknown };
+        const connectOne = async (serverName: string): Promise<Outcome> => {
+            const serverStartedAt = performance.now();
             try {
                 const client = await this.getOrCreateClient(serverName);
                 const tools = await client.listTools();
-
-                for (const tool of tools) {
-                    if (this.isToolHidden(serverName, tool.name)) {
-                        continue;
-                    }
-                    const advertised = `${serverName}${TOOL_NAME_SEPARATOR}${tool.name}`;
-                    const target = { server: serverName, tool: tool.name };
-                    this.toolTargets.set(advertised, target);
-                    this.toolTargets.set(normalizeToolName(advertised), target);
-                    allTools.push({ ...tool, name: advertised });
-                }
+                return { ok: true, tools };
             } catch (error) {
-                this.startupFailures.set(serverName, error);
+                return { ok: false, error };
+            } finally {
+                connectMs[serverName] = Math.max(0, Math.round(performance.now() - serverStartedAt));
+            }
+        };
+
+        const outcomes = new Array<Outcome>(serverNames.length);
+        let next = 0;
+        const worker = async (): Promise<void> => {
+            while (next < serverNames.length) {
+                const i = next++;
+                outcomes[i] = await connectOne(serverNames[i]);
+            }
+        };
+        await Promise.all(
+            Array.from({ length: Math.min(this.connectConcurrency, serverNames.length) }, worker)
+        );
+
+        const allTools: ToolDefinition[] = [];
+        this.toolDefs.clear();
+        serverNames.forEach((serverName, i) => {
+            const outcome = outcomes[i];
+            if (!outcome.ok) {
+                this.startupFailures.set(serverName, outcome.error);
                 this.logger.warn(
-                    { server: serverName, error },
+                    { server: serverName, error: outcome.error },
                     "Failed to list tools from MCP server"
                 );
+                return;
             }
-        }
+            for (const tool of outcome.tools) {
+                if (this.isToolHidden(serverName, tool.name)) {
+                    continue;
+                }
+                const advertised = `${serverName}${TOOL_NAME_SEPARATOR}${tool.name}`;
+                const target = { server: serverName, tool: tool.name };
+                this.toolTargets.set(advertised, target);
+                this.toolTargets.set(normalizeToolName(advertised), target);
+                const definition = { ...tool, name: advertised };
+                this.toolDefs.set(advertised, definition);
+                allTools.push(definition);
+            }
+            if (serverName === FS_SERVER_KEY) this.warnIfFsUnannotated(outcome.tools);
+        });
 
         if (this.webFetch) {
             const advertised = webFetchAdvertised();
             const target = { server: WEB_FETCH_SERVER, tool: advertised.name.slice(WEB_FETCH_SERVER.length + TOOL_NAME_SEPARATOR.length) };
             this.toolTargets.set(advertised.name, target);
             this.toolTargets.set(normalizeToolName(advertised.name), target);
+            this.toolDefs.set(advertised.name, advertised);
             allTools.push(advertised);
         }
 
+        this.timings = {
+            connectMs,
+            toolsReadyMs: Math.max(0, Math.round(performance.now() - startedAt)),
+        };
         return allTools;
+    }
+
+    /**
+     * R10 P1-A4: the same-turn ordering of file writes relies on the adopted fs server advertising
+     * `readOnlyHint` on EVERY tool. A server version that drops it would silently demote ordering
+     * (an unannotated `fs` tool is classified as a barrier, so correctness holds and only parallel
+     * reads are lost). Warn, never fail: start-up must not depend on the server's metadata.
+     */
+    private warnIfFsUnannotated(tools: readonly ToolDefinition[]): void {
+        const unannotated = tools
+            .filter((t) => typeof t.annotations?.readOnlyHint !== "boolean")
+            .map((t) => t.name);
+        if (unannotated.length > 0) {
+            this.logger.warn(
+                { server: FS_SERVER_KEY, tools: unannotated },
+                "The fs MCP server did not annotate every tool with readOnlyHint; unannotated fs tools are ordered as barriers (same-turn reads of them no longer run in parallel)"
+            );
+        }
+    }
+
+    /**
+     * Per-server connect timings and the total tools-ready time of the latest {@link listAllTools}
+     * (R10 S3). Before the first call: no servers, 0 ms. A copy: callers may keep it.
+     */
+    startupTimings(): IRegistryStartupTimings {
+        return { connectMs: { ...this.timings.connectMs }, toolsReadyMs: this.timings.toolsReadyMs };
+    }
+
+    /**
+     * The concurrency class of one advertised tool (R10 P1), from its server-advertised annotations
+     * and the engine's name rules (see `classifyTool`). A tool the latest `listAllTools` did not
+     * advertise is classified by name alone.
+     */
+    toolClass(server: string, tool: string): ToolConcurrencyClass {
+        const qualified = `${server}${TOOL_NAME_SEPARATOR}${tool}`;
+        return classifyTool(qualified, this.toolDefs.get(qualified));
     }
 
     resolveToolName(advertised: string): { server: string; tool: string } {
