@@ -198,7 +198,7 @@ export interface RetryConfig {
   onBan: 'abort' | 'hitl'
 }
 
-export interface SearchResultSource {
+export interface PageSource {
   provider: string
   strategy: 'network' | 'dom'
   capturedUrl: string
@@ -212,7 +212,7 @@ export interface ParseResult {
   url: string
   snippet: string
   meta?: Record<string, string>
-  source?: SearchResultSource
+  source?: PageSource
 }
 
 export interface DomPattern {

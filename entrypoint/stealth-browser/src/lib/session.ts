@@ -26,9 +26,6 @@ export function getSessionId(): string {
   return _uuid
 }
 
-/** Alias of {@link getSessionId}; kept so agent-search imports keep working through the cutover. */
-export const getSearchSessionId = getSessionId
-
 /** Browser targetIds opened during this session. */
 export class BrowserSession {
   private targetIds: string[] = []
@@ -39,7 +36,7 @@ export class BrowserSession {
 
   /** Most recent browser targetId, or empty string. */
   get currentBrowserSessionId(): string {
-    return this.targetIds.at(-1) ?? ''
+    return this.targetIds[this.targetIds.length - 1] ?? ''
   }
 
   /** All targetIds from this session. */

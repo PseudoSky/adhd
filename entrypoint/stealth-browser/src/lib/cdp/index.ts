@@ -6,7 +6,8 @@
  * and any other ADHD tool that needs browser automation.
  *
  * Usage:
- *   import { CdpSession, ensureChromeRunning, createPageTarget } from '@adhd/cdp-connection'
+ *   import { cdp } from '@adhd/stealth-browser'
+ *   const { CdpSession, ensureChromeRunning, createPageTarget } = cdp
  *
  *   // 1. Ensure Chrome is running
  *   await ensureChromeRunning()
@@ -25,6 +26,12 @@
 // ─── Session (WebSocket CDP connection) ─────────────────────────────────────────
 
 export { CdpSession, rand, humanPause, shortPause } from './session.js'
+
+
+// ─── Facade and session identity (so the `cdp` namespace needs no deep import) ───
+
+export { CdpClient } from '../domains/index.js'
+export { browserSession, getSessionId } from '../session.js'
 
 // ─── Targets (pages: create, list, close) ───────────────────────────────────────
 

@@ -766,6 +766,12 @@ importers:
 
   entrypoint/stealth-browser:
     dependencies:
+      '@adhd/sox-service-proxy':
+        specifier: ^0.5.0
+        version: 0.5.0
+      '@adhd/sox-store-adapter':
+        specifier: ^0.13.3
+        version: 0.13.3
       '@xmldom/xmldom':
         specifier: ^0.9.10
         version: 0.9.12
@@ -1751,7 +1757,6 @@ packages:
     engines: {node: '>=20'}
     requiresBuild: true
     dev: false
-    optional: true
 
   /@adhd/sox-semantic@0.1.11:
     resolution: {integrity: sha512-TnbfdbsRZ711H6JU7CwwWi1WC6kG6c8wtfo5btDWARqeyIDTAQfME65RhyX2E+oZipiPPA0rKExB7zv7D3jaZw==}
@@ -1774,7 +1779,6 @@ packages:
     dependencies:
       '@adhd/sox-listen-guard': 0.1.1
     dev: false
-    optional: true
 
   /@adhd/sox-store-adapter@0.13.3:
     resolution: {integrity: sha512-LN0NZxqKvxkniRmHjg93Z1ZlKTLdEE0AGIeeh2HEFkKfD8VsvwB0HLKSRDjx1GbBMFgtwtMdzElp8ecLfJp7Ag==}

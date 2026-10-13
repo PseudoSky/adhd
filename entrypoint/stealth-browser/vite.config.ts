@@ -8,6 +8,7 @@ import { nxViteTsPaths } from '@nx/vite/plugins/nx-tsconfig-paths.plugin';
 import { importMetaUrlCjs } from '../../tools/vite-plugins/import-meta-url-cjs.mjs';
 import { projectCacheDir, projectCoverage } from '../../packages/workspace/workspace-base-vite-paths/src/index';
 
+import { externalizeRealDeps } from '../../tools/vite-plugins/externalize.mjs';
 import { vitestTestDefaults } from '../../tools/vite-plugins/vitest-pool-defaults.mjs';
 const repoRoot = path.resolve(__dirname, '../..');
 
@@ -40,8 +41,10 @@ export default defineConfig({
       formats: ['es', 'cjs'],
     },
     rollupOptions: {
+      // Real npm deps (incl. @adhd/sox-store-adapter, @adhd/sox-service-proxy) stay out of dist/index.js.
       external: [
         /^node:/,
+        ...externalizeRealDeps(__dirname),
       ],
     },
   },
