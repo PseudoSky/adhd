@@ -306,7 +306,8 @@
       ],
       "guard": "python3 docs/plan/stealth-browser/scripts/guard.py resolve-findings",
       "artifacts": [
-        "entrypoint/stealth-browser/",
+        "packages/stealth/stealth-core-browser/",
+        "entrypoint/stealth-search/",
         "docs/plan/stealth-browser/review/RESOLUTION.json",
         "packages/resilience/resilience-core-tripwire/"
       ],
