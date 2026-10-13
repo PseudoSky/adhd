@@ -873,6 +873,19 @@
       ],
       "context": "contexts/tripwire-reverse-relink.md",
       "notes": "executor=typescript-pro tier=sonnet/medium; dispatcher-gated like agent-search-relink: after the release, pnpm add @adhd/resilience-core-tripwire@^0.1.0 in the reverse worktree, commit package.json and pnpm-lock.yaml, re-run the verification, ff-only merge feat/tripwire-adopt into reverse main and remove the worktree and branch"
+    },
+    "split-plan-repair": {
+      "kind": "work",
+      "phase": "scaffold",
+      "depends_on": [
+        "tripwire-pack"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py split-plan-repair",
+      "artifacts": [
+        "docs/plan/stealth-browser/"
+      ],
+      "context": "contexts/split-plan-repair.md",
+      "notes": "plan-builder amendment: rename core to @adhd/stealth-core-browser, port search to @adhd/stealth-search, retire surface-hosts/tracing-plugin/tracing-namespace-proof/agent-search-cutover/agent-search-relink"
     }
   },
   "authored_with": {
