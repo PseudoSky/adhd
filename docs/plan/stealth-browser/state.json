@@ -1348,6 +1348,21 @@
         "docs/plan/stealth-browser/contexts/tripwire-reverse-migrate.md"
       ],
       "by": "pseudosky"
+    },
+    {
+      "ts": "2026-10-13T09:40:04.652Z",
+      "state": "split-plan-repair",
+      "class": "executor",
+      "type": "plan-edit",
+      "reason": "split amendment: trimmed read_only contexts, README/SCOPE/APPROVAL-split/APPROVALS rewritten for three packages, audit-fixes.4/.5 cover both packages, gates-first.11 not folded",
+      "files_synced": [
+        "docs/plan/stealth-browser/README.md",
+        "docs/plan/stealth-browser/SCOPE.md",
+        "docs/plan/stealth-browser/APPROVAL-split.md",
+        "docs/plan/stealth-browser/APPROVALS.md",
+        "docs/plan/stealth-browser/scripts/guard.py"
+      ],
+      "by": "pseudosky"
     }
   ],
   "authored_with": {
