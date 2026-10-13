@@ -178,13 +178,6 @@
       "start_ref": null,
       "end_ref": null
     },
-    "agent-search-cutover": {
-      "status": "pending",
-      "started_at": null,
-      "done_at": null,
-      "start_ref": null,
-      "end_ref": null
-    },
     "prod-errors": {
       "status": "pending",
       "started_at": null,

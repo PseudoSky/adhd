@@ -1406,87 +1406,6 @@
       "cwd": "repo-root"
     },
     {
-      "id": "agent-search-cutover.1",
-      "phase": "verify",
-      "tier": null,
-      "kind": "command",
-      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py agent-search-cutover --only agent-search-cutover.1",
-      "expect": "exit0",
-      "cwd": "repo-root"
-    },
-    {
-      "id": "agent-search-cutover.2",
-      "phase": "verify",
-      "tier": null,
-      "kind": "command",
-      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py agent-search-cutover --only agent-search-cutover.2",
-      "expect": "exit0",
-      "cwd": "repo-root"
-    },
-    {
-      "id": "agent-search-cutover.3",
-      "phase": "verify",
-      "tier": null,
-      "kind": "command",
-      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py agent-search-cutover --only agent-search-cutover.3",
-      "expect": "exit0",
-      "cwd": "repo-root"
-    },
-    {
-      "id": "agent-search-cutover.4",
-      "phase": "verify",
-      "tier": null,
-      "kind": "command",
-      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py agent-search-cutover --only agent-search-cutover.4",
-      "expect": "exit0",
-      "cwd": "repo-root"
-    },
-    {
-      "id": "agent-search-cutover.5",
-      "phase": "verify",
-      "tier": null,
-      "kind": "command",
-      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py agent-search-cutover --only agent-search-cutover.5",
-      "expect": "exit0",
-      "cwd": "repo-root"
-    },
-    {
-      "id": "agent-search-cutover.6",
-      "phase": "verify",
-      "tier": null,
-      "kind": "command",
-      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py agent-search-cutover --only agent-search-cutover.6",
-      "expect": "exit0",
-      "cwd": "repo-root"
-    },
-    {
-      "id": "agent-search-cutover.7",
-      "phase": "verify",
-      "tier": null,
-      "kind": "command",
-      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py agent-search-cutover --only agent-search-cutover.7",
-      "expect": "exit0",
-      "cwd": "repo-root"
-    },
-    {
-      "id": "agent-search-cutover.8",
-      "phase": "verify",
-      "tier": null,
-      "kind": "command",
-      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py agent-search-cutover --only agent-search-cutover.8",
-      "expect": "exit0",
-      "cwd": "repo-root"
-    },
-    {
-      "id": "agent-search-cutover.9",
-      "phase": "verify",
-      "tier": null,
-      "kind": "command",
-      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py agent-search-cutover --only agent-search-cutover.9",
-      "expect": "exit0",
-      "cwd": "repo-root"
-    },
-    {
       "id": "prod-errors.1",
       "phase": "surface",
       "tier": null,
@@ -2563,42 +2482,6 @@
       "tier": null,
       "kind": "command",
       "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py merge-readiness --only merge-readiness.6",
-      "expect": "exit0",
-      "cwd": "repo-root"
-    },
-    {
-      "id": "agent-search-cutover.10",
-      "phase": "verify",
-      "tier": null,
-      "kind": "command",
-      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py agent-search-cutover --only agent-search-cutover.10",
-      "expect": "exit0",
-      "cwd": "repo-root"
-    },
-    {
-      "id": "agent-search-cutover.11",
-      "phase": "verify",
-      "tier": null,
-      "kind": "command",
-      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py agent-search-cutover --only agent-search-cutover.11",
-      "expect": "exit0",
-      "cwd": "repo-root"
-    },
-    {
-      "id": "agent-search-cutover.12",
-      "phase": "verify",
-      "tier": null,
-      "kind": "command",
-      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py agent-search-cutover --only agent-search-cutover.12",
-      "expect": "exit0",
-      "cwd": "repo-root"
-    },
-    {
-      "id": "agent-search-cutover.13",
-      "phase": "verify",
-      "tier": null,
-      "kind": "command",
-      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py agent-search-cutover --only agent-search-cutover.13",
       "expect": "exit0",
       "cwd": "repo-root"
     },

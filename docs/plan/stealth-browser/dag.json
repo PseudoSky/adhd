@@ -252,7 +252,6 @@
         "tests-unit-extract",
         "tests-unit-surface",
         "tests-use-cases",
-        "agent-search-cutover",
         "mig-docs",
         "audit-fixes",
         "sp-switch",
@@ -380,41 +379,6 @@
       "context": "contexts/merge-readiness.md",
       "notes": "executor=dispatcher tier=human/dispatcher; the release decision covers both packages (@adhd/stealth-browser and @adhd/resilience-core-tripwire) and waits for tripwire-reverse-migrate"
     },
-    "agent-search-cutover": {
-      "kind": "work",
-      "phase": "verify",
-      "depends_on": [
-        "tests-use-cases",
-        "tripwire-pack"
-      ],
-      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py agent-search-cutover",
-      "artifacts": [
-        "/Users/nix/dev/ai/scratch/agent-browser/adhd/",
-        "/Users/nix/dev/ai/scratch/agent-browser/cdp-query-client.ts",
-        "/Users/nix/dev/ai/scratch/agent-browser/cdp-search.ts",
-        "/Users/nix/dev/ai/scratch/agent-browser/chrome-lifecycle-test.ts",
-        "/Users/nix/dev/ai/scratch/agent-browser/network-capture.ts",
-        "/Users/nix/dev/ai/scratch/agent-browser/search-challenge.ts",
-        "/Users/nix/dev/ai/scratch/agent-browser/search-dom.ts",
-        "/Users/nix/dev/ai/scratch/agent-browser/search-fetch.ts",
-        "/Users/nix/dev/ai/scratch/agent-browser/search-guard-test.ts",
-        "/Users/nix/dev/ai/scratch/agent-browser/search-mcp-source.ts",
-        "/Users/nix/dev/ai/scratch/agent-browser/search-network.ts",
-        "/Users/nix/dev/ai/scratch/agent-browser/search-tripwire.ts",
-        "/Users/nix/dev/ai/scratch/agent-browser/search/queries/activity.ts",
-        "/Users/nix/dev/ai/scratch/agent-browser/search/queries/context.ts",
-        "/Users/nix/dev/ai/scratch/agent-browser/search/queries/last-search.ts",
-        "/Users/nix/dev/ai/scratch/agent-browser/package.json",
-        "/Users/nix/dev/ai/scratch/agent-browser/AGENTS.md",
-        "/Users/nix/dev/ai/scratch/agent-browser/SEARCH.md",
-        "/Users/nix/dev/ai/scratch/agent-browser/FEATURES.md",
-        "/Users/nix/dev/ai/scratch/agent-browser/FETCH.md",
-        "/Users/nix/dev/ai/scratch/agent-browser/docs/",
-        "/Users/nix/dev/node/adhd/.worktrees/stealth-browser/docs/plan/stealth-browser/evidence/"
-      ],
-      "context": "contexts/agent-search-cutover.md",
-      "notes": "executor=typescript-pro tier=sonnet/high; REQUIRED, runs before the audit against a tarball packed from this worktree; the post-release link:/published step is agent-search-relink; also adopts @adhd/resilience-core-tripwire (search-tripwire.ts becomes a thin adapter; tarball installed as a real directory, range ^0.1.0 recorded) in the same pass, criteria .10-.13"
-    },
     "prod-errors": {
       "kind": "work",
       "phase": "surface",
@@ -486,8 +450,7 @@
         "tests-unit-extract",
         "tests-unit-surface",
         "mig-docs",
-        "tests-use-cases",
-        "agent-search-cutover"
+        "tests-use-cases"
       ],
       "guard": "python3 docs/plan/stealth-browser/scripts/guard.py audit-pre-review",
       "artifacts": [
