@@ -1198,6 +1198,17 @@
         "docs/plan/stealth-browser/contexts/agent-search-relink.md"
       ],
       "by": "plan-builder"
+    },
+    {
+      "ts": "2026-10-13T09:28:21.454Z",
+      "state": "surface-hosts",
+      "class": "executor",
+      "type": "retire-state",
+      "reason": "split amendment: zero implementation commits ([psm:surface-hosts] count 0); manager-seam work moves to core-seam, host work to search-hosts",
+      "files_synced": [
+        "docs/plan/stealth-browser/contexts/surface-hosts.md"
+      ],
+      "by": "pseudosky"
     }
   ],
   "authored_with": {
