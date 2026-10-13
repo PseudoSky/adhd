@@ -59,6 +59,31 @@
       "options": {
         "packageRoot": "{projectRoot}/dist"
       }
+    },
+    "typecheck-spec": {
+      "//": "Type-checks the SPEC corpus (entrypoint/policy/tsconfig.spec.json). Closes lane-reachability rule 6: a tsconfig.spec.json with no compiling target lets the spec corpus carry type errors no gate can see (nx.json production namedInput excludes it). The ratchet fails on any per-file increase over tools/nx-plugins/build/executors/typecheck-spec/policy.baseline.json or on include narrowing. Wired into test.dependsOn so nx affected -t test runs it.",
+      "executor": "nx:run-commands",
+      "cache": true,
+      "inputs": [
+        "default",
+        {
+          "externalDependencies": [
+            "typescript"
+          ]
+        }
+      ],
+      "options": {
+        "cwd": ".",
+        "command": "node tools/nx-plugins/build/executors/typecheck-spec/ratchet.mjs --tsconfig entrypoint/policy/tsconfig.spec.json --baseline tools/nx-plugins/build/executors/typecheck-spec/policy.baseline.json"
+      }
+    },
+    "test": {
+      "//": "Partial override: only dependsOn is added (typecheck-spec, so the spec corpus is type-checked before it runs); the command stays the workspace default (vite.config.ts is .ts here, no .mts override needed).",
+      "dependsOn": [
+        "lint",
+        "^build",
+        "typecheck-spec"
+      ]
     }
   },
   "release": {

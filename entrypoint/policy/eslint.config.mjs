@@ -21,7 +21,12 @@ export default [
       '@nx/dependency-checks': [
         'error',
         {
-          ignoredFiles: ['{projectRoot}/vite.config.{js,ts,mjs,mts}', '{projectRoot}/**/*.e2e.{ts,tsx,mts,cts}'],
+          ignoredFiles: [
+            '{projectRoot}/vite.config.{js,ts,mjs,mts}',
+            '{projectRoot}/**/*.e2e.{ts,tsx,mts,cts}',
+            // Specs run the real bin code in process and are test-only: vitest is a workspace dev dependency, not a runtime one.
+            '{projectRoot}/src/test/**',
+          ],
           ignoredDependencies,
         },
       ],
