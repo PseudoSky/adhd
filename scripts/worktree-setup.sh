@@ -101,23 +101,41 @@ if [ -L "$target/node_modules" ] || [ ! -d "$target/node_modules" ]; then
   exit 1
 fi
 
-# Seed the gitnexus index so `gx` works here without a cold analyze (757f40d7).
-# gitnexus 1.6.5 keeps the index in <checkout>/.gitnexus and only collapses worktree
-# *names* to the repo's (GITNEXUS_HOME just moves the registry), so a new worktree
-# has no index. Clone main's (APFS clonefile / reflink: ~free) and run an incremental
-# analyze detached, which registers this worktree (~80s vs a cold full index).
-# Nx needs no seeding: with nx.json's cacheDirectory unpinned, Nx 23 shares one cache
-# + index DB per user across every checkout of the workspace.
+# gitnexus index for the new worktree (757f40d7, 3933e7f5).
+# gitnexus 1.6.5 stores the index in <checkout>/.gitnexus (GITNEXUS_HOME only moves the
+# registry) and has no clone command, so a new worktree starts with none. Measured here:
+#   cold `analyze` 100s | copy main's index + `gitnexus index` 0.1s | incremental analyze ~90s
+# so the copy only pays when main's index is COMPLETE for the commit the worktree starts at:
+#   - main's meta.json lastCommit == the worktree's HEAD, and
+#   - main has no .reindex.lock (the PostToolUse hook / worktree-merge write it while analyze
+#     rewrites .gitnexus; copying then could capture a half-written graph).
+# Then the copy is registered with `gitnexus index` (documented: "no re-analysis needed").
+# In every other case a standard `gitnexus analyze --index-only` runs detached (cold, ~100s).
+# Nx needs no seeding: with nx.json's cacheDirectory unpinned, Nx 23 shares one cache and one
+# index DB per user across every checkout of the workspace.
 # Best-effort: never fails setup. WORKTREE_SEED_GITNEXUS=0 turns it off.
+gx_background_analyze() {
+  mkdir -p "$target/tmp"
+  ( cd "$target" && nohup gitnexus analyze --index-only ${2:-} . >"$target/tmp/gitnexus-analyze.log" 2>&1 & )
+  echo "worktree-setup: gitnexus $1 — full analyze running in the background (log: $target/tmp/gitnexus-analyze.log, ~100s until gx answers)"
+}
 if [ "${WORKTREE_SEED_GITNEXUS:-1}" != "0" ] && [ -d "$main_root/.gitnexus" ] && command -v gitnexus >/dev/null 2>&1; then
-  if [ -e "$main_root/.gitnexus/.reindex.lock" ]; then
-    echo "worktree-setup: gitnexus is indexing right now — skipped the index seed (run: cd $target && gitnexus analyze --index-only)"
-  elif { cp -cR "$main_root/.gitnexus" "$target/.gitnexus" 2>/dev/null || cp -R "$main_root/.gitnexus" "$target/.gitnexus" 2>/dev/null; }; then
-    mkdir -p "$target/tmp"
-    ( cd "$target" && nohup gitnexus analyze --index-only . >"$target/tmp/gitnexus-analyze.log" 2>&1 & ) 
-    echo "worktree-setup: gitnexus index cloned; registering in the background (log: $target/tmp/gitnexus-analyze.log, ~80s until gx answers)"
+  main_idx="$main_root/.gitnexus"
+  indexed=""
+  if [ -f "$main_idx/meta.json" ]; then
+    indexed="$(node -e 'try{process.stdout.write(String(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).lastCommit||""))}catch{}' "$main_idx/meta.json")"
+  fi
+  wt_head="$(git -C "$target" rev-parse HEAD)"
+  if [ -e "$main_idx/.reindex.lock" ]; then
+    gx_background_analyze "main is re-indexing right now, so its index is not copied"
+  elif [ -z "$indexed" ] || [ "$indexed" != "$wt_head" ]; then
+    gx_background_analyze "main's index is not at this commit (indexed ${indexed:0:7}, worktree ${wt_head:0:7}), so it is not copied"
+  elif { cp -cR "$main_idx" "$target/.gitnexus" 2>/dev/null || cp -R "$main_idx" "$target/.gitnexus" 2>/dev/null; } \
+    && [ ! -e "$main_idx/.reindex.lock" ] \
+    && (cd "$target" && gitnexus index . >/dev/null 2>&1); then
+    echo "worktree-setup: gitnexus index copied from main (at ${wt_head:0:7}) and registered — gx is ready"
   else
-    echo "worktree-setup: gitnexus index clone failed — run: cd $target && gitnexus analyze --index-only"
+    gx_background_analyze "index copy failed or main started re-indexing mid-copy (a partial copy is rebuilt with --force)" --force
   fi
 fi
 

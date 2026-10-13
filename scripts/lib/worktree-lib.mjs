@@ -5,11 +5,11 @@
  * scrubs ambient GIT_* variables (50e8c966) so a hook-exported GIT_DIR can never
  * redirect a call to the wrong repo.
  */
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { basename, dirname, join, resolve, sep } from 'node:path';
-import { lstatSync, realpathSync } from 'node:fs';
+import { existsSync, lstatSync, realpathSync, statSync, writeFileSync, rmSync } from 'node:fs';
 
 const require = createRequire(import.meta.url);
 const { cleanGitEnv } = require('../../tools/nx-plugins/lib/git-env.js');
@@ -163,4 +163,36 @@ export function shortIdsIn(text, exclude = new Set()) {
     if (/[0-9]/.test(m[0]) && /[a-f]/.test(m[0]) && !exclude.has(m[0])) out.add(m[0]);
   }
   return [...out];
+}
+
+/** A reindex lock older than this is treated as abandoned (the PostToolUse hook uses the same TTL). */
+export const REINDEX_LOCK_TTL_MS = 10 * 60 * 1000;
+
+/**
+ * Refresh main's gitnexus index after a merge so the next worktree can copy a COMPLETE index
+ * (see worktree-setup.sh). Starts a detached `gitnexus analyze --skip-agents-md --skip-skills`
+ * in `root` under `<root>/.gitnexus/.reindex.lock` — the same lock the sox-tools PostToolUse
+ * hook honours, so the two never write the index at once. Best-effort: never throws.
+ * `WORKTREE_REFRESH_GITNEXUS=0` turns it off.
+ * @returns {string} one human-readable line saying what happened
+ */
+export function startMainIndexRefresh(root) {
+  try {
+    if (process.env.WORKTREE_REFRESH_GITNEXUS === '0') return 'gitnexus refresh disabled (WORKTREE_REFRESH_GITNEXUS=0)';
+    const dir = join(root, '.gitnexus');
+    if (!existsSync(dir)) return 'gitnexus: main has no index; nothing to refresh';
+    if (spawnSync('gitnexus', ['--version'], { stdio: 'ignore' }).status !== 0) return 'gitnexus not on PATH; main index not refreshed';
+    const lock = join(dir, '.reindex.lock');
+    if (existsSync(lock)) {
+      if (Date.now() - statSync(lock).mtimeMs < REINDEX_LOCK_TTL_MS) return 'gitnexus: main is already re-indexing (lock held); not starting another';
+      rmSync(lock, { force: true });
+    }
+    writeFileSync(lock, String(process.pid), { flag: 'wx' });
+    const q = (x) => `'${x.replace(/'/g, `'\\''`)}'`;
+    const child = spawn('/bin/sh', ['-c', `gitnexus analyze --skip-agents-md --skip-skills . ; rm -f ${q(lock)}`], { cwd: root, detached: true, stdio: 'ignore' });
+    child.unref();
+    return 'gitnexus: refreshing main\'s index in the background (~40s); new worktrees copy it once it finishes';
+  } catch (e) {
+    return `gitnexus refresh not started: ${e.message}`;
+  }
 }
