@@ -1209,6 +1209,17 @@
         "docs/plan/stealth-browser/contexts/surface-hosts.md"
       ],
       "by": "pseudosky"
+    },
+    {
+      "ts": "2026-10-13T09:28:21.607Z",
+      "state": "tracing-plugin",
+      "class": "executor",
+      "type": "retire-state",
+      "reason": "split amendment: superseded by search-tracing (tracing and telemetry now live in the stealth-search entrypoint)",
+      "files_synced": [
+        "docs/plan/stealth-browser/contexts/tracing-plugin.md"
+      ],
+      "by": "pseudosky"
     }
   ],
   "authored_with": {
