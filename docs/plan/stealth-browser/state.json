@@ -326,11 +326,11 @@
       "end_ref": null
     },
     "split-plan-repair": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-10-13T09:21:05.569Z",
-      "done_at": null,
+      "done_at": "2026-10-13T09:40:36.922Z",
       "start_ref": "5c07337fe460f053a5ab793884e28bc0f79db6a6",
-      "end_ref": null
+      "end_ref": "6f2a0c7ee34e8c9680b36c24862bf6bd733fa7ad"
     },
     "core-scaffold": {
       "status": "pending",
@@ -788,6 +788,18 @@
       "audit_criteria_total": 29,
       "by": "pseudosky",
       "note": "guard 0 (29/29) verified by orchestrator; commits 9bbfe724..9f3da49b; plan-repair fa70b1c8 95436fa3"
+    },
+    {
+      "ts": "2026-10-13T09:40:36.922Z",
+      "from": "split-plan-repair",
+      "to": "split-plan-repair",
+      "start_ref": "5c07337fe460f053a5ab793884e28bc0f79db6a6",
+      "end_ref": "6f2a0c7ee34e8c9680b36c24862bf6bd733fa7ad",
+      "audit_exit": 0,
+      "audit_criteria_passed": 7,
+      "audit_criteria_total": 7,
+      "by": "pseudosky",
+      "note": ""
     }
   ],
   "amendment_log": [
@@ -1370,7 +1382,7 @@
     "version": "0.8.35",
     "hash": "0b6bc1f3d70e"
   },
-  "current_state": "split-plan-repair",
+  "current_state": "core-scaffold",
   "dod_provenance": {
     "confirmed_at": "2026-10-12T23:49:38.410Z",
     "by": "pseudosky",
