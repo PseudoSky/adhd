@@ -31,7 +31,7 @@ export interface IPolicyIssue {
 /** Result of the pure `compile`. */
 export type ICompileResult =
   | { readonly ok: true; readonly policy: ICompiledPolicy; readonly warnings: readonly IPolicyIssue[] }
-  | { readonly ok: false; readonly errors: readonly IPolicyIssue[] };
+  | { readonly ok: false; readonly errors: readonly IPolicyIssue[]; /** Warnings found before the failure, so `verify` can report every issue (D-05). */ readonly warnings?: readonly IPolicyIssue[] };
 
 /** A tool call to decide on. */
 export interface IToolCall {

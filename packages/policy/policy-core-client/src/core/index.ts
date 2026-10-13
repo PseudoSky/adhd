@@ -11,3 +11,4 @@ export { evaluate, evaluateDetailed } from './evaluate/evaluate';
 export { explain } from './evaluate/explain';
 export { resolveAttributes as resolve } from './attributes/resolve';
 export { narrowAttributes as narrow } from './attributes/narrow';
+export { LAYER_ORDER } from './compile/layers';

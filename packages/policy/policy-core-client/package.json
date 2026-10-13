@@ -5,7 +5,11 @@
   "main": "./index.js",
   "types": "./index.d.ts",
   "dependencies": {
-    "@adhd/data-query-engine": "^2.3.10"
+    "@adhd/apigen-base-errors": "^0.2.3",
+    "@adhd/data-query-engine": "^2.3.10",
+    "@adhd/environment": "^0.1.8",
+    "@adhd/environment-base-spec": "^0.1.4",
+    "yaml": "^1.10.2"
   },
   "exports": {
     ".": {

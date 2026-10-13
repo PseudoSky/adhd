@@ -39,7 +39,7 @@ export function compile(
     const permissions = compilePermissions(ordered, documents);
     const declared = checkDeclarations({ ordered, documents, defaults, permissions });
     const errors: IPolicyIssue[] = [...issues, ...declared.errors];
-    if (errors.length > 0) return { ok: false, errors };
+    if (errors.length > 0) return { ok: false, errors, warnings: declared.warnings };
 
     const body = {
       schemaVersion: 1 as const,
