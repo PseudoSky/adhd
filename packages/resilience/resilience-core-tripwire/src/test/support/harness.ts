@@ -91,7 +91,11 @@ export function makeEnv<C extends TripContext = TripContext>(
   const warnings: TripwireWarning[] = [];
   const auditPath = over.auditPath ?? `${STATE_DIR}/audit.log`;
   const base = (fs: FsPort, o: EnvOptions): Tripwire<C> => {
-    const { linkSupported: _ignored, ...rest } = { ...over, ...o };
+    const {
+      linkSupported: _ignored,
+      fs: explicitFs,
+      ...rest
+    } = { ...over, ...o };
     return createTripwire<C>({
       namespace: 'test-ns',
       stateDir: STATE_DIR,
@@ -99,7 +103,8 @@ export function makeEnv<C extends TripContext = TripContext>(
       clock: clock.fn,
       onWarning: (w) => warnings.push(w),
       ...rest,
-      fs,
+      // an explicit `fs` (e.g. a tagged view) wins over the process view
+      fs: explicitFs ?? fs,
     });
   };
   const sharedFs = processView(mfs);

@@ -115,7 +115,7 @@ export interface MemoryFsOptions {
 
 /** The memory fs: an `FsPort` plus inspection and interleaving hooks. */
 export interface MemoryFs extends FsPort {
-  /** Every executed operation, in execution order. */
+  /** Every attempted operation (failed ones too), in execution order. */
   readonly ops: FsOpRecord[];
   /** File content as UTF-8, or undefined when absent. */
   readText(path: string): string | undefined;
@@ -214,7 +214,7 @@ export function createMemoryFs(opts: MemoryFsOptions = {}): MemoryFs {
     return rule.path.test(rec.path);
   };
 
-  /** Hold (when scheduling), apply failure rules, then log the op. */
+  /** Hold (when scheduling), log the op, then apply failure rules. */
   const enter = async (
     op: FsOpName,
     rawPath: string,
@@ -226,13 +226,13 @@ export function createMemoryFs(opts: MemoryFsOptions = {}): MemoryFs {
       const queue = held;
       await new Promise<void>((release) => queue.push({ rec, release }));
     }
+    ops.push(rec);
     const rule = rules.find((r) => matches(r, rec));
     if (rule) {
       if (rule.times !== undefined) {
         rule.times -= 1;
         if (rule.times <= 0) rules.splice(rules.indexOf(rule), 1);
       }
-      ops.push(rec);
       observer?.(rec);
       throw fsError(rule.code, op, rec.path);
     }
@@ -240,7 +240,6 @@ export function createMemoryFs(opts: MemoryFsOptions = {}): MemoryFs {
   };
 
   const done = (rec: FsOpRecord): void => {
-    ops.push(rec);
     observer?.(rec);
   };
 

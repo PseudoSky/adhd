@@ -205,6 +205,34 @@ export function createFileStorage(o: FileStorageOptions): TripwireStorage {
     return true;
   };
 
+  /**
+   * Rename the block sidecar aside; null when there is none (or it cannot
+   * be moved: the count is forensic only and must never fail a trip).
+   */
+  const stashBlocked = async (key: string): Promise<string | null> => {
+    const aside = `${blockedPath(key)}.${sfx()}.stash`;
+    try {
+      await fs.rename(blockedPath(key), aside);
+      return aside;
+    } catch {
+      return null;
+    }
+  };
+
+  /** Append a stashed count back onto the sidecar (best-effort). */
+  const restoreBlocked = async (key: string, aside: string): Promise<void> => {
+    try {
+      const bytes = await fs.readFile(aside);
+      if (bytes.length > 0) {
+        await fs.appendFile(blockedPath(key), bytes, FILE_MODE);
+      }
+    } catch {
+      // forensic count only; the lock itself is unaffected
+    } finally {
+      await ignore(fs.unlink(aside));
+    }
+  };
+
   return {
     async readLock(key) {
       assertValidKey(key);
@@ -233,19 +261,33 @@ export function createFileStorage(o: FileStorageOptions): TripwireStorage {
       await ensureDir();
       const p = lockPath(key);
       if (await exists(p)) return false;
-      // A gate that raced the previous clear may have left a count behind.
-      await ignore(fs.unlink(blockedPath(key)));
-      const tmp = await writeTmp(p, raw);
+      // A gate that raced the previous clear may have left a count behind:
+      // move it aside BEFORE the create. When this call wins, every byte
+      // set aside predates the new lock (stale) and is dropped; when it
+      // loses, the bytes may be blocks counted on the winner's lock and
+      // are appended back, so a losing trip never erases a real count.
+      const stash = await stashBlocked(key);
+      let created = false;
       try {
-        await fs.link(tmp, p);
-        return true;
-      } catch (e) {
-        const code = errCode(e);
-        if (code === 'EEXIST') return false;
-        if (!code || !LINK_UNSUPPORTED.has(code)) throw e;
-        return await createDirect(p, raw);
+        const tmp = await writeTmp(p, raw);
+        try {
+          await fs.link(tmp, p);
+          created = true;
+        } catch (e) {
+          const code = errCode(e);
+          if (code !== 'EEXIST') {
+            if (!code || !LINK_UNSUPPORTED.has(code)) throw e;
+            created = await createDirect(p, raw);
+          }
+        } finally {
+          await ignore(fs.unlink(tmp));
+        }
+        return created;
       } finally {
-        await ignore(fs.unlink(tmp));
+        if (stash !== null) {
+          if (created) await ignore(fs.unlink(stash));
+          else await restoreBlocked(key, stash);
+        }
       }
     },
 
