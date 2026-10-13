@@ -243,13 +243,19 @@ export async function resolveMcpStdioSource(
       { timeout: callTimeoutMs, ...(signal ? { signal } : {}) }
     ) as Promise<CallToolResult>;
 
+  // `composeSchemas` stamps `x-apigen-safe: true` on any tool whose arguments are all
+  // primitives (the HTTP GET-eligibility rule), which would let an upstream's own argument
+  // shape mark a destructive tool safe. No upstream tool is ever safe (G3).
+  const composed = composeSchemas(generated, []);
+  for (const entry of Object.values(composed)) entry['x-apigen-safe'] = false;
+
   return {
     sourceId: `bin:${commandBaseName(spec.command)}`,
     operations,
     pkg: {
       id: server,
       version: info?.version ?? '0.0.0',
-      schemas: composeSchemas(generated, []),
+      schemas: composed,
       importPath: `bin:${spec.command}`,
       fns,
       createClient: async () => undefined,
