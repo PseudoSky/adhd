@@ -132,7 +132,9 @@ jobs:
       # G12 planning record (595965cc T43): recorded rigor >= derived rigor, and a "not-testing" list at
       # Standard and Deep. Reads the trigger table from docs/standards/testing.md.
       - name: Planning record check (G12)
-        run: node tools/nx-plugins/test/routing/test-routing.mjs check --range "origin/${{ github.base_ref }}...HEAD"
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: node tools/nx-plugins/test/routing/test-routing.mjs check --range "origin/${BASE_REF}...HEAD"
 
       # Lockfile freshness (backlog 4f26493e AC2): names the package.json/specifier
       # that drifted from pnpm-lock.yaml (see .githooks/pre-push).

@@ -217,6 +217,22 @@ test('T43.AC5: the range check fails a change with no record, passes one with a 
   } finally { s.done(); }
 });
 
+test('T43.AC5: a three-dot range is the branch\'s own change: commits and paths that only the base gained are not its', () => {
+  const s = sandbox();
+  try {
+    const fork = s.commit('README.md', 'chore: start');
+    s.git('branch', 'feat');
+    s.commit('db/migrations/002.sql', 'fix: base-side migration with no record'); // main moves on after the fork
+    s.git('checkout', '-q', 'feat');
+    s.commit('lib/b.ts', `feat: b\n\n${record(base)}`);
+    const r = checkRange({ range: 'main...feat', implementation: withDoc({ enforcedFrom: '2026-10-20' }), cwd: s.dir });
+    assert.equal(r.ok, true, r.errors.join('; '));
+    assert.equal(r.commits, 1, 'only the branch\'s own commit is in scope');
+    assert.deepEqual(r.derived.triggers, [], 'the base-side migration is not a trigger of this change');
+    assert.ok(fork);
+  } finally { s.done(); }
+});
+
 test('T43.AC5: the range check runs git in the caller\'s directory, not the hook\'s repository', () => {
   const s = sandbox();
   try {

@@ -77,8 +77,10 @@ jobs:
       # G12 planning record (595965cc T43) over the pushed range; a new branch or a first push has no
       # usable "before", so it checks the head commit alone.
       - name: Planning record check (G12)
+        env:
+          BEFORE_SHA: ${{ github.event.before }}
         run: |
-          before="${{ github.event.before }}"
+          before="$BEFORE_SHA"
           case "$before" in ""|0000000000000000000000000000000000000000) before="HEAD~1" ;; esac
           node tools/nx-plugins/test/routing/test-routing.mjs check --range "$before..HEAD"
       # Lockfile freshness (backlog 4f26493e AC2): pnpm-lock.yaml must match every

@@ -302,19 +302,23 @@ function parseLog(raw) {
 }
 
 const changedPaths = (sha, cwd) => git(['diff-tree', '--no-commit-id', '--name-only', '-r', '-m', '--first-parent', sha], cwd).split('\n').filter(Boolean);
-const addedPaths = (sha, cwd) => git(['diff-tree', '--no-commit-id', '--name-only', '--diff-filter=A', '-r', '-m', '--first-parent', sha], cwd).split('\n').filter(Boolean);
 
-/** G12 over a commit range: commits authored before the enforcement date are exempt. */
+/**
+ * G12 over a commit range. The change is the branch's own work: commits are `base..head` (a three-dot
+ * range is normalised, so commits only the base gained are not the branch's) and the changed paths are
+ * the diff from the merge-base to head. Its record is the newest commit message in scope that carries a
+ * `## Testing record`. Commits authored before the enforcement date are exempt.
+ */
 export function checkRange({ range, implementation, cwd = REPO_ROOT }) {
-  const commits = parseLog(git(['log', `--format=%H${SEP}%aI${SEP}%B${END}`, range], cwd));
+  const [base, head = 'HEAD'] = range.includes('...') ? range.split('...') : range.split('..');
+  const commits = parseLog(git(['log', `--format=%H${SEP}%aI${SEP}%B${END}`, `${base}..${head}`], cwd));
   const from = implementation.enforcedFrom;
   const inScope = commits.filter((c) => !from || c.date.slice(0, 10) >= from);
   if (inScope.length === 0) {
     return { ok: true, exempt: true, errors: [], note: commits.length ? `every commit in ${range} predates the enforcement date ${from}` : `${range} holds no commits` };
   }
-  const [base, head] = range.includes('...') ? range.split('...') : range.split('..');
-  const paths = git(['diff', '--name-only', base, head || 'HEAD'], cwd).split('\n').filter(Boolean);
-  const added = git(['diff', '--name-only', '--diff-filter=A', base, head || 'HEAD'], cwd).split('\n').filter(Boolean);
+  const paths = git(['diff', '--name-only', `${base}...${head}`], cwd).split('\n').filter(Boolean);
+  const added = git(['diff', '--name-only', '--diff-filter=A', `${base}...${head}`], cwd).split('\n').filter(Boolean);
   const withRecord = inScope.find((c) => parseRecord(c.body) !== null);
   const result = checkRecord({ body: withRecord ? withRecord.body : '', paths, added, implementation });
   return { ...result, range, commits: inScope.length, recordCommit: withRecord ? withRecord.sha : null };

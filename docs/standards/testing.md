@@ -92,6 +92,8 @@ Terms used in the binding table. **Mechanism class:** C0 no mechanism; C1 text a
 
    *Enforced from: 2026-10-20.* G12 checks only commits authored on or after this date; earlier commits are exempt so that tightening the gate never turns unrelated history red (STRATEGY 10, ratchet).
 
+   *What a range is:* for `check --range <base>..<head>` the change is the branch's own work: the commits in `base..head`, the paths changed from the merge-base to `head`, and the newest commit message in scope that carries a `## Testing record` as its record.
+
    *Where the rigor record lives:* the `## Testing record` section in the item's body (`entrypoint/backlog/skill/SKILL.md`, "Testing record"), or in the change description when there is no item.
 
    *Rigor distribution report (D24):* `node tools/nx-plugins/test/routing/test-routing.mjs distribution` derives the rigor of each recent merged change from git history. Distribution window: 30 merged changes. A change with no testing record in its commit message counts as `unrecorded` and is derived as new behavior at Standard (STRATEGY 6.6).
