@@ -43,12 +43,13 @@ export async function serveVerb(argv: readonly string[], deps: IVerbDeps & { sig
       args: split.childArgs,
       ...(split.name !== undefined ? { name: split.name } : {}),
       ...(deps.launcher !== undefined ? { launcher: deps.launcher } : {}),
+      ...(deps.handshakeTimeoutMs !== undefined ? { handshakeTimeoutMs: deps.handshakeTimeoutMs } : {}),
     });
     const server = await serveMcpPassthrough({
       source: resolved,
       usePlugins: gate.usePlugins,
       serverInfo: { name: 'adhd-policy', version: readPolicyVersion() },
-      transport: createStdioHostTransport(),
+      transport: deps.hostTransport ?? createStdioHostTransport(),
       signal: deps.signal,
     });
     // Stay up until the signal aborts, the host disconnects, or the upstream exits.
