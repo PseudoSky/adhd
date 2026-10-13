@@ -1,173 +1,155 @@
 /**
- * Unit spec for src/lib/capture/network.ts (event-driven CDP network capture).
+ * Unit spec for src/lib/capture/network.ts (the capture entry point over the
+ * recorder pipeline).
  * Ticket 8468f7b1 AC2 · criteria [tests-unit-extract.1] [tests-unit-extract.2]
- * [tests-unit-extract.3] [tests-unit-extract.4].
- * The global WebSocket is replaced via vi.stubGlobal with a fake that the test
- * drives by emitting Network.* events; nothing touches a socket or Chrome.
+ * [tests-unit-extract.3] [tests-unit-extract.4] [capture-upgrade.12].
+ * The protocol is served by the in-memory FakeCdpServer (fixtures); the
+ * WebSocket is replaced globally, nothing touches a socket or Chrome.
  */
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { captureNetworkResponse } from '../../../lib/capture/network.js'
+import { CaptureError } from '../../../lib/recording/errors.js'
 import type { BanRule } from '../../../lib/types.js'
+import { FakeCdpServer, loadFixture, type CdpFixture } from '../../support/fake-cdp.js'
 
-type Listener = (ev: { data?: string }) => void
+const WS = 'ws://127.0.0.1:1/devtools/page/X'
+const baseOpts = { urlPattern: /\/search/, navigateUrl: 'https://site.test/search?q=x', timeoutMs: 5_000, logger: () => undefined }
 
-class FakeWebSocket {
-  static instances: FakeWebSocket[] = []
-  sent: Array<{ id: number; method: string; params: Record<string, unknown> }> = []
-  closed = false
-  private listeners = new Map<string, Listener[]>()
-
-  constructor(public url: string) {
-    FakeWebSocket.instances.push(this)
-  }
-  addEventListener(type: string, fn: Listener): void {
-    this.listeners.set(type, [...(this.listeners.get(type) ?? []), fn])
-  }
-  send(raw: string): void {
-    this.sent.push(JSON.parse(raw))
-  }
-  close(): void {
-    this.closed = true
-  }
-  emit(type: string, ev: { data?: string } = {}): void {
-    for (const fn of this.listeners.get(type) ?? []) fn(ev)
-  }
-  event(method: string, params: Record<string, unknown>): void {
-    this.emit('message', { data: JSON.stringify({ method, params }) })
-  }
-  /** Reply to the most recent Network.getResponseBody command. */
-  replyBody(result: Record<string, unknown> | undefined, error?: { code: number; message: string }): void {
-    const cmd = [...this.sent].reverse().find((m) => m.method === 'Network.getResponseBody')
-    if (!cmd) throw new Error('no getResponseBody was sent')
-    this.emit('message', { data: JSON.stringify({ id: cmd.id, result, error }) })
-  }
-  /** Run one full request lifecycle for url and answer the body fetch. */
-  load(requestId: string, url: string, body: string, base64 = false): void {
-    this.event('Network.requestWillBeSent', { requestId, request: { url, method: 'GET' } })
-    this.event('Network.loadingFinished', { requestId })
-    this.replyBody({ body: base64 ? Buffer.from(body).toString('base64') : body, base64Encoded: base64 })
-  }
+let restore: (() => void) | undefined
+function boot(fixture: string | CdpFixture): FakeCdpServer {
+  const server = new FakeCdpServer(typeof fixture === 'string' ? loadFixture(fixture) : fixture)
+  restore = server.install()
+  return server
 }
-
-const ws = (): FakeWebSocket => FakeWebSocket.instances[FakeWebSocket.instances.length - 1]
-
-const baseOpts = { urlPattern: /\/search/, navigateUrl: 'https://site.test/home', timeoutMs: 5_000 }
+afterEach(() => {
+  restore?.()
+  restore = undefined
+  vi.useRealTimers()
+  vi.unstubAllGlobals()
+})
 
 describe('8468f7b1 AC2 [tests-unit-extract.1][tests-unit-extract.3] captureNetworkResponse', () => {
-  beforeEach(() => {
-    FakeWebSocket.instances = []
-    vi.useFakeTimers()
-    vi.stubGlobal('WebSocket', FakeWebSocket)
-    vi.spyOn(console, 'error').mockImplementation(() => undefined)
-  })
-  afterEach(() => {
-    vi.useRealTimers()
-    vi.unstubAllGlobals()
-    vi.restoreAllMocks()
-  })
-
-  it('connects to the page ws url, enables Page+Network and navigates', async () => {
-    const p = captureNetworkResponse('ws://127.0.0.1:1/devtools/page/X', baseOpts)
-    const assertion = expect(p).rejects.toThrow('timeout')
-    ws().emit('open')
-    expect(ws().url).toBe('ws://127.0.0.1:1/devtools/page/X')
-    expect(ws().sent.map((m) => m.method)).toEqual(['Page.enable', 'Network.enable', 'Page.navigate'])
-    expect(ws().sent[2].params).toEqual({ url: 'https://site.test/home' })
-    expect(ws().sent.map((m) => m.method)).not.toContain('Runtime.evaluate')
-    await vi.advanceTimersByTimeAsync(5_000)
-    await assertion
-    expect(ws().closed).toBe(true)
+  it('connects to the page ws url, enables Page+Network and navigates (never Runtime.evaluate)', async () => {
+    const server = boot('search-404')
+    await captureNetworkResponse(WS, baseOpts)
+    const methods = server.received.map((m) => m.method)
+    expect(methods.slice(0, 3)).toEqual(['Page.enable', 'Network.enable', 'Page.navigate'])
+    expect(server.received[2]?.params).toEqual({ url: 'https://site.test/search?q=x' })
+    expect(methods).not.toContain('Runtime.evaluate')
   })
 
   it('resolves with the matching response body after the settle delay', async () => {
-    const p = captureNetworkResponse('ws://x/1', { ...baseOpts, extraWaitMs: 200 })
-    ws().emit('open')
-    ws().load('r1', 'https://site.test/search?q=a', '<html>hit</html>')
-    await vi.advanceTimersByTimeAsync(200)
-    const out = await p
-    expect(out.body).toBe('<html>hit</html>')
-    expect(out.url).toBe('https://site.test/search?q=a')
-    expect(out.status).toBe(200)
-    expect(ws().closed).toBe(true)
+    boot('search-404')
+    vi.useFakeTimers()
+    let out: Awaited<ReturnType<typeof captureNetworkResponse>> | undefined
+    void captureNetworkResponse(WS, { ...baseOpts, extraWaitMs: 200 }).then((r) => {
+      out = r
+    })
+    await vi.advanceTimersByTimeAsync(199)
+    expect(out).toBeUndefined()
+    await vi.advanceTimersByTimeAsync(1)
+    expect(out?.body).toBe('{"error":"not found"}')
+    expect(out?.url).toBe('https://site.test/search?q=x')
+    expect(out?.status).toBe(404) // the real status, no longer a hard-coded success
   })
 
   it('decodes base64 bodies', async () => {
-    const p = captureNetworkResponse('ws://x/1', baseOpts)
-    ws().emit('open')
-    ws().load('r1', 'https://site.test/search', 'café ✓', true)
-    await vi.advanceTimersByTimeAsync(500)
-    expect((await p).body).toBe('café ✓')
+    boot('binary-base64')
+    const out = await captureNetworkResponse(WS, { ...baseOpts, urlPattern: /img/, navigateUrl: 'https://site.test/img.png' })
+    expect(out.body).toBe(Buffer.from('iVBORw0KGgo=', 'base64').toString('utf-8'))
   })
 
   it('prefers the largest captured body', async () => {
-    const p = captureNetworkResponse('ws://x/1', { ...baseOpts, extraWaitMs: 300 })
-    ws().emit('open')
-    ws().load('small', 'https://site.test/search?a', 'tiny')
-    ws().load('big', 'https://site.test/search?b', 'a considerably larger document body')
-    await vi.advanceTimersByTimeAsync(300)
-    const out = await p
-    expect(out.url).toBe('https://site.test/search?b')
+    const f = loadFixture('two-tabs-parallel')
+    const generic = f.steps.findIndex((s) => s.when.method === 'Network.getResponseBody')
+    f.steps.splice(
+      generic,
+      1,
+      { when: { method: 'Network.getResponseBody', params: { requestId: 'A1' } }, reply: { result: { body: 'tiny', base64Encoded: false } } },
+      { when: { method: 'Network.getResponseBody', params: { requestId: 'B1' } }, reply: { result: { body: 'a considerably larger document body', base64Encoded: false } } },
+    )
+    boot(f)
+    const out = await captureNetworkResponse(WS, { ...baseOpts, urlPattern: /site\.test/, navigateUrl: 'https://site.test/a' })
+    expect(out.url).toBe('https://site.test/b')
     expect(out.body).toBe('a considerably larger document body')
   })
 
-  it('ignores responses whose request url does not match the pattern, then times out', async () => {
-    const p = captureNetworkResponse('ws://x/1', { ...baseOpts, timeoutMs: 1_000 })
-    const assertion = expect(p).rejects.toThrow('timeout')
-    ws().emit('open')
-    ws().event('Network.requestWillBeSent', { requestId: 'z', request: { url: 'https://site.test/img.png', method: 'GET' } })
-    ws().event('Network.loadingFinished', { requestId: 'z' })
-    expect(ws().sent.some((m) => m.method === 'Network.getResponseBody')).toBe(false)
+  it('ignores responses whose request url does not match the pattern, then reports what it saw', async () => {
+    const server = boot('doc-200')
+    vi.useFakeTimers()
+    const p = captureNetworkResponse(WS, { ...baseOpts, urlPattern: /\/search/, navigateUrl: 'https://site.test/home', timeoutMs: 1_000 })
+    const assertion = expect(p).rejects.toMatchObject({ code: 'CAPTURE_NO_MATCH', detail: { urls: ['https://site.test/home'] } })
     await vi.advanceTimersByTimeAsync(1_000)
     await assertion
+    expect(server.received.some((m) => m.method === 'Network.getResponseBody')).toBe(false)
   })
 
   it('discards a body fetch that comes back as a CDP error', async () => {
-    const p = captureNetworkResponse('ws://x/1', { ...baseOpts, timeoutMs: 1_000 })
-    const assertion = expect(p).rejects.toThrow('timeout')
-    ws().emit('open')
-    ws().event('Network.requestWillBeSent', { requestId: 'e', request: { url: 'https://site.test/search', method: 'GET' } })
-    ws().event('Network.loadingFinished', { requestId: 'e' })
-    ws().replyBody(undefined, { code: -32000, message: 'No resource' })
+    const f = loadFixture('search-404')
+    const body = f.steps.find((s) => s.when.method === 'Network.getResponseBody')
+    if (body) body.reply = { error: { code: -32000, message: 'No resource' } }
+    boot(f)
+    vi.useFakeTimers()
+    const p = captureNetworkResponse(WS, { ...baseOpts, timeoutMs: 1_000 })
+    const assertion = expect(p).rejects.toMatchObject({ code: 'CAPTURE_TIMEOUT' })
     await vi.advanceTimersByTimeAsync(1_000)
     await assertion
   })
 
-  it('rejects with "WebSocket error" when the socket errors', async () => {
-    const p = captureNetworkResponse('ws://x/1', baseOpts)
-    const assertion = expect(p).rejects.toThrow('WebSocket error')
-    ws().emit('error')
-    await assertion
-    expect(ws().closed).toBe(true)
+  it('rejects with a typed connection error when the socket errors before opening', async () => {
+    class ErroringSocket {
+      private readonly listeners = new Map<string, Array<() => void>>()
+      constructor() {
+        queueMicrotask(() => (this.listeners.get('error') ?? []).forEach((l) => l()))
+      }
+      addEventListener(type: string, fn: () => void): void {
+        this.listeners.set(type, [...(this.listeners.get(type) ?? []), fn])
+      }
+      close(): void {
+        /* nothing to release */
+      }
+    }
+    vi.stubGlobal('WebSocket', ErroringSocket)
+    const err = await captureNetworkResponse(WS, baseOpts).catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(CaptureError)
+    expect(err).toMatchObject({ code: 'CAPTURE_CONNECT_FAILED' })
   })
 
-  it('throws "Ban detected" when a ban rule matches the captured body', async () => {
-    const rules: BanRule[] = [{ name: 'captcha-body', signal: 'captcha', checkBody: /unusual traffic/ }]
-    const p = captureNetworkResponse('ws://x/1', { ...baseOpts, banRules: rules })
-    const assertion = expect(p).rejects.toThrow('Ban detected: captcha')
-    ws().emit('open')
-    ws().load('r1', 'https://site.test/search', '<p>unusual traffic from your network</p>')
-    await vi.advanceTimersByTimeAsync(500)
-    await assertion
+  it('throws a ban error when a ban rule matches the captured body', async () => {
+    boot('search-404')
+    const rules: BanRule[] = [{ name: 'not-found-body', signal: 'captcha', checkBody: /not found/ }]
+    await expect(captureNetworkResponse(WS, { ...baseOpts, banRules: rules })).rejects.toMatchObject({
+      code: 'CAPTURE_BAN_DETECTED',
+      detail: { signal: 'captcha' },
+    })
   })
 
   it('returns normally when ban rules exist but none match', async () => {
+    boot('search-404')
     const rules: BanRule[] = [{ name: 'captcha-body', signal: 'captcha', checkBody: /unusual traffic/ }]
-    const p = captureNetworkResponse('ws://x/1', { ...baseOpts, banRules: rules })
-    ws().emit('open')
-    ws().load('r1', 'https://site.test/search', '<p>fine</p>')
-    await vi.advanceTimersByTimeAsync(500)
-    await expect(p).resolves.toMatchObject({ body: '<p>fine</p>' })
+    await expect(captureNetworkResponse(WS, { ...baseOpts, banRules: rules })).resolves.toMatchObject({ body: '{"error":"not found"}' })
   })
 
-  it('surfaces a failed command send without crashing the capture', async () => {
-    const p = captureNetworkResponse('ws://x/1', { ...baseOpts, timeoutMs: 500 })
-    const assertion = expect(p).rejects.toThrow('timeout')
-    ws().send = () => {
-      throw new Error('closed')
+  it('logs a failed setup command without crashing the capture', async () => {
+    const f = loadFixture('search-404')
+    const enable = f.steps.find((s) => s.when.method === 'Page.enable')
+    if (enable) enable.reply = { error: { code: -32000, message: 'Page domain unavailable' } }
+    boot(f)
+    const logs: string[] = []
+    const out = await captureNetworkResponse(WS, { ...baseOpts, logger: (m) => logs.push(m) })
+    expect(out.status).toBe(404)
+    expect(logs).toHaveLength(1)
+    expect(logs[0]).toContain('Page.enable')
+  })
+
+  it('does not hang when the navigation itself fails: the failure is typed', async () => {
+    const f = loadFixture('search-404')
+    const nav = f.steps.find((s) => s.when.method === 'Page.navigate')
+    if (nav) {
+      nav.reply = { result: { errorText: 'net::ERR_ABORTED' } }
+      nav.emit = []
     }
-    ws().emit('open')
-    await vi.advanceTimersByTimeAsync(500)
-    await assertion
-    expect(console.error).toHaveBeenCalled()
+    boot(f)
+    await expect(captureNetworkResponse(WS, { ...baseOpts, timeoutMs: 30_000 })).rejects.toMatchObject({ code: 'CAPTURE_NAVIGATE_FAILED' })
   })
 })
