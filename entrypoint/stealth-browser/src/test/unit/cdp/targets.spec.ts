@@ -401,7 +401,7 @@ describe('8468f7b1 AC2 [tests-unit-core.1] closing and hiding', () => {
  * A CdpSession `respond` that answers from a harness fixture's steps (first
  * step whose method matches; an `error` reply throws like CDP does).
  */
-function respondFromFixture(name: string): (method: string) => unknown {
+function respondFromFixture(name: string): (method: string, params?: Record<string, unknown>) => unknown {
   const steps = loadFixture(name).steps
   return (method: string) => {
     const step = steps.find((s) => s.when.method === method)
@@ -657,11 +657,11 @@ describe('8468f7b1 [chrome-lifecycle.13] failsafe-inventory pins fs-053..fs-069 
       { id: 'C', type: 'page', url: 'https://c/' },
     ]
     cdp.state.respond = (method, params) => {
-      if (method === 'Target.closeTarget' && params.targetId === 'A') throw new Error('boom')
+      if (method === 'Target.closeTarget' && params['targetId'] === 'A') throw new Error('boom')
       return {}
     }
     await expect(closeAllPageTargets(HOST)).resolves.toBeUndefined()
-    expect(cdp.state.sent.filter((s) => s.method === 'Target.closeTarget').map((s) => s.params.targetId)).toEqual(['A', 'B', 'C'])
+    expect(cdp.state.sent.filter((s) => s.method === 'Target.closeTarget').map((s) => s.params['targetId'])).toEqual(['A', 'B', 'C'])
   })
 
   it('hideAllWindows minimizes every page window', async () => {
@@ -670,7 +670,7 @@ describe('8468f7b1 [chrome-lifecycle.13] failsafe-inventory pins fs-053..fs-069 
       { id: 'A', type: 'page', url: 'https://a/' },
       { id: 'B', type: 'page', url: 'chrome://newtab/' },
     ]
-    cdp.state.respond = (method, params) => (method === 'Browser.getWindowForTarget' ? { windowId: params.targetId === 'A' ? 1 : 2 } : {})
+    cdp.state.respond = (method, params) => (method === 'Browser.getWindowForTarget' ? { windowId: params['targetId'] === 'A' ? 1 : 2 } : {})
     await hideAllWindows(HOST)
     expect(cdp.state.sent.filter((s) => s.method === 'Browser.setWindowBounds').map((s) => s.params)).toEqual([
       { windowId: 1, bounds: { windowState: 'minimized' } },

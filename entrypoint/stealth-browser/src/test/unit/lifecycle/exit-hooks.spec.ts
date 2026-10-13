@@ -7,15 +7,15 @@
  * handler is ever installed) and fake timers.
  */
 import { EventEmitter } from 'node:events'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
 import { installProcessExitHooks, type ExitHookProcess, type ExitHookStdin } from '../../../lib/lifecycle/exit-hooks.js'
 
 interface Rig {
   proc: EventEmitter
   stdin: EventEmitter
   calls: string[]
-  exit: ReturnType<typeof vi.fn>
-  manager: { release: ReturnType<typeof vi.fn>; shutdownIfIdle: ReturnType<typeof vi.fn> }
+  exit: Mock<(code: number) => void>
+  manager: { release: Mock<() => Promise<void>>; shutdownIfIdle: Mock<() => Promise<void>> }
   logs: string[]
 }
 

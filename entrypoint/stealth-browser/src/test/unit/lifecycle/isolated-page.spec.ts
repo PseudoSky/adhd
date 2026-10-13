@@ -121,7 +121,7 @@ describe('8468f7b1 [chrome-lifecycle.13] openIsolatedPage — success path', () 
     const b = await openIsolatedPage(HOST)
     expect(count('Target.createBrowserContext')).toBe(2)
     for (const r of w.server.received.filter((x) => x.method === 'Target.createTarget')) {
-      expect(r.params.browserContextId).toBeDefined()
+      expect(r.params['browserContextId']).toBeDefined()
     }
     await a.dispose()
     await b.dispose()
@@ -139,7 +139,8 @@ describe('8468f7b1 [chrome-lifecycle.13] openIsolatedPage — success path', () 
     install(withSteps('isolated-context-ok', WINDOW_STEPS))
     const p = await openIsolatedPage(HOST)
     await p.reveal()
-    const last = w.server.received.filter((r) => r.method === 'Browser.setWindowBounds').at(-1)!
+    const bounds = w.server.received.filter((r) => r.method === 'Browser.setWindowBounds')
+    const last = bounds[bounds.length - 1]!
     expect(last.params).toEqual({ windowId: 7, bounds: { left: 80, top: 80, width: 1100, height: 850, windowState: 'normal' } })
     await p.dispose()
     await expectNoLeak()

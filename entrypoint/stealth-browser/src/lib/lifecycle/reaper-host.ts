@@ -85,8 +85,8 @@ export interface ReaperHostDeps {
   now: () => number
   /** One GET `/json/version`. */
   probeChrome: () => Promise<boolean>
-  /** The http(s) page count; a rejection means "unreachable" (proceed). */
-  countHttpPages: () => Promise<number>
+  /** The http(s) page count (`countActiveWebPages`); `'unreachable'` or a rejection means proceed (F12). */
+  countHttpPages: () => Promise<number | 'unreachable'>
   /** `HistoryClient.isRecentlyUsed(2)`; a throw means "unavailable" (proceed). */
   historyRecent: () => boolean
   owner: {

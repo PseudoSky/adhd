@@ -17,7 +17,11 @@
  * Ticket 8468f7b1 · plan state chrome-lifecycle (CL15 CL22).
  */
 
-import type { ReapOutcome, ReaperStatus } from './reaper-host.js'
+import { lifecycleErrors, type LifecycleError } from './errors.js'
+import type { ReaperScope } from './reap-policy.js'
+import type { ChromeReaperConfig } from './reaper-entry.js'
+import type { ReapOutcome, ReaperStatus, RpcResponse } from './reaper-host.js'
+import { backendSocketPath, dialBackend, ensureBackend, ERR_BACKEND_UNAVAILABLE, type BackendConnection } from './sp.js'
 
 export interface ReaperLink {
   /**
@@ -36,4 +40,189 @@ export interface ReaperLink {
   status(): Promise<ReaperStatus | null>
   /** True while a connection that sent `hello` is held. */
   isUp(): boolean
+  /** Why the last `ensureAndHello` failed (REAPER_UNAVAILABLE), or null. */
+  lastError(): LifecycleError | null
+}
+
+// ─── The real adapter over the service-proxy transport ───────────────────────
+
+/** The spawn form pinned by sp-reaper-load-proof (smoke/reaper-load-proof.md, VERDICT entry-path-ok). */
+export const REAPER_ENTRY_SCRIPT = 'require(process.argv[1]).lifecycle.runChromeReaper(JSON.parse(process.argv[2]))'
+
+/** Ms a held connection may take to connect before `hello` gives up (-32001). */
+export const LINK_GIVE_UP_MS = 2_000
+
+export interface ProxyReaperLinkConfig {
+  port: number
+  cdpHost?: string
+  /** The verified private state directory (holds the socket, the lock and the reaper log). */
+  stateDir: string
+  pid: number
+  checkHistory: boolean
+  idleTimeoutMs: number
+  shutdownGraceMs: number
+  orphanWindowMs: number
+  scope: ReaperScope
+  /** The built CommonJS package entry the reaper process requires. Default: this bundle's own file. */
+  entryPath?: string
+  /** Default `process.execPath`. */
+  nodePath?: string
+  logger?: (msg: string) => void
+}
+
+/** The singleton key of the reaper host for `port` (one host per port per user). */
+export function reaperSingletonKey(port: number): string {
+  return `stealth-browser-reaper:${port}`
+}
+
+/**
+ * The CommonJS bundle this code runs from. In the built package every module
+ * is inlined into `dist/index.js`, so `__filename` is that entry; the reaper
+ * process `require`s it (sp-reaper-load-proof).
+ */
+export function defaultReaperEntry(): string | null {
+  return typeof __filename === 'string' ? __filename : null
+}
+
+function isOk(r: RpcResponse | undefined): boolean {
+  return r !== undefined && r.error === undefined
+}
+
+/**
+ * `ReaperLink` over the service proxy. Link rules (spec 3.4):
+ * - each connection is one `dialBackend({ socketPath, backoff: { giveUpAfterMs: 2000 }, onDisconnect })`;
+ *   the dial's own re-dial is never relied on: an established connection that drops is closed and
+ *   forgotten (`onDisconnect`), and a reconnect is a NEW dial after a fresh `ensure`;
+ * - at most one live dial; a `hello` that resolves -32001 (never connected) closes the dial at once,
+ *   so a late connect can never register the same pid twice;
+ * - `ensure` happens only when the manager calls `ensureAndHello` — never on disconnect.
+ */
+export function createProxyReaperLink(cfg: ProxyReaperLinkConfig): ReaperLink {
+  const log = cfg.logger ?? (() => undefined)
+  const socketPath = backendSocketPath(cfg.stateDir, reaperSingletonKey(cfg.port))
+  let current: BackendConnection | null = null
+  let ensuring: Promise<boolean> | null = null
+  let lastError: LifecycleError | null = null
+  let seq = 0
+
+  const reaperConfig = (): ChromeReaperConfig => ({
+    port: cfg.port,
+    ...(cfg.cdpHost ? { cdpHost: cfg.cdpHost } : {}),
+    stateDir: cfg.stateDir,
+    socketPath,
+    idleTimeoutMs: cfg.idleTimeoutMs,
+    shutdownGraceMs: cfg.shutdownGraceMs,
+    orphanWindowMs: cfg.orphanWindowMs,
+    scope: cfg.scope,
+    checkHistoryDefault: true,
+  })
+
+  const drop = (conn: BackendConnection): void => {
+    try {
+      conn.close()
+    } catch {
+      /* already closed */
+    }
+    if (current === conn) current = null
+  }
+
+  const request = async (method: string, params?: unknown): Promise<RpcResponse | undefined> => {
+    const conn = current
+    if (!conn) return undefined
+    return conn.send({ jsonrpc: '2.0', id: `${method}-${++seq}`, method, ...(params === undefined ? {} : { params }) })
+  }
+
+  const ensureOnce = async (): Promise<boolean> => {
+    if (current) return true
+    const entry = cfg.entryPath ?? defaultReaperEntry()
+    if (!entry) {
+      lastError = lifecycleErrors.reaperUnavailable(cfg.port, new Error('the package entry path is unknown (not running from the built CommonJS bundle)'))
+      return false
+    }
+    let res
+    try {
+      res = await ensureBackend({
+        socketPath,
+        singletonKey: reaperSingletonKey(cfg.port),
+        command: cfg.nodePath ?? process.execPath,
+        args: ['-e', REAPER_ENTRY_SCRIPT, entry, JSON.stringify(reaperConfig())],
+        lockDir: cfg.stateDir,
+        stderrLogPath: `${cfg.stateDir}/reaper-${cfg.port}.log`,
+        onDiagnostic: log,
+      })
+    } catch (e) {
+      lastError = lifecycleErrors.reaperUnavailable(cfg.port, e, cfg.stateDir)
+      return false
+    }
+    if (res.disposition === 'failed') {
+      const cause = Object.assign(new Error(res.detail), res.errorCode ? { code: res.errorCode } : {})
+      lastError = lifecycleErrors.reaperUnavailable(cfg.port, cause, cfg.stateDir)
+      return false
+    }
+    // spawned | already-live | adopted-after-wait: a host serves the socket. Hold ONE connection.
+    const conn: BackendConnection = dialBackend({
+      socketPath,
+      backoff: { giveUpAfterMs: LINK_GIVE_UP_MS },
+      onDiagnostic: log,
+      onDisconnect: () => drop(conn),
+    })
+    current = conn
+    // Queued by the dial and delivered as the first frame once the connection is up.
+    const hello = await conn.send({ jsonrpc: '2.0', id: `hello-${++seq}`, method: 'hello', params: { pid: cfg.pid, checkHistory: cfg.checkHistory } })
+    if (hello.error) {
+      drop(conn)
+      lastError = lifecycleErrors.reaperUnavailable(
+        cfg.port,
+        new Error(hello.error.code === ERR_BACKEND_UNAVAILABLE ? `the reaper did not accept a connection within ${LINK_GIVE_UP_MS} ms` : hello.error.message),
+        cfg.stateDir,
+      )
+      return false
+    }
+    lastError = null
+    return true
+  }
+
+  return {
+    ensureAndHello(): Promise<boolean> {
+      if (!ensuring) {
+        ensuring = ensureOnce()
+          .catch((e: unknown) => {
+            lastError = lifecycleErrors.reaperUnavailable(cfg.port, e, cfg.stateDir)
+            return false
+          })
+          .finally(() => {
+            ensuring = null
+          })
+      }
+      return ensuring
+    },
+    activity(): void {
+      try {
+        current?.notify({ jsonrpc: '2.0', method: 'activity' })
+      } catch (e) {
+        log(`activity not sent: ${(e as Error).message}`)
+      }
+    },
+    async reapIfIdle(): Promise<ReapOutcome | null> {
+      const r = await request('reapIfIdle')
+      return isOk(r) ? (r!.result as ReapOutcome) : null
+    },
+    async release(): Promise<void> {
+      const conn = current
+      if (!conn) return
+      try {
+        await request('release')
+      } catch (e) {
+        log(`release not delivered: ${(e as Error).message}`)
+      } finally {
+        drop(conn)
+      }
+    },
+    async status(): Promise<ReaperStatus | null> {
+      const r = await request('status')
+      return isOk(r) ? (r!.result as ReaperStatus) : null
+    },
+    isUp: () => current !== null,
+    lastError: () => lastError,
+  }
 }

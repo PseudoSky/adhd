@@ -1,160 +1,339 @@
 /**
- * chrome-manager.ts — Chrome lifecycle management.
+ * chrome-manager.ts — the Chrome lifecycle of one client process.
  *
- * Provides auto-start, activity-bumped idle timer, and safety-checked
- * auto-shutdown. Composes cdp-connection (browser lifecycle, idle timer)
- * with domain/storage checks (CDP targets + history).
+ * Auto-start (race-free, bounded, self-healing), an activity-bumped idle
+ * timer, and an idle shutdown that never closes a Chrome someone else is
+ * using. Cross-process coordination is connection-based: every manager holds
+ * ONE connection to the reaper host of its port (`ReaperLink`); the host keeps
+ * the registry of connected clients, evaluates the three safety tiers
+ * (sibling activity, open http(s) pages, recent history) and performs the
+ * ordered reap. A killed client's connection closes with it, so a dead process
+ * can never pin Chrome, and the host outlives every client, so Chrome is never
+ * orphaned. There is no shared activity file.
  *
- * Multi-process safety via shared heartbeat file at
- * /tmp/stealth-browser-heartbeat. Every process bumps the heartbeat
- * on each activity; the idle shutdown defers if any process has
- * bumped recently. Only GENUINE CDP activity stamps the heartbeat — a
- * process that merely defers to a sibling re-arms its timer without
- * stamping, so idle processes cannot keep each other alive forever
- * (see _rearmIdle).
+ * Livelock protection: `bump()` is the ONLY sender of `activity`. Idle fire and
+ * `shutdownIfIdle()` ask the host (`reapIfIdle`) and, on keep / wait, re-arm the
+ * timer and send nothing — so idle processes cannot keep each other alive.
+ *
+ * Degraded mode (decision D1): when the reaper cannot be started (an unsafe
+ * state directory, `ensureBackend` failing with E_UDS_DIR_UNSAFE, ...) `ready()`
+ * still succeeds, `status().reaper` is false, the idle timer still fires but
+ * never closes Chrome (it cannot see siblings), a forced `shutdown()` still
+ * works, and exactly one warning is logged.
  *
  * Usage:
  *   const chrome = new ChromeManager()
- *   await chrome.ready()          // Chrome running, browser ready
- *   chrome.bump()                 // reset idle timer, write heartbeat
+ *   await chrome.ready()          // Chrome running, registered with the reaper
+ *   chrome.bump()                 // real work happened: re-arm + tell the reaper
  *   await chrome.shutdown()       // force shutdown now
+ *   await chrome.release()        // leave the reaper registry (process lives on)
+ *
+ * Ticket 8468f7b1 · plan state chrome-lifecycle (SPEC-single-pass-lifecycle.md 3.3, CL1-CL4 CL9 CL19 CL21 CL26 CL28 CL29).
  */
 
 import { ensureChromeRunning, killChrome } from './cdp/browser.js'
 import { IdleShutdown } from './cdp/shutdown.js'
-import { closeAllPageTargets, hideAllWindows, isChromeReachable } from './cdp/targets.js'
-import { TargetService } from './domains/target.js'
-import { HistoryClient } from './storage/history.js'
-import { isActiveWebTarget } from './lifecycle/page-tier.js'
-import { writeFileSync, readFileSync } from 'node:fs'
+import { closeAllPageTargets, hideAllWindows, isChromeReachable, listPageTargetsOnly } from './cdp/targets.js'
+import { errorMessage, lifecycleErrors, type LifecycleError } from './lifecycle/errors.js'
+import { createLaunchBreaker, type LaunchBreaker } from './lifecycle/launch-breaker.js'
+import { createOwnershipStore, type OwnershipStore } from './lifecycle/ownership.js'
+import { countActiveWebPages, isActiveWebTarget } from './lifecycle/page-tier.js'
+import type { ReaperScope } from './lifecycle/reap-policy.js'
+import type { ReapOutcome } from './lifecycle/reaper-host.js'
+import { createProxyReaperLink, type ReaperLink } from './lifecycle/reaper-link.js'
+import { resolveStateDir, type StateDirResult } from './lifecycle/state-dir.js'
+
+/** Safety tier 2 lives in lifecycle/page-tier.ts; re-exported here so the manager module keeps the export. */
+export { isActiveWebTarget }
+export type { ReaperLink }
 
 export interface ChromeManagerOptions {
   /** CDP host. Default: 127.0.0.1:9222 */
   cdpHost?: string
   /** Idle timeout in ms. Default: 120_000 (2 min). */
   idleTimeoutMs?: number
-  /** Path to shared heartbeat file. Default: /tmp/stealth-browser-heartbeat */
-  heartbeatPath?: string
-  /** If true, check Chrome history for recent activity. Default: true. */
+  /** Let a Chrome history visit within 2 minutes keep Chrome alive. Default: true. */
   checkHistory?: boolean
+  /** Grace after the last client left before the reaper closes Chrome. Default: 30_000. */
+  shutdownGraceMs?: number
+  /** A reaper host nobody uses retires this long after Chrome is gone. Default: 30_000. */
+  orphanWindowMs?: number
+  /** Private state directory. Default: `<os.tmpdir()>/stealth-browser-<uid>-<port>`. */
+  stateDir?: string
+  /** What the reaper may close: the port occupant (default) or only a Chrome it can prove it launched. */
+  reaperScope?: 'launched-only' | 'port-occupant'
+  /** The reaper seam. Default: the service-proxy reaper link of this port. */
+  link?: ReaperLink
   /** Log function. Default: console.error */
   logger?: (msg: string) => void
 }
 
+export interface ChromeStatus {
+  /** This manager has a verified, running Chrome. */
+  ready: boolean
+  /** This process launched the running Chrome. */
+  owned: boolean
+  /** Clients connected to the reaper (0 when it is unavailable). */
+  processes: number
+  /** Connected clients active within the idle window. */
+  activeProcesses: number
+  /** Open http(s) pages (`'unreachable'` when CDP did not answer). */
+  httpPages: number | 'unreachable'
+  /** The out-of-process reaper is connected (false = degraded). */
+  reaper: boolean
+  /** The launch circuit breaker. */
+  breaker: { open: boolean; retryAfterMs?: number }
+  /** Many sibling clients are connected (diagnostic only; never kills). */
+  siblingWarning: boolean
+}
+
 const defaultLogger = (msg: string) => console.error(`[chrome-manager] ${msg}`)
 
-const HEARTBEAT_PATH = '/tmp/stealth-browser-heartbeat'
+/** A soft reap through the host answers within this bound, or the manager defers. */
+export const REAP_IF_IDLE_TIMEOUT_MS = 3_000
+/** At most one reconnect attempt per this interval from `bump()` / `withBrowser`. */
+export const RECONNECT_MIN_INTERVAL_MS = 2_000
 
-/** Safety tier 2 lives in lifecycle/page-tier.ts; re-exported here so the manager module keeps the export. */
-export { isActiveWebTarget }
+function withTimeout<T>(p: Promise<T>, ms: number): Promise<T | 'timeout'> {
+  return new Promise((resolve, reject) => {
+    const t = setTimeout(() => resolve('timeout'), ms)
+    if (typeof t === 'object' && 'unref' in t) t.unref()
+    p.then(
+      (v) => {
+        clearTimeout(t)
+        resolve(v)
+      },
+      (e: unknown) => {
+        clearTimeout(t)
+        reject(e)
+      },
+    )
+  })
+}
 
 export class ChromeManager {
-  private targetService: TargetService
-  private history: HistoryClient
   private idle: IdleShutdown | null = null
   private _ready = false
-  private readonly opts: Required<ChromeManagerOptions>
+  private owned = false
+  private readonly cdpHost: string
+  private readonly port: number
+  private readonly idleTimeoutMs: number
+  private readonly checkHistory: boolean
+  private readonly shutdownGraceMs: number
+  private readonly orphanWindowMs: number
+  private readonly scope: ReaperScope
+  private readonly stateDirOpt: string | undefined
+  private readonly injectedLink: ReaperLink | undefined
   private readonly log: (msg: string) => void
-  private readonly myPid: number
+
+  private state: StateDirResult | null = null
+  private link: ReaperLink | null = null
+  private ownership: OwnershipStore | null = null
+  private breaker: LaunchBreaker | null = null
+  private degradedWarned = false
+  /** The last ensure failed and the one idle-fire retry has not been spent yet. */
+  private ensureFailed = false
+  private idleRetrySpent = false
+  private lastReconnectAt = Number.NEGATIVE_INFINITY
 
   constructor(opts: ChromeManagerOptions = {}) {
-    this.opts = {
-      cdpHost: opts.cdpHost ?? '127.0.0.1:9222',
-      idleTimeoutMs: opts.idleTimeoutMs ?? 120_000,
-      heartbeatPath: opts.heartbeatPath ?? HEARTBEAT_PATH,
-      checkHistory: opts.checkHistory ?? true,
-      logger: opts.logger ?? defaultLogger,
-    }
-    this.log = this.opts.logger
-    this.myPid = process.pid
-    this.targetService = new TargetService(this.opts.cdpHost)
-    this.history = new HistoryClient()
+    this.cdpHost = opts.cdpHost ?? '127.0.0.1:9222'
+    this.port = parseInt(this.cdpHost.split(':')[1] ?? '9222', 10) || 9222
+    this.idleTimeoutMs = opts.idleTimeoutMs ?? 120_000
+    this.checkHistory = opts.checkHistory ?? true
+    this.shutdownGraceMs = opts.shutdownGraceMs ?? 30_000
+    this.orphanWindowMs = opts.orphanWindowMs ?? 30_000
+    this.scope = opts.reaperScope ?? 'port-occupant'
+    this.stateDirOpt = opts.stateDir
+    this.injectedLink = opts.link
+    this.log = opts.logger ?? defaultLogger
   }
+
+  // ── Wiring (lazy: the constructor touches nothing) ─────────────────────────
+
+  /** Resolve the private state dir once; an unsafe dir means degraded mode, never a throw. */
+  private wire(): void {
+    if (this.state) return
+    this.state = resolveStateDir(this.port, this.stateDirOpt === undefined ? {} : { stateDir: this.stateDirOpt })
+    const dir = this.state.ok ? this.state.dir : undefined
+    this.breaker = createLaunchBreaker({ port: this.port, ...(dir ? { stateDir: dir } : {}), logger: this.log })
+    if (dir) this.ownership = createOwnershipStore({ stateDir: dir, port: this.port, logger: this.log })
+    if (this.injectedLink) this.link = this.injectedLink
+    else if (dir) {
+      this.link = createProxyReaperLink({
+        port: this.port,
+        cdpHost: this.cdpHost,
+        stateDir: dir,
+        pid: process.pid,
+        checkHistory: this.checkHistory,
+        idleTimeoutMs: this.idleTimeoutMs,
+        shutdownGraceMs: this.shutdownGraceMs,
+        orphanWindowMs: this.orphanWindowMs,
+        scope: this.scope,
+        logger: this.log,
+      })
+    }
+  }
+
+  /** One warning for the whole degraded session. */
+  private warnDegraded(err: LifecycleError): void {
+    if (this.degradedWarned) return
+    this.degradedWarned = true
+    this.log(`warning: reaper unavailable, running degraded — idle Chrome will not be closed automatically (${err.message})`)
+  }
+
+  /** Ensure the reaper and hold the link. Never throws; false = degraded. */
+  private async ensureLink(): Promise<boolean> {
+    this.wire()
+    if (!this.state!.ok || !this.link) {
+      const st = this.state!
+      this.ensureFailed = true
+      this.warnDegraded(lifecycleErrors.reaperUnavailable(this.port, st.ok ? new Error('no reaper link') : st.error, st.dir))
+      return false
+    }
+    if (this.link.isUp()) return true
+    let ok = false
+    try {
+      ok = await this.link.ensureAndHello()
+    } catch (e) {
+      ok = false
+      this.log(`reaper link failed: ${errorMessage(e)}`)
+    }
+    if (ok) {
+      this.ensureFailed = false
+      this.idleRetrySpent = false
+      return true
+    }
+    this.ensureFailed = true
+    let err: LifecycleError | null = null
+    try {
+      err = this.link.lastError()
+    } catch {
+      err = null
+    }
+    this.warnDegraded(err ?? lifecycleErrors.reaperUnavailable(this.port))
+    return false
+  }
+
+  // ── Public API ─────────────────────────────────────────────────────────────
 
   /** Ensure Chrome is running. Starts it if not reachable.
    *
-   *  Self-healing: `_ready` is NOT trusted blindly. Another process's idle
-   *  shutdown may have killed the SHARED Chrome while this process was idle,
-   *  leaving the flag stale — a blind `if (this._ready) return` would then
-   *  skip the relaunch and every search() would fail on CDP. Instead, when
-   *  `_ready` is true we cheaply re-verify reachability (one GET to
-   *  /json/version) and only take the fast path when Chrome is actually up.
-   *  On the fast path we deliberately do NOT re-hide windows: a HITL window
-   *  revealed for a human must stay visible. */
+   *  Self-healing: `_ready` is NOT trusted blindly. Another process may have
+   *  killed the SHARED Chrome while this process was idle, so when `_ready` is
+   *  true we cheaply re-verify reachability (one GET to /json/version) and only
+   *  take the fast path when Chrome is actually up. On the fast path windows
+   *  are deliberately NOT re-hidden: a window revealed for a human stays visible. */
   async ready(): Promise<void> {
+    this.wire()
     if (this._ready) {
-      if (await isChromeReachable(this.opts.cdpHost)) {
-        this._writeHeartbeat()
+      if (await isChromeReachable(this.cdpHost)) {
+        await this.ensureLink()
         return
       }
       this.log('stale _ready — Chrome no longer reachable (killed by another process?); relaunching')
       this._ready = false
+      this.owned = false
     }
+
+    this.breaker!.assertClosed()
+    let launched: { pid: number | null; profileDir: string }
     try {
-      await ensureChromeRunning({ port: this._port() })
+      launched = await ensureChromeRunning({ port: this.port })
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
+      this.breaker!.recordFailure()
+      const msg = errorMessage(err)
       this.log(`Failed to ensure Chrome running: ${msg}`)
-      throw err
+      throw /did not start CDP/.test(msg) ? lifecycleErrors.unreachableAfterLaunch(this.port, err) : lifecycleErrors.launchFailed(this.port, err)
+    }
+    this.breaker!.recordSuccess()
+
+    if (launched.pid !== null) {
+      // This process spawned Chrome: record it (pid + start token) for the reaper.
+      this.owned = true
+      this.ownership?.write(launched.pid, launched.profileDir)
     }
     try {
       // Hide ALL Chrome windows — prevents the default window from appearing on-screen
       // after auto-launch, even when Chrome ignores --window-position from saved state.
-      await hideAllWindows(this.opts.cdpHost)
+      // Only on this (launch) path: the fast path above never re-hides.
+      await hideAllWindows(this.cdpHost)
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
-      this.log(`Failed to hide Chrome windows: ${msg}`)
+      this.log(`Failed to hide Chrome windows: ${errorMessage(err)}`)
       throw err
     }
     this._ready = true
-    this._startIdleTimer()
+    this.startIdleTimer()
     // We just had activity (a launch) — re-arm the idle window from now.
     this.idle?.reset()
-    this._writeHeartbeat()
+    await this.ensureLink()
   }
 
-  /** Bump the idle timer and write heartbeat. Call after every CDP operation. */
+  /** Real work happened: re-arm the idle timer and tell the reaper. Call after every CDP operation. */
   bump(): void {
     if (!this.idle) return
     this.idle.reset()
-    this._writeHeartbeat()
+    const link = this.link
+    if (link?.isUp()) {
+      try {
+        link.activity()
+      } catch (e) {
+        this.log(`activity not sent: ${errorMessage(e)}`)
+      }
+      return
+    }
+    // The link is down: reconnect (rate-limited) if Chrome is reachable, then report this activity.
+    const now = Date.now()
+    if (now - this.lastReconnectAt < RECONNECT_MIN_INTERVAL_MS) return
+    this.lastReconnectAt = now
+    void (async () => {
+      try {
+        if (!(await isChromeReachable(this.cdpHost))) return
+        if (await this.ensureLink()) this.link?.activity()
+      } catch (e) {
+        this.log(`reconnect failed: ${errorMessage(e)}`)
+      }
+    })()
   }
 
-  /**
-   * Re-arm our idle timer WITHOUT advertising activity to siblings.
-   *
-   * Called only from the deferral branches of `_doShutdown`. The deferral path
-   * must NOT call `bump()`: writing the heartbeat from a process that is idle
-   * but merely *refusing* to shut down makes that process look active to its
-   * siblings, so they defer to it in turn — a mutual-deferral livelock in which
-   * every idle process keeps every other process's heartbeat fresh forever and
-   * the shared Chrome is never reaped, even with zero pages open (observed live:
-   * three idle servers rotating heartbeats every ~120s indefinitely). The
-   * heartbeat is written exclusively by genuine activity (`bump()` after a real
-   * CDP operation); deferral re-arms only, so `_isOtherProcessActive()` keeps
-   * meaning "another process is really doing work".
-   */
-  private _rearmIdle(): void {
-    this.idle?.reset()
-  }
-
-  /** Force immediate shutdown. */
+  /** Force immediate shutdown: ignores every safety tier; local (no reaper round-trip). */
   async shutdown(): Promise<void> {
     this.idle?.cancel()
-    await this._doShutdown(true)
+    this.log('shutting down...')
+    try {
+      await closeAllPageTargets(this.cdpHost)
+    } catch (err) {
+      this.log(`Failed to close page targets during shutdown: ${errorMessage(err)}`)
+    }
+    try {
+      await killChrome(this.port)
+    } catch (err) {
+      this.log(`Failed to kill Chrome during shutdown: ${errorMessage(err)}`)
+    }
+    this.ownership?.remove()
+    await this.release()
+    this.resetAfterShutdown()
   }
 
   /**
-   * SOFT shutdown: close Chrome only if it is genuinely idle — deferring to the
-   * cross-process heartbeat and to any open http(s) page (see `_doShutdown`).
-   * Unlike `shutdown()` this never force-kills a Chrome another session or a
-   * human's captcha window is using. Safe to call from a process-exit path so a
-   * server that launched Chrome does not orphan it (its idle timer dies with
-   * the process, leaving nothing to reap Chrome).
+   * SOFT shutdown: close Chrome only if it is genuinely idle — the reaper host
+   * defers to a sibling client, an open http(s) page and recent history. Never
+   * force-kills a Chrome another session or a human's captcha window is using.
+   * Safe for process-exit paths.
    */
   async shutdownIfIdle(): Promise<void> {
     this.idle?.cancel()
-    await this._doShutdown(false)
+    await this.softReap()
+  }
+
+  /** Leave the reaper registry (the process may live on; its next `ready()` re-registers). Never throws. */
+  async release(): Promise<void> {
+    if (!this.link) return
+    try {
+      await this.link.release()
+    } catch (e) {
+      this.log(`release failed: ${errorMessage(e)}`)
+    }
   }
 
   /** Run a function with automatic Chrome lifecycle management. */
@@ -171,127 +350,89 @@ export class ChromeManager {
     return this._ready
   }
 
-  /** CDP port parsed from cdpHost. */
-  private _port(): number {
-    return parseInt(this.opts.cdpHost.split(':')[1] ?? '9222', 10)
-  }
-
-  // ── Heartbeat ──────────────────────────────────────────────────────────────
-
-  /** Write our PID + current timestamp to the shared heartbeat file. */
-  private _writeHeartbeat(): void {
+  async status(): Promise<ChromeStatus> {
+    this.wire()
+    const breaker = this.breaker!.state()
+    let host = null
     try {
-      const existing = this._readHeartbeat()
-      existing.set(this.myPid, Date.now())
-      const lines = Array.from(existing.entries())
-        .map(([pid, ts]) => `${pid}:${ts}`)
-        .join('\n')
-      writeFileSync(this.opts.heartbeatPath, lines + '\n', 'utf8')
-    } catch { /* best effort */ }
-  }
-
-  /** Read the shared heartbeat file, filtering out dead PIDs.
-   *  Returns Map<pid, timestamp_ms> of live processes only. */
-  private _readHeartbeat(): Map<number, number> {
-    const map = new Map<number, number>()
-    try {
-      const raw = readFileSync(this.opts.heartbeatPath, 'utf8')
-      for (const line of raw.trim().split('\n')) {
-        const [pidStr, tsStr] = line.split(':')
-        if (!pidStr || !tsStr) continue
-        const pid = parseInt(pidStr, 10)
-        const ts = parseInt(tsStr, 10)
-        if (isNaN(pid) || isNaN(ts)) continue
-        // Skip dead PIDs — they can't be actively using Chrome
-        try { process.kill(pid, 0) } catch { continue }
-        map.set(pid, ts)
-      }
-    } catch { /* no file yet — we're first */ }
-    return map
-  }
-
-  /** Check if another process bumped the heartbeat within the timeout window. */
-  private _isOtherProcessActive(): boolean {
-    const heartbeat = this._readHeartbeat()
-    const now = Date.now()
-    const window = this.opts.idleTimeoutMs
-    for (const [pid, ts] of heartbeat) {
-      if (pid === this.myPid) continue
-      if (now - ts < window) {
-        this.log(`pid ${pid} active ${Math.round((now - ts) / 1000)}s ago — deferring`)
-        return true
-      }
+      host = this.link?.isUp() ? await this.link.status() : null
+    } catch (e) {
+      this.log(`reaper status failed: ${errorMessage(e)}`)
     }
-    return false
+    const httpPages = host ? host.httpPages : await countActiveWebPages(() => listPageTargetsOnly(this.cdpHost))
+    return {
+      ready: this._ready,
+      owned: this.owned,
+      processes: host?.clients ?? 0,
+      activeProcesses: host?.activeClients ?? 0,
+      httpPages,
+      reaper: this.link?.isUp() ?? false,
+      breaker,
+      siblingWarning: host?.siblingWarning ?? false,
+    }
   }
 
-  // ── Timer ──────────────────────────────────────────────────────────────────
+  // ── Idle ───────────────────────────────────────────────────────────────────
 
-  private _startIdleTimer(): void {
+  private startIdleTimer(): void {
     if (this.idle) return
     this.idle = new IdleShutdown({
-      timeoutMs: this.opts.idleTimeoutMs,
+      timeoutMs: this.idleTimeoutMs,
       logger: (m) => this.log(m),
-      onShutdown: () => this._doShutdown(false),
+      onShutdown: () => this.softReap(),
     })
   }
 
-  private async _doShutdown(force: boolean): Promise<void> {
-    if (!force) {
-      // 1. Cross-process heartbeat check
-      if (this._isOtherProcessActive()) {
-        this._rearmIdle()
+  /** Re-arm WITHOUT advertising activity (the deferral branch: livelock protection). */
+  private rearmIdle(): void {
+    this.idle?.reset()
+  }
+
+  /**
+   * The soft path (idle fire, `shutdownIfIdle`): the host decides. Keep / wait /
+   * no answer re-arm and write nothing; degraded never closes Chrome.
+   */
+  private async softReap(): Promise<void> {
+    let link = this.link
+    if (!link?.isUp()) {
+      // One retry of a previously failed ensure, then fail-safe defer (D1).
+      if (this.ensureFailed && !this.idleRetrySpent) {
+        this.idleRetrySpent = true
+        await this.ensureLink()
+      }
+      link = this.link
+      if (!link?.isUp()) {
+        this.log('reaper unavailable — not closing Chrome (cannot see sibling clients)')
+        this.rearmIdle()
         return
       }
-
-      // 2. Live CDP check: is a real WEB page open? Only http(s) documents mean
-      //    "a human / another call is using Chrome". Browser-internal targets
-      //    (chrome://newtab/, chrome://omnibox…, chrome-untrusted://, about:,
-      //    devtools://, extension service workers) must NOT keep Chrome alive —
-      //    the default window ALWAYS shows chrome://newtab/, so the previous
-      //    `url !== 'about:blank'` test counted it as active and made the idle
-      //    shutdown defer FOREVER (Chrome was never reaped). A HITL captcha
-      //    window or a keepPage result is http(s) and still defers correctly.
-      try {
-        const targets = await this.targetService.listPageTargets()
-        const active = targets.filter((t) => t.url && isActiveWebTarget(t.url))
-        if (active.length > 0) {
-          this.log(`${active.length} active page(s) found — Chrome in use`)
-          this._rearmIdle()
-          return
-        }
-      } catch { /* can't reach CDP — proceed */ }
-
-      // 3. History check (optional): recent visits?
-      if (this.opts.checkHistory) {
-        try {
-          const recentlyUsed = this.history.isRecentlyUsed(2)
-          if (recentlyUsed) {
-            this.log('recent history activity found — Chrome in use')
-            this._rearmIdle()
-            return
-          }
-        } catch { /* history DB unavailable — proceed */ }
-      }
     }
-
-    this.log('shutting down...')
+    let out: ReapOutcome | null | 'timeout' = null
     try {
-      await closeAllPageTargets(this.opts.cdpHost)
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
-      this.log(`Failed to close page targets during shutdown: ${msg}`)
+      out = await withTimeout(link.reapIfIdle(), REAP_IF_IDLE_TIMEOUT_MS)
+    } catch (e) {
+      this.log(`reapIfIdle failed: ${errorMessage(e)}`)
+      out = null
     }
-    try {
-      await killChrome(this._port())
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
-      this.log(`Failed to kill Chrome during shutdown: ${msg}`)
+    if (out === 'timeout' || out === null) {
+      this.rearmIdle()
+      return
     }
-    // After a REAL shutdown the idle timer is spent: any later relaunch must
-    // arm a fresh one (IdleShutdown.reset() now re-arms, but nulling also
-    // makes bump() a no-op until the next ready()).
+    if (out.reaped) {
+      this.log('reaper closed idle Chrome')
+      this.resetAfterShutdown()
+      return
+    }
+    if (out.action === 'keep') this.log(`Chrome in use (${out.pinnedBy ?? 'unknown'}) — deferring`)
+    this.rearmIdle()
+  }
+
+  /** After a REAL shutdown the idle timer is spent and ready is false: a later ready() relaunches and arms a fresh timer. */
+  private resetAfterShutdown(): void {
+    this.idle?.cancel()
     this.idle = null
     this._ready = false
+    this.owned = false
   }
 }
+
