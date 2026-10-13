@@ -242,11 +242,11 @@
       "end_ref": null
     },
     "capture-upgrade": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-10-13T00:47:02.086Z",
-      "done_at": null,
+      "done_at": "2026-10-13T01:26:42.255Z",
       "start_ref": "ff2288f08440685aa0e6e8aac1a697251ea64b37",
-      "end_ref": null
+      "end_ref": "b20749415241c305d4368b14a1dd42c49673cc96"
     },
     "chrome-lifecycle": {
       "status": "pending",
@@ -601,6 +601,18 @@
       "audit_criteria_total": 3,
       "by": "pseudosky",
       "note": "dist loads via require from out-of-repo cwd; detached spawn form passes against scratch stub; VERDICT entry-path-ok; evidence commit 0a0d7937; re-recorded after stale-write repair"
+    },
+    {
+      "ts": "2026-10-13T01:26:42.255Z",
+      "from": "chrome-lifecycle",
+      "to": "capture-upgrade",
+      "start_ref": "ff2288f08440685aa0e6e8aac1a697251ea64b37",
+      "end_ref": "b20749415241c305d4368b14a1dd42c49673cc96",
+      "audit_exit": 0,
+      "audit_criteria_passed": 28,
+      "audit_criteria_total": 28,
+      "by": "pseudosky",
+      "note": "CU1-CU28 NetworkRecorder pipeline, sinks, feature specs; commits 4344f3c6 ff6e8e9c; re-recorded after concurrent-write repair"
     }
   ],
   "amendment_log": [
@@ -1119,6 +1131,6 @@
       "dod.9"
     ]
   },
-  "claimed_by": null,
-  "claimed_at": null
+  "claimed_by": "plan-orchestrator-1791853833-24083",
+  "claimed_at": "2026-10-13T01:10:33.872Z"
 }
