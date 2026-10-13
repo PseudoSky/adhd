@@ -8,11 +8,15 @@ import type {
   IProviderEcho,
   IToolWarning,
   PostToolCallPayload,
+  PreToolCallPayload,
   ServerResultPersistPayload,
+  TaskStartupPayload,
+  ToolCallConcurrencyClass,
 } from '@adhd/agent-base-types';
 import { effectiveHitl } from '@adhd/agent-base-types';
 import { estimateToolResultTokens } from './tool-result-tokens.js';
 import { randomUUID } from 'node:crypto';
+import { performance } from 'node:perf_hooks';
 import { ToolError } from '../validation/errors.js';
 import { generateId } from '../utils/ids.js';
 import { nowIso } from '../utils/timestamps.js';
@@ -27,6 +31,8 @@ import { withNativeToolGuidance } from './native-tool-guidance.js';
 import { coerceToolArguments } from './tool-arg-coercion.js';
 import { DEFAULT_PROVIDER_TIMEOUT_MS } from '../interfaces.js';
 import { createToolLimiter } from './tool-limiter.js';
+import { assignGroups, schedulingClassOf, type ToolSchedulingClass } from './tool-class.js';
+import { classifyToolCallOutcome, modelVisibleBytes } from './tool-call-signals.js';
 import { selectionOf, wireModelOf } from '../providers/resolve-selection.js';
 import { readPartialUsage, type IProviderPartialUsage, type ProviderTokenUsage } from '../providers/partial-usage.js';
 import { buildModelResponsePayload, sourceFromResponse } from './model-response-payload.js';
@@ -558,10 +564,18 @@ export class Orchestrator {
     type GovernOutcome = {
       resolved: { server: string; tool: string };
       refused?: { result: unknown; isError: boolean };
+      /**
+       * The `pre:tool_call` payload exactly as emitted (the SAME object every handler received), so the
+       * native loop can complete `groupIndex` / `queuedMs` on it when the call starts (R10).
+       */
+      prePayload?: PreToolCallPayload;
     };
+    /** R10 trace signals known when the call is governed (Phase 1). Absent for bridged (claudecli) calls. */
+    type GovernSchedule = { concurrencyClass: ToolCallConcurrencyClass; turnIndex: number; groupIndex: number };
     const governToolCall = async (
       tc: GovernedCall,
-      bridged: boolean
+      bridged: boolean,
+      schedule?: GovernSchedule
     ): Promise<GovernOutcome> => {
       const resolved = registry.resolveToolName?.(
         `${tc.server}__${tc.tool}`
@@ -1133,12 +1147,19 @@ export class Orchestrator {
         }
       }
 
-      await hooks.emit('pre:tool_call', {
+      // R10: `concurrencyClass`, `turnIndex` and the PLANNED `groupIndex` are known now; `queuedMs` (and
+      // the final `groupIndex`) only exist once the call actually starts, after this event has fired.
+      // The native loop therefore completes them on THIS object when the call starts: a handler that
+      // keeps the payload (the tracing plugin keeps the open span's state) reads the final values at
+      // `post:tool_call`.
+      const prePayload: PreToolCallPayload = {
         executionContext,
         toolName: qualifiedToolName,
         callId: tc.id,
         toolInput: tc.arguments,
-      });
+        ...(schedule ?? {}),
+      };
+      await hooks.emit('pre:tool_call', prePayload);
 
       try {
         await hooks.enforce('pre:tool_call', {
@@ -1170,7 +1191,7 @@ export class Orchestrator {
             : undefined,
       });
       executionContext.toolCallCount++;
-      return { resolved };
+      return { resolved, ...(schedule ? { prePayload } : {}) };
     };
 
     /**
@@ -1225,7 +1246,9 @@ export class Orchestrator {
 
       // 9ed453c1 CACHE: canonical order for server-rendered allow-lists so the serialized tools
       // block (head of the cached prefix) is byte-stable across tasks and spawns.
+      const toolListingStartedAt = performance.now();
       const tools = canonicalizeToolDefinitions(withNativeToolGuidance(await registry.listAllTools()));
+      const toolListingMs = Math.max(0, Math.round(performance.now() - toolListingStartedAt));
 
       // HITL enablement is `nativeTooling.hitl` (legacy alias `allowHumanInput`),
       // resolved by `effectiveHitl` and DEFAULT-ON (ADR-0008 D3/D6: `hitl`
@@ -1237,6 +1260,18 @@ export class Orchestrator {
       if (effectiveHitl(executionContext.agentDefinition) !== false) {
         tools.push(HITL_BUILTIN_TOOL_DEFINITION);
       }
+
+      // R10 P10: where this task's start-up time went. Observational: a failing handler never fails
+      // the task. `queueWaitMs` and `sessionMs` are NOT in this payload: the engine receives neither
+      // the enqueue time nor the session-resolution time (both happen before `Orchestrator.run`), and
+      // the field is omitted rather than reported as a guess.
+      const startupTimings = registry.startupTimings?.();
+      await emitObservational('task:startup', {
+        executionContext,
+        mcpConnectMs: startupTimings?.connectMs ?? {},
+        toolsReadyMs: startupTimings?.toolsReadyMs ?? toolListingMs,
+        toolCount: tools.length,
+      } as TaskStartupPayload);
 
       // Default to 'full' JSON function-schemas — the contract models are trained on, and
       // what published 2.0.1 always sent. Full schemas are STATIC, so they sit in the cached
@@ -1278,10 +1313,13 @@ export class Orchestrator {
       const providerModel = wireModelOf(executionContext);
 
       let looping = true;
+      // R10: zero-based index of the model call whose response requests a turn's tool calls.
+      let toolTurnIndex = -1;
       while (looping) {
         if (signal.aborted) {
           throw new ToolError('PROVIDER_ERROR', 'Task was cancelled');
         }
+        toolTurnIndex += 1;
 
         // Cache-preserving context management (BUG-ORCH-008): don't trim from the front
         // every call. Let history grow append-only, and only when the REAL context nears
@@ -1957,6 +1995,33 @@ export class Orchestrator {
 
         const toolCalls = assistantMessage.toolCalls ?? [];
 
+        // R10 P1: classify every non-HITL call of the turn ONCE, before any is governed, so the
+        // `pre:tool_call` event can name its class and ordered group and Phase 2 schedules by the same
+        // answer. Delegation tools are `unordered`; the registry's own `toolClass` (server-advertised
+        // annotations) wins over a lookup in the advertised list when the registry has one.
+        const classOfCall = (tc: { server: string; tool: string }): ToolSchedulingClass => {
+          const resolved = registry.resolveToolName?.(`${tc.server}__${tc.tool}`) ?? {
+            server: tc.server,
+            tool: tc.tool,
+          };
+          const qualified = `${resolved.server}__${resolved.tool}`;
+          return schedulingClassOf(
+            qualified,
+            tools.find((t) => t.name === qualified),
+            registry.toolClass
+              ? () => registry.toolClass!(resolved.server, resolved.tool)
+              : undefined
+          );
+        };
+        const plannedCalls = toolCalls.filter((tc) => tc.tool !== HITL_TOOL_NAME);
+        const plannedClasses = plannedCalls.map(classOfCall);
+        const plannedGroups = assignGroups(plannedClasses);
+        const schedulingByCallId = new Map(
+          plannedCalls.map((tc, i) => [tc.id, { cls: plannedClasses[i], group: plannedGroups[i] }] as const)
+        );
+        // The `pre:tool_call` payloads of the calls that were governed, by call id (completed at start).
+        const prePayloads = new Map<string, PreToolCallPayload>();
+
         // Phase 1 — serial pre-dispatch loop
         const hitlResults = new Map<string, string>();
         const warningResults = new Map<
@@ -2114,10 +2179,19 @@ export class Orchestrator {
             continue;
           }
 
+          const planned = schedulingByCallId.get(tc.id);
           const governed = await governToolCall(
             { id: tc.id, server: tc.server, tool: tc.tool, arguments: tc.arguments },
-            false
+            false,
+            planned === undefined
+              ? undefined
+              : {
+                  concurrencyClass: planned.cls,
+                  turnIndex: toolTurnIndex,
+                  groupIndex: planned.group,
+                }
           );
+          if (governed.prePayload) prePayloads.set(tc.id, governed.prePayload);
           if (governed.refused) {
             warningResults.set(tc.id, governed.refused);
             continue;
@@ -2128,16 +2202,30 @@ export class Orchestrator {
         // concurrently, at most `config.toolCallConcurrency` in flight (default
         // DEFAULT_TOOL_CALL_CONCURRENCY); results keep call order. HITL calls
         // were handled above and never enter the pool.
+        // R10 P1: ordered by class. A write/edit/shell call (barrier) starts only after every earlier
+        // read or write of the turn has settled and every later one waits for it; reads between
+        // barriers still overlap; delegation tools (unordered) never wait and never block. Results
+        // keep call order, so a failed barrier still leaves every later call with its own result.
         const nonHitlToolCalls = toolCalls.filter(
           (tc) => tc.tool !== HITL_TOOL_NAME && !warningResults.has(tc.id)
         );
-        const toolResults = await toolLimiter.map(
+        const toolResults = await toolLimiter.mapOrdered(
           nonHitlToolCalls,
-          async (toolCall) => {
+          async (toolCall, startMeta) => {
             const resolved = registry.resolveToolName?.(
               `${toolCall.server}__${toolCall.tool}`
             ) ?? { server: toolCall.server, tool: toolCall.tool };
             const qualifiedToolName = `${resolved.server}__${resolved.tool}`;
+
+            // R10: the call starts now. Complete the `pre:tool_call` payload that fired during
+            // governance with what only exists at start: the group it actually ran in (refused
+            // calls leave the plan, so this can differ from the planned index) and how long it
+            // waited for a slot or an earlier barrier.
+            const prePayload = prePayloads.get(toolCall.id);
+            if (prePayload) {
+              prePayload.groupIndex = startMeta.groupIndex;
+              prePayload.queuedMs = startMeta.queuedMs;
+            }
 
             emit({
               type: 'tool_call',
@@ -2172,6 +2260,8 @@ export class Orchestrator {
             let toolResult: unknown;
             let isError = false;
             let isDenial = false;
+            let argMismatch = false;
+            let argCoerced = false;
             try {
               // BK2 (114e014c): tolerate a model stringifying an array/object
               // argument, driven by the tool's declared input schema.
@@ -2187,9 +2277,11 @@ export class Orchestrator {
                   toolCall.arguments
                 );
                 if (coerced.mismatch) {
+                  argMismatch = true;
                   throw new Error(coerced.mismatch.message);
                 }
                 callArguments = coerced.arguments;
+                argCoerced = coerced.coercions.length > 0;
                 for (const c of coerced.coercions) {
                   logger.warn(
                     {
@@ -2341,6 +2433,18 @@ export class Orchestrator {
               ...(isDenial ? { isDenial: true } : {}),
               ...(exitStatus !== undefined ? { exitStatus } : {}),
               estResultTokens: toolCallEstResultTokens,
+              // R10 trace signals. `resultBytes` is the model-visible text AFTER the size cap / spill
+              // and BEFORE `transform:tool_result` and the provider wire encoding. `noteAppended` is
+              // deliberately absent: notes are added later by `transform:tool_result` hooks.
+              errorClass: classifyToolCallOutcome({
+                isError,
+                isDenial,
+                argMismatch,
+                argCoerced,
+                ...(exitStatus !== undefined ? { exitStatus } : {}),
+                ...(isError && typeof toolResult === 'string' ? { errorText: toolResult } : {}),
+              }),
+              resultBytes: modelVisibleBytes(modelVisibleResult),
             });
 
             return {
@@ -2349,7 +2453,8 @@ export class Orchestrator {
               isError,
               estResultTokens: toolCallEstResultTokens,
             };
-          }
+          },
+          (call) => schedulingByCallId.get(call.id)?.cls ?? 'unordered'
         );
 
         // Phase 3 — serial result append
