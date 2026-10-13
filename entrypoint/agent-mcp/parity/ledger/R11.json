@@ -4,16 +4,36 @@
   "cap": 2,
   "approvedBy": "no, the experiment design I told you to use, where an agent dispatches backlog operator using agent mcp, gets a random ticket, implements it, etc. only arms b and c. those are the experiments I want you to run",
   "extraRunReason": "",
-  "runs": [],
+  "runs": [
+    {
+      "runId": "B1",
+      "arm": "B",
+      "at": "2026-10-13T09:32:00.519Z",
+      "pid": 60157,
+      "model": "claude-haiku-5-5",
+      "modelSource": "json"
+    },
+    {
+      "runId": "C1",
+      "arm": "C",
+      "at": "2026-10-13T09:36:09.048Z",
+      "pid": 60157,
+      "model": "claude-haiku-5-5",
+      "modelSource": "json"
+    }
+  ],
   "judgeCalls": [],
-  "scenarioSha": "",
+  "scenarioSha": "c1a5990e04b1f364eba45001fa91c14b71aa2480ad4e932f389f2026c1b64eab",
   "scopeChanges": [
     "SCOPE-R11-backlog-operator-task",
     "SCOPE-R11-stop-condition",
     "SCOPE-R11-prompt-update"
   ],
-  "armOrder": [],
-  "startedAt": null,
+  "armOrder": [
+    "B",
+    "C"
+  ],
+  "startedAt": "2026-10-13T09:31:24.781Z",
   "armA": null,
   "releases": [],
   "profile": {
