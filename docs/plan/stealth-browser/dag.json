@@ -185,20 +185,6 @@
       "context": "contexts/surface-api.md",
       "notes": "executor=typescript-pro tier=sonnet/high"
     },
-    "tracing-plugin": {
-      "kind": "work",
-      "phase": "surface",
-      "depends_on": [],
-      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py tracing-plugin",
-      "artifacts": [
-        "entrypoint/stealth-browser/src/tracing.ts",
-        "entrypoint/stealth-browser/src/server.ts",
-        "entrypoint/stealth-browser/src/cli.ts",
-        "entrypoint/stealth-browser/package.json"
-      ],
-      "context": "contexts/tracing-plugin.md",
-      "notes": "executor=typescript-pro tier=sonnet/high"
-    },
     "tests-unit-core": {
       "kind": "work",
       "phase": "verify",
@@ -248,8 +234,7 @@
       "kind": "work",
       "phase": "verify",
       "depends_on": [
-        "surface-api",
-        "tracing-plugin"
+        "surface-api"
       ],
       "guard": "python3 docs/plan/stealth-browser/scripts/guard.py tests-unit-surface",
       "artifacts": [
@@ -261,9 +246,7 @@
     "tracing-namespace-proof": {
       "kind": "work",
       "phase": "verify",
-      "depends_on": [
-        "tracing-plugin"
-      ],
+      "depends_on": [],
       "guard": "python3 docs/plan/stealth-browser/scripts/guard.py tracing-namespace-proof",
       "artifacts": [
         "entrypoint/stealth-browser/src/test/unit/tracing/tracing-namespace.spec.ts"
@@ -448,7 +431,6 @@
       "kind": "work",
       "phase": "surface",
       "depends_on": [
-        "tracing-plugin",
         "tests-unit-core",
         "tests-unit-data",
         "tests-unit-extract",
@@ -473,7 +455,6 @@
       "kind": "work",
       "phase": "surface",
       "depends_on": [
-        "tracing-plugin",
         "prod-errors"
       ],
       "guard": "python3 docs/plan/stealth-browser/scripts/guard.py prod-examples",
@@ -722,7 +703,6 @@
       "phase": "verify",
       "depends_on": [
         "chrome-lifecycle",
-        "tracing-plugin",
         "tripwire-pack"
       ],
       "guard": "python3 docs/plan/stealth-browser/scripts/guard.py sp-switch",
