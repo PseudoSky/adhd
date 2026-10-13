@@ -3,7 +3,7 @@ import { statSync } from 'node:fs';
 import type { EngineConfig, EngineLogger } from '../interfaces.js';
 import type { BackgroundQueue } from '../engine/queue.js';
 import type { DagEngine } from '../engine/dag-engine.js';
-import type { Orchestrator } from '../engine/orchestrator.js';
+import type { Orchestrator, OrchestratorStartupStamps } from '../engine/orchestrator.js';
 import { resolveHitl, warnEchoFailureOnce } from '../engine/orchestrator.js';
 import type { PolicyEngine } from '../engine/policy.js';
 import type {
@@ -35,6 +35,53 @@ import { generateId } from '../utils/ids.js';
 import { nowIso } from '../utils/timestamps.js';
 import type { IHookRegistry } from '@adhd/agent-base-types';
 import { buildTaskUsageReport, type Database } from './usage.js';
+
+/**
+ * R10 M2: measures the two start-up times only this file can see, because both happen before
+ * `Orchestrator.run` is called: the time spent in the session store (`session`) and enqueue-to-dequeue
+ * (`queueWait`). The result is the `startupStamps` handed to the orchestrator for the `task:startup` hook.
+ * Whole milliseconds >= 0. Stamps are produced ONLY for a dispatch that has a parent (`dispatched`): a direct
+ * REST/MCP call has no parent trace to attribute them to, so both stay absent (never 0).
+ */
+class StartupMeter {
+  private sessionTotal = 0;
+  private enqueuedAt = 0;
+  constructor(private readonly dispatched: boolean) {}
+
+  /** Time one synchronous session-store interaction. */
+  session<T>(fn: () => T): T {
+    const t0 = performance.now();
+    try {
+      return fn();
+    } finally {
+      this.sessionTotal += performance.now() - t0;
+    }
+  }
+
+  /** Time one asynchronous session-store interaction. */
+  async sessionAsync<T>(fn: () => Promise<T>): Promise<T> {
+    const t0 = performance.now();
+    try {
+      return await fn();
+    } finally {
+      this.sessionTotal += performance.now() - t0;
+    }
+  }
+
+  /** Call immediately before handing the run to the queue (or invoking it inline): starts the queue-wait clock. */
+  enqueued(): void {
+    this.enqueuedAt = performance.now();
+  }
+
+  /** Call on entry of the run closure: freezes the queue wait and returns the stamps (undefined without a dispatching parent). */
+  stamps(): OrchestratorStartupStamps | undefined {
+    if (!this.dispatched) return undefined;
+    return {
+      queueWaitMs: Math.max(0, Math.round(performance.now() - this.enqueuedAt)),
+      sessionMs: Math.max(0, Math.round(this.sessionTotal)),
+    };
+  }
+}
 
 export interface TaskStore {
     create(input: {
@@ -241,10 +288,13 @@ async function runEphemeralTask(
   // creates a REAL session row, not a sessionless placeholder. The noop-session
   // path is retired. `isEphemeral: true` is the retention class (an ephemeral
   // session is reclaimed on terminal), NOT an interactivity/HITL property.
-  const session = deps.sessionStore.create({
-    agentName: agentDefinition.name,
-    agentDefinition: snapshotDefinition,
-  });
+  const meter = new StartupMeter(callerContext !== undefined);
+  const session = meter.session(() =>
+    deps.sessionStore.create({
+      agentName: agentDefinition.name,
+      agentDefinition: snapshotDefinition,
+    })
+  );
   const sessionId = session.id;
 
   deps.taskStore.create({
@@ -320,7 +370,7 @@ async function runEphemeralTask(
   // `appendMessage` is on the concrete SessionStore, not the minimal
   // `SessionStoreForTool` surface — same cast the session path already uses.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  await (deps.sessionStore as any).appendMessage(sessionId, userMessage);
+  await meter.sessionAsync(() => (deps.sessionStore as any).appendMessage(sessionId, userMessage));
 
   const registry = new McpClientRegistry(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -337,8 +387,10 @@ async function runEphemeralTask(
   deps.taskStore.registerCancellation(taskId, controller);
 
   const runEphemeral = async (): Promise<void> => {
+  const startupStamps = meter.stamps();
   try {
     await deps.orchestrator.run({
+      ...(startupStamps ? { startupStamps } : {}),
       executionContext,
       messages,
       registry,
@@ -385,6 +437,7 @@ async function runEphemeralTask(
 
   // P2: background:true enqueues the run and returns at once; the one-shot
   // session is closed by `runEphemeral`'s finally only after the task is terminal.
+  meter.enqueued();
   if (input.background === true) {
     deps.queue.enqueue(taskId, runEphemeral);
     deps.logger.info({ taskId, sessionId }, 'Ephemeral task enqueued for background execution');
@@ -473,7 +526,8 @@ async function dispatchTask(
     return runEphemeralTask(input, deps, callerContext);
   }
 
-  const session = deps.sessionStore.read(input.session_id);
+  const meter = new StartupMeter(callerContext !== undefined);
+  const session = meter.session(() => deps.sessionStore.read(input.session_id));
   if (session.status !== 'active') {
     throw new ToolError(
       'SESSION_CLOSED',
@@ -484,9 +538,8 @@ async function dispatchTask(
   // Caller-cwd contract (ADR-0008 D4): the caller may supply a `cwd` on the
   // task; a sub-dispatch inherits the parent's. Absent ⇒ host fallback (flagged).
   const effectiveCwd = input.cwd ?? callerContext?.cwd;
-  const agentDefinition = deps.sessionStore.getAgentDefinition(
-    input.session_id,
-    effectiveCwd
+  const agentDefinition = meter.session(() =>
+    deps.sessionStore.getAgentDefinition(input.session_id, effectiveCwd)
   );
 
   // Resolve the provider selection BEFORE the task row is created (fail closed:
@@ -494,7 +547,7 @@ async function dispatchTask(
   // binding is the `session` tier of the chain.
   const { selection, wireModel } = resolveTaskSelection({
     agentDefinition,
-    sessionBinding: deps.sessionStore.getSelection?.(input.session_id) ?? null,
+    sessionBinding: meter.session(() => deps.sessionStore.getSelection?.(input.session_id) ?? null),
     config: deps.config,
     registry: deps.providerRegistry,
   });
@@ -584,7 +637,7 @@ async function dispatchTask(
     executionContext,
   });
 
-  const existingMessages = deps.sessionStore.getMessages(input.session_id);
+  const existingMessages = meter.session(() => deps.sessionStore.getMessages(input.session_id));
   // R9-hist: computed from the history BEFORE this prompt is appended, so idle time is the gap since
   // the session's last activity, not zero.
   const echoes = loadSessionEchoes(deps, input.session_id, existingMessages);
@@ -596,7 +649,7 @@ async function dispatchTask(
     createdAt: nowIso(),
   };
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  await (deps.sessionStore as any).appendMessage(input.session_id, userMessage);
+  await meter.sessionAsync(() => (deps.sessionStore as any).appendMessage(input.session_id, userMessage));
   const messages = [...existingMessages, userMessage] as unknown as Message[];
 
   const allMessages = agentDefinition.systemPrompt
@@ -631,8 +684,10 @@ async function dispatchTask(
   const suspensionAnswerable = input.background === true;
 
   const runTask = async (): Promise<void> => {
+    const startupStamps = meter.stamps();
     try {
       await deps.orchestrator.run({
+        ...(startupStamps ? { startupStamps } : {}),
         executionContext,
         messages: allMessages,
         registry,
@@ -654,6 +709,7 @@ async function dispatchTask(
     }
   };
 
+  meter.enqueued();
   if (input.background) {
     deps.queue.enqueue(task.id, runTask);
 
@@ -866,7 +922,10 @@ export async function enqueueExistingTask(
     return;
   }
 
-  const session = deps.sessionStore.read(task.sessionId);
+  // R10 M2: a DAG/restart redispatch is attributable to a parent only when the task row records one.
+  const meter = new StartupMeter(task.parentTaskId != null);
+  const taskSessionId = task.sessionId;
+  const session = meter.session(() => deps.sessionStore.read(taskSessionId));
 
   if (session.status !== 'active') {
     deps.logger.warn(
@@ -876,13 +935,13 @@ export async function enqueueExistingTask(
     return;
   }
 
-  const agentDefinition = deps.sessionStore.getAgentDefinition(task.sessionId);
+  const agentDefinition = meter.session(() => deps.sessionStore.getAgentDefinition(taskSessionId));
 
   let resolved: ReturnType<typeof resolveTaskSelection>;
   try {
     resolved = resolveTaskSelection({
       agentDefinition,
-      sessionBinding: deps.sessionStore.getSelection?.(task.sessionId) ?? null,
+      sessionBinding: meter.session(() => deps.sessionStore.getSelection?.(taskSessionId) ?? null),
       config: deps.config,
       registry: deps.providerRegistry,
     });
@@ -960,7 +1019,7 @@ export async function enqueueExistingTask(
     executionContext,
   });
 
-  const existingMessages = deps.sessionStore.getMessages(task.sessionId);
+  const existingMessages = meter.session(() => deps.sessionStore.getMessages(taskSessionId));
   const echoes = loadSessionEchoes(deps, task.sessionId, existingMessages);
   const userMessage = {
     id: generateId(),
@@ -995,9 +1054,12 @@ export async function enqueueExistingTask(
     deps.logger
   );
 
+  meter.enqueued();
   deps.queue.enqueue(taskId, async () => {
+    const startupStamps = meter.stamps();
     try {
       await deps.orchestrator.run({
+        ...(startupStamps ? { startupStamps } : {}),
         executionContext,
         messages: allMessages,
         registry,

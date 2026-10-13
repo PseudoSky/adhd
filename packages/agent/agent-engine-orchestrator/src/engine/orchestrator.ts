@@ -399,6 +399,18 @@ export interface OrchestratorRunInput {
    * echoes of its own responses and hands it to the provider on every call. Absent => legacy history.
    */
   echoes?: ReadonlyMap<string, IProviderEcho>;
+  /**
+   * R10 M2: the two start-up times the engine cannot see because both happen before `run` is called, measured by
+   * the dispatching tool (`tools/task.ts`): enqueue-to-dequeue and session create/read. Forwarded verbatim into
+   * `task:startup`. Absent (no dispatching parent, or a direct `run` call) => the payload omits both: never a guess, never 0.
+   */
+  startupStamps?: OrchestratorStartupStamps;
+}
+
+/** The pre-`run` start-up times a dispatching tool measured; each is whole milliseconds >= 0 and independently optional. */
+export interface OrchestratorStartupStamps {
+  queueWaitMs?: number;
+  sessionMs?: number;
 }
 
 export interface OrchestratorRunResult {
@@ -1265,15 +1277,18 @@ export class Orchestrator {
       }
 
       // R10 P10: where this task's start-up time went. Observational: a failing handler never fails
-      // the task. `queueWaitMs` and `sessionMs` are NOT in this payload: the engine receives neither
-      // the enqueue time nor the session-resolution time (both happen before `Orchestrator.run`, and
-      // the task row carries only `createdAt`, which for a synchronous or DAG-waiting task is not a queue
-      // wait), so the optional fields are omitted rather than reported as a guess.
+      // the task. `queueWaitMs` and `sessionMs` happen before `Orchestrator.run` (enqueue-to-dequeue, session
+      // create/read), so only the dispatching tool can measure them: it passes them as `input.startupStamps`
+      // (R10 M2). Without that field (no dispatching parent, or a direct `run` call) both are omitted rather
+      // than reported as a guess.
       const startupTimings = registry.startupTimings?.();
+      const stamps = input.startupStamps;
       const startupPayload: TaskStartupPayload = {
         executionContext,
         mcpConnectMs: startupTimings?.connectMs ?? {},
         toolsReadyMs: startupTimings?.toolsReadyMs ?? toolListingMs,
+        ...(stamps?.queueWaitMs !== undefined ? { queueWaitMs: stamps.queueWaitMs } : {}),
+        ...(stamps?.sessionMs !== undefined ? { sessionMs: stamps.sessionMs } : {}),
         toolCount: tools.length,
       };
       await emitObservational('task:startup', startupPayload);

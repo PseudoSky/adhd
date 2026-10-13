@@ -55,7 +55,7 @@ export type {
   ToolArgCoercionOutcome,
   ToolArgMismatch,
 } from './engine/tool-arg-coercion.js';
-export type { OrchestratorRunInput, OrchestratorRunResult, OrchestratorTaskStore, OrchestratorSessionStore } from './engine/orchestrator.js';
+export type { OrchestratorRunInput, OrchestratorStartupStamps, OrchestratorRunResult, OrchestratorTaskStore, OrchestratorSessionStore } from './engine/orchestrator.js';
 export { resolveHitl } from './engine/orchestrator.js';
 export { PolicyEngine } from './engine/policy.js';
 export type { PolicyConfig, PolicyCheckInput, AgentPolicyTemplateRule } from './engine/policy.js';
