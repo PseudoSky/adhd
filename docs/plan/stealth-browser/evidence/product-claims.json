@@ -1,0 +1,19 @@
+{
+  "plan": "8468f7b1-8adc-4237-9986-21ea1e27c537",
+  "state": "surface-api",
+  "launchChromeOptions": {
+    "libraryAcceptedOptions": ["port", "profileDir", "chromePath", "extraArgs", "quiet"],
+    "libraryEvidence": "entrypoint/stealth-browser/src/lib/cdp/browser.ts:22-33 (LaunchChromeOptions); extraArgs is spread into the spawn argv at :113 and chromePath is the spawned binary at :80,:116",
+    "chromeManagerPath": "entrypoint/stealth-browser/src/lib/chrome-manager.ts:101 calls ensureChromeRunning({ port }) only; ChromeManagerOptions (:34-45) has no profile, chromePath or extraArgs option",
+    "verbInputOptions": ["port", "userDataDir"],
+    "verbEvidence": "entrypoint/stealth-browser/src/api.ts LaunchChromeInput (port, userDataDir); userDataDir maps to the library option profileDir via ensureChromeRunning({ port, profileDir })",
+    "chromePathOrExtraArgsReachVerbInput": false
+  },
+  "getPageContextCookieValues": {
+    "returnsValues": false,
+    "returnsNames": false,
+    "returns": "cookieCount (a number of cookies whose host matches the page hostname)",
+    "evidence": "entrypoint/stealth-browser/src/lib/queries/context.ts:5-12 (PageContext has cookieCount only), :24-26 (cookies are read then only counted), :37-44 (returned object). CookieClient.getCookies selects the value column (src/lib/storage/cookies.ts:19,:32) but the value never leaves context.ts.",
+    "consequence": "host redaction of cookie values has nothing to redact; the redaction tests are regression guards"
+  }
+}
