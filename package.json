@@ -160,6 +160,7 @@
     "overrides": {
       "estree-walker": "2.0.2",
       "@adhd/sox-store-adapter": "^0.13.3",
+      "@adhd/sox-service-proxy": "file:/Users/nix/.cache/adhd-dev-tarballs/adhd-sox-service-proxy-0.6.0-61d3ed54-prerelease.tgz",
       "@tursodatabase/database": "0.8.2",
       "@nx/devkit@18.3.4>nx": "18.3.4"
     },

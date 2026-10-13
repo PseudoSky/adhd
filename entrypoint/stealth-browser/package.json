@@ -38,7 +38,7 @@
     "url": "https://github.com/PseudoSky/adhd/issues"
   },
   "dependencies": {
-    "@adhd/sox-service-proxy": "^0.5.0",
+    "@adhd/sox-service-proxy": "~0.6.0",
     "@adhd/sox-store-adapter": "^0.13.3",
     "@xmldom/xmldom": "^0.9.10",
     "node-html-parser": "^8.0.4",

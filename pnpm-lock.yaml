@@ -7,6 +7,7 @@ settings:
 overrides:
   estree-walker: 2.0.2
   '@adhd/sox-store-adapter': ^0.13.3
+  '@adhd/sox-service-proxy': file:/Users/nix/.cache/adhd-dev-tarballs/adhd-sox-service-proxy-0.6.0-61d3ed54-prerelease.tgz
   '@tursodatabase/database': 0.8.2
   '@nx/devkit@18.3.4>nx': 18.3.4
 
@@ -767,8 +768,8 @@ importers:
   entrypoint/stealth-browser:
     dependencies:
       '@adhd/sox-service-proxy':
-        specifier: ^0.5.0
-        version: 0.5.0
+        specifier: file:/Users/nix/.cache/adhd-dev-tarballs/adhd-sox-service-proxy-0.6.0-61d3ed54-prerelease.tgz
+        version: file:../../../../../.cache/adhd-dev-tarballs/adhd-sox-service-proxy-0.6.0-61d3ed54-prerelease.tgz
       '@adhd/sox-store-adapter':
         specifier: ^0.13.3
         version: 0.13.3
@@ -1670,6 +1671,8 @@ importers:
         specifier: ^0.1.7
         version: link:../environment-builder
 
+  packages/resilience/resilience-core-tripwire: {}
+
   packages/ui-react/ui-react-base-hooks:
     dependencies:
       react:
@@ -1725,7 +1728,7 @@ packages:
     engines: {node: '>=22'}
     requiresBuild: true
     dependencies:
-      '@adhd/sox-service-proxy': 0.5.0
+      '@adhd/sox-service-proxy': file:../../../../../.cache/adhd-dev-tarballs/adhd-sox-service-proxy-0.6.0-61d3ed54-prerelease.tgz
       '@adhd/sox-telemetry': 0.4.3
       '@huggingface/transformers': 4.2.0
       fastembed: 2.1.0
@@ -1770,14 +1773,6 @@ packages:
       '@adhd/sox-vector-store': 0.7.5
     transitivePeerDependencies:
       - encoding
-    dev: false
-
-  /@adhd/sox-service-proxy@0.5.0:
-    resolution: {integrity: sha512-BuefAZrsPrADlnQ351ehNxK8DrpcJZ67VtahPqm7r2AaBGt3EEBZBBbf9FsWZpb+P198Uk7zqTlCbeF4K/Kn9g==}
-    engines: {node: '>=20'}
-    requiresBuild: true
-    dependencies:
-      '@adhd/sox-listen-guard': 0.1.1
     dev: false
 
   /@adhd/sox-store-adapter@0.13.3:
@@ -26773,3 +26768,12 @@ packages:
 
   /zod@4.4.3:
     resolution: {integrity: sha512-ytENFjIJFl2UwYglde2jchW2Hwm4GJFLDiSXWdTrJQBIN9Fcyp7n4DhxJEiWNAJMV1/BqWfW/kkg71UDcHJyTQ==}
+
+  file:../../../../../.cache/adhd-dev-tarballs/adhd-sox-service-proxy-0.6.0-61d3ed54-prerelease.tgz:
+    resolution: {integrity: sha512-Mp8eKTr9KgFuavhIC4JaiVLO06hmrvaDnPrabYuP+7xmHjgFW0z0oxmMXOfPbylVDMBuVYjP+jNkm3IRBmzpPg==, tarball: file:../../../../../.cache/adhd-dev-tarballs/adhd-sox-service-proxy-0.6.0-61d3ed54-prerelease.tgz}
+    name: '@adhd/sox-service-proxy'
+    version: 0.6.0
+    engines: {node: '>=20'}
+    dependencies:
+      '@adhd/sox-listen-guard': 0.1.1
+    dev: false
