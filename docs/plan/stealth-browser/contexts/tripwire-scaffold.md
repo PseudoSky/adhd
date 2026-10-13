@@ -42,7 +42,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 ## Reservations
 
 ```text
-read_only:  ["docs/plan/stealth-browser/APPROVAL-tripwire.md", "docs/plan/stealth-browser/SPEC-tripwire.md", "entrypoint/stealth-browser/project.json"]
+read_only:  ["docs/plan/stealth-browser/APPROVAL-tripwire.md"]
 mutates:    ["packages/resilience/resilience-core-tripwire/", "tsconfig.base.json", ".adhd/workspace.json", "docs/plan/stealth-browser/evidence/tripwire/", "tools/nx-plugins/build/executors/typecheck-spec/resilience-core-tripwire.baseline.json"]
 ```
 

@@ -25,7 +25,19 @@ TOP = subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=Tru
 os.chdir(TOP)
 
 PLAN = "docs/plan/stealth-browser"
-P = "entrypoint/stealth-browser"
+# The package split (SPEC-stealth-search.md): the library moves from the generated entrypoint to the generated core package
+# `packages/stealth/stealth-core-browser` (@adhd/stealth-core-browser); the search entrypoint is `entrypoint/stealth-search`.
+LEGACY_DIR = "entrypoint/stealth-browser"
+CORE_DIR = "packages/stealth/stealth-core-browser"
+SEARCH_DIR = "entrypoint/stealth-search"
+CORE_PROJECT = "stealth-core-browser"
+SEARCH_PROJECT = "stealth-search"
+CORE_PKG = "@adhd/stealth-core-browser"
+SEARCH_PKG = "@adhd/stealth-search"
+LEGACY_PKG = "@adhd/stealth-browser"
+# `P` is the library package directory: the legacy entrypoint until core-scaffold moves it, the core package afterwards. Every check written
+# for the library before the split keeps working on both sides of the move because it addresses the library only through `P` / proj_name().
+P = LEGACY_DIR if (os.path.exists(LEGACY_DIR) and not os.path.exists(CORE_DIR)) else CORE_DIR
 TW = "packages/resilience/resilience-core-tripwire"
 TW_NAME = "resilience-core-tripwire"
 TW_PKG = "@adhd/resilience-core-tripwire"
@@ -92,7 +104,7 @@ def pkg():
 
 
 def proj_name():
-    return (jread(f"{P}/project.json", {}) or {}).get("name", "stealth-browser")
+    return (jread(f"{P}/project.json", {}) or {}).get("name", CORE_PROJECT if P == CORE_DIR else "stealth-browser")
 
 
 def dag():
@@ -223,6 +235,136 @@ def main_nm_untouched():
     except OSError:
         return False, "main node_modules/.modules.yaml unreadable"
     return cur == stamp, f"main .modules.yaml mtime {cur} vs stamp {stamp}"
+
+
+# ---------------------------------------------------------------- split helpers (shared by this file and scripts/guards/*.py)
+SPLIT_SPEC = f"{PLAN}/SPEC-stealth-search.md"
+SPLIT_EVIDENCE = f"{PLAN}/evidence/split"
+SPLIT_REQUEST = "port search to the entrypoint transfering all the apigen / tracing requirements over to the cli and mcps for search"
+
+
+def pkg_json(d):
+    return jread(f"{d}/package.json", {}) or {}
+
+
+def project_json(d):
+    return jread(f"{d}/project.json", {}) or {}
+
+
+def nx_run(project, target, *extra, timeout=1800):
+    """`nx run <project>:<target> [extra...]` -> (rc, output)."""
+    return sh([NX, "run", f"{project}:{target}", *extra], timeout=timeout)
+
+
+def code_tree(d):
+    """Identity of a package's code and manifest at HEAD (src, bin, package.json, project.json). Documentation edits (README, CHANGELOG, docs/, AGENTS.md, llms.txt) do not change it, so gate evidence stays valid across the docs states."""
+    if not os.path.isdir(d):
+        return ""
+    out = git("ls-tree", "-r", "HEAD", "--", f"{d}/src", f"{d}/bin", f"{d}/package.json", f"{d}/project.json")
+    return hashlib.sha256(out.encode()).hexdigest()
+
+
+def code_trees():
+    """code_tree of the three owned packages (empty string while a package does not exist yet)."""
+    return {"core": code_tree(P), "search": code_tree(SEARCH_DIR), "tw": code_tree(TW)}
+
+
+def nontest_ts(d, *subdirs):
+    """Non-test, non-declaration TypeScript files under d/<subdirs> (default src and bin)."""
+    out = []
+    for sub in subdirs or ("src", "bin"):
+        for f in walk(f"{d}/{sub}"):
+            if "/test/" in f or f.endswith((".spec.ts", ".d.ts")):
+                continue
+            out.append(f)
+    return out
+
+
+def spec_files_of(d, sub=""):
+    """*.spec.ts files under d/src/test/<sub>."""
+    root = f"{d}/src/test/{sub}".rstrip("/")
+    return [f for f in walk(root) if f.endswith((".spec.ts", ".test.ts"))]
+
+
+def cites(files, slug=None):
+    """Every file cites the ticket 8468f7b1 and at least one valid [<state>.N] criterion id (of `slug` when given)."""
+    ids = criteria_ids()
+    bad = []
+    for f in files:
+        txt = read(f)
+        found = set(re.findall(r"\[([a-z0-9-]+\.\d+)\]", txt))
+        if slug:
+            found = {i for i in found if i.startswith(slug + ".")}
+        if TICKET not in txt or not (found & ids):
+            bad.append(f)
+    return bool(files) and not bad, f"uncited or no files: {bad[:5]} (files={len(files)})"
+
+
+def offenders(files, rx, flags=0):
+    """Files whose code lines (comments stripped) match `rx`."""
+    return [f for f in files if re.search(rx, code_lines(read(f)), flags)]
+
+
+def env_readers(files):
+    return offenders(files, r"process\.env")
+
+
+def untyped_error_sites(files):
+    """Non-test source that constructs a bare Error / TypeError / RangeError or rejects with a string."""
+    return offenders(files, r"\bnew\s+(?:Error|TypeError|RangeError)\s*\(|\bthrow\s+['\"`]|Promise\.reject\(\s*['\"`]")
+
+
+def evidence_json(name):
+    return jread(f"{SPLIT_EVIDENCE}/{name}", {}) or {}
+
+
+def mcp_run(cmd, calls=(), env=None, cwd=None, timeout=60, close_stdin=False):
+    """Minimal real MCP stdio client: spawns `cmd`, initialize, tools/list, then tools/call for each (tool-name suffix or exact name, args).
+    Returns {tools, calls, stdout, stderr, exit}. `close_stdin` closes stdin after the last call and waits for the process to exit (proves stdin-EOF shutdown)."""
+    e = dict(os.environ)
+    e.update(env or {})
+    p = subprocess.Popen(cmd, cwd=cwd, env=e, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    out = {"tools": [], "calls": [], "stdout": [], "stderr": "", "exit": None}
+
+    def rpc(i, method, params=None):
+        p.stdin.write(json.dumps({"jsonrpc": "2.0", "id": i, "method": method, "params": params or {}}) + "\n")
+        p.stdin.flush()
+        end = time.time() + timeout
+        while time.time() < end:
+            line = p.stdout.readline()
+            if not line:
+                break
+            out["stdout"].append(line)
+            try:
+                m = json.loads(line)
+            except ValueError:
+                continue
+            if m.get("id") == i:
+                return m
+        return {}
+    try:
+        rpc(1, "initialize", {"protocolVersion": "2024-11-05", "capabilities": {}, "clientInfo": {"name": "guard", "version": "0"}})
+        p.stdin.write(json.dumps({"jsonrpc": "2.0", "method": "notifications/initialized"}) + "\n")
+        out["tools"] = rpc(2, "tools/list").get("result", {}).get("tools", [])
+        for n, (name, args) in enumerate(calls, 3):
+            tool = next((x for x in out["tools"] if x["name"] == name), None) or next((x for x in out["tools"] if x["name"].endswith(name)), None)
+            out["calls"].append(rpc(n, "tools/call", {"name": tool["name"], "arguments": args}) if tool else {})
+        if close_stdin:
+            p.stdin.close()
+            try:
+                p.wait(timeout=15)
+            except subprocess.TimeoutExpired:
+                pass
+    finally:
+        if p.poll() is None:
+            p.kill()
+            p.wait()
+        out["exit"] = p.returncode
+        try:
+            out["stderr"] = p.stderr.read()
+        except (OSError, ValueError):
+            pass
+    return out
 
 
 def ownership_ok(slug):
@@ -4305,6 +4447,16 @@ def _af13():
     g = jread(f"{PLAN}/evidence/gates-rerun.json", {})
     return (p.get("name") == TW_PKG and not (p.get("dependencies") or {}) and "module" not in p and "exports" not in p and "type" not in p and pur[0] and docs and not ai
             and g.get("tw_tree") == tw_tree_sha()), f"purity: {pur[1]} docs={docs} ai={bool(ai)}"
+
+
+# ---------------------------------------------------------------- split-state guard modules (scripts/guards/*.py)
+# One module per state group, executed in this namespace (they use check(), the helpers above and the constants at the top).
+import glob as _glob
+
+for _gf in sorted(_glob.glob(f"{SCRIPTS}/guards/*.py")):
+    if os.path.basename(_gf).startswith("_"):
+        continue
+    exec(compile(read(_gf), _gf, "exec"), globals())
 
 
 def main():

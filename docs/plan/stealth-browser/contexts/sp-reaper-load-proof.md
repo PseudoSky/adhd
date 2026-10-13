@@ -38,7 +38,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 ## Reservations
 
 ```text
-read_only:  ["docs/plan/stealth-browser/scripts/guard.py", "entrypoint/stealth-browser/"]
+read_only:  []
 mutates:    ["docs/plan/stealth-browser/smoke/reaper-load-proof.md"]
 ```
 

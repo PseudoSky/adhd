@@ -39,7 +39,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 ## Reservations
 
 ```text
-read_only:  ["docs/plan/stealth-browser/SPEC-tripwire.md"]
+read_only:  []
 mutates:    ["docs/plan/stealth-browser/evidence/tripwire/", "packages/resilience/resilience-core-tripwire/package.json", "packages/resilience/resilience-core-tripwire/project.json", "packages/resilience/resilience-core-tripwire/vite.config.ts"]
 ```
 
