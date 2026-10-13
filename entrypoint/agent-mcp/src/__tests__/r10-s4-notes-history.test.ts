@@ -184,7 +184,7 @@ describe("a2a9c6db AC2 [claudecli]: a bridged call gets no note and is never rep
   });
 });
 
-describe("a2a9c6db AC2: noteAppended is delivered to observers that register after the host hooks", () => {
+describe("noteAppended delivery depends on hook registration order (a2a9c6db AC2 partial; deferred clause: 78875362)", () => {
   const ctx = {
     taskId: "t",
     sessionId: "s",
@@ -197,7 +197,7 @@ describe("a2a9c6db AC2: noteAppended is delivered to observers that register aft
   const post: PostToolCallPayload = { executionContext: ctx, toolName: "fs__write_file", callId: "c1", toolInput: { path: "/w/a" }, result: WROTE, isError: false, estResultTokens: 1 };
   const observe = (hooks: IHookRegistry, into: Array<boolean | undefined>) => hooks.register("post:tool_call", (p) => void into.push(p.noteAppended));
 
-  it("a2a9c6db AC2: the shipped order (host hooks first, plugins after, as main() does) hands a plugin noteAppended = true", async () => {
+  it("a2a9c6db AC2 (shipped order only): the shipped order (host hooks first, plugins after, as main() does) hands a plugin noteAppended = true", async () => {
     const hooks = new HookRegistry();
     registerToolResultNotes(hooks);
     const seen: Array<boolean | undefined> = [];
@@ -206,7 +206,7 @@ describe("a2a9c6db AC2: noteAppended is delivered to observers that register aft
     expect(seen).toEqual([true]);
   });
 
-  it("a2a9c6db AC2: the registry has no handler priority, so an observer registered BEFORE the notes hook cannot see the flag (pinned limitation)", async () => {
+  it("78875362: the registry has no handler priority, so an observer registered BEFORE the notes hook cannot see the flag (pinned limitation; the registration-order clause of a2a9c6db AC2 is deferred to 78875362)", async () => {
     const hooks = new HookRegistry();
     const seen: Array<boolean | undefined> = [];
     observe(hooks, seen);
