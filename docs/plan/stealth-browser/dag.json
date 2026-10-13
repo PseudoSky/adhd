@@ -940,6 +940,20 @@
       ],
       "context": "contexts/search-verbs.md",
       "notes": "typescript-pro sonnet/high; U-REEXPORT and U-BOOL probes first"
+    },
+    "search-tracing": {
+      "kind": "work",
+      "phase": "surface",
+      "depends_on": [
+        "search-scaffold"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py search-tracing",
+      "artifacts": [
+        "entrypoint/stealth-search/src/tracing.ts",
+        "entrypoint/stealth-search/src/telemetry.ts"
+      ],
+      "context": "contexts/search-tracing.md",
+      "notes": "typescript-pro sonnet/medium; apigen tracing namespace adhd plus the single initTelemetry"
     }
   },
   "authored_with": {
