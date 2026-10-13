@@ -326,10 +326,10 @@
       "end_ref": "c74257e451719f01761ce477b6a819636cfc0fdb"
     },
     "tripwire-interactive": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-10-13T07:29:46.651Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "6e0dbaf0236c343e1b98bf70e49d5f34216805d7",
       "end_ref": null
     },
     "tripwire-docs": {
