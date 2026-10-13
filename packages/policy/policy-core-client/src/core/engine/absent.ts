@@ -32,9 +32,10 @@ export function containsAbsent(v: unknown): boolean {
 /**
  * Replaces every operator node `{_op: operand}` whose operand (deeply)
  * contains ABSENT with a constant-false node (a field no row has compared to
- * an impossible value). Required so `_not` over an absent comparison cannot
- * flip to true on a bare engine quirk: the result is exactly "that comparison
- * is false" (AT-10). Returns a new expression; the input is untouched.
+ * an impossible value), so a comparison against an absent `$attributes.<name>`
+ * is exactly "false" and never a bare engine quirk (AT-10). Logic stays
+ * two-valued: `_not` over that false node DOES flip to true, as it does for any
+ * false comparison. Returns a new expression; the input is untouched.
  */
 export function neutralizeAbsent(expression: FilterExpression): FilterExpression {
   return rewriteOperators(expression, (_path, _op, operand) =>
