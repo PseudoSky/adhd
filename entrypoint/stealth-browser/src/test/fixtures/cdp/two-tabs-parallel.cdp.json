@@ -1,0 +1,140 @@
+{
+  "meta": {
+    "name": "two-tabs-parallel",
+    "origin": "synthetic-protocol-conformant",
+    "chromeVersion": "126.0.6478.0"
+  },
+  "steps": [
+    {
+      "when": {
+        "method": "Page.enable"
+      }
+    },
+    {
+      "when": {
+        "method": "Network.enable"
+      }
+    },
+    {
+      "when": {
+        "method": "Page.navigate",
+        "params": {
+          "url": "https://site.test/a"
+        }
+      },
+      "reply": {
+        "result": {
+          "frameId": "F1",
+          "loaderId": "L1"
+        }
+      },
+      "emit": [
+        {
+          "method": "Network.requestWillBeSent",
+          "params": {
+            "requestId": "A1",
+            "loaderId": "L1",
+            "documentURL": "https://site.test/a",
+            "request": {
+              "url": "https://site.test/a",
+              "method": "GET",
+              "headers": {
+                "Accept": "*/*"
+              }
+            },
+            "timestamp": 100.0,
+            "wallTime": 1700000000.0,
+            "initiator": {
+              "type": "other"
+            },
+            "type": "Document"
+          }
+        },
+        {
+          "method": "Network.requestWillBeSent",
+          "params": {
+            "requestId": "B1",
+            "loaderId": "L1",
+            "documentURL": "https://site.test/b",
+            "request": {
+              "url": "https://site.test/b",
+              "method": "GET",
+              "headers": {
+                "Accept": "*/*"
+              }
+            },
+            "timestamp": 100.0,
+            "wallTime": 1700000000.0,
+            "initiator": {
+              "type": "other"
+            },
+            "type": "Document"
+          }
+        },
+        {
+          "method": "Network.responseReceived",
+          "params": {
+            "requestId": "B1",
+            "loaderId": "L1",
+            "timestamp": 100.1,
+            "type": "Document",
+            "response": {
+              "url": "https://site.test/b",
+              "status": 200,
+              "statusText": "OK",
+              "headers": {
+                "content-type": "text/html"
+              },
+              "mimeType": "text/html"
+            }
+          }
+        },
+        {
+          "method": "Network.responseReceived",
+          "params": {
+            "requestId": "A1",
+            "loaderId": "L1",
+            "timestamp": 100.1,
+            "type": "Document",
+            "response": {
+              "url": "https://site.test/a",
+              "status": 200,
+              "statusText": "OK",
+              "headers": {
+                "content-type": "text/html"
+              },
+              "mimeType": "text/html"
+            }
+          }
+        },
+        {
+          "method": "Network.loadingFinished",
+          "params": {
+            "requestId": "A1",
+            "timestamp": 100.2,
+            "encodedDataLength": 1024
+          }
+        },
+        {
+          "method": "Network.loadingFinished",
+          "params": {
+            "requestId": "B1",
+            "timestamp": 100.2,
+            "encodedDataLength": 1024
+          }
+        }
+      ]
+    },
+    {
+      "when": {
+        "method": "Network.getResponseBody"
+      },
+      "reply": {
+        "result": {
+          "body": "<html>tab</html>",
+          "base64Encoded": false
+        }
+      }
+    }
+  ]
+}

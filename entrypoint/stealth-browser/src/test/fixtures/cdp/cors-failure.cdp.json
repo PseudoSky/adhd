@@ -1,0 +1,79 @@
+{
+  "meta": {
+    "name": "cors-failure",
+    "origin": "synthetic-protocol-conformant",
+    "chromeVersion": "126.0.6478.0"
+  },
+  "steps": [
+    {
+      "when": {
+        "method": "Page.enable"
+      }
+    },
+    {
+      "when": {
+        "method": "Network.enable"
+      }
+    },
+    {
+      "when": {
+        "method": "Page.navigate",
+        "params": {
+          "url": "https://site.test/api/x"
+        }
+      },
+      "reply": {
+        "result": {
+          "frameId": "F1",
+          "loaderId": "L1"
+        }
+      },
+      "emit": [
+        {
+          "method": "Network.requestWillBeSent",
+          "params": {
+            "requestId": "R1",
+            "loaderId": "L1",
+            "documentURL": "https://site.test/api/x",
+            "request": {
+              "url": "https://site.test/api/x",
+              "method": "GET",
+              "headers": {
+                "Accept": "*/*"
+              }
+            },
+            "timestamp": 100.0,
+            "wallTime": 1700000000.0,
+            "initiator": {
+              "type": "other"
+            },
+            "type": "Fetch"
+          }
+        },
+        {
+          "method": "Network.responseReceivedExtraInfo",
+          "params": {
+            "requestId": "R1",
+            "blockedCookies": [],
+            "headers": {},
+            "statusCode": 403
+          }
+        },
+        {
+          "method": "Network.loadingFailed",
+          "params": {
+            "requestId": "R1",
+            "timestamp": 100.2,
+            "type": "Fetch",
+            "errorText": "net::ERR_FAILED",
+            "canceled": false,
+            "corsErrorStatus": {
+              "corsError": "PreflightMissingAllowOriginHeader",
+              "failedParameter": ""
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
