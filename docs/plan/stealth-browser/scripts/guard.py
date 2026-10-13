@@ -3248,10 +3248,12 @@ for _slug, _n, _owner in (("tests-unit-core", 6, "tests-unit-core"), ("tests-uni
 
 @check("surface-api", 11)
 def _sa11():
-    """[inv:no-features-removed] the six chrome verbs exist as features (chromeStatus, launchChrome, shutdownChrome, listPageTargets, checkChromeActivity, getPageContext) and every inventory row tagged `verb` names tests-unit-surface as its owner; export-name parity with the source is not required (greenfield)."""
+    """[inv:no-features-removed] the six chrome verbs exist as features (chromeStatus, launchChrome, shutdownChrome, listPageTargets, checkChromeActivity, getPageContext) at least 6 inventory rows tagged `verb` are owned by tests-unit-surface (the verb-level rows) and every `verb`-tagged row is owned by tests-unit-surface or chrome-lifecycle (the lifecycle rows that back the verbs), no other owner; export-name parity with the source is not required (greenfield)."""
     verbs = [r for r in inventory_rows() if "verb" in r.get("tags", [])]
     api = exports_of(read(f"{P}/src/api.ts"))
-    return {"chromeStatus", "launchChrome", "shutdownChrome", "listPageTargets", "checkChromeActivity", "getPageContext"} <= api and bool(verbs) and all(r.get("owner_state") == "tests-unit-surface" for r in verbs), f"verb rows={len(verbs)}"
+    owners = {r.get("owner_state") for r in verbs}
+    surface = [r for r in verbs if r.get("owner_state") == "tests-unit-surface"]
+    return {"chromeStatus", "launchChrome", "shutdownChrome", "listPageTargets", "checkChromeActivity", "getPageContext"} <= api and owners <= {"tests-unit-surface", "chrome-lifecycle"} and len(surface) >= 6, f"verb rows={len(verbs)} surface-owned={len(surface)} owners={sorted(owners)}"
 
 
 @check("port-fixes", 11)

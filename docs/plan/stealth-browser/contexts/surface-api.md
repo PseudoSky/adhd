@@ -38,7 +38,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 - [surface-api.7] (PA1.1) The launchChrome verb's input type declares only `port` and `userDataDir`; chromePath and extraArgs stay library-only (never on an apigen-visible verb input).
 - [surface-api.9] (PA4.1) Each of the six verbs in src/api.ts has a TSDoc block whose description is at least 40 characters (the hosts surface it as the tool description).
 - [surface-api.10] Greenfield: no legacy construct exists in the package: no src/legacy.ts, no `@deprecated` tag, no `getSearchSessionId` / `SearchResultSource` / `shutdownSearchChrome` identifier and no `legacy` export anywhere in non-test source, and package.json has no `./legacy` entry.
-- [surface-api.11] [inv:no-features-removed] the six chrome verbs exist as features (chromeStatus, launchChrome, shutdownChrome, listPageTargets, checkChromeActivity, getPageContext) and every inventory row tagged `verb` names tests-unit-surface as its owner; export-name parity with the source is not required (greenfield).
+- [surface-api.11] [inv:no-features-removed] the six chrome verbs exist as features (chromeStatus, launchChrome, shutdownChrome, listPageTargets, checkChromeActivity, getPageContext) at least 6 inventory rows tagged `verb` are owned by tests-unit-surface (the verb-level rows) and every `verb`-tagged row is owned by tests-unit-surface or chrome-lifecycle (the lifecycle rows that back the verbs), no other owner; export-name parity with the source is not required (greenfield).
 
 ---
 
