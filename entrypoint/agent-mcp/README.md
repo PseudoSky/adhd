@@ -476,6 +476,37 @@ reason. The default (unflagged) suite still exercises the orchestrator/tool path
 scripted providers; these live tests add real-model confirmation of model-independent
 invariants. The same record appears in this package's `AGENTS.md` and in each test's header.
 
+## R10 end-to-end consumer proof (default-running, no gate)
+
+`src/__tests__/r10-s8-consumer-proof.e2e.test.ts` (scaffold: `src/__tests__/r10-s8-scaffold.ts`) proves the R10
+product changes the way a host consumes them, for **both** the Anthropic and the OpenAI-compatible adapter, in one
+run of about four seconds. It drives the real `createServer` through a real MCP `Client` (in-memory transport), over
+the real stores, queue, orchestrator, host hooks and default tracing plugin, with the real `AnthropicProvider` /
+`OpenAIProvider` (and their SDKs) talking HTTP to a scripted loopback model, and the real adopted `fs` and `shell`
+MCP children. Only the model is scripted; nothing leaves 127.0.0.1 (a guard `fetch` fails the run on any other
+host, and `uv` runs offline). `HOME` is a scratch directory, so no host state is touched. No env gate: there is no
+paid service involved. Run it with:
+
+```bash
+npx nx run agent-mcp:e2e            # whole e2e lane
+# or just this proof, from entrypoint/agent-mcp:
+CI=true npx vitest run -c vitest.e2e.config.ts src/__tests__/r10-s8 --no-file-parallelism
+```
+
+| AC | What is observed (per adapter) |
+|---|---|
+| AC1 | a CRLF file read back through the fs tool is on the model request as raw, once-encoded text (no JSON-of-the-MCP-array string, no doubly escaped `\r\n`) |
+| AC2 | `write_file` then `read_text_file` of one path in ONE turn: the read sees the new content; results are paired by id in call order |
+| AC3 | the fs write/edit "no read-back needed" note is on the request exactly once (never accumulating), absent from stored session history and from a `dryRun` edit |
+| AC4 | a rejected `node -e` carries the actionable recovery line on the wire; the stored allowlist is unchanged |
+| AC5 | the model-visible `task` / `tasks_batch` descriptions lead with the shared decision rule, identical across adapters; the host tool list leads `task` / `tasks_batch` / `result` with it; a synchronous task and a background task collected with `result` both complete |
+| AC6 | an Anthropic `agent_create` with `thinking: {type: 'adaptive'}` puts that field in every request body; an OpenAI one is rejected naming `thinking` |
+| AC7 | the tracing sink holds `agent.tool_call` records with `concurrency_class` / `turn_index` / `group_index` (and `error_class`, `note_appended`), an `agent.task.startup` record with `mcp_connect_ms.<server>` and `tools_ready_ms`, and `agent.dispatch` records with `mode` and `parent_blocked_ms`; a scan of the whole sink finds none of the prompt, reply or tool-argument sentinels |
+
+Negative controls (each applied to the production file and reverted): re-introducing the JSON double encode in the
+OpenAI adapter reddens only the OpenAI rows; removing the ordering barrier reddens AC2 on both adapters; putting the
+write note into stored history reddens AC3 on both; dropping the Anthropic `thinking` spread reddens AC6.
+
 ## Native-tooling adoption gate (env-gated — external third-party server)
 
 The ADR-0008 D7 upstream-server adoption is a **human-gated** decision (NAT-TOOL-8).
