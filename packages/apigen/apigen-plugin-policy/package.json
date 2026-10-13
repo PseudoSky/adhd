@@ -4,5 +4,8 @@
   "type": "module",
   "main": "./index.js",
   "types": "./index.d.ts",
-  "dependencies": {}
+  "dependencies": {
+    "@adhd/apigen-base-errors": "^0.2.3",
+    "@adhd/apigen-engine-runtime": "^0.3.3"
+  }
 }
