@@ -347,10 +347,10 @@
       "end_ref": "1a6d42d7bb94702a1f89431eabdbf70f56b6d22e"
     },
     "tripwire-reverse-migrate": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-10-13T08:22:34.515Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "410f70b1f4ccbc54a18f1ac69275f49e3d5dbe1f",
       "end_ref": null
     },
     "tripwire-reverse-relink": {
@@ -1198,7 +1198,7 @@
     "version": "0.8.35",
     "hash": "0b6bc1f3d70e"
   },
-  "current_state": "surface-hosts",
+  "current_state": "tripwire-reverse-migrate",
   "dod_provenance": {
     "confirmed_at": "2026-10-12T23:49:38.410Z",
     "by": "pseudosky",
