@@ -887,6 +887,22 @@
       ],
       "context": "contexts/search-port-fetch.md",
       "notes": "typescript-pro sonnet/high; U-PDF probe first"
+    },
+    "search-port-engine": {
+      "kind": "work",
+      "phase": "migrate",
+      "depends_on": [
+        "search-port-providers"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py search-port-engine",
+      "artifacts": [
+        "entrypoint/stealth-search/src/lib/network.ts",
+        "entrypoint/stealth-search/src/lib/dom.ts",
+        "entrypoint/stealth-search/src/lib/challenge.ts",
+        "entrypoint/stealth-search/src/test/unit/engine/"
+      ],
+      "context": "contexts/search-port-engine.md",
+      "notes": "typescript-pro sonnet/high"
     }
   },
   "authored_with": {
