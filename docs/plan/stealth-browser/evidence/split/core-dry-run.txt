@@ -1,0 +1,28 @@
+$ npx nx g @adhd/workspace-codegen-nx:core --name=browser --group=stealth --nxLayer=logic --platform=node --access public --publish true --dry-run
+# generator accepted layer logic (no fallback to shared needed)
+
+ NX  Generating @adhd/workspace-codegen-nx:core
+
+Scaffolding stealth-core-browser at packages/stealth (@adhd/stealth-core-browser)
+
+ NX   Project already included in existing release configuration
+
+Generating a target that uses the deprecated `@nx/eslint:lint` executor. The executor will be removed in Nx v24. Run `nx g @nx/eslint:convert-to-inferred` next to migrate this target to the `@nx/eslint/plugin` inferred plugin and prevent future generators from emitting executor targets. See https://nx.dev/docs/guides/tasks--caching/convert-to-inferred for details.
+  Tags: domain:stealth, pkg-kind:core, pkg-class:foundation, layer:logic, platform:node, access:public, publish:npm
+CREATE packages/stealth/stealth-core-browser/tsconfig.lib.json
+CREATE packages/stealth/stealth-core-browser/tsconfig.json
+CREATE packages/stealth/stealth-core-browser/src/index.ts
+CREATE packages/stealth/stealth-core-browser/src/lib/stealth-core-browser.spec.ts
+CREATE packages/stealth/stealth-core-browser/src/lib/stealth-core-browser.ts
+CREATE packages/stealth/stealth-core-browser/README.md
+CREATE packages/stealth/stealth-core-browser/package.json
+UPDATE nx.json
+CREATE packages/stealth/stealth-core-browser/project.json
+UPDATE eslint.config.mjs
+CREATE packages/stealth/stealth-core-browser/tsconfig.spec.json
+CREATE packages/stealth/stealth-core-browser/vite.config.mts
+CREATE packages/stealth/stealth-core-browser/eslint.config.mjs
+UPDATE tsconfig.base.json
+CREATE tools/nx-plugins/build/executors/typecheck-spec/stealth-core-browser.baseline.json
+
+NOTE: The "dryRun" flag means no changes were made.
