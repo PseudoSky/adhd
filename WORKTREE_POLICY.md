@@ -9,3 +9,8 @@ All work that leaves the main checkout happens in a worktree, and worktrees are 
 5. **Leftovers** — `scripts/worktree-cleanup.sh [<worktree | branch | backlog-id> ...]` removes merged, clean worktrees that merge left behind.
 
 Afterwards, add the changelog entries for the packages you changed and resolve the backlog item, citing the merge commit.
+
+## Caches
+
+- **Nx** shares its cache across every worktree automatically. Never set `cacheDirectory` in `nx.json` or `NX_CACHE_DIRECTORY` / `NX_WORKSPACE_DATA_DIRECTORY` / `NX_PROJECT_GRAPH_CACHE_DIRECTORY`; each turns sharing off.
+- **gitnexus** is per checkout (`<worktree>/.gitnexus`). Setup inherits main's index when main is current and not mid-reindex, and merge refreshes main's index afterwards, so a new worktree's `gx` is ready immediately. Cleanup unregisters the index and waits for any running analyze first. Switches: `WORKTREE_SEED_GITNEXUS=0`, `WORKTREE_REFRESH_GITNEXUS=0`.

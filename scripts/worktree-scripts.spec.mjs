@@ -11,7 +11,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { spawnSync } from 'node:child_process';
-import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { appendFileSync, chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -470,6 +470,39 @@ test('cleanup: removing a worktree also unregisters its gitnexus index (`gitnexu
     assert.ok(call.split(' ')[1].endsWith('/.worktrees/plain'), `removes the worktree's own path, got ${call}`);
     assert.match(call, / --force @ /);
     assert.match(r.stdout, /gitnexus index unregistered/);
+  } finally { s.done(); }
+});
+
+test('cleanup: a worktree with a live gitnexus analyze (fresh .reindex.lock) is kept, not removed under it', () => {
+  const s = sandbox();
+  try {
+    assert.equal(s.sh('worktree-setup.sh', ['plain']).status, 0);
+    const wt = join(s.root, '.worktrees', 'plain');
+    appendFileSync(join(s.root, '.git', 'info', 'exclude'), '.gitnexus\n'); // the real repo gitignores it
+    mkdirSync(join(wt, '.gitnexus'), { recursive: true });
+    writeFileSync(join(wt, '.gitnexus', '.reindex.lock'), '1');
+    const r = s.sh('worktree-cleanup.sh', ['plain'], { env: { ...withFakeGitnexus(s), WORKTREE_CLEANUP_INDEX_WAIT_MS: '300' } });
+    assert.equal(r.status, 3, r.stdout + r.stderr);
+    assert.match(r.stdout, /gitnexus analyze is still running/);
+    assert.ok(existsSync(wt), 'tree is left alone');
+    assert.equal(gxLog(s).some((l) => l.startsWith('remove ')), false, 'index not unregistered while it is being written');
+  } finally { s.done(); }
+});
+
+test('cleanup: an abandoned (older than the TTL) .reindex.lock does not block removal', () => {
+  const s = sandbox();
+  try {
+    assert.equal(s.sh('worktree-setup.sh', ['plain']).status, 0);
+    const wt = join(s.root, '.worktrees', 'plain');
+    appendFileSync(join(s.root, '.git', 'info', 'exclude'), '.gitnexus\n'); // the real repo gitignores it
+    mkdirSync(join(wt, '.gitnexus'), { recursive: true });
+    const lock = join(wt, '.gitnexus', '.reindex.lock');
+    writeFileSync(lock, '1');
+    const old = new Date(Date.now() - 11 * 60 * 1000);
+    utimesSync(lock, old, old);
+    const r = s.sh('worktree-cleanup.sh', ['plain'], { env: { ...withFakeGitnexus(s), WORKTREE_CLEANUP_INDEX_WAIT_MS: '300' } });
+    assert.equal(r.status, 0, r.stdout + r.stderr);
+    assert.equal(existsSync(wt), false);
   } finally { s.done(); }
 });
 
