@@ -919,6 +919,27 @@
       ],
       "context": "contexts/search-port-guards.md",
       "notes": "typescript-pro sonnet/high; tripwire adoption, cooldown, concurrency"
+    },
+    "search-verbs": {
+      "kind": "work",
+      "phase": "surface",
+      "depends_on": [
+        "search-port-providers",
+        "search-port-fetch",
+        "search-port-engine",
+        "search-port-guards"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py search-verbs",
+      "artifacts": [
+        "entrypoint/stealth-search/src/api.ts",
+        "entrypoint/stealth-search/src/lib/search.ts",
+        "entrypoint/stealth-search/src/host-projection.ts",
+        "entrypoint/stealth-search/src/index.ts",
+        "entrypoint/stealth-search/src/test/unit/verbs/",
+        "docs/plan/stealth-browser/evidence/split/search-verbs-probes.json"
+      ],
+      "context": "contexts/search-verbs.md",
+      "notes": "typescript-pro sonnet/high; U-REEXPORT and U-BOOL probes first"
     }
   },
   "authored_with": {
