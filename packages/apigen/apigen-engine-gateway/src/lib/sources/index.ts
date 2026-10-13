@@ -10,3 +10,5 @@ export { resolveMcpStdioSource } from './mcp-source';
 export type { McpHints } from './mcp-source';
 export { resolveSource } from './resolve-source';
 export type { IResolveDeps } from './resolve-source';
+export { serveMcpPassthrough } from './mcp-passthrough-server';
+export type { IPassthroughServerOptions } from './mcp-passthrough-server';
