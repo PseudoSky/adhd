@@ -331,6 +331,13 @@
       "done_at": null,
       "start_ref": "5c07337fe460f053a5ab793884e28bc0f79db6a6",
       "end_ref": null
+    },
+    "core-scaffold": {
+      "status": "pending",
+      "started_at": null,
+      "done_at": null,
+      "start_ref": null,
+      "end_ref": null
     }
   },
   "transition_log": [

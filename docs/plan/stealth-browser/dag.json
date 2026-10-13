@@ -769,6 +769,25 @@
       ],
       "context": "contexts/split-plan-repair.md",
       "notes": "plan-builder amendment: rename core to @adhd/stealth-core-browser, port search to @adhd/stealth-search, retire surface-hosts/tracing-plugin/tracing-namespace-proof/agent-search-cutover/agent-search-relink"
+    },
+    "core-scaffold": {
+      "kind": "work",
+      "phase": "scaffold",
+      "depends_on": [
+        "split-plan-repair"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py core-scaffold",
+      "artifacts": [
+        "packages/stealth/stealth-core-browser/",
+        "entrypoint/stealth-browser/",
+        ".adhd/workspace.json",
+        "tsconfig.base.json",
+        "pnpm-lock.yaml",
+        "tools/nx-plugins/build/executors/typecheck-spec/stealth-core-browser.baseline.json",
+        "docs/plan/stealth-browser/evidence/split/"
+      ],
+      "context": "contexts/core-scaffold.md",
+      "notes": "typescript-pro sonnet/high; generator-built core library @adhd/stealth-core-browser, serialized rename owner"
     }
   },
   "authored_with": {
