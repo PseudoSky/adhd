@@ -655,7 +655,8 @@
       "depends_on": [
         "chrome-lifecycle",
         "core-seam",
-        "tripwire-pack"
+        "tripwire-pack",
+        "search-hosts"
       ],
       "guard": "python3 docs/plan/stealth-browser/scripts/guard.py sp-switch",
       "artifacts": [

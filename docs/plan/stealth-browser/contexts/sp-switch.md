@@ -1,6 +1,6 @@
 # sp-switch — STATE_NAME
 
-**Phase:** verify · **Kind:** work · **Depends on:** chrome-lifecycle, core-seam, tripwire-pack · **Guard:** `python3 docs/plan/stealth-browser/scripts/guard.py sp-switch`
+**Phase:** verify · **Kind:** work · **Depends on:** chrome-lifecycle, core-seam, tripwire-pack, search-hosts · **Guard:** `python3 docs/plan/stealth-browser/scripts/guard.py sp-switch`
 
 ---
 
