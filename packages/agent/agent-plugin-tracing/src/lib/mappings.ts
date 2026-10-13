@@ -2,6 +2,7 @@ import type { ExecutionContext, HookEvent, HookEventMap, IHookRegistry, Provider
 import { createRedactor, newTraceId } from '@adhd/sox-telemetry';
 import type { OtelAttributes } from '@adhd/sox-telemetry';
 import { openSpan, pointSpan } from './spans.js';
+import { unionMs } from './runtime.js';
 import type { TraceRuntime } from './runtime.js';
 
 /**
@@ -109,6 +110,31 @@ const taskStart = defineMapping('task:start', ({ executionContext: ctx }, rt) =>
   state.span = openSpan('agent.task', rt.taskAttrs(ctx, state.traceId), state.traceId);
 });
 
+/**
+ * Where this task's own wall time went, from the closed model-call and tool-call intervals it recorded:
+ *
+ * - `agent.task.model_ms`: total time inside model calls (a task runs them one at a time).
+ * - `agent.task.tool_ms`: wall time with at least one tool call in flight. Parallel tool calls are
+ *   counted ONCE (interval union), so it never exceeds the task's wall time. A sync dispatch to a
+ *   child is a tool call here: its stretch is the time this task was blocked on its children.
+ * - `agent.task.idle_ms`: wall time covered by neither (engine overhead, queueing, persistence).
+ *
+ * Omitted when `task:start` was not seen (no honest wall time). `critical_path_ms` is deliberately not
+ * computed: readers derive it from span start/end plus `agent.parent_task_id`.
+ */
+function taskActivityAttrs(rt: TraceRuntime, state: NonNullable<ReturnType<TraceRuntime['task']>>): OtelAttributes {
+  if (state.startedAt === undefined) return {};
+  const wall = rt.now() - state.startedAt;
+  const modelMs = unionMs(state.modelIntervals);
+  const toolMs = unionMs(state.toolIntervals);
+  const busyMs = unionMs([...state.modelIntervals, ...state.toolIntervals]);
+  return {
+    'agent.task.model_ms': Math.round(modelMs),
+    'agent.task.tool_ms': Math.round(toolMs),
+    'agent.task.idle_ms': Math.max(0, Math.round(wall - busyMs)),
+  };
+}
+
 /** Shared terminal handling for completed / failed / cancelled. */
 function endTask(
   rt: TraceRuntime,
@@ -121,7 +147,7 @@ function endTask(
   // first one is the task's outcome, and counting both would double-book it.
   if (state === undefined) return;
   rt.closeDangling(state);
-  const attrs: OtelAttributes = { 'agent.outcome': kind };
+  const attrs: OtelAttributes = { 'agent.outcome': kind, ...taskActivityAttrs(rt, state) };
   if (state.span !== undefined) {
     state.span.close(error === undefined ? { attrs } : { attrs, error });
   } else {
@@ -144,6 +170,26 @@ const taskFailed = defineMapping('task:failed', ({ executionContext, error }, rt
 const taskCancelled = defineMapping('task:cancelled', ({ executionContext }, rt) =>
   endTask(rt, executionContext, 'cancelled')
 );
+
+/**
+ * The entries of `attrs` whose value is a real measurement, so an optional hook field the emitter did not
+ * supply (undefined, null, NaN, Infinity) leaves the attribute absent: a missing measurement is never
+ * recorded as 0, null or 'undefined'.
+ */
+function definedAttrs(attrs: Record<string, string | number | boolean | null | undefined>): OtelAttributes {
+  const out: OtelAttributes = {};
+  for (const [key, value] of Object.entries(attrs)) {
+    if (value === undefined || value === null) continue;
+    if (typeof value === 'number' && !Number.isFinite(value)) continue;
+    out[key] = value;
+  }
+  return out;
+}
+
+/** A measured duration / count as a whole number, or `undefined` when it is absent or not a finite number. */
+function wholeMs(value: number | undefined): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? Math.round(value) : undefined;
+}
 
 const modelRequest = defineMapping('pre:model_request', (p, rt) => {
   const ctx = p.executionContext;
@@ -168,6 +214,7 @@ const modelResponse = defineMapping('post:model_response', (p, rt) => {
   const output = p.tokenUsage?.outputTokens ?? 0;
   const open = state?.model;
   if (state !== undefined) state.model = undefined;
+  if (open !== undefined) state?.modelIntervals.push([open.startedAt, rt.now()]);
   open?.span.close({
     attrs: {
       'agent.model_call.stop_reason': p.stopReason,
@@ -175,6 +222,13 @@ const modelResponse = defineMapping('post:model_response', (p, rt) => {
       'agent.model_call.input_tokens': input,
       'agent.model_call.output_tokens': output,
       'agent.model_call.compute_ms': p.computeMs,
+      ...definedAttrs({
+        'agent.model_call.ttfb_ms': p.ttfbMs,
+        'agent.model_call.thinking_config': p.thinkingConfig,
+        'agent.model_call.thinking_blocks': p.thinkingBlocks,
+        'agent.model_call.tool_result_bytes_in': p.toolResultBytesIn,
+        'agent.model_call.turn_index': p.turnIndex,
+      }),
     },
   });
   rt.counters.modelCall(input, output, open === undefined ? undefined : rt.now() - open.startedAt);
@@ -194,6 +248,7 @@ function failModelCall(rt: TraceRuntime, ctx: ExecutionContext | undefined, erro
   const open = state?.model;
   if (state === undefined || open === undefined) return;
   state.model = undefined;
+  state.modelIntervals.push([open.startedAt, rt.now()]);
   open.span.close({ attrs: { ...attrs, 'agent.outcome': 'error' }, error: errorRedactor.redactValue(error) });
   rt.counters.modelCall(0, 0, rt.now() - open.startedAt);
 }
@@ -275,9 +330,16 @@ const toolRequest = defineMapping('pre:tool_call', (p, rt) => {
       'agent.tool.name': p.toolName,
       'agent.tool.call_id': p.callId,
       ...rt.argAttrs(p.toolInput),
+      ...definedAttrs({
+        'agent.tool.concurrency_class': p.concurrencyClass,
+        'agent.tool.turn_index': p.turnIndex,
+        'agent.tool.group_index': p.groupIndex,
+        'agent.tool.queued_ms': p.queuedMs === undefined ? undefined : Math.round(p.queuedMs),
+      }),
     },
     state.traceId
   );
+  if (p.queuedMs !== undefined && p.queuedMs > 0) rt.counters.toolBarrierWait();
   state.tools.set(p.callId, { span, startedAt: rt.now(), tool: p.toolName });
 });
 
@@ -288,7 +350,13 @@ const toolResponse = defineMapping('post:tool_call', (p, rt) => {
   const attrs: OtelAttributes = {
     'agent.tool.is_error': p.isError,
     'agent.tool.est_result_tokens': p.estResultTokens,
+    ...definedAttrs({
+      'agent.tool.error_class': p.errorClass,
+      'agent.tool.result_bytes': p.resultBytes,
+      'agent.tool.note_appended': p.noteAppended,
+    }),
   };
+  if (open !== undefined) state?.toolIntervals.push([open.startedAt, rt.now()]);
   open?.span.close(p.isError ? { attrs, error: `tool ${p.toolName} returned an error result` } : { attrs });
   rt.counters.toolCall(p.toolName, p.isError, open === undefined ? undefined : rt.now() - open.startedAt);
 });
@@ -338,6 +406,67 @@ const hitlResume = defineMapping('hitl:resume', (p, rt) => {
   pointSpan('agent.hitl.resume', attrs, traceId);
 });
 
+/** Tool names (after the `<server>__` prefix) that dispatch child tasks. */
+const DISPATCH_TOOLS: ReadonlySet<string> = new Set(['task', 'tasks_batch']);
+
+/** A key segment safe to embed in an attribute name (server names come from configuration). */
+const attrKey = (segment: string): string => segment.replace(/[^A-Za-z0-9_-]/g, '_');
+
+/**
+ * `task:startup`: where a task's startup wall time went, as one point span that is a child of
+ * `agent.task` by identity attributes (`agent.task_id`). One `agent.startup.mcp_connect_ms.<server>`
+ * attribute per MCP server key.
+ */
+const taskStartup = defineMapping('task:startup', (p, rt) => {
+  // Every figure is optional at runtime: the engine reports only the timings it can measure (it does
+  // not see the queue wait or the session resolution that precede `Orchestrator.run`), and a figure it
+  // could not measure must be absent from the trace, never a guessed 0.
+  const attrs: OtelAttributes = definedAttrs({
+    'agent.startup.tools_ready_ms': wholeMs(p.toolsReadyMs),
+    'agent.startup.queue_wait_ms': wholeMs(p.queueWaitMs),
+    'agent.startup.session_ms': wholeMs(p.sessionMs),
+    'agent.startup.tools': wholeMs(p.toolCount),
+  });
+  for (const [server, ms] of Object.entries(p.mcpConnectMs ?? {})) {
+    const whole = wholeMs(ms);
+    if (whole !== undefined) attrs[`agent.startup.mcp_connect_ms.${attrKey(server)}`] = whole;
+  }
+  pointFor(rt, 'agent.task.startup', p.executionContext, attrs);
+});
+
+/**
+ * `dispatch:completed`: a point span on the PARENT task (`executionContext` is the dispatching task)
+ * carrying how long the parent was blocked and which child tasks it started; the children's own
+ * records share `agent.task_id` with `agent.dispatch.child_task_ids`. When exactly one dispatch tool
+ * call is open on the parent the span also carries its `agent.tool.call_id`; with concurrent dispatch
+ * calls the correlation is ambiguous and the reader joins on child ids instead.
+ */
+const dispatchCompleted = defineMapping('dispatch:completed', (p, rt) => {
+  rt.counters.dispatch(p.mode);
+  const ctx = p.executionContext;
+  const open = [...(rt.tasks.get(ctx.taskId)?.tools.entries() ?? [])].filter(([, t]) => DISPATCH_TOOLS.has(t.tool.split('__').pop() ?? ''));
+  pointFor(rt, 'agent.dispatch', ctx, {
+    'agent.dispatch.mode': p.mode,
+    'agent.dispatch.kind': p.kind,
+    'agent.dispatch.children': p.childTaskIds.length,
+    'agent.dispatch.child_task_ids': p.childTaskIds.join(','),
+    'agent.dispatch.parent_blocked_ms': Math.round(p.parentBlockedMs),
+    ...definedAttrs({
+      'agent.dispatch.wait_ms': p.waitMs === undefined ? undefined : Math.round(p.waitMs),
+      'agent.dispatch.call_id': open.length === 1 ? open[0]?.[0] : undefined,
+    }),
+  });
+});
+
+/** `background:delivered`: a background child's result reached its parent (no emitter ships yet; the mapping is ready). */
+const backgroundDelivered = defineMapping('background:delivered', (p, rt) =>
+  pointFor(rt, 'agent.background.delivered', p.executionContext, {
+    'agent.background.child_task_id': p.childTaskId,
+    'agent.background.latency_ms': Math.round(p.latencyMs),
+    'agent.background.consumed_via': p.consumedVia,
+  })
+);
+
 /**
  * The core subscription table — the ONLY place event→span knowledge lives. The plugin's
  * `install()` walks this table (plus `extraMappings`), so supporting a new event is a new row,
@@ -363,4 +492,7 @@ export const CORE_MAPPINGS: readonly AnyEventMapping[] = [
   permissionDecision,
   hitlSuspend,
   hitlResume,
+  taskStartup,
+  dispatchCompleted,
+  backgroundDelivered,
 ];

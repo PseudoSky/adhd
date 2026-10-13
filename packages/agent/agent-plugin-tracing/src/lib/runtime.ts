@@ -24,6 +24,37 @@ export interface TaskState {
   traceId: string;
   model?: { span: OpenSpan; startedAt: number };
   tools: Map<string, ToolSpan>;
+  /**
+   * Closed `[start, end]` monotonic-ms intervals of this task's own model calls and tool calls, kept so
+   * `agent.task.model_ms` / `tool_ms` / `idle_ms` are computed from the task's own activity at its terminal.
+   */
+  modelIntervals: Interval[];
+  toolIntervals: Interval[];
+}
+
+/** A closed `[start, end]` interval of monotonic milliseconds. */
+export type Interval = readonly [start: number, end: number];
+
+/** Total length covered by `intervals`, counting overlapping stretches once (parallel tool calls overlap). */
+export function unionMs(intervals: readonly Interval[]): number {
+  const sorted = [...intervals].sort((a, b) => a[0] - b[0]);
+  let total = 0;
+  let curStart = Number.NaN;
+  let curEnd = Number.NaN;
+  for (const [s, e] of sorted) {
+    if (e < s) continue;
+    if (Number.isNaN(curStart)) {
+      curStart = s;
+      curEnd = e;
+    } else if (s <= curEnd) {
+      if (e > curEnd) curEnd = e;
+    } else {
+      total += curEnd - curStart;
+      curStart = s;
+      curEnd = e;
+    }
+  }
+  return Number.isNaN(curStart) ? total : total + (curEnd - curStart);
 }
 
 /**
@@ -98,7 +129,7 @@ export class TraceRuntime {
     let state = this.tasks.get(ctx.taskId);
     if (state === undefined) {
       if (this.ended.has(ctx.taskId)) return undefined;
-      state = { traceId: this.traceFor(ctx), tools: new Map() };
+      state = { traceId: this.traceFor(ctx), tools: new Map(), modelIntervals: [], toolIntervals: [] };
       this.tasks.set(ctx.taskId, state);
     }
     return state;

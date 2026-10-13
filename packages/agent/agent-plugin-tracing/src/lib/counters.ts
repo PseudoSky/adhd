@@ -18,6 +18,12 @@ export interface TracingSnapshot {
   hitl: { suspend: number; resume: number; by_outcome: Record<string, number> };
   delegations: number;
   delegation_depth_max: number;
+  /** `pre:tool_call` events that waited (`queuedMs > 0`) for a concurrency slot or an earlier ordered group. */
+  tool_barrier_waits_total: number;
+  /** Dispatches (`task`, `tasks_batch`, one-shot agent task) that blocked the parent until the children finished. */
+  dispatch_sync_total: number;
+  /** Dispatches that returned to the parent immediately, leaving the children running. */
+  dispatch_background_total: number;
   latency_ms: { task: LatencySeries; model_call: LatencySeries; tool_call: LatencySeries };
 }
 
@@ -54,6 +60,9 @@ export class TracingCounters {
       hitl: { suspend: 0, resume: 0, by_outcome: nullMap() },
       delegations: 0,
       delegation_depth_max: 0,
+      tool_barrier_waits_total: 0,
+      dispatch_sync_total: 0,
+      dispatch_background_total: 0,
       latency_ms: { task: series(), model_call: series(), tool_call: series() },
     };
   }
@@ -91,6 +100,17 @@ export class TracingCounters {
     row.calls++;
     if (isError) row.errors++;
     if (ms !== undefined) this.observe(this.data.latency_ms.tool_call, ms);
+  }
+
+  /** A tool call that waited `queuedMs` > 0 before starting (a barrier / ordered-group wait). */
+  toolBarrierWait(): void {
+    this.data.tool_barrier_waits_total++;
+  }
+
+  /** One completed dispatch, by mode. */
+  dispatch(mode: 'sync' | 'background'): void {
+    if (mode === 'sync') this.data.dispatch_sync_total++;
+    else this.data.dispatch_background_total++;
   }
 
   permission(action: 'allow' | 'ask' | 'deny', resolution: 'allow' | 'suspend' | 'escalate' | 'deny'): void {

@@ -8,6 +8,7 @@
  */
 import Database from 'better-sqlite3';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
+import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -117,6 +118,8 @@ export function spanCounts(records: Recorded[], span: string): { start: number; 
 }
 
 export interface Env {
+  /** The drizzle handle over the same in-memory sqlite the stores use (for `TaskDeps.db` / the DAG engine). */
+  db: unknown;
   hooks: IHookRegistry;
   sessionStore: SessionStore;
   taskStore: TaskStore;
@@ -139,18 +142,31 @@ function agentDefinition(hitl: boolean): AgentDefinition {
   } as AgentDefinition;
 }
 
-/** Real in-memory stores wired to `hooks` (so `session:created` / `session:closed` reach the plugin). */
-export function makeEnv(hooks: IHookRegistry = new HookRegistry()): Env {
+/** The migrations agent-mcp ships: a store built through them can never drift from the shipped schema. */
+const REAL_MIGRATIONS_FOLDER = join(__dirname, '../../../../../entrypoint/agent-mcp/drizzle');
+
+/**
+ * Real in-memory stores wired to `hooks` (so `session:created` / `session:closed` reach the plugin).
+ * `realSchema` builds the database through agent-mcp's shipped drizzle migrations (foreign keys off,
+ * as the orchestrator's own fixtures do) instead of the minimal hand-written DDL; the dispatch tests
+ * need it because the usage report reads columns the minimal DDL lacks.
+ */
+export function makeEnv(hooks: IHookRegistry = new HookRegistry(), opts: { realSchema?: boolean } = {}): Env {
   const sqlite = new Database(':memory:');
-  sqlite.pragma('foreign_keys = ON');
-  sqlite.exec(DDL);
+  if (opts.realSchema === true) {
+    sqlite.pragma('foreign_keys = OFF');
+    migrate(drizzle(sqlite), { migrationsFolder: REAL_MIGRATIONS_FOLDER });
+  } else {
+    sqlite.pragma('foreign_keys = ON');
+    sqlite.exec(DDL);
+  }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const db = drizzle(sqlite, { schema }) as any;
   const sessionStore = new SessionStore(db, hooks);
   const taskStore = new TaskStore(db);
   const definition = agentDefinition(true);
   const session = sessionStore.create({ agentName: definition.name, agentDefinition: definition });
-  return { hooks, sessionStore, taskStore, sessionId: session.id, definition };
+  return { db, hooks, sessionStore, taskStore, sessionId: session.id, definition };
 }
 
 export function makeCtx(env: Env, opts: { hitl?: boolean; parentTaskId?: string; depth?: number } = {}): ExecutionContext {

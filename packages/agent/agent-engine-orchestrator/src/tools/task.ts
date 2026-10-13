@@ -402,7 +402,61 @@ async function runEphemeralTask(
   };
 }
 
+/**
+ * Tell the tracing/observer layer that a dispatching tool call finished handing work to child tasks
+ * (`dispatch:completed`, R10). Emitted once per dispatching tool call, from the PARENT's
+ * `callerContext` (a call with no parent context, e.g. a direct REST call, has no parent trace to
+ * attach to and emits nothing). `parentBlockedMs` is the wall time the parent spent inside the call
+ * for a synchronous dispatch, and 0 for a background one. Observational: a failing registry or
+ * handler can never change the tool's result, so any error is swallowed.
+ */
+async function emitDispatchCompleted(
+  deps: Pick<TaskDeps, 'hooks'>,
+  callerContext: ExecutionContext | undefined,
+  dispatch: {
+    kind: 'task' | 'tasks_batch' | 'agent_task';
+    mode: 'sync' | 'background';
+    childTaskIds: string[];
+    /** `performance.now()` taken when the tool call began. */
+    startedAt: number;
+  }
+): Promise<void> {
+  if (callerContext === undefined) return;
+  try {
+    await deps.hooks.emit('dispatch:completed', {
+      executionContext: callerContext,
+      kind: dispatch.kind,
+      mode: dispatch.mode,
+      childTaskIds: dispatch.childTaskIds,
+      parentBlockedMs: dispatch.mode === 'sync' ? performance.now() - dispatch.startedAt : 0,
+    });
+  } catch {
+    /* observational: never fail or alter a dispatch */
+  }
+}
+
+/**
+ * `task` tool: run one task in an existing session (`session_id`) or as a one-shot agent
+ * (`agent_name`), synchronously or in the background, and emit `dispatch:completed` for it.
+ */
 export async function taskTool(
+  input: TaskToolInput,
+  deps: TaskDeps,
+  callerContext?: ExecutionContext
+): Promise<TaskToolOutput> {
+  const startedAt = performance.now();
+  const out = await dispatchTask(input, deps, callerContext);
+  await emitDispatchCompleted(deps, callerContext, {
+    kind: 'agent_name' in input ? 'agent_task' : 'task',
+    mode: input.background ? 'background' : 'sync',
+    childTaskIds: [out.task_id],
+    startedAt,
+  });
+  return out;
+}
+
+/** The dispatch itself, without the `dispatch:completed` emission (so `tasksBatch` emits once per batch, not per item). */
+async function dispatchTask(
   input: TaskToolInput,
   deps: TaskDeps,
   callerContext?: ExecutionContext
@@ -658,6 +712,7 @@ export async function tasksBatch(
   deps: TaskDeps,
   callerContext?: ExecutionContext
 ): Promise<TasksBatchOutput> {
+  const startedAt = performance.now();
   const concurrency = input.concurrency ?? DEFAULT_BATCH_CONCURRENCY;
   const n = input.prompts.length;
 
@@ -691,7 +746,7 @@ export async function tasksBatch(
       ? ({ session_id: input.session_ids[i], ...base } as TaskToolInput)
       : ({ agent_name: input.agent_name as string, ...base } as TaskToolInput);
 
-    const out = await taskTool(itemInput, deps, callerContext);
+    const out = await dispatchTask(itemInput, deps, callerContext);
     taskIds[i] = out.task_id;
     results[i] = {
       index: i,
@@ -723,6 +778,12 @@ export async function tasksBatch(
     for (const i of ready) completed.add(i);
   }
 
+  await emitDispatchCompleted(deps, callerContext, {
+    kind: 'tasks_batch',
+    mode: input.background === true ? 'background' : 'sync',
+    childTaskIds: results.map((r) => r.task_id),
+    startedAt,
+  });
   return { concurrency, results };
 }
 
