@@ -160,7 +160,7 @@ describe('bc799330 AC2: https over a real TLS handshake - connecting to a pinned
   async function serveTls(): Promise<number> {
     seen.length = 0;
     tls = createTlsServer({ key, cert }, (req, res) => {
-      seen.push({ sni: (req.socket as TLSSocket).servername, host: req.headers.host });
+      seen.push({ sni: (req.socket as TLSSocket & { servername?: string | false }).servername, host: req.headers.host });
       res.writeHead(200, { 'content-type': 'text/html' });
       res.end('<title>Secure</title><p>over tls</p>');
     });

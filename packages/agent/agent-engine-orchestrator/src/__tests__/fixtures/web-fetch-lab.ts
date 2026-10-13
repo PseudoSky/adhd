@@ -15,11 +15,14 @@ import type { request } from 'node:http';
 export const LAB_HOST = 'fixture.example.test';
 export const LAB_PUBLIC_IP = '93.184.216.34';
 
-export const lab: { port: number; seen: RequestOptions[] } = { port: 0, seen: [] };
+/** What the engine asked `request` for (`servername` is the https-only TLS name). */
+export type LabRequestOptions = RequestOptions & { servername?: string };
+
+export const lab: { port: number; seen: LabRequestOptions[] } = { port: 0, seen: [] };
 
 /** A `request` that records the engine's options, then connects to the local fixture instead of the pinned IP. */
 export function labRequest(actual: typeof request): typeof request {
-  return ((o: RequestOptions) => {
+  return ((o: LabRequestOptions) => {
     lab.seen.push(o);
     return actual({ ...o, host: '127.0.0.1', port: lab.port, family: 4 });
   }) as typeof request;
