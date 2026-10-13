@@ -25,6 +25,7 @@ import { IdleShutdown } from './cdp/shutdown.js'
 import { closeAllPageTargets, hideAllWindows, isChromeReachable } from './cdp/targets.js'
 import { TargetService } from './domains/target.js'
 import { HistoryClient } from './storage/history.js'
+import { isActiveWebTarget } from './lifecycle/page-tier.js'
 import { writeFileSync, readFileSync } from 'node:fs'
 
 export interface ChromeManagerOptions {
@@ -44,16 +45,8 @@ const defaultLogger = (msg: string) => console.error(`[chrome-manager] ${msg}`)
 
 const HEARTBEAT_PATH = '/tmp/stealth-browser-heartbeat'
 
-/**
- * True only for a real WEB document that means a human (or another call) is
- * using Chrome. Browser-internal pages — `chrome://newtab/`, `chrome://omnibox…`,
- * `chrome-untrusted://…`, `about:`, `devtools://`, extension backgrounds — are
- * NOT a reason to keep Chrome alive: the default window always shows
- * `chrome://newtab/`, so counting it would make the idle shutdown defer forever.
- */
-export function isActiveWebTarget(url: string): boolean {
-  return /^https?:/i.test(url)
-}
+/** Safety tier 2 lives in lifecycle/page-tier.ts; re-exported here so the manager module keeps the export. */
+export { isActiveWebTarget }
 
 export class ChromeManager {
   private targetService: TargetService

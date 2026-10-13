@@ -179,39 +179,52 @@ export async function createIsolatedPageTarget(
 }> {
   const info = await getChromeInfo(cdpHost)
   const browser = new CdpSession()
-  await browser.connect(info.browserWsUrl)
-
-  // NOT disposeOnDetach: we close this browser connection immediately after
-  // creating the target, and disposeOnDetach:true would tear the context down on
-  // that detach — the target would vanish before we could poll for it. We own
-  // teardown explicitly via the returned dispose().
-  const { browserContextId } = await browser.send<{ browserContextId: string }>(
-    'Target.createBrowserContext',
-    {},
-  )
-  // Default: background:true — do NOT foreground the new window / steal focus.
-  // foreground: create it in the foreground so the user can watch/interact.
-  const { targetId } = await browser.send<{ targetId: string }>('Target.createTarget', {
-    url: 'about:blank',
-    browserContextId,
-    background: !options.foreground,
-    focus: !!options.foreground,
-  })
-
-  // Default: minimize the window. Chrome launched with
-  // --disable-backgrounding-occluded-windows so JS timers are NOT throttled.
-  // Skipped entirely when foreground is requested.
+  let browserContextId: string
+  let targetId: string
   let windowId: number | undefined
   try {
-    windowId = (await browser.send<{ windowId: number }>('Browser.getWindowForTarget', { targetId })).windowId
-    if (!options.foreground) {
-      await browser.send('Browser.setWindowBounds', {
-        windowId,
-        bounds: { windowState: 'minimized' },
-      })
+    await browser.connect(info.browserWsUrl)
+
+    // NOT disposeOnDetach: we close this browser connection immediately after
+    // creating the target, and disposeOnDetach:true would tear the context down on
+    // that detach — the target would vanish before we could poll for it. We own
+    // teardown explicitly via the returned dispose().
+    browserContextId = (await browser.send<{ browserContextId: string }>(
+      'Target.createBrowserContext',
+      {},
+    )).browserContextId
+    // Default: background:true — do NOT foreground the new window / steal focus.
+    // foreground: create it in the foreground so the user can watch/interact.
+    try {
+      targetId = (await browser.send<{ targetId: string }>('Target.createTarget', {
+        url: 'about:blank',
+        browserContextId,
+        background: !options.foreground,
+        focus: !!options.foreground,
+      })).targetId
+    } catch (err) {
+      // The context exists but no page will ever use it: dispose it on the
+      // still-open browser session before the error propagates (gap G1).
+      await browser.send('Target.disposeBrowserContext', { browserContextId }).catch(() => { /* best-effort */ })
+      throw err
     }
-  } catch (e) { console.warn("[@adhd/stealth-browser] Failed to run createIsolatedPageTarget > Browser.getWindowForTarget", e) }
-  browser.close()
+
+    // Default: minimize the window. Chrome launched with
+    // --disable-backgrounding-occluded-windows so JS timers are NOT throttled.
+    // Skipped entirely when foreground is requested.
+    try {
+      windowId = (await browser.send<{ windowId: number }>('Browser.getWindowForTarget', { targetId })).windowId
+      if (!options.foreground) {
+        await browser.send('Browser.setWindowBounds', {
+          windowId,
+          bounds: { windowState: 'minimized' },
+        })
+      }
+    } catch (e) { console.warn("[@adhd/stealth-browser] Failed to run createIsolatedPageTarget > Browser.getWindowForTarget", e) }
+  } finally {
+    // The creator browser session never outlives this call, success or throw (gap G1).
+    browser.close()
+  }
 
   // Un-hide the window for interactive solving. Best-effort; reconnects its own
   // short-lived browser session so it works after the creator connection closed.

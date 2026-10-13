@@ -223,20 +223,31 @@ function killGroup(pid: number, signal: NodeJS.Signals): boolean {
   try { process.kill(pid, signal); return true } catch { return false }
 }
 
+/**
+ * The tracked-launch kill of one Chrome process tree: SIGTERM the whole group
+ * (single-pid fallback), wait up to 5 s (polling every 200 ms) for the main
+ * pid to exit, then SIGKILL the group UNCONDITIONALLY — the main may be gone
+ * while its orphaned Helpers linger, and the group stays addressable as long
+ * as any member lives. Exported so the out-of-process reaper, which holds a
+ * verified owner record instead of `launchedPid`, takes the same branch.
+ */
+export async function killProcessGroup(pid: number): Promise<void> {
+  killGroup(pid, 'SIGTERM')
+  // Wait for the main process to exit.
+  await new Promise<void>((resolve) => {
+    const check = setInterval(() => {
+      try { process.kill(pid, 0) } catch { clearInterval(check); resolve() }
+    }, 200)
+    setTimeout(() => { clearInterval(check); resolve() }, 5000)
+  })
+  // The main may be gone while its Helpers linger (they were orphaned) — the
+  // group is still addressable as long as any member lives, so SIGKILL it too.
+  try { process.kill(-pid, 'SIGKILL') } catch { /* no group left */ }
+}
+
 export async function killChrome(port = 9222): Promise<void> {
   if (launchedPid !== null) {
-    const pid = launchedPid
-    killGroup(pid, 'SIGTERM')
-    // Wait for the main process to exit.
-    await new Promise<void>((resolve) => {
-      const check = setInterval(() => {
-        try { process.kill(pid, 0) } catch { clearInterval(check); resolve() }
-      }, 200)
-      setTimeout(() => { clearInterval(check); resolve() }, 5000)
-    })
-    // The main may be gone while its Helpers linger (they were orphaned) — the
-    // group is still addressable as long as any member lives, so SIGKILL it too.
-    try { process.kill(-pid, 'SIGKILL') } catch { /* no group left */ }
+    await killProcessGroup(launchedPid)
     launchedPid = null
     return
   }
