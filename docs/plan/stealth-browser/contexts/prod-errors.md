@@ -1,6 +1,6 @@
 # prod-errors — STATE_NAME
 
-**Phase:** surface · **Kind:** work · **Depends on:** core-seam, tests-unit-core, tests-unit-data, tests-unit-extract, capture-upgrade, chrome-lifecycle · **Guard:** `python3 docs/plan/stealth-browser/scripts/guard.py prod-errors`
+**Phase:** surface · **Kind:** work · **Depends on:** core-seam, tests-unit-core, tests-unit-data, tests-unit-extract, capture-upgrade, chrome-lifecycle, surface-api · **Guard:** `python3 docs/plan/stealth-browser/scripts/guard.py prod-errors`
 
 ---
 

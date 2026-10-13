@@ -400,7 +400,8 @@
         "tests-unit-data",
         "tests-unit-extract",
         "capture-upgrade",
-        "chrome-lifecycle"
+        "chrome-lifecycle",
+        "surface-api"
       ],
       "guard": "python3 docs/plan/stealth-browser/scripts/guard.py prod-errors",
       "artifacts": [
