@@ -5,14 +5,17 @@
  * AC2: it still resolves `test`, and the hook still sources the git-env guard.
  * AC3: `lane-gate.mjs` as CI calls it still includes e2e; CI workflows invoke it.
  * AC4: check-lane-reachability goes red when e2e is re-added to pre-push or `test`
- *      is removed (real files patched, restored in `finally`).
+ *      is removed. The negative controls patch a COPY of the hook in a temp workspace
+ *      (`--workspace-root`), never the real file: a concurrent reader of the real hook
+ *      (the gate engine's G2, the other wiring specs) must never see a mutated file.
  *
  * Run: node --test .githooks/pre-push-e2e.spec.mjs
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -60,23 +63,44 @@ test('pre-push-e2e AC3: lane-gate as CI calls it still includes e2e; CI invokes 
   assert.equal(diff.status, 0, 'CI workflows and lane-gate.mjs are unchanged vs HEAD');
 });
 
+/** A temp workspace holding a copy of the hook (patched by the caller) and of both CI workflows. */
+function workspaceWith(hookText) {
+  const ws = mkdtempSync(join(tmpdir(), 'pre-push-e2e-'));
+  mkdirSync(join(ws, '.githooks'), { recursive: true });
+  writeFileSync(join(ws, '.githooks/pre-push'), hookText);
+  cpSync(join(ROOT, '.github'), join(ws, '.github'), { recursive: true });
+  return ws;
+}
+const checkAt = (ws) => run([CHECK, '--workspace-root', ws]);
+
 test('pre-push-e2e AC4: reachability check is green, and red under negative controls', () => {
   assert.equal(run([CHECK]).status, 0);
   const original = readFileSync(HOOK, 'utf8');
-  try {
+  const cases = [
     // Re-add e2e to pre-push.
-    writeFileSync(HOOK, original + '\nnpx nx affected --target=e2e\n');
-    const a = run([CHECK]);
-    assert.equal(a.status, 1, a.stdout + a.stderr);
-    assert.match(a.stderr, /5-pre-push-runs-e2e/);
+    [original + '\nnpx nx affected --target=e2e\n', /5-pre-push-runs-e2e/],
     // Read the full gate directly (includes e2e).
-    writeFileSync(HOOK, original.replace(/^flags=.*$/m, 'flags=$(node "$repo_root/tools/gate/lane-gate.mjs")'));
-    assert.equal(run([CHECK]).status, 1);
+    [original.replace(/^flags=.*$/m, 'flags=$(node "$repo_root/tools/gate/lane-gate.mjs")'), null],
     // Remove test: hard-code only e2e instead of the resolver.
-    writeFileSync(HOOK, original.replace(/^flags=.*$/m, 'flags="--target=e2e"'));
-    assert.equal(run([CHECK]).status, 1);
-  } finally {
-    writeFileSync(HOOK, original);
+    [original.replace(/^flags=.*$/m, 'flags="--target=e2e"'), null],
+  ];
+  for (const [patched, expected] of cases) {
+    const ws = workspaceWith(patched);
+    try {
+      const r = checkAt(ws);
+      assert.equal(r.status, 1, r.stdout + r.stderr);
+      if (expected) assert.match(r.stderr, expected);
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
   }
-  assert.equal(run([CHECK]).status, 0);
+  // The unpatched copy is green: the controls fail because of the patch, not because of the fixture.
+  const clean = workspaceWith(original);
+  try {
+    const r = checkAt(clean);
+    assert.equal(r.status, 0, r.stdout + r.stderr);
+  } finally {
+    rmSync(clean, { recursive: true, force: true });
+  }
+  assert.equal(readFileSync(HOOK, 'utf8'), original, 'the real hook is untouched');
 });

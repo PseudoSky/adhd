@@ -1,0 +1,25 @@
+{
+  "$comment": "595965cc T30 — this repository's command table for the workspace-standards gate engine. One row per STRATEGY gate (G1-G12). A row with a `command` is a mechanical gate the engine runs; a row without one is an OBLIGATION: the engine reports it as an obligation, never as a pass (STRATEGY §13). `bound-by` names the task that turns an obligation into a command. G1, G2, G4, G10 and G12 are never relaxed by class or rigor (STRATEGY §6.7), so they carry no `classes`, `rigors` or `paths`.",
+  "gates": [
+    { "id": "G1", "command": "node tools/nx-plugins/test/gates/g1-tests.mjs", "stage": ["C", "D", "E", "G"], "mechanism": "mechanical" },
+    { "id": "G2", "command": "node tools/nx-plugins/test/executors/wiring/check-lane-reachability.mjs", "stage": ["B", "D", "E"], "mechanism": "mechanical" },
+    { "id": "G3", "command": "node tools/nx-plugins/test/executors/wiring/check-agent-lane-spawn.mjs", "stage": ["B", "D", "E"], "mechanism": "mechanical" },
+    { "id": "G4", "stage": ["D", "E"], "mechanism": "mechanical", "bound-by": "T32" },
+    { "id": "G5", "stage": ["E", "F"], "mechanism": "mechanical", "bound-by": "T36" },
+    { "id": "G6", "stage": ["D"], "mechanism": "review", "bound-by": "T33" },
+    { "id": "G7", "stage": ["D", "E"], "mechanism": "mechanical", "bound-by": "T37" },
+    { "id": "G8", "stage": ["D"], "mechanism": "mechanical", "bound-by": "T38" },
+    { "id": "G9", "stage": ["D"], "mechanism": "mechanical", "bound-by": "T34" },
+    { "id": "G10", "command": "npx nx affected -t verify-dist-load --base=${GATE_BASE:-origin/main}", "stage": ["D", "G"], "mechanism": "mechanical" },
+    { "id": "G11", "stage": ["D"], "mechanism": "review", "bound-by": "T63" },
+    { "id": "G12", "stage": ["D"], "mechanism": "mechanical", "bound-by": "T43" }
+  ],
+  "stages": {
+    "B": { "invokes": ["G2", "G3"] },
+    "C": { "invokes": ["G1"] },
+    "D": { "invokes": ["G1", "G2", "G3", "G4", "G6", "G7", "G8", "G9", "G10", "G11", "G12"] },
+    "E": { "invokes": ["G1", "G2", "G3", "G4", "G5", "G7"] },
+    "F": { "invokes": ["G5"] },
+    "G": { "invokes": ["G1", "G10"] }
+  }
+}
