@@ -1,6 +1,6 @@
 # core-scaffold — STATE_NAME
 
-**Phase:** scaffold · **Kind:** work · **Depends on:** split-plan-repair · **Guard:** `python3 docs/plan/stealth-browser/scripts/guard.py core-scaffold`
+**Phase:** scaffold · **Kind:** work · **Depends on:** split-plan-repair, surface-api, tests-unit-core, tests-unit-data, tests-unit-extract, mig-docs, chrome-lifecycle, capture-upgrade, cdp-test-harness, sp-reaper-load-proof · **Guard:** `python3 docs/plan/stealth-browser/scripts/guard.py core-scaffold`
 
 ---
 

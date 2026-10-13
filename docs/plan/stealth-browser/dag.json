@@ -792,7 +792,16 @@
       "kind": "work",
       "phase": "scaffold",
       "depends_on": [
-        "split-plan-repair"
+        "split-plan-repair",
+        "surface-api",
+        "tests-unit-core",
+        "tests-unit-data",
+        "tests-unit-extract",
+        "mig-docs",
+        "chrome-lifecycle",
+        "capture-upgrade",
+        "cdp-test-harness",
+        "sp-reaper-load-proof"
       ],
       "guard": "python3 docs/plan/stealth-browser/scripts/guard.py core-scaffold",
       "artifacts": [
