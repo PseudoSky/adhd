@@ -11,6 +11,9 @@ export default [
           ignoredFiles: [
             '{projectRoot}/eslint.config.{js,cjs,mjs,ts,cts,mts}',
             '{projectRoot}/vite.config.{js,ts,mjs,mts}',
+            // Specs drive the Layer over a real policy-core-client decider; that
+            // package is a test-only collaborator, never a runtime dependency.
+            '{projectRoot}/src/test/**',
           ],
         },
       ],
