@@ -461,7 +461,12 @@
         "tests-unit-extract",
         "tests-unit-surface",
         "mig-docs",
-        "tests-use-cases"
+        "tests-use-cases",
+        "search-hosts",
+        "search-usecases",
+        "search-examples",
+        "tracing-log-validation",
+        "search-cutover"
       ],
       "guard": "python3 docs/plan/stealth-browser/scripts/guard.py audit-pre-review",
       "artifacts": [
