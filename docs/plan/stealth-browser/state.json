@@ -1337,6 +1337,17 @@
         "docs/plan/stealth-browser/contexts/agent-search-relink.md"
       ],
       "by": "pseudosky"
+    },
+    {
+      "ts": "2026-10-13T09:40:04.491Z",
+      "state": "tripwire-reverse-migrate",
+      "class": "executor",
+      "type": "rescope-criterion",
+      "reason": "split amendment: criterion 4 judged on request-builder test/lint/build plus regression-free against the recorded d959c6a baseline; unrelated workspace-wide red (lint of 14 projects, wingman-bridge tests, tinder e2e) filed as backlog fd3be45b; state not completed by the amendment",
+      "files_synced": [
+        "docs/plan/stealth-browser/contexts/tripwire-reverse-migrate.md"
+      ],
+      "by": "pseudosky"
     }
   ],
   "authored_with": {
