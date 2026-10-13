@@ -217,7 +217,9 @@ async function main(line) {
   const role = (cur.match(ROLE_RE) || [])[1] || 'parent';
   const phase = /^\s*Follow-up\./.test(cur) ? 2 : 1;
   const boDesign = process.env.R2_FAKE_DESIGN === 'backlog-operator';
-  const reply = boDesign ? await runBoRole({ role: Object.keys(toolLists).some((n) => /backlog/i.test(n)) ? 'bo-operator' : toolLists['agent-mcp'] ? 'bo-performance' : 'bo-review', io }) : await runRole({ role, phase, io, mode: MODE });
+  const boAccess = process.env.R2_FAKE_ACCESS === 'cli' ? 'cli' : 'mcp';   // R12: the operator has the shell server and no dispatch tools (no backlog MCP server)
+  const boOperator = boAccess === 'cli' ? (!toolLists['agent-mcp'] && Boolean(toolLists.shell)) : Object.keys(toolLists).some((n) => /backlog/i.test(n));
+  const reply = boDesign ? await runBoRole({ role: boOperator ? 'bo-operator' : toolLists['agent-mcp'] ? 'bo-performance' : 'bo-review', io, access: boAccess, boMode: process.env.R2_BO_MODE || 'ok' }) : await runRole({ role, phase, io, mode: MODE });
   emitFinal(reply, null);
   if (!bridge) fs.writeFileSync(path.join(STATE, `session-${sid}.json`), JSON.stringify({ memory: `${history}\n${sessionMemory.join('\n')}\n${reply}` }));
   // Like the real CLI, `total_cost_usd` and `modelUsage` are SESSION-cumulative on a resumed native session (usage is this turn only).

@@ -362,7 +362,7 @@ export function serverEnv(ctx, store, logs) {
     ADHD_AGENT_NATIVE_TOOLING_FS_ALLOWED_ROOTS: JSON.stringify({ repo: ctx.repoDir }),
     ...(ctx.dry ? { ADHD_AGENT_ANTHROPIC_SECRET: 'dry-run-not-a-secret', ANTHROPIC_BASE_URL: ctx.fakeAnthropicUrl || 'http://127.0.0.1:9', NODE_OPTIONS: `--require ${path.join(HERE, 'dryrun/egress-guard.cjs')}`, R2_EGRESS_LOG: path.join(ctx.runDir, 'egress-blocked.log') } : {}),
     ...effortEnv(ctx),
-    ...captureEnv(ctx), ...(ctx.sandboxEnv ?? {}),   // sandboxEnv: R11 design only (backlog-operator.mjs sandboxWriteEnv); undefined for every other round, so R5-R10 server envs are unchanged
+    ...captureEnv(ctx), ...(ctx.sandboxEnv ?? {}), ...(ctx.pathPrepend ? { PATH: `${ctx.pathPrepend}${path.delimiter}${process.env.PATH ?? ''}` } : {}),   // pathPrepend: R12 dry run only (the stand-in adhd-backlog dir goes first on the server PATH, which the shell server and the exit-status shim inherit); sandboxEnv: R11 design only (backlog-operator.mjs sandboxWriteEnv); undefined for every other round, so R5-R10 server envs are unchanged
     ...(ctx.trace ? { ADHD_AGENT_TRACING_LOG_SINK: 'file', ADHD_AGENT_TRACING_LOG_DIR: path.join(logs, 'trace') } : {}),   // PARITY-R10-prep AC3: the agent-mcp tracing plugin has no on/off switch; the sink and directory are pinned explicitly so a changed default cannot drop the trace silently
   });
 }
@@ -497,13 +497,13 @@ async function setupFakes(ctx) {
   const mode = ctx.opts.degraded || 'ideal';
   const state = path.join(ctx.work, 'fake-state'); fs.mkdirSync(state, { recursive: true });
   const shim = path.join(ctx.work, 'claude-shim.sh');
-  fs.writeFileSync(shim, `#!/bin/sh\nexport R2_FAKE_STATE='${state}'\nexport R2_SDK_ROOT='${path.join(ctx.opts.wt, 'node_modules/@modelcontextprotocol/sdk/dist/esm')}'\nexport R2_FAKE_MODE='${mode}'\n${ctx.design ? `export R2_FAKE_DESIGN='${ctx.design}'\n` : ''}exec '${process.execPath}' '${path.join(HERE, 'dryrun/fake-claude.mjs')}' "$@"\n`, { mode: 0o755 });
+  fs.writeFileSync(shim, `#!/bin/sh\nexport R2_FAKE_STATE='${state}'\nexport R2_SDK_ROOT='${path.join(ctx.opts.wt, 'node_modules/@modelcontextprotocol/sdk/dist/esm')}'\nexport R2_FAKE_MODE='${mode}'\n${ctx.design ? `export R2_FAKE_DESIGN='${ctx.design}'\n` : ''}${ctx.backlogAccess === 'cli' ? `export R2_FAKE_ACCESS='cli'\nexport R2_BO_MODE='${ctx.boMode || 'ok'}'\n` : ''}exec '${process.execPath}' '${path.join(HERE, 'dryrun/fake-claude.mjs')}' "$@"\n`, { mode: 0o755 });
   ctx.opts = { ...ctx.opts, claude: shim };
   ctx.fakeEnv = {};
   ctx.fakeState = state;
   if (ctx.runDef.arm === 'C' || ctx.opts.capture) {   // with capture on, A/B also get the fake upstream so the fake claude's wire probe is answered locally, never by the real API
     const { startFakeAnthropic } = await import(pathToFileURL(path.join(HERE, 'dryrun/fake-anthropic.mjs')).href);
-    ctx.fake = await startFakeAnthropic({ mode, log: () => {}, ...(ctx.trace ? { thinking: 'omitted' } : {}), ...(ctx.design ? { design: ctx.design } : {}) }); ctx.fakeAnthropicUrl = ctx.fake.url;
+    ctx.fake = await startFakeAnthropic({ mode, log: () => {}, ...(ctx.trace ? { thinking: 'omitted' } : {}), ...(ctx.design ? { design: ctx.design } : {}), ...(ctx.backlogAccess === 'cli' ? { access: 'cli', boMode: ctx.boMode || 'ok' } : {}) }); ctx.fakeAnthropicUrl = ctx.fake.url;
   }
 }
 async function teardownFakes(ctx) { if (ctx.fake) await ctx.fake.close(); }
@@ -1823,6 +1823,11 @@ export const designAgentsDir = (env = process.env) => env.PARITY_AGENTS_DIR || B
  * Live gates of a design round, in GT.DESIGN_GATE_ORDER (ledger, scope, models, credential, designPreflight). Same contract as runLiveGates: read-only or zero-model, any red or throwing
  * gate refuses, nothing is reserved before all are green. `deps.preflight` / `deps.credential` are injectable (offline tests); the defaults are the real checks.
  */
+/** The design's scenario sha: the R11 object for an mcp round (unchanged), plus the access and the operator shell allowlist for a cli round. */
+export function designScenarioSha(opts, roster) {
+  const access = BO.accessOfRound(opts.round, opts.ledgerDir);
+  return access === 'cli' ? BO.scenarioShaOf({ roster, access, shellAllow: BO.operatorShellAllow({ base: BO.productShellDefault() }) }) : BO.scenarioShaOf({ roster });
+}
 export async function runDesignGates(opts, deps = {}) {
   const arms = roundProfile(opts).arms;
   const pendingArms = arms.filter((a) => !LG.readLedger(opts.round, opts.ledgerDir).runs.some((r) => r.arm === a));   // arms that already hold a ledger run keep their own worktree (the harness never removes it): only pending arms must find their path free
@@ -1830,10 +1835,10 @@ export async function runDesignGates(opts, deps = {}) {
     ledger: () => { const r = LG.checkLedgerForLive(opts.round, opts.ledgerDir); return { ok: r.ok, reasons: r.reasons }; },
     scope: () => { const led = LG.readLedger(opts.round, opts.ledgerDir); let logText = ''; try { logText = fs.readFileSync(GT.resolveLogPath(REPO_ROOT), 'utf8'); } catch { /* none */ }
       const roster = BO.loadRoster({ dir: opts.agentsDir ?? designAgentsDir() });   // a missing roster file is a red gate (the gate runner turns the throw into a reason)
-      return GT.checkScope({ scenarioSha: BO.scenarioShaOf({ roster }), previousSha: led.scenarioSha || previousScenarioSha(opts.round, opts.ledgerDir), scopeChanges: led.scopeChanges, logText, startedAt: led.startedAt ?? new Date().toISOString() }); },
+      return GT.checkScope({ scenarioSha: designScenarioSha(opts, roster), previousSha: led.scenarioSha || previousScenarioSha(opts.round, opts.ledgerDir), scopeChanges: led.scopeChanges, logText, startedAt: led.startedAt ?? new Date().toISOString() }); },
     models: () => modelsGate(opts),
     credential: () => { const c = (deps.credential ?? JG.resolveJudgeCredential)(); return { ok: c.present, reasons: c.present ? [] : ['no Anthropic credential (ANTHROPIC_API_KEY or ADHD_AGENT_ANTHROPIC_SECRET in env or ~/.adhd/.env): group C could not call the API after group B was paid for'] }; },   // presence only, no model call
-    designPreflight: () => (deps.preflight ?? ((o) => BO.designPreflight({ repoRoot: REPO_ROOT, round: o.round, arms, pendingArms, agentsDir: o.agentsDir ?? designAgentsDir(), distEntry: path.join(o.wt, 'entrypoint/agent-mcp/dist/src/index.js'), claude: o.claude })))(opts),
+    designPreflight: () => (deps.preflight ?? ((o) => BO.designPreflight({ repoRoot: REPO_ROOT, round: o.round, arms, pendingArms, agentsDir: o.agentsDir ?? designAgentsDir(), distEntry: path.join(o.wt, 'entrypoint/agent-mcp/dist/src/index.js'), claude: o.claude, access: BO.accessOfRound(o.round, o.ledgerDir) })))(opts),
   }, GT.DESIGN_GATE_ORDER);
 }
 /** Create a throwaway git repository for the DRY RUN (never the real checkout: the dry run must not occupy the live worktree paths). It lives under repo-root tmp/, NOT the OS temp dir, because the OS temp dir is srt-writable by default and would hide a sandbox refusal of `git commit` in a linked worktree. */
@@ -1858,7 +1863,9 @@ export async function runDesignMode(opts, dry, { log = console.log } = {}) {
     binary = BO.resolveBacklogBinary(); if (!binary) throw new BO.DesignError('adhd-backlog is not on PATH'); reader = BO.makeBacklogReader(BO.cliBacklogRunner({ binary: binary.path }));
   }
   const wtPlan = BO.worktreePlan({ round: opts.round, arms: profile.arms, mainRoot });
-  return BO.runDesignRound({ opts, dry, host: designHost, deps: { reader, repoRoot, mainRoot, baseSha, baseBranch, wtPlan, roster, binary, fakeItems: opts.fakeItems }, log });
+  const access = BO.accessOfRound(opts.round, opts.ledgerDir);
+  if (access === 'cli' && dry) binary = BO.resolveBacklogBinary();   // recorded only (the dry run's operator runs the stand-in); null is fine
+  return BO.runDesignRound({ opts, dry, host: designHost, deps: { reader, repoRoot, mainRoot, baseSha, baseBranch, wtPlan, roster, binary, fakeItems: opts.fakeItems, fakeItemsCli: opts.fakeItemsCli, access, boMode: opts.boMode ?? process.env.PARITY_FAKE_BO_MODE ?? null }, log });
 }
 /** `--print-plan --round R11`: what the design would run, with the worktree paths, groups and the verbatim prompt. Makes no model call and creates nothing. */
 export function designPlanText(opts) {
@@ -1867,7 +1874,7 @@ export function designPlanText(opts) {
   const ctxs = Object.fromEntries(profile.arms.map((a) => [a, makeCtx({ ...opts }, null, { arm: a, rep: 1 }, true)]));
   let mainRoot = null; try { mainRoot = BO.mainCheckoutOf(REPO_ROOT); } catch { /* not a git checkout */ }
   const pf = (() => { try { return BO.designPreflight({ repoRoot: REPO_ROOT, round: opts.round, arms: profile.arms, agentsDir, distEntry: path.join(opts.wt, 'entrypoint/agent-mcp/dist/src/index.js'), claude: opts.claude, spawn: () => ({ status: 1, stdout: '', stderr: '' }) }).facts.hooks; } catch { return null; } })();   // facts only (no process is spawned by the injected spawn stub; git config reads are read-only)
-  return BO.planText({ round: opts.round, profile, ledger, roster, rosterError, repoRoot: REPO_ROOT, mainRoot, agentsDir,
+  return BO.planText({ round: opts.round, profile, ledger, roster, rosterError, repoRoot: REPO_ROOT, mainRoot, agentsDir, access: BO.accessOfRound(opts.round, opts.ledgerDir),
     hostFacts: { hooks: pf, providers: Object.fromEntries(profile.arms.map((a) => [a, providerFor(ctxs[a], a)])), models: Object.fromEntries(profile.arms.map((a) => [a, modelOf(ctxs[a])])), thinking: Object.fromEntries(profile.arms.map((a) => [a, thinkingOf(ctxs[a], a)])) } });
 }
 
@@ -1906,7 +1913,7 @@ async function main() {
       const g = await runDesignGates(opts);
       for (const r of g.results) console.error(`gate ${r.gate}: ${r.ok ? 'GREEN' : 'RED'} ${(r.reasons ?? []).join('; ')}`);
       if (!g.ok) { console.error(`LIVE REFUSED by gate ${g.failed} (exit 3); ledger untouched, no model call, no claude spawned`); process.exit(3); }
-      LG.initRound(opts.round, { scenarioSha: BO.scenarioShaOf({ roster: BO.loadRoster({ dir: opts.agentsDir ?? designAgentsDir() }) }) });
+      LG.initRound(opts.round, { scenarioSha: designScenarioSha(opts, BO.loadRoster({ dir: opts.agentsDir ?? designAgentsDir() })) });
     }
     if (dry) opts.claude = 'FAKE-SET-PER-RUN';
     let res; try { res = await runDesignMode(opts, dry); } catch (e) { console.error(`${e instanceof BO.DesignError ? 'DESIGN REFUSED' : 'DESIGN FAULT'} (nothing was spent past this point): ${e.message}`); console.log(BO.PAUSE_LINE); process.exit(1); }

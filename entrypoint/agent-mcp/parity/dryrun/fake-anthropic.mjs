@@ -29,7 +29,7 @@ const parse = (t) => { try { return JSON.parse(t); } catch { return {}; } };
 const warmPrefixes = new Set();   // module scope: like the real prompt cache, it outlives one run (rep 2 reads what rep 1 wrote)
 // `thinking`: null (default; byte-identical to every earlier dry run) | 'omitted' (a thinking block with an EMPTY text and a signature, the shape claude-haiku-5-5 returns) | 'text' (a block that carries text).
 // `design`: null (the composite shopkit scenario, byte-identical to every earlier dry run) | 'backlog-operator' (R11: the role comes from the TOOLS offered, never from the prompt).
-export function startFakeAnthropic({ mode = 'ideal', log = () => {}, thinking = null, design = null } = {}) {
+export function startFakeAnthropic({ mode = 'ideal', log = () => {}, thinking = null, design = null, access = 'mcp', boMode = 'ok' } = {}) {
   const convs = new Map();
   const stats = { requests: 0, bodies: [], toolNamesSeen: new Set(), hosts: new Set() };
   const pick = (tools, re) => tools.find((x) => re.test(x.name))?.name;
@@ -42,7 +42,7 @@ export function startFakeAnthropic({ mode = 'ideal', log = () => {}, thinking = 
     const cur = texts[texts.length - 1] || '';
     const role = (cur.match(ROLE_RE) || [])[1] || (firstUser.match(ROLE_RE) || [])[1] || 'parent';
     const phase = /^\s*Follow-up\./.test(cur) ? 2 : 1;
-    const boRole = design === 'backlog-operator' ? (pick(tools, /(^|__)backlog_query$/) ? 'bo-operator' : (T.agent && T.task) ? 'bo-performance' : 'bo-review') : null;   // role from the OFFERED tools: backlog server => operator, dispatch tools => performance, neither => the read-only review agent
+    const boRole = design === 'backlog-operator' ? ((access === 'cli' ? (!(T.agent && T.task) && T.shell) : pick(tools, /(^|__)backlog_query$/)) ? 'bo-operator' : (T.agent && T.task) ? 'bo-performance' : 'bo-review') : null;   // role from the OFFERED tools: backlog server => operator, dispatch tools => performance, neither => the read-only review agent
     const c = { serverBlocks: [], pendingRes: null, pendingIds: [], signalNext: null, nextP: null, ctx: 0, first: true, turn: 0 };
     c.arm = () => new Promise((r) => { c.signalNext = r; });
     const callMany = (calls) => new Promise((res) => {
@@ -77,7 +77,7 @@ export function startFakeAnthropic({ mode = 'ideal', log = () => {}, thinking = 
       },
     };
     c.nextP = c.arm();
-    (boRole ? runBoRole({ role: boRole, io }) : runRole({ role, phase, io, mode })).then((final) => c.signalNext({ final }), (err) => c.signalNext({ error: String(err?.stack || err) }));
+    (boRole ? runBoRole({ role: boRole, io, access, boMode }) : runRole({ role, phase, io, mode })).then((final) => c.signalNext({ final }), (err) => c.signalNext({ error: String(err?.stack || err) }));
     return c;
   }
 

@@ -77,12 +77,14 @@ export function parseCliCall(call) {
  * envelope line (`{"ok":true`; the structured log lines the CLI prints around it are ignored) and no non-zero `[exit status: N]` sentinel.
  * @returns {{ok:boolean, why:string|null}}
  */
+// The envelope starts a line, or directly follows the closing brace of a structured log line: a bridge that joins the stdout and stderr parts of one result with no separator (the claude CLI bridge does) puts them on one line.
+const ENVELOPE_TRUE = /(?:^|\n|\})\s*\{"ok":true\b/; const ENVELOPE_FALSE = /(?:^|\n|\})\s*\{"ok":false\b/;
 export function cliOutcome(call) {
   const text = String(call?.resultText ?? '');
   if (call?.isError === true) return { ok: false, why: 'the engine marked the call an error' };
   if (/\[exit status: [1-9]\d*\]/.test(text)) return { ok: false, why: 'non-zero exit status' };
-  if (/^\s*\{"ok":false\b/m.test(text)) return { ok: false, why: 'the CLI answered {"ok":false}' };
-  if (!/^\s*\{"ok":true\b/m.test(text)) return { ok: false, why: call?.resultText == null ? 'no result recorded' : 'no {"ok":true} envelope in the output' };
+  if (ENVELOPE_FALSE.test(text)) return { ok: false, why: 'the CLI answered {"ok":false}' };
+  if (!ENVELOPE_TRUE.test(text)) return { ok: false, why: call?.resultText == null ? 'no result recorded' : 'no {"ok":true} envelope in the output' };
   return { ok: true, why: null };
 }
 /** `a` names the same item as `full` (equal, or `a` is a unique-prefix form of 8+ hex characters, which the CLI accepts). */

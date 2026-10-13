@@ -13,7 +13,58 @@ const parse = (t) => { try { return JSON.parse(t); } catch { return {}; } };
 const FAILED = /fatal:|exit status: [1-9]|Operation not permitted/;
 const oneLine = (t, n = 300) => String(t).replace(/\s+/g, ' ').slice(0, n);
 
-export async function runBoRole({ role, io }) {
+/**
+ * R12 (SCOPE-R12-backlog-cli): the backlog-operator reaches the backlog through the `adhd-backlog` CLI in its SHELL tool (no backlog MCP server). `access` 'cli' switches the operator role to that shape;
+ * `boMode` is a dry-run-only knob that scripts the negative controls of the flow-stage detector (default 'ok' = the happy path):
+ *   ok            query the repository's ready view -> get the first item -> claim -> write + commit -> reply; phase 2 transitions it
+ *   other-project query the ready view WITHOUT a project filter and pick the last item (another project's) -> claim -> commit -> reply ("out-of-repo pick")
+ *   stop          query the ready view, then stop without selecting an item ("operator stopped")
+ *   die           throw before any tool call ("operator died")
+ *   noflag        get the first item, then claim WITHOUT --allow-production-write (the CLI refuses), and report the refusal
+ */
+const CLI = 'adhd-backlog';
+const envelopeOf = (t) => {   // the envelope may share a line with the structured log line (the claude bridge joins the stdout and stderr parts with no separator): parse the JSON value that starts at `{"ok"`
+  const text = String(t); const at = text.indexOf('{"ok"'); if (at === -1) return null;
+  for (let k = text.indexOf('}', at); k !== -1; k = text.indexOf('}', k + 1)) { try { return JSON.parse(text.slice(at, k + 1)); } catch { /* extend */ } }
+  return null;
+};
+async function cli(io, cwd, verb, input, { write = false } = {}) {
+  const argv = [CLI, verb, '--input', JSON.stringify(input), ...(write ? ['--allow-production-write'] : [])];
+  const text = String(await io.call('shell', { argv, directory: cwd }));
+  return { text, env: envelopeOf(text) };
+}
+async function runCliOperator({ io, boMode }) {
+  const transition = /^\s*Transition (\S+) to (\S+)/.exec(io.prompt ?? '');
+  if (boMode === 'die') throw new Error('scripted backlog-operator death (R12 negative control)');
+  const cwd = await io.cwd();
+  if (transition) {
+    const r = await cli(io, cwd, 'transition', { uid: transition[1], by: 'backlog-operator:1', toStatus: transition[2], note: oneLine(io.prompt, 160) }, { write: true });
+    return r.env?.ok === true ? `Transitioned ${transition[1]}: ${r.env.data?.from ?? '?'} -> ${r.env.data?.to ?? '?'}.` : `ESCALATE: transition failed: ${oneLine(r.text)}`;
+  }
+  const filter = boMode === 'other-project' ? undefined : { project: 'adhd' };
+  const q = await cli(io, cwd, 'query', { view: 'ready', ...(filter ? { filter } : {}), limit: 50, fields: ['uid', 'title', 'status', 'project', 'component'] });
+  const items = q.env?.data?.items ?? [];
+  if (!items.length) return `ESCALATE: no unblocked item in the backlog (${oneLine(q.text)})`;
+  if (boMode === 'stop') return 'ESCALATE: I looked at the ready view and will not select an item.';
+  const pick = boMode === 'other-project' ? items[items.length - 1] : items[0];
+  await cli(io, cwd, 'get', { uid: pick.uid, fields: ['uid', 'title', 'status', 'project', 'component', 'blockers'] });
+  if (boMode === 'noflag') {
+    const refused = await cli(io, cwd, 'claim', { uid: pick.uid, by: 'backlog-operator:1', action: 'claim' });
+    return `ESCALATE: the claim of ${pick.uid} was refused: ${oneLine(refused.text)}`;
+  }
+  await cli(io, cwd, 'claim', { uid: pick.uid, by: 'backlog-operator:1', action: 'claim' }, { write: true });
+  const file = `r12-${pick.uid}.txt`;
+  const copied = String(await io.call('shell', { argv: ['cp', 'README.md', file], line: `cp README.md ${file}`, directory: cwd }));
+  const added = String(await io.call('shell', { argv: ['git', 'add', file], line: `git add ${file}`, directory: cwd }));
+  const msg = `r12 dry run: execute ${pick.uid}`;
+  const committed = String(await io.call('shell', { argv: ['git', 'commit', '-m', msg], line: `git commit -m "${msg}"`, directory: cwd }));
+  if (FAILED.test(`${copied}\n${added}\n${committed}`)) return `ESCALATE: git commit failed in ${cwd}: ${oneLine(`${copied} ${added} ${committed}`)}`;
+  const sha = String(await io.call('shell', { argv: ['git', 'rev-parse', 'HEAD'], line: 'git rev-parse HEAD', directory: cwd })).trim().split('\n').pop();
+  return `Implemented ${pick.uid} in ${file}; commit ${sha}. (${pick.title})`;
+}
+
+export async function runBoRole({ role, io, access = 'mcp', boMode = 'ok' }) {
+  if (role === 'bo-operator' && access === 'cli') return runCliOperator({ io, boMode });
   if (role === 'bo-performance') {
     const cwd = await io.cwd();
     const [impl] = await io.dispatchMany([{ name: 'backlog-operator', role: 'bo-operator', prompt: 'Select one random unblocked item from the backlog, implement it in the current working directory, and commit your work. Do not transition the item yet; report the item uid, the file you created and the commit sha.' }]);
