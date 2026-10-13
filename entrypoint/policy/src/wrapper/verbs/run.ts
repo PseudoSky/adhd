@@ -43,6 +43,7 @@ export async function runVerb(argv: readonly string[], deps: IVerbDeps): Promise
     });
     const resolved = await resolveSource(spec, 'run', {
       cwd: deps.cwd,
+      ...(deps.signal !== undefined ? { signal: deps.signal } : {}),
       ...(deps.launcher !== undefined ? { launcher: deps.launcher } : {}),
     });
     dispose = resolved.dispose;

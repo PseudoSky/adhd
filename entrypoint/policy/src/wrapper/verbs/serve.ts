@@ -1,6 +1,5 @@
 import { ApiError } from '@adhd/apigen-base-errors';
-import { parseSourceSpec, resolveSource, serveMcpPassthrough } from '@adhd/apigen-engine-gateway';
-import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { createStdioHostTransport, parseSourceSpec, resolveSource, serveMcpPassthrough } from '@adhd/apigen-engine-gateway';
 import { createAttributesSource } from '../attributes-source';
 import { splitPolicyArgv } from '../flags';
 import { buildGate } from '../gate';
@@ -45,16 +44,15 @@ export async function serveVerb(argv: readonly string[], deps: IVerbDeps & { sig
       args: split.childArgs,
       ...(deps.launcher !== undefined ? { launcher: deps.launcher } : {}),
     });
-    await serveMcpPassthrough({
+    const server = await serveMcpPassthrough({
       source: resolved,
       usePlugins: gate.usePlugins,
       serverInfo: { name: 'adhd-policy', version: readPolicyVersion() },
-      transport: new StdioServerTransport(),
+      transport: createStdioHostTransport(),
       signal: deps.signal,
     });
-    if (!deps.signal.aborted) {
-      await new Promise<void>((done) => deps.signal.addEventListener('abort', () => done(), { once: true }));
-    }
+    // Stay up until the signal aborts, the host disconnects, or the upstream exits.
+    await server.closed;
     return 0;
   } catch (error) {
     return reportFailure(error, deps);

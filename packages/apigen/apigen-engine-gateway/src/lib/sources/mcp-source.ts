@@ -1,42 +1,55 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { CallToolResultSchema, ResultSchema, ToolSchema } from '@modelcontextprotocol/sdk/types.js';
+import type { CallToolResult, Tool } from '@modelcontextprotocol/sdk/types.js';
 import { composeSchemas } from '@adhd/apigen-core-client';
 import type { GeneratedSchemas, Operation } from '@adhd/apigen-core-client';
-import { commandBaseName, segmentOf } from './command-name';
+import { commandBaseName, segmentOf, sourceNameOf } from './command-name';
 import { createLauncherTransport } from './launcher-transport';
 import type { IProcessHandle, IProcessLauncher } from './process';
 import { SourceError } from './types';
-import type { IResolvedSource } from './types';
+import type { IResolvedSource, ISkippedTool } from './types';
 
 const DEFAULT_HANDSHAKE_TIMEOUT_MS = 10_000;
+/** Default per-call wait for an upstream `tools/call` result. */
+const DEFAULT_CALL_TIMEOUT_MS = 120_000;
 /** Diagnostic stderr kept for handshake failures. */
 const STDERR_TAIL_BYTES = 4096;
+/** Tool names that would poison a name-keyed table; skipped and reported. */
+const RESERVED_TOOL_NAMES: ReadonlySet<string> = new Set(['__proto__', 'constructor', 'prototype']);
 
-/** Upstream hints per operation id, for `draft` (SRC-03, SRC-14: claims, not guarantees). */
+/** Upstream hints per operation id, for `draft` (SRC-03, SRC-14: advisory claims, never a guarantee). */
 export type McpHints = Readonly<Record<string, { readOnly?: boolean; destructive?: boolean }>>;
-
-function sanitizeServerName(raw: string | undefined, command: string): string {
-  const clean = (s: string) => s.toLowerCase().replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '');
-  return clean(raw ?? '') || clean(commandBaseName(command)) || 'server';
-}
 
 function describeError(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
 }
 
+function defaultWarn(line: string): void {
+  process.stderr.write(`${line}\n`);
+}
+
 /**
  * D-08. Starts the process, connects an SDK `Client` over {@link createLauncherTransport},
  * performs `initialize` bounded by `handshakeTimeoutMs` (default 10000), lists tools
- * (following cursors) and builds one Operation per tool: `id = '<server>.<tool>'` with
- * `server` the sanitised `serverInfo.name` (lowercase, `[a-z0-9_-]`, fallback the command
- * basename); `input` = the tool's `inputSchema` (a non-object schema is
- * `SourceError('unsupported')`); `output = {}`; `safe = annotations.readOnlyHint === true`.
- * Hints ride in the returned `hints` map. The fn table is keyed by the upstream tool name
- * verbatim and called positionally by apigen's dispatch: arguments are rebuilt by
- * `inputSchema.properties` key order, so a tool whose schema declares no `properties`
- * receives no arguments. A call returns `{content, structuredContent?, isError?}` taken
- * from the upstream result; an upstream `isError` result is returned as data, never thrown.
- * `dispose()` closes the client and kills the process. A handshake failure or timeout is
- * `SourceError('handshake-failed')` and the process is killed; there is no argv fallback.
+ * (following cursors) and builds one Operation per tool:
+ *
+ * - `id = '<source>.<tool>'` where `<source>` is the USER-CHOSEN name: `spec.name` when
+ *   given, else the command basename, lowercased to `[a-z0-9_-]`. The upstream's own
+ *   `serverInfo.name` is never used (an upstream could otherwise claim another source's
+ *   prefix and inherit its permissions).
+ * - `input` = the tool's `inputSchema`; `output = {}`; `safe` is ALWAYS `false`: the
+ *   upstream's `readOnlyHint` is an untrusted claim and rides only in the advisory
+ *   `hints` map.
+ * - A tool with a non-object `inputSchema`, a duplicate name, or a reserved name
+ *   (`__proto__`, `constructor`, `prototype`) is skipped and listed in `skipped`, with one
+ *   `onWarn` line each; the rest of the source stays usable.
+ *
+ * The resolved source also carries `mcp`: the full upstream `Tool` objects and a verbatim
+ * `callTool` (arguments exactly as given, result exactly as returned). The positional
+ * `pkg.fns` table remains for hosts that dispatch through apigen, but it can only pass
+ * the arguments the schema declares. `dispose()` closes the client and kills the
+ * process group. A handshake failure or timeout is `SourceError('handshake-failed')` and
+ * the process is killed; there is no argv fallback.
  */
 export async function resolveMcpStdioSource(
   spec: {
@@ -44,10 +57,21 @@ export async function resolveMcpStdioSource(
     args: readonly string[];
     cwd: string;
     env?: Record<string, string>;
+    /** User-chosen source name (operation-id prefix); defaults to the command basename. */
+    name?: string;
   },
-  deps: { launcher: IProcessLauncher; handshakeTimeoutMs?: number }
-): Promise<IResolvedSource & { hints: McpHints }> {
+  deps: {
+    launcher: IProcessLauncher;
+    handshakeTimeoutMs?: number;
+    /** Per-call wait for an upstream result (default 120000). */
+    callTimeoutMs?: number;
+    /** One line per skipped tool; defaults to stderr. */
+    onWarn?: (line: string) => void;
+  }
+): Promise<IResolvedSource & { hints: McpHints; skipped: readonly ISkippedTool[] }> {
   const timeoutMs = deps.handshakeTimeoutMs ?? DEFAULT_HANDSHAKE_TIMEOUT_MS;
+  const callTimeoutMs = deps.callTimeoutMs ?? DEFAULT_CALL_TIMEOUT_MS;
+  const onWarn = deps.onWarn ?? defaultWarn;
   const handle: IProcessHandle = await deps.launcher.start({
     command: spec.command,
     args: spec.args,
@@ -62,6 +86,13 @@ export async function resolveMcpStdioSource(
     },
   });
   const client = new Client({ name: 'adhd-apigen-source', version: '0.0.0' }, { capabilities: {} });
+
+  let closed = false;
+  const closeListeners: Array<() => void> = [];
+  client.onclose = () => {
+    closed = true;
+    for (const cb of closeListeners.splice(0)) cb();
+  };
 
   let disposing: Promise<void> | undefined;
   const dispose = (): Promise<void> => {
@@ -97,35 +128,65 @@ export async function resolveMcpStdioSource(
     if (timer) clearTimeout(timer);
   }
 
-  const tools = [] as Awaited<ReturnType<Client['listTools']>>['tools'];
+  // `tools/list` is read untyped and each entry validated on its own: the SDK's typed
+  // `listTools` rejects the WHOLE page when one tool is malformed, which would let a single
+  // bad tool disable the source.
+  const rawTools: unknown[] = [];
   try {
     let cursor: string | undefined;
     do {
-      const page = await client.listTools(cursor ? { cursor } : {}, { timeout: timeoutMs });
-      tools.push(...page.tools);
-      cursor = page.nextCursor;
+      const page = (await client.request(
+        { method: 'tools/list', params: cursor ? { cursor } : {} },
+        ResultSchema,
+        { timeout: timeoutMs }
+      )) as { tools?: unknown; nextCursor?: unknown };
+      if (!Array.isArray(page.tools)) throw new Error('tools/list result has no tools array');
+      rawTools.push(...page.tools);
+      cursor = typeof page.nextCursor === 'string' ? page.nextCursor : undefined;
     } while (cursor);
   } catch (e) {
     return fail('handshake-failed', `tools/list on ${spec.command} failed: ${describeError(e)}`);
   }
 
   const info = client.getServerVersion();
-  const server = sanitizeServerName(info?.name, spec.command);
+  const server = sourceNameOf(spec.command, spec.name);
   const operations: Operation[] = [];
   const hints: Record<string, { readOnly?: boolean; destructive?: boolean }> = {};
-  const generated: GeneratedSchemas = { metadata: { namespace: server, phase: '' }, schemas: {} };
-  const fns: Record<string, (...a: unknown[]) => unknown> = {};
+  const skipped: ISkippedTool[] = [];
+  const tools = new Map<string, Tool>();
+  const generated: GeneratedSchemas = { metadata: { namespace: server, phase: '' }, schemas: Object.create(null) };
+  const fns: Record<string, (...a: unknown[]) => unknown> = Object.create(null);
 
-  for (const tool of tools) {
-    if ((tool.inputSchema as { type?: unknown } | undefined)?.type !== 'object') {
-      return fail('unsupported', `tool ${tool.name} has a non-object inputSchema`);
+  const skip = (tool: string, reason: string): void => {
+    skipped.push({ tool, reason });
+    onWarn(`apigen-gateway: skipping upstream tool ${JSON.stringify(tool)} of ${server}: ${reason}`);
+  };
+
+  for (const entry of rawTools) {
+    const parsed = ToolSchema.safeParse(entry);
+    if (!parsed.success) {
+      const candidate = entry as { name?: unknown; inputSchema?: { type?: unknown } } | null;
+      const label = typeof candidate?.name === 'string' ? candidate.name : '<unnamed>';
+      const objectSchema = candidate?.inputSchema?.type === 'object';
+      skip(label, objectSchema ? 'invalid tool definition' : 'non-object inputSchema');
+      continue;
     }
-    if (Object.prototype.hasOwnProperty.call(fns, tool.name)) {
-      return fail('unsupported', `duplicate tool name ${tool.name}`);
+    const tool: Tool = parsed.data;
+    if (RESERVED_TOOL_NAMES.has(tool.name)) {
+      skip(tool.name, 'reserved tool name');
+      continue;
+    }
+    if ((tool.inputSchema as { type?: unknown } | undefined)?.type !== 'object') {
+      skip(tool.name, 'non-object inputSchema');
+      continue;
+    }
+    if (tools.has(tool.name)) {
+      skip(tool.name, 'duplicate tool name');
+      continue;
     }
     const id = `${server}.${tool.name}`;
-    const safe = tool.annotations?.readOnlyHint === true;
     const input = tool.inputSchema as Record<string, unknown>;
+    tools.set(tool.name, tool);
     operations.push({
       id,
       host: 'ts',
@@ -134,14 +195,15 @@ export async function resolveMcpStdioSource(
       kind: 'action',
       async: true,
       streaming: false,
-      safe,
+      // Never trust the upstream's readOnlyHint for a decision the host or Layer makes.
+      safe: false,
       input,
       output: {},
       envelope: {},
       typeText: null,
       hasCtx: false,
     });
-    generated.schemas[tool.name] = { input, output: {}, safe };
+    generated.schemas[tool.name] = { input, output: {}, safe: false };
     const annotations = tool.annotations;
     if (annotations && (annotations.readOnlyHint !== undefined || annotations.destructiveHint !== undefined)) {
       hints[id] = {
@@ -168,6 +230,19 @@ export async function resolveMcpStdioSource(
     };
   }
 
+  const callTool = (
+    name: string,
+    args?: Record<string, unknown>,
+    signal?: AbortSignal
+  ): Promise<CallToolResult> =>
+    // `request` (not `callTool`) so the SDK adds no client-side output validation: the
+    // result is the upstream's, and an McpError here is the upstream's own error.
+    client.request(
+      { method: 'tools/call', params: { name, ...(args !== undefined ? { arguments: args } : {}) } },
+      CallToolResultSchema,
+      { timeout: callTimeoutMs, ...(signal ? { signal } : {}) }
+    ) as Promise<CallToolResult>;
+
   return {
     sourceId: `bin:${commandBaseName(spec.command)}`,
     operations,
@@ -180,6 +255,15 @@ export async function resolveMcpStdioSource(
       createClient: async () => undefined,
     },
     hints,
+    skipped,
+    mcp: {
+      tools,
+      callTool,
+      onClose(cb) {
+        if (closed) queueMicrotask(cb);
+        else closeListeners.push(cb);
+      },
+    },
     dispose,
   };
 }
