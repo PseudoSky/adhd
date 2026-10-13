@@ -221,11 +221,11 @@
       "end_ref": null
     },
     "port-fixes": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-10-13T00:06:33.704Z",
-      "done_at": null,
+      "done_at": "2026-10-13T00:18:19.923Z",
       "start_ref": "0f71e50ef06b3bc5c5e529a137025e123cc58e2d",
-      "end_ref": null
+      "end_ref": "097412a5121ec9e82964026b0d97bb686ab64117"
     },
     "audit-pre-review": {
       "status": "pending",
@@ -440,6 +440,18 @@
       "audit_criteria_total": 5,
       "by": "pseudosky",
       "note": "inventory 209 rows, guard 0 (commit 4894bdc5)"
+    },
+    {
+      "ts": "2026-10-13T00:18:19.923Z",
+      "from": "port-fixes",
+      "to": "port-fixes",
+      "start_ref": "0f71e50ef06b3bc5c5e529a137025e123cc58e2d",
+      "end_ref": "097412a5121ec9e82964026b0d97bb686ab64117",
+      "audit_exit": 0,
+      "audit_criteria_passed": 12,
+      "audit_criteria_total": 12,
+      "by": "pseudosky",
+      "note": "port-fixes 12/12 guard 0; nx test 389 pass"
     }
   ],
   "amendment_log": [
@@ -525,7 +537,7 @@
     "version": "0.8.35",
     "hash": "0b6bc1f3d70e"
   },
-  "current_state": "port-fixes",
+  "current_state": "surface-api",
   "dod_provenance": {
     "confirmed_at": "2026-10-12T23:49:38.410Z",
     "by": "pseudosky",
