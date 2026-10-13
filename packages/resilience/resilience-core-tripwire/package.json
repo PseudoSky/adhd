@@ -1,0 +1,32 @@
+{
+  "name": "@adhd/resilience-core-tripwire",
+  "version": "0.1.0",
+  "description": "Persistent kill-switch latch: lock-file protocol with audit trail, fail-closed reads and break-glass clear",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist",
+    "CHANGELOG.md"
+  ],
+  "keywords": [
+    "tripwire",
+    "kill-switch",
+    "circuit-breaker",
+    "fail-safe",
+    "latch",
+    "guard"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PseudoSky/adhd.git",
+    "directory": "packages/resilience/resilience-core-tripwire"
+  },
+  "dependencies": {}
+}

@@ -8,6 +8,7 @@
     "decompile":  { "description": "Bytecode/bundle decompilation toolchain — CLI for reversing built JS artifacts" },
     "dispatch":   { "description": "Task dispatch — DAG-based execution planning and optimization" },
     "environment": { "description": "Environment management — specs, builders, core runtimes for Node, Python, and Rust" },
+    "resilience": { "description": "Fail-safe primitives - persistent kill-switches and guards that protect callers and upstream services from compounding failures" },
     "ui-react":   { "description": "React UI components — hooks, storybook config" },
     "workspace":  { "description": "Workspace tooling — generators, shared utilities" }
   },

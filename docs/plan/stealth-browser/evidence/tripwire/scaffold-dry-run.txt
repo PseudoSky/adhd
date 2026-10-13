@@ -1,0 +1,27 @@
+$ npx nx g @adhd/workspace-codegen-nx:core --name=tripwire --group=resilience --nxLayer=shared --platform=node --access public --publish true --dry-run
+
+ NX  Generating @adhd/workspace-codegen-nx:core
+
+Scaffolding resilience-core-tripwire at packages/resilience (@adhd/resilience-core-tripwire)
+
+ NX   Project already included in existing release configuration
+
+Generating a target that uses the deprecated `@nx/eslint:lint` executor. The executor will be removed in Nx v24. Run `nx g @nx/eslint:convert-to-inferred` next to migrate this target to the `@nx/eslint/plugin` inferred plugin and prevent future generators from emitting executor targets. See https://nx.dev/docs/guides/tasks--caching/convert-to-inferred for details.
+  Tags: domain:resilience, pkg-kind:core, pkg-class:foundation, layer:shared, platform:node, access:public, publish:npm
+CREATE packages/resilience/resilience-core-tripwire/tsconfig.lib.json
+CREATE packages/resilience/resilience-core-tripwire/tsconfig.json
+CREATE packages/resilience/resilience-core-tripwire/src/index.ts
+CREATE packages/resilience/resilience-core-tripwire/src/lib/resilience-core-tripwire.spec.ts
+CREATE packages/resilience/resilience-core-tripwire/src/lib/resilience-core-tripwire.ts
+CREATE packages/resilience/resilience-core-tripwire/README.md
+CREATE packages/resilience/resilience-core-tripwire/package.json
+UPDATE nx.json
+CREATE packages/resilience/resilience-core-tripwire/project.json
+UPDATE eslint.config.mjs
+CREATE packages/resilience/resilience-core-tripwire/tsconfig.spec.json
+CREATE packages/resilience/resilience-core-tripwire/vite.config.mts
+CREATE packages/resilience/resilience-core-tripwire/eslint.config.mjs
+UPDATE tsconfig.base.json
+CREATE tools/nx-plugins/build/executors/typecheck-spec/resilience-core-tripwire.baseline.json
+
+NOTE: The "dryRun" flag means no changes were made.
