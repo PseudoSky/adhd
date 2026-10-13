@@ -138,7 +138,15 @@ export async function serveMcpPassthrough(options: IPassthroughServerOptions): P
       transport: 'mcp',
       signal: callSignal,
     };
-    const final: Next = () => upstream.callTool(name, rawArguments, callSignal);
+    // The Layers see (and may mutate, e.g. a policy `set`) `call.domainArgs`; what the upstream
+    // receives is that same object, so a forced value reaches it even when the host sent no
+    // `arguments`. With nothing sent and nothing forced, the upstream still gets no `arguments`.
+    const final: Next = () =>
+      upstream.callTool(
+        name,
+        rawArguments === undefined && Object.keys(call.domainArgs).length === 0 ? undefined : call.domainArgs,
+        callSignal
+      );
     const composed = layers.reduceRight<Next>((inner, layer) => () => layer(call, inner), final);
     try {
       return (await composed()) as CallToolResult;
