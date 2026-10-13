@@ -15,7 +15,7 @@ All gates are green again after the findings were resolved; the evidence is agai
 
 - **Reference Pattern:** Same gate set as `gates-first`.
 
-- **Delta Spec:** `python3 docs/plan/stealth-browser/scripts/guard.py gates-rerun` (requires RESOLUTION.json); it re-runs the stealth-browser targets and the six `resilience-core-tripwire` targets against the post-fix trees (evidence key `tw:<target>`, tree key `tw_tree`).
+- **Delta Spec:** `python3 docs/plan/stealth-browser/scripts/guard.py gates-rerun` (requires RESOLUTION.json); it re-runs the `stealth-core-browser` and `stealth-search` targets (evidence keys `core:<target>`, `search:<target>`) and the six `resilience-core-tripwire` targets against the post-fix trees (evidence key `tw:<target>`, tree key `tw_tree`). [inv:gate-trees]: gate evidence is keyed by the code trees (src, bin, package.json and project.json of each package), so the docs states that follow `gates-rerun` (README, CHANGELOG, docs/, AGENTS.md, llms.txt) do not invalidate it; any later change to a package's src, bin or manifest does.
 
 - **Invariants:** A red gate returns control to resolve-findings via an amendment; never mark green on a red gate. Also: [inv:shared-worktree] (commit only your own explicit paths, tag every commit `[psm:gates-rerun]`), [inv:owned-paths-only], [inv:no-main-writes].
 
@@ -27,12 +27,12 @@ All gates are green again after the findings were resolved; the evidence is agai
 
 Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/guard.py` (`python3 docs/plan/stealth-browser/scripts/guard.py gates-rerun --only gates-rerun.N`). None may be deferred. Tests written by this plan cite ticket `8468f7b1` and these ids ([inv:tests-cite]).
 
-- [gates-rerun.1] `nx run stealth-browser:lint` exits 0 (includes @nx/dependency-checks)
-- [gates-rerun.2] `nx run stealth-browser:typecheck` and `:typecheck-spec` exit 0
-- [gates-rerun.3] `nx run stealth-browser:build` and `:build-bin` exit 0 (dist/index.js plus dist/bin/*)
-- [gates-rerun.4] `nx run stealth-browser:test` exits 0 (unit lane incl. the use-case suites; every spawner and third-party network call is mocked, no live Chrome)
-- [gates-rerun.5] `nx run stealth-browser:verify-dist-load` exits 0 (the built dist loads the way a consumer loads it)
-- [gates-rerun.6] Every spec file cites ticket 8468f7b1 and a valid acceptance-criterion id; evidence JSON records every gate command and exit code
+- [gates-rerun.1] `nx run stealth-core-browser:lint` and `nx run stealth-search:lint` exit 0 (includes @nx/dependency-checks)
+- [gates-rerun.2] `:typecheck` and `:typecheck-spec` of stealth-core-browser and stealth-search exit 0
+- [gates-rerun.3] `:build` of stealth-core-browser and `:build` and `:build-bin` of stealth-search exit 0 (dist/index.js plus the search dist/bin/*)
+- [gates-rerun.4] `:test` of stealth-core-browser and stealth-search exits 0 (unit lanes incl. the use-case suites; every spawner and third-party network call is mocked, no live Chrome, no spawned process)
+- [gates-rerun.5] `:verify-dist-load` of stealth-core-browser and stealth-search exits 0 (the built dists load the way a consumer loads them)
+- [gates-rerun.6] Every spec file of stealth-core-browser and stealth-search cites ticket 8468f7b1 and a valid acceptance-criterion id; evidence JSON records every gate command and exit code
 - [gates-rerun.7] `nx run resilience-core-tripwire:lint`, `:typecheck`, `:typecheck-spec`, `:test`, `:build` and `:verify-dist-load` exit 0 (the second approved package is gated with the first; evidence JSON records every command, its exit code and the tripwire tree sha `tw_tree`).
 
 ---
@@ -40,7 +40,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 ## Reservations
 
 ```text
-read_only:  ["entrypoint/stealth-browser/"]
+read_only:  []
 mutates:    ["docs/plan/stealth-browser/evidence/"]
 ```
 

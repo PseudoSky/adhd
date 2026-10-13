@@ -15,7 +15,7 @@ After the release, switch reverse-apis from the tarball to the registry range, r
 
 - **Primitive:** MODIFY the reverse worktree's `package.json` and `pnpm-lock.yaml`; CREATE `docs/plan/stealth-browser/tripwire-reverse/relink-verify.json`.
 
-- **Reference Pattern:** `docs/plan/stealth-browser/contexts/agent-search-relink.md` (the same gate and the same evidence style); the spec section 5.4 steps 3-4.
+- **Reference Pattern:** `docs/plan/stealth-browser/contexts/consumer-relink.md` (the same dispatcher gate and evidence style); the spec section 5.4 steps 3-4.
 
 - **Delta Spec:** Preconditions: `merge-readiness` is complete, the dispatcher has run the release and `npm view @adhd/resilience-core-tripwire@0.1.0 version` exits 0 (record it). In the reverse worktree run `pnpm add @adhd/resilience-core-tripwire@^0.1.0` (replacing the extracted tarball directory), commit `package.json` and `pnpm-lock.yaml` by explicit path, re-run the four verification commands of `tripwire-reverse-migrate.4` and record them with `head` in `relink-verify.json`, then fast-forward merge `feat/tripwire-adopt` into reverse main (`git merge --ff-only`), record `merged_sha`, remove the worktree `.worktrees/tripwire-adopt` and delete the branch. Never push (no remote). Do not touch main's dirty files.
 

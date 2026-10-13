@@ -1,7 +1,7 @@
 {
   "hb-deps-approval": {
     "type": "manual-approval",
-    "description": "Human approval to add node-html-parser, xpath and @xmldom/xmldom as dependencies of @adhd/stealth-browser (absent from the scratch runner adhd/ package; new to the workspace dependency set)",
+    "description": "Human approval to add node-html-parser, xpath and @xmldom/xmldom as dependencies of @adhd/stealth-core-browser (absent from the scratch runner adhd/ package; new to the workspace dependency set)",
     "required_by": [
       "deps-install"
     ],

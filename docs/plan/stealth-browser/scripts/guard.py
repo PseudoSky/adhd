@@ -129,7 +129,9 @@ def state():
 
 
 def tree_sha():
-    return git("rev-parse", f"HEAD:{P}") if exists(P) else ""
+    """Combined code identity of the stealth-core-browser and stealth-search packages (src, bin, package.json, project.json at HEAD). Documentation edits do not change it ([inv:gate-trees])."""
+    t = code_trees()
+    return hashlib.sha256((t["core"] + "|" + t["search"]).encode()).hexdigest() if (t["core"] or t["search"]) else ""
 
 
 def ownership():
@@ -213,11 +215,11 @@ def source_untouched():
             base[k] = v.strip()
     if "tree" not in base:
         return False, "evidence/source-baseline.txt missing (scaffold state records it)"
-    cut = [x for x in sh(["git", "log", "--format=%H", "--grep=\\[psm:agent-search-cutover\\]", "--reverse"], cwd=SCRATCH)[1].split() if x]
+    cut = [x for x in sh(["git", "log", "--format=%H", "--grep=\\[psm:search-cutover\\]", "--reverse"], cwd=SCRATCH)[1].split() if x]
     if cut:
         # the cutover may change agent-browser/adhd: everything BEFORE its first commit must equal the baseline, and only cutover commits may touch it afterwards
         tree = git("rev-parse", f"{cut[0]}^:agent-browser/adhd", cwd=SCRATCH)
-        others = [c for c in sh(["git", "log", "--format=%H%x1f%B%x1e", f"{cut[0]}^..HEAD", "--", "agent-browser/adhd"], cwd=SCRATCH)[1].split("\x1e") if c.strip() and "[psm:agent-search-cutover]" not in c]
+        others = [c for c in sh(["git", "log", "--format=%H%x1f%B%x1e", f"{cut[0]}^..HEAD", "--", "agent-browser/adhd"], cwd=SCRATCH)[1].split("\x1e") if c.strip() and "[psm:search-cutover]" not in c]
         return tree == base.get("tree") and not others, f"pre-cutover tree={tree[:10]} baseline={base.get('tree', '')[:10]} non-cutover commits touching adhd={len(others)}"
     tree = git("rev-parse", "HEAD:agent-browser/adhd", cwd=SCRATCH)
     diff = hashlib.sha256(sh(["git", "diff", "--", "agent-browser/adhd"], cwd=SCRATCH)[1].encode()).hexdigest()
@@ -256,11 +258,11 @@ def nx_run(project, target, *extra, timeout=1800):
     return sh([NX, "run", f"{project}:{target}", *extra], timeout=timeout)
 
 
-def code_tree(d):
-    """Identity of a package's code and manifest at HEAD (src, bin, package.json, project.json). Documentation edits (README, CHANGELOG, docs/, AGENTS.md, llms.txt) do not change it, so gate evidence stays valid across the docs states."""
-    if not os.path.isdir(d):
+def code_tree(d, ref="HEAD"):
+    """Identity of a package's code and manifest at `ref` (src, bin, package.json, project.json). Documentation edits (README, CHANGELOG, docs/, AGENTS.md, llms.txt) do not change it, so gate evidence stays valid across the docs states."""
+    if ref == "HEAD" and not os.path.isdir(d):
         return ""
-    out = git("ls-tree", "-r", "HEAD", "--", f"{d}/src", f"{d}/bin", f"{d}/package.json", f"{d}/project.json")
+    out = git("ls-tree", "-r", ref, "--", f"{d}/src", f"{d}/bin", f"{d}/package.json", f"{d}/project.json")
     return hashlib.sha256(out.encode()).hexdigest()
 
 
@@ -365,6 +367,18 @@ def mcp_run(cmd, calls=(), env=None, cwd=None, timeout=60, close_stdin=False):
         except (OSError, ValueError):
             pass
     return out
+
+
+RETIRED_STATES = ["surface-hosts", "tracing-plugin", "tracing-namespace-proof", "agent-search-cutover", "agent-search-relink"]
+
+
+def _ck(slug, n):
+    """Late-bound reference to another state's check (so a guard can re-run a check defined in a later module)."""
+    def run():
+        fn = dict(CHECKS.get(slug, [])).get(f"{slug}.{n}")
+        return fn() if fn else (False, f"no check {slug}.{n}")
+    run.__name__ = f"ck_{slug.replace('-', '_')}_{n}"
+    return run
 
 
 def ownership_ok(slug):
@@ -582,22 +596,23 @@ def _s2():
 
 @check("scaffold", 3)
 def _s3():
-    """entrypoint/stealth-browser/package.json name is exactly @adhd/stealth-browser and project.json exists."""
-    return pkg().get("name") == "@adhd/stealth-browser" and exists(f"{P}/project.json"), f"name={pkg().get('name')}"
+    """The generated entrypoint package was named exactly @adhd/stealth-browser with a project.json; after core-scaffold its successor @adhd/stealth-core-browser (generator-built library) carries the same migrated code with a project.json."""
+    return pkg().get("name") in (LEGACY_PKG, CORE_PKG) and exists(f"{P}/project.json"), f"name={pkg().get('name')}"
 
 
 @check("scaffold", 4)
 def _s4():
-    """tsconfig.base.json maps the @adhd/stealth-browser path alias (generator UPDATE)."""
-    return "@adhd/stealth-browser" in read("tsconfig.base.json"), "tsconfig.base.json alias"
+    """tsconfig.base.json maps the package path alias (generator UPDATE): @adhd/stealth-browser before core-scaffold, @adhd/stealth-core-browser after it (the old alias is removed)."""
+    t = read("tsconfig.base.json")
+    return (CORE_PKG in t) if P == CORE_DIR else (LEGACY_PKG in t), "tsconfig.base.json alias"
 
 
 @check("scaffold", 5)
 def _s5():
-    """Exactly the approved new project.json files since main: entrypoint/stealth-browser/project.json (required) and, once tripwire-scaffold has run, packages/resilience/resilience-core-tripwire/project.json (the second approved package); any other new project.json fails."""
+    """Exactly the approved new project.json files since main: the migrated package's (entrypoint/stealth-browser/project.json before core-scaffold, packages/stealth/stealth-core-browser/project.json after it) and, once their scaffold states have run, packages/resilience/resilience-core-tripwire/project.json and entrypoint/stealth-search/project.json (three packages in all, each generator-built); any other new project.json fails."""
     base = git("merge-base", "HEAD", "main")
     added = [f for f in git("diff", "--name-only", "--diff-filter=A", f"{base}..HEAD").splitlines() if f.endswith("project.json")]
-    return f"{P}/project.json" in added and set(added) <= {f"{P}/project.json", f"{TW}/project.json"} and len(added) == len(set(added)), f"new project.json files: {added}"
+    return f"{P}/project.json" in added and set(added) <= {f"{P}/project.json", f"{TW}/project.json", f"{SEARCH_DIR}/project.json"} and len(added) == len(set(added)), f"new project.json files: {added}"
 
 
 @check("scaffold", 6)
@@ -620,6 +635,15 @@ def _s8():
 
 
 # ============================================================ S2 entrypoint-parity
+def EPD():
+    """The generator-built entrypoint judged by the entrypoint-parity checks: the legacy shell until core-scaffold removes it, then the search entrypoint."""
+    return LEGACY_DIR if os.path.isdir(LEGACY_DIR) else SEARCH_DIR
+
+
+def EPP():
+    return jread(f"{EPD()}/package.json", {}) or {}
+
+
 def sibling_top():
     sets = []
     for s in SIBLINGS:
@@ -633,7 +657,8 @@ def sibling_top():
 def _ep1():
     """Top-level tracked file set contains every file common to dispatch-cli, backlog and apigen-cli (eslint/vite/tsconfig.*/vitest.e2e/AGENTS/CHANGELOG/LICENSE...)."""
     need = sibling_top()
-    have = {f[len(P) + 1:] for f in git("ls-files", "--", P).splitlines() if "/" not in f[len(P) + 1:]}
+    d = EPD()
+    have = {f[len(d) + 1:] for f in git("ls-files", "--", d).splitlines() if "/" not in f[len(d) + 1:]}
     miss = sorted(need - have)
     return not miss and bool(need), f"missing vs siblings: {miss}"
 
@@ -643,7 +668,7 @@ def _ep2():
     """project.json tags are a superset of the tags common to the three sibling entrypoints."""
     sets = [set((jread(f"{s}/project.json", {}) or {}).get("tags", [])) for s in SIBLINGS]
     inter = set.intersection(*sets)
-    mine = set((jread(f"{P}/project.json", {}) or {}).get("tags", []))
+    mine = set((jread(f"{EPD()}/project.json", {}) or {}).get("tags", []))
     return bool(inter) and inter <= mine, f"need {sorted(inter - mine)}"
 
 
@@ -657,23 +682,23 @@ def _ep3():
         except (ValueError, json.JSONDecodeError):
             return set()
     need = (targets("dispatch-cli") & targets("backlog")) | {"build-bin"}
-    mine = targets(proj_name())
+    mine = targets("stealth-browser" if EPD() == LEGACY_DIR else SEARCH_PROJECT)
     return bool(need) and need <= mine, f"missing targets {sorted(need - mine)}"
 
 
 @check("entrypoint-parity", 4)
 def _ep4():
-    """package.json carries the sibling publish metadata: repository.directory == entrypoint/stealth-browser, homepage, bugs, license, files, main/types, publishConfig."""
-    p = pkg()
+    """package.json carries the sibling publish metadata: repository.directory equal to the entrypoint directory, homepage, bugs, license, files, main/types, publishConfig."""
+    p = EPP()
     keys = ["homepage", "bugs", "license", "files", "main", "types", "publishConfig", "description", "keywords"]
-    ok = all(k in p for k in keys) and (p.get("repository") or {}).get("directory") == P
+    ok = all(k in p for k in keys) and (p.get("repository") or {}).get("directory") == EPD()
     return ok, f"missing {[k for k in keys if k not in p]}"
 
 
 @check("entrypoint-parity", 5)
 def _ep5():
-    """`nx run stealth-browser:lint` exits 0 on the scaffold (tooling wired)."""
-    rc, out = sh([NX, "run", f"{proj_name()}:lint"], timeout=900)
+    """`nx run <entrypoint project>:lint` exits 0 on the scaffold (tooling wired)."""
+    rc, out = sh([NX, "run", f"{'stealth-browser' if EPD() == LEGACY_DIR else SEARCH_PROJECT}:lint"], timeout=900)
     return rc == 0, out[-400:]
 
 
@@ -686,8 +711,8 @@ def _ep6():
 @check("entrypoint-parity", 7)
 def _ep7():
     """package.json declares `engines.node >= 22.5` (the migrated storage layer uses the built-in `node:sqlite`)."""
-    m = re.match(r"\s*>=\s*(\d+)(?:\.(\d+))?", (pkg().get("engines") or {}).get("node", ""))
-    return bool(m) and (int(m.group(1)), int(m.group(2) or 0)) >= (22, 5), f"engines={pkg().get('engines')}"
+    m = re.match(r"\s*>=\s*(\d+)(?:\.(\d+))?", (EPP().get("engines") or {}).get("node", ""))
+    return bool(m) and (int(m.group(1)), int(m.group(2) or 0)) >= (22, 5), f"engines={EPP().get('engines')}"
 
 
 # ============================================================ S3 deps-install
@@ -710,9 +735,9 @@ def _d2():
 
 @check("deps-install", 3)
 def _d3():
-    """pnpm-lock.yaml has an importers entry for entrypoint/stealth-browser listing all three deps."""
+    """pnpm-lock.yaml has an importers entry for the migrated package (entrypoint/stealth-browser, then packages/stealth/stealth-core-browser after core-scaffold) listing all three deps."""
     lock = read("pnpm-lock.yaml")
-    m = re.search(r"^  entrypoint/stealth-browser:\n((?:    .*\n|\n)+)", lock, re.M)
+    m = re.search(rf"^  {re.escape(P)}:\n((?:    .*\n|\n)+)", lock, re.M)
     return bool(m) and all(k in m.group(1) for k in WANT_DEPS), "importer block"
 
 
@@ -1226,7 +1251,7 @@ def _tus2():
 
 @check("tests-unit-surface", 3)
 def _tus3():
-    """`nx run stealth-browser:test` exits 0 and only owned paths changed by [psm:tests-unit-surface] commits."""
+    """`nx run stealth-core-browser:test` exits 0 and only owned paths changed by [psm:tests-unit-surface] commits."""
     rc, out = sh([NX, "run", f"{proj_name()}:test"], timeout=1500)
     o = ownership_ok("tests-unit-surface")
     return rc == 0 and o[0], out[-250:] + o[1]
@@ -1236,21 +1261,26 @@ def _tus3():
 GATE_TARGETS = ["lint", "typecheck", "typecheck-spec", "build", "build-bin", "test", "verify-dist-load"]
 
 
+GATE_PROJECTS = [("core", CORE_PROJECT, [t for t in GATE_TARGETS if t != "build-bin"]), ("search", SEARCH_PROJECT, GATE_TARGETS)]
+
+
 def run_gates(evidence):
+    """Run (or reuse, keyed by the combined code tree) every nx gate of the three owned packages: stealth-core-browser (six targets), stealth-search (seven) and resilience-core-tripwire (six)."""
     cur, twcur = tree_sha(), tw_tree_sha()
     cached = jread(evidence)
     if cached and cached.get("tree") == cur and cached.get("tw_tree") == twcur and cached.get("all_green"):
         return cached
     res = {}
-    for t in GATE_TARGETS:
-        t0 = time.time()
-        rc, out = sh([NX, "run", f"{proj_name()}:{t}"], timeout=2400)
-        res[t] = {"cmd": f"nx run {proj_name()}:{t}", "exit": rc, "seconds": round(time.time() - t0, 1), "tail": out[-300:]}
+    for key, project, targets in GATE_PROJECTS:
+        for t in targets:
+            t0 = time.time()
+            rc, out = sh([NX, "run", f"{project}:{t}"], timeout=2400)
+            res[f"{key}:{t}"] = {"cmd": f"nx run {project}:{t}", "exit": rc, "seconds": round(time.time() - t0, 1), "tail": out[-300:]}
     for t in TW_ALL_TARGETS:  # the second approved package is gated with the first
         t0 = time.time()
         rc, out = tw_nx(t, 2400)
         res[f"tw:{t}"] = {"cmd": f"nx run {TW_NAME}:{t}", "exit": rc, "seconds": round(time.time() - t0, 1), "tail": out[-300:]}
-    doc = {"tree": cur, "tw_tree": twcur, "head": git("rev-parse", "HEAD"), "results": res, "all_green": all(v["exit"] == 0 for v in res.values())}
+    doc = {"tree": cur, "trees": code_trees(), "tw_tree": twcur, "head": git("rev-parse", "HEAD"), "results": res, "all_green": all(v["exit"] == 0 for v in res.values())}
     os.makedirs(os.path.dirname(evidence), exist_ok=True)
     with open(evidence, "w", encoding="utf8") as f:
         json.dump(doc, f, indent=2)
@@ -1258,11 +1288,11 @@ def run_gates(evidence):
 
 
 def gate_checks(slug, evidence, pre=None):
-    names = [("lint", "`nx run stealth-browser:lint` exits 0 (includes @nx/dependency-checks)"),
-             ("typecheck", "`nx run stealth-browser:typecheck` and `:typecheck-spec` exit 0"),
-             ("build", "`nx run stealth-browser:build` and `:build-bin` exit 0 (dist/index.js plus dist/bin/*)"),
-             ("test", "`nx run stealth-browser:test` exits 0 (unit lane incl. the use-case suites; every spawner and third-party network call is mocked, no live Chrome)"),
-             ("verify-dist-load", "`nx run stealth-browser:verify-dist-load` exits 0 (the built dist loads the way a consumer loads it)")]
+    names = [("lint", "`nx run stealth-core-browser:lint` and `nx run stealth-search:lint` exit 0 (includes @nx/dependency-checks)"),
+             ("typecheck", "`:typecheck` and `:typecheck-spec` of stealth-core-browser and stealth-search exit 0"),
+             ("build", "`:build` of stealth-core-browser and `:build` and `:build-bin` of stealth-search exit 0 (dist/index.js plus the search dist/bin/*)"),
+             ("test", "`:test` of stealth-core-browser and stealth-search exits 0 (unit lanes incl. the use-case suites; every spawner and third-party network call is mocked, no live Chrome, no spawned process)"),
+             ("verify-dist-load", "`:verify-dist-load` of stealth-core-browser and stealth-search exits 0 (the built dists load the way a consumer loads them)")]
     for n, (tgt, text) in enumerate(names, 1):
         def mk(tgt=tgt, text=text):
             def fn():
@@ -1273,19 +1303,20 @@ def gate_checks(slug, evidence, pre=None):
                 doc = run_gates(evidence)
                 r = doc["results"]
                 keys = {"typecheck": ["typecheck", "typecheck-spec"], "build": ["build", "build-bin"]}.get(tgt, [tgt])
-                bad = [k for k in keys if r.get(k, {}).get("exit") != 0]
-                return not bad, f"{bad} {[r[k]['tail'] for k in bad][:1]}"
+                want = [f"{pre_}:{k}" for pre_, _, tg in GATE_PROJECTS for k in keys if k in tg]
+                bad = [k for k in want if r.get(k, {}).get("exit") != 0]
+                return not bad and bool(want), f"{bad} {[r[k]['tail'] for k in bad][:1]}"
             fn.__doc__ = text
             return fn
         CHECKS.setdefault(slug, []).append((f"{slug}.{n}", mk()))
     n = len(names) + 1
 
     def citations():
-        files = [f for f in walk(f"{P}/src/test", (".ts",)) if f.endswith(".spec.ts")]
+        files = [f for d in (CORE_DIR, SEARCH_DIR) for f in walk(f"{d}/src/test", (".ts",)) if f.endswith(".spec.ts")]
         ids = criteria_ids()
         bad = [f for f in files if TICKET not in read(f) or not (set(re.findall(r"\[([a-z0-9-]+\.\d+)\]", read(f))) & ids)]
-        return not bad and bool(files), f"uncited tests {bad[:6]}"
-    citations.__doc__ = "Every spec file cites ticket 8468f7b1 and a valid acceptance-criterion id; evidence JSON records every gate command and exit code"
+        return not bad and bool(files) and exists(SEARCH_DIR) and exists(CORE_DIR), f"uncited tests {bad[:6]}"
+    citations.__doc__ = "Every spec file of stealth-core-browser and stealth-search cites ticket 8468f7b1 and a valid acceptance-criterion id; evidence JSON records every gate command and exit code"
     CHECKS[slug].append((f"{slug}.{n}", citations))
 
 
@@ -1294,28 +1325,31 @@ gate_checks("gates-first", f"{PLAN}/evidence/gates-first.json")
 
 @check("gates-first", 7)
 def _gf7():
-    """(PA10.1, PA10.2, PA10.4, PA10.5; folded from the retired publish-readiness state) package.json has description, keywords, license, files, publishConfig.access = public and engines.node >= 22.5, the version is 0.x, the built dist/bin/cli.js and mcp.js start with a shebang and are executable, and every @adhd/* dependency is a public workspace package or recorded in published-state.json."""
-    p = pkg()
-    eng = (p.get("engines") or {}).get("node", "")
-    meta = all(p.get(k) for k in ("description", "keywords", "license", "files")) and (p.get("publishConfig") or {}).get("access") == "public" and "22.5" in eng
-    bad_bin = [f for f in ("cli.js", "mcp.js") if not (exists(f"{P}/dist/bin/{f}") and read(f"{P}/dist/bin/{f}").startswith("#!") and os.access(f"{P}/dist/bin/{f}", os.X_OK))]
+    """(PA10.1, PA10.2, PA10.4, PA10.5; folded from the retired publish-readiness state) both packages' package.json have description, keywords, license, files, publishConfig.access = public and engines.node >= 22.5, versions are 0.x, the built stealth-search dist/bin/cli.js and mcp.js start with a shebang and are executable (the library core declares no bin), and every @adhd/* dependency of either package is a public workspace package or recorded in published-state.json."""
     names = {}
     for f in git("ls-files", "*package.json").splitlines():
         d = jread(f, None)
         if isinstance(d, dict) and d.get("name"):
             names[d["name"]] = d
     pub = jread("published-state.json", {}) or {}
-    deps = {**(p.get("dependencies") or {}), **(p.get("peerDependencies") or {})}
-    bad_dep = [n for n in deps if n.startswith("@adhd/") and not ((n in names and not names[n].get("private")) or n in pub or n in (pub.get("packages") or {}))]
-    return meta and str(p.get("version", "")).startswith("0.") and not bad_bin and bool(deps) and not bad_dep, f"meta={meta} version={p.get('version')} bins={bad_bin} unpublished deps={bad_dep}"
+    meta_all, deps_all, bad_bin = True, {}, []
+    for d, bins in ((CORE_DIR, ()), (SEARCH_DIR, ("cli.js", "mcp.js"))):
+        p = jread(f"{d}/package.json", {}) or {}
+        eng = (p.get("engines") or {}).get("node", "")
+        meta = all(p.get(k) for k in ("description", "keywords", "license", "files")) and (p.get("publishConfig") or {}).get("access") == "public" and "22.5" in eng and str(p.get("version", "")).startswith("0.")
+        meta_all = meta_all and meta
+        deps_all.update({**(p.get("dependencies") or {}), **(p.get("peerDependencies") or {})})
+        bad_bin += [f"{d}/{f}" for f in bins if not (exists(f"{d}/dist/bin/{f}") and read(f"{d}/dist/bin/{f}").startswith("#!") and os.access(f"{d}/dist/bin/{f}", os.X_OK))]
+    bad_dep = [n for n in deps_all if n.startswith("@adhd/") and not ((n in names and not names[n].get("private")) or n in pub or n in (pub.get("packages") or {}))]
+    return meta_all and not bad_bin and bool(deps_all) and not bad_dep, f"meta={meta_all} bins={bad_bin} unpublished deps={bad_dep}"
 
 
 @check("gates-first", 8)
 def _gf8():
-    """(PA10.3) `npm pack --dry-run` against the built dist output lists README.md, CHANGELOG.md, bin/cli.js, bin/mcp.js, index.js and index.d.ts (the main/types/bin targets); the output is recorded in evidence/publish-dry-run.txt."""
-    rc, miss = tarball_missing()
+    """(PA10.3) `npm pack --dry-run` against each built dist output lists README.md, CHANGELOG.md and the main/types targets (stealth-search also bin/cli.js and bin/mcp.js); the output is recorded in evidence/publish-dry-run.txt."""
+    rc, miss = tarballs_missing()
     rec = read(f"{PLAN}/evidence/publish-dry-run.txt")
-    return rc == 0 and not miss and bool(rec.strip()), f"missing from tarball: {miss}; evidence recorded={bool(rec.strip())}"
+    return rc == 0 and not miss and bool(rec.strip()) and exists(f"{SEARCH_DIR}/dist"), f"missing from tarballs: {miss}; evidence recorded={bool(rec.strip())}"
 
 
 @check("gates-first", 9)
@@ -1325,15 +1359,18 @@ def _gf9():
 
 @check("gates-first", 10)
 def _gf10():
-    """After a full build, neither owned package is inlined into dist (module-format proof for ADR-0003): no dist/**/*.js file defines `createStoreAdapter`, `ensureBackend`, `serveBackend` or `dialBackend`, dist references `@adhd/sox-service-proxy` as an external require, and no dist file `require`s `@adhd/sox-store-adapter` (it is reached only through a dynamic `import()`)."""
-    rc, out = sh([NX, "run", f"{proj_name()}:build"], timeout=1800)
-    files = walk(f"{P}/dist", (".js", ".cjs", ".mjs"))
-    txt = {f: read(f) for f in files}
-    inlined = [os.path.relpath(f, P) for f, t in txt.items() if re.search(r"function\s+(createStoreAdapter|ensureBackend|serveBackend|dialBackend)\b", t)]
-    req_store = [os.path.relpath(f, P) for f, t in txt.items() if re.search(r"require\(\s*['\"]@adhd/sox-store-adapter['\"]", t)]
-    proxy_ext = any("@adhd/sox-service-proxy" in t for t in txt.values())
-    return rc == 0 and bool(files) and not inlined and not req_store and proxy_ext, f"build rc={rc} files={len(files)} inlined={inlined} store require={req_store} proxy external={proxy_ext}"
-
+    """After a full build, neither owned dependency is inlined into any dist (module-format proof for ADR-0003): no dist/**/*.js file of either package defines `createStoreAdapter`, `ensureBackend`, `serveBackend` or `dialBackend`, the core dist references `@adhd/sox-service-proxy` as an external require, no file `require`s `@adhd/sox-store-adapter` (it is reached only through a dynamic `import()`), and the stealth-search dist references `@adhd/stealth-core-browser` and `@adhd/resilience-core-tripwire` as externals and defines neither package's code."""
+    rc1, _ = nx_run(CORE_PROJECT, "build", timeout=1800)
+    rc2, _ = nx_run(SEARCH_PROJECT, "build", timeout=1800)
+    core = {f: read(f) for f in walk(f"{CORE_DIR}/dist", (".js", ".cjs", ".mjs"))}
+    srch = {f: read(f) for f in walk(f"{SEARCH_DIR}/dist", (".js", ".cjs", ".mjs"))}
+    alltxt = {**core, **srch}
+    inlined = [f for f, t in alltxt.items() if re.search(r"function\s+(createStoreAdapter|ensureBackend|serveBackend|dialBackend)\b", t)]
+    req_store = [f for f, t in alltxt.items() if re.search(r"require\(\s*['\"]@adhd/sox-store-adapter['\"]", t)]
+    proxy_ext = any("@adhd/sox-service-proxy" in t for t in core.values())
+    ext = any(CORE_PKG in t for t in srch.values()) and any(TW_PKG in t for t in srch.values())
+    dup = [f for f, t in srch.items() if re.search(r"function\s+(createTripwire|chromeStatus|launchChrome)\b", t)]
+    return rc1 == 0 and rc2 == 0 and bool(core) and bool(srch) and not inlined and not req_store and proxy_ext and ext and not dup, f"build rc={rc1}/{rc2} inlined={inlined} store require={req_store} proxy external={proxy_ext} core+tripwire external in search={ext} duplicated={dup}"
 
 
 def resolution_done():
@@ -1350,9 +1387,9 @@ REVIEW = f"{PLAN}/review"
 
 @check("review-prep", 1)
 def _rp1():
-    """review/migration.diff exists, is non-empty and covers entrypoint/stealth-browser, packages/resilience/resilience-core-tripwire and tsconfig.base.json since the scaffold start_ref (the blind review sees both approved packages; the consumer-repo diffs are not included)."""
+    """review/migration.diff exists, is non-empty and covers packages/stealth/stealth-core-browser, entrypoint/stealth-search, packages/resilience/resilience-core-tripwire and tsconfig.base.json since the scaffold start_ref (the blind review sees all three approved packages; the consumer-repo diffs are not included)."""
     d = read(f"{REVIEW}/migration.diff")
-    return len(d) > 2000 and f"{P}/src" in d and f"{TW}/src" in d, f"diff bytes={len(d)} covers tripwire={f'{TW}/src' in d}"
+    return len(d) > 2000 and f"{CORE_DIR}/src" in d and f"{SEARCH_DIR}/src" in d and f"{TW}/src" in d, f"diff bytes={len(d)} covers search={f'{SEARCH_DIR}/src' in d} tripwire={f'{TW}/src' in d}"
 
 
 @check("review-prep", 2)
@@ -1370,7 +1407,7 @@ def _rp3():
 
 @check("review-prep", 4)
 def _rp4():
-    """Only owned paths changed by [psm:review-prep] commits; gates-first evidence trees (stealth-browser and the tripwire package) match the diffed trees."""
+    """Only owned paths changed by [psm:review-prep] commits; gates-first evidence trees (the stealth-core-browser + stealth-search code tree and the tripwire package) match the diffed trees."""
     g = jread(f"{PLAN}/evidence/gates-first.json", {})
     o = ownership_ok("review-prep")
     return o[0] and g.get("all_green") is True and g.get("tree") == tree_sha() and g.get("tw_tree") == tw_tree_sha(), f"{o[1]} gates tree match={g.get('tree') == tree_sha()} tw tree match={g.get('tw_tree') == tw_tree_sha()}"
@@ -1409,9 +1446,9 @@ def _b3():
 
 @check("audit-migration-blind", 4)
 def _b4():
-    """The package tree is unchanged since review-prep (tree sha in INPUT matches HEAD), so the review judged the code that gated green."""
+    """The package code trees are unchanged since review-prep (the combined stealth-core-browser + stealth-search code tree recorded by gates-first equals HEAD), so the review judged the code that gated green."""
     g = jread(f"{PLAN}/evidence/gates-first.json", {})
-    return g.get("tree") == tree_sha(), "tree unchanged since gates-first"
+    return g.get("tree") == tree_sha() and bool(tree_sha()), "code trees unchanged since gates-first"
 
 
 @check("resolve-findings", 1)
@@ -1453,10 +1490,10 @@ def _r3():
 
 @check("resolve-findings", 4)
 def _r4():
-    """No new TODO/FIXME/XXX introduced in entrypoint/stealth-browser/src and only owned paths changed by [psm:resolve-findings] commits."""
-    t = "\n".join(read(f) for f in walk(f"{P}/src"))
+    """No new TODO/FIXME/XXX introduced in packages/stealth/stealth-core-browser/src or entrypoint/stealth-search/src and only owned paths changed by [psm:resolve-findings] commits."""
+    t = "\n".join(read(f) for d in (CORE_DIR, SEARCH_DIR) for f in walk(f"{d}/src"))
     o = ownership_ok("resolve-findings")
-    return not re.search(r"\b(TODO|FIXME|XXX)\b", t) and o[0], o[1]
+    return not re.search(r"\b(TODO|FIXME|XXX)\b", t) and o[0] and exists(SEARCH_DIR), o[1]
 
 
 # ============================================================ docs
@@ -1494,9 +1531,9 @@ def _dm4():
 
 @check("docs-marketing-run", 5)
 def _dm5():
-    """Gate evidence of gates-rerun still matches the package source trees (docs run changed no src/ of stealth-browser or of the tripwire package)."""
+    """Gate evidence of gates-rerun still matches the package source trees (docs run changed no src/ or bin/ of stealth-core-browser, stealth-search or the tripwire package)."""
     g = jread(f"{PLAN}/evidence/gates-rerun.json", {})
-    files = git("diff", "--name-only", g.get("head", "HEAD"), "HEAD", "--", f"{P}/src", f"{P}/bin", f"{TW}/src").splitlines()
+    files = git("diff", "--name-only", g.get("head", "HEAD"), "HEAD", "--", f"{CORE_DIR}/src", f"{CORE_DIR}/bin", f"{SEARCH_DIR}/src", f"{SEARCH_DIR}/bin", f"{TW}/src").splitlines()
     return g.get("all_green") is True and not files, f"src changed since gates-rerun: {files[:5]}"
 
 
@@ -1530,13 +1567,13 @@ def _rw3():
 
 @check("readme-rewrite", 4)
 def _rw4():
-    """Factual: no unverifiable superlatives (undetectable, unblockable, 100%, bypasses all, guaranteed); every `@adhd/stealth-browser` import specifier in code fences is a real package export."""
+    """Factual: no unverifiable superlatives (undetectable, unblockable, 100%, bypasses all, guaranteed); every `@adhd/stealth-core-browser` import specifier in code fences is a real package export (stealth-search's README is checked by readme-rewrite.10)."""
     t = read(README)
     if re.search(r"undetectable|unblockable|100%|bypasses? all|guaranteed", t, re.I):
         return False, "unverifiable superlative"
     exp = pkg().get("exports") or {".": "x"}
-    for spec in re.findall(r"from\s+['\"](@adhd/stealth-browser[^'\"]*)['\"]", t):
-        sub = "." + spec[len("@adhd/stealth-browser"):]
+    for spec in re.findall(r"from\s+['\"](@adhd/stealth-core-browser[^'\"]*)['\"]", t):
+        sub = "." + spec[len("@adhd/stealth-core-browser"):]
         if sub not in exp:
             return False, f"{spec} not exported"
     return True, "ok"
@@ -1550,29 +1587,32 @@ def _rw5():
         if not exists(os.path.normpath(os.path.join(P, link))):
             return False, f"dead link {link}"
     bins = set(pkg().get("bin", {}))
-    used = set(re.findall(r"^\s*(?:npx |pnpm dlx )?(stealth-browser(?:-mcp)?)\b", t, re.M))
+    used = set(re.findall(r"^\s*(?:npx |pnpm dlx )?(stealth-(?:search|browser)(?:-mcp)?)\b", t, re.M))
     return used <= bins, f"bins used={used}"
 
 
 # ============================================================ final audit / merge / cutover
 @check("audit-final", 1)
 def _af1():
-    """[dod.1] structural: only the approved new packages exist: entrypoint/stealth-browser named @adhd/stealth-browser (built by the generator, parity-clean) and packages/resilience/resilience-core-tripwire named @adhd/resilience-core-tripwire (built by the generator, tripwire-scaffold evidence)."""
+    """[dod.1] structural: only the three approved new packages exist: packages/stealth/stealth-core-browser named @adhd/stealth-core-browser and entrypoint/stealth-search named @adhd/stealth-search (both built by the workspace generator, core-scaffold and search-scaffold evidence, entrypoint parity clean) and packages/resilience/resilience-core-tripwire named @adhd/resilience-core-tripwire (tripwire-scaffold evidence), and entrypoint/stealth-browser no longer exists."""
     tw = jread(f"{TW}/package.json", {}) or {}
-    return _s3()[0] and _s5()[0] and _s2()[0] and _ep1()[0] and tw.get("name") == TW_PKG and exists(f"{TW}/project.json"), "package + generator evidence + parity + tripwire package"
+    c = jread(f"{CORE_DIR}/package.json", {}) or {}
+    s = jread(f"{SEARCH_DIR}/package.json", {}) or {}
+    return (c.get("name") == CORE_PKG and s.get("name") == SEARCH_PKG and tw.get("name") == TW_PKG and not exists(LEGACY_DIR)
+            and all(f()[0] for f in (_ck("core-scaffold", 1), _ck("search-scaffold", 1), _ep1, _s5)) and exists(f"{TW}/project.json")), "three packages + generator evidence + parity"
 
 
 @check("audit-final", 2)
 def _af2():
-    """[dod.2] behavioral: `nx run stealth-browser:verify-dist-load` and the use-case unit suites (library, CLI and MCP scenarios against the in-process fake CDP server) pass on the final tree, and the agent-search cutover proof holds (gates-rerun evidence all green, tree == HEAD tree)."""
+    """[dod.2] behavioral: `nx run stealth-core-browser:verify-dist-load`, `nx run stealth-search:verify-dist-load` and the use-case unit suites (library scenarios in the core, CLI and MCP scenarios in the search entrypoint, against the in-process fake CDP server) pass on the final tree: the gates-rerun evidence is all green and its code trees (src, bin and manifests only, so the docs states that follow do not invalidate it) equal HEAD's."""
     g = jread(f"{PLAN}/evidence/gates-rerun.json", {})
     return g.get("all_green") is True and g.get("tree") == tree_sha() and g.get("tw_tree") == tw_tree_sha(), f"gates tree {str(g.get('tree'))[:8]} vs {tree_sha()[:8]}; tripwire tree {str(g.get('tw_tree'))[:8]} vs {tw_tree_sha()[:8]}"
 
 
 @check("audit-final", 3)
 def _af3():
-    """[dod.3] structural: tracing namespace is `adhd` - singleton never imported, serviceName configured once, every mount carries the plugin (tracing-plugin checks 1,2,3,5 re-run)."""
-    return all(f()[0] for f in (_t1, _t2, _t3, _t5)), "namespace"
+    """[dod.3] structural: the tracing namespace is `adhd` in the search entrypoint (serviceName configured once in src/tracing.ts, package singleton never imported, one initTelemetry per bin, every mount carries the plugin: search-tracing checks 1,2 re-run) and the logs written by the built CLI and MCP hosts were read end to end by the validating agent (tracing-log-validation evidence, every check PASS)."""
+    return all(f()[0] for f in (_ck("search-tracing", 1), _ck("search-tracing", 2), _ck("tracing-log-validation", 1))), "namespace + log validation"
 
 
 @check("audit-final", 4)
@@ -1580,12 +1620,13 @@ def _af4():
     """[ref:runner-port] feature parity: every failsafe-inventory row (features and failsafes of the source runner, not code or exports) is pinned by a feature-level unit test that cites its row id."""
     rows = inventory_rows()
     bad = [r["id"] for r in rows if not row_pinned(r)]
-    return len(rows) >= 40 and not bad, f"{len(rows)} rows, unpinned {bad[:10]}"
+    sb = search_unpinned()
+    return len(rows) >= 40 and not bad and not sb, f"{len(rows)} rows, unpinned {bad[:10]}; search inventory unpinned {sb[:10]}"
 
 
 @check("audit-final", 5)
 def _af5():
-    """[dod.5] structural: the agent-search source tree was byte-identical to the scaffold-time baseline up to the first cutover commit, and only [psm:agent-search-cutover] commits touched agent-browser/adhd afterwards."""
+    """[dod.5] structural: the agent-search source tree was byte-identical to the scaffold-time baseline up to the first cutover commit, and only [psm:search-cutover] commits touched agent-browser/adhd afterwards."""
     return source_untouched()
 
 
@@ -1598,23 +1639,23 @@ def _af6():
 @check("audit-final", 7)
 def _af7():
     """[dod.7] structural: docs marketing run PASS, README rewrite receipts-backed (docs-marketing-run and readme-rewrite checks re-run)."""
-    return all(f()[0] for f in (_dm1, _dm2, _rw2, _rw3, _rw4)), "docs chain"
+    return all(f()[0] for f in (_dm1, _dm2, _rw2, _rw3, _rw4, _ck("docs-marketing-run", 12), _ck("readme-rewrite", 10))), "docs chain"
 
 
 @check("audit-final", 8)
 def _af8():
-    """[dod.8] structural: the working tree under entrypoint/stealth-browser and docs/plan/stealth-browser is clean (everything committed) and the main checkout node_modules is untouched."""
-    st = git("status", "--porcelain", "--", P, PLAN)
+    """[dod.8] structural: the working tree under packages/stealth/stealth-core-browser, entrypoint/stealth-search and docs/plan/stealth-browser is clean (everything committed) and the main checkout node_modules is untouched."""
+    st = git("status", "--porcelain", "--", CORE_DIR, SEARCH_DIR, PLAN)
     return st == "" and main_nm_untouched()[0], f"dirty: {st[:200]}"
 
 
 @check("audit-final", 10)
 def _af10():
     """Every spec file cites ticket 8468f7b1 and a valid criterion id (final re-run of the citation rule)."""
-    files = [f for f in walk(f"{P}/src/test", (".ts",))]
+    files = [f for d in (CORE_DIR, SEARCH_DIR) for f in walk(f"{d}/src/test", (".ts",))]
     ids = criteria_ids()
     bad = [f for f in files if TICKET not in read(f) or not (set(re.findall(r"\[([a-z0-9-]+\.\d+)\]", read(f))) & ids)]
-    return not bad and bool(files), f"uncited {bad[:5]}"
+    return not bad and bool(files) and exists(SEARCH_DIR), f"uncited {bad[:5]}"
 
 
 
@@ -1639,9 +1680,9 @@ def _mr2():
 
 @check("merge-readiness", 3)
 def _mr3():
-    """The trees gated by gates-rerun (stealth-browser and the tripwire package) are the trees being merged and the worktree is clean."""
+    """The code trees gated by gates-rerun (the stealth-core-browser + stealth-search src, bin and manifests, and the tripwire package; docs edits after the gates do not change them) are the trees being merged and the worktree is clean."""
     g = jread(f"{PLAN}/evidence/gates-rerun.json", {})
-    return g.get("tree") == tree_sha() and g.get("tw_tree") == tw_tree_sha() and git("status", "--porcelain", "--", P, TW, PLAN) == "", "clean + gated"
+    return g.get("tree") == tree_sha() and bool(tree_sha()) and g.get("tw_tree") == tw_tree_sha() and git("status", "--porcelain", "--", CORE_DIR, SEARCH_DIR, TW, PLAN) == "", "clean + gated"
 
 
 def mcp_session(cmd, cwd, calls, timeout=90):
@@ -1690,12 +1731,14 @@ def _refcheck(cid, fn, doc):
     CHECKS.setdefault("audit-final", []).append((cid, fn))
 
 
-_refcheck("audit-final.ref-backlog-tracing", _all(_t1, _t2, _t3, _t5),
-          "[ref:backlog-tracing] tracing.ts / usePlugins / no-singleton conformance with entrypoint/backlog/src/tracing.ts")
-_refcheck("audit-final.ref-entrypoint-structure", _all(_ep1, _ep2, _ep4, _s3),
-          "[ref:entrypoint-structure] top-level files, tags, package metadata conform to dispatch-cli/backlog/apigen-cli")
-_refcheck("audit-final.ref-apigen-host", _all(_sh1, _sh2, _t3),
+_refcheck("audit-final.ref-backlog-tracing", _all(_ck("search-tracing", 1), _ck("search-tracing", 2)),
+          "[ref:backlog-tracing] tracing.ts / telemetry.ts / usePlugins / no-singleton conformance with entrypoint/backlog/src/tracing.ts (stealth-search)")
+_refcheck("audit-final.ref-entrypoint-structure", _all(_ep1, _ep2, _ep4, _s3, _ck("search-scaffold", 2)),
+          "[ref:entrypoint-structure] top-level files, tags, package metadata conform to dispatch-cli/backlog/apigen-cli (stealth-search)")
+_refcheck("audit-final.ref-apigen-host", _all(_ck("search-hosts", 1), _ck("search-hosts", 2), _ck("search-tracing", 1)),
           "[ref:apigen-host] server.ts / cli.ts / bin hosts mirror entrypoint/backlog's apigen host shape")
+_refcheck("audit-final.ref-stealth-search-spec", _all(_ck("core-scaffold", 1), _ck("search-scaffold", 1), _ck("search-verbs", 1), _ck("search-tracing", 1), _ck("tracing-log-validation", 1)),
+          "[ref:stealth-search-spec] the split conforms to SPEC-stealth-search.md: generator-built core and search packages, the eleven projected tools, the single adhd tracing configuration and the agent-validated logs")
 _refcheck("audit-final.ref-runner-port", _af4,
           "[ref:runner-port] behavior-preserving port conforms to agent-browser/adhd (exports, similarity, tokens)")
 
@@ -2056,25 +2099,19 @@ EX = f"{P}/examples"
 
 
 # ---------------------------------------------------------------- tests (P1, P2, P9 coverage)
-@check("tests-unit-surface", 4)
-def _tus4():
-    """(PA1.2, PA1.3, PA2.2) An in-process host spec under src/test/unit/surface/ (child_process / ChromeManager mocked, no subprocess) asserts: the launchChrome tools/list schema has no chromePath or extraArgs, a tools/call with extraArgs is rejected and spawns nothing, and the fixture cookie value SECRET123 is absent from the MCP JSON and the CLI stdout; it cites the PA ids and ticket 8468f7b1."""
-    t = "\n".join(read(f) for f in spec_files("unit/surface") if "host" in os.path.basename(f))
-    need = ("SECRET123", "chromePath", "extraArgs", "PA1.2", "PA1.3", "PA2.2", TICKET, "vi.mock")
-    miss = [k for k in need if k not in t]
-    return not miss and re.search(r"not\.toContain\(['\"]?SECRET123|not\.toMatch\(.*SECRET123", t) is not None, f"host spec missing {miss}"
-
-
-
 @check("tests-unit-surface", 5)
 def _tus5():
-    """(PA3.1, greenfield) A public-API export snapshot spec under src/test/unit/surface/ lists every root export name of src/index.ts (the five core namespaces, the `lifecycle` namespace wired by surface-hosts and the six verbs) and the member names of each namespace, and fails on drift (toEqual / inline snapshot of the sorted names); it cites ticket 8468f7b1, a valid tests-unit-surface.N id and PA3.1."""
+    """(PA3.1, greenfield) This state OWNS the public-API export snapshot: src/test/unit/surface/public-api.spec.ts lists every root export name of src/index.ts (the five core namespaces, the `lifecycle` namespace wired by core-seam and the six verbs) and the member names of each namespace and fails on drift (toEqual of the sorted names); the names added by prod-errors (`recording`, StealthCoreBrowserError, ERROR_CODES, exitCodeFor) are an all-or-none group, so the spec passes both before and after prod-errors lands and fails on any other drift; it cites ticket 8468f7b1, a valid tests-unit-surface.N id and PA3.1, and `nx run stealth-core-browser:test -- src/test/unit/surface/public-api` exits 0."""
     specs = [f for f in spec_files("unit/surface") if "public-api" in os.path.basename(f)]
     t = "\n".join(read(f) for f in specs)
-    names = set(AREAS) | {"lifecycle"} | set(VERBS)
+    names = set(AREAS) | {"lifecycle"} | set(VERBS) | {"recording", "StealthCoreBrowserError", "ERROR_CODES", "exitCodeFor"}
     miss = sorted(n for n in names if n not in t)
     ids = set(re.findall(r"\[(tests-unit-surface\.\d+)\]", t))
-    return bool(specs) and not miss and re.search(r"toEqual|toMatchInlineSnapshot|toMatchSnapshot", t) is not None and TICKET in t and bool(ids & criteria_ids()) and "PA3.1" in t, f"specs={len(specs)} unlisted={miss}"
+    ok = bool(specs) and not miss and re.search(r"toEqual", t) is not None and TICKET in t and bool(ids & criteria_ids()) and "PA3.1" in t
+    if not ok:
+        return False, f"specs={len(specs)} unlisted={miss}"
+    rc, out = sh([NX, "run", f"{proj_name()}:test", "--", "src/test/unit/surface/public-api"], timeout=1500)
+    return rc == 0, out[-200:]
 
 # ---------------------------------------------------------------- docs (P6, P8, P9)
 @check("docs-marketing-run", 6)
@@ -2105,8 +2142,8 @@ def _dm8():
 
 @check("docs-marketing-run", 9)
 def _dm9():
-    """(PA9.1) docs/OBSERVABILITY.md documents adhd.<op>.start|finish|error records, how to enable the sink, the --verbose stderr diagnostics, and that the MCP bin writes only JSON-RPC to stdout."""
-    t = read(f"{P}/docs/OBSERVABILITY.md")
+    """(PA9.1) stealth-search docs/OBSERVABILITY.md documents adhd.<op>.start|finish|error records, how to enable the sink, the --verbose stderr diagnostics, and that the MCP bin writes only JSON-RPC to stdout."""
+    t = read(f"{SEARCH_DIR}/docs/OBSERVABILITY.md")
     need = ("adhd.", ".start", ".finish", ".error", "sink", "--verbose", "stderr", "JSON-RPC", "stdout")
     miss = [k for k in need if k not in t]
     return not miss, f"missing {miss}"
@@ -2155,15 +2192,16 @@ def _rr9():
     return not miss and len(blocks) >= 6 and not stray and "docs/ERRORS.md" in t and "docs/EXAMPLES.md" in t, f"unreferenced={miss} ts blocks={len(blocks)} not from examples={stray[:2]}"
 
 # ---------------------------------------------------------------- prod-publish-readiness (P10)
-def tarball_missing():
-    """`npm pack --dry-run --json` in dist/: returns (rc, missing members) against README.md, CHANGELOG.md, both bins and the main/types/bin targets of the dist manifest (no exports map, ADR-0003)."""
-    rc, o, e = run2(["npm", "pack", "--dry-run", "--json"], 300, cwd=f"{P}/dist")
+def tarball_missing(d=None):
+    """`npm pack --dry-run --json` in <package>/dist: returns (rc, missing members) against README.md, CHANGELOG.md, (search only) both bins and the main/types/bin targets of the dist manifest (no exports map, ADR-0003). Default package: stealth-search; pass CORE_DIR for the library."""
+    d = d or SEARCH_DIR
+    rc, o, e = run2(["npm", "pack", "--dry-run", "--json"], 300, cwd=f"{d}/dist")
     try:
         files = {f["path"] for f in json.loads(o)[0]["files"]}
     except (ValueError, KeyError, IndexError):
         return rc, [f"npm pack --dry-run unreadable rc={rc} {e[-150:]}"]
-    need = {"README.md", "CHANGELOG.md", "bin/cli.js", "bin/mcp.js"}
-    dm = jread(f"{P}/dist/package.json", {}) or {}
+    need = {"README.md", "CHANGELOG.md"} | ({"bin/cli.js", "bin/mcp.js"} if d == SEARCH_DIR else set())
+    dm = jread(f"{d}/dist/package.json", {}) or {}
     tg = set()
 
     def collect(x):
@@ -2179,12 +2217,11 @@ def tarball_missing():
 
 @check("audit-final", 9)
 def _af9():
-    """(PA10.3, re-checked after the docs states) `npm pack --dry-run` against the final dist output still lists README.md, CHANGELOG.md, bin/cli.js, bin/mcp.js, index.js and index.d.ts, and the packed README is the rewritten one (it links docs/RESPONSIBLE-USE.md)."""
-    rc, miss = tarball_missing()
-    return rc == 0 and not miss and "docs/RESPONSIBLE-USE.md" in read(f"{P}/dist/README.md"), f"missing from tarball: {miss}"
+    """(PA10.3, re-checked after the docs states) `npm pack --dry-run` against each final dist output still lists README.md, CHANGELOG.md and the main/types targets (stealth-search also bin/cli.js and bin/mcp.js), and the packed stealth-core-browser README is the rewritten one (it links docs/RESPONSIBLE-USE.md)."""
+    rc, miss = tarballs_missing()
+    return rc == 0 and not miss and "docs/RESPONSIBLE-USE.md" in read(f"{CORE_DIR}/dist/README.md") and exists(f"{SEARCH_DIR}/dist"), f"missing from tarballs: {miss}"
 
 
-# ---------------------------------------------------------------- release (D1, D3)
 CONSUMERS = ["cdp-query-client.ts", "cdp-search.ts", "chrome-lifecycle-test.ts", "network-capture.ts", "search-challenge.ts", "search-dom.ts", "search-fetch.ts",
              "search-guard-test.ts", "search-mcp-source.ts", "search-network.ts", "search-tripwire.ts", "search/queries/activity.ts", "search/queries/context.ts", "search/queries/last-search.ts"]
 CUTOVER_OWNED = ["adhd/", *CONSUMERS, "package.json", "pnpm-lock.yaml", "AGENTS.md", "SEARCH.md", "FEATURES.md", "FETCH.md", "docs/"]
@@ -2197,14 +2234,14 @@ def consume_link():
 
 @check("merge-readiness", 4)
 def _mr4():
-    """(D3) When CONSUME is a link: into the merged main checkout, RELEASE-DECISION.md records `MAIN_BUILD: nx run stealth-browser:build-bin exit=0` (dist/ built in the merged main checkout by the dispatcher before the link is consumed) and that dist exists there; a published CONSUME needs no main build."""
+    """(D3) When CONSUME is a link: into the merged main checkout, RELEASE-DECISION.md records `MAIN_BUILD: nx run stealth-search:build-bin exit=0` (dist/ built in the merged main checkout by the dispatcher before the link is consumed) and that dist exists there; a published CONSUME needs no main build."""
     t = read(f"{PLAN}/RELEASE-DECISION.md")
     link = consume_link()
     if not t:
         return False, "RELEASE-DECISION.md missing"
     if link is None:
-        return bool(re.search(r"^CONSUME:\s*@adhd/stealth-browser@\S+\s*$", t, re.M)), "published consume"
-    return bool(re.search(r"^MAIN_BUILD:\s*nx run stealth-browser:build-bin exit=0\s*$", t, re.M)) and exists(f"{link}/dist/bin/cli.js") and exists(f"{link}/dist/bin/mcp.js"), f"link={link}"
+        return bool(re.search(r"^CONSUME:\s*@adhd/stealth-search@\S+\s*$", t, re.M)), "published consume"
+    return bool(re.search(r"^MAIN_BUILD:\s*nx run stealth-search:build-bin exit=0\s*$", t, re.M)) and exists(f"{link}/dist/bin/cli.js") and exists(f"{link}/dist/bin/mcp.js"), f"link={link}"
 
 
 # ============================================================ port-fixes (corrections before any review)
@@ -2314,7 +2351,7 @@ def pre_findings():
 
 @check("audit-pre-review", 1)
 def _apr1():
-    """review/PRE-REVIEW.json exists and records `auditor`, `blind: false`, `static: true`, the audited `head` and `tree` (git rev-parse HEAD:entrypoint/stealth-browser), the `audit_dod` command, its integer `audit_dod_exit` and the verbatim `[dod.N]` lines it printed; PRE-REVIEW.md is the human-readable rendering."""
+    """review/PRE-REVIEW.json exists and records `auditor`, `blind: false`, `static: true`, the audited `head` and `tree` (the combined stealth-core-browser + stealth-search code tree, `tree_sha`), the `audit_dod` command, its integer `audit_dod_exit` and the verbatim `[dod.N]` lines it printed; PRE-REVIEW.md is the human-readable rendering."""
     f = pre_findings()
     ok = bool(f.get("auditor")) and f.get("blind") is False and f.get("static") is True and bool(f.get("head")) and bool(f.get("tree")) and isinstance(f.get("audit_dod_exit"), int) and "audit_dod.py --phase pre-review" in str(f.get("audit_dod", "")) and bool(f.get("audit_dod_lines"))
     return ok and len(read(f"{PLAN}/review/PRE-REVIEW.md").strip()) > 100, "pre-review record"
@@ -2322,7 +2359,7 @@ def _apr1():
 
 @check("audit-pre-review", 2)
 def _apr2():
-    """The audit judged the current code: `tree` in PRE-REVIEW.json equals the current entrypoint/stealth-browser tree sha, and `audit_dod_exit` equals the exit status of re-running `audit_dod.py --phase pre-review` now."""
+    """The audit judged the current code: `tree` in PRE-REVIEW.json equals the current combined core + search code tree sha, and `audit_dod_exit` equals the exit status of re-running `audit_dod.py --phase pre-review` now."""
     f = pre_findings()
     rc, _ = sh([sys.executable, f"{SCRIPTS}/audit_dod.py", "--phase", "pre-review"], timeout=2400)
     return f.get("tree") == tree_sha() and f.get("audit_dod_exit") == rc, f"tree match={f.get('tree') == tree_sha()} recorded exit={f.get('audit_dod_exit')} rerun={rc}"
@@ -2348,7 +2385,7 @@ def _apr4():
     since = st.get("start_ref")
     same = True
     if since:
-        same = git("rev-parse", f"{since}:{P}") == tree_sha()
+        same = hashlib.sha256((code_tree(CORE_DIR, since) + "|" + code_tree(SEARCH_DIR, since)).encode()).hexdigest() == tree_sha()
     return o[0] and same, f"{o[1]} package tree unchanged={same}"
 
 
@@ -2396,20 +2433,21 @@ def _afx3():
 
 @check("audit-fixes", 4)
 def _afx4():
-    """No new TODO/FIXME/XXX in entrypoint/stealth-browser/src and only owned paths changed by [psm:audit-fixes] commits."""
-    t = "\n".join(read(f) for f in walk(f"{P}/src"))
+    """No new TODO/FIXME/XXX in packages/stealth/stealth-core-browser/src or entrypoint/stealth-search/src and only owned paths changed by [psm:audit-fixes] commits."""
+    t = "\n".join(read(f) for d in (CORE_DIR, SEARCH_DIR) for f in walk(f"{d}/src"))
     o = ownership_ok("audit-fixes")
-    return not re.search(r"\b(TODO|FIXME|XXX)\b", t) and o[0], o[1]
+    return not re.search(r"\b(TODO|FIXME|XXX)\b", t) and o[0] and exists(SEARCH_DIR), o[1]
 
 
 @check("audit-fixes", 5)
 def _afx5():
-    """After the corrections lint, typecheck, typecheck-spec and the unit lane exit 0 (`nx run stealth-browser:lint typecheck typecheck-spec test`); the full gate run follows in gates-first."""
+    """After the corrections lint, typecheck, typecheck-spec and the unit lane exit 0 (`nx run <project>:lint typecheck typecheck-spec test` for stealth-core-browser and stealth-search); the full gate run follows in gates-first."""
     bad = []
-    for t in ("lint", "typecheck", "typecheck-spec", "test"):
-        rc, out = sh([NX, "run", f"{proj_name()}:{t}"], timeout=2400)
-        if rc != 0:
-            bad.append(f"{t}={rc}")
+    for proj in (CORE_PROJECT, SEARCH_PROJECT):
+        for t in ("lint", "typecheck", "typecheck-spec", "test"):
+            rc, out = sh([NX, "run", f"{proj}:{t}"], timeout=2400)
+            if rc != 0:
+                bad.append(f"{proj}:{t}={rc}")
     return not bad, f"failing {bad}"
 
 
@@ -2423,7 +2461,7 @@ def _afx6():
 
 # ---------------------------------------------------------------- prod-errors (100% typed errors)
 def untyped_throws():
-    """Every non-test source line under src/ and bin/ that constructs or throws an untyped error."""
+    """Every non-test source line under src/ that constructs or throws an untyped error."""
     hits = []
     for f in [x for x in src_nontest() if not x.endswith("errors.ts")] + walk(f"{P}/bin"):
         for i, ln in enumerate(read(f).splitlines(), 1):
@@ -2437,18 +2475,18 @@ def untyped_throws():
 
 @check("prod-errors", 1)
 def _pe1():
-    """(PA5.1, widened to 100%) src/errors.ts defines one `StealthBrowserError extends Error` with a readonly stable `code`, an exported `ERROR_CODES` const naming EVERY failure mode of the library, an `exitCodeFor(code)` mapping and a remediation message per code; the codes are exactly the 32 enumerated from the code and the two specs (4 host codes CHROME_NOT_FOUND, PORT_IN_USE, NODE_TOO_OLD, CHROME_NOT_RUNNING; 14 library codes CHROME_START_TIMEOUT, CDP_UNREACHABLE, CDP_BAD_RESPONSE, TARGET_NOT_FOUND, CDP_CONNECT_FAILED, CDP_NOT_CONNECTED, CDP_TIMEOUT, CDP_REMOTE_ERROR, CDP_SESSION_CLOSED, CDP_SEND_FAILED, NAVIGATION_FAILED, PAGE_SETTLE_FAILED, OPERATION_ABORTED, SELECTOR_TIMEOUT; the 8 CaptureError codes CAPTURE_CONNECT_FAILED, CAPTURE_NAVIGATE_FAILED, CAPTURE_TIMEOUT, CAPTURE_NO_MATCH, CAPTURE_BAN_DETECTED, CAPTURE_SESSION_CLOSED, CAPTURE_SINK_FAILED, CAPTURE_SINK_UNAVAILABLE; the 6 LifecycleError codes LAUNCH_FAILED, LAUNCH_LOCK_TIMEOUT, CHROME_UNREACHABLE_AFTER_LAUNCH, LAUNCH_CIRCUIT_OPEN, REAPER_UNAVAILABLE, ISOLATED_CONTEXT_FAILED), and every code's message names a concrete next step."""
+    """(PA5.1, widened to 100%) src/errors.ts defines one `StealthCoreBrowserError extends Error` with a readonly stable `code`, an exported `ERROR_CODES` const naming EVERY failure mode of the library, an `exitCodeFor(code)` mapping and a remediation message per code; the codes are exactly the 32 enumerated from the code and the two specs (4 environment codes CHROME_NOT_FOUND, PORT_IN_USE, NODE_TOO_OLD, CHROME_NOT_RUNNING; 14 library codes CHROME_START_TIMEOUT, CDP_UNREACHABLE, CDP_BAD_RESPONSE, TARGET_NOT_FOUND, CDP_CONNECT_FAILED, CDP_NOT_CONNECTED, CDP_TIMEOUT, CDP_REMOTE_ERROR, CDP_SESSION_CLOSED, CDP_SEND_FAILED, NAVIGATION_FAILED, PAGE_SETTLE_FAILED, OPERATION_ABORTED, SELECTOR_TIMEOUT; the 8 CaptureError codes CAPTURE_CONNECT_FAILED, CAPTURE_NAVIGATE_FAILED, CAPTURE_TIMEOUT, CAPTURE_NO_MATCH, CAPTURE_BAN_DETECTED, CAPTURE_SESSION_CLOSED, CAPTURE_SINK_FAILED, CAPTURE_SINK_UNAVAILABLE; the 6 LifecycleError codes LAUNCH_FAILED, LAUNCH_LOCK_TIMEOUT, CHROME_UNREACHABLE_AFTER_LAUNCH, LAUNCH_CIRCUIT_OPEN, REAPER_UNAVAILABLE, ISOLATED_CONTEXT_FAILED), and every code's message names a concrete next step."""
     t = read(f"{P}/src/errors.ts")
     miss = [c for c in all_codes() if c not in t]
-    cls = re.search(r"class\s+StealthBrowserError\s+extends\s+Error", t) is not None and re.search(r"readonly\s+code", t) is not None
-    api = {"ERROR_CODES", "exitCodeFor", "StealthBrowserError"} <= exports_of(t)
+    cls = re.search(r"class\s+StealthCoreBrowserError\s+extends\s+Error", t) is not None and re.search(r"readonly\s+code", t) is not None
+    api = {"ERROR_CODES", "exitCodeFor", "StealthCoreBrowserError"} <= exports_of(t)
     fix = len(re.findall(r"""['"`][^'"`\n]*\b(install|set|use|run|upgrade|start|free|choose|launch|update|retry|check|increase|pass)\b[^'"`\n]*['"`]""", t, re.I))
     return cls and api and not miss and fix >= len(all_codes()), f"class={cls} api={api} missing={miss} remediation strings={fix}"
 
 
 @check("prod-errors", 2)
 def _pe2():
-    """(PA5.4, widened) src/test/unit/errors/ has a unit test PER CODE: each code of the registry (all 32 codes) is asserted (`code` and a remediation message; CaptureError and LifecycleError instances are `instanceof StealthBrowserError`) and each of the 14 library codes is reached through the real library path (`rejects.toMatchObject({ code: '<CODE>' })` or `.code).toBe('<CODE>')` against the in-process fake server/stubs), citing ticket 8468f7b1, a valid prod-errors.N id and PA5.1 / PA5.4."""
+    """(PA5.4, widened) src/test/unit/errors/ has a unit test PER CODE: each code of the registry (all 32 codes) is asserted (`code` and a remediation message; CaptureError and LifecycleError instances are `instanceof StealthCoreBrowserError`) and each of the 14 library codes is reached through the real library path (`rejects.toMatchObject({ code: '<CODE>' })` or `.code).toBe('<CODE>')` against the in-process fake server/stubs), citing ticket 8468f7b1, a valid prod-errors.N id and PA5.1 / PA5.4."""
     specs = spec_files("unit/errors")
     t = "\n".join(read(f) for f in specs)
     miss = [c for c in all_codes() if t.count(c) < 1]
@@ -2459,37 +2497,23 @@ def _pe2():
 
 @check("prod-errors", 3)
 def _pe3():
-    """Only owned paths changed by [psm:prod-errors] commits (errors.ts, src/index.ts, the lib files whose throw sites it types, the host wiring files and the error specs); errors.ts reads no process.env; the existing unit lane still passes (`nx run stealth-browser:test` exits 0, messages preserved)."""
+    """Only owned paths changed by [psm:prod-errors] commits (errors.ts, src/index.ts, the lib files whose throw sites it types, the error specs); errors.ts reads no process.env; the existing unit lane still passes (`nx run stealth-core-browser:test` exits 0, messages preserved)."""
     o = ownership_ok("prod-errors")
     rc, out = sh([NX, "run", f"{proj_name()}:test"], timeout=2400)
     return o[0] and rc == 0 and "process.env" not in read(f"{P}/src/errors.ts") and exists(f"{P}/src/errors.ts"), f"{o[1]} test rc={rc} {out[-120:]}"
 
 
-@check("prod-errors", 4)
-def _pe4():
-    """(PA5.2, PA5.3, PA5.5, widened) the CLI and the MCP host map EVERY code consistently: bin/cli.ts and bin/mcp.ts preflight Node >= 22.5 (NODE_TOO_OLD, one-line message); src/cli.ts exits through `exitCodeFor(error.code)` printing `<CODE>: <message>` on stderr with no stack trace; src/server.ts returns `isError: true` with the code and message in the content for any StealthBrowserError; against a dead port the built CLI exits non-zero (the CHROME_NOT_RUNNING exit code) and the built MCP returns isError with CHROME_NOT_RUNNING."""
-    pre = all(re.search(r"22[.,\s]+5", read(f"{P}/bin/{f}")) for f in ("cli.ts", "mcp.ts"))
-    wired = "exitCodeFor" in read(f"{P}/src/cli.ts") and "StealthBrowserError" in read(f"{P}/src/server.ts") and re.search(r"isError", read(f"{P}/src/server.ts")) is not None
-    if not ensure_bin():
-        return False, "build-bin failed"
-    rc, o, e = cli_verb("listPageTargets", ["--port", HOST_PORT_DEAD])
-    cli_ok = rc not in (0, None) and "CHROME_NOT_RUNNING" in (o + e) and not re.search(r"\n\s+at\s+\S+.*[:(]\d+", e)
-    r = mcp_full([], [("listPageTargets", {"port": int(HOST_PORT_DEAD)})])
-    res = ((r["calls"] or [{}])[0].get("result") or {})
-    mcp_ok = res.get("isError") is True and "CHROME_NOT_RUNNING" in json.dumps(res.get("content"))
-    return pre and wired and cli_ok and mcp_ok, f"preflight={pre} wired={wired} cli(rc={rc})={cli_ok} mcp={mcp_ok}"
-
 
 @check("prod-errors", 5)
 def _pe5():
-    """(audit criterion) No untyped error escapes: no `new Error(`, `new TypeError(`, `Promise.reject('...')` or `throw '...'` exists in non-test src/ or bin/ outside src/errors.ts (every throw site raises a StealthBrowserError code)."""
+    """(audit criterion) No untyped error escapes: no `new Error(`, `new TypeError(`, `Promise.reject('...')` or `throw '...'` exists in non-test src/ outside src/errors.ts (every throw site raises a StealthCoreBrowserError code)."""
     hits = untyped_throws()
     return not hits, f"untyped error sites: {hits[:8]}"
 
 
 @check("prod-errors", 6)
 def _pe6():
-    """docs/ERRORS.md lists every code with its CLI exit code, its MCP isError code and its remediation, in the order of `ERROR_CODES`, and the root of the package exports StealthBrowserError, ERROR_CODES and exitCodeFor (src/index.ts re-exports ./errors.js)."""
+    """docs/ERRORS.md lists every code with its exit code (the value `exitCodeFor` returns, which hosts reuse) and its remediation, in the order of `ERROR_CODES`, and the root of the package exports StealthCoreBrowserError, ERROR_CODES and exitCodeFor (src/index.ts re-exports ./errors.js)."""
     d = read(f"{P}/docs/ERRORS.md")
     miss = [c for c in ERR_CODES if c not in d]
     idx = read(f"{P}/src/index.ts")
@@ -2499,7 +2523,7 @@ def _pe6():
 
 @check("prod-errors", 7)
 def _pe7():
-    """(amendment A3, greenfield root) src/index.ts exports the `recording` namespace (added here) and the `lifecycle` namespace (wired by surface-hosts) (`export * as recording from './lib/recording/index.js'`, `export * as lifecycle from './lib/lifecycle/index.js'`); `recording` exposes NetworkRecorder, CaptureError, MemoryRecordingSink, StoreRecordingSink, openStoreRecordingSink and redactHeaders, `capture` exposes captureAllNetworkResponses, `lifecycle` exposes LifecycleError, openIsolatedPage, withIsolatedPage, installProcessExitHooks, runChromeReaper and createProxyReaperLink (the detached reaper loads runChromeReaper through the package entry)."""
+    """(amendment A3, greenfield root) src/index.ts exports the `recording` namespace (added here) and the `lifecycle` namespace (wired by core-seam) (`export * as recording from './lib/recording/index.js'`, `export * as lifecycle from './lib/lifecycle/index.js'`); `recording` exposes NetworkRecorder, CaptureError, MemoryRecordingSink, StoreRecordingSink, openStoreRecordingSink and redactHeaders, `capture` exposes captureAllNetworkResponses, `lifecycle` exposes LifecycleError, openIsolatedPage, withIsolatedPage, installProcessExitHooks, runChromeReaper and createProxyReaperLink (the detached reaper loads runChromeReaper through the package entry)."""
     ns = dict(NS_RE.findall(read(f"{P}/src/index.ts")))
     wired = all(ns.get(a) and re.sub(r"\.js$", "", ns[a]) == "./" + AREAS_EXTRA[a] for a in AREAS_EXTRA)
     want = {"recording": {"NetworkRecorder", "CaptureError", "MemoryRecordingSink", "StoreRecordingSink", "openStoreRecordingSink", "redactHeaders"}, "capture": {"captureAllNetworkResponses"}, "lifecycle": {"LifecycleError", "openIsolatedPage", "withIsolatedPage", "installProcessExitHooks", "runChromeReaper", "createProxyReaperLink"}}
@@ -2510,9 +2534,9 @@ def _pe7():
 
 @check("prod-errors", 8)
 def _pe8():
-    """(amendment A4) CaptureError (src/lib/recording/errors.ts) and LifecycleError (src/lib/lifecycle/errors.ts) extend StealthBrowserError, so one `instanceof` covers every package error; `exitCodeFor` and docs/ERRORS.md cover every code; a classifier maps a launch failure whose cause is ENOENT to CHROME_NOT_FOUND and EADDRINUSE to PORT_IN_USE (unit-tested)."""
+    """(amendment A4) CaptureError (src/lib/recording/errors.ts) and LifecycleError (src/lib/lifecycle/errors.ts) extend StealthCoreBrowserError, so one `instanceof` covers every package error; `exitCodeFor` and docs/ERRORS.md cover every code; a classifier maps a launch failure whose cause is ENOENT to CHROME_NOT_FOUND and EADDRINUSE to PORT_IN_USE (unit-tested)."""
     cap, life = read(f"{P}/src/lib/recording/errors.ts"), read(f"{P}/src/lib/lifecycle/errors.ts")
-    ext = re.search(r"class\s+CaptureError\s+extends\s+StealthBrowserError", cap) is not None and re.search(r"class\s+LifecycleError\s+extends\s+StealthBrowserError", life) is not None
+    ext = re.search(r"class\s+CaptureError\s+extends\s+StealthCoreBrowserError", cap) is not None and re.search(r"class\s+LifecycleError\s+extends\s+StealthCoreBrowserError", life) is not None
     t = read(f"{P}/src/errors.ts")
     covered = all(c in t for c in all_codes()) and all(c in read(f"{P}/docs/ERRORS.md") for c in all_codes())
     spec = "\n".join(read(f) for f in spec_files("unit/errors"))
@@ -2527,41 +2551,32 @@ EX_NS_FILES = [f"namespaces/{a}.ts" for a in AREAS_ALL]
 
 @check("prod-examples", 1)
 def _pex1():
-    """(PA7.1, widened) examples/ holds one runnable TypeScript example per public verb (examples/verbs/<verb>.ts for the six verbs) and per root namespace (examples/namespaces/<namespace>.ts for cdp, storage, capture, parsers, chromeManager, recording, lifecycle), plus examples/cli.md and examples/mcp-config.json, all non-empty; each .ts example opens with a `Scenario:` header naming the real user task it solves and exports `run(options)`."""
-    miss = [f for f in EX_VERB_FILES + EX_NS_FILES + ["cli.md", "mcp-config.json"] if not read(f"{EX}/{f}").strip()]
+    """(PA7.1, widened) examples/ holds one runnable TypeScript example per public verb (examples/verbs/<verb>.ts for the six verbs) and per root namespace (examples/namespaces/<namespace>.ts for cdp, storage, capture, parsers, chromeManager, recording, lifecycle), all non-empty; each .ts example opens with a `Scenario:` header naming the real user task it solves and exports `run(options)`."""
+    miss = [f for f in EX_VERB_FILES + EX_NS_FILES if not read(f"{EX}/{f}").strip()]
     headless = [f for f in EX_VERB_FILES + EX_NS_FILES if exists(f"{EX}/{f}") and not (re.search(r"Scenario:\s*\S{12,}", read(f"{EX}/{f}")) and re.search(r"export\s+(?:async\s+)?function\s+run\b|export\s+const\s+run\b", read(f"{EX}/{f}")))]
     return not miss and not headless, f"missing/empty {miss}; without Scenario header or run(): {headless}"
 
 
 @check("prod-examples", 2)
 def _pex2():
-    """(PA7.2) tsconfig.spec.json includes examples/, every .ts example imports the package ROOT only (`@adhd/stealth-browser` or `../../src/index.js`, never a subpath or a src/lib path), and `nx run stealth-browser:typecheck-spec` exits 0."""
+    """(PA7.2) tsconfig.spec.json includes examples/, every .ts example imports the package ROOT only (`@adhd/stealth-core-browser` or `../../src/index.js`, never a subpath or a src/lib path), and `nx run stealth-core-browser:typecheck-spec` exits 0."""
     inc = "examples" in read(f"{P}/tsconfig.spec.json")
     bad = []
     for f in EX_VERB_FILES + EX_NS_FILES:
         t = read(f"{EX}/{f}")
         mods = re.findall(r"from\s+['\"]([^'\"]+)['\"]", t)
-        if not mods or any(m not in ("@adhd/stealth-browser", "../../src/index.js") and not m.startswith("node:") for m in mods):
+        if not mods or any(m not in ("@adhd/stealth-core-browser", "../../src/index.js") and not m.startswith("node:") for m in mods):
             bad.append(f)
     rc, out = sh([NX, "run", f"{proj_name()}:typecheck-spec"], timeout=1500) if inc and not bad else (1, "")
     return inc and not bad and rc == 0, f"included={inc} bad imports={bad} rc={rc} {out[-150:]}"
 
 
-@check("prod-examples", 3)
-def _pex3():
-    """(PA7.3) examples/mcp-config.json parses as JSON with an mcpServers entry whose command/args name the `stealth-browser-mcp` bin declared in package.json."""
-    d = jread(f"{EX}/mcp-config.json", None)
-    bins = set((pkg().get("bin") or {}))
-    servers = (d or {}).get("mcpServers") or {}
-    named = any("stealth-browser-mcp" in json.dumps(v) for v in servers.values())
-    return bool(servers) and "stealth-browser-mcp" in bins and named, f"servers={list(servers)} bins={sorted(bins)}"
-
 
 @check("prod-examples", 4)
 def _pex4():
-    """(PA7.4) Every example (all .ts, cli.md, mcp-config.json) uses an explicit non-9222 port and never the default 9222."""
+    """(PA7.4) Every example (all .ts) uses an explicit non-9222 port and never the default 9222."""
     bad = []
-    for f in EX_VERB_FILES + EX_NS_FILES + ["cli.md", "mcp-config.json"]:
+    for f in EX_VERB_FILES + EX_NS_FILES:
         t = read(f"{EX}/{f}")
         ports = re.findall(r"port\W{0,6}(\d{4,5})", t, re.I)
         if not ports or any(p == "9222" for p in ports) or re.search(r"(?<!\d)9222(?!\d)", t):
@@ -2587,12 +2602,12 @@ def _pex5():
 
 @check("prod-examples", 6)
 def _pex6():
-    """The examples are exercised, not just typechecked: a spec under src/test/unit/examples/ imports every examples/verbs and examples/namespaces file and runs its `run()` against the in-process fake CDP server (no live Chrome), citing ticket 8468f7b1, a valid prod-examples.N id and PA7.3 / PA7.4."""
+    """The examples are exercised, not just typechecked: a spec under src/test/unit/examples/ imports every examples/verbs and examples/namespaces file and runs its `run()` against the in-process fake CDP server (no live Chrome), citing ticket 8468f7b1, a valid prod-examples.N id and PA7.2 / PA7.4."""
     specs = spec_files("unit/examples")
     t = "\n".join(read(f) for f in specs)
     unused = [f for f in EX_VERB_FILES + EX_NS_FILES if os.path.splitext(f)[0] not in t]
     ids = set(re.findall(r"\[(prod-examples\.\d+)\]", t))
-    return bool(specs) and not unused and "run(" in t and TICKET in t and bool(ids & criteria_ids()) and all(k in t for k in ("PA7.3", "PA7.4")), f"specs={len(specs)} examples not exercised={unused}"
+    return bool(specs) and not unused and "run(" in t and TICKET in t and bool(ids & criteria_ids()) and all(k in t for k in ("PA7.2", "PA7.4")), f"specs={len(specs)} examples not exercised={unused}"
 
 
 # ============================================================ tests-use-cases (replaces the e2e lane)
@@ -2618,16 +2633,15 @@ def _uc1():
 
 @check("tests-use-cases", 2)
 def _uc2():
-    """At least 12 use-case specs under src/test/use-cases/, named after user scenarios (not modules: e.g. `recover-a-crashed-chrome.spec.ts`), each `describe` opening with `Scenario:` plus the user goal; together they cover all six verbs, all seven root namespaces and both hosts (the CLI and the MCP stdio server driven in-process), each citing ticket 8468f7b1, a valid tests-use-cases.N id and the AC ids they exercise."""
+    """At least 12 use-case specs under src/test/use-cases/, named after user scenarios (not modules: e.g. `recover-a-crashed-chrome.spec.ts`), each `describe` opening with `Scenario:` plus the user goal; together they cover all six verbs and all seven root namespaces (library scenarios only: the CLI and MCP host scenarios live in search-usecases), each citing ticket 8468f7b1, a valid tests-use-cases.N id and the AC ids they exercise."""
     specs = uc_specs()
     t = "\n".join(read(f) for f in specs)
     modlike = [os.path.basename(f) for f in specs if re.fullmatch(r"(cdp|storage|capture|parsers|chrome-manager|api|index|session|helpers|types)\.spec\.ts", os.path.basename(f))]
     nodesc = [os.path.basename(f) for f in specs if not re.search(r"describe\(\s*['\"`]Scenario:", read(f))]
     verbs = [v for v in VERBS if v not in t]
     areas = [a for a in AREAS_ALL if not re.search(rf"\b{a}\.", t)]
-    hosts = [h for h in ("server", "cli") if not re.search(rf"\b{h}\b", t)]
     uncited = [os.path.basename(f) for f in specs if TICKET not in read(f) or not (set(re.findall(r"\[(tests-use-cases\.\d+)\]", read(f))) & criteria_ids())]
-    return len(specs) >= 12 and not modlike and not nodesc and not verbs and not areas and not hosts and not uncited, f"specs={len(specs)} module-named={modlike} no Scenario describe={nodesc} verbs={verbs} namespaces={areas} hosts={hosts} uncited={uncited}"
+    return len(specs) >= 12 and not modlike and not nodesc and not verbs and not areas and not uncited, f"specs={len(specs)} module-named={modlike} no Scenario describe={nodesc} verbs={verbs} namespaces={areas} uncited={uncited}"
 
 
 @check("tests-use-cases", 3)
@@ -2644,7 +2658,7 @@ def _uc3():
 
 @check("tests-use-cases", 4)
 def _uc4():
-    """The examples are consumed: the suites import and `run()` every examples/verbs and examples/namespaces file (prod-examples), and the typed errors are reached through user scenarios (>= 6 distinct StealthBrowserError codes asserted across the suites)."""
+    """The examples are consumed: the suites import and `run()` every examples/verbs and examples/namespaces file (prod-examples), and the typed errors are reached through user scenarios (>= 6 distinct StealthCoreBrowserError codes asserted across the suites)."""
     t = "\n".join(read(f) for f in uc_specs())
     unused = [f for f in EX_VERB_FILES + EX_NS_FILES if os.path.splitext(f)[0] not in t]
     codes = [c for c in all_codes() if re.search(rf"['\"]{c}['\"]", t)]
@@ -2653,7 +2667,7 @@ def _uc4():
 
 @check("tests-use-cases", 5)
 def _uc5():
-    """`nx run stealth-browser:test -- src/test/use-cases` exits 0 in under 120 seconds wall clock and leaves no listener behind on the ports it used."""
+    """`nx run stealth-core-browser:test -- src/test/use-cases` exits 0 in under 120 seconds wall clock and leaves no listener behind on the ports it used."""
     t0 = time.time()
     rc, out = sh([NX, "run", f"{proj_name()}:test", "--", "src/test/use-cases"], timeout=1800)
     return rc == 0 and time.time() - t0 < 120 + 60, f"rc={rc} {time.time() - t0:.0f}s {out[-150:]}"
@@ -3349,6 +3363,28 @@ def row_pinned(r):
     return bool(pin.get("file")) and bool(txt.strip()) and f"[{r['id']}]" in txt and bool(pin.get("test")) and pin["test"] in txt
 
 
+SEARCH_INV = f"{PLAN}/evidence/search-failsafe-inventory.json"
+
+
+def search_unpinned():
+    """Rows of the search-side inventory (evidence/search-failsafe-inventory.json) that are not pinned: a row with a `pin` {file, test} must have the pin file under entrypoint/stealth-search/src/test/ cite `[<row id>]` and contain the named test; a row with `pin: null` needs a `reason`. Returns the ids; ['<no inventory>'] while the inventory does not exist."""
+    d = jread(SEARCH_INV, {}) or {}
+    rows = d.get("rows") or []
+    if not rows:
+        return ["<no inventory>"]
+    bad = []
+    for r in rows:
+        pin = r.get("pin")
+        if not pin:
+            if not r.get("reason"):
+                bad.append(r.get("id"))
+            continue
+        txt = read(f"{SEARCH_DIR}/{pin.get('file', '')}")
+        if not (pin.get("file") and txt.strip() and f"[{r.get('id')}]" in txt and pin.get("test") and pin["test"] in txt):
+            bad.append(r.get("id"))
+    return bad
+
+
 def inventory_owner_ok(owner):
     allrows = inventory_rows()
     rows = [r for r in allrows if r.get("owner_state") == owner]
@@ -3449,7 +3485,8 @@ def _rp5():
     """Blind-review gate ([inv:no-features-removed]): every failsafe-inventory row is still pinned (pin file exists, cites its row id, contains the named test) before the review diff is cut; the review brief itself stays the single word `Review`."""
     rows = inventory_rows()
     bad = [r["id"] for r in rows if not row_pinned(r)]
-    return len(rows) >= 40 and not bad, f"{len(rows)} rows, unpinned {bad[:10]}"
+    sb = search_unpinned()
+    return len(rows) >= 40 and not bad and not sb, f"{len(rows)} rows, unpinned {bad[:10]}; search inventory unpinned {sb[:10]}"
 
 
 @check("audit-pre-review", 5)
@@ -3458,7 +3495,8 @@ def _apr5():
     f = jread(f"{PLAN}/review/PRE-REVIEW.json", {}) or {}
     rows = inventory_rows()
     bad = [r["id"] for r in rows if not row_pinned(r)]
-    return len(rows) >= 40 and not bad and f.get("inventory_rows") == len(rows) and f.get("inventory_unpinned") == 0, f"unpinned {bad[:10]} recorded={f.get('inventory_rows')}/{f.get('inventory_unpinned')}"
+    sb = search_unpinned()
+    return len(rows) >= 40 and not bad and not sb and f.get("inventory_rows") == len(rows) and f.get("inventory_unpinned") == 0, f"unpinned {bad[:10]} search unpinned {sb[:6]} recorded={f.get('inventory_rows')}/{f.get('inventory_unpinned')}"
 
 
 @check("audit-final", 12)
@@ -3467,7 +3505,8 @@ def _af12():
     d = jread(INV, {}) or {}
     rows = d.get("rows", [])
     bad = [r["id"] for r in rows if not row_pinned(r)]
-    return len(rows) >= max(40, int(d.get("row_count") or 0)) and not bad, f"{len(rows)} rows, unpinned {bad[:10]}"
+    sb = search_unpinned()
+    return len(rows) >= max(40, int(d.get("row_count") or 0)) and not bad and not sb, f"{len(rows)} rows, unpinned {bad[:10]}; search inventory unpinned {sb[:10]}"
 
 
 @check("failsafe-inventory", 5)
@@ -3581,10 +3620,21 @@ def sp_dep():
     return ((pkg().get("dependencies")) or {}).get(PROXY_PKG, "")
 
 
+def tarballs_missing():
+    """tarball_missing for both published packages: (worst rc, {package dir: missing members})."""
+    out, rc = {}, 0
+    for d in (CORE_DIR, SEARCH_DIR):
+        r, m = tarball_missing(d)
+        rc = max(rc, r)
+        if m:
+            out[d] = m
+    return rc, out
+
+
 def local_specifiers():
     """`file:` / `link:` / `workspace:`-less local specifiers for any @adhd/* package in the root, stealth-browser and tripwire manifests (dependencies, devDependencies, peerDependencies, overrides)."""
     bad = []
-    for f in ("package.json", f"{P}/package.json", f"{TW}/package.json"):
+    for f in ("package.json", f"{CORE_DIR}/package.json", f"{SEARCH_DIR}/package.json", f"{TW}/package.json"):
         d = jread(f, {}) or {}
         blocks = [d.get(k) or {} for k in ("dependencies", "devDependencies", "peerDependencies", "optionalDependencies")] + [((d.get("pnpm") or {}).get("overrides")) or {}]
         for b in blocks:
@@ -3750,7 +3800,7 @@ def _sps1():
 
 @check("sp-reaper-smoke", 2)
 def _sps2():
-    """CL30 the real-process proof passes: `node smoke/reaper-smoke.mjs` (after `nx run stealth-browser:build` exits 0) exits 0 and its last stdout line is a JSON object with `ensure` = "spawned" and true values for `ping`, `hello`, `activity`, `status`, `entryLoaded` (the package entry exposes the `lifecycle` namespace), `retired` (the host retired on its own after `orphanWindowMs` = 1 s) and `socketRemoved`."""
+    """CL30 the real-process proof passes: `node smoke/reaper-smoke.mjs` (after `nx run stealth-core-browser:build` exits 0) exits 0 and its last stdout line is a JSON object with `ensure` = "spawned" and true values for `ping`, `hello`, `activity`, `status`, `entryLoaded` (the package entry exposes the `lifecycle` namespace), `retired` (the host retired on its own after `orphanWindowMs` = 1 s) and `socketRemoved`."""
     if not exists(SMK_JS):
         return False, "script missing"
     b, _ = sh([NX, "run", f"{proj_name()}:build"], timeout=1800)
@@ -3768,7 +3818,7 @@ def _sps2():
 
 @check("sp-reaper-smoke", 3)
 def _sps3():
-    """The run is recorded and the state is read-only for the package: smoke/reaper-smoke.md records `RUN: exit=0`, the dist/index.js sha256 and the service-proxy version used, smoke/reaper-smoke.json holds the script output, only owned paths changed by [psm:sp-reaper-smoke] commits and no file under entrypoint/stealth-browser/src is modified."""
+    """The run is recorded and the state is read-only for the package: smoke/reaper-smoke.md records `RUN: exit=0`, the dist/index.js sha256 and the service-proxy version used, smoke/reaper-smoke.json holds the script output, only owned paths changed by [psm:sp-reaper-smoke] commits and no file under packages/stealth/stealth-core-browser/src is modified."""
     t = read(SMK_MD)
     j = jread(SMK_JSON, {}) or {}
     o = ownership_ok("sp-reaper-smoke")
@@ -3787,17 +3837,17 @@ def _sw1():
 
 @check("sp-switch", 2)
 def _sw2():
-    """The dev-tarball indirection is gone with no source change: root package.json `pnpm.overrides` has no `@adhd/sox-service-proxy` key, no @adhd/* dependency or override in the root, stealth-browser or tripwire manifests starts with `file:`, `link:` or `portal:`, pnpm-lock.yaml mentions neither `adhd-dev-tarballs` nor a `file:/Users` resolution and resolves @adhd/sox-service-proxy 0.6.x with an integrity hash, and `git diff` of entrypoint/stealth-browser/src since the state start is empty."""
+    """The dev-tarball indirection is gone with no source change: root package.json `pnpm.overrides` has no `@adhd/sox-service-proxy` key, no @adhd/* dependency or override in the root, stealth-core-browser or tripwire manifests starts with `file:`, `link:` or `portal:`, pnpm-lock.yaml mentions neither `adhd-dev-tarballs` nor a `file:/Users` resolution and resolves @adhd/sox-service-proxy 0.6.x with an integrity hash, `git diff` of packages/stealth/stealth-core-browser/src since the state start is empty, and the core manifest's `@adhd/sox-service-proxy` specifier is a published semver range (`^0.6.0` or `~0.6.0`)."""
     lock = read("pnpm-lock.yaml")
     since = ((state().get("states") or {}).get("sp-switch") or {}).get("start_ref")
     src = own_touched("sp-switch", f"{P}/src") if since else ["(no start_ref)"]
     reg = re.search(r"/?@adhd/sox-service-proxy@0\.6\.\d+:\s*\n\s*resolution:\s*\{integrity:", lock) is not None
-    return PROXY_PKG not in root_overrides() and not local_specifiers() and "adhd-dev-tarballs" not in lock and "file:/Users" not in lock and reg and not src, f"overrides={root_overrides().get(PROXY_PKG)} local specifiers={local_specifiers()} registry resolution={reg} src={src[:3]}"
+    return PROXY_PKG not in root_overrides() and not local_specifiers() and "adhd-dev-tarballs" not in lock and "file:/Users" not in lock and reg and not src and re.fullmatch(r"[~^]0\.6\.\d+", sp_dep() or "") is not None, f"core range={sp_dep()!r} overrides={root_overrides().get(PROXY_PKG)} local specifiers={local_specifiers()} registry resolution={reg} src={src[:3]}"
 
 
 @check("sp-switch", 3)
 def _sw3():
-    """The registry build passes the same gates: after the switch `nx run stealth-browser:build` and `nx run stealth-browser:test -- src/test/unit/lifecycle` exit 0, and smoke/switch.md records `BUILD: exit=0` and `LIFECYCLE-UNIT: exit=0`."""
+    """The registry build passes the same gates: after the switch `nx run stealth-core-browser:build` and `nx run stealth-core-browser:test -- src/test/unit/lifecycle` exit 0, and smoke/switch.md records `BUILD: exit=0` and `LIFECYCLE-UNIT: exit=0`."""
     t = read(SPS)
     if not (re.search(r"^BUILD: exit=0\s*$", t, re.M) and re.search(r"^LIFECYCLE-UNIT: exit=0\s*$", t, re.M)):
         return False, "evidence missing"
@@ -3817,9 +3867,11 @@ def _sw4():
 
 @check("sp-switch", 5)
 def _sw5():
-    """The built dist requires the proxy from the registry build: `lifecycle/sp.ts` exists, `nx run stealth-browser:build` exits 0, dist/index.js contains a `require` (or dynamic `import()`) of `@adhd/sox-service-proxy` and no inlined definition of ensureBackend, serveBackend or dialBackend."""
-    if not exists(f"{P}/src/lifecycle/sp.ts"):
+    """The built dist requires the proxy from the registry build: with no dev-tarball override or local specifier left, `src/lib/lifecycle/sp.ts` exists, `nx run stealth-core-browser:build` exits 0, dist/index.js contains a `require` (or dynamic `import()`) of `@adhd/sox-service-proxy` and no inlined definition of ensureBackend, serveBackend or dialBackend."""
+    if not exists(f"{P}/src/lib/lifecycle/sp.ts"):
         return False, "src/lifecycle/sp.ts missing"
+    if PROXY_PKG in root_overrides() or local_specifiers():
+        return False, f"dev-tarball indirection still present: overrides={root_overrides().get(PROXY_PKG)} local={local_specifiers()}"
     rc, req, inl, _ = _sp_dist_probe()
     return rc == 0 and req and not inl, f"build rc={rc} external={req} inlined={inl}"
 
@@ -3944,7 +3996,7 @@ def _tws4():
 
 @check("tripwire-scaffold", 5)
 def _tws5():
-    """Exactly two project.json files were added since main (stealth-browser and the tripwire package; the same rule as scaffold.5), only owned paths changed by [psm:tripwire-scaffold] commits (the tripwire package directory, tsconfig.base.json, .adhd/workspace.json and evidence/tripwire/), and no other workspace group or project was edited."""
+    """Exactly the approved project.json files were added since main (the migrated package, the tripwire package and, once search-scaffold has run, stealth-search: three in all; the same rule as scaffold.5), only owned paths changed by [psm:tripwire-scaffold] commits (the tripwire package directory, tsconfig.base.json, .adhd/workspace.json and evidence/tripwire/), and no other workspace group or project was edited."""
     o = ownership_ok("tripwire-scaffold")
     return _s5()[0] and o[0] and exists(f"{TW}/project.json"), f"{o[1]} {_s5()[1]}"
 
@@ -4304,12 +4356,22 @@ def _twm3():
 
 @check("tripwire-reverse-migrate", 4)
 def _twm4():
-    """The regression bar is recorded for the current worktree head: docs/plan/stealth-browser/tripwire-reverse/reverse-verify.json holds `head` equal to the worktree HEAD and `commands` with exit 0 for `pnpm nx test request-builder` (the 21 request-builder tests plus the new block-count, audit and corrupt-lock tests), `pnpm nx run-many -t lint,test,build`, `pnpm nx e2e e2e-tests` and `pnpm vitest run --config tools/unlock-tripwire/vite.config.ts` (the 4 unlock spawn assertions with their exit codes unchanged)."""
+    """The regression bar is recorded for the current worktree head and scoped to the projects this state touched: docs/plan/stealth-browser/tripwire-reverse/reverse-verify.json holds `head` equal to the worktree HEAD and `commands` with exit 0 for `pnpm nx test request-builder` (the request-builder tests plus the new block-count, audit and corrupt-lock tests), `pnpm nx run-many -t lint,test,build -p request-builder` (lint, test and build of the touched library project) and `pnpm vitest run --config tools/unlock-tripwire/vite.config.ts` (the unlock tool's spawn assertions with their exit codes unchanged). The whole-workspace `pnpm nx run-many -t lint,test,build` and `pnpm nx e2e e2e-tests` runs are recorded too, but they fail on the clean base commit d959c6a for reasons this change does not touch (lint of 14 projects, wingman-bridge tests, tinder e2e), so they are judged only as regression-free: every failed task at head also appears in the recorded `baseline` failed tasks (the base failures are filed in the reverse-apis backlog)."""
     d = jread(REV_VERIFY, {}) or {}
     cmds = d.get("commands") or {}
-    want = ["pnpm nx test request-builder", "pnpm nx run-many -t lint,test,build", "pnpm nx e2e e2e-tests", "pnpm vitest run --config tools/unlock-tripwire/vite.config.ts"]
+    want = ["pnpm nx test request-builder", "pnpm nx run-many -t lint,test,build -p request-builder", "pnpm vitest run --config tools/unlock-tripwire/vite.config.ts"]
     bad = [w for w in want if (cmds.get(w) or {}).get("exit") != 0]
-    return d.get("head") == rev("rev-parse", "HEAD") and not bad, f"head match={d.get('head') == rev('rev-parse', 'HEAD')} failing/missing {bad}"
+    base = d.get("baseline") or {}
+    base_failed = set()
+    for k, v in base.items():
+        if isinstance(v, dict):
+            base_failed |= set(v.get("failed_tasks") or [])
+            m = re.match(r"nx (test|e2e) (\S+)$", k)
+            if m and v.get("exit") not in (0, None):
+                base_failed.add(f"{m.group(2)}:{m.group(1)}")
+    wide = [c for c in ("pnpm nx run-many -t lint,test,build", "pnpm nx e2e e2e-tests") if c in cmds]
+    new_fail = sorted({t for c in wide for t in (cmds[c].get("failed_tasks") or []) if t not in base_failed})
+    return d.get("head") == rev("rev-parse", "HEAD") and not bad and not new_fail and bool(base), f"head match={d.get('head') == rev('rev-parse', 'HEAD')} failing/missing {bad} failures new vs base {new_fail}"
 
 
 @check("tripwire-reverse-migrate", 5)
@@ -4404,7 +4466,7 @@ gate_tw_check("gates-rerun", 7, f"{PLAN}/evidence/gates-rerun.json", pre=resolut
 
 @check("gates-first", 12)
 def _gf12():
-    """Release hygiene for the service proxy and the tripwire: no @adhd/* dependency, devDependency or override in the root, stealth-browser or tripwire manifests starts with `file:`, `link:` or `portal:`, no `pnpm.overrides["@adhd/sox-service-proxy"]` remains (sp-switch removed it), pnpm-lock.yaml has no `adhd-dev-tarballs` or `file:/Users` resolution, and the stealth-browser dependency on @adhd/sox-service-proxy is `~0.6.0`."""
+    """Release hygiene for the service proxy and the tripwire: no @adhd/* dependency, devDependency or override in the root, stealth-core-browser, stealth-search or tripwire manifests starts with `file:`, `link:` or `portal:`, no `pnpm.overrides["@adhd/sox-service-proxy"]` remains (sp-switch removed it), pnpm-lock.yaml has no `adhd-dev-tarballs` or `file:/Users` resolution, and the stealth-browser dependency on @adhd/sox-service-proxy is `~0.6.0`."""
     lock = read("pnpm-lock.yaml")
     bad = local_specifiers()
     return not bad and PROXY_PKG not in root_overrides() and "adhd-dev-tarballs" not in lock and "file:/Users" not in lock and sp_dep() == "~0.6.0", f"local specifiers {bad}; override={root_overrides().get(PROXY_PKG)}; dependency={sp_dep()!r}"
@@ -4412,14 +4474,17 @@ def _gf12():
 
 @check("merge-readiness", 5)
 def _mr5():
-    """RELEASE-DECISION.md covers BOTH packages and the consumer: it names `@adhd/stealth-browser` and `@adhd/resilience-core-tripwire` with their versions (0.x) in the same release (one branch, one `pnpm release`), the reverse-apis branch `feat/tripwire-adopt` (merged only after the registry relink), and tripwire-reverse-migrate is complete."""
+    """RELEASE-DECISION.md covers all three packages and the consumer: it names `@adhd/resilience-core-tripwire`, `@adhd/stealth-core-browser` and `@adhd/stealth-search` with their versions (0.x), the publish order tripwire, then core, then search (dependencies publish before dependents), the reverse-apis branch `feat/tripwire-adopt` and its verification state (tripwire-reverse-migrate complete), and records `nx affected -t lint typecheck test build` exit codes."""
     t = read(f"{PLAN}/RELEASE-DECISION.md")
-    return "@adhd/stealth-browser" in t and TW_PKG in t and "feat/tripwire-adopt" in t and state_status("tripwire-reverse-migrate") == "complete", f"both packages named={'@adhd/stealth-browser' in t and TW_PKG in t} branch named={'feat/tripwire-adopt' in t}"
+    pos = [t.find(n) for n in (TW_PKG, CORE_PKG, SEARCH_PKG)]
+    order = re.search(r"PUBLISH_ORDER:\s*(\S+)\s*,\s*(\S+)\s*,\s*(\S+)", t)
+    ok_order = bool(order) and [order.group(i).strip(",") for i in (1, 2, 3)] == [TW_PKG, CORE_PKG, SEARCH_PKG]
+    return all(p >= 0 for p in pos) and ok_order and "feat/tripwire-adopt" in t and state_status("tripwire-reverse-migrate") == "complete", f"packages named={pos} order line ok={ok_order}"
 
 
 @check("merge-readiness", 6)
 def _mr6():
-    """The tree being merged carries no local specifier: no @adhd/* `file:` / `link:` / `portal:` value or service-proxy override in the root, stealth-browser or tripwire manifests, and no `adhd-dev-tarballs` or `file:/Users` text in pnpm-lock.yaml (a published manifest never carries a path)."""
+    """The tree being merged carries no local specifier: no @adhd/* `file:` / `link:` / `portal:` value or service-proxy override in the root, stealth-core-browser, stealth-search or tripwire manifests, and no `adhd-dev-tarballs` or `file:/Users` text in pnpm-lock.yaml (a published manifest never carries a path)."""
     lock = read("pnpm-lock.yaml")
     bad = local_specifiers()
     return not bad and PROXY_PKG not in root_overrides() and "adhd-dev-tarballs" not in lock and "file:/Users" not in lock and sp_dep() == "~0.6.0", f"local specifiers {bad}; stealth-browser proxy dependency={sp_dep()!r}"
@@ -4449,6 +4514,41 @@ def _af13():
             and g.get("tw_tree") == tw_tree_sha()), f"purity: {pur[1]} docs={docs} ai={bool(ai)}"
 
 
+@check("docs-marketing-run", 12)
+def _dm12():
+    """The stealth-search docs surface exists: README.md, CHANGELOG.md (with a 0.1.0 entry), AGENTS.md, llms.txt and docs/{OBSERVABILITY,ERRORS,CONFIGURATION,EXAMPLES,RESPONSIBLE-USE}.md of entrypoint/stealth-search, no AI attribution lines, and its docs/marketing/.catalog/capabilities.json lists the eleven projected tools as `shipped` with runnable receipts and a review.md verdict of PASS."""
+    names = ("README.md", "CHANGELOG.md", "AGENTS.md", "llms.txt", "docs/OBSERVABILITY.md", "docs/ERRORS.md", "docs/CONFIGURATION.md", "docs/EXAMPLES.md", "docs/RESPONSIBLE-USE.md")
+    ok = all(exists(f"{SEARCH_DIR}/{n}") for n in names) and "0.1.0" in read(f"{SEARCH_DIR}/CHANGELOG.md")
+    ai = re.search(r"Generated with|Co-Authored-By|written by an AI", "".join(read(f"{SEARCH_DIR}/{n}") for n in names), re.I)
+    cat = f"{SEARCH_DIR}/docs/marketing/.catalog"
+    c = jread(f"{cat}/capabilities.json", {})
+    items = c.get("capabilities", c if isinstance(c, list) else [])
+    shipped = sum(1 for i in items if i.get("status") == "shipped" and i.get("receipt"))
+    rv = read(f"{cat}/review.md")
+    return ok and not ai and shipped >= 11 and bool(re.search(r"\\bPASS\\b", rv)) and not re.search(r"\\bFAIL\\b", rv), f"docs set={ok} ai={bool(ai)} shipped receipts={shipped}"
+
+
+@check("readme-rewrite", 10)
+def _rw10():
+    """entrypoint/stealth-search/README.md has a title, a tagline <= 120 chars, Quickstart, Features, Surfaces and Receipts sections, >= 2 fenced code blocks, names all eleven stealth_* tools and the host flags --cdp-port, --transport, --listen-port and --data-dir, links docs/ERRORS.md and docs/EXAMPLES.md, every relative link resolves, the only bins it invokes are `stealth-search` and `stealth-search-mcp`, it has >= 5 `<!-- receipt:ID -->` markers resolving to shipped entries of the search catalog, and none of the overclaim words undetectable, bypass, evade, anti-bot."""
+    rd = f"{SEARCH_DIR}/README.md"
+    t = read(rd)
+    heads = {h.strip().lower() for h in re.findall(r"^#{1,3}\s+(.+)$", t, re.M)}
+    tagline = [ln for ln in t.splitlines()[1:12] if ln.startswith(">")]
+    tools = ("stealth_search", "stealth_listProviders", "stealth_describeProvider", "stealth_tripwireStatus", "stealth_clearTripwire", "stealth_chromeStatus", "stealth_launchChrome", "stealth_shutdownChrome", "stealth_listPageTargets", "stealth_checkChromeActivity", "stealth_getPageContext")
+    flags = ("--cdp-port", "--transport", "--listen-port", "--data-dir")
+    dead = [l for l in re.findall(r"\]\((?!http|mailto:|#)([^)#\s]+)", t) if not exists(os.path.normpath(os.path.join(SEARCH_DIR, l)))]
+    used = set(re.findall(r"^\s*(?:npx |pnpm dlx )?(stealth-search(?:-mcp)?)\b", t, re.M))
+    c = jread(f"{SEARCH_DIR}/docs/marketing/.catalog/capabilities.json", {})
+    items = c.get("capabilities", c if isinstance(c, list) else [])
+    shipped = {i.get("id") for i in items if i.get("status") == "shipped"}
+    ids = re.findall(r"<!--\s*receipt:([\w.-]+)\s*-->", t)
+    ok = (bool(t) and all(any(k in h for h in heads) for k in ("quickstart", "features", "surfaces", "receipts")) and bool(tagline) and len(tagline[0]) <= 122 and t.count("```") >= 4
+          and all(x in t for x in tools) and all(x in t for x in flags) and "docs/ERRORS.md" in t and "docs/EXAMPLES.md" in t and not dead and bool(used) and used <= {"stealth-search", "stealth-search-mcp"}
+          and len(ids) >= 5 and all(i in shipped for i in ids) and not re.search(r"undetectable|bypass|evade|anti-bot", t, re.I))
+    return ok, f"readme present={bool(t)} dead links={dead[:3]} bins={used} receipts={len(ids)}"
+
+
 # ---------------------------------------------------------------- split-state guard modules (scripts/guards/*.py)
 # One module per state group, executed in this namespace (they use check(), the helpers above and the constants at the top).
 import glob as _glob
@@ -4457,6 +4557,10 @@ for _gf in sorted(_glob.glob(f"{SCRIPTS}/guards/*.py")):
     if os.path.basename(_gf).startswith("_"):
         continue
     exec(compile(read(_gf), _gf, "exec"), globals())
+
+
+for _retired in RETIRED_STATES:  # states removed from the dag by the split amendment; their historical check bodies stay defined above but are no longer registered
+    CHECKS.pop(_retired, None)
 
 
 def main():

@@ -767,15 +767,6 @@
       "cwd": "repo-root"
     },
     {
-      "id": "tests-unit-surface.4",
-      "phase": "verify",
-      "tier": null,
-      "kind": "command",
-      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py tests-unit-surface --only tests-unit-surface.4",
-      "expect": "exit0",
-      "cwd": "repo-root"
-    },
-    {
       "id": "tests-unit-surface.5",
       "phase": "verify",
       "tier": null,
@@ -880,6 +871,24 @@
       "tier": null,
       "kind": "command",
       "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py gates-first --only gates-first.10",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "gates-first.11",
+      "phase": "verify",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py gates-first --only gates-first.11",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "gates-first.12",
+      "phase": "verify",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py gates-first --only gates-first.12",
       "expect": "exit0",
       "cwd": "repo-root"
     },
@@ -1055,6 +1064,15 @@
       "cwd": "repo-root"
     },
     {
+      "id": "gates-rerun.7",
+      "phase": "remediate",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py gates-rerun --only gates-rerun.7",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
       "id": "docs-marketing-run.1",
       "phase": "docs",
       "tier": null,
@@ -1145,6 +1163,24 @@
       "cwd": "repo-root"
     },
     {
+      "id": "docs-marketing-run.11",
+      "phase": "docs",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py docs-marketing-run --only docs-marketing-run.11",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "docs-marketing-run.12",
+      "phase": "docs",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py docs-marketing-run --only docs-marketing-run.12",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
       "id": "readme-rewrite.1",
       "phase": "docs",
       "tier": null,
@@ -1222,6 +1258,15 @@
       "tier": null,
       "kind": "command",
       "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py readme-rewrite --only readme-rewrite.9",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "readme-rewrite.10",
+      "phase": "docs",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py readme-rewrite --only readme-rewrite.10",
       "expect": "exit0",
       "cwd": "repo-root"
     },
@@ -1370,6 +1415,15 @@
       "cwd": "repo-root"
     },
     {
+      "id": "audit-final.13",
+      "phase": "release",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py audit-final --only audit-final.13",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
       "id": "merge-readiness.1",
       "phase": "release",
       "tier": null,
@@ -1406,6 +1460,24 @@
       "cwd": "repo-root"
     },
     {
+      "id": "merge-readiness.5",
+      "phase": "release",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py merge-readiness --only merge-readiness.5",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "merge-readiness.6",
+      "phase": "release",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py merge-readiness --only merge-readiness.6",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
       "id": "prod-errors.1",
       "phase": "surface",
       "tier": null,
@@ -1429,15 +1501,6 @@
       "tier": null,
       "kind": "command",
       "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py prod-errors --only prod-errors.3",
-      "expect": "exit0",
-      "cwd": "repo-root"
-    },
-    {
-      "id": "prod-errors.4",
-      "phase": "surface",
-      "tier": null,
-      "kind": "command",
-      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py prod-errors --only prod-errors.4",
       "expect": "exit0",
       "cwd": "repo-root"
     },
@@ -1492,15 +1555,6 @@
       "tier": null,
       "kind": "command",
       "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py prod-examples --only prod-examples.2",
-      "expect": "exit0",
-      "cwd": "repo-root"
-    },
-    {
-      "id": "prod-examples.3",
-      "phase": "surface",
-      "tier": null,
-      "kind": "command",
-      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py prod-examples --only prod-examples.3",
       "expect": "exit0",
       "cwd": "repo-root"
     },
@@ -2234,6 +2288,24 @@
       "cwd": "repo-root"
     },
     {
+      "id": "chrome-lifecycle.28",
+      "phase": "migrate",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py chrome-lifecycle --only chrome-lifecycle.28",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "chrome-lifecycle.29",
+      "phase": "migrate",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py chrome-lifecycle --only chrome-lifecycle.29",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
       "id": "tests-use-cases.1",
       "phase": "verify",
       "tier": null,
@@ -2387,87 +2459,6 @@
       "cwd": "repo-root"
     },
     {
-      "id": "gates-first.11",
-      "phase": "verify",
-      "tier": null,
-      "kind": "command",
-      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py gates-first --only gates-first.11",
-      "expect": "exit0",
-      "cwd": "repo-root"
-    },
-    {
-      "id": "gates-first.12",
-      "phase": "verify",
-      "tier": null,
-      "kind": "command",
-      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py gates-first --only gates-first.12",
-      "expect": "exit0",
-      "cwd": "repo-root"
-    },
-    {
-      "id": "gates-rerun.7",
-      "phase": "remediate",
-      "tier": null,
-      "kind": "command",
-      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py gates-rerun --only gates-rerun.7",
-      "expect": "exit0",
-      "cwd": "repo-root"
-    },
-    {
-      "id": "docs-marketing-run.11",
-      "phase": "docs",
-      "tier": null,
-      "kind": "command",
-      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py docs-marketing-run --only docs-marketing-run.11",
-      "expect": "exit0",
-      "cwd": "repo-root"
-    },
-    {
-      "id": "audit-final.13",
-      "phase": "release",
-      "tier": null,
-      "kind": "command",
-      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py audit-final --only audit-final.13",
-      "expect": "exit0",
-      "cwd": "repo-root"
-    },
-    {
-      "id": "merge-readiness.5",
-      "phase": "release",
-      "tier": null,
-      "kind": "command",
-      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py merge-readiness --only merge-readiness.5",
-      "expect": "exit0",
-      "cwd": "repo-root"
-    },
-    {
-      "id": "merge-readiness.6",
-      "phase": "release",
-      "tier": null,
-      "kind": "command",
-      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py merge-readiness --only merge-readiness.6",
-      "expect": "exit0",
-      "cwd": "repo-root"
-    },
-    {
-      "id": "chrome-lifecycle.28",
-      "phase": "migrate",
-      "tier": null,
-      "kind": "command",
-      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py chrome-lifecycle --only chrome-lifecycle.28",
-      "expect": "exit0",
-      "cwd": "repo-root"
-    },
-    {
-      "id": "chrome-lifecycle.29",
-      "phase": "migrate",
-      "tier": null,
-      "kind": "command",
-      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py chrome-lifecycle --only chrome-lifecycle.29",
-      "expect": "exit0",
-      "cwd": "repo-root"
-    },
-    {
       "id": "sp-reaper-load-proof.1",
       "phase": "migrate",
       "tier": null,
@@ -2599,6 +2590,15 @@
       "tier": null,
       "kind": "command",
       "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py sp-switch --only sp-switch.4",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "sp-switch.5",
+      "phase": "verify",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py sp-switch --only sp-switch.5",
       "expect": "exit0",
       "cwd": "repo-root"
     },
@@ -3179,11 +3179,1289 @@
       "cwd": "repo-root"
     },
     {
-      "id": "sp-switch.5",
+      "id": "core-scaffold.1",
+      "phase": "scaffold",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py core-scaffold --only core-scaffold.1",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "core-scaffold.2",
+      "phase": "scaffold",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py core-scaffold --only core-scaffold.2",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "core-scaffold.3",
+      "phase": "scaffold",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py core-scaffold --only core-scaffold.3",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "core-scaffold.4",
+      "phase": "scaffold",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py core-scaffold --only core-scaffold.4",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "core-scaffold.5",
+      "phase": "scaffold",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py core-scaffold --only core-scaffold.5",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "core-scaffold.6",
+      "phase": "scaffold",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py core-scaffold --only core-scaffold.6",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "core-scaffold.7",
+      "phase": "scaffold",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py core-scaffold --only core-scaffold.7",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "core-scaffold.8",
+      "phase": "scaffold",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py core-scaffold --only core-scaffold.8",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "core-scaffold.9",
+      "phase": "scaffold",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py core-scaffold --only core-scaffold.9",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "core-seam.1",
+      "phase": "migrate",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py core-seam --only core-seam.1",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "core-seam.2",
+      "phase": "migrate",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py core-seam --only core-seam.2",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "core-seam.3",
+      "phase": "migrate",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py core-seam --only core-seam.3",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "core-seam.4",
+      "phase": "migrate",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py core-seam --only core-seam.4",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "search-scaffold.1",
+      "phase": "scaffold",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-scaffold --only search-scaffold.1",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "search-scaffold.2",
+      "phase": "scaffold",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-scaffold --only search-scaffold.2",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "search-scaffold.3",
+      "phase": "scaffold",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-scaffold --only search-scaffold.3",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "search-scaffold.4",
+      "phase": "scaffold",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-scaffold --only search-scaffold.4",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "search-scaffold.5",
+      "phase": "scaffold",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-scaffold --only search-scaffold.5",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "search-scaffold.6",
+      "phase": "scaffold",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-scaffold --only search-scaffold.6",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "search-scaffold.7",
+      "phase": "scaffold",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-scaffold --only search-scaffold.7",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "search-inventory.1",
+      "phase": "migrate",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-inventory --only search-inventory.1",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "search-inventory.2",
+      "phase": "migrate",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-inventory --only search-inventory.2",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "search-inventory.3",
+      "phase": "migrate",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-inventory --only search-inventory.3",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "search-inventory.4",
+      "phase": "migrate",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-inventory --only search-inventory.4",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "search-inventory.5",
+      "phase": "migrate",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-inventory --only search-inventory.5",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "search-errors.1",
+      "phase": "migrate",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-errors --only search-errors.1",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "search-errors.2",
+      "phase": "migrate",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-errors --only search-errors.2",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "search-errors.3",
+      "phase": "migrate",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-errors --only search-errors.3",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "search-errors.4",
+      "phase": "migrate",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-errors --only search-errors.4",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "search-errors.5",
+      "phase": "migrate",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-errors --only search-errors.5",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "search-errors.6",
+      "phase": "migrate",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-errors --only search-errors.6",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "search-port-providers.1",
+      "phase": "migrate",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-port-providers --only search-port-providers.1",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "search-port-providers.2",
+      "phase": "migrate",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-port-providers --only search-port-providers.2",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "search-port-providers.3",
+      "phase": "migrate",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-port-providers --only search-port-providers.3",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "search-port-providers.4",
+      "phase": "migrate",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-port-providers --only search-port-providers.4",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "search-port-providers.5",
+      "phase": "migrate",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-port-providers --only search-port-providers.5",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "search-port-providers.6",
+      "phase": "migrate",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-port-providers --only search-port-providers.6",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "search-port-providers.7",
+      "phase": "migrate",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-port-providers --only search-port-providers.7",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "search-port-providers.8",
+      "phase": "migrate",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-port-providers --only search-port-providers.8",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "search-port-fetch.1",
+      "phase": "migrate",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-port-fetch --only search-port-fetch.1",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "search-port-fetch.2",
+      "phase": "migrate",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-port-fetch --only search-port-fetch.2",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "search-port-fetch.3",
+      "phase": "migrate",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-port-fetch --only search-port-fetch.3",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "search-port-fetch.4",
+      "phase": "migrate",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-port-fetch --only search-port-fetch.4",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "search-port-fetch.5",
+      "phase": "migrate",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-port-fetch --only search-port-fetch.5",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "search-port-fetch.6",
+      "phase": "migrate",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-port-fetch --only search-port-fetch.6",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "search-port-fetch.7",
+      "phase": "migrate",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-port-fetch --only search-port-fetch.7",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "search-port-fetch.8",
+      "phase": "migrate",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-port-fetch --only search-port-fetch.8",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "search-port-engine.1",
+      "phase": "migrate",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-port-engine --only search-port-engine.1",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "search-port-engine.2",
+      "phase": "migrate",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-port-engine --only search-port-engine.2",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "search-port-engine.3",
+      "phase": "migrate",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-port-engine --only search-port-engine.3",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "search-port-engine.4",
+      "phase": "migrate",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-port-engine --only search-port-engine.4",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "search-port-engine.5",
+      "phase": "migrate",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-port-engine --only search-port-engine.5",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "search-port-engine.6",
+      "phase": "migrate",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-port-engine --only search-port-engine.6",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "search-port-engine.7",
+      "phase": "migrate",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-port-engine --only search-port-engine.7",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "search-port-engine.8",
+      "phase": "migrate",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-port-engine --only search-port-engine.8",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "search-port-guards.1",
+      "phase": "migrate",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-port-guards --only search-port-guards.1",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "search-port-guards.2",
+      "phase": "migrate",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-port-guards --only search-port-guards.2",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "search-port-guards.3",
+      "phase": "migrate",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-port-guards --only search-port-guards.3",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "search-port-guards.4",
+      "phase": "migrate",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-port-guards --only search-port-guards.4",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "search-port-guards.5",
+      "phase": "migrate",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-port-guards --only search-port-guards.5",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "search-port-guards.6",
+      "phase": "migrate",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-port-guards --only search-port-guards.6",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "search-port-guards.7",
+      "phase": "migrate",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-port-guards --only search-port-guards.7",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "search-port-guards.8",
+      "phase": "migrate",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-port-guards --only search-port-guards.8",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "search-verbs.1",
+      "phase": "surface",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-verbs --only search-verbs.1",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "search-verbs.2",
+      "phase": "surface",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-verbs --only search-verbs.2",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "search-verbs.3",
+      "phase": "surface",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-verbs --only search-verbs.3",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "search-verbs.4",
+      "phase": "surface",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-verbs --only search-verbs.4",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "search-verbs.5",
+      "phase": "surface",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-verbs --only search-verbs.5",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "search-verbs.6",
+      "phase": "surface",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-verbs --only search-verbs.6",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "search-verbs.7",
+      "phase": "surface",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-verbs --only search-verbs.7",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "search-verbs.8",
+      "phase": "surface",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-verbs --only search-verbs.8",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "search-verbs.9",
+      "phase": "surface",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-verbs --only search-verbs.9",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "search-tracing.1",
+      "phase": "surface",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-tracing --only search-tracing.1",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "search-tracing.2",
+      "phase": "surface",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-tracing --only search-tracing.2",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "search-tracing.3",
+      "phase": "surface",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-tracing --only search-tracing.3",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "search-tracing.4",
+      "phase": "surface",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-tracing --only search-tracing.4",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "search-tracing.5",
+      "phase": "surface",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-tracing --only search-tracing.5",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "search-hosts.1",
+      "phase": "surface",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-hosts --only search-hosts.1",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "search-hosts.2",
+      "phase": "surface",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-hosts --only search-hosts.2",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "search-hosts.3",
+      "phase": "surface",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-hosts --only search-hosts.3",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "search-hosts.4",
+      "phase": "surface",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-hosts --only search-hosts.4",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "search-hosts.5",
+      "phase": "surface",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-hosts --only search-hosts.5",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "search-hosts.6",
+      "phase": "surface",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-hosts --only search-hosts.6",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "search-hosts.7",
+      "phase": "surface",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-hosts --only search-hosts.7",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "search-hosts.8",
+      "phase": "surface",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-hosts --only search-hosts.8",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "search-hosts.9",
+      "phase": "surface",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-hosts --only search-hosts.9",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "search-hosts.10",
+      "phase": "surface",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-hosts --only search-hosts.10",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "search-hosts.11",
+      "phase": "surface",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-hosts --only search-hosts.11",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "search-hosts.12",
+      "phase": "surface",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-hosts --only search-hosts.12",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "search-hosts.13",
+      "phase": "surface",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-hosts --only search-hosts.13",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "search-hosts.14",
+      "phase": "surface",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-hosts --only search-hosts.14",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "search-hosts.15",
+      "phase": "surface",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-hosts --only search-hosts.15",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "search-hosts.16",
+      "phase": "surface",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-hosts --only search-hosts.16",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "search-hosts.17",
+      "phase": "surface",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-hosts --only search-hosts.17",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "search-usecases.1",
       "phase": "verify",
       "tier": null,
       "kind": "command",
-      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py sp-switch --only sp-switch.5",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-usecases --only search-usecases.1",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "search-usecases.2",
+      "phase": "verify",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-usecases --only search-usecases.2",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "search-usecases.3",
+      "phase": "verify",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-usecases --only search-usecases.3",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "search-usecases.4",
+      "phase": "verify",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-usecases --only search-usecases.4",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "search-usecases.5",
+      "phase": "verify",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-usecases --only search-usecases.5",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "search-usecases.6",
+      "phase": "verify",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-usecases --only search-usecases.6",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "search-usecases.7",
+      "phase": "verify",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-usecases --only search-usecases.7",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "search-usecases.8",
+      "phase": "verify",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-usecases --only search-usecases.8",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "search-examples.1",
+      "phase": "verify",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-examples --only search-examples.1",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "search-examples.2",
+      "phase": "verify",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-examples --only search-examples.2",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "search-examples.3",
+      "phase": "verify",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-examples --only search-examples.3",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "search-examples.4",
+      "phase": "verify",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-examples --only search-examples.4",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "search-examples.5",
+      "phase": "verify",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-examples --only search-examples.5",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "tracing-log-validation.1",
+      "phase": "verify",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py tracing-log-validation --only tracing-log-validation.1",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "tracing-log-validation.2",
+      "phase": "verify",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py tracing-log-validation --only tracing-log-validation.2",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "tracing-log-validation.3",
+      "phase": "verify",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py tracing-log-validation --only tracing-log-validation.3",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "tracing-log-validation.4",
+      "phase": "verify",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py tracing-log-validation --only tracing-log-validation.4",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "tracing-log-validation.5",
+      "phase": "verify",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py tracing-log-validation --only tracing-log-validation.5",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "tracing-log-validation.6",
+      "phase": "verify",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py tracing-log-validation --only tracing-log-validation.6",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "tracing-log-validation.7",
+      "phase": "verify",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py tracing-log-validation --only tracing-log-validation.7",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "tracing-log-validation.8",
+      "phase": "verify",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py tracing-log-validation --only tracing-log-validation.8",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "tracing-log-validation.9",
+      "phase": "verify",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py tracing-log-validation --only tracing-log-validation.9",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "search-cutover.1",
+      "phase": "verify",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-cutover --only search-cutover.1",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "search-cutover.2",
+      "phase": "verify",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-cutover --only search-cutover.2",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "search-cutover.3",
+      "phase": "verify",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-cutover --only search-cutover.3",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "search-cutover.4",
+      "phase": "verify",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-cutover --only search-cutover.4",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "search-cutover.5",
+      "phase": "verify",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-cutover --only search-cutover.5",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "search-cutover.6",
+      "phase": "verify",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-cutover --only search-cutover.6",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "search-cutover.7",
+      "phase": "verify",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-cutover --only search-cutover.7",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "search-cutover.8",
+      "phase": "verify",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-cutover --only search-cutover.8",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "search-cutover.9",
+      "phase": "verify",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-cutover --only search-cutover.9",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "search-cutover.10",
+      "phase": "verify",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-cutover --only search-cutover.10",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "consumer-relink.1",
+      "phase": "release",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py consumer-relink --only consumer-relink.1",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "consumer-relink.2",
+      "phase": "release",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py consumer-relink --only consumer-relink.2",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "consumer-relink.3",
+      "phase": "release",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py consumer-relink --only consumer-relink.3",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "consumer-relink.4",
+      "phase": "release",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py consumer-relink --only consumer-relink.4",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "consumer-relink.5",
+      "phase": "release",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py consumer-relink --only consumer-relink.5",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "consumer-relink.6",
+      "phase": "release",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py consumer-relink --only consumer-relink.6",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "consumer-relink.7",
+      "phase": "release",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py consumer-relink --only consumer-relink.7",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "consumer-relink.8",
+      "phase": "release",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py consumer-relink --only consumer-relink.8",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "consumer-relink.9",
+      "phase": "release",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py consumer-relink --only consumer-relink.9",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "split-plan-repair.1",
+      "phase": "scaffold",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py split-plan-repair --only split-plan-repair.1",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "split-plan-repair.2",
+      "phase": "scaffold",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py split-plan-repair --only split-plan-repair.2",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "split-plan-repair.3",
+      "phase": "scaffold",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py split-plan-repair --only split-plan-repair.3",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "split-plan-repair.4",
+      "phase": "scaffold",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py split-plan-repair --only split-plan-repair.4",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "split-plan-repair.5",
+      "phase": "scaffold",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py split-plan-repair --only split-plan-repair.5",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "split-plan-repair.6",
+      "phase": "scaffold",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py split-plan-repair --only split-plan-repair.6",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "split-plan-repair.7",
+      "phase": "scaffold",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py split-plan-repair --only split-plan-repair.7",
+      "expect": "exit0",
+      "cwd": "repo-root"
+    },
+    {
+      "id": "audit-final.ref-stealth-search-spec",
+      "phase": "release",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py audit-final --only audit-final.ref-stealth-search-spec",
       "expect": "exit0",
       "cwd": "repo-root"
     }

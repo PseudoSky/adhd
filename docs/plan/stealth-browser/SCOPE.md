@@ -1,8 +1,14 @@
-# SCOPE - Migrate the agent-search chrome runner to @adhd/stealth-browser
+# SCOPE - Migrate the agent-search chrome runner to @adhd/stealth-core-browser and agent-search to @adhd/stealth-search
 
 Backlog plan item: `8468f7b1-8adc-4237-9986-21ea1e27c537` (adhd, in_progress). Plan home: `docs/plan/stealth-browser/`. Worktree: `/Users/nix/dev/node/adhd/.worktrees/stealth-browser` (branch `stealth-browser`, cut from main `c6011647`).
 
 Verbatim request: "Inside agent search there is a plan to migrate the chrome runner to adhd. Develop a fully dag compliant state machine plan to migrate the correct package. It should be called @adhd/stealth-browser and live in entrypoints. After the plan is complete have it reviewed by product for productization tasks. then begin dispatching work to a stealth browser worktree. all agents work from the same branch same dir, non overlapping buckets. review once migration is complete blind. one implementer resolve every review finding. add apigen tracing plugin and confirm correct namespacing. must be built with the workspace generator and match the entrypoint structure. after code complete have doc steward do a marketing run. then have content marketer write a more exciting readme"
+
+## Amendment: split into core and search entrypoint (three packages)
+
+Verbatim request: "port search to the entrypoint transfering all the apigen / tracing requirements over to the cli and mcps for search (which is built on top of the stealth core. Rename the entrypoint stealth search and the cdp to stealth core browser. Similar target slightly more work in the entrypoint, actual purpose. no need to do a full phase on confirming the logs just have an agent fully validate that they are being written - tests are unneeded".
+
+Where the sections below say `@adhd/stealth-browser` or `entrypoint/stealth-browser` for the migrated runner, read `@adhd/stealth-core-browser` at `packages/stealth/stealth-core-browser` (tier core, domain `stealth`). The CLI, the MCP stdio host, the search verbs and the apigen tracing (namespace `adhd`, one `initTelemetry` per bin) live in `@adhd/stealth-search` at `entrypoint/stealth-search`, built on top of the core. The plan builds exactly three packages: `@adhd/resilience-core-tripwire`, `@adhd/stealth-core-browser` and `@adhd/stealth-search`, released in that order, followed by `consumer-relink`. Tracing is confirmed by one validating agent that reads the log files written by the built bins (`tracing-log-validation`), not by a test phase. Detail: `SPEC-stealth-search.md`; direction recorded in `APPROVAL-split.md`.
 
 ## 1. Outcomes (falsifiable)
 
@@ -32,7 +38,7 @@ Verbatim request: "Inside agent search there is a plan to migrate the chrome run
 ### Not in scope
 - FEAT-AGENT-TRACING (`5b98d3b2`, an agent-side plugin in agent-mcp): different feature; only the apigen-side precedent `@adhd/apigen-plugin-tracing` is used here.
 - Environment/path survey gaps G1/G2 for `scratch-agent-search` (`docs/environment/adoption-survey/scratch/scratch-agent-search.md`).
-- Any third new package. The human approved exactly TWO: `entrypoint/stealth-browser` and `packages/resilience/resilience-core-tripwire` (`APPROVAL-tripwire.md`).
+- Any fourth new package. The user approved exactly THREE: `packages/stealth/stealth-core-browser`, `entrypoint/stealth-search` (`APPROVAL-split.md`) and `packages/resilience/resilience-core-tripwire` (`APPROVAL-tripwire.md`).
 - Publishing: the dispatcher decides in `merge-readiness` (PUBLISHING.md).
 - A separate package for the lifecycle, and changes to @adhd/sox-service-proxy itself (its 0.6.0 is specified and released in the sox-ecosystem repository; this plan only consumes it).
 - A live-Chrome e2e lane and any `./legacy` subpath. Items deferred by the user's decisions are listed in `DEFERRED.md`; the productization decisions in `PRODUCTIZATION-CATALOG.md`.

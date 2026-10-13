@@ -33,5 +33,12 @@
     "discovered_via": "manual",
     "shared_ref": "[ref:tripwire-core]",
     "audit_check": "[audit-final.13]"
+  },
+  "stealth-search-spec": {
+    "anchor": "docs/plan/stealth-browser/SPEC-stealth-search.md:1",
+    "rule": "Architect specification of the split: package names and generators, the stealth-search entrypoint (api, hosts, telemetry, errors, tripwire), the search failsafe inventory seed, the log-validation task, the DAG changes and the release order",
+    "discovered_via": "manual",
+    "shared_ref": "[ref:stealth-search-spec]",
+    "audit_check": "[audit-final.ref-stealth-search-spec]"
   }
 }

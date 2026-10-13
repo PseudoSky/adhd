@@ -31,7 +31,7 @@ Unit specs exist for the CDP domain wrappers, Chrome profile storage readers and
 Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/guard.py` (`python3 docs/plan/stealth-browser/scripts/guard.py tests-unit-data --only tests-unit-data.N`). None may be deferred. Tests written by this plan cite ticket `8468f7b1` and these ids ([inv:tests-cite]).
 
 - [tests-unit-data.1] A spec file exists for every ported source module (index barrels and pure type files excluded).
-- [tests-unit-data.2] Every spec cites ticket 8468f7b1 and at least one valid [slug.N] acceptance-criterion id.
+- [tests-unit-data.2] Every spec cites ticket 8468f7b1 and at least one valid slug.N acceptance-criterion id.
 - [tests-unit-data.3] Unit purity: specs touching process-spawning or network modules mock child_process/WebSocket/fetch (vi.mock or vi.stubGlobal); no spec reads the real Chrome profile.
 - [tests-unit-data.4] Assertions have teeth: each spec has at least as many expect() calls as test cases and at least one negative/error-path case.
 - [tests-unit-data.5] `nx run stealth-browser:test -- <own specs>` exits 0 and only owned paths changed by [psm:tests-unit-data] commits.
