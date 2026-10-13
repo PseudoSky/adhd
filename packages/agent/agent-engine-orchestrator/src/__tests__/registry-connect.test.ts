@@ -1,9 +1,11 @@
 /**
  * R10 S3 (P10): concurrent MCP connect, startup timings, annotation plumbing.
  *
- * The stdio client is replaced by a latch-controlled fake (no subprocess, ADR-0009): the registry,
- * its routing table and its failure bookkeeping are the REAL ones. Determinism by latches, never
- * sleeps.
+ * The remote (http) client is replaced by a latch-controlled fake (no subprocess, no socket,
+ * ADR-0009): the registry, its routing table and its failure bookkeeping are the REAL ones, and the
+ * connect scheduling is transport-independent. Determinism by latches, never sleeps. The real stdio
+ * client's `tools/list` mapping is covered in `registry-connect.e2e.test.ts` (unit-lane files may not
+ * reference the stdio transport classes, check-agent-lane-spawn.mjs).
  *
  *  - R10 S3 AC1: servers connect concurrently (the second connect starts before the first
  *    resolves), bounded by the stated default and ceiling.
@@ -36,9 +38,9 @@ const h = vi.hoisted(() => ({
     resolved: [] as string[],
 }));
 
-vi.mock("../clients/stdio-client.js", async (importOriginal) => {
-    const original = await importOriginal<typeof import("../clients/stdio-client.js")>();
-    class FakeStdioMcpClient {
+vi.mock("../clients/http-client.js", async (importOriginal) => {
+    const original = await importOriginal<typeof import("../clients/http-client.js")>();
+    class FakeHttpMcpClient {
         constructor(private readonly name: string) {}
         async connect(): Promise<void> {
             const server = h.servers.get(this.name) as IFakeServer;
@@ -55,7 +57,7 @@ vi.mock("../clients/stdio-client.js", async (importOriginal) => {
         }
         async close(): Promise<void> {}
     }
-    return { ...original, StdioMcpClient: FakeStdioMcpClient };
+    return { ...original, HttpMcpClient: FakeHttpMcpClient };
 });
 
 import {
@@ -64,7 +66,6 @@ import {
     McpClientRegistry,
     resolveMcpConnectConcurrency,
 } from "../clients/registry.js";
-import { HttpMcpClient } from "../clients/http-client.js";
 import { InProcessMcpClient } from "../clients/in-process.js";
 import { annotationsOf, pickToolAnnotations } from "../clients/types.js";
 
@@ -108,7 +109,7 @@ function recordingLogger(): { logger: EngineLogger; warns: IWarn[] } {
 }
 
 function makeRegistry(names: string[], logger?: EngineLogger, connectConcurrency?: number): McpClientRegistry {
-    const servers = Object.fromEntries(names.map((n) => [n, { transport: "stdio", command: "noop" }]));
+    const servers = Object.fromEntries(names.map((n) => [n, { transport: "http", url: `http://127.0.0.1:1/${n}` }]));
     return new McpClientRegistry(
         servers as never,
         undefined,
@@ -262,29 +263,9 @@ describe("R10 S3 AC5: annotation plumbing", () => {
         expect("annotations" in annotationsOf({ annotations: { openWorldHint: true } })).toBe(false);
     });
 
-    it("R10 S3 AC5: the stdio client maps tools/list annotations onto ToolDefinition.annotations and leaves unannotated tools unchanged", async () => {
-        // `StdioMcpClient` is the fake in this file; exercise the REAL class through its module.
-        const { StdioMcpClient } = await vi.importActual<typeof import("../clients/stdio-client.js")>("../clients/stdio-client.js");
-        const client = new StdioMcpClient("fs", { transport: "stdio", command: "noop" } as never);
-        (client as unknown as { client: unknown }).client = {
-            listTools: async () => ({
-                tools: [
-                    { name: "read", description: "r", inputSchema: schema, annotations: { readOnlyHint: true, openWorldHint: false } },
-                    { name: "write", description: "w", inputSchema: schema, annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false } },
-                    { name: "bare", description: "b", inputSchema: schema },
-                ],
-            }),
-        };
-        const listed = await client.listTools();
-        expect(listed).toEqual([
-            { name: "read", description: "r", inputSchema: schema, annotations: { readOnlyHint: true } },
-            { name: "write", description: "w", inputSchema: schema, annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false } },
-            { name: "bare", description: "b", inputSchema: schema },
-        ]);
-        expect("annotations" in listed[2]).toBe(false);
-    });
-
     it("R10 S3 AC5: the http client maps annotations the same way", async () => {
+        // `HttpMcpClient` is the fake in this file; exercise the REAL class through its module.
+        const { HttpMcpClient } = await vi.importActual<typeof import("../clients/http-client.js")>("../clients/http-client.js");
         const client = new HttpMcpClient("web", { transport: "http", url: "http://127.0.0.1:1/mcp" } as never);
         (client as unknown as { client: unknown }).client = {
             listTools: async () => ({
