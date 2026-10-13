@@ -37,9 +37,10 @@ export function expectedExtractorVersion(): string {
  * that holds `api.ir.json` or `cli.js` wins: the bundle's own directory, a
  * `dist/` beside it, a `dist/` one level up, and the package's `dist/` from
  * the source layout. With none present the bundle's own directory is returned.
+ * `here` is the directory the lookup starts from (default: this module's own
+ * directory); a caller passes another one to resolve a different layout.
  */
-export function policyDistDir(): string {
-  const here = dirname(fileURLToPath(import.meta.url));
+export function policyDistDir(here: string = dirname(fileURLToPath(import.meta.url))): string {
   const candidates = [here, join(here, 'dist'), join(here, '..', 'dist'), join(here, '..', '..', 'dist')];
   for (const candidate of candidates) {
     if (existsSync(join(candidate, POLICY_IR_ARTIFACT_FILENAME)) || existsSync(join(candidate, 'cli.js'))) return candidate;
@@ -152,11 +153,13 @@ export function readBakedIr(distDir: string): Operation[] | undefined {
  * (the only path that loads the extractor). A shipped artifact that cannot be
  * used (stale or mismatched) writes ONE stderr line through `onWarn` before the
  * fallback, so the slower start-up is explained rather than silent.
+ * `distDir` is where the artifact is looked for (default: {@link policyDistDir}).
  */
 export async function extractPolicyOperations(
-  onWarn: (line: string) => void = (line) => void process.stderr.write(`${line}\n`)
+  onWarn: (line: string) => void = (line) => void process.stderr.write(`${line}\n`),
+  distDir: string = policyDistDir()
 ): Promise<Operation[]> {
-  const inspected = inspectBakedIr(policyDistDir());
+  const inspected = inspectBakedIr(distDir);
   if ('operations' in inspected) return inspected.operations;
   if (inspected.reason !== 'missing') {
     onWarn(`@adhd/policy: ignoring the baked operation surface (${inspected.reason}); extracting live`);
