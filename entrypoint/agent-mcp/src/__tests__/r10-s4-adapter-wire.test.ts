@@ -207,6 +207,35 @@ describe.each(ADAPTERS)("R10 S4 adapter wire: %s", (adapter, factory) => {
   });
 });
 
+const SHELL_ORDERING_SENTENCE =
+  "Shell calls in one turn run one after another; to overlap independent long commands use one command that does it (e.g. `make -j2 test lint`) or a tasks_batch.";
+
+/** The description the model reads for `tool` on the FIRST request of a run, as that adapter puts it on the wire. */
+function wireToolDescription(adapter: Adapter, bodies: Body[], tool: string): string | undefined {
+  const tools = bodies[0].tools ?? [];
+  if (adapter === "anthropic") return tools.find((t) => t["name"] === tool)?.["description"] as string | undefined;
+  return (tools.find((t) => (t["function"] as { name: string }).name === tool)?.["function"] as { description?: string } | undefined)?.description;
+}
+
+describe.each(ADAPTERS)("R10 W1 adapter wire: %s", (adapter, factory) => {
+  it(`R10 W1 AC3 adapter: ${adapter}: the shell ordering sentence is in the shell tool's description on the wire, and only there`, async () => {
+    const shellBodies: Body[] = [];
+    const shellArgs = { command: ["ls"] };
+    await runCall({ server: "shell", tool: "shell_execute", args: shellArgs, returns: [{ type: "text", text: "ok" }], makeProvider: factory(shellBodies, { name: "shell__shell_execute", args: shellArgs }) });
+    const shell = wireToolDescription(adapter, shellBodies, "shell__shell_execute");
+    expect(shell, "shell tool is offered").toBeDefined();
+    expect(shell).toContain(SHELL_ORDERING_SENTENCE);
+
+    // control: the sentence is shell guidance, not a blanket note on every tool
+    const fsBodies: Body[] = [];
+    const fsArgs = { path: "/w/a.txt", content: "x" };
+    await runCall({ server: "fs", tool: "write_file", args: fsArgs, returns: WROTE, makeProvider: factory(fsBodies, { name: "fs__write_file", args: fsArgs }) });
+    const fsDesc = wireToolDescription(adapter, fsBodies, "fs__write_file");
+    expect(fsDesc, "fs tool is offered").toBeDefined();
+    expect(fsDesc).not.toContain(SHELL_ORDERING_SENTENCE);
+  });
+});
+
 describe("R10 S4 AC4 adapter: the delegation description is the same string on both wires", () => {
   it("R10 S4 AC4 adapter: task / tasks_batch / result descriptions are identical in OpenAI tools[].function.description and Anthropic tools[].description", async () => {
     const o = openDb();

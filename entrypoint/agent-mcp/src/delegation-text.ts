@@ -2,8 +2,9 @@
  * delegation-text.ts — the ONE source of the sync-versus-background decision rule that every delegation
  * description leads with (R10 S4, P6a).
  *
- * The rule is stated first, in the same words, in all five tool descriptions that carry it (`task` and
- * `tasks_batch` in the in-process descriptors, `task`, `tasks_batch` and `result` in the host tool list)
+ * The rule is stated first, in the same words, in all six tool descriptions that carry it (`task`,
+ * `tasks_batch` and `result` in the in-process descriptors a delegated model sees, and `task`, `tasks_batch` and
+ * `result` in the host tool list)
  * and in the usage guide, so the sites cannot drift apart. It is accurate for today's behaviour: a
  * background task's result is NOT delivered to the caller automatically; the caller has to fetch it with
  * `result` before its answer depends on it.

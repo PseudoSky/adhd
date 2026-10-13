@@ -521,7 +521,7 @@ export function createServer(deps: ServerDeps): Server {
     {
       name: 'result',
       description:
-        'Get the result of a task. Pass wait_ms (max 55000) to block until the task is terminal or the wait elapses, then return its current state; omit it for an immediate read.',
+        `${DELEGATION_DECISION_RULE} Get the result of a task. Pass wait_ms (max 55000) to block until the task is terminal or the wait elapses, then return its current state; omit it for an immediate read.`,
       inputSchema: toMcpInputSchema(resultInputSchema),
     },
     {

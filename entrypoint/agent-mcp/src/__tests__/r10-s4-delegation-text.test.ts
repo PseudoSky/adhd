@@ -88,11 +88,12 @@ describe('R10 S4 AC4: the delegation descriptions share one decision rule and le
 
   it('R10 S4 AC4: both in-process descriptors, the three host descriptions and the guide use the one constant (no literal copy)', () => {
     const src = read('../server.ts');
-    // 2 in-process + 3 host + 1 guide interpolation = 6 uses, plus the import.
-    expect(src.match(/DELEGATION_DECISION_RULE/g)?.length).toBe(7);
+    // 3 in-process (task, tasks_batch, result: R10 W2) + 3 host + 1 guide interpolation = 7 uses, plus the import.
+    expect(src.match(/DELEGATION_DECISION_RULE/g)?.length).toBe(8);
     const inProc = /name: 'task',\s*description:\s*`\$\{DELEGATION_DECISION_RULE\}/.test(src);
     const inProcBatch = /name: 'tasks_batch',\s*description:\s*`\$\{DELEGATION_DECISION_RULE\}/.test(src);
-    expect(inProc && inProcBatch).toBe(true);
+    const inProcResult = /name: 'result',\s*description:\s*`\$\{DELEGATION_DECISION_RULE\}/.test(src);
+    expect(inProc && inProcBatch && inProcResult).toBe(true);
     // The rule's own sentences exist in exactly one file.
     expect(src).not.toContain('MUST call result');
     expect(read('../delegation-text.ts')).toContain('MUST call result');

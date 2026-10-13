@@ -166,14 +166,20 @@ for (const kind of KINDS) {
       });
     }
 
-    it(`R10 S5b AC2 [${kind}]: task:startup carries queue_wait_ms / session_ms exactly when computable: the engine has no truthful source today, so both are absent (never a guessed 0)`, async () => {
+    it(`R10 S5b AC2 / R10 M2 [${kind}]: task:startup carries queue_wait_ms / session_ms exactly when the dispatching tool measured them: the dispatched worker has both (integers >= 0), the top-level parent (no dispatching parent) has neither, never a guessed 0`, async () => {
       const { run, recs } = await traced(single());
       const startups = named(recs, 'agent.task.startup.finish');
       expect(startups.map((s) => attr(s, 'agent.task_id')).sort()).toEqual([run.parent.taskId, workerIdOf(run)].sort());
+      const wholeMs = (v: unknown): boolean => typeof v === 'number' && Number.isInteger(v) && v >= 0;
       for (const s of startups) {
-        expect(['agent.startup.queue_wait_ms', 'agent.startup.session_ms'].filter((k) => k in s)).toEqual([]);
         expect(typeof attr(s, 'agent.startup.tools_ready_ms')).toBe('number');
         expect(typeof attr(s, 'agent.startup.tools')).toBe('number');
+        if (attr(s, 'agent.task_id') === workerIdOf(run)) {
+          expect(wholeMs(attr(s, 'agent.startup.queue_wait_ms')), 'worker queue_wait_ms').toBe(true);
+          expect(wholeMs(attr(s, 'agent.startup.session_ms')), 'worker session_ms').toBe(true);
+        } else {
+          expect(['agent.startup.queue_wait_ms', 'agent.startup.session_ms'].filter((k) => k in s)).toEqual([]);
+        }
       }
     });
 

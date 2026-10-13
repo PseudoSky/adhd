@@ -253,11 +253,9 @@ describe.each(ADAPTERS)("R10 S8 consumer proof [%s]", (a) => {
     expect(runs[a].deleg.status).toBe("completed");
   });
 
-  // KNOWN GAP (found by S8, backlog 483606ae): the in-process `result` descriptor - the one a
-  // DELEGATED model sees as `agent-mcp__result` - does not lead with the shared rule, although the host-list
-  // `result` does (R10 S4 AC4 covers only the host list). `it.fails` documents the gap without hiding it and turns
-  // RED the moment the descriptor gains the rule, so whoever fixes it must flip this to a plain `it`.
-  it.fails(`R10 S8 AC5 [${a}] KNOWN GAP: the model-visible agent-mcp__result description leads with the shared rule`, () => {
+  // Closed gap (found by S8, backlog 483606ae): the in-process `result` descriptor - the one a DELEGATED model sees as
+  // `agent-mcp__result` - now leads with the shared rule, like the host-list `result` does.
+  it(`R10 S8 AC5 [${a}]: the model-visible agent-mcp__result description leads with the shared rule`, () => {
     const d = req(a, scenario.deleg(a), 0).tools.find((t) => t.name === "agent-mcp__result")?.description;
     expect(d?.startsWith(DELEGATION_DECISION_RULE)).toBe(true);
   });

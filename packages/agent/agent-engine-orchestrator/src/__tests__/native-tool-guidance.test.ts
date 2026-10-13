@@ -100,6 +100,16 @@ describe('R10 S4 P3/P4 guidance text', () => {
     expect(shell).not.toMatch(/make test|npm test|npm run/);
   });
 
+  it('R10 W1 AC1: the shell guidance states, verbatim, that same-turn shell calls run one after another and how to overlap them', () => {
+    const sentence =
+      'Shell calls in one turn run one after another; to overlap independent long commands use one command that does it (e.g. `make -j2 test lint`) or a tasks_batch.';
+    expect(shellGuidance()).toContain(sentence);
+    expect(NATIVE_TOOL_GUIDANCE['shell__shell_execute']).toContain(sentence);
+    // exactly once, whatever the allowlist (the sentence is not part of the generated command list)
+    expect(shellGuidance(['cat', 'ls']).split(sentence).length - 1).toBe(1);
+    expect(shellGuidance().split(sentence).length - 1).toBe(1);
+  });
+
   it('R10 S4 AC3: a runner absent from the allowlist is never named (generated, not hand-typed)', () => {
     expect(shellGuidance(['cat', 'ls', 'curl'])).not.toMatch(/allowed runner/);
     expect(shellGuidance(['cat', 'npm'])).toContain('allowed runner (npm)');

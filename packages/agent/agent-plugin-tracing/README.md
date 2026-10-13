@@ -87,13 +87,13 @@ analysis: group by `agent.root_task_id` / `agent.task_id` / `agent.parent_task_i
 | | `agent.tool.result_bytes` | model-visible bytes of the result |
 | | `agent.tool.note_appended` | the host appended a guidance note to the result |
 | `agent.model_call.finish` | `agent.model_call.ttfb_ms` | provider request start to first streamed byte (only where the provider measures it) |
-| | `agent.model_call.thinking_config` | Anthropic only: `none` (no `thinking` field sent) / `adaptive` / `disabled`; absent for OpenAI-compatible and claudecli calls |
+| | `agent.model_call.thinking_config` | Anthropic only: `none` (no `thinking` field sent; the model may still think, so read `thinking_blocks`) / `adaptive` / `disabled`; absent for OpenAI-compatible and claudecli calls |
 | | `agent.model_call.thinking_blocks` | Anthropic only: `thinking` + `redacted_thinking` blocks in the response (a count, never their text; `0` is a real zero there); absent for OpenAI-compatible and claudecli calls |
 | | `agent.model_call.tool_result_bytes_in` | Anthropic and OpenAI-compatible: UTF-8 bytes of the model-visible tool-result text in this request's history (the adapter's own wire conversion); absent for claudecli |
 | | `agent.model_call.turn_index` | zero-based model call within its task (equals `agent.tool.turn_index` of the tool calls that response requested) |
 | `agent.task.startup.finish` | `agent.startup.mcp_connect_ms.<server>` | one attribute per MCP server key: connect + tool listing ms |
 | | `agent.startup.tools_ready_ms` | task start until the full tool list was ready |
-| | `agent.startup.queue_wait_ms`, `agent.startup.session_ms` | enqueue to run start; session resolution. Present only when the emitter measured them; the engine does not yet (it receives neither timestamp), so today they are absent, never a guessed `0` |
+| | `agent.startup.queue_wait_ms`, `agent.startup.session_ms` | enqueue to run start; session resolution. Measured by the dispatching tool (`task`/`tasks_batch` in the agent-engine-orchestrator), so present on a child started by a delegating parent and absent on a call with no parent, never a guessed `0` |
 | | `agent.startup.tools` | tools advertised to the model |
 | `agent.dispatch.finish` | `agent.dispatch.mode` | `sync` (parent waited for the children) / `background` |
 | | `agent.dispatch.kind` | `task` / `tasks_batch` / `agent_task`; `result` = a `result` tool call that waited on an existing child (records `wait_ms`, starts no child, not counted as a dispatch) |

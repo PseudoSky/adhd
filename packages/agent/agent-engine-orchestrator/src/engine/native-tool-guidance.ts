@@ -7,6 +7,15 @@ export const SHELL_UNAVAILABLE_COMMANDS: readonly string[] = Object.freeze([
 ]);
 
 /**
+ * R10 W1 — tells the model the same-turn rule it cannot otherwise see: shell calls are ordered barriers
+ * (`classifyTool`), so two independent long commands cost the SUM of their durations unless one command overlaps
+ * them. The exact text is pinned by `native-tool-guidance.test.ts` and by the per-adapter wire proof in agent-mcp.
+ */
+const SHELL_ORDERING_SENTENCE =
+  'Shell calls in one turn run one after another; to overlap independent long commands use one command that does it ' +
+  '(e.g. `make -j2 test lint`) or a tasks_batch.';
+
+/**
  * R7-guidance AC1/AC2 — the shell tool note. The command list is GENERATED from `allow` (default:
  * `DEFAULT_SHELL_ALLOW_COMMANDS`, the one source the shell server is configured from) so the text cannot drift
  * from what the server accepts. Recipes are verified against the real mcp-shell-server
@@ -22,6 +31,8 @@ export function shellGuidance(allow: readonly string[] = DEFAULT_SHELL_ALLOW_COM
     (runners.length > 0
       ? `, and run the project's own scripts through an allowed runner (${runners.join(', ')}).`
       : '.') +
+    ' ' +
+    SHELL_ORDERING_SENTENCE +
     ' ' +
     `Available commands: ${allow.join(' ')}. ` +
     'To read a web page use `curl -fsSL <url>`: it returns RAW HTML, not text. Page title, as argv: ' +
