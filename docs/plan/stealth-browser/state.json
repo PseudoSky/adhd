@@ -333,10 +333,10 @@
       "end_ref": "c234fcd20af2eb5c4edafbb9687e2ff971bf34f9"
     },
     "tripwire-docs": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-10-13T07:49:17.690Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "21ce6489d14ca7ab219c406cc0d8dcd86315748e",
       "end_ref": null
     },
     "tripwire-pack": {
