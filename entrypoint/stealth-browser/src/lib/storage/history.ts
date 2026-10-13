@@ -1,6 +1,6 @@
 import { openDb, toUnixTimeSql } from './helpers.js'
 import { join } from 'node:path'
-import { transitionName, chromeProfileDir, notYet, hydrateVisit } from '../helpers.js'
+import { transitionName, chromeProfileDir, hydrateVisit } from '../helpers.js'
 import type { VisitRow } from '../helpers.js'
 import type {
   ChromeVisit,
@@ -89,8 +89,8 @@ export class HistoryClient {
         SELECT c.visit_id, u.url, c.depth
         FROM chain c JOIN urls u ON c.url_id = u.id
         ORDER BY c.depth ASC
-      `).all(visitId) as Array<{ visit_id: number; url: string; depth: number }>
-      return rows.map((r) => ({ visitId: r.visit_id, url: r.url, depth: r.depth }))
+      `).all(visitId) as Array<{ visit_id: number | bigint; url: string; depth: number | bigint }>
+      return rows.map((r) => ({ visitId: Number(r.visit_id), url: r.url, depth: Number(r.depth) }))
     } finally {
       db.close()
     }
@@ -107,13 +107,13 @@ export class HistoryClient {
       const r = stmt.get(urlOrId) as Record<string, unknown> | undefined
       if (!r) return null
       return {
-        id: Number(r.id),
-        url: String(r.url ?? ''),
-        title: String(r.title ?? ''),
-        visitCount: Number(r.visit_count),
-        typedCount: Number(r.typed_count),
-        lastVisitTime: new Date(((Number(r.last_visit_time) / 1000) - 11644473600000)),
-        hidden: Boolean(r.hidden),
+        id: Number(r['id']),
+        url: String(r['url'] ?? ''),
+        title: String(r['title'] ?? ''),
+        visitCount: Number(r['visit_count']),
+        typedCount: Number(r['typed_count']),
+        lastVisitTime: new Date(((Number(r['last_visit_time']) / 1000) - 11644473600000)),
+        hidden: Boolean(r['hidden']),
       }
     } finally {
       db.close()
@@ -130,13 +130,13 @@ export class HistoryClient {
         LIMIT ?
       `).all(`%${query}%`, `%${query}%`, limit) as Record<string, unknown>[]
       return rows.map((r) => ({
-        id: Number(r.id),
-        url: String(r.url ?? ''),
-        title: String(r.title ?? ''),
-        visitCount: Number(r.visit_count),
-        typedCount: Number(r.typed_count),
-        lastVisitTime: new Date(((Number(r.last_visit_time) / 1000) - 11644473600000)),
-        hidden: Boolean(r.hidden),
+        id: Number(r['id']),
+        url: String(r['url'] ?? ''),
+        title: String(r['title'] ?? ''),
+        visitCount: Number(r['visit_count']),
+        typedCount: Number(r['typed_count']),
+        lastVisitTime: new Date(((Number(r['last_visit_time']) / 1000) - 11644473600000)),
+        hidden: Boolean(r['hidden']),
       }))
     } finally {
       db.close()

@@ -1,6 +1,6 @@
 /**
  * Unit spec for src/lib/storage/cookies.ts (CookieClient).
- * Ticket 8468f7b1 AC2 · criteria [tests-unit-data.1] [tests-unit-data.2] [tests-unit-data.3] [tests-unit-data.4].
+ * Ticket 8468f7b1 AC2 · criteria [tests-unit-data.1] [tests-unit-data.2] [tests-unit-data.3] [tests-unit-data.4] [port-fixes.3].
  * Reads a SQLite fixture created in the OS temp dir; a spy on console proves no real profile path is used.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -37,10 +37,11 @@ describe('8468f7b1 AC2 [tests-unit-data.1] CookieClient', () => {
     expect(sid).toMatchObject({ value: 'abc', host: 'a.test', path: '/', hasExpires: true, isSecure: true, isHttpOnly: true })
   })
 
-  it('session cookies report hasExpires=false (expires_utc=0 maps to the 1601 epoch, ported behavior)', () => {
+  it('[port-fixes.3] a session cookie (expires_utc = 0) reports a null expiry, not 1601-01-01', () => {
     const pref = new CookieClient(fx.root).getCookies().find((c) => c.name === 'pref')
     expect(pref?.hasExpires).toBe(false)
-    expect(pref?.expiresUtc?.getTime()).toBe(-11644473600 * 1000)
+    expect(pref?.expiresUtc).toBeNull()
+    expect(pref?.expiresUtc?.getUTCFullYear()).not.toBe(1601)
   })
 
   it('getCookies filters by host', () => {

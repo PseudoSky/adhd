@@ -1,27 +1,10 @@
 /**
  * Unit spec for src/lib/storage/history.ts (HistoryClient).
- * Ticket 8468f7b1 AC2 · criteria [tests-unit-data.1] [tests-unit-data.2] [tests-unit-data.3] [tests-unit-data.4].
+ * Ticket 8468f7b1 AC2 · criteria [tests-unit-data.1] [tests-unit-data.2] [tests-unit-data.3] [tests-unit-data.4] [port-fixes.2].
  * SQLite fixture built in the OS temp dir; the real Chrome profile is never read.
+ * Every test runs through the shipped read-only `readBigInts` opener (no opener mock).
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { DatabaseSync } from 'node:sqlite'
-
-// Number-mode opener: same read-only immutable URI as storage/helpers.openDb but without
-// readBigInts, so visit hydration is exercised on plain numbers. Tests that read raw Chrome
-// microsecond columns (> 2^53) set `useRealOpener` to use the shipped BigInt-mode openDb.
-const mode = vi.hoisted(() => ({ useRealOpener: false }))
-vi.mock('../../../lib/storage/helpers.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../../lib/storage/helpers.js')>()
-  return {
-    ...actual,
-    openDb: (dbPath: string) => {
-      if (mode.useRealOpener) return actual.openDb(dbPath)
-      const db = new DatabaseSync(`file:${dbPath}?mode=ro&immutable=1`)
-      db.exec('PRAGMA query_only = ON')
-      return db
-    },
-  }
-})
 
 import { HistoryClient } from '../../../lib/storage/history.js'
 import { chromeMicros, makeProfile, type Fixture } from './profile-fixture.js'
@@ -34,7 +17,6 @@ const SUBFRAME = 3 | 0x20000000 // AUTO_SUBFRAME, filtered out
 describe('8468f7b1 AC2 [tests-unit-data.1] HistoryClient', () => {
   let fx: Fixture
   beforeEach(() => {
-    mode.useRealOpener = false
     vi.useFakeTimers({ toFake: ['Date'] })
     vi.setSystemTime(new Date(NOW * 1000))
     fx = makeProfile()
@@ -99,7 +81,6 @@ describe('8468f7b1 AC2 [tests-unit-data.1] HistoryClient', () => {
   })
 
   it('getUrlInfo looks up by url string or numeric id', () => {
-    mode.useRealOpener = true
     const c = new HistoryClient(fx.root)
     const byUrl = c.getUrlInfo('https://a.test/')
     expect(byUrl).toMatchObject({ id: 1, title: 'Alpha', visitCount: 5, typedCount: 2, hidden: false })
@@ -112,7 +93,6 @@ describe('8468f7b1 AC2 [tests-unit-data.1] HistoryClient', () => {
   })
 
   it('searchUrls matches url or title and orders by recency', () => {
-    mode.useRealOpener = true
     const c = new HistoryClient(fx.root)
     expect(c.searchUrls('test').map((u) => u.id)).toEqual([3, 1, 2])
     expect(c.searchUrls('beta').map((u) => u.id)).toEqual([2])
@@ -148,7 +128,6 @@ describe('8468f7b1 AC2 [tests-unit-data.1] HistoryClient', () => {
   })
 
   it('content and context annotations return the row or null', () => {
-    mode.useRealOpener = true
     const c = new HistoryClient(fx.root)
     expect(c.getContentAnnotations(2)).toMatchObject({ visit_id: BigInt(2) })
     expect(c.getContextAnnotations(2)).toMatchObject({ total_foreground_duration: BigInt(1234) })
@@ -163,13 +142,24 @@ describe('8468f7b1 AC2 [tests-unit-data.1] HistoryClient', () => {
     ro.close()
   })
 
-  // Known defect in the ported opener: storage/helpers.openDb sets readBigInts:true, so SQL
-  // arithmetic columns arrive as BigInt and hydrateVisit's `* 1000` throws. This test states the
-  // CORRECT contract and is expected to fail until the opener or hydrateVisit is fixed; it will
-  // go red (it.fails) the moment the defect is fixed, forcing removal of the marker.
-  it.fails('getLastVisit works through the shipped read-only opener (BigInt defect)', () => {
-    mode.useRealOpener = true
-    expect(new HistoryClient(fx.root).getLastVisit()?.id).toBe(2)
+  it('[port-fixes.2] getLastVisit works through the shipped BigInt opener and returns plain numbers', () => {
+    const last = new HistoryClient(fx.root).getLastVisit()
+    expect(last?.id).toBe(2)
+    for (const v of [last?.id, last?.urlId, last?.transitionRaw, last?.fromVisitId, last?.openerVisitId, last?.visitDurationMs, last?.visitTimeUnix]) {
+      expect(typeof v).toBe('number')
+    }
+    expect(last?.visitDurationMs).toBe(2000)
+  })
+
+  it('[port-fixes.2] getRedirectChain returns number ids and depths, never BigInt', () => {
+    const chain = new HistoryClient(fx.root).getRedirectChain(2)
+    expect(chain.length).toBeGreaterThan(0)
+    for (const e of chain) {
+      expect(typeof e.visitId).toBe('number')
+      expect(typeof e.depth).toBe('number')
+      expect(e.visitId).toBeTypeOf('number')
+    }
+    expect(chain.map((e) => e.visitId)).toEqual([2, 1])
   })
 
   it('throws when the History database is missing (error path)', () => {

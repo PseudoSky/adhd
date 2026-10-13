@@ -86,33 +86,39 @@ export function toUnixTimeSql(column: string): string {
 // Visit row helpers
 // ═══════════════════════════════════════════════════════════════════════════════
 
-/** Row shape returned by visit queries (visit_time computed to unix epoch in SQL). */
+/**
+ * Row shape returned by visit queries (visit_time computed to unix epoch in SQL).
+ * The read-only opener runs with `readBigInts`, so integer columns arrive as `bigint`;
+ * {@link hydrateVisit} converts every one of them to a plain number.
+ */
 export interface VisitRow {
-  id: number
-  url_id: number
+  id: number | bigint
+  url_id: number | bigint
   url: string
   title: string
   /** Unix timestamp in seconds. */
-  visit_time_unix: number
-  transition: number
-  from_visit: number
-  visit_duration: number
-  opener_visit: number
+  visit_time_unix: number | bigint
+  transition: number | bigint
+  from_visit: number | bigint
+  visit_duration: number | bigint
+  opener_visit: number | bigint
 }
 
 export function hydrateVisit(row: VisitRow): ChromeVisit {
+  const transition = Number(row.transition)
+  const visitTimeUnix = Number(row.visit_time_unix)
   return {
-    id: row.id,
-    urlId: row.url_id,
+    id: Number(row.id),
+    urlId: Number(row.url_id),
     url: row.url,
     title: row.title,
-    visitTimeUnix: row.visit_time_unix,
-    visitTime: new Date(row.visit_time_unix * 1000),
-    transitionType: transitionName(row.transition),
-    transitionRaw: row.transition,
-    fromVisitId: row.from_visit,
-    visitDurationMs: Math.round(row.visit_duration / 1000),
-    openerVisitId: row.opener_visit,
+    visitTimeUnix,
+    visitTime: new Date(visitTimeUnix * 1000),
+    transitionType: transitionName(transition),
+    transitionRaw: transition,
+    fromVisitId: Number(row.from_visit),
+    visitDurationMs: Math.round(Number(row.visit_duration) / 1000),
+    openerVisitId: Number(row.opener_visit),
   }
 }
 
