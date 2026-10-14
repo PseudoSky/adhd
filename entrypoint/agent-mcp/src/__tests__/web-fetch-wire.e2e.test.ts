@@ -15,6 +15,12 @@
  *   49cec55e AC1  per-hop records on a real socket (302 then a chunked gzip body)
  *
  * Negative control: make `tracedRequest` return `base(options)` unconditionally and this goes red.
+ *
+ * guards: on a real socket `tracedRequest` writes wrong per-hop records: `complete` not true after a full body, or `wire_bytes`
+ *   counting decoded text instead of the compressed bytes that crossed the socket.
+ * tier: P (the e2e lane; real node:http loopback server and ClientRequest through executeWebFetch)
+ * gap: This cannot be observed at tier S because only a real ClientRequest and IncomingMessage on a loopback socket fire `close`, complete after a chunked body and deliver gzip bytes before Content-Encoding is undone; the unit suite fakes that socket leaf.
+ * cites: 49cec55e AC1.
  */
 import { createServer, type Server } from "node:http";
 import { gzipSync } from "node:zlib";

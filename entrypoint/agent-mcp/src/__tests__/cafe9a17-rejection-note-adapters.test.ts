@@ -13,6 +13,12 @@
  * Real: `Orchestrator`, the host hook registry (`createHostHooks`), the real native-tooling resolver that
  * produces the agent's `mcpServers`, a migrated sqlite `TaskStore`. Scripted: the model's replies and the MCP
  * result (a policy rejection). No network, no process.
+ *
+ * guards: the shell policy-rejection note tells the model to use a runner the agent's effective shell server would itself
+ *   reject (default catalog, overridden or empty allowlist, custom shell, unreadable config), or a claudecli bridge call
+ *   receives a note at all.
+ * tier: S (in-process real Orchestrator, providers and sqlite store over a capturing wire.fetch; no process, no network)
+ * cites: cafe9a17 AC1.
  */
 import { rmSync } from "node:fs";
 import { afterAll, afterEach, describe, expect, it } from "vitest";

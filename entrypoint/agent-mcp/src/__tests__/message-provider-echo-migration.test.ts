@@ -8,6 +8,11 @@
  *
  * NOT covered here (S4a owns the store code and `schema.ts`): the `schema_v` > supported rows being ignored on read,
  * the sweeper, and "DDL equals schema.ts". What this file pins is the table S4a's test DDL and schema.ts must equal.
+ *
+ * guards: migration 0017 creates a message_provider_echo table that differs from spec-v2 section 1 (columns, defaults, cascading
+ *   FK, session index), alters `messages`, is not idempotent over a rival opener's objects, or fails under a held write lock.
+ * tier: S (in-process better-sqlite3 files in a temp dir; the multi-process counterpart is migrate-runner-concurrency.e2e.test.ts)
+ * cites: R9-hist AC10, R9-hist AC11 (this file names no backlog uid).
  */
 import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";

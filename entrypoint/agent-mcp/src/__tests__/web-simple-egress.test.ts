@@ -2,6 +2,11 @@
  * R5-WEB-SIMPLE AC2 — default egress is OPEN via the allow-all loopback proxy; any operator
  * restriction keeps srt's own domain filter. Policy-file rendering + the proxy's own behaviour
  * (loopback sockets only; the real-srt/real-server proof is `web-fetch-curl.e2e.test.ts`).
+ *
+ * guards: the default run policy stops being open egress, an operator domain list or pinned file loses to the open proxy, a later
+ *   re-provision drops the proxy port, or the egress proxy listens beyond loopback, fails to tunnel CONNECT or answers 502.
+ * tier: S (policy-file rendering on temp files plus loopback sockets in one process; the real-srt proof is web-fetch-curl.e2e.test.ts)
+ * cites: R5-WEB-SIMPLE AC2, R6-prep AC2.
  */
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer, request as httpRequest, type Server } from 'node:http';

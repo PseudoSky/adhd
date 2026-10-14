@@ -9,6 +9,12 @@
  *   W2-AC1  `agent-mcp__result` description starts with the rule, on the Anthropic wire AND the OpenAI wire
  *   W2-AC2  the schema each tool shows the model (Anthropic `input_schema`, OpenAI `function.parameters`) hashes to the
  *           value captured BEFORE the descriptor change
+ *
+ * guards: the delegated worker's `agent-mcp__result` description stops leading with the shared rule, or the task / tasks_batch /
+ *   result input schemas the model sees change, on either the Anthropic or the OpenAI wire.
+ * tier: P (the e2e lane; real server, stores, queue and adapters over HTTP to a scripted loopback model)
+ * gap: This cannot be observed at tier S because the schema hashes are taken over the request body each real adapter serialized onto an HTTP socket, which a unit test of the descriptor never produces.
+ * cites: R10 W2 AC1, R10 W2 AC2, 483606ae.
  */
 import { createHash } from "node:crypto";
 

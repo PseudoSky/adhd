@@ -19,6 +19,11 @@
  *
  * Negative control (49cec55e AC3): make `tracedRequest` return `base(options)` unconditionally and the
  * claudecli and openai tests below go red (no http.* web_fetch records).
+ *
+ * guards: a `web_fetch` call is missing from the wire log for the claudecli or OpenAI-compatible adapter, an internal destination is
+ *   fetched or logged, or the Anthropic adapter is offered `web__web_fetch` instead of keeping the server tool.
+ * tier: S (production createWireSeams, real registry and file-backed channel with a faked socket leaf and LLM fetch; no process, no network)
+ * cites: 49cec55e AC3, 49cec55e AC4.
  */
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 

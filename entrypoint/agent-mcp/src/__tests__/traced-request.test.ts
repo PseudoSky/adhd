@@ -15,6 +15,11 @@
  *
  * Negative control (AC3): make `tracedRequest` return `base(options)` unconditionally and the AC1/AC2
  * tests below go red (no records are written).
+ *
+ * guards: engine-native `web_fetch` requests stop reaching the agent-mcp.api wire log, a record carries a body, header, path, query
+ *   or credential, or tracing changes behaviour (a refused hop reaches the seam, a throwing channel reaches the caller).
+ * tier: S (real executeWebFetch and file-backed channel with DNS stubbed and the socket leaf faked; no process, no network)
+ * cites: 49cec55e AC1, 49cec55e AC2, 49cec55e AC3.
  */
 import { gzipSync } from "node:zlib";
 

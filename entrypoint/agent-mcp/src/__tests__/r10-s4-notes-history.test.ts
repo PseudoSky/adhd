@@ -13,6 +13,11 @@
  * `wire.fetch`, a migrated sqlite `TaskStore`, the native-tooling resolver. Scripted: the model's replies and
  * the MCP tool results. claudecli is the engine's bridge path (a provider that calls `executeTool` as the
  * loopback bridge does; no `claude` process).
+ *
+ * guards: a host tool-result note leaks into stored history, observers or `toolResultBytesIn` from the second turn on (applied in
+ *   place), is missing from the model request, or `noteAppended` is wrong for the claudecli bridge or after a hook-order change.
+ * tier: S (in-process real Orchestrator, providers and sqlite store over a capturing wire.fetch; no process, no network)
+ * cites: a2a9c6db AC2, 78875362 (deferred clause).
  */
 import { rmSync } from "node:fs";
 import { afterAll, afterEach, describe, expect, it } from "vitest";

@@ -4,6 +4,11 @@
  * `echo.serverResultTtlMinutes`), default to 128 KiB / 4 MiB / 10 min, pass through
  * `toEngineConfig()` in the engine's `EchoCaps` shape, and fail loud on a negative or non-numeric
  * value. Pure: no process, no network, no provider call.
+ *
+ * guards: the provider-echo persistence caps ignore the Environment cascade, lose the 128 KiB / 4 MiB / 10 min defaults or the
+ *   minutes-to-milliseconds conversion, fail to reach toEngineConfig(), or accept a negative or non-numeric value silently.
+ * tier: S (pure config resolution; no process, no network, no provider call)
+ * cites: R9-hist S5c AC10 (this file names no backlog uid).
  */
 import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';

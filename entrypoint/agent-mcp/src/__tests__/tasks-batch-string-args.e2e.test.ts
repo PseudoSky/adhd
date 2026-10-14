@@ -11,6 +11,12 @@
  * decoded array is dispatched), R9.AC5 (tools/list still advertises integer /
  * array), R9.AC3 (malformed input is still an error through the real server),
  * R9.AC6 (e2e case).
+ *
+ * guards: `tasks_batch` given a numeric-string `concurrency` and a stringified-JSON `prompts` array (the R4 C1 shape) errors, ignores
+ *   the cap, dispatches the wrong prompts, or accepts malformed input silently; tools/list stops advertising integer / array.
+ * tier: P (the e2e lane; real MCP Client and server over the SDK in-memory transport with the real queue and stores; only the provider is scripted)
+ * gap: This cannot be observed at tier S because the argument coercion sits on the JSON-RPC path between a real MCP client and server and the cap is enforced by the real queue under a latch, neither of which a direct call of the tasksBatch function crosses.
+ * cites: 932604a0 R9.AC3, 932604a0 R9.AC4, 932604a0 R9.AC5, 932604a0 R9.AC6.
  */
 import { afterEach, describe, expect, it } from 'vitest';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';

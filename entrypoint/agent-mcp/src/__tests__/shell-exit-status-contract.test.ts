@@ -4,6 +4,11 @@
  * `@adhd/agent-engine-orchestrator` (the engine), two packages that cannot import
  * each other. agent-mcp depends on both, so the pin lives here: both expressions
  * accept and reject the same corpus, and the producer's text parses.
+ *
+ * guards: the exit-status sentinel expression the launcher produces and the one the engine parses drift apart, the host stops
+ *   putting the exit shim first on the shell server PATH, or the srt policy makes the shim directory writable.
+ * tier: S (pure regex corpus, host wiring on temp directories and a policy file; no process)
+ * cites: 61358b6f AC9.
  */
 import { mkdtempSync, readdirSync, chmodSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';

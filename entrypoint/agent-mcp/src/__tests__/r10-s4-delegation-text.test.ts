@@ -12,6 +12,11 @@
  *
  * Red -> green: replace the constant at any one site with literal text and the site-count / identity
  * assertions fail; delete the README/AGENTS mention and the docs assertions fail.
+ *
+ * guards: a delegation description (`task`, `tasks_batch`, `result`, the in-process descriptors, the usage guide) stops sharing
+ *   the one DELEGATION_DECISION_RULE or stops leading with it, or the `thinking` docs and strict input schema drift apart.
+ * tier: S (real createServer driven by an in-memory MCP Client; no process, no network)
+ * cites: R10 S4 AC4, R10 S4 AC5 (this file names no backlog uid).
  */
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';

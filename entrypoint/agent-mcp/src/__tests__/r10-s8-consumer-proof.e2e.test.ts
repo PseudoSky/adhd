@@ -24,6 +24,12 @@
  *        a synchronous task and a background task collected with `result` both complete
  *   AC6  thinking: anthropic agent_create puts the field in the request body; openai agent_create rejects the key
  *   AC7  trace: the sink holds the tool-call, startup and dispatch signals, and no prompt / reply / argument text
+ *
+ * guards: an R10 product change (tool results as text, same-turn ordering, notes, delegation text, `thinking`, trace signals) works
+ *   in its own unit test but not through the assembled agent-mcp server on one of the two model adapters.
+ * tier: P (the e2e lane; real server, MCP Client, adopted fs and shell MCP children, and an HTTP loopback model; only the model is scripted)
+ * gap: This cannot be observed at tier S because the adopted fs and shell MCP children and the HTTP round trip to the real adapters exist only when the whole server is assembled, and a stub of either replaces the seam under test.
+ * cites: R10 S8 AC1-AC7 (this file names no backlog uid).
  */
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";

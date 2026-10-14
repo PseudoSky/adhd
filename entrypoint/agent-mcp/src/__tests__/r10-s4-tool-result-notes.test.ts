@@ -16,6 +16,11 @@
  * Teeth: every positive case has a control that differs in exactly one input (dryRun, error, custom `fs`, no
  * host hooks), and the mutants listed in the segment report (note on dryRun; note in history; a diverged
  * allowlist) each turn a named test here red.
+ *
+ * guards: the fs write/edit note is appended on a dryRun, an error, a custom `fs` server or another tool, or reaches history and
+ *   observers; the shell recovery note names a runner outside the allowlist or touches a non-rejection; the allowlist widens.
+ * tier: S (in-process real Orchestrator, host hooks and sqlite store with a scripted provider and MCP client; no process)
+ * cites: R10 S4 AC1, AC2, AC3, AC6 (this file names no backlog uid).
  */
 import { createHash } from "node:crypto";
 import { readFileSync, rmSync } from "node:fs";

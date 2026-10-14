@@ -17,6 +17,12 @@
  * (`restricted`: PyPI-only srt filter, i.e. the previous default) and the same https fetch must
  * exit non-zero with the `[exit status: N]` trailer. If the open mode were not what makes the
  * positive test pass, the control would also pass and go red.
+ *
+ * guards: the default agent-mcp shell cannot curl a public page (egress closed or the shim, proxy or srt policy mis-provisioned), or a
+ *   failing fetch reports success without the non-zero `[exit status: N]` trailer.
+ * tier: P (the e2e lane; spawns the real mcp-shell-server via uvx under srt and the open-egress proxy, speaking MCP over stdio)
+ * gap: This cannot be observed at tier S because it needs the real mcp-shell-server, the srt sandbox, curl and the open-egress proxy as separate processes speaking stdio JSON-RPC to a public network host.
+ * cites: R5-WEB-SIMPLE AC1, R5-WEB-SIMPLE AC2, R5-WEB-SIMPLE AC3 (this file names no backlog uid).
  */
 import { spawn, spawnSync } from 'node:child_process';
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs';

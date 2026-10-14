@@ -18,6 +18,11 @@
  *
  * claudecli: its tools run inside the CLI's own loop, which never passes through `pre:model_request`, so it gets
  * no note (see the adapter table in the segment report); not driven here because that needs the `claude` binary.
+ *
+ * guards: an R10 S4 correction (fs write/edit note, shell rejection recovery line, delegation description, `thinking` rejection)
+ *   is lost or mangled in the bytes the real Anthropic or OpenAI-compatible adapter puts on the wire.
+ * tier: S (in-process real Orchestrator, adapters and sqlite store over a capturing wire.fetch; no process, no network)
+ * cites: R10 S4 AC1-AC5, R10 W1 AC3 (this file names no backlog uid).
  */
 import { rmSync } from "node:fs";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";

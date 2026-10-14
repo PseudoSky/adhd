@@ -11,6 +11,12 @@
  *   M2-AC2  their sum <= the child's pre-start gap (child `agent.task` start - the parent's `agent.tool_call` start) + 5 ms
  *   M2-AC3  a delayed session creation raises `session_ms` by at least the delay (the stamp is measured, not a constant)
  *   M2-AC4  a direct MCP `task` call (no dispatching parent) leaves both attributes ABSENT from the record (not 0)
+ *
+ * guards: the `queueWaitMs` / `sessionMs` start-up stamps are missing, constant, negative, larger than the real pre-start gap, or
+ *   present as 0 instead of absent on a direct (non-dispatched) task call, when driven through the assembled server.
+ * tier: P (the e2e lane; real createServer, MCP Client, queue, stores and an HTTP loopback model; only the model is scripted)
+ * gap: This cannot be observed at tier S because the stamps are measured on the wall clock across the real MCP server, queue, session creation and an HTTP round trip to a real model adapter, none of which a stubbed unit run crosses.
+ * cites: R10 M2 AC1-AC4 (this file names no backlog uid).
  */
 import { performance } from "node:perf_hooks";
 
