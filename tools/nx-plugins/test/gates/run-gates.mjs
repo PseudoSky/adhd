@@ -18,6 +18,7 @@ import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { realpathSync as realpathForEntry } from 'node:fs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 export const REPO_ROOT = resolve(here, '../../../..');
@@ -61,7 +62,7 @@ export function engineArgv(engine, rawArgs) {
   ];
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
+if ((() => { try { return realpathForEntry(process.argv[1]) === realpathForEntry(fileURLToPath(import.meta.url)); } catch { return process.argv[1] === fileURLToPath(import.meta.url); } })()) {
   const { engine, tried } = findEngine();
   if (engine === null) {
     process.stderr.write(`run-gates: the workspace-standards engine was not found. Looked at:\n${tried.map((p) => `  ${p}`).join('\n')}\nInstall the skill (soxe install workspace-standards) or set WORKSPACE_STANDARDS_ENGINE.\n`);

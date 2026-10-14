@@ -317,3 +317,17 @@ describe('b87dcea0 — only git-tracked test files decide the result', () => {
   });
 });
 
+
+describe('c40c33e1 — scanning cost grows with the file, not with the square of it', () => {
+  test('a large source full of blanked comments and slashes scans inside a fixed budget', () => {
+    // Each line blanks a long comment into a run of spaces and then meets a `/`, which asks regexAllowed whether a
+    // regex literal may start. Rescanning the whole output per `/` took 10.6 s of the 10.9 s the repo scan needed.
+    const line = `/* ${'padding '.repeat(20)}*/ const r${'x'.repeat(10)} = total / count; // ${'note '.repeat(10)}\n`;
+    const src = line.repeat(500);
+    const t0 = process.hrtime.bigint();
+    const { markers } = scanSource(src, TODAY);
+    const ms = Number(process.hrtime.bigint() - t0) / 1e6;
+    assert.deepEqual(markers, []);
+    assert.ok(ms < 1500, `scanning ${src.length} characters took ${Math.round(ms)} ms; the budget is 1500 ms`);
+  });
+});

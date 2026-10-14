@@ -9,6 +9,7 @@
  */
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { realpathSync as realpathForEntry } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { GATE_TARGETS } from '../../../gate/lane-gate.mjs';
 
@@ -21,7 +22,7 @@ export function g1Argv(env = process.env) {
   return ['nx', 'affected', ...targets, `--base=${env.GATE_BASE || 'origin/main'}`];
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
+if ((() => { try { return realpathForEntry(process.argv[1]) === realpathForEntry(fileURLToPath(import.meta.url)); } catch { return process.argv[1] === fileURLToPath(import.meta.url); } })()) {
   const r = spawnSync('npx', g1Argv(), { cwd: root, stdio: 'inherit' });
   process.exit(r.status ?? 1);
 }

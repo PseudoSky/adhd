@@ -33,6 +33,7 @@
  * target name (see PUBLISHING.md). Reachability is an explicit gate concern.
  */
 import { fileURLToPath } from 'node:url';
+import { realpathSync as realpathForEntry } from 'node:fs';
 import { resolve } from 'node:path';
 
 /** The targets the push/CI gate runs, in order. The one list. */
@@ -60,7 +61,7 @@ export function affectedArgv({ base, head, extra = [] } = {}) {
 // Guarded so importing this module (e.g. from the checker or a test) never
 // prints or exits.
 const invokedDirectly =
-  process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+  (() => { try { return realpathForEntry(process.argv[1]) === realpathForEntry(fileURLToPath(import.meta.url)); } catch { return process.argv[1] === fileURLToPath(import.meta.url); } })();
 if (invokedDirectly) {
   process.stdout.write(gateFlags().join(' '));
 }

@@ -34,6 +34,7 @@ import { existsSync, globSync, readFileSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { realpathSync as realpathForEntry } from 'node:fs';
 
 const require = createRequire(import.meta.url);
 const { cleanGitEnv } = require('../../../lib/git-env.js');
@@ -47,10 +48,14 @@ const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 /** A `/` starts a regex literal (not a division) after one of these tokens or at the start of the text. */
 function regexAllowed(out) {
-  const t = out.replace(/\s+$/, '');
-  if (t === '') return true;
-  if (/[(,=:[!&|?{};+\-*%<>~^]$/.test(t)) return true;
-  return /\b(?:return|typeof|case|in|of|void|delete|throw|yield|await)$/.test(t);
+  // Look at the tail only. `out.replace(/\s+$/, '')` rescanned the whole output on every `/`, and a blanked comment
+  // or string leaves long runs of spaces, so the scan went quadratic: 10.6 s of a 10.9 s run on 890 files (c40c33e1).
+  let end = out.length;
+  while (end > 0 && /\s/.test(out[end - 1])) end -= 1;
+  if (end === 0) return true;
+  if (/[(,=:[!&|?{};+\-*%<>~^]/.test(out[end - 1])) return true;
+  // Eight characters cover the longest keyword (six) plus the boundary character before it.
+  return /\b(?:return|typeof|case|in|of|void|delete|throw|yield|await)$/.test(out.slice(Math.max(0, end - 8), end));
 }
 
 /** Index just past the regex literal (and its flags) starting at `i`, or `i` when no closing `/` is on the line. */
@@ -334,4 +339,4 @@ function main(argv) {
   return 0;
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) process.exit(main(process.argv.slice(2)));
+if ((() => { try { return realpathForEntry(process.argv[1]) === realpathForEntry(fileURLToPath(import.meta.url)); } catch { return process.argv[1] === fileURLToPath(import.meta.url); } })()) process.exit(main(process.argv.slice(2)));

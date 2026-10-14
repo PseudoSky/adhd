@@ -19,6 +19,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
+import { realpathSync as realpathForEntry } from 'node:fs';
 
 const require = createRequire(import.meta.url);
 const { cleanGitEnv } = require('../../lib/git-env.js');
@@ -430,7 +431,7 @@ export function run(argv, { cwd = process.cwd() } = {}) {
   return { result: distribution({ last, ref: opts.ref ?? 'HEAD', implementation, cwd }), exit: 0 };
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if ((() => { try { return realpathForEntry(process.argv[1]) === realpathForEntry(fileURLToPath(import.meta.url)); } catch { return process.argv[1] === fileURLToPath(import.meta.url); } })()) {
   try {
     const { result, exit } = run(process.argv.slice(2));
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
