@@ -323,6 +323,51 @@ test('f2836e29 AC2: guard_verify names a STRAY WORKTREE added during the run', (
   }
 });
 
+test('50e8c966 AC2: guard_verify passes (exit 0) when a MANAGED worktree under <repo>/.worktrees/ is added during the run', () => {
+  const managed = join(R, '.worktrees', 'managed-add');
+  const r = runGuard(`guard_snapshot\ngit -C "${R}" worktree add -q "${managed}" -b managed-add-branch\nguard_verify`);
+  try {
+    assert.equal(r.status, 0, `a concurrent agent's managed worktree must not fail the hook\n${r.stderr}`);
+    assert.doesNotMatch(r.stderr, /GIT-ENV-LEAK/);
+  } finally {
+    spawnSync('git', ['-C', R, 'worktree', 'remove', '--force', managed], { env: cleanGitEnv() });
+    spawnSync('git', ['-C', R, 'branch', '-D', 'managed-add-branch'], { env: cleanGitEnv() });
+  }
+});
+
+test('50e8c966 AC2: guard_verify passes (exit 0) when a MANAGED worktree under <repo>/.worktrees/ is removed during the run', () => {
+  const managed = join(R, '.worktrees', 'managed-rm');
+  // detached: a branch checked out elsewhere is hidden from the ref snapshot, so removal would surface it as a ref change
+  git(R, ['worktree', 'add', '-q', '--detach', managed]);
+  try {
+    const r = runGuard(`guard_snapshot\ngit -C "${R}" worktree remove --force "${managed}"\nguard_verify`);
+    assert.equal(r.status, 0, `removing a managed worktree must not fail the hook\n${r.stderr}`);
+    assert.doesNotMatch(r.stderr, /GIT-ENV-LEAK/);
+  } finally {
+    spawnSync('git', ['-C', R, 'worktree', 'remove', '--force', managed], { env: cleanGitEnv() });
+  }
+});
+
+test('50e8c966 AC2: negative control - a worktree added OUTSIDE .worktrees/ (even beside a managed one) still fails the hook and names its path', () => {
+  const managed = join(R, '.worktrees', 'managed-mixed');
+  const stray = join(base, 'stray-mixed-wt');
+  const r = runGuard(
+    `guard_snapshot\ngit -C "${R}" worktree add -q "${managed}" -b managed-mixed-branch\n` +
+      `git -C "${R}" worktree add -q "${stray}" -b stray-mixed-branch\nguard_verify`
+  );
+  try {
+    assert.notEqual(r.status, 0, 'a temp-dir worktree must still fail the hook');
+    assert.match(r.stderr, /GIT-ENV-LEAK/);
+    assert.match(r.stderr, /stray-mixed-wt/);
+    assert.doesNotMatch(r.stderr, /managed-mixed/, 'the managed worktree must not be blamed');
+  } finally {
+    spawnSync('git', ['-C', R, 'worktree', 'remove', '--force', managed], { env: cleanGitEnv() });
+    spawnSync('git', ['-C', R, 'worktree', 'remove', '--force', stray], { env: cleanGitEnv() });
+    spawnSync('git', ['-C', R, 'branch', '-D', 'managed-mixed-branch'], { env: cleanGitEnv() });
+    spawnSync('git', ['-C', R, 'branch', '-D', 'stray-mixed-branch'], { env: cleanGitEnv() });
+  }
+});
+
 // ─── f2836e29 AC1: --only commit — Gate 3 sees the right staged list ────────
 
 /**
