@@ -1,3 +1,10 @@
+/*
+ * guards: the duration metrics regress: the graded wallMs changes or phaseSumMs becomes a partial sum, the harness overhead split stops
+ *   reconciling, the phase-sum starts gating the verdict, the rederive mode writes to saved R8 records, or paired fixtures change the
+ *   unpaired R8 values or share a per-arm nonce.
+ * tier: S (in-process pure functions over R8 timing fixtures and tmp copies; no subprocess, no network)
+ * cites: R9-meas AC1-AC4 as named in this file; no backlog uid is named in the file.
+ */
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';

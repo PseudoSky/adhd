@@ -1,3 +1,10 @@
+/*
+ * guards: the R12 backlog-operator CLI access shape regresses: an mcpServers entry or a wrong shell allowlist on the cli definition, selection
+ *   stage S1 passing on a query alone, an out-of-repo or terminal item, or an unresolved project, call ids colliding across tasks,
+ *   truncated failure text, tool errors and non-zero exits miscounted, or the R12 ledger changing shape.
+ * tier: S (in-process pure unit tests with a stand-in CLI module; no subprocess, no network; the subprocess side is r12-design.e2e.test.ts)
+ * cites: SCOPE-R12-schema-and-scope, SCOPE-R12-backlog-cli; R12 AC1-AC4, AC6 as named in this file; no backlog uid is named in the file.
+ */
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';

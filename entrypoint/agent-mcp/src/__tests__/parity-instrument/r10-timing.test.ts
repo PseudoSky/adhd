@@ -1,3 +1,10 @@
+/*
+ * guards: the graded wall of a parity run carries arm-specific harness time (setup, poll lag, accounting) so identical engine work scores
+ *   differently between arms, a missing or non-monotonic mark yields a partial number instead of an error, or the accounting wait
+ *   regresses to the fixed 1500 ms sleep.
+ * tier: S (in-process pure functions over parity/timing.mjs and metrics.mjs; no subprocess, no network)
+ * cites: PARITY-R10-prep AC1 (SCOPE-R10-prep), the ids this file already cites; no backlog uid is named in the file.
+ */
 import { describe, expect, it } from 'vitest';
 
 import { loadParity } from './load';

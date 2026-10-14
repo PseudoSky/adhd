@@ -1,3 +1,12 @@
+/*
+ * guards: the R10 dry run (real built agent-mcp over stdio) grades the run wall instead of the engine-window sum, leaves a non-zero segment
+ *   residual, keeps a fixed accounting sleep for arm C, drops or leaks evidence (thinking signature, tracing output in the user home),
+ *   or the live driver becomes reachable from an nx target, hook or workflow.
+ * tier: P (e2e lane, ADR-0009: spawns drive.mjs, the built agent-mcp and the fake claude as processes)
+ * gap: This cannot be observed at tier S because the engine windows, the tracing-plugin file sink and the evidence bundle exist only when
+ *   the built agent-mcp runs as a stdio MCP child process under drive.mjs.
+ * cites: PARITY-R10-prep AC1, AC2, AC3, AC5, AC6 (SCOPE-R10-prep), the ids this file already cites; no backlog uid is named in the file.
+ */
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';

@@ -1,3 +1,10 @@
+/*
+ * guards: the model configuration regresses: a usage-window read or pacing gate returns, the default models stop resolving to claude-haiku-5-5,
+ *   env precedence (group env > PARITY_MODEL > JSON) breaks, an invalid id or key is accepted instead of failing fast, a model mismatch
+ *   between arms is not refused before spend, or R5-R8 plans and ledgers change under PARITY_* variables.
+ * tier: S (in-process; a spy claude on disk is never executed, tmp dirs and ledgers; no subprocess, no model, no network)
+ * cites: PARITY-R9-cfg AC1-AC7 as named in this file; no backlog uid is named in the file.
+ */
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';

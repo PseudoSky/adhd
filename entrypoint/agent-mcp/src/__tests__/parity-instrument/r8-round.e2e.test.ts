@@ -1,3 +1,11 @@
+/*
+ * guards: preflight and the dry run of the R8 A,C remainder, run as CLIs, plan or probe the wrong arms (B1 again), lose the requested-to-resolved
+ *   model record, miss effort high on the wire of either arm, or route a capture proxy to anything but the local fake.
+ * tier: P (e2e lane, ADR-0009: spawns drive.mjs, preflight.mjs, the fake claude and the built agent-mcp)
+ * gap: This cannot be observed at tier S because the effort and model on the wire and the proxy upstream are produced only by the real
+ *   arm A and arm C processes talking to the capture proxy.
+ * cites: R8-AC (SCOPE-R8-A-C-complete): R8-AC-plan AC1, R8-model AC3, R8-AC-effort AC1, R8-capture AC1 as named in this file; no backlog uid is named.
+ */
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';

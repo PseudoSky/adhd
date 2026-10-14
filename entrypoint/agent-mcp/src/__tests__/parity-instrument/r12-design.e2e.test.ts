@@ -1,3 +1,12 @@
+/*
+ * guards: the R12 round, run against the real built server with a stand-in adhd-backlog CLI in the real sandboxed shell, regresses: the operator
+ *   definition gains an MCP backlog server or loses adhd-backlog from the allowlist, the CLI does not run in the sandbox, S1-S5 or the
+ *   record (before-snapshot, call ids, bug-candidate kinds) disagree with state, or worktree residue is not reported or gets reverted.
+ * tier: P (e2e lane, ADR-0009: spawns drive.mjs, the built agent-mcp, the fake claude, the sandboxed shell and git)
+ * gap: This cannot be observed at tier S because the operator definition as the server received it, the sandboxed shell running the CLI and
+ *   the uncommitted-change residue exist only across real process boundaries and a real git repository.
+ * cites: SCOPE-R12-schema-and-scope, SCOPE-R12-backlog-cli; R12 AC1-AC6 as named in this file; no backlog uid is named in the file.
+ */
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';

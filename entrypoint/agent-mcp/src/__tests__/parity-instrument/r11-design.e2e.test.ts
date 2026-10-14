@@ -1,3 +1,12 @@
+/*
+ * guards: the R11 backlog-operator round, driven end to end against the real built server, drifts: the task call stops carrying TASK_PROMPT
+ *   byte for byte, worktrees are not real linked worktrees on their own branch, B and C differ beyond the provider, the operator never
+ *   reaches the backlog server, the review agent is unregistered, a flow stage is misread, or a refused commit goes unnamed.
+ * tier: P (e2e lane, ADR-0009: spawns drive.mjs, the built agent-mcp, the fake claude and a fake backlog MCP server over real git worktrees)
+ * gap: This cannot be observed at tier S because the request as the server received it, the linked worktrees, the sandboxed git commit and
+ *   the backlog server calls exist only across real process and stdio boundaries.
+ * cites: SCOPE-R11-backlog-operator-task, SCOPE-R11-prompt-update; R11 AC2-AC7, AC9-AC12 as named in this file; no backlog uid is named in the file.
+ */
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';

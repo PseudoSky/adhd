@@ -1,3 +1,9 @@
+/*
+ * guards: the tool-error detectors regress: three same-args errors of one tool are not a DEFECT_SIGNAL naming every call id, the rate threshold
+ *   (above 25% and at least 8 calls) shifts, a throwing detector becomes a skip, or a blank web result is not flagged as egress-silent-empty.
+ * tier: S (in-process pure functions over synthetic call lists; no subprocess, no network)
+ * cites: backlog ticket 90758419 (R1/R6 family), R6.AC1-AC3 and R2.AC8, as named in this file.
+ */
 import { describe, expect, it } from 'vitest';
 
 import { loadParity } from './load';

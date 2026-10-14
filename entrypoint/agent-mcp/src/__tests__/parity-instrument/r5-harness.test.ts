@@ -1,3 +1,10 @@
+/*
+ * guards: the instrument faults that stopped live round R5 return: a default work dir under the repo, a harness fault before reservation
+ *   consuming a run or marking arm A void, ledger.releaseRun unaudited or able to exceed the cap, or the judge credential resolving
+ *   with the wrong auth shape or no presence gate.
+ * tier: S (in-process; stub executors and fetch, tmp ledgers; no subprocess, no model, no network)
+ * cites: R5-harness AC1-AC6 as named in this file; no backlog uid is named in the file.
+ */
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';

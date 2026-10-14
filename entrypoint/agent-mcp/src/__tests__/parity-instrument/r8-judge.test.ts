@@ -1,3 +1,10 @@
+/*
+ * guards: the judge request sends `temperature` again, the token ceiling truncates a thinking judge mid-JSON, a judge failure leaves no ledger
+ *   trace or exits 0, a request that went out is not counted against the cap, or a re-judge double-spends, judges the wrong repo state
+ *   or discards the prior failure.
+ * tier: S (in-process; injected judge clients, a stub fetch, tmp ledger directories; no subprocess, no network)
+ * cites: R8-judge AC1, AC1b, AC2, AC3 as named in this file; no backlog uid is named in the file.
+ */
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';

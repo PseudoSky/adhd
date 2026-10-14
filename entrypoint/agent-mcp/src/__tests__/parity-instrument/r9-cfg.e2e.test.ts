@@ -1,3 +1,11 @@
+/*
+ * guards: the real drive.mjs entrypoint invokes `claude` at all (a /usage read in particular), accepts an invalid model configuration instead of
+ *   exiting 2 naming the key (touching the ledger), or `--print-plan --round R9` stops showing the resolved model and source per arm.
+ * tier: P (e2e lane, ADR-0009: spawns drive.mjs with a spy claude first on PATH)
+ * gap: This cannot be observed at tier S because "claude was never invoked" and the exit code are only observable on a real drive.mjs
+ *   process with a spy binary on PATH.
+ * cites: PARITY-R9-cfg AC1, AC4, AC7 as named in this file; no backlog uid is named in the file.
+ */
 import { spawnSync } from 'node:child_process';
 import crypto from 'node:crypto';
 import fs from 'node:fs';

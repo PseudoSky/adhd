@@ -1,3 +1,11 @@
+/*
+ * guards: the R8 round profiles regress: a malformed profile is accepted instead of failing closed, the B-only or A,C cap and A-first gate are
+ *   miscounted (B1 not counted, C allowed before a genuine A), a model alias is matched or priced as the wrong family or resolved id,
+ *   effort leaks to arm C or goes missing from A/C, or a dry-run capture proxy can reach a real upstream.
+ * tier: S (in-process pure functions and a tmp ledger directory; no subprocess, no network)
+ * cites: SCOPE-R8-model-alias, SCOPE-R8-B-only, SCOPE-R8-A-C-complete; R8-profile, R8-model, R8-effort, R8-capture, R8-AC-* ACs as named in this file;
+ *   no backlog uid is named in the file.
+ */
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';

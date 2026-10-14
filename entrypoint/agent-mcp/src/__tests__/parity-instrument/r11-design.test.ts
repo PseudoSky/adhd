@@ -1,3 +1,10 @@
+/*
+ * guards: the R11 design contract regresses: arm A is accepted or the A-first gate is bypassed without the recorded owner waiver, TASK_PROMPT
+ *   drifts from its pinned byte length and sha256 or is retyped elsewhere, worktrees leave .worktrees/ or get removed, B and C stop being
+ *   identical but for the provider, the backlog reader accepts a write verb, or the design is wired into CI or an nx target.
+ * tier: S (in-process pure instrument tests; real files read, no subprocess, no network; the dry-run proofs are r11-design.e2e.test.ts)
+ * cites: SCOPE-R11-backlog-operator-task, SCOPE-R11-prompt-update; R11 AC1-AC8, AC10 as named in this file; no backlog uid is named in the file.
+ */
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';

@@ -1,3 +1,9 @@
+/*
+ * guards: one tool is counted under several keys again: shell spellings across arms A, B and C stop sharing one byTool key, a bare tool name is
+ *   guessed without an advertised list, a tool lands in the "other" category, or the re-derived R8 counts (C1 shell 13 calls, 9 bare) change.
+ * tier: S (in-process pure functions over synthetic calls and the committed golden/r8/tool-names.json fixture; no subprocess, no network)
+ * cites: I-toolname AC1-AC4 as named in this file; no backlog uid is named in the file.
+ */
 import fs from 'node:fs';
 import path from 'node:path';
 

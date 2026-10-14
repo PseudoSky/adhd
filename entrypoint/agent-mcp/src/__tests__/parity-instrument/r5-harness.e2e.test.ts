@@ -1,3 +1,11 @@
+/*
+ * guards: the default drive.mjs --dry-run, run as a CLI, stops completing (non-zero exit or harnessFailure) or places its work dir inside the
+ *   repo, or an explicit in-repo --out stops being rejected with the ancestor-leak error.
+ * tier: P (e2e lane, ADR-0009: spawns drive.mjs and the fake claude)
+ * gap: This cannot be observed at tier S because the exit code, the work dir placement and the leak rejection are properties of the whole
+ *   drive.mjs process, which only a real process run shows.
+ * cites: R5-harness AC1 (R6-prep AC1), AC2 as named in this file; no backlog uid is named in the file.
+ */
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';

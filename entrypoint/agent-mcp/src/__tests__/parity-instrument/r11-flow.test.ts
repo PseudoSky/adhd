@@ -1,3 +1,10 @@
+/*
+ * guards: the flow-stage detector passes a run it should fail or reads absent data as pass: stages S1-S5 mis-ordered (review before the operator,
+ *   transition before the review, one commit as both implementation and revision), the agent's own report trusted, a failure not naming
+ *   task, agent, last tool call and error text, or repeated tool errors not flagged.
+ * tier: S (in-process pure functions over synthetic task, git and backlog fixtures; no subprocess, no network)
+ * cites: SCOPE-R11-stop-condition; R11 AC11, AC12 as named in this file; no backlog uid is named in the file.
+ */
 import { describe, expect, it } from 'vitest';
 
 import { loadParity } from './load';
