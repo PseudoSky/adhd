@@ -21,7 +21,8 @@ import { fileURLToPath } from 'node:url';
 import { McpClientRegistry } from '../clients/registry.js';
 import type { InProcessToolHandler } from '../clients/in-process.js';
 import { ClaudeCliProvider } from '../providers/claudecli.js';
-import type { EngineConfig, EngineLogger } from '../interfaces.js';
+import type { EngineConfig, EngineLogger, WireRequestFn } from '../interfaces.js';
+import { request as httpRequest } from 'node:http';
 import type { ProviderChatRequest } from '../providers/types.js';
 import type { ExecutionContext } from '../validation/index.js';
 import { WEB_FETCH_TOOL } from '../tools/web-fetch.js';
@@ -71,7 +72,7 @@ async function fixtureServer(): Promise<{ loopbackUrl: string; namedUrl: string 
   return { loopbackUrl: `http://127.0.0.1:${port}/page`, namedUrl: labUrl(port) };
 }
 
-async function runClaudecli(url: string) {
+async function runClaudecli(url: string, wireRequest?: WireRequestFn) {
   const dir = realpathSync(mkdtempSync(join(tmpdir(), 'adhd-r6b-web-')));
   dirs.push(dir);
   chmodSync(FAKE_CLAUDE, 0o755);
@@ -89,7 +90,7 @@ async function runClaudecli(url: string) {
   const ctx = {
     agentDefinition: { provider: { type: 'claudecli', model: 'claude-haiku-4-5' }, mcpServers: {} },
   } as unknown as ExecutionContext;
-  const registry = new McpClientRegistry({}, undefined, [], noopHandler, ctx, { ...engine, wire: undefined } as EngineConfig, logger);
+  const registry = new McpClientRegistry({}, undefined, [], noopHandler, ctx, { ...engine, wire: wireRequest ? ({ request: wireRequest } as unknown as EngineConfig['wire']) : undefined } as EngineConfig, logger);
   const tools = await registry.listAllTools();
   const provider = new ClaudeCliProvider({ type: 'claudecli', claudePath: FAKE_CLAUDE, model: 'claude-haiku-4-5' }, {}, undefined, engine, logger);
   try {
@@ -145,6 +146,18 @@ describe('R6B-web AC4 — claudecli bridge serves web_fetch', () => {
     expect(lab.seen).toHaveLength(1);
     expect(lab.seen[0]!.host).toBe(LAB_PUBLIC_IP);
     expect((lab.seen[0]!.headers as Record<string, string>)['host']).toBe(new URL(url).host);
+  });
+
+  it('49cec55e AC4: through the real bridge the registry routes the pinned request through the host wire.request seam (the wire-log hook), to the validated IP', async () => {
+    const { namedUrl: url } = await fixtureServer();
+    const seen: Array<{ host?: string | null; hostHeader: string; protocol: string }> = [];
+    const self = await runClaudecli(url, (o) => {
+      seen.push({ host: o.host, hostHeader: String((o.headers as Record<string, string>)['host']), protocol: o.protocol });
+      return httpRequest(o); // the mocked node:http request: the lab maps the validated public IP onto the fixture
+    });
+    expect(self.results[0]!.isError).toBe(false);
+    // NEGATIVE CONTROL: if the registry stops forwarding wire.request, `seen` stays empty (red).
+    expect(seen).toEqual([{ host: LAB_PUBLIC_IP, hostHeader: new URL(url).host, protocol: 'http:' }]);
   });
 
   it('bc799330 AC1/AC6: through the real bridge a call to the fixture by its LOOPBACK address is refused as isError, naming the class, and the fixture is never hit', async () => {

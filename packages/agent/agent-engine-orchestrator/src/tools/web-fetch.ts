@@ -29,7 +29,7 @@
  * Extraction safety (cbad68d4): {@link extractHtml} is a set of forward-only scanners, not unbounded
  * lazy regexes, so cost is linear in the page size on untrusted input.
  */
-import type { ClientRequest, IncomingMessage, RequestOptions } from 'node:http';
+import type { IncomingMessage } from 'node:http';
 import { request as httpRequest } from 'node:http';
 import { request as httpsRequest } from 'node:https';
 import { lookup } from 'node:dns/promises';
@@ -38,6 +38,7 @@ import type { Readable, Transform } from 'node:stream';
 import { createBrotliDecompress, createGunzip, createInflate } from 'node:zlib';
 
 import type { InProcessToolDescriptor } from '../clients/in-process.js';
+import type { WireRequestFn } from '../interfaces.js';
 import type { IMcpClient } from '../clients/types.js';
 import type { ToolDefinition } from '../providers/types.js';
 
@@ -96,9 +97,11 @@ export type WebFetchResolver = (hostname: string) => Promise<ReadonlyArray<IReso
 
 /**
  * The socket seam: `node:http(s).request`. Receives `protocol` in its options so one function serves
- * both schemes. Defaults to the real `http`/`https` request functions.
+ * both schemes. The registry passes the host's traced one ({@link WireSeams.request}) so every hop and
+ * failover attempt reaches the wire log; when the host injects none this module falls back to the real
+ * `http`/`https` request functions (no logging).
  */
-export type WebFetchRequestFn = (options: RequestOptions & { protocol: string; servername?: string }) => ClientRequest;
+export type WebFetchRequestFn = WireRequestFn;
 
 export interface WebFetchOptions {
   /**
@@ -108,16 +111,9 @@ export interface WebFetchOptions {
    * authorises an internal address.
    */
   allowedDomains?: readonly string[];
-  /**
-   * @deprecated Ignored. A fetch implementation resolves the name again on its own, which defeats
-   * the validated-IP pin, so the executor connects through {@link WebFetchOptions.request} instead.
-   * The field remains only so existing callers (the registry forwards the wire-traced fetch) still
-   * type-check.
-   */
-  fetchImpl?: typeof fetch;
   /** DNS seam, called once per hop. Defaults to `dns.promises.lookup(host, { all: true, verbatim: true })`. */
   resolve?: WebFetchResolver;
-  /** Socket seam (tests). Defaults to `node:http` / `node:https` `request`. */
+  /** Socket seam (wire tracing, tests). Defaults to `node:http` / `node:https` `request`, untraced. */
   request?: WebFetchRequestFn;
   /** Wall-clock source for `retrieved_at`. */
   now?: () => Date;

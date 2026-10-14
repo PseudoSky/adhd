@@ -1,4 +1,5 @@
 import type { spawn } from 'node:child_process';
+import type { ClientRequest, RequestOptions } from 'node:http';
 
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 
@@ -74,6 +75,9 @@ export type PermissionGate = (
  */
 export const DEFAULT_PROVIDER_TIMEOUT_MS = 300_000;
 
+/** The socket-level request function the engine-native `web_fetch` connects through (see {@link WireSeams.request}). */
+export type WireRequestFn = (options: RequestOptions & { protocol: string; servername?: string }) => ClientRequest;
+
 /**
  * The outbound-I/O seams the host injects so every API call the engine makes can be logged raw
  * (backlog c536ce29). ADR-0006 dependency injection: the engine never imports the logging
@@ -85,6 +89,14 @@ export const DEFAULT_PROVIDER_TIMEOUT_MS = 300_000;
 export interface WireSeams {
   /** Replacement for `globalThis.fetch` used by every provider HTTP call. */
   fetch: typeof fetch;
+  /**
+   * Replacement for `node:http(s).request` used by the engine-native `web_fetch`, which connects to a
+   * validated, pinned IP and therefore cannot go through {@link WireSeams.fetch} (a fetch
+   * implementation resolves the name a second time, defeating the pin). Receives `protocol` in its
+   * options so one function serves both schemes. Optional: when absent the tool uses the plain
+   * `node:http`/`node:https` request functions and nothing is logged for it.
+   */
+  request?: WireRequestFn;
   /** Replacement for `child_process.spawn` used to launch subprocess providers/servers. */
   spawn: typeof spawn;
   /**

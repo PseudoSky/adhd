@@ -17,6 +17,7 @@ import { McpClientRegistry } from '../clients/registry.js';
 import type { InProcessToolHandler } from '../clients/in-process.js';
 import type { EngineConfig } from '../interfaces.js';
 import { OpenAIProvider } from '../providers/openai.js';
+import type { WebFetchRequestFn } from '../tools/web-fetch.js';
 import { bridgeableTools } from '../providers/claudecli-tool-bridge.js';
 import { ANTHROPIC_NATIVE_WEB_TOOLS } from '../providers/server-side-tools.js';
 import type { ProviderChatResponse } from '../providers/types.js';
@@ -102,6 +103,34 @@ describe('bc799330 AC6: claudecli', () => {
     const out = await executeTool(reg, 'web', 'web_fetch', { url: 'https://example.com/' });
     expect(out.isError).toBe(false);
     expect(wireCalls).toBe(0);
+    expect(hold.net.requests).toHaveLength(1);
+  });
+});
+
+describe('49cec55e AC2: the registry hands the host\'s wire.request seam to web_fetch (not wire.fetch)', () => {
+  for (const providerType of ['claudecli', 'openai']) {
+    it(`49cec55e AC2: ${providerType}: every pinned hop goes through wire.request, connected to the validated IP, and wire.fetch is never used`, async () => {
+      hold.net = stubNet(async () => html(), { 'seam.example.com': ['203.0.113.9'] });
+      const seen: Array<{ host?: string | null; hostHeader: string }> = [];
+      let fetchCalls = 0;
+      const wire = {
+        fetch: (async () => { fetchCalls += 1; return html(); }) as unknown as typeof fetch,
+        request: (o: Parameters<WebFetchRequestFn>[0]) => {
+          seen.push({ host: o.host, hostHeader: String((o.headers as Record<string, string>)['host']) });
+          return hold.net!.request(o);
+        },
+      } as unknown as EngineConfig['wire'];
+      const out = await executeTool(registryFor(providerType, { wire }), 'web', 'web_fetch', { url: 'https://seam.example.com/p' });
+      expect(out.isError).toBe(false);
+      expect(seen).toEqual([{ host: '203.0.113.9', hostHeader: 'seam.example.com' }]);
+      expect(fetchCalls).toBe(0);
+    });
+  }
+
+  it('49cec55e AC2: without wire.request the tool still works through the plain node:http(s) request (untraced fallback)', async () => {
+    hold.net = stubNet(async () => html());
+    const out = await executeTool(registryFor('claudecli', { wire: { fetch: fetch } as never }), 'web', 'web_fetch', { url: 'https://example.com/' });
+    expect(out.isError).toBe(false);
     expect(hold.net.requests).toHaveLength(1);
   });
 });

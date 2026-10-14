@@ -99,7 +99,7 @@ export class McpClientRegistry {
         if (!this.mcpServers[WEB_FETCH_SERVER] && this.needsClientSideWebFetch()) {
             this.webFetch = new WebFetchClient({
                 allowedDomains: engineConfig?.webFetch?.allowedDomains,
-                fetchImpl: engineConfig?.wire?.fetch,
+                request: engineConfig?.wire?.request,
             });
         }
     }
