@@ -13,6 +13,7 @@ import {
 
 import { resolveToolCallName } from "../clients/tool-naming.js";
 import { DEFAULT_PROVIDER_TIMEOUT_MS, type EngineLogger } from "../interfaces.js";
+import { hasTopLevelCombinator, normalizeToolForWire } from "./tool-schema.js";
 import type { ProviderChatRequest, ToolDefinition } from "./types.js";
 
 /**
@@ -170,7 +171,18 @@ function reply(res: ServerResponse, status: number, body: string, headers: Recor
 export async function startToolBridge(opts: StartToolBridgeOptions): Promise<ToolBridge> {
     const { executeTool, logger } = opts;
     const callTimeoutMs = opts.callTimeoutMs ?? DEFAULT_PROVIDER_TIMEOUT_MS;
-    const byServer = groupToolsByServer(opts.tools);
+    // 020307a5: hand the CLI an already-flat schema for a tool with a top-level oneOf/anyOf/allOf. The CLI flattens such
+    // a schema itself only behind a feature flag (`tengu_mcp_normalize_root_combinators`), and DROPS a tool it cannot
+    // flatten; flattening here with the shared normaliser makes the model-visible tool independent of that flag, and the
+    // CLI then sees nothing left to rewrite. Throws a `PROVIDER_INVALID_REQUEST` naming `tools.<n>` (n = index in
+    // `opts.tools`) before the listener is bound when a schema cannot be flattened.
+    const byServer = groupToolsByServer(
+        opts.tools.map((t, i) => {
+            if (!hasTopLevelCombinator(t.inputSchema)) return t;
+            const wire = normalizeToolForWire(t, i);
+            return { ...t, description: wire.description, inputSchema: wire.inputSchema };
+        })
+    );
     const token = randomBytes(32).toString("hex");
     let callCount = 0;
     let port = 0;

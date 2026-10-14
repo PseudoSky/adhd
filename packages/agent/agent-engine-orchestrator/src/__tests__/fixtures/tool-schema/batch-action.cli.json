@@ -1,0 +1,359 @@
+{
+ "name": "mcp__backlog__batch_action",
+ "description": "Input constraint: Provide parameters for exactly one of: (input).\n\nExample: {\"input\":{\"operation\":\"backlog/get\",\"items\":[{\"input\":{\"uid\":\"<string>\"}}]}}",
+ "input_schema": {
+  "type": "object",
+  "properties": {
+   "input": {
+    "type": "object",
+    "required": [
+     "operation",
+     "items"
+    ],
+    "properties": {
+     "operation": {
+      "type": "string",
+      "enum": [
+       "backlog/get"
+      ]
+     },
+     "items": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "properties": {
+        "input": {
+         "oneOf": [
+          {
+           "type": "object",
+           "properties": {
+            "uid": {
+             "type": "string"
+            },
+            "fields": {
+             "type": "array",
+             "items": {
+              "$schema": "http://json-schema.org/draft-07/schema#",
+              "oneOf": [
+               {
+                "$ref": "#/definitions/IIssuePlainField"
+               },
+               {
+                "$ref": "#/definitions/IIssuePseudoField"
+               }
+              ],
+              "x-apigen-logical": "union"
+             }
+            },
+            "lastN": {
+             "type": "number"
+            },
+            "after": {
+             "type": "string"
+            },
+            "deriveThrough": {
+             "type": "number",
+             "enum": [
+              1,
+              2,
+              3,
+              4,
+              5
+             ]
+            }
+           },
+           "required": [
+            "uid"
+           ],
+           "additionalProperties": false
+          },
+          {
+           "type": "object",
+           "properties": {
+            "registry": {
+             "type": "string",
+             "enum": [
+              "project",
+              "component",
+              "location"
+             ]
+            },
+            "name": {
+             "type": "string"
+            },
+            "filter": {
+             "$schema": "http://json-schema.org/draft-07/schema#",
+             "type": "object",
+             "properties": {
+              "project": {
+               "type": "string"
+              },
+              "component": {
+               "type": "string"
+              }
+             },
+             "additionalProperties": false
+            }
+           },
+           "required": [
+            "registry",
+            "name"
+           ],
+           "additionalProperties": false
+          }
+         ],
+         "x-apigen-logical": "union"
+        }
+       },
+       "required": [
+        "input"
+       ],
+       "definitions": {
+        "IIssuePlainField": {
+         "type": "string",
+         "enum": [
+          "uid",
+          "title",
+          "kind",
+          "status",
+          "priority",
+          "project",
+          "component",
+          "createdAt",
+          "updatedAt",
+          "assignee",
+          "author",
+          "closedAt",
+          "gitContext"
+         ],
+         "description": "The closed field vocabulary a `get`/`query` caller may request (SPEC.md \u00a76.5). `assertKnownFields` (this module's  {@link  assertKnownIssueFields  } ) rejects any name outside this union with a `BacklogValidationError` naming it \u2014 never a silent drop.\n\n`plain` fields are cheap: each is either a column on the `issue` node itself or a scalar living in `issue.meta.metadata` (`assignee`, `closedAt`, `gitContext` \u2014 SPEC.md \u00a76.5's own reclassification of `closedAt` as `plain`, since it is read in the SAME single-row fetch as `assignee`, not a second query; `gitContext` is the item-level disclosure-contract git context, a sibling of `assignee` in the same metadata blob).\n\n`pseudo` fields are opt-in only: each costs a genuine extra read (an edge traversal to another node kind, or only exists on a `searchRanked` response) and is therefore NEVER included in the default card."
+        },
+        "IIssuePseudoField": {
+         "type": "string",
+         "enum": [
+          "body",
+          "citations",
+          "notes",
+          "auditTrail",
+          "blockers",
+          "related",
+          "_score",
+          "_vector",
+          "blocksOut",
+          "dependents",
+          "partOf",
+          "obligations",
+          "verdict",
+          "spec",
+          "similar",
+          "primaryOwner",
+          "memberships",
+          "supersededBy",
+          "supersedeReason",
+          "specRevisionFragment"
+         ]
+        }
+       }
+      }
+     },
+     "concurrency": {
+      "type": "number"
+     },
+     "mode": {
+      "type": "string",
+      "enum": [
+       "parallel",
+       "serial",
+       "chained"
+      ]
+     },
+     "onItemError": {
+      "type": "string",
+      "enum": [
+       "continue",
+       "abort"
+      ]
+     },
+     "itemTimeoutMs": {
+      "type": "number"
+     }
+    },
+    "additionalProperties": true
+   }
+  },
+  "required": [
+   "input"
+  ],
+  "definitions": {
+   "IIssuePlainField": {
+    "type": "string",
+    "enum": [
+     "uid",
+     "title",
+     "kind",
+     "status",
+     "priority",
+     "project",
+     "component",
+     "createdAt",
+     "updatedAt",
+     "assignee",
+     "author",
+     "closedAt",
+     "gitContext"
+    ],
+    "description": "The closed field vocabulary a `get`/`query` caller may request (SPEC.md \u00a76.5). `assertKnownFields` (this module's  {@link  assertKnownIssueFields  } ) rejects any name outside this union with a `BacklogValidationError` naming it \u2014 never a silent drop.\n\n`plain` fields are cheap: each is either a column on the `issue` node itself or a scalar living in `issue.meta.metadata` (`assignee`, `closedAt`, `gitContext` \u2014 SPEC.md \u00a76.5's own reclassification of `closedAt` as `plain`, since it is read in the SAME single-row fetch as `assignee`, not a second query; `gitContext` is the item-level disclosure-contract git context, a sibling of `assignee` in the same metadata blob).\n\n`pseudo` fields are opt-in only: each costs a genuine extra read (an edge traversal to another node kind, or only exists on a `searchRanked` response) and is therefore NEVER included in the default card."
+   },
+   "IIssuePseudoField": {
+    "type": "string",
+    "enum": [
+     "body",
+     "citations",
+     "notes",
+     "auditTrail",
+     "blockers",
+     "related",
+     "_score",
+     "_vector",
+     "blocksOut",
+     "dependents",
+     "partOf",
+     "obligations",
+     "verdict",
+     "spec",
+     "similar",
+     "primaryOwner",
+     "memberships",
+     "supersededBy",
+     "supersedeReason",
+     "specRevisionFragment"
+    ]
+   },
+   "IRelationDirection": {
+    "type": "string",
+    "enum": [
+     "in",
+     "out"
+    ],
+    "description": "Which side of an edge the subject sits on: `in` = subject is `dst`, `out` = subject is `src`."
+   },
+   "IPredicate": {
+    "anyOf": [
+     {
+      "type": "object",
+      "properties": {
+       "op": {
+        "type": "string",
+        "const": "evidence"
+       },
+       "kind": {
+        "type": "string"
+       },
+       "min": {
+        "type": "number"
+       }
+      },
+      "required": [
+       "op",
+       "kind"
+      ],
+      "additionalProperties": false
+     },
+     {
+      "type": "object",
+      "properties": {
+       "op": {
+        "type": "string",
+        "const": "blockers_terminal"
+       }
+      },
+      "required": [
+       "op"
+      ],
+      "additionalProperties": false
+     },
+     {
+      "type": "object",
+      "properties": {
+       "op": {
+        "type": "string",
+        "const": "relation"
+       },
+       "type": {
+        "type": "string"
+       },
+       "direction": {
+        "$ref": "#/definitions/IRelationDirection"
+       }
+      },
+      "required": [
+       "op",
+       "type",
+       "direction"
+      ],
+      "additionalProperties": false
+     },
+     {
+      "type": "object",
+      "properties": {
+       "op": {
+        "type": "string",
+        "const": "all_of"
+       },
+       "of": {
+        "type": "array",
+        "items": {
+         "$ref": "#/definitions/IPredicate"
+        }
+       }
+      },
+      "required": [
+       "op",
+       "of"
+      ],
+      "additionalProperties": false
+     },
+     {
+      "type": "object",
+      "properties": {
+       "op": {
+        "type": "string",
+        "const": "any_of"
+       },
+       "of": {
+        "type": "array",
+        "items": {
+         "$ref": "#/definitions/IPredicate"
+        }
+       }
+      },
+      "required": [
+       "op",
+       "of"
+      ],
+      "additionalProperties": false
+     },
+     {
+      "type": "object",
+      "properties": {
+       "op": {
+        "type": "string",
+        "const": "not"
+       },
+       "of": {
+        "$ref": "#/definitions/IPredicate"
+       }
+      },
+      "required": [
+       "op",
+       "of"
+      ],
+      "additionalProperties": false
+     }
+    ],
+    "description": "The CLOSED predicate core (DESIGN \u00a72 Primitive 3). No CEL, no dynamic leaf, no timeout \u2014 the grammar is exactly these six productions. Validated recursively by  {@link  assertValidPredicate } .\n\n- `evidence{kind,min?}` \u2192 distinct verified attestations of `kind` \u2265 `min ?? 1`.\n- `blockers_terminal()` \u2192 every incoming live `blocks` source is terminal.\n- `relation{type,direction}` \u2192 a live edge of `type` touches the subject.\n- `all_of` / `any_of` / `not` \u2192 boolean composition. Empty `all_of` \u21d2 `true`,   empty `any_of` \u21d2 `false` (documented, asserted)."
+   }
+  },
+  "additionalProperties": true
+ }
+}

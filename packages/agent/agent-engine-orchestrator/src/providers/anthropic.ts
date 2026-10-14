@@ -14,6 +14,7 @@ import { DEFAULT_PROVIDER_TIMEOUT_MS } from "../interfaces.js";
 import { sdkFetchOption } from "./wire.js";
 import { applyCacheBreakpoints } from "./anthropic-cache.js";
 import { toToolResultContent } from "./anthropic-tool-result.js";
+import { normalizeToolForWire } from "./tool-schema.js";
 import { assistantBlocks, captureEcho, isEchoRejection, replayedEchoFamilies, sanitizeServerToolPairs, type EchoBlockFamily } from "./anthropic-echo.js";
 import { runWithPauseTurn, type IPauseCall } from "./anthropic-pause.js";
 import { type ProviderTokenUsage } from "./partial-usage.js";
@@ -154,17 +155,23 @@ function buildAnthropicClient(
     };
 }
 
+/**
+ * The `tools` array entries for the client-executed tools. A top-level `oneOf` / `anyOf` / `allOf` in a tool's
+ * `inputSchema` is flattened by {@link normalizeToolForWire} (the API rejects the whole request with HTTP 400 for one
+ * such tool, 020307a5); a schema that cannot be flattened throws a `PROVIDER_INVALID_REQUEST` naming `tools.<n>`.
+ * The registered definitions are never mutated.
+ */
 function toAnthropicTools(tools?: ToolDefinition[]): Tool[] | undefined {
     if (!tools) return undefined;
 
-    return tools.map(tool => ({
-        name: tool.name,
-        description: tool.description || "",
-        input_schema: (tool.inputSchema || {
-            type: "object",
-            properties: {},
-        }) as Tool["input_schema"],
-    }));
+    return tools.map((tool, index) => {
+        const wire = normalizeToolForWire(tool, index);
+        return {
+            name: tool.name,
+            description: wire.description,
+            input_schema: wire.inputSchema as Tool["input_schema"],
+        };
+    });
 }
 
 /**

@@ -7,6 +7,7 @@ import { nowIso } from "../utils/timestamps.js";
 import { resolveToolCallName } from "../clients/tool-naming.js";
 import { DEFAULT_PROVIDER_TIMEOUT_MS } from "../interfaces.js";
 import { sdkFetchOption } from "./wire.js";
+import { normalizeToolForWire } from "./tool-schema.js";
 import { isMcpContentArray, mcpContentText } from "../engine/tool-result-cap.js";
 import type { EngineConfig } from "../interfaces.js";
 
@@ -129,20 +130,26 @@ export function toOpenAIToolContent(result: unknown): string {
     return JSON.stringify(result) ?? "";
 }
 
+/**
+ * The `tools` array entries. A top-level `oneOf` / `anyOf` / `allOf` in a tool's `inputSchema` is flattened by
+ * {@link normalizeToolForWire} (OpenAI-compatible function `parameters` must be a plain object schema; one tool with a
+ * root combinator would otherwise fail every request, 020307a5); a schema that cannot be flattened throws a
+ * `PROVIDER_INVALID_REQUEST` naming `tools.<n>`. The registered definitions are never mutated.
+ */
 function toOpenAITools(tools?: ToolDefinition[]): ChatCompletionTool[] | undefined {
     if (!tools) return undefined;
 
-    return tools.map(tool => ({
-        type: "function" as const,
-        function: {
-            name: tool.name,
-            description: tool.description || "",
-            parameters: (tool.inputSchema || {
-                type: "object",
-                properties: {},
-            }) as Record<string, unknown>,
-        },
-    }));
+    return tools.map((tool, index) => {
+        const wire = normalizeToolForWire(tool, index);
+        return {
+            type: "function" as const,
+            function: {
+                name: tool.name,
+                description: wire.description,
+                parameters: wire.inputSchema,
+            },
+        };
+    });
 }
 
 export class OpenAIProvider implements LLMProvider {
@@ -183,6 +190,8 @@ export class OpenAIProvider implements LLMProvider {
 
     async chat(request: ProviderChatRequest): Promise<ProviderChatResponse> {
         const retryConfig = this.providerConfig.retryConfig;
+        // Built once, before any attempt: a tool schema that cannot be normalised is a request fault, never retried.
+        const wireTools = toOpenAITools(request.tools);
 
         const run = async (): Promise<ProviderChatResponse> => {
             const response = await this.client.chat.completions.create(
@@ -191,7 +200,7 @@ export class OpenAIProvider implements LLMProvider {
                     temperature: this.providerConfig.temperature,
                     max_tokens: this.providerConfig.maxTokens,
                     messages: toOpenAIMessages(request.messages),
-                    tools: toOpenAITools(request.tools),
+                    tools: wireTools,
                 },
                 { signal: request.signal }
             );
