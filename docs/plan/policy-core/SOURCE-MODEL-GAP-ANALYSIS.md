@@ -27,13 +27,14 @@ Date: 2026-10-13. Role: debugger/architect (read-only on source). Baseline: bran
 | Owner term | SPEC term | Primitive in this document | Code today |
 |---|---|---|---|
 | Detector | The orchestrator's "detect lang per file" (SPEC §1) | Asset kind detection | Three copies: `languageOfSource`, `detectLang`, `parseSourceSpec` (section 1.2) |
-| Locator + Translator | The two halves of the Extractor (SPEC §1, §14) | Locator (the transport step) and translator (an extractor as a whole) | Section 1.3 |
+| Locator | The first half of SPEC's single Extractor step (SPEC §1, §14), which fuses locating and translating | Locator, in the `transport/` group | Section 1.1 |
+| Translator | The second half of SPEC's Extractor step | Translator, in the `extractors/` group | Section 1.3 |
 | Runtime / host | The language runtime plus Harness (SPEC §13); SPEC §13.1 supervision covers lifecycle | Local execution binding | `apigen-engine-runtime`, `runtime.py`, `ApigenJavalinServer` (section 1.5) |
 | Binding | The execution binding on an `Operation` | Execution binding | Conflated in `Operation.host` (section 2) |
 | Effects | `Operation.kind` and `Operation.safe` (already exist) | Part of the IR | `Operation` (`apigen-core-client/src/lib/descriptor.ts:148-252`) |
 | Target | `TargetCapability`: generate and/or serve | Projection | The plugins (section 1.6) |
 
-Terminology in the body: "locator" means the transport step that turns a reference into raw assets. "Translator" means an extractor as a whole. "Target" keeps the SPEC meaning. The word "Executor" is not used for frameworks.
+Terminology in the body: "locator" means the transport step that turns a reference into raw assets (`transport/`). "Translator" and "extractor" mean the step that turns assets into IR (`extractors/`). "Target" keeps the SPEC meaning. The word "Executor" is not used for frameworks.
 
 ### 0.2 The primitives and their nearest existing code
 
@@ -613,7 +614,9 @@ Each step is a pure function of the string plus the probe.
 
 ### 5.6 Extractor dependency declaration and ir-cache staleness
 
-**Hazard:** the ir-cache layer records transitive local-import dependencies and their mtimes in its staleness snapshot (`ir-cache-layer.ts` header, lines 19-30; the `deps` field at lines 83-85 and the collection at lines 265-294 are rg hits only). `ExtractResult` is `Operation[]` (`extract-invoker.ts:79`), which carries no dependency list. A non-TS extractor placed behind the onion would therefore probably be cached on its entry file only, and a changed sibling module could serve stale IR. The collector function itself was not read: UNVERIFIED (finding F-11).
+**Hazard:** the ir-cache layer computes dependencies itself. `computeCacheKey` and `buildStalenessSnapshot` both call `collectLocalImportPaths(call.source)` (`ir-cache-layer.ts:247`, `:266`, read). That function is a ts-morph walk: it adds the entry file to a syntactic-resolver `Project` and follows TypeScript imports (`extraction-session.ts:295-313`, read). It never asks the extractor, whatever `call.host` is. `ExtractResult` is `Operation[]` (`extract-invoker.ts:79`), which carries no dependency list. A non-TS extractor placed behind the onion would therefore be keyed and staleness-checked through a TypeScript walk of its entry file. What that walk does for a `.py` or `.java` entry (an empty list, or an error) was not read: UNVERIFIED (finding F-11). Whichever it does, a changed Python or Java sibling module is not discovered.
+
+The same call also means the cache layer loads ts-morph on the slow gate and on a MISS, for any host (section 10).
 
 **Rule:** a non-TS extractor is not cacheable until it declares its dependencies to the onion (step 7). Python and Java are registered through the orchestration entry first and cached only after step 7. UNVERIFIED: whether ir-cache supports excluding one host in the interim.
 
@@ -665,7 +668,7 @@ Each step is a pure function of the string plus the probe.
 | F-8 | Stale docs: `OutputPlugin.language` says "all first-party plugins declare `'ts'`"; `source-language.ts` says its helpers route serve's files, but `pluginConsumesSource`/`sourcesForPlugin` have no production caller | `types.ts:134-136`; `source-language.ts:2-8`, `:115-150` | 5ec6e8bf |
 | F-9 | gitnexus index misses `resolveHosts`←`startServe`, `detectLang`←`extractSource`, `resolveMcpStdioSource`←`resolveSource` | `serve.ts:1455`; `orchestrator.ts:318`; `resolve-source.ts:57` | not filed (gitnexus index gap, not a repo defect) |
 | F-10 | The gateway barrel's marker string names the package `@adhd/apigen-gateway`; the package is `@adhd/apigen-engine-gateway` | `apigen-engine-gateway/src/index.ts:1`; `package.json:2` | 2b7cd592 |
-| F-11 | Extractor dependency declaration: ir-cache records transitive local-import dependencies and mtimes in its staleness snapshot, but `ExtractResult` is `Operation[]` and carries no dependency list, so a non-TS extractor behind the onion would probably be cached on its entry file only and a changed sibling module could serve stale IR. The collector function was not read: UNVERIFIED. | `ir-cache-layer.ts` header lines 19-30; `extract-invoker.ts:79`; `deps` field at `ir-cache-layer.ts:83-85` and collection at `:265-294` (rg hits) | Backlog: pending |
+| F-11 | Extractor dependency declaration: ir-cache computes its key and staleness snapshot by calling `collectLocalImportPaths(call.source)`, a TypeScript-only ts-morph walk, and `ExtractResult` is `Operation[]` with no dependency list. A non-TS extractor behind the onion would be keyed through a TypeScript walk of its entry file, and a changed sibling module would not be discovered. The walk's behaviour on a `.py` or `.java` entry (empty list or error) was not read: UNVERIFIED. | `ir-cache-layer.ts:247`, `:266`; `extraction-session.ts:295-313`; `extract-invoker.ts:79` | bbf1f0e3 (relates f7f25391, f6bf8550, 39c4e00c) |
 
 ---
 
@@ -726,7 +729,7 @@ Small drift fixes (docs and typing only): the `types.ts:134-136` claim, the `ser
 Translation (turning source into IR) and execution (serving the operations) have different environments, and today they share a process only for TS.
 
 - **TS is the one in-process translator.** `extract.ts:33` imports ts-morph only as types. ts-morph is loaded lazily with `lazyRequire` in `extraction-session.ts` (lines 44-56), `format-alias.ts` (31-39) and `extract-classes.ts` (30-49), deliberately because "a static import pulls the whole ts-morph".
-- **The ir-cache layer sits above the terminal `runExtractor`.** On a HIT, "the real extractor is never invoked at all" (`apigen-plugin-ir-cache/src/lib/ir-cache-layer.ts` header, lines 1-60).
+- **The ir-cache layer sits above the terminal `runExtractor`.** On a HIT, "the real extractor is never invoked at all" (`apigen-plugin-ir-cache/src/lib/ir-cache-layer.ts` header, lines 1-60). A fast-gate HIT only `stat()`s the recorded paths. The slow gate and a MISS call `collectLocalImportPaths` (`ir-cache-layer.ts:247`, `:266`), which uses ts-morph (`extraction-session.ts:295-313`), so ts-morph stays out of the serving process only on a fast-gate HIT.
 - **`ExtractionSession` exposes `dispose()`** (`extraction-session.ts:27-32`, `81-89`, `329-341`).
 - **Python and Java extractors are already subprocesses.** SPEC §1 and §14 already specify per-language extractors as subprocesses with JSON out ("drivable: apigen-<lang>-extractor <files> -> JSON").
 - **What `dispose()` can and cannot free.** Node cannot unload a required module, so `dispose()` frees AST and program heap but not module code. Only not loading the translator (a cache hit, or prebuilt IR, which is what adhd-policy does; see `docs/plan/policy-core/MEASUREMENTS.md`) or a process boundary keeps the translator out of the serving process.
