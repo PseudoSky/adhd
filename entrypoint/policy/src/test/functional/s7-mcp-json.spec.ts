@@ -1,3 +1,8 @@
+/**
+ * guards: `adhd-policy mcp-json init` wraps a stdio MCP entry wrongly, twice, or lossy, or `--undo` restores something other than the original bytes, leaving the user's .mcp.json corrupted or unguarded.
+ * tier: S
+ * cites: docs/plan/policy-core/tickets/T17.md (@S7.1; review fixes E2, E3, E4, E8)
+ */
 import { chmod, lstat, mkdir, readdir, readFile, stat, symlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';

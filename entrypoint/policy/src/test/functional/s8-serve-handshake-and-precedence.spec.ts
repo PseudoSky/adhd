@@ -1,3 +1,8 @@
+/**
+ * guards: `serve` falls back to treating a command that is not an MCP server as an argv operation, or merges attribute sources (flag, environment, file) instead of letting the flag win, so a call is allowed that should be refused.
+ * tier: S
+ * cites: docs/plan/policy-core/tickets/T19.md (@S8.2, @S8.3; D-06, D-08)
+ */
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { IProcessLauncher } from '@adhd/apigen-engine-gateway';

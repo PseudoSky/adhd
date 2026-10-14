@@ -1,3 +1,8 @@
+/**
+ * guards: A review fix to the entrypoint regresses: strict flag parsing (E11), abort handlers installed only for verbs (E4), attribute precedence flag over environment never merged (D-06), baked-IR and extraction handling, or the HTTP start refusals.
+ * tier: S
+ * cites: docs/plan/policy-core/REVIEW-FIXES.md (Entrypoint proof, Phase C part 1: E4, E11, E12, D-06)
+ */
 import { mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { existsSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';

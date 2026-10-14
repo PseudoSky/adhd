@@ -1,3 +1,8 @@
+/**
+ * guards: `adhd-policy run` launches a tool the policy refuses or asks about, lets a denied cwd through, forwards --adhd-* flags to the child, or loses the child's exit code.
+ * tier: S
+ * cites: docs/plan/policy-core/tickets/T13.md (@S3.1, @S3.2, @S3.3, @S3.6; B3.1)
+ */
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';

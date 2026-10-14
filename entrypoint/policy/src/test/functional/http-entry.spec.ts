@@ -1,3 +1,9 @@
+/**
+ * guards: The adhd-policy-http entry fails to serve the policy operations on its loopback port, binds a wrong port, leaves a signal handler or listener behind, or swallows a bad or taken ADHD_POLICY_HTTP_PORT instead of exiting 2 or 1.
+ * tier: P
+ * cites: docs/plan/policy-core/tickets/T17.md (HTTP entry, E6) and tickets/COVERAGE.md (adhd-policy-mcp / -http projections, T06)
+ * gap: This cannot be observed at tier S because the entry binds a real listening socket on an OS-assigned loopback port and answers real HTTP requests over it, and a listening socket exists only at tier P.
+ */
 import { createServer, type Server } from 'node:net';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { HTTP_PORT_ENV_VAR } from '../../wrapper/http-port';

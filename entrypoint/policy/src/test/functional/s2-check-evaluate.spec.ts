@@ -1,3 +1,8 @@
+/**
+ * guards: `adhd-policy check` and `evaluate` return the wrong decision or exit code for an allowed, denied, forced-set or no-match call, so a script gating on the exit code lets a refused call through.
+ * tier: S
+ * cites: docs/plan/policy-core/tickets/T12.md (@S2.1, @S2.2, @S2.3, @S2.5; B2.1-B2.4)
+ */
 import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { describe, expect, it } from 'vitest';

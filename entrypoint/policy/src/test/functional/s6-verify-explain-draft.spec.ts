@@ -1,3 +1,8 @@
+/**
+ * guards: `verify`, `explain` or `draft` accept a broken policy file, name the wrong rule, or report a wrong exit code, so an author ships a policy that does not mean what it says.
+ * tier: S
+ * cites: docs/plan/policy-core/tickets/T16.md (@S6.1, @S6.2, @S6.3, @S6.4; B6.1)
+ */
 import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import type { IDraftPolicy, IExplanation, IPolicyIssue, IResolved, IVerifyReport } from '@adhd/policy-core-client';

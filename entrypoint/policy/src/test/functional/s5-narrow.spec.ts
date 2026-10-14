@@ -1,3 +1,8 @@
+/**
+ * guards: `adhd-policy narrow` widens a child's authority beyond its parent's, mutates its frozen input, or reports the wrong failure shape and exit code.
+ * tier: S
+ * cites: docs/plan/policy-core/tickets/T15.md (@S5.1, @S5.2, @S5.3, @S5.6; B5.1)
+ */
 import { mkdir, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createPolicyClient, parsePolicyYaml, type Attributes, type INarrowResult } from '@adhd/policy-core-client';

@@ -1,3 +1,8 @@
+/**
+ * guards: `adhd-policy serve` lets a denied or ask call reach the upstream MCP server, drops a forced value, trusts the upstream's own server name, or leaves the host or upstream running after shutdown.
+ * tier: S
+ * cites: docs/plan/policy-core/tickets/T17.md (@S7.1, @S7.2, @S7.3; review fix E5)
+ */
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { PassThrough } from 'node:stream';
