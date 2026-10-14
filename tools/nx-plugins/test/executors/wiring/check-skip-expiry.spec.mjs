@@ -1,14 +1,17 @@
 /**
  * Backlog 595965cc T32 (G4: every skip, todo and disabled marker has a tracking item and an unexpired date).
  *
- * failure mode: a skipped or todo test that nobody tracks stays dark forever and the suite reads green; an expired
- *   tracking date is the same failure with a paper trail; a scanner that reads fixtures, comments or strings as
- *   markers fails the repository for text that skips nothing.
- * tier: S by name and lane (the build-tools `node --test` lane). The CLI cases spawn the script and a git call runs in a temp repository,
- *   which ADR 0009 forbids in the Vitest tier S lane; that exception is the one every build-tools spec lives under.
- * cites: T32.AC1, T32.AC2, T32.AC3.
- * teeth: with the annotation check removed every AC1 case fails; with the date comparison removed the AC2 cases fail.
- * guards: tools/nx-plugins/test/executors/wiring/check-skip-expiry.mjs
+ * guards: a skipped or todo test nobody tracks stays dark while the suite reads green, an expired tracking date is
+ *   the same failure with a paper trail, and a scanner that reads fixtures, comments or strings as markers fails the
+ *   repository for text that skips nothing.
+ * tier: P (the CLI cases spawn the script and a git call runs in a temporary repository; the build-tools `node --test`
+ *   lane, 10 s per test; the pure cases in this file are tier S and the file is classified by its heaviest case).
+ * gap: This cannot be observed at tier S because the exit code, the stdout report and the commit read from a real
+ *   repository exist only when the script runs as a process.
+ * cites: 595965cc T32.AC1, T32.AC2, T32.AC3.
+ * tags: regression:b87dcea0 (tier classification)
+ * teeth: red: node --test tools/nx-plugins/test/executors/wiring/check-skip-expiry.spec.mjs -> exit 1; with the
+ *   annotation check removed 20 cases fail, with dates never expiring 3 fail, with the baseline allowed to go stale 1 fails.
  */
 import test, { describe, before, after } from 'node:test';
 import assert from 'node:assert/strict';
