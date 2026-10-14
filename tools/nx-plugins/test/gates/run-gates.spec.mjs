@@ -117,6 +117,24 @@ describe('595965cc T30.AC1 — the repository command table', () => {
     assert.equal(passed, selected - obligations.length);
     assert.ok(passed < selected, 'the obligation must not be among the passes');
   });
+
+  // T03.AC3: stages C, D, E and G are documented as commands in AGENTS.md but were never run. Running the real
+  // gate commands at E and G means a full-repo nx run-many, so this swaps each command for a no-op in a copy of
+  // the real table and asserts what the engine SELECTS per stage: the stage -> gate map is what is under test.
+  const NOOP = 'node -e "process.exit(0)"';
+  for (const stage of ['C', 'D', 'E', 'G']) {
+    it(`backlog 06508843 T03.AC3 stage ${stage} selects exactly the gates the table binds to it; unbound gates are obligations`, { todo: ENGINE_TODO }, () => {
+      const real = table();
+      const invokes = real.stages[stage].invokes;
+      const copy = join(tmp, `real-${stage}.json`);
+      writeFileSync(copy, JSON.stringify({ ...real, gates: real.gates.map((g) => (g.command === undefined ? g : { ...g, command: NOOP })) }));
+      const r = wrapper(['--step', stage, '--table', copy]);
+      assert.equal(r.status, 0, `${r.stderr}\n${JSON.stringify(r.report?.summary)}`);
+      assert.deepEqual(r.report.gates.filter((g) => g.selected).map((g) => g.id).sort(), [...invokes].sort());
+      const unbound = real.gates.filter((g) => invokes.includes(g.id) && g.command === undefined).map((g) => g.id);
+      assert.deepEqual([...r.report.summary.obligations].sort(), unbound.sort());
+    });
+  }
 });
 
 function fixtureTable(rows) {
