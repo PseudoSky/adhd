@@ -1,6 +1,11 @@
 /**
  * g1-tests.spec.mjs — 595965cc T30: the G1 command selects the lane targets of tools/gate/lane-gate.mjs,
  * the affected set by default and every project under GATE_FULL=1.
+ *
+ * guards: G1 runs a different set of lane targets than the gate's single definition names.
+ * tier: S (pure argument construction; spawns nothing).
+ * cites: 595965cc T30.AC1.
+ * teeth: none recorded (a changed target list fails the equality assertion; no red run was captured).
  */
 import assert from 'node:assert/strict';
 import test from 'node:test';

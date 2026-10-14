@@ -1,16 +1,25 @@
 /**
- * run-gates.spec.mjs — 595965cc T30: this repository's command table and the wrapper around the
- * workspace-standards gate engine.
+ * run-gates.spec.mjs — 595965cc T30: this repository's command table and the wrapper around the workspace-standards
+ * gate engine.
  *
- *   T30.AC1 the table binds every gate id G1-G12 to a command (or an honest obligation), a stage and a
- *           mechanism class, the engine runs the named stage set from it and writes ONE JSON report;
+ *   T30.AC1 the table binds every gate id G1-G12 to a command (or an honest obligation), a stage and a mechanism
+ *           class, the engine runs the named stage set from it and writes ONE JSON report;
  *   T30.AC2 the exit code is the worst gate's;
  *   T30.AC3 a seeded failing gate makes the exit non-zero and the report names it.
- *   (T30.AC4, the nx cache hit, is a property of the `test-gates` target: `nx run @adhd/source:test-gates`
- *   twice, the second line reads `[local cache]`; its recorded evidence is in the task's commit message.)
+ *   (T30.AC4, the nx cache hit, is a property of the `test-gates` target: `nx run @adhd/source:test-gates` twice, the
+ *   second line reads `[local cache]`; its recorded evidence is in the task's commit message.)
  *
- * The real engine is required: if it is not installed these tests FAIL with the install command, they
- * never skip (a skipped gate is the failure STRATEGY G4 exists to stop).
+ * The real engine is required: if it is not installed these tests FAIL with the install command, they never skip (a
+ * skipped gate is the failure STRATEGY G4 exists to stop).
+ *
+ * guards: the gate engine runs a different gate set than the table binds, or a failing gate exits 0.
+ * tier: P (spawns the real engine and the wrapper; the build-tools `node --test` lane, 10 s per test; the slowest case
+ *   runs stage B in about 1.1 s).
+ * gap: This cannot be observed at tier S because stage selection, the single report and the worst-gate exit code exist
+ *   only when the engine runs as a process over the real table.
+ * cites: 595965cc T30.AC1-AC3; 06508843 T03.AC3.
+ * teeth: red evidence for the stage C, D, E and G cases is a changed expected set failing the equality assertion; it
+ *   was not captured as a recorded command for AC1-AC3 (authorship was not separated).
  */
 import { spawnSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';

@@ -432,7 +432,7 @@ This table wins over the dispatcher's own default rows: for every task it names,
 | test-gates | G6 | review | D | obligation | a defect fix carries a test that failed before the fix; every new behavioral test records a red run on a failed assertion |
 | test-gates | G7 | mechanical | D, E | command | per-test and per-stage budgets hold; p95 not more than 10% above the median of the previous five mainline runs (starting value) |
 | test-gates | G8 | mechanical | D | command | surviving mutants and uncovered lines in the changed code are reviewed; no repository-wide percentage target |
-| test-gates | G9 | mechanical | D | command | every tier P, H, or X test carries a valid fidelity-gap statement |
+| test-gates | G9 | mechanical | C, D, E | command | every tier P, H, or X test carries a valid fidelity-gap statement |
 | test-gates | G10 | mechanical | D, G | command | the built artifact loads and its primary journey runs as a consumer runs it |
 | test-gates | G11 | review | D | obligation | changes to test infrastructure and gates cite the strategy and the exception log |
 | test-gates | G12 | mechanical | C, D, E, F | command | every change has a class and rigor record; Standard and Deep have a not-testing list; every new test has a header |
@@ -442,9 +442,9 @@ This table wins over the dispatcher's own default rows: for every task it names,
 |---|---|
 | A | _none_ |
 | B | test-gates/G2, test-gates/G3 |
-| C | test-gates/G1, test-gates/G2, test-gates/G3, test-gates/G4, test-gates/G12 |
+| C | test-gates/G1, test-gates/G2, test-gates/G3, test-gates/G4, test-gates/G9, test-gates/G12 |
 | D | test-gates/G1, test-gates/G2, test-gates/G3, test-gates/G4, test-gates/G6, test-gates/G7, test-gates/G8, test-gates/G9, test-gates/G10, test-gates/G11, test-gates/G12 |
-| E | test-gates/G1, test-gates/G2, test-gates/G3, test-gates/G4, test-gates/G5, test-gates/G7, test-gates/G12 |
+| E | test-gates/G1, test-gates/G2, test-gates/G3, test-gates/G4, test-gates/G5, test-gates/G7, test-gates/G9, test-gates/G12 |
 | F | test-gates/G5, test-gates/G12 |
 | G | test-gates/G1, test-gates/G10 |
 | H | _none_ |

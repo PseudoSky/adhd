@@ -140,6 +140,10 @@ jobs:
       # the legacy baseline, which only shrinks.
       - name: Skip and todo expiry check (G4)
         run: node tools/nx-plugins/test/executors/wiring/check-skip-expiry.mjs
+      # G9 header lint (595965cc T34): a test's tier is judged against its code, P/H/X carry a fidelity-gap statement,
+      # and a new test has a header; legacy files are baselined and the baseline only shrinks.
+      - name: Test header and tier check (G9)
+        run: node tools/nx-plugins/test/executors/wiring/check-test-headers.mjs
 
       # Lockfile freshness (backlog 4f26493e AC2): names the package.json/specifier
       # that drifted from pnpm-lock.yaml (see .githooks/pre-push).

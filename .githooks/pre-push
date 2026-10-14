@@ -130,6 +130,16 @@ while read -r local_ref local_sha remote_ref remote_sha; do
   fi
   g4_done=1
 
+  # 595965cc T34 (G9, b87dcea0): each test's header tier is judged against its code (a spawning file headed tier S
+  # fails), tier P/H/X carry a fidelity-gap statement, and a new test has a header. Legacy files are baselined;
+  # the baseline only shrinks. Once per push. Node built-ins only.
+  if [ -z "${g9_done:-}" ] && ! node "$repo_root/tools/nx-plugins/test/executors/wiring/check-test-headers.mjs"; then
+    echo ""
+    echo "✖ pre-push: G9 test header check failed — give the test a header (guards, tier, cites; gap for tier P/H/X) whose tier matches what the code does; never reword a header to excuse the tier"
+    exit 1
+  fi
+  g9_done=1
+
   echo "→ pre-push: nx affected $flags  (base=${base:-<default>}  head=$local_sha, ref=$local_ref)"
 
   # ---------------------------------------------------------------------------

@@ -9,6 +9,15 @@
  *      (`--workspace-root`), never the real file: a concurrent reader of the real hook
  *      (the gate engine's G2, the other wiring specs) must never see a mutated file.
  *
+ * guards: the pre-push hook runs the heavy e2e lane again, or stops running the test lane, or loses the git-env guard.
+ * tier: P (executes the hook's own lines and the reachability check through sh and node; the build-tools `node --test`
+ *   lane, 10 s per test).
+ * gap: This cannot be observed at tier S because the hook is shell: its resolution and the checker's exit status exist
+ *   only when sh and node run it.
+ * cites: backlog pre-push-e2e AC1-AC4; 595965cc T03 (the remote-tip and once-per-push cases).
+ * teeth: red: node --test .githooks/pre-push-e2e.spec.mjs -> exit 1 with the unknown-remote-tip condition removed
+ *   (the blind-review 16 case fails); AC1-AC4 red evidence was not captured in this plan.
+ *
  * Run: node --test .githooks/pre-push-e2e.spec.mjs
  */
 import { test } from 'node:test';
