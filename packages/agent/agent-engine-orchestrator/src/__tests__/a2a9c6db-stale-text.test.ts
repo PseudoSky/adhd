@@ -6,6 +6,10 @@
  * on native-tooling while `package.json` and `native-tool-guidance.ts` say it does; the CHANGELOG Unreleased
  * block said both "validation-only, no behaviour change" and "sent verbatim" for `thinking`, and both
  * "omits queueWaitMs / sessionMs" and "carries" them for `task:startup`. These read the real files.
+ *
+ * guards: the deleted dead module engine/denial-message.ts (or its test) comes back, or a source header or the CHANGELOG again claims 'adds no default allowlist', 'does not depend on native-tooling', or contradicts itself on thinking and queueWaitMs/sessionMs.
+ * tier: S
+ * cites: a2a9c6db AC3, a2a9c6db AC4 (cited in the test titles).
  */
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";

@@ -1,3 +1,8 @@
+/**
+ * guards: the per-call timing helpers report a wrong time-to-first-byte or overhead: a first byte before start counts, a repeated mark overwrites the first, a backwards clock goes negative, a measured zero is treated as absent, or an unmeasured payload gains undefined keys.
+ * tier: S
+ * cites: adbf1c0b / 8dc52aa7 ticket family, plan P6 (P6 AC-ttfb, AC-overhead, AC-fields; cited in the test titles and the comment).
+ */
 import { describe, expect, it } from 'vitest';
 
 import { callTimingFields, computeOverheadMs, createTtfbProbe } from '../providers/call-timing.js';

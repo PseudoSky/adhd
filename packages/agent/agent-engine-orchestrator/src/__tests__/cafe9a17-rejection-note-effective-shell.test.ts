@@ -5,6 +5,10 @@
  * is the exact text the host appends to the model's view of a rejected command. The per-adapter proof that the
  * note reaches (anthropic, openai-compatible) or does not reach (claudecli) the model lives in agent-mcp
  * (`cafe9a17-rejection-note-adapters.test.ts`), which owns the host tool-result path.
+ *
+ * guards: the shell policy-rejection note names a runner the effective shell server does not allow (the default list after an override or a modification), or names runners when the effective config cannot be determined.
+ * tier: S
+ * cites: cafe9a17 AC1 residual (cited in the describe title).
  */
 import { resolveNativeToolingMap, DEFAULT_SHELL_ALLOW_COMMANDS } from '@adhd/agent-core-native-tooling';
 import type { McpServerConfig, NativeToolingConfig } from '@adhd/agent-base-types';

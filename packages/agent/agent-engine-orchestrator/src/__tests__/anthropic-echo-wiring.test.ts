@@ -21,6 +21,10 @@
  * `CONTEXT_WINDOW_EXCEEDED` lives in `orchestrator.ts` (S5a); here the provider is shown to surface the SAME error the
  * no-echo path surfaces, after exactly one request. Whether the live API accepts the replayed shapes is the gated live
  * test's job (S7); the fake encodes the documented rules only.
+ *
+ * guards: AnthropicProvider mis-wires the pure echo and pause modules: replayed blocks go back reordered or with unqualified tool names, a request with no echo changes its bytes, a pause loop sends one request too many or too few, a paused client tool_use is continued, a rejection degrades more or less than once, or a signature or page text reaches a log.
+ * tier: S
+ * cites: R9-hist S3a AC1-AC7 (cited in the test titles).
  */
 import { createHash } from "node:crypto";
 

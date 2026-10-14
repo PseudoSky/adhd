@@ -10,6 +10,10 @@
  *  - R9-pause AC1 (fixture side): `pause_turn` is a representable stop reason.
  *  - S1 hygiene: the committed captures carry no credential, no request/organisation id, no original Anthropic id and
  *    no real signature; the legacy `text` / `toolUse` params emit exactly the bytes the existing suites were written against.
+ *
+ * guards: the SSE fixture builder or a committed C1 wire capture drifts from what the real SDK accumulates (blocks lost or reordered, pause_turn not representable), or a capture carries a credential, request or organisation id, original Anthropic id or real signature.
+ * tier: S
+ * cites: R9-hist AC1, R9-pause AC1, S1 hygiene (cited in the header).
  */
 import Anthropic from "@anthropic-ai/sdk";
 import { readdirSync, readFileSync } from "node:fs";

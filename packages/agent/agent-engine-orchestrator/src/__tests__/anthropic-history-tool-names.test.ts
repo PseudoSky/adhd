@@ -12,6 +12,10 @@
  *    unchanged; `resolveToolCallName` keeps tolerating bare model output (DEBT-004 safety net).
  *
  * Real AnthropicProvider / OpenAIProvider + real SDKs through the engine's `wire.fetch` seam: no socket, no network.
+ *
+ * guards: the provider re-sends prior assistant tool_use blocks with the server prefix dropped (shell_execute instead of the advertised shell__shell_execute), differs between Anthropic and OpenAI for the same ToolCall, or rewrites server tools and unprefixed tools.
+ * tier: S
+ * cites: P1-toolname AC1, AC2, AC3 (cited in the test titles).
  */
 import { describe, expect, it } from "vitest";
 

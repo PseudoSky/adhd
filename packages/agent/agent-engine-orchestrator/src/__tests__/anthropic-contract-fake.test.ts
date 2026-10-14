@@ -10,6 +10,10 @@
  * Acceptance ids (spec R9-DUR AC12 "documented-rule fake", AC4 deferred shape, AC8/AC17 injected errors):
  *   R9-hist AC12 V1 | V2 | V3 | V4a | V4b | V5, R9-hist AC4, R9-hist AC8 (error injection), R9-pause AC1 (stop reason).
  * Offline: no socket, no clock, no provider call.
+ *
+ * guards: the offline Anthropic contract fake accepts a history that violates a documented rule (V1-V5) or rejects a valid one, so every provider proof that trusts its 200 or its 400 passes or fails for the wrong reason.
+ * tier: S
+ * cites: R9-hist AC12 (V1, V2, V3, V4a, V4b, V5), R9-hist AC4, R9-hist AC8, R9-pause AC1 (cited in the header).
  */
 import Anthropic from "@anthropic-ai/sdk";
 import { describe, expect, it } from "vitest";

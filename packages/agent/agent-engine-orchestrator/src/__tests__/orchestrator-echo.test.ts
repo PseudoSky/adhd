@@ -11,6 +11,10 @@
  * Every test title cites `R9-hist S5a AC<n>`; the numbers follow the task's acceptance list:
  *   AC1 load+replay, AC2 store+reopen, AC3 sticky veto, AC4 failure isolation, AC5 degrade, AC6 pause,
  *   AC7 compaction, AC8 metrics, AC9 privacy.
+ *
+ * guards: the orchestrator loads, replays, persists or deletes provider echoes wrongly: no echoes for the second task or past the TTL, a non-sticky persistence veto, an echo-store failure failing a task, a rejected replay degrading more or less than once, stored echoes deleted without the echo being the proven cause, unvetted pause continuations, compaction replaying compacted ids, or a signature leaking outside the echo table.
+ * tier: S (real orchestrator and stores on an on-disk SQLite file; only the LLM provider is scripted)
+ * cites: R9-hist S5a AC1-AC9, cafe9a17 AC2 (cited in the test titles).
  */
 import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";

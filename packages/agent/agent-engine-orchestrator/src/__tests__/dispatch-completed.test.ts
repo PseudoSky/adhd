@@ -1,3 +1,8 @@
+/**
+ * guards: dispatch:completed is emitted twice or zero times per completed dispatch, with the wrong mode, kind, childTaskIds or parent-blocked time, once per batch item instead of once per batch, for a plain tool, a call with no parent context or a refused dispatch, or a throwing observer fails or alters the dispatch.
+ * tier: S (real task tools, orchestrator, stores and hooks; only the openai SDK is mocked)
+ * cites: R10 S5 AC5, R10 S5 AC2 (cited in the test titles and the docblock).
+ */
 import { randomUUID } from 'node:crypto';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { describe, expect, it, vi } from 'vitest';

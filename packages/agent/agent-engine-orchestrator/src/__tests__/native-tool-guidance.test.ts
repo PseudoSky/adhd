@@ -1,3 +1,8 @@
+/**
+ * guards: the native-tool guidance appended to shell and fs tool descriptions drifts from the real allowlist (an unavailable command listed as available, or the default list not matching DEFAULT_SHELL_ALLOW_COMMANDS), touches other tools, or omits the write_file and create_directory constraints.
+ * tier: S
+ * cites: R5-WEB-SIMPLE AC4, R7-guidance AC2, R10 S4 P3/P4 (cited in the describe titles).
+ */
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_SHELL_ALLOW_COMMANDS, resolveNativeToolingMap } from '@adhd/agent-core-native-tooling';
 import {

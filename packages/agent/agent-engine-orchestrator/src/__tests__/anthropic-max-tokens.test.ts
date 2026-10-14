@@ -3,6 +3,10 @@
  * (catalog max_output_tokens.upper 128000), not the engine's small fallback. Also pins that the request body carries
  * no `thinking` field (the provider never forces thinking on or off; the API default for the model governs).
  * Real AnthropicProvider; only the SDK network boundary is mocked.
+ *
+ * guards: the Sonnet 5 or Haiku 5 default max_tokens falls back to the engine's small default (or leaks onto a neighbouring model), or the provider starts forcing a thinking field on the request body.
+ * tier: S (the Anthropic SDK network boundary is mocked)
+ * cites: R7-think AC3b, R8-model AC3b (cited in the header).
  */
 import { describe, expect, it, vi } from "vitest";
 

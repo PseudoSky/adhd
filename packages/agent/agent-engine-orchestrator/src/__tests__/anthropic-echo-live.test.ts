@@ -4,6 +4,11 @@
  * stripped after the TTL, the deferred server_tool_use tail)? The offline contract fake encodes only the documented
  * rules; this file is the one check of what the real API enforces.
  *
+ * guards: the live Anthropic Messages API rejects (HTTP 400) the assistant history this package replays (thinking signatures, executed server tool pairs, post-TTL stripped history, the deferred server_tool_use tail) although the offline contract fake accepts it.
+ * tier: X (a real paid model, gate ADHD_AGENT_LIVE_ECHO=1, approver nix, repo owner; the always-running half uses a fake fetch only)
+ * gap: This cannot be observed at tier P because whether the API accepts a replayed history is decided only by the live Anthropic service, and the offline contract fake encodes the documented rules only.
+ * cites: R9-hist S7 / spec-v2 AC13 items (a)-(f) (cited in the header).
+ *
  * ── ENV-GATED (paid third-party model) -- OFF BY DEFAULT AND OFF IN CI ─────────────────────────────────────────
  * Gate:      ADHD_AGENT_LIVE_ECHO=1   (exactly "1"; an API key alone never turns it on)
  * Owner / approver: nix (repo owner).

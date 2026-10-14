@@ -5,6 +5,10 @@
  * must still satisfy `LLMProvider`, and every new field is optional. The type assertions are
  * enforced by the `typecheck-spec` gate; the runtime assertions drive a real `LLMProvider`
  * implementation through the contract.
+ *
+ * guards: the echo and continuation fields on the provider contract stop being additive and optional, so a provider written against the previous contract no longer satisfies LLMProvider, or the request and response echo shapes change.
+ * tier: S (type assertions enforced by the typecheck-spec gate)
+ * cites: R9-hist S0, R9-hist AC6 (cited in the header and describe title).
  */
 import { describe, expect, expectTypeOf, it } from 'vitest';
 import type {

@@ -22,6 +22,10 @@
  * accepts. (2) its V4 matches a merged trailing assistant message to ONE emitted turn, so thinking blocks from TWO
  * different paused responses in the same tail read as "dropped in part" (V4a): scripts put thinking in the first
  * paused response only. Neither is a defect of the loop; fixtures are not edited here.
+ *
+ * guards: the pause_turn continuation loop returns a paused turn twice or partially, runs a sixth request, drops paused content or thinking from a continuation, skips or mis-times beforeContinuation, loses spend on cap, abort or hook rejection, or restarts the turn when one continuation is retried.
+ * tier: S
+ * cites: R9-pause AC1-AC9 (cited in the header and test titles).
  */
 import Anthropic from "@anthropic-ai/sdk";
 import type { ContentBlockParam, Message, MessageParam, Tool } from "@anthropic-ai/sdk/resources/messages";

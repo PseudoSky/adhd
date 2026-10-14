@@ -18,6 +18,10 @@
  *  - R9-hist AC6: no echo / wrong provider / wrong model / disagreeing tool calls => `undefined` (legacy path).
  *  - R9-hist AC10 (pure part): `partitionEcho` / `stripServerBlocks` tiering and caps.
  *  - R9-hist AC17 (matcher part): `isEchoRejection` accepts echo-fault 400s and excludes context-length 400s, 429, 5xx, abort.
+ *
+ * guards: the pure echo helpers capture, replay, sanitize or partition blocks wrongly (dropped or reordered thinking, a dangling server_tool_use or orphan result left in, a tier S block kept past its cap) so the replayed history is a 400 by the contract-fake validator, or isEchoRejection treats a context-length 400, 429, 5xx or abort as an echo fault.
+ * tier: S
+ * cites: R9-hist AC1, AC2, AC3, AC4, AC5, AC6, AC10, AC17 (cited in the header).
  */
 import Anthropic from "@anthropic-ai/sdk";
 import type { MessageParam } from "@anthropic-ai/sdk/resources/messages";

@@ -6,6 +6,11 @@
  * `Orchestrator.run` over `mcpServers` produced by the REAL resolver; the CLI itself (a paid third-party binary) is
  * stood in for by a provider that captures `request.tools`, exactly as `r10-w1-shell-guidance-claudecli.test.ts` does.
  * One scaffold, no sleeps, no timing assertions.
+ *
+ * guards: the tool descriptions a claudecli agent's CLI reads through the loopback MCP bridge describe the catalog defaults (default allowlist, exit-status promise, fs notes) instead of the task's effective shell and fs servers.
+ * tier: P (e2e lane)
+ * gap: This cannot be observed at tier S because the claudecli adapter hands its tools to the CLI only through a real loopback HTTP MCP server read by a real MCP client, and tier S allows no sockets.
+ * cites: cafe9a17 AC1, cafe9a17 AC3 (cited in the test titles).
  */
 import { resolveNativeToolingMap, DEFAULT_SHELL_ALLOW_COMMANDS } from "@adhd/agent-core-native-tooling";
 import type { McpServerConfig, NativeToolingConfig } from "@adhd/agent-base-types";

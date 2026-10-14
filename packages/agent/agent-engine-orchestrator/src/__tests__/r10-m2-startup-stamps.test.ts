@@ -16,6 +16,10 @@
  *    task raises `queueWaitMs` by at least the hold; an engine fed no stamps leaves the keys ABSENT (not 0).
  *  - R10 M2 AC4: a call with no dispatching parent leaves both absent.
  *  - R10 M2 AC5: the claudecli family takes the same `Orchestrator.run` path (a stamp is forwarded regardless of provider).
+ *
+ * guards: task:startup carries a wrong, negative or fabricated 0 sessionMs or queueWaitMs (instead of leaving the key absent), the stamps exceed the dispatch's own wall time, a delayed session create or a held queue is not reflected, or a DAG redispatch or a call with no parent is stamped wrongly, for the anthropic or openai family.
+ * tier: S (real task tool, orchestrator, stores and BackgroundQueue; only the LLM provider is scripted; virtual time, no sleeping)
+ * cites: R10 M2 AC1-AC5 (cited in the docblock and test titles).
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { drizzle } from "drizzle-orm/better-sqlite3";

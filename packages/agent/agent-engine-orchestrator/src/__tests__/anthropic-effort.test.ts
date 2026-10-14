@@ -6,6 +6,10 @@
  * agent-definition -> binding -> provider-config chain a stored agent takes at run time).
  *
  * Real AnthropicProvider + real @anthropic-ai/sdk through the engine's `wire.fetch` seam: no socket, no api.anthropic.com.
+ *
+ * guards: the Anthropic provider omits output_config.effort when configured, sends it when none is configured, accepts an unknown level or the field on a provider without the knob, or drops it between agent definition, binding and provider config.
+ * tier: S
+ * cites: R8-AC-effort AC1, AC2, AC3 (cited in the test titles).
  */
 import { describe, expect, it } from "vitest";
 

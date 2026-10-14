@@ -1,3 +1,8 @@
+/**
+ * guards: a background ephemeral task or tasks_batch blocks its caller until the run finishes, reclaims its one-shot session early, fails to wake or fail a waiting dependent, lets a background ask park instead of failing closed, or the bounded result wait sleeps on wait_ms 0 or errors on a non-terminal task.
+ * tier: S (real task tools, orchestrator and stores on in-memory migrated SQLite; only the LLM provider factory is mocked)
+ * cites: adbf1c0b, 099524a8 (P2 AC-bg-task, AC-bg-session-kept, AC-bg-dependents, AC-bg-ask, AC-bg-batch, AC-wait; cited in the test titles and the docblock).
+ */
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 

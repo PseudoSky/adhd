@@ -29,6 +29,10 @@
  *   AC6 privacy: signature / page text / encrypted_content only in message_provider_echo (with a teeth check)
  *   AC7 failure isolation: echo table dropped / corrupt mid-session => tasks complete on legacy history, one WARN
  *   AC8 compaction: the summariser request carries no echoed blocks; compacted ids are not replayed
+ *
+ * guards: the provider-echo chain breaks end to end: a second task in a session loses the model's own thinking signature or server tool pairs, tier S survives past the idle TTL, a signature 400 does not degrade once and heal, the sanitize veto or privacy rule leaks, or an echo-table failure fails a task.
+ * tier: S (real stores on an on-disk SQLite file, real provider and SDK parser, only the Anthropic HTTP boundary faked)
+ * cites: R9-hist S6 AC1-AC8 (cited in the test titles).
  */
 import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";

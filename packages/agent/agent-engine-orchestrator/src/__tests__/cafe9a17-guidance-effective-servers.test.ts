@@ -7,6 +7,10 @@
  * and the bytes asserted are the tool descriptions each REAL provider adapter puts on its wire (Anthropic and the
  * OpenAI-compatible adapter that DeepSeek uses, both through the engine's `wire.fetch` seam: no network). The
  * claudecli bridge leg is in `cafe9a17-guidance-claudecli.e2e.test.ts` (it needs a loopback server).
+ *
+ * guards: the native-tool guidance on the Anthropic and OpenAI-compatible wires describes the catalog defaults (allowlist, recipes, exit-status promise, fs notes) instead of the task's effective shell and fs servers, or promises something when the config is unknown instead of failing closed.
+ * tier: S
+ * cites: cafe9a17 AC1, cafe9a17 AC3 (cited in the test titles).
  */
 import { resolveNativeToolingMap, DEFAULT_SHELL_ALLOW_COMMANDS } from "@adhd/agent-core-native-tooling";
 import type { McpServerConfig, NativeToolingConfig } from "@adhd/agent-base-types";

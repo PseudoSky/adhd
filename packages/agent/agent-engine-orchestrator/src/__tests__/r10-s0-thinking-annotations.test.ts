@@ -8,6 +8,10 @@
  *      for the real Anthropic and OpenAI providers.
  *
  * Real providers + real SDKs through the engine's `wire.fetch` seam: no socket.
+ *
+ * guards: provider.thinking validation accepts an unknown shape or a wrong type, drops the field between agent definition, binding and provider config, or ToolDefinition.annotations reaches the Anthropic or OpenAI wire.
+ * tier: S
+ * cites: R10 S0 AC2, R10 S0 AC6 (cited in the docblock and test titles).
  */
 import { describe, expect, it } from "vitest";
 
