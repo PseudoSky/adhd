@@ -65,6 +65,7 @@ calc-server.log
 
 .nx/cache
 .nx/workspace-data
+.nx/test-gates
 
 # Claude Code local state. Only the genuinely local/huge/personal pieces are
 # ignored here -- .claude/settings.json (team-wide hooks/permissions),

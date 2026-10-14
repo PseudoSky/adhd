@@ -94,7 +94,8 @@ while read -r local_ref local_sha remote_ref remote_sha; do
   guard_exclude_ref "$local_ref" # the ref being pushed may legitimately differ
 
   base="$remote_sha"
-  if [ "$remote_sha" = "$zero_sha" ]; then
+  # A remote tip this clone does not have (the remote was rewritten) cannot anchor a range: treat it as a new branch.
+  if [ "$remote_sha" = "$zero_sha" ] || ! git cat-file -e "${remote_sha}^{commit}" 2>/dev/null; then
     # New remote branch: no remote tip to diff against yet. Scope to this
     # branch's own commits by diffing against its merge-base with main,
     # rather than the full repo history (which "affected" against a null
@@ -106,6 +107,28 @@ while read -r local_ref local_sha remote_ref remote_sha; do
       base=""
     fi
   fi
+
+  # 595965cc T43 (G12, STRATEGY 6.6): the change carries a rigor record, its recorded rigor is not below
+  # the rigor its paths and triggers derive, and a Standard or Deep change has a "not-testing" list.
+  # Commits authored before the IMPLEMENTATION's "Enforced from" date are exempt. Node built-ins only.
+  if [ -n "$base" ]; then
+    if ! node "$repo_root/tools/nx-plugins/test/routing/test-routing.mjs" check --range "$base..$local_sha"; then
+      echo ""
+      echo "✖ pre-push: G12 planning-record check failed for $base..$local_sha — add a '## Testing record' (class, rigor, triggers, not-testing) to a commit message in the range, or raise its rigor to the derived level above."
+      exit 1
+    fi
+  fi
+
+  # 595965cc T32 (G4, STRATEGY 10): every skip/todo/disabled marker carries a tracking item and an
+  # unexpired date, or is a legacy marker the baseline records (the baseline only shrinks). Repo-wide, not
+  # range-based, so it runs whether or not a base resolved, and once per push (not once per ref). It reads the
+  # checked-out tree, which is the tree a normal `git push` publishes. Node built-ins only.
+  if [ -z "${g4_done:-}" ] && ! node "$repo_root/tools/nx-plugins/test/executors/wiring/check-skip-expiry.mjs"; then
+    echo ""
+    echo "✖ pre-push: G4 skip/todo expiry check failed — name a tracking item and an unexpired date on the marker ('backlog <8 hex id> until YYYY-MM-DD'), or remove it"
+    exit 1
+  fi
+  g4_done=1
 
   echo "→ pre-push: nx affected $flags  (base=${base:-<default>}  head=$local_sha, ref=$local_ref)"
 
