@@ -23,10 +23,15 @@ const D: Any = await loadParity('drive.mjs');
 
 const SECRET = 'sk-ant-api03-SYNTHETIC-SECRET-do-not-log-0123456789'; // pragma: allowlist secret gitleaks:allow (synthetic canary; the test proves it is never logged)
 const BEARER = 'Bearer sk-openai-SYNTHETIC-BEARER-9876543210';
-const WORK = path.join(os.tmpdir(), 'r6b-proxy-unit');
+// b7e0d8c5 AC1: the work directory is unique per run (mkdtemp), never a fixed path shared by every process on the machine, so two concurrent runs
+// (e.g. in two worktrees) cannot race each other's setup or teardown.
+const makeWorkDir = () => fs.mkdtempSync(path.join(os.tmpdir(), 'r6b-proxy-unit-'));
+// b7e0d8c5 AC2: removes only the directory it is given and tolerates it already being gone (force), so afterAll is safe after a failing assertion too.
+const removeWorkDir = (dir: string) => { fs.rmSync(dir, { recursive: true, force: true }); };
+const WORK = makeWorkDir();
 let counter = 0;
 const freshDir = () => { const d = path.join(WORK, `t${process.pid}-${counter++}`); fs.mkdirSync(d, { recursive: true }); return d; };
-afterAll(() => { fs.rmSync(WORK, { recursive: true, force: true }); });
+afterAll(() => { removeWorkDir(WORK); });
 
 const ANTH_SSE = [
   'event: message_start\ndata: {"type":"message_start","message":{"id":"m1","usage":{"input_tokens":120,"cache_read_input_tokens":100,"cache_creation_input_tokens":7,"output_tokens":1}}}\n\n',
@@ -349,5 +354,31 @@ describe('R6B-proxy AC4: driver wiring (capture is opt-in, default OFF)', () => 
       expect(env.ADHD_AGENT_DEEPSEEK_BASE_URL).toBe(`http://127.0.0.1:7777/${arm}/deepseek/v1`);
     }
     expect(D.armAEnv(ctxFor('A', fake))).not.toHaveProperty('ADHD_AGENT_OPENAI_BASE_URL');
+  });
+});
+
+describe('b7e0d8c5: per-run unique work directory', () => {
+  it('b7e0d8c5 AC1: two invocations of the work-dir helper yield distinct directories, and neither is the legacy fixed path', () => {
+    const a = makeWorkDir(); const b = makeWorkDir();
+    try {
+      expect(a).not.toBe(b);
+      expect(a).not.toBe(path.join(os.tmpdir(), 'r6b-proxy-unit'));
+      expect(b).not.toBe(path.join(os.tmpdir(), 'r6b-proxy-unit'));
+      expect(fs.statSync(a).isDirectory()).toBe(true);
+      expect(fs.statSync(b).isDirectory()).toBe(true);
+      expect(WORK).not.toBe(a);
+    } finally { removeWorkDir(a); removeWorkDir(b); }
+  });
+
+  it('b7e0d8c5 AC2: cleanup removes only the given directory (siblings and parent survive) and tolerates a missing directory', () => {
+    const a = makeWorkDir(); const b = makeWorkDir();
+    try {
+      fs.writeFileSync(path.join(a, 'f'), 'x'); fs.writeFileSync(path.join(b, 'f'), 'y');
+      removeWorkDir(a);
+      expect(fs.existsSync(a)).toBe(false);
+      expect(fs.readFileSync(path.join(b, 'f'), 'utf8')).toBe('y');
+      expect(fs.existsSync(os.tmpdir())).toBe(true);
+      expect(() => removeWorkDir(a)).not.toThrow();
+    } finally { removeWorkDir(a); removeWorkDir(b); }
   });
 });
