@@ -1,3 +1,7 @@
+// guards: an argv-fallback command runs although the policy Layer refused it, or runs without the Layer seeing {argv, cwd}, or its output is not truncated at the marker
+// tier: S
+// cites: T13 @S3.1 @S3.2 @S3.3 (gateway side), REVIEW-FIXES G9
+
 /* eslint-disable @typescript-eslint/no-non-null-assertion -- specs index arrays/maps the test has just arranged; a miss would fail the very next assertion */
 // bin: argv fallback (D-07) — "Put a policy in front of any command" as the gateway sees it
 // (T13 @S3.1 @S3.2 @S3.3 gateway side, REVIEW-FIXES G9). The launcher is the recording

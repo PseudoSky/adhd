@@ -1,3 +1,7 @@
+// guards: a stdio MCP source is resolved under the upstream's self-declared name instead of the bin: command name, or a hung, malformed or failing upstream is not reported as a typed SourceError
+// tier: S
+// cites: T17 @S7.2 (gateway side), D-08, REVIEW-FIXES G2 G3 G4 G6 G8 G11
+
 /* eslint-disable @typescript-eslint/no-non-null-assertion -- specs index arrays/maps the test has just arranged; a miss would fail the very next assertion */
 // resolveSource(bin:, 'serve') — the stdio MCP source (D-08, T17 @S7.2 gateway side,
 // REVIEW-FIXES G2 G3 G4 G6 G8 G11). The upstream is an in-process stub behind a fake

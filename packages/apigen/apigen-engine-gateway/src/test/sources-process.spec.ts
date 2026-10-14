@@ -1,3 +1,7 @@
+// guards: nodeProcessLauncher hands the OS a shell string, a non-detached group or an unintended child environment, or mishandles the child's exit, error and kill events
+// tier: S
+// cites: REVIEW-FIXES G1 G9 G10 G11
+
 /* eslint-disable @typescript-eslint/no-non-null-assertion -- specs index arrays/maps the test has just arranged; a miss would fail the very next assertion */
 // nodeProcessLauncher (G1 G9 G10 G11) WITHOUT a real subprocess: `node:child_process.spawn`
 // is replaced by a scripted fake child, so what is asserted is exactly what the launcher

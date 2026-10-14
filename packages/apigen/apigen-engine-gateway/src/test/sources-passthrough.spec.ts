@@ -1,3 +1,7 @@
+// guards: the MCP passthrough forwards a tools/call to the upstream that the policy Layer refused, drops or rewrites an upstream result or error, or outlives the host's stdin EOF
+// tier: S
+// cites: T08b and T17 @S7.2 (gateway side), D-21, REVIEW-FIXES G2 G3 G4 G5 G7 G8
+
 /* eslint-disable @typescript-eslint/no-non-null-assertion -- specs index arrays/maps the test has just arranged; a miss would fail the very next assertion */
 // serveMcpPassthrough (D-21, T08b, T17 @S7.2 gateway side, REVIEW-FIXES G2 G3 G4 G5 G7 G8).
 //

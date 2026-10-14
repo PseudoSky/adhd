@@ -1,3 +1,7 @@
+// guards: a source argument is mis-parsed, a command is named or resolved wrongly, or resolution starts a process before the policy has decided
+// tier: S
+// cites: T08 and D-07 and D-20, REVIEW-FIXES G2 G11
+
 // bin: sources — parsing, command naming and resolution (T08 / D-07 / D-20, REVIEW-FIXES G2 G11).
 //
 // Driven through the package root exactly as a consumer imports it. No process is started:

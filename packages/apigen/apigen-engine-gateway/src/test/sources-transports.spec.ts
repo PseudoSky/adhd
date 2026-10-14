@@ -1,3 +1,7 @@
+// guards: the launcher transport loses, reorders or double-closes JSON-RPC messages over a process handle, or the stdio host transport keeps running after stdin EOF
+// tier: S
+// cites: REVIEW-FIXES G11 (launcher transport) and G8 (stdio host transport follows stdin EOF)
+
 // The two transports of the bin: source: the launcher transport (SDK Transport over a
 // process handle, G11) and the stdio HOST transport that follows stdin EOF (G8).
 
