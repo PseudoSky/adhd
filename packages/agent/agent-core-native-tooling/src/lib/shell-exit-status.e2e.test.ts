@@ -1,4 +1,13 @@
 /**
+ * guards: a failing command through the real srt sandbox and the unmodified mcp-shell-server loses its [exit status: N]
+ *   trailer (a silent failure returns an empty content array), a zero exit gains one, stdin is no longer forwarded
+ *   through the launcher, the tool surface or allowlist changes, or a timed-out command leaves an orphaned process.
+ * tier: P (`*.e2e.test.ts` in the e2e lane: spawns srt and uvx and speaks MCP over stdio)
+ * gap: This cannot be observed at tier S because the exit status is computed and dropped inside the foreign
+ *   mcp-shell-server process under the real srt sandbox, and only a real spawned server shows the missing trailer.
+ * cites: 61358b6f AC1, AC2, AC3, AC5, AC6, AC7, AC11, AC12
+ */
+/**
  * 61358b6f AC1-AC3, AC5-AC7, AC11, AC12 — shell exit status through the REAL `srt`
  * sandbox and the REAL, UNMODIFIED adopted `mcp-shell-server` (`uvx --from
  * mcp-shell-server==1.1.12`), driven by a real MCP stdio client.

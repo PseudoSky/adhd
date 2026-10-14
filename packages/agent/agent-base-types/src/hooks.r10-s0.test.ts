@@ -1,4 +1,11 @@
 /**
+ * guards: a trace-signal field added to a hook payload stops being optional or changes type (breaking every pre-R10 payload
+ *   fixture), or task:startup, dispatch:completed or background:delivered stop being HookEvent members that the real
+ *   HookRegistry registers and delivers with their typed payloads.
+ * tier: S (in-process HookRegistry plus type-level assertions checked by typecheck-spec)
+ * cites: R10 S0 AC1, R10 S0 AC3, R10 S5b AC2
+ */
+/**
  * R10 S0 (types only, additive): the new trace-signal fields and hook events.
  * AC1: every new payload field is optional, so existing payload fixtures compile and behave unchanged.
  * AC3: the three new events are accepted by the real HookRegistry and typed to their payloads.

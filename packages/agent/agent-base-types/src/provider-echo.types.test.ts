@@ -1,4 +1,10 @@
 /**
+ * guards: an echo, blocks or thinking field leaks into Message (provider history stored inline), or IProviderEcho widens past
+ *   provider 'anthropic', loses its ordered verbatim blocks, or stops surviving a JSON round-trip.
+ * tier: S (type-level contract checked by typecheck-spec plus an in-process JSON round-trip)
+ * cites: R9-hist AC1, R9-hist AC9
+ */
+/**
  * R9-hist S0: `IProviderEcho` is a side record, never a field of `Message`.
  *
  * Type-level contract (enforced by the `typecheck-spec` gate) plus a runtime shape check

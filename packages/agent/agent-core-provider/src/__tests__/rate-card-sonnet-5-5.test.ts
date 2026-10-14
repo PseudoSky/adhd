@@ -1,4 +1,11 @@
 /**
+ * guards: claude-sonnet-5-5 (dated, prefixed or cased) falls back to the sonnet 4.6 family card ($3 / $15) instead of the
+ *   bundled snapshot card ($2 / $10 with its cache rates), mispricing every estimate, or a neighbouring model id (sonnet,
+ *   claude-sonnet-4-6, claude-sonnet-5) changes card.
+ * tier: S (pure pricing functions over the committed bundled snapshot)
+ * cites: R7-think AC3c
+ */
+/**
  * R7-think AC3c -- claude-sonnet-5-5 is priced from the committed OpenRouter snapshot ($2 in / $10 out / cache read 0.10 /
  * write 5m 2.50 / 1h 4.00 per M, anthropic/claude-sonnet-5.5), never at the FAMILY_ALIASES `sonnet` (4.6, $3/$15) card.
  */

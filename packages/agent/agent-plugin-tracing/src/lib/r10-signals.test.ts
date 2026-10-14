@@ -1,3 +1,10 @@
+/**
+ * guards: a replayed hook sequence stops producing an attribute of the product-spec section 5 table through the real
+ *   tracing plugin and file sink, an unsupplied optional field is recorded as 0 / "undefined" instead of absent, or
+ *   agent.task model_ms / tool_ms / idle_ms miscount overlapping tool calls.
+ * tier: S (real plugin, HookRegistry and file sink on a temporary log directory; no provider, no socket, no subprocess)
+ * cites: R10 S5 AC1, R10 S5 AC4
+ */
 import { readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';

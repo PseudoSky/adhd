@@ -1,3 +1,10 @@
+/**
+ * guards: computeTotal in the frozen round-3 C2 fixture repo taxes the discounted amount (discount first, then tax) for
+ *   every SAVE10 / SAVE20 / VIP25 case; a return to `discounted + subtotal * taxRate` turns the cases red.
+ * tier: S (a golden fixture, never edited by hand: the visible suite of the C2 repo, run in-process by `node --test`;
+ *   this file spawns nothing)
+ * cites: c0366f39-4a1a-4295-abea-3b2f632b3f04 (this file cites no item of its own; the backlog item that added this header)
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { computeTotal } from '../src/checkout.js';

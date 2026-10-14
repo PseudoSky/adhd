@@ -1,3 +1,9 @@
+/**
+ * guards: transform:server_result_persist drops out of HookEvent or its payload shape drifts, or the real HookRegistry stops
+ *   handing handlers the payload by reference, so a handler's persist=false veto is no longer visible after emit().
+ * tier: S (in-process HookRegistry plus type-level assertions checked by typecheck-spec)
+ * cites: R9-hist AC15
+ */
 import { describe, it, expect, expectTypeOf } from 'vitest';
 import { HookRegistry } from './registry.js';
 import type {

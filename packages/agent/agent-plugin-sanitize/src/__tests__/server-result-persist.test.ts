@@ -1,3 +1,9 @@
+/**
+ * guards: the sanitize plugin stops vetoing persistence of server-tool result bodies when delegationOnly is false, or
+ *   vetoes (or registers a handler) under the default and delegationOnly:true configs, or a veto is reversed.
+ * tier: S (real plugin factory on a real in-process HookRegistry)
+ * cites: R9-hist AC15
+ */
 import { describe, it, expect } from 'vitest';
 import { HookRegistry } from '@adhd/agent-base-types';
 import type {

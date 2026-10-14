@@ -1,3 +1,10 @@
+/**
+ * guards: agent.tool.queued_ms, agent.tool.group_index and tool_barrier_waits_total stop carrying the engine-final values
+ *   from a real Orchestrator.run() (a read queued behind an edit barrier records its exact wait, a denied call leaves
+ *   its planned group), or a bridged claudecli call gains a guessed 0 for them.
+ * tier: S (real engine and providers over the in-process wire.fetch seam with a test-controlled clock; no socket)
+ * cites: a2a9c6db AC1
+ */
 import { readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';

@@ -1,4 +1,11 @@
 /**
+ * guards: the README section on the default shell allowlist drifts from the catalog (override and allowPatterns rules, the
+ *   excluded network tools, the exit-status shim section go missing) or a name the server rejects (sed, node,
+ *   python3 ...) re-enters DEFAULT_SHELL_ALLOW_COMMANDS.
+ * tier: S (reads the real README and the real catalog in process; no spawn)
+ * cites: 069316e5, 61358b6f, R5-WEB-SIMPLE AC1
+ */
+/**
  * Docs contract for the default shell allowlist (069316e5 policy change; 61358b6f
  * follow-through). The README section "Default shell allowlist (ADR-0008 D5 policy
  * change)" must name the export, the override and `allowPatterns`-suppression rules,

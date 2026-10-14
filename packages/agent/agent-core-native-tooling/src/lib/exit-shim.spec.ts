@@ -1,4 +1,11 @@
 /**
+ * guards: the exit-status shim directory shims a protected runtime name (uv, python*, srt, node, sh ...), is not sealed or
+ *   idempotent, or resolveNativeTooling stops leading the shell server's PATH with it, drops ADHD_SHIM_ORIG_PATH from
+ *   the child-env allowlist, or alters the allowlist the server enforces.
+ * tier: S (real temporary directories and the pure resolver; the launcher is never executed, no subprocess)
+ * cites: 61358b6f AC4, 61358b6f AC6, 61358b6f AC10
+ */
+/**
  * 61358b6f — unit coverage of the exit-status shim (no subprocess; the real-server
  * proof is `shell-exit-status.e2e.test.ts`).
  */

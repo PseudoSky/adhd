@@ -1,4 +1,11 @@
 /**
+ * guards: the persisted provider echo stops surviving a reopen of the on-disk file, session-idle TTL expiry or sweeping
+ *   serves or strips the wrong rows, a failure of the echo path throws instead of degrading once, or the echo DDL
+ *   drifts from migration 0017 and the drizzle table definition.
+ * tier: S (real on-disk better-sqlite3 files in a temporary directory, injected clock; no provider, no subprocess)
+ * cites: R9-hist S4a AC10, R9-hist AC11, R9-hist AC14, R9-hist S0
+ */
+/**
  * R9-hist S4a -- persisted provider echo in the runtime store (spec-v2 section 1, AC10 / AC11 / AC14).
  *
  * Real on-disk better-sqlite3 files (no mocks of the store), every persistence claim proven by REOPENING the

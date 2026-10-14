@@ -1,4 +1,13 @@
 /**
+ * guards: a name in DEFAULT_SHELL_ALLOW_COMMANDS is rejected by the real mcp-shell-server under its default security policy
+ *   (the model is told it can run commands that always fail), or the real fs / shell servers stop exposing the tool
+ *   names and curl / grep recipes the tool guidance cites.
+ * tier: P (`*.e2e.test.ts` in the e2e lane: spawns the real server with uvx over stdio)
+ * gap: This cannot be observed at tier S because the policy rejection happens inside the foreign mcp-shell-server
+ *   process (`uvx --from mcp-shell-server==1.1.12`) and no in-process fake reproduces its DANGEROUS_COMMANDS list.
+ * cites: 61358b6f, 069316e5, R5-WEB-SIMPLE AC1, R5-WEB-SIMPLE AC4, R7-guidance AC1
+ */
+/**
  * 61358b6f (S1 follow-through for 7f779174 / 069316e5) — every name in
  * `DEFAULT_SHELL_ALLOW_COMMANDS` is ACCEPTED by the REAL adopted
  * `mcp-shell-server==1.1.12` under its default security policy.
