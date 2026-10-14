@@ -366,7 +366,7 @@ Each item is a default-running test through a real MCP host, with a negative con
 | CC-01 | The compiled policy MAY be memoized in process memory, keyed by the content hash of every input layer (global, project, local) and the compiler version. | (new) | S |
 | CC-02 | A memo entry is valid only if its hash matches the current inputs. A mismatch MUST recompile. | (new) | S |
 | CC-03 | A memo hit MUST NOT parse YAML, run the compiler or walk the layers. | (new) | S |
-| CC-04 | There is no disk cache. A deployer who wants a precompiled artifact produces one with `compile` and loads it explicitly (CL-06, CL-13). | (new) | S |
+| CC-04 | There is no disk cache. A deployer who wants a precompiled artifact produces one with `compile`. `loadCompiled` is internal to the client and is not exported from the package root; the client loads the artifact with it (CL-06, CL-13). | (new) | S |
 | CC-05 | Memo entries are immutable, so concurrent evaluations in one process are safe. There is no shared mutable state between processes. | AGENTS.md parallel-process rule | S |
 | CC-08 | A change to any layer file MUST take effect on the next load. | (new) | S |
 

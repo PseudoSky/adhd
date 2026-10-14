@@ -211,7 +211,7 @@ Canonicalization: keys sorted, no insignificant whitespace, UTF-8, so equal inpu
 ```typescript
 // entrypoint/policy/src/core/index.ts
 export function compile(layers: readonly ILayerInput[], options?: ICompileOptions): ICompileResult;
-export function loadCompiled(json: unknown): ICompiledPolicy;           // verifies schema, hashes (CL-13)
+export function loadCompiled(json: unknown): ICompiledPolicy;           // verifies schema, hashes (CL-13); internal to the client, not a root export (D-25)
 export function evaluate(
   policy: ICompiledPolicy,
   call: IToolCall,
@@ -337,7 +337,7 @@ export interface IPolicyMemo {
 
 export function createPolicyMemo(options?: ICompileOptions): IPolicyMemo;
 ```
-Entries are immutable and keyed by the input hash and compiler version (CC-01, CC-02, CC-05). A deployer who wants a precompiled artifact calls `compile`, stores `ICompiledPolicy` JSON itself, and loads it with `loadCompiled` (CC-04, CL-13).
+Entries are immutable and keyed by the input hash and compiler version (CC-01, CC-02, CC-05). `compile` produces the `ICompiledPolicy` artifact. `loadCompiled` is internal to `@adhd/policy-core-client` and is not exported from the package root (D-25); the client calls it, with CL-13 failure semantics, wherever it reads a precompiled artifact (CC-04, CL-13).
 
 ### 4.6 Layer loading (kept out of `compile`; implemented in `service`)
 

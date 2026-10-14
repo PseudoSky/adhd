@@ -2,6 +2,7 @@
 
 Branch: `feat/policy-core` (worktree `.worktrees/policy-core`). Not merged to `main`; no push.
 Normative inputs (copied under `spec/`): `architect-spec*.md` (behaviors, IDs like `CL-02`), `architect-interfaces*.md` (shapes), `demo-policy-v1.md` (the demo; scenarios S1-S7), `research-auth-mechanisms.md` (context only).
+Decisions register: `SOURCE-MODEL-GAP-ANALYSIS.md` §9 (O-1 to O-14), `TAXONOMY-CONFORMING-DESIGNS.md` §10 (BA-1 to BA-11, E1 to E8), `INTERFACES.md` §2 (D-24 to D-26).
 Companions in this directory: `INTERFACES.md` (contracts and decisions), `DOD.md` (definition of done), `APPROVAL.md`, `tickets/T*.md` (scope plus Gherkin acceptance).
 
 ## Goal

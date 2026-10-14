@@ -10,14 +10,14 @@ ADR catalog read: adhd ADR-0001 through ADR-0009 and the proposed ADR-0016. The 
 
 | # | Item | Verdict |
 |---|---|---|
-| 1 | A1/A3: configuring the policy Layer loaded by `--use` | **CONFORMING-DESIGN-EXISTS** (local `--use` module + `make…Plugin` factory). Configuring through `--use <package> --opt k=v` needs extension E4. |
-| 2 | B8/E4: fronting an upstream MCP server through the standard Layer stack | **Split.** The fronting mechanism conforms (mount capability, `mcpPlugin.run`, `HostAdapter`). Verbatim tool names, verbatim `CallToolResult` and full `Tool` metadata need extensions E1, E2 and E3, or the owner accepts the standard projection (BA-1 to BA-4). |
-| 3 | B1: where `bin:`/`remote:` sources and an aggregator belong | **CONFORMING-DESIGN-EXISTS** (`mount` contributes operations, `HostAdapter`/`createGateway` invokes them, any `target` hosts them). `adhd-apigen run --source bin:<cmd>` needs extension E5 and is not needed by policy. |
+| 1 | A1/A3: configuring the policy Layer loaded by `--use` | **CONFORMING-DESIGN-EXISTS** (local `--use` module + `make…Plugin` factory). Configuring through `--use <package> --opt k=v` uses extension E4, which is adopted (BA-8). |
+| 2 | B8/E4: fronting an upstream MCP server through the standard Layer stack | **Decided (O-4).** Upstream tools enter at the extract stage as IR plus `Operation.binding`; `createUpstreamMountPlugin` is not built. Wrapped tool names come from the standard projection (BA-1), a string result is emitted as raw text by a general `apigen-plugin-mcp` fix (BA-2), tool metadata is carried (BA-3, E3), and a refusal is an `isError` tool result (BA-4). E1 and E2 are not adopted. |
+| 3 | B1: where `bin:`/`remote:` sources and an aggregator belong | **Decided.** `bin:` and `remote:` are extract-stage sources through the translator registry plus a binding (E5 is satisfied by O-4); `bin:` in `adhd-apigen` and remote sources are out of the slice. An aggregator is N sources through the gateway (backlog 79e1c3d9), not a separate feature. |
 | 4 | C5/C2/C3: `run`/`serve` through the standard host primitives, package builder, baked IR | **CONFORMING-DESIGN-EXISTS.** C2 needs one plain helper export. That is not a taxonomy member (BA-10). C3 carries one required parity proof. |
 | 5 | X1: ESM against adhd ADR-0003 | **CONFORMING-DESIGN-EXISTS.** The ADR shape is the authority. No CommonJS-only sibling exists yet, so siblings are copied only where they agree with the ADR. |
 | 6 | A4: inter-Layer attributes | **CONFORMING-DESIGN-EXISTS** (typed `ctx` key, SPEC §8.1 rule 3). |
 | 7 | B3/B4/B9: operation ids, `safe`, error type | **CONFORMING-DESIGN-EXISTS** (`syntheticOp`, `ProjectionConfig.http.verb`, `ApiError` and the gateway error builders). |
-| 8 | Multi-host gateway as the shared single-server and aggregator mechanism (owner's mid-review ask) | **CONFORMING-DESIGN-EXISTS** for routing, supervision, partial availability and a policy-outermost front. It needs an ADR-level reading of `Operation.host` (BA-7, no type change). Per-host deadlines and a dynamic tool list would be extensions E7 and E8. |
+| 8 | Multi-host gateway as the shared single-server and aggregator mechanism | **Decided.** The gateway routes by `Operation.binding ?? host` (O-1); a crashed upstream is supervised with a finite `maxRestarts` (BA-6). Per-host deadlines (E7) and a dynamic tool list (E8) are not adopted. |
 
 ---
 
@@ -55,7 +55,7 @@ ADR catalog read: adhd ADR-0001 through ADR-0009 and the proposed ADR-0016. The 
 
 ## 1. A1/A3: configuring the policy Layer loaded by `--use`
 
-**Verdict: CONFORMING-DESIGN-EXISTS.** Option-by-option configuration with `--use <package> --opt` would need extension E4, which the owner does not have to take.
+**Verdict: CONFORMING-DESIGN-EXISTS.** Option-by-option configuration with `--use <package> --opt` uses extension E4, which is adopted (BA-8): `LayerCapability.createLayer(opts)`, `createPackageInvoker` passes the options, and apigen-cli fills them from `--opt` as one flat bag per invocation (same as `extractLayer`). A bare `--use` with no decider still denies everything.
 
 ### Option channels examined
 
@@ -118,11 +118,13 @@ export default policyPlugin;
 
 ## 2. B8/E4: fronting an upstream MCP server through the standard Layer stack
 
-**Verdict: split.** A conforming fronting mechanism exists. Three host-visible behaviours of today's bespoke `serveMcpPassthrough` cannot be expressed on the standard path. Each needs an extension, or the owner accepts the standard projection.
+**Verdict: decided (O-4).** Upstream tools enter at the extract stage as IR plus a per-operation binding. The host-visible behaviours of today's bespoke `serveMcpPassthrough` are resolved one by one in the table below; the decision for each is in section 10.
 
 ### Two candidate representations on the standard path
 
-| | Package operations (`pkg.fns` + `composeSchemas`) | **Mount operations (chosen)** |
+The decided representation is neither column: foreign tools are extract-stage package operations carrying `Operation.binding`, and flat arguments reach the upstream through a binding-aware dispatch terminal (`SOURCE-MODEL-GAP-ANALYSIS.md` §3f D1). The columns record what the standard hosts do today for each shape.
+
+| | Package operations (`pkg.fns` + `composeSchemas`) | Mount operations (not chosen, O-4) |
 |---|---|---|
 | Arguments | `{data:{…}}` wrapper (`run.ts:302`); positional `fns` drop undeclared keys (`dispatch.ts:128-133`) | Flat `raw.args`, undeclared keys kept (`run.ts:300-302`) |
 | Advertised `inputSchema` | Composed `{data}` schema | The upstream's own schema (`run.ts:382-386`, `:615`, `:631`) |
@@ -130,35 +132,41 @@ export default policyPlugin;
 | Signal to the invocation | None (`invoke.ts:197-205`) | `call.signal` reaches the handler (`dispatch-for-plan.ts:115`), once F1 is fixed |
 | Served on CLI/HTTP too | Yes, wrapped | Yes, flat. cli projects the mount input to flags (cli `run.ts:736-743`). fastify reads the body or query unwrapped for mounts (fastify `run.ts:238-264`). This answers the review's transport-asymmetry point. |
 
-### Each passthrough behaviour on the mount path
+### Each passthrough behaviour on the standard hosts
+
+The cells describe the standard MCP host's current behaviour for flat-argument operations (the mount path). The Status column records the decision.
 
 | Bespoke behaviour (`mcp-passthrough-server.ts`) | Standard mount path | Status |
 |---|---|---|
-| Tool name verbatim (`:121`, `:124`) | `project(op).mcp.name` = namespace and path words joined with `_` (`naming.ts:155-156`); `syntheticSegment` lowercases and splits on case, `-` and `_` (`plugin.ts:508-516`). So `readFile` in source `fs` becomes `fs_read_file`. | **Not expressible** → BA-1 or E1 |
-| Full `Tool` object (title, annotations, outputSchema) | `ToolListMeta` carries only `description`/`inputSchema`/`outputSchema` (`run.ts:146-150`); mounts never bind an output schema. Descriptions can come from the existing `options.toolDescriptions` (`run.ts:466-467`, `:627`), but `buildToolDescription` appends the input description and a synthesized example (`apigen-engine-runtime/src/lib/tool-description.ts:59-73`). | **Partly** → BA-3 or E3 |
+| Tool name verbatim (`:121`, `:124`) | `project(op).mcp.name` = namespace and path words joined with `_` (`naming.ts:155-156`); `syntheticSegment` lowercases and splits on case, `-` and `_` (`plugin.ts:508-516`). So `readFile` in source `fs` becomes `fs_read_file`. | **Decided (BA-1):** names come from the standard projection; no E1 override |
+| Full `Tool` object (title, annotations, outputSchema) | `ToolListMeta` carries only `description`/`inputSchema`/`outputSchema` (`run.ts:146-150`); mounts never bind an output schema. Descriptions can come from the existing `options.toolDescriptions` (`run.ts:466-467`, `:627`), but `buildToolDescription` appends the input description and a synthesized example (`apigen-engine-runtime/src/lib/tool-description.ts:59-73`). | **Decided (BA-3, E3):** operations carry title, annotations and outputSchema |
 | Flat arguments, undeclared keys included (`:137`, `:144-149`) | `raw.args` (`run.ts:300-302`). Caveat: apigen reads `_meta` from inside `arguments` (`run.ts:692`), and for mounts that key stays in the arguments (finding F6, unverified against the MCP spec). | **Expressible** |
 | No validate Layer (G5) | No-op for mounts | **Parity** |
 | Layer stack, `set` reaches upstream (`:144-150`) | Mount calls run through `createPackageInvoker({}, usePlugins)` (`run.ts:598`, `:633-635`); `coreCall.data === domainArgs` | **Expressible** |
 | `envelope: {}` (`:136`) | `plan.envelope` is `[]` for schema-less mounts (`op-plan.ts:368`), so the envelope is `{}` | **Parity** (both lack §9.1 for mounts, F2) |
 | Per-request cancel via `extra.signal` (`:132`) | The host ignores `extra` (`run.ts:685`) | **Bug F1**, fixed at the source, no extension |
-| Verbatim `CallToolResult` (`:152`) | `writeResult` emits `content:[{type:'text', text: JSON.stringify(result)}]`, plus `structuredContent` only for bound object schemas (`run.ts:319-332`). **Every plain-text upstream result therefore reaches the model as a JSON string literal**, with quotes and escaped newlines, on every call. Returning the content array instead is worse: the model sees the serialised array. Images and resources are serialised as JSON; upstream `isError` cannot be emitted. | **Not expressible** → BA-2 or E2 |
-| Refusal → `isError` result (`:154`) | `writeError` rethrows (`run.ts:335-345`). The SDK maps a non-integer `code` to `-32603` with the message (`node_modules/@modelcontextprotocol/sdk/dist/cjs/shared/protocol.js:402`). SPEC §9 lists MCP as "error" for every code (`SPEC.md:400-406`). | **Different, documented binding** → BA-4 |
+| Verbatim `CallToolResult` (`:152`) | `writeResult` emits `content:[{type:'text', text: JSON.stringify(result)}]`, plus `structuredContent` only for bound object schemas (`run.ts:319-332`). **Every plain-text upstream result therefore reaches the model as a JSON string literal**, with quotes and escaped newlines, on every call. Returning the content array instead is worse: the model sees the serialised array. Images and resources are serialised as JSON; upstream `isError` cannot be emitted. | **Decided (BA-2):** general fix in `apigen-plugin-mcp` (a string result is raw text); no E2 |
+| Refusal → `isError` result (`:154`) | `writeError` rethrows (`run.ts:335-345`). The SDK maps a non-integer `code` to `-32603` with the message (`node_modules/@modelcontextprotocol/sdk/dist/cjs/shared/protocol.js:402`). SPEC §9 lists MCP as "error" for every code (`SPEC.md:400-406`). | **Decided (BA-4):** a refusal is an `isError` tool result carrying the code and reason; `writeError` changes generally |
 | Upstream `McpError` code verbatim (`:160-161`) | Rethrown; an integer code survives `protocol.js:402` | **Expressible** |
 | Unknown tool → `InvalidParams` (`:129`) | `throw new Error('Unknown tool')` → `-32603` (`run.ts:689`) | Minor difference |
-| Upstream exit shuts the server (`:189`) | Gateway supervision (item 8), or the wrapper aborts `mcpPlugin.run` on `onExit` | BA-6 |
-| stdin EOF shutdown (`stdio-host-transport.ts`) | Already in the MCP plugin (`run.ts:850-892`, see B7) | **Expressible**; delete the duplicate |
-| `serverInfo` = `adhd-policy` | `packages[0].id ?? 'apigen-mcp'` (`run.ts:666-672`) | Cosmetic, BA-9 |
-| Injectable host `Transport` (6e27d320) | `options.transport` is a string (`run.ts:923`). Tests use the `process.stdin` spy precedent (`apigen-plugin-mcp/src/test/run-lifecycle.spec.ts:186-193`) or in-process loopback `streaming-http`, which DoD #10 allows. | **Expressible**; `IVerbDeps.hostTransport` is deleted |
+| Upstream exit shuts the server (`:189`) | Gateway supervision (item 8) | **Decided (BA-6)** |
+| stdin EOF shutdown (`stdio-host-transport.ts`) | Already in the MCP plugin (`run.ts:850-892`, see B7) | **Expressible** on the standard host; whether the proxy target (O-8) keeps its own host-facing transport is UNVERIFIED |
+| `serverInfo` = `adhd-policy` | `packages[0].id ?? 'apigen-mcp'` (`run.ts:666-672`) | Cosmetic, accepted (BA-9) |
+| Injectable host `Transport` (6e27d320) | `options.transport` is a string (`run.ts:923`). Tests use the `process.stdin` spy precedent (`apigen-plugin-mcp/src/test/run-lifecycle.spec.ts:186-193`) or in-process loopback `streaming-http`, which DoD #10 allows. | **Expressible**; whether `IVerbDeps.hostTransport` is retained for the proxy target is UNVERIFIED |
 
-### Design (shared with item 8; the single-server wrap is N=1)
+### Decided design (O-4; shared with item 8; the single-server wrap is N=1)
 
+Foreign upstream tools enter at the extract stage as IR plus a per-operation binding. `createUpstreamMountPlugin` is not built: mount operations are produced at run time by a host, are invisible to `generate`, never pass through `extractLayer`/ir-cache, and carry an in-closure `handler` instead of a routable key (`SOURCE-MODEL-GAP-ANALYSIS.md` §4.1). Components:
+
+1. **Translator** (gateway `sources/`). A pure `operationsFromMcpTools(rawTools, name, onWarn)` returns `{operations, skipped, hints, tools}` (gap analysis §3e). Each operation has id `<source>/<tool>` (BA-5), `host: 'mcp'`, `binding: 'mcp:<name>'` (O-1), `safe: false` (D-08) and the upstream's input schema. Tool `title`, `annotations` and `outputSchema` ride on the operation (BA-3, E3). The skip rules are unchanged: a non-object schema, a duplicate or a reserved name is skipped and reported, never fatal.
+2. **Binding.** One `HostAdapter` per upstream, keyed `mcp:<name>`, supervised by `createGateway`:
 ```ts
 // NEW packages/apigen/apigen-engine-gateway/src/lib/sources/mcp-upstream-adapter.ts
 export interface IMcpUpstreamSpec {
   readonly name: string;                                   // user alias, never serverInfo.name (G2)
   readonly transport:
     | { kind: 'stdio'; command: string; args: readonly string[]; cwd: string; env?: Record<string, string> }
-    | { kind: 'http'; url: string };
+    | { kind: 'http'; url: string };                       // remote: out of the slice (O-6)
 }
 export interface IMcpUpstreamAdapter extends HostAdapter {  // host = `mcp:${name}`, hopCost: 1
   readonly sourceName: string;
@@ -168,54 +176,28 @@ export function createMcpUpstreamAdapter(
   spec: IMcpUpstreamSpec,
   deps: { launcher?: IProcessLauncher; handshakeTimeoutMs?: number; callTimeoutMs?: number; onWarn?: (l: string) => void }
 ): IMcpUpstreamAdapter;
-// start: spawn (launcher) or connect + initialize + tools/list (skip rules of mcp-source.ts:165-186). Idempotent.
-// ready: connected && client.ping(). invoke(req, signal): tools/call {name: req.operation.path.at(-1).raw,
-// arguments: req.data} with {signal, timeout: callTimeoutMs}. onExit: client.onclose. stop: dispose.
+// start: spawn (launcher) + initialize + tools/list. Idempotent. ready: connected && client.ping().
+// invoke(req, signal): tools/call {name, arguments: req.data} with {signal, timeout: callTimeoutMs}.
+// onExit: client.onclose. stop: dispose.
+```
+3. **Routing and dispatch.** The gateway routes by `operation.binding ?? operation.host`. A binding-aware dispatch terminal (gap analysis §3f D1, in `apigen-engine-runtime`) hands the argument object and `call.signal` to the binding's `invoke`, so undeclared keys survive. Standard targets (mcp, cli, fastify) host the operations; the `--use` Layers wrap them outermost, so policy is outermost for every upstream by `usePlugins` order.
+4. **Proxy target.** `serveMcpPassthrough` is kept only as the degenerate proxy target (source protocol equals target protocol) and is rewritten to consume the IR operations instead of raw upstream `Tool` objects (O-8).
+5. **Result and error shaping.** A string result is emitted as raw text content and a refusal is an `isError` tool result, both through general `apigen-plugin-mcp` fixes (BA-2, BA-4); they are specified in the ADR-0004 follow-up, which is drafted for approval and not yet written.
 
-// NEW packages/apigen/apigen-engine-gateway/src/lib/sources/upstream-mount.ts
-export function createUpstreamMountPlugin(input: {
-  gateway: Pick<Gateway, 'route' | 'health'>;
-  upstreams: readonly IMcpUpstreamAdapter[];
-  include?: (op: Operation) => boolean;                    // static filter, evaluated once (item 8)
-  onWarn?: (line: string) => void;
-}): { plugin: Plugin; projection: ProjectionConfig; toolDescriptions: Record<string, string> };
-// mount.operations(d): per tool, op = syntheticOp(`${src}/${tool.name}`, {...d, host: adapter.host},
-//   {input: tool.inputSchema, async: true, safe: false}). Skip and warn when syntheticOp throws (empty segment)
-//   or a tool name contains '/'. Accept incrementally while checkCollisions([...d.operations, ...accepted, op]) passes.
-//   handler: call => gateway.route({operation: op, data: call.data, envelope: call.envelope,
-//   transport: call.transport}, call.signal), then map the CallToolResult per ADR-0004: structuredContent,
-//   else the single text item, else the content array. An upstream isError throws
-//   ApiError('internal', text, {source, tool}).
-//   projection: http.verb[op.id] = 'POST' for every op (naming.ts:150-152). toolDescriptions: name -> tool.description.
-```
-Wrapper `entrypoint/policy/src/wrapper/verbs/serve.ts`:
-```ts
-// BEFORE: resolveSource(spec,'serve') -> serveMcpPassthrough({source, usePlugins, serverInfo, transport, signal})
-// AFTER
-const adapters = specs.map((s) => createMcpUpstreamAdapter(s, deps));   // N=1 for `serve bin:x`
-const gateway = createGateway({ adapters, defaultDeadlineMs: callTimeoutMs + 1_000,
-  backoff: { delayMs: defaultBackoff.delayMs, maxRestarts: 5 } });     // finite: never respawn forever
-try {
-  await gateway.start();                                                 // handshake failure rejects (D-08)
-  const up = createUpstreamMountPlugin({ gateway, upstreams: adapters });
-  await mcpPlugin.run({ packages: [], operations: [], outputDir: '', signal: deps.signal,
-    options: { transport: 'stdio', usePlugins: [up.plugin, tracingPlugin, ...gate.usePlugins],
-               projection: up.projection, toolDescriptions: up.toolDescriptions } });
-} finally {
-  await gateway.stop();                                                  // retires supervision, kills children
-}
-```
+Open: the gap analysis sequences D1 inside step 10 (deferred); S5 needs it for flat arguments. The decisions register does not state where D1 lands relative to S5.
+
 **Startup-failure contract (required).** `bringUp` subscribes `onExit` *before* it calls `adapter.start()` (`gateway.ts:448-456`). `defaultBackoff.maxRestarts` is `0`, which means unlimited (`gateway.ts:305-311`). If a failed handshake killed the child and fired `onExit`, `supervise()` would respawn in the background forever while `gateway.start()` rejected, and `serve bin:<not-an-mcp-server>` would never exit (against D-08 and `s8-serve-handshake-and-precedence.spec.ts`). Three rules, all within existing members, prevent this:
 1. **Adapter contract:** `onExit` fires only for an exit that happens after `start()` resolved. A start that fails rejects and fires nothing.
 2. **Wrapper:** `try { await gateway.start(); … } finally { await gateway.stop(); }`. `stop()` sets `retired`, which ends every supervise loop (`gateway.ts:647-655`, `:474-479`).
-3. **Wrapper:** a finite `backoff.maxRestarts` (`gateway.ts:298-303`).
-**Deleted from the branch:** `sources/mcp-passthrough-server.ts`, `sources/stdio-host-transport.ts`, the `serve` arm of `resolve-source.ts` and `IResolvedSource.mcp`, `IVerbDeps.hostTransport`, and `src/test/sources-passthrough.spec.ts`. `resolveMcpStdioSource` folds into the adapter.
+3. **Wrapper:** a finite `backoff.maxRestarts` (`gateway.ts:298-303`; BA-6).
+
+**Removed from the branch:** the serve arm of `resolve-source.ts` and `IResolvedSource.mcp` (the translator and binding replace them), and `SourceError` (item 7). `resolveMcpStdioSource` folds into the translator plus the adapter.
 
 **Source fix, not an extension (F1):** `apigen-plugin-mcp/src/lib/run.ts` changes the `tools/call` handler to `async (req, extra)` and threads `extra.signal` through `McpRaw` into `readCall`'s return value. `gx impact McpTransportAdapter`: LOW, 4 nodes.
 
-**Blast radius:** the gateway `sources/*` consumers are `entrypoint/policy/src/wrapper/verbs/{run,serve}.ts`, `failure.ts` and the test helpers listed under item 7. `mcpPlugin.run` itself is unchanged except for F1.
-**Tests:** `apigen-plugin-mcp/src/test/{run,run-lifecycle,flat-content-payload,transport-http-parity}.spec.ts` must stay green after F1. `apigen-engine-gateway/src/test/{gateway,sources-mcp-source,sources-process}.spec.ts` are kept and extended. `entrypoint/policy/src/test/functional/{s7-serve,s8-serve-handshake-and-precedence}.spec.ts` move to the stdin-spy or loopback seam.
-**Order:** F1 and item 7 come before the wrapper change.
+**Blast radius:** the gateway `sources/*` consumers are `entrypoint/policy/src/wrapper/verbs/{run,serve}.ts`, `failure.ts` and the test helpers listed under item 7. `mcpPlugin.run` changes for F1, BA-2 and BA-4.
+**Tests:** `apigen-plugin-mcp/src/test/{run,run-lifecycle,flat-content-payload,transport-http-parity}.spec.ts` must stay green after F1 (the BA-2 and BA-4 changes update the cases that pin the JSON string literal and the rethrow). `apigen-engine-gateway/src/test/{gateway,sources-mcp-source,sources-process}.spec.ts` are kept and extended. `entrypoint/policy/src/test/functional/{s7-serve,s8-serve-handshake-and-precedence}.spec.ts` move to the stdin-spy or loopback seam where the host transport is no longer injected.
+**Order:** F1, BA-2/BA-4 and item 7 come before the wrapper change.
 
 ---
 
@@ -225,14 +207,14 @@ try {
 
 | Concern | Existing member | Evidence |
 |---|---|---|
-| Contribute a foreign upstream's operations | `mount` capability ("ADD operations") | `SPEC.md:238`; `plugin.ts:443-494`. The parked Phase-4 verdict itself names `--use` mounts as the mechanism that "already works today" (`docs/apigen/proposals/transport-serve-core-refactor.md:217`). |
+| Contribute a foreign upstream's operations | The extract stage: a translator registered by `ExtractCall.host` returns IR, and `Operation.binding` names the executing `HostAdapter` (O-4) | `extract-invoker.ts:15-23`, `:56`; `SOURCE-MODEL-GAP-ANALYSIS.md` §3c, §3d. The `mount` capability (`SPEC.md:238`; `plugin.ts:443-494`) is not used for upstreams. |
 | Invoke out of process (local stdio or remote http) | `HostAdapter` + `createGateway` | `gateway.ts:191-236`, `:407-658`; SPEC §13.1/§14.4 (`SPEC.md:538-567`) |
-| Host it on any transport | Every `target` with mount support | mcp `run.ts:590-637`; cli `run.ts:710-745`; fastify `run.ts:313-323` |
-| Govern it | `layer` through `--use`, which also wraps mounts | `dispatch-for-plan.ts:15-29` |
+| Host it on any transport | Every standard `target`, consuming the IR operations | mcp `run.ts:590-637`; cli `run.ts:710-745`; fastify `run.ts:313-323` (mount-path hosting evidence) |
+| Govern it | `layer` through `--use` | `dispatch-for-plan.ts:15-29` |
 | `bin:` argv one-shot (`run` verb) | Package operation through the serve-core primitives (item 4) | — |
-| `adhd-apigen run --source bin:<cmd>` (f6bf8550 item 1) | **None.** `--source` is a required file path, and its functions are imported from it (`run.ts:249`, `:405-420`). | **E5** (Phase 4 / DEBT-APIGEN-SERVE-CORE-011). Not needed for policy. |
+| `adhd-apigen run --source bin:<cmd>` (f6bf8550 item 1) | An extract-stage source: the source resolver classifies it, the argv translator emits IR and the process binding executes it. No source capability is needed (E5 is satisfied by O-4). | Deferred: `bin:` in `adhd-apigen` is out of the slice. |
 
-**Home:** the adapter and mount factory stay in `apigen-engine-gateway` (engine tier, already `platform:node`, already depending on `@adhd/apigen-core-client`). It gains `@adhd/apigen-engine-naming` for `checkCollisions` and drops the branch's `@adhd/apigen-engine-runtime` edge, whose only user is the passthrough's `adaptCoreLayer`. No new package is created. `sources/types.ts:1`'s "for `adhd-policy run|serve`" header and `SourceIntent` (`:17-18`) are deleted.
+**Home:** the adapter and the MCP translator stay in `apigen-engine-gateway` (engine tier, already `platform:node`, already depending on `@adhd/apigen-core-client`). It gains `@adhd/apigen-engine-naming` for `checkCollisions` and drops the branch's `@adhd/apigen-engine-runtime` edge, whose only user is the passthrough's `adaptCoreLayer`. No new package is created. `sources/types.ts:1`'s "for `adhd-policy run|serve`" header and `SourceIntent` (`:17-18`) are deleted.
 
 ---
 
@@ -343,10 +325,10 @@ export class PolicyAttributes {
 - **B3 (argv):**
   - `buildArgvOperation` (`argv-operation.ts:38-75`, `host:'ts'` at `:43`) becomes `syntheticOp(\`bin/${base}\`, {host: 'bin', operations: []}, {input: ARGV_INPUT, output: ARGV_OUTPUT, async: true, safe: false})`.
   - The id is `bin/touch`, `namespace.raw` is `bin` and the path tail is `touch`, which meets `operationFor`'s join key (`T08-discovery.md:17`). The schemas are then keyed by `op.id` for `dispatchForPlan`.
-  - The host tag falls under BA-7. The argv operation is never routed through the gateway.
+  - The producer tag is `argv` and the binding key is `bin:<base>` (O-1; BA-7 is superseded). The argv operation is never routed through the gateway.
 - **B4 (MCP):**
-  - The id is `<source>/<tool>` through `syntheticOp` (item 2).
-  - `safe:false` comes from the `syntheticOp` field, and the `x-apigen-safe` rewrite (`mcp-source.ts:246-250`) is deleted because mounts never go through `composeSchemas`.
+  - The id is `<source>/<tool>` (BA-5), assigned by the MCP translator (item 2).
+  - `safe:false` is set on each translated operation (D-08), and the `x-apigen-safe` rewrite (`mcp-source.ts:246-250`) is deleted.
   - HTTP exposure forces `POST` through the existing `ProjectionConfig.http.verb` (`naming.ts:116-123`, `:152`).
   - Policy `tool:` keys and `draft` output change from `fs.read_file` to `fs/read_file` (BA-5).
 - **B9:**
@@ -367,30 +349,30 @@ export class PolicyAttributes {
 
 **Ask:** can `createGateway` front a set of MCP upstreams through the standard Layer stack with no extension? Where does it fall short, and how do single-wrap and aggregator share one mechanism?
 
-**Mechanism:** upstream specs (local stdio `bin:` or remote `http`) → one `IMcpUpstreamAdapter` each (`HostAdapter`, host `mcp:<source>`) → `createGateway({adapters})` → `createUpstreamMountPlugin` → **any** apigen host (`mcpPlugin.run` over stdio or streaming-http, or `cliPlugin`/fastify), with `usePlugins: [upstreamMount, tracing, attributes, policy]`. Policy is outermost relative to every upstream by `usePlugins` order. The single-server `serve bin:x` is exactly N=1. `serve --from mcp.json` is N>1. Remote upstreams differ only in the client transport inside the adapter.
+**Mechanism (O-4):** upstream specs (local stdio `bin:`; remote `http` is out of the slice) → one `IMcpUpstreamAdapter` each (`HostAdapter`, binding key `mcp:<source>`) plus the pure MCP translator → IR operations carrying `Operation.binding` → `createGateway({adapters})` routing by `binding ?? host` → **any** standard apigen host (`mcpPlugin.run` over stdio or streaming-http, or `cliPlugin`/fastify), with `usePlugins: [tracing, attributes, policy]`. Policy is outermost relative to every upstream by `usePlugins` order. The single-server `serve bin:x` is exactly N=1, and an aggregator is N sources through the same gateway (backlog 79e1c3d9; the acceptance test runs two upstreams in the gateway segment). `serve --from mcp.json` is N>1. Remote upstreams differ only in the client transport inside the adapter and are out of the slice.
 
 | Topic | Today | Conforming answer | Shortfall → decision |
 |---|---|---|---|
-| Routing key | Gateway routes by `operation.host`, one adapter per host, throws on duplicates (`gateway.ts:417-422`, `:591`); every MCP source op is stamped `host:'ts'` (`mcp-source.ts:192`) | Stamp `mcp:<source>` per upstream (a string value; `Operation.host: string`, `descriptor.ts:165-169`) | Meaning of `host` beyond "language runtime" → **BA-7** (ADR-level reading, no type change) |
-| `serve` uses the gateway | No (`serve.ts:41-54`); the gateway has 0 production callers | Mount handler → `gateway.route` | — |
-| Partial availability, restart | Passthrough exits on upstream close (`mcp-passthrough-server.ts:189`) | Supervision with backoff (`gateway.ts:474-503`); `unavailable` names the host (`:87-104`, `:608-614`) | N=1 behaviour change → **BA-6** |
-| Per-upstream timeout | Gateway deadline is global (`gateway.ts:321-322`, `:408`, `:617`) | The adapter enforces its own `callTimeoutMs` through the SDK request timeout; the gateway default is ≥ the maximum | True per-host deadline → **E7** (only if needed) |
-| Tool list | — | `mount.operations` is synchronous and called once (`plugin.ts:461-465`; mcp `run.ts:590-596`, dod.12), so all upstreams start eagerly before the host and the list is fixed. This matches spec 2026-07-28's constant-list rule (assessment `GATEWAY-AGGREGATION-ASSESSMENT.md:35`). | Lazy start, `listChanged`, policy-edit refresh → **E8** |
-| Name collisions | `registerRoute` is a `Map` keyed by MCP name, so the last writer wins silently (`run.ts:241`) | `checkCollisions` over the host's operations plus the accepted mount ops; skip and warn (SPEC §5, `SPEC.md:179-183`) | — (F3 for apigen generally) |
-| Aggregate health | — | A `_meta/upstreams` mount over `gateway.health()` (`gateway.ts:620-637`) in the same plugin. It cannot be named `_meta/health`, or it would collide with `--use health`. | — |
-| Hide denied tools | Denied tools are listed (D-08) | Static `include` predicate evaluated once at `mount.operations` | Dynamic filtering needs E8 |
-| Names | — | `<source>_<tool>` (`naming.ts:155-156`). For an aggregator, the MCP spec says SHOULD prefix (assessment `:36`). | N=1 verbatim names → **BA-1/E1** |
+| Routing key | Gateway routes by `operation.host`, one adapter per host, throws on duplicates (`gateway.ts:417-422`, `:591`); every MCP source op is stamped `host:'ts'` (`mcp-source.ts:192`) | `Operation.host` stays the producer tag (`mcp`); `Operation.binding` carries `mcp:<source>` and the gateway routes `binding ?? host` | **Decided (O-1);** BA-7 is superseded |
+| `serve` uses the gateway | No (`serve.ts:41-54`); the gateway has 0 production callers | Binding-aware dispatch → `gateway.route` | See the open D1 sequencing note in item 2 |
+| Partial availability, restart | Passthrough exits on upstream close (`mcp-passthrough-server.ts:189`) | Supervision with backoff (`gateway.ts:474-503`); `unavailable` names the host (`:87-104`, `:608-614`) | **Decided (BA-6):** supervise with a finite `maxRestarts` |
+| Per-upstream timeout | Gateway deadline is global (`gateway.ts:321-322`, `:408`, `:617`) | The adapter enforces its own `callTimeoutMs` through the SDK request timeout; the gateway default is ≥ the maximum | True per-host deadline: E7 is not adopted |
+| Tool list | — | `mount.operations` is synchronous and called once (`plugin.ts:461-465`; mcp `run.ts:590-596`, dod.12), so all upstreams start eagerly before the host and the list is fixed. This matches spec 2026-07-28's constant-list rule (assessment `GATEWAY-AGGREGATION-ASSESSMENT.md:35`). | Lazy start, `listChanged`, policy-edit refresh: E8 is not adopted |
+| Name collisions | `registerRoute` is a `Map` keyed by MCP name, so the last writer wins silently (`run.ts:241`) | `checkCollisions` over the host's operations including the translated upstream operations; skip and warn (SPEC §5, `SPEC.md:179-183`) | — (F3 for apigen generally) |
+| Aggregate health | — | A `_meta/upstreams` operation over `gateway.health()` (`gateway.ts:620-637`). It cannot be named `_meta/health`, or it would collide with `--use health`. | — |
+| Hide denied tools | Denied tools are listed (D-08) | Static `include` predicate evaluated once when the IR operations are built | Dynamic filtering needs E8, which is not adopted |
+| Names | — | `<source>_<tool>` (`naming.ts:155-156`). For an aggregator, the MCP spec says SHOULD prefix (assessment `:36`). | **Decided (BA-1):** standard projection with the mount namespace as `<source>`; E1 is not adopted |
 | Per-upstream env (c6ca91d6) | Fixed allowlist of 8 names plus `spec.env` (`sources/process.ts:48-57`), a different list from the SDK's | The adapter spec carries `env`; base it on SDK `getDefaultEnvironment()` (verified `stdio.js:7`, `:35`) | — |
-| Remote upstream | `remote:` throws (`resolve-source.ts:50-51`) | Same adapter with the SDK streamable-HTTP client transport (class name **unverified**), `hopCost: 1` | — |
+| Remote upstream | `remote:` throws (`resolve-source.ts:50-51`) | Same adapter with the SDK streamable-HTTP client transport (class name **unverified**), `hopCost: 1`. Out of the slice (O-6). | — |
 | Remote front | — | `mcpPlugin.run({transport:'streaming-http'})` (`run.ts:923-925`) | — |
 | Two gateway implementations | `adhd-apigen serve` has its own proxy (`serve.ts:1-60`) | Out of scope; recorded as F7 | — |
 
 **Reusing apigen-generated MCP hosts (local or remote) behind one policy-fronted gateway.**
 - A remote apigen MCP server (any `mcpPlugin.run({transport:'streaming-http'})`) is an `http` upstream like any other. Local stdio apigen servers (`adhd-backlog`, `adhd-policy-mcp`) are `stdio` upstreams.
-- In-process apigen packages need no gateway hop. They go in the same `mcpPlugin.run` call as `packages: [pkg]`, next to the upstream mount, under the same `usePlugins` Layer stack. This is the existing `startPolicyMcp` shape (`entrypoint/policy/src/wrapper/mount.ts:136-142`). Policy's own operations can be exposed this way if wanted.
-- Package operations and upstream mounts then share one route `Map` (`run.ts:241`). The mount plugin therefore runs `checkCollisions` over `[...descriptor.operations, ...accepted, op]`, not over its own operations only. `descriptor.operations` is the host's operation list passed to `mount.operations` (mcp `run.ts:441`, `:590-596`).
+- In-process apigen packages need no gateway hop. They go in the same `mcpPlugin.run` call as `packages: [pkg]`, next to the upstream operations, under the same `usePlugins` Layer stack. This is the existing `startPolicyMcp` shape (`entrypoint/policy/src/wrapper/mount.ts:136-142`). Policy's own operations can be exposed this way if wanted.
+- In-process package operations and upstream operations then share one route `Map` (`run.ts:241`). Collision checking therefore runs over the host's whole operation list, not over the upstream operations only.
 
-**Not reusable without an extension:** none of the core mechanism. The verbatim-name and verbatim-result needs of the N=1 wrap are the only gaps, and they are the same gaps as item 2.
+**Not reusable without an extension:** none of the core mechanism. The verbatim-name and verbatim-result needs of the N=1 wrap are resolved as in item 2 (BA-1, BA-2).
 
 ---
 
@@ -402,47 +384,49 @@ export class PolicyAttributes {
 | 0 | S2: MCP host wires `extra.signal` into `Call.signal` (`apigen-plugin-mcp`) | F1 | — | S1, S3 |
 | 0 | S3: dispatch `$ref` resolution, then delete both `dereferenceSchema` copies | C4 (1bb4b5d5) | — | S1, S2 |
 | 1 | S4: plugin-policy `ctx` key, then `makePolicyPlugin`, default deny-all, core-client typing; delete `state.ts`, the mount capability and `load-decider.ts` | A4, A1, A3, A6 | S1 (shared `package.json`) | S5, S6 |
-| 1 | S5: gateway `createMcpUpstreamAdapter`, `createUpstreamMountPlugin`, `syntheticOp` argv op, `ApiError`; delete passthrough, `stdio-host-transport`, `SourceError` and the serve arm | B3, B4, B5, B6, B7, B8, B9 | S2 for the cancel proof | S4, S6 |
-| 1 | S6: `buildApigenPackage` helper in runtime + backlog migration | C2 | owner BA-10 | S4, S5 |
-| 2 | S7: wrapper `gate.ts` (`makePolicyPlugin`, `ctx` attributes), `serve` via gateway + `mcpPlugin.run`, `run` via `createPackageInvoker`/`dispatchForPlan` + tracing, `failure.ts` | C5, C6, C7, A4 | S4, S5, and BA-1 to BA-6 decided | — |
+| 1 | S5: gateway sources as extract-stage IR + `Operation.binding` (source-model steps 0, 1, 4, 5), not `createUpstreamMountPlugin`: `createMcpUpstreamAdapter` binding, `operationsFromMcpTools` and argv translators, `ApiError`; `serveMcpPassthrough` rewritten to consume IR; delete `SourceError` and the serve arm | B3, B4, B5, B6, B7, B8, B9 | S2 for the cancel proof; source-model steps 0, 1, 4, 5 | S4, S6 |
+| 1 | S6: `buildApigenPackage` helper in runtime + backlog migration | C2 | BA-10 (decided); the `entrypoint/backlog` migration stays gated on separate approval | S4, S5 |
+| 2 | S7: wrapper `gate.ts` (`makePolicyPlugin`, `ctx` attributes), `serve` via gateway + `mcpPlugin.run`, `run` via `createPackageInvoker`/`dispatchForPlan` + tracing, `failure.ts` | C5, C6, C7, A4 | S4, S5 (BA-1 to BA-6 are decided, section 10a) | — |
 | 2 | S8: IR through the ir-cache artifact target + reader; delete the bake | C3 | S1, S6, and the parity proof | after S7 (shared `mount.ts`/`package.ts`) |
 | 3 | S9: tests. Functional specs on the stdin-spy or loopback seam. Real stdio proof in an `e2e` target per ADR-0009 (`0009-...md:19-25`); the owner's "no e2e" (`docs/plan/policy-core/README.md:12`) still governs whether it runs locally. | all | S7, S8 | S10 |
-| 3 | S10: docs. INTERFACES D-07, D-08, D-14, D-18, D-19, D-20, D-21 superseded; plugin and gateway READMEs; `packages/apigen/README.md` table | all | S7 | S9 |
+| 3 | S10: docs. INTERFACES D-07, D-08, D-14, D-18, D-19, D-20, D-21 superseded (D-21 by the O-8 proxy target); plugin and gateway READMEs; `packages/apigen/README.md` table | all | S7 | S9 |
 
 **Gates for every segment:** `npx nx affected -t lint,typecheck,typecheck-spec`; `nx affected -t test`; `verify-dist-load` on the three packages.
 
 ---
 
-## 10. Owner decisions still required
+## 10. Decisions register
 
-### 10a. Behaviour-change acceptances (the conforming design needs no extension, only acceptance)
+Owner: pseudosky. Status values: Decided, Deferred (out of slice), Open. Source-model decisions O-1 to O-14 are in `SOURCE-MODEL-GAP-ANALYSIS.md` §9. Slice: the policy path (S1 to S10), TS-only apigen foundations and the TS subprocess extractor; Python, Java, remote, `bin:` in adhd-apigen, Rust and Go are out. Packages approved for edits: `apigen-core-client`, `apigen-cli`, `apigen-engine-runtime`, `apigen-plugin-mcp`, `workspace-codegen-nx`; `entrypoint/backlog` is not approved.
 
-| ID | Accept… | Otherwise |
-|---|---|---|
-| BA-1 | Single-server wrap tool names become `<source>_<tool>`, with words snake-cased (`readFile` → `fs_read_file`). This breaks GW-03/D-08 and users' `mcp__<server>__<tool>` host rules after `mcp-json init`. | E1 |
-| BA-2 | Upstream results projected per ADR-0004. Concretely: every plain-text tool result reaches the model as a JSON string literal (quoted, newlines escaped) on every call; images and resources are serialised as JSON; upstream `isError` becomes a JSON-RPC error | E2 |
-| BA-3 | `tools/list` drops title, annotations and outputSchema; descriptions gain apigen's synthesized example | E3 |
-| BA-4 | A refusal is a JSON-RPC `-32603` error carrying the reason (SPEC §9) instead of an `isError` result (D-04/U12) | E2 |
-| BA-5 | Operation ids move from `.` to `/` (`fs/read_file`, `bin/touch`); policy files and `draft` output migrate | — |
-| BA-6 | An N=1 upstream crash is supervised (restart with a finite `maxRestarts`, `unavailable` in between) rather than shutting the server down. A failed startup handshake still exits non-zero (the startup-failure contract in item 2). The wrapper could instead abort on `onExit`. | — |
-| BA-7 | `Operation.host` may name a non-language runtime (`mcp:<source>`, `bin`). An ADR-level clarification of `descriptor.ts:165-169`; no type change. | — |
-| BA-8 | Bare `--use @adhd/apigen-plugin-policy` denies everything; configuration is a local `--use` module; string decider specifiers are dropped | E4 |
-| BA-9 | MCP `serverInfo` falls back to `apigen-mcp` (cosmetic) | — |
-| BA-10 | `buildApigenPackage` helper export in `apigen-engine-runtime` (a refactor helper, **not** a taxonomy member) | Duplicate stays (689af7c3) |
-| BA-11 | Only if `cliPlugin` is chosen for `run`: JSON report output | E6 |
+### 10a. Behaviour-change acceptances
 
-### 10b. True taxonomy extensions (decide only if the behaviour is wanted; none is required by the conforming designs)
-
-| ID | Extension | Member it would add | Note |
+| ID | Topic | Decision | Status |
 |---|---|---|---|
-| E1 | MCP tool-name override | `ProjectionConfig.mcp.name[id]` (`naming.ts:116-123`) | SPEC Tenet 1 already names "name" as a projection-override category (`SPEC.md:30-31`), but the type lacks it |
-| E2 | Raw `CallToolResult` passthrough | `McpTransportAdapter.writeResult` channel for pre-shaped results (`run.ts:306-333`) | Interacts with ADR-0004 D1. SPEC §9's "complete opt-out → raw passthrough" (`SPEC.md:395-396`) is documented but not built. |
-| E3 | Tool metadata passthrough for mounts | `MountedOperation`/`ToolListMeta` fields (`plugin.ts:478-494`; `run.ts:146-150`) | — |
-| E4 | `--use <pkg> --opt` for Layers | `LayerCapability.createLayer(opts)` + apigen-cli filling `useOptions` (`plugin.ts:305-330`; `run.ts:321-324`) | Review remediation #1 |
-| E5 | `--source bin:`/`remote:` in apigen-cli | Phase 4 source plugin (DEBT-APIGEN-SERVE-CORE-011, epic 292bd882; `transport-serve-core-refactor.md:217-225`) | Its revisit trigger has fired (review P15) |
-| E6 | cli-output raw-output mode | New cli-output option | Only with BA-11 |
-| E7 | Per-host gateway deadline | `GatewayOptions`/`HostAdapter` field | Only if adapter-level timeouts are insufficient |
-| E8 | Dynamic tool list (lazy start, `listChanged`, filtered refresh) | A tools/list hook for Layers or mounts | Spec 2026-07-28 tension (assessment §4.8) |
+| BA-1 | Wrapped tool names | Names come from the standard projection/naming engine, with the gateway mount namespace as `<source>` (`readFile` in source `fs` becomes `fs_read_file`). No E1 override. Users' `mcp__<server>__<tool>` host rules change after `mcp-json init`. | Decided |
+| BA-2 | Upstream results over MCP | A general fix in `apigen-plugin-mcp` for every service: a string result is emitted as raw text content, not a JSON string literal. Object results keep ADR-0004 behaviour. An ADR-0004 follow-up is drafted for approval and not yet written. | Decided |
+| BA-3 | Tool metadata in `tools/list` | Adopt E3: mounted operations carry tool metadata (title, annotations, outputSchema). | Decided |
+| BA-4 | Policy refusal shape | A refusal is a tool execution error: a result with `isError: true` carrying the code and reason (MCP spec 2025-06-18, Error Handling: business-logic failures are tool execution errors, protocol errors are JSON-RPC). This keeps D-04/U12. The general `apigen-plugin-mcp` `writeError` change (today it re-throws every `ApiError`, `run.ts:335-345`) belongs to the same ADR follow-up; which other `ApiError` codes map to `isError` is proposed in the ADR draft. | Decided |
+| BA-5 | Operation id separator | Operation ids use `/` per SPEC §4 (`fs/read_file`, `bin/touch`); policy files and `draft` output migrate. | Decided |
+| BA-6 | Crashed upstream | Supervise and restart a crashed upstream with a finite `maxRestarts`. A failed startup handshake still exits non-zero (the startup-failure contract in item 2). | Decided |
+| BA-7 | `Operation.host` meaning | Superseded by O-1: `host` keeps its producer meaning and `Operation.binding` carries the executing binding. | Decided |
+| BA-8 | Layer options through `--use` | Adopt E4: `LayerCapability.createLayer(opts)`, `createPackageInvoker` passes the options, and apigen-cli fills them from `--opt` as one flat bag per invocation (same as `extractLayer`). A bare `--use` with no decider still denies everything. | Decided |
+| BA-9 | MCP `serverInfo` fallback | Cosmetic; accepted (`apigen-mcp`). | Decided |
+| BA-10 | `buildApigenPackage` helper | Add `buildApigenPackage` to `apigen-engine-runtime`. Migrating `entrypoint/backlog` stays gated on separate approval. | Decided |
+| BA-11 | `cliPlugin` JSON report for `run` | Not applicable: `cliPlugin` is not chosen for `run`. | Decided |
+
+### 10b. Taxonomy extensions
+
+| ID | Extension | Member it would add | Note | Decision | Status |
+|---|---|---|---|---|---|
+| E1 | MCP tool-name override | `ProjectionConfig.mcp.name[id]` (`naming.ts:116-123`) | SPEC Tenet 1 already names "name" as a projection-override category (`SPEC.md:30-31`), but the type lacks it | Not adopted (BA-1). | Decided |
+| E2 | Raw `CallToolResult` passthrough | `McpTransportAdapter.writeResult` channel for pre-shaped results (`run.ts:306-333`) | Interacts with ADR-0004 D1. SPEC §9's "complete opt-out → raw passthrough" (`SPEC.md:395-396`) is documented but not built. | Not adopted: BA-2 and BA-4 are solved generally in the adapter. | Decided |
+| E3 | Tool metadata passthrough for mounts | `MountedOperation`/`ToolListMeta` fields (`plugin.ts:478-494`; `run.ts:146-150`) | — | Adopted (BA-3). | Decided |
+| E4 | `--use <pkg> --opt` for Layers | `LayerCapability.createLayer(opts)` + apigen-cli filling `useOptions` (`plugin.ts:305-330`; `run.ts:321-324`) | Review remediation #1 | Adopted (BA-8). | Decided |
+| E5 | `--source bin:`/`remote:` in apigen-cli | Phase 4 source plugin (DEBT-APIGEN-SERVE-CORE-011, epic 292bd882; `transport-serve-core-refactor.md:217-225`) | Its revisit trigger has fired (review P15) | Satisfied by O-4: `bin:` and `remote:` are extract-stage sources through the registry and `Operation.binding`; no source capability. `bin:` in adhd-apigen is deferred. | Decided |
+| E6 | cli-output raw-output mode | New cli-output option | Only with BA-11 | Not applicable (BA-11). | Decided |
+| E7 | Per-host gateway deadline | `GatewayOptions`/`HostAdapter` field | Only if adapter-level timeouts are insufficient | Not adopted. | Decided |
+| E8 | Dynamic tool list (lazy start, `listChanged`, filtered refresh) | A tools/list hook for Layers or mounts | Spec 2026-07-28 tension (assessment §4.8) | Not adopted. | Decided |
 
 ## 11. Findings discovered while verifying (not filed: this run had no backlog write access)
 
