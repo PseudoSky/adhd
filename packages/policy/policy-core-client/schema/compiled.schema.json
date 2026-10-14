@@ -1,0 +1,233 @@
+{
+  "$defs": {
+    "attributeValue": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      ]
+    },
+    "defaultsRule": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "layer": {
+          "$ref": "#/$defs/layer"
+        },
+        "set": {
+          "additionalProperties": {
+            "$ref": "#/$defs/attributeValue"
+          },
+          "type": "object"
+        },
+        "source": {
+          "type": "string"
+        },
+        "where": {
+          "type": "object"
+        }
+      },
+      "required": [
+        "id",
+        "layer",
+        "source",
+        "set"
+      ],
+      "type": "object"
+    },
+    "indexList": {
+      "items": {
+        "minimum": 0,
+        "type": "integer"
+      },
+      "type": "array"
+    },
+    "layer": {
+      "enum": [
+        "global",
+        "project",
+        "local"
+      ]
+    },
+    "permission": {
+      "additionalProperties": false,
+      "properties": {
+        "args": {
+          "type": "object"
+        },
+        "context": {
+          "type": "object"
+        },
+        "effect": {
+          "enum": [
+            "allow",
+            "ask",
+            "deny"
+          ]
+        },
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "layer": {
+          "$ref": "#/$defs/layer"
+        },
+        "placeholders": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "readsRuntime": {
+          "type": "boolean"
+        },
+        "set": {
+          "type": "object"
+        },
+        "tools": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "usesWithin": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "layer",
+        "tools",
+        "effect",
+        "placeholders",
+        "usesWithin",
+        "readsRuntime"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://adhd.dev/schema/compiled-1.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "attributes": {
+      "additionalProperties": {
+        "enum": [
+          "name",
+          "names",
+          "paths",
+          "number"
+        ]
+      },
+      "type": "object"
+    },
+    "compilerVersion": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "contentHash": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "defaults": {
+      "items": {
+        "$ref": "#/$defs/defaultsRule"
+      },
+      "type": "array"
+    },
+    "index": {
+      "additionalProperties": false,
+      "properties": {
+        "exact": {
+          "additionalProperties": {
+            "$ref": "#/$defs/indexList"
+          },
+          "type": "object"
+        },
+        "patterns": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "prefix": {
+                "type": "string"
+              },
+              "rules": {
+                "$ref": "#/$defs/indexList"
+              }
+            },
+            "required": [
+              "prefix",
+              "rules"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "exact",
+        "patterns"
+      ],
+      "type": "object"
+    },
+    "inputHash": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "narrowingCovered": {
+      "additionalProperties": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "type": "object"
+    },
+    "permissions": {
+      "items": {
+        "$ref": "#/$defs/permission"
+      },
+      "type": "array"
+    },
+    "runtime": {
+      "additionalProperties": {
+        "enum": [
+          "number",
+          "name"
+        ]
+      },
+      "type": "object"
+    },
+    "schemaVersion": {
+      "const": 1
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "compilerVersion",
+    "inputHash",
+    "contentHash",
+    "attributes",
+    "runtime",
+    "defaults",
+    "permissions",
+    "index",
+    "narrowingCovered"
+  ],
+  "title": "ADHD compiled policy",
+  "type": "object"
+}

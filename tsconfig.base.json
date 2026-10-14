@@ -213,6 +213,13 @@
       ],
       "@adhd/agent-plugin-tracing": [
         "./packages/agent/agent-plugin-tracing/src/index.ts"
+      ],
+      "@adhd/policy-core-client": [
+        "./packages/policy/policy-core-client/src/index.ts"
+      ],
+      "@adhd/policy": ["./entrypoint/policy/src/index.ts"],
+      "@adhd/apigen-plugin-policy": [
+        "./packages/apigen/apigen-plugin-policy/src/index.ts"
       ]
     }
   },

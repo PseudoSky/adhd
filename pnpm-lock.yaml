@@ -764,6 +764,78 @@ importers:
         specifier: ^1.10.2
         version: 1.10.3
 
+  entrypoint/policy:
+    dependencies:
+      '@adhd/apigen-base-errors':
+        specifier: ^0.2.3
+        version: link:../../packages/apigen/apigen-base-errors
+      '@adhd/apigen-core-client':
+        specifier: ^0.3.4
+        version: link:../../packages/apigen/apigen-core-client
+      '@adhd/apigen-engine-gateway':
+        specifier: ^0.2.3
+        version: link:../../packages/apigen/apigen-engine-gateway
+      '@adhd/apigen-engine-naming':
+        specifier: ^0.2.5
+        version: link:../../packages/apigen/apigen-engine-naming
+      '@adhd/apigen-engine-runtime':
+        specifier: ^0.3.3
+        version: link:../../packages/apigen/apigen-engine-runtime
+      '@adhd/apigen-plugin-api-fastify':
+        specifier: ^0.2.8
+        version: link:../../packages/apigen/apigen-plugin-api-fastify
+      '@adhd/apigen-plugin-cli-output':
+        specifier: ^0.2.8
+        version: link:../../packages/apigen/apigen-plugin-cli-output
+      '@adhd/apigen-plugin-mcp':
+        specifier: ^0.3.3
+        version: link:../../packages/apigen/apigen-plugin-mcp
+      '@adhd/apigen-plugin-policy':
+        specifier: ^0.0.1
+        version: link:../../packages/apigen/apigen-plugin-policy
+      '@adhd/apigen-plugin-tracing':
+        specifier: ^0.2.0
+        version: link:../../packages/apigen/apigen-plugin-tracing
+      '@adhd/policy-core-client':
+        specifier: ^0.0.1
+        version: link:../../packages/policy/policy-core-client
+      '@adhd/sox-telemetry':
+        specifier: ^0.4.3
+        version: 0.4.3
+      '@modelcontextprotocol/sdk':
+        specifier: 1.29.0
+        version: 1.29.0(zod@4.4.3)
+      ajv:
+        specifier: ^8.20.0
+        version: 8.20.0
+      ajv-formats:
+        specifier: 2.1.1
+        version: 2.1.1(ajv@8.20.0)
+      commander:
+        specifier: ^14.0.3
+        version: 14.0.3
+      fastify:
+        specifier: ^4.0.0
+        version: 4.29.1
+      pino:
+        specifier: 10.3.1
+        version: 10.3.1
+      pino-pretty:
+        specifier: 13.1.3
+        version: 13.1.3
+      ts-json-schema-generator:
+        specifier: ^2.3.0
+        version: 2.9.0
+      ts-morph:
+        specifier: ^23.0.0
+        version: 23.0.0
+      typescript:
+        specifier: ^5.5.0
+        version: 5.9.3
+      yaml:
+        specifier: ^1.10.2
+        version: 1.10.3
+
   packages/agent/agent-base-types: {}
 
   packages/agent/agent-core-env:
@@ -1279,6 +1351,12 @@ importers:
       '@adhd/apigen-core-client':
         specifier: ^0.3.4
         version: link:../apigen-core-client
+      '@adhd/apigen-engine-runtime':
+        specifier: ^0.3.3
+        version: link:../apigen-engine-runtime
+      '@modelcontextprotocol/sdk':
+        specifier: 1.29.0
+        version: 1.29.0(zod@4.4.3)
 
   packages/apigen/apigen-engine-naming:
     dependencies:
@@ -1488,6 +1566,15 @@ importers:
         specifier: ^0.3.4
         version: link:../apigen-core-client
 
+  packages/apigen/apigen-plugin-policy:
+    dependencies:
+      '@adhd/apigen-base-errors':
+        specifier: ^0.2.3
+        version: link:../apigen-base-errors
+      '@adhd/apigen-engine-runtime':
+        specifier: ^0.3.3
+        version: link:../apigen-engine-runtime
+
   packages/apigen/apigen-plugin-py-flask:
     dependencies:
       '@adhd/apigen-core-client':
@@ -1654,6 +1741,24 @@ importers:
       '@adhd/environment-builder':
         specifier: ^0.1.7
         version: link:../environment-builder
+
+  packages/policy/policy-core-client:
+    dependencies:
+      '@adhd/apigen-base-errors':
+        specifier: ^0.2.3
+        version: link:../../apigen/apigen-base-errors
+      '@adhd/data-query-engine':
+        specifier: ^2.3.10
+        version: link:../../data/data-query-engine
+      '@adhd/environment':
+        specifier: ^0.1.8
+        version: link:../../environment/environment-core-node
+      '@adhd/environment-base-spec':
+        specifier: ^0.1.4
+        version: link:../../environment/environment-base-spec
+      yaml:
+        specifier: ^1.10.2
+        version: 1.10.3
 
   packages/ui-react/ui-react-base-hooks:
     dependencies:
@@ -14007,7 +14112,6 @@ packages:
     resolution: {integrity: sha512-uZbew1NqdmPDTMJ8ah1y+b+9QEJrfkXFk3RcTQw3X0jW/xRUvFKsg1CfQdSYGdTbXZWExtU3J3ccxtnfw1Fi0g==}
     dependencies:
       balanced-match: 1.0.2
-    dev: false
 
   /brace-expansion@5.0.9:
     resolution: {integrity: sha512-ScQ4IuvIEF1TMlP7Zt+vjJ//9zlPb2SDcxWxM3bk8s6t6GGdJ7KO1dCcTidOPJKePW30LE/2cT7wCyPho9/Wxg==}
@@ -21192,7 +21296,7 @@ packages:
     resolution: {integrity: sha512-7o1wEA2RyMP7Iu7GNba9vc0RWWGACJOCZBJX2GJWip0ikV+wcOsgVuY9uE8CPiyQhkGFSlhuSkZPavN7u1c2Fw==}
     engines: {node: '>=10'}
     dependencies:
-      brace-expansion: 2.1.3
+      brace-expansion: 2.1.7
 
   /minimatch@7.4.9:
     resolution: {integrity: sha512-Brg/fp/iAVDOQoHxkuN5bEYhyQlZhxddI78yWsCbeEwTHXQjlNLtiJDUsp1GIptVqMI7/gkJMz4vVAc01mpoBw==}
