@@ -1,3 +1,7 @@
+// guards: The policy client operations return a wrong decision or hide why: deny/ask/allow precedence across layers, attribute defaulting, explain output, narrowing that widens, audit sink and createDecider host-port mapping.
+// tier: S
+// cites: L1.1-L1.4 client operations (evaluate, check, verify, explain, narrow, createDecider).
+
 import { ApiError } from '@adhd/apigen-base-errors';
 import { describe, expect, it } from 'vitest';
 import { createDecider, createMemoryCtx, createPolicyClient } from '../../index';

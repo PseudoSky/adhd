@@ -1,3 +1,7 @@
+// guards: The apigen policy Layer decides wrongly across global, project and local layers: wrong layer wins, inheritance is not stopped by an explicit empty list, or a denied call still runs.
+// tier: S
+// cites: S4.1 layered decisions through the apigen Layer (last layer that sets a value wins, inheritance, deny beats allow).
+
 import { describe, expect, it } from 'vitest';
 import type { Layer } from '@adhd/apigen-engine-runtime';
 import { createPolicyLayerPlugin } from '../index';

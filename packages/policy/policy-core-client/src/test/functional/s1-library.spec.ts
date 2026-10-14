@@ -1,3 +1,7 @@
+// guards: The policy client is not library-first: importing it starts a timer, socket or process, or compiling is non-deterministic, or a decision on the workspace policy allows what it should deny.
+// tier: S
+// cites: S1.1, S1.2, S1.3 library first (compile once, decide in process, no server).
+
 import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';

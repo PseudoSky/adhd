@@ -1,3 +1,7 @@
+// guards: A decider that throws, rejects, times out, returns a malformed decision or cannot be loaded results in an allow, or leaks its error text or call arguments to the client.
+// tier: S
+// cites: S8.1 fail-closed paths: a failing decider never allows, refusals are generic, nothing sensitive leaks.
+
 import { mkdir, rm, rmdir, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';

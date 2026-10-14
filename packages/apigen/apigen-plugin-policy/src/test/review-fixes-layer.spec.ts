@@ -1,3 +1,7 @@
+// guards: A review finding in the policy Layer regresses: unsafe attribute reads, an unreported fail-closed phase, an unvalidated or unenforced timeoutMs, a decider that can alter the real call, a lost captured configuration, or drifted package metadata.
+// tier: S
+// cites: review findings L1, L2, L4, L5, L6, L7 of the apigen-plugin-policy review.
+
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';

@@ -1,3 +1,7 @@
+// guards: A review finding in the policy client regresses: supplied keys escape narrowing, an unevaluable rule skips instead of denying, inherited properties are read as own, reserved attribute names are accepted, draft is wrong, or a stale layer is served from cache.
+// tier: S
+// cites: review findings C1, C2, C3, C5, C6, C7, C8, C9, C11 of the policy-core-client review.
+
 import { mkdir, utimes, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
