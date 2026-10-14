@@ -17,6 +17,7 @@
 import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { realpathSync as realpathForEntry } from 'node:fs';
 
 const TERMINAL = new Set(['resolved', 'closed']);
 const SHA_RE = /\b[0-9a-f]{7,40}\b/g;
@@ -76,4 +77,4 @@ function main(argv) {
   return uncited.length === 0 ? 0 : 1;
 }
 
-if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) process.exit(main(process.argv.slice(2)));
+if ((() => { try { return realpathForEntry(process.argv[1]) === realpathForEntry(fileURLToPath(import.meta.url)); } catch { return process.argv[1] === fileURLToPath(import.meta.url); } })()) process.exit(main(process.argv.slice(2)));

@@ -10,6 +10,7 @@
  * Shell: `flags=$(node "$repo_root/.githooks/lib/pre-push-flags.mjs")` -> "--target=test"
  */
 import { fileURLToPath } from 'node:url';
+import { realpathSync as realpathForEntry } from 'node:fs';
 import { resolve } from 'node:path';
 import { GATE_TARGETS } from '../../tools/gate/lane-gate.mjs';
 
@@ -27,7 +28,7 @@ export function prePushFlags() {
 }
 
 const invokedDirectly =
-  process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+  (() => { try { return realpathForEntry(process.argv[1]) === realpathForEntry(fileURLToPath(import.meta.url)); } catch { return process.argv[1] === fileURLToPath(import.meta.url); } })();
 if (invokedDirectly) {
   process.stdout.write(prePushFlags().join(' '));
 }

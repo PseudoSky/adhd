@@ -24,6 +24,7 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { realpathSync as realpathForEntry } from 'node:fs';
 import { blank, listTestFiles } from './check-skip-expiry.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -143,4 +144,4 @@ export function main(argv) {
   return violations.length ? 1 : 0;
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) process.exit(main(process.argv.slice(2)));
+if ((() => { try { return realpathForEntry(process.argv[1]) === realpathForEntry(fileURLToPath(import.meta.url)); } catch { return process.argv[1] === fileURLToPath(import.meta.url); } })()) process.exit(main(process.argv.slice(2)));

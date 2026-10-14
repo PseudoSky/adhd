@@ -79,6 +79,7 @@ import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { realpathSync as realpathForEntry } from 'node:fs';
 
 const findRoot = (d) => {
   while (d !== dirname(d)) {
@@ -1236,7 +1237,7 @@ async function main() {
   process.exit(ok ? 0 : 1);
 }
 
-const isMain = process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1];
+const isMain = (() => { try { return realpathForEntry(process.argv[1]) === realpathForEntry(fileURLToPath(import.meta.url)); } catch { return process.argv[1] === fileURLToPath(import.meta.url); } })();
 if (isMain) {
   main();
 }
