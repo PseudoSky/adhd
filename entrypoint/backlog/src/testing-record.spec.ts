@@ -5,6 +5,11 @@
  * It spawns the built dist/index.js, so it runs in the `e2e` lane. This file spawns nothing;
  * it exists so the default `test` target has the file's contract in view.
  *
+ * guards: the Testing record grammar the e2e proves is also listed in the unit lane, so the suite is not invisible there.
+ * tier: S
+ * cites: 595965cc T35.AC1-AC4
+ * teeth: none (placeholder todos; the red evidence is the e2e file's)
+ *
  * skip-expiry: 595965cc until 2026-12-31 the mocked placeholders are covered by testing-record.e2e.ts in the e2e lane.
  *
  * Resource lane: proc — spawns the built dist/index.js as a child process.
