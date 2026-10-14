@@ -129,3 +129,13 @@ test('pre-push (blind-review 15): the G4 check runs once per push, not once per 
   assert.match(body, /\[ -z "\$\{g4_done:-\}" \] && ! node "\$repo_root\/tools\/nx-plugins\/test\/executors\/wiring\/check-skip-expiry\.mjs"/);
   assert.match(body, /\n\s*g4_done=1\n/);
 });
+
+test('pre-push hardening: real-path root, empty flags refused, G12 advisory', () => {
+  const body = readFileSync(HOOK, 'utf8');
+  assert.ok(/repo_root=\$\(cd "\$hook_dir\/\.\." && pwd -P\)/.test(body), 'repo_root must be the physical path (pwd -P)');
+  assert.ok(/if \[ -z "\$flags" \]; then\n[^\n]*\n  exit 1/.test(body), 'an empty flags string must exit 1');
+  const g12 = body.split('\n').findIndex((l) => l.includes('test-routing.mjs" check'));
+  assert.ok(g12 > 0, 'G12 invocation present');
+  const block = body.split('\n').slice(g12, g12 + 5).join('\n');
+  assert.ok(!/exit 1/.test(block), 'G12 must warn, not exit 1');
+});
