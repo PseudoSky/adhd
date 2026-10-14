@@ -124,7 +124,7 @@ describe('R10 S4 P3/P4 guidance text', () => {
   });
 
   it('R10 S4 AC3: the rejection recovery note names the policy, the command, the unavailable set and the alternatives', () => {
-    const note = shellRejectionNote('python3');
+    const note = shellRejectionNote('python3', DEFAULT_SHELL_ALLOW_COMMANDS);
     expect(note).toContain('"python3" is rejected by the shell server\'s default security policy');
     for (const c of SHELL_UNAVAILABLE_COMMANDS) expect(note).toContain(c);
     expect(note).toContain('fs__edit_file');

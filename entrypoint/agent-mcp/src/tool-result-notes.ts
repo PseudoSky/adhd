@@ -6,7 +6,9 @@
  *    is no need to read it back to verify". Claude Code's Edit/Write results say the same; without it a
  *    worker spends a round re-reading what it just wrote.
  *  - P4: after the adopted shell server rejects a command by its default security policy, a recovery line
- *    that says what to do instead (the fs tools; the project's own scripts through an allowed runner).
+ *    that says what to do instead (the fs tools; the project's own scripts through an allowed runner). The
+ *    runners it names come from the agent's RESOLVED shell server (cafe9a17 AC1); a custom shell server or an
+ *    unreadable config names none.
  *
  * Delivery is model-visible ONLY, by construction:
  *
@@ -199,7 +201,8 @@ export function noteFor(
   if (toolName === 'shell__shell_execute' && isError) {
     const m = SHELL_POLICY_REJECTION.exec(resultText(result));
     if (!m) return undefined;
-    return `[Note: ${shellRejectionNote(m[1])}]`;
+    // cafe9a17 AC1: runners are named from THIS agent's resolved shell server, never the catalog defaults.
+    return `[Note: ${shellRejectionNote(m[1], executionContext?.agentDefinition?.mcpServers)}]`;
   }
   return undefined;
 }

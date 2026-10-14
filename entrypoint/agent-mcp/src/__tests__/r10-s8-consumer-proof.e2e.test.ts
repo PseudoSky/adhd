@@ -30,7 +30,7 @@ import { join } from "node:path";
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { resolveNativeToolingMap } from "@adhd/agent-core-native-tooling";
+import { DEFAULT_SHELL_ALLOW_COMMANDS, resolveNativeToolingMap } from "@adhd/agent-core-native-tooling";
 import { shellRejectionNote } from "@adhd/agent-engine-orchestrator";
 
 import { DELEGATION_DECISION_RULE } from "../delegation-text.js";
@@ -215,8 +215,8 @@ describe.each(ADAPTERS)("R10 S8 consumer proof [%s]", (a) => {
     const shell = r2.toolResults[2];
     const text = wireText(shell.content);
     expect(text).toContain("Command rejected by default security policy: node");
-    expect(text).toContain(`[Note: ${shellRejectionNote("node")}]`);
-    expect(count(r2.raw, JSON.stringify(`[Note: ${shellRejectionNote("node")}]`).slice(1, -1))).toBe(1);
+    expect(text).toContain(`[Note: ${shellRejectionNote("node", DEFAULT_SHELL_ALLOW_COMMANDS)}]`);
+    expect(count(r2.raw, JSON.stringify(`[Note: ${shellRejectionNote("node", DEFAULT_SHELL_ALLOW_COMMANDS)}]`).slice(1, -1))).toBe(1);
     if (a === "anthropic") expect(shell.isError).toBe(true);
     // allowlist: the stored definition still carries exactly the catalog default (no `node`)
     const stored = JSON.parse(textOf(await sc.call("agent_read", { name: `r10s8-work-${a}`, fullDefinition: true }))) as {

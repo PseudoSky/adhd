@@ -172,7 +172,9 @@ describe("R10 S4 AC3: the shell policy rejection carries an actionable, un-fitte
     expect(shellRejectionNote("sed", ["cat", "ls"])).not.toMatch(/runner/);
     expect(shellRejectionNote("sed", ["npm", "cat"])).toContain("(npm)");
     expect(shellRejectionNote(undefined)).toMatch(/^That command is rejected by the shell server's default security policy/);
-    expect(shellRejectionNote("node")).toBe(shellRejectionNote("node", DEFAULT_SHELL_ALLOW_COMMANDS));
+    // cafe9a17 AC1: no effective config -> no runner is suggested (the catalog default is never assumed).
+    expect(shellRejectionNote("node")).not.toMatch(/runner/);
+    expect(shellRejectionNote("node", DEFAULT_SHELL_ALLOW_COMMANDS)).toContain("allowed runner (npm, pnpm, npx, nx, make, uv)");
   });
 
   it("R10 S4 AC3: a different shell error (not a policy rejection) is untouched", async () => {

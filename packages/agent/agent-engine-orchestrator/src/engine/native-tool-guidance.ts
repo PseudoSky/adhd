@@ -121,19 +121,32 @@ function shellRunners(allow: readonly string[]): string[] {
   return SHELL_RUNNER_CANDIDATES.filter((c) => allow.includes(c));
 }
 
+/** True when `v` is an explicit allowlist (an array of command names) rather than a resolved `mcpServers` map. */
+function isAllowList(v: unknown): v is readonly string[] {
+  return Array.isArray(v);
+}
+
 /**
  * R10 S4 P4 — the actionable recovery line the host appends to a shell policy rejection. It names the
  * policy, the command that was rejected, what to use instead (the fs tools; the project's own scripts
- * through an allowed runner) and never a repo-specific target such as a particular test script: the
- * runner list is GENERATED from `allow`, so it cannot name a runner the server does not accept.
+ * through an allowed runner) and never a repo-specific target such as a particular test script.
+ *
+ * The runner list is GENERATED from the commands the EFFECTIVE shell server allows, never from the catalog
+ * defaults (cafe9a17 AC1): an agent that overrides `allowCommands` must not be pointed at a runner its server
+ * refuses. `effective` is either that allowlist, or the agent's RESOLVED `mcpServers` map, from which the
+ * allowlist is derived by {@link nativeGuidanceContextOf} (the same derivation that shapes the tool guidance).
+ * It FAILS CLOSED: with no `effective`, a custom (non-catalog) shell server, or a catalog shell whose
+ * allowlist cannot be read from its config, no runner is named. Runners allowed only by `ALLOW_PATTERNS` are
+ * not named either, since a pattern says nothing certain about a given runner.
  *
  * @param command The rejected command name (first argv item), when it could be read from the error.
- * @param allow The shell allowlist the server was configured with (default: the catalog default).
+ * @param effective The shell allowlist the server was configured with, or the agent's resolved `mcpServers`.
  */
 export function shellRejectionNote(
   command: string | undefined,
-  allow: readonly string[] = DEFAULT_SHELL_ALLOW_COMMANDS
+  effective?: readonly string[] | Readonly<Record<string, McpServerConfig>>
 ): string {
+  const allow = isAllowList(effective) ? effective : nativeGuidanceContextOf(effective).shell.allow;
   const runners = shellRunners(allow);
   const subject = command ? `"${command}"` : 'That command';
   return (
