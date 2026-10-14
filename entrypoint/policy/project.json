@@ -82,6 +82,7 @@
       "dependsOn": [
         "lint",
         "^build",
+        "build",
         "typecheck-spec"
       ]
     }
