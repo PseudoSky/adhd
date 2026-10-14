@@ -138,7 +138,9 @@ describe("49cec55e AC1 the wire log records every web_fetch request", () => {
         await withLogContext({ task_id: "t-web", session_id: "s-web" }, () =>
             executeWebFetch({ url: "https://ctx.example.com/" }, { resolve: resolver({ "ctx.example.com": [PUBLIC_A] }), request: tracedRequest(tc.channel, net.request) })
         );
-        for (const r of await tc.records()) {
+        const recs = await tc.records();
+        expect(recs.map((r) => r.event)).toEqual(["http.request", "http.response"]); // teeth: a loop over zero records would pass
+        for (const r of recs) {
             expect(r.task_id).toBe("t-web");
             expect(r.session_id).toBe("s-web");
         }
