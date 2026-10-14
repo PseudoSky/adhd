@@ -37,7 +37,8 @@
 //   "unmatched": ["<staged file with no co-located spec — not run anywhere>", ...]
 // }
 
-import { readFileSync, existsSync, readSync } from 'node:fs';
+import { readFileSync, existsSync, readSync, realpathSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
 const repoRoot = process.cwd();
@@ -164,6 +165,6 @@ function main() {
 
 // Only self-invoke when run directly (e.g. `node select-staged-specs.mjs`),
 // not when imported by run-staged-tests.mjs.
-if (import.meta.url === `file://${process.argv[1]}`) {
+if ((() => { try { return realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url)); } catch { return process.argv[1] === fileURLToPath(import.meta.url); } })()) {
   main();
 }

@@ -1,0 +1,4 @@
+{
+  "gateTable": "tools/nx-plugins/test/gates/gates.table.json",
+  "routingCommand": "node tools/nx-plugins/test/routing/test-routing.mjs"
+}

@@ -37,6 +37,7 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { realpathSync as realpathForEntry } from 'node:fs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 // tools/nx-plugins/test/executors/wiring -> repo root
@@ -173,7 +174,7 @@ async function main() {
 }
 
 const invokedDirectly =
-  process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+  (() => { try { return realpathForEntry(process.argv[1]) === realpathForEntry(fileURLToPath(import.meta.url)); } catch { return process.argv[1] === fileURLToPath(import.meta.url); } })();
 if (invokedDirectly) {
   main().catch((err) => {
     console.error('✖ vite-config-plugins check crashed:', err && err.stack ? err.stack : err);
