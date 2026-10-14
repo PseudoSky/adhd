@@ -366,7 +366,7 @@ The Testing block's own `test-routing` row names the harness playbook resolver (
 
 | capability | tool | usage |
 |---|---|---|
-| test-routing | workspace-standards | `/workspace-standards run testing` returns the class, rigor, and playbook of a change |
+| test-routing | `node tools/nx-plugins/test/routing/test-routing.mjs` | `/workspace-standards run testing` returns the class, rigor, and playbook of a change |
 
 | class | default rigor | author card |
 |---|---|---|
@@ -424,29 +424,29 @@ This table wins over the dispatcher's own default rows: for every task it names,
 ### Gate registry
 | gate set | gate | mechanism | stage | bound | threshold |
 |---|---|---|---|---|---|
-| test-gates | G1 | mechanical | D, E, G | command | required tests pass; a quarantined test past its deadline fails the build |
-| test-gates | G2 | mechanical | D | command | every test belongs to exactly one tier and runs in at least one stage |
-| test-gates | G3 | mechanical | D | command | no test exceeds its tier ceiling |
-| test-gates | G4 | mechanical | D | command | every skip, todo, disabled, characterization marker and review-debt entry has a tracking item and an unexpired date |
-| test-gates | G5 | mechanical | D, F, G | command | at most 1% of a tier's runs flaky (starting value); no unrecorded retry |
+| test-gates | G1 | mechanical | C, D, E, G | command | required tests pass; a quarantined test past its deadline fails the build |
+| test-gates | G2 | mechanical | B, D, E | command | every test belongs to exactly one tier and runs in at least one stage |
+| test-gates | G3 | mechanical | B, D, E | command | no test exceeds its tier ceiling |
+| test-gates | G4 | mechanical | D, E | command | every skip, todo, disabled, characterization marker and review-debt entry has a tracking item and an unexpired date |
+| test-gates | G5 | mechanical | E, F | command | at most 1% of a tier's runs flaky (starting value); no unrecorded retry |
 | test-gates | G6 | review | D | obligation | a defect fix carries a test that failed before the fix; every new behavioral test records a red run on a failed assertion |
 | test-gates | G7 | mechanical | D, E | command | per-test and per-stage budgets hold; p95 not more than 10% above the median of the previous five mainline runs (starting value) |
-| test-gates | G8 | mechanical | D, F | command | surviving mutants and uncovered lines in the changed code are reviewed; no repository-wide percentage target |
+| test-gates | G8 | mechanical | D | command | surviving mutants and uncovered lines in the changed code are reviewed; no repository-wide percentage target |
 | test-gates | G9 | mechanical | D | command | every tier P, H, or X test carries a valid fidelity-gap statement |
 | test-gates | G10 | mechanical | D, G | command | the built artifact loads and its primary journey runs as a consumer runs it |
 | test-gates | G11 | review | D | obligation | changes to test infrastructure and gates cite the strategy and the exception log |
-| test-gates | G12 | mechanical | D | command | every change has a class and rigor record; Standard and Deep have a not-testing list; every new test has a header |
+| test-gates | G12 | mechanical | C, D, E, F | command | every change has a class and rigor record; Standard and Deep have a not-testing list; every new test has a header |
 
 ### Stage bindings
 | stage | gates |
 |---|---|
 | A | _none_ |
-| B | _none_ |
-| C | _none_ |
-| D | test-gates/G1, test-gates/G2, test-gates/G3, test-gates/G4, test-gates/G5, test-gates/G6, test-gates/G7, test-gates/G8, test-gates/G9, test-gates/G10, test-gates/G11, test-gates/G12 |
-| E | test-gates/G1, test-gates/G7 |
-| F | test-gates/G5, test-gates/G8 |
-| G | test-gates/G1, test-gates/G5, test-gates/G10 |
+| B | test-gates/G2, test-gates/G3 |
+| C | test-gates/G1, test-gates/G12 |
+| D | test-gates/G1, test-gates/G2, test-gates/G3, test-gates/G4, test-gates/G6, test-gates/G7, test-gates/G8, test-gates/G9, test-gates/G10, test-gates/G11, test-gates/G12 |
+| E | test-gates/G1, test-gates/G2, test-gates/G3, test-gates/G4, test-gates/G5, test-gates/G7, test-gates/G12 |
+| F | test-gates/G5, test-gates/G12 |
+| G | test-gates/G1, test-gates/G10 |
 | H | _none_ |
 
 ### Gate runner
