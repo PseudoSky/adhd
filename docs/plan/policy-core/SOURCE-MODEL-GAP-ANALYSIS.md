@@ -1,10 +1,10 @@
-# Source model gap analysis: reference, locator, asset, translator, IR, binding, projection
+# Source model gap analysis: transport, extractor, runtime and target layout
 
-Date: 2026-10-13. Role: debugger/architect (read-only on source). Baseline: branch `feat/policy-core` at `680efcbf`. Paths are relative to the worktree root. A `file:line` citation means those lines were opened and read for this document. A citation marked **(rg hit)** means only the matching line was seen in `rg` output. A bare path comes from a directory listing.
+Date: 2026-10-13. Role: debugger/architect (read-only on source). Baseline: branch `feat/policy-core` at `a7fa35ad`. Paths are relative to the worktree root. A `file:line` citation means those lines were opened and read for this document. A citation marked **(rg hit)** means only the matching line was seen in `rg` output. A bare path comes from a directory listing.
 
 ## Contents
 
-- 0. The target model, and what the code already calls each primitive
+- 0. The target model: vocabulary, the four-group layout, composition rules, settled decisions
 - 1. Q1: where each primitive lives today, how far it is from the model, and what it is fused with
 - 2. Q2: can `Operation` express a binding separate from the translator?
 - 3. Q3: the minimal change set
@@ -12,12 +12,30 @@ Date: 2026-10-13. Role: debugger/architect (read-only on source). Baseline: bran
 - 5. Q5: hazards and the smallest safe rule for each
 - 6. Q6: where the model is (not) documented, and where to record it
 - 7. Findings (bugs and drift found while tracing)
-- 8. One-page minimal change sequence
+- 8. Change sequence around the orchestration entry
 - 9. Open decisions for the owner
+- 10. Translation versus execution environment
+- 11. `run` versus `generate`
+- 12. Compatibility matrix and unlock order
 
 ---
 
 ## 0. The target model and its nearest existing names
+
+### 0.1 Vocabulary: owner terms, SPEC terms, and the primitives used in this document
+
+| Owner term | SPEC term | Primitive in this document | Code today |
+|---|---|---|---|
+| Detector | The orchestrator's "detect lang per file" (SPEC §1) | Asset kind detection | Three copies: `languageOfSource`, `detectLang`, `parseSourceSpec` (section 1.2) |
+| Locator + Translator | The two halves of the Extractor (SPEC §1, §14) | Locator (the transport step) and translator (an extractor as a whole) | Section 1.3 |
+| Runtime / host | The language runtime plus Harness (SPEC §13); SPEC §13.1 supervision covers lifecycle | Local execution binding | `apigen-engine-runtime`, `runtime.py`, `ApigenJavalinServer` (section 1.5) |
+| Binding | The execution binding on an `Operation` | Execution binding | Conflated in `Operation.host` (section 2) |
+| Effects | `Operation.kind` and `Operation.safe` (already exist) | Part of the IR | `Operation` (`apigen-core-client/src/lib/descriptor.ts:148-252`) |
+| Target | `TargetCapability`: generate and/or serve | Projection | The plugins (section 1.6) |
+
+Terminology in the body: "locator" means the transport step that turns a reference into raw assets. "Translator" means an extractor as a whole. "Target" keeps the SPEC meaning. The word "Executor" is not used for frameworks.
+
+### 0.2 The primitives and their nearest existing code
 
 | Model primitive | Nearest existing code concept | Evidence |
 |---|---|---|
@@ -30,6 +48,31 @@ Date: 2026-10-13. Role: debugger/architect (read-only on source). Baseline: bran
 | Projection | `target` / `mount` / `layer` plugin capabilities | `apigen-core-client/src/lib/plugin.ts:723-754` |
 
 SPEC already has the three-stage shape the model refines. It names "extract (per-language extractors → merged descriptor) · generate · run" (`docs/apigen/SPEC.md:62-68`). It defines a first-class host as "Extractor" plus "Runtime/harness" plus "Server plugins" plus "Gateway adapter" (`SPEC.md:558-569`). In model terms that is translator + local binding + projection + remote binding. SPEC has no locator, no asset kind, and no notion of a binding that differs from the language that produced the operation.
+
+### 0.3 The four-group layout
+
+Each group is a registry plus its contributors. The groups are a conceptual grouping, not new tiers: the tiers in `docs/contributing/conventions/package-naming.md` stay `base`, `core`, `store`, `engine`, `serializer`, `plugin`, `generator`, `query`, and adding a tier or a package needs owner approval. No new plugin capability kinds are introduced.
+
+| Group | Role | Kinds | Contributors in the code today |
+|---|---|---|---|
+| `transport/` | Detectors and resolvers of raw assets and execution descriptors | remote (file, data, zip, package-manager); fs; bin; raw | `parseSourceSpec` (`sources/parse-source.ts`), `resolveSource` (`sources/resolve-source.ts`), `process.ts`, `launcher-transport.ts`, `source-language.ts` |
+| `extractors/` | Receive the transport result and assets, return IR | language (ts, py, java; later rs, go); protocol (mcp, graphql); standard (openapi, jsonschema); ir descriptor (reads a Descriptor / ir-cache artifact) | ts: `apigen-core-client/src/lib/extract.ts`. py: `apigen_python/extractor.py` plus `apigen/python-env`. java: `ApigenJavaExtractor`. The others have no code (section 1.3). |
+| `runtime/` | Per language, owns `run` (takes runnable code and runs it) and `serve` (serves it): typescript, python, java; later rust, go. A remote protocol client is also a runtime/binding kind. | | `apigen-engine-runtime`; Python `runtime.py`, `validator.py`, `errors.py`; `ApigenJavalinServer` |
+| `targets/` | Per framework or protocol: cli, mcp, api (fastify, express), flask, grpc, spring/javalin, graphql, fast-api, proxy passthrough. `generate` takes descriptors plus the transport spec and produces runnable code or a live handle. | | The plugins; `flask_server.py` and `grpc_server.py` as the framework servers inside the Python module |
+
+### 0.4 Composition and dependency rules
+
+- The source side is a pipeline: transport → extractor → IR.
+- The run side is a matrix: target × runtime.
+- Extractors know only asset and IR types. Transport knows nothing downstream. Targets know IR and the transport spec. Runtimes know no frameworks. Only the orchestration entry wires them together.
+
+### 0.5 Settled decisions
+
+1. SPEC's term "Target" stays. No new plugin capability kinds and no new tiers.
+2. Remote MCP, and remote anything, is an execution **binding** (a client runtime), not a framework. A "proxy" target is only the degenerate case where the source protocol equals the target protocol.
+3. Protocol targets (cli, mcp, api) are implemented once, hosted in the TS process, and reach other runtimes through binding adapters over the sidecar gateway. SPEC §13 already makes the sidecar gateway the confirmed default for mixed hosts: one local-IPC hop per operation, with the SPEC §13.1 failure model. Language-native frameworks (flask, grpc, javalin) run in their own language and accept only same-language sources.
+4. Orchestration, not only registration: every source kind goes through **one** orchestration entry that builds the `ExtractCall`, composes the `extractLayer` onion (ir-cache, tracing) around a registry terminal keyed by `ExtractCall.host`, shares the `ExtractionSession`, merges sources and logs. Only TS goes through it today (`orchestrator.ts` `extractSource`, lines 311-360, read). Python and Java extraction happens inside the `py-flask`, `py-grpc` and `java-javalin` `run()`, so those sources bypass the onion and cannot be cached.
+5. Extraction is removed from the framework plugins. The host (language module) keeps both halves: `extract(source) → Descriptor JSON` and `serve(plan, binding)`. The orchestrator invokes extract through the registry. The Node-side wrapper of the host registers it (`python-env` for Python). The framework plugin receives the Descriptor and passes it through.
 
 ---
 
@@ -229,12 +272,12 @@ The gitnexus index is incomplete for this area. It reports 0 upstream for `resol
 ## 3. Q3: the minimal change set
 
 Principles:
-- No new package.
-- No new plugin capability kind.
+- No new package (new packages need owner approval).
+- No new tier and no new plugin capability kind.
 - Today's `.ts`/`.py`/`.java` behaviour is unchanged.
 - Every new kind that is not built returns a typed "unsupported" from **one** place.
 
-### 3a. One resolver, replacing extension-only detection (NOW)
+### 3a. One resolver, replacing extension-only detection
 
 **Where:** `packages/apigen/apigen-core-client/src/lib/source-language.ts`, beside `languageOfSource`.
 - Both apigen-cli and the gateway already depend on core-client: `entrypoint/apigen-cli/package.json:9`, and the gateway `package.json` dependencies, read above.
@@ -242,7 +285,7 @@ Principles:
 - The resolver is **string-pure**. Filesystem and PATH checks are injected through a probe port, the same way `IResolveDeps.launcher` injects process start (`resolve-source.ts:11-13`).
 - core-client is tagged `platform:shared` (`apigen-core-client/project.json:15-18`). It already imports `node:path`/`node:fs` elsewhere (`source-language.ts:13`, `extraction-session.ts:38`), which is drift (finding F-6). The new code must not add to it, so it uses string operations instead of `path.extname`.
 - The node probe lives in `apigen-engine-gateway/src/lib/sources/` (`platform:node`, `apigen-engine-gateway/project.json:15-18`), which already owns the process launcher.
-- No new package is needed. A new package would only be justified if apigen-cli must not depend on the gateway. apigen-cli does not list the gateway today (`entrypoint/apigen-cli/package.json:8-28`), but it needs the probe only from step 7 onward.
+- No new package is needed. A new package would only be justified if apigen-cli must not depend on the gateway. apigen-cli does not list the gateway today (`entrypoint/apigen-cli/package.json:8-28`), but it needs the probe only from step 10 onward.
 
 ```ts
 // BEFORE (source-language.ts:27-67)
@@ -313,7 +356,7 @@ export function resolveSourceReference(
 
 **Tests:** extend `apigen-core-client/src/test/source-language.spec.ts` (default `test` lane). Add `source-reference.spec.ts` for the table above. Every row must fail if the order of the detection steps (§5.5) is changed.
 
-### 3b. apigen-cli calls the resolver (NOW)
+### 3b. apigen-cli calls the resolver
 
 | File | BEFORE | AFTER |
 |---|---|---|
@@ -322,7 +365,7 @@ export function resolveSourceReference(
 | `run.ts:358-379` | The pipeline is chosen by `effectiveLanguage(plugin)` | Resolve the source first. If `r.value.translator !== effectiveLanguage(plugin)`, fail early: `--type ${id} hosts ${lang} sources; --source ${src} is ${translator}`. Today that case fails late, inside the plugin (`py-flask/plugin.ts:192-196`) or in `detectLang`. The pipeline choice itself is unchanged. |
 
 - **Back-compat:** identical for every valid input. Only error timing and wording change, and only for inputs that already failed.
-  - A URL-shaped `--source` (`https://x/a.ts`) is now classified as a URL and reported as `unsupported`.
+  - A URL-shaped `--source` (`https://x/a.ts`) is classified as a URL and reported as `unsupported`.
   - Today such a value goes through `path.resolve` into a nonexistent local path. In the TS path it then fails inside extraction or import.
   - So the change affects only an input that already failed downstream.
 - **Blast radius:**
@@ -336,7 +379,7 @@ export function resolveSourceReference(
   - These must be run on demand: `npx nx affected -t e2e --parallel=1`.
 - **Tests to add (default lane):** `run.spec.ts` gets the plugin/source mismatch case. `serve.spec.ts` gets the `.java` message and an `.rs` "no default plugin" message.
 
-### 3c. IR: optional per-operation binding key (NOW)
+### 3c. IR: optional per-operation binding key
 
 ```ts
 // descriptor.ts: AFTER (additive)
@@ -367,34 +410,38 @@ export interface Operation {
 - **What this replaces:** BA-7. The Python `python`/`py` drift becomes harmless, because the binding key is assigned by the resolver (`local-host py` → key `py`), never by the extractor's string.
 - **Blast radius:** `Operation` is consumed repo-wide, but the change only adds an optional member. Readers are listed in section 2.
 - **Tests:** `apigen-engine-gateway/src/test/gateway.spec.ts` must stay green. Add one case: two ops with the same `host` and different `binding` route to two adapters, and an op without `binding` routes by `host`.
-- **Deferred:** extending the translator result from `Operation[]` (`extract-invoker.ts:79`) to `{operations, bindings}`, so a schema-document translator can emit its binding table. That is needed only by the remote extractor.
+- **Sequenced later (D2):** extending the translator result from `Operation[]` (`extract-invoker.ts:79`) to `{operations, bindings}`, so a schema-document translator can emit its binding table. That is needed only by the remote extractor.
 
-### 3d. Translator registry at the extract terminal (NOW for structure; Python wiring optional)
+### 3d. Orchestration entry and extractor registry
+
+One entry builds the `ExtractCall`, composes the `extractLayer` onion around a registry terminal keyed by `ExtractCall.host`, shares the `ExtractionSession`, merges sources and logs. Today that entry is `extractSource` in apigen-cli (`orchestrator.ts:311-360`, read), and it serves TS only. `entrypoint/backlog/src/extract-live.ts:217` (rg hit) also calls the onion path. The two-use rule (CLAUDE.md section 8) therefore makes `extractSource` a candidate to promote from apigen-cli into `apigen-core-client`. Placement is the owner's decision (O-9).
 
 ```ts
 // orchestrator.ts:311-360: BEFORE
 //   if (lang === 'ts') { ...extract()... }  throw 'host "${lang}" extractor not implemented'
-// AFTER
-const TRANSLATORS: Partial<Record<TranslatorId, (call: ExtractCall) => Promise<Operation[]>>> = {
+// AFTER (one entry; location per O-9)
+type Extractor = (call: ExtractCall) => Promise<Operation[]>;
+const EXTRACTORS: Partial<Record<TranslatorId, Extractor>> = {
   ts: (call) => extract({ sourceFile: call.source, namespace: call.namespace, /* exactly as :330-340 */ }),
 };
-const translate = TRANSLATORS[resolution.translator];
-if (!translate) throw new Error(`apigen-orchestrator: no ${resolution.translator} translator is registered`);
-const ops = await createExtractInvokerFromPlugins(usePluginObjects, translate, extractLayerOptions)({
+const extractor = EXTRACTORS[resolution.translator];
+if (!extractor) throw new Error(`apigen-orchestrator: no ${resolution.translator} extractor is registered`);
+const ops = await createExtractInvokerFromPlugins(usePluginObjects, extractor, extractLayerOptions)({
   source: entry.file, host: resolution.translator, namespace, extractorOptions: { tsconfig, session } });
 ```
 
-- The registry **is** the `runExtractor` terminal that `extract-invoker.ts:118-133` describes ("run the real extractor for `call.host`"). It is not a new capability.
-- **Optional, recommended:** register `py` with `runExtractorEmitJson` (`python-env/src/lib/run-extractor.ts:42-82`; apigen-cli already depends on `@adhd/apigen-python-env`, `package.json:27`). This puts Python under ir-cache and in `descriptor.operations`.
-- **Scope of the Python claim (unverified end to end).** Registering the translator is not enough by itself. `buildDescriptor` (`orchestrator.ts:435-610`) has three TS assumptions that the Python branch must handle:
+- The registry **is** the `runExtractor` terminal that `extract-invoker.ts:118-133` describes ("run the real extractor for `call.host`"). It is not a new capability kind.
+- Output for TS is identical for `generate`, `run` and `serve`. The `:858` `['ts','ts']` assertion in `orchestrator.e2e.ts` stays true.
+- Registration is done by the Node-side wrapper of each host: `python-env` for Python (`python-env/src/lib/run-extractor.ts:42-82`; apigen-cli already depends on `@adhd/apigen-python-env`, `package.json:27`). Java has no Node-side wrapper package: `runExtractorEmitJsonJava` lives inside `java-javalin` `plugin.ts:88-110`. Its home is the owner's decision (O-12). This document does not recommend a package.
+- Python through this entry (step 6) puts Python in `descriptor.operations`. `buildDescriptor` (`orchestrator.ts:435-610`) has three TS assumptions that the Python branch must handle:
   - `extractSource`'s TS branch resolves a tsconfig and a tsconfig-derived namespace (`:321-324`). A Python branch must take `entry.namespace` or a folder default instead.
   - The per-source `exportMode` filter classifies ops by TS path shape (`opMatchesExportMode`, applied at `:571`). It must be skipped for non-TS translators.
   - `packageSchemas[...].importPath` is the source file (`:559`). A target that **emits code importing `importPath`** would import a `.py` file. Only projections that read schemas or operations alone (`openapi`, `jsonschema`) can be claimed until each target is checked. The same translator/target compatibility guard as 3b's `run` check must reject the rest.
+- `py-flask` and `py-grpc` consume `RunInput.operations` instead of calling `runExtractorEmitJson`. `RunInput.operations` already exists (BUG-APIGEN-024, per the comment in `apigen-plugin-api-fastify/src/lib/generate.ts`), and `PluginInput.operations?` is at `apigen-core-client/src/lib/types.ts:109`. The TS path fills it. The Python path does not, because extraction occurs inside the plugin (`run.ts:367-379` passes the raw path with empty schemas). No new `RunInput` field is needed. During the migration, the plugin uses the Descriptor when supplied and extracts as it does today otherwise. The phase-2 plan file is unchanged.
 - The proof spawns Python, so its test is `*.e2e.ts` (adhd ADR-0009).
-- `py-flask`/`py-grpc` keep extracting inside `run()` until a later cleanup (`transport-serve-core-refactor.md` Phase 3, read at `:170-176`).
-- **Tests:** `orchestrator.spec.ts` / `orchestrator.e2e.ts`. The `:858` `['ts','ts']` assertion stays true.
+- **Tests:** `orchestrator.spec.ts` / `orchestrator.e2e.ts`.
 
-### 3e. Gateway sources and adhd-policy on the same path (NOW)
+### 3e. Gateway sources and adhd-policy on the same path
 
 | File | Change | Moved, kept or deleted |
 |---|---|---|
@@ -403,14 +450,14 @@ const ops = await createExtractInvokerFromPlugins(usePluginObjects, translate, e
 | `sources/mcp-source.ts:151-231` | Extract the pure translator `operationsFromMcpTools(rawTools, name, onWarn) → {operations, skipped, hints, tools}`. `resolveMcpStdioSource` becomes locator (spawn) + `client` binding + a call to that translator. The remote MCP URL later reuses the translator unchanged. | Split, no deletion |
 | `sources/argv-operation.ts` | `host`/`binding` values only (3c) | Kept |
 | `sources/types.ts` | `IResolvedSource` gains `binding: BindingSpec`. `SourceIntent` stays until the decision on BA-6/E1-E2 (section 4). | Kept |
-| `sources/mcp-passthrough-server.ts`, `stdio-host-transport.ts` | Unchanged now. They are a projection; their fate is the E1/E2/E3 decision (section 4). | Kept |
+| `sources/mcp-passthrough-server.ts`, `stdio-host-transport.ts` | Unchanged. They are a projection; their fate is the E1/E2/E3 decision (section 4). | Kept |
 | `entrypoint/policy/src/wrapper/verbs/run.ts:27-30` | `resolveSourceReference(positional, nodeSourceProbe)`. Require `asset === 'executable'`. Then `resolveSource(resolution, {...})`. | 3 to 6 lines |
-| `entrypoint/policy/src/wrapper/verbs/serve.ts:32`, `:41-47` | Same. `serve api.ts` now says "file sources are served by adhd-apigen" from the resolver, not a gateway `SourceError('unsupported')`. | 3 to 6 lines |
+| `entrypoint/policy/src/wrapper/verbs/serve.ts:32`, `:41-47` | Same. `serve api.ts` reports "file sources are served by adhd-apigen" from the resolver, not a gateway `SourceError('unsupported')`. | 3 to 6 lines |
 
 - **How adhd-policy stops being the only entrance.**
   - After 3a, 3b and 3e there is one classifier for every `--source` string in the repo.
-  - apigen-cli reports `bin:` as a known kind ("executable sources are served by adhd-policy run/serve; adhd-apigen support: step 7") instead of "unrecognised extension".
-  - The entrance is fully shared once step 7 lands (apigen-cli's terminal binds `process` resolutions through the gateway).
+  - apigen-cli reports `bin:` as a known kind ("executable sources are served by adhd-policy run/serve; adhd-apigen support: step 10") instead of "unrecognised extension".
+  - The entrance is fully shared once step 10 lands (apigen-cli's terminal binds `process` resolutions through the gateway).
 - **Tests that must keep passing (directory listing):**
   - `apigen-engine-gateway/src/test/{sources-argv,sources-mcp-source,sources-parse-resolve,sources-passthrough,sources-process,sources-transports,gateway}.spec.ts`.
   - `entrypoint/policy/src/test/functional/{s3-run-bin,s7-serve,s8-serve-handshake-and-precedence,review-fixes-entrypoint}.spec.ts`.
@@ -419,9 +466,9 @@ const ops = await createExtractInvokerFromPlugins(usePluginObjects, translate, e
   - `serve` over a `.ts` positional giving the resolver's message.
   - A `resolveSource` keyed by an explicit `protocol` option.
 
-### 3f. Deferred until the remote extractor (or `bin:` in adhd-apigen) is built
+### 3f. Sequenced after the orchestration entry (steps 10 and 11)
 
-| # | Change | Why deferred | Files |
+| # | Change | Why it is sequenced later | Files |
 |---|---|---|---|
 | D1 | **Binding-aware dispatch terminal.** An op whose binding is not `in-process` dispatches its argument object, plus `call.signal`, to the binding's `invoke`, instead of positional `fns`. | Today positional dispatch builds the argument list from `dataParamNames(schema)` (`dispatch.ts:127-132`), so undeclared keys are dropped. The terminal is hard-wired to `dispatch` with no signal (`invoke.ts:197-205`). Every foreign source through a standard host needs this. It is the model's answer to the flat-arguments reason TAXONOMY used mounts (section 4). It is the same item as review remediation #3's "`terminal` option to `createInvoker`" (`APIGEN-CONFORMANCE-REVIEW.md:463`). | `apigen-engine-runtime` `invoke.ts`, `package-invoker.ts`; hosts unchanged |
 | D2 | `{operations, bindings}` translator result | Needed only by schema-document translators | `extract-invoker.ts:79` |
@@ -441,7 +488,7 @@ const ops = await createExtractInvokerFromPlugins(usePluginObjects, translate, e
 - A help-text translator for executables (f6bf8550 item 3).
 - The passthrough's verbatim-name and verbatim-result behaviours (TAXONOMY E1/E2/E3).
 - Unifying `serve`'s front proxy with `createGateway` (TAXONOMY F7).
-- Fixing the Python/Java plugins' internal extraction (Phase 3).
+- Moving Java extraction out of `java-javalin` (step 8; gated on O-12).
 - The per-source option grammar beyond the `options` slot (decision O-3).
 
 ---
@@ -481,7 +528,7 @@ The model puts foreign tools at the **extract** stage as IR. The two placements 
 | TAXONOMY items 1, 4, 5, 6 (policy Layer config, `run` on serve-core, CommonJS, `ctx` attributes) | **Unaffected** | |
 | TAXONOMY E1 (MCP name override), E2 (raw result), E3 (tool metadata) | **Still needed** if verbatim N=1 wrapping is wanted. E3 becomes an IR question: `Operation` has no slot for MCP `title`/`annotations`. The MCP translator currently keeps them only in the side `hints`/`tools` maps (`mcp-source.ts:207-213`, `:189`). | |
 | TAXONOMY E4, E6 | **Unaffected** | |
-| TAXONOMY E5 | **Reclassified**: the model's main path, not a capability extension | |
+| TAXONOMY E5 | The model's main path, not a capability extension | |
 | TAXONOMY E7 (per-host deadline) | Becomes per-binding; **still an extension** | |
 | TAXONOMY E8 (dynamic tool list) | Equals f6bf8550 item 4 ("remote IR ... refreshed on change notification"); **still an extension** | |
 
@@ -494,6 +541,12 @@ The model puts foreign tools at the **extract** stage as IR. The two placements 
    - "Layers/plugins are host-agnostic (the `Call` carries `operation.host`)" (`SPEC.md:535-536`). The runtime `Call` for package ops carries only `{ id }` (`dispatch-for-plan.ts:94`).
    - SPEC §4's `Operation` (`SPEC.md:104-118`) omits `hasCtx`, like `descriptor.schema.json`.
 5. **TAXONOMY 0.1 item 6 and F7** are correct that `createGateway` has no production caller. Confirmed: rg finds it only in `gateway.spec.ts` and `gateway-mixed-host.e2e.ts`, and `gx impact` returns 0.
+
+### 4.3 Remote and proxy under the model
+
+- A remote MCP server, a remote OpenAPI service, or any other remote asset contributes in two parts: a protocol extractor that produces extract-stage IR, and a remote-client **binding** that executes the operations. It is not a mount upstream and not a framework.
+- A "proxy" target is only the degenerate case where the source protocol equals the target protocol. `serveMcpPassthrough` is that case for MCP (section 4.1, B8 row).
+- The MCP `tools/list` → `Operation` mapping is currently fused with the process and client in `resolveMcpStdioSource` (`mcp-source.ts:54-275`). Splitting it out is step 5 of the sequence (3e) and is the first piece of the protocol extractor.
 
 ---
 
@@ -558,6 +611,19 @@ If the owner wants the bare-name PATH fallback anyway (decision O-2), restrict i
 
 Each step is a pure function of the string plus the probe.
 
+### 5.6 Extractor dependency declaration and ir-cache staleness
+
+**Hazard:** the ir-cache layer records transitive local-import dependencies and their mtimes in its staleness snapshot (`ir-cache-layer.ts` header, lines 19-30; the `deps` field at lines 83-85 and the collection at lines 265-294 are rg hits only). `ExtractResult` is `Operation[]` (`extract-invoker.ts:79`), which carries no dependency list. A non-TS extractor placed behind the onion would therefore probably be cached on its entry file only, and a changed sibling module could serve stale IR. The collector function itself was not read: UNVERIFIED (finding F-11).
+
+**Rule:** a non-TS extractor is not cacheable until it declares its dependencies to the onion (step 7). Python and Java are registered through the orchestration entry first and cached only after step 7. UNVERIFIED: whether ir-cache supports excluding one host in the interim.
+
+### 5.7 The Python extractor executes the user module
+
+**Hazard:** `extractor.py:373-387` imports and executes the user module (`spec_from_file_location`, then `spec.loader.exec_module(mod)`). Registering Python through the orchestration entry makes that execution reachable from `generate`, which a user may run on code they have not reviewed.
+
+**Rule:** a guard is decided before Python is reachable from `generate` (decision O-13). §5.2 already refuses remote code assets without an opt-in and a pinned digest. The guard here covers local files.
+
+
 ---
 
 ## 6. Q6: is the model documented anywhere?
@@ -573,7 +639,7 @@ Each step is a pure function of the string plus the probe.
   - REVIEW §3's three-part source kind (`APIGEN-CONFORMANCE-REVIEW.md:371-374`, which lacks locator and asset).
 
 **Where to record it** (not written here):
-1. **A new adhd ADR** in `docs/decisions/`. It takes the next free number at authoring time, per the catalog rule at `docs/decisions/README.md` ("numbering is claimed at authoring time"), and is indexed there. It names the seven primitives and the decisions in section 9.
+1. **A new adhd ADR** in `docs/decisions/`. It takes the next free number at authoring time, per the catalog rule at `docs/decisions/README.md` ("numbering is claimed at authoring time"), and is indexed there. It names the seven primitives, the vocabulary mapping of section 0.1, the four-group layout of section 0.3 and the decisions in section 9.
 2. **`docs/apigen/SPEC.md`:**
    - §1 diagram: the EXTRACT box gains "reference → locator → asset → translator".
    - §4: `host` is the producer, and `binding` is added; `hasCtx` is added.
@@ -599,31 +665,38 @@ Each step is a pure function of the string plus the probe.
 | F-8 | Stale docs: `OutputPlugin.language` says "all first-party plugins declare `'ts'`"; `source-language.ts` says its helpers route serve's files, but `pluginConsumesSource`/`sourcesForPlugin` have no production caller | `types.ts:134-136`; `source-language.ts:2-8`, `:115-150` | 5ec6e8bf |
 | F-9 | gitnexus index misses `resolveHosts`←`startServe`, `detectLang`←`extractSource`, `resolveMcpStdioSource`←`resolveSource` | `serve.ts:1455`; `orchestrator.ts:318`; `resolve-source.ts:57` | not filed (gitnexus index gap, not a repo defect) |
 | F-10 | The gateway barrel's marker string names the package `@adhd/apigen-gateway`; the package is `@adhd/apigen-engine-gateway` | `apigen-engine-gateway/src/index.ts:1`; `package.json:2` | 2b7cd592 |
+| F-11 | Extractor dependency declaration: ir-cache records transitive local-import dependencies and mtimes in its staleness snapshot, but `ExtractResult` is `Operation[]` and carries no dependency list, so a non-TS extractor behind the onion would probably be cached on its entry file only and a changed sibling module could serve stale IR. The collector function was not read: UNVERIFIED. | `ir-cache-layer.ts` header lines 19-30; `extract-invoker.ts:79`; `deps` field at `ir-cache-layer.ts:83-85` and collection at `:265-294` (rg hits) | Backlog: pending |
 
 ---
 
-## 8. One-page minimal change sequence
+## 8. Change sequence around the orchestration entry
 
 Each step can land and ship on its own. Gates per step:
 - `npx nx affected -t lint,typecheck,typecheck-spec`
 - `npx nx affected -t test`
 - for steps that touch apigen-cli or spawn processes, `npx nx affected -t e2e --parallel=1` (the `resolveHosts`/`detectLang` tests live in the e2e lane).
 
-Sizes are estimates, based on the measured files: `source-language.ts` 150 lines, `orchestrator.ts` 767, `serve.ts` 1681, `run.ts` 426, `resolve-source.ts` 104, `mcp-source.ts` 275, `gateway.ts` 658.
+Sizes are estimates, based on the measured files: `source-language.ts` 150 lines, `orchestrator.ts` 767, `serve.ts` 1681, `run.ts` 426, `resolve-source.ts` 104, `mcp-source.ts` 275, `gateway.ts` 658. Steps whose size is not estimated say so.
 
-| # | Step | Now or deferred | Risk | Files touched | ≈ LOC |
+| # | Step | Depends on | Risk | Files touched | ≈ LOC |
 |---|---|---|---|---|---|
-| 0 | ADR + SPEC wording for the seven primitives and the `host` (producer) / `binding` (key) split. Correct SPEC `:535-536` and §4 `hasCtx`. | NOW | none (docs) | ADR (new), `docs/decisions/README.md`, `SPEC.md`, `transport-serve-core-refactor.md` | 150 |
-| 1 | `resolveSourceReference` + types in core-client. It calls the unchanged `languageOfSource` at its extension step. Pure, with the probe port. (3a) | NOW | LOW (additive; published export unchanged) | `source-language.ts`, `index.ts`, 2 specs | 180 src + 200 test |
-| 2 | apigen-cli uses it: `extractSource`, `resolveHosts`, an early plugin/source mismatch check in `run`. `detectLang` becomes a wrapper. (3b) | NOW | LOW (errors only) | `orchestrator.ts`, `serve.ts`, `run.ts`, 2 to 3 specs | 50 src + 80 test |
-| 3 | `Operation.binding?` + `descriptor.schema.json` (`binding`, `hasCtx`); the gateway routes `binding ?? host`; argv/MCP producers get `host:'argv'|'mcp'` and their binding keys. (3c) | NOW | LOW (optional field; no reader changes meaning) | `descriptor.ts`, `descriptor.schema.json`, `gateway.ts`, `argv-operation.ts`, `mcp-source.ts`, `gateway.spec.ts` | 30 src + 50 test |
-| 4 | Translator registry at the orchestrator's extract terminal (TS only; identical output). (3d) | NOW | LOW | `orchestrator.ts`, spec | 30 + 30 |
-| 5 | Gateway + adhd-policy: the verbs call the resolver; `resolveSource` is keyed by translator (intent is only the default); split `operationsFromMcpTools` out of `resolveMcpStdioSource`; node probe exported. (3e) | NOW | MEDIUM (touches the D-07/D-08 paths; parity proven by `s3`/`s7`/`s8`) | `parse-source.ts`, `resolve-source.ts`, `mcp-source.ts`, `types.ts`, new `source-probe.ts`, `verbs/run.ts`, `verbs/serve.ts`, specs | 120 src + 120 test |
-| 6 | Register the `py` translator (`runExtractorEmitJson`) at the terminal, with the three `buildDescriptor` guards from 3d (namespace without tsconfig, no TS export-mode filter, translator/target compatibility). This makes `generate --source x.py --type openapi\|jsonschema` work and puts Python under ir-cache. Other targets are rejected until each one is checked. Proof in `*.e2e.ts`. | NOW-optional (recommended; closes F-1 for schema projections) | MEDIUM (spawns Python; end-to-end unverified) | `orchestrator.ts`, `generate.ts`, an e2e spec | 80 + 120 |
-| 7 | Binding-aware dispatch terminal (D1); then adhd-apigen accepts `bin:` (argv translator + process binding) for `run --type cli|mcp|api-fastify` | DEFERRED (first consumer: bin in adhd-apigen) | MEDIUM | `apigen-engine-runtime` `invoke.ts`/`package-invoker.ts`, `run.ts`, specs | 150 + 150 |
-| 8 | Remote locator + materialisation + asset re-delegation + trust rules (D2, D3); MCP-HTTP `HostAdapter`; OpenAPI translator (D4) | DEFERRED (the remote extractor) | HIGH | core-client, gateway, apigen-cli | 600+ |
+| 0 | ADR + SPEC wording: the vocabulary mapping (0.1), the host (producer) / binding (key) split, `hasCtx`, and the `Call` sentence at `SPEC.md:535-536`. Needs owner approval before the ADR is written. | owner approval | none (docs) | ADR (new), `docs/decisions/README.md`, `SPEC.md`, `transport-serve-core-refactor.md` | 150 |
+| 1 | `resolveSourceReference` + types in core-client. It calls the unchanged `languageOfSource` at its extension step. Pure, with the probe port. (3a) | 0 | LOW (additive; published export unchanged) | `source-language.ts`, `index.ts`, 2 specs | 180 src + 200 test |
+| 2 | apigen-cli adopts it: `extractSource`, `resolveHosts`, an early plugin/source mismatch check in `run`. `detectLang` becomes a wrapper. (3b) | 1 | LOW (errors only) | `orchestrator.ts`, `serve.ts`, `run.ts`, 2 to 3 specs | 50 src + 80 test |
+| 3 | Orchestration entry: promote `extractSource` into `apigen-core-client` as the single entry, driven by a registry keyed by `ExtractCall.host`. TS is registered first, with identical output for `generate`, `run` and `serve`. (3d; placement O-9) | 2 | LOW for the registry; the promotion depends on O-9 | `orchestrator.ts`, core-client, spec | registry restructure 30 src + 30 test; promotion size not estimated |
+| 4 | Optional `Operation.binding` + `descriptor.schema.json` (`binding`, `hasCtx`); the gateway routes `binding ?? host`; argv/MCP producers get `host:'argv'|'mcp'` and their binding keys. (3c, O-1) | 1 | LOW (optional field; no reader changes meaning) | `descriptor.ts`, `descriptor.schema.json`, `gateway.ts`, `argv-operation.ts`, `mcp-source.ts`, `gateway.spec.ts` | 30 src + 50 test |
+| 5 | Gateway + adhd-policy use the shared resolver: the verbs call it; `resolveSource` is keyed by translator (intent is only the default); `operationsFromMcpTools` is split out of `resolveMcpStdioSource`; the node probe is exported. (3e) | 1, 4 | MEDIUM (touches the D-07/D-08 paths; parity proven by `s3`/`s7`/`s8`) | `parse-source.ts`, `resolve-source.ts`, `mcp-source.ts`, `types.ts`, new `source-probe.ts`, `verbs/run.ts`, `verbs/serve.ts`, specs | 120 src + 120 test |
+| 6 | Register Python through the orchestration entry, with the three `buildDescriptor` guards from 3d. `py-flask` and `py-grpc` consume `RunInput.operations` (Descriptor if supplied, else extract as today during the migration); the phase-2 plan file is unchanged. This makes `generate --source x.py --type openapi\|jsonschema` work. Other targets are rejected until each is checked. Decision O-13 precedes it. Proof in `*.e2e.ts`. | 3, O-13 | MEDIUM (spawns Python; end-to-end unverified) | `orchestrator.ts`, `generate.ts`, `py-flask/plugin.ts`, `py-grpc/plugin.ts`, an e2e spec | registration 80 src + 120 test; plugin changes not estimated |
+| 7 | Extractor dependency declaration, so ir-cache staleness is correct for non-TS extractors. It lands before Python or Java are cached (5.6, F-11). | 3 | MEDIUM (cache correctness) | `extract-invoker.ts`, `ir-cache-layer.ts`, extractors | size not estimated |
+| 8 | Register Java through the orchestration entry. The Node-side wrapper's home is decided first (O-12). | 3, 7, O-12 | MEDIUM | `java-javalin/plugin.ts` or the wrapper's home, `orchestrator.ts`, an e2e spec | size not estimated |
+| 9 | Make the TS extractor drivable as a subprocess (SPEC §14) and use it on a cache miss for `run`/`serve` children, so the serving process never loads ts-morph (decision O-10). Call `ExtractionSession.dispose()` before serving if `run` does not (section 10). | 3 | MEDIUM | `extract.ts` entry, `run.ts`, `serve.ts` | size not estimated |
+| 10 | Binding-aware dispatch (D1) and binding adapters for py/java under the B targets (section 12); `bin:` in adhd-apigen (argv translator + process binding). Decision O-14 precedes it. | 4, 6 or 8 | MEDIUM | `apigen-engine-runtime` `invoke.ts`/`package-invoker.ts`, `run.ts`, gateway, specs | D1 150 src + 150 test; adapters not estimated |
+| 11 | Remote locator and transport, protocol extractors, remote-client binding, trust rules (D2, D3, D4; section 5). | 10 | HIGH | core-client, gateway, apigen-cli | 600+ |
+| 12 | A shared extractor conformance suite in `apigen-engine-conformance`: golden, schema-valid operations per registered extractor. Added alongside each registration (steps 3, 6, 8). | 3 | LOW | `apigen-engine-conformance` | size not estimated |
 
-The dependency order is 0 → 1 → (2, 3, 4 in parallel) → 5 → 6 → 7 → 8. Steps 2, 3 and 4 touch disjoint files except `orchestrator.ts`, which steps 2 and 4 share, so land those two serially.
+The dependency order is 0 → 1 → (2, 4) → 3 (after 2; steps 2 and 3 share `orchestrator.ts`, so they land serially) → 5 (after 1 and 4) → 6 → 7 → 8 → 9 → 10 → 11. Step 12 accompanies every registration.
+
+Small drift fixes (docs and typing only): the `types.ts:134-136` claim, the `serve` error text that omits `.java`, the SPEC §13 `Call` sentence, and `hasCtx` in `descriptor.schema.json`.
 
 ---
 
@@ -634,8 +707,70 @@ The dependency order is 0 → 1 → (2, 3, 4 in parallel) → 5 → 6 → 7 → 
 | O-1 | Binding representation: an optional `Operation.binding` key (3c), or redefine `host` (BA-7) | `binding` key. It is additive, keeps producer identity, and neutralises the `python`/`py` drift. |
 | O-2 | Unprefixed bare-name PATH fallback (the owner's "final fallback") | Off. `bin:` is required for PATH names; an unprefixed executable must be an existing path (§5.4). |
 | O-3 | Per-source option grammar | `<scheme>[k=v,…]:<ref>`, prefixed forms only (§5.3) |
-| O-4 | Mount-based upstream representation (TAXONOMY items 2/8) versus extract-stage IR + D1 | Extract-stage IR. Do not build `createUpstreamMountPlugin`. |
+| O-4 | Mount-based upstream representation (TAXONOMY items 2/8) versus extract-stage IR plus a binding. Remote is a binding; a proxy target is the degenerate case where source protocol equals target protocol. | Extract-stage IR plus a binding. Do not build `createUpstreamMountPlugin`. |
 | O-5 | Canonical Python host tag (`python` vs `py`) | Leave the producer tag `python` (two tests pin it). Key bindings by the resolver's `py`. |
 | O-6 | Remote code assets | Unsupported unless an opt-in plus a pinned digest; the Python translator executes code (§5.2) |
-| O-7 | Whether step 6 (Python at the extract stage) ships now | Yes. It is the cheapest proof that the registry generalises, and it closes F-1. |
-| O-8 | Fate of `serveMcpPassthrough` | Decide E1/E2/E3 first. Under the model it is a projection and should consume IR, not raw upstream `Tool`s. |
+| O-7 | Whether step 6 (Python through the orchestration entry) is in the first slice | Yes, after O-13. It is the cheapest proof that the registry generalises, and it closes F-1. |
+| O-8 | Fate of `serveMcpPassthrough` | Decide E1/E2/E3 first. Under the model it is the degenerate proxy target (source protocol equals target protocol) and a projection, and it should consume IR, not raw upstream `Tool`s. |
+| O-9 | Where the orchestration entry lives: `apigen-core-client` (the two-use rule, since `extract-live.ts:217` (rg hit) also calls the onion path) or stays in apigen-cli | Owner decision. The two-use rule favours `apigen-core-client`. |
+| O-10 | Whether `run` extracts in a subprocess by default on a cache miss: a clean serving process versus one spawn per miss | Decide with the section 10 measurements, which do not exist yet. |
+| O-11 | Live mount versus generate parity: keep two renderers over one `OpPlan`, or make `run` execute exactly what `generate` emits (section 11) | Decide with section 11's cost trade-off. No recommendation without a parity-failure history. |
+| O-12 | Home of the Node-side wrapper for the Java host (new packages need owner approval) | Owner decision; no recommendation. |
+| O-13 | Guard for the Python extractor, which executes the user module, before it is reachable from `generate` (5.7) | Owner decision; the guard must exist before step 6. |
+| O-14 | Confirm that protocol targets are hosted once in TS with binding adapters (the SPEC §13 default) rather than re-implemented per language | Yes. Language-native frameworks stay in their own language and accept only same-language sources. |
+
+---
+
+## 10. Translation versus execution environment
+
+Translation (turning source into IR) and execution (serving the operations) have different environments, and today they share a process only for TS.
+
+- **TS is the one in-process translator.** `extract.ts:33` imports ts-morph only as types. ts-morph is loaded lazily with `lazyRequire` in `extraction-session.ts` (lines 44-56), `format-alias.ts` (31-39) and `extract-classes.ts` (30-49), deliberately because "a static import pulls the whole ts-morph".
+- **The ir-cache layer sits above the terminal `runExtractor`.** On a HIT, "the real extractor is never invoked at all" (`apigen-plugin-ir-cache/src/lib/ir-cache-layer.ts` header, lines 1-60).
+- **`ExtractionSession` exposes `dispose()`** (`extraction-session.ts:27-32`, `81-89`, `329-341`).
+- **Python and Java extractors are already subprocesses.** SPEC §1 and §14 already specify per-language extractors as subprocesses with JSON out ("drivable: apigen-<lang>-extractor <files> -> JSON").
+- **What `dispose()` can and cannot free.** Node cannot unload a required module, so `dispose()` frees AST and program heap but not module code. Only not loading the translator (a cache hit, or prebuilt IR, which is what adhd-policy does; see `docs/plan/policy-core/MEASUREMENTS.md`) or a process boundary keeps the translator out of the serving process.
+
+UNVERIFIED:
+- whether `createExtractionSession` forces ts-morph to load;
+- whether `run` calls `dispose()` before serving;
+- any memory figures (none were measured).
+
+Consequence for the sequence: step 9 makes the TS extractor drivable as a subprocess and uses it on a cache miss, and calls `dispose()` before serving if `run` does not. Whether subprocess extraction is the default is O-10.
+
+---
+
+## 11. `run` versus `generate`
+
+- `run` in `api-fastify` (`run.ts:423-431`) and `mcp` (`run.ts:523-553`) uses `buildOpPlan` + `dispatchForPlan` directly (a live mount) and does **not** call `generate`.
+- `api-fastify` `generate.ts:73` emits source that uses the same `buildOpPlan`, and its header comment says generated routes stay byte-identical to the OpenAPI document.
+- What is shared is the resolved `OpPlan`. There are two renderers, live and emitted. Parity is tested, not guaranteed by construction. The repo's CLAUDE.md names a golden-parity gate (DEBT-PROCESS-DISPATCH-RESIDUE-001 mention); the gate itself was not opened.
+- Python's plan file is the serialized form of the same plan (`flask_server.py` docstring, lines 8-40, and lines 858-871: the server "no longer self-extracts" and takes a plan whose `operations` are the extractor's Operation dicts, a two-phase extract/serve split). The Python host therefore already accepts a Descriptor. Whether `ApigenJavalinServer` accepts a plan the same way is UNVERIFIED.
+- **Owner decision (O-11):** keep two renderers over one `OpPlan`, or make `run` execute exactly what `generate` emits. The second gives parity by construction. Its cost is a codegen step at startup and the loss of the zero-codegen live mount for dynamic hosts.
+
+---
+
+## 12. Compatibility matrix and unlock order
+
+Target groups:
+- **A, emitters:** openapi document, jsonschema, ts-types, docs, clients. IR in, files out, no runtime.
+- **B, TS-hosted protocol targets:** cli, mcp, fastify, express.
+- **C, language-native frameworks:** flask, grpc, javalin.
+
+Plugin `language:` declarations (rg over `src/lib/plugin.ts`): `'ts'` for api-express, api-fastify, batch, cli-output, health, jsonschema, logger, mcp, openapi, tracing, ts-types; `'py'` for py-flask and py-grpc; `'java'` for java-javalin. `generate` returns no files for py-flask (`plugin.ts:374-377`), py-grpc and java-javalin (`plugin.ts:632`, rg hit). jsonschema and ts-types are generate-only.
+
+| Source | A emitters | B cli / mcp / api | C native frameworks |
+|---|---|---|---|
+| ts | works | works (in-process) | n/a |
+| py | fails today (`detectLang` throws); unlocked by the extractor registry plus the orchestration entry | fails; needs a binding adapter (`createGateway`, `HostAdapter` and `gateway_adapter.py` exist; `createGateway` has no production caller) | works (flask, grpc) |
+| java | same as py | same as py | works (javalin) |
+| rs / go | no extractor | no | no extractor, no runtime |
+| bin | no in apigen (adhd-policy has a bespoke path) | adhd-policy only | n/a |
+| remote MCP / OpenAPI | no extractor, no transport | no remote binding | n/a |
+
+Unlock order:
+1. Extractor registry + orchestration entry (steps 3, 6, 8). This opens column A for py and java, and makes them cacheable once dependency declaration exists (step 7).
+2. Binding adapters for column B, for py and java (step 10).
+3. `bin` as a source: `buildArgvOperation`, `createArgvInvoker` and `process.ts` exist in the gateway sources (step 10).
+4. Remote: transport, a protocol extractor (the MCP `tools/list` mapping is currently fused in the gateway), and a remote-client binding (step 11).
+5. rs / go: an extractor plus a runtime (no step assigned; size not estimated).
