@@ -37,6 +37,7 @@ import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { realpathSync as realpathForEntry } from 'node:fs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -232,7 +233,7 @@ export function main(argv = process.argv.slice(2), { repoRoot = REPO_ROOT } = {}
 
 // Only run as a CLI when invoked directly (`node check-publish-hygiene.mjs ...`)
 // — not when imported in-process by the `publish-hygiene` executor.
-const isMain = process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1];
+const isMain = (() => { try { return realpathForEntry(process.argv[1]) === realpathForEntry(fileURLToPath(import.meta.url)); } catch { return process.argv[1] === fileURLToPath(import.meta.url); } })();
 if (isMain) {
   process.exit(main());
 }

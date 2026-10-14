@@ -74,6 +74,7 @@
 import { existsSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { realpathSync as realpathForEntry } from 'node:fs';
 import { dirname, join } from 'node:path';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -195,7 +196,7 @@ export function main(argv = process.argv.slice(2), { workspaceRoot: root = works
 
 // Only run as a CLI when invoked directly (`node eslint-check.mjs ...`) — not
 // when imported by a test for the exported pure-ish helpers above.
-const isMain = process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1];
+const isMain = (() => { try { return realpathForEntry(process.argv[1]) === realpathForEntry(fileURLToPath(import.meta.url)); } catch { return process.argv[1] === fileURLToPath(import.meta.url); } })();
 if (isMain) {
   process.exit(main());
 }

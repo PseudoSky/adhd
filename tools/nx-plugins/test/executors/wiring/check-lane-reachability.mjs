@@ -71,6 +71,7 @@
 import { globSync, readFileSync, existsSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve, relative } from 'node:path';
 import { pathToFileURL, fileURLToPath } from 'node:url';
+import { realpathSync as realpathForEntry } from 'node:fs';
 import { createRequire } from 'node:module';
 import { collectViteConfigPluginViolations } from './check-vite-config-plugins.mjs';
 import { collectAgentLaneSpawnViolations } from './check-agent-lane-spawn.mjs';
@@ -359,7 +360,7 @@ async function main() {
 
 // Only run when invoked directly (never when imported by a test).
 const invokedDirectly =
-  process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+  (() => { try { return realpathForEntry(process.argv[1]) === realpathForEntry(fileURLToPath(import.meta.url)); } catch { return process.argv[1] === fileURLToPath(import.meta.url); } })();
 if (invokedDirectly) {
   main().catch((err) => {
     console.error('✖ lane reachability check crashed:', err && err.stack ? err.stack : err);
