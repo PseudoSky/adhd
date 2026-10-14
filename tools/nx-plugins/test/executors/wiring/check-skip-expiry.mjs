@@ -217,6 +217,27 @@ const loadBaseline = (file) => (existsSync(file) ? JSON.parse(readFileSync(file,
 const today0 = () => new Date().toISOString().slice(0, 10);
 
 /**
+ * The test files of `workspaceRoot`: the ones git tracks when it is a repository (an untracked scratch or rescue
+ * directory in a developer checkout must not decide a push), else every match on disk (fixture workspaces).
+ */
+export function listTestFiles(workspaceRoot) {
+  let tracked = null;
+  try {
+    tracked = execFileSync('git', ['ls-files', '-z', '--cached'], { cwd: workspaceRoot, env: cleanGitEnv(), encoding: 'utf8', maxBuffer: 256 * 1024 * 1024, stdio: ['ignore', 'pipe', 'ignore'] })
+      .split('\0')
+      .filter(Boolean);
+  } catch (err) {
+    // not a git repository (a fixture workspace): fall back to the files on disk below
+    if (err?.status === undefined && err?.code !== 'ENOENT') console.error(`check-skip-expiry: git ls-files failed in ${workspaceRoot}: ${err.message}`);
+  }
+  const isTest = (p) => /\.(?:spec|test|e2e)\.(?:ts|tsx|js|jsx|mjs|cjs|mts|cts)$/.test(p);
+  const paths = tracked
+    ? tracked.filter((p) => isTest(p) && existsSync(join(workspaceRoot, p)))
+    : globSync(TEST_GLOB, { cwd: workspaceRoot, exclude: (p) => SKIP_DIRS.test(String(p?.name ?? p).replaceAll('\\', '/')) });
+  return paths.map((p) => p.replaceAll('\\', '/')).filter((p) => !SKIP_DIRS.test(p)).sort();
+}
+
+/**
  * Scan `workspaceRoot` and judge it against `baseline`. Returns { violations, legacy, report } where `legacy`
  * is the per-file unannotated count a `--write-baseline` run records.
  */
@@ -225,10 +246,7 @@ export function collectSkipExpiry(workspaceRoot, { baseline = loadBaseline(BASEL
   const add = (rule, detail) => violations.push({ rule, detail });
   const counts = { skipMarkers: 0, todoMarkers: 0, stubSpecFiles: 0, tracked: 0, unannotated: 0, expired: 0 };
   const legacy = {};
-  const paths = globSync(TEST_GLOB, { cwd: workspaceRoot, exclude: (p) => SKIP_DIRS.test(String(p?.name ?? p).replaceAll('\\', '/')) })
-    .map((p) => p.replaceAll('\\', '/'))
-    .filter((p) => !SKIP_DIRS.test(p))
-    .sort();
+  const paths = listTestFiles(workspaceRoot);
   for (const rel of paths) {
     let src;
     try {

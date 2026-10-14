@@ -238,6 +238,7 @@ describe('T32.AC3 — the run reports what it measured, on the commit it ran on,
     const file = join(root, 'baseline.json');
     assert.equal(cli(root, ['--write-baseline', '--review-by', '2026-12-31'], file).status, 0);
     writeFileSync(join(root, 'new.spec.mjs'), "it.skip('e', () => {});\n");
+    execFileSync('git', ['add', 'new.spec.mjs'], { cwd: root, env: cleanGitEnv() }); // only tracked files are scanned
     const r = cli(root, [], file);
     assert.equal(r.status, 1);
     assert.match(r.stderr, /\[A-unannotated\] new\.spec\.mjs has 1 skip marker/);
@@ -300,3 +301,19 @@ describe('T32 blind-review findings — impossible months, regex literals, multi
     assert.equal(bare[0].state, 'unannotated');
   });
 });
+
+describe('b87dcea0 — only git-tracked test files decide the result', () => {
+  test('an untracked scratch copy holding a bare marker is ignored; the same file tracked fails', () => {
+    const root = workspace({ 'x/ok.spec.mjs': "it('a', () => {});\n", 'tmp/rescue/bad.spec.mjs': "it.skip('b', () => {});\n" });
+    const git = (...a) => execFileSync('git', a, { cwd: root, env: cleanGitEnv(process.env, { GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@t', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@t' }), encoding: 'utf8' });
+    git('init', '-q');
+    git('add', 'x/ok.spec.mjs');
+    const clean = spawnSync(process.execPath, [SCRIPT, '--workspace-root', root, '--baseline', join(root, 'none.json'), '--today', TODAY], { encoding: 'utf8' });
+    assert.equal(clean.status, 0, clean.stderr);
+    git('add', 'tmp/rescue/bad.spec.mjs');
+    const dirty = spawnSync(process.execPath, [SCRIPT, '--workspace-root', root, '--baseline', join(root, 'none.json'), '--today', TODAY], { encoding: 'utf8' });
+    assert.equal(dirty.status, 1);
+    assert.match(dirty.stderr, /tmp\/rescue\/bad\.spec\.mjs/);
+  });
+});
+

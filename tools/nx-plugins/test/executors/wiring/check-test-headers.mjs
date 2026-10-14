@@ -21,16 +21,14 @@
  * usage: check-test-headers.mjs [--workspace-root <dir>] [--baseline <file>] [--report <file>] [--write-baseline]
  * exit:  0 clean, 1 violation, 65 unreadable baseline or bad argument
  */
-import { existsSync, globSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { blank } from './check-skip-expiry.mjs';
+import { blank, listTestFiles } from './check-skip-expiry.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '../../../../..');
 export const BASELINE_PATH = join(HERE, 'test-headers.baseline.json');
-const SKIP_DIRS = /(^|\/)(node_modules|dist|\.worktrees|\.claude|\.nx|\.git)(\/|$)/;
-const TEST_GLOB = '**/*.{spec,test,e2e}.{ts,tsx,js,jsx,mjs,cjs,mts,cts}';
 
 /** The header block text: the first comment block within the first 60 lines, comment markers stripped. */
 export function headerOf(src) {
@@ -75,10 +73,7 @@ export function judge(src) {
 
 export function collect(workspaceRoot) {
   const found = {};
-  const paths = globSync(TEST_GLOB, { cwd: workspaceRoot, exclude: (p) => SKIP_DIRS.test(String(p?.name ?? p).replaceAll('\\', '/')) })
-    .map((p) => p.replaceAll('\\', '/'))
-    .filter((p) => !SKIP_DIRS.test(p))
-    .sort();
+  const paths = listTestFiles(workspaceRoot);
   for (const rel of paths) {
     let src;
     try {
