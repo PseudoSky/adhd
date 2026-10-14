@@ -1,3 +1,9 @@
+/*
+ * guards: an attribute the real server wrote into logs/trace is missing or altered in the evidence bundle, analyze --section wall prints numbers that differ from ones computed independently from the raw trace, the thinking_config and thinking_blocks table is wrong, arm A is not n/a, --self-check, --check-lib or --check-oracle exits non-zero (also under FORCE_COLOR=true), or a pre-existing analyze section changes bytes.
+ * tier: P (spawns drive.mjs --dry-run, the built agent-mcp and the analyze CLI; e2e lane, ADR-0009)
+ * gap: This cannot be observed at tier S because the trace under test is the one a freshly started real server just wrote, and the analyze and drive exit codes are those of separate processes.
+ * cites: dcf8b7da AC1; R10 M1 AC1, AC2, AC4, AC6, AC7 (as titled in this file).
+ */
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';

@@ -1,3 +1,8 @@
+/*
+ * guards: the judge quality mean or the 0.98 gate arithmetic is wrong, a brief leaks arm identity, arm order, oracle results, cost or thresholds to the blind judge, a bad judge reply is accepted, or a parser rule can be deleted without any fixture noticing (mutated-parser teeth).
+ * tier: S (fake judge client, pure functions, no model call)
+ * cites: R5.AC5, AC7, AC9, AC10, AC11 (as titled in this file; no backlog uid appears in this file; filed under G9 bucket 003366c1-fef5-4b97-be06-bda8155d31a3).
+ */
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';

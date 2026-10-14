@@ -1,3 +1,8 @@
+/*
+ * guards: the oracle scores the frozen R4 records differently from the fixed behaviour: A1 s1_tests_honest and h2_regress red again, sequential runs counted as parallel, x3 purpose-clause verdicts changing, cache carry computed from fresh input, silent curl results undetected, or the frozen oracle no longer red (teeth lost).
+ * tier: S (pure functions over committed golden records, read-only)
+ * cites: 90758419 AC1-AC3 (titled R1.AC2-AC7, R2.AC8 in this file).
+ */
 import fs from 'node:fs';
 import path from 'node:path';
 

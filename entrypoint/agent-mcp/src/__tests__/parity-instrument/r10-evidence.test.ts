@@ -1,3 +1,8 @@
+/*
+ * guards: the evidence bundle built from a run misattributes threads, tools offered, delegation mode, tool timings or same-turn concurrency, reports thinking as present when the API omitted the text, lets a signature, key or page text into a bundle, or the leak scan stops flagging them.
+ * tier: S (synthetic run directory under the OS temp dir, no process)
+ * cites: PARITY-R10-prep AC3 (SCOPE-R10-prep, as titled in this file; no backlog uid appears in this file; filed under G9 bucket 003366c1-fef5-4b97-be06-bda8155d31a3).
+ */
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';

@@ -1,3 +1,9 @@
+/*
+ * guards: arm C's agent_create (parent or worker) or the Anthropic request on the wire lacks thinking {type:'adaptive'} while arm A asks for it, thinkingFacts reports requested versus wire wrongly, PARITY_THINKING_C=none still sends thinking, or a driver whose worker definition forgets thinking is not flagged as a mismatch.
+ * tier: P (spawns drive.mjs --dry-run against the built agent-mcp over stdio MCP; e2e lane, ADR-0009)
+ * gap: This cannot be observed at tier S because agent_create's argument must travel through the real built server to the SDK request body that a fake Anthropic server receives over a socket.
+ * cites: R10 LP AC2, AC3 (SCOPE-R10-thinking-parity, as titled in this file; no backlog uid appears in this file; filed under G9 bucket 003366c1-fef5-4b97-be06-bda8155d31a3).
+ */
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';

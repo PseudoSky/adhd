@@ -1,3 +1,8 @@
+/*
+ * guards: an arm or the oracle runs on a model other than the single pin, the judge model merges with the pin, a model without a rate card is priced at another model's rate, or thinking is forced or switched off instead of left at the model default.
+ * tier: S (constants and pure functions, no model call)
+ * cites: R7-model AC1, AC3; R7-think AC1 (as titled in this file; no backlog uid appears in this file; filed under G9 bucket 003366c1-fef5-4b97-be06-bda8155d31a3).
+ */
 import { describe, expect, it } from 'vitest';
 
 import { loadParity } from './load';

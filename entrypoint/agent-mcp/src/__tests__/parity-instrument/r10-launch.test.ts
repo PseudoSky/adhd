@@ -1,3 +1,8 @@
+/*
+ * guards: experiment.json or PARITY_THINKING_C stops configuring thinking for group C only, an invalid shape or a non-anthropic group is accepted, thinkingFacts hides a requested-versus-wire mismatch, the --self-check anthropic.ts guard passes a mutant, the ledger precondition ignores the owner approval or accepts an empty approvedBy, or the README drops the Anthropic-only statement.
+ * tier: S (pure functions, temp ledger copies, in-process live-gate sequence)
+ * cites: R10 LP AC1, AC3, AC4, AC5, AC6 (SCOPE-R10-thinking-parity, as titled in this file; no backlog uid appears in this file; filed under G9 bucket 003366c1-fef5-4b97-be06-bda8155d31a3).
+ */
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';

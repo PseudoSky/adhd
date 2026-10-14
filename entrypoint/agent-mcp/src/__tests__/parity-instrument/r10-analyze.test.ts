@@ -1,3 +1,8 @@
+/*
+ * guards: the analyze commands stop reproducing the R9 triage numbers from the committed golden bundles (wall gap 17.780 s with residual 0, thread table, parent blocking, worker surplus, tools offered), RT1-RT6 miss a replayed or dangling thinking block, the probe matcher is not boundary-exact, a golden bundle holds signatures, keys or page text, or the CLI is non-deterministic or accepts a bad section.
+ * tier: S (pure functions and in-process CLI over committed redacted bundles)
+ * cites: PARITY-R10-prep AC2 (SCOPE-R10-prep, as titled in this file; no backlog uid appears in this file; filed under G9 bucket 003366c1-fef5-4b97-be06-bda8155d31a3).
+ */
 import fs from 'node:fs';
 import path from 'node:path';
 

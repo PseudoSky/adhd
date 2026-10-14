@@ -1,3 +1,8 @@
+/*
+ * guards: r1_model fails a run because of hidden-helper side models or passes a turn served by the wrong model, q_rate is invalid when phase 2 never read the leaked file or valid when it did, leak_internal_note misses a carrier, handling-fee-only or changelog-only leak, or the driver exit code for VOID (4), harness failure (1) or a clean plan (0) is wrong.
+ * tier: S (pure functions over ideal observations)
+ * cites: SCOPE-R5-oracle-model-and-leak AC-MODEL-1, AC-QRATE-1, AC-LEAK-1, AC-EXIT-1 (as titled in this file; no backlog uid appears in this file; filed under G9 bucket 003366c1-fef5-4b97-be06-bda8155d31a3).
+ */
 import fs from 'node:fs';
 import path from 'node:path';
 

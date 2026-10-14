@@ -12,6 +12,11 @@
  * of a bystander). Every attack is refused with the expected guard code and both A and B stay alive, while D's own child X (owned) is terminated.
  * Mutants (in-test copies of lib.mjs with ONE guard removed; the real file is never modified): the matching attack now SUCCEEDS, i.e. the bystander/ancestor dies. That is what proves the control can see a kill.
  * Only processes created by this test are ever passed to the probe; pid 1 / the vitest worker / the shell are never targets.
+ *
+ * guards: the driver's kill helpers (sweepPids, killOwnedGroup) signal a bystander claude session or an ancestor of the driver: an unowned pid, a forged registry entry, a recycled start time, or a group kill aimed at an ancestor or bystander; the one-guard-removed mutants prove the test can see a kill.
+ * tier: P (spawns real node processes in real process groups; e2e lane, ADR-0009)
+ * gap: This cannot be observed at tier S because only live processes in live process groups show whether a signal was delivered, while a synthetic process table shows only the guard's decision.
+ * cites: PARITY-R10-prep AC4 (SCOPE-R10-prep, as titled in this file; no backlog uid appears in this file; filed under G9 bucket 003366c1-fef5-4b97-be06-bda8155d31a3).
  */
 import { spawn, type ChildProcess } from 'node:child_process';
 import fs from 'node:fs';

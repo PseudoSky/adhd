@@ -1,3 +1,8 @@
+/*
+ * guards: the wall-attribution reader mis-computes per-thread or per-dispatch numbers from raw tracing records (sync versus background dispatch, result waits, barrier queued_ms, startup queue_wait_ms and session_ms), crashes or invents numbers on r9 goldens that predate the signals, or any pre-existing analyze section drifts from its captured baseline.
+ * tier: S (pure functions and in-process CLI over committed raw trace records)
+ * cites: R10 M1 AC1-AC7 (as titled in this file; no backlog uid appears in this file; filed under G9 bucket 003366c1-fef5-4b97-be06-bda8155d31a3).
+ */
 import fs from 'node:fs';
 import crypto from 'node:crypto';
 import path from 'node:path';

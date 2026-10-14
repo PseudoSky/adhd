@@ -15,6 +15,11 @@
  *     unset), so there is nothing real to probe; adding one back would re-introduce the instrument-added path R3 forbids.
  *   - R2.AC13 (missing srt/uvx fails loudly in beforeAll) applies once a leg launches the shell stack; nothing here launches srt or uvx.
  * The unit table (preflight.test.mjs, implementer 2) covers every verdict code with a mocked SDK.
+ *
+ * guards: --live --yes launches a model run (the claude shim is executed) or touches the tracked ledger while a gate is red, exits with a code other than 3, preflight emits legs not derived from the declared web surface or a receipt without the identity fields, or a path-shaped --round is not refused with exit 2.
+ * tier: P (spawns the real drive.mjs with a claude shim on PATH; e2e lane, ADR-0009)
+ * gap: This cannot be observed at tier S because the zero-spawn proof needs the real driver CLI as a separate process with a shim on PATH, with exit codes and the ledger bytes observed from outside in an isolated cwd and fake HOME.
+ * cites: 50e21ed9 AC2; 0ba70e47 AC1; 90758419 AC2; R2.AC5-AC7; R0.AC4, R0.AC7, R0.AC8.
  */
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';

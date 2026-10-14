@@ -1,3 +1,8 @@
+/*
+ * guards: variantVerdict or roundVerdict gates on the wrong thing: thresholds not inclusive, report-only metrics (turns, tool calls, peak context, thinking turns) gating, a non-genuine A or variant passing, a missing measurement passing by default or crashing, or an extra run without a reason counting.
+ * tier: S (pure functions over hand-built summaries)
+ * cites: R4.AC1-AC7; R7-think AC1 (as titled in this file; no backlog uid appears in this file; filed under G9 bucket 003366c1-fef5-4b97-be06-bda8155d31a3).
+ */
 import { describe, expect, it } from 'vitest';
 
 import { loadParity } from './load';

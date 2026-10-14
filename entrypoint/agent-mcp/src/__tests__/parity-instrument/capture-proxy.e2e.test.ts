@@ -1,3 +1,9 @@
+/*
+ * guards: arm C Anthropic traffic bypasses the capture proxy in the real built agent-mcp (ANTHROPIC_BASE_URL does not reach the server SDK), the record loses its capture facts, wire-diff cannot read what the proxy logged, or a run without --capture still captures.
+ * tier: P (spawns drive.mjs and the built agent-mcp; e2e lane, ADR-0009)
+ * gap: This cannot be observed at tier S because the base-URL env must reach the Anthropic SDK inside a spawned built agent-mcp process and the request must arrive at the proxy and the fake upstream over real sockets.
+ * cites: R6B-proxy AC4, AC5, AC6 (as titled in this file; no backlog uid appears in this file; filed under G9 bucket 003366c1-fef5-4b97-be06-bda8155d31a3).
+ */
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';

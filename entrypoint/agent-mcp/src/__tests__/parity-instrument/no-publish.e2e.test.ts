@@ -9,6 +9,11 @@
  *      published AGENTS.md / docs carry no instrument text;
  *   4. NEGATIVE CONTROL: a copy of dist with an injected `parity/x.mjs` (marker inside) turns BOTH the walker and the pack listing red.
  * Spawns `npm`, so it is e2e (isolated cwd under tmp/, fake HOME). Not env-gated.
+ *
+ * guards: parity instrument files or the PARITY-INSTRUMENT-ONLY marker reach dist/ or the npm pack listing, or package.json files, tsconfig.lib.json include, project.json assets or the published AGENTS.md start to carry them; the injected-file negative control proves the walker and the pack listing can see a leak.
+ * tier: P (spawns npm pack over the built dist/; e2e lane, ADR-0009)
+ * gap: This cannot be observed at tier S because the published file set is what npm pack computes over the built dist/, which exists only after a real build and a real npm process.
+ * cites: 25ce70b8 AC1; 1207765d; R0.AC5, R0.AC6.
  */
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';

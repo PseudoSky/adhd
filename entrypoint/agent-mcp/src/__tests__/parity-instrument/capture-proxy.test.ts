@@ -1,3 +1,9 @@
+/*
+ * guards: the capture proxy alters what it relays (bytes, headers, a 429, SSE chunk timing, gzip content-encoding), logs a credential or request header, misroutes /<arm>/<provider>, or the driver turns capture on by default; the work directory collides across concurrent runs (b7e0d8c5).
+ * tier: P (in-process loopback HTTP servers, vitest unit lane; sockets are outside tier S per docs/standards/testing.md section 1, file classified by its heaviest case)
+ * gap: This cannot be observed at tier S because incremental SSE delivery, byte-identical gzip passthrough and 429/502 passthrough exist only across real sockets with an upstream that holds the response open.
+ * cites: b7e0d8c5 AC1-AC2; R6B-proxy AC1-AC6 (as titled in this file).
+ */
 import fs from 'node:fs';
 import http from 'node:http';
 import os from 'node:os';

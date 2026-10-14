@@ -1,3 +1,8 @@
+/*
+ * guards: a signal guard in OwnedRegistry, refusalFor or killOwnedGroup stops returning its refusal code (pid-range, self, ancestor, not-owned, recycled, not-child, protected group, foreign member, fail-closed without a registry), or a pkill, killall or stray process.kill appears outside lib.mjs.
+ * tier: S (synthetic process tables, no real signal; static source audit)
+ * cites: PARITY-R10-prep AC4 (SCOPE-R10-prep, as titled in this file; no backlog uid appears in this file; filed under G9 bucket 003366c1-fef5-4b97-be06-bda8155d31a3).
+ */
 import fs from 'node:fs';
 import path from 'node:path';
 

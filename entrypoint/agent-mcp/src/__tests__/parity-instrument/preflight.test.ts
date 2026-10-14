@@ -1,3 +1,8 @@
+/*
+ * guards: classifyLeg maps a probe outcome to the wrong verdict code (the R4 blank-content isError:false signature must stay EMPTY_FALSE_SUCCESS), the exit code is non-zero for NOT_PROBEABLE or zero for a red leg, a throwing prober crashes instead of becoming LAUNCH_FAIL, or the receipt loses its identity fields.
+ * tier: S (injected prober, no process, no network)
+ * cites: 50e21ed9 AC2; 0ba70e47 AC1; 90758419 AC2; B2.AC9-AC11, AC17; R2.AC6 (as titled in this file).
+ */
 import { describe, expect, it } from 'vitest';
 
 import { loadParity } from './load';
