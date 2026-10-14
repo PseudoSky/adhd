@@ -113,6 +113,84 @@ the gated live-test header
 (`entrypoint/agent-mcp/src/__tests__/integration/native-tooling-adoption.e2e.test.ts`).
 
 
+## Default shell allowlist (ADR-0008 D5 policy change)
+
+When a task's `shell` member supplies **neither** `allowCommands` **nor**
+`allowPatterns`, the resolver emits `DEFAULT_SHELL_ALLOW_COMMANDS` (exported from
+`catalog.ts`; the single source) as the adopted server's `ALLOW_COMMANDS`, so a
+bare `nativeTooling: { shell: true }` agent can do ordinary file and toolchain work
+(`cat ls cp mv mkdir rm touch head tail wc sort uniq tr cut diff awk grep rg echo
+printf pwd test true false basename dirname realpath stat tee chmod git npm pnpm
+npx nx make tsc uv curl`). The list is an owner-approved policy change (069316e5):
+before it, an unconfigured shell allowed nothing.
+
+Rules:
+
+- **Override.** Any caller-supplied `allowCommands` list — even an empty one —
+  replaces it in full; the two lists are never merged. Re-state any default you
+  still want.
+- **`allowPatterns` suppresses it.** Supplying `allowPatterns` (with or without
+  `allowCommands`) means the default is not emitted, so a pattern-only policy is
+  exactly the patterns.
+- **Network tools.** `curl` is the one network tool in the default
+  (R5-WEB-SIMPLE AC1), so a default agent on any provider can fetch a page
+  (`curl -fsSL <url>`, `| head`, `-o <file>`; `|` and `>` are accepted as their own
+  argv items). `wget`, `ssh`, `scp`, `sudo` and `nc` are deliberately absent.
+  Whether `curl` can reach a host is the `srt` policy's call: agent-mcp's default
+  run policy is open egress; restrict it with `agent.shell.sandbox.allowedDomains`.
+- **Names the server refuses are not listed.** `mcp-shell-server==1.1.12`
+  rejects `sed`, `node`, `python3` (and `env`, `xargs`, `timeout`, `nice`, `sh`,
+  `bash`, other interpreters, …) with *"Command rejected by default security
+  policy"* even when allowlisted, so advertising them only produced commands that
+  always fail. They were removed from the default after driving every entry
+  through the real server; `default-shell-allowlist.e2e.test.ts` re-checks the
+  whole list on every e2e run. The adopted server's default policy is not
+  something this package overrides (ADR-0008 D5).
+
+## Shell exit status (61358b6f)
+
+The adopted server computes each command's exit status and drops it: a failing
+command returns `isError: false` with whatever it printed (often nothing). The
+server is neither forked nor patched, so the status is recovered with a **PATH
+launcher shim**. `prepareExitShimDir({ origPath, rootDir })` builds a read-only
+directory (mode 0555, keyed by a hash of the launcher and `origPath`) holding one
+symlink per executable found on `origPath` to a single POSIX `sh` launcher
+(`LAUNCHER_SOURCE`). When `ctx.exitShim = { dir, origPath }` is passed to
+`resolveNativeTooling`, the builtin shell server's `PATH` is `<dir>:<origPath>` and
+the original `PATH` rides in `ADHD_SHIM_ORIG_PATH` (named in the server's own
+`MCP_SHELL_CHILD_ENV_ALLOWLIST`, merged with the proxy names, also when
+`sandbox: false`). The launcher runs the real binary, forwards `TERM`/`INT`/`HUP`,
+and on a non-zero exit appends one stderr line:
+
+```
+[exit status: N]
+```
+
+which the server returns as an ordinary text part; zero-exit output is
+byte-identical. The orchestrator parses the trailer into a structured
+`exitStatus` on `post:tool_call` and `TOOL_RESULT` (it never changes `isError`:
+`grep` no-match and `diff` are not faults). Facts:
+
+- The allowlist is still enforced only by the server; the shim is inert for any
+  command the server refuses. Tool name, schema and description are unchanged.
+- Never shimmed (`EXIT_SHIM_PROTECTED`): `uv`, `uvx`, `python*`, `srt`, `node`,
+  `sh`, `env`, `bash`, `zsh`, `dash`, `which`, `sandbox-exec`, `bwrap`, `socat` —
+  the server's own toolchain and `srt`'s helpers resolve through the same `PATH`.
+  These therefore report no trailer.
+- **Known gap — absolute paths.** An allowlist entry that is an absolute path
+  (`/bin/ls`) bypasses `PATH` lookup, so it gets no trailer. Use bare names.
+- Pipelines: each segment is shimmed independently, so an early failing segment
+  prints its own trailer.
+- The sentinel is plain text; a command can echo it. The engine reads it only
+  from the end of the last text part of a `shell_execute` result.
+- The shim directory must live outside every sandbox-writable root and be
+  read-only to the sandbox (agent-mcp keeps it under its temp root and denies
+  writes to it in the per-run `srt` policy).
+- Retire the shim if upstream `tumf/mcp-shell-server` reports exit status itself.
+
+Proven end to end by `shell-exit-status.e2e.test.ts` (real `srt`, real unmodified
+server, real MCP client), including a negative control with the shim off `PATH`.
+
 ## Usage
 
 ```ts
@@ -181,6 +259,12 @@ missing; a control test proves the
 same call cannot resolve the host without the allowlist. `srt` refuses
 destinations that resolve to the host itself, so the local server is wired in as
 `srt`'s `network.parentProxy` rather than curled directly.
+
+`src/lib/shell-exit-status.e2e.test.ts` (61358b6f) drives the same real `srt` +
+real server through a real MCP client and asserts the `[exit status: N]` trailer
+(and its negative control); `src/lib/default-shell-allowlist.e2e.test.ts` calls
+every `DEFAULT_SHELL_ALLOW_COMMANDS` entry through the real server. `uvx` (and
+`srt` for the exit-status suite) must be installed; both fail loudly if missing.
 
 ## Line-ending helpers
 

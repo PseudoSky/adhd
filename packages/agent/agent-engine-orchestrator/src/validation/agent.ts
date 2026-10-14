@@ -34,6 +34,19 @@ export const tripwireConfigSchema = z.strictObject({
   probeLeaseMs: z.number().int().positive().optional(),
 });
 
+/**
+ * Anthropic `thinking` option (R10 S0). Strict on purpose, in both the input and the stored-row
+ * variants: an unknown `type` or `display` value, an extra key (the legacy `budget_tokens`), or a
+ * wrong type is rejected with the offending key in the issue path.
+ */
+export const anthropicThinkingSchema = z.discriminatedUnion('type', [
+  z.strictObject({
+    type: z.literal('adaptive'),
+    display: z.enum(['summarized', 'omitted']).optional(),
+  }),
+  z.strictObject({ type: z.literal('disabled') }),
+]);
+
 /** PF-1 fields shared by every provider variant (mirrors `PartialBinding`). */
 const failureBindingShape = {
   models: z.array(z.string().min(1)).optional(),
@@ -55,6 +68,8 @@ function buildProviderConfigSchema(strict: boolean) {
       env: providerEnvBlockSchema,
       temperature: z.number().min(0).max(1).optional(),
       maxTokens: z.number().int().positive().optional(),
+      effort: z.enum(['low', 'medium', 'high', 'xhigh', 'max']).optional(),
+      thinking: anthropicThinkingSchema.optional(),
       timeoutMs: z.number().int().positive().optional(),
       retryConfig: bindingRetryConfigSchema.optional(),
       ...failureBindingShape,

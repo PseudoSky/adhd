@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { newTraceId } from '@adhd/sox-telemetry';
 import type { OtelAttributes } from '@adhd/sox-telemetry';
-import type { ExecutionContext } from '@adhd/agent-base-types';
+import type { ExecutionContext, PreToolCallPayload } from '@adhd/agent-base-types';
 import { TracingCounters } from './counters.js';
 import { OpenSpan } from './spans.js';
 
@@ -15,6 +15,12 @@ interface ToolSpan {
   span: OpenSpan;
   startedAt: number;
   tool: string;
+  /**
+   * The `pre:tool_call` payload object exactly as the engine emitted it. The engine completes
+   * `groupIndex` and `queuedMs` on this same object when the call actually starts, which is after the
+   * event fired, so the final values are read from it at `post:tool_call`, never at `pre:tool_call`.
+   */
+  pre: Pick<PreToolCallPayload, 'groupIndex' | 'queuedMs'>;
 }
 
 export interface TaskState {
@@ -24,6 +30,37 @@ export interface TaskState {
   traceId: string;
   model?: { span: OpenSpan; startedAt: number };
   tools: Map<string, ToolSpan>;
+  /**
+   * Closed `[start, end]` monotonic-ms intervals of this task's own model calls and tool calls, kept so
+   * `agent.task.model_ms` / `tool_ms` / `idle_ms` are computed from the task's own activity at its terminal.
+   */
+  modelIntervals: Interval[];
+  toolIntervals: Interval[];
+}
+
+/** A closed `[start, end]` interval of monotonic milliseconds. */
+export type Interval = readonly [start: number, end: number];
+
+/** Total length covered by `intervals`, counting overlapping stretches once (parallel tool calls overlap). */
+export function unionMs(intervals: readonly Interval[]): number {
+  const sorted = [...intervals].sort((a, b) => a[0] - b[0]);
+  let total = 0;
+  let curStart = Number.NaN;
+  let curEnd = Number.NaN;
+  for (const [s, e] of sorted) {
+    if (e < s) continue;
+    if (Number.isNaN(curStart)) {
+      curStart = s;
+      curEnd = e;
+    } else if (s <= curEnd) {
+      if (e > curEnd) curEnd = e;
+    } else {
+      total += curEnd - curStart;
+      curStart = s;
+      curEnd = e;
+    }
+  }
+  return Number.isNaN(curStart) ? total : total + (curEnd - curStart);
 }
 
 /**
@@ -98,7 +135,7 @@ export class TraceRuntime {
     let state = this.tasks.get(ctx.taskId);
     if (state === undefined) {
       if (this.ended.has(ctx.taskId)) return undefined;
-      state = { traceId: this.traceFor(ctx), tools: new Map() };
+      state = { traceId: this.traceFor(ctx), tools: new Map(), modelIntervals: [], toolIntervals: [] };
       this.tasks.set(ctx.taskId, state);
     }
     return state;

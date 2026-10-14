@@ -5,12 +5,19 @@ import type { ExecutionContext, Message } from '../validation/index.js';
 import type {
   IHookRegistry,
   IEnforcementError,
+  IProviderEcho,
   IToolWarning,
+  PostModelResponsePayload,
   PostToolCallPayload,
+  PreToolCallPayload,
+  ServerResultPersistPayload,
+  TaskStartupPayload,
+  ToolCallConcurrencyClass,
 } from '@adhd/agent-base-types';
 import { effectiveHitl } from '@adhd/agent-base-types';
 import { estimateToolResultTokens } from './tool-result-tokens.js';
 import { randomUUID } from 'node:crypto';
+import { performance } from 'node:perf_hooks';
 import { ToolError } from '../validation/errors.js';
 import { generateId } from '../utils/ids.js';
 import { nowIso } from '../utils/timestamps.js';
@@ -21,12 +28,21 @@ import {
 } from './tool-result-cap.js';
 import { capOrSpillToolResult, resolveToolResultSpill } from './tool-result-spill.js';
 import { canonicalizeToolDefinitions, compactToolDefinitions } from './tool-schema-compact.js';
+import { nativeGuidanceContextOf, withNativeToolGuidance } from './native-tool-guidance.js';
 import { coerceToolArguments } from './tool-arg-coercion.js';
 import { DEFAULT_PROVIDER_TIMEOUT_MS } from '../interfaces.js';
 import { createToolLimiter } from './tool-limiter.js';
+import { assignGroups, schedulingClassOf, type ToolSchedulingClass } from './tool-class.js';
+import { classifyToolCallOutcome, modelVisibleBytes } from './tool-call-signals.js';
 import { selectionOf, wireModelOf } from '../providers/resolve-selection.js';
 import { readPartialUsage, type IProviderPartialUsage, type ProviderTokenUsage } from '../providers/partial-usage.js';
 import { buildModelResponsePayload, sourceFromResponse } from './model-response-payload.js';
+import { computeOverheadMs } from '../providers/call-timing.js';
+import { runInToolCallScope } from './dispatch-call-scope.js';
+import { thinkingBlocksOf, thinkingConfigOf, toolResultBytesInOf } from './model-call-signals.js';
+import { parseShellExitStatus } from './shell-exit-status.js';
+import { partitionEcho } from '../providers/anthropic-echo.js';
+import { isPauseTurnCapError } from '../providers/anthropic-pause.js';
 
 import type { McpClientRegistry } from '../clients/registry.js';
 import type { PolicyEngine } from './policy.js';
@@ -37,6 +53,7 @@ import {
 } from './tool-advertisement.js';
 import {
   estimateMessageTokens,
+  estimateEchoTokens,
   groupIntoAtomicUnits,
   decideCompaction,
   compactMessages,
@@ -241,6 +258,22 @@ export interface OrchestratorSessionStore {
      * there, exactly as the one-hop behaviour did.
      */
     getAgentDefinition?(sessionId: string): Parameters<typeof effectiveHitl>[0];
+    /**
+     * R9-hist provider echo persistence. All optional so minimal fakes compile; the real `SessionStore`
+     * implements them. Each is best-effort: the orchestrator isolates a throwing implementation
+     * (one WARN per process, then legacy history) and never lets it fail a task.
+     */
+    appendMessageEcho?(
+      messageId: string,
+      sessionId: string,
+      echo: IProviderEcho,
+      bytes: number,
+      serverBytes: number
+    ): void;
+    /** Tier S bytes already persisted for the session (soft per-session cap input). */
+    getEchoSessionServerBytes?(sessionId: string): number;
+    /** Drop every persisted echo of the session (self-heal after the API rejected a replay). */
+    deleteMessageEchoes?(sessionId: string): number;
 }
 
 /** Outcome of climbing the parent chain for an escalated `ask` (fc466f0b). */
@@ -360,6 +393,24 @@ export interface OrchestratorRunInput {
   logger?: EngineLogger;
   /** Injected config (replaces config.js import). */
   config?: EngineConfig;
+  /**
+   * R9-hist: provider-native assistant content loaded for the history in `messages`, keyed by the
+   * assistant `Message.id` (see `loadSessionEchoes` in `tools/task.ts`). The run extends it with the
+   * echoes of its own responses and hands it to the provider on every call. Absent => legacy history.
+   */
+  echoes?: ReadonlyMap<string, IProviderEcho>;
+  /**
+   * R10 M2: the two start-up times the engine cannot see because both happen before `run` is called, measured by
+   * the dispatching tool (`tools/task.ts`): enqueue-to-dequeue and session create/read. Forwarded verbatim into
+   * `task:startup`. Absent (no dispatching parent, or a direct `run` call) => the payload omits both: never a guess, never 0.
+   */
+  startupStamps?: OrchestratorStartupStamps;
+}
+
+/** The pre-`run` start-up times a dispatching tool measured; each is whole milliseconds >= 0 and independently optional. */
+export interface OrchestratorStartupStamps {
+  queueWaitMs?: number;
+  sessionMs?: number;
 }
 
 export interface OrchestratorRunResult {
@@ -379,6 +430,71 @@ function isEnforcementError(err: unknown): err is IEnforcementError {
     err !== null &&
     (err as IEnforcementError).isEnforcementError === true
   );
+}
+
+let echoFailureWarned = false;
+
+/**
+ * Echo persistence is best-effort (R9-hist): the FIRST failure per process logs one WARN and every later
+ * one is silent, so a missing table, a locked database or a corrupt row can neither fail a task nor spam
+ * the log. Only the operation and the error name/code are logged, never `err.message`: a `JSON.parse`
+ * error quotes the text it choked on, and echo blocks carry opaque signatures and fetched page text.
+ */
+export function warnEchoFailureOnce(logger: EngineLogger, op: string, err: unknown): void {
+  if (echoFailureWarned) return;
+  echoFailureWarned = true;
+  const code =
+    typeof err === 'object' && err !== null && typeof (err as { code?: unknown }).code === 'string'
+      ? (err as { code: string }).code
+      : undefined;
+  logger.warn(
+    {
+      op,
+      errorName: err instanceof Error ? err.name : typeof err,
+      ...(code !== undefined ? { errorCode: code } : {}),
+    },
+    'provider echo persistence failed; continuing with legacy history'
+  );
+}
+
+/** Test seam: re-arms the once-per-process echo failure WARN. */
+export function resetEchoFailureWarningForTests(): void {
+  echoFailureWarned = false;
+}
+
+/**
+ * The `transform:server_result_persist` payload with a LATCHING `persist`: it starts `true`, and a
+ * handler that sets it `false` vetoes persistence for good. `HookRegistry.emit` hands one mutable
+ * object to every handler in registration order, so with a plain boolean a later handler writing
+ * `true` would silently undo an earlier plugin's veto. Here a `true` write is ignored once vetoed
+ * (logical AND of every handler's verdict).
+ */
+function latchingPersistPayload(
+  base: Omit<ServerResultPersistPayload, 'persist'>
+): ServerResultPersistPayload {
+  let persist = true;
+  return Object.defineProperty({ ...base }, 'persist', {
+    enumerable: true,
+    get: () => persist,
+    set: (value: boolean) => {
+      if (value === false) persist = false;
+    },
+  }) as ServerResultPersistPayload;
+}
+
+/** The words of an API rejection that name which replayed block types it objected to. */
+const DEGRADED_REASON_KEYWORDS =
+  /thinking|signature|redacted|server_tool_use|tool_use_id|tool_result|web_fetch|web_search/gi;
+
+/**
+ * The `provider:history_degraded` event `reason`: a content-free classification built ONLY from the
+ * block-type keywords the API's rejection text names (`api_rejected_replay: thinking, signature`). The
+ * rejection text itself is never copied: an error message can quote the very signature, encrypted blob
+ * or fetched page it rejected, and none of that may reach `task_events`.
+ */
+function degradedReason(apiMessage: string): string {
+  const named = [...new Set((apiMessage.match(DEGRADED_REASON_KEYWORDS) ?? []).map((w) => w.toLowerCase()))];
+  return named.length > 0 ? `api_rejected_replay: ${named.join(', ')}` : 'api_rejected_replay';
 }
 
 const noopHooks: IHookRegistry = {
@@ -431,6 +547,10 @@ export class Orchestrator {
     };
 
     const currentMessages: Message[] = [...input.messages];
+    // R9-hist: provider-native assistant content to replay, by assistant message id. Grows with this
+    // run's own responses; cleared (and never refilled) once the API rejects a replay.
+    const echoes = new Map<string, IProviderEcho>(input.echoes ?? []);
+    let echoesDisabled = false;
     const contextLimit = config.server.contextLimit;
     // Fails loud (RangeError) on a negative / NaN / non-integer cap.
     const toolResultMaxChars = validateToolResultMaxChars(
@@ -459,10 +579,18 @@ export class Orchestrator {
     type GovernOutcome = {
       resolved: { server: string; tool: string };
       refused?: { result: unknown; isError: boolean };
+      /**
+       * The `pre:tool_call` payload exactly as emitted (the SAME object every handler received), so the
+       * native loop can complete `groupIndex` / `queuedMs` on it when the call starts (R10).
+       */
+      prePayload?: PreToolCallPayload;
     };
+    /** R10 trace signals known when the call is governed (Phase 1). Absent for bridged (claudecli) calls. */
+    type GovernSchedule = { concurrencyClass: ToolCallConcurrencyClass; turnIndex: number; groupIndex: number };
     const governToolCall = async (
       tc: GovernedCall,
-      bridged: boolean
+      bridged: boolean,
+      schedule?: GovernSchedule
     ): Promise<GovernOutcome> => {
       const resolved = registry.resolveToolName?.(
         `${tc.server}__${tc.tool}`
@@ -1034,12 +1162,19 @@ export class Orchestrator {
         }
       }
 
-      await hooks.emit('pre:tool_call', {
+      // R10: `concurrencyClass`, `turnIndex` and the PLANNED `groupIndex` are known now; `queuedMs` (and
+      // the final `groupIndex`) only exist once the call actually starts, after this event has fired.
+      // The native loop therefore completes them on THIS object when the call starts: a handler that
+      // keeps the payload (the tracing plugin keeps the open span's state) reads the final values at
+      // `post:tool_call`.
+      const prePayload: PreToolCallPayload = {
         executionContext,
         toolName: qualifiedToolName,
         callId: tc.id,
         toolInput: tc.arguments,
-      });
+        ...(schedule ?? {}),
+      };
+      await hooks.emit('pre:tool_call', prePayload);
 
       try {
         await hooks.enforce('pre:tool_call', {
@@ -1071,7 +1206,44 @@ export class Orchestrator {
             : undefined,
       });
       executionContext.toolCallCount++;
-      return { resolved };
+      return { resolved, ...(schedule ? { prePayload } : {}) };
+    };
+
+    /**
+     * Persist one assistant message's echo (R9-hist). Tier T (thinking, text, client tool_use) always;
+     * tier S (server tool pairs) only when the TTL is on, the sticky `transform:server_result_persist`
+     * hook does not veto, and the size caps allow. Any storage failure is isolated: one WARN per
+     * process, the task carries on and later tasks fall back to legacy history.
+     */
+    const persistEcho = async (messageId: string, echo: IProviderEcho): Promise<void> => {
+      const caps = config.echo;
+      if (caps === undefined || sessionStore.appendMessageEcho === undefined) return;
+      try {
+        const sessionId = executionContext.sessionId;
+        const sessionServerBytes = sessionStore.getEchoSessionServerBytes?.(sessionId) ?? 0;
+        let partition = partitionEcho(echo, caps, sessionServerBytes, true);
+        if ((partition.persist?.serverBytes ?? 0) > 0) {
+          const payload = latchingPersistPayload({
+            sessionId,
+            agentName: executionContext.agentName,
+            serverBytes: partition.persist?.serverBytes ?? 0,
+          });
+          try {
+            await hooks.emit('transform:server_result_persist', payload);
+          } catch (err) {
+            // A failing registry must never leak untrusted tier S into storage: fail closed.
+            payload.persist = false;
+            logger.debug({ taskId, err }, 'transform:server_result_persist emit failed; tier S not persisted');
+          }
+          if (!payload.persist) partition = partitionEcho(echo, caps, sessionServerBytes, false);
+        }
+        const kept = partition.persist;
+        if (kept !== undefined) {
+          sessionStore.appendMessageEcho(messageId, sessionId, kept.echo, kept.bytes, kept.serverBytes);
+        }
+      } catch (err) {
+        warnEchoFailureOnce(logger, 'appendMessageEcho', err);
+      }
     };
 
     let taskSucceeded = false;
@@ -1089,7 +1261,15 @@ export class Orchestrator {
 
       // 9ed453c1 CACHE: canonical order for server-rendered allow-lists so the serialized tools
       // block (head of the cached prefix) is byte-stable across tasks and spawns.
-      const tools = canonicalizeToolDefinitions(await registry.listAllTools());
+      const toolListingStartedAt = performance.now();
+      const tools = canonicalizeToolDefinitions(
+        // cafe9a17 AC1: the guidance describes the EFFECTIVE shell/fs servers of this task, not the catalog defaults.
+        withNativeToolGuidance(
+          await registry.listAllTools(),
+          nativeGuidanceContextOf(executionContext.agentDefinition?.mcpServers)
+        )
+      );
+      const toolListingMs = Math.max(0, Math.round(performance.now() - toolListingStartedAt));
 
       // HITL enablement is `nativeTooling.hitl` (legacy alias `allowHumanInput`),
       // resolved by `effectiveHitl` and DEFAULT-ON (ADR-0008 D3/D6: `hitl`
@@ -1101,6 +1281,23 @@ export class Orchestrator {
       if (effectiveHitl(executionContext.agentDefinition) !== false) {
         tools.push(HITL_BUILTIN_TOOL_DEFINITION);
       }
+
+      // R10 P10: where this task's start-up time went. Observational: a failing handler never fails
+      // the task. `queueWaitMs` and `sessionMs` happen before `Orchestrator.run` (enqueue-to-dequeue, session
+      // create/read), so only the dispatching tool can measure them: it passes them as `input.startupStamps`
+      // (R10 M2). Without that field (no dispatching parent, or a direct `run` call) both are omitted rather
+      // than reported as a guess.
+      const startupTimings = registry.startupTimings?.();
+      const stamps = input.startupStamps;
+      const startupPayload: TaskStartupPayload = {
+        executionContext,
+        mcpConnectMs: startupTimings?.connectMs ?? {},
+        toolsReadyMs: startupTimings?.toolsReadyMs ?? toolListingMs,
+        ...(stamps?.queueWaitMs !== undefined ? { queueWaitMs: stamps.queueWaitMs } : {}),
+        ...(stamps?.sessionMs !== undefined ? { sessionMs: stamps.sessionMs } : {}),
+        toolCount: tools.length,
+      };
+      await emitObservational('task:startup', startupPayload);
 
       // Default to 'full' JSON function-schemas — the contract models are trained on, and
       // what published 2.0.1 always sent. Full schemas are STATIC, so they sit in the cached
@@ -1137,23 +1334,36 @@ export class Orchestrator {
       // The provider's own reported prompt_tokens from the last call — the exact, free
       // ground truth for the real context size. Undefined before the first call.
       let lastReportedContext: number | undefined;
+      // P6: epoch ms the previous model call ended (undefined before the first call).
+      let lastModelCallEndedAt: number | undefined;
       const providerModel = wireModelOf(executionContext);
+      // R10 S5b: the provider family and `thinking` option this task's calls are made with (trace signals).
+      const runSelection = selectionOf(executionContext);
 
       let looping = true;
+      // R10: zero-based index of the model call whose response requests a turn's tool calls.
+      let toolTurnIndex = -1;
       while (looping) {
         if (signal.aborted) {
           throw new ToolError('PROVIDER_ERROR', 'Task was cancelled');
         }
+        toolTurnIndex += 1;
 
         // Cache-preserving context management (BUG-ORCH-008): don't trim from the front
         // every call. Let history grow append-only, and only when the REAL context nears
         // the model's true window compact the middle into one summary — rarely, so the
         // cached prefix survives between compactions.
         {
+          // The first-call estimate counts the echo the provider will replay; once a call has reported
+          // the real prompt size that figure already includes it and governs alone.
           const decision = decideCompaction(
             lastReportedContext,
             currentMessages,
             providerModel,
+            undefined,
+            lastReportedContext === undefined && !echoesDisabled
+              ? estimateEchoTokens(currentMessages, echoes)
+              : 0,
           );
           if (decision.shouldCompact) {
             const before = currentMessages.length;
@@ -1185,6 +1395,7 @@ export class Orchestrator {
                   ],
                   tools: undefined,
                   signal,
+                  // R9-hist: the summariser is a plain-text call; it never carries echoes or continuations.
                 });
                 const summary = await (config.wire
                   ? config.wire.withContext({ purpose: 'compaction' }, summarise)
@@ -1195,6 +1406,11 @@ export class Orchestrator {
             if (compacted.length < before) {
               currentMessages.length = 0;
               currentMessages.push(...compacted);
+              // A compacted message no longer exists in the history, so its echo must not be replayed.
+              if (echoes.size > 0) {
+                const liveIds = new Set(currentMessages.map((m) => m.id));
+                for (const id of [...echoes.keys()]) if (!liveIds.has(id)) echoes.delete(id);
+              }
               lastReportedContext = undefined; // recompute against the compacted history
               logger.debug(
                 { taskId, before, after: currentMessages.length, window: decision.window },
@@ -1225,6 +1441,8 @@ export class Orchestrator {
         // wall-clock `latency_ms` (see DESIGN.md §6). Captured right before the
         // MODEL_REQUEST event so it brackets exactly the provider.chat() call below.
         const modelCallStartedAt = Date.now();
+        // P6: engine time between the previous model call ending and this request starting.
+        const callOverheadMs = computeOverheadMs(lastModelCallEndedAt, modelCallStartedAt);
 
         taskStore.appendEvent({
           taskId,
@@ -1252,10 +1470,15 @@ export class Orchestrator {
           tools,
         });
 
+        // Enforcement handlers get a COPY of the history array, never `currentMessages` itself: a handler
+        // may replace an element of the copy (the host's tool-result notes do) and what it leaves there is
+        // what the provider is sent, while the history (session store, observers, the compaction
+        // summariser, the next turn's windowing) keeps the messages exactly as the tools produced them.
+        const requestMessages: Message[] = [...currentMessages];
         try {
           await hooks.enforce('pre:model_request', {
             executionContext,
-            messages: currentMessages,
+            messages: requestMessages,
             tools,
           });
         } catch (err: unknown) {
@@ -1266,10 +1489,55 @@ export class Orchestrator {
         }
 
         let providerResponse;
+        // R10 S5b: tool-result bytes of the request history, excluding host-added notes (set once the history is final).
+        let toolResultBytesIn: number | undefined;
         // GOV (f9dadeaa): the first fatal governance error a bridged call hit (cap / budget /
         // delegation). The bridge can only hand the CLI an isError result, so the task-level failure
         // the native path throws is re-thrown here once the provider call returns.
         let bridgeFatal: unknown;
+        // R9-hist: the first error `beforeContinuation` rejected with (cancelled / budget cap / hook
+        // failure). Provider wrappers may re-classify an error thrown through `chat()`; the engine keeps
+        // the original and re-throws it, so the cap's identity (BUDGET_EXCEEDED) survives any wrapping.
+        let continuationFatal: unknown;
+        // Awaited by a provider that continues a paused turn (`pause_turn`) BEFORE each continuation
+        // request: abort check, then the same `pre:model_request` enforcement a normal turn gets (so a
+        // budget cap trips mid-loop), then the progress event.
+        const beforeContinuation = async (n: number): Promise<void> => {
+          try {
+            if (signal.aborted) {
+              throw new ToolError('PROVIDER_ERROR', 'Task was cancelled');
+            }
+            // ENFORCE only, never `emit`: the observational `pre:model_request` handlers open and close
+            // per-turn records (tracing's `agent.model_call` span, ops-log's turn counter, the budget
+            // plugin's call timer) against the ONE `post:model_response` a paused turn produces, so an
+            // extra emit per continuation would split the turn and leave unpaired opens. Budget and
+            // USD caps live in the enforcement handlers, which keep no emit-set state.
+            // A throwaway copy: the continuation re-sends the request the provider already holds, so
+            // nothing an enforcement handler does to the array can (or should) reach `currentMessages`.
+            const requestPayload = { executionContext, messages: [...currentMessages], tools };
+            try {
+              await hooks.enforce('pre:model_request', requestPayload);
+            } catch (err: unknown) {
+              if (isEnforcementError(err)) {
+                throw new ToolError('BUDGET_EXCEEDED', err.message);
+              }
+              throw err;
+            }
+          } catch (err) {
+            continuationFatal ??= err;
+            throw err;
+          }
+          taskStore.appendEvent({ taskId, type: 'provider:pause_continued', payload: { n } });
+        };
+        // R10 S5b: the signals known from the request alone (the call may have failed before any response).
+        const requestSignals = (): Pick<PostModelResponsePayload, 'thinkingConfig' | 'toolResultBytesIn' | 'turnIndex'> => {
+          const thinkingConfig = thinkingConfigOf(runSelection.providerType, runSelection.thinking);
+          return {
+            turnIndex: toolTurnIndex,
+            ...(thinkingConfig !== undefined ? { thinkingConfig } : {}),
+            ...(toolResultBytesIn !== undefined ? { toolResultBytesIn } : {}),
+          };
+        };
         // afa37093: spend of a provider call that produced no usable response (CLI error result,
         // abort, timeout, crash) or whose response is discarded (fatal governance error). Recorded through
         // the SAME hook + MODEL_RESPONSE event a normal turn uses, so task_usage and every grain of
@@ -1285,7 +1553,8 @@ export class Orchestrator {
             };
             const modelCalls = partial.usage ? partial.reportedModelCalls ?? 1 : 0;
             const toolCallCount = partial.reportedToolUses ?? 0;
-            const failedComputeMs = Date.now() - modelCallStartedAt;
+            const failedEndedAt = Date.now();
+            const failedComputeMs = failedEndedAt - modelCallStartedAt;
             await hooks.emit('post:model_response', {
               executionContext,
               stopReason: 'error',
@@ -1294,6 +1563,8 @@ export class Orchestrator {
               tokenUsage: usage,
               responseModel: partial.responseModel,
               computeMs: failedComputeMs,
+              ...(callOverheadMs !== undefined ? { overheadMs: callOverheadMs } : {}),
+              ...requestSignals(),
             });
             taskStore.appendEvent({
               taskId,
@@ -1309,25 +1580,42 @@ export class Orchestrator {
                   rawUsage: partial.rawUsage,
                 },
                 failedComputeMs,
-                { failed: true, failure }
+                { failed: true, failure },
+                callOverheadMs
               ),
             });
+            lastModelCallEndedAt = failedEndedAt;
           } catch (recordErr) {
             logger.warn({ taskId, err: recordErr }, 'Failed to record usage of a failed provider call');
           }
         };
         try {
-          const baseMessages =
-            contextLimit > 0
-              ? windowMessages(currentMessages, contextLimit)
-              : currentMessages;
-          let messagesToSend = baseMessages;
-          if (toolDocSystemMessage) {
-            messagesToSend =
-              baseMessages[0]?.role === 'system'
-                ? [toolDocSystemMessage, ...baseMessages.slice(1)]
-                : [toolDocSystemMessage, ...baseMessages];
+          const shapeForRequest = (history: Message[]): Message[] => {
+            const windowed =
+              contextLimit > 0 ? windowMessages(history, contextLimit) : history;
+            if (!toolDocSystemMessage) return windowed;
+            return windowed[0]?.role === 'system'
+              ? [toolDocSystemMessage, ...windowed.slice(1)]
+              : [toolDocSystemMessage, ...windowed];
+          };
+          // What every observer and the history hold: windowed and tool-doc'd from the real history.
+          const observedMessages = shapeForRequest(currentMessages);
+          // What the provider is sent: the same window with any element an enforcement handler replaced
+          // on the request copy swapped in (a handler that restructured the array instead is honoured as is).
+          const replaced = new Map<Message, Message>();
+          if (requestMessages.length === currentMessages.length) {
+            requestMessages.forEach((m, i) => {
+              if (m !== currentMessages[i]) replaced.set(currentMessages[i], m);
+            });
           }
+          let messagesToSend = observedMessages;
+          if (requestMessages.length !== currentMessages.length) {
+            messagesToSend = shapeForRequest(requestMessages);
+          } else if (replaced.size > 0) {
+            messagesToSend = observedMessages.map((m) => replaced.get(m) ?? m);
+          }
+          // Measured on the un-noted history so it matches `resultBytes`, which also excludes host notes.
+          toolResultBytesIn = toolResultBytesInOf(runSelection.providerType, observedMessages);
           // Provider-native web tools (default on, opt out via
           // nativeWebTools:false) — see server-side-tools.ts (backlog 1abd2d84).
           const serverSideTools = serverSideToolsForProvider(
@@ -1340,6 +1628,10 @@ export class Orchestrator {
             serverSideTools:
               serverSideTools.length > 0 ? serverSideTools : undefined,
             signal: composedSignal,
+            // R9-hist: a copy, so a provider holding the map never sees later entries; omitted when empty
+            // so a request without echo is exactly the request it was.
+            ...(!echoesDisabled && echoes.size > 0 ? { echoes: new Map(echoes) } : {}),
+            beforeContinuation,
             builtinToolPolicy: (builtinTool) =>
               config.permissionGate
                 ? config.permissionGate({
@@ -1449,7 +1741,9 @@ export class Orchestrator {
                 const client = await registry.getClient(target.server);
                 rawResult = await toolLimiter.run(
                   () =>
-                    client.callTool(target.tool, callArguments, composedSignal),
+                    runInToolCallScope(taskId, callId, () =>
+                      client.callTool(target.tool, callArguments, composedSignal)
+                    ),
                   composedSignal
                 );
               } catch (error) {
@@ -1458,6 +1752,8 @@ export class Orchestrator {
                 rawResult = error instanceof Error ? error.message : String(error);
               }
 
+              // 61358b6f: structured exit status from the shim trailer (success path only).
+              const exitStatus = isErr ? undefined : parseShellExitStatus(target.tool, rawResult);
               const fullText =
                 typeof rawResult === 'string' ? rawResult : JSON.stringify(rawResult);
               const { tokens: estTokens, estimated: estTokensEstimated } =
@@ -1483,6 +1779,7 @@ export class Orchestrator {
                   callId,
                   tool: qualifiedToolName,
                   isError: isErr,
+                  ...(exitStatus !== undefined ? { exitStatus } : {}),
                   result: (fullText ?? '').slice(0, 500),
                   tool_call_est_result_tokens: estTokens,
                   ...(estTokensEstimated
@@ -1516,6 +1813,7 @@ export class Orchestrator {
                 result: rawResult,
                 isError: isErr,
                 ...(isDenial ? { isDenial: true } : {}),
+                ...(exitStatus !== undefined ? { exitStatus } : {}),
                 estResultTokens: estTokens,
               });
               const transformPayload: PostToolCallPayload = {
@@ -1547,11 +1845,13 @@ export class Orchestrator {
           if (spent) {
             let failure = 'provider_error';
             if (bridgeFatal !== undefined) failure = 'governance_fatal';
+            else if (continuationFatal !== undefined) failure = signal.aborted ? 'cancelled' : 'governance_fatal';
             else if (signal.aborted) failure = 'cancelled';
             else if (composedSignal.aborted) failure = 'timeout';
             await recordDiscardedUsage(spent, failure);
           }
           if (bridgeFatal !== undefined) throw bridgeFatal;
+          if (continuationFatal !== undefined) throw continuationFatal;
           if (signal.aborted) {
             throw new ToolError('PROVIDER_ERROR', 'Task was cancelled');
           }
@@ -1573,6 +1873,18 @@ export class Orchestrator {
           // from status/message text below would flatten billing/overloaded to PROVIDER_ERROR and
           // drop the reset time. The string rules below are only the fallback for untyped throws.
           // (de6bee5d FLT-AC1)
+          // R9-hist: a turn still paused after the provider's continuation cap is a FAILED task, never a
+          // completed one. The cap error may arrive wrapped (a re-classifying wrapper keeps the marker in
+          // `data.kind` / `cause`), so normalise it to PROVIDER_ERROR here.
+          if (isPauseTurnCapError(error)) {
+            throw error instanceof ToolError && error.code === 'PROVIDER_ERROR'
+              ? error
+              : new ToolError(
+                  'PROVIDER_ERROR',
+                  error instanceof Error ? error.message : 'provider paused the turn without finishing',
+                  (error as { data?: unknown }).data
+                );
+          }
           if (error instanceof ToolError) {
             throw error;
           }
@@ -1620,6 +1932,7 @@ export class Orchestrator {
             }`
           );
         }
+        if (bridgeFatal === undefined && continuationFatal !== undefined) bridgeFatal = continuationFatal;
         if (bridgeFatal !== undefined) {
           // The CLI returned normally and was billed for the whole run; the engine discards the
           // response for the fatal governance error but must still account the spend. (afa37093 AC2)
@@ -1650,6 +1963,35 @@ export class Orchestrator {
           assistantMessage
         );
         currentMessages.push(assistantMessage);
+        // R9-hist: keep (and persist) the provider-native content of this turn, or, when the provider
+        // had to retry without the replay, stop echoing for the rest of the run and self-heal the session.
+        if (providerResponse.echoDegraded !== undefined && !echoesDisabled) {
+          echoesDisabled = true;
+          echoes.clear();
+          taskStore.appendEvent({
+            taskId,
+            type: 'provider:history_degraded',
+            payload: {
+              reason: degradedReason(providerResponse.echoDegraded.apiMessage),
+              echoedMessages: providerResponse.echoDegraded.echoedMessages,
+              healed: true,
+            },
+          });
+          logger.warn(
+            { taskId, echoedMessages: providerResponse.echoDegraded.echoedMessages },
+            'provider rejected the replayed history; retried without it and cleared the session echo'
+          );
+          try {
+            sessionStore.deleteMessageEchoes?.(executionContext.sessionId);
+          } catch (err) {
+            warnEchoFailureOnce(logger, 'deleteMessageEchoes', err);
+          }
+        } else if (providerResponse.echo !== undefined && !echoesDisabled) {
+          // The live run replays the full echo (never capped or expired mid-run: prefix stability); what
+          // is PERSISTED for later tasks is decided by the caps and the sanitize veto.
+          echoes.set(assistantMessage.id, providerResponse.echo);
+          await persistEcho(assistantMessage.id, providerResponse.echo);
+        }
         // Record the provider's own context measurement to drive compaction decisions. Use the
         // TRUE per-response context: `peakContextTokens` when the provider reports it (claudecli
         // folds several CLI turns into one response whose `inputTokens` is their cumulative SUM,
@@ -1661,12 +2003,16 @@ export class Orchestrator {
           lastReportedContext = reportedContext;
         }
         // compute_ms: MODEL_RESPONSE.created_at - MODEL_REQUEST.created_at for this turn.
-        const computeMs = Date.now() - modelCallStartedAt;
+        const callEndedAt = Date.now();
+        const computeMs = callEndedAt - modelCallStartedAt;
+        lastModelCallEndedAt = callEndedAt;
         // Prefer the provider's own count of tools it ran internally (claudecli); otherwise
         // the tool calls the orchestrator loop is about to execute. Accounting only —
         // loop control still keys off assistantMessage.toolCalls / executionContext.
         const reportedToolCallCount =
           providerResponse.reportedToolUses ?? assistantMessage.toolCalls?.length ?? 0;
+        // R10 S5b: count the response's thinking blocks (absent for a provider that cannot produce them).
+        const thinkingBlocks = thinkingBlocksOf(runSelection.providerType, providerResponse.echo);
         await hooks.emit('post:model_response', {
           executionContext,
           stopReason: providerResponse.stopReason,
@@ -1675,6 +2021,10 @@ export class Orchestrator {
           tokenUsage: providerResponse.usage,
           responseModel: providerResponse.responseModel,
           computeMs,
+          ...(providerResponse.ttfbMs !== undefined ? { ttfbMs: providerResponse.ttfbMs } : {}),
+          ...(callOverheadMs !== undefined ? { overheadMs: callOverheadMs } : {}),
+          ...requestSignals(),
+          ...(thinkingBlocks !== undefined ? { thinkingBlocks } : {}),
         });
         await hooks.emit('message:appended', {
           executionContext,
@@ -1690,7 +2040,9 @@ export class Orchestrator {
               reportedToolCallCount,
               !!assistantMessage.content
             ),
-            computeMs
+            computeMs,
+            {},
+            callOverheadMs
           ),
         });
 
@@ -1710,6 +2062,33 @@ export class Orchestrator {
         }
 
         const toolCalls = assistantMessage.toolCalls ?? [];
+
+        // R10 P1: classify every non-HITL call of the turn ONCE, before any is governed, so the
+        // `pre:tool_call` event can name its class and ordered group and Phase 2 schedules by the same
+        // answer. Delegation tools are `unordered`; the registry's own `toolClass` (server-advertised
+        // annotations) wins over a lookup in the advertised list when the registry has one.
+        const classOfCall = (tc: { server: string; tool: string }): ToolSchedulingClass => {
+          const resolved = registry.resolveToolName?.(`${tc.server}__${tc.tool}`) ?? {
+            server: tc.server,
+            tool: tc.tool,
+          };
+          const qualified = `${resolved.server}__${resolved.tool}`;
+          return schedulingClassOf(
+            qualified,
+            tools.find((t) => t.name === qualified),
+            registry.toolClass
+              ? () => registry.toolClass!(resolved.server, resolved.tool)
+              : undefined
+          );
+        };
+        const plannedCalls = toolCalls.filter((tc) => tc.tool !== HITL_TOOL_NAME);
+        const plannedClasses = plannedCalls.map(classOfCall);
+        const plannedGroups = assignGroups(plannedClasses);
+        const schedulingByCallId = new Map(
+          plannedCalls.map((tc, i) => [tc.id, { cls: plannedClasses[i], group: plannedGroups[i] }] as const)
+        );
+        // The `pre:tool_call` payloads of the calls that were governed, by call id (completed at start).
+        const prePayloads = new Map<string, PreToolCallPayload>();
 
         // Phase 1 — serial pre-dispatch loop
         const hitlResults = new Map<string, string>();
@@ -1868,10 +2247,19 @@ export class Orchestrator {
             continue;
           }
 
+          const planned = schedulingByCallId.get(tc.id);
           const governed = await governToolCall(
             { id: tc.id, server: tc.server, tool: tc.tool, arguments: tc.arguments },
-            false
+            false,
+            planned === undefined
+              ? undefined
+              : {
+                  concurrencyClass: planned.cls,
+                  turnIndex: toolTurnIndex,
+                  groupIndex: planned.group,
+                }
           );
+          if (governed.prePayload) prePayloads.set(tc.id, governed.prePayload);
           if (governed.refused) {
             warningResults.set(tc.id, governed.refused);
             continue;
@@ -1882,16 +2270,30 @@ export class Orchestrator {
         // concurrently, at most `config.toolCallConcurrency` in flight (default
         // DEFAULT_TOOL_CALL_CONCURRENCY); results keep call order. HITL calls
         // were handled above and never enter the pool.
+        // R10 P1: ordered by class. A write/edit/shell call (barrier) starts only after every earlier
+        // read or write of the turn has settled and every later one waits for it; reads between
+        // barriers still overlap; delegation tools (unordered) never wait and never block. Results
+        // keep call order, so a failed barrier still leaves every later call with its own result.
         const nonHitlToolCalls = toolCalls.filter(
           (tc) => tc.tool !== HITL_TOOL_NAME && !warningResults.has(tc.id)
         );
-        const toolResults = await toolLimiter.map(
+        const toolResults = await toolLimiter.mapOrdered(
           nonHitlToolCalls,
-          async (toolCall) => {
+          async (toolCall, startMeta) => {
             const resolved = registry.resolveToolName?.(
               `${toolCall.server}__${toolCall.tool}`
             ) ?? { server: toolCall.server, tool: toolCall.tool };
             const qualifiedToolName = `${resolved.server}__${resolved.tool}`;
+
+            // R10: the call starts now. Complete the `pre:tool_call` payload that fired during
+            // governance with what only exists at start: the group it actually ran in (refused
+            // calls leave the plan, so this can differ from the planned index) and how long it
+            // waited for a slot or an earlier barrier.
+            const prePayload = prePayloads.get(toolCall.id);
+            if (prePayload) {
+              prePayload.groupIndex = startMeta.groupIndex;
+              prePayload.queuedMs = startMeta.queuedMs;
+            }
 
             emit({
               type: 'tool_call',
@@ -1926,6 +2328,8 @@ export class Orchestrator {
             let toolResult: unknown;
             let isError = false;
             let isDenial = false;
+            let argMismatch = false;
+            let argCoerced = false;
             try {
               // BK2 (114e014c): tolerate a model stringifying an array/object
               // argument, driven by the tool's declared input schema.
@@ -1941,9 +2345,11 @@ export class Orchestrator {
                   toolCall.arguments
                 );
                 if (coerced.mismatch) {
+                  argMismatch = true;
                   throw new Error(coerced.mismatch.message);
                 }
                 callArguments = coerced.arguments;
+                argCoerced = coerced.coercions.length > 0;
                 for (const c of coerced.coercions) {
                   logger.warn(
                     {
@@ -1969,10 +2375,10 @@ export class Orchestrator {
                 }
               }
               const client = await registry.getClient(resolved.server);
-              toolResult = await client.callTool(
-                resolved.tool,
-                callArguments,
-                composedSignal
+              // R10 S5b: the id of THIS tool call travels with the invocation so a dispatching tool can
+              // name it on `dispatch:completed` (concurrent calls on one parent share one context).
+              toolResult = await runInToolCallScope(taskId, toolCall.id, () =>
+                client.callTool(resolved.tool, callArguments, composedSignal)
               );
 
               if (
@@ -2007,6 +2413,11 @@ export class Orchestrator {
                 'TOOL_RESULT error'
               );
             }
+
+            // 61358b6f: structured exit status from the shim trailer (success path only).
+            const exitStatus = isError
+              ? undefined
+              : parseShellExitStatus(resolved.tool, toolResult);
 
             // Tokenize the FULL, untruncated result BEFORE the 500-char truncation
             // below — tokenizing the already-truncated summary would undercount
@@ -2050,6 +2461,7 @@ export class Orchestrator {
                 callId: toolCall.id,
                 tool: qualifiedToolName,
                 isError,
+                ...(exitStatus !== undefined ? { exitStatus } : {}),
                 result: resultSummary,
                 tool_call_est_result_tokens: toolCallEstResultTokens,
                 ...(toolCallEstResultTokensEstimated
@@ -2087,7 +2499,22 @@ export class Orchestrator {
               result: toolResult,
               isError,
               ...(isDenial ? { isDenial: true } : {}),
+              ...(exitStatus !== undefined ? { exitStatus } : {}),
               estResultTokens: toolCallEstResultTokens,
+              // R10 trace signals. `resultBytes` is the model-visible text AFTER the size cap / spill
+              // and BEFORE `transform:tool_result` and the provider wire encoding. `noteAppended` is
+              // deliberately absent: it is set by the host's own `post:tool_call` handler when it records
+              // a note, and the note itself is applied to the outgoing request copy at `pre:model_request`
+              // enforcement, so it never reaches `resultBytes`, the history or any observer.
+              errorClass: classifyToolCallOutcome({
+                isError,
+                isDenial,
+                argMismatch,
+                argCoerced,
+                ...(exitStatus !== undefined ? { exitStatus } : {}),
+                ...(isError && typeof toolResult === 'string' ? { errorText: toolResult } : {}),
+              }),
+              resultBytes: modelVisibleBytes(modelVisibleResult),
             });
 
             return {
@@ -2096,7 +2523,8 @@ export class Orchestrator {
               isError,
               estResultTokens: toolCallEstResultTokens,
             };
-          }
+          },
+          (call) => schedulingByCallId.get(call.id)?.cls ?? 'unordered'
         );
 
         // Phase 3 — serial result append

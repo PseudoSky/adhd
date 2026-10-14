@@ -5,6 +5,9 @@
  * (docs/decisions/0009-test-lanes-unit-vs-e2e.md). A HEALTHY sink — a run that completed normally —
  * never contains provider-failure / budget / HITL / permission spans; the default audit must exit 0
  * on it. `--require-all` is the strict mode that still demands every declared path.
+ *
+ * a2a9c6db AC4: the engine emits `agent.task.startup` exactly once per task, so it is an always-expected
+ * path: a sink of a completed run without it fails the default audit.
  */
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -37,6 +40,8 @@ describe('audit_tracing.py on a healthy run (c536ce29 FIX-M1)', () => {
   const healthy = [
     rec('agent.session.start'),
     rec('agent.task.start'),
+    rec('agent.task.startup.start'),
+    rec('agent.task.startup.finish', 0),
     rec('agent.model_call.start'),
     rec('agent.model_call.finish', 12),
     rec('agent.task.finish', 20),
@@ -61,5 +66,18 @@ describe('audit_tracing.py on a healthy run (c536ce29 FIX-M1)', () => {
     const r = run(sink);
     expect(r.status).toBe(1);
     expect(r.stderr).toContain('agent.model_call');
+  });
+
+  it('a2a9c6db AC4: fails (teeth) by default when agent.task.startup never fired, naming it', () => {
+    const sink = writeSink('no-startup', healthy.filter((l) => !l.includes('agent.task.startup')));
+    const r = run(sink);
+    expect(r.status).toBe(1);
+    expect(r.stderr).toContain('agent.task.startup');
+  });
+
+  it('a2a9c6db AC4: the same sink passes once agent.task.startup is present (the control for the case above)', () => {
+    const sink = writeSink('with-startup', healthy);
+    const r = run(sink);
+    expect(r.status, r.stderr).toBe(0);
   });
 });

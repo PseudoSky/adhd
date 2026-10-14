@@ -1,6 +1,6 @@
 /**
- * The production {@link WireSeams} (backlog c536ce29, TRC-AC2/3/5/6/9): the traced `fetch`, `spawn`
- * and MCP-transport wrapper that every engine egress site uses through `EngineConfig.wire`.
+ * The production {@link WireSeams} (backlog c536ce29, TRC-AC2/3/5/6/9; 49cec55e): the traced `fetch`,
+ * `spawn`, `http(s).request` (engine-native web_fetch) and MCP-transport wrapper that every engine egress site uses through `EngineConfig.wire`.
  *
  * Built ONCE per process. The wrappers resolve the process-wide `agent-mcp.api` channel lazily
  * (`getLogChannels().api`), so the same seams are inert before `initLogChannels()` and after
@@ -18,18 +18,21 @@ import { withLogContext } from "@adhd/agent-plugin-tracing";
 
 import { resolveLogRoots, toEngineConfig } from "../config.js";
 import { tracedFetch } from "./traced-fetch.js";
+import { tracedRequest, type WireRequestFn } from "./traced-request.js";
 import { tracedSpawn } from "./traced-spawn.js";
 import { TracedTransport } from "./traced-transport.js";
 
 let seams: WireSeams | undefined;
 
-/** Builds a fresh {@link WireSeams} over `globalThis.fetch` / `node:child_process` `spawn`. */
+/** Builds a fresh {@link WireSeams} over `globalThis.fetch` / `node:child_process` `spawn` / `node:http(s).request`. */
 export function createWireSeams(
-    base: { fetch?: typeof fetch; spawn?: typeof spawn; tempDir?: string } = {}
+    base: { fetch?: typeof fetch; spawn?: typeof spawn; request?: WireRequestFn; tempDir?: string } = {}
 ): WireSeams {
     return {
         // `base` undefined => `globalThis.fetch` resolved per call (a replaced global is honoured).
         fetch: tracedFetch(undefined, base.fetch),
+        // The engine-native web_fetch connects to a validated, pinned IP, so it cannot use `fetch`.
+        request: tracedRequest(undefined, base.request),
         spawn: tracedSpawn(undefined, base.spawn ?? spawn),
         wrapTransport: (t, meta) => new TracedTransport(t, meta),
         withContext: (ctx, fn) => withLogContext(ctx, fn),

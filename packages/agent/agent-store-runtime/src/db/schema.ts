@@ -59,6 +59,38 @@ export const messagesTable = sqliteTable("messages", {
 });
 
 // ──────────────────────────────────────────────
+// message_provider_echo (R9-hist; agent-mcp migration 0017)
+// ──────────────────────────────────────────────
+/**
+ * Provider-native assistant content (an `IProviderEcho`) that a chat history needs to be replayed faithfully,
+ * one row per assistant message. A SIDE table, never a column of `messages`: a previous-version binary ignores
+ * it (so mixed old/new histories stay valid) and the signed, third-party-bearing blocks never ride on a
+ * `Message`. `blocks` is ordered JSON; tier T (thinking, redacted_thinking, text, client tool_use) never expires,
+ * tier S (`server_tool_use` + every `*_tool_result`) expires from replay once the session has been idle past the
+ * TTL. `bytes` = length(blocks); `server_bytes` = the tier S part of it (0 once expiry stripped it). The row's
+ * lifetime follows its message (FK cascade); `session_id` is deliberately NOT a foreign key.
+ */
+export const messageProviderEchoTable = sqliteTable(
+    "message_provider_echo",
+    {
+        messageId: text("message_id")
+            .primaryKey()
+            .references(() => messagesTable.id, {
+                onDelete: "cascade"
+            }),
+        sessionId: text("session_id").notNull(),
+        provider: text("provider").notNull(),
+        model: text("model").notNull(),
+        schemaV: integer("schema_v").notNull().default(1),
+        blocks: text("blocks").notNull(),
+        bytes: integer("bytes").notNull(),
+        serverBytes: integer("server_bytes").notNull().default(0),
+        createdAt: text("created_at").notNull(),
+    },
+    (table) => [index("idx_message_provider_echo_session").on(table.sessionId)]
+);
+
+// ──────────────────────────────────────────────
 // tasks
 // ──────────────────────────────────────────────
 export const tasksTable = sqliteTable("tasks", {
@@ -107,6 +139,8 @@ export const taskEventsTable = sqliteTable(
                 "TOOL_ARG_COERCED",
                 "budget:unpriced_model",
                 "provider:builtin_bypass",
+                "provider:history_degraded",
+                "provider:pause_continued",
                 "TASK_COMPLETED",
                 "TASK_FAILED",
                 "TASK_CANCELLED"

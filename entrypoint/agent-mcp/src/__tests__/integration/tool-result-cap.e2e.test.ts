@@ -113,27 +113,27 @@ async function runOnce(toolResult?: { maxChars: number }): Promise<Run> {
 }
 
 describe("3ad735bb AC1.5 tool-result cap through the real orchestrator + real stdio MCP server (plan 9ed453c1)", () => {
-    it("default cap: the model sees head+marker+tail (<= cap + marker); telemetry saw the full result", async () => {
+    it("f7e5a502 AC1 AC2 AC3 AC4 default cap: the model sees head+marker+tail (<= cap + marker); telemetry saw the full result", async () => {
         const r = await runOnce();
         const marker = r.seenByModel.match(/\[tool result truncated: showing first (\d+) and last (\d+) of (\d+) chars; re-run with a narrower command \(e\.g\. grep, head, sed -n 'a,bp'\)\]/);
         expect(marker, "marker must be present with the exact format").not.toBeNull();
         expect(Number(marker?.[1])).toBe(4_500);
         expect(Number(marker?.[2])).toBe(1_500);
-        // The MCP client returns the content array ([{type:'text',text}]); the cap measures its
-        // JSON serialization, which is what the model is shown.
-        expect(Number(marker?.[3])).toBe(r.hookResultChars);
+        // The MCP client returns the content array ([{type:'text',text}]); for an all-text array the
+        // cap measures the extracted text (R10 S1), so the marker counts the fixture's real chars. (f7e5a502 AC1, AC4)
+        expect(Number(marker?.[3])).toBe(TOTAL);
         expect(r.hookResultChars).toBeGreaterThanOrEqual(TOTAL);
         // bounded: cap (6000) + marker + 2 joining newlines
         expect(r.seenByModel.length).toBeLessThanOrEqual(6_000 + (marker?.[0].length ?? 0) + 2);
         expect(r.seenByModel.length).toBeLessThan(r.hookResultChars / 4);
         // head and tail of the original survive
         expect(r.seenByModel).toContain("L000001:");
-        expect(r.seenByModel.slice(-30)).toMatch(/x"\}\]$/); // tail of the serialized original
+        expect(r.seenByModel.slice(-30)).toMatch(/x{30}$/); // tail of the extracted-text original (f7e5a502 AC2)
         // telemetry measured the FULL result
         expect(r.hookEstTokens).toBeGreaterThan(5_000);
         expect(r.toolResultEvent["tool_call_est_result_tokens"]).toBe(r.hookEstTokens);
         expect(r.toolResultEvent["truncated"]).toBe(true);
-        expect(r.toolResultEvent["original_chars"]).toBe(r.hookResultChars);
+        expect(r.toolResultEvent["original_chars"]).toBe(TOTAL); // f7e5a502 AC3
         // persisted history stores what the model saw
         expect(r.persistedChars).toBe(r.seenByModel.length);
     }, 60_000);

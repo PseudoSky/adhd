@@ -1,4 +1,5 @@
 import type { spawn } from 'node:child_process';
+import type { ClientRequest, RequestOptions } from 'node:http';
 
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 
@@ -74,6 +75,9 @@ export type PermissionGate = (
  */
 export const DEFAULT_PROVIDER_TIMEOUT_MS = 300_000;
 
+/** The socket-level request function the engine-native `web_fetch` connects through (see {@link WireSeams.request}). */
+export type WireRequestFn = (options: RequestOptions & { protocol: string; servername?: string }) => ClientRequest;
+
 /**
  * The outbound-I/O seams the host injects so every API call the engine makes can be logged raw
  * (backlog c536ce29). ADR-0006 dependency injection: the engine never imports the logging
@@ -85,6 +89,14 @@ export const DEFAULT_PROVIDER_TIMEOUT_MS = 300_000;
 export interface WireSeams {
   /** Replacement for `globalThis.fetch` used by every provider HTTP call. */
   fetch: typeof fetch;
+  /**
+   * Replacement for `node:http(s).request` used by the engine-native `web_fetch`, which connects to a
+   * validated, pinned IP and therefore cannot go through {@link WireSeams.fetch} (a fetch
+   * implementation resolves the name a second time, defeating the pin). Receives `protocol` in its
+   * options so one function serves both schemes. Optional: when absent the tool uses the plain
+   * `node:http`/`node:https` request functions and nothing is logged for it.
+   */
+  request?: WireRequestFn;
   /** Replacement for `child_process.spawn` used to launch subprocess providers/servers. */
   spawn: typeof spawn;
   /**
@@ -137,6 +149,13 @@ export interface EngineConfig {
     spill?: import('./engine/tool-result-spill.js').ToolResultSpillConfig;
   };
   /**
+   * Provider-echo persistence limits (R9-hist; config keys `echo.*`). Absent => the orchestrator
+   * persists no provider echo. See `providers/anthropic-echo.ts` `partitionEcho`.
+   */
+  echo?: import('./providers/anthropic-echo.js').EchoCaps;
+  /** Wall-clock source in epoch ms (default `Date.now`); tests inject a fake so TTL logic never sleeps. */
+  now?: () => number;
+  /**
    * Schema-driven tolerance for stringified array/object tool arguments
    * (backlog 114e014c, `engine/tool-arg-coercion.ts`). Absent => enabled.
    * `enabled: false` is the negative-control switch for tests.
@@ -153,6 +172,14 @@ export interface EngineConfig {
    * `task` tool's `background` default.
    */
   toolCallConcurrency?: number;
+  /**
+   * Engine-native `web_fetch` tool (`tools/web-fetch.ts`), advertised to providers that cannot take
+   * Anthropic's server-side web tools. `allowedDomains` is the egress allow-list (srt-style exact
+   * host or `*.suffix`); absent => open egress.
+   */
+  webFetch?: {
+    allowedDomains?: string[];
+  };
   queue: {
     /** Max concurrent background tasks. */
     concurrency: number;

@@ -7,6 +7,8 @@ import { nowIso } from "../utils/timestamps.js";
 import { resolveToolCallName } from "../clients/tool-naming.js";
 import { DEFAULT_PROVIDER_TIMEOUT_MS } from "../interfaces.js";
 import { sdkFetchOption } from "./wire.js";
+import { normalizeToolForWire } from "./tool-schema.js";
+import { isMcpContentArray, mcpContentText } from "../engine/tool-result-cap.js";
 import type { EngineConfig } from "../interfaces.js";
 
 import type { ProviderConfig, Message, ToolCall } from "../validation/index.js";
@@ -96,7 +98,7 @@ function toOpenAIMessages(messages: Message[]): ChatCompletionMessageParam[] {
                 return {
                     role: "tool",
                     tool_call_id: toolResult.toolCallId,
-                    content: JSON.stringify(toolResult.result),
+                    content: toOpenAIToolContent(toolResult.result),
                 };
             }
             default: {
@@ -107,20 +109,47 @@ function toOpenAIMessages(messages: Message[]): ChatCompletionMessageParam[] {
     });
 }
 
+/**
+ * The `role:"tool"` message content for a stored tool result. OpenAI-compatible APIs (DeepSeek included) take a
+ * plain string here, never a content-part array (R10 S1 P5-A2). An MCP array of text blocks is sent as its text
+ * (non-empty block texts joined by a newline); an MCP array that also holds a non-text block is sent as one string in
+ * which each text block is its raw text and each other block (image, audio, resource, ...) is that block's JSON, one
+ * per line in order, so nothing is dropped and the whole array is never JSON-encoded into a string; a string result
+ * is verbatim; anything else is its JSON once.
+ */
+export function toOpenAIToolContent(result: unknown): string {
+    const text = mcpContentText(result);
+    if (text !== undefined) return text;
+    if (isMcpContentArray(result)) {
+        return result
+            .map(b => (b.type === "text" ? (b["text"] as string) : JSON.stringify(b)))
+            .filter(t => t !== "")
+            .join("\n");
+    }
+    if (typeof result === "string") return result;
+    return JSON.stringify(result) ?? "";
+}
+
+/**
+ * The `tools` array entries. A top-level `oneOf` / `anyOf` / `allOf` in a tool's `inputSchema` is flattened by
+ * {@link normalizeToolForWire} (OpenAI-compatible function `parameters` must be a plain object schema; one tool with a
+ * root combinator would otherwise fail every request, 020307a5); a schema that cannot be flattened throws a
+ * `PROVIDER_INVALID_REQUEST` naming `tools.<n>`. The registered definitions are never mutated.
+ */
 function toOpenAITools(tools?: ToolDefinition[]): ChatCompletionTool[] | undefined {
     if (!tools) return undefined;
 
-    return tools.map(tool => ({
-        type: "function" as const,
-        function: {
-            name: tool.name,
-            description: tool.description || "",
-            parameters: (tool.inputSchema || {
-                type: "object",
-                properties: {},
-            }) as Record<string, unknown>,
-        },
-    }));
+    return tools.map((tool, index) => {
+        const wire = normalizeToolForWire(tool, index);
+        return {
+            type: "function" as const,
+            function: {
+                name: tool.name,
+                description: wire.description,
+                parameters: wire.inputSchema,
+            },
+        };
+    });
 }
 
 export class OpenAIProvider implements LLMProvider {
@@ -161,6 +190,8 @@ export class OpenAIProvider implements LLMProvider {
 
     async chat(request: ProviderChatRequest): Promise<ProviderChatResponse> {
         const retryConfig = this.providerConfig.retryConfig;
+        // Built once, before any attempt: a tool schema that cannot be normalised is a request fault, never retried.
+        const wireTools = toOpenAITools(request.tools);
 
         const run = async (): Promise<ProviderChatResponse> => {
             const response = await this.client.chat.completions.create(
@@ -169,7 +200,7 @@ export class OpenAIProvider implements LLMProvider {
                     temperature: this.providerConfig.temperature,
                     max_tokens: this.providerConfig.maxTokens,
                     messages: toOpenAIMessages(request.messages),
-                    tools: toOpenAITools(request.tools),
+                    tools: wireTools,
                 },
                 { signal: request.signal }
             );

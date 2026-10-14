@@ -1,0 +1,1178 @@
+{
+  "A1": {
+    "arm": "A",
+    "tasks": [
+      {
+        "id": "phase1",
+        "advertised": [
+          "Task",
+          "Bash",
+          "CronCreate",
+          "CronDelete",
+          "CronList",
+          "DesignSync",
+          "Edit",
+          "EnterWorktree",
+          "ExitWorktree",
+          "ListAgents",
+          "Monitor",
+          "NotebookEdit",
+          "PushNotification",
+          "Read",
+          "RemoteTrigger",
+          "ReportFindings",
+          "ScheduleWakeup",
+          "SendMessage",
+          "Skill",
+          "TaskStop",
+          "WebFetch",
+          "WebSearch",
+          "Workflow",
+          "Write",
+          "mcp__r2info__get_ticket"
+        ],
+        "calls": [
+          {
+            "name": "Bash",
+            "server": false,
+            "depth": 0
+          },
+          {
+            "name": "mcp__r2info__get_ticket",
+            "server": false,
+            "depth": 0
+          },
+          {
+            "name": "Bash",
+            "server": false,
+            "depth": 0
+          },
+          {
+            "name": "WebFetch",
+            "server": false,
+            "depth": 0
+          },
+          {
+            "name": "Agent",
+            "server": false,
+            "depth": 0
+          },
+          {
+            "name": "Read",
+            "server": false,
+            "depth": 1
+          },
+          {
+            "name": "Read",
+            "server": false,
+            "depth": 1
+          },
+          {
+            "name": "Read",
+            "server": false,
+            "depth": 1
+          },
+          {
+            "name": "Edit",
+            "server": false,
+            "depth": 1
+          },
+          {
+            "name": "Agent",
+            "server": false,
+            "depth": 0
+          },
+          {
+            "name": "Edit",
+            "server": false,
+            "depth": 1
+          },
+          {
+            "name": "Read",
+            "server": false,
+            "depth": 0
+          },
+          {
+            "name": "Read",
+            "server": false,
+            "depth": 1
+          },
+          {
+            "name": "Bash",
+            "server": false,
+            "depth": 1
+          },
+          {
+            "name": "Read",
+            "server": false,
+            "depth": 1
+          },
+          {
+            "name": "Edit",
+            "server": false,
+            "depth": 0
+          },
+          {
+            "name": "Bash",
+            "server": false,
+            "depth": 1
+          },
+          {
+            "name": "Bash",
+            "server": false,
+            "depth": 0
+          },
+          {
+            "name": "Bash",
+            "server": false,
+            "depth": 0
+          },
+          {
+            "name": "Bash",
+            "server": false,
+            "depth": 1
+          },
+          {
+            "name": "Write",
+            "server": false,
+            "depth": 1
+          },
+          {
+            "name": "Edit",
+            "server": false,
+            "depth": 1
+          },
+          {
+            "name": "Bash",
+            "server": false,
+            "depth": 0
+          },
+          {
+            "name": "Bash",
+            "server": false,
+            "depth": 0
+          },
+          {
+            "name": "Bash",
+            "server": false,
+            "depth": 0
+          }
+        ]
+      },
+      {
+        "id": "phase2",
+        "advertised": [
+          "Task",
+          "Bash",
+          "CronCreate",
+          "CronDelete",
+          "CronList",
+          "DesignSync",
+          "Edit",
+          "EnterWorktree",
+          "ExitWorktree",
+          "ListAgents",
+          "Monitor",
+          "NotebookEdit",
+          "PushNotification",
+          "Read",
+          "RemoteTrigger",
+          "ReportFindings",
+          "ScheduleWakeup",
+          "SendMessage",
+          "Skill",
+          "TaskStop",
+          "WebFetch",
+          "WebSearch",
+          "Workflow",
+          "Write",
+          "mcp__r2info__get_ticket"
+        ],
+        "calls": [
+          {
+            "name": "Read",
+            "server": false,
+            "depth": 0
+          },
+          {
+            "name": "Read",
+            "server": false,
+            "depth": 0
+          },
+          {
+            "name": "Edit",
+            "server": false,
+            "depth": 0
+          },
+          {
+            "name": "Bash",
+            "server": false,
+            "depth": 0
+          },
+          {
+            "name": "Agent",
+            "server": false,
+            "depth": 0
+          },
+          {
+            "name": "Read",
+            "server": false,
+            "depth": 1
+          },
+          {
+            "name": "Bash",
+            "server": false,
+            "depth": 0
+          },
+          {
+            "name": "Bash",
+            "server": false,
+            "depth": 1
+          },
+          {
+            "name": "Edit",
+            "server": false,
+            "depth": 1
+          }
+        ]
+      }
+    ]
+  },
+  "B1": {
+    "arm": "B",
+    "tasks": [
+      {
+        "id": "4c8ba6e0-f141-4ad1-b0a1-b1b5262fb5cf",
+        "advertised": [
+          "mcp__agent-mcp__agent",
+          "mcp__agent-mcp__guide",
+          "mcp__agent-mcp__pricing_history",
+          "mcp__agent-mcp__pricing_refresh",
+          "mcp__agent-mcp__result",
+          "mcp__agent-mcp__session_clear",
+          "mcp__agent-mcp__session_close",
+          "mcp__agent-mcp__session_list",
+          "mcp__agent-mcp__session_update",
+          "mcp__agent-mcp__task",
+          "mcp__agent-mcp__task_cancel",
+          "mcp__agent-mcp__task_list",
+          "mcp__agent-mcp__task_resume",
+          "mcp__agent-mcp__tasks_batch",
+          "mcp__agent-mcp__usage_query",
+          "mcp__fs__create_directory",
+          "mcp__fs__directory_tree",
+          "mcp__fs__edit_file",
+          "mcp__fs__get_file_info",
+          "mcp__fs__list_allowed_directories",
+          "mcp__fs__list_directory",
+          "mcp__fs__list_directory_with_sizes",
+          "mcp__fs__move_file",
+          "mcp__fs__read_file",
+          "mcp__fs__read_media_file",
+          "mcp__fs__read_multiple_files",
+          "mcp__fs__read_text_file",
+          "mcp__fs__search_files",
+          "mcp__fs__write_file",
+          "mcp__r2info__get_ticket",
+          "mcp__shell__shell_execute",
+          "mcp__web__web_fetch"
+        ],
+        "calls": [
+          {
+            "name": "mcp__shell__shell_execute",
+            "server": false,
+            "depth": 0
+          },
+          {
+            "name": "mcp__r2info__get_ticket",
+            "server": false,
+            "depth": 0
+          },
+          {
+            "name": "mcp__shell__shell_execute",
+            "server": false,
+            "depth": 0
+          },
+          {
+            "name": "mcp__web__web_fetch",
+            "server": false,
+            "depth": 0
+          },
+          {
+            "name": "mcp__shell__shell_execute",
+            "server": false,
+            "depth": 0
+          },
+          {
+            "name": "mcp__shell__shell_execute",
+            "server": false,
+            "depth": 0
+          },
+          {
+            "name": "mcp__agent-mcp__task",
+            "server": false,
+            "depth": 0
+          },
+          {
+            "name": "mcp__agent-mcp__task",
+            "server": false,
+            "depth": 0
+          },
+          {
+            "name": "mcp__fs__edit_file",
+            "server": false,
+            "depth": 0
+          },
+          {
+            "name": "mcp__agent-mcp__result",
+            "server": false,
+            "depth": 0
+          },
+          {
+            "name": "mcp__agent-mcp__result",
+            "server": false,
+            "depth": 0
+          },
+          {
+            "name": "mcp__shell__shell_execute",
+            "server": false,
+            "depth": 0
+          },
+          {
+            "name": "mcp__shell__shell_execute",
+            "server": false,
+            "depth": 0
+          }
+        ]
+      },
+      {
+        "id": "897b96c2-2f61-43d3-9902-34be3077c325",
+        "advertised": [
+          "mcp__agent-mcp__agent",
+          "mcp__agent-mcp__guide",
+          "mcp__agent-mcp__pricing_history",
+          "mcp__agent-mcp__pricing_refresh",
+          "mcp__agent-mcp__result",
+          "mcp__agent-mcp__session_clear",
+          "mcp__agent-mcp__session_close",
+          "mcp__agent-mcp__session_list",
+          "mcp__agent-mcp__session_update",
+          "mcp__agent-mcp__task",
+          "mcp__agent-mcp__task_cancel",
+          "mcp__agent-mcp__task_list",
+          "mcp__agent-mcp__task_resume",
+          "mcp__agent-mcp__tasks_batch",
+          "mcp__agent-mcp__usage_query",
+          "mcp__fs__create_directory",
+          "mcp__fs__directory_tree",
+          "mcp__fs__edit_file",
+          "mcp__fs__get_file_info",
+          "mcp__fs__list_allowed_directories",
+          "mcp__fs__list_directory",
+          "mcp__fs__list_directory_with_sizes",
+          "mcp__fs__move_file",
+          "mcp__fs__read_file",
+          "mcp__fs__read_media_file",
+          "mcp__fs__read_multiple_files",
+          "mcp__fs__read_text_file",
+          "mcp__fs__search_files",
+          "mcp__fs__write_file",
+          "mcp__shell__shell_execute",
+          "mcp__web__web_fetch"
+        ],
+        "calls": [
+          {
+            "name": "mcp__fs__read_text_file",
+            "server": false,
+            "depth": 1
+          },
+          {
+            "name": "mcp__fs__read_text_file",
+            "server": false,
+            "depth": 1
+          },
+          {
+            "name": "mcp__fs__read_text_file",
+            "server": false,
+            "depth": 1
+          },
+          {
+            "name": "mcp__shell__shell_execute",
+            "server": false,
+            "depth": 1
+          },
+          {
+            "name": "mcp__fs__write_file",
+            "server": false,
+            "depth": 1
+          },
+          {
+            "name": "mcp__shell__shell_execute",
+            "server": false,
+            "depth": 1
+          },
+          {
+            "name": "mcp__shell__shell_execute",
+            "server": false,
+            "depth": 1
+          },
+          {
+            "name": "mcp__shell__shell_execute",
+            "server": false,
+            "depth": 1
+          }
+        ]
+      },
+      {
+        "id": "a2e001a0-1b10-4a4f-b7fa-5d804fea5b1d",
+        "advertised": [
+          "mcp__agent-mcp__agent",
+          "mcp__agent-mcp__guide",
+          "mcp__agent-mcp__pricing_history",
+          "mcp__agent-mcp__pricing_refresh",
+          "mcp__agent-mcp__result",
+          "mcp__agent-mcp__session_clear",
+          "mcp__agent-mcp__session_close",
+          "mcp__agent-mcp__session_list",
+          "mcp__agent-mcp__session_update",
+          "mcp__agent-mcp__task",
+          "mcp__agent-mcp__task_cancel",
+          "mcp__agent-mcp__task_list",
+          "mcp__agent-mcp__task_resume",
+          "mcp__agent-mcp__tasks_batch",
+          "mcp__agent-mcp__usage_query",
+          "mcp__fs__create_directory",
+          "mcp__fs__directory_tree",
+          "mcp__fs__edit_file",
+          "mcp__fs__get_file_info",
+          "mcp__fs__list_allowed_directories",
+          "mcp__fs__list_directory",
+          "mcp__fs__list_directory_with_sizes",
+          "mcp__fs__move_file",
+          "mcp__fs__read_file",
+          "mcp__fs__read_media_file",
+          "mcp__fs__read_multiple_files",
+          "mcp__fs__read_text_file",
+          "mcp__fs__search_files",
+          "mcp__fs__write_file",
+          "mcp__shell__shell_execute",
+          "mcp__web__web_fetch"
+        ],
+        "calls": [
+          {
+            "name": "mcp__fs__list_directory",
+            "server": false,
+            "depth": 1
+          },
+          {
+            "name": "mcp__agent-mcp__agent",
+            "server": false,
+            "depth": 1
+          },
+          {
+            "name": "mcp__agent-mcp__task",
+            "server": false,
+            "depth": 1
+          },
+          {
+            "name": "mcp__fs__read_text_file",
+            "server": false,
+            "depth": 1
+          },
+          {
+            "name": "mcp__fs__read_text_file",
+            "server": false,
+            "depth": 1
+          },
+          {
+            "name": "mcp__fs__create_directory",
+            "server": false,
+            "depth": 1
+          },
+          {
+            "name": "mcp__fs__write_file",
+            "server": false,
+            "depth": 1
+          },
+          {
+            "name": "mcp__fs__edit_file",
+            "server": false,
+            "depth": 1
+          }
+        ]
+      },
+      {
+        "id": "ab211184-2115-4f2a-891a-6727a1f2d0c7",
+        "advertised": [
+          "mcp__agent-mcp__agent",
+          "mcp__agent-mcp__guide",
+          "mcp__agent-mcp__pricing_history",
+          "mcp__agent-mcp__pricing_refresh",
+          "mcp__agent-mcp__result",
+          "mcp__agent-mcp__session_clear",
+          "mcp__agent-mcp__session_close",
+          "mcp__agent-mcp__session_list",
+          "mcp__agent-mcp__session_update",
+          "mcp__agent-mcp__task",
+          "mcp__agent-mcp__task_cancel",
+          "mcp__agent-mcp__task_list",
+          "mcp__agent-mcp__task_resume",
+          "mcp__agent-mcp__tasks_batch",
+          "mcp__agent-mcp__usage_query",
+          "mcp__fs__create_directory",
+          "mcp__fs__directory_tree",
+          "mcp__fs__edit_file",
+          "mcp__fs__get_file_info",
+          "mcp__fs__list_allowed_directories",
+          "mcp__fs__list_directory",
+          "mcp__fs__list_directory_with_sizes",
+          "mcp__fs__move_file",
+          "mcp__fs__read_file",
+          "mcp__fs__read_media_file",
+          "mcp__fs__read_multiple_files",
+          "mcp__fs__read_text_file",
+          "mcp__fs__search_files",
+          "mcp__fs__write_file",
+          "mcp__shell__shell_execute",
+          "mcp__web__web_fetch"
+        ],
+        "calls": [
+          {
+            "name": "mcp__fs__read_text_file",
+            "server": false,
+            "depth": 1
+          },
+          {
+            "name": "mcp__fs__edit_file",
+            "server": false,
+            "depth": 1
+          }
+        ]
+      },
+      {
+        "id": "dc97213b-e238-46d7-aaea-5acc7f13e1f6",
+        "advertised": [
+          "mcp__agent-mcp__agent",
+          "mcp__agent-mcp__guide",
+          "mcp__agent-mcp__pricing_history",
+          "mcp__agent-mcp__pricing_refresh",
+          "mcp__agent-mcp__result",
+          "mcp__agent-mcp__session_clear",
+          "mcp__agent-mcp__session_close",
+          "mcp__agent-mcp__session_list",
+          "mcp__agent-mcp__session_update",
+          "mcp__agent-mcp__task",
+          "mcp__agent-mcp__task_cancel",
+          "mcp__agent-mcp__task_list",
+          "mcp__agent-mcp__task_resume",
+          "mcp__agent-mcp__tasks_batch",
+          "mcp__agent-mcp__usage_query",
+          "mcp__fs__create_directory",
+          "mcp__fs__directory_tree",
+          "mcp__fs__edit_file",
+          "mcp__fs__get_file_info",
+          "mcp__fs__list_allowed_directories",
+          "mcp__fs__list_directory",
+          "mcp__fs__list_directory_with_sizes",
+          "mcp__fs__move_file",
+          "mcp__fs__read_file",
+          "mcp__fs__read_media_file",
+          "mcp__fs__read_multiple_files",
+          "mcp__fs__read_text_file",
+          "mcp__fs__search_files",
+          "mcp__fs__write_file",
+          "mcp__shell__shell_execute",
+          "mcp__web__web_fetch"
+        ],
+        "calls": [
+          {
+            "name": "mcp__fs__search_files",
+            "server": false,
+            "depth": 1
+          },
+          {
+            "name": "mcp__fs__read_text_file",
+            "server": false,
+            "depth": 1
+          }
+        ]
+      },
+      {
+        "id": "e7a8791a-e9db-47b9-afda-f518aee60781",
+        "advertised": [
+          "mcp__agent-mcp__agent",
+          "mcp__agent-mcp__guide",
+          "mcp__agent-mcp__pricing_history",
+          "mcp__agent-mcp__pricing_refresh",
+          "mcp__agent-mcp__result",
+          "mcp__agent-mcp__session_clear",
+          "mcp__agent-mcp__session_close",
+          "mcp__agent-mcp__session_list",
+          "mcp__agent-mcp__session_update",
+          "mcp__agent-mcp__task",
+          "mcp__agent-mcp__task_cancel",
+          "mcp__agent-mcp__task_list",
+          "mcp__agent-mcp__task_resume",
+          "mcp__agent-mcp__tasks_batch",
+          "mcp__agent-mcp__usage_query",
+          "mcp__fs__create_directory",
+          "mcp__fs__directory_tree",
+          "mcp__fs__edit_file",
+          "mcp__fs__get_file_info",
+          "mcp__fs__list_allowed_directories",
+          "mcp__fs__list_directory",
+          "mcp__fs__list_directory_with_sizes",
+          "mcp__fs__move_file",
+          "mcp__fs__read_file",
+          "mcp__fs__read_media_file",
+          "mcp__fs__read_multiple_files",
+          "mcp__fs__read_text_file",
+          "mcp__fs__search_files",
+          "mcp__fs__write_file",
+          "mcp__r2info__get_ticket",
+          "mcp__shell__shell_execute",
+          "mcp__web__web_fetch"
+        ],
+        "calls": [
+          {
+            "name": "mcp__fs__edit_file",
+            "server": false,
+            "depth": 0
+          },
+          {
+            "name": "mcp__agent-mcp__task",
+            "server": false,
+            "depth": 0
+          },
+          {
+            "name": "mcp__shell__shell_execute",
+            "server": false,
+            "depth": 0
+          },
+          {
+            "name": "mcp__shell__shell_execute",
+            "server": false,
+            "depth": 0
+          }
+        ]
+      }
+    ]
+  },
+  "C1": {
+    "arm": "C",
+    "tasks": [
+      {
+        "id": "045aedb3-cee7-4fd3-8be0-07919cd55155",
+        "advertised": [
+          "fs__read_file",
+          "fs__read_text_file",
+          "fs__read_media_file",
+          "fs__read_multiple_files",
+          "fs__write_file",
+          "fs__edit_file",
+          "fs__create_directory",
+          "fs__list_directory",
+          "fs__list_directory_with_sizes",
+          "fs__directory_tree",
+          "fs__move_file",
+          "fs__search_files",
+          "fs__get_file_info",
+          "fs__list_allowed_directories",
+          "shell__shell_execute",
+          "agent-mcp__agent",
+          "agent-mcp__task",
+          "agent-mcp__tasks_batch",
+          "agent-mcp__result",
+          "agent-mcp__task_list",
+          "agent-mcp__task_cancel",
+          "agent-mcp__task_resume",
+          "agent-mcp__session_list",
+          "agent-mcp__session_close",
+          "agent-mcp__session_update",
+          "agent-mcp__session_clear",
+          "agent-mcp__usage_query",
+          "agent-mcp__pricing_refresh",
+          "agent-mcp__pricing_history",
+          "agent-mcp__guide",
+          "r2info__get_ticket",
+          "builtin__request_human_input",
+          "web_search",
+          "web_fetch"
+        ],
+        "calls": [
+          {
+            "name": "fs__edit_file",
+            "server": false,
+            "depth": 0
+          },
+          {
+            "name": "fs__write_file",
+            "server": false,
+            "depth": 0
+          },
+          {
+            "name": "agent-mcp__task",
+            "server": false,
+            "depth": 0
+          },
+          {
+            "name": "shell_execute",
+            "server": false,
+            "depth": 0
+          }
+        ]
+      },
+      {
+        "id": "256e86c2-2331-4fa3-8eac-db20dba7ccdc",
+        "advertised": [
+          "fs__read_file",
+          "fs__read_text_file",
+          "fs__read_media_file",
+          "fs__read_multiple_files",
+          "fs__write_file",
+          "fs__edit_file",
+          "fs__create_directory",
+          "fs__list_directory",
+          "fs__list_directory_with_sizes",
+          "fs__directory_tree",
+          "fs__move_file",
+          "fs__search_files",
+          "fs__get_file_info",
+          "fs__list_allowed_directories",
+          "shell__shell_execute",
+          "agent-mcp__agent",
+          "agent-mcp__task",
+          "agent-mcp__tasks_batch",
+          "agent-mcp__result",
+          "agent-mcp__task_list",
+          "agent-mcp__task_cancel",
+          "agent-mcp__task_resume",
+          "agent-mcp__session_list",
+          "agent-mcp__session_close",
+          "agent-mcp__session_update",
+          "agent-mcp__session_clear",
+          "agent-mcp__usage_query",
+          "agent-mcp__pricing_refresh",
+          "agent-mcp__pricing_history",
+          "agent-mcp__guide",
+          "builtin__request_human_input",
+          "web_search",
+          "web_fetch"
+        ],
+        "calls": [
+          {
+            "name": "fs__read_multiple_files",
+            "server": false,
+            "depth": 1
+          }
+        ]
+      },
+      {
+        "id": "367b9954-237c-4d21-8b16-f0e8128b122d",
+        "advertised": [
+          "fs__read_file",
+          "fs__read_text_file",
+          "fs__read_media_file",
+          "fs__read_multiple_files",
+          "fs__write_file",
+          "fs__edit_file",
+          "fs__create_directory",
+          "fs__list_directory",
+          "fs__list_directory_with_sizes",
+          "fs__directory_tree",
+          "fs__move_file",
+          "fs__search_files",
+          "fs__get_file_info",
+          "fs__list_allowed_directories",
+          "shell__shell_execute",
+          "agent-mcp__agent",
+          "agent-mcp__task",
+          "agent-mcp__tasks_batch",
+          "agent-mcp__result",
+          "agent-mcp__task_list",
+          "agent-mcp__task_cancel",
+          "agent-mcp__task_resume",
+          "agent-mcp__session_list",
+          "agent-mcp__session_close",
+          "agent-mcp__session_update",
+          "agent-mcp__session_clear",
+          "agent-mcp__usage_query",
+          "agent-mcp__pricing_refresh",
+          "agent-mcp__pricing_history",
+          "agent-mcp__guide",
+          "builtin__request_human_input",
+          "web_search",
+          "web_fetch"
+        ],
+        "calls": [
+          {
+            "name": "agent-mcp__agent",
+            "server": false,
+            "depth": 1
+          },
+          {
+            "name": "fs__list_directory",
+            "server": false,
+            "depth": 1
+          },
+          {
+            "name": "fs__read_text_file",
+            "server": false,
+            "depth": 1
+          },
+          {
+            "name": "agent-mcp__task",
+            "server": false,
+            "depth": 1
+          },
+          {
+            "name": "fs__read_text_file",
+            "server": false,
+            "depth": 1
+          },
+          {
+            "name": "fs__read_multiple_files",
+            "server": false,
+            "depth": 1
+          },
+          {
+            "name": "fs__create_directory",
+            "server": false,
+            "depth": 1
+          },
+          {
+            "name": "fs__edit_file",
+            "server": false,
+            "depth": 1
+          },
+          {
+            "name": "fs__write_file",
+            "server": false,
+            "depth": 1
+          }
+        ]
+      },
+      {
+        "id": "4a11455c-c2c4-48e9-84b2-76a38d9c3e13",
+        "advertised": [
+          "fs__read_file",
+          "fs__read_text_file",
+          "fs__read_media_file",
+          "fs__read_multiple_files",
+          "fs__write_file",
+          "fs__edit_file",
+          "fs__create_directory",
+          "fs__list_directory",
+          "fs__list_directory_with_sizes",
+          "fs__directory_tree",
+          "fs__move_file",
+          "fs__search_files",
+          "fs__get_file_info",
+          "fs__list_allowed_directories",
+          "shell__shell_execute",
+          "agent-mcp__agent",
+          "agent-mcp__task",
+          "agent-mcp__tasks_batch",
+          "agent-mcp__result",
+          "agent-mcp__task_list",
+          "agent-mcp__task_cancel",
+          "agent-mcp__task_resume",
+          "agent-mcp__session_list",
+          "agent-mcp__session_close",
+          "agent-mcp__session_update",
+          "agent-mcp__session_clear",
+          "agent-mcp__usage_query",
+          "agent-mcp__pricing_refresh",
+          "agent-mcp__pricing_history",
+          "agent-mcp__guide",
+          "builtin__request_human_input",
+          "web_search",
+          "web_fetch"
+        ],
+        "calls": [
+          {
+            "name": "fs__read_text_file",
+            "server": false,
+            "depth": 1
+          },
+          {
+            "name": "fs__read_multiple_files",
+            "server": false,
+            "depth": 1
+          },
+          {
+            "name": "fs__read_text_file",
+            "server": false,
+            "depth": 1
+          },
+          {
+            "name": "fs__write_file",
+            "server": false,
+            "depth": 1
+          },
+          {
+            "name": "shell__shell_execute",
+            "server": false,
+            "depth": 1
+          },
+          {
+            "name": "fs__read_multiple_files",
+            "server": false,
+            "depth": 1
+          }
+        ]
+      },
+      {
+        "id": "5f00aca0-2206-4719-8440-bdb680e27868",
+        "advertised": [
+          "fs__read_file",
+          "fs__read_text_file",
+          "fs__read_media_file",
+          "fs__read_multiple_files",
+          "fs__write_file",
+          "fs__edit_file",
+          "fs__create_directory",
+          "fs__list_directory",
+          "fs__list_directory_with_sizes",
+          "fs__directory_tree",
+          "fs__move_file",
+          "fs__search_files",
+          "fs__get_file_info",
+          "fs__list_allowed_directories",
+          "shell__shell_execute",
+          "agent-mcp__agent",
+          "agent-mcp__task",
+          "agent-mcp__tasks_batch",
+          "agent-mcp__result",
+          "agent-mcp__task_list",
+          "agent-mcp__task_cancel",
+          "agent-mcp__task_resume",
+          "agent-mcp__session_list",
+          "agent-mcp__session_close",
+          "agent-mcp__session_update",
+          "agent-mcp__session_clear",
+          "agent-mcp__usage_query",
+          "agent-mcp__pricing_refresh",
+          "agent-mcp__pricing_history",
+          "agent-mcp__guide",
+          "builtin__request_human_input",
+          "web_search",
+          "web_fetch"
+        ],
+        "calls": [
+          {
+            "name": "fs__read_multiple_files",
+            "server": false,
+            "depth": 1
+          },
+          {
+            "name": "fs__write_file",
+            "server": false,
+            "depth": 1
+          },
+          {
+            "name": "fs__edit_file",
+            "server": false,
+            "depth": 1
+          },
+          {
+            "name": "shell__shell_execute",
+            "server": false,
+            "depth": 1
+          },
+          {
+            "name": "shell__shell_execute",
+            "server": false,
+            "depth": 1
+          },
+          {
+            "name": "shell_execute",
+            "server": false,
+            "depth": 1
+          }
+        ]
+      },
+      {
+        "id": "c6d15086-50aa-42a2-8ad6-6a6cc7c9f91c",
+        "advertised": [
+          "fs__read_file",
+          "fs__read_text_file",
+          "fs__read_media_file",
+          "fs__read_multiple_files",
+          "fs__write_file",
+          "fs__edit_file",
+          "fs__create_directory",
+          "fs__list_directory",
+          "fs__list_directory_with_sizes",
+          "fs__directory_tree",
+          "fs__move_file",
+          "fs__search_files",
+          "fs__get_file_info",
+          "fs__list_allowed_directories",
+          "shell__shell_execute",
+          "agent-mcp__agent",
+          "agent-mcp__task",
+          "agent-mcp__tasks_batch",
+          "agent-mcp__result",
+          "agent-mcp__task_list",
+          "agent-mcp__task_cancel",
+          "agent-mcp__task_resume",
+          "agent-mcp__session_list",
+          "agent-mcp__session_close",
+          "agent-mcp__session_update",
+          "agent-mcp__session_clear",
+          "agent-mcp__usage_query",
+          "agent-mcp__pricing_refresh",
+          "agent-mcp__pricing_history",
+          "agent-mcp__guide",
+          "r2info__get_ticket",
+          "builtin__request_human_input",
+          "web_search",
+          "web_fetch"
+        ],
+        "calls": [
+          {
+            "name": "shell__shell_execute",
+            "server": false,
+            "depth": 0
+          },
+          {
+            "name": "r2info__get_ticket",
+            "server": false,
+            "depth": 0
+          },
+          {
+            "name": "fs__directory_tree",
+            "server": false,
+            "depth": 0
+          },
+          {
+            "name": "fs__read_multiple_files",
+            "server": false,
+            "depth": 0
+          },
+          {
+            "name": "web_fetch",
+            "server": true,
+            "depth": 0
+          },
+          {
+            "name": "fs__read_multiple_files",
+            "server": false,
+            "depth": 0
+          },
+          {
+            "name": "shell_execute",
+            "server": false,
+            "depth": 0
+          },
+          {
+            "name": "web_fetch",
+            "server": true,
+            "depth": 0
+          },
+          {
+            "name": "shell_execute",
+            "server": false,
+            "depth": 0
+          },
+          {
+            "name": "web_fetch",
+            "server": true,
+            "depth": 0
+          },
+          {
+            "name": "shell_execute",
+            "server": false,
+            "depth": 0
+          },
+          {
+            "name": "shell_execute",
+            "server": false,
+            "depth": 0
+          },
+          {
+            "name": "fs__create_directory",
+            "server": false,
+            "depth": 0
+          },
+          {
+            "name": "web_fetch",
+            "server": true,
+            "depth": 0
+          },
+          {
+            "name": "fs__read_text_file",
+            "server": false,
+            "depth": 0
+          },
+          {
+            "name": "web_fetch",
+            "server": true,
+            "depth": 0
+          },
+          {
+            "name": "fs__edit_file",
+            "server": false,
+            "depth": 0
+          },
+          {
+            "name": "agent-mcp__agent",
+            "server": false,
+            "depth": 0
+          },
+          {
+            "name": "agent-mcp__agent",
+            "server": false,
+            "depth": 0
+          },
+          {
+            "name": "web_fetch",
+            "server": true,
+            "depth": 0
+          },
+          {
+            "name": "shell_execute",
+            "server": false,
+            "depth": 0
+          },
+          {
+            "name": "shell_execute",
+            "server": false,
+            "depth": 0
+          },
+          {
+            "name": "agent-mcp__task",
+            "server": false,
+            "depth": 0
+          },
+          {
+            "name": "agent-mcp__task",
+            "server": false,
+            "depth": 0
+          },
+          {
+            "name": "agent-mcp__result",
+            "server": false,
+            "depth": 0
+          },
+          {
+            "name": "agent-mcp__result",
+            "server": false,
+            "depth": 0
+          },
+          {
+            "name": "shell_execute",
+            "server": false,
+            "depth": 0
+          },
+          {
+            "name": "fs__read_multiple_files",
+            "server": false,
+            "depth": 0
+          }
+        ]
+      }
+    ]
+  }
+}

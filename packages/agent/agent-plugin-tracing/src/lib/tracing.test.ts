@@ -131,10 +131,11 @@ describe('6ae794fe AC3 — each core operation emits exactly one start/finish sp
 
     const recs = records(plugin);
     assertEveryCoreOperationSpanned(recs);
-    // Every agent.* record is accounted for by the five core spans — nothing stray.
+    // Every agent.* record is accounted for by the five core spans plus the engine's once-per-task
+    // startup span (R10 S5, `agent.task.startup`) — nothing stray.
     const names = new Set(agentRecords(recs).map((r) => r.event.replace(/\.(start|finish|error)$/, '')));
     expect([...names].sort()).toEqual(
-      ['agent.model_call', 'agent.permission.decision', 'agent.session', 'agent.task', 'agent.tool_call'].sort()
+      ['agent.model_call', 'agent.permission.decision', 'agent.session', 'agent.task', 'agent.task.startup', 'agent.tool_call'].sort()
     );
     await plugin.dispose();
   });

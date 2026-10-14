@@ -1,6 +1,6 @@
 import type { ToolDefinition } from "../providers/types.js";
 import type { ExecutionContext } from "../validation/index.js";
-import type { IMcpClient } from "./types.js";
+import { annotationsOf, type IMcpClient } from "./types.js";
 
 export type InProcessToolHandler = (
     toolName: string,
@@ -12,6 +12,11 @@ export type InProcessToolDescriptor = {
     name: string;
     description: string;
     inputSchema: Record<string, unknown>;
+    /**
+     * Optional MCP annotation hints (`readOnlyHint`, ...), projected onto `ToolDefinition.annotations`
+     * exactly as a stdio/http server's `tools/list` annotations are. Absent for every descriptor today.
+     */
+    annotations?: Record<string, unknown>;
 };
 
 export class InProcessMcpClient implements IMcpClient {
@@ -26,6 +31,7 @@ export class InProcessMcpClient implements IMcpClient {
             name: t.name,
             description: t.description,
             inputSchema: t.inputSchema,
+            ...annotationsOf(t),
         }));
     }
 

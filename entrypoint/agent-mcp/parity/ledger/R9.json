@@ -1,0 +1,65 @@
+{
+  "round": "R9",
+  "cap": 2,
+  "approvedBy": "owner (2026-10-12), standing direction recorded in SCOPE-R9-stage1-retest: \"If filling in the other 2 successfully provides parity, dispatch the follow up and then compare again and follow the original flow for corrections and retest.\" -> round R9 Stage 1 retest is ONE run of arm A (native claude -p) FIRST, then ONE run of arm C (agent-mcp anthropic provider), alias haiku, effort high, thinking model default, wire capture ON, PAIRED fixtures (SCOPE-R9-paired-fixtures), identical prompt, exactly 2 judge calls (alias haiku, single sample); B is not run; no Stage 2; hard cap 2 arm runs + 2 judge calls (SCOPE-R9-product-fix, SCOPE-R9-duration-metric, SCOPE-R9-echo-persistence, SCOPE-R9-stage1-retest)",
+  "extraRunReason": "",
+  "runs": [
+    {
+      "runId": "A1",
+      "arm": "A",
+      "at": "2026-10-12T23:06:30.381Z",
+      "pid": 54857,
+      "model": "claude-haiku-5-5",
+      "modelSource": "json"
+    },
+    {
+      "runId": "C1",
+      "arm": "C",
+      "at": "2026-10-12T23:08:17.954Z",
+      "pid": 54857,
+      "model": "claude-haiku-5-5",
+      "modelSource": "json"
+    }
+  ],
+  "judgeCalls": [
+    {
+      "arm": "A",
+      "modelId": "claude-haiku-5-5",
+      "inputTokens": 18289,
+      "outputTokens": 2481,
+      "costUsd": 0.0030694,
+      "briefSha": "66c9b50dfa5aa11ef976d60dfc233ced00ab136f4d17cc43847d0ec86067124d",
+      "at": "2026-10-12T23:08:05.151Z",
+      "modelSource": "json"
+    }
+  ],
+  "scenarioSha": "56956efb90fc213aaaca7dff6d94f731e94a7b69ad4295e66ddb5fd6e06e4a18",
+  "scopeChanges": [
+    "SCOPE-R9-product-fix",
+    "SCOPE-R9-duration-metric",
+    "SCOPE-R9-paired-fixtures",
+    "SCOPE-R9-echo-persistence",
+    "SCOPE-R9-stage1-retest"
+  ],
+  "armOrder": [
+    "A",
+    "C"
+  ],
+  "startedAt": "2026-10-12T20:37:09.841Z",
+  "armA": {
+    "genuine": true,
+    "detail": "all content items green, no INVALID, no defect signal",
+    "at": "2026-10-12T23:07:52.828Z"
+  },
+  "releases": [],
+  "profile": {
+    "arms": [
+      "A",
+      "C"
+    ],
+    "effort": "high",
+    "capture": true,
+    "pairedFixtures": true,
+    "modelConfig": "experiment"
+  }
+}

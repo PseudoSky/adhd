@@ -189,6 +189,10 @@ describe('native web tools in the default toolset (1abd2d84)', () => {
     );
     expect(search?.['type']).toBe('web_search_20250305');
 
+    // R6B-web AC2: arm C keeps the server tools ONLY: the engine-executed
+    // `web__web_fetch` (added for providers without server tools) is absent.
+    expect((h.lastRequest?.tools ?? []).map((t) => String(t['name']))).not.toContain('web__web_fetch');
+
     // And the provider's inline (server-executed) result is the task result.
     expect(out.status).toBe('completed');
     expect(out.result).toContain('web result: 42');
@@ -212,5 +216,7 @@ describe('native web tools in the default toolset (1abd2d84)', () => {
     });
 
     expect(serverSideNames(h.lastRequest)).toEqual([]);
+    // R6B-web AC2: opting out removes the engine-executed web_fetch too (it is not a back door).
+    expect((h.lastRequest?.tools ?? []).map((t) => String(t['name']))).not.toContain('web__web_fetch');
   });
 });

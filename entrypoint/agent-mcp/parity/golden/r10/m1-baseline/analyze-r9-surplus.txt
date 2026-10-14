@@ -1,0 +1,19 @@
+== WORKER-REQUEST SURPLUS (C1 vs A1) ==
+worker # | phase | C requests (agent) | A requests | surplus | C request purposes (in order) | A request purposes (in order)
+1 | 1 | 6 (worker) | 4 | 2 | dispatch+read > dispatch > edit+write > write > shell > final-answer | read > edit+write > shell > final-answer
+2 | 1 | 6 (worker) | 3 | 3 | read > shell > edit+write > shell > retry-after-error:shell > final-answer | shell > shell > final-answer
+3 | 1 | 2 (worker) | 3 | -1 | read > final-answer | read+shell > edit > final-answer
+4 | 2 | 4 (worker) | 0 | 4 | read > edit+read > shell > final-answer | -
+total worker requests | C 18 | A 10 | surplus 8
+purpose | C | A | C-A
+dispatch | 1 | 0 | 1
+dispatch+read | 1 | 0 | 1
+edit | 0 | 1 | -1
+edit+read | 1 | 0 | 1
+edit+write | 2 | 1 | 1
+final-answer | 4 | 3 | 1
+read | 3 | 1 | 2
+read+shell | 0 | 1 | -1
+retry-after-error:shell | 1 | 0 | 1
+shell | 4 | 3 | 1
+write | 1 | 0 | 1

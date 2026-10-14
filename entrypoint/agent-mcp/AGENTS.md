@@ -39,7 +39,7 @@ The server exposes these MCP tools:
 | `session_close` | `(sessionId: string) -> {}` | Close a session; marks final state |
 | `session_update` | `({ session_id, provider?, model?, models? }) -> { session_id, selection }` | Set the session-held provider binding (`provider` = anthropic\|openai\|claudecli, `model`/`models` = canonical refs such as `claude_sonnet_4_6`). The session tier of the selection chain `task > session > agent > host default`; a provider-less agent with no binding fails closed (`NO_PROVIDER_SELECTED`). Persisted: survives a restart. |
 | `session_clear` | `(sessionId: string) -> {}` | Delete message history for a session (preserves agent snapshot) |
-| `usage_query` | `({ task_id?, root_task_id?, agent_name?, since?, include_incomplete?, limit?, group_by?: agent\|model\|provider\|response_model, grain?: session\|task\|turn }) -> {usage: [...], summary}` | Query task usage across multiple tasks (grouped by agent, model, provider, response_model; `group_by` wins over `grain`; legacy rows without a captured response model group under `(unknown)`; `claudecli` does not report a response model); rows carry `response_model`, `cost_status`, `cost_basis`, `pricing_ref`, summaries `priced_cost_usd`, `unpriced_*`, `price_age_hours` |
+| `usage_query` | `({ task_id?, root_task_id?, agent_name?, since?, include_incomplete?, limit?, group_by?: agent\|model\|provider\|response_model, grain?: session\|task\|turn }) -> {usage: [...], summary}` | Query task usage across multiple tasks (grouped by agent, model, provider, response_model; `group_by` wins over `grain`; legacy rows without a captured response model group under `(unknown)`; `claudecli` does not report a response model); rows carry `response_model`, `cost_status`, `cost_basis`, `pricing_ref`, summaries `priced_cost_usd`, `unpriced_*`, `price_age_hours`; task grain `model_calls` counts every continuation of an Anthropic `pause_turn`, turn grain reports 1 per turn; `MODEL_RESPONSE` payloads carry optional `echoBlocks`, `echoBytes`, `echoReplayedMessages`, `echoReplayedBytes` (see docs/logging.md) |
 | `pricing_refresh` | `({ accept?: string[] }) -> { status, ledger_id, fetched_at, models, new, changed, unchanged, anomalies, duration_ms, error? }` | Pull live model prices from the public OpenRouter feed now (no API key), bypassing the daily schedule. Only changed prices append history rows; a failed/rejected pull changes nothing. A >= 20x move (or input > $1000/M) is HELD and listed in `anomalies`; re-run with `accept:[modelId]` to apply it. |
 | `pricing_history` | `({ model: string, from?: string, to?: string }) -> { model, rows: [...], status: { last_ok, last_failed, price_age_hours, next_scheduled, anomaly_thresholds } }` | Observed price series for a model ($/M tokens, `observed_at` order, with `source` and `ledger_id`) plus pull status. Prices are as OBSERVED by this server, so the accuracy bound is the 24h pull cadence. |
 | `guide` | `() -> {workflows, providers, errors}` | Built-in help: 6 workflows, provider table, error codes |
@@ -75,6 +75,9 @@ These env vars configure the server-wide default agent and provider credentials:
 | `ADHD_AGENT_TOOL_CALL_CONCURRENCY` | integer | `8` (positive integer; config key `agent.toolCallConcurrency`; invalid fails at startup) | No |
 | `ADHD_AGENT_TOOL_RESULT_MAX_CHARS` | integer | `6000` (`0` disables; invalid fails at startup) | No |
 | `ADHD_AGENT_TOOL_RESULT_SPILL_ENABLED` | boolean | `false` (`true` spills over-cap results to a 0600 file under `ADHD_AGENT_TOOL_RESULT_SPILL_DIR`, default `<temp>/tool-results`, and the srt policy read-allows that dir) | No |
+| `ADHD_AGENT_ECHO_MAX_MESSAGE_BYTES` | integer | `131072` (config key `echo.maxMessageBytes`; non-negative integer; malformed fails at startup; largest provider echo stored for one assistant message) | No |
+| `ADHD_AGENT_ECHO_MAX_SESSION_BYTES` | integer | `4194304` (config key `echo.maxSessionBytes`; cap on server-tool result bytes stored per session) | No |
+| `ADHD_AGENT_ECHO_SERVER_RESULT_TTL_MINUTES` | integer | `10` (config key `echo.serverResultTtlMinutes`; minutes of session idleness after which stored server results stop being replayed; `0` never stores them) | No |
 | `ADHD_AGENT_ANTHROPIC_SECRET` | string | `sk-ant-oat...` or `sk-ant-api...` | If provider type=`anthropic` (`config.ts` `PROVIDER_DEFAULTS`) |
 | `ADHD_AGENT_OPENAI_SECRET` | string | (credential) | If provider type=`openai` (also covers OpenAI-compatible endpoints) |
 | `ADHD_AGENT_DEEPSEEK_SECRET` | string | (credential) | Only if an `openai`-type agent explicitly overrides `env.secret`/`env.base_url` to point at DeepSeek — there is no separate `"deepseek"` provider type |
@@ -108,6 +111,7 @@ The typed `nativeTooling` surface (ADR-0008 D10) is part of the `@adhd/environme
 | `ADHD_AGENT_NATIVE_TOOLING_HITL` | bool | HITL enablement; default `true` |
 | `ADHD_AGENT_SHELL_SANDBOX_EXTRA_ALLOW_WRITE` | string[] | extra WRITABLE roots for the srt-sandboxed shell (config key `agent.shell.sandbox.extraAllowWrite`; `~/` expanded; default `~/.adhd/backlog/production/data`). Allowlist: a strict descendant of `~/.adhd/backlog` or inside an `...EXTRA_ALLOW_WRITE_ROOTS` root, never a protected path (see the sandbox section below). Read from the GLOBAL scope only (`operationalEnv`); invalid => startup aborts |
 | `ADHD_AGENT_SHELL_SANDBOX_EXTRA_ALLOW_WRITE_ROOTS` | string[] | operator-declared trust roots for the entries above (config key `agent.shell.sandbox.extraAllowWriteRoots`; default none; e.g. a relocated backlog store). Validated like an entry and never `~/.adhd` or an ancestor |
+| `ADHD_AGENT_SHELL_SANDBOX_ALLOWED_DOMAINS` | string[] | restrict the srt-sandboxed shell's outbound network to these domains (config key `agent.shell.sandbox.allowedDomains`; `example.com`, `*.example.com`, optional `:port`). Default empty = OPEN egress: the default shell can `curl` any public site. Non-empty = ONLY these domains plus PyPI (the pinned shell server's own cold start). Read from the global scope only |
 
 The rule map (`nativeTooling.*.permissions`) and `shell.env` are JSON objects with no flat `FieldSpec`, so they are authored on the agent definition, not set via env. The removed authored-shell-server path override is dead: `tools/mcp-shell/server.mjs` was deleted by NAT-TOOL-4 and shell configuration is `nativeTooling.shell.*`.
 
@@ -132,7 +136,7 @@ There are exactly three provider `type`s in code (`packages/agent/agent-engine-o
 
 ### Provider fields accepted by `agent_create` / `agent_update`
 
-`provider` is a discriminated union on `type` (`anthropic` | `openai` | `claudecli`). Besides `model`, `env`, `temperature`, `maxTokens`, `timeoutMs` (and `baseURL` for `openai`, `claudePath`/`allowedBuiltinTools`/`systemPromptIsAgentSpec` for `claudecli`), every variant accepts the provider-failure fields:
+`provider` is a discriminated union on `type` (`anthropic` | `openai` | `claudecli`). Besides `model`, `env`, `temperature`, `maxTokens`, `timeoutMs` (`effort` for `anthropic`: `low|medium|high|xhigh|max`, sent as the Messages API `output_config.effort`, absent = the API default for the model; `thinking` for `anthropic`: `{ type: adaptive|disabled, display?: summarized|omitted }` (`display` only with `adaptive`), sent as the Messages API `thinking` field, absent = the API default, strict like the other provider keys; and `baseURL` for `openai`, `claudePath`/`allowedBuiltinTools`/`systemPromptIsAgentSpec` for `claudecli`), every variant accepts the provider-failure fields:
 
 | Field | Type | Meaning |
 |---|---|---|
@@ -192,8 +196,24 @@ it can run a real web search/fetch without any client-side executor. The tools
 are emitted as type-tagged entries (`{ type: 'web_search_20250305', name:
 'web_search' }`, `{ type: 'web_fetch_20250910', name: 'web_fetch' }`) and
 executed by the provider. Set `nativeWebTools: false` on the agent definition
-to opt out. Providers without native web tools (openai/claudecli) are
-unaffected.
+to opt out. Providers without native web tools (openai/claudecli) get the
+engine-executed `web_fetch` instead (R6B-web): one definition
+(`WEB_FETCH_TOOL` in `agent-engine-orchestrator/src/tools/web-fetch.ts`),
+advertised as `web__web_fetch` (`mcp__web__web_fetch` through the claudecli
+bridge), fetched by Node in the engine process, returning the same
+`web_fetch_result` shape the Anthropic tool returns. Egress follows
+`agent.shell.sandbox.allowedDomains` for NAMES (an empty list means open to
+PUBLIC addresses only, not open to everything). In both modes the tool refuses
+any destination that is, or resolves to, a loopback, RFC1918 private,
+link-local (including the 169.254.169.254 metadata address), unspecified,
+unique-local (ULA), shared-address (CGNAT), multicast or reserved address,
+including the IPv4-mapped, NAT64 and 6to4 spellings of those. A name that
+resolves to any such address is refused even when the allow-list names it, so
+local and intranet pages can no longer be fetched. Each hop is resolved once,
+the connection is pinned to the validated IP (the original name stays in
+`Host`/SNI), and every redirect hop (at most 5 redirects are followed) is validated again.
+Anthropic agents are unchanged (no duplicate); `nativeWebTools: false`
+removes it everywhere.
 
 ### Native tooling for dispatched agents (ADR-0008 / NAT-TOOL-4/6)
 
@@ -296,6 +316,32 @@ the `dispatch` self floor.
 The authored `tools/mcp-shell/server.mjs` thick layer was **removed** by NAT-TOOL-4 (ADR-0008
 D5/D7); the adopted `tumf/mcp-shell-server` (`uvx mcp-shell-server`) replaces it.
 
+### Model-visible tool-result notes (fs write/edit, shell policy rejection)
+
+Two short, factual notes are added to what the **model** sees of a tool result, never to anything
+stored or observed:
+
+- after a successful `fs__write_file` / non-dry-run `fs__edit_file` by the adopted (catalog) `fs` server:
+  "the file was written; there is no need to read it back to verify". No note on an error, on `dryRun`
+  (nothing is applied), or when `fs` is a custom server that replaced the builtin.
+- after the adopted shell server rejects a command by its default security policy (`node`, `python3`,
+  `sed`, `sh`, `bash`, `env` are always rejected, even if allowlisted): a recovery line that names the
+  policy and says to use the fs tools for file edits and reads, or the project's own scripts through an
+  allowed runner. The shell allowlist itself is unchanged.
+
+The note is applied to the outgoing model request only (`tool-result-notes.ts`): the session history,
+the `post:tool_call` / `TOOL_RESULT` payloads and `message:appended` keep the server's exact text, and a
+post-call payload carries `noteAppended: true`. Because the note is not stored, a session resumed in another
+process sends the result without it (safe; one prompt-cache miss). The notes ride the engine's own provider loop (`anthropic`, `openai`); a `claudecli` agent runs its tools inside the CLI's loop, which does not pass through `pre:model_request`, so it gets no note.
+
+### Delegation: synchronous by default, background results must be collected
+
+The `task`, `tasks_batch` and `result` descriptions (and the usage guide) lead with one shared rule
+(`delegation-text.ts`): `task` / `tasks_batch` are synchronous by default and return the finished result;
+use `background: true` only when you have independent work to do meanwhile, and then you **must** call
+`result` (with `wait_ms`) to collect it before your answer depends on it, because background results are
+not delivered automatically.
+
 ### Delegation (Agent → Child Agent)
 
 An agent can delegate to child agents by calling the `task` tool targeting another agent (when allowed by parent policy). Child agents:
@@ -349,6 +395,8 @@ real built agent-mcp over stdio with a real MCP client on an isolated store unde
 `cache_creation` or `cache_read` tokens > 0. Same gate reason; **approved by:** pseudosky (repo owner), 2026-10-10, with the standing
 rule "do not burn the 5h window": the test refuses to run live (fail-closed) when the 5h window is not `allowed`, utilization is >= 0.60,
 or the state cannot be read. Unset, it is reported SKIPPED with the gate and owner named; its offline controls run ungated.
+
+A sixth, the parity instrument's R11 design (`parity/backlog-operator.mjs`, `node parity/drive.mjs --live --yes --round R11` run from this directory; SCOPE-R11-backlog-operator-task), runs two real-provider groups (B claudecli, C anthropic) that dispatch the `performance` agent, which delegates to `backlog-operator` and the read-only `review` agent through agent-mcp (select and implement, review, revise, transition: SCOPE-R11-prompt-update; the five flow stages are read from state by `parity/flow-stages.mjs`), from a git worktree cwd against the production backlog. Same gate reason (paid model); **approved by:** nix (repo owner), quoted in `parity/ledger/R11.json` `approvedBy`; hard cap 2 (one run per group), no retry, no CI or nx wiring, and its offline proofs (`r11-design.test.ts`, `r11-design.e2e.test.ts`, the `--round R11` dry run) run by default. The harness never writes the backlog and signals only processes it spawned. Details: `parity/README.md` "R11: the backlog-operator design". R12 (`node parity/drive.mjs --live --yes --round R12`; SCOPE-R12-schema-and-scope, SCOPE-R12-backlog-cli; ledger root key `backlogAccess: "cli"`) is the same design with the `backlog-operator` reaching the backlog through the `adhd-backlog` CLI in its shell tool (no backlog MCP server; shell allowlist = the product default plus exactly `adhd-backlog`, identical in B and C; selection stage S1 passes only for a selected in-repo non-terminal unblocked item), same gate reason and owner (nix), hard cap 2, offline proofs `r12-cli.test.ts` / `r12-design.e2e.test.ts` / the `--round R12` dry run run by default. Details: `parity/README.md` "R12: the backlog-operator design with CLI access".
 
 ## Native-tooling adoption gate (env-gated — external third-party server)
 
@@ -430,7 +478,9 @@ As of 2.0.2, two migrations are required:
 
 Migration is auto-applied on server start.
 
-**Journal `when` caveat (b3999dfa AC7).** drizzle applies a migration only when its journal `when` is greater than the newest `created_at` already in a database's `__drizzle_migrations` ledger (it compares timestamps, not hashes or idx). Migrations `0007` to `0016` carry hand-assigned `when` values (`1782874595963` to `...971`: each the previous entry plus one), not a real clock reading. Today's clock is above them, so a freshly generated migration sorts after; but a migration whose `when` is LOWER than an entry already shipped (a clock-skewed machine, or a branch generated before another branch's higher-stamped migration shipped) is silently SKIPPED on every database already migrated past that entry, with no error. When adding a migration, make its `when` strictly greater than the last entry in `drizzle/meta/_journal.json` (edit the generated entry if needed), and keep the migration tests deriving their expectations from the journal (`src/__tests__/fixtures/migration-journal.ts`) rather than hardcoding counts.
+- **0017:** Adds the `message_provider_echo` table (provider-native assistant content for replay: thinking signatures, server tool use and results) and its session index. Additive only: `messages` is not altered and the statements are `IF NOT EXISTS`, so a previous-version binary keeps working against a migrated database.
+
+**Journal `when` caveat (b3999dfa AC7).** drizzle applies a migration only when its journal `when` is greater than the newest `created_at` already in a database's `__drizzle_migrations` ledger (it compares timestamps, not hashes or idx). Migrations `0007` to `0017` carry hand-assigned `when` values (`1782874595963` to `...973`: each the previous entry plus one), not a real clock reading. Today's clock is above them, so a freshly generated migration sorts after; but a migration whose `when` is LOWER than an entry already shipped (a clock-skewed machine, or a branch generated before another branch's higher-stamped migration shipped) is silently SKIPPED on every database already migrated past that entry, with no error. When adding a migration, make its `when` strictly greater than the last entry in `drizzle/meta/_journal.json` (edit the generated entry if needed), and keep the migration tests deriving their expectations from the journal (`src/__tests__/fixtures/migration-journal.ts`) rather than hardcoding counts.
 
 ## Example Usage (Fact-Based)
 

@@ -2,10 +2,11 @@
  * ea8f6f92-d0db-426e-bf9d-bd7ba2fdd5ca AC4 (review B2-M3): HITL calls bypass the tool-call limiter.
  *
  * Driven through the REAL `Orchestrator.run` at `toolCallConcurrency: 1`. The real limiter is wrapped
- * only to RECORD what is routed through `map`/`run` (behaviour unchanged). A `request_human_input`
+ * only to RECORD what is routed through `mapOrdered`/`run` (behaviour unchanged; the native loop moved
+ * from `map` to `mapOrdered` in R10 P1, and `map` is still recorded should anything route there). A `request_human_input`
  * call suspends the task in the governance phase, before the pool; it must (a) never be handed to the
  * limiter, and (b) never leave the run deadlocked at limit 1 with sibling calls queued. Teeth: removing
- * the HITL filter at the `toolLimiter.map` call site routes `request_human_input` into the recorded
+ * the HITL filter at the `toolLimiter.mapOrdered` call site routes `request_human_input` into the recorded
  * items and turns the first assertion red (verified, review B2-M3).
  */
 import { describe, expect, it, vi } from "vitest";
@@ -22,6 +23,10 @@ vi.mock("../engine/tool-limiter.js", async (importOriginal) => {
                 map: (items: readonly { tool: string }[], fn: (i: never) => Promise<unknown>) => {
                     mapped.push(items.map((i) => i.tool));
                     return real.map(items, fn as never);
+                },
+                mapOrdered: (items: readonly { tool: string }[], fn: (i: never, meta: never) => Promise<unknown>, classOf: (i: never) => never) => {
+                    mapped.push(items.map((i) => i.tool));
+                    return real.mapOrdered(items, fn as never, classOf as never);
                 },
             };
         },

@@ -1,0 +1,17 @@
+== THREADS A1 (A) ==
+thread | role | agent | phase | tools offered | requests | tool calls (+server) | tool errors | retry rounds | model s | tool s (trace spans | gaps) | out tokens | thinking blocks | span s
+999ea5a3 | parent | - | 1 | 25 | 16 | 17+0 | 0 | 0 | 71.690 | n/a | 7.921 | 12091 | 13 | 0.47-80.01
+fec9b7a9 | side | - | 1 | 0 | 1 | 0+0 | 0 | 0 | 3.351 | n/a | 0.000 | 654 | 1 | 16.04-19.39
+da0d6d2a | worker | - | 1 | 4 | 4 | 6+0 | 0 | 0 | 8.487 | n/a | 0.339 | 1919 | 2 | 28.31-37.14
+04a7f8a3 | worker | - | 1 | 4 | 3 | 2+0 | 0 | 0 | 7.189 | n/a | 0.711 | 1568 | 2 | 31.70-39.60
+234f5012 | worker | - | 2 | 4 | 3 | 3+0 | 0 | 0 | 8.063 | n/a | 0.894 | 1682 | 1 | 66.98-75.94
+total | requests 27 (parent 16, other 11) | tool errors 0 | model s 98.781
+
+== THREADS C1 (C) ==
+thread | role | agent | phase | tools offered | requests | tool calls (+server) | tool errors | retry rounds | model s | tool s (trace spans | gaps) | out tokens | thinking blocks | span s
+e95d6621 | parent | r2-parent-C1 | 1 | 34 | 16 | 22+1 | 2 | 2 | 57.542 | 19.664 | 36.211 | 11989 | 12 | 0.00-93.75
+f9622a9f | worker | worker | 1 | 33 | 6 | 8+0 | 0 | 0 | 14.082 | 2.774 | 2.796 | 2936 | 5 | 27.11-43.98
+0f67c01a | worker | worker | 1 | 33 | 6 | 8+0 | 1 | 1 | 17.946 | 0.207 | 0.223 | 4105 | 5 | 27.11-45.28
+b73cb662 | worker-nested | worker | 1 | 33 | 2 | 1+0 | 0 | 0 | 1.923 | 0.006 | 0.015 | 228 | 1 | 32.99-34.92
+50daaf8c | worker | worker | 2 | 33 | 4 | 4+0 | 0 | 0 | 12.703 | 0.040 | 0.074 | 2671 | 4 | 76.39-89.16
+total | requests 34 (parent 16, other 18) | tool errors 3 | model s 104.196

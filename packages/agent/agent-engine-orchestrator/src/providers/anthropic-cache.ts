@@ -200,7 +200,10 @@ function blockText(block: ContentBlockParam): string {
         case "tool_result": {
             const c = block.content;
             if (c === undefined) return "";
-            return typeof c === "string" ? c : JSON.stringify(c);
+            if (typeof c === "string") return c;
+            // A block-array tool_result (R10 S1 P5) is estimated by the text it carries; JSON.stringify of the array
+            // would count the `{"type":"text","text":` framing and every escape the model never sees.
+            return c.map(b => (b.type === "text" ? b.text : JSON.stringify(b))).join("\n");
         }
         default:
             return JSON.stringify(block);

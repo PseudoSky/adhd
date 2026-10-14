@@ -1,0 +1,15 @@
+== RT1-RT6 WIRE CHECKS A1 (A) ==
+RT1 PASS | thinking replayed == emitted: 19 emitted, 15 replayable (not the last response of a thread), 15 replayed byte-matched by signature, 0 replayed blocks never emitted in their thread
+RT2 PASS | no dangling server_tool_use in replayed history: 0 dangling
+RT3 PASS | no refetch of an already-fetched URL: 1 fetch calls, 1 unique URLs
+RT4 n/a | bare tool-name emissions: not applicable to this arm
+RT5 PASS | no 400 and no provider:history_degraded: 27/27 requests HTTP 200, 0 history_degraded events
+RT6 PASS | cache continuity (adopted: cache_read >= previous cache_read + cache_creation, per thread): 22/22 pairs; LITERAL reading (cache_read >= previous total prompt tokens = input + cache_read + cache_creation): 0/22 pairs, deficits of the failing pairs: 2 tokens (the previous request's uncached input_tokens)
+
+== RT1-RT6 WIRE CHECKS C1 (C) ==
+RT1 PASS | thinking replayed == emitted: 27 emitted, 22 replayable (not the last response of a thread), 22 replayed byte-matched by signature, 0 replayed blocks never emitted in their thread
+RT2 PASS | no dangling server_tool_use in replayed history: 0 dangling
+RT3 PASS | no refetch of an already-fetched URL: 1 fetch calls, 1 unique URLs
+RT4 PASS | bare tool-name emissions: 0
+RT5 PASS | no 400 and no provider:history_degraded: 34/34 requests HTTP 200, 0 history_degraded events
+RT6 PASS | cache continuity (adopted: cache_read >= previous cache_read + cache_creation, per thread): 29/29 pairs; LITERAL reading (cache_read >= previous total prompt tokens = input + cache_read + cache_creation): 0/29 pairs, deficits of the failing pairs: 2,4 tokens (the previous request's uncached input_tokens)

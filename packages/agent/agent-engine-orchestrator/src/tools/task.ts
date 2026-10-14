@@ -3,8 +3,8 @@ import { statSync } from 'node:fs';
 import type { EngineConfig, EngineLogger } from '../interfaces.js';
 import type { BackgroundQueue } from '../engine/queue.js';
 import type { DagEngine } from '../engine/dag-engine.js';
-import type { Orchestrator } from '../engine/orchestrator.js';
-import { resolveHitl } from '../engine/orchestrator.js';
+import type { Orchestrator, OrchestratorStartupStamps } from '../engine/orchestrator.js';
+import { resolveHitl, warnEchoFailureOnce } from '../engine/orchestrator.js';
 import type { PolicyEngine } from '../engine/policy.js';
 import type {
   InProcessToolDescriptor,
@@ -15,7 +15,7 @@ import type { ProviderRegistry } from '@adhd/agent-core-provider';
 import type { AgentStore } from './agent-crud.js';
 import type { SessionStoreForTool } from './session.js';
 import { McpClientRegistry } from '../clients/registry.js';
-import type { TaskStatus } from '@adhd/agent-base-types';
+import type { IProviderEcho, TaskStatus } from '@adhd/agent-base-types';
 import type {
   ExecutionContext,
   ResultInput,
@@ -29,10 +29,59 @@ import type {
   TasksBatchOutput,
 } from '../validation/index.js';
 import { ToolError } from '../validation/errors.js';
+import { RESULT_MAX_WAIT_MS } from '../validation/task.js';
+import { currentToolCallId } from '../engine/dispatch-call-scope.js';
 import { generateId } from '../utils/ids.js';
 import { nowIso } from '../utils/timestamps.js';
 import type { IHookRegistry } from '@adhd/agent-base-types';
 import { buildTaskUsageReport, type Database } from './usage.js';
+
+/**
+ * R10 M2: measures the two start-up times only this file can see, because both happen before
+ * `Orchestrator.run` is called: the time spent in the session store (`session`) and enqueue-to-dequeue
+ * (`queueWait`). The result is the `startupStamps` handed to the orchestrator for the `task:startup` hook.
+ * Whole milliseconds >= 0. Stamps are produced ONLY for a dispatch that has a parent (`dispatched`): a direct
+ * REST/MCP call has no parent trace to attribute them to, so both stay absent (never 0).
+ */
+class StartupMeter {
+  private sessionTotal = 0;
+  private enqueuedAt = 0;
+  constructor(private readonly dispatched: boolean) {}
+
+  /** Time one synchronous session-store interaction. */
+  session<T>(fn: () => T): T {
+    const t0 = performance.now();
+    try {
+      return fn();
+    } finally {
+      this.sessionTotal += performance.now() - t0;
+    }
+  }
+
+  /** Time one asynchronous session-store interaction. */
+  async sessionAsync<T>(fn: () => Promise<T>): Promise<T> {
+    const t0 = performance.now();
+    try {
+      return await fn();
+    } finally {
+      this.sessionTotal += performance.now() - t0;
+    }
+  }
+
+  /** Call immediately before handing the run to the queue (or invoking it inline): starts the queue-wait clock. */
+  enqueued(): void {
+    this.enqueuedAt = performance.now();
+  }
+
+  /** Call on entry of the run closure: freezes the queue wait and returns the stamps (undefined without a dispatching parent). */
+  stamps(): OrchestratorStartupStamps | undefined {
+    if (!this.dispatched) return undefined;
+    return {
+      queueWaitMs: Math.max(0, Math.round(performance.now() - this.enqueuedAt)),
+      sessionMs: Math.max(0, Math.round(this.sessionTotal)),
+    };
+  }
+}
 
 export interface TaskStore {
     create(input: {
@@ -79,6 +128,73 @@ export interface TaskDeps {
   emitTaskEvent?: (event: { type: string; taskId: string; status?: string; result?: string | null; error?: string | null; toolName?: string; toolCallId?: string; input?: unknown; content?: unknown }) => void;
 }
 
+/** The echo members of the real `SessionStore` that task start uses (optional: minimal fakes omit them). */
+interface IEchoSessionReader {
+  getMessageEchoes?(
+    sessionId: string,
+    messageIds: readonly string[],
+    idleMs: number,
+    ttlMs: number
+  ): Map<string, IProviderEcho>;
+  sweepEchoes?(nowMs: number, ttlMs: number): unknown;
+}
+
+/** Minimum gap between two echo sweeps by one process for one store (spec: once per 10 min). */
+const ECHO_SWEEP_INTERVAL_MS = 10 * 60_000;
+const lastEchoSweepAt = new WeakMap<object, number>();
+
+/**
+ * Load the persisted provider echo (R9-hist) for the assistant messages of an already loaded session
+ * history, so the next provider call replays them. Reads exactly those ids (never "all of the
+ * session"); `idleMs` is the time since the history's newest message, measured with the injected
+ * `config.now`, which lets the store strip expired tier S (server results) while keeping tier T.
+ *
+ * Best-effort, never fatal: no caps configured, a store without echo support, or any storage failure
+ * (one WARN per process) yields `undefined` and the task runs on legacy history. Also runs the
+ * throttled sweep that reclaims expired tier S, off the model-call path.
+ */
+export function loadSessionEchoes(
+  deps: Pick<TaskDeps, 'sessionStore' | 'config' | 'logger'>,
+  sessionId: string,
+  history: readonly unknown[]
+): ReadonlyMap<string, IProviderEcho> | undefined {
+  const caps = deps.config.echo;
+  const store = deps.sessionStore as unknown as IEchoSessionReader;
+  if (caps === undefined || typeof store.getMessageEchoes !== 'function') return undefined;
+  const nowMs = (deps.config.now ?? Date.now)();
+
+  if (typeof store.sweepEchoes === 'function') {
+    const last = lastEchoSweepAt.get(store);
+    if (last === undefined || nowMs - last >= ECHO_SWEEP_INTERVAL_MS) {
+      lastEchoSweepAt.set(store, nowMs);
+      try {
+        store.sweepEchoes(nowMs, caps.serverResultTtlMs);
+      } catch (err) {
+        warnEchoFailureOnce(deps.logger, 'sweepEchoes', err);
+      }
+    }
+  }
+
+  const assistantIds: string[] = [];
+  let newestMs = Number.NEGATIVE_INFINITY;
+  for (const raw of history) {
+    const m = raw as { id?: unknown; role?: unknown; createdAt?: unknown };
+    if (m.role === 'assistant' && typeof m.id === 'string') assistantIds.push(m.id);
+    const t = typeof m.createdAt === 'string' ? Date.parse(m.createdAt) : Number.NaN;
+    if (Number.isFinite(t) && t > newestMs) newestMs = t;
+  }
+  if (assistantIds.length === 0) return undefined;
+  // No readable timestamp: treat the session as idle (fail safe = tier S not replayed).
+  const idleMs = Number.isFinite(newestMs) ? Math.max(0, nowMs - newestMs) : Number.POSITIVE_INFINITY;
+  try {
+    const echoes = store.getMessageEchoes(sessionId, assistantIds, idleMs, caps.serverResultTtlMs);
+    return echoes.size > 0 ? echoes : undefined;
+  } catch (err) {
+    warnEchoFailureOnce(deps.logger, 'getMessageEchoes', err);
+    return undefined;
+  }
+}
+
 /** Task statuses a DAG upstream will never transition out of. */
 const TERMINAL_TASK_STATUSES = new Set(['completed', 'failed', 'cancelled']);
 
@@ -115,6 +231,7 @@ async function runEphemeralTask(
   input: {
     agent_name: string;
     prompt: string;
+    background?: boolean;
     depends_on?: string[];
     on_upstream_failure?: 'fail' | 'skip';
     cwd?: string;
@@ -171,10 +288,13 @@ async function runEphemeralTask(
   // creates a REAL session row, not a sessionless placeholder. The noop-session
   // path is retired. `isEphemeral: true` is the retention class (an ephemeral
   // session is reclaimed on terminal), NOT an interactivity/HITL property.
-  const session = deps.sessionStore.create({
-    agentName: agentDefinition.name,
-    agentDefinition: snapshotDefinition,
-  });
+  const meter = new StartupMeter(callerContext !== undefined);
+  const session = meter.session(() =>
+    deps.sessionStore.create({
+      agentName: agentDefinition.name,
+      agentDefinition: snapshotDefinition,
+    })
+  );
   const sessionId = session.id;
 
   deps.taskStore.create({
@@ -250,7 +370,7 @@ async function runEphemeralTask(
   // `appendMessage` is on the concrete SessionStore, not the minimal
   // `SessionStoreForTool` surface — same cast the session path already uses.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  await (deps.sessionStore as any).appendMessage(sessionId, userMessage);
+  await meter.sessionAsync(() => (deps.sessionStore as any).appendMessage(sessionId, userMessage));
 
   const registry = new McpClientRegistry(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -266,8 +386,11 @@ async function runEphemeralTask(
   const controller = new AbortController();
   deps.taskStore.registerCancellation(taskId, controller);
 
+  const runEphemeral = async (): Promise<void> => {
+  const startupStamps = meter.stamps();
   try {
     await deps.orchestrator.run({
+      ...(startupStamps ? { startupStamps } : {}),
       executionContext,
       messages,
       registry,
@@ -279,9 +402,10 @@ async function runEphemeralTask(
       signal: controller.signal,
       taskId,
       hooks: deps.hooks,
-      // A one-shot `agent_name` dispatch is SYNCHRONOUS: this call blocks until
-      // `run` resolves, so the caller can never receive a resumeToken. Hence no
-      // approver is reachable within the call — an `ask` must fail closed rather
+      // A one-shot `agent_name` dispatch has no reachable approver: a synchronous
+      // call blocks until `run` resolves and a `background:true` one returns only a
+      // task id, so the caller never receives a resumeToken. Hence no approver
+      // is reachable — an `ask` must fail closed rather
       // than suspend (ADR-0008 D6: an unanswered ask never hangs).
       suspensionAnswerable: false,
       emitTaskEvent: deps.emitTaskEvent,
@@ -301,7 +425,25 @@ async function runEphemeralTask(
     } catch {
       // already closed / absent — nothing to reclaim
     }
+    // A background ephemeral task may be an upstream of a waiting task: dispatch it
+    // (mirrors the session path's `runTask` finally). Harmless for a synchronous run.
+    try {
+      await deps.dagEngine.dispatchReady(taskId);
+    } catch (err) {
+      deps.logger.warn({ taskId, err }, 'dispatchReady after ephemeral task failed');
+    }
   }
+  };
+
+  // P2: background:true enqueues the run and returns at once; the one-shot
+  // session is closed by `runEphemeral`'s finally only after the task is terminal.
+  meter.enqueued();
+  if (input.background === true) {
+    deps.queue.enqueue(taskId, runEphemeral);
+    deps.logger.info({ taskId, sessionId }, 'Ephemeral task enqueued for background execution');
+    return { task_id: taskId, status: 'pending' };
+  }
+  await runEphemeral();
 
   const finalTask = deps.taskStore.read(taskId);
   const usage = buildTaskUsageReport(deps.db, taskId);
@@ -314,7 +456,68 @@ async function runEphemeralTask(
   };
 }
 
+/**
+ * Tell the tracing/observer layer that a dispatching tool call finished handing work to child tasks
+ * (`dispatch:completed`, R10). Emitted once per dispatching tool call, from the PARENT's
+ * `callerContext` (a call with no parent context, e.g. a direct REST call, has no parent trace to
+ * attach to and emits nothing). `parentBlockedMs` is the wall time the parent spent inside the call
+ * for a synchronous dispatch, and 0 for a background one. Observational: a failing registry or
+ * handler can never change the tool's result, so any error is swallowed.
+ */
+async function emitDispatchCompleted(
+  deps: Pick<TaskDeps, 'hooks'>,
+  callerContext: ExecutionContext | undefined,
+  dispatch: {
+    kind: 'task' | 'tasks_batch' | 'agent_task' | 'result';
+    mode: 'sync' | 'background';
+    childTaskIds: string[];
+    /** `performance.now()` taken when the tool call began. */
+    startedAt: number;
+    /** Milliseconds spent waiting for the children, when the call waited (a `result` wait). */
+    waitMs?: number;
+  }
+): Promise<void> {
+  if (callerContext === undefined) return;
+  try {
+    // R10 S5b: name the parent's tool call exactly (the engine scopes each tool invocation to its call id),
+    // so concurrent dispatch calls on one parent are told apart without a guess. Absent outside an engine call.
+    const toolCallId = currentToolCallId(callerContext.taskId);
+    await deps.hooks.emit('dispatch:completed', {
+      executionContext: callerContext,
+      kind: dispatch.kind,
+      mode: dispatch.mode,
+      childTaskIds: dispatch.childTaskIds,
+      ...(toolCallId !== undefined ? { toolCallId } : {}),
+      parentBlockedMs: dispatch.mode === 'sync' ? performance.now() - dispatch.startedAt : 0,
+      ...(dispatch.waitMs !== undefined ? { waitMs: dispatch.waitMs } : {}),
+    });
+  } catch {
+    /* observational: never fail or alter a dispatch */
+  }
+}
+
+/**
+ * `task` tool: run one task in an existing session (`session_id`) or as a one-shot agent
+ * (`agent_name`), synchronously or in the background, and emit `dispatch:completed` for it.
+ */
 export async function taskTool(
+  input: TaskToolInput,
+  deps: TaskDeps,
+  callerContext?: ExecutionContext
+): Promise<TaskToolOutput> {
+  const startedAt = performance.now();
+  const out = await dispatchTask(input, deps, callerContext);
+  await emitDispatchCompleted(deps, callerContext, {
+    kind: 'agent_name' in input ? 'agent_task' : 'task',
+    mode: input.background ? 'background' : 'sync',
+    childTaskIds: [out.task_id],
+    startedAt,
+  });
+  return out;
+}
+
+/** The dispatch itself, without the `dispatch:completed` emission (so `tasksBatch` emits once per batch, not per item). */
+async function dispatchTask(
   input: TaskToolInput,
   deps: TaskDeps,
   callerContext?: ExecutionContext
@@ -323,7 +526,8 @@ export async function taskTool(
     return runEphemeralTask(input, deps, callerContext);
   }
 
-  const session = deps.sessionStore.read(input.session_id);
+  const meter = new StartupMeter(callerContext !== undefined);
+  const session = meter.session(() => deps.sessionStore.read(input.session_id));
   if (session.status !== 'active') {
     throw new ToolError(
       'SESSION_CLOSED',
@@ -334,9 +538,8 @@ export async function taskTool(
   // Caller-cwd contract (ADR-0008 D4): the caller may supply a `cwd` on the
   // task; a sub-dispatch inherits the parent's. Absent ⇒ host fallback (flagged).
   const effectiveCwd = input.cwd ?? callerContext?.cwd;
-  const agentDefinition = deps.sessionStore.getAgentDefinition(
-    input.session_id,
-    effectiveCwd
+  const agentDefinition = meter.session(() =>
+    deps.sessionStore.getAgentDefinition(input.session_id, effectiveCwd)
   );
 
   // Resolve the provider selection BEFORE the task row is created (fail closed:
@@ -344,7 +547,7 @@ export async function taskTool(
   // binding is the `session` tier of the chain.
   const { selection, wireModel } = resolveTaskSelection({
     agentDefinition,
-    sessionBinding: deps.sessionStore.getSelection?.(input.session_id) ?? null,
+    sessionBinding: meter.session(() => deps.sessionStore.getSelection?.(input.session_id) ?? null),
     config: deps.config,
     registry: deps.providerRegistry,
   });
@@ -434,7 +637,10 @@ export async function taskTool(
     executionContext,
   });
 
-  const existingMessages = deps.sessionStore.getMessages(input.session_id);
+  const existingMessages = meter.session(() => deps.sessionStore.getMessages(input.session_id));
+  // R9-hist: computed from the history BEFORE this prompt is appended, so idle time is the gap since
+  // the session's last activity, not zero.
+  const echoes = loadSessionEchoes(deps, input.session_id, existingMessages);
   const userMessage = {
     id: generateId(),
     sessionId: input.session_id,
@@ -443,7 +649,7 @@ export async function taskTool(
     createdAt: nowIso(),
   };
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  await (deps.sessionStore as any).appendMessage(input.session_id, userMessage);
+  await meter.sessionAsync(() => (deps.sessionStore as any).appendMessage(input.session_id, userMessage));
   const messages = [...existingMessages, userMessage] as unknown as Message[];
 
   const allMessages = agentDefinition.systemPrompt
@@ -478,8 +684,10 @@ export async function taskTool(
   const suspensionAnswerable = input.background === true;
 
   const runTask = async (): Promise<void> => {
+    const startupStamps = meter.stamps();
     try {
       await deps.orchestrator.run({
+        ...(startupStamps ? { startupStamps } : {}),
         executionContext,
         messages: allMessages,
         registry,
@@ -490,6 +698,7 @@ export async function taskTool(
         signal: controller.signal,
         taskId: task.id,
         hooks: deps.hooks,
+        ...(echoes !== undefined ? { echoes } : {}),
         suspensionAnswerable,
         emitTaskEvent: deps.emitTaskEvent,
         logger: deps.logger,
@@ -500,6 +709,7 @@ export async function taskTool(
     }
   };
 
+  meter.enqueued();
   if (input.background) {
     deps.queue.enqueue(task.id, runTask);
 
@@ -519,7 +729,7 @@ export async function taskTool(
   } else {
     try {
       await runTask();
-    } catch (error) {
+    } catch {
       // Orchestrator already updated the task status
     }
 
@@ -566,6 +776,7 @@ export async function tasksBatch(
   deps: TaskDeps,
   callerContext?: ExecutionContext
 ): Promise<TasksBatchOutput> {
+  const startedAt = performance.now();
   const concurrency = input.concurrency ?? DEFAULT_BATCH_CONCURRENCY;
   const n = input.prompts.length;
 
@@ -591,7 +802,7 @@ export async function tasksBatch(
     const onUpstreamFailure = input.on_upstream_failure?.[i];
     const base = {
       prompt: input.prompts[i],
-      background: false,
+      background: input.background === true,
       ...(upstream.length > 0 ? { depends_on: upstream } : {}),
       ...(onUpstreamFailure ? { on_upstream_failure: onUpstreamFailure } : {}),
     };
@@ -599,7 +810,7 @@ export async function tasksBatch(
       ? ({ session_id: input.session_ids[i], ...base } as TaskToolInput)
       : ({ agent_name: input.agent_name as string, ...base } as TaskToolInput);
 
-    const out = await taskTool(itemInput, deps, callerContext);
+    const out = await dispatchTask(itemInput, deps, callerContext);
     taskIds[i] = out.task_id;
     results[i] = {
       index: i,
@@ -631,6 +842,12 @@ export async function tasksBatch(
     for (const i of ready) completed.add(i);
   }
 
+  await emitDispatchCompleted(deps, callerContext, {
+    kind: 'tasks_batch',
+    mode: input.background === true ? 'background' : 'sync',
+    childTaskIds: results.map((r) => r.task_id),
+    startedAt,
+  });
   return { concurrency, results };
 }
 
@@ -705,7 +922,10 @@ export async function enqueueExistingTask(
     return;
   }
 
-  const session = deps.sessionStore.read(task.sessionId);
+  // R10 M2: a DAG/restart redispatch is attributable to a parent only when the task row records one.
+  const meter = new StartupMeter(task.parentTaskId != null);
+  const taskSessionId = task.sessionId;
+  const session = meter.session(() => deps.sessionStore.read(taskSessionId));
 
   if (session.status !== 'active') {
     deps.logger.warn(
@@ -715,13 +935,13 @@ export async function enqueueExistingTask(
     return;
   }
 
-  const agentDefinition = deps.sessionStore.getAgentDefinition(task.sessionId);
+  const agentDefinition = meter.session(() => deps.sessionStore.getAgentDefinition(taskSessionId));
 
   let resolved: ReturnType<typeof resolveTaskSelection>;
   try {
     resolved = resolveTaskSelection({
       agentDefinition,
-      sessionBinding: deps.sessionStore.getSelection?.(task.sessionId) ?? null,
+      sessionBinding: meter.session(() => deps.sessionStore.getSelection?.(taskSessionId) ?? null),
       config: deps.config,
       registry: deps.providerRegistry,
     });
@@ -799,7 +1019,8 @@ export async function enqueueExistingTask(
     executionContext,
   });
 
-  const existingMessages = deps.sessionStore.getMessages(task.sessionId);
+  const existingMessages = meter.session(() => deps.sessionStore.getMessages(taskSessionId));
+  const echoes = loadSessionEchoes(deps, task.sessionId, existingMessages);
   const userMessage = {
     id: generateId(),
     sessionId: task.sessionId,
@@ -833,9 +1054,12 @@ export async function enqueueExistingTask(
     deps.logger
   );
 
+  meter.enqueued();
   deps.queue.enqueue(taskId, async () => {
+    const startupStamps = meter.stamps();
     try {
       await deps.orchestrator.run({
+        ...(startupStamps ? { startupStamps } : {}),
         executionContext,
         messages: allMessages,
         registry,
@@ -846,6 +1070,7 @@ export async function enqueueExistingTask(
         signal: controller.signal,
         taskId,
         hooks: deps.hooks,
+        ...(echoes !== undefined ? { echoes } : {}),
         emitTaskEvent: deps.emitTaskEvent,
         logger: deps.logger,
         config: deps.config,
@@ -1021,6 +1246,58 @@ export function resultTool(
     ) as ProjectedTaskResult;
   }
   return full;
+}
+
+/** Poll interval for {@link resultToolWait}. */
+const RESULT_WAIT_POLL_MS = 100;
+
+/** Task statuses at which {@link resultToolWait} stops waiting. */
+const RESULT_WAIT_TERMINAL = new Set(['completed', 'failed', 'cancelled', 'awaiting_input']);
+
+/**
+ * `result` with an optional bounded wait (P2). With `wait_ms` unset or 0 this is
+ * exactly {@link resultTool}. Otherwise it re-reads the task until it reaches a
+ * terminal (or `awaiting_input`, which only a human can advance) state or `wait_ms` (clamped to {@link RESULT_MAX_WAIT_MS}) elapses and
+ * returns the state at that moment — a timeout is not an error.
+ *
+ * @param input - the `result` input, including optional `wait_ms`.
+ * @param deps - task store and db.
+ * @param sleep - injectable delay (tests); defaults to a timer.
+ * @param now - injectable clock (tests); defaults to `Date.now`.
+ */
+export async function resultToolWait(
+  input: ResultInput,
+  deps: Pick<TaskDeps, 'taskStore' | 'db'> & {
+    /** With `callerContext`: a wait emits `dispatch:completed` (`kind: 'result'`) on the waiting parent. */
+    hooks?: Pick<TaskDeps, 'hooks'>['hooks'];
+    callerContext?: ExecutionContext;
+  },
+  sleep: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms)),
+  now: () => number = Date.now
+): Promise<(Task | ProjectedTask) & { usage?: TaskUsageReport }> {
+  const budget = Math.min(input.wait_ms ?? 0, RESULT_MAX_WAIT_MS);
+  if (budget > 0) {
+    const startedAt = performance.now();
+    const deadline = now() + budget;
+    for (;;) {
+      const status = deps.taskStore.read(input.task_id).status;
+      if (RESULT_WAIT_TERMINAL.has(status)) break;
+      const remaining = deadline - now();
+      if (remaining <= 0) break;
+      await sleep(Math.min(RESULT_WAIT_POLL_MS, remaining));
+    }
+    // R10 S5b: a wait is time the parent spent blocked on a child; record it (a wait-free read is not a wait).
+    if (deps.hooks !== undefined) {
+      await emitDispatchCompleted({ hooks: deps.hooks }, deps.callerContext, {
+        kind: 'result',
+        mode: 'sync',
+        childTaskIds: [input.task_id],
+        startedAt,
+        waitMs: performance.now() - startedAt,
+      });
+    }
+  }
+  return resultTool(input, deps);
 }
 
 // Import Message for type used above

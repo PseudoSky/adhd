@@ -44,6 +44,8 @@ export const taskEventTypeSchema = z.enum([
   'TOOL_ARG_COERCED',
   'budget:unpriced_model',
   'provider:builtin_bypass',
+  'provider:history_degraded',
+  'provider:pause_continued',
   'TASK_COMPLETED',
   'TASK_FAILED',
   'TASK_CANCELLED',
@@ -80,6 +82,12 @@ const sessionModeSchema = z.object({
 const ephemeralModeSchema = z.object({
   agent_name: z.string().min(1),
   prompt: z.string().min(1),
+  /**
+   * P2 background dispatch: `true` returns `{task_id, status:'pending'}`
+   * immediately; the one-shot session is kept until the task is terminal and
+   * reclaimed only then. Default (absent/false) stays synchronous.
+   */
+  background: z.boolean().optional(),
   depends_on: z.array(z.string().uuid()).optional(),
   on_upstream_failure: z.enum(['fail', 'skip']).optional(),
   stream: z.boolean().optional(),
@@ -149,12 +157,21 @@ export const taskCancelInputSchema = z.object({
   task_id: z.string().uuid(),
 });
 
+/** Upper bound for `result.wait_ms` (kept under typical MCP client call timeouts). */
+export const RESULT_MAX_WAIT_MS = 55_000;
+
 export const resultInputSchema = z.object({
   task_id: z.string().uuid(),
   /** f2b004eb: project the returned task record (id always included). The special
    *  value `usage` may be named to keep the usage report; omit `fields` for the full
    *  task + usage payload. */
   fields: z.array(z.union([taskListFieldSchema, z.literal('usage')])).optional(),
+  /**
+   * P2 bounded wait: when set, `result` blocks until the task is terminal or
+   * `wait_ms` elapses (clamped to {@link RESULT_MAX_WAIT_MS}, never rejected), then returns the
+   * current state. Absent/0 keeps the immediate-read behaviour.
+   */
+  wait_ms: z.number().int().nonnegative().optional(),
 });
 
 export type TaskToolInput = z.infer<typeof taskToolInputSchema>;
@@ -162,6 +179,51 @@ export type TaskToolOutput = z.infer<typeof taskToolOutputSchema>;
 export type TaskListInput = z.infer<typeof taskListInputSchema>;
 export type TaskCancelInput = z.infer<typeof taskCancelInputSchema>;
 export type ResultInput = z.infer<typeof resultInputSchema>;
+
+/** Type-mismatch message for `tasks_batch.prompts` (error text only; the advertised JSON schema is unaffected). */
+const PROMPTS_TYPE_ERROR = 'prompts must be an array or a JSON-array string';
+
+/** Type-mismatch message for `tasks_batch.concurrency` (error text only; the advertised JSON schema is unaffected). */
+const CONCURRENCY_TYPE_ERROR = 'concurrency must be an integer or an integer string';
+
+/**
+ * Tolerance pre-step for `tasks_batch.concurrency` (backlog 932604a0 R9): a
+ * model may send the integer as a base-10 string (`"2"`). Only a string that
+ * is an optionally-signed run of ASCII digits, optionally padded with
+ * whitespace (`" 2 "`, `"+2"`, `"007"`), is converted; anything else (`"abc"`,
+ * `"2.5"`, `"1e2"`, `"NaN"`, `""`) is passed through untouched so the strict
+ * number schema still rejects it. Range checks (positive, max 64) stay in the
+ * schema.
+ *
+ * @param value - the raw `concurrency` argument.
+ * @returns the number for an integer string, otherwise `value` unchanged.
+ */
+function parseIntegerString(value: unknown): unknown {
+  if (typeof value === 'string' && /^\s*[+-]?\d+\s*$/.test(value)) {
+    return Number(value);
+  }
+  return value;
+}
+
+/**
+ * Tolerance pre-step for `tasks_batch.prompts` (backlog 932604a0 R9): a model
+ * may send the array as a JSON string. Only a string that `JSON.parse`s to an
+ * array is replaced; malformed JSON or a non-array JSON value is passed
+ * through untouched so the strict array schema rejects it. Element rules
+ * (non-empty strings, non-empty array) stay in the schema.
+ *
+ * @param value - the raw `prompts` argument.
+ * @returns the decoded array for a stringified array, otherwise `value`.
+ */
+function parseStringifiedArray(value: unknown): unknown {
+  if (typeof value !== 'string') return value;
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : value;
+  } catch {
+    return value;
+  }
+}
 
 /**
  * `tasks_batch` (FEAT: native bulk/parallel task-dispatch primitive,
@@ -187,14 +249,23 @@ export const tasksBatchInputSchema = z
       .array(z.string().uuid())
       .optional()
       .describe('Reuse one existing session per prompt; length must equal prompts.length'),
-    prompts: z.array(z.string().min(1)).min(1).describe('One prompt per dispatched task'),
-    concurrency: z
-      .number()
-      .int()
-      .positive()
-      .max(64)
-      .optional()
-      .describe('Max tasks executing simultaneously (default 4)'),
+    prompts: z.preprocess(
+      parseStringifiedArray,
+      z
+        .array(z.string().min(1), { error: PROMPTS_TYPE_ERROR })
+        .min(1)
+        .describe('One prompt per dispatched task')
+    ),
+    concurrency: z.preprocess(
+      parseIntegerString,
+      z
+        .number({ error: CONCURRENCY_TYPE_ERROR })
+        .int()
+        .positive()
+        .max(64)
+        .optional()
+        .describe('Max tasks executing simultaneously (default 4)')
+    ),
     depends_on: z
       .array(z.array(z.string().uuid()))
       .optional()
@@ -209,6 +280,12 @@ export const tasksBatchInputSchema = z
       .array(z.enum(['fail', 'skip']))
       .optional()
       .describe('Per-item upstream-failure policy; length must equal prompts.length'),
+    background: z
+      .boolean()
+      .optional()
+      .describe(
+        'true = start every item in the background and return {index, task_id, status:"pending"} immediately; collect with result {task_id, wait_ms}. Not combinable with depends_on / depends_on_indexes; concurrency is ignored (the server background queue controls execution). Default false (synchronous)'
+      ),
   })
   .superRefine((val, ctx) => {
     const n = val.prompts.length;
@@ -234,6 +311,16 @@ export const tasksBatchInputSchema = z
         });
       }
     };
+    if (
+      val.background === true &&
+      (val.depends_on !== undefined || val.depends_on_indexes !== undefined)
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          'background:true cannot be combined with depends_on / depends_on_indexes (ordering needs synchronous waves)',
+      });
+    }
     parallel('depends_on', val.depends_on);
     parallel('depends_on_indexes', val.depends_on_indexes);
     parallel('on_upstream_failure', val.on_upstream_failure);

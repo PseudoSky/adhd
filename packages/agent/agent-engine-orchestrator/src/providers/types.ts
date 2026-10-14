@@ -1,6 +1,8 @@
 import type { Message } from '../validation/index.js';
-import type { PermissionAction, ToolDefinition, TokenUsage } from '@adhd/agent-base-types';
-export type { ToolDefinition, TokenUsage };
+import type { IProviderEcho, PermissionAction, ToolDefinition, TokenUsage } from '@adhd/agent-base-types';
+// `ToolDefinition` is declared in `@adhd/agent-base-types` (domain.ts). Its optional `annotations` are
+// engine-internal metadata and must never reach a provider wire request or the canonical tool hash.
+export type { ToolDefinition, TokenUsage, IProviderEcho };
 import type { ProviderLimitWarning } from './provider-failure.js';
 export type { ProviderLimitWarning };
 import type { ProviderTokenUsage } from './partial-usage.js';
@@ -44,6 +46,20 @@ export interface ProviderChatRequest {
     tool: string,
     args: unknown
   ) => Promise<{ result: unknown; isError: boolean }>;
+  /**
+   * R9-hist: provider-native assistant content to replay, keyed by the assistant `Message.id`
+   * (thinking, server_tool_use and server tool results; see {@link IProviderEcho}). A provider that
+   * does not echo, or an entry whose `provider`/`model` does not match this request, ignores it and
+   * rebuilds the turn from `messages` exactly as before. Absent => legacy history.
+   */
+  echoes?: ReadonlyMap<string, IProviderEcho>;
+  /**
+   * R9-hist: awaited by a provider that continues a paused turn itself (Anthropic `pause_turn`)
+   * BEFORE each continuation request, with the 1-based continuation number. The engine uses it to
+   * check cancellation and enforce `pre:model_request` (budget/USD caps) per continuation; a
+   * rejection aborts the continuation and propagates out of `chat()`. Absent => no per-continuation hook.
+   */
+  beforeContinuation?: (n: number) => Promise<void>;
 }
 
 export interface ProviderChatResponse {
@@ -74,6 +90,29 @@ export interface ProviderChatResponse {
    * `rate_limit_event` with `allowed_warning`). Surfaced, never swallowed (de6bee5d FLT-4).
    */
   limitWarnings?: ProviderLimitWarning[];
+  /**
+   * P6: milliseconds from request start to the first streamed byte/event of the call that
+   * produced this response. Absent when the provider could not observe one.
+   */
+  ttfbMs?: number;
+  /**
+   * R9-hist: the provider-native content of this assistant turn (see {@link IProviderEcho}), to be
+   * kept by the engine under `message.id` and passed back through {@link ProviderChatRequest.echoes}.
+   * Absent for providers that do not echo and when nothing replay-relevant was returned.
+   */
+  echo?: IProviderEcho;
+  /**
+   * R9-hist: set when the provider retried WITHOUT the echoed blocks because the API rejected the
+   * replay (`invalid_request` naming the echoed block types). `apiMessage` is the API's error text
+   * (the engine truncates it to 300 chars for the task event); `echoedMessages` is how many assistant
+   * messages had echoed blocks in the rejected request. The engine stops supplying echoes for the rest of the run.
+   */
+  echoDegraded?: { apiMessage: string; echoedMessages: number };
+  /**
+   * R9-hist: what was replayed in THIS request (inspectability): number of assistant messages sent
+   * with echoed blocks and the JSON byte length of those blocks. Absent when nothing was replayed.
+   */
+  echoReplay?: { messages: number; bytes: number };
 }
 
 export interface LLMProvider {

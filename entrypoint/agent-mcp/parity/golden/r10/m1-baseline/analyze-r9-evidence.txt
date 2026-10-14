@@ -1,0 +1,11 @@
+== EVIDENCE A1 (A) ==
+sources | wire true | api log false | tracing plugin false | mcp calls false
+thinking blocks | 19 | text omitted by the API (signature only) 19 | text returned 0 | NOTE: the API returned no thinking text; do not infer anything from its absence
+thinking config on the wire | {"type":"adaptive","display":"updates"} null
+delegation | sync 1 | background 2
+
+== EVIDENCE C1 (C) ==
+sources | wire true | api log true | tracing plugin true | mcp calls true
+thinking blocks | 27 | text omitted by the API (signature only) 27 | text returned 0 | NOTE: the API returned no thinking text; do not infer anything from its absence
+thinking config on the wire | null
+delegation | sync 3 | background 0

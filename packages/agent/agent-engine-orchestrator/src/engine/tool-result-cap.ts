@@ -7,7 +7,10 @@
  *
  * Semantics (binding architect verdict Q1):
  * - The cap is measured in UTF-16 code units of the serialized text
- *   (`JSON.stringify` for non-string results).
+ *   (`JSON.stringify` for non-string results). An MCP content array made only of
+ *   text blocks is measured, and sliced, as its model-visible TEXT
+ *   ({@link mcpContentText}), never as its JSON-escaped form: head/tail cuts land on
+ *   real source lines and the marker counts real characters (R10 S1 P5-A1).
  * - A result at or under the cap is returned untouched (same reference).
  * - Over the cap: `head` = floor(cap * 0.75) chars, `tail` = the rest, joined
  *   by an in-band marker. The marker is added OUTSIDE the cap.
@@ -40,13 +43,56 @@ export const TOOL_RESULT_MAX_CHARS_KEY = 'agent.toolResult.maxChars';
 /** Env var that carries the cap. */
 export const TOOL_RESULT_MAX_CHARS_ENV = 'ADHD_AGENT_TOOL_RESULT_MAX_CHARS';
 
+/** MCP content block types a tool result may carry (`@modelcontextprotocol/sdk` `ContentBlock`). */
+const MCP_BLOCK_TYPES: ReadonlySet<string> = new Set(['text', 'image', 'audio', 'resource', 'resource_link']);
+
+/** One recognised MCP content block; extra keys (`annotations`, `_meta`) are allowed and not model-visible. */
+export interface IMcpContentBlock {
+  readonly type: string;
+  readonly [key: string]: unknown;
+}
+
+const isObject = (v: unknown): v is Record<string, unknown> => v !== null && typeof v === 'object' && !Array.isArray(v);
+
+/** A recognised MCP block: a `text` block has a string `text`; an `image` block has string `data` and `mimeType`. */
+function isMcpBlock(b: unknown): b is IMcpContentBlock {
+  if (!isObject(b) || typeof b['type'] !== 'string' || !MCP_BLOCK_TYPES.has(b['type'])) return false;
+  if (b['type'] === 'text') return typeof b['text'] === 'string';
+  if (b['type'] === 'image') return typeof b['data'] === 'string' && typeof b['mimeType'] === 'string';
+  return true;
+}
+
+/**
+ * True iff `value` is an MCP tool-result content array: non-empty and EVERY element a recognised MCP block.
+ * Anything else (a string, an engine tool's own object/array, an array holding an unknown element) is not one
+ * and keeps its plain JSON encoding, so engine results are never reinterpreted.
+ */
+export function isMcpContentArray(value: unknown): value is readonly IMcpContentBlock[] {
+  return Array.isArray(value) && value.length > 0 && value.every(isMcpBlock);
+}
+
+/**
+ * The model-visible text of an MCP content array made ONLY of text blocks: the non-empty block texts joined by
+ * `\n` (a single block is returned verbatim, characters such as CR LF, quotes and backslashes untouched).
+ * `undefined` when `result` is not such an array (any other shape, or any non-text block present), so the caller
+ * keeps its own handling and nothing is dropped.
+ */
+export function mcpContentText(result: unknown): string | undefined {
+  if (!isMcpContentArray(result)) return undefined;
+  if (!result.every(b => b.type === 'text')) return undefined;
+  return result
+    .map(b => b['text'] as string)
+    .filter(t => t !== '')
+    .join('\n');
+}
+
 /** Outcome of {@link capToolResult}. */
 export interface ToolResultCapOutcome {
   /** The model-visible result: the input reference when untouched, else a string. */
   readonly result: unknown;
   /** True iff the result was truncated. */
   readonly truncated: boolean;
-  /** Serialized length (UTF-16 code units) of the original result. */
+  /** Length (UTF-16 code units) of the original result: its text for an all-text MCP array, else its serialization. */
   readonly originalChars: number;
 }
 
@@ -117,7 +163,8 @@ export function capToolResult(
   isError: boolean,
   maxChars: number
 ): ToolResultCapOutcome {
-  const text = serializeToolResult(result);
+  // R10 S1 P5-A1: an all-text MCP array is capped as the text the model reads, not as its escaped JSON.
+  const text = mcpContentText(result) ?? serializeToolResult(result);
   if (text === undefined) {
     return { result, truncated: false, originalChars: 0 };
   }

@@ -1,3 +1,9 @@
+## Unreleased
+
+### 🚀 Features
+
+- **agent-store-runtime:** persisted provider echo (R9-hist). New `message_provider_echo` table definition (`messageProviderEchoTable`, created by agent-mcp migration 0017; additive, `messages` is not altered, so a previous-version binary keeps working against a migrated database) and `SessionStore` members `appendMessageEcho` (one keyed `INSERT ... ON CONFLICT DO NOTHING`), `getMessageEchoes(sessionId, messageIds, idleMs, ttlMs)` (loads exactly the given assistant message ids in chunks of 500, never the whole session), `getEchoSessionServerBytes`, `sweepEchoes(nowMs, ttlMs)` and `deleteMessageEchoes`. Thinking, text and client `tool_use` blocks (tier T) never expire; `server_tool_use` and every `*_tool_result` block (tier S, third-party content) expire from replay once the session has been idle STRICTLY longer than the TTL (all-or-nothing per session; `ttlMs <= 0` serves none). Reader and sweeper decide through one exported rule, `isEchoSessionExpired`, and the sweeper re-checks session idleness inside each guarded UPDATE (batches of 200, `BEGIN IMMEDIATE`), so a session another process is using is never touched. `clearMessages` now deletes the session's echo rows in the same immediate transaction (holds with `foreign_keys=OFF`; skipped on a database that has not applied 0017). Echo persistence is best-effort: a failure logs one warning per process (no content) and degrades to legacy history, never failing a task. New exports: `ECHO_SCHEMA_VERSION`, `isEchoSessionExpired`, `stripEchoServerBlocks`, `IEchoSweepResult`. The `task_events.type` enum gains `provider:history_degraded` and `provider:pause_continued` (TypeScript enum only, no DDL). (R9-hist S4a)
+
 ## 2.2.10 (2026-10-11)
 
 ### 🚀 Features

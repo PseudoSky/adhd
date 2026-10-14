@@ -71,6 +71,7 @@ queue. Bodies are captured up to `logging.apiBodyMaxBytes` (4 MiB) with the sha2
 | `event` | Meaning | Notable fields |
 |---|---|---|
 | `http.request` / `http.response` | Outbound call to an HTTP provider (Anthropic API, OpenAI-compatible, the pricing feed) | `call_id`, `task_id`, `session_id`, `agent`, `method`, `url`, `headers` (secrets redacted), `body`; response: `status`, `ttfb_ms`, `latency_ms`, `chunk_count`, streamed `body` (a response past 64 MiB is cut off from logging with `drain_cancelled: true`; the caller still receives every byte) |
+| `http.request` / `http.response` / `http.error` (`web_fetch`) | The engine-native `web_fetch` (claudecli and OpenAI-compatible agents; Anthropic's server-side `web_fetch` runs on Anthropic's side and writes none). One record set per request, redirect hop and failover attempt | `call_id`, the ambient ids, `method`, `scheme`, `host` (the name), `port`, `ip` (the validated address the socket went to); response: `status`, `wire_bytes` (bytes received before `Content-Encoding` is undone), `complete`; error: `error_class`, `error_message`, `error_code`. NEVER the path or query, a header, the body or a credential. Told apart from the LLM-API records by `ip` and the absence of `url` |
 | `spawn.start` / `spawn.stdin` / `spawn.stdout` / `spawn.exit` / `spawn.close` | A subprocess provider (the `claude` CLI) | `command`, `args`, per-line `body`, `code`, `duration_ms`, `stdout_bytes`, `stdout_sha256` |
 | `mcp.request` / `mcp.response` / `mcp.error` | Inbound MCP `tools/call` handled by the server | `tool`, `mcp_session_id`, `request_id`, `is_error`, `duration_ms`, `body` |
 | `http.inbound.request` / `http.inbound.response` | The streamable-HTTP and SSE routes | `route`, `method`, `url`, `status`, `body_bytes` |
@@ -106,7 +107,7 @@ spans). Fields use dotted names: `agent.task_id`, `agent.session_id`, `agent.roo
 | Table | Holds |
 |---|---|
 | `tasks` | status, prompt, result, error, timestamps, `session_id` |
-| `task_events` | `MODEL_REQUEST`, `MODEL_RESPONSE` (with `rawUsage` verbatim from the provider), `TOOL_CALL`, `TOOL_ARG_COERCED`, `TOOL_RESULT`, `TASK_COMPLETED`, `budget:unpriced_model` (a cost-capped model had no rate-card price), `provider:builtin_bypass` (a claudecli agent enabled CLI built-ins that skip engine hooks), ... |
+| `task_events` | `MODEL_REQUEST`, `MODEL_RESPONSE` (with `rawUsage` verbatim from the provider), `TOOL_CALL`, `TOOL_ARG_COERCED`, `TOOL_RESULT`, `TASK_COMPLETED`, `budget:unpriced_model` (a cost-capped model had no rate-card price), `provider:builtin_bypass` (a claudecli agent enabled CLI built-ins that skip engine hooks), `provider:history_degraded` (the API rejected the replayed provider echo; payload `reason`, `echoedMessages`, `healed`), `provider:pause_continued` (a `pause_turn` was continued; payload `n`), ... |
 | `task_usage` | one row per task: tokens (total, uncached, cache read, cache write), latency, `est_cost_usd`, `priced_cost_usd`, `cost_status`, `cost_basis`, `pricing_ref`, `requested_model`, `cli_reported_cost_usd`, `cache_creation_1h_tokens` (the 1-hour-TTL subset of the cache writes; NULL on rows written before migration 0015), `model_breakdown_json` |
 | `model_price_history` | append-only price snapshots (`input_per_m`, `cache_read_per_m`, `cache_write_per_m`, `output_per_m`, `raw_json`) |
 | `price_pull_ledger` | one row per live price pull |
@@ -250,6 +251,22 @@ $ node call.mjs 47852 usage_query '{"agent_name":"live-trace-oauth","group_by":"
 
 Field semantics (`inputTokens` is cache-inclusive; `total_ms` is wall clock, `compute_ms` is model
 time) are in [dev-server-local-testing.md, "Reading usage correctly"](./dev-server-local-testing.md#reading-usage-correctly).
+
+#### Paused turns and provider echo in usage
+
+When the Anthropic API pauses a long server-tool turn (`pause_turn`), the provider continues it inside
+one response and reports the number of requests it made. At task grain every continuation counts in
+`model_calls` (a paused turn that took 3 requests adds 3). The turn grain reports `1` per
+`MODEL_RESPONSE`, so a paused turn is one row there; the turn's request count (the original request plus its continuations) is the `modelCalls` field of
+that event's payload (present only when the turn took more than one request). Each continuation also
+appends a `provider:pause_continued` event (`{ n }`) to `task_events`.
+
+`MODEL_RESPONSE` payloads gain four optional counts for the provider echo (see the
+[orchestrator README](../../../packages/agent/agent-engine-orchestrator/README.md#provider-echo-anthropic)):
+`echoBlocks` and `echoBytes` (content blocks and JSON bytes this response captured) and
+`echoReplayedMessages` and `echoReplayedBytes` (assistant messages and JSON bytes the request replayed
+from earlier turns). They are absent when nothing was captured or replayed, hold counts only (never
+block content), and `usage_query` renders payloads with and without them identically.
 
 #### Cumulative vs per-turn: `inputTokens` and `peakContextTokens`
 

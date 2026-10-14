@@ -8,7 +8,7 @@ import type { EngineConfig } from "@adhd/agent-engine-orchestrator";
 
 import { resolveLogRoots } from "../config.js";
 import { createWireSeams } from "../wire/seams.js";
-import { tracedFetch, tracedSpawn, TracedTransport } from "../wire/index.js";
+import { tracedFetch, tracedRequest, tracedSpawn, TracedTransport } from "../wire/index.js";
 import { noopLogChannel } from "../wire/channels.js";
 
 type SpawnFn = WireSeamsShape["spawn"];
@@ -34,6 +34,25 @@ describe("c536ce29 W1-AC-A WireSeams", () => {
         expectTypeOf(seams.spawn).toEqualTypeOf<SpawnFn>();
         expectTypeOf(seams.tempDir).toEqualTypeOf<string | undefined>();
         expect(seams.withContext({ a: 1 }, () => 5)).toBe(5);
+    });
+});
+
+describe("49cec55e AC2 WireSeams.request", () => {
+    it("49cec55e AC2: request is optional on WireSeams, so a seams literal without it still compiles", () => {
+        const seams: WireSeams = {
+            fetch: tracedFetch(noopLogChannel()),
+            spawn: (() => { throw new Error("not called"); }) as unknown as SpawnFn,
+            wrapTransport: (t) => t,
+            withContext: (_ctx, fn) => fn(),
+        };
+        expectTypeOf(seams.request).toEqualTypeOf<NonNullable<WireSeams["request"]> | undefined>();
+        expect(seams.request).toBeUndefined();
+    });
+
+    it("49cec55e AC2: createWireSeams provides a traced request seam, and tracedRequest satisfies the seam type", () => {
+        expect(typeof createWireSeams().request).toBe("function");
+        const traced: NonNullable<WireSeams["request"]> = tracedRequest(noopLogChannel());
+        expect(typeof traced).toBe("function");
     });
 });
 

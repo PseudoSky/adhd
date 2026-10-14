@@ -1,3 +1,13 @@
+## Unreleased
+
+### 🚀 Features
+
+- **agent-base-types:** R10 S5b trace-emission contract. `TaskStartupPayload.queueWaitMs` and `sessionMs` are now optional (the engine reports them only when it measured them, never a guess); `DispatchCompletedPayload` gains optional `toolCallId` (the parent's tool call that made the dispatch) and `kind: 'result'` (a `result` tool call that waited on a child). Backward compatible for emitters; a consumer that read `queueWaitMs` / `sessionMs` as always-present must now handle `undefined`. (R10 S5b)
+- **agent-base-types:** R10 S0 trace-signal types, all additive and optional. New hook events `task:startup`, `dispatch:completed` and `background:delivered` (type only, no emitter yet) with `TaskStartupPayload`, `DispatchCompletedPayload`, `BackgroundDeliveredPayload`; new optional fields on `PreToolCallPayload` (`concurrencyClass`, `turnIndex`, `groupIndex`, `queuedMs`), `PostToolCallPayload` (`errorClass`, `resultBytes`, `noteAppended`) and `PostModelResponsePayload` (`thinkingConfig`, `thinkingBlocks`, `toolResultBytesIn`, `turnIndex`); `ToolDefinition.annotations` (`IToolAnnotations`, engine-internal, never on the provider wire or in the canonical tool hash); `IAnthropicThinking` and `thinking?` on the anthropic `ProviderConfig` and on `PartialBinding`. No behaviour change. (R10 S0)
+- **agent-base-types:** `HookEventMap['transform:server_result_persist']` and `ServerResultPersistPayload` (`{ sessionId, agentName?, serverBytes, persist }`): a mutation-style persistence veto for provider server-tool result bodies, emitted once per assistant message before its echo is stored. Handlers set `persist = false` to keep the bodies in-run only. Additive; the frozen-event-surface type test now includes it. (R9-hist S5b)
+- **agent-base-types:** `TaskEventType` gains `provider:history_degraded` and `provider:pause_continued`, the progress events the engine appends when a replayed provider echo is rejected and degraded, and for each provider-driven `pause_turn` continuation. Additive union members. (R9-hist S0, S5a)
+- **agent-base-types:** `IProviderEcho`: a side record (provider, producing model, verbatim ordered content blocks) for provider-native assistant content that must be sent back unchanged (thinking, server tool use and results). Deliberately not a field of `Message`, so hook payloads, tracing and UI projections never carry signatures or fetched page content. Additive type only. (R9-hist S0)
+
 ## 2.3.11 (2026-10-11)
 
 ### 🚀 Features

@@ -26,6 +26,7 @@ vi.mock('@adhd/sox-telemetry', async (importOriginal) => {
 
 import { createPlugin } from '../index.js';
 import { HookRegistry, Orchestrator, makeCtx, makeEnv, makeLogDir, runInput } from '../test/harness.js';
+import { runParentDispatch, startFakeOpenAI } from '../test/dispatch-harness.js';
 
 /**
  * A failing exporter must never break a task (spec: observational only). Each mode makes the
@@ -79,6 +80,43 @@ describe('a throwing exporter never breaks a task', () => {
       plugin.dispose();
     } finally {
       rmSync(blocker, { recursive: true, force: true });
+    }
+  });
+
+  // R10 S5 AC2: the new dispatch / startup / tool-signal paths are observational too.
+  for (const mode of ['throws-sync', 'rejects'] as const) {
+    it(`R10 S5 AC2: a real parent -> worker dispatch completes with its real result while the exporter fails ("${mode}")`, async () => {
+      const openai = await startFakeOpenAI(() => ({ content: 'worker answer' }));
+      try {
+        const hooks = new HookRegistry();
+        const plugin = createPlugin({ db: null, config: { service: 'exporter-failure', logDir: log.dir } });
+        await plugin.install(hooks);
+        state.mode = mode;
+        const run = await runParentDispatch(hooks, openai.baseURL, 'task', { agent_name: 'worker-agent', prompt: 'p' });
+        expect(run.toolErrors).toEqual([]);
+        expect(run.result).toBe('parent finished');
+        expect(run.toolResults).toHaveLength(1);
+        expect(run.toolResults[0]).toMatchObject({ status: 'completed', result: 'worker answer' });
+        await plugin.dispose();
+      } finally {
+        state.mode = 'ok';
+        await openai.close();
+      }
+    });
+  }
+
+  it('R10 S5 AC2: a throwing hook handler on the new dispatch event never fails the dispatch', async () => {
+    const openai = await startFakeOpenAI(() => ({ content: 'worker answer' }));
+    try {
+      const hooks = new HookRegistry();
+      hooks.register('dispatch:completed', () => {
+        throw new Error('observer exploded');
+      });
+      const run = await runParentDispatch(hooks, openai.baseURL, 'task', { agent_name: 'worker-agent', prompt: 'p' });
+      expect(run.toolErrors).toEqual([]);
+      expect(run.toolResults[0]).toMatchObject({ status: 'completed', result: 'worker answer' });
+    } finally {
+      await openai.close();
     }
   });
 

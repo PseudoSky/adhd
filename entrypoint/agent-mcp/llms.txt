@@ -20,7 +20,7 @@ When run, @adhd/agent-mcp:
 - `agent_create(name, config)` — register a new agent with provider/model/policy
 - `task(agentName, prompt)` — send a prompt and run the agent until tool-loop ends
 - `result(taskId)` — retrieve task result and token usage
-- `usage_query({task_id?, root_task_id?, agent_name?, since?, limit?, group_by?, grain?})` — query usage across multiple tasks; `group_by` = agent | model | provider | response_model
+- `usage_query({task_id?, root_task_id?, agent_name?, since?, limit?, group_by?, grain?})` — query usage across multiple tasks; `group_by` = agent | model | provider | response_model; task grain `model_calls` counts every `pause_turn` continuation, turn grain reports 1 per turn
 - `pricing_refresh(accept?)` — pull live OpenRouter prices now (public feed, no API key); `pricing_history(model, from?, to?)` — observed price series + pull status
 - `task_cancel(taskId)` — cancel a running task
 - `agent_list()` — list all agents
@@ -47,13 +47,16 @@ Optional:
 - `ADHD_AGENT_TOOL_CALL_CONCURRENCY` — max tool calls of one assistant turn run concurrently (default: 8; positive integer; invalid fails at startup; one per-task limiter bounds BOTH the native tool loop and the claudecli bridge)
 - `ADHD_AGENT_TOOL_RESULT_MAX_CHARS` — max chars of one tool result shown to the model, head+tail truncated with a marker (default: 6000; 0 = disabled; invalid fails at startup)
 - `ADHD_AGENT_TOOL_RESULT_SPILL_ENABLED` — opt-in: write an over-cap tool result to a 0600 file and show the model a stub with the path instead of truncating (default: false; dir `ADHD_AGENT_TOOL_RESULT_SPILL_DIR`, ttl `ADHD_AGENT_TOOL_RESULT_SPILL_TTL_HOURS`)
+- `ADHD_AGENT_ECHO_MAX_MESSAGE_BYTES` — max bytes of one assistant message's stored provider echo (config key `echo.maxMessageBytes`; default: 131072; invalid fails at startup)
+- `ADHD_AGENT_ECHO_MAX_SESSION_BYTES` — cap on server-tool result bytes stored per session (config key `echo.maxSessionBytes`; default: 4194304)
+- `ADHD_AGENT_ECHO_SERVER_RESULT_TTL_MINUTES` — minutes of session idleness after which stored server-tool results stop being replayed (config key `echo.serverResultTtlMinutes`; default: 10; 0 = never store them)
 - `ADHD_AGENT_LOG_LEVEL` — logging level (default: info)
 - Log tree: `~/.adhd/agent-mcp/<namespace>/logs/{api,ops,trace}` (env-resolved, global scope, shared across restarts; scratch in `.../temp`). `ADHD_AGENT_LOGGING_DIR` overrides the root; `ADHD_AGENT_LOGGING_INSTANCE_LABEL` (default `default`) names files `<date>.<label>.<pid>.jsonl`.
 - `ADHD_AGENT_LOGGING_API` — `on` (default) / `off`; off stops only raw API body capture (ops + trace stay on)
 - `ADHD_AGENT_LOGGING_API_BODY_MAX_BYTES` (4194304), `_API_ROTATE_BYTES` (67108864), `_API_RETENTION_DAYS` (14), `_API_MAX_DIR_BYTES` (2147483648), `_OPS_ROTATE_BYTES` (16777216), `_OPS_RETENTION_DAYS` (60), `_OPS_MAX_DIR_BYTES` (268435456), `_TRACE_RETENTION_DAYS` (30), `_TRACE_MAX_DIR_BYTES` (536870912), `_FLOOD_MAX_BYTES` (268435456), `_FLOOD_WINDOW_SECONDS` (600) — all `ADHD_AGENT_LOGGING_*`
 - `ADHD_AGENT_TRACING_LOG_DIR` — tracing sink dir (default `<logs>/trace`)
 - `ADHD_AGENT_DATABASE_PATH` — absolute path of a custom SQLite DB (default: the production store `~/.adhd/agent-mcp/production/data/agents.db`; relative values are rejected; a launch-directory `.env` cannot set it)
-- Task events: `budget:unpriced_model` and `provider:builtin_bypass` are persisted in `task_events` (not env-configured); see docs/agent/provider-parity.md
+- Task events: `budget:unpriced_model`, `provider:builtin_bypass`, `provider:history_degraded` (payload `reason`, `echoedMessages`, `healed`) and `provider:pause_continued` (payload `n`) are persisted in `task_events` (not env-configured); see docs/agent/provider-parity.md
 
 ## 2.0.2 Highlights
 
