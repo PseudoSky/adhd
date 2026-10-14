@@ -7,7 +7,7 @@
 - `adr-drafts/0004-followup-mcp-adapter.md`: raw-text string results, the `isError` mapping, tool metadata.
 - `adr-drafts/spec-7.1-createLayer-binding.md`: the SPEC §7.1 / §4 / §8.1 edit draft.
 
-`SOURCE-MODEL-GAP-ANALYSIS.md` is cited by section, not line: it carries uncommitted working-tree edits.
+`SOURCE-MODEL-GAP-ANALYSIS.md` is cited by section, not line (last commit `4f743bc6`).
 
 ---
 
@@ -173,8 +173,7 @@ Each segment lists: files (verified paths), interface BEFORE/AFTER, behaviour ch
   // AFTER — createLayer called once per plugin at composition time; it wins over layer
   export function createPackageInvoker(
     schemas: ComposedSchemas, usePlugins: UsePlugin[],
-    layerOptions: Record<string, unknown> = {},
-    terminal?: Terminal
+    options: { layerOptions?: Record<string, unknown>; terminal?: Terminal } = {}
   ): InvokeFn
 
   // BEFORE invoke.ts:183
@@ -227,7 +226,7 @@ Each segment lists: files (verified paths), interface BEFORE/AFTER, behaviour ch
   // AFTER  — async (req, extra) => …; the dispatched call carries signal: extra.signal
 
   // BEFORE run.ts:512, :568, :598 — createPackageInvoker(schemas, usePlugins)
-  // AFTER  — createPackageInvoker(schemas, usePlugins, input.options)
+  // AFTER  — createPackageInvoker(schemas, usePlugins, { layerOptions: input.options })
 
   // BEFORE run.ts:960 — const t = new StdioServerTransport();
   // AFTER  — new StdioServerTransport(stdin?, stdout?) from an optional input.options['stdio'] stream pair
@@ -387,7 +386,7 @@ Each segment lists: files (verified paths), interface BEFORE/AFTER, behaviour ch
   // AFTER  — if (attributes !== undefined) call.ctx.set(PolicyAttributes, new PolicyAttributes(attributes))
 
   // BEFORE verbs/run.ts:53-72 — hand-built createInvoker over adaptCoreLayer + LayerContext
-  // AFTER  — buildOpPlan + createPackageInvoker(schemas, usePlugins, {}, argvTerminal) + dispatchForPlan(plan, …),
+  // AFTER  — buildOpPlan + createPackageInvoker(schemas, usePlugins, { terminal: argvTerminal }) + dispatchForPlan(plan, …),
   //          transport 'cli', signal from deps.signal
 
   // BEFORE verbs/serve.ts:47-56 — serveMcpPassthrough({ source: resolved, usePlugins, serverInfo, transport, signal })
@@ -462,18 +461,18 @@ The 369 existing behavioural tests are the contract: library (policy-core-client
 
 | Changed shape | Pinned at | Re-pointed to | Segment |
 | --- | --- | --- | --- |
-| `.`-separated operation ids (BA-5) | `entrypoint/policy/src/test/…/sources-parse-resolve.spec.ts:116` (`node.read_file`); `sources-passthrough.spec.ts:126` (`files.write_file`) | the `/` id rendered by the exported `buildId` | T-R7 |
-| Policy `tool:` values with `.` | `s2` functional spec lines 36, 46, 59, 68, 80, 91, 92, 117, 145, 162, 171; `s5:134` (`agent.spawn`); `s6:90, 99, 107, 119`; `http-entry:94`; `test/helpers/fixtures.ts` tool lines 15, 17, 21, 24, 31, 48, 57, 72, 74, 76 | `/` ids | T-R10 |
-| **Not** migrated (attribute and context paths, basename stripping) | `fixtures.ts:53-56, 77`; `s6:76`; `sources-parse-resolve.spec.ts:75-86` | unchanged | — |
-| Raw upstream tool names in `serve` (BA-1) | `s7-serve.spec.ts:33-160` (`notes_add` …); `s8` at 26, 217, 240-246 | the projected name. The rendered projection format is UNVERIFIED until R7b lands; T-R9 pins it | T-R9 |
+| `.`-separated operation ids (BA-5) | `packages/apigen/apigen-engine-gateway/src/test/sources-parse-resolve.spec.ts:116` (`node.read_file`); `…/sources-passthrough.spec.ts:126` (`files.write_file`) | the `/` id rendered by the exported `buildId` | T-R7 |
+| Policy `tool:` values with `.` | `entrypoint/policy/src/test/functional/s2-check-evaluate.spec.ts` lines 36, 46, 59, 68, 80, 91, 92, 117, 145, 162, 171; `…/s5-narrow.spec.ts:134` (`agent.spawn`); `…/s6-verify-explain-draft.spec.ts:90, 99, 107, 119`; `…/http-entry.spec.ts:94`; `entrypoint/policy/src/test/helpers/fixtures.ts` tool lines 15, 17, 21, 24, 31, 48, 57, 72, 74, 76 | `/` ids | T-R10 |
+| **Not** migrated (attribute and context paths, basename stripping) | `fixtures.ts:53-56, 77`; `s6-verify-explain-draft.spec.ts:76`; gateway `sources-parse-resolve.spec.ts:75-86` | unchanged | — |
+| Raw upstream tool names in `serve` (BA-1) | `entrypoint/policy/src/test/functional/s7-serve.spec.ts:33-160` (`notes_add` …); `…/s8-serve-handshake-and-precedence.spec.ts` at 26, 217, 240-246 | the projected name. The rendered projection format is UNVERIFIED until R7b lands; T-R9 pins it | T-R9 |
 | Upstream names the stub receives | `s7:86, 97-98, 160` (`stub.calls`) | unchanged: the upstream still receives its own tool name | — |
 | Tool metadata in `tools/list` | `s7:72` (`title: 'Add'`, `annotations`) | unchanged; carried by E3 through `mcpPlugin.run` | T-R4, T-R9 |
 | Unknown tool | `s7:124` (`/Unknown tool/`) | unchanged (protocol error) | — |
 | Injected host transport | `s7:285`; `s8:51`; `test/helpers/mcp-memory-client.ts:29-57` | the `mcpPlugin.run` stdio stream seam (R4) | T-R9 |
-| `SourceError` codes | 40 assertions across the policy and gateway suites (located by `rg "SourceError\|spawn-failed\|handshake-failed\|invalid-spec\|unsupported"` at the start of T-R7) | `ApiError` code + `detail.gatewayCode`; exit codes per §3 R7a | T-R7, T-R9 |
-| Envelope attributes | Layer suite assertions reading `envelope.attributes` (located at the start of T-R6) | `ctx.get(PolicyAttributes)` | T-R6 |
-| Bare plugin refuses with `internal` | Layer suite (located at the start of T-R6) | `permission_denied` | T-R6 |
-| String-decider and `load` phase | Layer suite (located at the start of T-R6) | deleted with the feature (A6) | T-R6 |
+| `SourceError` codes | 39 matching lines in four gateway specs (`rg -c "SourceError\|spawn-failed\|handshake-failed\|invalid-spec\|'unsupported'"`): `apigen-engine-gateway/src/test/sources-mcp-source.spec.ts` (13), `sources-parse-resolve.spec.ts` (18), `sources-passthrough.spec.ts` (1), `sources-process.spec.ts` (7); none in `entrypoint/policy/src/test` | `ApiError` code + `detail.gatewayCode`; exit codes per §3 R7a | T-R7, T-R9 |
+| Envelope attributes | `apigen-plugin-policy/src/test/layered-decisions.spec.ts:13, 84`; `fail-closed.spec.ts:29, 179`; `review-fixes-layer.spec.ts:39, 49, 57, 66, 91` | `ctx.get(PolicyAttributes)` | T-R6 |
+| Bare plugin refuses with `internal` | `review-fixes-layer.spec.ts:334-339` (no captured configuration), `:386-389` (options without a decider) | `permission_denied` | T-R6 |
+| String-decider and `load` phase | `fail-closed.spec.ts:107-130` (three `load`-phase cases), `:231-276` (module-reference decider, `deciderOptions`); `review-fixes-layer.spec.ts:122`; the mount-capture describe at `review-fixes-layer.spec.ts:325` | deleted with the feature (A6) | T-R6 |
 | JSON-quoted string results over MCP | `apigen-plugin-mcp/src/test/flat-content-payload.spec.ts`, `stream.spec.ts` | raw text for string returns only | T-R4 |
 
 Line numbers in the "Pinned at" column were read at plan time; the Phase C implementer re-locates each by its asserted literal before editing.
@@ -498,6 +497,7 @@ A cell lists the segments that edit the same file. Two segments sharing a file n
 | `policy-core-client/package.json`, `vite.config.mts` | R11c only (after R10) |
 | `entrypoint/policy/src/wrapper/package.ts`, `mount.ts` | R9 → R12 |
 | `entrypoint/policy/package.json`, `vite.config.ts` | R9 (if deps change) → R11d |
+| `entrypoint/policy/src/wrapper/verbs/index.ts` | R10 only (R9 edits `run.ts`, `serve.ts`, `failure.ts`, `deps.ts`, not `index.ts`) |
 | `entrypoint/policy/src/wrapper/ir.ts` | R12 (R11d reads it, does not edit) |
 | `entrypoint/policy/src/test/helpers/fixtures.ts` | T-R10 → T-R9 |
 | `docs/apigen/SPEC.md` | R0 → R14 |
@@ -593,7 +593,16 @@ Scenario: cancellation reaches a ctx-taking function
   Then the invocation rejects with an aborted ApiError
 
 Scenario: a ctx key set by an outer layer is visible to a mount handler
+  Given a --use plugin whose mount handler returns the value of a ctx key
+  And an outer layer that sets that key to "core"
+  When the mounted operation is invoked
+  Then the result is "core"
+
 Scenario: a $ref schema dispatches without the run-mode stub error
+  Given a service whose input type references a named definition
+  When an operation of the package built by buildApigenPackage is invoked with valid input
+  Then the function's result is returned
+  And no "cannot be resolved in run-mode" error occurs
 ```
 
 - DoD: `createInvoker(layers, { terminal })` routes to the terminal and never calls `dispatch`; asserted by the terminal's return value reaching the caller. Control: drop the terminal option → the result is the dispatch result and the test goes red.
@@ -615,9 +624,20 @@ Scenario: a refusal is a readable tool result
   And _meta["adhd/error"].code is permission_denied
 
 Scenario: an internal error stays a protocol error
+  Given the operation throws ApiError internal without a gatewayCode
+  When a host calls the tool
+  Then the host's callTool rejects with a JSON-RPC error
+
 Scenario: tools/list carries title and annotations from Operation.tool
+  Given an operation with tool { title: "Add", annotations: { readOnlyHint: false } }
+  When a host lists tools
+  Then that entry has title "Add" and the annotations
+  And an extracted TS operation's entry has neither field
+
 Scenario: the host cancels a call
-  Then the operation's signal is aborted
+  Given an operation that waits on its signal
+  When the host cancels the in-flight request
+  Then the operation observes an aborted signal and stops
 ```
 
 - Each approved BA-4 row gets one scenario; unapproved rows are not tested. Control per scenario: revert that branch of `writeError`/`writeResult`.
@@ -650,6 +670,10 @@ Scenario: attributes come from the ctx, not the envelope
   Then the call is allowed
 
 Scenario: two configurations in one process are independent
+  Given makePolicyPlugin with a decider allowing files/read
+  And makePolicyPlugin with a decider denying files/read, in the same process
+  When files/read is invoked through each
+  Then the first is allowed and the second fails permission_denied
 ```
 
 - Control: read the envelope instead of ctx → the second scenario goes red; reintroduce the module singleton → the third goes red.
@@ -668,7 +692,16 @@ Scenario: two upstreams aggregate through one gateway
   Then each call reaches its own upstream
 
 Scenario: a crashed upstream restarts at most N times and is unavailable in between
+  Given a gateway with backoff maxRestarts 2 and an upstream the fake launcher crashes on demand
+  When the upstream crashes and a tool is called before the restart completes
+  Then the call fails internal with gatewayCode unavailable
+  And after the third crash no further spawn happens
+
 Scenario: an unsupported source exits 2 with ApiError invalid_argument
+  Given a --source value no translator accepts
+  When the source is resolved
+  Then resolution fails with ApiError invalid_argument naming the value
+  And the CLI marshal maps it to exit code 2
 ```
 
 - The two-upstream scenario requires G-1. Restart scenarios use latches on the fake launcher, never sleeps. Control: route by `host` instead of `binding ?? host` → the aggregator scenario goes red.
@@ -683,7 +716,7 @@ Scenario: an unsupported source exits 2 with ApiError invalid_argument
 ```gherkin
 Scenario: policy run refuses a denied command
   Given a policy file denying bin/rm
-  When the user runs policy run -- rm -rf tmp
+  When the user runs policy run for the rm executable with arguments -rf tmp (exact argv form reconciled in T18)
   Then the exit code is 3 and stderr names the rule
 
 Scenario: policy serve gates an MCP upstream
@@ -693,8 +726,22 @@ Scenario: policy serve gates an MCP upstream
   And the upstream never received the call
 
 Scenario: a string answer from the upstream reaches the host as raw text
+  Given the stub upstream's tool answers with the text "saved"
+  When a host calls the projected tool through policy serve
+  Then content[0].text is saved
+
 Scenario: a failed upstream handshake exits non-zero and leaves no child running
+  Given the fake launcher starts an upstream that never completes the MCP handshake
+  When the user starts policy serve for it
+  Then serve exits non-zero with a message naming the source
+  And the fake launcher records the child as stopped
+
 Scenario: telemetry writes a 0600 log file by default and none when disabled
+  Given a fresh home directory under tmp/policy
+  When the user runs policy check with defaults
+  Then a telemetry log file exists with mode 0600
+  When the user runs it again with telemetry disabled by configuration
+  Then no new log entry is written
 ```
 
 - Control per scenario: revert the corresponding line in `serve.ts` / `run.ts` / `telemetry.ts` and record red.
@@ -703,12 +750,24 @@ Scenario: telemetry writes a 0600 log file by default and none when disabled
 
 ```gherkin
 Scenario: draft writes / ids
+  Given the policy service IR
+  When the user runs policy draft
+  Then every tool value in the output uses /
+
 Scenario: an old-separator tool value fails with the new id named
   Given a policy with tool "files.read"
   When it is loaded
   Then loading fails and the message names "files/read"
 Scenario: migrate rewrites a policy file and prints each change
+  Given a policy file with tool "files.read" and tool "files.write"
+  When the user runs the migrate command on it
+  Then the file has "files/read" and "files/write"
+  And stdout lists both changes
+
 Scenario: attribute paths with dots are untouched
+  Given a policy using child.read_roots and runtime.calls
+  When the user runs the migrate command
+  Then those paths are unchanged and the policy still loads
 ```
 
 - Control: disable the old-separator check → the second scenario goes red.
@@ -777,6 +836,8 @@ Each item was not read, or could not be confirmed from code; the segment that fi
 8. Whether `ExtractionSession.dispose()` releases ts-morph memory (R8).
 9. Whether any reader of `descriptor.schema.json` rejects unknown properties (R1).
 10. `naming.ts:155-156` (`<source>_<tool>` aggregator naming) is cited from TAXONOMY item 8, not opened for this plan.
+11. The exact `policy run` argv form used in T-R9 (`--input` CLI form per T18); T18 reconciles it.
+12. Whether unifying the mount-branch `Extensions` with `LayerContext` (R3 behaviour change 3) needs a core-client type change.
 
 ---
 

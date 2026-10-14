@@ -71,7 +71,7 @@ layer?: {
 export function createPackageInvoker(
   schemas: ComposedSchemas,
   usePlugins: UsePlugin[],
-  layerOptions: Record<string, unknown> = {}
+  options: { layerOptions?: Record<string, unknown>; terminal?: Terminal } = {}
 ): InvokeFn
 ```
 
@@ -104,6 +104,7 @@ AFTER:
 
 ### D4. §8.1 cancellation
 
+- `type Terminal = (fnName: string, call: Call, opts: InvokeOptions) => Promise<LayerResult>`; `createPackageInvoker`'s `options.terminal` (D1) is passed through to `createInvoker`.
 - `createInvoker(layers, { terminal? })`: the innermost service is `terminal(call)` when supplied, else the existing `dispatch`. The terminal receives the whole `Call`, including `signal`. Binding adapters (argv, MCP upstream) are terminals.
 - `dispatch` gains a trailing `signal?: AbortSignal` parameter. It never becomes a positional argument of a user function. A `ctx`-taking function receives it as `createClient(envelope, { signal })`.
 - Every host that has a transport-level signal passes it as `Call.signal`: MCP passes the SDK request handler's `extra.signal`.
