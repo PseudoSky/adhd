@@ -55,13 +55,13 @@ Terms used in the binding table. **Mechanism class:** C0 no mechanism; C1 text a
    | FM5 | A real provider or runtime path is exercised only with a scripted stub | X, behind the documented flag; no stage sets it |
    | FM6 | A dispatch-driven feature is green in unit tests and unreachable across the real MCP boundary | P, stage D |
    | FM7 | Dependency drift silently ships a broken dependency set | `nx lint` (`sync-deps-check`), stage B |
-   | FM8 | A skipped, disabled or `todo` test rests in the suite with no owner or date | G4, not yet mechanical |
+   | FM8 | A skipped, disabled or `todo` test rests in the suite with no owner or date | G4, enforced for new markers; the 849 legacy markers recorded at the first run are baselined and fall due 2027-01-31 |
    | FM9 | Flake hides a real failure behind a retry | G5, not yet mechanical |
    | FM10 | The gate engine cannot be found in CI, so the engine-driven steps cannot run there | tracked by backlog ca23e252 |
 8. **Migration plan.** Existing tests are left to the finished system (decision D10): this document does not classify, lower, remove or quarantine any of them. The filed items that track the work, all owned by the repository maintainer, review date 2026-11-13:
    - backlog `ca23e252` — CI cannot provision the gate engine (blocks stages D and E running the engine).
    - backlog `8963c3cb` — pre-push runs the full affected closure with the hook-exported git environment; the e2e lane is paused locally by owner decision.
-   - The tier H lane, the flag-setting stage for tier X, and the quarantine registry are listed as obligations in the binding table (G1 quarantine half, G2 for tier X, G5) and are tracked by the plan that created this document (595965cc, tasks T32, T36, T37, T38).
+   - The tier H lane, the flag-setting stage for tier X, and the quarantine registry are listed as obligations in the binding table (G1 quarantine half, G2 for tier X, G5) and are tracked by the plan that created this document (595965cc, tasks T36, T37, T38).
 9. **Class and rigor bindings.**
 
    *Escalation triggers and how they are detected.* The routing command (`node tools/nx-plugins/test/routing/test-routing.mjs`) reads the table below from this file: the `id`, the minimum rigor, and every backticked glob in the last column. A change whose changed files match a glob hits that trigger. A trigger no path can show (a `package.json` field change, an MCP tool `inputSchema` change, the irreversibility of an effect) is asserted in the item's testing record with `triggers:`; an asserted trigger raises the derived rigor and never lowers it.
@@ -157,7 +157,7 @@ Terms used in the binding table. **Mechanism class:** C0 no mechanism; C1 text a
 | G1 | C4 | node tools/nx-plugins/test/gates/g1-tests.mjs (the selection the pre-push hook and both CI workflows run as nx affected over the lanes) | verifier | enforced |
 | G2 | C4 | node tools/nx-plugins/test/executors/wiring/check-lane-reachability.mjs | mechanism-owner | enforced |
 | G3 | C3 | node tools/nx-plugins/test/executors/wiring/check-agent-lane-spawn.mjs (agent family only) | mechanism-owner | obligation, not yet a gate |
-| G4 | C0 | none; a skip, todo and debt-expiry scanner is bound by task T32 | mechanism-owner | obligation, not yet a gate |
+| G4 | C4 | node tools/nx-plugins/test/executors/wiring/check-skip-expiry.mjs (pre-push and both CI workflows; a marker names a tracking item and an unexpired date, legacy markers are baselined per file in skip-expiry.baseline.json, the baseline only shrinks and falls due 2027-01-31; the item id is format-checked, not looked up) | mechanism-owner | enforced |
 | G5 | C0 | none; a repeat-run reporter is bound by task T36 | mechanism-owner | obligation, not yet a gate |
 | G6 | C2 | backlog evidence obligation of kind regression-test (presence only) plus review | static-reviewer | obligation, not yet a gate |
 | G7 | C0 | none; runner timeouts exist, a duration report is bound by task T37 | mechanism-owner | obligation, not yet a gate |

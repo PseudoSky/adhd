@@ -34,6 +34,7 @@ afterEach(() => {
 
 // CI cannot provision the engine yet (backlog ca23e252): there the engine-driven cases are reported as
 // `todo` against that item, never as passes. Anywhere else a missing engine is a failure, never a skip.
+// skip-expiry: ca23e252 until 2026-12-31 CI cannot provision the gate engine; the engine-driven cases are todo there, never skipped locally.
 const ENGINE_TODO = process.env.CI && !findEngine().engine ? 'backlog ca23e252: CI cannot provision the gate engine' : false;
 
 const engine = () => {

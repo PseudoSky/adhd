@@ -393,7 +393,7 @@ test('f2836e29 AC1 (negative control): computing the staged list AFTER the scrub
  * STUBBED (and only these): the heavy gate commands the hook shells out
  * to - tools/nx-plugins/.../check-lane-reachability.mjs,
  * .../check-lockfile-fresh.mjs and the G12 planning-record check
- * .../test/routing/test-routing.mjs (all `exit 0`), and `npx` (a fake on PATH that
+ * .../test/routing/test-routing.mjs and the G4 skip-expiry check .../wiring/check-skip-expiry.mjs (all `exit 0`), and `npx` (a fake on PATH that
  * records its argv and optionally runs ADHD_FAKE_NPX_SIDE_EFFECT, standing in
  * for the nx test run). The guard stage - guard_snapshot, guard_exclude_ref in
  * the stdin loop, guard_verify - is the real code, in the real order.
@@ -421,6 +421,7 @@ function pushScenario({ sideEffect = '' } = {}) {
     'tools/nx-plugins/test/executors/wiring/check-lane-reachability.mjs',
     'tools/nx-plugins/build/executors/lockfile/check-lockfile-fresh.mjs',
     'tools/nx-plugins/test/routing/test-routing.mjs',
+    'tools/nx-plugins/test/executors/wiring/check-skip-expiry.mjs',
   ]) {
     mkdirSync(dirname(join(clone, f)), { recursive: true });
     writeFileSync(join(clone, f), 'process.exit(0);\n');

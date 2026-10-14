@@ -118,6 +118,15 @@ while read -r local_ref local_sha remote_ref remote_sha; do
     fi
   fi
 
+  # 595965cc T32 (G4, STRATEGY 10): every skip/todo/disabled marker carries a tracking item and an
+  # unexpired date, or is a legacy marker the baseline records (the baseline only shrinks). Repo-wide, not
+  # range-based, so it runs whether or not a base resolved. Node built-ins only.
+  if ! node "$repo_root/tools/nx-plugins/test/executors/wiring/check-skip-expiry.mjs"; then
+    echo ""
+    echo "✖ pre-push: G4 skip/todo expiry check failed — name a tracking item and an unexpired date on the marker ('backlog <8 hex id> until YYYY-MM-DD'), or remove it"
+    exit 1
+  fi
+
   echo "→ pre-push: nx affected $flags  (base=${base:-<default>}  head=$local_sha, ref=$local_ref)"
 
   # ---------------------------------------------------------------------------

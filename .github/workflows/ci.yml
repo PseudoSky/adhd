@@ -83,6 +83,10 @@ jobs:
           before="$BEFORE_SHA"
           case "$before" in ""|0000000000000000000000000000000000000000) before="HEAD~1" ;; esac
           node tools/nx-plugins/test/routing/test-routing.mjs check --range "$before..HEAD"
+      # G4 skip/todo expiry (595965cc T32): every marker names a tracking item and an unexpired date, or is in
+      # the legacy baseline, which only shrinks.
+      - name: Skip and todo expiry check (G4)
+        run: node tools/nx-plugins/test/executors/wiring/check-skip-expiry.mjs
       # Lockfile freshness (backlog 4f26493e AC2): pnpm-lock.yaml must match every
       # package.json. `pnpm install` above is already frozen under CI, but this
       # step names the offending package.json/specifier, and the teeth step proves
