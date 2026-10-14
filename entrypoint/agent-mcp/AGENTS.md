@@ -202,8 +202,18 @@ engine-executed `web_fetch` instead (R6B-web): one definition
 advertised as `web__web_fetch` (`mcp__web__web_fetch` through the claudecli
 bridge), fetched by Node in the engine process, returning the same
 `web_fetch_result` shape the Anthropic tool returns. Egress follows
-`agent.shell.sandbox.allowedDomains` (empty = open). Anthropic agents are
-unchanged (no duplicate); `nativeWebTools: false` removes it everywhere.
+`agent.shell.sandbox.allowedDomains` for NAMES (an empty list means open to
+PUBLIC addresses only, not open to everything). In both modes the tool refuses
+any destination that is, or resolves to, a loopback, RFC1918 private,
+link-local (including the 169.254.169.254 metadata address), unspecified,
+unique-local (ULA), shared-address (CGNAT), multicast or reserved address,
+including the IPv4-mapped, NAT64 and 6to4 spellings of those. A name that
+resolves to any such address is refused even when the allow-list names it, so
+local and intranet pages can no longer be fetched. Each hop is resolved once,
+the connection is pinned to the validated IP (the original name stays in
+`Host`/SNI), and every redirect hop (at most 5 redirects are followed) is validated again.
+Anthropic agents are unchanged (no duplicate); `nativeWebTools: false`
+removes it everywhere.
 
 ### Native tooling for dispatched agents (ADR-0008 / NAT-TOOL-4/6)
 
