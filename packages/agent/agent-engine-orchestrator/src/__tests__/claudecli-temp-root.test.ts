@@ -14,6 +14,10 @@ import type { EngineConfig, EngineLogger } from "../interfaces.js";
  * The sandbox lives under `os.tmpdir()`, so "not under tmpdir" proves nothing — the assertions are
  * (1) the paths are inside the injected root and (2) the top level of `os.tmpdir()` gains no
  * `agent-mcp-claudecli-*` / `agent-mcp-spec-*` entry.
+ *
+ * b941dcd3 AC2: `os.tmpdir()` is redirected (TMPDIR/TMP/TEMP) into an empty private dir for each test, so the
+ * stray-entry listing reads a handful of entries instead of the host temp dir (hundreds of thousands of
+ * entries, 0.45-2 s per listing, 5 s budget blown under load) and cannot race other processes' temp files.
  */
 
 vi.mock("child_process", () => ({ spawn: vi.fn() }));
@@ -65,11 +69,24 @@ beforeAll(async () => {
     await import("../providers/claudecli.js");
 }, COLD_IMPORT_TIMEOUT_MS);
 
+const TMP_ENV_KEYS = ["TMPDIR", "TMP", "TEMP"] as const;
+
 let sandbox: string;
+let savedTmpEnv: Record<(typeof TMP_ENV_KEYS)[number], string | undefined>;
 beforeEach(() => {
     sandbox = realpathSync(mkdtempSync(join(tmpdir(), "s8b-claudecli-")));
+    const osTmp = join(sandbox, "os-tmp");
+    mkdirSync(osTmp);
+    savedTmpEnv = { TMPDIR: process.env["TMPDIR"], TMP: process.env["TMP"], TEMP: process.env["TEMP"] };
+    // os.tmpdir() reads these at call time: from here on it names the empty private dir.
+    for (const k of TMP_ENV_KEYS) process.env[k] = osTmp;
 });
 afterEach(() => {
+    for (const k of TMP_ENV_KEYS) {
+        const prev = savedTmpEnv[k];
+        if (prev === undefined) delete process.env[k];
+        else process.env[k] = prev;
+    }
     rmSync(sandbox, { recursive: true, force: true });
 });
 
@@ -128,9 +145,11 @@ async function chatAndObserve(tempDir: string | undefined) {
 }
 
 describe("c536ce29 S8B-AC2 claudecli temp files land under the injected namespaced temp root", () => {
-    it("c536ce29 S8B-AC2: mcp-config and agent-spec dir are created inside wire.tempDir (created on demand), not os.tmpdir()", async () => {
+    it("c536ce29 S8B-AC2 / b941dcd3 AC2: mcp-config and agent-spec dir are created inside wire.tempDir (created on demand), not os.tmpdir()", async () => {
         const root = join(sandbox, "namespaced", "temp"); // does not exist yet: provider must create it
+        expect(tmpdir()).toBe(join(sandbox, "os-tmp")); // the redirect is live
         const before = strayInOsTmp();
+        expect(before).toEqual([]);
         const seen = await chatAndObserve(root);
 
         expect(seen.mcpConfigExisted).toBe(true);
@@ -140,13 +159,15 @@ describe("c536ce29 S8B-AC2 claudecli temp files land under the injected namespac
         expect(strayInOsTmp()).toEqual(before);
     });
 
-    it("c536ce29 S8B-AC2: without wire.tempDir the provider refuses (no os.tmpdir() fallback) and writes nothing to the OS temp dir", async () => {
+    it("c536ce29 S8B-AC2 / b941dcd3 AC2: without wire.tempDir the provider refuses (no os.tmpdir() fallback) and writes nothing to the OS temp dir", async () => {
+        expect(tmpdir()).toBe(join(sandbox, "os-tmp")); // the redirect is live
         const before = strayInOsTmp();
+        expect(before).toEqual([]);
         await expect(chatAndObserve(undefined)).rejects.toThrow(/wire\.tempDir/);
         expect(strayInOsTmp()).toEqual(before);
     });
 
-    it("c536ce29 FIX-M3: credential-bearing scratch is owner-only (root 0700, files 0600), even under a permissive umask", async () => {
+    it("c536ce29 FIX-M3 / b941dcd3 AC2: credential-bearing scratch is owner-only (root 0700, files 0600), even under a permissive umask", async () => {
         const prev = process.umask(0o000);
         try {
             const seen = await chatAndObserve(join(sandbox, "fresh", "temp"));
@@ -159,7 +180,7 @@ describe("c536ce29 S8B-AC2 claudecli temp files land under the injected namespac
         }
     });
 
-    it("c536ce29 FIX-M3: a pre-existing looser temp root is tightened to 0700", async () => {
+    it("c536ce29 FIX-M3 / b941dcd3 AC2: a pre-existing looser temp root is tightened to 0700", async () => {
         const root = join(sandbox, "loose");
         mkdirSync(root, { recursive: true });
         chmodSync(root, 0o755);
