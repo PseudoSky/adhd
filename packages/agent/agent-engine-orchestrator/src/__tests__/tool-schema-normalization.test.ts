@@ -20,6 +20,10 @@
  * `{required:["input"], properties:{input}}`, so the Claude CLI's output does not depend on the
  * trimmed ones), and `batch-action.cli.json` is what the Claude CLI 2.1.296 sent for it, captured
  * verbatim (wire seq of R11 B1). The normaliser must reproduce the CLI's schema and note text.
+ *
+ * guards: the shared schema normaliser leaves a root combinator in the tool sent to the Anthropic or OpenAI-compatible adapter, mutates a registered definition, diverges from the schema the Claude CLI sent for batch_action, is non-deterministic, or fails an un-normalisable schema with a bare HTTP 400 instead of naming tools.<n>.
+ * tier: S
+ * cites: 020307a5 AC1, AC2, AC3 (the claudecli bridge leg is in tool-schema-normalization.e2e.test.ts).
  */
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";

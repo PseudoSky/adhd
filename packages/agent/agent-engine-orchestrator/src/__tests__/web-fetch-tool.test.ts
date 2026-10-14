@@ -8,6 +8,10 @@
  *   providers, never to a provider that already gets the server tools, and never when
  *   `nativeWebTools:false`.
  * R6B-web AC4: byte-identity against the shared constant; negative controls are the "absent" cases.
+ *
+ * guards: the client-side web_fetch is advertised to a provider that has the server tool or omitted for claudecli and OpenAI-compatible providers, its output drops the Anthropic result shape or truncation marker, the egress allow-list is bypassed (including by redirect), or an agent's own web server is shadowed.
+ * tier: S
+ * cites: R6B-web AC1, AC2, AC4.
  */
 import { describe, expect, it } from 'vitest';
 

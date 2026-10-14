@@ -10,6 +10,10 @@
  *  - R10 S5b AC3: each tool call (native and claudecli-bridged) runs under its own call-id scope, so two
  *    concurrent dispatching calls on one parent are told apart exactly.
  *  - R10 S5b AC4: a `result` wait emits `dispatch:completed` (kind result, waitMs) when the host wires hooks.
+ *
+ * guards: the engine's trace signals are wrong: post:model_response zero-fills or omits turnIndex, thinkingConfig, thinkingBlocks or toolResultBytesIn per provider family, task:startup carries unmeasured figures, two concurrent tool calls on one parent observe each other's call id, or a result wait emits no dispatch:completed.
+ * tier: S
+ * cites: R10 S5b AC1-AC4 (every test title carries its AC).
  */
 import { HookRegistry } from "@adhd/agent-base-types";
 import type {

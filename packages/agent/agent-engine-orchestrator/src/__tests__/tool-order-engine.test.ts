@@ -12,6 +12,10 @@
  *  - R10 S2 AC6: the new `pre:tool_call` / `post:tool_call` fields for a mixed turn.
  *  - R10 S3 AC4: `task:startup` is emitted once per task, with the timing fields, before the
  *    first model call.
+ *
+ * guards: through the real engine a read in the same turn does not observe the edit before it, a delegation call serialises with writes, a failed barrier orphans later calls, the pre:tool_call and post:tool_call trace fields are wrong, or task:startup is not emitted exactly once before the first model call.
+ * tier: S
+ * cites: R10 S2 AC1, AC2, AC3, AC6; R10 S3 AC4 (every test title carries its AC).
  */
 import { HookRegistry } from "@adhd/agent-base-types";
 import type { PostToolCallPayload, PreToolCallPayload, TaskStartupPayload } from "@adhd/agent-base-types";

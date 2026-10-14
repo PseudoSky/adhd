@@ -12,6 +12,10 @@
  *    calls and never strands a waiter.
  *  - R10 S2 AC7: `concurrency: 1` does not deadlock; queuedMs/groupIndex meta; the measured cost
  *    of serialising two shell commands.
+ *
+ * guards: mapOrdered lets a barrier overlap an earlier or later call, gates a delegation call, returns results out of input order, strands a waiter after a failure, deadlocks at concurrency 1, or reports wrong queuedMs or groupIndex.
+ * tier: S
+ * cites: R10 S2 AC1, AC2, AC3, AC7 (every test title carries its AC).
  */
 import { performance } from "node:perf_hooks";
 

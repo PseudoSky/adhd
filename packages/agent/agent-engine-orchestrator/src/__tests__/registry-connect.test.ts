@@ -16,6 +16,10 @@
  *  - R10 S3 AC5: annotations flow from `tools/list` into `ToolDefinition.annotations` (stdio, http,
  *    in-process) as the three typed hints only; absent stays absent.
  *  - R10 S3 AC6: `toolClass` and the pinned-fs annotation warning.
+ *
+ * guards: MCP servers connect one after another or without the stated bound, a failing server loses its warning, recorded error or its neighbours' tools, advertised tools follow finish order instead of configured server-key order, or annotations and toolClass are mapped wrongly.
+ * tier: S
+ * cites: R10 S3 AC1-AC3, AC5, AC6 (every test title carries its AC).
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 

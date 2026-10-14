@@ -11,6 +11,10 @@
  *  - R10 S2 AC5 [anthropic|openai]: the whole first request body (tools array, hence any hash or cache key
  *    derived from it) is byte-equal with and without annotations and never contains an annotation key.
  *  - R10 S2 AC6 [anthropic|openai]: the new pre:tool_call / post:tool_call fields for the turn.
+ *
+ * guards: same-turn ordering holds on the engine but breaks on one provider's wire shape: the read does not see the edit, a failed barrier leaves a tool_use or tool_call without exactly one paired result, trace fields differ, or the request body changes with annotations.
+ * tier: S
+ * cites: R10 S2 AC1, AC3, AC5, AC6 over the anthropic and openai wires.
  */
 import { HookRegistry } from "@adhd/agent-base-types";
 import type { PostToolCallPayload, PreToolCallPayload } from "@adhd/agent-base-types";

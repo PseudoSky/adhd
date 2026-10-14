@@ -9,6 +9,11 @@
  *
  * Negative control (recorded when authored): removing the registry registration makes both tests
  * red (`toolListing.web` is undefined and the call has no `web` route).
+ *
+ * guards: the claudecli loopback bridge does not list web_fetch byte-identical to the shared definition, does not execute it against a real fixture, does not route the pinned request through the host wire.request seam, or lets a loopback or non-http target through without isError.
+ * tier: P
+ * gap: This cannot be observed at tier S because the bridge is served on a bound loopback socket to a spawned fake claude MCP client and the fetch target is a real local HTTP server, none of which exist at tier S.
+ * cites: R6B-web AC4; 49cec55e AC4; bc799330 AC1/AC6.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { chmodSync, mkdtempSync, readFileSync, realpathSync, rmSync } from 'node:fs';

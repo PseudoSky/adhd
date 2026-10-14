@@ -10,6 +10,10 @@
  *
  * Only libraries that touch the network are mocked (`node:dns/promises`, `node:http`, `node:https`), so the
  * registry, the client, the resolver call and the pinned request code all run for real.
+ *
+ * guards: web_fetch is reachable through an adapter (claudecli bridge, OpenAI-compatible, anthropic) without the SSRF guard, connects to an address other than the validated IP, falls back to wire.fetch instead of the host wire.request seam, or is offered to anthropic, which has the server tool.
+ * tier: S
+ * cites: bc799330 AC6; 49cec55e AC2.
  */
 import { describe, expect, it, vi } from 'vitest';
 

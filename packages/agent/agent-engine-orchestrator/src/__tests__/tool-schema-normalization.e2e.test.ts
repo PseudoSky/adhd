@@ -21,6 +21,11 @@
  * answered 400 with the R11 text, for both API shapes. The per-adapter "revert the fix, see red" runs
  * are recorded in the 020307a5 return (each adapter's call to `normalizeToolForWire` stubbed out
  * turns exactly that adapter's tests red).
+ *
+ * guards: a tool whose input schema has a top-level oneOf, anyOf or allOf (R11 backlog__batch_action) reaches the Anthropic API, an OpenAI-compatible endpoint or the claudecli bridge unflattened, so the whole request is rejected with HTTP 400, or the call no longer executes on the real server.
+ * tier: P
+ * gap: This cannot be observed at tier S because the root-oneOf tool comes from a spawned stdio MCP server and the rejecting API and the claudecli bridge are bound loopback sockets, none of which exist at tier S.
+ * cites: 020307a5 AC3, AC4.
  */
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";

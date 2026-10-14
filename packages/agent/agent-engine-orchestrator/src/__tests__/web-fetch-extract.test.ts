@@ -9,6 +9,10 @@
  *
  * The oracle (`legacyExtractHtml`) is the implementation this change replaced, verbatim. It is only ever run on
  * small inputs (it is quadratic by construction).
+ *
+ * guards: extractHtml or metaContent regress to quadratic work on a 1 MB adversarial page (unterminated openers, nesting, repeated meta tags), or ordinary-page output differs from the previous regex implementation.
+ * tier: S
+ * cites: cbad68d4 AC1, AC2, AC3.
  */
 import { describe, expect, it } from 'vitest';
 

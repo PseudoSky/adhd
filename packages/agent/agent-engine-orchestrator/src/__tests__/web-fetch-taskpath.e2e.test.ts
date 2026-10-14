@@ -11,6 +11,11 @@
  *
  * Negative control (recorded when authored): removing the registration in clients/registry.ts turns every case
  * red; denying `web_fetch` in the gate turns the allow case red.
+ *
+ * guards: through the real task path (taskTool, Orchestrator, advertisement rewriting, ClaudeCliProvider, loopback bridge, permission gate, registry, WebFetchClient) the web_fetch definition is rewritten, the permission gate or the egress allow-list does not govern the call, or a loopback target is fetched.
+ * tier: P
+ * gap: This cannot be observed at tier S because the path includes the spawned fake claude executable, a bound loopback bridge and a real local HTTP server, and a process and sockets do not exist at tier S.
+ * cites: R6B-web AC4; bc799330 AC1/AC6.
  */
 import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";

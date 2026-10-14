@@ -4,6 +4,10 @@
  * A model may send `concurrency` as a base-10 integer string and `prompts` as
  * a stringified JSON array. The schema accepts those shapes and keeps rejecting
  * genuinely invalid input. Pure schema tests: no process, no network.
+ *
+ * guards: tasks_batch rejects a model's string-typed concurrency or stringified prompts array, accepts malformed ones (beyond 64, exponent or non-ASCII digits, double-stringified arrays), or changes the advertised JSON schema.
+ * tier: S
+ * cites: 932604a0 R9 AC1-AC5 (plan f52586fc).
  */
 import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';

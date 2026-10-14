@@ -12,6 +12,10 @@
  * Teeth: with the `parseShellExitStatus` call removed from either loop the
  * matching "exitStatus is recorded" case goes red (negative control run when this
  * file was authored).
+ *
+ * guards: the [exit status: N] stderr trailer is not recovered as a structured exitStatus by the native loop or the claudecli bridge loop, or its recovery changes isError or the model-visible text.
+ * tier: S
+ * cites: 61358b6f AC8, AC9 (engine half).
  */
 import { describe, expect, it, vi } from 'vitest';
 

@@ -17,6 +17,10 @@
  *   AC6  P7: `thinking` unset => body byte-identical to before; set => exactly that field on the wire
  *   AC7  echo replay and cache-breakpoint token estimation work with the new tool_result shape
  *   AC8  `ToolDefinition.annotations` never reaches the wire
+ *
+ * guards: an MCP tool result reaches an Anthropic or OpenAI-compatible wire as escaped JSON of its content array (or an over-cap result as an escaped-JSON fragment, or with is_error, non-text blocks, the thinking option or tool annotations mishandled) instead of the extracted text the model should read.
+ * tier: S
+ * cites: ae9d4022; R10 S1 AC1-AC8 (every test title carries its AC).
  */
 import { describe, expect, it } from "vitest";
 

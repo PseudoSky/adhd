@@ -10,6 +10,10 @@
  *
  * Negative control (recorded in the R10 S2 return): making the registry fold the annotations into
  * the advertised description turns the byte-equality assertions red.
+ *
+ * guards: ToolDefinition.annotations leaks into a provider request tools array, the names-mode prompt document, the name-only tool list or the claudecli resume-config hash, changing bytes or cache keys.
+ * tier: S
+ * cites: R10 S2 AC5 (product amendment P10 AC6).
  */
 import { describe, expect, it } from "vitest";
 

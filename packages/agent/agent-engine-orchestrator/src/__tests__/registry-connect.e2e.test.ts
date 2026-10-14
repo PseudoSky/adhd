@@ -5,6 +5,11 @@
  * No process is spawned here: the SDK client is replaced by a stub that answers `listTools`, which
  * is the exact seam the production client calls. The registry-level S3 AC1..AC3 / AC6 proofs
  * (concurrency, failure isolation, ordering, timings, toolClass) are in `registry-connect.test.ts`.
+ *
+ * guards: the real StdioMcpClient.listTools drops or mangles the tools/list annotations (readOnlyHint, destructiveHint, idempotentHint) or adds an annotations key to an unannotated tool.
+ * tier: P
+ * gap: This cannot be observed at tier S because the class under test is a stdio transport class and the unit lane's spawn check (check-agent-lane-spawn.mjs, ADR 0009) refuses any tier S file that references it.
+ * cites: R10 S3 AC5 (stdio leg).
  */
 import { describe, expect, it } from "vitest";
 

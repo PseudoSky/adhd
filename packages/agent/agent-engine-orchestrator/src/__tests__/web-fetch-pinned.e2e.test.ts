@@ -5,6 +5,11 @@
  * directly, so the lab scaffold (fixtures/web-fetch-lab.ts) points the engine's pinned connection at it while
  * the resolver answers a public address: everything else (request building, Host/pin, response wrapping, body
  * cap, redirect cancel) is the production code on a real socket. ADR-0009 e2e lane; not env-gated.
+ *
+ * guards: the pinned transport of executeWebFetch connects to something other than the validated IP, sends the wrong Host or SNI, follows a redirect to a private name, fails to cap the body, skips TLS certificate verification against the name, or lets the default resolver and transport reach loopback.
+ * tier: P
+ * gap: This cannot be observed at tier S because Host, SNI, certificate verification and socket teardown exist only on a real TCP and TLS connection, and the injected socket function used at tier S replaces exactly that layer.
+ * cites: bc799330 AC1, AC2, AC3; cbad68d4 AC2.
  */
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, realpathSync, rmSync } from 'node:fs';

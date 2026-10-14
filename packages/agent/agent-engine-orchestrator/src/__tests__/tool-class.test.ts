@@ -1,5 +1,9 @@
 /**
  * R10 S2 AC4: the same-turn concurrency classification table (pure).
+ *
+ * guards: classifyTool, schedulingClassOf or assignGroups mislabel a tool, so a write runs as a safe read (or a read is serialised) and a delegation call is ordered or gates others.
+ * tier: S
+ * cites: R10 S2 AC4 (classification table) and the AC6 grouping cases.
  */
 import { describe, expect, it } from "vitest";
 

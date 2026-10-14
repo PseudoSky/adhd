@@ -13,6 +13,10 @@
  * AC6 (adapters) is in web-fetch-adapters.test.ts. No network, no DNS, no sleeps: the resolver and the socket
  * function are injected (fixtures/web-fetch-net.ts). Negative controls (validation removed => these go red) are
  * run by the dispatch harness against this file; see the return block of dispatch 48dc.
+ *
+ * guards: executeWebFetch fetches a loopback, RFC1918, link-local, unspecified or ULA address (including IPv4-mapped and decimal spellings), resolves more than once per hop, skips re-validating a redirect hop, trusts an allow-listed name that resolves private, or changes behaviour on ordinary public pages.
+ * tier: S
+ * cites: bc799330 AC1, AC2, AC3, AC5 (AC6 is in web-fetch-adapters.test.ts).
  */
 import { brotliCompressSync, deflateSync, gzipSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
