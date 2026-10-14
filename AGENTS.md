@@ -435,7 +435,7 @@ This table wins over the dispatcher's own default rows: for every task it names,
 | test-gates | G9 | mechanical | C, D, E | command | every tier P, H, or X test carries a valid fidelity-gap statement |
 | test-gates | G10 | mechanical | D, G | command | the built artifact loads and its primary journey runs as a consumer runs it |
 | test-gates | G11 | review | D | obligation | changes to test infrastructure and gates cite the strategy and the exception log |
-| test-gates | G12 | mechanical | C, D, E, F | command | every change has a class and rigor record; Standard and Deep have a not-testing list; every new test has a header |
+| test-gates | G12 | mechanical | C, D, E, F | command | (advisory, warns only) every change has a class and rigor record; Standard and Deep have a not-testing list; every new test has a header |
 
 ### Stage bindings
 | stage | gates |

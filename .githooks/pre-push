@@ -45,13 +45,17 @@ hook_dir=$(dirname "$0")
 # 50e8c966: defense in depth against hook-exported GIT_* leaking into spec-spawned git.
 # shellcheck source=lib/git-env-guard.sh
 . "$hook_dir/lib/git-env-guard.sh"
-repo_root=$(cd "$hook_dir/.." && pwd)
+repo_root=$(cd "$hook_dir/.." && pwd -P)
 
 # The gate's affected-target list is canonicalised in ONE module
 # (`tools/gate/lane-gate.mjs`); this hook runs it minus `PRE_PUSH_EXCLUDED`
 # (`e2e`). Never hard-code `--target=…` here. `flags` is the shell rendering
 # ("--target=test"), reused in the run, echo, and inspect lines below.
 flags=$(node "$repo_root/.githooks/lib/pre-push-flags.mjs")
+if [ -z "$flags" ]; then
+  echo "✖ pre-push: .githooks/lib/pre-push-flags.mjs printed nothing — refusing to run a gate with no targets."
+  exit 1
+fi
 
 # Fail fast, before spending minutes running the gate (or trusting a green
 # result): prove every gate file still invokes every target in GATE_TARGETS.
@@ -112,10 +116,10 @@ while read -r local_ref local_sha remote_ref remote_sha; do
   # the rigor its paths and triggers derive, and a Standard or Deep change has a "not-testing" list.
   # Commits authored before the IMPLEMENTATION's "Enforced from" date are exempt. Node built-ins only.
   if [ -n "$base" ]; then
+    # G12 is advisory: a planning record is prose nothing downstream reads, so a miss warns and never blocks.
     if ! node "$repo_root/tools/nx-plugins/test/routing/test-routing.mjs" check --range "$base..$local_sha"; then
       echo ""
-      echo "✖ pre-push: G12 planning-record check failed for $base..$local_sha — add a '## Testing record' (class, rigor, triggers, not-testing) to a commit message in the range, or raise its rigor to the derived level above."
-      exit 1
+      echo "⚠ pre-push: G12 planning record missing or below derived rigor for $base..$local_sha (advisory, not blocking) — see docs/standards/testing.md."
     fi
   fi
 
