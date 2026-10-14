@@ -24,6 +24,53 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROUND1 = path.join(HERE, 'golden/absent-round1.jsonl');
 const LIVE_RUNS = path.join(HERE, 'golden/absent-round2-runs');   // Round 2 evidence, read-only
 
+const SLEEPER = 'setInterval(()=>{},1000)';
+/** The sweep fixture's child: spawns a grandchild sleeper and reports its pid as a PLAIN STRING (`console.log(<number>)` is ANSI-coloured when FORCE_COLOR is set, as nx sets it). */
+const SWEEP_CHILD_SRC = `const c=require('child_process').spawn(process.execPath,['-e','${SLEEPER}']);process.stdout.write(String(c.pid)+'\\n');${SLEEPER}`;
+
+/** Parses one pid line from a fixture child. Throws a message carrying the raw text unless it is a plain integer pid > 1 (dcf8b7da AC2). */
+function parsePidLine(raw) {
+  const text = String(raw).trim(); const n = Number(text);
+  if (!/^\d+$/.test(text) || !Number.isInteger(n) || n <= 1) throw new Error(`grandchild pid is not a plain integer: ${JSON.stringify(String(raw))}`);
+  return n;
+}
+/** Resolves with the first pid line the child prints; rejects at the deadline or when the child exits first. */
+function readPidLine(child, deadlineMs = 10_000) {
+  return new Promise((resolve, reject) => {
+    let buf = ''; const timer = setTimeout(() => done(new Error(`no pid line from the fixture child within ${deadlineMs}ms (got ${JSON.stringify(buf)})`)), deadlineMs);
+    const onData = (b) => { buf += String(b); if (buf.includes('\n')) done(null, buf); };
+    const onExit = () => done(new Error(`fixture child exited before printing a pid (got ${JSON.stringify(buf)})`));
+    const done = (err, v) => { clearTimeout(timer); child.stdout.off('data', onData); child.off('exit', onExit); if (err) reject(err); else try { resolve(parsePidLine(v)); } catch (e) { reject(e); } };
+    child.stdout.on('data', onData); child.once('exit', onExit);
+  });
+}
+/** Polls (bounded) until none of `pids` is alive. */
+async function waitGone(pids, deadlineMs) {
+  const t0 = Date.now();
+  while (pids.some((p) => L.alive(p))) { if (Date.now() - t0 > deadlineMs) return false; await new Promise((r) => setTimeout(r, 25)); }
+  return true;
+}
+/**
+ * Runs `body({ child, grand, bystander })` against a fresh process tree (child -> grandchild, plus an unrelated bystander), all spawned by THIS call, and ALWAYS reaps that tree
+ * afterwards, whether `body` passes or throws (dcf8b7da AC3). Only processes this function spawned (and the child's descendants) are ever signalled.
+ */
+async function withSweepTree(body) {
+  const child = spawn(process.execPath, ['-e', SWEEP_CHILD_SRC], { stdio: ['ignore', 'pipe', 'ignore'] });
+  const bystander = spawn(process.execPath, ['-e', SLEEPER], { stdio: 'ignore' });
+  const exited = (p) => (p.exitCode !== null || p.signalCode !== null ? Promise.resolve() : new Promise((r) => p.once('exit', r)));
+  let grand = null;
+  try {
+    grand = await readPidLine(child);
+    return await body({ child, grand, bystander });
+  } finally {
+    const owned = new Set(child.exitCode === null && child.signalCode === null ? L.descendantsOf([child.pid]).map((p) => p.pid) : []);   // grandchild found via the tree even if its pid never parsed
+    if (Number.isInteger(grand)) owned.add(grand);
+    for (const pid of owned) if (L.alive(pid)) { try { process.kill(pid, 'SIGKILL'); } catch { /* already gone */ } }
+    child.kill('SIGKILL'); bystander.kill('SIGKILL');
+    await Promise.all([exited(child), exited(bystander)]); await waitGone([...owned], 5000);
+  }
+}
+
 export async function runLibTests({ log = console.log } = {}) {
   const results = [];
   const t = async (name, fn) => {
@@ -177,17 +224,33 @@ export async function runLibTests({ log = console.log } = {}) {
   await t('secret scan: a REDACTED placeholder is not re-flagged', () => { eq(L.redactText('Bearer [REDACTED:bearer]').hits, {}); });
 
   // ---- processes
-  await t('sweep: kills an owned process and its descendant, leaves an unrelated process alone', async () => {
-    const child = spawn(process.execPath, ['-e', "const c=require('child_process').spawn(process.execPath,['-e','setInterval(()=>{},1000)']);console.log(c.pid);setInterval(()=>{},1000)"], { stdio: ['ignore', 'pipe', 'ignore'] });
-    const grand = await new Promise((res) => child.stdout.once('data', (b) => res(+String(b).trim())));
-    const bystander = spawn(process.execPath, ['-e', 'setInterval(()=>{},1000)'], { stdio: 'ignore' });
+  await t('sweep: kills an owned process and its descendant, leaves an unrelated process alone', () => withSweepTree(async ({ child, grand, bystander }) => {   // dcf8b7da AC2/AC3: pid transported as a plain string; the tree is reaped even when an assertion throws
     const desc = L.descendantsOf([child.pid]).map((p) => p.pid); ok(desc.includes(grand), 'grandchild not found');
     ok(!desc.includes(bystander.pid), 'bystander counted as descendant');
     const reg = new L.OwnedRegistry(); ok(reg.add(child.pid), 'registry refused the child it spawned');   // PARITY-R10-prep AC4: ownership is recorded at spawn
     const swept = await L.sweepPids([child.pid, ...desc, bystander.pid], 300, reg);
-    ok(swept.includes(child.pid) && swept.includes(grand), 'not swept'); ok(!swept.includes(bystander.pid) && swept.refused.some((r) => r.pid === bystander.pid), 'the unregistered bystander was not refused'); await new Promise((r) => setTimeout(r, 300));
-    ok(!L.alive(child.pid) && !L.alive(grand), 'owned still alive'); ok(L.alive(bystander.pid), 'bystander was killed');
-    bystander.kill('SIGKILL');
+    ok(swept.includes(child.pid) && swept.includes(grand), 'not swept'); ok(!swept.includes(bystander.pid) && swept.refused.some((r) => r.pid === bystander.pid), 'the unregistered bystander was not refused');
+    ok(await waitGone([child.pid, grand], 5000), 'owned still alive'); ok(L.alive(bystander.pid), 'bystander was killed');
+  }));
+  await t('sweep: a pid line that is not a plain integer fails with the raw text, not with a downstream "not found"', () => {   // dcf8b7da AC2
+    eq(parsePidLine('125\n'), 125); eq(parsePidLine('  4242  '), 4242);
+    for (const bad of ['\x1b[33m125\x1b[39m\n', '', 'NaN', '12.5', '-3', '1', '0', 'abc']) {
+      let msg = ''; try { parsePidLine(bad); } catch (e) { msg = e.message; }
+      ok(msg.includes('grandchild pid is not a plain integer') && msg.includes(JSON.stringify(bad)), `bad pid line ${JSON.stringify(bad)} did not fail clearly: ${msg}`);
+    }
+  });
+  await t('sweep fixture: when an assertion throws inside the tree, child, grandchild and bystander are all killed (no leaked process)', async () => {   // dcf8b7da AC3
+    const seen = {}; let threw = '';
+    try {
+      await withSweepTree(async ({ child, grand, bystander }) => {
+        Object.assign(seen, { child: child.pid, grand, bystander: bystander.pid });
+        ok(L.alive(child.pid) && L.alive(grand) && L.alive(bystander.pid), 'fixture processes were not all alive before the forced failure');
+        throw new Error('forced failure');
+      });
+    } catch (e) { threw = e.message; }
+    eq(threw, 'forced failure');
+    ok(Number.isInteger(seen.child) && Number.isInteger(seen.grand) && Number.isInteger(seen.bystander), 'fixture pids were not captured');
+    eq([L.alive(seen.child), L.alive(seen.grand), L.alive(seen.bystander)], [false, false, false], 'leaked process after a failing body:');
   });
   await t('env: allowlist drops secrets and the enclosing session identity', () => {
     const e = L.cleanEnv({ KEEP: '1', CLAUDECODE: '1' }, { PATH: '/bin', HOME: '/h', ANTHROPIC_API_KEY: 'sk-x', AWS_SECRET_ACCESS_KEY: 'y', CLAUDE_CODE_SESSION_ID: 'z', CLAUDE_CODE_ENTRYPOINT: 'e' });

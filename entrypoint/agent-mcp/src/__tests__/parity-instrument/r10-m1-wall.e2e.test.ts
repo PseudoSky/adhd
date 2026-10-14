@@ -6,7 +6,7 @@ import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { PARITY_DIR } from './load';
-import { ATTR_SPECS, GOLDEN, TRACE_FILE_NAME, compareBundleToRaw, expectedPrestart, expectedTaskFacts, kv, rawLines, wallBlock } from './r10-m1-fixture';
+import { ATTR_SPECS, GOLDEN, compareBundleToRaw, expectedPrestart, expectedTaskFacts, kv, rawLines, wallBlock } from './r10-m1-fixture';
 
 /**
  * R10 M1 - e2e lane (ADR-0009). `drive.mjs --dry-run --round R10` end to end against the REAL built agent-mcp (arm C over stdio MCP, tracing plugin sink pinned to the run dir), the instrument's fake
@@ -23,9 +23,13 @@ let out = '';
 beforeAll(() => { out = fs.mkdtempSync(path.join(os.tmpdir(), 'r10-m1-dry-')); });
 afterAll(() => { fs.rmSync(out, { recursive: true, force: true }); });
 
-const run = (args: string[], timeout = 180_000) => spawnSync(process.execPath, [DRIVE, ...args], { cwd: REPO, encoding: 'utf8', timeout });
+const run = (args: string[], timeout = 180_000, env: NodeJS.ProcessEnv = process.env) => spawnSync(process.execPath, [DRIVE, ...args], { cwd: REPO, encoding: 'utf8', timeout, env });
+/** The ambient environment with FORCE_COLOR pinned: nx exports FORCE_COLOR=true to every task, a bare shell does not - the instrument must pass in both. */
+const withColor = (forceColor: string | undefined): NodeJS.ProcessEnv => { const e = { ...process.env }; if (forceColor === undefined) delete e.FORCE_COLOR; else e.FORCE_COLOR = forceColor; return e; };
 const evidence = (id: string) => JSON.parse(fs.readFileSync(path.join(out, 'runs', id, 'evidence.json'), 'utf8'));
-const traceOf = (id: string) => { const d = path.join(out, 'runs', id, 'logs', 'trace'); return fs.existsSync(d) ? fs.readdirSync(d).filter((f) => f === TRACE_FILE_NAME).map((f) => path.join(d, f)) : []; };
+/** The tracing sink names its file by the UTC date it was opened on (the live run's date, never a constant), and writes a sibling metrics-snapshot file the regex excludes. */
+const TRACE_FILE_RE = /^agent-mcp\.live-service-\d{4}-\d{2}-\d{2}\.jsonl$/;
+const traceOf = (id: string) => { const d = path.join(out, 'runs', id, 'logs', 'trace'); return fs.existsSync(d) ? fs.readdirSync(d).filter((f) => TRACE_FILE_RE.test(f)).map((f) => path.join(d, f)) : []; };
 let wall = '';
 
 describe('R10 M1: wall attribution on a fresh real-server mock-provider run', () => {
@@ -87,6 +91,11 @@ describe('R10 M1: wall attribution on a fresh real-server mock-provider run', ()
 describe('R10 M1 AC6: the instrument still reproduces itself', () => {
   it.each(['--self-check', '--check-lib', '--check-oracle'])('R10 M1 AC6: drive.mjs %s exits 0', (flag) => {
     const r = run([flag], 300_000); expect(r.status, r.stdout.slice(-2000) + r.stderr).toBe(0);
+  }, 320_000);
+
+  it.each(['true', undefined])('dcf8b7da AC1: drive.mjs --check-lib exits 0 and passes every case, including the process-sweep case, with FORCE_COLOR=%s (true is what nx exports; undefined is a bare shell)', (forceColor) => {
+    const r = run(['--check-lib'], 300_000, withColor(forceColor)); expect(r.status, r.stdout.slice(-2000) + r.stderr).toBe(0);
+    expect(r.stdout).toMatch(/lib self-test: PASS (\d+)\/\1\b/); expect(r.stdout).toContain('ok   sweep: kills an owned process and its descendant, leaves an unrelated process alone');
   }, 320_000);
 
   it.each(['gap', 'threads', 'blocking', 'surplus', 'tools', 'contamination', 'rt', 'evidence', 'all'])('R10 M1 AC6: the analyze CLI (subprocess) --section %s on the r9 goldens is byte-identical to the pre-change capture (all = that capture + the appended wall sections)', (s) => {
