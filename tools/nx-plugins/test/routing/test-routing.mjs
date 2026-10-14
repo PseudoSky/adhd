@@ -120,7 +120,11 @@ export function loadImplementation(file = DEFAULT_IMPLEMENTATION) {
 // ---------------------------------------------------------------------------------------------
 
 const CODE_EXT = /\.(?:[cm]?[jt]sx?|py|go|rs|java|sh)$/;
-const TEST_FILE = /(?:\.|-)(?:spec|test|e2e)(?:\.[a-z]+)*\.[cm]?[jt]sx?$|(?:^|\/)(?:__tests__|test|tests)\//;
+const TEST_NAME = /(?:\.|-)(?:spec|test|e2e)(?:\.[a-z]+)*\.[cm]?[jt]sx?$/;
+const TEST_DIR = /(?:^|\/)(?:__tests__|test|tests)\//;
+// tools/nx-plugins/test/ is the nx plugin that implements the test gates: its sources are behavior, not tests.
+const NOT_A_TEST_DIR = /^tools\/nx-plugins\/test\//;
+const TEST_FILE = { test: (p) => TEST_NAME.test(p) || (TEST_DIR.test(p) && !NOT_A_TEST_DIR.test(p) ? true : false) };
 /** Source or test paths: what a `no-code` change may not touch. */
 export const isCodeOrTest = (p) => CODE_EXT.test(p) || TEST_FILE.test(p);
 /** A behavior-bearing file: code that is not a test. */
@@ -309,9 +313,26 @@ const changedPaths = (sha, cwd) => git(['diff-tree', '--no-commit-id', '--name-o
  * the diff from the merge-base to head. Its record is the newest commit message in scope that carries a
  * `## Testing record`. Commits authored before the enforcement date are exempt.
  */
+/**
+ * The fork point of `head` from the gate base (origin/main, else main), when it lies strictly before `base`
+ * (an incremental push range); null when the range already starts at or before it.
+ */
+function branchForkPoint({ base, head, cwd }) {
+  for (const ref of [process.env.GATE_BASE, 'origin/main', 'main'].filter(Boolean)) {
+    let mb;
+    try { mb = git(['merge-base', head, ref], cwd).trim(); } catch { continue; }
+    if (!mb) continue;
+    let baseSha;
+    try { baseSha = git(['rev-parse', base], cwd).trim(); } catch { return null; }
+    if (mb === baseSha) return null;
+    try { git(['merge-base', '--is-ancestor', mb, baseSha], cwd); return mb; } catch { return null; }
+  }
+  return null;
+}
+
 export function checkRange({ range, implementation, cwd = REPO_ROOT }) {
   const [base, head = 'HEAD'] = range.includes('...') ? range.split('...') : range.split('..');
-  const commits = parseLog(git(['log', `--format=%H${SEP}%aI${SEP}%B${END}`, `${base}..${head}`], cwd));
+  const commits = parseLog(git(['log', `--format=%H${SEP}%cI${SEP}%B${END}`, `${base}..${head}`], cwd));
   const from = implementation.enforcedFrom;
   const inScope = commits.filter((c) => !from || c.date.slice(0, 10) >= from);
   if (inScope.length === 0) {
@@ -319,14 +340,18 @@ export function checkRange({ range, implementation, cwd = REPO_ROOT }) {
   }
   const paths = git(['diff', '--name-only', `${base}...${head}`], cwd).split('\n').filter(Boolean);
   const added = git(['diff', '--name-only', '--diff-filter=A', `${base}...${head}`], cwd).split('\n').filter(Boolean);
-  const withRecord = inScope.find((c) => parseRecord(c.body) !== null);
+  // A follow-up push's range holds only the new commits, but the record belongs to the branch: look for it from
+  // the fork point (merge-base with the gate base) so a fix-up commit does not have to repeat it.
+  const fork = branchForkPoint({ base, head, cwd });
+  const branchCommits = fork ? parseLog(git(['log', `--format=%H${SEP}%cI${SEP}%B${END}`, `${fork}..${head}`], cwd)).filter((c) => !from || c.date.slice(0, 10) >= from) : inScope;
+  const withRecord = branchCommits.find((c) => parseRecord(c.body) !== null);
   const result = checkRecord({ body: withRecord ? withRecord.body : '', paths, added, implementation });
   return { ...result, range, commits: inScope.length, recordCommit: withRecord ? withRecord.sha : null };
 }
 
 /** The derived-rigor distribution over the last N merged changes (D24). */
 export function distribution({ last, ref = 'HEAD', implementation, cwd = REPO_ROOT }) {
-  const commits = parseLog(git(['log', '--first-parent', '-n', String(last), `--format=%H${SEP}%aI${SEP}%B${END}`, ref], cwd));
+  const commits = parseLog(git(['log', '--first-parent', '-n', String(last), `--format=%H${SEP}%cI${SEP}%B${END}`, ref], cwd));
   const counts = { none: 0, light: 0, standard: 0, deep: 0 };
   let unrecorded = 0;
   for (const c of commits) {

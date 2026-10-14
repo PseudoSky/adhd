@@ -2,13 +2,13 @@
   "//": "Legacy skip/todo markers with no tracking item, per file. It may only shrink (rule C) and must be emptied by reviewBy (rule D). Regenerate with check-skip-expiry.mjs --write-baseline.",
   "reviewBy": "2027-01-31",
   "recordedAt": "2026-10-14",
-  "commit": "868b02cd97b843a68f5bf534ce9722f41c21f38c",
+  "commit": "25bb5ee8e32e7441ee1f60ed14206302a4f45872",
   "counts": {
     "skipMarkers": 44,
     "todoMarkers": 811,
     "stubSpecFiles": 81,
-    "tracked": 6,
-    "unannotated": 849,
+    "tracked": 10,
+    "unannotated": 845,
     "expired": 0
   },
   "files": {
@@ -214,9 +214,6 @@
       "todo": 10
     },
     "entrypoint/backlog/src/test/helpers/spawn-isolated-bin.spec.ts": {
-      "todo": 4
-    },
-    "entrypoint/backlog/src/testing-record.spec.ts": {
       "todo": 4
     },
     "entrypoint/backlog/src/vocabulary-gate.spec.ts": {

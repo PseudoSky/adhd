@@ -353,7 +353,7 @@ Concrete bindings for the capability names agents use; an absent row means the c
 | test-gates | `tools/nx-plugins/test/gates/run-gates.mjs` | one command per lifecycle step, all reading the table `docs/standards/testing.md` (binding table) and `tools/nx-plugins/test/gates/gates.table.json`: author loop `npx nx test <project>`; QA run `node tools/nx-plugins/test/gates/run-gates.mjs --step C`; final run `node tools/nx-plugins/test/gates/run-gates.mjs --step D`; mainline `GATE_FULL=1 node tools/nx-plugins/test/gates/run-gates.mjs --step E`; release `GATE_FULL=1 node tools/nx-plugins/test/gates/run-gates.mjs --step G`. The engine runs on demand: no hook or CI job calls it yet (backlog ca23e252); CI and the pre-push hook call the underlying checks directly |
 | test-routing | `tools/nx-plugins/test/routing/test-routing.mjs` | `node tools/nx-plugins/test/routing/test-routing.mjs route --class <class> --scope <path>...` prints the derived rigor, triggers, authorship, playbook and gates (exit 0), and exits non-zero for an unknown class (65), an inconsistent class and scope (1), or a Deep change with no coordinator or test author (3); `check --range <base>..<head>` is gate G12 |
 
-The Testing block's own `test-routing` row names the harness playbook resolver (`/workspace-standards run testing`); the row above is this repository's routing and rigor command.
+The Testing block's `test-routing` row names this repository's routing and rigor command in its tool column; its usage column describes the harness playbook resolver (`/workspace-standards run testing`).
 
 <!-- workspace-standards:testing:begin -->
 ## Testing
@@ -425,9 +425,9 @@ This table wins over the dispatcher's own default rows: for every task it names,
 | gate set | gate | mechanism | stage | bound | threshold |
 |---|---|---|---|---|---|
 | test-gates | G1 | mechanical | C, D, E, G | command | required tests pass; a quarantined test past its deadline fails the build |
-| test-gates | G2 | mechanical | B, D, E | command | every test belongs to exactly one tier and runs in at least one stage |
-| test-gates | G3 | mechanical | B, D, E | command | no test exceeds its tier ceiling |
-| test-gates | G4 | mechanical | D, E | command | every skip, todo, disabled, characterization marker and review-debt entry has a tracking item and an unexpired date |
+| test-gates | G2 | mechanical | B, C, D, E | command | every test belongs to exactly one tier and runs in at least one stage |
+| test-gates | G3 | mechanical | B, C, D, E | command | no test exceeds its tier ceiling |
+| test-gates | G4 | mechanical | C, D, E | command | every skip, todo, disabled, characterization marker and review-debt entry has a tracking item and an unexpired date |
 | test-gates | G5 | mechanical | E, F | command | at most 1% of a tier's runs flaky (starting value); no unrecorded retry |
 | test-gates | G6 | review | D | obligation | a defect fix carries a test that failed before the fix; every new behavioral test records a red run on a failed assertion |
 | test-gates | G7 | mechanical | D, E | command | per-test and per-stage budgets hold; p95 not more than 10% above the median of the previous five mainline runs (starting value) |
@@ -442,7 +442,7 @@ This table wins over the dispatcher's own default rows: for every task it names,
 |---|---|
 | A | _none_ |
 | B | test-gates/G2, test-gates/G3 |
-| C | test-gates/G1, test-gates/G12 |
+| C | test-gates/G1, test-gates/G2, test-gates/G3, test-gates/G4, test-gates/G12 |
 | D | test-gates/G1, test-gates/G2, test-gates/G3, test-gates/G4, test-gates/G6, test-gates/G7, test-gates/G8, test-gates/G9, test-gates/G10, test-gates/G11, test-gates/G12 |
 | E | test-gates/G1, test-gates/G2, test-gates/G3, test-gates/G4, test-gates/G5, test-gates/G7, test-gates/G12 |
 | F | test-gates/G5, test-gates/G12 |

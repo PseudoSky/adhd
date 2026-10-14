@@ -45,7 +45,34 @@ const SKIP_DIRS = /(^|\/)(node_modules|dist|\.worktrees|\.claude|\.nx|\.git)(\/|
 const TEST_GLOB = '**/*.{spec,test,e2e}.{ts,tsx,js,jsx,mjs,cjs,mts,cts}';
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
-/** Blank comments, strings and template literals to spaces, keeping every newline so line numbers hold. */
+/** A `/` starts a regex literal (not a division) after one of these tokens or at the start of the text. */
+function regexAllowed(out) {
+  const t = out.replace(/\s+$/, '');
+  if (t === '') return true;
+  if (/[(,=:[!&|?{};+\-*%<>~^]$/.test(t)) return true;
+  return /\b(?:return|typeof|case|in|of|void|delete|throw|yield|await)$/.test(t);
+}
+
+/** Index just past the regex literal (and its flags) starting at `i`, or `i` when no closing `/` is on the line. */
+function regexEnd(src, i) {
+  let j = i + 1;
+  let inClass = false;
+  while (j < src.length && src[j] !== '\n') {
+    const ch = src[j];
+    if (ch === '\\') { j += 2; continue; }
+    if (ch === '[') inClass = true;
+    else if (ch === ']') inClass = false;
+    else if (ch === '/' && !inClass) {
+      j++;
+      while (j < src.length && /[a-z]/i.test(src[j])) j++;
+      return j;
+    }
+    j++;
+  }
+  return i;
+}
+
+/** Blank comments, strings, regex literals and template literals to spaces, keeping every newline so line numbers hold. */
 export function blank(src) {
   let out = '';
   let i = 0;
@@ -60,6 +87,9 @@ export function blank(src) {
       out += '  '; i += 2;
       while (i < n && !(src[i] === '*' && src[i + 1] === '/')) { out += keep(src[i]); i++; }
       if (i < n) { out += '  '; i += 2; }
+    } else if (c === '/' && regexAllowed(out) && regexEnd(src, i) > i) {
+      const end = regexEnd(src, i);
+      while (i < end) { out += ' '; i++; }
     } else if (c === '"' || c === "'" || c === '`') {
       const q = c;
       out += ' '; i++;
@@ -129,22 +159,32 @@ export function parseAnnotation(text, pattern = ANNOTATION) {
   return m ? { id: m[1].toLowerCase(), date: m[2] } : null;
 }
 
-export const isRealDate = (s) => DATE.test(s) && new Date(`${s}T00:00:00Z`).toISOString().slice(0, 10) === s;
+export const isRealDate = (s) => {
+  if (!DATE.test(s)) return false;
+  const d = new Date(`${s}T00:00:00Z`);
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s;
+};
 
 /** Annotation text for the marker: its statement plus the comment lines directly above it. */
 function statementText(lines, code, marker) {
   const codeLines = code.split('\n');
-  let end = marker.line;
+  // An option marker (`skip:` / `todo:`) sits on a line inside the call's options object: the statement starts at
+  // the nearest earlier line that opens an it/test/describe call.
+  let first = marker.line;
+  for (let l = marker.line; l >= Math.max(1, marker.line - 8); l--) {
+    if (/\b(?:it|test|describe)(?:\.\w+)?\s*\(/.test(codeLines[l - 1])) { first = l; break; }
+  }
+  let end = first;
   let depth = 0;
   let seenOpen = false;
-  for (let l = marker.line; l <= Math.min(codeLines.length, marker.line + 8); l++) {
+  for (let l = first; l <= Math.min(codeLines.length, Math.max(marker.line, first) + 8); l++) {
     for (const ch of codeLines[l - 1]) {
       if (ch === '(') { depth++; seenOpen = true; } else if (ch === ')') depth--;
     }
     end = l;
-    if (seenOpen && depth <= 0) break;
+    if (seenOpen && depth <= 0 && l >= marker.line) break;
   }
-  let start = marker.line;
+  let start = first;
   while (start > 1 && /^\s*(\/\/|\/\*|\*)/.test(lines[start - 2])) start--;
   return lines.slice(start - 1, end).join('\n');
 }

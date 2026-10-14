@@ -4,7 +4,8 @@
  * failure mode: a skipped or todo test that nobody tracks stays dark forever and the suite reads green; an expired
  *   tracking date is the same failure with a paper trail; a scanner that reads fixtures, comments or strings as
  *   markers fails the repository for text that skips nothing.
- * tier: S (the scanner runs on fixture workspaces; the one git call is a real repository in a temp dir).
+ * tier: S by name and lane (the build-tools `node --test` lane). The CLI cases spawn the script and a git call runs in a temp repository,
+ *   which ADR 0009 forbids in the Vitest tier S lane; that exception is the one every build-tools spec lives under.
  * cites: T32.AC1, T32.AC2, T32.AC3.
  * teeth: with the annotation check removed every AC1 case fails; with the date comparison removed the AC2 cases fail.
  * guards: tools/nx-plugins/test/executors/wiring/check-skip-expiry.mjs
@@ -269,4 +270,30 @@ test('scanSource: a stub spec is all todo, a mixed file is not', () => {
   assert.equal(scanSource("it.todo('a');\n", TODAY).stub, true);
   assert.equal(scanSource("it('a', () => {});\nit.todo('b');\n", TODAY).stub, false);
   assert.equal(scanSource("it('a', () => {});\n", TODAY).stub, false);
+});
+
+describe('T32 blind-review findings — impossible months, regex literals, multi-line options', () => {
+  test('an impossible month is not a real date and does not crash the scan (finding 3)', () => {
+    assert.equal(isRealDate('2026-13-01'), false);
+    assert.equal(isRealDate('2026-00-10'), false);
+    const r = scanSource("// backlog ca23e252 until 2026-13-01\nit.skip('a', () => {});\n", TODAY).markers;
+    assert.equal(r[0].state, 'expired');
+  });
+
+  test('a regex literal holding a quote or backtick does not hide a later marker (finding 4)', () => {
+    for (const re of ['/`/', "/'/", '/"/', '/[`]/', '/a\\/`/']) {
+      const src = `const re = ${re};\nit.skip('a', () => {});\n`;
+      assert.equal(findMarkers(src).length, 1, re);
+    }
+    assert.equal(findMarkers('const x = a / b;\nit.skip("a", () => {});\nconst y = c / d;').length, 1, 'division stays division');
+  });
+
+  test('a comment above a multi-line it(..., { skip }) call annotates its option (finding 5)', () => {
+    const src = "// backlog ca23e252 until 2026-12-31\nit('a', {\n  skip: 'x',\n}, () => {});\n";
+    const r = scanSource(src, TODAY).markers;
+    assert.equal(r.length, 1);
+    assert.equal(r[0].state, 'tracked');
+    const bare = scanSource("it('a', {\n  skip: 'x',\n}, () => {});\n", TODAY).markers;
+    assert.equal(bare[0].state, 'unannotated');
+  });
 });

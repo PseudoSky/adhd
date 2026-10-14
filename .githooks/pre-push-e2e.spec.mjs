@@ -104,3 +104,19 @@ test('pre-push-e2e AC4: reachability check is green, and red under negative cont
   }
   assert.equal(readFileSync(HOOK, 'utf8'), original, 'the real hook is untouched');
 });
+
+test('pre-push (blind-review 16): a remote tip this clone does not have is treated as a new branch, not an unreadable range', () => {
+  // Execute the hook's own condition line with a remote sha that exists nowhere locally (a rewritten remote), and with a real one.
+  const line = readFileSync(HOOK, 'utf8').split('\n').find((l) => /^\s*if \[ "\$remote_sha" = "\$zero_sha" \]/.test(l));
+  assert.ok(line, 'the hook has a remote_sha resolution condition');
+  const probe = (sha) => spawnSync('sh', ['-c', `zero_sha=0000000000000000000000000000000000000000; remote_sha=${sha}; ${line.trim()}\n echo new-branch\n else echo known-tip\n fi`], { cwd: ROOT, env, encoding: 'utf8' }).stdout.trim();
+  assert.equal(probe('1234567890123456789012345678901234567890'), 'new-branch');
+  const head = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: ROOT, env, encoding: 'utf8' }).stdout.trim();
+  assert.equal(probe(head), 'known-tip');
+});
+
+test('pre-push (blind-review 15): the G4 check runs once per push, not once per pushed ref', () => {
+  const body = readFileSync(HOOK, 'utf8');
+  assert.match(body, /\[ -z "\$\{g4_done:-\}" \] && ! node "\$repo_root\/tools\/nx-plugins\/test\/executors\/wiring\/check-skip-expiry\.mjs"/);
+  assert.match(body, /\n\s*g4_done=1\n/);
+});

@@ -14,7 +14,7 @@ import { fileURLToPath } from 'node:url';
 
 import {
   CLASSES, DEFAULT_IMPLEMENTATION, NEVER_RELAXED, REPO_ROOT, checkRange, checkRecord, deriveRigor, distribution,
-  globToRegExp, loadImplementation, parseTriggers, route,
+  globToRegExp, isBehaviorBearing, loadImplementation, parseTriggers, route,
 } from './test-routing.mjs';
 
 const require = createRequire(import.meta.url);
@@ -233,6 +233,41 @@ test('T43.AC5: a three-dot range is the branch\'s own change: commits and paths 
   } finally { s.done(); }
 });
 
+test('T43.AC5 (blind-review 1): a follow-up push is judged on the branch\'s record, not only on the commits pushed since', () => {
+  const s = sandbox();
+  try {
+    s.commit('README.md', 'chore: start');
+    s.git('checkout', '-q', '-b', 'feat');
+    const pushed = s.commit('lib/a.ts', `feat: a\n\n${record(base)}`);
+    s.commit('lib/b.ts', 'fix: review follow-up, no record of its own');
+    // the remote already holds `pushed`; the hook's range is only the new commit
+    const r = checkRange({ range: `${pushed}..HEAD`, implementation: withDoc({ enforcedFrom: '2026-10-20' }), cwd: s.dir });
+    assert.equal(r.ok, true, r.errors.join('; '));
+    assert.ok(r.recordCommit, 'the record is found on the branch');
+    // and a branch with no record anywhere still fails on the same shape of range
+    s.git('checkout', '-q', 'main');
+    s.git('checkout', '-q', '-b', 'bare');
+    const bare = s.commit('lib/c.ts', 'feat: c with no record');
+    s.commit('lib/d.ts', 'fix: d');
+    const f = checkRange({ range: `${bare}..HEAD`, implementation: withDoc({ enforcedFrom: '2026-10-20' }), cwd: s.dir });
+    assert.equal(f.ok, false);
+    assert.match(f.errors[0], /rigor record is absent/);
+  } finally { s.done(); }
+});
+
+test('T43.AC5 (blind-review 12): enforcement keys on the committer date, so a backdated author date does not exempt a commit', () => {
+  const s = sandbox();
+  try {
+    const first = s.commit('README.md', 'chore: start', '2026-10-21T10:00:00Z');
+    fs.writeFileSync(path.join(s.dir, 'lib.ts'), 'x\n');
+    s.git('add', 'lib.ts');
+    const env = cleanGitEnv(process.env, { GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@t', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@t', GIT_AUTHOR_DATE: '2020-01-01T00:00:00Z', GIT_COMMITTER_DATE: '2026-10-21T10:00:00Z' });
+    execFileSync('git', ['commit', '-q', '-m', 'feat: backdated, no record'], { cwd: s.dir, env });
+    const r = checkRange({ range: `${first}..HEAD`, implementation: withDoc({ enforcedFrom: '2026-10-20' }), cwd: s.dir });
+    assert.equal(r.ok, false, 'a backdated author date must not exempt the commit');
+  } finally { s.done(); }
+});
+
 test('T43.AC5: the range check runs git in the caller\'s directory, not the hook\'s repository', () => {
   const s = sandbox();
   try {
@@ -258,4 +293,12 @@ test('T43.AC5: the CLI check mode exits 1 on a seeded Light record over a Deep t
     assert.equal(cli('check', '--record-file', bad, ...scope).status, 1);
     assert.equal(cli('check', '--record-file', good, ...scope).status, 0);
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('T43 (blind-review 10): gate source under tools/nx-plugins/test/ is behavior-bearing; spec files and test dirs elsewhere are not', () => {
+  assert.equal(isBehaviorBearing('tools/nx-plugins/test/routing/test-routing.mjs'), true);
+  assert.equal(isBehaviorBearing('tools/nx-plugins/test/gates/run-gates.mjs'), true);
+  assert.equal(isBehaviorBearing('tools/nx-plugins/test/gates/run-gates.spec.mjs'), false);
+  assert.equal(isBehaviorBearing('entrypoint/backlog/src/test/helpers/ci-env.ts'), false);
+  assert.equal(isBehaviorBearing('entrypoint/backlog/src/store/a.ts'), true);
 });

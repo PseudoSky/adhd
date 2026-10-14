@@ -64,8 +64,18 @@
         "{workspaceRoot}/tools/nx-plugins/test/gates/**/*",
         "{workspaceRoot}/tools/nx-plugins/test/executors/wiring/**/*",
         "{workspaceRoot}/tools/gate/**/*",
+        "{workspaceRoot}/tools/nx-plugins/test/routing/**/*",
+        "{workspaceRoot}/docs/standards/**/*",
+        "{workspaceRoot}/.githooks/**/*",
+        "{workspaceRoot}/.github/**/*",
         "{workspaceRoot}/{apps,libs,packages,entrypoint,extensions}/**/*",
         "!{workspaceRoot}/**/{node_modules,dist,coverage,.nx}/**",
+        {
+          "runtime": "date -u +%Y-%m-%d"
+        },
+        {
+          "runtime": "git rev-parse HEAD"
+        },
         {
           "env": "GATE_BASE"
         },
@@ -104,7 +114,7 @@
         }
       },
       "metadata": {
-        "description": "595965cc T30: the workspace-standards gate engine run over this repository's command table (tools/nx-plugins/test/gates/gates.table.json). `nx run @adhd/source:test-gates` runs stage B (pre-commit static checks); `--configuration=presubmit|mainline|release|pre-push` runs that stage. Writes ONE JSON report to .nx/test-gates/gate-report.json and exits with the worst gate's status. Cached: a second run over unchanged inputs is a cache hit (evidence is nx's cache line; never --skip-nx-cache). A gate with no command is reported as an obligation, never as a pass."
+        "description": "595965cc T30: the workspace-standards gate engine run over this repository's command table (tools/nx-plugins/test/gates/gates.table.json). `nx run @adhd/source:test-gates` runs stage B (pre-commit static checks); `--configuration=presubmit|mainline|release|pre-push` runs that stage. Writes ONE JSON report to .nx/test-gates/gate-report.json and exits with the worst gate's status. Cached, keyed on the files the gates read plus today's date (G4 expiry) and HEAD (G12 reads commit messages): a second run over unchanged inputs on the same day and commit is a cache hit (evidence is nx's cache line; never --skip-nx-cache). A gate with no command is reported as an obligation, never as a pass."
       }
     },
     "mass-delete-guard": {

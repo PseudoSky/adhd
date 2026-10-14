@@ -51,12 +51,14 @@ function wrapper(args, env = {}) {
     env: { ...process.env, ...env },
   });
   let parsed = null;
+  let parseError = null;
   try {
     parsed = JSON.parse(readFileSync(args.includes('--report') ? args[args.indexOf('--report') + 1] : report, 'utf8'));
-  } catch {
+  } catch (e) {
     parsed = null;
+    parseError = e.message; // surfaced in stderr so an assertion on the report names why it is absent
   }
-  return { status: r.status, stderr: r.stderr, report: parsed };
+  return { status: r.status, stderr: parseError ? `${r.stderr}\n[report unreadable: ${parseError}]` : r.stderr, report: parsed };
 }
 
 const table = () => JSON.parse(readFileSync(DEFAULT_TABLE, 'utf8'));

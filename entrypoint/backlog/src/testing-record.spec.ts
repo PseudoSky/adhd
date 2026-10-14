@@ -5,6 +5,8 @@
  * It spawns the built dist/index.js, so it runs in the `e2e` lane. This file spawns nothing;
  * it exists so the default `test` target has the file's contract in view.
  *
+ * skip-expiry: 595965cc until 2026-12-31 the mocked placeholders are covered by testing-record.e2e.ts in the e2e lane.
+ *
  * Resource lane: proc — spawns the built dist/index.js as a child process.
  */
 import { describe, it } from 'vitest';
