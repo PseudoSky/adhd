@@ -1,6 +1,7 @@
 // guards: nodeProcessLauncher hands the OS a shell string, a non-detached group or an unintended child environment, or mishandles the child's exit, error and kill events
 // tier: S
 // cites: REVIEW-FIXES G1 G9 G10 G11
+// skip-expiry: 05f910a0 until 2027-03-31 the three process-group tests are POSIX-only; Windows group kill is not implemented
 
 /* eslint-disable @typescript-eslint/no-non-null-assertion -- specs index arrays/maps the test has just arranged; a miss would fail the very next assertion */
 // nodeProcessLauncher (G1 G9 G10 G11) WITHOUT a real subprocess: `node:child_process.spawn`
