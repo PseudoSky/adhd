@@ -27,3 +27,6 @@ export {
   makeDeadlineExceededError,
   isGatewayError,
 } from './lib/gateway';
+
+// T08 / OD-32 — `bin:` source kind (argv fallback D-07, stdio-MCP serving D-08).
+export * from './lib/sources';

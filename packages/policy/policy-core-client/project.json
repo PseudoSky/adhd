@@ -1,0 +1,61 @@
+{
+  "name": "policy-core-client",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "packages/policy/policy-core-client/src",
+  "projectType": "library",
+  "release": {
+    "version": {
+      "manifestRootsToUpdate": ["dist/{projectRoot}"],
+      "currentVersionResolver": "git-tag",
+      "fallbackCurrentVersionResolver": "disk"
+    }
+  },
+  "tags": [
+    "domain:policy",
+    "pkg-kind:core",
+    "pkg-class:foundation",
+    "layer:logic",
+    "platform:node",
+    "access:public"
+  ],
+  "targets": {
+    "nx-release-publish": {
+      "options": {
+        "packageRoot": "{projectRoot}/dist"
+      },
+      "dependsOn": [
+        "build",
+        "test",
+        "verify-dist-load",
+        "dist-manifest",
+        "publish-hygiene"
+      ]
+    },
+    "lint": {
+      "executor": "@nx/eslint:lint"
+    },
+    "typecheck-spec": {
+      "//": "Type-checks the SPEC corpus (packages/policy/policy-core-client/tsconfig.spec.json). Closes lane-reachability rule 6: a tsconfig.spec.json with no compiling target lets the spec corpus carry type errors no gate can see (nx.json production namedInput excludes it). The ratchet fails on any per-file increase over tools/nx-plugins/build/executors/typecheck-spec/policy-core-client.baseline.json or on include narrowing. Wired into test.dependsOn so nx affected -t test runs it.",
+      "executor": "nx:run-commands",
+      "cache": true,
+      "inputs": [
+        "default",
+        {
+          "externalDependencies": ["typescript"]
+        }
+      ],
+      "options": {
+        "cwd": ".",
+        "command": "node tools/nx-plugins/build/executors/typecheck-spec/ratchet.mjs --tsconfig packages/policy/policy-core-client/tsconfig.spec.json --baseline tools/nx-plugins/build/executors/typecheck-spec/policy-core-client.baseline.json"
+      }
+    },
+    "test": {
+      "//": "Partial override: the command is overridden because this package's vitest config is `.mts` while the workspace targetDefaults hardcodes `.ts` (without it `nx run policy-core-client:test` fails to load the config and no test can run).",
+      "dependsOn": ["lint", "^build", "typecheck-spec"],
+      "options": {
+        "cwd": ".",
+        "command": "vitest run --config packages/policy/policy-core-client/vite.config.mts"
+      }
+    }
+  }
+}
