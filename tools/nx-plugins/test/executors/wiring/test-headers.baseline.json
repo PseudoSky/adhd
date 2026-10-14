@@ -1,6 +1,15 @@
 {
   "$comment": "Legacy test-header violations per file (check-test-headers.mjs). It only shrinks: a new violation fails, a fixed one must be removed here.",
   "files": {
+    ".githooks/check-no-credentials.spec.mjs": [
+      "H1"
+    ],
+    ".githooks/detect-mass-deletion.spec.mjs": [
+      "H1"
+    ],
+    ".githooks/git-env-leak.spec.mjs": [
+      "H1"
+    ],
     "docs/plan/actionable-store/demo/fixture/demo-gate.spec.mjs": [
       "H1"
     ],

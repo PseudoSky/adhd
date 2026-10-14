@@ -14,12 +14,15 @@
  */
 import test, { describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
 import { evaluate, headerOf, judge, spawnsProcess } from './check-test-headers.mjs';
+
+const { cleanGitEnv } = createRequire(import.meta.url)('../../../lib/git-env.js');
 
 const SCRIPT = join(dirname(fileURLToPath(import.meta.url)), 'check-test-headers.mjs');
 const hdr = (lines) => `/**\n${lines.map((l) => ` * ${l}`).join('\n')}\n */\n`;
@@ -118,4 +121,19 @@ describe('b87dcea0 — the CLI', () => {
     const r = spawnSync(process.execPath, [SCRIPT], { encoding: 'utf8' });
     assert.equal(r.status, 0, r.stderr);
   });
+
+  test('only git-tracked test files decide the result: an untracked scratch copy is ignored, the same file tracked fails', () => {
+    const root = ws({ 'x/ok.spec.mjs': hdr(GOOD_S), 'tmp/rescue/bad.spec.mjs': 'it();\n' });
+    const git = (...a) => execFileSync('git', a, { cwd: root, env: cleanGitEnv(process.env, { GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@t', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@t' }), encoding: 'utf8' });
+    try {
+      git('init', '-q');
+      git('add', 'x/ok.spec.mjs');
+      assert.equal(run(root).status, 0, 'the untracked tmp/rescue copy is not scanned');
+      git('add', 'tmp/rescue/bad.spec.mjs');
+      const r = run(root);
+      assert.equal(r.status, 1);
+      assert.match(r.stderr, /tmp\/rescue\/bad\.spec\.mjs violates H1/);
+    } finally { rmSync(root, { recursive: true, force: true }); }
+  });
 });
+
