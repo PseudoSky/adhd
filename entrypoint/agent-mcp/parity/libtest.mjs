@@ -63,9 +63,11 @@ async function withSweepTree(body) {
     grand = await readPidLine(child);
     return await body({ child, grand, bystander });
   } finally {
-    const owned = new Set(child.exitCode === null && child.signalCode === null ? L.descendantsOf([child.pid]).map((p) => p.pid) : []);   // grandchild found via the tree even if its pid never parsed
+    // Signals go through the harness's guarded paths only (r10-killsafety AC4): the registered child and its live descendants via sweepPids, the handles this call holds via ChildProcess.kill.
+    const owned = new Set(); const reg = new L.OwnedRegistry();
+    if (child.exitCode === null && child.signalCode === null && reg.add(child.pid)) { owned.add(child.pid); for (const d of L.descendantsOf([child.pid])) owned.add(d.pid); }   // grandchild found via the tree even if its pid never parsed
     if (Number.isInteger(grand)) owned.add(grand);
-    for (const pid of owned) if (L.alive(pid)) { try { process.kill(pid, 'SIGKILL'); } catch { /* already gone */ } }
+    if (owned.size) await L.sweepPids([...owned], 300, reg);
     child.kill('SIGKILL'); bystander.kill('SIGKILL');
     await Promise.all([exited(child), exited(bystander)]); await waitGone([...owned], 5000);
   }
