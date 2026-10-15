@@ -30,9 +30,15 @@ import type { ComposedSchemas } from './types';
 // ---------------------------------------------------------------------------
 
 /**
- * A loaded `--use` plugin object (SPEC §7.1). We only depend on the shape we
- * actually consume here (layer / mount capabilities) so the runtime stays
- * decoupled from the full `Plugin` type surface.
+ * A loaded `--use` plugin object (SPEC §7.1): the layer and mount
+ * capabilities this runtime consumes.
+ *
+ * Still a structural copy of core-client's `Plugin['capabilities']`, not a
+ * derivation (backlog cfd37408): deriving `layer` from core-client's
+ * `LayerCapability` types the layer's `call` as the core-client `Call`, and
+ * readers outside this package that cast it to the runtime `Call`
+ * (`entrypoint/policy/src/wrapper/attributes-layer.ts`) stop compiling. The
+ * derivation lands with those readers' segments (R6, R9).
  */
 export interface UsePlugin {
   id: string;
@@ -65,9 +71,8 @@ export interface UsePlugin {
         opts?: Record<string, unknown>,
         // (batch-rollout, BATCH_0.0.1.md §2/§F1) Optional, additive third
         // param — structurally equivalent to `apigen-core-client`'s
-        // `MountHostBridge` (duck-typed here rather than imported, since this
-        // file must not depend on the core-client package for its own
-        // internal `UsePlugin` shape).
+        // `MountHostBridge`. (This package already depends on core-client;
+        // the structural copy is the debt tracked by backlog cfd37408.)
         hostBridge?: {
           invoke(
             fnName: string,
