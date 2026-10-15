@@ -171,8 +171,11 @@ function toMcpErrorContent(error: unknown): {
   isError: true;
 } {
   let message: string;
-  if (error instanceof ToolError) {
-    message = `[${error.code}] ${error.message}`;
+  // The task store throws its own `ToolError` class (agent-store-runtime), distinct from the orchestrator's, so
+  // `instanceof` alone drops the code of every store-thrown error; a coded ToolError is recognised by name too.
+  const coded = error instanceof Error && (error as { name: string }).name === 'ToolError' && typeof (error as { code?: unknown }).code === 'string';
+  if (error instanceof ToolError || coded) {
+    message = `[${(error as ToolError).code}] ${(error as ToolError).message}`;
   } else if (error instanceof Error) {
     message = error.message;
   } else {
