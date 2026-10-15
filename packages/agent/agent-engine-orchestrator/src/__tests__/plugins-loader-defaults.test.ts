@@ -7,6 +7,14 @@ import { loadExternalPlugins, type PluginEntry } from "../plugins/loader.js";
 import type { IHookRegistry } from "@adhd/agent-base-types";
 
 /**
+ * Failure mode guarded: a default plugin entry is dropped, or a user entry fails to override it.
+ * Tier: S. Item: backlog 5339c2e5; variance hardening cites qa-variance (dispatch-1014).
+ * Red run: pending (variance edit made without running tests, per user).
+ * qa-variance: the loader's config discovery (cwd, ~/.adhd/agent-mcp, ~/.agent-mcp) read the
+ * developer's REAL home, so duration depended on the machine and the "installs nothing" case
+ * failed on any host with a global plugin config. Every call now pins `overrides.configPath` to an
+ * empty config file in this file's temp dir, so no path outside it is probed.
+ *
  * Backlog 5339c2e5 — `loadExternalPlugins` must install caller-supplied DEFAULT
  * entries (agent-mcp passes the default budget plugin) even with zero config
  * files, and a USER entry naming the same module must override the default
@@ -32,6 +40,10 @@ writeFileSync(
    }`,
   "utf8"
 );
+
+const emptyConfigPath = join(dir, "agent-mcp.config.json");
+writeFileSync(emptyConfigPath, JSON.stringify({ plugins: [] }), "utf8");
+const pinned = { configPath: emptyConfigPath };
 
 const globals = globalThis as unknown as {
   __probeInstalls?: number;
@@ -60,12 +72,12 @@ beforeEach(() => {
 
 describe("loadExternalPlugins — default entries (5339c2e5)", () => {
   it("installs nothing when there are no defaults and no config", async () => {
-    await loadExternalPlugins(hooks, {}, undefined, undefined, [], logger, []);
+    await loadExternalPlugins(hooks, {}, pinned, undefined, [], logger, []);
     expect(globals.__probeInstalls).toBeUndefined();
   });
 
   it("installs a DEFAULT entry even with zero config files", async () => {
-    await loadExternalPlugins(hooks, {}, undefined, undefined, [], logger, [
+    await loadExternalPlugins(hooks, {}, pinned, undefined, [], logger, [
       DEFAULT_ENTRY,
     ]);
     expect(globals.__probeInstalls).toBe(1);
@@ -77,7 +89,7 @@ describe("loadExternalPlugins — default entries (5339c2e5)", () => {
     await loadExternalPlugins(
       hooks,
       {},
-      undefined,
+      pinned,
       undefined,
       [probePath],
       logger,
