@@ -243,7 +243,9 @@ async function runSingleItem(
     // stays a `Date`). Stream chunks are therefore wire-encoded for typed output
     // schemas and host-encoded for empty ones. Whether that asymmetry is
     // intended is an open architect question (see backlog). The current behaviour
-    // is pinned by dispatch-stream-encode.spec.ts:124.
+    // is pinned by the dispatch-stream-encode.spec.ts test named "CURRENT
+    // behavior (open architect question, not a contract): an empty-schema
+    // stream passes through untouched".
     if (isApiStream(raw)) {
       const collected = await collectWithPhase(raw);
       if (!collected.ok) {
