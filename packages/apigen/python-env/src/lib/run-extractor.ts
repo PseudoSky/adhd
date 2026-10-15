@@ -99,13 +99,32 @@ export function runExtractorEmitJson(
     let stdout = ''
     let stderr = ''
     let timedOut = false
+    let exited = false
+    let settled = false
+    // Settles the promise exactly once and clears the timer on every settling path.
+    const settle = (action: () => void): void => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      action()
+    }
+    const timeoutError = (): Error =>
+      new Error(
+        `${label}: extractor --emit-json timed out after ${timeoutMs} ms and was killed ` +
+          `(command: ${commandLine})${stderr ? `:\n${stderr}` : ''}`,
+      )
     // A hung extractor must not hold the promise (and the caller's CI step) forever.
-    // On expiry the child is SIGKILLed; the promise settles on 'close' (not 'exit') so
-    // the child is gone AND its stdout/stderr pipes are fully drained before the caller
-    // observes the result or error.
+    // Normal completion settles on 'close', so stdout/stderr are fully drained before the
+    // caller observes the result. On expiry the child is SIGKILLed and the promise settles
+    // on whichever of 'exit' or 'close' fires first. 'close' does not fire while a
+    // descendant still holds the stdout/stderr pipes, so the timeout also destroys the
+    // parent-side pipe handles; the rejection is then raised once the child has exited.
     const timer = setTimeout(() => {
       timedOut = true
       proc.kill('SIGKILL')
+      proc.stdout?.destroy()
+      proc.stderr?.destroy()
+      if (exited) settle(() => reject(timeoutError()))
     }, timeoutMs)
     proc.stdout?.on('data', (chunk: Buffer) => {
       stdout += chunk.toString('utf8')
@@ -114,33 +133,32 @@ export function runExtractorEmitJson(
       stderr += chunk.toString('utf8')
     })
     proc.on('error', (err) => {
-      clearTimeout(timer)
-      reject(err)
+      settle(() => reject(err))
+    })
+    proc.on('exit', () => {
+      exited = true
+      if (timedOut) settle(() => reject(timeoutError()))
     })
     proc.on('close', (code) => {
-      clearTimeout(timer)
-      if (timedOut) {
-        reject(
-          new Error(
-            `${label}: extractor --emit-json timed out after ${timeoutMs} ms and was killed ` +
-              `(command: ${commandLine})${stderr ? `:\n${stderr}` : ''}`,
-          ),
-        )
-        return
-      }
-      if (code !== 0) {
-        reject(new Error(`${label}: extractor --emit-json exited with code ${code}:\n${stderr}`))
-        return
-      }
-      try {
-        resolve(JSON.parse(stdout) as Operation[])
-      } catch (err) {
-        reject(
-          new Error(
-            `${label}: extractor --emit-json produced invalid JSON (${(err as Error).message}):\n${stdout}`,
-          ),
-        )
-      }
+      settle(() => {
+        if (timedOut) {
+          reject(timeoutError())
+          return
+        }
+        if (code !== 0) {
+          reject(new Error(`${label}: extractor --emit-json exited with code ${code}:\n${stderr}`))
+          return
+        }
+        try {
+          resolve(JSON.parse(stdout) as Operation[])
+        } catch (err) {
+          reject(
+            new Error(
+              `${label}: extractor --emit-json produced invalid JSON (${(err as Error).message}):\n${stdout}`,
+            ),
+          )
+        }
+      })
     })
   })
 }
