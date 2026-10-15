@@ -4545,6 +4545,15 @@
       "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-verbs --only search-verbs.12",
       "expect": "exit0",
       "cwd": "repo-root"
+    },
+    {
+      "id": "search-port-guards.9",
+      "phase": "migrate",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-port-guards --only search-port-guards.9",
+      "expect": "exit0",
+      "cwd": "repo-root"
     }
   ]
 }
