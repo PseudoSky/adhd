@@ -6,7 +6,7 @@
 
 Every project's `lint` target depends on `sync-deps`, wired globally via `nx.json` `targetDefaults.lint.dependsOn: ["sync-deps"]` (not this plugin's `createNodes` — see rationale below). Since `build` already `dependsOn: ["^build", "lint"]` and `version` `dependsOn: ["build", <runtime dep version tasks>]` (see `tools/nx-plugins/build/README.md`), the effective chain is `version → build → lint → sync-deps`: dependency-range drift is fixed on disk *before* `@nx/dependency-checks` ever inspects the file.
 
-**Why `nx.json` `targetDefaults` and not this plugin's `createNodes`:** `lint` itself is created by a *different* plugin (`tools/nx-plugins/lint/plugin.js`, matching `**/.eslintrc.json`) than the one that creates `sync-deps` (this plugin, matching `**/package.json`). Two plugins' `createNodes` both returning a config for the same target name on the same project have an unspecified/version-sensitive merge order; `targetDefaults` is Nx's own supported mechanism for "every project's target X depends on Y" and merges deterministically into both explicit and plugin-inferred targets (the same mechanism already used for `build`'s `dependsOn: ["^build", "lint"]` in this same file) — so that's what we used.
+**Why `nx.json` `targetDefaults` and not this plugin's `createNodes`:** `lint` itself is created by a *different* plugin (`tools/nx-plugins/lint/plugin.js`, matching `**/eslint.config.{mjs,cjs,js}`) than the one that creates `sync-deps` (this plugin, matching `**/package.json`). Two plugins' `createNodes` both returning a config for the same target name on the same project have an unspecified/version-sensitive merge order; `targetDefaults` is Nx's own supported mechanism for "every project's target X depends on Y" and merges deterministically into both explicit and plugin-inferred targets (the same mechanism already used for `build`'s `dependsOn: ["^build", "lint"]` in this same file) — so that's what we used.
 
 **A project with no `sync-deps` target (no `package.json`+`project.json`, or no `build` target — see this plugin's `createNodes` gate) simply has that `dependsOn` entry skipped by Nx** (`processTasksForSingleProject` in `nx/src/tasks-runner/create-task-graph.js` only wires a same-project `dependsOn` target if the project actually has it) — it is never an error.
 
@@ -28,8 +28,10 @@ The pre-commit hook (`.githooks/pre-commit`) keeps its own, separate, **hard-fai
 
 The `lint` target (`tools/nx-plugins/lint/plugin.js`) and both `sync-deps` / `sync-deps-check` targets (this plugin) declare `{ externalDependencies: [...] }` as a cache input. Declaring that input **replaces** Nx's default hashing of installed external versions for the target, so each target lists every npm dependency its own project declares:
 
-- the names come from `dependencies`, `devDependencies`, `peerDependencies` and `optionalDependencies` in the project's `package.json`, via [`lib/declared-external-deps.js`](../lib/declared-external-deps.js) (`declaredExternalDeps`);
+- the names come from `dependencies`, `devDependencies`, `peerDependencies` and `optionalDependencies` in the project's `package.json` (except `@adhd/*`), via [`lib/declared-external-deps.js`](../lib/declared-external-deps.js) (`declaredExternalDeps`);
 - `@adhd/*` names are excluded (workspace siblings are covered by `^production`), and `eslint` is always listed once, first;
 - the lockfile is **not** an input. Hashing it would re-run lint for every project on any dependency bump in the workspace.
 
-The effect is that bumping an installed version of a dependency a project declares invalidates that project's `lint` and `sync-deps-check` entries, and nothing else. The first run after this change rebuilds the cache for every project, because `tools/nx-plugins/**` is a global input.
+The effect is that bumping an installed version of a dependency a project declares invalidates that project's `lint` and `sync-deps-check` entries, and nothing else.
+
+Global scope follows `nx.json` `namedInputs.sharedGlobals`, which lists `tools/nx-plugins/build/**/*` and `tools/nx-plugins/lint/**/*` and no other path under `tools/nx-plugins/`. Editing either listed directory invalidates every project's `default`-based inputs. Editing `tools/nx-plugins/lib/` or `tools/nx-plugins/deps/` (other than `eslint-check.mjs`, which the `sync-deps` targets list explicitly) does not.

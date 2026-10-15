@@ -47,6 +47,8 @@ exports.createNodes = ['**/package.json', (configFiles, _o, ctx) =>
   if (skip(projectRoot)) return [pkgPath, {}];
   if (!existsSync(join(ctx.workspaceRoot, projectRoot, 'project.json'))) return [pkgPath, {}];
   if (!hasBuildTarget(ctx.workspaceRoot, projectRoot)) return [pkgPath, {}];
+  // One read of the project's package.json per project, shared by both targets.
+  const inputs = syncDepsInputs(projectRoot, ctx.workspaceRoot);
   return [pkgPath, {
     projects: {
       [projectRoot]: {
@@ -62,12 +64,12 @@ exports.createNodes = ['**/package.json', (configFiles, _o, ctx) =>
             executor: '@adhd/nx-deps:sync',
             cache: true,
             outputs: ['{projectRoot}/package.json'],
-            inputs: syncDepsInputs(projectRoot, ctx.workspaceRoot),
+            inputs,
           },
           'sync-deps-check': {
             executor: '@adhd/nx-deps:check',
             cache: true,
-            inputs: syncDepsInputs(projectRoot, ctx.workspaceRoot),
+            inputs,
           },
         },
       },

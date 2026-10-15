@@ -49,15 +49,17 @@ const ALWAYS_LISTED_BY_CALLER = new Set(['eslint']);
  * of that project's targets.
  *
  * A project with no `package.json` declares nothing and yields `[]`. A
- * `package.json` that exists but is not valid JSON throws, naming the file: a
- * silently empty list would reintroduce the stale-cache defect this helper
- * exists to prevent.
+ * `package.json` that exists but is not valid JSON, or whose top level is not
+ * a plain object, throws, naming the file: a silently empty list would
+ * reintroduce the stale-cache defect this helper exists to prevent.
  *
  * @param {string} projectRoot Workspace-relative project directory (POSIX form, e.g. `packages/x/y`), as Nx's `createNodes` hands it.
  * @param {string} workspaceRoot Absolute workspace root (`ctx.workspaceRoot`).
  * @returns {string[]} Sorted unique names from `dependencies`, `devDependencies`,
  *   `peerDependencies` and `optionalDependencies`, excluding `@adhd/*` and `eslint`.
- * @throws {Error} When the project's `package.json` exists but does not parse as JSON.
+ * @throws {Error} When the project's `package.json` exists but does not parse as
+ *   JSON, or parses to something other than a plain object (`null`, an array, a
+ *   number or a string). The error message names the file.
  */
 function declaredExternalDeps(projectRoot, workspaceRoot) {
   const manifestPath = join(workspaceRoot, projectRoot, 'package.json');
@@ -72,10 +74,16 @@ function declaredExternalDeps(projectRoot, workspaceRoot) {
     );
   }
 
+  if (manifest === null || typeof manifest !== 'object' || Array.isArray(manifest)) {
+    throw new Error(
+      `declaredExternalDeps: ${manifestPath} is not a JSON object`,
+    );
+  }
+
   const names = new Set();
   for (const field of DEPENDENCY_FIELDS) {
     const block = manifest[field];
-    if (!block || typeof block !== 'object') continue;
+    if (!block || typeof block !== 'object' || Array.isArray(block)) continue;
     for (const name of Object.keys(block)) {
       if (name.startsWith(WORKSPACE_SCOPE_PREFIX)) continue;
       if (ALWAYS_LISTED_BY_CALLER.has(name)) continue;
