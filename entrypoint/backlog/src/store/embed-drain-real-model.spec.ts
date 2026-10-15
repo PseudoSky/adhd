@@ -1,5 +1,8 @@
 /**
- * guards: the real-model suite cannot silently drift from its paired e2e file, and its wiring is reachable without a model    tier: S    cites: 4256bc8b AC1, 4256bc8b AC2, 4256bc8b AC3, 4256bc8b (item 4256bc8b-3162-4bab-85de-8fe454724b2c)
+ * guards: the real-model suite cannot silently drift from its paired e2e file, and its wiring is reachable without a model
+ * tier: S
+ * cites: 4256bc8b AC1, AC2, AC3 (item 4256bc8b-3162-4bab-85de-8fe454724b2c)
+ * Embeddings mocked here: vi.mock('@adhd/sox-embedding-provider') below swaps in the deterministic fake.
  *
  * The paired stub for `embed-drain-real-model.e2e.ts`. The real-model cases run
  * in the `e2e` lane (CI-only). This file is the tier S lane's entry for that
@@ -67,7 +70,9 @@ function e2eSource(): string {
  * `.each` or otherwise unparsable title yields `[<modifier>] <unparsed>`, so none of
  * them can equal a plain mirrored title: adding one turns the AC2 check red.
  */
-function e2eItTitles(src: string): string[] {
+function e2eItTitles(rawSrc: string): string[] {
+  // Header and inline prose may contain `test (` / `it (`; only code declares cases.
+  const src = rawSrc.replace(/\/\*[\s\S]*?\*\//g, (c) => c.replace(/[^\n]/g, ' ')).replace(/^\s*\/\/.*$/gm, '');
   const entries: string[] = [];
   const head = /\b(?:it|test)((?:\.[A-Za-z]+)*)\s*\(/g;
   let m: RegExpExecArray | null;
@@ -148,6 +153,8 @@ describe('embed-drain-real-model (tier S stub for the e2e lane)', () => {
       '[todo] todo',
       '[each] <unparsed>',
     ]);
+    // Prose in comments is not code: a `test (` in a block or line comment is never a case.
+    expect(e2eItTitles('/* per test (budget) */\n// it (x)\nit(\'real\', () => {});')).toEqual(['real']);
     for (const entry of e2eItTitles(synthetic).filter((e) => e.startsWith('['))) {
       expect(MIRRORED_E2E_TITLES).not.toContain(entry);
     }

@@ -1,5 +1,7 @@
 /**
- * guards: a semantic query finds an item only when its vector is durably written by the production write path    tier: P    cites: 4256bc8b AC1, 4256bc8b AC4, 4256bc8b (item 4256bc8b-3162-4bab-85de-8fe454724b2c)
+ * guards: a semantic query finds an item only when its vector is durably written by the production write path
+ * tier: P
+ * cites: 4256bc8b AC1, AC4 (item 4256bc8b-3162-4bab-85de-8fe454724b2c)
  * gap: This cannot be observed at tier S because it loads the real fastembed bge-base-en-v1.5 ONNX model, opens the real Turso vector store, and spawns the built bin as a child process.
  *
  * embed-drain-real-model.e2e.ts — the close-time embed drain and the semantic
@@ -251,7 +253,37 @@ describe('close-time embed drain — real fastembed + spawned bin', () => {
       const dir = freshTmpDir('embed-drain-real-model-seam');
       let store: GraphBacklogStore | undefined;
       try {
-        store = await openGraphBacklogStore(join(dir, 'backlog.db'));
+        const dbPath = join(dir, 'backlog.db');
+        const body =
+          'The assembly line stops when the rotational gauge reading wanders beyond tolerance.';
+
+        // Item B first, through its OWN store handle opened and closed with embedding OFF.
+        // `bootstrapSemanticStoreMembers` memoizes per StoreAdapter and ignores the config on a
+        // cache hit, so a vector-less write needs an adapter that never saw embedding on. The
+        // store is empty, so the duplicate gate cannot suppress it.
+        const offEnv = buildEnvWithEmbedding(dir, 'false');
+        store = await openGraphBacklogStore(dbPath);
+        const offCtx: BacklogCtx = { store, env: offEnv };
+        const proj = await upsertProject(offCtx, { name: 'P', by: 't' });
+        expect(isOutcomeOk(proj), JSON.stringify(proj)).toBe(true);
+        const withoutVector = await create(offCtx, {
+          title: 'Widget conveyor halts on torque sensor drift at line two',
+          body,
+          project: 'P',
+          by: 't',
+        });
+        expect(isOutcomeOk(withoutVector), JSON.stringify(withoutVector)).toBe(true);
+        if (!isOutcomeOk(withoutVector) || withoutVector.data.uid === undefined) {
+          throw new Error(`create did not mint an issue: ${JSON.stringify(withoutVector)}`);
+        }
+        const withoutVectorUid = withoutVector.data.uid;
+        const offClosed = await closeGraphBacklogStore(store);
+        expect(offClosed.unrecorded).toHaveLength(0);
+        store = undefined;
+
+        // Item A: a fresh handle on the SAME file with embedding ON; written with its vector
+        // (awaitEmbed) through the production `create`, which reaches `ensureSemanticReady`.
+        store = await openGraphBacklogStore(dbPath);
         const env = buildBacklogEnv({ adhdRoot: dir });
         const ctx: BacklogCtx = { store, env };
 
@@ -268,14 +300,9 @@ describe('close-time embed drain — real fastembed + spawned bin', () => {
         }
         await members.embedding.embedDocument('warmup');
 
-        const proj = await upsertProject(ctx, { name: 'P', by: 't' });
-        expect(isOutcomeOk(proj), JSON.stringify(proj)).toBe(true);
-
-        // Item A: written with its vector (awaitEmbed) through the production
-        // `create`, which reaches `ensureSemanticReady` with embedding on.
         const withVector = await create(ctx, {
           title: 'Widget conveyor halts on torque sensor drift',
-          body: 'The assembly line stops when the rotational gauge reading wanders beyond tolerance.',
+          body,
           project: 'P',
           by: 't',
           awaitEmbed: true,
@@ -285,24 +312,6 @@ describe('close-time embed drain — real fastembed + spawned bin', () => {
           throw new Error(`create did not mint an issue: ${JSON.stringify(withVector)}`);
         }
         const withVectorUid = withVector.data.uid;
-
-        // Item B: same subject, written while embedding is OFF, so no vector
-        // is ever written for it. Only the vector can separate A from B.
-        const offEnv = buildEnvWithEmbedding(dir, 'false');
-        const withoutVector = await create(
-          { store, env: offEnv },
-          {
-            title: 'Widget conveyor halts on torque sensor drift at line two',
-            body: 'The assembly line stops when the rotational gauge reading wanders beyond tolerance.',
-            project: 'P',
-            by: 't',
-          }
-        );
-        expect(isOutcomeOk(withoutVector), JSON.stringify(withoutVector)).toBe(true);
-        if (!isOutcomeOk(withoutVector) || withoutVector.data.uid === undefined) {
-          throw new Error(`create did not mint an issue: ${JSON.stringify(withoutVector)}`);
-        }
-        const withoutVectorUid = withoutVector.data.uid;
 
         const closed = await closeGraphBacklogStore(store);
         expect(closed.unrecorded).toHaveLength(0);
