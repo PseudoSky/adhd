@@ -66,7 +66,19 @@ export {
   pluginsToEnvelopeMiddlewares,
 } from './lib/compose-schemas';
 export { isPrimitiveOnlyInputSchema } from './lib/get-safety';
-export { extract, tokenize, buildId } from './lib/extract';
+/**
+ * `extract` derives operations from TS source; `tokenize`, `buildId`,
+ * `renderIdSegment` and `canonicalOperationId` are the one canonical operation
+ * id rule (ADR-0017 D3): every segment tokenized and its words joined by `-`,
+ * segments joined by `/` (`fs/read_file` → `fs/read-file`).
+ */
+export {
+  extract,
+  tokenize,
+  buildId,
+  renderIdSegment,
+  canonicalOperationId,
+} from './lib/extract';
 export type { ExtractOptions } from './lib/extract';
 export {
   composeOnion,

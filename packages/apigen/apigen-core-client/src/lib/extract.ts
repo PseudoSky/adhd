@@ -932,7 +932,54 @@ function buildQueryOp(
  */
 export function buildId(ns: Segment, opPath: Segment[]): string {
   const allSegs: Segment[] = ns.raw ? [ns, ...opPath] : opPath;
-  return allSegs.map((s) => s.words.join('-')).join('/');
+  return allSegs.map((s) => joinIdWords(s.words)).join('/');
+}
+
+/** The one id-segment rendering rule: tokenized words joined by `-`. */
+function joinIdWords(words: readonly string[]): string {
+  return words.join('-');
+}
+
+/**
+ * Renders one raw name as an operation-id segment by the same rule
+ * {@link buildId} applies to a {@link Segment}: {@link tokenize}, then join the
+ * words with `-`. A name that tokenizes to no words renders as its lower-cased
+ * self (the fallback a `Segment` built from such a name carries), so the result
+ * is never empty for a non-empty input.
+ *
+ * Examples:
+ *   'read_file' → 'read-file'
+ *   'readFile'  → 'read-file'
+ *   'fs'        → 'fs'
+ *
+ * @param raw - A namespace, source, tool or export name.
+ * @returns The rendered segment.
+ */
+export function renderIdSegment(raw: string): string {
+  const words = tokenize(raw);
+  return words.length > 0 ? joinIdWords(words) : raw.toLowerCase();
+}
+
+/**
+ * Renders an operation id (or an id pattern) in canonical form: split on `/`,
+ * keep any segment containing `*` verbatim (a wildcard or trailing-`*`
+ * pattern), render every other segment with {@link renderIdSegment}, and join
+ * with `/`. Idempotent: a canonical id is returned unchanged.
+ *
+ * Examples:
+ *   'fs/read_file' → 'fs/read-file'
+ *   'fs/readFile'  → 'fs/read-file'
+ *   'fs/*'         → 'fs/*'
+ *   'fs/read-file' → 'fs/read-file'
+ *
+ * @param id - An operation id, e.g. a policy `tool:` value.
+ * @returns The canonical id.
+ */
+export function canonicalOperationId(id: string): string {
+  return id
+    .split('/')
+    .map((segment) => (segment.includes('*') || segment === '' ? segment : renderIdSegment(segment)))
+    .join('/');
 }
 
 // ---------------------------------------------------------------------------

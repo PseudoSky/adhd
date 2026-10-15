@@ -1,11 +1,12 @@
 import { isAbsolute, resolve } from 'node:path';
 import { ApiError } from '@adhd/apigen-base-errors';
-import { toolIdForOldSeparator } from '@adhd/policy-core-client';
+import { canonicalOperationId } from '@adhd/apigen-core-client';
+import { normalizeToolId } from '@adhd/policy-core-client';
 import yaml from 'yaml';
 import { nodeMcpJsonFs, type IMcpJsonFs } from '../mcp-json/io';
 import type { IVerbDeps } from './deps';
 
-/** One `tool:` value rewritten from the pre-BA-5 `.` separator to `/`. */
+/** One `tool:` value rewritten to its canonical operation id. */
 export interface IToolIdChange {
   /** 1-based line of the value in the original text. */
   readonly line: number;
@@ -52,10 +53,19 @@ function toolScalars(document: yaml.Document.Parsed): IYamlScalarLike[] {
   return out;
 }
 
+/** A `tool:` value in canonical form (ADR-0017 D3): `.` separator rewritten, every segment rendered by apigen's `canonicalOperationId`. */
+function canonicalToolValue(value: string): string {
+  return normalizeToolId(value, canonicalOperationId);
+}
+
 /**
- * BA-5: rewrites every permission `tool:` value written with the pre-BA-5 `.`
- * separator (`files.read`) to its `/` id (`files/read`), using the same rule
- * the loader rejects them by (`toolIdForOldSeparator`). Only `tool:` values are
+ * BA-5 / ADR-0017 D3: rewrites every permission `tool:` value to its canonical
+ * operation id: a value written with the pre-BA-5 `.` separator
+ * (`fs.read_file`) and a `/` value that is not canonical (`fs/read_file`) both
+ * become `fs/read-file`, by the same rule the loader checks them against
+ * (`normalizeToolId` with apigen's `canonicalOperationId`). A value already
+ * canonical, and a value with no `/` (`*`, `bash`), is left alone, so a second
+ * run changes nothing. Only `tool:` values are
  * touched; attribute and context paths (`child.read_roots`, `runtime.calls`)
  * and every other byte of the file (comments, quoting, flow maps) are kept: the
  * new value is spliced into the original text at the scalar's offset, with the
@@ -78,8 +88,8 @@ export function migrateToolIds(text: string, source: string): { text: string; ch
   const edits: { start: number; end: number; replacement: string; change: IToolIdChange }[] = [];
   for (const node of toolScalars(document)) {
     const from = node.value as string;
-    const to = toolIdForOldSeparator(from);
-    if (to === undefined) continue;
+    const to = canonicalToolValue(from);
+    if (to === from) continue;
     const start = node.range?.[0];
     const literal = literalOf(node.type, from);
     if (start === undefined || literal === undefined || text.slice(start, start + literal.length) !== literal) {
@@ -98,7 +108,7 @@ export function migrateToolIds(text: string, source: string): { text: string; ch
 
   const expected = toolScalars(document).map((node) => {
     const value = node.value as string;
-    return toolIdForOldSeparator(value) ?? value;
+    return canonicalToolValue(value);
   });
   const reparsed = yaml.parseDocument(out);
   const actual = reparsed.errors.length === 0 ? toolScalars(reparsed).map((node) => node.value as string) : undefined;
@@ -110,8 +120,9 @@ export function migrateToolIds(text: string, source: string): { text: string; ch
 
 /**
  * `migrate <file>...` rewrites, in place, every permission `tool:` value of each
- * policy file that uses the pre-BA-5 `.` separator to its `/` id, and prints one
- * stdout line per change: `<file>:<line>: tool "files.read" -> "files/read"`. A
+ * policy file that is not a canonical operation id (the pre-BA-5 `.` separator,
+ * or a `/` id with an unrendered segment) to its canonical id, and prints one
+ * stdout line per change: `<file>:<line>: tool "fs.read_file" -> "fs/read-file"`. A
  * file with nothing to change is reported on stderr and left untouched. Relative
  * paths resolve against the working directory. Files are written atomically
  * (temporary file + rename) and keep their permission bits. Exit 0 on success;
@@ -144,7 +155,7 @@ export async function migrateVerb(
     if (text === undefined) throw new ApiError('not_found', `${file}: no such file`);
     const { text: rewritten, changes } = migrateToolIds(text, file);
     if (changes.length === 0) {
-      deps.stderr(`${file}: no tool values use the old separator\n`);
+      deps.stderr(`${file}: every tool value is already a canonical operation id\n`);
       continue;
     }
     await fs.write(path, rewritten);

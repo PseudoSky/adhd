@@ -1,5 +1,5 @@
 import { compile } from '../core';
-import { normalizeToolId } from '../core/compile/tool-ids';
+import { normalizeToolId, type IToolIdOptions } from '../core/compile/tool-ids';
 import type {
   Effect,
   FilterExpression,
@@ -71,7 +71,10 @@ function effectFor(destructive: boolean, readOnly: boolean): Effect {
  * (kind `paths`) only when an operation needs them. One permission per
  * operation (input order): `tool` = the operation name as a `/` id (BA-5: a
  * name written with the pre-BA-5 `.` separator, `files.read`, is drafted as
- * `files/read`, so the draft never writes an id the loader rejects); effect `deny` when
+ * `files/read`, so the draft never writes an id the loader rejects). An
+ * `IDraftOperation` carries only a `name`, so with `input.canonicalToolId` the
+ * `/` id is also rendered canonical (`fs/read_file` is drafted as
+ * `fs/read-file`) and the self-check compiles with the same seam; effect `deny` when
  * destructive, `allow` when read-only, else `ask`. Each argument of kind `path`
  * on a non-denied operation gets `{ <arg>: { _within: '$attributes.<roots>' } }`;
  * `url` / `host` arguments get no constraint and an inferred note; a list-valued
@@ -85,6 +88,8 @@ function effectFor(destructive: boolean, readOnly: boolean): Effect {
 export function draftPolicy(input: {
   operations: readonly IDraftOperation[];
   options?: IDraftOptions;
+  /** Canonical operation-id renderer (see `IToolIdOptions`); hosts pass apigen's `canonicalOperationId`. */
+  canonicalToolId?: IToolIdOptions['canonicalToolId'];
 }): IDraftPolicy {
   const options: IDraftOptions = input.options ?? { source: 'draft' };
   const readRoots = options.readRootsAttribute ?? 'read_roots';
@@ -97,7 +102,7 @@ export function draftPolicy(input: {
   let usesWrite = false;
 
   for (const operation of input.operations) {
-    const tool = normalizeToolId(operation.name);
+    const tool = normalizeToolId(operation.name, input.canonicalToolId);
     const readOnly = operation.hints?.readOnly === true;
     const destructive = operation.hints?.destructive === true;
     const effect = effectFor(destructive, readOnly);
@@ -158,7 +163,10 @@ export function draftPolicy(input: {
     permissions,
   };
 
-  const check = compile([{ name: 'project', source: options.source, document }]);
+  const check = compile(
+    [{ name: 'project', source: options.source, document }],
+    input.canonicalToolId !== undefined ? { canonicalToolId: input.canonicalToolId } : undefined
+  );
   if (!check.ok) {
     throw new Error(`draftPolicy produced a policy that does not compile (bug): ${check.errors.map((e) => e.message).join('; ')}`);
   }

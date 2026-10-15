@@ -6,7 +6,7 @@ import { sha256Hex } from '../canonical/sha256';
 import { validateExpression } from '../engine/validate';
 import { PolicyLoadError } from '../errors';
 import { validateSchema } from '../schema/validate';
-import { oldSeparatorMessage, toolIdForOldSeparator } from './tool-ids';
+import { toolIdProblem, type CanonicalToolId, type IToolIdOptions } from './tool-ids';
 
 /**
  * Loads a stored compiled policy (CL-13). Validates against `COMPILED_SCHEMA`
@@ -15,11 +15,14 @@ import { oldSeparatorMessage, toolIdForOldSeparator } from './tool-ids';
  * tampering: anyone who can edit the file can recompute the hash), then checks
  * that every stored expression passes `validateExpression` (an unsupported
  * operator is `malformed`), that no permission tool uses the pre-BA-5 `.`
- * separator (`malformed`, naming the `/` id) and that every `index` entry
+ * separator (`malformed`, naming the `/` id; canonical when
+ * `options.canonicalToolId` is set), that, with `options.canonicalToolId`, every
+ * `/` tool is a canonical operation id (`malformed`, naming the canonical id),
+ * and that every `index` entry
  * points at an existing permission. Returns a deep-frozen copy. Throws {@link PolicyLoadError}; it
  * never falls back to a weaker policy.
  */
-export function loadCompiled(json: unknown): ICompiledPolicy {
+export function loadCompiled(json: unknown, options?: IToolIdOptions): ICompiledPolicy {
   if (json === null || typeof json !== 'object' || Array.isArray(json)) {
     throw new PolicyLoadError('malformed', 'compiled policy must be a JSON object');
   }
@@ -44,7 +47,7 @@ export function loadCompiled(json: unknown): ICompiledPolicy {
   }
   const policy = copy as unknown as ICompiledPolicy;
   checkExpressions(policy);
-  checkToolSeparators(policy);
+  checkToolIds(policy, options?.canonicalToolId);
   checkIndex(policy);
   return deepFreeze(copy) as unknown as ICompiledPolicy;
 }
@@ -64,12 +67,12 @@ function checkExpressions(policy: ICompiledPolicy): void {
   policy.defaults.forEach((rule, i) => check(`/defaults/${i}/where`, rule.where));
 }
 
-function checkToolSeparators(policy: ICompiledPolicy): void {
+function checkToolIds(policy: ICompiledPolicy, canonicalToolId: CanonicalToolId | undefined): void {
   policy.permissions.forEach((permission, i) => {
     permission.tools.forEach((tool, t) => {
-      const replacement = toolIdForOldSeparator(tool);
-      if (replacement !== undefined) {
-        throw new PolicyLoadError('malformed', `compiled policy is malformed at /permissions/${i}/tools/${t}: ${oldSeparatorMessage(tool, replacement)}`);
+      const problem = toolIdProblem(tool, canonicalToolId);
+      if (problem !== undefined) {
+        throw new PolicyLoadError('malformed', `compiled policy is malformed at /permissions/${i}/tools/${t}: ${problem.message}`);
       }
     });
   });
