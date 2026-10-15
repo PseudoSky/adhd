@@ -45,3 +45,10 @@ AC1-AC5: S, node `--test` static assertions over dispatcher.md (rule text presen
 ## Risks / serialization
 - Both items edit dispatcher.md: one implementer, one worktree. sox-ecosystem tree is dirty (memory-server, host-runtime, install-engine) — use a worktree under `.worktrees/`. Prose-only agents: version bump via Changesets (do not hand-edit package.json version).
 - Open for product/user: D3 (side-ask ceremony), D5 (git ownership), owning repo for the dispatcher.
+
+## Product revision
+dor (product): needs-user for two material choices (owning repo; git ownership). One decision is resolved here.
+Resolved by product: D3 accepted as recommended. A side-ask whose done-state is a single observable fact takes the existing rule-8 trivial path; a larger side-ask still gets rules 4/5/20 and does not wait on the main topic. The item's wording ("side-ask => no review gate regardless of size") is rejected because it lets a large unreviewed change bypass review by labelling. D1, D2, D4 (rule 0 guard) and D6 (adoption pointers) accepted unchanged.
+Not decided (user): (1) repo that owns the dispatcher (sox-ecosystem 2.1.0 vs claude-agents copy), (2) git ownership D5(a) vs (b). Product recommendation: sox-ecosystem owns it (newer, tested, Changesets flow); D5(a) keep rule 23 and close cc5a4906 as delivered once D6/AC6/AC7 land, because (b) is a larger rewrite of rules 5, 22, 23 and Steps 5/7 with no incident behind it, while the owner directive's literal wording conflicts with rule 23 and needs the owner to reaffirm or retire it.
+Cuts if the user wants speed: AC1-AC5 and AC6 are independent of D5; AC8 only if (b).
+Priority: P3, rank 10 (prose-only; the trivial-path half already shipped; no live incident).
