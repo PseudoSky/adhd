@@ -45,3 +45,10 @@ AC1, AC2, AC5: S (temp fs, injected `isAlive`/`onStaleRead`; AC1 spies on `write
 ## Risks / serialization
 - Shares `entrypoint/dispatch-cli/src/lib/core.ts` with roadmap A1 (not in this batch) — land first. `dispatch-orchestrator` is also named by ADR-0001 D4: do not add any `better-sqlite3` use.
 - Open for product/user: approve D4 (schema field) and the ADR-0001 D4 scope ruling for D5(ii); correct the item body (lock exists; real gaps are 1-4).
+
+## Product revision
+dor (product): ready for the SLICE D1+D2+D3 (AC1, AC2, AC3, AC4, AC6). D4 (AC5) and D5 are NOT in this slice; they wait on architect-decision (below).
+- Resolved (product): ship D1-D3 now; they are additive safety, keep the fail-fast `DuplicateDispatchError` contract (queueing rejected as an unrequested behavior change), and close the observed silent-loss gaps 1-3. Item body to be corrected: the lock exists, real gaps are 1-4.
+- Deferred, flagged (scope cut): D4 optimistic `revision` field (gap 4, non-CLI writers) and D5 durable-home move. D5(i) "keep dag.json" is the interim; log a follow-up backlog item for D4 (cites this spec, AC5).
+- Handed to architect-decision (not decided here): see "architect-decision questions" in the product report; a one-question brief on whether dag.json is an ADR-0001 "store" and whether D4's additive optional `revision` field with a reject-on-stale write is acceptable under it.
+- Serialization: lands BEFORE roadmap A1 (shares core.ts). Priority: P1, rank 3 (silent data loss of the observation record; S size).
