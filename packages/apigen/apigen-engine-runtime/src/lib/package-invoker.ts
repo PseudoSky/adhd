@@ -18,6 +18,7 @@
  * built ONCE per package via `createInvoker` (`./invoke.ts`).
  */
 
+import { ApiError } from '@adhd/apigen-base-errors';
 import type { Layer } from './invoke';
 import { createInvoker } from './invoke';
 import { makeValidateLayer } from './validate-layer';
@@ -37,7 +38,13 @@ export interface UsePlugin {
   id: string;
   capabilities?: {
     layer?: {
-      layer: (
+      /**
+       * Optional to mirror core-client's `LayerCapability`, whose `layer` may be
+       * absent when a plugin supplies only `createLayer`. This runtime does not
+       * yet consume `createLayer`; {@link adaptCoreLayer} rejects such a plugin
+       * with a clear error instead of calling an undefined function.
+       */
+      layer?: (
         call: unknown,
         next: () => Promise<unknown>
       ) => Promise<unknown> | AsyncIterable<unknown>;
@@ -133,9 +140,16 @@ export function readUseOptions(options: Record<string, unknown>): UseOptions {
 export function adaptCoreLayer(
   cap: NonNullable<NonNullable<UsePlugin['capabilities']>['layer']>
 ): Layer {
+  const layerFn = cap.layer;
+  if (layerFn === undefined) {
+    throw new ApiError(
+      'internal',
+      'apigen-engine-runtime: a --use plugin layer capability has no `layer` function (createLayer-only plugins are not supported by this runtime)'
+    );
+  }
   return async function useLayer(call: RuntimeCall, next): Promise<unknown> {
     const view = Object.assign(call, { data: call.domainArgs });
-    const result = await cap.layer(view, next as () => Promise<unknown>);
+    const result = await layerFn.call(cap, view, next as () => Promise<unknown>);
     return result;
   };
 }

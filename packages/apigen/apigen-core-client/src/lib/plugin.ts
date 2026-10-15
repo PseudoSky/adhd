@@ -302,7 +302,7 @@ export interface TargetCapability<Opts = Record<string, unknown>> {
  * `async function*` that wraps `next()` with `for await … yield` — to
  * participate in the full per-chunk stream lifecycle (SPEC §11).
  */
-export interface LayerCapability<Opts = Record<string, unknown>> {
+export interface LayerCapabilityShape<Opts = Record<string, unknown>> {
   /**
    * Extra envelope fields this layer needs on the request side — merged into
    * the effective descriptor's envelope schema before serving begins.
@@ -321,12 +321,15 @@ export interface LayerCapability<Opts = Record<string, unknown>> {
    * For streaming operations, return an `AsyncIterable<Chunk>` wrapping the
    * iterable returned by `next()` (SPEC §11).
    *
+   * Optional in the type because a plugin may supply {@link LayerCapabilityShape.createLayer}
+   * instead; the runtime requires at least one of the two (see {@link LayerCapability}).
+   *
    * @param call - The inbound call descriptor.
    * @param next - The continuation — call at most once.
    * @returns     `Promise<Result>` for unary operations; `AsyncIterable<Chunk>`
    *              for streaming operations.
    */
-  layer(call: Call, next: Next): Promise<Result> | AsyncIterable<Chunk>;
+  layer?(call: Call, next: Next): Promise<Result> | AsyncIterable<Chunk>;
 
   /**
    * Optional layer factory: builds the layer function from per-use options
@@ -341,6 +344,25 @@ export interface LayerCapability<Opts = Record<string, unknown>> {
     opts: Opts,
   ): (call: Call, next: Next) => Promise<Result> | AsyncIterable<Chunk>;
 }
+
+/**
+ * The `layer` capability: a {@link LayerCapabilityShape} that supplies at
+ * least one of `layer` or `createLayer`. An object with neither fails
+ * typecheck. Readers must guard — `cap.layer` is `undefined` when only
+ * `createLayer` is supplied.
+ */
+export type LayerCapability<Opts = Record<string, unknown>> =
+  LayerCapabilityShape<Opts> &
+    (
+      | {
+          layer: (call: Call, next: Next) => Promise<Result> | AsyncIterable<Chunk>;
+        }
+      | {
+          createLayer: (
+            opts: Opts,
+          ) => (call: Call, next: Next) => Promise<Result> | AsyncIterable<Chunk>;
+        }
+    );
 
 /**
  * **`extractLayer`** capability — wrap the EXTRACT stage (design doc

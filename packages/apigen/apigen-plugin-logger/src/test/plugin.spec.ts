@@ -150,7 +150,7 @@ describe('layer — wraps an operation (logs around it, delegates via next())', 
     const next = vi.fn<Next>().mockResolvedValue('result');
     const { layer } = loggerPlugin.capabilities;
     expect(layer).not.toBeNull();
-    await layer?.layer(call, next);
+    await layer?.layer?.(call, next);
     expect(next).toHaveBeenCalledTimes(1);
   });
 
@@ -160,7 +160,7 @@ describe('layer — wraps an operation (logs around it, delegates via next())', 
     const next: Next = vi.fn().mockResolvedValue(sentinel);
     const { layer } = loggerPlugin.capabilities;
     expect(layer).not.toBeNull();
-    const result = await layer?.layer(call, next);
+    const result = await layer?.layer?.(call, next);
     expect(result).toBe(sentinel);
   });
 
@@ -173,7 +173,7 @@ describe('layer — wraps an operation (logs around it, delegates via next())', 
     });
     const { layer } = loggerPlugin.capabilities;
     expect(layer).not.toBeNull();
-    await layer?.layer(call, next);
+    await layer?.layer?.(call, next);
     expect(seenInNext).toBeInstanceOf(Logger);
   });
 
@@ -195,7 +195,7 @@ describe('layer — wraps an operation (logs around it, delegates via next())', 
     const plugin = makeLoggerPlugin({});
     const { layer } = plugin.capabilities;
     expect(layer).not.toBeNull();
-    await layer?.layer(call, next);
+    await layer?.layer?.(call, next);
 
     expect(entryLogged).toBe(true);
   });
@@ -209,7 +209,7 @@ describe('layer — wraps an operation (logs around it, delegates via next())', 
     const plugin = makeLoggerPlugin({});
     const { layer } = plugin.capabilities;
     expect(layer).not.toBeNull();
-    await layer?.layer(call, next);
+    await layer?.layer?.(call, next);
 
     const exitLog = calls.find(
       (c) => c.msg.includes('←') && c.msg.includes('queryOp')
@@ -231,7 +231,7 @@ describe('layer — error propagation', () => {
     const next: Next = vi.fn().mockRejectedValue(boom);
     const { layer } = loggerPlugin.capabilities;
     expect(layer).not.toBeNull();
-    await expect(layer?.layer(call, next)).rejects.toThrow(
+    await expect(layer?.layer?.(call, next)).rejects.toThrow(
       'downstream failure'
     );
   });
@@ -247,7 +247,7 @@ describe('layer — error propagation', () => {
 
     const { layer } = plugin.capabilities;
     expect(layer).not.toBeNull();
-    await expect(layer?.layer(call, next)).rejects.toThrow(
+    await expect(layer?.layer?.(call, next)).rejects.toThrow(
       'oops'
     );
 
@@ -269,7 +269,7 @@ describe('layer — error propagation', () => {
 
     let caught: unknown;
     try {
-      await layer?.layer(call, next);
+      await layer?.layer?.(call, next);
     } catch (e) {
       caught = e;
     }
@@ -298,7 +298,7 @@ describe('layer — stream-lifecycle (§11)', () => {
     const { layer } = loggerPlugin.capabilities;
     expect(layer).not.toBeNull();
 
-    const result = layer?.layer(call, next);
+    const result = layer?.layer?.(call, next);
 
     // The layer must return an AsyncIterable for a streaming next().
     expect(
@@ -326,7 +326,7 @@ describe('layer — stream-lifecycle (§11)', () => {
 
     const { layer } = loggerPlugin.capabilities;
     expect(layer).not.toBeNull();
-    const result = layer?.layer(call, next) as AsyncIterable<unknown>;
+    const result = layer?.layer?.(call, next) as AsyncIterable<unknown>;
 
     const iterator = result[Symbol.asyncIterator]();
     await iterator.next(); // consume 'first'
@@ -353,7 +353,7 @@ describe('layer — stream-lifecycle (§11)', () => {
     const plugin = makeLoggerPlugin({});
     const { layer } = plugin.capabilities;
     expect(layer).not.toBeNull();
-    const result = layer?.layer(
+    const result = layer?.layer?.(
       call,
       next
     ) as AsyncIterable<unknown>;
@@ -381,7 +381,7 @@ describe('layer — stream-lifecycle (§11)', () => {
     const plugin = makeLoggerPlugin({});
     const { layer } = plugin.capabilities;
     expect(layer).not.toBeNull();
-    const result = layer?.layer(
+    const result = layer?.layer?.(
       call,
       next
     ) as AsyncIterable<unknown>;

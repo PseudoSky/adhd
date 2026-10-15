@@ -148,7 +148,7 @@ describe('backlog is a REQUIRED, adhd-namespaced tracing consumer (FEAT-APIGEN-T
 
   it('the configured instance EMITS adhd.* spans and attributes — never apigen.*', async () => {
     const call = makeCall('echo');
-    await (tracingPlugin.capabilities.layer!.layer(call, async () => 'ok') as Promise<Result>);
+    await (tracingPlugin.capabilities.layer!.layer!(call, async () => 'ok') as Promise<Result>);
 
     const records = readRecords();
     const start = records.find((r) => r.event === 'adhd.echo.start');
@@ -166,7 +166,7 @@ describe('backlog is a REQUIRED, adhd-namespaced tracing consumer (FEAT-APIGEN-T
   it('the configured instance EMITS adhd.op.error on a thrown op (namespaced error record)', async () => {
     const call = makeCall('boom');
     await expect(
-      tracingPlugin.capabilities.layer!.layer(call, async () => {
+      tracingPlugin.capabilities.layer!.layer!(call, async () => {
         throw new Error('kaput');
       }) as Promise<Result>
     ).rejects.toThrow('kaput');
@@ -256,7 +256,7 @@ describe('FEAT-APIGEN-TRACING: every real backlog operation is traced', () => {
     'emits adhd.%s.{start,finish} + adhd.op/adhd.transport — never apigen.*',
     async (opId) => {
       const call = makeCall(opId);
-      await (tracingPlugin.capabilities.layer!.layer(call, async () => 'ok') as Promise<Result>);
+      await (tracingPlugin.capabilities.layer!.layer!(call, async () => 'ok') as Promise<Result>);
 
       const records = readRecords();
       const start = records.find((r) => r.event === `adhd.${opId}.start`);
@@ -274,7 +274,7 @@ describe('FEAT-APIGEN-TRACING: every real backlog operation is traced', () => {
     async (opId) => {
       const call = makeCall(opId);
       await expect(
-        tracingPlugin.capabilities.layer!.layer(call, async () => {
+        tracingPlugin.capabilities.layer!.layer!(call, async () => {
           throw new Error(`synthetic-failure:${opId}`);
         }) as Promise<Result>
       ).rejects.toThrow('synthetic-failure');

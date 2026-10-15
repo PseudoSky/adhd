@@ -24,6 +24,7 @@ export type {
   // capability interfaces
   TargetCapability,
   LayerCapability,
+  LayerCapabilityShape,
   ExtractLayerCapability,
   MountCapability,
   MountedOperation,

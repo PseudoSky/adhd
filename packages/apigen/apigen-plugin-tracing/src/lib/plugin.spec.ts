@@ -193,14 +193,14 @@ describe('apigen-plugin-tracing — layer', () => {
   it('honours serviceName in the span name (makeTracingPlugin)', async () => {
     const call = makeCall({ id: 'echo' });
     const plugin = makeTracingPlugin({ serviceName: 'checkout' });
-    await (plugin.capabilities.layer!.layer(call, async () => 'ok') as Promise<Result>);
+    await (plugin.capabilities.layer!.layer!(call, async () => 'ok') as Promise<Result>);
     expect(call.ctx.get(TraceHandle)!.spanName).toBe('checkout.echo');
   });
 
   it('namespaces span name, attribute keys, and error record with serviceName (adhd.*, never apigen.*)', async () => {
     const call = makeCall({ id: 'echo', transport: 'mcp' });
     const plugin = makeTracingPlugin({ serviceName: 'adhd' });
-    await (plugin.capabilities.layer!.layer(call, async () => 'ok') as Promise<Result>);
+    await (plugin.capabilities.layer!.layer!(call, async () => 'ok') as Promise<Result>);
 
     const records = readRecords();
     const start = records.find((r) => r.event === 'adhd.echo.start');
@@ -218,7 +218,7 @@ describe('apigen-plugin-tracing — layer', () => {
   it('copies declared envelopeAttrs onto the span', async () => {
     const call = makeCall({ id: 'echo', envelope: { 'x-request-id': 'abc', ignored: 'nope' } });
     const plugin = makeTracingPlugin({ serviceName: 'apigen', envelopeAttrs: ['x-request-id'] });
-    await (plugin.capabilities.layer!.layer(call, async () => 'ok') as Promise<Result>);
+    await (plugin.capabilities.layer!.layer!(call, async () => 'ok') as Promise<Result>);
     const start = readRecords().find((r) => r.event === 'apigen.echo.start');
     expect(start!['x-request-id']).toBe('abc');
     expect(start!.ignored).toBeUndefined();
@@ -239,7 +239,7 @@ describe('apigen-plugin-tracing — layer', () => {
       serviceName: 'checkout',
       envelopeAttrs: ['trace_id', 'checkout.op', 'checkout.transport'],
     });
-    await (plugin.capabilities.layer!.layer(call, async () => 'ok') as Promise<Result>);
+    await (plugin.capabilities.layer!.layer!(call, async () => 'ok') as Promise<Result>);
 
     const start = readRecords().find((r) => r.event === 'checkout.echo.start');
     expect(start).toBeDefined();
