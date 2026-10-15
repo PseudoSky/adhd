@@ -107,7 +107,7 @@ Namespaced verbs (namespace + verb, per-field flags):
 Verbs (one-token, --input JSON envelope):
   backlog add-citation  { input: { uid: string, citation: object, by: string } }
   backlog attest  { input: { subject: object, claim: object, anchor: object, by: string } }
-  backlog claim  { input: { uid: string, by: string, action: 'claim'|'release'|'renew', force?: boolean } }
+  backlog claim  { input: { uid: string, by: string, action?: 'claim'|'release'|'renew' (default 'claim'), force?: boolean } }
   backlog create  { input: { title: string, body: string, project: string, component?: string, kind?: string, status?: string, priority?: string, citations?: object[], author?: string, assignee?: string, gitContext?: string, dedupeExcludeUid?: string, by: string, duplicateAction?: 'abort'|'force'|'comment', awaitEmbed?: boolean } }
   backlog delete  { input: { uid: string, reason: string, by: string, awaitEmbed?: boolean } }
   backlog embedding-status
@@ -115,22 +115,22 @@ Verbs (one-token, --input JSON envelope):
   backlog lookup  { input: { q: string, kind?: string } }
   backlog merge-project  { input: { fromUid: string, toUid: string, by: string } }
   backlog move  { input: { uid: string, toProject?: string, toComponent?: string, by: string } }
-  backlog obligate  { input: { uid: string, applies_to: object, requirement: union, on_fail: 'block'|'warn', override?: object, by: string } }
-  backlog open-curve  { input: { filter?: object, at: string[] } }
+  backlog obligate  { input: { uid: string, applies_to: object, requirement: union, on_fail?: 'block'|'warn' (default 'block'), override?: object, by: string } }
+  backlog open-curve  { input?: { filter?: object, at?: string[] (default: now) } }
   backlog part-of-rollup  { input: { uid: string, countOnly?: boolean, limit?: number, after?: string } }
-  backlog priority-matrix  { input: { filter?: object } }
-  backlog query  { input: { text?: string, filter?: object, fields?: union[], sort?: 'priority'|'updated'|'created'|'relevance'|'textMatch', direction?: 'asc'|'desc', limit?: number, offset?: number, after?: string, view?: 'list'|'ready'|'graph'|'order'|'stale'|'similar'|'overlap'|'projects'|'components'|'locations'|'kinds'|'catalogs', format?: 'json'|'markdown', overlapAxis?: 'file'|'project'|'component'|'author', overlapUids?: string[], staleAfterMin?: number, catalog?: 'kind'|'status'|'priority'|'relation'|'field'|'error_code'|'location_type'|'verb' } }
+  backlog priority-matrix  { input?: { filter?: object } }
+  backlog query  { input?: { text?: string, filter?: object, fields?: union[], sort?: 'priority'|'updated'|'created'|'relevance'|'textMatch', direction?: 'asc'|'desc', limit?: number, offset?: number, after?: string, view?: 'list'|'ready'|'graph'|'order'|'stale'|'similar'|'overlap'|'projects'|'components'|'locations'|'kinds'|'catalogs', format?: 'json'|'markdown', overlapAxis?: 'file'|'project'|'component'|'author', overlapUids?: string[], staleAfterMin?: number, catalog?: 'kind'|'status'|'priority'|'relation'|'field'|'error_code'|'location_type'|'verb' } }
   backlog recheck  { input: { attestationUid: string, by: string } }
-  backlog relate  { input: { sourceUid: string, targetUid: string, rel: 'relates_to'|'supersedes'|'blocks'|'duplicate_of'|'part_of'|'similar_to', action: 'add'|'remove', by: string } }
+  backlog relate  { input: { sourceUid: string, targetUid: string, rel: 'relates_to'|'supersedes'|'blocks'|'duplicate_of'|'part_of'|'similar_to', action?: 'add'|'remove' (default 'add'), by: string } }
   backlog remove  { input: { uid: string, confirm: boolean, reason?: string, by: string } }
   backlog remove-citation  { input: { uid: string, by: string, reason?: string } }
-  backlog report  { input: { filter?: object } }
+  backlog report  { input?: { filter?: object } }
   backlog restore  { input: { uid: string, by: string } }
   backlog rm-location  { input: { uid: string, by: string, reason?: string } }
   backlog rm-project  { input: { uid: string, reason: string, by: string } }
   backlog spec-append  { input: { uid: string, fragment: string, anchor?: object, base_revision: string, by: string } }
   backlog spec-check  { input: { uid: string, token?: string } }
-  backlog timeline  { input: { sessionId: string, includeChildren?: boolean, limit?: number, after?: string } }
+  backlog timeline  { input?: { sessionId?: string, since?: string (window mode only; default 7 days), includeChildren?: boolean, limit?: number, after?: string } }
   backlog transition  { input: { uid: string, by: string, toStatus: string, note?: string, citations?: object[], gitContext?: string, override?: object } }
   backlog unobligate  { input: { obligationUid: string, by: string } }
   backlog update  { input: { uid: string, by: string, title?: string, body?: string, kind?: string, priority?: string, assignee?: string, author?: string, citations?: object[], awaitEmbed?: boolean } }
@@ -1417,8 +1417,11 @@ Each such call appends exactly one append-only op-event (independent of
 reservation `{issueUid, paths[], holder, sessionId, claimedAt, leaseExpiry}` (paths =
 the item's path citations plus `paths`); `view:"reservations"` lists the ACTIVE ones
 (`leaseExpiry > now`; `now` is injectable for tests; `pathPrefix` is segment-aware).
-`timeline` returns the session, its child sessions, the ordered ops and the item uids
-touched; an unknown session is `item_not_found`. (`list reservation` / `get session`
+`timeline` with a `sessionId` returns that session, its child sessions, the ordered ops
+and the item uids touched; an unknown session is `item_not_found`. With no `sessionId`
+it returns the ops of every session whose `t` falls in the window `[since, now]`
+(`since` defaults to 7 days ago; `session` is `null` and `window.since` echoes the bound),
+paged by `limit`/`after`. (`list reservation` / `get session`
 are the future CLI-HIERARCHY spellings of these views.)
 
 **Other reads.** `get {fields:["specRevisionFragment"]}` returns the head revision's

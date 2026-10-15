@@ -160,7 +160,7 @@ describe('91a8c640 B-AC7 — timeline', () => {
     });
 
     it('a `since` after every op excludes them all (the window is a real lower bound)', async () => {
-      const future = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+      const future = new Date(Date.now() + DAY_MS).toISOString();
       const r = await tl({ since: future });
       expect(r.ops).toEqual([]);
       expect(r.touched).toEqual([]);

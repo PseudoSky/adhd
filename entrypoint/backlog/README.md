@@ -555,7 +555,7 @@ See [`CONTRIBUTING.md`](CONTRIBUTING.md). This package is MIT-licensed under
 
 Mutating verbs accept `sessionId`/`parentSessionId`; each such call appends one
 append-only op-event, `claim`/`renew`/`release` persist a reservation, and
-`timeline {sessionId}` reconstructs what a session (and its child sessions) did.
+`timeline {sessionId}` reconstructs what a session (and its child sessions) did; `timeline` with no `sessionId` lists every session's ops from the last 7 days (`since` widens or narrows the window).
 `query {view:"reservations"|"sessions"|"orphaned-parents"|"registry-orphans"}` and
 `query {projection:"byCitationPath", path}` are the store-wide reads. Placement is n:m with
 one primary owner (`get {fields:["primaryOwner","memberships"]}`); citations check that

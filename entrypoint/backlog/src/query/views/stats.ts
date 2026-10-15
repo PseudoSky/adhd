@@ -60,7 +60,6 @@ import type {
   NodeRecord,
 } from '@adhd/sox-graph-store';
 import { InvalidArgumentError } from '../../write/errors.js';
-import { nowISO } from '../../write/tx.js';
 import { BacklogValidationError } from '../../write/errors.js';
 import { isStatusTerminal } from '../card.js';
 import {
@@ -689,7 +688,7 @@ export async function orphanedParents(
 export interface IOpenCurveInput {
   /** `project`/`component`/`kind` only — `status` is rejected (`InvalidArgumentError`): this view computes openness itself, per sampled instant, so a caller-given status filter would silently conflict with that computation rather than compose with it. */
   filter?: IIssueFilter;
-  /** ISO-8601 instants to sample, in the given order. Omitted ⇒ a single sample at the current instant (`nowISO()`); an explicit empty list is rejected. Each is parsed via `Date.parse` and normalized to a full ISO string for lexical comparison against stored `at` timestamps — an unparsable entry throws by name rather than silently producing `NaN`-derived output. */
+  /** ISO-8601 instants to sample, in the given order. Omitted ⇒ a single sample at the current instant; an explicit empty list is rejected. Each is parsed via `Date.parse` and normalized to a full ISO string for lexical comparison against stored `at` timestamps — an unparsable entry throws by name rather than silently producing `NaN`-derived output. */
   at?: readonly string[];
 }
 
@@ -893,7 +892,7 @@ export async function openCurve(
     'openCurve'
   );
 
-  const sampleAt = input.at ?? [nowISO()];
+  const sampleAt = input.at ?? [new Date().toISOString()];
   if (sampleAt.length === 0) {
     throw new InvalidArgumentError(
       'at',

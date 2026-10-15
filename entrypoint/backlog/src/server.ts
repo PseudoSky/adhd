@@ -206,29 +206,47 @@ export function cliLogger(): Logger {
   // pino's two call shapes: `logger.info(msg)` and `logger.info(fields, msg)`.
   // A string-only call must not be spread as a fields object (that garbles it
   // into character-indexed keys).
-  const method =
-    (name: string) =>
-    (objOrMsg: Record<string, unknown> | string, msg?: string): void => {
-      const rank = CLI_METHOD_RANK[name] as number;
-      if (rank < threshold) return;
-      const [obj, text] = typeof objOrMsg === 'string' ? [{}, objOrMsg] : [objOrMsg ?? {}, msg ?? ''];
-      const fields = { ...serialiseCliFields(obj), level: name, msg: text };
-      if (rank >= 50) log.error('backlog.cli.log', fields);
-      else if (rank >= 40) log.warn('backlog.cli.log', fields);
-      else if (rank >= 30) log.info('backlog.cli.log', fields);
-      else log.debug('backlog.cli.log', fields);
-    };
+  // pino's call shapes: `logger.info(msg)`, `logger.info(fields, msg)` and
+  // `logger.error(err)`. A bare string or Error must not be spread as a fields
+  // object (that garbles it into character-indexed keys or drops the stack).
+  const build = (bindings: Record<string, unknown>): Record<string, unknown> => {
+    const method =
+      (name: string) =>
+      (objOrMsg: Record<string, unknown> | Error | string, msg?: string): void => {
+        const rank = CLI_METHOD_RANK[name] as number;
+        if (rank < threshold) return;
+        let fields: Record<string, unknown>;
+        let text: string;
+        if (typeof objOrMsg === 'string') {
+          fields = {};
+          text = objOrMsg;
+        } else if (objOrMsg instanceof Error) {
+          fields = { err: objOrMsg };
+          text = msg ?? objOrMsg.message;
+        } else {
+          fields = objOrMsg ?? {};
+          text = msg ?? '';
+        }
+        const record = { ...bindings, ...serialiseCliFields(fields), level: name, msg: text };
+        if (rank >= 50) log.error('backlog.cli.log', record);
+        else if (rank >= 40) log.warn('backlog.cli.log', record);
+        else if (rank >= 30) log.info('backlog.cli.log', record);
+        else log.debug('backlog.cli.log', record);
+      };
 
-  const logger: Record<string, unknown> = {
-    trace: method('trace'),
-    debug: method('debug'),
-    info: method('info'),
-    warn: method('warn'),
-    error: method('error'),
-    fatal: method('fatal'),
+    const logger: Record<string, unknown> = {
+      trace: method('trace'),
+      debug: method('debug'),
+      info: method('info'),
+      warn: method('warn'),
+      error: method('error'),
+      fatal: method('fatal'),
+    };
+    // pino's child(bindings) merges its bindings into every record it emits.
+    logger['child'] = (childBindings?: Record<string, unknown>) => build({ ...bindings, ...(childBindings ?? {}) });
+    return logger;
   };
-  logger['child'] = () => logger;
-  return logger as unknown as Logger;
+  return build({}) as unknown as Logger;
 }
 
 // ---------------------------------------------------------------------------

@@ -44,8 +44,8 @@ describe('cliLogger (CLI apigen logger → sox-telemetry)', () => {
     logMock.info.mockClear();
     logMock.warn.mockClear();
     logMock.error.mockClear();
-    stdoutSpy = vi.spyOn(process.stdout, 'write');
-    stderrSpy = vi.spyOn(process.stderr, 'write');
+    stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
   });
 
   afterEach(() => {
@@ -159,6 +159,28 @@ describe('cliLogger (CLI apigen logger → sox-telemetry)', () => {
     logger.child().info({ command: 'c' }, 'via child');
 
     expect(logMock.info).toHaveBeenCalledWith('backlog.cli.log', { command: 'c', level: 'info', msg: 'via child' });
+  });
+
+  it('child(bindings) merges its bindings into every record the child emits', () => {
+    const logger = cliLogger() as unknown as { child(b: Record<string, unknown>): PinoLike };
+    logger.child({ session: 'S1' }).info({ command: 'c' }, 'bound');
+
+    expect(logMock.info).toHaveBeenCalledWith('backlog.cli.log', {
+      session: 'S1',
+      command: 'c',
+      level: 'info',
+      msg: 'bound',
+    });
+  });
+
+  it('error(err) with a bare Error carries its message and stack under err', () => {
+    const logger = cliLogger() as unknown as { error(e: Error): void };
+    logger.error(new RangeError('out of range'));
+
+    const fields = logMock.error.mock.calls[0]?.[1] as { msg: string; err: { name: string; stack: string } };
+    expect(fields.msg).toBe('out of range');
+    expect(fields.err.name).toBe('RangeError');
+    expect(fields.err.stack).toContain('out of range');
   });
 
   it('under vitest it defers to the silent no-op (VITEST set)', () => {
