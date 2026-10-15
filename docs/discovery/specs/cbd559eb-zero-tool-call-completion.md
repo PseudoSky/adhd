@@ -38,3 +38,12 @@ All S: real orchestrator + real in-memory stores (harness pattern `entrypoint/ag
 ## Risks / serialization
 - Shares `orchestrator.ts` with any open R10/usage worktrees; gx impact on `runTask` loop not run (symbol is a 2700-line module) — implementer must run `gx impact` before editing. No other spec in this batch touches this file.
 - Open for product: D2 trigger (granted-tools proxy vs opt-in flag) and whether warning should also be logged at `warn` level.
+
+## Product revision
+dor (product): ready.
+Resolved decisions (from the consumer outcome: a caller reading a task result must be able to tell "answered without tools" from "stopped without doing the work", with zero annotation burden on existing agents):
+- D2 resolved = the granted-tools trigger (warn when final stop is `completed`, task-wide `toolUseCount === 0`, resolved tool list non-empty, not ended in HITL). Opt-in-only is rejected: it never fires for the observed researcher case unless every agent is hand-annotated.
+- `AgentDefinition.requiresToolUse` and the escalate-to-`failed` path are CUT from this slice (scope cut, deliberate): it adds a domain type field plus a new failure reason with no observed consumer asking for it. AC4 is removed from this slice and deferred to a follow-up backlog item (file via backlog-operator: "agent requiresToolUse opt-in escalating no_tool_use to failed", cites this spec). `domain.ts` is therefore NOT in the write-scope.
+- Warning is also logged at `warn` level (one line: task id, agent, provider). Resolved yes.
+Final ACs for this slice: AC1, AC2, AC3, AC5 as written, plus AC6 (new): the orchestrator emits one `warn` log line when it attaches `no_tool_use`.
+Priority: P1, rank 2 (silent false-success on real agent runs; S size; no cross-spec dependency).
