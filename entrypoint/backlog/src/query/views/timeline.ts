@@ -14,6 +14,10 @@
  * the store read: op events are loaded for every session and filtered in memory
  * (push-down of the time predicate into the graph query is deferred).
  *
+ * Window membership is decided on parsed instants: an op whose `t` does not parse,
+ * or whose instant is after now, is outside the window (the session view still
+ * shows such ops). Window order follows the stored `t` text plus rowid.
+ *
  * Window cursors are `<since>|<t>#<rowid>`: the cursor carries its window's lower
  * bound, so paging keeps the same window even after the default window would
  * have moved past the cursor's ops.
@@ -32,7 +36,7 @@ export const DEFAULT_TIMELINE_WINDOW_DAYS = 7;
 export interface ITimelineInput {
   /** The session to report on. Omitted ⇒ every session's ops within the window (see `since`). */
   sessionId?: string;
-  /** Include descendant sessions' ops (default true). Ignored when `sessionId` is omitted. */
+  /** Include descendant sessions' ops (default true). Only valid with `sessionId`; passing it without one is a validation error. */
   includeChildren?: boolean;
   /** Max ops in the page (default 500, max 5000). */
   limit?: number;

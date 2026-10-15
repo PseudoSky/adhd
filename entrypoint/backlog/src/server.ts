@@ -204,6 +204,7 @@ export function cliLogger(): Logger {
       ? (CLI_LOG_THRESHOLD[raw] as number)
       : (CLI_LOG_THRESHOLD['info'] as number);
 
+  // printf-style interpolation (`logger.info('%s', x)`) is not supported; apigen does not use it.
   // pino's call shapes: `logger.info(msg)`, `logger.info(fields, msg)` and
   // `logger.error(err)`. A bare string or Error must not be spread as a fields
   // object (that garbles it into character-indexed keys or drops the stack).

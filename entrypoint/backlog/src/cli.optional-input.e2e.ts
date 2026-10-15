@@ -12,9 +12,9 @@
  * default, so `@adhd/apigen-core-client` marked `input` a required key of the
  * `data` envelope and every bare `backlog query` exited 2 with
  * `missing required key 'input' at data`. RED: with the required parameter
- * restored, the three "runs with no --input" cases fail with exit 2. GREEN:
+ * restored, the "runs with no --input" cases fail with exit 2. GREEN:
  * the parameters carry a `= {}` default, the extractor marks them optional,
- * and the three verbs exit 0 with an `ok:true` envelope. The `get` case is the
+ * and each of the five verbs exits 0 with an `ok:true` envelope. The `get` case is the
  * negative control: `get` requires `uid`, so it must keep rejecting a bare call.
  *
  * Also asserts stderr carries no per-call apigen trace (`→ <command>`), which
