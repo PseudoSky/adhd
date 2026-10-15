@@ -93,7 +93,9 @@ function resolveSince(raw: string | undefined, now: number): string {
     return new Date(now - DEFAULT_TIMELINE_WINDOW_DAYS * 24 * 60 * 60 * 1000).toISOString();
   }
   const parsed = Date.parse(raw);
-  if (Number.isNaN(parsed)) throw new BacklogValidationError('since', `must be an ISO-8601 instant, got ${JSON.stringify(raw)}`);
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/.test(raw) || Number.isNaN(parsed)) {
+    throw new BacklogValidationError('since', `must be an ISO-8601 instant, got ${JSON.stringify(raw)}`);
+  }
   return new Date(parsed).toISOString();
 }
 

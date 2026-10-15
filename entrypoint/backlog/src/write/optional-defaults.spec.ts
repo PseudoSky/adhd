@@ -82,6 +82,12 @@ describe('optional inputs resolve their documented defaults (real store)', () =>
         InvalidArgumentError
       );
     });
+
+    it('an explicit null is rejected as InvalidArgumentError, not silently defaulted to now', async () => {
+      await expect(
+        openCurve(store, { at: null as unknown as string[] })
+      ).rejects.toBeInstanceOf(InvalidArgumentError);
+    });
   });
 
   describe('claim: action', () => {

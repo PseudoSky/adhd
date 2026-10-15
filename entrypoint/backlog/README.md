@@ -450,6 +450,15 @@ published/installed); on such a build `gitContext` may be rejected with
 absent. Run `adhd-backlog --help` and compare it against
 [§1 of REFERENCE.md](skill/REFERENCE.md) if a documented field or verb is refused.
 
+### Output streams (CLI)
+
+stdout carries exactly one JSON envelope per invocation; stderr carries no trace or envelope output (the `--namespace sandbox` mode prints its own notice there). The
+per-call trace (`→ backlog <verb>`, with `command` and `ms`) and any error or fatal
+record go to the sox durable log (`~/.adhd/sox-ecosystem/backlog/logs`), not to stderr.
+A failed call still reports its code and message in the stdout envelope. Set
+`ADHD_BACKLOG_LOG_LEVEL` to `trace|debug|info|warn|error|fatal` to change the threshold
+(default `info`), or `silent` to drop trace records.
+
 ## Build & startup
 
 `nx build backlog` emits TWO things into `dist/`: the compiled

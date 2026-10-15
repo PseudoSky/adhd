@@ -892,7 +892,10 @@ export async function openCurve(
     'openCurve'
   );
 
-  const sampleAt = input.at ?? [new Date().toISOString()];
+  const sampleAt = input.at === undefined ? [new Date().toISOString()] : input.at;
+  if (!Array.isArray(sampleAt)) {
+    throw new InvalidArgumentError('at', 'must be a list of ISO-8601 instants when given');
+  }
   if (sampleAt.length === 0) {
     throw new InvalidArgumentError(
       'at',

@@ -189,10 +189,11 @@ function serialiseCliFields(obj: Record<string, unknown>): Record<string, unknow
  * durable log (`~/.adhd/sox-ecosystem/backlog/logs`, the sink `index.ts`
  * initialises) and stdout/stderr carry only the result envelope.
  *
- * The apigen plugin calls the pino surface (`info`/`warn`/`error`/`debug`/
- * `trace`/`fatal`/`child`), so this adapter keeps that surface and gates it
- * by `ADHD_BACKLOG_LOG_LEVEL` (default `info`; `silent` disables). Under
- * vitest this defers to {@link testSilentLogger}, the same no-op contract.
+ * `@adhd/apigen-plugin-cli-output` calls only `logger.info` and `logger.error`
+ * (run.ts: the per-call trace and the failure paths). The other pino members
+ * are kept so the adapter stays a drop-in pino surface, gated by
+ * `ADHD_BACKLOG_LOG_LEVEL` (default `info`; `silent` disables). Under vitest
+ * this defers to {@link testSilentLogger}, the same no-op contract.
  */
 export function cliLogger(): Logger {
   const silentForTests = testSilentLogger();
@@ -203,9 +204,6 @@ export function cliLogger(): Logger {
       ? (CLI_LOG_THRESHOLD[raw] as number)
       : (CLI_LOG_THRESHOLD['info'] as number);
 
-  // pino's two call shapes: `logger.info(msg)` and `logger.info(fields, msg)`.
-  // A string-only call must not be spread as a fields object (that garbles it
-  // into character-indexed keys).
   // pino's call shapes: `logger.info(msg)`, `logger.info(fields, msg)` and
   // `logger.error(err)`. A bare string or Error must not be spread as a fields
   // object (that garbles it into character-indexed keys or drops the stack).

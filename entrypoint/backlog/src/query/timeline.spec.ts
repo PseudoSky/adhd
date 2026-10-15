@@ -147,16 +147,24 @@ describe('91a8c640 B-AC7 — timeline', () => {
         expect(p2.ops).toHaveLength(1);
         expect(p2.window?.since).toBe(new Date(start - 7 * DAY_MS).toISOString());
       });
+    });
 
-      it('a window cursor is rejected when `since` contradicts it, and a session-style cursor is rejected in window mode', async () => {
-        const p1 = await tl({ limit: 3 });
-        const contradict = await api.timeline(ctx, { limit: 3, after: p1.nextCursor, since: '2000-01-01T00:00:00Z' } as never);
-        expect(contradict.ok).toBe(false);
-        if (!contradict.ok) expect(contradict.error.code).toBe('validation');
-        const sessionCursor = await api.timeline(ctx, { after: `${a}#1` } as never);
-        expect(sessionCursor.ok).toBe(false);
-        if (!sessionCursor.ok) expect(sessionCursor.error.code).toBe('validation');
-      });
+    it('a window cursor is rejected when `since` contradicts it, and a session-style cursor is rejected in window mode', async () => {
+      const p1 = await tl({ limit: 3 });
+      const contradict = await api.timeline(ctx, { limit: 3, after: p1.nextCursor, since: '2000-01-01T00:00:00Z' } as never);
+      expect(contradict.ok).toBe(false);
+      if (!contradict.ok) expect(contradict.error.code).toBe('validation');
+      const sessionCursor = await api.timeline(ctx, { after: `${a}#1` } as never);
+      expect(sessionCursor.ok).toBe(false);
+      if (!sessionCursor.ok) expect(sessionCursor.error.code).toBe('validation');
+    });
+
+    it('a malformed since such as "Oct 1" or "2026" is a validation error, not parsed by Date.parse', async () => {
+      for (const since of ['Oct 1', '2026']) {
+        const r = await api.timeline(ctx, { since } as never);
+        expect(r.ok).toBe(false);
+        if (!r.ok) expect(r.error.code).toBe('validation');
+      }
     });
 
     it('a `since` after every op excludes them all (the window is a real lower bound)', async () => {
