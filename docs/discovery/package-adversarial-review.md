@@ -4,9 +4,9 @@ Scope: every npm-style package under `packages/*`, `entrypoint/*`, `tools/nx-plu
 
 ## Verdict counts
 
-- KEEP: 67
+- KEEP: 70
 - MERGE: 4
-- WASTE: 8
+- WASTE: 9
 - SHRINK: 6
 
 ## Method and rules
@@ -113,6 +113,10 @@ Scope: every npm-style package under `packages/*`, `entrypoint/*`, `tools/nx-plu
 | tools/vite-plugins | KEEP | HIGH | n/a | nx.json:40-43 namedInputs; every vite.config consumes externalize/source-resolution/vitest-pool-defaults. |
 | packages/apigen/java | KEEP | HIGH | n/a | Maven module consumed by apigen-plugin-java-javalin and the live JVM conformance matrix; CI installs Temurin 17 for it (ci.yml:39-47). |
 | packages/apigen/python | KEEP | HIGH | n/a | Python runtime (`apigen_logical.py`, grpc_server.py, run_tests.py) driven by py-flask/py-grpc plugins + conformance gate (gate.ts:497-502). |
+| tools/nx-plugins/verify-dist-load | WASTE | MEDIUM | n/a | Not in nx.json plugins (the registered ./tools/nx-plugins plugins are lint, build, assets, deps, test); referenced only by its own spec (run via package.json:28 test:build-tools) and a comment (build/detect-target.js:5). The live  |
+| tools/nx-plugins/lint | KEEP | HIGH | n/a | Registered nx plugin: nx.json plugins ./tools/nx-plugins/lint/plugin.js. |
+| tools/nx-plugins/lib | KEEP | HIGH | n/a | Shared helpers (file-lock.js, git-env.js, metrics.js, scratch-root.js) required by the test, assets, build, lint and verify-dist-load plugins. |
+| tools/nx-plugins (project @adhd/nx-plugins) | KEEP | MEDIUM | n/a | Aggregate nx project (tools/nx-plugins/project.json:3-12) with implicitDependencies on the nx-* plugins; carries their test targets. |
 
 ## Bugs found while reviewing
 
@@ -275,7 +279,7 @@ Scope: every npm-style package under `packages/*`, `entrypoint/*`, `tools/nx-plu
 - **Published:** public v0.1.5; npm last-month downloads 579/mo (see downloads caveat)
 - **Last substantive commit:** 2026-10-12 9c8d9bf1 docs(agent-engine-orchestrator): document provider echo persistence, TTL, degrade, pause_turn cap, privacy, events, hook, config keys, migration 0017 and usage accounting (R9-hist S8); 40 commits total; 5 source files
 - **Adversarial attack:** Zero static importers and not default-loaded, so real use is UNKNOWN.
-- **Self-refutation:** Self-refutation (settles it): `hooks.emit("transform:tool_result")` still fires at orchestrator.ts:1828 and :2566, the plugin targets `agent-mcp__task`/`agent-mcp__agent` (index.ts:64) which delegation-text.ts/server.ts still serve, and open backlog B08 (fdb79d6f) is actively hardening it. The orchestrator persist veto (orchestrator.ts:1991) governs echo persistence, not model-facing wrapping, so it is not a duplicate. Alive but unproven in use.
+- **Self-refutation:** Self-refutation (settles it): `hooks.emit("transform:tool_result")` still fires at orchestrator.ts:1828 and :2566, the plugin targets `agent-mcp__task`/`agent-mcp__agent` (index.ts:64) and those names are still live: server named agent-mcp registers tool task (server.ts:498,510,766) and the orchestrator classifies `agent-mcp__{agent,task,...}` (tool-class.ts:26, tools/session.ts:73), so `delegationOnly: true` is not a silent no-op, and open backlog B08 (fdb79d6f) is actively hardening it. The orchestrator persist veto (orchestrator.ts:1991) governs echo persistence, not model-facing wrapping, so it is not a duplicate. Alive but unproven in use.
 - **Evidence:** packages/agent/agent-engine-orchestrator/src/engine/orchestrator.ts:1828,2566; packages/agent/agent-plugin-sanitize/src/index.ts:64,75; backlog fdb79d6f-7538-440e-a4cd-8895723e5a4c
 
 ### @adhd/agent-plugin-tracing (packages/agent/agent-plugin-tracing) - KEEP (HIGH)
@@ -972,7 +976,7 @@ Scope: every npm-style package under `packages/*`, `entrypoint/*`, `tools/nx-plu
 - **package.json dependents:** (none)
 - **Published:** public v2.3.5; npm last-month downloads 623/mo (see downloads caveat)
 - **Last substantive commit:** 2026-09-25 2e9146f0 fix(test): make the full affected gate green (3 latent test-hermeticity fixes); 34 commits total; 35 source files
-- **Adversarial attack:** 35 files of generic hooks (use-debounce, use-infinite-scroll, use-copy-to-clipboard...) that duplicate off-the-shelf hook libraries and have no caller in this repo. It drags React 19, storybook 7, material-tailwind, cypress, next plugins into the root devDependencies (package.json:33,59,89,91,97).
+- **Adversarial attack:** 35 files of generic hooks (use-debounce, use-infinite-scroll, use-copy-to-clipboard...) that duplicate off-the-shelf hook libraries and have no caller in this repo. Root dependencies include React 19, storybook 7, material-tailwind and the next/cypress nx plugins (package.json:33,59,89,91,97); no code in the repo imports material-tailwind, so at least part of that surface has no consumer, but that the hooks package is the reason for them is NOT established.
 - **Self-refutation:** Self-refutation: open backlog b702f0fb (MEDIUM) specifies a React filter panel for data-query-engine and names this package as the existing React surface; it proposes a NEW package (`ui-react-filter-panel`) and has provenance "wrong-chat-spec-captured". That is a weak roadmap tie, so not WASTE; the verdict is SHRINK. If b702f0fb is dropped this becomes WASTE. External consumers UNKNOWN (623/mo = floor).
 - **Evidence:** packages/ui-react/ui-react-base-hooks/src/lib/*; docs/ARCHITECTURE.md:65; backlog b702f0fb-6e5f-48a4-a587-76e320001e89; package.json:33,59,89,91,97
 
