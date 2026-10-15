@@ -47,9 +47,11 @@ function depsOf(fixture: TaskEventsFixture) {
 }
 
 describe("facd4aaa AC1 ordering: events sharing one created_at keep their emit order", () => {
-  // Failure mode 1. Emit order is the insertion order below. The ids sort in the reverse of that order
-  // and the types are not alphabetical, so an ORDER BY id or a type-index scan returns a different list.
-  it("facd4aaa AC1: same-millisecond events return in insertion (rowid) order, and an earlier event inserted last sorts first", () => {
+  // Failure mode 1. The production reader sorts `ORDER BY rowid` (insertion order); `created_at` is not the
+  // sort key. Insertion order below is the expected page order. The ids sort in the reverse of that order,
+  // the types are not alphabetical, and the last-inserted row carries an EARLIER created_at: an
+  // ORDER BY id, a type-index scan, or a created_at sort each return a different list.
+  it("facd4aaa AC1: events are returned in insertion (rowid) order even when a later-inserted event carries an earlier created_at", () => {
     const fx = open();
     const taskId = fx.createTask();
     fx.seedEvent({ id: "ffffffff-0000-4000-8000-000000000001", taskId, type: "TOOL_RESULT", createdAt: T0, payloadText: "{}" });
@@ -59,12 +61,12 @@ describe("facd4aaa AC1 ordering: events sharing one created_at keep their emit o
 
     const page = taskEvents({ task_id: taskId }, depsOf(fx));
 
-    expect(page.events.map((e) => e.type)).toEqual(["TASK_COMPLETED", "TOOL_RESULT", "MODEL_REQUEST", "TOOL_CALL"]);
+    expect(page.events.map((e) => e.type)).toEqual(["TOOL_RESULT", "MODEL_REQUEST", "TOOL_CALL", "TASK_COMPLETED"]);
     expect(page.events.map((e) => e.id)).toEqual([
-      "99999999-0000-4000-8000-000000000004",
       "ffffffff-0000-4000-8000-000000000001",
       "eeeeeeee-0000-4000-8000-000000000002",
       "00000000-0000-4000-8000-000000000003",
+      "99999999-0000-4000-8000-000000000004",
     ]);
   });
 
