@@ -14,7 +14,8 @@
  *    deterministically; the defaults are real (`Date.now`, `ps`, `process.kill`).
  */
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { randomBytes } from 'node:crypto';
+import { linkSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 
 // ── duplicate-dispatch guard ────────────────────────────────────────────────
@@ -54,6 +55,74 @@ export interface AcquireOptions {
   pid?: number;
   /** Liveness probe, injectable for tests. Default: {@link pidAlive}. */
   isAlive?: (pid: number) => boolean;
+  /**
+   * Test seam: called after a stale lock body has been read and before the
+   * reclaimer moves the lock file aside. Lets a test interleave a competitor
+   * that re-acquires the lock inside the stale-read window.
+   */
+  onStaleRead?: () => void;
+}
+
+/** Pid recorded in a lock body, or `null` when the body is unreadable or malformed. */
+function holderPidOf(body: string): number | null {
+  try {
+    const parsed = JSON.parse(body) as { pid?: number };
+    return typeof parsed.pid === 'number' ? parsed.pid : null;
+  } catch {
+    return null; // half-written or corrupt: treated as stale by the caller
+  }
+}
+
+/**
+ * Reclaim a stale lock without deleting a competitor's lock.
+ *
+ * The lock file is first renamed to a unique side name, which removes it from
+ * `lockPath` atomically. The side copy is then compared with the stale body the
+ * caller read earlier:
+ * - identical: it is the stale file, so it is discarded and the caller retries
+ *   the exclusive create;
+ * - different: a competitor re-acquired the lock between the stale read and the
+ *   rename. The side copy is hard-linked back to `lockPath` (which never
+ *   overwrites) and, if that competitor is alive, this reclaim is refused with
+ *   `DuplicateDispatchError` naming it.
+ *
+ * @throws {DuplicateDispatchError} when the moved-aside lock belongs to a live competitor.
+ */
+function reclaimStaleLock(
+  lockPath: string,
+  staleBody: string,
+  identity: string,
+  isAlive: (pid: number) => boolean
+): void {
+  const aside = `${lockPath}.reclaim.${process.pid}.${randomBytes(6).toString('hex')}`;
+  try {
+    renameSync(lockPath, aside);
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return; // already gone: caller retries
+    throw err;
+  }
+  let moved = '';
+  try {
+    moved = readFileSync(aside, 'utf8');
+  } catch {
+    moved = ''; // unreadable side copy: cannot match the stale body
+  }
+  if (moved === staleBody) {
+    rmSync(aside, { force: true });
+    return;
+  }
+  // Not the stale file: a competitor re-acquired between our read and our rename.
+  let restored = false;
+  try {
+    linkSync(aside, lockPath); // fails with EEXIST rather than overwriting a newer lock
+    restored = true;
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== 'EEXIST') throw err;
+  }
+  const competitor = holderPidOf(moved);
+  const liveCompetitor = competitor !== null && isAlive(competitor);
+  if (restored || !liveCompetitor) rmSync(aside, { force: true });
+  if (liveCompetitor) throw new DuplicateDispatchError(identity, competitor);
 }
 
 /**
@@ -85,15 +154,17 @@ export function acquireDispatchLock(lockPath: string, identity: string, opts: Ac
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code !== 'EEXIST') throw err;
     }
-    let holder: number | null = null;
+    let staleBody: string;
     try {
-      const parsed = JSON.parse(readFileSync(lockPath, 'utf8')) as { pid?: number };
-      holder = typeof parsed.pid === 'number' ? parsed.pid : null;
-    } catch {
-      holder = null; // unreadable / half-written: treat as stale
+      staleBody = readFileSync(lockPath, 'utf8');
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === 'ENOENT') continue; // released meanwhile: retry the create
+      throw err;
     }
+    const holder = holderPidOf(staleBody);
     if (holder !== null && isAlive(holder)) throw new DuplicateDispatchError(identity, holder);
-    rmSync(lockPath, { force: true }); // stale: reclaim, then retry the exclusive create
+    opts.onStaleRead?.();
+    reclaimStaleLock(lockPath, staleBody, identity, isAlive); // stale: reclaim, then retry the exclusive create
   }
   throw new Error(`acquireDispatchLock: could not acquire ${lockPath} after reclaiming a stale lock`);
 }

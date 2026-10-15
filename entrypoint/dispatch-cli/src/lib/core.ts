@@ -682,13 +682,26 @@ export async function runCycleCore(
     allowedFsActions: allowedFsActions as OperationAction[],
     ...(toolsRoot !== undefined ? { toolsRoot } : {}),
   };
-  if (dryRun) return orchestrateCycle(deps);
   // Duplicate-dispatch guard (backlog d794287f D-AC3): a live run of this DAG
-  // may exist at most once, across processes. A second `run` against the same
-  // dag while the first is live is refused with `DuplicateDispatchError`.
+  // may exist at most once, across processes. Dry runs take the same lock:
+  // `orchestrateCycle` saves the dag in both modes, so a dry run must not write
+  // the file while a live run holds it. A second `run` (dry or wet) against the
+  // same dag while the first is live is refused with `DuplicateDispatchError`.
+  return withDagLock(dagPath, () => orchestrateCycle(deps));
+}
+
+/**
+ * Runs `fn` while holding the live-dispatch lock for `dagPath`, releasing it on
+ * return or throw. The lock is per DAG file and fail-fast: a second holder in
+ * another process is refused immediately with `DuplicateDispatchError`, never
+ * queued. A caller that runs several cycles (e.g. `orchestrate()`'s loop) wraps
+ * the whole loop here so the lock spans every cycle, not one cycle.
+ * @throws {DuplicateDispatchError} when a live process already holds the lock.
+ */
+export async function withDagLock<T>(dagPath: string, fn: () => Promise<T>): Promise<T> {
   const lock = acquireDispatchLock(dispatchLockPath(dagPath), resolve(dagPath));
   try {
-    return await orchestrateCycle(deps);
+    return await fn();
   } finally {
     lock.release();
   }

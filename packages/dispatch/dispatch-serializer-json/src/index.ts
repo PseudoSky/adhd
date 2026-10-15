@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import { randomBytes } from 'crypto';
 import { upgradeDagToCurrent } from '@adhd/dispatch-base-spec';
 import type { DagJson, DagSnapshot } from '@adhd/dispatch-base-spec';
 import type { IDagSerializer } from '@adhd/dispatch-core-client';
@@ -25,17 +26,26 @@ export function createJsonFileSerializer(filePath: string): IDagSerializer {
 
   /**
    * Atomically writes data to a file using temp-file + rename pattern.
+   *
+   * The temp name carries the pid and a random suffix so two writers targeting
+   * the same path never share a temp file. The temp file is removed in `finally`
+   * so a failed write or rename leaves no `.tmp` behind (after a successful
+   * rename the temp path no longer exists and the removal is a no-op).
    */
   function atomicWrite(targetPath: string, data: unknown): void {
     const dir = path.dirname(targetPath);
     const filename = path.basename(targetPath);
-    const tempPath = path.join(dir, `.${filename}.tmp`);
+    const tempPath = path.join(dir, `.${filename}.${process.pid}.${randomBytes(6).toString('hex')}.tmp`);
 
-    // Write to temp file
-    fs.writeFileSync(tempPath, JSON.stringify(data, null, 2), 'utf-8');
+    try {
+      // Write to temp file
+      fs.writeFileSync(tempPath, JSON.stringify(data, null, 2), 'utf-8');
 
-    // Atomic rename
-    fs.renameSync(tempPath, targetPath);
+      // Atomic rename
+      fs.renameSync(tempPath, targetPath);
+    } finally {
+      fs.rmSync(tempPath, { force: true });
+    }
   }
 
   /**
