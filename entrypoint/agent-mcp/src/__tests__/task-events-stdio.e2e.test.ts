@@ -21,16 +21,27 @@
  * exercises the MCP tool registration, the `dist/` artifact, the environment cascade and the stdio JSON-RPC
  * framing that a host depends on.
  *
- * Gap, recorded for the owner: the seeded task is a completed row written with raw SQL, not a task run
- * through a scripted provider over an HTTP loopback. A loopback model run would also cover the write path
- * end to end; it is not in this file. Remaining work: add a loopback-driven run once the seeded path is green.
+ * Real-run case (AC5): the same server also runs a REAL task. `agent_create` (anthropic provider, native tooling
+ * off) -> `agent` -> `task` go over stdio to the built server, whose Anthropic SDK talks over HTTP to an
+ * in-process loopback model server on 127.0.0.1 (`ANTHROPIC_BASE_URL`, the repository's existing loopback-model
+ * pattern from integration/provider-selection.e2e.test.ts). The model is the only scripted boundary. The test
+ * then reads the events the run recorded back through `task_events` and asserts their order
+ * (MODEL_REQUEST before MODEL_RESPONSE before TASK_COMPLETED, TASK_COMPLETED last) and paging
+ * (limit 1 windows concatenate to the full list, `total` equals its length, `has_more` falls to false).
+ *
+ * Not covered, stated precisely: a run that calls a tool (no TOOL_CALL / TOOL_RESULT events are asserted from a
+ * real run; those payloads are covered only by the seeded task above), and a byte-budget truncation over the
+ * wire (covered at tier S in task-events-tool.test.ts).
  *
  * Not env-gated (ADR-0009 e2e lane). Fails loudly if the built entry is missing; it never skips.
  *
- * Red evidence: pending; tests cannot run until the hold is released. Expected red at facd4aaa^ (the tool is
+ * Tag: regression:facd4aaa (AC5).
+ * Red: pending (user hold). Tests cannot run until the hold is released. Expected red at facd4aaa^ (the tool is
  * not advertised, so the tools/list and tools/call cases fail with the missing-tool assertion).
  */
 import fs from "node:fs";
+import { createServer as createHttpServer, type Server as HttpServer } from "node:http";
+import type { AddressInfo } from "node:net";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -58,6 +69,19 @@ let tmpDir: string;
 let fakeHome: string;
 let dbPath: string;
 let client: Client;
+let modelServer: HttpServer;
+let modelOrigin: string;
+let modelRequests = 0;
+
+/** One streamed Anthropic message with a single text block: the whole scripted model. */
+const MODEL_SSE = [
+  ["message_start", { type: "message_start", message: { id: "msg_te", type: "message", role: "assistant", model: "m", content: [], stop_reason: null, stop_sequence: null, usage: { input_tokens: 1, output_tokens: 1 } } }],
+  ["content_block_start", { type: "content_block_start", index: 0, content_block: { type: "text", text: "" } }],
+  ["content_block_delta", { type: "content_block_delta", index: 0, delta: { type: "text_delta", text: "pong" } }],
+  ["content_block_stop", { type: "content_block_stop", index: 0 }],
+  ["message_delta", { type: "message_delta", delta: { stop_reason: "end_turn", stop_sequence: null }, usage: { output_tokens: 2 } }],
+  ["message_stop", { type: "message_stop" }],
+] as const;
 
 /** Child env: strip ambient `ADHD_AGENT_*`, pin the operational DB to the seeded file, force stdio. */
 function buildChildEnv(): Record<string, string> {
@@ -70,6 +94,9 @@ function buildChildEnv(): Record<string, string> {
   env.ADHD_AGENT_DATABASE_PATH = dbPath;
   env.ADHD_AGENT_TRANSPORT = "stdio";
   env.ADHD_AGENT_SSE_ENABLED = "false";
+  // The real-run case: the child's Anthropic SDK talks to the loopback model, never to the internet.
+  env.ANTHROPIC_BASE_URL = modelOrigin;
+  env.ADHD_AGENT_ANTHROPIC_SECRET = "sk-ant-api-task-events-e2e"; // pragma: allowlist secret — synthetic loopback value
   return env;
 }
 
@@ -129,6 +156,18 @@ describe("facd4aaa AC5 task_events over stdio JSON-RPC against the built server"
       `expected built entry at ${DIST_ENTRY}; run "npx nx build agent-mcp" first`,
     ).toBe(true);
 
+    modelServer = createHttpServer((req, res) => {
+      req.resume();
+      req.on("end", () => {
+        modelRequests++;
+        res.writeHead(200, { "content-type": "text/event-stream" });
+        for (const [event, data] of MODEL_SSE) res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+        res.end();
+      });
+    });
+    await new Promise<void>((r) => modelServer.listen(0, "127.0.0.1", r));
+    modelOrigin = `http://127.0.0.1:${(modelServer.address() as AddressInfo).port}`;
+
     fs.mkdirSync(TMP_ROOT, { recursive: true });
     tmpDir = fs.mkdtempSync(path.join(TMP_ROOT, "run-"));
     fakeHome = path.join(tmpDir, "home");
@@ -152,6 +191,11 @@ describe("facd4aaa AC5 task_events over stdio JSON-RPC against the built server"
       await client?.close();
     } catch {
       /* ignore: the child may already have exited */
+    }
+    try {
+      await new Promise<void>((r) => modelServer?.close(() => r()));
+    } catch {
+      /* ignore: teardown is best effort after assertions have run */
     }
     try {
       fs.rmSync(tmpDir, { recursive: true, force: true });
@@ -212,4 +256,47 @@ describe("facd4aaa AC5 task_events over stdio JSON-RPC against the built server"
 
     expect(result.isError).toBe(true);
   });
+
+  it("facd4aaa AC5: a REAL task run through the server (loopback model only) is read back over stdio in recorded order with consistent paging", async () => {
+    const created = await client.callTool({
+      name: "agent_create",
+      arguments: {
+        name: "task-events-e2e-agent",
+        provider: { type: "anthropic", model: "claude-sonnet-4-6", env: { secret: "ADHD_AGENT_ANTHROPIC_SECRET" } },
+        systemPrompt: "You are a test agent.",
+        mcpServers: {},
+        permissions: {},
+        nativeTooling: { fs: false, shell: false, dispatch: false },
+      },
+    });
+    expect(created.isError, textOf(created)).not.toBe(true);
+    const { session_id } = parseText(await client.callTool({ name: "agent", arguments: { name: "task-events-e2e-agent" } })) as { session_id: string };
+    const run = await client.callTool({ name: "task", arguments: { session_id, prompt: "ping" } });
+    expect(run.isError, textOf(run)).not.toBe(true);
+    const done = parseText(run) as { task_id: string; status: string; result?: string };
+    expect(done.status).toBe("completed");
+    expect(done.result).toBe("pong");
+    expect(modelRequests).toBeGreaterThanOrEqual(1);
+
+    type Page = { total: number; offset: number; has_more: boolean; events: Array<{ id: string; type: string; created_at: string }> };
+    const full = parseText(await client.callTool({ name: "task_events", arguments: { task_id: done.task_id, limit: 500 } })) as Page;
+    const types = full.events.map((e) => e.type);
+    expect(full.total).toBe(full.events.length);
+    expect(full.has_more).toBe(false);
+    expect(types.indexOf("MODEL_REQUEST")).toBeGreaterThanOrEqual(0);
+    expect(types.indexOf("MODEL_RESPONSE")).toBeGreaterThan(types.indexOf("MODEL_REQUEST"));
+    expect(types.indexOf("TASK_COMPLETED")).toBeGreaterThan(types.indexOf("MODEL_RESPONSE"));
+    expect(types[types.length - 1]).toBe("TASK_COMPLETED");
+
+    // Paging over the same run: windows of one concatenate to the full list; has_more is true until the last.
+    const ids: string[] = [];
+    for (let offset = 0; offset < full.total; offset++) {
+      const page = parseText(await client.callTool({ name: "task_events", arguments: { task_id: done.task_id, limit: 1, offset } })) as Page;
+      expect(page.total).toBe(full.total);
+      expect(page.events).toHaveLength(1);
+      expect(page.has_more).toBe(offset < full.total - 1);
+      ids.push(page.events[0]!.id);
+    }
+    expect(ids).toEqual(full.events.map((e) => e.id));
+  }, 60_000);
 });
