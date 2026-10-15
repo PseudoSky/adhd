@@ -38,6 +38,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 - [search-port-engine.7] The state gates are green: `nx run stealth-search:typecheck`, `:lint` and `:test` exit 0.
 - [search-port-engine.8] Only owned paths changed by [psm:search-port-engine] commits.
 
+- [search-port-engine.9] (backlog 224e7a44) A network-capture failure never hangs or escapes as an unhandled rejection: when the CDP socket closes or errors during capture (a fake page whose capture rejects with a socket-closed error) the engine falls back to the dom strategy once and returns its results; when the fallback also fails it returns outcome `error` whose message names the cause. Specs under src/test/unit/engine/ register a process `unhandledRejection` listener and assert it never fires; titles carry `socket closed`, `falls back`, `dom`, `unhandledRejection` and the uid 224e7a44, and the spec cites [search-port-engine.9].
 ---
 
 ## Reservations
