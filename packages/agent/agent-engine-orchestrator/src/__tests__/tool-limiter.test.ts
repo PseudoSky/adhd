@@ -3,18 +3,24 @@
  * by the native fan-out (`map`) and the bridge (`run`). Latch proofs, no sleeps. The end-to-end
  * native/bridge behaviour is in tool-call-concurrency.test.ts (unmodified, AC2) and
  * claudecli-bridge-concurrency.test.ts.
+ *
+ * guards: the tool-call limiter exceeds its bound, shares slots unevenly between map() and run(), strands run() after a map failure, or releases a slot while an aborted call is still in flight.
+ * tier: S
+ * cites: ea8f6f92 AC1, AC2; cf7e0e5c review-4; variance hardening cites qa-variance (dispatch-1014).
+ * red: pending (qa-variance edit made without running tests, per user). qa-variance: the fixed 30-turn
+ * `setImmediate` loop is replaced by `settleUntilStable` (state-probe quiescence, no clock).
  */
 import { describe, expect, it } from "vitest";
 
 import { DEFAULT_TOOL_CALL_CONCURRENCY } from "../interfaces.js";
 import { createToolLimiter, resolveToolCallConcurrency } from "../engine/tool-limiter.js";
+import { settleUntilStable } from "./fixtures/settle.js";
 
 function deferred() {
     let resolve!: () => void;
     const promise = new Promise<void>((r) => (resolve = r));
     return { promise, resolve };
 }
-const settle = async () => { for (let i = 0; i < 30; i++) await new Promise<void>((r) => setImmediate(r)); };
 
 describe("ea8f6f92-d0db-426e-bf9d-bd7ba2fdd5ca AC1: one limiter bounds map() and run() together", () => {
     it("ea8f6f92 AC1: map and run calls share the same N slots", async () => {
@@ -33,7 +39,7 @@ describe("ea8f6f92-d0db-426e-bf9d-bd7ba2fdd5ca AC1: one limiter bounds map() and
             limiter.run(body),
             limiter.run(body),
         ]);
-        await settle();
+        await settleUntilStable(() => [peak, inFlight]);
         expect(peak).toBe(2);
         gate.resolve();
         await all;
@@ -51,7 +57,7 @@ describe("ea8f6f92-d0db-426e-bf9d-bd7ba2fdd5ca AC1: one limiter bounds map() and
         });
         const outcome = failing.then(() => "ok", (e: Error) => e.message);
         const bridged = limiter.run(async () => "bridged"); // queued behind the map items
-        await settle();
+        await settleUntilStable(() => started);
         gate.resolve();
         expect(await outcome).toBe("fatal");
         expect(await bridged).toBe("bridged"); // pool.clear() would have stranded this forever
@@ -73,11 +79,11 @@ describe("cf7e0e5c review-4: abort never releases a slot while the call is still
         const started: string[] = [];
         const a = limiter.run(async () => { started.push("A"); await gateA.promise; }, ac.signal);
         a.catch(() => undefined);
-        await settle();
+        await settleUntilStable(() => started);
         expect(started).toEqual(["A"]);
         ac.abort(new Error("cancelled"));
         const b = limiter.run(async () => { started.push("B"); });
-        await settle();
+        await settleUntilStable(() => started);
         // A's fn has not settled: the bound of 1 must still hold.
         expect(started).toEqual(["A"]);
         gateA.resolve();
@@ -97,7 +103,7 @@ describe("cf7e0e5c review-4: abort never releases a slot while the call is still
         await expect(queued).rejects.toBe(reason);
         gate.resolve();
         await holder;
-        await settle();
+        await settleUntilStable(() => ran);
         expect(ran).toEqual([]);
     });
 

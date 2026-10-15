@@ -13,6 +13,7 @@ import { ToolError } from '../validation/errors.js';
 import type { ExecutionContext, Message } from '../validation/index.js';
 import type { McpClientRegistry } from '../clients/registry.js';
 import type { EngineConfig, EngineLogger } from '../interfaces.js';
+import { settleUntilStable } from './fixtures/settle.js';
 
 /**
  * 35768ae8 (R3-PAR-ENG) — same-turn tool calls run through a concurrency-limited
@@ -23,6 +24,12 @@ import type { EngineConfig, EngineLogger } from '../interfaces.js';
  *  - 35768ae8 AC2: limit=2 over 5 calls peaks at exactly 2 in flight; result order == call order.
  *  - 35768ae8 AC3: one failing call does not cancel the others.
  *  - a4235310 AC4: after a fatal error, queued calls never start; in-flight siblings run to completion.
+ *
+ * guards: same-turn tool calls run serially, exceed the concurrency bound, lose call order, cancel siblings on one failure, or start queued calls after a fatal error.
+ * tier: S
+ * cites: 35768ae8 AC1-AC3; a4235310 AC4; variance hardening cites qa-variance (dispatch-1014).
+ * red: pending (qa-variance edit made without running tests, per user). qa-variance: the fixed 50-turn
+ * `setImmediate` loop is replaced by `settleUntilStable` (state-probe quiescence, no clock).
  */
 
 const policy = { check: () => {} } as unknown as PolicyEngine;
@@ -134,11 +141,6 @@ async function runTurn(opts: {
   return { result: out.result, toolMessages };
 }
 
-/** Yields to the event loop a bounded number of times (no timers). */
-async function settle(): Promise<void> {
-  for (let i = 0; i < 50; i++) await new Promise<void>((r) => setImmediate(r));
-}
-
 describe('35768ae8 R3-PAR-ENG bounded same-turn tool-call fan-out (real engine)', () => {
   it('35768ae8 AC1 R3-PAR-ENG — 3 calls under limit 3 are all started before any finishes', async () => {
     const started = new Set<number>();
@@ -195,13 +197,13 @@ describe('35768ae8 R3-PAR-ENG bounded same-turn tool-call fan-out (real engine)'
         return [{ type: 'text', text: `r${i}` }];
       },
     });
-    await settle();
+    await settleUntilStable(() => [startedIdx, inFlight, peak]);
     expect(startedIdx).toEqual([0, 1]); // call 2 is queued, not started
     gates[1].resolve(); // finish out of order: 1 before 0
-    await settle();
+    await settleUntilStable(() => [startedIdx, inFlight, peak]);
     expect(startedIdx).toEqual([0, 1, 2]);
     gates[0].resolve();
-    await settle();
+    await settleUntilStable(() => [startedIdx, inFlight, peak]);
     expect(startedIdx).toEqual([0, 1, 2, 3]);
     gates[4].resolve(); // pre-resolved gates are fine for calls not yet started
     gates[3].resolve();
@@ -262,7 +264,7 @@ describe('35768ae8 R3-PAR-ENG bounded same-turn tool-call fan-out (real engine)'
       (e: unknown) => ({ rejected: true as const, e })
     );
     void run.then(() => { settled = true; });
-    await settle();
+    await settleUntilStable(() => [settled, started, siblingFinished]);
     // The turn aborted on the fatal call while siblings 1 and 2 are still parked.
     expect(settled).toBe(true);
     const outcome = await run;
@@ -271,7 +273,7 @@ describe('35768ae8 R3-PAR-ENG bounded same-turn tool-call fan-out (real engine)'
     expect(siblingFinished).toEqual([]);
     // In-flight siblings are not aborted: once released they run to completion.
     release.resolve();
-    await settle();
+    await settleUntilStable(() => [settled, started, siblingFinished]);
     expect(siblingFinished.slice().sort()).toEqual([1, 2]);
     expect(started).not.toContain(3);
   });
