@@ -35,6 +35,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 - [search-inventory.4] Each row names the destination state it is implemented in and carries a `pin` {file, test} placeholder under entrypoint/stealth-search/src/test/ or `pin: null` with a `reason` for rows owned by hosts, usecases, examples, cutover or docs states; the 209 rows of evidence/failsafe-inventory.json are not duplicated (no row repeats a `fs-NNN` id).
 - [search-inventory.5] Only owned paths changed by [psm:search-inventory] commits.
 
+- [search-inventory.6] (backlog 406a4e66) The inventory records the Google SERP parsing as search-owned: at least one row whose feature, symbols or source mention the Google result-page (SERP) walker or `capture/dom.ts` has owner_state `search-port-engine` and a destination naming `dom.ts` (entrypoint/stealth-search/src/lib/dom.ts), so no Google SERP parser is left unaccounted for in the core.
 ---
 
 ## Reservations
