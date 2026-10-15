@@ -259,12 +259,12 @@ describe('batchPlugin handler: real fan-out (invokeBatch)', () => {
     });
     const [op] = requireMount().operations(descriptor, undefined, bridge);
 
-    const result = await op.handler(
+    const result = (await op.handler(
       fakeCall({
         operation: 'ns/opA',
         items: [{ value: 'good1' }, { value: 'bad' }, { value: 'good2' }],
       })
-    );
+    )) as Array<Record<string, unknown>>;
 
     expect(result[0]).toMatchObject({ status: 'fulfilled', value: 'ok:good1' });
     expect(result[1]).toMatchObject({ status: 'rejected' });
@@ -283,14 +283,14 @@ describe('batchPlugin handler: real fan-out (invokeBatch)', () => {
     });
     const [op] = requireMount().operations(descriptor, undefined, bridge);
 
-    const result = await op.handler(
+    const result = (await op.handler(
       fakeCall({
         operation: 'ns/opA',
         items: [{ value: 'first' }, { value: 'bad' }, { value: 'never' }],
         mode: 'serial',
         onItemError: 'abort',
       })
-    );
+    )) as Array<Record<string, unknown>>;
 
     expect(result[0]).toMatchObject({ status: 'fulfilled', value: 'ok:first' });
     expect(result[1]).toMatchObject({ status: 'rejected' });
@@ -380,7 +380,7 @@ describe('regression:087ec253 batchPlugin handler: null/undefined item guard', (
   it('087ec253 AC1: a null item rejects with invalid_argument naming input.items[1] and never invokes the target', async () => {
     const { op, bridge } = mountWithBridge();
     const err = await captureRejection(
-      op.handler(fakeCall({ operation: 'ns/opA', items: [{ value: 'a' }, null] }))
+      Promise.resolve(op.handler(fakeCall({ operation: 'ns/opA', items: [{ value: 'a' }, null] })))
     );
     expect(err).toBeInstanceOf(ApiError);
     expect(err).toMatchObject({
@@ -393,7 +393,7 @@ describe('regression:087ec253 batchPlugin handler: null/undefined item guard', (
   it('087ec253 AC1: an explicit undefined item rejects with invalid_argument naming input.items[1] and never invokes the target', async () => {
     const { op, bridge } = mountWithBridge();
     const err = await captureRejection(
-      op.handler(fakeCall({ operation: 'ns/opA', items: [{ value: 'a' }, undefined] }))
+      Promise.resolve(op.handler(fakeCall({ operation: 'ns/opA', items: [{ value: 'a' }, undefined] })))
     );
     expect(err).toBeInstanceOf(ApiError);
     expect(err).toMatchObject({
@@ -408,7 +408,7 @@ describe('regression:087ec253 batchPlugin handler: null/undefined item guard', (
     const holey: unknown[] = [{ value: 'a' }];
     holey.length = 2; // index 1 is a hole: reads as undefined, Array.isArray still true
     const err = await captureRejection(
-      op.handler(fakeCall({ operation: 'ns/opA', items: holey }))
+      Promise.resolve(op.handler(fakeCall({ operation: 'ns/opA', items: holey })))
     );
     expect(err).toBeInstanceOf(ApiError);
     expect(err).toMatchObject({
@@ -426,7 +426,7 @@ describe('regression:087ec253 batchPlugin handler: null/undefined item guard', (
   ])('087ec253 AC1: a %s item rejects with the same invalid_argument shape naming input.items[1] and never invokes the target', async (_label, bad) => {
     const { op, bridge } = mountWithBridge();
     const err = await captureRejection(
-      op.handler(fakeCall({ operation: 'ns/opA', items: [{ value: 'a' }, bad] }))
+      Promise.resolve(op.handler(fakeCall({ operation: 'ns/opA', items: [{ value: 'a' }, bad] })))
     );
     expect(err).toBeInstanceOf(ApiError);
     expect(err).toMatchObject({
@@ -439,7 +439,7 @@ describe('regression:087ec253 batchPlugin handler: null/undefined item guard', (
   it('087ec253 AC1: a primitive at index 0 is named input.items[0] (0-based) and rejects the whole batch', async () => {
     const { op, bridge } = mountWithBridge();
     const err = await captureRejection(
-      op.handler(fakeCall({ operation: 'ns/opA', items: [7, { value: 'b' }] }))
+      Promise.resolve(op.handler(fakeCall({ operation: 'ns/opA', items: [7, { value: 'b' }] })))
     );
     expect(err).toMatchObject({
       code: 'invalid_argument',
