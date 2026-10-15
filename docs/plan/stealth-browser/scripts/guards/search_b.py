@@ -927,3 +927,65 @@ def _br8():
 def _br9():
     """Only owned paths changed by [psm:consumer-relink] commits in the adhd worktree (evidence/relink/)."""
     return ownership_ok(_CR)
+
+
+# ============================================================ backlog fold-in (2026-10-14 search bugs): hosts
+@check("search-hosts", 18)
+def _sh18():
+    """(backlog abeedba8) The CLI exits as soon as its JSON is written: the host closes every browser handle, flushes stdout, then exits 0. Proven by (a) a spec under src/test/unit/hosts/ on the exported CLI runner with an injected stdout sink and exit function asserting the order write, flush, handles closed, exit(0), and that no timer or socket handle is left open (the idle-shutdown child is detached with stdio ignored and never inherits stdout), and (b) a real-process probe run by this guard: three `node dist/bin/cli.js chromeStatus --cdp-port 19999` processes started together with stdout redirected to files each exit 0 within 15 s and each file holds one parseable JSON document with running=false (a 0-byte output fails). Titles carry `flush`, `exit`, `detached`, `idleShutdown`, `stdout` and the uid abeedba8, and the spec cites [search-hosts.18]."""
+    ok, detail = _bug_ac("search", "search-hosts", 18, ["abeedba8"], "hosts", ["flush", "exit", "detached", "idleShutdown", "stdout"])
+    if not ok:
+        return False, detail
+    g = _sa_gate("build-bin")
+    if not g[0]:
+        return g
+    import subprocess, tempfile, time
+    bin_ = f"{SEARCH_DIR}/dist/bin/cli.js"
+    if not exists(bin_):
+        return False, f"{bin_} missing"
+    d = tempfile.mkdtemp(prefix="sh18-")
+    procs = []
+    for i in range(3):
+        fh = open(f"{d}/out{i}.json", "wb")
+        procs.append((subprocess.Popen(["node", bin_, "chromeStatus", "--cdp-port", "19999"], stdout=fh, stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL), fh))
+    deadline = time.time() + 15
+    bad = []
+    for i, (p, fh) in enumerate(procs):
+        try:
+            p.wait(timeout=max(0.1, deadline - time.time()))
+        except subprocess.TimeoutExpired:
+            p.kill()
+            bad.append(f"proc {i} did not exit within 15 s")
+        fh.close()
+        try:
+            doc = json.loads(read(f"{d}/out{i}.json"))
+            if p.returncode != 0 or json.dumps(doc).find("false") < 0:
+                bad.append(f"proc {i} exit {p.returncode} doc {str(doc)[:80]}")
+        except ValueError:
+            bad.append(f"proc {i}: output not one JSON document ({len(read(f'{d}/out{i}.json'))} chars)")
+    return not bad, "; ".join(bad) or "three backgrounded CLI runs exited 0 with JSON"
+
+
+@check("search-hosts", 19)
+def _sh19():
+    """(backlog 657bd597) Human-in-the-loop prompts never hang on a closed or non-interactive stdin: the CLI's `InteractionPort` implementation checks `process.stdin.isTTY` and the stream end; with a closed stdin or no TTY the gate prompt and the solved confirmation reject immediately with StealthSearchError HITL_ABORTED (no new code; the exit code comes from `exitCodeFor`, stable and non-zero) within 1000 ms and the tripped provider stays tripped. A spec under src/test/unit/hosts/ simulates a closed stdin stream and a non-TTY stdin through the real prompter with fake streams and fake timers; titles carry `isTTY`, `closed stdin`, `HITL_ABORTED`, `1000` and the uid 657bd597, and the spec cites [search-hosts.19]."""
+    files = nontest_ts(SEARCH_DIR)
+    if not any(re.search(r"isTTY", code_lines(read(f))) for f in files):
+        return False, "no host source checks stdin.isTTY"
+    return _bug_ac("search", "search-hosts", 19, ["657bd597"], "hosts", ["isTTY", "closed stdin", "HITL_ABORTED", "1000"])
+
+
+@check("search-hosts", 20)
+def _sh20():
+    """(backlog 9d05e8b2) The CLI and the MCP host report the same tripwire status: both route `tripwireStatus` through the one verb (neither src/cli.ts nor src/server.ts holds an expiry or TTL predicate of its own), and a spec under src/test/unit/hosts/ seeds a data dir with one live and one expired lock and asserts that the CLI projection and the MCP tool result list exactly the same tripped set (the expired lock in neither). Titles carry `tripwireStatus`, `expired`, `CLI`, `MCP`, `same` and the uid 9d05e8b2, and the spec cites [search-hosts.20]."""
+    own = [f for f in (f"{SEARCH_DIR}/src/cli.ts", f"{SEARCH_DIR}/src/server.ts") if exists(f)]
+    dup = [f for f in own if re.search(r"expiresAt|\bttl\b|Date\.now\(\)", code_lines(read(f)), re.I)]
+    if len(own) < 2 or dup:
+        return False, f"hosts present={len(own)} own expiry predicate in {dup}"
+    return _bug_ac("search", "search-hosts", 20, ["9d05e8b2"], "hosts", ["tripwireStatus", "expired", "CLI", "MCP", "same"])
+
+
+@check("search-hosts", 21)
+def _sh21():
+    """(backlog 86ed154e) The CLI never exits 0 with empty output: every operation writes one non-empty JSON document to stdout before exit 0, and an empty or undefined verb result becomes a typed HOST_BOOT_FAILED failure with a non-zero exit (`HOST_BOOT_FAILED: <message>` on one stderr line) instead of a silent exit 0. A spec under src/test/unit/hosts/ runs three CLI runner invocations concurrently with fake verbs (one returning undefined) and asserts three stdout documents or a typed failure each; titles carry `empty`, `undefined`, `HOST_BOOT_FAILED`, `stdout`, `concurrent` and the uid 86ed154e, and the spec cites [search-hosts.21]."""
+    return _bug_ac("search", "search-hosts", 21, ["86ed154e"], "hosts", ["empty", "undefined", "HOST_BOOT_FAILED", "stdout", "concurrent"])

@@ -190,3 +190,23 @@ def _sm4():
     hosts = [d for d in deps if d.startswith("@adhd/apigen") or d == "commander"]
     o = ownership_ok("core-seam")
     return bool(m) and not env and "@adhd/sox-service-proxy" not in m and not hosts and o[0], f"env readers={env} host deps={hosts} {o[1]}"
+
+
+# ---------------------------------------------------------------- backlog fold-in (2026-10-14 search bugs)
+@check("core-seam", 5)
+def _sm5():
+    """(backlog e093636f) The legacy heartbeat reader stays out of the core: src/lib/managers.ts exists and its options carry no heartbeat setting, and a seam spec under src/test/unit/seam/ asserts at the type level (`// @ts-expect-error`) that `ChromeManagerOptions` has no `legacyHeartbeatPath` or `heartbeatPath` and that configuring the seam reads no heartbeat file; the static absence scan stays chrome-lifecycle.24. Titles carry `legacyHeartbeatPath`, `@ts-expect-error` and the uid e093636f, and the spec cites [core-seam.5]."""
+    m = _managers()
+    if not m or re.search(r"heartbeat", code_lines(m), re.I):
+        return False, f"managers.ts present={bool(m)} heartbeat mention={bool(re.search('heartbeat', code_lines(m), re.I))}"
+    return _bug_ac("core", "core-seam", 5, ["e093636f"], "seam", ["legacyHeartbeatPath", "@ts-expect-error"])
+
+
+@check("core-seam", 6)
+def _sm6():
+    """(backlog 7f881aa7) The attach and kill paths check profile identity before they touch a process, as a filter on the existing paths (defaults stay port 9222 and the Chrome-CDP profile dir per backlog 8332a825; both are exported constants overridable through the typed options and every check uses the RESOLVED profile): `launchChrome` and `ensureChromeRunning` attach to a reachable listener only when it is this tool's own Chrome (its `--user-data-dir` equals the resolved profile dir, read through an injected process probe, or the profile's DevToolsActivePort names the port); a reachable foreign Chrome (the operator's real profile) is not attached to and raises LifecycleError LAUNCH_FAILED with detail reason `foreign-profile` (no new code: the six lifecycle codes are pinned); `killChrome(port)` and the reaper's port-occupant path signal only a pid whose command line carries the resolved `--user-data-dir`, never an arbitrary port listener, and skip with a logged reason otherwise. Specs under src/test/unit/seam/ (no node:child_process import: the probe is injected) simulate own Chrome attached, foreign Chrome refused, kill of a foreign occupant skipped, kill of an own occupant done and an override profile dir honored; titles carry `foreign-profile`, `LAUNCH_FAILED`, `user-data-dir`, `killChrome`, `9222`, `probe` and the uid 7f881aa7, and the spec cites [core-seam.6]. `nx run stealth-core-browser:test` (the whole project, the completed lifecycle and cdp specs included; kill.spec.ts and launch.spec.ts may adapt their fixtures, never their assertions) exits 0."""
+    br = code_lines(read(f"{CORE_DIR}/src/lib/cdp/browser.ts"))
+    if not re.search(r"foreign-profile", br) or not re.search(r"user-data-dir", br):
+        return False, "browser.ts has no foreign-profile refusal or user-data-dir identity filter"
+    return _bug_ac("core", "core-seam", 6, ["7f881aa7"], "seam",
+                   ["foreign-profile", "LAUNCH_FAILED", "user-data-dir", "killChrome", "9222", "probe"], nx_all=True)
