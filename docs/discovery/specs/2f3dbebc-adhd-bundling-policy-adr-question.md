@@ -34,3 +34,9 @@ AC1/AC4 (E) S over dist text scans + P for `verify-dist-load` (existing target; 
 ## Risks / serialization
 - Highest blast radius in the batch: every package build; all caches invalidate. Do not run in parallel with any spec touching `tools/nx-plugins/deps/**` (spec fbbb1464 — serialize fbbb1464 first; it is ready now).
 - Open for user: rule on ADR-0017; until then do not change `externalize.mjs`.
+
+## Product revision
+dor (product): needs-decision (ADR-level, technical). Not decided by product. The drafted question above is forwarded to architect-decision verbatim (one question, neutral framing, verdict space APPROVE E | B | H | INSUFFICIENT | ESCALATE-ARCHITECT). Because the verdict space includes INSUFFICIENT, the evidence list in "Evidence needed" is to be gathered BEFORE dispatch (per-package inlined `@adhd/*` list for the 31 vite configs; published-range correctness; `updateDependents` behavior) or the one-shot will return INSUFFICIENT and spend the dispatch.
+Product inputs (WHAT/WHY only): the harm is real and demonstrated (a base fix inert until the dependent is republished, 0.2.3 -> 0.2.4); the product requirement is "a fix in a dependency reaches consumers without republishing every dependent, or the release process makes that republish impossible to forget". Either E, B or H meets it; product has no preference among them.
+Hard ordering: fbbb1464 first (both read `tools/nx-plugins/deps/**`). Do not touch `externalize.mjs` before the ruling.
+Priority: P2 now (verdict + evidence gathering), implementation rank 8 (highest blast radius, cache-wide invalidation).
