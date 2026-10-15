@@ -47,6 +47,7 @@
  *   e.g.  node with-dist-lock.mjs sh -c "vite build && node dist/index.js ir-artifact --out dist/api.ir.json"
  *         node with-dist-lock.mjs vitest run --config entrypoint/backlog/vitest.e2e.config.ts
  *
+ * The child's PATH is prefixed with <repo>/node_modules/.bin, so the usage above works outside nx.
  * The child inherits stdio and this process's exit code. The lock is released
  * on normal exit and on SIGINT/SIGTERM. A crashed holder's lock is force-broken
  * after STALE_MS (see below) so a dead run can never deadlock the gate forever.
@@ -54,7 +55,7 @@
 import { createRequire } from 'node:module';
 import { spawn } from 'node:child_process';
 import { mkdirSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { delimiter, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const HERE = dirname(fileURLToPath(import.meta.url)); // entrypoint/backlog/tools
@@ -104,7 +105,11 @@ function release() {
   releaseLock(lock);
 }
 
-const child = spawn(cmd, args, { stdio: 'inherit', env: process.env });
+// Resolve the child through the workspace's node_modules/.bin even when run outside nx
+// (nx is what normally puts it on PATH); an unset PATH yields just that directory.
+const BIN_DIR = join(REPO_ROOT, 'node_modules', '.bin');
+const childPath = process.env.PATH ? `${BIN_DIR}${delimiter}${process.env.PATH}` : BIN_DIR;
+const child = spawn(cmd, args, { stdio: 'inherit', env: { ...process.env, PATH: childPath } });
 const forward = (sig) => {
   try {
     child.kill(sig);
