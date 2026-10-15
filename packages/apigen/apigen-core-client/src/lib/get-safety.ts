@@ -8,8 +8,10 @@
 // "Properly typed primitives" (BACKLOG FEAT-APIGEN-022 point 4): only
 // `string`/`number`/`boolean`/`integer` round-trip reliably through a query
 // string with no serialization convention. `array`/`object`/`$ref`/union
-// (`oneOf`/`anyOf`/`allOf`) params are NOT eligible — Express's `qs` and
-// Fastify's default query parser disagree on nested-object encoding, so
+// (`oneOf`/`anyOf`/`allOf`) params are NOT eligible — except the extractor's own
+// rendering of an optional/nullable primitive, `oneOf: [{type:'null'},{type:T}]`,
+// which is exactly the documented `[T, 'null']` case (BACKLOG 59c34223). Express's
+// `qs` and Fastify's default query parser disagree on nested-object encoding, so
 // "properly typed primitives" is a hard boundary, not a heuristic.
 //
 // A zero-domain-param function (`properties: {}`) is vacuously primitive-only
@@ -29,6 +31,32 @@ interface PropertySchema {
 
 const PRIMITIVE_TYPES = new Set(['string', 'number', 'boolean', 'integer']);
 
+/**
+ * `true` iff `branches` is the extractor's rendering of an optional/nullable
+ * primitive (`limit?: number` under `strict`): `oneOf`/`anyOf` of exactly ONE
+ * bare primitive branch plus one or more bare `{ type: 'null' }` branches
+ * (e.g. `[{ type: 'null' }, { type: 'number' }]`). A union of two primitives
+ * (`number | string`) is NOT eligible — a query string cannot say which one a
+ * value like `"1"` was — and neither is any branch carrying `$ref`, nested
+ * composition, `enum` or other structure.
+ */
+function isNullablePrimitiveUnion(branches: unknown[] | undefined): boolean {
+  if (!Array.isArray(branches) || branches.length < 2) return false;
+  let primitives = 0;
+  for (const b of branches) {
+    if (typeof b !== 'object' || b === null) return false;
+    const { type, $ref, oneOf, anyOf, allOf } = b as PropertySchema;
+    if ($ref !== undefined || oneOf || anyOf || allOf) return false;
+    if (type === 'null') continue;
+    if (typeof type === 'string' && PRIMITIVE_TYPES.has(type)) {
+      primitives++;
+      continue;
+    }
+    return false;
+  }
+  return primitives === 1;
+}
+
 function isPrimitivePropertySchema(propSchema: unknown): boolean {
   if (typeof propSchema !== 'object' || propSchema === null) return false;
   const s = propSchema as PropertySchema;
@@ -37,7 +65,8 @@ function isPrimitivePropertySchema(propSchema: unknown): boolean {
   // shapes are never "properly typed primitives" — they need a $defs pool to
   // resolve and aren't guaranteed query-string round-trippable.
   if (s.$ref !== undefined) return false;
-  if (s.oneOf || s.anyOf || s.allOf) return false;
+  if (s.allOf) return false;
+  if (s.oneOf || s.anyOf) return isNullablePrimitiveUnion(s.oneOf ?? s.anyOf);
 
   const { type } = s;
   if (typeof type === 'string') return PRIMITIVE_TYPES.has(type);

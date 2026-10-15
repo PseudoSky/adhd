@@ -124,6 +124,12 @@ export interface InternalExtractionSession extends ExtractionSession {
   readonly generatorCache: Map<string, GeneratorEntry>;
   /** Memoized `mtimeMs:size` snapshot per file path (a run is a snapshot). */
   statVersion(pathStr: string): string;
+  /**
+   * Per entry file: every local file `sourceFileFor` walked for it (entry
+   * included, sorted). This is the set `extract()` reports as the files it
+   * read (`ExtractResult.sourceFiles`).
+   */
+  readonly referencedFiles: Map<string, string[]>;
 }
 
 /**
@@ -137,7 +143,11 @@ export interface InternalExtractionSession extends ExtractionSession {
  * once per `sourceFileFor()` call (once per extraction entry file per run),
  * not once per `buildSchema()` call.
  */
-function collectReferencedFiles(sf: SourceFile, seen: Set<string>): void {
+function collectReferencedFiles(
+  sf: SourceFile,
+  seen: Set<string>,
+  ownPackage: string | undefined = ownPackageBoundary(sf.getFilePath())
+): void {
   const specifierSourceFiles = [
     ...sf.getImportDeclarations().map((d) => d.getModuleSpecifierSourceFile()),
     ...sf.getExportDeclarations().map((d) => d.getModuleSpecifierSourceFile()),
@@ -145,7 +155,7 @@ function collectReferencedFiles(sf: SourceFile, seen: Set<string>): void {
   for (const target of specifierSourceFiles) {
     if (!target) continue; // unresolved (bare package import, ambient module, …)
     const targetPath = target.getFilePath();
-    if (targetPath.includes('/node_modules/')) continue;
+    if (isVendored(targetPath, ownPackage)) continue;
     if (seen.has(targetPath)) continue;
     seen.add(targetPath);
     try {
@@ -157,8 +167,40 @@ function collectReferencedFiles(sf: SourceFile, seen: Set<string>): void {
       // contributing to the composite version (matches fileVersion()'s own
       // 'nostat' sentinel behavior for a missing entry file).
     }
-    collectReferencedFiles(target, seen);
+    collectReferencedFiles(target, seen, ownPackage);
   }
+}
+
+const NODE_MODULES = '/node_modules/';
+
+/**
+ * When `entryPath` is itself an INSTALLED file (`…/node_modules/@scope/pkg/api.d.ts`)
+ * the package directory it lives in (`…/node_modules/@scope/pkg/`); otherwise
+ * `undefined`. The entry's own package is its source graph, not vendored code:
+ * excluding every `/node_modules/` path unconditionally dropped all of an
+ * installed entry's sibling `.d.ts` files, so an installed package's imported
+ * types were never tracked (backlog 39c4e00c).
+ */
+function ownPackageBoundary(entryPath: string): string | undefined {
+  const at = entryPath.lastIndexOf(NODE_MODULES);
+  if (at < 0) return undefined;
+  const segments = entryPath.slice(at + NODE_MODULES.length).split('/');
+  const nameSegments = segments[0]?.startsWith('@') ? 2 : 1;
+  if (segments.length <= nameSegments) return undefined;
+  return (
+    entryPath.slice(0, at + NODE_MODULES.length) +
+    segments.slice(0, nameSegments).join('/') +
+    '/'
+  );
+}
+
+/** A path inside `node_modules` that is not part of the entry's own installed package. */
+function isVendored(targetPath: string, ownPackage: string | undefined): boolean {
+  if (!targetPath.includes(NODE_MODULES)) return false;
+  if (ownPackage !== undefined && targetPath.startsWith(ownPackage)) {
+    return `/${targetPath.slice(ownPackage.length)}`.includes(NODE_MODULES);
+  }
+  return true;
 }
 
 /** Compute a file's `mtimeMs:size` version string (uncached). */
@@ -308,7 +350,7 @@ export function collectLocalImportPaths(entryPath: string): string[] {
     }
   }
   const seen = new Set<string>([entryPath]);
-  collectReferencedFiles(sf, seen);
+  collectReferencedFiles(sf, seen, ownPackageBoundary(entryPath));
   return [...seen].sort();
 }
 
@@ -335,6 +377,7 @@ export function createExtractionSession(): ExtractionSession {
     aliasCache: new WeakMap(),
     zodImportCache: new WeakMap(),
     generatorCache: new Map(),
+    referencedFiles: new Map(),
 
     projectFor(tsconfig?: string): Project {
       if (disposed)
@@ -392,11 +435,12 @@ export function createExtractionSession(): ExtractionSession {
       // we only chase the user's own source graph, not vendored .d.ts churn.
       if (entry) {
         const seen = new Set<string>([filePath]);
-        collectReferencedFiles(sf, seen);
+        collectReferencedFiles(sf, seen, ownPackageBoundary(filePath));
         for (const refPath of seen) {
           if (refPath === filePath) continue;
           entry.fileVersions.set(refPath, this.statVersion(refPath));
         }
+        this.referencedFiles.set(filePath, [...seen].sort());
       }
 
       return sf;
@@ -418,6 +462,7 @@ export function createExtractionSession(): ExtractionSession {
       disposed = true;
       this.schemaCache.clear();
       this.generatorCache.clear();
+      this.referencedFiles.clear();
       statCache.clear();
     },
   };
