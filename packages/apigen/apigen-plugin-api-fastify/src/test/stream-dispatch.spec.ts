@@ -22,8 +22,9 @@
  * resolves on whichever happens first, the first frame write or the SSE call
  * settling, so a broken implementation fails on an assertion instead of hanging.
  *
- * Red expectation: on the pre-fix commit c61683d2^ the SSE call settles without
- * writing the Date frame (or writes an error frame), so `frame 1 contains
+ * red: pending (user hold) — expected to fail at 5701848e^ (the parent of the
+ * stream-encoding fix 5701848e) because the SSE call settles without writing the
+ * Date frame (or writes an error frame), so `frame 1 contains
  * "2024-01-15T12:00:00.000Z"` fails and the latch-state assertion is never reached.
  */
 
