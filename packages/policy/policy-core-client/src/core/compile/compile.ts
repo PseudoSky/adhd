@@ -15,13 +15,16 @@ import { buildIndex } from './index-builder';
 import { orderAndValidate } from './layers';
 import { computeNarrowingCoverage } from './narrowing';
 import { compilePermissions } from './permissions';
+import { checkToolIds } from './tool-ids';
 
 /** The compiler version stamped into every compiled policy; part of `inputHash`. */
 export const COMPILER_VERSION = '1';
 
 /**
  * Pure, deterministic, never throws on user input. Steps: `orderAndValidate`
- * -> `compileDefaults` / `compilePermissions` -> `checkDeclarations` ->
+ * -> `compileDefaults` / `compilePermissions` -> `checkDeclarations` /
+ * `checkToolIds` (a `tool:` value with the pre-BA-5 `.` separator is a
+ * `schema` error naming the `/` id) ->
  * `computeNarrowingCoverage` -> `buildIndex` -> assemble. `inputHash` hashes
  * the ordered layers + compiler version; `contentHash` hashes the compiled
  * object without `contentHash`. `source` strings are not hashed. `ok: false`
@@ -38,7 +41,7 @@ export function compile(
     const defaults = compileDefaults(ordered, documents);
     const permissions = compilePermissions(ordered, documents);
     const declared = checkDeclarations({ ordered, documents, defaults, permissions });
-    const errors: IPolicyIssue[] = [...issues, ...declared.errors];
+    const errors: IPolicyIssue[] = [...issues, ...checkToolIds(ordered, documents), ...declared.errors];
     if (errors.length > 0) return { ok: false, errors, warnings: declared.warnings };
 
     const body = {

@@ -16,5 +16,6 @@ export { parsePolicyYaml, stringifyPolicyYaml } from './config/yaml';
 export { createDecider } from './decider';
 export type { IDecider, IDeciderRequest, IDeciderResult } from './decider';
 export { draftPolicy, DEFAULT_SECRET_LIKE_PATTERNS } from './draft';
+export { toolIdForOldSeparator, normalizeToolId } from '../core/compile/tool-ids';
 export { verifyLayers } from './verify';
 export { PolicyLoadError, PolicyCompileError } from '../core';

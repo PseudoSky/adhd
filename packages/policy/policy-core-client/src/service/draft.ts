@@ -1,4 +1,5 @@
 import { compile } from '../core';
+import { normalizeToolId } from '../core/compile/tool-ids';
 import type {
   Effect,
   FilterExpression,
@@ -68,7 +69,9 @@ function effectFor(destructive: boolean, readOnly: boolean): Effect {
 /**
  * D-09 / D-16. Pure and deterministic. Declares `read_roots` / `write_roots`
  * (kind `paths`) only when an operation needs them. One permission per
- * operation (input order): `tool` = the operation name; effect `deny` when
+ * operation (input order): `tool` = the operation name as a `/` id (BA-5: a
+ * name written with the pre-BA-5 `.` separator, `files.read`, is drafted as
+ * `files/read`, so the draft never writes an id the loader rejects); effect `deny` when
  * destructive, `allow` when read-only, else `ask`. Each argument of kind `path`
  * on a non-denied operation gets `{ <arg>: { _within: '$attributes.<roots>' } }`;
  * `url` / `host` arguments get no constraint and an inferred note; a list-valued
@@ -94,6 +97,7 @@ export function draftPolicy(input: {
   let usesWrite = false;
 
   for (const operation of input.operations) {
+    const tool = normalizeToolId(operation.name);
     const readOnly = operation.hints?.readOnly === true;
     const destructive = operation.hints?.destructive === true;
     const effect = effectFor(destructive, readOnly);
@@ -104,7 +108,7 @@ export function draftPolicy(input: {
         if (!pathArgNames.includes(arg.name)) pathArgNames.push(arg.name);
         if (isListType(arg.type)) {
           inferred.push({
-            operation: operation.name,
+            operation: tool,
             argument: arg.name,
             kind,
             reason: 'list-valued: not constrained, review (the secret-path deny matches a single path string, not each element of a list)',
@@ -116,11 +120,11 @@ export function draftPolicy(input: {
           args[arg.name] = { _within: `$attributes.${readOnly ? readRoots : writeRoots}` };
         }
       } else if (kind === 'url' || kind === 'host') {
-        inferred.push({ operation: operation.name, argument: arg.name, kind, reason: 'no constraint drafted' });
+        inferred.push({ operation: tool, argument: arg.name, kind, reason: 'no constraint drafted' });
       }
       if (arg.provenance === 'inferred' || kind === undefined) {
         inferred.push({
-          operation: operation.name,
+          operation: tool,
           argument: arg.name,
           kind: kind ?? 'unknown',
           reason:
@@ -131,7 +135,7 @@ export function draftPolicy(input: {
       }
     }
     permissions.push({
-      tool: operation.name,
+      tool,
       effect,
       ...(Object.keys(args).length > 0 ? { args: args as FilterExpression } : {}),
     });
