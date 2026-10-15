@@ -148,7 +148,7 @@
       "executor": "nx:run-commands",
       "cache": false,
       "options": {
-        "command": "node --test tools/nx-plugins/build/executors/lockfile/lockfile-gate.e2e.spec.mjs"
+        "command": "node --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=./tools/nx-plugins/test/metrics/node-test-reporter.mjs --test-reporter-destination=stdout tools/nx-plugins/build/executors/lockfile/lockfile-gate.e2e.spec.mjs"
       },
       "metadata": {
         "description": "E2E proof the lockfile gate has teeth (backlog 4f26493e AC2 / e98bb455 AC1): real `corepack pnpm` against a scratch workspace and a drifted real package.json (restored in finally) must turn the gate red, name the drift, leave pnpm-lock.yaml byte-identical, and regenerateLockfile must turn it green. Invoked by the CI `main` job."
@@ -184,7 +184,7 @@
         "backlog:build"
       ],
       "options": {
-        "command": "node --test docs/plan/actionable-store/demo/fixture/demo-gate.spec.mjs"
+        "command": "node --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=./tools/nx-plugins/test/metrics/node-test-reporter.mjs --test-reporter-destination=stdout docs/plan/actionable-store/demo/fixture/demo-gate.spec.mjs"
       },
       "metadata": {
         "description": "Proves the demo-acceptance gate has teeth (backlog ddceb069): a deliberately broken R-control turns the runner red; the unbroken runner is green. Invoked by the CI `main` job after `demo-acceptance`."
@@ -194,7 +194,7 @@
       "executor": "nx:run-commands",
       "cache": false,
       "options": {
-        "command": "node --test tools/evidence/evidence.spec.mjs"
+        "command": "node --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=./tools/nx-plugins/test/metrics/node-test-reporter.mjs --test-reporter-destination=stdout tools/evidence/evidence.spec.mjs"
       },
       "metadata": {
         "description": "Evidence tooling gate (backlog 65788fd8 D-AC4): drives check-suite-tree-state, commit-mine and audit-closed-items as real processes against throwaway git repos; each tool has a negative control (a broken copy must go red). Exit code gates. Invoked by the CI `main` job."
@@ -205,7 +205,7 @@
       "cache": true,
       "dependsOn": [],
       "options": {
-        "command": "node --test scripts/worktree-scripts.spec.mjs",
+        "command": "node --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=./tools/nx-plugins/test/metrics/node-test-reporter.mjs --test-reporter-destination=stdout scripts/worktree-scripts.spec.mjs",
         "cwd": "."
       },
       "inputs": [
