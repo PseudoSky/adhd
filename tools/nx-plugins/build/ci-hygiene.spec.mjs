@@ -12,6 +12,12 @@
  *   7b7d5e38 C-AC8  scripts/worktree-setup.sh gives a worktree a REAL node_modules
  *   ddceb069 C-AC9  demo gate is an nx target invoked by CI (its teeth: docs/plan/actionable-store/demo/fixture/demo-gate.spec.mjs)
  *
+ * Failure mode guarded: release/CI hygiene gates silently unwired or green on a defective tree.
+ * Tier: P for the nested `nx run` (C-AC5, whose point is the real nx spawn and vitest file count),
+ * the tree-clean CLI exit codes (C-AC7) and worktree-setup.sh (C-AC8); S for the rest.
+ * Item: qa-variance (C-AC6 drives the exported runParity in-process instead of 3 node child spawns;
+ * C-AC7 fixture repo uses `git -c` identity: 3 spawns instead of 5). Red run: pending (not run per user).
+ *
  * Run: node --test tools/nx-plugins/build/ci-hygiene.spec.mjs
  */
 import { test } from 'node:test';
@@ -154,7 +160,7 @@ test('420a7051 C-AC6: no publishable project is behind published-state.json (rea
   assert.ok(ok);
 });
 
-test('420a7051 C-AC6: the CLI exits 0 on parity and 1 when a source version is behind (exit codes)', () => {
+test('420a7051 C-AC6: the CLI exits 0 on parity and 1 when a source version is behind (exit codes)', async () => {
   const cli = join(here, 'executors/range-check/check-published-parity.mjs');
   const root = tmp('c-ac6-');
   const mk = (srcVersion, pubVersion) => {
@@ -166,18 +172,18 @@ test('420a7051 C-AC6: the CLI exits 0 on parity and 1 when a source version is b
     writeFileSync(join(root, 'published-state.json'), JSON.stringify({ '@adhd/d-core-x': { version: pubVersion } }));
   };
   try {
-    // the script locates the workspace from ITS OWN location, so drive the exported runner with an explicit root
-    const run = (src, pub) => {
+    // the script locates the workspace from ITS OWN location, so drive the exported runner with an explicit root.
+    // In-process: runParity is a pure async function (main() is entry-guarded), and the CLI's exit code is
+    // exactly `ok ? 0 : 1`, so mapping the result the same way asserts the same contract without a child spawn.
+    const { runParity } = await import(pathToFileURL(cli).href);
+    const run = async (src, pub) => {
       mk(src, pub);
-      const r = sh(process.execPath, ['--input-type=module', '-e',
-        `import { runParity } from ${JSON.stringify(pathToFileURL(cli).href)};
-         const r = await runParity({ workspaceRoot: ${JSON.stringify(root)} });
-         process.exit(r.ok ? 0 : 1);`]);
-      return r.status;
+      const r = await runParity({ workspaceRoot: root });
+      return r.ok ? 0 : 1;
     };
-    assert.equal(run('0.1.4', '0.1.4'), 0, 'equal is settled');
-    assert.equal(run('0.1.5', '0.1.4'), 0, 'ahead is an in-progress bump');
-    assert.equal(run('0.1.3', '0.1.4'), 1, 'behind is the 420a7051 defect');
+    assert.equal(await run('0.1.4', '0.1.4'), 0, 'equal is settled');
+    assert.equal(await run('0.1.5', '0.1.4'), 0, 'ahead is an in-progress bump');
+    assert.equal(await run('0.1.3', '0.1.4'), 1, 'behind is the 420a7051 defect');
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -195,11 +201,9 @@ const TREE_CLEAN = join(here, 'executors/tree-clean/check-tree-clean.mjs');
 function scratchRepo() {
   const root = tmp('c-ac7-');
   sh('git', ['init', '-q'], { cwd: root });
-  sh('git', ['config', 'user.email', 't@example.com'], { cwd: root });
-  sh('git', ['config', 'user.name', 'T'], { cwd: root });
   writeFileSync(join(root, 'tracked.txt'), 'a\n');
   sh('git', ['add', '-A'], { cwd: root });
-  sh('git', ['commit', '-q', '-m', 'init'], { cwd: root });
+  sh('git', ['-c', 'user.email=t@example.com', '-c', 'user.name=T', '-c', 'commit.gpgsign=false', 'commit', '-q', '-m', 'init'], { cwd: root });
   return root;
 }
 const wiresTreeClean = (yaml) => /nx run @adhd\/source:check-tree-clean/.test(yaml);

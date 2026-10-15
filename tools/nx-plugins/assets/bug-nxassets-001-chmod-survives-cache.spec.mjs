@@ -24,9 +24,14 @@
  *   4. BEHAVIOUR: a dist whose bin lost its executable bit (the cache-restore
  *      shape) is repaired by `writeDistManifest`, on a real temp fs.
  *
+ * Failure mode guarded: a cache-restored bin without its executable bit ships non-runnable.
+ * Tier: S (real temp fs, no spawn). Item: qa-variance (the first-use `require` of the manifest
+ * module moved to load time so cold module compile is not charged to a test body; the three
+ * read-only plugin cases share one fixture). Red run: pending (tests not run per user).
+ *
  * Run: node --test tools/nx-plugins/assets/bug-nxassets-001-chmod-survives-cache.spec.mjs
  */
-import { test } from 'node:test';
+import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, chmodSync, statSync } from 'node:fs';
@@ -37,6 +42,8 @@ import { fileURLToPath } from 'node:url';
 const require = createRequire(import.meta.url);
 const { createNodes } = require('./plugin.js');
 const [, createNodesFn] = createNodes;
+// Loaded once at module load so the cold compile of the manifest module is not charged to a test body.
+const { writeDistManifest } = require('../build/executors/manifest/generate-manifest.js');
 
 /** Build a throwaway workspace containing one buildable, bin-having project. */
 function fixture() {
@@ -50,6 +57,14 @@ function fixture() {
   return { ws, projectRoot, cleanup: () => rmSync(ws, { recursive: true, force: true }) };
 }
 
+// The three plugin-shape cases only read the fixture (createNodes does not write), so one is shared.
+let sharedFixture = null;
+function sharedFx() {
+  if (!sharedFixture) sharedFixture = fixture();
+  return sharedFixture;
+}
+after(() => { if (sharedFixture) sharedFixture.cleanup(); });
+
 function targetsFor(ws, projectRoot) {
   // Nx 23 plugin API: createNodes[1] takes the ARRAY of matched config files and
   // returns [configFile, result] tuples.
@@ -58,31 +73,31 @@ function targetsFor(ws, projectRoot) {
 }
 
 test('chmod-bin is declared uncacheable — its body must run on EVERY invocation', () => {
-  const f = fixture();
-  try {
+  const f = sharedFx();
+  {
     const targets = targetsFor(f.ws, f.projectRoot);
     assert.ok(targets['chmod-bin'], 'a bin-having project must get an inferred chmod-bin target');
     assert.equal(targets['chmod-bin'].cache, false, 'chmod-bin must be uncacheable, or the fix regresses to the original bug');
     assert.equal(targets['chmod-bin'].executor, '@adhd/nx-assets:chmod-bin');
-  } finally { f.cleanup(); }
+  }
 });
 
 test('assets depends on build ONLY — chmod-bin is NOT in any assets consumer\'s graph (cache-dag AC9)', () => {
-  const f = fixture();
-  try {
+  const f = sharedFx();
+  {
     const targets = targetsFor(f.ws, f.projectRoot);
     assert.deepEqual(targets.assets.dependsOn, ['build']);
     assert.ok(!targets.assets.dependsOn.includes('chmod-bin'),
       'an uncacheable chmod-bin in assets\' dependsOn makes every build/test graph miss');
-  } finally { f.cleanup(); }
+  }
 });
 
 test('assets does NOT claim the bin path as its own output (would reintroduce BUG-026)', () => {
-  const f = fixture();
-  try {
+  const f = sharedFx();
+  {
     const targets = targetsFor(f.ws, f.projectRoot);
     assert.ok(!targets.assets.outputs.includes('{projectRoot}/dist/index.js'));
-  } finally { f.cleanup(); }
+  }
 });
 
 test('the real plugin, applied to a real bin-having project, keeps chmod-bin uncached and out of assets\' deps', () => {
@@ -95,7 +110,6 @@ test('the real plugin, applied to a real bin-having project, keeps chmod-bin unc
 });
 
 test('BEHAVIOUR: a cache-restored dist whose bin lost its executable bit is repaired by writeDistManifest', async () => {
-  const { writeDistManifest } = require('../build/executors/manifest/generate-manifest.js');
   const rootDir = mkdtempSync(join(tmpdir(), 'adhd-bugnxassets001-wdm-'));
   try {
     const projectRoot = 'entrypoint/demo-cli';
