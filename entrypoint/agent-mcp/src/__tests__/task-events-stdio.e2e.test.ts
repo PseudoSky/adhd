@@ -1,7 +1,7 @@
 /**
  * guards: the built agent-mcp server does not advertise or serve task_events over stdio the way a host calls it
  * tier: P
- * cites: facd4aaa AC1, AC5
+ * cites: facd4aaa AC1, AC5; plan discovery-sweep-1014 blind-review A2 TEB-I2
  * gap: This cannot be observed at tier S because only a spawned built server over stdio exercises tool registration, the dist artifact, the environment cascade and JSON-RPC framing.
  *
  * task-events-stdio.e2e.test.ts — facd4aaa AC5. The `task_events` tool, as a host reaches it.
@@ -38,6 +38,15 @@
  * real run; those payloads are covered only by the seeded task above), and a byte-budget truncation over the
  * wire (covered at tier S in task-events-tool.test.ts).
  *
+ * plan discovery-sweep-1014 blind-review A2 TEB-I2: the same server also holds a second seeded task with a 300 KiB
+ * `result` row (written before the 16000-char bound existed), a 2 MiB row, and a small row. Read through the real
+ * JSON-RPC client, the first comes back clipped to 16000 chars with `payload_clipped`, the second as `too_large`
+ * with `payload_bytes` and a null payload, the third unchanged, and the whole response is far below the MCP
+ * output limit. Failure mode: the tool returns the 300 KiB string and the 2 MiB payload whole over the wire.
+ * Red run (seeded fault in the built reader: the per-field clip and the row bound disabled, rebuilt, `npx nx run
+ * agent-mcp:e2e -- task-events-stdio`, exit 1): the I2 case fails on `expect(page.truncated_by_bytes).toBeUndefined()`
+ * (`expected true to be false`), because the 300 KiB and 2 MiB rows come back whole and overflow the page budget.
+ *
  * Not env-gated (ADR-0009 e2e lane). Fails loudly if the built entry is missing; it never skips.
  *
  * Tag: regression:facd4aaa (AC5).
@@ -67,6 +76,7 @@ const REPO_ROOT = path.resolve(__dirname, "..", "..", "..", "..");
 const TMP_ROOT = path.join(REPO_ROOT, "tmp", "agent-mcp", "task-events-stdio");
 
 const TASK_ID = "a7c3e1f0-5b2d-4e8a-9c61-0d4f2b8e7a19";
+const BIG_TASK_ID = "c9e5a3b2-7d4f-4a0c-9e83-2f6b4d0a9c31";
 const UNKNOWN_TASK_ID = "b8d4f2a1-6c3e-4f9b-8d72-1e5a3c9f8b20";
 const SHARED_CREATED_AT = "2026-01-01T00:00:00.000Z";
 
@@ -141,6 +151,27 @@ function seedOperationalStore(file: string): void {
     JSON.stringify({ ok: true }),
     SHARED_CREATED_AT,
   );
+  // plan discovery-sweep-1014 blind-review A2 TEB-I2: rows no writer bound would have produced.
+  sqlite
+    .prepare(
+      "INSERT INTO tasks (id, session_id, status, prompt, created_at, updated_at, completed_at) VALUES (?, NULL, 'completed', 'seeded big', ?, ?, ?)",
+    )
+    .run(BIG_TASK_ID, SHARED_CREATED_AT, SHARED_CREATED_AT, SHARED_CREATED_AT);
+  insert.run(
+    "40000000-0000-4000-8000-000000000004",
+    BIG_TASK_ID,
+    "TOOL_RESULT",
+    JSON.stringify({ tool: "legacy", result: `BEGIN${"r".repeat(300 * 1024 - 8)}END` }),
+    SHARED_CREATED_AT,
+  );
+  insert.run(
+    "50000000-0000-4000-8000-000000000005",
+    BIG_TASK_ID,
+    "TOOL_RESULT",
+    JSON.stringify({ tool: "huge", blob: "h".repeat(2 * 1024 * 1024) }),
+    SHARED_CREATED_AT,
+  );
+  insert.run("60000000-0000-4000-8000-000000000006", BIG_TASK_ID, "TASK_COMPLETED", JSON.stringify({ ok: true }), SHARED_CREATED_AT);
   sqlite.close();
 }
 
@@ -260,6 +291,40 @@ describe("facd4aaa AC5 task_events over stdio JSON-RPC against the built server"
     const result = await client.callTool({ name: "task_events", arguments: { task_id: TASK_ID, limit: 501 } });
 
     expect(result.isError).toBe(true);
+  });
+
+  it("plan discovery-sweep-1014 blind-review A2 TEB-I2: a 300 KiB legacy result is clipped with payload_clipped and a 2 MiB row is too_large, over stdio, in a response far under the MCP limit", async () => {
+    const result = await client.callTool({ name: "task_events", arguments: { task_id: BIG_TASK_ID } });
+    expect(result.isError, textOf(result)).not.toBe(true);
+    const wire = textOf(result);
+    const page = JSON.parse(wire) as {
+      total: number;
+      has_more: boolean;
+      truncated_by_bytes?: true;
+      events: Array<{
+        id: string;
+        type: string;
+        payload: Record<string, unknown> | null;
+        payload_error?: string;
+        payload_bytes?: number;
+        payload_clipped?: Array<{ field: string; original_chars: number }>;
+      }>;
+    };
+
+    expect(page.total).toBe(3);
+    expect(page.has_more).toBe(false);
+    expect(page.truncated_by_bytes).toBeUndefined();
+    const [legacy, huge, done] = page.events;
+    const clipped = (legacy!.payload as { result: string }).result;
+    expect(clipped).toHaveLength(16_000);
+    expect(clipped.startsWith("BEGIN")).toBe(true);
+    expect(clipped.endsWith("END")).toBe(true);
+    expect(legacy!.payload_clipped).toEqual([{ field: "result", original_chars: 307_200 }]);
+    expect(huge!.payload).toBeNull();
+    expect(huge!.payload_error).toBe("too_large");
+    expect(huge!.payload_bytes).toBeGreaterThan(2 * 1024 * 1024);
+    expect(done!.payload).toEqual({ ok: true });
+    expect(Buffer.byteLength(wire, "utf8")).toBeLessThan(64 * 1024);
   });
 
   it("facd4aaa AC5: a REAL task run through the server (loopback model only) is read back over stdio in recorded order with consistent paging", async () => {
