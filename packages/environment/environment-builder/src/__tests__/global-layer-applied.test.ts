@@ -1,4 +1,6 @@
 /**
+ * This file is the 0945d1b9 AC3 test (the spec names it `global-layer-applied.spec.ts`; `.test.ts` matches its neighbours).
+ *
  * guards: the GLOBAL config layer (`$HOME/.adhd/<project>/<namespace>/config.yaml`) really reaches the resolved
  *   config, and an absent global file resolves silently to the default. This is the premise of the spawn-isolation
  *   posture: a child process that inherits the real HOME reads the machine's real global layer, so spawned test
@@ -102,6 +104,12 @@ describe('the global layer file is applied (0945d1b9 AC3)', () => {
   it('an absent global file resolves silently: no throw, an undefined global layer, and the default applies', () => {
     const home = mkHome();
     vi.stubEnv('HOME', home);
+    // the system root reads XDG_DATA_HOME / APPDATA from the ambient env (roots.ts systemAppDir), which a HOME stub does
+    // not redirect: point them at an empty throwaway dir so a developer's real system layer cannot leak in
+    const emptyAppData = mkHome();
+    vi.stubEnv('XDG_DATA_HOME', emptyAppData);
+    vi.stubEnv('XDG_CONFIG_HOME', emptyAppData);
+    vi.stubEnv('APPDATA', emptyAppData);
     const roots = resolveRoots({ project: PROJECT, namespace: DEFAULT_NAMESPACE, orgNamespace: DEFAULT_ORG_NAMESPACE });
     expect(() => loadLayerFiles(roots)).not.toThrow();
     expect(loadLayerFiles(roots).global).toBeUndefined();
