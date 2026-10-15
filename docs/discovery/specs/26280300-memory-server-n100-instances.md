@@ -38,3 +38,12 @@ AC0: P (real processes, <=10 s budget not met -> classify tier H long lane; just
 ## Risks / serialization
 - Shares store-adapter `integrity.ts`/sidecar code with spec 87799e1d — serialize after it. Resource: 100 servers x embedding model is heavy; fleet uses the mock-by-default embed path (spec `bl567-mock-by-default.spec.ts` shows the pattern).
 - Open for user/product: accept D1 (diagnose before spec), the AC4 bound, and which lane (not CI per-PR) hosts N=100.
+
+## Product revision
+dor (product): ready for the DIAGNOSTIC SLICE only (D1 + AC0). The fix slice stays unspecced by design and is filed after AC0 lands.
+Resolved:
+- D1 accepted (diagnose first). The deliverable of this slice is AC0 plus a root-cause statement with evidence (per-instance jsonl correlated by pid/time, launchd log, the `.tshm` rename code path, minimal 2-instance repro on distinct db). The diagnosing agent is `debug`, read-only on the sox tree until the cause is named; no edits to `integrity.ts`, `sidecar-retention.ts`, `store-lease.ts`.
+- N=100 lane: NOT per-PR CI. Default lane N=4 (tier P); N=100 runs in an on-demand/nightly long lane. Decided as a product call (cost: 100 servers exceeds any runner).
+- AC4 bound: provisional, not guessed. This slice records time-to-`memory_ping` vs N (N=1,4,16); the bound is set from that data in the fix slice. Provisional ceiling to carry into the fix spec: p95 at N=4 <= 2x single-instance (the architect's example), not binding until measured.
+- Priority of the user's stated outcome ("100 servers without problem") stays HIGH; the observed prod watchdog kill loop makes the diagnostic slice the urgent part: P1.
+Serialization: diagnostic slice is read-only and can start now. The FIX slice must follow 87799e1d (shared `integrity.ts`). Rank 6 (unknown size, high value; first 5 are cheap and certain). Follow-ups to file via backlog-operator: fix item (after AC0), long-lane N=100 harness.
