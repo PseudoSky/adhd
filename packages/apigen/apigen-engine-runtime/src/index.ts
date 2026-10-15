@@ -97,7 +97,11 @@ export {
   readUseOptions,
   adaptCoreLayer,
 } from './lib/package-invoker';
-export type { UsePlugin, UseOptions } from './lib/package-invoker';
+export type {
+  UsePlugin,
+  UseOptions,
+  PackageInvokerOptions,
+} from './lib/package-invoker';
 export { dispatchForPlan } from './lib/dispatch-for-plan';
 export {
   DEFAULT_LISTEN_HOST,

@@ -39,12 +39,22 @@ export interface UsePlugin {
   capabilities?: {
     layer?: {
       /**
-       * Optional to mirror core-client's `LayerCapability`, whose `layer` may be
-       * absent when a plugin supplies only `createLayer`. This runtime does not
-       * yet consume `createLayer`; {@link adaptCoreLayer} rejects such a plugin
-       * with a clear error instead of calling an undefined function.
+       * The static layer function. Optional because a plugin may supply only
+       * {@link createLayer} (adhd ADR-0019 D1).
        */
       layer?: (
+        call: unknown,
+        next: () => Promise<unknown>
+      ) => Promise<unknown> | AsyncIterable<unknown>;
+      /**
+       * Opts-aware layer factory (adhd ADR-0019 D1, SPEC §7.1): called ONCE per
+       * plugin at composition time with the invocation's flat options bag;
+       * the returned function is the layer. Wins over {@link layer} when both
+       * are present.
+       */
+      createLayer?: (
+        opts: Record<string, unknown>
+      ) => (
         call: unknown,
         next: () => Promise<unknown>
       ) => Promise<unknown> | AsyncIterable<unknown>;
@@ -130,26 +140,73 @@ export function readUseOptions(options: Record<string, unknown>): UseOptions {
   return raw && typeof raw === 'object' ? (raw as UseOptions) : {};
 }
 
+/** Options for {@link createPackageInvoker}. */
+export interface PackageInvokerOptions {
+  /**
+   * The invocation's flat options bag (adhd ADR-0019 D1): handed to every
+   * `--use` plugin's `createLayer` once, at composition time. Not namespaced
+   * per plugin — a plugin reads only its own keys. Defaults to `{}`.
+   */
+  layerOptions?: Record<string, unknown>;
+}
+
+/** The layer capability of a `--use` plugin, as {@link UsePlugin} declares it. */
+type UseLayerCapability = NonNullable<NonNullable<UsePlugin['capabilities']>['layer']>;
+
 /**
- * Adapt a core `LayerCapability.layer` (which receives the SPEC §7.1 `Call`
+ * Adapt a core `LayerCapability` (whose layer receives the SPEC §7.1 `Call`
  * shape with `.data`) into a runtime {@link Layer} (which threads the §8.1
- * `Call` with `.domainArgs`). The runtime Call already carries `operation.id`,
+ * `Call` with `.domainArgs`). The runtime Call already carries `operation`,
  * `envelope`, `ctx`, and `signal`; we additionally surface `.data` (an alias of
  * `domainArgs`) so layers written against either shape see their fields.
+ *
+ * Accepts either form of the capability (adhd ADR-0019 D1):
+ *   - `createLayer` present → called ONCE, here, with `layerOptions`; its
+ *     result is the layer. It wins over a static `layer`. A `createLayer` that
+ *     throws propagates unchanged (it fails composition, before any request).
+ *   - otherwise `layer` is the layer.
+ *
+ * Call this once per plugin at composition time, never per request.
+ *
+ * @param cap          The plugin's layer capability.
+ * @param layerOptions The invocation's flat options bag for `createLayer`; defaults to `{}`.
+ * @param pluginId     The plugin's id, named in the composition error; optional.
+ * @returns The runtime Layer.
+ * @throws ApiError('internal') when the capability has neither a `layer` nor a
+ *   `createLayer` function (possible only from untyped JS), or when
+ *   `createLayer` returns something other than a function.
  */
 export function adaptCoreLayer(
-  cap: NonNullable<NonNullable<UsePlugin['capabilities']>['layer']>
+  cap: UseLayerCapability,
+  layerOptions: Record<string, unknown> = {},
+  pluginId?: string
 ): Layer {
-  const layerFn = cap.layer;
-  if (layerFn === undefined) {
+  const label = pluginId === undefined ? 'a --use plugin' : `--use plugin "${pluginId}"`;
+  let layerFn: (
+    call: unknown,
+    next: () => Promise<unknown>
+  ) => Promise<unknown> | AsyncIterable<unknown>;
+  if (typeof cap.createLayer === 'function') {
+    const built: unknown = cap.createLayer(layerOptions);
+    if (typeof built !== 'function') {
+      throw new ApiError(
+        'internal',
+        `apigen-engine-runtime: ${label}: layer capability createLayer() returned ${built === null ? 'null' : typeof built}, not a layer function`
+      );
+    }
+    layerFn = built as typeof layerFn;
+  } else if (typeof cap.layer === 'function') {
+    const staticLayer = cap.layer;
+    layerFn = (call, next) => staticLayer.call(cap, call, next);
+  } else {
     throw new ApiError(
       'internal',
-      'apigen-engine-runtime: a --use plugin layer capability has no `layer` function (createLayer-only plugins are not supported by this runtime)'
+      `apigen-engine-runtime: ${label}: layer capability has neither a layer nor a createLayer function`
     );
   }
   return async function useLayer(call: RuntimeCall, next): Promise<unknown> {
     const view = Object.assign(call, { data: call.domainArgs });
-    const result = await layerFn.call(cap, view, next as () => Promise<unknown>);
+    const result = await layerFn(view, next as () => Promise<unknown>);
     return result;
   };
 }
@@ -159,15 +216,27 @@ export function adaptCoreLayer(
  * plugins (outermost-first, in declaration order) wrapping the central
  * validate-Layer (innermost, immediately before dispatch — BUG-APIGEN-009).
  * Built ONCE per package, not per request.
+ *
+ * Every plugin's layer is materialised here, at composition (adhd ADR-0019
+ * D1): a `createLayer` runs once with `options.layerOptions`, and a capability
+ * with neither `layer` nor `createLayer` fails here — once, with
+ * `ApiError('internal')` — rather than on every request.
+ *
+ * @param schemas    The package's composed schemas (bound to the validate-Layer).
+ * @param usePlugins The loaded `--use` plugins, outermost first.
+ * @param options    Composition options; see {@link PackageInvokerOptions}.
+ * @returns The composed invoke function.
  */
 export function createPackageInvoker(
   schemas: ComposedSchemas,
-  usePlugins: UsePlugin[]
+  usePlugins: UsePlugin[],
+  options: PackageInvokerOptions = {}
 ): InvokeFn {
+  const layerOptions = options.layerOptions ?? {};
   const layers: Layer[] = [];
   for (const plugin of usePlugins) {
     const cap = plugin.capabilities?.layer;
-    if (cap) layers.push(adaptCoreLayer(cap));
+    if (cap) layers.push(adaptCoreLayer(cap, layerOptions, plugin.id));
   }
   // validate-Layer is ALWAYS innermost so malformed input is rejected before
   // dispatch is ever reached (SPEC §6 / §8.1 rule 1).
