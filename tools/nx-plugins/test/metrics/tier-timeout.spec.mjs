@@ -46,8 +46,8 @@ function runVitest(env = {}) {
 
 describe('the enforced timeout of each tier', () => {
   it('the repository states a cap for S, P and H, and none for the metered tier X', () => {
-    assert.deepEqual(TIER_TIMEOUT_CAPS_MS, { S: 10_000, P: 60_000, H: 300_000, X: null });
-    assert.equal(timeoutForTier('S'), 10_000);
+    assert.deepEqual(TIER_TIMEOUT_CAPS_MS, { S: 30_000, P: 60_000, H: 300_000, X: null });
+    assert.equal(timeoutForTier('S'), 30_000);
     assert.equal(timeoutForTier('X'), null);
   });
 

@@ -22,11 +22,12 @@ export const TIER_BUDGETS = Object.freeze({
 
 /**
  * The enforced per-test timeout of each tier, in milliseconds (T37.AC1). A cap, not a target: `tier-timeout-setup.mjs`
- * lowers a test file's timeout to it when the project configures more. S is generous against its 100 ms p95 because a
- * loaded machine stretches a pure test (the 5 s flakes of 1ab12bb2); P and H sit above their p95 budgets; X is metered
+ * lowers a test file's timeout to it when the project configures more. S is the 30 s project default, generous against its 100 ms p95 because a
+ * loaded machine stretches a pure test (a declared-S spec took 10.9 s at load 150 and timed out under a 10 s cap, 595965cc
+ * merge gate 2026-10-15; the 5 s flakes of 1ab12bb2); P and H sit above their p95 budgets; X is metered
  * and has no cap here.
  */
-export const TIER_TIMEOUT_CAPS_MS = Object.freeze({ S: 10_000, P: 60_000, H: 300_000, X: null });
+export const TIER_TIMEOUT_CAPS_MS = Object.freeze({ S: 30_000, P: 60_000, H: 300_000, X: null });
 
 /** The enforced per-test timeout of `tier` in milliseconds, or null when the tier has none. */
 export function timeoutForTier(tier) {
