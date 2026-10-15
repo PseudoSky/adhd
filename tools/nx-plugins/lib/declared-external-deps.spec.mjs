@@ -9,26 +9,43 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const require = createRequire(import.meta.url);
 const { declaredExternalDeps } = require('./declared-external-deps.js');
+const { scratchRootPath } = require('./scratch-root.js');
+
+const REPO = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 
 const PROJECT = 'packages/fx/proj';
 
+/** Write a minimal installed package (`node_modules/<name>/package.json`) under `dir`. */
+function install(dir, name) {
+  const pkgDir = join(dir, 'node_modules', name);
+  mkdirSync(pkgDir, { recursive: true });
+  writeFileSync(join(pkgDir, 'package.json'), JSON.stringify({ name, version: '1.0.0' }));
+}
+
 /**
- * Build a throwaway workspace containing `packages/fx/proj/package.json` with
- * `manifestText` (or no manifest when `manifestText` is undefined), run `fn`
- * with the workspace root, and remove the workspace in all cases.
+ * Build a throwaway workspace under the tooling scratch root containing
+ * `packages/fx/proj/package.json` with `manifestText` (or no manifest when
+ * `manifestText` is undefined), install the names in `installedAtRoot` at
+ * `<ws>/node_modules` and `installedInProject` at the project's own
+ * `node_modules`, run `fn` with the workspace root, and remove the workspace in
+ * all cases.
  */
-function withWorkspace(manifestText, fn) {
-  const ws = mkdtempSync(join(tmpdir(), 'fbbb1464-deps-'));
+function withWorkspace(manifestText, fn, { installedAtRoot = [], installedInProject = [] } = {}) {
+  const scratch = scratchRootPath(REPO);
+  mkdirSync(scratch, { recursive: true });
+  const ws = mkdtempSync(join(scratch, 'fbbb1464-deps-'));
   try {
     if (manifestText !== undefined) {
       mkdirSync(join(ws, PROJECT), { recursive: true });
       writeFileSync(join(ws, PROJECT, 'package.json'), manifestText);
     }
+    for (const name of installedAtRoot) install(ws, name);
+    for (const name of installedInProject) install(join(ws, PROJECT), name);
     return fn(ws);
   } finally {
     rmSync(ws, { recursive: true, force: true });
@@ -65,7 +82,7 @@ test('declaredExternalDeps: collects all four dependency fields, sorted and de-d
       declaredExternalDeps(PROJECT, ws),
       ['alpha', 'beta', 'delta', 'gamma', 'zeta'],
     );
-  });
+  }, { installedAtRoot: ['alpha', 'beta', 'delta', 'gamma', 'zeta'] });
 });
 
 /**
@@ -81,7 +98,7 @@ test('declaredExternalDeps: excludes @adhd/* workspace names and eslint', () => 
   });
   withWorkspace(manifest, (ws) => {
     assert.deepEqual(declaredExternalDeps(PROJECT, ws), ['real-dep']);
-  });
+  }, { installedAtRoot: ['real-dep', '@adhd/data-base-transforms', 'eslint'] });
 });
 
 /**
@@ -111,4 +128,77 @@ test('declaredExternalDeps: malformed package.json throws an error naming the fi
         /declaredExternalDeps: cannot parse .*package\.json/.test(err.message),
     );
   });
+});
+
+const INSTALLED_MANIFEST = JSON.stringify({
+  dependencies: { 'dep-installed': '^1.0.0', 'dep-missing': '^1.0.0' },
+  devDependencies: { 'dev-installed': '^1.0.0', 'dev-missing': '^1.0.0' },
+  peerDependencies: { 'peer-installed': '>=1', 'peer-missing': '>=1' },
+});
+
+/**
+ * regression:fbbb1464 · tier S · fbbb1464 D3(i) (supports AC1)
+ * Failure mode: an installed dependency, devDependency or peerDependency is
+ * dropped from the list, so a bump of its installed version no longer
+ * invalidates the project's lint/sync-deps cache (the reported stale-cache bug).
+ */
+test('declaredExternalDeps: installed dependency, devDependency and peerDependency are all emitted', () => {
+  withWorkspace(INSTALLED_MANIFEST, (ws) => {
+    const out = declaredExternalDeps(PROJECT, ws);
+    for (const name of ['dep-installed', 'dev-installed', 'peer-installed']) {
+      assert.ok(out.includes(name), `${name} is installed and declared, so it must be emitted; got ${JSON.stringify(out)}`);
+    }
+  }, { installedAtRoot: ['dep-installed', 'dev-installed', 'peer-installed'] });
+});
+
+/**
+ * regression:fbbb1464 · tier S · fbbb1464 D3(i)
+ * Failure mode: a declared-but-not-installed name (missing optional peer,
+ * manifest ahead of install) is emitted into externalDependencies, naming a
+ * package with no installed version for Nx to hash.
+ */
+test('declaredExternalDeps: declared names that are not installed are absent, installed ones remain', () => {
+  withWorkspace(INSTALLED_MANIFEST, (ws) => {
+    assert.deepEqual(declaredExternalDeps(PROJECT, ws), [
+      'dep-installed',
+      'dev-installed',
+      'peer-installed',
+    ]);
+  }, { installedAtRoot: ['dep-installed', 'dev-installed', 'peer-installed'] });
+});
+
+/**
+ * regression:fbbb1464 · tier S · fbbb1464 D3(i)
+ * Failure mode: with nothing installed every declared name is emitted anyway
+ * (the filter is skipped), so the list names packages with no installed version.
+ */
+test('declaredExternalDeps: nothing installed yields an empty list', () => {
+  withWorkspace(INSTALLED_MANIFEST, (ws) => {
+    assert.deepEqual(declaredExternalDeps(PROJECT, ws), []);
+  });
+});
+
+/**
+ * regression:fbbb1464 · tier S · fbbb1464 D3(i)
+ * Failure mode: only the project's own node_modules is searched, so a hoisted
+ * root install (the common pnpm/npm layout) is treated as missing and its
+ * version bumps stop invalidating the cache.
+ */
+test('declaredExternalDeps: a package installed only in the workspace root node_modules is emitted', () => {
+  const manifest = JSON.stringify({ dependencies: { hoisted: '^1.0.0' } });
+  withWorkspace(manifest, (ws) => {
+    assert.deepEqual(declaredExternalDeps(PROJECT, ws), ['hoisted']);
+  }, { installedAtRoot: ['hoisted'] });
+});
+
+/**
+ * regression:fbbb1464 · tier S · fbbb1464 D3(i)
+ * Failure mode: only the workspace root node_modules is searched, so a package
+ * linked into the project's own node_modules (pnpm layout) is treated as missing.
+ */
+test('declaredExternalDeps: a package installed only in the project node_modules is emitted', () => {
+  const manifest = JSON.stringify({ dependencies: { local: '^1.0.0', '@scope/local': '^1.0.0' } });
+  withWorkspace(manifest, (ws) => {
+    assert.deepEqual(declaredExternalDeps(PROJECT, ws), ['@scope/local', 'local']);
+  }, { installedInProject: ['local', '@scope/local'] });
 });

@@ -16,6 +16,14 @@
  * install does, since the hasher reads the lockfile for external versions. Whether Nx reads one or both is the
  * D3 probe of the fbbb1464 spec; this file is not yet proven to flip the hash at HEAD.
  *
+ * Cache hit/miss is observed from STATE, not Nx stdout wording: each check command appends a line to a
+ * per-project-and-target run log (a directory outside the workspace, passed by FBBB1464_RUN_LOG) every time
+ * it actually executes. A cache hit replays the stored result without executing the command, so a task was
+ * "cached" exactly when its run log did not grow. The log lives outside the workspace so it is never a hash
+ * input. No assertion depends on Nx output text; the only inputs are the exit status and the run-log line count.
+ * A non-zero exit with no execution means Nx failed before running the task, which is thrown as unobservable
+ * rather than read as a hit.
+ *
  * Run: node --test tools/nx-plugins/lint/declared-deps-hash.e2e.spec.mjs
  * Lane: e2e (ADR-0009); spawns `nx` and is not part of the unit `test:build-tools` suite.
  */
@@ -23,7 +31,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -38,8 +46,6 @@ const { scratchRootPath } = require('../lib/scratch-root.js');
 const PROBE = 'fixture-probe-dep';
 const ESLINT = 'eslint';
 const SPAWN_TIMEOUT_MS = 240_000;
-const CACHE_HIT = /instead of running the command for 1 out of 1 tasks/;
-const NX_OUTPUT = /\bNx\b|nx run|Successfully ran|Running target/;
 
 /** Resolve the repo's own nx CLI. Throws (loud) when the nx package or its bin is missing. */
 function resolveNxBin() {
@@ -96,9 +102,12 @@ function installProbe(ws, version) {
 }
 
 /** Manifest-range check used as both lint and sync-deps-check command: fails when an installed declared version differs. */
-const CHECK_SCRIPT = `import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
+const CHECK_SCRIPT = `import { appendFileSync, mkdirSync, readFileSync } from 'node:fs';
+import { basename, join } from 'node:path';
 const dir = process.argv[2];
+const target = process.argv[3];
+mkdirSync(process.env.FBBB1464_RUN_LOG, { recursive: true });
+appendFileSync(join(process.env.FBBB1464_RUN_LOG, \`\${basename(dir)}-\${target}.log\`), 'ran\\n');
 const pkg = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'));
 const bad = [];
 for (const [name, range] of Object.entries(pkg.devDependencies ?? {})) {
@@ -120,6 +129,7 @@ function makeFixture() {
   mkdirSync(scratch, { recursive: true });
   const ws = mkdtempSync(join(scratch, 'fbbb1464-ws-'));
   const home = mkdtempSync(join(scratch, 'fbbb1464-home-'));
+  const runLog = join(home, 'runs');
   const w = (rel, body) => {
     const p = join(ws, rel);
     mkdirSync(dirname(p), { recursive: true });
@@ -141,15 +151,15 @@ function makeFixture() {
   };
   for (const [name, devDependencies] of Object.entries(projects)) {
     const root = `projects/${name}`;
-    const command = `node check-declared.mjs ${root}`;
+    const command = (target) => `node check-declared.mjs ${root} ${target}`;
     w(`${root}/package.json`, json({ name: `@fbbb1464-probe/${name}`, version: '0.0.0', private: true, devDependencies }));
     w(`${root}/project.json`, json({
       name: `proj-${name}`,
       root,
       targets: {
         build: { executor: 'nx:noop' },
-        lint: { executor: 'nx:run-commands', options: { command } },
-        'sync-deps-check': { executor: 'nx:run-commands', options: { command } },
+        lint: { executor: 'nx:run-commands', options: { command: command('lint') } },
+        'sync-deps-check': { executor: 'nx:run-commands', options: { command: command('sync-deps-check') } },
       },
     }));
     w(`${root}/eslint.config.mjs`, 'export default [];\n');
@@ -163,11 +173,13 @@ function makeFixture() {
     NX_DAEMON: 'false',
     NX_NO_CLOUD: 'true',
     NX_TUI: 'false',
+    FBBB1464_RUN_LOG: runLog,
     CI: '1',
   });
   return {
     ws,
     env,
+    runLog,
     cleanup: () => {
       rmSync(ws, { recursive: true, force: true });
       rmSync(home, { recursive: true, force: true });
@@ -175,11 +187,19 @@ function makeFixture() {
   };
 }
 
+/** Number of times the check command actually executed for `project`:`target` (cache hits do not execute it). */
+function executions(fx, project, target) {
+  const log = join(fx.runLog, `${project.replace('proj-', '')}-${target}.log`);
+  return existsSync(log) ? readFileSync(log, 'utf8').split('\n').filter(Boolean).length : 0;
+}
+
 /**
- * Run `nx run <project>:<target>` in the fixture. Returns the exit status and whether Nx reported the task was
- * read from the cache. Throws when the output shows no nx task (the cache state is then unobservable).
+ * Run `nx run <project>:<target>` in the fixture. Returns the exit status and whether the task was served
+ * from the cache (the check command did not execute). Throws when Nx exited non-zero without executing the
+ * command, since the cache state is then unobservable.
  */
 function nxRun(fx, project, target) {
+  const before = executions(fx, project, target);
   const r = spawnSync(process.execPath, [NX_BIN, 'run', `${project}:${target}`, '--outputStyle=static'], {
     cwd: fx.ws,
     env: fx.env,
@@ -188,10 +208,11 @@ function nxRun(fx, project, target) {
   });
   if (r.error) throw r.error;
   const out = `${r.stdout ?? ''}\n${r.stderr ?? ''}`;
-  if (!NX_OUTPUT.test(out)) {
-    throw new Error(`no nx task output for ${project}:${target} (status ${r.status}); cache state is unobservable\n${out}`);
+  const executed = executions(fx, project, target) > before;
+  if (!executed && r.status !== 0) {
+    throw new Error(`nx failed before running ${project}:${target} (status ${r.status}); cache state is unobservable\n${out}`);
   }
-  return { status: r.status, cached: CACHE_HIT.test(out), out };
+  return { status: r.status, cached: !executed, out };
 }
 
 test('AC3: bumping an installed declared dependency misses only the declaring project lint and sync-deps-check', () => {

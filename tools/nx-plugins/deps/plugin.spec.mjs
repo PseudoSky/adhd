@@ -6,8 +6,11 @@
  * projects. The task-hash behavior (AC3: a bumped installed version changes the
  * sync-deps-check hash; AC4: a warm-cache lint of a mismatched project fails
  * after the bump) is NOT proven here. It needs Nx's hasher over a real
- * workspace, which cannot run in the unit lane. See the fbbb1464 tier-P gap
- * recorded in the author-regression report.
+ * workspace, which cannot run in the unit lane. Tier-P gap: this cannot be
+ * observed at tier S because the sync-deps-check cache key is produced by Nx's
+ * task hasher over a real project graph (external nodes, installed versions and
+ * the plugin-emitted inputs), which only a subprocess `nx run` reaches. AC3/AC4
+ * are covered by tools/nx-plugins/lint/declared-deps-hash.e2e.spec.mjs (tier P, e2e lane).
  *
  * Run: node --test tools/nx-plugins/deps/plugin.spec.mjs
  */
@@ -15,11 +18,13 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const require = createRequire(import.meta.url);
 const plugin = require('./plugin.js');
+const { scratchRootPath } = require('../lib/scratch-root.js');
+const REPO = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 
 const PROJECT_A = 'packages/fx/alpha';
 const PROJECT_B = 'packages/fx/beta';
@@ -29,7 +34,8 @@ const PROJECT_B = 'packages/fx/beta';
  * run `fn` with its root, and remove it in all cases.
  */
 function withWorkspace(files, fn) {
-  const ws = mkdtempSync(join(tmpdir(), 'fbbb1464-deps-plugin-'));
+  mkdirSync(scratchRootPath(REPO), { recursive: true });
+  const ws = mkdtempSync(join(scratchRootPath(REPO), 'fbbb1464-deps-plugin-'));
   try {
     for (const [rel, body] of Object.entries(files)) {
       mkdirSync(join(ws, dirname(rel)), { recursive: true });
@@ -39,6 +45,17 @@ function withWorkspace(files, fn) {
   } finally {
     rmSync(ws, { recursive: true, force: true });
   }
+}
+
+/**
+ * Fixture files that install `names` at the workspace root (`node_modules/<name>/package.json`).
+ * The declared-deps helper emits only installed names (fbbb1464 D3(i)), so a declared
+ * name must be installed in the fixture to appear in the externalDependencies list.
+ */
+function installed(...names) {
+  return Object.fromEntries(
+    names.map((n) => [`node_modules/${n}/package.json`, JSON.stringify({ name: n, version: '1.0.0' })]),
+  );
 }
 
 /** A project.json that makes hasBuildTarget() true, so the plugin attaches sync targets. */
@@ -80,6 +97,7 @@ test('sync-deps and sync-deps-check carry the same declared externalDependencies
     {
       [`${PROJECT_A}/project.json`]: BUILDABLE_PROJECT_JSON,
       [`${PROJECT_A}/package.json`]: manifest,
+      ...installed('a', 'b', '@adhd/x'),
     },
     (ws) => {
       const targets = syncTargets(ws, [`${PROJECT_A}/package.json`]);
@@ -131,6 +149,7 @@ test('sync target externalDependencies are per-project and do not leak across pr
       [`${PROJECT_A}/package.json`]: JSON.stringify({ dependencies: { a: '^1.0.0' } }),
       [`${PROJECT_B}/project.json`]: BUILDABLE_PROJECT_JSON,
       [`${PROJECT_B}/package.json`]: JSON.stringify({ dependencies: { c: '^3.0.0' } }),
+      ...installed('a', 'c'),
     },
     (ws) => {
       const targets = syncTargets(ws, [
