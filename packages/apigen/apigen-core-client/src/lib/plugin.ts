@@ -302,7 +302,7 @@ export interface TargetCapability<Opts = Record<string, unknown>> {
  * `async function*` that wraps `next()` with `for await … yield` — to
  * participate in the full per-chunk stream lifecycle (SPEC §11).
  */
-export interface LayerCapability {
+export interface LayerCapability<Opts = Record<string, unknown>> {
   /**
    * Extra envelope fields this layer needs on the request side — merged into
    * the effective descriptor's envelope schema before serving begins.
@@ -327,6 +327,19 @@ export interface LayerCapability {
    *              for streaming operations.
    */
   layer(call: Call, next: Next): Promise<Result> | AsyncIterable<Chunk>;
+
+  /**
+   * Optional layer factory: builds the layer function from per-use options
+   * (`Opts`), so a plugin can be configured at the point it is loaded.
+   * A runtime that supports it calls `createLayer(opts)` and composes the
+   * returned function exactly as it would {@link LayerCapability.layer}.
+   *
+   * @param opts - Options supplied where the plugin is used.
+   * @returns    The layer function (same contract as `layer`).
+   */
+  createLayer?(
+    opts: Opts,
+  ): (call: Call, next: Next) => Promise<Result> | AsyncIterable<Chunk>;
 }
 
 /**
@@ -491,6 +504,12 @@ export type MountedOperation = Operation & {
    * streaming mounts.
    */
   handler(call: Call): unknown | Promise<unknown> | AsyncIterable<Chunk>;
+
+  /**
+   * Optional tool-presentation metadata for MCP-style hosts (title and tool
+   * annotations). Mirrors {@link Operation.tool}.
+   */
+  tool?: { title?: string; annotations?: Record<string, unknown> };
 };
 
 // ---------------------------------------------------------------------------

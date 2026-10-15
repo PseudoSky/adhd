@@ -70,6 +70,19 @@
     "typeText": {
       "description": "Optional language-tagged textual type rendering (same-host sugar). null when unavailable; non-host targets ignore it.",
       "oneOf": [{ "$ref": "#/$defs/TypeText" }, { "type": "null" }]
+    },
+    "hasCtx": {
+      "type": "boolean",
+      "description": "True when the underlying export's first parameter is named 'ctx' (matched by name only). ctx is excluded from input; a runtime dispatcher re-injects it as the first call argument. Only meaningful for kind 'action'."
+    },
+    "binding": {
+      "type": "string",
+      "description": "Optional name of the policy/layer binding this operation is attached to (ADR-0018). Opaque to the extractor; resolved by the runtime.",
+      "minLength": 1
+    },
+    "tool": {
+      "type": "object",
+      "description": "Optional tool-presentation metadata for MCP-style hosts: a display title and tool annotations (ADR-0018)."
     }
   },
   "$defs": {

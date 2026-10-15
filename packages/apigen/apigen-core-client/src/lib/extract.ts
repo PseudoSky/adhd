@@ -911,7 +911,17 @@ function buildQueryOp(
 // ID derivation — pure function of namespace + path per SPEC §4
 // ---------------------------------------------------------------------------
 
-function buildId(ns: Segment, opPath: Segment[]): string {
+/**
+ * Derives the canonical operation id from a namespace segment and an operation
+ * path (SPEC §4): each segment's tokenized words joined by `-`, segments joined
+ * by `/`. An empty namespace (`ns.raw === ''`) is omitted. Pure and
+ * deterministic; shared by the function and class extractors.
+ *
+ * @param ns     - Namespace segment (may have empty `raw`).
+ * @param opPath - Operation path segments.
+ * @returns        The id, e.g. `transform/humanize/humanize-bytes`.
+ */
+export function buildId(ns: Segment, opPath: Segment[]): string {
   const allSegs: Segment[] = ns.raw ? [ns, ...opPath] : opPath;
   return allSegs.map((s) => s.words.join('-')).join('/');
 }
