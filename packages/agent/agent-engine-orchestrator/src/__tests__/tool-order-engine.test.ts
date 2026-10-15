@@ -15,7 +15,10 @@
  *
  * guards: through the real engine a read in the same turn does not observe the edit before it, a delegation call serialises with writes, a failed barrier orphans later calls, the pre:tool_call and post:tool_call trace fields are wrong, or task:startup is not emitted exactly once before the first model call.
  * tier: S
- * cites: R10 S2 AC1, AC2, AC3, AC6; R10 S3 AC4 (every test title carries its AC).
+ * cites: R10 S2 AC1, AC2, AC3, AC6; R10 S3 AC4 (every test title carries its AC); variance hardening cites qa-variance (dispatch-1014).
+ * red: pending (qa-variance edit made without running tests, per user). qa-variance: the fixed 50-turn
+ * `setImmediate` loop is replaced by `settleUntilStable` (state-probe quiescence, no clock); each negative
+ * assertion is still taken only after the probed state is unchanged across consecutive turns.
  */
 import { HookRegistry } from "@adhd/agent-base-types";
 import type { PostToolCallPayload, PreToolCallPayload, TaskStartupPayload } from "@adhd/agent-base-types";
@@ -31,6 +34,7 @@ import { generateId } from "../utils/ids.js";
 import { nowIso } from "../utils/timestamps.js";
 import { ToolError } from "../validation/errors.js";
 import type { ExecutionContext, Message } from "../validation/index.js";
+import { settleUntilStable } from "./fixtures/settle.js";
 
 const policy = { check: () => {} } as unknown as PolicyEngine;
 const silentLogger: EngineLogger = { info() {}, warn() {}, error() {}, debug() {} } as EngineLogger;
@@ -77,9 +81,6 @@ function latch() {
     const promise = new Promise<void>((r) => (resolve = r));
     return { promise, resolve };
 }
-const flush = async (): Promise<void> => {
-    for (let i = 0; i < 50; i++) await new Promise<void>((r) => setImmediate(r));
-};
 
 interface ICallSpec {
     id: string;
@@ -204,7 +205,7 @@ describe("R10 S2 AC1: the read observes the edit (real engine)", () => {
                 },
             });
             await editStarted.promise;
-            await flush();
+            await settleUntilStable(() => order);
             expect(order).toEqual(["edit_file:start"]); // the read has NOT started: it waits for the barrier
             editGate.resolve();
             const { toolMessages } = await running;
@@ -292,10 +293,10 @@ describe("R10 S2 AC2: reads and delegation stay parallel (real engine)", () => {
             },
         });
         await taskStarted.promise;
-        await flush();
+        await settleUntilStable(() => started);
         expect(started).toEqual(["fs__edit_file", "agent-mcp__task"]); // the task started beside the first edit
         editGate.resolve();
-        await flush();
+        await settleUntilStable(() => started);
         expect(started).toEqual(["fs__edit_file", "agent-mcp__task", "fs__write_file"]); // second write did not wait for the task
         taskGate.resolve();
         expect((await running).result).toBe("done");
@@ -435,7 +436,7 @@ describe("R10 S2 AC6: trace fields on pre:tool_call / post:tool_call (real engin
             },
         });
         await editStarted.promise;
-        await flush();
+        await settleUntilStable(() => pre.map((x) => [x.callId, x.queuedMs]));
         const read = pre.find((x) => x.callId === "r")!;
         expect(read.concurrencyClass).toBe("safe");
         expect(read.queuedMs).toBeUndefined(); // still waiting for the barrier: not started
