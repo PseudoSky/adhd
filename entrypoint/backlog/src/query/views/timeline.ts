@@ -87,16 +87,25 @@ function resolveLimit(raw: number | undefined): number {
   return limit;
 }
 
+const ISO_INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/;
+
+/** Epoch milliseconds of a strict ISO-8601 date-time, or `undefined` when the text is not one. */
+function isoInstantMs(raw: string): number | undefined {
+  if (!ISO_INSTANT.test(raw)) return undefined;
+  const ms = Date.parse(raw);
+  return Number.isNaN(ms) ? undefined : ms;
+}
+
 /** Resolves `since` to a normalised UTC ISO-8601 instant, defaulting to the lookback window. */
 function resolveSince(raw: string | undefined, now: number): string {
   if (raw === undefined) {
     return new Date(now - DEFAULT_TIMELINE_WINDOW_DAYS * 24 * 60 * 60 * 1000).toISOString();
   }
-  const parsed = Date.parse(raw);
-  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/.test(raw) || Number.isNaN(parsed)) {
+  const ms = isoInstantMs(raw);
+  if (ms === undefined) {
     throw new BacklogValidationError('since', `must be an ISO-8601 instant, got ${JSON.stringify(raw)}`);
   }
-  return new Date(parsed).toISOString();
+  return new Date(ms).toISOString();
 }
 
 /**
@@ -132,8 +141,9 @@ function windowCursorOf(after: string | undefined): { since?: string; key?: stri
   const bar = after.indexOf('|');
   if (bar < 0) throw new BacklogValidationError('after', 'is not a cursor from this timeline');
   const since = after.slice(0, bar);
-  if (Number.isNaN(Date.parse(since))) throw new BacklogValidationError('after', 'is not a cursor from this timeline');
-  return { since: new Date(Date.parse(since)).toISOString(), key: after.slice(bar + 1) };
+  const ms = isoInstantMs(since);
+  if (ms === undefined) throw new BacklogValidationError('after', 'is not a cursor from this timeline');
+  return { since: new Date(ms).toISOString(), key: after.slice(bar + 1) };
 }
 
 function opsOf(page: readonly IOpEventRow[]): ITimelineOp[] {
@@ -153,9 +163,14 @@ async function windowTimeline(
     throw new BacklogValidationError('after', 'was issued for a different since; pass the same since or none');
   }
   const since = cursor.since ?? resolveSince(input.since, now);
-  const upper = new Date(now).toISOString();
+  // Compare parsed instants, never the stored text: `t` is written from a caller-supplied `at`
+  // when one is given (write/tx.ts), so its text need not be UTC `toISOString()` form.
+  const sinceMs = Date.parse(since);
   const all = await loadOpEvents(graph, sessions, new Set(sessions.keys()));
-  const events = all.filter((e) => e.t >= since && e.t <= upper);
+  const events = all.filter((e) => {
+    const ms = isoInstantMs(e.t);
+    return ms !== undefined && ms >= sinceMs && ms <= now;
+  });
   const touched = [...new Set(events.map((e) => e.targetUid))].sort();
   const { page, hasMore, nextCursor } = pageOf(events, cursor.key, limit, `${since}|`);
   return {

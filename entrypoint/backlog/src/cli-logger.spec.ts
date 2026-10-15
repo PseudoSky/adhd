@@ -25,7 +25,10 @@ const logMock = vi.hoisted(() => ({
   error: vi.fn(),
 }));
 
-vi.mock('@adhd/sox-telemetry', () => ({ log: logMock }));
+vi.mock('@adhd/sox-telemetry', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@adhd/sox-telemetry')>()),
+  log: logMock,
+}));
 
 import { cliLogger } from './server.js';
 

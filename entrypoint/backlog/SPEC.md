@@ -3120,8 +3120,8 @@ access control out of scope).
   ops. Without `sessionId` it returns every session's ops in the window `[since, now]`
   (`since` defaults to 7 days before now; `session` is `null`). `claim.action` defaults
   to `claim`, `relate.action` to `add`, `obligate.on_fail` to `block`, and
-  `open-curve.at` to the current instant; an explicit `null` or unknown value is a
-  validation error, never a silent default. Spellings `list reservation` / `get session` belong to the unshipped
+  `open-curve.at` to the current instant; an explicit `null` or unknown value is
+  rejected (`validation` or `invalid_argument`), never silently defaulted. Spellings `list reservation` / `get session` belong to the unshipped
   CLI-HIERARCHY verb tree; the shipped spellings are the views above.
 - **Reads.** `get {fields:["specRevisionFragment"]}` returns the HEAD revision's
   fragment verbatim; `query {projection:"byCitationPath", path:P}` returns every

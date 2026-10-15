@@ -167,6 +167,12 @@ describe('91a8c640 B-AC7 — timeline', () => {
       }
     });
 
+    it('a hand-made window cursor whose since part is not an ISO-8601 instant is a validation error', async () => {
+      const r = await api.timeline(ctx, { after: 'Oct 1|0#1' } as never);
+      expect(r.ok).toBe(false);
+      if (!r.ok) expect(r.error.code).toBe('validation');
+    });
+
     it('a `since` after every op excludes them all (the window is a real lower bound)', async () => {
       const future = new Date(Date.now() + DAY_MS).toISOString();
       const r = await tl({ since: future });
