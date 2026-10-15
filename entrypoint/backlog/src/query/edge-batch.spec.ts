@@ -105,7 +105,8 @@ describe('2267eaf9 — batched edge pseudo-field reads (real store)', () => {
         by: 'filer',
       });
     }
-  });
+    // 60 creates + 180 relates are sequential write transactions: 2.6-5.6 s quiet, 12-30 s under load, so the 30 s default hook timeout is too tight.
+  }, 120_000);
 
   afterAll(async () => {
     await store.close();

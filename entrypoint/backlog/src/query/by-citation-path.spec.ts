@@ -100,7 +100,8 @@ describe('7e5469d3 B-AC10 — byCitationPath projection', () => {
     const card = data(await api.get(ctx, { uid: issues.removed!, fields: ['citations'] })) as unknown as { citations: Array<{ uid: string }> };
     removedCitationUid = card.citations[0]!.uid;
     data(await api.removeCitation(ctx, { uid: removedCitationUid, by: 'filer' }));
-  });
+    // Store open + seeding run sequential write transactions; under load they exceed the 30 s default hook timeout.
+  }, 120_000);
   afterEach(async () => {
     await tmp.cleanup();
   });
