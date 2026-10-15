@@ -27,7 +27,8 @@
  *      `fork(modulePath, …)`. It is routed when, within the call's own argument span,
  *      there is a `HOME` override (`HOME:` / `'HOME':` / shorthand `HOME`, not the real
  *      home) or a use of something imported from an isolation helper
- *      (`spawn-isolated-bin`, `spawn-backlog-bin`, or any name in `helpers`;
+ *      (a call, a `...helper(…)` spread, or a `...opts` spread of an identifier built by one;
+ *      `spawn-isolated-bin`, `spawn-backlog-bin`, or any name in `helpers`;
  *      `DIST_INDEX` and other non-isolating exports do not count), or the span names
  *      an identifier whose visible declaration carries one of those, or a
  *      `process.env.HOME =` / `env.HOME =` assignment precedes the call in an
@@ -97,6 +98,10 @@ export const NON_ISOLATING_EXPORTS = [
  */
 export const NODE_SPAWN =
   /\b(?:spawn|spawnSync|execFile|execFileSync|fork)\s*\(\s*(?:process\.execPath|process\.argv0|'node'|"node"|`node`)/;
+
+// Start-of-identifier boundary: not preceded by a word char, and not by a member-access `.`
+// (`a.helper`, `a?.helper`) — but a spread `...helper(…)` / `...opts` IS a use of the name.
+const NAME_START = String.raw`(?<![\w$])(?<!(?<!\.\.)\.)`;
 
 const SPAWN_CALL = /(?<![\w$])(?:spawn|spawnSync|execFile|execFileSync|fork)\s*\(/g;
 const NODE_LITERAL = /^(?:process\.execPath|process\.argv0|process\.argv\[\s*0\s*\]|(['"`])(?:node|nodejs)\1)$/;
@@ -326,9 +331,9 @@ function hasHomeSignal(text, binds) {
   for (const m of text.matchAll(/[\w$\]]\s*(?:\.HOME|\[\s*['"]HOME['"]\s*\])\s*=(?!=)\s*([^;\n]*)/g)) {
     if (!REAL_HOME_VALUE.test(m[1].trim())) return true;
   }
-  for (const name of binds.names) if (new RegExp(`(?<![\\w$.])${esc(name)}(?![\\w$])`).test(text)) return true;
+  for (const name of binds.names) if (new RegExp(`${NAME_START}${esc(name)}(?![\\w$])`).test(text)) return true;
   for (const ns of binds.namespaces) {
-    const re = new RegExp(`(?<![\\w$.])${esc(ns)}\\s*\\.\\s*([\\w$]+)`, 'g');
+    const re = new RegExp(`${NAME_START}${esc(ns)}\\s*\\.\\s*([\\w$]+)`, 'g');
     for (const m of text.matchAll(re)) if (!NON_ISOLATING_EXPORTS.includes(m[1])) return true;
   }
   return false;
@@ -428,7 +433,7 @@ export function findUnroutedSpawnSites(rawSrc, helpers = ISOLATION_HELPERS) {
   const visited = new Set();
   const identifierRouted = (text, absStart, level, siteIdx) => {
     if (level > 2) return false;
-    for (const m of text.matchAll(/(?<![\w$.])([A-Za-z_$][\w$]*)(?![\w$])(?!\s*:)/g)) {
+    for (const m of text.matchAll(new RegExp(`${NAME_START}([A-Za-z_$][\\w$]*)(?![\\w$])(?!\\s*:)`, 'g'))) {
       const id = m[1];
       if (KEYWORDS.has(id) || (absStart !== undefined && mask[absStart + m.index])) continue;
       if (visited.has(`${level}:${id}`)) continue;
