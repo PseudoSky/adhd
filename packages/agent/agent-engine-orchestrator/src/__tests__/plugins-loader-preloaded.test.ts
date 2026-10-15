@@ -1,3 +1,8 @@
+/**
+ * guards: the plugin loader fails to install a specifier from the preloadedModules map (bundled host), or installs it without passing the entry's config, or resolves a missing specifier without the map.
+ * tier: S
+ * cites: d365a3e1 (bundle the server with preloaded default plugin modules) — preloadedModules resolution, cited in the test titles.
+ */
 import { describe, expect, it, vi } from "vitest";
 import type { EngineLogger } from "../interfaces.js";
 import {
