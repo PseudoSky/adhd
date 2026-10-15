@@ -2,7 +2,7 @@ import type { IVerbDeps } from './deps';
 import { reportFailure } from './failure';
 
 /** The wrapper verbs that run before apigen's own command table. */
-export const VERB_NAMES = ['run', 'serve', 'mcp-json'] as const;
+export const VERB_NAMES = ['run', 'serve', 'mcp-json', 'migrate'] as const;
 
 /**
  * Returns `{handled:false}` when `argv[0]` is not a verb, else runs it (argv
@@ -27,6 +27,8 @@ export async function dispatchVerb(
         };
       case 'mcp-json':
         return { handled: true, exitCode: await (await import('./mcp-json')).mcpJsonVerb(rest, deps) };
+      case 'migrate':
+        return { handled: true, exitCode: await (await import('./migrate')).migrateVerb(rest, deps) };
       default:
         return { handled: false };
     }
