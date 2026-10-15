@@ -19,7 +19,7 @@
  */
 
 import { ApiError } from '@adhd/apigen-base-errors';
-import type { Layer } from './invoke';
+import type { Layer, Terminal } from './invoke';
 import { createInvoker } from './invoke';
 import { makeValidateLayer } from './validate-layer';
 import type { Call as RuntimeCall, InvokeFn } from './invoke';
@@ -153,6 +153,13 @@ export interface PackageInvokerOptions {
    * per plugin — a plugin reads only its own keys. Defaults to `{}`.
    */
   layerOptions?: Record<string, unknown>;
+  /**
+   * Binding-aware dispatch terminal (adhd ADR-0017 D7): passed through to
+   * {@link createInvoker}, where it replaces the core `dispatch` as the
+   * innermost Service, inside the validate-Layer. Absent, the invoker
+   * dispatches through `dispatch` unchanged. See {@link Terminal}.
+   */
+  terminal?: Terminal;
 }
 
 /** The layer capability of a `--use` plugin, as {@link UsePlugin} declares it. */
@@ -246,5 +253,7 @@ export function createPackageInvoker(
   // validate-Layer is ALWAYS innermost so malformed input is rejected before
   // dispatch is ever reached (SPEC §6 / §8.1 rule 1).
   layers.push(makeValidateLayer(schemas));
-  return createInvoker(layers);
+  return options.terminal === undefined
+    ? createInvoker(layers)
+    : createInvoker(layers, { terminal: options.terminal });
 }

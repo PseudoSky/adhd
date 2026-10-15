@@ -169,10 +169,46 @@ export type InvokeFn = (
 ) => Promise<LayerResult>;
 
 /**
+ * A binding-aware dispatch terminal (adhd ADR-0017 D7, ADR-0019 D4): the
+ * innermost Service of a composed invoker, used IN PLACE OF the core `dispatch`
+ * Service.
+ *
+ * A terminal receives the operation name, the whole {@link Call} — including
+ * `call.signal` and the flat argument object on `call.domainArgs`, exactly as
+ * the Layers left them — and the runtime {@link InvokeOptions}. It routes by
+ * `call.operation.binding ?? call.operation.host` (e.g. an argv child process or
+ * an MCP upstream) and resolves with the operation's result, scalar or stream.
+ *
+ * A terminal owns the dispatch step outright: when one is supplied the core
+ * `dispatch` is never called and no schema lookup is made on its behalf.
+ *
+ * ```ts
+ * const terminal: Terminal = async (fnName, call) =>
+ *   hosts[call.operation.binding ?? call.operation.host ?? ''].invoke(fnName, call.domainArgs, call.signal)
+ * const invoke = createInvoker([authLayer], { terminal })
+ * ```
+ */
+export type Terminal = (
+  fnName: string,
+  call: Call,
+  opts: InvokeOptions
+) => Promise<LayerResult>;
+
+/** Options for {@link createInvoker}. */
+export interface CreateInvokerOptions {
+  /**
+   * Replaces the core `dispatch` Service as the innermost Service. Absent (the
+   * default), the composed invoker dispatches through `dispatch` exactly as
+   * before. See {@link Terminal}.
+   */
+  terminal?: Terminal;
+}
+
+/**
  * Compose a Layer stack and return a typed `invoke` function.
  *
  * Layers are applied **outermost-first**: `layers[0]` wraps `layers[1]`
- * which wraps … which wraps `dispatch`.  Equivalent to Tower's
+ * which wraps … which wraps the innermost Service.  Equivalent to Tower's
  * `ServiceBuilder::layer` / `layer_fn` composition order.
  *
  * ```ts
@@ -180,38 +216,57 @@ export type InvokeFn = (
  * const result = await invoke('getUser', call, opts)
  * ```
  *
- * When `layers` is empty, `invoke` calls `dispatch` directly.
+ * The innermost Service is `options.terminal` when supplied (see
+ * {@link Terminal}); otherwise it is the core `dispatch`, preceded by a lookup
+ * of `opts.schemas[fnName]` that throws before any Layer runs when the schema
+ * is missing.  When `layers` is empty, `invoke` calls the innermost Service
+ * directly.
  *
  * §8.1 rule 6 (codegen-weave): static hosts receive the composed list at
  * codegen time; `createInvoker` is called once per plugin instantiation, not
  * once per request.
+ *
+ * @param layers  The Layer stack, outermost first. Defaults to `[]`.
+ * @param options Composition options; see {@link CreateInvokerOptions}.
+ * @returns The composed invoke function.
  */
-export function createInvoker(layers: readonly Layer[] = []): InvokeFn {
+export function createInvoker(
+  layers: readonly Layer[] = [],
+  options: CreateInvokerOptions = {}
+): InvokeFn {
+  const terminal = options.terminal;
   return async function invoke(
     fnName: string,
     call: Call,
     opts: InvokeOptions
   ): Promise<LayerResult> {
-    const schema = opts.schemas[fnName];
-    if (!schema) {
-      throw new Error(
-        `apigen/invoke: no schema found for operation "${fnName}"`
-      );
-    }
+    let coreService: Next;
+    if (terminal !== undefined) {
+      // A supplied terminal is the innermost Service; `dispatch` is never
+      // reached. It sees the whole Call, signal and flat arguments included.
+      coreService = () => terminal(fnName, call, opts);
+    } else {
+      const schema = opts.schemas[fnName];
+      if (!schema) {
+        throw new Error(
+          `apigen/invoke: no schema found for operation "${fnName}"`
+        );
+      }
 
-    // The innermost Service — wraps the canonical dispatch function. The
-    // call's signal reaches dispatch (adhd ADR-0019 D4), which hands it to a
-    // `ctx`-taking function through `createClient` and rejects on abort.
-    const coreService: Next = () =>
-      dispatch(
-        opts.fns,
-        opts.createClient,
-        schema,
-        fnName,
-        call.envelope,
-        call.domainArgs,
-        call.signal
-      );
+      // The innermost Service — wraps the canonical dispatch function. The
+      // call's signal reaches dispatch (adhd ADR-0019 D4), which hands it to a
+      // `ctx`-taking function through `createClient` and rejects on abort.
+      coreService = () =>
+        dispatch(
+          opts.fns,
+          opts.createClient,
+          schema,
+          fnName,
+          call.envelope,
+          call.domainArgs,
+          call.signal
+        );
+    }
 
     // Compose layers right-to-left so layers[0] is outermost.
     // Each Layer receives a `next` that calls the next Layer inward.

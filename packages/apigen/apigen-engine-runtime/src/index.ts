@@ -6,6 +6,8 @@ export type {
   Call,
   InvokeOptions,
   InvokeFn,
+  Terminal,
+  CreateInvokerOptions,
 } from './lib/invoke';
 export { defineMiddleware } from './lib/define-middleware';
 export { EventBus, wireObservers } from './lib/event-bus';
