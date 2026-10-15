@@ -38,6 +38,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 - [search-port-providers.7] The state gates are green: `nx run stealth-search:typecheck`, `:lint` and `:test` exit 0.
 - [search-port-providers.8] Only owned paths changed by [psm:search-port-providers] commits.
 
+- [search-port-providers.9] (backlog 861571da, 224e7a44) The github provider returns results or a typed outcome, never a silent empty or a long hang: repository search (default `type=repositories`, dom strategy) yields results from a result-page fixture and, when the dom path finds none, falls back once to an API fixture inside the same call; `type:code` search maps to the github-code provider and, given an unauthenticated login wall fixture, returns outcome `error` whose message names the login wall (never `empty` or `success` with zero results); a rate-limit fixture returns `rate_limited`. Specs under src/test/unit/providers/ drive the real provider functions over fixtures; titles carry `type:code`, `login wall`, `fallback`, `rate_limited`, `repositories` and the uids 861571da and 224e7a44, and the spec cites [search-port-providers.9].
 ---
 
 ## Reservations
