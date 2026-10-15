@@ -108,12 +108,38 @@ function discardQuietly(path: string): void {
 }
 
 /**
+ * `linkSync` error codes that mean the filesystem cannot create hard links (some
+ * network mounts, FAT/exFAT, WSL drvfs), as opposed to a lock that already exists.
+ */
+const NO_HARDLINK_CODES: ReadonlySet<string> = new Set(['ENOTSUP', 'EOPNOTSUPP', 'EPERM', 'EXDEV', 'ENOSYS']);
+
+/**
+ * Fallback publish for filesystems without hard links: an exclusive `wx` write of
+ * `body` straight to `lockPath`. Exclusivity is kept (EEXIST means another holder
+ * owns the path), but the file is visible before its body is fully written, so a
+ * concurrent reader can briefly see an empty lock; the caller treats an empty
+ * body as corrupt, which is the weaker guarantee this path trades for working at all.
+ * @returns true when this call created the lock, false when the path already exists.
+ */
+function publishExclusive(lockPath: string, body: string): boolean {
+  try {
+    writeFileSync(lockPath, body, { flag: 'wx' });
+    return true;
+  } catch (err) {
+    if (errCode(err) === 'EEXIST') return false;
+    throw err;
+  }
+}
+
+/**
  * Publish `body` at `lockPath` with its full content already present: the body
  * is written to a unique temp file in the same directory and hard-linked to
  * `lockPath`. `linkSync` never overwrites, so EEXIST means another holder owns
  * the path. A concurrent reader therefore never sees an empty or half-written
  * lock. The temp file is always removed (a hard crash between the write and the
- * removal can leave one `<lock>.tmp.*` file behind).
+ * removal can leave one `<lock>.tmp.*` file behind). On a filesystem that cannot
+ * hard-link (see {@link NO_HARDLINK_CODES}) the lock is published with an
+ * exclusive `wx` write instead, with the same EEXIST semantics.
  * @returns true when this call created the lock, false when the path already exists.
  */
 function publishLock(lockPath: string, body: string): boolean {
@@ -124,7 +150,9 @@ function publishLock(lockPath: string, body: string): boolean {
       linkSync(temp, lockPath);
       return true;
     } catch (err) {
-      if (errCode(err) === 'EEXIST') return false;
+      const code = errCode(err);
+      if (code === 'EEXIST') return false;
+      if (code !== undefined && NO_HARDLINK_CODES.has(code)) return publishExclusive(lockPath, body);
       throw err;
     }
   } finally {

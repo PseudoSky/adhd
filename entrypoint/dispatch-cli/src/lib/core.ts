@@ -694,8 +694,12 @@ export async function runCycleCore(
  * Runs `fn` while holding the live-dispatch lock for `dagPath`, releasing it on
  * return or throw. The lock is per DAG file and fail-fast: a second holder in
  * another process is refused immediately with `DuplicateDispatchError`, never
- * queued. A caller that runs several cycles (e.g. `orchestrate()`'s loop) wraps
- * the whole loop here so the lock spans every cycle, not one cycle.
+ * queued. `runCycleCore` takes this lock for exactly ONE cycle and releases it on
+ * return; nothing in dispatch-cli loops over cycles. A caller that runs several
+ * cycles (for example one driving the `orchestrate` generator of
+ * `@adhd/dispatch-orchestrator`) must wrap its whole loop here, and must not call
+ * `runCycleCore` inside it (the lock is not reentrant), so the lock spans every
+ * cycle.
  *
  * NOT reentrant: nesting `withDagLock` for the same DAG inside `fn` (or calling
  * it from code already running under the lock, such as `runCycleCore`, which
