@@ -23,6 +23,23 @@ import { spawn } from 'node:child_process'
 import type { Operation } from '@adhd/apigen-core-client'
 
 /**
+ * Default wall-clock budget for one `--emit-json` extraction: 120 000 ms. Extraction
+ * of a typical module finishes in well under a second; the budget exists so a hung
+ * extractor fails the caller instead of stalling it indefinitely.
+ */
+export const DEFAULT_EXTRACTOR_TIMEOUT_MS = 120_000
+
+/** Options for {@link runExtractorEmitJson}. */
+export interface IRunExtractorOptions {
+  /**
+   * Wall-clock limit in milliseconds for the extractor process. On expiry the child is
+   * killed (SIGKILL) and the promise rejects with a timeout error naming the command.
+   * Must be a positive finite number. Defaults to {@link DEFAULT_EXTRACTOR_TIMEOUT_MS}.
+   */
+  timeoutMs?: number
+}
+
+/**
  * Runs `python -m apigen_python.extractor --emit-json` to completion and
  * parses its stdout into `Operation[]` — phase 1 of the py-flask / py-grpc
  * two-phase spawn (extract-only, then `project()`, then serve). This is a
@@ -38,6 +55,7 @@ import type { Operation } from '@adhd/apigen-core-client'
  * @param label        - Short caller identifier (e.g. `'py-flask'`, `'py-grpc'`)
  *                       prefixed onto error messages so failures are traceable
  *                       to their caller.
+ * @param options      - {@link IRunExtractorOptions}; `timeoutMs` bounds the run.
  */
 export function runExtractorEmitJson(
   python: string,
@@ -45,28 +63,55 @@ export function runExtractorEmitJson(
   modulePath: string,
   namespace: string,
   label: string,
+  options: IRunExtractorOptions = {},
 ): Promise<Operation[]> {
-  return new Promise<Operation[]>((resolve, reject) => {
-    const proc = spawn(
-      python,
-      ['-m', 'apigen_python.extractor', modulePath, '--namespace', namespace, '--emit-json'],
-      {
-        cwd: pythonPkgDir,
-        env: { ...process.env, PYTHONPATH: pythonPkgDir },
-        stdio: ['ignore', 'pipe', 'pipe'],
-      },
+  const timeoutMs = options.timeoutMs ?? DEFAULT_EXTRACTOR_TIMEOUT_MS
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+    return Promise.reject(
+      new RangeError(`${label}: extractor timeoutMs must be a positive finite number, got ${timeoutMs}`),
     )
+  }
+  const args = ['-m', 'apigen_python.extractor', modulePath, '--namespace', namespace, '--emit-json']
+  const commandLine = [python, ...args].join(' ')
+
+  return new Promise<Operation[]>((resolve, reject) => {
+    const proc = spawn(python, args, {
+      cwd: pythonPkgDir,
+      env: { ...process.env, PYTHONPATH: pythonPkgDir },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
 
     let stdout = ''
     let stderr = ''
+    let timedOut = false
+    // A hung extractor must not hold the promise (and the caller's CI step) forever.
+    // On expiry the child is SIGKILLed; the rejection is deferred to 'exit' so the
+    // child is provably gone by the time the caller observes the error.
+    const timer = setTimeout(() => {
+      timedOut = true
+      proc.kill('SIGKILL')
+    }, timeoutMs)
     proc.stdout?.on('data', (chunk: Buffer) => {
       stdout += chunk.toString('utf8')
     })
     proc.stderr?.on('data', (chunk: Buffer) => {
       stderr += chunk.toString('utf8')
     })
-    proc.on('error', reject)
+    proc.on('error', (err) => {
+      clearTimeout(timer)
+      reject(err)
+    })
     proc.on('exit', (code) => {
+      clearTimeout(timer)
+      if (timedOut) {
+        reject(
+          new Error(
+            `${label}: extractor --emit-json timed out after ${timeoutMs} ms and was killed ` +
+              `(command: ${commandLine})${stderr ? `:\n${stderr}` : ''}`,
+          ),
+        )
+        return
+      }
       if (code !== 0) {
         reject(new Error(`${label}: extractor --emit-json exited with code ${code}:\n${stderr}`))
         return
