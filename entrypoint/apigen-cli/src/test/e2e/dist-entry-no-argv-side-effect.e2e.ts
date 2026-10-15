@@ -35,9 +35,15 @@
 import { describe, it, expect } from 'vitest';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { readFileSync } from 'node:fs';
 import * as path from 'node:path';
 
 const execFileAsync = promisify(execFile);
+const PKG_VERSION = (
+  JSON.parse(
+    readFileSync(path.resolve(__dirname, '..', '..', '..', 'package.json'), 'utf8')
+  ) as { version: string }
+).version;
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..', '..', '..');
 const BUILT_BIN_CJS = path.join(
@@ -137,9 +143,9 @@ describe('dist entry point: no argv-parsing side effect on mere require()/import
       const result = await runNodeFile(BUILT_BIN_CJS, ['--version']);
 
       expect(result.code, `stderr:\n${result.stderr}`).toBe(0);
-      // src/index.ts: new Command().name('apigen').version('0.1.0') — commander
-      // prints exactly the configured version string for `--version`.
-      expect(result.stdout.trim()).toBe('0.1.0');
+      // commander prints exactly the configured version string for `--version`,
+      // which src/index.ts reads from this package's own package.json.
+      expect(result.stdout.trim()).toBe(PKG_VERSION);
     },
     30_000
   );

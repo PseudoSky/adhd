@@ -15,7 +15,7 @@
  * and a path under `tmp/dispatch-cli/`.
  */
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { createHash } from 'node:crypto';
 import { homedir, tmpdir } from 'node:os';
@@ -168,7 +168,15 @@ const WORKSPACE_MARKER_SEARCH_DEPTH = 12;
  */
 function resolutionBase(): string {
   const entry = process.argv[1];
-  return entry && entry.length > 0 ? entry : join(process.cwd(), 'index.js');
+  if (!entry || entry.length === 0) return join(process.cwd(), 'index.js');
+  // `process.argv[1]` keeps the path the CLI was launched BY. Launched through a symlink (a bin shim outside the
+  // repo, or a macOS `/var` -> `/private/var` path), its parents are the link's directories, not the install's, so
+  // neither `createRequire` nor the walk to `entrypoint/` would find the checkout (the c40c33e1 entry-guard class).
+  try {
+    return realpathSync(entry);
+  } catch {
+    return entry;
+  }
 }
 
 /**
