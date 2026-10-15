@@ -51,9 +51,14 @@ function modelVisibleTextOf(result: unknown): string {
 }
 
 /**
- * sha256 (hex) of the system message the provider is sent, or `null` when the request
- * carries no system message. `toolDocSystemMessage` (names mode) already embeds the
- * history's system content, so it takes precedence over `history[0]`.
+ * sha256 (hex) of the system message of a model request, or `null` when it carries none.
+ *
+ * What is hashed: the system content of the history as the turn is about to shape it, taken
+ * before the `pre:model_request` enforcement runs and before windowing. `toolDocSystemMessage`
+ * (names mode) already embeds the history's system content, so it takes precedence over
+ * `history[0]`, the same precedence the request shaping uses. The hash therefore does not
+ * reflect a system message an enforcement handler replaces on the request copy; the MODEL_REQUEST
+ * event cannot be moved after that step without reordering it against the enforcement hook.
  */
 function systemPromptSha256(
   toolDocSystemMessage: Message | null,
@@ -1479,6 +1484,8 @@ export class Orchestrator {
         // compute_ms capture: turn-level model-call latency, distinct from task
         // wall-clock `latency_ms` (see DESIGN.md §6). Captured right before the
         // MODEL_REQUEST event so it brackets exactly the provider.chat() call below.
+        // The MODEL_REQUEST payload's systemPromptSha256 is computed here, before the
+        // pre:model_request enforcement below (see systemPromptSha256 for what it hashes).
         const modelCallStartedAt = Date.now();
         // P6: engine time between the previous model call ending and this request starting.
         const callOverheadMs = computeOverheadMs(lastModelCallEndedAt, modelCallStartedAt);
@@ -2469,8 +2476,8 @@ export class Orchestrator {
               ? undefined
               : parseShellExitStatus(resolved.tool, toolResult);
 
-            // Tokenize the FULL, untruncated result BEFORE the 500-char truncation
-            // below — tokenizing the already-truncated summary would undercount
+            // Tokenize the FULL, untruncated result BEFORE the model-visible cap
+            // applied below (BK1) — tokenizing the capped text would undercount
             // every large tool result (DESIGN.md §5).
             const fullResultText =
               typeof toolResult === 'string'
@@ -2482,8 +2489,9 @@ export class Orchestrator {
             } = estimateToolResultTokens(fullResultText);
 
             // BK1 (3ad735bb): bound what the MODEL sees (and what the session
-            // history persists). Telemetry above and the 500-char summary below
-            // keep measuring the FULL result; `post:tool_call` also receives it.
+            // history persists). Telemetry above and `post:tool_call` below keep
+            // the FULL result. The TOOL_RESULT event stores the model-visible
+            // (capped) text and its sha256 — whole, never sliced.
             const capOutcome = capOrSpillToolResult({
               result: toolResult,
               isError,

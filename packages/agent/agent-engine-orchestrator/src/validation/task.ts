@@ -36,6 +36,12 @@ export const taskSchema = z.object({
 
 export type { Task } from '@adhd/agent-base-types';
 
+/**
+ * Zod mirror of the `TaskEventType` union in `@adhd/agent-base-types` and of the `task_events.type`
+ * enum in the drizzle schema (`@adhd/agent-store-runtime`). Keep all three in step: a type added to
+ * one and not the others fails validation or insertion. `CONTEXT_COMPACTED` is recorded when the
+ * orchestrator compacts a task's history.
+ */
 export const taskEventTypeSchema = z.enum([
   'MODEL_REQUEST',
   'MODEL_RESPONSE',

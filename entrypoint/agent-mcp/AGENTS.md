@@ -122,6 +122,15 @@ The rule map (`nativeTooling.*.permissions`) and `shell.env` are JSON objects wi
 - **Persistence:** All agents, conversations, and usage records persist across server restarts
 - **Migration:** `npm run db:migrate` (drizzle-kit auto-applied on server start as of 2.0.2). On boot the server also runs a one-time flat→namespaced legacy migration that copies rows from `~/.adhd/agent-mcp/agents.db` into the resolved store. Set `ADHD_AGENT_SKIP_LEGACY_MIGRATION=true` (config field `db.skipLegacyMigration`) to skip it entirely — the flat legacy store is then never read. Intended for hermetic test harnesses so a fresh scratch DB is not seeded from a developer's real store; normal servers should leave it unset.
 
+### Task event log (`task_events` tool)
+
+- **Input:** `task_id` (uuid, required); `limit` (1–500, default 50, caps the event count); `offset` (default 0). An unknown `task_id` throws.
+- **Output:** `{ task_id, total, offset, limit, has_more, events, truncated_by_bytes? }`. Events are in recorded order (`rowid`, oldest first). Each event is `{ id, type, created_at, payload, payload_error? }`; `payload` is the parsed JSON, or `null` with `payload_error: "invalid_json"` when the stored text does not parse.
+- **Byte budget:** the serialized page is capped at 256 KiB (`TASK_EVENTS_MAX_PAGE_BYTES`). Trailing events are dropped to fit; `truncated_by_bytes: true` is then present and `has_more` is true. The first event of a page is always returned.
+- **Tool results:** a `TOOL_RESULT` event stores the model-visible text (capped by `ADHD_AGENT_TOOL_RESULT_MAX_CHARS`, or a spill stub) in `result` and its sha256 in `result_sha256`. It does not store the uncapped tool output.
+- **Model requests:** a `MODEL_REQUEST` event carries `advertisedToolNames` and `systemPromptSha256` (see `systemPromptSha256` in `orchestrator.ts` for what is hashed).
+- **Access:** the tool does not scope or redact. Any caller that knows a task UUID can read that task's model-visible tool output and event history, and this holds for tasks from every session on the server.
+
 ### Providers (Supported Models)
 
 There are exactly three provider `type`s in code (`packages/agent/agent-engine-orchestrator/src/validation/agent.ts`: `anthropicProviderSchema`, `openaiProviderSchema`, `claudecliProviderSchema`). "DeepSeek" and "Gemini" are **not** separate provider types:

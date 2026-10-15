@@ -25,6 +25,8 @@ const jsonOut = args["json"] as boolean;
 const follow = args["follow"] as boolean;
 
 const defaultMaxLen = verbose ? 100000 : 2000;
+/** Non-verbose cap on a TOOL_RESULT / TASK_COMPLETED preview, in UTF-16 code units (`string.length`). */
+const NON_VERBOSE_PREVIEW_CHARS = 2000;
 
 const dbPath = resolveTailDbPath();
 
@@ -202,7 +204,7 @@ function buildDetail(row: EventRow, tcList: ToolCallEntry[], trList: ToolResultE
       const trMatch = trList.find((t: ToolResultEntry) => t.toolCallId === callId || t.id === callId || t.callId === callId);
       const result = trMatch?.result ?? trMatch?.content ?? trMatch?.text ?? p["content"] ?? p["result"] ?? "";
       let resultStr = typeof result === "string" ? result : JSON.stringify(result, null, verbose ? 2 : 0);
-      if (!verbose && resultStr.length > 2000) resultStr = resultStr.slice(0, 2000) + "...";
+      if (!verbose && resultStr.length > NON_VERBOSE_PREVIEW_CHARS) resultStr = resultStr.slice(0, NON_VERBOSE_PREVIEW_CHARS) + "...";
       return `${tool}${err} ${resultStr}`;
     }
     case "TASK_COMPLETED": {
@@ -210,7 +212,7 @@ function buildDetail(row: EventRow, tcList: ToolCallEntry[], trList: ToolResultE
       if (!text) return "";
       const s = typeof text === "string" ? text : JSON.stringify(text);
       if (verbose) return s;
-      return s.length > 2000 ? s.slice(0, 2000) + "..." : s;
+      return s.length > NON_VERBOSE_PREVIEW_CHARS ? s.slice(0, NON_VERBOSE_PREVIEW_CHARS) + "..." : s;
     }
     case "TASK_FAILED":
       return `Error: ${pretty(JSON.stringify(p), 500)}`;

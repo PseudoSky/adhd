@@ -426,6 +426,14 @@ This release fixes six critical regressions from 2.0.0/2.0.1 related to context 
 
 **Impact:** Existing configs at the legacy path will load again. No action required.
 
+## Task event log (`task_events`)
+
+`task_events` reads the event log of one task by `task_id`, oldest first. Pass `limit` (1–500, default 50) and `offset` to page; the response carries `total` and `has_more`. A page is also capped at 256 KiB of serialized JSON: when trailing events are dropped to fit, the response sets `truncated_by_bytes: true` and `has_more: true`. An unknown `task_id` is an error.
+
+`TOOL_RESULT` events carry the model-visible result text (capped by `ADHD_AGENT_TOOL_RESULT_MAX_CHARS`) and its `result_sha256`. `MODEL_REQUEST` events carry `advertisedToolNames` and `systemPromptSha256`. `CONTEXT_COMPACTED` records a history compaction.
+
+**Access:** `task_events` is not scoped or redacted. Any MCP client that knows a task UUID can read that task's tool output and event history. Run the server only where every connected client may read every task on it.
+
 ## Local dev server (`serve`, live reload)
 
 A long-running local server over the streamable-HTTP transport that restarts itself whenever the
