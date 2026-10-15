@@ -492,7 +492,9 @@ export function createGateway(opts: GatewayOptions): Gateway {
     // A start still in flight may spawn its child after this stop returns; record one
     // owed post-start stop per such start before awaiting, so a start settling during
     // this stop is not missed.
-    entry.owedStopsAfterStart += entry.startsInFlight;
+    // Idempotent: repeated stops during the same start must not inflate the owed count
+    // beyond the number of starts that can still settle (one owed stop per in-flight start).
+    entry.owedStopsAfterStart = Math.max(entry.owedStopsAfterStart, entry.startsInFlight);
     await entry.adapter.stop();
   }
 
@@ -510,7 +512,14 @@ export function createGateway(opts: GatewayOptions): Gateway {
       entry.startsInFlight -= 1;
       if (entry.owedStopsAfterStart > 0) {
         entry.owedStopsAfterStart -= 1;
-        await entry.adapter.stop();
+        // A failing owed stop must not replace this start's outcome. On the failure path the
+        // start error keeps propagating; on the success path teardown already retired the host
+        // and marked it `down`, so a failed stop leaves nothing routable and is swallowed here.
+        try {
+          await entry.adapter.stop();
+        } catch {
+          // gateway.ts has no logging channel, so the failed stop is not recorded.
+        }
       }
     }
   }
