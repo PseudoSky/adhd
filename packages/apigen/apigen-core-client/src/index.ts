@@ -84,8 +84,18 @@ export {
   pluginConsumesSource,
   sourcesForPlugin,
   effectiveLanguage,
+  resolveSourceReference,
 } from './lib/source-language';
-export type { LanguageAwarePlugin } from './lib/source-language';
+export type {
+  LanguageAwarePlugin,
+  AssetKind,
+  TranslatorId,
+  SourceLocator,
+  BindingSpec,
+  ISourceResolution,
+  SourceResolutionError,
+  ISourceProbe,
+} from './lib/source-language';
 
 // F1 (BATCH_0.0.1.md) — host-agnostic batch/bulk fan-out schema derivation.
 export {
