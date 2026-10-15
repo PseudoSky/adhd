@@ -49,3 +49,10 @@ AC1-AC4: S, pure functions in get-safety.spec/naming.spec, negative controls inc
 - Breaking generated HTTP surfaces for every apigen consumer (D1-A). Mitigate: CHANGELOG + `http.safe` migration note; run `npx nx affected -t test,e2e` (apigen family is wide; CRITICAL gx rating).
 - Shares `entrypoint/apigen-cli/src/lib/orchestrator.ts` and apigen-core-client with no other spec in this batch. Serialize behind any open apigen runmode/batch worktree (b-apigen-*) touching compose-schemas.ts.
 - Open decision for product: D1 A vs B; whether the breaking change needs a deprecation window (one release emitting a warning when an undeclared primitive-only fn would have been GET).
+
+## Product revision
+dor (product): needs-decision, narrowed to ONE technical question for architect-decision (safety-signal policy). Everything else is ready; the moment the verdict lands the spec is impl-ready without further product input.
+Product position (input to the architect, not a decision on it): the consumer outcome is "an undeclared state-mutating function is never reachable by GET (prefetch/cache/crawler safe)". Options C (keep + document) and D (`@safe` annotation, Tenet 1) are rejected on that outcome. Product prefers the option whose default is POST with explicit declaration (spec Option A) provided the architect confirms it is sound against Tenet 1 and the conformance vectors.
+Product call made now (not technical): NO deprecation-warning window. apigen is 0.x, backlog mounts are already POST, and a warning release leaves non-idempotent writes GET-reachable for a full release cycle, which defeats the bug. Breaking change ships as a minor bump + CHANGELOG with a `http.safe.<id>` migration note in the three packages. Reopen if the architect or a consumer names a published HTTP-surface consumer of the 0.x line.
+Item correction: hoist is in naming.ts and compose-schemas.ts, not `run.ts`; backlog evidence is stale (client.ts gone).
+Priority: P1 when unblocked (writes reachable by GET is a correctness/safety defect), rank 7 (gated on the verdict; M size; CRITICAL gx rating so serialize behind open b-apigen-* worktrees).
