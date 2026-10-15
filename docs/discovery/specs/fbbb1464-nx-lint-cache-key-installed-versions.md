@@ -28,7 +28,7 @@ D4 Not in scope: changing which projects the pre-commit hook lints (`--files` ma
 - /Users/nix/dev/node/adhd/tools/nx-plugins/deps/README.md (document the key)
 
 ## Acceptance criteria
-- AC1 For a fixture project whose package.json declares `dependencies:{a:..}`, `devDependencies:{b:..}`, `@adhd/x`, the lint target's inputs include `externalDependencies` containing `eslint`, `a`, `b` and not `@adhd/x`.
+- AC1 For a fixture project whose package.json declares `dependencies:{a:..}`, `devDependencies:{b:..}`, `@adhd/x`, and whose `a` and `b` are installed in `node_modules`, the lint target's inputs include `externalDependencies` containing `eslint`, `a`, `b` and not `@adhd/x`. A declared name that is not installed is omitted (see Implementation note, D3(i)).
 - AC2 `sync-deps-check` and `sync-deps` inputs carry the same declared set for that project.
 - AC3 Changing the installed version of a declared dependency changes the task hash of that project's `lint` and `sync-deps-check`, and does not change the hash of a project that does not declare it.
 - AC4 A warm-cache `nx lint` of a project whose manifest range excludes its installed version fails after the installed version changes (the reported scenario), without `nx reset`.
@@ -48,3 +48,9 @@ dor (product): ready. No open decision; architect dor stands.
 - Scope: unchanged (D1-D4). One-time cache invalidation after merge is accepted as intended cost. No scope cut.
 - Priority: P1, rank 1 of the impl-ready set (smallest S, widest trust payoff, unblocks 2f3dbebc).
 - Added gate: AC3/AC4 must be shown red against current main before the fix (G6); the D3 Nx probe is the first test and its outcome is recorded in the spec's implementation note.
+
+## Implementation note (D3 probe outcomes, Nx 23.2.1, pnpm workspace)
+- D3(i) absent declared name: a listed `externalDependencies` name that is not installed makes Nx fail the task: `The externalDependency 'not-installed-x' for 'proj-a:lint' could not be found` (exit 1). The declared list is therefore filtered to names installed in `node_modules` at createNodes time via `isInstalledFromProject` in `tools/nx-plugins/lib/declared-external-deps.js`. This is the D3 fallback, and it is required.
+- D3(ii) installed version: a version bump recorded in the lockfile changes the hash of a project that declares the dependency, and a warm `lint` run misses the cache (AC4 path). A `node_modules/<dep>/package.json` edit that is not reflected in the lockfile does not change the hash: a warm `lint` after that edit still hits 1/1.
+- AC3 B-clause (open): Nx 23 invalidates a project that does NOT declare the changed dependency, once, when the parsed external graph changes (a version bump or an unrelated package added to the lockfile). Comment-only lockfile edits and `node_modules`-only edits do not. This contradicts AC3's "does not change the hash of a project that does not declare it." The spec's risk note bounds invalidation to the declaring project, so the B-clause is not met as written. Decision pending (QA / architect); the AC is not weakened in the test.
+- Test fixture: `node_modules/.modules.yaml` is required for the pnpm external-graph loader; `targetDefaults` for `sync-deps-check` and `lint` carry `cache:true`; `dependsOn` is omitted from the scratch root `nx.json`, because it made AC4 unobservable.
