@@ -24,6 +24,11 @@
  * synchronous result has no `warnings`. Each control (no warning) therefore also asserts the exact
  * `toolUseCount`, so it fails at base on "expected undefined to be N" instead of passing vacuously.
  *
+ * Added later: the max(reportedToolUses, toolCalls.length) count (reported 0 + calls > 0 must not warn), the
+ * discarded-attempt accounting (limited to the failed MODEL_RESPONSE/hook toolCallCount: every discard ends in
+ * TASK_FAILED, so `toolUseCount` itself is not observable there), and the TASK_COMPLETION_WARNINGS tuple.
+ * Red run for these: pending (user hold).
+ *
  * Not covered here (outside this package; see the hand-back): the agent-mcp
  * `notifications/task/completed` leg, which lives in entrypoint/agent-mcp/src/server.ts.
  */
@@ -31,7 +36,10 @@ import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { describe, expect, it, vi } from 'vitest';
 
 import { SessionStore, TaskStore } from '@adhd/agent-store-runtime';
+import { TASK_COMPLETION_WARNINGS } from '@adhd/agent-base-types';
 import type { AgentDefinition } from '@adhd/agent-base-types';
+
+import { attachPartialUsage } from '../providers/partial-usage.js';
 
 import { Orchestrator, resolveHitl } from '../engine/orchestrator.js';
 import type { OrchestratorSessionStore, OrchestratorTaskStore } from '../engine/orchestrator.js';
@@ -348,16 +356,16 @@ describe('cbd559eb AC1 -- tools granted + zero tool use => warnings:[no_tool_use
   // set is exactly that tool (the real registry adds a client-side web_fetch for openai otherwise).
   it('cbd559eb AC1: the synchronous task result carries warnings when the run used no tools, and omits the key when it did', async () => {
     const warned = await runTaskTool([{ kind: 'completed', content: 'answered cold' }]);
-    expect(warned.output.status).toBe('completed');
-    expect(warned.output.result).toBe('answered cold');
-    expect(warned.output.warnings).toEqual(['no_tool_use']);
+    expect(warned.output['status']).toBe('completed');
+    expect(warned.output['result']).toBe('answered cold');
+    expect(warned.output['warnings']).toEqual(['no_tool_use']);
 
     const used = await runTaskTool([
       { kind: 'tools', calls: [{ server: 'agent-mcp', tool: 'probe' }] },
       { kind: 'completed', content: 'answered with a tool' },
     ]);
-    expect(used.output.status).toBe('completed');
-    expect(used.output.result).toBe('answered with a tool');
+    expect(used.output['status']).toBe('completed');
+    expect(used.output['result']).toBe('answered with a tool');
     expect('warnings' in used.output, 'the key is omitted, not empty').toBe(false);
     expect(used.probeCalls).toBe(1);
   });
@@ -567,6 +575,103 @@ describe('cbd559eb AC6 -- one warn log line per flagged task', () => {
 });
 
 // ---------------------------------------------------------------------------------------------
+// AC2 (accounting) -- discarded attempts and mixed provider reports
+// ---------------------------------------------------------------------------------------------
+
+describe('cbd559eb AC2 -- accounting of discarded attempts and of toolCalls vs reportedToolUses', () => {
+  // Failure mode: a provider response with reportedToolUses = 0 AND populated message.toolCalls reads the 0
+  // through a `??` chain and drops the real calls, raising a false no_tool_use warning. The count is the
+  // max of the two. Tier S. Technique: boundary (reported 0, calls 2).
+  it('cbd559eb AC2: reportedToolUses 0 with message.toolCalls.length > 0 does not warn and counts the calls', async () => {
+    const s = await runScenario({
+      tools: [TOOL_A, TOOL_B],
+      turns: [
+        {
+          kind: 'tools',
+          calls: [
+            { server: 'srv', tool: 'a' },
+            { server: 'srv', tool: 'b' },
+          ],
+          reportedToolUses: 0,
+        },
+        { kind: 'completed', content: 'done', reportedToolUses: 0 },
+      ],
+    });
+    expect(s.executed).toEqual(['srv__a', 'srv__b']);
+    expect(s.completed['toolUseCount']).toBe(2);
+    expect('warnings' in s.completed, 'persisted payload omits the key').toBe(false);
+    expect('warnings' in s.hookPayloads[0]).toBe(false);
+    expect('warnings' in s.doneEvents[0]).toBe(false);
+    expect(noToolUseLogs(s)).toHaveLength(0);
+  });
+
+  // Failure mode: the CLI-internal tool uses of a DISCARDED attempt (a provider call that failed or was
+  // dropped for a fatal governance error but carried partial usage) are not accounted. Tier S.
+  // Limit of observability: every discard path ends the run in TASK_FAILED, so the task-wide
+  // `toolUseCount` local is not exposed after a discard; the accounting the engine DOES expose for the
+  // discarded attempt is the `toolCallCount` of its failed MODEL_RESPONSE record and of the
+  // `post:model_response` hook payload, both asserted here. A CLI retry that follows a discarded attempt
+  // never double-counts tool uses (foldFailedAttemptSpend), so the retried response carries its own count.
+  it('cbd559eb AC2: a discarded attempt carrying reportedToolUses 2 records toolCallCount 2 on its failed MODEL_RESPONSE and hook', async () => {
+    const sqlite = createMigratedSqlite();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const db = drizzle(sqlite) as any;
+    const taskStore = new TaskStore(db);
+    const ctx = makeCtx();
+    taskStore.create({ sessionId: ctx.sessionId, prompt: 'do the work', id: ctx.taskId });
+    const hooks = new HookRegistry();
+    const modelResponses: Array<Record<string, unknown>> = [];
+    hooks.register('post:model_response', (payload) => {
+      modelResponses.push(payload as unknown as Record<string, unknown>);
+    });
+    const provider: LLMProvider = {
+      chat: async () => {
+        throw attachPartialUsage(new Error('cli run discarded'), {
+          usage: { inputTokens: 10, outputTokens: 5 },
+          reportedToolUses: 2,
+          reportedModelCalls: 1,
+        });
+      },
+    };
+    await expect(
+      new Orchestrator().run({
+        executionContext: ctx,
+        messages: [userMessage(ctx.sessionId)],
+        registry: fakeRegistry([TOOL_A], []),
+        provider,
+        policy,
+        taskStore: taskStore as unknown as OrchestratorTaskStore,
+        sessionStore,
+        signal: new AbortController().signal,
+        taskId: ctx.taskId,
+        hooks,
+        config: engineConfig(),
+      })
+    ).rejects.toThrow();
+
+    const failedResponses = (
+      sqlite.prepare("SELECT payload FROM task_events WHERE task_id = ? AND type = 'MODEL_RESPONSE'").all(ctx.taskId) as Array<{
+        payload: string;
+      }>
+    )
+      .map((e) => JSON.parse(e.payload) as Record<string, unknown>)
+      .filter((p) => p['failed'] === true);
+    sqlite.close();
+    expect(failedResponses, 'the discarded attempt is recorded once').toHaveLength(1);
+    expect(failedResponses[0]['toolCallCount']).toBe(2);
+    expect(modelResponses).toHaveLength(1);
+    expect(modelResponses[0]['toolCallCount']).toBe(2);
+    expect(modelResponses[0]['stopReason']).toBe('error');
+  });
+
+  // Failure mode: the warning vocabulary drifts from the shared tuple (a second spelling, or an extra
+  // value added without a contract change). Tier S.
+  it('cbd559eb AC1: TASK_COMPLETION_WARNINGS is exactly [no_tool_use]', () => {
+    expect([...TASK_COMPLETION_WARNINGS]).toEqual(['no_tool_use']);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------
 // taskTool leg harness (REAL taskTool -> runEphemeralTask -> Orchestrator; provider mocked via factory)
 // ---------------------------------------------------------------------------------------------
 
@@ -629,7 +734,7 @@ async function runTaskTool(
     logger: silent,
   };
   scriptedProvider = scriptedProviderOf(turns).provider;
-  // Widened on purpose: the result field under test (`warnings`) does not exist on the base type.
+  // Widened to a string-keyed record so the assertions read result fields by bracket access.
   const output = (await taskTool({ agent_name: def.name, prompt: 'do the work' }, deps)) as unknown as Record<string, unknown>;
   return { output, probeCalls };
 }

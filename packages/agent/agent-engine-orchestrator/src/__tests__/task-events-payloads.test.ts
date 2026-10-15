@@ -8,7 +8,8 @@
  *   (d) with the cap disabled the stored text is truncated anyway; (e) with spill enabled the stored stub
  *   is not the stub the model read, or the spilled file is missing its full text.
  * AC3 (MODEL_REQUEST): `advertisedToolNames` equals the tool names the provider was called with, and
- *   `systemPromptSha256` is the sha256 of the system content the provider was sent (null when none).
+ *   `systemPromptSha256` is the sha256 of the composed system prompt before model-request enforcement and
+ *   windowing (null when none).
  *   Failure modes: (f) names drawn from the registry instead of the request; (g) a hash of the wrong text
  *   (history[0] vs the tool-doc system message); (h) a hash of a non-null value when no system message exists.
  * AC4 (CONTEXT_COMPACTED): the type parses through `taskEventTypeSchema` and survives a round trip through
@@ -223,8 +224,8 @@ describe("facd4aaa AC2 TOOL_RESULT stores the model-visible text, not a 500-char
         const payload = toolResultOf(outcome);
         const seen = modelReadToolText(outcome);
 
-        expect(payload.result).toBe(seen);
-        expect(payload.result_sha256).toBe(sha256(seen));
+        expect(payload["result"]).toBe(seen);
+        expect(payload["result_sha256"]).toBe(sha256(seen));
         expect(seen.length).toBeGreaterThan(500);
         expect(seen.length).toBeGreaterThanOrEqual(5_000);
         expect(seen.length).toBeLessThanOrEqual(7_000);
@@ -239,8 +240,8 @@ describe("facd4aaa AC2 TOOL_RESULT stores the model-visible text, not a 500-char
         const payload = toolResultOf(outcome);
 
         expect(modelReadToolText(outcome)).toBe(text);
-        expect(payload.result).toBe(text);
-        expect(payload.result_sha256).toBe(sha256(text));
+        expect(payload["result"]).toBe(text);
+        expect(payload["result_sha256"]).toBe(sha256(text));
     });
 
     // Failure mode (d). maxChars 0 disables the cap; the stored text must be the full result.
@@ -250,8 +251,8 @@ describe("facd4aaa AC2 TOOL_RESULT stores the model-visible text, not a 500-char
         const payload = toolResultOf(outcome);
 
         expect(modelReadToolText(outcome)).toBe(text);
-        expect(payload.result).toBe(text);
-        expect(payload.result_sha256).toBe(sha256(text));
+        expect(payload["result"]).toBe(text);
+        expect(payload["result_sha256"]).toBe(sha256(text));
     });
 
     // Failure mode (e). With spill on, the model reads the stub; the stored result must be that stub, and the
@@ -265,21 +266,21 @@ describe("facd4aaa AC2 TOOL_RESULT stores the model-visible text, not a 500-char
         const payload = toolResultOf(outcome);
         const seen = modelReadToolText(outcome);
 
-        expect(payload.spilled).toBe(true);
-        expect(typeof payload.spill_path).toBe("string");
-        const spillPath = payload.spill_path as string;
+        expect(payload["spilled"]).toBe(true);
+        expect(typeof payload["spill_path"]).toBe("string");
+        const spillPath = payload["spill_path"] as string;
         expect(existsSync(spillPath)).toBe(true);
         expect(readFileSync(spillPath, "utf8")).toBe(text);
-        expect(payload.result).toBe(seen);
+        expect(payload["result"]).toBe(seen);
         expect(seen).toContain(spillPath);
-        expect(payload.result_sha256).toBe(sha256(seen));
+        expect(payload["result_sha256"]).toBe(sha256(seen));
     });
 
     // Failure mode (a), negative control. The stored text must not equal the uncapped result when the cap is on.
     it("facd4aaa AC2 NEGATIVE CONTROL: with the default cap an over-cap result is not stored whole", async () => {
         const text = `BEGIN${"c".repeat(20_000)}END`;
         const outcome = await drive({ toolText: text });
-        expect(toolResultOf(outcome).result).not.toBe(text);
+        expect(toolResultOf(outcome)["result"]).not.toBe(text);
     });
 });
 
@@ -297,12 +298,13 @@ describe("facd4aaa AC3 MODEL_REQUEST records the tools advertised and the system
             expect(request.serverSideTools ?? []).toHaveLength(0);
             const sentNames = (request.tools ?? []).map((t) => t.name);
             expect(sentNames).toEqual(["test-server__echo", "test-server__ping"]);
-            expect(event.payload?.advertisedToolNames).toEqual(sentNames);
+            expect(event.payload?.["advertisedToolNames"]).toEqual(sentNames);
         });
     });
 
-    // Failure mode (g). The hash must be of the system content as sent, so the test computes it from the request.
-    it("facd4aaa AC3: systemPromptSha256 equals the sha256 of the system content the provider was sent", async () => {
+    // Failure mode (g). The hash is of the composed system prompt (taken before pre:model_request enforcement and
+    // windowing); with no enforcement hook registered here that equals the system message the provider received.
+    it("facd4aaa AC3: systemPromptSha256 equals the sha256 of the composed system prompt before model-request enforcement and windowing", async () => {
         const systemPrompt = "SYSTEM ALPHA: answer in one word.";
         const outcome = await drive({ toolText: "ok", systemPrompt });
         const modelRequests = outcome.events.filter((e) => e.type === "MODEL_REQUEST");
@@ -311,7 +313,7 @@ describe("facd4aaa AC3 MODEL_REQUEST records the tools advertised and the system
         expect(sentSystem, "the provider must be sent a system message for this case").toBeDefined();
         const sentText = typeof sentSystem!.content === "string" ? sentSystem!.content : JSON.stringify(sentSystem!.content);
         expect(sentText).toContain("SYSTEM ALPHA");
-        expect(modelRequests[0]!.payload?.systemPromptSha256).toBe(sha256(sentText));
+        expect(modelRequests[0]!.payload?.["systemPromptSha256"]).toBe(sha256(sentText));
     });
 
     // Failure mode (h). No system message sent means the hash is null, not the hash of an empty string.
@@ -322,7 +324,7 @@ describe("facd4aaa AC3 MODEL_REQUEST records the tools advertised and the system
 
         // Precondition: the case is only meaningful when no system message reached the provider.
         expect(sentSystem, "precondition: this case sends no system message").toBeUndefined();
-        expect(modelRequests[0]!.payload?.systemPromptSha256).toBeNull();
+        expect(modelRequests[0]!.payload?.["systemPromptSha256"]).toBeNull();
     });
 });
 
