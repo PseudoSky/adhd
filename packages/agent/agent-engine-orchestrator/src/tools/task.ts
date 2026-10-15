@@ -258,7 +258,7 @@ async function runEphemeralTask(
   },
   deps: TaskDeps,
   callerContext?: ExecutionContext
-): Promise<TaskToolResult> {
+): Promise<TaskToolOutput> {
   // Caller-cwd contract (ADR-0008 D4): the caller may supply a `cwd`; a
   // sub-dispatch inherits the parent's. Absent ⇒ the host falls back to its own
   // process.cwd() (flagged on the resolve context).
@@ -526,7 +526,7 @@ export async function taskTool(
   input: TaskToolInput,
   deps: TaskDeps,
   callerContext?: ExecutionContext
-): Promise<TaskToolResult> {
+): Promise<TaskToolOutput> {
   const startedAt = performance.now();
   const out = await dispatchTask(input, deps, callerContext);
   await emitDispatchCompleted(deps, callerContext, {
@@ -543,7 +543,7 @@ async function dispatchTask(
   input: TaskToolInput,
   deps: TaskDeps,
   callerContext?: ExecutionContext
-): Promise<TaskToolResult> {
+): Promise<TaskToolOutput> {
   if ('agent_name' in input) {
     return runEphemeralTask(input, deps, callerContext);
   }
