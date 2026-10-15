@@ -4599,6 +4599,15 @@
       "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-hosts --only search-hosts.21",
       "expect": "exit0",
       "cwd": "repo-root"
+    },
+    {
+      "id": "core-seam.5",
+      "phase": "migrate",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py core-seam --only core-seam.5",
+      "expect": "exit0",
+      "cwd": "repo-root"
     }
   ]
 }
