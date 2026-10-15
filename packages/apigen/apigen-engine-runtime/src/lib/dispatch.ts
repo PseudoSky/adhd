@@ -1,4 +1,8 @@
-import type { SchemaNode, TranscodeCtx } from '@adhd/apigen-base-logical';
+import type {
+  SchemaNode,
+  TranscodeCtx,
+  Wire,
+} from '@adhd/apigen-base-logical';
 import {
   buildTranscoder,
   createRegistry,
@@ -6,6 +10,8 @@ import {
   rootRefResolver,
 } from '@adhd/apigen-base-logical';
 import type { ComposedSchemas } from './types';
+import type { ApiStream } from './stream';
+import { isApiStream } from './stream';
 
 // ---------------------------------------------------------------------------
 // Module-level transcoder: built once from the well-known TS scalar codecs.
@@ -122,8 +128,33 @@ function refCtx(root: SchemaNode, fnName: string): Partial<TranscodeCtx> {
 }
 
 /**
+ * Wrap a stream so each chunk is encoded against the declared chunk schema.
+ * The wrapper is itself an `ApiStream`, so transports still take the SSE
+ * branch. Iteration is delegated to the source's `for await`, so a consumer's
+ * `break` or cancellation reaches the source's `return()`.
+ */
+function encodeChunks(
+  source: ApiStream<unknown>,
+  chunkSchema: SchemaNode,
+  ctx: Partial<TranscodeCtx>
+): ApiStream<Wire> {
+  return {
+    [Symbol.asyncIterator]: async function* (): AsyncGenerator<Wire> {
+      for await (const chunk of source) {
+        yield _transcoder.encode(chunk, chunkSchema, ctx);
+      }
+    },
+  };
+}
+
+/**
  * Encode the function's return value against the output schema node.
+ *
  * When the output schema is empty ({}), the value passes through unchanged.
+ * A streaming result (`isApiStream`) is never transcoded as a single value:
+ * the transcoder would walk the output schema's properties against the
+ * iterator object and return `{}`. Instead the stream is kept and each chunk
+ * is encoded against the output schema (the chunk schema).
  * `$ref`s in the output schema resolve against the output schema's own root.
  */
 function encodeResult(
@@ -135,7 +166,9 @@ function encodeResult(
   // An empty object schema `{}` has no `type` — the transcoder treats it as
   // schema-less / plain-JSON passthrough; only typed output schemas are encoded.
   if (!outputSchema || Object.keys(outputSchema).length === 0) return value;
-  return _transcoder.encode(value, outputSchema, refCtx(outputSchema, fnName));
+  const ctx = refCtx(outputSchema, fnName);
+  if (isApiStream(value)) return encodeChunks(value, outputSchema, ctx);
+  return _transcoder.encode(value, outputSchema, ctx);
 }
 
 /**
