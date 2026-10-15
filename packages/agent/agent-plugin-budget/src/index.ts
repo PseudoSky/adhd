@@ -1939,17 +1939,27 @@ class BudgetPlugin implements Plugin {
 
       const capMode = cap.mode ?? mode ?? 'warning';
       if (capMode === 'block') {
+        const message =
+          cap.message ??
+          `Response size (${totalChars} chars) exceeds limit of ${limit}. Use offset/limit or shell paging tools instead.`;
         resultObj['content'] = [
-          {
-            type: 'text',
-            text:
-              cap.message ??
-              `Response size (${totalChars} chars) exceeds limit of ${limit}. Use offset/limit or shell paging tools instead.`,
-          },
+          { type: 'text', text: message.slice(0, limit) },
         ];
         p.isError = true;
       } else {
-        let remaining = limit;
+        // The truncation notice is part of the emitted response, so its length is
+        // reserved out of the budget before any content is kept: the final text
+        // length is <= limit for every input.
+        const notice = `\n\n[truncated: response was ${totalChars} chars, limited to ${
+          cap.maximum
+        }. ${
+          cap.message ?? 'Use offset/limit or shell paging tools for full content.'
+        }]`;
+        if (notice.length > limit) {
+          resultObj['content'] = [{ type: 'text', text: notice.slice(0, limit) }];
+          break;
+        }
+        let remaining = limit - notice.length;
         const truncated: unknown[] = [];
         for (const part of content) {
           if (typeof part !== 'object' || part === null) {
@@ -1970,15 +1980,7 @@ class BudgetPlugin implements Plugin {
             break;
           }
         }
-        truncated.push({
-          type: 'text',
-          text: `\n\n[truncated: response was ${totalChars} chars, limited to ${
-            cap.maximum
-          }. ${
-            cap.message ??
-            'Use offset/limit or shell paging tools for full content.'
-          }]`,
-        });
+        truncated.push({ type: 'text', text: notice });
         resultObj['content'] = truncated;
       }
       break;
