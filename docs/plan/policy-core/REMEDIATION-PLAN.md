@@ -1,6 +1,6 @@
 # Policy-core remediation plan
 
-**Owner:** pseudosky. **Branch:** `feat/policy-core` (worktree `.worktrees/policy-core`).
+**Owner:** pseudosky. **Branch:** `feat/policy-remediation` (worktree `.worktrees/policy-remediation`).
 **Inputs:** `TAXONOMY-CONFORMING-DESIGNS.md` (segments S1–S10, decisions BA-1…BA-11, E1…E8), `SOURCE-MODEL-GAP-ANALYSIS.md` (steps 0–12, decisions O-1…O-14, findings F-1…F-11), `APIGEN-CONFORMANCE-REVIEW.md` §5 (top-10 remediations), `REVIEW-FIXES.md`, `INTERFACES.md`, `DOD.md`, `tickets/T18.md`, `docs/decisions/0003-*.md`, `docs/decisions/0004-*.md`, `docs/apigen/SPEC.md`.
 **Accepted ADRs (`docs/decisions/`):**
 - [adhd ADR-0017](../../decisions/0017-apigen-source-model.md): vocabulary, the transport/extractors/runtime/targets layout, `Operation.binding`, IR generation centralized in apigen-core-client.
@@ -77,9 +77,11 @@ No new packages. Edits the slice needs outside this list are listed in §9 (open
 | 0 | R11a | workspace-codegen-nx | Generator emits CommonJS-only packages (ADR-0003) | — | not estimated |
 | 1 | R2 | apigen-core-client | `resolveSourceReference` + types + detection order (O-2) | R1 (shared `index.ts`) | gap analysis step 1: ≈180 src + 200 test |
 | 1 | R3 | apigen-engine-runtime | `createLayer` in `UsePlugin`/`createPackageInvoker`; signal to dispatch; ctx continuity in the mount branch; `buildApigenPackage`; dispatch `$ref` resolution | R1 | not estimated |
+| 1 | R3a | apigen-engine-runtime | `coercibleType` resolves the non-null branch of `oneOf` / `anyOf` / a `type` array, so a query-string value for a nullable param is coerced (backlog 9429470e) | R3 (same package, serial after R3); parallel with D1 only if it leaves `src/index.ts` alone, otherwise after D1 | not estimated |
 | 1 | D1 | apigen-engine-runtime | Binding-aware dispatch terminal for flat arguments: `Terminal`, `createInvoker(layers, { terminal })`, `createPackageInvoker(..., { terminal })`; built with `Operation.binding` (R1) and consumed by the orchestration entry's foreign extractors (R5, R7b) | R1, R3 (same files, serial after R3) | gap analysis: ≈150 src + 150 test |
 | 2 | R4 | apigen-plugin-mcp | adhd ADR-0018 (BA-2, BA-3, BA-4 for every `ApiError` code); `extra.signal`; layer options; injectable stdio streams | R1, R3 | not estimated |
 | 2 | R5 | apigen-cli + apigen-core-client | `--use` plugins materialise `createLayer` from the flat `--opt` bag; resolver adoption; IR generation entry promoted into core-client, whose result carries the IR and the files each extractor read | R2, R3, D1 | gap analysis steps 2+3: ≈80 src + 110 test; promotion not estimated |
+| 2 | R5a | apigen-cli | The `--opt http.verb.<id>=GET` overrides parsed by `parseOverrides` reach the projection on `generate` and `run` (backlog 0bc4f3f6) | R5 (same file `orchestrator.ts`, serial after R5, before R8) | not estimated |
 | 2 | R8p | apigen-plugin-ir-cache | The cache keys, stores and validates from the extraction result; `collectLocalImportPaths` leaves the cache path; no extractor option hides in a closure; tsconfig `extends` chain reported in `sourceFiles`; comment fixes (088745d2); residual regression tests | R5 (the result type; serial inside the wave) | not estimated |
 | 2 | R6 | apigen-plugin-policy | E4: `makePolicyPlugin` default export with `optionsSchema`; `PolicyAttributes` ctx key; deletes `state.ts`, `load-decider.ts`, the mount capability | R1, R3 | not estimated |
 | 2 | R7a | gateway `sources/` | `SourceError` → `ApiError`; ids via core `buildId`/`syntheticOp`; `host`/`binding` producers; node `ISourceProbe`; `resolveSource` keyed by translator; `operationsFromMcpTools` split | R1, R2, R3 | gap analysis step 5: ≈120 src + 120 test |
@@ -205,6 +207,16 @@ Each segment lists: files (verified paths), interface BEFORE/AFTER, behaviour ch
 - **Rollback:** revert R3 with D1, R4, R5, R6, R7b, R9.
 - **Tests:** T-R3. **Size:** not estimated.
 
+### R3a — Nullable query-string coercion (apigen-engine-runtime)
+
+Backlog 9429470e-4362-4c8b-9ce4-936e8aff0574.
+
+- **Files:** `packages/apigen/apigen-engine-runtime/src/lib/coerce-query.ts`; `src/index.ts` only if the fix exports a new symbol.
+- **Behaviour change:** `coercibleType` skips a schema of the form `oneOf: [{ type: 'null' }, T]` (and the `anyOf` and `type: ['null', T]` equivalents), so a query-string value for a nullable param stays a string. The non-null branch of `oneOf` / `anyOf` / a `type` array is resolved before coercing; a nullable integer or boolean param is coerced like its non-nullable form. Schemas without a null branch are unchanged.
+- **Dependencies:** R3 (same package; serial after R3).
+- **Risk:** low. **Rollback:** revert R3a alone.
+- **Tests:** T-R3a. **Size:** not estimated.
+
 ### D1 — Binding-aware dispatch terminal for flat arguments (apigen-engine-runtime)
 
 Part of the first slice; built with the orchestration entry (R5) and `Operation.binding` (R1). adhd ADR-0017 D7, adhd ADR-0019 D4.
@@ -305,6 +317,16 @@ IR generation is centralized in apigen-core-client (adhd ADR-0017 D5). The entry
 - **Risk:** medium. The promotion moves code that `entrypoint/backlog` duplicates; R13 is the gated follow-up. `entrypoint/apigen-cli` and `apigen-plugin-ir-cache` both call the entry's result type, so R5 publishes the type before R8p starts.
 - **Rollback:** revert R5 with R8p, R7b, R8.
 - **Tests:** T-R5. **Size:** gap analysis steps 2+3 ≈80 src + 110 test; the promotion is not estimated.
+
+### R5a — `http.verb` override pass-through (apigen-cli)
+
+Backlog 0bc4f3f6-cf5e-4eb4-9d1c-791d593d7cd1.
+
+- **Files:** `entrypoint/apigen-cli/src/lib/orchestrator.ts` (`parseOverrides`, `:210`), `commands/generate.ts`, `commands/run.ts`.
+- **Behaviour change:** `--opt http.verb.<id>=GET` is parsed by `parseOverrides` but the parsed overrides are not passed to the projection on `generate` and `run`. Both commands pass them into the projection, so the override changes the projected verb of operation `<id>` in `generate` output and `run` dispatch.
+- **Dependencies:** R5 (shares `orchestrator.ts`; serial after R5, before R8).
+- **Risk:** low. **Rollback:** revert R5a alone.
+- **Tests:** T-R5a. **Size:** not estimated.
 
 ### R8p — IR cache residuals on the merged extraction-result cache (apigen-plugin-ir-cache, apigen-core-client)
 
@@ -542,10 +564,12 @@ A cell lists the segments that edit the same file. Two segments sharing a file n
 | `apigen-core-client/src/lib/extract.ts` | R1 (buildId) → R8 (subprocess entry) |
 | `apigen-core-client/src/lib/plugin.ts`, `descriptor.ts` | R1 (R3 only if ctx unification needs a type change, after R1) |
 | `apigen-engine-runtime/src/lib/*` | R3 → D1 (`invoke.ts`, `package-invoker.ts`) |
+| `apigen-engine-runtime/src/lib/coerce-query.ts` | R3 → R3a |
+| `apigen-engine-runtime/src/index.ts` | R3 → D1 → R3a (R3a only if it exports a symbol; otherwise R3a runs parallel with D1) |
 | `apigen-plugin-ir-cache/src/lib/ir-cache-layer.ts` | R8p only (after R5) |
 | gateway `gateway.ts` (routing line) | R7b only |
 | `apigen-plugin-mcp/src/lib/run.ts` | R4 only |
-| `apigen-cli/src/lib/orchestrator.ts`, `commands/run.ts`, `commands/serve.ts` | R5 → R8 |
+| `apigen-cli/src/lib/orchestrator.ts`, `commands/run.ts`, `commands/generate.ts`, `commands/serve.ts` | R5 → R5a → R8 (R5a edits `orchestrator.ts`, `commands/generate.ts`, `commands/run.ts`) |
 | `entrypoint/agent-mcp`, `dispatch-orchestrator`, `agent-plugin-budget` readers | R15 only |
 | gateway `sources/mcp-source.ts`, `resolve-source.ts`, `index.ts` | R7a → R7b |
 | `apigen-plugin-policy/src/plugin.ts`, `index.ts` | R6 only |
@@ -588,8 +612,8 @@ R1 ─► R2 ─► R5 ─► R8p ─► R7b (needs R7a, D1) ┘
 | Wave | Runs in parallel |
 | --- | --- |
 | 0 | R1 ∥ R11a (R0 is the owner, outside the lanes) |
-| 1 | R2 ∥ R3 → D1 (R2 only touches `source-language.ts` and, after R1, `index.ts`; D1 follows R3 on the shared runtime files) |
-| 2 | R4 ∥ R5 → R8p ∥ R6 ∥ R7a |
+| 1 | R2 ∥ R3 → D1 ∥ R3a (R2 only touches `source-language.ts` and, after R1, `index.ts`; D1 follows R3 on the shared runtime files; R3a follows R3 on `coerce-query.ts` and runs parallel with D1 only if it leaves `src/index.ts` alone, otherwise D1 → R3a) |
+| 2 | R4 ∥ R5 → R5a ∥ R8p ∥ R6 ∥ R7a (R5a follows R5 on `orchestrator.ts` and precedes R8) |
 | 3 | R7b → then R9; R8 ∥ R10 ∥ R11b (after R6) ∥ R11c (after R10) ∥ R15 (after R4) |
 | 4 | R11d → R12 |
 | B | one review per finished package, in any order |
@@ -662,6 +686,22 @@ Scenario: a $ref schema dispatches without the run-mode stub error
 ```
 
 - DoD: `buildApigenPackage` for the policy service IR produces schemas that dispatch `check`; asserted by the returned decision. Control: skip `$ref` resolution → "cannot be resolved in run-mode" and red.
+
+### T-R3a — nullable query coercion
+
+```gherkin
+Scenario: a nullable integer query param is coerced
+  Given an operation whose query param schema is oneOf [{ type: "null" }, { type: "integer" }]
+  When the query string carries "n=5"
+  Then the function receives the number 5
+
+Scenario: a nullable boolean query param is coerced
+  Given a query param schema of type ["null", "boolean"]
+  When the query string carries "b=true"
+  Then the function receives the boolean true
+```
+
+- DoD: both scenarios drive the HTTP query path of the runtime. Control: revert the non-null branch resolution in `coercibleType` → both cases receive strings and go red.
 
 ### T-D1 — binding-aware terminal
 
@@ -738,6 +778,17 @@ Scenario: an unclassifiable --source is reported with every interpretation tried
 ```
 
 - DoD: `generate` for the fixture TS source writes output byte-identical to the pre-R5 golden. Control: perturb the entry's namespace default → golden diff red.
+
+### T-R5a — `http.verb` override
+
+```gherkin
+Scenario: an http.verb override changes the projected verb
+  Given a fixture TS source with an operation <id> projected as POST
+  When apigen generate and apigen run are invoked with --opt http.verb.<id>=GET
+  Then the generated output and the run projection both expose <id> as GET
+```
+
+- DoD: asserted on `generate` output and on `run` dispatch. Control: drop the override pass-through in `generate` or `run` → that command still projects POST and the case goes red.
 
 ### T-R6 — policy Layer
 
