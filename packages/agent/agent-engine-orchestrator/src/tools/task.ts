@@ -25,7 +25,7 @@ import {
   type TaskCompletionWarning,
   type TaskStatus,
 } from '@adhd/agent-base-types';
-import { and, eq } from 'drizzle-orm';
+import { and, desc, eq, sql } from 'drizzle-orm';
 import { taskEventsTable } from '@adhd/agent-store-runtime';
 import type {
   ExecutionContext,
@@ -51,19 +51,33 @@ import { buildTaskUsageReport, type Database } from './usage.js';
  * cbd559eb: the advisory completion warnings of a finished task, read from its persisted `TASK_COMPLETED`
  * payload (the orchestrator writes `warnings` there only when one fired). Returns `undefined` when none
  * did, so callers omit the key instead of sending an empty array.
+ * A task can hold several `TASK_COMPLETED` events (e.g. after a resume): the most recent one is read
+ * (`created_at DESC`, `rowid DESC` as the tie-break). A payload that is not a JSON object is treated as
+ * carrying no warnings rather than throwing, because this read runs after the task is already terminal and
+ * a throw here would discard the finished task's result.
+ * @internal Exported for the unit test seam only; not part of the tool surface.
  */
-function completionWarningsOf(db: Database, taskId: string): TaskCompletionWarning[] | undefined {
+export function completionWarningsOf(db: Database, taskId: string): TaskCompletionWarning[] | undefined {
   const row = db
     .select({ payload: taskEventsTable.payload })
     .from(taskEventsTable)
     .where(and(eq(taskEventsTable.taskId, taskId), eq(taskEventsTable.type, 'TASK_COMPLETED')))
+    .orderBy(desc(taskEventsTable.createdAt), desc(sql`rowid`))
+    .limit(1)
     .get();
   if (!row?.payload) return undefined;
-  const parsed = JSON.parse(row.payload) as { warnings?: unknown };
-  if (!Array.isArray(parsed.warnings)) return undefined;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(row.payload);
+  } catch {
+    return undefined;
+  }
+  if (typeof parsed !== 'object' || parsed === null) return undefined;
+  const warnings = (parsed as { warnings?: unknown }).warnings;
+  if (!Array.isArray(warnings)) return undefined;
   // Values outside TASK_COMPLETION_WARNINGS are intentionally ignored (forward compatibility): a newer
   // engine may persist a warning this reader does not know yet, and it must not fail the read.
-  const known = parsed.warnings.filter(
+  const known = warnings.filter(
     (w): w is TaskCompletionWarning =>
       (TASK_COMPLETION_WARNINGS as readonly unknown[]).includes(w),
   );
