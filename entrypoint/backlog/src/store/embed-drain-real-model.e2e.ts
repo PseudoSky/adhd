@@ -17,6 +17,23 @@
  * and the local pre-push hook does not run it. To run it on demand:
  * `npx nx run backlog:e2e`. Lane policy: docs/decisions/0009-test-lanes-unit-vs-e2e.md.
  *
+ * red: pending (user hold) — no run is recorded. Command: `npx nx run backlog:e2e`. Expected
+ * failing assertions against a base where embedding is disabled or the drain loses the vector:
+ * the `toContain(uid)` / `toContain(created.data.uid)` / `toContain(withVectorUid)` checks on
+ * the semantic query result (AC4: the item is not found through the semantic route), and in
+ * the third case `not.toContain(withoutVectorUid)` guards the reverse (an item whose vector
+ * was never written must not surface).
+ *
+ * ## Budget deviation (G3, G7)
+ *
+ * Tier P budgets 10 s per test (`docs/standards/testing.md`). Each case here carries a
+ * 180 s timeout (`E2E_TIMEOUT`). Justification: cold ONNX model load and first inference
+ * of the real bge-base-en-v1.5 model dominate; the model is warmed outside the drain's
+ * bound, but the first load on a clean CI runner still exceeds 10 s. The spawned-bin case
+ * pays a second cold model init in the child process, and the third (ensureSemanticReady
+ * seam) case embeds two items plus the query on a real store. The ceiling is a cold-load
+ * bound, not a hang allowance; assertions are unchanged and no case sleeps.
+ *
  * No env flag gates these cases. The embedding model is local ONNX inference over
  * a model cached on disk, not a paid or external service. If the model or the
  * optional packages are missing, the cases fail loudly (the explicit
