@@ -18,6 +18,7 @@
  */
 import { parseArgs } from "node:util";
 import { followTaskStream, FollowUsageError, type FollowFormat } from "../streaming/follow-renderer.js";
+import { CLI_VERSION } from "../cli-version.js";
 
 const USAGE = `agent-mcp-follow — live SSE renderer for an agent-mcp task
 
@@ -31,6 +32,7 @@ Options:
       --events           Print one line per stream event, not just assistant text
       --json             Print raw newline-delimited JSON events
       --help             Show this help
+  -v, --version          Print the version and exit
 
 Port note: a standalone agent-mcp instance binds an OS-assigned ephemeral port
 when its configured SSE port is already taken by another instance (see
@@ -48,9 +50,15 @@ const { values, positionals } = parseArgs({
         events:     { type: "boolean", default: false },
         json:       { type: "boolean", default: false },
         help:       { type: "boolean", default: false },
+        version:    { type: "boolean", short: "v", default: false },
     },
     allowPositionals: true,
 });
+
+if (values.version) {
+    process.stdout.write(CLI_VERSION + "\n");
+    process.exit(0);
+}
 
 if (values.help) {
     process.stdout.write(USAGE);
