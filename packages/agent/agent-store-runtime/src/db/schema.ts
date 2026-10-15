@@ -141,6 +141,7 @@ export const taskEventsTable = sqliteTable(
                 "provider:builtin_bypass",
                 "provider:history_degraded",
                 "provider:pause_continued",
+                "CONTEXT_COMPACTED",
                 "TASK_COMPLETED",
                 "TASK_FAILED",
                 "TASK_CANCELLED"
@@ -231,9 +232,9 @@ export const taskUsageTable = sqliteTable(
         // missing tool-exec/queueing gaps between calls).
         computeMs: integer("compute_ms"),
         // CUMULATIVE Σ of tokenized tool-result payloads, tokenized on the FULL
-        // result BEFORE the existing 500-char truncation applied to the stored
-        // `task_events.TOOL_RESULT.result` summary — tokenizing the truncated
-        // summary would undercount every large tool result.
+        // result BEFORE the model-visible cap applied to the stored
+        // `task_events.TOOL_RESULT.result` text — tokenizing the capped text
+        // would undercount every large tool result.
         estToolResultTokens: integer("est_tool_result_tokens"),
         // CUMULATIVE Σ of estimated dollar cost from the rate-card module
         // (agent-core-provider/src/pricing/rate-card.ts). NULL (never 0) once any

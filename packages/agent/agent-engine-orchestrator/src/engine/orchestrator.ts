@@ -17,7 +17,7 @@ import type {
 } from '@adhd/agent-base-types';
 import { effectiveHitl } from '@adhd/agent-base-types';
 import { estimateToolResultTokens } from './tool-result-tokens.js';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
 import { ToolError } from '../validation/errors.js';
 import { generateId } from '../utils/ids.js';
@@ -25,10 +25,44 @@ import { nowIso } from '../utils/timestamps.js';
 import type { EngineConfig, EngineLogger } from '../interfaces.js';
 import {
   DEFAULT_TOOL_RESULT_MAX_CHARS,
+  mcpContentText,
+  serializeToolResult,
   validateToolResultMaxChars,
 } from './tool-result-cap.js';
 import { capOrSpillToolResult, resolveToolResultSpill } from './tool-result-spill.js';
 import { canonicalizeToolDefinitions, compactToolDefinitions } from './tool-schema-compact.js';
+
+/**
+ * sha256 (hex) of a string. Fingerprints the model-visible text of a `TOOL_RESULT` and the
+ * system prompt of a `MODEL_REQUEST` in `task_events`, so a reader can tell two payloads
+ * apart without the bytes.
+ */
+function sha256Hex(text: string): string {
+  return createHash('sha256').update(text, 'utf8').digest('hex');
+}
+
+/**
+ * The text the model reads for a capped tool result: the MCP text join for an all-text
+ * content array, else its serialization. Stored whole (the cap already bounds it), never
+ * sliced, so a reader sees exactly what the model saw.
+ */
+function modelVisibleTextOf(result: unknown): string {
+  return mcpContentText(result) ?? serializeToolResult(result) ?? '';
+}
+
+/**
+ * sha256 (hex) of the system message the provider is sent, or `null` when the request
+ * carries no system message. `toolDocSystemMessage` (names mode) already embeds the
+ * history's system content, so it takes precedence over `history[0]`.
+ */
+function systemPromptSha256(
+  toolDocSystemMessage: Message | null,
+  history: readonly Message[],
+): string | null {
+  const system =
+    toolDocSystemMessage ?? (history[0]?.role === 'system' ? history[0] : null);
+  return system ? sha256Hex(serializeToolResult(system.content) ?? '') : null;
+}
 import { nativeGuidanceContextOf, withNativeToolGuidance } from './native-tool-guidance.js';
 import { coerceToolArguments } from './tool-arg-coercion.js';
 import { DEFAULT_PROVIDER_TIMEOUT_MS } from '../interfaces.js';
@@ -1456,6 +1490,9 @@ export class Orchestrator {
             messageCount: currentMessages.length,
             toolCount: tools.length,
             toolAdvertisement: advertisementMode,
+            // What the provider is advertised: the names it may call, in the order sent.
+            advertisedToolNames: advertisedTools.map((tool) => tool.name),
+            systemPromptSha256: systemPromptSha256(toolDocSystemMessage, currentMessages),
           },
         });
 
@@ -1779,6 +1816,7 @@ export class Orchestrator {
                     'Tool-result spill failed; using the head+tail cap'
                   ),
               });
+              const modelVisibleText = modelVisibleTextOf(capOutcome.result);
               taskStore.appendEvent({
                 taskId,
                 type: 'TOOL_RESULT',
@@ -1787,7 +1825,8 @@ export class Orchestrator {
                   tool: qualifiedToolName,
                   isError: isErr,
                   ...(exitStatus !== undefined ? { exitStatus } : {}),
-                  result: (fullText ?? '').slice(0, 500),
+                  result: modelVisibleText,
+                  result_sha256: sha256Hex(modelVisibleText),
                   tool_call_est_result_tokens: estTokens,
                   ...(estTokensEstimated
                     ? { tool_call_est_result_tokens_estimated: true }
@@ -2460,10 +2499,7 @@ export class Orchestrator {
             });
             const modelVisibleResult = capOutcome.result;
 
-            const resultSummary =
-              typeof toolResult === 'string'
-                ? toolResult.slice(0, 500)
-                : JSON.stringify(toolResult).slice(0, 500);
+            const modelVisibleText = modelVisibleTextOf(modelVisibleResult);
 
             taskStore.appendEvent({
               taskId,
@@ -2473,7 +2509,8 @@ export class Orchestrator {
                 tool: qualifiedToolName,
                 isError,
                 ...(exitStatus !== undefined ? { exitStatus } : {}),
-                result: resultSummary,
+                result: modelVisibleText,
+                result_sha256: sha256Hex(modelVisibleText),
                 tool_call_est_result_tokens: toolCallEstResultTokens,
                 ...(toolCallEstResultTokensEstimated
                   ? { tool_call_est_result_tokens_estimated: true }

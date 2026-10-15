@@ -123,7 +123,7 @@ export interface PostToolCallPayload {
   exitStatus?: number;
   /**
    * Token estimate for the FULL, untruncated tool result (tokenized before the
-   * 500-char truncation applied to the stored `task_events.TOOL_RESULT.result` summary).
+   * model-visible cap applied to the stored `task_events.TOOL_RESULT.result` text).
    */
   estResultTokens: number;
   /** Outcome class of the call. Absent when the engine did not classify it. */

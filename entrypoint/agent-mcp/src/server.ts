@@ -107,6 +107,7 @@ import {
 } from './pricing/tools.js';
 import type { TaskStore } from '@adhd/agent-store-runtime';
 import { noteToolError, withApiLog, withHttpApiLog } from './wire/api-log.js';
+import { taskEvents, taskEventsInputSchema } from './tools/task-events.js';
 
 const taskResumeInputSchema = z.object({
   taskId: z.string().uuid().describe('ID of the awaiting_input task to resume'),
@@ -531,6 +532,12 @@ export function createServer(deps: ServerDeps): Server {
       inputSchema: toMcpInputSchema(taskListInputSchema),
     },
     {
+      name: 'task_events',
+      description:
+        'Read every recorded event of one task by task_id, oldest first. Pagination: limit (default 50, max 500) and offset; the response carries total and has_more. TOOL_RESULT events carry the model-visible result text and its result_sha256; MODEL_REQUEST events carry advertisedToolNames and systemPromptSha256; CONTEXT_COMPACTED records a history compaction. Throws for an unknown task_id.',
+      inputSchema: toMcpInputSchema(taskEventsInputSchema),
+    },
+    {
       name: 'task_cancel',
       description: 'Cancel a running task',
       inputSchema: toMcpInputSchema(taskCancelInputSchema),
@@ -629,6 +636,11 @@ export function createServer(deps: ServerDeps): Server {
       case 'task_list':
         return taskList(taskListInputSchema.parse(args), {
           taskStore: deps.taskStore,
+        });
+      case 'task_events':
+        return taskEvents(taskEventsInputSchema.parse(args), {
+          taskStore: deps.taskStore,
+          db: deps.db,
         });
       case 'task_cancel':
         return taskCancel(taskCancelInputSchema.parse(args), {
@@ -788,6 +800,12 @@ export function createServer(deps: ServerDeps): Server {
         description:
           'List tasks. Filters: session_id, session_ids[], agent_name, status, is_ephemeral. Pagination: limit/offset. Projection: fields[] (id always included) or summary:true to omit the bulk prompt/result text.',
         inputSchema: toMcpInputSchema(taskListInputSchema),
+      },
+      {
+        name: 'task_events',
+        description:
+          'Read every recorded event of one task by task_id, oldest first. Pagination: limit (default 50, max 500) and offset; the response carries total and has_more. TOOL_RESULT events carry the model-visible result text and its result_sha256; MODEL_REQUEST events carry advertisedToolNames and systemPromptSha256; CONTEXT_COMPACTED records a history compaction. Throws for an unknown task_id.',
+        inputSchema: toMcpInputSchema(taskEventsInputSchema),
       },
       {
         name: 'task_cancel',
@@ -976,6 +994,14 @@ export function createServer(deps: ServerDeps): Server {
           return toMcpContent(
             taskList(taskListInputSchema.parse(args), {
               taskStore: deps.taskStore,
+            })
+          );
+
+        case 'task_events':
+          return toMcpContent(
+            taskEvents(taskEventsInputSchema.parse(args), {
+              taskStore: deps.taskStore,
+              db: deps.db,
             })
           );
 
