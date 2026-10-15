@@ -41,3 +41,10 @@ AC1, AC2, AC5: S (`node --test` specs on `createNodes` output with fixture works
 - Wider key means more cache misses on dependency bumps — intended, bounded to the declaring project. Root `package.json` and `tools/nx-plugins/**` are global inputs: the first run after merge rebuilds everything once.
 - Serialize BEFORE spec 2f3dbebc (both read `tools/nx-plugins/deps/**`); no other spec in this batch touches these files.
 - gx impact: not run (plugin files are JS config modules with no indexed callers); implementer must run `nx show projects --affected` to size the one-time invalidation.
+
+## Product revision
+dor (product): ready. No open decision; architect dor stands.
+- WHY now: a green cached lint that a clean cache would fail makes every lint/sync-deps gate untrustworthy for ~65 projects, and it is the first link of the serialization chain (this spec precedes 2f3dbebc).
+- Scope: unchanged (D1-D4). One-time cache invalidation after merge is accepted as intended cost. No scope cut.
+- Priority: P1, rank 1 of the impl-ready set (smallest S, widest trust payoff, unblocks 2f3dbebc).
+- Added gate: AC3/AC4 must be shown red against current main before the fix (G6); the D3 Nx probe is the first test and its outcome is recorded in the spec's implementation note.
