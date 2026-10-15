@@ -393,34 +393,34 @@ importers:
   entrypoint/agent-mcp:
     dependencies:
       '@adhd/agent-base-types':
-        specifier: ^2.3.11
+        specifier: ^2.3.12
         version: link:../../packages/agent/agent-base-types
       '@adhd/agent-core-env':
         specifier: ^0.1.5
         version: link:../../packages/agent/agent-core-env
       '@adhd/agent-core-native-tooling':
-        specifier: ^0.0.4
+        specifier: ^0.0.5
         version: link:../../packages/agent/agent-core-native-tooling
       '@adhd/agent-core-provider':
-        specifier: ^2.2.9
+        specifier: ^2.2.10
         version: link:../../packages/agent/agent-core-provider
       '@adhd/agent-engine-compiler':
         specifier: ^2.2.8
         version: link:../../packages/agent/agent-engine-compiler
       '@adhd/agent-engine-orchestrator':
-        specifier: ^2.3.13
+        specifier: ^2.3.14
         version: link:../../packages/agent/agent-engine-orchestrator
       '@adhd/agent-plugin-budget':
-        specifier: ^0.2.9
+        specifier: ^0.2.10
         version: link:../../packages/agent/agent-plugin-budget
       '@adhd/agent-plugin-tracing':
-        specifier: ^0.0.3
+        specifier: ^0.0.4
         version: link:../../packages/agent/agent-plugin-tracing
       '@adhd/agent-store-prompts':
         specifier: ^2.2.3
         version: link:../../packages/agent/agent-store-prompts
       '@adhd/agent-store-runtime':
-        specifier: ^2.2.10
+        specifier: ^2.2.11
         version: link:../../packages/agent/agent-store-runtime
       '@adhd/environment':
         specifier: ^0.1.8
@@ -456,34 +456,34 @@ importers:
         specifier: ^0.1.4
         version: link:../../packages/apigen/apigen-base-logical
       '@adhd/apigen-core-client':
-        specifier: ^0.3.4
+        specifier: ^0.3.5
         version: link:../../packages/apigen/apigen-core-client
       '@adhd/apigen-engine-naming':
-        specifier: ^0.2.5
+        specifier: ^0.2.6
         version: link:../../packages/apigen/apigen-engine-naming
       '@adhd/apigen-engine-runtime':
-        specifier: ^0.3.3
+        specifier: ^0.3.4
         version: link:../../packages/apigen/apigen-engine-runtime
       '@adhd/apigen-plugin-api-express':
-        specifier: ^0.2.8
+        specifier: ^0.2.9
         version: link:../../packages/apigen/apigen-plugin-api-express
       '@adhd/apigen-plugin-api-fastify':
-        specifier: ^0.2.8
+        specifier: ^0.2.9
         version: link:../../packages/apigen/apigen-plugin-api-fastify
       '@adhd/apigen-plugin-batch':
         specifier: ^0.2.6
         version: link:../../packages/apigen/apigen-plugin-batch
       '@adhd/apigen-plugin-cli-output':
-        specifier: ^0.2.8
+        specifier: ^0.2.9
         version: link:../../packages/apigen/apigen-plugin-cli-output
       '@adhd/apigen-plugin-health':
         specifier: ^0.2.6
         version: link:../../packages/apigen/apigen-plugin-health
       '@adhd/apigen-plugin-ir-cache':
-        specifier: ^0.1.4
+        specifier: ^0.1.5
         version: link:../../packages/apigen/apigen-plugin-ir-cache
       '@adhd/apigen-plugin-java-javalin':
-        specifier: ^0.0.4
+        specifier: ^0.0.5
         version: link:../../packages/apigen/apigen-plugin-java-javalin
       '@adhd/apigen-plugin-jsonschema':
         specifier: ^0.2.3
@@ -492,16 +492,16 @@ importers:
         specifier: ^0.2.3
         version: link:../../packages/apigen/apigen-plugin-logger
       '@adhd/apigen-plugin-mcp':
-        specifier: ^0.3.3
+        specifier: ^0.3.4
         version: link:../../packages/apigen/apigen-plugin-mcp
       '@adhd/apigen-plugin-openapi':
-        specifier: ^0.2.5
+        specifier: ^0.2.6
         version: link:../../packages/apigen/apigen-plugin-openapi
       '@adhd/apigen-plugin-py-flask':
-        specifier: ^0.2.8
+        specifier: ^0.2.9
         version: link:../../packages/apigen/apigen-plugin-py-flask
       '@adhd/apigen-plugin-py-grpc':
-        specifier: ^0.2.7
+        specifier: ^0.2.8
         version: link:../../packages/apigen/apigen-plugin-py-grpc
       '@adhd/apigen-plugin-tracing':
         specifier: ^0.2.0
@@ -559,28 +559,28 @@ importers:
         specifier: ^0.1.4
         version: link:../../packages/apigen/apigen-base-logical
       '@adhd/apigen-core-client':
-        specifier: ^0.3.4
+        specifier: ^0.3.5
         version: link:../../packages/apigen/apigen-core-client
       '@adhd/apigen-engine-naming':
-        specifier: ^0.2.5
+        specifier: ^0.2.6
         version: link:../../packages/apigen/apigen-engine-naming
       '@adhd/apigen-plugin-api-fastify':
-        specifier: ^0.2.8
+        specifier: ^0.2.9
         version: link:../../packages/apigen/apigen-plugin-api-fastify
       '@adhd/apigen-plugin-batch':
         specifier: ^0.2.6
         version: link:../../packages/apigen/apigen-plugin-batch
       '@adhd/apigen-plugin-cli-output':
-        specifier: ^0.2.8
+        specifier: ^0.2.9
         version: link:../../packages/apigen/apigen-plugin-cli-output
       '@adhd/apigen-plugin-ir-cache':
-        specifier: ^0.1.4
+        specifier: ^0.1.5
         version: link:../../packages/apigen/apigen-plugin-ir-cache
       '@adhd/apigen-plugin-mcp':
-        specifier: ^0.3.3
+        specifier: ^0.3.4
         version: link:../../packages/apigen/apigen-plugin-mcp
       '@adhd/apigen-plugin-openapi':
-        specifier: ^0.2.5
+        specifier: ^0.2.6
         version: link:../../packages/apigen/apigen-plugin-openapi
       '@adhd/apigen-plugin-tracing':
         specifier: ^0.2.0
@@ -719,13 +719,13 @@ importers:
   entrypoint/dispatch-cli:
     dependencies:
       '@adhd/agent-base-types':
-        specifier: ^2.3.11
+        specifier: ^2.3.12
         version: link:../../packages/agent/agent-base-types
       '@adhd/agent-core-native-tooling':
-        specifier: ^0.0.4
+        specifier: ^0.0.5
         version: link:../../packages/agent/agent-core-native-tooling
       '@adhd/backlog':
-        specifier: ^1.0.16
+        specifier: ^1.0.17
         version: link:../backlog
       '@adhd/dispatch-base-spec':
         specifier: ^0.1.7
@@ -770,25 +770,25 @@ importers:
         specifier: ^0.2.3
         version: link:../../packages/apigen/apigen-base-errors
       '@adhd/apigen-core-client':
-        specifier: ^0.3.4
+        specifier: ^0.3.5
         version: link:../../packages/apigen/apigen-core-client
       '@adhd/apigen-engine-gateway':
-        specifier: ^0.2.3
+        specifier: ^0.2.4
         version: link:../../packages/apigen/apigen-engine-gateway
       '@adhd/apigen-engine-naming':
-        specifier: ^0.2.5
+        specifier: ^0.2.6
         version: link:../../packages/apigen/apigen-engine-naming
       '@adhd/apigen-engine-runtime':
-        specifier: ^0.3.3
+        specifier: ^0.3.4
         version: link:../../packages/apigen/apigen-engine-runtime
       '@adhd/apigen-plugin-api-fastify':
-        specifier: ^0.2.8
+        specifier: ^0.2.9
         version: link:../../packages/apigen/apigen-plugin-api-fastify
       '@adhd/apigen-plugin-cli-output':
-        specifier: ^0.2.8
+        specifier: ^0.2.9
         version: link:../../packages/apigen/apigen-plugin-cli-output
       '@adhd/apigen-plugin-mcp':
-        specifier: ^0.3.3
+        specifier: ^0.3.4
         version: link:../../packages/apigen/apigen-plugin-mcp
       '@adhd/apigen-plugin-policy':
         specifier: ^0.0.1
@@ -878,7 +878,7 @@ importers:
   packages/agent/agent-core-native-tooling:
     dependencies:
       '@adhd/agent-base-types':
-        specifier: ^2.3.11
+        specifier: ^2.3.12
         version: link:../agent-base-types
       '@anthropic-ai/sandbox-runtime':
         specifier: ^0.0.78
@@ -909,7 +909,7 @@ importers:
   packages/agent/agent-core-policy:
     dependencies:
       '@adhd/agent-base-types':
-        specifier: ^2.3.11
+        specifier: ^2.3.12
         version: link:../agent-base-types
       drizzle-orm:
         specifier: 0.45.2
@@ -946,7 +946,7 @@ importers:
   packages/agent/agent-core-provider:
     dependencies:
       '@adhd/agent-base-types':
-        specifier: ^2.3.11
+        specifier: ^2.3.12
         version: link:../agent-base-types
       drizzle-orm:
         specifier: 0.45.2
@@ -986,7 +986,7 @@ importers:
         specifier: ^2.2.3
         version: link:../agent-core-policy
       '@adhd/agent-core-provider':
-        specifier: ^2.2.9
+        specifier: ^2.2.10
         version: link:../agent-core-provider
       '@adhd/agent-store-prompts':
         specifier: ^2.2.3
@@ -1029,25 +1029,25 @@ importers:
   packages/agent/agent-engine-orchestrator:
     dependencies:
       '@adhd/agent-base-types':
-        specifier: ^2.3.11
+        specifier: ^2.3.12
         version: link:../agent-base-types
       '@adhd/agent-core-native-tooling':
-        specifier: ^0.0.4
+        specifier: ^0.0.5
         version: link:../agent-core-native-tooling
       '@adhd/agent-core-provider':
-        specifier: ^2.2.9
+        specifier: ^2.2.10
         version: link:../agent-core-provider
       '@adhd/agent-engine-compiler':
         specifier: ^2.2.8
         version: link:../agent-engine-compiler
       '@adhd/agent-plugin-budget':
-        specifier: ^0.2.9
+        specifier: ^0.2.10
         version: link:../agent-plugin-budget
       '@adhd/agent-store-prompts':
         specifier: ^2.2.3
         version: link:../agent-store-prompts
       '@adhd/agent-store-runtime':
-        specifier: ^2.2.10
+        specifier: ^2.2.11
         version: link:../agent-store-runtime
       '@anthropic-ai/sdk':
         specifier: ^0.96.0
@@ -1118,13 +1118,13 @@ importers:
   packages/agent/agent-plugin-budget:
     dependencies:
       '@adhd/agent-base-types':
-        specifier: ^2.3.11
+        specifier: ^2.3.12
         version: link:../agent-base-types
       '@adhd/agent-core-provider':
-        specifier: ^2.2.9
+        specifier: ^2.2.10
         version: link:../agent-core-provider
       '@adhd/agent-store-runtime':
-        specifier: ^2.2.10
+        specifier: ^2.2.11
         version: link:../agent-store-runtime
       drizzle-orm:
         specifier: 0.45.2
@@ -1143,7 +1143,7 @@ importers:
   packages/agent/agent-plugin-sanitize:
     dependencies:
       '@adhd/agent-base-types':
-        specifier: ^2.3.11
+        specifier: ^2.3.12
         version: link:../agent-base-types
       zod:
         specifier: ^4.4.3
@@ -1152,7 +1152,7 @@ importers:
   packages/agent/agent-plugin-tracing:
     dependencies:
       '@adhd/agent-base-types':
-        specifier: ^2.3.11
+        specifier: ^2.3.12
         version: link:../agent-base-types
       '@adhd/sox-telemetry':
         specifier: ^0.4.3
@@ -1217,7 +1217,7 @@ importers:
   packages/agent/agent-store-runtime:
     dependencies:
       '@adhd/agent-base-types':
-        specifier: ^2.3.11
+        specifier: ^2.3.12
         version: link:../agent-base-types
       better-sqlite3:
         specifier: 12.10.0
@@ -1334,10 +1334,10 @@ importers:
         specifier: ^0.1.4
         version: link:../apigen-base-logical
       '@adhd/apigen-core-client':
-        specifier: ^0.3.4
+        specifier: ^0.3.5
         version: link:../apigen-core-client
       '@adhd/apigen-engine-naming':
-        specifier: ^0.2.5
+        specifier: ^0.2.6
         version: link:../apigen-engine-naming
       '@adhd/apigen-python-env':
         specifier: ^0.2.7
@@ -1349,10 +1349,10 @@ importers:
         specifier: ^0.2.3
         version: link:../apigen-base-errors
       '@adhd/apigen-core-client':
-        specifier: ^0.3.4
+        specifier: ^0.3.5
         version: link:../apigen-core-client
       '@adhd/apigen-engine-runtime':
-        specifier: ^0.3.3
+        specifier: ^0.3.4
         version: link:../apigen-engine-runtime
       '@modelcontextprotocol/sdk':
         specifier: 1.29.0
@@ -1361,7 +1361,7 @@ importers:
   packages/apigen/apigen-engine-naming:
     dependencies:
       '@adhd/apigen-core-client':
-        specifier: ^0.3.4
+        specifier: ^0.3.5
         version: link:../apigen-core-client
 
   packages/apigen/apigen-engine-runtime:
@@ -1373,10 +1373,10 @@ importers:
         specifier: ^0.1.4
         version: link:../apigen-base-logical
       '@adhd/apigen-core-client':
-        specifier: ^0.3.4
+        specifier: ^0.3.5
         version: link:../apigen-core-client
       '@adhd/apigen-engine-naming':
-        specifier: ^0.2.5
+        specifier: ^0.2.6
         version: link:../apigen-engine-naming
       ajv:
         specifier: ^8.20.0
@@ -1406,13 +1406,13 @@ importers:
         specifier: ^0.2.3
         version: link:../apigen-base-errors
       '@adhd/apigen-core-client':
-        specifier: ^0.3.4
+        specifier: ^0.3.5
         version: link:../apigen-core-client
       '@adhd/apigen-engine-naming':
-        specifier: ^0.2.5
+        specifier: ^0.2.6
         version: link:../apigen-engine-naming
       '@adhd/apigen-engine-runtime':
-        specifier: ^0.3.3
+        specifier: ^0.3.4
         version: link:../apigen-engine-runtime
       express:
         specifier: ^5.2.1
@@ -1434,13 +1434,13 @@ importers:
         specifier: ^0.2.3
         version: link:../apigen-base-errors
       '@adhd/apigen-core-client':
-        specifier: ^0.3.4
+        specifier: ^0.3.5
         version: link:../apigen-core-client
       '@adhd/apigen-engine-naming':
-        specifier: ^0.2.5
+        specifier: ^0.2.6
         version: link:../apigen-engine-naming
       '@adhd/apigen-engine-runtime':
-        specifier: ^0.3.3
+        specifier: ^0.3.4
         version: link:../apigen-engine-runtime
       fastify:
         specifier: ^4.0.0
@@ -1459,10 +1459,10 @@ importers:
         specifier: ^0.2.3
         version: link:../apigen-base-errors
       '@adhd/apigen-core-client':
-        specifier: ^0.3.4
+        specifier: ^0.3.5
         version: link:../apigen-core-client
       '@adhd/apigen-engine-runtime':
-        specifier: ^0.3.3
+        specifier: ^0.3.4
         version: link:../apigen-engine-runtime
 
   packages/apigen/apigen-plugin-cli-output:
@@ -1471,13 +1471,13 @@ importers:
         specifier: ^0.2.3
         version: link:../apigen-base-errors
       '@adhd/apigen-core-client':
-        specifier: ^0.3.4
+        specifier: ^0.3.5
         version: link:../apigen-core-client
       '@adhd/apigen-engine-naming':
-        specifier: ^0.2.5
+        specifier: ^0.2.6
         version: link:../apigen-engine-naming
       '@adhd/apigen-engine-runtime':
-        specifier: ^0.3.3
+        specifier: ^0.3.4
         version: link:../apigen-engine-runtime
     devDependencies:
       '@adhd/apigen-plugin-tracing':
@@ -1490,13 +1490,13 @@ importers:
   packages/apigen/apigen-plugin-health:
     dependencies:
       '@adhd/apigen-core-client':
-        specifier: ^0.3.4
+        specifier: ^0.3.5
         version: link:../apigen-core-client
 
   packages/apigen/apigen-plugin-ir-cache:
     dependencies:
       '@adhd/apigen-core-client':
-        specifier: ^0.3.4
+        specifier: ^0.3.5
         version: link:../apigen-core-client
       '@adhd/environment':
         specifier: ^0.1.8
@@ -1508,16 +1508,16 @@ importers:
         specifier: ^0.1.4
         version: link:../apigen-base-logical
       '@adhd/apigen-core-client':
-        specifier: ^0.3.4
+        specifier: ^0.3.5
         version: link:../apigen-core-client
       '@adhd/apigen-engine-naming':
-        specifier: ^0.2.5
+        specifier: ^0.2.6
         version: link:../apigen-engine-naming
 
   packages/apigen/apigen-plugin-jsonschema:
     dependencies:
       '@adhd/apigen-core-client':
-        specifier: ^0.3.4
+        specifier: ^0.3.5
         version: link:../apigen-core-client
 
   packages/apigen/apigen-plugin-logger:
@@ -1526,7 +1526,7 @@ importers:
         specifier: ^0.2.3
         version: link:../apigen-base-errors
       '@adhd/apigen-core-client':
-        specifier: ^0.3.4
+        specifier: ^0.3.5
         version: link:../apigen-core-client
       pino:
         specifier: 10.3.1
@@ -1538,13 +1538,13 @@ importers:
         specifier: ^0.2.3
         version: link:../apigen-base-errors
       '@adhd/apigen-core-client':
-        specifier: ^0.3.4
+        specifier: ^0.3.5
         version: link:../apigen-core-client
       '@adhd/apigen-engine-naming':
-        specifier: ^0.2.5
+        specifier: ^0.2.6
         version: link:../apigen-engine-naming
       '@adhd/apigen-engine-runtime':
-        specifier: ^0.3.3
+        specifier: ^0.3.4
         version: link:../apigen-engine-runtime
       '@modelcontextprotocol/sdk':
         specifier: 1.29.0
@@ -1560,10 +1560,10 @@ importers:
   packages/apigen/apigen-plugin-openapi:
     dependencies:
       '@adhd/apigen-codegen-openapi':
-        specifier: ^0.2.5
+        specifier: ^0.2.6
         version: link:../codegen/openapi
       '@adhd/apigen-core-client':
-        specifier: ^0.3.4
+        specifier: ^0.3.5
         version: link:../apigen-core-client
 
   packages/apigen/apigen-plugin-policy:
@@ -1572,19 +1572,19 @@ importers:
         specifier: ^0.2.3
         version: link:../apigen-base-errors
       '@adhd/apigen-engine-runtime':
-        specifier: ^0.3.3
+        specifier: ^0.3.4
         version: link:../apigen-engine-runtime
 
   packages/apigen/apigen-plugin-py-flask:
     dependencies:
       '@adhd/apigen-core-client':
-        specifier: ^0.3.4
+        specifier: ^0.3.5
         version: link:../apigen-core-client
       '@adhd/apigen-engine-naming':
-        specifier: ^0.2.5
+        specifier: ^0.2.6
         version: link:../apigen-engine-naming
       '@adhd/apigen-engine-runtime':
-        specifier: ^0.3.3
+        specifier: ^0.3.4
         version: link:../apigen-engine-runtime
       '@adhd/apigen-python-env':
         specifier: ^0.2.7
@@ -1593,10 +1593,10 @@ importers:
   packages/apigen/apigen-plugin-py-grpc:
     dependencies:
       '@adhd/apigen-core-client':
-        specifier: ^0.3.4
+        specifier: ^0.3.5
         version: link:../apigen-core-client
       '@adhd/apigen-engine-naming':
-        specifier: ^0.2.5
+        specifier: ^0.2.6
         version: link:../apigen-engine-naming
       '@adhd/apigen-python-env':
         specifier: ^0.2.7
@@ -1605,7 +1605,7 @@ importers:
   packages/apigen/apigen-plugin-tracing:
     dependencies:
       '@adhd/apigen-core-client':
-        specifier: ^0.3.4
+        specifier: ^0.3.5
         version: link:../apigen-core-client
       '@adhd/sox-telemetry':
         specifier: ^0.4.3
@@ -1614,10 +1614,10 @@ importers:
   packages/apigen/apigen-plugin-ts-types:
     dependencies:
       '@adhd/apigen-core-client':
-        specifier: ^0.3.4
+        specifier: ^0.3.5
         version: link:../apigen-core-client
       '@adhd/apigen-engine-naming':
-        specifier: ^0.2.5
+        specifier: ^0.2.6
         version: link:../apigen-engine-naming
     devDependencies:
       esbuild:
@@ -1627,16 +1627,16 @@ importers:
   packages/apigen/codegen/openapi:
     dependencies:
       '@adhd/apigen-core-client':
-        specifier: ^0.3.4
+        specifier: ^0.3.5
         version: link:../../apigen-core-client
       '@adhd/apigen-engine-naming':
-        specifier: ^0.2.5
+        specifier: ^0.2.6
         version: link:../../apigen-engine-naming
 
   packages/apigen/python-env:
     dependencies:
       '@adhd/apigen-core-client':
-        specifier: ^0.3.4
+        specifier: ^0.3.5
         version: link:../apigen-core-client
 
   packages/data/data-base-transforms: {}
@@ -1659,7 +1659,7 @@ importers:
   packages/dispatch/dispatch-base-spec:
     dependencies:
       '@adhd/agent-base-types':
-        specifier: ^2.3.11
+        specifier: ^2.3.12
         version: link:../../agent/agent-base-types
 
   packages/dispatch/dispatch-base-types: {}

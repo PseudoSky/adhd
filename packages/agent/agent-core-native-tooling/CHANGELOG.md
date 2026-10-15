@@ -1,3 +1,20 @@
+## 0.0.5 (2026-10-15)
+
+### 🚀 Features
+
+- **agent-engine-orchestrator:** shell tool guidance lists generated allowlist, unavailable commands and verified curl title/heading recipes (R7-guidance AC1-AC3) ([11d757f4](https://github.com/PseudoSky/adhd/commit/11d757f4))
+- **agent-mcp:** default shell can curl; open egress via loopback allow-all proxy (R5-WEB-SIMPLE AC1-AC6) ([e707c788](https://github.com/PseudoSky/adhd/commit/e707c788))
+- **agent-core-native-tooling:** surface shell exit status via a PATH launcher shim, parsed by the engine (61358b6f AC1-AC13) ([94b48cce](https://github.com/PseudoSky/adhd/commit/94b48cce))
+- **agent-core-native-tooling:** ship a default shell command allowlist (ADR-0008 D5) ([7f779174](https://github.com/PseudoSky/adhd/commit/7f779174))
+
+### 🩹 Fixes
+
+- **agent-core-native-tooling:** drop sed, node, python3 from the default shell allowlist and document it (7f779174 S1 follow-through, 61358b6f) ([45090f87](https://github.com/PseudoSky/adhd/commit/45090f87))
+
+### ❤️ Thank You
+
+- pseudosky
+
 ## 0.0.4 (2026-10-11)
 
 ### 🩹 Fixes

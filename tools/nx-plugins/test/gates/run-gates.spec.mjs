@@ -122,9 +122,14 @@ describe('595965cc T30.AC1 — the repository command table', () => {
   });
 
   it('595965cc T30.AC1 a stage with unbound gates reports them as obligations, not passes', { todo: ENGINE_TODO }, () => {
-    const r = wrapper(['--step', 'F']);
+    // Stage D binds G6, G8 and G11, which have no command; every gate that has one is swapped for a no-op so only the
+    // table's honest obligations decide the outcome.
+    const real = table();
+    const copy = join(tmp, 'real-D-obligations.json');
+    writeFileSync(copy, JSON.stringify({ ...real, gates: real.gates.map((g) => (g.command === undefined ? g : { ...g, command: 'node -e "process.exit(0)"' })) }));
+    const r = wrapper(['--step', 'D', '--table', copy]);
     const { selected, passed, obligations } = r.report.summary;
-    assert.equal(obligations.includes('G5'), true);
+    assert.equal(obligations.includes('G6'), true);
     // An obligation is never counted as a pass: every selected gate is either passed or an obligation.
     assert.equal(passed, selected - obligations.length);
     assert.ok(passed < selected, 'the obligation must not be among the passes');
