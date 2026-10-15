@@ -267,8 +267,12 @@ describe("usage accounting — data capture (DEBT-AGENTMCP-ACCOUNTING-001)", () 
             // a truncated-first bug would report ~truncatedTokens instead.
             expect(payload.tool_call_est_result_tokens).toBe(fullTokens);
             expect(payload.tool_call_est_result_tokens).not.toBe(truncatedTokens);
-            // The stored `result` field itself must still be the truncated summary.
-            expect(payload.result).toBe(longResult.slice(0, 500));
+            // The stored `result` is the capped text the model read (facd4aaa AC2: head + tail with a
+            // truncation notice), not the full result and no longer a 500-character slice.
+            expect(payload.result.length).toBeLessThan(longResult.length);
+            expect(payload.result).toContain("[tool result truncated: showing first");
+            expect(payload.result).toContain(longResult.slice(0, 4500));
+            expect(payload.result).not.toBe(longResult.slice(0, 500));
 
             const usageRow = sqlite
                 .prepare("SELECT est_tool_result_tokens FROM task_usage WHERE task_id = ?")

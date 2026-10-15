@@ -103,6 +103,8 @@ function makeContext(taskId: string, systemPrompt: string): ExecutionContext {
         name: "task-events-agent",
         version: 1,
         provider: { type: "anthropic", model: "claude_sonnet_4_6" },
+        // Provider-native web tools are on by default for anthropic; this suite pins the CLIENT tool list.
+        nativeWebTools: false,
         systemPrompt,
         mcpServers: {},
         permissions: {},
@@ -176,7 +178,8 @@ async function drive(opts: DriveOptions): Promise<DriveOutcome> {
 
     await new Orchestrator().run({
         executionContext: ctx,
-        messages: [user],
+        // The orchestrator reads the system prompt from history[0]; the definition's systemPrompt alone is not sent.
+        messages: systemPrompt === "" ? [user] : [{ id: generateId(), sessionId: ctx.sessionId, role: "system", content: systemPrompt, createdAt: nowIso() } as Message, user],
         registry,
         provider,
         policy: { check: () => undefined } as unknown as PolicyEngine,
@@ -301,7 +304,8 @@ describe("facd4aaa AC3 MODEL_REQUEST records the tools advertised and the system
             const request = outcome.requests[i]!;
             expect(request.serverSideTools ?? []).toHaveLength(0);
             const sentNames = (request.tools ?? []).map((t) => t.name);
-            expect(sentNames).toEqual(["test-server__echo", "test-server__ping"]);
+            // The engine adds its own built-in tools (human input); the registry tools must be present, in order.
+            expect(sentNames.filter((n) => n.startsWith("test-server__"))).toEqual(["test-server__echo", "test-server__ping"]);
             expect(event.payload?.["advertisedToolNames"]).toEqual(sentNames);
         });
     });
