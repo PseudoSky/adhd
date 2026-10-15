@@ -29,12 +29,19 @@ import type { Operation } from '@adhd/apigen-core-client'
  */
 export const DEFAULT_EXTRACTOR_TIMEOUT_MS = 120_000
 
+/**
+ * Largest delay `setTimeout` accepts (2^31 - 1 ms, about 24.8 days). A larger value
+ * overflows to 1 ms in Node and fires the timeout immediately, so it is rejected up front.
+ */
+const MAX_EXTRACTOR_TIMEOUT_MS = 2_147_483_647
+
 /** Options for {@link runExtractorEmitJson}. */
 export interface IRunExtractorOptions {
   /**
    * Wall-clock limit in milliseconds for the extractor process. On expiry the child is
    * killed (SIGKILL) and the promise rejects with a timeout error naming the command.
-   * Must be a positive finite number. Defaults to {@link DEFAULT_EXTRACTOR_TIMEOUT_MS}.
+   * Must be a positive finite number no greater than 2147483647 (the `setTimeout` maximum).
+   * Defaults to {@link DEFAULT_EXTRACTOR_TIMEOUT_MS}.
    */
   timeoutMs?: number
 }
@@ -71,6 +78,14 @@ export function runExtractorEmitJson(
       new RangeError(`${label}: extractor timeoutMs must be a positive finite number, got ${timeoutMs}`),
     )
   }
+  if (timeoutMs > MAX_EXTRACTOR_TIMEOUT_MS) {
+    return Promise.reject(
+      new RangeError(
+        `${label}: extractor timeoutMs must not exceed ${MAX_EXTRACTOR_TIMEOUT_MS} ms ` +
+          `(the setTimeout maximum), got ${timeoutMs}`,
+      ),
+    )
+  }
   const args = ['-m', 'apigen_python.extractor', modulePath, '--namespace', namespace, '--emit-json']
   const commandLine = [python, ...args].join(' ')
 
@@ -85,8 +100,9 @@ export function runExtractorEmitJson(
     let stderr = ''
     let timedOut = false
     // A hung extractor must not hold the promise (and the caller's CI step) forever.
-    // On expiry the child is SIGKILLed; the rejection is deferred to 'exit' so the
-    // child is provably gone by the time the caller observes the error.
+    // On expiry the child is SIGKILLed; the promise settles on 'close' (not 'exit') so
+    // the child is gone AND its stdout/stderr pipes are fully drained before the caller
+    // observes the result or error.
     const timer = setTimeout(() => {
       timedOut = true
       proc.kill('SIGKILL')
@@ -101,7 +117,7 @@ export function runExtractorEmitJson(
       clearTimeout(timer)
       reject(err)
     })
-    proc.on('exit', (code) => {
+    proc.on('close', (code) => {
       clearTimeout(timer)
       if (timedOut) {
         reject(
