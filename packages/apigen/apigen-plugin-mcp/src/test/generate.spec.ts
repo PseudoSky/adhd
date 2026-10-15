@@ -648,7 +648,13 @@ describe('regression:969e36f4 generate() — hyphenated package id in index.ts i
       { id: 'a\nb\rc\u2028d\u2029e', importPath: '@x/line\nbreak' },
     ]);
     expect(syntacticErrors(content)).toEqual([]);
-    expect(content).not.toMatch(/[\u2028\u2029\r]/);
+    // The escaped literals (single-quoted group and import path) must carry no raw terminator. The JSON.stringify'd
+    // tool-name key legitimately keeps a raw U+2028/U+2029 (valid in a string literal since ES2019), so the whole
+    // file is checked only for a raw carriage return, and the literals the fix owns are checked individually.
+    expect(content).not.toMatch(/\r/);
+    const singleQuoted = content.match(/'(?:[^'\\\n]|\\.)*'/g) ?? [];
+    expect(singleQuoted.length).toBeGreaterThan(0);
+    for (const literal of singleQuoted) expect(literal).not.toMatch(/[\u2028\u2029\r]/);
   });
 
   it('969e36f4: duplicate raw package ids throw an Error naming the id and emit nothing', () => {
