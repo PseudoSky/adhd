@@ -39,6 +39,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 - [search-verbs.8] The state gates are green: `nx run stealth-search:typecheck`, `:lint`, `:test` and `:build` exit 0.
 - [search-verbs.9] Only owned paths changed by [psm:search-verbs] commits.
 
+- [search-verbs.10] (backlog cd05ad09) Verb output is token-efficient by default: `SearchInput` gains `offset` (number) and `preview: 'none'|'include'` (an enum, no boolean) and defaults to `content: 'none'`, `preview: 'none'` and `maxContentSize` = `DEFAULT_MAX_CONTENT_SIZE` (20000 bytes); `search` results are `{title, url, snippet}` items with no `raw.preview` and no HTML unless `preview: 'include'`. A spec under src/test/unit/verbs/ on the fake core simulates a 400 KB page for the duckduckgo, github and fetch providers and asserts the default serialized result stays under 8192 bytes (`Buffer.byteLength`), that `preview: 'include'` adds the preview, and that `content: 'full'` is bounded by `maxContentSize` with `nextOffset`; titles carry `maxContentSize`, `nextOffset`, `snippet`, `preview`, `byteLength`, `8192` and the uid cd05ad09, and the spec cites [search-verbs.10].
 ---
 
 ## Reservations
