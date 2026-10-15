@@ -103,6 +103,12 @@ export type {
   PackageInvokerOptions,
 } from './lib/package-invoker';
 export { dispatchForPlan } from './lib/dispatch-for-plan';
+export { buildApigenPackage } from './lib/build-apigen-package';
+export type {
+  BuildApigenPackageInput,
+  BuildApigenPackageResult,
+  ApigenPackage,
+} from './lib/build-apigen-package';
 export {
   DEFAULT_LISTEN_HOST,
   isLoopbackListenHost,
