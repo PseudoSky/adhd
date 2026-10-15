@@ -24,8 +24,10 @@ import { generateId } from '../utils/ids.js';
 import { nowIso } from '../utils/timestamps.js';
 import type { EngineConfig, EngineLogger } from '../interfaces.js';
 import {
+  clipForStorage,
   DEFAULT_TOOL_RESULT_MAX_CHARS,
   mcpContentText,
+  TOOL_RESULT_EVENT_MAX_CHARS,
   serializeToolResult,
   validateToolResultMaxChars,
 } from './tool-result-cap.js';
@@ -42,9 +44,27 @@ function sha256Hex(text: string): string {
 }
 
 /**
+ * The `result` fields of a `TOOL_RESULT` event payload: the model-visible text clipped to
+ * {@link TOOL_RESULT_EVENT_MAX_CHARS}, and `result_sha256`, the hash of the FULL model-visible
+ * text (equal to the hash of `result` only when nothing was clipped). A clipped result also
+ * carries `result_stored_clipped: true` and `result_model_visible_chars`, the length before the
+ * clip. `truncated` / `original_chars` keep describing the model cap, not this clip.
+ */
+function storedResultFields(modelVisibleText: string): Record<string, unknown> {
+  const clip = clipForStorage(modelVisibleText, TOOL_RESULT_EVENT_MAX_CHARS);
+  return {
+    result: clip.text,
+    result_sha256: sha256Hex(modelVisibleText),
+    ...(clip.clipped
+      ? { result_stored_clipped: true, result_model_visible_chars: clip.originalChars }
+      : {}),
+  };
+}
+
+/**
  * The text the model reads for a capped tool result: the MCP text join for an all-text
- * content array, else its serialization. Stored whole (the cap already bounds it), never
- * sliced, so a reader sees exactly what the model saw.
+ * content array, else its serialization. The event log stores it through
+ * {@link storedResultFields}, which bounds it at {@link TOOL_RESULT_EVENT_MAX_CHARS}.
  */
 function modelVisibleTextOf(result: unknown): string {
   return mcpContentText(result) ?? serializeToolResult(result) ?? '';
@@ -1850,8 +1870,7 @@ export class Orchestrator {
                   tool: qualifiedToolName,
                   isError: isErr,
                   ...(exitStatus !== undefined ? { exitStatus } : {}),
-                  result: modelVisibleText,
-                  result_sha256: sha256Hex(modelVisibleText),
+                  ...storedResultFields(modelVisibleText),
                   tool_call_est_result_tokens: estTokens,
                   ...(estTokensEstimated
                     ? { tool_call_est_result_tokens_estimated: true }
@@ -2539,8 +2558,7 @@ export class Orchestrator {
                 tool: qualifiedToolName,
                 isError,
                 ...(exitStatus !== undefined ? { exitStatus } : {}),
-                result: modelVisibleText,
-                result_sha256: sha256Hex(modelVisibleText),
+                ...storedResultFields(modelVisibleText),
                 tool_call_est_result_tokens: toolCallEstResultTokens,
                 ...(toolCallEstResultTokensEstimated
                   ? { tool_call_est_result_tokens_estimated: true }

@@ -16,12 +16,14 @@ export type { EchoCaps } from './providers/anthropic-echo.js';
 export { Orchestrator } from './engine/orchestrator.js';
 export {
   capToolResult,
+  clipForStorage,
+  TOOL_RESULT_EVENT_MAX_CHARS,
   validateToolResultMaxChars,
   parseToolResultMaxChars,
   DEFAULT_TOOL_RESULT_MAX_CHARS,
   ERROR_RESULT_FLOOR_CHARS,
 } from './engine/tool-result-cap.js';
-export type { ToolResultCapOutcome } from './engine/tool-result-cap.js';
+export type { ToolResultCapOutcome, StoredTextClip } from './engine/tool-result-cap.js';
 export {
   SHELL_EXECUTE_TOOL,
   SHELL_EXIT_SENTINEL_RE,

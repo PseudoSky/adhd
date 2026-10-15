@@ -1,7 +1,7 @@
 /**
  * guards: task_events payloads differ from what the model saw or was offered (tool result cap, advertised tools, system prompt hash, compacted event type)
  * tier: S
- * cites: facd4aaa AC2, AC3, AC4
+ * cites: facd4aaa AC2, AC3, AC4; plan discovery-sweep-1014 blind-review A2 TEB-A1, TEB-A2, TEB-A4, TEB-A5
  *
  * facd4aaa AC2 / AC3 / AC4 — the payloads the orchestrator writes to `task_events` describe what the model
  * actually saw and was offered.
@@ -33,7 +33,18 @@
  * (5000 to 7000), because the marker that separates head and tail is not part of the contract this file
  * pins. If the marker grows past 1000 chars, widen the band here and record why.
  *
- * Red evidence: pending; tests cannot run until the hold is released. Expected red at facd4aaa^ for every
+ * plan discovery-sweep-1014 blind-review A2 (TEB-A1, TEB-A2, TEB-A4, TEB-A5): the stored `result` is bounded at
+ * TOOL_RESULT_EVENT_MAX_CHARS (16000) even when the model cap is 0, and `result_sha256` always hashes the FULL
+ * model-visible text. Failure modes: (j) cap 0 stores the whole 100k text (unbounded row); (k) a clipped result's
+ * `result_sha256` hashes the clipped text, so the full text's identity is lost; (l) the two writers (the native
+ * tool loop and the claudecli bridge) disagree on the payload shape; (m) the clip leaks into the token estimate
+ * or the `post:tool_call` payload, which must keep describing the full result. Tier S.
+ * Red run (TEB-A1/A2/A4/A5): against the pre-change orchestrator (no `clipForStorage`, `result` stored whole) the
+ * cap-0 cases fail on `result.length <= 16000` (received 100000) and on missing `result_stored_clipped`; the bridge
+ * parity case fails the same way; TEB-A1 and the A5 estimate/hook assertions already hold pre-change and are
+ * pinned as regression guards.
+ *
+ * Red evidence (facd4aaa): pending; tests cannot run until the hold is released. Expected red at facd4aaa^ for every
  * case (the TOOL_RESULT stores a 500-char slice; no `result_sha256`, `advertisedToolNames` or
  * `systemPromptSha256` are written; `CONTEXT_COMPACTED` is not in `taskEventTypeSchema`).
  */
@@ -50,6 +61,8 @@ import { TaskStore, taskEventsTable } from "@adhd/agent-store-runtime";
 import type { AgentDefinition, ExecutionContext, Message } from "@adhd/agent-base-types";
 
 import { Orchestrator } from "../engine/orchestrator.js";
+import { TOOL_RESULT_EVENT_MAX_CHARS } from "../engine/tool-result-cap.js";
+import { estimateToolResultTokens } from "../engine/tool-result-tokens.js";
 import type { OrchestratorTaskStore, OrchestratorSessionStore } from "../engine/orchestrator.js";
 import { HookRegistry } from "../engine/hooks.js";
 import type { ToolResultSpillConfig } from "../engine/tool-result-spill.js";
@@ -88,6 +101,10 @@ interface DriveOptions {
     spill?: ToolResultSpillConfig;
     /** Names of the tools the registry lists. */
     toolNames?: string[];
+    /** Drive the tool through the claudecli bridge (`request.executeTool`) instead of the native tool loop. */
+    bridge?: boolean;
+    /** Registered on the hook registry before the run (e.g. to capture `post:tool_call`). */
+    onPostToolCall?: (payload: { result: unknown; estResultTokens?: number }) => void;
 }
 
 interface DriveOutcome {
@@ -137,6 +154,13 @@ async function drive(opts: DriveOptions): Promise<DriveOutcome> {
         chat: async (request: ProviderChatRequest): Promise<ProviderChatResponse> => {
             requests.push({ ...request, messages: [...request.messages], tools: request.tools ? [...request.tools] : undefined });
             calls++;
+            if (opts.bridge) {
+                if (calls === 1) await request.executeTool!("test-server", "echo", {});
+                return {
+                    message: { id: generateId(), sessionId: ctx.sessionId, role: "assistant", content: "done", createdAt: nowIso() },
+                    stopReason: "completed",
+                };
+            }
             return calls === 1
                 ? {
                       message: {
@@ -176,6 +200,9 @@ async function drive(opts: DriveOptions): Promise<DriveOutcome> {
         toolResult: { maxChars: opts.maxChars ?? CAP, ...(opts.spill ? { spill: opts.spill } : {}) },
     } as unknown as EngineConfig;
 
+    const hooks = new HookRegistry();
+    if (opts.onPostToolCall) hooks.register("post:tool_call", (payload) => opts.onPostToolCall!(payload as never));
+
     await new Orchestrator().run({
         executionContext: ctx,
         // The orchestrator reads the system prompt from history[0]; the definition's systemPrompt alone is not sent.
@@ -187,7 +214,7 @@ async function drive(opts: DriveOptions): Promise<DriveOutcome> {
         sessionStore,
         signal: new AbortController().signal,
         taskId,
-        hooks: new HookRegistry(),
+        hooks,
         config,
     });
 
@@ -251,14 +278,20 @@ describe("facd4aaa AC2 TOOL_RESULT stores the model-visible text, not a 500-char
         expect(payload["result_sha256"]).toBe(sha256(text));
     });
 
-    // Failure mode (d). maxChars 0 disables the cap; the stored text must be the full result.
-    it("facd4aaa AC2: maxChars 0 (cap disabled) stores the full result unbounded and the model reads all of it", async () => {
+    // Failure mode (d). maxChars 0 disables the model cap: the model reads all of it; the event log stores a bounded
+    // head+tail (TOOL_RESULT_EVENT_MAX_CHARS) and keeps the full text's identity in `result_sha256`.
+    it("facd4aaa AC2 / TEB-A2: maxChars 0 (cap disabled) lets the model read the full result; the stored result is clipped to 16000 and hashed whole", async () => {
         const text = `BEGIN${"n".repeat(20_000)}END`;
         const outcome = await drive({ toolText: text, maxChars: 0 });
         const payload = toolResultOf(outcome);
+        const stored = payload["result"] as string;
 
         expect(modelReadToolText(outcome)).toBe(text);
-        expect(payload["result"]).toBe(text);
+        expect(stored.length).toBeLessThanOrEqual(TOOL_RESULT_EVENT_MAX_CHARS);
+        expect(stored.startsWith("BEGIN")).toBe(true);
+        expect(stored.endsWith("END")).toBe(true);
+        expect(payload["result_stored_clipped"]).toBe(true);
+        expect(payload["result_model_visible_chars"]).toBe(text.length);
         expect(payload["result_sha256"]).toBe(sha256(text));
     });
 
@@ -380,5 +413,80 @@ describe("facd4aaa AC4 CONTEXT_COMPACTED parses and round-trips through the task
     it("facd4aaa AC4: taskEventTypeSchema accepts CONTEXT_COMPACTED and rejects a near-miss spelling", () => {
         expect(taskEventTypeSchema.safeParse("CONTEXT_COMPACTED").success).toBe(true);
         expect(taskEventTypeSchema.safeParse("CONTEXT_COMPACTED_X").success).toBe(false);
+    });
+});
+
+// ── plan discovery-sweep-1014 blind-review A2: bounded stored result ──────────────────────────────────
+
+describe("plan discovery-sweep-1014 blind-review A2 TOOL_RESULT stored result is bounded", () => {
+    // TEB-A1. Default config: a 5000-char result is under both the model cap and the event bound, so it is stored whole.
+    it("plan discovery-sweep-1014 blind-review A2 TEB-A1: a 5,000-char result under the default config is stored whole, unflagged, with sha256(result) === result_sha256", async () => {
+        const text = `HEAD${"a".repeat(4_992)}TAIL`;
+        expect(text).toHaveLength(5_000);
+        const outcome = await drive({ toolText: text });
+        const payload = toolResultOf(outcome);
+
+        expect(payload["result"]).toBe(text);
+        expect("result_stored_clipped" in payload).toBe(false);
+        expect("result_model_visible_chars" in payload).toBe(false);
+        expect(sha256(payload["result"] as string)).toBe(payload["result_sha256"]);
+    });
+
+    // TEB-A2. Cap 0, 100,000 chars: the row is bounded; identity of the full text lives in the hash and the length.
+    it("plan discovery-sweep-1014 blind-review A2 TEB-A2: cap 0 with a 100,000-char result stores <= 16000 chars, flags the clip, and hashes the FULL text", async () => {
+        const text = `BEGIN${"z".repeat(99_990)}END!!`;
+        expect(text).toHaveLength(100_000);
+        const outcome = await drive({ toolText: text, maxChars: 0 });
+        const payload = toolResultOf(outcome);
+        const stored = payload["result"] as string;
+
+        expect(stored.length).toBeLessThanOrEqual(16_000);
+        expect(stored.length).toBeGreaterThan(15_000);
+        expect(payload["result_stored_clipped"]).toBe(true);
+        expect(payload["result_model_visible_chars"]).toBe(100_000);
+        expect(payload["result_sha256"]).toBe(sha256(text));
+        expect(sha256(stored)).not.toBe(payload["result_sha256"]);
+        expect(stored.startsWith("BEGIN")).toBe(true);
+        expect(stored.endsWith("END!!")).toBe(true);
+    });
+
+    // TEB-A4. The native tool loop and the claudecli bridge write the same payload shape for the same tool output.
+    it.each([
+        ["native tool loop", false],
+        ["claudecli bridge", true],
+    ])("plan discovery-sweep-1014 blind-review A2 TEB-A4: the %s writer clips identically", async (_label, bridge) => {
+        const text = `BEGIN${"q".repeat(49_990)}END!!`;
+        const outcome = await drive({ toolText: text, maxChars: 0, bridge });
+        const payload = toolResultOf(outcome);
+        const stored = payload["result"] as string;
+
+        expect(stored.length).toBeLessThanOrEqual(16_000);
+        expect(stored.startsWith("BEGIN")).toBe(true);
+        expect(stored.endsWith("END!!")).toBe(true);
+        expect(payload["result_stored_clipped"]).toBe(true);
+        expect(payload["result_model_visible_chars"]).toBe(50_000);
+        expect(payload["result_sha256"]).toBe(sha256(text));
+        expect("truncated" in payload).toBe(false);
+    });
+
+    // TEB-A5. The clip is a storage concern only: the token estimate and the post:tool_call payload describe the full result.
+    it.each([
+        ["native tool loop", false],
+        ["claudecli bridge", true],
+    ])("plan discovery-sweep-1014 blind-review A2 TEB-A5: the %s keeps tool_call_est_result_tokens and post:tool_call.result on the FULL result", async (_label, bridge) => {
+        const text = Array.from({ length: 6_000 }, (_, i) => `line ${i} value ${i * 31}`).join("\n");
+        expect(text.length).toBeGreaterThan(100_000);
+        const posts: Array<{ result: unknown; estResultTokens?: number }> = [];
+        const outcome = await drive({ toolText: text, maxChars: 0, bridge, onPostToolCall: (p) => posts.push(p) });
+        const payload = toolResultOf(outcome);
+
+        const fullEstimate = estimateToolResultTokens(text);
+        expect(payload["tool_call_est_result_tokens"]).toBe(fullEstimate.tokens);
+        expect((payload["result"] as string).length).toBeLessThanOrEqual(16_000);
+        if (!bridge) {
+            expect(posts).toHaveLength(1);
+            expect(posts[0]!.result).toBe(text);
+            expect(posts[0]!.estResultTokens).toBe(fullEstimate.tokens);
+        }
     });
 });
