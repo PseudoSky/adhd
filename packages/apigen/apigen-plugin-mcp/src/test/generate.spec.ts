@@ -523,21 +523,26 @@ describe('[BUG-APIGEN-OPENAPI-ROUTE-PATH-MISMATCH-001] generate() derives canoni
 // ---------------------------------------------------------------------------
 //
 // Test header
-//   guards: generateIndex (generate.ts lines 34-42 and 86-90) passes every
+//   guards: generateIndex (the uniqueSanitizedIdentifiers call and the groupFns table) passes every
 //     package id through uniqueSanitizedIdentifiers before it names the
 //     import namespace and the fn table, so a hyphenated id emits parseable
 //     TypeScript and a colliding pair of ids gets distinct identifiers. The
 //     raw id stays in string-literal positions.
 //   tier: S (unit). Pure string generation; the TypeScript parser runs
 //     in-process. No subprocess, socket or network.
-//   cites: 969e36f4 AC1, AC2, AC3, AC4.
+//   cites: 969e36f4 AC1, AC2, AC3 (identifier sanitisation), plus the
+//     literal-escaping and duplicate-id guards added to the same function.
+//     The ticket (969e36f4 body and notes) defines no numbered AC4; its only
+//     further requirement is process ("negative control: revert, confirm
+//     red"), which no test can assert and is recorded in the red line below.
 //   tags: regression:969e36f4.
-//   teeth: AC1 and AC2 fail on ac42a142^, where `import * as data-base-transforms_ns`
+//   teeth: AC1 and AC2 fail on a286b457^, where `import * as data-base-transforms_ns`
 //     is spliced raw and the parser reports syntax diagnostics.
-//   red: pending (not run per user; must fail on ac42a142^ for AC1 and AC2,
+//   red: pending (user hold; not run; must fail on a286b457^ for AC1 and AC2,
 //     pass on the bucket head). AC3's byte-identical 'myPkg' case is a
-//     characterization guard and passes on both sides. AC4 is this statement:
-//     the regression is red on the pre-fix commit, which this header records.
+//     characterization guard and passes on both sides. The escaping and
+//     duplicate-id tests fail on a286b457 itself (raw splice, no guard) and
+//     pass on the bucket head.
 //   parser: ts.transpileModule with reportDiagnostics, the public API for
 //     syntactic diagnostics. It reports the same parse errors as the
 //     parser-level parseDiagnostics without reading a TypeScript internal.
@@ -628,5 +633,38 @@ describe('regression:969e36f4 generate() — hyphenated package id in index.ts i
       '}',
     ].join('\n');
     expect(content).toBe(expected);
+  });
+
+  it('969e36f4: an id and importPath containing a quote and a backslash yield index.ts that parses, with the literal escaped', () => {
+    const content = indexContentFor([{ id: "a'b\\c", importPath: "@x/it's\\here" }]);
+    expect(syntacticErrors(content)).toEqual([]);
+    expect(content).toContain("'a\\'b\\\\c': ");
+    expect(content).toContain("from '@x/it\\'s\\\\here'");
+    expect(content).toContain("group: 'a\\'b\\\\c'");
+  });
+
+  it('969e36f4: an id with newline, carriage return, U+2028 and U+2029 yields parseable index.ts with no raw terminators', () => {
+    const content = indexContentFor([
+      { id: 'a\nb\rc\u2028d\u2029e', importPath: '@x/line\nbreak' },
+    ]);
+    expect(syntacticErrors(content)).toEqual([]);
+    expect(content).not.toMatch(/[\u2028\u2029\r]/);
+  });
+
+  it('969e36f4: duplicate raw package ids throw an Error naming the id and emit nothing', () => {
+    const input: PluginInput = {
+      packages: [
+        { id: 'dup-pkg', importPath: '@x/one', schemas: {}, fns: {} },
+        { id: 'other', importPath: '@x/two', schemas: {}, fns: {} },
+        { id: 'dup-pkg', importPath: '@x/three', schemas: {}, fns: {} },
+      ],
+      outputDir: '/tmp/out',
+      options: {},
+    };
+    let produced: unknown;
+    expect(() => {
+      produced = generate(input);
+    }).toThrow(/duplicate package id.*"dup-pkg"/);
+    expect(produced).toBeUndefined();
   });
 });
