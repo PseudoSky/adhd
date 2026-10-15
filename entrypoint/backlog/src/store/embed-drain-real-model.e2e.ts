@@ -1,30 +1,40 @@
 /**
- * embed-drain-real-model.e2e.ts — the close-time embed drain proven
- * end-to-end against the REAL embedding stack: real
+ * guards: a semantic query finds an item only when its vector is durably written by the production write path    tier: P    cites: 4256bc8b AC1, 4256bc8b AC4, 4256bc8b (item 4256bc8b-3162-4bab-85de-8fe454724b2c)
+ * gap: This cannot be observed at tier S because it loads the real fastembed bge-base-en-v1.5 ONNX model, opens the real Turso vector store, and spawns the built bin as a child process.
+ *
+ * embed-drain-real-model.e2e.ts — the close-time embed drain and the semantic
+ * query route proven end-to-end against the REAL embedding stack: real
  * `@adhd/sox-embedding-provider` (fastembed, bge-base-en-v1.5, 768-dim ONNX),
  * real `@adhd/sox-vector-store` Turso vector backend, a real store opened
- * through the production `openGraphBacklogStore` factory, and — for the
- * strongest form — the REAL BUILT `dist/index.js` bin as a genuine child
- * process.
+ * through the production `openGraphBacklogStore` factory, and the REAL BUILT
+ * `dist/index.js` bin as a genuine child process.
+ *
+ * ## Lane and command
+ *
+ * This suite runs in the e2e lane, which is CI-only. CI runs it on every
+ * presubmit via `npx nx affected -t e2e --parallel=1` (the gate targets in
+ * `tools/gate/lane-gate.mjs`) and before publish. It is not part of `nx test`,
+ * and the local pre-push hook does not run it. To run it on demand:
+ * `npx nx run backlog:e2e`. Lane policy: docs/decisions/0009-test-lanes-unit-vs-e2e.md.
+ *
+ * No env flag gates these cases. The embedding model is local ONNX inference over
+ * a model cached on disk, not a paid or external service. If the model or the
+ * optional packages are missing, the cases fail loudly (the explicit
+ * `bootstrapSemanticStoreMembers` precondition below) and never skip.
  *
  * ## What this proves that the fake-backed suite cannot
  *
- * `embed-drain.spec.ts` proves the drain's *mechanics* with a deterministic
- * fake backend. It cannot prove the one-shot production path actually works:
- * a fake can fake a vector the real model would never produce. These tests
- * drive the real consumer seam — `create` WITHOUT `awaitEmbed` through
- * `api.ts`'s production handle, and a spawned `backlog create` — then close
- * through the real drain and assert the item is semantically reachable from a
- * fresh store. That is the outcome a one-shot host depends on.
+ * `embed-drain.spec.ts` proves the drain's mechanics with a deterministic fake
+ * backend. It cannot prove the one-shot production path actually works: a fake
+ * can fake a vector the real model would never produce. These tests drive the
+ * real consumer seams:
  *
- * ## Why this runs by DEFAULT, with no env flag
- *
- * AGENTS.md's "Live testing is mandatory" allows an env gate for exactly one
- * reason: a PAID or EXTERNAL third-party service. fastembed is neither — it is
- * local ONNX inference over a model already cached on disk. So these run
- * unflagged, and if the model or the optional packages are missing they FAIL
- * LOUDLY (the explicit `bootstrapSemanticStoreMembers` precondition below)
- * rather than skipping.
+ * - `create` WITHOUT `awaitEmbed` through `api.ts`'s production handle, then a
+ *   close through the real drain, and a semantic query from a fresh store;
+ * - a spawned `backlog create`;
+ * - the `ensureSemanticReady` seam. It is module-private in `api.ts`, so this
+ *   suite reaches it through the public `create` and `query` verbs, both of
+ *   which call it. The query carries no token shared with the item.
  */
 import { rmSync } from 'node:fs';
 import { join } from 'node:path';
@@ -52,6 +62,22 @@ const E2E_TIMEOUT = 180_000;
 /** The text shares NO meaningful token with the created item — only the semantic route can surface it. */
 const QUERY_TEXT =
   'manufacturing robot pauses because its turning measurement misbehaves';
+
+/**
+ * Builds a ctx env with the embedding switch forced to `value` for this one
+ * build only. `buildBacklogEnv` resolves the cascade at construction, so the
+ * override is captured in the returned env and the prior value is restored.
+ */
+function buildEnvWithEmbedding(adhdRoot: string, value: string) {
+  const prev = process.env[ENV_VAR];
+  process.env[ENV_VAR] = value;
+  try {
+    return buildBacklogEnv({ adhdRoot });
+  } finally {
+    if (prev === undefined) delete process.env[ENV_VAR];
+    else process.env[ENV_VAR] = prev;
+  }
+}
 
 describe('close-time embed drain — real fastembed + spawned bin', () => {
   let prevEnvVar: string | undefined;
@@ -197,6 +223,89 @@ describe('close-time embed drain — real fastembed + spawned bin', () => {
       } finally {
         if (store) await closeGraphBacklogStore(store).catch(() => undefined);
         rmSync(sandbox.adhdRoot, { recursive: true, force: true });
+      }
+    },
+    E2E_TIMEOUT
+  );
+
+  it(
+    'a query with no shared token finds the created item through the semantic route and not an item whose vector was never written',
+    async () => {
+      const dir = freshTmpDir('embed-drain-real-model-seam');
+      let store: GraphBacklogStore | undefined;
+      try {
+        store = await openGraphBacklogStore(join(dir, 'backlog.db'));
+        const env = buildBacklogEnv({ adhdRoot: dir });
+        const ctx: BacklogCtx = { store, env };
+
+        // Same fail-loud precondition as the drain case: never skip.
+        const members = await bootstrapSemanticStoreMembers(
+          store.adapter,
+          store.graph,
+          env.config.embedding
+        );
+        if (!members.search || !members.embedding) {
+          throw new Error(
+            'real semantic backend unavailable: bootstrapSemanticStoreMembers returned no search/embedding members — is fastembed + the bge-base-v1.5 model available?'
+          );
+        }
+        await members.embedding.embedDocument('warmup');
+
+        const proj = await upsertProject(ctx, { name: 'P', by: 't' });
+        expect(isOutcomeOk(proj), JSON.stringify(proj)).toBe(true);
+
+        // Item A: written with its vector (awaitEmbed) through the production
+        // `create`, which reaches `ensureSemanticReady` with embedding on.
+        const withVector = await create(ctx, {
+          title: 'Widget conveyor halts on torque sensor drift',
+          body: 'The assembly line stops when the rotational gauge reading wanders beyond tolerance.',
+          project: 'P',
+          by: 't',
+          awaitEmbed: true,
+        });
+        expect(isOutcomeOk(withVector), JSON.stringify(withVector)).toBe(true);
+        if (!isOutcomeOk(withVector) || withVector.data.uid === undefined) {
+          throw new Error(`create did not mint an issue: ${JSON.stringify(withVector)}`);
+        }
+        const withVectorUid = withVector.data.uid;
+
+        // Item B: same subject, written while embedding is OFF, so no vector
+        // is ever written for it. Only the vector can separate A from B.
+        const offEnv = buildEnvWithEmbedding(dir, 'false');
+        const withoutVector = await create(
+          { store, env: offEnv },
+          {
+            title: 'Widget conveyor halts on torque sensor drift at line two',
+            body: 'The assembly line stops when the rotational gauge reading wanders beyond tolerance.',
+            project: 'P',
+            by: 't',
+          }
+        );
+        expect(isOutcomeOk(withoutVector), JSON.stringify(withoutVector)).toBe(true);
+        if (!isOutcomeOk(withoutVector) || withoutVector.data.uid === undefined) {
+          throw new Error(`create did not mint an issue: ${JSON.stringify(withoutVector)}`);
+        }
+        const withoutVectorUid = withoutVector.data.uid;
+
+        const closed = await closeGraphBacklogStore(store);
+        expect(closed.unrecorded).toHaveLength(0);
+        store = undefined;
+
+        // Reopen on the SAME file with embedding on; the semantic route is the
+        // only route a no-shared-token query can take to A.
+        store = await openGraphBacklogStore(join(dir, 'backlog.db'));
+        const ctx2: BacklogCtx = { store, env };
+        const res = await query(ctx2, { text: QUERY_TEXT });
+        expect(isOutcomeOk(res), JSON.stringify(res)).toBe(true);
+        if (!isOutcomeOk(res) || res.data.view !== 'list' || !('items' in res.data)) {
+          throw new Error(`expected view 'list', got ${JSON.stringify(res)}`);
+        }
+        const uids = res.data.items.map((i) => i.uid);
+        expect(uids).toContain(withVectorUid);
+        expect(uids).not.toContain(withoutVectorUid);
+      } finally {
+        if (store) await closeGraphBacklogStore(store).catch(() => undefined);
+        rmSync(dir, { recursive: true, force: true });
       }
     },
     E2E_TIMEOUT
