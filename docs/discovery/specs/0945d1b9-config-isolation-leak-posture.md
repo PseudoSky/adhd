@@ -38,3 +38,11 @@ AC1/AC2: S (`.spec.mjs`, fixture trees, negative control = fixture with a bare `
 ## Risks / serialization
 - Touches `tools/nx-plugins/test/executors/wiring/**` (shared by ADR-0009 lane checks) — serialize with any open lane-gate work; no overlap with other specs in this batch.
 - Open for owner: confirm D1 (HOME-redirect + repo-wide guard) vs D4 (resolver option); correct the item (guard exists in default lane; af6d29d5 invalid).
+
+## Product revision
+dor (product): ready.
+Resolved: D1 + D2 + D3 (HOME-redirect remains THE isolation mechanism; extend the static guard repo-wide; characterization test + README posture). D4 (resolver `layers` option) is REJECTED: it protects only in-process callers, no one has reported an in-process leak, and it is a HIGH-impact edit to `resolveConfig`. Rationale: the observed harm is spawned children inheriting the real HOME; the guard is the cheapest control that covers it for every package, not just backlog.
+- AC5 is removed (D4 not chosen). Final ACs: AC1-AC4.
+- Item correction: record that the backlog guard exists in the default lane (`vocabulary-gate`) and that af6d29d5 is invalid; this item's remaining scope is the repo-wide extension.
+- Reopen trigger for D4: a filed report of an in-process (non-spawn) global-layer leak.
+Priority: P2, rank 4 (XS; prevents the class repo-wide, no live incident).
