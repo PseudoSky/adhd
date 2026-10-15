@@ -100,12 +100,21 @@ export const taskToolInputSchema = z.union([
   ephemeralModeSchema,
 ]);
 
+/**
+ * Advisory completion warnings of a finished task (cbd559eb). Mirrors the `TaskCompletionWarning`
+ * literal union from `@adhd/agent-base-types`; the `no_tool_use` member is the only one emitted. The
+ * key is omitted when the task completed with no warning.
+ */
+export const taskToolWarningSchema = z.enum(['no_tool_use']);
+
 export const taskToolOutputSchema = z.object({
   task_id: z.string().uuid(),
   status: taskStatusSchema,
   result: z.string().optional(),
   stream_url: z.string().optional(),
   usage: taskUsageReportSchema.optional(),
+  /** cbd559eb: advisory completion warnings; absent when none fired (see `TaskCompletionWarning`). */
+  warnings: z.array(taskToolWarningSchema).optional(),
 });
 
 /**

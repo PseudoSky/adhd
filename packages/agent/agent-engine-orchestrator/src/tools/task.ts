@@ -39,12 +39,6 @@ import type { IHookRegistry } from '@adhd/agent-base-types';
 import { buildTaskUsageReport, type Database } from './usage.js';
 
 /**
- * A synchronous task result: the `TaskToolOutput` fields plus the advisory completion warnings of the
- * finished task (cbd559eb). `warnings` is absent when the task completed with none.
- */
-type TaskToolResult = TaskToolOutput & { warnings?: TaskCompletionWarning[] };
-
-/**
  * cbd559eb: the advisory completion warnings of a finished task, read from its persisted `TASK_COMPLETED`
  * payload (the orchestrator writes `warnings` there only when one fired). Returns `undefined` when none
  * did, so callers omit the key instead of sending an empty array.
@@ -764,7 +758,7 @@ async function dispatchTask(
     const finalTask = deps.taskStore.read(task.id);
     const usage = buildTaskUsageReport(deps.db, finalTask.id);
     const warnings = completionWarningsOf(deps.db, finalTask.id);
-    const response: TaskToolResult = {
+    const response: TaskToolOutput = {
       task_id: finalTask.id,
     status: finalTask.status as TaskStatus,
       result: finalTask.result,
