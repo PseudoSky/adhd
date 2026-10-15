@@ -36,6 +36,7 @@
 const { existsSync } = require('node:fs');
 const { basename, dirname, join } = require('node:path');
 const { isScratchPath } = require('../lib/scratch-root');
+const { declaredExternalDeps } = require('../lib/declared-external-deps');
 
 function skip(p) {
   return (
@@ -83,7 +84,15 @@ exports.createNodes = [
                   '{workspaceRoot}/eslint.base.config.mjs',
                   '{workspaceRoot}/eslint.config.mjs',
                   `{projectRoot}/${basename(configPath)}`,
-                  { externalDependencies: ['eslint'] },
+                  // fbbb1464: `externalDependencies` REPLACES Nx's default hashing of
+                  // installed external versions, so the project's own declared deps
+                  // must be listed or a bump of one never misses this cache entry.
+                  {
+                    externalDependencies: [
+                      'eslint',
+                      ...declaredExternalDeps(projectRoot, ctx.workspaceRoot),
+                    ],
+                  },
                 ],
               },
             },

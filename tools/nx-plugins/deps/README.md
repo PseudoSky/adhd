@@ -23,3 +23,13 @@ The pre-commit hook (`.githooks/pre-commit`) keeps its own, separate, **hard-fai
 ### Pre-commit hook interaction — mutation, never auto-staged
 
 `lint`'s new `sync-deps` dependency can mutate a project's `package.json` in the **working tree** as a side effect of the pre-commit hook's `nx affected -t lint` call. The hook was extensively hardened against exactly this shape of problem before (see its header, `BUG-REPO-PRECOMMIT-PARTIAL-STAGE-001` / `BUG-REPO-PRECOMMIT-DEPCHECK-STRIPS-USED-DEPS-001`) — it **never** stages anything itself. Instead, Gate 2 snapshots every `package.json`'s working-tree status immediately before and after running lint; if `sync-deps` touched any of them, the commit is **failed** (even if `lint` itself reports clean) so the developer must review the auto-fix diff, `git add -- <path>/package.json` it themselves, and commit again — this is deliberate: without it, an already-staged (now stale) `package.json` would otherwise silently ship despite a "lint passed" banner, because the dependency check validated the just-fixed disk copy, not the index.
+
+### Cache key — installed versions of the project's declared dependencies (fbbb1464)
+
+The `lint` target (`tools/nx-plugins/lint/plugin.js`) and both `sync-deps` / `sync-deps-check` targets (this plugin) declare `{ externalDependencies: [...] }` as a cache input. Declaring that input **replaces** Nx's default hashing of installed external versions for the target, so each target lists every npm dependency its own project declares:
+
+- the names come from `dependencies`, `devDependencies`, `peerDependencies` and `optionalDependencies` in the project's `package.json`, via [`lib/declared-external-deps.js`](../lib/declared-external-deps.js) (`declaredExternalDeps`);
+- `@adhd/*` names are excluded (workspace siblings are covered by `^production`), and `eslint` is always listed once, first;
+- the lockfile is **not** an input. Hashing it would re-run lint for every project on any dependency bump in the workspace.
+
+The effect is that bumping an installed version of a dependency a project declares invalidates that project's `lint` and `sync-deps-check` entries, and nothing else. The first run after this change rebuilds the cache for every project, because `tools/nx-plugins/**` is a global input.
