@@ -6,7 +6,7 @@
  * project. The task-hash behavior (AC3: a bumped installed version changes the
  * lint hash; AC4: warm-cache lint fails after the bump) is NOT proven here. It
  * needs Nx's hasher over a real workspace, which cannot run in the unit lane.
- * See the fbbb1464 tier-P gap recorded in the author-regression report.
+ * AC3/AC4 are covered by tools/nx-plugins/lint/declared-deps-hash.e2e.spec.mjs (tier P, e2e lane).
  *
  * Run: node --test tools/nx-plugins/lint/plugin.spec.mjs
  */
