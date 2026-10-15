@@ -519,6 +519,39 @@ The extraction result already reports `sourceFiles`, and the cache key already c
 - **Dependencies:** R4. **Risk:** medium. **Rollback:** per reader.
 - **Tests:** T-R15.
 
+#### R15 audit table
+
+Basis: R4 (`apigen-plugin-mcp/src/lib/run.ts`) returns a string result as the raw `content[0].text` with no `structuredContent` (D1), and maps every `ApiError` to an `isError` result with text `<code>: <message>` and `_meta['adhd/error']`, so `callTool` resolves (D2, K3). A non-`ApiError` throw and a stream (`projectStreamMcp`) are unchanged. `entrypoint/agent-mcp` serves its own tools (`server.ts` `toMcpContent` = `JSON.stringify(value, null, 2)`, `toMcpErrorContent` = `[CODE] message`) and has no `@adhd/apigen-*` dependency. `entrypoint/backlog` mounts through `apigen-plugin-mcp`; every mounted verb in `api.ts` returns an `IOutcomeEnvelope` object and catches its own throws into the envelope (`envelope()`, `api.ts:630-640`), so no backlog tool returns a string and no backlog verb raises an `ApiError` from its body.
+
+| Reader (file:line) | Tool it reads | String-returning apigen tool? | Parses text? (`JSON.parse`?) | Breaks under raw string / K3? | Action |
+|---|---|---|---|---|---|
+| `packages/dispatch/dispatch-orchestrator/src/lib/agent-runner.ts:499` (`AgentMcpRunner.callTool`) | agent-mcp `agent_read`, `agent_create`, `task`, `result`, `task_cancel`, `usage_query` (`:519-640`) | no (agent-mcp, not apigen) | yes, `JSON.parse` (`:507`); `isError` text matched by `[CODE]` (`:502`) | no; K3 no (agent-mcp returns `isError` itself) | none |
+| `packages/agent/agent-plugin-budget/src/index.ts:1919-1931` (`enforceResponseSize`) | any tool result through `transform:tool_result` | may be | no (sums `text.length`) | no | none |
+| `packages/agent/agent-plugin-budget/src/__tests__/budget-plugin.test.ts:1076` | literal fixture `{ text: 'small file' }` | no | no | no | none |
+| `entrypoint/agent-mcp/src/__tests__/traced-transport.test.ts:49,68` | in-test SDK `Server` `add` (`String(a+b)`) | no | `:68` parses the JSON-RPC body, reads `text` as-is | no | none |
+| `entrypoint/agent-mcp/src/__tests__/pricing-tools-mcp.test.ts:51,74,77` | agent-mcp `pricing_refresh`, `pricing_history` | no | yes | no | none |
+| `entrypoint/agent-mcp/src/__tests__/tasks-batch-string-args.e2e.test.ts:147`, `live/tracing-live.e2e.test.ts:264,338` | agent-mcp tools | no | yes | no | none |
+| `entrypoint/agent-mcp/src/__tests__/agent-list-reflects-store.e2e.test.ts:145,184,194`; `integration/{native-web-tools:108, tasks-batch:91, provider-selection:85, agent-prompt-projection:62, tracing-e2e:218, default-mcp-servers:81, provider-selection-global:99}.e2e.test.ts`; `provider-wire.e2e.test.ts:253`; `r10-s4-delegation-text.test.ts:123` | agent-mcp tools | no | varies | no | none |
+| `entrypoint/backlog/src/test/helpers/spawn-mcp-host.ts:94-114` (`callToolJson`, used by `mcp-host`, `contract-matrix`, `production-write-gate` e2e) | backlog verbs | no (envelope objects) | yes | no; K3 no (domain failures are `ok:false` envelopes; no case sends schema-invalid input — `contract-matrix.e2e.ts:186` `limit:-5` has no schema bound and reaches the domain) | none |
+| `entrypoint/backlog/src/server.mcp.e2e.ts:108,170,187`; `serve.e2e.ts:150,171`; `serve.singleton.e2e.ts:123,147`; `store/acked-write-durability.e2e.ts:116` | backlog verbs | no | yes | no | none |
+| `entrypoint/backlog/src/server.verbs.e2e.ts` | none (lists mounts; no `callTool`) | n/a | no | no | none |
+| `packages/apigen/apigen-plugin-mcp/src/test/flat-content-payload.spec.ts:107,123` | object and union returns | no | yes | no | none |
+| `packages/apigen/apigen-plugin-mcp/src/test/stream.spec.ts:40-212` | `projectStreamMcp` output | stream chunks (unchanged by R4) | yes | no | none |
+
+Production readers: one (`agent-runner.ts:499`); none breaks; no source edit. K3 production callers relying on a rejected `callTool`: none in the G-5 paths (the only production `callTool` caller is `agent-runner.ts`, which targets agent-mcp).
+
+Readers outside the G-5 list that break (not edited here; test re-point owed):
+
+| Reader (file:line) | Tool it reads | String-returning apigen tool? | Parses text? | Breaks? | Action |
+|---|---|---|---|---|---|
+| `entrypoint/apigen-cli/src/test/e2e/bug-apigen-033-anonymous-default-dispatch.e2e.ts:143-146` | default export returning `'hello Ada'` | yes | `JSON.parse` | yes (D1) | T-R15 |
+| `entrypoint/apigen-cli/src/test/e2e/import-source-cjs-format.e2e.ts:92-95` | `greet` returning `'hello world'` | yes | `JSON.parse` | yes (D1) | T-R15 |
+| `entrypoint/apigen-cli/src/test/e2e/real-consumer.e2e.ts:236-237,445-448` | `text.ts` exports (`upperFirst`, `trim`, …) | yes | `JSON.parse` | yes (D1) | T-R15 |
+| `packages/apigen/apigen-plugin-mcp/src/test/transport-http-parity.e2e.ts:281-286,367-372` | `get_thing` `'missing'` throws `ApiError('not_found')` | n/a | `rejects.toThrow()` | yes (K3: resolves `isError`) | T-R4 |
+| `packages/apigen/apigen-plugin-mcp/src/test/run.e2e.ts:1444-1447` | malformed input, `ApiError('invalid_argument')` | n/a | `rejects.toThrow()` | yes (K3) | T-R4 |
+| `packages/apigen/apigen-plugin-mcp/src/test/run.e2e.ts:1282-1300` (parity harness) | error fixtures recorded as `ok:false`/`errorCode` from a catch | n/a | catch path | yes (K3: error fixtures now resolve) | T-R4 |
+| `packages/apigen/apigen-engine-gateway/src/lib/sources/mcp-source.ts:~302` | upstream MCP `content` (production client) | may be | not audited (outside G-5 paths; under concurrent edit) | unknown | audit owed |
+
 ### R13 — Backlog migration (gated; off the critical path)
 
 Moves `entrypoint/backlog`'s `buildBacklogApigenPackage` copy and `extract-live.ts:213-222` onto `buildApigenPackage` and the orchestration entry. **Not started without explicit owner approval (G-3).** Nothing else depends on it.
