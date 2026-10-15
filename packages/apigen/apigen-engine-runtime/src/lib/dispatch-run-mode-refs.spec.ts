@@ -230,3 +230,61 @@ describe('regression:1bb4b5d5 — dispatch resolves $ref against the op schema r
     }
   );
 });
+
+// plan discovery-sweep-1014 blind-review C AC2
+//   Failure mode: dispatch.ts kept its own copy of the resolvable-$ref regex and a
+//     blanket `catch {}` that replaced the resolver's error, so the E_EMIT
+//     diagnosis from rootRefResolver (apigen-base-logical) never reached a
+//     run-mode caller and the cause was dropped.
+//   Tier: S (real dispatch() in process, no mocks, no I/O).
+//   Gap statement: none; dispatch() is the consumer seam.
+//   Item/criterion: plan discovery-sweep-1014 blind-review C AC2.
+//   Risk map (Light): the op id must still be present (pre-existing assertions
+//     above); the cause must be the original EmitError, not a stringified copy.
+//   Red run: against the unfixed dispatch.ts the E_EMIT-message and cause
+//     assertions fail (message lacks "E_EMIT", err.cause is undefined).
+describe('plan discovery-sweep-1014 blind-review C AC2 — run-mode $ref errors keep the E_EMIT diagnosis and cause', () => {
+  const schemaWithRef = (ref: string): Schema => ({
+    input: {
+      type: 'object',
+      definitions: { A: { type: 'string', format: 'date-time' } },
+      properties: {
+        data: {
+          type: 'object',
+          properties: { at: { $ref: ref } },
+          required: ['at'],
+        },
+      },
+      required: ['data'],
+    },
+    output: {},
+  });
+
+  it('AC2: an unsupported $ref form surfaces the E_EMIT message with the op id and the EmitError as cause', async () => {
+    const err = (await errorOf(
+      run({ op: () => null }, schemaWithRef('#/$defs/A/properties/b'), 'op', {
+        at: ISO,
+      })
+    )) as Error;
+    expect(err).toBeInstanceOf(Error);
+    expect(err.message).toContain('"op"');
+    expect(err.message).toContain('E_EMIT: unsupported $ref form');
+    expect(err.message).toContain('#/$defs/A/properties/b');
+    const cause = err.cause as { code?: string; name?: string } | undefined;
+    expect(cause).toBeInstanceOf(Error);
+    expect(cause?.code).toBe('E_EMIT');
+    expect(cause?.name).toBe('EmitError');
+  });
+
+  it('AC2: a missing definition names the op id and ref, and keeps the EmitError as cause', async () => {
+    const err = (await errorOf(
+      run({ op: () => null }, schemaWithRef('#/definitions/Nope'), 'op', {
+        at: ISO,
+      })
+    )) as Error;
+    expect(err).toBeInstanceOf(Error);
+    expect(err.message).toContain('"op"');
+    expect(err.message).toContain('#/definitions/Nope');
+    expect((err.cause as { code?: string } | undefined)?.code).toBe('E_EMIT');
+  });
+});

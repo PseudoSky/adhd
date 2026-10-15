@@ -106,8 +106,10 @@ function decodeArg(
  * document root (the op's `input` or `output` schema, whose `definitions` /
  * `$defs` the extractor hoisted onto that root).
  *
- * A `$ref` that does not match any definition throws an error naming both the
- * ref and the operation id, so the failure points at the schema, not the codec.
+ * A `$ref` that is unsupported or has no matching definition throws an error
+ * naming both the ref and the operation id (the resolver's `E_EMIT` message is
+ * kept, and the original `EmitError` is attached as `cause`), so the failure
+ * points at the schema, not the codec.
  *
  * @param root  The schema document the `$ref`s inside it are relative to.
  * @param fnName The operation id, used only in the error message.
@@ -116,28 +118,23 @@ function refCtx(root: SchemaNode, fnName: string): Partial<TranscodeCtx> {
   const lookup = rootRefResolver(root);
   return {
     resolve: (ref: string): SchemaNode => {
-      // Only a bare root-level definition name is resolvable in run-mode. Any
-      // other form (a JSON pointer into properties, a nested pointer such as
-      // `#/$defs/A/properties/b`, an external document URI) is a different
-      // failure from a missing definition, so it gets its own message.
-      if (!RESOLVABLE_REF.test(ref)) {
-        throw new Error(
-          `[apigen-engine-runtime] op "${fnName}": unsupported $ref form "${ref}" — only #/definitions/<name> and #/$defs/<name> roots are resolvable in run-mode`
-        );
-      }
+      // `rootRefResolver` (apigen-base-logical) is the single owner of which
+      // `$ref` forms are resolvable: it throws an `E_EMIT` EmitError for an
+      // unsupported form and a distinct one for a missing definition. Re-throw
+      // with the op id prefixed and the EmitError kept as `cause`, so the
+      // failure points at the schema and the original diagnosis is not lost.
       try {
         return lookup(ref);
-      } catch {
+      } catch (cause) {
+        const detail = cause instanceof Error ? cause.message : String(cause);
         throw new Error(
-          `[apigen-engine-runtime] op "${fnName}": $ref "${ref}" has no matching definition in this operation's schema (define it under "definitions" or "$defs" on the schema root)`
+          `[apigen-engine-runtime] op "${fnName}": ${detail}`,
+          { cause }
         );
       }
     },
   };
 }
-
-/** A `$ref` run-mode can resolve: `#/definitions/<name>` or `#/$defs/<name>`, one name segment, no nested pointer. */
-const RESOLVABLE_REF = /^#\/(\$defs|definitions)\/[^/]+$/;
 
 /**
  * Wrap a stream so each chunk is encoded against the declared chunk schema.
