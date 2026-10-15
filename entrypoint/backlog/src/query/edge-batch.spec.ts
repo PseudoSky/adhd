@@ -3,6 +3,11 @@
  * ("`backlog query` with relationship/edge fields is pathologically slow —
  * per-item (N+1) edge traversal").
  *
+ * guards: assembleIssueCards resolving edge pseudo-fields per item (N+1 store round trips) instead of one batch per relation, or batching changing a card's content.
+ * tier: S
+ * cites: 2267eaf9 (batched edge reads); 8752d7d5 (seeding must fit tier S: 6 issues, 24 write transactions)
+ * teeth: red run recorded below (batching disabled in card.ts `assembleIssueCards`, restored after).
+ *
  * `query` used to resolve every edge pseudo-field (`blockers`/`partOf`/
  * `related`/`blocksOut`, plus `dependents`/`obligations`/`similar`) one item at
  * a time: for each card, an outgoing `getEdges({src})`, one or more incoming
@@ -15,15 +20,23 @@
  * ## Teeth (deterministic — no wall-clock assertion)
  *
  * The count test asserts the number of `GraphBackend.getEdges` +
- * `getNodesByIds` calls is EQUAL for a 1-item page and a 50-item page. With the
- * N+1 shape restored it grows ~linearly with page size and goes red. Proven:
- * temporarily making `assembleIssueCard` ignore the page batch (so every
- * resolver falls back to per-item graph reads) turned this test RED
- * (`getEdges+getNodesByIds` 6 → 300+); restoring the batch turned it green.
+ * `getNodesByIds` calls is EQUAL for a 1-item page and a POOL-item page. With
+ * the N+1 shape restored it grows with page size and goes red.
+ *
+ * Red run (2026-10-14, real in-process store, POOL = 6): making
+ * `assembleIssueCards` build no page batch (the `issues.length > 0` guard
+ * inverted, so every resolver falls back to per-item graph reads) turned the count test RED —
+ * `AssertionError: expected 90 to be 15` (POOL-item page issued 90 getEdges+getNodesByIds calls, 1-item page 15; batched: equal) — and the restored batch turned it green again.
+ * The deep-equal test stays green under that mutation by design: it guards the
+ * batched path's content, the count test guards its cost.
  *
  * A second, differential test drives the SAME store through the batched page
  * path and the single-item `getIssue` path and asserts the cards are
  * deep-equal — so the batching cannot silently change results or ordering.
+ *
+ * Seeding is deliberately tiny (tier S ceiling 1 s, docs/standards/testing.md):
+ * 6 issues with one ring of each needed relation is enough for the comparison
+ * to have teeth, since the N+1 shape costs ~6x the batch on a 6-item page.
  */
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
@@ -42,7 +55,7 @@ import { assembleIssueCards } from './card.js';
 import { resolveIssueByUid } from './resolve.js';
 import type { IIssueField } from './types.js';
 
-const POOL = 60;
+const POOL = 6;
 const EDGE_FIELDS: readonly IIssueField[] = [
   'uid',
   'blockers',
@@ -51,8 +64,7 @@ const EDGE_FIELDS: readonly IIssueField[] = [
   'blocksOut',
 ];
 
-// skip-expiry: 8752d7d5 until 2026-12-31 owner disabled this spec: its 60-issue seeding beforeAll times out under load
-describe.skip('2267eaf9 — batched edge pseudo-field reads (real store)', () => {
+describe('2267eaf9 — batched edge pseudo-field reads (real store)', () => {
   let dir: string;
   let store: TestIssueStore;
   let projectUid: string;
@@ -106,8 +118,7 @@ describe.skip('2267eaf9 — batched edge pseudo-field reads (real store)', () =>
         by: 'filer',
       });
     }
-    // 60 creates + 180 relates are sequential write transactions: 2.6-5.6 s quiet, 12-30 s under load, so the 30 s default hook timeout is too tight.
-  }, 120_000);
+  });
 
   afterAll(async () => {
     await store.close();
@@ -131,16 +142,16 @@ describe.skip('2267eaf9 — batched edge pseudo-field reads (real store)', () =>
     }
   }
 
-  it('issues a bounded number of store round trips, independent of page size', async () => {
+  it('issues a bounded number of store round trips, independent of page size (1 vs POOL)', async () => {
     const one = await countRoundTrips(1);
-    const fifty = await countRoundTrips(50);
+    const full = await countRoundTrips(POOL);
 
     // The batch fetches one `getEdges({rel})` per needed relation (blocks,
     // part_of, relates_to), the `has_status` relation once, and a constant
-    // number of node batches — the same whether the page holds 1 issue or 50.
-    expect(fifty).toBe(one);
-    // Hard upper bound: an N+1 regression makes this ~O(page size) (300+ here).
-    expect(fifty).toBeLessThanOrEqual(12);
+    // number of node batches — the same whether the page holds 1 issue or POOL.
+    expect(full).toBe(one);
+    // Hard upper bound: an N+1 regression makes this ~O(page size).
+    expect(full).toBeLessThanOrEqual(12);
   });
 
   it('batched page cards are deep-equal to the single-item get path (no semantics change)', async () => {
@@ -157,7 +168,7 @@ describe.skip('2267eaf9 — batched edge pseudo-field reads (real store)', () =>
       'blocksOut',
       'obligations',
     ];
-    const page = await assembleIssueCards(store.graph, records.slice(0, 12), fields);
+    const page = await assembleIssueCards(store.graph, records, fields);
     for (const card of page) {
       const single = await getIssue(store.graph, { uid: card.uid, fields });
       expect(card).toEqual(single);

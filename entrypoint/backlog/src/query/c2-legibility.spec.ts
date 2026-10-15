@@ -24,6 +24,11 @@
  *    `SingleValuedRelationConflictError` naming the existing parent, and
  *    `CONTRACT.md` documents the `n:1` cardinality.
  *
+ * guards: structural legibility regressions in related/order/dependents/part_of reads over a real store.
+ * tier: S
+ * cites: ac911229 C2 AC1-AC6
+ * teeth: the negative controls below.
+ *
  * ## Negative controls (each proven RED, then restored)
  *
  * Every behavioural test below has teeth. Three were demonstrated by a temporary
@@ -70,8 +75,7 @@ describe('C2 — structural legibility (real store)', () => {
     dir = freshTmpDir('c2-legibility');
     store = await openTestIssueStore(join(dir, 'backlog.db'));
     projectUid = (await seedProject(store, 'c2-legibility-project')).projectUid;
-    // Store open + seeding run sequential write transactions; under load they exceed the 30 s default hook timeout.
-  }, 120_000);
+  });
 
   afterEach(async () => {
     await store.close();
