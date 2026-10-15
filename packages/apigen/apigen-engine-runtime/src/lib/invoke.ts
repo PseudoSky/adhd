@@ -21,6 +21,7 @@
 
 import type { Operation, Transport } from '@adhd/apigen-core-client';
 import { dispatch } from './dispatch';
+import type { CreateClientFn } from './dispatch';
 import type { ComposedSchemas } from './types';
 
 // ---------------------------------------------------------------------------
@@ -140,8 +141,13 @@ export type Layer = (call: Call, next: Next) => Promise<LayerResult>;
 export interface InvokeOptions {
   /** The live function table (fn-name → implementation). */
   fns: Record<string, (...args: unknown[]) => unknown>;
-  /** Optional client factory (for session-ctx middleware). */
-  createClient?: (envelope: Record<string, unknown>) => Promise<unknown>;
+  /**
+   * Optional client factory (for session-ctx middleware and `ctx`-taking
+   * functions). When the call carries a signal, `dispatch` passes it as the
+   * second argument (`{ signal }`, adhd ADR-0019 D4); a one-argument factory
+   * keeps working unchanged.
+   */
+  createClient?: CreateClientFn;
   /** Composed schemas for the target namespace. */
   schemas: ComposedSchemas;
 }
@@ -193,7 +199,9 @@ export function createInvoker(layers: readonly Layer[] = []): InvokeFn {
       );
     }
 
-    // The innermost Service — wraps the canonical dispatch function.
+    // The innermost Service — wraps the canonical dispatch function. The
+    // call's signal reaches dispatch (adhd ADR-0019 D4), which hands it to a
+    // `ctx`-taking function through `createClient` and rejects on abort.
     const coreService: Next = () =>
       dispatch(
         opts.fns,
@@ -201,7 +209,8 @@ export function createInvoker(layers: readonly Layer[] = []): InvokeFn {
         schema,
         fnName,
         call.envelope,
-        call.domainArgs
+        call.domainArgs,
+        call.signal
       );
 
     // Compose layers right-to-left so layers[0] is outermost.

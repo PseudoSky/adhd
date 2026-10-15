@@ -21,6 +21,7 @@ export type {
   ComposedSchemas,
 } from './lib/types';
 export { needsEnvelopeField, dataParamNames, dispatch } from './lib/dispatch';
+export type { CreateClientFn } from './lib/dispatch';
 export { createLogger } from './lib/logger';
 export type { Logger, LogFormat, CreateLoggerOptions } from './lib/logger';
 export { describeParams } from './lib/describe-params';
