@@ -29,14 +29,16 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {
-  extract,
   composeSchemas,
   createExtractionSession,
+  createExtractorRegistry,
+  extractSourceEntry,
   pluginsToEnvelopeMiddlewares,
-  createExtractInvokerFromPlugins,
+  resolveSourceReference,
 } from '@adhd/apigen-core-client';
 import type {
   ExtractionSession,
+  ISourceResolution,
   Operation,
   Descriptor,
   ComposedSchemas,
@@ -178,20 +180,36 @@ export interface GenerateResult {
 export type HostLang = 'ts';
 
 /**
- * Detects the host language from a file path extension.
+ * Classifies `filePath` with the shared source-reference resolver and returns
+ * its resolution when it names a TypeScript source.
  *
- * @throws if the extension is not a recognised TypeScript extension.
+ * @throws if the reference is not a TypeScript source.
  */
-export function detectLang(filePath: string): HostLang {
-  const ext = path.extname(filePath).toLowerCase();
-  if (ext === '.ts' || ext === '.tsx' || ext === '.mts' || ext === '.cts') {
-    return 'ts';
+function resolveTypeScriptSource(filePath: string): ISourceResolution {
+  const resolved = resolveSourceReference(filePath);
+  if (resolved.ok && resolved.value.translator === 'ts') {
+    return resolved.value;
   }
+  const ext = path.extname(filePath).toLowerCase();
   throw new Error(
     `apigen-orchestrator: unsupported source extension "${ext}" for file "${filePath}". ` +
       `Currently supported: .ts .tsx .mts .cts`
   );
 }
+
+/**
+ * Detects the host language from a file path extension, via the shared
+ * source-reference resolver.
+ *
+ * @throws if the extension is not a recognised TypeScript extension.
+ */
+export function detectLang(filePath: string): HostLang {
+  resolveTypeScriptSource(filePath);
+  return 'ts';
+}
+
+/** The extractors this orchestrator runs, keyed by translator id. */
+const extractorRegistry = createExtractorRegistry();
 
 // ---------------------------------------------------------------------------
 // Projection-override config parsing (Tenet 1)
@@ -281,7 +299,8 @@ interface SourceExtraction {
 /**
  * Extract canonical `Operation[]` from a single source file.
  *
- * Uses `@adhd/apigen-core-client's v2 `extract()` function.
+ * Delegates to `@adhd/apigen-core-client`'s `extractSourceEntry`, the one IR
+ * entry shared by `generate`, `run` and `serve`.
  *
  * Returns the resolved `namespace` alongside the operations — the ONLY
  * place `resolveNamespace()` is called for a given source, so downstream
@@ -315,48 +334,24 @@ async function extractSource(
   usePluginObjects: Plugin[] = [],
   extractLayerOptions: Record<string, unknown> = {}
 ): Promise<SourceExtraction> {
-  const lang = detectLang(entry.file);
+  const resolution = resolveTypeScriptSource(entry.file);
+  const tsconfig = resolveTsconfig(entry.file, entry.tsconfig);
+  const namespace =
+    entry.namespace ??
+    resolveNamespace(entry.file, { tsconfig: entry.tsconfig });
 
-  if (lang === 'ts') {
-    const tsconfig = resolveTsconfig(entry.file, entry.tsconfig);
-    const namespace =
-      entry.namespace ??
-      resolveNamespace(entry.file, { tsconfig: entry.tsconfig });
-
-    logger?.info(`extracting ${entry.file} (host: ts, ns: ${namespace})`);
-    const invokeExtract = createExtractInvokerFromPlugins(
-      usePluginObjects,
-      (call) =>
-        extract({
-          sourceFile: call.source,
-          namespace: call.namespace,
-          tsconfig:
-            typeof call.extractorOptions?.['tsconfig'] === 'string'
-              ? (call.extractorOptions['tsconfig'] as string)
-              : undefined,
-          session: call.extractorOptions?.['session'] as
-            | ExtractionSession
-            | undefined,
-        }),
-      extractLayerOptions
-    );
-    const ops = await invokeExtract({
-      source: entry.file,
-      host: 'ts',
-      namespace,
-      extractorOptions: { tsconfig, session },
-    });
-    logger?.info(
-      `extracted ${ops.length} operations from ${path.basename(entry.file)}`
-    );
-    logger?.debug({ ops: ops.map((o) => o.id) }, 'operation ids');
-    return { namespace, ops };
-  }
-
-  // Future hosts: shell to apigen-<lang>-extractor subprocess → parse JSON.
-  throw new Error(
-    `apigen-orchestrator: host "${lang}" extractor not implemented`
-  );
+  const { operations } = await extractSourceEntry({
+    reference: entry.file,
+    resolution,
+    namespace,
+    tsconfig,
+    usePlugins: usePluginObjects,
+    extractLayerOptions,
+    session,
+    registry: extractorRegistry,
+    logger,
+  });
+  return { namespace, ops: operations };
 }
 
 /**

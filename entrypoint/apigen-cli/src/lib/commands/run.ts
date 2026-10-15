@@ -5,7 +5,10 @@ import type {
   Plugin,
   RunInput,
 } from '@adhd/apigen-core-client';
-import { effectiveLanguage } from '@adhd/apigen-core-client';
+import {
+  effectiveLanguage,
+  resolveSourceReference,
+} from '@adhd/apigen-core-client';
 import { buildFnTable } from '@adhd/apigen-engine-runtime';
 import { Command } from 'commander';
 import * as path from 'node:path';
@@ -356,6 +359,20 @@ export function registerRunCommand(
         process.on('SIGHUP', () => onSignal('SIGHUP'));
 
         const pluginLang = effectiveLanguage(plugin);
+
+        // The resolver classifies `--source`; a source the selected plugin does
+        // not host fails here instead of late inside the plugin or extractor.
+        const resolvedSource = resolveSourceReference(sourceFile);
+        if (
+          resolvedSource.ok &&
+          resolvedSource.value.translator !== undefined &&
+          resolvedSource.value.translator !== pluginLang
+        ) {
+          throw new Error(
+            `--type ${opts.type} hosts ${pluginLang} sources; ` +
+              `--source ${opts.source} is ${resolvedSource.value.translator}`
+          );
+        }
 
         // Unified v2 orchestrator path: detect → extract → merge →
         // collision-check → run. This is now the ONLY extraction pipeline

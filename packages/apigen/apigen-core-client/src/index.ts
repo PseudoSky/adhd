@@ -92,6 +92,16 @@ export type {
   ExtractResult,
   ExtractMiddleware,
 } from './lib/extract-invoker';
+export {
+  createExtractorRegistry,
+  extractSourceEntry,
+} from './lib/extraction-entry';
+export type {
+  Extractor,
+  ExtractorRegistry,
+  IExtractionResult,
+  IExtractSourceEntryInput,
+} from './lib/extraction-entry';
 export { extractClasses } from './lib/extract-classes';
 export type { ExtractClassesOptions } from './lib/extract-classes';
 export {
