@@ -36,6 +36,7 @@
 
 import type { Project, SourceFile } from 'ts-morph';
 import fs from 'node:fs';
+import path from 'node:path';
 import { lazyRequire } from './esm-require';
 
 // PERF (BUG-APIGEN-CORE-CLIENT-STARTUP-001): `Project` is used as a runtime
@@ -50,6 +51,30 @@ import { lazyRequire } from './esm-require';
 // `dist/index.mjs`); every other usage in this file is a TYPE position and
 // stays on the `import type` above (erased at compile time, zero runtime
 // cost).
+/**
+ * The resolved `extends` chain of a tsconfig: `tsconfig` itself followed by
+ * every config it extends, transitively, as absolute paths (TypeScript's own
+ * resolution, so relative and package `extends` both resolve). Editing any of
+ * these changes the compiler options an extraction ran under, so the TS
+ * extractor reports them in `ExtractResult.sourceFiles`. An unreadable config
+ * yields just `[tsconfig]`.
+ */
+export function resolveTsconfigChain(tsconfig: string): string[] {
+  const { ts } = lazyRequire('ts-morph') as typeof import('ts-morph');
+  try {
+    // Parsing populates `extendedSourceFiles` with the whole transitive chain.
+    const sourceFile = ts.readJsonConfigFile(tsconfig, ts.sys.readFile);
+    ts.parseJsonSourceFileConfigFileContent(
+      sourceFile,
+      ts.sys,
+      path.dirname(tsconfig)
+    );
+    return [tsconfig, ...(sourceFile.extendedSourceFiles ?? [])];
+  } catch {
+    return [tsconfig];
+  }
+}
+
 let _Project: typeof import('ts-morph').Project | undefined;
 function getProjectCtor(): typeof import('ts-morph').Project {
   if (_Project) return _Project;

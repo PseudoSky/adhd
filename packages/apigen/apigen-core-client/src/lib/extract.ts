@@ -36,6 +36,7 @@ import { buildSchema } from './schema-builders/ts-json-schema';
 import {
   createExtractionSession,
   internalSession,
+  resolveTsconfigChain,
   type ExtractionSession,
   type InternalExtractionSession,
 } from './extraction-session';
@@ -99,10 +100,12 @@ export async function extract(opts: ExtractOptions): Promise<ExtractResult> {
     const operations = await extractWithSession(opts, session);
     // Report the files this extraction read (entry + its local import graph)
     // so a cache layer tracks exactly that set, not its own re-derivation.
-    return withSourceFiles(
-      operations,
-      session.referencedFiles.get(opts.sourceFile) ?? [opts.sourceFile]
-    );
+    // The resolved tsconfig `extends` chain is part of that set: editing a base
+    // config changes the compiler options the extraction ran under.
+    return withSourceFiles(operations, [
+      ...(session.referencedFiles.get(opts.sourceFile) ?? [opts.sourceFile]),
+      ...(opts.tsconfig ? resolveTsconfigChain(opts.tsconfig) : []),
+    ]);
   } finally {
     if (ownsSession) session.dispose();
   }

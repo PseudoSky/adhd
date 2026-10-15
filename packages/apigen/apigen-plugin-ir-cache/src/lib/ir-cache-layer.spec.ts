@@ -235,7 +235,7 @@ describe('createIrCacheLayer — RUNTIME CACHE mode HIT/MISS semantics', () => {
 
     await expect(invoke(call)).resolves.toEqual(FIXTURE_OPS);
     expect(runExtractor).toHaveBeenCalledTimes(1);
-    await waitForCacheWrite(); // the MISS's write-through is fire-and-forget
+    await waitForCacheWrite(); // the MISS's write-through is awaited by the layer; this confirms the entry file exists
 
     // Reproducibility: the written runtime-cache entry carries NO wall-clock
     // timestamp (the shared `CachedExtractEntry` shape deliberately has none —

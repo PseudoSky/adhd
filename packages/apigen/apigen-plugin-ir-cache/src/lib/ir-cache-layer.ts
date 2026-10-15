@@ -61,10 +61,12 @@
 // namespace, versionHint, every `extractorOptions` entry except the run-scoped
 // `session`) plus the bytes of the source and of every dependency file. The
 // dependency set is whatever the extractor REPORTED reading
-// (`ExtractResult.sourceFiles`, `@adhd/apigen-core-client`'s `extract()`); only
-// an extractor that reports nothing falls back to the `collectLocalImportPaths`
-// walk. An option that changes the extracted IR must therefore travel in the
-// call (see `ExtractCall.extractorOptions`), not hide in the terminal step.
+// (`ExtractResult.sourceFiles`, `@adhd/apigen-core-client`'s `extract()`, which
+// includes the resolved tsconfig `extends` chain); an extractor that reports
+// nothing gets a source-only key and a source-only staleness record. The layer
+// never derives a dependency list itself. An option that changes the extracted
+// IR must therefore travel in the call (see `ExtractCall.extractorOptions`),
+// not hide in the terminal step.
 
 import { createHash } from 'node:crypto';
 import * as fsPromises from 'node:fs/promises';
@@ -73,11 +75,7 @@ import type {
   ExtractMiddleware,
   Operation,
 } from '@adhd/apigen-core-client';
-import {
-  collectLocalImportPaths,
-  sourceFilesOf,
-  withSourceFiles,
-} from '@adhd/apigen-core-client';
+import { sourceFilesOf, withSourceFiles } from '@adhd/apigen-core-client';
 import { createSingleFileBackend } from './backends/single-file-backend';
 
 /**
@@ -95,9 +93,9 @@ export interface CachedExtractStaleness {
   /** Absolute path + mtimeMs of the source file at write time. */
   source: { path: string; mtimeMs: number };
   /** Absolute path + mtimeMs of every other file the result depends on at write
-   *  time: the files the extractor REPORTED reading (`ExtractResult.sourceFiles`),
-   *  or — for an extractor that reports none — the `collectLocalImportPaths`
-   *  walk; plus the tsconfig the call names, if any. */
+   *  time: the files the extractor REPORTED reading (`ExtractResult.sourceFiles`;
+   *  empty for an extractor that reports none); plus the tsconfig the call
+   *  names, if any. */
   deps: Array<{ path: string; mtimeMs: number }>;
   /** Hash of the call's extraction-affecting inputs ({@link callIdentity}).
    *  Compared on the fast gate, which otherwise only stats files. Absent on an
@@ -329,10 +327,9 @@ async function sha256FileOrMissing(filePath: string): Promise<string> {
  * changes ({@link callIdentity}).
  *
  * `depPaths` is the dependency set to hash: the files the extractor reported
- * reading, or (the recorded set, on the slow gate). When omitted it falls back
- * to the `collectLocalImportPaths` walk of `call.source`, for a caller that has
- * no reported list. The result is sorted, so the key is stable across calls
- * and machines.
+ * reading, or the recorded set on the slow gate. When omitted the key covers
+ * `call.source` (and the named tsconfig) only. The result is sorted, so the key
+ * is stable across calls and machines.
  *
  * This is the SLOW-GATE fallback (RUNTIME CACHE mode) and the sole key
  * formula ARTIFACT mode's cross-mode-compatible reader falls back to when no
@@ -342,7 +339,7 @@ async function sha256FileOrMissing(filePath: string): Promise<string> {
 export async function computeCacheKey(
   call: ExtractCall,
   extractorVersion: string,
-  depPaths?: readonly string[]
+  depPaths: readonly string[] = []
 ): Promise<string> {
   const sourceHash = await sha256File(call.source);
   const h = createHash('sha256');
@@ -350,7 +347,7 @@ export async function computeCacheKey(
   h.update(`extractorVersion:${extractorVersion}\n`);
   h.update(`call:${callIdentity(call)}\n`);
   h.update(`source:${sourceHash}\n`);
-  for (const depPath of dependencyPaths(call, depPaths ?? collectLocalImportPaths(call.source))) {
+  for (const depPath of dependencyPaths(call, depPaths)) {
     h.update(`dep:${depPath}:${await sha256FileOrMissing(depPath)}\n`);
   }
   return h.digest('hex');
@@ -384,7 +381,7 @@ async function buildStalenessSnapshot(
 
 /**
  * FAST GATE (design doc R2.3 step 3): `stat()` the recorded source path and
- * every recorded dep path directly — no `collectLocalImportPaths` call, no
+ * every recorded dep path directly — no dependency derivation, no
  * hashing, just `fs.stat` on a short, already-known list of paths. Returns
  * `true` only if `call.source` still matches the recorded source path AND
  * every current `mtimeMs` matches the recorded one.
@@ -457,14 +454,15 @@ export function createIrCacheLayer(
   /**
    * The dependency set of a fresh `result`: the files its extractor REPORTED
    * reading (`ExtractResult.sourceFiles`); an extractor that reports none
-   * (a bare `Operation[]`) falls back to the local-import walk of the source.
+   * (a bare `Operation[]`) yields an empty set, so the key and staleness
+   * record cover the source file alone.
    */
-  function reportedFiles(call: ExtractCall, result: readonly Operation[]): readonly string[] {
-    return sourceFilesOf(result) ?? collectLocalImportPaths(call.source);
+  function reportedFiles(result: readonly Operation[]): readonly string[] {
+    return sourceFilesOf(result) ?? [];
   }
 
   async function writeThrough(call: ExtractCall, operations: Operation[]): Promise<void> {
-    const depPaths = reportedFiles(call, operations);
+    const depPaths = reportedFiles(operations);
     const contentKey = await computeCacheKey(call, extractorVersion, depPaths);
     const staleness = await buildStalenessSnapshot(call, contentKey, depPaths);
     await backend.put(opts.cache, {
