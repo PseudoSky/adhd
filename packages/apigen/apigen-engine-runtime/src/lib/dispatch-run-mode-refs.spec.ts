@@ -17,10 +17,13 @@
  * Node with a Date leaf), AC3 (missing ref names ref AND op id), plus the
  * reviewer-demanded alias-cycle and unsupported-ref-form tests.
  *
- * Red expectation: on the pre-fix commit c882f1e1^ every `$ref` test fails with the
- * default resolver's "cannot be resolved in run-mode" error (AC1/AC2 assertions
- * never reach their value check). The alias-cycle test is a guard for the cycle
- * guard added alongside the fix and is not a pre-fix red on its own.
+ * red: pending (user hold) — expected to fail at 373f1b0f^ (the parent of the
+ * run-mode $ref fix 373f1b0f) because every `$ref` test fails with the default
+ * resolver's "cannot be resolved in run-mode" error (AC1/AC2 assertions never reach
+ * their value check). The unsupported-ref-form assertions are expected to fail at
+ * a901ab8b^ (the parent of a901ab8b, which distinguished unsupported $ref forms).
+ * The alias-cycle test is expected to fail at 1368b124^ (the parent of the alias
+ * cycle guard 1368b124) with an unnamed RangeError.
  */
 
 import { describe, it, expect } from 'vitest';

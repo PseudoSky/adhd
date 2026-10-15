@@ -78,14 +78,24 @@ export class EmitError extends Error {
  * emits) and the full ref-URI (`{ '#/$defs/User': {...} }`, what hand-built
  * fixtures use). The bare name is tried first.
  *
+ * Any other ref form is rejected up front with an `E_EMIT` "unsupported $ref
+ * form" error, distinct from a missing definition: a JSON-Pointer path into a
+ * definition (`#/$defs/A/properties/b`), a URI-qualified ref
+ * (`https://…#/definitions/A`), a `#/properties/…` pointer, or an empty name.
+ *
  * @param root The schema document holding `$defs` / `definitions`.
  * @returns A resolver suitable for {@link EmitCtx.resolve}.
  */
 export function rootRefResolver(root: SchemaNode): (ref: string) => SchemaNode {
   return (ref: string): SchemaNode => {
-    const m = /^#\/(\$defs|definitions)\/(.+)$/.exec(ref);
+    // A definition name is a single JSON-Pointer token: no raw `/` (a `/` inside
+    // a name is written `~1`). Anything else is an unsupported form, not a miss.
+    const m = /^#\/(\$defs|definitions)\/([^/]+)$/.exec(ref);
     if (!m) {
-      throw new EmitError(`E_EMIT: unresolvable $ref "${ref}"`, '');
+      throw new EmitError(
+        `E_EMIT: unsupported $ref form "${ref}"; supported forms are "#/$defs/<name>" and "#/definitions/<name>"`,
+        ''
+      );
     }
     const bag = root[m[1]] as Record<string, unknown> | undefined;
     const def =

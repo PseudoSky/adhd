@@ -17,11 +17,16 @@
  * consumer break reaches the source's return(); an empty-schema stream passes
  * through untouched).
  *
- * Red expectation: on the pre-fix commit c61683d2^ the date-time stream test fails
- * at `isApiStream(result)` (the result is a transcoded object, not a stream), and
- * the break test fails with a TypeError from iterating a non-iterable result. The
- * empty-schema pass-through test is a no-regression guard and is green on both
- * commits by design.
+ * red: pending (user hold) — expected to fail at 5701848e^ (the parent of the fix
+ * commit 5701848e) because the date-time stream test fails at `isApiStream(result)`
+ * (the result is a transcoded object, not a stream), and the break test fails with a
+ * TypeError from iterating a non-iterable result. The empty-schema test pins the
+ * CURRENT behavior and is expected green on both commits by design.
+ *
+ * OPEN ARCHITECT QUESTION (backlog): the empty-schema test below pins that an
+ * empty output schema yields RAW host values (Date) for stream chunks while typed
+ * schemas yield RFC 3339 strings. That is the CURRENT behavior, not a contract; it
+ * is under review and may change. Do not cite it as a guarantee.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -101,7 +106,7 @@ describe('regression:8a62ced2 — dispatch encodes a stream per chunk', () => {
     expect(sourceClosed).toBe(true);
   });
 
-  it('AC3: an empty-schema stream passes through untouched; chunks stay Date instances (8a62ced2 AC3 guard)', async () => {
+  it('AC3: CURRENT behavior (open architect question, not a contract): an empty-schema stream passes through untouched; chunks stay raw Date instances (8a62ced2 AC3 guard)', async () => {
     const schema: Schema = { input: noArgsInput, output: {} };
     const result = await dispatch(
       {

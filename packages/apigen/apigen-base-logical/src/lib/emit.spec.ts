@@ -222,8 +222,16 @@ describe('rootRefResolver', () => {
  * (`{ '#/$defs/X': ... }`) is not found, and prototype keys resolve to
  * Object.prototype instead of failing.
  * Tier: S (pure function, in-process). Item 1bb4b5d5, AC2 and AC3 as cited
- * on each test. Red expectation: on c882f1e1^ the full-URI key is not looked
- * up, so the full-URI test fails with "E_EMIT: ... has no $def target".
+ * on each test.
+ *
+ * red: pending (user hold) — expected to fail at 373f1b0f^ (the parent of 373f1b0f,
+ * which added full-URI key lookup) because the full-URI test fails with
+ * "E_EMIT: ... has no $def target"; the prototype-key rows are expected to fail at
+ * 1368b124^ (own-property lookup) because Object.prototype is returned instead of
+ * throwing; the unsupported-form rows (`#/$defs/A/properties/b` in particular) are
+ * expected to fail at the parent of the commit that adds the up-front
+ * "unsupported $ref form" rejection, because the ref is reported as a missing
+ * definition.
  */
 describe('regression:1bb4b5d5 — rootRefResolver key conventions', () => {
   it('resolves a definition keyed by its full ref-URI (1bb4b5d5 AC2)', () => {
@@ -286,6 +294,7 @@ describe('regression:1bb4b5d5 — rootRefResolver key conventions', () => {
       }
       expect(err).toBeInstanceOf(EmitError);
       expect((err as EmitError).message).toContain(ref);
+      expect((err as EmitError).message).toMatch(/unsupported \$ref form/);
       expect((err as EmitError).message).not.toMatch(
         /no matching definition|has no \$def target|missing/i
       );

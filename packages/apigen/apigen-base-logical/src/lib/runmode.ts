@@ -28,6 +28,13 @@ import type { LogicalTypeRegistry } from './registry';
 // ---------------------------------------------------------------------------
 
 /**
+ * The empty same-value ref path. Passed whenever a walk step consumes part of
+ * the value (an array item, an object property): the value changed, so no ref
+ * can yet be part of a same-value cycle.
+ */
+const NO_REFS: readonly string[] = [];
+
+/**
  * Build a full `TranscodeCtx` from the registry and an optional partial
  * override supplied by the caller. The default `resolve` refuses every `$ref`
  * because the transcoder has no schema document root of its own. A caller that
@@ -69,7 +76,8 @@ function buildCtx(
 function encodeNode(
   value: unknown,
   schema: SchemaNode,
-  ctx: TranscodeCtx
+  ctx: TranscodeCtx,
+  viaRefs: readonly string[] = NO_REFS
 ): Wire {
   // ── 1. Registered codec wins ───────────────────────────────────────────────
   const codec = ctx.registry.resolve(schema);
@@ -80,14 +88,15 @@ function encodeNode(
   // ── 2. $ref ────────────────────────────────────────────────────────────────
   const ref = schema['$ref'];
   if (typeof ref === 'string') {
-    return encodeNode(value, followRef(ref, ctx), ctx);
+    assertSameValueProgress(ref, viaRefs, ctx);
+    return encodeNode(value, followRef(ref, ctx), ctx, [...viaRefs, ref]);
   }
 
   // ── 3. oneOf / discriminated union ─────────────────────────────────────────
   const oneOf = schema['oneOf'];
   if (Array.isArray(oneOf)) {
-    const branch = pickUnionBranch(value, oneOf, schema, ctx);
-    return encodeNode(value, branch, ctx);
+    const branch = pickUnionBranch(value, oneOf, schema, ctx, viaRefs);
+    return encodeNode(value, branch, ctx, viaRefs);
   }
 
   const schemaType = schema['type'];
@@ -167,7 +176,8 @@ function encodeNode(
 function decodeNode(
   wire: Wire,
   schema: SchemaNode,
-  ctx: TranscodeCtx
+  ctx: TranscodeCtx,
+  viaRefs: readonly string[] = NO_REFS
 ): unknown {
   // ── 1. Registered codec wins ───────────────────────────────────────────────
   const codec = ctx.registry.resolve(schema);
@@ -178,14 +188,15 @@ function decodeNode(
   // ── 2. $ref ────────────────────────────────────────────────────────────────
   const ref = schema['$ref'];
   if (typeof ref === 'string') {
-    return decodeNode(wire, followRef(ref, ctx), ctx);
+    assertSameValueProgress(ref, viaRefs, ctx);
+    return decodeNode(wire, followRef(ref, ctx), ctx, [...viaRefs, ref]);
   }
 
   // ── 3. oneOf / discriminated union ─────────────────────────────────────────
   const oneOf = schema['oneOf'];
   if (Array.isArray(oneOf)) {
-    const branch = pickUnionBranch(wire, oneOf, schema, ctx);
-    return decodeNode(wire, branch, ctx);
+    const branch = pickUnionBranch(wire, oneOf, schema, ctx, viaRefs);
+    return decodeNode(wire, branch, ctx, viaRefs);
   }
 
   const schemaType = schema['type'];
@@ -273,18 +284,23 @@ function decodeNode(
 /**
  * Resolve `ref` to the first definition that is NOT a bare `$ref` alias.
  *
- * A `$ref` may legitimately resolve to a definition that is itself a bare
- * `$ref` (`A → B → C`). That chain is followed here, and a chain that revisits
- * a ref it has already passed (`Loop = { $ref: '#/definitions/Loop' }`, or a
- * two-step `A → B → A`) throws a clear error naming the ref. Without this the
- * walk recurses on the same ref forever and fails with an unnamed
- * `RangeError`.
+ * Guarantees, and only these:
+ *  - A chain of bare `$ref` aliases that revisits a ref (`Loop = { $ref:
+ *    '#/definitions/Loop' }`, or a two-step `A → B → A`) throws an error naming
+ *    the ref and the chain. Without this the walk recurses on the same ref and
+ *    fails with an unnamed `RangeError`.
+ *  - A node a registered codec claims is not an alias and is returned as-is,
+ *    matching the codec-first order of `encodeNode` / `decodeNode`.
  *
- * Only alias links are followed. A `$ref` nested under `properties`, `items`,
- * or `oneOf` is consumed by the walk itself, and value-driven recursion through
- * such a ref is finite (it consumes one level of the value per step), so it is
- * never blocked here. A node a registered codec claims is not an alias and is
- * returned as-is, matching the codec-first order of `encodeNode` / `decodeNode`.
+ * Not guaranteed here: termination of a `$ref` reached from a `oneOf` branch on
+ * the SAME value (`A = { oneOf: [{ $ref: '#/definitions/A' }] }`). Such a chain
+ * never consumes the value, and this function sees only the alias links. The
+ * walks (`encodeNode`, `decodeNode`) and the branch scorer
+ * (`scoreUnionBranch`) track the refs entered on the current same-value path
+ * (`viaRefs`): a walk that re-enters one throws `E_RUNMODE_CYCLE`, and the
+ * scorer treats such a branch as ineligible. Recursion that descends into
+ * `properties` or `items` consumes part of the value on each step, so it
+ * terminates for any finite value and is never blocked.
  *
  * @param ref The `$ref` string being followed.
  * @param ctx The transcode ctx whose `resolve` binds the document root.
@@ -396,7 +412,8 @@ function pickUnionBranch(
   value: unknown,
   oneOf: SchemaNode[],
   schema: SchemaNode,
-  ctx: TranscodeCtx
+  ctx: TranscodeCtx,
+  viaRefs: readonly string[] = NO_REFS
 ): SchemaNode {
   const discriminator = schema['discriminator'] as
     | { propertyName?: string; mapping?: Record<string, string> }
@@ -509,7 +526,7 @@ function pickUnionBranch(
   // for that property against those literals. Strictly additive: a union
   // with no such property behaves exactly as before (this returns
   // `undefined` immediately and structural scoring runs unchanged).
-  const implicit = findImplicitDiscriminatorBranch(value, oneOf, ctx);
+  const implicit = findImplicitDiscriminatorBranch(value, oneOf, ctx, viaRefs);
   if (implicit) return implicit;
 
   // ── Structural match ───────────────────────────────────────────────────────
@@ -518,8 +535,12 @@ function pickUnionBranch(
   let best: SchemaNode | undefined;
   let bestScore = -1;
   for (const branch of oneOf) {
-    const resolved = resolveBranch(branch, ctx);
-    const score = scoreUnionBranch(value, resolved, ctx);
+    const entered = enterSameValueBranch(branch, ctx, viaRefs);
+    // A branch that re-enters a ref already on this same-value path can never
+    // finish, so it is not a candidate. If the walk is ever sent into it anyway,
+    // `encodeNode` / `decodeNode` throw E_RUNMODE_CYCLE at that $ref.
+    if (entered === undefined) continue;
+    const score = scoreUnionBranch(value, entered.node, ctx, entered.viaRefs);
     if (score !== null && score > bestScore) {
       bestScore = score;
       best = branch;
@@ -536,6 +557,45 @@ function pickUnionBranch(
 function resolveBranch(branch: SchemaNode, ctx: TranscodeCtx): SchemaNode {
   const ref = branch['$ref'];
   return typeof ref === 'string' ? ctx.resolve(ref) : branch;
+}
+
+/**
+ * Enter a `oneOf` branch (or a nested `$ref` node) for the SAME value, extending
+ * the same-value ref path. Used by the structural scorer, which walks the
+ * branch's own nested `oneOf`s without consuming the value.
+ *
+ * @returns The node to score and the extended path, or `undefined` when the
+ *   branch's `$ref` is already on the path: that cycle can never finish, so the
+ *   branch is ineligible rather than an error.
+ */
+function enterSameValueBranch(
+  branch: SchemaNode,
+  ctx: TranscodeCtx,
+  viaRefs: readonly string[]
+): { node: SchemaNode; viaRefs: readonly string[] } | undefined {
+  const ref = branch['$ref'];
+  if (typeof ref !== 'string') return { node: branch, viaRefs };
+  if (viaRefs.includes(ref)) return undefined;
+  return { node: ctx.resolve(ref), viaRefs: [...viaRefs, ref] };
+}
+
+/**
+ * Throw `E_RUNMODE_CYCLE` when a walk is about to enter a `$ref` that is already
+ * on the same-value path. Such a walk would repeat the same (schema, value) state
+ * forever; the error names the ref chain so the cycle is locatable. Recursion
+ * that consumed part of the value never reaches this check with a repeated ref.
+ */
+function assertSameValueProgress(
+  ref: string,
+  viaRefs: readonly string[],
+  ctx: TranscodeCtx
+): void {
+  const at = viaRefs.indexOf(ref);
+  if (at === -1) return;
+  const chain = [...viaRefs.slice(at), ref].join(' -> ');
+  throw new Error(
+    `[apigen-logical] E_RUNMODE_CYCLE: $ref "${ref}" at "${ctx.path || '#'}" re-enters itself while transcoding the same value (chain ${chain}); a $ref/oneOf cycle that never descends into a property or item cannot terminate`
+  );
 }
 
 /** The literal value a property schema pins — `const`, or a single-element `enum` — `undefined` if it isn't a literal-valued schema at all. */
@@ -558,7 +618,8 @@ function literalValueOf(schema: SchemaNode): unknown {
 function findImplicitDiscriminatorBranch(
   value: unknown,
   oneOf: SchemaNode[],
-  ctx: TranscodeCtx
+  ctx: TranscodeCtx,
+  viaRefs: readonly string[] = NO_REFS
 ): SchemaNode | undefined {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) {
     return undefined;
@@ -634,7 +695,11 @@ function findImplicitDiscriminatorBranch(
     // structurally admissible for this value; otherwise the heuristic has
     // misfired for this value and we fall through to structural scoring, which
     // selects the markdown member correctly.
-    if (scoreUnionBranch(value, resolvedBranches[matchIndex]!, ctx) === null) {
+    const entered = enterSameValueBranch(oneOf[matchIndex]!, ctx, viaRefs);
+    if (
+      entered === undefined ||
+      scoreUnionBranch(value, entered.node, ctx, entered.viaRefs) === null
+    ) {
       continue;
     }
     return oneOf[matchIndex];
@@ -672,15 +737,20 @@ function jsonTypeOf(value: unknown): string {
 function scoreUnionBranch(
   value: unknown,
   branch: SchemaNode,
-  ctx: TranscodeCtx
+  ctx: TranscodeCtx,
+  viaRefs: readonly string[] = NO_REFS
 ): number | null {
   // A `oneOf` nested directly inside a branch: take its best sub-branch score
-  // so nesting does not silently disqualify the whole branch.
+  // so nesting does not silently disqualify the whole branch. The recursion
+  // stays on the same value, so it carries the same-value ref path and treats a
+  // repeated ref as an ineligible sub-branch (see `enterSameValueBranch`).
   const nested = branch['oneOf'];
   if (Array.isArray(nested)) {
     let bestNested: number | null = null;
     for (const sub of nested) {
-      const s = scoreUnionBranch(value, resolveBranch(sub, ctx), ctx);
+      const entered = enterSameValueBranch(sub, ctx, viaRefs);
+      if (entered === undefined) continue;
+      const s = scoreUnionBranch(value, entered.node, ctx, entered.viaRefs);
       if (s !== null && (bestNested === null || s > bestNested)) bestNested = s;
     }
     return bestNested;

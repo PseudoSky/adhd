@@ -13,9 +13,9 @@
  * Tier: S (in-process, default `test` lane, no socket). Fidelity gap: none for S.
  * Item: 8a62ced2 (batch chunks are wire-encoded). Batch-level AC.
  *
- * Red expectation: on the pre-fix commit c61683d2^ the chunks assertion fails
- * because the item reports a transcoded object or non-string chunks instead of
- * the RFC 3339 strings.
+ * red: pending (user hold) — expected to fail at 5701848e^ (the parent of the
+ * stream-encoding fix 5701848e) because the chunks assertion fails: the item
+ * reports a transcoded object or non-string chunks instead of the RFC 3339 strings.
  */
 
 import { describe, it, expect } from 'vitest';
