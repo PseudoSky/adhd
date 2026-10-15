@@ -4464,6 +4464,15 @@
       "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py audit-final --only audit-final.ref-stealth-search-spec",
       "expect": "exit0",
       "cwd": "repo-root"
+    },
+    {
+      "id": "search-port-fetch.9",
+      "phase": "migrate",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-port-fetch --only search-port-fetch.9",
+      "expect": "exit0",
+      "cwd": "repo-root"
     }
   ]
 }

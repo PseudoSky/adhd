@@ -38,6 +38,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 - [search-port-fetch.7] The state gates are green: `nx run stealth-search:typecheck`, `:lint` and `:test` exit 0.
 - [search-port-fetch.8] Only owned paths changed by [psm:search-port-fetch] commits.
 
+- [search-port-fetch.9] (backlog cd05ad09) The fetch result is token-efficient by default: with the default `content: 'none'` it holds only the metadata fields provider, url, finalUrl, outcome, status, contentType, contentSize, title, truncated, attempts and tookMs (no `content`, no HTML, no `raw.preview`); `content: 'full'` adds `content` as HTML-stripped markdown or text bounded by `maxContentSize` (the exported constant `DEFAULT_MAX_CONTENT_SIZE = 20000` bytes in src/lib/fetch/fetch.ts) starting at `offset`, and returns `nextOffset` while truncated so a caller can page. A spec under src/test/unit/fetch/ simulates the real case, a 408112-byte repository README page: the default result serializes under 2048 bytes, `content: 'full'` returns at most 20000 bytes plus `nextOffset`, and following `nextOffset` reaches the end with `nextOffset` absent; spec titles carry the literals `contentSize`, `nextOffset`, `maxContentSize`, `offset`, `finalUrl`, `408112`, `2048`, `20000` and the uid cd05ad09, and the spec cites [search-port-fetch.9].
 ---
 
 ## Reservations
