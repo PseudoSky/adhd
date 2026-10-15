@@ -11,7 +11,11 @@ export interface IPolicyDecideRequest {
   readonly args: Readonly<Record<string, unknown>>;
   readonly envelope: Readonly<Record<string, unknown>>;
   readonly transport: 'http' | 'grpc' | 'mcp' | 'cli';
-  /** Read from the call envelope, where an earlier layer (an auth layer) wrote them (LP-09). Absent means none (AT-09). */
+  /**
+   * Read from the call ctx under `PolicyAttributes`, where an earlier layer
+   * (an auth layer) wrote them (LP-09); the envelope is never read for them.
+   * Absent means none (AT-09).
+   */
   readonly attributes?: Readonly<Record<string, string | number | readonly string[]>>;
 }
 

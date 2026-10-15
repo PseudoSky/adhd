@@ -18,6 +18,6 @@
   ],
   "dependencies": {
     "@adhd/apigen-base-errors": "^0.2.3",
-    "@adhd/apigen-engine-runtime": "^0.3.4"
+    "@adhd/apigen-core-client": "^0.3.5"
   }
 }
