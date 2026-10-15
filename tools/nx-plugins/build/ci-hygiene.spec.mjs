@@ -161,7 +161,7 @@ test('420a7051 C-AC6: no publishable project is behind published-state.json (rea
   assert.ok(ok);
 });
 
-test('420a7051 C-AC6: the CLI exits 0 on parity and 1 when a source version is behind (exit codes)', async () => {
+test('420a7051 C-AC6: runParity is ok on equal/ahead and not ok when a source version is behind (the CLI exit-code mapping itself is not exercised here)', async () => {
   const cli = join(here, 'executors/range-check/check-published-parity.mjs');
   const root = tmp('c-ac6-');
   const mk = (srcVersion, pubVersion) => {
@@ -174,8 +174,8 @@ test('420a7051 C-AC6: the CLI exits 0 on parity and 1 when a source version is b
   };
   try {
     // the script locates the workspace from ITS OWN location, so drive the exported runner with an explicit root.
-    // In-process: runParity is a pure async function (main() is entry-guarded), and the CLI's exit code is
-    // exactly `ok ? 0 : 1`, so mapping the result the same way asserts the same contract without a child spawn.
+    // In-process: runParity is a pure async function (main() is entry-guarded). This asserts the verdict only;
+    // the `process.exit(ok ? 0 : 1)` mapping in main() and its entry guard are NOT driven by this test.
     const { runParity } = await import(pathToFileURL(cli).href);
     const run = async (src, pub) => {
       mk(src, pub);
