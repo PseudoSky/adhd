@@ -1421,17 +1421,17 @@ Maps to `precondition_failed`. **Additive** — appended after every pre-existin
 
 ## `note.ts` (4 exports)
 
-### `IRemoveNoteInput` / `IRemoveNoteOutcome` — interfaces (`note.ts:48`, `note.ts:58`)
+### `IRemoveNoteInput` / `IRemoveNoteOutcome` — interfaces (`note.ts:53`, `note.ts:69`)
 
 `IRemoveNoteInput` is `{ uid, by, reason }` (`reason` REQUIRED) plus the session
 stamp. `IRemoveNoteOutcome` is `{ uid, issueUid, invalidated: true }`.
 
-### `mayRemoveNote(policy, author, actor)` — function (`note.ts:141`)
+### `mayRemoveNote(policy, author, actor)` — function (`note.ts:155`)
 
 Pure authorization rule: the author always may; anyone else only when listed in
 `policy.noteRemovers`.
 
-### `removeNote(handle, input)` — function (`note.ts:164`)
+### `removeNote(handle, input)` — function (`note.ts:178`)
 
 Guarantees: one `immediate` transaction. Resolves the live `note` by `uid`,
 finds its live owning issue via `has_note`, authorizes against the owning
