@@ -10,9 +10,23 @@
  * in-process `run()` calls, each racing for the SAME lockfile a separate `nx
  * run-many -t publish` process would use).
  *
+ * Header (test-maintenance, item qa-variance):
+ *   failure mode: publish writes a wrong/regressed published-state entry, skips
+ *     or double-publishes on a cache hit/miss, loses a concurrent write-through,
+ *     ships an un-restamped dist manifest, or treats a 202-without-promotion as
+ *     success (defect 32af828b, BUG-005, DEBT-002, BUG-BUILD-PUBLISH-DISTMANIFEST-
+ *     CLOBBERED-001).
+ *   tier: S (only child_process.spawnSync mocked; real cache I/O and lockfile).
+ *   variance fix: release env (RELEASE_RUN_TOKEN / FORCE_*) pinned to unset for
+ *     the file so ambient CI/shell values cannot change the backstop branch.
+ *   kept as is: the module reload per test (the mocked spawnSync is captured at
+ *     load by npm-registry/reconcile-core) and the 12-way real-lock concurrency
+ *     test (its real lockfile polling is the property under test).
+ *   red run: pending (tests not run per user instruction; assertions unchanged).
+ *
  * Run: node --test tools/nx-plugins/build/executors/publish/impl.spec.mjs
  */
-import { test } from 'node:test';
+import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import child_process from 'node:child_process';
@@ -47,6 +61,27 @@ process.env.ADHD_NX_METRICS_MAX_CPU_PCT = '0';
 // sleep 15s per attempt for 30 minutes).
 process.env.ADHD_PUBLISH_VERIFY_TIMEOUT_MS = '0';
 process.env.ADHD_PUBLISH_VERIFY_INTERVAL_MS = '0';
+
+// qa-variance: the executor reads RELEASE_RUN_TOKEN / RELEASE_FORCE_FULL_PUBLISH /
+// RELEASE_FORCE_REASON straight from process.env (and writeReleaseManifest
+// defaults its runToken from it). A shell or CI run that exports the release
+// env would change which branch of the backstop these tests hit, so the file
+// pins them to unset up front and restores the ambient values afterwards. Tests
+// that need a value still set and restore it themselves.
+const PINNED_RELEASE_ENV = ['RELEASE_RUN_TOKEN', 'RELEASE_FORCE_FULL_PUBLISH', 'RELEASE_FORCE_REASON'];
+const ambientReleaseEnv = {};
+before(() => {
+  for (const k of PINNED_RELEASE_ENV) {
+    ambientReleaseEnv[k] = process.env[k];
+    delete process.env[k];
+  }
+});
+after(() => {
+  for (const k of PINNED_RELEASE_ENV) {
+    if (ambientReleaseEnv[k] === undefined) delete process.env[k];
+    else process.env[k] = ambientReleaseEnv[k];
+  }
+});
 
 const require = createRequire(import.meta.url);
 const implAbs = require.resolve('./impl.js');
