@@ -17,6 +17,13 @@
  *   `rmSync`s the competitor's lock); the publish test fails on "no hard-link
  *   publish observed"; the heldBySelf tests fail on `heldBySelf` undefined; the
  *   same-pid release test fails because the base release compares pid only.
+ *   The third-process-in-window tests (defect: the reclaimer deleted the displaced
+ *   live competitor's lock when restoreAside hit EEXIST) fail against the
+ *   pre-fix guard on `expected [] to have length 1` (the side copy is gone) and
+ *   on `displacedPid` undefined; the cleanup-masking test fails because the
+ *   unguarded `rmSync(aside)` in `finally` replaces the DuplicateDispatchError.
+ *   Run record: `red: pending (user hold)` — no test was run when this was written.
+ * Tag: regression:0b80a7b5-reclaim-eexist-displaced-lock
  *
  * Concurrency is injected through latches (the `onStaleRead` callback and a
  * `linkSync` hook), never through sleeps.
@@ -25,9 +32,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as nodeFs from 'node:fs';
 import { join, resolve } from 'node:path';
 
-// Pass-through wrapper: only `linkSync` is observable, every other fs call is real.
+// Pass-through wrapper: only `linkSync` and `rmSync` are observable (and `rmSync` may be made to fail), every other fs call is real.
 const hooks = vi.hoisted(() => ({
   link: null as null | ((src: string, dst: string) => void),
+  rm: null as null | ((path: string) => void),
 }));
 vi.mock('node:fs', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:fs')>();
@@ -36,6 +44,10 @@ vi.mock('node:fs', async (importOriginal) => {
     linkSync: (src: string, dst: string) => {
       hooks.link?.(src, dst);
       return actual.linkSync(src, dst);
+    },
+    rmSync: (path: Parameters<typeof actual.rmSync>[0], options?: Parameters<typeof actual.rmSync>[1]) => {
+      hooks.rm?.(String(path));
+      return actual.rmSync(path, options);
     },
   };
 });
@@ -58,6 +70,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   hooks.link = null;
+  hooks.rm = null;
   nodeFs.rmSync(TMP_ROOT, { recursive: true, force: true });
 });
 
@@ -108,10 +121,12 @@ describe('0b80a7b5 AC2 stale-lock reclaim never deletes a competitor lock', () =
     expect(nodeFs.existsSync(lock)).toBe(false);
   });
 
-  it('0b80a7b5 AC2: when a third process creates the lock in the rename window (EEXIST on restore) the error names the CURRENT holder, not the displaced competitor', () => {
+  /** Drive the EEXIST-on-restore window: a competitor re-acquires inside the stale-read window, then a third process wins the path before the reclaimer restores the moved-aside lock. */
+  function runThirdProcessWindow(opts: { competitorPid: number; thirdPid: number; live: number[] }) {
     const lock = join(dir, 'dag.lock');
     nodeFs.writeFileSync(lock, body(STALE_PID));
-    const thirdBody = body(THIRD, 'third');
+    const competitorBody = body(opts.competitorPid, 'competitor');
+    const thirdBody = body(opts.thirdPid, 'third');
     let raced = false;
     hooks.link = (src, dst) => {
       // Only the reclaimer's restore of the moved-aside competitor lock.
@@ -120,26 +135,81 @@ describe('0b80a7b5 AC2 stale-lock reclaim never deletes a competitor lock', () =
         nodeFs.writeFileSync(lock, thirdBody, { flag: 'wx' }); // the third process wins the path
       }
     };
-
     let thrown: unknown;
     try {
       acquireDispatchLock(lock, 'dag', {
         pid: ME,
-        isAlive: alive(COMPETITOR, THIRD),
+        isAlive: alive(...opts.live),
         onStaleRead: () => {
           nodeFs.rmSync(lock);
-          nodeFs.writeFileSync(lock, body(COMPETITOR, 'competitor'), { flag: 'wx' });
+          nodeFs.writeFileSync(lock, competitorBody, { flag: 'wx' });
         },
       });
     } catch (err) {
       thrown = err;
     }
-
     expect(raced, 'the restore hard-link must have been attempted').toBe(true);
+    const side = leftovers('dag.lock');
+    return { lock, thirdBody, competitorBody, thrown, side };
+  }
+
+  it('0b80a7b5 AC2: a third process taking the lock in the rename window (EEXIST on restore) is refused naming the path holder AND the displaced live competitor, and the competitor lock file is retained byte-for-byte', () => {
+    const { lock, thirdBody, competitorBody, thrown, side } = runThirdProcessWindow({
+      competitorPid: COMPETITOR,
+      thirdPid: THIRD,
+      live: [COMPETITOR, THIRD],
+    });
+
+    expect(thrown).toBeInstanceOf(DuplicateDispatchError);
+    const dup = thrown as DuplicateDispatchError;
+    expect(dup.holderPid).toBe(THIRD);
+    expect(dup.displacedPid, 'the displaced live competitor must be named').toBe(COMPETITOR);
+    expect(dup.message).toContain(`pid ${THIRD}`);
+    expect(dup.message).toContain(`pid ${COMPETITOR}`);
+    expect(nodeFs.readFileSync(lock, 'utf8')).toBe(thirdBody);
+    // The displaced live owner's lock is NOT silently discarded: exactly one side
+    // file survives and it is the competitor's lock, untouched.
+    expect(side).toHaveLength(1);
+    expect(side[0]).toMatch(/^dag\.lock\.reclaim\./);
+    expect(nodeFs.readFileSync(join(dir, side[0]), 'utf8')).toBe(competitorBody);
+  });
+
+  it('0b80a7b5 AC2: when the path holder that won the window is itself dead, the displaced LIVE competitor is the one named and its lock file is retained', () => {
+    const { lock, thirdBody, competitorBody, thrown, side } = runThirdProcessWindow({
+      competitorPid: COMPETITOR,
+      thirdPid: THIRD,
+      live: [COMPETITOR], // THIRD is dead
+    });
+
+    expect(thrown).toBeInstanceOf(DuplicateDispatchError);
+    expect((thrown as DuplicateDispatchError).holderPid).toBe(COMPETITOR);
+    expect(nodeFs.readFileSync(lock, 'utf8')).toBe(thirdBody); // stale path holder left for the next reclaim
+    expect(side).toHaveLength(1);
+    expect(nodeFs.readFileSync(join(dir, side[0]), 'utf8')).toBe(competitorBody);
+  });
+
+  it('0b80a7b5 AC2 NEGATIVE CONTROL: when the displaced competitor is provably dead its side copy is discarded and the live path holder alone is named', () => {
+    const { lock, thirdBody, thrown, side } = runThirdProcessWindow({
+      competitorPid: COMPETITOR,
+      thirdPid: THIRD,
+      live: [THIRD], // COMPETITOR is dead
+    });
+
     expect(thrown).toBeInstanceOf(DuplicateDispatchError);
     expect((thrown as DuplicateDispatchError).holderPid).toBe(THIRD);
+    expect((thrown as DuplicateDispatchError).displacedPid).toBeUndefined();
     expect(nodeFs.readFileSync(lock, 'utf8')).toBe(thirdBody);
-    expect(leftovers('dag.lock')).toEqual([]);
+    expect(side).toEqual([]);
+  });
+
+  it('0b80a7b5 AC2: a failure while discarding the side copy never masks the DuplicateDispatchError', () => {
+    hooks.rm = (path) => {
+      if (path.includes('.reclaim.')) throw Object.assign(new Error('EIO: injected cleanup failure'), { code: 'EIO' });
+    };
+    const { thrown } = runThirdProcessWindow({ competitorPid: COMPETITOR, thirdPid: THIRD, live: [THIRD] });
+
+    expect(thrown, 'the primary refusal must survive a failing best-effort cleanup').toBeInstanceOf(DuplicateDispatchError);
+    expect((thrown as DuplicateDispatchError).holderPid).toBe(THIRD);
   });
 });
 
@@ -231,14 +301,31 @@ describe('0b80a7b5 release compares the pid+token body (b0f8fda7)', () => {
     expect(nodeFs.existsSync(lock)).toBe(false);
   });
 
-  it('0b80a7b5 AC2: release is idempotent and a second release never removes a lock re-acquired afterwards', () => {
+  it('0b80a7b5 AC2: a handle whose lock now belongs to a DIFFERENT pid never removes it — the owner/token check, not the idempotence flag, is what protects', () => {
+    const lock = join(dir, 'dag.lock');
+    const a = acquireDispatchLock(lock, 'dag', { pid: ME, isAlive: alive() });
+    nodeFs.rmSync(lock); // A's lock is reclaimed out from under it (A never released: its flag is still unset)
+    const b = acquireDispatchLock(lock, 'dag', { pid: COMPETITOR, isAlive: alive() });
+    const bBody = nodeFs.readFileSync(lock, 'utf8');
+
+    a.release(); // first call on A: only the body comparison can spare B's lock
+
+    expect(nodeFs.readFileSync(lock, 'utf8'), "A's release touched B's lock").toBe(bBody);
+    expect(leftovers('dag.lock')).toEqual([]);
+    b.release();
+    expect(nodeFs.existsSync(lock)).toBe(false);
+  });
+
+  it('0b80a7b5 AC2: release is idempotent — a repeated release neither throws nor removes a lock re-acquired afterwards', () => {
     const lock = join(dir, 'dag.lock');
     const a = acquireDispatchLock(lock, 'dag', { pid: ME, isAlive: alive() });
     a.release();
+    a.release();
     expect(nodeFs.existsSync(lock)).toBe(false);
     const b = acquireDispatchLock(lock, 'dag', { pid: ME, isAlive: alive() });
+    const bBody = nodeFs.readFileSync(lock, 'utf8');
     a.release();
-    expect(nodeFs.existsSync(lock)).toBe(true);
+    expect(nodeFs.readFileSync(lock, 'utf8')).toBe(bBody);
     b.release();
     expect(nodeFs.existsSync(lock)).toBe(false);
   });

@@ -29,16 +29,26 @@ export class DuplicateDispatchError extends Error {
   readonly holderPid: number;
   /** True when the live holder is the calling process itself (a non-reentrant re-acquire). */
   readonly heldBySelf: boolean;
-  constructor(identity: string, holderPid: number, heldBySelf = false) {
+  /**
+   * Pid of a second live lock owner that a reclaim displaced from the lock path
+   * while `holderPid` took the path. Its lock file is retained, never deleted.
+   * Absent when no displaced live owner was observed.
+   */
+  readonly displacedPid?: number;
+  constructor(identity: string, holderPid: number, heldBySelf = false, displacedPid?: number) {
+    const base = heldBySelf
+      ? `dispatch '${identity}' is already held by this process (pid ${holderPid}) — the dispatch lock is not reentrant; refusing a nested acquisition`
+      : `dispatch '${identity}' is already live (held by pid ${holderPid}) — refusing a duplicate submission`;
     super(
-      heldBySelf
-        ? `dispatch '${identity}' is already held by this process (pid ${holderPid}) — the dispatch lock is not reentrant; refusing a nested acquisition`
-        : `dispatch '${identity}' is already live (held by pid ${holderPid}) — refusing a duplicate submission`
+      displacedPid === undefined
+        ? base
+        : `${base}; live pid ${displacedPid} was displaced from the lock path during a reclaim and its lock file is retained`
     );
     this.name = 'DuplicateDispatchError';
     this.identity = identity;
     this.holderPid = holderPid;
     this.heldBySelf = heldBySelf;
+    this.displacedPid = displacedPid;
   }
 }
 
@@ -85,6 +95,19 @@ function holderPidOf(body: string): number | null {
 const errCode = (err: unknown): string | undefined => (err as NodeJS.ErrnoException).code;
 
 /**
+ * Remove a scratch or side file on a best-effort basis. Called from `finally`
+ * blocks, so a cleanup failure must never replace the primary outcome (a lock
+ * that was just published, or the error that is already propagating).
+ */
+function discardQuietly(path: string): void {
+  try {
+    rmSync(path, { force: true });
+  } catch {
+    /* best effort: the primary outcome is already decided */
+  }
+}
+
+/**
  * Publish `body` at `lockPath` with its full content already present: the body
  * is written to a unique temp file in the same directory and hard-linked to
  * `lockPath`. `linkSync` never overwrites, so EEXIST means another holder owns
@@ -105,7 +128,7 @@ function publishLock(lockPath: string, body: string): boolean {
       throw err;
     }
   } finally {
-    rmSync(temp, { force: true });
+    discardQuietly(temp);
   }
 }
 
@@ -152,13 +175,19 @@ function readOrNull(path: string): string | null {
  * - different or unreadable: a competitor re-acquired the lock between the stale
  *   read and the rename (an unverified file is never treated as the stale one).
  *   The side copy is hard-linked back to `lockPath` (which never overwrites):
- *   - restored and the competitor is alive: refused with `DuplicateDispatchError`
+ *   - restored: the side name is dropped (it was only a second link to the
+ *     restored lock); a live competitor is refused with `DuplicateDispatchError`
  *     naming it;
  *   - `lockPath` was re-created by a third process in the rename window (EEXIST):
- *     the CURRENT holder read from `lockPath` is reported when alive; the
- *     displaced competitor is reported only when `lockPath` is unreadable.
+ *     the side copy is the only record of the displaced competitor's lock, so it
+ *     is KEPT whenever its owner may be alive (or its body is unreadable). The
+ *     refusal names the live path holder, and the displaced competitor too when
+ *     it is alive.
  *
- * The side copy is removed on every path (including errors).
+ * The side copy is removed only when no live owner can be behind it: it is the
+ * stale file, its owner is provably dead, or its body carries no parseable pid
+ * (the same "corrupt is stale" rule the caller applies). Cleanup failures never
+ * replace the outcome above.
  *
  * @throws {DuplicateDispatchError} when the lock belongs to a live holder other than the stale one.
  */
@@ -176,51 +205,77 @@ function reclaimStaleLock(
     if (errCode(err) === 'ENOENT') return; // already gone: caller retries
     throw err;
   }
+  const moved = readOrNull(aside);
+  const isStale = moved !== null && moved === staleBody;
+  const displacedPid = moved === null ? null : holderPidOf(moved);
+  const displacedLive = displacedPid !== null && isAlive(displacedPid);
+  // Unreadable bodies are unknown owners and are never discarded. A parseable pid
+  // is discardable only when that pid is not alive; a corrupt body has no owner.
+  let disposable = isStale || (moved !== null && !displacedLive);
   try {
-    const moved = readOrNull(aside);
-    if (moved !== null && moved === staleBody) return; // the stale file: discarded in finally
-    const displaced = moved === null ? null : holderPidOf(moved);
-    const restored = restoreAside(aside, lockPath, moved);
-    if (restored) {
-      if (displaced !== null && isAlive(displaced)) throw new DuplicateDispatchError(identity, displaced, displaced === selfPid);
+    if (isStale) return; // the stale file: discarded in finally
+    if (restoreAside(aside, lockPath, moved)) {
+      // The displaced body is back at lockPath; the side name is now a second link to it.
+      disposable = true;
+      if (displacedPid !== null && displacedLive) throw new DuplicateDispatchError(identity, displacedPid, displacedPid === selfPid);
       return;
     }
-    // A third process created the lock in the rename window; it owns the path now.
+    // EEXIST: a third process created the lock in the rename window and owns the path.
     const currentBody = readOrNull(lockPath);
-    const current = currentBody === null ? null : holderPidOf(currentBody);
-    if (current !== null) {
-      if (isAlive(current)) throw new DuplicateDispatchError(identity, current, current === selfPid);
-      return; // current holder is itself stale: caller retries and reclaims it
+    const currentPid = currentBody === null ? null : holderPidOf(currentBody);
+    if (currentPid !== null && isAlive(currentPid)) {
+      throw new DuplicateDispatchError(
+        identity,
+        currentPid,
+        currentPid === selfPid,
+        displacedPid !== null && displacedLive ? displacedPid : undefined
+      );
     }
-    if (displaced !== null && isAlive(displaced)) throw new DuplicateDispatchError(identity, displaced, displaced === selfPid);
+    if (displacedPid !== null && displacedLive) {
+      throw new DuplicateDispatchError(identity, displacedPid, displacedPid === selfPid);
+    }
+    if (moved === null) {
+      throw new Error(`acquireDispatchLock: the displaced lock at ${aside} is unreadable and was retained for inspection; resolve it before retrying`);
+    }
+    // Neither the path holder nor the displaced owner is live: the caller retries and reclaims the stale path.
   } finally {
-    rmSync(aside, { force: true });
+    if (disposable) discardQuietly(aside);
   }
 }
 
 /**
  * Release the lock at `lockPath` only if its body is still exactly `body`.
  * The file is renamed aside first so the compare-and-delete is not a
- * read-then-remove-by-path race: whichever file was moved is the one inspected,
- * and a lock that is not ours is hard-linked back (never overwriting).
+ * read-then-remove-by-path race: whichever file was moved is the one inspected.
+ * A file that is not ours belongs to another holder that published at `lockPath`
+ * after our lock had been reclaimed; it is hard-linked back (never overwriting).
+ * If `lockPath` was taken again in the meantime (EEXIST), that holder's lock is
+ * retained at the side name rather than deleted whenever its owner may be alive,
+ * because the side copy may be the only record of that owner's lock.
  * Errors are swallowed: release runs in `finally` blocks and must not mask the
  * primary error.
  */
-function releaseOwned(lockPath: string, body: string): void {
+function releaseOwned(lockPath: string, body: string, isAlive: (pid: number) => boolean): void {
   const aside = `${lockPath}.release.${process.pid}.${randomBytes(6).toString('hex')}`;
   try {
     renameSync(lockPath, aside);
   } catch {
     return; // already gone (or unreachable): nothing to release
   }
+  const moved = readOrNull(aside);
+  if (moved === body) {
+    discardQuietly(aside); // ours
+    return;
+  }
+  // Unreadable bodies are unknown owners and are kept; a parseable pid is discardable only when not alive.
+  const ownerPid = moved === null ? null : holderPidOf(moved);
+  let disposable = moved !== null && (ownerPid === null || !isAlive(ownerPid));
   try {
-    const moved = readOrNull(aside);
-    if (moved === body) return; // ours: discarded in finally
-    restoreAside(aside, lockPath, moved); // not ours (we were reclaimed): give it back; EEXIST => its owner was displaced already
+    if (restoreAside(aside, lockPath, moved)) disposable = true; // restored: the side name is now a second link
   } catch {
     /* best effort: see JSDoc */
   } finally {
-    rmSync(aside, { force: true });
+    if (disposable) discardQuietly(aside);
   }
 }
 
@@ -243,7 +298,7 @@ export function acquireDispatchLock(lockPath: string, identity: string, opts: Ac
         release() {
           if (released) return;
           released = true;
-          releaseOwned(lockPath, body);
+          releaseOwned(lockPath, body, isAlive);
         },
       };
     }
