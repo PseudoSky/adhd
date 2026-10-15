@@ -80,7 +80,7 @@ No new packages. Edits the slice needs outside this list are listed in §9 (open
 | 1 | D1 | apigen-engine-runtime | Binding-aware dispatch terminal for flat arguments: `Terminal`, `createInvoker(layers, { terminal })`, `createPackageInvoker(..., { terminal })`; built with `Operation.binding` (R1) and consumed by the orchestration entry's foreign extractors (R5, R7b) | R1, R3 (same files, serial after R3) | gap analysis: ≈150 src + 150 test |
 | 2 | R4 | apigen-plugin-mcp | adhd ADR-0018 (BA-2, BA-3, BA-4 for every `ApiError` code); `extra.signal`; layer options; injectable stdio streams | R1, R3 | not estimated |
 | 2 | R5 | apigen-cli + apigen-core-client | `--use` plugins materialise `createLayer` from the flat `--opt` bag; resolver adoption; IR generation entry promoted into core-client, whose result carries the IR and the files each extractor read | R2, R3, D1 | gap analysis steps 2+3: ≈80 src + 110 test; promotion not estimated |
-| 2 | R8p | apigen-plugin-ir-cache | The cache keys, stores and validates; its dependency list comes from the extraction result; `collectLocalImportPaths` leaves the cache path; regression tests for 39c4e00c and a66aca5d | R5 (the result type; serial inside the wave) | not estimated |
+| 2 | R8p | apigen-plugin-ir-cache | The cache keys, stores and validates from the extraction result; `collectLocalImportPaths` leaves the cache path; no extractor option hides in a closure; tsconfig `extends` chain reported in `sourceFiles`; comment fixes (088745d2); residual regression tests | R5 (the result type; serial inside the wave) | not estimated |
 | 2 | R6 | apigen-plugin-policy | E4: `makePolicyPlugin` default export with `optionsSchema`; `PolicyAttributes` ctx key; deletes `state.ts`, `load-decider.ts`, the mount capability | R1, R3 | not estimated |
 | 2 | R7a | gateway `sources/` | `SourceError` → `ApiError`; ids via core `buildId`/`syntheticOp`; `host`/`binding` producers; node `ISourceProbe`; `resolveSource` keyed by translator; `operationsFromMcpTools` split | R1, R2, R3 | gap analysis step 5: ≈120 src + 120 test |
 | 3 | R7b | gateway `sources/` + `gateway.ts` routing line | argv and MCP extractors registered with the entry (each reports its dependencies); `HostAdapter`s for argv and MCP stdio; D1 terminal wiring; the routing line reads `binding ?? host` (G-1); finite supervision; `serveMcpPassthrough` consumes IR | R5, R7a, D1 | not estimated |
@@ -299,25 +299,26 @@ IR generation is centralized in apigen-core-client (adhd ADR-0017 D5). The entry
   1. `--use @adhd/apigen-plugin-policy --opt k=v` reaches the policy Layer's `createLayer` under every target.
   2. `--source` classification errors come from the resolver (gap analysis §3b table); valid inputs unchanged.
   3. `generate`, `run`, `serve` extract TS through one entry; output identical (pinned by golden comparison in T-R5).
-  4. The TS extractor returns, in `files`, the source files its program loaded (the transitive local imports `collectLocalImportPaths` finds today, computed once by the extractor); the `argv` and `mcp` extractors (R7b) report the executable or an empty list.
+  4. The TS extractor reports, in `sourceFiles`, the source files its program loaded (including the resolved tsconfig `extends` chain, R8p); the `argv` and `mcp` extractors (R7b) report the executable or an empty list.
 - **Dependencies:** R2, R3, D1. R5's two halves share `orchestrator.ts` and land serially inside the segment.
 - **Read-only context:** `commands/run.ts:180-345`; `commands/generate.ts:160-270`; `orchestrator.ts:110-150, 170-200, 290-360, 430-470, 620-715`; `apigen-core-client/src/lib/extract-invoker.ts:1-176`; `entrypoint/backlog/src/extract-live.ts:200-230` (second caller; not edited).
 - **Risk:** medium. The promotion moves code that `entrypoint/backlog` duplicates; R13 is the gated follow-up. `entrypoint/apigen-cli` and `apigen-plugin-ir-cache` both call the entry's result type, so R5 publishes the type before R8p starts.
 - **Rollback:** revert R5 with R8p, R7b, R8.
 - **Tests:** T-R5. **Size:** gap analysis steps 2+3 ≈80 src + 110 test; the promotion is not estimated.
 
-### R8p — IR cache keys, stores and validates (apigen-plugin-ir-cache)
+### R8p — IR cache residuals on the merged extraction-result cache (apigen-plugin-ir-cache, apigen-core-client)
 
-Lands in the same wave as the orchestration entry (serial after R5), before R12 and before any step relies on the cache (adhd ADR-0017 D6).
+The extraction result already reports `sourceFiles`, and the cache key already covers the whole `ExtractCall` (main `0bf369d5`; pinned by `ir-cache-invalidation.spec.ts` and `extract-source-files.spec.ts`). R8p is the remainder. It lands in the same wave as the orchestration entry (serial after R5), before R12 and before any step relies on the cache (adhd ADR-0017 D6).
 
-- **Files:** `packages/apigen/apigen-plugin-ir-cache/src/lib/ir-cache-layer.ts` and its tests.
+- **Files:** `packages/apigen/apigen-plugin-ir-cache/src/lib/ir-cache-layer.ts`, `src/lib/backends/fs-backend.ts`, `src/lib/ir-cache-layer.spec.ts`; the TS extractor in `packages/apigen/apigen-core-client` (the `sourceFiles` report); the R5 entry's `ExtractOptions` construction.
 - **Interface and behaviour:**
-  1. The dependency list for the staleness record and the content key comes from the extraction result (`files`), not from `collectLocalImportPaths` (today imported at `ir-cache-layer.ts:66` and called at `:247` and `:266`). The import and both calls leave the cache path; `collectLocalImportPaths` stays exported from core-client for the TS extractor that reports `files`.
-  2. `computeCacheKey` (`ir-cache-layer.ts:236`) includes the extraction options, so two extractions of one source with different options never share a key (backlog a66aca5d). It currently hashes format version, extractor version, `host`, `namespace`, source hash and dependency hashes only.
-  3. The staleness record carries the extractor-reported dependency list, so a change to an imported file invalidates a cached entry (backlog 39c4e00c: a TS record written with `deps: []`). Where the record is written with an empty list is confirmed by the segment before editing; the regression test pins the outcome.
-  4. The artifact target produces the artifact through the core-client entry; the artifact the cache stores is the artifact the policy wrapper reads (R12).
+  1. The cache takes its dependency list only from the extraction result's `sourceFiles` (G-2). The `collectLocalImportPaths` import and both fallback uses leave `ir-cache-layer.ts`; an extractor that reports no `sourceFiles` gets a source-only key and a source-only staleness record. `collectLocalImportPaths` stays exported from core-client for the TS extractor.
+  2. No extractor option can hide in a closure: the R5 entry builds `ExtractOptions` only from `ExtractCall` fields (`source`, `namespace`, and `extractorOptions.{dropFileSegment,tsconfig,session}`), so everything that affects extraction is part of the key. The one live violator, `entrypoint/backlog/src/extract-live.ts:271` (passes `extractorOptions: {}` while a closure hard-codes `dropFileSegment`; its `tsconfig` branch is dead), is fixed by moving both into `extractorOptions` under R13, which is gated because `entrypoint/backlog` is outside §0.3.
+  3. The TS extractor reports the resolved tsconfig `extends` chain in `sourceFiles` (backlog 9025607e), so editing a base tsconfig invalidates the entry without the cache walking `extends`.
+  4. Comment-only: "fire-and-forget" is corrected where the layer now awaits `writeThrough` (backlog 088745d2) at `backends/fs-backend.ts:30` and `ir-cache-layer.spec.ts:238`. The backlog `env.ts` part of 088745d2 goes to R13.
+  5. The artifact target produces the artifact through the core-client entry; the artifact the cache stores is the artifact the policy wrapper reads (R12).
 - **Dependencies:** R5.
-- **Read-only context:** `ir-cache-layer.ts:60-300`; the cache's `target` module; `IExtractionResult` from R5; backlog items 39c4e00c and a66aca5d.
+- **Read-only context:** `ir-cache-layer.ts` (key computation, `dependencyPaths`, `sourceFilesOf` use); the cache's `target` module; `ExtractResult.sourceFiles` and `extract-invoker.ts` in core-client; backlog items 9025607e, 088745d2, bbf1f0e3.
 - **Risk:** medium (cache invalidation is silent when wrong). **Rollback:** revert R8p with R12.
 - **Tests:** T-R8p. **Size:** not estimated.
 
@@ -794,27 +795,36 @@ Scenario: an unsupported source exits 2 with ApiError invalid_argument
 - DoD: the `ts-subprocess` registration returns operations deep-equal to the in-process `ts` extractor for the fixture source. Control: drop one operation in the subprocess decoder → red.
 - Measurement is not a gate; its numbers go to `MEASUREMENTS.md`.
 
-### T-R8p — IR cache regression tests (39c4e00c, a66aca5d)
+### T-R8p — IR cache residual tests (cases the specs merged with `0bf369d5` do not pin)
 
 ```gherkin
-Scenario: a changed extraction option is a cache miss (a66aca5d)
-  Given a cached extraction of a fixture source with option A
-  When the same source is extracted with option B
-  Then the cache does not return the option-A entry
+Scenario: calls differing only in dropFileSegment are a cache miss
+  Given a cached extraction through the core-client entry with dropFileSegment true
+  When the same source is extracted with dropFileSegment false
+  Then the cache does not return the first entry
 
-Scenario: a change to an imported file invalidates the cached entry (39c4e00c)
-  Given a cached extraction of a fixture source that imports a second file
-  When the imported file changes and the source is extracted again
-  Then the result reflects the change
-
-Scenario: the cache takes its dependency list from the extraction result
-  Given an extractor that reports files [entry, dep]
-  When the extraction is cached
-  Then the stored staleness record lists dep
+Scenario: an extractor that reports no sourceFiles gets a source-only key
+  Given an extractor whose result carries no sourceFiles
+  When the extraction is cached and an imported file then changes
+  Then the cached entry is still a hit
+  And the staleness record lists only the source
   And the cache module does not walk imports itself
+
+Scenario: editing a base tsconfig invalidates the entry (9025607e)
+  Given a TS extraction whose tsconfig extends a base tsconfig
+  When the base tsconfig changes and the source is extracted again
+  Then the result is re-extracted
+  And the extractor's reported sourceFiles include the base tsconfig
+
+Scenario: no extractor option is built outside ExtractCall
+  Given two ExtractCalls that differ in one ExtractCall field
+  When the entry builds ExtractOptions for each
+  Then the options differ in exactly that field
+  And no option is present that is not derived from an ExtractCall field
 ```
 
-- Control: restore the omission of the options from `computeCacheKey` → the first scenario goes red; write `deps: []` into the staleness record → the second goes red. Both controls are recorded, and the tests are the regression gate: they fail if either bug returns.
+- Control: restore the `collectLocalImportPaths` fallback in `ir-cache-layer.ts` → the second scenario goes red; drop the tsconfig `extends` chain from the extractor's `sourceFiles` → the third goes red; read `dropFileSegment` from a closure instead of the call → the first and fourth go red. Each control is recorded.
+- The `fire-and-forget` comment edits (088745d2) are comment-only and carry no test.
 
 ### T-R9 — policy entrypoint (in-process `cliPlugin.run` / `mcpPlugin.run`)
 
@@ -916,7 +926,7 @@ Scenario: attribute paths with dots are untouched
 | K7 | Mount-branch ctx differs from Layer ctx, so `PolicyAttributes` is invisible to mounts | high (observed in code) | medium | R3 behaviour change 3 + T-R3 scenario | implementer |
 | K8 | Cross-bundle class-key identity for `PolicyAttributes` | medium | medium | single import path `@adhd/apigen-plugin-policy`; T-R6 | implementer |
 | K9 | Supervision tests flake | medium | medium | latches on the fake launcher; no sleeps | implementer |
-| K10 | ir-cache staleness (39c4e00c) or key collision (a66aca5d) makes R8/R12 serve stale IR | medium | medium | R8p lands with the entry, before R12 and before any cache reliance; regression tests T-R8p (G-2, approved) | implementer |
+| K10 | ir-cache staleness (39c4e00c) or key collision (a66aca5d) makes R8/R12 serve stale IR | medium | medium | R8p lands with the entry, before R12 and before any cache reliance; `0bf369d5`'s specs plus T-R8p (G-2, approved) | implementer |
 | K11 | Telemetry knobs absent in `@adhd/sox-telemetry` | unknown (UNVERIFIED) | low | the values are decided (14 days, 100 MB per file); an edit to the package is requested only if a knob is missing (G-6) | owner |
 | K12 | Users' policy files with `.` ids stop loading | certain | medium | loader message names the new id; migrate command (R10) | owner (BA-5 decided) |
 | K13 | `serve` spawns the upstream before gating | certain | low | accepted risk O-2; documented in R14 | owner (decided) |
@@ -960,7 +970,7 @@ Each item was not read, or could not be confirmed from code; the segment that fi
 
 1. Whether `_transcoder.decode`/`encode` in `apigen-engine-runtime/src/lib/dispatch.ts` accept a ctx `resolve()` override (R3; G-4).
 2. The `StdioServerTransport` constructor's stream arguments in the installed MCP SDK (R4).
-3. Where the ir-cache `deps: []` staleness record (39c4e00c) is written (R8p confirms before editing; T-R8p pins the outcome).
+3. How the TS extractor obtains the resolved tsconfig `extends` chain from its program (R8p; 9025607e; T-R8p pins the outcome).
 4. Where the `@nx/js:library` template injects `type`/`exports` into a scaffolded `package.json` (R11a).
 5. Whether `@adhd/sox-telemetry` exposes file mode, disable and retention options for the decided values (R9; G-6 opens only if a knob is missing).
 6. Whether each listed reader of `content[0].text` reads a string-returning apigen tool (R15 audits each before any edit; G-5).
