@@ -47,7 +47,10 @@ const REPO_ROOT = path.resolve(__dirname, '..', '..', '..', '..');
 const TSX_BIN = path.join(REPO_ROOT, 'node_modules', '.bin', 'tsx');
 const TSCONFIG_BASE = path.join(REPO_ROOT, 'tsconfig.base.json');
 const CLI_PATH = path.join(REPO_ROOT, 'entrypoint', 'dispatch-cli', 'bin', 'cli.ts');
-const TMP_ROOT = path.join(REPO_ROOT, 'tmp', 'dispatch-cli', 'dag-write-safety');
+// Kept SHORT on purpose: the tsx child listens on a unix socket at `<TMPDIR>/tsx-<uid>/<pid>.pipe`, and
+// macOS rejects a socket path of 104 bytes or more (listen EINVAL), so the private TMPDIR must stay shallow.
+const TMP_ROOT = path.join(REPO_ROOT, 'tmp', 'dispatch-cli', 'd');
+const SOCKET_PATH_LIMIT = 104;
 const DEADLINE_MS = 60_000;
 
 // --- harness ---------------------------------------------------------------
@@ -66,14 +69,18 @@ interface Case {
 
 /** A fresh isolated case dir; lock files for it live under its private TMPDIR. */
 function newCase(): Case {
-  const dir = path.join(TMP_ROOT, `case-${caseN++}`);
+  const dir = path.join(TMP_ROOT, `${caseN++}`);
   const c: Case = {
     dir,
     home: path.join(dir, 'home'),
-    tmp: path.join(dir, 'tmp'),
+    tmp: path.join(dir, 't'),
     toolsRoot: path.join(dir, 'tools'),
     dagPath: path.join(dir, 'dag.json'),
   };
+  const socketPath = path.join(c.tmp, `tsx-${process.getuid?.() ?? 0}`, '9999999.pipe');
+  if (Buffer.byteLength(socketPath) >= SOCKET_PATH_LIMIT) {
+    throw new Error(`worktree path too deep for the tsx IPC socket (${socketPath.length} >= ${SOCKET_PATH_LIMIT}): ${socketPath}`);
+  }
   for (const d of [c.home, c.tmp, c.toolsRoot]) fs.mkdirSync(d, { recursive: true });
   // The lock directory must exist before anything watches it (fs.watch throws
   // ENOENT on a missing path); the product's mkdirSync(recursive) is then a no-op.
