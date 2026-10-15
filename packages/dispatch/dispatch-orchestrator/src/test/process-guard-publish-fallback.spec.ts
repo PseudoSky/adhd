@@ -2,6 +2,7 @@
  * process-guard-publish-fallback.spec.ts — lock publication on filesystems that
  * cannot hard-link.
  *
+ * Guards: lock publication failing with a raw fs error on filesystems without hard links; EEXIST semantics of the lock publish.
  * Failure mode: `publishLock` hard-links a temp file to the lock path and only
  * handles EEXIST; on a filesystem without hard links (some network mounts,
  * FAT/exFAT, WSL drvfs) `linkSync` throws ENOTSUP/EPERM/EXDEV/ENOSYS/EOPNOTSUPP
@@ -12,7 +13,7 @@
  *   through a node:fs mock; no process spawned, no network, no sleeps).
  * Gap statement: tier S suffices; a filesystem that lacks hard links is not
  *   available on the test host, so the error `linkSync` raises there is injected.
- * Cited: plan discovery-sweep-1014 blind-review B AC2 and AC3.
+ * Cites: plan discovery-sweep-1014 blind-review B AC2 and AC3.
  * Red run (against the unfixed process-guard.ts, `npx vitest run
  *   src/test/process-guard-publish-fallback.spec.ts`, exit 1): 6 failed, 2 passed.
  *   The five code cases fail on the raw `Error: <code>: hard links are not

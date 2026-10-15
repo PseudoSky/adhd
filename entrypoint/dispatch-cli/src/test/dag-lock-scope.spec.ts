@@ -3,6 +3,7 @@
  * serialize in dispatch-cli: ONE orchestrator cycle per `runCycleCore` call, and
  * a multi-cycle caller must wrap its own loop in `withDagLock`.
  *
+ * Guards: a withDagLock doc that claims an orchestrate loop is wrapped when only one cycle per runCycleCore is locked; a second concurrent cycle on one DAG; a lock held between cycles.
  * Failure mode: core.ts's `withDagLock` JSDoc claims `orchestrate()`'s loop is
  * wrapped, but nothing in dispatch-cli calls `orchestrate()` (it is an exported
  * generator of `@adhd/dispatch-orchestrator`); a reader trusts the comment and
@@ -15,7 +16,7 @@
  *   spawned, no network, no sleeps).
  * Gap statement: tier S suffices; the lock is observed through the real
  *   `runCycleCore` / `acquireDispatchLock` pair on a real file.
- * Cited: plan discovery-sweep-1014 blind-review B AC1.
+ * Cites: plan discovery-sweep-1014 blind-review B AC1.
  * Red run (recorded against the unfixed core.ts, `npx vitest run
  *   src/test/dag-lock-scope.spec.ts`, exit 1): the doc-claim test fails with
  *   `AssertionError: expected true to be false` at the claim assertion; the two
