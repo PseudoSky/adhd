@@ -220,12 +220,16 @@ async function resolveNotes(
   );
   if (edges.length === 0) return [];
   const nodes = await pickNodes(graph, nodeById, edges.map((e) => e.dst));
-  return nodes.map((n) => ({
-    uid: n.uid,
-    author: typeof n.metadata?.author === 'string' ? n.metadata.author : '',
-    text: typeof n.metadata?.text === 'string' ? n.metadata.text : n.content,
-    at: typeof n.metadata?.at === 'string' ? n.metadata.at : n.tCreated,
-  }));
+  // A removed note (`remove-note`) is bi-temporally invalidated; it must never
+  // render on the issue card, whatever the edge read returns.
+  return nodes
+    .filter((n) => n.tInvalid === undefined)
+    .map((n) => ({
+      uid: n.uid,
+      author: typeof n.metadata?.author === 'string' ? n.metadata.author : '',
+      text: typeof n.metadata?.text === 'string' ? n.metadata.text : n.content,
+      at: typeof n.metadata?.at === 'string' ? n.metadata.at : n.tCreated,
+    }));
 }
 
 /** The full audit trail for an issue — `audits` edges FROM the issue (SPEC.md §3: `audits: * → audit (1:n)`, the subject is the edge SOURCE), sorted oldest-first. */

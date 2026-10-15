@@ -31,7 +31,7 @@ or after the one that mounted them. Compare the `backlog create`, `backlog
 priority-matrix`, and `backlog obligate` lines of `adhd-backlog --help` with §1
 before relying on a field.
 
-## 1. Command surface — 32 verbs (plus `batch`), one calling convention
+## 1. Command surface — 33 verbs (plus `batch`), one calling convention
 
 **Every verb except `embedding-status` takes a single `--input` flag carrying
 one JSON object** (`embedding-status` takes no options at all). There
@@ -74,6 +74,7 @@ adhd-backlog backlog recheck            --input '<IRecheckInput json>'
 adhd-backlog backlog relate             --input '<IRelateInput json>'
 adhd-backlog backlog remove             --input '<IRemoveIssueInput json>'
 adhd-backlog backlog remove-citation    --input '<IRemoveCitationInput json>'
+adhd-backlog backlog remove-note        --input '<IRemoveNoteInput json>'
 adhd-backlog backlog report             --input '<IReportInput json>'
 adhd-backlog backlog restore            --input '<IRestoreIssueInput json>'
 adhd-backlog backlog rm-location        --input '<IRmLocationInput json>'
@@ -124,6 +125,7 @@ Verbs (one-token, --input JSON envelope):
   backlog relate  { input: { sourceUid: string, targetUid: string, rel: 'relates_to'|'supersedes'|'blocks'|'duplicate_of'|'part_of'|'similar_to', action: 'add'|'remove', by: string } }
   backlog remove  { input: { uid: string, confirm: boolean, reason?: string, by: string } }
   backlog remove-citation  { input: { uid: string, by: string, reason?: string } }
+  backlog remove-note  { input: { uid: string, by: string, reason: string } }
   backlog report  { input: { filter?: object } }
   backlog restore  { input: { uid: string, by: string } }
   backlog rm-location  { input: { uid: string, by: string, reason?: string } }
@@ -490,6 +492,22 @@ $ adhd-backlog backlog add-citation --input '{"uid":"a61ff0b6-…","by":"claude:
 
 $ adhd-backlog backlog remove-citation --input '{"uid":"c1e2f3a4-…","by":"claude:1","reason":"superseded by a rewrite"}'
 {"ok":true,"data":{"uid":"c1e2f3a4-…","invalidated":true}}
+```
+
+**Remove a note.** `create` with `duplicateAction: 'comment'` attaches a note to
+the top-matching duplicate and returns its id as `commentedOn.noteId`.
+`remove-note` soft-removes that note by `uid`. The caller must be the note's
+author, or an actor listed in the owning project's `policy.noteRemovers`
+(default: none, so author-only). Any other caller gets a `precondition_failed`
+refusal and nothing changes. A successful removal, with its `reason`, appears in
+the owning issue's `auditTrail` as `note-removed`:
+
+```
+$ adhd-backlog backlog remove-note --input '{"uid":"n9d8c7b6-…","by":"claude:1","reason":"duplicate comment filed in error"}'
+{"ok":true,"data":{"uid":"n9d8c7b6-…","issueUid":"a61ff0b6-…","invalidated":true}}
+
+$ adhd-backlog backlog remove-note --input '{"uid":"n9d8c7b6-…","by":"agent:worker-2","reason":"tidying up"}'
+{"ok":false,"error":{"code":"precondition_failed","message":"Note removal not permitted: actor \"agent:worker-2\" is neither the author of note \"n9d8c7b6-…\" nor listed in the project policy noteRemovers","details":{"retryable":false}}}
 ```
 
 `update` carries a **desired citation set** as a diff: it adds what's new and

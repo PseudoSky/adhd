@@ -565,7 +565,7 @@ export function deprecatedKindReplacement(name: string): string | undefined;
 Guarantees: the case-folded in-code replacement for a deprecated `kind` name,
 or `undefined` when the name is not one of `DEPRECATED_KIND_NAMES`.
 
-### `VALID_LOCATION_TYPES` — const (`catalog.ts:1546`)
+### `VALID_LOCATION_TYPES` — const (`catalog.ts:1571`)
 
 ```ts
 export const VALID_LOCATION_TYPES: readonly ILocationType[];
@@ -671,6 +671,7 @@ export interface IProjectPolicy {
   readonly citationRequired: boolean;
   readonly citationRequiresSha: boolean;
   readonly citationAllowedExternalRoots: readonly string[];
+  readonly noteRemovers: readonly string[];
   readonly defaultStatus?: string;
   readonly defaultKind?: string;
   readonly dedupeScanEnabled: boolean;
@@ -688,7 +689,9 @@ export interface IProjectPolicy {
 ```
 
 Guarantees: every field is `readonly` at the type level. `allowedStatuses`/
-`allowedKinds` empty means "no restriction." `citationAllowedExternalRoots`
+`allowedKinds` empty means "no restriction." `noteRemovers` is the actor list,
+beyond a note's own author, permitted to run `remove-note`; empty (the default)
+means author-only, and a malformed value falls back to empty. `citationAllowedExternalRoots`
 is external absolute roots a citation may be read from, IN ADDITION to the
 project's own `metadata.path` root (BUG c6d35272): a citation target is
 accepted iff its canonical (symlink-resolved) path lies within the project
@@ -717,7 +720,7 @@ minimum title-token Jaccard for the SECOND independent signal — cosine alone i
 never sufficient cross-project. All four are data (never env toggles) resolved
 by `resolveProjectPolicy` over `DEFAULT_PROJECT_POLICY`.
 
-### `resolveProjectPolicy(project)` — function (`catalog.ts:1020`)
+### `resolveProjectPolicy(project)` — function (`catalog.ts:1029`)
 
 ```ts
 export function resolveProjectPolicy(project: IResolvedProjectRow): IProjectPolicy;
@@ -1385,6 +1388,59 @@ opened ONLY by a typed opt-in — `--allow-production-write` on the CLI (and in
 the `serve` server args, e.g. `.mcp.json`) — never an ambient env toggle
 (ADR-0013). Maps to `precondition_failed`; refused before any transaction opens,
 so it has no side effect. **Additive** — appended after every pre-existing export.
+
+### `NoteNotFoundError(uid)` — class (`errors.ts:1009`)
+
+```ts
+export class NoteNotFoundError extends BacklogWriteError {
+  readonly code: 'E_VALIDATION';
+  readonly retryable: false;
+  constructor(uid: string);
+}
+```
+
+Guarantees: thrown by `removeNote` when `uid` is not a LIVE `note` node, is
+already removed, names a node of another kind, or has no live owning issue.
+Maps to `item_not_found`. **Additive** — appended after every pre-existing export.
+
+### `NoteRemovalNotPermittedError(noteUid, actor)` — class (`errors.ts:1027`)
+
+```ts
+export class NoteRemovalNotPermittedError extends BacklogWriteError {
+  readonly code: 'E_VALIDATION';
+  readonly retryable: false;
+  constructor(noteUid: string, actor: string);
+}
+```
+
+Guarantees: thrown by `removeNote` before any write when the actor is neither
+the note's recorded author nor listed in the owning project's `noteRemovers`.
+Maps to `precondition_failed`. **Additive** — appended after every pre-existing export.
+
+---
+
+## `note.ts` (4 exports)
+
+### `IRemoveNoteInput` / `IRemoveNoteOutcome` — interfaces (`note.ts:48`, `note.ts:58`)
+
+`IRemoveNoteInput` is `{ uid, by, reason }` (`reason` REQUIRED) plus the session
+stamp. `IRemoveNoteOutcome` is `{ uid, issueUid, invalidated: true }`.
+
+### `mayRemoveNote(policy, author, actor)` — function (`note.ts:141`)
+
+Pure authorization rule: the author always may; anyone else only when listed in
+`policy.noteRemovers`.
+
+### `removeNote(handle, input)` — function (`note.ts:164`)
+
+Guarantees: one `immediate` transaction. Resolves the live `note` by `uid`,
+finds its live owning issue via `has_note`, authorizes against the owning
+project's policy, then bi-temporally invalidates the note node and its
+`has_note` edge (merging `invalidatedReason`/`invalidatedAt`, never replacing
+`meta`). Writes one `note-removed` audit row whose subject is the OWNING ISSUE,
+so the removal appears in that issue's `auditTrail`. Nothing is written on any
+refusal. Rejects `InvalidArgumentError` (blank `uid`/`by`/`reason`, bare role
+`by`), `NoteNotFoundError`, `NoteRemovalNotPermittedError`.
 
 ---
 

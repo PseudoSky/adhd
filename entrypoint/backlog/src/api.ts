@@ -82,6 +82,8 @@ import {
   IssueNotFoundError,
   IssueNotRestorableError,
   IssueTerminalError,
+  NoteNotFoundError,
+  NoteRemovalNotPermittedError,
   NoteRequiredError,
   ProductionWriteRefusedError,
   RemoveConfirmationRequiredError,
@@ -144,6 +146,11 @@ import type {
   IRemoveCitationInput,
   IRemoveCitationOutcome,
 } from './write/citation.js';
+import { removeNote as removeNoteOp } from './write/note.js';
+import type {
+  IRemoveNoteInput,
+  IRemoveNoteOutcome,
+} from './write/note.js';
 import { transition as transitionIssueOp } from './write/transition.js';
 import { claim as claimIssueOp } from './write/claim.js';
 import { relate as relateIssueOp } from './write/relate.js';
@@ -494,6 +501,7 @@ const ERROR_CLASS_TO_ENVELOPE_CODE: ReadonlyArray<
   [AttestationNotFoundError, 'item_not_found'],
   [ObligationNotFoundError, 'item_not_found'],
   [CitationNotFoundError, 'item_not_found'],
+  [NoteNotFoundError, 'item_not_found'],
   [AmbiguousReferenceError, 'ambiguous_reference'],
   [CatalogNotFoundError, 'not_found'],
   [InvalidArgumentError, 'invalid_argument'],
@@ -509,6 +517,7 @@ const ERROR_CLASS_TO_ENVELOPE_CODE: ReadonlyArray<
   [CitationUnverifiableError, 'precondition_failed'],
   [ObligationUnsatisfiedError, 'precondition_failed'],
   [OverrideNotPermittedError, 'precondition_failed'],
+  [NoteRemovalNotPermittedError, 'precondition_failed'],
   [PreconditionRefusedError, 'precondition_failed'],
   // C10 — a stale `base_revision` is the caller's OWN read being out of date,
   // not resource contention, so it maps to `precondition_failed` (AC6), never
@@ -949,6 +958,22 @@ export async function removeCitation(
 ): Promise<IOutcomeEnvelope<IRemoveCitationOutcome>> {
   return envelope(async () =>
     removeCitationOp(await writeHandle(ctx, { needsSemantic: false }, input), input)
+  );
+}
+
+/**
+ * Soft-remove one note by its own `uid` (the `noteId` `create` returns when it
+ * comments on a duplicate). Allowed for the note's author, or for an actor
+ * listed in the owning project's `policy.noteRemovers`; any other caller gets a
+ * typed `precondition_failed` refusal and nothing is written. The removal, with
+ * its `reason`, appears in the owning issue's `auditTrail`.
+ */
+export async function removeNote(
+  ctx: BacklogCtx,
+  input: IRemoveNoteInput
+): Promise<IOutcomeEnvelope<IRemoveNoteOutcome>> {
+  return envelope(async () =>
+    removeNoteOp(await writeHandle(ctx, { needsSemantic: false }, input), input)
   );
 }
 
