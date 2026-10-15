@@ -12,8 +12,12 @@
  *
  * guards: extractHtml or metaContent regress to quadratic work on a 1 MB adversarial page (unterminated openers, nesting, repeated meta tags), or ordinary-page output differs from the previous regex implementation.
  * tier: S
- * cites: cbad68d4 AC1, AC2, AC3.
+ * cites: cbad68d4 AC1, AC2, AC3; variance hardening cites qa-variance (dispatch-1014).
+ * red: pending (qa-variance edit made without running tests, per user). qa-variance: the 4000-case oracle loop
+ * built a JSON.stringify failure message and a matcher object per case; it now compares with a strict deep-equal
+ * and only runs the `expect` (with the message) on a mismatch, so a mismatch still fails with the same message.
  */
+import { isDeepStrictEqual } from 'node:util';
 import { describe, expect, it } from 'vitest';
 
 import { WEB_FETCH_MAX_BYTES, extractHtml, type IExtractStats } from '../tools/web-fetch.js';
@@ -115,7 +119,9 @@ describe('cbad68d4 AC2: ordinary-page extraction is unchanged', () => {
       const len = rnd(14);
       let html = '';
       for (let j = 0; j < len; j += 1) html += tokens[rnd(tokens.length)];
-      expect(extractHtml(html), JSON.stringify(html)).toEqual(legacyExtractHtml(html));
+      const got = extractHtml(html);
+      const want = legacyExtractHtml(html);
+      if (!isDeepStrictEqual(got, want)) expect(got, JSON.stringify(html)).toEqual(want);
     }
   });
 
