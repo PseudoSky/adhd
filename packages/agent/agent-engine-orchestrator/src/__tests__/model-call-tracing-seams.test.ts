@@ -1,4 +1,11 @@
 /**
+ * qa-variance (dispatch-1014): the compaction test is the only one that estimates tokens over ~5 MB of history; the first
+ * `gpt-tokenizer` `encode` in the worker was charged to it. `beforeAll` now loads the tokenizer once.
+ * guards: the compaction summariser call loses its purpose:'compaction' tag, or the tracing decorator changes a result or error the caller sees.
+ * tier: S
+ * cites: qa-variance, docs/discovery/qa-test-variance-tail-orchestrator-a.md (assertions unchanged; red: pending, tests not run per user).
+ */
+/**
  * c536ce29 W4 — model-call completeness seams in the engine.
  *
  *  - TRC-AC26: the compaction summariser call runs inside `wire.withContext({purpose:'compaction'})`
@@ -11,7 +18,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
-import { describe, expect, it, vi } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 
 import * as schema from "@adhd/agent-store-runtime";
 import { TaskStore } from "@adhd/agent-store-runtime";
@@ -28,6 +35,11 @@ import { OpenAIProvider } from "../providers/openai.js";
 import type { LLMProvider, ProviderChatRequest, ProviderChatResponse } from "../providers/types.js";
 import { generateId } from "../utils/ids.js";
 import { nowIso } from "../utils/timestamps.js";
+import { warmTokenizer } from "./fixtures/warm-modules.js";
+
+beforeAll(async () => {
+  await warmTokenizer();
+}, 60_000);
 
 const sdk = vi.hoisted(() => ({ create: undefined as undefined | (() => Promise<unknown>) }));
 vi.mock("openai", () => {

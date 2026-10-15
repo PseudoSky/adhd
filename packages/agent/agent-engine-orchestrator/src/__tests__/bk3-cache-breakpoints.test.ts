@@ -1,4 +1,11 @@
 /**
+ * qa-variance (dispatch-1014): the first `gpt-tokenizer` `encode` in a worker decodes the BPE table (100-300 ms) and was
+ * charged to whichever test counted tokens first; `beforeAll` now loads it once.
+ * guards: a cache breakpoint lands on a thinking/empty block, below the model minimum, or on the OAuth identity block
+ * tier: S
+ * cites: qa-variance, docs/discovery/qa-test-variance-tail-orchestrator-a.md (assertions unchanged; red: pending, tests not run per user).
+ */
+/**
  * ae62e6b0 (BK3, plan 9ed453c1-b113-473d-8c35-fc6dc2541306) — prompt-cache breakpoint placement.
  *
  * Pure request-builder tests (`applyCacheBreakpoints`, `minCacheableTokens`) plus the REAL
@@ -7,7 +14,7 @@
  * `bk3-cache-breakpoints.e2e.test.ts`.
  */
 import { encode } from "gpt-tokenizer";
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import type { MessageParam, TextBlockParam, Tool } from "@anthropic-ai/sdk/resources/messages";
 
 import type { EngineConfig, EngineLogger } from "../interfaces.js";
@@ -19,6 +26,11 @@ import {
   minCacheableTokens,
 } from "../providers/anthropic-cache.js";
 import { anthropicSseBody, distinctFiller } from "./fixtures/anthropic-sse.js";
+import { warmTokenizer } from "./fixtures/warm-modules.js";
+
+beforeAll(async () => {
+  await warmTokenizer();
+}, 60_000);
 
 const HAIKU = "claude-haiku-4-5";
 const IDENTITY = "You are Claude Code, Anthropic's official CLI for Claude.";
