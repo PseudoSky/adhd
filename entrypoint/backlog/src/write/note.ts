@@ -12,8 +12,10 @@
  * **Authorization.** The caller must be the note's recorded author
  * (`metadata.author`, set at mint time) or be listed in the owning project's
  * `policy.noteRemovers`. The allow-list is per-project TYPED config resolved
- * from the store, never a caller-supplied field: a caller who could name their
- * own allowance would bypass the gate. Refusal happens before any write.
+ * from the store, never from the request. `by` is the caller-ASSERTED identity
+ * (SPEC §6.3), so this gate is attribution against that asserted identity, not
+ * authentication; binding `by` to a server-side identity is a tracked follow-up.
+ * Refusal happens before any write.
  *
  * Hand-composed against the caller's own open `tx` (never the bare adapter),
  * per the same §4c rule as every other write verb in this package.
@@ -44,13 +46,22 @@ import {
   resolveUidPrefixTx,
 } from './tx.js';
 
-/** Input for {@link removeNote}. Every field is caller-asserted except the policy, which is read from the store. */
+/**
+ * Input for {@link removeNote}. Every field is caller-asserted except the
+ * policy, which is read from the store.
+ */
 export interface IRemoveNoteInput extends ISessionStamp {
   /** The `note` uid to soft-remove — the id `create` returns as `commentedOn.noteId`. */
   uid: string;
-  /** The acting identity (§6.3's opening rule), e.g. `"claude:1"`. Must be the note's author or on the project's `noteRemovers`. REQUIRED. */
+  /**
+   * The acting identity (§6.3's opening rule), e.g. `"claude:1"`. Must be the
+   * note's author or on the project's `noteRemovers`. REQUIRED.
+   */
   by: string;
-  /** Why the note is being removed. Recorded on the note's invalidation and on the issue's audit row. REQUIRED. */
+  /**
+   * Why the note is being removed. Recorded on the note's invalidation and on
+   * the issue's audit row. REQUIRED.
+   */
   reason: string;
 }
 
@@ -118,7 +129,10 @@ async function resolveIssueProjectTx(
   };
 }
 
-/** Resolve a note uid (exact or unique prefix) to its live `note` node, mapping a miss to {@link NoteNotFoundError}. */
+/**
+ * Resolve a note uid (exact or unique prefix) to its live `note` node, mapping
+ * a miss to {@link NoteNotFoundError}.
+ */
 async function resolveNoteNodeTx(
   tx: AdapterTransaction,
   uid: string

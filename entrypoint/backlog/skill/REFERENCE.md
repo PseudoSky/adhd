@@ -319,7 +319,7 @@ Each verb is also an MCP tool once `.mcp.json` wires the server, named
 `backlog_spec_append`, `backlog_spec_check`, `backlog_transition`,
 `backlog_unobligate`, `backlog_update`, `backlog_upsert_component`,
 `backlog_upsert_location`, `backlog_upsert_project`, plus the un-namespaced
-`batch_action` — 32 verbs + `batch`.
+`batch_action` — 33 verbs + `batch`.
 
 The tool list a session sees is the MCP **server process's** build, which can
 lag the CLI: a long-lived `serve` started before a verb was mounted does not

@@ -559,6 +559,7 @@ for that adapter — ADR-0012 §1 note two).
 | `rmLocation`                                           | `immediate` | invalidate-by-uid after confirming the row is live, for uniformity with every other verb above (one mode, one decision, never re-litigated per verb)                                                                                         |
 | `addCitation`                                          | `immediate` | resolves the issue → live `issue` row and mints the `citation` node + its `has_citation` edge + audit in one transaction; the cited file's sha is computed before the transaction opens (never a lock held across a filesystem/git read)     |
 | `removeCitation`                                       | `immediate` | invalidate-by-uid (the citation's OWN uid, never a `(target,line)` composite) after confirming the citation row is live, then invalidates its `has_citation` edge — the `rmLocation` shape, applied to `citation`                          |
+| `removeNote`                                           | `immediate` | invalidate-by-uid (the note's OWN uid) after confirming the `note` node is live, then invalidates its `has_note` edge and writes the `note-removed` audit row against the owning issue — the `removeCitation` shape, applied to `note`     |
 
 #### `findOrCreateNode` is not race-free — the write layer does not call it
 
@@ -2808,7 +2809,7 @@ not carry (§7). Every action once carried under `admin` is accounted for:
 
 ### 6.7 Transport surfaces
 
-CLI/MCP/HTTP each mount the issue verbs (the nine plus `add-citation`/`remove-citation`) plus §3a's registry verbs
+CLI/MCP/HTTP each mount the issue verbs (the nine plus `add-citation`/`remove-citation`/`remove-note`) plus §3a's registry verbs
 through the same one-descriptor→four-projection mechanism `server.ts`
 already uses (`describeMountedSurface`/`project(op)`) — unchanged
 mechanism, new operation list. MCP tool names follow the existing

@@ -1442,6 +1442,15 @@ so the removal appears in that issue's `auditTrail`. Nothing is written on any
 refusal. Rejects `InvalidArgumentError` (blank `uid`/`by`/`reason`, bare role
 `by`), `NoteNotFoundError`, `NoteRemovalNotPermittedError`.
 
+**Identity model.** The removal gate is attribution against the asserted `by`
+(SPEC.md §6.3), not authentication: `removeNote` compares the caller's `by` to
+the note's recorded author and the project's `noteRemovers`, and does not verify
+`by` against a server-side identity. Binding `by` to a server-side identity is a
+tracked follow-up.
+
+`noteRemovers` is store-seeded only today: no write verb sets it, so it takes
+effect only when it is present in the project's stored policy.
+
 ---
 
 ## `audit.ts` (3 exports)

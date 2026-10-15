@@ -282,8 +282,8 @@ and `Unknown option: --<field>. Available: --input`. (`--help` prints a
 "per-field flags are also accepted" footer line; it is generated boilerplate
 that does not hold for these commands — `--input` is the only option they
 accept. The special commands `serve`, `install-skill`, and `search` are the
-exception: they take argv flags and no `--input`.) Thirty-two operations (the
-32 verbs plus `batch`):
+exception: they take argv flags and no `--input`.) Thirty-three operations (the
+33 verbs plus `batch`):
 
 | Verb              | CLI                             | MCP tool                   |
 | ----------------- | ------------------------------- | -------------------------- |
@@ -299,6 +299,7 @@ exception: they take argv flags and no `--input`.) Thirty-two operations (the
 | `update`          | `adhd-backlog update`           | `backlog_update`           |
 | `addCitation`     | `adhd-backlog add-citation`     | `backlog_add_citation`     |
 | `removeCitation`  | `adhd-backlog remove-citation`  | `backlog_remove_citation`  |
+| `removeNote`      | `adhd-backlog remove-note`      | `backlog_remove_note`      |
 | `timeline`        | `adhd-backlog timeline`         | `backlog_timeline`         |
 | `transition`      | `adhd-backlog transition`       | `backlog_transition`       |
 | `attest`          | `adhd-backlog attest`           | `backlog_attest`           |
@@ -325,7 +326,7 @@ exception: they take argv flags and no `--input`.) Thirty-two operations (the
 `adhd-backlog <verb>` form shown above, and accepts the explicit namespace
 prefix at any position. `get`/`query`/`lookup`/`embedding-status` and the four
 stats/rollup ops are reads. `create`/`update`/`add-citation`/`remove-citation`/
-`transition`/`claim`/`relate`/`move`/`delete` mutate one issue (`remove`
+`remove-note`/`transition`/`claim`/`relate`/`move`/`delete` mutate one issue (`remove`
 permanently retires one, `restore` reverses a `delete`);
 `attest`/`recheck` record anchored evidence,
 and `obligate`/`unobligate` declare or retire a typed requirement that gates a
