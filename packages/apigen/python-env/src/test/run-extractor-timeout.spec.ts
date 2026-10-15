@@ -316,3 +316,69 @@ describe('runExtractorEmitJson settle and bound (unit, mocked spawn)', () => {
     expect(pkg).toHaveProperty('DEFAULT_EXTRACTOR_TIMEOUT_MS', 120_000)
   })
 })
+
+// plan discovery-sweep-1014 blind-review C AC3
+//   Failure mode: the timeout timer fired between the child's 'exit' and 'close' while
+//     its stdout was still draining, so a run that exited cleanly and was about to
+//     deliver complete JSON was SIGKILLed, had its pipes destroyed and was reported
+//     as a timeout (lost output, false failure).
+//   Tier: S (mocked spawn, fake timers, event latches; no sleep, no subprocess).
+//   Gap statement: none; the fake child reproduces the event ordering exactly.
+//   Item/criterion: plan discovery-sweep-1014 blind-review C AC3.
+//   Risk map (Light): the exited-and-silent case (grandchild holding the pipes) must
+//     still time out; it is pinned by the existing "child already exited and close
+//     never fires" test above and by the second case here.
+//   Red run: against the unfixed run-extractor.ts the first case rejects with
+//     "timed out after 5000 ms" and kill is called with SIGKILL.
+describe('runExtractorEmitJson clean exit while stdout drains (unit, mocked spawn)', () => {
+  const startRun = (child: IFakeChild): IObserved => {
+    spawnMock.mockReturnValue(child as unknown as ReturnType<typeof spawn>)
+    return observe(
+      runExtractorEmitJson('python3', '/pkg', '/mod.py', 'ns', 'py-flask', { timeoutMs: 5_000 }),
+    )
+  }
+
+  it('AC3: a child that exited cleanly and is still draining stdout at expiry is not killed or flagged as a timeout', async () => {
+    const child = createFakeChild()
+    const state = startRun(child)
+
+    vi.advanceTimersByTime(1_000)
+    child.emit('exit', 0, null)
+    child.stdout.emit('data', Buffer.from('[{"id":'))
+
+    vi.advanceTimersByTime(4_000) // expiry lands between 'exit' and 'close'
+    await flushMicrotasks()
+
+    expect(child.kill).not.toHaveBeenCalled()
+    expect(child.stdout.destroy).not.toHaveBeenCalled()
+    expect(state.settled).toBe(false)
+
+    child.stdout.emit('data', Buffer.from('"op"}]'))
+    child.emit('close', 0, null)
+    await flushMicrotasks()
+
+    expect(state.settled).toBe(true)
+    expect(state.error).toBeUndefined()
+    expect(state.value).toEqual([{ id: 'op' }])
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('AC3: a child that exited and then goes silent for a full further window is still rejected as a timeout', async () => {
+    const child = createFakeChild()
+    const state = startRun(child)
+
+    child.emit('exit', 0, null)
+    child.stdout.emit('data', Buffer.from('['))
+    vi.advanceTimersByTime(5_000) // re-armed, output seen since exit
+    await flushMicrotasks()
+    expect(state.settled).toBe(false)
+
+    vi.advanceTimersByTime(5_000) // no output since the last expiry
+    await flushMicrotasks()
+
+    expect(state.settled).toBe(true)
+    expect((state.error as Error).message).toContain('timed out after 5000 ms')
+    expect(child.kill).toHaveBeenCalledWith('SIGKILL')
+    expect(vi.getTimerCount()).toBe(0)
+  })
+})

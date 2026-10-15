@@ -119,14 +119,27 @@ export function runExtractorEmitJson(
     // on whichever of 'exit' or 'close' fires first. 'close' does not fire while a
     // descendant still holds the stdout/stderr pipes, so the timeout also destroys the
     // parent-side pipe handles; the rejection is then raised once the child has exited.
-    const timer = setTimeout(() => {
+    // A child that has already exited with its stdout still draining (data arrived after
+    // 'exit') is finishing normally, not hung: killing it here would report a timeout for
+    // output that is about to complete. Re-arm instead; each further expiry needs fresh
+    // output since the last one, so a child that exited and went silent (a descendant
+    // holding the pipes) is still bounded and rejected as a timeout.
+    let drainedSinceExit = false
+    const onExpiry = (): void => {
+      if (exited && drainedSinceExit) {
+        drainedSinceExit = false
+        timer = setTimeout(onExpiry, timeoutMs)
+        return
+      }
       timedOut = true
       proc.kill('SIGKILL')
       proc.stdout?.destroy()
       proc.stderr?.destroy()
       if (exited) settle(() => reject(timeoutError()))
-    }, timeoutMs)
+    }
+    let timer = setTimeout(onExpiry, timeoutMs)
     proc.stdout?.on('data', (chunk: Buffer) => {
+      if (exited) drainedSinceExit = true
       stdout += chunk.toString('utf8')
     })
     proc.stderr?.on('data', (chunk: Buffer) => {
