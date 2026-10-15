@@ -43,24 +43,22 @@
  * `--workspace-root <dir>` points the scan at a fixture workspace; `--baseline <file>`
  * overrides agent-lane-spawn.baseline.json (fixture runs).
  */
-import { existsSync, globSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { realpathSync as realpathForEntry } from 'node:fs';
+import { globScan } from './glob-exclusions.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '../../../../..');
 const BASELINE_PATH = join(HERE, 'agent-lane-spawn.baseline.json');
 
-/** `fs.globSync` takes `exclude` (a predicate), not the `glob` package's `ignore`: an `ignore` option is silently dropped. */
-const isIgnoredDir = (p) => IGNORE_DIRS.has(String(p?.name ?? p).replaceAll('\\', '/').split('/').pop());
-const IGNORE_DIRS = new Set(['node_modules', 'dist', '.worktrees', '.claude']);
 const E2E_FILE = /\.e2e(\.test)?\.[cm]?[jt]sx?$/;
 const TEST_FILE = /\.(test|spec)\.[cm]?[jt]sx?$/;
 
 /** Project roots that make up the agent family. */
 export function agentFamilyRoots(workspaceRoot) {
-  const roots = globSync('packages/agent/*/project.json', { cwd: workspaceRoot, exclude: isIgnoredDir }).map(dirname);
+  const roots = globScan(workspaceRoot, 'packages/agent/*/project.json').map(dirname);
   for (const r of ['entrypoint/agent-mcp', 'entrypoint/dispatch-cli']) {
     if (existsSync(join(workspaceRoot, r, 'project.json'))) roots.push(r);
   }
@@ -125,7 +123,7 @@ export function collectAgentLaneSpawnViolations(workspaceRoot, baselineOverride)
   const unitFiles = new Set();
 
   for (const root of roots) {
-    const files = globSync('src/**/*.*', { cwd: join(workspaceRoot, root), exclude: isIgnoredDir });
+    const files = globScan(join(workspaceRoot, root), 'src/**/*.*');
     let hasE2eTestFiles = false;
     for (const f of files) {
       if (!TEST_FILE.test(f) && !E2E_FILE.test(f)) continue;

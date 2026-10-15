@@ -76,9 +76,10 @@
  * `--workspace-root <dir>` points the scan (and the default baseline lookup) at a
  * fixture workspace; `--baseline <file>` overrides the baseline (fixture runs).
  */
-import { existsSync, globSync, readFileSync, realpathSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { existsSync, readFileSync, realpathSync } from 'node:fs';
+import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { globScan } from './glob-exclusions.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '../../../../..');
@@ -86,9 +87,6 @@ const REPO_ROOT = resolve(HERE, '../../../../..');
 /** Workspace-relative location of the ratchet baseline (resolved against the scanned workspace root). */
 export const BASELINE_REL = 'tools/nx-plugins/test/executors/wiring/spawn-isolation.baseline.json';
 
-/** `fs.globSync` takes `exclude` (a predicate), not the `glob` package's `ignore`: an `ignore` option is silently dropped. */
-const isIgnoredDir = (p) => IGNORE_DIRS.has(String(p?.name ?? p).replaceAll('\\', '/').split('/').pop());
-const IGNORE_DIRS = new Set(['node_modules', 'dist', '.worktrees', '.claude']);
 const SPEC_FILE = /\.(spec|test|e2e)\.[cm]?[jt]sx?$/;
 
 /** Default workspace roots scanned, relative to the workspace root. */
@@ -655,6 +653,22 @@ export function spawnIsolationReason(rawSrc, helpers = ISOLATION_HELPERS) {
 }
 
 /**
+ * Parse a JSON file, naming it on failure. A bare `SyntaxError` from `JSON.parse` says nothing about which
+ * of the workspace's files is broken; this rethrows with the workspace-relative path (plan discovery-sweep-1014
+ * blind-review D AC2) and keeps the parser's message and original error as `cause`.
+ * @param {string} abs Absolute path of the JSON file.
+ * @param {string} workspaceRoot Absolute workspace root, used to name the file relative to it.
+ * @returns {any} The parsed document.
+ */
+export function readJsonFile(abs, workspaceRoot) {
+  try {
+    return JSON.parse(readFileSync(abs, 'utf8'));
+  } catch (err) {
+    throw new Error(`${relative(workspaceRoot, abs)}: not valid JSON — ${err.message}`, { cause: err });
+  }
+}
+
+/**
  * The owning package of a workspace-relative file: the nearest `package.json` at
  * or above its directory, read as `{ dir, pkg }`, or `undefined` if none exists.
  * @param {string} workspaceRoot Absolute workspace root.
@@ -665,7 +679,7 @@ export function owningPackage(workspaceRoot, relFile) {
   let dir = dirname(relFile);
   for (;;) {
     const abs = join(workspaceRoot, dir, 'package.json');
-    if (existsSync(abs)) return { dir, pkg: JSON.parse(readFileSync(abs, 'utf8')) };
+    if (existsSync(abs)) return { dir, pkg: readJsonFile(abs, workspaceRoot) };
     const parent = dirname(dir);
     if (parent === dir) return undefined;
     dir = parent;
@@ -712,7 +726,7 @@ export function collectSpawnIsolationViolations(workspaceRoot, opts = {}) {
   const roots = opts.roots ?? DEFAULT_ROOTS;
   const helpers = opts.helpers ?? ISOLATION_HELPERS;
   const baselinePath = join(workspaceRoot, BASELINE_REL);
-  const baseline = opts.baseline ?? (existsSync(baselinePath) ? JSON.parse(readFileSync(baselinePath, 'utf8')) : {});
+  const baseline = opts.baseline ?? (existsSync(baselinePath) ? readJsonFile(baselinePath, workspaceRoot) : {});
   const known = normalizeBaseline(baseline);
   const violations = [];
   const unroutedCount = new Map();
@@ -742,11 +756,11 @@ export function collectSpawnIsolationViolations(workspaceRoot, opts = {}) {
   for (const root of roots) {
     if (!existsSync(join(workspaceRoot, root))) continue;
     rootsPresent += 1;
-    for (const f of globSync('**/package.json', { cwd: join(workspaceRoot, root), exclude: isIgnoredDir })) {
-      const pkg = JSON.parse(readFileSync(join(workspaceRoot, root, f), 'utf8'));
+    for (const f of globScan(join(workspaceRoot, root), '**/package.json')) {
+      const pkg = readJsonFile(join(workspaceRoot, root, f), workspaceRoot);
       if (usesEnvironmentFamily(pkg)) envPackages += 1;
     }
-    for (const f of globSync('**/*.*', { cwd: join(workspaceRoot, root), exclude: isIgnoredDir })) {
+    for (const f of globScan(join(workspaceRoot, root), '**/*.*')) {
       if (!SPEC_FILE.test(f)) continue;
       const rel = `${root}/${f}`;
       const owner = owningPackage(workspaceRoot, rel);
@@ -803,7 +817,14 @@ function main() {
   const workspaceRoot = i >= 0 ? resolve(process.argv[i + 1]) : REPO_ROOT;
   const b = process.argv.indexOf('--baseline');
   const baseline = b >= 0 ? JSON.parse(readFileSync(resolve(process.argv[b + 1]), 'utf8')) : undefined;
-  const { violations, scanned } = collectSpawnIsolationViolations(workspaceRoot, { baseline });
+  let result;
+  try {
+    result = collectSpawnIsolationViolations(workspaceRoot, { baseline });
+  } catch (err) {
+    console.error(`✖ spawn-isolation check FAILED: ${err.message}`);
+    process.exit(1);
+  }
+  const { violations, scanned } = result;
   if (violations.length > 0) {
     console.error('✖ spawn-isolation check FAILED:');
     for (const v of violations) console.error(`   [${v.rule}] ${v.detail}`);
