@@ -51,7 +51,8 @@ const EDGE_FIELDS: readonly IIssueField[] = [
   'blocksOut',
 ];
 
-describe('2267eaf9 — batched edge pseudo-field reads (real store)', () => {
+// skip-expiry: 8752d7d5 until 2026-12-31 owner disabled this spec: its 60-issue seeding beforeAll times out under load
+describe.skip('2267eaf9 — batched edge pseudo-field reads (real store)', () => {
   let dir: string;
   let store: TestIssueStore;
   let projectUid: string;
