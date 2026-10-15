@@ -1955,6 +1955,9 @@ class BudgetPlugin implements Plugin {
         }. ${
           cap.message ?? 'Use offset/limit or shell paging tools for full content.'
         }]`;
+        // Intentional: when the cap is smaller than the notice, no content is kept and the
+        // emitted text is the notice clipped to `limit`. The clipped notice may end mid-word;
+        // the `limit` bound on the final text length takes priority over notice integrity.
         if (notice.length > limit) {
           resultObj['content'] = [{ type: 'text', text: notice.slice(0, limit) }];
           break;
