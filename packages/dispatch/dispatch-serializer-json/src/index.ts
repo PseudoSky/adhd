@@ -44,7 +44,13 @@ export function createJsonFileSerializer(filePath: string): IDagSerializer {
       // Atomic rename
       fs.renameSync(tempPath, targetPath);
     } finally {
-      fs.rmSync(tempPath, { force: true });
+      // Cleanup must not mask the primary error: a throwing rmSync here would
+      // replace the write/rename failure that is already propagating.
+      try {
+        fs.rmSync(tempPath, { force: true });
+      } catch {
+        /* best effort: the original error (if any) survives */
+      }
     }
   }
 

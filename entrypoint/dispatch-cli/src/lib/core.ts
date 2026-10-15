@@ -696,6 +696,12 @@ export async function runCycleCore(
  * another process is refused immediately with `DuplicateDispatchError`, never
  * queued. A caller that runs several cycles (e.g. `orchestrate()`'s loop) wraps
  * the whole loop here so the lock spans every cycle, not one cycle.
+ *
+ * NOT reentrant: nesting `withDagLock` for the same DAG inside `fn` (or calling
+ * it from code already running under the lock, such as `runCycleCore`, which
+ * takes the lock itself) finds this process's own live pid in the lock and
+ * is refused with a `DuplicateDispatchError` whose `heldBySelf` is true. Take
+ * the lock once at the outermost entrypoint.
  * @throws {DuplicateDispatchError} when a live process already holds the lock.
  */
 export async function withDagLock<T>(dagPath: string, fn: () => Promise<T>): Promise<T> {
