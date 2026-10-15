@@ -1571,9 +1571,9 @@ importers:
       '@adhd/apigen-base-errors':
         specifier: ^0.2.3
         version: link:../apigen-base-errors
-      '@adhd/apigen-engine-runtime':
-        specifier: ^0.3.4
-        version: link:../apigen-engine-runtime
+      '@adhd/apigen-core-client':
+        specifier: ^0.3.5
+        version: link:../apigen-core-client
 
   packages/apigen/apigen-plugin-py-flask:
     dependencies:
