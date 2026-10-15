@@ -1,3 +1,7 @@
+## 0.3.4 (2026-10-15)
+
+This was a version bump only for apigen-plugin-mcp to align it with other projects, there were no code changes.
+
 ## 0.3.3 (2026-10-09)
 
 ### 🩹 Fixes

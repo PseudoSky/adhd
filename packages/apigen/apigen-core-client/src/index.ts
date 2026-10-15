@@ -72,6 +72,8 @@ export {
   composeOnion,
   createExtractInvoker,
   createExtractInvokerFromPlugins,
+  withSourceFiles,
+  sourceFilesOf,
 } from './lib/extract-invoker';
 export type {
   ExtractCall,

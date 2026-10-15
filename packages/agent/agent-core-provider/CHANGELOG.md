@@ -1,3 +1,13 @@
+## 2.2.10 (2026-10-15)
+
+### 🚀 Features
+
+- **agent-mcp:** parity R7-think: thinking is the model default on every arm (report-only), main-tree LOG scope gate, sonnet-5 context/max-tokens/rate card ([1eb61b08](https://github.com/PseudoSky/adhd/commit/1eb61b08))
+
+### ❤️ Thank You
+
+- pseudosky
+
 ## 2.2.9 (2026-10-11)
 
 This was a version bump only for agent-core-provider to align it with other projects, there were no code changes.

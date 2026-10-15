@@ -40,6 +40,7 @@ import {
   type InternalExtractionSession,
 } from './extraction-session';
 import { extractParamDefault, applyParamDefault } from './param-defaults';
+import { withSourceFiles, type ExtractResult } from './extract-invoker';
 import { detectFormatAnnotatedAlias } from './format-alias';
 import { detectStreamElementType } from './stream-type';
 
@@ -87,13 +88,21 @@ export interface ExtractOptions {
  * by the **exported symbol** in source — never by position or internal name.
  *
  * @param opts - Extraction options.
- * @returns Resolved array of canonical operations.
+ * @returns Resolved array of canonical operations. It is a plain
+ * `Operation[]` to every existing caller; it also carries the non-enumerable
+ * `sourceFiles` list (see {@link ExtractResult}).
  */
-export async function extract(opts: ExtractOptions): Promise<Operation[]> {
+export async function extract(opts: ExtractOptions): Promise<ExtractResult> {
   const ownsSession = opts.session === undefined;
   const session = internalSession(opts.session ?? createExtractionSession());
   try {
-    return await extractWithSession(opts, session);
+    const operations = await extractWithSession(opts, session);
+    // Report the files this extraction read (entry + its local import graph)
+    // so a cache layer tracks exactly that set, not its own re-derivation.
+    return withSourceFiles(
+      operations,
+      session.referencedFiles.get(opts.sourceFile) ?? [opts.sourceFile]
+    );
   } finally {
     if (ownsSession) session.dispose();
   }

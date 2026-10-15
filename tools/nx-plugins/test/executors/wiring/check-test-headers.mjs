@@ -51,7 +51,13 @@ export function headerOf(src) {
 
 const field = (header, name) => new RegExp(`^\\s*${name}:\\s*(.+)$`, 'mi').exec(header)?.[1]?.trim() ?? null;
 
-const CP_IMPORT = /from\s+['"](?:node:)?child_process['"]|require\(\s*['"](?:node:)?child_process['"]\s*\)|\bStdioClientTransport\b|\bStdioMcpClient\b/;
+/** The tier letter (S, P, H or X) a test file's header declares, or null when the header has none or an invalid one. */
+export function tierOf(src) {
+  const letter = /^([A-Za-z])\b/.exec(field(headerOf(src), 'tier') ?? '')?.[1] ?? null;
+  return letter !== null && ['S', 'P', 'H', 'X'].includes(letter) ? letter : null;
+}
+
+const CP_IMPORT =/from\s+['"](?:node:)?child_process['"]|require\(\s*['"](?:node:)?child_process['"]\s*\)|\bStdioClientTransport\b|\bStdioMcpClient\b/;
 const CP_CALL = /\b(?:spawnSync|spawn|execFileSync|execFile|execSync|fork)\s*\(|\bStdioClientTransport\b|\bStdioMcpClient\b/;
 
 /** True when the code starts a process; comments, strings and regex literals are blanked first. */

@@ -1,3 +1,18 @@
+## 1.0.17 (2026-10-15)
+
+### 🚀 Features
+
+- **test:** G9 test header and tier check, wired into pre-push, CI and the gate table (595965cc T34) ([f69c3f6e](https://github.com/PseudoSky/adhd/commit/f69c3f6e))
+
+### 🩹 Fixes
+
+- **test:** blind-review findings on G12, G4, the gate table and the cache inputs (595965cc) ([b4bbd215](https://github.com/PseudoSky/adhd/commit/b4bbd215))
+- **test:** engine-driven gate specs are todo against ca23e252 in CI, G1 argv is tested, the T35 e2e carries a header (595965cc) ([df5094ec](https://github.com/PseudoSky/adhd/commit/df5094ec))
+
+### ❤️ Thank You
+
+- pseudosky
+
 ## 1.0.16 (2026-10-11)
 
 This was a version bump only for backlog to align it with other projects, there were no code changes.

@@ -1,13 +1,13 @@
 {
   "name": "@adhd/apigen-engine-gateway",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
   "typings": "./dist/index.d.ts",
   "dependencies": {
     "@adhd/apigen-base-errors": "^0.2.3",
-    "@adhd/apigen-core-client": "^0.3.4",
-    "@adhd/apigen-engine-runtime": "^0.3.3",
+    "@adhd/apigen-core-client": "^0.3.5",
+    "@adhd/apigen-engine-runtime": "^0.3.4",
     "@modelcontextprotocol/sdk": "1.29.0"
   },
   "publishConfig": {
