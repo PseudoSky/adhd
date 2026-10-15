@@ -124,6 +124,7 @@ export async function scaffoldGenerator(tree: Tree, schema: ScaffoldGeneratorSch
   // copy-readme plugin would target the wrong (pre-migration) directory.
   patchInSourceDist(tree, projectRoot);
   patchViteConfig(tree, projectRoot, platform);
+  if (type !== 'entrypoint') patchPackageJsonCommonJs(tree, projectRoot);
   patchReleasePublish(tree, projectRoot);
   ensureReadme(tree, projectRoot, projectName);
   patchEslintrc(tree, projectRoot);
@@ -180,6 +181,12 @@ function patchViteConfig(tree: Tree, dir: string, platform: 'node' | 'browser' |
   if (!content.includes('emptyOutDir')) {
     content = content.replace(/(\s*outDir:\s*['"][^'"]+['"],)/, '$1\n    emptyOutDir: true,');
   }
+
+  // ADR-0003 D2: `@adhd/*` publishes CommonJS-only. The `@nx/vite` library
+  // template emits `formats: ['es' as const]` (vite/dist/src/utils/generator-utils.js,
+  // the `lib: { ... formats }` block); rewrite it so a fresh package never
+  // builds the ESM half the ADR removed.
+  content = content.replace(/formats:\s*\[\s*(['"])es\1(?:\s+as const)?\s*\]/, "formats: ['cjs']");
 
   // Add copy-readme plugin
   if (!content.includes('copy-readme')) {
@@ -367,6 +374,34 @@ function patchViteConfig(tree: Tree, dir: string, platform: 'node' | 'browser' |
   }
 
   tree.write(vitePath, content);
+}
+
+/**
+ * ADR-0003 D1: every published `@adhd/*` package declares exactly
+ * `"main": "./dist/index.js"`, `"type"` unset, no `"module"`, no `"exports"`.
+ *
+ * Injection site (read from the installed @nx/js 23.2.1, not assumed):
+ * `libraryGenerator` writes `...determineEntryFields(options)` into the
+ * scaffolded package.json (`@nx/js/dist/src/generators/library/library.js`,
+ * the `updateJson`/`writeJson` spread, and `determineEntryFields`' `case 'vite'`
+ * non-TS-solution branch), which for `bundler: 'vite'` is
+ * `{ type: 'module', main: './index.js', types: './index.d.ts' }`. The template
+ * does NOT inject `exports` or `module` on this path (`exports` appears only in
+ * its `bundler: 'none'` TS-solution branch, and `module` only in `rollup`);
+ * they are removed here defensively so the contract holds if Nx changes that.
+ * The generated `type: 'module'` is the one that matters: left in place it makes
+ * the CJS `dist/index.js` load as ESM and throw.
+ */
+function patchPackageJsonCommonJs(tree: Tree, dir: string) {
+  const pkgPath = joinPathFragments(dir, 'package.json');
+  if (!tree.exists(pkgPath)) return;
+  const pkg = readJson(tree, pkgPath);
+  delete pkg.type;
+  delete pkg.module;
+  delete pkg.exports;
+  pkg.main = './dist/index.js';
+  pkg.types = './dist/index.d.ts';
+  writeJson(tree, pkgPath, pkg);
 }
 
 function patchReleasePublish(tree: Tree, dir: string) {
