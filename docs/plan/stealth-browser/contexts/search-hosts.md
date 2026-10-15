@@ -47,6 +47,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 - [search-hosts.16] Host unit specs simulate real use in-process: spec files under src/test/unit/hosts/ cite ticket 8468f7b1 and [search-hosts.16], import no child_process, and drive the real flag parser (every flag of the table, defaults, HOST_FLAG_INVALID for bad values), the extraArgs rejection, the NODE_TOO_OLD preflight function, the transport selection and exit-hook wiring through the exported host factories; `nx run stealth-search:test -- src/test/unit/hosts` exits 0.
 - [search-hosts.17] Only owned paths changed by [psm:search-hosts] commits.
 
+- [search-hosts.18] (backlog abeedba8) The CLI exits as soon as its JSON is written: the host closes every browser handle, flushes stdout, then exits 0. Proven by (a) a spec under src/test/unit/hosts/ on the exported CLI runner with an injected stdout sink and exit function asserting the order write, flush, handles closed, exit(0), and that no timer or socket handle is left open (the idle-shutdown child is detached with stdio ignored and never inherits stdout), and (b) a real-process probe run by this guard: three `node dist/bin/cli.js chromeStatus --cdp-port 19999` processes started together with stdout redirected to files each exit 0 within 15 s and each file holds one parseable JSON document with running=false (a 0-byte output fails). Titles carry `flush`, `exit`, `detached`, `idleShutdown`, `stdout` and the uid abeedba8, and the spec cites [search-hosts.18].
 ---
 
 ## Reservations

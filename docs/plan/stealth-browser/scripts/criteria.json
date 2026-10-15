@@ -4563,6 +4563,15 @@
       "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-port-guards --only search-port-guards.10",
       "expect": "exit0",
       "cwd": "repo-root"
+    },
+    {
+      "id": "search-hosts.18",
+      "phase": "surface",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-hosts --only search-hosts.18",
+      "expect": "exit0",
+      "cwd": "repo-root"
     }
   ]
 }
