@@ -104,7 +104,8 @@ marker is refactor-stable**. Prefer a glob when you need a selector that survive
 ```jsonc
 Operation = {
   "id":        "transform/humanize/humanize-bytes",  // deterministic (derivation-stable), globally-unique slug
-  "host":      "ts",                                  // owning language runtime
+  "host":      "ts",                                  // producer: which extractor produced this IR
+  "binding":   "mcp:notes",                           // OPTIONAL. the runtime that executes it; absent => same as host
   "namespace": Segment,            // package (from --namespace / tsconfig folder)
   "path":      Segment[],          // file → export… (hierarchical identity)
   "kind":      "action" | "query" | "constructor" | "instance-method",
@@ -114,11 +115,19 @@ Operation = {
   "input":     JSONSchema,         // params object (ctx excluded); data-wrapper dissolved
   "output":    JSONSchema,         // Promise<T>/stream unwrapped → T
   "envelope":  JSONSchema,         // effective request side-channel (middleware-contributed)
-  "typeText":  { "lang": "ts", "input": "...", "output": "..." } | null  // language-tagged, optional
+  "typeText":  { "lang": "ts", "input": "...", "output": "..." } | null, // language-tagged, optional
+  "tool":      { "title": "Add", "annotations": { "readOnlyHint": false } } // OPTIONAL transport-facing display metadata
 }
 Segment = { "raw": "humanizeBytes", "words": ["humanize","bytes"] }   // casing-neutral
 ```
 
+- **`binding`** is an opaque routing key naming the runtime that executes the operation. The gateway
+  selects the adapter by `operation.binding ?? operation.host`. An extracted TS operation has no
+  `binding`. A foreign operation (an MCP upstream, a PATH executable) carries a non-`ts` host tag naming
+  its extractor and a `binding` naming its runtime.
+- **`tool`** is advisory metadata copied from the source (for an MCP upstream, its `tools/list` entry).
+  It never changes `id`, `input`, `output` or dispatch. `MountedOperation` carries the same optional
+  field. MCP's `tools/list` emits `title` / `annotations` from it.
 - **`id`** = the canonical fully-qualified slug; the cross-plugin reference key; never re-cased.
   **Deterministic, not refactor-stable:** `id` is a pure function of `namespace/path`, so the same
   source always yields the same `id`, but moving/renaming a file or export re-mints it (and thus
@@ -248,9 +257,14 @@ interface TargetCapability {
 }
 
 // --- layer: wrap (own the continuation) ---
-interface LayerCapability {
+interface LayerCapability<Opts = Record<string, unknown>> {
   envelopeFields?: Record<string, JSONSchema>   // merged into effective request envelope
-  layer(call: Call, next: Next): Promise<Result> | AsyncIterable<Chunk>
+  // Exactly one of `layer` / `createLayer` is required; if both are present the host uses createLayer.
+  layer?(call: Call, next: Next): Promise<Result> | AsyncIterable<Chunk>
+  // Called ONCE per host invocation, before the first request, with the invocation's
+  // single flat `--opt` bag (the same bag extractLayer.createLayer receives).
+  // May throw to refuse startup (invalid options); the host reports the error and exits non-zero.
+  createLayer?(opts: Opts): (call: Call, next: Next) => Promise<Result> | AsyncIterable<Chunk>
 }
 type Call = {
   operation: Operation, data: Record<string,unknown>, envelope: Record<string,unknown>,
@@ -268,6 +282,12 @@ type MountedOperation = Operation & { transports?: Transport[]; handler: (call: 
 // --- envelope: declare request/response side-channel fields (header convention: x-<id>-* / x-adhd-*) ---
 interface EnvelopeCapability { request?: Record<string,JSONSchema>; response?: Record<string,JSONSchema> }
 ```
+
+A host MUST call `createLayer` at most once per plugin per invocation and reuse the returned layer for
+every request. The options bag is the whole invocation's flat `--opt` map; it is not namespaced per
+plugin. A plugin reads only its own keys and SHOULD declare them in `Plugin.optionsSchema`. A
+`createLayer` that throws fails the invocation before serving starts. `mount.operations(descriptor, opts)`
+is unchanged.
 
 Hook sugar (`onRequest/onResponse/onError`) compiles to a `LayerCapability` (one execution model).
 
@@ -365,6 +385,13 @@ impl<S, Req: HasOperation> Service<Req> for LoggerService<S> where S: Service<Re
   }
 }
 ```
+
+**Cancellation.** `Call.signal` reaches the dispatch terminal. The innermost service is the host's
+dispatch, or a binding adapter's terminal (`type Terminal = (fnName, call, opts) => Promise<LayerResult>`)
+when one is supplied; a terminal receives the whole `Call`, including `signal`. `dispatch` never receives
+the signal as a positional argument of a user function: a `ctx`-taking function receives it through
+`createClient(envelope, { signal })`. Every host with a transport-level signal passes it as `Call.signal`
+(MCP passes the request handler's `extra.signal`).
 
 1. **Short-circuit:** a Layer that returns a `Result` without invoking `next` skips **all** downstream
    Layers **and** dispatch.
@@ -533,7 +560,7 @@ then:
 
 `--source humanize.ts ping.rs` → merged descriptor → gateway routes `/transform/humanize/*` to the
 TS runtime, `/…/ping` to the Rust runtime, behind one HTTP/MCP/… surface. Layers/plugins are
-host-agnostic (the `Call` carries `operation.host`).
+host-agnostic (the `Call` carries `operation.host` and, when present, `operation.binding`).
 
 ### 13.1 Gateway failure model *(normative — a mixed-host `run` is a distributed system)*
 
