@@ -452,10 +452,12 @@ absent. Run `adhd-backlog --help` and compare it against
 
 ### Output streams (CLI)
 
-A successful call writes its result envelope to stdout and nothing else. A failed call
-exits non-zero and writes its error envelope (`{code, message}`) to stderr. The per-call
-trace (`→ backlog <verb>`, with `command` and `ms`) never reaches either stream: it goes
-to the sox durable log, `~/.adhd/sox-ecosystem/backlog/logs`, or to a
+stdout carries the outcome envelope: `{"ok":true,"data":…}` on success, or
+`{"ok":false,"error":{code,message,details}}` when the verb reports a failure. A reported
+failure exits 1 (`item_not_found`) or 2 (`validation`). An invocation the CLI cannot
+dispatch, such as a required `--input` that is missing, exits 2 with a `{code,message}`
+error on stderr instead. The per-call trace (`→ backlog <verb>`, with `command` and `ms`)
+is written to the sox durable log, `~/.adhd/sox-ecosystem/backlog/logs`, or to a
 `backlog-sandbox-logs-*` temp directory under `--namespace sandbox`. Set
 `ADHD_BACKLOG_LOG_LEVEL` to `trace|debug|info|warn|error|fatal` to change the threshold
 (default `info`), or `silent` to drop trace records.

@@ -76,6 +76,7 @@ describe('optional-input verbs run without --input (real built CLI)', () => {
   it('negative control: get (required uid) with no --input still exits 2 invalid_argument', () => {
     const r = run(['get']);
     expect(r.status).toBe(2);
-    expect((envelopeLine(r.stdout || r.stderr) as { code: string }).code).toBe('invalid_argument');
+    expect(r.stdout).toBe('');
+  expect((envelopeLine(r.stderr) as { code: string }).code).toBe('invalid_argument');
   });
 });

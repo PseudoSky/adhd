@@ -107,7 +107,7 @@ Namespaced verbs (namespace + verb, per-field flags):
 Verbs (one-token, --input JSON envelope):
   backlog add-citation  { input: { uid: string, citation: object, by: string } }
   backlog attest  { input: { subject: object, claim: object, anchor: object, by: string } }
-  backlog claim  { input: { uid: string, by: string, action?: 'claim'|'release'|'renew' (default 'claim'), force?: boolean } }
+  backlog claim  { input: { uid: string, by: string, action?: 'claim'|'release'|'renew', force?: boolean } }
   backlog create  { input: { title: string, body: string, project: string, component?: string, kind?: string, status?: string, priority?: string, citations?: object[], author?: string, assignee?: string, gitContext?: string, dedupeExcludeUid?: string, by: string, duplicateAction?: 'abort'|'force'|'comment', awaitEmbed?: boolean } }
   backlog delete  { input: { uid: string, reason: string, by: string, awaitEmbed?: boolean } }
   backlog embedding-status
@@ -115,13 +115,13 @@ Verbs (one-token, --input JSON envelope):
   backlog lookup  { input: { q: string, kind?: string } }
   backlog merge-project  { input: { fromUid: string, toUid: string, by: string } }
   backlog move  { input: { uid: string, toProject?: string, toComponent?: string, by: string } }
-  backlog obligate  { input: { uid: string, applies_to: object, requirement: union, on_fail?: 'block'|'warn' (default 'block'), override?: object, by: string } }
-  backlog open-curve  { input?: { filter?: object, at?: string[] (default: now) } }
+  backlog obligate  { input: { uid: string, applies_to: object, requirement: union, on_fail?: 'block'|'warn', override?: object, by: string } }
+  backlog open-curve  { input?: { filter?: object, at?: string[] } }
   backlog part-of-rollup  { input: { uid: string, countOnly?: boolean, limit?: number, after?: string } }
   backlog priority-matrix  { input?: { filter?: object } }
   backlog query  { input?: { text?: string, filter?: object, fields?: union[], sort?: 'priority'|'updated'|'created'|'relevance'|'textMatch', direction?: 'asc'|'desc', limit?: number, offset?: number, after?: string, view?: 'list'|'ready'|'graph'|'order'|'stale'|'similar'|'overlap'|'projects'|'components'|'locations'|'kinds'|'catalogs', format?: 'json'|'markdown', overlapAxis?: 'file'|'project'|'component'|'author', overlapUids?: string[], staleAfterMin?: number, catalog?: 'kind'|'status'|'priority'|'relation'|'field'|'error_code'|'location_type'|'verb' } }
   backlog recheck  { input: { attestationUid: string, by: string } }
-  backlog relate  { input: { sourceUid: string, targetUid: string, rel: 'relates_to'|'supersedes'|'blocks'|'duplicate_of'|'part_of'|'similar_to', action?: 'add'|'remove' (default 'add'), by: string } }
+  backlog relate  { input: { sourceUid: string, targetUid: string, rel: 'relates_to'|'supersedes'|'blocks'|'duplicate_of'|'part_of'|'similar_to', action?: 'add'|'remove', by: string } }
   backlog remove  { input: { uid: string, confirm: boolean, reason?: string, by: string } }
   backlog remove-citation  { input: { uid: string, by: string, reason?: string } }
   backlog report  { input?: { filter?: object } }
@@ -130,7 +130,7 @@ Verbs (one-token, --input JSON envelope):
   backlog rm-project  { input: { uid: string, reason: string, by: string } }
   backlog spec-append  { input: { uid: string, fragment: string, anchor?: object, base_revision: string, by: string } }
   backlog spec-check  { input: { uid: string, token?: string } }
-  backlog timeline  { input?: { sessionId?: string, since?: string (window mode only; default 7 days), includeChildren?: boolean, limit?: number, after?: string } }
+  backlog timeline  { input?: { sessionId?: string, since?: string, includeChildren?: boolean, limit?: number, after?: string } }
   backlog transition  { input: { uid: string, by: string, toStatus: string, note?: string, citations?: object[], gitContext?: string, override?: object } }
   backlog unobligate  { input: { obligationUid: string, by: string } }
   backlog update  { input: { uid: string, by: string, title?: string, body?: string, kind?: string, priority?: string, assignee?: string, author?: string, citations?: object[], awaitEmbed?: boolean } }
@@ -138,6 +138,15 @@ Verbs (one-token, --input JSON envelope):
   backlog upsert-location  { input: { component: string, project?: string, locType: 'path'|'url'|'tool', value: string, by: string } }
   backlog upsert-project  { input: { name: string, path?: string, repoUrl?: string, monorepo?: boolean, description?: string, by: string } }
 ```
+
+Optional inputs and their defaults. A default applies only when the key is omitted; an
+explicit `null` or unknown value is rejected. `claim.action` defaults to `claim`,
+`relate.action` to `add`, `obligate.on_fail` to `block`, and `open-curve.at` to the
+current instant. `timeline` with no `sessionId` covers every session's ops in the window
+`[since, now]`, where `since` defaults to 7 days before now (`session` is `null` and
+`window.since` echoes the bound); `includeChildren` applies only with a `sessionId`.
+`query`, `report`, `priority-matrix`, `open-curve` and `timeline` may be called with no
+`--input` at all.
 
 Trust that output over anything hardcoded here — it is the live schema, not
 a stale copy of it.
