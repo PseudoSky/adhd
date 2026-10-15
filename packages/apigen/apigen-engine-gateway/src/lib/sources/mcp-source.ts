@@ -1,13 +1,13 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { CallToolResultSchema, ResultSchema, ToolSchema } from '@modelcontextprotocol/sdk/types.js';
 import type { CallToolResult, Tool } from '@modelcontextprotocol/sdk/types.js';
-import { buildId, composeSchemas } from '@adhd/apigen-core-client';
-import type { GeneratedSchemas, Operation } from '@adhd/apigen-core-client';
-import { commandBaseName, segmentOf, sourceNameOf } from './command-name';
+import { buildId } from '@adhd/apigen-core-client';
+import type { Operation } from '@adhd/apigen-core-client';
+import { segmentOf } from './command-name';
 import { createLauncherTransport } from './launcher-transport';
 import type { IProcessHandle, IProcessLauncher } from './process';
 import { startError } from './types';
-import type { IResolvedSource, ISkippedTool } from './types';
+import type { ISkippedTool } from './types';
 
 const DEFAULT_HANDSHAKE_TIMEOUT_MS = 10_000;
 /** Default per-call wait for an upstream `tools/call` result. */
@@ -42,10 +42,6 @@ export interface IMcpTranslation {
 
 function describeError(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
-}
-
-function defaultWarn(line: string): void {
-  process.stderr.write(`${line}\n`);
 }
 
 /**
@@ -196,8 +192,8 @@ export interface IOpenedMcpUpstream {
  * Starts the process through `deps.launcher`, connects an SDK `Client` over
  * {@link createLauncherTransport}, performs `initialize` bounded by `handshakeTimeoutMs`
  * (default 10000) and reads `tools/list` (following cursors, entries left unvalidated so one
- * malformed tool cannot disable the source). Shared by {@link resolveMcpStdioSource} and the
- * MCP upstream adapter.
+ * malformed tool cannot disable the source). Shared by the `mcp` extractor and the MCP
+ * upstream adapter.
  *
  * A process that cannot be started, or a handshake / `tools/list` failure or timeout, rejects
  * with `makeUnavailableError(binding, '(start)', reason)` (the stderr tail is appended to the
@@ -316,102 +312,5 @@ export async function openMcpStdioUpstream(
     },
     isClosed: () => closed,
     dispose,
-  };
-}
-
-/**
- * D-08. Opens the upstream through {@link openMcpStdioUpstream} (initialize bounded by
- * `handshakeTimeoutMs`, default 10000; `tools/list` following cursors) and translates the
- * tools with {@link operationsFromMcpTools}. The source
- * name is the USER-CHOSEN `spec.name` when given, else the command basename, lowercased to
- * `[a-z0-9_-]`; the upstream's own `serverInfo.name` is never used (an upstream could
- * otherwise claim another source's prefix and inherit its permissions).
- *
- * The resolved source also carries `mcp`: the full upstream `Tool` objects and a verbatim
- * `callTool` (arguments exactly as given, result exactly as returned). The positional
- * `pkg.fns` table (keyed by upstream tool name, the path tail's `raw`) remains for hosts that
- * dispatch through apigen, but it can only pass the arguments the schema declares.
- * `dispose()` closes the client and kills the process group.
- *
- * A process that cannot be started, or a handshake / `tools/list` failure or timeout, rejects
- * with `makeUnavailableError('mcp:<name>', '(start)', reason)` (the stderr tail is appended to
- * the reason) and the process is killed; there is no argv fallback.
- */
-export async function resolveMcpStdioSource(
-  spec: {
-    command: string;
-    args: readonly string[];
-    cwd: string;
-    env?: Record<string, string>;
-    /** User-chosen source name (operation-id prefix); defaults to the command basename. */
-    name?: string;
-  },
-  deps: {
-    launcher: IProcessLauncher;
-    handshakeTimeoutMs?: number;
-    /** Per-call wait for an upstream result (default 120000). */
-    callTimeoutMs?: number;
-    /** One line per skipped tool; defaults to stderr. */
-    onWarn?: (line: string) => void;
-  }
-): Promise<IResolvedSource & { hints: McpHints; skipped: readonly ISkippedTool[] }> {
-  const onWarn = deps.onWarn ?? defaultWarn;
-  const server = sourceNameOf(spec.command, spec.name);
-  const upstream = await openMcpStdioUpstream(spec, mcpBindingOf(server), {
-    launcher: deps.launcher,
-    ...(deps.handshakeTimeoutMs !== undefined ? { handshakeTimeoutMs: deps.handshakeTimeoutMs } : {}),
-    ...(deps.callTimeoutMs !== undefined ? { callTimeoutMs: deps.callTimeoutMs } : {}),
-  });
-  const { client, callTool } = upstream;
-
-  const { operations, skipped, hints, tools } = operationsFromMcpTools(upstream.rawTools, server, onWarn);
-  const generated: GeneratedSchemas = { metadata: { namespace: server, phase: '' }, schemas: Object.create(null) };
-  const fns: Record<string, (...a: unknown[]) => unknown> = Object.create(null);
-
-  for (const operation of operations) {
-    // The path tail's `raw` is the upstream tool name: the key of `pkg.fns` / `pkg.schemas`.
-    const toolName = operation.path[operation.path.length - 1]?.raw ?? operation.id;
-    const input = operation.input;
-    generated.schemas[toolName] = { input, output: {}, safe: false };
-    const paramNames = Object.keys((input['properties'] as Record<string, unknown> | undefined) ?? {});
-    fns[toolName] = async (...positional: unknown[]) => {
-      const args: Record<string, unknown> = {};
-      paramNames.forEach((param, i) => {
-        if (positional[i] !== undefined) args[param] = positional[i];
-      });
-      const result = (await client.callTool({ name: toolName, arguments: args })) as {
-        content?: unknown;
-        structuredContent?: unknown;
-        isError?: boolean;
-      };
-      return {
-        content: result.content ?? [],
-        ...(result.structuredContent !== undefined ? { structuredContent: result.structuredContent } : {}),
-        ...(result.isError ? { isError: true } : {}),
-      };
-    };
-  }
-
-  const composed = composeSchemas(generated, []);
-
-  return {
-    sourceId: `bin:${commandBaseName(spec.command)}`,
-    operations,
-    pkg: {
-      id: server,
-      version: upstream.serverVersion ?? '0.0.0',
-      schemas: composed,
-      importPath: `bin:${spec.command}`,
-      fns,
-      createClient: async () => undefined,
-    },
-    hints,
-    skipped,
-    mcp: {
-      tools,
-      callTool,
-      onClose: upstream.onClose,
-    },
-    dispose: upstream.dispose,
   };
 }

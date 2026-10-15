@@ -1,4 +1,4 @@
-export type { SourceSpec, SourceIntent, IResolvedSource, ISkippedTool, IMcpUpstream } from './types';
+export type { SourceSpec, SourceIntent, IResolvedSource, ISkippedTool } from './types';
 export { parseSourceSpec } from './parse-source';
 export { nodeProcessLauncher } from './process';
 export type { IProcessSpec, IProcessHandle, IProcessLauncher } from './process';
@@ -13,7 +13,6 @@ export {
 export type { IArgvResult, IArgvInvokerOptions } from './argv-operation';
 export { createLauncherTransport } from './launcher-transport';
 export {
-  resolveMcpStdioSource,
   operationsFromMcpTools,
   openMcpStdioUpstream,
   mcpBindingOf,
@@ -30,6 +29,8 @@ export type {
 } from './mcp-upstream-adapter';
 export { createArgvAdapter } from './argv-adapter';
 export type { IArgvAdapterSpec, IArgvAdapterDeps } from './argv-adapter';
+export { registerSourceExtractors } from './extractors';
+export type { ISourceExtractorDeps, IMcpExtractorOptions } from './extractors';
 export { nodeSourceProbe } from './source-probe';
 export { resolveSource } from './resolve-source';
 export type { IResolveDeps } from './resolve-source';
