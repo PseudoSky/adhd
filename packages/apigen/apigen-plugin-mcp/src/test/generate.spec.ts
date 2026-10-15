@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import * as ts from 'typescript';
 import { generate } from '../lib/generate';
 import { mcpPlugin } from '../lib/plugin';
 import type {
@@ -514,5 +515,118 @@ describe('[BUG-APIGEN-OPENAPI-ROUTE-PATH-MISMATCH-001] generate() derives canoni
     );
     expect(fallbackName).not.toBe(expectedName);
     expect(idx.content).not.toContain(JSON.stringify(fallbackName));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Regression: hyphenated package ids spliced raw into index.ts identifiers (969e36f4)
+// ---------------------------------------------------------------------------
+//
+// Test header
+//   guards: generateIndex (generate.ts lines 34-42 and 86-90) passes every
+//     package id through uniqueSanitizedIdentifiers before it names the
+//     import namespace and the fn table, so a hyphenated id emits parseable
+//     TypeScript and a colliding pair of ids gets distinct identifiers. The
+//     raw id stays in string-literal positions.
+//   tier: S (unit). Pure string generation; the TypeScript parser runs
+//     in-process. No subprocess, socket or network.
+//   cites: 969e36f4 AC1, AC2, AC3, AC4.
+//   tags: regression:969e36f4.
+//   teeth: AC1 and AC2 fail on ac42a142^, where `import * as data-base-transforms_ns`
+//     is spliced raw and the parser reports syntax diagnostics.
+//   red: pending (not run per user; must fail on ac42a142^ for AC1 and AC2,
+//     pass on the bucket head). AC3's byte-identical 'myPkg' case is a
+//     characterization guard and passes on both sides. AC4 is this statement:
+//     the regression is red on the pre-fix commit, which this header records.
+//   parser: ts.transpileModule with reportDiagnostics, the public API for
+//     syntactic diagnostics. It reports the same parse errors as the
+//     parser-level parseDiagnostics without reading a TypeScript internal.
+
+/** Returns the syntactic diagnostics TypeScript reports for `source`; empty means it parses. */
+function syntacticErrors(source: string): string[] {
+  const out = ts.transpileModule(source, {
+    reportDiagnostics: true,
+    fileName: 'index.ts',
+    compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext },
+  });
+  return (out.diagnostics ?? []).map((d) =>
+    ts.flattenDiagnosticMessageText(d.messageText, '\n')
+  );
+}
+
+/**
+ * Generates the index.ts content for the given package ids. With
+ * `withPing` (the default) each package carries one `ping` function; without
+ * it, the package has no functions, so index.ts has no toolMetas entries.
+ */
+function indexContentFor(
+  pkgs: Array<{ id: string; importPath: string }>,
+  withPing = true
+): string {
+  const input: PluginInput = {
+    packages: pkgs.map((p) => ({
+      id: p.id,
+      importPath: p.importPath,
+      schemas: withPing
+        ? { ping: { input: { type: 'object', properties: {} }, output: { type: 'object' } } }
+        : {},
+      fns: withPing ? { ping: () => ({}) } : {},
+    })),
+    outputDir: '/tmp/out',
+    options: {},
+  };
+  const idx = generate(input).files.find((f) => f.path === 'index.ts');
+  if (!idx) throw new Error('Expected index.ts');
+  return idx.content;
+}
+
+describe('regression:969e36f4 generate() — hyphenated package id in index.ts identifiers', () => {
+  it('969e36f4 AC1: a hyphenated id ("data-base-transforms") yields index.ts that parses with zero syntax diagnostics', () => {
+    const content = indexContentFor([
+      { id: 'data-base-transforms', importPath: '@adhd/data-base-transforms' },
+    ]);
+    expect(syntacticErrors(content)).toEqual([]);
+  });
+
+  it('969e36f4 AC2: the import namespace and fn-table use the sanitized identifier; the raw id stays in the group key', () => {
+    const content = indexContentFor([
+      { id: 'data-base-transforms', importPath: '@adhd/data-base-transforms' },
+    ]);
+    expect(content).toContain('import * as data_base_transforms_ns');
+    expect(content).toContain("'data-base-transforms': data_base_transforms_fns");
+    expect(content).not.toContain('data-base-transforms_ns');
+  });
+
+  it('969e36f4 AC3: ids ["a-b","a_b"] get distinct declarations const a_b_fns and const a_b_2_fns, and the file parses', () => {
+    const content = indexContentFor([
+      { id: 'a-b', importPath: '@x/a-b' },
+      { id: 'a_b', importPath: '@x/a_b' },
+    ]);
+    expect(content).toContain('const a_b_fns = buildFnTable(a_b_ns');
+    expect(content).toContain('const a_b_2_fns = buildFnTable(a_b_2_ns');
+    expect(content).toContain('import * as a_b_2_ns from');
+    expect(syntacticErrors(content)).toEqual([]);
+  });
+
+  it('969e36f4 AC3 (characterization): a non-hyphenated id "myPkg" yields index.ts byte-identical to the pre-change template', () => {
+    const content = indexContentFor([{ id: 'myPkg', importPath: '@acme/my-pkg' }], false);
+    const expected = [
+      '// Auto-generated by @adhd/apigen-cli — do not edit',
+      "import { buildFnTable } from '@adhd/apigen-engine-runtime'",
+      "import * as myPkg_ns from '@acme/my-pkg'",
+      'const myPkg_fns = buildFnTable(myPkg_ns as Record<string, unknown>)',
+      '',
+      'export const toolMetas: Record<string, { group: string; fnName: string; schema: unknown; description: string }> = {',
+      '}',
+      '',
+      'export const groupFns: Record<string, Record<string, (...args: unknown[]) => unknown>> = {',
+      "  'myPkg': myPkg_fns as Record<string, (...args: unknown[]) => unknown>,",
+      '}',
+      '',
+      'export const groupCreateClient: Record<string, ((e: Record<string, unknown>) => Promise<unknown>) | undefined> = {',
+      "  'myPkg': undefined, // injected at startup if createClient provided",
+      '}',
+    ].join('\n');
+    expect(content).toBe(expected);
   });
 });

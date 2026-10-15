@@ -16,6 +16,7 @@ import type {
   MountHostBridgeInvokeOptions,
   Operation,
 } from '@adhd/apigen-core-client';
+import { ApiError } from '@adhd/apigen-base-errors';
 import batchPlugin from '../lib/plugin';
 
 // ---------------------------------------------------------------------------
@@ -323,5 +324,126 @@ describe('batchPlugin handler: real fan-out (invokeBatch)', () => {
     );
 
     expect(maxInFlight).toBeLessThanOrEqual(2);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Regression: BUG-APIGEN-BATCH-NULL-ITEM (087ec253) — null/undefined/hole items
+// ---------------------------------------------------------------------------
+//
+// Test header
+//   guards: the per-item guard in plugin.ts parseBatchRequest (lines 116-124)
+//     rejects a null, undefined or sparse-hole item with invalid_argument
+//     before any item is dispatched, so the target operation is never
+//     invoked; a valid object item reaches the target invoke as the same
+//     object (no {} substitution).
+//   tier: S (unit). The only fake is hostBridge.invoke, the host boundary
+//     named in this file's header; invokeBatch and the request parser are real.
+//   cites: 087ec253 AC1, AC2, AC3.
+//   tags: regression:087ec253.
+//   teeth: AC1 fails on 16ac1836^, where the null/undefined item is coerced
+//     to {} and the handler resolves instead of rejecting.
+//   red: pending (not run per user; must fail on 16ac1836^ for AC1, pass on
+//     the bucket head). AC2 and AC3 are characterization guards: they pass on
+//     both sides and pin the valid-item path the fix must keep.
+
+/**
+ * Resolves to the rejection reason of `promise`. Throws when the promise
+ * resolves, so a handler that silently accepts a bad item fails here with a
+ * clear message rather than passing an assertion on the wrong value.
+ */
+async function captureRejection(promise: Promise<unknown>): Promise<unknown> {
+  try {
+    await promise;
+  } catch (err) {
+    return err;
+  }
+  throw new Error('expected the batch handler to reject, but it resolved');
+}
+
+describe('regression:087ec253 batchPlugin handler: null/undefined item guard', () => {
+  function mountWithBridge(
+    fns: Record<string, (domainArgs: Record<string, unknown>) => unknown> = {
+      'ns/opA': (a) => `echo:${a['value']}`,
+    }
+  ) {
+    const descriptor: Descriptor = { host: 'ts', operations: [makeOp('ns/opA')] };
+    const bridge = makeHostBridge(fns);
+    const [op] = requireMount().operations(descriptor, undefined, bridge);
+    return { op, bridge };
+  }
+
+  it('087ec253 AC1: a null item rejects with invalid_argument naming input.items[1] and never invokes the target', async () => {
+    const { op, bridge } = mountWithBridge();
+    const err = await captureRejection(
+      op.handler(fakeCall({ operation: 'ns/opA', items: [{ value: 'a' }, null] }))
+    );
+    expect(err).toBeInstanceOf(ApiError);
+    expect(err).toMatchObject({
+      code: 'invalid_argument',
+      message: expect.stringContaining('input.items[1]'),
+    });
+    expect(bridge.invoke).not.toHaveBeenCalled();
+  });
+
+  it('087ec253 AC1: an explicit undefined item rejects with invalid_argument naming input.items[1] and never invokes the target', async () => {
+    const { op, bridge } = mountWithBridge();
+    const err = await captureRejection(
+      op.handler(fakeCall({ operation: 'ns/opA', items: [{ value: 'a' }, undefined] }))
+    );
+    expect(err).toBeInstanceOf(ApiError);
+    expect(err).toMatchObject({
+      code: 'invalid_argument',
+      message: expect.stringContaining('input.items[1]'),
+    });
+    expect(bridge.invoke).not.toHaveBeenCalled();
+  });
+
+  it('087ec253 AC1: a sparse hole in items rejects with invalid_argument naming input.items[1] and never invokes the target', async () => {
+    const { op, bridge } = mountWithBridge();
+    const holey: unknown[] = [{ value: 'a' }];
+    holey.length = 2; // index 1 is a hole: reads as undefined, Array.isArray still true
+    const err = await captureRejection(
+      op.handler(fakeCall({ operation: 'ns/opA', items: holey }))
+    );
+    expect(err).toBeInstanceOf(ApiError);
+    expect(err).toMatchObject({
+      code: 'invalid_argument',
+      message: expect.stringContaining('input.items[1]'),
+    });
+    expect(bridge.invoke).not.toHaveBeenCalled();
+  });
+
+  it('087ec253 AC2: a valid object item reaches the target invoke as the exact same object (identity, no {} substitution)', async () => {
+    const seen: unknown[] = [];
+    const { op } = mountWithBridge({
+      'ns/opA': (a) => {
+        seen.push(a);
+        return 'ok';
+      },
+    });
+    const item = { value: 'kept' };
+    const result = await op.handler(fakeCall({ operation: 'ns/opA', items: [item] }));
+    expect(seen).toHaveLength(1);
+    expect(seen[0]).toBe(item);
+    expect(result).toEqual([{ index: 0, status: 'fulfilled', value: 'ok' }]);
+  });
+
+  it('087ec253 AC3 (characterization): a two-item object batch makes two invoke calls with the same domainArgs and the BatchItemResult[] shape', async () => {
+    const { op, bridge } = mountWithBridge();
+    const items = [{ value: 'one' }, { value: 'two' }];
+    const result = await op.handler(fakeCall({ operation: 'ns/opA', items }));
+    const invokeMock = bridge.invoke as unknown as ReturnType<typeof vi.fn>;
+    expect(invokeMock).toHaveBeenCalledTimes(2);
+    const domainArgs = invokeMock.mock.calls.map(
+      (c: unknown[]) => (c[1] as { domainArgs: unknown }).domainArgs
+    );
+    expect(domainArgs).toHaveLength(2);
+    expect(domainArgs[0]).toBe(items[0]);
+    expect(domainArgs[1]).toBe(items[1]);
+    expect(result).toEqual([
+      { index: 0, status: 'fulfilled', value: 'echo:one' },
+      { index: 1, status: 'fulfilled', value: 'echo:two' },
+    ]);
   });
 });
