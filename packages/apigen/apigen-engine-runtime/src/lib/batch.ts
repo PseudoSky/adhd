@@ -230,6 +230,13 @@ async function runSingleItem(
   try {
     const itemCall: Call = derived.signal ? { ...call, signal: derived.signal } : call;
     const raw = await invoke(fnName, itemCall, opts);
+    // Intended semantics: `invoke` returns the dispatch result, and for an op
+    // with a non-empty output schema that result is the encoded stream wrapper
+    // (see dispatch.ts `encodeResult`). So each collected chunk here is a WIRE
+    // value, not a host value: a `Date` chunk arrives as an RFC 3339 string, and
+    // a chunk schema with no logical codec arrives as plain JSON. Batch does not
+    // decode chunks back to host values. Ops with an empty output schema return
+    // the raw value, so this branch is not taken for them.
     if (isApiStream(raw)) {
       const collected = await collectWithPhase(raw);
       if (!collected.ok) {

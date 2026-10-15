@@ -116,6 +116,15 @@ function refCtx(root: SchemaNode, fnName: string): Partial<TranscodeCtx> {
   const lookup = rootRefResolver(root);
   return {
     resolve: (ref: string): SchemaNode => {
+      // Only a bare root-level definition name is resolvable in run-mode. Any
+      // other form (a JSON pointer into properties, a nested pointer such as
+      // `#/$defs/A/properties/b`, an external document URI) is a different
+      // failure from a missing definition, so it gets its own message.
+      if (!RESOLVABLE_REF.test(ref)) {
+        throw new Error(
+          `[apigen-engine-runtime] op "${fnName}": unsupported $ref form "${ref}" — only #/definitions/<name> and #/$defs/<name> roots are resolvable in run-mode`
+        );
+      }
       try {
         return lookup(ref);
       } catch {
@@ -126,6 +135,9 @@ function refCtx(root: SchemaNode, fnName: string): Partial<TranscodeCtx> {
     },
   };
 }
+
+/** A `$ref` run-mode can resolve: `#/definitions/<name>` or `#/$defs/<name>`, one name segment, no nested pointer. */
+const RESOLVABLE_REF = /^#\/(\$defs|definitions)\/[^/]+$/;
 
 /**
  * Wrap a stream so each chunk is encoded against the declared chunk schema.
@@ -167,6 +179,11 @@ function encodeResult(
   // schema-less / plain-JSON passthrough; only typed output schemas are encoded.
   if (!outputSchema || Object.keys(outputSchema).length === 0) return value;
   const ctx = refCtx(outputSchema, fnName);
+  // Ruling: a streaming result is NOT returned as the identical object the fn
+  // produced. The returned value is a new ApiStream (same `Symbol.asyncIterator`
+  // contract, so transports still take the SSE branch) whose chunks are
+  // wire-encoded against the output schema. Identity is intentionally not
+  // preserved; consumers must rely on the ApiStream contract, not on `===`.
   if (isApiStream(value)) return encodeChunks(value, outputSchema, ctx);
   return _transcoder.encode(value, outputSchema, ctx);
 }
