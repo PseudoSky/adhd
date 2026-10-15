@@ -14,22 +14,34 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const require = createRequire(import.meta.url);
 const plugin = require('./plugin.js');
+const { scratchRootPath } = require('../lib/scratch-root.js');
+
+/** Repo root, so fixture workspaces live under the canonical scratch root. */
+const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 
 const PROJECT = 'packages/fx/proj';
 const CONFIG = `${PROJECT}/eslint.config.mjs`;
 
 /**
- * Build a throwaway workspace from `files` (workspace-relative path -> body),
- * run `fn` with its root, and remove it in all cases.
+ * Build a throwaway workspace under the scratch root from `files`
+ * (workspace-relative path -> body), install each name in `installed` as
+ * `node_modules/<name>/package.json` (declaredExternalDeps emits only installed
+ * names), run `fn` with its root, and remove it in all cases.
  */
-function withWorkspace(files, fn) {
-  const ws = mkdtempSync(join(tmpdir(), 'fbbb1464-lint-'));
+function withWorkspace(files, fn, installed = []) {
+  const scratch = scratchRootPath(REPO_ROOT);
+  mkdirSync(scratch, { recursive: true });
+  const ws = mkdtempSync(join(scratch, 'fbbb1464-lint-'));
   try {
+    for (const name of installed) {
+      mkdirSync(join(ws, 'node_modules', name), { recursive: true });
+      writeFileSync(join(ws, 'node_modules', name, 'package.json'), JSON.stringify({ name, version: '1.0.0' }));
+    }
     for (const [rel, body] of Object.entries(files)) {
       mkdirSync(join(ws, dirname(rel)), { recursive: true });
       writeFileSync(join(ws, rel), body);
@@ -82,6 +94,7 @@ test('lint inputs include the project declared dependencies and exclude @adhd/* 
       assert.deepEqual([...ext].sort(), ['a', 'b', 'eslint']);
       assert.ok(!ext.includes('@adhd/x'));
     },
+    ['a', 'b', '@adhd/x'],
   );
 });
 
@@ -139,6 +152,35 @@ test('lint externalDependencies lists eslint exactly once when the manifest also
       assert.equal(ext.filter((n) => n === 'eslint').length, 1);
       assert.deepEqual([...ext].sort(), ['c', 'eslint']);
     },
+    ['c', 'eslint'],
+  );
+});
+
+/**
+ * regression:fbbb1464 · tier S · fbbb1464 AC1 (D3(i), commit 29ae7468)
+ * Failure mode: a declared dependency with no installed version (manifest ahead
+ * of install, missing optional peer) is listed in externalDependencies, so Nx is
+ * handed a name it has no version to hash.
+ */
+test('lint externalDependencies omits a declared name that is not installed', () => {
+  const manifest = JSON.stringify({
+    name: 'fx-proj',
+    dependencies: { a: '^1.0.0', 'not-installed': '^1.0.0' },
+    peerDependencies: { 'missing-peer': '^2.0.0' },
+  });
+  withWorkspace(
+    {
+      [`${PROJECT}/project.json`]: PROJECT_JSON,
+      [CONFIG]: ESLINT_CONFIG,
+      [`${PROJECT}/package.json`]: manifest,
+    },
+    (ws) => {
+      const ext = externalDependencies(lintInputs(ws));
+      assert.deepEqual([...ext].sort(), ['a', 'eslint']);
+      assert.ok(!ext.includes('not-installed'));
+      assert.ok(!ext.includes('missing-peer'));
+    },
+    ['a'],
   );
 });
 

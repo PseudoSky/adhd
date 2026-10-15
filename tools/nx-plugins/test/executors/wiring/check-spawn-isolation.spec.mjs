@@ -7,7 +7,7 @@
  *   so the child reads and writes the real ~/.adhd; and a ratchet baseline that is not enforced in both directions
  *   (more unrouted sites than recorded, or fewer with the entry left behind) lets the leak grow or the baseline rot.
  * tier: S (pure functions over in-memory source strings, and the real collector over throwaway fixture workspaces under
- *   tmp/; no process is spawned, nothing sleeps)
+ *   the tooling scratch root (.adhd/tmp/, via scratchRootPath); no process is spawned, nothing sleeps)
  * cites: 0945d1b9 AC1 (per-site detection and routing forms), 0945d1b9 AC2 (ratchet, stale, invalid, zero-scan, rule 9
  *   fixture contract).
  * red: pending - the owner's hold forbids running tests; against the pre-guard base 21ba12b3 the module
@@ -21,6 +21,7 @@ import assert from 'node:assert/strict';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
 import {
   BASELINE_REL,
   NODE_SPAWN,
@@ -35,7 +36,9 @@ import { runChecks } from './check-lane-reachability.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '../../../../..');
-const SCRATCH_PARENT = join(REPO_ROOT, 'tmp', 'spawn-isolation-spec');
+// tooling-layer scratch root: the single canonical definition (AGENTS.md section 10), never a hardcoded path
+const { scratchRootPath } = createRequire(import.meta.url)('../../../lib/scratch-root.js');
+const SCRATCH_PARENT = scratchRootPath(REPO_ROOT, 'spawn-isolation-spec');
 
 const L = (...lines) => lines.join('\n');
 const CP = "import { spawnSync, spawn, fork } from 'node:child_process';";
@@ -343,6 +346,193 @@ test('AC1 subset of the retired backlog gate: every shape it flagged is still fl
   }
 });
 
+// ---------------------------------------------------------------------------------------------------------------
+// Hardening negative controls (0945d1b9 AC1, AC2): each case below was accepted by the first guard and is now flagged,
+// except the shorthand-HOME narrowing, which is the reverse (a bare HOME that is not an object property no longer routes).
+// failure mode: the guard reports "routed" for a spawn that still hands the child the real HOME, so the leak ships green.
+// tier: S (in-memory source strings through findUnroutedSpawnSites / collectSpawnIsolationViolations; nothing spawns)
+// red: pending (user hold) - no run is recorded; against the first guard each "violation appears" case counts 0 sites.
+// ---------------------------------------------------------------------------------------------------------------
+
+const REAL_HOME_INITIALIZERS = {
+  'os.homedir()': 'os.homedir()',
+  'homedir()': 'homedir()',
+  'process.env.HOME': 'process.env.HOME',
+};
+
+for (const [label, init] of Object.entries(REAL_HOME_INITIALIZERS)) {
+  test(`AC1 control (violation appears): HOME bound to an identifier initialised from ${label} is unrouted [0945d1b9 AC1]`, () => {
+    const src = L(
+      CP,
+      `const home = ${init};`,
+      'spawnSync(process.execPath, [bin], { env: { ...process.env, HOME: home } });',
+    );
+    assert.equal(count(src), 1, `expected one unrouted site, got ${JSON.stringify(findUnroutedSpawnSites(src))}`);
+  });
+}
+
+test('AC1 control (violation appears): a `let` identifier initialised from the real home is unrouted [0945d1b9 AC1]', () => {
+  const src = L(CP, 'let home = os.homedir();', 'spawnSync(process.execPath, [bin], { env: { HOME: home } });');
+  assert.equal(count(src), 1);
+});
+
+test('AC1 control (violation appears): process.env.HOME assigned from an identifier holding the real home is unrouted [0945d1b9 AC1]', () => {
+  const src = L(CP, 'const home = os.homedir();', 'process.env.HOME = home;', 'spawnSync(process.execPath, [bin]);');
+  assert.equal(count(src), 1);
+});
+
+test('AC1 control: an identifier initialised from a throwaway directory still routes (the resolution does not over-flag) [0945d1b9 AC1]', () => {
+  const src = L(
+    CP,
+    "const home = mkdtempSync(join(tmpdir(), 'h-'));",
+    'spawnSync(process.execPath, [bin], { env: { ...process.env, HOME: home } });',
+  );
+  assert.equal(count(src), 0);
+});
+
+test('AC1 documented limit: an identifier with no resolvable initializer (a parameter) is treated as routed [0945d1b9 AC1]', () => {
+  const src = L(CP, 'function run(home) {', '  spawnSync(process.execPath, [bin], { env: { HOME: home } });', '}');
+  assert.equal(count(src), 0);
+});
+
+// ---- aliased and exec-family child_process bindings --------------------------------------------------------------
+
+const ALIASED_SITES = {
+  'import { spawn as launch }': L(
+    "import { spawn as launch } from 'node:child_process';",
+    'launch(process.execPath, [bin]);',
+  ),
+  'import { spawnSync as run } from the unprefixed module': L(
+    "import { spawnSync as run } from 'child_process';",
+    'run(process.execPath, [bin]);',
+  ),
+  'const { spawnSync: run } = require()': L(
+    "const { spawnSync: run } = require('child_process');",
+    'run(process.execPath, [bin]);',
+  ),
+  'const { fork: launch } = await import()': L(
+    "const { fork: launch } = await import('node:child_process');",
+    'launch(modulePath, []);',
+  ),
+  'namespace member cp.spawnSync': L(
+    "import * as cp from 'node:child_process';",
+    'cp.spawnSync(process.execPath, [bin]);',
+  ),
+};
+
+for (const [form, src] of Object.entries(ALIASED_SITES)) {
+  test(`AC1 control (violation appears): aliased child_process binding is a site: ${form} [0945d1b9 AC1]`, () => {
+    assert.equal(count(src), 1, `expected one unrouted site, got ${JSON.stringify(findUnroutedSpawnSites(src))}`);
+  });
+}
+
+test('AC1 control: an aliased spawn routed with HOME is clean [0945d1b9 AC1]', () => {
+  const src = L(
+    "import { spawn as launch } from 'node:child_process';",
+    'launch(process.execPath, [bin], { env: { ...process.env, HOME: tmp } });',
+  );
+  assert.equal(count(src), 0);
+});
+
+test('AC1 control: a local function that merely has an alias-like name and is not from child_process is not a site [0945d1b9 AC1]', () => {
+  const src = L('const launch = (exe, args) => [exe, ...args];', 'launch(process.execPath, [bin]);');
+  assert.equal(count(src), 0);
+});
+
+const EXEC_SITES = {
+  'execSync of a node command template': L("import { execSync } from 'node:child_process';", 'execSync(`node ${bin} --json`);'),
+  'exec of a node command string with a callback': L("import { exec } from 'node:child_process';", "exec('node dist/index.js list', cb);"),
+  'execSync of a command containing process.execPath': L(
+    "import { execSync } from 'node:child_process';",
+    'execSync(`${process.execPath} ${bin}`);',
+  ),
+  'namespace cp.execSync of a node command': L("import * as cp from 'node:child_process';", "cp.execSync('node dist/index.js');"),
+};
+
+for (const [form, src] of Object.entries(EXEC_SITES)) {
+  test(`AC1 control (violation appears): string-form exec of a node bin is a site: ${form} [0945d1b9 AC1]`, () => {
+    assert.equal(count(src), 1, `expected one unrouted site, got ${JSON.stringify(findUnroutedSpawnSites(src))}`);
+  });
+}
+
+test('AC1 control: exec of a non-node command is not a site, and a routed exec of node is clean [0945d1b9 AC1]', () => {
+  assert.equal(count(L("import { execSync } from 'node:child_process';", "execSync('git status');")), 0);
+  assert.equal(
+    count(L("import { execSync } from 'node:child_process';", "execSync('node x.js', { env: { ...process.env, HOME: tmp } });")),
+    0,
+  );
+});
+
+// ---- shorthand HOME only counts inside an object literal ---------------------------------------------------------
+
+const NOT_OBJECT_SHORTHAND = {
+  'HOME as a bare call argument': L(CP, 'spawnSync(process.execPath, [bin], buildEnv(tmp, HOME));'),
+  'HOME as an argv element': L(CP, 'spawnSync(process.execPath, [bin, HOME]);'),
+};
+
+for (const [form, src] of Object.entries(NOT_OBJECT_SHORTHAND)) {
+  test(`AC1 control (violation appears): ${form} is not HOME routing [0945d1b9 AC1]`, () => {
+    assert.equal(count(src), 1, `expected one unrouted site, got ${JSON.stringify(findUnroutedSpawnSites(src))}`);
+  });
+}
+
+test('AC1 control: shorthand HOME inside an object literal still routes, alone or among other keys [0945d1b9 AC1]', () => {
+  assert.equal(count(L(CP, 'spawnSync(process.execPath, [bin], { env: { HOME } });')), 0);
+  assert.equal(count(L(CP, 'spawnSync(process.execPath, [bin], { env: { a, HOME, b } });')), 0);
+});
+
+test('AC1 control (violation appears): shorthand { HOME } whose declaration is the real home is unrouted [0945d1b9 AC1]', () => {
+  const src = L(CP, 'const HOME = os.homedir();', 'spawnSync(process.execPath, [bin], { env: { ...process.env, HOME } });');
+  assert.equal(count(src), 1);
+});
+
+test('AC1 an aliased site reports the original child_process export name as callee [0945d1b9 AC1]', () => {
+  const src = L("import { spawn as launch } from 'node:child_process';", 'launch(process.execPath, [bin]);');
+  assert.equal(findUnroutedSpawnSites(src)[0].callee, 'spawn');
+});
+
+test('AC1 control: a saved copy of the real home (prevHome) bound as HOME is unrouted; stubEnv(HOME) routes [0945d1b9 AC1]', () => {
+  assert.equal(count(L(CP, 'const prevHome = process.env.HOME;', 'spawnSync(process.execPath, [bin], { env: { HOME: prevHome } });')), 1);
+  assert.equal(count(L(CP, "vi.stubEnv('HOME', tmp);", 'spawnSync(process.execPath, [bin]);')), 0);
+});
+
+// ---- baseline entries that are not positive-integer-count objects ----------------------------------------------------
+
+const BAD_ENTRIES = [
+  ['null', null],
+  ['a bare string', 'two'],
+  ['a bare number', 3],
+  ['an object with a fractional count', { count: 1.5, reason: 'x' }],
+];
+
+for (const [label, bad] of BAD_ENTRIES) {
+  test(`AC2 a baseline entry that is ${label} is spawn-isolation-baseline-invalid and does not throw [0945d1b9 AC2]`, () => {
+    withFixture({ [SPEC]: ROUTED }, (root) => {
+      const ghost = 'packages/envuser/src/gone.e2e.test.ts';
+      let res;
+      assert.doesNotThrow(() => {
+        res = collectSpawnIsolationViolations(root, { baseline: baselineOf({ [ghost]: bad }) });
+      });
+      assert.ok(rulesOf(res).includes('spawn-isolation-baseline-invalid'), JSON.stringify(res.violations));
+      assert.ok(res.violations.some((v) => v.rule === 'spawn-isolation-baseline-invalid' && v.detail.includes(ghost)));
+    });
+  });
+}
+
+// ---- deliberate looseness versus the retired backlog gate ------------------------------------------------------------
+
+test('AC2 pinned looseness (partial): a DIST_INDEX spawn with no helper import is accepted when it sets HOME, though the retired gate flagged it [0945d1b9 AC2]', () => {
+  // failure mode: a future tightening or loosening of the per-call HOME rule changes this silently.
+  // The retired backlog gate flagged EVERY direct DIST_INDEX spawn that did not import an isolation helper, even one that
+  // set HOME. The per-site guard deliberately accepts an explicit HOME override in the call, so AC2 (the retired gate's
+  // coverage is a subset of the new guard's) holds only in part: the retired regex matches this shape, the guard does not.
+  const src = L(CP, 'spawn(process.execPath, [DIST_INDEX], { env: { ...process.env, HOME: tmp } });');
+  assert.match(src, NODE_SPAWN, 'fixture must be a shape the coarse retired regex matched');
+  assert.equal(count(src), 0);
+  // control: the same spawn without the HOME override is flagged, so the acceptance comes from the override alone.
+  assert.equal(count(L(CP, 'spawn(process.execPath, [DIST_INDEX]);')), 1);
+});
+
 test('AC1 scanSource blanks comments in place and masks literals, preserving length and newlines [0945d1b9 AC1]', () => {
   const src = L("const a = 'x'; // note", '/* block', 'two */ const b = `t`;');
   const { code, mask } = scanSource(src);
@@ -538,7 +728,7 @@ test('AC2 control: an entry under a root the run does not scan is not reported s
   });
 });
 
-for (const [label, bad] of [['zero', 0], ['negative', -1], ['non-numeric', 'two'], ['missing', undefined]]) {
+for (const [label, bad] of [['zero', 0], ['negative', -1], ['fractional', 1.5], ['non-numeric', 'two'], ['missing', undefined]]) {
   test(`AC2 a ${label} count is spawn-isolation-baseline-invalid [0945d1b9 AC2]`, () => {
     withFixture({ [SPEC]: ROUTED }, (root) => {
       const ghost = 'packages/envuser/src/gone.e2e.test.ts';
