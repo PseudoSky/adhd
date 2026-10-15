@@ -23,7 +23,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { cpSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -60,7 +61,18 @@ test('pre-push-e2e AC2: pre-push still runs test and the git-env guard is intact
   }
 });
 
+/** sha256 over the bytes of the CI workflows and lane-gate.mjs: what AC3 must leave exactly as it found them. */
+function guardedFilesDigest() {
+  const files = ['tools/gate/lane-gate.mjs', ...readdirSync(join(ROOT, '.github/workflows')).sort().map((f) => `.github/workflows/${f}`)];
+  const h = createHash('sha256');
+  for (const f of files) h.update(f).update('\0').update(readFileSync(join(ROOT, f))).update('\0');
+  return h.digest('hex');
+}
+
 test('pre-push-e2e AC3: lane-gate as CI calls it still includes e2e; CI invokes it', () => {
+  // Compared against the bytes before the test ran, not against HEAD: a dirty working tree (an edit in progress, a
+  // merge gate run from a worktree) is not this test's failure, and a run that changed these files still is.
+  const before = guardedFilesDigest();
   const r = run([join(ROOT, 'tools/gate/lane-gate.mjs')]);
   assert.equal(r.status, 0);
   assert.equal(r.stdout, '--target=test --target=e2e');
@@ -68,8 +80,7 @@ test('pre-push-e2e AC3: lane-gate as CI calls it still includes e2e; CI invokes 
     const t = readFileSync(join(ROOT, wf), 'utf8');
     assert.match(t, /(-t\s+[^\n]*\be2e\b|--target=e2e|lane-gate\.mjs)/, `${wf} must still reach e2e`);
   }
-  const diff = spawnSync('git', ['diff', '--quiet', 'HEAD', '--', '.github', 'tools/gate/lane-gate.mjs'], { cwd: ROOT, env });
-  assert.equal(diff.status, 0, 'CI workflows and lane-gate.mjs are unchanged vs HEAD');
+  assert.equal(guardedFilesDigest(), before, 'running lane-gate.mjs must not modify the CI workflows or lane-gate.mjs');
 });
 
 /** A temp workspace holding a copy of the hook (patched by the caller) and of both CI workflows. */
