@@ -168,8 +168,8 @@ async function windowTimeline(
   const sinceMs = Date.parse(since);
   const all = await loadOpEvents(graph, sessions, new Set(sessions.keys()));
   const events = all.filter((e) => {
-    const ms = isoInstantMs(e.t);
-    return ms !== undefined && ms >= sinceMs && ms <= now;
+    const ms = Date.parse(e.t);
+    return !Number.isNaN(ms) && ms >= sinceMs && ms <= now;
   });
   const touched = [...new Set(events.map((e) => e.targetUid))].sort();
   const { page, hasMore, nextCursor } = pageOf(events, cursor.key, limit, `${since}|`);
@@ -250,6 +250,9 @@ async function sessionTimeline(
 export async function timeline(graph: GraphBackend, input: ITimelineInput): Promise<ITimelineResult> {
   const limit = resolveLimit(input.limit);
   if (input.sessionId === undefined) {
+    if (input.includeChildren !== undefined) {
+      throw new BacklogValidationError('includeChildren', 'applies only when sessionId is given (window mode covers every session)');
+    }
     const sessions = await loadSessions(graph);
     return windowTimeline(graph, sessions, input, limit);
   }

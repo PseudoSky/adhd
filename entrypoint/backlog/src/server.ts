@@ -223,7 +223,7 @@ export function cliLogger(): Logger {
           text = msg ?? objOrMsg.message;
         } else {
           fields = objOrMsg ?? {};
-          text = msg ?? '';
+          text = msg ?? (typeof fields['msg'] === 'string' ? fields['msg'] : '');
         }
         const record = { ...bindings, ...serialiseCliFields(fields), level: name, msg: text };
         if (rank >= 50) log.error('backlog.cli.log', record);

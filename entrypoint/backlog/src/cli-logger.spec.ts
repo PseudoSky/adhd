@@ -176,6 +176,17 @@ describe('cliLogger (CLI apigen logger → sox-telemetry)', () => {
     });
   });
 
+  it('logger.info(fields) with no message keeps a msg already in the fields', () => {
+    const logger = cliLogger() as unknown as PinoLike;
+    logger.info({ command: 'c', msg: 'from fields' }, undefined as unknown as string);
+
+    expect(logMock.info).toHaveBeenCalledWith('backlog.cli.log', {
+      command: 'c',
+      level: 'info',
+      msg: 'from fields',
+    });
+  });
+
   it('error(err) with a bare Error carries its message and stack under err', () => {
     const logger = cliLogger() as unknown as { error(e: Error): void };
     logger.error(new RangeError('out of range'));

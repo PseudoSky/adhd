@@ -142,7 +142,7 @@ describe('91a8c640 B-AC7 — timeline', () => {
         vi.useFakeTimers({ toFake: ['Date'], now: start });
         const p1 = await tl({ limit: 3 });
         expect(p1.nextCursor).toBeDefined();
-        vi.setSystemTime(start + 6 * DAY_MS);
+        vi.setSystemTime(start + 8 * DAY_MS);
         const p2 = await tl({ limit: 3, after: p1.nextCursor });
         expect(p2.ops).toHaveLength(1);
         expect(p2.window?.since).toBe(new Date(start - 7 * DAY_MS).toISOString());
@@ -165,6 +165,12 @@ describe('91a8c640 B-AC7 — timeline', () => {
         expect(r.ok).toBe(false);
         if (!r.ok) expect(r.error.code).toBe('validation');
       }
+    });
+
+    it('includeChildren without a sessionId is a validation error (window mode has no tree to walk)', async () => {
+      const r = await api.timeline(ctx, { includeChildren: false } as never);
+      expect(r.ok).toBe(false);
+      if (!r.ok) expect(r.error.code).toBe('validation');
     });
 
     it('a hand-made window cursor whose since part is not an ISO-8601 instant is a validation error', async () => {

@@ -452,10 +452,11 @@ absent. Run `adhd-backlog --help` and compare it against
 
 ### Output streams (CLI)
 
-stdout carries exactly one JSON envelope per invocation; stderr carries no trace or envelope output (the `--namespace sandbox` mode prints its own notice there). The
-per-call trace (`→ backlog <verb>`, with `command` and `ms`) and any error or fatal
-record go to the sox durable log (`~/.adhd/sox-ecosystem/backlog/logs`), not to stderr.
-A failed call still reports its code and message in the stdout envelope. Set
+A successful call writes its result envelope to stdout and nothing else. A failed call
+exits non-zero and writes its error envelope (`{code, message}`) to stderr. The per-call
+trace (`→ backlog <verb>`, with `command` and `ms`) never reaches either stream: it goes
+to the sox durable log, `~/.adhd/sox-ecosystem/backlog/logs`, or to a
+`backlog-sandbox-logs-*` temp directory under `--namespace sandbox`. Set
 `ADHD_BACKLOG_LOG_LEVEL` to `trace|debug|info|warn|error|fatal` to change the threshold
 (default `info`), or `silent` to drop trace records.
 

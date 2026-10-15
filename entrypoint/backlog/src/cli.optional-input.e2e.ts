@@ -49,8 +49,14 @@ function envelopeLine(text: string): unknown {
   return JSON.parse(line);
 }
 
+/**
+ * `VITEST: ''` is cleared for the child: `testSilentLogger` (server.ts) keys on
+ * `process.env.VITEST`, so an inherited value would swap the CLI's real logger
+ * for the silent no-op and make the stderr assertions vacuous. An empty string
+ * is falsy there, so the child runs the real `cliLogger()`.
+ */
 function run(args: string[]) {
-  const r = runBacklogBin(args);
+  const r = runBacklogBin(args, { VITEST: '' });
   const root = extractMintedSandboxRoot(r.stderr);
   if (root !== undefined) minted.push(root);
   return r;
