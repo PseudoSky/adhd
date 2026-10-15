@@ -137,9 +137,18 @@ export interface MessageAppendedPayload {
   executionContext: ExecutionContext;
   message: Message;
 }
+/**
+ * Advisory flags a task can complete with. A warning never changes the task's status or result.
+ * - `no_tool_use`: the final stop was `completed`, the task made zero tool calls, and the agent was
+ *   granted at least one tool (cbd559eb).
+ */
+export type TaskCompletionWarning = 'no_tool_use';
+
 export interface TaskCompletedPayload {
   executionContext: ExecutionContext;
   result: string;
+  /** Present only when the task completed with at least one warning. */
+  warnings?: TaskCompletionWarning[];
 }
 export interface TaskFailedPayload {
   executionContext: ExecutionContext;

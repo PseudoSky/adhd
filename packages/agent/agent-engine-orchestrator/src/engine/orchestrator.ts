@@ -11,6 +11,7 @@ import type {
   PostToolCallPayload,
   PreToolCallPayload,
   ServerResultPersistPayload,
+  TaskCompletionWarning,
   TaskStartupPayload,
   ToolCallConcurrencyClass,
 } from '@adhd/agent-base-types';
@@ -1258,6 +1259,10 @@ export class Orchestrator {
       });
 
       let finalContent = '';
+      // cbd559eb: task-wide tool-use count (API tool calls + provider-internal claudecli uses) and whether
+      // the final stop was `completed`; both feed the `no_tool_use` completion warning.
+      let toolUseCount = 0;
+      let finalStopCompleted = false;
 
       // 9ed453c1 CACHE: canonical order for server-rendered allow-lists so the serialized tools
       // block (head of the cached prefix) is byte-stable across tasks and spawns.
@@ -2011,6 +2016,7 @@ export class Orchestrator {
         // loop control still keys off assistantMessage.toolCalls / executionContext.
         const reportedToolCallCount =
           providerResponse.reportedToolUses ?? assistantMessage.toolCalls?.length ?? 0;
+        toolUseCount += reportedToolCallCount;
         // R10 S5b: count the response's thinking blocks (absent for a provider that cannot produce them).
         const thinkingBlocks = thinkingBlocksOf(runSelection.providerType, providerResponse.echo);
         await hooks.emit('post:model_response', {
@@ -2057,6 +2063,7 @@ export class Orchestrator {
 
         if (providerResponse.stopReason === 'completed') {
           finalContent = assistantMessage.content ?? '';
+          finalStopCompleted = true;
           looping = false;
           continue;
         }
@@ -2601,6 +2608,29 @@ export class Orchestrator {
         }
       }
 
+      // cbd559eb: a `completed` stop with zero tool use, on an agent granted at least one tool, is flagged
+      // (never failed). HITL needs no separate check: a suspension always arrives through a tool call, so
+      // `toolUseCount` is already non-zero. The HITL builtin is pushed unconditionally, so it is excluded
+      // from the granted count.
+      const grantedToolCount = tools.filter(
+        (t) => t.name !== HITL_BUILTIN_TOOL_DEFINITION.name
+      ).length;
+      const completionWarnings: TaskCompletionWarning[] | undefined =
+        finalStopCompleted && toolUseCount === 0 && grantedToolCount > 0
+          ? ['no_tool_use']
+          : undefined;
+      if (completionWarnings) {
+        logger.warn(
+          {
+            taskId,
+            agentName: executionContext.agentName,
+            provider: runSelection.providerType,
+            grantedToolCount,
+          },
+          'TASK_COMPLETED with zero tool use although tools were granted (warnings: no_tool_use)'
+        );
+      }
+
       taskStore.updateStatus(taskId, 'completed', {
         result: finalContent,
         completedAt: nowIso(),
@@ -2610,7 +2640,11 @@ export class Orchestrator {
       taskStore.appendEvent({
         taskId,
         type: 'TASK_COMPLETED',
-        payload: { result: finalContent },
+        payload: {
+          result: finalContent,
+          toolUseCount,
+          ...(completionWarnings ? { warnings: completionWarnings } : {}),
+        },
       });
 
       logger.info(
@@ -2621,6 +2655,7 @@ export class Orchestrator {
       await hooks.emit('task:completed', {
         executionContext,
         result: finalContent,
+        ...(completionWarnings ? { warnings: completionWarnings } : {}),
       });
 
       emit({
