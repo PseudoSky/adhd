@@ -63,7 +63,8 @@ describe('C7 AC1 — ready/stale report an honest has_more (real store)', () => 
     dir = freshTmpDir('c7-ready');
     store = await openTestIssueStore(join(dir, 'backlog.db'));
     projectUid = (await seedProject(store, 'c7-ready-project')).projectUid;
-  });
+    // Store open + seeding run sequential write transactions; under load they exceed the 30 s default hook timeout.
+  }, 120_000);
   afterEach(async () => {
     await store.close();
     removeTestIssueStoreDir(dir);
@@ -142,7 +143,8 @@ describe('C7 AC3 — part-of-rollup count-only and paged modes (real store)', ()
     store = await openTestIssueStore(join(dir, 'backlog.db'));
     projectUid = (await seedProject(store, 'c7-rollup-project')).projectUid;
     await seedTerminalStatus(store, 'done');
-  });
+    // Store open + seeding run sequential write transactions; under load they exceed the 30 s default hook timeout.
+  }, 120_000);
   afterEach(async () => {
     await store.close();
     removeTestIssueStoreDir(dir);
@@ -254,7 +256,8 @@ describe('C7 AC4 — get lastN bounds the audit trail to its newest tail (real s
     dir = freshTmpDir('c7-get-lastn');
     store = await openTestIssueStore(join(dir, 'backlog.db'));
     projectUid = (await seedProject(store, 'c7-get-lastn-project')).projectUid;
-  });
+    // Store open + seeding run sequential write transactions; under load they exceed the 30 s default hook timeout.
+  }, 120_000);
   afterEach(async () => {
     await store.close();
     removeTestIssueStoreDir(dir);
@@ -334,7 +337,8 @@ describe('C7 AC5 (grep branch) — a grep-only _score is tagged bm25, never unta
     dir = freshTmpDir('c7-grep-score');
     store = await openTestIssueStore(join(dir, 'backlog.db'));
     projectUid = (await seedProject(store, 'c7-grep-score-project')).projectUid;
-  });
+    // Store open + seeding run sequential write transactions; under load they exceed the 30 s default hook timeout.
+  }, 120_000);
   afterEach(async () => {
     await store.close();
     removeTestIssueStoreDir(dir);
@@ -375,7 +379,8 @@ describe('C7 AC5 (vocabulary) — `_score_kind` accompanies `_score`, never requ
     store = await openTestIssueStore(join(dir, 'backlog.db'));
     projectUid = (await seedProject(store, 'c7-score-kind-vocab-project'))
       .projectUid;
-  });
+    // Store open + seeding run sequential write transactions; under load they exceed the 30 s default hook timeout.
+  }, 120_000);
   afterEach(async () => {
     await store.close();
     removeTestIssueStoreDir(dir);
@@ -451,7 +456,8 @@ describe('C7 AC7 — report equals an INDEPENDENT recomputation (real store, dir
     store = await openTestIssueStore(join(dir, 'backlog.db'));
     projectUid = (await seedProject(store, 'c7-report-project')).projectUid;
     await seedTerminalStatus(store, 'done');
-  });
+    // Store open + seeding run sequential write transactions; under load they exceed the 30 s default hook timeout.
+  }, 120_000);
   afterEach(async () => {
     await store.close();
     removeTestIssueStoreDir(dir);

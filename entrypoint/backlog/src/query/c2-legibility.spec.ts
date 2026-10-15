@@ -70,7 +70,8 @@ describe('C2 — structural legibility (real store)', () => {
     dir = freshTmpDir('c2-legibility');
     store = await openTestIssueStore(join(dir, 'backlog.db'));
     projectUid = (await seedProject(store, 'c2-legibility-project')).projectUid;
-  });
+    // Store open + seeding run sequential write transactions; under load they exceed the 30 s default hook timeout.
+  }, 120_000);
 
   afterEach(async () => {
     await store.close();
