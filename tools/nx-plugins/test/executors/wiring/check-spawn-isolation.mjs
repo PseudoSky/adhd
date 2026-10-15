@@ -3,49 +3,72 @@
  * check-spawn-isolation — the repo-wide static guard for the HOME-redirect
  * isolation posture (backlog 0945d1b9, decisions D1 + D2).
  *
- * THE CLASS. A spec or e2e test that spawns a Node bin (`process.execPath`, or
- * the literal `node`) hands the child the parent's environment. The child builds
- * its own `@adhd/environment` cascade from argv, env and `HOME`, so a child that
- * inherits the real `HOME` reads the machine's real `~/.adhd` config and stores.
- * The isolation mechanism is therefore the HOME redirect: every spawn site must
- * either route through an isolation helper (which sets `HOME` to a throwaway
- * root) or set `HOME` explicitly in its own env. A resolver-side gate cannot
- * protect a child process, so this guard is the control (see
- * docs/decisions/0002 and the spec's D1 rationale).
+ * THE CLASS. A spec or e2e test that spawns a Node bin (`process.execPath`, the
+ * literal `node`, or `fork(modulePath)`) hands the child the parent's environment.
+ * The child builds its own `@adhd/environment` cascade from argv, env and `HOME`, so
+ * a child that inherits the real `HOME` reads the machine's real `~/.adhd` config and
+ * stores. The isolation mechanism is therefore the HOME redirect: every spawn site
+ * must either route through an isolation helper (which sets `HOME` to a throwaway
+ * root) or set `HOME` explicitly in its own env. A resolver-side gate cannot protect
+ * a child process, so this guard is the control (see docs/decisions/0002 and the
+ * spec's D1 rationale).
  *
  * SCOPE. A file is checked when its owning package (nearest `package.json` at or
  * above it) declares a dependency on any `@adhd/environment*` package: those are
  * the packages whose children resolve the cascade. Only `*.spec.*`, `*.test.*` and
  * `*.e2e.*` files under `packages/` and `entrypoint/` are scanned.
  *
- * WHAT IT CHECKS (any violation => exit 1). For each in-scope file, with comments
- * stripped:
- *   A. (spawn-isolation-unrouted) the file spawns a node bin
- *      (`spawn|spawnSync|execFile|execFileSync|fork` with `process.execPath`,
- *      `'node'` or `"node"` as the executable) AND neither imports an isolation
- *      helper (`spawn-isolated-bin` or `spawn-backlog-bin`, or any name passed in
- *      `helpers`) NOR sets an explicit `HOME:` key in an env object.
- *      A file listed in `spawn-isolation.baseline.json` `unrouted` is tolerated
- *      while it still offends; the ratchet can only shrink.
- *   B. (spawn-isolation-baseline-stale) a baseline entry under a scanned root that
- *      no longer offends (routed, moved, renamed or deleted) must be removed.
+ * WHAT IT CHECKS (any violation => exit 1). Each file is tokenized (comments and
+ * string/template/regex literals are recognised, so a spawn inside an embedded script
+ * string is not a site and a commented `HOME:` routes nothing). Then:
+ *   A. (spawn-isolation-unrouted) a spawn SITE is unrouted unless that call routes
+ *      itself. A site is a call of `spawn|spawnSync|execFile|execFileSync` whose
+ *      executable is `process.execPath`, `'node'` or a const alias of either, or
+ *      `fork(modulePath, …)`. It is routed when, within the call's own argument span,
+ *      there is a `HOME` override (`HOME:` / `'HOME':` / shorthand `HOME`, not the real
+ *      home) or a use of something imported from an isolation helper
+ *      (`spawn-isolated-bin`, `spawn-backlog-bin`, or any name in `helpers`;
+ *      `DIST_INDEX` and other non-isolating exports do not count), or the span names
+ *      an identifier whose visible declaration carries one of those, or a
+ *      `process.env.HOME =` / `env.HOME =` assignment precedes the call in an
+ *      enclosing scope (or a `beforeAll`/`beforeEach` hook of one). A `HOME` key
+ *      elsewhere in the file routes nothing.
+ *   B. (spawn-isolation-unrouted, over the baseline) `spawn-isolation.baseline.json`
+ *      records, per file, the COUNT of unrouted sites tolerated today. A baselined
+ *      file whose unrouted count exceeds its baseline fails, naming file:line of every
+ *      site; a file not in the baseline tolerates none. Code changes can only lower
+ *      the tolerated counts; adding a file or raising a count is a reviewed edit of
+ *      the JSON (the same property as rule 6's ratchet), not something this check
+ *      rejects.
+ *   C. (spawn-isolation-baseline-stale) a baselined file under a scanned root whose
+ *      unrouted count dropped below its baseline (routed, moved, renamed, deleted)
+ *      fails until the entry is lowered or removed. (spawn-isolation-baseline-invalid:
+ *      an entry without a positive integer `count`.)
+ *   D. (spawn-isolation-scan-found-nothing) the scope holds `@adhd/environment*`
+ *      packages but zero spec/e2e files were scanned: the walker is broken.
+ *
+ * Known limits (static, regex-grade): a re-export of a helper under another module
+ * name is not followed; an identifier is matched by name against visible const/function
+ * declarations to depth 2; sites inside template-literal `${}` expressions are judged
+ * like any other code.
  *
  * Exit code is the only signal (0 = clean, 1 = violation), per the repo's
  * verification standard. Invoked by check-lane-reachability.mjs (rule 9), which
  * the pre-push hook and both CI workflows run, and by the backlog package's
  * `vocabulary-gate` through a thin caller.
  *
- * `--workspace-root <dir>` points the scan at a fixture workspace; `--baseline <file>`
- * overrides spawn-isolation.baseline.json (fixture runs).
+ * `--workspace-root <dir>` points the scan (and the default baseline lookup) at a
+ * fixture workspace; `--baseline <file>` overrides the baseline (fixture runs).
  */
 import { existsSync, globSync, readFileSync, realpathSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { stripComments } from './check-agent-lane-spawn.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '../../../../..');
-const BASELINE_PATH = join(HERE, 'spawn-isolation.baseline.json');
+
+/** Workspace-relative location of the ratchet baseline (resolved against the scanned workspace root). */
+export const BASELINE_REL = 'tools/nx-plugins/test/executors/wiring/spawn-isolation.baseline.json';
 
 const IGNORE = ['**/node_modules/**', '**/dist/**', '**/.worktrees/**', '**/.claude/**'];
 const SPEC_FILE = /\.(spec|test|e2e)\.[cm]?[jt]sx?$/;
@@ -53,11 +76,408 @@ const SPEC_FILE = /\.(spec|test|e2e)\.[cm]?[jt]sx?$/;
 /** Default workspace roots scanned, relative to the workspace root. */
 export const DEFAULT_ROOTS = ['packages', 'entrypoint'];
 
-/** Isolation helpers whose import marks a spawn site as routed. */
+/** Isolation helpers whose import marks a spawn site as routed (when the site uses what it imported). */
 export const ISOLATION_HELPERS = ['spawn-isolated-bin', 'spawn-backlog-bin'];
 
-/** A direct spawn of a Node bin: the executable is `process.execPath`, `node` or `"node"`. */
-export const NODE_SPAWN = /\b(?:spawn|spawnSync|execFile|execFileSync|fork)\s*\(\s*(?:process\.execPath|'node'|"node")/;
+/**
+ * Helper exports that do NOT isolate anything (the bin path, key lists, parsers).
+ * Importing or mentioning them never routes a spawn site.
+ */
+export const NON_ISOLATING_EXPORTS = [
+  'DIST_INDEX',
+  'AMBIENT_REDIRECT_ENV_KEYS',
+  'extractMintedSandboxRoot',
+  'looksLikeOwnSandboxDir',
+];
+
+/**
+ * Coarse regex for a direct spawn of a Node bin with a literal executable. Retained
+ * as an export for callers; the guard itself decides per call site (see
+ * {@link findUnroutedSpawnSites}), which also covers `fork(module)` and const aliases.
+ */
+export const NODE_SPAWN =
+  /\b(?:spawn|spawnSync|execFile|execFileSync|fork)\s*\(\s*(?:process\.execPath|process\.argv0|'node'|"node"|`node`)/;
+
+const SPAWN_CALL = /(?<![\w$])(?:spawn|spawnSync|execFile|execFileSync|fork)\s*\(/g;
+const NODE_LITERAL = /^(?:process\.execPath|process\.argv0|process\.argv\[\s*0\s*\]|(['"`])(?:node|nodejs)\1)$/;
+const ALIAS_DECL =
+  /(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*(?::[^=;\n]+)?=\s*(?:process\.execPath|process\.argv0|process\.argv\[\s*0\s*\]|(['"`])(?:node|nodejs)\2)\s*(?:as\s+[\w.]+\s*)?(?=[;,\n)]|$)/g;
+const ALIAS_DESTRUCTURE = /(?:const|let|var)\s*\{[^}]*\bexecPath\b[^}]*\}\s*=\s*process\b/;
+const ALIAS_IMPORT = /import\s*\{[^}]*\bexecPath\b[^}]*\}\s*from\s*['"](?:node:)?process['"]/;
+// A value that is the real home (or a variable holding a saved copy of it): not a redirect.
+const REAL_HOME_VALUE =
+  /^(?:process\.env\.HOME\b|process\.env\[\s*['"]HOME['"]\s*\]|(?:os\.)?homedir\s*\(|(?:prev|orig|saved|old|real)[\w$]*\s*(?:$|[;,}]))/;
+const KEYWORDS = new Set([
+  'process', 'true', 'false', 'null', 'undefined', 'new', 'await', 'async', 'typeof', 'void', 'return',
+  'const', 'let', 'var', 'function', 'this', 'as', 'of', 'in', 'string', 'number', 'boolean', 'any', 'unknown',
+]);
+
+/**
+ * One pass over the source: `code` is the source with comments blanked (same length,
+ * newlines kept, so indices and line numbers stay exact), `mask[i] === 1` marks
+ * characters inside a string, template or regex literal, and `blocks` lists every
+ * `{ … }` block of real code.
+ * @param {string} src Raw file contents.
+ * @returns {{ code: string, mask: Uint8Array, blocks: Array<{ start: number, end: number }> }}
+ */
+export function scanSource(src) {
+  const n = src.length;
+  const out = src.split('');
+  const mask = new Uint8Array(n);
+  const blocks = [];
+  const open = [];
+  const tpl = [];
+  let depth = 0;
+  let lastSig = '';
+  let lastWord = '';
+
+  const scanTemplate = (from) => {
+    let j = from;
+    while (j < n) {
+      mask[j] = 1;
+      const c = src[j];
+      if (c === '\\') {
+        if (j + 1 < n) mask[j + 1] = 1;
+        j += 2;
+        continue;
+      }
+      if (c === '`') return j + 1;
+      if (c === '$' && src[j + 1] === '{') {
+        mask[j + 1] = 1;
+        tpl.push(depth);
+        depth += 1;
+        return j + 2;
+      }
+      j += 1;
+    }
+    return j;
+  };
+
+  let i = 0;
+  while (i < n) {
+    const c = src[i];
+    const next = src[i + 1];
+    if (c === '/' && next === '/') {
+      while (i < n && src[i] !== '\n') out[i++] = ' ';
+      continue;
+    }
+    if (c === '/' && next === '*') {
+      const end = src.indexOf('*/', i + 2);
+      const stop = end < 0 ? n : end + 2;
+      for (; i < stop; i += 1) if (src[i] !== '\n') out[i] = ' ';
+      continue;
+    }
+    if (c === "'" || c === '"') {
+      mask[i] = 1;
+      i += 1;
+      while (i < n && src[i] !== c && src[i] !== '\n') {
+        mask[i] = 1;
+        if (src[i] === '\\') {
+          i += 1;
+          if (i < n) mask[i] = 1;
+        }
+        i += 1;
+      }
+      if (i < n && src[i] === c) mask[i] = 1;
+      i += 1;
+      lastSig = c;
+      lastWord = '';
+      continue;
+    }
+    if (c === '`') {
+      mask[i] = 1;
+      i = scanTemplate(i + 1);
+      lastSig = '`';
+      lastWord = '';
+      continue;
+    }
+    if (c === '/' && (lastSig === '' || '(,=:[!&|?{};'.includes(lastSig) || lastWord === 'return' || lastWord === 'typeof')) {
+      let j = i + 1;
+      let inClass = false;
+      while (j < n && src[j] !== '\n') {
+        if (src[j] === '\\') j += 1;
+        else if (src[j] === '[') inClass = true;
+        else if (src[j] === ']') inClass = false;
+        else if (src[j] === '/' && !inClass) break;
+        j += 1;
+      }
+      if (j < n && src[j] === '/') {
+        for (let k = i; k <= j; k += 1) mask[k] = 1;
+        i = j + 1;
+        lastSig = '/';
+        lastWord = '';
+        continue;
+      }
+    }
+    if (c === '{') {
+      open.push({ start: i, depth });
+      depth += 1;
+    } else if (c === '}') {
+      depth -= 1;
+      if (tpl.length > 0 && tpl[tpl.length - 1] === depth) {
+        tpl.pop();
+        mask[i] = 1;
+        i = scanTemplate(i + 1);
+        lastSig = '`';
+        continue;
+      }
+      const o = open.pop();
+      if (o) blocks.push({ start: o.start, end: i });
+    }
+    if (!/\s/.test(c)) {
+      if (/[\w$]/.test(c)) lastWord = /[\w$]/.test(src[i - 1] ?? '') ? lastWord + c : c;
+      else lastWord = '';
+      lastSig = c;
+    }
+    i += 1;
+  }
+  for (const o of open) blocks.push({ start: o.start, end: n });
+  return { code: out.join(''), mask, blocks };
+}
+
+/** Index of the matching `)` for the `(` at `openIdx` (literals skipped), or `code.length`. */
+function matchParen(code, mask, openIdx) {
+  let d = 0;
+  for (let j = openIdx; j < code.length; j += 1) {
+    if (mask[j]) continue;
+    if (code[j] === '(') d += 1;
+    else if (code[j] === ')') {
+      d -= 1;
+      if (d === 0) return j;
+    }
+  }
+  return code.length;
+}
+
+/** The first top-level argument text of a call whose argument span is `[from, to)`. */
+function firstArgument(code, mask, from, to) {
+  let d = 0;
+  for (let j = from; j < to; j += 1) {
+    if (mask[j]) continue;
+    const c = code[j];
+    if (c === '(' || c === '[' || c === '{') d += 1;
+    else if (c === ')' || c === ']' || c === '}') d -= 1;
+    else if (c === ',' && d === 0) return code.slice(from, j).trim();
+  }
+  return code.slice(from, to).trim();
+}
+
+/** Escape a string for use inside a RegExp source. */
+function esc(s) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * Local names a file binds from an isolation helper module (ESM import, `require`,
+ * or awaited `import()`), minus type-only and non-isolating bindings.
+ * @param {string} code Comment-blanked source.
+ * @param {readonly string[]} helpers Helper module basenames.
+ * @returns {{ names: Set<string>, namespaces: Set<string> }}
+ */
+function helperBindings(code, helpers) {
+  const names = new Set();
+  const namespaces = new Set();
+  if (helpers.length === 0) return { names, namespaces };
+  const modulePath = new RegExp(`(?:^|[\\\\/])(?:${helpers.map(esc).join('|')})(?:\\.[cm]?[jt]s)?$`);
+  const bindList = (list) => {
+    for (const part of list.split(',')) {
+      const p = part.trim();
+      if (!p || /^type\s/.test(p)) continue;
+      const m = /^([\w$]+)(?:\s+as\s+([\w$]+)|\s*:\s*([\w$]+))?$/.exec(p);
+      if (!m) continue;
+      if (NON_ISOLATING_EXPORTS.includes(m[1])) continue;
+      names.add(m[2] ?? m[3] ?? m[1]);
+    }
+  };
+  const importRe = /import\s+(?!\()(type\s+)?([^'";]*?)\s*from\s*['"]([^'"]+)['"]/g;
+  for (const m of code.matchAll(importRe)) {
+    if (m[1] || !modulePath.test(m[3])) continue;
+    const clause = m[2].trim();
+    const ns = /\*\s*as\s+([\w$]+)/.exec(clause);
+    if (ns) namespaces.add(ns[1]);
+    const braces = /\{([^}]*)\}/.exec(clause);
+    if (braces) bindList(braces[1]);
+    const def = /^([\w$]+)\s*(?:,|$)/.exec(clause.replace(/\{[^}]*\}/, '').trim());
+    if (def) names.add(def[1]);
+  }
+  const requireRe = /(?:const|let|var)\s+(\{[^}]*\}|[\w$]+)\s*=\s*(?:await\s+)?(?:require|import)\s*\(\s*['"]([^'"]+)['"]\s*\)/g;
+  for (const m of code.matchAll(requireRe)) {
+    if (!modulePath.test(m[2])) continue;
+    if (m[1].startsWith('{')) bindList(m[1].slice(1, -1));
+    else namespaces.add(m[1]);
+  }
+  return { names, namespaces };
+}
+
+/**
+ * Does `text` contain a HOME-redirect signal: a `HOME` key (bare, quoted or
+ * shorthand) whose value is not the real home, a `.HOME =` assignment, a
+ * `stubEnv('HOME', …)`, or a use of something imported from an isolation helper?
+ * @param {string} text Source slice (comments blanked).
+ * @param {{ names: Set<string>, namespaces: Set<string> }} binds Helper bindings.
+ * @returns {boolean}
+ */
+function hasHomeSignal(text, binds) {
+  for (const m of text.matchAll(/(?<![\w$.])(?:HOME|'HOME'|"HOME"|`HOME`)\s*:\s*([^,}\n]*)/g)) {
+    if (!REAL_HOME_VALUE.test(m[1].trim())) return true;
+  }
+  if (/[{,]\s*HOME\s*[,}]/.test(text)) return true;
+  if (/stubEnv\s*\(\s*['"]HOME['"]/.test(text)) return true;
+  for (const m of text.matchAll(/[\w$\]]\s*(?:\.HOME|\[\s*['"]HOME['"]\s*\])\s*=(?!=)\s*([^;\n]*)/g)) {
+    if (!REAL_HOME_VALUE.test(m[1].trim())) return true;
+  }
+  for (const name of binds.names) if (new RegExp(`(?<![\\w$.])${esc(name)}(?![\\w$])`).test(text)) return true;
+  for (const ns of binds.namespaces) {
+    const re = new RegExp(`(?<![\\w$.])${esc(ns)}\\s*\\.\\s*([\\w$]+)`, 'g');
+    for (const m of text.matchAll(re)) if (!NON_ISOLATING_EXPORTS.includes(m[1])) return true;
+  }
+  return false;
+}
+
+/** Positions of every `.HOME =` / `stubEnv('HOME', …)` statement (HOME set for the whole process or an env object). */
+function homeAssignments(code, mask) {
+  const out = [];
+  const re = /[\w$\]]\s*(?:\.HOME|\[\s*['"]HOME['"]\s*\])\s*=(?!=)\s*([^;\n]*)|stubEnv\s*\(\s*['"]HOME['"]/g;
+  for (const m of code.matchAll(re)) {
+    if (mask[m.index] && !/^stubEnv/.test(m[0])) continue;
+    if (m[1] !== undefined && REAL_HOME_VALUE.test(m[1].trim())) continue;
+    out.push(m.index);
+  }
+  return out;
+}
+
+/** The initializer / body texts (with their start index) that declare `id` in `code`. */
+function declarationsOf(code, mask, blocks, id) {
+  const texts = [];
+  // `const|let|var ID … = init` declarations, and later plain `ID = init` assignments
+  // (`let sandbox; … sandbox = mintBacklogSandbox();`).
+  const declRe = new RegExp(
+    `(?:(?:const|let|var)\\s+${esc(id)}(?![\\w$])[^=;\\n]*=(?!=)|(?<![\\w$.])${esc(id)}\\s*=(?![=>]))\\s*`,
+    'g',
+  );
+  for (const m of code.matchAll(declRe)) {
+    if (mask[m.index]) continue;
+    const from = m.index + m[0].length;
+    let d = 0;
+    let j = from;
+    for (; j < code.length && j - from < 4000; j += 1) {
+      if (mask[j]) continue;
+      const c = code[j];
+      if (c === '(' || c === '[' || c === '{') d += 1;
+      else if (c === ')' || c === ']' || c === '}') {
+        d -= 1;
+        if (d < 0) break;
+      } else if (d === 0 && c === ';') break;
+      else if (d === 0 && c === '\n') {
+        const prev = code.slice(from, j).trimEnd().slice(-1);
+        const nxt = /\S/.exec(code.slice(j))?.[0] ?? '';
+        if (!'=,(+-*/&|?:>'.includes(prev) && !'.?:+-*/&|,)'.includes(nxt)) break;
+      }
+    }
+    texts.push({ idx: m.index, text: code.slice(from, j) });
+  }
+  const fnRe = new RegExp(`function\\s+${esc(id)}\\s*\\(`, 'g');
+  for (const m of code.matchAll(fnRe)) {
+    if (mask[m.index]) continue;
+    const close = matchParen(code, mask, m.index + m[0].length - 1);
+    const body = blocks.filter((b) => b.start > close).sort((a, b) => a.start - b.start)[0];
+    if (body) texts.push({ idx: m.index, text: code.slice(m.index, body.end + 1) });
+  }
+  return texts;
+}
+
+const HOOK_HEAD = /(?:beforeAll|beforeEach)\s*\(\s*(?:async\s*)?(?:function\s*\w*\s*\([^)]*\)|\([^)]*\)\s*(?::\s*[^=]+)?=>|[\w$]+\s*=>)\s*$/;
+
+/**
+ * Every spawn call of a Node bin in a spec or e2e source whose child can inherit the
+ * real `HOME`. Judged PER CALL SITE: a site is routed only when its own argument span
+ * carries a HOME redirect or helper use (directly, or through an identifier declared
+ * with one), or a `.HOME =` assignment precedes it in an enclosing scope. A `HOME:`
+ * key elsewhere in the file routes nothing.
+ *
+ * Node-bin spawns are `spawn|spawnSync|execFile|execFileSync` whose executable is
+ * `process.execPath`, `'node'`, or a const alias of either, and `fork(modulePath, …)`.
+ * @param {string} rawSrc Raw file contents.
+ * @param {readonly string[]} [helpers] Helper module basenames that mark a routed site.
+ * @returns {Array<{ line: number, callee: string }>}
+ */
+export function findUnroutedSpawnSites(rawSrc, helpers = ISOLATION_HELPERS) {
+  if (!/\b(?:spawn|spawnSync|execFile|execFileSync|fork)\s*\(/.test(rawSrc)) return [];
+  const { code, mask, blocks } = scanSource(rawSrc);
+  const binds = helperBindings(code, helpers);
+  const aliases = new Set();
+  for (const m of code.matchAll(ALIAS_DECL)) if (!mask[m.index]) aliases.add(m[1]);
+  if (ALIAS_DESTRUCTURE.test(code) || ALIAS_IMPORT.test(code)) aliases.add('execPath');
+  const assignments = homeAssignments(code, mask);
+  const lineAt = (idx) => code.slice(0, idx).split('\n').length;
+  const innermost = (p, within = blocks) => {
+    let best;
+    for (const b of within) if (b.start < p && p < b.end && (!best || b.end - b.start < best.end - best.start)) best = b;
+    return best;
+  };
+  const contains = (b, p) => !b || (b.start < p && p < b.end);
+  // Is a statement at `p` in a scope the site at `siteIdx` can see: module level, a block
+  // enclosing the site, or a `beforeAll`/`beforeEach` hook of such a block?
+  const scopeReaches = (p, siteIdx) => {
+    const home = innermost(p);
+    if (contains(home, siteIdx)) return true;
+    if (HOOK_HEAD.test(code.slice(Math.max(0, home.start - 160), home.start))) return contains(innermost(home.start), siteIdx);
+    return false;
+  };
+
+  const visited = new Set();
+  const identifierRouted = (text, absStart, level, siteIdx) => {
+    if (level > 2) return false;
+    for (const m of text.matchAll(/(?<![\w$.])([A-Za-z_$][\w$]*)(?![\w$])(?!\s*:)/g)) {
+      const id = m[1];
+      if (KEYWORDS.has(id) || (absStart !== undefined && mask[absStart + m.index])) continue;
+      if (visited.has(`${level}:${id}`)) continue;
+      visited.add(`${level}:${id}`);
+      for (const decl of declarationsOf(code, mask, blocks, id)) {
+        // Only a declaration visible from the site counts: module level, or in a block enclosing it.
+        if (!scopeReaches(decl.idx, siteIdx)) continue;
+        if (hasHomeSignal(decl.text, binds) || identifierRouted(decl.text, undefined, level + 1, siteIdx)) return true;
+      }
+    }
+    return false;
+  };
+
+  const sites = [];
+  for (const m of code.matchAll(SPAWN_CALL)) {
+    if (mask[m.index]) continue;
+    const callee = /^[a-zA-Z]+/.exec(m[0])[0];
+    if (callee === 'fork' && /(?:cluster|worker)\s*\.\s*$/.test(code.slice(Math.max(0, m.index - 12), m.index))) continue;
+    const open = m.index + m[0].length - 1;
+    const close = matchParen(code, mask, open);
+    // A declaration (`function fork(a) {`, `fork(a) {` class member), not a call.
+    if (/function\s*\*?\s*$/.test(code.slice(Math.max(0, m.index - 20), m.index)) || /^\s*\{/.test(code.slice(close + 1, close + 40))) continue;
+    const first = firstArgument(code, mask, open + 1, close);
+    const isNodeBin = callee === 'fork' ? first.length > 0 : NODE_LITERAL.test(first) || aliases.has(first);
+    if (!isNodeBin) continue;
+
+    const span = code.slice(open + 1, close);
+    if (hasHomeSignal(span, binds)) continue;
+    visited.clear();
+    if (identifierRouted(span, open + 1, 0, m.index)) continue;
+    const routedByAssignment = assignments.some((p) => p < m.index && scopeReaches(p, m.index));
+    if (routedByAssignment) continue;
+    sites.push({ line: lineAt(m.index), callee });
+  }
+  return sites;
+}
+
+/**
+ * Why a spec or e2e source (raw text) spawns a Node bin without isolation, or
+ * `undefined` when every Node-bin spawn site is routed (see {@link findUnroutedSpawnSites}).
+ * @param {string} rawSrc Raw file contents.
+ * @param {readonly string[]} [helpers] Helper module basenames that mark a routed site.
+ * @returns {string | undefined}
+ */
+export function spawnIsolationReason(rawSrc, helpers = ISOLATION_HELPERS) {
+  const sites = findUnroutedSpawnSites(rawSrc, helpers);
+  if (sites.length === 0) return undefined;
+  return `${sites.length} spawn site(s) of a node bin (process.execPath / node / fork) without an isolation helper or an explicit HOME override in the call (line ${sites.map((s) => s.line).join(', ')})`;
+}
 
 /**
  * The owning package of a workspace-relative file: the nearest `package.json` at
@@ -89,67 +509,95 @@ export function usesEnvironmentFamily(pkg) {
 }
 
 /**
- * Why a spec or e2e source (raw text) spawns a Node bin without isolation, or
- * `undefined` when it does not spawn one or it is routed (imports a helper, or
- * sets an explicit `HOME:` key). Comments are stripped first, so a commented
- * `HOME:` or helper import does not count.
- * @param {string} rawSrc Raw file contents.
- * @param {readonly string[]} [helpers] Helper module names that mark a routed site.
- * @returns {string | undefined}
+ * Normalize a baseline document to `Map<file, { count, reason? }>`. The current shape
+ * is `{ unrouted: { "<file>": { count, reason } } }`. A legacy array of file names is
+ * still parsed (each file tolerated without a count ceiling, for fixture compatibility
+ * only; the checked-in baseline uses counts).
+ * @param {{ unrouted?: Record<string, { count: number, reason?: string }> | string[] }} [baseline]
+ * @returns {Map<string, { count: number, reason?: string }>}
  */
-export function spawnIsolationReason(rawSrc, helpers = ISOLATION_HELPERS) {
-  const src = stripComments(rawSrc);
-  if (!NODE_SPAWN.test(src)) return undefined;
-  const alternation = helpers.map((h) => h.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
-  if (new RegExp(`from\\s+['"][^'"]*(?:${alternation})(?:\\.js)?['"]`).test(src)) return undefined;
-  if (/\bHOME\s*:/.test(src)) return undefined;
-  return 'spawns a node bin (process.execPath / node) without an isolation helper or an explicit HOME override';
+export function normalizeBaseline(baseline) {
+  const out = new Map();
+  const u = baseline?.unrouted;
+  if (Array.isArray(u)) for (const f of u) out.set(f, { count: Number.POSITIVE_INFINITY });
+  else if (u && typeof u === 'object') for (const [f, v] of Object.entries(u)) out.set(f, v);
+  return out;
 }
 
 /**
  * Run the repo-wide spawn-isolation scan.
  * @param {string} workspaceRoot Absolute workspace root.
- * @param {{ baseline?: { unrouted?: string[] }, roots?: string[], helpers?: string[] }} [opts]
- *   `baseline` overrides the on-disk baseline; `roots` limits the scan (and the
- *   stale-entry check) to those workspace-relative directories.
+ * @param {{ baseline?: object, roots?: string[], helpers?: string[] }} [opts]
+ *   `baseline` overrides the baseline read from `BASELINE_REL` under the workspace root (a
+ *   workspace without that file has an empty baseline); `roots` limits the scan (and
+ *   the stale-entry check) to those workspace-relative directories.
  * @returns {{ violations: Array<{ rule: string, detail: string }>, scanned: number }}
  */
 export function collectSpawnIsolationViolations(workspaceRoot, opts = {}) {
   const roots = opts.roots ?? DEFAULT_ROOTS;
   const helpers = opts.helpers ?? ISOLATION_HELPERS;
-  const baseline =
-    opts.baseline ?? (existsSync(BASELINE_PATH) ? JSON.parse(readFileSync(BASELINE_PATH, 'utf8')) : { unrouted: [] });
-  const known = new Set(baseline.unrouted ?? []);
-  const offending = new Set();
+  const baselinePath = join(workspaceRoot, BASELINE_REL);
+  const baseline = opts.baseline ?? (existsSync(baselinePath) ? JSON.parse(readFileSync(baselinePath, 'utf8')) : {});
+  const known = normalizeBaseline(baseline);
   const violations = [];
+  const unroutedCount = new Map();
   let scanned = 0;
+  let envPackages = 0;
+  let rootsPresent = 0;
+
+  for (const [file, entry] of known) {
+    if (!(entry.count > 0)) {
+      violations.push({
+        rule: 'spawn-isolation-baseline-invalid',
+        detail: `${file} — spawn-isolation.baseline.json entry needs a positive integer "count"; got ${JSON.stringify(entry.count)}.`,
+      });
+    }
+  }
 
   for (const root of roots) {
     if (!existsSync(join(workspaceRoot, root))) continue;
+    rootsPresent += 1;
+    for (const f of globSync('**/package.json', { cwd: join(workspaceRoot, root), ignore: IGNORE })) {
+      const pkg = JSON.parse(readFileSync(join(workspaceRoot, root, f), 'utf8'));
+      if (usesEnvironmentFamily(pkg)) envPackages += 1;
+    }
     for (const f of globSync('**/*.*', { cwd: join(workspaceRoot, root), ignore: IGNORE })) {
       if (!SPEC_FILE.test(f)) continue;
       const rel = `${root}/${f}`;
       const owner = owningPackage(workspaceRoot, rel);
       if (!owner || !usesEnvironmentFamily(owner.pkg)) continue;
       scanned += 1;
-      const why = spawnIsolationReason(readFileSync(join(workspaceRoot, rel), 'utf8'), helpers);
-      if (!why) continue;
-      offending.add(rel);
-      if (!known.has(rel)) {
-        violations.push({
-          rule: 'spawn-isolation-unrouted',
-          detail: `${rel} — ${why}. Route the spawn through an isolation helper (spawn-isolated-bin or spawn-backlog-bin) or set an explicit HOME in the child env (backlog 0945d1b9 AC1).`,
-        });
-      }
+      const sites = findUnroutedSpawnSites(readFileSync(join(workspaceRoot, rel), 'utf8'), helpers);
+      if (sites.length === 0) continue;
+      unroutedCount.set(rel, sites.length);
+      const allowed = known.get(rel)?.count ?? 0;
+      if (sites.length <= allowed) continue;
+      const where = sites.map((s) => `${rel}:${s.line} (${s.callee})`).join(', ');
+      violations.push({
+        rule: 'spawn-isolation-unrouted',
+        detail:
+          allowed > 0
+            ? `${rel} — ${sites.length} unrouted node-bin spawn site(s), baseline allows ${allowed}; a new unrouted site was added. Sites: ${where}. Route each through an isolation helper (spawn-isolated-bin or spawn-backlog-bin) or set an explicit HOME in the child env (backlog 0945d1b9 AC1).`
+            : `${rel} — spawns a node bin without an isolation helper or an explicit HOME override in the call: ${where}. Route the spawn through an isolation helper (spawn-isolated-bin or spawn-backlog-bin) or set an explicit HOME in the child env (backlog 0945d1b9 AC1).`,
+      });
     }
   }
 
-  for (const rel of known) {
+  if (rootsPresent > 0 && envPackages > 0 && scanned === 0) {
+    violations.push({
+      rule: 'spawn-isolation-scan-found-nothing',
+      detail: `${workspaceRoot} — found ${envPackages} @adhd/environment-family package(s) but ZERO spec/test/e2e files scanned; the walker is broken.`,
+    });
+  }
+
+  for (const [rel, entry] of known) {
     const underScannedRoot = roots.some((root) => rel.startsWith(`${root}/`));
-    if (underScannedRoot && !offending.has(rel)) {
+    if (!underScannedRoot || !(entry.count > 0)) continue;
+    const now = unroutedCount.get(rel) ?? 0;
+    if (entry.count === Number.POSITIVE_INFINITY ? now === 0 : now < entry.count) {
       violations.push({
         rule: 'spawn-isolation-baseline-stale',
-        detail: `${rel} — listed in spawn-isolation.baseline.json unrouted but no longer an unrouted spawn (routed, moved, renamed or deleted); remove the entry.`,
+        detail: `${rel} — spawn-isolation.baseline.json allows ${entry.count} unrouted site(s) but only ${now} remain (routed, moved, renamed or deleted); ${now === 0 ? 'remove the entry' : `lower the count to ${now}`}.`,
       });
     }
   }
@@ -177,7 +625,7 @@ function main() {
     process.exit(1);
   }
   console.log(
-    `✓ spawn-isolation OK — ${scanned} spec/e2e file(s) in @adhd/environment-family packages checked; every node spawn is routed or baselined.`,
+    `✓ spawn-isolation OK — ${scanned} spec/e2e file(s) in @adhd/environment-family packages checked; every node spawn site is routed or within its baseline count.`,
   );
 }
 

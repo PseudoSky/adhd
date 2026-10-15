@@ -61,6 +61,12 @@
  *      ships `*.e2e.test.ts` excludes them from its unit lane. Delegated to
  *      `check-agent-lane-spawn.mjs` (backlog 5b839b90 AC2).
  *
+ *   9. Every spawn of a Node bin (`process.execPath` / `node` / `fork(module)`) in a
+ *      spec/test/e2e file of an `@adhd/environment*`-dependent package routes HOME in
+ *      the call itself (an isolation helper or an explicit `HOME` override). Ratcheted
+ *      per file against `spawn-isolation.baseline.json` (per-file site counts that can
+ *      only shrink). Delegated to `check-spawn-isolation.mjs` (backlog 0945d1b9).
+ *
  * Exit code is the only signal (0 = wired, 1 = gap found), per the repo's
  * verification standard — never grep stdout for "passed".
  *
@@ -152,7 +158,7 @@ function fileInvokesTarget(text, t, { canonical = true } = {}) {
  * injecting a deliberately-broken plugin; production always passes the REAL
  * plugin (see `main`).
  */
-export async function runChecks({ workspaceRoot, gateTargets, createNodesFn, baseline: baselineOverride, agentLaneBaseline, prePushTargets: prePushOverride }) {
+export async function runChecks({ workspaceRoot, gateTargets, createNodesFn, baseline: baselineOverride, agentLaneBaseline, spawnIsolationBaseline, prePushTargets: prePushOverride }) {
   const violations = [];
   const add = (rule, detail) => violations.push({ rule, detail });
 
@@ -330,8 +336,10 @@ export async function runChecks({ workspaceRoot, gateTargets, createNodesFn, bas
 
   // ---- rule 9: every node spawn in an @adhd/environment-family spec routes HOME ----
   // backlog 0945d1b9 AC1/AC2. Delegated to check-spawn-isolation.mjs (one
-  // implementation). Unconditional, like rules 7 and 8.
-  for (const v of collectSpawnIsolationViolations(workspaceRoot).violations) {
+  // implementation). Unconditional, like rules 7 and 8. The baseline is read from
+  // `workspaceRoot` (a fixture workspace without one has an empty baseline) unless
+  // `spawnIsolationBaseline` overrides it, mirroring rule 6's `baseline`.
+  for (const v of collectSpawnIsolationViolations(workspaceRoot, { baseline: spawnIsolationBaseline }).violations) {
     add(`9-${v.rule}`, v.detail);
   }
 
@@ -359,11 +367,13 @@ async function main() {
     console.error('  The gate runs GATE_TARGETS from tools/gate/lane-gate.mjs; both CI workflows must reach');
     console.error('  every target (pre-push runs test, never e2e), every `e2e` lane must be cached, `test` must not re-couple `e2e`,');
     console.error('  `publish` does not depend on `e2e` (owner decision 2026-10-07), and every');
-    console.error('  `vite.config.ts` must declare exactly ONE `plugins:` array (check-vite-config-plugins.mjs).');
+    console.error('  `vite.config.ts` must declare exactly ONE `plugins:` array (check-vite-config-plugins.mjs), no agent-family');
+    console.error('  unit-lane test may spawn a subprocess (check-agent-lane-spawn.mjs), and every node-bin spawn in an');
+    console.error('  @adhd/environment-family spec/e2e must route HOME per call site (check-spawn-isolation.mjs).');
     process.exit(1);
   }
 
-  console.log(`✓ lane reachability OK — gate targets [${gateTargets.join(', ')}]; CI workflows reach them, pre-push runs test without e2e; every e2e lane cached; publish does not depend on e2e; every vite.config.ts single-array.`);
+  console.log(`✓ lane reachability OK — gate targets [${gateTargets.join(', ')}]; CI workflows reach them, pre-push runs test without e2e; every e2e lane cached; publish does not depend on e2e; every vite.config.ts single-array; no agent-family unit-lane spawn; every environment-family node spawn routes HOME (within its baseline).`);
 }
 
 // Only run when invoked directly (never when imported by a test).
