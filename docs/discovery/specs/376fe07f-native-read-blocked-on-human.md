@@ -19,3 +19,8 @@ Options and consequences (no recommendation is pre-committed; the architect woul
 3. Decline the build and instead propose the numbering as a post-processing note in the existing fs server wrapper (no new server) — would need its own evaluation; conflicts with ADR-0008 A1's conclusion that no adoptable server gives native-Read output.
 
 When approved, record the approval text in the item (`adhd-backlog update` note) and re-dispatch architect for a full spec: AC1-AC10 in the item are already stable and testable; open questions to carry into that spec: the claudecli bridge deny path is unverified (must be proven by a test, per item), and the tool-result-cap interaction (AC7).
+
+## Product revision
+dor (product): blocked-on-human (unchanged; product cannot grant package-creation approval).
+Product recommendation for the user's one decision: Option 2 (host the stdio server inside the existing `agent-core-native-tooling`). Reasons: AGENTS section 8 reuse-before-create and the two-use rule (that package already owns catalog and launch resolution, so a second package would immediately import it back), one less published surface, and AC8 collapses to a single `verify-dist-load`. Option 1 only if the read tool must version and publish independently of the catalog. Option 3 conflicts with ADR-0008 A1's conclusion and is not recommended.
+Priority: P3, rank 11 (blocked; value is a native-Read-shaped output, not a defect).
