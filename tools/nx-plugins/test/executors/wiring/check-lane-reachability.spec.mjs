@@ -23,6 +23,8 @@ import { dirname, join } from 'node:path';
 import { runChecks } from './check-lane-reachability.mjs';
 // Rule 8's own negative controls ride this (already `test:build-tools`-wired) spec file.
 import './check-agent-lane-spawn.spec.mjs';
+// Rule 9's own negative controls (0945d1b9 AC1/AC2) ride this same wired spec file.
+import './check-spawn-isolation.spec.mjs';
 // 90d07610 AC4: the NAT_TOOL_LIVE gate-table docs contract rides this same wired spec file.
 import './nat-tool-live-docs.spec.mjs';
 
