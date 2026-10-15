@@ -105,7 +105,7 @@ Scope: every npm-style package under `packages/*`, `entrypoint/*`, `tools/nx-plu
 | packages/apigen/plugins/demo-plugin | WASTE | HIGH | n/a | tsconfig.base.json:116 alias only; no package.json, no project.json, 0 references (`rg demo-plugin` outside tsconfig/self -> none). |
 | packages/apigen/tools/vite-copy-readme.mjs | WASTE | MEDIUM | n/a | 0 references; differs from the live tools/vite-plugins/copy-readme.mjs (`diff -q` -> differ); commit bf74a157 claimed it moved to root tools/. |
 | packages/apigen/tools/bench-extract.ts | SHRINK | LOW | n/a | Only referenced by the grooming extract (docs/backlog/grooming/wf_28c6a91a-4c9-extract.json:7487-7489), which calls it "silent"; not in any target. |
-| tools/util/pbcopy.js | WASTE | HIGH | n/a | `rg pbcopy` over code/config -> only its own file; 1 commit-era file of 9 lines (macOS clipboard helper). |
+| tools/util/pbcopy.js | WASTE | HIGH | n/a | `rg pbcopy` over code/config -> only its own file; a 9-line macOS clipboard helper (tools/util/pbcopy.js:1-9). |
 | tools/ai-migrations | SHRINK | LOW | n/a | 8 prompt files referenced only from migrations.json:279,416,466,480,506 (nx migrate AI prompts for 23.2.1). Installed @nx/jest is 23.2.1. |
 | tools/mcp-shell | SHRINK | LOW | n/a | Only security.yaml remains. In-repo reader is a contract test (docs-and-config-contract.test.ts:162-191) asserting it exists; README says machine-global agents point MCP_SHELL_SEC_CONFIG_FILE at it (external, UNKNOWN). |
 | tools/evidence | KEEP | HIGH | n/a | Gated by `nx run @adhd/source:evidence-gates` (project.json:193-200), CI ci.yml:104; 3 scripts used by agent workflow (commit-mine, audit-closed-items). |
@@ -151,7 +151,7 @@ Scope: every npm-style package under `packages/*`, `entrypoint/*`, `tools/nx-plu
 - **Last substantive commit:** 2026-10-12 b3c4bd21 feat(agent-engine-orchestrator): R10 S5b engine trace emission - post:model_response turnIndex/thinkingConfig/thinkingBlocks/toolResultBytesIn from real data, task:startup typed (queueWaitMs/sessionMs optional), dispatch:completed toolCallId via per-call scope, result-wait dispatch event (R10 S5b AC1 AC2 AC3 AC4 AC5); 82 commits total; 16 source files
 - **Adversarial attack:** Attack: look for zero/self-only importers; found 11 real importer(s) (+1 test-only).
 - **Self-refutation:** Refuted: has production importers on a path reachable from an entrypoint.
-- **Evidence:** importers listed below
+- **Evidence:** see Importers list
 
 ### @adhd/agent-core-env (packages/agent/agent-core-env) - KEEP (HIGH)
 
@@ -166,7 +166,7 @@ Scope: every npm-style package under `packages/*`, `entrypoint/*`, `tools/nx-plu
 - **Last substantive commit:** 2026-10-08 8c0514d6 fix(agent-core-env): release 0.1.5 declaring @adhd/sox-store-adapter ^0.13.3 (Turso 0.8.2) to stop mixed-engine FTS drop/recreate (4b7fd623); 37 commits total; 16 source files
 - **Adversarial attack:** Attack: look for zero/self-only importers; found 3 real importer(s).
 - **Self-refutation:** Refuted: has production importers on a path reachable from an entrypoint.
-- **Evidence:** importers listed below
+- **Evidence:** see Importers list
 
 ### @adhd/agent-core-native-tooling (packages/agent/agent-core-native-tooling) - KEEP (HIGH)
 
@@ -181,7 +181,7 @@ Scope: every npm-style package under `packages/*`, `entrypoint/*`, `tools/nx-plu
 - **Last substantive commit:** 2026-10-12 11d757f4 feat(agent-engine-orchestrator): shell tool guidance lists generated allowlist, unavailable commands and verified curl title/heading recipes (R7-guidance AC1-AC3); 44 commits total; 21 source files
 - **Adversarial attack:** Attack: look for zero/self-only importers; found 3 real importer(s).
 - **Self-refutation:** Refuted: has production importers on a path reachable from an entrypoint.
-- **Evidence:** importers listed below
+- **Evidence:** see Importers list
 
 ### @adhd/agent-core-policy (packages/agent/agent-core-policy) - KEEP (MEDIUM)
 
@@ -210,7 +210,7 @@ Scope: every npm-style package under `packages/*`, `entrypoint/*`, `tools/nx-plu
 - **Last substantive commit:** 2026-10-12 1eb61b08 feat(agent-mcp): parity R7-think: thinking is the model default on every arm (report-only), main-tree LOG scope gate, sonnet-5 context/max-tokens/rate card; 67 commits total; 46 source files
 - **Adversarial attack:** Attack: look for zero/self-only importers; found 4 real importer(s).
 - **Self-refutation:** Refuted: has production importers on a path reachable from an entrypoint.
-- **Evidence:** importers listed below
+- **Evidence:** see Importers list
 
 ### @adhd/agent-engine-compiler (packages/agent/agent-engine-compiler) - KEEP (MEDIUM)
 
@@ -224,7 +224,7 @@ Scope: every npm-style package under `packages/*`, `entrypoint/*`, `tools/nx-plu
 - **Last substantive commit:** 2026-10-07 4e465788 Committing: released items; 64 commits total; 29 source files
 - **Adversarial attack:** Attack: look for zero/self-only importers; found 2 real importer(s).
 - **Self-refutation:** Refuted: has production importers on a path reachable from an entrypoint.
-- **Evidence:** importers listed below
+- **Evidence:** see Importers list
 
 ### @adhd/agent-engine-orchestrator (packages/agent/agent-engine-orchestrator) - KEEP (MEDIUM)
 
@@ -237,7 +237,7 @@ Scope: every npm-style package under `packages/*`, `entrypoint/*`, `tools/nx-plu
 - **Last substantive commit:** 2026-10-14 3b83db8a fix(agent-engine-orchestrator): temp-root test redirects os.tmpdir and usage chunking test splits its 33k seed (b941dcd3); 270 commits total; 242 source files
 - **Adversarial attack:** Attack: look for zero/self-only importers; found 1 real importer(s) (+2 test-only).
 - **Self-refutation:** Refuted: has production importers on a path reachable from an entrypoint.
-- **Evidence:** importers listed below
+- **Evidence:** see Importers list
 
 ### @adhd/agent-generator-plugin (packages/agent/agent-generator-plugin) - MERGE (LOW)
 
@@ -304,7 +304,7 @@ Scope: every npm-style package under `packages/*`, `entrypoint/*`, `tools/nx-plu
 - **Last substantive commit:** 2026-10-07 35bbcbf0 feat(nx-build): release/CI/toolchain integrity gates (a4d346ae df9de4da 8c0c314e 255394d0 b83f167d 420a7051 e92e2b92 7b7d5e38 ddceb069); 41 commits total; 22 source files
 - **Adversarial attack:** Attack: look for zero/self-only importers; found 3 real importer(s).
 - **Self-refutation:** Refuted: has production importers on a path reachable from an entrypoint.
-- **Evidence:** importers listed below
+- **Evidence:** see Importers list
 
 ### @adhd/agent-store-runtime (packages/agent/agent-store-runtime) - KEEP (HIGH)
 
@@ -319,7 +319,7 @@ Scope: every npm-style package under `packages/*`, `entrypoint/*`, `tools/nx-plu
 - **Last substantive commit:** 2026-10-12 9c8d9bf1 docs(agent-engine-orchestrator): document provider echo persistence, TTL, degrade, pause_turn cap, privacy, events, hook, config keys, migration 0017 and usage accounting (R9-hist S8); 70 commits total; 25 source files
 - **Adversarial attack:** Attack: look for zero/self-only importers; found 3 real importer(s) (+2 test-only).
 - **Self-refutation:** Refuted: has production importers on a path reachable from an entrypoint.
-- **Evidence:** importers listed below
+- **Evidence:** see Importers list
 
 ### @adhd/agent-store-tools (packages/agent/agent-store-tools) - KEEP (MEDIUM)
 
@@ -332,7 +332,7 @@ Scope: every npm-style package under `packages/*`, `entrypoint/*`, `tools/nx-plu
 - **Last substantive commit:** 2026-10-07 35bbcbf0 feat(nx-build): release/CI/toolchain integrity gates (a4d346ae df9de4da 8c0c314e 255394d0 b83f167d 420a7051 e92e2b92 7b7d5e38 ddceb069); 41 commits total; 21 source files
 - **Adversarial attack:** Attack: look for zero/self-only importers; found 1 real importer(s) (+1 test-only).
 - **Self-refutation:** Refuted: has production importers on a path reachable from an entrypoint.
-- **Evidence:** importers listed below
+- **Evidence:** see Importers list
 
 ### @adhd/apigen-base-errors (packages/apigen/apigen-base-errors) - KEEP (HIGH)
 
@@ -356,7 +356,7 @@ Scope: every npm-style package under `packages/*`, `entrypoint/*`, `tools/nx-plu
 - **Last substantive commit:** 2026-09-22 b2022986 feat(vite-plugins): absorb perf/test-resolve-fix — test-time @adhd/* source resolution; 26 commits total; 5 source files
 - **Adversarial attack:** Attack: look for zero/self-only importers; found 12 real importer(s) (+1 test-only).
 - **Self-refutation:** Refuted: has production importers on a path reachable from an entrypoint.
-- **Evidence:** importers listed below
+- **Evidence:** see Importers list
 
 ### @adhd/apigen-base-logical (packages/apigen/apigen-base-logical) - KEEP (HIGH)
 
@@ -375,7 +375,7 @@ Scope: every npm-style package under `packages/*`, `entrypoint/*`, `tools/nx-plu
 - **Last substantive commit:** 2026-09-25 b38aa0cd fix(apigen-base-logical): reject implicit union-branch matches the value cannot inhabit; 41 commits total; 24 source files
 - **Adversarial attack:** Attack: look for zero/self-only importers; found 7 real importer(s).
 - **Self-refutation:** Refuted: has production importers on a path reachable from an entrypoint.
-- **Evidence:** importers listed below
+- **Evidence:** see Importers list
 
 ### @adhd/apigen-base-schema (packages/apigen/apigen-base-schema) - WASTE (HIGH)
 
@@ -437,7 +437,7 @@ Scope: every npm-style package under `packages/*`, `entrypoint/*`, `tools/nx-plu
 - **Last substantive commit:** 2026-10-14 0bf369d5 fix(apigen-plugin-ir-cache): extraction reports the files it read; cache keys the whole call and tracks installed-package deps; 95 commits total; 91 source files
 - **Adversarial attack:** Attack: look for zero/self-only importers; found 24 real importer(s).
 - **Self-refutation:** Refuted: has production importers on a path reachable from an entrypoint.
-- **Evidence:** importers listed below
+- **Evidence:** see Importers list
 
 ### @adhd/apigen-engine-conformance (packages/apigen/apigen-engine-conformance) - SHRINK (MEDIUM)
 
@@ -463,7 +463,7 @@ Scope: every npm-style package under `packages/*`, `entrypoint/*`, `tools/nx-plu
 - **Last substantive commit:** 2026-10-14 5087ba97 test(apigen-engine-gateway): track the win32 process-group skips with backlog 05f910a0; 46 commits total; 26 source files
 - **Adversarial attack:** One consumer.
 - **Self-refutation:** Refuted: it is the live gateway under the policy host; ties to an actively developed entrypoint (policy 0.0.1, commits 2026-10-14).
-- **Evidence:** entrypoint/policy (see importers below)
+- **Evidence:** entrypoint/policy (see Importers list)
 
 ### @adhd/apigen-engine-naming (packages/apigen/apigen-engine-naming) - KEEP (HIGH)
 
@@ -489,7 +489,7 @@ Scope: every npm-style package under `packages/*`, `entrypoint/*`, `tools/nx-plu
 - **Last substantive commit:** 2026-09-25 ad52ba61 fix(apigen-engine-naming): close review doc/lint residuals; 42 commits total; 7 source files
 - **Adversarial attack:** Attack: look for zero/self-only importers; found 14 real importer(s).
 - **Self-refutation:** Refuted: has production importers on a path reachable from an entrypoint.
-- **Evidence:** importers listed below
+- **Evidence:** see Importers list
 
 ### @adhd/apigen-engine-runtime (packages/apigen/apigen-engine-runtime) - KEEP (HIGH)
 
@@ -511,7 +511,7 @@ Scope: every npm-style package under `packages/*`, `entrypoint/*`, `tools/nx-plu
 - **Last substantive commit:** 2026-10-08 c079e826 fix(agent-mcp): bind loopback 127.0.0.1 by default; apigen hosts and generated servers too (5989ed90); 87 commits total; 60 source files
 - **Adversarial attack:** Attack: look for zero/self-only importers; found 10 real importer(s) (+2 test-only).
 - **Self-refutation:** Refuted: has production importers on a path reachable from an entrypoint.
-- **Evidence:** importers listed below
+- **Evidence:** see Importers list
 
 ### @adhd/apigen-generator-nx (packages/apigen/apigen-generator-nx) - KEEP (HIGH)
 
@@ -537,7 +537,7 @@ Scope: every npm-style package under `packages/*`, `entrypoint/*`, `tools/nx-plu
 - **Last substantive commit:** 2026-10-09 0fbf9a66 chore(deps): dedupe @adhd/sox-telemetry to ^0.4.3 across consumers and regenerate lockfile (c536ce29); 61 commits total; 17 source files
 - **Adversarial attack:** Attack: look for zero/self-only importers; found 1 real importer(s).
 - **Self-refutation:** Refuted: has production importers on a path reachable from an entrypoint.
-- **Evidence:** importers listed below
+- **Evidence:** see Importers list
 
 ### @adhd/apigen-plugin-api-fastify (packages/apigen/apigen-plugin-api-fastify) - KEEP (HIGH)
 
@@ -552,7 +552,7 @@ Scope: every npm-style package under `packages/*`, `entrypoint/*`, `tools/nx-plu
 - **Last substantive commit:** 2026-10-09 0fbf9a66 chore(deps): dedupe @adhd/sox-telemetry to ^0.4.3 across consumers and regenerate lockfile (c536ce29); 64 commits total; 17 source files
 - **Adversarial attack:** Attack: look for zero/self-only importers; found 3 real importer(s).
 - **Self-refutation:** Refuted: has production importers on a path reachable from an entrypoint.
-- **Evidence:** importers listed below
+- **Evidence:** see Importers list
 
 ### @adhd/apigen-plugin-batch (packages/apigen/apigen-plugin-batch) - KEEP (MEDIUM)
 
@@ -566,7 +566,7 @@ Scope: every npm-style package under `packages/*`, `entrypoint/*`, `tools/nx-plu
 - **Last substantive commit:** 2026-10-01 509ee4c7 fix(apigen): engine-supplied Call.transport + real-transport tracing e2e; 23 commits total; 5 source files
 - **Adversarial attack:** Attack: look for zero/self-only importers; found 2 real importer(s).
 - **Self-refutation:** Refuted: has production importers on a path reachable from an entrypoint.
-- **Evidence:** importers listed below
+- **Evidence:** see Importers list
 
 ### @adhd/apigen-plugin-cli-output (packages/apigen/apigen-plugin-cli-output) - KEEP (HIGH)
 
@@ -581,7 +581,7 @@ Scope: every npm-style package under `packages/*`, `entrypoint/*`, `tools/nx-plu
 - **Last substantive commit:** 2026-10-09 0fbf9a66 chore(deps): dedupe @adhd/sox-telemetry to ^0.4.3 across consumers and regenerate lockfile (c536ce29); 66 commits total; 22 source files
 - **Adversarial attack:** Attack: look for zero/self-only importers; found 3 real importer(s).
 - **Self-refutation:** Refuted: has production importers on a path reachable from an entrypoint.
-- **Evidence:** importers listed below
+- **Evidence:** see Importers list
 
 ### @adhd/apigen-plugin-health (packages/apigen/apigen-plugin-health) - KEEP (MEDIUM)
 
@@ -594,7 +594,7 @@ Scope: every npm-style package under `packages/*`, `entrypoint/*`, `tools/nx-plu
 - **Last substantive commit:** 2026-10-08 c079e826 fix(agent-mcp): bind loopback 127.0.0.1 by default; apigen hosts and generated servers too (5989ed90); 41 commits total; 5 source files
 - **Adversarial attack:** 5 files, one real consumer.
 - **Self-refutation:** Refuted: thin by design (plugin per concern); consumed.
-- **Evidence:** importers below
+- **Evidence:** see Importers list
 
 ### @adhd/apigen-plugin-ir-cache (packages/apigen/apigen-plugin-ir-cache) - KEEP (MEDIUM)
 
@@ -608,7 +608,7 @@ Scope: every npm-style package under `packages/*`, `entrypoint/*`, `tools/nx-plu
 - **Last substantive commit:** 2026-10-14 0bf369d5 fix(apigen-plugin-ir-cache): extraction reports the files it read; cache keys the whole call and tracks installed-package deps; 27 commits total; 15 source files
 - **Adversarial attack:** Attack: look for zero/self-only importers; found 2 real importer(s).
 - **Self-refutation:** Refuted: has production importers on a path reachable from an entrypoint.
-- **Evidence:** importers listed below
+- **Evidence:** see Importers list
 
 ### @adhd/apigen-plugin-java-javalin (packages/apigen/apigen-plugin-java-javalin) - KEEP (MEDIUM)
 
@@ -621,7 +621,7 @@ Scope: every npm-style package under `packages/*`, `entrypoint/*`, `tools/nx-plu
 - **Last substantive commit:** 2026-09-28 45532731 fix(workspace): restore the publish gate's heavy lane and canonicalise the gate; 27 commits total; 11 source files
 - **Adversarial attack:** Attack: look for zero/self-only importers; found 1 real importer(s).
 - **Self-refutation:** Refuted: has production importers on a path reachable from an entrypoint.
-- **Evidence:** importers listed below
+- **Evidence:** see Importers list
 
 ### @adhd/apigen-plugin-jsonschema (packages/apigen/apigen-plugin-jsonschema) - KEEP (MEDIUM)
 
@@ -634,7 +634,7 @@ Scope: every npm-style package under `packages/*`, `entrypoint/*`, `tools/nx-plu
 - **Last substantive commit:** 2026-09-22 5cef1867 refactor(nx): infer release-publish + lint targets; make lint check-only; 36 commits total; 5 source files
 - **Adversarial attack:** 5 files, one consumer, description overlaps apigen-codegen-openapi/ts-types.
 - **Self-refutation:** Refuted: imported by the flagship apigen host; emits a distinct artifact.
-- **Evidence:** importers below
+- **Evidence:** see Importers list
 
 ### @adhd/apigen-plugin-logger (packages/apigen/apigen-plugin-logger) - KEEP (MEDIUM)
 
@@ -647,7 +647,7 @@ Scope: every npm-style package under `packages/*`, `entrypoint/*`, `tools/nx-plu
 - **Last substantive commit:** 2026-09-22 5cef1867 refactor(nx): infer release-publish + lint targets; make lint check-only; 38 commits total; 5 source files
 - **Adversarial attack:** 5 files.
 - **Self-refutation:** Refuted: consumed.
-- **Evidence:** importers below
+- **Evidence:** see Importers list
 
 ### @adhd/apigen-plugin-mcp (packages/apigen/apigen-plugin-mcp) - KEEP (HIGH)
 
@@ -662,7 +662,7 @@ Scope: every npm-style package under `packages/*`, `entrypoint/*`, `tools/nx-plu
 - **Last substantive commit:** 2026-10-09 0fbf9a66 chore(deps): dedupe @adhd/sox-telemetry to ^0.4.3 across consumers and regenerate lockfile (c536ce29); 66 commits total; 24 source files
 - **Adversarial attack:** Attack: look for zero/self-only importers; found 3 real importer(s).
 - **Self-refutation:** Refuted: has production importers on a path reachable from an entrypoint.
-- **Evidence:** importers listed below
+- **Evidence:** see Importers list
 
 ### @adhd/apigen-plugin-openapi (packages/apigen/apigen-plugin-openapi) - KEEP (MEDIUM)
 
@@ -676,7 +676,7 @@ Scope: every npm-style package under `packages/*`, `entrypoint/*`, `tools/nx-plu
 - **Last substantive commit:** 2026-09-22 5cef1867 refactor(nx): infer release-publish + lint targets; make lint check-only; 41 commits total; 5 source files
 - **Adversarial attack:** Attack: look for zero/self-only importers; found 2 real importer(s) (+2 test-only).
 - **Self-refutation:** Refuted: has production importers on a path reachable from an entrypoint.
-- **Evidence:** importers listed below
+- **Evidence:** see Importers list
 
 ### @adhd/apigen-plugin-policy (packages/apigen/apigen-plugin-policy) - KEEP (MEDIUM)
 
@@ -689,7 +689,7 @@ Scope: every npm-style package under `packages/*`, `entrypoint/*`, `tools/nx-plu
 - **Last substantive commit:** 2026-10-14 9e6badda test(policy): add test headers (guards, tier, cites); 9 commits total; 11 source files
 - **Adversarial attack:** 9 commits total, brand-new.
 - **Self-refutation:** Refuted: wired into the new policy entrypoint.
-- **Evidence:** importers below
+- **Evidence:** see Importers list
 
 ### @adhd/apigen-plugin-py-flask (packages/apigen/apigen-plugin-py-flask) - KEEP (MEDIUM)
 
@@ -702,7 +702,7 @@ Scope: every npm-style package under `packages/*`, `entrypoint/*`, `tools/nx-plu
 - **Last substantive commit:** 2026-09-28 45532731 fix(workspace): restore the publish gate's heavy lane and canonicalise the gate; 56 commits total; 7 source files
 - **Adversarial attack:** Attack: look for zero/self-only importers; found 1 real importer(s).
 - **Self-refutation:** Refuted: has production importers on a path reachable from an entrypoint.
-- **Evidence:** importers listed below
+- **Evidence:** see Importers list
 
 ### @adhd/apigen-plugin-py-grpc (packages/apigen/apigen-plugin-py-grpc) - KEEP (MEDIUM)
 
@@ -715,7 +715,7 @@ Scope: every npm-style package under `packages/*`, `entrypoint/*`, `tools/nx-plu
 - **Last substantive commit:** 2026-09-28 45532731 fix(workspace): restore the publish gate's heavy lane and canonicalise the gate; 51 commits total; 7 source files
 - **Adversarial attack:** Attack: look for zero/self-only importers; found 1 real importer(s).
 - **Self-refutation:** Refuted: has production importers on a path reachable from an entrypoint.
-- **Evidence:** importers listed below
+- **Evidence:** see Importers list
 
 ### @adhd/apigen-plugin-tracing (packages/apigen/apigen-plugin-tracing) - KEEP (HIGH)
 
@@ -730,7 +730,7 @@ Scope: every npm-style package under `packages/*`, `entrypoint/*`, `tools/nx-plu
 - **Last substantive commit:** 2026-10-09 0fbf9a66 chore(deps): dedupe @adhd/sox-telemetry to ^0.4.3 across consumers and regenerate lockfile (c536ce29); 12 commits total; 5 source files
 - **Adversarial attack:** Attack: look for zero/self-only importers; found 3 real importer(s) (+4 test-only).
 - **Self-refutation:** Refuted: has production importers on a path reachable from an entrypoint.
-- **Evidence:** importers listed below
+- **Evidence:** see Importers list
 
 ### @adhd/apigen-plugin-ts-types (packages/apigen/apigen-plugin-ts-types) - KEEP (MEDIUM)
 
@@ -743,7 +743,7 @@ Scope: every npm-style package under `packages/*`, `entrypoint/*`, `tools/nx-plu
 - **Last substantive commit:** 2026-09-22 5cef1867 refactor(nx): infer release-publish + lint targets; make lint check-only; 16 commits total; 6 source files
 - **Adversarial attack:** 5-6 files, one consumer, no description.
 - **Self-refutation:** Refuted: imported by the flagship apigen host.
-- **Evidence:** importers below
+- **Evidence:** see Importers list
 
 ### @adhd/apigen-codegen-openapi (packages/apigen/codegen/openapi) - KEEP (MEDIUM)
 
@@ -756,7 +756,7 @@ Scope: every npm-style package under `packages/*`, `entrypoint/*`, `tools/nx-plu
 - **Last substantive commit:** 2026-09-22 b2022986 feat(vite-plugins): absorb perf/test-resolve-fix — test-time @adhd/* source resolution; 36 commits total; 5 source files
 - **Adversarial attack:** Attack: look for zero/self-only importers; found 1 real importer(s) (+1 test-only).
 - **Self-refutation:** Refuted: has production importers on a path reachable from an entrypoint.
-- **Evidence:** importers listed below
+- **Evidence:** see Importers list
 
 ### @adhd/apigen-python-env (packages/apigen/python-env) - KEEP (HIGH)
 
@@ -772,7 +772,7 @@ Scope: every npm-style package under `packages/*`, `entrypoint/*`, `tools/nx-plu
 - **Last substantive commit:** 2026-09-28 45532731 fix(workspace): restore the publish gate's heavy lane and canonicalise the gate; 47 commits total; 9 source files
 - **Adversarial attack:** Attack: look for zero/self-only importers; found 4 real importer(s).
 - **Self-refutation:** Refuted: has production importers on a path reachable from an entrypoint.
-- **Evidence:** importers listed below
+- **Evidence:** see Importers list
 
 ### @adhd/data-base-transforms (packages/data/data-base-transforms) - KEEP (HIGH)
 
@@ -787,7 +787,7 @@ Scope: every npm-style package under `packages/*`, `entrypoint/*`, `tools/nx-plu
 - **Last substantive commit:** 2026-10-14 4f88f6c9 test(data-base-transforms): drop dead commented-out legacy blocks from specs; record qa legacy-test audit; 33 commits total; 23 source files
 - **Adversarial attack:** Attack: look for zero/self-only importers; found 3 real importer(s).
 - **Self-refutation:** Refuted: has production importers on a path reachable from an entrypoint.
-- **Evidence:** importers listed below
+- **Evidence:** see Importers list
 
 ### @adhd/data-core-structures (packages/data/data-core-structures) - MERGE (LOW)
 
@@ -813,7 +813,7 @@ Scope: every npm-style package under `packages/*`, `entrypoint/*`, `tools/nx-plu
 - **Last substantive commit:** 2026-10-07 228ff974 build(vitest): measured pool defaults (forks, no poolOptions/vm), backlog file parallelism, engine-runtime no-isolate; shrink data-query-engine complexity ladder; PIPELINE docs; 65 commits total; 40 source files
 - **Adversarial attack:** Attack: look for zero/self-only importers; found 1 real importer(s).
 - **Self-refutation:** Refuted: has production importers on a path reachable from an entrypoint.
-- **Evidence:** importers listed below
+- **Evidence:** see Importers list
 
 ### @adhd/dispatch-base-spec (packages/dispatch/dispatch-base-spec) - KEEP (HIGH)
 
@@ -830,7 +830,7 @@ Scope: every npm-style package under `packages/*`, `entrypoint/*`, `tools/nx-plu
 - **Last substantive commit:** 2026-10-07 4e465788 Committing: released items; 51 commits total; 11 source files
 - **Adversarial attack:** Attack: look for zero/self-only importers; found 5 real importer(s).
 - **Self-refutation:** Refuted: has production importers on a path reachable from an entrypoint.
-- **Evidence:** importers listed below
+- **Evidence:** see Importers list
 
 ### @adhd/dispatch-base-types (packages/dispatch/dispatch-base-types) - WASTE (HIGH)
 
@@ -858,7 +858,7 @@ Scope: every npm-style package under `packages/*`, `entrypoint/*`, `tools/nx-plu
 - **Last substantive commit:** 2026-10-07 4e465788 Committing: released items; 33 commits total; 7 source files
 - **Adversarial attack:** Attack: look for zero/self-only importers; found 3 real importer(s).
 - **Self-refutation:** Refuted: has production importers on a path reachable from an entrypoint.
-- **Evidence:** importers listed below
+- **Evidence:** see Importers list
 
 ### @adhd/dispatch-core-optimizer (packages/dispatch/dispatch-core-optimizer) - KEEP (MEDIUM)
 
@@ -871,7 +871,7 @@ Scope: every npm-style package under `packages/*`, `entrypoint/*`, `tools/nx-plu
 - **Last substantive commit:** 2026-10-07 4e465788 Committing: released items; 41 commits total; 12 source files
 - **Adversarial attack:** Attack: look for zero/self-only importers; found 1 real importer(s) (+1 test-only).
 - **Self-refutation:** Refuted: has production importers on a path reachable from an entrypoint.
-- **Evidence:** importers listed below
+- **Evidence:** see Importers list
 
 ### @adhd/dispatch-orchestrator (packages/dispatch/dispatch-orchestrator) - KEEP (MEDIUM)
 
@@ -884,7 +884,7 @@ Scope: every npm-style package under `packages/*`, `entrypoint/*`, `tools/nx-plu
 - **Last substantive commit:** 2026-10-08 cfc9d936 feat(agent-engine-orchestrator): capture provider response model; build usage test fixtures from real migrations (1f1c8598); 82 commits total; 22 source files
 - **Adversarial attack:** Attack: look for zero/self-only importers; found 1 real importer(s).
 - **Self-refutation:** Refuted: has production importers on a path reachable from an entrypoint.
-- **Evidence:** importers listed below
+- **Evidence:** see Importers list
 
 ### @adhd/dispatch-serializer-json (packages/dispatch/dispatch-serializer-json) - MERGE (LOW)
 
@@ -897,7 +897,7 @@ Scope: every npm-style package under `packages/*`, `entrypoint/*`, `tools/nx-plu
 - **Last substantive commit:** 2026-10-07 4e465788 Committing: released items; 33 commits total; 4 source files
 - **Adversarial attack:** 4 files, one consumer, tiny: (de)serialises the DAG spec that dispatch-core-client already owns.
 - **Self-refutation:** Self-refutation: separating serializers keeps core-client format-agnostic. It is a legitimate seam, only a tidiness MERGE; LOW confidence.
-- **Evidence:** see per-package importers below
+- **Evidence:** see Importers list
 
 ### @adhd/environment-base-spec (packages/environment/environment-base-spec) - KEEP (HIGH)
 
@@ -915,7 +915,7 @@ Scope: every npm-style package under `packages/*`, `entrypoint/*`, `tools/nx-plu
 - **Last substantive commit:** 2026-10-06 f285def5 merge(agent): shell-pattern allowlist (ALLOW_PATTERNS) into native-tooling integration; 33 commits total; 5 source files
 - **Adversarial attack:** Attack: look for zero/self-only importers; found 6 real importer(s).
 - **Self-refutation:** Refuted: has production importers on a path reachable from an entrypoint.
-- **Evidence:** importers listed below
+- **Evidence:** see Importers list
 
 ### @adhd/environment-builder (packages/environment/environment-builder) - KEEP (HIGH)
 
@@ -930,7 +930,7 @@ Scope: every npm-style package under `packages/*`, `entrypoint/*`, `tools/nx-plu
 - **Last substantive commit:** 2026-09-25 796a3cc4 fix(environment-cli): default-import yaml so emitted ESM loads, and gate it; 35 commits total; 21 source files
 - **Adversarial attack:** Attack: look for zero/self-only importers; found 3 real importer(s).
 - **Self-refutation:** Refuted: has production importers on a path reachable from an entrypoint.
-- **Evidence:** importers listed below
+- **Evidence:** see Importers list
 
 ### @adhd/environment (packages/environment/environment-core-node) - KEEP (HIGH)
 
@@ -948,7 +948,7 @@ Scope: every npm-style package under `packages/*`, `entrypoint/*`, `tools/nx-plu
 - **Last substantive commit:** 2026-09-22 b2022986 feat(vite-plugins): absorb perf/test-resolve-fix — test-time @adhd/* source resolution; 35 commits total; 11 source files
 - **Adversarial attack:** Attack: look for zero/self-only importers; found 6 real importer(s) (+1 test-only).
 - **Self-refutation:** Refuted: has production importers on a path reachable from an entrypoint.
-- **Evidence:** importers listed below
+- **Evidence:** see Importers list
 
 ### @adhd/policy-core-client (packages/policy/policy-core-client) - KEEP (MEDIUM)
 
@@ -961,7 +961,7 @@ Scope: every npm-style package under `packages/*`, `entrypoint/*`, `tools/nx-plu
 - **Last substantive commit:** 2026-10-14 9e6badda test(policy): add test headers (guards, tier, cites); 15 commits total; 60 source files
 - **Adversarial attack:** Brand-new (15 commits, unpublished) and conceptually overlaps agent-core-policy.
 - **Self-refutation:** Refuted: the sole consumer of data-query-engine and the engine of the policy entrypoint.
-- **Evidence:** importers below
+- **Evidence:** see Importers list
 
 ### @adhd/ui-react-base-hooks (packages/ui-react/ui-react-base-hooks) - SHRINK (LOW)
 
@@ -987,7 +987,7 @@ Scope: every npm-style package under `packages/*`, `entrypoint/*`, `tools/nx-plu
 - **Last substantive commit:** 2026-09-22 b2022986 feat(vite-plugins): absorb perf/test-resolve-fix — test-time @adhd/* source resolution; 14 commits total; 5 source files
 - **Adversarial attack:** Its only component is the scaffold placeholder `<h1>Welcome to Storybook!</h1>`. The real content is its `.storybook/main.ts` glob that serves ui-react-base-hooks stories.
 - **Self-refutation:** Self-refutation: the Storybook host is genuinely used to view hooks stories. So the config is worth keeping but as a folder inside ui-react-base-hooks, not a package with a placeholder component. Falls with hooks if hooks go.
-- **Evidence:** packages/ui-react/ui-react-base-storybook/src/lib/storybook.tsx:1-12; .storybook/main.ts (stories glob ../../**/src/lib/**/*.stories.*); package.json:18; backlog 5-item grep: no roadmap item
+- **Evidence:** packages/ui-react/ui-react-base-storybook/src/lib/storybook.tsx:1-12; .storybook/main.ts (stories glob ../../**/src/lib/**/*.stories.*); package.json:18; live backlog grep for the package name returns no roadmap item (only b702f0fb, c6a9cf2f hygiene)
 
 ### @adhd/workspace-base-standard (packages/workspace/workspace-base-standard) - SHRINK (MEDIUM)
 
@@ -1052,7 +1052,7 @@ Scope: every npm-style package under `packages/*`, `entrypoint/*`, `tools/nx-plu
 - **Last substantive commit:** 2026-10-13 ac43c6b0 fix(agent-mcp): reap the parity sweep fixture through the guarded sweepPids so the kill-safety audit stays process.kill-free outside lib.mjs (dcf8b7da AC3); 398 commits total; 277 source files
 - **Adversarial attack:** Entrypoint: judged by whether it ships a bin/server that is built, smoke-tested and documented.
 - **Self-refutation:** Refuted: it is an entrypoint with a bin/server consumed directly by users or by sibling packages.
-- **Evidence:** importers listed below
+- **Evidence:** see Importers list
 
 ### @adhd/apigen-cli (entrypoint/apigen-cli) - KEEP (HIGH)
 
@@ -1065,7 +1065,7 @@ Scope: every npm-style package under `packages/*`, `entrypoint/*`, `tools/nx-plu
 - **Last substantive commit:** 2026-10-09 0fbf9a66 chore(deps): dedupe @adhd/sox-telemetry to ^0.4.3 across consumers and regenerate lockfile (c536ce29); 131 commits total; 93 source files
 - **Adversarial attack:** Entrypoint: judged by whether it ships a bin/server that is built, smoke-tested and documented.
 - **Self-refutation:** Refuted: it is an entrypoint with a bin/server consumed directly by users or by sibling packages.
-- **Evidence:** importers listed below
+- **Evidence:** see Importers list
 
 ### @adhd/backlog (entrypoint/backlog) - KEEP (HIGH)
 
@@ -1078,7 +1078,7 @@ Scope: every npm-style package under `packages/*`, `entrypoint/*`, `tools/nx-plu
 - **Last substantive commit:** 2026-10-14 6979a77a test(backlog): disable edge-batch.spec.ts, tracked by backlog 8752d7d5; 290 commits total; 365 source files
 - **Adversarial attack:** Entrypoint: judged by whether it ships a bin/server that is built, smoke-tested and documented.
 - **Self-refutation:** Refuted: it is an entrypoint with a bin/server consumed directly by users or by sibling packages.
-- **Evidence:** importers listed below
+- **Evidence:** see Importers list
 
 ### @adhd/decompile-cli (entrypoint/decompile-cli) - KEEP (LOW)
 
@@ -1104,7 +1104,7 @@ Scope: every npm-style package under `packages/*`, `entrypoint/*`, `tools/nx-plu
 - **Last substantive commit:** 2026-10-07 4b836e8c build(nx-build): make build/test graphs fully cacheable; cache dist-manifest, verify-dist-load, publish-hygiene, generate-cli, backlog build; 101 commits total; 35 source files
 - **Adversarial attack:** Entrypoint: judged by whether it ships a bin/server that is built, smoke-tested and documented.
 - **Self-refutation:** Refuted: it is an entrypoint with a bin/server consumed directly by users or by sibling packages.
-- **Evidence:** importers listed below
+- **Evidence:** see Importers list
 
 ### @adhd/environment-cli (entrypoint/environment-cli) - WASTE (MEDIUM)
 
@@ -1130,7 +1130,7 @@ Scope: every npm-style package under `packages/*`, `entrypoint/*`, `tools/nx-plu
 - **Last substantive commit:** 2026-10-14 f65fa1b2 fix(policy): policy:test builds its own dist before running (4041424f); 13 commits total; 50 source files
 - **Adversarial attack:** Entrypoint: judged by whether it ships a bin/server that is built, smoke-tested and documented.
 - **Self-refutation:** Refuted: it is an entrypoint with a bin/server consumed directly by users or by sibling packages.
-- **Evidence:** importers listed below
+- **Evidence:** see Importers list
 
 ### @adhd/nx-assets (tools/nx-plugins/assets) - KEEP (MEDIUM)
 
@@ -1143,7 +1143,7 @@ Scope: every npm-style package under `packages/*`, `entrypoint/*`, `tools/nx-plu
 - **Last substantive commit:** 2026-10-07 77b432f6 build(nx-build): cache nx-plugins:test with audited inputs; ignore release-written manifest fields; release-reset-check publish-only with HEAD-aware semantics; 16 commits total; 6 source files
 - **Adversarial attack:** Attack: look for zero/self-only importers; found 0 real importer(s).
 - **Self-refutation:** Refuted: has production importers on a path reachable from an entrypoint.
-- **Evidence:** importers listed below
+- **Evidence:** see Importers list
 
 ### @adhd/nx-build (tools/nx-plugins/build) - KEEP (MEDIUM)
 
@@ -1156,7 +1156,7 @@ Scope: every npm-style package under `packages/*`, `entrypoint/*`, `tools/nx-plu
 - **Last substantive commit:** 2026-10-14 9d681724 fix(test): gate scripts run when the checkout path crosses a symlink; G4 scan 10.9s to 0.6s (c40c33e1); 93 commits total; 73 source files
 - **Adversarial attack:** Attack: look for zero/self-only importers; found 0 real importer(s).
 - **Self-refutation:** Refuted: has production importers on a path reachable from an entrypoint.
-- **Evidence:** importers listed below
+- **Evidence:** see Importers list
 
 ### @adhd/nx-deps (tools/nx-plugins/deps) - KEEP (HIGH)
 
