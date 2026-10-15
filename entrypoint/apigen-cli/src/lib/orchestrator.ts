@@ -286,6 +286,40 @@ export function loadOverrideConfig(
   return merged;
 }
 
+/**
+ * Returns the plugin option bag with the projection overrides attached under
+ * the `projection` key — the key the output plugins (fastify, express, mcp)
+ * read to build their per-operation plans, so `--opt http.verb.<id>=GET`
+ * changes the verb the generated or mounted route uses for `<id>`.
+ *
+ * An empty override config leaves the bag untouched, so operations without an
+ * override keep their projected verb. Overrides win over a `projection` value
+ * already present in the bag, key by key.
+ *
+ * @param pluginOpts - The flat `--opt` bag handed to the plugin.
+ * @param overrides - Parsed projection overrides for this invocation.
+ */
+export function withProjectionOption(
+  pluginOpts: Record<string, unknown>,
+  overrides: OverrideConfig | undefined
+): Record<string, unknown> {
+  if (!overrides?.http?.verb || Object.keys(overrides.http.verb).length === 0) {
+    return pluginOpts;
+  }
+  const existing = (pluginOpts['projection'] ?? {}) as OverrideConfig;
+  return {
+    ...pluginOpts,
+    projection: {
+      ...existing,
+      ...overrides,
+      http: {
+        ...existing.http,
+        verb: { ...existing.http?.verb, ...overrides.http.verb },
+      },
+    },
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Core orchestration
 // ---------------------------------------------------------------------------
@@ -642,7 +676,7 @@ export async function orchestrateGenerate(
   const input: PluginInput = {
     packages,
     outputDir,
-    options: pluginOpts,
+    options: withProjectionOption(pluginOpts, opts.overrides),
     logger: opts.logger,
     // DEBT-APIGEN-PLUGIN-MCP-GENERATE-OPERATIONS-001: thread the real merged
     // Operation[] through so generate() can call project(op) on real ops
@@ -739,7 +773,7 @@ export async function orchestrateRun(
   const input: RunInput = {
     packages,
     outputDir: '',
-    options: pluginOpts,
+    options: withProjectionOption(pluginOpts, opts.overrides),
     signal,
     logger: opts.logger,
     // BUG-APIGEN-024: thread the real merged Operation[] through so `--use`
