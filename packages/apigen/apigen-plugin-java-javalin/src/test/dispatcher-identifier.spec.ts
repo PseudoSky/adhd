@@ -17,7 +17,12 @@
 // Keyword-adjacent names are NOT asserted: the identifier check does not reject Java
 // keywords, and the brief says to assert only existing behavior.
 // The accepts-cases are no-regression guards and pass before the fix; the rejects-cases are
-// the regression assertions.
+// the regression assertions. The non-ASCII cases pin the documented narrowing; they are
+// green with the check present (fix commit c16f2153) and red at its parent, which emitted
+// any name raw.
+//
+// red: pending (user hold) — the suite was not executed when these tests were authored.
+// Expected red: every rejects-case at the parent of c16f2153 (no check, source returned).
 
 import { describe, it, expect } from 'vitest';
 import type { Operation } from '@adhd/apigen-core-client';
@@ -81,6 +86,19 @@ describe('renderDispatcherJava parameter-name identifier check (6e29bff1)', () =
       renderDispatcherJava([opWithParam('a-b', 'orders/create')])
     ).toThrow(/operation "orders\/create".*parameter name "a-b"/);
   });
+
+  // Documented ASCII-only narrowing (6e29bff1): the JLS also admits non-ASCII letters, but
+  // the generated `__p_<name>` / `body.get("<name>")` emission is written against the ASCII
+  // set, so a non-ASCII-letter name is refused at generate time. Pinning this keeps the
+  // narrowing deliberate: widening it must come with proof of the emission path.
+  it.each(['café', 'ñame', 'π', '名前'])(
+    'rejects the non-ASCII-letter parameter name %j at generate time (documented ASCII-only narrowing)',
+    (name) => {
+      expect(() => renderDispatcherJava([opWithParam(name)])).toThrow(
+        /not a valid Java identifier/
+      );
+    }
+  );
 
   // Regression: a quote or backslash must not reach the body.get("...") string literal,
   // which is the injection the check exists to stop.
