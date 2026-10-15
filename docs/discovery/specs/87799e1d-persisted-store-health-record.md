@@ -39,3 +39,12 @@ AC1-AC5: S with a real in-process adapter on a temp DB (existing `integrity-stat
 ## Risks / serialization
 - Cross-repo: sox change must publish before adhd consumes (pin). Touches `integrity.ts` and `adapter-meta.ts`, which spec 26280300 (sidecar growth, AC3) may also touch — serialize 87799e1d first; both have uncommitted sox edits nearby (git status shows host-runtime/memory-server modified).
 - Open for product: D2 history bound, D3 threshold/owner, D4 surface, and whether to correct the item to drop `embedding_health` and name `last_integrity` as the starting point.
+
+## Product revision
+dor (product): needs-user (cross-repo authority; adhd ADR-0002 / ROADMAP D-B lets adhd fix sox code but not redesign sox). Not decided by product; see the user question in the product report.
+Product recommendations that stand once the user authorizes the cross-repo work (WHAT/WHY only):
+- Item correction accepted: drop `embedding_health` (retired); the starting point is the existing `last_integrity` row. Premise "no persisted record" is partly stale; the real gaps are vector coverage, history, and a single read.
+- D2: bounded ring of N=20 recommended (answers "what was it before" at bounded cost). D3: consumer-owned coverage, default threshold 0.99, typed config. D4: additive optional field on `memory_ping` and `embedding-status` only; no new verb (29-verb freeze). These are architect-authored and carried as the working defaults; the user's authorization should confirm them in one pass.
+- Smallest valuable slice if the user wants a cut: D1 + D3 (`last_health` with vector coverage and the `healthy:false` verdict for the 1acbd738 case: a store missing 34% of vectors currently reads `ok`). History (D2) can follow.
+Serialization: sox change publishes before adhd consumes (pin, ADR-0001 D6); 87799e1d lands BEFORE the 26280300 fix slice (shared `integrity.ts`/`adapter-meta.ts`).
+Priority: P1 for the slice, rank 9 (gated on user authorization; M size; cross-repo release coordination).
