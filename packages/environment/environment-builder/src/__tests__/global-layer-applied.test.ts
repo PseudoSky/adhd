@@ -16,7 +16,7 @@
  *   from somewhere other than os.homedir()) fails the cases below with `expected 8787 to be 9100`.
  */
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve, sep } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { EnvironmentSpec } from '@adhd/environment-base-spec';
@@ -29,7 +29,10 @@ import { buildSnapshot } from '../snapshot';
 type Cfg = { a: { port: number } };
 
 const PROJECT = 'global-layer-probe';
-const SCRATCH_PARENT = join(process.cwd(), 'tmp', 'environment-builder-global-layer');
+// Anchored to this file (not process.cwd()), so running vitest from the package dir cannot land the scratch in an
+// untracked packages/.../tmp. Removal is bounded to this root (user decision 2026-10-15: tests may rmSync a computed
+// path only when it is under tmp/<package>/ and a guard throws on escape).
+const SCRATCH_PARENT = resolve(__dirname, '../../../../../tmp/environment-builder-global-layer');
 const cleanupDirs: string[] = [];
 
 /** A throwaway HOME under tmp/ (gitignored), removed in afterEach. */
@@ -55,7 +58,9 @@ afterEach(() => {
   vi.unstubAllEnvs();
   while (cleanupDirs.length > 0) {
     const dir = cleanupDirs.pop();
-    if (dir) rmSync(dir, { recursive: true, force: true });
+    if (!dir) continue;
+    if (!resolve(dir).startsWith(SCRATCH_PARENT + sep)) throw new Error(`refusing to remove ${dir}: outside ${SCRATCH_PARENT}`);
+    rmSync(dir, { recursive: true, force: true });
   }
 });
 
