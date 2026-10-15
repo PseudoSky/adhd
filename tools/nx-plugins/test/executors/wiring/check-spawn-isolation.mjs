@@ -86,7 +86,9 @@ const REPO_ROOT = resolve(HERE, '../../../../..');
 /** Workspace-relative location of the ratchet baseline (resolved against the scanned workspace root). */
 export const BASELINE_REL = 'tools/nx-plugins/test/executors/wiring/spawn-isolation.baseline.json';
 
-const IGNORE = ['**/node_modules/**', '**/dist/**', '**/.worktrees/**', '**/.claude/**'];
+/** `fs.globSync` takes `exclude` (a predicate), not the `glob` package's `ignore`: an `ignore` option is silently dropped. */
+const isIgnoredDir = (p) => IGNORE_DIRS.has(String(p?.name ?? p).replaceAll('\\', '/').split('/').pop());
+const IGNORE_DIRS = new Set(['node_modules', 'dist', '.worktrees', '.claude']);
 const SPEC_FILE = /\.(spec|test|e2e)\.[cm]?[jt]sx?$/;
 
 /** Default workspace roots scanned, relative to the workspace root. */
@@ -740,11 +742,11 @@ export function collectSpawnIsolationViolations(workspaceRoot, opts = {}) {
   for (const root of roots) {
     if (!existsSync(join(workspaceRoot, root))) continue;
     rootsPresent += 1;
-    for (const f of globSync('**/package.json', { cwd: join(workspaceRoot, root), ignore: IGNORE })) {
+    for (const f of globSync('**/package.json', { cwd: join(workspaceRoot, root), exclude: isIgnoredDir })) {
       const pkg = JSON.parse(readFileSync(join(workspaceRoot, root, f), 'utf8'));
       if (usesEnvironmentFamily(pkg)) envPackages += 1;
     }
-    for (const f of globSync('**/*.*', { cwd: join(workspaceRoot, root), ignore: IGNORE })) {
+    for (const f of globSync('**/*.*', { cwd: join(workspaceRoot, root), exclude: isIgnoredDir })) {
       if (!SPEC_FILE.test(f)) continue;
       const rel = `${root}/${f}`;
       const owner = owningPackage(workspaceRoot, rel);
