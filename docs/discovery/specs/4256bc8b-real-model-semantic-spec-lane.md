@@ -35,3 +35,12 @@ AC1: S (grep-style assertion in the stub or the lane-reachability header check; 
 ## Risks / serialization
 - No shared files with other specs in this batch. Same directory as sibling backlog work (embed-drain.spec.ts) — keep edits to the two named files. CI e2e time +~1 min if D4.
 - Open for owner: accept CI-e2e as "default-running" (D1) and approve D4; correct the item (premise superseded by 0b83f28d).
+
+## Product revision
+dor (product): ready.
+Resolved:
+- D1 accepted: "default-running" means un-gated and run by CI. ADR-0009 (Amendment, owner decision 2026-10-06) defines the `e2e` lane as CI-only and un-env-gated, reached by `tools/gate/lane-gate.mjs` `GATE_TARGETS` and publish; AGENTS.md section 7 requires "in CI", which this satisfies. No new local lane.
+- D2, D3 accepted as written (header wording fix; stub `it.todo` replaced by a sibling-title mirror assertion plus fake-provider wiring assertion).
+- D4 approved: the `ensureSemanticReady` real-model case covers the production seam the item exists for (semantic search finding an item with no shared token); the cost is about one extra minute of CI e2e time, accepted.
+- Item correction: premise "unreachable" superseded by 0b83f28d (resolved); re-scope the item to wording + stub + the D4 case.
+All of AC1-AC4 stand. Priority: P2, rank 5 (XS for AC1-AC3; AC4 adds a CI minute).
