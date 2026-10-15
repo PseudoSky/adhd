@@ -77,6 +77,6 @@ describe('optional-input verbs run without --input (real built CLI)', () => {
     const r = run(['get']);
     expect(r.status).toBe(2);
     expect(r.stdout).toBe('');
-  expect((envelopeLine(r.stderr) as { code: string }).code).toBe('invalid_argument');
+    expect((envelopeLine(r.stderr) as { code: string }).code).toBe('invalid_argument');
   });
 });

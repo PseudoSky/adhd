@@ -61,6 +61,7 @@ describe('cliLogger (CLI apigen logger → sox-telemetry)', () => {
   });
 
   type PinoLike = {
+    trace(obj: Record<string, unknown>, msg: string): void;
     info(obj: Record<string, unknown>, msg: string): void;
     warn(obj: Record<string, unknown>, msg: string): void;
     error(obj: Record<string, unknown>, msg: string): void;
@@ -76,7 +77,7 @@ describe('cliLogger (CLI apigen logger → sox-telemetry)', () => {
     expect(logMock.info).toHaveBeenCalledWith('backlog.cli.log', {
       command: 'backlog query',
       ms: 12,
-      level: 'info',
+      cliLevel: 'info',
       msg: '→ backlog query',
     });
   });
@@ -95,9 +96,20 @@ describe('cliLogger (CLI apigen logger → sox-telemetry)', () => {
     logger.info('cli run: signal already aborted before dispatch — skipping');
 
     expect(logMock.info).toHaveBeenCalledWith('backlog.cli.log', {
-      level: 'info',
+      cliLevel: 'info',
       msg: 'cli run: signal already aborted before dispatch — skipping',
     });
+  });
+
+  it('a trace call goes to log.debug with cliLevel "trace" and no `level` field that would replace the sink level', () => {
+    process.env['ADHD_BACKLOG_LOG_LEVEL'] = 'trace';
+    const logger = cliLogger() as unknown as PinoLike;
+    logger.trace({ command: 'c' }, 't');
+
+    expect(logMock.debug).toHaveBeenCalledTimes(1);
+    const fields = logMock.debug.mock.calls[0]?.[1] as Record<string, unknown>;
+    expect(fields).toEqual({ command: 'c', cliLevel: 'trace', msg: 't' });
+    expect('level' in fields).toBe(false);
   });
 
   it('maps warn and error to their sox levels', () => {
@@ -105,8 +117,8 @@ describe('cliLogger (CLI apigen logger → sox-telemetry)', () => {
     logger.warn({ command: 'c' }, 'w');
     logger.error({ command: 'c' }, 'e');
 
-    expect(logMock.warn).toHaveBeenCalledWith('backlog.cli.log', { command: 'c', level: 'warn', msg: 'w' });
-    expect(logMock.error).toHaveBeenCalledWith('backlog.cli.log', { command: 'c', level: 'error', msg: 'e' });
+    expect(logMock.warn).toHaveBeenCalledWith('backlog.cli.log', { command: 'c', cliLevel: 'warn', msg: 'w' });
+    expect(logMock.error).toHaveBeenCalledWith('backlog.cli.log', { command: 'c', cliLevel: 'error', msg: 'e' });
   });
 
   it('default threshold is info: debug is dropped, info passes', () => {
@@ -161,7 +173,7 @@ describe('cliLogger (CLI apigen logger → sox-telemetry)', () => {
     const logger = cliLogger() as unknown as PinoLike;
     logger.child().info({ command: 'c' }, 'via child');
 
-    expect(logMock.info).toHaveBeenCalledWith('backlog.cli.log', { command: 'c', level: 'info', msg: 'via child' });
+    expect(logMock.info).toHaveBeenCalledWith('backlog.cli.log', { command: 'c', cliLevel: 'info', msg: 'via child' });
   });
 
   it('child(bindings) merges its bindings into every record the child emits', () => {
@@ -171,7 +183,7 @@ describe('cliLogger (CLI apigen logger → sox-telemetry)', () => {
     expect(logMock.info).toHaveBeenCalledWith('backlog.cli.log', {
       session: 'S1',
       command: 'c',
-      level: 'info',
+      cliLevel: 'info',
       msg: 'bound',
     });
   });
@@ -182,7 +194,7 @@ describe('cliLogger (CLI apigen logger → sox-telemetry)', () => {
 
     expect(logMock.info).toHaveBeenCalledWith('backlog.cli.log', {
       command: 'c',
-      level: 'info',
+      cliLevel: 'info',
       msg: 'from fields',
     });
   });

@@ -226,7 +226,9 @@ export function cliLogger(): Logger {
           fields = objOrMsg ?? {};
           text = msg ?? (typeof fields['msg'] === 'string' ? fields['msg'] : '');
         }
-        const record = { ...bindings, ...serialiseCliFields(fields), level: name, msg: text };
+        // `cliLevel`, not `level`: sox-telemetry spreads caller fields over its own `level`,
+        // so a field named `level` would replace the sink level (trace would land as "trace").
+        const record = { ...bindings, ...serialiseCliFields(fields), cliLevel: name, msg: text };
         if (rank >= 50) log.error('backlog.cli.log', record);
         else if (rank >= 40) log.warn('backlog.cli.log', record);
         else if (rank >= 30) log.info('backlog.cli.log', record);
