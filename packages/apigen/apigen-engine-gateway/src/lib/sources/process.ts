@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
-import { SourceError } from './types';
+import { commandBaseName } from './command-name';
+import { startError } from './types';
 
 /** What to start. `command` is a name or path; `args` are passed as an array (never through a shell). */
 export interface IProcessSpec {
@@ -19,7 +20,7 @@ export interface IProcessHandle {
   kill(signal?: 'SIGTERM' | 'SIGKILL'): void;
 }
 
-/** The port a sandbox implements to confine upstream processes. Rejects `SourceError('spawn-failed')`. */
+/** The port a sandbox implements to confine upstream processes. Rejects with the gateway `unavailable` `ApiError` (`makeUnavailableError`, via `startError`). */
 export interface IProcessLauncher {
   start(spec: IProcessSpec): Promise<IProcessHandle>;
 }
@@ -108,8 +109,8 @@ function wrap(child: ChildProcess, grouped: boolean): IProcessHandle {
  * Default launcher: `child_process.spawn` with `shell: false`, piped stdio and an
  * allowlisted environment (`PATH HOME USER LANG LC_ALL TMPDIR TERM SHELL`) overlaid by
  * `spec.env`. On POSIX the child leads its own process group and `kill` signals the whole
- * group, so grandchildren die with it. Rejects `SourceError('spawn-failed')` when the
- * process cannot be started (for example the command does not exist).
+ * group, so grandchildren die with it. Rejects with the gateway `unavailable` `ApiError` for
+ * `bin:<base>` when the process cannot be started (for example the command does not exist).
  */
 export const nodeProcessLauncher: IProcessLauncher = {
   start(spec) {
@@ -125,11 +126,11 @@ export const nodeProcessLauncher: IProcessLauncher = {
           stdio: ['pipe', 'pipe', 'pipe'],
         });
       } catch (e) {
-        reject(new SourceError('spawn-failed', `cannot start ${spec.command}: ${(e as Error).message}`));
+        reject(startError(`bin:${commandBaseName(spec.command)}`, new Error(`cannot start ${spec.command}: ${(e as Error).message}`)));
         return;
       }
       child.once('error', (e) =>
-        reject(new SourceError('spawn-failed', `cannot start ${spec.command}: ${e.message}`))
+        reject(startError(`bin:${commandBaseName(spec.command)}`, new Error(`cannot start ${spec.command}: ${e.message}`)))
       );
       child.once('spawn', () => resolve(wrap(child, grouped)));
     });

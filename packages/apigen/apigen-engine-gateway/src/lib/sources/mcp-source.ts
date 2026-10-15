@@ -11,7 +11,7 @@ import type { IResolvedSource, ISkippedTool } from './types';
 
 const DEFAULT_HANDSHAKE_TIMEOUT_MS = 10_000;
 /** Default per-call wait for an upstream `tools/call` result. */
-const DEFAULT_CALL_TIMEOUT_MS = 120_000;
+export const DEFAULT_CALL_TIMEOUT_MS = 120_000;
 /** Diagnostic stderr kept for handshake failures. */
 const STDERR_TAIL_BYTES = 4096;
 /** Tool names that would poison a name-keyed table; skipped and reported. */
@@ -160,47 +160,60 @@ export function operationsFromMcpTools(
   return { operations, skipped, hints, tools };
 }
 
+/** The process an MCP stdio upstream is started from. */
+export interface IMcpStdioCommand {
+  readonly command: string;
+  readonly args: readonly string[];
+  readonly cwd: string;
+  readonly env?: Readonly<Record<string, string>>;
+}
+
+/** A started, handshaken MCP stdio upstream: the SDK client plus its raw `tools/list`. */
+export interface IOpenedMcpUpstream {
+  /** The connected SDK client (for callers that need the typed `callTool`). */
+  readonly client: Client;
+  /** The `tools` entries of every `tools/list` page, as received (unvalidated). */
+  readonly rawTools: readonly unknown[];
+  /** The upstream's self-reported version, when it sent one. */
+  readonly serverVersion: string | undefined;
+  /**
+   * `tools/call` with `args` exactly as given and the upstream's result returned verbatim, bounded
+   * by the call timeout and `signal`. An error the upstream itself returned rejects with the SDK
+   * `McpError`; a call that outlives the timeout rejects with `McpError(RequestTimeout)`.
+   */
+  callTool(name: string, args?: Record<string, unknown>, signal?: AbortSignal): Promise<CallToolResult>;
+  /** Round-trips an MCP `ping`, bounded by the handshake timeout; rejects when the upstream is gone. */
+  ping(): Promise<void>;
+  /** Registers `cb` for when the connection closes (fires immediately, asynchronously, if it already has). */
+  onClose(cb: () => void): void;
+  /** True once the connection has closed (the process exited or `dispose` ran). */
+  isClosed(): boolean;
+  /** Closes the client and kills the process group. Idempotent. */
+  dispose(): Promise<void>;
+}
+
 /**
- * D-08. Starts the process, connects an SDK `Client` over {@link createLauncherTransport},
- * performs `initialize` bounded by `handshakeTimeoutMs` (default 10000), lists tools
- * (following cursors) and translates them with {@link operationsFromMcpTools}. The source
- * name is the USER-CHOSEN `spec.name` when given, else the command basename, lowercased to
- * `[a-z0-9_-]`; the upstream's own `serverInfo.name` is never used (an upstream could
- * otherwise claim another source's prefix and inherit its permissions).
- *
- * The resolved source also carries `mcp`: the full upstream `Tool` objects and a verbatim
- * `callTool` (arguments exactly as given, result exactly as returned). The positional
- * `pkg.fns` table (keyed by upstream tool name, the path tail's `raw`) remains for hosts that
- * dispatch through apigen, but it can only pass the arguments the schema declares.
- * `dispose()` closes the client and kills the process group.
+ * Starts the process through `deps.launcher`, connects an SDK `Client` over
+ * {@link createLauncherTransport}, performs `initialize` bounded by `handshakeTimeoutMs`
+ * (default 10000) and reads `tools/list` (following cursors, entries left unvalidated so one
+ * malformed tool cannot disable the source). Shared by {@link resolveMcpStdioSource} and the
+ * MCP upstream adapter.
  *
  * A process that cannot be started, or a handshake / `tools/list` failure or timeout, rejects
- * with `makeUnavailableError('mcp:<name>', '(start)', reason)` (the stderr tail is appended to
- * the reason) and the process is killed; there is no argv fallback.
+ * with `makeUnavailableError(binding, '(start)', reason)` (the stderr tail is appended to the
+ * reason) after the process was killed; nothing is left running and no close listener fires.
+ *
+ * @param spec    - The command to start.
+ * @param binding - The binding key (`mcp:<name>`) named in startup failures.
+ * @param deps    - Process launcher and the handshake / per-call timeouts.
  */
-export async function resolveMcpStdioSource(
-  spec: {
-    command: string;
-    args: readonly string[];
-    cwd: string;
-    env?: Record<string, string>;
-    /** User-chosen source name (operation-id prefix); defaults to the command basename. */
-    name?: string;
-  },
-  deps: {
-    launcher: IProcessLauncher;
-    handshakeTimeoutMs?: number;
-    /** Per-call wait for an upstream result (default 120000). */
-    callTimeoutMs?: number;
-    /** One line per skipped tool; defaults to stderr. */
-    onWarn?: (line: string) => void;
-  }
-): Promise<IResolvedSource & { hints: McpHints; skipped: readonly ISkippedTool[] }> {
+export async function openMcpStdioUpstream(
+  spec: IMcpStdioCommand,
+  binding: string,
+  deps: { launcher: IProcessLauncher; handshakeTimeoutMs?: number; callTimeoutMs?: number }
+): Promise<IOpenedMcpUpstream> {
   const timeoutMs = deps.handshakeTimeoutMs ?? DEFAULT_HANDSHAKE_TIMEOUT_MS;
   const callTimeoutMs = deps.callTimeoutMs ?? DEFAULT_CALL_TIMEOUT_MS;
-  const onWarn = deps.onWarn ?? defaultWarn;
-  const server = sourceNameOf(spec.command, spec.name);
-  const binding = mcpBindingOf(server);
   let handle: IProcessHandle;
   try {
     handle = await deps.launcher.start({
@@ -282,8 +295,76 @@ export async function resolveMcpStdioSource(
     return fail(`tools/list on ${spec.command} failed: ${describeError(e)}`);
   }
 
-  const info = client.getServerVersion();
-  const { operations, skipped, hints, tools } = operationsFromMcpTools(rawTools, server, onWarn);
+  return {
+    client,
+    rawTools,
+    serverVersion: client.getServerVersion()?.version,
+    callTool: (name, args, signal) =>
+      // `request` (not `callTool`) so the SDK adds no client-side output validation: the
+      // result is the upstream's, and an McpError here is the upstream's own error.
+      client.request(
+        { method: 'tools/call', params: { name, ...(args !== undefined ? { arguments: args } : {}) } },
+        CallToolResultSchema,
+        { timeout: callTimeoutMs, ...(signal ? { signal } : {}) }
+      ) as Promise<CallToolResult>,
+    async ping() {
+      await client.ping({ timeout: timeoutMs });
+    },
+    onClose(cb) {
+      if (closed) queueMicrotask(cb);
+      else closeListeners.push(cb);
+    },
+    isClosed: () => closed,
+    dispose,
+  };
+}
+
+/**
+ * D-08. Opens the upstream through {@link openMcpStdioUpstream} (initialize bounded by
+ * `handshakeTimeoutMs`, default 10000; `tools/list` following cursors) and translates the
+ * tools with {@link operationsFromMcpTools}. The source
+ * name is the USER-CHOSEN `spec.name` when given, else the command basename, lowercased to
+ * `[a-z0-9_-]`; the upstream's own `serverInfo.name` is never used (an upstream could
+ * otherwise claim another source's prefix and inherit its permissions).
+ *
+ * The resolved source also carries `mcp`: the full upstream `Tool` objects and a verbatim
+ * `callTool` (arguments exactly as given, result exactly as returned). The positional
+ * `pkg.fns` table (keyed by upstream tool name, the path tail's `raw`) remains for hosts that
+ * dispatch through apigen, but it can only pass the arguments the schema declares.
+ * `dispose()` closes the client and kills the process group.
+ *
+ * A process that cannot be started, or a handshake / `tools/list` failure or timeout, rejects
+ * with `makeUnavailableError('mcp:<name>', '(start)', reason)` (the stderr tail is appended to
+ * the reason) and the process is killed; there is no argv fallback.
+ */
+export async function resolveMcpStdioSource(
+  spec: {
+    command: string;
+    args: readonly string[];
+    cwd: string;
+    env?: Record<string, string>;
+    /** User-chosen source name (operation-id prefix); defaults to the command basename. */
+    name?: string;
+  },
+  deps: {
+    launcher: IProcessLauncher;
+    handshakeTimeoutMs?: number;
+    /** Per-call wait for an upstream result (default 120000). */
+    callTimeoutMs?: number;
+    /** One line per skipped tool; defaults to stderr. */
+    onWarn?: (line: string) => void;
+  }
+): Promise<IResolvedSource & { hints: McpHints; skipped: readonly ISkippedTool[] }> {
+  const onWarn = deps.onWarn ?? defaultWarn;
+  const server = sourceNameOf(spec.command, spec.name);
+  const upstream = await openMcpStdioUpstream(spec, mcpBindingOf(server), {
+    launcher: deps.launcher,
+    ...(deps.handshakeTimeoutMs !== undefined ? { handshakeTimeoutMs: deps.handshakeTimeoutMs } : {}),
+    ...(deps.callTimeoutMs !== undefined ? { callTimeoutMs: deps.callTimeoutMs } : {}),
+  });
+  const { client, callTool } = upstream;
+
+  const { operations, skipped, hints, tools } = operationsFromMcpTools(upstream.rawTools, server, onWarn);
   const generated: GeneratedSchemas = { metadata: { namespace: server, phase: '' }, schemas: Object.create(null) };
   const fns: Record<string, (...a: unknown[]) => unknown> = Object.create(null);
 
@@ -311,19 +392,6 @@ export async function resolveMcpStdioSource(
     };
   }
 
-  const callTool = (
-    name: string,
-    args?: Record<string, unknown>,
-    signal?: AbortSignal
-  ): Promise<CallToolResult> =>
-    // `request` (not `callTool`) so the SDK adds no client-side output validation: the
-    // result is the upstream's, and an McpError here is the upstream's own error.
-    client.request(
-      { method: 'tools/call', params: { name, ...(args !== undefined ? { arguments: args } : {}) } },
-      CallToolResultSchema,
-      { timeout: callTimeoutMs, ...(signal ? { signal } : {}) }
-    ) as Promise<CallToolResult>;
-
   const composed = composeSchemas(generated, []);
 
   return {
@@ -331,7 +399,7 @@ export async function resolveMcpStdioSource(
     operations,
     pkg: {
       id: server,
-      version: info?.version ?? '0.0.0',
+      version: upstream.serverVersion ?? '0.0.0',
       schemas: composed,
       importPath: `bin:${spec.command}`,
       fns,
@@ -342,11 +410,8 @@ export async function resolveMcpStdioSource(
     mcp: {
       tools,
       callTool,
-      onClose(cb) {
-        if (closed) queueMicrotask(cb);
-        else closeListeners.push(cb);
-      },
+      onClose: upstream.onClose,
     },
-    dispose,
+    dispose: upstream.dispose,
   };
 }

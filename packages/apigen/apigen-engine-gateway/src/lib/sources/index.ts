@@ -12,8 +12,24 @@ export {
 } from './argv-operation';
 export type { IArgvResult, IArgvInvokerOptions } from './argv-operation';
 export { createLauncherTransport } from './launcher-transport';
-export { resolveMcpStdioSource, operationsFromMcpTools, mcpBindingOf, MCP_HOST } from './mcp-source';
-export type { McpHints, IMcpTranslation } from './mcp-source';
+export {
+  resolveMcpStdioSource,
+  operationsFromMcpTools,
+  openMcpStdioUpstream,
+  mcpBindingOf,
+  MCP_HOST,
+  DEFAULT_CALL_TIMEOUT_MS,
+} from './mcp-source';
+export type { McpHints, IMcpTranslation, IMcpStdioCommand, IOpenedMcpUpstream } from './mcp-source';
+export { createMcpUpstreamAdapter } from './mcp-upstream-adapter';
+export type {
+  IMcpUpstreamSpec,
+  IMcpUpstreamTransport,
+  IMcpUpstreamDeps,
+  IMcpUpstreamAdapter,
+} from './mcp-upstream-adapter';
+export { createArgvAdapter } from './argv-adapter';
+export type { IArgvAdapterSpec, IArgvAdapterDeps } from './argv-adapter';
 export { nodeSourceProbe } from './source-probe';
 export { resolveSource } from './resolve-source';
 export type { IResolveDeps } from './resolve-source';

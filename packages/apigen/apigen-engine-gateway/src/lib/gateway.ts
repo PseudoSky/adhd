@@ -588,7 +588,7 @@ export function createGateway(opts: GatewayOptions): Gateway {
     },
 
     async route(req, signal) {
-      const host = req.operation.host;
+      const host = req.operation.binding ?? req.operation.host;
       const entry = hosts.get(host);
       // No adapter for this host → unavailable (partial availability, not whole-surface).
       if (entry == null) {
