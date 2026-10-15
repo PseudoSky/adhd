@@ -48,10 +48,25 @@
  *   D. (spawn-isolation-scan-found-nothing) the scope holds `@adhd/environment*`
  *      packages but zero spec/e2e files were scanned: the walker is broken.
  *
- * Known limits (static, regex-grade): a re-export of a helper under another module
- * name is not followed; an identifier is matched by name against visible const/function
- * declarations to depth 2; sites inside template-literal `${}` expressions are judged
- * like any other code.
+ * Known limits (static, regex-grade):
+ *   - a re-export of a helper under another module name is not followed;
+ *   - an identifier is matched by name against visible const/function declarations to
+ *     depth 2; sites inside template-literal `${}` expressions are judged like any other code;
+ *   - a bare-identifier HOME value (`HOME: home`, `env.HOME = home`) is resolved through its
+ *     visible `const|let|var` / plain-assignment initializer: an initializer matching the real-home
+ *     forms (`os.homedir()`, `process.env.HOME`, a saved `prev*`/`orig*`/… copy) is UNROUTED; any other
+ *     initializer routes it; an identifier with no resolvable initializer (a parameter, an import,
+ *     a function result bound elsewhere) is treated as ROUTED;
+ *   - the per-file-count ratchet allows swapping a routed call for an unrouted one (routing one
+ *     site and adding another unrouted site leaves the count unchanged, so it passes);
+ *   - a shorthand `HOME` is a redirect only inside an object-literal `{ … }` (a destructuring
+ *     `const { HOME } = …` or a function call argument does not count); a parameter-list
+ *     destructuring `({ HOME }) =>` is indistinguishable from an object literal and counts;
+ *   - child_process is recognised through static and `require`/dynamic import bindings, aliases
+ *     (`spawn as launch`), and namespace members (`cp.spawn`, `cp.exec`); a spawn reached only
+ *     through a re-exported or wrapped `child_process` binding is not detected;
+ *   - `exec`/`execSync` are node-bin sites only when their first argument is a string or template
+ *     beginning with `node`/`nodejs`, or contains `process.execPath` or a const alias of it.
  *
  * Exit code is the only signal (0 = clean, 1 = violation), per the repo's
  * verification standard. Invoked by check-lane-reachability.mjs (rule 9), which
@@ -103,7 +118,13 @@ export const NODE_SPAWN =
 // (`a.helper`, `a?.helper`) — but a spread `...helper(…)` / `...opts` IS a use of the name.
 const NAME_START = String.raw`(?<![\w$])(?<!(?<!\.\.)\.)`;
 
-const SPAWN_CALL = /(?<![\w$])(?:spawn|spawnSync|execFile|execFileSync|fork)\s*\(/g;
+/** Spawn-family names recognised by bare name (a `.name(` member call matches too). */
+const BARE_SPAWN_NAMES = ['spawn', 'spawnSync', 'execFile', 'execFileSync', 'fork'];
+/** Every child_process export a file may bind under another local name (alias / destructure). */
+const CHILD_PROCESS_FUNCS = [...BARE_SPAWN_NAMES, 'exec', 'execSync'];
+/** The exec family takes a command STRING, so it is a node site only through a node-string first argument. */
+const EXEC_FAMILY = new Set(['exec', 'execSync']);
+const EXEC_NODE_STRING = /^\s*(?:`|'|")?\s*(?:node|nodejs)(?=[\s'"`]|$)/;
 const NODE_LITERAL = /^(?:process\.execPath|process\.argv0|process\.argv\[\s*0\s*\]|(['"`])(?:node|nodejs)\1)$/;
 const ALIAS_DECL =
   /(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*(?::[^=;\n]+)?=\s*(?:process\.execPath|process\.argv0|process\.argv\[\s*0\s*\]|(['"`])(?:node|nodejs)\2)\s*(?:as\s+[\w.]+\s*)?(?=[;,\n)]|$)/g;
@@ -314,22 +335,114 @@ function helperBindings(code, helpers) {
   return { names, namespaces };
 }
 
+const IDENT = /^[A-Za-z_$][\w$]*$/;
+
+/**
+ * What a file binds from `child_process` (ESM import, `require`, or `import()` assigned to a
+ * binding): `direct` maps each local name to the child_process export it names (so
+ * `import { spawn as launch }` gives `launch → spawn`), and `namespaces` holds the local names
+ * of a whole-module binding (`import * as cp`, `import cp from`, `const cp = require(…)`).
+ * Type-only imports are skipped.
+ * @param {string} code Comment-blanked source.
+ * @returns {{ direct: Map<string, string>, namespaces: Set<string> }}
+ */
+function childProcessBindings(code) {
+  const direct = new Map();
+  const namespaces = new Set();
+  const isChildProcess = (spec) => /^(?:node:)?child_process$/.test(spec);
+  const bindList = (list) => {
+    for (const part of list.split(',')) {
+      const p = part.trim();
+      if (!p || /^type\s/.test(p)) continue;
+      const m = /^([\w$]+)(?:\s+as\s+([\w$]+)|\s*:\s*([\w$]+))?$/.exec(p);
+      if (!m || !CHILD_PROCESS_FUNCS.includes(m[1])) continue;
+      direct.set(m[2] ?? m[3] ?? m[1], m[1]);
+    }
+  };
+  for (const m of code.matchAll(/import\s+(?!\()(type\s+)?([^'";]*?)\s*from\s*['"]([^'"]+)['"]/g)) {
+    if (m[1] || !isChildProcess(m[3])) continue;
+    const clause = m[2].trim();
+    const ns = /\*\s*as\s+([\w$]+)/.exec(clause);
+    if (ns) namespaces.add(ns[1]);
+    const braces = /\{([^}]*)\}/.exec(clause);
+    if (braces) bindList(braces[1]);
+    const def = /^([\w$]+)\s*(?:,|$)/.exec(clause.replace(/\{[^}]*\}/, '').trim());
+    if (def) namespaces.add(def[1]);
+  }
+  for (const m of code.matchAll(/(?:const|let|var)\s+(\{[^}]*\}|[\w$]+)\s*=\s*(?:await\s+)?(?:require|import)\s*\(\s*['"]([^'"]+)['"]\s*\)/g)) {
+    if (!isChildProcess(m[2])) continue;
+    if (m[1].startsWith('{')) bindList(m[1].slice(1, -1));
+    else namespaces.add(m[1]);
+  }
+  return { direct, namespaces };
+}
+
+/**
+ * Index of the unclosed `(`, `[` or `{` that encloses `idx` in `text`, or `-1`.
+ * @param {string} text Source slice (comments blanked).
+ * @param {number} idx Position inside the slice.
+ * @returns {number}
+ */
+function innermostOpen(text, idx) {
+  let d = 0;
+  for (let j = idx - 1; j >= 0; j -= 1) {
+    const c = text[j];
+    if (c === ')' || c === ']' || c === '}') d += 1;
+    else if (c === '(' || c === '[' || c === '{') {
+      if (d === 0) return j;
+      d -= 1;
+    }
+  }
+  return -1;
+}
+
+/**
+ * Is a `{` at `open` an object-literal brace (an expression position) rather than a block,
+ * a class/function body, or a destructuring pattern? Judged by the token before it.
+ * @param {string} text Source slice (comments blanked).
+ * @param {number} open Index of the `{`.
+ * @returns {boolean}
+ */
+function isObjectLiteralBrace(text, open) {
+  const before = text.slice(0, open).trimEnd();
+  return /(?:[(,=:[?]|\breturn)$/.test(before);
+}
+
+/**
+ * Does `text` carry a shorthand `HOME` property (`{ HOME }`, `{ a, HOME, b }`) inside an
+ * object literal? A bare `HOME` argument (`f(x, HOME)`) or a destructuring pattern
+ * (`const { HOME } = …`) is not an object-literal shorthand and routes nothing. The shorthand
+ * is `HOME: HOME`, so its value is judged by `isRealHome` like any other HOME value.
+ * @param {string} text Source slice (comments blanked).
+ * @param {(value: string) => boolean} isRealHome True when a HOME value is the real home at the call site.
+ * @returns {boolean}
+ */
+function hasShorthandHome(text, isRealHome) {
+  for (const m of text.matchAll(/(?<![\w$.'"`])HOME(?=\s*[,}])/g)) {
+    if (!/[{,]$/.test(text.slice(0, m.index).trimEnd())) continue;
+    const open = innermostOpen(text, m.index);
+    if (open >= 0 && text[open] === '{' && isObjectLiteralBrace(text, open) && !isRealHome('HOME')) return true;
+  }
+  return false;
+}
+
 /**
  * Does `text` contain a HOME-redirect signal: a `HOME` key (bare, quoted or
  * shorthand) whose value is not the real home, a `.HOME =` assignment, a
  * `stubEnv('HOME', …)`, or a use of something imported from an isolation helper?
  * @param {string} text Source slice (comments blanked).
  * @param {{ names: Set<string>, namespaces: Set<string> }} binds Helper bindings.
+ * @param {(value: string) => boolean} isRealHome True when a HOME value is the real home at the call site.
  * @returns {boolean}
  */
-function hasHomeSignal(text, binds) {
+function hasHomeSignal(text, binds, isRealHome) {
   for (const m of text.matchAll(/(?<![\w$.])(?:HOME|'HOME'|"HOME"|`HOME`)\s*:\s*([^,}\n]*)/g)) {
-    if (!REAL_HOME_VALUE.test(m[1].trim())) return true;
+    if (!isRealHome(m[1].trim())) return true;
   }
-  if (/[{,]\s*HOME\s*[,}]/.test(text)) return true;
+  if (hasShorthandHome(text, isRealHome)) return true;
   if (/stubEnv\s*\(\s*['"]HOME['"]/.test(text)) return true;
   for (const m of text.matchAll(/[\w$\]]\s*(?:\.HOME|\[\s*['"]HOME['"]\s*\])\s*=(?!=)\s*([^;\n]*)/g)) {
-    if (!REAL_HOME_VALUE.test(m[1].trim())) return true;
+    if (!isRealHome(m[1].trim())) return true;
   }
   for (const name of binds.names) if (new RegExp(`${NAME_START}${esc(name)}(?![\\w$])`).test(text)) return true;
   for (const ns of binds.namespaces) {
@@ -339,14 +452,19 @@ function hasHomeSignal(text, binds) {
   return false;
 }
 
-/** Positions of every `.HOME =` / `stubEnv('HOME', …)` statement (HOME set for the whole process or an env object). */
+/**
+ * Positions of every `.HOME =` / `stubEnv('HOME', …)` statement (HOME set for the whole process
+ * or an env object), with the assigned value text (`undefined` for `stubEnv`).
+ * @param {string} code Comment-blanked source.
+ * @param {Uint8Array} mask String/regex literal mask.
+ * @returns {Array<{ index: number, value: string | undefined }>}
+ */
 function homeAssignments(code, mask) {
   const out = [];
   const re = /[\w$\]]\s*(?:\.HOME|\[\s*['"]HOME['"]\s*\])\s*=(?!=)\s*([^;\n]*)|stubEnv\s*\(\s*['"]HOME['"]/g;
   for (const m of code.matchAll(re)) {
     if (mask[m.index] && !/^stubEnv/.test(m[0])) continue;
-    if (m[1] !== undefined && REAL_HOME_VALUE.test(m[1].trim())) continue;
-    out.push(m.index);
+    out.push({ index: m.index, value: m[1]?.trim() });
   }
   return out;
 }
@@ -397,19 +515,26 @@ const HOOK_HEAD = /(?:beforeAll|beforeEach)\s*\(\s*(?:async\s*)?(?:function\s*\w
  * Every spawn call of a Node bin in a spec or e2e source whose child can inherit the
  * real `HOME`. Judged PER CALL SITE: a site is routed only when its own argument span
  * carries a HOME redirect or helper use (directly, or through an identifier declared
- * with one), or a `.HOME =` assignment precedes it in an enclosing scope. A `HOME:`
- * key elsewhere in the file routes nothing.
+ * with one), or a `.HOME =` assignment whose value is not the real home precedes it in an
+ * enclosing scope. A `HOME:` key elsewhere in the file routes nothing.
  *
- * Node-bin spawns are `spawn|spawnSync|execFile|execFileSync` whose executable is
- * `process.execPath`, `'node'`, or a const alias of either, and `fork(modulePath, …)`.
+ * Candidate calls: the spawn family (`spawn|spawnSync|execFile|execFileSync|fork`) by bare
+ * name; any local alias bound from `child_process` (`import { spawn as launch }`,
+ * `const { spawnSync: run } = require('child_process')`); and the exec family
+ * (`exec|execSync`) only when child_process binds it (directly, or as a namespace member
+ * `cp.exec(…)`). A spawn-family candidate is a node-bin site when its executable is
+ * `process.execPath`, `'node'`, or a const alias of either; an exec-family candidate when its
+ * command string starts with `node`/`nodejs` or contains `process.execPath` or such an alias;
+ * `fork(modulePath, …)` always is.
  * @param {string} rawSrc Raw file contents.
  * @param {readonly string[]} [helpers] Helper module basenames that mark a routed site.
- * @returns {Array<{ line: number, callee: string }>}
+ * @returns {Array<{ line: number, callee: string }>} `callee` is the child_process export the call names.
  */
 export function findUnroutedSpawnSites(rawSrc, helpers = ISOLATION_HELPERS) {
-  if (!/\b(?:spawn|spawnSync|execFile|execFileSync|fork)\s*\(/.test(rawSrc)) return [];
+  if (!/child_process|\b(?:spawn|spawnSync|execFile|execFileSync|fork)\s*\(/.test(rawSrc)) return [];
   const { code, mask, blocks } = scanSource(rawSrc);
   const binds = helperBindings(code, helpers);
+  const cp = childProcessBindings(code);
   const aliases = new Set();
   for (const m of code.matchAll(ALIAS_DECL)) if (!mask[m.index]) aliases.add(m[1]);
   if (ALIAS_DESTRUCTURE.test(code) || ALIAS_IMPORT.test(code)) aliases.add('execPath');
@@ -430,6 +555,30 @@ export function findUnroutedSpawnSites(rawSrc, helpers = ISOLATION_HELPERS) {
     return false;
   };
 
+  /**
+   * Is a HOME value the real home at the site `siteIdx`? The real-home forms match directly; a
+   * bare identifier resolves to its visible initializer(s) and is real only when every one is.
+   * No resolvable initializer (a parameter, an import, an unknown binding) is NOT real: routed.
+   * `undefined` (a `stubEnv('HOME', …)` call carries no value) is not real.
+   */
+  const realHomeAt = (siteIdx) => (value) => {
+    if (value === undefined) return false;
+    const v = value.trim();
+    if (REAL_HOME_VALUE.test(v)) return true;
+    if (!IDENT.test(v) || KEYWORDS.has(v)) return false;
+    const inits = declarationsOf(code, mask, blocks, v)
+      .filter((d) => !code.startsWith('function', d.idx) && scopeReaches(d.idx, siteIdx))
+      .map((d) => d.text.trim());
+    return inits.length > 0 && inits.every((t) => REAL_HOME_VALUE.test(t));
+  };
+  const hasSignal = (text, siteIdx) => hasHomeSignal(text, binds, realHomeAt(siteIdx));
+
+  // A spawn-family call names a Node bin; an exec-family call names one through its command string.
+  const execRunsNode = (first) =>
+    EXEC_NODE_STRING.test(first) ||
+    /\bprocess\s*\.\s*(?:execPath|argv0)\b|\bprocess\.argv\[\s*0\s*\]/.test(first) ||
+    (first.match(/[A-Za-z_$][\w$]*/g) ?? []).some((id) => aliases.has(id));
+
   const visited = new Set();
   const identifierRouted = (text, absStart, level, siteIdx) => {
     if (level > 2) return false;
@@ -441,32 +590,51 @@ export function findUnroutedSpawnSites(rawSrc, helpers = ISOLATION_HELPERS) {
       for (const decl of declarationsOf(code, mask, blocks, id)) {
         // Only a declaration visible from the site counts: module level, or in a block enclosing it.
         if (!scopeReaches(decl.idx, siteIdx)) continue;
-        if (hasHomeSignal(decl.text, binds) || identifierRouted(decl.text, undefined, level + 1, siteIdx)) return true;
+        if (hasSignal(decl.text, siteIdx) || identifierRouted(decl.text, undefined, level + 1, siteIdx)) return true;
       }
     }
     return false;
   };
 
+  // Candidate calls, in source order: the spawn family by bare name (or a child_process alias),
+  // and the exec family only when child_process binds it or it is a namespace member.
+  const callNames = [...new Set([...BARE_SPAWN_NAMES, ...cp.direct.keys()])];
+  const callRe = new RegExp(`(?<![\\w$])(${callNames.map(esc).join('|')})\\s*\\(`, 'g');
+  const candidates = [];
+  for (const m of code.matchAll(callRe)) {
+    candidates.push({ index: m.index, callee: cp.direct.get(m[1]) ?? m[1], open: m.index + m[0].length - 1 });
+  }
+  if (cp.namespaces.size > 0) {
+    const nsRe = new RegExp(`(?<![\\w$])(?:${[...cp.namespaces].map(esc).join('|')})\\s*\\.\\s*(exec|execSync)\\s*\\(`, 'g');
+    for (const m of code.matchAll(nsRe)) candidates.push({ index: m.index, callee: m[1], open: m.index + m[0].length - 1 });
+  }
+  candidates.sort((a, b) => a.index - b.index);
+
   const sites = [];
-  for (const m of code.matchAll(SPAWN_CALL)) {
-    if (mask[m.index]) continue;
-    const callee = /^[a-zA-Z]+/.exec(m[0])[0];
-    if (callee === 'fork' && /(?:cluster|worker)\s*\.\s*$/.test(code.slice(Math.max(0, m.index - 12), m.index))) continue;
-    const open = m.index + m[0].length - 1;
+  for (const { index, callee, open } of candidates) {
+    if (mask[index]) continue;
+    if (callee === 'fork' && /(?:cluster|worker)\s*\.\s*$/.test(code.slice(Math.max(0, index - 12), index))) continue;
     const close = matchParen(code, mask, open);
     // A declaration (`function fork(a) {`, `fork(a) {` class member), not a call.
-    if (/function\s*\*?\s*$/.test(code.slice(Math.max(0, m.index - 20), m.index)) || /^\s*\{/.test(code.slice(close + 1, close + 40))) continue;
+    if (/function\s*\*?\s*$/.test(code.slice(Math.max(0, index - 20), index)) || /^\s*\{/.test(code.slice(close + 1, close + 40))) continue;
     const first = firstArgument(code, mask, open + 1, close);
-    const isNodeBin = callee === 'fork' ? first.length > 0 : NODE_LITERAL.test(first) || aliases.has(first);
+    const isNodeBin =
+      callee === 'fork'
+        ? first.length > 0
+        : EXEC_FAMILY.has(callee)
+          ? execRunsNode(first)
+          : NODE_LITERAL.test(first) || aliases.has(first);
     if (!isNodeBin) continue;
 
     const span = code.slice(open + 1, close);
-    if (hasHomeSignal(span, binds)) continue;
+    if (hasSignal(span, index)) continue;
     visited.clear();
-    if (identifierRouted(span, open + 1, 0, m.index)) continue;
-    const routedByAssignment = assignments.some((p) => p < m.index && scopeReaches(p, m.index));
+    if (identifierRouted(span, open + 1, 0, index)) continue;
+    const routedByAssignment = assignments.some(
+      (a) => a.index < index && scopeReaches(a.index, index) && !realHomeAt(index)(a.value),
+    );
     if (routedByAssignment) continue;
-    sites.push({ line: lineAt(m.index), callee });
+    sites.push({ line: lineAt(index), callee });
   }
   return sites;
 }
@@ -550,11 +718,21 @@ export function collectSpawnIsolationViolations(workspaceRoot, opts = {}) {
   let envPackages = 0;
   let rootsPresent = 0;
 
+  // Tolerated unrouted count per baselined file. A valid entry carries a positive integer
+  // `count`; anything else (a null or non-object entry, a missing/zero/fractional count) is
+  // reported and tolerates nothing. `Infinity` is only the legacy array form's sentinel.
+  const tolerance = new Map();
   for (const [file, entry] of known) {
-    if (!(entry.count > 0)) {
+    const count = entry !== null && typeof entry === 'object' ? entry.count : undefined;
+    if (count === Number.POSITIVE_INFINITY) {
+      tolerance.set(file, count);
+    } else if (Number.isInteger(count) && count > 0) {
+      tolerance.set(file, count);
+    } else {
+      tolerance.set(file, 0);
       violations.push({
         rule: 'spawn-isolation-baseline-invalid',
-        detail: `${file} — spawn-isolation.baseline.json entry needs a positive integer "count"; got ${JSON.stringify(entry.count)}.`,
+        detail: `${file} — spawn-isolation.baseline.json entry needs a positive integer "count"; got ${JSON.stringify(entry) ?? String(entry)}.`,
       });
     }
   }
@@ -575,7 +753,7 @@ export function collectSpawnIsolationViolations(workspaceRoot, opts = {}) {
       const sites = findUnroutedSpawnSites(readFileSync(join(workspaceRoot, rel), 'utf8'), helpers);
       if (sites.length === 0) continue;
       unroutedCount.set(rel, sites.length);
-      const allowed = known.get(rel)?.count ?? 0;
+      const allowed = tolerance.get(rel) ?? 0;
       if (sites.length <= allowed) continue;
       const where = sites.map((s) => `${rel}:${s.line} (${s.callee})`).join(', ');
       violations.push({
@@ -595,14 +773,14 @@ export function collectSpawnIsolationViolations(workspaceRoot, opts = {}) {
     });
   }
 
-  for (const [rel, entry] of known) {
+  for (const [rel, count] of tolerance) {
     const underScannedRoot = roots.some((root) => rel.startsWith(`${root}/`));
-    if (!underScannedRoot || !(entry.count > 0)) continue;
+    if (!underScannedRoot || !(count > 0)) continue;
     const now = unroutedCount.get(rel) ?? 0;
-    if (entry.count === Number.POSITIVE_INFINITY ? now === 0 : now < entry.count) {
+    if (count === Number.POSITIVE_INFINITY ? now === 0 : now < count) {
       violations.push({
         rule: 'spawn-isolation-baseline-stale',
-        detail: `${rel} — spawn-isolation.baseline.json allows ${entry.count} unrouted site(s) but only ${now} remain (routed, moved, renamed or deleted); ${now === 0 ? 'remove the entry' : `lower the count to ${now}`}.`,
+        detail: `${rel} — spawn-isolation.baseline.json allows ${count} unrouted site(s) but only ${now} remain (routed, moved, renamed or deleted); ${now === 0 ? 'remove the entry' : `lower the count to ${now}`}.`,
       });
     }
   }

@@ -1,5 +1,5 @@
 {
-  "description": "Ratchet baseline for check-spawn-isolation.mjs. Per file: the number of unrouted node-bin spawn sites tolerated today (count) and why (reason). A file whose unrouted count exceeds its count fails; a count above the true number fails as stale. Counts and files can only go down; never add a file or raise a count. Fix the spawn (route it through spawn-isolated-bin / spawn-backlog-bin or set HOME in the child env), then lower or remove the entry.",
+  "description": "Ratchet baseline for check-spawn-isolation.mjs. Per file: the number of unrouted node-bin spawn sites tolerated today (count) and why (reason). A file whose unrouted count exceeds its count fails; a count above the true number fails as stale. Review convention, not enforced by the check: counts and files should only go down, and a reviewer should reject an added file or a raised count. The check compares each file's unrouted count to its entry as written, so an edit that raises a count or adds a file passes the check. To retire a site, fix the spawn (route it through spawn-isolated-bin / spawn-backlog-bin or set HOME in the child env), then lower or remove the entry.",
   "unrouted": {
     "entrypoint/agent-mcp/src/__tests__/agent-mcp-follow-bin.e2e.test.ts": {
       "count": 1,
