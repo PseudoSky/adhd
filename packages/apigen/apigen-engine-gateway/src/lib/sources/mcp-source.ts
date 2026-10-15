@@ -1,12 +1,12 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { CallToolResultSchema, ResultSchema, ToolSchema } from '@modelcontextprotocol/sdk/types.js';
 import type { CallToolResult, Tool } from '@modelcontextprotocol/sdk/types.js';
-import { composeSchemas } from '@adhd/apigen-core-client';
+import { buildId, composeSchemas } from '@adhd/apigen-core-client';
 import type { GeneratedSchemas, Operation } from '@adhd/apigen-core-client';
 import { commandBaseName, segmentOf, sourceNameOf } from './command-name';
 import { createLauncherTransport } from './launcher-transport';
 import type { IProcessHandle, IProcessLauncher } from './process';
-import { SourceError } from './types';
+import { startError } from './types';
 import type { IResolvedSource, ISkippedTool } from './types';
 
 const DEFAULT_HANDSHAKE_TIMEOUT_MS = 10_000;
@@ -20,6 +20,26 @@ const RESERVED_TOOL_NAMES: ReadonlySet<string> = new Set(['__proto__', 'construc
 /** Upstream hints per operation id, for `draft` (SRC-03, SRC-14: advisory claims, never a guarantee). */
 export type McpHints = Readonly<Record<string, { readOnly?: boolean; destructive?: boolean }>>;
 
+/** Producer tag (`Operation.host`) of the MCP translator (ADR-0017). */
+export const MCP_HOST = 'mcp';
+
+/** The binding key (`Operation.binding`) of every operation of the MCP source `name`: `mcp:<name>`. */
+export function mcpBindingOf(name: string): string {
+  return `mcp:${name}`;
+}
+
+/** Result of {@link operationsFromMcpTools}. */
+export interface IMcpTranslation {
+  /** One operation per exposed tool, in `tools/list` order. */
+  readonly operations: Operation[];
+  /** Tools that were not exposed, with the reason. */
+  readonly skipped: ISkippedTool[];
+  /** Upstream `readOnlyHint` / `destructiveHint` per operation id (advisory only). */
+  readonly hints: McpHints;
+  /** Every exposed upstream `Tool`, by upstream name. */
+  readonly tools: Map<string, Tool>;
+}
+
 function describeError(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
 }
@@ -29,27 +49,134 @@ function defaultWarn(line: string): void {
 }
 
 /**
+ * The pure MCP translator (ADR-0017, gap analysis §3e): maps the raw entries of an upstream
+ * `tools/list` (all pages, unvalidated) to apigen IR. Starts nothing and talks to nothing, so
+ * a remote MCP source can reuse it unchanged.
+ *
+ * Each exposed tool becomes one `action` operation:
+ * - `id` is rendered by the core `buildId` from the source name and the tool name
+ *   (`<source>/<tool>`; each segment is tokenised, so `read_file` renders `read-file`);
+ *   `namespace` is the source segment and the path tail's `raw` is the upstream tool name.
+ * - `host: 'mcp'` (the producer tag), `binding: 'mcp:<name>'` (the runtime adapter key).
+ * - `input` is the tool's `inputSchema`; `output = {}` (the upstream result is a
+ *   `CallToolResult`, not an instance of the tool's `outputSchema`).
+ * - `safe` is ALWAYS `false`: the upstream's `readOnlyHint` is an untrusted claim and rides
+ *   only in the advisory `hints` map (D-08).
+ * - `tool` carries the upstream `title` and `annotations` when present (E3).
+ *
+ * A tool with an invalid definition, a non-object `inputSchema`, a duplicate name, a reserved
+ * name (`__proto__`, `constructor`, `prototype`) or a name whose rendered id collides with an
+ * earlier tool's id is skipped and listed in `skipped`, with one `onWarn` line each; the rest
+ * of the source stays usable.
+ *
+ * @param rawTools - The `tools` entries of every `tools/list` page, as received.
+ * @param name     - The user-chosen source name (already normalised, e.g. by `sourceNameOf`);
+ *                   never the upstream's own `serverInfo.name`.
+ * @param onWarn   - Receives one line per skipped tool.
+ */
+export function operationsFromMcpTools(
+  rawTools: readonly unknown[],
+  name: string,
+  onWarn: (line: string) => void
+): IMcpTranslation {
+  const operations: Operation[] = [];
+  const hints: Record<string, { readOnly?: boolean; destructive?: boolean }> = {};
+  const skipped: ISkippedTool[] = [];
+  const tools = new Map<string, Tool>();
+  const ids = new Map<string, string>();
+  const namespace = segmentOf(name);
+  const binding = mcpBindingOf(name);
+
+  const skip = (tool: string, reason: string): void => {
+    skipped.push({ tool, reason });
+    onWarn(`apigen-gateway: skipping upstream tool ${JSON.stringify(tool)} of ${name}: ${reason}`);
+  };
+
+  for (const entry of rawTools) {
+    const parsed = ToolSchema.safeParse(entry);
+    if (!parsed.success) {
+      const candidate = entry as { name?: unknown; inputSchema?: { type?: unknown } } | null;
+      const label = typeof candidate?.name === 'string' ? candidate.name : '<unnamed>';
+      const objectSchema = candidate?.inputSchema?.type === 'object';
+      skip(label, objectSchema ? 'invalid tool definition' : 'non-object inputSchema');
+      continue;
+    }
+    const tool: Tool = parsed.data;
+    if (RESERVED_TOOL_NAMES.has(tool.name)) {
+      skip(tool.name, 'reserved tool name');
+      continue;
+    }
+    if ((tool.inputSchema as { type?: unknown } | undefined)?.type !== 'object') {
+      skip(tool.name, 'non-object inputSchema');
+      continue;
+    }
+    if (tools.has(tool.name)) {
+      skip(tool.name, 'duplicate tool name');
+      continue;
+    }
+    const tail = segmentOf(tool.name);
+    const id = buildId(namespace, [tail]);
+    const clash = ids.get(id);
+    if (clash !== undefined) {
+      skip(tool.name, `operation id ${JSON.stringify(id)} already taken by tool ${JSON.stringify(clash)}`);
+      continue;
+    }
+    ids.set(id, tool.name);
+    tools.set(tool.name, tool);
+
+    const annotations = tool.annotations as Record<string, unknown> | undefined;
+    const title = typeof tool.title === 'string' ? tool.title : undefined;
+    const meta: { title?: string; annotations?: Record<string, unknown> } = {
+      ...(title !== undefined ? { title } : {}),
+      ...(annotations !== undefined ? { annotations: { ...annotations } } : {}),
+    };
+    operations.push({
+      id,
+      host: MCP_HOST,
+      binding,
+      namespace,
+      path: [tail],
+      kind: 'action',
+      async: true,
+      streaming: false,
+      // Never trust the upstream's readOnlyHint for a decision the host or Layer makes.
+      safe: false,
+      input: tool.inputSchema as Record<string, unknown>,
+      output: {},
+      envelope: {},
+      typeText: null,
+      hasCtx: false,
+      ...(Object.keys(meta).length > 0 ? { tool: meta } : {}),
+    });
+    const ann = tool.annotations;
+    if (ann && (ann.readOnlyHint !== undefined || ann.destructiveHint !== undefined)) {
+      hints[id] = {
+        ...(ann.readOnlyHint !== undefined ? { readOnly: ann.readOnlyHint } : {}),
+        ...(ann.destructiveHint !== undefined ? { destructive: ann.destructiveHint } : {}),
+      };
+    }
+  }
+
+  return { operations, skipped, hints, tools };
+}
+
+/**
  * D-08. Starts the process, connects an SDK `Client` over {@link createLauncherTransport},
  * performs `initialize` bounded by `handshakeTimeoutMs` (default 10000), lists tools
- * (following cursors) and builds one Operation per tool:
- *
- * - `id = '<source>.<tool>'` where `<source>` is the USER-CHOSEN name: `spec.name` when
- *   given, else the command basename, lowercased to `[a-z0-9_-]`. The upstream's own
- *   `serverInfo.name` is never used (an upstream could otherwise claim another source's
- *   prefix and inherit its permissions).
- * - `input` = the tool's `inputSchema`; `output = {}`; `safe` is ALWAYS `false`: the
- *   upstream's `readOnlyHint` is an untrusted claim and rides only in the advisory
- *   `hints` map.
- * - A tool with a non-object `inputSchema`, a duplicate name, or a reserved name
- *   (`__proto__`, `constructor`, `prototype`) is skipped and listed in `skipped`, with one
- *   `onWarn` line each; the rest of the source stays usable.
+ * (following cursors) and translates them with {@link operationsFromMcpTools}. The source
+ * name is the USER-CHOSEN `spec.name` when given, else the command basename, lowercased to
+ * `[a-z0-9_-]`; the upstream's own `serverInfo.name` is never used (an upstream could
+ * otherwise claim another source's prefix and inherit its permissions).
  *
  * The resolved source also carries `mcp`: the full upstream `Tool` objects and a verbatim
  * `callTool` (arguments exactly as given, result exactly as returned). The positional
- * `pkg.fns` table remains for hosts that dispatch through apigen, but it can only pass
- * the arguments the schema declares. `dispose()` closes the client and kills the
- * process group. A handshake failure or timeout is `SourceError('handshake-failed')` and
- * the process is killed; there is no argv fallback.
+ * `pkg.fns` table (keyed by upstream tool name, the path tail's `raw`) remains for hosts that
+ * dispatch through apigen, but it can only pass the arguments the schema declares.
+ * `dispose()` closes the client and kills the process group.
+ *
+ * A process that cannot be started, or a handshake / `tools/list` failure or timeout, rejects
+ * with `makeUnavailableError('mcp:<name>', '(start)', reason)` (the stderr tail is appended to
+ * the reason) and the process is killed; there is no argv fallback.
  */
 export async function resolveMcpStdioSource(
   spec: {
@@ -72,12 +199,19 @@ export async function resolveMcpStdioSource(
   const timeoutMs = deps.handshakeTimeoutMs ?? DEFAULT_HANDSHAKE_TIMEOUT_MS;
   const callTimeoutMs = deps.callTimeoutMs ?? DEFAULT_CALL_TIMEOUT_MS;
   const onWarn = deps.onWarn ?? defaultWarn;
-  const handle: IProcessHandle = await deps.launcher.start({
-    command: spec.command,
-    args: spec.args,
-    cwd: spec.cwd,
-    ...(spec.env ? { env: spec.env } : {}),
-  });
+  const server = sourceNameOf(spec.command, spec.name);
+  const binding = mcpBindingOf(server);
+  let handle: IProcessHandle;
+  try {
+    handle = await deps.launcher.start({
+      command: spec.command,
+      args: spec.args,
+      cwd: spec.cwd,
+      ...(spec.env ? { env: spec.env } : {}),
+    });
+  } catch (e) {
+    throw startError(binding, e);
+  }
 
   let stderrTail = '';
   const transport = createLauncherTransport(handle, {
@@ -107,10 +241,10 @@ export async function resolveMcpStdioSource(
     return disposing;
   };
 
-  const fail = async (code: 'handshake-failed' | 'unsupported', message: string): Promise<never> => {
+  const fail = async (message: string): Promise<never> => {
     await dispose();
     const tail = stderrTail.trim();
-    throw new SourceError(code, tail ? `${message} (stderr: ${tail})` : message);
+    throw startError(binding, tail ? `${message} (stderr: ${tail})` : message);
   };
 
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -123,7 +257,7 @@ export async function resolveMcpStdioSource(
     });
     await Promise.race([client.connect(transport, { timeout: timeoutMs }), deadline]);
   } catch (e) {
-    return fail('handshake-failed', `MCP handshake with ${spec.command} failed: ${describeError(e)}`);
+    return fail(`MCP handshake with ${spec.command} failed: ${describeError(e)}`);
   } finally {
     if (timer) clearTimeout(timer);
   }
@@ -145,79 +279,26 @@ export async function resolveMcpStdioSource(
       cursor = typeof page.nextCursor === 'string' ? page.nextCursor : undefined;
     } while (cursor);
   } catch (e) {
-    return fail('handshake-failed', `tools/list on ${spec.command} failed: ${describeError(e)}`);
+    return fail(`tools/list on ${spec.command} failed: ${describeError(e)}`);
   }
 
   const info = client.getServerVersion();
-  const server = sourceNameOf(spec.command, spec.name);
-  const operations: Operation[] = [];
-  const hints: Record<string, { readOnly?: boolean; destructive?: boolean }> = {};
-  const skipped: ISkippedTool[] = [];
-  const tools = new Map<string, Tool>();
+  const { operations, skipped, hints, tools } = operationsFromMcpTools(rawTools, server, onWarn);
   const generated: GeneratedSchemas = { metadata: { namespace: server, phase: '' }, schemas: Object.create(null) };
   const fns: Record<string, (...a: unknown[]) => unknown> = Object.create(null);
 
-  const skip = (tool: string, reason: string): void => {
-    skipped.push({ tool, reason });
-    onWarn(`apigen-gateway: skipping upstream tool ${JSON.stringify(tool)} of ${server}: ${reason}`);
-  };
-
-  for (const entry of rawTools) {
-    const parsed = ToolSchema.safeParse(entry);
-    if (!parsed.success) {
-      const candidate = entry as { name?: unknown; inputSchema?: { type?: unknown } } | null;
-      const label = typeof candidate?.name === 'string' ? candidate.name : '<unnamed>';
-      const objectSchema = candidate?.inputSchema?.type === 'object';
-      skip(label, objectSchema ? 'invalid tool definition' : 'non-object inputSchema');
-      continue;
-    }
-    const tool: Tool = parsed.data;
-    if (RESERVED_TOOL_NAMES.has(tool.name)) {
-      skip(tool.name, 'reserved tool name');
-      continue;
-    }
-    if ((tool.inputSchema as { type?: unknown } | undefined)?.type !== 'object') {
-      skip(tool.name, 'non-object inputSchema');
-      continue;
-    }
-    if (tools.has(tool.name)) {
-      skip(tool.name, 'duplicate tool name');
-      continue;
-    }
-    const id = `${server}.${tool.name}`;
-    const input = tool.inputSchema as Record<string, unknown>;
-    tools.set(tool.name, tool);
-    operations.push({
-      id,
-      host: 'ts',
-      namespace: segmentOf(server),
-      path: [{ raw: tool.name, words: segmentOf(tool.name).words }],
-      kind: 'action',
-      async: true,
-      streaming: false,
-      // Never trust the upstream's readOnlyHint for a decision the host or Layer makes.
-      safe: false,
-      input,
-      output: {},
-      envelope: {},
-      typeText: null,
-      hasCtx: false,
-    });
-    generated.schemas[tool.name] = { input, output: {}, safe: false };
-    const annotations = tool.annotations;
-    if (annotations && (annotations.readOnlyHint !== undefined || annotations.destructiveHint !== undefined)) {
-      hints[id] = {
-        ...(annotations.readOnlyHint !== undefined ? { readOnly: annotations.readOnlyHint } : {}),
-        ...(annotations.destructiveHint !== undefined ? { destructive: annotations.destructiveHint } : {}),
-      };
-    }
+  for (const operation of operations) {
+    // The path tail's `raw` is the upstream tool name: the key of `pkg.fns` / `pkg.schemas`.
+    const toolName = operation.path[operation.path.length - 1]?.raw ?? operation.id;
+    const input = operation.input;
+    generated.schemas[toolName] = { input, output: {}, safe: false };
     const paramNames = Object.keys((input['properties'] as Record<string, unknown> | undefined) ?? {});
-    fns[tool.name] = async (...positional: unknown[]) => {
+    fns[toolName] = async (...positional: unknown[]) => {
       const args: Record<string, unknown> = {};
-      paramNames.forEach((name, i) => {
-        if (positional[i] !== undefined) args[name] = positional[i];
+      paramNames.forEach((param, i) => {
+        if (positional[i] !== undefined) args[param] = positional[i];
       });
-      const result = (await client.callTool({ name: tool.name, arguments: args })) as {
+      const result = (await client.callTool({ name: toolName, arguments: args })) as {
         content?: unknown;
         structuredContent?: unknown;
         isError?: boolean;
@@ -243,11 +324,7 @@ export async function resolveMcpStdioSource(
       { timeout: callTimeoutMs, ...(signal ? { signal } : {}) }
     ) as Promise<CallToolResult>;
 
-  // `composeSchemas` stamps `x-apigen-safe: true` on any tool whose arguments are all
-  // primitives (the HTTP GET-eligibility rule), which would let an upstream's own argument
-  // shape mark a destructive tool safe. No upstream tool is ever safe (G3).
   const composed = composeSchemas(generated, []);
-  for (const entry of Object.values(composed)) entry['x-apigen-safe'] = false;
 
   return {
     sourceId: `bin:${commandBaseName(spec.command)}`,

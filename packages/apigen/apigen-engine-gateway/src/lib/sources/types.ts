@@ -6,7 +6,10 @@
 // `buildBacklogApigenPackage`). See docs/plan/policy-core/T08-discovery.md.
 
 import type { CallToolResult, Tool } from '@modelcontextprotocol/sdk/types.js';
+import { isApiError } from '@adhd/apigen-base-errors';
+import type { ApiError } from '@adhd/apigen-base-errors';
 import type { Operation, composeSchemas } from '@adhd/apigen-core-client';
+import { makeUnavailableError } from '../gateway';
 
 /** A parsed source argument. */
 export type SourceSpec =
@@ -14,7 +17,10 @@ export type SourceSpec =
   | { readonly kind: 'remote'; readonly url: string }
   | { readonly kind: 'bin'; readonly command: string };
 
-/** `run` resolves lazily (nothing starts until an operation is invoked); `serve` is an explicit start. */
+/**
+ * `run` resolves lazily (nothing starts until an operation is invoked); `serve` is an explicit
+ * start. Only used to fill a resolution's unset translator: `run` -> `argv`, `serve` -> `mcp`.
+ */
 export type SourceIntent = 'run' | 'serve';
 
 /** A tool the resolver refused to expose, with the reason. One bad tool never disables a source. */
@@ -63,17 +69,18 @@ export interface IResolvedSource {
   dispose(): Promise<void>;
 }
 
-/** Typed failure of source parsing, resolution or startup. */
-export class SourceError extends Error {
-  constructor(
-    readonly code:
-      | 'unsupported'
-      | 'handshake-failed'
-      | 'spawn-failed'
-      | 'invalid-spec',
-    message: string
-  ) {
-    super(message);
-    this.name = 'SourceError';
-  }
+// Failures of source parsing, resolution or startup are core `ApiError`s (TAXONOMY §7, B9):
+// an invalid or unsupported source is `ApiError('invalid_argument')`; a process that cannot
+// be started or an upstream that fails its handshake is `makeUnavailableError(<binding>,
+// '(start)', reason)` from the gateway error model.
+
+/**
+ * Normalise a startup failure (spawn, handshake, `tools/list`) to the gateway `unavailable`
+ * error for `binding`. An `ApiError` the launcher already raised (a confining launcher's own
+ * refusal, for example) passes through unchanged. Internal to `sources/`.
+ */
+export function startError(binding: string, cause: unknown, context?: string): ApiError {
+  if (isApiError(cause)) return cause;
+  const reason = cause instanceof Error ? cause.message : String(cause);
+  return makeUnavailableError(binding, '(start)', context ? `${context}: ${reason}` : reason);
 }
