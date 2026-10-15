@@ -1,7 +1,7 @@
 # @adhd/apigen-cli — Agent Guide
 
 ## Package identity
-- **npm:** `@adhd/apigen-cli` (version 0.1.0)
+- **npm:** `@adhd/apigen-cli`
 - **Bin:** `apigen` (from `bin.apigen` in package.json)
 - **Build:** `npx nx build apigen-cli` → `dist/entrypoint/apigen-cli/index.js`
 - **Location in repo:** `entrypoint/apigen-cli/`

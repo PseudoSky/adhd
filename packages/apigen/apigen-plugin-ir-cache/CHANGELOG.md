@@ -1,3 +1,13 @@
+## 0.1.5 (2026-10-15)
+
+### 🩹 Fixes
+
+- **apigen-plugin-ir-cache:** extraction reports the files it read; cache keys the whole call and tracks installed-package deps ([0bf369d5](https://github.com/PseudoSky/adhd/commit/0bf369d5))
+
+### ❤️ Thank You
+
+- pseudosky
+
 ## 0.1.4 (2026-10-03)
 
 ### 🩹 Fixes

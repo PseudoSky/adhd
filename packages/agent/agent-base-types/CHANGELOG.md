@@ -1,3 +1,7 @@
+## 2.3.12 (2026-10-15)
+
+This was a version bump only for agent-base-types to align it with other projects, there were no code changes.
+
 ## Unreleased
 
 ### 🚀 Features

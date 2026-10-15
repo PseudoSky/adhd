@@ -19,6 +19,7 @@ import { irCachePlugin } from '@adhd/apigen-plugin-ir-cache';
 import type { IrCacheOptions } from '@adhd/apigen-plugin-ir-cache';
 import javaJavalinPlugin from '@adhd/apigen-plugin-java-javalin';
 import { addLoggingOptions } from './lib/logging';
+import { readPackageVersion } from './lib/version';
 import type { OutputPlugin, PluginInput, PluginOutput } from '@adhd/apigen-core-client';
 
 // `irCachePlugin` (`@adhd/apigen-plugin-ir-cache`) is a v2 capability-based
@@ -71,7 +72,7 @@ const plugins: Record<string, OutputPlugin> = {
   'java-javalin': javaJavalinPlugin,
 };
 
-const program = new Command().name('apigen').version('0.1.0');
+const program = new Command().name('apigen').version(readPackageVersion(import.meta.url));
 addLoggingOptions(program);
 
 registerGenerateCommand(program, plugins);
