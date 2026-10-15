@@ -13,15 +13,15 @@ dor: needs-decision — check: AC1 says "agents whose prompt demands tools" and 
 - ADR: adhd 0001 D3/D7 (no schema churn avoidable) and the item's own scope (out: tool-grant starvation, transport failure).
 
 ## Design decisions
-D1 Surface as a payload warning, not a new status/event: `TASK_COMPLETED.payload` becomes `{ result, toolUseCount, warnings?: Array<'no_tool_use'> }`; the `task:completed` hook payload gains the same optional `warnings`; agent-mcp `task_get`/SSE `done` passes them through (additive field). No migration, no status change, existing consumers unaffected. Rejected: new `TaskStatus 'incomplete'` (DB CHECK migration, every consumer switch, and false-fails legitimate tool-less answers); new event type (CHECK enum); failing the task (unrequested semantic change).
+D1 Surface as a payload warning, not a new status/event: `TASK_COMPLETED.payload` becomes `{ result, toolUseCount, warnings?: Array<'no_tool_use'> }`; the `task:completed` hook payload gains the same optional `warnings`; agent-mcp `task` result/SSE `done` passes them through (additive field). No migration, no status change, existing consumers unaffected. Rejected: new `TaskStatus 'incomplete'` (DB CHECK migration, every consumer switch, and false-fails legitimate tool-less answers); new event type (CHECK enum); failing the task (unrequested semantic change).
 D2 (DECISION) Trigger definition. Recommended: warn when ALL hold — final stop is `completed`, accumulated `toolUseCount === 0` over the whole task, the agent was granted >=1 tool (resolved tool list non-empty), and the task did not end in HITL. A per-agent opt-in `requiresToolUse?: boolean` in AgentDefinition (frontmatter-compatible) escalates the warning to status `failed` with reason `no_tool_use` when true — default false. Alternative: only opt-in flag (never warns by default) — misses the observed case unless agents are annotated.
 D3 Counter: accumulate `toolUseCount += reportedToolCallCount` at the point `reportedToolCallCount` is computed (`:2012`) for every model response, so API and claudecli share one authoritative number; do not read `executionContext.toolCallCount`.
-D4 Doc: README of agent-engine-orchestrator and agent-mcp tool description for `task_get` mention `warnings`.
+D4 Doc: README of agent-engine-orchestrator and agent-mcp tool description for `task` mention `warnings`.
 
 ## Write-scope (exact)
 - /Users/nix/dev/node/adhd/packages/agent/agent-engine-orchestrator/src/engine/orchestrator.ts (lines ~2008-2062, ~2605-2625 only)
 - /Users/nix/dev/node/adhd/packages/agent/agent-base-types/src/hooks.ts (task:completed payload), domain.ts (only if D2 flag adopted: `AgentDefinition.requiresToolUse`)
-- /Users/nix/dev/node/adhd/entrypoint/agent-mcp/src/server.ts (~l.1044 `done` event / task_get result field)
+- /Users/nix/dev/node/adhd/entrypoint/agent-mcp/src/server.ts (~l.1044 `done` event / `task` result field)
 - tests: `packages/agent/agent-engine-orchestrator/src/__tests__/` new `no-tool-use-warning.test.ts`
 - CHANGELOGs of the three packages.
 

@@ -138,11 +138,15 @@ export interface MessageAppendedPayload {
   message: Message;
 }
 /**
- * Advisory flags a task can complete with. A warning never changes the task's status or result.
+ * Every advisory flag a task can complete with, the single source for `TaskCompletionWarning` and the
+ * zod mirror in `agent-engine-orchestrator`. A warning never changes the task's status or result.
  * - `no_tool_use`: the final stop was `completed`, the task made zero tool calls, and the agent was
  *   granted at least one tool (cbd559eb).
  */
-export type TaskCompletionWarning = 'no_tool_use';
+export const TASK_COMPLETION_WARNINGS = ['no_tool_use'] as const;
+
+/** One advisory completion warning; derived from `TASK_COMPLETION_WARNINGS`. */
+export type TaskCompletionWarning = (typeof TASK_COMPLETION_WARNINGS)[number];
 
 export interface TaskCompletedPayload {
   executionContext: ExecutionContext;

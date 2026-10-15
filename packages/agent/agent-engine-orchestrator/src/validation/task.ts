@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { TASK_COMPLETION_WARNINGS } from '@adhd/agent-base-types';
 
 import { taskUsageReportSchema } from './usage.js';
 
@@ -108,11 +109,11 @@ export const taskToolInputSchema = z.union([
 ]);
 
 /**
- * Advisory completion warnings of a finished task (cbd559eb). Mirrors the `TaskCompletionWarning`
- * literal union from `@adhd/agent-base-types`; the `no_tool_use` member is the only one emitted. The
- * key is omitted when the task completed with no warning.
+ * Advisory completion warnings of a finished task (cbd559eb). Built from the same
+ * `TASK_COMPLETION_WARNINGS` tuple that defines `TaskCompletionWarning` in `@adhd/agent-base-types`.
+ * The key is omitted when the task completed with no warning.
  */
-export const taskToolWarningSchema = z.enum(['no_tool_use']);
+export const taskToolWarningSchema = z.enum(TASK_COMPLETION_WARNINGS);
 
 export const taskToolOutputSchema = z.object({
   task_id: z.string().uuid(),

@@ -56,9 +56,10 @@ function modelVisibleTextOf(result: unknown): string {
  * What is hashed: the system content of the history as the turn is about to shape it, taken
  * before the `pre:model_request` enforcement runs and before windowing. `toolDocSystemMessage`
  * (names mode) already embeds the history's system content, so it takes precedence over
- * `history[0]`, the same precedence the request shaping uses. The hash therefore does not
- * reflect a system message an enforcement handler replaces on the request copy; the MODEL_REQUEST
- * event cannot be moved after that step without reordering it against the enforcement hook.
+ * `history[0]`, the same precedence the request shaping uses. It is therefore NOT always the
+ * system content the provider receives: an enforcement handler can replace the system message on
+ * the request copy, and windowing runs after the hash is taken. The MODEL_REQUEST event cannot be
+ * moved after that step without reordering it against the enforcement hook.
  */
 function systemPromptSha256(
   toolDocSystemMessage: Message | null,
@@ -398,6 +399,23 @@ export function resolveHitl(taskId: string, userInput: string): boolean {
   return true;
 }
 
+/**
+ * The event shape `OrchestratorRunInput.emitTaskEvent` delivers. Exported so the callers that inject
+ * the callback (`tools/task.ts` `TaskDeps`) reuse this one type instead of restating it.
+ */
+export type OrchestratorTaskEvent = {
+  type: string;
+  taskId: string;
+  status?: string;
+  result?: string | null;
+  error?: string | null;
+  warnings?: TaskCompletionWarning[];
+  toolName?: string;
+  toolCallId?: string;
+  input?: unknown;
+  content?: unknown;
+};
+
 export interface OrchestratorRunInput {
   executionContext: ExecutionContext;
   messages: Message[];
@@ -428,7 +446,7 @@ export interface OrchestratorRunInput {
    */
   suspensionAnswerable?: boolean;
   /** Injected emitTaskEvent callback (replaces streaming/event-bus import). */
-  emitTaskEvent?: (event: { type: string; taskId: string; status?: string; result?: string | null; error?: string | null; warnings?: TaskCompletionWarning[]; toolName?: string; toolCallId?: string; input?: unknown; content?: unknown }) => void;
+  emitTaskEvent?: (event: OrchestratorTaskEvent) => void;
   /** Injected logger (replaces logger.js import). */
   logger?: EngineLogger;
   /** Injected config (replaces config.js import). */
@@ -2059,11 +2077,15 @@ export class Orchestrator {
         const callEndedAt = Date.now();
         const computeMs = callEndedAt - modelCallStartedAt;
         lastModelCallEndedAt = callEndedAt;
-        // Prefer the provider's own count of tools it ran internally (claudecli); otherwise
-        // the tool calls the orchestrator loop is about to execute. Accounting only —
-        // loop control still keys off assistantMessage.toolCalls / executionContext.
-        const reportedToolCallCount =
-          providerResponse.reportedToolUses ?? assistantMessage.toolCalls?.length ?? 0;
+        // The provider's own count of tools it ran internally (claudecli) and the tool calls the
+        // orchestrator loop is about to execute. Take the larger: a provider may report 0 while still
+        // populating toolCalls, and a `??` chain would then read that 0 and drop the real calls, which
+        // would raise a false no_tool_use warning. Accounting only — loop control still keys off
+        // assistantMessage.toolCalls / executionContext.
+        const reportedToolCallCount = Math.max(
+          providerResponse.reportedToolUses ?? 0,
+          assistantMessage.toolCalls?.length ?? 0,
+        );
         // cbd559eb: counts every REQUESTED call, including calls the policy later denied (a denied call is
         // still tool use the model attempted; the warning asks "did the model use tools at all").
         toolUseCount += reportedToolCallCount;

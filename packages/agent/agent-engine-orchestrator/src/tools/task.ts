@@ -3,7 +3,11 @@ import { statSync } from 'node:fs';
 import type { EngineConfig, EngineLogger } from '../interfaces.js';
 import type { BackgroundQueue } from '../engine/queue.js';
 import type { DagEngine } from '../engine/dag-engine.js';
-import type { Orchestrator, OrchestratorStartupStamps } from '../engine/orchestrator.js';
+import type {
+  Orchestrator,
+  OrchestratorStartupStamps,
+  OrchestratorTaskEvent,
+} from '../engine/orchestrator.js';
 import { resolveHitl, warnEchoFailureOnce } from '../engine/orchestrator.js';
 import type { PolicyEngine } from '../engine/policy.js';
 import type {
@@ -15,7 +19,12 @@ import type { ProviderRegistry } from '@adhd/agent-core-provider';
 import type { AgentStore } from './agent-crud.js';
 import type { SessionStoreForTool } from './session.js';
 import { McpClientRegistry } from '../clients/registry.js';
-import type { IProviderEcho, TaskCompletionWarning, TaskStatus } from '@adhd/agent-base-types';
+import {
+  TASK_COMPLETION_WARNINGS,
+  type IProviderEcho,
+  type TaskCompletionWarning,
+  type TaskStatus,
+} from '@adhd/agent-base-types';
 import { and, eq } from 'drizzle-orm';
 import { taskEventsTable } from '@adhd/agent-store-runtime';
 import type {
@@ -52,7 +61,12 @@ function completionWarningsOf(db: Database, taskId: string): TaskCompletionWarni
   if (!row?.payload) return undefined;
   const parsed = JSON.parse(row.payload) as { warnings?: unknown };
   if (!Array.isArray(parsed.warnings)) return undefined;
-  const known = parsed.warnings.filter((w): w is TaskCompletionWarning => w === 'no_tool_use');
+  // Values outside TASK_COMPLETION_WARNINGS are intentionally ignored (forward compatibility): a newer
+  // engine may persist a warning this reader does not know yet, and it must not fail the read.
+  const known = parsed.warnings.filter(
+    (w): w is TaskCompletionWarning =>
+      (TASK_COMPLETION_WARNINGS as readonly unknown[]).includes(w),
+  );
   return known.length > 0 ? known : undefined;
 }
 
@@ -145,7 +159,7 @@ export interface TaskDeps {
    * resolved to its provider-native wire string at provider construction.
    */
   providerRegistry?: ProviderRegistry;
-  emitTaskEvent?: (event: { type: string; taskId: string; status?: string; result?: string | null; error?: string | null; toolName?: string; toolCallId?: string; input?: unknown; content?: unknown }) => void;
+  emitTaskEvent?: (event: OrchestratorTaskEvent) => void;
 }
 
 /** The echo members of the real `SessionStore` that task start uses (optional: minimal fakes omit them). */
