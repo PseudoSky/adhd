@@ -265,7 +265,7 @@ describe('plan discovery-sweep-1014 blind-review C AC2 — run-mode $ref errors 
       run({ op: () => null }, schemaWithRef('#/$defs/A/properties/b'), 'op', {
         at: ISO,
       })
-    )) as Error;
+    )) as Error & { cause?: unknown };
     expect(err).toBeInstanceOf(Error);
     expect(err.message).toContain('"op"');
     expect(err.message).toContain('E_EMIT: unsupported $ref form');
@@ -281,7 +281,7 @@ describe('plan discovery-sweep-1014 blind-review C AC2 — run-mode $ref errors 
       run({ op: () => null }, schemaWithRef('#/definitions/Nope'), 'op', {
         at: ISO,
       })
-    )) as Error;
+    )) as Error & { cause?: unknown };
     expect(err).toBeInstanceOf(Error);
     expect(err.message).toContain('"op"');
     expect(err.message).toContain('#/definitions/Nope');

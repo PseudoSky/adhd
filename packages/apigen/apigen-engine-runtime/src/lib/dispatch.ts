@@ -127,10 +127,13 @@ function refCtx(root: SchemaNode, fnName: string): Partial<TranscodeCtx> {
         return lookup(ref);
       } catch (cause) {
         const detail = cause instanceof Error ? cause.message : String(cause);
-        throw new Error(
-          `[apigen-engine-runtime] op "${fnName}": ${detail}`,
-          { cause }
+        // The package compiles below ES2022, whose `lib` lacks `ErrorOptions`,
+        // so the standard `cause` property is attached by assignment.
+        const wrapped: Error & { cause?: unknown } = new Error(
+          `[apigen-engine-runtime] op "${fnName}": ${detail}`
         );
+        wrapped.cause = cause;
+        throw wrapped;
       }
     },
   };
