@@ -88,12 +88,27 @@ export function rootRefResolver(root: SchemaNode): (ref: string) => SchemaNode {
       throw new EmitError(`E_EMIT: unresolvable $ref "${ref}"`, '');
     }
     const bag = root[m[1]] as Record<string, unknown> | undefined;
-    const def = bag?.[decodePointerToken(m[2])] ?? bag?.[ref];
+    const def =
+      ownProperty(bag, decodePointerToken(m[2])) ?? ownProperty(bag, ref);
     if (def == null || typeof def !== 'object') {
       throw new EmitError(`E_EMIT: $ref "${ref}" has no $def target`, '');
     }
     return def as SchemaNode;
   };
+}
+
+/**
+ * Read `key` from a `$defs` / `definitions` bag only when it is an OWN property.
+ * A plain `bag[key]` read walks the prototype chain, so `#/$defs/__proto__` or
+ * `#/$defs/constructor` would resolve to `Object.prototype` / `Object` instead of
+ * failing as a missing definition.
+ */
+function ownProperty(
+  bag: Record<string, unknown> | undefined,
+  key: string
+): unknown {
+  if (typeof bag !== 'object' || bag === null) return undefined;
+  return Object.prototype.hasOwnProperty.call(bag, key) ? bag[key] : undefined;
 }
 
 /** Decode a single JSON-Pointer reference token (`~1`→`/`, `~0`→`~`). */

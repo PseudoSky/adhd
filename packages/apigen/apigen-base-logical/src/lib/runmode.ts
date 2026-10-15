@@ -80,8 +80,7 @@ function encodeNode(
   // ── 2. $ref ────────────────────────────────────────────────────────────────
   const ref = schema['$ref'];
   if (typeof ref === 'string') {
-    const resolved = ctx.resolve(ref);
-    return encodeNode(value, resolved, ctx);
+    return encodeNode(value, followRef(ref, ctx), ctx);
   }
 
   // ── 3. oneOf / discriminated union ─────────────────────────────────────────
@@ -98,26 +97,28 @@ function encodeNode(
     if (!Array.isArray(value)) {
       return encodeSchemaless(value, schema, ctx);
     }
-    const items = schema['items'] as SchemaNode | SchemaNode[] | undefined;
-    if (!items) {
-      // No items schema → passthrough each element as plain JSON
-      return (value as unknown[]).map((el) => encodePassthrough(el)) as Wire[];
-    }
-    const childPath = ctx.path;
-    // Positional (tuple) form: `items` is an array of per-index schemas
-    // (draft-07 tuple validation). Walk each element against its positional
-    // schema; elements past the tuple length pass through as plain JSON.
-    if (Array.isArray(items)) {
-      return (value as unknown[]).map((el, i) => {
-        const itemSchema = items[i];
-        return itemSchema === undefined
-          ? (encodePassthrough(el) as Wire)
-          : encodeNode(el, itemSchema, { ...ctx, path: `${childPath}/${i}` });
-      }) as Wire[];
-    }
-    return (value as unknown[]).map((el, i) =>
-      encodeNode(el, items, { ...ctx, path: `${childPath}/${i}` })
-    ) as Wire[];
+    return withPathGuard(value, ctx, (): Wire[] => {
+      const items = schema['items'] as SchemaNode | SchemaNode[] | undefined;
+      if (!items) {
+        // No items schema → passthrough each element as plain JSON
+        return (value as unknown[]).map((el) => encodePassthrough(el)) as Wire[];
+      }
+      const childPath = ctx.path;
+      // Positional (tuple) form: `items` is an array of per-index schemas
+      // (draft-07 tuple validation). Walk each element against its positional
+      // schema; elements past the tuple length pass through as plain JSON.
+      if (Array.isArray(items)) {
+        return (value as unknown[]).map((el, i) => {
+          const itemSchema = items[i];
+          return itemSchema === undefined
+            ? (encodePassthrough(el) as Wire)
+            : encodeNode(el, itemSchema, { ...ctx, path: `${childPath}/${i}` });
+        }) as Wire[];
+      }
+      return (value as unknown[]).map((el, i) =>
+        encodeNode(el, items, { ...ctx, path: `${childPath}/${i}` })
+      ) as Wire[];
+    });
   }
 
   // ── 5. object ──────────────────────────────────────────────────────────────
@@ -125,25 +126,27 @@ function encodeNode(
     if (value === null || typeof value !== 'object' || Array.isArray(value)) {
       return encodeSchemaless(value, schema, ctx);
     }
-    const props = schema['properties'] as
-      | Record<string, SchemaNode>
-      | undefined;
-    if (!props) {
-      // No properties → passthrough (plain object)
-      return encodePassthrough(value) as Wire;
-    }
-    const childPath = ctx.path;
-    const result: { [k: string]: Wire } = {};
-    for (const [k, propSchema] of Object.entries(props)) {
-      const v = (value as Record<string, unknown>)[k];
-      if (v !== undefined) {
-        result[k] = encodeNode(v, propSchema, {
-          ...ctx,
-          path: `${childPath}/${k}`,
-        });
+    return withPathGuard(value, ctx, (): Wire => {
+      const props = schema['properties'] as
+        | Record<string, SchemaNode>
+        | undefined;
+      if (!props) {
+        // No properties → passthrough (plain object)
+        return encodePassthrough(value) as Wire;
       }
-    }
-    return result;
+      const childPath = ctx.path;
+      const result: { [k: string]: Wire } = {};
+      for (const [k, propSchema] of Object.entries(props)) {
+        const v = (value as Record<string, unknown>)[k];
+        if (v !== undefined) {
+          result[k] = encodeNode(v, propSchema, {
+            ...ctx,
+            path: `${childPath}/${k}`,
+          });
+        }
+      }
+      return result;
+    });
   }
 
   // ── 6. Schema-less / any position → envelope ───────────────────────────────
@@ -175,8 +178,7 @@ function decodeNode(
   // ── 2. $ref ────────────────────────────────────────────────────────────────
   const ref = schema['$ref'];
   if (typeof ref === 'string') {
-    const resolved = ctx.resolve(ref);
-    return decodeNode(wire, resolved, ctx);
+    return decodeNode(wire, followRef(ref, ctx), ctx);
   }
 
   // ── 3. oneOf / discriminated union ─────────────────────────────────────────
@@ -262,6 +264,82 @@ function decodeNode(
 
   // ── 7. Passthrough ─────────────────────────────────────────────────────────
   return wire;
+}
+
+// ---------------------------------------------------------------------------
+// $ref and cycle guards
+// ---------------------------------------------------------------------------
+
+/**
+ * Resolve `ref` to the first definition that is NOT a bare `$ref` alias.
+ *
+ * A `$ref` may legitimately resolve to a definition that is itself a bare
+ * `$ref` (`A → B → C`). That chain is followed here, and a chain that revisits
+ * a ref it has already passed (`Loop = { $ref: '#/definitions/Loop' }`, or a
+ * two-step `A → B → A`) throws a clear error naming the ref. Without this the
+ * walk recurses on the same ref forever and fails with an unnamed
+ * `RangeError`.
+ *
+ * Only alias links are followed. A `$ref` nested under `properties`, `items`,
+ * or `oneOf` is consumed by the walk itself, and value-driven recursion through
+ * such a ref is finite (it consumes one level of the value per step), so it is
+ * never blocked here. A node a registered codec claims is not an alias and is
+ * returned as-is, matching the codec-first order of `encodeNode` / `decodeNode`.
+ *
+ * @param ref The `$ref` string being followed.
+ * @param ctx The transcode ctx whose `resolve` binds the document root.
+ * @returns The resolved, non-alias schema node.
+ */
+function followRef(ref: string, ctx: TranscodeCtx): SchemaNode {
+  const chain: string[] = [ref];
+  let node = ctx.resolve(ref);
+  while (
+    typeof node['$ref'] === 'string' &&
+    ctx.registry.resolve(node) === undefined
+  ) {
+    const next = node['$ref'] as string;
+    if (chain.includes(next)) {
+      throw new Error(
+        `[apigen-logical] $ref "${next}" at "${ctx.path || '#'}" is an alias cycle (${[...chain, next].join(' -> ')}); a $ref chain must end at a definition that is not itself a $ref`
+      );
+    }
+    chain.push(next);
+    node = ctx.resolve(next);
+  }
+  return node;
+}
+
+/**
+ * Run `walk` with `value` marked as an ancestor on the encode path, and unmark
+ * it when the walk finishes (including on throw).
+ *
+ * This is a PATH stack, not a visited set: a host object reachable twice from
+ * sibling positions (a DAG) is encoded both times, and only a value that is its
+ * own ancestor (a true host cycle) throws. The throw names the JSON Pointer of
+ * the back-edge, so a cyclic host value fails with a located error instead of
+ * an unnamed `RangeError`. Uses `ctx.seen`, the cycle guard the contract
+ * declares for the encode side.
+ *
+ * @param value The host object or array whose children are about to be walked.
+ * @param ctx   The transcode ctx (its `seen` set holds the active path).
+ * @param walk  The walk over `value`'s children.
+ */
+function withPathGuard<T>(
+  value: object,
+  ctx: TranscodeCtx,
+  walk: () => T
+): T {
+  if (ctx.seen.has(value)) {
+    throw new Error(
+      `[apigen-logical] cyclic host value at "${ctx.path || '#'}": the value contains a reference to one of its own ancestors, which cannot be encoded to JSON`
+    );
+  }
+  ctx.seen.add(value);
+  try {
+    return walk();
+  } finally {
+    ctx.seen.delete(value);
+  }
 }
 
 // ---------------------------------------------------------------------------
