@@ -73,6 +73,11 @@ export class EmitError extends Error {
  * JSON-Schema `#/$defs/<name>` (and legacy `#/definitions/<name>`) lookup
  * against a `root` document.
  *
+ * Two key conventions are accepted in the `$defs` / `definitions` bag: the
+ * bare definition name (`{ User: {...} }`, what `ts-json-schema-generator`
+ * emits) and the full ref-URI (`{ '#/$defs/User': {...} }`, what hand-built
+ * fixtures use). The bare name is tried first.
+ *
  * @param root The schema document holding `$defs` / `definitions`.
  * @returns A resolver suitable for {@link EmitCtx.resolve}.
  */
@@ -83,7 +88,7 @@ export function rootRefResolver(root: SchemaNode): (ref: string) => SchemaNode {
       throw new EmitError(`E_EMIT: unresolvable $ref "${ref}"`, '');
     }
     const bag = root[m[1]] as Record<string, unknown> | undefined;
-    const def = bag?.[decodePointerToken(m[2])];
+    const def = bag?.[decodePointerToken(m[2])] ?? bag?.[ref];
     if (def == null || typeof def !== 'object') {
       throw new EmitError(`E_EMIT: $ref "${ref}" has no $def target`, '');
     }

@@ -1,8 +1,9 @@
-import type { SchemaNode } from '@adhd/apigen-base-logical';
+import type { SchemaNode, TranscodeCtx } from '@adhd/apigen-base-logical';
 import {
   buildTranscoder,
   createRegistry,
   registerWellKnown,
+  rootRefResolver,
 } from '@adhd/apigen-base-logical';
 import type { ComposedSchemas } from './types';
 
@@ -81,24 +82,60 @@ function paramSchemaNode(
  * the transcoder once per declared param name rather than walking a nested
  * object schema.
  */
-function decodeArg(wire: unknown, node: SchemaNode | undefined): unknown {
+function decodeArg(
+  wire: unknown,
+  node: SchemaNode | undefined,
+  ctx: Partial<TranscodeCtx>
+): unknown {
   if (node === undefined || wire === undefined) return wire;
-  return _transcoder.decode(wire as import('@adhd/apigen-base-logical').Wire, node);
+  return _transcoder.decode(
+    wire as import('@adhd/apigen-base-logical').Wire,
+    node,
+    ctx
+  );
+}
+
+/**
+ * Build a transcoder context whose `$ref` resolver is bound to one schema
+ * document root (the op's `input` or `output` schema, whose `definitions` /
+ * `$defs` the extractor hoisted onto that root).
+ *
+ * A `$ref` that does not match any definition throws an error naming both the
+ * ref and the operation id, so the failure points at the schema, not the codec.
+ *
+ * @param root  The schema document the `$ref`s inside it are relative to.
+ * @param fnName The operation id, used only in the error message.
+ */
+function refCtx(root: SchemaNode, fnName: string): Partial<TranscodeCtx> {
+  const lookup = rootRefResolver(root);
+  return {
+    resolve: (ref: string): SchemaNode => {
+      try {
+        return lookup(ref);
+      } catch {
+        throw new Error(
+          `[apigen-engine-runtime] op "${fnName}": $ref "${ref}" has no matching definition in this operation's schema (define it under "definitions" or "$defs" on the schema root)`
+        );
+      }
+    },
+  };
 }
 
 /**
  * Encode the function's return value against the output schema node.
  * When the output schema is empty ({}), the value passes through unchanged.
+ * `$ref`s in the output schema resolve against the output schema's own root.
  */
 function encodeResult(
   value: unknown,
+  fnName: string,
   fnSchema: ComposedSchemas[string]
 ): unknown {
   const outputSchema = fnSchema.output as SchemaNode;
   // An empty object schema `{}` has no `type` — the transcoder treats it as
   // schema-less / plain-JSON passthrough; only typed output schemas are encoded.
   if (!outputSchema || Object.keys(outputSchema).length === 0) return value;
-  return _transcoder.encode(value, outputSchema);
+  return _transcoder.encode(value, outputSchema, refCtx(outputSchema, fnName));
 }
 
 /**
@@ -128,8 +165,11 @@ export async function dispatch(
   const paramNames = dataParamNames(schema);
 
   // ── Decode: wire → host for every domain arg ───────────────────────────────
+  // Param `$ref`s resolve against the input schema root (where the extractor
+  // hoists `definitions`/`$defs` for the `data` envelope).
+  const inputCtx = refCtx(schema.input as SchemaNode, fnName);
   const args = paramNames.map((k) =>
-    decodeArg(domainArgs[k], paramSchemaNode(schema, k))
+    decodeArg(domainArgs[k], paramSchemaNode(schema, k), inputCtx)
   );
 
   // Session middleware: build ctx from the session envelope and inject it as the
@@ -139,7 +179,7 @@ export async function dispatch(
     const raw = await (
       fns[fnName] as (ctx: unknown, ...a: unknown[]) => unknown
     )(ctx, ...args);
-    return encodeResult(raw, schema);
+    return encodeResult(raw, fnName, schema);
   }
 
   // ctx-param fn WITHOUT session middleware (BUG-APIGEN-001): the source fn's
@@ -151,9 +191,9 @@ export async function dispatch(
     const raw = await (
       fns[fnName] as (ctx: unknown, ...a: unknown[]) => unknown
     )(ctx, ...args);
-    return encodeResult(raw, schema);
+    return encodeResult(raw, fnName, schema);
   }
 
   const raw = await fns[fnName](...args);
-  return encodeResult(raw, schema);
+  return encodeResult(raw, fnName, schema);
 }

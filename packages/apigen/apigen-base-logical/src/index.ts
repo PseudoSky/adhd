@@ -30,6 +30,7 @@ export {
 } from './lib/descriptor-ext';
 
 export { buildTranscoder, tryRegister, validateSchemaRefs } from './lib/runmode';
+export { rootRefResolver } from './lib/emit';
 
 export {
   dateTimeCodec,

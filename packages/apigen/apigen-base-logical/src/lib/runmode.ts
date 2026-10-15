@@ -29,9 +29,11 @@ import type { LogicalTypeRegistry } from './registry';
 
 /**
  * Build a full `TranscodeCtx` from the registry and an optional partial
- * override supplied by the caller. The `resolve` function is a no-op stub here
- * (actual $def resolvers are wired in by later states that own the descriptor
- * root); the cycle guard and mode are initialised with safe defaults.
+ * override supplied by the caller. The default `resolve` refuses every `$ref`
+ * because the transcoder has no schema document root of its own. A caller that
+ * transcodes a schema containing `$ref` must pass a root-bound `resolve` in the
+ * override (see {@link rootRefResolver}). The cycle guard and mode are
+ * initialised with safe defaults.
  */
 function buildCtx(
   registry: LogicalTypeRegistry,
@@ -343,11 +345,11 @@ function pickUnionBranch(
       // 1b. BUG-APIGEN-RUNMODE-DISCRIMINATOR-DEREF-001: match by the
       // RESOLVED branch's own declared discriminator value. 1a alone is
       // silently inert whenever the caller has inlined every `$ref` before
-      // dispatch (`@adhd/backlog`'s `dereferenceSchema` does exactly this —
-      // its own doc comment explains WHY: run-mode's `ctx.resolve` has no
-      // descriptor root and unconditionally throws on any `$ref` it sees, so
-      // a host that wants run-mode dispatch to work AT ALL must strip every
-      // `$ref` before the schema ever reaches this transcoder). Once
+      // dispatch (`@adhd/backlog`'s `dereferenceSchema` does exactly this).
+      // A transcoder built without a root-bound `ctx.resolve` throws on any
+      // `$ref` it sees, so inlining is the only way such a caller can dispatch
+      // without one; `engine-runtime`'s `dispatch()` binds the op's root and
+      // does not need the inlining. Once
       // `oneOf`'s branches are inlined object schemas, NONE of them carry a
       // `$ref` key any more, so `oneOf.find((b) => b['$ref'] === ref)` above
       // always returns `undefined` and 1a silently no-ops — `mapping` was
