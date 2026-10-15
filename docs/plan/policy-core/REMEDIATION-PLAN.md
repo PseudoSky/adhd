@@ -1037,14 +1037,14 @@ Scenario: attribute paths with dots are untouched
 
 ### Open
 
-| ID | Item | Why it blocks |
-| --- | --- | --- |
-| G-3 | Backlog entrypoint migration R13 (`entrypoint/backlog` is not approved beyond the G-5 reader audit) | nothing on the critical path |
-| G-4 | `apigen-base-logical` edit, only if dispatch cannot pass a `resolve()` override to the transcoder | R3 `$ref` resolution |
-| G-6 | `@adhd/sox-telemetry` edit, only if its file-mode, disable or retention knobs are missing (the retention values are decided under D-24) | R9 D-24 |
-| G-8 | Confirm E2 stays unadopted | scope |
-| G-9 | createLayer reach: fastify, express and cli-output targets are not approved; the plan reaches them through `loadUsePlugins` materialisation in apigen-cli (R5) without editing them. Confirm that this boundary is acceptable | R5 |
-| G-10 | INTERFACES supersessions (D-07, D-08, D-14, D-18, D-19, D-20, D-21) | R14 |
+| ID | Item | Why it blocks | Proposed default (pending owner confirmation) |
+| --- | --- | --- | --- |
+| G-3 | Backlog entrypoint migration R13 (`entrypoint/backlog` is not approved beyond the G-5 reader audit) | nothing on the critical path | R13 is not started; `entrypoint/backlog` stays outside this slice and keeps its duplicated `buildBacklogApigenPackage` until the owner approves R13. |
+| G-4 | `apigen-base-logical` edit, only if dispatch cannot pass a `resolve()` override to the transcoder | R3 `$ref` resolution | no `apigen-base-logical` edit; dispatch resolves `$ref` inside apigen-engine-runtime (landed in R3, 24156bf8). |
+| G-6 | `@adhd/sox-telemetry` edit, only if its file-mode, disable or retention knobs are missing (the retention values are decided under D-24) | R9 D-24 | no `@adhd/sox-telemetry` edit; R9 uses the knobs the package exposes and records any missing knob as a backlog deferral. |
+| G-8 | Confirm E2 stays unadopted | scope | E2 stays unadopted. |
+| G-9 | createLayer reach: fastify, express and cli-output targets are not approved; the plan reaches them through `loadUsePlugins` materialisation in apigen-cli (R5) without editing them. Confirm that this boundary is acceptable | R5 | the boundary is accepted: fastify, express and cli-output receive configured layers through apigen-cli `loadUsePlugins` materialisation (R5) and are not edited. |
+| G-10 | INTERFACES supersessions (D-07, D-08, D-14, D-18, D-19, D-20, D-21) | R14 | INTERFACES D-07, D-08, D-14, D-18, D-19, D-20, D-21 are marked superseded in R14; D-04/U12 kept. |
 
 ---
 
