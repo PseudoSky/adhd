@@ -509,7 +509,7 @@ export function createServer(deps: ServerDeps): Server {
     {
       name: 'task',
       description:
-        `${DELEGATION_DECISION_RULE} Run a prompt against a session or a named agent. Independent dispatches go in ONE turn; use tasks_batch for a list of prompts.`,
+        `${DELEGATION_DECISION_RULE} Run a prompt against a session or a named agent. Independent dispatches go in ONE turn; use tasks_batch for a list of prompts. A finished task whose agent had tools granted but made zero tool calls carries warnings:["no_tool_use"]; its status and result are unchanged.`,
       inputSchema: toMcpInputSchema(taskToolInputSchema),
     },
     {
@@ -1043,6 +1043,8 @@ function wireTaskNotifications(server: Server): () => void {
           status: event.error ? 'failed' : 'completed',
           result: event.result,
           error: event.error,
+          // cbd559eb: advisory completion warnings; the key is omitted when there are none.
+          ...(event.warnings ? { warnings: event.warnings } : {}),
         },
       })
       .catch((err: unknown) => {

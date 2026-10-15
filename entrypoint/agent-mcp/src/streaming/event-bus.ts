@@ -1,11 +1,13 @@
 import { EventEmitter } from "node:events";
+import type { TaskCompletionWarning } from "@adhd/agent-base-types";
 
 export type TaskStreamEvent =
     | { type: "token";         taskId: string; chunk: string }
     | { type: "tool_call";     taskId: string; toolName: string; toolCallId: string; input: unknown }
     | { type: "tool_result";   taskId: string; toolCallId: string; content: unknown }
     | { type: "status_change"; taskId: string; status: string }
-    | { type: "done";          taskId: string; result: string | null; error: string | null };
+    /** `warnings` is present only when the task completed with at least one advisory warning (cbd559eb). */
+    | { type: "done";          taskId: string; result: string | null; error: string | null; warnings?: TaskCompletionWarning[] };
 
 const emitter = new EventEmitter();
 emitter.setMaxListeners(500);

@@ -389,7 +389,7 @@ export interface OrchestratorRunInput {
    */
   suspensionAnswerable?: boolean;
   /** Injected emitTaskEvent callback (replaces streaming/event-bus import). */
-  emitTaskEvent?: (event: { type: string; taskId: string; status?: string; result?: string | null; error?: string | null; toolName?: string; toolCallId?: string; input?: unknown; content?: unknown }) => void;
+  emitTaskEvent?: (event: { type: string; taskId: string; status?: string; result?: string | null; error?: string | null; warnings?: TaskCompletionWarning[]; toolName?: string; toolCallId?: string; input?: unknown; content?: unknown }) => void;
   /** Injected logger (replaces logger.js import). */
   logger?: EngineLogger;
   /** Injected config (replaces config.js import). */
@@ -1558,6 +1558,8 @@ export class Orchestrator {
             };
             const modelCalls = partial.usage ? partial.reportedModelCalls ?? 1 : 0;
             const toolCallCount = partial.reportedToolUses ?? 0;
+            // cbd559eb: a discarded attempt's CLI-internal tool uses still count toward the task-wide total.
+            toolUseCount += toolCallCount;
             const failedEndedAt = Date.now();
             const failedComputeMs = failedEndedAt - modelCallStartedAt;
             await hooks.emit('post:model_response', {
@@ -2016,6 +2018,8 @@ export class Orchestrator {
         // loop control still keys off assistantMessage.toolCalls / executionContext.
         const reportedToolCallCount =
           providerResponse.reportedToolUses ?? assistantMessage.toolCalls?.length ?? 0;
+        // cbd559eb: counts every REQUESTED call, including calls the policy later denied (a denied call is
+        // still tool use the model attempted; the warning asks "did the model use tools at all").
         toolUseCount += reportedToolCallCount;
         // R10 S5b: count the response's thinking blocks (absent for a provider that cannot produce them).
         const thinkingBlocks = thinkingBlocksOf(runSelection.providerType, providerResponse.echo);
@@ -2612,6 +2616,9 @@ export class Orchestrator {
       // (never failed). HITL needs no separate check: a suspension always arrives through a tool call, so
       // `toolUseCount` is already non-zero. The HITL builtin is pushed unconditionally, so it is excluded
       // from the granted count.
+      // `tools` is the task's own registry listing (`McpClientRegistry` built per task from the agent's
+      // mcpServers), and `listAllTools` drops every allowedTools/disallowedTools-hidden tool, so this is the
+      // agent-granted set, not the catalog.
       const grantedToolCount = tools.filter(
         (t) => t.name !== HITL_BUILTIN_TOOL_DEFINITION.name
       ).length;
@@ -2655,6 +2662,7 @@ export class Orchestrator {
       await hooks.emit('task:completed', {
         executionContext,
         result: finalContent,
+        toolUseCount,
         ...(completionWarnings ? { warnings: completionWarnings } : {}),
       });
 
@@ -2663,6 +2671,7 @@ export class Orchestrator {
         taskId,
         result: finalContent,
         error: null,
+        ...(completionWarnings ? { warnings: completionWarnings } : {}),
       });
 
       taskSucceeded = true;

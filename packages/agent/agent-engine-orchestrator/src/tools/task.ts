@@ -15,7 +15,9 @@ import type { ProviderRegistry } from '@adhd/agent-core-provider';
 import type { AgentStore } from './agent-crud.js';
 import type { SessionStoreForTool } from './session.js';
 import { McpClientRegistry } from '../clients/registry.js';
-import type { IProviderEcho, TaskStatus } from '@adhd/agent-base-types';
+import type { IProviderEcho, TaskCompletionWarning, TaskStatus } from '@adhd/agent-base-types';
+import { and, eq } from 'drizzle-orm';
+import { taskEventsTable } from '@adhd/agent-store-runtime';
 import type {
   ExecutionContext,
   ResultInput,
@@ -35,6 +37,30 @@ import { generateId } from '../utils/ids.js';
 import { nowIso } from '../utils/timestamps.js';
 import type { IHookRegistry } from '@adhd/agent-base-types';
 import { buildTaskUsageReport, type Database } from './usage.js';
+
+/**
+ * A synchronous task result: the `TaskToolOutput` fields plus the advisory completion warnings of the
+ * finished task (cbd559eb). `warnings` is absent when the task completed with none.
+ */
+type TaskToolResult = TaskToolOutput & { warnings?: TaskCompletionWarning[] };
+
+/**
+ * cbd559eb: the advisory completion warnings of a finished task, read from its persisted `TASK_COMPLETED`
+ * payload (the orchestrator writes `warnings` there only when one fired). Returns `undefined` when none
+ * did, so callers omit the key instead of sending an empty array.
+ */
+function completionWarningsOf(db: Database, taskId: string): TaskCompletionWarning[] | undefined {
+  const row = db
+    .select({ payload: taskEventsTable.payload })
+    .from(taskEventsTable)
+    .where(and(eq(taskEventsTable.taskId, taskId), eq(taskEventsTable.type, 'TASK_COMPLETED')))
+    .get();
+  if (!row?.payload) return undefined;
+  const parsed = JSON.parse(row.payload) as { warnings?: unknown };
+  if (!Array.isArray(parsed.warnings)) return undefined;
+  const known = parsed.warnings.filter((w): w is TaskCompletionWarning => w === 'no_tool_use');
+  return known.length > 0 ? known : undefined;
+}
 
 /**
  * R10 M2: measures the two start-up times only this file can see, because both happen before
@@ -238,7 +264,7 @@ async function runEphemeralTask(
   },
   deps: TaskDeps,
   callerContext?: ExecutionContext
-): Promise<TaskToolOutput> {
+): Promise<TaskToolResult> {
   // Caller-cwd contract (ADR-0008 D4): the caller may supply a `cwd`; a
   // sub-dispatch inherits the parent's. Absent ⇒ the host falls back to its own
   // process.cwd() (flagged on the resolve context).
@@ -447,12 +473,14 @@ async function runEphemeralTask(
 
   const finalTask = deps.taskStore.read(taskId);
   const usage = buildTaskUsageReport(deps.db, taskId);
+  const warnings = completionWarningsOf(deps.db, taskId);
 
   return {
     task_id: taskId,
     status: finalTask.status as TaskStatus,
     result: finalTask.result,
     usage,
+    ...(warnings ? { warnings } : {}),
   };
 }
 
@@ -504,7 +532,7 @@ export async function taskTool(
   input: TaskToolInput,
   deps: TaskDeps,
   callerContext?: ExecutionContext
-): Promise<TaskToolOutput> {
+): Promise<TaskToolResult> {
   const startedAt = performance.now();
   const out = await dispatchTask(input, deps, callerContext);
   await emitDispatchCompleted(deps, callerContext, {
@@ -521,7 +549,7 @@ async function dispatchTask(
   input: TaskToolInput,
   deps: TaskDeps,
   callerContext?: ExecutionContext
-): Promise<TaskToolOutput> {
+): Promise<TaskToolResult> {
   if ('agent_name' in input) {
     return runEphemeralTask(input, deps, callerContext);
   }
@@ -735,11 +763,13 @@ async function dispatchTask(
 
     const finalTask = deps.taskStore.read(task.id);
     const usage = buildTaskUsageReport(deps.db, finalTask.id);
-    const response: TaskToolOutput = {
+    const warnings = completionWarningsOf(deps.db, finalTask.id);
+    const response: TaskToolResult = {
       task_id: finalTask.id,
     status: finalTask.status as TaskStatus,
       result: finalTask.result,
       usage,
+      ...(warnings ? { warnings } : {}),
     };
     if (streamUrl) {
       response.stream_url = streamUrl;

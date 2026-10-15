@@ -147,6 +147,11 @@ export type TaskCompletionWarning = 'no_tool_use';
 export interface TaskCompletedPayload {
   executionContext: ExecutionContext;
   result: string;
+  /**
+   * Task-wide count of tool uses: calls the orchestrator executed plus the CLI-internal tool uses a
+   * provider reported (claudecli). Mirrors the `toolUseCount` on the persisted `TASK_COMPLETED` event (cbd559eb).
+   */
+  toolUseCount?: number;
   /** Present only when the task completed with at least one warning. */
   warnings?: TaskCompletionWarning[];
 }
