@@ -12,8 +12,13 @@
  * re-implementation).
  *
  * Run: node --test tools/nx-plugins/test/executors/wiring/check-lane-reachability.spec.mjs
+ *
+ * guards: a lane-reachability rule stays silent on a workspace that violates it, fires on a correctly wired one, or a test leaves fixture workspaces behind in the OS temp dir
+ * tier: S (fixture workspaces on disk driven through the in-process `runChecks`; the one subprocess case lives in check-agent-lane-spawn.spec.mjs)
+ * cites: AGENTS.md section 7 negative controls; qa-variance (docs/discovery/qa-test-variance-tail-policy-backlog-nx.md)
+ * teeth: red: pending (verification pending, tests not run per user; assertions unchanged)
  */
-import { test } from 'node:test';
+import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -33,8 +38,15 @@ const GATE_TARGETS = ['test', 'e2e'];
 // unless a test deliberately injects a broken one).
 const NO_PUBLISH = () => [];
 
+// qa-variance: every fixture workspace is removed when the file finishes (they used to accumulate in the OS temp dir).
+const fixtureRoots = [];
+after(() => {
+  for (const root of fixtureRoots) rmSync(root, { recursive: true, force: true });
+});
+
 function fixture(files) {
   const root = mkdtempSync(join(tmpdir(), 'lane-reach-'));
+  fixtureRoots.push(root);
   for (const [rel, content] of Object.entries(files)) {
     const p = join(root, rel);
     mkdirSync(dirname(p), { recursive: true });

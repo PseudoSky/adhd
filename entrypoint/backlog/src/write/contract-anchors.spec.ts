@@ -15,6 +15,11 @@
  * asserts the parser saw EVERY reference in the file, so a future anchor added
  * outside the heading shape fails loudly instead of silently escaping the
  * check.
+ *
+ * guards: a CONTRACT.md `(file.ts:NNN)` anchor drifts off the declaration it names, or an anchor escapes the heading parser
+ * tier: S
+ * cites: 1e12507f; qa-variance (docs/discovery/qa-test-variance-tail-policy-backlog-nx.md)
+ * teeth: red: pending (verification pending, tests not run per user; assertions unchanged)
  */
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -54,15 +59,26 @@ const anchors: IAnchor[] = contract
     line: Number(m[3]!),
   }));
 
+/** qa-variance: each cited source is read and split once, not once per anchor (dozens of anchors cite the same few files). */
+const sourceLines = new Map<string, string[]>();
+function linesOf(file: string): string[] {
+  let lines = sourceLines.get(file);
+  if (lines === undefined) {
+    lines = readFileSync(
+      fileURLToPath(new URL(`./${file}`, import.meta.url)),
+      'utf8'
+    ).split('\n');
+    sourceLines.set(file, lines);
+  }
+  return lines;
+}
+
 describe('CONTRACT.md line-reference anchors are not stale (DEBT 1e12507f)', () => {
   it('every (file.ts:NNN) reference sits on the declaration line of the symbol it names', () => {
     expect(anchors.length).toBeGreaterThan(0);
     const problems: string[] = [];
     for (const { sym, file, line } of anchors) {
-      const lines = readFileSync(
-        fileURLToPath(new URL(`./${file}`, import.meta.url)),
-        'utf8'
-      ).split('\n');
+      const lines = linesOf(file);
       const cited = lines[line - 1] ?? '';
       if (!declarationRe(sym).test(cited)) {
         problems.push(
