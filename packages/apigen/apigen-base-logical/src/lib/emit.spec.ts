@@ -215,3 +215,80 @@ describe('rootRefResolver', () => {
     expect(resolve('#/definitions/B')).toEqual({ type: 'boolean' });
   });
 });
+
+/*
+ * regression:1bb4b5d5 — run-mode $ref resolution (backlog 1bb4b5d5).
+ * Failure mode: a hand-built or hoisted schema bag keyed by full ref-URI
+ * (`{ '#/$defs/X': ... }`) is not found, and prototype keys resolve to
+ * Object.prototype instead of failing.
+ * Tier: S (pure function, in-process). Item 1bb4b5d5, AC2 and AC3 as cited
+ * on each test. Red expectation: on c882f1e1^ the full-URI key is not looked
+ * up, so the full-URI test fails with "E_EMIT: ... has no $def target".
+ */
+describe('regression:1bb4b5d5 — rootRefResolver key conventions', () => {
+  it('resolves a definition keyed by its full ref-URI (1bb4b5d5 AC2)', () => {
+    const resolve = rootRefResolver({
+      definitions: { '#/definitions/Full': { type: 'string' } },
+    });
+    expect(resolve('#/definitions/Full')).toEqual({ type: 'string' });
+  });
+
+  it('prefers the bare definition name over a full-URI key of the same name (1bb4b5d5 AC2)', () => {
+    const resolve = rootRefResolver({
+      $defs: {
+        X: { type: 'number' },
+        '#/$defs/X': { type: 'string' },
+      },
+    });
+    expect(resolve('#/$defs/X')).toEqual({ type: 'number' });
+  });
+
+  it('throws E_EMIT naming the ref when no definition matches (1bb4b5d5 AC3, generate path)', () => {
+    const resolve = rootRefResolver({ $defs: {} });
+    let err: unknown;
+    try {
+      resolve('#/$defs/Missing');
+    } catch (e) {
+      err = e;
+    }
+    expect(err).toBeInstanceOf(EmitError);
+    expect((err as EmitError).code).toBe('E_EMIT');
+    expect((err as EmitError).message).toContain('#/$defs/Missing');
+  });
+
+  it.each([
+    ['#/$defs/__proto__'],
+    ['#/definitions/__proto__'],
+  ])(
+    'refuses the prototype key %s instead of returning Object.prototype (1bb4b5d5 AC2 guard)',
+    (ref) => {
+      const resolve = rootRefResolver({ $defs: {}, definitions: {} });
+      expect(() => resolve(ref)).toThrow(EmitError);
+    }
+  );
+
+  it.each([
+    ['#/properties/x'],
+    ['#/$defs/A/properties/b'],
+    ['https://example.com/schema.json#/definitions/A'],
+  ])(
+    'reports an unsupported ref form %s with the ref, not as a missing definition (1bb4b5d5 AC3)',
+    (ref) => {
+      const resolve = rootRefResolver({
+        $defs: { A: { type: 'object', properties: { b: { type: 'string' } } } },
+        definitions: { A: { type: 'string' } },
+      });
+      let err: unknown;
+      try {
+        resolve(ref);
+      } catch (e) {
+        err = e;
+      }
+      expect(err).toBeInstanceOf(EmitError);
+      expect((err as EmitError).message).toContain(ref);
+      expect((err as EmitError).message).not.toMatch(
+        /no matching definition|has no \$def target|missing/i
+      );
+    }
+  );
+});
