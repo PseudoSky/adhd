@@ -42,7 +42,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 
 ```text
 read_only:  ["packages/stealth/stealth-core-browser/src/lib/chrome-manager.ts", "packages/stealth/stealth-core-browser/src/lib/lifecycle/index.ts"]
-mutates:    ["packages/stealth/stealth-core-browser/src/lib/managers.ts", "packages/stealth/stealth-core-browser/src/lib/chrome-manager.ts", "packages/stealth/stealth-core-browser/src/lib/lifecycle/index.ts", "packages/stealth/stealth-core-browser/src/index.ts", "packages/stealth/stealth-core-browser/src/api.ts", "packages/stealth/stealth-core-browser/src/test/unit/seam/"]
+mutates:    ["packages/stealth/stealth-core-browser/src/lib/managers.ts", "packages/stealth/stealth-core-browser/src/lib/chrome-manager.ts", "packages/stealth/stealth-core-browser/src/lib/lifecycle/index.ts", "packages/stealth/stealth-core-browser/src/index.ts", "packages/stealth/stealth-core-browser/src/api.ts", "packages/stealth/stealth-core-browser/src/test/unit/seam/", "packages/stealth/stealth-core-browser/src/lib/cdp/browser.ts", "packages/stealth/stealth-core-browser/src/test/unit/lifecycle/kill.spec.ts", "packages/stealth/stealth-core-browser/src/test/unit/lifecycle/launch.spec.ts"]
 ```
 
 ---
