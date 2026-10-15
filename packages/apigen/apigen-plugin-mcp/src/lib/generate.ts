@@ -3,28 +3,15 @@ import type {
   PluginInput,
   PluginOutput,
 } from '@adhd/apigen-core-client';
-import { uniqueSanitizedIdentifiers } from '@adhd/apigen-engine-naming';
+import {
+  escapeLineTerminators,
+  escapeSingleQuotedLiteral,
+  uniqueSanitizedIdentifiers,
+} from '@adhd/apigen-engine-naming';
 import { buildOpPlan, buildToolDescription } from '@adhd/apigen-engine-runtime';
 import { generateStdioServer } from './templates/server-stdio.tpl';
 import { generateHttpServer } from './templates/server-http.tpl';
 import { operationFor } from './tool-naming';
-
-/**
- * Escape a raw string for splicing into a single-quoted TypeScript string
- * literal in the generated index.ts: backslash first, then the single quote,
- * the line terminators (`\n`, `\r`), and U+2028/U+2029 (line terminators in
- * JS source before ES2019 string-literal rules). Identity for plain ids and
- * import paths, so existing valid-input output is unchanged.
- */
-function escapeSingleQuoted(value: string): string {
-  return value
-    .replace(/\\/g, '\\\\')
-    .replace(/'/g, "\\'")
-    .replace(/\n/g, '\\n')
-    .replace(/\r/g, '\\r')
-    .replace(/\u2028/g, '\\u2028')
-    .replace(/\u2029/g, '\\u2029');
-}
 
 /**
  * Generates the index.ts file that exports toolMetas, groupFns,
@@ -71,13 +58,13 @@ function generateIndex(
   // Identifiers are sanitised (`dispatch-cli` → `dispatch_cli`) and collisions
   // disambiguated (`a-b`, `a_b` → `a_b`, `a_b_2`). The raw `pkg.id` stays in
   // every string-literal position (`group`, the `groupFns` key), escaped via
-  // `escapeSingleQuoted` so an id or import path containing a quote or
+  // `escapeSingleQuotedLiteral` so an id or import path containing a quote or
   // backslash still yields a parseable index.ts.
   const idents = uniqueSanitizedIdentifiers(packages.map((pkg) => pkg.id));
   packages.forEach((pkg, i) => {
     const ident = idents[i];
     lines.push(
-      `import * as ${ident}_ns from '${escapeSingleQuoted(pkg.importPath)}'`
+      `import * as ${ident}_ns from ${escapeSingleQuotedLiteral(pkg.importPath)}`
     );
     lines.push(
       `const ${ident}_fns = buildFnTable(${ident}_ns as Record<string, unknown>)`
@@ -112,11 +99,13 @@ function generateIndex(
         descriptions[toolName] ?? descriptions[fnName]
       );
       lines.push(
-        `  ${JSON.stringify(toolName)}: { group: '${escapeSingleQuoted(pkg.id)}', fnName: ${JSON.stringify(
-          fnName
-        )}, schema: ${JSON.stringify(fnSchema)}, description: ${JSON.stringify(
-          desc
-        )} },`
+        // Every spliced JSON blob goes through escapeLineTerminators: JSON.stringify
+        // emits raw U+2028/U+2029 verbatim, a parse error in es2018 string literals.
+        `  ${escapeLineTerminators(JSON.stringify(toolName))}: { group: ${escapeSingleQuotedLiteral(pkg.id)}, fnName: ${escapeLineTerminators(
+          JSON.stringify(fnName)
+        )}, schema: ${escapeLineTerminators(
+          JSON.stringify(fnSchema)
+        )}, description: ${escapeLineTerminators(JSON.stringify(desc))} },`
       );
     }
   }
@@ -127,7 +116,7 @@ function generateIndex(
   );
   packages.forEach((pkg, i) => {
     lines.push(
-      `  '${escapeSingleQuoted(pkg.id)}': ${idents[i]}_fns as Record<string, (...args: unknown[]) => unknown>,`
+      `  ${escapeSingleQuotedLiteral(pkg.id)}: ${idents[i]}_fns as Record<string, (...args: unknown[]) => unknown>,`
     );
   });
   lines.push(`}`);
@@ -137,7 +126,7 @@ function generateIndex(
   );
   for (const pkg of packages) {
     lines.push(
-      `  '${escapeSingleQuoted(pkg.id)}': undefined, // injected at startup if createClient provided`
+      `  ${escapeSingleQuotedLiteral(pkg.id)}: undefined, // injected at startup if createClient provided`
     );
   }
   lines.push(`}`);

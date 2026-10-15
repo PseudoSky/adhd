@@ -10,6 +10,7 @@ import { describe, it, expect } from 'vitest';
 import {
   coercePort,
   escapeLineTerminators,
+  escapeSingleQuotedLiteral,
   escapeStringLiteral,
   toPosixPath,
   sanitizeIdentifier as sanitizeFromEmit,
@@ -180,5 +181,38 @@ describe('coercePort', () => {
     expect(() => coercePort([8080])).toThrow(TypeError);
     expect(() => coercePort({})).toThrow(TypeError);
     expect(() => coercePort({ valueOf: () => 8080 })).toThrow(TypeError);
+  });
+});
+
+// plan discovery-sweep-1014 blind-review C AC1
+//   Failure mode: plugin-mcp hand-rolled a single-quote escaper duplicating this
+//     module's documented single source of truth; any divergence is a codegen
+//     injection/parse-error vector. escapeSingleQuotedLiteral is that shared
+//     escaper; its output must stay byte-identical to the former local one.
+//   Tier: S (pure function). Gap statement: none.
+//   Item/criterion: plan discovery-sweep-1014 blind-review C AC1.
+//   Risk map (Light): ordering (backslash before quote) is the only subtle bit,
+//     pinned by the backslash-quote case.
+//   Red run: before the helper existed the import is undefined and every case
+//     throws TypeError (escapeSingleQuotedLiteral is not a function).
+describe('escapeSingleQuotedLiteral (plan discovery-sweep-1014 blind-review C AC1)', () => {
+  it.each([
+    ['ping', "'ping'"],
+    ['@adhd/data-base-transforms', "'@adhd/data-base-transforms'"],
+    ["it's", "'it\\'s'"],
+    ['a\\b', "'a\\\\b'"],
+    ["a'b\\c", "'a\\'b\\\\c'"],
+    ['a\nb\rc', "'a\\nb\\rc'"],
+    ['a\u2028b\u2029c', "'a\\u2028b\\u2029c'"],
+    ['', "''"],
+  ])('AC1: %j renders as %s', (input, expected) => {
+    expect(escapeSingleQuotedLiteral(input)).toBe(expected);
+  });
+
+  it('AC1: output never contains a raw line terminator and evaluates back to the input', () => {
+    const raw = "q'\\\n\r\u2028\u2029z";
+    const lit = escapeSingleQuotedLiteral(raw);
+    expect(lit).not.toMatch(/[\n\r\u2028\u2029]/);
+    expect(new Function(`return ${lit}`)()).toBe(raw);
   });
 });

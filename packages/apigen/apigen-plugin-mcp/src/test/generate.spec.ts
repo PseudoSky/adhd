@@ -674,3 +674,74 @@ describe('regression:969e36f4 generate() — hyphenated package id in index.ts i
     expect(produced).toBeUndefined();
   });
 });
+
+// plan discovery-sweep-1014 blind-review C AC1
+//   Failure mode: generateIndex spliced JSON.stringify(toolName / fnName /
+//     schema / description) into index.ts without escapeLineTerminators, so a
+//     raw U+2028/U+2029 in a schema description (JSON.stringify emits them
+//     verbatim) reached the generated source: a parse error in es2018 string
+//     literals and a raw line break in a one-line entry.
+//   Tier: S (pure in-process string generation, no I/O, no subprocess).
+//   Gap statement: none; the generator is the entire seam.
+//   Item/criterion: plan discovery-sweep-1014 blind-review C AC1.
+//   Risk map (Light): the shared escaper from @adhd/apigen-engine-naming is
+//     the only escaping path; the removed local escapeSingleQuoted is pinned
+//     by the byte-identical characterization test above.
+//   Red run: against the unfixed generate.ts (before escapeLineTerminators
+//     was applied to the JSON splices) the not.toMatch assertion fails because
+//     the description's raw U+2028 appears in index.ts. Recorded in the commit.
+describe('plan discovery-sweep-1014 blind-review C AC1 — generated index has no raw line separators', () => {
+  it('AC1: raw U+2028/U+2029 in a schema description and a description override are escaped in every JSON splice', () => {
+    const input: PluginInput = {
+      packages: [
+        {
+          id: 'pkg',
+          importPath: '@x/pkg',
+          schemas: {
+            ping: {
+              input: {
+                type: 'object',
+                description: 'in\u2028put\u2029desc',
+                properties: {
+                  data: {
+                    type: 'object',
+                    properties: { a: { type: 'string', description: 'x\u2028y' } },
+                  },
+                },
+              },
+              output: { type: 'object', description: 'out\u2029put' },
+            },
+          },
+          fns: { ping: () => ({}) },
+        },
+      ],
+      outputDir: '/tmp/out',
+      options: { toolDescriptions: { ping: 'over\u2028ride\u2029' } },
+    };
+    const idx = generate(input).files.find((f) => f.path === 'index.ts');
+    if (!idx) throw new Error('Expected index.ts');
+    expect(idx.content).not.toMatch(/[\u2028\u2029]/);
+    expect(idx.content).toContain('\\u2028');
+    expect(syntacticErrors(idx.content)).toEqual([]);
+  });
+
+  it('AC1: the toolMetas description round-trips the original separators when the generated entry is evaluated', () => {
+    const input: PluginInput = {
+      packages: [
+        {
+          id: 'pkg',
+          importPath: '@x/pkg',
+          schemas: { ping: { input: { type: 'object', properties: {} }, output: { type: 'object' } } },
+          fns: { ping: () => ({}) },
+        },
+      ],
+      outputDir: '/tmp/out',
+      options: { toolDescriptions: { ping: 'a\u2028b\u2029c' } },
+    };
+    const idx = generate(input).files.find((f) => f.path === 'index.ts');
+    if (!idx) throw new Error('Expected index.ts');
+    const m = /description: ("(?:[^"\\]|\\.)*") \}/.exec(idx.content);
+    expect(m).not.toBeNull();
+    expect(JSON.parse(m![1])).toContain('a\u2028b\u2029c');
+  });
+});
