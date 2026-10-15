@@ -215,7 +215,8 @@ async function loadOnePlugin(
   logger: EngineLogger,
   resolveBases: readonly string[] = [],
   isDefault = false,
-  onFailure?: PluginLoadFailureHandler
+  onFailure?: PluginLoadFailureHandler,
+  preloaded?: PreloadedPluginModules
 ): Promise<void> {
   const { module: specifier, config: rawConfig } = entry;
   const fail = (stage: PluginLoadFailureStage, reason: string): void => {
@@ -226,25 +227,33 @@ async function loadOnePlugin(
     }
   };
 
-  let resolved: string;
-  try {
-    resolved = await resolveSpecifier(specifier, resolveBases);
-  } catch (err) {
-    logger.error({ specifier, err }, 'Plugin resolution failed — skipping');
-    fail('resolve', reasonOf(err));
-    return;
-  }
-
+  // A host that statically imported this plugin (a bundled build has no
+  // runtime module graph to resolve against) hands the module in directly.
+  // Resolution and dynamic import are skipped; every other stage runs as usual.
   let mod: PluginModule;
-  try {
-    mod = (await import(resolved)) as PluginModule;
-  } catch (err) {
-    logger.error(
-      { specifier, resolved, err },
-      'Plugin import failed — skipping'
-    );
-    fail('import', reasonOf(err));
-    return;
+  const pre = preloaded?.[specifier];
+  if (pre !== undefined) {
+    mod = pre;
+  } else {
+    let resolved: string;
+    try {
+      resolved = await resolveSpecifier(specifier, resolveBases);
+    } catch (err) {
+      logger.error({ specifier, err }, 'Plugin resolution failed — skipping');
+      fail('resolve', reasonOf(err));
+      return;
+    }
+
+    try {
+      mod = (await import(resolved)) as PluginModule;
+    } catch (err) {
+      logger.error(
+        { specifier, resolved, err },
+        'Plugin import failed — skipping'
+      );
+      fail('import', reasonOf(err));
+      return;
+    }
   }
 
   let validatedConfig: Record<string, unknown> = rawConfig ?? {};
@@ -324,6 +333,16 @@ async function loadOnePlugin(
  *   `module` (config file or `pluginEntries`/env) OVERRIDES the default:
  *   de-duped by module, user wins.
  */
+/**
+ * Plugin modules a host has already imported, keyed by the exact `module`
+ * specifier a config entry names. A bundled build (esbuild, one file) cannot
+ * resolve a plugin by name at runtime, so the host imports the defaults itself
+ * and passes them here; an entry whose specifier appears in this map is
+ * installed from the map and never resolved. Unlisted specifiers take the
+ * normal resolve-and-import path, so user-configured plugins are unaffected.
+ */
+export type PreloadedPluginModules = Readonly<Record<string, PluginModule>>;
+
 export async function loadExternalPlugins(
   hooks: IHookRegistry,
   db: unknown,
@@ -331,6 +350,8 @@ export async function loadExternalPlugins(
     configPath?: string | null;
     pluginEntries?: string[];
     resolveBases?: readonly string[];
+    /** See {@link PreloadedPluginModules}. */
+    preloadedModules?: PreloadedPluginModules;
     /**
      * Invoked once for every skipped entry (resolve/import/config/factory/instantiate/install),
      * with `isDefault` distinguishing host defaults from user config. Lets the host surface a
@@ -369,7 +390,8 @@ export async function loadExternalPlugins(
       log,
       overrides?.resolveBases ?? [],
       defaultSet.has(entry),
-      overrides?.onPluginLoadFailed
+      overrides?.onPluginLoadFailed,
+      overrides?.preloadedModules
     );
   }
 }

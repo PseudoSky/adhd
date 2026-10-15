@@ -76,8 +76,12 @@ export default [
             "@nx/dependency-checks": [
                 "error",
                 {
+                    // Build-only tooling: esbuild (devDependency) is used by the bundler
+                    // script, which is never shipped to consumers. Declaring it as a
+                    // runtime dependency would ship the esbuild binary with every install.
                     ignoredFiles: [
-                        "{projectRoot}/vite.config.{js,ts,mjs,mts}"
+                        "{projectRoot}/vite.config.{js,ts,mjs,mts}",
+                        "{projectRoot}/scripts/bundle.mjs"
                     ],
                     ignoredDependencies: [
                         "@adhd/agent-plugin-budget",

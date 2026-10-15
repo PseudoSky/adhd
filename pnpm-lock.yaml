@@ -449,6 +449,10 @@ importers:
       zod:
         specifier: ^4.4.3
         version: 4.4.3
+    devDependencies:
+      esbuild:
+        specifier: 0.18.20
+        version: 0.18.20
 
   entrypoint/apigen-cli:
     dependencies:

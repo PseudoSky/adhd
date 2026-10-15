@@ -28,6 +28,15 @@
         "command": "node node_modules/typescript/bin/tsc -p {projectRoot}/tsconfig.lib.json --outDir {projectRoot}/dist --rootDir {projectRoot} --baseUrl {projectRoot} --composite false --noEmitOnError && cp {projectRoot}/*.md {projectRoot}/LICENSE {projectRoot}/dist/ && cp -R {projectRoot}/docs {projectRoot}/dist/"
       }
     },
+    "bundle": {
+      "//": "Single-file server bundle (dist/bundle/index.js) plus per-package migration folders. Cold `npx` of the bundle answers MCP initialize in seconds; the tsc build needs ~200 packages on a cold cache. See scripts/bundle.mjs.",
+      "dependsOn": ["build"],
+      "outputs": ["{projectRoot}/dist/bundle"],
+      "options": {
+        "cwd": "{projectRoot}",
+        "command": "node scripts/bundle.mjs"
+      }
+    },
     "typecheck": {
       "executor": "nx:run-commands",
       "options": {
