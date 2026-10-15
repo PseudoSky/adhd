@@ -22,6 +22,20 @@ const REPO_ROOT = resolve(HERE, "../../../../../..");
 /** The migrations folder agent-mcp ships and the registry runs at startup. */
 export const REAL_MIGRATIONS_FOLDER = join(REPO_ROOT, "entrypoint/agent-mcp/drizzle");
 
+let cachedImage: Buffer | undefined;
+
+/** The serialized image of an empty database with every real migration applied (built once per process). */
+function migratedImage(): Buffer {
+  if (cachedImage === undefined) {
+    const seed = new Database(":memory:");
+    seed.pragma("foreign_keys = OFF");
+    migrate(drizzle(seed), { migrationsFolder: REAL_MIGRATIONS_FOLDER });
+    cachedImage = seed.serialize();
+    seed.close();
+  }
+  return cachedImage;
+}
+
 /**
  * Create an in-memory database and apply every real migration to it.
  *
@@ -34,9 +48,12 @@ export const REAL_MIGRATIONS_FOLDER = join(REPO_ROOT, "entrypoint/agent-mcp/driz
 export function createMigratedSqlite(
   opts: { enforceForeignKeys?: boolean } = {}
 ): Database.Database {
-  const sqlite = new Database(":memory:");
+  // Variance fix (qa-variance 2026-10-14, verification pending): `migrate()` re-read and re-ran every real migration for
+  // EVERY call (25 test files call this per test), a disk + DDL cost that swung with load. The real migrations still run
+  // for real, once per process; each call then deserializes that migrated image into its own independent in-memory
+  // database, so a new migration still reaches every consumer and no state is shared between tests.
+  const sqlite = new Database(migratedImage());
   sqlite.pragma("foreign_keys = OFF");
-  migrate(drizzle(sqlite), { migrationsFolder: REAL_MIGRATIONS_FOLDER });
   if (opts.enforceForeignKeys === true) sqlite.pragma("foreign_keys = ON");
   return sqlite;
 }
