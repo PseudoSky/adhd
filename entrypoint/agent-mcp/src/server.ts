@@ -537,7 +537,7 @@ export function createServer(deps: ServerDeps): Server {
     {
       name: 'task_events',
       description:
-        'Read every recorded event of one task by task_id, oldest first. Pagination: limit (default 50, max 500) and offset; the response carries total and has_more. A page trimmed to fit the 256 KiB byte budget carries truncated_by_bytes: true, and the next page starts at offset + events.length. TOOL_RESULT events carry the model-visible result text and its result_sha256; MODEL_REQUEST events carry advertisedToolNames and systemPromptSha256; CONTEXT_COMPACTED records a history compaction. Throws for an unknown task_id.',
+        'Read every recorded event of one task by task_id, oldest first. Pagination: limit (default 50, max 500) and offset; the response carries total and has_more. A page trimmed to fit the 256 KiB byte budget carries truncated_by_bytes: true, and the next page starts at offset + events.length. TOOL_RESULT events carry the model-visible result text and its result_sha256; MODEL_REQUEST events carry advertisedToolNames and systemPromptSha256; CONTEXT_COMPACTED records a history compaction. Throws for an unknown task_id. String fields over 16,000 chars are clipped (see payload_clipped); a row over 1 MiB returns payload_error too_large.',
       inputSchema: toMcpInputSchema(taskEventsInputSchema),
     },
     {
@@ -807,7 +807,7 @@ export function createServer(deps: ServerDeps): Server {
       {
         name: 'task_events',
         description:
-          'Read every recorded event of one task by task_id, oldest first. Pagination: limit (default 50, max 500) and offset; the response carries total and has_more. A page trimmed to fit the 256 KiB byte budget carries truncated_by_bytes: true, and the next page starts at offset + events.length. TOOL_RESULT events carry the model-visible result text and its result_sha256; MODEL_REQUEST events carry advertisedToolNames and systemPromptSha256; CONTEXT_COMPACTED records a history compaction. Throws for an unknown task_id.',
+          'Read every recorded event of one task by task_id, oldest first. Pagination: limit (default 50, max 500) and offset; the response carries total and has_more. A page trimmed to fit the 256 KiB byte budget carries truncated_by_bytes: true, and the next page starts at offset + events.length. TOOL_RESULT events carry the model-visible result text and its result_sha256; MODEL_REQUEST events carry advertisedToolNames and systemPromptSha256; CONTEXT_COMPACTED records a history compaction. Throws for an unknown task_id. String fields over 16,000 chars are clipped (see payload_clipped); a row over 1 MiB returns payload_error too_large.',
         inputSchema: toMcpInputSchema(taskEventsInputSchema),
       },
       {

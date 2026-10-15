@@ -1,7 +1,7 @@
 /**
  * guards: task_events pages out of insertion order, miscounts total/has_more, accepts out-of-range input, or fails a whole page on one corrupt row
  * tier: S
- * cites: facd4aaa AC1
+ * cites: facd4aaa AC1; plan discovery-sweep-1014 blind-review A2 TEB-B1 (amended byte-guard cases)
  *
  * facd4aaa AC1 — `task_events` pages a finished task oldest-first with `total`, `has_more` and `offset`,
  * rejects out-of-range input, and degrades per row rather than per page.
@@ -248,7 +248,11 @@ describe("facd4aaa AC1 corrupt payload: one unparseable row degrades that row on
 describe("facd4aaa AC1 byte guard: an oversized page is cut to the response budget, never emptied", () => {
   // Failure mode 6. The budget is TASK_EVENTS_MAX_PAGE_BYTES of the WIRE text, which the MCP server builds with
   // JSON.stringify(value, null, 2). Every size below is measured that way, never on compact JSON.
-  const SIXTY_FOUR_KIB = "x".repeat(64 * 1024);
+  // A payload field is an ARRAY of 1 KiB strings, not one 64 KiB string: a top-level string field over
+  // TASK_EVENTS_MAX_FIELD_CHARS is clipped on read (plan discovery-sweep-1014 blind-review A2 TEB-B1), so a
+  // single long string no longer makes a big payload. The array keeps the stored size (about 64 KiB) and
+  // the byte-guard intent, and no string in it reaches the field bound.
+  const SIXTY_FOUR_KIB = Array.from({ length: 64 }, () => "x".repeat(1024));
   const wireBytes = (value: unknown): number => Buffer.byteLength(JSON.stringify(value, null, 2), "utf8");
   type Page = Record<string, unknown> & { events: unknown[]; total: number; has_more: boolean };
 
@@ -299,14 +303,16 @@ describe("facd4aaa AC1 byte guard: an oversized page is cut to the response budg
   it("facd4aaa AC1: a single oversized event (300 KiB, over the budget alone) is returned whole as exactly one event, with has_more true while another follows", () => {
     const fx = open();
     const taskId = fx.createTask();
-    const huge = JSON.stringify({ blob: "y".repeat(300 * 1024) });
+    // 300 KiB as an array of 1 KiB strings (non-string structure): a lone event over the page budget that
+    // the per-field clip does not shrink, so the "first event is always kept" rule is what returns it whole.
+    const huge = JSON.stringify({ blob: Array.from({ length: 300 }, () => "y".repeat(1024)) });
     fx.seedEvent({ taskId, type: "TOOL_RESULT", createdAt: T0, payloadText: huge });
     fx.seedEvent({ taskId, type: "TOOL_RESULT", createdAt: "2026-01-01T00:00:01.000Z", payloadText: JSON.stringify({ small: true }) });
 
     const page = taskEvents({ task_id: taskId }, depsOf(fx)) as unknown as Page;
 
     expect(page.events).toHaveLength(1);
-    expect((page.events[0] as { payload: { blob: string } }).payload.blob).toHaveLength(300 * 1024);
+    expect((page.events[0] as { payload: { blob: string[] } }).payload.blob.join("")).toHaveLength(300 * 1024);
     expect(page.truncated_by_bytes).toBe(true);
     expect(page.has_more).toBe(true);
     // The pager can advance: the next window starts at offset 1 and returns the second event.
