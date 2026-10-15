@@ -79,6 +79,8 @@ const INVOKERS: Record<string, Invoker> = {
   restore: (c, u) => api.restore(c, { uid: u, by: 'x' }),
   'merge-project': (c, _u, p) => api.mergeProject(c, { fromUid: p, toUid: p, by: 'x' }),
   'rm-project': (c, _u, p) => api.rmProject(c, { uid: p, reason: 'r', by: 'x' }),
+  // 0f9b6132 AC4: the gate names `remove-note` (note.ts decorates the transaction with that verb).
+  'remove-note': (c, u) => api.removeNote(c, { uid: u, by: 'x', reason: 'r' }),
 };
 
 describe('31b37c54 A-AC13 — production gate names the real verb for every write verb', () => {

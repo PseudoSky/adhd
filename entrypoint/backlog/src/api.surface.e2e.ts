@@ -64,6 +64,11 @@ const EXPECTED = [
     cli: 'backlog remove-citation',
   },
   {
+    id: 'backlog/remove-note',
+    mcp: 'backlog_remove_note',
+    cli: 'backlog remove-note',
+  },
+  {
     id: 'backlog/transition',
     mcp: 'backlog_transition',
     cli: 'backlog transition',
