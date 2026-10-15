@@ -2,6 +2,8 @@
  * guards: `serve` falls back to treating a command that is not an MCP server as an argv operation, or merges attribute sources (flag, environment, file) instead of letting the flag win, so a call is allowed that should be refused.
  * tier: S
  * cites: docs/plan/policy-core/tickets/T19.md (@S8.2, @S8.3; D-06, D-08)
+ * item: qa-variance (docs/discovery/qa-test-variance-tail-policy.md)
+ * red: pending (tests not run per user); assertions are unchanged, each case still gets its own empty directory.
  */
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -15,7 +17,9 @@ import { settle } from '../helpers/flush';
 import { resultText, startServeSession } from '../helpers/mcp-memory-client';
 import { capturedDeps } from '../helpers/run-deps';
 import { createStubMcpUpstream, type IStubMcpUpstream } from '../helpers/stub-mcp-upstream';
-import { withTmpDir } from '../helpers/tmp';
+import { useScratchDirs } from '../helpers/tmp';
+
+const scratch = useScratchDirs('s8');
 
 const ATTRIBUTES_ENV = 'ADHD_POLICY_ATTRIBUTES';
 
@@ -63,7 +67,7 @@ describe('Safety-relevant failure paths - serve refuses an upstream that is not 
   }
 
   it('@S8.2 an upstream that never answers initialize fails serve with exit 1 after the handshake timeout: nothing registered, no fallback start, process gone', async () => {
-    await withTmpDir('s8-silent', async (dir) => {
+    await scratch.with('s8-silent', async (dir) => {
       vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
       const stub = createStubMcpUpstream({ tools: [], initialize: 'silent' });
       const result = await serveAgainst(dir, stub.launcher, 50, async () => {
@@ -84,7 +88,7 @@ describe('Safety-relevant failure paths - serve refuses an upstream that is not 
   });
 
   it('@S8.2 the only thing written to the upstream is MCP JSON-RPC (initialize), never the command-as-argv treatment', async () => {
-    await withTmpDir('s8-wire', async (dir) => {
+    await scratch.with('s8-wire', async (dir) => {
       vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
       const stub = createStubMcpUpstream({ tools: [], initialize: 'silent' });
       await serveAgainst(dir, stub.launcher, 10, async () => {
@@ -106,7 +110,7 @@ describe('Safety-relevant failure paths - serve refuses an upstream that is not 
   ];
   for (const row of failures) {
     it(`@S8.2 ${row.name}: exit 1, the message on stderr, the host transport never started`, async () => {
-      await withTmpDir('s8-fail', async (dir) => {
+      await scratch.with('s8-fail', async (dir) => {
         const stub = row.stub();
         const result = await serveAgainst(dir, stub.launcher);
         expect(result.code).toBe(1);
@@ -120,7 +124,7 @@ describe('Safety-relevant failure paths - serve refuses an upstream that is not 
   }
 
   it('@S8.2 a plain command that prints text and exits (not an MCP server) is an error, not an argv operation', async () => {
-    await withTmpDir('s8-plain', async (dir) => {
+    await scratch.with('s8-plain', async (dir) => {
       const launcher = createFakeLauncher(() => ({ exit: 0, stdout: 'hello, I am just a program\n' }));
       const result = await serveAgainst(dir, launcher);
       expect(result.code).toBe(1);
@@ -133,7 +137,7 @@ describe('Safety-relevant failure paths - serve refuses an upstream that is not 
 
 describe('Safety-relevant failure paths - attribute sources do not merge (D-06)', () => {
   async function withRun(fn: (ctx: { dir: string; out: string; gate: string }) => Promise<void>): Promise<void> {
-    await withTmpDir('s8-run', async (dir) => {
+    await scratch.with('s8-run', async (dir) => {
       const out = join(dir, 'out');
       await mkdir(out);
       const gate = join(dir, 'gate.yaml');
@@ -206,7 +210,7 @@ permissions:
   });
 
   it('@S8.3 serve: flag writer beats env intruder, env alone works, flag intruder beats env writer', async () => {
-    await withTmpDir('s8-serve', async (dir) => {
+    await scratch.with('s8-serve', async (dir) => {
       const spec = join(dir, 'notes.yaml');
       await writeFile(spec, NOTES_POLICY);
       const attempt = async (options: { flag?: string; env?: string }): Promise<number> => {
@@ -234,7 +238,7 @@ permissions:
   });
 
   it('@S8.3 serve: an attributes @file is re-read on every call - changing it mid-session changes the next decision', async () => {
-    await withTmpDir('s8-reread', async (dir) => {
+    await scratch.with('s8-reread', async (dir) => {
       const spec = join(dir, 'notes.yaml');
       const who = join(dir, 'who.json');
       await writeFile(spec, NOTES_POLICY);
