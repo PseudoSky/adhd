@@ -252,6 +252,8 @@ See `/entrypoint/agent-mcp/docs/architecture-and-security.md` for the full agent
 
 `tool_call_est_result_tokens` on `TOOL_RESULT` events is exact for results of at most 20,000 chars and a head+tail-sample estimate above that (`tool_call_est_result_tokens_estimated: true`), so a huge single-character run cannot stall the event loop in the tokenizer (d89e20f4). See `src/engine/tool-result-tokens.ts` and `entrypoint/agent-mcp/docs/logging.md`.
 
+The stored `TOOL_RESULT.result` is the model-visible text clipped to 16,000 chars (`TOOL_RESULT_EVENT_MAX_CHARS`, `clipForStorage`); `result_sha256` hashes the full model-visible text, and a clipped result adds `result_stored_clipped` and `result_model_visible_chars`. With the model cap at `0` the event keeps the head+tail of the full text, not all of it.
+
 ## Tool results on the provider wire
 
 A stored tool result is whatever the tool returned; for an MCP tool that is the content array `[{ "type": "text", "text": "..." }]`. Every adapter sends the model that text, never a JSON string of the array (R10 S1; the old form escaped file text inside a JSON document, hid CR LF as two characters and cost tokens on every read):
