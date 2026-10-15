@@ -13,11 +13,24 @@ export const TASK_EVENTS_DEFAULT_LIMIT = 50;
 export const TASK_EVENTS_MAX_LIMIT = 500;
 
 /**
- * Upper bound, in bytes, of the JSON-serialized page a `task_events` call returns (256 KiB).
- * Trailing events are dropped until the page fits; the first event of a page is always kept,
- * so a single event larger than this budget is returned whole.
+ * Upper bound, in bytes, of the page a `task_events` call returns (256 KiB), measured on the
+ * wire text {@link toWireText} produces. Trailing events are dropped until the page fits; the
+ * first event of a page is always kept, so a single event larger than this budget is returned
+ * whole.
  */
 export const TASK_EVENTS_MAX_PAGE_BYTES = 256 * 1024;
+
+/**
+ * The MCP wire text of a tool result: the value serialized as 2-space-indented JSON. The MCP
+ * server's tool-result serializer and the `task_events` byte budget both use this function, so
+ * the budget measures exactly the bytes that are sent and the two cannot drift apart.
+ *
+ * @param value - the tool result payload.
+ * @returns the JSON text placed in the MCP `text` content block.
+ */
+export function toWireText(value: unknown): string {
+  return JSON.stringify(value, null, 2);
+}
 
 /**
  * Input of the `task_events` MCP tool: every recorded event of one task, oldest first.
@@ -74,9 +87,9 @@ interface TaskEventRow {
   created_at: string;
 }
 
-/** Serialized size in bytes (UTF-8) of a value, as the MCP response carries it. */
-function jsonByteLength(value: unknown): number {
-  return Buffer.byteLength(JSON.stringify(value), 'utf8');
+/** Size in bytes (UTF-8) of a value's wire text, as the MCP response carries it. */
+function wireByteLength(value: unknown): number {
+  return Buffer.byteLength(toWireText(value), 'utf8');
 }
 
 /**
@@ -95,32 +108,10 @@ function toRecord(row: TaskEventRow): TaskEventRecord {
 }
 
 /**
- * Trims trailing events until the serialized page fits {@link TASK_EVENTS_MAX_PAGE_BYTES}.
- *
- * The fit is computed from per-event sizes rather than by re-serializing the page per trim.
- * The envelope is measured with `has_more` and `truncated_by_bytes` set to `false`, the widest
- * boolean literal, so it bounds the final envelope and the returned page never exceeds the cap.
- * The first event is always kept.
- *
- * @param page - the page built from the row query, before the byte bound.
- * @returns the page unchanged when it fits, else a copy with trailing events dropped and
- *   `has_more` / `truncated_by_bytes` set.
+ * The page holding only its first `keep` events, in the exact shape the byte bound returns.
+ * Trimming sets `truncated_by_bytes` and recomputes `has_more` from the kept count.
  */
-function boundPageBytes(page: TaskEventsPage): TaskEventsPage {
-  if (jsonByteLength(page) <= TASK_EVENTS_MAX_PAGE_BYTES) return page;
-
-  const envelope = jsonByteLength({ ...page, events: [], has_more: false, truncated_by_bytes: false });
-  let used = envelope + jsonByteLength(page.events[0]);
-  let keep = 1;
-  while (keep < page.events.length) {
-    const next = 1 + jsonByteLength(page.events[keep]); // the joining comma plus the event
-    if (used + next > TASK_EVENTS_MAX_PAGE_BYTES) break;
-    used += next;
-    keep++;
-  }
-  // Nothing was dropped: the only event alone exceeds the budget and is returned whole.
-  if (keep === page.events.length) return page;
-
+function pageWithEvents(page: TaskEventsPage, keep: number): TaskEventsPage {
   return {
     ...page,
     events: page.events.slice(0, keep),
@@ -130,12 +121,44 @@ function boundPageBytes(page: TaskEventsPage): TaskEventsPage {
 }
 
 /**
+ * Trims trailing events until the page's wire text fits {@link TASK_EVENTS_MAX_PAGE_BYTES}.
+ *
+ * Each candidate is measured as the full page would be sent, by serializing it with
+ * {@link toWireText}. Per-event sizes are not summed: pretty-printing indents a nested event by
+ * its depth in the page, so an event's size inside the page differs from its standalone size, and
+ * a sum taken outside the page can under-count. The size is monotone in the kept count, so the
+ * largest count that fits is found by binary search. The first event is always kept.
+ *
+ * @param page - the page built from the row query, before the byte bound.
+ * @returns the page unchanged when it fits or holds a single event, else a copy with trailing
+ *   events dropped and `has_more` / `truncated_by_bytes` set.
+ */
+function boundPageBytes(page: TaskEventsPage): TaskEventsPage {
+  if (wireByteLength(page) <= TASK_EVENTS_MAX_PAGE_BYTES) return page;
+  // A lone event that exceeds the budget is returned whole: there is nothing to trim.
+  if (page.events.length <= 1) return page;
+
+  // Invariant: `lo` events fit, or `lo` is the first-event floor; `hi` is the largest count
+  // still to test. The full page is already known not to fit, so the search starts below it.
+  let lo = 1;
+  let hi = page.events.length - 1;
+  while (lo < hi) {
+    const mid = Math.ceil((lo + hi) / 2);
+    if (wireByteLength(pageWithEvents(page, mid)) <= TASK_EVENTS_MAX_PAGE_BYTES) lo = mid;
+    else hi = mid - 1;
+  }
+  return pageWithEvents(page, lo);
+}
+
+/**
  * Reads one page of the events recorded for a task, in recorded order (`rowid`, oldest first).
  *
- * Ordering is by `rowid`, the insertion order. `TaskStore.appendEvent` is the writer and inserts
- * each row in one statement, so `rowid` is the order the events were recorded. `created_at` is
- * taken just before that insert and is not used for ordering: under concurrent writers from
- * several processes (ADR-0012) it can disagree with insertion order by clock skew.
+ * Ordering is by `rowid`, the insertion order. Each `TaskStore.appendEvent` insert is one
+ * statement that SQLite assigns a unique, monotonically increasing `rowid`, so `rowid` order is
+ * the order the rows were inserted. That holds when several processes write concurrently
+ * (ADR-0012), because each insert takes its own rowid. `created_at` is taken just before that
+ * insert and is not used for ordering: across processes it can disagree with insertion order by
+ * clock skew.
  *
  * The COUNT and the page SELECT run in one read transaction, so `total` and `events` come from the
  * same snapshot. Throws the task store's not-found error for an unknown `task_id`, rather than
