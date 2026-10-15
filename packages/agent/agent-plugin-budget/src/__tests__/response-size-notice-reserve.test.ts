@@ -51,8 +51,8 @@ function makeCtx(): ExecutionContext {
   } as unknown as ExecutionContext;
 }
 
-function responseSizePlugin(cap: { maximum: number; mode: 'warning' | 'block'; message?: string }) {
-  return createPlugin({
+async function responseSizePlugin(cap: { maximum: number; mode: 'warning' | 'block'; message?: string }) {
+  return await createPlugin({
     db: null,
     config: pluginConfigSchema.parse({
       tool: { overrides: { read_file: { caps: [{ field: 'responseSize', ...cap }] } } },
@@ -97,7 +97,7 @@ describe('responseSize notice reserve (977e0ca6)', () => {
 
   // Boundary: content exactly one under the cap is never truncated and carries no notice.
   it('cap-1: content one char under the limit is passed through unchanged, no notice', async () => {
-    const plugin = responseSizePlugin({ maximum: 100, mode: 'warning' });
+    const plugin = await responseSizePlugin({ maximum: 100, mode: 'warning' });
     await plugin.install(hooks);
     const body = 'x'.repeat(99);
     const payload = payloadFor([{ type: 'text', text: body }]);
@@ -110,7 +110,7 @@ describe('responseSize notice reserve (977e0ca6)', () => {
 
   // Boundary: content exactly at the cap is not truncated.
   it('cap: content exactly at the limit is passed through unchanged, no notice', async () => {
-    const plugin = responseSizePlugin({ maximum: 100, mode: 'warning' });
+    const plugin = await responseSizePlugin({ maximum: 100, mode: 'warning' });
     await plugin.install(hooks);
     const body = 'x'.repeat(100);
     const payload = payloadFor([{ type: 'text', text: body }]);
@@ -127,7 +127,7 @@ describe('responseSize notice reserve (977e0ca6)', () => {
   // could pass without any content retained; the cap here leaves room for both, and the
   // test asserts the retained content as well as the bound.
   it('cap+1: truncated output including the notice is never longer than the cap, and keeps content', async () => {
-    const plugin = responseSizePlugin({ maximum: 300, mode: 'warning' });
+    const plugin = await responseSizePlugin({ maximum: 300, mode: 'warning' });
     await plugin.install(hooks);
     const payload = payloadFor([{ type: 'text', text: 'x'.repeat(301) }]);
 
@@ -145,7 +145,7 @@ describe('responseSize notice reserve (977e0ca6)', () => {
   // Same boundary with a short custom message, so retention is possible at the cap of 100
   // that the original cap+1 case used.
   it('cap+1 at a cap of 100 with a short notice message: content is retained and the total stays within the cap', async () => {
-    const plugin = responseSizePlugin({ maximum: 100, mode: 'warning', message: 'page it' });
+    const plugin = await responseSizePlugin({ maximum: 100, mode: 'warning', message: 'page it' });
     await plugin.install(hooks);
     const payload = payloadFor([{ type: 'text', text: 'x'.repeat(101) }]);
 
@@ -163,7 +163,7 @@ describe('responseSize notice reserve (977e0ca6)', () => {
   // cap, no content is kept and the emitted text is the notice clipped to the cap, as a
   // single part. The cap takes priority over notice integrity, so it may end mid-word.
   it('notice longer than the cap: content is dropped and the emitted text is the notice clipped to the cap', async () => {
-    const plugin = responseSizePlugin({ maximum: 40, mode: 'warning' });
+    const plugin = await responseSizePlugin({ maximum: 40, mode: 'warning' });
     await plugin.install(hooks);
     const payload = payloadFor([{ type: 'text', text: 'x'.repeat(500) }]);
 
@@ -180,7 +180,7 @@ describe('responseSize notice reserve (977e0ca6)', () => {
   // Regression: a multi-part result is split at the cap; the notice is part of the budget,
   // so the summed text across parts stays within the cap.
   it('multi-part result: summed text across parts, notice included, stays within the cap', async () => {
-    const plugin = responseSizePlugin({ maximum: 200, mode: 'warning' });
+    const plugin = await responseSizePlugin({ maximum: 200, mode: 'warning' });
     await plugin.install(hooks);
     const payload = payloadFor([
       { type: 'text', text: 'a'.repeat(150) },
@@ -196,7 +196,7 @@ describe('responseSize notice reserve (977e0ca6)', () => {
   // Regression: a cap smaller than the notice itself. The notice is clipped to the cap so
   // the emitted text still never exceeds it. Pre-fix the notice alone was appended in full.
   it('cap smaller than the notice: emitted text is clipped to the cap', async () => {
-    const plugin = responseSizePlugin({ maximum: 40, mode: 'warning' });
+    const plugin = await responseSizePlugin({ maximum: 40, mode: 'warning' });
     await plugin.install(hooks);
     const payload = payloadFor([{ type: 'text', text: 'x'.repeat(500) }]);
 
@@ -207,7 +207,7 @@ describe('responseSize notice reserve (977e0ca6)', () => {
 
   // Block mode shares the same invariant: the replacement message is clipped to the cap.
   it('block mode: a replacement message longer than the cap is clipped to it', async () => {
-    const plugin = responseSizePlugin({
+    const plugin = await responseSizePlugin({
       maximum: 30,
       mode: 'block',
       message: 'm'.repeat(200),

@@ -166,7 +166,7 @@ describe('regression:1bb4b5d5 — dispatch resolves $ref against the op schema r
       },
     };
     const err = await errorOf(
-      run({ lonely: () => null }, composed.lonely, 'lonely', { at: ISO })
+      run({ lonely: () => null }, composed['lonely'], 'lonely', { at: ISO })
     );
     expect(err).toBeInstanceOf(Error);
     const message = (err as Error).message;

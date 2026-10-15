@@ -356,7 +356,7 @@ describe('batchPlugin handler: real fan-out (invokeBatch)', () => {
  * resolves, so a handler that silently accepts a bad item fails here with a
  * clear message rather than passing an assertion on the wrong value.
  */
-async function captureRejection(promise: Promise<unknown>): Promise<unknown> {
+async function captureRejection(promise: unknown): Promise<unknown> {
   try {
     await promise;
   } catch (err) {

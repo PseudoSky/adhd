@@ -631,11 +631,12 @@ describe('createJsonFileSerializer', () => {
  *   `.tmp` entry in the directory.
  */
 describe('0b80a7b5 AC1 atomic write temp files', () => {
-  const doc = (id: string): DagJson => ({
-    operations: [],
-    milestones: {},
-    dispatch_log: [{ id } as unknown as DagJson['dispatch_log'][number]],
-  });
+  const doc = (id: string): DagJson =>
+    ({
+      operations: [],
+      milestones: {},
+      dispatch_log: [{ id }],
+    }) as unknown as DagJson;
   const dirEntries = () => fs.readdirSync(TMP_DIR).sort();
   const isTemp = (p: string) => path.basename(p).endsWith('.tmp');
 

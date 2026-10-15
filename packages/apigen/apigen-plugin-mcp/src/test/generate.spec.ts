@@ -572,10 +572,10 @@ function indexContentFor(
     packages: pkgs.map((p) => ({
       id: p.id,
       importPath: p.importPath,
-      schemas: withPing
+      schemas: (withPing
         ? { ping: { input: { type: 'object', properties: {} }, output: { type: 'object' } } }
-        : {},
-      fns: withPing ? { ping: () => ({}) } : {},
+        : {}) as PluginInput['packages'][number]['schemas'],
+      fns: withPing ? { ping: () => ({}) } : ({} as Record<string, () => unknown>),
     })),
     outputDir: '/tmp/out',
     options: {},

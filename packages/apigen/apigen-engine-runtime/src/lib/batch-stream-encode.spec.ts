@@ -59,6 +59,7 @@ describe('regression:8a62ced2 — streaming batch item chunks are wire-encoded',
       ctx: new LayerContext(),
       envelope: {},
       domainArgs: {},
+      transport: 'http',
     };
 
     const results = await invokeBatch(createInvoker([]), 'ticks', [call], opts);
