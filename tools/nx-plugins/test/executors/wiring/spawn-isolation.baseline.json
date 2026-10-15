@@ -1,0 +1,25 @@
+{
+  "unrouted": [
+    "entrypoint/agent-mcp/src/__tests__/agent-mcp-follow-bin.e2e.test.ts",
+    "entrypoint/agent-mcp/src/__tests__/bk6-store-launch.e2e.test.ts",
+    "entrypoint/agent-mcp/src/__tests__/migrate-runner-concurrency.e2e.test.ts",
+    "entrypoint/agent-mcp/src/__tests__/parity-instrument/capture-proxy.e2e.test.ts",
+    "entrypoint/agent-mcp/src/__tests__/parity-instrument/r10-killsafety.e2e.test.ts",
+    "entrypoint/agent-mcp/src/__tests__/parity-instrument/r10-launch.e2e.test.ts",
+    "entrypoint/agent-mcp/src/__tests__/parity-instrument/r10-m1-wall.e2e.test.ts",
+    "entrypoint/agent-mcp/src/__tests__/parity-instrument/r10-trace.e2e.test.ts",
+    "entrypoint/agent-mcp/src/__tests__/parity-instrument/r11-design.e2e.test.ts",
+    "entrypoint/agent-mcp/src/__tests__/parity-instrument/r12-design.e2e.test.ts",
+    "entrypoint/agent-mcp/src/__tests__/parity-instrument/r5-harness.e2e.test.ts",
+    "entrypoint/agent-mcp/src/__tests__/parity-instrument/r8-round.e2e.test.ts",
+    "entrypoint/agent-mcp/src/__tests__/parity-instrument/r9-cfg.e2e.test.ts",
+    "entrypoint/agent-mcp/src/__tests__/live/tracing-live.e2e.test.ts",
+    "entrypoint/agent-mcp/src/__tests__/srt-policy-bk7-boot.e2e.test.ts",
+    "entrypoint/agent-mcp/src/__tests__/srt-policy.e2e.test.ts",
+    "entrypoint/agent-mcp/src/__tests__/stdio-stdout-clean.e2e.test.ts",
+    "entrypoint/backlog/src/store/embed-funnel-watchdog.e2e.ts",
+    "entrypoint/backlog/src/store/embed-funnel.e2e.ts",
+    "entrypoint/backlog/src/vocabulary-gate.e2e.ts",
+    "entrypoint/backlog/src/web-ui.e2e.ts"
+  ]
+}

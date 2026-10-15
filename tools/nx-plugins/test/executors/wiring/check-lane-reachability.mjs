@@ -75,6 +75,7 @@ import { realpathSync as realpathForEntry } from 'node:fs';
 import { createRequire } from 'node:module';
 import { collectViteConfigPluginViolations } from './check-vite-config-plugins.mjs';
 import { collectAgentLaneSpawnViolations } from './check-agent-lane-spawn.mjs';
+import { collectSpawnIsolationViolations } from './check-spawn-isolation.mjs';
 import { E2E_FILE_INCLUDES } from '../../../../vite-plugins/e2e-globs.mjs';
 
 const require = createRequire(import.meta.url);
@@ -325,6 +326,13 @@ export async function runChecks({ workspaceRoot, gateTargets, createNodesFn, bas
   // not depend on nx-affected membership.
   for (const v of collectAgentLaneSpawnViolations(workspaceRoot, agentLaneBaseline).violations) {
     add(`8-${v.rule}`, v.detail);
+  }
+
+  // ---- rule 9: every node spawn in an @adhd/environment-family spec routes HOME ----
+  // backlog 0945d1b9 AC1/AC2. Delegated to check-spawn-isolation.mjs (one
+  // implementation). Unconditional, like rules 7 and 8.
+  for (const v of collectSpawnIsolationViolations(workspaceRoot).violations) {
+    add(`9-${v.rule}`, v.detail);
   }
 
   return { violations, gapProjects };
