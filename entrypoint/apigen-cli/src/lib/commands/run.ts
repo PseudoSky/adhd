@@ -186,19 +186,35 @@ const BUILTIN_USE_PLUGINS: Record<string, Plugin> = {
  *   2. Otherwise treat the specifier as a package name or local path and
  *      dynamically `import()` it (default or named `plugin`/`<id>Plugin` export).
  *
+ * A plugin whose `layer` capability supplies `createLayer` is materialised
+ * here, ONCE, with `layerOptions` (adhd ADR-0019 D1, SPEC §7.1): the returned
+ * plugin is a copy whose layer capability carries the built function as its
+ * static `layer` and no `createLayer`. Hosts may build any number of request
+ * invokers from the returned plugins (`createPackageInvoker` per package,
+ * per target) without `createLayer` running again, and every target receives
+ * the same configured layer without that target's plugin being edited. A
+ * plugin that supplies only `layer` is returned as the same object.
+ *
  * The loaded plugins are threaded to the run plugin via `options.usePlugins`
  * so the transport adapter can compose their `layer`/`mount` capabilities
  * (RunInput carries no dedicated field).
  *
- * @param specifiers - The raw `--use` values (slugs, package names, or paths).
+ * @param specifiers   - The raw `--use` values (slugs, package names, or paths).
+ * @param layerOptions - The invocation's flat `--opt` bag, handed to each
+ *                       plugin's `createLayer`; defaults to `{}`.
  * @returns The loaded plugin objects, in declaration order.
+ * @throws Error when a `createLayer` throws (propagated unchanged) or returns
+ *   something other than a function; the message names the `--use` specifier.
  */
-export async function loadUsePlugins(specifiers: string[]): Promise<Plugin[]> {
+export async function loadUsePlugins(
+  specifiers: string[],
+  layerOptions: Record<string, unknown> = {}
+): Promise<Plugin[]> {
   const loaded: Plugin[] = [];
   for (const spec of specifiers) {
     const builtin = BUILTIN_USE_PLUGINS[spec];
     if (builtin) {
-      loaded.push(builtin);
+      loaded.push(materialiseLayer(builtin, spec, layerOptions));
       continue;
     }
     // Package specifier or local path — resolve a local path to a file URL so
@@ -225,9 +241,46 @@ export async function loadUsePlugins(specifiers: string[]): Promise<Plugin[]> {
         `a \`plugin\` export, or an object with a \`capabilities\` field)`
       );
     }
-    loaded.push(candidate);
+    loaded.push(materialiseLayer(candidate, spec, layerOptions));
   }
   return loaded;
+}
+
+/**
+ * Build a plugin's `createLayer` layer once and return a copy of the plugin
+ * whose layer capability carries the built function as `layer`.
+ *
+ * The copy drops `createLayer` so a downstream `adaptCoreLayer` (which prefers
+ * `createLayer` over `layer`) uses the materialised function and never calls
+ * the factory again. The input plugin is never mutated (built-in plugins are
+ * shared singletons). A plugin without `createLayer` is returned unchanged.
+ *
+ * @param plugin       - The loaded plugin.
+ * @param spec         - The `--use` specifier, named in errors.
+ * @param layerOptions - The flat `--opt` bag passed to `createLayer`.
+ * @returns The plugin with its layer materialised, or `plugin` itself.
+ */
+function materialiseLayer(
+  plugin: Plugin,
+  spec: string,
+  layerOptions: Record<string, unknown>
+): Plugin {
+  const caps = plugin.capabilities;
+  const cap = caps?.layer;
+  if (!caps || !cap || typeof cap.createLayer !== 'function') return plugin;
+  const built: unknown = cap.createLayer(layerOptions);
+  if (typeof built !== 'function') {
+    throw new Error(
+      `--use ${spec}: layer capability createLayer() returned ` +
+      `${built === null ? 'null' : typeof built}, not a layer function`
+    );
+  }
+  const { createLayer: _factory, ...rest } = cap;
+  void _factory;
+  const layerCap = { ...rest, layer: built } as typeof cap;
+  return Object.assign(Object.create(Object.getPrototypeOf(plugin)), plugin, {
+    capabilities: { ...caps, layer: layerCap },
+  }) as Plugin;
 }
 
 export function registerRunCommand(
@@ -309,6 +362,10 @@ export function registerRunCommand(
         const logger = buildCliLogger(program);
         const allOpts = opts.opt;
         const options = parseOptPairs(allOpts);
+        // The invocation's flat `--opt` bag, taken before `argv`/`usePlugins`
+        // are added to `options`: it is what `createLayer` and the extraction
+        // entry receive (SPEC §7.1 — createLayer sees only the options bag).
+        const layerOptions = { ...options };
         // DEBT-APIGEN-CLI-RUN-ARGV-PASSTHROUGH-001: the native `-- <command>
         // <args>` positional passthrough takes precedence over the `--opt
         // argv=<string>` delivery path when both are present — it's the more
@@ -321,7 +378,7 @@ export function registerRunCommand(
         // objects to the run plugin via options.usePlugins so it can compose their
         // layer (validation, logging) + mount (health) capabilities into the
         // served HTTP path. RunInput has no dedicated field, so they ride here.
-        const usePlugins = await loadUsePlugins(opts.use);
+        const usePlugins = await loadUsePlugins(opts.use, layerOptions);
         if (usePlugins.length > 0) {
           options['usePlugins'] = usePlugins;
         }
@@ -415,6 +472,7 @@ export function registerRunCommand(
             // `layer.envelopeFields` capability into the composed schema
             // before this namespace's ComposedSchemas is built.
             usePluginObjects: usePlugins,
+            extractLayerOptions: layerOptions,
             overrides,
             logger,
           },
