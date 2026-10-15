@@ -110,6 +110,18 @@ function parseBatchRequest(
       '@adhd/apigen-plugin-batch: "input.items" must be an array'
     );
   }
+  // BUG-APIGEN-BATCH-NULL-ITEM (087ec253): a null/undefined item is a malformed
+  // request, never an empty-args call. Reject the whole batch before any item
+  // is dispatched, so the target operation is never invoked.
+  for (let index = 0; index < items.length; index += 1) {
+    const item = items[index];
+    if (item === null || item === undefined) {
+      throw new ApiError(
+        'invalid_argument',
+        `@adhd/apigen-plugin-batch: "input.items[${index}]" is ${item === null ? 'null' : 'undefined'}; every batch item must be an object`
+      );
+    }
+  }
 
   const concurrency = input['concurrency'];
   if (concurrency !== undefined && typeof concurrency !== 'number') {
@@ -194,7 +206,7 @@ function buildBatchHandler(
     const calls: RuntimeCall[] = request.items.map((item) => ({
       operation: { id: request.operation },
       ctx: new LayerContext(),
-      domainArgs: (item ?? {}) as Record<string, unknown>,
+      domainArgs: item as Record<string, unknown>,
       envelope: call.envelope,
       signal: call.signal,
       // Propagate the host's transport from the already-stamped batch
