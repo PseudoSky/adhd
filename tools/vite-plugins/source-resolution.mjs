@@ -1,5 +1,5 @@
 import { nxViteTsPaths } from '@nx/vite/plugins/nx-tsconfig-paths.plugin';
-import { testMetricsConfig } from './test-metrics.mjs';
+import { sharedTestConfig } from './test-metrics.mjs';
 
 /**
  * Test-time source resolution for workspace `@adhd/*` packages.
@@ -48,6 +48,6 @@ import { testMetricsConfig } from './test-metrics.mjs';
  */
 export function nxViteTsPathsPre() {
   // `config` is the one shared test-time hook every vitest project reaches without a per-project edit: it attaches the
-  // test-metrics reporter (see test-metrics.mjs). It is a no-op for anything but a config with a `test` block.
-  return { ...nxViteTsPaths(), name: 'nx-vite-ts-paths-pre', enforce: 'pre', apply: 'serve', config: (userConfig) => testMetricsConfig(userConfig) };
+  // test-metrics reporter and the per-tier timeout (see test-metrics.mjs). It is a no-op for anything but a config with a `test` block.
+  return { ...nxViteTsPaths(), name: 'nx-vite-ts-paths-pre', enforce: 'pre', apply: 'serve', config: (userConfig) => sharedTestConfig(userConfig) };
 }

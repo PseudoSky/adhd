@@ -11,6 +11,7 @@
  *   mainline  a run on `main` or on a commit already reachable from `origin/main`, with a clean working tree.
  *   percentile  nearest-rank: the smallest observed value with at least p percent of observations at or below it.
  */
+import { isQuarantined } from './quarantine.mjs';
 import { TIER_BUDGETS, TIER_ORDER } from './tiers.mjs';
 
 export const G5_FLAKE_SHARE_LIMIT = 0.01;
@@ -157,17 +158,26 @@ export function flaky(records, { includeDirty = false } = {}) {
 
 /**
  * G5: the flaky share of each tier's executions is at most 1 percent, and no retry is in use. A record is flaky when its
- * test is `mixed` on its code or the record itself used a retry. With no retry registry (T36 quarantine) every retry is
- * an unrecorded retry. No executions at all is `insufficient`, not a pass.
+ * test is `mixed` on its code or the record itself used a retry. No executions at all is `insufficient`, not a pass.
+ *
+ * `quarantine` (T36.AC2) is `{ active, violations }` from `quarantine.mjs`: the executions of a quarantined test are
+ * left out of the share and out of the flake and retry violations, and are listed under `quarantined` with their
+ * outcomes (the test still runs and is still reported); an expired or malformed entry is itself a violation.
  */
-export function g5(records, { limit = G5_FLAKE_SHARE_LIMIT, includeDirty = false } = {}) {
+export function g5(records, { limit = G5_FLAKE_SHARE_LIMIT, includeDirty = false, quarantine = { active: [], violations: [] } } = {}) {
   const exec = records.filter(isExecuted);
-  if (exec.length === 0) return { status: 'insufficient', message: 'insufficient history: no executed test records', tiers: {}, violations: [] };
-  const f = flaky(records, { includeDirty });
+  if (exec.length === 0) return { status: 'insufficient', message: 'insufficient history: no executed test records', tiers: {}, violations: [], quarantined: [] };
+  const held = (r) => isQuarantined(quarantine.active, displayKey(r));
+  const gated = exec.filter((r) => !held(r));
+  const quarantined = [];
+  for (const recs of groupBy(exec.filter(held), testKey).values()) {
+    quarantined.push({ test: displayKey(recs[0]), tier: recs[0].tier, executions: recs.length, passes: recs.filter((r) => r.outcome === 'pass').length, fails: recs.filter((r) => r.outcome === 'fail').length });
+  }
+  const f = flaky(records.filter((r) => !isExecuted(r) || !held(r)), { includeDirty });
   const mixedKeys = new Set(f.mixed.map((m) => `${m.test}\u0001${m.code}`));
   const tiers = {};
   for (const t of TIER_ORDER) {
-    const recs = exec.filter((r) => r.tier === t);
+    const recs = gated.filter((r) => r.tier === t);
     if (!recs.length) continue;
     const flakyRecs = recs.filter((r) => r.retryCount > 0 || mixedKeys.has(`${displayKey(r)}\u0001${codeId(r, { includeDirty })}`));
     tiers[t] = { executed: recs.length, flaky: flakyRecs.length, share: round(flakyRecs.length / recs.length) };
@@ -175,7 +185,15 @@ export function g5(records, { limit = G5_FLAKE_SHARE_LIMIT, includeDirty = false
   const violations = [];
   for (const [t, v] of Object.entries(tiers)) if (v.flaky / v.executed > limit) violations.push({ rule: 'flake-share', tier: t, share: v.share, limit });
   for (const r of f.retried) violations.push({ rule: 'unrecorded-retry', test: r.test, tier: r.tier, maxRetries: r.maxRetries });
-  return { status: violations.length ? 'fail' : 'pass', tiers, violations, mixed: f.mixed, retried: f.retried, repeatCoverage: f.repeatCoverage };
+  for (const v of quarantine.violations) violations.push({ rule: v.rule, test: v.entry.test ?? null, message: v.message });
+  // With no same-code repeat anywhere, no flake CAN be observed (nx's cache means same-sha repeats are rare), so a clean
+  // result is absence of evidence: `insufficient`, which the gate reports as unmeasured, until `repeat` has produced some.
+  const unobservable = violations.length === 0 && f.repeatCoverage === 0;
+  return {
+    status: violations.length ? 'fail' : unobservable ? 'insufficient' : 'pass',
+    message: unobservable ? 'insufficient history: no test has a same-code repeat, so a flake cannot be observed; run `test-report.mjs repeat --times 5 -- <test command>`' : undefined,
+    tiers, violations, mixed: f.mixed, retried: f.retried, quarantined, repeatCoverage: f.repeatCoverage,
+  };
 }
 
 const runsOf = (recs) => {
@@ -226,7 +244,7 @@ export function g7(records, { budgetSeverity = 'warn', ratio = G7_REGRESSION_RAT
   const failing = regressions.length > 0 || (budgetSeverity === 'fail' && budgetOffenders.length > 0);
   const allInsufficient = units.every((u) => u.state === 'insufficient history');
   return {
-    status: failing ? 'fail' : 'pass',
+    status: failing ? 'fail' : allInsufficient ? 'insufficient' : 'pass',
     message: allInsufficient ? `insufficient history: no project has ${minPrior} prior mainline runs, the regression rule was not evaluated` : undefined,
     budget: { severity: budgetSeverity, offenders: budgetOffenders },
     regressions,

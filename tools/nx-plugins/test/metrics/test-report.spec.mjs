@@ -86,6 +86,37 @@ describe('exit codes as a process', () => {
     assert.match(empty.stdout, /insufficient history/);
   });
 
+  it('--gate exits 78 (unmeasured) on insufficient history for g5 and g7, never 0; a real violation still exits 1', () => {
+    seed([rec({ name: 'a' }), rec({ name: 'a' })]);
+    assert.equal(cli(['g7', '--gate', '--file', file]).status, 78);
+    assert.equal(cli(['g5', '--gate', '--file', join(dir, 'missing.jsonl')]).status, 78);
+    seed(slow);
+    assert.equal(cli(['g7', '--gate', '--budget-severity', 'fail', '--file', file]).status, 1);
+  });
+
+  it('g5 honors --quarantine: a quarantined flake passes and is listed; an expired entry fails; --no-retry-scan keeps the case hermetic', () => {
+    seed(mixed);
+    const reg = join(dir, 'q.json');
+    writeFileSync(reg, JSON.stringify({ entries: [{ test: 'a.spec.ts :: flaky', id: 'abcdef12', until: '2099-01-01', reason: 'x' }] }));
+    const held = cli(['g5', '--no-retry-scan', '--quarantine', reg, '--file', file]);
+    assert.equal(held.status, 0, held.stdout);
+    assert.match(held.stdout, /quarantined \(still runs, not gated\).*flaky/);
+    writeFileSync(reg, JSON.stringify({ entries: [{ test: 'a.spec.ts :: flaky', id: 'abcdef12', until: '2020-01-01', reason: 'x' }] }));
+    const expired = cli(['g5', '--no-retry-scan', '--quarantine', reg, '--file', file]);
+    assert.equal(expired.status, 1);
+    assert.match(expired.stdout, /quarantine-expired/);
+  });
+
+  it('g5 fails on an untracked retry in a runner config even when the store has no history, and never reports it as unmeasured', () => {
+    const repo = join(dir, 'repo');
+    spawnSync('git', ['init', '-q', repo]);
+    writeFileSync(join(repo, 'vitest.config.ts'), 'export default { test: { retry: 2 } };\n');
+    spawnSync('git', ['add', 'vitest.config.ts'], { cwd: repo });
+    const r = cli(['g5', '--gate', '--workspace-root', repo, '--file', join(dir, 'missing.jsonl')]);
+    assert.equal(r.status, 1, r.stdout + r.stderr);
+    assert.match(r.stdout, /retry-unannotated/);
+  });
+
   it('exits 65 with a message for an unknown subcommand or option', () => {
     assert.equal(cli(['nope']).status, 65);
     const r = cli(['summary', '--bogus']);

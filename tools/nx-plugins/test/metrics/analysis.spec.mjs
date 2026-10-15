@@ -115,8 +115,15 @@ describe('flaky (both outcomes on the same code)', () => {
 
 describe('g5 (flake share per tier, no retry)', () => {
   const hundredStable = (n) => Array.from({ length: n }, (_, i) => rec({ name: `stable-${i}` }));
-  it('passes with no flakes, and with history it cannot judge it says insufficient', () => {
-    assert.equal(g5(hundredStable(50)).status, 'pass');
+  // A repeat group: the same test run twice on the same code, both passing. Without one, no flake can be observed.
+  const repeated = () => [rec({ name: 'rep', group: 'g1', runId: 'ra' }), rec({ name: 'rep', group: 'g1', runId: 'rb' })];
+  it('says insufficient, not pass, when no test has a same-code repeat (a flake could not have been observed)', () => {
+    const r = g5(hundredStable(50));
+    assert.equal(r.status, 'insufficient');
+    assert.match(r.message, /no test has a same-code repeat/);
+  });
+  it('passes with no flakes once repeats exist, and with no records says insufficient', () => {
+    assert.equal(g5([...hundredStable(50), ...repeated()]).status, 'pass');
     const empty = g5([]);
     assert.equal(empty.status, 'insufficient');
     assert.match(empty.message, /insufficient history/);
@@ -126,7 +133,7 @@ describe('g5 (flake share per tier, no retry)', () => {
     const over = g5([...hundredStable(94), ...mixed(1), ...mixed(2), ...mixed(3)]); // 6 flaky records of 100
     assert.equal(over.status, 'fail');
     assert.equal(over.violations.find((v) => v.rule === 'flake-share').tier, 'S');
-    const atLimit = g5([...hundredStable(99), rec({ name: 'f', outcome: 'pass', retryCount: 0 })]);
+    const atLimit = g5([...hundredStable(97), ...repeated(), rec({ name: 'f', outcome: 'pass', retryCount: 0 })]);
     assert.equal(atLimit.status, 'pass');
   });
   it('fails any retry in use: with no tracking-item registry every retry is unrecorded', () => {
@@ -142,9 +149,9 @@ describe('g7 (budgets and the regression rule)', () => {
     ...priorMs.map((d, i) => rec({ runId: `prior-${i}`, durationMs: d, ts: `2026-10-${String(i + 1).padStart(2, '0')}T00:00:00.000Z`, ...priorOver })),
     rec({ runId: 'latest', durationMs: latestMs, ts: '2026-10-14T00:00:00.000Z', mainline: false, branch: 'feat', ...latestOver }),
   ];
-  it('reports insufficient history, and passes, with fewer than 5 prior mainline runs', () => {
+  it('reports insufficient history, not a pass, with fewer than 5 prior mainline runs', () => {
     const r = g7(history5([10, 10, 10, 10], 500));
-    assert.equal(r.status, 'pass');
+    assert.equal(r.status, 'insufficient');
     assert.match(r.message, /insufficient history/);
     assert.equal(r.units[0].state, 'insufficient history');
     assert.equal(r.units[0].priorMainlineRuns, 4);
@@ -175,10 +182,10 @@ describe('g7 (budgets and the regression rule)', () => {
   it('lists per-test budget breaches as warnings by default and as failures when the severity is fail', () => {
     const budgetOnly = [rec({ runId: 'only', name: 'slow', durationMs: 2000 })];
     const warn = g7(budgetOnly);
-    assert.equal(warn.status, 'pass');
+    assert.equal(warn.status, 'insufficient', 'budgets were checked but the regression rule had no history');
     assert.equal(warn.budget.offenders.length, 1);
     assert.equal(g7(budgetOnly, { budgetSeverity: 'fail' }).status, 'fail');
-    assert.equal(g7([rec({ runId: 'only', durationMs: 5 })], { budgetSeverity: 'fail' }).status, 'pass', 'nothing over budget never fails');
+    assert.equal(g7([rec({ runId: 'only', durationMs: 5 })], { budgetSeverity: 'fail' }).status, 'insufficient', 'nothing over budget never fails');
   });
   it('says insufficient history when there is no data at all', () => {
     assert.equal(g7([]).status, 'insufficient');

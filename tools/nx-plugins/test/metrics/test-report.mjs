@@ -19,7 +19,8 @@
  * --since <ISO date>, --project <name>, --tier S|P|H|X, --limit <n>, --include-dirty, --check, --budget-severity warn|fail.
  * --check makes `offenders` and `flaky` exit 1 when they list anything. `g5` and `g7` always exit 1 on a violation.
  *
- * Exit: 0 report ok (also `insufficient history`), 1 gate violation, 65 usage error.
+ * Exit: 0 report ok (also `insufficient history`), 1 gate violation, 65 usage error, 78 with --gate when the history
+ * is insufficient (the gate engine reports 78 as `unmeasured`, never as a pass).
  * The reporters never run this file; it only reads what they wrote.
  */
 import { spawnSync } from 'node:child_process';
@@ -27,7 +28,18 @@ import { randomUUID } from 'node:crypto';
 import { realpathSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { filterRecords, flaky, g5, g7, history, offenders, summary } from './analysis.mjs';
+import { checkQuarantine, loadQuarantine } from './quarantine.mjs';
+import { scanWorkspace } from './retry-scan.mjs';
 import { readRecords, storePath } from './store.mjs';
+
+/** Exit for a gate result. With --gate an `insufficient` result is UNMEASURED_EXIT (78), never 0: the gate engine reports
+ * 78 as `unmeasured`, so an empty store (CI has none) is not counted as a pass. Without --gate it stays a report: 0. */
+export const UNMEASURED_EXIT = 78;
+function gateExit(r, opts) {
+  if (r.status === 'fail') return 1;
+  if (r.status === 'insufficient' && opts.gate) return UNMEASURED_EXIT;
+  return 0;
+}
 
 const COMMANDS = ['summary', 'offenders', 'flaky', 'history', 'g7', 'g5', 'repeat'];
 
@@ -38,15 +50,19 @@ export function parseArgs(argv) {
   const tail = dd === -1 ? [] : argv.slice(dd + 1);
   const [cmd, ...more] = head;
   if (!COMMANDS.includes(cmd)) return { error: `unknown or missing subcommand ${JSON.stringify(cmd ?? '')}; expected one of ${COMMANDS.join(', ')}` };
-  const opts = { json: false, check: false, includeDirty: false, budgetSeverity: 'warn', limit: 25, times: 3 };
+  const opts = { json: false, check: false, gate: false, retryScan: true, includeDirty: false, budgetSeverity: 'warn', limit: 25, times: 3 };
   const rest = [];
   for (let i = 0; i < more.length; i++) {
     const a = more[i];
     const val = () => more[++i];
     if (a === '--json') opts.json = true;
     else if (a === '--check') opts.check = true;
+    else if (a === '--gate') opts.gate = true;
+    else if (a === '--no-retry-scan') opts.retryScan = false;
+    else if (a === '--quarantine') opts.quarantine = val();
     else if (a === '--include-dirty') opts.includeDirty = true;
     else if (a === '--file') opts.file = val();
+    else if (a === '--workspace-root') opts.workspaceRoot = val();
     else if (a === '--since') opts.since = val();
     else if (a === '--project') opts.project = val();
     else if (a === '--tier') opts.tier = val();
@@ -95,10 +111,15 @@ function renderFlaky(f) {
 }
 
 function renderG5(r) {
-  if (r.status === 'insufficient') return `G5: ${r.message}`;
-  const lines = [`G5 ${r.status.toUpperCase()}: flaky share per tier (limit 1%), repeat coverage ${r.repeatCoverage} test(s)`];
+  if (r.status === 'insufficient') return [`G5: ${r.message}`, ...(r.quarantined ?? []).map((q) => `  quarantined (still runs, not gated) ${q.tier} ${q.test}: ${q.passes} pass / ${q.fails} fail of ${q.executions}`)].join('\n');
+  const lines = [`G5 ${r.status.toUpperCase()}: flaky share per tier (limit 1%), repeat coverage ${r.repeatCoverage ?? 0} test(s)`];
   for (const [t, v] of Object.entries(r.tiers)) lines.push(`  ${t}: ${v.flaky}/${v.executed} = ${(v.share * 100).toFixed(2)}%`);
-  for (const v of r.violations) lines.push(`  violation ${v.rule}: ${v.test ?? `tier ${v.tier}`}${v.share !== undefined ? ` ${(v.share * 100).toFixed(2)}% > ${v.limit * 100}%` : `, retried up to ${v.maxRetries}x with no tracking item (no retry registry exists)`}`);
+  for (const q of r.quarantined ?? []) lines.push(`  quarantined (still runs, not gated) ${q.tier} ${q.test}: ${q.passes} pass / ${q.fails} fail of ${q.executions}`);
+  for (const v of r.violations) {
+    if (v.rule === 'flake-share') lines.push(`  violation flake-share: tier ${v.tier} ${(v.share * 100).toFixed(2)}% > ${v.limit * 100}%`);
+    else if (v.rule === 'unrecorded-retry') lines.push(`  violation unrecorded-retry: ${v.test}, retried up to ${v.maxRetries}x`);
+    else lines.push(`  violation ${v.rule}: ${v.test ?? ''} ${v.message ?? ''}`.trimEnd());
+  }
   return lines.join('\n');
 }
 
@@ -172,14 +193,27 @@ export function main(argv, io = {}) {
       return 0;
     }
     case 'g5': {
-      const r = g5(recs, { includeDirty: opts.includeDirty });
+      let quarantine;
+      try {
+        quarantine = checkQuarantine(loadQuarantine(opts.quarantine));
+      } catch (e) {
+        err(`test-report: ${e.message}`);
+        return 65;
+      }
+      const r = g5(recs, { includeDirty: opts.includeDirty, quarantine });
+      // T36.AC3: a retry in a runner config with no tracking item is a violation whatever the history says.
+      if (opts.retryScan) {
+        const retries = scanWorkspace(opts.workspaceRoot ?? process.cwd());
+        for (const v of retries) r.violations.push({ rule: v.rule, test: `${v.file}:${v.line}`, message: v.text });
+        if (retries.length) r.status = 'fail';
+      }
       emit(r, renderG5(r));
-      return r.status === 'fail' ? 1 : 0;
+      return gateExit(r, opts);
     }
     case 'g7': {
       const r = g7(recs, { budgetSeverity: opts.budgetSeverity });
       emit(r, r.status === 'insufficient' ? `G7: ${r.message}` : renderG7(r));
-      return r.status === 'fail' ? 1 : 0;
+      return gateExit(r, opts);
     }
     default:
       return 65;

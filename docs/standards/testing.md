@@ -41,9 +41,10 @@ Terms used in the binding table. **Mechanism class:** C0 no mechanism; C1 text a
    | Metric | Produced by | Viewed |
    |---|---|---|
    | Pass rate and failures per tier and stage | the Nx and Vitest runner output | CI logs |
-   | Duration p50 and p95, suite wall time | the runner's reported durations | CI logs |
+   | Duration p50 and p95, suite wall time, tests over their tier budget | `tools/nx-plugins/test/metrics` reporters (one record per test in `~/.adhd/test-timings/test-metrics.jsonl`) | `test-report.mjs summary`, `offenders`, `g7` |
    | Gate results | `.nx/test-gates/gate-report.json` | the file |
-   | Flake rate, shape, signal precision, escape rates, selection escapes, skipped and quarantined age, test growth, changed-code mutation score, change-failure rate | not measured | not measured |
+   | Flake rate (same-code repeats, retries; quarantined tests listed apart) | the same records, plus `test-report.mjs repeat` groups and `quarantine.json` | `test-report.mjs flaky`, `g5` (reports unmeasured until a repeat exists) |
+   | Shape, signal precision, escape rates, selection escapes, skipped age, test growth, changed-code mutation score, change-failure rate | not measured | not measured |
 7. **Risk map.** Failure modes of this repository, ranked by impact × likelihood, with the covering tier.
 
    | # | Failure mode | Covering tier and stage |
@@ -56,12 +57,12 @@ Terms used in the binding table. **Mechanism class:** C0 no mechanism; C1 text a
    | FM6 | A dispatch-driven feature is green in unit tests and unreachable across the real MCP boundary | P, stage D |
    | FM7 | Dependency drift silently ships a broken dependency set | `nx lint` (`sync-deps-check`), stage B |
    | FM8 | A skipped, disabled or `todo` test rests in the suite with no owner or date | G4, enforced for new markers; the 849 legacy markers recorded at the first run are baselined and fall due 2027-01-31 |
-   | FM9 | Flake hides a real failure behind a retry | G5, not yet mechanical |
+   | FM9 | Flake hides a real failure behind a retry | G5: `retry-scan.mjs` fails an untracked retry in a runner config; `test-report.mjs g5` lists any retry that ran |
    | FM10 | The gate engine cannot be found in CI, so the engine-driven steps cannot run there | tracked by backlog ca23e252 |
 8. **Migration plan.** Existing tests are left to the finished system (decision D10): this document does not classify, lower, remove or quarantine any of them. The filed items that track the work, all owned by the repository maintainer, review date 2026-11-13:
    - backlog `ca23e252` — CI cannot provision the gate engine (blocks stages D and E running the engine).
    - backlog `8963c3cb` — pre-push runs the full affected closure with the hook-exported git environment; the e2e lane is paused locally by owner decision.
-   - The tier H lane, the flag-setting stage for tier X, and the quarantine registry are listed as obligations in the binding table (G1 quarantine half, G2 for tier X, G5) and are tracked by the plan that created this document (595965cc, tasks T36, T37, T38).
+   - The tier H lane and the flag-setting stage for tier X are listed as obligations in the binding table (G2 for tier X) and are tracked by the plan that created this document (595965cc, tasks T36, T37, T38). The quarantine registry is `tools/nx-plugins/test/metrics/quarantine.json`: G5 leaves a quarantined test out of its verdict, the test still runs and is listed, and an entry past its date fails (T36.AC2). Quarantine is for a test that is flaky for a reason unrelated to the change under test (including machine load, see backlog e47ec788); it is not a place to park a failing test.
 9. **Class and rigor bindings.**
 
    *Escalation triggers and how they are detected.* The routing command (`node tools/nx-plugins/test/routing/test-routing.mjs`) reads the table below from this file: the `id`, the minimum rigor, and every backticked glob in the last column. A change whose changed files match a glob hits that trigger. A trigger no path can show (a `package.json` field change, an MCP tool `inputSchema` change, the irreversibility of an effect) is asserted in the item's testing record with `triggers:`; an asserted trigger raises the derived rigor and never lowers it.

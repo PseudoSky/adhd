@@ -4,6 +4,25 @@ import { fileURLToPath } from 'node:url';
 /** Absolute path of the vitest reporter that records test metrics (tools/nx-plugins/test/metrics). */
 export const TEST_METRICS_REPORTER = join(dirname(fileURLToPath(import.meta.url)), '../nx-plugins/test/metrics/vitest-reporter.mjs');
 
+/** Absolute path of the vitest setup file that enforces each test file's tier timeout (T37.AC1). */
+export const TIER_TIMEOUT_SETUP = join(dirname(fileURLToPath(import.meta.url)), '../nx-plugins/test/metrics/tier-timeout-setup.mjs');
+
+/**
+ * The vite `config` hook that enforces the per-tier test timeout: appends `tier-timeout-setup.mjs` to `setupFiles`
+ * (vite concatenates arrays) for any config with a `test` block. `ADHD_TIER_TIMEOUT=0` turns it off.
+ */
+export function tierTimeoutConfig(userConfig, env = process.env) {
+  if (env.ADHD_TIER_TIMEOUT === '0' || !userConfig || userConfig.test === undefined) return undefined;
+  return { test: { setupFiles: [TIER_TIMEOUT_SETUP] } };
+}
+
+/** Both shared test-time config contributions in one result: the metrics reporter and the tier timeout. */
+export function sharedTestConfig(userConfig, env = process.env) {
+  const parts = [testMetricsConfig(userConfig, env), tierTimeoutConfig(userConfig, env)].filter(Boolean);
+  if (!parts.length) return undefined;
+  return { test: Object.assign({}, ...parts.map((p) => p.test)) };
+}
+
 /**
  * The vite `config` hook that attaches the test-metrics reporter to a vitest project (G5 and G7 history).
  *

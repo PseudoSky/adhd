@@ -168,7 +168,16 @@ describe('the shared vite plugin hook', () => {
   it('is carried by nxViteTsPathsPre, the plugin every project config already installs', () => {
     const plugin = nxViteTsPathsPre();
     assert.equal(plugin.name, 'nx-vite-ts-paths-pre');
-    assert.deepEqual(plugin.config({ test: { reporters: ['default'] } }), { test: { reporters: [TEST_METRICS_REPORTER] } });
+    const cfg = plugin.config({ test: { reporters: ['default'] } });
+    assert.deepEqual(cfg.test.reporters, [TEST_METRICS_REPORTER]);
+    assert.equal(cfg.test.setupFiles.length, 1, 'the per-tier timeout setup file rides the same hook');
+  });
+  it('the e2e-lane factory merges the package base config, so the plugin carrying the reporter and tier timeout reaches the e2e lanes too', () => {
+    // defineE2eConfig imports a .ts helper node cannot load, so the factory is checked from its source: it must keep the base
+    // config's plugins by merging the whole base (minus `test`), never by rebuilding a config from scratch.
+    const src = readFileSync(join(ROOT, 'tools/vite-plugins/e2e-config.mjs'), 'utf8');
+    assert.match(src, /const \{ test: baseTest, \.\.\.baseViteConfig \} = baseConfig/);
+    assert.match(src, /return mergeConfig\(baseViteConfig,/);
   });
   it('points at a reporter file that exists and default-exports a class', async () => {
     const mod = await import(TEST_METRICS_REPORTER);

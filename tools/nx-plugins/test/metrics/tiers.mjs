@@ -20,6 +20,19 @@ export const TIER_BUDGETS = Object.freeze({
   X: Object.freeze({ p95Ms: null, splitOrFixMs: null }),
 });
 
+/**
+ * The enforced per-test timeout of each tier, in milliseconds (T37.AC1). A cap, not a target: `tier-timeout-setup.mjs`
+ * lowers a test file's timeout to it when the project configures more. S is generous against its 100 ms p95 because a
+ * loaded machine stretches a pure test (the 5 s flakes of 1ab12bb2); P and H sit above their p95 budgets; X is metered
+ * and has no cap here.
+ */
+export const TIER_TIMEOUT_CAPS_MS = Object.freeze({ S: 10_000, P: 60_000, H: 300_000, X: null });
+
+/** The enforced per-test timeout of `tier` in milliseconds, or null when the tier has none. */
+export function timeoutForTier(tier) {
+  return TIER_TIMEOUT_CAPS_MS[tier] ?? null;
+}
+
 /** The tiers in report order. */
 export const TIER_ORDER = Object.freeze(['S', 'P', 'H', 'X']);
 
