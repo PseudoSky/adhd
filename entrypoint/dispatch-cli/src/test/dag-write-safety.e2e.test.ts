@@ -1,4 +1,9 @@
 /**
+ * guards: two dispatch run processes write one dag.json at once and one overwrites the other, or a lock/temp file is left behind
+ * tier: P
+ * cites: 0b80a7b5 AC6
+ * gap: This cannot be observed at tier S because an injected isAlive/pid replaces exactly the cross-process liveness and hard-link publish the criterion is about.
+ *
  * dag-write-safety.e2e.test.ts — AC6 of the dag write-safety slice as a consumer
  * meets it: two real `dispatch run` OS processes contending for one dag file
  * through the real `bin/cli.ts` and the real `withDagLock`.

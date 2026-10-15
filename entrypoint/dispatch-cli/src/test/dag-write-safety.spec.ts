@@ -1,4 +1,8 @@
 /**
+ * guards: a dry run passes a live run's dag lock, or a multi-cycle caller drops or leaks the lock
+ * tier: S
+ * cites: 0b80a7b5 AC3, AC4
+ *
  * dag-write-safety.spec.ts — AC3 and AC4 of the dag write-safety slice, driven
  * through dispatch-cli's real `runCycleCore` / `withDagLock` with an injected
  * `MockAgentRunner`.

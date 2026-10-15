@@ -1,4 +1,9 @@
 /**
+ * guards: the built agent-mcp server does not advertise or serve task_events over stdio the way a host calls it
+ * tier: P
+ * cites: facd4aaa AC1, AC5
+ * gap: This cannot be observed at tier S because only a spawned built server over stdio exercises tool registration, the dist artifact, the environment cascade and JSON-RPC framing.
+ *
  * task-events-stdio.e2e.test.ts — facd4aaa AC5. The `task_events` tool, as a host reaches it.
  *
  * A real MCP client (`@modelcontextprotocol/sdk` Client over StdioClientTransport) spawns the REAL built

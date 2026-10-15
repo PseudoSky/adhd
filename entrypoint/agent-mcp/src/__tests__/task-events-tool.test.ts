@@ -1,4 +1,8 @@
 /**
+ * guards: task_events pages out of insertion order, miscounts total/has_more, accepts out-of-range input, or fails a whole page on one corrupt row
+ * tier: S
+ * cites: facd4aaa AC1
+ *
  * facd4aaa AC1 — `task_events` pages a finished task oldest-first with `total`, `has_more` and `offset`,
  * rejects out-of-range input, and degrades per row rather than per page.
  *

@@ -1,4 +1,8 @@
 /**
+ * guards: a zero-tool-call completion with tools granted is indistinguishable from a finished task (no no_tool_use warning, or the warning on a clean run)
+ * tier: S
+ * cites: cbd559eb AC1, AC2, AC3, AC4, AC5, AC6
+ *
  * cbd559eb -- a zero-tool-call stop must not be indistinguishable from a finished task.
  *
  * Spec: docs/discovery/specs/cbd559eb-zero-tool-call-completion.md (Product revision governs: the

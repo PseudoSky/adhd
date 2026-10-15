@@ -1,4 +1,8 @@
 /**
+ * guards: runExtractorEmitJson never settles or never kills the child on timeout, or accepts an out-of-range timeoutMs
+ * tier: S
+ * cites: 5a59f9ec, 80c98734 (regression)
+ *
  * Regression tests for `runExtractorEmitJson` timeout handling.
  *
  * Tier: S (unit lane). `node:child_process.spawn` is mocked with a fake child

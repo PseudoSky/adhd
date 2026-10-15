@@ -1,4 +1,8 @@
 /**
+ * guards: task_events payloads differ from what the model saw or was offered (tool result cap, advertised tools, system prompt hash, compacted event type)
+ * tier: S
+ * cites: facd4aaa AC2, AC3, AC4
+ *
  * facd4aaa AC2 / AC3 / AC4 — the payloads the orchestrator writes to `task_events` describe what the model
  * actually saw and was offered.
  *

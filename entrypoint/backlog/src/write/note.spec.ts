@@ -1,4 +1,8 @@
 /**
+ * guards: remove-note removes a note for an unauthorized caller, leaves no audit trail, or loses the removal across a store reopen
+ * tier: S
+ * cites: 0f9b6132 AC1, AC2, AC3
+ *
  * note.spec.ts — `remove-note` (the `removeNote` verb, `write/note.ts`).
  *
  * Item 0f9b6132 (remove-note). Every assertion drives the REAL `api.removeNote`

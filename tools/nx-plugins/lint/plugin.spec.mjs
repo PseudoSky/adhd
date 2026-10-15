@@ -1,4 +1,8 @@
 /**
+ * guards: the lint target emits the wrong externalDependencies cache input for a project
+ * tier: S
+ * cites: fbbb1464 AC1, AC3, AC4, AC5
+ *
  * Tests for lint/plugin.js createNodes — the per-project `lint` target's
  * `externalDependencies` cache input (spec fbbb1464).
  *

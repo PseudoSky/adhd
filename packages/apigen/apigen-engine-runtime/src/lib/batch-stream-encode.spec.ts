@@ -1,4 +1,8 @@
 /**
+ * guards: a streaming batch item yields un-encoded values instead of wire-encoded chunks
+ * tier: S
+ * cites: 8a62ced2 (batch-level AC)
+ *
  * regression:8a62ced2 — a streaming batch item yields wire-encoded chunks
  * (backlog 8a62ced2, batch.ts streaming collection at ~line 233).
  *

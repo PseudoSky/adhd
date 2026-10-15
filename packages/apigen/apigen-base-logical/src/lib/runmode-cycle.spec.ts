@@ -1,3 +1,8 @@
+/**
+ * guards: a same-value $ref/oneOf cycle in the run-mode transcoder recurses to an unnamed RangeError instead of E_RUNMODE_CYCLE, or value-shrinking recursion is blocked
+ * tier: S
+ * cites: apigen-runmode-oneof-ref-cycle CYC-1, CYC-2, CYC-3 (no backlog uid recorded)
+ */
 import { describe, expect, it } from 'vitest';
 import { buildTranscoder } from './runmode';
 import { createRegistry } from './registry';

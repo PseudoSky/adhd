@@ -1,4 +1,8 @@
 /**
+ * guards: the sync-deps targets emit the wrong externalDependencies input list for a project
+ * tier: S
+ * cites: fbbb1464 AC2, AC5
+ *
  * Tests for deps/plugin.js createNodes — the `sync-deps` and `sync-deps-check`
  * targets' shared `externalDependencies` cache input (spec fbbb1464).
  *

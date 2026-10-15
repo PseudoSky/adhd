@@ -1,3 +1,7 @@
+// guards: renderDispatcherJava emits a non-identifier parameter name into generated Java
+// tier: S
+// cites: 6e29bff1 (regression)
+//
 // renderDispatcherJava — parameter names must be Java identifiers at generate time.
 //
 // Header (author-regression):

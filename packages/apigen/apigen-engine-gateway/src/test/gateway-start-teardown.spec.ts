@@ -1,3 +1,7 @@
+// guards: gateway start() leaves sibling hosts running after a partial failure, restarts after stop, or mishandles stop during start and supervision backoff
+// tier: S
+// cites: 78b1c1d6, fcd20c30 (regression)
+//
 // @adhd/apigen-gateway — start() partial-failure, restart-after-stop, and stop-during-start.
 //
 // Header (author-regression, one defect per block):

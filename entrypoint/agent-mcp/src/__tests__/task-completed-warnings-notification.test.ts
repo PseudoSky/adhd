@@ -1,4 +1,8 @@
 /**
+ * guards: wireTaskNotifications drops the no_tool_use warnings from, or adds an empty warnings key to, the task/completed notification
+ * tier: S
+ * cites: cbd559eb AC1
+ *
  * cbd559eb AC1 (notification leg) — `notifications/task/completed` carries the task's advisory warnings.
  *
  *   cbd559eb AC1  a `done` stream event with `warnings:['no_tool_use']` reaches an MCP client as

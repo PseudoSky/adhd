@@ -1,4 +1,8 @@
 /**
+ * guards: declaredExternalDeps misreads a project's declared or installed dependencies
+ * tier: S
+ * cites: fbbb1464 AC1, AC5
+ *
  * Tests for lib/declared-external-deps.js — the single reader behind the
  * per-project `externalDependencies` cache input of `lint`, `sync-deps` and
  * `sync-deps-check` (spec fbbb1464).

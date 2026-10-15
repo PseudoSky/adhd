@@ -15,6 +15,7 @@
  * Failure mode guarded: release/CI hygiene gates silently unwired or green on a defective tree.
  * Tier: P for the nested `nx run` (C-AC5, whose point is the real nx spawn and vitest file count),
  * the tree-clean CLI exit codes (C-AC7) and worktree-setup.sh (C-AC8); S for the rest.
+ * gap: This cannot be observed at tier S because C-AC5, C-AC7 and C-AC8 depend on a real nested nx spawn, the tree-clean CLI exit status and worktree-setup.sh output, which only a subprocess reaches.
  * Item: qa-variance (C-AC6 drives the exported runParity in-process instead of 3 node child spawns;
  * C-AC7 fixture repo uses `git -c` identity: 3 spawns instead of 5). Red run: pending (not run per user).
  *

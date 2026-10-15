@@ -1,4 +1,8 @@
 /**
+ * guards: run-mode dispatch does not resolve $ref against the op schema root, or an unresolvable ref does not name the ref and op
+ * tier: S
+ * cites: 1bb4b5d5 AC1, AC2, AC3
+ *
  * regression:1bb4b5d5 — run-mode dispatch resolves `$ref` against the op schema root.
  *
  * Consumer seam: the real `dispatch()` entrypoint (the single canonical path every

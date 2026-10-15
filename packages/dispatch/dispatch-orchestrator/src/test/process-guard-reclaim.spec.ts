@@ -1,4 +1,8 @@
 /**
+ * guards: a stale-lock reclaimer deletes a competitor's live lock, a half-published lock is stolen, or release removes a lock that is not its own
+ * tier: S
+ * cites: 0b80a7b5 AC2
+ *
  * process-guard-reclaim.spec.ts — stale-lock reclaim, atomic publish and
  * owner-checked release of `acquireDispatchLock`.
  *

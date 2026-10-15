@@ -1,4 +1,8 @@
 /**
+ * guards: a streaming op result is transcoded as one value instead of encoded per chunk
+ * tier: S
+ * cites: 8a62ced2 AC2, AC3
+ *
  * regression:8a62ced2 — a streaming op's result is encoded per chunk, not transcoded
  * as a single value (backlog 8a62ced2).
  *

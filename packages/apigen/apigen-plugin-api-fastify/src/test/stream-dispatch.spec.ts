@@ -1,4 +1,8 @@
 /**
+ * guards: the SSE projection of a streaming op writes no frame until the producer completes
+ * tier: S
+ * cites: 8a62ced2 AC1
+ *
  * regression:8a62ced2 — the SSE projection of a streaming op emits frame 1 before the
  * producer finishes (backlog 8a62ced2, AC1).
  *

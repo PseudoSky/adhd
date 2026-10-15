@@ -1,3 +1,7 @@
+// guards: the responseSize truncation notice pushes the emitted tool result past the cap
+// tier: S
+// cites: 977e0ca6 (regression, no AC numbering)
+//
 // BudgetPlugin responseSize — the emitted tool result never exceeds the cap, truncation
 // notice included.
 //
