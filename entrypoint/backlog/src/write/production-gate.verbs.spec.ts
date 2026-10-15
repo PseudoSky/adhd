@@ -12,8 +12,13 @@
  * Negative controls (run once, then restored): re-adding `?? 'write'` in
  * `executeWriteTransaction` and dropping one `verb:` decoration turns the
  * matching row red (its message would say "write", not the verb).
+ *
+ * guards: a mounted write verb reaches the live PRODUCTION store, or its refusal names a generic "write" instead of the verb
+ * tier: S
+ * cites: 31b37c54 A-AC13; 3bd99d24 A-AC13
+ * teeth: red: pending (the negative controls above were run once and restored; no red-run record is cited for this variance edit)
  */
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -89,7 +94,11 @@ describe('31b37c54 A-AC13 — production gate names the real verb for every writ
   let uid: string;
   let project: string;
 
-  beforeEach(async () => {
+  // Variance fix (qa-variance 2026-10-14, verification pending): this was a per-test `beforeEach` (a real Turso open
+  // plus 5 seed writes, 24 times). Every test below drives a REFUSED write through the production gate, so the seeded
+  // state is never mutated by contract (the 'seed issue is unchanged' test asserts exactly that): one shared store is
+  // equivalent and removes 23 of the 24 store opens whose cost swung 0.3 - 2.7 s under load.
+  beforeAll(async () => {
     tmp = await openTmpStore('production-gate-verbs');
     const env = buildBacklogEnv({ adhdRoot: tmp.dir });
     const open: api.BacklogCtx = { store: tmp.store, env };
@@ -113,13 +122,8 @@ describe('31b37c54 A-AC13 — production gate names the real verb for every writ
     ctx = { ...open, productionWrite: { isProductionStore: true, allowProductionWrite: false } };
   });
 
-  afterEach(async () => {
+  afterAll(async () => {
     await tmp.cleanup();
-  });
-
-  it('31b37c54 A-AC13 — the verb list below is exactly the mounted write surface (drift guard)', () => {
-    const writeVerbs = BACKLOG_VERBS.filter((v) => !READ_ONLY_VERBS.has(v)).sort();
-    expect(Object.keys(INVOKERS).sort()).toEqual(writeVerbs);
   });
 
   for (const verb of Object.keys(INVOKERS)) {
@@ -138,6 +142,14 @@ describe('31b37c54 A-AC13 — production gate names the real verb for every writ
     await INVOKERS['update']!(ctx, uid, project);
     const got = await api.get({ ...ctx, productionWrite: undefined } as api.BacklogCtx, { uid });
     expect(got.ok && (got.data as { title: string }).title).toBe('seed');
+  });
+});
+
+// Pure checks (no store): kept out of the store-backed describe so they do not pay its setup.
+describe('31b37c54 / 3bd99d24 A-AC13 — static shape of the mounted write surface', () => {
+  it('31b37c54 A-AC13 — the verb list below is exactly the mounted write surface (drift guard)', () => {
+    const writeVerbs = BACKLOG_VERBS.filter((v) => !READ_ONLY_VERBS.has(v)).sort();
+    expect(Object.keys(INVOKERS).sort()).toEqual(writeVerbs);
   });
 
   it('3bd99d24 A-AC13 — api.ts has a single create-issue.js import and a non-async get', () => {
