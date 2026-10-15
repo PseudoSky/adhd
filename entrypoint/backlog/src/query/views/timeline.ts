@@ -10,8 +10,13 @@
  *
  * Without a `sessionId` the view covers EVERY session's ops whose `t` falls in
  * the window `[since, now]` (default: the last {@link DEFAULT_TIMELINE_WINDOW_DAYS}
- * days). The window keeps an unscoped read bounded on a long-lived store; pass
- * `since` to widen or narrow it.
+ * days; pass `since` to widen or narrow it). The window bounds the RESPONSE, not
+ * the store read: op events are loaded for every session and filtered in memory
+ * (push-down of the time predicate into the graph query is deferred).
+ *
+ * Window cursors are `<since>|<t>#<rowid>`: the cursor carries its window's lower
+ * bound, so paging keeps the same window even after the default window would
+ * have moved past the cursor's ops.
  */
 import type { GraphBackend, NodeRecord } from '@adhd/sox-graph-store';
 import { BacklogValidationError } from '../../write/errors.js';
@@ -92,15 +97,20 @@ function resolveSince(raw: string | undefined, now: number): string {
   return new Date(parsed).toISOString();
 }
 
-/** Applies the `after` cursor and the page size to an ordered op list. */
+/**
+ * Applies the `after` position and the page size to an ordered op list. `after`
+ * is an op key (`<t>#<rowid>`); `prefix` is prepended to the emitted cursor
+ * (window mode carries its `since` there).
+ */
 function pageOf(
   events: readonly IOpEventRow[],
-  after: string | undefined,
-  limit: number
+  afterKey: string | undefined,
+  limit: number,
+  prefix = ''
 ): { page: IOpEventRow[]; hasMore: boolean; nextCursor?: string } {
   let start = 0;
-  if (after !== undefined) {
-    const idx = events.findIndex((e) => `${e.t}#${e.rowid}` === after);
+  if (afterKey !== undefined) {
+    const idx = events.findIndex((e) => `${e.t}#${e.rowid}` === afterKey);
     if (idx < 0) throw new BacklogValidationError('after', 'is not a cursor from this timeline');
     start = idx + 1;
   }
@@ -110,8 +120,18 @@ function pageOf(
   return {
     page,
     hasMore,
-    ...(hasMore && last !== undefined ? { nextCursor: `${last.t}#${last.rowid}` } : {}),
+    ...(hasMore && last !== undefined ? { nextCursor: `${prefix}${last.t}#${last.rowid}` } : {}),
   };
+}
+
+/** Splits a window cursor into its `since` and op key; a cursor with no `since` part is not a window cursor. */
+function windowCursorOf(after: string | undefined): { since?: string; key?: string } {
+  if (after === undefined) return {};
+  const bar = after.indexOf('|');
+  if (bar < 0) throw new BacklogValidationError('after', 'is not a cursor from this timeline');
+  const since = after.slice(0, bar);
+  if (Number.isNaN(Date.parse(since))) throw new BacklogValidationError('after', 'is not a cursor from this timeline');
+  return { since: new Date(Date.parse(since)).toISOString(), key: after.slice(bar + 1) };
 }
 
 function opsOf(page: readonly IOpEventRow[]): ITimelineOp[] {
@@ -125,11 +145,17 @@ async function windowTimeline(
   input: ITimelineInput,
   limit: number
 ): Promise<ITimelineResult> {
-  const since = resolveSince(input.since, Date.now());
+  const now = Date.now();
+  const cursor = windowCursorOf(input.after);
+  if (cursor.since !== undefined && input.since !== undefined && resolveSince(input.since, now) !== cursor.since) {
+    throw new BacklogValidationError('after', 'was issued for a different since; pass the same since or none');
+  }
+  const since = cursor.since ?? resolveSince(input.since, now);
+  const upper = new Date(now).toISOString();
   const all = await loadOpEvents(graph, sessions, new Set(sessions.keys()));
-  const events = all.filter((e) => e.t >= since);
+  const events = all.filter((e) => e.t >= since && e.t <= upper);
   const touched = [...new Set(events.map((e) => e.targetUid))].sort();
-  const { page, hasMore, nextCursor } = pageOf(events, input.after, limit);
+  const { page, hasMore, nextCursor } = pageOf(events, cursor.key, limit, `${since}|`);
   return {
     session: null,
     children: [],
@@ -210,7 +236,7 @@ export async function timeline(graph: GraphBackend, input: ITimelineInput): Prom
     const sessions = await loadSessions(graph);
     return windowTimeline(graph, sessions, input, limit);
   }
-  if (input.sessionId.trim().length === 0) {
+  if (typeof input.sessionId !== 'string' || input.sessionId.trim().length === 0) {
     throw new BacklogValidationError('sessionId', 'must not be blank (omit it for every session in the window)');
   }
   if (input.since !== undefined) {

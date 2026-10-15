@@ -9,12 +9,14 @@
  * Negative control (run once, restored): dropping the descendant walk makes the
  * child's ops absent, so the "includes S1.1" row goes red.
  */
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { openTmpStore, type TmpStore } from '../test/helpers/tmp-store.js';
 import { buildBacklogEnv } from '../env.js';
 import * as api from '../api.js';
 import type { IOutcomeEnvelope } from '../envelope.js';
 import type { ITimelineResult } from './views/timeline.js';
+
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 function data<T>(r: IOutcomeEnvelope<T>): T {
   if (!r.ok) throw new Error(JSON.stringify(r));
@@ -110,10 +112,51 @@ describe('91a8c640 B-AC7 — timeline', () => {
       expect(r.window?.since).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
     });
 
-    it('the default window is the last 7 days: an explicit `since` older than the ops includes them all', async () => {
+    it('an explicit `since` older than the ops includes them all and echoes the window', async () => {
       const r = await tl({ since: '2000-01-01T00:00:00Z' });
       expect(r.ops).toHaveLength(4);
       expect(r.window?.since).toBe('2000-01-01T00:00:00.000Z');
+    });
+
+    describe('default 7-day window (clock moved with fake Date; the store is real)', () => {
+      afterEach(() => {
+        vi.useRealTimers();
+      });
+
+      it('ops inside the last 7 days are in the default window', async () => {
+        vi.useFakeTimers({ toFake: ['Date'], now: Date.now() + 6 * DAY_MS });
+        const r = await tl({});
+        expect(r.ops).toHaveLength(4);
+        expect(r.window?.since).toBe(new Date(Date.now() - 7 * DAY_MS).toISOString());
+      });
+
+      it('ops older than the default 7-day window are excluded when no `since` is given', async () => {
+        vi.useFakeTimers({ toFake: ['Date'], now: Date.now() + 8 * DAY_MS });
+        const r = await tl({});
+        expect(r.ops).toEqual([]);
+        expect(r.touched).toEqual([]);
+      });
+
+      it('a window cursor keeps its since: paging still works after the default window has moved past its ops', async () => {
+        const start = Date.now();
+        vi.useFakeTimers({ toFake: ['Date'], now: start });
+        const p1 = await tl({ limit: 3 });
+        expect(p1.nextCursor).toBeDefined();
+        vi.setSystemTime(start + 6 * DAY_MS);
+        const p2 = await tl({ limit: 3, after: p1.nextCursor });
+        expect(p2.ops).toHaveLength(1);
+        expect(p2.window?.since).toBe(new Date(start - 7 * DAY_MS).toISOString());
+      });
+
+      it('a window cursor is rejected when `since` contradicts it, and a session-style cursor is rejected in window mode', async () => {
+        const p1 = await tl({ limit: 3 });
+        const contradict = await api.timeline(ctx, { limit: 3, after: p1.nextCursor, since: '2000-01-01T00:00:00Z' } as never);
+        expect(contradict.ok).toBe(false);
+        if (!contradict.ok) expect(contradict.error.code).toBe('validation');
+        const sessionCursor = await api.timeline(ctx, { after: `${a}#1` } as never);
+        expect(sessionCursor.ok).toBe(false);
+        if (!sessionCursor.ok) expect(sessionCursor.error.code).toBe('validation');
+      });
     });
 
     it('a `since` after every op excludes them all (the window is a real lower bound)', async () => {
@@ -144,6 +187,11 @@ describe('91a8c640 B-AC7 — timeline', () => {
       const blank = await api.timeline(ctx, { sessionId: '   ' } as never);
       expect(blank.ok).toBe(false);
       if (!blank.ok) expect(blank.error.code).toBe('validation');
+      for (const sessionId of [null, 42]) {
+        const r = await api.timeline(ctx, { sessionId } as never);
+        expect(r.ok).toBe(false);
+        if (!r.ok) expect(r.error.code).toBe('validation');
+      }
     });
   });
 });

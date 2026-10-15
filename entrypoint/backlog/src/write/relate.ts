@@ -189,7 +189,7 @@ export async function relate(
   assertNonBlank('targetUid', input.targetUid);
   assertNonBlank('by', input.by);
   assertNotBareRoleLiteral('by', input.by);
-  const action = input.action ?? 'add';
+  const action = input.action === undefined ? 'add' : input.action;
   if (!RELATE_RELS.includes(input.rel)) {
     throw new InvalidArgumentError(
       'rel',

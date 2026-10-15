@@ -11,10 +11,10 @@
  * assertions below fail. GREEN: records arrive as `log.<level>('backlog.cli.log',
  * …)` and the process streams stay untouched.
  *
- * Tier: unit (default `test` lane). The sox `log` channel is mocked because it
- * is the external output boundary; `cliLogger` itself is the real code under
- * test. `VITEST` is unset for the body of each case because `testSilentLogger`
- * deliberately short-circuits to a no-op under vitest.
+ * guards: the CLI logger writes apigen trace records to stdout or stderr, drops the sox routing or the level threshold, or garbles a message-only call into character-indexed fields.
+ * tier: S
+ * cites: be8b3b0c-86a9-4f51-a208-683838ae70e6 (CLI apigen trace routed to sox telemetry, not stderr).
+ * The sox `log` channel is mocked because it is the external output boundary; `cliLogger` itself is the real code under test. `VITEST` is unset for the body of each case because `testSilentLogger` deliberately short-circuits to a no-op under vitest.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -85,6 +85,16 @@ describe('cliLogger (CLI apigen logger → sox-telemetry)', () => {
 
     expect(stdoutSpy).not.toHaveBeenCalled();
     expect(stderrSpy).not.toHaveBeenCalled();
+  });
+
+  it('a message-only call (logger.info(msg), the apigen run.ts:605 shape) carries the message, not character-indexed fields', () => {
+    const logger = cliLogger() as unknown as { info(msg: string): void };
+    logger.info('cli run: signal already aborted before dispatch — skipping');
+
+    expect(logMock.info).toHaveBeenCalledWith('backlog.cli.log', {
+      level: 'info',
+      msg: 'cli run: signal already aborted before dispatch — skipping',
+    });
   });
 
   it('maps warn and error to their sox levels', () => {

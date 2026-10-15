@@ -14,8 +14,9 @@
  * the "omitted" cases fail. GREEN: the omitted case resolves to the documented
  * default and the explicit/invalid cases keep their original behaviour.
  *
- * Tier: unit (default `test` lane) — in-process against a real store
- * (`openTestIssueStore`), no subprocess, no embedding model.
+ * guards: an optional input with a documented default (openCurve.at, claim.action, relate.action, obligate.on_fail) is required, or resolves to the wrong default, or an explicit invalid or null value is silently defaulted instead of rejected.
+ * tier: S
+ * cites: be8b3b0c-86a9-4f51-a208-683838ae70e6 (optional inputs resolve their documented defaults; explicit values keep validation).
  */
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -102,6 +103,13 @@ describe('optional inputs resolve their documented defaults (real store)', () =>
         })
       ).rejects.toBeInstanceOf(InvalidArgumentError);
     });
+
+    it('an explicit null action is rejected, not silently defaulted to "claim"', async () => {
+      const uid = await newIssue('claim target null action');
+      await expect(
+        claim(store, { uid, by: 'agent-a', action: null as unknown as IClaimInput['action'] })
+      ).rejects.toBeInstanceOf(InvalidArgumentError);
+    });
   });
 
   describe('relate: action', () => {
@@ -128,6 +136,20 @@ describe('optional inputs resolve their documented defaults (real store)', () =>
           targetUid: b,
           rel: 'relates_to',
           action: 'bogus' as unknown as IRelateInput['action'],
+          by: 'agent-a',
+        })
+      ).rejects.toBeInstanceOf(InvalidArgumentError);
+    });
+
+    it('an explicit null action is rejected, not silently defaulted to "add"', async () => {
+      const a = await newIssue('relate source null action');
+      const b = await newIssue('relate target null action');
+      await expect(
+        relate(store, {
+          sourceUid: a,
+          targetUid: b,
+          rel: 'relates_to',
+          action: null as unknown as IRelateInput['action'],
           by: 'agent-a',
         })
       ).rejects.toBeInstanceOf(InvalidArgumentError);
@@ -171,6 +193,19 @@ describe('optional inputs resolve their documented defaults (real store)', () =>
           applies_to: { to: 'RESOLVED' },
           requirement: { op: 'blockers_terminal' },
           on_fail: 'bogus' as unknown as IObligateInput['on_fail'],
+          by: 'declarer:1',
+        })
+      ).rejects.toBeInstanceOf(InvalidArgumentError);
+    });
+
+    it('an explicit null on_fail is rejected, not silently defaulted to "block"', async () => {
+      const uid = await newIssue('obligation null severity');
+      await expect(
+        obligate(store, {
+          uid,
+          applies_to: { to: 'RESOLVED' },
+          requirement: { op: 'blockers_terminal' },
+          on_fail: null as unknown as IObligateInput['on_fail'],
           by: 'declarer:1',
         })
       ).rejects.toBeInstanceOf(InvalidArgumentError);

@@ -380,7 +380,7 @@ export async function obligate(
 
   const appliesTo = normaliseAppliesTo(input.applies_to);
 
-  const onFail = input.on_fail ?? 'block';
+  const onFail = input.on_fail === undefined ? 'block' : input.on_fail;
   if (onFail !== 'block' && onFail !== 'warn') {
     throw new InvalidArgumentError('on_fail', 'must be "block" or "warn"');
   }

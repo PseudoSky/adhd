@@ -203,12 +203,16 @@ export function cliLogger(): Logger {
       ? (CLI_LOG_THRESHOLD[raw] as number)
       : (CLI_LOG_THRESHOLD['info'] as number);
 
+  // pino's two call shapes: `logger.info(msg)` and `logger.info(fields, msg)`.
+  // A string-only call must not be spread as a fields object (that garbles it
+  // into character-indexed keys).
   const method =
     (name: string) =>
-    (obj: Record<string, unknown>, msg: string): void => {
+    (objOrMsg: Record<string, unknown> | string, msg?: string): void => {
       const rank = CLI_METHOD_RANK[name] as number;
       if (rank < threshold) return;
-      const fields = { ...serialiseCliFields(obj), level: name, msg };
+      const [obj, text] = typeof objOrMsg === 'string' ? [{}, objOrMsg] : [objOrMsg ?? {}, msg ?? ''];
+      const fields = { ...serialiseCliFields(obj), level: name, msg: text };
       if (rank >= 50) log.error('backlog.cli.log', fields);
       else if (rank >= 40) log.warn('backlog.cli.log', fields);
       else if (rank >= 30) log.info('backlog.cli.log', fields);

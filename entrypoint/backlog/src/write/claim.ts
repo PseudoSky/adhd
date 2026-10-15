@@ -257,7 +257,7 @@ export async function claim(
   assertNonBlank('uid', input.uid);
   assertNonBlank('by', input.by);
   assertNotBareRoleLiteral('by', input.by);
-  const action = input.action ?? 'claim';
+  const action = input.action === undefined ? 'claim' : input.action;
   if (
     action !== 'claim' &&
     action !== 'release' &&

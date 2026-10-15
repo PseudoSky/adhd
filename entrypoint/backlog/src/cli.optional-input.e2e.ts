@@ -1,4 +1,9 @@
 /**
+ * guards: a verb whose input is entirely optional rejects a bare call (missing --input), or a verb with a required key runs without it, or the CLI writes an apigen trace line to stderr.
+ * tier: P
+ * gap: This cannot be observed at tier S because it must spawn the built dist/index.js and read its real exit status and stdout envelope as a consumer does.
+ * cites: be8b3b0c-86a9-4f51-a208-683838ae70e6 (optional-input verbs run with no --input; CLI trace off stderr).
+ *
  * cli.optional-input.e2e.ts — a verb whose input is entirely optional runs
  * with NO `--input` flag, while a verb with a required field still rejects a
  * missing `--input`.
