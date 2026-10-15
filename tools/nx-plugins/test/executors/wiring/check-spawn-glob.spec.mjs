@@ -27,6 +27,7 @@ import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { BASELINE_REL, collectSpawnIsolationViolations, owningPackage } from './check-spawn-isolation.mjs';
 import { collectAgentLaneSpawnViolations } from './check-agent-lane-spawn.mjs';
+import { excludeEntry } from './glob-exclusions.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '../../../../..');
@@ -110,6 +111,18 @@ test('plan discovery-sweep-1014 blind-review D AC1 an @adhd/environment package 
       assert.equal(res.scanned, 0);
     },
   );
+});
+
+test('plan discovery-sweep-1014 blind-review D AC1 exclude predicate handles the Dirent shape (Node 22) and the path-string shape (Node 24) alike [AC1]', () => {
+  const cwd = join(SCRATCH_PARENT, 'dirent-shape');
+  const exclude = excludeEntry(cwd);
+  // Node 22 may hand the predicate a Dirent: parentPath (or path) plus name.
+  assert.equal(exclude({ name: 'a.spec.ts', parentPath: join(cwd, 'packages/x/node_modules/dep') }), true);
+  assert.equal(exclude({ name: 'a.spec.ts', path: join(cwd, 'packages/x/dist') }), true);
+  assert.equal(exclude({ name: 'a.spec.ts', parentPath: join(cwd, 'packages/x/src') }), false);
+  // Node 24 hands a cwd-relative string; the same segment rule must apply.
+  assert.equal(exclude('packages/x/node_modules/dep/a.spec.ts'), true);
+  assert.equal(exclude('packages/x/src/a.spec.ts'), false);
 });
 
 test('plan discovery-sweep-1014 blind-review D AC1 agent-lane never visits node_modules, dist, .worktrees or .claude [AC1]', () => {
