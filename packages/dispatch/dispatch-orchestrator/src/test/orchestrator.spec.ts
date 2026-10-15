@@ -1,11 +1,19 @@
 /**
  * orchestrator.spec.ts — integration tests for the minimal dispatch loop.
  *
+ * qa-variance (2026-10-14, verification pending: tests not run per user instruction):
+ *   failure mode guarded: guard pass/fail results are wrong or not persisted; tier S (real
+ *   serializer + real `sh -c` guard exec, no network). The guard fixtures were `node -e
+ *   "process.exit(n)"`, which pays a full node start-up (tens of ms, 10x under load average
+ *   30-150) per guard run and made every orchestrateCycle test highly variable; they are now
+ *   `exit n`, which still goes through the same real `exec` -> `sh -c` -> exit-code path and
+ *   asserts the same outcomes. red: pending.
+ *
  * Real components throughout: real `createJsonFileSerializer` writing to a
  * synthetic dag.json under `tmp/dispatch-orchestrator/orchestrator-spec/`,
  * real `DagClient`, real `snapshot()`/`optimize()` from
  * `@adhd/dispatch-core-optimizer`, real `node:child_process` guard execution
- * against cheap real commands (`node -e "process.exit(0|1)"`). The only test
+ * against cheap real commands (`sh -c "exit 0|1"`). The only test
  * double is `MockAgentRunner` — the documented external boundary (a real
  * agent-mcp dispatch is a paid third-party model call; see
  * packages/dispatch/dispatch-orchestrator/src/test/helpers/mock-agent-runner.ts).
@@ -69,8 +77,9 @@ afterAll(() => {
 // ── Fixtures ─────────────────────────────────────────────────────────────────
 // ---------------------------------------------------------------------------
 
-const PASS_GUARD = 'node -e "process.exit(0)"';
-const FAIL_GUARD = 'node -e "process.exit(1)"';
+// Real `sh -c` guards (the default executor's contract) without a node start-up per run.
+const PASS_GUARD = 'exit 0';
+const FAIL_GUARD = 'exit 1';
 
 function makePartialBinding(): PartialBinding {
   return {
