@@ -26,7 +26,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 import { acquireDispatchLock, DuplicateDispatchError, MockAgentRunner } from '@adhd/dispatch-orchestrator';
-import type { DispatchUnit } from '@adhd/dispatch-orchestrator';
+import type { DispatchUnit } from '@adhd/dispatch-base-spec';
 
 import * as core from '../lib/core.js';
 import { makeFixtureDag, makeOp } from './helpers/fixtures.js';
