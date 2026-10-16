@@ -458,6 +458,19 @@ published/installed); on such a build `gitContext` may be rejected with
 absent. Run `adhd-backlog --help` and compare it against
 [§1 of REFERENCE.md](skill/REFERENCE.md) if a documented field or verb is refused.
 
+### Output streams (CLI)
+
+stdout carries the outcome envelope: `{"ok":true,"data":…}` on success, or
+`{"ok":false,"error":{code,message,details}}` when the verb reports a failure. A reported
+failure exits with the code for its error (for example 1 for `item_not_found`, 2 for
+`validation`); the full mapping is `CLI_EXIT_CODE` in `src/envelope.ts`. An invocation the CLI cannot
+dispatch, such as a required `--input` that is missing, exits 2 with a `{code,message}`
+error on stderr instead. The per-call trace (`→ backlog <verb>`, with `command` and `ms`)
+is written to the sox durable log, `~/.adhd/sox-ecosystem/backlog/logs`, or to a
+`backlog-sandbox-logs-*` temp directory under `--namespace sandbox`. Set
+`ADHD_BACKLOG_LOG_LEVEL` to `trace|debug|info|warn|error|fatal` to change the threshold
+(default `info`), or `silent` to drop trace records.
+
 ## Build & startup
 
 `nx build backlog` emits TWO things into `dist/`: the compiled
@@ -563,7 +576,8 @@ See [`CONTRIBUTING.md`](CONTRIBUTING.md). This package is MIT-licensed under
 
 Mutating verbs accept `sessionId`/`parentSessionId`; each such call appends one
 append-only op-event, `claim`/`renew`/`release` persist a reservation, and
-`timeline {sessionId}` reconstructs what a session (and its child sessions) did.
+`timeline {sessionId}` reconstructs what a session (and its child sessions) did; `timeline` with no `sessionId` lists every session's ops from the last 7 days
+(`since` widens or narrows the window).
 `query {view:"reservations"|"sessions"|"orphaned-parents"|"registry-orphans"}` and
 `query {projection:"byCitationPath", path}` are the store-wide reads. Placement is n:m with
 one primary owner (`get {fields:["primaryOwner","memberships"]}`); citations check that

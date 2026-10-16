@@ -44,7 +44,7 @@ import {
 import {
   buildBacklogApigenPackage,
   requireRun,
-  testSilentLogger,
+  cliLogger,
 } from './server.js';
 import { runInstallSkillCommand } from './install-skill.js';
 import { runInstallCommand } from './install.js';
@@ -1027,7 +1027,7 @@ export async function runBacklogCli(
           isOutcomeEnvelope(result) ? exitCodeForEnvelope(result) : undefined,
       },
       signal: opts.signal ?? new AbortController().signal,
-      logger: testSilentLogger(),
+      logger: cliLogger(),
     });
 
     // BUG-BACKLOG-BATCH-DISCOVERABILITY-001: a per-verb `--help` (e.g.
