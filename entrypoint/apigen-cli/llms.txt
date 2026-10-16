@@ -1,7 +1,7 @@
 # @adhd/apigen-cli — LLM summary
 
 ## Identity
-- npm: @adhd/apigen-cli (0.1.0) — bin: `apigen`
+- npm: @adhd/apigen-cli — bin: `apigen`
 - Source: entrypoint/apigen-cli/ in adhd monorepo
 - License: MIT
 - Build: npx nx build apigen-cli

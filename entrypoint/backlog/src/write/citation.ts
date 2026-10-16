@@ -44,8 +44,8 @@
 import type { ISessionStamp } from './session-stamp.js';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { createReadStream } from 'node:fs';
-import { isAbsolute, relative, resolve as resolvePath, sep } from 'node:path';
+import { createReadStream, existsSync, realpathSync } from 'node:fs';
+import { basename, dirname, isAbsolute, join, relative, resolve as resolvePath, sep } from 'node:path';
 import type { AdapterTransaction } from '@adhd/sox-store-adapter';
 import {
   citationKeyFromMetadata,
@@ -244,6 +244,8 @@ export interface ICitationVerification {
   reason?: CitationUnverifiedReason;
   /** `path` | `url` | `registry` | `query`. */
   targetType: string;
+  /** For `revision-unresolved`: every repository root the pinned revision was tried in, in order. */
+  triedRepos?: readonly string[];
 }
 
 /**
@@ -323,14 +325,80 @@ function unverified(reason: CitationUnverifiedReason): ICitationVerification {
 }
 
 /**
+ * The root of the git repository enclosing the absolute path `file`, or
+ * `undefined` when none contains it (not in a work tree, no `git` binary).
+ * `file` itself need not exist (a path that only exists at the pinned revision
+ * is legitimate): the nearest existing ancestor is asked, and the missing tail
+ * is re-joined onto its canonical form so the result composes with git's own
+ * (symlink-resolved) `--show-toplevel`.
+ */
+function enclosingRepoOf(file: string): { root: string; canonicalFile: string } | undefined {
+  let dir = dirname(resolvePath(file));
+  const tail: string[] = [basename(file)];
+  while (!existsSync(dir)) {
+    const parent = dirname(dir);
+    if (parent === dir) return undefined;
+    tail.unshift(basename(dir));
+    dir = parent;
+  }
+  try {
+    const root = execFileSync('git', ['-C', dir, 'rev-parse', '--show-toplevel'], {
+      stdio: ['ignore', 'pipe', 'ignore'],
+    })
+      .toString()
+      .trim();
+    if (root.length === 0) return undefined;
+    return { root, canonicalFile: join(realpathSync(dir), ...tail) };
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Resolve a revision-pinned citation. The repository that holds the cited path
+ * is not necessarily the item's own project repo, so the pinned revision is
+ * tried, in order, in: the item's project repo; for an ABSOLUTE path, the git
+ * repo that encloses it; and the repos of the other registered projects
+ * (`siblingRoots`, the store's own registry — no disk scan). The first repo in
+ * which `git show <revision>:<path>` resolves wins; the integrity guarantee
+ * (the cited file exists at that revision in a real repo) is unchanged.
+ */
+function verifyAtRevision(
+  projectRoot: string,
+  file: string,
+  revision: string,
+  siblingRoots: readonly string[]
+): ICitationVerification {
+  const attempts: Array<{ root: string; file: string }> = [{ root: projectRoot, file }];
+  if (isAbsolute(file)) {
+    const enclosing = enclosingRepoOf(file);
+    if (enclosing !== undefined) attempts.push({ root: enclosing.root, file: enclosing.canonicalFile });
+  }
+  for (const sibling of siblingRoots) attempts.push({ root: sibling, file });
+
+  const tried: string[] = [];
+  for (const attempt of attempts) {
+    if (tried.includes(attempt.root)) continue;
+    tried.push(attempt.root);
+    const relpath = toRepoRelative(attempt.root, attempt.file);
+    if (relpath === undefined) continue;
+    const sha = readCitationShaAtRevision(attempt.root, revision, relpath);
+    if (sha !== undefined) return { sha, outcome: 'verified', targetType: 'path' };
+  }
+  return { ...unverified('revision-unresolved'), triedRepos: tried };
+}
+
+/**
  * The citation verification rule, in ONE place (A-AC1..3, breaking #8).
  * EXISTENCE — not project membership — decides verification:
  *
  * - `url:`/`registry:`/`query:` anchors bypass the filesystem (see
  *   {@link abstractAnchorVerification}).
  * - A PATH-LESS project cannot content-address anything → `path-less-project`.
- * - Revision-pinned: `git show <revision>:<relpath>` resolves → verified, else
- *   `revision-unresolved`.
+ * - Revision-pinned: `git show <revision>:<relpath>` resolves in the item's
+ *   project repo, the repo enclosing an absolute path, or another registered
+ *   project's repo ({@link verifyAtRevision}) → verified, else
+ *   `revision-unresolved` listing every repo tried.
  * - Working tree: the canonical target is `stat`ed. A regular FILE is read and
  *   hashed (verified) REGARDLESS of whether it sits inside the project root —
  *   an existing out-of-root file or a worktree-only path is verified. A
@@ -355,14 +423,7 @@ export async function computeCitationSha(
   if (!projectHasKnownPath(project)) return unverified('path-less-project');
 
   if (revision !== undefined) {
-    const relpath = toRepoRelative(project.metadata.path, file);
-    const sha =
-      relpath === undefined
-        ? undefined
-        : readCitationShaAtRevision(project.metadata.path, revision, relpath);
-    return sha === undefined
-      ? unverified('revision-unresolved')
-      : { sha, outcome: 'verified', targetType: 'path' };
+    return verifyAtRevision(project.metadata.path, file, revision, siblingRoots);
   }
 
   try {
@@ -451,7 +512,8 @@ export function assertCitationShasVerifiable(
     if (refusable && policy.citationRequiresSha && projectHasKnownPath(project)) {
       throw new CitationUnverifiableError(
         citations[i]!.file,
-        v.reason as CitationUnverifiableReason
+        v.reason as CitationUnverifiableReason,
+        v.triedRepos
       );
     }
     if (v.reason === 'path-less-project' && policy.citationRequiresSha) {
