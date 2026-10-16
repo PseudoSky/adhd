@@ -518,11 +518,14 @@ export class CitationUnverifiableError extends BacklogWriteError {
    */
   constructor(
     public readonly target: string,
-    public readonly reason: CitationUnverifiableReason = 'target-missing'
+    public readonly reason: CitationUnverifiableReason = 'target-missing',
+    /** For `revision-unresolved`: every repository root the revision was tried in. */
+    public readonly triedRepos: readonly string[] = []
   ) {
     super(
       `Citation target "${target}" could not be verified and this project requires a real sha — ` +
         UNVERIFIABLE_REASON_TEXT[reason] +
+        (triedRepos.length > 0 ? ` (repos tried: ${triedRepos.join(', ')})` : '') +
         '. Cite a path that exists (anywhere on this machine — project membership is not required), ' +
         'or set project_policy.citationRequiresSha to false.'
     );

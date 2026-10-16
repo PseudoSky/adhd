@@ -1,12 +1,12 @@
 {
   "name": "@adhd/apigen-plugin-api-express",
-  "version": "0.2.8",
+  "version": "0.2.9",
   "main": "./dist/index.js",
   "dependencies": {
     "@adhd/apigen-base-errors": "^0.2.3",
-    "@adhd/apigen-core-client": "^0.3.4",
-    "@adhd/apigen-engine-naming": "^0.2.5",
-    "@adhd/apigen-engine-runtime": "^0.3.3",
+    "@adhd/apigen-core-client": "^0.3.5",
+    "@adhd/apigen-engine-naming": "^0.2.6",
+    "@adhd/apigen-engine-runtime": "^0.3.4",
     "express": "^5.2.1",
     "pino-http": "11.0.0"
   },

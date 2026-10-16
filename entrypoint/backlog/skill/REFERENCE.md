@@ -512,7 +512,11 @@ $ adhd-backlog backlog update --input '{"uid":"a61ff0b6-…","by":"claude:1","ci
 
 **Cite a branch-only file with `revision`.** A citation whose `file` exists only
 on an unmerged branch is unreadable from the working tree; pin it to the branch
-and the sha is resolved from `git show <revision>:<path>` instead:
+and the sha is resolved from `git show <revision>:<path>` instead. The item's
+own project repo is tried first; an absolute `file` is also tried in the git repo
+that encloses it, and any registered project's repo is tried too, so a citation
+may live in a different repo from the item (e.g. an item under one project citing
+`/abs/path/in/another/repo` at that repo's sha):
 
 ```
 $ adhd-backlog backlog add-citation --input '{"uid":"a61ff0b6-…","by":"claude:1","citation":{"file":"packages/auth/src/index.ts","revision":"feat/auth"}}'
@@ -522,8 +526,11 @@ $ adhd-backlog backlog add-citation --input '{"uid":"a61ff0b6-…","by":"claude:
 **Move an issue to a new status.** A terminal `toStatus` REQUIRES `citations`
 only when the project's policy turns citation enforcement ON — `citationRequired`
 defaults to `false`, so out of the box no citation is required. When a project
-HAS turned it on, citations must be verifiable against the project's own
-filesystem path — an unverifiable citation is rejected with `precondition_failed`:
+HAS turned it on, citations must be verifiable — the cited file must exist
+(and, when pinned with `revision`, exist at that revision in some real repo: the
+item's own project repo, the git repo enclosing an absolute path, or another
+registered project's repo). An unverifiable citation is rejected with
+`precondition_failed`, and the message lists the repos tried:
 
 ```
 $ adhd-backlog backlog transition --input '{

@@ -1,3 +1,7 @@
+## 0.2.9 (2026-10-15)
+
+This was a version bump only for apigen-plugin-api-fastify to align it with other projects, there were no code changes.
+
 ## 0.2.8 (2026-10-09)
 
 ### 🩹 Fixes

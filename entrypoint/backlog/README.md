@@ -142,8 +142,11 @@ adhd-backlog claim --input '{"uid":"b3b2da0e-…","by":"agent:worker-1","action"
 
 A citation is `{ file, lines?, context?, symbol? }`, not hand-typed markdown.
 When a project enforces citations, a terminal transition is rejected with
-`precondition_failed` unless every cited file resolves inside the project's own
-registered path. Name a `symbol` and the store shells out to
+`precondition_failed` unless every cited file exists. A revision-pinned citation
+(`revision`) is verified in the repo that actually contains the path: the item's
+own project repo, the git repo enclosing an absolute path, or another registered
+project's repo, so an item can cite a file in a different repo at that repo's
+sha. Name a `symbol` and the store shells out to
 `gitnexus impact <symbol>` at write time to stamp a best-effort `blastRadius`
 on the citation.
 
@@ -427,7 +430,12 @@ directory target is rejected as a non-retryable `validation` error.
 Pin a citation to a git revision with `revision` (a branch, tag, or sha) to cite
 a file that exists **only on an unmerged branch** — the target is read from
 `git show <revision>:<path>` rather than the working tree, so the sha is a real
-content hash even though the file is not checked out.
+content hash even though the file is not checked out. The revision is tried in
+the item's own project repo first, then (for an absolute `file`) the git repo
+that encloses it, then the repos of the other registered projects; a repo-relative
+`file` can therefore resolve in a sibling project's repo. The citation is refused
+only when no repo contains the file at that revision, and the error lists every
+repo tried.
 
 The item-level **`gitContext`** is separate from a citation's own `context`:
 it records the repo disclosure contract's `<active git context>` — the first
