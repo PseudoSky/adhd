@@ -1,3 +1,17 @@
+## 2.3.16 (2026-10-20)
+
+### 🚀 Features
+
+- **agent-engine-orchestrator:** load plugins from a preloaded module map ([d8099256](https://github.com/PseudoSky/adhd/commit/d8099256))
+
+### 🩹 Fixes
+
+- **agent-engine-orchestrator:** send the resolved Anthropic base URL to the SDK client ([dd20e8e3](https://github.com/PseudoSky/adhd/commit/dd20e8e3))
+
+### ❤️ Thank You
+
+- pseudosky
+
 ## 2.3.15 (2026-10-19)
 
 ### 🚀 Features

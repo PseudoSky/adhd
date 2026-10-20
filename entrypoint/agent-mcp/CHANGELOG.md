@@ -1,3 +1,13 @@
+## 2.3.16 (2026-10-20)
+
+### 🚀 Features
+
+- **agent-mcp:** ship a single-file bundle with --version on every bin ([764fbb9e](https://github.com/PseudoSky/adhd/commit/764fbb9e))
+
+### ❤️ Thank You
+
+- pseudosky
+
 ## 2.3.15 (2026-10-19)
 
 ### 🚀 Features
