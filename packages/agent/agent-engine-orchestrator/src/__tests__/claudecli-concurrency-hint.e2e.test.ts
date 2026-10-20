@@ -29,7 +29,7 @@ import { FAKE_CLAUDE, makeBridgeEnv, type IBridgeEnv } from "./fixtures/bridge-e
 
 const COUNTING = fileURLToPath(new URL("./fixtures/counting-mcp-server.mjs", import.meta.url));
 /** claude CLI version the AC5 finding was recorded against; a different version must re-prove it. */
-const PINNED_CLAUDE_VERSION = "2.1.300";
+const PINNED_CLAUDE_VERSION = "2.1.304";
 const logger: EngineLogger = { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} };
 
 const scratch: string[] = [];
