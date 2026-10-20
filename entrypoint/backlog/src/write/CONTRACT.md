@@ -1393,7 +1393,7 @@ the `serve` server args, e.g. `.mcp.json`) — never an ambient env toggle
 (ADR-0013). Maps to `precondition_failed`; refused before any transaction opens,
 so it has no side effect. **Additive** — appended after every pre-existing export.
 
-### `NoteNotFoundError(uid)` — class (`errors.ts:1009`)
+### `NoteNotFoundError(uid)` — class (`errors.ts:1012`)
 
 ```ts
 export class NoteNotFoundError extends BacklogWriteError {
@@ -1407,7 +1407,7 @@ Guarantees: thrown by `removeNote` when `uid` is not a LIVE `note` node, is
 already removed, names a node of another kind, or has no live owning issue.
 Maps to `item_not_found`. **Additive** — appended after every pre-existing export.
 
-### `NoteRemovalNotPermittedError(noteUid, actor)` — class (`errors.ts:1027`)
+### `NoteRemovalNotPermittedError(noteUid, actor)` — class (`errors.ts:1030`)
 
 ```ts
 export class NoteRemovalNotPermittedError extends BacklogWriteError {
