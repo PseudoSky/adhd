@@ -1712,3 +1712,502 @@ Running tests pins ~200% CPU. Likely vitest pool/thread parallelism plus real wo
 
 **Citations:** [tools/vite-plugins/vitest-pool-defaults.mjs]
 - Note (main, 2026-07-25T01:33:31.929Z): [transition to RESOLVED] fixed in 91ddcf7a: shared vitest-pool-defaults caps 45 previously-unbounded thread pools (clamp(ceil(cores/3),2,4)), curbing cross-project oversubscription under nx parallel. Residual single-suite spike is concurrency-scale.spec.ts spawning 20 real worker_threads by design (CAS-race proof per MIGRATION.md 3.3) - intentional, not lowered.
+
+---
+
+### PRODUCT-TRIAGE-REVERSE-APIS-001 — the reverse-apis project has 0 terminal items against 18 non-terminal, and one of its items has a title-identical twin already closed DUPLICATE in another project
+
+**Status:** OPEN
+
+**Discovered:** 2026-10-08, product triage pass over backlog project `reverse-apis` (project uid `8f025539-5354-4e65-bc27-e443afa19bcb`, component `466a0dc3-f5f3-4549-bb7b-3a13cf6c2118` `(root)`). Deliverable: `tmp/agent-mcp-live/product/reverse-apis.md`.
+**Where:** the backlog graph, project `8f025539-5354-4e65-bc27-e443afa19bcb`. `backlog_report` with `statusScope: "all"` returns only `[{open, terminal:false, 5}, {UNKNOWN, terminal:false, 13}]` — **no terminal status row exists for this project at all**. All 18 items were imported 2026-09-22 by actor `etl` from `/Users/nix/dev/projects/reverse-apis/BACKLOG.md`.
+**Impact:** there is no in-project exemplar of the closure standard, so "what shipped" is unrecorded for this project and any new item has nothing to imitate. Three aggravating facts: (1) `a64d2899-b5d7-49e0-a194-af7175e88de2` has a **title-identical twin, `c85aa429-1745-4654-87b1-c2abd36b5e33`, already terminal `DUPLICATE`** in project `7ee5721e-…`, matching on all four evidence keys (`getStoreAvailability`, `api_web_gateway_web_availability_stores_storeId_zone`, `rappi`, `tripwire`) — a dedupe decision is owed, do not bulk-close; (2) **13 of 18 items carry status `UNKNOWN`**, a live non-terminal term that no human chose as a workflow state — the importer should say whether `open` was intended; (3) `a64d2899` carries a `DEAD` verdict produced by grooming run `wf_28c6a91a-4c9` in which 82% of triage agents had no graph access — that batch searched the wrong repository, found nothing and concluded the item was dead, so the verdict is bad evidence and the item is **unassessed on its merits**.
+**Fix direction:** decide the fate of the duplicate twin (`c85aa429` vs `a64d2899`) individually with evidence; adjudicate whether `UNKNOWN` was intended for the 13; and establish a closure path for this project so the next pass can see what was shipped. The product pass also grouped the 18 items into 10 feature sets (FS-01…FS-10) with binary ACs — that grouping exists only as a document, no epics were minted.
+**Citations:** [product session 58280302, claude, reverse-apis discovery triage, 1: backlog_report/statusScope:all for project 8f025539 showing zero terminal rows, 2: operator similar-item pass — `grep:tripwire` / `grep:getStoreAvailability` across the whole store, 3: item a64d2899 body (carried-over grooming note wf_28c6a91a-4c9), 4: tmp/agent-mcp-live/product/reverse-apis.md §8]
+
+### PRODUCT-TOOLING-GAP-REVERSE-APIS-REPO-ACCESS-001 — the product agent's filesystem is confined to the adhd repo, so it cannot open a single source file of the project it owns the roadmap for
+
+**Status:** OPEN
+
+**Discovered:** 2026-10-08, same product triage pass. Every file:line reference and every quoted runtime result in `tmp/agent-mcp-live/product/reverse-apis.md` is **second-hand from item bodies**.
+**Where:** the product agent's allowed filesystem root is `/Users/nix/dev/node/adhd` (confirmed via `list_allowed_directories`). The project under triage is `/Users/nix/dev/projects/reverse-apis` — a separate Nx workspace with its own `AGENTS.md`, `BACKLOG.md` and `.mcp.json`, per the evidence carried in item `a64d2899`.
+**Impact:** the product agent owns WHAT and WHY for this project but **cannot verify a single claim against source**: it cannot read `packages/apis/rappi/src/lib/endpoints/search/suggestions.ts`, `cross-store.ts`, `discover-sequences.ts`, `extract.ts`, `sequencing.ts`, `parity.ts`, `cdp-capture.ts`, `compose-schemas.ts`, `executor.ts`, `VISION.md`, `REARCHITECTURE.md`, `README.md` or `FOLLOWUPS.md`. Consequences: (a) acceptance criteria cannot be falsified by their author before hand-off; (b) an adhd ADR cannot be asserted as binding on that repo, only cited as precedent — the reverse-apis decision catalog was unreadable; (c) the 10 ACs in the deliverable are proposals whose paths are leads to verify, not verified facts. The B-003 cross-reference in item `8985e345` (`agent-browser adhd/cdp-connection/src/session.ts`) likewise could not be checked.
+**Fix direction:** either widen the product agent's allowed roots to include the repository it owns the roadmap for, or run the triage pass inside that workspace with an agent that can reach it. Mechanism is `architect-decision`'s. **Should be fixed before the next planning pass** — this one materially degrades the deliverable.
+**Citations:** [product session 58280302, claude, reverse-apis discovery triage, 1: list_allowed_directories → `/Users/nix/dev/node/adhd` only, 2: item a64d2899 body ("git -C /Users/nix/dev/projects/reverse-apis rev-parse --show-toplevel confirms a distinct repo root"), 3: tmp/agent-mcp-live/product/reverse-apis.md §6]
+
+### PRODUCT-GAP-SEARCH-CORRECTNESS-DESIGN-IS-UNBACKED-BY-ANY-ITEM — three of five Rappi bugs cite a design doc that no backlog item tracks
+
+**Status:** OPEN
+
+**Discovered:** 2026-10-08, same product triage pass.
+**Where:** `docs/design/rappi-search-correctness.md` §0.3, cited as the motivating design doc by items `25c1c7db` (Wong-biased suggester default), `30cf54ad` (no store-scoped availability oracle) and `e64cd533` (its rappi-shop skill note). The motivating incident: a `menta` query returned 60 confectionery SKUs and no fresh herbs.
+**Impact:** the recall/shelf-correctness design has a design doc and **no owner's ticket**. Either it is already shipped (in which case say so, and FS-04/FS-03 lose a dependency and FS-04's priority drops) or it is unbuilt work living only in a doc — invisible to any backlog-driven plan, and the reason three separate bugs each independently cite it.
+**Fix direction:** determine whether `rappi-search-correctness.md` is delivered, partially delivered, or unbuilt; if unbuilt, file it as its own item and link the three citing bugs to it.
+**Citations:** [product session 58280302, claude, reverse-apis discovery triage, 1: items 25c1c7db / 30cf54ad / e64cd533 bodies (each cites docs/design/rappi-search-correctness.md §0.3), 2: tmp/agent-mcp-live/product/reverse-apis.md §4 FS-04, §8 F-03]
+
+### PRODUCT-TOOLING-GAP-PRIORITY-WRITE-IS-NOT-DURABLY-RELIABLE-001 — the product owner's priority mandate (duty 6) is one dropped context away from silently not executing
+
+**Status:** OPEN
+
+**Discovered:** 2026-10-08, reverse-apis priority write-back. Related to PRODUCT-TOOLING-GAP-BACKLOG-ACCESS-001 (below), but a distinct failure: that one is about read cost, this one is about **write reliability**.
+**Where:** the product → `backlog-operator` write path. A single `backlog_batch_action` → `backlog/update` covering 17 uids.
+**What happened:** the first dispatch **failed as a whole** and returned `ESCALATE` — not because the request was wrong, but because two preconditions were unmet: (1) the operator reported the uid→priority **mapping as lost to its own conversation compaction** and refused to write 17 production values on a guess (correct refusal); (2) every mutating verb requires `by = "${agentName}:${instanceId}"`, which a product-side dispatch had never supplied, so no conforming identity could be formed. Nothing was written by the failed hop. The re-dispatch with the mapping restated inline **plus an explicit `by` value** (`product:<product session id>`) succeeded: 17 applied, 1 verified no-op, read-back confirming 4 HIGH / 12 MEDIUM / 2 LOW. Cost of the two hops: 1,305,135 + 421,990 = **≈1.73M input tokens to perform one 17-item priority write.**
+**Impact:** multi-item product→operator writes are **not idempotent and not durable across the operator's own context management**. The whole batch silently fails (safe) but only after burning ~1.3M tokens (expensive), and it fails in a way that presents as a *content* problem ("the mapping was lost") rather than a *protocol* problem ("you never supplied `by`"). Since priority assignment/re-ranking is a standing product duty, this path needs to be reliable.
+**Fix direction:** let the operator accept a **mapping by reference** (a file path, or a BL id it can read) instead of inline values, so a compacted context can always re-derive the payload; and make the missing-`by` rejection fail **fast and loudly at dispatch time** (before any per-item work) so the caller learns the shape problem in one round trip instead of after a full operator run. The caller-side fix — product supplying `by` on every write dispatch — is cheap and should be recorded in the product agent's own operating notes.
+**Citations:** [product session 58280302, claude, reverse-apis priority write-back, 1: operator return 6116e2f1 (ESCALATE — mapping lost + `by` unbound; SKILL.md:328-330 requires `by`; no write executed), 2: operator return 3b7ab92a (17 applied / 1 no-op / read-back verified; `backlog_batch_action` items with `by = product:58280302-6a52-47fc-b7be-7d6738d46ad0`), 3: tmp/agent-mcp-live/product/reverse-apis.md §7]
+
+### PRODUCT-TRIAGE-CLAUDE-AGENTS-001 — claude-agents backlog triage: 3 "open" items appear to duplicate already-terminal items, inflating the non-terminal count
+
+**Status:** OPEN (backlog-hygiene / product)
+
+**Discovered:** 2026-10-08, `product` feature-grouping pass over the `claude-agents` backlog project (36 non-terminal items; project uid `e82f9cd4-5d60-41dd-b5a2-ef3b4ffa99e5`).
+**Where:** the graph store for project `claude-agents`. Three items sitting at status `open` carry titles identical to items already in a terminal `DUPLICATE` state: `b1cc2505` (open) ↔ `84b5110e` (DUPLICATE); `ab54c48d` (open) ↔ `fdb1af78` (DUPLICATE); `137486eb` (open) ↔ `f988cecc` + `b83782e2` (DUPLICATE). All three pairs are identical-title, same-subject-item pairs surfaced by the duplicate scan run during the triage read.
+**Impact:** if confirmed, 3 of the 36 "non-terminal" items are stale duplicates. Every product count, priority ranking, and roadmap statement that relies on "36 open items in claude-agents" is inflated by up to 3, and the three affected feature-set members collapse. A backlog that over-counts its own open work is the same class of defect as one that mis-states statuses (cf. `f451ab42`).
+**Fix direction:** adjudicate each pair individually — either confirm still-live (cite the terminal duplicate and show it does not cover the open item's scope) or transition to `DUPLICATE`. Do NOT bulk-close: the identical title is evidence of duplication, not proof. Tracked as acceptance criterion FS-05 AC7 in `tmp/agent-mcp-live/product/claude-agents.md`; requires a `backlog-operator` dispatch to action (product does not write the graph).
+**Citations:** [product feature-grouping pass 2026-10-08; `backlog-operator` duplicate scan over the 36 non-terminal uids of project uid e82f9cd4-5d60-41dd-b5a2-ef3b4ffa99e5; output at tmp/agent-mcp-live/product/claude-agents.md §6 D-1]
+**Status:** OPEN — not actioned this pass (the triage pass was read-only by design).
+
+### PRODUCT-TOOLING-GAP-BACKLOG-ACCESS-001 — the `product` agent has no backlog read tool, so every triage read costs a full `backlog-operator` agent hop
+
+**Status:** OPEN (tooling / product capability)
+
+**Discovered:** 2026-10-08, same triage pass.
+**Where:** the `product` agent's tool surface. The backlog graph is readable only through `backlog_query` / `backlog_get` / `batch_action`, which are granted to `backlog-operator` alone. `product` therefore has no way to list, read, or count backlog items directly.
+**Impact:** the owner mandate is that "all discoveries go to a product agent for feature grouping and ac definitions" — but the product agent cannot see the discoveries. Consequence 1: every product triage read requires delegating to `backlog-operator`, which for a single 36-item listing cost ~221k input tokens (4 model calls) in this pass, and scales linearly with every future grouping/priority pass. Consequence 2: product triage is hard-down whenever `backlog-operator` is unavailable, and product becomes a bottleneck on another agent being healthy. Note this is the *read* half only — the write half (priority) is correctly owned by `backlog-operator` per the ownership contract and should stay that way.
+**Fix direction:** grant `product` the read-only backlog verbs (list/get/count) and no write verbs. Priority writes continue to route through `backlog-operator`. Mechanism/permission-model decision is an `architect-decision` call, not a product one.
+**Citations:** [product feature-grouping pass 2026-10-08; tool-surface observation: `backlog_query` absent from the product agent's available tools; delegation usage recorded on task 8bcab7a8-9b31-4aa3-a707-399413eaaf85 (`usage.direct.inputTokens` 221213, `modelCalls` 4)]
+**Status:** OPEN — deliberately not designed or implemented here (mechanism not mine to choose).
+**Re-observed 2026-10-08 (job-applications pass):** same gap, cost on task `9d3ae54a-fcb2-4d12-8c89-e56a7c9fdba7` = 422,202 input tokens / 6 model calls for a **12-item** read. Not re-filed — this entry stands.
+
+### PRODUCT-GAP-JOB-APPLICATIONS-ROADMAP-IS-UNREPRESENTED-001 — the product's forward scope has zero items in its own backlog
+
+**Status:** OPEN (product / roadmap)
+
+**Discovered:** 2026-10-08, `product` feature-grouping pass over the `job-applications` backlog project (uid `d91cbfdc-b3ad-439e-90db-d42098b0330e`; 13 items total, 12 non-terminal, 1 terminal).
+**Where:** the graph. Every one of the 13 items was authored by `plan-builder:1` in a discovered → measured → impact → remediation shape; none carries a persona, an outcome statement, or an acceptance-criteria section; all 13 have `partOf: null`. The project's own description promises "Autonomous job-search engine — zero-interaction e2e job search from profile extraction **through interview scheduling**", and item `99b1d514` cites the plan's walking skeleton (`docs/plan/walking-skeleton/USE_CASES.md`, UC-19).
+**Impact:** the backlog is a **discovery ledger, not a product backlog**. No item covers resume tailoring, ranking, submission, or interview scheduling — i.e. the product's actual downstream scope is unrepresented, so no backlog-driven plan can be built from this graph beyond defect cleanup. Contrast the sibling `claude-agents` pass, which found one genuine new-feature set (FS-08) among 36 items; here there is none, and the omission is silent.
+**Fix direction:** file the forward scope as its own items/epics (tailoring, ranking, submission, scheduling) with outcome + acceptance criteria, or state explicitly that this project is discovery-only for now. Which of those is true is an **owner** call.
+**Citations:** [product feature-grouping pass 2026-10-08, project uid d91cbfdc-b3ad-439e-90db-d42098b0330e; item bodies 2555ba14 / 15bce142 / a79b13e8 / 952fd355 / 0d06373a / 82751956 / 99b1d514 / d7c32e10 / 243da790 / 7392305e / dca98f15 / e907b322 (all `partOf: null`); output at tmp/agent-mcp-live/product/job-applications.md §1, §8 F-01]
+
+### PRODUCT-GAP-JOB-APPLICATIONS-SET-BOUNDARIES-MAY-DOUBLE-COUNT-001 — the umbrella audit's "5 urgent security findings" are not enumerated, so feature-set membership may overlap
+
+**Status:** OPEN (backlog hygiene / product)
+
+**Discovered:** 2026-10-08, same pass.
+**Where:** item `e907b322` ("Public-GitHub audit: 77 public repos - 5 urgent security findings, 7 deletions, 11 archives"), whose body names the count **5** but never enumerates the five findings. Candidates already tracked under other uids in the same project: `dca98f15` (third-party Tinder PII at HEAD of the public repo), `15bce142` (live Google OAuth secret in `~/Downloads`), `7392305e` (`@yieldx/embed` on public npm).
+**Impact:** if any of those three **is** one of the five, then closing the PII set (FS-06) or the credential set (FS-07) discharges part of `e907b322`'s scope, and the "12 items / 7 feature sets" arithmetic downstream over-counts. Worse, an owner reading "5 urgent findings" and then reading a remediation plan that closes 3 of them has no way to tell whether 2 remain. An aggregate count with no enumeration is unfalsifiable.
+**Fix direction:** one enumeration pass over the audit's five findings, mapping each to an existing uid or filing it as new; then have the set ACs reference them rather than restate them. Do NOT close `e907b322` on the strength of the count.
+**Citations:** [product feature-grouping pass 2026-10-08; item `e907b322` body ("5 urgent security findings" — no list); tmp/agent-mcp-live/product/job-applications.md §4 named dependency FS-06 → FS-07 AC1, §8 F-02]
+
+### PRODUCT-GAP-TINDER-PII-HAS-NO-SINGLE-TRACKER-001 — one privacy incident, three items, two projects, no designated owner
+
+**Status:** OPEN (privacy / backlog hygiene)
+
+**Discovered:** 2026-10-08, same pass (surfaced by `backlog-operator`'s cross-project duplicate scan, not by me).
+**Where:** the same Tinder-export incident is tracked by three items across two projects: `dca98f15` (job-applications, **open** — "570 real Tinder matches at HEAD of the PUBLIC PseudoSky/adhd repo"), `f47984b7` (adhd `7ee5721e`, **resolved** — "real Tinder export (third-party PII) was committed as a test fixture, undetected and public on GitHub"), `c2a4ad5f` (adhd, **open** — "GitHub refs/pull/* still expose the purged Tinder export; needs a GitHub Support purge"). Related: `dde47f87` (adhd, **resolved** — "secret-scan pre-commit gate does not detect PII/sensitive content, only credentials"), `a98b7642` (adhd, open — vendor contact emails in a published fixture), and `e0660ab1` (adhd, **open**, MEDIUM — "non-main branches now import a removed fixture (query.spec.ts → test-data-large.json)" — the same fixture, whose earlier removal already broke a branch's test import, so it has been removed before and came back or the branches were never reconciled).
+**Impact:** (1) The **open** purge item is `c2a4ad5f` in adhd, not the item my grouping owns — so a job-applications-scoped remediation plan would treat the incident as closure-ready when an open blocker lives in another project. (2) The PII-detection gate sibling `dde47f87` is **already resolved in adhd**, so any acceptance criterion here that says "build a PII gate" risks building a second one — `adhd ADR-0002` territory. (3) Irreversibility: branch/fork copies accumulate daily, and no retrofit purge reaches them.
+**Fix direction:** designate **one** tracker for the incident before any remediation work, link the other two to it, and make the job-applications remediation reference `dde47f87`/`c2a4ad5f` rather than restate them. Enumerate the 47 remote branches on `PseudoSky/adhd` before any history rewrite.
+**Citations:** [product feature-grouping pass 2026-10-08; `backlog-operator` whole-store FTS key `Tinder` (10 hits: 1 in job-applications `dca98f15`, 4 in adhd `7ee5721e`, 1 in sox-ecosystem `a1e8f31c`, 4 in reverse-apis `8f025539`); tmp/agent-mcp-live/product/job-applications.md §3 FS-06 AC6–AC7, §5, §8 F-03]
+
+### PRODUCT-TOOLING-GAP-BACKLOG-UID-INSTABILITY-ON-IN-PLACE-EDIT-001 — an in-place edit changes an item's uid, dangling every external reference to it
+
+**Status:** OPEN (tooling / backlog)
+
+**Discovered:** 2026-10-08, same pass.
+**Where:** the backlog store. Two items in project `job-applications` were re-written in place and **changed uid on each rewrite**: `e907b322` ← `6c3b2670…` ← `5ace4113…` (2 rewrites, fields changed: title, body, author), and `dca98f15` ← `3574e829…` ← `8e10d81b…` (2 rewrites, same field set). The store's own audit trail records these as `updated` with a new uid.
+**Impact:** a uid is the only handle any other agent, plan, ADR, commit message or review can cite — and it is not stable across an ordinary content correction. Concretely: **every acceptance criterion in `tmp/agent-mcp-live/product/job-applications.md` cites uids**, as do the feature sets, the priority write, and the cross-project table; a single in-place edit silently breaks all of them at once, with no error and no redirect. Files cross out of repo (this BACKLOG.md cites uids too). Reference-by-uid is therefore not durable across the store's own supported edit path.
+**Fix direction:** either (a) make content corrections mint a superseding node and keep the original uid resolvable as a redirect, or (b) expose a stable non-uid handle for cross-agent citation. Which — and whether the audit-trail behaviour is intended — is a **mechanism** question for `architect-decision`, not for product. Interim: cite uid **plus** title so a dangling uid is detectable.
+**Citations:** [product feature-grouping pass 2026-10-08; `backlog-operator` audit-trail note on `e907b322` (uid chain 5ace4113… → 6c3b2670… → e907b322…, 2 in-place `updated` re-writes) and on `dca98f15` (uid chain 8e10d81b… → 3574e829… → dca98f15…); tmp/agent-mcp-live/product/job-applications.md §8 F-04]
+
+### PRODUCT-TOOLING-GAP-PRIORITY-EDIT-DOES-NOT-ADVANCE-updatedAt-001 — a non-transition field edit leaves no timestamp signal, so a write is confirmable only by the field itself
+
+**Status:** OPEN (tooling / backlog)
+
+**Discovered:** 2026-10-08, `product` priority re-rank of 3 items in project `job-applications` (`d91cbfdc-b3ad-439e-90db-d42098b0330e`), via `backlog_operator` task `de6ac923-83f1-453c-b5d6-080207ee0933`.
+**Where:** the backlog store. The write succeeded — 3/3 `{ok:true, changed:["priority"]}`, pre-write `from` values matched live state 3/3 — but `updatedAt` **did not advance on any of the three items** (`dca98f15` 2026-09-28T19:40:28.237Z, `0d06373a` 2026-09-27T20:12:22.551Z, `7392305e` 2026-09-28T19:34:02.540Z — all pre-write values, unchanged).
+**Impact:** `updatedAt` is the natural signal a caller uses to confirm a field edit landed and to detect that *someone else* edited an item. It silently does not exist for the `enrich`/field-edit class. A product owner re-ranking the queue therefore has **no independent confirmation that the change persisted**, and equally no way to notice a competing edit. This compounds the read-back problem below: the only evidence of a priority change is the mutated field read from the same process that mutated it.
+**Narrowed scope after dedupe (see the companion entry below):** this is the **only novel** friction point of the three found this pass. The sibling friction points (EPERM blocking any fresh-process read-back — even `get` needs a lease write) are already tracked as `515a2b50` (**P1 BLOCKER, in_progress**, component `entrypoint/backlog`), and the aggregate-reconciliation gap as `d5e803d0` (open, MEDIUM) + `16ccec17` (`byPriority` is status-blind, **fixed**). Those must be linked, not re-filed. `88d30949` (resolved, CRITICAL — "an unverifiable write") and `33db8ac8` (resolved — audit trail built from durable fields only) are the nearest conceptual neighbours and were read-status-checked, not read in full.
+**Fix direction:** advance `updatedAt` on a field edit, or expose a monotonic revision counter. Mechanism — `architect-decision`.
+**Attempted filing (did not land):** `backlog_operator` task `a45012c0-792a-46f8-8481-83f483801b8a` attempted a `create` for this finding in project `adhd`, component `entrypoint/backlog` (`9a7bf578-cdd5-426d-ad26-449320ee7b01`); the store returned `{created:false, reason:"duplicate-suppressed"}` with unrelated 0.86-scoring candidates, and the operator correctly declined to `force` or to re-try with a different verb. **This finding is therefore recorded here and NOT in the graph.** A narrowed re-file (this entry only, as an issue) needs one authorization. The 3-in-1 filing that was suppressed cost ~695k input tokens to not land.
+**Citations:** [product priority-extraction pass 2026-10-08; task `de6ac923-83f1-453c-b5d6-080207ee0933` (3/3 `{ok:true, changed:["priority"]}`; `updatedAt` unchanged ×3; EPERM ×4 at `acquireStoreLease`); task `a45012c0-792a-46f8-8481-83f483801b8a` (duplicate-suppressed, filed nothing); existing coverage `515a2b50` / `d5e803d0` / `16ccec17`; tmp/agent-mcp-live/product/job-applications.md §7, §10]
+
+### PRODUCT-CONFLICT-BACKLOG-MD-AUTHORSHIP-IS-CONTESTED-001 — two standing rules disagree about who may write BACKLOG.md, so product findings have no durable home
+
+**Status:** OPEN (process / tooling) — needs an **owner ruling**
+
+**Discovered:** 2026-10-08, same pass. The conflict was surfaced by a refusal, not by inspection.
+**Where:** the boundary between the `product` group and the `backlog` implementer group.
+- **Rule A (product, standing and explicit):** every discovery is logged to the project's `BACKLOG.md` at discovery time — "log at discovery time, not at convenience", "never bury a finding mid-response", no zero-deflection excuses.
+- **Rule B (`backlog-operator`, hard):** *"Never edit BACKLOG.md directly — it is a deprecated projection; the graph is the source of truth."* Stated as a refusal when asked to add one line to an existing entry: *"editing the projection is precisely what the rule forbids, and it produces divergence, not a filing."*
+
+**Impact:** both rules are individually reasonable and they are jointly unsatisfiable on the same artifact. Observed consequences on this one pass: (1) the entries filed by this pass — `PRODUCT-GAP-JOB-APPLICATIONS-ROADMAP-IS-UNREPRESENTED-001`, `PRODUCT-GAP-JOB-APPLICATIONS-SET-BOUNDARIES-MAY-DOUBLE-COUNT-001`, `PRODUCT-GAP-TINDER-PII-HAS-NO-SINGLE-TRACKER-001`, `PRODUCT-TOOLING-GAP-BACKLOG-UID-INSTABILITY-ON-IN-PLACE-EDIT-001` — exist **only** as `BACKLOG.md` prose and as **0 graph items** (verified by the operator: greps for `PRODUCT-TOOLING-GAP`, `SINGLE-TRACKER`, `DURABLY` return 0 graph items), so `BACKLOG.md` is **not** a projection of these — it is their only record, while also being the one artifact the only backlog writer is forbidden to touch. (2) A genuinely new finding (above) could not be filed in the graph either, because a batched create was duplicate-suppressed on unrelated candidates and a narrowed re-file requires authorization. (3) The one-line update this pass wanted (adding a cross-project item to F-03) was refused, so the record is now knowingly incomplete. (4) Work is being routed around the gap at **~700k input tokens per attempted filing** (3 filings attempted this session across two passes; 2 did not land).
+**Fix direction (two parts, both needing someone else's call):** (a) **owner ruling** — either `BACKLOG.md` is a real ledger that `product` (and `backlog-operator`) may write, or product findings must become graph items and the file is frozen; (b) **`architect-decision`** — if findings belong in the graph, product needs a filing path that does not require a full-context operator dispatch per item (see `PRODUCT-TOOLING-GAP-BACKLOG-ACCESS-001`, the read half of the same gap). Interim, and stated plainly rather than hidden: this pass wrote to `BACKLOG.md` under Rule A, and the entries stand there.
+**Citations:** [product feature-grouping pass 2026-10-08; `backlog_operator` task `a45012c0-792a-46f8-8481-83f483801b8a` (explicit refusal to edit BACKLOG.md, with the deprecated-projection rationale quoted verbatim); `backlog_operator` task `de6ac923-83f1-453c-b5d6-080207ee0933` (implementation scale: 734,040 input tokens for 3 priority fields); tmp/agent-mcp-live/product/job-applications.md §8 F-07]
+
+---
+
+## raquel — feature-grouping pass 2026-10-08
+
+Project `raquel` (uid `485cd3f2-ae03-4dcb-ba99-0a4a79a88ab0`), 13 items (11 non-terminal / 2 terminal). Output: `tmp/agent-mcp-live/product/raquel.md` (5 feature sets, 11 members, each item assigned exactly once).
+
+### PRODUCT-GAP-RAQUEL-PROJECT-DESCRIPTION-VS-SHIPPED-SCOPE-001 — the advertised value proposition and the committed v1 scope disagree
+
+**Status:** OPEN (product / positioning) — needs an **owner ruling**
+
+**Discovered:** 2026-10-08, `product` feature-grouping pass over `raquel`.
+**Where:** the project's own description — "Claude plugin that generates publication-ready articles in the voice of Raquel Coronell Uribe; **learns from reviewer feedback**" — against item `aaeff3ce` (architecture build spec v2, `in_progress`), which records that the plugin is to be **REMOVED** (40 measured references) and that "Product-spec Capability 4, its A4.1-A4.7 criteria, and end-to-end criteria 8/9/10 leaving v1 scope are all out" — i.e. the review-learning loop is **deleted outright**, not deferred. The capability spec (`9c52187b`) still *requires* Capability 4 with "an acceptance signal that a later draft demonstrably changes".
+**Impact:** the thing the product says it does is the thing v1 is defined as not doing. Every downstream reader — a user, a reviewer, a plan-builder — is being told two different products exist. This is not a doc typo: the differentiator named in the one-line pitch is out of scope, which means either the pitch is stale or the scope is wrong.
+**Fix direction:** an owner call on whether the learning loop is in v1, is v1+1, or is cut. Then the description, the capability spec and the build spec are reconciled to one answer (see `PRODUCT-GAP-RAQUEL-V1-V2-SCOPE-IS-TWO-VALUED-001`).
+**Citations:** [product feature-grouping pass 2026-10-08; project `raquel` description field; item bodies `aaeff3ce`, `9c52187b`, `f602e299`; tmp/agent-mcp-live/product/raquel.md §FS-01, §FS-05, OQ-2]
+
+### PRODUCT-GAP-RAQUEL-V1-V2-SCOPE-IS-TWO-VALUED-001 — parent and child items assert opposite release scopes, and the artifact target is therefore undefined
+
+**Status:** OPEN (backlog hygiene / product) — **blocks every other raquel set**
+
+**Discovered:** 2026-10-08, same pass.
+**Where:** `f602e299` (umbrella feature "Build `raquel`", `in_progress`) mandates the output be "usable from claude.ai chat **while also installing as a Claude Code plugin**" and includes "plugin scaffolding **including a review-learning loop**"; its own child `aaeff3ce` (`partOf` `f602e299`, `in_progress`) mandates the plugin be removed and the learning loop deleted. Direct opposition, both live, neither superseding the other. Compounding it: the same items use **"C4" for two different things** — `f602e299` means the citation invariant (`4531b816`, 4th child by creation order), the build spec means the learning-loop design (section 6).
+**Impact:** every other raquel set sizes against an artifact definition that is currently two-valued — do you build a citation checker for a skill zip or for a plugin? You cannot ship or verify an artifact whose definition is ambiguous, yet `5fa154c8` claims the artifact already passed V1-V6. The structural cause is visible in the graph: `aaeff3ce` argues against its own parent and nothing records that the parent lost.
+**Fix direction:** amend `f602e299`'s body to the surviving scope **or** record a `supersedes` relation from `aaeff3ce` to it, so a literal reading of either item yields the same scope; then align the capability spec's Capability 4 status to it.
+**Citations:** [product feature-grouping pass 2026-10-08; item bodies `f602e299` vs `aaeff3ce`; tmp/agent-mcp-live/product/raquel.md §FS-01 AC4, §FS-05 AC3, OQ-1]
+
+### PRODUCT-GAP-RAQUEL-BEAT-PROFILE-ADEQUACY-IS-UNOWNED-001 — pitch quality rests on a 5.6%-captured, page-one-biased corpus and no open item owns it
+
+**Status:** OPEN (product) — needs an **owner ruling**
+
+**Discovered:** 2026-10-08, same pass.
+**Where:** the dependency chain Capability 1 (pitch) → beat profile → corpus. Item `b91c7ea3` was closed **WONTFIX** (owner scope-cap: "you can stop at 50 most recent… do NOT pursue the remaining ~459 NBC items") with **27 of 486 items captured = 5.6%**, and its body was **never amended** — it still reads "GAP, scheduled not shelved", status "PENDING the concurrent enumeration item C5". Its own recorded concern survived the closure unanswered: *"50 sources / 35,181 words is ADEQUATE for the voice model but thin and page-one-biased for the BEAT PROFILE, and the beat profile is what Capability 1 (pitch) is built on. A pitch slate derived from 5.6% of her output will systematically miss her recurring subjects."*
+**Impact:** the adequacy question was neither answered nor assigned. No open item in the project mentions beat-profile adequacy; `86f8702f`/`1f480def` were scoped to enumerate and gather and accept the WONTFIX as given. So the product's pitch capability is knowingly built on a biased sample, with the caveat recorded only in the *body of a closed item*. The `WONTFIX` disposition and the body text also contradict each other, so a reader cannot tell whether the gap is shelved or merely unscheduled.
+**Fix direction:** decide explicitly whether a page-one-biased beat profile is acceptable for the pitch capability. If yes, amend `b91c7ea3`'s body and have the pitch capability state its limitation where it is read; if no, reopen. Do **not** close the adequacy question on the strength of the WONTFIX.
+**Citations:** [product feature-grouping pass 2026-10-08; item body `b91c7ea3` (27/486, 35,181 words, "GAP, scheduled not shelved", status PENDING); items `86f8702f`, `1f480def`; tmp/agent-mcp-live/product/raquel.md §FS-04 AC7, §Pending OQ-5]
+
+### PRODUCT-GAP-RAQUEL-FORWARD-ROADMAP-IS-UNREPRESENTED-001 — the backlog is one build run's artifact trail, so the product's forward scope has zero items
+
+**Status:** OPEN (product / roadmap)
+
+**Discovered:** 2026-10-08, same pass.
+**Where:** the graph. All 11 non-terminal items trace to a **single** run, `dispatch-2026-09-25-e447`: 7 `task`, 4 `bug`, 1 `feature`, 1 `requirement`. **None carries a persona, an outcome statement, or an acceptance-criteria section**, and all 10 non-umbrella items hang off `f602e299` via `part_of` — a build-run shape (discovery → build → verify), not a product backlog. The project's forward scope — voice-model improvement, the reviewer-feedback loop, additional outlets/beats, publish-ready output QA — has **no item at all**. Priority distribution confirms it: 10 `HIGH`, 2 `MEDIUM`, 1 `CRITICAL` — priority is being used as "belongs to the build", not to rank anything against anything.
+**Impact:** no backlog-driven plan can be built from this graph beyond finishing the one run. Every item is `HIGH`, so "prioritize" is a no-op; and because there are no acceptance criteria in the graph (the referenced `A1.x`/`B1-B3`/`A4.1-A4.7`/end-to-end 1-11 live only in cited files), a verifier has nothing in the backlog to check a ticket against. This document is currently the queue.
+**Fix direction:** file the forward scope as items/epics with outcome + acceptance criteria, or state explicitly that this project is a finished build artifact and the roadmap lives elsewhere. Which is true is an **owner** call.
+**Citations:** [product feature-grouping pass 2026-10-08, project uid `485cd3f2-ae03-4dcb-ba99-0a4a79a88ab0`; all 11 non-terminal item bodies; priority counts 10 HIGH / 2 MEDIUM / 1 CRITICAL; tmp/agent-mcp-live/product/raquel.md §Inventory, §F-03]
+
+### PRODUCT-TRIAGE-RAQUEL-001 — the open count is inflated by status-vs-body mismatch; read as 11 open but only ~4 genuinely unfinished
+
+**Status:** OPEN (backlog hygiene) — adjudicate **individually**, do not bulk-close
+
+**Discovered:** 2026-10-08, same pass.
+**Where:** four distinct shapes of status/body divergence in one 11-item inventory:
+1. **Complete-in-fact, open-in-state.** `86f8702f`, `a1d39f7c`, `9c52187b` are `in_progress` while their deliverables exist and are **citation-verified** (`corpus/manifest.json`; `docs/research/plugin-landscape.md:1-622`; `docs/product/capability-spec.md:1-473`).
+2. **Title contradicts status.** `5fa154c8` titles itself as a completed "V1-V6 PASS" while `status: open`.
+3. **Body contradicts disposition.** `b91c7ea3` is terminal `WONTFIX` while its body says "GAP, scheduled not shelved" (see F-02/`...BEAT-PROFILE-ADEQUACY...`).
+4. **Stale claim, no advancement.** **6 items** carry a `ClaimStale` condition against a single claim (`dispatch-2026-09-25-e447`, threshold 30 min), and **all 13 items have `createdAt == updatedAt`** — nothing has been updated since creation.
+**Impact:** a reader (or a plan-builder, or `backlog-operator`'s readiness logic) counting open items gets 11; the number of things actually needing work is closer to **4**. Every planning pass over this project starts from an inflated denominator, and the two "the work is done" records (a PASS-titled item sitting `open`; a WONTFIX whose body says scheduled) are exactly the ones a reviewer would trust.
+**Fix direction:** item-by-item adjudication — close-with-evidence for shape 1, status-or-title fix for shapes 2 and 3, and a close-out policy decision for the six stale claims. Explicitly **not** a bulk close: `5fa154c8`'s PASS was run against a beat profile later shown thin, so some of these are done-but-not-durable.
+**Citations:** [product feature-grouping pass 2026-10-08; `createdAt == updatedAt` on 13/13 items; 6 items with a `ClaimStale` condition on run `dispatch-2026-09-25-e447`; verified citation bodies for `86f8702f` / `a1d39f7c` / `9c52187b`; tmp/agent-mcp-live/product/raquel.md §Inventory, §FS-01 AC6, OQ-7]
+
+**Re-observed (not re-filed) — `PRODUCT-TOOLING-GAP-BACKLOG-ACCESS-001`:** the read half of this gap cost **593,850 input tokens / 8 model calls across 2 dispatches** (342,180 + 251,670) for an **11-item** read with full bodies. The product agent still holds no backlog read tool. This is the third consecutive project confirming the same magnitude (claude-agents 221,213 / 4 calls for ~12 items; job-applications 422,202 / 6 calls for 12 items). Combined with `PRODUCT-CONFLICT-BACKLOG-MD-AUTHORSHIP-IS-CONTESTED-001` above, the write half is equally unresolved.
+
+**Rule conflict, restated:** these raquel findings were written to `BACKLOG.md` under product Rule A (log at discovery time). They exist **only here** and as **0 graph items** — `product` holds no backlog writer, and `backlog-operator` declines to edit this file. See `PRODUCT-CONFLICT-BACKLOG-MD-AUTHORSHIP-IS-CONTESTED-001`; the conflict is unchanged by this pass.
+
+---
+
+## global — feature-grouping pass 2026-10-08
+
+Project `global` (uid `63d8cef7-83ef-457f-9e08-2a9eff7bbd34`), 9 items (6 non-terminal: 5 `open` + 1 `BLOCKED`; 3 `resolved`, exclusion disputed — see D-G-1). Output: `tmp/agent-mcp-live/product/global.md` (9 feature sets, 47 acceptance criteria, every non-terminal item assigned).
+
+### D-G-1 `PRODUCT-GAP-GLOBAL-INVENTORY-COUNT-IS-DISPUTED-001` — the store's own surfaces disagree on whether lowercase `resolved` is terminal, so the project's non-terminal count is either 6 or 9
+
+**Status:** OPEN (backlog correctness) — needs an **owner ruling** or an operator read; **blocks every count derived from this project**
+
+**Discovered:** 2026-10-08, `product` feature-grouping pass over `global`.
+**Where:** two reads of the same store, same pass. Read A (`report`, `statusScope:"all"`) returned `resolved → terminal:true` and therefore excluded 3 items. Read B — item `605bee16`'s body, read live — records the terminal set as `DONE, DUPLICATE, FIXED, INVALID, MITIGATED, REMOVED, RESOLVED, SHIPPED, SUPERSEDED, VERIFIED, WONTFIX` with **"the lowercase twins `closed/resolved/invalid/fixed` carry `terminal:false` — case is load-bearing."** Read B is corroborated by **ADR-0006 D5** (the status catalog is OPEN; an unresolved status *name* mints a new status with `terminal:false`, so lowercase `resolved` is plausibly a distinct minted status from `RESOLVED`) and by item `56aa8ab0` ("store-check reports catalog invariant violations … **unflagged-terminal RESOLVED**"), which is the one in-context challenge to `resolved`'s flag.
+**Impact:** if Read B is right, the inventory is **9 items, not 6**, and three were wrongly excluded — including `3f63b308` (the *resolved* half of the never-built embedding funnel, which is itself the subject of open item `9987d063`) and `5f67f28d`. Every count in the pass deliverable would be understated by 3, and the same error propagates to any triage over any project. The correct answer is not deducible from the read surface by the product agent, which holds no backlog verb.
+**Fix direction:** make a status's **terminal flag and exact spelling** readable through the verb surface (ADR-0007 D5's target — generated readable `kind` catalog, machine-readable verb surface — is the intended shape; do not mint a new verb shape, ADR-0006 D6 additive-first), then adjudicate each lowercase/uppercase twin pair as one status or two and re-adjudicate the 3 excluded items against that answer. Do **not** decide by editing the store file.
+**Citations:** [`backlog-operator` task `3c5e94af-234c-4036-aeaa-8cdd6fc631d9` (`report`, `statusScope:"all"`); `backlog-operator` task `b22bd882-ccdd-4653-a2f3-38402163a7f3` (item `605bee16` body, terminal set verbatim); `docs/decisions/0006-backlog-public-interface-freeze.md` D5 (open status catalog); `docs/decisions/0007-backlog-target-public-interface.md` D5 (target `kind` catalog read); tmp/agent-mcp-live/product/global.md §1a, §FS-01 AC7/AC8, OQ-1]
+
+### D-G-2 `PRODUCT-GAP-BACKLOG-ITEM-PROJECT-ATTRIBUTION-UNSTABLE-001` — the same two items resolve to two different projects in one pass
+
+**Status:** OPEN (backlog correctness)
+
+**Discovered:** 2026-10-08, same pass.
+**Where:** `49ce83b8` (namespace-split misfiling) and `9987d063` (stale never-built-plugin docs) were both returned as project `global` by Read A — with `project` uid `63d8cef7-…` echoed in each payload — and reported as project `adhd` by Read B, same store, same session. Read A's read was scoped *by* project, so the disagreement is not a filter artifact on one side alone.
+**Impact:** two of six items sit in an ambiguous project, so both project inventories are simultaneously right and wrong; a per-project count cannot be trusted, and the item that reports *"namespace-split misfiling … items vanish silently"* is one of the two whose own attribution is unstable — i.e. the reported fix does not appear to have made attribution single-valued. This is also the reason this pass states its membership with its basis rather than as fact.
+**Fix direction:** settle which read is authoritative and make the answer stable across both read paths; if the divergence is a live instance of `49ce83b8`, that item is not fixed and FS-01's reproduce-or-refute (its AC1) must run before anything else in the project is sequenced.
+**Citations:** [`backlog-operator` task `3c5e94af-234c-4036-aeaa-8cdd6fc631d9` (Read A, `project` uid per payload); `backlog-operator` task `b22bd882-ccdd-4653-a2f3-38402163a7f3` (Read B, §5 table); tmp/agent-mcp-live/product/global.md §1, §FS-01, OQ-2]
+
+### D-G-3 `PRODUCT-GAP-IDLE-GAP-DETECTOR-HAS-NO-BACKLOG-ITEM-001` — a deliverable referenced as "dispatched separately" is tracked nowhere
+
+**Status:** OPEN (product / ownership)
+
+**Discovered:** 2026-10-08, same pass.
+**Where:** item `12ec3591` describes the fix for idle in-process teammates as *"the companion tooling request (dispatched separately)"* covering the `scratch-claude-metadata` `flags`/`inefficiency` idle-gap detection — and **no backlog item for it exists anywhere in the read surface**. The item also carries no pointer to a tracker, a dispatch id, or an owner.
+**Impact:** an unowned deliverable inside a set that otherwise has one clean owner. Its acceptance criterion (re-run the detector against a historical transcript and flag both recorded gaps) cannot be verified by anyone, because there is nothing to run or to close.
+**Fix direction:** file the companion tooling as an item linked to `12ec3591`, or record an explicit decision that idle-gap detection is folded into `12ec3591` itself. Either is fine; leaving it unnamed is not.
+**Citations:** [item `12ec3591-e6fd-422f-9899-c78c696cbc27` body; `backlog-operator` tasks `3c5e94af-…` / `b22bd882-…` (no matching item returned in either read); tmp/agent-mcp-live/product/global.md §FS-04 AC5]
+
+### D-G-4 `PRODUCT-GAP-GLOBAL-RE-FILED-FINDINGS-MAY-DOUBLE-COUNT-ACROSS-NAMESPACES-001` — four findings re-filed into `global` may still exist in a non-production namespace
+
+**Status:** OPEN (backlog hygiene)
+
+**Discovered:** 2026-10-08, same pass.
+**Where:** item `49ce83b8`'s body records that four findings filed from the main-repo build path went into per-repo namespaces while production reads `global`, and were re-filed on 2026-09-22. The originals are (per that same body) still live in the non-production namespace.
+**Impact:** the same defect may be counted twice across `global` and another namespace, so any cross-project priority roll-up or duplicate search over this class is unreliable until the originals are reconciled or explicitly declared non-production. It also means "how many open items does this class have?" has two answers today.
+**Fix direction:** trace each of the four re-filed findings to one canonical node (FS-01 AC4) and record the disposition of the original on the item itself, not in prose.
+**Citations:** [item `49ce83b8-1f13-49ef-bfa4-2cd3f53808b7` body; tmp/agent-mcp-live/product/global.md §FS-01 AC4]
+
+### D-G-5 `PRODUCT-TOOLING-GAP-HUMANID-IS-NOT-READABLE-001` — the `humanId` collision class cannot be verified from the read surface
+
+**Status:** OPEN (tooling / backlog)
+
+**Discovered:** 2026-10-08, same pass.
+**Where:** requesting `humanId` through the read verbs is rejected — it is not in the closed field vocabulary (`uid,title,kind,status,priority,project,component,createdAt,updatedAt,assignee,author,closedAt,gitContext`, plus pseudo-fields). The collision is nonetheless visible in this pass from item *bodies*: `DEBT-NXBUILD-CPU-GUARD-FLAKY-001` is recorded on **both** `e55fd438` (canonical, `global`) and `a38072a7` (its terminal DUPLICATE, adhd) — the exact `BUG-BACKLOG-HUMANID-COLLISION-001` pattern.
+**Impact:** a repaired `humanId` cannot be verified, a collision cannot be detected before it is repaired by hand, and any finding that keys off a `humanId` is unverifiable. Two items in this project carry a `humanId` that is only legible because a human wrote it into the body text.
+**Fix direction:** make `humanId` a readable field (or a pseudo-field) and add a collision check; the read half needs no new verb shape (ADR-0006 D6 additive-first applies to optional inputs/response fields).
+**Citations:** [`backlog-operator` task `b22bd882-…` §0 (rejection verbatim: `value "humanId" … is not one of: …`); item bodies `a38072a7` + `e55fd438` (same `humanId` string); tmp/agent-mcp-live/product/global.md §6]
+
+### D-G-6 `PRODUCT-GAP-GLOBAL-MIXES-THREE-UNRELATED-PROGRAM-AREAS-001` — the project is a catch-all, and feature grouping is doing structural work a project split should do
+
+**Status:** OPEN (product / backlog hygiene) — needs an **owner call**
+
+**Discovered:** 2026-10-08, same pass.
+**Where:** `global` holds (a) defects in the backlog system itself (`49ce83b8` namespace misfiling, `9987d063` docs drift, plus the terminal-flag dispute D-G-1), (b) a public-visibility program (`eeb01952`, six unrelated incomplete workstreams), (c) human-decision blockers (`f02a2c52`) and cross-cutting infra debt (`12ec3591`, `e55fd438`). Four of six items carry component `(root)`.
+**Impact:** the project cannot be planned as one thing: its first three items are bugs in the instrument used to plan the last three. Priority has no common denominator across the three areas, and a single owner cannot be accountable for "the backlog system's correctness" and "the public website" at once.
+**Fix direction:** split the visibility program into its own project (the four deliverable sets FS-06…FS-09 are already cut and ready to move), keep the backlog-system defects together as the system of record's own QA surface, and assign components to the 4 `(root)` items.
+**Citations:** [all 6 item bodies + component fields; tmp/agent-mcp-live/product/global.md §1b, OQ-11]
+
+### D-G-7 `PRODUCT-TOOLING-GAP-BACKLOG-ACCESS-001` — re-observed, not re-filed
+
+**Measured this pass:** **1,463,647 input tokens / 19 model calls / 49 tool calls across 2 dispatches** for a **6-item** inventory (705,506 + 758,141). Fourth consecutive project at this magnitude (claude-agents 221,213 / 4 calls for ~12 items; job-applications 422,202 / 6 calls for 12 items; raquel 593,850 / 8 calls for 11 items). The product agent still holds no backlog read tool. The cost is not only spend: it makes triage hard-down whenever `backlog-operator` is unavailable, and it is why this pass's inventory carries any second-hand content at all.
+**Citations:** [`backlog-operator` tasks `3c5e94af-234c-4036-aeaa-8cdd6fc631d9` + `b22bd882-ccdd-4653-a2f3-38402163a7f3`, `usage` blocks; tmp/agent-mcp-live/product/global.md §0]
+
+### D-G-8 `PRODUCT-GAP-NXBUILD-CPU-GUARD-ITEM-MAY-BE-STALE-NOT-OPEN-001` — the canonical `global` item's premise is recorded DEAD on its own duplicate
+
+**Status:** OPEN (backlog correctness) — resolve before any fix work starts
+
+**Discovered:** 2026-10-08, same pass.
+**Where:** `e55fd438` (`global`, open, `DEBT-NXBUILD-CPU-GUARD-FLAKY-001`) reports flaky `checkCpuGuard` threshold trips in `test:build-tools`. Its terminal DUPLICATE `a38072a7` (adhd) carries a recorded debugger finding that the named `nx-metrics-cpu-guard` **never existed**, that the real `checkCpuGuard` is post-hoc, and that **its own flake was already fixed in `5a5011e3` + `579b0061`**.
+**Impact:** the project's only release-pipeline item may be asking for a fix that already shipped — so it either consumes implementation effort re-fixing solved work, or it gets closed by someone assuming the DEAD finding applies without running the reproduction. Neither is acceptable: the item is open, so it will be counted and planned on.
+**Fix direction:** reproduce-or-refute before touching the lane — run the two spec files 10× on a loaded machine; ≥1 failure = live (fix it), 0 failures = close citing `5a5011e3` + `579b0061` with the transcript attached. Both outcomes are answers; inheriting the title is not.
+**Citations:** [item `e55fd438-d98d-4645-a98c-0d5485fd2688` body; item `a38072a7-9af5-45a7-a0b0-8c0e2203600d` (terminal DUPLICATE, DEAD premise + commit shas); `backlog-operator` task `b22bd882-…` §6; tmp/agent-mcp-live/product/global.md §FS-03 AC1, OQ-4]
+
+### D-G-9 `PRODUCT-GAP-GLOBAL-VISIBILITY-PROGRAM-IS-ONE-UNASSIGNABLE-ITEM-001` — six unrelated workstreams in a single body cannot be prioritised, assigned or closed
+
+**Status:** OPEN (product / backlog hygiene)
+
+**Discovered:** 2026-10-08, same pass.
+**Where:** `eeb01952` (HUMAN, open, HIGH — "Rediscovery anchor … intention + done + incomplete") bundles: (1) website never built/deployed; (2) SEO execution barely started with `FEAT-SEO-007`/`008` open; (3) packages not republished; (4) productization research-only with no test run; (5) `sox-ecosystem` has no GitHub repo; (6) two packages' metadata uncommitted — alongside its own DONE list (metadata commits, GitHub profile, `FEAT-SEO-001` RESOLVED).
+**Impact:** one HIGH/HUMAN item absorbs a live-website build, a registry republish, a repo creation and a new-app business validation. It cannot be closed, cannot be ranked against anything, and its HIGH priority is inherited by every one of those six deliverables regardless of their wildly different value and cost — the republish is days of user-facing wrongness, the productization program is a quarters-scale investment.
+**Fix direction:** split into the four deliverable sets this pass already cut (FS-06 site+AEO; FS-07 registry/repo truthfulness; FS-08 discoverability measurement; FS-09 productization validation), each with its own priority and owner, and keep `eeb01952` as the retrospective anchor only.
+**Citations:** [item `eeb01952-0768-4118-b73a-2f8e5a030556` body; tmp/agent-mcp-live/product/global.md §FS-06…FS-09, OQ-11]
+
+**Rule conflict, restated:** these `global` findings were written to `BACKLOG.md` under product Rule A (log at discovery time). They exist **only here** and as **0 graph items** — `product` holds no backlog writer, and `backlog-operator` declines to edit this file. See `PRODUCT-CONFLICT-BACKLOG-MD-AUTHORSHIP-IS-CONTESTED-001`; the conflict is unchanged by this pass. Also unchanged: `backlog-operator` reports SKILL §12 requiring feature/experience items to be filed for these very reshaping frictions (grouped uid-list reads, and a first-class terminal-flag field — the latter already a DUPLICATE as `605bee16`); nothing was filed this pass because the mandate was explicitly read-only.
+
+### D-G-10 `PRODUCT-GAP-BACKLOG-MD-SECTION-HEADINGS-ARE-INCONSISTENT-001` — findings written without a project heading land under whichever section precedes them, so four `dot` entries read as members of this project's section
+
+**Status:** OPEN (findings hygiene / documentation) — **partly repaired this pass**, disclosed rather than hidden
+
+**Discovered:** 2026-10-08, while appending this pass's findings.
+**Where:** `BACKLOG.md` carries only two level-2 headings (`## raquel — feature-grouping pass 2026-10-08` and this pass's `## global — …`) against ~1800 lines of `### <FINDING-ID>` entries. Every earlier project pass (reverse-apis, claude-agents, job-applications) and the `dot` pass wrote bare `###` entries with no section heading, so each pass's findings silently inherit the heading of the pass above them. On appending this section between raquel's closing paragraph and the `dot` entries, the four `dot` findings (`PRODUCT-TRIAGE-DOT-001`, `PRODUCT-GAP-DOT-REAPER-COMPONENT-HAS-NO-TREE-001`, `PRODUCT-GAP-DOT-MARKDOWN-VS-GRAPH-BACKLOG-DIVERGED-001`, `PRODUCT-TOOLING-GAP-BACKLOG-OPERATOR-DISPATCH-SCOPING-001`) came to sit under `## global` — misattributing another project's findings to this one.
+**Impact:** findings are the only durable record product passes produce (they exist as 0 graph items — see D-G-7 and `PRODUCT-CONFLICT-BACKLOG-MD-AUTHORSHIP-IS-CONTESTED-001`), so misattributing them by adjacency is a correctness defect in the ledger itself: a reader counting "how many findings does project X have" gets the wrong answer, and a finding's project is inferable only from prose that happens to name it.
+**Fix direction:** every pass writes a `## <project> — feature-grouping pass <date>` heading before its first entry (the raquel/global precedent), and the existing headerless passes get headings retro-fitted. **Repaired here:** a `## dot — feature-grouping pass 2026-10-08` heading was inserted immediately before `### PRODUCT-TRIAGE-DOT-001`, so the `dot` entries are once again bounded and are **not** members of this section. The `dot` pass should confirm that heading is correct.
+**Citations:** [`rg -n '^#+ ' BACKLOG.md` (2 level-2 headings at lines 1849 and 1913 pre-repair; `### PRODUCT-TRIAGE-DOT-001` at 2006 with no parent heading); tmp/agent-mcp-live/product/global.md §6]
+
+---
+
+## dot — feature-grouping pass 2026-10-08
+
+### PRODUCT-TRIAGE-DOT-001 — one item's named remainder is already done; the stale "REMAINING 1" will be re-worked if nobody corrects it
+
+**Status:** OPEN (backlog hygiene) — amend `ca94741f`'s body, do **not** schedule its "REMAINING 1"
+
+**Discovered:** 2026-10-08, product feature-grouping pass, project `dot` (uid `912e1cc5-df08-4938-9041-8cc27cae5fa1`).
+**Where:** `ca94741f` (bug, open, MEDIUM) states: *"REMAINING 1: etc/shell-manager/golden.snap:6354 and :6371 still carry the old `rm $diff_file`"*. Verified by `rg` on the working tree 2026-10-08: **`golden.snap:6355` and `golden.snap:6372` both read `rm -f "$diff_file"`** — the fixed form (file mtime Oct 7 11:47, after the fix). `setup/install.sh:77` and `:97` likewise both read `rm -f "$diff_file"`. So the item's only *named* remainder is discharged; the live remainder is its REMAINING 2 (shell startup is not quiet-by-default for non-interactive shells) alone.
+**Impact:** the body reads as "one known drift left", so a planner schedules work that is already done, and a verifier sent to check it finds green and cannot tell whether the item was already fixed. Compounding shape in the same project: all 3 non-terminal items are `open` while 2 are half-discharged — the open count is 3, the count of genuinely unfinished work is lower.
+**Fix direction:** amend `ca94741f` to record REMAINING 1 as discharged (with the two line numbers) and keep it open for REMAINING 2 only. Item-by-item, **not** a bulk status change.
+**Citations:** [product `dot` pass 2026-10-08; `rg -n diff_file setup/install.sh etc/shell-manager/golden.snap`; tmp/agent-mcp-live/product/dot.md §F-04, §FS-01 AC3]
+
+### PRODUCT-GAP-DOT-REAPER-COMPONENT-HAS-NO-TREE-001 — the graph registers a `py/reaper` component whose code is not in the checkout, leaving an item unverifiable
+
+**Status:** OPEN (product / graph integrity)
+
+**Discovered:** 2026-10-08, same pass.
+**Where:** project `dot` declares 4 components, one of them `a3b1c628-63cd-4588-a99d-be64c0fe3e9f` = `py/reaper`. On disk: `ls /Users/nix/dot/py` → `No such file or directory`; `.gitignore` does **not** exclude `py/`; `rg --files` over `/Users/nix/dot` returns no `classify.py`, no `reaper`, no `scoring_audit`. Item `107c3f17` cites `py/reaper/src/reaper/classify.py`, `rules.py`, `tui.py` and `py/reaper/tests/test_scoring_audit_x.py` — a tree that does not exist as checked out. Cross-project FTS: `ALL_TAGS` and `classify.py` match **only** `107c3f17` (so it is not a duplicate filed elsewhere); `reaper` matches 62+ items, mostly `sox-ecosystem` — the word is shared, the code is not. The project also declares **two** components both named `(root)` (`986d2bc4`, `0f17b1b1`), and its `description` is absent/empty in registry reads.
+**Impact:** `107c3f17`'s fix (a one-line `ALL_TAGS` addition plus a regression guard) **cannot be verified or implemented from this checkout at all** — every acceptance criterion for it is unverifiable until the tree is located. A planner that treats it as a same-day fix will hand an implementer a path that does not resolve.
+**Fix direction:** establish which of these is true — code never committed, code in an unchecked-out submodule/worktree, or the `py/reaper` component location is wrong — then correct the component location or re-file the item to the project that owns the code. Also de-duplicate the two `(root)` components and give the project a description.
+**Citations:** [product `dot` pass 2026-10-08; `ls /Users/nix/dot/py`; `/Users/nix/dot/.gitignore`; `rg --files` over `/Users/nix/dot` and `/Users/nix/dev/node/adhd`; backlog-operator task `40581e54-477d-43f6-8b3b-c1e86f06e764`; tmp/agent-mcp-live/product/dot.md §FS-02 AC0, §F-01, §F-02, §F-03]
+
+### PRODUCT-GAP-DOT-MARKDOWN-VS-GRAPH-BACKLOG-DIVERGED-001 — neither the repo's BACKLOG.md nor the graph is a superset of the other, and a live credential action exists only in the markdown
+
+**Status:** OPEN (product / roadmap) — needs an **owner ruling** on which is authoritative
+
+**Discovered:** 2026-10-08, same pass.
+**Where:** `/Users/nix/dot/BACKLOG.md` was last modified **Aug 31**; the 3 graph items for this project are Oct-dated. The markdown carries (a) a **live security action** — §"🔴 SECURITY — committed NX Cloud token (needs rotation, 2026-07-04)": the value sat in tracked `env/yieldx:3`, was committed in `3bb03fb` and pushed to `git@bitbucket.org:id8/dot.git`, so it lives in remote history; the HEAD scrub and the move into the gitignored `secrets/flywl` are recorded DONE, and **"[USER ACTION — REQUIRED] Rotate the token in NX Cloud"** is outstanding, with a follow-up that the golden `_SECRET_RE` scan did not catch it because a base64 token is not token-shaped; and (b) a full in-progress shell-manager plan (`docs/plan/shell-manager/PLAN.md`, referenced not read) with 5 numbered requirements (golden baseline = pre-perf state; path compiler quarantines non-existent dirs; standalone `shell_snapshot` with coloured diffs and the approved snapshot committed to git; a `*_confirm` gate mirroring the liked `path_drift_confirm` UX; Homebrew-first). The graph carries 3 shell/reaper bugs that the markdown does not mention. **Neither file is a superset of the other.**
+**Impact:** a planner reading either artifact alone works from an incomplete queue. A credential exposure that predates both the markdown's last edit and the graph items has **zero representation in the graph**, so no backlog-driven process can surface it — it is invisible to every graph query, including this project's own triage. Its only durable home is a file that is now 6 weeks stale.
+**Fix direction:** rule on authority (file the markdown's live items to the graph, or declare the markdown authoritative and give the graph items a home in it) and file the token rotation with a named owner and an explicit disposition. History purge (`git filter-repo`/force-push, "optional/cosmetic once rotated", needs coordination with other clones) is an **owner** call, not a product one.
+**Citations:** [product `dot` pass 2026-10-08; `/Users/nix/dot/BACKLOG.md` lines ~3–22 and the shell-manager section; `ls -la` mtimes; tmp/agent-mcp-live/product/dot.md §FS-03, §F-05, OQ-9]
+
+### PRODUCT-TOOLING-GAP-BACKLOG-OPERATOR-DISPATCH-SCOPING-001 — an unscoped operator prompt burns ~1M tokens and returns nothing on failure
+
+**Status:** OPEN (tooling) — **new**, this pass
+
+**Discovered:** 2026-10-08, same pass.
+**Where:** `backlog-operator` task `dd4454fd-f6ec-447a-8b44-c77af600a687` — a 3-part prompt (project metadata + terminal-item closure notes + a cross-project FTS sweep + a near-duplicate edge scan) against a **7-item** project — was dispatched with an explicit "read-only, compact" instruction and **failed after 58 tool calls / 10 model calls / 838,243 input tokens** (peak context 117,021). Status `failed`, **`result` empty**: the entire spend bought zero information. The narrower retry (`40581e54`, two questions, "at most 3 backlog tool calls, no cascade/similarity/report scan") completed in **3 calls / 186,657 input tokens**. The parallel sibling inventory prompt `21432e52` also failed with no result.
+**Impact:** dispatch prompt scope, not dispatch count, determines whether an operator hop returns anything — and a failed hop is **silent**: it reports `failed` with no partial result, no reason, and no indication of what was already read. A caller budgeting on "one hop per question" can lose ~0.84M tokens to a single unlucky prompt. This pass's **measured** read cost is **1,024,900 input tokens across 4 dispatches for 3 items** (838,243 + 186,657 measured; the two batch tasks were not metered in the response), on top of the cost of writing the deliverable.
+**Fix direction:** (a) operators should return partial findings on failure, or the failure envelope should carry the tool calls already made; (b) a caller-side convention of one narrow question per hop, with explicit tool-call and word budgets, should be recorded in the product playbook (it is what made the second hop succeed); (c) this is a fourth consecutive confirmation of `PRODUCT-TOOLING-GAP-BACKLOG-ACCESS-001` (claude-agents 221,213; job-applications 422,202; raquel 593,850; dot ~1,024,900) — a read-only backlog granter for `product` would remove most of it.
+**Citations:** [task `dd4454fd-f6ec-447a-8b44-c77af600a687` usage block (838,243 in / 17,682 out / 58 tool calls / failed, no result); task `40581e54-477d-43f6-8b3b-c1e86f06e764` (186,657 in / 3 tool calls / completed); task `21432e52-f2a5-406d-aef2-d419a95194cc` (failed)]
+
+**Re-observed (not re-filed) — `PRODUCT-TOOLING-GAP-BACKLOG-ACCESS-001`** and **`PRODUCT-GAP-<project>-PROJECT-DESCRIPTION-IS-UNREADABLE-FROM-THE-GRAPH`**: `dot`'s `description` is absent/empty in every registry read (fourth project in a row — claude-agents, job-applications, reverse-apis, raquel all showed the same shape), so a product agent cannot ground "what this product is" from the graph and must fall back to repo files.
+
+### PRODUCT-TRIAGE-SYSTEM-001 — project `system`'s only item has no owner, no acceptance criteria and no definition of done
+
+**Status:** OPEN (product / intake integrity)
+
+**Discovered:** 2026-10-08, product feature-grouping pass, project `system` (uid `113daf52-01b1-4ff4-889b-c8b8e36e347b`, components `(root)` `62676138…` + `permissions` `cd7c9730…`).
+**Where:** the project has **1 non-terminal item and 0 closed** (verified by five agreeing reads: `query` open/all/closed, `priority-matrix`, `report`; store-wide control 3936) — `506fe3b2-dd03-4554-82a3-f4aae2c71105`, kind `request`, status `open`, priority MEDIUM, author `git-manager`, **`assignee: —`**, **no live claim**, `notes: []`, `blockers: []`, **`obligations: []`**, `partOf: null`, `createdAt == updatedAt == 2026-10-01T15:56:05.304Z`. The store's own `verdict` carries **`MissingObligation` (warn) — "no obligations are declared on this item"**. The project's registered `path` is **`/`**, which is not a git work tree, so `path:` citation anchors resolve `unknown`. The project status vocabulary is `{ open }` only.
+**Impact:** a live permission request that blocks an operator-authorized cleanup has no owner, no acceptance criteria, and no path to a documented closure; it has sat unchanged for 7 days (`avgAgeDays: 7.06`). Nothing in the project can be verified DONE, because nothing defines done.
+**Fix direction:** the product pass proposes FS-05 — every `request` in `system` carries acceptance criteria + an assignee or an explicit `needs-decision` decider + a recorded disposition at closure; give the project a real path. Do **not** bulk-close anything.
+**Citations:** [product `system` pass 2026-10-08; backlog-operator task `bb33b03c-9df7-4099-a994-183a6b693eb0`; tmp/agent-mcp-live/product/system.md §0, §FS-05]
+
+### PRODUCT-GAP-SYSTEM-PERMISSION-RULE-DUPLICATION-001 — one security rule is hand-maintained in two agent definitions while the global block omits it
+
+**Status:** OPEN (product / architecture-debt) — architect verdict already obtained: **BLOCKED** as a duplicated edit
+
+**Discovered:** 2026-10-08, same pass.
+**Where:** item `506fe3b2` reports the rule `'git branch -D*': deny` at `~/.config/opencode/agents/git-manager.md:16` (its own permission block) **and** at `~/.config/opencode/agents/agent-manager.md:130`, while `~/.config/opencode/opencode.json:52-65` does **not** contain it (so the deny is agent-scoped, not global). Those three files are **outside the product agent's allowed root** — line numbers are second-hand from the item body. In-repo counterpart verified first-hand: `adhd/.claude/settings.json` is `allow`-only plus one PreToolUse nx-scope hook — **no `deny` block at all**, matching `docs/plan/push-pr-architecture/PUSH-PR-ARCHITECTURE.md:333`.
+**Impact:** every future change to this rule is a two-file hand edit of a security control with no linkage; drift between the two copies (or between them and the global block) is silent. `adhd ADR-0002` ("correct the source, never work around") makes this non-compliant as the *first* move rather than the last.
+**Fix direction:** one SSOT for permission rules (generated or render-time validated), with intentional deviations expressed as exceptions carrying a rationale + owner. Then, and only then, re-scope the requested change.
+**Citations:** [architect `50daad39-c07f-43b9-9406-fc3ca587b026` Q3 = BLOCKED; item `506fe3b2` body; `adhd/.claude/settings.json` read 2026-10-08; tmp/agent-mcp-live/product/system.md §2, §FS-02]
+
+### PRODUCT-GAP-SYSTEM-GUARDRAIL-BYPASS-IS-AVAILABLE-AND-UNRECORDED-001 — the deny is bypassable and the fleet has no record that the bypass is not the sanctioned path
+
+**Status:** OPEN (product / integrity)
+
+**Discovered:** 2026-10-08, same pass.
+**Where:** the item states that when the deny blocked the reap, the only remaining mechanism was the low-level `git update-ref -d refs/heads/<b>` (**probe `rc=0`**), and that it deliberately did **not** take it — leaving three branches (`docs/agmd-constraints` `2867c8cc`, `feat/pkt56-orphan-branch-guard` `b6be4d65`, `docs/embedding-model-tier-spec` `b15cdc00`) in place. That decline is recorded **only inside one item body**; nothing in the permission surface, the git policy, or an agent contract says the bypass is forbidden or that it was considered and refused. The in-repo DRAFT `docs/plan/agent-git-safety/GIT-SAFETY-DESIGN.md` already documents the class: vector #5 `git branch -D <other>`, vector #6 `git update-ref`, and §4.2 "no mechanical layer is un-bypassable against arbitrary bash" / harness deny is "friction on the obvious path, not a guarantee". The architect verdict concurs: `deny→ask` is friction and must never be documented as a control that *prevents* deletion.
+**Impact:** the next agent facing the same wall has no signal that the bypass is out of bounds — and the erosion of a cross-agent ref control would leave no trace. A blocked-but-authorized workflow is exactly the pressure that produces silent bypasses.
+**Fix direction:** the sanctioned path must exist and be documented (FS-01), the bypass must be named as un-sanctioned wherever the workflow is described, and no repo doc or agent definition may demonstrate `update-ref -d refs/heads/*` as the way to reap a branch.
+**Citations:** [item `506fe3b2` body; `docs/plan/agent-git-safety/GIT-SAFETY-DESIGN.md` §0, §2 vector table, §4.2 (read first-hand); architect `50daad39-c07f-43b9-9406-fc3ca587b026` Q1; tmp/agent-mcp-live/product/system.md §FS-01 AC7/AC8]
+
+### PRODUCT-GAP-SYSTEM-MEMBERSHIP-INDEX-GAP-001 — a primary-owned item is invisible to membership-scoped queries
+
+**Status:** OPEN (tooling / graph integrity)
+
+**Discovered:** 2026-10-08, same pass.
+**Where:** item `506fe3b2` reports `primaryOwner: {project: system, component: permissions}` yet `memberships: []`, so `filter.memberOfProject:"113daf52-01b1-4ff4-889b-c8b8e36e347b"` → **0** and `filter.memberOfComponent:"cd7c9730-3c9b-4b82-bc0c-54fa5c8c5382"` → **0**, while `filter.project:"system"` → 1. Control proving the filter works: `memberOfProject:"7ee5721e…"` (adhd) → 187. Reported by the operator, not independently re-run by me.
+**Impact:** any membership-scoped triage under-reports silently — a project can appear empty to a query that is not the one you happened to run.
+**Fix direction:** populate `memberships` on primary-ownership assignment (or make `memberOfProject` fall back to `primaryOwner`), and record which one is authoritative.
+**Citations:** [backlog-operator task `bb33b03c-9df7-4099-a994-183a6b693eb0` §6.1; tmp/agent-mcp-live/product/system.md §FS-05 AC5, D-5]
+
+### PRODUCT-GAP-SYSTEM-PERMISSION-POSTURE-HAS-NO-RECORD-AND-TWO-CONTRADICTORY-PLANS-001
+
+**Status:** OPEN (product / decision record) — needs an **owner ruling**
+
+**Discovered:** 2026-10-08, same pass.
+**Where:** open item `506fe3b2` requests `deny → ask` for `git branch -D*` on one agent, while in-repo `docs/plan/push-pr-architecture/PUSH-PR-ARCHITECTURE.md:339` proposes adding `Bash(git branch -D:*)` to a `permissions.deny` block (§5.2/§5.3) and `docs/plan/agent-git-safety/GIT-SAFETY-DESIGN.md` §5 lists `git branch -D` among MUST-NEVER commands. **Neither plan is an ADR** — `GIT-SAFETY-DESIGN.md`'s header reads "Status: DRAFT — design only. Nothing here is implemented", and `docs/decisions/README.md` states that the push-pr plan's proposed `docs/decisions/0001-*` filename "was never a reservation". The adhd catalog (0001-0009, 0016) contains **no accepted ADR on agent permissions**. Architect verdict Q4: this is a policy posture, not mere config, and **must** be recorded as one ADR covering deny-vs-ask + tolerated bypass + recoverability + SSOT; it contradicts DRAFT doc B and "cannot be left to drift".
+**Impact:** the fleet's most consequential git control (who may orphan another agent's branch ref) currently has two contradictory live intents and no decision record — so the requested change would be the de-facto policy, set by a config edit.
+**Fix direction:** one ADR in the adhd catalog (next free number — confirm the slot; 0016 is the highest present) recording the posture per agent class, reconciling doc B explicitly, and stating the recoverability guarantee + SSOT requirement as conditions with the residual risks copied honestly from `GIT-SAFETY-DESIGN.md §4.6`. Requires **explicit owner approval before writing an ACCEPTED ADR** (per `docs/decisions/README.md`).
+**Citations:** [`docs/plan/push-pr-architecture/PUSH-PR-ARCHITECTURE.md:97,335-345,352-356,369` and `docs/plan/agent-git-safety/GIT-SAFETY-DESIGN.md` header/§4.3/§5 (both read first-hand 2026-10-08); `docs/decisions/README.md`; architect `50daad39-c07f-43b9-9406-fc3ca587b026` Q2/Q4; tmp/agent-mcp-live/product/system.md §1, §FS-04, D-6]
+
+**Re-observed (not re-filed) — `PRODUCT-TOOLING-GAP-BACKLOG-ACCESS-001`:** this pass's read cost **570,502 input tokens / 8 model calls / 31 tool calls** for a **single-item** project (fifth consecutive confirmation; claude-agents 221,213 → job-applications 422,202 → raquel 593,850 → dot ~1,024,900). Also re-observed: **the `product` agent still has no backlog read tool**, so a 1-item project cannot be triaged without a full operator hop.
+
+## sox-protocol — feature-grouping pass 2026-10-08
+
+*(Heading added retroactively, same pass: these entries were first appended directly after the `system` pass's closing paragraph, where they would have inherited `system`'s heading — exactly the `PRODUCT-GAP-BACKLOG-MD-SECTION-HEADINGS-ARE-INCONSISTENT-001` / D-G-10 defect. Verified after insert with `rg -n '^#+ '`.)*
+
+### PRODUCT-TOOLING-GAP-BACKLOG-NO-NOTE-VERB-001 — the mandated "discoveries → product agent → feature grouping + AC definitions" workflow has no writable destination on the item
+
+**Status:** OPEN (tooling / blocking for the product workflow)
+
+**Discovered:** 2026-10-08, `sox-protocol` product pass.
+**Where:** an attempt to append the FS-01 feature-grouping text and its AC1–AC7 acceptance criteria onto item `dd225b78-d383-4420-96b5-1d1660c64bb0` could not be issued — **no mounted verb writes a note**. Verified against the tooling's own surfaces, not assumed: `BACKLOG_VERBS` in `src/server.ts` (recorded at `report/notes-addendum-scoping.md:76`: "none of the 17 verbs writes a note"); `src/api.ts` `update` accepts `{uid, by, title?, body?, kind?, priority?, assignee?, author?, citations?, awaitEmbed?}` — no `note`/`notes`; `transition`'s `note` writes a *transition* node and would require a status change; the only note-writing code path is `create`'s `duplicateAction:'comment'` branch (`src/write/create-issue.ts:752-784`), which requires creating an issue. `update.body` was **not** used as a substitute: `body` supersedes and mints a new uid, which would break the exact uid addressed.
+**Impact:** the owner mandate is "all discoveries go to a product agent for feature grouping and ac definitions" — but a defined AC set has nowhere to live on the item. Today the durable record is a markdown file, and the item's `verdict` reports `Obligation / MissingObligation / warn` ("no obligations are declared") on a HIGH item that has seven ACs written for it in a sibling document. `sox-ecosystem` ADR-0011 names `backlog_append_note`; it **does not exist in the mounted 1.0.0 surface**, so the ADR's ruled path is currently unexecutable.
+**Fix direction:** either mount a note/AC verb (and re-point ADR-0011 at the real verb name), or declare in the ADR that the acceptance-criteria channel is **file-based by design** — because this is a decision that binds every project's product agent, not a `sox-protocol` local.
+**Citations:** [backlog-operator task `1f7c18a4-48bd-4462-980f-266b1218b12a` §(d); `report/notes-addendum-scoping.md:76`; `src/api.ts` verb table; `src/write/create-issue.ts:752-784`; tmp/agent-mcp-live/product/sox-protocol.md §G, §H.1, Q3]
+
+### PRODUCT-TOOLING-GAP-BACKLOG-UPDATEDAT-NOT-BUMPED-001 — a re-rank is invisible to any freshness-scoped review
+
+**Status:** OPEN (tooling / auditability)
+
+**Discovered:** 2026-10-08, same pass, on the write that re-ranked `dd225b78…` LOW → HIGH.
+**Where:** `updatedAt` stayed `2026-09-28T20:05:59.768Z` across the update, while the write landed an `auditTrail` row at `2026-10-08T17:25:56.636Z` (`actor: product:sox-protocol-priority-rerank`). The field read-back and a second surface (`backlog_query {grep:"skywinstonsk"}`) both confirm `priority:"HIGH"`; the record just does not *look* touched.
+**Impact:** priority is the product agent's core owned field (owner-contract duty 6), and a re-rank that does not move the recency cursor cannot be found by `sort:'updated'`, a "what changed this week" sweep, or any staleness review — so the re-rank silently decays. A priority set once and never revisited is exactly the failure mode the contract forbids.
+**Fix direction:** bump `updatedAt` on any managed-field write (or expose a distinct `fieldsUpdatedAt` and document which one sweeps should use).
+**Citations:** [backlog-operator task `1f7c18a4-48bd-4462-980f-266b1218b12a` §(b), anomaly list; tmp/agent-mcp-live/product/sox-protocol.md §G, §H.2]
+
+### PRODUCT-GAP-SOX-PROTOCOL-SEVERITY-PRIORITY-CONTRADICTION-001 — the item body argues for LOW while the field and the sibling evidence say HIGH, and the body is uncorrectable as part of the same fix
+
+**Status:** OPEN (product / item integrity)
+
+**Discovered:** 2026-10-08, same pass.
+**Where:** `sox-protocol` item `dd225b78` (operator's real email + handle at `docs/ip/oin-application.md:18` and `docs/ip/preprint/SUBMISSION.md:73`, both citations `verification:"verified"`). Its untouched body reads "Severity: LOW (own data, low sensitivity)" and presents the two options symmetrically ("either accept the disclosure, or replace"); the priority field now reads HIGH. The same artifact class is triaged **CRITICAL** in `dca98f15` (third-party PII — 570 records, 9 phone numbers, at HEAD of a public repo) and `e907b322` (public-GitHub audit, project `job-applications`), and `e907b322` is the only other item in the store carrying the operator-email string.
+**Impact:** the body could not be corrected in the same write (description/body is out of scope of a priority update, and `update.body` supersedes the uid — see the note-verb gap above), so the item now disagrees with itself. Worse, the LOW framing weighed only *data sensitivity* and omitted **publish-time irreversibility** (a git HEAD, a crawler index, and a possibly DOI-deposited preprint cannot be un-published) and **third-party exposure**, which is what drove the sibling items to CRITICAL. A future reader who trusts the body will re-derive LOW.
+**Fix direction:** correct the body to state the severity rationale that the field now encodes, and record whether history rewrite is in scope (AC4a/AC4b branch) — that branch needs an owner ruling, not an engineering one.
+**Citations:** [item `dd225b78` full `get` incl. citation shas `7ca455fd…a98e` / `ebc81c39…4e1a`, read 2026-10-08; sibling items `dca98f15`, `e907b322`; tmp/agent-mcp-live/product/sox-protocol.md §FS-01, §G, Q1/Q2/Q5]
+
+### PRODUCT-GAP-SOX-PROTOCOL-CONTACT-BLOCK-HAS-NO-ROLE-ALIAS-AND-NO-GUARD-001 — removal is not the same as remediation, and nothing prevents recurrence
+
+**Status:** OPEN (product / enhancement — proposed, needs an owner ruling before an epic is cut)
+
+**Discovered:** 2026-10-08, same pass. Filed as **FS-02** in the product file; deliberately **not** written as a backlog item, because cutting it would pre-empt the owner's build-vs-adopt call.
+**Where:** the two cited IP/submission docs carry an individual's personal address as the contact point, and there is no pre-publish check that would stop the next document doing the same. `byCitationPath` for each cited file returns exactly one item — this one — so nothing else in the store tracks either file.
+**Impact:** a fix that deletes the string without naming a **role-addressed** replacement contact leaves the next author with no sanctioned contact to put there, and the fixed file is one copy-paste away from regressing. `sox-protocol`'s repo-wide class surface (personal handles, phone numbers) has **not** been measured — the single item covers two files, not the class.
+**Fix direction:** establish the canonical role alias + its owner (a one-line owner ruling), then a publish-time pattern gate on PRs touching `docs/ip/**` with a versioned pattern list and a false-positive rate measured under 10% on the last 20 such PRs — a gate that fires on legitimate content gets disabled, so that threshold is a functional criterion. Build-vs-adopt (existing secret/PII scanner) has real switching cost and is an owner call.
+**Citations:** [item `dd225b78` citations + `byCitationPath` on both paths; tmp/agent-mcp-live/product/sox-protocol.md §FS-01 AC3/AC5/AC7, §FS-02, Q4]
+
+**Also recorded (store-health observations, not re-derived as items):** `sox-ecosystem` `byPriority` does not sum to its total — 41+343+532+291+6+8+3+0 = **1224 vs 1362 items**, so **138 items are absent from the priority rollup** (null/unrecognised priority; cause unverified) while status and kind rollups do sum. `view:"registry-orphans"` reports **28** findings (27 `component-project-mismatch`, 1 `empty-project`). The `projects` registry view returns **no pagination metadata**, so non-truncation is unprovable from the response. The `adhd-backlog` CLI is **unusable in a read-only session** (`EPERM … backlog-v2.db.sox-lease.d/…`) — only the MCP path reads, so any workflow documented against the CLI has no read path here. `view:"similar"` requires `filter.anchor`/`filter.semantic` (passing `similarTo` errors `invalid_argument`), and the `semantic` channel's `meta.total` is the whole-store size (`3936`), not a match count.
+
+## scratch — feature-grouping pass 2026-10-08 (slice 3 of 3)
+
+Deliverable: `tmp/agent-mcp-live/product/scratch-slice-3.md` (81 rows, 18 feature sets, 40 ACs, priority **recommendations only** — no graph write made). Slice window: `backlog/query{project:"scratch", status:[10-token non-terminal vocabulary], limit:90, offset:180}` → `meta{total:261, returned:81, offset:180}`, `hasMore:false`; first uid `89d4d3e1`, last uid `24353408`.
+
+### PRODUCT-TOOLING-GAP-BACKLOG-NO-UID-SORT-001 — the ordered read the triage protocol specifies cannot be expressed
+
+**Status:** OPEN (tooling)
+
+**Discovered:** 2026-10-08, slice 3.
+**Where:** `backlog/query`. A `sort:"uid"` was rejected verbatim: `Validation failed: value "uid" at data.input.sort is not one of: "priority","updated","created","relevance","textMatch"`. `offset`/`limit` *are* supported and honoured, so the window is the offset-180 tail of the tool's **default** order — not the 180th-270th row by uid ascending. The 81 returned uids span `00a59f8e…` to `fd055641…`, which is evidence of a non-uid ordering, not of a narrow window.
+**Impact:** a slice mandate phrased as "offset N, limit 90, sorted by uid ascending" is unsatisfiable as stated; the resulting membership is order-dependent and therefore **not reproducible** from the parameters alone. A reader who assumes uid ordering will draw wrong conclusions about coverage and about which items are in which slice.
+**Fix direction:** either add `sort:"uid"` (and any stable keyset) to the enum, or change the slice mandate to name the default order explicitly and record it next to the offsets. Mechanism = architect-decision if a sort key is added.
+**Citations:** [operator task `37d4c958-3858-41fa-a529-7f005f8275ac` — verbatim validation error + `meta`; tmp/agent-mcp-live/product/scratch-slice-3.md header]
+
+### PRODUCT-GAP-SCRATCH-SLICES-ARE-NOT-DISJOINT-001 — the three product slices double-count rows
+
+**Status:** OPEN (product / slice integrity)
+
+**Discovered:** 2026-10-08, slice 3 (slice 2's file read for comparison: `entrypoint/backlog/triage/scratch-nonterminal-slice.txt`, first_uid `0089160e`, last_uid `568de2e9`).
+**Where:** slice 2's membership was drawn from pages of the created-ascending order and then sorted by uid locally, taking the first 90; slice 3 is the offset-180 tail of the default order. The uid ranges **overlap** (slice 2 spans `0089160e…568de2e9`; slice 3 contains e.g. `51ba4048`, `51b1ebf3`, `53e03c90`, `54f293eb`, `554410a6`, `55f5cd79`, `5a735c5a` — all lexicographically below slice 2's last uid, and 29 of slice 3's uids sit inside slice 2's span).
+**Impact:** concatenating the three product files would double-count rows and inflate every member count, and a set-level priority recommendation made from one slice may silently omit the sibling rows the other slice holds. Slice 1 additionally died in transit (below), so the intended 3-way partition of 261 rows does not exist at all.
+**Fix direction:** merge by uid with an explicit dedup pass before any priority write, and treat the merged set — not the slices — as the queue.
+**Citations:** [tmp/agent-mcp-live/product/scratch-slice-3.md §F-3; slice 2 artifact `entrypoint/backlog/triage/scratch-nonterminal-slice.txt`]
+
+### PRODUCT-TOOLING-GAP-SLICE-DISPATCH-MCP-TIMEOUT-001 — a slice dispatch died after 600s and produced no inventory
+
+**Status:** OPEN (tooling)
+
+**Discovered:** 2026-10-08, slice 3 (found in `tmp/agent-mcp-live/product-scratch-slice-1.out`).
+**Where:** the slice-1 `backlog-operator` dispatch failed with `McpError -32001 Request timed out (600000ms)`. No rows were returned; the slice-1 inventory has never existed.
+**Impact:** a 3-slice partition of 261 rows silently became a 2-slice partition, and nothing in the artifact set said so — the failure was only discoverable by reading a `.out` file. Any downstream count that assumed "3 slices cover 261" is wrong.
+**Fix direction:** the dispatch should pass `background:true` (or otherwise stay under the client timeout) and **write its result to disk itself**, so a timed-out hop is visible as a missing artifact rather than as silence.
+**Citations:** [tmp/agent-mcp-live/product-scratch-slice-1.out; tmp/agent-mcp-live/product/scratch-slice-3.md §F-6]
+
+### PRODUCT-GAP-BACKLOG-DECISION-KIND-IS-NEVER-TRIAGED-001 — `kind:decision` items carry no priority and are invisible to every priority sweep
+
+**Status:** OPEN (product / triage completeness)
+
+**Discovered:** 2026-10-08, slice 3.
+**Where:** item `da4113ee-8c5d-4624-9327-7ed1ece3304e` (`kind:decision`, "config-record shape for delta colour … ADR-0005-bound") is the only row in the 81 with **no priority at all**. It is a decided/partly-decided item (an architect-decision verdict is already quoted in its body) that still gates downstream token work, and it is invisible to `sort:"priority"` and to every `byPriority` rollup.
+**Impact:** decisions are the items whose absence blocks other work, yet they are the one kind that a priority-ordered sweep cannot see, and `byPriority` counts (already known to drop 138 rows in `sox-ecosystem`) structurally cannot report them. A decided item with no priority also has no way to be sequenced behind or ahead of its dependants.
+**Fix direction:** make `priority` mandatory at creation for every kind (or give decisions a default that surfaces them), and record the decided/pending status on the item so "decision recorded but downstream work not unblocked" is detectable.
+**Citations:** [operator task `37d4c958-3858-41fa-a529-7f005f8275ac` row `da4113ee`; `backlog/get da4113ee` body (architect-decision verdict quoting `MetricSpec.delta?: {polarity}` and the ADR-0005 PROPOSED caveat); tmp/agent-mcp-live/product/scratch-slice-3.md §F-4]
+
+### PRODUCT-GAP-SCRATCH-DOC-DEADNESS-CONTRADICTION-001 — two open items disagree about whether `compareDisplay.ts` is dead
+
+**Status:** OPEN (product / item contradiction — needs a source read, not a ruling)
+
+**Discovered:** 2026-10-08, slice 3, both rows in the same window.
+**Where:** `a130e1de` ("`compare.ts` + `compareDisplay.ts` `deltaPct` dead/inverted again (DEMO.md §5.4 regression)", MEDIUM) asserts the code is dead/inverted **now**; `36ab0e3c` ("demo/test docs drift — … DEMO.md §5.4 overstates `compareDisplay.ts` as fully dead", LOW) asserts the doc **overstates** the deadness. Both are `open`.
+**Impact:** the two items point at the same file and the same doc section with opposite premises, so any planner who reads one will either re-fix working code or withdraw a doc correction that is itself wrong. Neither can be verified from item text; the file must be read.
+**Fix direction:** read `compareDisplay.ts` / `compare.ts` once, decide which item is the true one, and correct or close the other with the `file:line` evidence attached.
+**Citations:** [operator task `37d4c958-3858-41fa-a529-7f005f8275ac` rows `a130e1de`, `36ab0e3c`; tmp/agent-mcp-live/product/scratch-slice-3.md §OQ-3]
+
+**Also re-observed (already filed, not re-filed):** `PRODUCT-TOOLING-GAP-BACKLOG-ACCESS-001` (product holds no backlog read tool — this slice cost 2 full `backlog-operator` hops, 94,254 + 211,383 input tokens, for one 81-row listing plus 4 bodies); `PRODUCT-TOOLING-GAP-BACKLOG-NO-NOTE-VERB-001` (no verb writes an AC/note, so the 40 ACs of this pass exist only in `tmp/agent-mcp-live/product/scratch-slice-3.md` — the owner mandate "all discoveries go to a product agent for feature grouping and ac definitions" still has no writable destination on the item). `PRODUCT-TOOLING-GAP-BACKLOG-OPERATOR-DISPATCH-SCOPING-001` was confirmed again from the other side: the two **narrow** prompts this pass (one exact query, one 4-uid body fetch with a hard 900-char cap) both returned complete, well-labelled results on the first try — scope, not hop count, decides whether a hop returns anything. Kind-vocabulary inconsistency re-observed: `FEAT` vs `feature`, plus `OBSERVATION`/`decision`/`issue`/`doc`, so kind rollups under-count features.
+

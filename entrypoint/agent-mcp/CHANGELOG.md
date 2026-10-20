@@ -1,3 +1,14 @@
+## 2.3.14 (2026-10-15)
+
+### 🩹 Fixes
+
+- **agent-mcp:** reap the parity sweep fixture through the guarded sweepPids so the kill-safety audit stays process.kill-free outside lib.mjs (dcf8b7da AC3) ([ac43c6b0](https://github.com/PseudoSky/adhd/commit/ac43c6b0))
+- **agent-mcp:** make the parity sweep fixture colour-proof and leak-proof, and find the live trace by its run date rather than a constant (dcf8b7da AC1 AC2 AC3 AC4 AC5) ([4e8cd498](https://github.com/PseudoSky/adhd/commit/4e8cd498))
+
+### ❤️ Thank You
+
+- pseudosky
+
 ## Unreleased
 
 ### 🚀 Features

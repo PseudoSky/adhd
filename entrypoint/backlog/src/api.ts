@@ -693,7 +693,7 @@ export function get(
  */
 export async function query(
   ctx: BacklogCtx,
-  input: IIssueQueryInput
+  input: IIssueQueryInput = {}
 ): Promise<IOutcomeEnvelope<IIssueQueryResult>> {
   // Not routed through the generic `envelope()` helper: `query` is the one
   // verb whose success arm carries `meta` (SPEC.md's pagination-truth
@@ -734,7 +734,7 @@ export async function query(
  */
 export async function priorityMatrix(
   ctx: BacklogCtx,
-  input: IPriorityMatrixInput
+  input: IPriorityMatrixInput = {}
 ): Promise<IOutcomeEnvelope<IPriorityMatrixResult>> {
   return envelope(async () =>
     priorityMatrixView(
@@ -777,7 +777,7 @@ export async function partOfRollup(
  */
 export async function timeline(
   ctx: BacklogCtx,
-  input: ITimelineInput
+  input: ITimelineInput = {}
 ): Promise<IOutcomeEnvelope<ITimelineResult>> {
   return envelope(async () => timelineView(ctx.store.graph, input));
 }
@@ -795,7 +795,7 @@ export async function timeline(
  */
 export async function openCurve(
   ctx: BacklogCtx,
-  input: IOpenCurveInput
+  input: IOpenCurveInput = {}
 ): Promise<IOutcomeEnvelope<IOpenCurveResult>> {
   return envelope(async () =>
     openCurveView(
@@ -817,7 +817,7 @@ export async function openCurve(
  */
 export async function report(
   ctx: BacklogCtx,
-  input: IReportInput
+  input: IReportInput = {}
 ): Promise<IOutcomeEnvelope<IReportResult>> {
   return envelope(async () =>
     reportView(

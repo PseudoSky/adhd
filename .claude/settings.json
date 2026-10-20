@@ -22,7 +22,25 @@
       "Bash(npx nx affected -t test *)",
       "Bash(npx nx affected -t lint *)",
       "Bash(npx nx affected -t test)",
-      "Bash(npx nx affected -t lint)"
+      "Bash(npx nx affected -t lint)",
+      "Bash(adhd-backlog get *)",
+      "Bash(adhd-backlog backlog get *)",
+      "Bash(adhd-backlog search *)",
+      "Bash(adhd-backlog backlog query *)",
+      "Bash(shasum -a 256 *)",
+      "Bash(adhd-backlog query *)",
+      "Bash(adhd-backlog --help)",
+      "mcp__backlog__backlog_get",
+      "mcp__search__agent_browser_search_mcp_source_search",
+      "mcp__backlog__backlog_query",
+      "mcp__r2info__get_ticket",
+      "Bash(git merge-base *)",
+      "Bash(md5 *)",
+      "Bash(git config --get *)",
+      "Bash(gx status)",
+      "Bash(gx query *)",
+      "Bash(gitnexus list)",
+      "Bash(git check-ignore *)"
     ]
   },
   "hooks": {

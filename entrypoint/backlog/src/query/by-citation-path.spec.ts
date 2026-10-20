@@ -11,6 +11,11 @@
  *
  * Real store + real api verbs.
  *
+ * guards: byCitationPath returning a different set than the O(n) reference walk (substring match, wrong-project relative paths, removed citations).
+ * tier: S
+ * cites: 7e5469d3 B-AC10
+ * teeth: the negative control below.
+ *
  * Negative control (run once, restored): matching with `LIKE '%path%'`-style
  * substring semantics (`includes`) turns the prefix-collision row red.
  */
@@ -100,8 +105,7 @@ describe('7e5469d3 B-AC10 — byCitationPath projection', () => {
     const card = data(await api.get(ctx, { uid: issues.removed!, fields: ['citations'] })) as unknown as { citations: Array<{ uid: string }> };
     removedCitationUid = card.citations[0]!.uid;
     data(await api.removeCitation(ctx, { uid: removedCitationUid, by: 'filer' }));
-    // Store open + seeding run sequential write transactions; under load they exceed the 30 s default hook timeout.
-  }, 120_000);
+  });
   afterEach(async () => {
     await tmp.cleanup();
   });

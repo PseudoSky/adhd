@@ -4,6 +4,16 @@
 
 - **apigen-plugin-java-javalin:** operation parameter identifiers are now ASCII-only. A parameter name must match the ASCII subset of the Java identifier grammar (ASCII letters, digits, `_` and `$`, not starting with a digit). Parameters that use non-ASCII letters, which the JLS grammar admits, are rejected at generate time with an error naming the parameter; rename the parameter to ASCII to resolve it. The check protects the raw splice of parameter names into the generated `GeneratedDispatcher.java` ([c16f2153](https://github.com/PseudoSky/adhd/commit/c16f2153))
 
+## 0.0.5 (2026-10-15)
+
+### 🩹 Fixes
+
+- **workspace:** restore the publish gate's heavy lane and canonicalise the gate ([45532731](https://github.com/PseudoSky/adhd/commit/45532731))
+
+### ❤️ Thank You
+
+- pseudosky
+
 ## 0.0.3 (2026-09-26)
 
 ### 🚀 Features

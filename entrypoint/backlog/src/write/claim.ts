@@ -64,7 +64,7 @@ export interface IClaimInput extends ISessionStamp {
   uid: string;
   /** The claimant — the acting agent or person. REQUIRED on every action (§6.3's opening rule). */
   by: string;
-  action: 'claim' | 'release' | 'renew';
+  action?: 'claim' | 'release' | 'renew';
   /** Human-confirmed override of a NON-stale claim (§6.2). Only consulted on `action:'claim'` when the current claimant differs and the lease is not yet stale. */
   force?: boolean;
   /** Additional paths to reserve explicitly (on top of the issue's live path citations). `action:'claim'`/`'renew'` only; canonicalised and recorded on the reservation. */
@@ -257,15 +257,16 @@ export async function claim(
   assertNonBlank('uid', input.uid);
   assertNonBlank('by', input.by);
   assertNotBareRoleLiteral('by', input.by);
+  const action = input.action === undefined ? 'claim' : input.action;
   if (
-    input.action !== 'claim' &&
-    input.action !== 'release' &&
-    input.action !== 'renew'
+    action !== 'claim' &&
+    action !== 'release' &&
+    action !== 'renew'
   ) {
     throw new InvalidArgumentError(
       'action',
       `must be "claim", "release", or "renew" (got ${JSON.stringify(
-        input.action
+        action
       )})`
     );
   }
@@ -316,7 +317,7 @@ export async function claim(
     const meta = { ...(row.metadata ?? {}) };
     const { claimedBy, claimedAt } = extractClaimMeta(meta);
 
-    if (input.action === 'claim') {
+    if (action === 'claim') {
       // BUG-BACKLOG-CLAIM-TERMINAL-001: reject claiming a terminal-status
       // issue outright — see IssueTerminalError's doc comment for why this
       // is not a documented reopen path. Only for 'claim' — release/renew
@@ -462,7 +463,7 @@ export async function claim(
       };
     }
 
-    if (input.action === 'release') {
+    if (action === 'release') {
       if (claimedBy === input.by) {
         const newMeta: Record<string, unknown> = {
           ...meta,
@@ -489,7 +490,7 @@ export async function claim(
       return { uid: row.uid, status: 'release-noop', wasClaimedBy: claimedBy };
     }
 
-    // input.action === 'renew'
+    // action === 'renew'
     if (claimedBy === input.by) {
       const newMeta = { ...meta, claimedAt: now, revision: nextRevision(meta) };
       await touchMetadataTx(tx, row.rowid, newMeta, now);

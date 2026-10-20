@@ -142,8 +142,11 @@ adhd-backlog claim --input '{"uid":"b3b2da0e-…","by":"agent:worker-1","action"
 
 A citation is `{ file, lines?, context?, symbol? }`, not hand-typed markdown.
 When a project enforces citations, a terminal transition is rejected with
-`precondition_failed` unless every cited file resolves inside the project's own
-registered path. Name a `symbol` and the store shells out to
+`precondition_failed` unless every cited file exists. A revision-pinned citation
+(`revision`) is verified in the repo that actually contains the path: the item's
+own project repo, the git repo enclosing an absolute path, or another registered
+project's repo, so an item can cite a file in a different repo at that repo's
+sha. Name a `symbol` and the store shells out to
 `gitnexus impact <symbol>` at write time to stamp a best-effort `blastRadius`
 on the citation.
 
@@ -428,7 +431,12 @@ directory target is rejected as a non-retryable `validation` error.
 Pin a citation to a git revision with `revision` (a branch, tag, or sha) to cite
 a file that exists **only on an unmerged branch** — the target is read from
 `git show <revision>:<path>` rather than the working tree, so the sha is a real
-content hash even though the file is not checked out.
+content hash even though the file is not checked out. The revision is tried in
+the item's own project repo first, then (for an absolute `file`) the git repo
+that encloses it, then the repos of the other registered projects; a repo-relative
+`file` can therefore resolve in a sibling project's repo. The citation is refused
+only when no repo contains the file at that revision, and the error lists every
+repo tried.
 
 The item-level **`gitContext`** is separate from a citation's own `context`:
 it records the repo disclosure contract's `<active git context>` — the first
@@ -450,6 +458,19 @@ published/installed); on such a build `gitContext` may be rejected with
 `part-of-rollup` / `open-curve` / `report`) and the obligation/spec verbs may be
 absent. Run `adhd-backlog --help` and compare it against
 [§1 of REFERENCE.md](skill/REFERENCE.md) if a documented field or verb is refused.
+
+### Output streams (CLI)
+
+stdout carries the outcome envelope: `{"ok":true,"data":…}` on success, or
+`{"ok":false,"error":{code,message,details}}` when the verb reports a failure. A reported
+failure exits with the code for its error (for example 1 for `item_not_found`, 2 for
+`validation`); the full mapping is `CLI_EXIT_CODE` in `src/envelope.ts`. An invocation the CLI cannot
+dispatch, such as a required `--input` that is missing, exits 2 with a `{code,message}`
+error on stderr instead. The per-call trace (`→ backlog <verb>`, with `command` and `ms`)
+is written to the sox durable log, `~/.adhd/sox-ecosystem/backlog/logs`, or to a
+`backlog-sandbox-logs-*` temp directory under `--namespace sandbox`. Set
+`ADHD_BACKLOG_LOG_LEVEL` to `trace|debug|info|warn|error|fatal` to change the threshold
+(default `info`), or `silent` to drop trace records.
 
 ## Build & startup
 
@@ -556,7 +577,8 @@ See [`CONTRIBUTING.md`](CONTRIBUTING.md). This package is MIT-licensed under
 
 Mutating verbs accept `sessionId`/`parentSessionId`; each such call appends one
 append-only op-event, `claim`/`renew`/`release` persist a reservation, and
-`timeline {sessionId}` reconstructs what a session (and its child sessions) did.
+`timeline {sessionId}` reconstructs what a session (and its child sessions) did; `timeline` with no `sessionId` lists every session's ops from the last 7 days
+(`since` widens or narrows the window).
 `query {view:"reservations"|"sessions"|"orphaned-parents"|"registry-orphans"}` and
 `query {projection:"byCitationPath", path}` are the store-wide reads. Placement is n:m with
 one primary owner (`get {fields:["primaryOwner","memberships"]}`); citations check that

@@ -1,3 +1,14 @@
+## 2.3.14 (2026-10-15)
+
+### 🩹 Fixes
+
+- **agent-engine-orchestrator:** temp-root test redirects os.tmpdir and usage chunking test splits its 33k seed (b941dcd3) ([3b83db8a](https://github.com/PseudoSky/adhd/commit/3b83db8a))
+- **agent-mcp:** trace the engine-native web_fetch on the wire log through a pinned-request seam (49cec55e) ([10544a5f](https://github.com/PseudoSky/adhd/commit/10544a5f))
+
+### ❤️ Thank You
+
+- pseudosky
+
 ## Unreleased
 
 ### 🚀 Features

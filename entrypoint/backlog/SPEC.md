@@ -3118,8 +3118,13 @@ access control out of scope).
   component, sessionId, holder}, now?}` lists ACTIVE reservations (`leaseExpiry >
   now`, `now` injectable); `query {view:"sessions"}` lists sessions; the
   `timeline {sessionId}` verb returns the session, its descendants and the ordered
-  ops. Spellings `list reservation` / `get session` belong to the unshipped
+  ops. Without `sessionId` it returns every session's ops in the window `[since, now]`
+  (`since` defaults to 7 days before now; `session` is `null`). Spellings `list reservation` / `get session` belong to the unshipped
   CLI-HIERARCHY verb tree; the shipped spellings are the views above.
+- **Optional inputs.** A default applies only when its key is omitted. `claim.action`
+  defaults to `claim`, `relate.action` to `add`, `obligate.on_fail` to `block`, and
+  `open-curve.at` to the current instant. An explicit `null` or unknown value is
+  rejected (`validation` or `invalid_argument`), never silently defaulted.
 - **Reads.** `get {fields:["specRevisionFragment"]}` returns the HEAD revision's
   fragment verbatim; `query {projection:"byCitationPath", path:P}` returns every
   live item citing P (exact path equality, relative paths resolved per project

@@ -109,7 +109,7 @@ export interface IRelateInput extends ISessionStamp {
   /** The relation's TARGET `issue` uid — may belong to ANY project, including a different one than `sourceUid` (see this file's own doc comment on the resolved cross-project gap). */
   targetUid: string;
   rel: RelateRel;
-  action: 'add' | 'remove';
+  action?: 'add' | 'remove';
   /** The acting agent or person performing the change (§6.3's opening rule). REQUIRED. */
   by: string;
 }
@@ -189,6 +189,7 @@ export async function relate(
   assertNonBlank('targetUid', input.targetUid);
   assertNonBlank('by', input.by);
   assertNotBareRoleLiteral('by', input.by);
+  const action = input.action === undefined ? 'add' : input.action;
   if (!RELATE_RELS.includes(input.rel)) {
     throw new InvalidArgumentError(
       'rel',
@@ -197,10 +198,10 @@ export async function relate(
       )} (got ${JSON.stringify(input.rel)})`
     );
   }
-  if (input.action !== 'add' && input.action !== 'remove') {
+  if (action !== 'add' && action !== 'remove') {
     throw new InvalidArgumentError(
       'action',
-      `must be "add" or "remove" (got ${JSON.stringify(input.action)})`
+      `must be "add" or "remove" (got ${JSON.stringify(action)})`
     );
   }
   if (input.sourceUid === input.targetUid) {
@@ -223,7 +224,7 @@ export async function relate(
       input.rel
     );
 
-    if (input.action === 'add') {
+    if (action === 'add') {
       if (existingRowid !== null) {
         // Already live, same source/target/rel — a stated idempotent no-op
         // (§6.3.6's "same target returns noop:true"), never a disguised
@@ -288,7 +289,7 @@ export async function relate(
       };
     }
 
-    // input.action === 'remove'
+    // action === 'remove'
     if (existingRowid === null) {
       // Already invalidated, or never existed — a stated idempotent no-op,
       // never a disguised invalidate-of-nothing: nothing written, no audit.
