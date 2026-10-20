@@ -1,3 +1,13 @@
+## 2.3.18 (2026-10-20)
+
+### 🩹 Fixes
+
+- **agent-mcp:** read package.json at runtime in bundled bins so --version cannot freeze a stale build-time snapshot ([cf599783](https://github.com/PseudoSky/adhd/commit/cf599783))
+
+### ❤️ Thank You
+
+- pseudosky
+
 ## 2.3.17 (2026-10-20)
 
 ### 🩹 Fixes

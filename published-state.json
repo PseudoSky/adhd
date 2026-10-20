@@ -48,10 +48,10 @@
     "publishedFromRef": "5f12b13af3100597655b5298bda7c7287a46c7b1"
   },
   "@adhd/agent-mcp": {
-    "version": "2.3.17",
-    "normalizedHash": "sha256:deb63e1f8065763fa7cf0b5972bfab5b3344d1584ab06d5ec281622e04de4ebb",
-    "publishedIntegrity": "sha512-jRjHP3ulY/DZKPaRcNVwWhdJuqr7Q2C+Ulx8iBiaIn9Xt9jlaWnKSiCOhuMoZ8NNZ57f4RSIwBKoCoj3jHzvww==",
-    "publishedFromRef": "e4859c375c5f581281526ede18ac25ad7de006a9"
+    "version": "2.3.18",
+    "normalizedHash": "sha256:c7e01d83396f0b7615e8430e31af7ab9e2fe1bbd2a8009b19af8f79dec59c269",
+    "publishedIntegrity": "sha512-Cvfw2fy/2YBsrU9ohtKqv8LxG98VLfnhFz/zv0awiKbs4JrNhgQN1SJJF9c642WLihPMRMBF41GwJ1Xr8XWxpA==",
+    "publishedFromRef": "cf5997837883dbdcf0613b80aff1b459f1f512b1"
   },
   "@adhd/agent-plugin-budget": {
     "version": "0.2.10",
