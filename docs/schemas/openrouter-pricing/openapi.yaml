@@ -1,0 +1,906 @@
+openapi: 3.0.3
+info:
+  title: OpenRouter public catalog (pricing, models, providers)
+  version: 1.0.0
+  description: |
+    Wire schema for the unauthenticated, read-only OpenRouter catalog endpoints
+    under https://openrouter.ai/api/v1. Every operation here was confirmed to
+    return HTTP 200 without an Authorization header.
+
+    Wire names are kept as the API sends them (snake_case). Client libraries
+    may map them to idiomatic names, but must not change the shape.
+
+    Conventions:
+    - Prices are decimal strings in USD per token, exactly as sent. Never parse
+      them as floats for money math. Use `Pricing` helpers in the client to
+      convert to USD per million tokens.
+    - Video SKU prices (`VideoModel.pricing_skus`) are decimal strings in cents.
+    - Timestamps named `created` are Unix epoch seconds.
+    - Fields marked `nullable: true` may be JSON null. Fields that are not in
+      `required` may be absent.
+    - Server string enums that can grow over time are typed as `string` with the
+      observed values listed in the description, so a new value does not break
+      deserialization.
+
+servers:
+  - url: https://openrouter.ai/api/v1
+
+tags:
+  - name: models
+  - name: endpoints
+  - name: providers
+  - name: auth
+
+paths:
+  /models:
+    get:
+      operationId: listModels
+      tags: [models]
+      summary: List all models and their properties
+      parameters:
+        - { $ref: '#/components/parameters/Offset' }
+        - { $ref: '#/components/parameters/Limit' }
+        - { $ref: '#/components/parameters/Category' }
+        - { $ref: '#/components/parameters/SupportedParameters' }
+        - { $ref: '#/components/parameters/OutputModalities' }
+        - { $ref: '#/components/parameters/Sort' }
+        - { $ref: '#/components/parameters/Q' }
+        - { $ref: '#/components/parameters/InputModalities' }
+        - { $ref: '#/components/parameters/Context' }
+        - { $ref: '#/components/parameters/MinPrice' }
+        - { $ref: '#/components/parameters/MaxPrice' }
+        - { $ref: '#/components/parameters/MinOutputPrice' }
+        - { $ref: '#/components/parameters/MaxOutputPrice' }
+        - { $ref: '#/components/parameters/Arch' }
+        - { $ref: '#/components/parameters/ModelAuthors' }
+        - { $ref: '#/components/parameters/Providers' }
+        - { $ref: '#/components/parameters/Distillable' }
+        - { $ref: '#/components/parameters/Zdr' }
+        - { $ref: '#/components/parameters/Region' }
+        - { $ref: '#/components/parameters/MinAgeDays' }
+        - { $ref: '#/components/parameters/MaxAgeDays' }
+        - { $ref: '#/components/parameters/MinIntelligenceIndex' }
+        - { $ref: '#/components/parameters/MaxIntelligenceIndex' }
+        - { $ref: '#/components/parameters/MinCodingIndex' }
+        - { $ref: '#/components/parameters/MaxCodingIndex' }
+        - { $ref: '#/components/parameters/MinAgenticIndex' }
+        - { $ref: '#/components/parameters/MaxAgenticIndex' }
+        - { $ref: '#/components/parameters/MinToolSuccessRate' }
+        - { $ref: '#/components/parameters/MaxToolSuccessRate' }
+      responses:
+        '200':
+          description: Model list.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ModelListResponse' }
+
+  /models/count:
+    get:
+      operationId: countModels
+      tags: [models]
+      summary: Get total count of available models
+      responses:
+        '200':
+          description: Count of models.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ModelCountResponse' }
+
+  /model/{author}/{slug}:
+    get:
+      operationId: getModel
+      tags: [models]
+      summary: Get a model by its slug
+      parameters:
+        - { $ref: '#/components/parameters/Author' }
+        - { $ref: '#/components/parameters/Slug' }
+      responses:
+        '200':
+          description: The model.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ModelResponse' }
+
+  /models/{author}/{slug}/endpoints:
+    get:
+      operationId: listModelEndpoints
+      tags: [endpoints]
+      summary: List all endpoints for a model
+      parameters:
+        - { $ref: '#/components/parameters/Author' }
+        - { $ref: '#/components/parameters/Slug' }
+      responses:
+        '200':
+          description: The model with its per-provider endpoints.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ModelEndpointsResponse' }
+
+  /endpoints/zdr:
+    get:
+      operationId: listEndpointsZdr
+      tags: [endpoints]
+      summary: Preview the impact of ZDR on the available endpoints
+      responses:
+        '200':
+          description: Endpoints that remain available under zero data retention.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EndpointListResponse' }
+
+  /providers:
+    get:
+      operationId: listProviders
+      tags: [providers]
+      summary: List all providers
+      responses:
+        '200':
+          description: Provider list.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProviderListResponse' }
+
+  /embeddings/models:
+    get:
+      operationId: listEmbeddingsModels
+      tags: [models]
+      summary: List all embeddings models
+      responses:
+        '200':
+          description: Embedding model list.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ModelListResponse' }
+
+  /images/models:
+    get:
+      operationId: listImageModels
+      tags: [models]
+      summary: List image generation models
+      responses:
+        '200':
+          description: Image model list.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ImageModelListResponse' }
+
+  /videos/models:
+    get:
+      operationId: listVideosModels
+      tags: [models]
+      summary: List all video generation models
+      responses:
+        '200':
+          description: Video model list.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VideoModelListResponse' }
+
+  /oauth/jwks:
+    get:
+      operationId: listOauthJwks
+      tags: [auth]
+      summary: OpenRouter access token signing keys
+      responses:
+        '200':
+          description: Public JSON Web Key Set.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/JwksResponse' }
+
+components:
+  parameters:
+    Author:
+      name: author
+      in: path
+      required: true
+      schema: { type: string }
+    Slug:
+      name: slug
+      in: path
+      required: true
+      schema: { type: string }
+    Offset:
+      name: offset
+      in: query
+      description: Records to skip. When both offset and limit are omitted, the full list is returned.
+      schema: { type: integer, default: 0 }
+    Limit:
+      name: limit
+      in: query
+      description: Maximum records to return (max 1000).
+      schema: { type: integer, default: 500, maximum: 1000 }
+    Category:
+      name: category
+      in: query
+      description: Filter models by use case category.
+      schema:
+        type: string
+        enum: [programming, roleplay, marketing, marketing/seo, technology, science, translation, legal, finance, health, trivia, academia]
+    SupportedParameters:
+      name: supported_parameters
+      in: query
+      description: Filter by supported parameter (comma-separated).
+      schema: { type: string }
+    OutputModalities:
+      name: output_modalities
+      in: query
+      description: Comma-separated output modalities (text, image, embeddings, audio, video, rerank, decisions, speech, transcription), or "all". Defaults to "text".
+      schema: { type: string }
+    Sort:
+      name: sort
+      in: query
+      description: Server-side sort. Models without a score for the chosen benchmark are placed last.
+      schema:
+        type: string
+        enum: [most-popular, newest, top-weekly, pricing-low-to-high, pricing-high-to-low, context-high-to-low, throughput-high-to-low, latency-low-to-high, intelligence-high-to-low, coding-high-to-low, agentic-high-to-low, design-arena-elo-high-to-low]
+    Q:
+      name: q
+      in: query
+      description: Free-text search by model name or slug.
+      schema: { type: string }
+    InputModalities:
+      name: input_modalities
+      in: query
+      description: Comma-separated input modalities (text, image, audio, file).
+      schema: { type: string }
+    Context:
+      name: context
+      in: query
+      description: Minimum context length in tokens.
+      schema: { type: integer, minimum: 1 }
+    MinPrice:
+      name: min_price
+      in: query
+      description: Minimum prompt price in USD per million tokens.
+      schema: { type: number, minimum: 0, nullable: true }
+    MaxPrice:
+      name: max_price
+      in: query
+      description: Maximum prompt price in USD per million tokens.
+      schema: { type: number, minimum: 0, nullable: true }
+    MinOutputPrice:
+      name: min_output_price
+      in: query
+      description: Minimum completion price in USD per million tokens.
+      schema: { type: number, minimum: 0, nullable: true }
+    MaxOutputPrice:
+      name: max_output_price
+      in: query
+      description: Maximum completion price in USD per million tokens.
+      schema: { type: number, minimum: 0, nullable: true }
+    Arch:
+      name: arch
+      in: query
+      description: Filter by architecture or model family (for example GPT, Claude, Gemini, Llama).
+      schema: { type: string }
+    ModelAuthors:
+      name: model_authors
+      in: query
+      description: Comma-separated author slugs.
+      schema: { type: string }
+    Providers:
+      name: providers
+      in: query
+      description: Comma-separated provider names.
+      schema: { type: string }
+    Distillable:
+      name: distillable
+      in: query
+      schema: { type: string, enum: ['true', 'false'] }
+    Zdr:
+      name: zdr
+      in: query
+      description: When "true", return only models with zero data retention endpoints.
+      schema: { type: string, enum: ['true'] }
+    Region:
+      name: region
+      in: query
+      schema: { type: string, enum: [eu, us] }
+    MinAgeDays:
+      name: min_age_days
+      in: query
+      schema: { type: integer, minimum: 0, nullable: true }
+    MaxAgeDays:
+      name: max_age_days
+      in: query
+      schema: { type: integer, minimum: 0, nullable: true }
+    MinIntelligenceIndex:
+      name: min_intelligence_index
+      in: query
+      description: Minimum Artificial Analysis intelligence index.
+      schema: { type: number, minimum: 0, nullable: true }
+    MaxIntelligenceIndex:
+      name: max_intelligence_index
+      in: query
+      schema: { type: number, minimum: 0, nullable: true }
+    MinCodingIndex:
+      name: min_coding_index
+      in: query
+      description: Minimum Artificial Analysis coding index.
+      schema: { type: number, minimum: 0, nullable: true }
+    MaxCodingIndex:
+      name: max_coding_index
+      in: query
+      schema: { type: number, minimum: 0, nullable: true }
+    MinAgenticIndex:
+      name: min_agentic_index
+      in: query
+      description: Minimum Artificial Analysis agentic index.
+      schema: { type: number, minimum: 0, nullable: true }
+    MaxAgenticIndex:
+      name: max_agentic_index
+      in: query
+      schema: { type: number, minimum: 0, nullable: true }
+    MinToolSuccessRate:
+      name: min_tool_success_rate
+      in: query
+      description: Minimum tool-calling success rate as a fraction in [0, 1].
+      schema: { type: number, minimum: 0, maximum: 1, nullable: true }
+    MaxToolSuccessRate:
+      name: max_tool_success_rate
+      in: query
+      description: Maximum tool-calling success rate as a fraction in [0, 1].
+      schema: { type: number, minimum: 0, maximum: 1, nullable: true }
+
+  schemas:
+    # ---- Envelopes -------------------------------------------------------
+
+    ModelListResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/Model' }
+        total_count:
+          type: integer
+        links: { $ref: '#/components/schemas/PageLinks' }
+
+    ModelResponse:
+      type: object
+      required: [data]
+      properties:
+        data: { $ref: '#/components/schemas/Model' }
+
+    ModelCountResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [count]
+          properties:
+            count: { type: integer }
+
+    ModelEndpointsResponse:
+      type: object
+      required: [data]
+      properties:
+        data: { $ref: '#/components/schemas/ModelWithEndpoints' }
+
+    EndpointListResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/Endpoint' }
+
+    ProviderListResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/Provider' }
+
+    ImageModelListResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/ImageModel' }
+
+    VideoModelListResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/VideoModel' }
+
+    JwksResponse:
+      type: object
+      required: [keys]
+      properties:
+        keys:
+          type: array
+          items: { $ref: '#/components/schemas/Jwk' }
+
+    PageLinks:
+      type: object
+      properties:
+        next:
+          type: string
+          nullable: true
+
+    # ---- Money -----------------------------------------------------------
+
+    DecimalString:
+      type: string
+      description: Exact decimal number as a string, for example "0.0000025". Never parse as float for money math.
+      pattern: '^-?\d+(\.\d+)?([eE]-?\d+)?$'
+      example: '0.0000025'
+
+    # ---- Models ----------------------------------------------------------
+
+    Model:
+      type: object
+      description: A model record as returned by the list and single-model endpoints. Endpoint-level data is in ModelWithEndpoints and Endpoint.
+      required: [id, name, description, created, context_length, architecture, pricing, top_provider, supported_parameters, default_parameters, links]
+      properties:
+        id:
+          type: string
+          description: Author and slug joined by "/", for example openai/gpt-4o.
+        canonical_slug:
+          type: string
+        hugging_face_id:
+          type: string
+          nullable: true
+        name:
+          type: string
+        created:
+          type: integer
+          description: Unix epoch seconds.
+        description:
+          type: string
+        context_length:
+          type: integer
+        architecture: { $ref: '#/components/schemas/Architecture' }
+        pricing: { $ref: '#/components/schemas/Pricing' }
+        top_provider: { $ref: '#/components/schemas/TopProvider' }
+        per_request_limits:
+          type: object
+          nullable: true
+          additionalProperties: true
+          description: Shape not observed; null in every sampled response.
+        supported_parameters:
+          type: array
+          items: { type: string }
+        default_parameters: { $ref: '#/components/schemas/DefaultParameters' }
+        supported_voices:
+          type: array
+          nullable: true
+          items: { type: string }
+        knowledge_cutoff:
+          type: string
+          nullable: true
+          description: ISO date string when present.
+        expiration_date:
+          type: string
+          nullable: true
+          description: ISO date string when present.
+        links: { $ref: '#/components/schemas/ModelLinks' }
+        reasoning: { $ref: '#/components/schemas/Reasoning' }
+        alias_target: { $ref: '#/components/schemas/AliasTarget' }
+        benchmarks: { $ref: '#/components/schemas/Benchmarks' }
+
+    ModelWithEndpoints:
+      type: object
+      required: [id, name, created, description, architecture, endpoints]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        created: { type: integer }
+        description: { type: string }
+        architecture: { $ref: '#/components/schemas/Architecture' }
+        endpoints:
+          type: array
+          items: { $ref: '#/components/schemas/Endpoint' }
+
+    ModelLinks:
+      type: object
+      required: [details]
+      properties:
+        details:
+          type: string
+          description: Relative API path to the model record.
+
+    Architecture:
+      type: object
+      required: [tokenizer, modality, input_modalities, output_modalities]
+      properties:
+        tokenizer:
+          type: string
+          description: Observed values include GPT, Claude, Gemini, Llama3, Qwen3, Router, Other.
+        instruct_type:
+          type: string
+          nullable: true
+          description: Observed values include chatml, llama3, mistral, deepseek-r1, vicuna.
+        modality:
+          type: string
+          description: Raw modality expression, for example "text+image->text" or "text->embeddings".
+        input_modalities:
+          type: array
+          items: { $ref: '#/components/schemas/Modality' }
+        output_modalities:
+          type: array
+          items: { $ref: '#/components/schemas/Modality' }
+
+    Modality:
+      type: string
+      description: Observed input values are audio, file, image, text, video. Observed output values are audio, embeddings, image, text.
+      enum: [text, image, file, audio, video, embeddings]
+
+    TopProvider:
+      type: object
+      required: [is_moderated]
+      properties:
+        context_length:
+          type: integer
+          nullable: true
+        max_completion_tokens:
+          type: integer
+          nullable: true
+        is_moderated:
+          type: boolean
+
+    DefaultParameters:
+      type: object
+      description: Default sampling parameters. Each value is null when the provider does not set a default.
+      properties:
+        temperature: { type: number, nullable: true }
+        top_p: { type: number, nullable: true }
+        top_k: { type: integer, nullable: true }
+        frequency_penalty: { type: number, nullable: true }
+        presence_penalty: { type: number, nullable: true }
+        repetition_penalty: { type: number, nullable: true }
+
+    Reasoning:
+      type: object
+      properties:
+        mandatory: { type: boolean }
+        default_enabled: { type: boolean }
+        default_effort:
+          type: string
+          description: Observed values include none, minimal, low, medium, high, xhigh, max.
+        supported_efforts:
+          type: array
+          items: { type: string }
+        supports_max_tokens: { type: boolean }
+
+    AliasTarget:
+      type: object
+      required: [name, slug]
+      properties:
+        name: { type: string }
+        slug: { type: string }
+
+    Benchmarks:
+      type: object
+      properties:
+        artificial_analysis:
+          type: object
+          properties:
+            intelligence_index: { type: number, nullable: true }
+            coding_index: { type: number, nullable: true }
+            agentic_index: { type: number, nullable: true }
+        design_arena:
+          type: array
+          items: { $ref: '#/components/schemas/DesignArenaEntry' }
+
+    DesignArenaEntry:
+      type: object
+      required: [arena, category, elo, rank, win_rate]
+      properties:
+        arena:
+          type: string
+          description: Observed values are agents and models.
+        category: { type: string }
+        elo: { type: integer }
+        rank: { type: integer }
+        win_rate: { type: number }
+
+    # ---- Pricing ---------------------------------------------------------
+
+    Pricing:
+      type: object
+      description: |
+        Token and media prices in USD as decimal strings. Token prices are per
+        token, so divide by 1e-6 to get USD per million tokens. A missing field
+        means the model has no charge for that dimension.
+      required: [prompt, completion]
+      properties:
+        prompt: { $ref: '#/components/schemas/DecimalString' }
+        completion: { $ref: '#/components/schemas/DecimalString' }
+        request: { $ref: '#/components/schemas/DecimalString' }
+        image: { $ref: '#/components/schemas/DecimalString' }
+        image_output: { $ref: '#/components/schemas/DecimalString' }
+        image_token: { $ref: '#/components/schemas/DecimalString' }
+        audio: { $ref: '#/components/schemas/DecimalString' }
+        audio_output: { $ref: '#/components/schemas/DecimalString' }
+        input_audio_cache: { $ref: '#/components/schemas/DecimalString' }
+        input_cache_read: { $ref: '#/components/schemas/DecimalString' }
+        input_cache_write: { $ref: '#/components/schemas/DecimalString' }
+        input_cache_write_1h: { $ref: '#/components/schemas/DecimalString' }
+        internal_reasoning: { $ref: '#/components/schemas/DecimalString' }
+        web_search: { $ref: '#/components/schemas/DecimalString' }
+        discount:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: Observed on endpoints only, as a fraction in [0, 1]. Semantics not yet verified against billing.
+        overrides:
+          type: array
+          items: { $ref: '#/components/schemas/PricingOverride' }
+
+    PricingOverride:
+      type: object
+      description: |
+        A price that replaces the base price when all of its conditions match.
+        Conditions are the UTC window (utc_start, utc_end, utc_days) and
+        min_prompt_tokens. Only the overridden price fields are present.
+      properties:
+        utc_start:
+          type: integer
+          nullable: true
+          description: Inclusive start of a daily UTC window, HHMM clock number (100 = 01:00). The window is [utc_start, utc_end) and may wrap past midnight.
+        utc_end:
+          type: integer
+          nullable: true
+          description: Exclusive end of the daily UTC window, HHMM clock number.
+        utc_days:
+          type: array
+          nullable: true
+          description: UTC weekdays the override applies on. Without a window, applies to the whole day.
+          items:
+            type: string
+            enum: [monday, tuesday, wednesday, thursday, friday, saturday, sunday]
+        min_prompt_tokens:
+          type: integer
+          nullable: true
+          description: Applies only when the request has at least this many prompt tokens.
+        prompt: { $ref: '#/components/schemas/DecimalString' }
+        completion: { $ref: '#/components/schemas/DecimalString' }
+        audio: { $ref: '#/components/schemas/DecimalString' }
+        input_audio_cache: { $ref: '#/components/schemas/DecimalString' }
+        input_cache_read: { $ref: '#/components/schemas/DecimalString' }
+        input_cache_write: { $ref: '#/components/schemas/DecimalString' }
+        input_cache_write_1h: { $ref: '#/components/schemas/DecimalString' }
+
+    # ---- Endpoints -------------------------------------------------------
+
+    Endpoint:
+      type: object
+      description: One provider's serving endpoint for a model.
+      required:
+        - name
+        - model_id
+        - model_name
+        - context_length
+        - pricing
+        - provider_name
+        - tag
+        - quantization
+        - status
+        - supported_parameters
+        - supports_tool_choice
+        - native_tools
+      properties:
+        name:
+          type: string
+          description: Display name, for example "Azure | openai/gpt-4o".
+        model_id: { type: string }
+        model_name: { type: string }
+        context_length: { type: integer }
+        pricing: { $ref: '#/components/schemas/Pricing' }
+        provider_name:
+          type: string
+          description: Display name of the provider.
+        tag:
+          type: string
+          description: Stable provider slug, for example azure or wafer. Key on this, not on provider_name.
+        quantization:
+          $ref: '#/components/schemas/Quantization'
+        max_completion_tokens:
+          type: integer
+          nullable: true
+        max_prompt_tokens:
+          type: integer
+          nullable: true
+        supported_parameters:
+          type: array
+          items: { type: string }
+        supports_tool_choice:
+          type: object
+          properties:
+            none: { type: boolean }
+            auto: { type: boolean }
+            required: { type: boolean }
+            function: { type: boolean }
+        status:
+          type: integer
+          description: Observed values are 0, -2, and -5. Meaning not yet documented.
+        uptime_last_5m:
+          type: number
+          nullable: true
+          description: Percent uptime in the window, 0 to 100.
+        uptime_last_30m:
+          type: number
+          nullable: true
+        uptime_last_1d:
+          type: number
+          nullable: true
+        latency_last_30m:
+          type: number
+          nullable: true
+        throughput_last_30m:
+          type: number
+          nullable: true
+        supports_implicit_caching: { type: boolean }
+        supports_voice_cloning: { type: boolean }
+        supports_multiple_audio_references: { type: boolean }
+        supports_image_reference: { type: boolean }
+        native_tools:
+          type: object
+          description: Server tools this endpoint runs natively, keyed by tool id.
+          additionalProperties:
+            type: object
+            required: [type]
+            properties:
+              type: { type: string }
+
+    Quantization:
+      type: string
+      description: Observed values are the ten listed below. "unknown" is the default when the provider does not report it.
+      enum: [unknown, fp32, fp16, bf16, fp8, fp4, nvfp4, mxfp4, int8, int4]
+
+    # ---- Providers -------------------------------------------------------
+
+    Provider:
+      type: object
+      required: [name, slug]
+      properties:
+        name: { type: string }
+        slug:
+          type: string
+          description: Stable key, for example ionstream.
+        privacy_policy_url:
+          type: string
+          nullable: true
+        terms_of_service_url:
+          type: string
+          nullable: true
+        status_page_url:
+          type: string
+          nullable: true
+        headquarters:
+          type: string
+          nullable: true
+        datacenters:
+          type: array
+          nullable: true
+          description: Country codes where the provider serves traffic, for example US or SG.
+          items: { type: string }
+
+    # ---- Image and video models ------------------------------------------
+
+    ImageModel:
+      type: object
+      required: [id, name, description, created, architecture, supported_parameters, supports_streaming, endpoints]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        description: { type: string }
+        created: { type: integer }
+        architecture:
+          type: object
+          required: [input_modalities, output_modalities]
+          properties:
+            input_modalities:
+              type: array
+              items: { $ref: '#/components/schemas/Modality' }
+            output_modalities:
+              type: array
+              items: { $ref: '#/components/schemas/Modality' }
+        supported_parameters:
+          type: object
+          description: Parameter specs keyed by parameter name.
+          additionalProperties: { $ref: '#/components/schemas/ImageParamSpec' }
+        supports_streaming: { type: boolean }
+        endpoints:
+          type: string
+          description: Relative API path to the model's endpoints.
+
+    ImageParamSpec:
+      type: object
+      required: [type]
+      properties:
+        type:
+          type: string
+          enum: [boolean, enum, range]
+        values:
+          type: array
+          description: Allowed values when type is enum.
+          items: { type: string }
+        min:
+          type: integer
+          description: Lower bound when type is range.
+        max:
+          type: integer
+          description: Upper bound when type is range.
+
+    VideoModel:
+      type: object
+      required: [id, canonical_slug, name, description, created, pricing_skus, allowed_passthrough_parameters]
+      properties:
+        id: { type: string }
+        canonical_slug: { type: string }
+        hugging_face_id:
+          type: string
+          nullable: true
+        name: { type: string }
+        description: { type: string }
+        created: { type: integer }
+        supported_resolutions:
+          type: array
+          nullable: true
+          items: { type: string }
+        supported_aspect_ratios:
+          type: array
+          nullable: true
+          items: { type: string }
+        supported_sizes:
+          type: array
+          nullable: true
+          items: { type: string }
+        supported_durations:
+          type: array
+          nullable: true
+          items: { type: integer }
+        supported_frame_images:
+          type: array
+          nullable: true
+          items: { type: string }
+        upscale_factor:
+          type: object
+          nullable: true
+          properties:
+            min: { type: number }
+            max: { type: integer }
+        creativity:
+          type: array
+          nullable: true
+          items: { type: integer }
+        generate_audio:
+          type: boolean
+          nullable: true
+        seed:
+          type: boolean
+          nullable: true
+        pricing_skus:
+          type: object
+          description: |
+            Price SKUs keyed by name. Values are decimal strings in cents. The
+            key set varies by model and is not fixed, so it is an open map.
+          additionalProperties: { $ref: '#/components/schemas/DecimalString' }
+        allowed_passthrough_parameters:
+          type: array
+          items: { type: string }
+
+    # ---- Auth infrastructure ---------------------------------------------
+
+    Jwk:
+      type: object
+      description: JSON Web Key (RFC 7517). Public key material only.
+      required: [kty, kid, alg, use]
+      properties:
+        kty: { type: string }
+        crv: { type: string }
+        kid: { type: string }
+        x: { type: string }
+        y: { type: string }
+        alg: { type: string }
+        use: { type: string }

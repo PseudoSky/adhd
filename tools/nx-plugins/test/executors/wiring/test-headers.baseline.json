@@ -646,16 +646,7 @@
     "entrypoint/backlog/src/query-output-codec.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/query/by-citation-path.spec.ts": [
-      "H1"
-    ],
     "entrypoint/backlog/src/query/c1-reference.spec.ts": [
-      "H1"
-    ],
-    "entrypoint/backlog/src/query/c2-legibility.spec.ts": [
-      "H1"
-    ],
-    "entrypoint/backlog/src/query/c7-envelopes.spec.ts": [
       "H1"
     ],
     "entrypoint/backlog/src/query/card.obligations.spec.ts": [
@@ -665,9 +656,6 @@
       "H1"
     ],
     "entrypoint/backlog/src/query/card.spec.ts": [
-      "H1"
-    ],
-    "entrypoint/backlog/src/query/edge-batch.spec.ts": [
       "H1"
     ],
     "entrypoint/backlog/src/query/filter-plan-project-path.spec.ts": [

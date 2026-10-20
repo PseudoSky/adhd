@@ -1,6 +1,6 @@
 {
   "name": "@adhd/agent-mcp",
-  "version": "2.3.13",
+  "version": "2.3.14",
   "type": "module",
   "bin": {
     "agent-mcp": "./dist/bundle/index.js",
@@ -20,16 +20,16 @@
     "better-sqlite3": "^12.10.0"
   },
   "devDependencies": {
-    "@adhd/agent-base-types": "^2.3.11",
+    "@adhd/agent-base-types": "^2.3.12",
     "@adhd/agent-core-env": "^0.1.5",
-    "@adhd/agent-core-native-tooling": "^0.0.4",
-    "@adhd/agent-core-provider": "^2.2.9",
+    "@adhd/agent-core-native-tooling": "^0.0.5",
+    "@adhd/agent-core-provider": "^2.2.10",
     "@adhd/agent-engine-compiler": "^2.2.8",
-    "@adhd/agent-engine-orchestrator": "^2.3.13",
-    "@adhd/agent-plugin-budget": "^0.2.9",
-    "@adhd/agent-plugin-tracing": "^0.0.3",
+    "@adhd/agent-engine-orchestrator": "^2.3.14",
+    "@adhd/agent-plugin-budget": "^0.2.10",
+    "@adhd/agent-plugin-tracing": "^0.0.4",
     "@adhd/agent-store-prompts": "^2.2.3",
-    "@adhd/agent-store-runtime": "^2.2.10",
+    "@adhd/agent-store-runtime": "^2.2.11",
     "@adhd/environment": "^0.1.8",
     "@adhd/environment-base-spec": "^0.1.4",
     "@modelcontextprotocol/sdk": "^1.29.0",

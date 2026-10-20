@@ -24,7 +24,7 @@
  * the spawned server a path that 404s is caught. (2) couples this package's
  * `test` target to `backlog:build`; the CI cost is documented in project.json.
  */
-import { existsSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -152,5 +152,27 @@ describe('resolveBacklogMcpEntry + defaultDispatchMcpServers (daafe2d3)', () => 
     // The override is a real, existing file — asserting it exists proves the
     // value flows through untouched and points somewhere spawnable.
     expect(existsSync(overrideEntry)).toBe(true);
+  });
+
+  it('resolves the monorepo entry when the CLI is launched through a symlink outside the checkout', () => {
+    // A bin shim (or a macOS /var -> /private/var path) leaves process.argv[1] pointing at the LINK. With no installed
+    // @adhd/backlog reachable and no override, only the walk up to `entrypoint/` can answer, and it must start from the
+    // real file's directory, not the link's. This repo has no node_modules in the temp tree, so branch 2 cannot answer.
+    const base = realpathSync(mkdtempSync(join(tmpdir(), 'dispatch-argv-link-')));
+    const realCli = join(base, 'repo', 'entrypoint', 'dispatch-cli', 'dist', 'bin', 'cli.js');
+    mkdirSync(join(base, 'repo', 'entrypoint', 'backlog', 'dist'), { recursive: true });
+    mkdirSync(join(base, 'repo', 'entrypoint', 'dispatch-cli', 'dist', 'bin'), { recursive: true });
+    mkdirSync(join(base, 'bin'), { recursive: true });
+    writeFileSync(realCli, '');
+    const link = join(base, 'bin', 'dispatch');
+    symlinkSync(realCli, link);
+    const saved = process.argv[1];
+    try {
+      process.argv[1] = link;
+      expect(resolveBacklogMcpEntry({} as NodeJS.ProcessEnv)).toBe(join(base, 'repo', 'entrypoint', 'backlog', 'dist', 'index.js'));
+    } finally {
+      process.argv[1] = saved;
+      rmSync(base, { recursive: true, force: true });
+    }
   });
 });
