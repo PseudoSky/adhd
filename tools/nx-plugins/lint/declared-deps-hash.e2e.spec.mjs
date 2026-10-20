@@ -3,7 +3,9 @@
  * tier: P
  * gap: This cannot be observed at tier S because the lint and sync-deps-check cache keys are produced by Nx's task hasher over a real workspace graph (external nodes from the lockfile, installed versions, and the plugin-emitted inputs), which only a subprocess `nx run` reaches.
  * cites: fbbb1464 AC3, fbbb1464 AC4
- * red: pending (authored against base f9b64cbc; not run in this dispatch)
+ * red: AC3 B-clause negative control (comment-only/node_modules-only expectation flipped to "must miss") failed with
+ *   AssertionError "B sync-deps-check was invalidated by a comment-only lockfile edit or a node_modules-only edit"
+ *   (node --test exit 1); restored, the same run passes 2/2 (exit 0).
  *
  * Fixture: an isolated workspace under .adhd/tmp (scratch root) with fake HOME, two projects, and the
  * repo's own lint/plugin.js and deps/plugin.js registered by absolute path (never copied). Project A declares
@@ -58,6 +60,36 @@ function resolveNxBin() {
 
 const NX_BIN = resolveNxBin();
 
+/**
+ * `node_modules/.modules.yaml`, the manifest pnpm writes beside every install. Nx's pnpm lockfile plugin
+ * refuses a `pnpm-lock.yaml` whose `node_modules` lacks it ("node_modules was not installed with pnpm"),
+ * so the fixture must carry it or the project graph never builds. No hoisted deps: the probe is direct.
+ */
+const MODULES_MANIFEST = `hoistedDependencies: {}
+included:
+  dependencies: true
+  devDependencies: true
+  optionalDependencies: true
+layoutVersion: 5
+nodeLinker: isolated
+packageManager: pnpm@8.15.9
+pendingBuilds: []
+publicHoistPattern: []
+registries:
+  default: https://registry.npmjs.org/
+skipped: []
+virtualStoreDir: .pnpm
+`;
+
+/**
+ * Integrity string for the probe at `version`. A real registry tarball has a distinct integrity per version, and
+ * Nx's pnpm parser hashes an external package by its lockfile integrity (pnpm-parser.js createHashFromSnapshot), so
+ * a fixture that reuses one integrity for every version can never show a version bump to the task hasher.
+ */
+function probeIntegrity(version) {
+  return `sha512-${Buffer.from(`${PROBE}@${version}`).toString('base64')}`;
+}
+
 /** Pnpm lockfile (v6, matching the repo's lockfile format) with the probe at `probeVersion`. */
 function lockfile(probeVersion) {
   return `lockfileVersion: '6.0'
@@ -88,7 +120,7 @@ packages:
     dev: true
 
   /${PROBE}@${probeVersion}:
-    resolution: {integrity: sha512-ZHJvYmUtcHJvYmU=}
+    resolution: {integrity: ${probeIntegrity(probeVersion)}}
     dev: true
 `;
 }
@@ -141,9 +173,20 @@ function makeFixture() {
   w('pnpm-workspace.yaml', "packages:\n  - 'projects/*'\n");
   w('eslint.base.config.mjs', 'export default [];\n');
   w('eslint.config.mjs', 'export default [];\n');
-  w('nx.json', json({ plugins: [{ plugin: LINT_PLUGIN }, { plugin: DEPS_PLUGIN }] }));
+  // targetDefaults mirror the repo root nx.json's `cache: true` for lint and sync-deps-check: without it the
+  // explicit run-commands targets below are never cacheable and no warm re-run can observe a hit. The root's
+  // `lint.dependsOn: ["sync-deps-check"]` is deliberately NOT mirrored: with it, an out-of-range installed
+  // version fails sync-deps-check first, lint never executes, and AC4 (lint's own cache entry) is unobservable.
+  w('nx.json', json({
+    plugins: [{ plugin: LINT_PLUGIN }, { plugin: DEPS_PLUGIN }],
+    targetDefaults: {
+      'sync-deps-check': { cache: true },
+      lint: { cache: true },
+    },
+  }));
   w('check-declared.mjs', CHECK_SCRIPT);
   w('node_modules/eslint/package.json', json({ name: ESLINT, version: '9.0.0' }));
+  w('node_modules/.modules.yaml', MODULES_MANIFEST);
 
   const projects = {
     a: { [ESLINT]: '9.0.0', [PROBE]: '1.0.0' },
@@ -234,9 +277,24 @@ test('AC3: bumping an installed declared dependency misses only the declaring pr
 
     installProbe(fx.ws, '2.0.0');
 
-    // B does not declare the probe: its keys must be unchanged.
-    assert.equal(nxRun(fx, 'proj-b', 'sync-deps-check').cached, true, 'B sync-deps-check hash changed; it does not declare the bumped dependency');
-    assert.equal(nxRun(fx, 'proj-b', 'lint').cached, true, 'B lint hash changed; it does not declare the bumped dependency');
+    // B does not declare the probe. Amended B-clause (fbbb1464 AC3, option A): a non-declaring project may be
+    // invalidated at most once per external-graph change, then stays cached; comment-only lockfile edits and
+    // node_modules-only edits do not invalidate.
+    for (const target of ['sync-deps-check', 'lint']) {
+      // (1) The first run after the external-graph change may miss; it must still succeed.
+      const first = nxRun(fx, 'proj-b', target);
+      assert.equal(first.status, 0, `B ${target} first run after the external-graph change must succeed (a miss is permitted)\n${first.out}`);
+      // (2) The second run is cached: at most one invalidation per change.
+      assert.equal(nxRun(fx, 'proj-b', target).cached, true, `B ${target} was invalidated again with no further change; at most one invalidation per external-graph change is allowed`);
+    }
+
+    // (3) A comment-only lockfile edit and a node_modules-only edit leave B cached.
+    const lockPath = join(fx.ws, 'pnpm-lock.yaml');
+    writeFileSync(lockPath, `# comment-only edit, no package content change\n${readFileSync(lockPath, 'utf8')}`);
+    writeFileSync(join(fx.ws, 'node_modules', ESLINT, 'node-modules-only-edit.txt'), 'not a manifest change\n');
+    for (const target of ['sync-deps-check', 'lint']) {
+      assert.equal(nxRun(fx, 'proj-b', target).cached, true, `B ${target} was invalidated by a comment-only lockfile edit or a node_modules-only edit`);
+    }
 
     // A declares the probe: both keys must change (a miss, not a replay of the old entry).
     assert.equal(nxRun(fx, 'proj-a', 'sync-deps-check').cached, false, 'A sync-deps-check hash did not change after a declared dependency was bumped');
