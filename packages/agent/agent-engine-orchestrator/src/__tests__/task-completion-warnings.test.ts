@@ -1,4 +1,8 @@
 /**
+ * guards: completionWarningsOf throws on a non-JSON TASK_COMPLETED payload, reads an arbitrary row when a task has several TASK_COMPLETED events, or stops filtering unknown warning values
+ * tier: S
+ * cites: plan discovery-sweep-1014 blind-review A AC1, AC2, AC3
+ *
  * plan discovery-sweep-1014 blind-review A AC1 / AC2 / AC3 -- `completionWarningsOf` (tools/task.ts).
  *
  * Failure modes covered:

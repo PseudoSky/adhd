@@ -1,4 +1,8 @@
 /**
+ * guards: a production lib source cites a spec by file:line (e.g. dispatch-stream-encode.spec.ts:124), leaving a dangling pointer once the spec is edited
+ * tier: S
+ * cites: plan discovery-sweep-1014 blind-review C AC4
+ *
  * plan discovery-sweep-1014 blind-review C AC4
  *
  * Failure mode: a production source comment cites a spec by `file.spec.ts:<line>`;
