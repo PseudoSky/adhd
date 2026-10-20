@@ -1,6 +1,6 @@
 {
   "name": "@adhd/agent-engine-orchestrator",
-  "version": "2.3.14",
+  "version": "2.3.15",
   "description": "Agent engine orchestrator — providers, clients, tools, plugins, and validation extracted from agent-mcp",
   "type": "module",
   "publishConfig": {
