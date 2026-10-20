@@ -415,7 +415,7 @@ importers:
         specifier: ^2.2.8
         version: link:../../packages/agent/agent-engine-compiler
       '@adhd/agent-engine-orchestrator':
-        specifier: ^2.3.14
+        specifier: ^2.3.15
         version: link:../../packages/agent/agent-engine-orchestrator
       '@adhd/agent-plugin-budget':
         specifier: ^0.2.10
@@ -732,7 +732,7 @@ importers:
         specifier: ^0.0.5
         version: link:../../packages/agent/agent-core-native-tooling
       '@adhd/backlog':
-        specifier: ^1.0.17
+        specifier: ^1.0.18
         version: link:../backlog
       '@adhd/dispatch-base-spec':
         specifier: ^0.1.7

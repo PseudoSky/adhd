@@ -36,22 +36,22 @@
     "publishedFromRef": "b76b4bedadaaaf740b8658a19523e9fe03095e53"
   },
   "@adhd/agent-engine-orchestrator": {
-    "version": "2.3.14",
-    "normalizedHash": "sha256:1aeab49c62aea8a671339a7ed53e760ab8bdc3b3169c81ce3a7776cff134cd0c",
-    "publishedIntegrity": "sha512-RIBHNVHQmfViE88k4APgVj8niKzNBDAJtuHcAEd5BhPZWInuJo09Dr9LWpdvZikzUQcZbJ+5M0n92pXc1uGa3g==",
-    "publishedFromRef": "b1dbfa0179058c48ecd439ba2357063a6c98ccb2"
+    "version": "2.3.15",
+    "normalizedHash": "sha256:c8754e74ff438ef76384922d1084c15250ab34edcc287d8e07210a104ddd01d7",
+    "publishedIntegrity": "sha512-5TiDlCVVekpQlZVWhmUh6iEp8yak4y7KQoAC9VuBbJn2ygYGPkHImiS+8Yb2xaMX07gytDBmT15hgjISaUn3VA==",
+    "publishedFromRef": "5f12b13af3100597655b5298bda7c7287a46c7b1"
   },
   "@adhd/agent-generator-plugin": {
-    "version": "0.1.7",
-    "normalizedHash": "sha256:94456febe778d816d3973a975e66fb3f200d9062d5ff4b31ba09edfb4f10af21",
-    "publishedIntegrity": "sha512-3hZGXdPEJgrqfke/DwpTG0ZL0udPM04H5gau+nEIY9Ksny9U00P5A/xMaRStNXinRbMNbBGf3W1GhYneiHdhcA==",
-    "publishedFromRef": "ab8813cc6cf570e9fb2aa66e361ef5d365693682"
+    "version": "0.1.8",
+    "normalizedHash": "sha256:020128b0859a59f32e21c454d8f5c5c19e9e8e6ae285f2585abcc6f63326a095",
+    "publishedIntegrity": "sha512-P9xGlbXe2LraBNw6JVND6wCy/KXB06RGgGnGJ52byQAlQc28014aSf02QHExIGJlrN7A6EYYciHX8VGCwtMHNA==",
+    "publishedFromRef": "5f12b13af3100597655b5298bda7c7287a46c7b1"
   },
   "@adhd/agent-mcp": {
-    "version": "2.3.14",
-    "normalizedHash": "sha256:89494ec96456b9a00eb1361108a82a559ee2ed9c89e6d038f78944aea6c4cf61",
-    "publishedIntegrity": "sha512-xKXyfv+59QG258LqyWx7H+zsFKUclp8TYcet11G0SeOCMGFWfZ6WjsaiXTe6uPsyWyTkPgZvCubIBjg2CbuNDg==",
-    "publishedFromRef": "b1dbfa0179058c48ecd439ba2357063a6c98ccb2"
+    "version": "2.3.15",
+    "normalizedHash": "sha256:25ebf2bf9c4c65c80007bb3f5715eada9685a8065c08efc0bc8f4b02276db79d",
+    "publishedIntegrity": "sha512-JA0aHgQ6h4QgpTA9oNrIAP/ZXtMk75Q4w0wXXXcMaF/AK4Xtr7Da2qnkBUyyYS36DfcBSS5NmXgRPR4kUu8/OQ==",
+    "publishedFromRef": "5f12b13af3100597655b5298bda7c7287a46c7b1"
   },
   "@adhd/agent-plugin-budget": {
     "version": "0.2.10",
@@ -114,10 +114,10 @@
     "publishedFromRef": "a1a6ba024c5526b930f97c5420e920639d14e110"
   },
   "@adhd/apigen-cli": {
-    "version": "0.2.12",
-    "normalizedHash": "sha256:0afb03c359f134d882670938d347becd952432ecbaa6f415bd8e2403257bd822",
-    "publishedIntegrity": "sha512-n5lE9Qwwz5+zDSJOD8ARg8UIovbOZFwnQGOZ2m76+aG5+wKTC2ZfUUnvkjyoQ8D0X/ddeRw+7Brypilz2jFCsQ==",
-    "publishedFromRef": "b1dbfa0179058c48ecd439ba2357063a6c98ccb2"
+    "version": "0.2.13",
+    "normalizedHash": "sha256:d8d18c93add8c06b6e954dfc92c2f76e6c0482ffa756305adab39c93b58b01c7",
+    "publishedIntegrity": "sha512-FQ1MVGVNGpCbSmnLyQvDdPhGkHie1+5rs3lanLb9ailS85XQLx36pGisTV/KuZvnJzE6d1DgGqG9xDGp3JPSRQ==",
+    "publishedFromRef": "5f12b13af3100597655b5298bda7c7287a46c7b1"
   },
   "@adhd/apigen-codegen-openapi": {
     "version": "0.2.6",
@@ -156,10 +156,10 @@
     "publishedFromRef": "b1dbfa0179058c48ecd439ba2357063a6c98ccb2"
   },
   "@adhd/apigen-generator-nx": {
-    "version": "0.1.6",
-    "normalizedHash": "sha256:6da81533e86c6018f5c6e45a37a120e6a7859c7a45e7d47a5393aa1a33e597da",
-    "publishedIntegrity": "sha512-qunHdGG4WVi1hQ6KIG3L3bMPKYnPxHCfzfkqe7S+gCCuaKUvoBKx3a2kuIH+77efUO1FZTe9/xVeI+jB8hjfOA==",
-    "publishedFromRef": "ab8813cc6cf570e9fb2aa66e361ef5d365693682"
+    "version": "0.1.7",
+    "normalizedHash": "sha256:6376ec106a6ce37b0c0036e6555a3e348596ed4f0ff230bf5acc6635f6d87f78",
+    "publishedIntegrity": "sha512-PC/1Rrm8MCLErTAXyQJT5iT3vUW3twF5E1N8uV0Y2A9zDfqIlkN4H1LoIh01s+zLlkn015el23zQRnDKsqvC8w==",
+    "publishedFromRef": "5f12b13af3100597655b5298bda7c7287a46c7b1"
   },
   "@adhd/apigen-plugin-api-express": {
     "version": "0.2.9",
@@ -264,10 +264,10 @@
     "publishedFromRef": "a1a6ba024c5526b930f97c5420e920639d14e110"
   },
   "@adhd/backlog": {
-    "version": "1.0.17",
-    "normalizedHash": "sha256:6086a4424a21c576efba6b028f03b2d0806106ca208afdf35af91115878cf202",
-    "publishedIntegrity": "sha512-Hw7jfg50NgxVpTvXQiWiWPqkPO9eBjC2dwQpaA0rrO3FtCNGcd0H5d0ALC7PYfNYMTNHNy7XvuRIxVgCfIEH2Q==",
-    "publishedFromRef": "b1dbfa0179058c48ecd439ba2357063a6c98ccb2"
+    "version": "1.0.18",
+    "normalizedHash": "sha256:0168f324f02df9b25c437668210a9c52b56861e7c63ee652e801e7a9f55e5bf6",
+    "publishedIntegrity": "sha512-XvnxvkRpbybl2MtR5ySwlIs5jce9+iBQx0yWa6omqLaEGe0Sv/ot/XabwDZrnwBv+wKBRDaVoZkJ3VXfacgsvA==",
+    "publishedFromRef": "5f12b13af3100597655b5298bda7c7287a46c7b1"
   },
   "@adhd/data-base-transforms": {
     "version": "2.3.4",
@@ -306,10 +306,10 @@
     "publishedFromRef": "a1a6ba024c5526b930f97c5420e920639d14e110"
   },
   "@adhd/dispatch-cli": {
-    "version": "0.1.9",
-    "normalizedHash": "sha256:900b8faa2c3d88f3730a57ce3209677261e0b414beafe7a4972bcb9716310324",
-    "publishedIntegrity": "sha512-B27r7UPX1dqMQ2brG4yy+qQAiM8ZOmiVkTnKOWvZ7fFtzk3W+6PI0SCtSAyY+4q7g0+fMvwyteMAEJRXH6jvzA==",
-    "publishedFromRef": "b1dbfa0179058c48ecd439ba2357063a6c98ccb2"
+    "version": "0.1.10",
+    "normalizedHash": "sha256:5904b7a76e684807ba9a977789bc247661e885b041d6e3eda9e829fd30bf1fea",
+    "publishedIntegrity": "sha512-JZDBdix4BuvxAtJ3B8TLr4xVipHfjZYxaZTcL4iX87xEZcb+ALGDSvoxN0gJ4S1hEul9aW1WwYQLedkFKNU3IA==",
+    "publishedFromRef": "5f12b13af3100597655b5298bda7c7287a46c7b1"
   },
   "@adhd/dispatch-core-client": {
     "version": "0.1.3",
@@ -354,10 +354,10 @@
     "publishedFromRef": "a1a6ba024c5526b930f97c5420e920639d14e110"
   },
   "@adhd/policy": {
-    "version": "0.0.1",
-    "normalizedHash": "sha256:840308cd32222b9deadc300854741e5916913ccfe1cca1514bf5d6e53e996bf0",
-    "publishedIntegrity": "sha512-TbuEhDt0hJlQJDORq4iAJektczWftDpkegPdQT2CRWUIYrXXAdnpZZFqY8IbPrfPRwPlfpyElYNQq88HtxZxYw==",
-    "publishedFromRef": "b1dbfa0179058c48ecd439ba2357063a6c98ccb2"
+    "version": "0.0.2",
+    "normalizedHash": "sha256:59bf4aadd6bd3db932fa6c441f1c4e67c234d9033501b0976c75b9d3e4999dfc",
+    "publishedIntegrity": "sha512-EJh6OElddVWkvU2jyEsMbbzxQYX7glxXTT7IeUho4DYGtY093Yd9PpMroLTkl0xq12jVuUUSkts8uMK4C0AX8w==",
+    "publishedFromRef": "5f12b13af3100597655b5298bda7c7287a46c7b1"
   },
   "@adhd/policy-core-client": {
     "version": "0.0.1",
