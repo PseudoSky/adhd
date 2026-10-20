@@ -14,9 +14,8 @@
  *  - The template is built with the SAME calls both openers make
  *    (`createStoreAdapter` + `createGraphBackend(OPEN_TYPE_POLICY)` +
  *    `applySchema()`), then closed, so the file is a quiesced image.
- *  - The template is used ONLY if, after close, the directory holds no file
- *    except the db (no `-wal`/`-shm`/journal sidecar carrying uncommitted
- *    pages). Otherwise `seedFromSchemaTemplate` returns false and the caller
+ *  - The template is used ONLY if, after close, no `-wal`/journal sidecar
+ *    carries uncommitted pages (a non-empty one). Otherwise `seedFromSchemaTemplate` returns false and the caller
  *    opens the store from scratch exactly as before.
  *  - The copy is placed with link-if-absent semantics: it never replaces an
  *    existing `dbPath`, so a child process opening the SAME path (the
@@ -72,8 +71,11 @@ async function buildTemplate(): Promise<string | null> {
     } finally {
       await adapter.close();
     }
+    // Only a page-carrying sidecar (a non-empty WAL or rollback journal) makes the image unquiesced. The store
+    // adapter also leaves non-page files after close (a stale shared-memory snapshot, a sweep marker, a lease dir);
+    // those carry no database pages and must not disable the template.
     const strays = readdirSync(dir).filter(
-      (f) => f !== 'template.db' && statSync(join(dir, f)).size > 0
+      (f) => /-(wal|journal)$/.test(f) && statSync(join(dir, f)).size > 0
     );
     if (strays.length > 0 || !existsSync(dbPath)) return null;
     return dbPath;
