@@ -1,3 +1,13 @@
+## 0.1.10 (2026-10-19)
+
+### 🩹 Fixes
+
+- **dispatch-cli:** resolve the entry script's real path before walking up to the checkout ([2eb81cdc](https://github.com/PseudoSky/adhd/commit/2eb81cdc))
+
+### ❤️ Thank You
+
+- pseudosky
+
 ## 0.1.9 (2026-10-15)
 
 This was a version bump only for dispatch-cli to align it with other projects, there were no code changes.

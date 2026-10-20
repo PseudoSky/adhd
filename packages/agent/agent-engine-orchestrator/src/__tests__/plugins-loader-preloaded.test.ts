@@ -1,7 +1,8 @@
 /**
- * guards: the plugin loader fails to install a specifier from the preloadedModules map (bundled host), or installs it without passing the entry's config, or resolves a missing specifier without the map.
+ * guards: loadExternalPlugins installs a plugin from the preloaded module map without resolving its specifier, and still fails at the resolve stage for an unresolvable specifier when no map entry exists.
  * tier: S
- * cites: d365a3e1 (bundle the server with preloaded default plugin modules) — preloadedModules resolution, cited in the test titles.
+ * cites: bundled-host AC (preloaded plugin modules), negative control in the same file.
+ * red run: with the preloaded branch disabled (`if (false && pre !== undefined)`), test 1 fails with a resolve-stage failure; the negative control stays green.
  */
 import { describe, expect, it, vi } from "vitest";
 import type { EngineLogger } from "../interfaces.js";

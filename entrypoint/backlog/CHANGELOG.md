@@ -1,3 +1,20 @@
+## 1.0.18 (2026-10-19)
+
+### 🩹 Fixes
+
+- **backlog:** stop the CLI trace from overwriting the sox log level ([fd9e2755](https://github.com/PseudoSky/adhd/commit/fd9e2755))
+- **backlog:** make the CLI stderr check real and correct the output-stream contract ([5ab84154](https://github.com/PseudoSky/adhd/commit/5ab84154))
+- **backlog:** compare timeline window by parsed instant and validate cursor since ([2c911586](https://github.com/PseudoSky/adhd/commit/2c911586))
+- **backlog:** reject explicit null for open-curve.at and tighten timeline since ([333c2407](https://github.com/PseudoSky/adhd/commit/333c2407))
+- **backlog:** reject explicit null for defaulted inputs and fix timeline window cursor ([c4843264](https://github.com/PseudoSky/adhd/commit/c4843264))
+- **backlog:** route CLI logs through sox telemetry and make optional inputs optional ([024eb38c](https://github.com/PseudoSky/adhd/commit/024eb38c))
+- **backlog:** verify citations against the repo that contains the cited path ([54ed7139](https://github.com/PseudoSky/adhd/commit/54ed7139))
+- **backlog:** with-dist-lock resolves its child via node_modules/.bin ([b038b4df](https://github.com/PseudoSky/adhd/commit/b038b4df))
+
+### ❤️ Thank You
+
+- pseudosky
+
 ## 1.0.17 (2026-10-15)
 
 ### 🚀 Features

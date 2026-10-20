@@ -1,3 +1,31 @@
+## 2.3.16 (2026-10-20)
+
+### 🚀 Features
+
+- **agent-engine-orchestrator:** load plugins from a preloaded module map ([d8099256](https://github.com/PseudoSky/adhd/commit/d8099256))
+
+### 🩹 Fixes
+
+- **agent-engine-orchestrator:** send the resolved Anthropic base URL to the SDK client ([dd20e8e3](https://github.com/PseudoSky/adhd/commit/dd20e8e3))
+
+### ❤️ Thank You
+
+- pseudosky
+
+## 2.3.15 (2026-10-19)
+
+### 🚀 Features
+
+- **agent-mcp:** bundle the server with preloaded default plugin modules ([d365a3e1](https://github.com/PseudoSky/adhd/commit/d365a3e1))
+
+### 🩹 Fixes
+
+- **backlog:** route CLI logs through sox telemetry and make optional inputs optional ([024eb38c](https://github.com/PseudoSky/adhd/commit/024eb38c))
+
+### ❤️ Thank You
+
+- pseudosky
+
 ## 2.3.14 (2026-10-15)
 
 ### 🩹 Fixes

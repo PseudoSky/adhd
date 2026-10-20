@@ -13,10 +13,10 @@
  * drizzle/ folder beside the bundle. Path resolution only; no SQL is changed.
  */
 import { build } from 'esbuild';
-import { spawn } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { cpSync, existsSync, readFileSync, rmSync, mkdirSync } from 'node:fs';
+import { cpSync, existsSync, readFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -25,7 +25,17 @@ const pkgRoot = resolve(here, '..');
 const repoRoot = resolve(pkgRoot, '..', '..');
 const outDir = join(pkgRoot, 'dist', 'bundle');
 
-const ENTRY = join(pkgRoot, 'dist', 'src', 'index.js');
+/**
+ * Every published bin, keyed by its bundle output name. All four are bundled so the
+ * published package can declare only native dependencies (better-sqlite3) and every
+ * bin still runs after a single small install.
+ */
+const ENTRIES = {
+  'index': join(pkgRoot, 'dist', 'src', 'index.js'),
+  'agent-mcp-tail': join(pkgRoot, 'dist', 'src', 'scripts', 'agent-mcp-tail.js'),
+  'agent-mcp-follow': join(pkgRoot, 'dist', 'src', 'scripts', 'agent-mcp-follow.js'),
+  'agent-mcp-install': join(pkgRoot, 'dist', 'src', 'scripts', 'agent-mcp-install.js'),
+};
 const RUNNER = /migrate-runner\.(ts|js)$/;
 const URL_EXPR = /new URL\((['"])\.\.\/\.\.\/drizzle\1, import\.meta\.url\)/g;
 
@@ -72,6 +82,10 @@ const inlineRelativePackageJson = {
     b.onLoad({ filter: /\.(c|m)?[jt]s$/ }, (args) => {
       const src = readFileSync(args.path, 'utf8');
       if (!src.includes('package.json')) return undefined;
+      // agent-mcp's own sources keep their runtime `require("../package.json")`: the bundles sit in
+      // dist/bundle/, one level below the shipped dist/package.json, so the version is read from the
+      // installed package. Inlining it would freeze a build-time snapshot that can go stale.
+      if (args.path.startsWith(join(pkgRoot, 'dist') + sep) || args.path.startsWith(join(pkgRoot, 'src') + sep)) return undefined;
       let changed = false;
       const contents = src.replace(RELATIVE_PACKAGE_JSON, (match, quote, rel) => {
         const target = resolve(dirname(args.path), rel);
@@ -85,19 +99,20 @@ const inlineRelativePackageJson = {
   },
 };
 
-rmSync(outDir, { recursive: true, force: true });
 mkdirSync(outDir, { recursive: true });
 
 await build({
-  entryPoints: [ENTRY],
-  outfile: join(outDir, 'index.js'),
+  entryPoints: ENTRIES,
+  outdir: outDir,
   bundle: true,
   platform: 'node',
   format: 'esm',
   target: 'node20',
   external: ['better-sqlite3'],
   // CJS-only dependencies (e.g. node-fetch) call require(); give the ESM bundle one.
-  banner: { js: "import { createRequire as __bundleCreateRequire } from 'node:module'; const require = __bundleCreateRequire(import.meta.url);" },
+  // Some bundled CJS dependencies (pino worker resolution, the MCP filesystem server) read
+  // __filename/__dirname, which do not exist in an ESM file; define them from import.meta.url.
+  banner: { js: "import { createRequire as __bundleCreateRequire } from 'node:module'; import { fileURLToPath as __bundleFileURLToPath } from 'node:url'; import { dirname as __bundleDirname } from 'node:path'; const require = __bundleCreateRequire(import.meta.url); const __filename = __bundleFileURLToPath(import.meta.url); const __dirname = __bundleDirname(__filename);" },
   plugins: [perRunnerUrl, inlineRelativePackageJson],
   logLevel: 'warning',
 });
@@ -110,7 +125,7 @@ for (const [label, drizzleDir] of owners) {
 const selfDrizzle = join(pkgRoot, 'drizzle');
 cpSync(selfDrizzle, join(outDir, 'drizzle', 'agent-mcp'), { recursive: true });
 
-console.log(`bundle: ${join(outDir, 'index.js')} (${owners.size + 1} migration folders)`);
+console.log(`bundle: ${Object.keys(ENTRIES).map((n) => join(outDir, `${n}.js`)).join(', ')} (${owners.size + 1} migration folders)`);
 
 /**
  * Verifies the bundle the way an MCP host starts it: spawn the file, send
@@ -158,5 +173,39 @@ function verifyHandshake(bundleFile, deadlineMs = 60000) {
   });
 }
 
-const response = await verifyHandshake(join(outDir, 'index.js'));
+/**
+ * The bundle reads its version with `require("../package.json")`, so it must sit one
+ * directory below a package.json, exactly as it does once published (dist/bundle/ next
+ * to dist/package.json). The verify step therefore copies the bundle and a package.json
+ * into tmp/bundle-verify/ (same relative layout, outside dist/ so it is never packed)
+ * and runs the handshake from there. The copy is overwritten on every run; nothing is
+ * removed.
+ */
+const VERIFY_ROOT = join(pkgRoot, 'tmp', 'bundle-verify');
+cpSync(outDir, join(VERIFY_ROOT, 'bundle'), { recursive: true });
+cpSync(join(pkgRoot, 'package.json'), join(VERIFY_ROOT, 'package.json'));
+
+const response = await verifyHandshake(join(VERIFY_ROOT, 'bundle', 'index.js'));
 console.log(`verify: initialize OK -> ${response.slice(0, 120)}`);
+
+/**
+ * Every bin must report the package's own version. The inlined package.json is a build-time
+ * snapshot, so a stale source (e.g. a leftover dist/package.json) silently ships a wrong
+ * `--version`. Compare each bundle's `--version` output to the source package.json.
+ */
+// Overwrite the verify copy's version with a sentinel: a bin that still reports it read
+// package.json at runtime; a bin that reports anything else froze a build-time snapshot.
+const SENTINEL = '0.0.0-runtime-read-probe';
+const verifyPkg = JSON.parse(readFileSync(join(VERIFY_ROOT, 'package.json'), 'utf8'));
+verifyPkg.version = SENTINEL;
+writeFileSync(join(VERIFY_ROOT, 'package.json'), JSON.stringify(verifyPkg));
+for (const name of Object.keys(ENTRIES)) {
+  const reported = execFileSync(process.execPath, [join(VERIFY_ROOT, 'bundle', `${name}.js`), '--version'], {
+    encoding: 'utf8',
+    cwd: VERIFY_ROOT,
+  }).trim();
+  if (reported !== SENTINEL) {
+    throw new Error(`verify: ${name} --version reported "${reported}", expected the runtime package.json version "${SENTINEL}" (a build-time snapshot was baked in)`);
+  }
+}
+console.log(`verify: --version read at runtime on ${Object.keys(ENTRIES).length} bins`);

@@ -1,3 +1,43 @@
+## 2.3.18 (2026-10-20)
+
+### 🩹 Fixes
+
+- **agent-mcp:** read package.json at runtime in bundled bins so --version cannot freeze a stale build-time snapshot ([cf599783](https://github.com/PseudoSky/adhd/commit/cf599783))
+
+### ❤️ Thank You
+
+- pseudosky
+
+## 2.3.17 (2026-10-20)
+
+### 🩹 Fixes
+
+- **agent-mcp:** bake the source package.json version into bundled bins and fail the build when a bin reports a different --version ([e4859c37](https://github.com/PseudoSky/adhd/commit/e4859c37))
+
+### ❤️ Thank You
+
+- pseudosky
+
+## 2.3.16 (2026-10-20)
+
+### 🚀 Features
+
+- **agent-mcp:** ship a single-file bundle with --version on every bin ([764fbb9e](https://github.com/PseudoSky/adhd/commit/764fbb9e))
+
+### ❤️ Thank You
+
+- pseudosky
+
+## 2.3.15 (2026-10-19)
+
+### 🚀 Features
+
+- **agent-mcp:** bundle the server with preloaded default plugin modules ([d365a3e1](https://github.com/PseudoSky/adhd/commit/d365a3e1))
+
+### ❤️ Thank You
+
+- pseudosky
+
 ## 2.3.14 (2026-10-15)
 
 ### 🩹 Fixes

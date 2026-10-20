@@ -4,6 +4,7 @@ import { parseArgs } from "node:util";
 import Database from "better-sqlite3";
 
 import { legacyTailDbPath, resolveTailDbPath, tailDbHint } from "./tail-db-path.js";
+import { CLI_VERSION } from "../cli-version.js";
 
 const { values: args } = parseArgs({
   options: {
@@ -13,9 +14,37 @@ const { values: args } = parseArgs({
     "limit":          { type: "string",  short: "n", default: "" },
     "json":           { type: "boolean", short: "j", default: false },
     "follow":         { type: "boolean", short: "F", default: false },
+    "help":           { type: "boolean", default: false },
+    "version":        { type: "boolean", short: "v", default: false },
   },
   allowPositionals: true,
 });
+
+if (args["version"]) {
+  process.stdout.write(`${CLI_VERSION}\n`);
+  process.exit(0);
+}
+
+if (args["help"]) {
+  process.stdout.write(
+    [
+      "agent-mcp-tail — print the transcript of agent-mcp tasks from the local database",
+      "",
+      "Usage: agent-mcp-tail [options]",
+      "",
+      "  -f, --full              show full message bodies (up to 100000 chars each)",
+      "  -a, --agent <name>      only show tasks for this agent",
+      "  -h, --include-history   with --follow, replay existing history first",
+      "  -n, --limit <count>     show at most this many entries",
+      "  -j, --json              emit JSON lines",
+      "  -F, --follow            keep streaming new entries",
+      "      --help              show this help and exit",
+      "  -v, --version           print the version and exit",
+      "",
+    ].join("\n"),
+  );
+  process.exit(0);
+}
 
 const verbose = args["full"] as boolean;
 const filterAgent = (args["agent"] || "").trim();
