@@ -1,3 +1,13 @@
+## 2.3.17 (2026-10-20)
+
+### 🩹 Fixes
+
+- **agent-mcp:** bake the source package.json version into bundled bins and fail the build when a bin reports a different --version ([e4859c37](https://github.com/PseudoSky/adhd/commit/e4859c37))
+
+### ❤️ Thank You
+
+- pseudosky
+
 ## 2.3.16 (2026-10-20)
 
 ### 🚀 Features
