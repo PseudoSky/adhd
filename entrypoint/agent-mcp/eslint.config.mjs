@@ -84,8 +84,32 @@ export default [
                         "{projectRoot}/scripts/bundle.mjs"
                     ],
                     ignoredDependencies: [
+                        // Inlined into dist/bundle/*.js by scripts/bundle.mjs (esbuild), so they are
+                        // declared as devDependencies and never ship. The rule reads the src imports
+                        // and would otherwise demand them under `dependencies`.
+                        "@adhd/agent-base-types",
+                        "@adhd/agent-core-env",
+                        "@adhd/agent-core-native-tooling",
+                        "@adhd/agent-core-provider",
+                        "@adhd/agent-engine-compiler",
+                        "@adhd/agent-engine-orchestrator",
+                        "@adhd/agent-store-prompts",
+                        "@adhd/agent-store-runtime",
+                        "@adhd/environment",
+                        "@adhd/environment-base-spec",
+                        "@modelcontextprotocol/sdk",
                         "@adhd/agent-plugin-budget",
-                        "@adhd/agent-plugin-tracing"
+                        "@adhd/agent-plugin-tracing",
+                        "dotenv",
+                        "drizzle-orm",
+                        "pino",
+                        "tslib",
+                        "zod",
+                        // Resolved by name at runtime (createRequire + require.resolve in
+                        // @adhd/agent-core-native-tooling), not imported, so static analysis
+                        // reports it unused. It must ship as a runtime dependency: the
+                        // bundled server locates it next to the installed package.
+                        "@modelcontextprotocol/server-filesystem"
                     ]
                 }
             ]
