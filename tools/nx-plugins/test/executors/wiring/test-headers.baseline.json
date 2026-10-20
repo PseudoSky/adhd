@@ -892,12 +892,6 @@
     "entrypoint/backlog/src/store/catalog-invariant-guard.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/store/embed-drain-real-model.e2e.ts": [
-      "H1"
-    ],
-    "entrypoint/backlog/src/store/embed-drain-real-model.spec.ts": [
-      "H1"
-    ],
     "entrypoint/backlog/src/store/embed-drain.spec.ts": [
       "H1"
     ],
