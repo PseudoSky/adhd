@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "generated_from": "7314f964b50ecdec88dcae27801adecf06483039",
+  "generated_from": "fb24c02b6a3fe74c6d62f095af8528b353a9bb8e",
   "generated_by": "entrypoint/backlog/scripts/gen-ac-traceability.mjs",
   "source": "docs/plan/backlog-consolidation/QA-STRATEGY.md §3 (107 measured AC bullets, SPEC-SET.md S01–S12)",
   "counts": {
@@ -1449,7 +1449,7 @@
       "reason": "**surface-absent**",
       "measured": {
         "token": "precondition_failed",
-        "rg_matches_in_src": 60
+        "rg_matches_in_src": 62
       },
       "negative_control": null,
       "red_sha": null,
