@@ -109,11 +109,11 @@
       "end_ref": "99b936cf755d0b18b174f6d16848851ee857323f"
     },
     "tests-unit-surface": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-10-21T19:19:40.958Z",
-      "done_at": null,
+      "done_at": "2026-10-21T19:47:48.644Z",
       "start_ref": "dba8167ede6e91702daa5cd35be1f5035366abb4",
-      "end_ref": null
+      "end_ref": "9830641c9bcb909ab67ba79e0e41efc73a3f5ad7"
     },
     "gates-first": {
       "status": "pending",
@@ -884,6 +884,18 @@
       "audit_criteria_total": 8,
       "by": "pseudosky",
       "note": "guard exit 0 (orchestrator-verified); sonnet; ee08311e"
+    },
+    {
+      "ts": "2026-10-21T19:47:48.644Z",
+      "from": "prod-examples",
+      "to": "tests-unit-surface",
+      "start_ref": "dba8167ede6e91702daa5cd35be1f5035366abb4",
+      "end_ref": "9830641c9bcb909ab67ba79e0e41efc73a3f5ad7",
+      "audit_exit": 0,
+      "audit_criteria_passed": 5,
+      "audit_criteria_total": 5,
+      "by": "pseudosky",
+      "note": "guard exit 0 (orchestrator-verified); sonnet; dfb95d27"
     }
   ],
   "amendment_log": [
