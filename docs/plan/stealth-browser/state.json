@@ -1452,6 +1452,18 @@
         "scripts/criteria.json"
       ],
       "by": "pseudosky"
+    },
+    {
+      "ts": "2026-10-21T18:49:54.631Z",
+      "state": "search-errors",
+      "class": "executor",
+      "type": "rescope-criterion",
+      "reason": "search-errors.7: SEARCH_FAILED strategy-unsupported and HITL_ABORTED exit 2 rows",
+      "files_synced": [
+        "contexts/search-errors.md",
+        "scripts/criteria.json"
+      ],
+      "by": "pseudosky"
     }
   ],
   "authored_with": {
