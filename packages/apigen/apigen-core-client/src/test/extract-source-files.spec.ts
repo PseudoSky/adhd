@@ -1,26 +1,23 @@
 /**
- * STUB (mocked placeholder) — the real, RESOURCE-CONSUMING test lives in the
- * sibling `extract-source-files.e2e.ts`.
+ * STUB (paired, ADR 0009 D2): the real suite is the sibling `extract-source-files.e2e.ts` (tier P), which builds real
+ * ts-morph programs over real temporary source trees (9.5 s for 3 cases). It runs in the project's `e2e` target (CI only
+ * (`nx affected -t e2e --parallel=1`)), never in the unit `test` lane the local pre-push hook runs. This file compiles
+ * nothing; it keeps the suite in view in the unit lane and fails if the suite leaves the e2e lane.
  *
- * It was moved there so the default `test` target — and therefore
- * `nx affected -t test` / the pre-commit + pre-push hooks — no longer builds real ts-morph programs over temp source trees (measured 9.5 s / 3 cases).
- * This file compiles nothing and spawns nothing; it exists so the future MOCKED unit-test version
- * of this suite has a home that the default target picks up.
- *
- * The `it.todo` entries below inventory the original cases (one per real
- * case in `extract-source-files.e2e.ts`); they are the contract a mocked version must
- * satisfy without compiling a real TypeScript program.
- *
- * guards: the extract-source-files.e2e.ts suite is deleted or renamed out of the e2e lane while the unit lane stays green.
- * tier: S (placeholders only; no program build)
+ * guards: the extract-source-files.e2e.ts suite is deleted, renamed out of the e2e lane, or loses its tier P header while
+ *   the unit lane stays green.
+ * tier: S (reads one sibling file; no program build)
  * cites: backlog f3683008 AC3; docs/decisions/0009-test-lanes-unit-vs-e2e.md amendment 2026-10-15
- *
- * Resource lane: cpu.
+ * teeth: red 2026-10-21: `npx vitest run src/test/extract-source-files.spec.ts` in this package with the sibling name
+ *   misspelled in this stub -> exit 1 (ENOENT in readFileSync); restored -> exit 0.
  */
-import { describe, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { describe, expect, it } from 'vitest';
 
-describe("mocked: extract-source-files", () => {
-  it.todo("mocked: [AC1] an ordinary tree: entry plus transitive local imports, sorted; another package stays out");
-  it.todo("mocked: [AC1] an installed package: entry plus transitive local imports, sorted; another package stays out");
-  it.todo("mocked: [AC1] the list does not change how the result reads as Operation[]");
+describe('stub: extract-source-files.e2e.ts runs in the e2e lane', () => {
+  it('the sibling suite exists, is named *.e2e.ts and declares tier P', () => {
+    const src = readFileSync(join(__dirname, 'extract-source-files.e2e.ts'), 'utf8');
+    expect(src).toMatch(/^\s*\*\s*tier:\s*P\b/m);
+  });
 });
