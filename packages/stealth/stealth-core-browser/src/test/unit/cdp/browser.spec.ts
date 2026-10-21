@@ -397,7 +397,7 @@ describe('8468f7b1 AC2 [tests-unit-core.1] killChrome — tracked launch', () =>
     await first
     m.execSync.mockReturnValue('')
     await mod.killChrome(PORT)
-    expect(m.execSync).toHaveBeenCalledWith(`lsof -ti tcp:${PORT} 2>/dev/null`, { encoding: 'utf8', timeout: 3000 })
+    expect(m.execSync).toHaveBeenCalledWith(`lsof -ti tcp:${PORT} -sTCP:LISTEN 2>/dev/null`, { encoding: 'utf8', timeout: 3000 })
   })
 
   it('falls back to a single-pid SIGTERM when the group signal is not deliverable', async () => {
@@ -443,7 +443,7 @@ describe('8468f7b1 AC2 [tests-unit-core.1] killChrome — port discovery (mocked
     const { killChrome } = await loadFresh()
     execScript({ lsof: '' , fuser: '' })
     await killChrome(PORT)
-    expect(m.execSync).toHaveBeenCalledWith(`lsof -ti tcp:${PORT} 2>/dev/null`, { encoding: 'utf8', timeout: 3000 })
+    expect(m.execSync).toHaveBeenCalledWith(`lsof -ti tcp:${PORT} -sTCP:LISTEN 2>/dev/null`, { encoding: 'utf8', timeout: 3000 })
   })
 
   it('kills the process group of each listener pid, then SIGKILLs the first group', async () => {

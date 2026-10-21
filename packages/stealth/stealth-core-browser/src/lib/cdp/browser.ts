@@ -100,7 +100,7 @@ function execText(cmd: string, timeout: number): string {
 export const systemProcessProbe: ProcessProbe = {
   listeners(port) {
     // Same commands as the original port discovery, so a host with only fuser still resolves listeners.
-    let pidStr = execText(`lsof -ti tcp:${port} 2>/dev/null`, 3000)
+    let pidStr = execText(`lsof -ti tcp:${port} -sTCP:LISTEN 2>/dev/null`, 3000)
     if (!pidStr) pidStr = execText(`fuser ${port}/tcp 2>/dev/null`, 3000)
     return pidStr
       .split(/\s+/)

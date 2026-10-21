@@ -142,7 +142,7 @@ describe('8468f7b1 [chrome-lifecycle.11] process-group kill of a tracked launch'
     m.execSync.mockImplementation(execScript({ lsof: '', fuser: '' }))
     d.log.length = 0
     await mod.killChrome(PORT)
-    expect(m.execSync).toHaveBeenCalledWith(`lsof -ti tcp:${PORT} 2>/dev/null`, { encoding: 'utf8', timeout: 3000 })
+    expect(m.execSync).toHaveBeenCalledWith(`lsof -ti tcp:${PORT} -sTCP:LISTEN 2>/dev/null`, { encoding: 'utf8', timeout: 3000 })
     expect(signals(d.log)).toEqual([])
   })
 })
@@ -153,7 +153,7 @@ describe('8468f7b1 [chrome-lifecycle.12] port-occupant kill (the reaper scope)',
     const { killChrome } = await loadFresh()
     m.execSync.mockImplementation(execScript({ lsof: '111\n', ...ownChrome(111), 'ps -o pgid= -p 111': '111' }))
     await killChrome(PORT)
-    expect(m.execSync).toHaveBeenCalledWith(`lsof -ti tcp:${PORT} 2>/dev/null`, { encoding: 'utf8', timeout: 3000 })
+    expect(m.execSync).toHaveBeenCalledWith(`lsof -ti tcp:${PORT} -sTCP:LISTEN 2>/dev/null`, { encoding: 'utf8', timeout: 3000 })
     expect(signals(d.log)[0]).toEqual({ pid: -111, sig: 'SIGTERM' })
   })
 

@@ -88,7 +88,7 @@ describe("8468f7b1 [chrome-lifecycle.12] scope 'port-occupant' (default)", () =>
     m.execSync.mockImplementation(execScript({ lsof: '5150', ...ownCmd(5150), 'ps -o pgid= -p 5150': '5100' }))
     const h = await hostWith(undefined, null)
     expect(await reap(h)).toMatchObject({ action: 'reap', reaped: true })
-    expect(m.execSync).toHaveBeenCalledWith(`lsof -ti tcp:${PORT} 2>/dev/null`, expect.anything())
+    expect(m.execSync).toHaveBeenCalledWith(`lsof -ti tcp:${PORT} -sTCP:LISTEN 2>/dev/null`, expect.anything())
     expect(signals(d.log)[0]).toEqual({ pid: -5100, sig: 'SIGTERM' })
   })
 
