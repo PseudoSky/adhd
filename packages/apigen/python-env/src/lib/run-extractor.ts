@@ -23,6 +23,30 @@ import { spawn } from 'node:child_process'
 import type { Operation } from '@adhd/apigen-core-client'
 
 /**
+ * Default wall-clock budget for one `--emit-json` extraction: 120 000 ms. Extraction
+ * of a typical module finishes in well under a second; the budget exists so a hung
+ * extractor fails the caller instead of stalling it indefinitely.
+ */
+export const DEFAULT_EXTRACTOR_TIMEOUT_MS = 120_000
+
+/**
+ * Largest delay `setTimeout` accepts (2^31 - 1 ms, about 24.8 days). A larger value
+ * overflows to 1 ms in Node and fires the timeout immediately, so it is rejected up front.
+ */
+const MAX_EXTRACTOR_TIMEOUT_MS = 2_147_483_647
+
+/** Options for {@link runExtractorEmitJson}. */
+export interface IRunExtractorOptions {
+  /**
+   * Wall-clock limit in milliseconds for the extractor process. On expiry the child is
+   * killed (SIGKILL) and the promise rejects with a timeout error naming the command.
+   * Must be a positive finite number no greater than 2147483647 (the `setTimeout` maximum).
+   * Defaults to {@link DEFAULT_EXTRACTOR_TIMEOUT_MS}.
+   */
+  timeoutMs?: number
+}
+
+/**
  * Runs `python -m apigen_python.extractor --emit-json` to completion and
  * parses its stdout into `Operation[]` — phase 1 of the py-flask / py-grpc
  * two-phase spawn (extract-only, then `project()`, then serve). This is a
@@ -38,6 +62,7 @@ import type { Operation } from '@adhd/apigen-core-client'
  * @param label        - Short caller identifier (e.g. `'py-flask'`, `'py-grpc'`)
  *                       prefixed onto error messages so failures are traceable
  *                       to their caller.
+ * @param options      - {@link IRunExtractorOptions}; `timeoutMs` bounds the run.
  */
 export function runExtractorEmitJson(
   python: string,
@@ -45,41 +70,108 @@ export function runExtractorEmitJson(
   modulePath: string,
   namespace: string,
   label: string,
+  options: IRunExtractorOptions = {},
 ): Promise<Operation[]> {
-  return new Promise<Operation[]>((resolve, reject) => {
-    const proc = spawn(
-      python,
-      ['-m', 'apigen_python.extractor', modulePath, '--namespace', namespace, '--emit-json'],
-      {
-        cwd: pythonPkgDir,
-        env: { ...process.env, PYTHONPATH: pythonPkgDir },
-        stdio: ['ignore', 'pipe', 'pipe'],
-      },
+  const timeoutMs = options.timeoutMs ?? DEFAULT_EXTRACTOR_TIMEOUT_MS
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+    return Promise.reject(
+      new RangeError(`${label}: extractor timeoutMs must be a positive finite number, got ${timeoutMs}`),
     )
+  }
+  if (timeoutMs > MAX_EXTRACTOR_TIMEOUT_MS) {
+    return Promise.reject(
+      new RangeError(
+        `${label}: extractor timeoutMs must not exceed ${MAX_EXTRACTOR_TIMEOUT_MS} ms ` +
+          `(the setTimeout maximum), got ${timeoutMs}`,
+      ),
+    )
+  }
+  const args = ['-m', 'apigen_python.extractor', modulePath, '--namespace', namespace, '--emit-json']
+  const commandLine = [python, ...args].join(' ')
+
+  return new Promise<Operation[]>((resolve, reject) => {
+    const proc = spawn(python, args, {
+      cwd: pythonPkgDir,
+      env: { ...process.env, PYTHONPATH: pythonPkgDir },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
 
     let stdout = ''
     let stderr = ''
+    let timedOut = false
+    let exited = false
+    let settled = false
+    // Settles the promise exactly once and clears the timer on every settling path.
+    const settle = (action: () => void): void => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      action()
+    }
+    const timeoutError = (): Error =>
+      new Error(
+        `${label}: extractor --emit-json timed out after ${timeoutMs} ms and was killed ` +
+          `(command: ${commandLine})${stderr ? `:\n${stderr}` : ''}`,
+      )
+    // A hung extractor must not hold the promise (and the caller's CI step) forever.
+    // Normal completion settles on 'close', so stdout/stderr are fully drained before the
+    // caller observes the result. On expiry the child is SIGKILLed and the promise settles
+    // on whichever of 'exit' or 'close' fires first. 'close' does not fire while a
+    // descendant still holds the stdout/stderr pipes, so the timeout also destroys the
+    // parent-side pipe handles; the rejection is then raised once the child has exited.
+    // A child that has already exited with its stdout still draining (data arrived after
+    // 'exit') is finishing normally, not hung: killing it here would report a timeout for
+    // output that is about to complete. Re-arm instead; each further expiry needs fresh
+    // output since the last one, so a child that exited and went silent (a descendant
+    // holding the pipes) is still bounded and rejected as a timeout.
+    let drainedSinceExit = false
+    const onExpiry = (): void => {
+      if (exited && drainedSinceExit) {
+        drainedSinceExit = false
+        timer = setTimeout(onExpiry, timeoutMs)
+        return
+      }
+      timedOut = true
+      proc.kill('SIGKILL')
+      proc.stdout?.destroy()
+      proc.stderr?.destroy()
+      if (exited) settle(() => reject(timeoutError()))
+    }
+    let timer = setTimeout(onExpiry, timeoutMs)
     proc.stdout?.on('data', (chunk: Buffer) => {
+      if (exited) drainedSinceExit = true
       stdout += chunk.toString('utf8')
     })
     proc.stderr?.on('data', (chunk: Buffer) => {
       stderr += chunk.toString('utf8')
     })
-    proc.on('error', reject)
-    proc.on('exit', (code) => {
-      if (code !== 0) {
-        reject(new Error(`${label}: extractor --emit-json exited with code ${code}:\n${stderr}`))
-        return
-      }
-      try {
-        resolve(JSON.parse(stdout) as Operation[])
-      } catch (err) {
-        reject(
-          new Error(
-            `${label}: extractor --emit-json produced invalid JSON (${(err as Error).message}):\n${stdout}`,
-          ),
-        )
-      }
+    proc.on('error', (err) => {
+      settle(() => reject(err))
+    })
+    proc.on('exit', () => {
+      exited = true
+      if (timedOut) settle(() => reject(timeoutError()))
+    })
+    proc.on('close', (code) => {
+      settle(() => {
+        if (timedOut) {
+          reject(timeoutError())
+          return
+        }
+        if (code !== 0) {
+          reject(new Error(`${label}: extractor --emit-json exited with code ${code}:\n${stderr}`))
+          return
+        }
+        try {
+          resolve(JSON.parse(stdout) as Operation[])
+        } catch (err) {
+          reject(
+            new Error(
+              `${label}: extractor --emit-json produced invalid JSON (${(err as Error).message}):\n${stdout}`,
+            ),
+          )
+        }
+      })
     })
   })
 }

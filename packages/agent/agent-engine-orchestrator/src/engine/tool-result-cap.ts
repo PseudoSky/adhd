@@ -194,3 +194,75 @@ export function capToolResult(
     originalChars: total,
   };
 }
+
+/**
+ * Largest stored `TOOL_RESULT.result`, in UTF-16 code units, marker included. Also the
+ * `task_events` per-field read bound. Independent of the model-facing cap
+ * ({@link DEFAULT_TOOL_RESULT_MAX_CHARS}): the event log is a record, not the model's input, so
+ * it stays bounded even when the model cap is disabled with `0`. At more than twice the default
+ * cap, a default-capped result is stored untouched.
+ */
+export const TOOL_RESULT_EVENT_MAX_CHARS = 16_000;
+
+/** The outcome of {@link clipForStorage}. */
+export interface StoredTextClip {
+  /** The stored text: the input itself when it fit, else head + marker + tail. */
+  readonly text: string;
+  /** Whether the input was longer than `maxChars` and was clipped. */
+  readonly clipped: boolean;
+  /** Length of the input, in UTF-16 code units. */
+  readonly originalChars: number;
+}
+
+/**
+ * Clips text for storage: head 75% + tail 25% around an in-band marker
+ * `[stored text clipped: showing first H and last T of N chars]`.
+ *
+ * - The output length is at most `maxChars`, marker included, so the clip is idempotent:
+ *   `clipForStorage(clipForStorage(x, m).text, m).text` equals `clipForStorage(x, m).text`.
+ * - Text at or under `maxChars` is returned unchanged (same text, `clipped: false`).
+ * - Cut points never split a UTF-16 surrogate pair.
+ * - When `maxChars` leaves no room for the marker, the result is the surrogate-safe head slice
+ *   alone (still `clipped: true`).
+ *
+ * @param text - the text to store.
+ * @param maxChars - the largest result length, in UTF-16 code units; at least 0.
+ * @returns the stored text plus clip facts.
+ */
+export function clipForStorage(text: string, maxChars: number): StoredTextClip {
+  const originalChars = text.length;
+  if (originalChars <= maxChars) return { text, clipped: false, originalChars };
+
+  const limit = Math.max(0, Math.floor(maxChars));
+  const digits = String(originalChars).length;
+  // Upper bound of the marker length: head and tail are each at most `originalChars`.
+  const markerBound =
+    '[stored text clipped: showing first  and last  of  chars]'.length + 3 * digits + 2; // + the two joining newlines
+  const budget = limit - markerBound;
+  if (budget <= 0) {
+    let end = limit;
+    if (end > 0 && isHighSurrogate(text.charCodeAt(end - 1))) end -= 1;
+    return { text: text.slice(0, end), clipped: true, originalChars };
+  }
+
+  const build = (room: number): string => {
+    let headLen = Math.floor(room * HEAD_FRACTION);
+    let tailStart = originalChars - (room - headLen);
+    if (headLen > 0 && isHighSurrogate(text.charCodeAt(headLen - 1))) headLen -= 1;
+    if (tailStart < originalChars && isLowSurrogate(text.charCodeAt(tailStart))) tailStart += 1;
+    const head = text.slice(0, headLen);
+    const tail = text.slice(tailStart);
+    const marker = `[stored text clipped: showing first ${head.length} and last ${tail.length} of ${originalChars} chars]`;
+    return `${head}\n${marker}\n${tail}`;
+  };
+
+  // `markerBound` over-estimates the marker (head and tail counted at the digits of the total), so the
+  // first build usually leaves a few unused chars. Spend them on more text while the result still fits.
+  let best = build(budget);
+  for (let attempt = 0; attempt < 3 && best.length < limit; attempt++) {
+    const next = build(budget + (limit - best.length));
+    if (next.length > limit || next.length <= best.length) break;
+    best = next;
+  }
+  return { text: best, clipped: true, originalChars };
+}

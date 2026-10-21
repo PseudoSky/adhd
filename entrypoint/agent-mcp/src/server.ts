@@ -107,6 +107,7 @@ import {
 } from './pricing/tools.js';
 import type { TaskStore } from '@adhd/agent-store-runtime';
 import { noteToolError, withApiLog, withHttpApiLog } from './wire/api-log.js';
+import { taskEvents, taskEventsInputSchema, toWireText } from './tools/task-events.js';
 
 const taskResumeInputSchema = z.object({
   taskId: z.string().uuid().describe('ID of the awaiting_input task to resume'),
@@ -170,8 +171,11 @@ function toMcpErrorContent(error: unknown): {
   isError: true;
 } {
   let message: string;
-  if (error instanceof ToolError) {
-    message = `[${error.code}] ${error.message}`;
+  // The task store throws its own `ToolError` class (agent-store-runtime), distinct from the orchestrator's, so
+  // `instanceof` alone drops the code of every store-thrown error; a coded ToolError is recognised by name too.
+  const coded = error instanceof Error && (error as { name: string }).name === 'ToolError' && typeof (error as { code?: unknown }).code === 'string';
+  if (error instanceof ToolError || coded) {
+    message = `[${(error as ToolError).code}] ${(error as ToolError).message}`;
   } else if (error instanceof Error) {
     message = error.message;
   } else {
@@ -191,7 +195,7 @@ function toMcpContent(value: unknown): {
     content: [
       {
         type: 'text' as const,
-        text: JSON.stringify(value, null, 2),
+        text: toWireText(value),
       },
     ],
   };
@@ -509,7 +513,7 @@ export function createServer(deps: ServerDeps): Server {
     {
       name: 'task',
       description:
-        `${DELEGATION_DECISION_RULE} Run a prompt against a session or a named agent. Independent dispatches go in ONE turn; use tasks_batch for a list of prompts.`,
+        `${DELEGATION_DECISION_RULE} Run a prompt against a session or a named agent. Independent dispatches go in ONE turn; use tasks_batch for a list of prompts. A finished task whose agent had tools granted but made zero tool calls carries warnings:["no_tool_use"]; its status and result are unchanged.`,
       inputSchema: toMcpInputSchema(taskToolInputSchema),
     },
     {
@@ -529,6 +533,12 @@ export function createServer(deps: ServerDeps): Server {
       description:
         'List tasks. Filters: session_id, session_ids[], agent_name, status, is_ephemeral. Pagination: limit/offset. Projection: fields[] (id always included) or summary:true to omit the bulk prompt/result text.',
       inputSchema: toMcpInputSchema(taskListInputSchema),
+    },
+    {
+      name: 'task_events',
+      description:
+        'Read every recorded event of one task by task_id, oldest first. Pagination: limit (default 50, max 500) and offset; the response carries total and has_more. A page trimmed to fit the 256 KiB byte budget carries truncated_by_bytes: true, and the next page starts at offset + events.length. TOOL_RESULT events carry the model-visible result text and its result_sha256; MODEL_REQUEST events carry advertisedToolNames and systemPromptSha256; CONTEXT_COMPACTED records a history compaction. Throws for an unknown task_id. String fields over 16,000 chars are clipped (see payload_clipped); a row over 1 MiB returns payload_error too_large.',
+      inputSchema: toMcpInputSchema(taskEventsInputSchema),
     },
     {
       name: 'task_cancel',
@@ -629,6 +639,11 @@ export function createServer(deps: ServerDeps): Server {
       case 'task_list':
         return taskList(taskListInputSchema.parse(args), {
           taskStore: deps.taskStore,
+        });
+      case 'task_events':
+        return taskEvents(taskEventsInputSchema.parse(args), {
+          taskStore: deps.taskStore,
+          db: deps.db,
         });
       case 'task_cancel':
         return taskCancel(taskCancelInputSchema.parse(args), {
@@ -788,6 +803,12 @@ export function createServer(deps: ServerDeps): Server {
         description:
           'List tasks. Filters: session_id, session_ids[], agent_name, status, is_ephemeral. Pagination: limit/offset. Projection: fields[] (id always included) or summary:true to omit the bulk prompt/result text.',
         inputSchema: toMcpInputSchema(taskListInputSchema),
+      },
+      {
+        name: 'task_events',
+        description:
+          'Read every recorded event of one task by task_id, oldest first. Pagination: limit (default 50, max 500) and offset; the response carries total and has_more. A page trimmed to fit the 256 KiB byte budget carries truncated_by_bytes: true, and the next page starts at offset + events.length. TOOL_RESULT events carry the model-visible result text and its result_sha256; MODEL_REQUEST events carry advertisedToolNames and systemPromptSha256; CONTEXT_COMPACTED records a history compaction. Throws for an unknown task_id. String fields over 16,000 chars are clipped (see payload_clipped); a row over 1 MiB returns payload_error too_large.',
+        inputSchema: toMcpInputSchema(taskEventsInputSchema),
       },
       {
         name: 'task_cancel',
@@ -979,6 +1000,14 @@ export function createServer(deps: ServerDeps): Server {
             })
           );
 
+        case 'task_events':
+          return toMcpContent(
+            taskEvents(taskEventsInputSchema.parse(args), {
+              taskStore: deps.taskStore,
+              db: deps.db,
+            })
+          );
+
         case 'task_cancel':
           return toMcpContent(
             taskCancel(taskCancelInputSchema.parse(args), {
@@ -1043,6 +1072,8 @@ function wireTaskNotifications(server: Server): () => void {
           status: event.error ? 'failed' : 'completed',
           result: event.result,
           error: event.error,
+          // cbd559eb: advisory completion warnings; the key is omitted when there are none.
+          ...(event.warnings ? { warnings: event.warnings } : {}),
         },
       })
       .catch((err: unknown) => {

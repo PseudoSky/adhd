@@ -3,6 +3,8 @@
  * tier: P
  * cites: docs/plan/policy-core/tickets/T17.md (HTTP entry, E6) and tickets/COVERAGE.md (adhd-policy-mcp / -http projections, T06)
  * gap: This cannot be observed at tier S because the entry binds a real listening socket on an OS-assigned loopback port and answers real HTTP requests over it, and a listening socket exists only at tier P.
+ * item: qa-variance (docs/discovery/qa-test-variance-tail-policy.md)
+ * red: pending (tests not run per user); assertions are unchanged, only the waits for the entry to come up and go down moved from a fixed number of event-loop turns to a bounded real-time deadline.
  */
 import { createServer, type Server } from 'node:net';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -13,6 +15,16 @@ useScratchTelemetry();
 
 // Loading the entry builds the policy package (a cold live extraction takes seconds); it is setup, not a timing assertion.
 vi.setConfig({ testTimeout: 60_000 });
+
+/** How long a wait for the entry to come up or go down may take. Below the 60 s test timeout so a real hang reports the wait that failed. */
+const WAIT_DEADLINE_MS = 50_000;
+const POLL_INTERVAL_MS = 10;
+
+/** Resolves once `condition()` holds or the deadline passes (the caller's assertion then reports the failure); polls on real timers so the entry's own work is not starved. */
+async function waitFor(condition: () => boolean): Promise<void> {
+  const deadline = Date.now() + WAIT_DEADLINE_MS;
+  while (!condition() && Date.now() < deadline) await new Promise<void>((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
+}
 
 const SIGNALS = ['SIGINT', 'SIGTERM'] as const;
 
@@ -70,15 +82,20 @@ function enterHttp(port: string | undefined): IEntered {
   return { done, stderr, terminate: () => installed()[0]?.call(process) };
 }
 
-/** Polls (yielding whole event-loop turns, no timers) until `url` accepts a connection. */
+/**
+ * Polls until `url` accepts a connection, the entry module settles (it failed to start), or the deadline passes.
+ * The wait is a real-time deadline, not a count of event-loop turns: a cold live extraction takes seconds, and a
+ * refused connection costs microseconds, so a turn count would run out long before a slow start-up finished.
+ */
 async function untilUp(url: string, failed: Promise<void>): Promise<Response> {
   let finished = false;
   void failed.then(() => (finished = true));
-  for (let attempt = 0; attempt < 2000 && !finished; attempt += 1) {
+  const deadline = Date.now() + WAIT_DEADLINE_MS;
+  while (!finished && Date.now() < deadline) {
     try {
       return await fetch(url);
     } catch {
-      await new Promise<void>((resolve) => setImmediate(resolve));
+      await new Promise<void>((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
     }
   }
   throw new Error(`${url} never came up`);
@@ -115,16 +132,12 @@ describe('adhd-policy-http entry (src/entry/http.ts) in process', () => {
     const entered = enterHttp(undefined);
     let finished = false;
     void entered.done.then(() => (finished = true));
-    for (let attempt = 0; attempt < 2000 && !finished && servers() === before; attempt += 1) {
-      await new Promise<void>((resolve) => setImmediate(resolve));
-    }
+    await waitFor(() => finished || servers() !== before);
     expect(finished).toBe(false);
     expect(servers()).toBe(before + 1);
     entered.terminate();
     await entered.done;
-    for (let attempt = 0; attempt < 2000 && servers() !== before; attempt += 1) {
-      await new Promise<void>((resolve) => setImmediate(resolve));
-    }
+    await waitFor(() => servers() === before);
     expect(servers()).toBe(before);
     expect(process.exitCode).toBeUndefined();
   });

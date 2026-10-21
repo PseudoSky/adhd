@@ -145,6 +145,20 @@ function agentDefinition(hitl: boolean): AgentDefinition {
 /** The migrations agent-mcp ships: a store built through them can never drift from the shipped schema. */
 const REAL_MIGRATIONS_FOLDER = join(__dirname, '../../../../../entrypoint/agent-mcp/drizzle');
 
+let realImage: Buffer | undefined;
+
+/** Serialized image of an empty database with every real migration applied (built once per process). */
+function realSchemaImage(): Buffer {
+  if (realImage === undefined) {
+    const seed = new Database(':memory:');
+    seed.pragma('foreign_keys = OFF');
+    migrate(drizzle(seed), { migrationsFolder: REAL_MIGRATIONS_FOLDER });
+    realImage = seed.serialize();
+    seed.close();
+  }
+  return realImage;
+}
+
 /**
  * Real in-memory stores wired to `hooks` (so `session:created` / `session:closed` reach the plugin).
  * `realSchema` builds the database through agent-mcp's shipped drizzle migrations (foreign keys off,
@@ -152,10 +166,11 @@ const REAL_MIGRATIONS_FOLDER = join(__dirname, '../../../../../entrypoint/agent-
  * need it because the usage report reads columns the minimal DDL lacks.
  */
 export function makeEnv(hooks: IHookRegistry = new HookRegistry(), opts: { realSchema?: boolean } = {}): Env {
-  const sqlite = new Database(':memory:');
+  // Variance fix (qa-variance 2026-10-14, verification pending): the real migrations ran per call; they now run once
+  // per process and each call deserializes that migrated image into its own independent in-memory database.
+  const sqlite = opts.realSchema === true ? new Database(realSchemaImage()) : new Database(':memory:');
   if (opts.realSchema === true) {
     sqlite.pragma('foreign_keys = OFF');
-    migrate(drizzle(sqlite), { migrationsFolder: REAL_MIGRATIONS_FOLDER });
   } else {
     sqlite.pragma('foreign_keys = ON');
     sqlite.exec(DDL);

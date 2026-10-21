@@ -880,12 +880,6 @@
     "entrypoint/backlog/src/store/catalog-invariant-guard.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/store/embed-drain-real-model.e2e.ts": [
-      "H1"
-    ],
-    "entrypoint/backlog/src/store/embed-drain-real-model.spec.ts": [
-      "H1"
-    ],
     "entrypoint/backlog/src/store/embed-drain.spec.ts": [
       "H1"
     ],
@@ -1015,9 +1009,6 @@
     "entrypoint/backlog/src/write/claim.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/write/contract-anchors.spec.ts": [
-      "H1"
-    ],
     "entrypoint/backlog/src/write/create-duplicate-gate.spec.ts": [
       "H1"
     ],
@@ -1073,9 +1064,6 @@
       "H1"
     ],
     "entrypoint/backlog/src/write/op-event.spec.ts": [
-      "H1"
-    ],
-    "entrypoint/backlog/src/write/production-gate.verbs.spec.ts": [
       "H1"
     ],
     "entrypoint/backlog/src/write/rag-optional-deps.spec.ts": [
@@ -1378,12 +1366,6 @@
     "packages/agent/agent-engine-orchestrator/src/__tests__/bk3-cache-breakpoints.e2e.test.ts": [
       "H1"
     ],
-    "packages/agent/agent-engine-orchestrator/src/__tests__/bk3-cache-breakpoints.test.ts": [
-      "H1"
-    ],
-    "packages/agent/agent-engine-orchestrator/src/__tests__/bounded-token-count.test.ts": [
-      "H1"
-    ],
     "packages/agent/agent-engine-orchestrator/src/__tests__/bridge-parity.e2e.test.ts": [
       "H1"
     ],
@@ -1402,19 +1384,10 @@
     "packages/agent/agent-engine-orchestrator/src/__tests__/claudecli-bridge-concurrency-task.test.ts": [
       "H1"
     ],
-    "packages/agent/agent-engine-orchestrator/src/__tests__/claudecli-bridge-concurrency.test.ts": [
-      "H1"
-    ],
     "packages/agent/agent-engine-orchestrator/src/__tests__/claudecli-bridge-config.test.ts": [
       "H1"
     ],
     "packages/agent/agent-engine-orchestrator/src/__tests__/claudecli-bridge-governance.e2e.test.ts": [
-      "H1"
-    ],
-    "packages/agent/agent-engine-orchestrator/src/__tests__/claudecli-bridge-governance.test.ts": [
-      "H1"
-    ],
-    "packages/agent/agent-engine-orchestrator/src/__tests__/claudecli-builtin-bypass.test.ts": [
       "H1"
     ],
     "packages/agent/agent-engine-orchestrator/src/__tests__/claudecli-concurrency-hint.e2e.test.ts": [
@@ -1453,12 +1426,6 @@
     "packages/agent/agent-engine-orchestrator/src/__tests__/claudecli-reap.e2e.test.ts": [
       "H1"
     ],
-    "packages/agent/agent-engine-orchestrator/src/__tests__/claudecli-session-hardening.test.ts": [
-      "H1"
-    ],
-    "packages/agent/agent-engine-orchestrator/src/__tests__/claudecli-session-resume.test.ts": [
-      "H1"
-    ],
     "packages/agent/agent-engine-orchestrator/src/__tests__/claudecli-spawn-failure.e2e.test.ts": [
       "H1"
     ],
@@ -1475,9 +1442,6 @@
       "H1"
     ],
     "packages/agent/agent-engine-orchestrator/src/__tests__/claudecli-usage.test.ts": [
-      "H1"
-    ],
-    "packages/agent/agent-engine-orchestrator/src/__tests__/claudecli-worker-isolation.test.ts": [
       "H1"
     ],
     "packages/agent/agent-engine-orchestrator/src/__tests__/context-window.test.ts": [
@@ -1504,9 +1468,6 @@
     "packages/agent/agent-engine-orchestrator/src/__tests__/ephemeral-task-session.test.ts": [
       "H1"
     ],
-    "packages/agent/agent-engine-orchestrator/src/__tests__/factory-bypass-emit-order.test.ts": [
-      "H1"
-    ],
     "packages/agent/agent-engine-orchestrator/src/__tests__/flt-anthropic-faults.test.ts": [
       "H1"
     ],
@@ -1520,9 +1481,6 @@
       "H1"
     ],
     "packages/agent/agent-engine-orchestrator/src/__tests__/mcp-verify.e2e.test.ts": [
-      "H1"
-    ],
-    "packages/agent/agent-engine-orchestrator/src/__tests__/model-call-tracing-seams.test.ts": [
       "H1"
     ],
     "packages/agent/agent-engine-orchestrator/src/__tests__/nat-tool-3-cwd-env.e2e.test.ts": [
@@ -1610,9 +1568,6 @@
       "H1"
     ],
     "packages/agent/agent-engine-orchestrator/src/__tests__/tool-limiter-hitl.test.ts": [
-      "H1"
-    ],
-    "packages/agent/agent-engine-orchestrator/src/__tests__/tool-limiter.test.ts": [
       "H1"
     ],
     "packages/agent/agent-engine-orchestrator/src/__tests__/tool-naming.test.ts": [
@@ -2506,7 +2461,7 @@
     "tools/nx-plugins/build/bug-026-assets-output-scope.spec.mjs": [
       "H1"
     ],
-    "tools/nx-plugins/build/ci-hygiene.spec.mjs": [
+    "tools/nx-plugins/build/ci-hygiene.e2e.mjs": [
       "H1"
     ],
     "tools/nx-plugins/build/ci-publish-wiring.spec.mjs": [
@@ -2620,13 +2575,7 @@
     "tools/nx-plugins/lib/git-env.spec.mjs": [
       "H1"
     ],
-    "tools/nx-plugins/lib/metrics.spec.mjs": [
-      "H1"
-    ],
     "tools/nx-plugins/test/executors/wiring/check-agent-lane-spawn.spec.mjs": [
-      "H1"
-    ],
-    "tools/nx-plugins/test/executors/wiring/check-lane-reachability.spec.mjs": [
       "H1"
     ],
     "tools/nx-plugins/test/executors/wiring/nat-tool-live-docs.spec.mjs": [

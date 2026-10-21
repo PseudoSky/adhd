@@ -9,12 +9,14 @@
  * Negative control (run once, restored): dropping the descendant walk makes the
  * child's ops absent, so the "includes S1.1" row goes red.
  */
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { openTmpStore, type TmpStore } from '../test/helpers/tmp-store.js';
 import { buildBacklogEnv } from '../env.js';
 import * as api from '../api.js';
 import type { IOutcomeEnvelope } from '../envelope.js';
 import type { ITimelineResult } from './views/timeline.js';
+
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 function data<T>(r: IOutcomeEnvelope<T>): T {
   if (!r.ok) throw new Error(JSON.stringify(r));
@@ -48,7 +50,7 @@ describe('91a8c640 B-AC7 — timeline', () => {
   it('91a8c640 B-AC7 returns agent, session and the ordered ops including the child session S1.1', async () => {
     const r = await tl({ sessionId: 'S1' });
     expect(r.session).toMatchObject({ sessionId: 'S1', agent: 'agent-1' });
-    expect(r.session.parentSessionId).toBeUndefined();
+    expect(r.session?.parentSessionId).toBeUndefined();
     expect(r.children).toEqual(['S1.1']);
     expect(r.ops.map((o) => `${o.sessionId}:${o.op}:${o.agent}`)).toEqual([
       'S1:created:agent-1',
@@ -69,7 +71,7 @@ describe('91a8c640 B-AC7 — timeline', () => {
     expect(own.ops.every((o) => o.sessionId === 'S1')).toBe(true);
     expect(own.ops).toHaveLength(2);
     const child = await tl({ sessionId: 'S1.1' });
-    expect(child.session.parentSessionId).toBe('S1');
+    expect(child.session?.parentSessionId).toBe('S1');
     expect(child.ops).toHaveLength(2);
   });
 
@@ -92,5 +94,124 @@ describe('91a8c640 B-AC7 — timeline', () => {
     if (!r.ok) expect(r.error.code).toBe('item_not_found');
     const blank = await api.timeline(ctx, { sessionId: '' } as never);
     expect(blank.ok).toBe(false);
+  });
+
+  describe('without sessionId: every session in the window', () => {
+    it('omitted sessionId covers EVERY session (parent and child ops), with no session block and a window', async () => {
+      const r = await tl({});
+      expect(r.session).toBeNull();
+      expect(r.children).toEqual([]);
+      expect(r.ops.map((o) => `${o.sessionId}:${o.op}:${o.agent}`)).toEqual([
+        'S1:created:agent-1',
+        'S1:claimed:agent-1',
+        'S1.1:created:agent-2',
+        'S1.1:transitioned:agent-2',
+      ]);
+      expect(r.touched).toEqual([a, b].sort());
+      expect(r.hasMore).toBe(false);
+      expect(r.window?.since).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+    });
+
+    it('an explicit `since` older than the ops includes them all and echoes the window', async () => {
+      const r = await tl({ since: '2000-01-01T00:00:00Z' });
+      expect(r.ops).toHaveLength(4);
+      expect(r.window?.since).toBe('2000-01-01T00:00:00.000Z');
+    });
+
+    describe('default 7-day window (clock moved with fake Date; the store is real)', () => {
+      afterEach(() => {
+        vi.useRealTimers();
+      });
+
+      it('ops inside the last 7 days are in the default window', async () => {
+        vi.useFakeTimers({ toFake: ['Date'], now: Date.now() + 6 * DAY_MS });
+        const r = await tl({});
+        expect(r.ops).toHaveLength(4);
+        expect(r.window?.since).toBe(new Date(Date.now() - 7 * DAY_MS).toISOString());
+      });
+
+      it('ops older than the default 7-day window are excluded when no `since` is given', async () => {
+        vi.useFakeTimers({ toFake: ['Date'], now: Date.now() + 8 * DAY_MS });
+        const r = await tl({});
+        expect(r.ops).toEqual([]);
+        expect(r.touched).toEqual([]);
+      });
+
+      it('a window cursor keeps its since: paging still works after the default window has moved past its ops', async () => {
+        const start = Date.now();
+        vi.useFakeTimers({ toFake: ['Date'], now: start });
+        const p1 = await tl({ limit: 3 });
+        expect(p1.nextCursor).toBeDefined();
+        vi.setSystemTime(start + 8 * DAY_MS);
+        const p2 = await tl({ limit: 3, after: p1.nextCursor });
+        expect(p2.ops).toHaveLength(1);
+        expect(p2.window?.since).toBe(new Date(start - 7 * DAY_MS).toISOString());
+      });
+    });
+
+    it('a window cursor is rejected when `since` contradicts it, and a session-style cursor is rejected in window mode', async () => {
+      const p1 = await tl({ limit: 3 });
+      const contradict = await api.timeline(ctx, { limit: 3, after: p1.nextCursor, since: '2000-01-01T00:00:00Z' } as never);
+      expect(contradict.ok).toBe(false);
+      if (!contradict.ok) expect(contradict.error.code).toBe('validation');
+      const sessionCursor = await api.timeline(ctx, { after: `${a}#1` } as never);
+      expect(sessionCursor.ok).toBe(false);
+      if (!sessionCursor.ok) expect(sessionCursor.error.code).toBe('validation');
+    });
+
+    it('a malformed since such as "Oct 1" or "2026" is a validation error, not parsed by Date.parse', async () => {
+      for (const since of ['Oct 1', '2026']) {
+        const r = await api.timeline(ctx, { since } as never);
+        expect(r.ok).toBe(false);
+        if (!r.ok) expect(r.error.code).toBe('validation');
+      }
+    });
+
+    it('includeChildren without a sessionId is a validation error (window mode has no tree to walk)', async () => {
+      const r = await api.timeline(ctx, { includeChildren: false } as never);
+      expect(r.ok).toBe(false);
+      if (!r.ok) expect(r.error.code).toBe('validation');
+    });
+
+    it('a hand-made window cursor whose since part is not an ISO-8601 instant is a validation error', async () => {
+      const r = await api.timeline(ctx, { after: 'Oct 1|0#1' } as never);
+      expect(r.ok).toBe(false);
+      if (!r.ok) expect(r.error.code).toBe('validation');
+    });
+
+    it('a `since` after every op excludes them all (the window is a real lower bound)', async () => {
+      const future = new Date(Date.now() + DAY_MS).toISOString();
+      const r = await tl({ since: future });
+      expect(r.ops).toEqual([]);
+      expect(r.touched).toEqual([]);
+      expect(r.hasMore).toBe(false);
+    });
+
+    it('pages across sessions with the cursor and never repeats or drops an op', async () => {
+      const p1 = await tl({ limit: 3 });
+      expect(p1.ops).toHaveLength(3);
+      expect(p1.hasMore).toBe(true);
+      const p2 = await tl({ limit: 3, after: p1.nextCursor });
+      expect(p2.ops).toHaveLength(1);
+      const full = await tl({});
+      expect([...p1.ops, ...p2.ops]).toEqual(full.ops);
+    });
+
+    it('rejects `since` alongside sessionId, a malformed `since`, and a blank sessionId', async () => {
+      const both = await api.timeline(ctx, { sessionId: 'S1', since: '2000-01-01T00:00:00Z' } as never);
+      expect(both.ok).toBe(false);
+      if (!both.ok) expect(both.error.code).toBe('validation');
+      const bad = await api.timeline(ctx, { since: 'not-a-date' } as never);
+      expect(bad.ok).toBe(false);
+      if (!bad.ok) expect(bad.error.code).toBe('validation');
+      const blank = await api.timeline(ctx, { sessionId: '   ' } as never);
+      expect(blank.ok).toBe(false);
+      if (!blank.ok) expect(blank.error.code).toBe('validation');
+      for (const sessionId of [null, 42]) {
+        const r = await api.timeline(ctx, { sessionId } as never);
+        expect(r.ok).toBe(false);
+        if (!r.ok) expect(r.error.code).toBe('validation');
+      }
+    });
   });
 });

@@ -28,10 +28,19 @@ import type { LogicalTypeRegistry } from './registry';
 // ---------------------------------------------------------------------------
 
 /**
+ * The empty same-value ref path. Passed whenever a walk step consumes part of
+ * the value (an array item, an object property): the value changed, so no ref
+ * can yet be part of a same-value cycle.
+ */
+const NO_REFS: readonly string[] = [];
+
+/**
  * Build a full `TranscodeCtx` from the registry and an optional partial
- * override supplied by the caller. The `resolve` function is a no-op stub here
- * (actual $def resolvers are wired in by later states that own the descriptor
- * root); the cycle guard and mode are initialised with safe defaults.
+ * override supplied by the caller. The default `resolve` refuses every `$ref`
+ * because the transcoder has no schema document root of its own. A caller that
+ * transcodes a schema containing `$ref` must pass a root-bound `resolve` in the
+ * override (see {@link rootRefResolver}). The cycle guard and mode are
+ * initialised with safe defaults.
  */
 function buildCtx(
   registry: LogicalTypeRegistry,
@@ -67,7 +76,8 @@ function buildCtx(
 function encodeNode(
   value: unknown,
   schema: SchemaNode,
-  ctx: TranscodeCtx
+  ctx: TranscodeCtx,
+  viaRefs: readonly string[] = NO_REFS
 ): Wire {
   // ── 1. Registered codec wins ───────────────────────────────────────────────
   const codec = ctx.registry.resolve(schema);
@@ -78,15 +88,15 @@ function encodeNode(
   // ── 2. $ref ────────────────────────────────────────────────────────────────
   const ref = schema['$ref'];
   if (typeof ref === 'string') {
-    const resolved = ctx.resolve(ref);
-    return encodeNode(value, resolved, ctx);
+    assertSameValueProgress(ref, viaRefs, ctx);
+    return encodeNode(value, followRef(ref, ctx), ctx, [...viaRefs, ref]);
   }
 
   // ── 3. oneOf / discriminated union ─────────────────────────────────────────
   const oneOf = schema['oneOf'];
   if (Array.isArray(oneOf)) {
-    const branch = pickUnionBranch(value, oneOf, schema, ctx);
-    return encodeNode(value, branch, ctx);
+    const branch = pickUnionBranch(value, oneOf, schema, ctx, viaRefs);
+    return encodeNode(value, branch, ctx, viaRefs);
   }
 
   const schemaType = schema['type'];
@@ -96,26 +106,28 @@ function encodeNode(
     if (!Array.isArray(value)) {
       return encodeSchemaless(value, schema, ctx);
     }
-    const items = schema['items'] as SchemaNode | SchemaNode[] | undefined;
-    if (!items) {
-      // No items schema → passthrough each element as plain JSON
-      return (value as unknown[]).map((el) => encodePassthrough(el)) as Wire[];
-    }
-    const childPath = ctx.path;
-    // Positional (tuple) form: `items` is an array of per-index schemas
-    // (draft-07 tuple validation). Walk each element against its positional
-    // schema; elements past the tuple length pass through as plain JSON.
-    if (Array.isArray(items)) {
-      return (value as unknown[]).map((el, i) => {
-        const itemSchema = items[i];
-        return itemSchema === undefined
-          ? (encodePassthrough(el) as Wire)
-          : encodeNode(el, itemSchema, { ...ctx, path: `${childPath}/${i}` });
-      }) as Wire[];
-    }
-    return (value as unknown[]).map((el, i) =>
-      encodeNode(el, items, { ...ctx, path: `${childPath}/${i}` })
-    ) as Wire[];
+    return withPathGuard(value, ctx, (): Wire[] => {
+      const items = schema['items'] as SchemaNode | SchemaNode[] | undefined;
+      if (!items) {
+        // No items schema → passthrough each element as plain JSON
+        return (value as unknown[]).map((el) => encodePassthrough(el)) as Wire[];
+      }
+      const childPath = ctx.path;
+      // Positional (tuple) form: `items` is an array of per-index schemas
+      // (draft-07 tuple validation). Walk each element against its positional
+      // schema; elements past the tuple length pass through as plain JSON.
+      if (Array.isArray(items)) {
+        return (value as unknown[]).map((el, i) => {
+          const itemSchema = items[i];
+          return itemSchema === undefined
+            ? (encodePassthrough(el) as Wire)
+            : encodeNode(el, itemSchema, { ...ctx, path: `${childPath}/${i}` });
+        }) as Wire[];
+      }
+      return (value as unknown[]).map((el, i) =>
+        encodeNode(el, items, { ...ctx, path: `${childPath}/${i}` })
+      ) as Wire[];
+    });
   }
 
   // ── 5. object ──────────────────────────────────────────────────────────────
@@ -123,25 +135,27 @@ function encodeNode(
     if (value === null || typeof value !== 'object' || Array.isArray(value)) {
       return encodeSchemaless(value, schema, ctx);
     }
-    const props = schema['properties'] as
-      | Record<string, SchemaNode>
-      | undefined;
-    if (!props) {
-      // No properties → passthrough (plain object)
-      return encodePassthrough(value) as Wire;
-    }
-    const childPath = ctx.path;
-    const result: { [k: string]: Wire } = {};
-    for (const [k, propSchema] of Object.entries(props)) {
-      const v = (value as Record<string, unknown>)[k];
-      if (v !== undefined) {
-        result[k] = encodeNode(v, propSchema, {
-          ...ctx,
-          path: `${childPath}/${k}`,
-        });
+    return withPathGuard(value, ctx, (): Wire => {
+      const props = schema['properties'] as
+        | Record<string, SchemaNode>
+        | undefined;
+      if (!props) {
+        // No properties → passthrough (plain object)
+        return encodePassthrough(value) as Wire;
       }
-    }
-    return result;
+      const childPath = ctx.path;
+      const result: { [k: string]: Wire } = {};
+      for (const [k, propSchema] of Object.entries(props)) {
+        const v = (value as Record<string, unknown>)[k];
+        if (v !== undefined) {
+          result[k] = encodeNode(v, propSchema, {
+            ...ctx,
+            path: `${childPath}/${k}`,
+          });
+        }
+      }
+      return result;
+    });
   }
 
   // ── 6. Schema-less / any position → envelope ───────────────────────────────
@@ -162,7 +176,8 @@ function encodeNode(
 function decodeNode(
   wire: Wire,
   schema: SchemaNode,
-  ctx: TranscodeCtx
+  ctx: TranscodeCtx,
+  viaRefs: readonly string[] = NO_REFS
 ): unknown {
   // ── 1. Registered codec wins ───────────────────────────────────────────────
   const codec = ctx.registry.resolve(schema);
@@ -173,15 +188,15 @@ function decodeNode(
   // ── 2. $ref ────────────────────────────────────────────────────────────────
   const ref = schema['$ref'];
   if (typeof ref === 'string') {
-    const resolved = ctx.resolve(ref);
-    return decodeNode(wire, resolved, ctx);
+    assertSameValueProgress(ref, viaRefs, ctx);
+    return decodeNode(wire, followRef(ref, ctx), ctx, [...viaRefs, ref]);
   }
 
   // ── 3. oneOf / discriminated union ─────────────────────────────────────────
   const oneOf = schema['oneOf'];
   if (Array.isArray(oneOf)) {
-    const branch = pickUnionBranch(wire, oneOf, schema, ctx);
-    return decodeNode(wire, branch, ctx);
+    const branch = pickUnionBranch(wire, oneOf, schema, ctx, viaRefs);
+    return decodeNode(wire, branch, ctx, viaRefs);
   }
 
   const schemaType = schema['type'];
@@ -263,6 +278,87 @@ function decodeNode(
 }
 
 // ---------------------------------------------------------------------------
+// $ref and cycle guards
+// ---------------------------------------------------------------------------
+
+/**
+ * Resolve `ref` to the first definition that is NOT a bare `$ref` alias.
+ *
+ * Guarantees, and only these:
+ *  - A chain of bare `$ref` aliases that revisits a ref (`Loop = { $ref:
+ *    '#/definitions/Loop' }`, or a two-step `A → B → A`) throws an error naming
+ *    the ref and the chain. Without this the walk recurses on the same ref and
+ *    fails with an unnamed `RangeError`.
+ *  - A node a registered codec claims is not an alias and is returned as-is,
+ *    matching the codec-first order of `encodeNode` / `decodeNode`.
+ *
+ * Not guaranteed here: termination of a `$ref` reached from a `oneOf` branch on
+ * the SAME value (`A = { oneOf: [{ $ref: '#/definitions/A' }] }`). Such a chain
+ * never consumes the value, and this function sees only the alias links. The
+ * walks (`encodeNode`, `decodeNode`) and the branch scorer
+ * (`scoreUnionBranch`) track the refs entered on the current same-value path
+ * (`viaRefs`): a walk that re-enters one throws `E_RUNMODE_CYCLE`, and the
+ * scorer treats such a branch as ineligible. Recursion that descends into
+ * `properties` or `items` consumes part of the value on each step, so it
+ * terminates for any finite value and is never blocked.
+ *
+ * @param ref The `$ref` string being followed.
+ * @param ctx The transcode ctx whose `resolve` binds the document root.
+ * @returns The resolved, non-alias schema node.
+ */
+function followRef(ref: string, ctx: TranscodeCtx): SchemaNode {
+  const chain: string[] = [ref];
+  let node = ctx.resolve(ref);
+  while (
+    typeof node['$ref'] === 'string' &&
+    ctx.registry.resolve(node) === undefined
+  ) {
+    const next = node['$ref'] as string;
+    if (chain.includes(next)) {
+      throw new Error(
+        `[apigen-logical] $ref "${next}" at "${ctx.path || '#'}" is an alias cycle (${[...chain, next].join(' -> ')}); a $ref chain must end at a definition that is not itself a $ref`
+      );
+    }
+    chain.push(next);
+    node = ctx.resolve(next);
+  }
+  return node;
+}
+
+/**
+ * Run `walk` with `value` marked as an ancestor on the encode path, and unmark
+ * it when the walk finishes (including on throw).
+ *
+ * This is a PATH stack, not a visited set: a host object reachable twice from
+ * sibling positions (a DAG) is encoded both times, and only a value that is its
+ * own ancestor (a true host cycle) throws. The throw names the JSON Pointer of
+ * the back-edge, so a cyclic host value fails with a located error instead of
+ * an unnamed `RangeError`. Uses `ctx.seen`, the cycle guard the contract
+ * declares for the encode side.
+ *
+ * @param value The host object or array whose children are about to be walked.
+ * @param ctx   The transcode ctx (its `seen` set holds the active path).
+ * @param walk  The walk over `value`'s children.
+ */
+function withPathGuard<T>(
+  value: object,
+  ctx: TranscodeCtx,
+  walk: () => T
+): T {
+  if (ctx.seen.has(value)) {
+    throw new Error(
+      `[apigen-logical] cyclic host value at "${ctx.path || '#'}": the value contains a reference to one of its own ancestors, which cannot be encoded to JSON`
+    );
+  }
+  ctx.seen.add(value);
+  try {
+    return walk();
+  } finally {
+    ctx.seen.delete(value);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Discriminated union helpers
 // ---------------------------------------------------------------------------
 
@@ -316,7 +412,8 @@ function pickUnionBranch(
   value: unknown,
   oneOf: SchemaNode[],
   schema: SchemaNode,
-  ctx: TranscodeCtx
+  ctx: TranscodeCtx,
+  viaRefs: readonly string[] = NO_REFS
 ): SchemaNode {
   const discriminator = schema['discriminator'] as
     | { propertyName?: string; mapping?: Record<string, string> }
@@ -343,11 +440,11 @@ function pickUnionBranch(
       // 1b. BUG-APIGEN-RUNMODE-DISCRIMINATOR-DEREF-001: match by the
       // RESOLVED branch's own declared discriminator value. 1a alone is
       // silently inert whenever the caller has inlined every `$ref` before
-      // dispatch (`@adhd/backlog`'s `dereferenceSchema` does exactly this —
-      // its own doc comment explains WHY: run-mode's `ctx.resolve` has no
-      // descriptor root and unconditionally throws on any `$ref` it sees, so
-      // a host that wants run-mode dispatch to work AT ALL must strip every
-      // `$ref` before the schema ever reaches this transcoder). Once
+      // dispatch (`@adhd/backlog`'s `dereferenceSchema` does exactly this).
+      // A transcoder built without a root-bound `ctx.resolve` throws on any
+      // `$ref` it sees, so inlining is the only way such a caller can dispatch
+      // without one; `engine-runtime`'s `dispatch()` binds the op's root and
+      // does not need the inlining. Once
       // `oneOf`'s branches are inlined object schemas, NONE of them carry a
       // `$ref` key any more, so `oneOf.find((b) => b['$ref'] === ref)` above
       // always returns `undefined` and 1a silently no-ops — `mapping` was
@@ -429,7 +526,7 @@ function pickUnionBranch(
   // for that property against those literals. Strictly additive: a union
   // with no such property behaves exactly as before (this returns
   // `undefined` immediately and structural scoring runs unchanged).
-  const implicit = findImplicitDiscriminatorBranch(value, oneOf, ctx);
+  const implicit = findImplicitDiscriminatorBranch(value, oneOf, ctx, viaRefs);
   if (implicit) return implicit;
 
   // ── Structural match ───────────────────────────────────────────────────────
@@ -438,8 +535,12 @@ function pickUnionBranch(
   let best: SchemaNode | undefined;
   let bestScore = -1;
   for (const branch of oneOf) {
-    const resolved = resolveBranch(branch, ctx);
-    const score = scoreUnionBranch(value, resolved, ctx);
+    const entered = enterSameValueBranch(branch, ctx, viaRefs);
+    // A branch that re-enters a ref already on this same-value path can never
+    // finish, so it is not a candidate. If the walk is ever sent into it anyway,
+    // `encodeNode` / `decodeNode` throw E_RUNMODE_CYCLE at that $ref.
+    if (entered === undefined) continue;
+    const score = scoreUnionBranch(value, entered.node, ctx, entered.viaRefs);
     if (score !== null && score > bestScore) {
       bestScore = score;
       best = branch;
@@ -456,6 +557,45 @@ function pickUnionBranch(
 function resolveBranch(branch: SchemaNode, ctx: TranscodeCtx): SchemaNode {
   const ref = branch['$ref'];
   return typeof ref === 'string' ? ctx.resolve(ref) : branch;
+}
+
+/**
+ * Enter a `oneOf` branch (or a nested `$ref` node) for the SAME value, extending
+ * the same-value ref path. Used by the structural scorer, which walks the
+ * branch's own nested `oneOf`s without consuming the value.
+ *
+ * @returns The node to score and the extended path, or `undefined` when the
+ *   branch's `$ref` is already on the path: that cycle can never finish, so the
+ *   branch is ineligible rather than an error.
+ */
+function enterSameValueBranch(
+  branch: SchemaNode,
+  ctx: TranscodeCtx,
+  viaRefs: readonly string[]
+): { node: SchemaNode; viaRefs: readonly string[] } | undefined {
+  const ref = branch['$ref'];
+  if (typeof ref !== 'string') return { node: branch, viaRefs };
+  if (viaRefs.includes(ref)) return undefined;
+  return { node: ctx.resolve(ref), viaRefs: [...viaRefs, ref] };
+}
+
+/**
+ * Throw `E_RUNMODE_CYCLE` when a walk is about to enter a `$ref` that is already
+ * on the same-value path. Such a walk would repeat the same (schema, value) state
+ * forever; the error names the ref chain so the cycle is locatable. Recursion
+ * that consumed part of the value never reaches this check with a repeated ref.
+ */
+function assertSameValueProgress(
+  ref: string,
+  viaRefs: readonly string[],
+  ctx: TranscodeCtx
+): void {
+  const at = viaRefs.indexOf(ref);
+  if (at === -1) return;
+  const chain = [...viaRefs.slice(at), ref].join(' -> ');
+  throw new Error(
+    `[apigen-logical] E_RUNMODE_CYCLE: $ref "${ref}" at "${ctx.path || '#'}" re-enters itself while transcoding the same value (chain ${chain}); a $ref/oneOf cycle that never descends into a property or item cannot terminate`
+  );
 }
 
 /** The literal value a property schema pins — `const`, or a single-element `enum` — `undefined` if it isn't a literal-valued schema at all. */
@@ -478,7 +618,8 @@ function literalValueOf(schema: SchemaNode): unknown {
 function findImplicitDiscriminatorBranch(
   value: unknown,
   oneOf: SchemaNode[],
-  ctx: TranscodeCtx
+  ctx: TranscodeCtx,
+  viaRefs: readonly string[] = NO_REFS
 ): SchemaNode | undefined {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) {
     return undefined;
@@ -554,7 +695,11 @@ function findImplicitDiscriminatorBranch(
     // structurally admissible for this value; otherwise the heuristic has
     // misfired for this value and we fall through to structural scoring, which
     // selects the markdown member correctly.
-    if (scoreUnionBranch(value, resolvedBranches[matchIndex]!, ctx) === null) {
+    const entered = enterSameValueBranch(oneOf[matchIndex]!, ctx, viaRefs);
+    if (
+      entered === undefined ||
+      scoreUnionBranch(value, entered.node, ctx, entered.viaRefs) === null
+    ) {
       continue;
     }
     return oneOf[matchIndex];
@@ -592,15 +737,20 @@ function jsonTypeOf(value: unknown): string {
 function scoreUnionBranch(
   value: unknown,
   branch: SchemaNode,
-  ctx: TranscodeCtx
+  ctx: TranscodeCtx,
+  viaRefs: readonly string[] = NO_REFS
 ): number | null {
   // A `oneOf` nested directly inside a branch: take its best sub-branch score
-  // so nesting does not silently disqualify the whole branch.
+  // so nesting does not silently disqualify the whole branch. The recursion
+  // stays on the same value, so it carries the same-value ref path and treats a
+  // repeated ref as an ineligible sub-branch (see `enterSameValueBranch`).
   const nested = branch['oneOf'];
   if (Array.isArray(nested)) {
     let bestNested: number | null = null;
     for (const sub of nested) {
-      const s = scoreUnionBranch(value, resolveBranch(sub, ctx), ctx);
+      const entered = enterSameValueBranch(sub, ctx, viaRefs);
+      if (entered === undefined) continue;
+      const s = scoreUnionBranch(value, entered.node, ctx, entered.viaRefs);
       if (s !== null && (bestNested === null || s > bestNested)) bestNested = s;
     }
     return bestNested;

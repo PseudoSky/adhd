@@ -33,6 +33,11 @@ const { python, venvDir, pythonPkgDir } = ensurePythonEnv({ extras: ['grpc'] })
      concurrent `serve` children don't double-provision.
 - **`resolvePythonPkgDir()`** — locates the `apigen_python` sources (shared by
   both py plugins; also exported for tools like the conformance gate).
+- **`runExtractorEmitJson(python, pythonPkgDir, modulePath, namespace, label, { timeoutMs })`**
+  — runs `apigen_python.extractor --emit-json` to completion and parses its
+  operations. `timeoutMs` defaults to `120000`.
+  On expiry the child is killed with SIGKILL and the promise rejects with an error
+  naming the command; the rejection is raised only after the child has exited.
 
 Environment knobs:
 

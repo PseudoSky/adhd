@@ -518,11 +518,14 @@ export class CitationUnverifiableError extends BacklogWriteError {
    */
   constructor(
     public readonly target: string,
-    public readonly reason: CitationUnverifiableReason = 'target-missing'
+    public readonly reason: CitationUnverifiableReason = 'target-missing',
+    /** For `revision-unresolved`: every repository root the revision was tried in. */
+    public readonly triedRepos: readonly string[] = []
   ) {
     super(
       `Citation target "${target}" could not be verified and this project requires a real sha — ` +
         UNVERIFIABLE_REASON_TEXT[reason] +
+        (triedRepos.length > 0 ? ` (repos tried: ${triedRepos.join(', ')})` : '') +
         '. Cite a path that exists (anywhere on this machine — project membership is not required), ' +
         'or set project_policy.citationRequiresSha to false.'
     );
@@ -993,6 +996,48 @@ export class ProductionWriteRefusedError extends BacklogWriteError {
         '`--allow-production-write` on the CLI (and in the `serve` server args, ' +
         'e.g. `.mcp.json`) — or point the command at an isolated store ' +
         '(--namespace sandbox).'
+    );
+  }
+}
+
+/**
+ * `removeNote` named a uid that is not a LIVE `note` node — absent, already
+ * removed, or a uid naming a node of a DIFFERENT kind. Distinct from
+ * `CitationNotFoundError` so a caller can branch on the missing record kind.
+ * `E_VALIDATION` → `item_not_found` in the envelope, never retryable.
+ *
+ * Declared ATTACHED to `errors.ts`'s end so this additive change shifts NO
+ * existing line and leaves `CONTRACT.md`'s `(errors.ts:NNN)` anchors true.
+ */
+export class NoteNotFoundError extends BacklogWriteError {
+  readonly code = 'E_VALIDATION' as const;
+  readonly retryable = false;
+
+  constructor(public readonly uid: string) {
+    super(`No live note found for uid "${uid}"`);
+  }
+}
+
+/**
+ * `removeNote` was called by an actor who is neither the note's author nor
+ * listed in the owning project's `policy.noteRemovers`. Refused before any
+ * write, so the note and its audit trail are untouched. `E_VALIDATION` →
+ * `precondition_failed` in the envelope (a re-read shows the same state),
+ * never retryable.
+ *
+ * Declared ATTACHED to `errors.ts`'s end (anchors preserved, as above).
+ */
+export class NoteRemovalNotPermittedError extends BacklogWriteError {
+  readonly code = 'E_VALIDATION' as const;
+  readonly retryable = false;
+
+  constructor(
+    public readonly noteUid: string,
+    public readonly actor: string
+  ) {
+    super(
+      `Note removal not permitted: actor "${actor}" is neither the author of note "${noteUid}" ` +
+        'nor listed in the project policy noteRemovers'
     );
   }
 }

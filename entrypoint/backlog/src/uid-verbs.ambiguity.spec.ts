@@ -18,6 +18,7 @@ import { buildBacklogEnv } from './env.js';
 import * as api from './api.js';
 import { BACKLOG_VERBS } from './vocabulary.js';
 import type { IOutcomeEnvelope } from './envelope.js';
+import { seedNote } from './test/helpers/seed-note.js';
 
 /** Verbs that take no uid reference (names, filters, or no input). */
 const NON_UID_VERBS = new Set([
@@ -45,6 +46,7 @@ const P = {
   citation: 'c0ffee05',
   location: 'c0ffee06',
   deleted: 'c0ffee07',
+  note: 'c0ffee08',
 } as const;
 
 type Env = { ok: boolean; error?: { code: string; details?: Record<string, unknown> } };
@@ -57,6 +59,8 @@ const AMBIGUOUS_CALLS: Record<string, Call> = {
   update: (c) => api.update(c, { uid: P.issue, by: 'x', title: 'z' }),
   'add-citation': (c) => api.addCitation(c, { uid: P.issue, by: 'x', citation: { file: 'q.ts' } }),
   'remove-citation': (c) => api.removeCitation(c, { uid: P.citation, by: 'x' }),
+  // 0f9b6132 AC4: a note uid is a uid-taking verb; its prefix resolves like every other.
+  'remove-note': (c) => api.removeNote(c, { uid: P.note, by: 'x', reason: 'r' }),
   transition: (c) => api.transition(c, { uid: P.issue, by: 'x', toStatus: 'IN_PROGRESS', note: 'n' }),
   attest: (c) =>
     api.attest(c, { subject: { id: P.issue, revision: 1 }, claim: { kind: 'k' }, anchor: { locator: 'path:a', digest: 'd' }, by: 'x' }),
@@ -133,12 +137,16 @@ describe('3a4a0405 A-AC10 — ambiguous uid prefix on every uid-taking verb', ()
     must(await api.obligate(ctx, { uid: i1uid, applies_to: { to: 'DONE' }, requirement: { op: 'blockers_terminal' }, on_fail: 'warn', by: 'seed' }));
     must(await api.addCitation(ctx, { uid: i1uid, by: 'seed', citation: { file: 'a.ts' } }));
     must(await api.addCitation(ctx, { uid: i1uid, by: 'seed', citation: { file: 'b.ts' } }));
+    // 0f9b6132 AC4: two live notes so the `note` prefix is ambiguous for remove-note.
+    await seedNote(tmp.store, { issueUid: i1uid, text: 'note one', author: 'seed' });
+    await seedNote(tmp.store, { issueUid: i1uid, text: 'note two', author: 'seed' });
     await renameWhere("kind = 'issue' AND t_invalid IS NOT NULL", P.deleted);
     await rename('issue', P.issue);
     await rename('project', P.project);
     await rename('attestation', P.attestation);
     await rename('obligation', P.obligation);
     await rename('citation', P.citation);
+    await rename('note', P.note);
     await rename('location', P.location);
   });
 

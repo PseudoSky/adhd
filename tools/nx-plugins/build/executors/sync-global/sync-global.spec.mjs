@@ -40,6 +40,15 @@
  * these tests run against the PRE-fix code first, where the version-only
  * gate flips on a content-mismatched worktree — the (a) test fails RED).
  *
+ * Header (test-maintenance, item qa-variance):
+ *   failure mode: a stale/content-mismatched worktree dist flips the operator's
+ *     global CLI shim, or a currency/legacy/unverifiable row is reported as
+ *     verified (BUG-004, BUG-027, bea4bfe1, f1dece41, ab4d0864, HIGH/MEDIUM/LOW).
+ *   tier: S (temp-dir fixtures, injected npmView/pnpmAdd/install; nothing spawns).
+ *   variance fix: the stamped baseline hash is computed once per distinct dist
+ *     content (memoised) instead of a mkdtemp+copy+hash+rm per fixture.
+ *   red run: pending (tests not run per user instruction; assertions unchanged).
+ *
  * Run: node --test tools/nx-plugins/build/executors/sync-global/sync-global.spec.mjs
  */
 import { test } from 'node:test';
@@ -71,6 +80,39 @@ const { generateDistManifest } = require('../manifest/generate-manifest.js');
  * @returns {string} `sha256:<hex>`
  */
 function stampedDistHashOf(distDir, srcPkg) {
+  // qa-variance: every makeFixture() call used to mkdtemp, copy the dist tree,
+  // stamp and hash it, then remove it again (~40 fixtures per run, cost scaling
+  // with disk/CPU load). The result is a pure function of the dist CONTENT and
+  // the source manifest (normalizedHash is path- and mtime-independent), so the
+  // real primitives run once per distinct content and the hash is reused.
+  const memoKey = distContentKey(distDir, srcPkg);
+  const memo = stampedHashMemo.get(memoKey);
+  if (memo !== undefined) return memo;
+  const hash = computeStampedDistHash(distDir, srcPkg);
+  stampedHashMemo.set(memoKey, hash);
+  return hash;
+}
+
+/** @type {Map<string, string>} content key -> stamped hash (per process) */
+const stampedHashMemo = new Map();
+
+/** Stable key over every file (relative path + bytes) of a dist dir plus the source manifest. */
+function distContentKey(distDir, srcPkg) {
+  const entries = [];
+  const walk = (dir, rel) => {
+    for (const e of readdirSync(dir, { withFileTypes: true })) {
+      const abs = join(dir, e.name);
+      const r = rel ? `${rel}/${e.name}` : e.name;
+      if (e.isDirectory()) walk(abs, r);
+      else entries.push([r, readFileSync(abs).toString('base64')]);
+    }
+  };
+  walk(distDir, '');
+  entries.sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
+  return JSON.stringify([entries, srcPkg]);
+}
+
+function computeStampedDistHash(distDir, srcPkg) {
   const tmp = mkdtempSync(join(tmpdir(), 'sync-global-stamped-'));
   try {
     // Recurse-copy the dist, then replace package.json with the stamped manifest.

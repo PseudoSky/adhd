@@ -74,7 +74,7 @@ Consequences for releasing:
 
 ## Approval & Authorization
 
-**Pushing and publishing normally require human approval** — see `AGENTS.md` Rules. However, **if the human grants explicit blanket permission at the start of a session** (e.g., "continuous publish" / "you can publish without asking"), that per-session authorization is sufficient for the rest of that session without per-release re-approval. The grant is **per-session only**; silence or a prior session's grant does **not** carry over to a new session.
+**Pushing, merging to `main`, and publishing are pre-authorized for all agents** — no approval is needed; the Gates in `AGENTS.md` still apply and must be green first, unless otherwise explicitly directed by your prompt.
 
 ---
 
@@ -148,7 +148,7 @@ pnpm release:commit:dry   # preview exactly what would be staged + the commit me
 pnpm release:commit       # stage + commit ONLY the bumped package.json + CHANGELOG.md + published-state.json
 ```
 
-`release-commit` (`tools/nx-plugins/build/executors/publish/release-commit.mjs`) stages explicit pathspecs only — never `git add -A`/`.` — so unrelated concurrent work in the tree is never swept in. Then `git push` (human-approved). No tag push is needed; the registry itself records what's released. (Leaving them uncommitted is still coherent — next release sees source == npm/cache and re-detects from the artifact — but committing keeps git, npm, and the cache aligned for the next contributor/CI run.)
+`release-commit` (`tools/nx-plugins/build/executors/publish/release-commit.mjs`) stages explicit pathspecs only — never `git add -A`/`.` — so unrelated concurrent work in the tree is never swept in. Then `git push`. No tag push is needed; the registry itself records what's released. (Leaving them uncommitted is still coherent — next release sees source == npm/cache and re-detects from the artifact — but committing keeps git, npm, and the cache aligned for the next contributor/CI run.)
 
 **Step 3.5 — global-CLI sync (runs inside `pnpm release`; NOT advisory).** After publish (and before GATE 2), `sync-global.mjs` reconciles every global install of this workspace's bin-shipping entrypoints. It enumerates every global root (`discoverGlobalRoots`): the **pnpm** global bin dir (`pnpm config get global-bin-dir` → `~/Library/pnpm`), the **npm** global prefix (`npm prefix -g`), and **every NVM node version** (`{NVM_DIR||~/.nvm}/versions/node/*/{bin,lib/node_modules}`) — so a stale/broken CLI installed by nvm's npm is no longer invisible (DEBT `ab4d0864`).
 
@@ -239,7 +239,7 @@ npx nx release version             # execute (no --dry-run)
 > falls back to disk and resolves bumps from the _entire_ history → the first release touches
 > everything. Baseline tags for all 52 release-group projects were established locally at their
 > current disk versions on 2026-07-20 (see `DEBT-RELEASE-BASELINE-TAGS-001`); **they are LOCAL
-> until pushed** (`git push --tags`, human-approved) — CI won't see changed-only until then.
+> until pushed** (`git push --tags`) — CI won't see changed-only until then.
 > Bootstrapping a fresh clone instead: `npx nx release --first-release`.
 
 ### 2. Publish (build, test, verify-dist-load, push to npm)

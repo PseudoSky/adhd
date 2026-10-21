@@ -1,10 +1,17 @@
-import type { SchemaNode } from '@adhd/apigen-base-logical';
+import type {
+  SchemaNode,
+  TranscodeCtx,
+  Wire,
+} from '@adhd/apigen-base-logical';
 import {
   buildTranscoder,
   createRegistry,
   registerWellKnown,
+  rootRefResolver,
 } from '@adhd/apigen-base-logical';
 import type { ComposedSchemas } from './types';
+import type { ApiStream } from './stream';
+import { isApiStream } from './stream';
 
 // ---------------------------------------------------------------------------
 // Module-level transcoder: built once from the well-known TS scalar codecs.
@@ -81,24 +88,104 @@ function paramSchemaNode(
  * the transcoder once per declared param name rather than walking a nested
  * object schema.
  */
-function decodeArg(wire: unknown, node: SchemaNode | undefined): unknown {
+function decodeArg(
+  wire: unknown,
+  node: SchemaNode | undefined,
+  ctx: Partial<TranscodeCtx>
+): unknown {
   if (node === undefined || wire === undefined) return wire;
-  return _transcoder.decode(wire as import('@adhd/apigen-base-logical').Wire, node);
+  return _transcoder.decode(
+    wire as import('@adhd/apigen-base-logical').Wire,
+    node,
+    ctx
+  );
+}
+
+/**
+ * Build a transcoder context whose `$ref` resolver is bound to one schema
+ * document root (the op's `input` or `output` schema, whose `definitions` /
+ * `$defs` the extractor hoisted onto that root).
+ *
+ * A `$ref` that is unsupported or has no matching definition throws an error
+ * naming both the ref and the operation id (the resolver's `E_EMIT` message is
+ * kept, and the original `EmitError` is attached as `cause`), so the failure
+ * points at the schema, not the codec.
+ *
+ * @param root  The schema document the `$ref`s inside it are relative to.
+ * @param fnName The operation id, used only in the error message.
+ */
+function refCtx(root: SchemaNode, fnName: string): Partial<TranscodeCtx> {
+  const lookup = rootRefResolver(root);
+  return {
+    resolve: (ref: string): SchemaNode => {
+      // `rootRefResolver` (apigen-base-logical) is the single owner of which
+      // `$ref` forms are resolvable: it throws an `E_EMIT` EmitError for an
+      // unsupported form and a distinct one for a missing definition. Re-throw
+      // with the op id prefixed and the EmitError kept as `cause`, so the
+      // failure points at the schema and the original diagnosis is not lost.
+      try {
+        return lookup(ref);
+      } catch (cause) {
+        const detail = cause instanceof Error ? cause.message : String(cause);
+        // The package compiles below ES2022, whose `lib` lacks `ErrorOptions`,
+        // so the standard `cause` property is attached by assignment.
+        const wrapped: Error & { cause?: unknown } = new Error(
+          `[apigen-engine-runtime] op "${fnName}": ${detail}`
+        );
+        wrapped.cause = cause;
+        throw wrapped;
+      }
+    },
+  };
+}
+
+/**
+ * Wrap a stream so each chunk is encoded against the declared chunk schema.
+ * The wrapper is itself an `ApiStream`, so transports still take the SSE
+ * branch. Iteration is delegated to the source's `for await`, so a consumer's
+ * `break` or cancellation reaches the source's `return()`.
+ */
+function encodeChunks(
+  source: ApiStream<unknown>,
+  chunkSchema: SchemaNode,
+  ctx: Partial<TranscodeCtx>
+): ApiStream<Wire> {
+  return {
+    [Symbol.asyncIterator]: async function* (): AsyncGenerator<Wire> {
+      for await (const chunk of source) {
+        yield _transcoder.encode(chunk, chunkSchema, ctx);
+      }
+    },
+  };
 }
 
 /**
  * Encode the function's return value against the output schema node.
+ *
  * When the output schema is empty ({}), the value passes through unchanged.
+ * A streaming result (`isApiStream`) is never transcoded as a single value:
+ * the transcoder would walk the output schema's properties against the
+ * iterator object and return `{}`. Instead the stream is kept and each chunk
+ * is encoded against the output schema (the chunk schema).
+ * `$ref`s in the output schema resolve against the output schema's own root.
  */
 function encodeResult(
   value: unknown,
+  fnName: string,
   fnSchema: ComposedSchemas[string]
 ): unknown {
   const outputSchema = fnSchema.output as SchemaNode;
   // An empty object schema `{}` has no `type` — the transcoder treats it as
   // schema-less / plain-JSON passthrough; only typed output schemas are encoded.
   if (!outputSchema || Object.keys(outputSchema).length === 0) return value;
-  return _transcoder.encode(value, outputSchema);
+  const ctx = refCtx(outputSchema, fnName);
+  // Ruling: a streaming result is NOT returned as the identical object the fn
+  // produced. The returned value is a new ApiStream (same `Symbol.asyncIterator`
+  // contract, so transports still take the SSE branch) whose chunks are
+  // wire-encoded against the output schema. Identity is intentionally not
+  // preserved; consumers must rely on the ApiStream contract, not on `===`.
+  if (isApiStream(value)) return encodeChunks(value, outputSchema, ctx);
+  return _transcoder.encode(value, outputSchema, ctx);
 }
 
 /**
@@ -128,8 +215,11 @@ export async function dispatch(
   const paramNames = dataParamNames(schema);
 
   // ── Decode: wire → host for every domain arg ───────────────────────────────
+  // Param `$ref`s resolve against the input schema root (where the extractor
+  // hoists `definitions`/`$defs` for the `data` envelope).
+  const inputCtx = refCtx(schema.input as SchemaNode, fnName);
   const args = paramNames.map((k) =>
-    decodeArg(domainArgs[k], paramSchemaNode(schema, k))
+    decodeArg(domainArgs[k], paramSchemaNode(schema, k), inputCtx)
   );
 
   // Session middleware: build ctx from the session envelope and inject it as the
@@ -139,7 +229,7 @@ export async function dispatch(
     const raw = await (
       fns[fnName] as (ctx: unknown, ...a: unknown[]) => unknown
     )(ctx, ...args);
-    return encodeResult(raw, schema);
+    return encodeResult(raw, fnName, schema);
   }
 
   // ctx-param fn WITHOUT session middleware (BUG-APIGEN-001): the source fn's
@@ -151,9 +241,9 @@ export async function dispatch(
     const raw = await (
       fns[fnName] as (ctx: unknown, ...a: unknown[]) => unknown
     )(ctx, ...args);
-    return encodeResult(raw, schema);
+    return encodeResult(raw, fnName, schema);
   }
 
   const raw = await fns[fnName](...args);
-  return encodeResult(raw, schema);
+  return encodeResult(raw, fnName, schema);
 }

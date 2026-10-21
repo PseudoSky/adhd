@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { TASK_COMPLETION_WARNINGS } from '@adhd/agent-base-types';
 
 import { taskUsageReportSchema } from './usage.js';
 
@@ -36,6 +37,12 @@ export const taskSchema = z.object({
 
 export type { Task } from '@adhd/agent-base-types';
 
+/**
+ * Zod mirror of the `TaskEventType` union in `@adhd/agent-base-types` and of the `task_events.type`
+ * enum in the drizzle schema (`@adhd/agent-store-runtime`). Keep all three in step: a type added to
+ * one and not the others fails validation or insertion. `CONTEXT_COMPACTED` is recorded when the
+ * orchestrator compacts a task's history.
+ */
 export const taskEventTypeSchema = z.enum([
   'MODEL_REQUEST',
   'MODEL_RESPONSE',
@@ -46,6 +53,7 @@ export const taskEventTypeSchema = z.enum([
   'provider:builtin_bypass',
   'provider:history_degraded',
   'provider:pause_continued',
+  'CONTEXT_COMPACTED',
   'TASK_COMPLETED',
   'TASK_FAILED',
   'TASK_CANCELLED',
@@ -100,12 +108,21 @@ export const taskToolInputSchema = z.union([
   ephemeralModeSchema,
 ]);
 
+/**
+ * Advisory completion warnings of a finished task (cbd559eb). Built from the same
+ * `TASK_COMPLETION_WARNINGS` tuple that defines `TaskCompletionWarning` in `@adhd/agent-base-types`.
+ * The key is omitted when the task completed with no warning.
+ */
+export const taskToolWarningSchema = z.enum(TASK_COMPLETION_WARNINGS);
+
 export const taskToolOutputSchema = z.object({
   task_id: z.string().uuid(),
   status: taskStatusSchema,
   result: z.string().optional(),
   stream_url: z.string().optional(),
   usage: taskUsageReportSchema.optional(),
+  /** cbd559eb: advisory completion warnings; absent when none fired (see `TaskCompletionWarning`). */
+  warnings: z.array(taskToolWarningSchema).optional(),
 });
 
 /**

@@ -63,7 +63,10 @@ afterAll(() => {
 // Fixtures (mirror orchestrator.spec.ts's shape, kept local on purpose)
 // ---------------------------------------------------------------------------
 
-const PASS_GUARD = 'node -e "process.exit(0)"';
+// qa-variance (item qa-variance, tier S): failure mode guarded: the guard fixture
+// paid a node start-up per run under load, causing variance. `exit 0` runs through
+// the same real `sh -c` exec path as the default guard executor. Red run: pending.
+const PASS_GUARD = 'exit 0';
 const TARGET_AGENT = 'forbidden-agent';
 
 function makePartialBinding(): PartialBinding {

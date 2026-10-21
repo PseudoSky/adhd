@@ -19,7 +19,7 @@
  *                         `inE2eLane`). The local pre-push hook runs the `test` lane only, so a tier P/H/X suite named
  *                         `*.spec.*` / `*.test.*` would run on every push; in the e2e lane it runs in CI (`nx affected -t
  *                         e2e`): vitest projects through their `e2e` target (ADR 0009), the build-tools `node --test`
- *                         specs (`*.e2e.mjs`) through `test:build-tools-e2e` (lane-reachability rule 9).
+ *                         specs (`*.e2e.mjs`) through `test:build-tools-e2e` (lane-reachability rule 10).
  *   B  baseline          a violation the baseline does not record fails; a baselined violation that no longer
  *                         occurs also fails until `--write-baseline` lowers it, so the baseline only shrinks.
  *

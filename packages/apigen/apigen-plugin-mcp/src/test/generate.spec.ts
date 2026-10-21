@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import * as ts from 'typescript';
 import { generate } from '../lib/generate';
 import { mcpPlugin } from '../lib/plugin';
 import type {
@@ -514,5 +515,233 @@ describe('[BUG-APIGEN-OPENAPI-ROUTE-PATH-MISMATCH-001] generate() derives canoni
     );
     expect(fallbackName).not.toBe(expectedName);
     expect(idx.content).not.toContain(JSON.stringify(fallbackName));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Regression: hyphenated package ids spliced raw into index.ts identifiers (969e36f4)
+// ---------------------------------------------------------------------------
+//
+// Test header
+//   guards: generateIndex (the uniqueSanitizedIdentifiers call and the groupFns table) passes every
+//     package id through uniqueSanitizedIdentifiers before it names the
+//     import namespace and the fn table, so a hyphenated id emits parseable
+//     TypeScript and a colliding pair of ids gets distinct identifiers. The
+//     raw id stays in string-literal positions.
+//   tier: S (unit). Pure string generation; the TypeScript parser runs
+//     in-process. No subprocess, socket or network.
+//   cites: 969e36f4 AC1, AC2, AC3 (identifier sanitisation), plus the
+//     literal-escaping and duplicate-id guards added to the same function.
+//     The ticket (969e36f4 body and notes) defines no numbered AC4; its only
+//     further requirement is process ("negative control: revert, confirm
+//     red"), which no test can assert and is recorded in the red line below.
+//   tags: regression:969e36f4.
+//   teeth: AC1 and AC2 fail on a286b457^, where `import * as data-base-transforms_ns`
+//     is spliced raw and the parser reports syntax diagnostics.
+//   red: pending (user hold; not run; must fail on a286b457^ for AC1 and AC2,
+//     pass on the bucket head). AC3's byte-identical 'myPkg' case is a
+//     characterization guard and passes on both sides. The escaping and
+//     duplicate-id tests fail on a286b457 itself (raw splice, no guard) and
+//     pass on the bucket head.
+//   parser: ts.transpileModule with reportDiagnostics, the public API for
+//     syntactic diagnostics. It reports the same parse errors as the
+//     parser-level parseDiagnostics without reading a TypeScript internal.
+
+/** Returns the syntactic diagnostics TypeScript reports for `source`; empty means it parses. */
+function syntacticErrors(source: string): string[] {
+  const out = ts.transpileModule(source, {
+    reportDiagnostics: true,
+    fileName: 'index.ts',
+    compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext },
+  });
+  return (out.diagnostics ?? []).map((d) =>
+    ts.flattenDiagnosticMessageText(d.messageText, '\n')
+  );
+}
+
+/**
+ * Generates the index.ts content for the given package ids. With
+ * `withPing` (the default) each package carries one `ping` function; without
+ * it, the package has no functions, so index.ts has no toolMetas entries.
+ */
+function indexContentFor(
+  pkgs: Array<{ id: string; importPath: string }>,
+  withPing = true
+): string {
+  const input: PluginInput = {
+    packages: pkgs.map((p) => ({
+      id: p.id,
+      importPath: p.importPath,
+      schemas: (withPing
+        ? { ping: { input: { type: 'object', properties: {} }, output: { type: 'object' } } }
+        : {}) as PluginInput['packages'][number]['schemas'],
+      fns: withPing ? { ping: () => ({}) } : ({} as Record<string, () => unknown>),
+    })),
+    outputDir: '/tmp/out',
+    options: {},
+  };
+  const idx = generate(input).files.find((f) => f.path === 'index.ts');
+  if (!idx) throw new Error('Expected index.ts');
+  return idx.content;
+}
+
+describe('regression:969e36f4 generate() — hyphenated package id in index.ts identifiers', () => {
+  it('969e36f4 AC1: a hyphenated id ("data-base-transforms") yields index.ts that parses with zero syntax diagnostics', () => {
+    const content = indexContentFor([
+      { id: 'data-base-transforms', importPath: '@adhd/data-base-transforms' },
+    ]);
+    expect(syntacticErrors(content)).toEqual([]);
+  });
+
+  it('969e36f4 AC2: the import namespace and fn-table use the sanitized identifier; the raw id stays in the group key', () => {
+    const content = indexContentFor([
+      { id: 'data-base-transforms', importPath: '@adhd/data-base-transforms' },
+    ]);
+    expect(content).toContain('import * as data_base_transforms_ns');
+    expect(content).toContain("'data-base-transforms': data_base_transforms_fns");
+    expect(content).not.toContain('data-base-transforms_ns');
+  });
+
+  it('969e36f4 AC3: ids ["a-b","a_b"] get distinct declarations const a_b_fns and const a_b_2_fns, and the file parses', () => {
+    const content = indexContentFor([
+      { id: 'a-b', importPath: '@x/a-b' },
+      { id: 'a_b', importPath: '@x/a_b' },
+    ]);
+    expect(content).toContain('const a_b_fns = buildFnTable(a_b_ns');
+    expect(content).toContain('const a_b_2_fns = buildFnTable(a_b_2_ns');
+    expect(content).toContain('import * as a_b_2_ns from');
+    expect(syntacticErrors(content)).toEqual([]);
+  });
+
+  it('969e36f4 AC3 (characterization): a non-hyphenated id "myPkg" yields index.ts byte-identical to the pre-change template', () => {
+    const content = indexContentFor([{ id: 'myPkg', importPath: '@acme/my-pkg' }], false);
+    const expected = [
+      '// Auto-generated by @adhd/apigen-cli — do not edit',
+      "import { buildFnTable } from '@adhd/apigen-engine-runtime'",
+      "import * as myPkg_ns from '@acme/my-pkg'",
+      'const myPkg_fns = buildFnTable(myPkg_ns as Record<string, unknown>)',
+      '',
+      'export const toolMetas: Record<string, { group: string; fnName: string; schema: unknown; description: string }> = {',
+      '}',
+      '',
+      'export const groupFns: Record<string, Record<string, (...args: unknown[]) => unknown>> = {',
+      "  'myPkg': myPkg_fns as Record<string, (...args: unknown[]) => unknown>,",
+      '}',
+      '',
+      'export const groupCreateClient: Record<string, ((e: Record<string, unknown>) => Promise<unknown>) | undefined> = {',
+      "  'myPkg': undefined, // injected at startup if createClient provided",
+      '}',
+    ].join('\n');
+    expect(content).toBe(expected);
+  });
+
+  it('969e36f4: an id and importPath containing a quote and a backslash yield index.ts that parses, with the literal escaped', () => {
+    const content = indexContentFor([{ id: "a'b\\c", importPath: "@x/it's\\here" }]);
+    expect(syntacticErrors(content)).toEqual([]);
+    expect(content).toContain("'a\\'b\\\\c': ");
+    expect(content).toContain("from '@x/it\\'s\\\\here'");
+    expect(content).toContain("group: 'a\\'b\\\\c'");
+  });
+
+  it('969e36f4: an id with newline, carriage return, U+2028 and U+2029 yields parseable index.ts with no raw terminators', () => {
+    const content = indexContentFor([
+      { id: 'a\nb\rc\u2028d\u2029e', importPath: '@x/line\nbreak' },
+    ]);
+    expect(syntacticErrors(content)).toEqual([]);
+    // The escaped literals (single-quoted group and import path) must carry no raw terminator. The JSON.stringify'd
+    // tool-name key legitimately keeps a raw U+2028/U+2029 (valid in a string literal since ES2019), so the whole
+    // file is checked only for a raw carriage return, and the literals the fix owns are checked individually.
+    expect(content).not.toMatch(/\r/);
+    const singleQuoted = content.match(/'(?:[^'\\\n]|\\.)*'/g) ?? [];
+    expect(singleQuoted.length).toBeGreaterThan(0);
+    for (const literal of singleQuoted) expect(literal).not.toMatch(/[\u2028\u2029\r]/);
+  });
+
+  it('969e36f4: duplicate raw package ids throw an Error naming the id and emit nothing', () => {
+    const input: PluginInput = {
+      packages: [
+        { id: 'dup-pkg', importPath: '@x/one', schemas: {}, fns: {} },
+        { id: 'other', importPath: '@x/two', schemas: {}, fns: {} },
+        { id: 'dup-pkg', importPath: '@x/three', schemas: {}, fns: {} },
+      ],
+      outputDir: '/tmp/out',
+      options: {},
+    };
+    let produced: unknown;
+    expect(() => {
+      produced = generate(input);
+    }).toThrow(/duplicate package id.*"dup-pkg"/);
+    expect(produced).toBeUndefined();
+  });
+});
+
+// plan discovery-sweep-1014 blind-review C AC1
+//   Failure mode: generateIndex spliced JSON.stringify(toolName / fnName /
+//     schema / description) into index.ts without escapeLineTerminators, so a
+//     raw U+2028/U+2029 in a schema description (JSON.stringify emits them
+//     verbatim) reached the generated source: a parse error in es2018 string
+//     literals and a raw line break in a one-line entry.
+//   Tier: S (pure in-process string generation, no I/O, no subprocess).
+//   Gap statement: none; the generator is the entire seam.
+//   Item/criterion: plan discovery-sweep-1014 blind-review C AC1.
+//   Risk map (Light): the shared escaper from @adhd/apigen-engine-naming is
+//     the only escaping path; the removed local escapeSingleQuoted is pinned
+//     by the byte-identical characterization test above.
+//   Red run: against the unfixed generate.ts (before escapeLineTerminators
+//     was applied to the JSON splices) the not.toMatch assertion fails because
+//     the description's raw U+2028 appears in index.ts. Recorded in the commit.
+describe('plan discovery-sweep-1014 blind-review C AC1 — generated index has no raw line separators', () => {
+  it('AC1: raw U+2028/U+2029 in a schema description and a description override are escaped in every JSON splice', () => {
+    const input: PluginInput = {
+      packages: [
+        {
+          id: 'pkg',
+          importPath: '@x/pkg',
+          schemas: {
+            ping: {
+              input: {
+                type: 'object',
+                description: 'in\u2028put\u2029desc',
+                properties: {
+                  data: {
+                    type: 'object',
+                    properties: { a: { type: 'string', description: 'x\u2028y' } },
+                  },
+                },
+              },
+              output: { type: 'object', description: 'out\u2029put' },
+            },
+          },
+          fns: { ping: () => ({}) },
+        },
+      ],
+      outputDir: '/tmp/out',
+      options: { toolDescriptions: { ping: 'over\u2028ride\u2029' } },
+    };
+    const idx = generate(input).files.find((f) => f.path === 'index.ts');
+    if (!idx) throw new Error('Expected index.ts');
+    expect(idx.content).not.toMatch(/[\u2028\u2029]/);
+    expect(idx.content).toContain('\\u2028');
+    expect(syntacticErrors(idx.content)).toEqual([]);
+  });
+
+  it('AC1: the toolMetas description round-trips the original separators when the generated entry is evaluated', () => {
+    const input: PluginInput = {
+      packages: [
+        {
+          id: 'pkg',
+          importPath: '@x/pkg',
+          schemas: { ping: { input: { type: 'object', properties: {} }, output: { type: 'object' } } },
+          fns: { ping: () => ({}) },
+        },
+      ],
+      outputDir: '/tmp/out',
+      options: { toolDescriptions: { ping: 'a\u2028b\u2029c' } },
+    };
+    const idx = generate(input).files.find((f) => f.path === 'index.ts');
+    if (!idx) throw new Error('Expected index.ts');
+    const m = /description: ("(?:[^"\\]|\\.)*") \}/.exec(idx.content);
+    expect(m).not.toBeNull();
+    expect(JSON.parse(m![1])).toContain('a\u2028b\u2029c');
   });
 });

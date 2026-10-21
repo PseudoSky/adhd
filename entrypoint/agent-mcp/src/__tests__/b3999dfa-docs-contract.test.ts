@@ -6,6 +6,12 @@
  *        on) and AGENTS.md carries the caveat.
  *   AC9  the `est_cost_usd` snake_case naming in the usage summary is a documented decision, and the summary
  *        schema accepts exactly that key.
+ *
+ * plan discovery-sweep-1014 blind-review A2 TEB-D1 (tier S): the stored-result bound is documented where a reader
+ * looks. Failure mode: a doc keeps saying the event stores a 500-char summary, or that cap `0` stores the full
+ * output, or omits the new field names, so a consumer builds on a false contract. Red run: against the docs before
+ * this change the "500-char `result` summary" assertion and the "full tool output text" assertion fail and the
+ * `result_stored_clipped` / `payload_clipped` / `too_large` / 16,000 assertions fail on missing text.
  */
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
@@ -46,5 +52,29 @@ describe('b3999dfa docs contract', () => {
     expect(usageSummarySchema.safeParse({ ...summary, est_cost_usd: 0.5 }).success).toBe(true);
     expect(usageSummarySchema.safeParse({ ...summary, estCostUsd: 0.5 }).success).toBe(false);
     expect(read('docs/logging.md')).toContain('snake_case beside the camelCase token counters');
+  });
+});
+
+describe('plan discovery-sweep-1014 blind-review A2 TEB-D1 stored result bound is documented', () => {
+  const taskEventDocs = ['README.md', 'AGENTS.md'] as const;
+
+  it.each(taskEventDocs)('plan discovery-sweep-1014 blind-review A2 TEB-D1: %s names the stored-result fields and the 16,000 bound', (doc) => {
+    const text = read(doc);
+    for (const name of ['result_stored_clipped', 'payload_clipped', 'too_large', '16,000']) {
+      expect(text, `${doc} must mention ${name}`).toContain(name);
+    }
+  });
+
+  it('plan discovery-sweep-1014 blind-review A2 TEB-D1: logging.md no longer states the 500-char result summary and documents the bound', () => {
+    const logging = read('docs/logging.md');
+    expect(logging).not.toContain('500-char `result` summary');
+    expect(logging).toContain('16,000');
+    expect(logging).toContain('result_stored_clipped');
+  });
+
+  it.each(['README.md', 'AGENTS.md', 'docs/logging.md'])('plan discovery-sweep-1014 blind-review A2 TEB-D1: %s does not say cap 0 stores the full output', (doc) => {
+    const text = read(doc);
+    expect(text).not.toContain('then `result` is the full tool output text');
+    expect(text).not.toMatch(/stores? the full (tool )?output/i);
   });
 });

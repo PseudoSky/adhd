@@ -937,6 +937,13 @@ export interface IProjectPolicy {
    * per-project config — deliberately never an environment toggle.
    */
   readonly citationAllowedExternalRoots: readonly string[];
+  /**
+   * Actors (beyond a note's own author) permitted to soft-remove a note via
+   * `removeNote`. Typed per-project config, never a caller-supplied list: a
+   * caller who could name their own allowance would bypass the gate. Empty
+   * (the default) means author-only.
+   */
+  readonly noteRemovers: readonly string[];
   readonly defaultStatus?: string;
   readonly defaultKind?: string;
   readonly dedupeScanEnabled: boolean;
@@ -995,6 +1002,8 @@ const DEFAULT_PROJECT_POLICY: IProjectPolicy = Object.freeze({
   citationRequiresSha: true,
   // No machine-global default root: absent/malformed/empty all mean "no external roots".
   citationAllowedExternalRoots: Object.freeze([]),
+  // Author-only note removal unless a project names extra removers (§2).
+  noteRemovers: Object.freeze([]),
   dedupeScanEnabled: true,
   dedupeThreshold: 0.8,
   claimStaleAfterMin: 30,
@@ -1034,6 +1043,7 @@ export function resolveProjectPolicy(
       policy.citationRequiresSha ?? DEFAULT_PROJECT_POLICY.citationRequiresSha,
     // Validated: a malformed value falls back to the empty array rather than being spread.
     citationAllowedExternalRoots: resolveCitationAllowedExternalRoots(policy),
+    noteRemovers: resolveNoteRemovers(policy),
     defaultStatus: policy.defaultStatus,
     defaultKind: policy.defaultKind,
     dedupeScanEnabled:
@@ -1085,6 +1095,21 @@ function resolveCitationAllowedExternalRoots(
   const raw: unknown = policy.citationAllowedExternalRoots;
   if (raw === undefined) return [];
   if (!Array.isArray(raw) || !raw.every((root) => typeof root === 'string')) {
+    return [];
+  }
+  return raw;
+}
+
+/**
+ * Validate `project_policy.noteRemovers` (the `removeNote` allow-list). Same
+ * contract as {@link resolveCitationAllowedExternalRoots}: the blob is parsed
+ * JSON, so any non-`string[]` value falls back to the empty array (author-only),
+ * the narrowest possible surface, rather than spreading a string into characters.
+ */
+function resolveNoteRemovers(policy: Partial<IProjectPolicy>): readonly string[] {
+  const raw: unknown = policy.noteRemovers;
+  if (raw === undefined) return [];
+  if (!Array.isArray(raw) || !raw.every((actor) => typeof actor === 'string')) {
     return [];
   }
   return raw;

@@ -45,6 +45,7 @@ import {
   nowISO,
 } from '../../write/tx.js';
 import { resolveEdgeKindTx } from '../../write/catalog.js';
+import { seedFromSchemaTemplate } from './schema-template.js';
 export { OPEN_TYPE_POLICY } from '../../store/type-policy.js';
 import { OPEN_TYPE_POLICY } from '../../store/type-policy.js';
 import type { IQueryStoreHandle } from '../../query/query.js';
@@ -84,6 +85,10 @@ export async function openTestIssueStore(
   busyTimeoutMs = 5000
 ): Promise<TestIssueStore> {
   if (dbPath !== ':memory:') mkdirSync(dirname(dbPath), { recursive: true });
+  // qa-variance: start from a process-wide schema-applied image (see
+  // schema-template.ts); applySchema below stays and is idempotent, so a
+  // seeded file is verified, and any seeding failure is a plain cold open.
+  await seedFromSchemaTemplate(dbPath);
   const adapter = await createStoreAdapter({ dbPath });
   await adapter.pragmaSet('busy_timeout', busyTimeoutMs);
   const graph = createGraphBackend(adapter, { typePolicy: OPEN_TYPE_POLICY });

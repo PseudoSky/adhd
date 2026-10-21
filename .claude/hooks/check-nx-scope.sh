@@ -6,8 +6,10 @@
 #
 # Two disallowed shapes, both real footguns confirmed this session:
 #
-#   1. `nx test|build|lint <project>` (bare, not run-many/affected) —
-#      silently misses every downstream consumer of <project>. Confirmed
+#   1. `nx build|lint <project>` (bare, not run-many/affected) — denied.
+#      `nx test <project>` is allowed with a one-line warning instead
+#      (DEBT-PROCESS-AFFECTED-TEST-001). Bare invocations silently miss every
+#      downstream consumer of <project>. Confirmed
 #      real: commit a82ec947 changed apigen-engine-naming, the author only
 #      ran targeted `nx test` on two packages, three downstream test suites
 #      landed broken and stayed broken until a later triage pass.
@@ -117,13 +119,22 @@ case "$cmd" in
   *"nx graph"*|*"nx show"*|*"nx list"*|*"nx reset"*|*"nx format"*) echo '{}'; exit 0 ;;
 esac
 
-# Shape 1: bare `nx test|build|lint <project>` (single targeted project, no
-# run-many, no affected — already excluded above).
-if echo "$cmd" | grep -qE '(^|[^a-zA-Z0-9_-])nx[[:space:]]+(test|build|lint)[[:space:]]+[a-zA-Z0-9@/_-]+' \
+# Shape 1a: bare `nx build|lint <project>` (single targeted project, no
+# run-many, no affected — already excluded above). Denied.
+if echo "$cmd" | grep -qE '(^|[^a-zA-Z0-9_-])nx[[:space:]]+(build|lint)[[:space:]]+[a-zA-Z0-9@/_-]+' \
    && ! echo "$cmd" | grep -qE 'run-many'; then
   cat <<'EOF'
 {"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Targeted `nx test/build/lint <project>` silently misses downstream consumers when the project has dependents (DEBT-PROCESS-AFFECTED-TEST-001 — a real incident, commit a82ec947, landed 3 broken downstream suites this way). Use `npx nx affected -t <target> --uncommitted` (or --base=<ref>/--files=<path>), which naturally scopes to the real changed set including all dependents. Only a leaf package with zero dependents is safe to target directly, and this hook can't verify that for you — prefer affected regardless."}}
 EOF
+  exit 0
+fi
+
+# Shape 1b: bare `nx test <project>` (no run-many, no affected). Allowed, with
+# a short warning on the hook's systemMessage channel.
+if echo "$cmd" | grep -qE '(^|[^a-zA-Z0-9_-])nx[[:space:]]+test[[:space:]]+[a-zA-Z0-9@/_-]+' \
+   && ! echo "$cmd" | grep -qE 'run-many'; then
+  project=$(echo "$cmd" | sed -nE 's/.*nx[[:space:]]+test[[:space:]]+([a-zA-Z0-9@/_-]+).*/\1/p' | head -n 1)
+  printf '%s\n' "{\"systemMessage\":\"warn: nx test ${project} skips dependents; prefer npx nx affected -t test (DEBT-PROCESS-AFFECTED-TEST-001)\",\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\"}}"
   exit 0
 fi
 

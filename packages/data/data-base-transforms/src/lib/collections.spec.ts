@@ -344,17 +344,3 @@ describe('collections.ts', () => {
     });
   });
 });
-
-// honey/src/components/Search/QuickFilters.js
-// import { Collections } from "@adhd/utils";
-
-// function extractLabel({ name, event_labels_aggregate: agg }) {
-//   return { name, count: agg.aggregate.count };
-// }
-
-// export function QuickFilters({ filters = {}, onFilterPress, labels = [] }) {
-//   const chips = useMemo(() => {
-//     return Collections.sortBy(
-//       labels.map(extractLabel),
-//       "count"
-//     )

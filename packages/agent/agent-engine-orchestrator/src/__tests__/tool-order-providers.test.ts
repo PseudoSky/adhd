@@ -14,7 +14,10 @@
  *
  * guards: same-turn ordering holds on the engine but breaks on one provider's wire shape: the read does not see the edit, a failed barrier leaves a tool_use or tool_call without exactly one paired result, trace fields differ, or the request body changes with annotations.
  * tier: S
- * cites: R10 S2 AC1, AC3, AC5, AC6 over the anthropic and openai wires.
+ * cites: R10 S2 AC1, AC3, AC5, AC6 over the anthropic and openai wires; variance hardening cites qa-variance (dispatch-1014).
+ * red: pending (qa-variance edit made without running tests, per user). qa-variance: the fixed 50-turn
+ * `setImmediate` loop is replaced by `settleUntilStable` (state-probe quiescence, no clock); each negative
+ * assertion is still taken only after the probed state is unchanged across consecutive turns.
  */
 import { HookRegistry } from "@adhd/agent-base-types";
 import type { PostToolCallPayload, PreToolCallPayload } from "@adhd/agent-base-types";
@@ -32,6 +35,7 @@ import { generateId } from "../utils/ids.js";
 import { nowIso } from "../utils/timestamps.js";
 import type { ExecutionContext, Message } from "../validation/index.js";
 import { anthropicSseBody } from "./fixtures/anthropic-sse.js";
+import { settleUntilStable } from "./fixtures/settle.js";
 
 const logger: EngineLogger = { info() {}, warn() {}, error() {}, debug() {} } as EngineLogger;
 const policy = { check: () => {} } as unknown as PolicyEngine;
@@ -65,9 +69,6 @@ function latch() {
     const promise = new Promise<void>((r) => (resolve = r));
     return { promise, resolve };
 }
-const flush = async (): Promise<void> => {
-    for (let i = 0; i < 50; i++) await new Promise<void>((r) => setImmediate(r));
-};
 const text = (s: string) => [{ type: "text", text: s }];
 
 /** Builds the model's reply (one assistant message carrying all `calls`) in the adapter's wire shape. */
@@ -229,7 +230,7 @@ describe.each(["anthropic", "openai"] as const)("R10 S2 same-turn ordering over 
             }
         );
         await editStarted.promise;
-        await flush();
+        await settleUntilStable(() => order);
         expect(order).toEqual(["edit_file:start"]); // the read waits for the barrier
         gate.resolve();
         const { wire, result } = await running;

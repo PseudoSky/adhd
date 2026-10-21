@@ -4,13 +4,13 @@
  * guards: a test whose header declares tier P, H or X is named `*.spec.*` / `*.test.*`, so the `test` lane the local
  *   pre-push hook runs executes it on every push (H5), or a build-tools e2e spec is listed in the pre-push
  *   `test:build-tools` script, in no script at all, or behind an `e2e` target that is missing or hashes other inputs
- *   (lane-reachability rule 9).
+ *   (lane-reachability rule 10).
  * tier: S (pure functions over strings and parsed JSON; the one repository case reads files, spawns nothing)
  * cites: owner order 2026-10-15 "directly stop pre push from running e2e or P tier" (backlog f3683008
  *   AC1-AC3); STRATEGY G2 (every test runs in at least one stage), G9 (header tier judged against the code).
  * teeth: red 2026-10-15: node --test tools/nx-plugins/test/executors/wiring/check-tier-lane.spec.mjs with the H5 push
  *   in judge() disabled (`&& false`) -> exit 1, AssertionError in the H5 "fails" cases (8 failing lines); with
- *   buildToolsLaneViolations returning [] first -> exit 1, every rule 9 negative control red (10 failing lines).
+ *   buildToolsLaneViolations returning [] first -> exit 1, every rule 10 negative control red (10 failing lines).
  *   Green after restoring both: exit 0.
  */
 import { describe, test } from 'node:test';
@@ -80,7 +80,7 @@ describe('H5 — a tier P, H or X test is named into the e2e lane', () => {
   });
 });
 
-describe('rule 9 — the build-tools e2e lane is wired and reachable', () => {
+describe('rule 10 — the build-tools e2e lane is wired and reachable', () => {
   const RUN = 'node --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=./r.mjs --test-reporter-destination=stdout';
   const INPUTS = ['default', '{workspaceRoot}/tools/**/*'];
   const good = () => ({
@@ -106,42 +106,42 @@ describe('rule 9 — the build-tools e2e lane is wired and reachable', () => {
   test('fails: an e2e spec listed in the pre-push script', () => {
     const g = good();
     g.scripts[BUILD_TOOLS_UNIT_SCRIPT] += ' tools/b.e2e.mjs';
-    assert.deepEqual(rules(g), ['9-e2e-file-in-push-lane']);
+    assert.deepEqual(rules(g), ['10-e2e-file-in-push-lane']);
   });
 
   test('fails: an e2e spec on disk that no script lists (G2)', () => {
     const g = good();
     g.e2eFiles.push('tools/d.e2e.mjs');
-    assert.deepEqual(rules(g), ['9-e2e-file-unreachable']);
+    assert.deepEqual(rules(g), ['10-e2e-file-unreachable']);
   });
 
   test('fails: the e2e script lists a non-e2e name or a missing file', () => {
     const g = good();
     g.scripts[BUILD_TOOLS_E2E_SCRIPT] += ' tools/a.spec.mjs tools/gone.e2e.mjs';
-    assert.deepEqual(rules(g), ['9-non-e2e-file-in-e2e-lane', '9-e2e-script-stale-entry']);
+    assert.deepEqual(rules(g), ['10-non-e2e-file-in-e2e-lane', '10-e2e-script-stale-entry']);
   });
 
   test('fails: no e2e target, an uncached one, one hashing other inputs, a test target not running the unit script', () => {
     const noTarget = good();
     delete noTarget.project.targets.e2e;
-    assert.deepEqual(rules(noTarget), ['9-build-tools-e2e-target']);
+    assert.deepEqual(rules(noTarget), ['10-build-tools-e2e-target']);
     const uncached = good();
     uncached.project.targets.e2e.cache = false;
-    assert.deepEqual(rules(uncached), ['9-build-tools-e2e-not-cached']);
+    assert.deepEqual(rules(uncached), ['10-build-tools-e2e-not-cached']);
     const drift = good();
     drift.project.targets.e2e.inputs = ['default'];
-    assert.deepEqual(rules(drift), ['9-build-tools-e2e-not-cached']);
+    assert.deepEqual(rules(drift), ['10-build-tools-e2e-not-cached']);
     const wrongTest = good();
     wrongTest.project.targets.test.options.command = `pnpm run ${BUILD_TOOLS_E2E_SCRIPT}`;
-    assert.deepEqual(rules(wrongTest), ['9-build-tools-test-target']);
-    assert.deepEqual(rules({ ...good(), project: null }), ['9-build-tools-project-missing']);
+    assert.deepEqual(rules(wrongTest), ['10-build-tools-test-target']);
+    assert.deepEqual(rules({ ...good(), project: null }), ['10-build-tools-project-missing']);
   });
 });
 
 describe('this repository: the pre-push build-tools lane is tier S only', () => {
   const scripts = JSON.parse(readFileSync(join(REPO, 'package.json'), 'utf8')).scripts;
 
-  test('rule 9 holds over the real package.json, tools/nx-plugins/project.json and e2e files', () => {
+  test('rule 10 holds over the real package.json, tools/nx-plugins/project.json and e2e files', () => {
     const e2eFiles = globSync(BUILD_TOOLS_E2E_GLOBS, { cwd: REPO, exclude: (p) => /node_modules/.test(String(p?.name ?? p)) });
     assert.ok(e2eFiles.length > 0, 'the build-tools e2e lane has files');
     const project = JSON.parse(readFileSync(join(REPO, BUILD_TOOLS_PROJECT), 'utf8'));

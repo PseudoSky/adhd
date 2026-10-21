@@ -11,23 +11,84 @@ import type {
   PostToolCallPayload,
   PreToolCallPayload,
   ServerResultPersistPayload,
+  TaskCompletionWarning,
   TaskStartupPayload,
   ToolCallConcurrencyClass,
 } from '@adhd/agent-base-types';
 import { effectiveHitl } from '@adhd/agent-base-types';
 import { estimateToolResultTokens } from './tool-result-tokens.js';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
 import { ToolError } from '../validation/errors.js';
 import { generateId } from '../utils/ids.js';
 import { nowIso } from '../utils/timestamps.js';
 import type { EngineConfig, EngineLogger } from '../interfaces.js';
 import {
+  clipForStorage,
   DEFAULT_TOOL_RESULT_MAX_CHARS,
+  mcpContentText,
+  TOOL_RESULT_EVENT_MAX_CHARS,
+  serializeToolResult,
   validateToolResultMaxChars,
 } from './tool-result-cap.js';
 import { capOrSpillToolResult, resolveToolResultSpill } from './tool-result-spill.js';
 import { canonicalizeToolDefinitions, compactToolDefinitions } from './tool-schema-compact.js';
+
+/**
+ * sha256 (hex) of a string. Fingerprints the model-visible text of a `TOOL_RESULT` and the
+ * system prompt of a `MODEL_REQUEST` in `task_events`, so a reader can tell two payloads
+ * apart without the bytes.
+ */
+function sha256Hex(text: string): string {
+  return createHash('sha256').update(text, 'utf8').digest('hex');
+}
+
+/**
+ * The `result` fields of a `TOOL_RESULT` event payload: the model-visible text clipped to
+ * {@link TOOL_RESULT_EVENT_MAX_CHARS}, and `result_sha256`, the hash of the FULL model-visible
+ * text (equal to the hash of `result` only when nothing was clipped). A clipped result also
+ * carries `result_stored_clipped: true` and `result_model_visible_chars`, the length before the
+ * clip. `truncated` / `original_chars` keep describing the model cap, not this clip.
+ */
+function storedResultFields(modelVisibleText: string): Record<string, unknown> {
+  const clip = clipForStorage(modelVisibleText, TOOL_RESULT_EVENT_MAX_CHARS);
+  return {
+    result: clip.text,
+    result_sha256: sha256Hex(modelVisibleText),
+    ...(clip.clipped
+      ? { result_stored_clipped: true, result_model_visible_chars: clip.originalChars }
+      : {}),
+  };
+}
+
+/**
+ * The text the model reads for a capped tool result: the MCP text join for an all-text
+ * content array, else its serialization. The event log stores it through
+ * {@link storedResultFields}, which bounds it at {@link TOOL_RESULT_EVENT_MAX_CHARS}.
+ */
+function modelVisibleTextOf(result: unknown): string {
+  return mcpContentText(result) ?? serializeToolResult(result) ?? '';
+}
+
+/**
+ * sha256 (hex) of the system message of a model request, or `null` when it carries none.
+ *
+ * What is hashed: the system content of the history as the turn is about to shape it, taken
+ * before the `pre:model_request` enforcement runs and before windowing. `toolDocSystemMessage`
+ * (names mode) already embeds the history's system content, so it takes precedence over
+ * `history[0]`, the same precedence the request shaping uses. It is therefore NOT always the
+ * system content the provider receives: an enforcement handler can replace the system message on
+ * the request copy, and windowing runs after the hash is taken. The MODEL_REQUEST event cannot be
+ * moved after that step without reordering it against the enforcement hook.
+ */
+function systemPromptSha256(
+  toolDocSystemMessage: Message | null,
+  history: readonly Message[],
+): string | null {
+  const system =
+    toolDocSystemMessage ?? (history[0]?.role === 'system' ? history[0] : null);
+  return system ? sha256Hex(serializeToolResult(system.content) ?? '') : null;
+}
 import { nativeGuidanceContextOf, withNativeToolGuidance } from './native-tool-guidance.js';
 import { coerceToolArguments } from './tool-arg-coercion.js';
 import { DEFAULT_PROVIDER_TIMEOUT_MS } from '../interfaces.js';
@@ -358,6 +419,23 @@ export function resolveHitl(taskId: string, userInput: string): boolean {
   return true;
 }
 
+/**
+ * The event shape `OrchestratorRunInput.emitTaskEvent` delivers. Exported so the callers that inject
+ * the callback (`tools/task.ts` `TaskDeps`) reuse this one type instead of restating it.
+ */
+export type OrchestratorTaskEvent = {
+  type: string;
+  taskId: string;
+  status?: string;
+  result?: string | null;
+  error?: string | null;
+  warnings?: TaskCompletionWarning[];
+  toolName?: string;
+  toolCallId?: string;
+  input?: unknown;
+  content?: unknown;
+};
+
 export interface OrchestratorRunInput {
   executionContext: ExecutionContext;
   messages: Message[];
@@ -388,7 +466,7 @@ export interface OrchestratorRunInput {
    */
   suspensionAnswerable?: boolean;
   /** Injected emitTaskEvent callback (replaces streaming/event-bus import). */
-  emitTaskEvent?: (event: { type: string; taskId: string; status?: string; result?: string | null; error?: string | null; toolName?: string; toolCallId?: string; input?: unknown; content?: unknown }) => void;
+  emitTaskEvent?: (event: OrchestratorTaskEvent) => void;
   /** Injected logger (replaces logger.js import). */
   logger?: EngineLogger;
   /** Injected config (replaces config.js import). */
@@ -1258,6 +1336,10 @@ export class Orchestrator {
       });
 
       let finalContent = '';
+      // cbd559eb: task-wide tool-use count (API tool calls + provider-internal claudecli uses) and whether
+      // the final stop was `completed`; both feed the `no_tool_use` completion warning.
+      let toolUseCount = 0;
+      let finalStopCompleted = false;
 
       // 9ed453c1 CACHE: canonical order for server-rendered allow-lists so the serialized tools
       // block (head of the cached prefix) is byte-stable across tasks and spawns.
@@ -1440,6 +1522,8 @@ export class Orchestrator {
         // compute_ms capture: turn-level model-call latency, distinct from task
         // wall-clock `latency_ms` (see DESIGN.md §6). Captured right before the
         // MODEL_REQUEST event so it brackets exactly the provider.chat() call below.
+        // The MODEL_REQUEST payload's systemPromptSha256 is computed here, before the
+        // pre:model_request enforcement below (see systemPromptSha256 for what it hashes).
         const modelCallStartedAt = Date.now();
         // P6: engine time between the previous model call ending and this request starting.
         const callOverheadMs = computeOverheadMs(lastModelCallEndedAt, modelCallStartedAt);
@@ -1451,6 +1535,9 @@ export class Orchestrator {
             messageCount: currentMessages.length,
             toolCount: tools.length,
             toolAdvertisement: advertisementMode,
+            // What the provider is advertised: the names it may call, in the order sent.
+            advertisedToolNames: advertisedTools.map((tool) => tool.name),
+            systemPromptSha256: systemPromptSha256(toolDocSystemMessage, currentMessages),
           },
         });
 
@@ -1553,6 +1640,8 @@ export class Orchestrator {
             };
             const modelCalls = partial.usage ? partial.reportedModelCalls ?? 1 : 0;
             const toolCallCount = partial.reportedToolUses ?? 0;
+            // cbd559eb: a discarded attempt's CLI-internal tool uses still count toward the task-wide total.
+            toolUseCount += toolCallCount;
             const failedEndedAt = Date.now();
             const failedComputeMs = failedEndedAt - modelCallStartedAt;
             await hooks.emit('post:model_response', {
@@ -1772,6 +1861,7 @@ export class Orchestrator {
                     'Tool-result spill failed; using the head+tail cap'
                   ),
               });
+              const modelVisibleText = modelVisibleTextOf(capOutcome.result);
               taskStore.appendEvent({
                 taskId,
                 type: 'TOOL_RESULT',
@@ -1780,7 +1870,7 @@ export class Orchestrator {
                   tool: qualifiedToolName,
                   isError: isErr,
                   ...(exitStatus !== undefined ? { exitStatus } : {}),
-                  result: (fullText ?? '').slice(0, 500),
+                  ...storedResultFields(modelVisibleText),
                   tool_call_est_result_tokens: estTokens,
                   ...(estTokensEstimated
                     ? { tool_call_est_result_tokens_estimated: true }
@@ -2006,11 +2096,18 @@ export class Orchestrator {
         const callEndedAt = Date.now();
         const computeMs = callEndedAt - modelCallStartedAt;
         lastModelCallEndedAt = callEndedAt;
-        // Prefer the provider's own count of tools it ran internally (claudecli); otherwise
-        // the tool calls the orchestrator loop is about to execute. Accounting only —
-        // loop control still keys off assistantMessage.toolCalls / executionContext.
-        const reportedToolCallCount =
-          providerResponse.reportedToolUses ?? assistantMessage.toolCalls?.length ?? 0;
+        // The provider's own count of tools it ran internally (claudecli) and the tool calls the
+        // orchestrator loop is about to execute. Take the larger: a provider may report 0 while still
+        // populating toolCalls, and a `??` chain would then read that 0 and drop the real calls, which
+        // would raise a false no_tool_use warning. Accounting only — loop control still keys off
+        // assistantMessage.toolCalls / executionContext.
+        const reportedToolCallCount = Math.max(
+          providerResponse.reportedToolUses ?? 0,
+          assistantMessage.toolCalls?.length ?? 0,
+        );
+        // cbd559eb: counts every REQUESTED call, including calls the policy later denied (a denied call is
+        // still tool use the model attempted; the warning asks "did the model use tools at all").
+        toolUseCount += reportedToolCallCount;
         // R10 S5b: count the response's thinking blocks (absent for a provider that cannot produce them).
         const thinkingBlocks = thinkingBlocksOf(runSelection.providerType, providerResponse.echo);
         await hooks.emit('post:model_response', {
@@ -2057,6 +2154,7 @@ export class Orchestrator {
 
         if (providerResponse.stopReason === 'completed') {
           finalContent = assistantMessage.content ?? '';
+          finalStopCompleted = true;
           looping = false;
           continue;
         }
@@ -2419,8 +2517,8 @@ export class Orchestrator {
               ? undefined
               : parseShellExitStatus(resolved.tool, toolResult);
 
-            // Tokenize the FULL, untruncated result BEFORE the 500-char truncation
-            // below — tokenizing the already-truncated summary would undercount
+            // Tokenize the FULL, untruncated result BEFORE the model-visible cap
+            // applied below (BK1) — tokenizing the capped text would undercount
             // every large tool result (DESIGN.md §5).
             const fullResultText =
               typeof toolResult === 'string'
@@ -2432,8 +2530,9 @@ export class Orchestrator {
             } = estimateToolResultTokens(fullResultText);
 
             // BK1 (3ad735bb): bound what the MODEL sees (and what the session
-            // history persists). Telemetry above and the 500-char summary below
-            // keep measuring the FULL result; `post:tool_call` also receives it.
+            // history persists). Telemetry above and `post:tool_call` below keep
+            // the FULL result. The TOOL_RESULT event stores the model-visible
+            // (capped) text and its sha256 — whole, never sliced.
             const capOutcome = capOrSpillToolResult({
               result: toolResult,
               isError,
@@ -2449,10 +2548,7 @@ export class Orchestrator {
             });
             const modelVisibleResult = capOutcome.result;
 
-            const resultSummary =
-              typeof toolResult === 'string'
-                ? toolResult.slice(0, 500)
-                : JSON.stringify(toolResult).slice(0, 500);
+            const modelVisibleText = modelVisibleTextOf(modelVisibleResult);
 
             taskStore.appendEvent({
               taskId,
@@ -2462,7 +2558,7 @@ export class Orchestrator {
                 tool: qualifiedToolName,
                 isError,
                 ...(exitStatus !== undefined ? { exitStatus } : {}),
-                result: resultSummary,
+                ...storedResultFields(modelVisibleText),
                 tool_call_est_result_tokens: toolCallEstResultTokens,
                 ...(toolCallEstResultTokensEstimated
                   ? { tool_call_est_result_tokens_estimated: true }
@@ -2601,6 +2697,32 @@ export class Orchestrator {
         }
       }
 
+      // cbd559eb: a `completed` stop with zero tool use, on an agent granted at least one tool, is flagged
+      // (never failed). HITL needs no separate check: a suspension always arrives through a tool call, so
+      // `toolUseCount` is already non-zero. The HITL builtin is pushed unconditionally, so it is excluded
+      // from the granted count.
+      // `tools` is the task's own registry listing (`McpClientRegistry` built per task from the agent's
+      // mcpServers), and `listAllTools` drops every allowedTools/disallowedTools-hidden tool, so this is the
+      // agent-granted set, not the catalog.
+      const grantedToolCount = tools.filter(
+        (t) => t.name !== HITL_BUILTIN_TOOL_DEFINITION.name
+      ).length;
+      const completionWarnings: TaskCompletionWarning[] | undefined =
+        finalStopCompleted && toolUseCount === 0 && grantedToolCount > 0
+          ? ['no_tool_use']
+          : undefined;
+      if (completionWarnings) {
+        logger.warn(
+          {
+            taskId,
+            agentName: executionContext.agentName,
+            provider: runSelection.providerType,
+            grantedToolCount,
+          },
+          'TASK_COMPLETED with zero tool use although tools were granted (warnings: no_tool_use)'
+        );
+      }
+
       taskStore.updateStatus(taskId, 'completed', {
         result: finalContent,
         completedAt: nowIso(),
@@ -2610,7 +2732,11 @@ export class Orchestrator {
       taskStore.appendEvent({
         taskId,
         type: 'TASK_COMPLETED',
-        payload: { result: finalContent },
+        payload: {
+          result: finalContent,
+          toolUseCount,
+          ...(completionWarnings ? { warnings: completionWarnings } : {}),
+        },
       });
 
       logger.info(
@@ -2621,6 +2747,8 @@ export class Orchestrator {
       await hooks.emit('task:completed', {
         executionContext,
         result: finalContent,
+        toolUseCount,
+        ...(completionWarnings ? { warnings: completionWarnings } : {}),
       });
 
       emit({
@@ -2628,6 +2756,7 @@ export class Orchestrator {
         taskId,
         result: finalContent,
         error: null,
+        ...(completionWarnings ? { warnings: completionWarnings } : {}),
       });
 
       taskSucceeded = true;

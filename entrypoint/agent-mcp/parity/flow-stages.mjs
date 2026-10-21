@@ -39,7 +39,7 @@ export function errorSnippet(text, width = 260) { const t = String(text).replace
 // ----------------------------------------------------------------------------------------------------------------
 export const BACKLOG_CLI = 'adhd-backlog';
 /** Verbs that change the store (the CLI refuses them on the production store without `--allow-production-write`). */
-export const CLI_WRITE_VERBS = Object.freeze(['claim', 'transition', 'create', 'update', 'relate', 'delete', 'remove', 'restore', 'move', 'obligate', 'unobligate', 'attest', 'recheck', 'add-citation', 'remove-citation', 'merge-project', 'rm-project', 'rm-location', 'spec-append', 'upsert-component', 'upsert-location', 'upsert-project']);
+export const CLI_WRITE_VERBS = Object.freeze(['claim', 'transition', 'create', 'update', 'relate', 'delete', 'remove', 'restore', 'move', 'obligate', 'unobligate', 'attest', 'recheck', 'add-citation', 'remove-citation', 'remove-note', 'merge-project', 'rm-project', 'rm-location', 'spec-append', 'upsert-component', 'upsert-location', 'upsert-project']);
 const baseOf = (p) => String(p ?? '').split('/').pop();
 const isShellCall = (c) => /(^|__)shell_execute$/.test(String(c?.name));
 const HEX_PREFIX = /^[0-9a-f]{8,}(?:-[0-9a-f-]*)?$/i;

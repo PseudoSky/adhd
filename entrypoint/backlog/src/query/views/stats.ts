@@ -688,8 +688,8 @@ export async function orphanedParents(
 export interface IOpenCurveInput {
   /** `project`/`component`/`kind` only — `status` is rejected (`InvalidArgumentError`): this view computes openness itself, per sampled instant, so a caller-given status filter would silently conflict with that computation rather than compose with it. */
   filter?: IIssueFilter;
-  /** ISO-8601 instants to sample, in the given order. Must be non-empty; each is parsed via `Date.parse` and normalized to a full ISO string for lexical comparison against stored `at` timestamps — an unparsable entry throws by name rather than silently producing `NaN`-derived output. */
-  at: readonly string[];
+  /** ISO-8601 instants to sample, in the given order. Omitted ⇒ a single sample at the current instant; an explicit empty list is rejected. Each is parsed via `Date.parse` and normalized to a full ISO string for lexical comparison against stored `at` timestamps — an unparsable entry throws by name rather than silently producing `NaN`-derived output. */
+  at?: readonly string[];
 }
 
 export interface IOpenCurvePoint {
@@ -892,13 +892,17 @@ export async function openCurve(
     'openCurve'
   );
 
-  if (input.at.length === 0) {
+  const sampleAt = input.at === undefined ? [new Date().toISOString()] : input.at;
+  if (!Array.isArray(sampleAt)) {
+    throw new InvalidArgumentError('at', 'must be a list of ISO-8601 instants when given');
+  }
+  if (sampleAt.length === 0) {
     throw new InvalidArgumentError(
       'at',
       'requires at least one ISO-8601 instant to sample'
     );
   }
-  const instants = input.at.map((raw) => {
+  const instants = sampleAt.map((raw) => {
     const parsed = new Date(raw);
     if (Number.isNaN(parsed.getTime())) {
       throw new InvalidArgumentError(

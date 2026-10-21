@@ -175,7 +175,7 @@
         "cwd": "."
       },
       "metadata": {
-        "description": "Runs the root package.json `test:build-tools-e2e` script: the tier P/H/X build-tools `node --test` specs (`tools/**/*.e2e.mjs`, `.githooks/*.e2e.mjs`), which spawn node, git or sh against temporary directories. The local pre-push hook runs `test` only (`.githooks/lib/pre-push-flags.mjs`), so these run in CI (`nx affected -t e2e --parallel=1` in pull-request.yml and ci.yml) and on demand (`npx nx run @adhd/nx-plugins:e2e`). `inputs` equal `test`'s, the audited read set of the build-tools specs (lane-reachability rule 9 fails if they diverge or the target is uncached). docs/decisions/0009-test-lanes-unit-vs-e2e.md (amendment 2026-10-15)."
+        "description": "Runs the root package.json `test:build-tools-e2e` script: the tier P/H/X build-tools `node --test` specs (`tools/**/*.e2e.mjs`, `.githooks/*.e2e.mjs`), which spawn node, git or sh against temporary directories. The local pre-push hook runs `test` only (`.githooks/lib/pre-push-flags.mjs`), so these run in CI (`nx affected -t e2e --parallel=1` in pull-request.yml and ci.yml) and on demand (`npx nx run @adhd/nx-plugins:e2e`). `inputs` equal `test`'s, the audited read set of the build-tools specs (lane-reachability rule 10 fails if they diverge or the target is uncached). docs/decisions/0009-test-lanes-unit-vs-e2e.md (amendment 2026-10-15)."
       },
       "inputs": [
         "default",

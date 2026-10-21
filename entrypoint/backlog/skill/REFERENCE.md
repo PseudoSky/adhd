@@ -31,7 +31,7 @@ or after the one that mounted them. Compare the `backlog create`, `backlog
 priority-matrix`, and `backlog obligate` lines of `adhd-backlog --help` with §1
 before relying on a field.
 
-## 1. Command surface — 32 verbs (plus `batch`), one calling convention
+## 1. Command surface — 33 verbs (plus `batch`), one calling convention
 
 **Every verb except `embedding-status` takes a single `--input` flag carrying
 one JSON object** (`embedding-status` takes no options at all). There
@@ -74,6 +74,7 @@ adhd-backlog backlog recheck            --input '<IRecheckInput json>'
 adhd-backlog backlog relate             --input '<IRelateInput json>'
 adhd-backlog backlog remove             --input '<IRemoveIssueInput json>'
 adhd-backlog backlog remove-citation    --input '<IRemoveCitationInput json>'
+adhd-backlog backlog remove-note        --input '<IRemoveNoteInput json>'
 adhd-backlog backlog report             --input '<IReportInput json>'
 adhd-backlog backlog restore            --input '<IRestoreIssueInput json>'
 adhd-backlog backlog rm-location        --input '<IRmLocationInput json>'
@@ -107,7 +108,7 @@ Namespaced verbs (namespace + verb, per-field flags):
 Verbs (one-token, --input JSON envelope):
   backlog add-citation  { input: { uid: string, citation: object, by: string } }
   backlog attest  { input: { subject: object, claim: object, anchor: object, by: string } }
-  backlog claim  { input: { uid: string, by: string, action: 'claim'|'release'|'renew', force?: boolean } }
+  backlog claim  { input: { uid: string, by: string, action?: 'claim'|'release'|'renew', force?: boolean } }
   backlog create  { input: { title: string, body: string, project: string, component?: string, kind?: string, status?: string, priority?: string, citations?: object[], author?: string, assignee?: string, gitContext?: string, dedupeExcludeUid?: string, by: string, duplicateAction?: 'abort'|'force'|'comment', awaitEmbed?: boolean } }
   backlog delete  { input: { uid: string, reason: string, by: string, awaitEmbed?: boolean } }
   backlog embedding-status
@@ -115,22 +116,23 @@ Verbs (one-token, --input JSON envelope):
   backlog lookup  { input: { q: string, kind?: string } }
   backlog merge-project  { input: { fromUid: string, toUid: string, by: string } }
   backlog move  { input: { uid: string, toProject?: string, toComponent?: string, by: string } }
-  backlog obligate  { input: { uid: string, applies_to: object, requirement: union, on_fail: 'block'|'warn', override?: object, by: string } }
-  backlog open-curve  { input: { filter?: object, at: string[] } }
+  backlog obligate  { input: { uid: string, applies_to: object, requirement: union, on_fail?: 'block'|'warn', override?: object, by: string } }
+  backlog open-curve  { input?: { filter?: object, at?: string[] } }
   backlog part-of-rollup  { input: { uid: string, countOnly?: boolean, limit?: number, after?: string } }
-  backlog priority-matrix  { input: { filter?: object } }
-  backlog query  { input: { text?: string, filter?: object, fields?: union[], sort?: 'priority'|'updated'|'created'|'relevance'|'textMatch', direction?: 'asc'|'desc', limit?: number, offset?: number, after?: string, view?: 'list'|'ready'|'graph'|'order'|'stale'|'similar'|'overlap'|'projects'|'components'|'locations'|'kinds'|'catalogs', format?: 'json'|'markdown', overlapAxis?: 'file'|'project'|'component'|'author', overlapUids?: string[], staleAfterMin?: number, catalog?: 'kind'|'status'|'priority'|'relation'|'field'|'error_code'|'location_type'|'verb' } }
+  backlog priority-matrix  { input?: { filter?: object } }
+  backlog query  { input?: { text?: string, filter?: object, fields?: union[], sort?: 'priority'|'updated'|'created'|'relevance'|'textMatch', direction?: 'asc'|'desc', limit?: number, offset?: number, after?: string, view?: 'list'|'ready'|'graph'|'order'|'stale'|'similar'|'overlap'|'projects'|'components'|'locations'|'kinds'|'catalogs', format?: 'json'|'markdown', overlapAxis?: 'file'|'project'|'component'|'author', overlapUids?: string[], staleAfterMin?: number, catalog?: 'kind'|'status'|'priority'|'relation'|'field'|'error_code'|'location_type'|'verb' } }
   backlog recheck  { input: { attestationUid: string, by: string } }
-  backlog relate  { input: { sourceUid: string, targetUid: string, rel: 'relates_to'|'supersedes'|'blocks'|'duplicate_of'|'part_of'|'similar_to', action: 'add'|'remove', by: string } }
+  backlog relate  { input: { sourceUid: string, targetUid: string, rel: 'relates_to'|'supersedes'|'blocks'|'duplicate_of'|'part_of'|'similar_to', action?: 'add'|'remove', by: string } }
   backlog remove  { input: { uid: string, confirm: boolean, reason?: string, by: string } }
   backlog remove-citation  { input: { uid: string, by: string, reason?: string } }
-  backlog report  { input: { filter?: object } }
+  backlog remove-note  { input: { uid: string, by: string, reason: string } }
+  backlog report  { input?: { filter?: object } }
   backlog restore  { input: { uid: string, by: string } }
   backlog rm-location  { input: { uid: string, by: string, reason?: string } }
   backlog rm-project  { input: { uid: string, reason: string, by: string } }
   backlog spec-append  { input: { uid: string, fragment: string, anchor?: object, base_revision: string, by: string } }
   backlog spec-check  { input: { uid: string, token?: string } }
-  backlog timeline  { input: { sessionId: string, includeChildren?: boolean, limit?: number, after?: string } }
+  backlog timeline  { input?: { sessionId?: string, since?: string, includeChildren?: boolean, limit?: number, after?: string } }
   backlog transition  { input: { uid: string, by: string, toStatus: string, note?: string, citations?: object[], gitContext?: string, override?: object } }
   backlog unobligate  { input: { obligationUid: string, by: string } }
   backlog update  { input: { uid: string, by: string, title?: string, body?: string, kind?: string, priority?: string, assignee?: string, author?: string, citations?: object[], awaitEmbed?: boolean } }
@@ -138,6 +140,15 @@ Verbs (one-token, --input JSON envelope):
   backlog upsert-location  { input: { component: string, project?: string, locType: 'path'|'url'|'tool', value: string, by: string } }
   backlog upsert-project  { input: { name: string, path?: string, repoUrl?: string, monorepo?: boolean, description?: string, by: string } }
 ```
+
+Optional inputs and their defaults. A default applies only when the key is omitted; an
+explicit `null` or unknown value is rejected. `claim.action` defaults to `claim`,
+`relate.action` to `add`, `obligate.on_fail` to `block`, and `open-curve.at` to the
+current instant. `timeline` with no `sessionId` covers every session's ops in the window
+`[since, now]`, where `since` defaults to 7 days before now (`session` is `null` and
+`window.since` echoes the bound); `includeChildren` applies only with a `sessionId`.
+`query`, `report`, `priority-matrix`, `open-curve` and `timeline` may be called with no
+`--input` at all.
 
 Trust that output over anything hardcoded here — it is the live schema, not
 a stale copy of it.
@@ -317,7 +328,7 @@ Each verb is also an MCP tool once `.mcp.json` wires the server, named
 `backlog_spec_append`, `backlog_spec_check`, `backlog_transition`,
 `backlog_unobligate`, `backlog_update`, `backlog_upsert_component`,
 `backlog_upsert_location`, `backlog_upsert_project`, plus the un-namespaced
-`batch_action` — 32 verbs + `batch`.
+`batch_action` — 33 verbs + `batch`.
 
 The tool list a session sees is the MCP **server process's** build, which can
 lag the CLI: a long-lived `serve` started before a verb was mounted does not
@@ -492,6 +503,22 @@ $ adhd-backlog backlog remove-citation --input '{"uid":"c1e2f3a4-…","by":"clau
 {"ok":true,"data":{"uid":"c1e2f3a4-…","invalidated":true}}
 ```
 
+**Remove a note.** `create` with `duplicateAction: 'comment'` attaches a note to
+the top-matching duplicate and returns its id as `commentedOn.noteId`.
+`remove-note` soft-removes that note by `uid`. The caller must be the note's
+author, or an actor listed in the owning project's `policy.noteRemovers`
+(default: none, so author-only). Any other caller gets a `precondition_failed`
+refusal and nothing changes. A successful removal, with its `reason`, appears in
+the owning issue's `auditTrail` as `note-removed`:
+
+```
+$ adhd-backlog backlog remove-note --input '{"uid":"n9d8c7b6-…","by":"claude:1","reason":"duplicate comment filed in error"}'
+{"ok":true,"data":{"uid":"n9d8c7b6-…","issueUid":"a61ff0b6-…","invalidated":true}}
+
+$ adhd-backlog backlog remove-note --input '{"uid":"n9d8c7b6-…","by":"agent:worker-2","reason":"tidying up"}'
+{"ok":false,"error":{"code":"precondition_failed","message":"Note removal not permitted: actor \"agent:worker-2\" is neither the author of note \"n9d8c7b6-…\" nor listed in the project policy noteRemovers","details":{"retryable":false}}}
+```
+
 `update` carries a **desired citation set** as a diff: it adds what's new and
 removes what's gone against the live set, inside one transaction. It never mints
 a new issue `uid` — only a `body` edit supersedes:
@@ -503,7 +530,11 @@ $ adhd-backlog backlog update --input '{"uid":"a61ff0b6-…","by":"claude:1","ci
 
 **Cite a branch-only file with `revision`.** A citation whose `file` exists only
 on an unmerged branch is unreadable from the working tree; pin it to the branch
-and the sha is resolved from `git show <revision>:<path>` instead:
+and the sha is resolved from `git show <revision>:<path>` instead. The item's
+own project repo is tried first; an absolute `file` is also tried in the git repo
+that encloses it, and any registered project's repo is tried too, so a citation
+may live in a different repo from the item (e.g. an item under one project citing
+`/abs/path/in/another/repo` at that repo's sha):
 
 ```
 $ adhd-backlog backlog add-citation --input '{"uid":"a61ff0b6-…","by":"claude:1","citation":{"file":"packages/auth/src/index.ts","revision":"feat/auth"}}'
@@ -513,8 +544,11 @@ $ adhd-backlog backlog add-citation --input '{"uid":"a61ff0b6-…","by":"claude:
 **Move an issue to a new status.** A terminal `toStatus` REQUIRES `citations`
 only when the project's policy turns citation enforcement ON — `citationRequired`
 defaults to `false`, so out of the box no citation is required. When a project
-HAS turned it on, citations must be verifiable against the project's own
-filesystem path — an unverifiable citation is rejected with `precondition_failed`:
+HAS turned it on, citations must be verifiable — the cited file must exist
+(and, when pinned with `revision`, exist at that revision in some real repo: the
+item's own project repo, the git repo enclosing an absolute path, or another
+registered project's repo). An unverifiable citation is rejected with
+`precondition_failed`, and the message lists the repos tried:
 
 ```
 $ adhd-backlog backlog transition --input '{
@@ -1417,8 +1451,11 @@ Each such call appends exactly one append-only op-event (independent of
 reservation `{issueUid, paths[], holder, sessionId, claimedAt, leaseExpiry}` (paths =
 the item's path citations plus `paths`); `view:"reservations"` lists the ACTIVE ones
 (`leaseExpiry > now`; `now` is injectable for tests; `pathPrefix` is segment-aware).
-`timeline` returns the session, its child sessions, the ordered ops and the item uids
-touched; an unknown session is `item_not_found`. (`list reservation` / `get session`
+`timeline` with a `sessionId` returns that session, its child sessions, the ordered ops
+and the item uids touched; an unknown session is `item_not_found`. With no `sessionId`
+it returns the ops of every session whose `t` falls in the window `[since, now]`
+(`since` defaults to 7 days ago; `session` is `null` and `window.since` echoes the bound),
+paged by `limit`/`after`. (`list reservation` / `get session`
 are the future CLI-HIERARCHY spellings of these views.)
 
 **Other reads.** `get {fields:["specRevisionFragment"]}` returns the head revision's

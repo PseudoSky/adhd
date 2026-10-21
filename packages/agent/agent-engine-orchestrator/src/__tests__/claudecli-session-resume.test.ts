@@ -1,4 +1,11 @@
 /**
+ * qa-variance (dispatch-1014): the first dynamic `import("../providers/...")` of the provider graph used to be
+ * charged to whichever test ran first (100-300 ms cold load against a 10-90 ms median); `beforeAll` now pays it once.
+ * guards: a follow-up task replays the whole history instead of resuming the retained CLI session, or resumes one it cannot prove covered
+ * tier: S
+ * cites: qa-variance, docs/discovery/qa-test-variance-tail-orchestrator-a.md (assertions unchanged; red: pending, tests not run per user).
+ */
+/**
  * b31e1fe5 (R3-COST) -- claudecli session continuity: a follow-up task on the same engine session resumes the
  * retained CLI session (forked, tail only) instead of replaying the whole history cold. The real
  * ClaudeCliProvider and the real session registry run; only `child_process.spawn` is replaced (no model call).
@@ -11,7 +18,8 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Readable } from "node:stream";
-import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { COLD_IMPORT_TIMEOUT_MS, warmClaudeCliModules } from "./fixtures/warm-modules.js";
 
 import type { EngineConfig, EngineLogger } from "../interfaces.js";
 import { ClaudeCliSessionRegistry, messageFingerprint } from "../providers/claudecli-session.js";
@@ -21,6 +29,9 @@ vi.mock("child_process", () => ({ spawn: vi.fn() }));
 
 const root = mkdtempSync(join(tmpdir(), "b31e1fe5-"));
 afterAll(() => rmSync(root, { recursive: true, force: true }));
+beforeAll(async () => {
+  await warmClaudeCliModules({ factory: true });
+}, COLD_IMPORT_TIMEOUT_MS);
 const configDir = join(root, "claude-config");
 
 // CLI session ids are UUIDs (95ee2a24 AC2: anything else is never retained, resumed or deleted).

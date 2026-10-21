@@ -16,6 +16,7 @@ import type {
   MountHostBridgeInvokeOptions,
   Operation,
 } from '@adhd/apigen-core-client';
+import { ApiError } from '@adhd/apigen-base-errors';
 import batchPlugin from '../lib/plugin';
 
 // ---------------------------------------------------------------------------
@@ -258,12 +259,12 @@ describe('batchPlugin handler: real fan-out (invokeBatch)', () => {
     });
     const [op] = requireMount().operations(descriptor, undefined, bridge);
 
-    const result = await op.handler(
+    const result = (await op.handler(
       fakeCall({
         operation: 'ns/opA',
         items: [{ value: 'good1' }, { value: 'bad' }, { value: 'good2' }],
       })
-    );
+    )) as Array<Record<string, unknown>>;
 
     expect(result[0]).toMatchObject({ status: 'fulfilled', value: 'ok:good1' });
     expect(result[1]).toMatchObject({ status: 'rejected' });
@@ -282,14 +283,14 @@ describe('batchPlugin handler: real fan-out (invokeBatch)', () => {
     });
     const [op] = requireMount().operations(descriptor, undefined, bridge);
 
-    const result = await op.handler(
+    const result = (await op.handler(
       fakeCall({
         operation: 'ns/opA',
         items: [{ value: 'first' }, { value: 'bad' }, { value: 'never' }],
         mode: 'serial',
         onItemError: 'abort',
       })
-    );
+    )) as Array<Record<string, unknown>>;
 
     expect(result[0]).toMatchObject({ status: 'fulfilled', value: 'ok:first' });
     expect(result[1]).toMatchObject({ status: 'rejected' });
@@ -323,5 +324,160 @@ describe('batchPlugin handler: real fan-out (invokeBatch)', () => {
     );
 
     expect(maxInFlight).toBeLessThanOrEqual(2);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Regression: BUG-APIGEN-BATCH-NULL-ITEM (087ec253) — non-object batch items
+// ---------------------------------------------------------------------------
+//
+// Test header
+//   guards: the per-item guard in plugin.ts parseBatchRequest rejects a
+//     null, undefined, sparse-hole, primitive (number, string, boolean) or
+//     array item with invalid_argument naming input.items[<0-based index>]
+//     before any item is dispatched, so the target operation is never
+//     invoked; a valid object item reaches the target invoke as the same
+//     object (no {} substitution).
+//   tier: S (unit). The only fake is hostBridge.invoke, the host boundary
+//     named in this file's header; invokeBatch and the request parser are real.
+//   cites: 087ec253 AC1, AC2, AC3.
+//   tags: regression:087ec253.
+//   teeth: AC1 fails on 36ada51f^ (ebc5ac0c), where the null/undefined item is
+//     coerced to {} and the handler resolves instead of rejecting; the
+//     primitive and array cases additionally fail on 36ada51f itself, whose
+//     guard only rejects null/undefined, and pass on the bucket head.
+//   red: pending (user hold; not run; must fail on 36ada51f^ for the
+//     null/undefined/hole cases, on 36ada51f for the primitive/array cases,
+//     and pass on the bucket head). AC2 and AC3 are characterization guards: they pass on
+//     both sides and pin the valid-item path the fix must keep.
+
+/**
+ * Resolves to the rejection reason of `promise`. Throws when the promise
+ * resolves, so a handler that silently accepts a bad item fails here with a
+ * clear message rather than passing an assertion on the wrong value.
+ */
+async function captureRejection(promise: unknown): Promise<unknown> {
+  try {
+    await promise;
+  } catch (err) {
+    return err;
+  }
+  throw new Error('expected the batch handler to reject, but it resolved');
+}
+
+describe('regression:087ec253 batchPlugin handler: null/undefined item guard', () => {
+  function mountWithBridge(
+    fns: Record<string, (domainArgs: Record<string, unknown>) => unknown> = {
+      'ns/opA': (a) => `echo:${a['value']}`,
+    }
+  ) {
+    const descriptor: Descriptor = { host: 'ts', operations: [makeOp('ns/opA')] };
+    const bridge = makeHostBridge(fns);
+    const [op] = requireMount().operations(descriptor, undefined, bridge);
+    return { op, bridge };
+  }
+
+  it('087ec253 AC1: a null item rejects with invalid_argument naming input.items[1] and never invokes the target', async () => {
+    const { op, bridge } = mountWithBridge();
+    const err = await captureRejection(
+      Promise.resolve(op.handler(fakeCall({ operation: 'ns/opA', items: [{ value: 'a' }, null] })))
+    );
+    expect(err).toBeInstanceOf(ApiError);
+    expect(err).toMatchObject({
+      code: 'invalid_argument',
+      message: expect.stringContaining('input.items[1]'),
+    });
+    expect(bridge.invoke).not.toHaveBeenCalled();
+  });
+
+  it('087ec253 AC1: an explicit undefined item rejects with invalid_argument naming input.items[1] and never invokes the target', async () => {
+    const { op, bridge } = mountWithBridge();
+    const err = await captureRejection(
+      Promise.resolve(op.handler(fakeCall({ operation: 'ns/opA', items: [{ value: 'a' }, undefined] })))
+    );
+    expect(err).toBeInstanceOf(ApiError);
+    expect(err).toMatchObject({
+      code: 'invalid_argument',
+      message: expect.stringContaining('input.items[1]'),
+    });
+    expect(bridge.invoke).not.toHaveBeenCalled();
+  });
+
+  it('087ec253 AC1: a sparse hole in items rejects with invalid_argument naming input.items[1] and never invokes the target', async () => {
+    const { op, bridge } = mountWithBridge();
+    const holey: unknown[] = [{ value: 'a' }];
+    holey.length = 2; // index 1 is a hole: reads as undefined, Array.isArray still true
+    const err = await captureRejection(
+      Promise.resolve(op.handler(fakeCall({ operation: 'ns/opA', items: holey })))
+    );
+    expect(err).toBeInstanceOf(ApiError);
+    expect(err).toMatchObject({
+      code: 'invalid_argument',
+      message: expect.stringContaining('input.items[1]'),
+    });
+    expect(bridge.invoke).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['number 1', 1],
+    ['string "x"', 'x'],
+    ['boolean true', true],
+    ['an array', ['nested']],
+  ])('087ec253 AC1: a %s item rejects with the same invalid_argument shape naming input.items[1] and never invokes the target', async (_label, bad) => {
+    const { op, bridge } = mountWithBridge();
+    const err = await captureRejection(
+      Promise.resolve(op.handler(fakeCall({ operation: 'ns/opA', items: [{ value: 'a' }, bad] })))
+    );
+    expect(err).toBeInstanceOf(ApiError);
+    expect(err).toMatchObject({
+      code: 'invalid_argument',
+      message: expect.stringContaining('input.items[1]'),
+    });
+    expect(bridge.invoke).not.toHaveBeenCalled();
+  });
+
+  it('087ec253 AC1: a primitive at index 0 is named input.items[0] (0-based) and rejects the whole batch', async () => {
+    const { op, bridge } = mountWithBridge();
+    const err = await captureRejection(
+      Promise.resolve(op.handler(fakeCall({ operation: 'ns/opA', items: [7, { value: 'b' }] })))
+    );
+    expect(err).toMatchObject({
+      code: 'invalid_argument',
+      message: expect.stringContaining('input.items[0]'),
+    });
+    expect(bridge.invoke).not.toHaveBeenCalled();
+  });
+
+  it('087ec253 AC2: a valid object item reaches the target invoke as the exact same object (identity, no {} substitution)', async () => {
+    const seen: unknown[] = [];
+    const { op } = mountWithBridge({
+      'ns/opA': (a) => {
+        seen.push(a);
+        return 'ok';
+      },
+    });
+    const item = { value: 'kept' };
+    const result = await op.handler(fakeCall({ operation: 'ns/opA', items: [item] }));
+    expect(seen).toHaveLength(1);
+    expect(seen[0]).toBe(item);
+    expect(result).toEqual([{ index: 0, status: 'fulfilled', value: 'ok' }]);
+  });
+
+  it('087ec253 AC3 (characterization): a two-item object batch makes two invoke calls with the same domainArgs and the BatchItemResult[] shape', async () => {
+    const { op, bridge } = mountWithBridge();
+    const items = [{ value: 'one' }, { value: 'two' }];
+    const result = await op.handler(fakeCall({ operation: 'ns/opA', items }));
+    const invokeMock = bridge.invoke as unknown as ReturnType<typeof vi.fn>;
+    expect(invokeMock).toHaveBeenCalledTimes(2);
+    const domainArgs = invokeMock.mock.calls.map(
+      (c: unknown[]) => (c[1] as { domainArgs: unknown }).domainArgs
+    );
+    expect(domainArgs).toHaveLength(2);
+    expect(domainArgs[0]).toBe(items[0]);
+    expect(domainArgs[1]).toBe(items[1]);
+    expect(result).toEqual([
+      { index: 0, status: 'fulfilled', value: 'echo:one' },
+      { index: 1, status: 'fulfilled', value: 'echo:two' },
+    ]);
   });
 });

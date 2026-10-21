@@ -2,12 +2,21 @@
  * cf7e0e5c review-6: the `provider:builtin_bypass` emit is awaited, not fire-and-forget. The provider
  * finishes persisting the disclosure BEFORE its first CLI turn, so a caller that reads `task_events` right
  * after `await provider.chat(...)` cannot race it. Deterministic: a latch holds the emit open; no timing.
+ *
+ * guards: the builtin-bypass emit is fire-and-forget (the CLI spawns while the emit is still open), or a rejecting emit fails the chat.
+ * tier: S
+ * cites: cf7e0e5c review-6; variance hardening cites qa-variance (dispatch-1014).
+ * red: pending (qa-variance edit made without running tests, per user). qa-variance: the fixed 30-turn
+ * `setImmediate` loop is replaced by `settleUntilStable` (state-probe quiescence, no clock). The path from
+ * chat() to the emit is microtask-only (claudecli.ts reportBuiltinBypass runs before any fs/bridge work), so
+ * the emit has been called by the first turn; the negative assertion (no spawn) is taken after the probe is stable.
  */
 import { Readable } from "stream";
 import { describe, expect, it, vi } from "vitest";
 
 import type { ExecutionContext, IHookRegistry } from "@adhd/agent-base-types";
 import { createProvider } from "../providers/factory.js";
+import { settleUntilStable } from "./fixtures/settle.js";
 
 vi.mock("child_process", () => ({ spawn: vi.fn() }));
 
@@ -18,7 +27,6 @@ function fakeProc() {
   queueMicrotask(() => { stdout.push(RESULT_LINE + "\n"); stdout.push(null); });
   return { stdout, stdin: { write: () => true, end: noop }, stderr: new Readable({ read: noop }), pid: undefined, on: noop, kill: noop, exitCode: 0, killed: false };
 }
-const settle = async () => { for (let i = 0; i < 30; i++) await new Promise<void>((r) => setImmediate(r)); };
 
 const ctx = {
   taskId: "t-order", sessionId: "s-order", agentId: "a", userId: "u",
@@ -49,7 +57,7 @@ describe("cf7e0e5c review-6: provider:builtin_bypass emit completes before the f
     spawnMock.mockImplementation(() => { order.push("spawn"); return fakeProc(); });
 
     const chat = build(emit as never).chat({ messages: [{ role: "user", content: "go" }] } as never);
-    await settle();
+    await settleUntilStable(() => [emit.mock.calls.length, order]);
     expect(emit).toHaveBeenCalledTimes(1);
     expect(order).toEqual(["emit:start"]); // emit open => CLI not spawned yet
     release();

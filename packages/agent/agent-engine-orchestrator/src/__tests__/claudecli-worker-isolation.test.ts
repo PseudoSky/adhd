@@ -1,7 +1,15 @@
+/**
+ * qa-variance (dispatch-1014): the first dynamic `import("../providers/...")` of the provider graph used to be
+ * charged to whichever test ran first (100-300 ms cold load against a 10-90 ms median); `beforeAll` now pays it once.
+ * guards: a claudecli worker inherits the parent environment or built-ins, answers tool_use itself, or closes the child's stdin early
+ * tier: S
+ * cites: qa-variance, docs/discovery/qa-test-variance-tail-orchestrator-a.md (assertions unchanged; red: pending, tests not run per user).
+ */
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { COLD_IMPORT_TIMEOUT_MS, warmClaudeCliModules } from "./fixtures/warm-modules.js";
 import { Readable } from "stream";
 import type { EngineConfig, EngineLogger } from "../interfaces.js";
 import type { ProviderChatRequest } from "../providers/types.js";
@@ -72,6 +80,9 @@ function makeFakeProc(lines: string[] = [RESULT_LINE]) {
 // claudecli requires the host-injected namespaced temp root (no os.tmpdir() fallback; c536ce29 S8B).
 const scratchRoot = mkdtempSync(join(tmpdir(), "98f9da19-claudecli-"));
 afterAll(() => rmSync(scratchRoot, { recursive: true, force: true }));
+beforeAll(async () => {
+  await warmClaudeCliModules();
+}, COLD_IMPORT_TIMEOUT_MS);
 
 function makeEngineConfig(subprocessEnv: Record<string, string> = {}): EngineConfig {
     return {

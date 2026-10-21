@@ -1,4 +1,11 @@
 /**
+ * qa-variance (dispatch-1014): the first dynamic `import("../providers/...")` of the provider graph used to be
+ * charged to whichever test ran first (100-300 ms cold load against a 10-90 ms median); `beforeAll` now pays it once.
+ * guards: a CLI built-in reaches the claude argv without passing the governance gate, or agent-spec mode spawns after a denial
+ * tier: S
+ * cites: qa-variance, docs/discovery/qa-test-variance-tail-orchestrator-a.md (assertions unchanged; red: pending, tests not run per user).
+ */
+/**
  * f9dadeaa — claudecli bridge governance bypass (spawn-free unit lane).
  *
  * The claudecli provider runs its own tool loop inside the `claude` child; every MCP tool call it makes
@@ -17,7 +24,8 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Readable } from "stream";
-import { afterAll, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { COLD_IMPORT_TIMEOUT_MS, warmClaudeCliModules } from "./fixtures/warm-modules.js";
 
 import type { AgentDefinition, PermissionAction } from "@adhd/agent-base-types";
 import type { EngineConfig, EngineLogger } from "../interfaces.js";
@@ -169,6 +177,9 @@ describe("f9dadeaa GOV-AC4/AC6: hooks fire for bridged calls exactly as native; 
 const RESULT_LINE = JSON.stringify({ type: "result", subtype: "success", is_error: false, result: "OK", num_turns: 1 });
 const scratchRoot = mkdtempSync(join(tmpdir(), "f9dadeaa-"));
 afterAll(() => rmSync(scratchRoot, { recursive: true, force: true }));
+beforeAll(async () => {
+  await warmClaudeCliModules();
+}, COLD_IMPORT_TIMEOUT_MS);
 
 function fakeProc() {
   const stdout = new Readable({ read() {} });

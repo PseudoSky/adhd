@@ -3,7 +3,11 @@ import { statSync } from 'node:fs';
 import type { EngineConfig, EngineLogger } from '../interfaces.js';
 import type { BackgroundQueue } from '../engine/queue.js';
 import type { DagEngine } from '../engine/dag-engine.js';
-import type { Orchestrator, OrchestratorStartupStamps } from '../engine/orchestrator.js';
+import type {
+  Orchestrator,
+  OrchestratorStartupStamps,
+  OrchestratorTaskEvent,
+} from '../engine/orchestrator.js';
 import { resolveHitl, warnEchoFailureOnce } from '../engine/orchestrator.js';
 import type { PolicyEngine } from '../engine/policy.js';
 import type {
@@ -15,7 +19,14 @@ import type { ProviderRegistry } from '@adhd/agent-core-provider';
 import type { AgentStore } from './agent-crud.js';
 import type { SessionStoreForTool } from './session.js';
 import { McpClientRegistry } from '../clients/registry.js';
-import type { IProviderEcho, TaskStatus } from '@adhd/agent-base-types';
+import {
+  TASK_COMPLETION_WARNINGS,
+  type IProviderEcho,
+  type TaskCompletionWarning,
+  type TaskStatus,
+} from '@adhd/agent-base-types';
+import { and, desc, eq, sql } from 'drizzle-orm';
+import { taskEventsTable } from '@adhd/agent-store-runtime';
 import type {
   ExecutionContext,
   ResultInput,
@@ -35,6 +46,43 @@ import { generateId } from '../utils/ids.js';
 import { nowIso } from '../utils/timestamps.js';
 import type { IHookRegistry } from '@adhd/agent-base-types';
 import { buildTaskUsageReport, type Database } from './usage.js';
+
+/**
+ * cbd559eb: the advisory completion warnings of a finished task, read from its persisted `TASK_COMPLETED`
+ * payload (the orchestrator writes `warnings` there only when one fired). Returns `undefined` when none
+ * did, so callers omit the key instead of sending an empty array.
+ * A task can hold several `TASK_COMPLETED` events (e.g. after a resume): the most recent one is read
+ * (`created_at DESC`, `rowid DESC` as the tie-break). A payload that is not a JSON object is treated as
+ * carrying no warnings rather than throwing, because this read runs after the task is already terminal and
+ * a throw here would discard the finished task's result.
+ * @internal Exported for the unit test seam only; not part of the tool surface.
+ */
+export function completionWarningsOf(db: Database, taskId: string): TaskCompletionWarning[] | undefined {
+  const row = db
+    .select({ payload: taskEventsTable.payload })
+    .from(taskEventsTable)
+    .where(and(eq(taskEventsTable.taskId, taskId), eq(taskEventsTable.type, 'TASK_COMPLETED')))
+    .orderBy(desc(taskEventsTable.createdAt), desc(sql`rowid`))
+    .limit(1)
+    .get();
+  if (!row?.payload) return undefined;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(row.payload);
+  } catch {
+    return undefined;
+  }
+  if (typeof parsed !== 'object' || parsed === null) return undefined;
+  const warnings = (parsed as { warnings?: unknown }).warnings;
+  if (!Array.isArray(warnings)) return undefined;
+  // Values outside TASK_COMPLETION_WARNINGS are intentionally ignored (forward compatibility): a newer
+  // engine may persist a warning this reader does not know yet, and it must not fail the read.
+  const known = warnings.filter(
+    (w): w is TaskCompletionWarning =>
+      (TASK_COMPLETION_WARNINGS as readonly unknown[]).includes(w),
+  );
+  return known.length > 0 ? known : undefined;
+}
 
 /**
  * R10 M2: measures the two start-up times only this file can see, because both happen before
@@ -125,7 +173,7 @@ export interface TaskDeps {
    * resolved to its provider-native wire string at provider construction.
    */
   providerRegistry?: ProviderRegistry;
-  emitTaskEvent?: (event: { type: string; taskId: string; status?: string; result?: string | null; error?: string | null; toolName?: string; toolCallId?: string; input?: unknown; content?: unknown }) => void;
+  emitTaskEvent?: (event: OrchestratorTaskEvent) => void;
 }
 
 /** The echo members of the real `SessionStore` that task start uses (optional: minimal fakes omit them). */
@@ -447,12 +495,14 @@ async function runEphemeralTask(
 
   const finalTask = deps.taskStore.read(taskId);
   const usage = buildTaskUsageReport(deps.db, taskId);
+  const warnings = completionWarningsOf(deps.db, taskId);
 
   return {
     task_id: taskId,
     status: finalTask.status as TaskStatus,
     result: finalTask.result,
     usage,
+    ...(warnings ? { warnings } : {}),
   };
 }
 
@@ -735,11 +785,13 @@ async function dispatchTask(
 
     const finalTask = deps.taskStore.read(task.id);
     const usage = buildTaskUsageReport(deps.db, finalTask.id);
+    const warnings = completionWarningsOf(deps.db, finalTask.id);
     const response: TaskToolOutput = {
       task_id: finalTask.id,
     status: finalTask.status as TaskStatus,
       result: finalTask.result,
       usage,
+      ...(warnings ? { warnings } : {}),
     };
     if (streamUrl) {
       response.stream_url = streamUrl;

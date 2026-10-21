@@ -105,7 +105,7 @@ export interface IObligateInput extends ISessionStamp {
   uid: string;
   applies_to: IObligationAppliesTo;
   requirement: IPredicate;
-  on_fail: IObligationSeverity;
+  on_fail?: IObligationSeverity;
   override?: IObligationOverride;
   by: string;
 }
@@ -380,7 +380,8 @@ export async function obligate(
 
   const appliesTo = normaliseAppliesTo(input.applies_to);
 
-  if (input.on_fail !== 'block' && input.on_fail !== 'warn') {
+  const onFail = input.on_fail === undefined ? 'block' : input.on_fail;
+  if (onFail !== 'block' && onFail !== 'warn') {
     throw new InvalidArgumentError('on_fail', 'must be "block" or "warn"');
   }
   const override = normaliseOverride(input.override);
@@ -397,7 +398,7 @@ export async function obligate(
     const metadata: Record<string, unknown> = {
       applies_to: appliesTo,
       requirement,
-      on_fail: input.on_fail,
+      on_fail: onFail,
       ...(override !== undefined ? { override } : {}),
     };
 

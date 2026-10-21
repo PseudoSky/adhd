@@ -100,6 +100,7 @@ export type TaskEventType =
   | 'provider:builtin_bypass'
   | 'provider:history_degraded'
   | 'provider:pause_continued'
+  | 'CONTEXT_COMPACTED'
   | 'TASK_COMPLETED'
   | 'TASK_FAILED'
   | 'TASK_CANCELLED';

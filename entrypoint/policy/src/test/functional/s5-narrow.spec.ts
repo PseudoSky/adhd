@@ -2,14 +2,16 @@
  * guards: `adhd-policy narrow` widens a child's authority beyond its parent's, mutates its frozen input, or reports the wrong failure shape and exit code.
  * tier: S
  * cites: docs/plan/policy-core/tickets/T15.md (@S5.1, @S5.2, @S5.3, @S5.6; B5.1)
+ * item: qa-variance (docs/discovery/qa-test-variance-tail-policy.md)
+ * red: pending (tests not run per user); assertions are unchanged, only where the fixture directory comes from moved.
  */
 import { mkdir, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createPolicyClient, parsePolicyYaml, type Attributes, type INarrowResult } from '@adhd/policy-core-client';
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 import { parseJson, runCli, useScratchTelemetry } from '../helpers/capture';
 import { callInput, NARROW_YAML, writePolicy } from '../helpers/fixtures';
-import { withTmpDir } from '../helpers/tmp';
+import { useScratchDirs } from '../helpers/tmp';
 
 useScratchTelemetry();
 
@@ -31,17 +33,33 @@ const parentFor = (demo: string): Attributes => ({
   max_refund: 100,
 });
 
+const scratch = useScratchDirs('s5');
+let sharedDemo: string;
+
+/** A demo root holding the narrow policy and the work/ directories the requests name. */
+async function makeDemo(label: string): Promise<string> {
+  const demo = await scratch.fresh(label);
+  await writePolicy(demo, NARROW_YAML);
+  await mkdir(join(demo, 'work/tests'), { recursive: true });
+  await mkdir(join(demo, 'work/src'), { recursive: true });
+  return demo;
+}
+
+/** The CLI `narrow` call against `demo`, as a consumer runs it. */
+const narrowIn =
+  (demo: string) =>
+  (request: unknown): Promise<{ exitCode: number; stdout: string; stderr: string }> =>
+    runCli(['narrow', '--input', JSON.stringify({ parent: parentFor(demo), request })], { cwd: demo, home: demo });
+
+/** One demo root for the file, built once: every case below only reads it (narrow and check never write), and the case that asserts the directory is left untouched takes its own. */
+beforeAll(async () => {
+  sharedDemo = await makeDemo('shared');
+});
+
 async function withNarrowDemo<T>(
   fn: (demo: string, narrow: (request: unknown) => Promise<{ exitCode: number; stdout: string; stderr: string }>) => Promise<T>
 ): Promise<T> {
-  return withTmpDir('s5', async (demo) => {
-    await writePolicy(demo, NARROW_YAML);
-    await mkdir(join(demo, 'work/tests'), { recursive: true });
-    await mkdir(join(demo, 'work/src'), { recursive: true });
-    const narrow = (request: unknown) =>
-      runCli(['narrow', '--input', JSON.stringify({ parent: parentFor(demo), request })], { cwd: demo, home: demo });
-    return fn(demo, narrow);
-  });
+  return fn(sharedDemo, narrowIn(sharedDemo));
 }
 
 describe('Feature: Hand a sub-agent less authority - narrow', () => {
@@ -63,25 +81,24 @@ describe('Feature: Hand a sub-agent less authority - narrow', () => {
   });
 
   it('@S5.1 nothing is stored or issued: the working directory holds exactly what it held before', async () => {
-    await withNarrowDemo(async (demo, narrow) => {
-      const before = (await readdir(demo, { recursive: true })).sort();
-      await narrow({ attributes: { role: 'reviewer' }, grant: { read_roots: [`${demo}/work/tests`] } });
-      expect((await readdir(demo, { recursive: true })).sort()).toEqual(before);
-    });
+    // Its own directory: the comparison must see only what THIS call wrote, never files an earlier case in the file left behind.
+    const demo = await makeDemo('untouched');
+    const before = (await readdir(demo, { recursive: true })).sort();
+    await narrowIn(demo)({ attributes: { role: 'reviewer' }, grant: { read_roots: [`${demo}/work/tests`] } });
+    expect((await readdir(demo, { recursive: true })).sort()).toEqual(before);
   });
 
   it('@S5.1 the parent handed to the library is deep-frozen and comes back byte-identical (it is not mutated)', async () => {
-    await withTmpDir('s5-lib', async (demo) => {
-      const client = createPolicyClient({ layers: [{ name: 'project', source: 'memory:project', document: parsePolicyYaml(NARROW_YAML, 'memory:project') }] });
-      const parent = deepFreeze(parentFor(demo));
-      const snapshot = JSON.stringify(parent);
-      const result = await client.narrow({ parent, request: { attributes: { role: 'reviewer' }, grant: { read_roots: [`${demo}/work/tests`] } } });
-      expect(result.ok).toBe(true);
-      expect(JSON.stringify(parent)).toBe(snapshot);
-      const refused = await client.narrow({ parent, request: { attributes: { role: 'reviewer' }, grant: { max_refund: 900 } } });
-      expect(refused.ok).toBe(false);
-      expect(JSON.stringify(parent)).toBe(snapshot);
-    });
+    const demo = sharedDemo;
+    const client = createPolicyClient({ layers: [{ name: 'project', source: 'memory:project', document: parsePolicyYaml(NARROW_YAML, 'memory:project') }] });
+    const parent = deepFreeze(parentFor(demo));
+    const snapshot = JSON.stringify(parent);
+    const result = await client.narrow({ parent, request: { attributes: { role: 'reviewer' }, grant: { read_roots: [`${demo}/work/tests`] } } });
+    expect(result.ok).toBe(true);
+    expect(JSON.stringify(parent)).toBe(snapshot);
+    const refused = await client.narrow({ parent, request: { attributes: { role: 'reviewer' }, grant: { max_refund: 900 } } });
+    expect(refused.ok).toBe(false);
+    expect(JSON.stringify(parent)).toBe(snapshot);
   });
 
   it('@S5.2 only replaces the added set when it lies within it', async () => {

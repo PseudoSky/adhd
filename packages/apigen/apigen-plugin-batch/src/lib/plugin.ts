@@ -62,6 +62,18 @@ interface ParsedBatchRequest {
 }
 
 /**
+ * Describe a rejected batch item for the `invalid_argument` message: the exact
+ * word for `null`/`undefined`, `an array` for arrays, and `a <typeof>` for
+ * primitives (`a number`, `a string`, `a boolean`, ...).
+ */
+function describeNonObjectItem(item: unknown): string {
+  if (item === null) return 'null';
+  if (item === undefined) return 'undefined';
+  if (Array.isArray(item)) return 'an array';
+  return `a ${typeof item}`;
+}
+
+/**
  * Parse+validate a `_batch/<kind>` request body (§1.1's discriminated-union
  * branch shape) into {@link ParsedBatchRequest}. Defense-in-depth: the
  * validate-Layer (SPEC §6/§8.1) should already reject a schema-violating
@@ -109,6 +121,20 @@ function parseBatchRequest(
       'invalid_argument',
       '@adhd/apigen-plugin-batch: "input.items" must be an array'
     );
+  }
+  // BUG-APIGEN-BATCH-NULL-ITEM (087ec253): every item must be a plain object
+  // (the domainArgs of one target-operation call). A null/undefined, primitive,
+  // or array item is a malformed request, never an empty-args call. Reject the
+  // whole batch before any item is dispatched, so the target operation is never
+  // invoked.
+  for (let index = 0; index < items.length; index += 1) {
+    const item = items[index];
+    if (item === null || typeof item !== 'object' || Array.isArray(item)) {
+      throw new ApiError(
+        'invalid_argument',
+        `@adhd/apigen-plugin-batch: "input.items[${index}]" is ${describeNonObjectItem(item)}; every batch item must be an object`
+      );
+    }
   }
 
   const concurrency = input['concurrency'];
@@ -194,7 +220,7 @@ function buildBatchHandler(
     const calls: RuntimeCall[] = request.items.map((item) => ({
       operation: { id: request.operation },
       ctx: new LayerContext(),
-      domainArgs: (item ?? {}) as Record<string, unknown>,
+      domainArgs: item as Record<string, unknown>,
       envelope: call.envelope,
       signal: call.signal,
       // Propagate the host's transport from the already-stamped batch

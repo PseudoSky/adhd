@@ -1,0 +1,18 @@
+[package]
+name = "openrouter-pricing"
+version = "0.1.0"
+edition = "2021"
+description = "Typed client, wire types, and pricing functions for the OpenRouter public catalog"
+publish = false
+rust-version = "1.75"
+
+[dependencies]
+chrono = { version = "0.4", default-features = false, features = ["std", "clock"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+rust_decimal = { version = "1", default-features = false, features = ["std", "serde"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "1"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }

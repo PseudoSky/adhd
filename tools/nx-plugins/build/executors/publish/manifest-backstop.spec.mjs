@@ -12,9 +12,17 @@
  * boundary as `impl.spec.mjs`) — everything else, including the real
  * manifest file I/O, is exercised for real.
  *
+ * Header (test-maintenance, item qa-variance):
+ *   failure mode: the real publish executor refuses a listed project, admits an
+ *     override with no reason, loses the override audit log entry, or mishandles
+ *     a stale/foreign-run manifest.
+ *   tier: S (only child_process.spawnSync mocked; real manifest file I/O).
+ *   variance fix: release env pinned to unset for the file (see below).
+ *   red run: pending (tests not run per user instruction; assertions unchanged).
+ *
  * Run: node --test tools/nx-plugins/build/executors/publish/manifest-backstop.spec.mjs
  */
-import { test } from 'node:test';
+import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import child_process from 'node:child_process';
@@ -44,6 +52,27 @@ process.env.ADHD_NX_METRICS_MAX_CPU_PCT = '0';
 // otherwise they would hit the real network and/or sleep for ~30 minutes.
 process.env.ADHD_PUBLISH_VERIFY_TIMEOUT_MS = '0';
 process.env.ADHD_PUBLISH_VERIFY_INTERVAL_MS = '0';
+
+// qa-variance: the executor reads RELEASE_RUN_TOKEN / RELEASE_FORCE_FULL_PUBLISH /
+// RELEASE_FORCE_REASON straight from process.env (and writeReleaseManifest
+// defaults its runToken from it). A shell or CI run that exports the release
+// env would change which branch of the backstop these tests hit, so the file
+// pins them to unset up front and restores the ambient values afterwards. Tests
+// that need a value still set and restore it themselves.
+const PINNED_RELEASE_ENV = ['RELEASE_RUN_TOKEN', 'RELEASE_FORCE_FULL_PUBLISH', 'RELEASE_FORCE_REASON'];
+const ambientReleaseEnv = {};
+before(() => {
+  for (const k of PINNED_RELEASE_ENV) {
+    ambientReleaseEnv[k] = process.env[k];
+    delete process.env[k];
+  }
+});
+after(() => {
+  for (const k of PINNED_RELEASE_ENV) {
+    if (ambientReleaseEnv[k] === undefined) delete process.env[k];
+    else process.env[k] = ambientReleaseEnv[k];
+  }
+});
 
 const require = createRequire(import.meta.url);
 const implAbs = require.resolve('./impl.js');

@@ -22,12 +22,36 @@ import { fileURLToPath } from "node:url";
 
 import type { EngineLogger } from "@adhd/agent-engine-orchestrator";
 import { loadExternalPlugins } from "@adhd/agent-engine-orchestrator";
-import type { PluginLoadFailure } from "@adhd/agent-engine-orchestrator";
+import type {
+  PluginLoadFailure,
+  PreloadedPluginModules,
+} from "@adhd/agent-engine-orchestrator";
 import type { IHookRegistry } from "@adhd/agent-base-types";
+
+import * as tracingPluginModule from "@adhd/agent-plugin-tracing";
 
 import { defaultPluginEntries, env } from "../config.js";
 import type { DefaultPluginEntry } from "../config.js";
 import { logPluginLoadFailed, type ChannelSource } from "../ops-log.js";
+
+/**
+ * The default plugins a single-file bundle must contain, keyed by the specifiers
+ * `defaultPluginEntries()` emits (`DEFAULT_BUDGET_PLUGIN_MODULE`,
+ * `DEFAULT_TRACING_PLUGIN_MODULE`) — the loader matches an entry to its module by
+ * that exact string.
+ *
+ * Tracing is already a static import across agent-mcp. Budget stays a LAZY
+ * import (the repo's module-boundary rule forbids a static import of it); the
+ * literal `import()` is still bundled by esbuild into the single file, so the
+ * lazy load does not reintroduce a runtime resolution step.
+ */
+export async function loadBundledDefaultPluginModules(): Promise<PreloadedPluginModules> {
+  const budgetPluginModule = await import("@adhd/agent-plugin-budget");
+  return {
+    "@adhd/agent-plugin-budget": budgetPluginModule,
+    "@adhd/agent-plugin-tracing": tracingPluginModule,
+  };
+}
 
 /**
  * agent-mcp's own package module directory (`src/` under source, `dist/src/`
@@ -57,6 +81,8 @@ export interface LoadDefaultPluginsOverrides {
   stderr?: Pick<NodeJS.WriteStream, "write">;
   /** Ops channel for the `plugin.load_failed` record; default: the process-wide one. */
   opsChannel?: ChannelSource;
+  /** Preloaded default modules; default {@link loadBundledDefaultPluginModules}. */
+  preloadedModules?: PreloadedPluginModules;
 }
 
 /**
@@ -95,12 +121,15 @@ export async function loadDefaultPlugins(
   logger: EngineLogger,
   overrides: LoadDefaultPluginsOverrides = {}
 ): Promise<void> {
+  const preloadedModules =
+    overrides.preloadedModules ?? (await loadBundledDefaultPluginModules());
   await loadExternalPlugins(
     hooks,
     db,
     {
       configPath: overrides.configPath,
       resolveBases: overrides.resolveBases ?? [AGENT_MCP_PLUGIN_RESOLUTION_BASE],
+      preloadedModules,
       onPluginLoadFailed: (failure) =>
         reportPluginLoadFailure(failure, overrides.stderr, overrides.opsChannel),
     },

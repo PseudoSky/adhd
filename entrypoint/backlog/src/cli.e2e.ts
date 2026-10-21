@@ -189,8 +189,8 @@ describe('resolveCommandPrefix / prefixCommand — namespace-prefix derivation (
     // creep onto api.ts's exported surface (see api.ts's own doc comment on why
     // the exported surface IS the mounted surface). `remove`/`restore` are the
     // S02 AC14 lifecycle verbs (cluster backlog-lifecycle-model 0b0df8f3).
-    // 31 + `timeline` (B-AC5, 91a8c640).
-    expect(actions.length).toBe(32);
+    // 31 + `timeline` (B-AC5, 91a8c640) + `removeNote` (0f9b6132 AC4).
+    expect(actions.length).toBe(33);
     const prefix = resolveCommandPrefix(actions);
     for (const op of actions) {
       expect(resolveCommandPrefix([op])).toEqual(prefix);

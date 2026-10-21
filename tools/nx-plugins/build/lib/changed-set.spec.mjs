@@ -11,10 +11,16 @@
  * `check-release-ranges.mjs`'s own `runCheck({ fetchVersions })` injection
  * convention and `plugin.spec.mjs`'s fixture-project pattern.
  *
+ * Failure mode guarded: release scope under-/over-computed (changed projects dropped, unchanged
+ * ones published, wrong base ref chosen). Tier: P (real git spawns are the unit under test for
+ * resolveBaseRefFromPublishedState). Item: qa-variance (spawn count cut: one shared dated repo
+ * built with a single git init and per-commit identity via -c instead of 3 config spawns; HEAD sha
+ * read once). Red run: pending (tests not run per user instruction).
+ *
  * Run: `node --test tools/nx-plugins/build/lib/changed-set.spec.mjs`
  * (also wired into `pnpm test:build-tools`).
  */
-import { test } from 'node:test';
+import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
@@ -253,31 +259,50 @@ test('RED-equivalent: a resolver that ignores its inputs and always returns ever
 // compute an empty changed-set and publish nothing.
 // ---------------------------------------------------------------------------
 
-/** Build a throwaway repo with one empty commit per ISO date; returns its root and the commit SHAs in order. */
-function makeDatedRepo(dates) {
+/**
+ * One throwaway repo shared by the read-only dated-ref cases: built lazily, ONCE (a single `git init`,
+ * identity passed per commit with -c rather than three `git config` spawns), removed in `after`.
+ * Commits, oldest first: a (2026-01-01), b (2026-01-02), then c and d which share ONE committer second
+ * (2026-01-03) with c the ancestor of d. The cases only read it (git log / ancestry), none mutates it.
+ */
+let sharedDated = null;
+function datedRepo() {
+  if (sharedDated) return sharedDated;
   const root = mkdtempSync(join(tmpdir(), 'changed-set-dated-'));
   const git = (args, date) =>
-    execFileSync('git', args, {
+    execFileSync('git', ['-c', 'user.email=t@example.com', '-c', 'user.name=t', '-c', 'commit.gpgsign=false', ...args], {
       cwd: root, encoding: 'utf8',
       env: { ...cleanGitEnv(), ...(date ? { GIT_AUTHOR_DATE: date, GIT_COMMITTER_DATE: date } : {}) },
     }).trim();
   git(['init', '-q']);
-  git(['config', 'user.email', 't@example.com']);
-  git(['config', 'user.name', 't']);
-  git(['config', 'commit.gpgsign', 'false']);
-  const shas = dates.map((d, i) => {
-    git(['commit', '-q', '--allow-empty', '-m', `c${i}`], d);
+  const dates = ['2026-01-01T00:00:00Z', '2026-01-02T00:00:00Z', '2026-01-03T00:00:00Z', '2026-01-03T00:00:00Z'];
+  const [a, b, c, d] = dates.map((dt, i) => {
+    git(['commit', '-q', '--allow-empty', '-m', `c${i}`], dt);
     return git(['rev-parse', 'HEAD']);
   });
-  return { root, shas };
+  sharedDated = { root, a, b, c, d };
+  return sharedDated;
+}
+after(() => {
+  if (sharedDated) rmSync(sharedDated.root, { recursive: true, force: true });
+});
+
+/** HEAD of the checkout the suite runs in, resolved once for the cases that need a real, resolvable SHA. */
+let cachedHead = null;
+function realHead() {
+  if (!cachedHead) {
+    cachedHead = execFileSync('git', ['rev-parse', 'HEAD'], {
+      cwd: process.cwd(), encoding: 'utf8', env: cleanGitEnv(),
+    }).trim();
+  }
+  return cachedHead;
 }
 
 test('resolveBaseRefFromPublishedState: picks the OLDEST resolvable ref, not the newest (ad988fda AC4)', () => {
   // Explicit, distinct commit dates: older must win so no package's window is clipped. Newest-wins would
   // silently hide changes for anything published at the earlier commit.
-  const { root, shas } = makeDatedRepo(['2026-01-01T00:00:00Z', '2026-01-02T00:00:00Z']);
-  try {
-    const [older, newer] = shas;
+  const { root, a: older, b: newer } = datedRepo();
+  {
     for (const order of [
       { '@adhd/a': { version: '1.0.0', publishedFromRef: newer }, '@adhd/b': { version: '1.0.0', publishedFromRef: older } },
       { '@adhd/b': { version: '1.0.0', publishedFromRef: older }, '@adhd/a': { version: '1.0.0', publishedFromRef: newer } },
@@ -285,16 +310,12 @@ test('resolveBaseRefFromPublishedState: picks the OLDEST resolvable ref, not the
       const chosen = resolveBaseRefFromPublishedState({ workspaceRoot: root, publishedState: order });
       assert.strictEqual(chosen, older, 'must choose the oldest ref, never the newest, regardless of key order');
     }
-  } finally {
-    rmSync(root, { recursive: true, force: true });
   }
 });
 
 test('resolveBaseRefFromPublishedState: commits sharing a committer second resolve by ancestry, independent of key order (ad988fda AC4)', () => {
-  const same = '2026-01-01T00:00:00Z';
-  const { root, shas } = makeDatedRepo([same, same]);
-  try {
-    const [older, newer] = shas;
+  const { root, c: older, d: newer } = datedRepo();
+  {
     for (const state of [
       { '@adhd/a': { version: '1.0.0', publishedFromRef: newer }, '@adhd/b': { version: '1.0.0', publishedFromRef: older } },
       { '@adhd/b': { version: '1.0.0', publishedFromRef: older }, '@adhd/a': { version: '1.0.0', publishedFromRef: newer } },
@@ -305,15 +326,11 @@ test('resolveBaseRefFromPublishedState: commits sharing a committer second resol
         'a same-second tie must go to the ancestor'
       );
     }
-  } finally {
-    rmSync(root, { recursive: true, force: true });
   }
 });
 
 test('resolveBaseRefFromPublishedState: skips refs that no longer resolve (rebase/squash guard)', () => {
-  const real = execFileSync('git', ['rev-parse', 'HEAD'], {
-    cwd: process.cwd(), encoding: 'utf8', env: cleanGitEnv(),
-  }).trim();
+  const real = realHead();
   // Well-formed 40-hex SHA that is not a commit in this repo — exactly what a
   // rebased-away ref looks like. It must be skipped, not thrown on, and must
   // not win despite sorting arbitrarily.
@@ -351,9 +368,7 @@ test('resolveBaseRefFromPublishedState: returns null when NO usable ref exists, 
 });
 
 test('resolveBaseRef: RELEASE_BASE_REF still outranks publishedFromRef', () => {
-  const real = execFileSync('git', ['rev-parse', 'HEAD'], {
-    cwd: process.cwd(), encoding: 'utf8', env: cleanGitEnv(),
-  }).trim();
+  const real = realHead();
   assert.strictEqual(
     resolveBaseRef({
       workspaceRoot: process.cwd(),
