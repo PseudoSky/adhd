@@ -36,6 +36,25 @@ def _cs1():
     return ok and isinstance(grp, dict) and bool(grp.get("description")) and pj.get("name") == CORE_PROJECT and CORE_TAGS_WANT <= tags and bool(tags & CORE_TAGS_LAYER) and not extra, f"transcript={ok} group={grp} name={pj.get('name')} tags={sorted(tags)}"
 
 
+def _vite_output_text(vite):
+    """The vite config with import/from specifier lines and comments removed, so only output configuration (formats, fileName, entryFileNames, chunkFileNames, ...) is inspected: every generator-built package imports shared `tools/vite-plugins/*.mjs` helpers, which are inputs, not build outputs."""
+    vite = re.sub(r"/\*.*?\*/", "", vite, flags=re.S)
+    keep = []
+    in_import = False
+    for ln in vite.splitlines():
+        code = re.sub(r"(^|\s)//.*$", "", ln)
+        if in_import:
+            in_import = not re.search(r"\bfrom\s*['\"]", code)
+            continue
+        if re.match(r"\s*(import\s*(type\s*)?\{|export\s*(type\s*)?\{|import\s+\w+\s*,\s*\{)[^}]*$", code) and not re.search(r"\bfrom\s*['\"]|^\s*import\s*['\"]", code):
+            in_import = True
+            continue
+        if re.match(r"\s*(import|export)\b.*\bfrom\s*['\"]", code) or re.match(r"\s*import\s*['\"]", code):
+            continue
+        keep.append(code)
+    return "\n".join(keep)
+
+
 @check("core-scaffold", 2)
 def _cs2():
     """The manifest has the ADR-0003 CJS-only library shape: name @adhd/stealth-core-browser, version 0.1.0, `main` ./dist/index.js, a `types` entry, `type` unset, no `module`, no `exports`, no `bin`, engines.node >= 22.5, publishConfig.access public, `files` containing dist and CHANGELOG.md; the package vite config is `vite.config.ts` (not .mts) and emits CJS only (`formats` exactly ['cjs'], no .mjs output); the package has no bin/ directory and no build-bin or verify-dist-load-of-a-bin target."""
@@ -47,7 +66,7 @@ def _cs2():
              and not ({"type", "module", "exports", "bin"} & set(p)) and (p.get("publishConfig") or {}).get("access") == "public"
              and {"dist", "CHANGELOG.md"} <= set(p.get("files") or []) and re.search(r"22\.5", (p.get("engines") or {}).get("node", "")) is not None)
     targets = set((project_json(CORE_DIR).get("targets") or {}))
-    return shape and fmts == ["cjs"] and not re.search(r"\.mjs['\"`]", vite) and not exists(f"{CORE_DIR}/vite.config.mts") and not exists(f"{CORE_DIR}/bin") and "build-bin" not in targets, f"shape={shape} formats={fmts} targets={sorted(targets)}"
+    return shape and fmts == ["cjs"] and not re.search(r"\.mjs['\"`]", _vite_output_text(vite)) and not exists(f"{CORE_DIR}/vite.config.mts") and not exists(f"{CORE_DIR}/bin") and "build-bin" not in targets, f"shape={shape} formats={fmts} targets={sorted(targets)}"
 
 
 @check("core-scaffold", 3)

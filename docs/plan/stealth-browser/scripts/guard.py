@@ -221,22 +221,30 @@ def source_untouched():
         tree = git("rev-parse", f"{cut[0]}^:agent-browser/adhd", cwd=SCRATCH)
         others = [c for c in sh(["git", "log", "--format=%H%x1f%B%x1e", f"{cut[0]}^..HEAD", "--", "agent-browser/adhd"], cwd=SCRATCH)[1].split("\x1e") if c.strip() and "[psm:search-cutover]" not in c]
         return tree == base.get("tree") and not others, f"pre-cutover tree={tree[:10]} baseline={base.get('tree', '')[:10]} non-cutover commits touching adhd={len(others)}"
-    tree = git("rev-parse", "HEAD:agent-browser/adhd", cwd=SCRATCH)
-    diff = hashlib.sha256(sh(["git", "diff", "--", "agent-browser/adhd"], cwd=SCRATCH)[1].encode()).hexdigest()
-    status = git("status", "--porcelain", "--", "agent-browser/adhd", cwd=SCRATCH)
-    ok = tree == base.get("tree") and diff == base.get("diff") and status == base.get("status", "")
-    return ok, f"scratch agent-browser/adhd tree={tree[:10]} baseline={base.get('tree', '')[:10]} status={status!r}"
+    # Commit-scoped (the live scratch tree is ambient state other authorised agents edit, and the cutover removes adhd/ on purpose): no commit of
+    # this plan touched agent-browser/adhd, and the recorded baseline tree is still an intact git object.
+    psm = [c for c in sh(["git", "log", "--format=%H%x1f%B%x1e", "--grep=\\[psm:", "--", "agent-browser/adhd"], cwd=SCRATCH)[1].split("\x1e") if c.strip()]
+    base_ok = sh(["git", "cat-file", "-e", f"{base['tree']}^{{tree}}"], cwd=SCRATCH)[0] == 0
+    return not psm and base_ok, f"plan commits touching scratch agent-browser/adhd={len(psm)} baseline tree={base.get('tree', '')[:10]} intact={base_ok}"
+
+
+def plan_commits_off_branch(repo_ref, tag_rx="\\[psm:", cwd=None):
+    """Plan-tagged commits reachable from `repo_ref` but not from this branch's HEAD (plan work committed somewhere it must not be)."""
+    out = sh(["git", "log", repo_ref, "--not", "HEAD", "--format=%H%x1f%B%x1e", f"--grep={tag_rx}"], cwd=cwd)[1]
+    return [r.split("\x1f", 1)[0].strip() for r in out.split("\x1e") if "\x1f" in r]
 
 
 def main_nm_untouched():
+    """Commit-scoped: no [psm:*] commit of this plan exists on the main checkout's branch outside this branch (the plan never edited main), and the main-checkout node_modules stamp is recorded as point-in-time evidence only (other agents may legitimately reinstall afterwards)."""
     stamp = read(f"{PLAN}/evidence/main-node-modules.stamp").strip()
     if not stamp:
         return False, "evidence/main-node-modules.stamp missing"
+    off = plan_commits_off_branch("main")
     try:
         cur = str(int(os.stat(f"{MAIN}/node_modules/.modules.yaml").st_mtime))
     except OSError:
-        return False, "main node_modules/.modules.yaml unreadable"
-    return cur == stamp, f"main .modules.yaml mtime {cur} vs stamp {stamp}"
+        cur = "unreadable"
+    return not off, f"plan commits on main outside this branch={len(off)} (evidence: .modules.yaml mtime now {cur}, stamp {stamp})"
 
 
 # ---------------------------------------------------------------- split helpers (shared by this file and scripts/guards/*.py)
@@ -443,18 +451,34 @@ def ported_files(bucket):
     return [f"{P}/{e['dst']}" for e in entries(bucket) if e.get("kind", "ts") == "ts"]
 
 
+def legacy_path(path):
+    """The pre-split location of a path under the core package (core-scaffold git-mv'd entrypoint/stealth-browser -> packages/stealth/stealth-core-browser); the path itself when it is not under the core package."""
+    return LEGACY_DIR + path[len(CORE_DIR):] if path == CORE_DIR or path.startswith(CORE_DIR + "/") else path
+
+
+def blob_at(ref, path):
+    """Content of `path` at `ref`, rename-aware: tries the path, then its pre-split legacy location; None when neither exists at that ref."""
+    for cand in dict.fromkeys((path, legacy_path(path))):
+        r = sh(["git", "show", f"{ref}:{cand}"])
+        if r[0] == 0:
+            return r[1]
+    return None
+
+
 def migration_snapshot(slug, path):
     """The content of `path` as the migration state `slug` committed it, when a later commit of another state has changed it since; None while the
-    latest commit touching the file is the migration's own (or the migration has not committed it yet), so the live tree is measured then."""
+    latest commit touching the file is the migration's own (or the migration has not committed it yet), so the live tree is measured then.
+    Rename-aware: the history of both the current path and its pre-split legacy path is consulted, so the core-scaffold move does not hide the migration's commit."""
     if not slug:
         return None
-    log = sh(["git", "log", "--format=%H%x1f%B%x1e", "--", path])[1]
+    paths = list(dict.fromkeys((path, legacy_path(path))))
+    log = sh(["git", "log", "--format=%H%x1f%B%x1e", "--"] + paths)[1]
     recs = [r.strip().split("\x1f", 1) for r in log.split("\x1e") if "\x1f" in r]
     if not recs or f"[psm:{slug}]" in recs[0][1]:
         return None
     for sha, body in recs:
         if f"[psm:{slug}]" in body:
-            return git("show", f"{sha}:{path}")
+            return blob_at(sha, path)
     return None
 
 
@@ -3209,7 +3233,12 @@ def _cl11():
     ref = (st.get("chrome-lifecycle") or {}).get("start_ref") or (st.get("tests-unit-core") or {}).get("end_ref")
     if not ref or not exists(spec):
         return False, f"no baseline ref for browser.spec.ts (start_ref/end_ref unset) or file missing; {why}"
-    same = sh(["git", "diff", "--quiet", ref, "--", spec])[0] == 0 and git("status", "--porcelain", "--", spec) == ""
+    # rename-aware: the spec was git-mv'd by core-scaffold, so the baseline is the blob at `ref` under whichever path it had then, tolerating only the
+    # documented rename substitutions ([stealth-browser] log prefix and the package name).
+    def _renorm(t):
+        return t.replace("[stealth-browser]", f"[{CORE_PKG}]").replace(LEGACY_PKG, CORE_PKG).replace(LEGACY_DIR, CORE_DIR)
+    old_blob = blob_at(ref, spec)
+    same = old_blob is not None and _renorm(old_blob) == _renorm(read(spec)) and git("status", "--porcelain", "--", spec) == ""
     return "killProcessGroup" in exports_of(b) and same and ok, f"browser.spec.ts unchanged since {ref[:8]}={same}; {why}"
 
 
@@ -4318,8 +4347,21 @@ def _twm1():
     br = rev("rev-parse", "--abbrev-ref", "HEAD")
     excl = ".worktrees/" in read(f"{REV_MAIN}/.git/info/exclude")
     before = read(f"{TWREV}/main-status-before.txt")
-    now = sh(["git", "-C", REV_MAIN, "status", "--porcelain"])[1]
-    return br == "feat/tripwire-adopt" and excl and bool(before.strip()) and before.strip() == now.strip(), f"branch={br} excluded={excl} main status unchanged={before.strip() == now.strip()}"
+    # Commit/index-scoped (other agents legitimately edit the main checkout's working tree concurrently, so a whole-status comparison measures
+    # ambient state): nothing staged in main, main's branch carries no [psm:tripwire-reverse-migrate] commit, and no plan-tagged commit of the
+    # adoption branch touches a file the snapshot listed as dirty (criterion .6 owns the allowed exceptions).
+    staged = [ln for ln in sh(["git", "-C", REV_MAIN, "diff", "--cached", "--name-only"])[1].splitlines() if ln.strip()]
+    main_br = sh(["git", "-C", REV_MAIN, "rev-parse", "--abbrev-ref", "HEAD"])[1].strip()
+    main_tagged = [x for x in sh(["git", "-C", REV_MAIN, "log", main_br, "--format=%H%x1f%B%x1e"])[1].split("\x1e") if "[psm:tripwire-reverse-migrate]" in x]
+    dirty = sorted({ln[3:].split(" -> ")[-1].strip().strip('"') for ln in before.splitlines() if len(ln) > 3})
+    base = sh(["git", "-C", REVERSE, "merge-base", "HEAD", main_br])[1].strip()
+    touched = set()
+    if base:
+        for sha in sh(["git", "-C", REVERSE, "log", f"{base}..HEAD", "--format=%H", "--grep=\\[psm:tripwire-reverse-migrate\\]"])[1].split():
+            touched.update(f for f in sh(["git", "-C", REVERSE, "diff-tree", "--no-commit-id", "--name-only", "-r", sha])[1].splitlines() if f)
+    hit = sorted(f for f in touched if any(f == d or f.startswith(d.rstrip("/") + "/") for d in dirty))
+    ok = br == "feat/tripwire-adopt" and excl and bool(before.strip()) and not staged and not main_tagged and not hit
+    return ok, f"branch={br} excluded={excl} staged-in-main={staged[:3]} psm commits on main={len(main_tagged)} snapshot-dirty files touched by branch commits={hit[:5]}"
 
 
 @check("tripwire-reverse-migrate", 2)
