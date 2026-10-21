@@ -1582,6 +1582,17 @@
         "scripts/guards/search_a.py"
       ],
       "by": "pseudosky"
+    },
+    {
+      "ts": "2026-10-21T18:56:09.886Z",
+      "state": "search-hosts",
+      "class": "executor",
+      "type": "plan-edit",
+      "reason": "guard hosts.2+.11 requires the state's own work products to exist (it was green on the scaffold skeleton, failing the red-before-work proof)",
+      "files_synced": [
+        "scripts/guards/search_b.py"
+      ],
+      "by": "pseudosky"
     }
   ],
   "authored_with": {
