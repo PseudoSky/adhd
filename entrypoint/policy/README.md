@@ -8,7 +8,7 @@ npm install -g @adhd/policy
 
 | Bin | What it starts |
 |---|---|
-| `adhd-policy` | the command line (`check`, `evaluate`, `explain`, `resolve`, `narrow`, `compile`, `verify`, `show`, `doctor`, `draft`) |
+| `adhd-policy` | the command line (`check`, `evaluate`, `explain`, `resolve`, `narrow`, `compile`, `verify`, `show`, `doctor`, `draft`, plus `run`, `serve`, `mcp-json` and `migrate`) |
 | `adhd-policy-mcp` | the same operations as MCP tools over stdio (`policy_check`, ...), explicit start only |
 | `adhd-policy-http` | the same operations over HTTP on `127.0.0.1` (`ADHD_POLICY_HTTP_PORT`, `0` = ephemeral port); a non-loopback host is refused |
 
@@ -17,9 +17,11 @@ npm install -g @adhd/policy
 Every operation takes one JSON object, passed as `--input '<json>'`. There are no per-field flags and `--input @file` is not supported. Operations whose input is all optional (`verify`, `compile`, `resolve`, `show`, `doctor`) need no `--input`.
 
 ```bash
-adhd-policy check --input '{"tool":"files.read","args":{"path":"/work/readme.md"},"attributes":{"role":"dev","read_roots":["/work"]}}'
+adhd-policy check --input '{"tool":"files/read","args":{"path":"/work/readme.md"},"attributes":{"role":"dev","read_roots":["/work"]}}'
 adhd-policy verify
 ```
+
+`tool` is an operation id joined with `/` (`files/read`, `notes/add`, `bin/touch`). The policy file syntax is in [`docs/policy-reference.md`](../../docs/policy-reference.md) and the attribute sources in [`docs/attributes.md`](../../docs/attributes.md).
 
 The policy is found by walking up from the working directory for `workspace-policy.yaml` (then the user-global `global.yaml`, then a built-in deny-all default). The source is announced once on stderr as `policy: <path>`; `ADHD_POLICY_FILES` overrides discovery.
 
@@ -42,7 +44,13 @@ adhd-policy mcp-json init --spec gate.yaml
 adhd-policy mcp-json --undo
 ```
 
-`serve` fronts the upstream through a gateway and ends when the host closes stdin or the transport, or on SIGINT / SIGTERM; the upstream's whole process group is stopped and the exit code is 0. An upstream that fails its startup handshake makes `serve` exit non-zero before it serves anything. An upstream that crashes while serving is restarted up to 5 times; calls made while it is down return an `isError` result, and once the restarts are used up they keep doing so until the host disconnects. `run` is traced like the servers (one span per dispatched operation). The upstream sees only `PATH HOME USER LANG LC_ALL TMPDIR TERM SHELL` from the environment: variables set in a wrapped `.mcp.json` entry's `env` belong to the `adhd-policy` process and are not forwarded to the upstream.
+`serve` fronts the upstream through a gateway and ends when the host closes stdin or the transport, or on SIGINT / SIGTERM; the upstream's whole process group is stopped and the exit code is 0. An upstream that fails its startup handshake makes `serve` exit non-zero before it serves anything. An upstream that crashes while serving is restarted up to 5 times; calls made while it is down return an `isError` result, and when 5 consecutive restart attempts have failed `serve` stops serving, stops the gateway and exits 1. `run` is traced like the servers (one span per dispatched operation). The upstream sees only `PATH HOME USER LANG LC_ALL TMPDIR TERM SHELL` from the environment: variables set in a wrapped `.mcp.json` entry's `env` belong to the `adhd-policy` process and are not forwarded to the upstream.
+
+`serve` spawns the upstream at startup, before any policy decision, to list its tools; `bin:` makes the source an executable. A reference without the `bin:` prefix that names no file and no URL is looked up on `PATH` last, so a mistyped bare word can start a real binary (`run` executes it only after the call is allowed).
+
+### `migrate`
+
+`adhd-policy migrate <file>...` rewrites, in place, every permission `tool:` value of the named policy files to its canonical operation id (a `.`-separated `files.read` becomes `files/read`; `fs/read_file` becomes `fs/read-file`) and prints one `<file>:<line>: tool "<from>" -> "<to>"` line per change. Comments, quoting and every other byte are kept. A file with nothing to change is reported on stderr and left alone. A `.`-separated `tool:` value in a loaded policy is a load error that names this command.
 
 ### `mcp-json`
 
@@ -75,8 +83,12 @@ The attributes name the caller (`role`, `read_roots`, ...) and the policy decide
 | `ADHD_POLICY_ATTRIBUTES` | caller attributes when no `--adhd-attributes` flag is given |
 | `ADHD_POLICY_HTTP_PORT` | port of `adhd-policy-http`; whole number 0..65535, `0` (default) asks the OS; anything else exits 2 |
 | `ADHD_POLICY_LOG_LEVEL` | `debug`, `info`, `warn` (default for the command line), `error`, `silent` |
-| `ADHD_POLICY_TELEMETRY` | `off` silences metrics and event logs; anything else (default) writes them to `~/.adhd/sox-ecosystem/policy/logs`, rotating at 100 MB per file |
+| `ADHD_POLICY_TELEMETRY` | `off` silences metrics and event logs; anything else (default) writes them to `~/.adhd/sox-ecosystem/policy/logs`, rotating at 100 MB per file; the 14-day age limit and owner-only (`0600`) log mode are not applied because `@adhd/sox-telemetry` does not accept them yet (`src/wrapper/telemetry.ts`) |
 
 ## Build
 
-`nx build policy` bundles the three bins and bakes `dist/api.ir.json` (the extracted operation surface) beside them, so start-up does not run the TypeScript extractor. If the shipped artifact is stale or mismatched, one line on stderr says so and the surface is extracted live. `nx run policy:verify-dist-load` loads the three bins.
+The package is CommonJS only. `vite.config.ts` builds three bundles (`dist/cli.js`, `dist/mcp.js`, `dist/http.js`) with `formats: ['cjs']`, a `#!/usr/bin/env node` banner on each, `@adhd/*` workspace source bundled and every npm dependency and Node builtin external. `package.json#bin` points straight at these files, and the `importMetaUrlCjs` plugin keeps `import.meta.url` call sites working in the CJS output.
+
+`nx build policy` runs `vite build && node dist/cli.js ir-artifact --out dist/api.ir.json` (`project.json`, `build` target). The second command is the hidden build-time subcommand `ir-artifact`: it extracts the operation surface of the built `@adhd/policy-core-client` declarations (`service/api.d.ts`) through the apigen-core-client extraction entry, shapes the result with the `@adhd/apigen-plugin-ir-cache` artifact target, and writes it atomically beside the bundles. `--out` must resolve under this package's `dist/`; anything else exits 2. The baked `dist/api.ir.json` carries the digests of the `.d.ts` surface it came from, so start-up reads it instead of running the TypeScript extractor. If the artifact is missing, stale or was produced by another extractor version, one line on stderr says so and the surface is extracted live through the same entry. `^build` of `policy-core-client` is a prerequisite of the bake.
+
+`nx run policy:verify-dist-load` loads the three bins.

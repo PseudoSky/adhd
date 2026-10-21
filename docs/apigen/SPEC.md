@@ -259,7 +259,7 @@ interface TargetCapability {
 // --- layer: wrap (own the continuation) ---
 interface LayerCapability<Opts = Record<string, unknown>> {
   envelopeFields?: Record<string, JSONSchema>   // merged into effective request envelope
-  // Exactly one of `layer` / `createLayer` is required; if both are present the host uses createLayer.
+  // At least one of `layer` / `createLayer` is required; if both are present the host uses createLayer.
   layer?(call: Call, next: Next): Promise<Result> | AsyncIterable<Chunk>
   // Called ONCE per host invocation, before the first request, with the invocation's
   // single flat `--opt` bag (the same bag extractLayer.createLayer receives).
@@ -520,7 +520,7 @@ apigen/
     @adhd/apigen-errors          # ApiError codes + transport status-mapping tables
     @adhd/apigen-schema          # JSON-Schema utils + transforms (→proto/openapi/ts/cli-flags)
     @adhd/apigen-conformance     # cross-language conformance vectors (every host must pass)
-    @adhd/apigen-gateway         # neutral router for mixed-host `run` (§13)
+    @adhd/apigen-engine-gateway  # neutral router for mixed-host `run` (§13)
     codegen/                              # neutral generators (descriptor → standard artifact)
       @adhd/apigen-openapi · @adhd/apigen-proto · @adhd/apigen-jsonschema · @adhd/apigen-docs
       @adhd/apigen-client-<lang>          # client SDK generators (emit ANY target language)
@@ -554,9 +554,11 @@ then:
 - **run** → presents one API; picks the **simplest viable topology** (cost function + failure model: §13.1):
   - **all one host** → a single in-process runtime (zero overhead; today's path).
   - **mixed hosts** → **sidecar gateway** *(general, confirmed default)*: spawn a per-language
-    runtime per host + `@adhd/apigen-gateway` presenting one transport and routing each op to its
+    runtime per host + `@adhd/apigen-engine-gateway` presenting one transport and routing each op to its
     owning runtime over local IPC.
   - **[OPT]** in-process WASM/FFI co-host when all sources are WASM/FFI-compatible.
+
+IR generation is one entry, `extractSourceEntry` in `@adhd/apigen-core-client`: it builds the `ExtractCall`, composes the extract Layers around an extractor registry keyed by `ExtractCall.host`, and serves `generate`, `run` and `serve` alike; the result carries the IR and the files the extractor read, and `@adhd/apigen-plugin-ir-cache` keys, stores and validates from that result (adhd ADR-0017 D5/D6).
 
 `--source humanize.ts ping.rs` → merged descriptor → gateway routes `/transform/humanize/*` to the
 TS runtime, `/…/ping` to the Rust runtime, behind one HTTP/MCP/… surface. Layers/plugins are
