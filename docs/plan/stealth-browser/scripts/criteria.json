@@ -4680,6 +4680,15 @@
       "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py prod-errors --only prod-errors.9",
       "expect": "exit0",
       "cwd": "repo-root"
+    },
+    {
+      "id": "search-inventory.7",
+      "phase": "migrate",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-inventory --only search-inventory.7",
+      "expect": "exit0",
+      "cwd": "repo-root"
     }
   ]
 }

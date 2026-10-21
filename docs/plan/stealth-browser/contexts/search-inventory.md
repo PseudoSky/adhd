@@ -36,6 +36,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 - [search-inventory.5] Only owned paths changed by [psm:search-inventory] commits.
 
 - [search-inventory.6] (backlog 406a4e66) The inventory records the Google SERP parsing as search-owned: at least one row whose feature, symbols or source mention the Google result-page (SERP) walker or `capture/dom.ts` has owner_state `search-port-engine` and a destination naming `dom.ts` (entrypoint/stealth-search/src/lib/dom.ts), so no Google SERP parser is left unaccounted for in the core.
+- [search-inventory.7] (delta commits 591e1a7, c00edea) The inventory baseline includes the two 2026-10-16 fixes and names the new rows: `baseline_commit` is a commit of the source repo that has 591e1a7 and c00edea as ancestors, and rows exist whose `symbols` cover `fallbackView` and `resolveProvider` (owner_state search-port-providers) and `loginWallResponse` and `noCaptureOutcome` (owner_state search-port-engine), and whose feature or symbols cover the zero-result no-retry rule `decideRetry`, the `sharedProfile` page option and the `-sTCP:LISTEN` idle-shutdown lookup (owner_state core-seam), so no delta behavior is unowned.
 ---
 
 ## Reservations
