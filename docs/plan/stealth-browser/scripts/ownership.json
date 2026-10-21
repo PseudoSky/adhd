@@ -134,7 +134,8 @@
     "packages/stealth/stealth-core-browser/src/lib/",
     "packages/stealth/stealth-core-browser/src/index.ts",
     "packages/stealth/stealth-core-browser/docs/ERRORS.md",
-    "packages/stealth/stealth-core-browser/src/test/unit/errors/"
+    "packages/stealth/stealth-core-browser/src/test/unit/errors/",
+    "packages/stealth/stealth-core-browser/src/api.ts"
   ],
   "prod-examples": [
     "packages/stealth/stealth-core-browser/examples/",
@@ -329,7 +330,17 @@
     "packages/stealth/stealth-core-browser/src/test/unit/seam/",
     "packages/stealth/stealth-core-browser/src/lib/cdp/browser.ts",
     "packages/stealth/stealth-core-browser/src/test/unit/lifecycle/kill.spec.ts",
-    "packages/stealth/stealth-core-browser/src/test/unit/lifecycle/launch.spec.ts"
+    "packages/stealth/stealth-core-browser/src/test/unit/lifecycle/launch.spec.ts",
+    "packages/stealth/stealth-core-browser/src/lib/lifecycle/reaper-entry.ts",
+    "packages/stealth/stealth-core-browser/src/lib/lifecycle/reaper-host.ts",
+    "packages/stealth/stealth-core-browser/src/lib/lifecycle/reaper-link.ts",
+    "packages/stealth/stealth-core-browser/src/lib/cdp/targets.ts",
+    "packages/stealth/stealth-core-browser/src/lib/parsers.ts",
+    "packages/stealth/stealth-core-browser/src/lib/capture/bans.ts",
+    "packages/stealth/stealth-core-browser/src/test/unit/cdp/browser.spec.ts",
+    "packages/stealth/stealth-core-browser/src/test/unit/lifecycle/concurrent-launch.spec.ts",
+    "packages/stealth/stealth-core-browser/src/test/unit/lifecycle/reaper-scope.spec.ts",
+    "packages/stealth/stealth-core-browser/src/test/unit/capture-parsers/bans.spec.ts"
   ],
   "search-scaffold": [
     "entrypoint/stealth-search/",
