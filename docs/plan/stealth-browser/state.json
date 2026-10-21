@@ -1524,6 +1524,18 @@
         "scripts/criteria.json"
       ],
       "by": "pseudosky"
+    },
+    {
+      "ts": "2026-10-21T18:49:55.659Z",
+      "state": "chrome-lifecycle",
+      "class": "executor",
+      "type": "plan-edit",
+      "reason": "CL11 compares assertion lines instead of bytes so the fixture-only edits of core-seam do not reopen a completed state",
+      "files_synced": [
+        "contexts/chrome-lifecycle.md",
+        "scripts/guard.py"
+      ],
+      "by": "pseudosky"
     }
   ],
   "authored_with": {
