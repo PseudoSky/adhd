@@ -1,0 +1,884 @@
+{
+ "schema": "search-failsafe-inventory/1",
+ "baseline_commit": "c00edea2a1795abb5a887d3b74541646309aa52e",
+ "row_count": 52,
+ "rows": [
+  {
+   "id": "I-01",
+   "feature": "Module ChromeManager: 120 s idle, checkHistory:false (B-034), stderr logger",
+   "destination": "core configureManagers({idleTimeoutMs:120000,checkHistory:false,logger}); seam gains checkHistory, logger",
+   "owner_state": "core-seam",
+   "symbols": [],
+   "source": {
+    "file": "search-mcp-source.ts",
+    "line": 52,
+    "anchor": "idleTimeoutMs: 120_000"
+   },
+   "pin": null,
+   "reason": "pinned in the core package tests"
+  },
+  {
+   "id": "I-02",
+   "feature": "Tripwire-locked fail-fast response: outcome hitl, attempts 0, no Chrome",
+   "destination": "src/lib/search.ts",
+   "owner_state": "search-verbs",
+   "symbols": [
+    "search"
+   ],
+   "source": {
+    "file": "search-mcp-source.ts",
+    "line": 253,
+    "anchor": "gateBlocked(p.id)"
+   },
+   "pin": {
+    "file": "src/test/unit/verbs/search-gate.spec.ts",
+    "test": "tripwire lock fails fast with attempts 0"
+   }
+  },
+  {
+   "id": "I-03",
+   "feature": "Provider list + response-schema help; per-provider help",
+   "destination": "listProviders, describeProvider",
+   "owner_state": "search-verbs",
+   "symbols": [
+    "listProviders"
+   ],
+   "source": {
+    "file": "search-mcp-source.ts",
+    "line": 394,
+    "anchor": "export async function listProviders"
+   },
+   "pin": {
+    "file": "src/test/unit/verbs/list-providers.spec.ts",
+    "test": "lists the 12 providers"
+   }
+  },
+  {
+   "id": "I-04",
+   "feature": "Unknown provider returns typed error before any gate or Chrome",
+   "destination": "UNKNOWN_PROVIDER",
+   "owner_state": "search-verbs",
+   "symbols": [],
+   "source": {
+    "file": "search-mcp-source.ts",
+    "line": 213,
+    "anchor": "Resolve the provider before any gate"
+   },
+   "pin": {
+    "file": "src/test/unit/verbs/search-unknown.spec.ts",
+    "test": "unknown provider raises UNKNOWN_PROVIDER"
+   }
+  },
+  {
+   "id": "I-05",
+   "feature": "Tripwire gate before ANY Chrome work, gateBlocked count",
+   "destination": "src/lib/search.ts",
+   "owner_state": "search-verbs",
+   "symbols": [],
+   "source": {
+    "file": "search-mcp-source.ts",
+    "line": 253,
+    "anchor": "gateBlocked(p.id)"
+   },
+   "pin": {
+    "file": "src/test/unit/verbs/search-gate.spec.ts",
+    "test": "gate counts blocked calls"
+   }
+  },
+  {
+   "id": "I-06",
+   "feature": "Cooldown gate returns rate_limited, retry hint, no window",
+   "destination": "src/lib/search.ts + guard",
+   "owner_state": "search-verbs",
+   "symbols": [],
+   "source": {
+    "file": "search-mcp-source.ts",
+    "line": 270,
+    "anchor": "outcome: 'rate_limited'"
+   },
+   "pin": {
+    "file": "src/test/unit/verbs/search-cooldown.spec.ts",
+    "test": "cooldown returns rate_limited without window"
+   }
+  },
+  {
+   "id": "I-07",
+   "feature": "Bounded per-process FIFO concurrency (max 2) wraps the window-opening body",
+   "destination": "guard",
+   "owner_state": "search-verbs",
+   "symbols": [],
+   "source": {
+    "file": "search-mcp-source.ts",
+    "line": 281,
+    "anchor": "return withSearchConcurrency(async"
+   },
+   "pin": {
+    "file": "src/test/unit/verbs/search-concurrency.spec.ts",
+    "test": "bounded FIFO concurrency"
+   }
+  },
+  {
+   "id": "I-08",
+   "feature": "chrome.ready()/bump(): heartbeat only on real activity",
+   "destination": "core manager",
+   "owner_state": "core-seam",
+   "symbols": [],
+   "source": {
+    "file": "search-mcp-source.ts",
+    "line": 246,
+    "anchor": "ready()"
+   },
+   "pin": null,
+   "reason": "pinned in the core package tests"
+  },
+  {
+   "id": "I-08.a",
+   "feature": "PageOptions.sharedProfile: page created in the default browser context; dispose closes only the target, never the user's default context",
+   "destination": "core lib/cdp/targets PageOptions.sharedProfile; seam openPage passes provider.sharedProfile",
+   "owner_state": "core-seam",
+   "symbols": [
+    "sharedProfile"
+   ],
+   "source": {
+    "file": "adhd/cdp-connection/src/targets.ts",
+    "line": 193,
+    "anchor": "options.sharedProfile"
+   },
+   "pin": null,
+   "reason": "pinned in the core package tests"
+  },
+  {
+   "id": "I-09",
+   "feature": "fetch provider route: no qualifier prepend, no strategy loop",
+   "destination": "fetch batch",
+   "owner_state": "search-port-fetch",
+   "symbols": [],
+   "source": {
+    "file": "search-mcp-source.ts",
+    "line": 38,
+    "anchor": "fetch"
+   },
+   "pin": {
+    "file": "src/test/unit/fetch/fetch-route.spec.ts",
+    "test": "fetch provider skips the strategy loop"
+   }
+  },
+  {
+   "id": "I-10",
+   "feature": "Qualifier prepend; github type:code resolves to the code-search provider",
+   "destination": "utils.ts",
+   "owner_state": "search-port-providers",
+   "symbols": [
+    "stripTypeCode"
+   ],
+   "source": {
+    "file": "search/utils.ts",
+    "line": 12,
+    "anchor": "export function stripTypeCode"
+   },
+   "pin": {
+    "file": "src/test/unit/providers/utils.spec.ts",
+    "test": "type:code resolves to code search"
+   }
+  },
+  {
+   "id": "I-10.a",
+   "feature": "resolveProvider and fallbackView: github code override with sharedProfile and no dom; a second network strategy runs against fallbackNetwork",
+   "destination": "utils.ts",
+   "owner_state": "search-port-providers",
+   "symbols": [
+    "resolveProvider",
+    "fallbackView"
+   ],
+   "source": {
+    "file": "search/utils.ts",
+    "line": 21,
+    "anchor": "export function fallbackView"
+   },
+   "pin": {
+    "file": "src/test/unit/providers/utils.spec.ts",
+    "test": "fallbackView swaps the capture and resolveProvider overrides github code"
+   }
+  },
+  {
+   "id": "I-11",
+   "feature": "Isolated off-screen context, dom vs network strategy select",
+   "destination": "engine batch",
+   "owner_state": "search-port-engine",
+   "symbols": [],
+   "source": {
+    "file": "cdp-search.ts",
+    "line": 27,
+    "anchor": "createIsolatedPageTarget"
+   },
+   "pin": {
+    "file": "src/test/unit/engine/strategy-select.spec.ts",
+    "test": "strategy select"
+   }
+  },
+  {
+   "id": "I-11.a",
+   "feature": "A forced dom strategy on a provider without dom config is a typed usage error before any CDP work; in-loop it returns outcome error naming the missing config",
+   "destination": "engine batch + search-errors",
+   "owner_state": "search-port-engine",
+   "symbols": [],
+   "source": {
+    "file": "cdp-search.ts",
+    "line": 430,
+    "anchor": "has no DOM strategy config"
+   },
+   "pin": {
+    "file": "src/test/unit/engine/strategy-select.spec.ts",
+    "test": "dom strategy without config errors"
+   }
+  },
+  {
+   "id": "I-12",
+   "feature": "Cloudflare managed-challenge recovery: reveal, poll provider ban markers, retry once",
+   "destination": "challenge.ts",
+   "owner_state": "search-port-engine",
+   "symbols": [
+    "waitForChallengeClear"
+   ],
+   "source": {
+    "file": "search-challenge.ts",
+    "line": 28,
+    "anchor": "export async function waitForChallengeClear"
+   },
+   "pin": {
+    "file": "src/test/unit/engine/challenge.spec.ts",
+    "test": "challenge recovery retries once"
+   }
+  },
+  {
+   "id": "I-13",
+   "feature": "Hostile outcomes arm cooldown (hitl excluded); HITL fires tripwire, reveals page, keeps context alive",
+   "destination": "search.ts",
+   "owner_state": "search-verbs",
+   "symbols": [],
+   "source": {
+    "file": "search-mcp-source.ts",
+    "line": 347,
+    "anchor": "Hostile outcomes arm"
+   },
+   "pin": {
+    "file": "src/test/unit/verbs/search-hitl.spec.ts",
+    "test": "hostile outcomes arm cooldown"
+   }
+  },
+  {
+   "id": "I-13.a",
+   "feature": "Zero-result no-retry rule: decideRetry returns shouldRetry false for empty; error and timeout still retry",
+   "destination": "core capture/bans.ts decideRetry",
+   "owner_state": "core-seam",
+   "symbols": [
+    "decideRetry"
+   ],
+   "source": {
+    "file": "adhd/capture/bans.ts",
+    "line": 28,
+    "anchor": "export function decideRetry"
+   },
+   "pin": null,
+   "reason": "pinned in the core package tests"
+  },
+  {
+   "id": "I-13.b",
+   "feature": "login_required HITL writes no tripwire and arms no cooldown; a stored login_required lock never gates a search",
+   "destination": "search.ts + guards",
+   "owner_state": "search-port-guards",
+   "symbols": [],
+   "source": {
+    "file": "search-mcp-source.ts",
+    "line": 252,
+    "anchor": "login_required"
+   },
+   "pin": {
+    "file": "src/test/unit/guards/login-required.spec.ts",
+    "test": "login_required writes no tripwire"
+   }
+  },
+  {
+   "id": "I-14",
+   "feature": "finally: page.close, dispose unless keepPage/hitl; outer catch disposes leaked context",
+   "destination": "search.ts",
+   "owner_state": "search-verbs",
+   "symbols": [],
+   "source": {
+    "file": "search-mcp-source.ts",
+    "line": 371,
+    "anchor": "finally"
+   },
+   "pin": {
+    "file": "src/test/unit/verbs/search-cleanup.spec.ts",
+    "test": "isolated page cleanup on every path"
+   }
+  },
+  {
+   "id": "I-15",
+   "feature": "Sparse string-keyed tripwire status; clear returns false if not tripped",
+   "destination": "tripwireStatus, clearTripwire",
+   "owner_state": "search-port-guards",
+   "symbols": [
+    "tripwireStatus",
+    "clearTripwire"
+   ],
+   "source": {
+    "file": "search-mcp-source.ts",
+    "line": 410,
+    "anchor": "export async function tripwireStatus"
+   },
+   "pin": {
+    "file": "src/test/unit/guards/tripwire-status.spec.ts",
+    "test": "clear returns false when not tripped"
+   }
+  },
+  {
+   "id": "I-16",
+   "feature": "chromeStatus required managed boolean; launchChrome",
+   "destination": "core verbs (done)",
+   "owner_state": "search-verbs",
+   "symbols": [
+    "chromeStatus",
+    "launchChrome"
+   ],
+   "source": {
+    "file": "search-mcp-source.ts",
+    "line": 456,
+    "anchor": "export async function chromeStatus"
+   },
+   "pin": {
+    "file": "src/test/unit/verbs/chrome-status.spec.ts",
+    "test": "chromeStatus reports managed"
+   }
+  },
+  {
+   "id": "I-17",
+   "feature": "Soft shutdown on every exit path",
+   "destination": "host exit hooks",
+   "owner_state": "search-verbs",
+   "symbols": [
+    "shutdownSearchChrome"
+   ],
+   "source": {
+    "file": "search-mcp-source.ts",
+    "line": 493,
+    "anchor": "export async function shutdownSearchChrome"
+   },
+   "pin": {
+    "file": "src/test/unit/verbs/shutdown.spec.ts",
+    "test": "soft shutdown"
+   }
+  },
+  {
+   "id": "I-18",
+   "feature": "Per-provider qualifier examples",
+   "destination": "describeProvider",
+   "owner_state": "search-verbs",
+   "symbols": [
+    "providerUsage"
+   ],
+   "source": {
+    "file": "search-mcp-source.ts",
+    "line": 560,
+    "anchor": "export function providerUsage"
+   },
+   "pin": {
+    "file": "src/test/unit/verbs/describe-provider.spec.ts",
+    "test": "qualifier examples"
+   }
+  },
+  {
+   "id": "I-19",
+   "feature": "Cooldown 30/20/60 s, atomic tmp+rename file <data>/guard/<provider>.json, lazy cleanup, success/empty disarm",
+   "destination": "guard.ts",
+   "owner_state": "search-port-guards",
+   "symbols": [
+    "setProviderCooldown",
+    "readProviderCooldown",
+    "clearProviderCooldown",
+    "cooldownRemainingMs",
+    "cooldownForOutcome",
+    "recordSearchOutcome"
+   ],
+   "source": {
+    "file": "search-guard.ts",
+    "line": 68,
+    "anchor": "export function setProviderCooldown"
+   },
+   "pin": {
+    "file": "src/test/unit/guards/cooldown.spec.ts",
+    "test": "cooldown arms and disarms atomically"
+   }
+  },
+  {
+   "id": "I-20",
+   "feature": "SEARCH_MAX_CONCURRENT (2; <=0 disables) FIFO queue, diagnostic snapshot",
+   "destination": "guard.ts",
+   "owner_state": "search-port-guards",
+   "symbols": [
+    "withSearchConcurrency",
+    "searchConcurrencyInfo"
+   ],
+   "source": {
+    "file": "search-guard.ts",
+    "line": 143,
+    "anchor": "export async function withSearchConcurrency"
+   },
+   "pin": {
+    "file": "src/test/unit/guards/concurrency.spec.ts",
+    "test": "FIFO queue honours the limit"
+   }
+  },
+  {
+   "id": "I-21",
+   "feature": "Lock record, audit log (5 MiB cap, rotate), TTL 2 h lazy removal, blocked count, reverified/resolved",
+   "destination": "replaced by tripwire package; TripwireRecord stays a concrete non-generic interface",
+   "owner_state": "search-port-guards",
+   "symbols": [
+    "readTripwire",
+    "writeTripwire",
+    "clearTripwire",
+    "isTripwireExpired",
+    "isTripwireTripped",
+    "tripwireGate",
+    "incrementBlockedCount",
+    "setReverified",
+    "setResolved",
+    "appendAudit",
+    "fireTripwire",
+    "gateBlocked",
+    "clearedTripwire",
+    "resolvedTripwire"
+   ],
+   "source": {
+    "file": "search-tripwire.ts",
+    "line": 102,
+    "anchor": "export function readTripwire"
+   },
+   "pin": {
+    "file": "src/test/unit/guards/tripwire-record.spec.ts",
+    "test": "tripwire lock lifecycle"
+   }
+  },
+  {
+   "id": "I-22",
+   "feature": "12 providers: duckduckgo google arxiv npm github maven wikipedia crates pypi mdn stackoverflow fetch; getProvider throws on unknown",
+   "destination": "providers.ts",
+   "owner_state": "search-port-providers",
+   "symbols": [
+    "PROVIDERS",
+    "PROVIDER_NAMES",
+    "getProvider"
+   ],
+   "source": {
+    "file": "search-providers.ts",
+    "line": 18,
+    "anchor": "export const PROVIDERS"
+   },
+   "pin": {
+    "file": "src/test/unit/providers/providers.spec.ts",
+    "test": "twelve providers"
+   }
+  },
+  {
+   "id": "I-22.a",
+   "feature": "github repository search: API primary, rendered page via fallbackNetwork (embedded json) fallback, no dom config",
+   "destination": "providers.ts",
+   "owner_state": "search-port-providers",
+   "symbols": [],
+   "source": {
+    "file": "search-providers.ts",
+    "line": 197,
+    "anchor": "fallbackNetwork"
+   },
+   "pin": {
+    "file": "src/test/unit/providers/github.spec.ts",
+    "test": "github API primary with embedded-json fallback"
+   }
+  },
+  {
+   "id": "I-23",
+   "feature": "SearchResultSource -> PageSource (core), outcomes, HitlInfo, extractor configs",
+   "destination": "types.ts",
+   "owner_state": "search-port-providers",
+   "symbols": [],
+   "source": {
+    "file": "search-types.ts",
+    "line": 239,
+    "anchor": "sharedProfile"
+   },
+   "pin": {
+    "file": "src/test/unit/providers/types.spec.ts",
+    "test": "outcome and HitlInfo shapes"
+   }
+  },
+  {
+   "id": "I-24",
+   "feature": "Direct JSON-API fetch without browser, network capture search, No network config error outcome",
+   "destination": "engine batch",
+   "owner_state": "search-port-engine",
+   "symbols": [
+    "networkSearch"
+   ],
+   "source": {
+    "file": "search-network.ts",
+    "line": 14,
+    "anchor": "export async function networkSearch"
+   },
+   "pin": {
+    "file": "src/test/unit/engine/network.spec.ts",
+    "test": "network search and missing config error"
+   }
+  },
+  {
+   "id": "I-24.a",
+   "feature": "Zero-body capture maps to timeout or error, never empty",
+   "destination": "network.ts",
+   "owner_state": "search-port-engine",
+   "symbols": [
+    "noCaptureOutcome"
+   ],
+   "source": {
+    "file": "network-capture.ts",
+    "line": 48,
+    "anchor": "export function noCaptureOutcome"
+   },
+   "pin": {
+    "file": "src/test/unit/engine/no-capture.spec.ts",
+    "test": "no-body capture is timeout or error"
+   }
+  },
+  {
+   "id": "I-24.b",
+   "feature": "Signed-out github code page zero results returns hitl login_required with login return_to url",
+   "destination": "network.ts",
+   "owner_state": "search-port-engine",
+   "symbols": [
+    "loginWallResponse"
+   ],
+   "source": {
+    "file": "network-capture.ts",
+    "line": 53,
+    "anchor": "export function loginWallResponse"
+   },
+   "pin": {
+    "file": "src/test/unit/engine/login-wall.spec.ts",
+    "test": "login wall returns hitl login_required"
+   }
+  },
+  {
+   "id": "I-25",
+   "feature": "DOM extraction (pattern + structural), ban checks, selector wait with jittered 600-1800 ms retry",
+   "destination": "engine batch; entrypoint/stealth-search/src/lib/dom.ts",
+   "owner_state": "search-port-engine",
+   "symbols": [
+    "domSearch",
+    "extractFromDom"
+   ],
+   "source": {
+    "file": "search-dom.ts",
+    "line": 26,
+    "anchor": "export async function domSearch"
+   },
+   "pin": {
+    "file": "src/test/unit/engine/dom.spec.ts",
+    "test": "dom extraction and selector wait"
+   }
+  },
+  {
+   "id": "I-25.a",
+   "feature": "Google SERP (result-page) walker in capture/dom.ts is search-owned, moves to dom.ts",
+   "destination": "entrypoint/stealth-search/src/lib/dom.ts",
+   "owner_state": "search-port-engine",
+   "symbols": [],
+   "source": {
+    "file": "adhd/capture/dom.ts",
+    "line": 29,
+    "anchor": "export async function walkDomTree"
+   },
+   "pin": {
+    "file": "src/test/unit/engine/dom.spec.ts",
+    "test": "google serp walker extracts results"
+   }
+  },
+  {
+   "id": "I-26",
+   "feature": "Duplicate capture with #rso preference; response select prefers 429/503; capture wait honours timeoutMs",
+   "destination": "DELETE: use core capture.captureNetworkResponse with select",
+   "owner_state": "none",
+   "symbols": [
+    "networkCaptureSearch"
+   ],
+   "source": {
+    "file": "network-capture.ts",
+    "line": 76,
+    "anchor": "export async function networkCaptureSearch"
+   },
+   "pin": null,
+   "reason": "deleted: core capture.captureNetworkResponse replaces it (documented deletion)"
+  },
+  {
+   "id": "I-27",
+   "feature": "Cookieless render to Turndown markdown; PDF via Fetch-domain body; 3000-char sparse-challenge heuristic; two-phase CF wait; FETCH_UA; readySignal",
+   "destination": "fetch batch",
+   "owner_state": "search-port-fetch",
+   "symbols": [
+    "fetchPage"
+   ],
+   "source": {
+    "file": "search-fetch.ts",
+    "line": 114,
+    "anchor": "export async function fetchPage"
+   },
+   "pin": {
+    "file": "src/test/unit/fetch/fetch-page.spec.ts",
+    "test": "cookieless render to markdown"
+   }
+  },
+  {
+   "id": "I-28",
+   "feature": "SSRF block: IP literals incl IPv4-mapped IPv6, RFC1918, 169.254, loopback, single-label, trailing dot, non-http(s), creds, 2000-char URL cap",
+   "destination": "fetch batch (security failsafe)",
+   "owner_state": "search-port-fetch",
+   "symbols": [
+    "MAX_URL_LENGTH",
+    "forbiddenTargetReason",
+    "validateFetchUrl"
+   ],
+   "source": {
+    "file": "fetch-policy.ts",
+    "line": 28,
+    "anchor": "export const MAX_URL_LENGTH"
+   },
+   "pin": {
+    "file": "src/test/unit/fetch/fetch-policy.spec.ts",
+    "test": "SSRF targets are blocked"
+   }
+  },
+  {
+   "id": "I-29",
+   "feature": "1 MiB Turndown input cap + truncation marker",
+   "destination": "fetch batch",
+   "owner_state": "search-port-fetch",
+   "symbols": [
+    "htmlToMarkdown"
+   ],
+   "source": {
+    "file": "fetch-markdown.ts",
+    "line": 55,
+    "anchor": "export async function htmlToMarkdown"
+   },
+   "pin": {
+    "file": "src/test/unit/fetch/fetch-markdown.spec.ts",
+    "test": "input cap and truncation marker"
+   }
+  },
+  {
+   "id": "I-30",
+   "feature": "pdfjs legacy text extraction, per-page cap",
+   "destination": "fetch batch (U-PDF)",
+   "owner_state": "search-port-fetch",
+   "symbols": [
+    "extractPdfText"
+   ],
+   "source": {
+    "file": "fetch-pdf.ts",
+    "line": 15,
+    "anchor": "export async function extractPdfText"
+   },
+   "pin": {
+    "file": "src/test/unit/fetch/fetch-pdf.spec.ts",
+    "test": "pdf text extraction"
+   }
+  },
+  {
+   "id": "I-31",
+   "feature": "Google-history keyword recovery",
+   "destination": "src/lib/queries/last-search.ts",
+   "owner_state": "search-port-providers",
+   "symbols": [
+    "getLastSearchFromHistory"
+   ],
+   "source": {
+    "file": "search/queries/last-search.ts",
+    "line": 22,
+    "anchor": "export function getLastSearchFromHistory"
+   },
+   "pin": {
+    "file": "src/test/unit/providers/last-search.spec.ts",
+    "test": "recovers keywords from history"
+   }
+  },
+  {
+   "id": "I-32",
+   "feature": "activity/context queries are engine-agnostic",
+   "destination": "already core",
+   "owner_state": "core-seam",
+   "symbols": [],
+   "source": {
+    "file": "search/queries/context.ts",
+    "line": 5,
+    "anchor": "export"
+   },
+   "pin": null,
+   "reason": "pinned in the core package tests"
+  },
+  {
+   "id": "I-33",
+   "feature": "Boot trace, pid registry, crash handlers, 5 s forced exit, stdin-EOF orphan",
+   "destination": "hosts",
+   "owner_state": "search-hosts",
+   "symbols": [],
+   "source": {
+    "file": "server.mjs",
+    "line": 128,
+    "anchor": "process.on"
+   },
+   "pin": null,
+   "reason": "owned by search-hosts: pinned by its own state's scenario, doc or cutover proof, not a search-lib test"
+  },
+  {
+   "id": "I-34",
+   "feature": "SSE/stdio/streaming-http, host/port, logger level/format/file",
+   "destination": "hosts",
+   "owner_state": "search-hosts",
+   "symbols": [],
+   "source": {
+    "file": "server.mjs",
+    "line": 13,
+    "anchor": "stdio"
+   },
+   "pin": null,
+   "reason": "owned by search-hosts: pinned by its own state's scenario, doc or cutover proof, not a search-lib test"
+  },
+  {
+   "id": "I-35",
+   "feature": "$ref inlining, package build, IR cache",
+   "destination": "hosts (baked cache)",
+   "owner_state": "search-hosts",
+   "symbols": [],
+   "source": {
+    "file": "apigen-client-common.mjs",
+    "line": 92,
+    "anchor": "$ref"
+   },
+   "pin": null,
+   "reason": "owned by search-hosts: pinned by its own state's scenario, doc or cutover proof, not a search-lib test"
+  },
+  {
+   "id": "I-36",
+   "feature": "One-shot apigen CLI, silent logs default",
+   "destination": "cli.ts",
+   "owner_state": "search-hosts",
+   "symbols": [],
+   "source": {
+    "file": "search-cli.mjs",
+    "line": 20,
+    "anchor": "import"
+   },
+   "pin": null,
+   "reason": "owned by search-hosts: pinned by its own state's scenario, doc or cutover proof, not a search-lib test"
+  },
+  {
+   "id": "I-37",
+   "feature": "Human CLI flags: strategy, timeout, max-attempts, pretty, list-providers, tripwire-status, keep-alive, idle-shutdown, restart-browser, monitor, challenge-wait, foreground, include-content, max-content-size, qualifier, keep-page, verbose",
+   "destination": "verb inputs or host flags",
+   "owner_state": "search-hosts",
+   "symbols": [],
+   "source": {
+    "file": "cdp-search.ts",
+    "line": 81,
+    "anchor": "--max-attempts"
+   },
+   "pin": null,
+   "reason": "owned by search-hosts: pinned by its own state's scenario, doc or cutover proof, not a search-lib test"
+  },
+  {
+   "id": "I-38",
+   "feature": "Interactive tripwire gate prompt + HITL prompt (readline); stdin close rejects and CLI exits 2 with a JSON hitl line",
+   "destination": "InteractionPort + tripwire interactiveGate/confirmSolved",
+   "owner_state": "search-hosts",
+   "symbols": [],
+   "source": {
+    "file": "cdp-search.ts",
+    "line": 22,
+    "anchor": "readline"
+   },
+   "pin": null,
+   "reason": "owned by search-hosts: pinned by its own state's scenario, doc or cutover proof, not a search-lib test"
+  },
+  {
+   "id": "I-39",
+   "feature": "--restart-browser; detached idle-kill process",
+   "destination": "--restart-browser -> shutdownChrome; idle kill = core reaper",
+   "owner_state": "search-hosts",
+   "symbols": [],
+   "source": {
+    "file": "cdp-search.ts",
+    "line": 87,
+    "anchor": "restart-browser"
+   },
+   "pin": null,
+   "reason": "owned by search-hosts: pinned by its own state's scenario, doc or cutover proof, not a search-lib test"
+  },
+  {
+   "id": "I-39.a",
+   "feature": "Idle-shutdown port-occupant lookup uses lsof -sTCP:LISTEN so only the Chrome owning the port is signalled",
+   "destination": "core lib/cdp/browser.ts lsof lookup",
+   "owner_state": "core-seam",
+   "symbols": [
+    "lsof"
+   ],
+   "source": {
+    "file": "cdp-search.ts",
+    "line": 647,
+    "anchor": "-sTCP:LISTEN"
+   },
+   "pin": null,
+   "reason": "pinned in the core package tests"
+  },
+  {
+   "id": "I-40",
+   "feature": "Scenarios: e2e, search-guard, chrome-lifecycle tests",
+   "destination": "src/test/use-cases/ unit scenarios",
+   "owner_state": "search-usecases",
+   "symbols": [],
+   "source": {
+    "file": "e2e-test.ts",
+    "line": 14,
+    "anchor": "import"
+   },
+   "pin": null,
+   "reason": "owned by search-usecases: pinned by its own state's scenario, doc or cutover proof, not a search-lib test"
+  },
+  {
+   "id": "I-41",
+   "feature": "docs README/cli/lifecycle/mcp (1382 lines), SEARCH.md, FETCH.md, FEATURES.md",
+   "destination": "entrypoint/stealth-search/docs + README",
+   "owner_state": "docs-marketing-run",
+   "symbols": [],
+   "source": {
+    "file": "docs/agent-search/README.md",
+    "line": 1,
+    "anchor": "#"
+   },
+   "pin": null,
+   "reason": "owned by docs-marketing-run: pinned by its own state's scenario, doc or cutover proof, not a search-lib test"
+  },
+  {
+   "id": "I-42",
+   "feature": "package.json bins scratch-agent-search{,-serve,-mcp-cli}: collapse to two bins",
+   "destination": "two bins",
+   "owner_state": "search-cutover",
+   "symbols": [],
+   "source": {
+    "file": "package.json",
+    "line": 2,
+    "anchor": "scratch-agent-search"
+   },
+   "pin": null,
+   "reason": "owned by search-cutover: pinned by its own state's scenario, doc or cutover proof, not a search-lib test"
+  }
+ ]
+}
