@@ -182,7 +182,7 @@ def _sm3():
 
 @check("core-seam", 4)
 def _sm4():
-    """(P7) The seam is host-neutral and env-free: managers.ts and every file under src/lib/lifecycle/ contain no `process.env`, managers.ts names neither the proxy package (@adhd/sox-service-proxy) nor any apigen, commander or host package, and the core package manifest has no @adhd/apigen-* dependency; only owned paths changed by [psm:core-seam] commits (src/lib/managers.ts, chrome-manager.ts, lifecycle/index.ts, src/index.ts, the src/api.ts header and src/test/unit/seam/)."""
+    """(P7) The seam is host-neutral and env-free: managers.ts and every file under src/lib/lifecycle/ contain no `process.env`, managers.ts names neither the proxy package (@adhd/sox-service-proxy) nor any apigen, commander or host package, and the core package manifest has no @adhd/apigen-* dependency; only owned paths changed by [psm:core-seam] commits (src/lib/managers.ts, chrome-manager.ts, lifecycle/index.ts, src/index.ts, the src/api.ts header, src/lib/cdp/browser.ts, the fixtures of src/test/unit/lifecycle/kill.spec.ts and launch.spec.ts, and src/test/unit/seam/)."""
     m = _managers()
     life = [f for f in walk(f"{CORE_DIR}/src/lib/lifecycle") if f.endswith(".ts")]
     env = env_readers([f"{CORE_DIR}/src/lib/managers.ts"] + life) if m else ["managers.ts missing"]

@@ -59,3 +59,9 @@ Every plan-file write is committed (R1). Work-product commits for this state, al
 
 - [ ] After the specs are green: `feat(stealth-search): typed error family [psm:search-errors]`
 - [ ] **After the guard passes** (mandatory) — commit the work and the `state.json` update together by explicit path.
+
+## Backlog fold-in (2026-10-14 search bugs)
+
+Backlog-facing: each criterion below is cited by a unit test simulating the real use case; ids are stable (appended, never renumbered).
+
+- Backlog fold-in 2026-10-14 adds no error code: closed-stdin HITL reuses `HITL_ABORTED` ([search-hosts.19], backlog 657bd597) and a fetch of a missing page is outcome `error` with a `SEARCH_FAILED:` message ([search-port-fetch.10], backlog 86ed154e); the registry stays at the 13 codes of [search-errors.1].

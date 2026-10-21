@@ -66,3 +66,11 @@ Every plan-file write is committed (R1). Work-product commits for this state, al
 - [ ] After the probes: `docs(plan): U-REEXPORT and U-BOOL probes [psm:search-verbs]`
 - [ ] After the guard passes: `feat(stealth-search): the eleven search verbs [psm:search-verbs]`
 - [ ] **After the guard passes** (mandatory) — commit the work and the `state.json` update together by explicit path.
+
+## Backlog fold-in (2026-10-14 search bugs)
+
+Backlog-facing: each criterion below is cited by a unit test simulating the real use case; ids are stable (appended, never renumbered).
+
+- cd05ad09 (HIGH) -> [search-verbs.10]: token-efficient defaults (`content: 'none'`, `preview: 'none'`, numeric default cap 20000, `offset`/`nextOffset`, results are `{title, url, snippet}`).
+- 861571da, 224e7a44 -> [search-verbs.11]: one overall deadline (`DEFAULT_SEARCH_TIMEOUT_MS = 30000`), a hung provider resolves as outcome `timeout`, never a 90 s `error`.
+- 86ed154e -> [search-verbs.12]: concurrent fetch/search calls each return their own result, failures as outcome `error`.

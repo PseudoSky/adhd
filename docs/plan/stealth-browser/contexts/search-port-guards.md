@@ -63,3 +63,15 @@ Every plan-file write is committed (R1). Work-product commits for this state, al
 
 - [ ] After the guard passes: `feat(stealth-search): port cooldown, concurrency and tripwire guards [psm:search-port-guards]`
 - [ ] **After the guard passes** (mandatory) — commit the work and the `state.json` update together by explicit path.
+
+## Backlog fold-in (2026-10-14 search bugs)
+
+Backlog-facing: each criterion below is cited by a unit test simulating the real use case; ids are stable (appended, never renumbered).
+
+- Tripwire writer family c6d7fbcf (HIGH), 982ea870 (HIGH), 9487dcd0, d201694e, a3266358, 6ae134b9, 08801f2a, 84e1f7a2, 3aaa855f -> ONE criterion set, [search-port-guards.9]: the old search tripwire is replaced by `@adhd/resilience-core-tripwire`; unit tests prove each behavior in the new wiring. 9d05e8b2 (CLI vs MCP status parity) is [search-hosts.20].
+- 93dee018 -> [search-port-guards.10]: `tripwireStatus` tells agents how to clear (`clearWith: 'clearTripwire'`, `clearPolicy: 'open'`).
+- If the tripwire package itself fails one of the .9 behaviors, do not change the package here: state the behavior with `it.fails` naming the uid and add the finding below.
+
+## Findings
+
+_(none recorded yet; the executor lists any behavior the tripwire package fails, by backlog uid, before completing the state.)_

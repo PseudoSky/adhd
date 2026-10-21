@@ -62,3 +62,9 @@ Every plan-file write is committed (R1). Work-product commits for this state, al
 
 - [ ] After the guard passes: `feat(stealth-search): port providers, types, utils, last-search [psm:search-port-providers]`
 - [ ] **After the guard passes** (mandatory) — commit the work and the `state.json` update together by explicit path.
+
+## Backlog fold-in (2026-10-14 search bugs)
+
+Backlog-facing: each criterion below is cited by a unit test simulating the real use case; ids are stable (appended, never renumbered).
+
+- 861571da, 224e7a44 -> [search-port-providers.9]: the github provider (repositories dom + API fallback, `type:code` login wall) returns results or a typed outcome. The bounded-time half (one overall deadline, default 30000 ms) is [search-verbs.11]; the capture-WebSocket half is [search-port-engine.9].

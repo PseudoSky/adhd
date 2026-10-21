@@ -63,3 +63,14 @@ Every plan-file write is committed (R1). Work-product commits for this state, al
 
 - [ ] After the guard passes: `feat(stealth-search): port the network, DOM and challenge engines [psm:search-port-engine]`
 - [ ] **After the guard passes** (mandatory) — commit the work and the `state.json` update together by explicit path.
+
+## Backlog fold-in (2026-10-14 search bugs)
+
+Backlog-facing: each criterion below is cited by a unit test simulating the real use case; ids are stable (appended, never renumbered).
+
+- 224e7a44 -> [search-port-engine.9]: a capture socket failure falls back to the dom strategy once, never hangs, never escapes as an unhandled rejection.
+- 406a4e66 -> [search-port-engine.10]: the Google SERP walker lives in stealth-search (`src/lib/dom.ts`), not the core. The inventory side is [search-inventory.6].
+
+## Findings
+
+- The core still holds the original Google SERP walker (`packages/stealth/stealth-core-browser/src/lib/capture/dom.ts`, built by completed states). Removing it from the core is a core-side follow-up that no pending state owns and that depends on the OD-11 user decision (keep the walker as a ported feature); this state only guarantees the search-side copy and that the search package imports no SERP symbol from the core.

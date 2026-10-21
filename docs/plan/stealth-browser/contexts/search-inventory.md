@@ -59,3 +59,9 @@ Every plan-file write is committed (R1). Work-product commits for this state, al
 
 - [ ] After the file validates against .1-.4: `docs(plan): search failsafe inventory [psm:search-inventory]`
 - [ ] **After the guard passes** (mandatory) — commit the work and the `state.json` update together by explicit path.
+
+## Backlog fold-in (2026-10-14 search bugs)
+
+Backlog-facing: each criterion below is cited by a unit test simulating the real use case; ids are stable (appended, never renumbered).
+
+- 406a4e66 -> [search-inventory.6]: a row records the Google SERP walker (`capture/dom.ts`) with owner `search-port-engine` and destination `dom.ts`.

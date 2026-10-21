@@ -28,6 +28,27 @@ Until the first `search-cutover` commit the scratch `agent-browser/adhd/` tree e
 - `5152786d-0243-41ab-b232-fff7fdcfd8f2` (apigen tracing design notes stale after the serviceName change, open debt): OUT of scope to fix here (the notes live in `docs/apigen/design-notes/`). IN scope as a pin: `search-tracing.8` and `tracing-log-validation.6` assert what `plugin.ts` actually emits (`${serviceName}.op`, `${serviceName}.transport`, `${serviceName}.op.error`) so this plan follows the code, not the stale notes.
 - Backlog component `24cfccf0-fa28-4fa8-af08-23d0c1c56978` is the registered home of `packages/stealth/stealth-core-browser`; file follow-ups (the P11 learnings review and the PRODUCT-REVIEW.md out-of-scope candidates) against it.
 
+### Backlog bugs against the old agent-search, folded into port acceptance criteria
+
+Each bug is a red-before-work guard on the state that owns the behavior; the criterion text is in `scripts/guards/` and mirrored in `contexts/<state>.md` under "Backlog fold-in". The backlog is not edited here.
+
+| Backlog uid | Sev | Criterion (owning state) |
+|---|---|---|
+| cd05ad09 | HIGH | `search-port-fetch.9`, `search-verbs.10` |
+| 861571da | | `search-port-providers.9`, `search-verbs.11` |
+| 224e7a44 | | `search-port-providers.9`, `search-port-engine.9`, `search-verbs.11` |
+| 86ed154e | | `search-port-fetch.10`, `search-verbs.12`, `search-hosts.21` |
+| abeedba8 | | `search-hosts.18` |
+| 657bd597 | | `search-hosts.19` |
+| 93dee018 | | `search-port-guards.10` |
+| c6d7fbcf | HIGH | `search-port-guards.9` |
+| 982ea870 | HIGH | `search-port-guards.9` |
+| 9487dcd0, d201694e, a3266358, 6ae134b9, 08801f2a, 84e1f7a2, 3aaa855f | | `search-port-guards.9` |
+| 9d05e8b2 | | `search-hosts.20` |
+| 7f881aa7 | HIGH | `core-seam.6` (not covered by the completed `chrome-lifecycle`: default `reaperScope` is `port-occupant` and `launchChrome` accepts any reachable listener) |
+| 406a4e66 | | `search-port-engine.10`, `search-inventory.6` |
+| e093636f | | `core-seam.5` (static scan stays `chrome-lifecycle.24`) |
+
 ## THREE approved new packages
 
 The plan builds exactly three packages, each produced by the workspace generator: `packages/resilience/resilience-core-tripwire` (`@adhd/resilience-core-tripwire`, `APPROVAL-tripwire.md`, decision D1), `packages/stealth/stealth-core-browser` (`@adhd/stealth-core-browser`, built with `npx nx g @adhd/workspace-codegen-nx:core --name=browser --group=stealth ...` after the new `stealth` workspace group is added) and `entrypoint/stealth-search` (`@adhd/stealth-search`, built with `npx nx g @adhd/workspace-codegen-nx:entrypoint --name stealth-search --nxLayer entrypoints --platform node`). The user's request "port search to the entrypoint transfering all the apigen / tracing requirements over to the cli and mcps for search ... Rename the entrypoint stealth search and the cdp to stealth core browser" (`APPROVAL-split.md`) is the approval. No fourth package may be created (`[inv:one-new-package]`). Build order: tripwire, core, search; the new third-party dependencies of the search entrypoint (`turndown`, `pdfjs-dist`, `commander`) and the sox packages are owned or commodity choices and need no approval gate.

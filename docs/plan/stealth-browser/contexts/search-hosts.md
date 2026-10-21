@@ -84,3 +84,12 @@ Every plan-file write is committed (R1). Work-product commits for this state, al
 - `search-tracing` owns `src/tracing.ts` and `src/telemetry.ts`; import `tracingPlugin` and the telemetry initializer from them. Never name the service or namespace here (`search-hosts.15`).
 - No persistent Chrome: dead-port `chromeStatus` and the extraArgs rejection on port 19997 are the only process probes; the rest is in-process host specs (ADR-0009, `src/test/unit/hosts/`; `unit/verbs/` is `search-verbs`').
 - Manifest and lockfile change only as the O12 outcome demands (`commander`); lock diff confined to the stealth-search importer ([inv:node-modules]).
+
+## Backlog fold-in (2026-10-14 search bugs)
+
+Backlog-facing: each criterion below is cited by a unit test simulating the real use case; ids are stable (appended, never renumbered).
+
+- abeedba8 -> [search-hosts.18]: the CLI closes handles, flushes stdout and exits 0 promptly; backgrounded runs keep their output (real-process probe on a dead port, no Chrome).
+- 657bd597 -> [search-hosts.19]: HITL prompts on closed or non-TTY stdin reject with `HITL_ABORTED` within 1000 ms (no new code).
+- 9d05e8b2 -> [search-hosts.20]: CLI and MCP report the same tripwire status. 93dee018 is [search-port-guards.10].
+- 86ed154e -> [search-hosts.21]: the CLI never exits 0 with empty output.

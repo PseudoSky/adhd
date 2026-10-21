@@ -64,3 +64,10 @@ Every plan-file write is committed (R1). Work-product commits for this state, al
 - [ ] After the probe: `docs(plan): U-PDF probe [psm:search-port-fetch]`
 - [ ] After the guard passes: `feat(stealth-search): port the fetch provider with the SSRF policy [psm:search-port-fetch]`
 - [ ] **After the guard passes** (mandatory) — commit the work and the `state.json` update together by explicit path.
+
+## Backlog fold-in (2026-10-14 search bugs)
+
+Backlog-facing: each criterion below is cited by a unit test simulating the real use case; ids are stable (appended, never renumbered).
+
+- cd05ad09 (HIGH) -> [search-port-fetch.9]: default fetch output is metadata-only and bounded; content is opt-in through the `content` enum, capped at `DEFAULT_MAX_CONTENT_SIZE` (20000) with `offset`/`nextOffset` paging. The verb-level half is [search-verbs.10].
+- 86ed154e -> [search-port-fetch.10]: not-found (404/410, soft-404, redirect-to-root) is outcome `error` with the HTTP status and a `SEARCH_FAILED:` message; no new error code (the registry stays at 13). The concurrent-call half is [search-verbs.12] and the CLI empty-output half [search-hosts.21].

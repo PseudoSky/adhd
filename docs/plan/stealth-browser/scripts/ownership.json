@@ -326,7 +326,10 @@
     "packages/stealth/stealth-core-browser/src/lib/lifecycle/index.ts",
     "packages/stealth/stealth-core-browser/src/index.ts",
     "packages/stealth/stealth-core-browser/src/api.ts",
-    "packages/stealth/stealth-core-browser/src/test/unit/seam/"
+    "packages/stealth/stealth-core-browser/src/test/unit/seam/",
+    "packages/stealth/stealth-core-browser/src/lib/cdp/browser.ts",
+    "packages/stealth/stealth-core-browser/src/test/unit/lifecycle/kill.spec.ts",
+    "packages/stealth/stealth-core-browser/src/test/unit/lifecycle/launch.spec.ts"
   ],
   "search-scaffold": [
     "entrypoint/stealth-search/",
