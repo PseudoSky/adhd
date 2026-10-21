@@ -298,6 +298,8 @@ def _se2():
 def _se3():
     """100% typed errors in the entrypoint so far: no bare `new Error(`, `TypeError`, `RangeError`, string throw or string rejection in non-test source under entrypoint/stealth-search/src and bin, and no `process.env`."""
     files = nontest_ts(SEARCH_DIR)
+    if not exists(f"{SEARCH_DIR}/src/errors.ts"):
+        return False, "src/errors.ts (the state's own work product) does not exist yet"
     return bool(files) and not untyped_error_sites(files) and not env_readers(files), f"files={len(files)} untyped={untyped_error_sites(files)[:5]} env={env_readers(files)[:5]}"
 
 
@@ -648,6 +650,8 @@ def _sv6():
 @check("search-verbs", 7)
 def _sv7():
     """Hygiene of the owned files: no `process.env`, no bare Error, no `@adhd/stealth-browser` string, no deep import into the core's src/, no own WebSocket."""
+    if not exists(f"{SEARCH_DIR}/src/api.ts"):
+        return False, "src/api.ts (the state's own work product) does not exist yet"
     return _sa_hygiene("search-verbs")
 
 

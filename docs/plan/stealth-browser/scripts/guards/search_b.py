@@ -117,6 +117,8 @@ def _bh1():
 @check(_HOSTS, 2)
 def _bh2():
     """package.json declares bins stealth-search and stealth-search-mcp into ./dist/bin/, depends on the apigen core-client/engine-runtime/plugin-mcp/plugin-cli-output/plugin-tracing packages, the core, tripwire and sox-telemetry packages, has no link:/file: value and no exports/module field."""
+    if not (exists(f"{SEARCH_DIR}/src/server.ts") and exists(f"{SEARCH_DIR}/src/cli.ts")):
+        return False, "src/server.ts and src/cli.ts (the state's own work products) do not exist yet"
     p = pkg_json(SEARCH_DIR)
     deps = {**(p.get("dependencies") or {}), **(p.get("devDependencies") or {})}
     need = ["@adhd/apigen-core-client", "@adhd/apigen-engine-runtime", "@adhd/apigen-plugin-mcp", "@adhd/apigen-plugin-cli-output",
@@ -232,6 +234,8 @@ def _bh10():
 @check(_HOSTS, 11)
 def _bh11():
     """No environment variable is read anywhere in src/ or bin/ of stealth-search (ADR-0001: every former SEARCH_* toggle is a typed option or host flag) and no tsx runtime import remains."""
+    if not (exists(f"{SEARCH_DIR}/src/server.ts") and exists(f"{SEARCH_DIR}/src/cli.ts")):
+        return False, "src/server.ts and src/cli.ts (the state's own work products) do not exist yet"
     files = nontest_ts(SEARCH_DIR)
     env = env_readers(files)
     tsx = offenders(files, r"from\s+['\"]tsx|require\(['\"]tsx|\bSEARCH_[A-Z_]{3,}\b")
