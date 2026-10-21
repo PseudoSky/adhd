@@ -4779,6 +4779,15 @@
       "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-verbs --only search-verbs.14",
       "expect": "exit0",
       "cwd": "repo-root"
+    },
+    {
+      "id": "search-verbs.15",
+      "phase": "surface",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-verbs --only search-verbs.15",
+      "expect": "exit0",
+      "cwd": "repo-root"
     }
   ]
 }
