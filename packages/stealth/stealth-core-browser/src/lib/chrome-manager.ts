@@ -191,6 +191,7 @@ export class ChromeManager {
         orphanWindowMs: this.orphanWindowMs,
         scope: this.scope,
         ...(this.entryPath === undefined ? {} : { entryPath: this.entryPath }),
+        ...(this.userDataDir === undefined ? {} : { profileDir: this.userDataDir }),
         logger: this.log,
       })
     }

@@ -19,7 +19,7 @@
  * Ticket 8468f7b1 · plan state chrome-lifecycle (SPEC-single-pass-lifecycle.md 3.1 3.3, CL15).
  */
 
-import { killChrome, killProcessGroup } from '../cdp/browser.js'
+import { killChrome, killProcessGroup, type KillChromeOptions } from '../cdp/browser.js'
 import { closeAllPageTargets, isChromeReachable, listPageTargetsOnly } from '../cdp/targets.js'
 import { HistoryClient } from '../storage/history.js'
 import { errorMessage } from './errors.js'
@@ -40,6 +40,11 @@ export interface ChromeReaperConfig {
   shutdownGraceMs: number
   orphanWindowMs: number
   scope?: ReaperScope
+  /**
+   * The manager's RESOLVED profile (`--user-data-dir`): the port-occupant kill signals only a
+   * Chrome carrying it. Absent = the default dedicated profile.
+   */
+  profileDir?: string
   checkHistoryDefault?: boolean
   /** Default 5000. */
   tickMs?: number
@@ -59,6 +64,8 @@ export interface ChromeReaperOverrides {
   /** Replace individual host effects (tests). */
   hostDeps?: Partial<ReaperHostDeps>
   logger?: (msg: string) => void
+  /** Probe / logger of the port-occupant kill (tests inject a simulated machine). `profileDir` comes from the config. */
+  killOptions?: Omit<KillChromeOptions, 'profileDir'>
 }
 
 export const REAPER_TICK_MS = 5_000
@@ -84,7 +91,7 @@ export async function runChromeReaper(cfg: ChromeReaperConfig, overrides: Chrome
     owner: { read: () => owner.read(), isValid: (r) => owner.isValid(r), remove: () => owner.remove() },
     closeAllPageTargets: () => closeAllPageTargets(cdpHost),
     killProcessGroup,
-    killChrome,
+    killChrome: (port) => killChrome(port, { logger: log, ...overrides.killOptions, ...(cfg.profileDir === undefined ? {} : { profileDir: cfg.profileDir }) }),
     logger: log,
     onActivity: () => retirer?.touch(),
     ...overrides.hostDeps,

@@ -63,6 +63,8 @@ export interface ProxyReaperLinkConfig {
   shutdownGraceMs: number
   orphanWindowMs: number
   scope: ReaperScope
+  /** The manager's RESOLVED profile dir, handed to the reaper so its port-occupant kill matches only that Chrome. */
+  profileDir?: string
   /** The built CommonJS package entry the reaper process requires. Default: this bundle's own file. */
   entryPath?: string
   /** Default `process.execPath`. */
@@ -114,6 +116,7 @@ export function createProxyReaperLink(cfg: ProxyReaperLinkConfig): ReaperLink {
     shutdownGraceMs: cfg.shutdownGraceMs,
     orphanWindowMs: cfg.orphanWindowMs,
     scope: cfg.scope,
+    ...(cfg.profileDir === undefined ? {} : { profileDir: cfg.profileDir }),
     checkHistoryDefault: true,
   })
 
