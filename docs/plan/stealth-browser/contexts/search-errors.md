@@ -36,6 +36,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 - [search-errors.5] The state gates are green: `nx run stealth-search:typecheck`, `:lint` and `:test` exit 0.
 - [search-errors.6] Only owned paths changed by [psm:search-errors] commits.
 
+- [search-errors.7] (delta commits 591e1a7, 657bd597) The registry stays at the 13 codes and pins two facts for the new behaviors: a forced strategy a provider cannot run is a `SEARCH_FAILED` StealthSearchError whose structured detail carries `reason: 'strategy-unsupported'` and whose message names the provider and the strategy (no new code), and `exitCodeFor('HITL_ABORTED')` is 2 (the exit code of a hitl response, shared with search-hosts.22). docs/ERRORS.md has a `SEARCH_FAILED` row that names the `strategy-unsupported` reason and a `HITL_ABORTED` row that states exit 2. A spec under src/test/unit/errors/ builds the strategy-unsupported error through the real class and asserts `instanceof StealthSearchError`, `instanceof StealthCoreBrowserError`, `code`, the detail reason and `exitCodeFor`; titles carry `strategy-unsupported`, `SEARCH_FAILED`, `HITL_ABORTED`, `exitCodeFor` and the uid 591e1a7, and the spec cites [search-errors.7]; `nx run stealth-search:test -- src/test/unit/errors` exits 0.
 ---
 
 ## Reservations
