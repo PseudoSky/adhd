@@ -28,6 +28,10 @@ export interface ChromeVersionInfo {
 
 export type PageOptions = {
   foreground?: boolean,
+  /** Create the page in the DEFAULT browser context, so it carries the Chrome profile's
+   *  cookies/session (where the user signed in). Only for providers that require a signed-in
+   *  account; everything else stays in an isolated context. dispose() closes just this target. */
+  sharedProfile?: boolean,
 }
 
 // ─── Chrome info ──────────────────────────────────────────────────────────────
@@ -150,6 +154,19 @@ export async function createPageTarget(cdpHost: string, options: PageOptions = {
   throw new Error(`Target ${targetId} not found in /json/list after 3s`)
 }
 
+/** The handle of a created isolated page; `browserContextId` is undefined for a `sharedProfile` page. */
+export interface IsolatedPageTargetHandle<Ctx extends string | undefined = string | undefined> {
+  targetId: string
+  pageWsUrl: string
+  /** Undefined when `sharedProfile` placed the page in the default context. */
+  browserContextId: Ctx
+  /** Bring the (off-screen) window ON-SCREEN and foreground it — for interactive
+   *  CAPTCHA solving that a managed challenge's auto-clear can't handle.
+   *  No-op when created with `foreground: true` (already on-screen). */
+  reveal: () => Promise<void>
+  dispose: () => Promise<void>
+}
+
 /**
  * Create a page target inside a FRESH, ISOLATED browser context.
  *
@@ -166,20 +183,19 @@ export async function createPageTarget(cdpHost: string, options: PageOptions = {
  */
 export async function createIsolatedPageTarget(
   cdpHost: string,
+  options: PageOptions & { sharedProfile: true },
+): Promise<IsolatedPageTargetHandle<undefined>>
+export async function createIsolatedPageTarget(
+  cdpHost: string,
+  options?: PageOptions & { sharedProfile?: false },
+): Promise<IsolatedPageTargetHandle<string>>
+export async function createIsolatedPageTarget(
+  cdpHost: string,
   options: PageOptions = {},
-): Promise<{
-  targetId: string
-  pageWsUrl: string
-  browserContextId: string
-  /** Bring the (off-screen) window ON-SCREEN and foreground it — for interactive
-   *  CAPTCHA solving that a managed challenge's auto-clear can't handle.
-   *  No-op when created with `foreground: true` (already on-screen). */
-  reveal: () => Promise<void>
-  dispose: () => Promise<void>
-}> {
+): Promise<IsolatedPageTargetHandle> {
   const info = await getChromeInfo(cdpHost)
   const browser = new CdpSession()
-  let browserContextId: string
+  let browserContextId: string | undefined
   let targetId: string
   let windowId: number | undefined
   try {
@@ -189,23 +205,24 @@ export async function createIsolatedPageTarget(
     // creating the target, and disposeOnDetach:true would tear the context down on
     // that detach — the target would vanish before we could poll for it. We own
     // teardown explicitly via the returned dispose().
-    browserContextId = (await browser.send<{ browserContextId: string }>(
-      'Target.createBrowserContext',
-      {},
-    )).browserContextId
+    browserContextId = options.sharedProfile
+      ? undefined
+      : (await browser.send<{ browserContextId: string }>('Target.createBrowserContext', {})).browserContextId
     // Default: background:true — do NOT foreground the new window / steal focus.
     // foreground: create it in the foreground so the user can watch/interact.
     try {
       targetId = (await browser.send<{ targetId: string }>('Target.createTarget', {
         url: 'about:blank',
-        browserContextId,
+        ...(browserContextId ? { browserContextId } : {}),
         background: !options.foreground,
         focus: !!options.foreground,
       })).targetId
     } catch (err) {
       // The context exists but no page will ever use it: dispose it on the
       // still-open browser session before the error propagates (gap G1).
-      await browser.send('Target.disposeBrowserContext', { browserContextId }).catch(() => { /* best-effort */ })
+      if (browserContextId) {
+        await browser.send('Target.disposeBrowserContext', { browserContextId }).catch(() => { /* best-effort */ })
+      }
       throw err
     }
 
@@ -247,8 +264,13 @@ export async function createIsolatedPageTarget(
       const i = await getChromeInfo(cdpHost)
       const b = new CdpSession()
       await b.connect(i.browserWsUrl)
-      // Disposing the context closes every target within it.
-      await b.send('Target.disposeBrowserContext', { browserContextId }).catch(() => { /* best-effort */ })
+      if (browserContextId) {
+        // Disposing the context closes every target within it.
+        await b.send('Target.disposeBrowserContext', { browserContextId }).catch(() => { /* best-effort */ })
+      } else {
+        // Shared profile: never dispose the user's default context, just this target.
+        await b.send('Target.closeTarget', { targetId }).catch(() => { /* best-effort */ })
+      }
       b.close()
     } catch (e) { console.warn("[@adhd/stealth-core-browser] Failed to run dispose", e) }
   }
