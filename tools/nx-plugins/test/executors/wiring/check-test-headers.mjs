@@ -15,7 +15,12 @@
  *   H2 tier-invalid       the tier is not S, P, H or X.
  *   H3 gap-missing        tier P, H or X with no `cannot be observed at tier <T> because <property>` statement.
  *   H4 spawn-in-tier-S    the header says tier S and the code spawns a process (child_process, a stdio MCP client).
- *   B  baseline           a violation the baseline does not record fails; a baselined violation that no longer
+ *   H5 tier-outside-e2e   the header says tier P, H or X and the file is not named into the e2e lane (`*.e2e.*`, see
+ *                         `inE2eLane`). The local pre-push hook runs the `test` lane only, so a tier P/H/X suite named
+ *                         `*.spec.*` / `*.test.*` would run on every push; in the e2e lane it runs in CI (`nx affected -t
+ *                         e2e`): vitest projects through their `e2e` target (ADR 0009), the build-tools `node --test`
+ *                         specs (`*.e2e.mjs`) through `test:build-tools-e2e` (lane-reachability rule 9).
+ *   B  baseline          a violation the baseline does not record fails; a baselined violation that no longer
  *                         occurs also fails until `--write-baseline` lowers it, so the baseline only shrinks.
  *
  * usage: check-test-headers.mjs [--workspace-root <dir>] [--baseline <file>] [--report <file>] [--write-baseline]
@@ -63,8 +68,20 @@ const CP_CALL = /\b(?:spawnSync|spawn|execFileSync|execFile|execSync|fork)\s*\(|
 /** True when the code starts a process; comments, strings and regex literals are blanked first. */
 export const spawnsProcess = (src) => CP_IMPORT.test(src) && CP_CALL.test(blank(src));
 
-/** The rule ids a test file violates. */
-export function judge(src) {
+/**
+ * True when the file name puts a test in the e2e lane: `*.e2e.ts`, `*.e2e.test.ts` (vitest, ADR 0009) or `*.e2e.mjs`
+ * (the build-tools `node --test` lane). The same name rule `metrics/tiers.mjs` infers tier P from.
+ * @param {string} rel workspace-relative path
+ */
+export const inE2eLane = (rel) => /\.e2e\.[^/]+$/.test(rel);
+
+/**
+ * The rule ids a test file violates. `rel` (the workspace-relative path) enables the lane rule H5; without it only the
+ * header rules are judged.
+ * @param {string} src file source
+ * @param {string} [rel] workspace-relative path
+ */
+export function judge(src, rel) {
   const header = headerOf(src);
   const guards = field(header, 'guards');
   const tier = field(header, 'tier');
@@ -75,6 +92,7 @@ export function judge(src) {
   if (tier && !['S', 'P', 'H', 'X'].includes(letter ?? '')) rules.push('H2');
   if (['P', 'H', 'X'].includes(letter ?? '') && !/cannot be observed at tier [SPHX] because\s+\S/i.test(field(header, 'gap') ?? '')) rules.push('H3');
   if (letter === 'S' && spawnsProcess(src)) rules.push('H4');
+  if (rel !== undefined && ['P', 'H', 'X'].includes(letter ?? '') && !inE2eLane(rel)) rules.push('H5');
   return rules;
 }
 
@@ -90,7 +108,7 @@ export function collect(workspaceRoot) {
       found[rel] = ['unreadable'];
       continue;
     }
-    const rules = judge(src);
+    const rules = judge(src, rel);
     if (rules.length) found[rel] = rules;
   }
   return { files: paths.length, found };

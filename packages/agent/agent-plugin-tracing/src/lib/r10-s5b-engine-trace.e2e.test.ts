@@ -2,8 +2,8 @@
  * guards: the signals the engine populates stop reaching the trace from a real run (turn_index, tool_result_bytes_in
  *   against the request body on the wire, thinking_config / thinking_blocks, startup queue_wait_ms / session_ms only
  *   when measured, each concurrent dispatch's own call_id, the result-wait dispatch), or a figure is guessed as 0.
- * tier: P (binds a loopback HTTP port for the provider adapters; classified by the code, not the unit `test` lane it
- *   runs in today; no subprocess)
+ * tier: P (binds a loopback HTTP port for the provider adapters; the `e2e` lane, ADR 0009;
+ *   no subprocess)
  * gap: This cannot be observed at tier S because the expected figures come from the request bodies the real provider
  *   adapters put on a real HTTP socket, which a replayed hook payload does not carry.
  * cites: R10 S5b AC1, AC2, AC3, AC4, AC5

@@ -1,5 +1,5 @@
 /**
- * anthropic-echo-live.test.ts -- R9-hist S7 (spec-v2 AC13, items (a)-(f)): does the LIVE Anthropic Messages API
+ * anthropic-echo-live.e2e.test.ts -- R9-hist S7 (spec-v2 AC13, items (a)-(f)): does the LIVE Anthropic Messages API
  * accept the assistant history this package replays (thinking signatures, executed server tool pairs, tier S
  * stripped after the TTL, the deferred server_tool_use tail)? The offline contract fake encodes only the documented
  * rules; this file is the one check of what the real API enforces.
@@ -628,7 +628,7 @@ describe("R9-hist S7 -- offline controls for the gated live test (no network)", 
     }) as typeof fetch;
 
   it("S7 gate documentation: header, README.md and AGENTS.md all name the gate and the owner", () => {
-    const header = readFileSync(join(HERE, "anthropic-echo-live.test.ts"), "utf8").split("\n").slice(0, 40).join("\n");
+    const header = readFileSync(join(HERE, "anthropic-echo-live.e2e.test.ts"), "utf8").split("\n").slice(0, 40).join("\n");
     for (const [name, text] of [
       ["test header", header],
       ["README.md", readFileSync(join(PACKAGE_ROOT, "README.md"), "utf8")],

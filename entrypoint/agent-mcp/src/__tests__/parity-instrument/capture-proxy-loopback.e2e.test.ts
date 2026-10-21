@@ -1,6 +1,6 @@
 /*
  * guards: the capture proxy alters what it relays (bytes, headers, a 429, SSE chunk timing, gzip content-encoding), logs a credential or request header, misroutes /<arm>/<provider>, or the driver turns capture on by default; the work directory collides across concurrent runs (b7e0d8c5).
- * tier: P (in-process loopback HTTP servers, vitest unit lane; sockets are outside tier S per docs/standards/testing.md section 1, file classified by its heaviest case)
+ * tier: P (in-process loopback HTTP servers, the `e2e` lane per ADR 0009; sockets are outside tier S per docs/standards/testing.md section 1, file classified by its heaviest case)
  * gap: This cannot be observed at tier S because incremental SSE delivery, byte-identical gzip passthrough and 429/502 passthrough exist only across real sockets with an upstream that holds the response open.
  * cites: b7e0d8c5 AC1-AC2; R6B-proxy AC1-AC6 (as titled in this file).
  */
@@ -15,7 +15,7 @@ import { afterAll, afterEach, describe, expect, it } from 'vitest';
 import { loadParity } from './load';
 
 /**
- * R6B-proxy (unit lane): the wire-capture proxy (parity/capture-proxy.mjs), its offline reader (parity/wire-diff.mjs) and the driver's opt-in wiring
+ * R6B-proxy (e2e lane, in-process): the wire-capture proxy (parity/capture-proxy.mjs), its offline reader (parity/wire-diff.mjs) and the driver's opt-in wiring
  * (parity/drive.mjs captureEnv). Servers run in-process on 127.0.0.1 (no subprocess, no model, no network): a local mock upstream speaks the Anthropic SSE
  * and the OpenAI chat SSE wire formats. Credentials used are synthetic.
  *   AC1 routing   AC2 transparency (bytes, headers, 429, streaming incremental)   AC3 logging (shape, usage, no credential)

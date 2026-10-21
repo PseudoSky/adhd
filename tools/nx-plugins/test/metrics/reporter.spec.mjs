@@ -1,7 +1,7 @@
 /**
  * reporter.spec.mjs: the vitest and node:test reporters write one record per test (pass, fail, skip, todo) with the
  * run's identity, never throw when the store cannot be written, and are attached to every vitest project by the shared
- * plugin hook. Vitest's TestModule and TestCase are stubbed here; reporter-api.spec.mjs runs the real vitest.
+ * plugin hook. Vitest's TestModule and TestCase are stubbed here; reporter-api.e2e.mjs runs the real vitest.
  *
  * guards: a test result is lost or mislabeled in the history, a failed write breaks the run being observed, or a
  *   vitest project is not given the reporter.

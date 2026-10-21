@@ -9,7 +9,7 @@
  * `entrypoint/agent-mcp/src/__tests__/r10-s4-adapter-wire.test.ts` ("R10 W1 AC3").
  *
  * guards: the shell ordering sentence is lost between the engine's guided tool list and the description the claudecli loopback bridge serves in tools/list, so a claudecli agent never reads it.
- * tier: P
+ * tier: P (e2e lane, ADR 0009: binds a loopback HTTP socket; backlog 132547e7, f3683008)
  * gap: This cannot be observed at tier S because the description the claude CLI reads is served by the bridge over a bound loopback HTTP socket to a real MCP client, and tier S allows no sockets.
  * cites: R10 W1 AC3.
  */

@@ -1,14 +1,14 @@
 /**
- * check-test-headers.spec.mjs — 595965cc T34 (G9 header lint, the header half of G12), prompted by b87dcea0.
+ * check-test-headers.e2e.mjs — 595965cc T34 (G9 header lint, the header half of G12), prompted by b87dcea0.
  *
  * guards: a test is filed under a lighter tier than the code does (a spawning spec headed tier S), a tier P, H or X
  *   test has no fidelity-gap statement, or a new test has no header, and nobody notices because the claim is prose.
- * tier: P (the CLI cases spawn the script; the build-tools `node --test` lane, 10 s per test; the judge cases are
+ * tier: P (the CLI cases spawn the script; the build-tools `node --test` e2e (`test:build-tools-e2e`, CI only) lane, 10 s per test; the judge cases are
  *   tier S and the file is classified by its heaviest case).
  * gap: This cannot be observed at tier S because the exit code and the report on stdout exist only when the script
  *   runs as a process over a real directory tree.
  * cites: 595965cc T34; b87dcea0.
- * teeth: red: node --test tools/nx-plugins/test/executors/wiring/check-test-headers.spec.mjs -> exit 1 with the H4
+ * teeth: red: node --test tools/nx-plugins/test/executors/wiring/check-test-headers.e2e.mjs -> exit 1 with the H4
  *   rule removed (the spawn-in-tier-S cases fail), with H3 removed (the gap cases fail), with the baseline allowed to
  *   go stale (the shrink case fails).
  */
@@ -102,7 +102,9 @@ describe('b87dcea0 — the CLI', () => {
       const bad = run(root);
       assert.equal(bad.status, 1);
       assert.match(bad.stderr, /x\/a\.spec\.mjs violates H4/);
-      writeFileSync(join(root, 'x/a.spec.mjs'), hdr(['guards: g', 'tier: P', 'cites: c', GAP]) + SPAWN);
+      // corrected tier P belongs in the e2e lane by name (H5), so the corrected file is a.e2e.mjs
+      rmSync(join(root, 'x/a.spec.mjs'));
+      writeFileSync(join(root, 'x/a.e2e.mjs'), hdr(['guards: g', 'tier: P', 'cites: c', GAP]) + SPAWN);
       assert.equal(run(root).status, 0);
     } finally { rmSync(root, { recursive: true, force: true }); }
   });

@@ -1,16 +1,16 @@
 /**
- * reporter-api.spec.mjs: the metrics reporters, the vitest one attached by the shared plugin the way every project config attaches it,
+ * reporter-api.e2e.mjs: the metrics reporters, the vitest one attached by the shared plugin the way every project config attaches it,
  * run under the REAL vitest on a throwaway project, and the node:test one under the real `node --test`: it records pass, fail, skip and todo with the header tier, leaves
  * vitest's own output and exit status untouched, and cannot break a run when the store is unwritable or switched off.
  *
  * guards: vitest's or node:test's reporter API drifts from the stubs reporter.spec.mjs uses and records go missing or mislabeled, the
  *   reporter changes a run's exit status or output, or a store failure fails a green run.
- * tier: P (spawns vitest, a child process, in a temporary project; build-tools `node --test` lane; each case is one
+ * tier: P (spawns vitest, a child process, in a temporary project; build-tools `node --test` e2e (`test:build-tools-e2e`, CI only) lane; each case is one
  *   vitest or node run, about 1 s on an idle machine).
  * gap: This cannot be observed at tier S because the TestModule/TestCase objects and node:test event stream, the config merge that appends the
  *   reporter after `default`, the process exit status and the printed summary exist only inside a real vitest process.
  * cites: 595965cc T37.AC2 (per-test durations are recorded for every vitest project), T36.AC1 (outcomes recorded per run).
- * teeth: red 2026-10-15: `node --test reporter-api.spec.mjs` -> exit 1 with the plugin hook dropping `default` (no-reporters case) and
+ * teeth: red 2026-10-15: `node --test reporter-api.e2e.mjs` -> exit 1 with the plugin hook dropping `default` (no-reporters case) and
  *   with the store rethrowing on an unwritable path (green-run case) (authorship was not separated).
  */
 import assert from 'node:assert/strict';

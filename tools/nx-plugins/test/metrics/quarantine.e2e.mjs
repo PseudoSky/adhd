@@ -1,5 +1,5 @@
 /**
- * quarantine.spec.mjs: T36.AC2 (a quarantine registry excludes a test from the gating run, still runs and reports it, and
+ * quarantine.e2e.mjs: T36.AC2 (a quarantine registry excludes a test from the gating run, still runs and reports it, and
  * fails past its deadline) and T36.AC3 (a scan fails any runner config that sets a retry without a tracking item).
  *
  * guards: a quarantined test still fails G5, a quarantined test vanishes from the report, an expired or malformed
@@ -10,7 +10,7 @@
  * gap: This cannot be observed at tier S because the scan reads git-tracked files and exits with a status; only a real
  *   git repository and a real process show that an untracked or node_modules file is ignored and the exit code is 1.
  * cites: 595965cc T36.AC2, T36.AC3; docs/standards/testing.md section 7 (FM9, G5).
- * teeth: red 2026-10-15: `node --test quarantine.spec.mjs` -> exit 1 with isQuarantined always false (the exclusion case),
+ * teeth: red 2026-10-15: `node --test quarantine.e2e.mjs` -> exit 1 with isQuarantined always false (the exclusion case),
  *   with the expiry comparison inverted (the expired case) and with the comment-line skip removed (the commented retry case).
  */
 import assert from 'node:assert/strict';

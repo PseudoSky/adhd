@@ -1,17 +1,17 @@
 /**
- * test-report.spec.mjs: the report CLI over a seeded store: its subcommands, exit codes (0 report ok or insufficient
+ * test-report.e2e.mjs: the report CLI over a seeded store: its subcommands, exit codes (0 report ok or insufficient
  * history, 1 gate violation under --check or for g5 and g7, 65 usage), and the repeat-run mode that finds a test with
  * both outcomes on the same code.
  *
  * guards: a gate violation exits 0, a clean history exits 1, or the repeat-run misses a test whose outcome changes
  *   between runs of one command.
- * tier: P (spawns the CLI and, for repeat, a child command; build-tools `node --test` lane; the in-process cases are
+ * tier: P (spawns the CLI and, for repeat, a child command; build-tools `node --test` e2e (`test:build-tools-e2e`, CI only) lane; the in-process cases are
  *   tier S and the file is classified by its heaviest case).
  * gap: This cannot be observed at tier S because the process exit status, the stdout/stderr split and the environment
  *   a repeat-run hands its child command exist only when the CLI runs as a process.
  * cites: 595965cc T36.AC1 (repeat-run reports a test with both outcomes), T37.AC2 (over-budget test listed, fails at the
  *   configured severity).
- * teeth: red 2026-10-15: `node --test test-report.spec.mjs` -> exit 1 with `offenders --check` ignored (1 case) and with g5 never
+ * teeth: red 2026-10-15: `node --test test-report.e2e.mjs` -> exit 1 with `offenders --check` ignored (1 case) and with g5 never
  *   failing (1 case); a limit option shadowing G5's share limit failed the g5 case before it was fixed.
  */
 import assert from 'node:assert/strict';

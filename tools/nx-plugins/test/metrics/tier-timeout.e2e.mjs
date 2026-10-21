@@ -1,5 +1,5 @@
 /**
- * tier-timeout.spec.mjs: T37.AC1, each tier has an enforced per-test timeout. A real vitest runs a temporary project
+ * tier-timeout.e2e.mjs: T37.AC1, each tier has an enforced per-test timeout. A real vitest runs a temporary project
  * through the setup file the shared plugin hook attaches, with the caps lowered by ADHD_TIER_TIMEOUT_CAPS so a case
  * takes milliseconds, and the declared tier decides whether a 500 ms test times out.
  *
@@ -9,7 +9,7 @@
  * gap: This cannot be observed at tier S because the timeout is applied by vitest inside a worker from a setup file;
  *   only a real vitest run shows that vi.setConfig in the setup file reaches the test's own timeout.
  * cites: 595965cc T37.AC1; backlog 1ab12bb2 (a 5 s timeout flaked under load), e47ec788 (no load guidance in the standard).
- * teeth: red 2026-10-15: `node --test tier-timeout.spec.mjs` -> exit 1 with the setup file's vi.setConfig removed (the
+ * teeth: red 2026-10-15: `node --test tier-timeout.e2e.mjs` -> exit 1 with the setup file's vi.setConfig removed (the
  *   declared-S case passes instead of timing out), and 1 with the cap applied to inferred-tier files (the legacy case fails).
  */
 import assert from 'node:assert/strict';
