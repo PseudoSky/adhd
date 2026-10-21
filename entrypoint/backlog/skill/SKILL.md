@@ -32,7 +32,9 @@ Rules that bite:
 - File with the right `project` (and `component`); search before filing so you
   update an existing item instead of duplicating it.
 - `update` with a `body` mints a successor uid (the old one reports a
-  `conflict` naming the live one); re-read the uid from the result.
+  `conflict` naming the live one); re-read the uid from the result. Holding a
+  stale uid? `lookup {"q":"<uid>"}` returns the live head (`redirect.uid`) and
+  `forwardedFrom`; `get` and every write verb never forward.
 - Never edit `BACKLOG.md`; the graph is the source of truth.
 - A wrong `--input` shape fails with `invalid_argument` and prints the exact
   working invocation; `adhd-backlog --help` lists every verb's live schema.

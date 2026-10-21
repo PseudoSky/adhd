@@ -1,3 +1,9 @@
+## Unreleased
+
+### 🩹 Fixes
+
+- **backlog:** `lookup` on a superseded issue uid (or unique prefix) now returns the live chain head in `redirect.uid` and an additive `forwardedFrom` echoing the uid supplied, instead of redirecting to the stale uid that `get` then refuses; a prefix matching a superseded node and its own head resolves to the head. `get` and every write verb are unchanged and still answer `conflict` naming the live uid (68175e51-9eda-459c-bc23-6bba2b4c7707).
+
 ## 1.0.18 (2026-10-19)
 
 ### 🩹 Fixes

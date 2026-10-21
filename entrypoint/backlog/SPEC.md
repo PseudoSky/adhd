@@ -1942,11 +1942,11 @@ silently.
   nothing.
 
 - **How a human or agent gets a `uid` at all — the two-step pattern.**
-  §3a's `lookup` is registry-only (project/component/location — "where does
-  this live"); it does **not** resolve issues, and conflating the two would
-  be wrong: `lookup` answers a structural question with one correct answer
-  per input, while resolving "the issue about X" is inherently a _search_
-  with zero, one, or many matches. So issue addressing is **discover, then
+  §3a's `lookup` answers structural questions with one correct answer per
+  input — registry shape (project/component/location — "where does this
+  live") and a uid or unique uid prefix — while resolving "the issue about X"
+  is inherently a _search_ with zero, one, or many matches, which is `query`'s
+  job. For a uid, `lookup` is the one verb that heals a rotted uid: given a uid or unique prefix of a superseded issue (replaced by a body edit), it returns the uid of the live head and sets `forwardedFrom` to the uid you supplied. `get`, `update`, `transition`, `claim`, `relate`, `move` and `delete` never forward: addressing a superseded uid returns `conflict` naming the live uid. So issue addressing is **discover, then
   act** — the same shape a coding agent already uses for `rg` before `Edit`:
 
   1. `query({filter:{grep:"..."} , fields:["uid","title"]})` (or
