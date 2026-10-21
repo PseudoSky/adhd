@@ -40,6 +40,16 @@ type BrowserModule = typeof import('../../../lib/cdp/browser.js')
 const PORT = 9333
 let d: ProcessDoubles
 
+/**
+ * Fixture for the profile-identity filter (backlog 7f881aa7, [core-seam.6]): the command line `ps` reports for a
+ * port occupant that is this tool's own Chrome (the default dedicated profile under the mocked HOME). The
+ * assertions below are unchanged; the occupants simply identify themselves now.
+ */
+const OWN_PROFILE = '/fake/home/Library/Application Support/Google/Chrome-CDP'
+const ownChrome = (pid: number): Record<string, string> => ({
+  [`ps -o command= -p ${pid}`]: `/Applications/Google Chrome.app/Contents/MacOS/Google Chrome --remote-debugging-port=${PORT} --user-data-dir=${OWN_PROFILE} --no-first-run`,
+})
+
 async function loadFresh(): Promise<BrowserModule> {
   vi.resetModules()
   return import('../../../lib/cdp/browser.js')
@@ -141,7 +151,7 @@ describe('8468f7b1 [chrome-lifecycle.12] port-occupant kill (the reaper scope)',
   it('closes the port occupant found with lsof', async () => {
     // [fs-048]
     const { killChrome } = await loadFresh()
-    m.execSync.mockImplementation(execScript({ lsof: '111\n', 'ps -o pgid= -p 111': '111' }))
+    m.execSync.mockImplementation(execScript({ lsof: '111\n', ...ownChrome(111), 'ps -o pgid= -p 111': '111' }))
     await killChrome(PORT)
     expect(m.execSync).toHaveBeenCalledWith(`lsof -ti tcp:${PORT} 2>/dev/null`, { encoding: 'utf8', timeout: 3000 })
     expect(signals(d.log)[0]).toEqual({ pid: -111, sig: 'SIGTERM' })
@@ -150,7 +160,7 @@ describe('8468f7b1 [chrome-lifecycle.12] port-occupant kill (the reaper scope)',
   it('falls back to fuser when lsof finds nothing', async () => {
     // [fs-049]
     const { killChrome } = await loadFresh()
-    m.execSync.mockImplementation(execScript({ lsof: '', fuser: '333', 'ps -o pgid= -p 333': '333' }))
+    m.execSync.mockImplementation(execScript({ lsof: '', fuser: '333', ...ownChrome(333), 'ps -o pgid= -p 333': '333' }))
     await killChrome(PORT)
     expect(m.execSync).toHaveBeenCalledWith(`fuser ${PORT}/tcp 2>/dev/null`, { encoding: 'utf8', timeout: 3000 })
     expect(signals(d.log)[0]).toEqual({ pid: -333, sig: 'SIGTERM' })
@@ -159,7 +169,7 @@ describe('8468f7b1 [chrome-lifecycle.12] port-occupant kill (the reaper scope)',
   it("signals the occupant's process group", async () => {
     // [fs-050] the pgid comes from `ps -o pgid=`; a failed lookup keeps the pid.
     const { killChrome } = await loadFresh()
-    m.execSync.mockImplementation(execScript({ lsof: '111\n222', 'ps -o pgid= -p 111': '900', 'ps -o pgid= -p 222': new Error('ps failed') }))
+    m.execSync.mockImplementation(execScript({ lsof: '111\n222', ...ownChrome(111), ...ownChrome(222), 'ps -o pgid= -p 111': '900', 'ps -o pgid= -p 222': new Error('ps failed') }))
     await killChrome(PORT)
     expect(signals(d.log).filter((e) => e.sig === 'SIGTERM')).toEqual([
       { pid: -900, sig: 'SIGTERM' },
@@ -170,7 +180,7 @@ describe('8468f7b1 [chrome-lifecycle.12] port-occupant kill (the reaper scope)',
   it('SIGKILLs the occupant group when it lingers', async () => {
     // [fs-051] the first listener dies after three 200 ms polls; its group (Helpers) is then SIGKILLed.
     const { killChrome } = await loadFresh()
-    m.execSync.mockImplementation(execScript({ lsof: '111', 'ps -o pgid= -p 111': '111' }))
+    m.execSync.mockImplementation(execScript({ lsof: '111', ...ownChrome(111), 'ps -o pgid= -p 111': '111' }))
     d.alive.add(111)
     const p = killChrome(PORT)
     await vi.advanceTimersByTimeAsync(600)
@@ -185,7 +195,7 @@ describe('8468f7b1 [chrome-lifecycle.12] port-occupant kill (the reaper scope)',
 
   it('the occupant wait is bounded to 25 polls and never SIGKILLs a listener that will not die', async () => {
     const { killChrome } = await loadFresh()
-    m.execSync.mockImplementation(execScript({ lsof: '111', 'ps -o pgid= -p 111': '111' }))
+    m.execSync.mockImplementation(execScript({ lsof: '111', ...ownChrome(111), 'ps -o pgid= -p 111': '111' }))
     d.alive.add(111)
     const p = killChrome(PORT)
     await vi.advanceTimersByTimeAsync(5_200)

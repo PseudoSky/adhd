@@ -12,18 +12,45 @@
  */
 
 import { execSync, spawn } from 'node:child_process'
+import * as nodeFs from 'node:fs'
 import { existsSync, mkdirSync, openSync, closeSync, unlinkSync } from 'node:fs'
 import { homedir, platform, tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { lifecycleError, type LifecycleError } from '../lifecycle/errors.js'
 import { isChromeReachable } from './targets.js'
+
+// ─── Defaults ─────────────────────────────────────────────────────────────────
+
+/** The CDP port used when no `port` option is given. Override per call with `port`. */
+export const DEFAULT_CDP_PORT = 9222
+/** Directory name of the dedicated CDP profile under `~/Library/Application Support/Google`. */
+export const DEFAULT_PROFILE_NAME = 'Chrome-CDP'
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
+/**
+ * How the attach and kill paths look at the processes on a port. Injected in
+ * unit specs; the default reads the machine through lsof / fuser / ps.
+ * Every method answers "unknown" (empty / null) instead of throwing.
+ */
+export interface ProcessProbe {
+  /** Pids listening on the TCP port. */
+  listeners(port: number): number[]
+  /** The full command line of a pid, or null when it cannot be read. */
+  commandLine(pid: number): string | null
+  /** The process group id of a pid, or null when it cannot be read. */
+  groupOf(pid: number): number | null
+}
+
 export interface LaunchChromeOptions {
-  /** CDP port. Default: 9222. */
+  /** CDP port. Default: DEFAULT_CDP_PORT (9222). */
   port?: number
-  /** Chrome user data directory. Default: ~/Library/Application Support/Google/Chrome-CDP */
+  /** Chrome user data directory. Default: ~/Library/Application Support/Google/Chrome-CDP (DEFAULT_PROFILE_NAME) */
   profileDir?: string
+  /** Process probe used to prove a reachable Chrome is this tool's own. Default: lsof / fuser / ps. */
+  probe?: ProcessProbe
+  /** Sink for the "skipped" / diagnostic lines of the identity checks. Default: console.error. */
+  logger?: (msg: string) => void
   /** Path to Chrome binary. Auto-detected per platform if unset. */
   chromePath?: string
   /** Extra args to pass to Chrome. */
@@ -50,7 +77,112 @@ function defaultChromePath(): string {
 function defaultProfileDir(): string {
   const base = join(homedir(), 'Library', 'Application Support', 'Google')
   mkdirSync(base, { recursive: true })
-  return join(base, 'Chrome-CDP')
+  return join(base, DEFAULT_PROFILE_NAME)
+}
+
+/** The profile directory an identity check compares against: the RESOLVED one, with no filesystem side effect. */
+function resolvedProfileDir(opts: { profileDir?: string }): string {
+  return opts.profileDir ?? join(homedir(), 'Library', 'Application Support', 'Google', DEFAULT_PROFILE_NAME)
+}
+
+// ─── Profile identity (backlog 7f881aa7, [core-seam.6]) ───────────────────────
+
+function execText(cmd: string, timeout: number): string {
+  try {
+    const out = execSync(cmd, { encoding: 'utf8', timeout }) as unknown
+    return typeof out === 'string' ? out.trim() : ''
+  } catch {
+    return ''
+  }
+}
+
+/** The machine probe: lsof (macOS, Linux), fuser as the fallback, ps for the command line and group. */
+export const systemProcessProbe: ProcessProbe = {
+  listeners(port) {
+    // Same commands as the original port discovery, so a host with only fuser still resolves listeners.
+    let pidStr = execText(`lsof -ti tcp:${port} 2>/dev/null`, 3000)
+    if (!pidStr) pidStr = execText(`fuser ${port}/tcp 2>/dev/null`, 3000)
+    return pidStr
+      .split(/\s+/)
+      .filter((t) => /^\d+$/.test(t))
+      .map((t) => parseInt(t, 10))
+  },
+  commandLine(pid) {
+    const out = execText(`ps -o command= -p ${pid} 2>/dev/null`, 2000)
+    return out || null
+  },
+  groupOf(pid) {
+    const n = parseInt(execText(`ps -o pgid= -p ${pid} 2>/dev/null`, 2000), 10)
+    return isNaN(n) ? null : n
+  },
+}
+
+const trimSlash = (p: string): string => (p.length > 1 ? p.replace(/[\\/]+$/, '') : p)
+
+/**
+ * True when a Chrome command line carries exactly `--user-data-dir=<profileDir>`.
+ * The value ends at the end of the line or where the next `--flag` starts (a
+ * profile path may contain spaces; `/a/b` must not match `/a/b2` or `/a/b Backup`).
+ */
+export function commandLineCarriesProfile(commandLine: string, profileDir: string): boolean {
+  const want = `--user-data-dir=${trimSlash(profileDir)}`
+  let from = 0
+  for (;;) {
+    const at = commandLine.indexOf(want, from)
+    if (at === -1) return false
+    const before = at === 0 ? ' ' : commandLine[at - 1]!
+    const rest = commandLine.slice(at + want.length).replace(/^[\\/]+(?=\s|$)/, '')
+    if (/\s/.test(before) && (rest === '' || rest.startsWith(' --'))) return true
+    from = at + 1
+  }
+}
+
+/** The port a profile's DevToolsActivePort file names (its first line), or null. */
+function devToolsActivePort(profileDir: string): number | null {
+  try {
+    const first = String(nodeFs.readFileSync(join(profileDir, 'DevToolsActivePort'), 'utf8')).split('\n')[0]?.trim() ?? ''
+    const n = parseInt(first, 10)
+    return isNaN(n) ? null : n
+  } catch {
+    return null
+  }
+}
+
+/** Verdict of the identity check: own, or foreign with the reason it is not attached to. */
+type Identity = { own: true } | { own: false; why: string }
+
+/**
+ * Is the Chrome answering on `port` this tool's own (its `--user-data-dir` is
+ * the resolved profile)? Positive evidence from a readable command line wins;
+ * the profile's DevToolsActivePort naming the port is accepted only when no
+ * listener command line can be read at all. Anything unproven is foreign.
+ */
+function identifyListener(port: number, profileDir: string, probe: ProcessProbe): Identity {
+  const lines = probe
+    .listeners(port)
+    .map((pid) => probe.commandLine(pid))
+    .filter((c): c is string => c !== null)
+  if (lines.some((c) => commandLineCarriesProfile(c, profileDir))) return { own: true }
+  if (lines.length > 0) return { own: false, why: `the Chrome on port ${port} does not run with --user-data-dir=${profileDir}` }
+  if (devToolsActivePort(profileDir) === port) return { own: true }
+  return { own: false, why: `no listener on port ${port} could be tied to --user-data-dir=${profileDir}` }
+}
+
+/** The typed refusal to attach to somebody else's Chrome (no new lifecycle code: LAUNCH_FAILED with reason `foreign-profile`). */
+function foreignProfileError(port: number, profileDir: string, why: string): LifecycleError {
+  return lifecycleError(
+    'LAUNCH_FAILED',
+    `Chrome on port ${port} is not this tool's own Chrome (${why}); it was not attached to. Close it or choose another port or userDataDir.`,
+    { detail: { port, path: profileDir, reason: 'foreign-profile' } },
+  )
+}
+
+/** A reachable Chrome is attached to only when it is ours; otherwise LAUNCH_FAILED `foreign-profile`. */
+function assertOwnChrome(port: number, profileDir: string, opts: LaunchChromeOptions): void {
+  const id = identifyListener(port, profileDir, opts.probe ?? systemProcessProbe)
+  if (id.own) return
+  if (!opts.quiet) (opts.logger ?? ((m: string) => console.error(m)))(`[cdp] refusing to attach: ${id.why}`)
+  throw foreignProfileError(port, profileDir, id.why)
 }
 
 // ─── Process tracking ─────────────────────────────────────────────────────────
@@ -74,13 +206,14 @@ export async function launchChrome(opts: LaunchChromeOptions = {}): Promise<{
   alreadyRunning: boolean
   profileDir: string
 }> {
-  const port = opts.port ?? 9222
+  const port = opts.port ?? DEFAULT_CDP_PORT
   const cdpHost = `127.0.0.1:${port}`
   const profileDir = opts.profileDir ?? defaultProfileDir()
   const chromePath = opts.chromePath ?? defaultChromePath()
 
-  // Check if already running
+  // Check if already running: attach only to this tool's own Chrome, never to the operator's.
   if (await isChromeReachable(cdpHost)) {
+    assertOwnChrome(port, profileDir, opts)
     return { pid: null, port, alreadyRunning: true, profileDir }
   }
 
@@ -152,11 +285,12 @@ export async function ensureChromeRunning(opts: LaunchChromeOptions = {}): Promi
   port: number
   profileDir: string
 }> {
-  const port = opts.port ?? 9222
+  const port = opts.port ?? DEFAULT_CDP_PORT
   const cdpHost = `127.0.0.1:${port}`
   const resolvedProfile = opts.profileDir ?? defaultProfileDir()
 
   if (await isChromeReachable(cdpHost)) {
+    assertOwnChrome(port, resolvedProfile, opts)
     return { pid: null, port, profileDir: resolvedProfile }
   }
 
@@ -173,6 +307,7 @@ export async function ensureChromeRunning(opts: LaunchChromeOptions = {}): Promi
     while (Date.now() < deadline) {
       await new Promise((r) => setTimeout(r, 250))
       if (await isChromeReachable(cdpHost)) {
+        assertOwnChrome(port, resolvedProfile, opts)
         return { pid: null, port, profileDir: resolvedProfile }
       }
     }
@@ -183,6 +318,7 @@ export async function ensureChromeRunning(opts: LaunchChromeOptions = {}): Promi
   try {
     // Re-check while holding the lock — the winner may have just started it.
     if (await isChromeReachable(cdpHost)) {
+      assertOwnChrome(port, resolvedProfile, opts)
       return { pid: null, port, profileDir: resolvedProfile }
     }
     if (!opts.quiet) console.error(`[cdp] Chrome not found on port ${port} — launching...`)
@@ -245,41 +381,54 @@ export async function killProcessGroup(pid: number): Promise<void> {
   try { process.kill(-pid, 'SIGKILL') } catch { /* no group left */ }
 }
 
-export async function killChrome(port = 9222): Promise<void> {
+export interface KillChromeOptions {
+  /** The profile whose Chrome may be signalled. Default: the dedicated CDP profile. */
+  profileDir?: string
+  /** Process probe. Default: lsof / fuser / ps. */
+  probe?: ProcessProbe
+  /** Sink for the logged reason of every skipped pid. Default: console.error. */
+  logger?: (msg: string) => void
+}
+
+/**
+ * Kill this tool's Chrome on `port`. A tracked launch of this process is its
+ * own by construction. Otherwise only a listener whose command line carries
+ * the resolved `--user-data-dir` is signalled; any other occupant (the
+ * operator's real Chrome, an unrelated server) is skipped with a logged reason.
+ */
+export async function killChrome(port = DEFAULT_CDP_PORT, opts: KillChromeOptions = {}): Promise<void> {
   if (launchedPid !== null) {
     await killProcessGroup(launchedPid)
     launchedPid = null
     return
   }
 
-  // Find and kill Chrome listening on the target port.
-  // Tries lsof (macOS, Linux), falls back to fuser (Linux with psmisc).
-  let pidStr = ''
-  try {
-    pidStr = execSync(`lsof -ti tcp:${port} 2>/dev/null`, { encoding: 'utf8', timeout: 3000 }).trim()
-  } catch { /* lsof not found or no listener */ }
-  if (!pidStr) {
-    try {
-      pidStr = execSync(`fuser ${port}/tcp 2>/dev/null`, { encoding: 'utf8', timeout: 3000 }).trim()
-    } catch { /* fuser not found either */ }
+  const probe = opts.probe ?? systemProcessProbe
+  const log = opts.logger ?? ((m: string) => console.error(`[cdp] ${m}`))
+  const profileDir = resolvedProfileDir(opts)
+  const pids: number[] = []
+  for (const pid of probe.listeners(port)) {
+    const line = probe.commandLine(pid)
+    if (line !== null && commandLineCarriesProfile(line, profileDir)) pids.push(pid)
+    else
+      log(
+        line === null
+          ? `killChrome: skipped pid ${pid} on port ${port}: its command line is unreadable, so --user-data-dir=${profileDir} cannot be confirmed`
+          : `killChrome: skipped pid ${pid} on port ${port}: its command line does not carry --user-data-dir=${profileDir}`,
+      )
   }
-  if (!pidStr) return
-  const pids = pidStr.split('\n').map((s) => parseInt(s, 10)).filter((n) => !isNaN(n))
+  if (pids.length === 0) return
   for (const pid of pids) {
     // Kill the listener's process GROUP so Chrome's detached Helpers go too.
-    let pgid = pid
-    try {
-      pgid = parseInt(execSync(`ps -o pgid= -p ${pid} 2>/dev/null`, { encoding: 'utf8', timeout: 2000 }).trim(), 10) || pid
-    } catch { /* keep pid */ }
-    killGroup(pgid, 'SIGTERM')
+    killGroup(probe.groupOf(pid) ?? pid, 'SIGTERM')
   }
   // Wait for the first PID to die, then SIGKILL its group for lingering Helpers.
   for (let i = 0; i < 25; i++) {
     try {
-      process.kill(pids[0], 0)
+      process.kill(pids[0]!, 0)
       await new Promise((r) => setTimeout(r, 200))
     } catch {
-      try { process.kill(-pids[0], 'SIGKILL') } catch { /* no group left */ }
+      try { process.kill(-pids[0]!, 'SIGKILL') } catch { /* no group left */ }
       return
     }
   }

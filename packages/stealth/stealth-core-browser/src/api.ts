@@ -19,9 +19,8 @@
  *  - every output is a plain JSON shape (no `Date`, no class instance).
  */
 
-import { ensureChromeRunning } from './lib/cdp/browser.js'
 import { getChromeInfo, isChromeReachable, listPageTargetsOnly } from './lib/cdp/targets.js'
-import { ChromeManager } from './lib/chrome-manager.js'
+import { isManagedAt, managerFor, noteManagerActivity, shutdownIdleAt } from './lib/managers.js'
 import { checkChromeActivity as readChromeActivity } from './lib/queries/activity.js'
 import { getPageContext as readPageContext } from './lib/queries/context.js'
 import type { PageContext } from './lib/queries/context.js'
@@ -126,8 +125,8 @@ export interface PageContextResult {
 
 // ─── Configuration helpers ────────────────────────────────────────────────────
 
-/** Resolve and validate the CDP `host:port` from typed input. */
-function resolveCdpHost(input: ChromeEndpointInput = {}): string {
+/** Resolve and validate the CDP endpoint from typed input. */
+function resolveEndpoint(input: ChromeEndpointInput = {}): { host: string; port: number; cdpHost: string } {
   const host = input.host?.trim() || DEFAULT_HOST
   const port = input.port ?? DEFAULT_PORT
   if (!Number.isInteger(port) || port < 1 || port > 65535) {
@@ -136,28 +135,18 @@ function resolveCdpHost(input: ChromeEndpointInput = {}): string {
   if (/[\s/]/.test(host)) {
     throw new RangeError(`host must be a bare host name or address, got "${host}"`)
   }
-  return `${host}:${port}`
+  return { host, port, cdpHost: `${host}:${port}` }
 }
 
-/**
- * Managers live for the process so `managed` (did THIS process launch and own
- * the Chrome?) and the idle timer persist across verb calls. This map is the
- * ONLY place a ChromeManager is constructed.
- */
-const managers = new Map<string, ChromeManager>()
-
-function managerFor(cdpHost: string): ChromeManager {
-  let manager = managers.get(cdpHost)
-  if (!manager) {
-    manager = new ChromeManager({ cdpHost })
-    managers.set(cdpHost, manager)
-  }
-  return manager
+/** The CDP `host:port` of typed input. */
+function resolveCdpHost(input: ChromeEndpointInput = {}): string {
+  return resolveEndpoint(input).cdpHost
 }
 
 /** Record genuine activity on a managed Chrome so its idle timer re-arms. */
-function noteActivity(cdpHost: string): void {
-  managers.get(cdpHost)?.bump()
+function noteActivity(input: ChromeEndpointInput): void {
+  const { host, port } = resolveEndpoint(input)
+  noteManagerActivity(host, port)
 }
 
 function describeError(err: unknown): string {
@@ -175,7 +164,7 @@ function toVisitRecord(visit: ChromeVisit): ChromeVisitRecord {
  * version, and whether this process launched and manages it.
  */
 export async function chromeStatus(input?: ChromeEndpointInput): Promise<ChromeStatus> {
-  const cdpHost = resolveCdpHost(input)
+  const { host, port, cdpHost } = resolveEndpoint(input)
   try {
     if (!(await isChromeReachable(cdpHost))) return { running: false, managed: false }
     const info = await getChromeInfo(cdpHost)
@@ -183,7 +172,7 @@ export async function chromeStatus(input?: ChromeEndpointInput): Promise<ChromeS
       running: true,
       version: info.browserVersion,
       protocol: info.protocolVersion,
-      managed: managerFor(cdpHost).isReady,
+      managed: isManagedAt(host, port),
     }
   } catch (err) {
     throw new Error(`Failed to check Chrome status: ${describeError(err)}`)
@@ -196,14 +185,9 @@ export async function chromeStatus(input?: ChromeEndpointInput): Promise<ChromeS
  * repeatedly: an already running Chrome is reused.
  */
 export async function launchChrome(input?: LaunchChromeInput): Promise<LaunchChromeResult> {
-  const port = input?.port ?? DEFAULT_PORT
-  const cdpHost = resolveCdpHost({ port })
+  const { host, port } = resolveEndpoint({ port: input?.port })
   try {
-    if (input?.userDataDir) {
-      // The manager launches the default profile; a requested profile is launched first and the manager then adopts the running Chrome.
-      await ensureChromeRunning({ port, profileDir: input.userDataDir })
-    }
-    await managerFor(cdpHost).ready()
+    await managerFor(host, port, input?.userDataDir).ready()
   } catch (err) {
     throw new Error(`Failed to launch Chrome: ${describeError(err)}`)
   }
@@ -216,9 +200,9 @@ export async function launchChrome(input?: LaunchChromeInput): Promise<LaunchChr
  * is still running afterwards.
  */
 export async function shutdownChrome(input?: ChromeEndpointInput): Promise<ShutdownChromeResult> {
-  const cdpHost = resolveCdpHost(input)
+  const { host, port, cdpHost } = resolveEndpoint(input)
   try {
-    await managerFor(cdpHost).shutdownIfIdle()
+    await shutdownIdleAt(host, port)
   } catch {
     // best effort: a soft shutdown never throws; `running` below tells the caller what happened
   }
@@ -232,7 +216,7 @@ export async function shutdownChrome(input?: ChromeEndpointInput): Promise<Shutd
 export async function listPageTargets(input?: ChromeEndpointInput): Promise<PageTargetList> {
   const cdpHost = resolveCdpHost(input)
   const pages = await listPageTargetsOnly(cdpHost)
-  noteActivity(cdpHost)
+  noteActivity(input ?? {})
   return { targets: pages.map((p) => ({ id: p.id, type: p.type, url: p.url, webSocketDebuggerUrl: p.webSocketDebuggerUrl })) }
 }
 
@@ -243,7 +227,7 @@ export async function listPageTargets(input?: ChromeEndpointInput): Promise<Page
 export async function checkChromeActivity(input?: CheckChromeActivityInput): Promise<ChromeActivityReport> {
   const cdpHost = resolveCdpHost(input)
   const activity = await readChromeActivity(cdpHost, input?.withinMinutes)
-  noteActivity(cdpHost)
+  noteActivity(input ?? {})
   return {
     ...activity,
     lastVisit: activity.lastVisit ? toVisitRecord(activity.lastVisit) : null,
@@ -258,6 +242,6 @@ export async function checkChromeActivity(input?: CheckChromeActivityInput): Pro
 export async function getPageContext(input: GetPageContextInput): Promise<PageContextResult> {
   const cdpHost = resolveCdpHost(input)
   const context = await readPageContext(input.targetId, cdpHost)
-  noteActivity(cdpHost)
+  noteActivity(input ?? {})
   return { found: context !== null, context }
 }

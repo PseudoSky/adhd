@@ -24,7 +24,7 @@
  * works, and exactly one warning is logged.
  *
  * Usage:
- *   const chrome = new ChromeManager()
+ *   const chrome = managerFor('127.0.0.1', 9222)   // src/lib/managers.ts is the one construction site
  *   await chrome.ready()          // Chrome running, registered with the reaper
  *   chrome.bump()                 // real work happened: re-arm + tell the reaper
  *   await chrome.shutdown()       // force shutdown now
@@ -36,7 +36,7 @@
 import { ensureChromeRunning, killChrome } from './cdp/browser.js'
 import { IdleShutdown } from './cdp/shutdown.js'
 import { closeAllPageTargets, hideAllWindows, isChromeReachable, listPageTargetsOnly } from './cdp/targets.js'
-import { errorMessage, lifecycleErrors, type LifecycleError } from './lifecycle/errors.js'
+import { errorMessage, isLifecycleError, lifecycleErrors, type LifecycleError } from './lifecycle/errors.js'
 import { createLaunchBreaker, type LaunchBreaker } from './lifecycle/launch-breaker.js'
 import { createOwnershipStore, type OwnershipStore } from './lifecycle/ownership.js'
 import { countActiveWebPages, isActiveWebTarget } from './lifecycle/page-tier.js'
@@ -54,6 +54,18 @@ export interface ChromeManagerOptions {
   cdpHost?: string
   /** Idle timeout in ms. Default: 120_000 (2 min). */
   idleTimeoutMs?: number
+  /**
+   * true never arms the idle timer (a long-lived host keeps its Chrome); the forced `shutdown()`,
+   * the soft `shutdownIfIdle()` and the reaper's own decisions are unchanged. Default: false.
+   */
+  keepAlive?: boolean
+  /**
+   * The built CommonJS package entry the detached reaper process loads `runChromeReaper` through
+   * (the entry the HOST loaded). Default: the bundle this code runs from.
+   */
+  entryPath?: string
+  /** Chrome user data directory this manager launches and may kill. Default: the dedicated CDP profile. */
+  userDataDir?: string
   /** Let a Chrome history visit within 2 minutes keep Chrome alive. Default: true. */
   checkHistory?: boolean
   /** Grace after the last client left before the reaper closes Chrome. Default: 30_000. */
@@ -120,6 +132,9 @@ export class ChromeManager {
   private readonly cdpHost: string
   private readonly port: number
   private readonly idleTimeoutMs: number
+  private readonly keepAlive: boolean
+  private readonly entryPath: string | undefined
+  private readonly userDataDir: string | undefined
   private readonly checkHistory: boolean
   private readonly shutdownGraceMs: number
   private readonly orphanWindowMs: number
@@ -142,6 +157,9 @@ export class ChromeManager {
     this.cdpHost = opts.cdpHost ?? '127.0.0.1:9222'
     this.port = parseInt(this.cdpHost.split(':')[1] ?? '9222', 10) || 9222
     this.idleTimeoutMs = opts.idleTimeoutMs ?? 120_000
+    this.keepAlive = opts.keepAlive ?? false
+    this.entryPath = opts.entryPath
+    this.userDataDir = opts.userDataDir
     this.checkHistory = opts.checkHistory ?? true
     this.shutdownGraceMs = opts.shutdownGraceMs ?? 30_000
     this.orphanWindowMs = opts.orphanWindowMs ?? 30_000
@@ -172,6 +190,7 @@ export class ChromeManager {
         shutdownGraceMs: this.shutdownGraceMs,
         orphanWindowMs: this.orphanWindowMs,
         scope: this.scope,
+        ...(this.entryPath === undefined ? {} : { entryPath: this.entryPath }),
         logger: this.log,
       })
     }
@@ -243,8 +262,10 @@ export class ChromeManager {
     this.breaker!.assertClosed()
     let launched: { pid: number | null; profileDir: string }
     try {
-      launched = await ensureChromeRunning({ port: this.port })
+      launched = await ensureChromeRunning({ port: this.port, ...(this.userDataDir === undefined ? {} : { profileDir: this.userDataDir }) })
     } catch (err) {
+      // A refusal to attach to somebody else's Chrome is not a failed launch: it must not feed the breaker, and its detail survives.
+      if (isLifecycleError(err, 'LAUNCH_FAILED') && err.detail?.['reason'] === 'foreign-profile') throw err
       this.breaker!.recordFailure()
       const msg = errorMessage(err)
       this.log(`Failed to ensure Chrome running: ${msg}`)
@@ -276,8 +297,9 @@ export class ChromeManager {
 
   /** Real work happened: re-arm the idle timer and tell the reaper. Call after every CDP operation. */
   bump(): void {
-    if (!this.idle) return
-    this.idle.reset()
+    // `_ready` (not the timer): a keep-alive manager arms no timer but its work is still activity the reaper must see.
+    if (!this._ready) return
+    this.idle?.reset()
     if (this.link?.isUp()) {
       this.sendActivity()
       return
@@ -306,7 +328,7 @@ export class ChromeManager {
       this.log(`Failed to close page targets during shutdown: ${errorMessage(err)}`)
     }
     try {
-      await killChrome(this.port)
+      await killChrome(this.port, ...(this.userDataDir === undefined ? [] : [{ profileDir: this.userDataDir }] as const))
     } catch (err) {
       this.log(`Failed to kill Chrome during shutdown: ${errorMessage(err)}`)
     }
@@ -391,7 +413,7 @@ export class ChromeManager {
 
 
   private startIdleTimer(): void {
-    if (this.idle) return
+    if (this.idle || this.keepAlive) return
     this.idle = new IdleShutdown({
       timeoutMs: this.idleTimeoutMs,
       logger: (m) => this.log(m),

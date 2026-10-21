@@ -25,9 +25,25 @@ const sim = vi.hoisted(() => ({
   startMs: 300 as number | null,
   spawn: vi.fn(),
   probes: 0,
+  /** The `--user-data-dir` of the simulated Chrome that answers on the port (profile-identity fixture, [core-seam.6]). */
+  chromeProfile: '',
+  /** A rival launcher's Chrome (this tool's own) appears while the launch lock is held: reachable only on the re-check. */
+  rivalUp: false,
 }))
 
-vi.mock('node:child_process', () => ({ execSync: vi.fn(() => ''), spawn: sim.spawn }))
+/**
+ * The simulated machine's `lsof` / `ps`: while the simulated Chrome is up it is the one listener, and its command
+ * line carries the profile it was started with, so the profile-identity filter (backlog 7f881aa7) sees this
+ * tool's own Chrome exactly as it would on a real machine. Nothing is executed.
+ */
+function simExec(cmd: string): string {
+  if (!sim.chromeUp && !sim.rivalUp) return ''
+  if (cmd.startsWith('lsof')) return '4242\n'
+  if (cmd.startsWith('ps -o command=')) return `/Applications/Fake Chrome --remote-debugging-port=9333 --user-data-dir=${sim.chromeProfile} --no-first-run`
+  return ''
+}
+
+vi.mock('node:child_process', () => ({ execSync: vi.fn((cmd: string) => simExec(cmd)), spawn: sim.spawn }))
 vi.mock('node:fs', () => ({
   existsSync: (p: string) => sim.fs.existsSync(p),
   mkdirSync: (p: string, o?: { recursive?: boolean }) => sim.fs.mkdirSync(p, { recursive: true, ...o }),
@@ -68,12 +84,16 @@ beforeEach(async () => {
   sim.fs.mkdirSync('/Applications', { recursive: true })
   sim.fs.writeFileSync(CHROME, 'binary')
   sim.chromeUp = false
+  sim.rivalUp = false
+  sim.chromeProfile = PROFILE
   sim.startMs = 300
   sim.probes = 0
   let nextPid = 7000
   sim.spawn.mockReset()
-  sim.spawn.mockImplementation(() => {
+  sim.spawn.mockImplementation((_bin: string, args: string[]) => {
     const pid = nextPid++
+    const dirArg = args.find((a) => a.startsWith('--user-data-dir='))
+    if (dirArg) sim.chromeProfile = dirArg.slice('--user-data-dir='.length)
     if (sim.startMs !== null) setTimeout(() => (sim.chromeUp = true), sim.startMs)
     return { pid, unref: vi.fn() }
   })
@@ -224,6 +244,7 @@ describe('8468f7b1 [chrome-lifecycle.1] ensureChromeRunning and the O_EXCL launc
     // [fs-039] the winner may have just started Chrome: the probe under the lock sees it and skips the spawn.
     const { isChromeReachable } = await import('../../../lib/cdp/targets.js')
     vi.mocked(isChromeReachable).mockResolvedValueOnce(false).mockResolvedValueOnce(true)
+    sim.rivalUp = true
     await expect(mod.ensureChromeRunning(opts)).resolves.toEqual({ pid: null, port: PORT, profileDir: PROFILE })
     expect(sim.spawn).not.toHaveBeenCalled()
     expect(sim.fs.existsSync(LOCK)).toBe(false)
@@ -254,6 +275,7 @@ describe('8468f7b1 [chrome-lifecycle.1] [chrome-lifecycle.2] [chrome-lifecycle.3
     resetSp()
     sim.fs.mkdirSync('/Applications/Google Chrome.app/Contents/MacOS', { recursive: true })
     sim.fs.writeFileSync(DEFAULT_CHROME, 'binary')
+    sim.chromeProfile = '/home/u/Library/Application Support/Google/Chrome-CDP'
     logs = []
   })
 
