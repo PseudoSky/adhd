@@ -725,6 +725,20 @@ function normalizeBaseUrl(url: string): string {
   } catch { return url; }
 }
 
+/**
+ * The Anthropic SDK appends `/v1/messages` to its `baseURL` itself, so the value handed to it
+ * must be the origin (plus any proxy path prefix) and never end in `/v1`. A trailing `/v1` is
+ * stripped (tolerating an OpenAI-style value pasted into `ADHD_AGENT_ANTHROPIC_BASE_URL`), and
+ * a bare origin is returned without a trailing slash. Backlog 760ca534.
+ */
+function stripAnthropicV1(url: string): string {
+  try {
+    const parsed = new URL(url);
+    parsed.pathname = parsed.pathname.replace(/\/v1\/?$/, "");
+    return parsed.toString().replace(/\/$/, "");
+  } catch { return url; }
+}
+
 function isLocalhostUrl(url: string | undefined): boolean {
   if (!url) return false;
   try { return ["localhost", "127.0.0.1", "::1"].includes(new URL(url).hostname); }
@@ -742,7 +756,7 @@ function getProviderConfig(opts: GetProviderConfigOpts): ProviderConfigResolved 
   let baseURL: string | undefined;
   if (opts.url) baseURL = env.resolveEnvName(opts.url);
   if (!baseURL) baseURL = opts.inlineBaseURL ?? (defaults ? env.resolveEnvName(defaults.baseUrl) : undefined);
-  if (baseURL) baseURL = normalizeBaseUrl(baseURL);
+  if (baseURL) baseURL = opts.provider === "anthropic" ? stripAnthropicV1(baseURL) : normalizeBaseUrl(baseURL);
 
   let secret: string | undefined;
   if (opts.secret) secret = env.resolveEnvName(opts.secret);
