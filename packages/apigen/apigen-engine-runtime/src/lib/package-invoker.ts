@@ -19,6 +19,7 @@
  */
 
 import { ApiError } from '@adhd/apigen-base-errors';
+import type { Call as CoreCall, Plugin } from '@adhd/apigen-core-client';
 import type { Layer, Terminal } from './invoke';
 import { createInvoker } from './invoke';
 import { makeValidateLayer } from './validate-layer';
@@ -33,46 +34,25 @@ import type { ComposedSchemas } from './types';
  * A loaded `--use` plugin object (SPEC §7.1): the layer and mount
  * capabilities this runtime consumes.
  *
- * Still a structural copy of core-client's `Plugin['capabilities']`, not a
- * derivation (backlog cfd37408): deriving `layer` from core-client's
- * `LayerCapability` types the layer's `call` as the core-client `Call`, and
- * readers outside this package that cast it to the runtime `Call`
- * (`entrypoint/policy/src/wrapper/attributes-layer.ts`) stop compiling. The
- * derivation lands with those readers' segments (R6, R9).
+ * `capabilities.layer` is DERIVED from core-client's `Plugin` (backlog
+ * cfd37408), so it is exactly {@link LayerCapability}: the layer receives the
+ * core-client `Call`, and at least one of `layer` / `createLayer` is required
+ * by the type (adhd ADR-0019 D1). `capabilities.mount` stays structural
+ * because hosts hand it `{ host, operations: unknown[] }` rather than a
+ * core-client `Descriptor`. A reader that needs the runtime `Call` shape
+ * (`.domainArgs`) casts through `unknown` (`rawCall as unknown as Call`).
  */
 export interface UsePlugin {
   id: string;
-  capabilities?: {
-    layer?: {
-      /**
-       * The static layer function. Optional because a plugin may supply only
-       * {@link createLayer} (adhd ADR-0019 D1).
-       */
-      layer?: (
-        call: unknown,
-        next: () => Promise<unknown>
-      ) => Promise<unknown> | AsyncIterable<unknown>;
-      /**
-       * Opts-aware layer factory (adhd ADR-0019 D1, SPEC §7.1): called ONCE per
-       * plugin at composition time with the invocation's flat options bag;
-       * the returned function is the layer. Wins over {@link layer} when both
-       * are present.
-       */
-      createLayer?: (
-        opts: Record<string, unknown>
-      ) => (
-        call: unknown,
-        next: () => Promise<unknown>
-      ) => Promise<unknown> | AsyncIterable<unknown>;
-    };
+  capabilities?: Pick<NonNullable<Plugin['capabilities']>, 'layer'> & {
     mount?: {
       operations: (
         descriptor: { host: string; operations: unknown[] },
         opts?: Record<string, unknown>,
         // (batch-rollout, BATCH_0.0.1.md §2/§F1) Optional, additive third
         // param — structurally equivalent to `apigen-core-client`'s
-        // `MountHostBridge`. (This package already depends on core-client;
-        // the structural copy is the debt tracked by backlog cfd37408.)
+        // `MountHostBridge`; kept structural so hosts need not build a
+        // core-client `Descriptor`.
         hostBridge?: {
           invoke(
             fnName: string,
@@ -209,7 +189,7 @@ export function adaptCoreLayer(
     layerFn = built as typeof layerFn;
   } else if (typeof cap.layer === 'function') {
     const staticLayer = cap.layer;
-    layerFn = (call, next) => staticLayer.call(cap, call, next);
+    layerFn = (call, next) => staticLayer.call(cap, call as CoreCall, next);
   } else {
     throw new ApiError(
       'internal',

@@ -61,6 +61,11 @@ reads as "pass an empty object" and teaches nothing.
 > and `data` (the rejected value) off each `ErrorObject`, neither of which is present on
 > AJV's default error shape.
 
+## `--use` plugin typing and query coercion
+
+- `UsePlugin['capabilities']['layer']` is derived from `@adhd/apigen-core-client`'s `LayerCapability`: the layer receives the core-client `Call`, and at least one of `layer` / `createLayer` is required by the type. `capabilities.mount` stays structural (`{ host, operations: unknown[] }`). A reader that needs the runtime `Call` (`.domainArgs`) casts `rawCall as unknown as Call`.
+- GET query-string params are coerced to `number` / `integer` / `boolean` from the function's composed schema, including nullable forms: `type: ['null', T]`, and a `oneOf` / `anyOf` with a single non-null branch. A union with several non-null branches is left as-is for the validate-Layer to judge.
+
 ## Request envelope
 
 Inbound payloads are wrapped: `{ "data": { ...params }, ...envelope }`. `dispatch` validates
