@@ -179,10 +179,10 @@
       "end_ref": null
     },
     "prod-errors": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-10-21T19:19:40.787Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "6e6d55e5c38d725b34014bdc95c041cd0d7ec662",
       "end_ref": null
     },
     "prod-examples": {
@@ -1636,7 +1636,7 @@
     "version": "0.8.35",
     "hash": "0b6bc1f3d70e"
   },
-  "current_state": "tests-unit-surface",
+  "current_state": "prod-errors",
   "dod_provenance": {
     "confirmed_at": "2026-10-12T23:49:38.410Z",
     "by": "pseudosky",
