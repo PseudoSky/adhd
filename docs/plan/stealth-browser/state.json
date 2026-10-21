@@ -1411,6 +1411,21 @@
         "docs/plan/stealth-browser/scripts/guard.py"
       ],
       "by": "pseudosky"
+    },
+    {
+      "ts": "2026-10-21T18:49:54.165Z",
+      "state": "core-seam",
+      "class": "executor",
+      "type": "rescope-criterion",
+      "reason": "delta fold-in 591e1a7/c00edea: criteria core-seam.7-12 added (sharedProfile, embedded-json, lsof LISTEN, decideRetry empty, reaper profile thread, fixture-only spec guard); core-seam.4/.6 text matches guards; reservation +10 paths incl. 4 specs",
+      "files_synced": [
+        "contexts/core-seam.md",
+        "scripts/criteria.json",
+        "scripts/ownership.json",
+        "dag.json",
+        "scripts/guards/search_c.py"
+      ],
+      "by": "pseudosky"
     }
   ],
   "authored_with": {
