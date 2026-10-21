@@ -75,7 +75,7 @@
       "tripwire-reverse-migrate"
     ],
     "verification": "rg -q \"export const CONFIRM_TOKEN = 'I-UNDERSTAND-THE-RISK'\" docs/plan/stealth-browser/SPEC-tripwire.md",
-    "status": "needed",
+    "status": "verified",
     "owner": "dispatcher",
     "how_to_provide": "Nothing to provide: CONFIRM_TOKEN is a code identifier defined in SPEC-tripwire.md, not a secret or credential.",
     "destination": "env:CONFIRM_TOKEN",
@@ -90,7 +90,7 @@
       "tripwire-reverse-migrate"
     ],
     "verification": "rg -q \"'TRIPWIRE_INVALID_KEY'\" docs/plan/stealth-browser/SPEC-tripwire.md",
-    "status": "needed",
+    "status": "verified",
     "owner": "dispatcher",
     "how_to_provide": "Nothing to provide: TRIPWIRE_INVALID_KEY is a code identifier defined in SPEC-tripwire.md, not a secret or credential.",
     "destination": "env:TRIPWIRE_INVALID_KEY",
