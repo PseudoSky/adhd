@@ -354,11 +354,11 @@
       "end_ref": "255d77590e6bb4bedbc48f501e77e656e15d0fd7"
     },
     "search-inventory": {
-      "status": "pending",
-      "started_at": null,
-      "done_at": null,
-      "start_ref": null,
-      "end_ref": null
+      "status": "complete",
+      "started_at": "2026-10-21T19:03:31.346Z",
+      "done_at": "2026-10-21T19:11:20.356Z",
+      "start_ref": "1d6cc59972cb019cb3f8946ca6ad6ee3bda0fd67",
+      "end_ref": "8ee8f6a03ee7bd5703ba4473b9a8c72b3ff59810"
     },
     "search-errors": {
       "status": "pending",
@@ -403,10 +403,10 @@
       "end_ref": null
     },
     "search-tracing": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-10-21T19:03:31.410Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "1d6cc59972cb019cb3f8946ca6ad6ee3bda0fd67",
       "end_ref": null
     },
     "search-hosts": {
@@ -836,6 +836,18 @@
       "audit_criteria_total": 7,
       "by": "pseudosky",
       "note": "guard exit 0; generator-built entrypoint; .5 regex fixed 255d7759"
+    },
+    {
+      "ts": "2026-10-21T19:11:20.356Z",
+      "from": "search-tracing",
+      "to": "search-inventory",
+      "start_ref": "1d6cc59972cb019cb3f8946ca6ad6ee3bda0fd67",
+      "end_ref": "8ee8f6a03ee7bd5703ba4473b9a8c72b3ff59810",
+      "audit_exit": 0,
+      "audit_criteria_passed": 7,
+      "audit_criteria_total": 7,
+      "by": "pseudosky",
+      "note": "guard exit 0 (orchestrator-verified); sonnet; 52 rows, baseline c00edea"
     }
   ],
   "amendment_log": [

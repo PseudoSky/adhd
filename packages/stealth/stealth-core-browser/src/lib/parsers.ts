@@ -159,21 +159,21 @@ export function extractResultsFromEmbeddedJson(body: string, capture: CaptureCon
         .join(' ')
         .slice(0, 500)
     }
-    if (!snippet) snippet = String(resolvePath(itemObj, capture.fields.snippet) ?? '')
 
     // URL: construct GitHub blob URL from repo_nwo + ref_name + path
     const repo = String(resolvePath(itemObj, 'repo_nwo') ?? '')
     const ref = String(resolvePath(itemObj, 'ref_name') ?? '').replace('refs/heads/', '')
     const path = String(resolvePath(itemObj, 'path') ?? '')
-    let url = repo && ref && path ? `https://github.com/${repo}/blob/${ref}/${path}` : String(resolvePath(itemObj, capture.fields.url) ?? '')
+    let url = repo && ref && path ? `https://github.com/${repo}/blob/${ref}/${path}` : renderField(itemObj, capture.fields.url)
     if (capture.fields.urlTemplate) {
       url = capture.fields.urlTemplate.replace('{}', url)
     }
 
+    // Titles and snippets may carry search highlight markup (e.g. "vitejs/<em>vite</em>").
     return {
-      title: String(resolvePath(itemObj, capture.fields.title) ?? ''),
+      title: cleanText(renderField(itemObj, capture.fields.title)),
       url: normalizeUrl(url),
-      snippet,
+      snippet: snippet || cleanText(renderField(itemObj, capture.fields.snippet)),
       meta: capture.fields.meta ? extractMeta(itemObj, capture.fields.meta) : undefined,
     }
   })
@@ -362,6 +362,26 @@ function extractSnippet(body: string, matchIndex: number, snippetPattern: string
 // ═══════════════════════════════════════════════════════════════════════════════
 
 function stripHtml(s: string): string { return s.replace(/<[^>]*>/g, '') }
+
+/** Strip highlight markup FIRST, then decode the entities the embedded JSON carries
+ *  (so a decoded `<tools>` survives). Used for embedded-json titles and snippets only. */
+function cleanText(s: string): string {
+  return stripHtml(s)
+    .replace(/&quot;/g, '"').replace(/&#39;|&#x27;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&')
+    .trim()
+}
+
+/**
+ * Resolve a field spec against one item. A plain dot-path returns the value; a
+ * spec containing `{path}` placeholders is interpolated (a missing path renders
+ * empty), e.g. `'{repo.repository.owner_login}/{repo.repository.name}'`.
+ */
+function renderField(item: unknown, spec: string | undefined): string {
+  if (!spec) return ''
+  if (!spec.includes('{')) return String(resolvePath(item, spec) ?? '')
+  return spec.replace(/\{([^{}]+)\}/g, (_, path: string) => String(resolvePath(item, path) ?? ''))
+}
 
 function escapeRe(s: string): string { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') }
 
