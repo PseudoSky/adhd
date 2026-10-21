@@ -1512,6 +1512,18 @@
         "scripts/criteria.json"
       ],
       "by": "pseudosky"
+    },
+    {
+      "ts": "2026-10-21T18:49:55.493Z",
+      "state": "search-hosts",
+      "class": "executor",
+      "type": "rescope-criterion",
+      "reason": "hosts.22 (HITL closed stdin exit 2) and hosts.23 (commander ^14.0.3) added",
+      "files_synced": [
+        "contexts/search-hosts.md",
+        "scripts/criteria.json"
+      ],
+      "by": "pseudosky"
     }
   ],
   "authored_with": {
