@@ -109,10 +109,10 @@
       "end_ref": "99b936cf755d0b18b174f6d16848851ee857323f"
     },
     "tests-unit-surface": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-10-21T19:19:40.958Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "dba8167ede6e91702daa5cd35be1f5035366abb4",
       "end_ref": null
     },
     "gates-first": {
@@ -1636,7 +1636,7 @@
     "version": "0.8.35",
     "hash": "0b6bc1f3d70e"
   },
-  "current_state": "prod-errors",
+  "current_state": "tests-unit-surface",
   "dod_provenance": {
     "confirmed_at": "2026-10-12T23:49:38.410Z",
     "by": "pseudosky",
