@@ -409,7 +409,8 @@
         "packages/stealth/stealth-core-browser/src/lib/",
         "packages/stealth/stealth-core-browser/src/index.ts",
         "packages/stealth/stealth-core-browser/docs/ERRORS.md",
-        "packages/stealth/stealth-core-browser/src/test/unit/errors/"
+        "packages/stealth/stealth-core-browser/src/test/unit/errors/",
+        "packages/stealth/stealth-core-browser/src/api.ts"
       ],
       "context": "contexts/prod-errors.md",
       "notes": "executor=typescript-pro tier=sonnet/high; 100% typed errors (user decision): every lib throw site raises a StealthBrowserError code"

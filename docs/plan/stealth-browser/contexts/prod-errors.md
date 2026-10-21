@@ -43,8 +43,8 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 ## Reservations
 
 ```text
-read_only:  ["docs/plan/stealth-browser/specs/"]
-mutates:    ["packages/stealth/stealth-core-browser/src/errors.ts", "packages/stealth/stealth-core-browser/src/lib/", "packages/stealth/stealth-core-browser/src/index.ts", "packages/stealth/stealth-core-browser/docs/ERRORS.md", "packages/stealth/stealth-core-browser/src/test/unit/errors/"]
+read_only:  []
+mutates:    ["packages/stealth/stealth-core-browser/src/errors.ts", "packages/stealth/stealth-core-browser/src/lib/", "packages/stealth/stealth-core-browser/src/index.ts", "packages/stealth/stealth-core-browser/docs/ERRORS.md", "packages/stealth/stealth-core-browser/src/test/unit/errors/", "packages/stealth/stealth-core-browser/src/api.ts"]
 ```
 
 ---
