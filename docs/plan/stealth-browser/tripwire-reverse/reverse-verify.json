@@ -49,6 +49,21 @@
         "5 passed (5)"
       ]
     },
+    "pnpm nx run-many -t lint,test,build -p request-builder": {
+      "exit": 0,
+      "argv": [
+        "pnpm",
+        "nx",
+        "run-many",
+        "-t",
+        "lint,test,build",
+        "-p",
+        "request-builder",
+        "--skip-nx-cache"
+      ],
+      "log": "/private/tmp/claude-502/-Users-nix-dev-ai-scratch/c8273d10-b319-41df-99f1-5458418387f6/scratchpad/rb-runmany.log",
+      "failed_tasks": []
+    },
     "pnpm nx e2e e2e-tests": {
       "exit": 1,
       "argv": [
