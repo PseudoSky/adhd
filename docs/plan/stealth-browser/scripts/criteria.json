@@ -4752,6 +4752,15 @@
       "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-port-engine --only search-port-engine.15",
       "expect": "exit0",
       "cwd": "repo-root"
+    },
+    {
+      "id": "search-port-guards.11",
+      "phase": "migrate",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-port-guards --only search-port-guards.11",
+      "expect": "exit0",
+      "cwd": "repo-root"
     }
   ]
 }
