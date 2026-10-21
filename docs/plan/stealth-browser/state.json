@@ -1426,6 +1426,20 @@
         "scripts/guards/search_c.py"
       ],
       "by": "pseudosky"
+    },
+    {
+      "ts": "2026-10-21T18:49:54.325Z",
+      "state": "prod-errors",
+      "class": "executor",
+      "type": "rescope-criterion",
+      "reason": "prod-errors.9 added (api.launchChrome typed LifecycleError); src/api.ts added to mutates; prod-errors.3 text matches guard",
+      "files_synced": [
+        "contexts/prod-errors.md",
+        "scripts/criteria.json",
+        "scripts/ownership.json",
+        "dag.json"
+      ],
+      "by": "pseudosky"
     }
   ],
   "authored_with": {
