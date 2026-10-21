@@ -77,9 +77,15 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
+const HOME_PROFILE = '/fake/home/Library/Application Support/Google/Chrome-CDP'
+/** Profile-identity fixture (backlog 7f881aa7, [core-seam.6]): the occupant is this tool's own Chrome (default profile under the mocked HOME). */
+const ownCmd = (pid: number): Record<string, string> => ({
+  [`ps -o command= -p ${pid}`]: `/Applications/Google Chrome --user-data-dir=${HOME_PROFILE} --no-first-run`,
+})
+
 describe("8468f7b1 [chrome-lifecycle.12] scope 'port-occupant' (default)", () => {
   it('with no owner record signals the port occupant found by lsof, with its pgid', async () => {
-    m.execSync.mockImplementation(execScript({ lsof: '5150', 'ps -o pgid= -p 5150': '5100' }))
+    m.execSync.mockImplementation(execScript({ lsof: '5150', ...ownCmd(5150), 'ps -o pgid= -p 5150': '5100' }))
     const h = await hostWith(undefined, null)
     expect(await reap(h)).toMatchObject({ action: 'reap', reaped: true })
     expect(m.execSync).toHaveBeenCalledWith(`lsof -ti tcp:${PORT} 2>/dev/null`, expect.anything())
@@ -87,7 +93,7 @@ describe("8468f7b1 [chrome-lifecycle.12] scope 'port-occupant' (default)", () =>
   })
 
   it('falls back to fuser when lsof finds nothing', async () => {
-    m.execSync.mockImplementation(execScript({ lsof: '', fuser: '6160', 'ps -o pgid= -p 6160': '6160' }))
+    m.execSync.mockImplementation(execScript({ lsof: '', fuser: '6160', ...ownCmd(6160), 'ps -o pgid= -p 6160': '6160' }))
     const h = await hostWith('port-occupant', null)
     await reap(h)
     expect(m.execSync).toHaveBeenCalledWith(`fuser ${PORT}/tcp 2>/dev/null`, expect.anything())
@@ -110,7 +116,7 @@ describe("8468f7b1 [chrome-lifecycle.12] scope 'port-occupant' (default)", () =>
     const stale: OwnerRecord = { pid: chrome.pid, procStart: chrome.start, port: PORT }
     procs.die(chrome.pid)
     procs.recycle(chrome.pid) // same pid, unrelated process, new start token
-    m.execSync.mockImplementation(execScript({ lsof: '7170', 'ps -o pgid= -p 7170': '7170' }))
+    m.execSync.mockImplementation(execScript({ lsof: '7170', ...ownCmd(7170), 'ps -o pgid= -p 7170': '7170' }))
     const h = await hostWith('port-occupant', stale)
     await reap(h)
     expect(d.log.some((e) => Math.abs(e.pid) === chrome.pid)).toBe(false)

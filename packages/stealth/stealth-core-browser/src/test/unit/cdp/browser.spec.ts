@@ -47,6 +47,31 @@ const PORT = 9333
 const CHROME = '/fake/bin/chrome'
 const PROFILE = '/fake/profile'
 const LOCK = `/fake/tmp/stealth-chrome-launch-${PORT}.lock`
+const HOME_PROFILE = '/fake/home/Library/Application Support/Google/Chrome-CDP'
+
+/**
+ * Profile-identity fixture (backlog 7f881aa7, [core-seam.6]): the machine's `lsof` / `ps` answer for a Chrome that
+ * is this tool's own, started with `--user-data-dir=<profile>`. The assertions of the specs using it are unchanged.
+ */
+function ownCmdLine(profile: string, pid: number): Record<string, string> {
+  return {
+    [`ps -o command= -p ${pid}`]: `/fake/bin/chrome --remote-debugging-port=${PORT} --user-data-dir=${profile} --no-first-run`,
+  }
+}
+function ownOccupant(profile: string, pid = 4242): Record<string, string> {
+  return { lsof: String(pid), ...ownCmdLine(profile, pid) }
+}
+function scriptExec(map: Record<string, string | Error>): void {
+  m.execSync.mockImplementation((cmd: string) => {
+    for (const [needle, out] of Object.entries(map)) {
+      if (cmd.includes(needle)) {
+        if (out instanceof Error) throw out
+        return out
+      }
+    }
+    throw new Error(`unexpected exec: ${cmd}`)
+  })
+}
 
 let kill: ReturnType<typeof vi.spyOn>
 let alive: Set<number>
@@ -92,6 +117,7 @@ describe('8468f7b1 AC2 [tests-unit-core.1] launchChrome', () => {
   it('is idempotent: returns alreadyRunning without spawning when CDP answers', async () => {
     const { launchChrome } = await loadFresh()
     m.isChromeReachable.mockResolvedValue(true)
+    scriptExec(ownOccupant(PROFILE))
     const r = await launchChrome({ port: PORT, chromePath: CHROME, profileDir: PROFILE })
     expect(r).toEqual({ pid: null, port: PORT, alreadyRunning: true, profileDir: PROFILE })
     expect(m.isChromeReachable).toHaveBeenCalledWith(`127.0.0.1:${PORT}`)
@@ -181,6 +207,7 @@ describe('8468f7b1 AC2 [tests-unit-core.1] launchChrome', () => {
   it('[fs-076] uses a dedicated profile directory: derives the profile dir from the mocked HOME when none is given', async () => {
     const { launchChrome } = await loadFresh()
     m.isChromeReachable.mockResolvedValue(true)
+    scriptExec(ownOccupant(HOME_PROFILE))
     const r = await launchChrome({ port: PORT, chromePath: CHROME })
     expect(r.profileDir.startsWith('/fake/home/')).toBe(true)
     expect(r.profileDir.endsWith('Chrome-CDP')).toBe(true)
@@ -245,6 +272,7 @@ describe('8468f7b1 AC2 [tests-unit-core.1] ensureChromeRunning', () => {
   it('no-ops (no lock, no spawn) when Chrome is already reachable', async () => {
     const { ensureChromeRunning } = await loadFresh()
     m.isChromeReachable.mockResolvedValue(true)
+    scriptExec(ownOccupant(PROFILE))
     const r = await ensureChromeRunning({ port: PORT, profileDir: PROFILE })
     expect(r).toEqual({ pid: null, port: PORT, profileDir: PROFILE })
     expect(m.openSync).not.toHaveBeenCalled()
@@ -300,6 +328,7 @@ describe('8468f7b1 AC2 [tests-unit-core.1] ensureChromeRunning', () => {
       throw Object.assign(new Error('EEXIST'), { code: 'EEXIST' })
     })
     m.isChromeReachable.mockResolvedValueOnce(false).mockResolvedValue(true)
+    scriptExec(ownOccupant(PROFILE))
     const p = ensureChromeRunning({ port: PORT, chromePath: CHROME, profileDir: PROFILE })
     await vi.advanceTimersByTimeAsync(300)
     await expect(p).resolves.toEqual({ pid: null, port: PORT, profileDir: PROFILE })
@@ -324,6 +353,7 @@ describe('8468f7b1 AC2 [tests-unit-core.1] ensureChromeRunning', () => {
   it('re-checks under the lock and skips the launch if a rival just started Chrome', async () => {
     const { ensureChromeRunning } = await loadFresh()
     m.isChromeReachable.mockResolvedValueOnce(false).mockResolvedValue(true)
+    scriptExec(ownOccupant(PROFILE))
     const r = await ensureChromeRunning({ port: PORT, chromePath: CHROME, profileDir: PROFILE })
     expect(r.pid).toBeNull()
     expect(m.spawn).not.toHaveBeenCalled()
@@ -418,7 +448,7 @@ describe('8468f7b1 AC2 [tests-unit-core.1] killChrome — port discovery (mocked
 
   it('kills the process group of each listener pid, then SIGKILLs the first group', async () => {
     const { killChrome } = await loadFresh()
-    execScript({ lsof: '111\n222\n', 'ps -o pgid= -p 111': '111\n', 'ps -o pgid= -p 222': '300\n' })
+    execScript({ lsof: '111\n222\n', ...ownCmdLine(HOME_PROFILE, 111), ...ownCmdLine(HOME_PROFILE, 222), 'ps -o pgid= -p 111': '111\n', 'ps -o pgid= -p 222': '300\n' })
     await killChrome(PORT)
     expect(kill).toHaveBeenCalledWith(-111, 'SIGTERM')
     expect(kill).toHaveBeenCalledWith(-300, 'SIGTERM')
@@ -427,14 +457,14 @@ describe('8468f7b1 AC2 [tests-unit-core.1] killChrome — port discovery (mocked
 
   it('falls back to the pid itself when pgid lookup fails', async () => {
     const { killChrome } = await loadFresh()
-    execScript({ lsof: '111\n', 'ps -o pgid=': new Error('ps failed') })
+    execScript({ lsof: '111\n', ...ownCmdLine(HOME_PROFILE, 111), 'ps -o pgid=': new Error('ps failed') })
     await killChrome(PORT)
     expect(kill).toHaveBeenCalledWith(-111, 'SIGTERM')
   })
 
   it('falls back to fuser when lsof is missing', async () => {
     const { killChrome } = await loadFresh()
-    execScript({ lsof: new Error('lsof: not found'), fuser: '333', 'ps -o pgid= -p 333': '333' })
+    execScript({ lsof: new Error('lsof: not found'), fuser: '333', ...ownCmdLine(HOME_PROFILE, 333), 'ps -o pgid= -p 333': '333' })
     await killChrome(PORT)
     expect(m.execSync).toHaveBeenCalledWith(`fuser ${PORT}/tcp 2>/dev/null`, { encoding: 'utf8', timeout: 3000 })
     expect(kill).toHaveBeenCalledWith(-333, 'SIGTERM')
@@ -449,7 +479,7 @@ describe('8468f7b1 AC2 [tests-unit-core.1] killChrome — port discovery (mocked
 
   it('falls back to single-pid SIGTERM when the group signal fails', async () => {
     const { killChrome } = await loadFresh()
-    execScript({ lsof: '111\n', 'ps -o pgid= -p 111': '111' })
+    execScript({ lsof: '111\n', ...ownCmdLine(HOME_PROFILE, 111), 'ps -o pgid= -p 111': '111' })
     kill.mockImplementation(((pid: number, sig?: string | number) => {
       if (sig === 0) throw new Error('ESRCH')
       if (pid < 0) throw new Error('EPERM')
@@ -461,7 +491,7 @@ describe('8468f7b1 AC2 [tests-unit-core.1] killChrome — port discovery (mocked
 
   it('stops waiting after 25 polls (5s) if the listener never exits, with no SIGKILL', async () => {
     const { killChrome } = await loadFresh()
-    execScript({ lsof: '111\n', 'ps -o pgid= -p 111': '111' })
+    execScript({ lsof: '111\n', ...ownCmdLine(HOME_PROFILE, 111), 'ps -o pgid= -p 111': '111' })
     alive.add(111)
     const p = killChrome(PORT)
     await vi.advanceTimersByTimeAsync(5200)

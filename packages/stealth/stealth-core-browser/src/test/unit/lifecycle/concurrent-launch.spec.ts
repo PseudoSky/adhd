@@ -25,7 +25,18 @@ const sim = vi.hoisted(() => ({
   probed: [] as string[],
 }))
 
-vi.mock('node:child_process', () => ({ execSync: vi.fn(() => ''), spawn: sim.spawn }))
+/**
+ * Profile-identity fixture (backlog 7f881aa7, [core-seam.6]): while the simulated Chrome is up it is the one
+ * listener on the port and its command line carries the default dedicated profile the managers launch with.
+ */
+function simExec(cmd: string): string {
+  if (!sim.chromeUp) return ''
+  if (cmd.startsWith('lsof')) return '4242\n'
+  if (cmd.startsWith('ps -o command=')) return '/Applications/Google Chrome --user-data-dir=/home/u/Library/Application Support/Google/Chrome-CDP --no-first-run'
+  return ''
+}
+
+vi.mock('node:child_process', () => ({ execSync: vi.fn((cmd: string) => simExec(cmd)), spawn: sim.spawn }))
 vi.mock('node:fs', () => ({
   existsSync: (p: string) => sim.fs.existsSync(p),
   mkdirSync: (p: string, o?: { recursive?: boolean }) => sim.fs.mkdirSync(p, { recursive: true, ...o }),
