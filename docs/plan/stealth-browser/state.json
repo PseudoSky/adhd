@@ -1500,6 +1500,18 @@
         "scripts/criteria.json"
       ],
       "by": "pseudosky"
+    },
+    {
+      "ts": "2026-10-21T18:49:55.301Z",
+      "state": "search-verbs",
+      "class": "executor",
+      "type": "rescope-criterion",
+      "reason": "verbs.4 carved out, verbs.13-16 added (login wall, timeoutMs, strategy-unsupported, no retry of empty)",
+      "files_synced": [
+        "contexts/search-verbs.md",
+        "scripts/criteria.json"
+      ],
+      "by": "pseudosky"
     }
   ],
   "authored_with": {
