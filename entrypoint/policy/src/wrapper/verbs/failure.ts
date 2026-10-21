@@ -7,7 +7,8 @@ import type { IVerbDeps } from './deps';
  * not_found 4, ...); anything else -> 1. Source resolution, spawn and handshake
  * failures from the gateway are `ApiError`s (`invalid_argument` for an invalid
  * source, `internal` with `details.gatewayCode: 'unavailable'` for an upstream
- * that cannot start), so they take the same table.
+ * that cannot start), so they take the same table. A `serve` upstream that exits
+ * and exhausts its restart budget fails with `internal` and exits 1 the same way.
  *
  * @param error The thrown value.
  * @param deps Only the stderr writer is used.

@@ -5,6 +5,7 @@ import {
   type ServerResponse,
 } from 'node:http';
 import type { Readable, Writable } from 'node:stream';
+import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
@@ -29,6 +30,7 @@ import type {
   LayerResult,
   Logger,
   OpPlan,
+  Terminal,
   TransportAdapter,
   UseOptions,
   UsePlugin,
@@ -182,6 +184,32 @@ function toolPresentation(tool: ToolPresentation | undefined): ToolPresentation 
   };
 }
 
+/** True for a value shaped like an MCP `CallToolResult` (a `content` array). */
+function isCallToolResultLike(value: unknown): boolean {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    Array.isArray((value as { content?: unknown }).content)
+  );
+}
+
+/**
+ * Read `options.terminal` — the optional dispatch {@link Terminal} that serves
+ * `RunInput.operations` no package supplies a function for (a gateway or
+ * proxy route). Absent means no such operations are served.
+ */
+function readTerminal(options: Record<string, unknown>): Terminal | undefined {
+  const value = options['terminal'];
+  if (value === undefined || value === null) return undefined;
+  if (typeof value !== 'function') {
+    throw new ApiError(
+      'invalid_argument',
+      'apigen mcp option "terminal" must be a function (fnName, call, opts) => Promise<result>'
+    );
+  }
+  return value as Terminal;
+}
+
 /**
  * Map an `ApiError` to its `isError` tool result (ADR-0018 D2). The
  * gateway-unavailable case is keyed on `details.gatewayCode === 'unavailable'`
@@ -273,6 +301,20 @@ export class McpTransportAdapter implements TransportAdapter<McpRaw> {
    * `registerRoute()` (the tool set itself)
    * (DEBT-APIGEN-MCP-LISTTOOLS-CACHE-001). */
   private cachedList: McpToolListEntry[] | undefined;
+  /** Tool names routed through a dispatch terminal (`options.terminal`): their
+   * `arguments` are the flat argument object and their results may already be
+   * `CallToolResult`s (see {@link McpTransportAdapter.markTerminalRoute}). */
+  private readonly terminalRoutes = new Set<string>();
+
+  /**
+   * Marks tool `name` as a terminal-routed (gateway/proxy) tool: `readCall`
+   * hands the Layers the request's `arguments` verbatim as `domainArgs` (no
+   * `data` wrapper), and `writeResult` passes a result that is already a
+   * `CallToolResult` through unchanged.
+   */
+  markTerminalRoute(name: string): void {
+    this.terminalRoutes.add(name);
+  }
 
   bindSchema(opId: string, schema: ComposedSchemas[string]): void {
     this.schemasByOpId.set(opId, schema);
@@ -353,7 +395,7 @@ export class McpTransportAdapter implements TransportAdapter<McpRaw> {
     // `undefined` → `{}`) was indistinguishable from "no input was sent" —
     // but a mount with real domain input (e.g. `_batch/<kind>`'s
     // `{operation, items, …}`) needs the raw `args` object itself, unwrapped.
-    const domainArgs = plan.isMount
+    const domainArgs = plan.isMount || this.terminalRoutes.has(plan.mcp.name)
       ? raw.args
       : (raw.args['data'] as Record<string, unknown> | undefined) ?? {};
     return { envelope, domainArgs };
@@ -369,6 +411,16 @@ export class McpTransportAdapter implements TransportAdapter<McpRaw> {
     // mis-serializing it through JSON.stringify.
     if (isApiStream(result)) {
       raw.output = await projectStreamMcp(result as ApiStream<unknown>);
+      return;
+    }
+
+    // A terminal-routed tool (a proxied MCP upstream) resolves with the
+    // upstream's own `CallToolResult`; it reaches the host unchanged.
+    if (
+      this.terminalRoutes.has(plan.mcp.name) &&
+      isCallToolResultLike(result)
+    ) {
+      raw.output = result as McpToolOutput;
       return;
     }
 
@@ -618,6 +670,48 @@ function buildToolTable(input: RunInput, adapter: McpTransportAdapter): void {
     }
   }
 
+  // Terminal-routed operations (`options.terminal`): every `input.operations`
+  // entry no package already registered is served through the composed
+  // `--use` invoker with the terminal as its innermost step — the gateway /
+  // proxy route. The tool's `arguments` ARE the flat argument object (the
+  // Layers and the terminal see them verbatim; there is no `data` envelope
+  // and no composed schema, so the validate-Layer passes them through).
+  const terminal = readTerminal(input.options);
+  if (terminal !== undefined) {
+    const registered = new Set<string>(
+      Object.keys(mergedSchemasByOpId)
+    );
+    const terminalInvoke = createPackageInvoker({}, usePlugins, {
+      layerOptions: input.options,
+      terminal,
+    });
+    const terminalOpts: InvokeOptions = { fns: {}, schemas: {} };
+    for (const op of input.operations ?? []) {
+      if (registered.has(op.id)) continue;
+      const plan = buildOpPlan({ op, transport: 'mcp', projection });
+      if (adapter.getPlan(plan.mcp.name) !== undefined) {
+        throw new ApiError(
+          'invalid_argument',
+          `operation ${JSON.stringify(op.id)} projects to the tool name ${JSON.stringify(plan.mcp.name)}, which another operation already uses`
+        );
+      }
+      const inputSchema = deriveMcpMountInputSchema(op.input);
+      adapter.bindToolMeta(plan.mcp.name, {
+        description: buildToolDescription(
+          plan.mcp.name,
+          { input: inputSchema },
+          descriptions[plan.mcp.name]
+        ),
+        inputSchema,
+        ...toolPresentation(op.tool),
+      });
+      adapter.markTerminalRoute(plan.mcp.name);
+      adapter.registerRoute(plan, (call) =>
+        dispatchForPlan(plan, terminalInvoke, call, terminalOpts)
+      );
+    }
+  }
+
   // dod.11 / [mcp-adapter.7]: register `--use` mount ops. They flow through a
   // composed `--use` invoker so the `--use` layer capabilities observe mount
   // calls too, exactly like fastify's `[fix:mount-through-layers]`.
@@ -732,6 +826,16 @@ export interface McpServerIdentity {
 }
 
 function resolveMcpServerIdentity(input: RunInput): McpServerIdentity {
+  const override = input.options['serverInfo'] as
+    | { name?: unknown; version?: unknown }
+    | undefined;
+  if (
+    override !== undefined &&
+    typeof override.name === 'string' &&
+    typeof override.version === 'string'
+  ) {
+    return { name: override.name, version: override.version };
+  }
   const pkg = input.packages[0];
   return {
     name: pkg?.id ?? 'apigen-mcp',
@@ -989,6 +1093,66 @@ export function awaitStdioClose(
   });
 }
 
+/**
+ * Read `options.hostTransport` — an optional SDK `Transport` that serves the
+ * `stdio` mode in place of `StdioServerTransport` (an in-memory transport in
+ * tests, or a stdio transport that also follows stdin EOF).
+ */
+function readHostTransport(value: unknown): Transport | undefined {
+  if (value === undefined || value === null) return undefined;
+  const t = value as Partial<Transport>;
+  if (
+    typeof value !== 'object' ||
+    typeof t.start !== 'function' ||
+    typeof t.send !== 'function' ||
+    typeof t.close !== 'function'
+  ) {
+    throw new ApiError(
+      'invalid_argument',
+      'apigen mcp option "hostTransport" must be an MCP SDK Transport'
+    );
+  }
+  return value as Transport;
+}
+
+/**
+ * Settle when `t` closes (chaining the SDK's own `onclose`, never replacing
+ * it) or `signal` aborts. On abort the transport is closed so the connected
+ * `Server` shuts down.
+ */
+function awaitTransportClose(
+  t: Transport,
+  logger: Logger,
+  signal?: AbortSignal
+): Promise<void> {
+  return new Promise<void>((resolve) => {
+    let done = false;
+    const settle = (message: string): void => {
+      if (done) return;
+      done = true;
+      signal?.removeEventListener('abort', onAbort);
+      logger.info(message);
+      resolve();
+    };
+    const onAbort = (): void => {
+      void t.close().catch(() => undefined);
+      settle('mcp server shutting down');
+    };
+    const prev = t.onclose;
+    t.onclose = () => {
+      prev?.();
+      settle('host transport closed');
+    };
+    if (signal) {
+      if (signal.aborted) {
+        onAbort();
+        return;
+      }
+      signal.addEventListener('abort', onAbort, { once: true });
+    }
+  });
+}
+
 /** The optional stdio stream pair `options.stdio` may supply. */
 interface McpStdioStreams {
   stdin?: Readable;
@@ -1070,6 +1234,15 @@ export async function run(input: RunInput): Promise<void> {
 
   if (transport === 'stdio') {
     const server = createMcpServer(adapter, logger, identity);
+    // In-process seam: an optional `options.hostTransport` (an SDK
+    // `Transport`) replaces the stdio transport entirely; it settles `run()`
+    // when it closes or `signal` aborts.
+    const hostTransport = readHostTransport(input.options['hostTransport']);
+    if (hostTransport !== undefined) {
+      await server.connect(hostTransport);
+      logger.info('host transport ready');
+      return awaitTransportClose(hostTransport, logger, input.signal);
+    }
     // In-process seam: an optional `options.stdio = { stdin, stdout }` stream
     // pair replaces process stdio (SDK 1.29.0:
     // `new StdioServerTransport(_stdin?: Readable, _stdout?: Writable)`).

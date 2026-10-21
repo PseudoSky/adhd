@@ -1563,7 +1563,7 @@ describe.skip('[mcp-adapter.7] dod.11 — mcp composes --use layer + mount via c
           operations: () => [statusMountOp],
         },
       },
-    };
+    } as unknown as UsePlugin;
   }
 
   beforeAll(async () => {
