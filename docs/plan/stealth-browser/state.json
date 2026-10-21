@@ -1488,6 +1488,18 @@
         "scripts/criteria.json"
       ],
       "by": "pseudosky"
+    },
+    {
+      "ts": "2026-10-21T18:49:55.114Z",
+      "state": "search-port-guards",
+      "class": "executor",
+      "type": "rescope-criterion",
+      "reason": "guards.11 added (login_required trips without a lock)",
+      "files_synced": [
+        "contexts/search-port-guards.md",
+        "scripts/criteria.json"
+      ],
+      "by": "pseudosky"
     }
   ],
   "authored_with": {
