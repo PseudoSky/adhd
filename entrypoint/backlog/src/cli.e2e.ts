@@ -692,11 +692,11 @@ describe('runBacklogCli — live CLI mount, real spawned dist/index.js bin, temp
     const c = run([
       'create',
       '--input',
-      JSON.stringify({ title: 'lookup superseded wire', body: 'v0', project, by: 'cli.spec' }),
+      JSON.stringify({ title: 'lookup superseded wire', body: 'first body', project, by: 'cli.spec' }),
     ]);
     expect(c.status, c.dbg).toBe(0);
     const u0 = c.env.data?.uid as string;
-    const e = run(['update', '--input', JSON.stringify({ uid: u0, by: 'cli.spec', body: 'v1 edited' })]);
+    const e = run(['update', '--input', JSON.stringify({ uid: u0, by: 'cli.spec', body: 'second body' })]);
     expect(e.status, e.dbg).toBe(0);
     const u1 = e.env.data?.uid as string;
     expect(u1).not.toBe(u0);
