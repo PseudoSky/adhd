@@ -312,6 +312,18 @@ export function persistentSchemasFor(
   return entry.schemas;
 }
 
+/**
+ * Release everything extraction retains for the life of the process: the
+ * persistent ts-morph Projects, the persistent schema tier, and the syntactic
+ * resolver Project. `ExtractionSession.dispose()` frees only the per-run
+ * caches and leaves this tier to speed up the next extraction in the same
+ * process, so a host that finishes extracting and then serves for a long time
+ * calls this once between the two.
+ */
+export function releaseExtractionMemory(): void {
+  clearPersistentProjectCache();
+}
+
 /** Drop the process-lifetime Project + schema caches (tests / explicit memory reclaim). */
 export function clearPersistentProjectCache(): void {
   _persistentProjects.clear();

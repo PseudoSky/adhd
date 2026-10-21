@@ -18,6 +18,7 @@ import type { Operation } from './descriptor';
 import { extract } from './extract';
 import type { ExtractionSession } from './extraction-session';
 import {
+  assertExtractorOptions,
   createExtractInvokerFromPlugins,
   sourceFilesOf,
   type ExtractCall,
@@ -52,7 +53,7 @@ export interface ExtractorRegistry {
  * The TypeScript extractor. It builds `ExtractOptions` only from the call:
  * `source`, `namespace` and `extractorOptions.{dropFileSegment,tsconfig,session}`.
  */
-const typescriptExtractor: Extractor = (call) => {
+export const typescriptExtractor: Extractor = (call) => {
   const options = call.extractorOptions;
   const tsconfig = options?.['tsconfig'];
   const dropFileSegment = options?.['dropFileSegment'];
@@ -126,6 +127,14 @@ export interface IExtractSourceEntryInput {
   session?: ExtractionSession;
   /** The extractor registry, keyed by translator id. */
   registry: ExtractorRegistry;
+  /**
+   * Registry key of the extractor to run, when it differs from the
+   * resolution's translator id (for example `'ts-subprocess'` for a source
+   * whose translator is `'ts'`). `ExtractCall.host` stays the translator id, so
+   * an extractor choice never changes a cache key: every extractor registered
+   * for one translator must return the same operations for the same call.
+   */
+  extractor?: string;
   /** Optional logger. */
   logger?: Logger;
 }
@@ -171,6 +180,7 @@ export async function extractSourceEntry(
     extractLayerOptions,
     session,
     registry,
+    extractor: extractorKey,
     logger,
   } = input;
 
@@ -181,9 +191,12 @@ export async function extractSourceEntry(
         `an executable source needs an explicit protocol`
     );
   }
-  const extractor = registry.get(host);
+  const registered = extractorKey ?? host;
+  const extractor = registry.get(registered);
   if (extractor === undefined) {
-    throw new Error(`apigen-orchestrator: no ${host} extractor is registered`);
+    throw new Error(
+      `apigen-orchestrator: no ${registered} extractor is registered`
+    );
   }
 
   const extractorOptions: Record<string, unknown> = {};
@@ -192,6 +205,7 @@ export async function extractSourceEntry(
     extractorOptions['dropFileSegment'] = dropFileSegment;
   }
   if (session !== undefined) extractorOptions['session'] = session;
+  assertExtractorOptions(extractorOptions);
 
   logger?.info(`extracting ${reference} (host: ${host}, ns: ${namespace})`);
   const invokeExtract = createExtractInvokerFromPlugins(

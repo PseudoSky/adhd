@@ -387,6 +387,26 @@ try {
 
 **Important:** Do **not** parallelize `buildSchema` loops — the work is synchronous CPU under an async signature, and morph-walk mutates the shared SourceFile, so `Promise.all` gains nothing and can race.
 
+### One IR-generation entry
+
+`extractSourceEntry` turns a classified source reference into canonical `Operation[]` and returns them together with the files the extractor read (`{ operations, files }`). `generate`, `run` and `serve` all extract TypeScript through it. Extractors live in an `ExtractorRegistry` (`createExtractorRegistry()`, keyed by `ExtractCall.host`); the `--use` plugins' `extractLayer` onion wraps the registered extractor.
+
+Every option that changes extraction travels in the `ExtractCall` (`source`, `namespace`, `extractorOptions.{dropFileSegment, tsconfig, session}`): the TypeScript extractor builds its `ExtractOptions` from the call alone, and `assertExtractorOptions` rejects values that are not plain JSON (or a mistyped `tsconfig`/`dropFileSegment`), so a cache layer keying on the call sees everything that affects the result. Two calls that differ only in `dropFileSegment` therefore have different keys.
+
+```ts
+const registry = createExtractorRegistry();
+const { operations, files } = await extractSourceEntry({
+  reference: './api.ts', resolution, namespace: 'api', dropFileSegment: true,
+  usePlugins: [], extractLayerOptions: {}, registry,
+});
+```
+
+### TypeScript extraction in a subprocess
+
+`registerTypescriptSubprocessExtractor(registry, { launcher?, workerModule? })` adds a `ts-subprocess` extractor that runs the same extraction in a worker process (`runExtractWorker`, started through `node -e`) and returns the same operations and `sourceFiles` as the in-process `ts` extractor. The launcher is injected (`ExtractLauncher`); `spawnExtractLauncher` is the real one. Select it per call with `extractSourceEntry({ extractor: TS_SUBPROCESS_HOST })`; `ExtractCall.host` stays `'ts'`, so the choice does not change a cache key.
+
+`ExtractionSession.dispose()` releases the per-run caches. The persistent ts-morph tier survives it by design; `releaseExtractionMemory()` drops that tier too, for a host that finishes extracting and then serves.
+
 ### Mount capability: Synthetic operations and batch fan-out
 
 Mount plugins add synthetic operations to your server — both simple mounts like `GET /_meta/health` and complex features like batch bulk fan-out. The batch plugin demonstrates the pattern:

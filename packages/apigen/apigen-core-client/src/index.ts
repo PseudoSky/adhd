@@ -55,6 +55,7 @@ export type { Logger } from 'pino';
 export {
   createExtractionSession,
   clearPersistentProjectCache,
+  releaseExtractionMemory,
   collectLocalImportPaths,
 } from './lib/extraction-session';
 export type {
@@ -102,6 +103,21 @@ export type {
   IExtractionResult,
   IExtractSourceEntryInput,
 } from './lib/extraction-entry';
+export { assertExtractorOptions } from './lib/extract-invoker';
+export {
+  createTypescriptSubprocessExtractor,
+  registerTypescriptSubprocessExtractor,
+  runExtractWorker,
+  spawnExtractLauncher,
+  EXTRACT_RESULT_MARKER,
+  TS_SUBPROCESS_HOST,
+} from './lib/extract-subprocess';
+export type {
+  ExtractLauncher,
+  IExtractLaunchRequest,
+  IExtractLaunchResult,
+  ITypescriptSubprocessOptions,
+} from './lib/extract-subprocess';
 export { extractClasses } from './lib/extract-classes';
 export type { ExtractClassesOptions } from './lib/extract-classes';
 export {

@@ -34,6 +34,9 @@ import {
   createExtractorRegistry,
   extractSourceEntry,
   pluginsToEnvelopeMiddlewares,
+  registerTypescriptSubprocessExtractor,
+  releaseExtractionMemory,
+  TS_SUBPROCESS_HOST,
   resolveSourceReference,
 } from '@adhd/apigen-core-client';
 import type {
@@ -210,6 +213,19 @@ export function detectLang(filePath: string): HostLang {
 
 /** The extractors this orchestrator runs, keyed by translator id. */
 const extractorRegistry = createExtractorRegistry();
+registerTypescriptSubprocessExtractor(extractorRegistry);
+
+/**
+ * Whether the invocation's flat `--opt` bag asks for the subprocess TypeScript
+ * extractor (`--opt extract.subprocess=true`). The choice changes where
+ * extraction runs, never its result or its cache key.
+ */
+function wantsSubprocessExtractor(
+  extractLayerOptions: Record<string, unknown>
+): boolean {
+  const flag = extractLayerOptions['extract.subprocess'];
+  return flag === true || flag === 'true' || flag === '1';
+}
 
 // ---------------------------------------------------------------------------
 // Projection-override config parsing (Tenet 1)
@@ -374,6 +390,7 @@ async function extractSource(
     entry.namespace ??
     resolveNamespace(entry.file, { tsconfig: entry.tsconfig });
 
+  const subprocess = wantsSubprocessExtractor(extractLayerOptions);
   const { operations } = await extractSourceEntry({
     reference: entry.file,
     resolution,
@@ -381,8 +398,10 @@ async function extractSource(
     tsconfig,
     usePlugins: usePluginObjects,
     extractLayerOptions,
-    session,
+    // A subprocess extractor cannot share the run's in-process session.
+    session: subprocess ? undefined : session,
     registry: extractorRegistry,
+    extractor: subprocess ? TS_SUBPROCESS_HOST : undefined,
     logger,
   });
   return { namespace, ops: operations };
@@ -781,6 +800,11 @@ export async function orchestrateRun(
     // from actual extracted operations instead of an empty stub.
     operations: descriptor.operations,
   };
+
+  // Extraction is finished and `buildDescriptor` already disposed its session.
+  // The process now serves for as long as the plugin runs, so also release the
+  // process-lifetime ts-morph tier that `dispose()` leaves in place.
+  releaseExtractionMemory();
 
   await plugin.run(input);
 }

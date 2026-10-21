@@ -114,6 +114,63 @@ export function withSourceFiles(
   return operations;
 }
 
+/**
+ * Enforce the {@link ExtractCall.extractorOptions} contract at the point a call
+ * is built: every option that changes the extracted operations must be plain
+ * JSON-like data (so a cache layer can key on it), `tsconfig` must be a string
+ * and `dropFileSegment` a boolean (so an extractor never silently ignores a
+ * mistyped option, which would make two different calls produce one cache
+ * entry). `session` is the one run-scoped handle exempt from the check; it
+ * never affects the result and is ignored for keying.
+ *
+ * @param options - The `extractorOptions` bag about to travel in an `ExtractCall`.
+ * @throws Error naming the offending key when a value is not JSON-like or a
+ *         known key has the wrong type.
+ */
+export function assertExtractorOptions(
+  options: Record<string, unknown> | undefined
+): void {
+  if (options === undefined) return;
+  for (const [key, value] of Object.entries(options)) {
+    if (key === 'session') continue;
+    if (!isJsonLike(value)) {
+      throw new Error(
+        `ExtractCall.extractorOptions.${key} is not plain JSON data; an option ` +
+          `that cannot be keyed must not influence extraction`
+      );
+    }
+  }
+  const tsconfig = options['tsconfig'];
+  if (tsconfig !== undefined && typeof tsconfig !== 'string') {
+    throw new Error('ExtractCall.extractorOptions.tsconfig must be a string');
+  }
+  const dropFileSegment = options['dropFileSegment'];
+  if (dropFileSegment !== undefined && typeof dropFileSegment !== 'boolean') {
+    throw new Error(
+      'ExtractCall.extractorOptions.dropFileSegment must be a boolean'
+    );
+  }
+}
+
+function isJsonLike(value: unknown): boolean {
+  if (value === null) return true;
+  switch (typeof value) {
+    case 'string':
+    case 'boolean':
+      return true;
+    case 'number':
+      return Number.isFinite(value);
+    case 'object': {
+      if (Array.isArray(value)) return value.every(isJsonLike);
+      const proto = Object.getPrototypeOf(value) as unknown;
+      if (proto !== Object.prototype && proto !== null) return false;
+      return Object.values(value as Record<string, unknown>).every(isJsonLike);
+    }
+    default:
+      return false;
+  }
+}
+
 /** The files `result`'s extractor reported reading, or `undefined` if it did not report any. */
 export function sourceFilesOf(
   result: readonly Operation[]
