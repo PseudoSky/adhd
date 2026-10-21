@@ -1,4 +1,4 @@
-export const __apigen_pkg = '@adhd/apigen-gateway';
+export const __apigen_pkg = '@adhd/apigen-engine-gateway';
 
 // SPEC §13 / §13.1 — the sidecar gateway public API.
 export {

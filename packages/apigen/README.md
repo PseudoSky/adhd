@@ -46,7 +46,7 @@ HTTP calls use `POST /<namespace>/<fn>` with body `{"data":{…}}`.
 | [`@adhd/apigen-base-errors`](./apigen-base-errors) | **Error model** — canonical error codes mapped to each transport | — | — |
 | [`@adhd/apigen-base-logical`](./apigen-base-logical) | **Logical type codecs** — Date, int64, Decimal, UUID, bytes | — | — |
 | [`@adhd/apigen-engine-naming`](./apigen-engine-naming) | **Naming** — case conversion, collision detection, envelope keys | — | — |
-| [`@adhd/apigen-engine-gateway`](./apigen-engine-gateway) | **Gateway** — multi-package aggregation with health probes | — | — |
+| [`@adhd/apigen-engine-gateway`](./apigen-engine-gateway) | **Gateway** — host supervision, routing and health; `bin:` sources (MCP-over-stdio upstream adapter, argv fallback) and `serveMcpPassthrough`, which serves an upstream's tools with a Layer stack composed around every call | — | — |
 | [`@adhd/apigen-plugin-mcp`](./apigen-plugin-mcp) | MCP server (stdio / sse / streaming-http) | ✓ | ✓ |
 | [`@adhd/apigen-plugin-api-fastify`](./apigen-plugin-api-fastify) | Fastify HTTP server | ✓ | ✓ |
 | [`@adhd/apigen-plugin-api-express`](./apigen-plugin-api-express) | Express HTTP server | ✓ | ✓ |
@@ -56,6 +56,8 @@ HTTP calls use `POST /<namespace>/<fn>` with body `{"data":{…}}`.
 | [`@adhd/apigen-plugin-health`](./apigen-plugin-health) | Mount: `GET /_meta/health` | — | — |
 | [`@adhd/apigen-plugin-logger`](./apigen-plugin-logger) | Layer: per-operation logging | — | — |
 | [`@adhd/apigen-plugin-tracing`](./apigen-plugin-tracing) | Layer: per-operation OTel spans + durable JSONL trace records | — | — |
+| [`@adhd/apigen-plugin-policy`](./apigen-plugin-policy) | Layer: `makePolicyPlugin`, gates every operation with a `@adhd/policy-core-client` policy (`--use` + `--opt`) | — | — |
+| [`@adhd/apigen-plugin-ir-cache`](./apigen-plugin-ir-cache) | IR cache: keying, storing and validating extracted operations, including the baked `api.ir.json` artifact | — | — |
 | [`@adhd/apigen-codegen-openapi`](./apigen-codegen-openapi) | OpenAPI 3.1 document builder | — | — |
 | [`@adhd/apigen-generator-nx`](./apigen-generator-nx) | Nx generator (`plugin`) + cache-aware executor (`generate`) | — | — |
 | [`@adhd/apigen-python-env`](./python-env) | Python venv provisioning | — | — |

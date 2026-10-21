@@ -5,12 +5,14 @@ import {
   createMcpUpstreamAdapter,
   createStdioHostTransport,
   defaultBackoff,
+  DEFAULT_CALL_TIMEOUT_MS,
+  GENERIC_FAILURE,
   nodeSourceProbe,
+  upstreamErrorForHost,
   type HostAdapter,
 } from '@adhd/apigen-engine-gateway';
 import { createLogger, type Terminal } from '@adhd/apigen-engine-runtime';
 import { mcpPlugin } from '@adhd/apigen-plugin-mcp';
-import { ErrorCode, McpError } from '@modelcontextprotocol/sdk/types.js';
 import { attributesFromFlags } from '../attributes-from-flags';
 import { splitPolicyArgv } from '../flags';
 import { buildGate } from '../gate';
@@ -19,36 +21,66 @@ import type { IVerbDeps } from './deps';
 import { reportFailure } from './failure';
 
 /**
- * How many times the gateway restarts a crashed upstream before parking it as
- * `unavailable` (BA-6). Finite on purpose: the gateway default restarts forever.
+ * The restart budget of the supervised upstream (BA-6): the most restarts allowed within
+ * {@link SERVE_RESTART_WINDOW_MS}, and also the most consecutive failed restart attempts.
+ * Finite on purpose: the gateway default restarts forever.
  */
 export const SERVE_MAX_RESTARTS = 5;
 
-/** JSON-RPC codes the SDK raises locally (connection lost, request timeout); never the upstream's words. */
-const LOCAL_ERROR_CODES: ReadonlySet<number> = new Set([ErrorCode.ConnectionClosed, ErrorCode.RequestTimeout]);
+/** Length of the rolling window in which at most {@link SERVE_MAX_RESTARTS} upstream restarts are allowed. */
+export const SERVE_RESTART_WINDOW_MS = 60_000;
 
-/** Generic text a host sees for any failure that is not a refusal or an upstream's own error. */
-const GENERIC_FAILURE = 'The tool call failed.';
+/** Optional knobs of {@link watchRestartBudget}. */
+export interface IRestartBudgetOptions {
+  /** Rolling window for the restart count. Default {@link SERVE_RESTART_WINDOW_MS}. */
+  readonly windowMs?: number;
+  /** Clock in epoch milliseconds; injected by tests. Default `Date.now`. */
+  readonly now?: () => number;
+}
 
 /**
  * Wraps a host adapter so the verb learns when the gateway's supervision has given up on
- * it. The gateway parks a crashed host as `unavailable` once its restart budget is spent
- * and exposes no signal for that, so the wrapper counts consecutive failed restart
- * attempts (a `start()` that throws, or a `ready()` that resolves `false`, after the host
- * exited) and calls `onExhausted` when the count reaches `maxRestarts`. A restart that
- * becomes ready resets the count. Everything else delegates to `inner` untouched.
+ * it. The gateway restarts a crashed host with an attempt counter that starts over at every
+ * crash and parks the host as `unavailable` only when one outage spends its budget, and it
+ * exposes no signal for that, so the wrapper enforces two bounds and calls `onExhausted`
+ * (once) when either is hit:
+ *
+ * - consecutive failed restart attempts (a `start()` that throws, or a `ready()` that
+ *   resolves `false`, after the host exited) reach `maxRestarts`; a restart that becomes
+ *   ready resets this count;
+ * - upstream exits within the rolling `windowMs` exceed `maxRestarts`, i.e. the host has been
+ *   restarted `maxRestarts` times in the window and exited again. A restart that becomes
+ *   ready does not reset this count, so a host that comes up and crashes again in a loop is
+ *   bounded too.
+ *
+ * Everything else delegates to `inner` untouched.
  *
  * @param inner The adapter the gateway would supervise.
- * @param maxRestarts The gateway's restart budget for this host.
+ * @param maxRestarts The restart budget for this host.
  * @param onExhausted Called once, when the budget is spent.
+ * @param options Window length and clock.
  * @returns An adapter with the same host, cost and behaviour as `inner`.
  */
-export function watchRestartBudget(inner: HostAdapter, maxRestarts: number, onExhausted: () => void): HostAdapter {
+export function watchRestartBudget(
+  inner: HostAdapter,
+  maxRestarts: number,
+  onExhausted: () => void,
+  options: IRestartBudgetOptions = {}
+): HostAdapter {
+  const windowMs = options.windowMs ?? SERVE_RESTART_WINDOW_MS;
+  const now = options.now ?? Date.now;
   let exited = false;
   let failures = 0;
+  let spent = false;
+  const exitTimes: number[] = [];
+  const exhaust = (): void => {
+    if (spent) return;
+    spent = true;
+    onExhausted();
+  };
   const fail = (): void => {
     failures += 1;
-    if (failures === maxRestarts) onExhausted();
+    if (failures === maxRestarts) exhaust();
   };
   return {
     host: inner.host,
@@ -77,15 +109,14 @@ export function watchRestartBudget(inner: HostAdapter, maxRestarts: number, onEx
       inner.onExit((reason) => {
         exited = true;
         failures = 0;
+        const at = now();
+        exitTimes.push(at);
+        while (exitTimes.length > 0 && at - (exitTimes[0] as number) > windowMs) exitTimes.shift();
+        if (exitTimes.length > maxRestarts) exhaust();
         listener(reason);
       }),
     stop: () => inner.stop(),
   };
-}
-
-/** The SDK prefixes `MCP error <code>: `; strip it so re-raising does not double the prefix. */
-function upstreamMessage(error: McpError): string {
-  return error.message.replace(/^MCP error -?\d+: /, '');
 }
 
 /**
@@ -108,8 +139,9 @@ function upstreamMessage(error: McpError): string {
  * upstream itself returned is re-raised to the host with its code and message.
  * The process stays up until `deps.signal` aborts or the host closes stdin / the
  * transport; the gateway (and with it the upstream's process group) is stopped in
- * `finally`. When the upstream exits and {@link SERVE_MAX_RESTARTS} consecutive
- * restarts fail, the verb stops serving and exits non-zero (`internal`) instead
+ * `finally`. When the upstream spends its restart budget ({@link watchRestartBudget}:
+ * {@link SERVE_MAX_RESTARTS} consecutive failed restarts, or more than that many exits within
+ * {@link SERVE_RESTART_WINDOW_MS}), the verb stops serving and exits non-zero (`internal`) instead
  * of answering `unavailable` indefinitely. Returns 0 on a clean shutdown; a source
  * failure prints its message to stderr and returns its exit code.
  *
@@ -151,12 +183,14 @@ export async function serveVerb(argv: readonly string[], deps: IVerbDeps & { sig
     const exhaustion = new AbortController();
     let exhausted: ApiError | undefined;
     const adapter = watchRestartBudget(upstream, SERVE_MAX_RESTARTS, () => {
-      exhausted = new ApiError('internal', `upstream '${upstream.host}' exited and could not be restarted after ${SERVE_MAX_RESTARTS} attempts`);
+      exhausted = new ApiError('internal', `upstream '${upstream.host}' exited and exceeded its restart budget (${SERVE_MAX_RESTARTS} restarts within ${SERVE_RESTART_WINDOW_MS / 1000}s, or ${SERVE_MAX_RESTARTS} consecutive failed restarts)`);
       exhaustion.abort();
     });
     const gateway = createGateway({
       adapters: [adapter],
       backoff: { delayMs: defaultBackoff.delayMs, maxRestarts: SERVE_MAX_RESTARTS },
+      // The adapter bounds each upstream call by DEFAULT_CALL_TIMEOUT_MS; the gateway's own deadline must not cut it short.
+      defaultDeadlineMs: DEFAULT_CALL_TIMEOUT_MS,
     });
     // The innermost step of every call: route to the upstream through the gateway. Only the
     // refusal/ApiError channel and an upstream's own McpError carry words to the host.
@@ -170,9 +204,8 @@ export async function serveVerb(argv: readonly string[], deps: IVerbDeps & { sig
         deps.stderr(
           `apigen-gateway: tool call failed: operation=${call.operation.id} error=${kind}${typeof code === 'number' || typeof code === 'string' ? ` code=${String(code)}` : ''}\n`
         );
-        if (error instanceof McpError && !LOCAL_ERROR_CODES.has(error.code)) {
-          throw new McpError(error.code, upstreamMessage(error), error.data);
-        }
+        const upstreamError = upstreamErrorForHost(error);
+        if (upstreamError !== undefined) throw upstreamError;
         throw new ApiError('internal', GENERIC_FAILURE);
       }
     };

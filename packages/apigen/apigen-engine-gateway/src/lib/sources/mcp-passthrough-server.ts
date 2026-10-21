@@ -13,8 +13,8 @@ import { adaptCoreLayer, buildOpPlan, LayerContext } from '@adhd/apigen-engine-r
 import type { Call, Next, UsePlugin } from '@adhd/apigen-engine-runtime';
 import type { Gateway } from '../gateway';
 
-/** Generic text returned for any non-refusal failure; internals are never leaked to the host. */
-const GENERIC_FAILURE = 'The tool call failed.';
+/** Generic text returned for any non-refusal failure; internals are never leaked to the host. The single BA-4 definition, shared with every host that serves an upstream. */
+export const GENERIC_FAILURE = 'The tool call failed.';
 
 /** JSON-RPC codes the SDK itself raises locally (connection lost, request timeout); never the upstream's words. */
 const LOCAL_ERROR_CODES: ReadonlySet<number> = new Set([ErrorCode.ConnectionClosed, ErrorCode.RequestTimeout]);
@@ -78,6 +78,23 @@ function defaultOnError(error: unknown, ctx: IPassthroughErrorContext): void {
 /** The SDK prefixes `MCP error <code>: `; strip it so re-raising does not double the prefix. */
 function upstreamMessage(e: McpError): string {
   return e.message.replace(/^MCP error -?\d+: /, '');
+}
+
+/**
+ * BA-4 mapping of a non-refusal tool-call failure: an `McpError` the upstream itself returned
+ * is re-raised with its own code, message and data (the SDK's `MCP error <code>: ` prefix
+ * stripped); anything else, including the SDK's local connection-lost and request-timeout
+ * errors, yields `undefined` and the caller answers with {@link GENERIC_FAILURE}. The one
+ * implementation of this rule; hosts import it rather than re-deriving it.
+ *
+ * @param error The value a tool call rejected with.
+ * @returns The error to re-raise to the host, or `undefined` for the generic failure.
+ */
+export function upstreamErrorForHost(error: unknown): McpError | undefined {
+  if (error instanceof McpError && !LOCAL_ERROR_CODES.has(error.code)) {
+    return new McpError(error.code, upstreamMessage(error), error.data);
+  }
+  return undefined;
 }
 
 function isCallToolResult(value: unknown): value is CallToolResult {
@@ -210,9 +227,8 @@ export async function serveMcpPassthrough(options: IPassthroughServerOptions): P
       } catch {
         // a faulty reporter must not change what the host sees
       }
-      if (e instanceof McpError && !LOCAL_ERROR_CODES.has(e.code)) {
-        throw new McpError(e.code, upstreamMessage(e), e.data);
-      }
+      const upstream = upstreamErrorForHost(e);
+      if (upstream !== undefined) throw upstream;
       return errorResult(GENERIC_FAILURE);
     }
   });

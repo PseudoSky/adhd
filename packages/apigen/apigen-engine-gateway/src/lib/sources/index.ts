@@ -34,6 +34,6 @@ export type { ISourceExtractorDeps, IMcpExtractorOptions } from './extractors';
 export { nodeSourceProbe } from './source-probe';
 export { resolveSource } from './resolve-source';
 export type { IResolveDeps } from './resolve-source';
-export { serveMcpPassthrough } from './mcp-passthrough-server';
+export { serveMcpPassthrough, upstreamErrorForHost, GENERIC_FAILURE } from './mcp-passthrough-server';
 export type { IPassthroughServerOptions, IPassthroughErrorContext, IPassthroughServer } from './mcp-passthrough-server';
 export { createStdioHostTransport } from './stdio-host-transport';

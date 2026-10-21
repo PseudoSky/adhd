@@ -11,7 +11,7 @@ Three bins (`adhd-policy`, `adhd-policy-mcp`, `adhd-policy-http`) over `@adhd/po
 ## Behaviour to preserve
 
 - `serve` never falls back to argv: a handshake failure is an error and exits non-zero.
-- The gateway has no exhaustion signal, so `watchRestartBudget` counts consecutive failed restart attempts after an upstream exit; at `SERVE_MAX_RESTARTS` the verb aborts `mcpPlugin.run` and throws `ApiError('internal')` (exit 1). A restart that becomes ready resets the count.
+- The gateway has no exhaustion signal, so `watchRestartBudget` counts consecutive failed restart attempts after an upstream exit; at `SERVE_MAX_RESTARTS` consecutive failures, or when more than `SERVE_MAX_RESTARTS` exits fall within `SERVE_RESTART_WINDOW_MS` (60 s; a ready restart does not reset this count), the verb aborts `mcpPlugin.run` and throws `ApiError('internal')` (exit 1). A restart that becomes ready resets the consecutive-failure count only.
 - Terminal-routed tools take flat `arguments` and return the upstream's `CallToolResult` unchanged; only a refusal or `ApiError` (BA-4, ADR-0018) or an upstream `McpError` (re-raised with its code and message) carries words to the host. Any other failure is `internal: The tool call failed.` with one stderr line naming the operation and error class, never argument values.
 - `serve` spawns the upstream at startup, before any gating, to list its tools (accepted risk O-2).
 

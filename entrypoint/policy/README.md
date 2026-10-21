@@ -44,7 +44,7 @@ adhd-policy mcp-json init --spec gate.yaml
 adhd-policy mcp-json --undo
 ```
 
-`serve` fronts the upstream through a gateway and ends when the host closes stdin or the transport, or on SIGINT / SIGTERM; the upstream's whole process group is stopped and the exit code is 0. An upstream that fails its startup handshake makes `serve` exit non-zero before it serves anything. An upstream that crashes while serving is restarted up to 5 times; calls made while it is down return an `isError` result, and when 5 consecutive restart attempts have failed `serve` stops serving, stops the gateway and exits 1. `run` is traced like the servers (one span per dispatched operation). The upstream sees only `PATH HOME USER LANG LC_ALL TMPDIR TERM SHELL` from the environment: variables set in a wrapped `.mcp.json` entry's `env` belong to the `adhd-policy` process and are not forwarded to the upstream.
+`serve` fronts the upstream through a gateway and ends when the host closes stdin or the transport, or on SIGINT / SIGTERM; the upstream's whole process group is stopped and the exit code is 0. An upstream that fails its startup handshake makes `serve` exit non-zero before it serves anything. An upstream that crashes while serving is restarted up to 5 times; calls made while it is down return an `isError` result, and when 5 consecutive restart attempts have failed, or the upstream has exited more than 5 times within 60 seconds, `serve` stops serving, stops the gateway and exits 1. `run` is traced like the servers (one span per dispatched operation). The upstream sees only `PATH HOME USER LANG LC_ALL TMPDIR TERM SHELL` from the environment: variables set in a wrapped `.mcp.json` entry's `env` belong to the `adhd-policy` process and are not forwarded to the upstream.
 
 `serve` spawns the upstream at startup, before any policy decision, to list its tools; `bin:` makes the source an executable. A reference without the `bin:` prefix that names no file and no URL is looked up on `PATH` last, so a mistyped bare word can start a real binary (`run` executes it only after the call is allowed).
 
@@ -83,7 +83,7 @@ The attributes name the caller (`role`, `read_roots`, ...) and the policy decide
 | `ADHD_POLICY_ATTRIBUTES` | caller attributes when no `--adhd-attributes` flag is given |
 | `ADHD_POLICY_HTTP_PORT` | port of `adhd-policy-http`; whole number 0..65535, `0` (default) asks the OS; anything else exits 2 |
 | `ADHD_POLICY_LOG_LEVEL` | `debug`, `info`, `warn` (default for the command line), `error`, `silent` |
-| `ADHD_POLICY_TELEMETRY` | `off` silences metrics and event logs; anything else (default) writes them to `~/.adhd/sox-ecosystem/policy/logs`, rotating at 100 MB per file; the 14-day age limit and owner-only (`0600`) log mode are not applied because `@adhd/sox-telemetry` does not accept them yet (`src/wrapper/telemetry.ts`) |
+| `ADHD_POLICY_TELEMETRY` | `off`, `0`, `false` or `no` (case-insensitive) silences metrics and event logs; `on`, `1`, `true`, `yes` or unset (default) writes them to `~/.adhd/sox-ecosystem/policy/logs`, rotating at 100 MB per file; any other value is rejected at start-up; the 14-day age limit and owner-only (`0600`) log mode are not applied because `@adhd/sox-telemetry` does not accept them yet (`src/wrapper/telemetry.ts`) |
 
 ## Build
 

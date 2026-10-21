@@ -2,7 +2,6 @@ import { createHash } from 'node:crypto';
 import { existsSync, readdirSync, readFileSync, type Dirent } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join, relative, sep } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import type { Operation } from '@adhd/apigen-core-client';
 import { createSingleFileBackend, CURRENT_FORMAT_VERSION } from '@adhd/apigen-plugin-ir-cache';
 
@@ -12,7 +11,8 @@ export const POLICY_IR_ARTIFACT_FILENAME = 'api.ir.json';
 /** Bump when the artifact layout changes; a mismatch falls back to live extraction. */
 export const POLICY_IR_FORMAT_VERSION = CURRENT_FORMAT_VERSION;
 
-const requirePkg = createRequire(import.meta.url);
+// This package is CommonJS-only (vite `formats: ['cjs']`), so `__filename` / `__dirname` are always defined.
+const requirePkg = createRequire(__filename);
 
 /**
  * The extractor version an artifact must have been produced by
@@ -41,7 +41,7 @@ export function expectedExtractorVersion(): string {
  * `here` is the directory the lookup starts from (default: this module's own
  * directory); a caller passes another one to resolve a different layout.
  */
-export function policyDistDir(here: string = dirname(fileURLToPath(import.meta.url))): string {
+export function policyDistDir(here: string = __dirname): string {
   const candidates = [here, join(here, 'dist'), join(here, '..', 'dist'), join(here, '..', '..', 'dist')];
   for (const candidate of candidates) {
     if (existsSync(join(candidate, POLICY_IR_ARTIFACT_FILENAME)) || existsSync(join(candidate, 'cli.js'))) return candidate;
@@ -127,7 +127,13 @@ function sameDeps(recorded: Record<string, string>, actual: Record<string, strin
 }
 
 /** Outcome of {@link inspectBakedIr}: the operations, or why the artifact cannot be used (`missing` = none was shipped). */
-export type BakedIrInspection = { readonly operations: Operation[] } | { readonly reason: string };
+export type BakedIrInspection =
+  | {
+      readonly operations: Operation[];
+      /** Set when the client declarations could not be located, so the artifact's `.d.ts` hashes were not compared. */
+      readonly stalenessUnchecked?: true;
+    }
+  | { readonly reason: string };
 
 /**
  * Reads the baked artifact: the `CachedExtractEntry` the ir-cache artifact target
@@ -150,11 +156,10 @@ export async function inspectBakedIr(distDir: string): Promise<BakedIrInspection
     }
     if (!Array.isArray(entry.operations) || entry.operations.length === 0) return { reason: 'artifact holds no operations' };
     const client = locateClientApi();
-    if (client !== undefined) {
-      const recorded = entry.artifactSource?.deps;
-      if (recorded === undefined || !sameDeps(recorded, surfaceDepHashes(client.surfaceRoot))) {
-        return { reason: 'the @adhd/policy-core-client declarations changed since the artifact was baked' };
-      }
+    if (client === undefined) return { operations: entry.operations, stalenessUnchecked: true };
+    const recorded = entry.artifactSource?.deps;
+    if (recorded === undefined || !sameDeps(recorded, surfaceDepHashes(client.surfaceRoot))) {
+      return { reason: 'the @adhd/policy-core-client declarations changed since the artifact was baked' };
     }
     return { operations: entry.operations };
   } catch (error) {
@@ -181,7 +186,12 @@ export async function extractPolicyOperations(
   distDir: string = policyDistDir()
 ): Promise<Operation[]> {
   const inspected = await inspectBakedIr(distDir);
-  if ('operations' in inspected) return inspected.operations;
+  if ('operations' in inspected) {
+    if (inspected.stalenessUnchecked === true) {
+      onWarn('@adhd/policy: using the baked operation surface without checking it for staleness (the @adhd/policy-core-client declarations were not found)');
+    }
+    return inspected.operations;
+  }
   if (inspected.reason !== 'missing') {
     onWarn(`@adhd/policy: ignoring the baked operation surface (${inspected.reason}); extracting live`);
   }
