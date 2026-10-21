@@ -346,10 +346,12 @@ def _spp2():
 
 @check("search-port-providers", 3)
 def _spp3():
-    """src/lib/utils.ts prepends the qualifier to the query and maps a github `type:code` search to the github-code provider, proven by a spec that runs both transformations on real provider ids (including the no-qualifier and fetch-provider no-prepend cases)."""
+    """src/lib/utils.ts prepends the qualifier to the query and resolves a github `type:code` query through `resolveProvider(provider, query)` to the code override of the github provider (an override object, never a thirteenth registered provider id: `stripTypeCode` removes the qualifier, and every other provider and query returns the provider itself, identity), proven by a spec that runs both transformations on real provider ids (including the no-qualifier and fetch-provider no-prepend cases)."""
     t = read(f"{SEARCH_DIR}/src/lib/utils.ts")
     spec = _sa_text(_sa_specs("search-port-providers"))
-    return "github-code" in t and "github-code" in spec and "qualifier" in spec and "type:code" in spec, "utils.ts/spec lack qualifier or github-code handling"
+    registered = read(f"{SEARCH_DIR}/src/lib/providers.ts")
+    ok = "resolveProvider" in t and "stripTypeCode" in t and "github-code" not in registered and "resolveProvider" in spec and "qualifier" in spec and "type:code" in spec
+    return ok, "utils.ts/spec lack qualifier or the resolveProvider type:code override, or providers.ts registers a github-code id"
 
 
 @check("search-port-providers", 4)
@@ -619,7 +621,7 @@ def _sv3():
 
 @check("search-verbs", 4)
 def _sv4():
-    """src/lib/search.ts orchestrates the search in the ported order and is proven by unit scenarios on a fake core (zero real Chrome): unknown provider raises UNKNOWN_PROVIDER before any gate; a tripped provider returns outcome `hitl` with attempts 0 and ZERO Chrome calls; an armed cooldown returns `rate_limited` with a retry hint and no window; the concurrency cap queues the third call; a hostile outcome (captcha, rate_limited, banned) arms the cooldown but `hitl` does not; a HITL outcome fires the tripwire, reveals the page and keeps the context alive; `pageDisposal: 'dispose'` disposes the context in the finally path and an outer catch disposes a leaked one."""
+    """src/lib/search.ts orchestrates the search in the ported order and is proven by unit scenarios on a fake core (zero real Chrome): unknown provider raises UNKNOWN_PROVIDER before any gate; a provider tripped for any reason except `login_required` returns outcome `hitl` with attempts 0 and ZERO Chrome calls (a stored `login_required` lock never gates, search-verbs.13); an armed cooldown returns `rate_limited` with a retry hint and no window; the concurrency cap queues the third call; a hostile outcome (captcha, rate_limited, banned) arms the cooldown but `hitl` does not; a HITL outcome fires the tripwire (not for reason `login_required`, search-verbs.13), reveals the page and keeps the context alive; `pageDisposal: 'dispose'` disposes the context in the finally path and an outer catch disposes a leaked one."""
     t = read(f"{SEARCH_DIR}/src/lib/search.ts")
     spec = _sa_text(_sa_specs("search-verbs"))
     ok = bool(t) and all(k in spec for k in ("UNKNOWN_PROVIDER", "hitl", "rate_limited", "pageDisposal", "attempts")) and "configureSearch" in (t + read(f"{SEARCH_DIR}/src/index.ts"))
@@ -752,14 +754,24 @@ def _spf10():
 
 @check("search-port-providers", 9)
 def _spp9():
-    """(backlog 861571da, 224e7a44) The github provider returns results or a typed outcome, never a silent empty or a long hang: repository search (default `type=repositories`, dom strategy) yields results from a result-page fixture and, when the dom path finds none, falls back once to an API fixture inside the same call; `type:code` search maps to the github-code provider and, given an unauthenticated login wall fixture, returns outcome `error` whose message names the login wall (never `empty` or `success` with zero results); a rate-limit fixture returns `rate_limited`. Specs under src/test/unit/providers/ drive the real provider functions over fixtures; titles carry `type:code`, `login wall`, `fallback`, `rate_limited`, `repositories` and the uids 861571da and 224e7a44, and the spec cites [search-port-providers.9]."""
-    return _bug_ac("search", "search-port-providers", 9, ["861571da", "224e7a44"], "providers",
-                   ["type:code", "login wall", "fallback", "rate_limited", "repositories"])
+    """(backlog 861571da, 224e7a44; commits 591e1a7, c00edea) The github provider returns results or a typed outcome, never a silent empty or a long hang. Repository search (default `type=repositories`) is API-primary: `providers.github.network` is the direct public REST fetch (`api.github.com/search/repositories`, no browser), and its FALLBACK is the rendered result page captured through `providers.github.fallbackNetwork` (embedded-json on `github.com/search`, `dataTarget` react-app.embeddedData, resultSelector `payload.blackbirdSearchRoute.results`, titles `owner/name`, stars from `followers`); `providers.github` has NO `dom` config and no dom strategy. `type:code` resolves through `resolveProvider` to a network-only override (`strategies.primary` network, no `fallback`, no `dom`, no `fallbackNetwork`, `sharedProfile: true`, snippetLines 5, extraWaitMs 500, the same resultSelector); the code-search-signed-out.html fixture yields zero results and matches the override's `emptyRequiresLogin` rule, whose `loginUrl(returnTo)` is `https://github.com/login?return_to=<encoded returnTo>`, while a signed-in variant of that fixture (the same page with `logged_in` true) and repo-search.html never match it and a signed-in result maps path, repo, language and snippet; the engine turns the rule hit into outcome `hitl` reason `login_required` (search-port-engine.11) and that outcome never writes a tripwire (search-port-guards.11, search-verbs.13); a rate-limit fixture returns `rate_limited`. The fixtures are copies of agent-browser/test-fixtures/github/ (repo-search.html, code-search-signed-out.html) stored under src/test/unit/providers/fixtures/github/ and byte-identical to them. Specs under src/test/unit/providers/ drive the real provider functions over the fixtures (the two-repo page gives vitejs/vite first, stars 83351, language TypeScript); titles carry `type:code`, `login wall`, `fallbackNetwork`, `login_required`, `rate_limited`, `repositories`, `sharedProfile` and the uids 861571da, 224e7a44 and 591e1a7, and the spec cites [search-port-providers.9]."""
+    fx = f"{SEARCH_DIR}/src/test/unit/providers/fixtures/github"
+    bad = []
+    for name in ("repo-search.html", "code-search-signed-out.html"):
+        mine = read(f"{fx}/{name}")
+        theirs = read(f"{SA_SRC}/test-fixtures/github/{name}")
+        if not mine or (theirs and mine != theirs):
+            bad.append(name)
+    if bad:
+        return False, f"github fixtures missing or not byte-identical to agent-browser/test-fixtures/github under {fx}: {bad}"
+    return _bug_ac("search", "search-port-providers", 9, ["861571da", "224e7a44", "591e1a7"], "providers",
+                   ["type:code", "login wall", "fallbackNetwork", "login_required", "rate_limited", "repositories", "sharedProfile"],
+                   [("src/lib/providers.ts", r"fallbackNetwork"), ("src/lib/utils.ts", r"login_required|emptyRequiresLogin")])
 
 
 @check("search-port-engine", 9)
 def _spe9():
-    """(backlog 224e7a44) A network-capture failure never hangs or escapes as an unhandled rejection: when the CDP socket closes or errors during capture (a fake page whose capture rejects with a socket-closed error) the engine falls back to the dom strategy once and returns its results; when the fallback also fails it returns outcome `error` whose message names the cause. Specs under src/test/unit/engine/ register a process `unhandledRejection` listener and assert it never fires; titles carry `socket closed`, `falls back`, `dom`, `unhandledRejection` and the uid 224e7a44, and the spec cites [search-port-engine.9]."""
+    """(backlog 224e7a44) A network-capture failure never hangs or escapes as an unhandled rejection: when the CDP socket closes or errors during capture (a fake page whose capture rejects with a socket-closed error) the engine falls back once to the provider's next strategy when it declares one (the dom strategy only for a provider that has a `dom` config; github has none, so there the failure returns outcome `error` naming the cause, search-port-engine.14) and returns its results; when the fallback also fails it returns outcome `error` whose message names the cause. Specs under src/test/unit/engine/ register a process `unhandledRejection` listener and assert it never fires; titles carry `socket closed`, `falls back`, `dom`, `unhandledRejection` and the uid 224e7a44, and the spec cites [search-port-engine.9]."""
     return _bug_ac("search", "search-port-engine", 9, ["224e7a44"], "engine",
                    ["socket closed", "falls back", "dom", "unhandledRejection"])
 

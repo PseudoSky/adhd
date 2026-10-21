@@ -456,6 +456,15 @@ def legacy_path(path):
     return LEGACY_DIR + path[len(CORE_DIR):] if path == CORE_DIR or path.startswith(CORE_DIR + "/") else path
 
 
+def assertion_lines(text):
+    """The assertion and title lines of a spec (`expect(`, `it(`, `describe(`, `test(`), whitespace-free, with the `-sTCP:LISTEN` insertion of core-seam.9 normalized away: the fixture-only comparison of CL11 and core-seam.12."""
+    keep = []
+    for ln in text.replace(" -sTCP:LISTEN", "").splitlines():
+        if re.search(r"\bexpect\s*[(.]", ln) or re.match(r"\s*(?:it|describe|test)(?:\.\w+)*\s*[(\[]", ln):
+            keep.append(re.sub(r"\s+", "", ln))
+    return keep
+
+
 def blob_at(ref, path):
     """Content of `path` at `ref`, rename-aware: tries the path, then its pre-split legacy location; None when neither exists at that ref."""
     for cand in dict.fromkeys((path, legacy_path(path))):
@@ -2521,7 +2530,7 @@ def _pe2():
 
 @check("prod-errors", 3)
 def _pe3():
-    """Only owned paths changed by [psm:prod-errors] commits (errors.ts, src/index.ts, the lib files whose throw sites it types, the error specs); errors.ts reads no process.env; the existing unit lane still passes (`nx run stealth-core-browser:test` exits 0, messages preserved)."""
+    """Only owned paths changed by [psm:prod-errors] commits (errors.ts, src/index.ts, src/api.ts, the lib files whose throw sites it types, the error specs); errors.ts reads no process.env; the existing unit lane still passes (`nx run stealth-core-browser:test` exits 0, messages preserved)."""
     o = ownership_ok("prod-errors")
     rc, out = sh([NX, "run", f"{proj_name()}:test"], timeout=2400)
     return o[0] and rc == 0 and "process.env" not in read(f"{P}/src/errors.ts") and exists(f"{P}/src/errors.ts"), f"{o[1]} test rc={rc} {out[-120:]}"
@@ -3225,7 +3234,7 @@ _cl_spec(10, "ordered-shutdown.spec.ts", "CL10 (F16) ordered shutdown: ordered-s
 
 @check("chrome-lifecycle", 11)
 def _cl11():
-    """CL11 (F18) group kill: src/lib/cdp/browser.ts exports `killProcessGroup(pid)` (extract-only: the SIGTERM-to-group, bounded wait, SIGKILL-to-group, single-pid fallback logic that the tracked-branch kill already used, moved to a named export), src/test/unit/cdp/browser.spec.ts is byte-identical to its content at the chrome-lifecycle start_ref (fallback: the tests-unit-core end_ref) and still green, and process-group.spec.ts proves `killProcessGroup` issues the same signal sequence as the tracked branch (SIGTERM, a bounded wait, SIGKILL, fallback to the single pid)."""
+    """CL11 (F18) group kill: src/lib/cdp/browser.ts exports `killProcessGroup(pid)` (extract-only: the SIGTERM-to-group, bounded wait, SIGKILL-to-group, single-pid fallback logic that the tracked-branch kill already used, moved to a named export), src/test/unit/cdp/browser.spec.ts keeps every `expect(` line and every `it(` or `describe(` title line it had at the chrome-lifecycle start_ref (fallback: the tests-unit-core end_ref) and is still green: fixture-only changes (helpers, `execSync` mocks, the simulated `ps -o command=` answers) and the `-sTCP:LISTEN` insertion into the lsof command string are allowed, any other changed assertion fails, and process-group.spec.ts proves `killProcessGroup` issues the same signal sequence as the tracked branch (SIGTERM, a bounded wait, SIGKILL, fallback to the single pid)."""
     b = read(f"{P}/src/lib/cdp/browser.ts")
     ok, why = ac_spec("unit/lifecycle", "process-group.spec.ts", "chrome-lifecycle.11", ("killProcessGroup", "SIGTERM", "SIGKILL"))
     spec = f"{P}/src/test/unit/cdp/browser.spec.ts"
@@ -3238,8 +3247,9 @@ def _cl11():
     def _renorm(t):
         return t.replace("[stealth-browser]", f"[{CORE_PKG}]").replace(LEGACY_PKG, CORE_PKG).replace(LEGACY_DIR, CORE_DIR)
     old_blob = blob_at(ref, spec)
-    same = old_blob is not None and _renorm(old_blob) == _renorm(read(spec)) and git("status", "--porcelain", "--", spec) == ""
-    return "killProcessGroup" in exports_of(b) and same and ok, f"browser.spec.ts unchanged since {ref[:8]}={same}; {why}"
+    # fixture-only edits are allowed (core-seam.12): every assertion and title line must equal the baseline once the lsof LISTEN insertion is normalized
+    same = old_blob is not None and assertion_lines(_renorm(old_blob)) == assertion_lines(_renorm(read(spec))) and git("status", "--porcelain", "--", spec) == ""
+    return "killProcessGroup" in exports_of(b) and same and ok, f"browser.spec.ts assertion/title lines unchanged since {ref[:8]}={same}; {why}"
 
 
 _cl_spec(12, "reaper-scope.spec.ts", "CL12 (F19) reaper scope: reaper-scope.spec.ts proves scope `port-occupant` (default) signals the port occupant (lsof, then fuser, with its pgid) when no owner is recorded and only the matching pid when the owner record is valid (`isSameProcess(pid, procStart)`), and scope `launched-only` never signals an unrecorded process.", ("port-occupant", "launched-only", "lsof", "fuser", "procStart", "isSameProcess"))
@@ -4343,7 +4353,7 @@ def rev(*args):
 
 @check("tripwire-reverse-migrate", 1)
 def _twm1():
-    """The adoption branch is isolated: /Users/nix/dev/projects/reverse-apis/.worktrees/tripwire-adopt is a worktree on branch `feat/tripwire-adopt`, `.worktrees/` is listed in the main checkout's .git/info/exclude (a local untracked file), and the main checkout's `git status --porcelain` equals the snapshot taken before the state started (docs/plan/stealth-browser/tripwire-reverse/main-status-before.txt): none of main's dirty files was touched and nothing was staged there."""
+    """The adoption branch is isolated: /Users/nix/dev/projects/reverse-apis/.worktrees/tripwire-adopt is a worktree on branch `feat/tripwire-adopt`, `.worktrees/` is listed in the main checkout's .git/info/exclude (a local untracked file), a non-empty snapshot of the main checkout's `git status --porcelain` was taken before the state started (docs/plan/stealth-browser/tripwire-reverse/main-status-before.txt), nothing is staged in the main checkout, the main branch carries no [psm:tripwire-reverse-migrate] commit, and no plan-tagged commit of the adoption branch changes a file the snapshot listed as dirty (other agents may edit the main working tree concurrently, so the check is commit- and index-scoped, not a whole-status comparison; criterion 6 owns the allowed exceptions)."""
     br = rev("rev-parse", "--abbrev-ref", "HEAD")
     excl = ".worktrees/" in read(f"{REV_MAIN}/.git/info/exclude")
     before = read(f"{TWREV}/main-status-before.txt")
