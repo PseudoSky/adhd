@@ -35,6 +35,11 @@ export function decideRetry(
     return { shouldRetry: false, delayMs: 0, reason: 'already succeeded' }
   }
 
+  // A parsed zero-result page is a legitimate answer: retrying cannot change it, at any attempt.
+  if (response.outcome === 'empty') {
+    return { shouldRetry: false, delayMs: 0, reason: 'empty: legitimate zero results, no retry' }
+  }
+
   // Check if we're past max attempts
   if (attempt >= config.maxAttempts) {
     return { shouldRetry: false, delayMs: 0, reason: `max attempts (${config.maxAttempts}) reached` }
@@ -84,7 +89,6 @@ export function decideRetry(
         reason: `timeout: retry attempt ${attempt + 1}`,
       }
 
-    case 'empty':
     case 'error':
       return {
         shouldRetry: true,

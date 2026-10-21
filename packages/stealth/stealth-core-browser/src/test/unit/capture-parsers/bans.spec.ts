@@ -78,7 +78,7 @@ describe('8468f7b1 AC2 [tests-unit-extract.1] decideRetry', () => {
   it('[fs-120] retries timeouts empties and errors and refuses unknown outcomes', () => {
     expect(decideRetry({ outcome: 'timeout' }, 0, { ...base, onTimeout: 'abort' }).shouldRetry).toBe(false)
     expect(decideRetry({ outcome: 'timeout' }, 1, base)).toMatchObject({ shouldRetry: true, delayMs: 200 })
-    expect(decideRetry({ outcome: 'empty' }, 0, base).reason).toBe('empty: retry attempt 1')
+    expect(decideRetry({ outcome: 'empty' }, 0, base).reason).toMatch(/legitimate zero results/)
     expect(decideRetry({ outcome: 'error', error: 'boom' }, 1, base).reason).toBe('error: retry attempt 2')
     const d = decideRetry({ outcome: 'weird' }, 0, base)
     expect(d.shouldRetry).toBe(false)
