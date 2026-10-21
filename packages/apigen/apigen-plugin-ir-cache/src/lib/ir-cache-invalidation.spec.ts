@@ -12,11 +12,10 @@
  *   misspelled in this stub -> exit 1 (ENOENT in readFileSync); restored -> exit 0.
  */
 import { readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-const HERE = dirname(fileURLToPath(import.meta.url));
+const HERE = __dirname;
 
 describe('stub: ir-cache-invalidation.e2e.test.ts runs in the e2e lane', () => {
   it('the sibling suite exists, is named *.e2e.test.ts and declares tier P', () => {
