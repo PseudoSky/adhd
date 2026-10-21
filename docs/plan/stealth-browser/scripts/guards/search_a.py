@@ -176,7 +176,7 @@ def _ssc5():
         d = git("show", "--format=", "--numstat", sha, "--", "pnpm-lock.yaml").split()
         if len(d) >= 2 and d[1].isdigit() and int(d[1]) > 0:
             removed.append(sha[:8])
-    ok = (re.search(r'"@adhd/stealth-search"\s*:\s*\[\s*"entrypoint/stealth-search/', ts) is not None
+    ok = (re.search(r'"@adhd/stealth-search"\s*:\s*\[\s*"(?:\./)?entrypoint/stealth-search/', ts) is not None
           and re.search(r'"@adhd/stealth-core-browser"\s*:', ts) is not None
           and "entrypoint/stealth-search:" in lock and not removed
           and exists("tools/nx-plugins/build/executors/typecheck-spec/stealth-search.baseline.json"))
