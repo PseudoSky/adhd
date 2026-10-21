@@ -403,7 +403,7 @@ const { operations, files } = await extractSourceEntry({
 
 ### TypeScript extraction in a subprocess
 
-`registerTypescriptSubprocessExtractor(registry, { launcher?, workerModule? })` adds a `ts-subprocess` extractor that runs the same extraction in a worker process (`runExtractWorker`, started through `node -e`) and returns the same operations and `sourceFiles` as the in-process `ts` extractor. The launcher is injected (`ExtractLauncher`); `spawnExtractLauncher` is the real one. Select it per call with `extractSourceEntry({ extractor: TS_SUBPROCESS_HOST })`; `ExtractCall.host` stays `'ts'`, so the choice does not change a cache key.
+`registerTypescriptSubprocessExtractor(registry, { launcher?, workerModule?, cwd?, timeoutMs?, maxStdoutBytes?, maxStderrBytes? })` adds a `ts-subprocess` extractor that runs the same extraction in a worker process (`runExtractWorker`, started through `node -e`) and returns the same operations and `sourceFiles` as the in-process `ts` extractor. `workerModule` defaults to this package's absolute entry path, so the worker never resolves it from the working directory. A run is killed after `timeoutMs` (default 5 minutes; `0` disables), stdout is capped at `maxStdoutBytes` (default 512 MiB) and only the last `maxStderrBytes` (default 64 KiB) of stderr are kept. The launcher is injected (`ExtractLauncher`); `spawnExtractLauncher` is the real one. Select it per call with `extractSourceEntry({ extractor: TS_SUBPROCESS_HOST })`; `ExtractCall.host` stays `'ts'`, so the choice does not change a cache key.
 
 `ExtractionSession.dispose()` releases the per-run caches. The persistent ts-morph tier survives it by design; `releaseExtractionMemory()` drops that tier too, for a host that finishes extracting and then serves.
 

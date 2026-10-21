@@ -332,7 +332,7 @@ Passed through to the target plugin. Recognized keys:
 | `http.verb.<id>=GET/POST` | All HTTP plugins | (derived) | Override HTTP verb per operation (`generate` and `run`) |
 | `extract.subprocess` | `generate`, `run` | `false` | Run TypeScript extraction in a worker process; same operations and cache key as in-process extraction |
 
-Every `--use` plugin whose layer capability supplies `createLayer` is built once per invocation from this bag, and each target receives the already-configured layer.
+On `run` and `run-registry`, every `--use` plugin whose layer capability supplies `createLayer` is built once per invocation from this bag, and each target receives the already-configured layer. `generate` and `generate-registry` never run that factory; they compose each plugin's `extractLayer.createLayer` once per invocation, shared across all sources.
 
 MCP over `stdio` keeps **stdout** clean for JSON-RPC — all logs go to stderr.
 

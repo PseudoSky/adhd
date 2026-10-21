@@ -135,9 +135,19 @@ export interface IExtractSourceEntryInput {
    * for one translator must return the same operations for the same call.
    */
   extractor?: string;
+  /**
+   * Extract invokers already built for this invocation, keyed by registry key.
+   * Pass one map to every `extractSourceEntry` call of an invocation so the
+   * `--use` plugins' `extractLayer.createLayer` runs once per invocation rather
+   * than once per source. Omit it and each call builds its own invoker.
+   */
+  invokerCache?: Map<string, ExtractInvoker>;
   /** Optional logger. */
   logger?: Logger;
 }
+
+/** A composed extract-stage invoker: the `extractLayer` onion around an extractor. */
+export type ExtractInvoker = (call: ExtractCall) => Promise<ExtractResult>;
 
 /** Where an `ExtractCall` reads from, per the resolution's locator. */
 function sourceOf(resolution: ISourceResolution): string {
@@ -181,6 +191,7 @@ export async function extractSourceEntry(
     session,
     registry,
     extractor: extractorKey,
+    invokerCache,
     logger,
   } = input;
 
@@ -208,11 +219,15 @@ export async function extractSourceEntry(
   assertExtractorOptions(extractorOptions);
 
   logger?.info(`extracting ${reference} (host: ${host}, ns: ${namespace})`);
-  const invokeExtract = createExtractInvokerFromPlugins(
-    usePlugins,
-    extractor,
-    extractLayerOptions
-  );
+  let invokeExtract = invokerCache?.get(registered);
+  if (invokeExtract === undefined) {
+    invokeExtract = createExtractInvokerFromPlugins(
+      usePlugins,
+      extractor,
+      extractLayerOptions
+    );
+    invokerCache?.set(registered, invokeExtract);
+  }
   const operations = await invokeExtract({
     source: sourceOf(resolution),
     host,

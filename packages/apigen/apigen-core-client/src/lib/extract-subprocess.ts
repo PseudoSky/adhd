@@ -15,6 +15,7 @@ import { spawn } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import path from 'node:path';
 import { typescriptExtractor, type Extractor, type ExtractorRegistry } from './extraction-entry';
+import { lazyRequire } from './esm-require';
 import {
   assertExtractorOptions,
   sourceFilesOf,
@@ -42,7 +43,22 @@ export interface IExtractLaunchRequest {
   cwd?: string;
   /** Aborting kills the process and rejects the launch. */
   signal?: AbortSignal;
+  /** Kills the process and rejects the launch once this many ms have elapsed. */
+  timeoutMs?: number;
+  /** Kills the process and rejects the launch when stdout exceeds this many bytes. */
+  maxStdoutBytes?: number;
+  /** Bytes of stderr kept (the tail); earlier output is discarded. */
+  maxStderrBytes?: number;
 }
+
+/** Default wall-clock limit for one worker run: 5 minutes. */
+export const DEFAULT_EXTRACT_TIMEOUT_MS = 5 * 60 * 1000;
+
+/** Default stdout ceiling for the result line: 512 MiB. */
+export const DEFAULT_EXTRACT_MAX_STDOUT_BYTES = 512 * 1024 * 1024;
+
+/** Default stderr tail kept for diagnostics: 64 KiB. */
+export const DEFAULT_EXTRACT_MAX_STDERR_BYTES = 64 * 1024;
 
 /** What a finished launch produced. */
 export interface IExtractLaunchResult {
@@ -68,26 +84,86 @@ export type ExtractLauncher = (
  */
 export const spawnExtractLauncher: ExtractLauncher = (request) =>
   new Promise((resolve, reject) => {
+    const maxStdout =
+      request.maxStdoutBytes ?? DEFAULT_EXTRACT_MAX_STDOUT_BYTES;
+    const maxStderr =
+      request.maxStderrBytes ?? DEFAULT_EXTRACT_MAX_STDERR_BYTES;
     const child = spawn(request.command, request.args, {
       cwd: request.cwd,
       stdio: ['pipe', 'pipe', 'pipe'],
       signal: request.signal,
     });
     const out: Buffer[] = [];
-    const err: Buffer[] = [];
-    child.stdout.on('data', (chunk: Buffer) => out.push(chunk));
-    child.stderr.on('data', (chunk: Buffer) => err.push(chunk));
-    child.once('error', reject);
-    child.once('close', (exitCode) =>
+    let outBytes = 0;
+    let err: Buffer[] = [];
+    let errBytes = 0;
+    let settled = false;
+    let timer: NodeJS.Timeout | undefined;
+    const fail = (error: Error): void => {
+      if (settled) return;
+      settled = true;
+      if (timer) clearTimeout(timer);
+      child.kill('SIGKILL');
+      reject(error);
+    };
+    const timeoutMs = request.timeoutMs ?? DEFAULT_EXTRACT_TIMEOUT_MS;
+    if (timeoutMs > 0 && Number.isFinite(timeoutMs)) {
+      timer = setTimeout(
+        () =>
+          fail(
+            new Error(
+              `extract worker timed out after ${String(timeoutMs)}ms and was killed` +
+                stderrSuffix(err)
+            )
+          ),
+        timeoutMs
+      );
+      timer.unref();
+    }
+    child.stdout.on('data', (chunk: Buffer) => {
+      outBytes += chunk.length;
+      if (outBytes > maxStdout) {
+        fail(
+          new Error(
+            `extract worker stdout exceeded ${String(maxStdout)} bytes (result too large to carry on one line)` +
+              stderrSuffix(err)
+          )
+        );
+        return;
+      }
+      out.push(chunk);
+    });
+    child.stderr.on('data', (chunk: Buffer) => {
+      err.push(chunk);
+      errBytes += chunk.length;
+      while (errBytes - err[0].length >= maxStderr && err.length > 1) {
+        errBytes -= err[0].length;
+        err = err.slice(1);
+      }
+    });
+    child.once('error', (error) => fail(error));
+    child.once('close', (exitCode) => {
+      if (settled) return;
+      settled = true;
+      if (timer) clearTimeout(timer);
+      const stderrAll = Buffer.concat(err);
       resolve({
         exitCode,
         stdout: Buffer.concat(out).toString('utf8'),
-        stderr: Buffer.concat(err).toString('utf8'),
-      })
-    );
+        stderr: stderrAll
+          .subarray(Math.max(0, stderrAll.length - maxStderr))
+          .toString('utf8'),
+      });
+    });
     child.stdin.on('error', () => undefined);
     child.stdin.end(request.stdin);
   });
+
+/** The captured stderr tail formatted for appending to an error message. */
+function stderrSuffix(chunks: Buffer[]): string {
+  const text = Buffer.concat(chunks).toString('utf8').trim();
+  return text ? `: ${text}` : '';
+}
 
 /** Options for {@link createTypescriptSubprocessExtractor}. */
 export interface ITypescriptSubprocessOptions {
@@ -95,15 +171,22 @@ export interface ITypescriptSubprocessOptions {
   launcher?: ExtractLauncher;
   /**
    * Module the worker imports `runExtractWorker` from: a package specifier or an
-   * absolute file path. Defaults to `@adhd/apigen-core-client`.
+   * absolute file path. Defaults to the absolute path of this package's own
+   * entry, so resolution never depends on the working directory.
    */
   workerModule?: string;
   /** Node executable; defaults to `process.execPath`. */
   nodePath?: string;
-  /** Working directory of the worker; defaults to the parent's. */
+  /** Working directory of the worker; defaults to the parent's `process.cwd()`. */
   cwd?: string;
   /** Aborts an in-flight extraction. */
   signal?: AbortSignal;
+  /** Wall-clock limit per extraction in ms; defaults to {@link DEFAULT_EXTRACT_TIMEOUT_MS}. `0` disables it. */
+  timeoutMs?: number;
+  /** Stdout ceiling in bytes; defaults to {@link DEFAULT_EXTRACT_MAX_STDOUT_BYTES}. */
+  maxStdoutBytes?: number;
+  /** Stderr tail kept in bytes; defaults to {@link DEFAULT_EXTRACT_MAX_STDERR_BYTES}. */
+  maxStderrBytes?: number;
 }
 
 /** The request the parent writes to the worker's stdin. */
@@ -117,6 +200,23 @@ interface IWorkerRequest {
 interface IWorkerResponse {
   operations: Operation[];
   files: string[];
+}
+
+/**
+ * Absolute path of this package's loadable entry. The CJS build's own file is
+ * used when it is plain JavaScript; otherwise (ESM build, TypeScript source
+ * under a test runner) the package entry is resolved from this module's
+ * location. Falls back to the bare package specifier only when neither works.
+ */
+function defaultWorkerModule(): string {
+  if (typeof __filename === 'string' && !/\.[cm]?tsx?$/.test(__filename)) {
+    return __filename;
+  }
+  try {
+    return lazyRequire.resolve('@adhd/apigen-core-client');
+  } catch {
+    return '@adhd/apigen-core-client';
+  }
 }
 
 function workerSpecifier(workerModule: string): string {
@@ -136,15 +236,16 @@ function workerSpecifier(workerModule: string): string {
  *
  * @param options - Launcher and worker location.
  * @returns An {@link Extractor} for {@link TS_SUBPROCESS_HOST}.
- * @throws (from the returned extractor) Error carrying the worker's stderr when
- *         it exits non-zero or prints no result line.
+ * @throws (from the returned extractor) Error carrying the worker's stderr tail
+ *         when it exits non-zero, prints no result line, prints an unparseable
+ *         one, exceeds `timeoutMs`, or exceeds `maxStdoutBytes`.
  */
 export function createTypescriptSubprocessExtractor(
   options: ITypescriptSubprocessOptions = {}
 ): Extractor {
   const launcher = options.launcher ?? spawnExtractLauncher;
   const specifier = workerSpecifier(
-    options.workerModule ?? '@adhd/apigen-core-client'
+    options.workerModule ?? defaultWorkerModule()
   );
   return async (call) => {
     const { session: _session, ...serialisable } = call.extractorOptions ?? {};
@@ -161,8 +262,11 @@ export function createTypescriptSubprocessExtractor(
         `import(${JSON.stringify(specifier)}).then((m) => m.runExtractWorker())`,
       ],
       stdin: JSON.stringify(request),
-      cwd: options.cwd,
+      cwd: options.cwd ?? process.cwd(),
       signal: options.signal,
+      timeoutMs: options.timeoutMs,
+      maxStdoutBytes: options.maxStdoutBytes,
+      maxStderrBytes: options.maxStderrBytes,
     });
     return parseWorkerOutput(call, launched);
   };
@@ -182,9 +286,19 @@ function parseWorkerOutput(
         `(exit ${String(launched.exitCode)}): ${launched.stderr.trim() || 'no result line on stdout'}`
     );
   }
-  const response = JSON.parse(
-    line.slice(EXTRACT_RESULT_MARKER.length)
-  ) as IWorkerResponse;
+  let response: IWorkerResponse;
+  try {
+    response = JSON.parse(
+      line.slice(EXTRACT_RESULT_MARKER.length)
+    ) as IWorkerResponse;
+  } catch (error) {
+    const tail = launched.stderr.trim().slice(-2000);
+    throw new Error(
+      `ts-subprocess extractor returned an unparseable result for ${call.source} ` +
+        `(${error instanceof Error ? error.message : String(error)})` +
+        (tail ? `; worker stderr tail: ${tail}` : '')
+    );
+  }
   return withSourceFiles(response.operations, response.files);
 }
 

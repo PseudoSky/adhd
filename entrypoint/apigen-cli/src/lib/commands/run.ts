@@ -202,19 +202,28 @@ const BUILTIN_USE_PLUGINS: Record<string, Plugin> = {
  * @param specifiers   - The raw `--use` values (slugs, package names, or paths).
  * @param layerOptions - The invocation's flat `--opt` bag, handed to each
  *                       plugin's `createLayer`; defaults to `{}`.
+ * @param materialise  - Build each plugin's `createLayer` layer (default
+ *                       `true`). `generate` paths pass `false`: they only
+ *                       compose `extractLayer`/envelope capabilities and must
+ *                       not run a request-layer factory that may open handles
+ *                       or require runtime options; plugins are returned
+ *                       unmaterialised.
  * @returns The loaded plugin objects, in declaration order.
  * @throws Error when a `createLayer` throws (propagated unchanged) or returns
  *   something other than a function; the message names the `--use` specifier.
  */
 export async function loadUsePlugins(
   specifiers: string[],
-  layerOptions: Record<string, unknown> = {}
+  layerOptions: Record<string, unknown> = {},
+  materialise = true
 ): Promise<Plugin[]> {
   const loaded: Plugin[] = [];
+  const finish = (plugin: Plugin, spec: string): Plugin =>
+    materialise ? materialiseLayer(plugin, spec, layerOptions) : plugin;
   for (const spec of specifiers) {
     const builtin = BUILTIN_USE_PLUGINS[spec];
     if (builtin) {
-      loaded.push(materialiseLayer(builtin, spec, layerOptions));
+      loaded.push(finish(builtin, spec));
       continue;
     }
     // Package specifier or local path — resolve a local path to a file URL so
@@ -241,7 +250,7 @@ export async function loadUsePlugins(
         `a \`plugin\` export, or an object with a \`capabilities\` field)`
       );
     }
-    loaded.push(materialiseLayer(candidate, spec, layerOptions));
+    loaded.push(finish(candidate, spec));
   }
   return loaded;
 }
@@ -278,8 +287,16 @@ function materialiseLayer(
   const { createLayer: _factory, ...rest } = cap;
   void _factory;
   const layerCap = { ...rest, layer: built } as typeof cap;
-  return Object.assign(Object.create(Object.getPrototypeOf(plugin)), plugin, {
-    capabilities: { ...caps, layer: layerCap },
+  // Only `capabilities` is cloned; the copy's prototype IS the original
+  // plugin, so every other field (id, methods, getters) is read through it
+  // rather than copied as own enumerables.
+  return Object.create(plugin, {
+    capabilities: {
+      value: { ...caps, layer: layerCap },
+      enumerable: true,
+      writable: true,
+      configurable: true,
+    },
   }) as Plugin;
 }
 
@@ -420,8 +437,12 @@ export function registerRunCommand(
         // The resolver classifies `--source`; a source the selected plugin does
         // not host fails here instead of late inside the plugin or extractor.
         const resolvedSource = resolveSourceReference(sourceFile);
+        if (!resolvedSource.ok) {
+          throw new Error(
+            `--source ${opts.source}: ${resolvedSource.error.message}`
+          );
+        }
         if (
-          resolvedSource.ok &&
           resolvedSource.value.translator !== undefined &&
           resolvedSource.value.translator !== pluginLang
         ) {

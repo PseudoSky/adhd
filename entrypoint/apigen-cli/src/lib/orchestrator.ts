@@ -40,6 +40,7 @@ import {
   resolveSourceReference,
 } from '@adhd/apigen-core-client';
 import type {
+  ExtractInvoker,
   ExtractionSession,
   ISourceResolution,
   Operation,
@@ -382,7 +383,8 @@ async function extractSource(
   logger?: Logger,
   session?: ExtractionSession,
   usePluginObjects: Plugin[] = [],
-  extractLayerOptions: Record<string, unknown> = {}
+  extractLayerOptions: Record<string, unknown> = {},
+  invokerCache?: Map<string, ExtractInvoker>
 ): Promise<SourceExtraction> {
   const resolution = resolveTypeScriptSource(entry.file);
   const tsconfig = resolveTsconfig(entry.file, entry.tsconfig);
@@ -398,8 +400,10 @@ async function extractSource(
     tsconfig,
     usePlugins: usePluginObjects,
     extractLayerOptions,
-    // A subprocess extractor cannot share the run's in-process session.
-    session: subprocess ? undefined : session,
+    // The subprocess extractor drops the run-scoped session itself (it cannot
+    // cross a process boundary), so it is passed unconditionally here.
+    session,
+    invokerCache,
     registry: extractorRegistry,
     extractor: subprocess ? TS_SUBPROCESS_HOST : undefined,
     logger,
@@ -509,9 +513,19 @@ export async function buildDescriptor(
   const session = createExtractionSession();
   try {
     // --- Step 1+2: detect + extract per source -------------------------------
+    // One invoker cache for the invocation: `extractLayer.createLayer` runs
+    // once however many sources there are.
+    const invokerCache = new Map<string, ExtractInvoker>();
     const perSource: SourceExtraction[] = await Promise.all(
       sources.map((entry) =>
-        extractSource(entry, logger, session, usePluginObjects, extractLayerOptions)
+        extractSource(
+          entry,
+          logger,
+          session,
+          usePluginObjects,
+          extractLayerOptions,
+          invokerCache
+        )
       )
     );
 

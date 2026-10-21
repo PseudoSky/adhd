@@ -253,8 +253,10 @@ export function registerGenerateCommand(
         const cliOverrides = parseOverrides(allOpts);
         const overrides = loadOverrideConfig(opts.config, cliOverrides);
         const options = parseOptPairs(allOpts);
-        // The flat `--opt` bag: handed to each `--use` plugin's `createLayer`
-        // (once) and to the extraction entry as `extractLayerOptions`.
+        // The flat `--opt` bag: handed to the extraction entry as
+        // `extractLayerOptions` (each `extractLayer.createLayer` runs once per
+        // invocation). Request-stage `layer.createLayer` factories are NOT run
+        // on a generate path.
         const layerOptions = { ...options };
 
         // BUG-APIGEN-CLI-GENERATE-USE-UNRESOLVED-001: resolve the `--use`
@@ -263,7 +265,7 @@ export function registerGenerateCommand(
         // buildDescriptor()/extractSource() can compose a declared
         // `extractLayer` capability (e.g. `apigen-plugin-ir-cache`) into
         // extraction, exactly as `run` already does.
-        const usePlugins = await loadUsePlugins(opts.use, layerOptions);
+        const usePlugins = await loadUsePlugins(opts.use, layerOptions, false);
 
         // Unified v2 orchestrator path: detect → extract → merge →
         // collision-check → gen. This is now the ONLY extraction pipeline

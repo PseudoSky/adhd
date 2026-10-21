@@ -80,8 +80,10 @@ export function registerGenerateRegistryCommand(
 
         const logger = buildCliLogger(program);
         const options = parseOptPairs(opts.opt);
-        // The flat `--opt` bag: handed to each `--use` plugin's `createLayer`
-        // (once) and to the extraction entry as `extractLayerOptions`.
+        // The flat `--opt` bag: handed to the extraction entry as
+        // `extractLayerOptions` (each `extractLayer.createLayer` runs once per
+        // invocation). Request-stage `layer.createLayer` factories are NOT run
+        // on a generate path.
         const layerOptions = { ...options };
         const packagesDir = path.resolve(opts.packagesDir);
         const outputDir = path.resolve(opts.outDir);
@@ -124,7 +126,7 @@ export function registerGenerateRegistryCommand(
         // specifiers to loaded Plugin objects and thread as
         // `usePluginObjects` so an `extractLayer` capability (e.g.
         // `apigen-plugin-ir-cache`) is composed into extraction here too.
-        const usePlugins = await loadUsePlugins(opts.use, layerOptions);
+        const usePlugins = await loadUsePlugins(opts.use, layerOptions, false);
 
         const { pluginOutput } = await orchestrateGenerate(
           {

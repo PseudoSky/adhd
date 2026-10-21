@@ -98,6 +98,7 @@ export {
   extractSourceEntry,
 } from './lib/extraction-entry';
 export type {
+  ExtractInvoker,
   Extractor,
   ExtractorRegistry,
   IExtractionResult,

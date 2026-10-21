@@ -39,18 +39,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { lazyRequire } from './esm-require';
 
-// PERF (BUG-APIGEN-CORE-CLIENT-STARTUP-001): `Project` is used as a runtime
-// VALUE (via `new Project(...)`) inside `syntacticResolverProject()` and
-// `createExtractionSession()`'s `projectFor()` — both fully synchronous. A
-// static `import { Project } from 'ts-morph'` pulls the whole ts-morph
-// package (and its bundled TypeScript) into every process that loads this
-// module, even one that never actually builds a Project (e.g. `backlog
-// --help`). Lazily resolved and memoized below via `lazyRequire` (the
-// ESM-safe `createRequire` shim — see `./esm-require.ts`; a bare `require`
-// here threw `ReferenceError: require is not defined` in the built
-// `dist/index.mjs`); every other usage in this file is a TYPE position and
-// stays on the `import type` above (erased at compile time, zero runtime
-// cost).
 /**
  * The resolved `extends` chain of a tsconfig: `tsconfig` itself followed by
  * every config it extends, transitively, as absolute paths (TypeScript's own
@@ -75,6 +63,18 @@ export function resolveTsconfigChain(tsconfig: string): string[] {
   }
 }
 
+// PERF (BUG-APIGEN-CORE-CLIENT-STARTUP-001): `Project` is used as a runtime
+// VALUE (via `new Project(...)`) inside `syntacticResolverProject()` and
+// `createExtractionSession()`'s `projectFor()` — both fully synchronous. A
+// static `import { Project } from 'ts-morph'` pulls the whole ts-morph
+// package (and its bundled TypeScript) into every process that loads this
+// module, even one that never actually builds a Project (e.g. `backlog
+// --help`). Lazily resolved and memoized below via `lazyRequire` (the
+// ESM-safe `createRequire` shim — see `./esm-require.ts`; a bare `require`
+// here threw `ReferenceError: require is not defined` in the built
+// `dist/index.mjs`); every other usage in this file is a TYPE position and
+// stays on the `import type` above (erased at compile time, zero runtime
+// cost).
 let _Project: typeof import('ts-morph').Project | undefined;
 function getProjectCtor(): typeof import('ts-morph').Project {
   if (_Project) return _Project;
@@ -319,6 +319,11 @@ export function persistentSchemasFor(
  * caches and leaves this tier to speed up the next extraction in the same
  * process, so a host that finishes extracting and then serves for a long time
  * calls this once between the two.
+ *
+ * The tier is process-global: the call clears it for every session and every
+ * concurrent extraction in this process, not only the caller's. Extractions in
+ * flight rebuild what they need on their next lookup, at the cost of a cold
+ * start.
  */
 export function releaseExtractionMemory(): void {
   clearPersistentProjectCache();
