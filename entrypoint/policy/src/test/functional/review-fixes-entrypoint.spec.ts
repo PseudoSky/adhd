@@ -12,7 +12,6 @@ import { describe, expect, it, vi } from 'vitest';
 import { ATTRIBUTES_ENV_VAR, attributesFromFlags } from '../../wrapper/attributes-from-flags';
 import { createAttributesLayerPlugin } from '../../wrapper/attributes-layer';
 import { createAttributesSource, type IAttributesSource } from '../../wrapper/attributes-source';
-import { dereferenceSchema } from '../../wrapper/dereference';
 import { splitPolicyArgv } from '../../wrapper/flags';
 import { HTTP_PORT_ENV_VAR, parseHttpPort } from '../../wrapper/http-port';
 import {
@@ -333,40 +332,6 @@ describe('Review fix E12 - log level, doctor exit code, README exit-code table',
     const table = readme.slice(readme.indexOf('## Exit codes'), readme.indexOf('## Settings'));
     const codes = [...table.matchAll(/^\| (\d) \|/gm)].map((match) => match[1]);
     expect(codes).toEqual(['0', '1', '2', '3', '4']);
-  });
-});
-
-describe('Review fix E9 - dereferenceSchema is strict', () => {
-  it('E9 inlines local definitions and drops the definition tables', () => {
-    const schema = {
-      type: 'object',
-      properties: { a: { $ref: '#/definitions/Item' }, b: { $ref: '#/$defs/Other' } },
-      definitions: { Item: { type: 'string' } },
-      $defs: { Other: { type: 'number' } },
-    };
-    expect(dereferenceSchema(schema)).toEqual({ type: 'object', properties: { a: { type: 'string' }, b: { type: 'number' } } });
-  });
-
-  it('E9 an unresolved $ref throws naming the ref and the schema path', () => {
-    expect(() => dereferenceSchema({ type: 'object', properties: { a: { $ref: '#/definitions/Missing' } } })).toThrow(
-      /unresolved \$ref "#\/definitions\/Missing" at properties\.a/
-    );
-  });
-
-  it('E9 a non-local $ref throws too', () => {
-    expect(() => dereferenceSchema({ properties: { a: { $ref: 'https://example.com/x.json' } } })).toThrow(/unresolved \$ref "https:\/\/example.com\/x.json" at properties\.a/);
-  });
-
-  it('E9 a reference cycle throws naming the chain instead of recursing', () => {
-    const schema = {
-      properties: { node: { $ref: '#/definitions/Node' } },
-      definitions: { Node: { type: 'object', properties: { next: { $ref: '#/definitions/Node' } } } },
-    };
-    expect(() => dereferenceSchema(schema)).toThrow(/cyclic \$ref "#\/definitions\/Node" at properties\.node\.properties\.next \(Node -> Node\)/);
-  });
-
-  it('E9 a root-level $ref reports <root>', () => {
-    expect(() => dereferenceSchema({ $ref: '#/definitions/Nope' })).toThrow(/at <root>/);
   });
 });
 

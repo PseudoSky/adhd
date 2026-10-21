@@ -34,7 +34,7 @@ adhd-policy run bin:touch --spec gate.yaml --adhd-attributes @attrs.json -- file
 # Serve an upstream MCP server (stdio) behind the policy; refusals reach the host as isError tool results
 adhd-policy serve bin:node --spec gate.yaml -- ./server.js
 
-# Name the source: operation ids are <name>.<tool> (default: the command's basename; never the upstream's own self-declared name)
+# Name the source: operation ids are <name>/<tool> and the MCP tool names the host sees are <name>_<tool> (default name: the command's basename; never the upstream's own self-declared name)
 adhd-policy serve bin:node --name notes --spec gate.yaml -- ./server.js
 
 # Point an existing .mcp.json entry at `adhd-policy serve`, and put it back byte for byte
@@ -42,7 +42,7 @@ adhd-policy mcp-json init --spec gate.yaml
 adhd-policy mcp-json --undo
 ```
 
-`serve` ends when the host closes stdin or the transport, when the upstream exits, or on SIGINT / SIGTERM; the upstream's whole process group is stopped and the exit code is 0. The upstream sees only `PATH HOME USER LANG LC_ALL TMPDIR TERM SHELL` from the environment: variables set in a wrapped `.mcp.json` entry's `env` belong to the `adhd-policy` process and are not forwarded to the upstream.
+`serve` fronts the upstream through a gateway and ends when the host closes stdin or the transport, or on SIGINT / SIGTERM; the upstream's whole process group is stopped and the exit code is 0. An upstream that fails its startup handshake makes `serve` exit non-zero before it serves anything. An upstream that crashes while serving is restarted up to 5 times; calls made while it is down return an `isError` result, and once the restarts are used up they keep doing so until the host disconnects. `run` is traced like the servers (one span per dispatched operation). The upstream sees only `PATH HOME USER LANG LC_ALL TMPDIR TERM SHELL` from the environment: variables set in a wrapped `.mcp.json` entry's `env` belong to the `adhd-policy` process and are not forwarded to the upstream.
 
 ### `mcp-json`
 
@@ -55,7 +55,7 @@ adhd-policy mcp-json --undo
 
 ## Trust: who is asking
 
-The attributes name the caller (`role`, `read_roots`, ...) and the policy decides on them, so they are only as trustworthy as their source. `--adhd-attributes` and `ADHD_POLICY_ATTRIBUTES` are self-asserted by whoever launches `adhd-policy`; they are not authentication. The source must therefore be outside the control of the process being gated: a root-owned or launcher-owned `@file`, or a flag set by the host that starts the wrapper, never a file or environment the gated command or model can write. The gated child never receives `ADHD_POLICY_ATTRIBUTES` or any `--adhd-*` flag (its environment is the allowlist above). A caller cannot supply its own attributes through a tool call: the attributes layer overwrites that channel on every call. The policy file itself (`--spec`, `ADHD_POLICY_FILES`, a discovered `workspace-policy.yaml`) is equally trusted input; project policy discovery stops at your home directory and never adopts a file above it.
+The attributes name the caller (`role`, `read_roots`, ...) and the policy decides on them, so they are only as trustworthy as their source. `--adhd-attributes` and `ADHD_POLICY_ATTRIBUTES` are self-asserted by whoever launches `adhd-policy`; they are not authentication. The source must therefore be outside the control of the process being gated: a root-owned or launcher-owned `@file`, or a flag set by the host that starts the wrapper, never a file or environment the gated command or model can write. The gated child never receives `ADHD_POLICY_ATTRIBUTES` or any `--adhd-*` flag (its environment is the allowlist above). A caller cannot supply its own attributes through a tool call: the attributes layer writes them to the call context on every call and the policy Layer reads only that, never anything the tool call carried. The policy file itself (`--spec`, `ADHD_POLICY_FILES`, a discovered `workspace-policy.yaml`) is equally trusted input; project policy discovery stops at your home directory and never adopts a file above it.
 
 ## Exit codes
 
@@ -75,6 +75,7 @@ The attributes name the caller (`role`, `read_roots`, ...) and the policy decide
 | `ADHD_POLICY_ATTRIBUTES` | caller attributes when no `--adhd-attributes` flag is given |
 | `ADHD_POLICY_HTTP_PORT` | port of `adhd-policy-http`; whole number 0..65535, `0` (default) asks the OS; anything else exits 2 |
 | `ADHD_POLICY_LOG_LEVEL` | `debug`, `info`, `warn` (default for the command line), `error`, `silent` |
+| `ADHD_POLICY_TELEMETRY` | `off` silences metrics and event logs; anything else (default) writes them to `~/.adhd/sox-ecosystem/policy/logs`, rotating at 100 MB per file |
 
 ## Build
 

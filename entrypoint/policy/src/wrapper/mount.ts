@@ -18,7 +18,7 @@ import { LOG_LEVEL_ENV_VAR, resolveLogLevel } from './log-level';
 import { buildPolicyPackage } from './package';
 import { prefixCommand, resolveCommandPrefix } from './prefix';
 import { installAbortOnSignals } from './signals';
-import { initPolicyTelemetry } from './telemetry';
+import { initPolicyTelemetry, telemetryConfigFromEnv } from './telemetry';
 import { tracingPlugin } from './tracing';
 import { dispatchVerb, VERB_NAMES } from './verbs/index';
 
@@ -97,7 +97,7 @@ export async function runPolicyCli(argv: readonly string[], deps: IPolicyMountDe
     process.exitCode = await runIrArtifact(argv.slice(1), { cwd, stderr });
     return;
   }
-  initPolicyTelemetry('cli');
+  initPolicyTelemetry('cli', telemetryConfigFromEnv(env));
   const home = deps.home ?? homedir();
   const isVerb = (VERB_NAMES as readonly string[]).includes(argv[0] ?? '');
   const verb = await dispatchVerb(argv, {
@@ -130,7 +130,7 @@ export async function runPolicyCli(argv: readonly string[], deps: IPolicyMountDe
 
 /** Stdio MCP server over the same operations. Explicit start only (VR-06). */
 export async function startPolicyMcp(deps: IPolicyMountDeps & { signal: AbortSignal }): Promise<void> {
-  initPolicyTelemetry('live-service');
+  initPolicyTelemetry('live-service', telemetryConfigFromEnv(deps.env ?? process.env));
   const cwd = deps.cwd ?? process.cwd();
   const { pkg, operations } = await buildPolicyPackage(lazyCtx(deps, cwd, deps.home ?? homedir()));
   await requireRun(mcpPlugin)({
@@ -150,7 +150,7 @@ export async function startPolicyHttp(
     throw new ApiError('invalid_argument', `adhd-policy-http binds loopback only; refusing host "${deps.host}"`);
   }
   const port = deps.port ?? parseHttpPort((deps.env ?? process.env)[HTTP_PORT_ENV_VAR]);
-  initPolicyTelemetry('live-service');
+  initPolicyTelemetry('live-service', telemetryConfigFromEnv(deps.env ?? process.env));
   const cwd = deps.cwd ?? process.cwd();
   const { pkg, operations } = await buildPolicyPackage(lazyCtx(deps, cwd, deps.home ?? homedir()));
   await requireRun(apiFastifyPlugin)({
