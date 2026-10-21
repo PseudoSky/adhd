@@ -312,11 +312,11 @@
       "end_ref": "1a6d42d7bb94702a1f89431eabdbf70f56b6d22e"
     },
     "tripwire-reverse-migrate": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-10-13T08:22:34.515Z",
-      "done_at": null,
+      "done_at": "2026-10-21T18:08:49.902Z",
       "start_ref": "410f70b1f4ccbc54a18f1ac69275f49e3d5dbe1f",
-      "end_ref": null
+      "end_ref": "4ba87b2d6c61696e69fad04a60d72c0d2ebc285c"
     },
     "tripwire-reverse-relink": {
       "status": "pending",
@@ -800,6 +800,18 @@
       "audit_criteria_total": 7,
       "by": "pseudosky",
       "note": ""
+    },
+    {
+      "ts": "2026-10-21T18:08:49.902Z",
+      "from": "core-scaffold",
+      "to": "tripwire-reverse-migrate",
+      "start_ref": "410f70b1f4ccbc54a18f1ac69275f49e3d5dbe1f",
+      "end_ref": "4ba87b2d6c61696e69fad04a60d72c0d2ebc285c",
+      "audit_exit": 0,
+      "audit_criteria_passed": 6,
+      "audit_criteria_total": 6,
+      "by": "pseudosky",
+      "note": "guard exit 0 (orchestrator-verified); request-builder scoped run-many recorded exit 0 by haiku"
     }
   ],
   "amendment_log": [
@@ -1382,7 +1394,7 @@
     "version": "0.8.35",
     "hash": "0b6bc1f3d70e"
   },
-  "current_state": "core-scaffold",
+  "current_state": "tripwire-reverse-migrate",
   "dod_provenance": {
     "confirmed_at": "2026-10-12T23:49:38.410Z",
     "by": "pseudosky",
