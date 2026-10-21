@@ -434,7 +434,7 @@ describe('Review fixes E1 / E13 - dist layout lookup, stale artifact warning, lo
       const artifact = JSON.parse(await readFile(file, 'utf8')) as Record<string, unknown>;
       change(artifact);
       await writeFile(file, JSON.stringify(artifact));
-      return inspectBakedIr(dir);
+      return await inspectBakedIr(dir);
     }
 
     it('E1 a freshly baked artifact is accepted', async () => {
@@ -448,7 +448,7 @@ describe('Review fixes E1 / E13 - dist layout lookup, stale artifact warning, lo
       { name: 'a different artifact format', change: (a) => void (a['formatVersion'] = 0), reason: /artifact format 0 is not 1/ },
       { name: 'a different extractor version', change: (a) => void (a['extractorVersion'] = '0.0.0-other'), reason: /baked by extractor 0\.0\.0-other/ },
       { name: 'no operations', change: (a) => void (a['operations'] = []), reason: /holds no operations/ },
-      { name: 'a changed client surface', change: (a) => void (a['surfaceSha256'] = 'deadbeef'), reason: /declarations changed since the artifact was baked/ },
+      { name: 'a changed client surface', change: (a) => void ((a['artifactSource'] as { deps: Record<string, string> }).deps = { 'service/api.d.ts': 'deadbeef' }), reason: /declarations changed since the artifact was baked/ },
     ];
     for (const row of stale) {
       it(`E1 ${row.name} is rejected with a reason`, async () => {
@@ -461,9 +461,9 @@ describe('Review fixes E1 / E13 - dist layout lookup, stale artifact warning, lo
 
     it('E1 a missing artifact is reported as missing and a corrupt one as unreadable', async () => {
       await withTmpDir('e1-missing', async (dir) => {
-        expect(inspectBakedIr(dir)).toEqual({ reason: 'missing' });
+        expect(await inspectBakedIr(dir)).toEqual({ reason: 'missing' });
         await writeFile(join(dir, 'api.ir.json'), '{not json');
-        const corrupt = inspectBakedIr(dir);
+        const corrupt = await inspectBakedIr(dir);
         expect('reason' in corrupt && corrupt.reason).toMatch(/artifact is unreadable/);
       });
     });

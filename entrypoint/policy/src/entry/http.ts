@@ -3,4 +3,4 @@ import { runEntry } from '../wrapper/run-entry';
 import { installAbortOnSignals } from '../wrapper/signals';
 
 // The port comes from ADHD_POLICY_HTTP_PORT (parsed strictly in the mount; 0 asks the OS for an ephemeral port).
-await runEntry(() => startPolicyHttp({ signal: installAbortOnSignals(), host: '127.0.0.1' }));
+void runEntry(() => startPolicyHttp({ signal: installAbortOnSignals(), host: '127.0.0.1' }));

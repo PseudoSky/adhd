@@ -1,7 +1,6 @@
 {
   "name": "@adhd/policy",
   "version": "0.0.1",
-  "type": "module",
   "bin": {
     "adhd-policy": "./dist/cli.js",
     "adhd-policy-mcp": "./dist/mcp.js",
@@ -15,6 +14,7 @@
     "@adhd/apigen-engine-runtime": "^0.3.4",
     "@adhd/apigen-plugin-api-fastify": "^0.2.9",
     "@adhd/apigen-plugin-cli-output": "^0.2.9",
+    "@adhd/apigen-plugin-ir-cache": "^0.1.5",
     "@adhd/apigen-plugin-mcp": "^0.3.4",
     "@adhd/apigen-plugin-policy": "^0.0.1",
     "@adhd/apigen-plugin-tracing": "^0.2.0",
