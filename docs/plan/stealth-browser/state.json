@@ -340,11 +340,11 @@
       "end_ref": "15c0986a65a84733567178229ed04874c9959734"
     },
     "core-seam": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-10-21T18:12:03.660Z",
-      "done_at": null,
+      "done_at": "2026-10-21T19:19:32.854Z",
       "start_ref": "ad1df1358592de0eabff0ffb31f6ee6448d7b963",
-      "end_ref": null
+      "end_ref": "f23d1e9cba0acfdaf2a387e29a529eeeb19be52c"
     },
     "search-scaffold": {
       "status": "complete",
@@ -860,6 +860,18 @@
       "audit_criteria_total": 5,
       "by": "pseudosky",
       "note": "guard exit 0 (orchestrator-verified); sonnet"
+    },
+    {
+      "ts": "2026-10-21T19:19:32.854Z",
+      "from": "search-tracing",
+      "to": "core-seam",
+      "start_ref": "ad1df1358592de0eabff0ffb31f6ee6448d7b963",
+      "end_ref": "f23d1e9cba0acfdaf2a387e29a529eeeb19be52c",
+      "audit_exit": 0,
+      "audit_criteria_passed": 12,
+      "audit_criteria_total": 12,
+      "by": "pseudosky",
+      "note": "guard exit 0, 12/12 (orchestrator-verified); haiku fixture patch 10458bc7 + sonnet impl 01d05754 bcffc8fa 7b4b3f5e 1bb8eb3a aa5df30a(.8, swept into inventory completion commit); core test 97 files/946 tests"
     }
   ],
   "amendment_log": [
@@ -1624,7 +1636,7 @@
     "version": "0.8.35",
     "hash": "0b6bc1f3d70e"
   },
-  "current_state": "search-tracing",
+  "current_state": "tests-unit-surface",
   "dod_provenance": {
     "confirmed_at": "2026-10-12T23:49:38.410Z",
     "by": "pseudosky",
