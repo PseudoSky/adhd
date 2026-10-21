@@ -82,7 +82,13 @@
     },
     "tool": {
       "type": "object",
-      "description": "Optional tool-presentation metadata for MCP-style hosts: a display title and tool annotations (ADR-0018)."
+      "description": "Optional tool-presentation metadata for MCP-style hosts: a display title, an optional description, tool annotations and an optional outputSchema (ADR-0018).",
+      "properties": {
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "annotations": { "type": "object" },
+        "outputSchema": { "type": "object" }
+      }
     }
   },
   "$defs": {

@@ -696,13 +696,17 @@ function buildToolTable(input: RunInput, adapter: McpTransportAdapter): void {
         );
       }
       const inputSchema = deriveMcpMountInputSchema(op.input);
+      // An upstream-authored description wins over the generated one.
       adapter.bindToolMeta(plan.mcp.name, {
-        description: buildToolDescription(
-          plan.mcp.name,
-          { input: inputSchema },
-          descriptions[plan.mcp.name]
-        ),
+        description:
+          op.tool?.description ??
+          buildToolDescription(
+            plan.mcp.name,
+            { input: inputSchema },
+            descriptions[plan.mcp.name]
+          ),
         inputSchema,
+        ...(op.tool?.outputSchema !== undefined ? { outputSchema: op.tool.outputSchema } : {}),
         ...toolPresentation(op.tool),
       });
       adapter.markTerminalRoute(plan.mcp.name);

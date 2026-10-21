@@ -141,7 +141,7 @@ Single-request streaming HTTP for long-lived operations (server-sent events per 
 
 - A `string` return is emitted as the raw text in `content[0].text` with no `structuredContent`; any other value is `JSON.stringify`-ed, with `structuredContent` for an object return.
 - Every `ApiError` is a tool result with `isError: true`, text `<code>: <message>` and the machine-readable code in `_meta['adhd/error']` (`{ code }`, plus `gatewayCode: 'unavailable'` for an unavailable gateway host, whose text is `unavailable: <message>`). `callTool` resolves for these. Unknown tool names, malformed requests and non-`ApiError` throws stay JSON-RPC protocol errors.
-- `tools/list` carries `title` and `annotations` from `Operation.tool` when present.
+- `tools/list` carries `title`, `annotations` and `outputSchema` from `Operation.tool` when present; an `Operation.tool.description` replaces the generated description for terminal-route tools.
 - Client cancellation (`notifications/cancelled`) aborts the dispatched call's `signal`.
 
 ### Gateway and proxy routes (`options.terminal`)

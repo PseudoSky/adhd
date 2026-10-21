@@ -122,8 +122,17 @@ export function operationsFromMcpTools(
 
     const annotations = tool.annotations as Record<string, unknown> | undefined;
     const title = typeof tool.title === 'string' ? tool.title : undefined;
-    const meta: { title?: string; annotations?: Record<string, unknown> } = {
+    const description = typeof tool.description === 'string' && tool.description !== '' ? tool.description : undefined;
+    const outputSchema = tool.outputSchema as Record<string, unknown> | undefined;
+    const meta: {
+      title?: string;
+      description?: string;
+      annotations?: Record<string, unknown>;
+      outputSchema?: Record<string, unknown>;
+    } = {
       ...(title !== undefined ? { title } : {}),
+      ...(description !== undefined ? { description } : {}),
+      ...(outputSchema !== undefined ? { outputSchema: { ...outputSchema } } : {}),
       ...(annotations !== undefined ? { annotations: { ...annotations } } : {}),
     };
     operations.push({

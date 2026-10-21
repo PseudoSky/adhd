@@ -531,7 +531,14 @@ export type MountedOperation = Operation & {
    * Optional tool-presentation metadata for MCP-style hosts (title and tool
    * annotations). Mirrors {@link Operation.tool}.
    */
-  tool?: { title?: string; annotations?: Record<string, unknown> };
+  tool?: {
+    title?: string;
+    /** Upstream-authored tool description; preferred over a generated one by MCP hosts. */
+    description?: string;
+    annotations?: Record<string, unknown>;
+    /** Upstream-authored JSON Schema (object) for the tool's result. */
+    outputSchema?: Record<string, unknown>;
+  };
 };
 
 // ---------------------------------------------------------------------------
