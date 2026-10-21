@@ -48,6 +48,43 @@ Each bug is a red-before-work guard on the state that owns the behavior; the cri
 | 7f881aa7 | HIGH | `core-seam.6` (not covered by the completed `chrome-lifecycle`: default `reaperScope` is `port-occupant` and `launchChrome` accepts any reachable listener) |
 | 406a4e66 | | `search-port-engine.10`, `search-inventory.6` |
 | e093636f | | `core-seam.5` (static scan stays `chrome-lifecycle.24`) |
+| 591e1a7 (old commit: github code search via embedded JSON, HITL login wall, raw network status, request timeout) | | `core-seam.7`, `core-seam.8`, `core-seam.9`, `search-port-providers.9`, `search-port-providers.10`, `search-port-engine.9`, `search-port-engine.11`, `search-port-engine.12`, `search-port-engine.13`, `search-port-engine.14`, `search-port-guards.11`, `search-verbs.13`, `search-verbs.14`, `search-verbs.15`, `search-errors.7`, `search-hosts.22`, `search-inventory.7` |
+| c00edea (old commit: no retry of a zero-result page, retry only transport failures) | | `core-seam.10`, `search-port-engine.15`, `search-verbs.16`, `search-inventory.7` |
+
+### Delta fold-in (2026-10-21): fixes that went into the old agent-search after the port inventory
+
+The old `agent-browser/` (agent-search) gained two commits after the failsafe inventory baseline: `591e1a7` and `c00edea`. The delta report listed 15 behavioral rows; each is now a red-before-work guard (`scripts/guards/search_c.py`, criterion text in `scripts/guards/delta-criteria.json`, mirrored in `contexts/<state>.md`) proven by a unit test that simulates the real use case (mocked process spawn and network, fixtures from `agent-browser/test-fixtures/github/`). Criterion ids are appended, never renumbered.
+
+| Delta row | Behavior | Criterion (owning state) |
+|---|---|---|
+| 1 | provider config types, no `github-code` provider name pinned | `search-port-providers.9` (reworded) |
+| 2 | `emptyRequiresLogin`, `fallbackNetwork`, `sharedProfile`, `fallbackView` | `search-port-providers.9`, `search-port-providers.10` |
+| 3 | login wall response (`login_required`, `return_to`, signed-in vs signed-out) | `search-port-engine.11` |
+| 4 | login wall trips the guard without a lock; `reveal` and `confirmSolved` | `search-port-guards.11`, `search-verbs.13` (`search-verbs.4` carved out) |
+| 5 | `sharedProfile` page option (browser context create/close/dispose) | `core-seam.7` |
+| 7 | raw network status: 429 and 503 with `retry-after` | `search-port-engine.12` |
+| 8 | request `timeoutMs` honoured | `search-port-engine.13`, `search-verbs.14` |
+| 9 | unsupported strategy fails before any page: `SEARCH_FAILED` reason `strategy-unsupported` | `search-verbs.15`, `search-errors.7`, `search-port-engine.14`, `search-port-engine.9` (reworded: no "fall back to dom once") |
+| 10 | `fallbackView` and the no-DOM-strategy case | `search-port-providers.10`, `search-port-engine.14` |
+| 11 | embedded-json `{path}` interpolation, markup stripping, entity decoding | `core-seam.8` |
+| 12, 13 | HITL on closed stdin aborts with exit 2 (`HITL_ABORTED`) | `search-hosts.22`, `search-errors.7` |
+| 14 | `lsof -sTCP:LISTEN` idle-shutdown lookup | `core-seam.9` |
+| 18 | `decideRetry` does not retry `empty` (legitimate zero results) | `core-seam.10`, `search-verbs.16` |
+| 19 | `noCaptureOutcome` (WebSocket error or timeout vs empty) | `search-port-engine.15` |
+| 6, 15 | already covered by existing criteria (no change) | unchanged |
+| 16, 17, 20 | no action (not behavior of the port) | none |
+
+`search-inventory.7` makes the inventory own every delta symbol (`fallbackView`, `resolveProvider`, `loginWallResponse`, `noCaptureOutcome`, `decideRetry`, `sharedProfile`, `lsof`). Core-side rows land on `core-seam`, which stays in progress; its reservation gained `cdp/targets.ts`, `parsers.ts`, `capture/bans.ts`, the three `lifecycle/reaper-*.ts` files and the specs below.
+
+Repairs reported by the orchestrator, folded in the same pass:
+
+- `core-seam.12` and a relaxed `chrome-lifecycle.11`: three specs the guards did not own (`cdp/browser.spec.ts`, `lifecycle/concurrent-launch.spec.ts`, `lifecycle/reaper-scope.spec.ts`) plus `capture-parsers/bans.spec.ts` are now in `core-seam` mutates, edited for fixtures only (assertion lines compared against the state start, `lsof` flag spelling normalized); `chrome-lifecycle.11` compares assertion lines rather than bytes. `core-seam.6` text was corrected to match its guard.
+- `prod-errors.9`: `api.launchChrome` and the other verbs that wrap a lifecycle failure rethrow the typed `LifecycleError`/reason (`src/api.ts` added to `prod-errors` mutates).
+- `core-seam.11`: the reaper port-occupant path threads the resolved profile through `ChromeReaperConfig` to `killChrome` instead of using the default profile.
+- `core-scaffold.2` and `tripwire-reverse-migrate.1`: criterion text now states what the guard checks.
+- `human-blockers.json` declares `hb-confirm-token` and `hb-tripwire-invalid-key` (code identifiers, not secrets) so gap-check no longer warns.
+
+Decisions: no new error code (the `strategy-unsupported` case is a reason of `SEARCH_FAILED`); `search-hosts.23` pins commander `^14.0.3` because commander 15 requires node >=22.12.0 while the entrypoint engines is >=22.5 and the workspace pins 14.0.3; the delta fixtures live under the existing `agent-browser/test-fixtures/github/` and are copied by the owning states, not shared across packages.
 
 ## THREE approved new packages
 
@@ -89,22 +126,22 @@ Wave = dependency depth; states in one wave with no edge between them may run co
 | 15 | `tripwire-reverse-migrate` | migrate | work | executor=typescript-pro tier=sonnet/high | `/Users/nix/dev/projects/reverse-apis/.worktrees/tripwire-adopt/`, `/Users/nix/dev/projects/reverse-apis/.git/info/exclude`, `docs/plan/stealth-browser/tripwire-reverse/` | `guard.py tripwire-reverse-migrate` |
 | 15 | `split-plan-repair` | scaffold | work | plan-builder amendment: rename core to @adhd/stealth-core-br | `docs/plan/stealth-browser/scripts/`, `docs/plan/stealth-browser/dag.json`, `docs/plan/stealth-browser/contexts/` ... | `guard.py split-plan-repair` |
 | 16 | `core-scaffold` | scaffold | work | typescript-pro sonnet/high | `packages/stealth/stealth-core-browser/`, `entrypoint/stealth-browser/`, `.adhd/workspace.json` ... | `guard.py core-scaffold` |
-| 17 | `core-seam` | migrate | work | typescript-pro sonnet/high | `packages/stealth/stealth-core-browser/src/lib/managers.ts`, `packages/stealth/stealth-core-browser/src/lib/chrome-manager.ts`, `packages/stealth/stealth-core-browser/src/lib/lifecycle/index.ts` ... | `guard.py core-seam` |
+| 17 | `core-seam` | migrate | work | typescript-pro sonnet/high | `packages/stealth/stealth-core-browser/src/lib/managers.ts`, `packages/stealth/stealth-core-browser/src/lib/chrome-manager.ts`, `packages/stealth/stealth-core-browser/src/lib/lifecycle/index.ts` ... | `guard.py core-seam` delta: core-seam.7-12 (591e1a7, c00edea, repairs) |
 | 17 | `search-scaffold` | scaffold | work | typescript-pro sonnet/high | `entrypoint/stealth-search/`, `tsconfig.base.json`, `pnpm-lock.yaml` ... | `guard.py search-scaffold` |
 | 18 | `tests-unit-surface` | verify | work | executor=test-automator tier=sonnet/medium | `packages/stealth/stealth-core-browser/src/test/unit/surface/` | `guard.py tests-unit-surface` |
-| 18 | `prod-errors` | surface | work | executor=typescript-pro tier=sonnet/high | `packages/stealth/stealth-core-browser/src/errors.ts`, `packages/stealth/stealth-core-browser/src/lib/`, `packages/stealth/stealth-core-browser/src/index.ts` ... | `guard.py prod-errors` |
-| 18 | `search-inventory` | migrate | work | typescript-pro sonnet/high | `docs/plan/stealth-browser/evidence/search-failsafe-inventory.json` | `guard.py search-inventory` |
+| 18 | `prod-errors` | surface | work | executor=typescript-pro tier=sonnet/high | `packages/stealth/stealth-core-browser/src/errors.ts`, `packages/stealth/stealth-core-browser/src/lib/`, `packages/stealth/stealth-core-browser/src/index.ts` ... | `guard.py prod-errors` delta: prod-errors.9 (api.launchChrome typed errors) |
+| 18 | `search-inventory` | migrate | work | typescript-pro sonnet/high | `docs/plan/stealth-browser/evidence/search-failsafe-inventory.json` | `guard.py search-inventory` delta: search-inventory.7 (591e1a7, c00edea) |
 | 18 | `search-tracing` | surface | work | typescript-pro sonnet/medium | `entrypoint/stealth-search/src/tracing.ts`, `entrypoint/stealth-search/src/telemetry.ts` | `guard.py search-tracing` |
 | 19 | `prod-examples` | surface | work | executor=typescript-pro tier=sonnet/medium | `packages/stealth/stealth-core-browser/examples/`, `packages/stealth/stealth-core-browser/src/test/unit/examples/`, `packages/stealth/stealth-core-browser/tsconfig.spec.json` | `guard.py prod-examples` |
 | 19 | `sp-reaper-smoke` | verify | work | executor=qa tier=sonnet/medium | `docs/plan/stealth-browser/smoke/reaper-smoke.mjs`, `docs/plan/stealth-browser/smoke/reaper-smoke.md`, `docs/plan/stealth-browser/smoke/reaper-smoke.json` | `guard.py sp-reaper-smoke` |
-| 19 | `search-errors` | migrate | work | typescript-pro sonnet/high | `entrypoint/stealth-search/src/errors.ts`, `entrypoint/stealth-search/src/test/unit/errors/`, `entrypoint/stealth-search/docs/ERRORS.md` | `guard.py search-errors` |
+| 19 | `search-errors` | migrate | work | typescript-pro sonnet/high | `entrypoint/stealth-search/src/errors.ts`, `entrypoint/stealth-search/src/test/unit/errors/`, `entrypoint/stealth-search/docs/ERRORS.md` | `guard.py search-errors` delta: search-errors.7 (591e1a7) |
 | 20 | `tests-use-cases` | verify | work | executor=test-automator tier=sonnet/high | `packages/stealth/stealth-core-browser/src/test/use-cases/`, `packages/stealth/stealth-core-browser/src/test/support/profile-fixtures.ts`, `packages/stealth/stealth-core-browser/src/test/support/page-fixtures.ts` | `guard.py tests-use-cases` |
-| 20 | `search-port-providers` | migrate | work | typescript-pro sonnet/high | `entrypoint/stealth-search/src/lib/types.ts`, `entrypoint/stealth-search/src/lib/providers.ts`, `entrypoint/stealth-search/src/lib/utils.ts` ... | `guard.py search-port-providers` |
+| 20 | `search-port-providers` | migrate | work | typescript-pro sonnet/high | `entrypoint/stealth-search/src/lib/types.ts`, `entrypoint/stealth-search/src/lib/providers.ts`, `entrypoint/stealth-search/src/lib/utils.ts` ... | `guard.py search-port-providers` delta: providers.9 reworded, .10 (591e1a7) |
 | 20 | `search-port-fetch` | migrate | work | typescript-pro sonnet/high | `entrypoint/stealth-search/src/lib/fetch/`, `entrypoint/stealth-search/src/test/unit/fetch/`, `docs/plan/stealth-browser/evidence/split/u-pdf.json` | `guard.py search-port-fetch` |
-| 20 | `search-port-guards` | migrate | work | typescript-pro sonnet/high | `entrypoint/stealth-search/src/lib/guard.ts`, `entrypoint/stealth-search/src/lib/tripwire.ts`, `entrypoint/stealth-search/src/lib/config.ts` ... | `guard.py search-port-guards` |
-| 21 | `search-port-engine` | migrate | work | typescript-pro sonnet/high | `entrypoint/stealth-search/src/lib/network.ts`, `entrypoint/stealth-search/src/lib/dom.ts`, `entrypoint/stealth-search/src/lib/challenge.ts` ... | `guard.py search-port-engine` |
-| 22 | `search-verbs` | surface | work | typescript-pro sonnet/high | `entrypoint/stealth-search/src/api.ts`, `entrypoint/stealth-search/src/lib/search.ts`, `entrypoint/stealth-search/src/host-projection.ts` ... | `guard.py search-verbs` |
-| 23 | `search-hosts` | surface | work | typescript-pro sonnet/high | `entrypoint/stealth-search/src/server.ts`, `entrypoint/stealth-search/src/cli.ts`, `entrypoint/stealth-search/src/host-flags.ts` ... | `guard.py search-hosts` |
+| 20 | `search-port-guards` | migrate | work | typescript-pro sonnet/high | `entrypoint/stealth-search/src/lib/guard.ts`, `entrypoint/stealth-search/src/lib/tripwire.ts`, `entrypoint/stealth-search/src/lib/config.ts` ... | `guard.py search-port-guards` delta: guards.11 (591e1a7) |
+| 21 | `search-port-engine` | migrate | work | typescript-pro sonnet/high | `entrypoint/stealth-search/src/lib/network.ts`, `entrypoint/stealth-search/src/lib/dom.ts`, `entrypoint/stealth-search/src/lib/challenge.ts` ... | `guard.py search-port-engine` delta: engine.9 reworded, .11-.15 (591e1a7, c00edea) |
+| 22 | `search-verbs` | surface | work | typescript-pro sonnet/high | `entrypoint/stealth-search/src/api.ts`, `entrypoint/stealth-search/src/lib/search.ts`, `entrypoint/stealth-search/src/host-projection.ts` ... | `guard.py search-verbs` delta: verbs.4 carved out, .13-.16 (591e1a7, c00edea) |
+| 23 | `search-hosts` | surface | work | typescript-pro sonnet/high | `entrypoint/stealth-search/src/server.ts`, `entrypoint/stealth-search/src/cli.ts`, `entrypoint/stealth-search/src/host-flags.ts` ... | `guard.py search-hosts` delta: hosts.22 (591e1a7), .23 (commander ^14.0.3) |
 | 24 | `sp-switch` | verify | work | executor=devops-engineer tier=sonnet/medium | `package.json`, `pnpm-lock.yaml`, `docs/plan/stealth-browser/smoke/switch.md` | `guard.py sp-switch` |
 | 24 | `search-usecases` | verify | work | typescript-pro sonnet/high | `entrypoint/stealth-search/src/test/use-cases/` | `guard.py search-usecases` |
 | 24 | `search-examples` | verify | work | typescript-pro sonnet/medium | `entrypoint/stealth-search/examples/`, `entrypoint/stealth-search/src/test/unit/examples/`, `entrypoint/stealth-search/README.md` | `guard.py search-examples` |
