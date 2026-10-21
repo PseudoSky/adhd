@@ -1536,6 +1536,18 @@
         "scripts/guard.py"
       ],
       "by": "pseudosky"
+    },
+    {
+      "ts": "2026-10-21T18:49:55.824Z",
+      "state": "core-scaffold",
+      "class": "executor",
+      "type": "plan-edit",
+      "reason": "core-scaffold.2 criterion text rewritten to match guard behaviour",
+      "files_synced": [
+        "contexts/core-scaffold.md",
+        "scripts/guards/core.py"
+      ],
+      "by": "pseudosky"
     }
   ],
   "authored_with": {
