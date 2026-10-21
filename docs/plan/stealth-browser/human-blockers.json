@@ -68,13 +68,17 @@
   },
   "hb-confirm-token": {
     "type": "manual-approval",
-    "description": "x",
+    "description": "CONFIRM_TOKEN is the exported constant 'I-UNDERSTAND-THE-RISK' of @adhd/resilience-core-tripwire. It is a code identifier, not a secret; no human supplies it.",
     "required_by": [
-      "tripwire-core"
+      "tripwire-core",
+      "tripwire-pack",
+      "tripwire-reverse-migrate"
     ],
-    "verification": "true",
+    "verification": "rg -q \"export const CONFIRM_TOKEN = 'I-UNDERSTAND-THE-RISK'\" docs/plan/stealth-browser/SPEC-tripwire.md",
     "status": "needed",
+    "owner": "dispatcher",
+    "how_to_provide": "Nothing to provide: CONFIRM_TOKEN is a code identifier defined in SPEC-tripwire.md, not a secret or credential.",
     "destination": "env:CONFIRM_TOKEN",
-    "blocks_at": "execution-start"
+    "blocks_at": "per-state"
   }
 }
