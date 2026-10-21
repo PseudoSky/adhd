@@ -1476,6 +1476,18 @@
         "scripts/criteria.json"
       ],
       "by": "pseudosky"
+    },
+    {
+      "ts": "2026-10-21T18:49:54.934Z",
+      "state": "search-port-engine",
+      "class": "executor",
+      "type": "rescope-criterion",
+      "reason": "engine.9 reworded (no fall back to dom once), engine.11-15 added (login wall, 429/503, timeoutMs, fallbackView, noCaptureOutcome)",
+      "files_synced": [
+        "contexts/search-port-engine.md",
+        "scripts/criteria.json"
+      ],
+      "by": "pseudosky"
     }
   ],
   "authored_with": {
