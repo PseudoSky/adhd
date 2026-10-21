@@ -1464,6 +1464,18 @@
         "scripts/criteria.json"
       ],
       "by": "pseudosky"
+    },
+    {
+      "ts": "2026-10-21T18:49:54.783Z",
+      "state": "search-port-providers",
+      "class": "executor",
+      "type": "rescope-criterion",
+      "reason": "providers.9 rewritten (no github-code provider name), providers.3 text, providers.10 added (emptyRequiresLogin, fallbackNetwork, sharedProfile, fallbackView)",
+      "files_synced": [
+        "contexts/search-port-providers.md",
+        "scripts/criteria.json"
+      ],
+      "by": "pseudosky"
     }
   ],
   "authored_with": {
