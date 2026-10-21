@@ -65,5 +65,16 @@
     "how_to_provide": "Done: @adhd/sox-service-proxy@0.6.0 published (npm view exits 0). sp-link completed through the dev-tarball override; sp-switch removes the override and re-locks against the registry.",
     "destination": "/Users/nix/.cache/adhd-dev-tarballs/ (sp-link); npm registry (sp-switch)",
     "blocks_at": "per-state"
+  },
+  "hb-confirm-token": {
+    "type": "manual-approval",
+    "description": "x",
+    "required_by": [
+      "tripwire-core"
+    ],
+    "verification": "true",
+    "status": "needed",
+    "destination": "env:CONFIRM_TOKEN",
+    "blocks_at": "execution-start"
   }
 }
