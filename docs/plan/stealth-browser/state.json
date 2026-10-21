@@ -347,10 +347,10 @@
       "end_ref": null
     },
     "search-scaffold": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-10-21T18:12:35.504Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "72b1d368081d0a5f282569c2d0efd679e6c3a490",
       "end_ref": null
     },
     "search-inventory": {
@@ -1406,7 +1406,7 @@
     "version": "0.8.35",
     "hash": "0b6bc1f3d70e"
   },
-  "current_state": "core-seam",
+  "current_state": "search-scaffold",
   "dod_provenance": {
     "confirmed_at": "2026-10-12T23:49:38.410Z",
     "by": "pseudosky",
