@@ -4644,6 +4644,15 @@
       "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py core-seam --only core-seam.9",
       "expect": "exit0",
       "cwd": "repo-root"
+    },
+    {
+      "id": "core-seam.10",
+      "phase": "migrate",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py core-seam --only core-seam.10",
+      "expect": "exit0",
+      "cwd": "repo-root"
     }
   ]
 }
