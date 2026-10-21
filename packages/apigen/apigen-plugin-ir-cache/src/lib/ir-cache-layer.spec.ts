@@ -58,7 +58,7 @@ vi.mock('node:fs/promises', async (importOriginal) => {
   };
 });
 import type { ExtractCall, Operation } from '@adhd/apigen-core-client';
-import { createExtractInvoker } from '@adhd/apigen-core-client';
+import { createExtractInvoker, withSourceFiles } from '@adhd/apigen-core-client';
 import {
   computeCacheKey,
   createIrCacheLayer,
@@ -175,11 +175,18 @@ describe('computeCacheKey', () => {
     expect(after).not.toBe(before);
   });
 
-  it('changes when a transitively-imported file changes', async () => {
+  it('changes when a file the extractor reported reading changes', async () => {
+    const before = await computeCacheKey(makeCall(), EXTRACTOR_VERSION, [importPath]);
+    writeSources(undefined, `export interface Imported { v: number; extra: string }\n`);
+    const after = await computeCacheKey(makeCall(), EXTRACTOR_VERSION, [importPath]);
+    expect(after).not.toBe(before);
+  });
+
+  it('does not change when an import the extractor did not report changes (the layer never walks imports)', async () => {
     const before = await computeCacheKey(makeCall(), EXTRACTOR_VERSION);
     writeSources(undefined, `export interface Imported { v: number; extra: string }\n`);
     const after = await computeCacheKey(makeCall(), EXTRACTOR_VERSION);
-    expect(after).not.toBe(before);
+    expect(after).toBe(before);
   });
 
   it('changes when the extractor version changes', async () => {
@@ -332,8 +339,8 @@ describe('createIrCacheLayer — RUNTIME CACHE mode HIT/MISS semantics', () => {
     expect(runExtractor).toHaveBeenCalledTimes(2); // content change — MISS
   });
 
-  it('editing an IMPORTED file is a MISS (extractor runs again)', async () => {
-    const runExtractor = vi.fn(async () => FIXTURE_OPS);
+  it('editing an IMPORTED file the extractor reported reading is a MISS (extractor runs again)', async () => {
+    const runExtractor = vi.fn(async () => withSourceFiles(FIXTURE_OPS, [importPath]));
     const invoke = createExtractInvoker(
       [createIrCacheLayer({ cache: cachePath, extractorVersion: EXTRACTOR_VERSION })],
       runExtractor

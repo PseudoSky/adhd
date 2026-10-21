@@ -1,11 +1,9 @@
-// guards: A decider that throws, rejects, times out, returns a malformed decision or cannot be loaded results in an allow, or leaks its error text or call arguments to the client.
+// guards: A decider that throws, rejects, times out or returns a malformed decision results in an allow, or leaks its error text or call arguments to the client.
 // tier: S
 // cites: S8.1 fail-closed paths: a failing decider never allows, refusals are generic, nothing sensitive leaks.
 
-import { mkdir, rm, rmdir, writeFile } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createPolicyLayerPlugin } from '../index';
+import { makePolicyPlugin } from '../index';
 import type { IPolicyAskHandler, IPolicyDecider, IPolicyLayerOptions, PolicyErrorPhase } from '../index';
 import { createHost, latch, refusal } from './helpers/harness';
 import { realDecider, unloadableDecider } from './helpers/policies';
@@ -19,9 +17,9 @@ interface IObserved {
   readonly error: unknown;
 }
 
-function build(decider: IPolicyDecider | string, extra: Partial<IPolicyLayerOptions> = {}) {
+function build(decider: IPolicyDecider, extra: Partial<IPolicyLayerOptions> = {}) {
   const observed: IObserved[] = [];
-  const plugin = createPolicyLayerPlugin({
+  const plugin = makePolicyPlugin({
     decider,
     onError: (error, info) => observed.push({ phase: info.phase, error }),
     ...extra,
@@ -30,7 +28,7 @@ function build(decider: IPolicyDecider | string, extra: Partial<IPolicyLayerOpti
 }
 
 const call = (host: ReturnType<typeof createHost>, extra: Record<string, unknown> = {}) =>
-  host.invoke('files.read', { path: `/demo/${SECRET}` }, { envelope: { token: SECRET, attributes: { role: 'dev' } }, ...extra });
+  host.invoke('files/read', { path: `/demo/${SECRET}` }, { envelope: { token: SECRET }, attributes: { role: 'dev' }, ...extra });
 
 afterEach(() => {
   vi.useRealTimers();
@@ -108,30 +106,11 @@ describe('Feature: Safety-relevant failure paths - a decider that fails never al
     }
   });
 
-  it('@S8.1 @negative a decider that cannot be loaded refuses every call (load phase)', async () => {
-    const { host, observed } = build(`./does-not-exist-${SECRET}.mjs`);
-    for (let i = 0; i < 2; i += 1) {
-      const error = await refusal(call(host));
-      expect(error.code).toBe('permission_denied');
-      expect(error.message).toBe(GENERIC);
-    }
-    expect(host.ran).toHaveLength(0);
-    expect(observed.map((o) => o.phase)).toEqual(['load', 'load']);
-  });
-
-  it('@S8.1 @negative a module reference without createDecider, or with a decider-less result, is refused (load phase)', async () => {
-    const { host, observed } = build('node:path');
-    expect((await refusal(call(host))).message).toBe(GENERIC);
-    expect(host.ran).toHaveLength(0);
-    expect(observed[0]?.phase).toBe('load');
-    expect(String((observed[0]?.error as Error).message)).toContain('module has no createDecider export');
-  });
-
-  it('@S8.1 @negative an object that is not a decider is refused (load phase)', async () => {
+  it('@S8.1 @negative an object that is not a decider is refused at call time (decide phase)', async () => {
     const { host, observed } = build({} as unknown as IPolicyDecider);
     expect((await refusal(call(host))).message).toBe(GENERIC);
     expect(host.ran).toHaveLength(0);
-    expect(observed.map((o) => o.phase)).toEqual(['load']);
+    expect(observed.map((o) => o.phase)).toEqual(['decide']);
   });
 
   it('@S8.1 @negative an unsupported transport is refused without consulting the decider', async () => {
@@ -175,12 +154,12 @@ describe('Feature: Safety-relevant failure paths - a decider that fails never al
 
   it('@S8.1 @negative a policy that cannot be evaluated is refused by the real decider, and an allowing real policy still runs the operation', async () => {
     const bad = build(unloadableDecider());
-    const error = await refusal(bad.host.invoke('files.read', { path: '/demo/a' }, {}));
+    const error = await refusal(bad.host.invoke('files/read', { path: '/demo/a' }, {}));
     expect(error.code).toBe('permission_denied');
     expect(bad.host.ran).toHaveLength(0);
 
     const good = build(realDecider());
-    expect(await good.host.invoke('files.read', { path: '/demo/shared/guide.md' }, { envelope: { attributes: { role: 'dev', read_roots: ['/demo/work'] } } })).toBe('read-ran');
+    expect(await good.host.invoke('files/read', { path: '/demo/shared/guide.md' }, { attributes: { role: 'dev', read_roots: ['/demo/work'] } })).toBe('read-ran');
   });
 
   it('@S8.1 @negative the client never sees argument values: not in the message, the code, the details or the cause', async () => {
@@ -200,7 +179,7 @@ describe('Feature: Safety-relevant failure paths - a decider that fails never al
 
   it('@S8.1 @negative the default observer writes exactly one stderr line naming the phase and error class, never a value', async () => {
     const write = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
-    const plugin = createPolicyLayerPlugin({
+    const plugin = makePolicyPlugin({
       decider: {
         decide: () => {
           throw new TypeError(`secret ${SECRET}`);
@@ -216,7 +195,7 @@ describe('Feature: Safety-relevant failure paths - a decider that fails never al
   });
 
   it('@S8.1 @negative an onError observer that throws changes nothing: the call is still refused', async () => {
-    const plugin = createPolicyLayerPlugin({
+    const plugin = makePolicyPlugin({
       decider: { decide: () => Promise.reject(new Error('boom')) },
       onError: () => {
         throw new Error('observer exploded');
@@ -226,58 +205,5 @@ describe('Feature: Safety-relevant failure paths - a decider that fails never al
     const error = await refusal(call(host));
     expect(error.message).toBe(GENERIC);
     expect(host.ran).toHaveLength(0);
-  });
-});
-
-/** `<repo>/tmp/apigen-plugin-policy`: the gitignored scratch root this package's tests write under. */
-const SCRATCH_ROOT = resolve(import.meta.dirname, '../../../../..', 'tmp', 'apigen-plugin-policy');
-
-describe('Feature: A decider given as a module reference is loaded once and a broken module never allows', () => {
-  async function withModule<T>(name: string, source: string, fn: (specifier: string, counter: { loads: number; options?: unknown }) => Promise<T>): Promise<T> {
-    const dir = join(SCRATCH_ROOT, `${name}-${process.pid}`);
-    await mkdir(dir, { recursive: true });
-    const counter: { loads: number; options?: unknown } = { loads: 0 };
-    (globalThis as Record<string, unknown>)['__policyLayerTest'] = counter;
-    try {
-      const file = join(dir, 'decider.mjs');
-      await writeFile(file, source);
-      return await fn(file, counter);
-    } finally {
-      delete (globalThis as Record<string, unknown>)['__policyLayerTest'];
-      await rm(dir, { recursive: true, force: true });
-      // Remove the scratch root once empty so an empty `tmp/apigen-plugin-policy` is not left behind (non-recursive: never removes anything else).
-      await rmdir(SCRATCH_ROOT).catch((error: NodeJS.ErrnoException) => {
-        if (error.code !== 'ENOTEMPTY' && error.code !== 'ENOENT') throw error;
-      });
-    }
-  }
-
-  it('@S8.1 @happy createDecider runs once for many calls and receives deciderOptions', async () => {
-    const source = `export function createDecider(options) {
-      const state = globalThis.__policyLayerTest; state.loads += 1; state.options = options;
-      return { decide: async () => ({ decision: 'allow' }) };
-    }`;
-    await withModule('once', source, async (specifier, counter) => {
-      const host = createHost(createPolicyLayerPlugin({ decider: specifier, deciderOptions: { scope: 'x' } }));
-      expect(await call(host)).toBe('read-ran');
-      expect(await call(host)).toBe('read-ran');
-      expect(await Promise.all([call(host), call(host)])).toEqual(['read-ran', 'read-ran']);
-      expect(counter.loads).toBe(1);
-      expect(counter.options).toEqual({ scope: 'x' });
-    });
-  });
-
-  it('@S8.1 @negative a createDecider that throws is tried once and every call is refused', async () => {
-    const source = `export function createDecider() {
-      globalThis.__policyLayerTest.loads += 1;
-      throw new Error('cannot start');
-    }`;
-    await withModule('broken', source, async (specifier, counter) => {
-      const { host, observed } = build(specifier);
-      for (let i = 0; i < 3; i += 1) expect((await refusal(call(host))).message).toBe(GENERIC);
-      expect(host.ran).toHaveLength(0);
-      expect(counter.loads).toBe(1);
-      expect(observed.map((o) => o.phase)).toEqual(['load', 'load', 'load']);
-    });
   });
 });

@@ -3,7 +3,6 @@
 // log), declares a deliberately false server name, and can be told to misbehave.
 
 import type { IProcessLauncher, IProcessSpec } from '../../lib/sources';
-import { SourceError } from '../../lib/sources';
 import { FakeProcess } from './fake-process';
 
 export interface IStubTool {
@@ -87,6 +86,10 @@ export function createStubMcpUpstream(options: IStubOptions): IStubMcpUpstream {
       });
       return;
     }
+    if (method === 'ping') {
+      respond(proc, { id, result: {} });
+      return;
+    }
     if (method === 'tools/list') {
       if (options.listTools === 'error') {
         respond(proc, { id, error: { code: -32603, message: 'list refused' } });
@@ -140,7 +143,7 @@ export function createStubMcpUpstream(options: IStubOptions): IStubMcpUpstream {
     launcher: {
       async start(spec) {
         started.push(spec);
-        if (options.failStart) throw new SourceError('spawn-failed', `cannot start ${spec.command}: ENOENT`);
+        if (options.failStart) throw new Error(`cannot start ${spec.command}: ENOENT`);
         let buffer = '';
         const proc: FakeProcess = new FakeProcess({
           ...(options.ignoreSigterm ? { ignoreSigterm: true } : {}),
