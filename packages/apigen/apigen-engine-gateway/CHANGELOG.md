@@ -1,3 +1,15 @@
+## 0.2.5 (2026-10-21)
+
+### 🩹 Fixes
+
+- **apigen-gateway:** idempotent owed-stop count and guarded post-start stop ([899994b8](https://github.com/PseudoSky/adhd/commit/899994b8))
+- **apigen-engine-gateway:** reject restart of a stopped gateway and stop children spawned by a racing start ([16b53560](https://github.com/PseudoSky/adhd/commit/16b53560))
+- **apigen-engine-gateway:** stop already-started hosts when start() partially fails ([7e49d096](https://github.com/PseudoSky/adhd/commit/7e49d096))
+
+### ❤️ Thank You
+
+- pseudosky
+
 ## 0.2.4 (2026-10-15)
 
 ### 🚀 Features

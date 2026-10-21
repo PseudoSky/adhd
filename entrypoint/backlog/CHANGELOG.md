@@ -1,3 +1,19 @@
+## 1.0.19 (2026-10-21)
+
+### 🚀 Features
+
+- **backlog:** add remove-note verb ([4e33bbe4](https://github.com/PseudoSky/adhd/commit/4e33bbe4))
+
+### 🩹 Fixes
+
+- **backlog:** re-anchor CONTRACT.md NoteNotFoundError/NoteRemovalNotPermittedError line refs after merge ([d3b216bc](https://github.com/PseudoSky/adhd/commit/d3b216bc))
+- **backlog:** honest remove-note identity model, verb counts and surface docs ([588e99c8](https://github.com/PseudoSky/adhd/commit/588e99c8))
+- **nx-test:** review corrections for the repo-wide spawn-isolation guard (0945d1b9) ([1a92065c](https://github.com/PseudoSky/adhd/commit/1a92065c))
+
+### ❤️ Thank You
+
+- pseudosky
+
 ## 1.0.18 (2026-10-19)
 
 ### 🩹 Fixes

@@ -1,3 +1,17 @@
+## 0.2.8 (2026-10-21)
+
+### 🩹 Fixes
+
+- **apigen-python-env:** do not report a timeout for a child that exited cleanly and is still draining stdout ([8c0e6216](https://github.com/PseudoSky/adhd/commit/8c0e6216))
+- **apigen-python-env:** settle extractor timeout on exit or close and destroy pipes after kill ([06e642a7](https://github.com/PseudoSky/adhd/commit/06e642a7))
+- **apigen-python-env:** settle extractor on close and bound timeoutMs to setTimeout range ([5d46329d](https://github.com/PseudoSky/adhd/commit/5d46329d))
+- **apigen-python-env:** bound the extractor run with a timeout that kills the child ([d8d8c1c5](https://github.com/PseudoSky/adhd/commit/d8d8c1c5))
+- **workspace:** restore the publish gate's heavy lane and canonicalise the gate ([45532731](https://github.com/PseudoSky/adhd/commit/45532731))
+
+### ❤️ Thank You
+
+- pseudosky
+
 ## 0.2.6 (2026-09-26)
 
 ### 🚀 Features
