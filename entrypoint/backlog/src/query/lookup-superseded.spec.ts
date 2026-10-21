@@ -7,6 +7,9 @@
  * that heals a rotted uid — it returns the live chain head and an additive
  * `forwardedFrom`; `get` and every write verb keep refusing, naming the head.
  *
+ * guards: lookup returns the live chain head for a superseded uid/prefix and get/writes still refuse
+ * cites: 68175e51-9eda-459c-bc23-6bba2b4c7707 AC1 AC2 AC3 AC4 AC5
+ *
  * Tier: S (real store + real api.ts verbs, no mocks, no subprocess).
  * Gap statement: none above S — the behavior is observable in-process; the
  * built-CLI wire shape is covered separately in cli.e2e.ts.
