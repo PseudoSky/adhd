@@ -852,7 +852,17 @@
         "packages/stealth/stealth-core-browser/src/test/unit/seam/",
         "packages/stealth/stealth-core-browser/src/lib/cdp/browser.ts",
         "packages/stealth/stealth-core-browser/src/test/unit/lifecycle/kill.spec.ts",
-        "packages/stealth/stealth-core-browser/src/test/unit/lifecycle/launch.spec.ts"
+        "packages/stealth/stealth-core-browser/src/test/unit/lifecycle/launch.spec.ts",
+        "packages/stealth/stealth-core-browser/src/lib/lifecycle/reaper-entry.ts",
+        "packages/stealth/stealth-core-browser/src/lib/lifecycle/reaper-host.ts",
+        "packages/stealth/stealth-core-browser/src/lib/lifecycle/reaper-link.ts",
+        "packages/stealth/stealth-core-browser/src/lib/cdp/targets.ts",
+        "packages/stealth/stealth-core-browser/src/lib/parsers.ts",
+        "packages/stealth/stealth-core-browser/src/lib/capture/bans.ts",
+        "packages/stealth/stealth-core-browser/src/test/unit/cdp/browser.spec.ts",
+        "packages/stealth/stealth-core-browser/src/test/unit/lifecycle/concurrent-launch.spec.ts",
+        "packages/stealth/stealth-core-browser/src/test/unit/lifecycle/reaper-scope.spec.ts",
+        "packages/stealth/stealth-core-browser/src/test/unit/capture-parsers/bans.spec.ts"
       ],
       "context": "contexts/core-seam.md",
       "notes": "typescript-pro sonnet/high; manager seam (configureManagers/managerFor/chromeExitTarget) moved out of the retired surface-hosts"
