@@ -179,11 +179,11 @@
       "end_ref": null
     },
     "prod-errors": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-10-21T19:19:40.787Z",
-      "done_at": null,
+      "done_at": "2026-10-21T19:41:08.286Z",
       "start_ref": "6e6d55e5c38d725b34014bdc95c041cd0d7ec662",
-      "end_ref": null
+      "end_ref": "ee08311e8ae214f31aa6e0793225cd891ae653eb"
     },
     "prod-examples": {
       "status": "pending",
@@ -872,6 +872,18 @@
       "audit_criteria_total": 12,
       "by": "pseudosky",
       "note": "guard exit 0, 12/12 (orchestrator-verified); haiku fixture patch 10458bc7 + sonnet impl 01d05754 bcffc8fa 7b4b3f5e 1bb8eb3a aa5df30a(.8, swept into inventory completion commit); core test 97 files/946 tests"
+    },
+    {
+      "ts": "2026-10-21T19:41:08.286Z",
+      "from": "tests-unit-surface",
+      "to": "prod-errors",
+      "start_ref": "6e6d55e5c38d725b34014bdc95c041cd0d7ec662",
+      "end_ref": "ee08311e8ae214f31aa6e0793225cd891ae653eb",
+      "audit_exit": 0,
+      "audit_criteria_passed": 8,
+      "audit_criteria_total": 8,
+      "by": "pseudosky",
+      "note": "guard exit 0 (orchestrator-verified); sonnet; ee08311e"
     }
   ],
   "amendment_log": [
@@ -1636,7 +1648,7 @@
     "version": "0.8.35",
     "hash": "0b6bc1f3d70e"
   },
-  "current_state": "tests-unit-surface",
+  "current_state": "prod-examples",
   "dod_provenance": {
     "confirmed_at": "2026-10-12T23:49:38.410Z",
     "by": "pseudosky",
