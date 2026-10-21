@@ -4698,6 +4698,15 @@
       "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-errors --only search-errors.7",
       "expect": "exit0",
       "cwd": "repo-root"
+    },
+    {
+      "id": "search-port-providers.10",
+      "phase": "migrate",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-port-providers --only search-port-providers.10",
+      "expect": "exit0",
+      "cwd": "repo-root"
     }
   ]
 }
