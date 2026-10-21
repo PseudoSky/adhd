@@ -21,6 +21,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { openTmpStore, type TmpStore } from '../test/helpers/tmp-store.js';
 import { buildBacklogEnv } from '../env.js';
 import * as api from '../api.js';
+import type { IOutcomeEnvelope } from '../envelope.js';
 
 const ITEM = '68175e51-9eda-459c-bc23-6bba2b4c7707';
 
@@ -29,7 +30,7 @@ describe(`${ITEM} — lookup heals a superseded uid; get/writes still refuse`, (
   let ctx: api.BacklogCtx;
   let u0: string;
 
-  const ok = <T>(r: { ok: boolean; data?: T }): T => {
+  const ok = <T>(r: IOutcomeEnvelope<unknown>): T => {
     if (!r.ok) throw new Error(`fixture: ${JSON.stringify(r)}`);
     return r.data as T;
   };
