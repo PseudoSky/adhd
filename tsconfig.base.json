@@ -219,7 +219,8 @@
       ],
       "@adhd/stealth-core-browser": [
         "./packages/stealth/stealth-core-browser/src/index.ts"
-      ]
+      ],
+      "@adhd/stealth-search": ["./entrypoint/stealth-search/src/index.ts"]
     }
   },
   "exclude": ["node_modules", "tmp"]
