@@ -1548,6 +1548,18 @@
         "scripts/guards/core.py"
       ],
       "by": "pseudosky"
+    },
+    {
+      "ts": "2026-10-21T18:49:55.983Z",
+      "state": "tripwire-reverse-migrate",
+      "class": "executor",
+      "type": "plan-edit",
+      "reason": "tripwire-reverse-migrate.1 criterion text rewritten to match guard behaviour",
+      "files_synced": [
+        "contexts/tripwire-reverse-migrate.md",
+        "scripts/guard.py"
+      ],
+      "by": "pseudosky"
     }
   ],
   "authored_with": {
