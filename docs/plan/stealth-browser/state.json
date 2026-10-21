@@ -1440,6 +1440,18 @@
         "dag.json"
       ],
       "by": "pseudosky"
+    },
+    {
+      "ts": "2026-10-21T18:49:54.477Z",
+      "state": "search-inventory",
+      "class": "executor",
+      "type": "rescope-criterion",
+      "reason": "search-inventory.7: inventory owns the delta symbols of 591e1a7 and c00edea",
+      "files_synced": [
+        "contexts/search-inventory.md",
+        "scripts/criteria.json"
+      ],
+      "by": "pseudosky"
     }
   ],
   "authored_with": {
