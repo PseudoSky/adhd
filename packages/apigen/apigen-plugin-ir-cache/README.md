@@ -188,10 +188,11 @@ factory, exactly as before — `createLayer`/`opts` only matters for a
   slow gate and by ARTIFACT-mode-compatible reads) covers: entry file
   content; every dependency file the extractor **reported reading**
   (`ExtractResult.sourceFiles`, which `@adhd/apigen-core-client`'s `extract()`
-  fills in; an extractor that reports nothing falls back to the
-  `collectLocalImportPaths` walk) — for an entry installed under
+  fills in; an extractor that reports nothing gets a source-only key; the cache
+  never walks imports itself) — for an entry installed under
   `node_modules`, that includes its own package's files; the tsconfig file the
-  call names; `extractorVersion`; `formatVersion`; and the call's identity
+  call names (the extractor's reported `sourceFiles` already include the resolved
+  tsconfig `extends` chain, so no walk is needed); `extractorVersion`; `formatVersion`; and the call's identity
   (`callIdentity`: `host`, `namespace`, `versionHint`, and every
   `extractorOptions` entry except the run-scoped `session`). An option that
   changes the extracted IR (e.g. `dropFileSegment`) must therefore travel in the

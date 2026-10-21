@@ -299,8 +299,9 @@ function tsconfigOf(call: ExtractCall): string | undefined {
 
 /**
  * Every file besides `call.source` that the result for `call` depends on:
- * `reported` (the extractor's own `sourceFiles`, or the local-import walk when
- * it reported none) plus the tsconfig the call names. Sorted and de-duplicated.
+ * `reported` (the extractor's own `sourceFiles`, or nothing when it
+ * reported none: the layer never walks imports itself) plus the tsconfig the
+ * call names. Sorted and de-duplicated.
  */
 function dependencyPaths(call: ExtractCall, reported: readonly string[]): string[] {
   const all = new Set(reported);

@@ -1,3 +1,9 @@
+## Unreleased
+
+### 🩹 Fixes
+
+- **apigen-plugin-ir-cache:** docs and comments state that the layer awaits the MISS write-through and never walks imports (a source-only key when the extractor reports no `sourceFiles`)
+
 ## 0.1.5 (2026-10-15)
 
 ### 🩹 Fixes

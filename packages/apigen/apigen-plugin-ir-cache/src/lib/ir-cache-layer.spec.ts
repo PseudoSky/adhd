@@ -432,8 +432,8 @@ describe('createIrCacheLayer — cross-mode compatibility (R2.5)', () => {
     await expect(invoke(makeCall())).resolves.toEqual(FIXTURE_OPS);
     expect(runExtractor).toHaveBeenCalledTimes(1);
 
-    // The MISS write-through lands a `staleness` snapshot fire-and-forget so
-    // the NEXT read gets the fast path — a real, observable state change,
+    // The MISS write-through (awaited by the layer) lands a `staleness`
+    // snapshot so the NEXT read gets the fast path — a real, observable state change,
     // awaited via a bounded-deadline poll.
     await vi.waitFor(
       () => {
@@ -497,8 +497,8 @@ describe('createIrCacheLayer — cross-mode compatibility (R2.5)', () => {
 describe('createIrCacheLayer — durability (design doc Revision 3)', () => {
   // THE TEETH for the awaited/durable write contract. The spec deliberately
   // latches the exact point the entry becomes visible (`rename`) and asserts
-  // the layer's promise has NOT settled while that latch is held. Pre-fix
-  // (fire-and-forget `void writeThrough(...)`), the layer resolved as soon as
+  // the layer's promise has NOT settled while that latch is held. A
+  // layer that did not await `writeThrough(...)` would resolve as soon as
   // `next()` returned — so `settled` would be true here and this test RED.
   it('does not settle a MISS until the write is published (rename), then settles with the file present', async () => {
     let releaseRename!: () => void;
