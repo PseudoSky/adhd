@@ -347,11 +347,11 @@
       "end_ref": null
     },
     "search-scaffold": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-10-21T18:12:35.504Z",
-      "done_at": null,
+      "done_at": "2026-10-21T18:24:03.068Z",
       "start_ref": "72b1d368081d0a5f282569c2d0efd679e6c3a490",
-      "end_ref": null
+      "end_ref": "255d77590e6bb4bedbc48f501e77e656e15d0fd7"
     },
     "search-inventory": {
       "status": "pending",
@@ -824,6 +824,18 @@
       "audit_criteria_total": 9,
       "by": "pseudosky",
       "note": "guard repair 614edb74 (rename-aware, commit-scoped); guards exit 0; sweep verified"
+    },
+    {
+      "ts": "2026-10-21T18:24:03.068Z",
+      "from": "search-scaffold",
+      "to": "search-scaffold",
+      "start_ref": "72b1d368081d0a5f282569c2d0efd679e6c3a490",
+      "end_ref": "255d77590e6bb4bedbc48f501e77e656e15d0fd7",
+      "audit_exit": 0,
+      "audit_criteria_passed": 7,
+      "audit_criteria_total": 7,
+      "by": "pseudosky",
+      "note": "guard exit 0; generator-built entrypoint; .5 regex fixed 255d7759"
     }
   ],
   "amendment_log": [
@@ -1406,7 +1418,7 @@
     "version": "0.8.35",
     "hash": "0b6bc1f3d70e"
   },
-  "current_state": "search-scaffold",
+  "current_state": "search-inventory",
   "dod_provenance": {
     "confirmed_at": "2026-10-12T23:49:38.410Z",
     "by": "pseudosky",
