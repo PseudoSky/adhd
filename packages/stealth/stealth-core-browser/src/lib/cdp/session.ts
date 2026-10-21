@@ -14,6 +14,8 @@
  *   - Connection lifecycle (connect/close)
  */
 
+import { StealthCoreBrowserError } from '../../errors.js'
+
 type CdpResponse = { id: number; result?: Record<string, unknown>; error?: { code: number; message: string } }
 type CdpEvent = { method: string; params: Record<string, unknown> }
 type CdpMessage = CdpResponse | CdpEvent
@@ -47,7 +49,7 @@ export class CdpSession {
       const ws = this._ws!
       let timer: ReturnType<typeof setTimeout> | undefined
       let settled = false
-      const settle = (err?: Error): void => {
+      const settle = (err?: StealthCoreBrowserError): void => {
         if (settled) return
         settled = true
         if (timer !== undefined) clearTimeout(timer)
@@ -57,12 +59,12 @@ export class CdpSession {
         } else resolve()
       }
       if (timeoutMs !== undefined) {
-        timer = setTimeout(() => settle(new Error(`WebSocket open timeout after ${timeoutMs}ms`)), timeoutMs)
+        timer = setTimeout(() => settle(StealthCoreBrowserError.of('CDP_CONNECT_FAILED', `WebSocket open timeout after ${timeoutMs}ms`, { detail: { wsUrl, timeoutMs } })), timeoutMs)
       }
       ws.addEventListener('open', () => settle(), { once: true })
-      ws.addEventListener('error', () => settle(new Error('WebSocket connection failed')), { once: true })
+      ws.addEventListener('error', () => settle(StealthCoreBrowserError.of('CDP_CONNECT_FAILED', 'WebSocket connection failed', { detail: { wsUrl } })), { once: true })
       // A close before open is a failed connect, never a hang.
-      ws.addEventListener('close', () => settle(new Error('WebSocket connection failed')), { once: true })
+      ws.addEventListener('close', () => settle(StealthCoreBrowserError.of('CDP_CONNECT_FAILED', 'WebSocket connection failed', { detail: { wsUrl } })), { once: true })
     })
 
     this._connected = true
@@ -75,7 +77,7 @@ export class CdpSession {
         const cb = this.pending.get(msg.id)
         if (cb) {
           this.pending.delete(msg.id)
-          if (msg.error) cb.reject(new Error(msg.error.message))
+          if (msg.error) cb.reject(StealthCoreBrowserError.of('CDP_REMOTE_ERROR', msg.error.message, { detail: { remoteCode: msg.error.code } }))
           else cb.resolve(msg.result ?? {})
         }
         return
@@ -92,7 +94,7 @@ export class CdpSession {
     this._ws.addEventListener('close', () => {
       this._connected = false
       // Reject all pending
-      for (const [, cb] of this.pending) cb.reject(new Error('WebSocket closed'))
+      for (const [, cb] of this.pending) cb.reject(StealthCoreBrowserError.of('CDP_SESSION_CLOSED', 'WebSocket closed'))
       this.pending.clear()
     })
   }
@@ -106,14 +108,14 @@ export class CdpSession {
   send<T = Record<string, unknown>>(method: string, params: Record<string, unknown> = {}, timeoutMs = 30_000): Promise<T> {
     return new Promise<T>((resolve, reject) => {
       if (!this._ws || !this._connected) {
-        reject(new Error('CdpSession not connected'))
+        reject(StealthCoreBrowserError.of('CDP_NOT_CONNECTED', 'CdpSession not connected', { detail: { method } }))
         return
       }
 
       const id = this.nextId++
       const timer = setTimeout(() => {
         this.pending.delete(id)
-        reject(new Error(`CDP timeout: ${method} after ${timeoutMs}ms`))
+        reject(StealthCoreBrowserError.of('CDP_TIMEOUT', `CDP timeout: ${method} after ${timeoutMs}ms`, { detail: { method, timeoutMs } }))
       }, timeoutMs)
 
       this.pending.set(id, {
@@ -126,7 +128,7 @@ export class CdpSession {
       } catch (err) {
         clearTimeout(timer)
         this.pending.delete(id)
-        reject(new Error(`CDP send failed: ${(err as Error).message}`))
+        reject(StealthCoreBrowserError.of('CDP_SEND_FAILED', `CDP send failed: ${(err as Error).message}`, { cause: err, detail: { method } }))
       }
     })
   }
@@ -162,7 +164,7 @@ export class CdpSession {
   close(): void {
     this._connected = false
     try { this._ws?.close() } catch { /* ignore */ }
-    for (const [, cb] of this.pending) cb.reject(new Error('Session closed'))
+    for (const [, cb] of this.pending) cb.reject(StealthCoreBrowserError.of('CDP_SESSION_CLOSED', 'Session closed'))
     this.pending.clear()
     this.handlers.clear()
   }

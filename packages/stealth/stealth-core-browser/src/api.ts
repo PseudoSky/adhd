@@ -19,6 +19,8 @@
  *  - every output is a plain JSON shape (no `Date`, no class instance).
  */
 
+import { StealthCoreBrowserError } from './errors.js'
+import { lifecycleError } from './lib/lifecycle/errors.js'
 import { getChromeInfo, isChromeReachable, listPageTargetsOnly } from './lib/cdp/targets.js'
 import { isManagedAt, managerFor, noteManagerActivity, shutdownIdleAt } from './lib/managers.js'
 import { checkChromeActivity as readChromeActivity } from './lib/queries/activity.js'
@@ -130,10 +132,10 @@ function resolveEndpoint(input: ChromeEndpointInput = {}): { host: string; port:
   const host = input.host?.trim() || DEFAULT_HOST
   const port = input.port ?? DEFAULT_PORT
   if (!Number.isInteger(port) || port < 1 || port > 65535) {
-    throw new RangeError(`port must be an integer between 1 and 65535, got ${String(port)}`)
+    throw StealthCoreBrowserError.invalidEndpoint(`port must be an integer between 1 and 65535, got ${String(port)}`)
   }
   if (/[\s/]/.test(host)) {
-    throw new RangeError(`host must be a bare host name or address, got "${host}"`)
+    throw StealthCoreBrowserError.invalidEndpoint(`host must be a bare host name or address, got "${host}"`)
   }
   return { host, port, cdpHost: `${host}:${port}` }
 }
@@ -175,7 +177,8 @@ export async function chromeStatus(input?: ChromeEndpointInput): Promise<ChromeS
       managed: isManagedAt(host, port),
     }
   } catch (err) {
-    throw new Error(`Failed to check Chrome status: ${describeError(err)}`)
+    if (err instanceof StealthCoreBrowserError) throw err
+    throw StealthCoreBrowserError.of('CDP_UNREACHABLE', `Failed to check Chrome status: ${describeError(err)}`, { cause: err, detail: { host, port } })
   }
 }
 
@@ -189,7 +192,8 @@ export async function launchChrome(input?: LaunchChromeInput): Promise<LaunchChr
   try {
     await managerFor(host, port, input?.userDataDir).ready()
   } catch (err) {
-    throw new Error(`Failed to launch Chrome: ${describeError(err)}`)
+    if (err instanceof StealthCoreBrowserError) throw err
+    throw lifecycleError('LAUNCH_FAILED', `Failed to launch Chrome: ${describeError(err)}`, { cause: err, detail: { port } })
   }
   return { ok: true, port }
 }

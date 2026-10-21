@@ -9,6 +9,8 @@
  * Ticket 8468f7b1 · plan state capture-upgrade (spec 5.5).
  */
 
+import { StealthCoreBrowserError } from '../../errors.js'
+
 export const CAPTURE_ERROR_CODES = [
   'CAPTURE_CONNECT_FAILED',
   'CAPTURE_NAVIGATE_FAILED',
@@ -27,17 +29,13 @@ export interface CaptureErrorInit {
   detail?: Record<string, unknown>
 }
 
-export class CaptureError extends Error {
-  readonly code: CaptureErrorCode
-  readonly cause?: unknown
-  readonly detail?: Record<string, unknown>
+/** A capture failure: a StealthCoreBrowserError whose code is one of the eight capture codes. */
+export class CaptureError extends StealthCoreBrowserError {
+  declare readonly code: CaptureErrorCode
 
   constructor(code: CaptureErrorCode, message: string, init: CaptureErrorInit = {}) {
-    super(message)
+    super(code, message, init)
     this.name = 'CaptureError'
-    this.code = code
-    if (init.cause !== undefined) this.cause = init.cause
-    if (init.detail !== undefined) this.detail = init.detail
   }
 }
 

@@ -8,6 +8,7 @@
  * Ticket 8468f7b1 · plan state capture-upgrade [capture-upgrade.15].
  */
 import type { RecordingEnvelope, RecordingSink } from './types.js'
+import { captureError } from './errors.js'
 
 export class MemoryRecordingSink implements RecordingSink {
   private readonly byKey = new Map<string, RecordingEnvelope>()
@@ -15,7 +16,7 @@ export class MemoryRecordingSink implements RecordingSink {
 
   /** Replaying an envelope with a known key replaces it: one record per key. */
   write(envelope: RecordingEnvelope): void {
-    if (this.closed) throw new Error('MemoryRecordingSink is closed')
+    if (this.closed) throw captureError('CAPTURE_SINK_FAILED', 'MemoryRecordingSink is closed')
     this.byKey.set(envelope.key, envelope)
   }
 

@@ -24,6 +24,12 @@
 import { randomUUID } from 'node:crypto'
 import type { CdpSession } from '../cdp/session.js'
 import { captureError, errorMessage } from './errors.js'
+import { StealthCoreBrowserError } from '../../errors.js'
+
+/** A CDP frame the recorder cannot read; it is logged and skipped, never fatal. */
+function malformed(what: string): StealthCoreBrowserError {
+  return new StealthCoreBrowserError('CDP_BAD_RESPONSE', what)
+}
 import type {
   Headers,
   RecordedExchange,
@@ -242,7 +248,7 @@ export class NetworkRecorder {
 
   private guarded(method: string, p: Params, fn: (p: Params) => void): void {
     try {
-      if (!isObj(p)) throw new Error('params is not an object')
+      if (!isObj(p)) throw malformed('params is not an object')
       fn(p)
     } catch (e) {
       this.logger(`[recorder] skipped malformed ${method}: ${errorMessage(e)}`)
@@ -251,16 +257,16 @@ export class NetworkRecorder {
 
   private requireId(p: Params): string {
     const id = str(p['requestId'])
-    if (!id) throw new Error('missing requestId')
+    if (!id) throw malformed('missing requestId')
     return id
   }
 
   private onRequestWillBeSent(p: Params): void {
     const id = this.requireId(p)
     const reqObj = p['request']
-    if (!isObj(reqObj)) throw new Error('missing request')
+    if (!isObj(reqObj)) throw malformed('missing request')
     const url = str(reqObj['url'])
-    if (url === undefined) throw new Error('missing request.url')
+    if (url === undefined) throw malformed('missing request.url')
     const method = str(reqObj['method']) ?? 'GET'
     const rec: RecordedRequest = {
       method,
@@ -344,7 +350,7 @@ export class NetworkRecorder {
   private onResponseReceived(p: Params): void {
     const id = this.requireId(p)
     const resp = p['response']
-    if (!isObj(resp)) throw new Error('missing response')
+    if (!isObj(resp)) throw malformed('missing response')
     const d = this.drafts.get(id)
     if (!d) return // started before Network.enable
     d.mainResponse = responseFrom(resp)
@@ -547,7 +553,7 @@ export class NetworkRecorder {
     try {
       const r = await this.session.send<{ body?: unknown; base64Encoded?: unknown }>('Network.getResponseBody', { requestId: d.id })
       const body = str(r?.body)
-      if (body === undefined) throw new Error('no body in Network.getResponseBody result')
+      if (body === undefined) throw malformed('no body in Network.getResponseBody result')
       const base64 = r.base64Encoded === true
       const bytes = base64 ? Math.floor((body.length * 3) / 4) : Buffer.byteLength(body)
       if (bytes > max) {
@@ -661,7 +667,7 @@ export class NetworkRecorder {
   private async withTimeout(work: Promise<void>, what: string): Promise<void> {
     let timer: ReturnType<typeof setTimeout> | undefined
     const timeout = new Promise<void>((_, reject) => {
-      timer = setTimeout(() => reject(new Error(`${what} timed out after ${DEFAULT_CLOSE_TIMEOUT_MS}ms`)), DEFAULT_CLOSE_TIMEOUT_MS)
+      timer = setTimeout(() => reject(captureError('CAPTURE_TIMEOUT', `${what} timed out after ${DEFAULT_CLOSE_TIMEOUT_MS}ms`, { detail: { what, timeoutMs: DEFAULT_CLOSE_TIMEOUT_MS } })), DEFAULT_CLOSE_TIMEOUT_MS)
       unref(timer)
     })
     try {

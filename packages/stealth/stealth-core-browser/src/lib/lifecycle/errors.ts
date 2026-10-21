@@ -3,8 +3,8 @@
  *
  * The six failure modes of the Chrome lifecycle. Every throw site under
  * src/lib/lifecycle (and the lifecycle paths of chrome-manager.ts) goes
- * through `lifecycleError`, so the later `prod-errors` state reconciles the
- * class with `StealthBrowserError` in one place.
+ * through `lifecycleError`; the class is a `StealthCoreBrowserError`, so one
+ * `instanceof` covers every package error.
  *
  * There is deliberately no presence/lease code: presence is one held
  * connection per client to the reaper host, so there is no presence file whose
@@ -12,6 +12,8 @@
  *
  * Ticket 8468f7b1 · plan state chrome-lifecycle (SPEC-single-pass-lifecycle.md 3.6, CL20).
  */
+
+import { StealthCoreBrowserError } from '../../errors.js'
 
 export const LIFECYCLE_ERROR_CODES = [
   'LAUNCH_FAILED',
@@ -40,17 +42,14 @@ export interface LifecycleErrorInit {
   detail?: LifecycleErrorDetail
 }
 
-export class LifecycleError extends Error {
-  readonly code: LifecycleErrorCode
-  readonly cause?: unknown
-  readonly detail?: LifecycleErrorDetail
+/** A lifecycle failure: a StealthCoreBrowserError whose code is one of the six lifecycle codes. */
+export class LifecycleError extends StealthCoreBrowserError {
+  declare readonly code: LifecycleErrorCode
+  declare readonly detail?: LifecycleErrorDetail
 
   constructor(code: LifecycleErrorCode, message: string, init: LifecycleErrorInit = {}) {
-    super(message)
+    super(code, message, init)
     this.name = 'LifecycleError'
-    this.code = code
-    if (init.cause !== undefined) this.cause = init.cause
-    if (init.detail !== undefined) this.detail = init.detail
   }
 }
 

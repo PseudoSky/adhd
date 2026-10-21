@@ -17,11 +17,25 @@
  * Ticket 8468f7b1 · plan state chrome-lifecycle (CL15 CL22).
  */
 
-import { lifecycleErrors, type LifecycleError } from './errors.js'
+import { lifecycleError, lifecycleErrors, type LifecycleError } from './errors.js'
 import type { ReaperScope } from './reap-policy.js'
 import type { ChromeReaperConfig } from './reaper-entry.js'
 import type { ReapOutcome, ReaperStatus, RpcResponse } from './reaper-host.js'
 import { backendSocketPath, dialBackend, ensureBackend, ERR_BACKEND_UNAVAILABLE, type BackendConnection } from './sp.js'
+
+/** The typed cause of a reaper that cannot be reached. */
+function reaperCause(message: string): LifecycleError {
+  return lifecycleError('REAPER_UNAVAILABLE', message)
+}
+
+/**
+ * The failure the reaper backend reported. It is a record of the backend's own answer (its
+ * `code` is a backend code such as E_UDS_DIR_UNSAFE, not a registry code), so it is not an Error;
+ * `toString` yields the message for the REAPER_UNAVAILABLE text built around it.
+ */
+function backendFailure(message: string, code: string | undefined): { readonly message: string; readonly code?: string; toString(): string } {
+  return { message, ...(code === undefined ? {} : { code }), toString: () => message }
+}
 
 export interface ReaperLink {
   /**
@@ -139,7 +153,7 @@ export function createProxyReaperLink(cfg: ProxyReaperLinkConfig): ReaperLink {
     if (current) return true
     const entry = cfg.entryPath ?? defaultReaperEntry()
     if (!entry) {
-      lastError = lifecycleErrors.reaperUnavailable(cfg.port, new Error('the package entry path is unknown (not running from the built CommonJS bundle)'))
+      lastError = lifecycleErrors.reaperUnavailable(cfg.port, reaperCause('the package entry path is unknown (not running from the built CommonJS bundle)'))
       return false
     }
     let res
@@ -158,7 +172,7 @@ export function createProxyReaperLink(cfg: ProxyReaperLinkConfig): ReaperLink {
       return false
     }
     if (res.disposition === 'failed') {
-      const cause = Object.assign(new Error(res.detail), res.errorCode ? { code: res.errorCode } : {})
+      const cause = backendFailure(res.detail, res.errorCode)
       lastError = lifecycleErrors.reaperUnavailable(cfg.port, cause, cfg.stateDir)
       return false
     }
@@ -176,7 +190,7 @@ export function createProxyReaperLink(cfg: ProxyReaperLinkConfig): ReaperLink {
       drop(conn)
       lastError = lifecycleErrors.reaperUnavailable(
         cfg.port,
-        new Error(hello.error.code === ERR_BACKEND_UNAVAILABLE ? `the reaper did not accept a connection within ${LINK_GIVE_UP_MS} ms` : hello.error.message),
+        reaperCause(hello.error.code === ERR_BACKEND_UNAVAILABLE ? `the reaper did not accept a connection within ${LINK_GIVE_UP_MS} ms` : hello.error.message),
         cfg.stateDir,
       )
       return false

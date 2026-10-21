@@ -14,6 +14,7 @@
 
 import type { CdpSession } from '../cdp/session.js'
 import type { DomExtractor, DomPattern, ParseResult } from '../types.js'
+import { StealthCoreBrowserError } from '../../errors.js'
 
 export interface DomWalkOptions {
   navigateUrl: string
@@ -358,7 +359,7 @@ async function waitForSelector(
     }
     await new Promise((r) => setTimeout(r, 600 + Math.random() * 1200))
   }
-  throw new Error(`Timed out waiting for "${selector}" (${timeoutMs}ms). Last error: ${lastErr}`)
+  throw StealthCoreBrowserError.of('SELECTOR_TIMEOUT', `Timed out waiting for "${selector}" (${timeoutMs}ms). Last error: ${lastErr}`, { detail: { selector, timeoutMs } })
 }
 
 // ─── Simple ban detection via DOM ─────────────────────────────────────────────

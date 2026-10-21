@@ -8,6 +8,7 @@
  */
 
 import { CdpSession } from './session.js'
+import { StealthCoreBrowserError } from '../../errors.js'
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -55,13 +56,17 @@ async function cdpFetch(cdpHost: string, path: string): Promise<Response> {
     if (nested instanceof Error && nested.message && nested.message !== cause) {
       cause = nested.message
     }
-    throw new Error(
+    throw StealthCoreBrowserError.of(
+      'CDP_UNREACHABLE',
       `CDP unreachable on ${cdpHost} — Chrome is not running or remote debugging is not enabled on that port (${cause})`,
+      { cause: err, detail: { cdpHost } },
     )
   }
   if (!res.ok) {
-    throw new Error(
+    throw StealthCoreBrowserError.of(
+      'CDP_BAD_RESPONSE',
       `CDP on ${cdpHost} returned HTTP ${res.status} for ${path} — Chrome may be starting or shutting down`,
+      { detail: { cdpHost, path, status: res.status } },
     )
   }
   return res
@@ -80,7 +85,7 @@ export async function getChromeInfo(cdpHost: string): Promise<ChromeVersionInfo>
     v = (await res.json()) as typeof v
   } catch (err) {
     const cause = err instanceof Error ? err.message : String(err)
-    throw new Error(`CDP on ${cdpHost} returned a non-JSON /json/version response (${cause})`)
+    throw StealthCoreBrowserError.of('CDP_BAD_RESPONSE', `CDP on ${cdpHost} returned a non-JSON /json/version response (${cause})`, { cause: err, detail: { cdpHost } })
   }
   return {
     browserWsUrl: v.webSocketDebuggerUrl,
@@ -151,7 +156,7 @@ export async function createPageTarget(cdpHost: string, options: PageOptions = {
   }
 
   console.error(`[@adhd/stealth-core-browser] Target ${targetId} not found in /json/list after 3s`)
-  throw new Error(`Target ${targetId} not found in /json/list after 3s`)
+  throw StealthCoreBrowserError.of('TARGET_NOT_FOUND', `Target ${targetId} not found in /json/list after 3s`, { detail: { targetId, cdpHost } })
 }
 
 /** The handle of a created isolated page; `browserContextId` is undefined for a `sharedProfile` page. */
@@ -286,7 +291,7 @@ export async function createIsolatedPageTarget(
 
   await dispose()
   console.error(`[@adhd/stealth-core-browser] Isolated target ${targetId} not found in /json/list after 3s`)
-  throw new Error(`Isolated target ${targetId} not found in /json/list after 3s`)
+  throw StealthCoreBrowserError.of('TARGET_NOT_FOUND', `Isolated target ${targetId} not found in /json/list after 3s`, { detail: { targetId, cdpHost } })
 }
 
 // ─── Target closing ─────────────────────────────────────────────────────────

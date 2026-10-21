@@ -105,6 +105,16 @@
  */
 
 import type { CdpSession } from './session.js'
+import { StealthCoreBrowserError } from '../../errors.js'
+
+/** The typed rejection of an aborted wait; the signal's reason is the message source and the cause. */
+function abortError(reason: unknown): StealthCoreBrowserError {
+  if (reason instanceof StealthCoreBrowserError) return reason
+  let text = 'aborted'
+  if (reason instanceof Error) text = reason.message
+  else if (typeof reason === 'string' && reason !== '') text = reason
+  return StealthCoreBrowserError.of('OPERATION_ABORTED', text, { ...(reason === undefined ? {} : { cause: reason }) })
+}
 
 /** How we concluded the page settled. `deadline` means we never observed it. */
 export type SettleSignal =
@@ -220,7 +230,8 @@ export async function awaitPageSettled(
   // failure is silent (a fast "success" against a blank page). Fail loudly here
   // rather than return a confidently wrong snapshot.
   if (!navigate && !opts.loaderId) {
-    throw new Error(
+    throw StealthCoreBrowserError.of(
+      'PAGE_SETTLE_FAILED',
       'awaitPageSettled: pass `navigate` (preferred) or `loaderId`. Without one, ' +
       'lifecycle events cannot be scoped to your navigation and about:blank wins the race.',
     )
@@ -272,12 +283,12 @@ export async function awaitPageSettled(
     }
 
     if (abort) {
-      if (abort.aborted) { reject(abort.reason ?? new Error('aborted')); return }
+      if (abort.aborted) { reject(abortError(abort.reason)); return }
       abort.addEventListener('abort', () => {
         if (done) return
         done = true
         for (const u of unsubs) u()
-        reject(abort.reason ?? new Error('aborted'))
+        reject(abortError(abort.reason))
       }, { once: true })
     }
 
@@ -423,7 +434,7 @@ export async function awaitPageSettled(
     if (navigate) {
       session.send<{ loaderId?: string; errorText?: string }>('Page.navigate', { url: navigate })
         .then((r) => {
-          if (r.errorText) { if (!done) { done = true; for (const u of unsubs) u(); reject(new Error(`Page.navigate failed: ${r.errorText}`)) } ; return }
+          if (r.errorText) { if (!done) { done = true; for (const u of unsubs) u(); reject(StealthCoreBrowserError.of('NAVIGATION_FAILED', `Page.navigate failed: ${r.errorText}`, { detail: { url: navigate, errorText: r.errorText } })) } ; return }
           if (r.loaderId) loaderId = r.loaderId   // authoritative — beats the `init` guess
         })
         .catch((e) => { if (!done) { done = true; for (const u of unsubs) u(); reject(e) } })

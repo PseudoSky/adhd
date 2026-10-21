@@ -140,7 +140,7 @@ export class StoreRecordingSink implements RecordingSink {
 
   /** One immediate transaction for the whole batch. */
   async writeBatch(envelopes: readonly RecordingEnvelope[]): Promise<void> {
-    if (this.closePromise) throw new Error('StoreRecordingSink is closed')
+    if (this.closePromise) throw captureError('CAPTURE_SINK_FAILED', 'StoreRecordingSink is closed')
     await this.init()
     await this.store.transaction(
       async (tx) => {

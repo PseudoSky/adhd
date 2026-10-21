@@ -18,6 +18,7 @@ import { homedir, platform, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { lifecycleError, type LifecycleError } from '../lifecycle/errors.js'
 import { isChromeReachable } from './targets.js'
+import { StealthCoreBrowserError } from '../../errors.js'
 
 // ─── Defaults ─────────────────────────────────────────────────────────────────
 
@@ -218,9 +219,11 @@ export async function launchChrome(opts: LaunchChromeOptions = {}): Promise<{
   }
 
   if (!chromePath || !existsSync(chromePath)) {
-    throw new Error(
+    throw StealthCoreBrowserError.of(
+      'CHROME_NOT_FOUND',
       `Chrome binary not found at "${chromePath}". ` +
       `Set CHROME_PATH env var or install Chrome.`,
+      { detail: { path: chromePath, port } },
     )
   }
 
@@ -262,9 +265,23 @@ export async function launchChrome(opts: LaunchChromeOptions = {}): Promise<{
         resolve({ pid: launchedPid, port, alreadyRunning: false, profileDir })
       } else if (Date.now() > deadline) {
         clearInterval(poll)
-        reject(new Error(`Chrome did not start CDP on port ${port} within 10s`))
+        reject(StealthCoreBrowserError.of('CHROME_START_TIMEOUT', `Chrome did not start CDP on port ${port} within 10s`, { detail: { port } }))
       }
     }, 200)
+
+    // A spawn that fails after it returned (ENOENT, EADDRINUSE, EACCES) arrives as an 'error' event:
+    // reject with the classified typed error instead of an unhandled event that crashes the process.
+    if (typeof child.once === 'function') {
+      child.once('error', (cause: Error) => {
+        clearInterval(poll)
+        const code = StealthCoreBrowserError.classifyLaunchFailure(cause)
+        reject(
+          code === 'CHROME_NOT_FOUND' || code === 'PORT_IN_USE'
+            ? StealthCoreBrowserError.of(code, `Chrome could not be spawned from "${chromePath}": ${cause.message}`, { cause, detail: { path: chromePath, port } })
+            : lifecycleError('LAUNCH_FAILED', `Chrome could not be spawned from "${chromePath}": ${cause.message}`, { cause, detail: { path: chromePath, port } }),
+        )
+      })
+    }
   })
 }
 

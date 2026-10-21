@@ -36,7 +36,7 @@
 import { ensureChromeRunning, killChrome } from './cdp/browser.js'
 import { IdleShutdown } from './cdp/shutdown.js'
 import { closeAllPageTargets, hideAllWindows, isChromeReachable, listPageTargetsOnly } from './cdp/targets.js'
-import { errorMessage, isLifecycleError, lifecycleErrors, type LifecycleError } from './lifecycle/errors.js'
+import { errorMessage, isLifecycleError, lifecycleError, lifecycleErrors, type LifecycleError } from './lifecycle/errors.js'
 import { createLaunchBreaker, type LaunchBreaker } from './lifecycle/launch-breaker.js'
 import { createOwnershipStore, type OwnershipStore } from './lifecycle/ownership.js'
 import { countActiveWebPages, isActiveWebTarget } from './lifecycle/page-tier.js'
@@ -48,6 +48,11 @@ import { resolveStateDir, type StateDirResult } from './lifecycle/state-dir.js'
 /** Safety tier 2 lives in lifecycle/page-tier.ts; re-exported here so the manager module keeps the export. */
 export { isActiveWebTarget }
 export type { ReaperLink }
+
+/** The launch ran but CDP never answered: the typed CHROME_START_TIMEOUT, or its message from an older build. */
+function isStartTimeout(err: unknown): boolean {
+  return (err as { code?: unknown } | null)?.code === 'CHROME_START_TIMEOUT' || /did not start CDP/.test(errorMessage(err))
+}
 
 export interface ChromeManagerOptions {
   /** CDP host. Default: 127.0.0.1:9222 */
@@ -210,7 +215,7 @@ export class ChromeManager {
     if (!this.state!.ok || !this.link) {
       const st = this.state!
       this.ensureFailed = true
-      this.warnDegraded(lifecycleErrors.reaperUnavailable(this.port, st.ok ? new Error('no reaper link') : st.error, st.dir))
+      this.warnDegraded(lifecycleErrors.reaperUnavailable(this.port, st.ok ? lifecycleError('REAPER_UNAVAILABLE', 'no reaper link') : st.error, st.dir))
       return false
     }
     if (this.link.isUp()) return true
@@ -270,7 +275,7 @@ export class ChromeManager {
       this.breaker!.recordFailure()
       const msg = errorMessage(err)
       this.log(`Failed to ensure Chrome running: ${msg}`)
-      throw /did not start CDP/.test(msg) ? lifecycleErrors.unreachableAfterLaunch(this.port, err) : lifecycleErrors.launchFailed(this.port, err)
+      throw isStartTimeout(err) ? lifecycleErrors.unreachableAfterLaunch(this.port, err) : lifecycleErrors.launchFailed(this.port, err)
     }
     this.breaker!.recordSuccess()
 
