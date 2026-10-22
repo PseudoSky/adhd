@@ -8,6 +8,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { StealthCoreBrowserError, cdp } from '../../index.js'
+import type { FakeCdpServer } from '../support/fake-cdp.js'
 import { ChromeWorld, refuseWebSocketOpen, installSilentWebSocket } from './scenario-kit.js'
 
 const world = new ChromeWorld(9404)
@@ -24,7 +25,7 @@ afterEach(() => {
 
 describe('Scenario: drive a Chrome over raw CDP and survive every failure of the conversation', () => {
   it('[tests-use-cases.2] lists the tabs and exchanges commands with the page without ever evaluating script', async () => {
-    const server = world.useCdp({
+    const server: FakeCdpServer = world.useCdp({
       meta: { name: 'raw-conversation', origin: 'synthetic-protocol-conformant' },
       steps: [
         { when: { method: 'Page.enable' } },

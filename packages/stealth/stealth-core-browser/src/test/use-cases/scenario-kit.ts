@@ -33,6 +33,7 @@ export class ChromeWorld {
   /** Stub `fetch` as the fake Chrome. */
   installFetch(): void {
     this.savedFetch ??= { value: globalThis.fetch }
+    this.requested.length = 0
     globalThis.fetch = (async (input: string | URL) => {
       const url = String(input)
       this.requested.push(url)
@@ -190,6 +191,9 @@ export class PolicyReaperLink implements ReaperLink {
     private readonly history: () => boolean | 'unavailable',
     private readonly otherClients: () => ClientView[] = () => [],
   ) {}
+
+  /** The most recent reap decision, or undefined before the first. */
+  lastDecision(): ReapOutcome | undefined { return this.decisions[this.decisions.length - 1] }
 
   private httpPages(): number { return this.world.tabs.filter((t) => isActiveWebTarget(t.url)).length }
 
