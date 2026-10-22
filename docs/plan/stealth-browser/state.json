@@ -263,10 +263,10 @@
       "end_ref": "4344d048eb8ed67d4b2075f5c5519ff1927b9a59"
     },
     "sp-reaper-smoke": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-10-22T02:23:06.396Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "52596bffdd58ae8658bdada4a4da177f75ea13dc",
       "end_ref": null
     },
     "sp-switch": {
@@ -1660,7 +1660,7 @@
     "version": "0.8.35",
     "hash": "0b6bc1f3d70e"
   },
-  "current_state": "search-errors",
+  "current_state": "sp-reaper-smoke",
   "dod_provenance": {
     "confirmed_at": "2026-10-12T23:49:38.410Z",
     "by": "pseudosky",
