@@ -299,6 +299,17 @@ function parseWorkerOutput(
         (tail ? `; worker stderr tail: ${tail}` : '')
     );
   }
+  if (
+    typeof response !== 'object' ||
+    response === null ||
+    !Array.isArray(response.operations) ||
+    !Array.isArray(response.files)
+  ) {
+    throw new Error(
+      `ts-subprocess extractor returned a malformed result for ${call.source} ` +
+        `(expected { operations: [], files: [] })`
+    );
+  }
   return withSourceFiles(response.operations, response.files);
 }
 

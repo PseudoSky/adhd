@@ -570,6 +570,41 @@ function collectMountedOperations(
 // adapter. Called EXACTLY ONCE per `run()` invocation ([mcp-adapter.8]).
 // ---------------------------------------------------------------------------
 
+/**
+ * Build each plugin's `createLayer` layer exactly once and return copies whose
+ * layer capability carries the built function as `layer` (and no
+ * `createLayer`), so every downstream `createPackageInvoker` reuses the same
+ * layer instance. Inputs are never mutated; plugins without `createLayer`
+ * pass through unchanged.
+ */
+function materialiseUsePlugins(
+  plugins: UsePlugin[],
+  layerOptions: Record<string, unknown>
+): UsePlugin[] {
+  return plugins.map((plugin) => {
+    const caps = plugin.capabilities;
+    const cap = caps?.layer;
+    if (!caps || !cap || typeof cap.createLayer !== 'function') return plugin;
+    const built: unknown = cap.createLayer(layerOptions);
+    if (typeof built !== 'function') {
+      throw new ApiError(
+        'internal',
+        `apigen-plugin-mcp: --use plugin "${plugin.id}": layer capability createLayer() returned ${built === null ? 'null' : typeof built}, not a layer function`
+      );
+    }
+    const { createLayer: _factory, ...rest } = cap;
+    void _factory;
+    return Object.create(plugin, {
+      capabilities: {
+        value: { ...caps, layer: { ...rest, layer: built } },
+        enumerable: true,
+        writable: true,
+        configurable: true,
+      },
+    }) as UsePlugin;
+  });
+}
+
 function buildToolTable(input: RunInput, adapter: McpTransportAdapter): void {
   __toolTableBuildCount.count++;
 
@@ -577,7 +612,13 @@ function buildToolTable(input: RunInput, adapter: McpTransportAdapter): void {
     (input.options['projection'] as ProjectionConfig | undefined) ?? {};
   const descriptions =
     (input.options['toolDescriptions'] as Record<string, string>) ?? {};
-  const usePlugins = readUsePlugins(input.options);
+  // SPEC 7.1 / ADR-0019 D1: each plugin's `createLayer` runs at most once per
+  // invocation. Materialise once here and share the result across the
+  // per-package, terminal, mount and hostBridge invokers below.
+  const usePlugins = materialiseUsePlugins(
+    readUsePlugins(input.options),
+    input.options
+  );
   const useOptions = readUseOptions(input.options);
 
   // (batch-rollout, BATCH_0.0.1.md §2/§F1, architect-review Finding 2)

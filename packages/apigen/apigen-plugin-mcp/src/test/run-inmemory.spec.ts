@@ -317,7 +317,7 @@ describe('Feature: --use Layers receive the invocation options', () => {
       },
     };
     const host = await startHost({ options: { usePlugins: [plugin], marker: 'M1' } });
-    expect(bags.length).toBeGreaterThanOrEqual(1);
+    expect(bags).toHaveLength(1);
     expect(bags.every((b) => b['marker'] === 'M1')).toBe(true);
     const result = await call(host, 'echoString');
     expect(result.content).toEqual([{ type: 'text', text: 'M1:ok' }]);

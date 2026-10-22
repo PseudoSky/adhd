@@ -156,7 +156,7 @@ describe('Feature: tools/list advertises the BA-1 projection of the IR operation
   // DEFECT (reported, not fixed here): tools/list builds each tool from name, inputSchema, title and
   // annotations only, so the upstream-authored description and outputSchema that the IR carries
   // (Operation.tool, E3) never reach the host. Correct behaviour asserted; fails until it is fixed.
-  it.fails('@G4 the host also sees the upstream-authored description and outputSchema of a tool', async () => {
+  it('@G4 the host also sees the upstream-authored description and outputSchema of a tool', async () => {
     const { client } = await rig();
     const read = (await client.listTools()).tools[0]!;
     expect(read.description).toBe('Reads a file');

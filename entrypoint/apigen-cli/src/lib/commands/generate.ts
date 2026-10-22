@@ -12,6 +12,7 @@ import type {
   OutputPlugin,
   ComposedSchemas,
 } from '@adhd/apigen-core-client';
+import { resolveSourceReference } from '@adhd/apigen-core-client';
 import { emitResolutionScaffolding } from '../scaffold';
 import { describeTypeOption, unknownTypeError } from '../plugin-registry';
 // BUG-APIGEN-CLI-GENERATE-USE-UNRESOLVED-001: `generate` accepted `--use` but
@@ -245,6 +246,15 @@ export function registerGenerateCommand(
         const exportMode = resolveExportMode(opts.export);
         const sourceFile = path.resolve(opts.source);
         const outputDir = path.resolve(opts.outDir);
+
+        // The resolver classifies `--source`; an unclassifiable source fails
+        // here in the same `--source <x>: ...` form `run` uses.
+        const resolvedSource = resolveSourceReference(sourceFile);
+        if (!resolvedSource.ok) {
+          throw new Error(
+            `--source ${opts.source}: ${resolvedSource.error.message}`
+          );
+        }
 
         // Separate plugin opts from projection overrides (http.verb.* keys).
         // All --opt pairs feed plugin options; override keys additionally update

@@ -335,7 +335,7 @@ describe('Feature: the upstream is called verbatim through the gateway', () => {
   // same code as a real timeout, so the adapter's RequestTimeout mapping reports a caller cancellation
   // as `deadline_exceeded` after callTimeoutMs. The assertion below is the correct behaviour; it is
   // expected to fail until the adapter checks `signal.aborted` first. See the skip-expiry header line.
-  it.fails('@T-R7 a caller cancellation is not reported as deadline_exceeded (it never outlived any deadline)', async () => {
+  it('@T-R7 a caller cancellation is not reported as deadline_exceeded (it never outlived any deadline)', async () => {
     const r = await rig({ tools: [{ name: 'slow', inputSchema: OBJECT_SCHEMA, silent: true }] }, { name: 'u' });
     const ac = new AbortController();
     const pending = caught(r.gateway.route(requestFor(operationOf(r)), ac.signal));

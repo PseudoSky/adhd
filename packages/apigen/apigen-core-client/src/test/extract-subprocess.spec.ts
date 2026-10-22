@@ -237,7 +237,7 @@ describe('ts-subprocess extractor via an injected launcher (T-R8)', () => {
     // A marker line that parses but is not a { operations, files } object. The error must name the source like
     // every other worker failure; today `{}` raises a raw TypeError ("Object.defineProperty called on non-object"), `null` raises "Cannot read properties of null (reading 'operations')", and a non-array `operations` resolves silently as a non-array result (see the T-R8 report). `it.fails` flips red the
     // moment parseWorkerOutput validates the shape, which is the signal to turn these into plain `it`.
-    it.fails.each([
+    it.each([
       ['an empty object', '{}'],
       ['null', 'null'],
       ['operations that is not an array', '{"operations":{},"files":[]}'],

@@ -191,6 +191,8 @@ export function createMcpUpstreamAdapter(
       try {
         return await current.callTool(tool, req.data, signal);
       } catch (e) {
+        // The SDK wraps a caller abort as McpError(RequestTimeout); a cancellation is not a deadline.
+        if (signal.aborted) throw e;
         if (e instanceof McpError && e.code === ErrorCode.RequestTimeout) {
           throw makeDeadlineExceededError(host, req.operation.id, callTimeoutMs);
         }

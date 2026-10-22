@@ -184,6 +184,8 @@ export async function serveMcpPassthrough(options: IPassthroughServerOptions): P
     tools.push({
       name,
       inputSchema: operation.input as Tool['inputSchema'],
+      ...(operation.tool?.description !== undefined ? { description: operation.tool.description } : {}),
+      ...(operation.tool?.outputSchema !== undefined ? { outputSchema: operation.tool.outputSchema as Tool['outputSchema'] } : {}),
       ...(operation.tool?.title !== undefined ? { title: operation.tool.title } : {}),
       ...(operation.tool?.annotations !== undefined ? { annotations: operation.tool.annotations as Tool['annotations'] } : {}),
     });
