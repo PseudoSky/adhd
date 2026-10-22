@@ -1,15 +1,15 @@
 /**
- * entry-guard-symlink.spec.mjs — c40c33e1: a gate script invoked through a symlinked path must run, not exit 0 silently.
+ * entry-guard-symlink.e2e.mjs — c40c33e1: a gate script invoked through a symlinked path must run, not exit 0 silently.
  *
  * guards: a gate script whose entry guard compares an unresolved process.argv[1] with the realpathed
  *   import.meta.url never calls main() when its checkout path crosses a symlink (macOS /var -> /private/var, a
  *   symlinked dev directory), so the pre-push hook, which calls it by that logical path, passes having checked nothing.
- * tier: P (spawns node over a symlinked directory; the build-tools `node --test` lane, 10 s per test; the static scan
+ * tier: P (spawns node over a symlinked directory; the build-tools `node --test` e2e (`test:build-tools-e2e`, CI only) lane, 10 s per test; the static scan
  *   case is tier S and the file is classified by its heaviest case).
  * gap: This cannot be observed at tier S because the divergence between process.argv[1] and import.meta.url is made
  *   by the node loader at process start and exists only when a real process is started through a real symlink.
  * cites: c40c33e1; 595965cc T32, T34.
- * teeth: red: node --test tools/nx-plugins/test/executors/wiring/entry-guard-symlink.spec.mjs -> exit 1 with the
+ * teeth: red: node --test tools/nx-plugins/test/executors/wiring/entry-guard-symlink.e2e.mjs -> exit 1 with the
  *   guard in check-test-headers.mjs restored to `resolve(process.argv[1]) === fileURLToPath(import.meta.url)` (the
  *   linked run prints nothing and exits 0), and the static scan fails naming the file.
  */

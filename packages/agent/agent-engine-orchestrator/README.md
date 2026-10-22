@@ -300,9 +300,9 @@ The live run replays its own full echo and is never capped or expired mid-run; t
 
 | Test file | Gate | Calls | Owner |
 | --- | --- | --- | --- |
-| `src/__tests__/anthropic-echo-live.test.ts` | `ADHD_AGENT_LIVE_ECHO=1` (plus `ANTHROPIC_API_KEY`) | a real paid model, Anthropic `claude-haiku-5-5` at effort `high`; at most 6 requests per run (hard counter), `max_tokens` 4096, no retries; typical run 4 requests | **nix (repo owner)** |
+| `src/__tests__/anthropic-echo-live.e2e.test.ts` | `ADHD_AGENT_LIVE_ECHO=1` (plus `ANTHROPIC_API_KEY`) | a real paid model, Anthropic `claude-haiku-5-5` at effort `high`; at most 6 requests per run (hard counter), `max_tokens` 4096, no retries; typical run 4 requests | **nix (repo owner)** |
 
-- **Why it is gated.** It calls a real paid model, the only gate reason the repo allows (root `AGENTS.md` section 7, "Live testing is mandatory"). Nothing else about it is gated: its offline half (request-cap, body-inspection and redaction controls, plus a full run of the same rig against the offline contract fake, and a check that this section, `AGENTS.md` and the file header all name the gate and the owner) runs in every `nx test`.
+- **Why it is gated.** It calls a real paid model, the only gate reason the repo allows (root `AGENTS.md` section 7, "Live testing is mandatory"). Nothing else about it is gated: its offline half (request-cap, body-inspection and redaction controls, plus a full run of the same rig against the offline contract fake, and a check that this section, `AGENTS.md` and the file header all name the gate and the owner) runs ungated in the project's `e2e` target (CI `nx affected -t e2e`; ADR 0009, backlog f3683008), not in the pre-push `test` lane.
 - **Off by default and off in CI.** Unset, every live test is reported `SKIPPED` with a reason naming the gate and the owner, and the file makes no network call. Setting the gate without `ANTHROPIC_API_KEY` turns the suite red; there is no silent skip once enabled.
 - **What it proves** (R9-hist S7, spec-v2 AC13): the live API accepts the assistant history this package replays: (a) a real thinking turn with its signature byte for byte, (b) a real `server_tool_use` + `web_fetch_tool_result` pair including its `citations` / `caller` / `citations: null` shapes, (c) an empty `text` block dropped before the request, (d) a real `pause_turn` continuation when the model produces one (otherwise reported "not exercised", never faked), (e) the post-TTL shape with tier S stripped and tier T kept, and (f), informational and last, whether a dangling `server_tool_use` tail is accepted (this gates S3b).
 - **Diagnostics and prerequisites.** Turn 1 writes one `turn 1 diagnostics:` line to the run summary before checking anything: HTTP statuses, stop reason, block types and counts, output tokens, elapsed ms, whether the sent request carried a `thinking` field, its `output_config.effort`, and the web_fetch pair status (types, counts and booleans only). The executed `web_fetch` pair is the only hard prerequisite of (b)(c)(e)(f). A turn without a thinking block fails only item (a), reported as "NOT EXERCISED"; the provider sends `output_config.effort` and, unless the provider config sets `thinking`, no `thinking` field, so whether thinking blocks appear is the model's choice at that effort.
@@ -311,5 +311,5 @@ The live run replays its own full echo and is never capped or expired mid-run; t
 
   ```bash
   ADHD_AGENT_LIVE_ECHO=1 ANTHROPIC_API_KEY=<key> npx vitest run \
-    --config packages/agent/agent-engine-orchestrator/vite.config.ts anthropic-echo-live
+    --config packages/agent/agent-engine-orchestrator/vitest.e2e.config.ts anthropic-echo-live
   ```

@@ -1,16 +1,16 @@
 /**
- * test-routing.spec.mjs — 595965cc T43 (AC1-AC8): the pure functions, the real CLI as a consumer runs it, and a
+ * test-routing.e2e.mjs — 595965cc T43 (AC1-AC8): the pure functions, the real CLI as a consumer runs it, and a
  * throwaway git repository for the history-driven modes. Every negative control asserts the refusal it names; none
  * skips the failing case.
  *
  * guards: a change reaches main with no rigor record, a record below the derived rigor, or a rigor derived from the
  *   wrong commits and paths.
- * tier: P (spawns the CLI and git in temporary repositories; the build-tools `node --test` lane, 10 s per test; the
+ * tier: P (spawns the CLI and git in temporary repositories; the build-tools `node --test` e2e (`test:build-tools-e2e`, CI only) lane, 10 s per test; the
  *   pure-function cases are tier S and the file is classified by its heaviest case).
  * gap: This cannot be observed at tier S because the commit range, the merge-base and the committer dates exist only
  *   in a real git history.
  * cites: 595965cc T43.AC1-AC8.
- * teeth: red: node --test tools/nx-plugins/test/routing/test-routing.spec.mjs -> exit 1 for the follow-up push, the
+ * teeth: red: node --test tools/nx-plugins/test/routing/test-routing.e2e.mjs -> exit 1 for the follow-up push, the
  *   committer-date and the gate-source cases with their fixes disabled (b4bbd215); red evidence for AC1-AC8 was not
  *   captured against a stub commit (authorship was not separated).
  */

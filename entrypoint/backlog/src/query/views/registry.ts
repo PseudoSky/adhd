@@ -22,6 +22,7 @@ import {
 } from '../../write/errors.js';
 import {
   isUidShaped,
+  resolveLogicalIssue,
   resolveUidPrefix,
   tryResolveComponentRef,
   tryResolveRef,
@@ -659,6 +660,36 @@ async function lookupLocation(
 }
 
 /**
+ * Resolve a uid / unique uid prefix to the LIVE node it names today (68175e51:
+ * `lookup` is the one verb that heals a rotted uid). Uses the non-throwing
+ * {@link resolveLogicalIssue}, which walks a superseded node's chain to its
+ * head. A prefix that matches a superseded node AND its live head (or any
+ * several nodes of ONE chain) is not ambiguous: every candidate is normalised
+ * to its head and the prefix resolves when they all agree. A prefix spanning
+ * genuinely different logical items still throws `AmbiguousReferenceError`.
+ * `forwarded` is true when the answer differs from the node `q` named.
+ */
+async function resolveLookupHead(
+  graph: GraphBackend,
+  q: string
+): Promise<{ uid: string; forwarded: boolean }> {
+  try {
+    const head = await resolveLogicalIssue(graph, q);
+    const named = await resolveUidPrefix(graph, q);
+    return { uid: head.uid, forwarded: head.uid !== named.uid };
+  } catch (err) {
+    if (!(err instanceof AmbiguousReferenceError)) throw err;
+    const heads = new Set<string>();
+    for (const candidate of err.candidates) {
+      heads.add((await resolveLogicalIssue(graph, candidate.uid)).uid);
+    }
+    const [only] = heads;
+    if (heads.size !== 1 || only === undefined) throw err;
+    return { uid: only, forwarded: true };
+  }
+}
+
+/**
  * `query --input '{"view":"lookup", "lookup": "<tool|file|url|uid|title|project>"}'`
  * (§3a, C1 AC4) — resolve ANY token a consumer holds to exactly one canonical
  * answer, or fail loudly naming what was searched.
@@ -690,10 +721,11 @@ export async function lookup(
   // shape, so the project/component/location fields stay empty (the established
   // "no registry match" sentinel) and the caller is told where to look.
   if (isUidShaped(q) || isUidPrefixShaped(q)) {
-    const record = await resolveUidPrefix(graph, q);
+    const head = await resolveLookupHead(graph, q);
     return {
       project: { uid: '', name: '' },
-      redirect: { verb: 'get', uid: record.uid },
+      redirect: { verb: 'get', uid: head.uid },
+      ...(head.forwarded ? { forwardedFrom: q } : {}),
     };
   }
 

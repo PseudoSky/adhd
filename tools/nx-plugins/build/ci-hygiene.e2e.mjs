@@ -19,7 +19,7 @@
  * Item: qa-variance (C-AC6 drives the exported runParity in-process instead of 3 node child spawns;
  * C-AC7 fixture repo uses `git -c` identity: 3 spawns instead of 5). Red run: pending (not run per user).
  *
- * Run: node --test tools/nx-plugins/build/ci-hygiene.spec.mjs
+ * Run: node --test tools/nx-plugins/build/ci-hygiene.e2e.mjs
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';

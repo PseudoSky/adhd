@@ -1,5 +1,5 @@
 /**
- * run-gates.spec.mjs — 595965cc T30: this repository's command table and the wrapper around the workspace-standards
+ * run-gates.e2e.mjs — 595965cc T30: this repository's command table and the wrapper around the workspace-standards
  * gate engine.
  *
  *   T30.AC1 the table binds every gate id G1-G12 to a command (or an honest obligation), a stage and a mechanism
@@ -13,7 +13,7 @@
  * skipped gate is the failure STRATEGY G4 exists to stop).
  *
  * guards: the gate engine runs a different gate set than the table binds, or a failing gate exits 0.
- * tier: P (spawns the real engine and the wrapper; the build-tools `node --test` lane, 10 s per test; the slowest case
+ * tier: P (spawns the real engine and the wrapper; the build-tools `node --test` e2e (`test:build-tools-e2e`, CI only) lane, 10 s per test; the slowest case
  *   runs stage B in about 1.1 s).
  * gap: This cannot be observed at tier S because stage selection, the single report and the worst-gate exit code exist
  *   only when the engine runs as a process over the real table.

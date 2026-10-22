@@ -4,7 +4,7 @@
  * E2E lane: the claudecli adapter hands its tools to the `claude` CLI only through the loopback MCP bridge, so the
  * request builder under test is a real HTTP server read by a real MCP client. The guided tool list comes from the REAL
  * `Orchestrator.run` over `mcpServers` produced by the REAL resolver; the CLI itself (a paid third-party binary) is
- * stood in for by a provider that captures `request.tools`, exactly as `r10-w1-shell-guidance-claudecli.test.ts` does.
+ * stood in for by a provider that captures `request.tools`, exactly as `r10-w1-shell-guidance-claudecli.e2e.test.ts` does.
  * One scaffold, no sleeps, no timing assertions.
  *
  * guards: the tool descriptions a claudecli agent's CLI reads through the loopback MCP bridge describe the catalog defaults (default allowlist, exit-status promise, fs notes) instead of the task's effective shell and fs servers.

@@ -2461,7 +2461,7 @@
     "tools/nx-plugins/build/bug-026-assets-output-scope.spec.mjs": [
       "H1"
     ],
-    "tools/nx-plugins/build/ci-hygiene.spec.mjs": [
+    "tools/nx-plugins/build/ci-hygiene.e2e.mjs": [
       "H1"
     ],
     "tools/nx-plugins/build/ci-publish-wiring.spec.mjs": [

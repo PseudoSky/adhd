@@ -2,7 +2,7 @@
  * R10 S5b: the engine side of the trace signals, through the REAL `Orchestrator.run` and the real
  * `HookRegistry`. Only the LLM provider and the MCP client boundary are scripted; the per-adapter proof
  * through the REAL Anthropic and OpenAI adapters over loopback HTTP, joined to the real tracing plugin, is in
- * `agent-plugin-tracing/src/lib/r10-s5b-engine-trace.test.ts`. Latches, never sleeps.
+ * `agent-plugin-tracing/src/lib/r10-s5b-engine-trace.e2e.test.ts`. Latches, never sleeps.
  *
  *  - R10 S5b AC1: `post:model_response` carries turnIndex / thinkingConfig / thinkingBlocks /
  *    toolResultBytesIn from real data, per provider family; absent (never 0) where a family cannot supply it.

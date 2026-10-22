@@ -17,7 +17,7 @@ node, but a `body` edit replaces that node: as §3 below spells out, `update`
 with a `body` mints a successor with a fresh `uid` and joins the two with a
 `SUPERSEDES` edge. A uid you persisted earlier therefore stays _resolvable_ but
 may no longer be the _live_ one — addressing it returns `conflict` and names
-the successor. Never treat a stored uid as immutable across edits.
+the successor. Never treat a stored uid as immutable across edits. `lookup` is the one verb that heals a rotted uid: given a uid or unique prefix of a superseded issue (replaced by a body edit), it returns the uid of the live head and sets `forwardedFrom` to the uid you supplied. `get`, `update`, `transition`, `claim`, `relate`, `move` and `delete` never forward: addressing a superseded uid returns `conflict` naming the live uid. To refresh a stored uid without a write, run `lookup` on it.
 
 Every example below was run against `entrypoint/backlog/dist/index.js` and its
 exact output is what is shown. The obligations/verdict (§4), spec-pointer (§5),
@@ -1166,7 +1166,11 @@ $ adhd-backlog backlog lookup --input '{"q":"packages/auth/src/index.ts"}'
 ```
 
 `lookup` routes `q` by shape, in order: (1) a **uid or unique uid prefix**
-returns `{"redirect":{"verb":"get","uid":…}}`; (2) an **issue title** with
+returns `{"redirect":{"verb":"get","uid":…}}` — the LIVE uid: `lookup` is the one verb that heals a rotted uid: given a uid or unique prefix of a superseded issue (replaced by a body edit), it returns the uid of the live head and sets `forwardedFrom` to the uid you supplied. `get`, `update`, `transition`, `claim`, `relate`, `move` and `delete` never forward: addressing a superseded uid returns `conflict` naming the live uid. A prefix matching a superseded
+node and its own live head is not ambiguous (it resolves to the head); a prefix
+spanning two different issues is still refused. Example: `lookup {"q":"<stale uid>"}`
+returns `{"redirect":{"verb":"get","uid":"<live uid>"},"forwardedFrom":"<stale uid>"}`;
+a live uid returns no `forwardedFrom`; (2) an **issue title** with
 exactly one match returns the same `get` redirect, and a title matching two or
 more issues is refused (`ambiguous_reference`); (3) a **location** is
 classified as a tool name / file path / URL and resolved as before; (4) a

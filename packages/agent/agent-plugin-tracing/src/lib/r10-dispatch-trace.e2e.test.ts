@@ -3,8 +3,8 @@
  *   parent's agent.dispatch, parent_blocked_ms between worker duration and the dispatching tool_call), emits null / NaN
  *   for attributes a provider cannot supply, double-counts a batch, or leaks a prompt, reply, argument or thinking
  *   sentinel into a record.
- * tier: P (binds a loopback HTTP port for the provider adapters; classified by the code, not the unit `test` lane it
- *   runs in today; no subprocess)
+ * tier: P (binds a loopback HTTP port for the provider adapters; the `e2e` lane, ADR 0009;
+ *   no subprocess)
  * gap: This cannot be observed at tier S because the OpenAI Chat Completions and Anthropic Messages streaming adapters
  *   only produce their request and response shapes over a real HTTP socket.
  * cites: R10 S5 AC0, AC1, AC3, AC4, AC5

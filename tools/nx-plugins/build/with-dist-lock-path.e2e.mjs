@@ -1,5 +1,5 @@
 /**
- * with-dist-lock-path.spec.mjs - the documented standalone usage of with-dist-lock.mjs resolves its child command.
+ * with-dist-lock-path.e2e.mjs - the documented standalone usage of with-dist-lock.mjs resolves its child command.
  *
  * guards: `node entrypoint/backlog/tools/with-dist-lock.mjs vitest ...` (the usage documented in the script header)
  *   fails with `spawn vitest ENOENT` when run outside nx, because the child spawn relied on nx having put
@@ -8,7 +8,7 @@
  * gap: This cannot be observed at tier S because PATH lookup of the child happens in the operating system's spawn, in a
  *   real process started with a real environment that lacks node_modules/.bin; no in-process call reproduces it.
  * cites: backlog fix-dist-lock-path (feat/fix-dist-lock-path), criterion: documented usage works outside nx.
- * teeth: red, before the fix: node --test tools/nx-plugins/build/with-dist-lock-path.spec.mjs -> exit 1; the wrapper
+ * teeth: red, before the fix: node --test tools/nx-plugins/build/with-dist-lock-path.e2e.mjs -> exit 1; the wrapper
  *   printed `with-dist-lock: failed to spawn "vitest": spawn vitest ENOENT` and exited 1 (AssertionError 1 !== 0, stderr as quoted).
  *   green, after the fix: exit 0.
  */
