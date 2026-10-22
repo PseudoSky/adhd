@@ -198,7 +198,7 @@ function branded(e: unknown): e is Record<PropertyKey, unknown> {
  * package: checks the registry brand and a registry code, not `instanceof`.
  */
 export function isTripwireError(e: unknown): e is TripwireError {
-  return branded(e) && typeof e.code === 'string' && CODE_SET.has(e.code);
+  return branded(e) && typeof e['code'] === 'string' && CODE_SET.has(e['code']);
 }
 
 /** True for a tripped error from any copy of the package. */
