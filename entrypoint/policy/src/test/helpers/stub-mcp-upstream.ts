@@ -87,6 +87,11 @@ export function createStubMcpUpstream(options: IStubOptions): IStubMcpUpstream {
       });
       return;
     }
+    if (method === 'ping') {
+      // The gateway's readiness probe (McpUpstreamAdapter.ready) round-trips an MCP ping; an unanswered ping leaves the host 'degraded'.
+      respond(proc, { id, result: {} });
+      return;
+    }
     if (method === 'tools/list') {
       if (options.listTools === 'error') {
         respond(proc, { id, error: { code: -32603, message: 'list refused' } });

@@ -12,28 +12,28 @@ attributes:
 defaults:
   - set: { role: guest, read_roots: [], write_roots: [], customers: [], max_refund: 0 }
 permissions:
-  - tool: files.read
+  - tool: files/read
     args: { path: { _within: $attributes.read_roots } }
-  - tool: files.write
+  - tool: files/write
     context: { role: { _eq: dev } }
     args: { path: { _within: $attributes.write_roots } }
     set: { overwrite: false }
-  - tool: files.*
+  - tool: files/*
     effect: deny
     args: { path: { _regex: '(^|/)\\.env$|(^|/)\\.ssh/' } }
-  - tool: billing.refund
+  - tool: billing/refund
     effect: ask
     context: { role: { _eq: support } }
     args:
       _and:
         - { customer: { _in: $attributes.customers } }
         - { amount: { _lte: $attributes.max_refund } }
-  - tool: billing.*
+  - tool: billing/*
     effect: deny
     context: { role: { _eq: guest } }
 `;
 
-/** B5.0: the narrow policy; `agent.spawn` is child-creating because a permission reads `child.*`. */
+/** B5.0: the narrow policy; `agent/spawn` is child-creating because a permission reads `child.*`. */
 export const NARROW_YAML = `version: 1
 attributes:
   role: name
@@ -45,7 +45,7 @@ defaults:
   - where: { role: { _eq: reviewer } }
     set: { write_roots: [], repos: [acme/shop] }
 permissions:
-  - tool: agent.spawn
+  - tool: agent/spawn
     effect: deny
     args:
       _not:
@@ -54,7 +54,7 @@ permissions:
           - { 'child.write_roots': { _within: $attributes.write_roots } }
           - { 'child.repos':       { _contained_in: $attributes.repos } }
           - { 'child.max_refund':  { _lte: $attributes.max_refund } }
-  - tool: agent.spawn
+  - tool: agent/spawn
     context: { role: { _eq: orchestrator } }
     args: { agent_name: { _in: [reviewer] } }
 `;
@@ -69,11 +69,11 @@ runtime:
 defaults:
   - set: { docs: ["/opt/docs"] }
 permissions:
-  - tool: files.read
+  - tool: files/read
     args: { path: { _wthin: $attributes.docs } }
-  - tool: files.write
+  - tool: files/write
     args: { team: { _eq: $attributes.team } }
-  - tool: slack.post
+  - tool: slack/post
     context: { 'runtime.calls': { _lt: 3 } }
 `;
 

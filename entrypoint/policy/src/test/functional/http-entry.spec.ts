@@ -11,6 +11,21 @@ import { useScratchTelemetry } from '../helpers/capture';
 
 useScratchTelemetry();
 
+// The entry file is `void runEntry(...)` (CJS bundle, no top-level await), so importing it settles at once. The real
+// runEntry still runs; this wrapper only keeps the promise it returns so the test can await the entry's lifecycle.
+const entryRuns = vi.hoisted(() => [] as Array<Promise<void>>);
+vi.mock('../../wrapper/run-entry', async (importOriginal) => {
+  const real = await importOriginal<typeof import('../../wrapper/run-entry')>();
+  return {
+    ...real,
+    runEntry: (start: () => Promise<void>): Promise<void> => {
+      const run = real.runEntry(start);
+      entryRuns.push(run);
+      return run;
+    },
+  };
+});
+
 // Loading the entry builds the policy package (a cold live extraction takes seconds); it is setup, not a timing assertion.
 vi.setConfig({ testTimeout: 60_000 });
 
@@ -65,7 +80,8 @@ function enterHttp(port: string | undefined): IEntered {
   process.exitCode = undefined;
   const before = new Map(SIGNALS.map((signal) => [signal, process.listeners(signal)] as const));
   vi.resetModules();
-  const done = import('../../entry/http').then(() => undefined);
+  entryRuns.length = 0;
+  const done = import('../../entry/http').then(() => entryRuns[entryRuns.length - 1]);
   const installed = (): Array<() => void> => SIGNALS.flatMap((signal) => process.listeners(signal).filter((l) => !before.get(signal)?.includes(l))) as Array<() => void>;
   return { done, stderr, terminate: () => installed()[0]?.call(process) };
 }
@@ -97,7 +113,7 @@ describe('adhd-policy-http entry (src/entry/http.ts) in process', () => {
       const verify = await post(port, '/policy/verify', { data: { input: {} } });
       expect(verify.status).toBe(200);
       expect(await verify.json()).toMatchObject({ ok: true, errors: [], sources: ['built-in'] });
-      const check = await post(port, '/policy/check', { data: { input: { tool: 'files.read', args: { path: '/x' } } } });
+      const check = await post(port, '/policy/check', { data: { input: { tool: 'files/read', args: { path: '/x' } } } });
       expect(check.status).toBe(403);
       expect(JSON.stringify(await check.json())).toContain('permission_denied');
     } finally {

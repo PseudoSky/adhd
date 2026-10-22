@@ -7,6 +7,7 @@ import { mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { existsSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { isApiError } from '@adhd/apigen-base-errors';
+import { PolicyAttributes } from '@adhd/apigen-plugin-policy';
 import type { IProcessLauncher } from '@adhd/apigen-engine-gateway';
 import { describe, expect, it, vi } from 'vitest';
 import { ATTRIBUTES_ENV_VAR, attributesFromFlags } from '../../wrapper/attributes-from-flags';
@@ -212,19 +213,25 @@ describe('Decision D-06 - attribute precedence, never merged, files re-read on e
     expect(hasCode(error, 'invalid_argument')).toBe(true);
   });
 
-  /** Runs the attributes layer once against `envelope` and returns the envelope afterwards. */
-  async function runLayer(source: IAttributesSource, envelope: Record<string, unknown>): Promise<Record<string, unknown>> {
+  /** Runs the attributes layer once against a call carrying `envelope` and a fresh ctx; returns the ctx entry and the envelope afterwards. */
+  async function runLayer(source: IAttributesSource, envelope: Record<string, unknown>): Promise<{ readonly attributes: PolicyAttributes | undefined; readonly envelope: Record<string, unknown> }> {
     const plugin = createAttributesLayerPlugin(source);
     const layer = plugin.capabilities?.layer?.layer as unknown as (call: unknown, next: () => Promise<unknown>) => Promise<unknown>;
-    await layer({ envelope }, async () => 'next');
-    return envelope;
+    const store = new Map<unknown, unknown>();
+    const ctx = { get: (key: unknown) => store.get(key), set: (key: unknown, value: unknown) => void store.set(key, value) };
+    await layer({ envelope, ctx }, async () => 'next');
+    return { attributes: ctx.get(PolicyAttributes) as PolicyAttributes | undefined, envelope };
   }
 
-  it('D-06 the attributes layer overwrites whatever a caller put on the envelope, and deletes it when there are none', async () => {
+  it('D-06 the attributes layer writes the configured attributes to the call ctx, and writes nothing when there are none (the envelope is never the carrier)', async () => {
     const configured = createAttributesSource({ flag: '{"role":"dev"}', cwd: process.cwd() });
-    expect(await runLayer(configured, { attributes: { role: 'admin' } })).toEqual({ attributes: { role: 'dev' } });
+    const withFlag = await runLayer(configured, { attributes: { role: 'admin' } });
+    expect(withFlag.attributes?.values).toEqual({ role: 'dev' });
+    expect(withFlag.envelope).toEqual({ attributes: { role: 'admin' } });
     const none = createAttributesSource({ cwd: process.cwd() });
-    expect(await runLayer(none, { attributes: { role: 'admin' }, other: 1 })).toEqual({ other: 1 });
+    const without = await runLayer(none, { attributes: { role: 'admin' }, other: 1 });
+    expect(without.attributes).toBeUndefined();
+    expect(without.envelope).toEqual({ attributes: { role: 'admin' }, other: 1 });
   });
 
   it('D-06 a read failure on a call is permission_denied, never a call that proceeds', async () => {
