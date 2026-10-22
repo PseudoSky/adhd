@@ -228,11 +228,11 @@
       "end_ref": "83ab6df7f9e54eca9dd1f6e3820242fcf2844064"
     },
     "tests-use-cases": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-10-22T03:00:36.705Z",
-      "done_at": null,
+      "done_at": "2026-10-22T22:51:29.002Z",
       "start_ref": "2f687cfb4587dca1cae4b4924b5e6761c2864b87",
-      "end_ref": null
+      "end_ref": "99afe3d1d71d121a4627fbc7769ef9f22cfaf68b"
     },
     "cdp-test-harness": {
       "status": "complete",
@@ -932,6 +932,18 @@
       "audit_criteria_total": 5,
       "by": "pseudosky",
       "note": "guard exit 0 (orchestrator-verified); sonnet; 0a4f18f2"
+    },
+    {
+      "ts": "2026-10-22T22:51:29.002Z",
+      "from": "tests-use-cases",
+      "to": "tests-use-cases",
+      "start_ref": "2f687cfb4587dca1cae4b4924b5e6761c2864b87",
+      "end_ref": "99afe3d1d71d121a4627fbc7769ef9f22cfaf68b",
+      "audit_exit": 0,
+      "audit_criteria_passed": 6,
+      "audit_criteria_total": 6,
+      "by": "pseudosky",
+      "note": "guard exit 0 (orchestrator-verified); sonnet; cdba8a4e 93b96f92"
     }
   ],
   "amendment_log": [
