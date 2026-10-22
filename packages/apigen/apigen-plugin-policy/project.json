@@ -20,19 +20,16 @@
   ],
   "targets": {
     "nx-release-publish": {
-      "options": {
-        "packageRoot": "{projectRoot}/dist"
-      },
       "dependsOn": [
         "build",
         "test",
         "verify-dist-load",
         "dist-manifest",
         "publish-hygiene"
-      ]
-    },
-    "lint": {
-      "executor": "@nx/eslint:lint"
+      ],
+      "options": {
+        "packageRoot": "{projectRoot}/dist"
+      }
     },
     "typecheck-spec": {
       "//": "Type-checks the SPEC corpus (packages/apigen/apigen-plugin-policy/tsconfig.spec.json). Closes lane-reachability rule 6: a tsconfig.spec.json with no compiling target lets the spec corpus carry type errors no gate can see (nx.json production namedInput excludes it). The ratchet fails on any per-file increase over tools/nx-plugins/build/executors/typecheck-spec/apigen-plugin-policy.baseline.json or on include narrowing. Wired into test.dependsOn so nx affected -t test runs it.",
