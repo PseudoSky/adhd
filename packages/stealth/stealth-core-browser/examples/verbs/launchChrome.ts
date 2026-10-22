@@ -1,5 +1,5 @@
 /**
- * Scenario: start (or reuse) a hidden stealth Chrome on a dedicated debugging
+ * Scenario: launch-dedicated-chrome -- start (or reuse) a hidden stealth Chrome on a dedicated debugging
  * port, with its own profile directory, before a job drives it. Calling it twice
  * is safe: a Chrome that is already running is reused.
  */

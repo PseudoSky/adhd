@@ -1,5 +1,5 @@
 /**
- * Scenario: a long-lived host wants to know whether its Chrome is safe to close:
+ * Scenario: safe-to-close-report -- a long-lived host wants to know whether its Chrome is safe to close:
  * which open tabs count as real web pages, what the manager reports about the
  * reaper and the launch breaker, and how long a soft reap may take.
  */

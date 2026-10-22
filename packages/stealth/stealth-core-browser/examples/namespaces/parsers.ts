@@ -1,5 +1,5 @@
 /**
- * Scenario: turn a captured response into result rows without injecting any
+ * Scenario: response-to-result-rows -- turn a captured response into result rows without injecting any
  * script into the page: read it as a JSON API when it is JSON, otherwise as HTML,
  * and fall back to the structural XPath reader when the selectors find nothing.
  */

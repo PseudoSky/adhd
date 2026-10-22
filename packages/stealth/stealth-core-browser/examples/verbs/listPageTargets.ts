@@ -1,5 +1,5 @@
 /**
- * Scenario: find the target id of the tab a person left open on a given site, so
+ * Scenario: find-the-open-tab -- find the target id of the tab a person left open on a given site, so
  * a follow-up call can inspect that exact page instead of opening a new one.
  */
 // eslint-disable-next-line @nx/enforce-module-boundaries -- examples import the package root exactly as a consumer does

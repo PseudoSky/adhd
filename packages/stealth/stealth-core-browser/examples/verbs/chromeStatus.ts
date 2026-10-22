@@ -1,5 +1,5 @@
 /**
- * Scenario: before a scraping job starts, find out whether the dedicated Chrome
+ * Scenario: preflight-status-check -- before a scraping job starts, find out whether the dedicated Chrome
  * already answers on its debugging port (and which version), so the job can
  * decide between reusing it and launching a fresh one.
  */

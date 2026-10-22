@@ -1,5 +1,5 @@
 /**
- * Scenario: given the target id of an open tab, describe the page a person is
+ * Scenario: describe-an-open-tab -- given the target id of an open tab, describe the page a person is
  * looking at (URL, title, how many cookies the profile holds for its host, how
  * often it appears in history) without ever reading cookie values.
  */

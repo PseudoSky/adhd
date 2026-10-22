@@ -1,5 +1,5 @@
 /**
- * Scenario: inspect a running Chrome at the protocol level: confirm it answers,
+ * Scenario: protocol-level-inspection -- inspect a running Chrome at the protocol level: confirm it answers,
  * read its version, list its tabs and open a raw CDP session on the first tab to
  * enable the Page domain.
  */

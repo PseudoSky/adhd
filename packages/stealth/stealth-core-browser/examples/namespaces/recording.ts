@@ -1,5 +1,5 @@
 /**
- * Scenario: keep a replayable record of a page load for later debugging, with
+ * Scenario: redacted-page-recording -- keep a replayable record of a page load for later debugging, with
  * credentials masked before anything is stored: a recording sink collects the
  * exchange and the redactor hides cookies and authorization headers.
  */

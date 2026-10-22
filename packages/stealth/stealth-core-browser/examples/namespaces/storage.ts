@@ -1,5 +1,5 @@
 /**
- * Scenario: audit which of the open tabs the dedicated profile already knows,
+ * Scenario: read-only-profile-audit -- audit which of the open tabs the dedicated profile already knows,
  * read-only and without touching Chrome's files: the history of each open page,
  * bookmarks matching a topic and the profile's top sites.
  */

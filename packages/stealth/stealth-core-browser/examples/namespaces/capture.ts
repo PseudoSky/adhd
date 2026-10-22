@@ -1,5 +1,5 @@
 /**
- * Scenario: capture the real network response of a page load, check it for a
+ * Scenario: capture-and-ban-check -- capture the real network response of a page load, check it for a
  * CAPTCHA or rate-limit wall, and decide whether the job should retry or give up.
  */
 // eslint-disable-next-line @nx/enforce-module-boundaries -- examples import the package root exactly as a consumer does

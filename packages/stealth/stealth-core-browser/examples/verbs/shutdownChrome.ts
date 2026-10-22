@@ -1,5 +1,5 @@
 /**
- * Scenario: when a job finishes, ask the managed Chrome to close, but only if it
+ * Scenario: idle-safe-shutdown -- when a job finishes, ask the managed Chrome to close, but only if it
  * is genuinely idle. A person's open tab or another session keeps it alive, and
  * the result says whether Chrome is still running so the caller can tell.
  */

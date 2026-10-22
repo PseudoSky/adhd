@@ -1,5 +1,5 @@
 /**
- * Scenario: before an automation job touches the shared Chrome, check that a
+ * Scenario: human-activity-guard -- before an automation job touches the shared Chrome, check that a
  * human is not actively browsing in it: no open web pages and no history visit
  * within the last few minutes.
  */

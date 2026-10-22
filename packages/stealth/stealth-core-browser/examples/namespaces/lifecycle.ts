@@ -1,5 +1,5 @@
 /**
- * Scenario: decide whether an idle Chrome may be closed right now (another
+ * Scenario: reap-and-launch-guard -- decide whether an idle Chrome may be closed right now (another
  * client, an open web page or a recent history visit each keep it alive) and
  * guard against a launch storm with the circuit breaker.
  */
