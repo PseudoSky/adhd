@@ -263,11 +263,11 @@
       "end_ref": "4344d048eb8ed67d4b2075f5c5519ff1927b9a59"
     },
     "sp-reaper-smoke": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-10-22T02:23:06.396Z",
-      "done_at": null,
+      "done_at": "2026-10-22T02:50:27.619Z",
       "start_ref": "52596bffdd58ae8658bdada4a4da177f75ea13dc",
-      "end_ref": null
+      "end_ref": "40029d6d334ff7144ef10bf2843e6e5376f9cdc5"
     },
     "sp-switch": {
       "status": "pending",
@@ -908,6 +908,18 @@
       "audit_criteria_total": 7,
       "by": "pseudosky",
       "note": "guard exit 0 (orchestrator-verified); sonnet; 9b29f160"
+    },
+    {
+      "ts": "2026-10-22T02:50:27.619Z",
+      "from": "search-port-providers",
+      "to": "sp-reaper-smoke",
+      "start_ref": "52596bffdd58ae8658bdada4a4da177f75ea13dc",
+      "end_ref": "40029d6d334ff7144ef10bf2843e6e5376f9cdc5",
+      "audit_exit": 0,
+      "audit_criteria_passed": 3,
+      "audit_criteria_total": 3,
+      "by": "pseudosky",
+      "note": "guard exit 0 (orchestrator-verified); sonnet; c1c5fd6c"
     }
   ],
   "amendment_log": [
