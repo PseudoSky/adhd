@@ -1114,7 +1114,7 @@ main().catch((err) => {
         const { rows } = await check.adapter.executeAll<{ n: number }>(
           "SELECT COUNT(*) as n FROM node WHERE kind = 'project' AND name = 'ac12-deferred-race-project' AND t_invalid IS NULL"
         );
-        // eslint-disable-next-line no-console
+         
         console.warn(
           `[catalog-verbs AC-12 NEGATIVE CONTROL] deferred-mode race: a.ok=${
             a.ok

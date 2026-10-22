@@ -181,7 +181,7 @@ describe('FEAT-APIGEN-TRACING: SIX demanded tags co-occur on ONE durable record'
     expect(root!['parent_span_id']).toBeNull();
 
     // THE PROOF RECORD — printed for the dispatch evidence.
-    // eslint-disable-next-line no-console
+     
     console.log(
       '\n=== SIX-TAG PROOF RECORD (one JSONL line) ===\n' +
         JSON.stringify(record, null, 2) +

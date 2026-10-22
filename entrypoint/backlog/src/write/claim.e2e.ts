@@ -641,7 +641,7 @@ describe('claim — real concurrent-process CAS proof (BEGIN IMMEDIATE, SPEC.md 
     } else {
       observationNote = '';
     }
-    // eslint-disable-next-line no-console
+     
     console.warn(
       `[claim CAS negative control] winners=${winners.length} losers=${losers.length} unexpected=${unexpected.length} ` +
         `results=${JSON.stringify(results)}` +

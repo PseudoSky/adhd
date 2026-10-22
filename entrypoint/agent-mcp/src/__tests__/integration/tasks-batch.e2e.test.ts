@@ -327,7 +327,7 @@ describe('tasks_batch (05cc1db4)', () => {
     // Create an upstream task directly, then batch a dependent of it.
     const upstream = harness.taskStore.create({
       sessionId: null,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       isEphemeral: true,
       prompt: 'upstream',
     });

@@ -55,7 +55,7 @@ describe("ebfe7421 AC2: whole-prefix estimator vs the API's real input_tokens", 
       expect(t.realInputTokens).toBe(REAL[n - 1]);
       const est = estimatePrefixTokens(t.request).total;
       const ratio = est / t.realInputTokens;
-      // eslint-disable-next-line no-console
+       
       console.info(`ebfe7421 AC2 turn${n}: estimate=${est} real=${t.realInputTokens} ratio=${ratio.toFixed(4)}`);
       expect(est).toBeLessThanOrEqual(t.realInputTokens);
       expect(est).toBeGreaterThanOrEqual(CACHE_ESTIMATE_LOWER_TOLERANCE * t.realInputTokens);

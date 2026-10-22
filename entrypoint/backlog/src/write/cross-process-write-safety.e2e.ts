@@ -381,7 +381,7 @@ describe('cross-process write safety — BUG-039 fix verification (SPEC.md §9.1
       // guarantee is real and its failure mode is LOUD; the dedupe test
       // proves AC-22's literal "stored count BELOW the expected total"
       // silent-loss signature, deterministically.
-      // eslint-disable-next-line no-console
+       
       console.warn(
         `[cross-process-write-safety] NEGATIVE CONTROL numbers this run: attempted=${
           2 * N
@@ -449,7 +449,7 @@ describe('cross-process write safety — BUG-039 fix verification (SPEC.md §9.1
       const persisted = await storedCount(dbPath, projectUid);
       const combinedOk = a.ok + b.ok;
 
-      // eslint-disable-next-line no-console
+       
       console.warn(
         `[cross-process-write-safety] DEDUPE NEGATIVE CONTROL numbers this run: attempted=${
           2 * N

@@ -46,7 +46,7 @@ function ctx(root?: SchemaNode) {
 
 /** Evaluate emitted TS glue against a value to prove the expression is real. */
 function run(exprSource: string, valueName: string, value: unknown): unknown {
-  // eslint-disable-next-line @typescript-eslint/no-implied-eval
+   
   const fn = new Function(valueName, `return (${exprSource});`);
   return fn(value);
 }

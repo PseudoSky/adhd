@@ -243,7 +243,7 @@ describe('C5 closure gate — cross-process concurrency safety (AC5)', () => {
     });
     const post = await readPostState(dbPath, issueUid);
 
-    // eslint-disable-next-line no-console
+     
     console.warn(
       `[cross-process-gate-safety] NEGATIVE CONTROL numbers: A=${JSON.stringify(a)} B=${JSON.stringify(b)} ` +
         `transitions=${post.transitions} status=${post.status}`

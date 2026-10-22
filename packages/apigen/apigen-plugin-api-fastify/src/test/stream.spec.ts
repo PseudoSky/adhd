@@ -192,7 +192,7 @@ describe('[sse-stream.before-first-chunk] error before first chunk → normal HT
     const stream = createStream<number>({
       produce: async function* () {
         throw new ApiError('internal', 'db unreachable');
-        // eslint-disable-next-line no-unreachable
+         
         yield 0;
       },
     });
@@ -211,7 +211,7 @@ describe('[sse-stream.before-first-chunk] error before first chunk → normal HT
     const stream = createStream<number>({
       produce: async function* () {
         throw new ApiError('not_found', 'item missing');
-        // eslint-disable-next-line no-unreachable
+         
         yield 0;
       },
     });
@@ -226,7 +226,7 @@ describe('[sse-stream.before-first-chunk] error before first chunk → normal HT
     const stream = createStream<number>({
       produce: async function* () {
         throw new Error('unexpected crash');
-        // eslint-disable-next-line no-unreachable
+         
         yield 0;
       },
     });
@@ -272,7 +272,7 @@ describe('[sse-stream.before-first-chunk] error before first chunk → normal HT
     const stream = createStream<number>({
       produce: async function* () {
         throw new ShadowApiError('not_found', 'item missing');
-        // eslint-disable-next-line no-unreachable
+         
         yield 0;
       },
     });

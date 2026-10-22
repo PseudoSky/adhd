@@ -199,7 +199,7 @@ describe('C9 AC4 — cross-process reviewed linking', () => {
     );
     const persisted = await liveEdgeCount(dbPath, sourceUid, 'duplicate_of');
     const reportedCommits = [a, b].filter((w) => w.ok && !w.noop).length;
-    // eslint-disable-next-line no-console
+     
     console.warn(
       `[relate-similar-e2e] DEFERRED NEGATIVE CONTROL: exitCodes=${a.exitCode}/${
         b.exitCode

@@ -148,7 +148,7 @@ describe("95ee2a24 AC5: claude CLI version tripwire (the only version-pinned tes
     const r = spawnSync("claude", ["--version"], { encoding: "utf8" });
     expect(r.status, "claude CLI must be installed to run this suite").toBe(0);
     const installed = r.stdout.trim().split(" ")[0];
-    // eslint-disable-next-line no-console
+     
     console.log("424b6362 AC5 claude version:", r.stdout.trim());
     expect(
       installed,

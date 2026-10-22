@@ -439,7 +439,7 @@ describe('generate()', () => {
       const jsSource = match[0]
         .replace('(flag: string, raw: unknown): unknown', '(flag, raw)')
         .replace('(err as Error).message', 'err.message');
-      // eslint-disable-next-line no-new-func
+       
       return new Function(`return (${jsSource})`)();
     }
 

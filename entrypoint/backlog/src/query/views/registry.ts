@@ -498,7 +498,7 @@ export async function getRegistryDetail(
 
 function looksLikeUrl(q: string): boolean {
   try {
-    // eslint-disable-next-line no-new
+     
     new URL(q);
     return true;
   } catch {

@@ -949,7 +949,7 @@ export async function createBacklogServer(
         }),
       // The write layer's only sink is stderr (`write/bootstrap.ts`'s own
       // latched notices); a structured logger is out of scope for this slice.
-      // eslint-disable-next-line no-console
+       
       log: (_level, message) => console.error(message),
     }),
   };

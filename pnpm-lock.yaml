@@ -422,7 +422,7 @@ importers:
         version: link:../../packages/agent/agent-plugin-budget
       '@adhd/agent-plugin-tracing':
         specifier: ^0.0.4
-        version: link:../../packages/agent/agent-plugin-tracing
+        version: 0.0.4(@adhd/agent-base-types@packages+agent+agent-base-types)
       '@adhd/agent-store-prompts':
         specifier: ^2.2.3
         version: link:../../packages/agent/agent-store-prompts
@@ -732,7 +732,7 @@ importers:
         specifier: ^0.0.5
         version: link:../../packages/agent/agent-core-native-tooling
       '@adhd/backlog':
-        specifier: ^1.0.19
+        specifier: ^1.0.20
         version: link:../backlog
       '@adhd/dispatch-base-spec':
         specifier: ^0.1.7
@@ -1816,6 +1816,17 @@ importers:
   tools/nx-plugins/test: {}
 
 packages:
+
+  /@adhd/agent-plugin-tracing@0.0.4(@adhd/agent-base-types@packages+agent+agent-base-types):
+    resolution: {integrity: sha512-q1GWqkAOIv0VV0BpVeNcadYMT04QLwqQTmGueRYwGq1MDJiyplUq68+ipUR8F5+8QqpAWFkfuEPH67l6ZWdJKw==}
+    peerDependencies:
+      '@adhd/agent-base-types': ^2.3.12
+    dependencies:
+      '@adhd/agent-base-types': link:packages/agent/agent-base-types
+      '@adhd/sox-telemetry': 0.4.3
+      tslib: 2.8.1
+      zod: 4.4.3
+    dev: true
 
   /@adhd/sox-embedding-provider@0.6.3:
     resolution: {integrity: sha512-LVYsA4R6vwiDJANU/2zDFxfTc00TJHEj4DjYcU2XaAvKqc5ogCftEumNm4qEUUFnZ0VfDjaj+MyObAUeV4i3Tg==}

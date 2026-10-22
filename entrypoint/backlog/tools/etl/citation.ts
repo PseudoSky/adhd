@@ -21,7 +21,7 @@ import { UNVERIFIED_SHA } from './constants.js';
  */
 export function citationTargetType(file: string): 'url' | 'path' {
   try {
-    // eslint-disable-next-line no-new -- constructed purely to probe parseability
+     
     new URL(file);
     return 'url';
   } catch {

@@ -140,7 +140,7 @@ afterAll(async () => {
   for (const d of [scratch, tmpRoot, homeRoot]) {
     if (d) fs.rmSync(d, { recursive: true, force: true });
   }
-  // eslint-disable-next-line no-console
+   
   console.log(
     '\n48dc PORTABILITY MATRIX (cwd × case → outcome)\n' +
       results.map(([c, k, o]) => `  ${c.padEnd(12)} ${k.padEnd(34)} ${o}`).join('\n')

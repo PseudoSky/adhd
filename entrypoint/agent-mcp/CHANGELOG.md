@@ -1,3 +1,13 @@
+## 2.3.20 (2026-10-22)
+
+### 🩹 Fixes
+
+- **nx-test:** pre-push runs tier S only; tier P/H/X specs live in the e2e lane ([71039a60](https://github.com/PseudoSky/adhd/commit/71039a60))
+
+### ❤️ Thank You
+
+- pseudosky
+
 ## 2.3.19 (2026-10-21)
 
 ### 🩹 Fixes

@@ -105,7 +105,7 @@ describe('BAKE-AT-BUILD — baked `--help` vs. forced live fallback, real measur
     bakedTimes.sort((a, b) => a - b);
     const bakedMedian = bakedTimes[1] as number;
 
-    // eslint-disable-next-line no-console -- deliberate: real measured numbers
+     
     // must be visible in test output, not just a pass/fail.
     console.log(
       `[ir-cache perf] forced fallback/live median: ${fallbackMedian.toFixed(1)}ms ` +

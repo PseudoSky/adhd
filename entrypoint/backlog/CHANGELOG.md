@@ -1,3 +1,7 @@
+## 1.0.20 (2026-10-22)
+
+This was a version bump only for backlog to align it with other projects, there were no code changes.
+
 ## Unreleased
 
 ### 🩹 Fixes

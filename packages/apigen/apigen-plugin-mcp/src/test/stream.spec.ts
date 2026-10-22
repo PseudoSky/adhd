@@ -88,7 +88,7 @@ describe('[mcp-stream.before-first-chunk] error before any chunk', () => {
     const stream = createStream<number>({
       produce: async function* () {
         throw new ApiError('not_found', 'missing resource');
-        // eslint-disable-next-line no-unreachable
+         
         yield 0;
       },
     });

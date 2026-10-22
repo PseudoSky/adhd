@@ -175,7 +175,7 @@ describe(`C6 AC6 — the ${N}-item list bound (real store, real git)`, () => {
     }
 
     const p95ms = Number(p95(durations).toFixed(1));
-    // eslint-disable-next-line no-console
+     
     console.log(
       `[C6 AC6] N=${N} items (returned ${itemsReturned}); list-path p95 = ${p95ms}ms over 15 runs; maxRungObserved = 2`
     );

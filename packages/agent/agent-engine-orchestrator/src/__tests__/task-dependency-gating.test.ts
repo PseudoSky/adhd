@@ -55,7 +55,7 @@ vi.mock("openai", () => {
         create: (args: any) => hoisted.chat!(args),
       },
     };
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+     
     constructor(_opts: unknown) {
       // no-op: the real network client is never constructed
     }

@@ -121,7 +121,7 @@ describe('424b6362 R3-PAR-B parallel dispatch through the real claude CLI', () =
   it('424b6362 AC1 spike: record overlap with and without readOnlyHint', { timeout: 240_000 }, async () => {
     const without = await observe(false);
     const withHint = await observe(true);
-    // eslint-disable-next-line no-console
+     
     console.log('PAR-B-SPIKE', JSON.stringify({ without, withHint }, null, 1));
     for (const o of [without, withHint]) {
       expect(o.calls.length).toBe(2);

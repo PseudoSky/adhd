@@ -359,7 +359,7 @@ describe('layer — stream-lifecycle (§11)', () => {
     ) as AsyncIterable<unknown>;
 
     try {
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+       
       for await (const _ of result) {
         // consume
       }
@@ -386,7 +386,7 @@ describe('layer — stream-lifecycle (§11)', () => {
       next
     ) as AsyncIterable<unknown>;
 
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+     
     for await (const _ of result) {
       // drain
     }

@@ -5,7 +5,7 @@
     "dispatch-cli": "./dist/bin/cli.js"
   },
   "dependencies": {
-    "@adhd/backlog": "^1.0.19",
+    "@adhd/backlog": "^1.0.20",
     "@adhd/agent-base-types": "^2.3.13",
     "@adhd/agent-core-native-tooling": "^0.0.5",
     "@adhd/dispatch-serializer-json": "^0.1.5",
