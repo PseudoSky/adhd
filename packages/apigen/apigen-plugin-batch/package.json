@@ -1,10 +1,10 @@
 {
   "name": "@adhd/apigen-plugin-batch",
-  "version": "0.2.6",
+  "version": "0.2.7",
   "main": "./dist/index.js",
   "dependencies": {
-    "@adhd/apigen-core-client": "^0.3.5",
-    "@adhd/apigen-engine-runtime": "^0.3.4",
+    "@adhd/apigen-core-client": "^0.3.6",
+    "@adhd/apigen-engine-runtime": "^0.3.5",
     "@adhd/apigen-base-errors": "^0.2.3"
   },
   "publishConfig": {

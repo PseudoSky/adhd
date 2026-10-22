@@ -4,6 +4,22 @@
 
 - **backlog:** `lookup` on a superseded issue uid (or unique prefix) now returns the live chain head in `redirect.uid` and an additive `forwardedFrom` echoing the uid supplied, instead of redirecting to the stale uid that `get` then refuses; a prefix matching a superseded node and its own head resolves to the head. `get` and every write verb are unchanged and still answer `conflict` naming the live uid (68175e51-9eda-459c-bc23-6bba2b4c7707).
 
+## 1.0.19 (2026-10-21)
+
+### 🚀 Features
+
+- **backlog:** add remove-note verb ([4e33bbe4](https://github.com/PseudoSky/adhd/commit/4e33bbe4))
+
+### 🩹 Fixes
+
+- **backlog:** re-anchor CONTRACT.md NoteNotFoundError/NoteRemovalNotPermittedError line refs after merge ([d3b216bc](https://github.com/PseudoSky/adhd/commit/d3b216bc))
+- **backlog:** honest remove-note identity model, verb counts and surface docs ([588e99c8](https://github.com/PseudoSky/adhd/commit/588e99c8))
+- **nx-test:** review corrections for the repo-wide spawn-isolation guard (0945d1b9) ([1a92065c](https://github.com/PseudoSky/adhd/commit/1a92065c))
+
+### ❤️ Thank You
+
+- pseudosky
+
 ## 1.0.18 (2026-10-19)
 
 ### 🩹 Fixes

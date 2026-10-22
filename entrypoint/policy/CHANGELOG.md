@@ -7,6 +7,10 @@
 - A crashed upstream is restarted up to 5 times. When the upstream has exited and 5 consecutive restarts fail, or it exits more than 5 times within 60 seconds, `serve` stops and exits 1 with the reason on stderr instead of answering `unavailable` indefinitely.
 - A failed startup handshake exits non-zero before the host transport starts, and the gateway is stopped on every exit path.
 
+## 0.0.3 (2026-10-21)
+
+This was a version bump only for policy to align it with other projects, there were no code changes.
+
 ## 0.0.2 (2026-10-19)
 
 ### 🚀 Features

@@ -9,6 +9,10 @@
 - `releaseExtractionMemory()` releases the process-lifetime ts-morph tier
 - the TypeScript extractor reports the resolved tsconfig `extends` chain in `sourceFiles`
 
+## 0.3.6 (2026-10-21)
+
+This was a version bump only for apigen-core-client to align it with other projects, there were no code changes.
+
 ## 0.3.5 (2026-10-15)
 
 ### 🩹 Fixes

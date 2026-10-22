@@ -9,6 +9,6 @@
   ],
   "dependencies": {
     "@adhd/apigen-base-errors": "^0.2.3",
-    "@adhd/apigen-core-client": "^0.3.5"
+    "@adhd/apigen-core-client": "^0.3.6"
   }
 }

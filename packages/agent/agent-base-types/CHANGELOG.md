@@ -1,3 +1,19 @@
+## 2.3.13 (2026-10-21)
+
+### 🚀 Features
+
+- **agent-mcp:** task_events read tool ([5117a8af](https://github.com/PseudoSky/adhd/commit/5117a8af))
+- **agent-engine-orchestrator:** warn when a tool-granted task completes with zero tool use (cbd559eb) ([909c70d6](https://github.com/PseudoSky/adhd/commit/909c70d6))
+
+### 🩹 Fixes
+
+- **agent-engine-orchestrator:** share completion-warning tuple and event type, fix tool-use count, correct spec (cbd559eb) ([83284e4f](https://github.com/PseudoSky/adhd/commit/83284e4f))
+- **agent-engine-orchestrator:** review corrections and warnings pass-through for no_tool_use (cbd559eb) ([f44f40bc](https://github.com/PseudoSky/adhd/commit/f44f40bc))
+
+### ❤️ Thank You
+
+- pseudosky
+
 ## 2.3.12 (2026-10-15)
 
 This was a version bump only for agent-base-types to align it with other projects, there were no code changes.

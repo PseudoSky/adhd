@@ -1,3 +1,14 @@
+## 0.2.7 (2026-10-21)
+
+### 🩹 Fixes
+
+- **apigen-plugin-batch:** reject non-object batch items (087ec253) ([479746bf](https://github.com/PseudoSky/adhd/commit/479746bf))
+- **apigen-plugin-batch:** reject null/undefined batch items instead of coercing to {} ([36ada51f](https://github.com/PseudoSky/adhd/commit/36ada51f))
+
+### ❤️ Thank You
+
+- pseudosky
+
 ## 0.2.6 (2026-10-03)
 
 ### 🩹 Fixes

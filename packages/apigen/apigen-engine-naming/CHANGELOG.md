@@ -1,3 +1,13 @@
+## 0.2.7 (2026-10-21)
+
+### 🩹 Fixes
+
+- **apigen-plugin-mcp:** route generateIndex literals through the shared engine-naming escapers ([933992e0](https://github.com/PseudoSky/adhd/commit/933992e0))
+
+### ❤️ Thank You
+
+- pseudosky
+
 ## 0.2.6 (2026-10-15)
 
 This was a version bump only for apigen-engine-naming to align it with other projects, there were no code changes.
