@@ -7,18 +7,18 @@ export function layer(name: LayerName, document: unknown, source = `memory:${nam
 
 /**
  * The library-first demo policy (S1): attributes `{role, read_roots}`, default
- * role `guest`, a `files.read` allow within `read_roots`, a `files.*` deny on
- * `.env`, and a developer-only `files.write` allow that forces `overwrite=false`.
+ * role `guest`, a `files/read` allow within `read_roots`, a `files/*` deny on
+ * `.env`, and a developer-only `files/write` allow that forces `overwrite=false`.
  */
 export const WORKSPACE_DOCUMENT = {
   version: 1,
   attributes: { role: 'name', read_roots: 'paths' },
   defaults: [{ set: { role: 'guest' } }],
   permissions: [
-    { tool: 'files.read', args: { path: { _within: '$attributes.read_roots' } } },
-    { tool: 'files.*', effect: 'deny', args: { path: { _regex: '(^|/)\\.env$' } } },
+    { tool: 'files/read', args: { path: { _within: '$attributes.read_roots' } } },
+    { tool: 'files/*', effect: 'deny', args: { path: { _regex: '(^|/)\\.env$' } } },
     {
-      tool: 'files.write',
+      tool: 'files/write',
       context: { role: { _eq: 'dev' } },
       args: { path: { _within: '$attributes.read_roots' } },
       set: { overwrite: false },

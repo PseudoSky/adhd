@@ -39,11 +39,11 @@ describe('Feature: Library first - compile once, decide in process, no server', 
       const client = createPolicyClient({ layers: WORKSPACE_POLICY });
       const attributes = { role: 'dev', read_roots: [`${demo}/work`] };
 
-      const read = await client.evaluate({ tool: 'files.read', args: { path: `${demo}/work/readme.md` }, attributes });
+      const read = await client.evaluate({ tool: 'files/read', args: { path: `${demo}/work/readme.md` }, attributes });
       expect(read.effect).toBe('allow');
       expect(read.matched).toEqual(['project:0']);
 
-      const write = await client.evaluate({ tool: 'files.write', args: { path: `${demo}/work/out/notes.txt` }, attributes });
+      const write = await client.evaluate({ tool: 'files/write', args: { path: `${demo}/work/out/notes.txt` }, attributes });
       expect(write.effect).toBe('allow');
       expect(write.set).toEqual({ overwrite: false });
     });
@@ -53,7 +53,7 @@ describe('Feature: Library first - compile once, decide in process, no server', 
     await withDemo(async (demo) => {
       const client = createPolicyClient({ layers: WORKSPACE_POLICY });
       const decision = await client.evaluate({
-        tool: 'files.write',
+        tool: 'files/write',
         args: { path: `${demo}/work/out/notes.txt` },
         attributes: { read_roots: [`${demo}/work`] },
       });
@@ -66,7 +66,7 @@ describe('Feature: Library first - compile once, decide in process, no server', 
   it('@S1.2 a secret path is denied even inside the developers read root', async () => {
     await withDemo(async (demo) => {
       const attributes = { role: 'dev', read_roots: [`${demo}/work`] };
-      const secret = { tool: 'files.read', args: { path: `${demo}/work/.env` }, attributes };
+      const secret = { tool: 'files/read', args: { path: `${demo}/work/.env` }, attributes };
 
       const denied = await createPolicyClient({ layers: WORKSPACE_POLICY }).evaluate(secret);
       expect(denied.effect).toBe('deny');
@@ -84,7 +84,7 @@ describe('Feature: Library first - compile once, decide in process, no server', 
   });
 
   it('@S1.3 compiling is deterministic and the result is plain data', async () => {
-    const client = createPolicyClient({ layers: [layer('project', { version: 1, permissions: [{ tool: 'a.b' }] })] });
+    const client = createPolicyClient({ layers: [layer('project', { version: 1, permissions: [{ tool: 'a/b' }] })] });
     const first = await client.compile();
     const second = await client.compile();
     expect(first.ok).toBe(true);
@@ -97,7 +97,7 @@ describe('Feature: Library first - compile once, decide in process, no server', 
     expect(JSON.parse(JSON.stringify(first.policy))).toEqual(first.policy);
 
     // A different document hashes differently (the hash is a function of the content).
-    const other = await createPolicyClient({ layers: [layer('project', { version: 1, permissions: [{ tool: 'a.c' }] })] }).compile();
+    const other = await createPolicyClient({ layers: [layer('project', { version: 1, permissions: [{ tool: 'a/c' }] })] }).compile();
     expect(other.contentHash).not.toBe(first.contentHash);
   });
 });
