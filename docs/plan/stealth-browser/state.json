@@ -368,10 +368,10 @@
       "end_ref": "f48ab75adacf084470b17c724b1a51d8ebbf041c"
     },
     "search-port-providers": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-10-22T03:00:35.763Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "b5c4e077c7e76cfe8dd09bf619b3953b1d93b7aa",
       "end_ref": null
     },
     "search-port-fetch": {
@@ -1696,7 +1696,7 @@
     "version": "0.8.35",
     "hash": "0b6bc1f3d70e"
   },
-  "current_state": "tests-use-cases",
+  "current_state": "search-port-providers",
   "dod_provenance": {
     "confirmed_at": "2026-10-12T23:49:38.410Z",
     "by": "pseudosky",
