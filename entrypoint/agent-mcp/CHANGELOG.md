@@ -1,3 +1,13 @@
+## 2.3.19 (2026-10-21)
+
+### 🩹 Fixes
+
+- **agent-mcp:** hand the Anthropic SDK an origin, not <origin>/v1, so a custom ADHD_AGENT_ANTHROPIC_BASE_URL stops hitting /v1/v1/messages ([d6c5caea](https://github.com/PseudoSky/adhd/commit/d6c5caea))
+
+### ❤️ Thank You
+
+- pseudosky
+
 ## 2.3.18 (2026-10-20)
 
 ### 🩹 Fixes

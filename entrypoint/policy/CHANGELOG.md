@@ -1,3 +1,7 @@
+## 0.0.3 (2026-10-21)
+
+This was a version bump only for policy to align it with other projects, there were no code changes.
+
 ## 0.0.2 (2026-10-19)
 
 ### 🚀 Features

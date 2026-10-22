@@ -1,3 +1,7 @@
+## 0.0.6 (2026-10-21)
+
+This was a version bump only for apigen-plugin-java-javalin to align it with other projects, there were no code changes.
+
 ## Unreleased
 
 ### ⚠️ Breaking Changes

@@ -1,12 +1,12 @@
 {
   "name": "@adhd/apigen-plugin-api-fastify",
-  "version": "0.2.9",
+  "version": "0.2.10",
   "main": "./dist/index.js",
   "dependencies": {
     "@adhd/apigen-base-errors": "^0.2.3",
-    "@adhd/apigen-core-client": "^0.3.5",
-    "@adhd/apigen-engine-naming": "^0.2.6",
-    "@adhd/apigen-engine-runtime": "^0.3.4",
+    "@adhd/apigen-core-client": "^0.3.6",
+    "@adhd/apigen-engine-naming": "^0.2.7",
+    "@adhd/apigen-engine-runtime": "^0.3.5",
     "fastify": "^4.0.0"
   },
   "devDependencies": {

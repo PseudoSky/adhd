@@ -1,3 +1,13 @@
+## 2.2.12 (2026-10-21)
+
+### 🚀 Features
+
+- **agent-mcp:** task_events read tool ([5117a8af](https://github.com/PseudoSky/adhd/commit/5117a8af))
+
+### ❤️ Thank You
+
+- pseudosky
+
 ## 2.2.11 (2026-10-15)
 
 This was a version bump only for agent-store-runtime to align it with other projects, there were no code changes.

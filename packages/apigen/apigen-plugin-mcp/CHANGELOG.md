@@ -1,3 +1,15 @@
+## 0.3.5 (2026-10-21)
+
+### 🩹 Fixes
+
+- **apigen-plugin-mcp:** route generateIndex literals through the shared engine-naming escapers ([933992e0](https://github.com/PseudoSky/adhd/commit/933992e0))
+- **apigen-plugin-mcp:** update generate ([754f49fd](https://github.com/PseudoSky/adhd/commit/754f49fd))
+- **apigen-plugin-mcp:** sanitise generated identifiers from package ids in generate ([a286b457](https://github.com/PseudoSky/adhd/commit/a286b457))
+
+### ❤️ Thank You
+
+- pseudosky
+
 ## 0.3.4 (2026-10-15)
 
 This was a version bump only for apigen-plugin-mcp to align it with other projects, there were no code changes.
