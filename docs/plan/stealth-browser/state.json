@@ -186,10 +186,10 @@
       "end_ref": "ee08311e8ae214f31aa6e0793225cd891ae653eb"
     },
     "prod-examples": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-10-22T02:23:06.557Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "90272daa935d7d1af5d69fa7a77719d63047361d",
       "end_ref": null
     },
     "port-fixes": {
@@ -1660,7 +1660,7 @@
     "version": "0.8.35",
     "hash": "0b6bc1f3d70e"
   },
-  "current_state": "sp-reaper-smoke",
+  "current_state": "prod-examples",
   "dod_provenance": {
     "confirmed_at": "2026-10-12T23:49:38.410Z",
     "by": "pseudosky",
