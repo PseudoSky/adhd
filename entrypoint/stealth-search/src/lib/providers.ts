@@ -185,7 +185,7 @@ export const PROVIDERS = {
   github: {
     id: 'github',
     name: 'GitHub',
-    help: 'GitHub search — repos by default. Use qualifier "type:code" for code search, "type:repositories" to stay explicit. Qualifiers: repo:, org:, user:, language:, license:, is:, path:, symbol:, regex. See docs.github.com/en/search-github/github-code-search.',
+    help: 'GitHub search — repos by default. Use qualifier "type:code" for code search, "type:repositories" to stay explicit. Qualifiers: repo:, org:, user:, language:, license:, is:, path:, symbol:, regex. See docs.github.com/en/search-github (code search).',
     qualifierExamples: ['type:code           Code search (default: repos)', 'repo:owner/name     Search within a repo', 'org:name            Search within an org', 'user:name           Search within a user', 'language:go         Filter by language', 'license:MIT         Filter by license', 'is:archived         Include archived repos', 'NOT is:fork         Exclude forks', 'path:src/*.ts       Filter by file path (glob)', 'symbol:MyFunction   Search symbol definitions', '/pattern/           Use regex in terms and qualifiers'],
     url: (q) => `https://github.com/search?q=${encodeURIComponent(q)}&type=repositories`,
     // Primary: the public REST search API (no browser). Fallback: the rendered search
