@@ -565,7 +565,7 @@ export function deprecatedKindReplacement(name: string): string | undefined;
 Guarantees: the case-folded in-code replacement for a deprecated `kind` name,
 or `undefined` when the name is not one of `DEPRECATED_KIND_NAMES`.
 
-### `VALID_LOCATION_TYPES` — const (`catalog.ts:1546`)
+### `VALID_LOCATION_TYPES` — const (`catalog.ts:1571`)
 
 ```ts
 export const VALID_LOCATION_TYPES: readonly ILocationType[];
@@ -671,6 +671,7 @@ export interface IProjectPolicy {
   readonly citationRequired: boolean;
   readonly citationRequiresSha: boolean;
   readonly citationAllowedExternalRoots: readonly string[];
+  readonly noteRemovers: readonly string[];
   readonly defaultStatus?: string;
   readonly defaultKind?: string;
   readonly dedupeScanEnabled: boolean;
@@ -688,7 +689,9 @@ export interface IProjectPolicy {
 ```
 
 Guarantees: every field is `readonly` at the type level. `allowedStatuses`/
-`allowedKinds` empty means "no restriction." `citationAllowedExternalRoots`
+`allowedKinds` empty means "no restriction." `noteRemovers` is the actor list,
+beyond a note's own author, permitted to run `remove-note`; empty (the default)
+means author-only, and a malformed value falls back to empty. `citationAllowedExternalRoots`
 is external absolute roots a citation may be read from, IN ADDITION to the
 project's own `metadata.path` root (BUG c6d35272): a citation target is
 accepted iff its canonical (symlink-resolved) path lies within the project
@@ -717,7 +720,7 @@ minimum title-token Jaccard for the SECOND independent signal — cosine alone i
 never sufficient cross-project. All four are data (never env toggles) resolved
 by `resolveProjectPolicy` over `DEFAULT_PROJECT_POLICY`.
 
-### `resolveProjectPolicy(project)` — function (`catalog.ts:1020`)
+### `resolveProjectPolicy(project)` — function (`catalog.ts:1029`)
 
 ```ts
 export function resolveProjectPolicy(project: IResolvedProjectRow): IProjectPolicy;
@@ -839,7 +842,7 @@ The ONE copy of §8.5's citation-sha rule (`create`/`transition`/`update`/
 by a `has_citation` edge; the ONE contract lives in the `citation.ts` leaf
 (`src/citation.ts`), which this module encodes to / decodes from.
 
-### `computeCitationSha(project, file, revision, allowedExternalRoots, siblingRoots?)` — function (`citation.ts:344`)
+### `computeCitationSha(project, file, revision, allowedExternalRoots, siblingRoots?)` — function (`citation.ts:412`)
 
 ```ts
 export async function computeCitationSha(
@@ -853,17 +856,21 @@ export async function computeCitationSha(
 
 §8.5's two-branch rule. Branch 1: a path-less project degrades to the
 `"unverified"` sentinel. Branch 2a: a `revision` resolves the target from
-`git show <revision>:<path>` (so a branch-only file is citable). Branch 2b: the
+`git show <revision>:<path>` (so a branch-only file is citable), tried in the
+item's project repo, then (absolute path) the git repo enclosing the file, then
+every other registered project's repo (`siblingRoots`); the first that resolves
+wins and an unresolved revision records every repo tried
+(`ICitationVerification.triedRepos`, echoed by `CitationUnverifiableError`). Branch 2b: the
 working-tree read, canonical containment against the project root ∪
 `allowedExternalRoots`.
 
-### `computeCitationShas(project, citations, allowedExternalRoots, siblingRoots?)` — function (`citation.ts:397`)
+### `computeCitationShas(project, citations, allowedExternalRoots, siblingRoots?)` — function (`citation.ts:458`)
 
 The filesystem/git half of the pre-resolve, with NO policy gate — callable on
 its own by `update`'s diff-emitter, which defers the gate until it knows which
 citations are actually being added.
 
-### `assertCitationShasVerifiable(project, policy, citations, shas, verb)` — function (`citation.ts:432`)
+### `assertCitationShasVerifiable(project, policy, citations, shas, verb)` — function (`citation.ts:493`)
 
 Enforce `citationRequiresSha` over an already-computed sha list. Only a MISSING
 target or an unresolvable pinned revision, in a project with a known `path`, is
@@ -872,27 +879,27 @@ anchor, over-cap target, directory, path-less project) is persisted with its
 recorded reason — a path-less project records `sha:"unverified"` and logs the
 waiver.
 
-### `resolveCitationShas(project, policy, citations, siblingRoots, verb)` — function (`citation.ts:471`)
+### `resolveCitationShas(project, policy, citations, siblingRoots, verb)` — function (`citation.ts:533`)
 
 `computeCitationShas` + `assertCitationShasVerifiable` — compute AND gate every
 citation, in order.
 
-### `appendCitationTx(tx, handle, params)` — function (`citation.ts:493`)
+### `appendCitationTx(tx, handle, params)` — function (`citation.ts:555`)
 
 Mint ONE `citation` node + its `has_citation` edge against the issue, inside the
 caller's open `tx`. Never writes an audit row (the calling verb owns it).
 
-### `readLiveCitationsTx(tx, issueRowid)` — function (`citation.ts:571`)
+### `readLiveCitationsTx(tx, issueRowid)` — function (`citation.ts:633`)
 
 The LIVE citations currently attached to an issue, each with its `citationKey`
 (`file` + `lines`) — the "live set" `update`'s diff compares a desired set to.
 
-### `removeCitationTx(tx, params)` — function (`citation.ts:602`)
+### `removeCitationTx(tx, params)` — function (`citation.ts:664`)
 
 Bi-temporally invalidate ONE citation: its node (merged `invalidatedAt` /
 `invalidatedReason`) AND its `has_citation` edge. Never writes an audit row.
 
-### `IAddCitationInput` — interface (`citation.ts:681`)
+### `IAddCitationInput` — interface (`citation.ts:743`)
 
 ```ts
 export interface IAddCitationInput {
@@ -902,12 +909,12 @@ export interface IAddCitationInput {
 }
 ```
 
-### `addCitation(handle, input)` — function (`citation.ts:714`)
+### `addCitation(handle, input)` — function (`citation.ts:776`)
 
 One `immediate` transaction: resolve the issue → mint the citation node + edge →
 audit. The sha is computed before the transaction opens.
 
-### `IRemoveCitationInput` — interface (`citation.ts:790`)
+### `IRemoveCitationInput` — interface (`citation.ts:852`)
 
 ```ts
 export interface IRemoveCitationInput {
@@ -917,7 +924,7 @@ export interface IRemoveCitationInput {
 }
 ```
 
-### `removeCitation(handle, input)` — function (`citation.ts:817`)
+### `removeCitation(handle, input)` — function (`citation.ts:879`)
 
 One `immediate` transaction: resolve the citation by its OWN uid → invalidate
 the node + edge → audit. `CitationNotFoundError` when the uid is not a live
@@ -1139,7 +1146,7 @@ refusal (ADR-0007 #8; SPEC-SET S02.C2 "never drop, never abort"): an abstract
 (`sha:"unverified"` verbatim, waiver logged). A persisted unverified citation
 reads back with `verification:'unverified-with-reason'` and its `unverifiedReason`.
 
-### `CitationTargetIsDirectoryError` — class (`errors.ts:542`)
+### `CitationTargetIsDirectoryError` — class (`errors.ts:545`)
 
 ```ts
 export class CitationTargetIsDirectoryError extends BacklogWriteError {
@@ -1155,7 +1162,7 @@ has no content to hash, so the payload can never succeed as-is; nothing is
 written. The mapping from a citation read error to this class or to
 `WriteIOError` lives in `errors.ts`'s `citationReadError` (56a2133e).
 
-### `NoteRequiredError` — class (`errors.ts:572`)
+### `NoteRequiredError` — class (`errors.ts:575`)
 
 ```ts
 export class NoteRequiredError extends BacklogWriteError {
@@ -1168,7 +1175,7 @@ export class NoteRequiredError extends BacklogWriteError {
 Guarantees: thrown by `transition` when `project_policy.transitionRequiresNote`
 (default `true`) is set and no `note` was given.
 
-### `CitationRequiredError` — class (`errors.ts:584`)
+### `CitationRequiredError` — class (`errors.ts:587`)
 
 ```ts
 export class CitationRequiredError extends BacklogWriteError {
@@ -1182,7 +1189,7 @@ Guarantees: thrown by `transition` when `project_policy.citationRequired`
 (default `false`) is set, the target status is terminal, and no citation was
 given.
 
-### `BacklogValidationError` — class (`errors.ts:607`)
+### `BacklogValidationError` — class (`errors.ts:610`)
 
 ```ts
 export class BacklogValidationError extends BacklogWriteError {
@@ -1197,7 +1204,7 @@ or an out-of-range/non-integral `limit`) — deliberately the SAME
 `E_VALIDATION`-class member of this same error union, not a parallel one, so
 a `query`/`get` caller catches it identically to any write-verb error.
 
-### `AnchorLocatorInvalidError` — class (`errors.ts:622`)
+### `AnchorLocatorInvalidError` — class (`errors.ts:625`)
 
 ```ts
 export class AnchorLocatorInvalidError extends BacklogWriteError {
@@ -1212,7 +1219,7 @@ Guarantees: a supplied anchor locator is outside the closed grammar
 is a bare `path:line` with no `digest`. A caller-input mistake — `E_VALIDATION`,
 never retryable; nothing is written.
 
-### `AttestationNotFoundError` — class (`errors.ts:641`)
+### `AttestationNotFoundError` — class (`errors.ts:644`)
 
 ```ts
 export class AttestationNotFoundError extends BacklogWriteError {
@@ -1227,7 +1234,7 @@ node. Distinct from `IssueNotFoundError` (an `issue` uid) and
 `CatalogNotFoundError`, so a caller can branch on the missing record kind;
 `E_VALIDATION`, never retryable.
 
-### `InvalidPredicateError` — class (`errors.ts:663`)
+### `InvalidPredicateError` — class (`errors.ts:666`)
 
 ```ts
 export class InvalidPredicateError extends BacklogWriteError {
@@ -1242,7 +1249,7 @@ predicate core — an unknown `op`, a missing/ill-typed leaf, an unexpected extr
 key, or `evidence.min < 1`. Raised before any transaction opens, so an invalid
 predicate never holds a write lock; `E_VALIDATION`, never retryable.
 
-### `ObligationNotFoundError` — class (`errors.ts:678`)
+### `ObligationNotFoundError` — class (`errors.ts:681`)
 
 ```ts
 export class ObligationNotFoundError extends BacklogWriteError {
@@ -1256,7 +1263,7 @@ Guarantees: thrown by `unobligate` when the named uid is not a live `obligation`
 node. Distinct from `IssueNotFoundError` / `AttestationNotFoundError`, so a
 caller can branch on the missing record kind; `E_VALIDATION`, never retryable.
 
-### `SpecRevisionConflictError` — class (`errors.ts:700`)
+### `SpecRevisionConflictError` — class (`errors.ts:703`)
 
 ```ts
 export class SpecRevisionConflictError extends BacklogWriteError {
@@ -1272,7 +1279,7 @@ EXPLICITLY to the envelope code `precondition_failed` in `api.ts`'s
 `ERROR_CLASS_TO_ENVELOPE_CODE` (AC6); the `E_VALIDATION` fallthrough would
 otherwise return `validation`. No write runs.
 
-### `classifyDriverError(err)` — function (`errors.ts:751`)
+### `classifyDriverError(err)` — function (`errors.ts:754`)
 
 ```ts
 export function classifyDriverError(err: unknown): IWriteError;
@@ -1287,7 +1294,7 @@ distinguishes a recognized-but-unclassified database error (`E_IO`,
 (`E_IO`, `retryable: false` — never retried, since it never even reached the
 driver).
 
-### `ObligationUnsatisfiedError(refusal)` — class (`errors.ts:833`)
+### `ObligationUnsatisfiedError(refusal)` — class (`errors.ts:836`)
 
 ```ts
 export class ObligationUnsatisfiedError extends BacklogWriteError {
@@ -1305,7 +1312,7 @@ envelope code `precondition_failed` (exit 1), with the structured refusal in
 a re-read shows the status unchanged. Never retryable. **Additive (C5)** —
 appended after every pre-existing export so no `CONTRACT.md` anchor shifted.
 
-### `OverrideNotPermittedError(obligationUid, actor)` — class (`errors.ts:853`)
+### `OverrideNotPermittedError(obligationUid, actor)` — class (`errors.ts:856`)
 
 ```ts
 export class OverrideNotPermittedError extends BacklogWriteError {
@@ -1322,7 +1329,7 @@ recorded reason (DESIGN §2 Primitive 3), never a configurable boolean. Maps to
 `precondition_failed`; never retryable. **Additive (C5)** — appended after every
 pre-existing export so no `CONTRACT.md` anchor shifted.
 
-### `CitationNotFoundError(uid)` — class (`errors.ts:915`)
+### `CitationNotFoundError(uid)` — class (`errors.ts:918`)
 
 ```ts
 export class CitationNotFoundError extends BacklogWriteError {
@@ -1338,7 +1345,7 @@ node — absent, already removed, or a uid naming a node of a different kind (th
 **Additive** — appended after every pre-existing export so no existing
 `CONTRACT.md` anchor shifted.
 
-### `IssueNotRestorableError(uid, reason)` — class (`errors.ts:934`)
+### `IssueNotRestorableError(uid, reason)` — class (`errors.ts:937`)
 
 ```ts
 export class IssueNotRestorableError extends BacklogWriteError {
@@ -1354,7 +1361,7 @@ superseded (`reason: 'superseded'`), or permanently `remove`d
 (`reason: 'permanently-removed'`). Maps to `precondition_failed`; nothing is
 written. **Additive** — appended after every pre-existing export.
 
-### `RemoveConfirmationRequiredError(uid)` — class (`errors.ts:962`)
+### `RemoveConfirmationRequiredError(uid)` — class (`errors.ts:965`)
 
 ```ts
 export class RemoveConfirmationRequiredError extends BacklogWriteError {
@@ -1369,7 +1376,7 @@ irreversible retire requires the explicit typed confirmation, refused before
 any write. Maps to `precondition_failed`. **Additive** — appended after every
 pre-existing export.
 
-### `ProductionWriteRefusedError(verb)` — class (`errors.ts:985`)
+### `ProductionWriteRefusedError(verb)` — class (`errors.ts:988`)
 
 ```ts
 export class ProductionWriteRefusedError extends BacklogWriteError {
@@ -1385,6 +1392,68 @@ opened ONLY by a typed opt-in — `--allow-production-write` on the CLI (and in
 the `serve` server args, e.g. `.mcp.json`) — never an ambient env toggle
 (ADR-0013). Maps to `precondition_failed`; refused before any transaction opens,
 so it has no side effect. **Additive** — appended after every pre-existing export.
+
+### `NoteNotFoundError(uid)` — class (`errors.ts:1012`)
+
+```ts
+export class NoteNotFoundError extends BacklogWriteError {
+  readonly code: 'E_VALIDATION';
+  readonly retryable: false;
+  constructor(uid: string);
+}
+```
+
+Guarantees: thrown by `removeNote` when `uid` is not a LIVE `note` node, is
+already removed, names a node of another kind, or has no live owning issue.
+Maps to `item_not_found`. **Additive** — appended after every pre-existing export.
+
+### `NoteRemovalNotPermittedError(noteUid, actor)` — class (`errors.ts:1030`)
+
+```ts
+export class NoteRemovalNotPermittedError extends BacklogWriteError {
+  readonly code: 'E_VALIDATION';
+  readonly retryable: false;
+  constructor(noteUid: string, actor: string);
+}
+```
+
+Guarantees: thrown by `removeNote` before any write when the actor is neither
+the note's recorded author nor listed in the owning project's `noteRemovers`.
+Maps to `precondition_failed`. **Additive** — appended after every pre-existing export.
+
+---
+
+## `note.ts` (4 exports)
+
+### `IRemoveNoteInput` / `IRemoveNoteOutcome` — interfaces (`note.ts:53`, `note.ts:69`)
+
+`IRemoveNoteInput` is `{ uid, by, reason }` (`reason` REQUIRED) plus the session
+stamp. `IRemoveNoteOutcome` is `{ uid, issueUid, invalidated: true }`.
+
+### `mayRemoveNote(policy, author, actor)` — function (`note.ts:155`)
+
+Pure authorization rule: the author always may; anyone else only when listed in
+`policy.noteRemovers`.
+
+### `removeNote(handle, input)` — function (`note.ts:178`)
+
+Guarantees: one `immediate` transaction. Resolves the live `note` by `uid`,
+finds its live owning issue via `has_note`, authorizes against the owning
+project's policy, then bi-temporally invalidates the note node and its
+`has_note` edge (merging `invalidatedReason`/`invalidatedAt`, never replacing
+`meta`). Writes one `note-removed` audit row whose subject is the OWNING ISSUE,
+so the removal appears in that issue's `auditTrail`. Nothing is written on any
+refusal. Rejects `InvalidArgumentError` (blank `uid`/`by`/`reason`, bare role
+`by`), `NoteNotFoundError`, `NoteRemovalNotPermittedError`.
+
+**Identity model.** The removal gate is attribution against the asserted `by`
+(SPEC.md §6.3), not authentication: `removeNote` compares the caller's `by` to
+the note's recorded author and the project's `noteRemovers`, and does not verify
+`by` against a server-side identity. Binding `by` to a server-side identity is a
+tracked follow-up.
+
+`noteRemovers` is store-seeded only today: no write verb sets it, so it takes
+effect only when it is present in the project's stored policy.
 
 ---
 

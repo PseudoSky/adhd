@@ -167,7 +167,19 @@ store has no dedicated event tables, so each is an ordinary node of its own
 
 ```
 note         kind='note'
-  meta: { author, text, at }
+  meta: { author, text, at, invalidatedReason?, invalidatedAt? }
+  -- retired by `removeNote` (invalidate the note node AND its `has_note` edge
+  -- by the note's OWN uid — never a hard row deletion). The acting identity
+  -- `by` must be the note's recorded `author` or listed in the owning project's
+  -- `policy.noteRemovers`; this is attribution against the caller-asserted
+  -- identity, not authentication. A successful removal stamps
+  -- `invalidatedReason`/`invalidatedAt` onto the note and writes one
+  -- `note-removed` audit row against the OWNING ISSUE (`from` = the note uid,
+  -- `note` = the removal reason). Errors: a uid with no LIVE `note` (absent,
+  -- already removed, a different kind, or no live owning issue) →
+  -- `item_not_found` (NoteNotFoundError); an actor who is neither author nor
+  -- on `noteRemovers` → `precondition_failed` (NoteRemovalNotPermittedError),
+  -- refused before any write.
 
 session      kind='session', name = sessionId (INTERNAL, S11)
   meta: { sessionId, agent, startedAt, endedAt?, parentSessionId?, stub? }

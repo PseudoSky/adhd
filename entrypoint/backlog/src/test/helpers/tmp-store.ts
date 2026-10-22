@@ -12,6 +12,7 @@ import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { openGraphBacklogStore, closeGraphBacklogStore, type GraphBacklogStore } from '../../store/graph-backlog-store.js';
+import { seedFromSchemaTemplate } from './schema-template.js';
 
 const TMP_ROOT = join(process.cwd(), 'tmp', 'backlog');
 
@@ -33,6 +34,9 @@ export interface TmpStore {
 export async function openTmpStore(name: string, busyTimeoutMs?: number): Promise<TmpStore> {
   const dir = mkdtempSync(join(ensureTmpRoot(), `${name}-`));
   const dbPath = join(dir, 'backlog.db');
+  // qa-variance: seed a schema-applied image; openGraphBacklogStore still runs
+  // applySchema + the vocabulary assertion over it (see schema-template.ts).
+  await seedFromSchemaTemplate(dbPath);
   const store = busyTimeoutMs === undefined ? await openGraphBacklogStore(dbPath) : await openGraphBacklogStore(dbPath, busyTimeoutMs);
   return {
     store,

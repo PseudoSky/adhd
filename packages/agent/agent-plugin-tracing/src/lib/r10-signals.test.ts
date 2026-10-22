@@ -21,7 +21,7 @@ import type { Recorded } from '../test/harness.js';
  * Tests cite acceptance criteria as `R10 S5 AC<n>`:
  *
  *   AC1 a replayed hook sequence produces each attribute of the spec table (table-driven)
- *   (AC0 and AC3-AC5 live in r10-dispatch-trace.test.ts, AC2 in exporter-failure.test.ts: they need a real dispatch)
+ *   (AC0 and AC3-AC5 live in r10-dispatch-trace.e2e.test.ts, AC2 in exporter-failure.test.ts: they need a real dispatch)
  */
 
 let log: ReturnType<typeof makeLogDir>;

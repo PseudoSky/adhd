@@ -19,13 +19,16 @@
  *
  * guards: MCP servers connect one after another or without the stated bound, a failing server loses its warning, recorded error or its neighbours' tools, advertised tools follow finish order instead of configured server-key order, or annotations and toolClass are mapped wrongly.
  * tier: S
- * cites: R10 S3 AC1-AC3, AC5, AC6 (every test title carries its AC).
+ * cites: R10 S3 AC1-AC3, AC5, AC6 (every test title carries its AC); variance hardening cites qa-variance (dispatch-1014).
+ * red: pending (qa-variance edit made without running tests, per user). qa-variance: the fixed 20-turn
+ * `setImmediate` loop is replaced by `settleUntilStable` over the started/resolved connect log.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { ToolDefinition } from "../providers/types.js";
 import type { EngineLogger } from "../interfaces.js";
 import type { ExecutionContext } from "../validation/index.js";
+import { settleUntilStable } from "./fixtures/settle.js";
 
 interface IFakeServer {
     tools: ToolDefinition[];
@@ -90,10 +93,8 @@ function addServer(name: string, tools: ToolDefinition[], opts: { open?: boolean
     return server;
 }
 
-/** Yields to the microtask/macrotask queue so already-resolvable promises have run. */
-const flush = async (): Promise<void> => {
-    for (let i = 0; i < 20; i++) await new Promise<void>((r) => setImmediate(r));
-};
+/** Yields until the connect log (started/resolved) stops changing, so already-resolvable promises have run. */
+const flush = (): Promise<number> => settleUntilStable(() => [h.started, h.resolved]);
 
 interface IWarn {
     obj: unknown;

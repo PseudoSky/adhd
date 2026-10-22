@@ -810,6 +810,13 @@ export interface ILookupResult {
    */
   redirect?: { verb: 'get' | 'query'; uid?: string; query?: string };
   /**
+   * Additive, set only when `lookup` healed a rotted reference: `q` named a
+   * SUPERSEDED issue (replaced by a body edit), so `redirect.uid` is the live
+   * chain head and this field echoes the uid / prefix the caller supplied.
+   * Absent for a live uid. `get` and the write verbs never forward.
+   */
+  forwardedFrom?: string;
+  /**
    * C1 — the candidate set behind an ambiguity this read CHOSE to surface
    * rather than fail on. (A `lookup` whose title grep matches ≥2 issues still
    * throws `AmbiguousReferenceError`; this field exists for callers that

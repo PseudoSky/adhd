@@ -6,7 +6,7 @@
  * request body against the history rules the API documents. A provider that sends an invalid history gets the same
  * HTTP 400 `invalid_request_error` the real API returns, so a mistake in echo / replay / sanitize code fails a default-
  * running CI test instead of a paid live run. (The fake encodes the documented rules; it cannot prove the rules are
- * what the live API enforces. The gated live test `anthropic-echo-live.test.ts` (S7) is the only check of that.)
+ * what the live API enforces. The gated live test `anthropic-echo-live.e2e.test.ts` (S7) is the only check of that.)
  *
  * Validators (each has a rejecting negative control in `anthropic-contract-fake.test.ts`):
  *  - V1  every client `tool_use` has a `tool_result` for its id in the immediately following user turn.

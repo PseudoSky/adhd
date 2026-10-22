@@ -98,6 +98,9 @@ jobs:
       # the gate goes red on a drifted fixture and regenerates green.
       - run: npx nx run @adhd/source:check-lockfile-fresh
       - run: npx nx run @adhd/source:lockfile-gate-teeth
+      # Declared-dependency hash teeth (fbbb1464 AC3/AC4): the e2e proof that a bumped
+      # installed version flips the lint/sync-deps-check hashes. Lane e2e (ADR-0009).
+      - run: npx nx run @adhd/source:declared-deps-hash-teeth
       # Evidence tooling (backlog 65788fd8): check-suite-tree-state, commit-mine and
       # audit-closed-items, each with a negative control; the exit code gates.
       - name: Evidence tooling gates

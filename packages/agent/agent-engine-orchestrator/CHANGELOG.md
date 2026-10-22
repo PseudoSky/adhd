@@ -1,3 +1,31 @@
+## 2.3.16 (2026-10-20)
+
+### 🚀 Features
+
+- **agent-engine-orchestrator:** load plugins from a preloaded module map ([d8099256](https://github.com/PseudoSky/adhd/commit/d8099256))
+
+### 🩹 Fixes
+
+- **agent-engine-orchestrator:** send the resolved Anthropic base URL to the SDK client ([dd20e8e3](https://github.com/PseudoSky/adhd/commit/dd20e8e3))
+
+### ❤️ Thank You
+
+- pseudosky
+
+## 2.3.15 (2026-10-19)
+
+### 🚀 Features
+
+- **agent-mcp:** bundle the server with preloaded default plugin modules ([d365a3e1](https://github.com/PseudoSky/adhd/commit/d365a3e1))
+
+### 🩹 Fixes
+
+- **backlog:** route CLI logs through sox telemetry and make optional inputs optional ([024eb38c](https://github.com/PseudoSky/adhd/commit/024eb38c))
+
+### ❤️ Thank You
+
+- pseudosky
+
 ## 2.3.14 (2026-10-15)
 
 ### 🩹 Fixes
@@ -25,6 +53,7 @@
 
 ### 🩹 Fixes
 
+- **agent-engine-orchestrator:** the `TOOL_RESULT` event no longer stores an unbounded `result`. The stored text is the model-visible text clipped to 16,000 chars (`TOOL_RESULT_EVENT_MAX_CHARS`, new export) by the new `clipForStorage` (head 75% + tail 25% around a marker, never longer than the bound, idempotent, surrogate-safe). `result_sha256` still hashes the FULL model-visible text, so it equals the hash of `result` only when nothing was clipped; a clipped event adds `result_stored_clipped: true` and `result_model_visible_chars`. Before, with `ADHD_AGENT_TOOL_RESULT_MAX_CHARS=0` the row held the whole tool output. The model cap, spill, token estimates, hooks and the SSE `tool_result` event are unchanged. The turn-grain `usage_query` reader extracts `tool_call_est_result_tokens` in SQL instead of loading each `TOOL_RESULT` payload; its rows are unchanged.
 - **agent-engine-orchestrator:** a tool whose input schema has a top-level `oneOf` / `anyOf` / `allOf` no longer fails every model request. The Anthropic API answers HTTP 400 (`tools.43.custom.input_schema: input_schema does not support oneOf, allOf, or anyOf at the top level`) for the whole request when any one tool carries one, which killed parity run R11 group C on the backlog server's `batch_action` (a 32-branch top-level `oneOf`). The new shared `normalizeToolForWire` (`providers/tool-schema.ts`) flattens such a schema into a plain object schema (properties of the root and of every branch, first definition wins; `required` from the root and `allOf` branches; `$defs`/`definitions`/`additionalProperties` carried, `additionalProperties` defaulting to `true`) and appends one `Input constraint: ...` paragraph to the tool description, the transformation the Claude CLI applies (its real output for `batch_action` is a golden fixture). It is applied by the anthropic adapter, the openai-compatible adapter (OpenAI, DeepSeek) and the claudecli loopback bridge (the CLI flattens only behind a feature flag and drops a tool it cannot flatten); a tool without a combinator is sent exactly as before, and registered definitions are never mutated. A schema that cannot be flattened (a non-array combinator, or a root `type` other than `object`) now throws `PROVIDER_INVALID_REQUEST` naming `tools.<n>` and the tool before any request is made, instead of a bare provider 400. (020307a5 AC1 AC2 AC3 AC4)
 - **agent-engine-orchestrator:** native-tool guidance now describes the task's EFFECTIVE shell and fs servers instead of the catalog defaults: `withNativeToolGuidance(tools, ctx)` takes a context derived by `nativeGuidanceContextOf(agentDefinition.mcpServers)`, so the shell note lists only the commands the server was configured to allow (and the curl/grep recipes only when the commands they pipe through are allowed), promises `[exit status: N]` only when the exit-status shim is active, says nothing catalog-specific for a custom shell server, and the `fs__*` notes are added only for the adopted catalog fs server; with no determinable config it fails closed (ordering sentence only). `isEchoRejection` matches only echo-specific 400 shapes (`thinking`/`redacted_thinking` blocks, `server_tool_use`, `*_tool_result`) and, given the replayed block families, only a family that was actually on the wire: a client `tool_result`/`tool_use_id` history fault or a server-tool configuration error is no longer retried without echoes, so it can no longer cost the session its stored echoes. (cafe9a17 AC1 AC2 AC3)
 - **agent-engine-orchestrator:** `pre:model_request` enforcement handlers now receive a COPY of the history array and the provider is sent what that copy holds, so a handler that replaces a message (the host's tool-result notes) no longer rewrites the engine's live history. Before, from the second turn after a noted tool call the note showed up in the observational `pre:model_request` payload (tracing, ops log, the compaction summariser) and was counted in `toolResultBytesIn`; it now reaches the model request only, and `toolResultBytesIn` is measured on the un-noted history. The `pause_turn` continuation enforcement gets a throwaway copy too. A `post:tool_call` observer's `noteAppended` is no longer set for a claudecli-bridged call (a note cannot reach the model there). In the tracing plugin, `agent.tool.queued_ms`, `agent.tool.group_index` and the barrier-wait counter now take the engine-final values from the `pre:tool_call` payload at `post:tool_call` (the engine completes both when the call starts, after the event fires), so `queued_ms` is finally emitted and `group_index` is the group the call ran in rather than the planned one. Removed the unused `denial-message.ts` (nothing imported it; its header's no-default-allowlist claim did not hold) with its test; corrected the `shell-exit-status.ts` header, the `task:startup` / `thinking` / `toolResultBytesIn` wording above, and `scripts/audit_tracing.py` now requires `agent.task.startup`. (a2a9c6db)

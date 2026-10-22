@@ -4,6 +4,7 @@ import { parseArgs } from "node:util";
 import Database from "better-sqlite3";
 
 import { legacyTailDbPath, resolveTailDbPath, tailDbHint } from "./tail-db-path.js";
+import { CLI_VERSION } from "../cli-version.js";
 
 const { values: args } = parseArgs({
   options: {
@@ -13,9 +14,37 @@ const { values: args } = parseArgs({
     "limit":          { type: "string",  short: "n", default: "" },
     "json":           { type: "boolean", short: "j", default: false },
     "follow":         { type: "boolean", short: "F", default: false },
+    "help":           { type: "boolean", default: false },
+    "version":        { type: "boolean", short: "v", default: false },
   },
   allowPositionals: true,
 });
+
+if (args["version"]) {
+  process.stdout.write(`${CLI_VERSION}\n`);
+  process.exit(0);
+}
+
+if (args["help"]) {
+  process.stdout.write(
+    [
+      "agent-mcp-tail — print the transcript of agent-mcp tasks from the local database",
+      "",
+      "Usage: agent-mcp-tail [options]",
+      "",
+      "  -f, --full              show full message bodies (up to 100000 chars each)",
+      "  -a, --agent <name>      only show tasks for this agent",
+      "  -h, --include-history   with --follow, replay existing history first",
+      "  -n, --limit <count>     show at most this many entries",
+      "  -j, --json              emit JSON lines",
+      "  -F, --follow            keep streaming new entries",
+      "      --help              show this help and exit",
+      "  -v, --version           print the version and exit",
+      "",
+    ].join("\n"),
+  );
+  process.exit(0);
+}
 
 const verbose = args["full"] as boolean;
 const filterAgent = (args["agent"] || "").trim();
@@ -25,6 +54,8 @@ const jsonOut = args["json"] as boolean;
 const follow = args["follow"] as boolean;
 
 const defaultMaxLen = verbose ? 100000 : 2000;
+/** Non-verbose cap on a TOOL_RESULT / TASK_COMPLETED preview, in UTF-16 code units (`string.length`). */
+const NON_VERBOSE_PREVIEW_CHARS = 2000;
 
 const dbPath = resolveTailDbPath();
 
@@ -202,7 +233,7 @@ function buildDetail(row: EventRow, tcList: ToolCallEntry[], trList: ToolResultE
       const trMatch = trList.find((t: ToolResultEntry) => t.toolCallId === callId || t.id === callId || t.callId === callId);
       const result = trMatch?.result ?? trMatch?.content ?? trMatch?.text ?? p["content"] ?? p["result"] ?? "";
       let resultStr = typeof result === "string" ? result : JSON.stringify(result, null, verbose ? 2 : 0);
-      if (!verbose && resultStr.length > 2000) resultStr = resultStr.slice(0, 2000) + "...";
+      if (!verbose && resultStr.length > NON_VERBOSE_PREVIEW_CHARS) resultStr = resultStr.slice(0, NON_VERBOSE_PREVIEW_CHARS) + "...";
       return `${tool}${err} ${resultStr}`;
     }
     case "TASK_COMPLETED": {
@@ -210,7 +241,7 @@ function buildDetail(row: EventRow, tcList: ToolCallEntry[], trList: ToolResultE
       if (!text) return "";
       const s = typeof text === "string" ? text : JSON.stringify(text);
       if (verbose) return s;
-      return s.length > 2000 ? s.slice(0, 2000) + "..." : s;
+      return s.length > NON_VERBOSE_PREVIEW_CHARS ? s.slice(0, NON_VERBOSE_PREVIEW_CHARS) + "..." : s;
     }
     case "TASK_FAILED":
       return `Error: ${pretty(JSON.stringify(p), 500)}`;

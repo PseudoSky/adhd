@@ -230,6 +230,22 @@ async function runSingleItem(
   try {
     const itemCall: Call = derived.signal ? { ...call, signal: derived.signal } : call;
     const raw = await invoke(fnName, itemCall, opts);
+    // `invoke` returns the dispatch result. For an op with a non-empty output
+    // schema that result is the re-wrapped stream (see dispatch.ts
+    // `encodeResult` → `encodeChunks`), so each collected chunk is a WIRE value:
+    // a `Date` chunk arrives as an RFC 3339 string, and a chunk schema with no
+    // logical codec arrives as plain JSON. Batch does not decode chunks back to
+    // host values.
+    //
+    // For an op with an EMPTY output schema, `encodeResult` returns the raw
+    // value unchanged. A raw ApiStream still satisfies `isApiStream`, so this
+    // branch IS taken for it, and its collected chunks are HOST values (a `Date`
+    // stays a `Date`). Stream chunks are therefore wire-encoded for typed output
+    // schemas and host-encoded for empty ones. Whether that asymmetry is
+    // intended is an open architect question (see backlog). The current behaviour
+    // is pinned by the dispatch-stream-encode.spec.ts test named "CURRENT
+    // behavior (open architect question, not a contract): an empty-schema
+    // stream passes through untouched".
     if (isApiStream(raw)) {
       const collected = await collectWithPhase(raw);
       if (!collected.ok) {

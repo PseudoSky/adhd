@@ -13,7 +13,7 @@ import { dispatch, buildFnTable, describeParams, needsEnvelopeField, dataParamNa
 import type { Logger, LogFormat, CreateLoggerOptions, ParamInfo, AnyFn, BatchOptions, BatchItemResult } from '@adhd/apigen-engine-runtime';
 ```
 
-- **`dispatch(fns, ctx, schema, fnName, envelope, data)`** — the one dispatch path. No plugin
+- **`dispatch(fns, createClient, schema, fnName, envelope, domainArgs)`** — the one dispatch path. No plugin
   inlines this; all import it here.
 - **`buildFnTable(mod)`** — normalize an imported module into a callable table, recursively
   unwrapping `default` / CommonJS `module.exports` layers and keying functions by their

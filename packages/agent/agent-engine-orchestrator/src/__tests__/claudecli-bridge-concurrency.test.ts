@@ -14,6 +14,13 @@
  *  - AC4: a permission-denied bridge call does not hold a slot.
  *  - AC5 (teeth): the AC1 assertion goes red if the bridge acquisition is reverted (see the
  *    negative-control note on the test; verified by reverting `toolLimiter.run` in orchestrator.ts).
+ *
+ * guards: bridged calls exceed the shared limiter bound, a queued bridged call runs after the task is cancelled, or a permission-denied call holds a slot.
+ * tier: S
+ * cites: ea8f6f92 AC1, AC4, AC5, review B2-M1; variance hardening cites qa-variance (dispatch-1014).
+ * red: pending (qa-variance edit made without running tests, per user). qa-variance: the fixed 50-turn
+ * `setImmediate` loop is replaced by `settleUntilStable` (state-probe quiescence, no clock); each negative
+ * assertion is still taken only after the probed state is unchanged across consecutive turns.
  */
 import { describe, expect, it } from "vitest";
 
@@ -26,6 +33,7 @@ import type { LLMProvider, ProviderChatRequest, ProviderChatResponse, ToolDefini
 import type { ExecutionContext, Message } from "../validation/index.js";
 import type { McpClientRegistry } from "../clients/registry.js";
 import type { EngineConfig, EngineLogger } from "../interfaces.js";
+import { settleUntilStable } from "./fixtures/settle.js";
 
 const policy = { check: () => {} } as unknown as PolicyEngine;
 const silentLogger: EngineLogger = { info() {}, warn() {}, error() {}, debug() {} } as EngineLogger;
@@ -51,10 +59,6 @@ function deferred() {
     let resolve!: () => void;
     const promise = new Promise<void>((r) => (resolve = r));
     return { promise, resolve };
-}
-
-async function settle(): Promise<void> {
-    for (let i = 0; i < 50; i++) await new Promise<void>((r) => setImmediate(r));
 }
 
 const done = (): ProviderChatResponse =>
@@ -100,6 +104,7 @@ describe("ea8f6f92-d0db-426e-bf9d-bd7ba2fdd5ca AC1: bridged calls obey toolCallC
         let peak = 0;
         const started: number[] = [];
         const gates = Array.from({ length: 5 }, () => deferred());
+        const twoStarted = deferred();
         const run = runBridged({
             config: { toolCallConcurrency: 2 },
             provider: cliProvider(async (exec) => {
@@ -108,6 +113,7 @@ describe("ea8f6f92-d0db-426e-bf9d-bd7ba2fdd5ca AC1: bridged calls obey toolCallC
             callTool: async (_t, a) => {
                 const i = (a as { i: number }).i;
                 started.push(i);
+                if (started.length === 2) twoStarted.resolve();
                 inFlight++;
                 peak = Math.max(peak, inFlight);
                 await gates[i].promise;
@@ -115,10 +121,11 @@ describe("ea8f6f92-d0db-426e-bf9d-bd7ba2fdd5ca AC1: bridged calls obey toolCallC
                 return [{ type: "text", text: `r${i}` }];
             },
         });
-        await settle();
+        await twoStarted.promise; // both slots are taken (latch, not a turn count)
+        await settleUntilStable(() => [started, inFlight, peak]);
         expect(started).toEqual([0, 1]); // calls 2..4 are queued behind the limiter, not started
         gates[0].resolve();
-        await settle();
+        await settleUntilStable(() => [started, inFlight, peak]);
         expect(started).toEqual([0, 1, 2]);
         for (const g of gates) g.resolve();
         expect((await run).result).toBe("done");
@@ -194,7 +201,7 @@ describe("ea8f6f92-d0db-426e-bf9d-bd7ba2fdd5ca review B2-M1: cancellation drops 
                 const first = exec("lat", "work", { i: 0 });
                 await holding.promise; // call 0 owns the only slot
                 const queued = exec("lat", "work", { i: 1 }); // parked in the limiter queue
-                await settle();
+                await settleUntilStable(() => invoked);
                 controller.abort(); // cancel while call 1 is still queued
                 release.resolve(); // call 0 finishes; the freed slot must NOT run call 1
                 queuedOutcome = await queued;

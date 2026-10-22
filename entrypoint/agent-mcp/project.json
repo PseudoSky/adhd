@@ -28,6 +28,18 @@
         "command": "node node_modules/typescript/bin/tsc -p {projectRoot}/tsconfig.lib.json --outDir {projectRoot}/dist --rootDir {projectRoot} --baseUrl {projectRoot} --composite false --noEmitOnError && cp {projectRoot}/*.md {projectRoot}/LICENSE {projectRoot}/dist/ && cp -R {projectRoot}/docs {projectRoot}/dist/"
       }
     },
+    "bundle": {
+      "//": "Single-file server bundle (dist/bundle/index.js) plus per-package migration folders. Cold `npx` of the bundle answers MCP initialize in seconds; the tsc build needs ~200 packages on a cold cache. See scripts/bundle.mjs.",
+      "executor": "nx:run-commands",
+      "dependsOn": ["build"],
+      "cache": true,
+      "inputs": ["default", "^production"],
+      "outputs": ["{projectRoot}/dist/bundle"],
+      "options": {
+        "cwd": "{projectRoot}",
+        "command": "node scripts/bundle.mjs"
+      }
+    },
     "typecheck": {
       "executor": "nx:run-commands",
       "options": {
@@ -50,6 +62,7 @@
       "//": "Partial override of the inferred @adhd/nx-build:manifest target (dependsOn only; executor/cache/outputs come from inference). The inferred value is `[\"build\",\"assets\"]` — this project's OWN dist. `^assets` is added because agent-mcp is the runtime HOST that runs the five-package registry migration at startup (`buildPromptResolver` -> agent-engine-compiler's `migrateRegistry`, which imports all five registry-family packages). Each of those packages ships its drizzle migrations as a runtime ASSET written by its own `assets` target into `<pkg>/dist/drizzle` — and the migrator reads them via `new URL('../../drizzle', import.meta.url)` from that package's built dist. `^build` never runs `assets`, so a freshly built registry-family dep (or a build cache HIT, whose whole-`dist` output restore removes the assets-written `drizzle/` — the BUG-026 clobber class) leaves `<pkg>/dist/drizzle` absent, and the spawned host crashes `Can't find meta/_journal.json` and silently falls back to a flat systemPrompt (observed: dispatch-cli's agents-import.e2e.test.ts persona import returns systemPrompt=undefined). Declaring `^assets` here makes every dependency's assets run AFTER its build, so the registry-family dists are complete before any consumer of agent-mcp's manifest (dispatch-cli:test, agent-mcp:test) spawns the host. Precedent: `entrypoint/backlog/project.json`'s test is the only other place that consumes `assets` — DEBT-024 — and it does so explicitly; this is the same requirement one level up the graph.",
       "dependsOn": [
         "build",
+        "bundle",
         "assets",
         "^assets"
       ]

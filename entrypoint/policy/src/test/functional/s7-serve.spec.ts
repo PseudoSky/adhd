@@ -2,6 +2,8 @@
  * guards: `adhd-policy serve` lets a denied or ask call reach the upstream MCP server, drops a forced value, trusts the upstream's own server name, or leaves the host or upstream running after shutdown.
  * tier: S
  * cites: docs/plan/policy-core/tickets/T17.md (@S7.1, @S7.2, @S7.3; review fix E5)
+ * item: qa-variance (docs/discovery/qa-test-variance-tail-policy.md)
+ * red: pending (tests not run per user); assertions are unchanged, each case still gets its own empty directory.
  */
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -13,7 +15,9 @@ import { createStubMcpUpstream, type IStubMcpUpstream } from '../helpers/stub-mc
 import { resultText, startServeSession, type IServeSession } from '../helpers/mcp-memory-client';
 import { capturedDeps } from '../helpers/run-deps';
 import { settle } from '../helpers/flush';
-import { withTmpDir } from '../helpers/tmp';
+import { useScratchDirs } from '../helpers/tmp';
+
+const scratch = useScratchDirs('s7-serve');
 
 /** B7.0: writer may call notes_add with tag forced to "policy"; notes_archive is ask; notes_clear has no permission. */
 const NOTES_YAML = `version: 1
@@ -46,7 +50,7 @@ async function withNotes(
   fn: (ctx: { dir: string; spec: string; stub: IStubMcpUpstream }) => Promise<void>,
   options: { policy?: string } = {}
 ): Promise<void> {
-  await withTmpDir('s7-serve', async (dir) => {
+  await scratch.with('s7-serve', async (dir) => {
     const spec = join(dir, 'notes.yaml');
     await writeFile(spec, options.policy ?? NOTES_YAML);
     await fn({ dir, spec, stub: createNotesStub({}) });

@@ -7,6 +7,16 @@
 - `--opt http.verb.<id>=GET` overrides reach the projection on `generate` and `run`
 - `--opt extract.subprocess=true` runs TypeScript extraction in a worker process; the process-lifetime ts-morph tier is released before `run` starts serving
 
+## 0.2.13 (2026-10-19)
+
+### 🩹 Fixes
+
+- **apigen-cli:** report the real package version ([28fc6f07](https://github.com/PseudoSky/adhd/commit/28fc6f07))
+
+### ❤️ Thank You
+
+- pseudosky
+
 ## 0.2.12 (2026-10-15)
 
 This was a version bump only for apigen-cli to align it with other projects, there were no code changes.

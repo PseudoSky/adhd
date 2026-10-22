@@ -6,10 +6,21 @@
  * `executors/publish/manifest-backstop.spec.mjs`; this file exercises the
  * decision function in isolation with full control over time.
  *
+ * Header (test-maintenance, item qa-variance):
+ *   failure mode: the publish backstop admits a project outside the release
+ *     scope, honours a stale/foreign-run manifest, or accepts a force override
+ *     with no reason (silent bypass).
+ *   tier: S (pure decision function + temp-dir manifest I/O; nothing spawns).
+ *   variance fix: `writeReleaseManifest` defaults its runToken to the AMBIENT
+ *     `process.env.RELEASE_RUN_TOKEN`, so a shell/CI run that exports the
+ *     release env changed what the manifests under test contained. The release
+ *     env is now pinned to unset for the whole file and restored after.
+ *   red run: pending (tests not run per user instruction; assertions unchanged).
+ *
  * Run: node --test tools/nx-plugins/build/lib/release-manifest.spec.mjs
  * (also wired into `pnpm test:build-tools`).
  */
-import { test } from 'node:test';
+import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { mkdtempSync, rmSync, readFileSync, existsSync } from 'node:fs';
@@ -26,6 +37,21 @@ const {
   MANIFEST_RELATIVE_PATH,
   OVERRIDE_LOG_RELATIVE_PATH,
 } = require('./release-manifest.js');
+
+const PINNED_ENV_KEYS = ['RELEASE_RUN_TOKEN', 'RELEASE_FORCE_FULL_PUBLISH', 'RELEASE_FORCE_REASON'];
+const ambientEnv = {};
+before(() => {
+  for (const k of PINNED_ENV_KEYS) {
+    ambientEnv[k] = process.env[k];
+    delete process.env[k];
+  }
+});
+after(() => {
+  for (const k of PINNED_ENV_KEYS) {
+    if (ambientEnv[k] === undefined) delete process.env[k];
+    else process.env[k] = ambientEnv[k];
+  }
+});
 
 function withTmpDir(fn) {
   const dir = mkdtempSync(join(tmpdir(), 'release-manifest-'));

@@ -2,6 +2,8 @@
  * guards: `adhd-policy mcp-json init` wraps a stdio MCP entry wrongly, twice, or lossy, or `--undo` restores something other than the original bytes, leaving the user's .mcp.json corrupted or unguarded.
  * tier: S
  * cites: docs/plan/policy-core/tickets/T17.md (@S7.1; review fixes E2, E3, E4, E8)
+ * item: qa-variance (docs/discovery/qa-test-variance-tail-policy.md)
+ * red: pending (tests not run per user); assertions are unchanged, each case still gets its own empty directory.
  */
 import { chmod, lstat, mkdir, readdir, readFile, stat, symlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -10,9 +12,11 @@ import { backupPath, integrityPath } from '../../wrapper/mcp-json/io';
 import { mcpJsonVerb } from '../../wrapper/verbs/mcp-json';
 import { runCli, useScratchTelemetry } from '../helpers/capture';
 import { capturedDeps } from '../helpers/run-deps';
-import { withTmpDir } from '../helpers/tmp';
+import { useScratchDirs } from '../helpers/tmp';
 
 useScratchTelemetry();
+
+const scratch = useScratchDirs('s7-mcpjson');
 
 const STUB_PATH = '/opt/stubs/notes-server.js';
 
@@ -36,7 +40,7 @@ interface IFixture {
 }
 
 async function withMcpJson(fn: (f: IFixture) => Promise<void>, text: string = MCP_JSON): Promise<void> {
-  await withTmpDir('s7-mcpjson', async (dir) => {
+  await scratch.with('s7-mcpjson', async (dir) => {
     const file = join(dir, '.mcp.json');
     await writeFile(file, text);
     await fn({ dir, file, original: await readFile(file) });
@@ -212,7 +216,7 @@ describe('Review fix E3 - private backups, kept modes, atomic writes', () => {
   });
 
   it('E3 a symlinked .mcp.json is written through: the link stays a link and its target is what changes', async () => {
-    await withTmpDir('s7-symlink', async (dir) => {
+    await scratch.with('s7-symlink', async (dir) => {
       const real = join(dir, 'real');
       await mkdir(real);
       await writeFile(join(real, 'mcp.json'), MCP_JSON);
@@ -277,7 +281,7 @@ describe('Review fix E8 - mcp-json init flags', () => {
   });
 
   it('E8 a relative --spec is stored relative to the .mcp.json directory; an absolute --spec is stored as given', async () => {
-    await withTmpDir('s7-spec-path', async (dir) => {
+    await scratch.with('s7-spec-path', async (dir) => {
       await mkdir(join(dir, 'sub'));
       await mkdir(join(dir, 'policies'));
       await writeFile(join(dir, 'sub', 'mcp.json'), MCP_JSON);

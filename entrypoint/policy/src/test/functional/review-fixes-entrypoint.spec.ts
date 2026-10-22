@@ -2,6 +2,8 @@
  * guards: A review fix to the entrypoint regresses: strict flag parsing (E11), abort handlers installed only for verbs (E4), attribute precedence flag over environment never merged (D-06), baked-IR and extraction handling, or the HTTP start refusals.
  * tier: S
  * cites: docs/plan/policy-core/REVIEW-FIXES.md (Entrypoint proof, Phase C part 1: E4, E11, E12, D-06)
+ * item: qa-variance (docs/discovery/qa-test-variance-tail-policy.md)
+ * red: pending (tests not run per user); assertions are unchanged. The baked artifact is produced by the real writeBakedIr once per describe instead of once per case, and read-only policy directories are built once per file.
  */
 import { mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { existsSync, readFileSync } from 'node:fs';
@@ -9,7 +11,7 @@ import { join, resolve } from 'node:path';
 import { isApiError } from '@adhd/apigen-base-errors';
 import { PolicyAttributes } from '@adhd/apigen-plugin-policy';
 import type { IProcessLauncher } from '@adhd/apigen-engine-gateway';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { ATTRIBUTES_ENV_VAR, attributesFromFlags } from '../../wrapper/attributes-from-flags';
 import { createAttributesLayerPlugin } from '../../wrapper/attributes-layer';
 import { createAttributesSource, type IAttributesSource } from '../../wrapper/attributes-source';
@@ -31,12 +33,24 @@ import { installAbortOnSignals } from '../../wrapper/signals';
 import { dispatchVerb } from '../../wrapper/verbs/index';
 import { parseJson, runCli, useScratchTelemetry } from '../helpers/capture';
 import { BROKEN_YAML, WORKSPACE_YAML, writePolicy } from '../helpers/fixtures';
-import { withTmpDir } from '../helpers/tmp';
+import { useScratchDirs } from '../helpers/tmp';
 
 useScratchTelemetry();
 
+const scratch = useScratchDirs('review-fixes');
+
 // A cold live extraction of the client declarations takes several seconds (ts-morph); it is setup, not a timing assertion.
-vi.setConfig({ testTimeout: 60_000 });
+vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
+
+/** Policy directories that cases only read (`verify` and `doctor` never write into the working directory), built once for the file. */
+let goodPolicyDir: string;
+let brokenPolicyDir: string;
+beforeAll(async () => {
+  goodPolicyDir = await scratch.fresh('good-policy');
+  await writePolicy(goodPolicyDir, WORKSPACE_YAML);
+  brokenPolicyDir = await scratch.fresh('broken-policy');
+  await writePolicy(brokenPolicyDir, BROKEN_YAML);
+});
 
 /** Runs `fn` and returns the error it throws (fails the test when it does not throw). */
 async function thrown(fn: () => unknown): Promise<unknown> {
@@ -142,13 +156,11 @@ describe('Review fixes E11 / E12 - strict flags (splitPolicyArgv and the verbs)'
 
 describe('Review fix E4 - abort handlers are installed only for verbs', () => {
   it('E4 an apigen command (verify) leaves the SIGINT/SIGTERM listeners exactly as it found them', async () => {
-    await withTmpDir('e4', async (dir) => {
-      await writePolicy(dir, WORKSPACE_YAML);
-      const before = [process.listenerCount('SIGINT'), process.listenerCount('SIGTERM')];
-      const result = await runCli(['verify'], { cwd: dir, home: dir });
-      expect(result.exitCode).toBe(0);
-      expect([process.listenerCount('SIGINT'), process.listenerCount('SIGTERM')]).toEqual(before);
-    });
+    const dir = goodPolicyDir;
+    const before = [process.listenerCount('SIGINT'), process.listenerCount('SIGTERM')];
+    const result = await runCli(['verify'], { cwd: dir, home: dir });
+    expect(result.exitCode).toBe(0);
+    expect([process.listenerCount('SIGINT'), process.listenerCount('SIGTERM')]).toEqual(before);
   });
 
   it('E4 installAbortOnSignals aborts on the first signal and removes both handlers', () => {
@@ -194,7 +206,7 @@ describe('Decision D-06 - attribute precedence, never merged, files re-read on e
   });
 
   it('D-06 an @file is read from disk on every call, so a rotating identity file is honoured', async () => {
-    await withTmpDir('d06', async (dir) => {
+    await scratch.with('d06', async (dir) => {
       const file = join(dir, 'who.json');
       await writeFile(file, '{"role":"first"}');
       const source = await attributesFromFlags({ attributes: '@who.json' }, { cwd: dir, env: {} });
@@ -235,7 +247,7 @@ describe('Decision D-06 - attribute precedence, never merged, files re-read on e
   });
 
   it('D-06 a read failure on a call is permission_denied, never a call that proceeds', async () => {
-    await withTmpDir('d06-layer', async (dir) => {
+    await scratch.with('d06-layer', async (dir) => {
       const source = createAttributesSource({ flag: '@who.json', cwd: dir });
       const plugin = createAttributesLayerPlugin(source);
       const layer = plugin.capabilities?.layer?.layer as unknown as (call: unknown, next: () => Promise<unknown>) => Promise<unknown>;
@@ -303,35 +315,29 @@ describe('Review fix E12 - log level, doctor exit code, README exit-code table',
   });
 
   it('E12 an unknown ADHD_POLICY_LOG_LEVEL through the command line exits 2 with the variable named, before any command runs', async () => {
-    await withTmpDir('e12-level', async (dir) => {
-      await writePolicy(dir, WORKSPACE_YAML);
-      const result = await runCli(['verify'], { cwd: dir, home: dir, env: { [LOG_LEVEL_ENV_VAR]: 'loud' } });
-      expect(result.exitCode).toBe(2);
-      expect(result.stdout).toBe('');
-      expect(result.stderr).toContain(LOG_LEVEL_ENV_VAR);
-    });
+    const dir = goodPolicyDir;
+    const result = await runCli(['verify'], { cwd: dir, home: dir, env: { [LOG_LEVEL_ENV_VAR]: 'loud' } });
+    expect(result.exitCode).toBe(2);
+    expect(result.stdout).toBe('');
+    expect(result.stderr).toContain(LOG_LEVEL_ENV_VAR);
   });
 
   it('E12 doctor on a good policy exits 0 with every check ok', async () => {
-    await withTmpDir('e12-doctor-ok', async (dir) => {
-      await writePolicy(dir, WORKSPACE_YAML);
-      const result = await runCli(['doctor'], { cwd: dir, home: dir });
-      expect(result.exitCode).toBe(0);
-      const report = parseJson<{ ok: boolean; checks: { name: string; ok: boolean }[] }>(result.stdout);
-      expect(report.ok).toBe(true);
-      expect(report.checks.every((check) => check.ok)).toBe(true);
-    });
+    const dir = goodPolicyDir;
+    const result = await runCli(['doctor'], { cwd: dir, home: dir });
+    expect(result.exitCode).toBe(0);
+    const report = parseJson<{ ok: boolean; checks: { name: string; ok: boolean }[] }>(result.stdout);
+    expect(report.ok).toBe(true);
+    expect(report.checks.every((check) => check.ok)).toBe(true);
   });
 
   it('E12 doctor with a failed check is ok:false and exits 2 (not 0)', async () => {
-    await withTmpDir('e12-doctor-bad', async (dir) => {
-      await writePolicy(dir, BROKEN_YAML);
-      const result = await runCli(['doctor'], { cwd: dir, home: dir });
-      const report = parseJson<{ ok: boolean; checks: { name: string; ok: boolean }[] }>(result.stdout);
-      expect(report.ok).toBe(false);
-      expect(report.checks.some((check) => !check.ok)).toBe(true);
-      expect(result.exitCode).toBe(2);
-    });
+    const dir = brokenPolicyDir;
+    const result = await runCli(['doctor'], { cwd: dir, home: dir });
+    const report = parseJson<{ ok: boolean; checks: { name: string; ok: boolean }[] }>(result.stdout);
+    expect(report.ok).toBe(false);
+    expect(report.checks.some((check) => !check.ok)).toBe(true);
+    expect(result.exitCode).toBe(2);
   });
 
   it('E12 the README exit-code table documents exactly the codes the CLI uses', () => {
@@ -350,7 +356,7 @@ describe('Review fix E10 - the hidden ir-artifact subcommand', () => {
   }
 
   it('E10 a missing or valueless --out is invalid_argument: exit 2, one clean line, no stack trace', async () => {
-    await withTmpDir('e10', async (dir) => {
+    await scratch.with('e10', async (dir) => {
       for (const argv of [[], ['--out'], ['--out', ''], ['--out', '--other']]) {
         const { code, stderr } = await run(argv, dir);
         expect(code, argv.join(' ')).toBe(2);
@@ -362,7 +368,7 @@ describe('Review fix E10 - the hidden ir-artifact subcommand', () => {
 
   it('E10 --out outside the package dist/ is refused with exit 2 and nothing is written', async () => {
     // Every rejected target stays inside this scratch directory, so even a regression that stops refusing writes only here.
-    await withTmpDir('e10-out', async (dir) => {
+    await scratch.with('e10-out', async (dir) => {
       const cwd = join(dir, 'inner');
       await mkdir(cwd);
       for (const out of [join(dir, 'escape.json'), 'escape.json', '../escape.json']) {
@@ -393,7 +399,7 @@ describe('Review fix E10 - the hidden ir-artifact subcommand', () => {
 
 describe('Review fixes E1 / E13 - dist layout lookup, stale artifact warning, loadable version', () => {
   it('E1 policyDistDir finds the bundle directory in each of the shipped and source layouts', async () => {
-    await withTmpDir('e1-layout', async (root) => {
+    await scratch.with('e1-layout', async (root) => {
       const touch = async (path: string, name: string) => {
         await mkdir(path, { recursive: true });
         await writeFile(join(path, name), '');
@@ -419,7 +425,7 @@ describe('Review fixes E1 / E13 - dist layout lookup, stale artifact warning, lo
   });
 
   it('E1 the starting directory wins over a dist/ beside it when both hold the markers', async () => {
-    await withTmpDir('e1-order', async (root) => {
+    await scratch.with('e1-order', async (root) => {
       await mkdir(join(root, 'dist'), { recursive: true });
       await writeFile(join(root, 'dist', 'cli.js'), '');
       await writeFile(join(root, 'cli.js'), '');
@@ -434,18 +440,25 @@ describe('Review fixes E1 / E13 - dist layout lookup, stale artifact warning, lo
   });
 
   describe('a baked artifact is used only when it is current', () => {
-    /** Bakes a real artifact into `dir`, applies `change` to its JSON, and returns the inspection. */
+    /** The text of one artifact produced by the real `writeBakedIr` (a live ts-morph extraction of seconds), baked once for the describe; cases write copies of it. */
+    let bakedText: string;
+    beforeAll(async () => {
+      const file = join(await scratch.fresh('bake'), 'api.ir.json');
+      await writeBakedIr(file);
+      bakedText = await readFile(file, 'utf8');
+    });
+
+    /** Writes a copy of the baked artifact into `dir`, applies `change` to its JSON, and returns the inspection. */
     async function inspectChanged(dir: string, change: (artifact: Record<string, unknown>) => void) {
       const file = join(dir, 'api.ir.json');
-      await writeBakedIr(file);
-      const artifact = JSON.parse(await readFile(file, 'utf8')) as Record<string, unknown>;
+      const artifact = JSON.parse(bakedText) as Record<string, unknown>;
       change(artifact);
       await writeFile(file, JSON.stringify(artifact));
       return await inspectBakedIr(dir);
     }
 
     it('E1 a freshly baked artifact is accepted', async () => {
-      await withTmpDir('e1-fresh', async (dir) => {
+      await scratch.with('e1-fresh', async (dir) => {
         const inspected = await inspectChanged(dir, () => undefined);
         expect('operations' in inspected && inspected.operations.length > 0).toBe(true);
       });
@@ -459,7 +472,7 @@ describe('Review fixes E1 / E13 - dist layout lookup, stale artifact warning, lo
     ];
     for (const row of stale) {
       it(`E1 ${row.name} is rejected with a reason`, async () => {
-        await withTmpDir('e1-stale', async (dir) => {
+        await scratch.with('e1-stale', async (dir) => {
           const inspected = await inspectChanged(dir, row.change);
           expect('reason' in inspected && inspected.reason).toMatch(row.reason);
         });
@@ -467,7 +480,7 @@ describe('Review fixes E1 / E13 - dist layout lookup, stale artifact warning, lo
     }
 
     it('E1 a missing artifact is reported as missing and a corrupt one as unreadable', async () => {
-      await withTmpDir('e1-missing', async (dir) => {
+      await scratch.with('e1-missing', async (dir) => {
         expect(await inspectBakedIr(dir)).toEqual({ reason: 'missing' });
         await writeFile(join(dir, 'api.ir.json'), '{not json');
         const corrupt = await inspectBakedIr(dir);
@@ -476,7 +489,7 @@ describe('Review fixes E1 / E13 - dist layout lookup, stale artifact warning, lo
     });
 
     it('E1 a stale artifact writes exactly ONE warning line and falls back to live extraction that still yields the operations', async () => {
-      await withTmpDir('e1-warn', async (dir) => {
+      await scratch.with('e1-warn', async (dir) => {
         await writeFile(join(dir, 'api.ir.json'), JSON.stringify({ formatVersion: 0 }));
         const lines: string[] = [];
         const operations = await extractPolicyOperations((line) => void lines.push(line), dir);
@@ -488,11 +501,11 @@ describe('Review fixes E1 / E13 - dist layout lookup, stale artifact warning, lo
     });
 
     it('E1 no artifact shipped is not a warning, and a current one is used silently', async () => {
-      await withTmpDir('e1-quiet', async (dir) => {
+      await scratch.with('e1-quiet', async (dir) => {
         const lines: string[] = [];
         const live = await extractPolicyOperations((line) => void lines.push(line), dir);
         expect(lines).toEqual([]);
-        await writeBakedIr(join(dir, 'api.ir.json'));
+        await writeFile(join(dir, 'api.ir.json'), bakedText);
         const baked = await extractPolicyOperations((line) => void lines.push(line), dir);
         expect(lines).toEqual([]);
         expect(baked).toEqual(live);

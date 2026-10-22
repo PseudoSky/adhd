@@ -154,6 +154,16 @@
         "description": "E2E proof the lockfile gate has teeth (backlog 4f26493e AC2 / e98bb455 AC1): real `corepack pnpm` against a scratch workspace and a drifted real package.json (restored in finally) must turn the gate red, name the drift, leave pnpm-lock.yaml byte-identical, and regenerateLockfile must turn it green. Invoked by the CI `main` job."
       }
     },
+    "declared-deps-hash-teeth": {
+      "executor": "nx:run-commands",
+      "cache": false,
+      "options": {
+        "command": "node --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=./tools/nx-plugins/test/metrics/node-test-reporter.mjs --test-reporter-destination=stdout tools/nx-plugins/lint/declared-deps-hash.e2e.spec.mjs"
+      },
+      "metadata": {
+        "description": "E2E proof of the declared-dependency cache inputs (fbbb1464 AC3 / AC4): with a real Nx hasher over a scratch workspace, a bumped installed version of a declared dependency must change the lint and sync-deps-check task hashes, and a warm-cache lint must miss and fail after the bump. Lane e2e per ADR-0009; invoked by the CI `main` job. Not part of test:build-tools."
+      }
+    },
     "check-published-parity": {
       "executor": "nx:run-commands",
       "cache": false,

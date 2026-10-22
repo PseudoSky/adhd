@@ -37,6 +37,7 @@ export {
 export {
   escapeLineTerminators,
   escapeStringLiteral,
+  escapeSingleQuotedLiteral,
   toPosixPath,
   coercePort,
 } from './lib/emit';

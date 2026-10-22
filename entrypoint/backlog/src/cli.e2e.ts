@@ -189,8 +189,8 @@ describe('resolveCommandPrefix / prefixCommand — namespace-prefix derivation (
     // creep onto api.ts's exported surface (see api.ts's own doc comment on why
     // the exported surface IS the mounted surface). `remove`/`restore` are the
     // S02 AC14 lifecycle verbs (cluster backlog-lifecycle-model 0b0df8f3).
-    // 31 + `timeline` (B-AC5, 91a8c640).
-    expect(actions.length).toBe(32);
+    // 31 + `timeline` (B-AC5, 91a8c640) + `removeNote` (0f9b6132 AC4).
+    expect(actions.length).toBe(33);
     const prefix = resolveCommandPrefix(actions);
     for (const op of actions) {
       expect(resolveCommandPrefix([op])).toEqual(prefix);
@@ -665,6 +665,62 @@ describe('runBacklogCli — live CLI mount, real spawned dist/index.js bin, temp
     expect(got.ok).toBe(true);
     expect(got.data.uid).toBe(created.data.uid);
     expect(got.data.title).toBe('roundtrip');
+  });
+
+  // 68175e51-9eda-459c-bc23-6bba2b4c7707 — failure mode: `lookup` on a
+  // superseded uid redirected to the stale uid, so `get` then answered
+  // `conflict`. Tier: E (real built bin, two+ processes, fake HOME/isolated
+  // ADHD_ROOT). Gap: the additive `forwardedFrom` wire shape and the
+  // lookup->get one-hop contract only exist through the built CLI.
+  // Red run: against the unfixed bin AC1 fails `expected U0 to be U1`.
+  it('68175e51-9eda-459c-bc23-6bba2b4c7707 AC1-3: `lookup` on a superseded uid/prefix returns the live head + forwardedFrom; live uid has none; `get` on the stale uid still conflicts', () => {
+    const project = 'PseudoSky/cli-lookup-superseded';
+    const run = (args: string[]) => {
+      const r = runBin(args, { ADHD_ROOT: sharedRoot });
+      return {
+        status: r.status,
+        env: JSON.parse(r.stdout.trim()) as {
+          ok: boolean;
+          data?: Record<string, any>;
+          error?: { code: string; message: string };
+        },
+        dbg: `stderr:\n${r.stderr}\nstdout:\n${r.stdout}`,
+      };
+    };
+    const up = run(['upsert-project', '--input', JSON.stringify({ name: project, by: 'cli.spec' })]);
+    expect(up.status, up.dbg).toBe(0);
+    const c = run([
+      'create',
+      '--input',
+      JSON.stringify({ title: 'lookup superseded wire', body: 'first body', project, by: 'cli.spec' }),
+    ]);
+    expect(c.status, c.dbg).toBe(0);
+    const u0 = c.env.data?.uid as string;
+    const e = run(['update', '--input', JSON.stringify({ uid: u0, by: 'cli.spec', body: 'second body' })]);
+    expect(e.status, e.dbg).toBe(0);
+    const u1 = e.env.data?.uid as string;
+    expect(u1).not.toBe(u0);
+
+    const full = run(['lookup', '--input', JSON.stringify({ q: u0 })]);
+    expect(full.status, full.dbg).toBe(0);
+    expect(full.env.data?.redirect?.uid, full.dbg).toBe(u1);
+    expect(full.env.data?.forwardedFrom, full.dbg).toBe(u0);
+
+    const prefix = run(['lookup', '--input', JSON.stringify({ q: u0.slice(0, 8) })]);
+    expect(prefix.env.data?.redirect?.uid, prefix.dbg).toBe(u1);
+
+    const live = run(['lookup', '--input', JSON.stringify({ q: u1 })]);
+    expect(live.env.data?.redirect?.uid, live.dbg).toBe(u1);
+    expect(live.env.data).not.toHaveProperty('forwardedFrom');
+
+    const hop = run(['get', '--input', JSON.stringify({ uid: full.env.data?.redirect?.uid })]);
+    expect(hop.status, hop.dbg).toBe(0);
+    expect(hop.env.ok).toBe(true);
+
+    const stale = run(['get', '--input', JSON.stringify({ uid: u0 })]);
+    expect(stale.env.ok).toBe(false);
+    expect(stale.env.error?.code).toBe('conflict');
+    expect(stale.env.error?.message).toContain(u1);
   });
 
   it('"query" (view:list) returns the seeded item, filtered by project', async () => {

@@ -8,6 +8,7 @@
 //   - identifier positions         → `sanitizeIdentifier` (re-exported below)
 //   - collision-safe identifier sets → `uniqueSanitizedIdentifiers`
 //   - string-literal positions      → `escapeStringLiteral`
+//     (double-quoted) or `escapeSingleQuotedLiteral` (single-quoted)
 //   - path positions (on any OS)    → `toPosixPath`
 //   - numeric-literal positions     → `coercePort`
 //   - a multi-value JSON blob       → `escapeLineTerminators` (then splice)
@@ -62,6 +63,29 @@ export function escapeLineTerminators(text: string): string {
  */
 export function escapeStringLiteral(value: string): string {
   return escapeLineTerminators(JSON.stringify(value));
+}
+
+/**
+ * Renders a value as a **complete, single-quoted JavaScript/TypeScript string
+ * literal** (including the surrounding quotes), for generators whose emitted
+ * source style is single-quoted.
+ *
+ * Escapes the backslash first, then the single quote, `\n`, `\r`, and the two
+ * raw line terminators `U+2028` / `U+2029` (via {@link escapeLineTerminators}).
+ * Identity (apart from the surrounding quotes) for plain ids and import paths,
+ * so output for ordinary inputs is unchanged.
+ *
+ * @example escapeSingleQuotedLiteral("it's")   // → `'it\'s'`
+ * @example escapeSingleQuotedLiteral('a\nb')    // → `'a\nb'` (no raw newline)
+ * @example escapeSingleQuotedLiteral('\u2028')  // → `'\u2028'`
+ */
+export function escapeSingleQuotedLiteral(value: string): string {
+  const body = value
+    .replace(/\\/g, '\\\\')
+    .replace(/'/g, "\\'")
+    .replace(/\n/g, '\\n')
+    .replace(/\r/g, '\\r');
+  return `'${escapeLineTerminators(body)}'`;
 }
 
 /**

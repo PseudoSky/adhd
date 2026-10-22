@@ -12,6 +12,7 @@ You are an expert full-stack engineer operating within a high-scale **Nx Monorep
 - Pushing to `main`, merging to `main`, and publishing to npm are pre-authorized for every agent: do them directly, without asking, once the Gates below are green, unless otherwise explicitly directed by your prompt.
 - You always plan before acting
 - **Worktrees: create with `scripts/worktree-setup.sh --bl <backlog-id>`, work and commit only inside `.worktrees/<name>`, merge with `scripts/worktree-merge.sh <worktree|branch|id>` (tests, merges, pushes, cleans up), and follow whatever a script prints when it stops.** Never create, merge, or remove a worktree by hand and never symlink `node_modules`. Process: [`WORKTREE_POLICY.md`](WORKTREE_POLICY.md).
+- When several agents share ONE worktree, none commits: each returns its changed paths and one dispatcher-dispatched committer lands them sequentially with `git commit -m ... -- <paths>`, because the pre-commit hook holds the worktree's single index.lock for tens of seconds and lints the whole tree. Default to one worktree per parallel agent.
 - You never run destructive bash commands without evaluating failure cases
 - You always write tests for the real user use cases (the way in which a 3rd party consumes a package)
 - You do not run git stash commands ever
@@ -24,7 +25,7 @@ You are an expert full-stack engineer operating within a high-scale **Nx Monorep
 - You never create a new package (any tier, any generator, including `entrypoint/`) without explicit human approval recorded in your ticket or prompt; `--dry-run` is for inspection only. Experiment harnesses, measurement drivers, and one-off tooling nobody imports are not packages.
 - You never create folders in the repo root without human approval
 - You never chain file removals in bash commands
-- You never write fs removals within scripts relying on variables without human approval
+- You never write fs removals within scripts relying on variables without human approval, except tests may remove a variable path resolved under the repo's `tmp/<package>/` scratch root, guarded to throw if it escapes that root (approved 2026-10-15).
 - You file, claim, transition, and resolve backlog items via the `adhd-backlog` CLI (renamed from the bare `backlog` bin, which collided with the unrelated public npm package `backlog@1.4.56`) / `mcp__backlog__*` tools — never by hand-editing a `BACKLOG.md`. The graph is the source of truth and any `BACKLOG.md` still on disk is a dead artifact, not a projection: nothing regenerates it, so a hand edit is simply invisible to every reader. Identity is the `uid` each verb returns. The command surface, the `--input '<json>'` calling convention, and a worked example of every verb live in `entrypoint/backlog/skill/SKILL.md` — read it rather than guessing a flag. (For this repo, this supersedes the global "store deferrals/bugs to BACKLOG.md" disclosure rule.)
 - You never declare bugs as "pre-existing"
 - After merging branches or worktrees, you always clean up the branch and write to the apropriate changelogs

@@ -139,7 +139,10 @@ function makeMilestone(overrides: Partial<MilestoneDag> = {}): MilestoneDag {
     effort: 'medium',
     two_stage: false,
     read_only: [],
-    guard: 'node -e "process.exit(0)"',
+    // qa-variance (item qa-variance, tier S): failure mode guarded: the guard fixture
+    // paid a node start-up per run under load, causing variance. `exit 0` runs through
+    // the same real `sh -c` exec path as the default guard executor. Red run: pending.
+    guard: 'exit 0',
     ...overrides,
   };
 }

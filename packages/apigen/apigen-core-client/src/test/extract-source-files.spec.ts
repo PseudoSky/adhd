@@ -1,65 +1,23 @@
 /**
- * guards: extraction does not report the files it read, so a cache layer has to re-derive the dependency set itself, and an installed (node_modules) entry's own sibling files are dropped from it
- * tier: S
- * cites: backlog 39c4e00c - AC1 extract() reports the local files it read (entry included, sorted) for an installed and an ordinary tree, without changing how the result reads as Operation[]
+ * STUB (paired, ADR 0009 D2): the real suite is the sibling `extract-source-files.e2e.ts` (tier P), which builds real
+ * ts-morph programs over real temporary source trees (9.5 s for 3 cases). It runs in the project's `e2e` target (CI only
+ * (`nx affected -t e2e --parallel=1`)), never in the unit `test` lane the local pre-push hook runs. This file compiles
+ * nothing; it keeps the suite in view in the unit lane and fails if the suite leaves the e2e lane.
  *
- * Consumer path: the real `extract()` over real temp source trees, read back through the public `sourceFilesOf`.
- *
- * red run (against the pre-change sources, 2026-10-14): all 3 cases failed - `sourceFilesOf` did not exist, and
- * `collectLocalImportPaths` on an installed entry returned only the entry itself.
+ * guards: the extract-source-files.e2e.ts suite is deleted, renamed out of the e2e lane, or loses its tier P header while
+ *   the unit lane stays green.
+ * tier: S (reads one sibling file; no program build)
+ * cites: backlog f3683008 AC3; docs/decisions/0009-test-lanes-unit-vs-e2e.md amendment 2026-10-15
+ * teeth: red 2026-10-21: `npx vitest run src/test/extract-source-files.spec.ts` in this package with the sibling name
+ *   misspelled in this stub -> exit 1 (ENOENT in readFileSync); restored -> exit 0.
  */
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import * as fs from 'node:fs';
-import * as os from 'node:os';
-import * as path from 'node:path';
-import { collectLocalImportPaths, extract, sourceFilesOf } from '../index';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { describe, expect, it } from 'vitest';
 
-let root: string;
-beforeAll(() => {
-  root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'apigen-srcfiles-')));
-});
-afterAll(() => {
-  fs.rmSync(root, { recursive: true, force: true });
-});
-
-function tree(base: string): { entry: string; types: string; deep: string; vendored: string } {
-  const entry = path.join(base, 'api.d.ts');
-  const types = path.join(base, 'write', 'types.d.ts');
-  const deep = path.join(base, 'write', 'deep.d.ts');
-  const vendored = path.join(base, 'node_modules', 'other', 'index.d.ts');
-  for (const [f, c] of [
-    [deep, 'export interface IDeep { d: number }\n'],
-    [types, "import { IDeep } from './deep.js';\nexport interface IIn { a: string; deep: IDeep }\n"],
-    [vendored, 'export interface IOther { o: string }\n'],
-    [
-      entry,
-      "import { IIn } from './write/types.js';\nimport { IOther } from 'other';\nexport declare function run(i: IIn): Promise<string>;\nexport declare function other(i: IOther): Promise<string>;\n",
-    ],
-  ] as const) {
-    fs.mkdirSync(path.dirname(f), { recursive: true });
-    fs.writeFileSync(f, c);
-  }
-  return { entry, types, deep, vendored };
-}
-
-describe('extract() reports the files it read (39c4e00c)', () => {
-  it.each([
-    ['an ordinary tree', ['src']],
-    ['an installed package', ['node_modules', '@scope', 'pkg']],
-  ])('[AC1] %s: entry plus transitive local imports, sorted; another package stays out', async (_n, parts) => {
-    const base = path.join(root, parts.join('-'), ...parts);
-    const t = tree(base);
-    const ops = await extract({ sourceFile: t.entry, namespace: 'x' });
-    expect(sourceFilesOf(ops)).toEqual([t.entry, t.deep, t.types].sort());
-    expect(collectLocalImportPaths(t.entry)).toEqual([t.entry, t.deep, t.types].sort());
-  });
-
-  it('[AC1] the list does not change how the result reads as Operation[]', async () => {
-    const t = tree(path.join(root, 'plain'));
-    const ops = await extract({ sourceFile: t.entry, namespace: 'x' });
-    expect(sourceFilesOf(ops)).toBeDefined();
-    expect(Object.keys(ops)).toEqual(ops.map((_, i) => String(i)));
-    expect(JSON.parse(JSON.stringify(ops))).toEqual([...ops]);
-    expect(sourceFilesOf([...ops])).toBeUndefined();
+describe('stub: extract-source-files.e2e.ts runs in the e2e lane', () => {
+  it('the sibling suite exists, is named *.e2e.ts and declares tier P', () => {
+    const src = readFileSync(join(__dirname, 'extract-source-files.e2e.ts'), 'utf8');
+    expect(src).toMatch(/^\s*\*\s*tier:\s*P\b/m);
   });
 });

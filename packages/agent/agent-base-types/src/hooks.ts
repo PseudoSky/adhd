@@ -123,7 +123,7 @@ export interface PostToolCallPayload {
   exitStatus?: number;
   /**
    * Token estimate for the FULL, untruncated tool result (tokenized before the
-   * 500-char truncation applied to the stored `task_events.TOOL_RESULT.result` summary).
+   * model-visible cap applied to the stored `task_events.TOOL_RESULT.result` text).
    */
   estResultTokens: number;
   /** Outcome class of the call. Absent when the engine did not classify it. */
@@ -137,9 +137,27 @@ export interface MessageAppendedPayload {
   executionContext: ExecutionContext;
   message: Message;
 }
+/**
+ * Every advisory flag a task can complete with, the single source for `TaskCompletionWarning` and the
+ * zod mirror in `agent-engine-orchestrator`. A warning never changes the task's status or result.
+ * - `no_tool_use`: the final stop was `completed`, the task made zero tool calls, and the agent was
+ *   granted at least one tool (cbd559eb).
+ */
+export const TASK_COMPLETION_WARNINGS = ['no_tool_use'] as const;
+
+/** One advisory completion warning; derived from `TASK_COMPLETION_WARNINGS`. */
+export type TaskCompletionWarning = (typeof TASK_COMPLETION_WARNINGS)[number];
+
 export interface TaskCompletedPayload {
   executionContext: ExecutionContext;
   result: string;
+  /**
+   * Task-wide count of tool uses: calls the orchestrator executed plus the CLI-internal tool uses a
+   * provider reported (claudecli). Mirrors the `toolUseCount` on the persisted `TASK_COMPLETED` event (cbd559eb).
+   */
+  toolUseCount?: number;
+  /** Present only when the task completed with at least one warning. */
+  warnings?: TaskCompletionWarning[];
 }
 export interface TaskFailedPayload {
   executionContext: ExecutionContext;

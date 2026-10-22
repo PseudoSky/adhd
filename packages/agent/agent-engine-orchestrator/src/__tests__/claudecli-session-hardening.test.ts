@@ -1,4 +1,11 @@
 /**
+ * qa-variance (dispatch-1014): the first dynamic `import("../providers/...")` of the provider graph used to be
+ * charged to whichever test ran first (100-300 ms cold load against a 10-90 ms median); `beforeAll` now pays it once.
+ * guards: a non-UUID id reaches transcript removal, the resume key ignores an input, or an unresumable session is retained
+ * tier: S
+ * cites: qa-variance, docs/discovery/qa-test-variance-tail-orchestrator-a.md (assertions unchanged; red: pending, tests not run per user).
+ */
+/**
  * 95ee2a24 -- claudecli session retention hardening (blind-review M1 / M2 / M3).
  *
  *  AC2  removeTranscripts / commit only ever touch ids that are UUIDs (traversal ids touch nothing)
@@ -13,7 +20,8 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Readable } from "node:stream";
-import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { COLD_IMPORT_TIMEOUT_MS, warmClaudeCliModules } from "./fixtures/warm-modules.js";
 
 import type { EngineConfig, EngineLogger } from "../interfaces.js";
 import {
@@ -31,6 +39,9 @@ vi.mock("child_process", () => ({ spawn: vi.fn() }));
 
 const root = mkdtempSync(join(tmpdir(), "95ee2a24-"));
 afterAll(() => rmSync(root, { recursive: true, force: true }));
+beforeAll(async () => {
+  await warmClaudeCliModules({ factory: true });
+}, COLD_IMPORT_TIMEOUT_MS);
 let n = 0;
 /** A fresh config dir per test so ledgers and transcripts never leak between cases. */
 function freshConfigDir(): string {

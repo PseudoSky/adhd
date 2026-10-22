@@ -229,6 +229,8 @@ Classification (`src/engine/tool-class.ts`, `classifyTool`; first match wins): `
 
 **Task events.** Besides `MODEL_REQUEST`, `MODEL_RESPONSE`, `TOOL_CALL`, `TOOL_RESULT`, `TOOL_ARG_COERCED` and the terminal events, two typed events are persisted to `task_events` (`src/engine/task-event-hooks.ts`): `budget:unpriced_model` (the budget plugin could not price a model for the `cost` cap) and `provider:builtin_bypass` (a `claudecli` agent enabled CLI built-ins, which run inside the `claude` process and skip hooks including the EOL hook, argument coercion, the result cap, the token estimator and this pool; built-ins are default-deny and the warning is silent unless an agent opts in, and is emitted once per task and live built-in set, not once per model turn; `registerTaskEventHooks` is idempotent per hook registry, and agent-spec mode also discloses a block-style `tools:` list). The orchestrator also appends two events directly: `provider:history_degraded` (payload `{ reason, echoedMessages, healed }`: the API rejected the replayed provider echo, the provider retried once without it, the engine stopped echoing for the run and deleted the session's stored echo, so `healed` is always `true`; `reason` is `api_rejected_replay` followed by the block-type keywords the rejection named, never the API text; `echoedMessages` is how many assistant messages were replayed with echoed blocks) and `provider:pause_continued` (payload `{ n }`, the 1-based continuation number, one per provider-driven `pause_turn` continuation, each vetted by `pre:model_request` enforcement). Both are described under [Provider echo](#provider-echo-anthropic). Which behaviors apply to which provider, including the built-in CRLF caveat and `reasoningTokens` itemisation limits: [docs/agent/provider-parity.md](../../../docs/agent/provider-parity.md).
 
+**Completion warnings (cbd559eb).** A task whose final stop is `completed`, whose agent had at least one tool granted, and whose task-wide `toolUseCount` is zero completes with `warnings: ["no_tool_use"]`. The status and `result` are unchanged. The warning is written to the `TASK_COMPLETED` payload (omitted when empty), passed on the `task:completed` hook payload and the `done` stream event, forwarded in the agent-mcp `notifications/task/completed` notification, and returned by the synchronous `task` result. The engine also logs one `warn` line per flagged task. `toolUseCount` counts every requested tool call, including denied ones, plus the CLI-internal tool uses a `claudecli` provider reports.
+
 ## `claudecli` provider: governance (permission gate, caps, hooks)
 
 The `claude` CLI runs its own tool loop, so its tool calls bypass the engine's dispatch loop. They are governed anyway (f9dadeaa):
@@ -249,6 +251,8 @@ See `/entrypoint/agent-mcp/docs/architecture-and-security.md` for the full agent
 ## Tool-result token estimate
 
 `tool_call_est_result_tokens` on `TOOL_RESULT` events is exact for results of at most 20,000 chars and a head+tail-sample estimate above that (`tool_call_est_result_tokens_estimated: true`), so a huge single-character run cannot stall the event loop in the tokenizer (d89e20f4). See `src/engine/tool-result-tokens.ts` and `entrypoint/agent-mcp/docs/logging.md`.
+
+The stored `TOOL_RESULT.result` is the model-visible text clipped to 16,000 chars (`TOOL_RESULT_EVENT_MAX_CHARS`, `clipForStorage`); `result_sha256` hashes the full model-visible text, and a clipped result adds `result_stored_clipped` and `result_model_visible_chars`. With the model cap at `0` the event keeps the head+tail of the full text, not all of it.
 
 ## Tool results on the provider wire
 
@@ -296,9 +300,9 @@ The live run replays its own full echo and is never capped or expired mid-run; t
 
 | Test file | Gate | Calls | Owner |
 | --- | --- | --- | --- |
-| `src/__tests__/anthropic-echo-live.test.ts` | `ADHD_AGENT_LIVE_ECHO=1` (plus `ANTHROPIC_API_KEY`) | a real paid model, Anthropic `claude-haiku-5-5` at effort `high`; at most 6 requests per run (hard counter), `max_tokens` 4096, no retries; typical run 4 requests | **nix (repo owner)** |
+| `src/__tests__/anthropic-echo-live.e2e.test.ts` | `ADHD_AGENT_LIVE_ECHO=1` (plus `ANTHROPIC_API_KEY`) | a real paid model, Anthropic `claude-haiku-5-5` at effort `high`; at most 6 requests per run (hard counter), `max_tokens` 4096, no retries; typical run 4 requests | **nix (repo owner)** |
 
-- **Why it is gated.** It calls a real paid model, the only gate reason the repo allows (root `AGENTS.md` section 7, "Live testing is mandatory"). Nothing else about it is gated: its offline half (request-cap, body-inspection and redaction controls, plus a full run of the same rig against the offline contract fake, and a check that this section, `AGENTS.md` and the file header all name the gate and the owner) runs in every `nx test`.
+- **Why it is gated.** It calls a real paid model, the only gate reason the repo allows (root `AGENTS.md` section 7, "Live testing is mandatory"). Nothing else about it is gated: its offline half (request-cap, body-inspection and redaction controls, plus a full run of the same rig against the offline contract fake, and a check that this section, `AGENTS.md` and the file header all name the gate and the owner) runs ungated in the project's `e2e` target (CI `nx affected -t e2e`; ADR 0009, backlog f3683008), not in the pre-push `test` lane.
 - **Off by default and off in CI.** Unset, every live test is reported `SKIPPED` with a reason naming the gate and the owner, and the file makes no network call. Setting the gate without `ANTHROPIC_API_KEY` turns the suite red; there is no silent skip once enabled.
 - **What it proves** (R9-hist S7, spec-v2 AC13): the live API accepts the assistant history this package replays: (a) a real thinking turn with its signature byte for byte, (b) a real `server_tool_use` + `web_fetch_tool_result` pair including its `citations` / `caller` / `citations: null` shapes, (c) an empty `text` block dropped before the request, (d) a real `pause_turn` continuation when the model produces one (otherwise reported "not exercised", never faked), (e) the post-TTL shape with tier S stripped and tier T kept, and (f), informational and last, whether a dangling `server_tool_use` tail is accepted (this gates S3b).
 - **Diagnostics and prerequisites.** Turn 1 writes one `turn 1 diagnostics:` line to the run summary before checking anything: HTTP statuses, stop reason, block types and counts, output tokens, elapsed ms, whether the sent request carried a `thinking` field, its `output_config.effort`, and the web_fetch pair status (types, counts and booleans only). The executed `web_fetch` pair is the only hard prerequisite of (b)(c)(e)(f). A turn without a thinking block fails only item (a), reported as "NOT EXERCISED"; the provider sends `output_config.effort` and, unless the provider config sets `thinking`, no `thinking` field, so whether thinking blocks appear is the model's choice at that effort.
@@ -307,5 +311,5 @@ The live run replays its own full echo and is never capped or expired mid-run; t
 
   ```bash
   ADHD_AGENT_LIVE_ECHO=1 ANTHROPIC_API_KEY=<key> npx vitest run \
-    --config packages/agent/agent-engine-orchestrator/vite.config.ts anthropic-echo-live
+    --config packages/agent/agent-engine-orchestrator/vitest.e2e.config.ts anthropic-echo-live
   ```

@@ -2,14 +2,16 @@
  * guards: `adhd-policy run` launches a tool the policy refuses or asks about, lets a denied cwd through, forwards --adhd-* flags to the child, or loses the child's exit code.
  * tier: S
  * cites: docs/plan/policy-core/tickets/T13.md (@S3.1, @S3.2, @S3.3, @S3.6; B3.1)
+ * item: qa-variance (docs/discovery/qa-test-variance-tail-policy.md)
+ * red: pending (tests not run per user); assertions are unchanged, only where the fixture directory comes from moved.
  */
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 import { runVerb } from '../../wrapper/verbs/run';
 import { createFakeLauncher } from '../helpers/fake-launcher';
 import { capturedDeps } from '../helpers/run-deps';
-import { withTmpDir } from '../helpers/tmp';
+import { useScratchDirs } from '../helpers/tmp';
 
 /** B3.0: dev may run "touch" with the cwd inside write_roots; interns "ask"; any cwd under ".ssh" is denied. */
 const GATE_YAML = `version: 1
@@ -38,24 +40,39 @@ interface IDemo {
   readonly gate: string;
 }
 
+const scratch = useScratchDirs('s3-run');
+let shared: IDemo;
+
+/**
+ * One demo tree for the whole file, built once. Every case only reads it (the
+ * gate, the work/out/ssh directories) and writes its own uniquely named
+ * attributes file, so no case can see another's state; the one case that needs
+ * a different gate writes its own gate file instead of rewriting this one.
+ */
+beforeAll(async () => {
+  const dir = await scratch.fresh('demo');
+  shared = {
+    demo: dir,
+    out: join(dir, 'work', 'out'),
+    work: join(dir, 'work'),
+    ssh: join(dir, 'home', '.ssh'),
+    gate: join(dir, 'gate.yaml'),
+  };
+  await mkdir(shared.out, { recursive: true });
+  await mkdir(shared.ssh, { recursive: true });
+  await writeFile(shared.gate, GATE_YAML);
+});
+
 async function withDemo(fn: (demo: IDemo) => Promise<void>): Promise<void> {
-  await withTmpDir('s3-run', async (dir) => {
-    const demo: IDemo = {
-      demo: dir,
-      out: join(dir, 'work', 'out'),
-      work: join(dir, 'work'),
-      ssh: join(dir, 'home', '.ssh'),
-      gate: join(dir, 'gate.yaml'),
-    };
-    await mkdir(demo.out, { recursive: true });
-    await mkdir(demo.ssh, { recursive: true });
-    await writeFile(demo.gate, GATE_YAML);
-    await fn(demo);
-  });
+  await fn(shared);
 }
 
+let attrsCounter = 0;
+
+/** Writes `value` to a file no other case uses and returns the `@file` flag value. */
 async function attrsFile(dir: string, name: string, value: unknown): Promise<string> {
-  const file = join(dir, name);
+  attrsCounter += 1;
+  const file = join(dir, `${attrsCounter}-${name}`);
   await writeFile(file, JSON.stringify(value));
   return `@${file}`;
 }
@@ -112,12 +129,13 @@ describe('Put a policy in front of any command - run bin:', () => {
   it('@S3.3 ask with nobody to answer is a refusal, and the attributes file is re-read on every invocation', async () => {
     await withDemo(async (d) => {
       const launcher = createFakeLauncher();
-      const argv = ['bin:touch', '--spec', d.gate, '--adhd-attributes', `@${join(d.demo, 'who.json')}`, '--', 'again.txt'];
-      await writeFile(join(d.demo, 'who.json'), JSON.stringify({ role: 'dev', write_roots: [d.out] }));
+      const who = join(d.demo, 's3-who.json');
+      const argv = ['bin:touch', '--spec', d.gate, '--adhd-attributes', `@${who}`, '--', 'again.txt'];
+      await writeFile(who, JSON.stringify({ role: 'dev', write_roots: [d.out] }));
       const first = capturedDeps({ cwd: d.out, launcher });
       expect(await runVerb(argv, first.deps)).toBe(0);
       expect(launcher.started).toHaveLength(1);
-      await writeFile(join(d.demo, 'who.json'), JSON.stringify({ role: 'intern', write_roots: [d.out] }));
+      await writeFile(who, JSON.stringify({ role: 'intern', write_roots: [d.out] }));
       const second = capturedDeps({ cwd: d.out, launcher });
       expect(await runVerb(argv, second.deps)).toBe(3);
       expect(launcher.started).toHaveLength(1);
@@ -129,9 +147,10 @@ describe('Put a policy in front of any command - run bin:', () => {
     await withDemo(async (d) => {
       const launcher = createFakeLauncher();
       for (const bad of ['"not-an-object"', '[1]', '42', 'null']) {
-        await writeFile(join(d.demo, 'bad-attrs.json'), bad);
+        const badFile = join(d.demo, 's3-bad-attrs.json');
+        await writeFile(badFile, bad);
         const captured = capturedDeps({ cwd: d.out, launcher });
-        const code = await runVerb(['bin:touch', '--spec', d.gate, '--adhd-attributes', `@${join(d.demo, 'bad-attrs.json')}`, '--', 'never.txt'], captured.deps);
+        const code = await runVerb(['bin:touch', '--spec', d.gate, '--adhd-attributes', `@${badFile}`, '--', 'never.txt'], captured.deps);
         expect(code, bad).toBe(2);
         expect(captured.stderr.join('')).toMatch(/must be a JSON object/);
       }
@@ -147,11 +166,12 @@ describe('Put a policy in front of any command - run bin:', () => {
         'args: { cwd: { _within: $attributes.write_roots } }',
         `args: { cwd: { _within: $attributes.write_roots } }\n    set: { argv: [forced.txt], cwd: '${forcedCwd}' }`
       );
-      await writeFile(d.gate, gate);
+      const forcedGate = join(d.demo, 'gate-forced.yaml');
+      await writeFile(forcedGate, gate);
       const launcher = createFakeLauncher();
       const captured = capturedDeps({ cwd: d.out, launcher });
       const attrs = await attrsFile(d.demo, 'attrs.json', { role: 'dev', write_roots: [d.out] });
-      expect(await runVerb(['bin:touch', '--spec', d.gate, '--adhd-attributes', attrs, '--', 'asked.txt', 'extra'], captured.deps)).toBe(0);
+      expect(await runVerb(['bin:touch', '--spec', forcedGate, '--adhd-attributes', attrs, '--', 'asked.txt', 'extra'], captured.deps)).toBe(0);
       expect(launcher.started).toHaveLength(1);
       expect(launcher.started[0]).toMatchObject({ command: 'touch', args: ['forced.txt'], cwd: forcedCwd });
     });

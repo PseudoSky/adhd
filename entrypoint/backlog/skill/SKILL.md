@@ -31,22 +31,23 @@ Rules that bite:
   role word like `"agent"` is refused.
 - File with the right `project` (and `component`); search before filing so you
   update an existing item instead of duplicating it.
-- `update` with a `body` mints a successor uid (the old one reports a
-  `conflict` naming the live one); re-read the uid from the result.
+- `update` with a `body` mints a successor uid (old one: `conflict` naming the
+  live one); `lookup` on a stale uid returns the live head + `forwardedFrom`.
 - Never edit `BACKLOG.md`; the graph is the source of truth.
 - A wrong `--input` shape fails with `invalid_argument` and prints the exact
   working invocation; `adhd-backlog --help` lists every verb's live schema.
 
 Other verbs: `add-citation attest delete embedding-status lookup merge-project
 move obligate open-curve part-of-rollup priority-matrix recheck remove
-remove-citation report restore rm-location rm-project spec-append spec-check
-timeline unobligate upsert-component upsert-location upsert-project` and
-`batch action`.
+remove-citation remove-note report restore rm-location rm-project spec-append
+spec-check timeline unobligate upsert-component upsert-location
+upsert-project` and `batch action`.
 
 ## Long reference (read only when the above is not enough)
 
-`REFERENCE.md`, in this directory next to this file, holds the complete 32-verb
-reference: outcome envelopes and MCP tool names (§2), worked examples for every
+`REFERENCE.md`, in this directory next to this file, holds the complete
+reference for the 33 verbs (plus `batch`): outcome envelopes and MCP tool names
+(§2), worked examples for every
 issue verb (§3), obligations and the actionability verdict (§4), spec revisions
 (§5), read views and catalogs (§6), the project/component/location registry and
 filing rules (§7), batch (§8), citations (§9), verifying writes (§10), stats

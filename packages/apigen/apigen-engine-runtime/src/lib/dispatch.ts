@@ -4,8 +4,11 @@ import {
   buildTranscoder,
   createRegistry,
   registerWellKnown,
+  rootRefResolver,
 } from '@adhd/apigen-base-logical';
 import type { ComposedSchemas } from './types';
+import type { ApiStream } from './stream';
+import { isApiStream } from './stream';
 
 // ---------------------------------------------------------------------------
 // Module-level transcoder: built once from the well-known TS scalar codecs.
@@ -27,164 +30,6 @@ export type CreateClientFn = (
   envelope: Record<string, unknown>,
   options?: { signal?: AbortSignal }
 ) => Promise<unknown>;
-
-// ---------------------------------------------------------------------------
-// $ref resolution (adhd ADR-0019 / REMEDIATION-PLAN R3 behaviour change 4)
-// ---------------------------------------------------------------------------
-
-/** The local definition pointers the extractors emit: `#/definitions/<name>` and `#/$defs/<name>`. */
-const DEFINITION_POINTER = /^#\/(?:definitions|\$defs)\/(.+)$/;
-
-/** Keys that make a schema node more than a bare alias of another `$ref`. */
-const STRUCTURAL_KEYS = [
-  'type',
-  'properties',
-  'items',
-  'oneOf',
-  'anyOf',
-  'allOf',
-  'enum',
-  'const',
-  'additionalProperties',
-  'format',
-];
-
-/**
- * Normalise a definition name taken from a `$ref` pointer or a definitions
- * key: JSON-pointer unescaping (`~1` → `/`, `~0` → `~`) after percent
- * decoding (`ts-json-schema-generator` percent-encodes generic names such as
- * `Page<User>` in the pointer but keys the definition by the raw name).
- */
-function normaliseDefinitionName(raw: string): string {
-  let decoded = raw;
-  try {
-    decoded = decodeURIComponent(raw);
-  } catch {
-    // A literal `%` that is not an escape: keep the raw spelling.
-  }
-  return decoded.replace(/~1/g, '/').replace(/~0/g, '~');
-}
-
-/** The transcoder ctx override of one composed schema entry; `undefined` when the entry declares no definitions. */
-type EntryTranscodeCtx = Partial<TranscodeCtx> | undefined;
-
-/**
- * One ctx override per composed schema entry and operation name, built on
- * first use and reused: the schema objects are immutable once composed, so
- * the definitions walk runs once per entry rather than once per call. Keyed
- * by name as well because one schema object may back several operations, and
- * the resolver's errors name the operation.
- */
-const transcodeCtxCache = new WeakMap<object, Map<string, EntryTranscodeCtx>>();
-
-/**
- * Collect every `definitions` / `$defs` dictionary in `node` (at any depth)
- * into `into`, keyed by normalised definition name. The first definition seen
- * for a name wins, matching the order a document-root lookup would use.
- * Keys already written as a full pointer (`'#/$defs/User'`, the hand-built
- * fixture convention `validateComposedRefs` also accepts) are normalised to
- * their bare name.
- */
-function collectDefinitions(
-  node: unknown,
-  into: Map<string, SchemaNode>,
-  seen: Set<object>
-): void {
-  if (node === null || typeof node !== 'object' || seen.has(node)) return;
-  seen.add(node);
-  if (Array.isArray(node)) {
-    for (const item of node) collectDefinitions(item, into, seen);
-    return;
-  }
-  const obj = node as Record<string, unknown>;
-  for (const defKey of ['definitions', '$defs']) {
-    const defs = obj[defKey];
-    if (defs === null || typeof defs !== 'object' || Array.isArray(defs)) continue;
-    for (const [key, def] of Object.entries(defs as Record<string, unknown>)) {
-      const pointer = DEFINITION_POINTER.exec(key);
-      const name = normaliseDefinitionName(pointer?.[1] ?? key);
-      if (!into.has(name) && def !== null && typeof def === 'object') {
-        into.set(name, def as SchemaNode);
-      }
-    }
-  }
-  for (const value of Object.values(obj)) collectDefinitions(value, into, seen);
-}
-
-/** True when `node` is a pure alias: a `$ref` with no structure of its own. */
-function isRefAlias(node: SchemaNode): boolean {
-  if (typeof node['$ref'] !== 'string') return false;
-  return !STRUCTURAL_KEYS.some((key) => key in node);
-}
-
-/**
- * The transcoder ctx override for one composed schema entry: a
- * definitions-backed `resolve()`, so a `$ref` decodes and encodes instead of
- * hitting the transcoder's run-mode stub ("cannot be resolved in run-mode
- * without a descriptor root"). The definitions come from the entry's `input` root
- * (`composeSchemas` hoists them there) and its `output` root (the extractor
- * hoists them there), so one resolver serves both directions.
- *
- * A recursive type resolves on demand: the transcoder walks the VALUE, so a
- * self-referential definition terminates with the data. Only a chain of pure
- * aliases that returns to itself (`A → B → A` with no structure in between)
- * can never terminate; it is rejected here, naming the chain.
- *
- * @throws ApiError('internal') naming the operation and the pointer, when a
- *   pointer is not a local definition pointer, names no collected definition,
- *   or starts an alias cycle. These are server-side schema defects, not caller
- *   errors.
- */
-function transcodeCtxFor(
-  fnName: string,
-  schema: ComposedSchemas[string]
-): EntryTranscodeCtx {
-  let byName = transcodeCtxCache.get(schema);
-  if (byName === undefined) {
-    byName = new Map();
-    transcodeCtxCache.set(schema, byName);
-  }
-  if (byName.has(fnName)) return byName.get(fnName);
-  const definitions = new Map<string, SchemaNode>();
-  const seen = new Set<object>();
-  collectDefinitions(schema.input, definitions, seen);
-  collectDefinitions(schema.output, definitions, seen);
-  const lookup = (ref: string): SchemaNode => {
-    const match = DEFINITION_POINTER.exec(ref);
-    const def =
-      match?.[1] === undefined
-        ? undefined
-        : definitions.get(normaliseDefinitionName(match[1]));
-    if (def === undefined) {
-      throw new ApiError(
-        'internal',
-        `apigen dispatch: operation "${fnName}" has an unresolved $ref "${ref}" (no matching local definition in its schema)`
-      );
-    }
-    return def;
-  };
-  const resolve = (ref: string): SchemaNode => {
-    const chain = [ref];
-    let node = lookup(ref);
-    while (isRefAlias(node)) {
-      const next = node['$ref'] as string;
-      if (chain.includes(next)) {
-        throw new ApiError(
-          'internal',
-          `apigen dispatch: operation "${fnName}" has a cyclic $ref alias chain (${[...chain, next].join(' -> ')})`
-        );
-      }
-      chain.push(next);
-      node = lookup(next);
-    }
-    return node;
-  };
-  // No definitions: keep the transcoder's own default (its run-mode stub),
-  // so a schema with no definitions behaves exactly as before.
-  const ctx: EntryTranscodeCtx = definitions.size === 0 ? undefined : { resolve };
-  byName.set(fnName, ctx);
-  return ctx;
-}
 
 // ---------------------------------------------------------------------------
 // Cancellation (adhd ADR-0019 D4, SPEC §8.1)
@@ -316,18 +161,89 @@ function decodeArg(
 }
 
 /**
+ * Build a transcoder context whose `$ref` resolver is bound to one schema
+ * document root (the op's `input` or `output` schema, whose `definitions` /
+ * `$defs` the extractor hoisted onto that root).
+ *
+ * A `$ref` that is unsupported or has no matching definition throws an error
+ * naming both the ref and the operation id (the resolver's `E_EMIT` message is
+ * kept, and the original `EmitError` is attached as `cause`), so the failure
+ * points at the schema, not the codec.
+ *
+ * @param root  The schema document the `$ref`s inside it are relative to.
+ * @param fnName The operation id, used only in the error message.
+ */
+function refCtx(root: SchemaNode, fnName: string): Partial<TranscodeCtx> {
+  const lookup = rootRefResolver(root);
+  return {
+    resolve: (ref: string): SchemaNode => {
+      // `rootRefResolver` (apigen-base-logical) is the single owner of which
+      // `$ref` forms are resolvable: it throws an `E_EMIT` EmitError for an
+      // unsupported form and a distinct one for a missing definition. Re-throw
+      // with the op id prefixed and the EmitError kept as `cause`, so the
+      // failure points at the schema and the original diagnosis is not lost.
+      try {
+        return lookup(ref);
+      } catch (cause) {
+        const detail = cause instanceof Error ? cause.message : String(cause);
+        // The package compiles below ES2022, whose `lib` lacks `ErrorOptions`,
+        // so the standard `cause` property is attached by assignment.
+        const wrapped: Error & { cause?: unknown } = new Error(
+          `[apigen-engine-runtime] op "${fnName}": ${detail}`
+        );
+        wrapped.cause = cause;
+        throw wrapped;
+      }
+    },
+  };
+}
+
+/**
+ * Wrap a stream so each chunk is encoded against the declared chunk schema.
+ * The wrapper is itself an `ApiStream`, so transports still take the SSE
+ * branch. Iteration is delegated to the source's `for await`, so a consumer's
+ * `break` or cancellation reaches the source's `return()`.
+ */
+function encodeChunks(
+  source: ApiStream<unknown>,
+  chunkSchema: SchemaNode,
+  ctx: Partial<TranscodeCtx>
+): ApiStream<Wire> {
+  return {
+    [Symbol.asyncIterator]: async function* (): AsyncGenerator<Wire> {
+      for await (const chunk of source) {
+        yield _transcoder.encode(chunk, chunkSchema, ctx);
+      }
+    },
+  };
+}
+
+/**
  * Encode the function's return value against the output schema node.
+ *
  * When the output schema is empty ({}), the value passes through unchanged.
+ * A streaming result (`isApiStream`) is never transcoded as a single value:
+ * the transcoder would walk the output schema's properties against the
+ * iterator object and return `{}`. Instead the stream is kept and each chunk
+ * is encoded against the output schema (the chunk schema).
+ * `$ref`s in the output schema resolve against the output schema's own root.
  */
 function encodeResult(
   value: unknown,
-  fnSchema: ComposedSchemas[string],
-  ctx: Partial<TranscodeCtx> | undefined
+  fnName: string,
+  fnSchema: ComposedSchemas[string]
 ): unknown {
   const outputSchema = fnSchema.output as SchemaNode;
   // An empty object schema `{}` has no `type` — the transcoder treats it as
   // schema-less / plain-JSON passthrough; only typed output schemas are encoded.
   if (!outputSchema || Object.keys(outputSchema).length === 0) return value;
+  const ctx = refCtx(outputSchema, fnName);
+  // Ruling: a streaming result is NOT returned as the identical object the fn
+  // produced. The returned value is a new ApiStream (same `Symbol.asyncIterator`
+  // contract, so transports still take the SSE branch) whose chunks are
+  // wire-encoded against the output schema. Identity is intentionally not
+  // preserved; consumers must rely on the ApiStream contract, not on `===`.
+  if (isApiStream(value)) return encodeChunks(value, outputSchema, ctx);
   return _transcoder.encode(value, outputSchema, ctx);
 }
 
@@ -344,10 +260,12 @@ function encodeResult(
  *     output schema. A `Date` return becomes an RFC 3339 string; plain JSON
  *     values pass through unchanged.
  *
- * `$ref` resolution: a param or output node that is (or contains) a local
- * `$ref` resolves against the definitions of the operation's own composed
- * schema entry (see {@link transcodeCtxFor}); the transcoder's run-mode stub is
- * never reached for a schema that carries its definitions.
+ * `$ref` resolution: a param node's `$ref`s resolve against the operation's
+ * `input` schema root and a result's against its `output` root (where the
+ * extractor hoisted `definitions` / `$defs`), via {@link refCtx}; the
+ * transcoder's run-mode stub is never reached for a schema that carries its
+ * definitions. A streaming result is returned as a new stream whose chunks are
+ * encoded against the output schema.
  *
  * Cancellation (adhd ADR-0019 D4): `signal` is never a positional argument of
  * the user function. A `ctx`-taking function receives it through
@@ -397,7 +315,6 @@ async function dispatchUnguarded(
   signal: AbortSignal | undefined
 ): Promise<unknown> {
   const paramNames = dataParamNames(schema);
-  const transcodeCtx = transcodeCtxFor(fnName, schema);
   const buildClient = (
     factory: CreateClientFn,
     clientEnvelope: Record<string, unknown>
@@ -405,8 +322,11 @@ async function dispatchUnguarded(
     signal === undefined ? factory(clientEnvelope) : factory(clientEnvelope, { signal });
 
   // ── Decode: wire → host for every domain arg ───────────────────────────────
+  // Param `$ref`s resolve against the input schema root (where the extractor
+  // hoists `definitions`/`$defs` for the `data` envelope).
+  const inputCtx = refCtx(schema.input as SchemaNode, fnName);
   const args = paramNames.map((k) =>
-    decodeArg(domainArgs[k], paramSchemaNode(schema, k), transcodeCtx)
+    decodeArg(domainArgs[k], paramSchemaNode(schema, k), inputCtx)
   );
 
   // Session middleware: build ctx from the session envelope and inject it as the
@@ -416,7 +336,7 @@ async function dispatchUnguarded(
     const raw = await (
       fns[fnName] as (ctx: unknown, ...a: unknown[]) => unknown
     )(ctx, ...args);
-    return encodeResult(raw, schema, transcodeCtx);
+    return encodeResult(raw, fnName, schema);
   }
 
   // ctx-param fn WITHOUT session middleware (BUG-APIGEN-001): the source fn's
@@ -428,9 +348,9 @@ async function dispatchUnguarded(
     const raw = await (
       fns[fnName] as (ctx: unknown, ...a: unknown[]) => unknown
     )(ctx, ...args);
-    return encodeResult(raw, schema, transcodeCtx);
+    return encodeResult(raw, fnName, schema);
   }
 
   const raw = await fns[fnName](...args);
-  return encodeResult(raw, schema, transcodeCtx);
+  return encodeResult(raw, fnName, schema);
 }

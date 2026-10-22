@@ -1,10 +1,17 @@
 /**
+ * qa-variance (dispatch-1014): the first `gpt-tokenizer` `encode` in a worker was charged to whichever test counted tokens first
+ * (185 ms p95 against a 5.8 ms median); `beforeAll` now loads it once.
+ * guards: boundedTokenCount hands the tokenizer an unbounded span, or the sampled estimate drifts from the exact count.
+ * tier: S
+ * cites: qa-variance, docs/discovery/qa-test-variance-tail-orchestrator-a.md (assertions unchanged; red: pending, tests not run per user).
+ */
+/**
  * ea8f6f92-d0db-426e-bf9d-bd7ba2fdd5ca AC1 (bucket B2, G5): `boundedTokenCount` is exact up to
  * 20k chars and sampled above; the tokenizer is never handed an unbounded span. Deterministic:
  * bounds are asserted on the tokenizer's argument length, never on wall-clock.
  */
 import { encode as realEncode } from "gpt-tokenizer";
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 
 import {
     BOUNDED_COUNT_EXACT_MAX_CHARS,
@@ -12,6 +19,11 @@ import {
     boundedTokenCount,
 } from "../engine/bounded-token-count.js";
 import { estimateToolResultTokens } from "../engine/tool-result-tokens.js";
+import { warmTokenizer } from "./fixtures/warm-modules.js";
+
+beforeAll(async () => {
+    await warmTokenizer();
+}, 60_000);
 
 describe("ea8f6f92-d0db-426e-bf9d-bd7ba2fdd5ca AC1: boundedTokenCount", () => {
     it("ea8f6f92 AC1: exact (== encode().length, not estimated) up to the 20k-char threshold", () => {

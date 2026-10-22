@@ -45,7 +45,7 @@
  * than quietly comparing stale names.
  *
  * **Split-brain guard:** the live surface's CLI leaves are also checked
- * against `BACKLOG_VERBS` — the pinned 32-verb list every mount is supposed
+ * against `BACKLOG_VERBS` — the pinned verb list every mount is supposed
  * to consolidate onto. That list exists precisely because `cli.ts`'s own
  * argv parser is a hand-written surface, not an apigen mount, so it cannot be
  * derived from the descriptors the way the other three transports are; a
@@ -408,9 +408,17 @@ describe('SPEC.md §6.7 — one apigen package composed once, mounted to four tr
       .sort();
     expect(liveLeaves).toEqual([...BACKLOG_VERBS].sort());
     expect(live.surface.length).toBe(BACKLOG_VERBS.length);
-    // 29 shipped verbs + `remove`/`restore` (S02 AC14, cluster
-    // backlog-lifecycle-model 0b0df8f3) + `timeline` (B-AC5, 91a8c640).
-    expect(BACKLOG_VERBS.length).toBe(32);
+    // regression:0f9b6132 AC4 (surface parity). Failure mode: adding a verb
+    // (`remove-note`) and replacing the pinned count with a value derived
+    // from `BACKLOG_VERBS` makes the count assertion tautological, so a verb
+    // dropped from (or added to) the list passes unnoticed. Tier: E2E.
+    // The literal is the mounted count (docs state 33 plus `batch`); change it
+    // deliberately, together with cli.e2e.ts and the docs, when the surface moves.
+    expect(BACKLOG_VERBS.length).toBe(33);
+    expect(live.surface.length).toBe(33);
+    // The pinned list carries no duplicate verb: a repeated entry would
+    // project two operations onto one CLI leaf.
+    expect(new Set(BACKLOG_VERBS).size).toBe(BACKLOG_VERBS.length);
   });
 });
 

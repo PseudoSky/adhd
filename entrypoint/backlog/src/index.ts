@@ -36,6 +36,7 @@ export {
   update,
   addCitation,
   removeCitation,
+  removeNote,
   transition,
   attest,
   recheck,
@@ -61,6 +62,7 @@ export type {
   IRemoveCitationInput,
   IRemoveCitationOutcome,
 } from './write/citation.js';
+export type { IRemoveNoteInput, IRemoveNoteOutcome } from './write/note.js';
 export type { ICitation, ICitationRecord } from './citation.js';
 export type {
   IMergeProjectInput,

@@ -237,7 +237,11 @@ describe.each(FAMILIES)("R10 M2 [%s]: the dispatching tool stamps sessionMs and 
     const out = await taskTool({ agent_name: `m2-${family}`, prompt: "go" }, env.deps, parent);
     const delayed = env.startups.get(out.task_id)?.sessionMs as number;
     expect(delayed).toBeGreaterThanOrEqual(DELAY);
-    expect(delayed - baselineMs).toBeGreaterThanOrEqual(DELAY - 1);
+    // Variance fix (qa-variance 2026-10-14): the old `delayed - baselineMs >= DELAY - 1` compared two REAL-time
+    // measurements; the baseline run is the cold first run in the process, so a baseline slower than the delayed
+    // run by >1 ms (load, JIT) failed it (one same-sha fail in test-metrics.jsonl). The virtual delay is exact, so
+    // the stamp must be the delay plus a small real remainder: bound the remainder instead of subtracting a noisy baseline.
+    expect(delayed - DELAY, "real remainder beyond the virtual delay").toBeLessThan(DELAY);
   });
 
   it(`R10 M2 AC3 [${family}]: a delayed session read raises sessionMs by at least the delay (session path)`, async () => {

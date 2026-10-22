@@ -426,6 +426,14 @@ This release fixes six critical regressions from 2.0.0/2.0.1 related to context 
 
 **Impact:** Existing configs at the legacy path will load again. No action required.
 
+## Task event log (`task_events`)
+
+`task_events` reads the event log of one task by `task_id`, oldest first. Pass `limit` (1–500, default 50) and `offset` to page; the response carries `total` and `has_more`. A page is also capped at 256 KiB of serialized JSON: when trailing events are dropped to fit, the response sets `truncated_by_bytes: true` and `has_more: true`, and the next page starts at `offset + events.length`. A top-level string field over 16,000 chars is returned as its head+tail clip and listed in `payload_clipped` (`{ field, original_chars }`); an event whose stored payload is over 1 MiB comes back as `payload: null` with `payload_error: "too_large"` and `payload_bytes`, and its payload is never read. An unknown `task_id` is an error.
+
+`TOOL_RESULT` events carry the model-visible result text (capped by `ADHD_AGENT_TOOL_RESULT_MAX_CHARS`) clipped to at most 16,000 chars, and `result_sha256`, the hash of the full model-visible text. A clipped result also carries `result_stored_clipped: true` and `result_model_visible_chars`. With the cap set to `0` the model reads the whole output and the event keeps the 16,000-char head+tail of it, not all of it. `MODEL_REQUEST` events carry `advertisedToolNames` and `systemPromptSha256`. `CONTEXT_COMPACTED` records a history compaction.
+
+**Access:** `task_events` is not scoped or redacted. Any MCP client that knows a task UUID can read that task's tool output and event history. `task_events` shares one trust domain with the `result` tool, `agent-mcp-tail` and the local store, and performs no redaction. Run the server only where every connected client may read every task on it. Multi-tenant exposure requires a caller-identity decision first (a trust-boundary ADR is proposed, not yet written).
+
 ## Local dev server (`serve`, live reload)
 
 A long-running local server over the streamable-HTTP transport that restarts itself whenever the

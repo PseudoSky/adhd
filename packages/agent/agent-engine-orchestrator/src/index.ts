@@ -16,12 +16,14 @@ export type { EchoCaps } from './providers/anthropic-echo.js';
 export { Orchestrator } from './engine/orchestrator.js';
 export {
   capToolResult,
+  clipForStorage,
+  TOOL_RESULT_EVENT_MAX_CHARS,
   validateToolResultMaxChars,
   parseToolResultMaxChars,
   DEFAULT_TOOL_RESULT_MAX_CHARS,
   ERROR_RESULT_FLOOR_CHARS,
 } from './engine/tool-result-cap.js';
-export type { ToolResultCapOutcome } from './engine/tool-result-cap.js';
+export type { ToolResultCapOutcome, StoredTextClip } from './engine/tool-result-cap.js';
 export {
   SHELL_EXECUTE_TOOL,
   SHELL_EXIT_SENTINEL_RE,
@@ -133,6 +135,7 @@ export { UsagePlugin } from './plugins/usage-plugin.js';
 export { registerTaskEventHooks, type ITaskEventSink } from './engine/task-event-hooks.js';
 export { shellRejectionNote, SHELL_UNAVAILABLE_COMMANDS } from './engine/native-tool-guidance.js';
 export { loadExternalPlugins, resolveSpecifier, findConfigFile, loadConfigFile, agentMcpConfigFileSchema } from './plugins/loader.js';
+export type { PreloadedPluginModules } from './plugins/loader.js';
 export type { AgentMcpConfigFile, PluginEntry, PluginLoadFailure, PluginLoadFailureHandler, PluginLoadFailureStage } from './plugins/loader.js';
 
 // ── Validation ────────────────────────────────────────────────────────────────

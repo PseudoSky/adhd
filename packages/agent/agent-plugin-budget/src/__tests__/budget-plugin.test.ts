@@ -1042,7 +1042,8 @@ describe('per-tool overrides', () => {
       .map((c) => c.text)
       .join('');
     expect(text).toContain('[truncated');
-    expect(text).toContain('limited to 30');
+    // 977e0ca6: the notice is part of the emitted text, so the whole result (notice included) stays within the cap.
+    expect(text.length).toBeLessThanOrEqual(30);
   });
 
   it('responseSize does not truncate when within limit', async () => {

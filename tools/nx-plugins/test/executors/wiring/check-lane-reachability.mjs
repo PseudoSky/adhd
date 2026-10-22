@@ -61,6 +61,21 @@
  *      ships `*.e2e.test.ts` excludes them from its unit lane. Delegated to
  *      `check-agent-lane-spawn.mjs` (backlog 5b839b90 AC2).
  *
+ *   9. Every spawn of a Node bin (`process.execPath` / `node` / `fork(module)`) in a
+ *      spec/test/e2e file of an `@adhd/environment*`-dependent package routes HOME in
+ *      the call itself (an isolation helper or an explicit `HOME` override). Ratcheted
+ *      per file against `spawn-isolation.baseline.json` (per-file site counts that can
+ *      only shrink). Delegated to `check-spawn-isolation.mjs` (backlog 0945d1b9).
+ *
+ *  10. The build-tools `node --test` specs are split by tier: the tier S specs in the root
+ *      `test:build-tools` script (the `test` target of tools/nx-plugins, which pre-push runs),
+ *      the tier P/H/X specs, named `*.e2e.mjs`, in `test:build-tools-e2e` (the `e2e` target,
+ *      which only CI runs). Fails when `test:build-tools` lists a `*.e2e.*` file, when a
+ *      `tools/**` or `.githooks/**` `*.e2e.mjs` file is in no script (G2), when the e2e
+ *      script lists a missing or non-e2e file, or when the `e2e` target is absent, uncached
+ *      or hashes different inputs than `test`. Check-test-headers H5 is the other half: a
+ *      tier P/H/X header outside a `*.e2e.*` name fails there.
+ *
  * Exit code is the only signal (0 = wired, 1 = gap found), per the repo's
  * verification standard — never grep stdout for "passed".
  *
@@ -75,7 +90,9 @@ import { realpathSync as realpathForEntry } from 'node:fs';
 import { createRequire } from 'node:module';
 import { collectViteConfigPluginViolations } from './check-vite-config-plugins.mjs';
 import { collectAgentLaneSpawnViolations } from './check-agent-lane-spawn.mjs';
+import { collectSpawnIsolationViolations } from './check-spawn-isolation.mjs';
 import { E2E_FILE_INCLUDES } from '../../../../vite-plugins/e2e-globs.mjs';
+import { inE2eLane } from './check-test-headers.mjs';
 
 const require = createRequire(import.meta.url);
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -151,7 +168,7 @@ function fileInvokesTarget(text, t, { canonical = true } = {}) {
  * injecting a deliberately-broken plugin; production always passes the REAL
  * plugin (see `main`).
  */
-export async function runChecks({ workspaceRoot, gateTargets, createNodesFn, baseline: baselineOverride, agentLaneBaseline, prePushTargets: prePushOverride }) {
+export async function runChecks({ workspaceRoot, gateTargets, createNodesFn, baseline: baselineOverride, agentLaneBaseline, spawnIsolationBaseline, prePushTargets: prePushOverride }) {
   const violations = [];
   const add = (rule, detail) => violations.push({ rule, detail });
 
@@ -327,7 +344,86 @@ export async function runChecks({ workspaceRoot, gateTargets, createNodesFn, bas
     add(`8-${v.rule}`, v.detail);
   }
 
+  // ---- rule 9: every node spawn in an @adhd/environment-family spec routes HOME ----
+  // backlog 0945d1b9 AC1/AC2. Delegated to check-spawn-isolation.mjs (one
+  // implementation). Unconditional, like rules 7 and 8. The baseline is read from
+  // `workspaceRoot` (a fixture workspace without one has an empty baseline) unless
+  // `spawnIsolationBaseline` overrides it, mirroring rule 6's `baseline`.
+  for (const v of collectSpawnIsolationViolations(workspaceRoot, { baseline: spawnIsolationBaseline }).violations) {
+    add(`9-${v.rule}`, v.detail);
+  }
+
+  // ---- rule 10: the build-tools node:test e2e lane is wired and reachable --
+  const projectPath = join(workspaceRoot, BUILD_TOOLS_PROJECT);
+  const e2eFiles = globSync(BUILD_TOOLS_E2E_GLOBS, { cwd: workspaceRoot, ignore: IGNORE }).map((p) => p.replaceAll('\\', '/'));
+  if (existsSync(projectPath) || e2eFiles.length > 0) {
+    const pkgPath = join(workspaceRoot, 'package.json');
+    const scripts = existsSync(pkgPath) ? (readJson(pkgPath).scripts ?? {}) : {};
+    const project = existsSync(projectPath) ? readJson(projectPath) : null;
+    for (const v of buildToolsLaneViolations({ scripts, e2eFiles, project })) add(v.rule, v.detail);
+  }
+
   return { violations, gapProjects };
+}
+
+/** The package.json-less project that runs the build-tools `node --test` lanes (rule 10). */
+export const BUILD_TOOLS_PROJECT = 'tools/nx-plugins/project.json';
+/** The build-tools e2e files (tier P, H or X `node --test` specs) rule 10 requires the e2e script to list. */
+export const BUILD_TOOLS_E2E_GLOBS = ['tools/**/*.e2e.{mjs,js,cjs}', '.githooks/**/*.e2e.{mjs,js,cjs}'];
+/** The root package.json scripts of the two build-tools lanes: `test` (pre-push, CI) and `e2e` (CI only). */
+export const BUILD_TOOLS_UNIT_SCRIPT = 'test:build-tools';
+export const BUILD_TOOLS_E2E_SCRIPT = 'test:build-tools-e2e';
+
+/** The spec files a `node --test …` script names (path arguments; flags and `--x=./reporter.mjs` values excluded). */
+export function scriptFiles(script) {
+  return (script ?? '').split(/\s+/).filter((t) => t && !t.startsWith('-') && /\.[cm]?js$/.test(t));
+}
+
+/**
+ * Rule 9 (pure): the build-tools `node --test` specs are split into a tier S `test` lane the pre-push hook runs and a
+ * tier P/H/X `e2e` lane only CI runs (`nx affected -t e2e`), and the e2e lane reaches every `*.e2e.mjs` file (G2: every
+ * test runs in at least one stage). A `*.e2e.*` name is the lane marker (`inE2eLane` in check-test-headers.mjs, whose
+ * H5 rule puts every tier P/H/X file there).
+ * @param {{ scripts: Record<string,string>, e2eFiles: string[], project: any }} input root package.json scripts, the
+ *   build-tools e2e files on disk (workspace-relative), the parsed tools/nx-plugins/project.json (null when absent)
+ * @returns {{ rule: string, detail: string }[]}
+ */
+export function buildToolsLaneViolations({ scripts, e2eFiles, project }) {
+  const out = [];
+  const add = (rule, detail) => out.push({ rule, detail });
+  const isE2e = inE2eLane;
+  const unit = scriptFiles(scripts[BUILD_TOOLS_UNIT_SCRIPT]);
+  const e2e = scriptFiles(scripts[BUILD_TOOLS_E2E_SCRIPT]);
+  for (const f of unit.filter(isE2e)) {
+    add('10-e2e-file-in-push-lane', `${f} — listed in \`${BUILD_TOOLS_UNIT_SCRIPT}\`, which the pre-push hook runs; a \`*.e2e.*\` (tier P/H/X) spec belongs in \`${BUILD_TOOLS_E2E_SCRIPT}\` (CI only).`);
+  }
+  for (const f of e2e.filter((x) => !isE2e(x))) {
+    add('10-non-e2e-file-in-e2e-lane', `${f} — listed in \`${BUILD_TOOLS_E2E_SCRIPT}\` but not named \`*.e2e.mjs\`; rename it (its tier is P/H/X) or move it to \`${BUILD_TOOLS_UNIT_SCRIPT}\`.`);
+  }
+  const listed = new Set(e2e);
+  for (const f of e2eFiles.filter((x) => !listed.has(x))) {
+    add('10-e2e-file-unreachable', `${f} — a build-tools e2e spec no lane runs (G2); add it to the root package.json \`${BUILD_TOOLS_E2E_SCRIPT}\` script.`);
+  }
+  const onDisk = new Set(e2eFiles);
+  for (const f of e2e.filter((x) => isE2e(x) && !onDisk.has(x))) {
+    add('10-e2e-script-stale-entry', `${f} — listed in \`${BUILD_TOOLS_E2E_SCRIPT}\` but not on disk.`);
+  }
+  const targets = project?.targets ?? {};
+  const cmd = (t) => String(t?.options?.command ?? t?.command ?? '');
+  if (!project) {
+    add('10-build-tools-project-missing', `${BUILD_TOOLS_PROJECT} — missing, so no nx target runs the build-tools lanes.`);
+    return out;
+  }
+  if (!new RegExp(`\\b${BUILD_TOOLS_UNIT_SCRIPT}(?![\\w-])`).test(cmd(targets.test))) {
+    add('10-build-tools-test-target', `${BUILD_TOOLS_PROJECT} — \`test\` must run \`pnpm run ${BUILD_TOOLS_UNIT_SCRIPT}\` (got ${JSON.stringify(cmd(targets.test))}).`);
+  }
+  const e2eTarget = targets.e2e;
+  if (!e2eTarget || !cmd(e2eTarget).includes(BUILD_TOOLS_E2E_SCRIPT)) {
+    add('10-build-tools-e2e-target', `${BUILD_TOOLS_PROJECT} — needs an \`e2e\` target running \`pnpm run ${BUILD_TOOLS_E2E_SCRIPT}\`, the only stage that runs the tier P/H/X build-tools specs (CI \`nx affected -t e2e\`).`);
+  } else if (e2eTarget.cache !== true || JSON.stringify(e2eTarget.inputs ?? null) !== JSON.stringify(targets.test?.inputs ?? null)) {
+    add('10-build-tools-e2e-not-cached', `${BUILD_TOOLS_PROJECT} — \`e2e\` must be \`cache: true\` with the same \`inputs\` as \`test\` (the audited read set of the build-tools specs), or a change one lane reads would not re-run it.`);
+  }
+  return out;
 }
 
 async function main() {
@@ -351,11 +447,13 @@ async function main() {
     console.error('  The gate runs GATE_TARGETS from tools/gate/lane-gate.mjs; both CI workflows must reach');
     console.error('  every target (pre-push runs test, never e2e), every `e2e` lane must be cached, `test` must not re-couple `e2e`,');
     console.error('  `publish` does not depend on `e2e` (owner decision 2026-10-07), and every');
-    console.error('  `vite.config.ts` must declare exactly ONE `plugins:` array (check-vite-config-plugins.mjs).');
+    console.error('  `vite.config.ts` must declare exactly ONE `plugins:` array (check-vite-config-plugins.mjs), no agent-family');
+    console.error('  unit-lane test may spawn a subprocess (check-agent-lane-spawn.mjs), and every node-bin spawn in an');
+    console.error('  @adhd/environment-family spec/e2e must route HOME per call site (check-spawn-isolation.mjs).');
     process.exit(1);
   }
 
-  console.log(`✓ lane reachability OK — gate targets [${gateTargets.join(', ')}]; CI workflows reach them, pre-push runs test without e2e; every e2e lane cached; publish does not depend on e2e; every vite.config.ts single-array.`);
+  console.log(`✓ lane reachability OK — gate targets [${gateTargets.join(', ')}]; CI workflows reach them, pre-push runs test without e2e; every e2e lane cached; publish does not depend on e2e; every vite.config.ts single-array; no agent-family unit-lane spawn; every environment-family node spawn routes HOME (within its baseline).`);
 }
 
 // Only run when invoked directly (never when imported by a test).

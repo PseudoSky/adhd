@@ -1,4 +1,10 @@
 /**
+ * qa-variance (2026-10-14, verification pending: tests not run per user instruction):
+ *   failure mode guarded: a duplicate dispatch runs concurrently, or a runaway child is not reaped;
+ *   tier P (real child processes; `kill -0` / `ps` probes). The reaper test slept `setTimeout(0)`
+ *   and hoped the spawned child was registered with `ps`; it now awaits the child's `spawn` event,
+ *   which Node emits once the process exists. red: pending.
+ *
  * d794287f D-AC3 — duplicate-dispatch refusal and runaway-child reaping, proven
  * with REAL processes: a second OS process contends for the lock, and reaped
  * children are verified gone with a pid probe (`kill -0`), never by trusting the
@@ -36,6 +42,7 @@ function sleeper(): ChildProcess {
   spawned.push(c);
   return c;
 }
+const spawnedUp = (c: ChildProcess) => new Promise<void>((res, rej) => { c.once('spawn', () => res()); c.once('error', rej); });
 const exited = (c: ChildProcess) => new Promise<void>((res) => (c.exitCode !== null || c.signalCode !== null ? res() : c.once('exit', () => res())));
 
 describe('d794287f D-AC3 duplicate-dispatch guard', () => {
@@ -95,7 +102,7 @@ describe('d794287f D-AC3 child reaper', () => {
   it('d794287f D-AC3: a child over the memory ceiling is reaped and a pid probe finds no orphan', async () => {
     const child = sleeper();
     const pid = child.pid as number;
-    await new Promise((r) => setTimeout(r, 0)); // let the spawn settle; ps needs the pid registered
+    await spawnedUp(child); // the process exists once 'spawn' fires; ps needs the pid registered
     expect(psRssBytes(pid)).not.toBeNull();
     const reaper = new ChildReaper({ maxRssBytes: 1024 }); // real ps probe: any node process exceeds 1 KiB
     reaper.track(pid);
