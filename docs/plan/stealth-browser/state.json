@@ -361,10 +361,10 @@
       "end_ref": "8ee8f6a03ee7bd5703ba4473b9a8c72b3ff59810"
     },
     "search-errors": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-10-22T02:23:06.222Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "a6c4eb66679437f2eb779121f3fcbbe901a2f28d",
       "end_ref": null
     },
     "search-port-providers": {
@@ -1660,7 +1660,7 @@
     "version": "0.8.35",
     "hash": "0b6bc1f3d70e"
   },
-  "current_state": "prod-examples",
+  "current_state": "search-errors",
   "dod_provenance": {
     "confirmed_at": "2026-10-12T23:49:38.410Z",
     "by": "pseudosky",
