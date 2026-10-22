@@ -1,25 +1,24 @@
 /**
  * guards: the operation surface `adhd-policy` starts from drifts from the ir-cache artifact contract or from live extraction (a second extraction path), a stale or version-mismatched artifact is served instead of rejected with a reason, an unverifiable artifact is used without a warning, or the baked-artifact start-up loads the extractor (ts-morph).
  * tier: S
+ * not-covered: the real ts-morph extraction (baking, parity of the baked operations with a live extraction, the E10 bake) is tier X: `t-r12-ir-artifact.e2e.test.ts`. This file serves the extractor from a stub built on the shipped artifact so the fall-back and lazy-load behaviour is observable in well under a second.
  * cites: docs/plan/policy-core/REMEDIATION-PLAN.md T-R12, §3 R12 (parity proof); adhd ADR-0017 D5
  * red-run: 2026-10-21 controls: ir.ts without the formatVersion check -> 1 failed (version test); without the sameDeps check -> 1 failed (staleness test); `import './ir-live'` at the top of ir.ts -> 1 failed (lazy-load test).
  */
-import { copyFile, readFile, writeFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { Operation } from '@adhd/apigen-core-client';
 import { createSingleFileBackend, CURRENT_FORMAT_VERSION, type CachedExtractEntry } from '@adhd/apigen-plugin-ir-cache';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  bakedIrArtifactPath,
   expectedExtractorVersion,
   extractPolicyOperations,
   inspectBakedIr,
   locateClientApi,
   policyDistDir,
   POLICY_IR_ARTIFACT_FILENAME,
-  writeBakedIr,
 } from '../../wrapper/ir';
-import { extractPolicyOperationsLive } from '../../wrapper/ir-live';
+import { shippedBakedIrText, stubbedIrLive } from '../helpers/baked-ir';
 import { withTmpDir } from '../helpers/tmp';
 
 // The two seams the unit lane can reach without a subprocess: whether the client declarations resolve (the module
@@ -45,7 +44,8 @@ vi.mock('node:module', async (importOriginal) => {
   };
 });
 
-vi.setConfig({ testTimeout: 90_000 });
+// The extractor module (ts-morph, seconds per extraction) is replaced by a stub that serves the shipped artifact's operations and counts loads; the real extraction, and its parity with the baked artifact, run in the e2e lane (t-r12-ir-artifact.e2e.test.ts).
+vi.mock('../../wrapper/ir-live', () => stubbedIrLive({ onLoad: () => void (seams.irLiveLoads += 1) }));
 
 beforeEach(() => {
   seams.hideClient = false;
@@ -57,11 +57,11 @@ async function readEntry(file: string): Promise<CachedExtractEntry> {
   return entry;
 }
 
-describe('the baked artifact is an ir-cache entry (R12)', () => {
-  it('a baked file reads back through the ir-cache single-file backend with the current format and extractor version', async () => {
+describe('the shipped artifact is an ir-cache entry (R12)', () => {
+  it('the artifact in dist/ reads back through the ir-cache single-file backend with the current format and extractor version', async () => {
     await withTmpDir('t-r12-entry', async (dir) => {
       const file = join(dir, POLICY_IR_ARTIFACT_FILENAME);
-      await writeBakedIr(file);
+      await writeFile(file, await shippedBakedIrText());
       const entry = await readEntry(file);
       expect(entry.formatVersion).toBe(CURRENT_FORMAT_VERSION);
       expect(entry.extractorVersion).toBe(expectedExtractorVersion());
@@ -72,26 +72,7 @@ describe('the baked artifact is an ir-cache entry (R12)', () => {
     });
   });
 
-  it('parity: the baked operations deep-equal a live extraction of the same declarations (one extraction path)', async () => {
-    await withTmpDir('t-r12-parity', async (dir) => {
-      const file = join(dir, POLICY_IR_ARTIFACT_FILENAME);
-      await writeBakedIr(file);
-      const client = locateClientApi();
-      if (client === undefined) throw new Error('the built @adhd/policy-core-client declarations are required (nx build policy-core-client)');
-      const live = await extractPolicyOperationsLive(client.apiDts);
-      expect((await readEntry(file)).operations).toEqual(JSON.parse(JSON.stringify(live)));
-    });
-  });
-
-  it('parity: the artifact the build shipped in dist/ deep-equals a fresh bake, and the reader accepts it as current', async () => {
-    const shipped = bakedIrArtifactPath(policyDistDir());
-    await withTmpDir('t-r12-shipped', async (dir) => {
-      const fresh = join(dir, POLICY_IR_ARTIFACT_FILENAME);
-      await writeBakedIr(fresh);
-      const built = await readEntry(shipped); // throws (red) when the build did not produce dist/api.ir.json
-      expect(built.operations).toEqual((await readEntry(fresh)).operations);
-      expect(built.formatVersion).toBe(CURRENT_FORMAT_VERSION);
-    });
+  it('the reader accepts the artifact the build shipped in dist/ as current', async () => {
     const inspected = await inspectBakedIr(policyDistDir());
     expect('operations' in inspected).toBe(true);
     expect('stalenessUnchecked' in inspected).toBe(false);
@@ -101,7 +82,7 @@ describe('the baked artifact is an ir-cache entry (R12)', () => {
 describe('a baked artifact is used only when it is current (R12)', () => {
   async function mutated(dir: string, change: (entry: CachedExtractEntry) => void): Promise<void> {
     const file = join(dir, POLICY_IR_ARTIFACT_FILENAME);
-    await writeBakedIr(file);
+    await writeFile(file, await shippedBakedIrText());
     const entry = JSON.parse(await readFile(file, 'utf8')) as CachedExtractEntry;
     change(entry);
     await writeFile(file, JSON.stringify(entry));
@@ -154,7 +135,7 @@ describe('the client declarations cannot be found (R12)', () => {
   it('a baked artifact is still served, with exactly one warning that staleness was not checked', async () => {
     await withTmpDir('t-r12-noclient', async (dir) => {
       const file = join(dir, POLICY_IR_ARTIFACT_FILENAME);
-      await writeBakedIr(file);
+      await writeFile(file, await shippedBakedIrText());
       seams.hideClient = true;
       expect(locateClientApi()).toBeUndefined();
       const inspected = await inspectBakedIr(dir);
@@ -178,14 +159,11 @@ describe('the client declarations cannot be found (R12)', () => {
 describe('the baked-artifact start-up never loads the extractor (R12)', () => {
   it('reading a current artifact does not import ir-live; falling back to live extraction does', async () => {
     await withTmpDir('t-r12-lazy', async (dir) => {
-      await copyFile(bakedIrArtifactPath(policyDistDir()), join(dir, POLICY_IR_ARTIFACT_FILENAME));
+      await writeFile(join(dir, POLICY_IR_ARTIFACT_FILENAME), await shippedBakedIrText());
       vi.resetModules();
       seams.irLiveLoads = 0;
       // doMock registers a factory for the fresh module graph; it runs exactly when something imports ir-live.
-      vi.doMock('../../wrapper/ir-live', async (importOriginal) => {
-        seams.irLiveLoads += 1;
-        return await importOriginal<typeof import('../../wrapper/ir-live')>();
-      });
+      vi.doMock('../../wrapper/ir-live', () => stubbedIrLive({ onLoad: () => void (seams.irLiveLoads += 1) }));
       const fresh = await import('../../wrapper/ir');
       const baked = await fresh.extractPolicyOperations(() => undefined, dir);
       expect(baked.length).toBeGreaterThan(0);

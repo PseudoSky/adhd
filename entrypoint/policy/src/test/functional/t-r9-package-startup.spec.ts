@@ -23,8 +23,6 @@ vi.mock('../../wrapper/ir', async (importOriginal) => {
 
 import { buildPolicyPackage } from '../../wrapper/package';
 
-vi.setConfig({ testTimeout: 60_000 });
-
 const ctx = {} as never;
 
 async function realOperations(): Promise<Operation[]> {

@@ -17,7 +17,8 @@ import {
 } from '../../wrapper/telemetry';
 import { withTmpDir } from '../helpers/tmp';
 
-vi.setConfig({ testTimeout: 60_000 });
+// Each case loads a fresh copy of the CLI (telemetry initialises once per module graph). The transform of that graph is the dominant cost of the first load; it is paid once here, at collection, so no test carries it.
+await import('../helpers/capture');
 
 describe('telemetryConfigFromEnv - the on/off switch', () => {
   for (const value of ['off', '0', 'false', 'no', 'OFF', 'False', ' no ']) {
@@ -69,11 +70,16 @@ describe('telemetry through the command line', () => {
     return { exitCode: result.exitCode, stderr: result.stderr, logs };
   }
 
-  it('by default a telemetry log is written; disabled by configuration, a fresh home gets none', async () => {
-    await withTmpDir('t-r9-telemetry', async (dir) => {
+  it('by default a telemetry log is written', async () => {
+    await withTmpDir('t-r9-telemetry-on', async (dir) => {
       const on = await runVerify(dir, {});
       expect(on.exitCode).toBe(0);
       expect(on.logs.some((name) => name.endsWith('.jsonl'))).toBe(true);
+    });
+  });
+
+  it('disabled by configuration, a fresh home gets no telemetry log', async () => {
+    await withTmpDir('t-r9-telemetry-off', async (dir) => {
       const off = await runVerify(dir, { [TELEMETRY_ENV_VAR]: 'off' });
       expect(off.exitCode).toBe(0);
       expect(off.logs).toEqual([]);

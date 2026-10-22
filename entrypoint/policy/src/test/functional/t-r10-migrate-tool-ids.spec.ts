@@ -6,14 +6,13 @@
  */
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { dispatchVerb } from '../../wrapper/verbs/index';
 import { parseJson, runCli, useScratchTelemetry } from '../helpers/capture';
 import { capturedDeps } from '../helpers/run-deps';
 import { withTmpDir } from '../helpers/tmp';
 
 useScratchTelemetry();
-vi.setConfig({ testTimeout: 60_000 });
 
 const OLD_POLICY = `version: 1
 attributes:

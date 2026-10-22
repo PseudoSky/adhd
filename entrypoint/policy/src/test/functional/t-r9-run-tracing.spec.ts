@@ -6,12 +6,14 @@
  */
 import { readdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createFakeLauncher } from '../helpers/fake-launcher';
 import { capturedDeps } from '../helpers/run-deps';
 import { withTmpDir } from '../helpers/tmp';
 
-vi.setConfig({ testTimeout: 60_000 });
+// Loading the CLI module graph is the dominant cost of the first call; it is paid once here, at collection, so no test or hook carries it.
+const { initPolicyTelemetry } = await import('../../wrapper/telemetry');
+const { runVerb } = await import('../../wrapper/verbs/run');
 
 const POLICY = `version: 1
 permissions:
@@ -29,7 +31,6 @@ interface ISpanRecord {
 
 describe('adhd-policy run - traced, same exit codes', () => {
   const previous = process.env['SOX_ECOSYSTEM_HOME'];
-  let tracedRun: typeof import('../../wrapper/verbs/run').runVerb;
   let scratch: string | undefined;
   let release: (() => void) | undefined;
   let finished: Promise<void> | undefined;
@@ -44,9 +45,7 @@ describe('adhd-policy run - traced, same exit codes', () => {
         process.env['SOX_ECOSYSTEM_HOME'] = join(dir, 'sox');
         logsDir = join(dir, 'sox', 'policy', 'logs');
         await writeFile(join(dir, 'policy.yaml'), POLICY);
-        const { initPolicyTelemetry } = await import('../../wrapper/telemetry');
         initPolicyTelemetry('cli');
-        tracedRun = (await import('../../wrapper/verbs/run')).runVerb;
         resolve();
         await held;
       });
@@ -71,7 +70,7 @@ describe('adhd-policy run - traced, same exit codes', () => {
     const launcher = createFakeLauncher();
     const captured = capturedDeps({ cwd: scratch as string, launcher });
     const split = argv.indexOf('--') < 0 ? argv.length : argv.indexOf('--');
-    const code = await tracedRun([...argv.slice(0, split), '--spec', join(scratch as string, 'policy.yaml'), ...argv.slice(split)], captured.deps);
+    const code = await runVerb([...argv.slice(0, split), '--spec', join(scratch as string, 'policy.yaml'), ...argv.slice(split)], captured.deps);
     return { code, stderr: captured.stderr.join(''), started: launcher.started.length };
   }
 

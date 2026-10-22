@@ -3,10 +3,10 @@
  * tier: S
  * cites: docs/plan/policy-core/REVIEW-FIXES.md (Entrypoint proof, Phase C part 1: E4, E11, E12, D-06)
  * item: qa-variance (docs/discovery/qa-test-variance-tail-policy.md)
- * red: pending (tests not run per user); assertions are unchanged. The baked artifact is produced by the real writeBakedIr once per describe instead of once per case, and read-only policy directories are built once per file.
+ * red: pending (tests not run per user); assertions are unchanged. The baked artifact is the one the build shipped in dist/ (read once per describe), the extractor is served from it by a stub, and read-only policy directories are built once per file. The real bake (E10 --out) and the live-vs-baked equality run in the e2e lane: t-r12-ir-artifact.e2e.test.ts.
  */
-import { mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
-import { existsSync, readFileSync } from 'node:fs';
+import { mkdir, readdir, rm, writeFile } from 'node:fs/promises';
+import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { isApiError } from '@adhd/apigen-base-errors';
 import { PolicyAttributes } from '@adhd/apigen-plugin-policy';
@@ -22,8 +22,6 @@ import {
   extractPolicyOperations,
   inspectBakedIr,
   policyDistDir,
-  POLICY_IR_FORMAT_VERSION,
-  writeBakedIr,
 } from '../../wrapper/ir';
 import { runIrArtifact } from '../../wrapper/ir-artifact';
 import { LOG_LEVEL_ENV_VAR, resolveLogLevel } from '../../wrapper/log-level';
@@ -32,6 +30,7 @@ import { readPolicyVersion } from '../../wrapper/package';
 import { installAbortOnSignals } from '../../wrapper/signals';
 import { dispatchVerb } from '../../wrapper/verbs/index';
 import { parseJson, runCli, useScratchTelemetry } from '../helpers/capture';
+import { shippedBakedIrText, stubbedIrLive } from '../helpers/baked-ir';
 import { BROKEN_YAML, WORKSPACE_YAML, writePolicy } from '../helpers/fixtures';
 import { useScratchDirs } from '../helpers/tmp';
 
@@ -39,8 +38,8 @@ useScratchTelemetry();
 
 const scratch = useScratchDirs('review-fixes');
 
-// A cold live extraction of the client declarations takes several seconds (ts-morph); it is setup, not a timing assertion.
-vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
+// A live extraction of the client declarations takes seconds (ts-morph): the extractor module is a stub serving the shipped artifact's operations; the real one runs in the e2e lane (t-r12-ir-artifact.e2e.test.ts).
+vi.mock('../../wrapper/ir-live', () => stubbedIrLive());
 
 /** Policy directories that cases only read (`verify` and `doctor` never write into the working directory), built once for the file. */
 let goodPolicyDir: string;
@@ -380,21 +379,6 @@ describe('Review fix E10 - the hidden ir-artifact subcommand', () => {
       expect(await readdir(dir, { recursive: true })).toEqual(['inner']);
     });
   });
-
-  it('E10 --out under dist/ bakes an artifact that is then usable, and the file is removed afterwards', async () => {
-    const target = join(policyDistDir(), `.ir-artifact-spec-${process.pid}.json`);
-    try {
-      const { code, stderr } = await run(['--out', target], process.cwd());
-      expect(stderr).toBe('');
-      expect(code).toBe(0);
-      const baked = JSON.parse(await readFile(target, 'utf8')) as { formatVersion: number; operations: { kind: string }[] };
-      expect(baked.formatVersion).toBe(POLICY_IR_FORMAT_VERSION);
-      expect(baked.operations.length).toBeGreaterThan(0);
-    } finally {
-      await rm(target, { force: true });
-    }
-    expect(existsSync(target)).toBe(false);
-  });
 });
 
 describe('Review fixes E1 / E13 - dist layout lookup, stale artifact warning, loadable version', () => {
@@ -440,12 +424,10 @@ describe('Review fixes E1 / E13 - dist layout lookup, stale artifact warning, lo
   });
 
   describe('a baked artifact is used only when it is current', () => {
-    /** The text of one artifact produced by the real `writeBakedIr` (a live ts-morph extraction of seconds), baked once for the describe; cases write copies of it. */
+    /** The text of the artifact the build shipped in dist/, read once for the describe; cases write copies of it. */
     let bakedText: string;
     beforeAll(async () => {
-      const file = join(await scratch.fresh('bake'), 'api.ir.json');
-      await writeBakedIr(file);
-      bakedText = await readFile(file, 'utf8');
+      bakedText = await shippedBakedIrText();
     });
 
     /** Writes a copy of the baked artifact into `dir`, applies `change` to its JSON, and returns the inspection. */
@@ -505,6 +487,7 @@ describe('Review fixes E1 / E13 - dist layout lookup, stale artifact warning, lo
         const lines: string[] = [];
         const live = await extractPolicyOperations((line) => void lines.push(line), dir);
         expect(lines).toEqual([]);
+        expect(live.length).toBeGreaterThan(0);
         await writeFile(join(dir, 'api.ir.json'), bakedText);
         const baked = await extractPolicyOperations((line) => void lines.push(line), dir);
         expect(lines).toEqual([]);
