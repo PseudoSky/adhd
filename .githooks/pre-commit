@@ -1,6 +1,6 @@
 #!/usr/bin/env sh
 #
-# Pre-commit hook. Four gates, in order:
+# Pre-commit hook. Three gates, in order (Gate 2 was removed):
 #   0. mass-deletion guard (BUG-ADHD-EE8D24C8-REVERT-001) — blocks a commit
 #      whose staged diff is dominated by deletions of files that already
 #      existed at HEAD (the proven shape of a stale-working-tree-after-a-
@@ -13,11 +13,12 @@
 #      local hook can) and what does (`.githooks/post-commit`).
 #   1. secret-scan — `@adhd/nx-secret-scan:scan` (wraps check-no-credentials.js)
 #      blocks credentials from entering the repo (gitleaks + built-in rules).
-#   2. affected lint (self-healing dependency ranges, otherwise VERIFY ONLY) —
-#      runs `nx affected -t lint` on the projects touched by staged changes
-#      and BLOCKS on any error. `lint` `dependsOn: ["sync-deps"]`, so it can
-#      MUTATE a project's package.json as a side effect (see "GATE 2
-#      SELF-HEALING" below). This hook NEVER auto-stages that mutation.
+#   2. (removed) affected lint. `git commit` holds .git/index.lock for the
+#      whole hook, and `nx affected -t lint` spawned one ESLint process per
+#      affected project while holding it, serializing every concurrent agent's
+#      commit behind a lint run. Lint is still enforced before anything leaves
+#      the machine: pre-push runs `nx affected -t test`, and `test` dependsOn
+#      `lint`; CI runs the same.
 #   3. staged-spec test (DEBT-PROCESS-AFFECTED-TEST-001 Option 3, superseding
 #      Option 2, PERF-PRECOMMIT-STAGED-TEST-SCOPE-001) — runs `vitest run`
 #      DIRECTLY, and ONLY, on the spec files honestly implicated by what is
@@ -103,8 +104,6 @@ if [ -z "$staged" ]; then
   exit 0
 fi
 
-files=$(printf '%s' "$staged" | paste -sd, -)
-repo_root=$(cd "$hook_dir/.." && pwd)
 out=$(mktemp)
 trap 'rm -f "$out"' EXIT
 
@@ -116,68 +115,8 @@ if ! CI=true npx nx run @adhd/source:secret-scan --mode=staged --output-style=st
   exit 1
 fi
 
-# ── Gate 2: lint (VERIFY ONLY — never --fix, never re-stages) ───────────────
-# If this workspace root's node_modules was never really installed (e.g. a
-# fresh git worktree — git does not copy node_modules), @nx/dependency-checks
-# will misreport nearly every dependency as unused (BUG-REPO-PRECOMMIT-
-# DEPCHECK-STRIPS-USED-DEPS-001). Fail with the RIGHT message instead of
-# letting confusing false-positive lint errors surface here.
-if [ ! -f "$repo_root/node_modules/.modules.yaml" ] || [ ! -f "$repo_root/node_modules/nx/package.json" ]; then
-  echo "✖ pre-commit: node_modules in this workspace root is not a real"
-  echo "  package-manager install (missing node_modules/.modules.yaml"
-  echo "  and/or node_modules/nx). Lint would misreport dependencies."
-  echo "  Fix: run 'pnpm install' in this workspace root, then commit again."
-  exit 1
-fi
-
-# Snapshot every package.json's working-tree status BEFORE lint runs, so we
-# can tell exactly what sync-deps (lint's dependency) mutated (see README —
-# GATE 2 SELF-HEALING) — regardless of any other, unrelated dirty
-# package.json already sitting in the tree.
-pkg_status_before=$(git status --porcelain | grep -E 'package\.json$' || true)
-
-# Gate 2 runs with the hook's GIT_* unset (50e8c966) — only Gate 1 needs the index var (it reads
-# the staged index), and Gate 0/this hook's own git calls keep the hook environment.
-guard_snapshot
-no_hook_git_env env CI=true npx nx affected --target=lint --files="$files" --output-style=stream-without-prefixes >"$out" 2>&1
-status=$?
-if ! guard_verify; then
-  cat "$out"
-  exit 1
-fi
-
-pkg_status_after=$(git status --porcelain | grep -E 'package\.json$' || true)
-
-if [ "$pkg_status_before" != "$pkg_status_after" ]; then
-  cat "$out"
-  echo ""
-  echo "✖ pre-commit: 'lint' ran 'sync-deps' first, which mutated package.json"
-  echo "  in the WORKING TREE (not the index — this hook never auto-stages)."
-  echo "  Changed since Gate 2 started:"
-  before_tmp=$(mktemp) && after_tmp=$(mktemp)
-  printf '%s\n' "$pkg_status_before" >"$before_tmp"
-  printf '%s\n' "$pkg_status_after" >"$after_tmp"
-  diff "$before_tmp" "$after_tmp" 2>/dev/null | grep '^>' | sed 's/^> */    · /'
-  rm -f "$before_tmp" "$after_tmp"
-  echo "  Review the diff, 'git add -- <path>/package.json' it, and commit again."
-  echo "  (bypass in an emergency with: git commit --no-verify)"
-  exit 1
-fi
-
-if [ "$status" -ne 0 ]; then
-  cat "$out"
-  echo ""
-  echo "✖ pre-commit: affected lint failed — fix and re-commit."
-  echo "  Dependency drift self-heals via sync-deps; a remaining error is real."
-  echo "  Inspect: npx nx affected -t lint --fix --files=\"$files\", review the"
-  echo "  diff, stage it yourself, then commit. See .githooks/README.md for detail."
-  echo "  (bypass in an emergency with: git commit --no-verify)"
-  exit 1
-fi
-
 # ── Gate 3: staged-spec test (DEBT-PROCESS-AFFECTED-TEST-001 Option 3) ──────
-# Runs AFTER lint so it inherits Gate 2's already-verified lint pass. See the
-# header comment above for the full rationale/incident this replaces.
+# See the header comment above for the full rationale/incident this replaces.
 # `run-staged-tests.mjs` computes the plan AND runs vitest itself (one
 # invocation per implicated project) — its own output IS the reproduce
 # instructions on failure, so it is allowed to print directly rather than
@@ -200,5 +139,5 @@ if [ "$tests_status" -ne 0 ]; then
   exit 1
 fi
 
-echo "✓ pre-commit: mass-deletion guard clean, secret-scan clean, affected lint clean, staged-spec test clean."
+echo "✓ pre-commit: mass-deletion guard clean, secret-scan clean, staged-spec test clean."
 exit 0

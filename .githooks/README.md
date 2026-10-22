@@ -12,7 +12,7 @@ git config core.hooksPath .githooks
 
 | Hook         | What it does                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `pre-commit` | **0.** `detect-mass-deletion.js --staged` — blocks a commit whose staged diff is dominated by deletions of already-existing files (BUG-ADHD-EE8D24C8-REVERT-001). **1.** `nx run @adhd/source:secret-scan --mode=staged` (wraps `check-no-credentials.js --staged`) — blocks credentials from entering the repo. **2.** `nx affected -t lint --files=<staged>` (VERIFY ONLY, never `--fix`, never re-stages) — `lint` `dependsOn: ["sync-deps"]`, which can self-heal stale `@adhd/*` dependency ranges on disk; blocks on any other lint error. **3.** a fast, staged-file-scoped `vitest run` (`.githooks/lib/run-staged-tests.mjs`) — runs ONLY spec files directly implicated by what's staged (a staged spec itself, or the co-located same-basename spec of a staged source file); blocks on any failure. |
+| `pre-commit` | **0.** `detect-mass-deletion.js --staged` — blocks a commit whose staged diff is dominated by deletions of already-existing files (BUG-ADHD-EE8D24C8-REVERT-001). **1.** `nx run @adhd/source:secret-scan --mode=staged` (wraps `check-no-credentials.js --staged`) — blocks credentials from entering the repo. **2.** (removed — lint runs at pre-push via `test` → `lint`, and in CI; see "Why `pre-commit` does not lint" below). **3.** a fast, staged-file-scoped `vitest run` (`.githooks/lib/run-staged-tests.mjs`) — runs ONLY spec files directly implicated by what's staged (a staged spec itself, or the co-located same-basename spec of a staged source file); blocks on any failure. |
 | `pre-push`   | The full `nx affected -t test` closure that Gate 3 used to run inline in `pre-commit` (DEBT-PROCESS-AFFECTED-TEST-001 Option 2 → Option 3 migration, PERF-PRECOMMIT-STAGED-TEST-SCOPE-001) — scoped by **commit range** (`--base`/`--head` from the pushed ref update), which is what makes it safe to run in a worktree with other agents' concurrent uncommitted edits: a commit range can only ever contain committed history. Runs `test` only, not `e2e` (`.githooks/lib/pre-push-flags.mjs`; CI still runs e2e). Blocks the push on any affected-test failure.                                                                                                                                                                                                                                                                                                                                 |
 
 ### Why Gate 3 moved off whole-project `nx affected -t test` (PERF-PRECOMMIT-STAGED-TEST-SCOPE-001)
@@ -42,7 +42,7 @@ tree. It fixes (1) as a side effect: the slow path was never the individual spec
 `registry.spec.ts` — legitimately run ~20s on their own, which is proof-with-teeth
 taking real wall time, not a hook inefficiency), it was the forced whole-project build +
 79-file run. Measured after the fix, on the identical kind of commit (2 files,
-1 co-located spec matched): **8.9s total** (secret-scan + lint + staged-spec test),
+1 co-located spec matched): **8.9s total** (secret-scan + lint + staged-spec test, measured while lint was still a pre-commit gate),
 ~38x faster, and immune to unrelated authors' dirty files.
 
 A staged file with no co-located spec, or belonging to a project whose `test` target
@@ -51,14 +51,6 @@ isn't `@nx/vite:test`, is **not** covered by this fast gate — that gap is clos
 another agent's uncommitted WIP) and by CI's `nx affected -t test` job on the PR
 (`.github/workflows/pull-request.yml`), which was already running full-affected testing
 on every PR before this change and is unaffected by it.
-
-**Known, deliberately-deferred limitation:** Gate 2 (lint) has the identical
-working-tree-contamination shape as the old Gate 3 — `nx affected -t lint --files=<staged>`
-scopes the _project_ honestly from the staged list, but `nx lint <project>` then lints
-every file in that project off disk, including another agent's dirty, unrelated files.
-This was NOT fixed here (lint wasn't the reported failure, and a lint error from a dirty
-neighbor file is a much smaller cost than a 338s test run) — tracked as
-`DEBT-PRECOMMIT-LINT-WORKING-TREE-SCOPE-001` in the backlog graph.
 
 Secrets are checked **first** and are cheap. A leaked credential is _unrecoverable_
 once pushed — the fix is rotation, not reversion — whereas a lint error is not.
@@ -98,8 +90,8 @@ still exited 0. Three layers now stop it:
    --porcelain`: a worktree added or removed). Scope: `refs/remotes/*` and
    branches checked out in *other* worktrees are ignored, and `pre-push` excludes
    the ref being pushed (`guard_exclude_ref`). `pre-commit` takes a fresh
-   snapshot immediately before each gate that runs foreign code (Gate 2 lint,
-   Gate 3 staged specs). A ref or worktree change made by a concurrent process
+   snapshot immediately before the gate that runs foreign code (Gate 3 staged
+   specs). A ref or worktree change made by a concurrent process
    during the run is reported too (the message names it); re-run the hook if it
    is not a fixture.
 
@@ -149,32 +141,16 @@ STAGES what it mutated, running inside the commit path, where neither pathspec
 commits nor careful manual staging can see it coming. The fix is structural, not "run
 it more carefully": THIS HOOK never stages anything, ever, full stop.
 
-### Gate 2 self-healing (`BUILD-TOOLING-VERSION-SYNC-DEPS-001`)
+### Why `pre-commit` does not lint
 
-`lint` now `dependsOn: ["sync-deps"]` globally (`nx.json` `targetDefaults`), so that
-`@nx/dependency-checks` errors from a stale/undeclared internal `@adhd/*` range
-self-heal (get fixed on disk) BEFORE the check runs, instead of hard-failing lint on
-every fixable drift. That means running `nx affected -t lint` from the hook can now
-mutate a project's `package.json` in the WORKING TREE, mid-hook, as a side effect.
-
-This does NOT get to reintroduce `BUG-REPO-PRECOMMIT-PARTIAL-STAGE-001`. The hook
-still never runs `git add`/stages anything. Instead, Gate 2 snapshots every
-`package.json`'s working-tree status immediately before running lint and diffs it
-against the status immediately after. If `sync-deps` touched ANY `package.json`, the
-commit is FAILED (even if lint itself reported clean) — the fix is sitting in the
-working tree, unstaged, and the developer must review it,
-`git add -- <path>/package.json` themselves, and commit again. This is deliberate:
-without this check, the ALREADY-STAGED (stale) `package.json` would otherwise get
-silently committed while lint reports green, because dependency-checks now validates
-the just-fixed DISK copy, not the index. See `tools/nx-plugins/deps/README.md` and
-`tools/nx-plugins/build/README.md` for the full write-up, and `CHANGELOG.md`.
-
-The guard for a not-really-installed `node_modules` (in the hook) is unaffected and
-unchanged in spirit: it still hard-fails BEFORE `nx` is even invoked, which remains
-the actual enforcement point for the commit path. (A separate, softer no-op+warn guard
-also lives inside `sync-deps` itself — `tools/nx-plugins/deps/eslint-check.mjs` — for
-callers OTHER than this hook, e.g. a bare `nx affected -t lint` run outside the commit
-path; see its header for why that one may no longer be a hard fail.)
+`git commit` takes `.git/index.lock` before it runs `pre-commit` and holds it until the
+hook exits. Lint here (`nx affected -t lint --files=<staged>`) started an ESLint process
+per affected project — plus, through `lint`'s former `sync-deps-check` dependency, a
+second full ESLint process per project — while every other agent's `git commit`/`git add`
+in the same checkout waited on that lock. Lint is enforced where it does not hold the
+index: `pre-push` runs `nx affected -t test`, and `test` `dependsOn` `lint`; CI runs the
+same. `sync-deps` remains the explicit, standalone dependency-range fixer
+(`npx nx affected -t sync-deps`); nothing runs it implicitly.
 
 ## `check-no-credentials.js`
 
