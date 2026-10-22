@@ -228,10 +228,10 @@
       "end_ref": "83ab6df7f9e54eca9dd1f6e3820242fcf2844064"
     },
     "tests-use-cases": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-10-22T03:00:36.705Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "2f687cfb4587dca1cae4b4924b5e6761c2864b87",
       "end_ref": null
     },
     "cdp-test-harness": {
@@ -1696,7 +1696,7 @@
     "version": "0.8.35",
     "hash": "0b6bc1f3d70e"
   },
-  "current_state": "search-port-guards",
+  "current_state": "tests-use-cases",
   "dod_provenance": {
     "confirmed_at": "2026-10-12T23:49:38.410Z",
     "by": "pseudosky",
