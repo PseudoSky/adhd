@@ -34,9 +34,20 @@
  * `apigen-core-client/src/lib/plugin.ts:87-117`) and stamps `Call.transport`
  * from `plan.transport` — NEVER a hardcoded `'http'`, which would mis-tag
  * every non-HTTP transport's mount provenance once mcp/cli land.
+ *
+ * ctx continuity (REMEDIATION-PLAN R3 behaviour change 3, SPEC §8.1 rule 3):
+ * one per-call `LayerContext` is created here and is the SAME map the `--use`
+ * Layers write and the mount handler reads as its core-client `ctx`, so a key
+ * an outer Layer sets (e.g. the policy plugin's attributes) is visible to a
+ * mount handler. `LayerContext` satisfies core-client `Extensions`
+ * structurally, so no core-client type change is needed.
+ *
+ * The call's `operation` is the plan's full `Operation` (including `binding`
+ * and `tool`, adhd ADR-0019 D2/D3), so every Layer — and a `createLayer`
+ * product — sees the same operation descriptor the transport projected.
  */
 
-import type { Call as CoreClientCall, Extensions } from '@adhd/apigen-core-client';
+import type { Call as CoreClientCall } from '@adhd/apigen-core-client';
 import type {
   Call as RuntimeCall,
   InvokeFn,
@@ -45,18 +56,6 @@ import type {
 } from './invoke';
 import { LayerContext } from './invoke';
 import type { OpPlan } from './op-plan';
-
-/** A minimal, self-contained `Extensions` implementation for an adapted mount `Call`. */
-function createExtensions(): Extensions {
-  const map = new Map<unknown, unknown>();
-  return {
-    get: <T>(key: abstract new (...args: never[]) => T): T | undefined =>
-      map.get(key) as T | undefined,
-    set: <T>(key: abstract new (...args: never[]) => T, value: T): void => {
-      map.set(key, value);
-    },
-  };
-}
 
 /**
  * A schema-less, zero-domain-param composed-schema stand-in used ONLY to
@@ -89,7 +88,7 @@ export async function dispatchForPlan(
 ): Promise<LayerResult> {
   const fullCall: RuntimeCall = {
     ...call,
-    operation: { id: plan.op.id },
+    operation: plan.op,
     ctx: new LayerContext(),
     // F3: the single stamp — `plan.transport` is the source of truth for the
     // transport this call arrived on.  Supplied by the engine, never by a Layer.
@@ -105,12 +104,14 @@ export async function dispatchForPlan(
     }
 
     // F3: adapt the runtime Call -> core-client Call, stamping `transport`
-    // from `plan.transport` — never a hardcoded literal.
+    // from `plan.transport` — never a hardcoded literal. `ctx` is the SAME
+    // per-call map the Layers see (`fullCall.ctx`), never a fresh one, so a
+    // key an outer Layer set is readable by the mount handler.
     const coreCall: CoreClientCall = {
       operation: plan.op,
       data: call.domainArgs,
       envelope: call.envelope,
-      ctx: createExtensions(),
+      ctx: fullCall.ctx,
       transport: plan.transport,
       signal: call.signal ?? new AbortController().signal,
     };

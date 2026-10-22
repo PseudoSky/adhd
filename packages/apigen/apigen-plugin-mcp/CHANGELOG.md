@@ -1,3 +1,11 @@
+## Unreleased
+
+### 🚀 Features
+
+- `options.terminal`: serve `RunInput.operations` through a dispatch terminal (gateway or proxy routes) with flat `arguments`, the `--use` Layer stack around the terminal, and `CallToolResult` results passed through unchanged.
+- `options.hostTransport`: serve `stdio` mode over a caller-supplied MCP SDK `Transport`.
+- `options.serverInfo`: override the identity advertised in the `initialize` response.
+
 ## 0.3.5 (2026-10-21)
 
 ### 🩹 Fixes

@@ -138,7 +138,7 @@ describe('FEAT-APIGEN-TRACING: SIX demanded tags co-occur on ONE durable record'
     // CHILD (non-null parent_span_id). Without this, every span the plugin
     // opens is a root and `parent_span_id` is legitimately null.
     await withSpan('proof.outer', {}, async () => {
-      await (tracingPlugin.capabilities.layer!.layer(
+      await (tracingPlugin.capabilities.layer!.layer!(
         call,
         async () => 'ok'
       ) as Promise<Result>);

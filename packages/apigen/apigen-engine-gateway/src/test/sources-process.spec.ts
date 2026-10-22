@@ -1,6 +1,7 @@
 // guards: nodeProcessLauncher hands the OS a shell string, a non-detached group or an unintended child environment, or mishandles the child's exit, error and kill events
 // tier: S
-// cites: REVIEW-FIXES G1 G9 G10 G11
+// cites: policy-core REMEDIATION-PLAN T-R7 AC1 (R7a), REVIEW-FIXES G1 G9 G10 G11
+// teeth: red: npx vitest run src/test/sources-process.spec.ts -> exit 1; recorded in the sources-argv/passthrough runs: a spawn failure that is not typed unavailable fails the isGatewayError assertions here
 // skip-expiry: 05f910a0 until 2027-03-31 the three process-group tests are POSIX-only; Windows group kill is not implemented
 
 /* eslint-disable @typescript-eslint/no-non-null-assertion -- specs index arrays/maps the test has just arranged; a miss would fail the very next assertion */
@@ -17,7 +18,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const spawnMock = vi.hoisted(() => vi.fn());
 vi.mock('node:child_process', () => ({ spawn: spawnMock }));
 
-import { SourceError, nodeProcessLauncher } from '../index';
+import { isGatewayError, nodeProcessLauncher } from '../index';
 import { flush } from './helpers/flush';
 
 class FakeStream extends EventEmitter {
@@ -152,25 +153,26 @@ describe('Feature: how the child is started', () => {
     expect(spawnMock.mock.calls[0]![2].detached).toBe(true);
   });
 
-  it('@spawn a command that cannot start is SourceError(spawn-failed) via the error event', async () => {
+  it('@spawn a command that cannot start is the gateway unavailable ApiError for bin:<base> via the error event', async () => {
     spawnMock.mockImplementation(() => {
       const child = new FakeChild();
       queueMicrotask(() => child.emit('error', new Error('spawn nope ENOENT')));
       return child;
     });
     const err = await nodeProcessLauncher.start({ command: 'nope', args: [], cwd: '/w' }).catch((e) => e);
-    expect(err).toBeInstanceOf(SourceError);
-    expect(err).toMatchObject({ code: 'spawn-failed' });
+    expect(isGatewayError(err)).toBe(true);
+    expect(err).toMatchObject({ code: 'internal', details: { gatewayCode: 'unavailable', host: 'bin:nope' } });
     expect(err.message).toContain('nope');
   });
 
-  it('@spawn a synchronous spawn throw is SourceError(spawn-failed)', async () => {
+  it('@spawn a synchronous spawn throw is the gateway unavailable ApiError for bin:<base>', async () => {
     spawnMock.mockImplementation(() => {
       throw new Error('EACCES');
     });
     const err = await nodeProcessLauncher.start({ command: 'x', args: [], cwd: '/w' }).catch((e) => e);
-    expect(err).toBeInstanceOf(SourceError);
-    expect(err).toMatchObject({ code: 'spawn-failed' });
+    expect(isGatewayError(err)).toBe(true);
+    expect(err).toMatchObject({ code: 'internal', details: { gatewayCode: 'unavailable', host: 'bin:x' } });
+    expect(err.message).toContain('EACCES');
   });
 });
 

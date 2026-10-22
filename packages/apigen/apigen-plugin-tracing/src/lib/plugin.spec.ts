@@ -29,6 +29,18 @@ import {
 // nothing about the runtime stamp, which is exactly the gap this suite closes.
 // ---------------------------------------------------------------------------
 
+/**
+ * The layer function of a plugin, asserting the capability is present first so a
+ * missing layer fails loudly (architect disposition 11) instead of surfacing as a
+ * bare TypeError from a non-null assertion.
+ */
+function requireLayer(p: { capabilities: { layer?: { layer?: (call: Call, next: Next) => unknown } } }): (call: Call, next: Next) => unknown {
+  const cap = p.capabilities.layer;
+  expect(cap, 'plugin has no layer capability').toBeDefined();
+  expect(cap?.layer).toBeTypeOf('function');
+  return (call, next) => (cap as NonNullable<typeof cap>).layer!(call, next);
+}
+
 interface Recorded {
   event: string;
   level: string;
@@ -193,14 +205,14 @@ describe('apigen-plugin-tracing — layer', () => {
   it('honours serviceName in the span name (makeTracingPlugin)', async () => {
     const call = makeCall({ id: 'echo' });
     const plugin = makeTracingPlugin({ serviceName: 'checkout' });
-    await (plugin.capabilities.layer!.layer(call, async () => 'ok') as Promise<Result>);
+    await (requireLayer(plugin)(call, async () => 'ok') as Promise<Result>);
     expect(call.ctx.get(TraceHandle)!.spanName).toBe('checkout.echo');
   });
 
   it('namespaces span name, attribute keys, and error record with serviceName (adhd.*, never apigen.*)', async () => {
     const call = makeCall({ id: 'echo', transport: 'mcp' });
     const plugin = makeTracingPlugin({ serviceName: 'adhd' });
-    await (plugin.capabilities.layer!.layer(call, async () => 'ok') as Promise<Result>);
+    await (requireLayer(plugin)(call, async () => 'ok') as Promise<Result>);
 
     const records = readRecords();
     const start = records.find((r) => r.event === 'adhd.echo.start');
@@ -218,7 +230,7 @@ describe('apigen-plugin-tracing — layer', () => {
   it('copies declared envelopeAttrs onto the span', async () => {
     const call = makeCall({ id: 'echo', envelope: { 'x-request-id': 'abc', ignored: 'nope' } });
     const plugin = makeTracingPlugin({ serviceName: 'apigen', envelopeAttrs: ['x-request-id'] });
-    await (plugin.capabilities.layer!.layer(call, async () => 'ok') as Promise<Result>);
+    await (requireLayer(plugin)(call, async () => 'ok') as Promise<Result>);
     const start = readRecords().find((r) => r.event === 'apigen.echo.start');
     expect(start!['x-request-id']).toBe('abc');
     expect(start!.ignored).toBeUndefined();
@@ -239,7 +251,7 @@ describe('apigen-plugin-tracing — layer', () => {
       serviceName: 'checkout',
       envelopeAttrs: ['trace_id', 'checkout.op', 'checkout.transport'],
     });
-    await (plugin.capabilities.layer!.layer(call, async () => 'ok') as Promise<Result>);
+    await (requireLayer(plugin)(call, async () => 'ok') as Promise<Result>);
 
     const start = readRecords().find((r) => r.event === 'checkout.echo.start');
     expect(start).toBeDefined();
@@ -489,7 +501,7 @@ describe('apigen-plugin-tracing — plugin shape', () => {
 
   it('declares id "tracing" and a layer capability', () => {
     expect(tracingPlugin.id).toBe('tracing');
-    expect(typeof tracingPlugin.capabilities.layer!.layer).toBe('function');
+    expect(tracingPlugin.capabilities.layer?.layer).toBeTypeOf('function');
   });
 });
 

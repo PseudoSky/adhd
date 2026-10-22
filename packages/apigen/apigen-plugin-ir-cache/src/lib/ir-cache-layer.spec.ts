@@ -58,7 +58,7 @@ vi.mock('node:fs/promises', async (importOriginal) => {
   };
 });
 import type { ExtractCall, Operation } from '@adhd/apigen-core-client';
-import { createExtractInvoker } from '@adhd/apigen-core-client';
+import { createExtractInvoker, withSourceFiles } from '@adhd/apigen-core-client';
 import {
   computeCacheKey,
   createIrCacheLayer,
@@ -175,11 +175,18 @@ describe('computeCacheKey', () => {
     expect(after).not.toBe(before);
   });
 
-  it('changes when a transitively-imported file changes', async () => {
+  it('changes when a file the extractor reported reading changes', async () => {
+    const before = await computeCacheKey(makeCall(), EXTRACTOR_VERSION, [importPath]);
+    writeSources(undefined, `export interface Imported { v: number; extra: string }\n`);
+    const after = await computeCacheKey(makeCall(), EXTRACTOR_VERSION, [importPath]);
+    expect(after).not.toBe(before);
+  });
+
+  it('does not change when an import the extractor did not report changes (the layer never walks imports)', async () => {
     const before = await computeCacheKey(makeCall(), EXTRACTOR_VERSION);
     writeSources(undefined, `export interface Imported { v: number; extra: string }\n`);
     const after = await computeCacheKey(makeCall(), EXTRACTOR_VERSION);
-    expect(after).not.toBe(before);
+    expect(after).toBe(before);
   });
 
   it('changes when the extractor version changes', async () => {
@@ -235,7 +242,7 @@ describe('createIrCacheLayer — RUNTIME CACHE mode HIT/MISS semantics', () => {
 
     await expect(invoke(call)).resolves.toEqual(FIXTURE_OPS);
     expect(runExtractor).toHaveBeenCalledTimes(1);
-    await waitForCacheWrite(); // the MISS's write-through is fire-and-forget
+    await waitForCacheWrite(); // the MISS's write-through is awaited by the layer; this confirms the entry file exists
 
     // Reproducibility: the written runtime-cache entry carries NO wall-clock
     // timestamp (the shared `CachedExtractEntry` shape deliberately has none —
@@ -332,8 +339,8 @@ describe('createIrCacheLayer — RUNTIME CACHE mode HIT/MISS semantics', () => {
     expect(runExtractor).toHaveBeenCalledTimes(2); // content change — MISS
   });
 
-  it('editing an IMPORTED file is a MISS (extractor runs again)', async () => {
-    const runExtractor = vi.fn(async () => FIXTURE_OPS);
+  it('editing an IMPORTED file the extractor reported reading is a MISS (extractor runs again)', async () => {
+    const runExtractor = vi.fn(async () => withSourceFiles(FIXTURE_OPS, [importPath]));
     const invoke = createExtractInvoker(
       [createIrCacheLayer({ cache: cachePath, extractorVersion: EXTRACTOR_VERSION })],
       runExtractor
@@ -432,8 +439,8 @@ describe('createIrCacheLayer — cross-mode compatibility (R2.5)', () => {
     await expect(invoke(makeCall())).resolves.toEqual(FIXTURE_OPS);
     expect(runExtractor).toHaveBeenCalledTimes(1);
 
-    // The MISS write-through lands a `staleness` snapshot fire-and-forget so
-    // the NEXT read gets the fast path — a real, observable state change,
+    // The MISS write-through (awaited by the layer) lands a `staleness`
+    // snapshot so the NEXT read gets the fast path — a real, observable state change,
     // awaited via a bounded-deadline poll.
     await vi.waitFor(
       () => {
@@ -497,8 +504,8 @@ describe('createIrCacheLayer — cross-mode compatibility (R2.5)', () => {
 describe('createIrCacheLayer — durability (design doc Revision 3)', () => {
   // THE TEETH for the awaited/durable write contract. The spec deliberately
   // latches the exact point the entry becomes visible (`rename`) and asserts
-  // the layer's promise has NOT settled while that latch is held. Pre-fix
-  // (fire-and-forget `void writeThrough(...)`), the layer resolved as soon as
+  // the layer's promise has NOT settled while that latch is held. A
+  // layer that did not await `writeThrough(...)` would resolve as soon as
   // `next()` returned — so `settled` would be true here and this test RED.
   it('does not settle a MISS until the write is published (rename), then settles with the file present', async () => {
     let releaseRename!: () => void;

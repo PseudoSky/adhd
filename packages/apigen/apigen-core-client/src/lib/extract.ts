@@ -36,6 +36,7 @@ import { buildSchema } from './schema-builders/ts-json-schema';
 import {
   createExtractionSession,
   internalSession,
+  resolveTsconfigChain,
   type ExtractionSession,
   type InternalExtractionSession,
 } from './extraction-session';
@@ -99,10 +100,12 @@ export async function extract(opts: ExtractOptions): Promise<ExtractResult> {
     const operations = await extractWithSession(opts, session);
     // Report the files this extraction read (entry + its local import graph)
     // so a cache layer tracks exactly that set, not its own re-derivation.
-    return withSourceFiles(
-      operations,
-      session.referencedFiles.get(opts.sourceFile) ?? [opts.sourceFile]
-    );
+    // The resolved tsconfig `extends` chain is part of that set: editing a base
+    // config changes the compiler options the extraction ran under.
+    return withSourceFiles(operations, [
+      ...(session.referencedFiles.get(opts.sourceFile) ?? [opts.sourceFile]),
+      ...(opts.tsconfig ? resolveTsconfigChain(opts.tsconfig) : []),
+    ]);
   } finally {
     if (ownsSession) session.dispose();
   }
@@ -920,9 +923,66 @@ function buildQueryOp(
 // ID derivation — pure function of namespace + path per SPEC §4
 // ---------------------------------------------------------------------------
 
-function buildId(ns: Segment, opPath: Segment[]): string {
+/**
+ * Derives the canonical operation id from a namespace segment and an operation
+ * path (SPEC §4): each segment's tokenized words joined by `-`, segments joined
+ * by `/`. An empty namespace (`ns.raw === ''`) is omitted. Pure and
+ * deterministic; shared by the function and class extractors.
+ *
+ * @param ns     - Namespace segment (may have empty `raw`).
+ * @param opPath - Operation path segments.
+ * @returns        The id, e.g. `transform/humanize/humanize-bytes`.
+ */
+export function buildId(ns: Segment, opPath: Segment[]): string {
   const allSegs: Segment[] = ns.raw ? [ns, ...opPath] : opPath;
-  return allSegs.map((s) => s.words.join('-')).join('/');
+  return allSegs.map((s) => joinIdWords(s.words)).join('/');
+}
+
+/** The one id-segment rendering rule: tokenized words joined by `-`. */
+function joinIdWords(words: readonly string[]): string {
+  return words.join('-');
+}
+
+/**
+ * Renders one raw name as an operation-id segment by the same rule
+ * {@link buildId} applies to a {@link Segment}: {@link tokenize}, then join the
+ * words with `-`. A name that tokenizes to no words renders as its lower-cased
+ * self (the fallback a `Segment` built from such a name carries), so the result
+ * is never empty for a non-empty input.
+ *
+ * Examples:
+ *   'read_file' → 'read-file'
+ *   'readFile'  → 'read-file'
+ *   'fs'        → 'fs'
+ *
+ * @param raw - A namespace, source, tool or export name.
+ * @returns The rendered segment.
+ */
+export function renderIdSegment(raw: string): string {
+  const words = tokenize(raw);
+  return words.length > 0 ? joinIdWords(words) : raw.toLowerCase();
+}
+
+/**
+ * Renders an operation id (or an id pattern) in canonical form: split on `/`,
+ * keep any segment containing `*` verbatim (a wildcard or trailing-`*`
+ * pattern), render every other segment with {@link renderIdSegment}, and join
+ * with `/`. Idempotent: a canonical id is returned unchanged.
+ *
+ * Examples:
+ *   'fs/read_file' → 'fs/read-file'
+ *   'fs/readFile'  → 'fs/read-file'
+ *   'fs/*'         → 'fs/*'
+ *   'fs/read-file' → 'fs/read-file'
+ *
+ * @param id - An operation id, e.g. a policy `tool:` value.
+ * @returns The canonical id.
+ */
+export function canonicalOperationId(id: string): string {
+  return id
+    .split('/')
+    .map((segment) => (segment.includes('*') || segment === '' ? segment : renderIdSegment(segment)))
+    .join('/');
 }
 
 // ---------------------------------------------------------------------------

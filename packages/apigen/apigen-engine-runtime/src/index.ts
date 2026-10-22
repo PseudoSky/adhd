@@ -6,6 +6,8 @@ export type {
   Call,
   InvokeOptions,
   InvokeFn,
+  Terminal,
+  CreateInvokerOptions,
 } from './lib/invoke';
 export { defineMiddleware } from './lib/define-middleware';
 export { EventBus, wireObservers } from './lib/event-bus';
@@ -21,6 +23,7 @@ export type {
   ComposedSchemas,
 } from './lib/types';
 export { needsEnvelopeField, dataParamNames, dispatch } from './lib/dispatch';
+export type { CreateClientFn } from './lib/dispatch';
 export { createLogger } from './lib/logger';
 export type { Logger, LogFormat, CreateLoggerOptions } from './lib/logger';
 export { describeParams } from './lib/describe-params';
@@ -96,8 +99,18 @@ export {
   readUseOptions,
   adaptCoreLayer,
 } from './lib/package-invoker';
-export type { UsePlugin, UseOptions } from './lib/package-invoker';
+export type {
+  UsePlugin,
+  UseOptions,
+  PackageInvokerOptions,
+} from './lib/package-invoker';
 export { dispatchForPlan } from './lib/dispatch-for-plan';
+export { buildApigenPackage } from './lib/build-apigen-package';
+export type {
+  BuildApigenPackageInput,
+  BuildApigenPackageResult,
+  ApigenPackage,
+} from './lib/build-apigen-package';
 export {
   DEFAULT_LISTEN_HOST,
   isLoopbackListenHost,

@@ -2,7 +2,7 @@
  * guards: the runtime IR cache serves a stale or wrong-option operation list (installed-package dependency edits, and call options that change the extracted IR, never invalidating the cached entry)
  * tier: P
  * gap: This cannot be observed at tier S because the claim is that a cache layer over the real ts-morph extraction of real files on disk invalidates on a real mtime change; the extraction (1-5 s per case, measured 2026-10-21: 9 cases 24.7 s) and the file-system staleness record exist only against a real program build, so a stubbed extractor would only echo the key.
- * cites: backlog 39c4e00c (staleness record has deps: [], imported .d.ts edits never invalidate) AC1 editing an imported type file invalidates the cache; backlog a66aca5d (computeCacheKey omits extraction-affecting options) AC2 a call that differs only in extractorOptions, namespace, host, versionHint or tsconfig content misses and re-extracts, and an identical call hits
+ * cites: backlog 39c4e00c (staleness record has deps: [], imported .d.ts edits never invalidate) AC1 editing an imported type file the extractor reported reading invalidates the cache, and an extractor that reports nothing gets a source-only key (REMEDIATION-PLAN R8p, G-2; backlog bbf1f0e3); backlog a66aca5d (computeCacheKey omits extraction-affecting options) AC2 a call that differs only in extractorOptions, namespace, host, versionHint or tsconfig content misses and re-extracts, and an identical call hits
  *
  * Consumer path: a real cache layer (`createIrCacheLayer` over the real single-file backend) wrapped around the real
  * ts-morph `extract()` of a real temp source tree, composed with the real `createExtractInvoker`. The only addition is a
@@ -122,7 +122,7 @@ describe('39c4e00c: an edit to an imported type file invalidates the runtime cac
     expect(calls.n).toBe(2);
   });
 
-  it('[AC1] an extractor that reports no file list (plain Operation[]) still invalidates on a dependency edit', async () => {
+  it('[AC1] an extractor that reports no file list gets a source-only key: an imported-file edit is a HIT and the staleness record has no dependency (G-2: the layer never walks imports)', async () => {
     const { entry, types } = makePackage(path.join(root, 'src'), 'a: string;');
     const calls = { n: 0 };
     const plain = async (call: ExtractCall): Promise<Operation[]> => [...(await realExtractor(calls)(call))];
@@ -130,8 +130,10 @@ describe('39c4e00c: an edit to an imported type file invalidates the runtime cac
     const call: ExtractCall = { source: entry, host: 'ts', namespace: 'pkg' };
     await run(call);
     put(types, 'export interface IIn { a: string; b: number }\n');
-    expect(inputProps(await run(call))).toEqual(['a', 'b']);
-    expect(calls.n).toBe(2);
+    expect(inputProps(await run(call))).toEqual(['a']);
+    expect(calls.n).toBe(1);
+    const stored = JSON.parse(fs.readFileSync(cacheFile, 'utf8')) as { staleness: { deps: unknown[] } };
+    expect(stored.staleness.deps).toEqual([]);
   });
 
   it('[AC1] deleting an imported file is a MISS, not a thrown error', async () => {

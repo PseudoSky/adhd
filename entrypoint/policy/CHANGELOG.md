@@ -8,6 +8,16 @@
 
 - pseudosky
 
+## Unreleased
+
+### 🚀 Features
+
+- `serve <source>` serves the upstream MCP server through `createGateway` and `mcpPlugin.run` from `@adhd/apigen-plugin-mcp`. The gateway owns the upstream (handshake, supervision, restarts); the policy Layer stack wraps each call and a gateway terminal routes it to the upstream.
+- MCP tool names are the standard projection of the operation id (`<name>_<tool>`); string results are raw text; `tools/list` carries the upstream's `title` and `annotations`; every refusal or other `ApiError` is a tool result with `isError: true`, text `<code>: <message>` and `_meta['adhd/error']`.
+- A crashed upstream is restarted up to 5 times. When the upstream has exited and 5 consecutive restarts fail, or it exits more than 5 times within 60 seconds, `serve` stops and exits 1 with the reason on stderr instead of answering `unavailable` indefinitely.
+- A failed startup handshake exits non-zero before the host transport starts, and the gateway is stopped on every exit path.
+
+
 ## 0.0.3 (2026-10-21)
 
 This was a version bump only for policy to align it with other projects, there were no code changes.

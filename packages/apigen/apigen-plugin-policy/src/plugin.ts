@@ -1,28 +1,27 @@
 import { ApiError } from '@adhd/apigen-base-errors';
-import type { Call, UsePlugin } from '@adhd/apigen-engine-runtime';
-import { loadDecider } from './load-decider.js';
+import type { Call, Next, Plugin } from '@adhd/apigen-core-client';
+import { PolicyAttributes } from './attributes.js';
 import type {
   IPolicyAskHandler,
   IPolicyDecideRequest,
   IPolicyDecider,
   IPolicyDecision,
 } from './ports.js';
-import { createPluginState } from './state.js';
 
 /** Where a failure happened; handed to `IPolicyLayerOptions.onError`. */
-export type PolicyErrorPhase = 'load' | 'decide' | 'timeout' | 'shape' | 'merge';
+export type PolicyErrorPhase = 'decide' | 'timeout' | 'shape' | 'merge';
 
-/** Options for the policy Layer. */
+/** Options for {@link makePolicyPlugin}. */
 export interface IPolicyLayerOptions {
-  /** An object, or a module specifier / path exporting `createDecider(options)`. */
-  readonly decider: IPolicyDecider | string;
-  /** Options handed to `createDecider` when `decider` is a module reference. */
-  readonly deciderOptions?: Readonly<Record<string, unknown>>;
+  /** Answers every authorization question. */
+  readonly decider: IPolicyDecider;
+  /** Resolves an `ask` decision; without one, `ask` denies. */
   readonly ask?: IPolicyAskHandler;
   /**
    * Optional deadline for one decision, in milliseconds. Must be a finite
    * number greater than zero (anything else throws at construction). Expiry
-   * denies (LP-11) and aborts the `AbortSignal` handed to `decide`.
+   * denies (LP-11) and aborts the `AbortSignal` handed to `decide`. A
+   * `timeoutMs` in the options a host hands `createLayer` overrides it.
    */
   readonly timeoutMs?: number;
   /**
@@ -59,29 +58,60 @@ function isPlainObject(v: unknown): v is Record<string, unknown> {
   return proto === Object.prototype || proto === null;
 }
 
+const TIMEOUT_MS_MESSAGE =
+  'apigen-plugin-policy: timeoutMs must be a finite number greater than 0';
+
+/** A decimal string as `--opt timeoutMs=<n>` delivers it; the value must still be > 0. */
+const DECIMAL_PATTERN = '^[0-9]+(\\.[0-9]+)?$';
+const DECIMAL = new RegExp(DECIMAL_PATTERN);
+
 /**
- * Throw when `timeoutMs` is present but not a finite number greater than zero.
- * Called at construction and at `--use` option capture, never per call.
+ * JSON Schema for the options a host hands `createLayer`. The bag is the
+ * invocation's whole flat `--opt` map, shared by every `--use` plugin, so
+ * unknown keys are allowed and ignored. `--opt` delivers strings, so a decimal
+ * string is accepted for `timeoutMs`; either form must be greater than 0.
  */
-function assertTimeoutMs(timeoutMs: unknown): void {
-  if (timeoutMs === undefined) return;
-  if (typeof timeoutMs !== 'number' || !Number.isFinite(timeoutMs) || timeoutMs <= 0) {
-    throw new ApiError(
-      'invalid_argument',
-      'apigen-plugin-policy: timeoutMs must be a finite number greater than 0'
-    );
+const OPTIONS_SCHEMA: Record<string, unknown> = Object.freeze({
+  type: 'object',
+  properties: {
+    timeoutMs: {
+      description:
+        'Deadline for one decision, in milliseconds; greater than 0. Expiry denies the call.',
+      anyOf: [
+        { type: 'number', exclusiveMinimum: 0 },
+        { type: 'string', pattern: DECIMAL_PATTERN },
+      ],
+    },
+  },
+});
+
+/**
+ * Validate a `timeoutMs` value against {@link OPTIONS_SCHEMA}: absent, a
+ * finite number greater than 0, or a decimal string whose value is greater
+ * than 0. Called at construction and in `createLayer`, never per call.
+ *
+ * @returns The value as a number, or `undefined` when absent.
+ * @throws ApiError('invalid_argument') for any other value.
+ */
+function readTimeoutMs(timeoutMs: unknown): number | undefined {
+  if (timeoutMs === undefined) return undefined;
+  let value: number | undefined;
+  if (typeof timeoutMs === 'number') value = timeoutMs;
+  else if (typeof timeoutMs === 'string' && DECIMAL.test(timeoutMs)) value = Number(timeoutMs);
+  if (value === undefined || !Number.isFinite(value) || value <= 0) {
+    throw new ApiError('invalid_argument', TIMEOUT_MS_MESSAGE);
   }
+  return value;
 }
 
 /**
- * Validate `envelope.attributes` (D-18). Only string, finite number and
- * string[] values are accepted; any other shape yields `undefined` (no
- * attributes). An own `__proto__` key rejects the whole object, and the result
- * has a null prototype built with `defineProperty`, so a key can never reach
- * `Object.prototype` or a prototype setter (L1).
+ * Validate the values of the call's {@link PolicyAttributes}. Only string,
+ * finite number and string[] values are accepted; any other shape yields
+ * `undefined` (no attributes). An own `__proto__` key rejects the whole
+ * object, and the result has a null prototype built with `defineProperty`, so
+ * a key can never reach `Object.prototype` or a prototype setter (L1).
  */
-function readAttributes(envelope: Record<string, unknown>): Attributes | undefined {
-  const raw = envelope['attributes'];
+function readAttributes(raw: unknown): Attributes | undefined {
   if (!isPlainObject(raw)) return undefined;
   if (Object.prototype.hasOwnProperty.call(raw, '__proto__')) return undefined;
   const out: Record<string, string | number | readonly string[]> = Object.create(null);
@@ -177,26 +207,40 @@ function mergeSet(domainArgs: Record<string, unknown>, set: Readonly<Record<stri
   }
 }
 
+/** The layer function `createLayer` returns (SPEC §7.1). */
+type PolicyLayer = (call: Call, next: Next) => Promise<unknown>;
+
+/** Options for the policy plugin as a host hands them to `createLayer`. */
+export interface IPolicyPluginOptions {
+  /** Overrides the factory's `timeoutMs`; a decimal string (from `--opt`) is accepted. */
+  readonly timeoutMs?: number;
+}
+
 /**
- * Build the policy Layer plugin (LP-06..LP-17). Per call: resolve the decider
- * once (a load failure is memoised, so every call is then denied), map the
- * transport, build the request (frozen shallow copies of the arguments and
- * envelope, so a decider cannot mutate the real call), race the decision
- * against `timeoutMs` (expiry aborts the signal given to `decide`), validate
- * the answer, then `allow` merges `set` over `call.domainArgs` and continues,
- * `ask` consults the ask handler, `deny` throws `ApiError('permission_denied')`.
- * Every failure mode denies (fail closed) and is reported to `onError`.
- * No state is held between calls (LP-13); streaming results pass through
- * untouched (LP-12).
- *
- * Ordering rule (LP-14): declare this layer AFTER any layer that writes
- * `call.envelope.attributes` (an auth layer), since it reads them there.
- *
- * @param options Decider, optional ask handler, decision deadline and error observer.
- * @throws ApiError('invalid_argument') when `timeoutMs` is not a finite number > 0.
+ * The refusal of an unconfigured plugin: every call is denied, and the reason
+ * says how to supply a decider.
  */
-export function createPolicyLayerPlugin(options: IPolicyLayerOptions): UsePlugin {
-  assertTimeoutMs(options.timeoutMs);
+const NO_DECIDER_REASON =
+  'apigen-plugin-policy: no decider configured. Create a module whose default export is ' +
+  "makePolicyPlugin({ decider }) (import { makePolicyPlugin } from '@adhd/apigen-plugin-policy') " +
+  'and load that module with --use <module> instead of the bare package';
+
+/**
+ * Build the policy Layer for one configuration (LP-06..LP-17). Per call: map
+ * the transport, build the request (frozen shallow copies of the arguments and
+ * envelope, so a decider cannot mutate the real call; attributes from
+ * `call.ctx.get(PolicyAttributes)`), race the decision against `timeoutMs`
+ * (expiry aborts the signal given to `decide`), validate the answer, then
+ * `allow` merges `set` over `call.data` and continues, `ask` consults the ask
+ * handler, `deny` throws `ApiError('permission_denied')`. Every failure mode
+ * denies (fail closed) and is reported to `onError`. No state is held between
+ * calls (LP-13); streaming results pass through untouched (LP-12).
+ */
+function buildPolicyLayer(
+  options: IPolicyLayerOptions,
+  timeoutMs: number | undefined
+): PolicyLayer {
+  const decider = options.decider;
   const onError = options.onError ?? defaultOnError;
   const report = (error: unknown, phase: PolicyErrorPhase): void => {
     try {
@@ -205,17 +249,9 @@ export function createPolicyLayerPlugin(options: IPolicyLayerOptions): UsePlugin
       // An observer must never change the outcome.
     }
   };
-  let deciderPromise: Promise<IPolicyDecider> | undefined;
-  const resolveDecider = (): Promise<IPolicyDecider> => {
-    deciderPromise ??= loadDecider(
-      options.decider,
-      options.deciderOptions as Record<string, unknown> | undefined
-    );
-    return deciderPromise;
-  };
 
   async function decideCall(call: Call): Promise<Verdict> {
-    let phase: PolicyErrorPhase = 'load';
+    let phase: PolicyErrorPhase = 'decide';
     try {
       const transport = call.transport as string;
       if (!TRANSPORTS.includes(transport)) {
@@ -224,15 +260,12 @@ export function createPolicyLayerPlugin(options: IPolicyLayerOptions): UsePlugin
       const envelope = call.envelope ?? {};
       const request: IPolicyDecideRequest = Object.freeze({
         tool: call.operation.id,
-        args: Object.freeze({ ...call.domainArgs }),
+        args: Object.freeze({ ...call.data }),
         envelope: Object.freeze({ ...envelope }),
         transport: transport as Transport,
-        attributes: readAttributes(envelope),
+        attributes: readAttributes(call.ctx?.get(PolicyAttributes)?.values),
       });
-      const decider = await resolveDecider();
-      phase = 'decide';
-      const controller =
-        options.timeoutMs === undefined ? undefined : new AbortController();
+      const controller = timeoutMs === undefined ? undefined : new AbortController();
       let signal = call.signal;
       if (controller !== undefined) {
         signal =
@@ -242,7 +275,7 @@ export function createPolicyLayerPlugin(options: IPolicyLayerOptions): UsePlugin
       }
       const raw = await withDeadline(
         Promise.resolve(decider.decide(request, signal)),
-        options.timeoutMs,
+        timeoutMs,
         controller
       );
       phase = 'shape';
@@ -253,7 +286,7 @@ export function createPolicyLayerPlugin(options: IPolicyLayerOptions): UsePlugin
       }
       if (decision.decision === 'allow') {
         phase = 'merge';
-        if (decision.set !== undefined) mergeSet(call.domainArgs, decision.set);
+        if (decision.set !== undefined) mergeSet(call.data, decision.set);
         return { kind: 'allow' };
       }
       if (decision.decision === 'ask') {
@@ -273,71 +306,72 @@ export function createPolicyLayerPlugin(options: IPolicyLayerOptions): UsePlugin
     }
   }
 
+  return async (call, next) => {
+    const verdict = await decideCall(call);
+    if (verdict.kind === 'deny') {
+      throw new ApiError('permission_denied', verdict.reason, { code: 'policy-denied' });
+    }
+    return next();
+  };
+}
+
+/** The Layer of a plugin made without a decider: refuses every call. */
+const refuseUnconfigured: PolicyLayer = async () => {
+  throw new ApiError('permission_denied', NO_DECIDER_REASON, { code: 'policy-not-configured' });
+};
+
+/**
+ * Make a policy Layer plugin (adhd ADR-0019 D1). Each call returns an
+ * independent plugin: nothing is held in module scope, so several
+ * configurations in one process never affect each other.
+ *
+ * `capabilities.layer.createLayer(opts)` is called by the host once per
+ * invocation with its flat options bag; it validates `opts.timeoutMs` against
+ * `optionsSchema` (which then overrides `options.timeoutMs`) and returns the
+ * Layer. Without `options` (or without a decider) the Layer refuses every
+ * call with `ApiError('permission_denied')` whose reason says how to configure
+ * a decider.
+ *
+ * Ordering rule (LP-14): declare this plugin AFTER any layer that writes
+ * `PolicyAttributes` on `call.ctx` (an auth layer), since it reads them there.
+ *
+ * @example
+ * ```ts
+ * // policy.plugin.mjs, loaded with `--use ./policy.plugin.mjs`
+ * import { makePolicyPlugin } from '@adhd/apigen-plugin-policy';
+ * export default makePolicyPlugin({ decider: await createMyDecider(), timeoutMs: 5000 });
+ * ```
+ *
+ * @param options Decider, optional ask handler, decision deadline and error observer.
+ * @returns A plugin with id `policy`, an `optionsSchema` and a `layer.createLayer` capability.
+ * @throws ApiError('invalid_argument') when `options.timeoutMs` is not a finite number > 0.
+ */
+export function makePolicyPlugin(options?: IPolicyLayerOptions): Plugin<IPolicyPluginOptions> {
+  const baseTimeoutMs = readTimeoutMs(options?.timeoutMs);
   return {
     id: 'policy',
+    description:
+      'Layer plugin: gates every operation behind an authorization decision; fails closed.',
+    language: 'ts',
+    optionsSchema: OPTIONS_SCHEMA,
     capabilities: {
       layer: {
-        layer: async (rawCall, next) => {
-          const verdict = await decideCall(rawCall as Call);
-          if (verdict.kind === 'deny') {
-            throw new ApiError('permission_denied', verdict.reason, { code: 'policy-denied' });
-          }
-          return next();
+        createLayer: (opts: Record<string, unknown>) => {
+          const timeoutMs = readTimeoutMs(opts?.['timeoutMs']) ?? baseTimeoutMs;
+          if (options?.decider === undefined) return refuseUnconfigured;
+          return buildPolicyLayer(options, timeoutMs);
         },
       },
     },
   };
 }
 
-const state = createPluginState();
-let cached: { options: object; plugin: UsePlugin } | undefined;
-
-function delegate(): UsePlugin {
-  const options = state.get();
-  if (options?.decider === undefined) {
-    throw new ApiError('internal', 'apigen-plugin-policy: no decider configured');
-  }
-  if (cached?.options !== options) {
-    cached = { options, plugin: createPolicyLayerPlugin(options as IPolicyLayerOptions) };
-  }
-  return cached.plugin;
-}
-
 /**
- * Default export, loaded by `--use @adhd/apigen-plugin-policy`. A host hands
- * `--use` options only to `mount.operations` (D-14), so that capability
- * captures them and returns no operations; the `layer` capability then
- * delegates to a plugin built from the captured options. Without options the
- * layer throws `ApiError('internal')`, which fails the call (closed).
- *
- * One configuration per process: options are held in module scope, so every
- * mount in a process shares the most recently captured options, and a mount
- * that supplies none keeps them. Invalid options (`timeoutMs`) throw at capture.
+ * Default export, loaded by a bare `--use @adhd/apigen-plugin-policy`: a
+ * plugin with no decider, so every call is refused with `permission_denied`
+ * and a reason that says how to configure one. Configure a decider with
+ * {@link makePolicyPlugin}.
  */
-const plugin: UsePlugin = {
-  id: 'policy',
-  capabilities: {
-    layer: {
-      layer: async (call, next) => {
-        const inner = delegate().capabilities?.layer?.layer;
-        if (inner === undefined) {
-          throw new ApiError('internal', 'apigen-plugin-policy: no decider configured');
-        }
-        return inner(call, next);
-      },
-    },
-    mount: {
-      operations: (_descriptor, opts) => {
-        // A later mount (the host mounts once per transport/instance) that
-        // carries no options must not erase the configuration already captured.
-        if (opts === undefined || opts === null) return [];
-        const captured = opts as Parameters<typeof state.set>[0];
-        assertTimeoutMs(captured?.timeoutMs);
-        state.set(captured);
-        return [];
-      },
-    },
-  },
-};
+const policyPlugin: Plugin<IPolicyPluginOptions> = makePolicyPlugin();
 
-export default plugin;
+export default policyPlugin;

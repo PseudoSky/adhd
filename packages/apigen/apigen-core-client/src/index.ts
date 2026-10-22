@@ -24,6 +24,7 @@ export type {
   // capability interfaces
   TargetCapability,
   LayerCapability,
+  LayerCapabilityShape,
   ExtractLayerCapability,
   MountCapability,
   MountedOperation,
@@ -54,6 +55,7 @@ export type { Logger } from 'pino';
 export {
   createExtractionSession,
   clearPersistentProjectCache,
+  releaseExtractionMemory,
   collectLocalImportPaths,
 } from './lib/extraction-session';
 export type {
@@ -65,7 +67,19 @@ export {
   pluginsToEnvelopeMiddlewares,
 } from './lib/compose-schemas';
 export { isPrimitiveOnlyInputSchema } from './lib/get-safety';
-export { extract, tokenize } from './lib/extract';
+/**
+ * `extract` derives operations from TS source; `tokenize`, `buildId`,
+ * `renderIdSegment` and `canonicalOperationId` are the one canonical operation
+ * id rule (ADR-0017 D3): every segment tokenized and its words joined by `-`,
+ * segments joined by `/` (`fs/read_file` → `fs/read-file`).
+ */
+export {
+  extract,
+  tokenize,
+  buildId,
+  renderIdSegment,
+  canonicalOperationId,
+} from './lib/extract';
 export type { ExtractOptions } from './lib/extract';
 export {
   composeOnion,
@@ -79,6 +93,32 @@ export type {
   ExtractResult,
   ExtractMiddleware,
 } from './lib/extract-invoker';
+export {
+  createExtractorRegistry,
+  extractSourceEntry,
+} from './lib/extraction-entry';
+export type {
+  ExtractInvoker,
+  Extractor,
+  ExtractorRegistry,
+  IExtractionResult,
+  IExtractSourceEntryInput,
+} from './lib/extraction-entry';
+export { assertExtractorOptions } from './lib/extract-invoker';
+export {
+  createTypescriptSubprocessExtractor,
+  registerTypescriptSubprocessExtractor,
+  runExtractWorker,
+  spawnExtractLauncher,
+  EXTRACT_RESULT_MARKER,
+  TS_SUBPROCESS_HOST,
+} from './lib/extract-subprocess';
+export type {
+  ExtractLauncher,
+  IExtractLaunchRequest,
+  IExtractLaunchResult,
+  ITypescriptSubprocessOptions,
+} from './lib/extract-subprocess';
 export { extractClasses } from './lib/extract-classes';
 export type { ExtractClassesOptions } from './lib/extract-classes';
 export {
@@ -86,8 +126,18 @@ export {
   pluginConsumesSource,
   sourcesForPlugin,
   effectiveLanguage,
+  resolveSourceReference,
 } from './lib/source-language';
-export type { LanguageAwarePlugin } from './lib/source-language';
+export type {
+  LanguageAwarePlugin,
+  AssetKind,
+  TranslatorId,
+  SourceLocator,
+  BindingSpec,
+  ISourceResolution,
+  SourceResolutionError,
+  ISourceProbe,
+} from './lib/source-language';
 
 // F1 (BATCH_0.0.1.md) — host-agnostic batch/bulk fan-out schema derivation.
 export {

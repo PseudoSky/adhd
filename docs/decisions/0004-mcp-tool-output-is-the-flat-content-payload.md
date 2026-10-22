@@ -1,6 +1,6 @@
 # ADR-0004 — MCP tool output is the flat payload on `content`; no `{result}` envelope
 
-**Status:** ACCEPTED (2026-09-25).
+**Status:** ACCEPTED (2026-09-25); amended by adhd ADR-0018 (2026-10-14).
 **Owner:** pseudosky.
 **Supersedes:** nothing. (It reverses the *transport half* of the bug-fix `BUG-APIGEN-019`, which was a commit, never an ADR.)
 **Drives:** `7d02c71c` (agent_search wraps results in a `{result}` envelope / apigen-garbage), `b6a04e7f` (walker emits `{}` for imported optional object properties), and the `structuredContent` half of the `-32602` schema class (`6fd8eed5`, `3a3e5884`).
@@ -94,3 +94,7 @@ Republish `@adhd/apigen-engine-runtime` / `@adhd/apigen-plugin-mcp` **first**. T
 - `packages/apigen/apigen-engine-runtime/src/lib/mcp-output-schema.ts:37-58, 65-73`; `packages/apigen/apigen-plugin-mcp/src/lib/run.ts` (`writeResult`, `listTools`, generated host templates).
 - `@modelcontextprotocol/sdk` `dist/esm/spec.types.d.ts:1201-1208` (outputSchema restricted to a root `type:'object'`).
 - Backlog: `7d02c71c` (the triaged defect), `b6a04e7f`, `6fd8eed5`, `3a3e5884`; `BUG-APIGEN-019` (the bug-fix whose transport half this reverses).
+
+## Amendments
+
+- **adhd ADR-0018 (2026-10-14):** a `string` return is emitted as the raw string in `content[0].text` (no `JSON.stringify`, no `structuredContent`); every `ApiError` code returns a tool result with `isError: true` (JSON-RPC protocol errors remain for unknown tools, malformed requests and non-`ApiError` throws); `tools/list` passes `title` and `annotations` through. The flat payload, the absence of a `{result}` envelope and `structuredContent` only for an object return are unchanged for every non-string result. These are additions; no decision above is reversed.

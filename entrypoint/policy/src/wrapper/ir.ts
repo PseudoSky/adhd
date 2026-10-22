@@ -1,17 +1,18 @@
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, type Dirent } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join, relative, sep } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import type { Operation } from '@adhd/apigen-core-client';
+import { createSingleFileBackend, CURRENT_FORMAT_VERSION } from '@adhd/apigen-plugin-ir-cache';
 
 /** File name of the baked operations artifact, written beside the bundle in `dist/`. */
 export const POLICY_IR_ARTIFACT_FILENAME = 'api.ir.json';
 
 /** Bump when the artifact layout changes; a mismatch falls back to live extraction. */
-export const POLICY_IR_FORMAT_VERSION = 1;
+export const POLICY_IR_FORMAT_VERSION = CURRENT_FORMAT_VERSION;
 
-const requirePkg = createRequire(import.meta.url);
+// This package is CommonJS-only (vite `formats: ['cjs']`), so `__filename` / `__dirname` are always defined.
+const requirePkg = createRequire(__filename);
 
 /**
  * The extractor version an artifact must have been produced by
@@ -40,7 +41,7 @@ export function expectedExtractorVersion(): string {
  * `here` is the directory the lookup starts from (default: this module's own
  * directory); a caller passes another one to resolve a different layout.
  */
-export function policyDistDir(here: string = dirname(fileURLToPath(import.meta.url))): string {
+export function policyDistDir(here: string = __dirname): string {
   const candidates = [here, join(here, 'dist'), join(here, '..', 'dist'), join(here, '..', '..', 'dist')];
   for (const candidate of candidates) {
     if (existsSync(join(candidate, POLICY_IR_ARTIFACT_FILENAME)) || existsSync(join(candidate, 'cli.js'))) return candidate;
@@ -53,7 +54,7 @@ export function bakedIrArtifactPath(distDir: string): string {
   return join(distDir, POLICY_IR_ARTIFACT_FILENAME);
 }
 
-interface IClientApi {
+export interface IClientApi {
   /** The `service/api.d.ts` the operations are extracted from. */
   readonly apiDts: string;
   /** The declaration root whose `.d.ts` files make up the extracted surface. */
@@ -81,15 +82,29 @@ export function locateClientApi(): IClientApi | undefined {
   return undefined;
 }
 
-function sha256Hex(content: Buffer | string): string {
+function sha256Hex(content: Buffer): string {
   return createHash('sha256').update(content).digest('hex');
 }
 
-/** Digest over every `.d.ts` under `root` (relative path + content), skipping `node_modules`. */
-function surfaceDigest(root: string): string {
+/**
+ * sha256 of every `.d.ts` under `root`, keyed by `root`-relative POSIX path,
+ * skipping `node_modules`. The extracted operations are a function of the whole
+ * declaration surface (extraction resolves types through `api.d.ts`'s sibling
+ * imports), so this is the `artifactSource.deps` map the bake records and the
+ * reader recomputes. Plain fs + crypto: the baked-artifact start-up path must not
+ * load the extractor. Never throws; an unreadable directory contributes nothing,
+ * which fails the equality check (a miss, never a stale hit).
+ */
+export function surfaceDepHashes(root: string): Record<string, string> {
   const files: string[] = [];
   const walk = (dir: string): void => {
-    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    let entries: Dirent[];
+    try {
+      entries = readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
       const abs = join(dir, String(entry.name));
       if (entry.isDirectory()) {
         if (entry.name !== 'node_modules') walk(abs);
@@ -100,50 +115,61 @@ function surfaceDigest(root: string): string {
   };
   walk(root);
   files.sort();
-  const lines = files.map((abs) => `${relative(root, abs).split(sep).join('/')}\0${sha256Hex(readFileSync(abs))}`);
-  return sha256Hex(lines.join('\n'));
+  const deps: Record<string, string> = {};
+  for (const abs of files) deps[relative(root, abs).split(sep).join('/')] = sha256Hex(readFileSync(abs));
+  return deps;
 }
 
-interface IBakedArtifact {
-  readonly formatVersion: number;
-  readonly extractorVersion: string;
-  readonly surfaceSha256: string;
-  readonly operations: Operation[];
+function sameDeps(recorded: Record<string, string>, actual: Record<string, string>): boolean {
+  const keys = Object.keys(recorded).sort();
+  const actualKeys = Object.keys(actual).sort();
+  return keys.length === actualKeys.length && keys.every((key, index) => key === actualKeys[index] && recorded[key] === actual[key]);
 }
 
 /** Outcome of {@link inspectBakedIr}: the operations, or why the artifact cannot be used (`missing` = none was shipped). */
-export type BakedIrInspection = { readonly operations: Operation[] } | { readonly reason: string };
+export type BakedIrInspection =
+  | {
+      readonly operations: Operation[];
+      /** Set when the client declarations could not be located, so the artifact's `.d.ts` hashes were not compared. */
+      readonly stalenessUnchecked?: true;
+    }
+  | { readonly reason: string };
 
 /**
- * Reads the baked artifact. Reports `{reason}` on missing, corrupt, format or
- * extractor-version mismatch, or - when the client declarations are resolvable
- * - a surface digest that no longer matches, so any doubt degrades to live
- * extraction rather than serving a stale surface. Never throws.
+ * Reads the baked artifact: the `CachedExtractEntry` the ir-cache artifact target
+ * stores, read through `createSingleFileBackend(file).get('')`. Reports `{reason}`
+ * on missing, corrupt, format or extractor-version mismatch, or - when the client
+ * declarations are resolvable - a `.d.ts` surface that no longer matches the
+ * entry's `artifactSource.deps`, so any doubt degrades to live extraction rather
+ * than serving a stale surface. Never throws.
  */
-export function inspectBakedIr(distDir: string): BakedIrInspection {
+export async function inspectBakedIr(distDir: string): Promise<BakedIrInspection> {
   try {
     const file = bakedIrArtifactPath(distDir);
     if (!existsSync(file)) return { reason: 'missing' };
-    const parsed = JSON.parse(readFileSync(file, 'utf8')) as Partial<IBakedArtifact>;
-    if (parsed.formatVersion !== POLICY_IR_FORMAT_VERSION) return { reason: `artifact format ${String(parsed.formatVersion)} is not ${POLICY_IR_FORMAT_VERSION}` };
+    const entry = await createSingleFileBackend(file).get('');
+    if (entry === undefined) return { reason: 'artifact is unreadable (not a JSON entry)' };
+    if (entry.formatVersion !== CURRENT_FORMAT_VERSION) return { reason: `artifact format ${String(entry.formatVersion)} is not ${CURRENT_FORMAT_VERSION}` };
     const extractorVersion = expectedExtractorVersion();
-    if (extractorVersion === 'unknown' || parsed.extractorVersion !== extractorVersion) {
-      return { reason: `artifact was baked by extractor ${String(parsed.extractorVersion)}, this install has ${extractorVersion}` };
+    if (extractorVersion === 'unknown' || entry.extractorVersion !== extractorVersion) {
+      return { reason: `artifact was baked by extractor ${String(entry.extractorVersion)}, this install has ${extractorVersion}` };
     }
-    if (!Array.isArray(parsed.operations) || parsed.operations.length === 0) return { reason: 'artifact holds no operations' };
+    if (!Array.isArray(entry.operations) || entry.operations.length === 0) return { reason: 'artifact holds no operations' };
     const client = locateClientApi();
-    if (client !== undefined && parsed.surfaceSha256 !== surfaceDigest(client.surfaceRoot)) {
+    if (client === undefined) return { operations: entry.operations, stalenessUnchecked: true };
+    const recorded = entry.artifactSource?.deps;
+    if (recorded === undefined || !sameDeps(recorded, surfaceDepHashes(client.surfaceRoot))) {
       return { reason: 'the @adhd/policy-core-client declarations changed since the artifact was baked' };
     }
-    return { operations: parsed.operations };
+    return { operations: entry.operations };
   } catch (error) {
     return { reason: `artifact is unreadable (${error instanceof Error ? error.message : String(error)})` };
   }
 }
 
 /** The usable baked operations, or `undefined` (see {@link inspectBakedIr}). */
-export function readBakedIr(distDir: string): Operation[] | undefined {
-  const inspected = inspectBakedIr(distDir);
+export async function readBakedIr(distDir: string): Promise<Operation[] | undefined> {
+  const inspected = await inspectBakedIr(distDir);
   return 'operations' in inspected ? inspected.operations : undefined;
 }
 
@@ -159,8 +185,13 @@ export async function extractPolicyOperations(
   onWarn: (line: string) => void = (line) => void process.stderr.write(`${line}\n`),
   distDir: string = policyDistDir()
 ): Promise<Operation[]> {
-  const inspected = inspectBakedIr(distDir);
-  if ('operations' in inspected) return inspected.operations;
+  const inspected = await inspectBakedIr(distDir);
+  if ('operations' in inspected) {
+    if (inspected.stalenessUnchecked === true) {
+      onWarn('@adhd/policy: using the baked operation surface without checking it for staleness (the @adhd/policy-core-client declarations were not found)');
+    }
+    return inspected.operations;
+  }
   if (inspected.reason !== 'missing') {
     onWarn(`@adhd/policy: ignoring the baked operation surface (${inspected.reason}); extracting live`);
   }
@@ -174,7 +205,12 @@ export async function extractPolicyOperations(
   return (await import('./ir-live')).extractPolicyOperationsLive(client.apiDts);
 }
 
-/** Writes `dist/api.ir.json` (atomically); invoked by the `ir-artifact` build step. */
+/**
+ * Writes the baked artifact (atomically) to `outFile`; invoked by the
+ * `ir-artifact` build step. The artifact is produced by the one core-client
+ * IR-generation entry and shaped by the ir-cache artifact target (see
+ * `./ir-live`), loaded lazily so this module stays extractor-free.
+ */
 export async function writeBakedIr(outFile: string): Promise<void> {
   const client = locateClientApi();
   if (client === undefined) {
@@ -184,15 +220,5 @@ export async function writeBakedIr(outFile: string): Promise<void> {
   if (extractorVersion === 'unknown') {
     throw new Error('@adhd/policy: ir-artifact cannot read the version of @adhd/apigen-core-client, so the artifact would be unverifiable.');
   }
-  const operations = await (await import('./ir-live')).extractPolicyOperationsLive(client.apiDts);
-  const artifact: IBakedArtifact = {
-    formatVersion: POLICY_IR_FORMAT_VERSION,
-    extractorVersion,
-    surfaceSha256: surfaceDigest(client.surfaceRoot),
-    operations,
-  };
-  mkdirSync(dirname(outFile), { recursive: true });
-  const temporary = `${outFile}.${process.pid}.tmp`;
-  writeFileSync(temporary, `${JSON.stringify(artifact)}\n`);
-  renameSync(temporary, outFile);
+  await (await import('./ir-live')).bakePolicyIr(outFile, client, extractorVersion);
 }

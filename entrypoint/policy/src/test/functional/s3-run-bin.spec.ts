@@ -21,13 +21,13 @@ attributes:
 defaults:
   - set: { role: guest, write_roots: [] }
 permissions:
-  - tool: touch
+  - tool: bin/touch
     context: { role: { _eq: dev } }
     args: { cwd: { _within: $attributes.write_roots } }
-  - tool: touch
+  - tool: bin/touch
     effect: ask
     context: { role: { _eq: intern } }
-  - tool: touch
+  - tool: bin/touch
     effect: deny
     args: { cwd: { _regex: '(^|/)\\.ssh(/|$)' } }
 `;
@@ -105,9 +105,9 @@ describe('Put a policy in front of any command - run bin:', () => {
   });
 
   const refused: Array<{ name: string; attributes: (d: IDemo) => unknown | undefined; cwd: (d: IDemo) => string; reason: RegExp }> = [
-    { name: 'dev with write_roots outside the cwd', attributes: (d) => ({ role: 'dev', write_roots: [d.out] }), cwd: (d) => d.work, reason: /no permission allows touch/ },
+    { name: 'dev with write_roots outside the cwd', attributes: (d) => ({ role: 'dev', write_roots: [d.out] }), cwd: (d) => d.work, reason: /no permission allows bin\/touch/ },
     { name: 'dev whose write root contains a .ssh cwd (deny wins)', attributes: (d) => ({ role: 'dev', write_roots: [join(d.demo, 'home')] }), cwd: (d) => d.ssh, reason: /denied by permission global:2/ },
-    { name: 'no attributes at all (guest)', attributes: () => undefined, cwd: (d) => d.out, reason: /no permission allows touch/ },
+    { name: 'no attributes at all (guest)', attributes: () => undefined, cwd: (d) => d.out, reason: /no permission allows bin\/touch/ },
     { name: 'intern (ask with nobody to answer)', attributes: (d) => ({ role: 'intern', write_roots: [d.out] }), cwd: (d) => d.out, reason: /requires approval/ },
   ];
   for (const row of refused) {

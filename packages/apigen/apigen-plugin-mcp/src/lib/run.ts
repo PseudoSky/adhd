@@ -4,6 +4,8 @@ import {
   type Server as HttpServer,
   type ServerResponse,
 } from 'node:http';
+import type { Readable, Writable } from 'node:stream';
+import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
@@ -28,6 +30,7 @@ import type {
   LayerResult,
   Logger,
   OpPlan,
+  Terminal,
   TransportAdapter,
   UseOptions,
   UsePlugin,
@@ -47,7 +50,7 @@ import {
   warnIfNonLoopbackListen,
   wrapMcpStructuredContent,
 } from '@adhd/apigen-engine-runtime';
-import { ApiError, MCP_ERROR_KIND, isApiError } from '@adhd/apigen-base-errors';
+import { ApiError, isApiError } from '@adhd/apigen-base-errors';
 import { operationFor } from './tool-naming';
 import { projectStreamMcp } from './stream';
 import type { McpCallToolResult } from './stream';
@@ -64,11 +67,10 @@ import type { McpCallToolResult } from './stream';
 //      outermost-first) is composed for the FIRST time. Pre-migration, this
 //      file's `CallToolRequestSchema` handler called `dispatch()` directly —
 //      malformed tool input reached the domain function completely
-//      unvalidated. ⚠️ FLAGGED BREAKING BEHAVIOR CHANGE: a malformed call now
-//      REJECTS with `ApiError{code:'invalid_argument'}` (surfaced to a real
-//      MCP client as a JSON-RPC error) instead of silently succeeding (or
-//      running the domain fn with garbage args). This is intentional and
-//      required — not a regression.
+//      unvalidated. A malformed call REJECTS with
+//      `ApiError{code:'invalid_argument'}`, which reaches a real MCP client as
+//      a tool result with `isError: true` (ADR-0018 D2), never by silently
+//      running the domain fn with garbage args.
 //   2. DEBT-APIGEN-SERVE-CORE-002 (mcp half) fix ([mcp-adapter.2]):
 //      `projectStreamMcp` (`./stream.ts`) is wired LIVE via `writeResult`'s
 //      `isApiStream` branch. Pre-migration this function had ZERO call sites
@@ -139,14 +141,95 @@ export interface McpRaw {
   /** `_meta` extracted from `args` — the §9.1 envelope carrier for MCP. */
   meta: Record<string, unknown>;
   /** Populated by `writeResult`/`writeError` before the handler returns. */
-  output?: McpCallToolResult;
+  output?: McpToolOutput;
 }
+
+/**
+ * The `CallToolResult` this adapter returns: the transport-neutral
+ * `McpCallToolResult` plus the result-level `_meta` an error result carries
+ * its machine-readable code in (`_meta['adhd/error']`, ADR-0018 D2).
+ */
+type McpToolOutput = McpCallToolResult & { _meta?: Record<string, unknown> };
+
+/** The machine-readable error record an `isError` result carries under
+ * `_meta['adhd/error']` (ADR-0018 D2). */
+interface McpErrorMeta {
+  code: string;
+  gatewayCode?: string;
+}
+
+/**
+ * Optional tool-presentation metadata (`title`, `annotations`) an
+ * `Operation.tool` / `MountedOperation.tool` carries (ADR-0018 D3).
+ */
+type ToolPresentation = { title?: string; annotations?: Record<string, unknown> };
 
 /** One resolved tool's list-facing metadata — computed ONCE ([mcp-adapter.8]). */
 interface ToolListMeta {
   description: string;
   inputSchema: unknown;
   outputSchema?: Record<string, unknown>;
+  /** `Operation.tool.title`, listed only when present (ADR-0018 D3). */
+  title?: string;
+  /** `Operation.tool.annotations`, listed only when present (ADR-0018 D3). */
+  annotations?: Record<string, unknown>;
+}
+
+/** Copy only the present `title`/`annotations` of a tool's presentation
+ * metadata, so an op without them lists exactly as before (ADR-0018 D3). */
+function toolPresentation(tool: ToolPresentation | undefined): ToolPresentation {
+  return {
+    ...(tool?.title !== undefined ? { title: tool.title } : {}),
+    ...(tool?.annotations !== undefined ? { annotations: tool.annotations } : {}),
+  };
+}
+
+/** True for a value shaped like an MCP `CallToolResult` (a `content` array). */
+function isCallToolResultLike(value: unknown): boolean {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    Array.isArray((value as { content?: unknown }).content)
+  );
+}
+
+/**
+ * Read `options.terminal` — the optional dispatch {@link Terminal} that serves
+ * `RunInput.operations` no package supplies a function for (a gateway or
+ * proxy route). Absent means no such operations are served.
+ */
+function readTerminal(options: Record<string, unknown>): Terminal | undefined {
+  const value = options['terminal'];
+  if (value === undefined || value === null) return undefined;
+  if (typeof value !== 'function') {
+    throw new ApiError(
+      'invalid_argument',
+      'apigen mcp option "terminal" must be a function (fnName, call, opts) => Promise<result>'
+    );
+  }
+  return value as Terminal;
+}
+
+/**
+ * Map an `ApiError` to its `isError` tool result (ADR-0018 D2). The
+ * gateway-unavailable case is keyed on `details.gatewayCode === 'unavailable'`
+ * (no `unavailable` code exists): its text is `unavailable: <message>` and its
+ * `_meta` carries `{ code: 'internal', gatewayCode: 'unavailable' }`. Every
+ * other `ApiError` is `<code>: <message>` with `{ code }`.
+ */
+function apiErrorToolResult(err: ApiError): McpToolOutput {
+  const gatewayCode = (err.details as { gatewayCode?: unknown } | undefined)
+    ?.gatewayCode;
+  const unavailable = err.code === 'internal' && gatewayCode === 'unavailable';
+  const errorMeta: McpErrorMeta = unavailable
+    ? { code: err.code, gatewayCode: 'unavailable' }
+    : { code: err.code };
+  const prefix = unavailable ? 'unavailable' : err.code;
+  return {
+    content: [{ type: 'text', text: `${prefix}: ${err.message}` }],
+    isError: true,
+    _meta: { 'adhd/error': errorMeta },
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -184,6 +267,8 @@ type McpToolListEntry = {
   description: string;
   inputSchema: unknown;
   outputSchema?: Record<string, unknown>;
+  title?: string;
+  annotations?: Record<string, unknown>;
 };
 
 // ---------------------------------------------------------------------------
@@ -216,6 +301,20 @@ export class McpTransportAdapter implements TransportAdapter<McpRaw> {
    * `registerRoute()` (the tool set itself)
    * (DEBT-APIGEN-MCP-LISTTOOLS-CACHE-001). */
   private cachedList: McpToolListEntry[] | undefined;
+  /** Tool names routed through a dispatch terminal (`options.terminal`): their
+   * `arguments` are the flat argument object and their results may already be
+   * `CallToolResult`s (see {@link McpTransportAdapter.markTerminalRoute}). */
+  private readonly terminalRoutes = new Set<string>();
+
+  /**
+   * Marks tool `name` as a terminal-routed (gateway/proxy) tool: `readCall`
+   * hands the Layers the request's `arguments` verbatim as `domainArgs` (no
+   * `data` wrapper), and `writeResult` passes a result that is already a
+   * `CallToolResult` through unchanged.
+   */
+  markTerminalRoute(name: string): void {
+    this.terminalRoutes.add(name);
+  }
 
   bindSchema(opId: string, schema: ComposedSchemas[string]): void {
     this.schemasByOpId.set(opId, schema);
@@ -260,12 +359,7 @@ export class McpTransportAdapter implements TransportAdapter<McpRaw> {
    * (frozen) array reference (DEBT-APIGEN-MCP-LISTTOOLS-CACHE-001). The array,
    * each entry, and the shared `DEFAULT_INPUT_SCHEMA` are frozen so a consumer
    * cannot corrupt the memoized projection in place. */
-  listTools(): Array<{
-    name: string;
-    description: string;
-    inputSchema: unknown;
-    outputSchema?: Record<string, unknown>;
-  }> {
+  listTools(): McpToolListEntry[] {
     if (this.cachedList) return this.cachedList;
     const list: McpToolListEntry[] = [...this.plans.keys()].map((name) => {
       const meta = this.toolMeta.get(name);
@@ -274,6 +368,10 @@ export class McpTransportAdapter implements TransportAdapter<McpRaw> {
         description: meta?.description ?? name,
         inputSchema: meta?.inputSchema ?? DEFAULT_INPUT_SCHEMA,
         ...(meta?.outputSchema ? { outputSchema: meta.outputSchema } : {}),
+        ...(meta?.title !== undefined ? { title: meta.title } : {}),
+        ...(meta?.annotations !== undefined
+          ? { annotations: meta.annotations }
+          : {}),
       });
     });
     this.cachedList = Object.freeze(list) as McpToolListEntry[];
@@ -297,7 +395,7 @@ export class McpTransportAdapter implements TransportAdapter<McpRaw> {
     // `undefined` → `{}`) was indistinguishable from "no input was sent" —
     // but a mount with real domain input (e.g. `_batch/<kind>`'s
     // `{operation, items, …}`) needs the raw `args` object itself, unwrapped.
-    const domainArgs = plan.isMount
+    const domainArgs = plan.isMount || this.terminalRoutes.has(plan.mcp.name)
       ? raw.args
       : (raw.args['data'] as Record<string, unknown> | undefined) ?? {};
     return { envelope, domainArgs };
@@ -313,6 +411,23 @@ export class McpTransportAdapter implements TransportAdapter<McpRaw> {
     // mis-serializing it through JSON.stringify.
     if (isApiStream(result)) {
       raw.output = await projectStreamMcp(result as ApiStream<unknown>);
+      return;
+    }
+
+    // A terminal-routed tool (a proxied MCP upstream) resolves with the
+    // upstream's own `CallToolResult`; it reaches the host unchanged.
+    if (
+      this.terminalRoutes.has(plan.mcp.name) &&
+      isCallToolResultLike(result)
+    ) {
+      raw.output = result as McpToolOutput;
+      return;
+    }
+
+    // ADR-0018 D1 (BA-2): a string return is the raw text itself — never
+    // JSON-quoted — and carries no `structuredContent`.
+    if (typeof result === 'string') {
+      raw.output = { content: [{ type: 'text', text: result }] };
       return;
     }
 
@@ -332,16 +447,13 @@ export class McpTransportAdapter implements TransportAdapter<McpRaw> {
     };
   }
 
-  writeError(_raw: McpRaw, err: unknown, _plan: OpPlan): void {
-    // §9: MCP surfaces all apigen errors by RE-THROWING — the SDK's own
-    // Protocol layer (`_onrequest`) converts a thrown error into a JSON-RPC
-    // error response. Unlike HTTP (a distinct status-code channel) or a
-    // stream's in-band error notification, MCP's unary error channel IS the
-    // thrown-error-to-JSON-RPC-error conversion the SDK already performs, so
-    // re-throwing here is the correct §9 marshal for this transport.
-    const code = isApiError(err) ? err.code : 'internal';
-    void MCP_ERROR_KIND[code]; // validates the §9 table is wired
-    throw err;
+  writeError(raw: McpRaw, err: unknown, _plan: OpPlan): void {
+    // §9 / ADR-0018 D2: every `ApiError` is a tool execution error — a
+    // `CallToolResult` with `isError: true` the model can read, its code in
+    // `_meta['adhd/error']`. Only a non-`ApiError` throw is re-thrown, which
+    // the SDK's Protocol layer (`_onrequest`) turns into a JSON-RPC error.
+    if (!isApiError(err)) throw err;
+    raw.output = apiErrorToolResult(err);
   }
 }
 
@@ -458,6 +570,41 @@ function collectMountedOperations(
 // adapter. Called EXACTLY ONCE per `run()` invocation ([mcp-adapter.8]).
 // ---------------------------------------------------------------------------
 
+/**
+ * Build each plugin's `createLayer` layer exactly once and return copies whose
+ * layer capability carries the built function as `layer` (and no
+ * `createLayer`), so every downstream `createPackageInvoker` reuses the same
+ * layer instance. Inputs are never mutated; plugins without `createLayer`
+ * pass through unchanged.
+ */
+function materialiseUsePlugins(
+  plugins: UsePlugin[],
+  layerOptions: Record<string, unknown>
+): UsePlugin[] {
+  return plugins.map((plugin) => {
+    const caps = plugin.capabilities;
+    const cap = caps?.layer;
+    if (!caps || !cap || typeof cap.createLayer !== 'function') return plugin;
+    const built: unknown = cap.createLayer(layerOptions);
+    if (typeof built !== 'function') {
+      throw new ApiError(
+        'internal',
+        `apigen-plugin-mcp: --use plugin "${plugin.id}": layer capability createLayer() returned ${built === null ? 'null' : typeof built}, not a layer function`
+      );
+    }
+    const { createLayer: _factory, ...rest } = cap;
+    void _factory;
+    return Object.create(plugin, {
+      capabilities: {
+        value: { ...caps, layer: { ...rest, layer: built } },
+        enumerable: true,
+        writable: true,
+        configurable: true,
+      },
+    }) as UsePlugin;
+  });
+}
+
 function buildToolTable(input: RunInput, adapter: McpTransportAdapter): void {
   __toolTableBuildCount.count++;
 
@@ -465,7 +612,13 @@ function buildToolTable(input: RunInput, adapter: McpTransportAdapter): void {
     (input.options['projection'] as ProjectionConfig | undefined) ?? {};
   const descriptions =
     (input.options['toolDescriptions'] as Record<string, string>) ?? {};
-  const usePlugins = readUsePlugins(input.options);
+  // SPEC 7.1 / ADR-0019 D1: each plugin's `createLayer` runs at most once per
+  // invocation. Materialise once here and share the result across the
+  // per-package, terminal, mount and hostBridge invokers below.
+  const usePlugins = materialiseUsePlugins(
+    readUsePlugins(input.options),
+    input.options
+  );
   const useOptions = readUseOptions(input.options);
 
   // (batch-rollout, BATCH_0.0.1.md §2/§F1, architect-review Finding 2)
@@ -509,7 +662,9 @@ function buildToolTable(input: RunInput, adapter: McpTransportAdapter): void {
     // then invoke through it per request. Rejects schema-violating input with
     // `ApiError{invalid_argument}` BEFORE the target function is ever called
     // — mcp never did this pre-migration.
-    const invoke = createPackageInvoker(schemasByOpId, usePlugins);
+    const invoke = createPackageInvoker(schemasByOpId, usePlugins, {
+      layerOptions: input.options,
+    });
     const invokeOpts: InvokeOptions = {
       fns: fnsByOpId,
       createClient: pkg.createClient,
@@ -548,9 +703,56 @@ function buildToolTable(input: RunInput, adapter: McpTransportAdapter): void {
         description,
         inputSchema: (fnSchema as { input?: unknown }).input,
         outputSchema,
+        ...toolPresentation(op.tool),
       });
       adapter.registerRoute(plan, (call) =>
         dispatchForPlan(plan, invoke, call, invokeOpts)
+      );
+    }
+  }
+
+  // Terminal-routed operations (`options.terminal`): every `input.operations`
+  // entry no package already registered is served through the composed
+  // `--use` invoker with the terminal as its innermost step — the gateway /
+  // proxy route. The tool's `arguments` ARE the flat argument object (the
+  // Layers and the terminal see them verbatim; there is no `data` envelope
+  // and no composed schema, so the validate-Layer passes them through).
+  const terminal = readTerminal(input.options);
+  if (terminal !== undefined) {
+    const registered = new Set<string>(
+      Object.keys(mergedSchemasByOpId)
+    );
+    const terminalInvoke = createPackageInvoker({}, usePlugins, {
+      layerOptions: input.options,
+      terminal,
+    });
+    const terminalOpts: InvokeOptions = { fns: {}, schemas: {} };
+    for (const op of input.operations ?? []) {
+      if (registered.has(op.id)) continue;
+      const plan = buildOpPlan({ op, transport: 'mcp', projection });
+      if (adapter.getPlan(plan.mcp.name) !== undefined) {
+        throw new ApiError(
+          'invalid_argument',
+          `operation ${JSON.stringify(op.id)} projects to the tool name ${JSON.stringify(plan.mcp.name)}, which another operation already uses`
+        );
+      }
+      const inputSchema = deriveMcpMountInputSchema(op.input);
+      // An upstream-authored description wins over the generated one.
+      adapter.bindToolMeta(plan.mcp.name, {
+        description:
+          op.tool?.description ??
+          buildToolDescription(
+            plan.mcp.name,
+            { input: inputSchema },
+            descriptions[plan.mcp.name]
+          ),
+        inputSchema,
+        ...(op.tool?.outputSchema !== undefined ? { outputSchema: op.tool.outputSchema } : {}),
+        ...toolPresentation(op.tool),
+      });
+      adapter.markTerminalRoute(plan.mcp.name);
+      adapter.registerRoute(plan, (call) =>
+        dispatchForPlan(plan, terminalInvoke, call, terminalOpts)
       );
     }
   }
@@ -565,7 +767,9 @@ function buildToolTable(input: RunInput, adapter: McpTransportAdapter): void {
   // target) — built from the package-spanning merged tables above, through
   // the SAME composed `--use` invoker every request goes through (never a
   // bypass of auth/logging/validate).
-  const hostInvoke = createPackageInvoker(mergedSchemasByOpId, usePlugins);
+  const hostInvoke = createPackageInvoker(mergedSchemasByOpId, usePlugins, {
+      layerOptions: input.options,
+    });
   const hostBridge: MountHostBridge = {
     invoke: (fnName, call, opts) =>
       hostInvoke(
@@ -595,7 +799,9 @@ function buildToolTable(input: RunInput, adapter: McpTransportAdapter): void {
     hostBridge
   );
   if (mountedOps.length > 0) {
-    const mountInvoke = createPackageInvoker({}, usePlugins);
+    const mountInvoke = createPackageInvoker({}, usePlugins, {
+      layerOptions: input.options,
+    });
     const mountInvokeOpts: InvokeOptions = { fns: {}, schemas: {} };
     for (const mountedOp of mountedOps) {
       const plan = buildOpPlan({ op: mountedOp, transport: 'mcp', projection });
@@ -629,6 +835,7 @@ function buildToolTable(input: RunInput, adapter: McpTransportAdapter): void {
       adapter.bindToolMeta(plan.mcp.name, {
         description,
         inputSchema: mountInputSchema,
+        ...toolPresentation(mountedOp.tool),
       });
       adapter.registerRoute(plan, (call) =>
         dispatchForPlan(plan, mountInvoke, call, mountInvokeOpts)
@@ -664,6 +871,16 @@ export interface McpServerIdentity {
 }
 
 function resolveMcpServerIdentity(input: RunInput): McpServerIdentity {
+  const override = input.options['serverInfo'] as
+    | { name?: unknown; version?: unknown }
+    | undefined;
+  if (
+    override !== undefined &&
+    typeof override.name === 'string' &&
+    typeof override.version === 'string'
+  ) {
+    return { name: override.name, version: override.version };
+  }
   const pkg = input.packages[0];
   return {
     name: pkg?.id ?? 'apigen-mcp',
@@ -682,7 +899,7 @@ function createMcpServer(
     tools: adapter.listTools(),
   }));
 
-  server.setRequestHandler(CallToolRequestSchema, async (req) => {
+  server.setRequestHandler(CallToolRequestSchema, async (req, extra) => {
     const { name, arguments: rawArgs = {} } = req.params;
     const plan = adapter.getPlan(name);
     const dispatch = adapter.getDispatch(name);
@@ -694,7 +911,10 @@ function createMcpServer(
     const start = Date.now();
     try {
       const call = await adapter.readCall(raw, plan);
-      const result = await dispatch(call);
+      // ADR-0018 D4 / ADR-0019 D4: client cancellation (`notifications/
+      // cancelled`) aborts the SDK's per-request signal, which the dispatched
+      // call carries to every Layer and the domain function.
+      const result = await dispatch({ ...call, signal: extra.signal });
       await adapter.writeResult(raw, result, plan);
       logger.info({ tool: name, ms: Date.now() - start }, `→ ${name}`);
       // `McpCallToolResult` (our own, transport-neutral shape — content +
@@ -723,9 +943,12 @@ function createMcpServer(
       } else {
         logger.error({ tool: name, ms: Date.now() - start, err }, `✗ ${name}`);
       }
+      // `writeError` sets `raw.output` to the `isError` result for an
+      // `ApiError` and re-throws anything else (a JSON-RPC protocol error).
+      // `writeResult` is the last statement of the `try`, so a throw there
+      // leaves `raw.output` unset and only `writeError` can have set it.
       adapter.writeError(raw, err, plan);
-      // writeError always re-throws (§9 marshal for mcp) — unreachable, but
-      // keeps this handler's control flow (and inferred return type) honest.
+      if (raw.output) return raw.output as unknown as ServerResult;
       throw err;
     }
   });
@@ -915,6 +1138,105 @@ export function awaitStdioClose(
   });
 }
 
+/**
+ * Read `options.hostTransport` — an optional SDK `Transport` that serves the
+ * `stdio` mode in place of `StdioServerTransport` (an in-memory transport in
+ * tests, or a stdio transport that also follows stdin EOF).
+ */
+function readHostTransport(value: unknown): Transport | undefined {
+  if (value === undefined || value === null) return undefined;
+  const t = value as Partial<Transport>;
+  if (
+    typeof value !== 'object' ||
+    typeof t.start !== 'function' ||
+    typeof t.send !== 'function' ||
+    typeof t.close !== 'function'
+  ) {
+    throw new ApiError(
+      'invalid_argument',
+      'apigen mcp option "hostTransport" must be an MCP SDK Transport'
+    );
+  }
+  return value as Transport;
+}
+
+/**
+ * Settle when `t` closes (chaining the SDK's own `onclose`, never replacing
+ * it) or `signal` aborts. On abort the transport is closed so the connected
+ * `Server` shuts down.
+ */
+function awaitTransportClose(
+  t: Transport,
+  logger: Logger,
+  signal?: AbortSignal
+): Promise<void> {
+  return new Promise<void>((resolve) => {
+    let done = false;
+    const settle = (message: string): void => {
+      if (done) return;
+      done = true;
+      signal?.removeEventListener('abort', onAbort);
+      logger.info(message);
+      resolve();
+    };
+    const onAbort = (): void => {
+      void t.close().catch(() => undefined);
+      settle('mcp server shutting down');
+    };
+    const prev = t.onclose;
+    t.onclose = () => {
+      prev?.();
+      settle('host transport closed');
+    };
+    if (signal) {
+      if (signal.aborted) {
+        onAbort();
+        return;
+      }
+      signal.addEventListener('abort', onAbort, { once: true });
+    }
+  });
+}
+
+/** The optional stdio stream pair `options.stdio` may supply. */
+interface McpStdioStreams {
+  stdin?: Readable;
+  stdout?: Writable;
+}
+
+/**
+ * Read `options.stdio` — an optional `{ stdin, stdout }` stream pair for the
+ * stdio transport. Absent (or either half absent) means process stdio for
+ * that half. A present value that is not an object, or whose halves are not
+ * streams, is rejected with `invalid_argument` rather than handed to the SDK.
+ */
+function readStdioStreams(value: unknown): McpStdioStreams {
+  if (value === undefined || value === null) return {};
+  if (typeof value !== 'object') {
+    throw new ApiError(
+      'invalid_argument',
+      'apigen mcp option "stdio" must be an object { stdin?, stdout? }'
+    );
+  }
+  const { stdin, stdout } = value as { stdin?: unknown; stdout?: unknown };
+  if (stdin !== undefined && typeof (stdin as Readable).on !== 'function') {
+    throw new ApiError(
+      'invalid_argument',
+      'apigen mcp option "stdio.stdin" must be a readable stream'
+    );
+  }
+  if (stdout !== undefined && typeof (stdout as Writable).write !== 'function') {
+    throw new ApiError(
+      'invalid_argument',
+      'apigen mcp option "stdio.stdout" must be a writable stream'
+    );
+  }
+  return {
+    ...(stdin !== undefined ? { stdin: stdin as Readable } : {}),
+    ...(stdout !== undefined ? { stdout: stdout as Writable } : {}),
+  };
+}
+
 // ---------------------------------------------------------------------------
 // run
 // ---------------------------------------------------------------------------
@@ -957,12 +1279,31 @@ export async function run(input: RunInput): Promise<void> {
 
   if (transport === 'stdio') {
     const server = createMcpServer(adapter, logger, identity);
-    const t = new StdioServerTransport();
+    // In-process seam: an optional `options.hostTransport` (an SDK
+    // `Transport`) replaces the stdio transport entirely; it settles `run()`
+    // when it closes or `signal` aborts.
+    const hostTransport = readHostTransport(input.options['hostTransport']);
+    if (hostTransport !== undefined) {
+      await server.connect(hostTransport);
+      logger.info('host transport ready');
+      return awaitTransportClose(hostTransport, logger, input.signal);
+    }
+    // In-process seam: an optional `options.stdio = { stdin, stdout }` stream
+    // pair replaces process stdio (SDK 1.29.0:
+    // `new StdioServerTransport(_stdin?: Readable, _stdout?: Writable)`).
+    const stdio = readStdioStreams(input.options['stdio']);
+    const t = new StdioServerTransport(stdio.stdin, stdio.stdout);
     await server.connect(t);
     logger.info('stdio transport ready');
     // stdio has a natural shutdown (stdin EOF, or transport close), so no
     // signal is required; a supplied one is an additional out-of-band stop.
-    return awaitStdioClose(t, logger, input.signal);
+    // The EOF watch follows the SAME stdin the transport reads.
+    return awaitStdioClose(
+      t,
+      logger,
+      input.signal,
+      stdio.stdin ?? process.stdin
+    );
   }
 
   if (transport === 'sse') {

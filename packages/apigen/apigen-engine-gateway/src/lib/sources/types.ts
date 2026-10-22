@@ -5,8 +5,10 @@
 // `run()` accept (same shape as `entrypoint/backlog/src/server.ts`
 // `buildBacklogApigenPackage`). See docs/plan/policy-core/T08-discovery.md.
 
-import type { CallToolResult, Tool } from '@modelcontextprotocol/sdk/types.js';
+import { isApiError } from '@adhd/apigen-base-errors';
+import type { ApiError } from '@adhd/apigen-base-errors';
 import type { Operation, composeSchemas } from '@adhd/apigen-core-client';
+import { makeUnavailableError } from '../gateway';
 
 /** A parsed source argument. */
 export type SourceSpec =
@@ -14,36 +16,25 @@ export type SourceSpec =
   | { readonly kind: 'remote'; readonly url: string }
   | { readonly kind: 'bin'; readonly command: string };
 
-/** `run` resolves lazily (nothing starts until an operation is invoked); `serve` is an explicit start. */
+/**
+ * `run` resolves lazily (nothing starts until an operation is invoked); `serve` is an explicit
+ * start. Only used to fill a resolution's unset translator: `run` -> `argv`, `serve` -> `mcp`.
+ */
 export type SourceIntent = 'run' | 'serve';
 
-/** A tool the resolver refused to expose, with the reason. One bad tool never disables a source. */
+/** A tool the MCP translator refused to expose, with the reason. One bad tool never disables a source. */
 export interface ISkippedTool {
   readonly tool: string;
   readonly reason: string;
 }
 
 /**
- * The live upstream of an MCP source: the full upstream `Tool` objects and a direct
- * `tools/call` path. The passthrough server uses this instead of the positional `fns`
- * table, so arguments and results reach the upstream and the host verbatim.
+ * An executable source (`argv` translator) resolved to the pair an apigen host consumes. An MCP
+ * upstream is not resolved to a live object: it is IR plus a binding (`registerSourceExtractors`,
+ * `createMcpUpstreamAdapter`).
  */
-export interface IMcpUpstream {
-  /** Every exposed upstream tool (name, title, description, inputSchema, outputSchema, annotations), by upstream name. */
-  readonly tools: ReadonlyMap<string, Tool>;
-  /**
-   * `tools/call` on the upstream with `args` exactly as given (undeclared properties
-   * included) and the upstream's result returned verbatim. An error the upstream itself
-   * returned rejects with the SDK `McpError` carrying the upstream's code.
-   */
-  callTool(name: string, args?: Record<string, unknown>, signal?: AbortSignal): Promise<CallToolResult>;
-  /** Registers `cb` for when the upstream connection closes (including the process exiting on its own). Fires at most once per registration. */
-  onClose(cb: () => void): void;
-}
-
-/** A source resolved to the pair an apigen host consumes. */
 export interface IResolvedSource {
-  /** `'bin:touch'` | `'bin:mcp-server-filesystem'`. */
+  /** `'bin:touch'`. */
   readonly sourceId: string;
   readonly operations: Operation[];
   readonly pkg: {
@@ -55,25 +46,22 @@ export interface IResolvedSource {
     fns: Record<string, (...a: unknown[]) => unknown>;
     createClient: () => Promise<unknown>;
   };
-  /** Tools of an MCP source that were not exposed (non-object schema, duplicate or reserved name). */
-  readonly skipped?: readonly ISkippedTool[];
-  /** Present for an MCP (`serve`) source: the live upstream. */
-  readonly mcp?: IMcpUpstream;
   /** Kills any process this source started (the whole process group). Idempotent. */
   dispose(): Promise<void>;
 }
 
-/** Typed failure of source parsing, resolution or startup. */
-export class SourceError extends Error {
-  constructor(
-    readonly code:
-      | 'unsupported'
-      | 'handshake-failed'
-      | 'spawn-failed'
-      | 'invalid-spec',
-    message: string
-  ) {
-    super(message);
-    this.name = 'SourceError';
-  }
+// Failures of source parsing, resolution or startup are core `ApiError`s (TAXONOMY §7, B9):
+// an invalid or unsupported source is `ApiError('invalid_argument')`; a process that cannot
+// be started or an upstream that fails its handshake is `makeUnavailableError(<binding>,
+// '(start)', reason)` from the gateway error model.
+
+/**
+ * Normalise a startup failure (spawn, handshake, `tools/list`) to the gateway `unavailable`
+ * error for `binding`. An `ApiError` the launcher already raised (a confining launcher's own
+ * refusal, for example) passes through unchanged. Internal to `sources/`.
+ */
+export function startError(binding: string, cause: unknown, context?: string): ApiError {
+  if (isApiError(cause)) return cause;
+  const reason = cause instanceof Error ? cause.message : String(cause);
+  return makeUnavailableError(binding, '(start)', context ? `${context}: ${reason}` : reason);
 }

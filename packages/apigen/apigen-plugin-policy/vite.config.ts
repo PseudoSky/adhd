@@ -13,7 +13,7 @@ import { externalizeRealDeps } from '../../../tools/vite-plugins/externalize.mjs
 import { nxCopyAssetsPlugin } from '@nx/vite/plugins/nx-copy-assets.plugin';
 
 export default defineConfig(() => ({
-  root: import.meta.dirname,
+  root: __dirname,
   cacheDir: projectCacheDir(__dirname),
   // NOTE (test resolution): the pre-ordered tsconfig-paths plugin below makes
   // the vitest PARENT resolve @adhd/* to `src`. If this project's tests spawn a
@@ -24,10 +24,10 @@ export default defineConfig(() => ({
     importMetaUrlCjs(),
     nxViteTsPaths(),
     nxViteTsPathsPre(),
-    nxCopyAssetsPlugin(['*.md', 'schema/*.json']),
+    nxCopyAssetsPlugin(['*.md']),
     dts({
       entryRoot: 'src',
-      tsconfigPath: path.join(import.meta.dirname, 'tsconfig.lib.json'),
+      tsconfigPath: path.join(__dirname, 'tsconfig.lib.json'),
       pathsToAliases: false,
     }),
   ],
@@ -47,11 +47,11 @@ export default defineConfig(() => ({
     lib: {
       // Could also be a dictionary or array of multiple entry points.
       entry: 'src/index.ts',
-      name: 'policy-core-client',
+      name: 'apigen-plugin-policy',
       fileName: 'index',
       // Change this to the formats you want to support.
       // Don't forget to update your package.json as well.
-      formats: ['es' as const],
+      formats: ['cjs' as const],
     },
     rolldownOptions: {
       // External packages that should not be bundled into your library.
@@ -59,7 +59,7 @@ export default defineConfig(() => ({
     },
   },
   test: {
-    name: 'policy-core-client',
+    name: 'apigen-plugin-policy',
     watch: false,
     globals: true,
     environment: 'node',

@@ -12,11 +12,10 @@
  *   this shape (six, f3683008) shares the one assertion.
  */
 import { readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-const HERE = dirname(fileURLToPath(import.meta.url));
+const HERE = __dirname;
 
 describe('stub: http-entry.e2e.test.ts runs in the e2e lane', () => {
   it('the sibling suite exists, is named *.e2e.test.ts and declares tier P', () => {

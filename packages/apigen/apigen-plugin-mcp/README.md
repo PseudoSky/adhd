@@ -95,6 +95,11 @@ async function start() {
 | `port` | `number` | `3000` | Listen port (HTTP transports only) |
 | `host` | `string` | `'127.0.0.1'` | Bind address (HTTP transports only) |
 | `toolDescriptions` | `Record<string, string>` | `{}` | Override tool descriptions per function name |
+| `usePlugins` | `UsePlugin[]` | `[]` | `--use` plugins whose Layers wrap every call, outermost first |
+| `terminal` | `Terminal` | none | Dispatch terminal that serves `operations` no package supplies a function for (see [Gateway and proxy routes](#gateway-and-proxy-routes-optionsterminal)) |
+| `serverInfo` | `{ name: string; version: string }` | first package id and version | Identity advertised in the MCP `initialize` response |
+| `hostTransport` | MCP SDK `Transport` | stdio | `stdio` mode only: serve over this transport instead of `StdioServerTransport` |
+| `stdio` | `{ stdin?: Readable; stdout?: Writable }` | process stdio | `stdio` mode only: stream pair for the default stdio transport |
 
 ---
 
@@ -131,6 +136,23 @@ curl -X POST http://localhost:3100/messages?sessionId=... \
 ### streaming-http
 
 Single-request streaming HTTP for long-lived operations (server-sent events per tool call).
+
+### Results and errors
+
+- A `string` return is emitted as the raw text in `content[0].text` with no `structuredContent`; any other value is `JSON.stringify`-ed, with `structuredContent` for an object return.
+- Every `ApiError` is a tool result with `isError: true`, text `<code>: <message>` and the machine-readable code in `_meta['adhd/error']` (`{ code }`, plus `gatewayCode: 'unavailable'` for an unavailable gateway host, whose text is `unavailable: <message>`). `callTool` resolves for these. Unknown tool names, malformed requests and non-`ApiError` throws stay JSON-RPC protocol errors.
+- `tools/list` carries `title`, `annotations` and `outputSchema` from `Operation.tool` when present; an `Operation.tool.description` replaces the generated description for terminal-route tools.
+- Client cancellation (`notifications/cancelled`) aborts the dispatched call's `signal`.
+
+### Gateway and proxy routes (`options.terminal`)
+
+`run({ packages: [], operations, options: { terminal, usePlugins } })` serves every operation in `operations` that no package supplies a function for, with `terminal` as the innermost step of the composed Layer stack (`(fnName, call, opts) => Promise<result>`, routing by `call.operation.binding ?? call.operation.host`). These tools differ from package tools:
+
+- the tool's `arguments` are the flat argument object; there is no `{ data }` wrapper and `call.domainArgs` is that object, so the Layers and the terminal see exactly what the host sent;
+- no composed schema is bound, so the validate Layer passes the call through and the advertised `inputSchema` is the operation's own `input`;
+- a result that is already a `CallToolResult` (an MCP upstream's answer) reaches the host unchanged.
+
+Two operations that project to the same tool name are rejected with `invalid_argument`. Without `terminal`, operations with no package function are not served. `adhd-policy serve` uses this route with a gateway terminal and `hostTransport`.
 
 ---
 

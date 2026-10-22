@@ -39,7 +39,7 @@ export type Effect = 'allow' | 'ask' | 'deny';
 
 /** One permission entry of a policy document. */
 export interface IPermission {
-  /** Tool name, list, or trailing-wildcard pattern (`files.*`). */
+  /** Tool name, list, or trailing-wildcard pattern (`files/*`; `files.*` is normalised to it). */
   readonly tool: string | readonly string[];
   /** Default `allow` (PM-05). */
   readonly effect?: Effect;

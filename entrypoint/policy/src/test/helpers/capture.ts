@@ -3,7 +3,8 @@ import { mkdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { runPolicyCli, type IPolicyMountDeps } from '../../wrapper/mount';
 import { runEntry } from '../../wrapper/run-entry';
-import { removeScratchRootIfEmpty, SCRATCH_ROOT } from './tmp';
+import { WORKSPACE_YAML, writePolicy } from './fixtures';
+import { removeScratchRootIfEmpty, SCRATCH_ROOT, withTmpDir } from './tmp';
 
 /** What one in-process CLI run produced. */
 export interface ICliResult {
@@ -87,3 +88,23 @@ export function useScratchTelemetry(): void {
 export function parseJson<T = Record<string, unknown>>(stdout: string): T {
   return JSON.parse(stdout) as T;
 }
+
+const WARMED = Symbol.for('adhd-policy.test.cli-warmed');
+
+/**
+ * Pays the cold cost of the first in-process CLI run (lazy module loads and one-time runtime assembly, about a second
+ * on a loaded machine) at collection time, so no test or hook carries it. Runs `verify` against a good policy with
+ * telemetry off, once per process (a `vi.resetModules()` re-import does not repeat it), and touches nothing outside
+ * `tmp/policy`.
+ */
+export async function warmCli(): Promise<void> {
+  const flags = globalThis as unknown as Record<symbol, boolean | undefined>;
+  if (flags[WARMED] === true) return;
+  flags[WARMED] = true;
+  await withTmpDir('warm-cli', async (dir) => {
+    await writePolicy(dir, WORKSPACE_YAML);
+    await runCli(['verify'], { cwd: dir, home: dir, env: { ADHD_POLICY_TELEMETRY: 'off' } });
+  });
+}
+
+await warmCli();

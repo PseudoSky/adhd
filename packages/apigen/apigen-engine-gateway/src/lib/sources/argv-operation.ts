@@ -1,6 +1,8 @@
-import type { Operation } from '@adhd/apigen-core-client';
-import { commandBaseName, segmentOf } from './command-name';
-import type { IProcessLauncher } from './process';
+import { syntheticOp } from '@adhd/apigen-core-client';
+import type { JSONSchema, Operation } from '@adhd/apigen-core-client';
+import { commandBaseName } from './command-name';
+import type { IProcessHandle, IProcessLauncher } from './process';
+import { startError } from './types';
 
 /** Per-stream capture cap (UTF-8 bytes). */
 const OUTPUT_CAP_BYTES = 1024 * 1024;
@@ -29,47 +31,62 @@ export interface IArgvInvokerOptions {
   readonly signal?: AbortSignal;
 }
 
+/** Producer tag (`Operation.host`) of the argv translator (ADR-0017). */
+export const ARGV_HOST = 'argv';
+
+/** The binding key (`Operation.binding`) of the argv operation for `command`: `bin:<base>`. */
+export function argvBindingOf(command: string): string {
+  return `bin:${commandBaseName(command)}`;
+}
+
+/** Fresh copy per operation so a consumer mutating one schema never leaks into another. */
+const argvInput = (): JSONSchema => ({
+  type: 'object',
+  required: ['argv', 'cwd'],
+  additionalProperties: false,
+  properties: {
+    argv: { type: 'array', items: { type: 'string' } },
+    cwd: { type: 'string' },
+  },
+});
+
+const argvOutput = (): JSONSchema => ({
+  type: 'object',
+  required: ['exitCode', 'stdout', 'stderr'],
+  additionalProperties: false,
+  properties: {
+    exitCode: { type: 'number' },
+    stdout: { type: 'string' },
+    stderr: { type: 'string' },
+    signal: { type: 'string' },
+  },
+});
+
 /**
- * D-07: the argv fallback for a `bin:` source. One `action` operation whose id is the
- * command's basename without extension (`touch`); input `{argv, cwd}` (`argv` excludes
- * the command, `cwd` is the working directory); output `{exitCode, stdout, stderr}`.
- * Pure construction: nothing is started (SRC-05 / PS-28).
+ * D-07: the argv fallback for a `bin:` source. One `action` operation built by the core
+ * `syntheticOp`: id `bin/<base>` (`<base>` is the command's basename without a known
+ * executable extension, e.g. `bin/touch`), producer `host: 'argv'`, `binding: 'bin:<base>'`,
+ * `safe: false`; input `{argv, cwd}` (`argv` excludes the command, `cwd` is the working
+ * directory); output `{exitCode, stdout, stderr}`. `fnName` is the path tail's `raw`
+ * (`<base>`), the key of the `pkg.fns` / `pkg.schemas` tables. Pure construction: nothing
+ * is started (SRC-05 / PS-28).
  */
 export function buildArgvOperation(command: string): { operation: Operation; fnName: string } {
   const fnName = commandBaseName(command);
-  const seg = segmentOf(fnName);
   const operation: Operation = {
-    id: fnName,
-    host: 'ts',
-    namespace: seg,
-    path: [seg],
-    kind: 'action',
-    async: true,
-    streaming: false,
-    safe: false,
-    input: {
-      type: 'object',
-      required: ['argv', 'cwd'],
-      additionalProperties: false,
-      properties: {
-        argv: { type: 'array', items: { type: 'string' } },
-        cwd: { type: 'string' },
-      },
-    },
-    output: {
-      type: 'object',
-      required: ['exitCode', 'stdout', 'stderr'],
-      additionalProperties: false,
-      properties: {
-        exitCode: { type: 'number' },
-        stdout: { type: 'string' },
-        stderr: { type: 'string' },
-        signal: { type: 'string' },
-      },
-    },
-    envelope: {},
-    typeText: null,
-    hasCtx: false,
+    ...syntheticOp(
+      `bin/${fnName}`,
+      { host: ARGV_HOST, operations: [] },
+      {
+        kind: 'action',
+        async: true,
+        safe: false,
+        input: argvInput(),
+        output: argvOutput(),
+        hasCtx: false,
+      }
+    ),
+    binding: argvBindingOf(command),
   };
   return { operation, fnName };
 }
@@ -128,7 +145,12 @@ export function createArgvInvoker(
     }
     const signal = callSignal ?? options.signal;
     signal?.throwIfAborted();
-    const handle = await launcher.start({ command, args: input.argv, cwd: input.cwd });
+    let handle: IProcessHandle;
+    try {
+      handle = await launcher.start({ command, args: input.argv, cwd: input.cwd });
+    } catch (e) {
+      throw startError(argvBindingOf(command), e);
+    }
     const out = capture();
     const err = capture();
     handle.onStdout((c) => out.push(c));

@@ -148,3 +148,260 @@ export function sourcesForPlugin(
 ): string[] {
   return files.filter((f) => pluginConsumesSource(plugin, f));
 }
+
+// ---------------------------------------------------------------------------
+// Source-reference resolver (ADR-0017 D4; gap analysis §3a, §5.4, §5.5)
+// ---------------------------------------------------------------------------
+
+/** What a source reference points at. */
+export type AssetKind = 'code' | 'schema-document' | 'endpoint' | 'executable';
+
+/**
+ * Translator id; equals `ExtractCall.host`. Code translators reuse
+ * {@link PluginLanguage} values.
+ */
+export type TranslatorId =
+  | PluginLanguage
+  | 'argv'
+  | 'mcp'
+  | 'openapi'
+  | 'graphql'
+  | 'jsonschema';
+
+/** Where the asset lives: a file path, a URL, or a command name/path. */
+export type SourceLocator =
+  | { readonly kind: 'path'; readonly path: string }
+  | { readonly kind: 'url'; readonly url: string }
+  | { readonly kind: 'command'; readonly command: string };
+
+/**
+ * How an operation from the source is executed. Pure data: never a URL or
+ * command smuggled inside `Operation`.
+ */
+export type BindingSpec =
+  | { readonly kind: 'in-process'; readonly runtime: 'ts' }
+  | { readonly kind: 'local-host'; readonly runtime: PluginLanguage }
+  | {
+      readonly kind: 'process';
+      readonly command: string;
+      readonly protocol: 'argv' | 'mcp-stdio';
+    }
+  | {
+      readonly kind: 'remote';
+      readonly protocol: 'http' | 'mcp' | 'grpc';
+      readonly url: string;
+    }
+  /** Decided by the translator (OpenAPI servers, MCP URL). */
+  | { readonly kind: 'from-asset' };
+
+/** The classification of one source reference. */
+export interface ISourceResolution {
+  /** The reference exactly as given. */
+  readonly reference: string;
+  /** Where the asset lives. */
+  readonly locator: SourceLocator;
+  /** What kind of asset the reference names. */
+  readonly asset: AssetKind;
+  /**
+   * Absent only for an executable with no `protocol` option. The resolver is
+   * pure and never sees the caller's verb, so the caller fills this in.
+   */
+  readonly translator?: TranslatorId;
+  /**
+   * How operations from this source execute. For an executable the protocol
+   * is the `argv` default; a caller that selects the `mcp` translator
+   * rewrites it to `mcp-stdio`.
+   */
+  readonly binding: BindingSpec;
+  /** Per-source options. Always `{}` until the option grammar is built. */
+  readonly options: Readonly<Record<string, string>>;
+}
+
+/** Why a reference could not be resolved. */
+export type SourceResolutionError = {
+  readonly code: 'unsupported' | 'not-found' | 'invalid-reference';
+  readonly message: string;
+};
+
+/**
+ * Filesystem and PATH checks, injected so the resolver stays string-pure and
+ * safe for `platform:shared`. The node implementation lives in the gateway.
+ */
+export interface ISourceProbe {
+  /** Path exists and is a regular file. */
+  isFile(path: string): boolean;
+  /** Path exists and carries an exec bit. */
+  isExecutable(path: string): boolean;
+  /** The reference names an executable found on PATH. */
+  onPath(command: string): boolean;
+}
+
+const SCHEMA_DOCUMENT_EXTENSIONS: ReadonlySet<string> = new Set([
+  '.json',
+  '.yaml',
+  '.yml',
+  '.graphql',
+]);
+
+/** Lowercased extension of the last path segment, by string operations only. */
+function extensionOf(reference: string): string {
+  const slash = Math.max(reference.lastIndexOf('/'), reference.lastIndexOf('\\'));
+  const base = reference.slice(slash + 1);
+  const dot = base.lastIndexOf('.');
+  return dot <= 0 ? '' : base.slice(dot).toLowerCase();
+}
+
+function executableResolution(
+  reference: string,
+  command: string
+): { ok: true; value: ISourceResolution } {
+  return {
+    ok: true,
+    value: {
+      reference,
+      locator: { kind: 'command', command },
+      asset: 'executable',
+      binding: { kind: 'process', command, protocol: 'argv' },
+      options: {},
+    },
+  };
+}
+
+/**
+ * Classify a `--source` reference into locator, asset kind, translator and
+ * binding. Pure apart from the injected `probe`; adds no `node:*` import.
+ *
+ * Detection order (ADR-0017 D4, gap analysis §5.5), each step a function of
+ * the string plus the probe:
+ *
+ * 1. closed-list scheme prefix: `bin:<cmd>` (executable); `remote:` is `unsupported`
+ * 2. `http://` / `https://` is `unsupported` (checked before the extension so
+ *    `https://x/function.py` is not read as code)
+ * 3. code extension (no stat), via {@link languageOfSource}
+ * 4. schema-document extension (`.json`, `.yaml`, `.yml`, `.graphql`) is `unsupported`
+ * 5. existing file with an exec bit (`probe.isFile` and `probe.isExecutable`)
+ * 6. PATH fallback (`probe.onPath`): unguarded and last (decision O-2); a
+ *    mistyped bare word can therefore name a real PATH binary
+ * 7. anything else is `invalid-reference`, naming every interpretation tried
+ *
+ * Without a probe, steps 5 and 6 are skipped.
+ *
+ * @param reference - The `--source` string.
+ * @param probe     - Optional filesystem/PATH port.
+ * @returns The resolution, or a typed error.
+ *
+ * @example
+ * ```ts
+ * resolveSourceReference('src/api.ts')
+ * // → { ok: true, value: { asset: 'code', translator: 'ts', binding: { kind: 'in-process', runtime: 'ts' }, … } }
+ * resolveSourceReference('bin:git')
+ * // → { ok: true, value: { asset: 'executable', translator: undefined, … } }
+ * ```
+ */
+export function resolveSourceReference(
+  reference: string,
+  probe?: ISourceProbe
+): { ok: true; value: ISourceResolution } | { ok: false; error: SourceResolutionError } {
+  if (reference.length === 0) {
+    return {
+      ok: false,
+      error: { code: 'invalid-reference', message: 'empty source reference' },
+    };
+  }
+
+  // 1. closed-list scheme prefix
+  if (reference.startsWith('bin:')) {
+    const command = reference.slice('bin:'.length);
+    if (command.length === 0) {
+      return {
+        ok: false,
+        error: {
+          code: 'invalid-reference',
+          message: 'bin: source needs a command name or path',
+        },
+      };
+    }
+    if (/\s/.test(command)) {
+      return {
+        ok: false,
+        error: {
+          code: 'invalid-reference',
+          message:
+            'bin: source must be a command name or path with no arguments or whitespace; pass arguments separately',
+        },
+      };
+    }
+    return executableResolution(reference, command);
+  }
+  if (reference.startsWith('remote:')) {
+    return {
+      ok: false,
+      error: { code: 'unsupported', message: 'remote sources are not implemented yet' },
+    };
+  }
+
+  // 2. URL
+  if (/^https?:\/\//i.test(reference)) {
+    return {
+      ok: false,
+      error: { code: 'unsupported', message: 'remote sources are not implemented yet' },
+    };
+  }
+
+  // 3. code extension (no stat)
+  const language = languageOfSource(reference);
+  if (language !== undefined) {
+    return {
+      ok: true,
+      value: {
+        reference,
+        locator: { kind: 'path', path: reference },
+        asset: 'code',
+        translator: language,
+        binding:
+          language === 'ts'
+            ? { kind: 'in-process', runtime: 'ts' }
+            : { kind: 'local-host', runtime: language },
+        options: {},
+      },
+    };
+  }
+
+  // 4. schema-document extension
+  if (SCHEMA_DOCUMENT_EXTENSIONS.has(extensionOf(reference))) {
+    return {
+      ok: false,
+      error: {
+        code: 'unsupported',
+        message: 'schema-document sources are not implemented yet',
+      },
+    };
+  }
+
+  // 5. existing path with an exec bit
+  if (probe !== undefined && probe.isFile(reference) && probe.isExecutable(reference)) {
+    return executableResolution(reference, reference);
+  }
+
+  // 6. PATH fallback: unguarded, last (O-2)
+  if (probe?.onPath(reference) === true) {
+    return executableResolution(reference, reference);
+  }
+
+  // 7. nothing matched
+  const unchecked = probe === undefined ? ' (not checked: no probe supplied)' : '';
+  return {
+    ok: false,
+    error: {
+      code: 'invalid-reference',
+      message:
+        `cannot resolve source "${reference}". Interpretations tried: ` +
+        'scheme prefix (bin:, remote:); ' +
+        'URL (http://, https://); ' +
+        'code extension (.ts .tsx .mts .cts .py .rs .go .java); ' +
+        'schema extension (.json .yaml .yml .graphql); ' +
+        `existing executable path${unchecked}; ` +
+        `PATH lookup${unchecked}`,
+    },
+  };
+}

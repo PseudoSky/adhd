@@ -9,7 +9,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { PassThrough } from 'node:stream';
 import { createStdioHostTransport } from '@adhd/apigen-engine-gateway';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { mcpJsonVerb } from '../../wrapper/verbs/mcp-json';
 import { createStubMcpUpstream, type IStubMcpUpstream } from '../helpers/stub-mcp-upstream';
 import { resultText, startServeSession, type IServeSession } from '../helpers/mcp-memory-client';
@@ -24,10 +24,10 @@ const NOTES_YAML = `version: 1
 attributes:
   role: name
 permissions:
-  - tool: notes.notes_add
+  - tool: notes/notes-add
     context: { role: { _eq: writer } }
     set: { tag: policy }
-  - tool: notes.notes_archive
+  - tool: notes/notes-archive
     effect: ask
     context: { role: { _eq: writer } }
 `;
@@ -73,12 +73,14 @@ async function withSession(
 }
 
 describe('Wrap an unmodified MCP server - serve', () => {
-  it('@S7.2 the client sees the upstream tools under their own names with their definitions unchanged, denied ones included (D-08)', async () => {
+  it('@S7.2 the client sees every upstream tool (denied ones included) under the BA-1 projection <alias>_<tool>, with the upstream definition carried through (D-08)', async () => {
     await withNotes(async ({ dir, spec, stub }) => {
       await withSession(['bin:notes-server', '--name', 'notes', '--spec', spec, '--adhd-attributes', WRITER], { dir, stub }, async (session) => {
         const listed = await session.client.listTools();
-        expect(listed.tools.map((t) => t.name)).toEqual(['notes_add', 'notes_clear', 'notes_archive']);
-        expect(listed.tools[0]).toMatchObject({ name: 'notes_add', title: 'Add', description: 'Add a note', annotations: { readOnlyHint: false } });
+        expect(listed.tools.map((t) => t.name)).toEqual(['notes_notes_add', 'notes_notes_clear', 'notes_notes_archive']);
+        expect(listed.tools[0]).toMatchObject({ name: 'notes_notes_add', title: 'Add', description: 'Add a note', annotations: { readOnlyHint: false } });
+        expect(listed.tools[1]).toMatchObject({ name: 'notes_notes_clear', description: 'Clear all notes', annotations: { destructiveHint: true } });
+        expect(listed.tools[2]).toMatchObject({ name: 'notes_notes_archive', description: 'Archive notes' });
         expect(listed.tools[0]?.inputSchema).toEqual({ type: 'object', properties: { text: { type: 'string' }, tag: { type: 'string' } } });
         expect(session.client.getServerVersion()?.name).toBe('adhd-policy');
         expect(stub.calls).toEqual([]);
@@ -89,7 +91,7 @@ describe('Wrap an unmodified MCP server - serve', () => {
   it('@S7.2 the allowed call reaches the upstream with the forced value: exactly one entry, tag "policy" (regression: set must reach tools/call)', async () => {
     await withNotes(async ({ dir, spec, stub }) => {
       await withSession(['bin:notes-server', '--name', 'notes', '--spec', spec, '--adhd-attributes', WRITER], { dir, stub }, async (session) => {
-        const result = await session.client.callTool({ name: 'notes_add', arguments: { text: 'hello', tag: 'mine' } });
+        const result = await session.client.callTool({ name: 'notes_notes_add', arguments: { text: 'hello', tag: 'mine' } });
         expect(result.isError).toBeFalsy();
         expect(resultText(result)).toBe('ok:notes_add');
         expect(stub.calls).toEqual([{ tool: 'notes_add', args: { text: 'hello', tag: 'policy' } }]);
@@ -100,8 +102,8 @@ describe('Wrap an unmodified MCP server - serve', () => {
   it('@S7.2 a forced value is added when the host omitted the argument, and when it sent no arguments at all', async () => {
     await withNotes(async ({ dir, spec, stub }) => {
       await withSession(['bin:notes-server', '--name', 'notes', '--spec', spec, '--adhd-attributes', WRITER], { dir, stub }, async (session) => {
-        await session.client.callTool({ name: 'notes_add', arguments: { text: 'no tag' } });
-        await session.client.callTool({ name: 'notes_add' });
+        await session.client.callTool({ name: 'notes_notes_add', arguments: { text: 'no tag' } });
+        await session.client.callTool({ name: 'notes_notes_add' });
         expect(stub.calls).toEqual([
           { tool: 'notes_add', args: { text: 'no tag', tag: 'policy' } },
           { tool: 'notes_add', args: { tag: 'policy' } },
@@ -113,15 +115,15 @@ describe('Wrap an unmodified MCP server - serve', () => {
   it('@S7.2 denied and ask calls are refused with the reason and never reach the upstream (call count 0)', async () => {
     await withNotes(async ({ dir, spec, stub }) => {
       await withSession(['bin:notes-server', '--name', 'notes', '--spec', spec, '--adhd-attributes', WRITER], { dir, stub }, async (session) => {
-        const denied = await session.client.callTool({ name: 'notes_clear', arguments: {} });
+        const denied = await session.client.callTool({ name: 'notes_notes_clear', arguments: {} });
         expect(denied.isError).toBe(true);
-        expect(resultText(denied)).toContain('no permission allows notes.notes_clear');
-        const asked = await session.client.callTool({ name: 'notes_archive', arguments: { before: 'today' } });
+        expect(resultText(denied)).toMatch(/^permission_denied: .*no permission allows notes\/notes-clear/);
+        const asked = await session.client.callTool({ name: 'notes_notes_archive', arguments: { before: 'today' } });
         expect(asked.isError).toBe(true);
-        expect(resultText(asked)).toContain('requires approval');
+        expect(resultText(asked)).toMatch(/^permission_denied: .*requires approval/);
         expect(stub.calls).toHaveLength(0);
         // the same session still serves the allowed call afterwards
-        await session.client.callTool({ name: 'notes_add', arguments: { text: 'x' } });
+        await session.client.callTool({ name: 'notes_notes_add', arguments: { text: 'x' } });
         expect(stub.calls).toHaveLength(1);
       });
     });
@@ -131,7 +133,7 @@ describe('Wrap an unmodified MCP server - serve', () => {
     await withNotes(async ({ dir, spec, stub }) => {
       await withSession(['bin:notes-server', '--name', 'notes', '--spec', spec, '--adhd-attributes', '{"role":"intruder"}'], { dir, stub }, async (session) => {
         await expect(session.client.callTool({ name: 'nope', arguments: {} })).rejects.toThrow(/Unknown tool/);
-        const refused = await session.client.callTool({ name: 'notes_add', arguments: { text: 'x' } });
+        const refused = await session.client.callTool({ name: 'notes_notes_add', arguments: { text: 'x' } });
         expect(refused.isError).toBe(true);
         expect(stub.calls).toHaveLength(0);
       });
@@ -141,7 +143,7 @@ describe('Wrap an unmodified MCP server - serve', () => {
   it('@S7.3 with no policy and no attributes the built-in default refuses every call, announces "policy: built-in" once, and the upstream log stays empty', async () => {
     await withNotes(async ({ dir, stub }) => {
       await withSession(['bin:notes-server', '--name', 'notes'], { dir, stub }, async (session) => {
-        for (const name of ['notes_add', 'notes_clear', 'notes_archive']) {
+        for (const name of ['notes_notes_add', 'notes_notes_clear', 'notes_notes_archive']) {
           const result = await session.client.callTool({ name, arguments: {} });
           expect(result.isError, name).toBe(true);
         }
@@ -165,7 +167,7 @@ describe('Wrap an unmodified MCP server - serve', () => {
       const argv = [...entry.args.slice(1, dashDash), '--name', 'notes', '--adhd-attributes', WRITER, ...entry.args.slice(dashDash)];
       expect(entry.args.slice(dashDash)).toEqual(['--', '--stdio']);
       await withSession(argv, { dir, stub }, async (session) => {
-        await session.client.callTool({ name: 'notes_add', arguments: { text: 'via wrapped entry', tag: 'mine' } });
+        await session.client.callTool({ name: 'notes_notes_add', arguments: { text: 'via wrapped entry', tag: 'mine' } });
         expect(stub.calls).toEqual([{ tool: 'notes_add', args: { text: 'via wrapped entry', tag: 'policy' } }]);
         expect(stub.started[0]).toMatchObject({ command: 'notes-server', args: ['--stdio'], cwd: dir });
       });
@@ -178,9 +180,9 @@ describe('serve --name - operation ids use the alias the user chose, never the u
 attributes:
   role: name
 permissions:
-  - tool: liar-name.notes_clear
+  - tool: liar-name/notes-clear
     context: { role: { _eq: writer } }
-  - tool: notes.notes_add
+  - tool: notes/notes-add
     context: { role: { _eq: writer } }
 `;
 
@@ -189,10 +191,10 @@ permissions:
       async ({ dir, spec }) => {
         const liar = createNotesStub({ serverName: 'liar-name' });
         await withSession(['bin:notes-server', '--name', 'notes', '--spec', spec, '--adhd-attributes', WRITER], { dir, stub: liar }, async (session) => {
-          const clear = await session.client.callTool({ name: 'notes_clear', arguments: {} });
+          const clear = await session.client.callTool({ name: 'notes_notes_clear', arguments: {} });
           expect(clear.isError).toBe(true);
-          expect(resultText(clear)).toContain('no permission allows notes.notes_clear');
-          const add = await session.client.callTool({ name: 'notes_add', arguments: { text: 'ok' } });
+          expect(resultText(clear)).toMatch(/^permission_denied: .*no permission allows notes\/notes-clear/);
+          const add = await session.client.callTool({ name: 'notes_notes_add', arguments: { text: 'ok' } });
           expect(add.isError).toBeFalsy();
           expect(liar.calls.map((c) => c.tool)).toEqual(['notes_add']);
         });
@@ -201,19 +203,19 @@ permissions:
     );
   });
 
-  it('@S7.2 without --name the alias is the command basename (<basename>.<tool>)', async () => {
+  it('@S7.2 without --name the alias is the command basename (<basename>_<tool>)', async () => {
     const policy = `version: 1
 attributes:
   role: name
 permissions:
-  - tool: notes-server.notes_add
+  - tool: notes-server/notes-add
     context: { role: { _eq: writer } }
 `;
     await withNotes(
       async ({ dir, spec, stub }) => {
         await withSession(['bin:/usr/local/bin/notes-server', '--spec', spec, '--adhd-attributes', WRITER], { dir, stub }, async (session) => {
-          expect((await session.client.callTool({ name: 'notes_add', arguments: { text: 'x' } })).isError).toBeFalsy();
-          expect((await session.client.callTool({ name: 'notes_clear', arguments: {} })).isError).toBe(true);
+          expect((await session.client.callTool({ name: 'notes_server_notes_add', arguments: { text: 'x' } })).isError).toBeFalsy();
+          expect((await session.client.callTool({ name: 'notes_server_notes_clear', arguments: {} })).isError).toBe(true);
           expect(stub.calls.map((c) => c.tool)).toEqual(['notes_add']);
         });
       },
@@ -247,15 +249,18 @@ describe('Review fix E5 - serve ends with its host and leaves no orphan', () => 
     });
   });
 
-  it('E5 the upstream exiting on its own ends serve with exit 0 and the host sees the disconnect', async () => {
+  it('BA-6 the upstream exiting on its own does not end serve: the gateway relaunches it and the host keeps being served', async () => {
     await withNotes(async ({ dir, spec, stub }) => {
       const session = await startServeSession(['bin:notes-server', '--name', 'notes', '--spec', spec, '--adhd-attributes', WRITER], { cwd: dir, home: dir, launcher: stub.launcher });
-      const hostSawClose = new Promise<void>((resolve) => {
-        session.client.onclose = () => resolve();
-      });
+      expect(stub.started).toHaveLength(1);
       stub.proc().exit(1);
+      // The relaunch waits out the gateway's first backoff step; await the observable (a second start), bounded.
+      await vi.waitFor(() => expect(stub.started).toHaveLength(2), { timeout: 5000 });
+      await vi.waitFor(async () => expect((await session.client.callTool({ name: 'notes_notes_add', arguments: { text: 'after restart' } })).isError).toBeFalsy(), { timeout: 5000 });
+      expect(stub.calls).toEqual([{ tool: 'notes_add', args: { text: 'after restart', tag: 'policy' } }]);
+      await session.client.close();
       expect(await session.exit).toBe(0);
-      await hostSawClose;
+      expect(stub.proc().hasExited).toBe(true);
     });
   });
 
@@ -297,7 +302,7 @@ describe('Review fix E5 - serve ends with its host and leaves no orphan', () => 
       stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-03-26', capabilities: {}, clientInfo: { name: 'raw', version: '0' } } })}\n`);
       await waitForLine((m) => m['id'] === 1);
       stdin.write(`${JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' })}\n`);
-      stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'notes_add', arguments: { text: 'framed', tag: 'mine' } } })}\n`);
+      stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'notes_notes_add', arguments: { text: 'framed', tag: 'mine' } } })}\n`);
       const reply = await waitForLine((m) => m['id'] === 2);
       expect(JSON.stringify(reply)).toContain('ok:notes_add');
       expect(stub.calls).toEqual([{ tool: 'notes_add', args: { text: 'framed', tag: 'policy' } }]);

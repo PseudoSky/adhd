@@ -153,7 +153,7 @@ describe('Feature: Hand a sub-agent less authority - narrow', () => {
     await withNarrowDemo(async (demo, _narrow) => {
       const spawn = (child: Record<string, unknown>) =>
         runCli(
-          ['check', '--input', callInput({ tool: 'agent.spawn', args: { agent_name: 'reviewer', child }, attributes: parentFor(demo) })],
+          ['check', '--input', callInput({ tool: 'agent/spawn', args: { agent_name: 'reviewer', child }, attributes: parentFor(demo) })],
           { cwd: demo, home: demo }
         );
       const narrowed = { role: 'reviewer', read_roots: [`${demo}/work/tests`], write_roots: [], repos: ['acme/shop'], max_refund: 100 };

@@ -104,6 +104,9 @@ export function registerRunRegistryCommand(
 
         const logger = buildCliLogger(program);
         const options = parseOptPairs(opts.opt);
+        // The flat `--opt` bag: handed to each `--use` plugin's `createLayer`
+        // (once) and to the extraction entry as `extractLayerOptions`.
+        const layerOptions = { ...options };
         // DEBT-APIGEN-CLI-RUN-ARGV-PASSTHROUGH-001: native passthrough takes
         // precedence over `--opt argv=<string>` when both are present.
         if (cliArgs.length > 0) {
@@ -115,7 +118,7 @@ export function registerRunRegistryCommand(
         // layer/mount composition AND via OrchestratorOptions.usePluginObjects
         // below so buildDescriptor()/extractSource() can compose a declared
         // `extractLayer` capability, e.g. `apigen-plugin-ir-cache`).
-        const usePlugins = await loadUsePlugins(opts.use);
+        const usePlugins = await loadUsePlugins(opts.use, layerOptions);
         if (usePlugins.length > 0) {
           options['usePlugins'] = usePlugins;
         }
@@ -155,7 +158,13 @@ export function registerRunRegistryCommand(
         process.on('SIGTERM', () => controller.abort());
 
         await orchestrateRun(
-          { sources, usePlugins: opts.use, usePluginObjects: usePlugins, logger },
+          {
+            sources,
+            usePlugins: opts.use,
+            usePluginObjects: usePlugins,
+            extractLayerOptions: layerOptions,
+            logger,
+          },
           plugin,
           async (entry: SourceEntry) => {
             const tsconfig = resolveTsconfig(entry.file, entry.tsconfig);

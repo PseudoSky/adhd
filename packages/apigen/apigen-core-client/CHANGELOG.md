@@ -1,3 +1,14 @@
+## Unreleased
+
+### 🚀 Features
+
+- IR-generation entry (`extractSourceEntry`, `createExtractorRegistry`) returning `{ operations, files }`; extractor options are validated by `assertExtractorOptions` so everything that affects extraction is part of the `ExtractCall`
+- `ts-subprocess` extractor (`registerTypescriptSubprocessExtractor`, `runExtractWorker`, injectable `ExtractLauncher`) with the same operations and `sourceFiles` as the in-process extractor; the worker defaults to this package's absolute entry path (independent of the working directory), is killed after `timeoutMs` (default 5 minutes), keeps a bounded stderr tail, caps stdout at `maxStdoutBytes`, and reports unparseable results with the stderr tail
+- `extractSourceEntry({ invokerCache })` shares one composed extract invoker across sources so `extractLayer.createLayer` runs once per invocation
+- `extractorOptions` validation rejects cyclic values
+- `releaseExtractionMemory()` releases the process-lifetime ts-morph tier
+- the TypeScript extractor reports the resolved tsconfig `extends` chain in `sourceFiles`
+
 ## 0.3.6 (2026-10-21)
 
 This was a version bump only for apigen-core-client to align it with other projects, there were no code changes.

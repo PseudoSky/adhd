@@ -302,7 +302,7 @@ export interface TargetCapability<Opts = Record<string, unknown>> {
  * `async function*` that wraps `next()` with `for await … yield` — to
  * participate in the full per-chunk stream lifecycle (SPEC §11).
  */
-export interface LayerCapability {
+export interface LayerCapabilityShape<Opts = Record<string, unknown>> {
   /**
    * Extra envelope fields this layer needs on the request side — merged into
    * the effective descriptor's envelope schema before serving begins.
@@ -321,13 +321,48 @@ export interface LayerCapability {
    * For streaming operations, return an `AsyncIterable<Chunk>` wrapping the
    * iterable returned by `next()` (SPEC §11).
    *
+   * Optional in the type because a plugin may supply {@link LayerCapabilityShape.createLayer}
+   * instead; the runtime requires at least one of the two (see {@link LayerCapability}).
+   *
    * @param call - The inbound call descriptor.
    * @param next - The continuation — call at most once.
    * @returns     `Promise<Result>` for unary operations; `AsyncIterable<Chunk>`
    *              for streaming operations.
    */
-  layer(call: Call, next: Next): Promise<Result> | AsyncIterable<Chunk>;
+  layer?(call: Call, next: Next): Promise<Result> | AsyncIterable<Chunk>;
+
+  /**
+   * Optional layer factory: builds the layer function from per-use options
+   * (`Opts`), so a plugin can be configured at the point it is loaded.
+   * A runtime that supports it calls `createLayer(opts)` and composes the
+   * returned function exactly as it would {@link LayerCapability.layer}.
+   *
+   * @param opts - Options supplied where the plugin is used.
+   * @returns    The layer function (same contract as `layer`).
+   */
+  createLayer?(
+    opts: Opts,
+  ): (call: Call, next: Next) => Promise<Result> | AsyncIterable<Chunk>;
 }
+
+/**
+ * The `layer` capability: a {@link LayerCapabilityShape} that supplies at
+ * least one of `layer` or `createLayer`. An object with neither fails
+ * typecheck. Readers must guard — `cap.layer` is `undefined` when only
+ * `createLayer` is supplied.
+ */
+export type LayerCapability<Opts = Record<string, unknown>> =
+  LayerCapabilityShape<Opts> &
+    (
+      | {
+          layer: (call: Call, next: Next) => Promise<Result> | AsyncIterable<Chunk>;
+        }
+      | {
+          createLayer: (
+            opts: Opts,
+          ) => (call: Call, next: Next) => Promise<Result> | AsyncIterable<Chunk>;
+        }
+    );
 
 /**
  * **`extractLayer`** capability — wrap the EXTRACT stage (design doc
@@ -491,6 +526,19 @@ export type MountedOperation = Operation & {
    * streaming mounts.
    */
   handler(call: Call): unknown | Promise<unknown> | AsyncIterable<Chunk>;
+
+  /**
+   * Optional tool-presentation metadata for MCP-style hosts (title and tool
+   * annotations). Mirrors {@link Operation.tool}.
+   */
+  tool?: {
+    title?: string;
+    /** Upstream-authored tool description; preferred over a generated one by MCP hosts. */
+    description?: string;
+    annotations?: Record<string, unknown>;
+    /** Upstream-authored JSON Schema (object) for the tool's result. */
+    outputSchema?: Record<string, unknown>;
+  };
 };
 
 // ---------------------------------------------------------------------------

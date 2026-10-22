@@ -1,8 +1,5 @@
-import type {
-  SchemaNode,
-  TranscodeCtx,
-  Wire,
-} from '@adhd/apigen-base-logical';
+import { ApiError } from '@adhd/apigen-base-errors';
+import type { SchemaNode, TranscodeCtx, Wire } from '@adhd/apigen-base-logical';
 import {
   buildTranscoder,
   createRegistry,
@@ -20,6 +17,72 @@ import { isApiStream } from './stream';
 const _registry = createRegistry();
 registerWellKnown(_registry);
 const _transcoder = buildTranscoder(_registry.freeze());
+
+/**
+ * The client factory `dispatch` builds a function's `ctx` with. The second
+ * argument carries the invocation's cancellation signal (adhd ADR-0019 D4,
+ * SPEC §8.1): a `ctx`-taking function receives the signal through the `ctx`
+ * its host's factory builds, never as a positional argument. It is passed
+ * only when the invocation has a signal, so a factory written against the
+ * one-argument form sees exactly the call it always saw.
+ */
+export type CreateClientFn = (
+  envelope: Record<string, unknown>,
+  options?: { signal?: AbortSignal }
+) => Promise<unknown>;
+
+// ---------------------------------------------------------------------------
+// Cancellation (adhd ADR-0019 D4, SPEC §8.1)
+// ---------------------------------------------------------------------------
+
+/**
+ * The error an aborted dispatch rejects with: `ApiError('internal')` whose
+ * message names the operation and carries "aborted", plus the abort reason
+ * when the signal has one.
+ */
+function abortedError(fnName: string, signal: AbortSignal): ApiError {
+  const reason: unknown = signal.reason;
+  let detail = '';
+  if (reason instanceof Error) detail = reason.message;
+  else if (reason !== undefined) detail = String(reason);
+  return new ApiError(
+    'internal',
+    `apigen dispatch: operation "${fnName}" aborted${detail.length > 0 ? `: ${detail}` : ''}`
+  );
+}
+
+/**
+ * Settle with `work`, or reject with {@link abortedError} the moment `signal`
+ * aborts, whichever comes first. The abort listener is removed once `work`
+ * settles, so a long-lived signal shared by many calls accumulates no
+ * listeners. A `work` rejection that arrives after the abort already won is
+ * observed and dropped (never an unhandled rejection).
+ */
+function raceAbort<T>(
+  work: Promise<T>,
+  fnName: string,
+  signal: AbortSignal | undefined
+): Promise<T> {
+  if (signal === undefined) return work;
+  if (signal.aborted) {
+    work.catch(() => undefined);
+    return Promise.reject(abortedError(fnName, signal));
+  }
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = (): void => reject(abortedError(fnName, signal));
+    signal.addEventListener('abort', onAbort, { once: true });
+    work.then(
+      (value) => {
+        signal.removeEventListener('abort', onAbort);
+        resolve(value);
+      },
+      (error: unknown) => {
+        signal.removeEventListener('abort', onAbort);
+        reject(error);
+      }
+    );
+  });
+}
 
 /** Returns true when the composed schema has `field` in input.properties (i.e. an envelope field). */
 export function needsEnvelopeField(
@@ -91,14 +154,10 @@ function paramSchemaNode(
 function decodeArg(
   wire: unknown,
   node: SchemaNode | undefined,
-  ctx: Partial<TranscodeCtx>
+  ctx: Partial<TranscodeCtx> | undefined
 ): unknown {
   if (node === undefined || wire === undefined) return wire;
-  return _transcoder.decode(
-    wire as import('@adhd/apigen-base-logical').Wire,
-    node,
-    ctx
-  );
+  return _transcoder.decode(wire as Wire, node, ctx);
 }
 
 /**
@@ -201,18 +260,66 @@ function encodeResult(
  *     output schema. A `Date` return becomes an RFC 3339 string; plain JSON
  *     values pass through unchanged.
  *
+ * `$ref` resolution: a param node's `$ref`s resolve against the operation's
+ * `input` schema root and a result's against its `output` root (where the
+ * extractor hoisted `definitions` / `$defs`), via {@link refCtx}; the
+ * transcoder's run-mode stub is never reached for a schema that carries its
+ * definitions. A streaming result is returned as a new stream whose chunks are
+ * encoded against the output schema.
+ *
+ * Cancellation (adhd ADR-0019 D4): `signal` is never a positional argument of
+ * the user function. A `ctx`-taking function receives it through
+ * `createClient(envelope, { signal })`. A signal that is already aborted
+ * rejects before any argument is decoded or any client is built; a signal
+ * that aborts while the function runs rejects the dispatch at once (the
+ * function's own later settlement is dropped). Both rejections are
+ * `ApiError('internal')` carrying "aborted".
+ *
  * All existing behaviors (session ctx injection, BUG-APIGEN-001 ctx-param path,
  * envelope handling) are preserved unchanged.
+ *
+ * @param fns          The live function table (fn-name → implementation).
+ * @param createClient The `ctx` factory, or `undefined` when the host has none.
+ * @param schema       The operation's composed schema entry.
+ * @param fnName       The dispatch-table key of the function to call.
+ * @param envelope     The request's envelope side-channel.
+ * @param domainArgs   The request's domain arguments (wire form).
+ * @param signal       The invocation's cancellation signal, when it has one.
+ * @returns The function's result, encoded host → wire.
  */
 export async function dispatch(
   fns: Record<string, (...args: unknown[]) => unknown>,
-  createClient: ((e: Record<string, unknown>) => Promise<unknown>) | undefined,
+  createClient: CreateClientFn | undefined,
   schema: ComposedSchemas[string],
   fnName: string,
   envelope: Record<string, unknown>,
-  domainArgs: Record<string, unknown>
+  domainArgs: Record<string, unknown>,
+  signal?: AbortSignal
+): Promise<unknown> {
+  if (signal?.aborted) throw abortedError(fnName, signal);
+  return raceAbort(
+    dispatchUnguarded(fns, createClient, schema, fnName, envelope, domainArgs, signal),
+    fnName,
+    signal
+  );
+}
+
+/** The body of {@link dispatch}, without the abort race. */
+async function dispatchUnguarded(
+  fns: Record<string, (...args: unknown[]) => unknown>,
+  createClient: CreateClientFn | undefined,
+  schema: ComposedSchemas[string],
+  fnName: string,
+  envelope: Record<string, unknown>,
+  domainArgs: Record<string, unknown>,
+  signal: AbortSignal | undefined
 ): Promise<unknown> {
   const paramNames = dataParamNames(schema);
+  const buildClient = (
+    factory: CreateClientFn,
+    clientEnvelope: Record<string, unknown>
+  ): Promise<unknown> =>
+    signal === undefined ? factory(clientEnvelope) : factory(clientEnvelope, { signal });
 
   // ── Decode: wire → host for every domain arg ───────────────────────────────
   // Param `$ref`s resolve against the input schema root (where the extractor
@@ -225,7 +332,7 @@ export async function dispatch(
   // Session middleware: build ctx from the session envelope and inject it as the
   // first arg. Preserves [dod.4] envelope behavior.
   if (needsEnvelopeField(schema, 'session') && createClient) {
-    const ctx = await createClient({ session: envelope['session'] });
+    const ctx = await buildClient(createClient, { session: envelope['session'] });
     const raw = await (
       fns[fnName] as (ctx: unknown, ...a: unknown[]) => unknown
     )(ctx, ...args);
@@ -237,7 +344,7 @@ export async function dispatch(
   // first arg or the first DOMAIN arg lands in the ctx slot. Build ctx via
   // createClient when a client exists, else pass undefined (the fn may ignore it).
   if (schema.hasCtx) {
-    const ctx = createClient ? await createClient(envelope) : undefined;
+    const ctx = createClient ? await buildClient(createClient, envelope) : undefined;
     const raw = await (
       fns[fnName] as (ctx: unknown, ...a: unknown[]) => unknown
     )(ctx, ...args);

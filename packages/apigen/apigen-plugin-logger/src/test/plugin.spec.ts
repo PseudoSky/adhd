@@ -1,6 +1,18 @@
 import { describe, it, expect, vi } from 'vitest';
 import { loggerPlugin, makeLoggerPlugin, Logger } from '../lib/plugin';
-import type { Call, Next, Extensions, Operation } from '@adhd/apigen-core-client';
+import type { Call, Next, Extensions, Operation, Plugin } from '@adhd/apigen-core-client';
+
+/**
+ * The layer function of a plugin's layer capability, asserting presence first
+ * so a missing capability fails the test loudly instead of turning every
+ * `layer?.layer?.(...)` call into a silent no-op (architect disposition 11).
+ */
+function requireLayer(cap: Plugin['capabilities']['layer']): (call: Call, next: Next) => ReturnType<NonNullable<NonNullable<Plugin['capabilities']['layer']>['layer']>> {
+  expect(cap).toBeDefined();
+  expect(cap?.layer).toBeTypeOf('function');
+  return (call, next) => (cap as NonNullable<typeof cap>).layer!(call, next);
+}
+
 
 // ---------------------------------------------------------------------------
 // Helpers — build a minimal Call with a real Extensions map so we can
@@ -98,7 +110,7 @@ describe('loggerPlugin — v2 shape', () => {
 
   it('has a string description', () => {
     const description = loggerPlugin.description;
-    expect(description).not.toBeNull();
+    expect(description).toBeDefined();
     expect(typeof description).toBe('string');
     expect(description?.length).toBeGreaterThan(0);
   });
@@ -106,31 +118,31 @@ describe('loggerPlugin — v2 shape', () => {
   it('capabilities is a non-null object', () => {
     expect(loggerPlugin.capabilities).toBeDefined();
     expect(typeof loggerPlugin.capabilities).toBe('object');
-    expect(loggerPlugin.capabilities).not.toBeNull();
+    expect(loggerPlugin.capabilities).toBeDefined();
   });
 
   it('declares a valid layer capability with a layer() function', () => {
     const { layer } = loggerPlugin.capabilities;
-    expect(layer).not.toBeNull();
-    expect(typeof layer?.layer).toBe('function');
+    expect(layer).toBeDefined();
+    expect(layer?.layer).toBeTypeOf('function');
   });
 
   it('declares a target capability with name "logger" and a generate() function', () => {
     const { target } = loggerPlugin.capabilities;
-    expect(target).not.toBeNull();
+    expect(target).toBeDefined();
     expect(target?.name).toBe('logger');
     expect(typeof target?.generate).toBe('function');
   });
 
   it('target.serve is undefined (generate-only plugin)', () => {
     const { target } = loggerPlugin.capabilities;
-    expect(target).not.toBeNull();
+    expect(target).toBeDefined();
     expect(target?.serve).toBeUndefined();
   });
 
   it('target.generate returns an empty File array (no codegen for a layer plugin)', () => {
     const { target } = loggerPlugin.capabilities;
-    expect(target).not.toBeNull();
+    expect(target).toBeDefined();
     const result = target?.generate(
       { operations: [], host: 'ts', namespace: 'test' },
       {}
@@ -149,8 +161,8 @@ describe('layer — wraps an operation (logs around it, delegates via next())', 
     const call = makeCall();
     const next = vi.fn<Next>().mockResolvedValue('result');
     const { layer } = loggerPlugin.capabilities;
-    expect(layer).not.toBeNull();
-    await layer?.layer(call, next);
+    expect(layer).toBeDefined();
+    await requireLayer(layer)(call, next);
     expect(next).toHaveBeenCalledTimes(1);
   });
 
@@ -159,8 +171,8 @@ describe('layer — wraps an operation (logs around it, delegates via next())', 
     const sentinel = { answer: 42 };
     const next: Next = vi.fn().mockResolvedValue(sentinel);
     const { layer } = loggerPlugin.capabilities;
-    expect(layer).not.toBeNull();
-    const result = await layer?.layer(call, next);
+    expect(layer).toBeDefined();
+    const result = await requireLayer(layer)(call, next);
     expect(result).toBe(sentinel);
   });
 
@@ -172,8 +184,8 @@ describe('layer — wraps an operation (logs around it, delegates via next())', 
       return 'ok';
     });
     const { layer } = loggerPlugin.capabilities;
-    expect(layer).not.toBeNull();
-    await layer?.layer(call, next);
+    expect(layer).toBeDefined();
+    await requireLayer(layer)(call, next);
     expect(seenInNext).toBeInstanceOf(Logger);
   });
 
@@ -194,8 +206,8 @@ describe('layer — wraps an operation (logs around it, delegates via next())', 
 
     const plugin = makeLoggerPlugin({});
     const { layer } = plugin.capabilities;
-    expect(layer).not.toBeNull();
-    await layer?.layer(call, next);
+    expect(layer).toBeDefined();
+    await requireLayer(layer)(call, next);
 
     expect(entryLogged).toBe(true);
   });
@@ -208,13 +220,13 @@ describe('layer — wraps an operation (logs around it, delegates via next())', 
     const next: Next = vi.fn().mockResolvedValue('done');
     const plugin = makeLoggerPlugin({});
     const { layer } = plugin.capabilities;
-    expect(layer).not.toBeNull();
-    await layer?.layer(call, next);
+    expect(layer).toBeDefined();
+    await requireLayer(layer)(call, next);
 
     const exitLog = calls.find(
       (c) => c.msg.includes('←') && c.msg.includes('queryOp')
     );
-    expect(exitLog).not.toBeNull();
+    expect(exitLog).toBeDefined();
     expect(exitLog?.level).toBe('info');
     expect(typeof exitLog?.obj['ms']).toBe('number');
   });
@@ -230,8 +242,8 @@ describe('layer — error propagation', () => {
     const boom = new Error('downstream failure');
     const next: Next = vi.fn().mockRejectedValue(boom);
     const { layer } = loggerPlugin.capabilities;
-    expect(layer).not.toBeNull();
-    await expect(layer?.layer(call, next)).rejects.toThrow(
+    expect(layer).toBeDefined();
+    await expect(requireLayer(layer)(call, next)).rejects.toThrow(
       'downstream failure'
     );
   });
@@ -246,13 +258,13 @@ describe('layer — error propagation', () => {
     const plugin = makeLoggerPlugin({});
 
     const { layer } = plugin.capabilities;
-    expect(layer).not.toBeNull();
-    await expect(layer?.layer(call, next)).rejects.toThrow(
+    expect(layer).toBeDefined();
+    await expect(requireLayer(layer)(call, next)).rejects.toThrow(
       'oops'
     );
 
     const errorLog = calls.find((c) => c.level === 'error');
-    expect(errorLog).not.toBeNull();
+    expect(errorLog).toBeDefined();
     expect(errorLog?.obj['err']).toBe(boom);
     expect(errorLog?.msg).toContain('failOp');
   });
@@ -265,11 +277,11 @@ describe('layer — error propagation', () => {
     const original = new DomainError('not found');
     const next: Next = vi.fn().mockRejectedValue(original);
     const { layer } = loggerPlugin.capabilities;
-    expect(layer).not.toBeNull();
+    expect(layer).toBeDefined();
 
     let caught: unknown;
     try {
-      await layer?.layer(call, next);
+      await requireLayer(layer)(call, next);
     } catch (e) {
       caught = e;
     }
@@ -296,9 +308,9 @@ describe('layer — stream-lifecycle (§11)', () => {
     const call = makeCall('streamOp');
     const next = streamNext([1, 2, 3]);
     const { layer } = loggerPlugin.capabilities;
-    expect(layer).not.toBeNull();
+    expect(layer).toBeDefined();
 
-    const result = layer?.layer(call, next);
+    const result = requireLayer(layer)(call, next);
 
     // The layer must return an AsyncIterable for a streaming next().
     expect(
@@ -325,8 +337,8 @@ describe('layer — stream-lifecycle (§11)', () => {
     });
 
     const { layer } = loggerPlugin.capabilities;
-    expect(layer).not.toBeNull();
-    const result = layer?.layer(call, next) as AsyncIterable<unknown>;
+    expect(layer).toBeDefined();
+    const result = requireLayer(layer)(call, next) as AsyncIterable<unknown>;
 
     const iterator = result[Symbol.asyncIterator]();
     await iterator.next(); // consume 'first'
@@ -352,8 +364,8 @@ describe('layer — stream-lifecycle (§11)', () => {
 
     const plugin = makeLoggerPlugin({});
     const { layer } = plugin.capabilities;
-    expect(layer).not.toBeNull();
-    const result = layer?.layer(
+    expect(layer).toBeDefined();
+    const result = requireLayer(layer)(
       call,
       next
     ) as AsyncIterable<unknown>;
@@ -368,7 +380,7 @@ describe('layer — stream-lifecycle (§11)', () => {
     }
 
     const errorLog = calls.find((c) => c.level === 'error');
-    expect(errorLog).not.toBeNull();
+    expect(errorLog).toBeDefined();
     expect(errorLog?.msg).toContain('errorStream');
   });
 
@@ -380,8 +392,8 @@ describe('layer — stream-lifecycle (§11)', () => {
     const next = streamNext(['a', 'b']);
     const plugin = makeLoggerPlugin({});
     const { layer } = plugin.capabilities;
-    expect(layer).not.toBeNull();
-    const result = layer?.layer(
+    expect(layer).toBeDefined();
+    const result = requireLayer(layer)(
       call,
       next
     ) as AsyncIterable<unknown>;
@@ -394,7 +406,7 @@ describe('layer — stream-lifecycle (§11)', () => {
     const exitLog = calls.find(
       (c) => c.msg.includes('←') && c.msg.includes('ok')
     );
-    expect(exitLog).not.toBeNull();
+    expect(exitLog).toBeDefined();
     expect(exitLog?.obj['chunks']).toBe(2);
   });
 });

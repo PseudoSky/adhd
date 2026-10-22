@@ -27,7 +27,7 @@ const NOTES_POLICY = `version: 1
 attributes:
   role: name
 permissions:
-  - tool: notes.notes_add
+  - tool: notes/notes-add
     context: { role: { _eq: writer } }
 `;
 
@@ -150,7 +150,7 @@ attributes:
 defaults:
   - set: { role: guest, write_roots: [] }
 permissions:
-  - tool: touch
+  - tool: bin/touch
     context: { role: { _eq: dev } }
     args: { cwd: { _within: $attributes.write_roots } }
 `
@@ -223,7 +223,7 @@ permissions:
           env: options.env !== undefined ? { [ATTRIBUTES_ENV]: options.env } : {},
         });
         try {
-          await session.client.callTool({ name: 'notes_add', arguments: { text: 'x' } });
+          await session.client.callTool({ name: 'notes_notes_add', arguments: { text: 'x' } });
           return stub.calls.length;
         } finally {
           await session.client.close();
@@ -246,13 +246,13 @@ permissions:
       const stub = touchNotes();
       const session = await startServeSession(['bin:notes-server', '--name', 'notes', '--spec', spec, '--adhd-attributes', `@${who}`], { cwd: dir, home: dir, launcher: stub.launcher });
       try {
-        expect((await session.client.callTool({ name: 'notes_add', arguments: { text: '1' } })).isError).toBeFalsy();
+        expect((await session.client.callTool({ name: 'notes_notes_add', arguments: { text: '1' } })).isError).toBeFalsy();
         await writeFile(who, '{"role":"intruder"}');
-        const refused = await session.client.callTool({ name: 'notes_add', arguments: { text: '2' } });
+        const refused = await session.client.callTool({ name: 'notes_notes_add', arguments: { text: '2' } });
         expect(refused.isError).toBe(true);
-        expect(resultText(refused)).toContain('no permission allows notes.notes_add');
+        expect(resultText(refused)).toMatch(/^permission_denied: .*no permission allows notes\/notes-add/);
         await writeFile(who, '[1]');
-        const broken = await session.client.callTool({ name: 'notes_add', arguments: { text: '3' } });
+        const broken = await session.client.callTool({ name: 'notes_notes_add', arguments: { text: '3' } });
         expect(broken.isError).toBe(true);
         expect(stub.calls).toHaveLength(1);
       } finally {

@@ -329,7 +329,10 @@ Passed through to the target plugin. Recognized keys:
 | `port` | `mcp` (HTTP), `api-fastify`, `api-express`, `py-flask` | `3000` | Listen port |
 | `host` | All HTTP transports | `127.0.0.1` | Bind address |
 | `routePrefix` | `api-fastify`, `api-express` | `""` | Path prefix before `/<namespace>/<fn>` |
-| `http.verb.<id>=GET/POST` | All HTTP plugins | (derived) | Override HTTP verb per operation |
+| `http.verb.<id>=GET/POST` | All HTTP plugins | (derived) | Override HTTP verb per operation (`generate` and `run`) |
+| `extract.subprocess` | `generate`, `run` | `false` | Run TypeScript extraction in a worker process; same operations and cache key as in-process extraction |
+
+On `run` and `run-registry`, every `--use` plugin whose layer capability supplies `createLayer` is built once per invocation from this bag, and each target receives the already-configured layer. `generate` and `generate-registry` never run that factory; they compose each plugin's `extractLayer.createLayer` once per invocation, shared across all sources.
 
 MCP over `stdio` keeps **stdout** clean for JSON-RPC — all logs go to stderr.
 

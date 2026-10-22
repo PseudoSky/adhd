@@ -3,7 +3,6 @@
 // No process is spawned. It logs every tools/call it receives (`calls` is the stub's own
 // log), declares a deliberately false server name, and can be told to misbehave.
 
-import { SourceError } from '@adhd/apigen-engine-gateway';
 import type { IProcessLauncher, IProcessSpec } from '@adhd/apigen-engine-gateway';
 import { FakeProcess } from './fake-process';
 
@@ -88,6 +87,11 @@ export function createStubMcpUpstream(options: IStubOptions): IStubMcpUpstream {
       });
       return;
     }
+    if (method === 'ping') {
+      // The gateway's readiness probe (McpUpstreamAdapter.ready) round-trips an MCP ping; an unanswered ping leaves the host 'degraded'.
+      respond(proc, { id, result: {} });
+      return;
+    }
     if (method === 'tools/list') {
       if (options.listTools === 'error') {
         respond(proc, { id, error: { code: -32603, message: 'list refused' } });
@@ -141,7 +145,7 @@ export function createStubMcpUpstream(options: IStubOptions): IStubMcpUpstream {
     launcher: {
       async start(spec) {
         started.push(spec);
-        if (options.failStart) throw new SourceError('spawn-failed', `cannot start ${spec.command}: ENOENT`);
+        if (options.failStart) throw new Error(`cannot start ${spec.command}: ENOENT`);
         let buffer = '';
         const proc: FakeProcess = new FakeProcess({
           ...(options.ignoreSigterm ? { ignoreSigterm: true } : {}),

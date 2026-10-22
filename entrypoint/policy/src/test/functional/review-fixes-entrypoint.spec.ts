@@ -3,18 +3,18 @@
  * tier: S
  * cites: docs/plan/policy-core/REVIEW-FIXES.md (Entrypoint proof, Phase C part 1: E4, E11, E12, D-06)
  * item: qa-variance (docs/discovery/qa-test-variance-tail-policy.md)
- * red: pending (tests not run per user); assertions are unchanged. The baked artifact is produced by the real writeBakedIr once per describe instead of once per case, and read-only policy directories are built once per file.
+ * red: pending (tests not run per user); assertions are unchanged. The baked artifact is the one the build shipped in dist/ (read once per describe), the extractor is served from it by a stub, and read-only policy directories are built once per file. The real bake (E10 --out) and the live-vs-baked equality run in the e2e lane: t-r12-ir-artifact.e2e.test.ts.
  */
-import { mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
-import { existsSync, readFileSync } from 'node:fs';
+import { mkdir, readdir, rm, writeFile } from 'node:fs/promises';
+import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { isApiError } from '@adhd/apigen-base-errors';
+import { PolicyAttributes } from '@adhd/apigen-plugin-policy';
 import type { IProcessLauncher } from '@adhd/apigen-engine-gateway';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { ATTRIBUTES_ENV_VAR, attributesFromFlags } from '../../wrapper/attributes-from-flags';
 import { createAttributesLayerPlugin } from '../../wrapper/attributes-layer';
 import { createAttributesSource, type IAttributesSource } from '../../wrapper/attributes-source';
-import { dereferenceSchema } from '../../wrapper/dereference';
 import { splitPolicyArgv } from '../../wrapper/flags';
 import { HTTP_PORT_ENV_VAR, parseHttpPort } from '../../wrapper/http-port';
 import {
@@ -22,8 +22,6 @@ import {
   extractPolicyOperations,
   inspectBakedIr,
   policyDistDir,
-  POLICY_IR_FORMAT_VERSION,
-  writeBakedIr,
 } from '../../wrapper/ir';
 import { runIrArtifact } from '../../wrapper/ir-artifact';
 import { LOG_LEVEL_ENV_VAR, resolveLogLevel } from '../../wrapper/log-level';
@@ -32,6 +30,7 @@ import { readPolicyVersion } from '../../wrapper/package';
 import { installAbortOnSignals } from '../../wrapper/signals';
 import { dispatchVerb } from '../../wrapper/verbs/index';
 import { parseJson, runCli, useScratchTelemetry } from '../helpers/capture';
+import { shippedBakedIrText, stubbedIrLive } from '../helpers/baked-ir';
 import { BROKEN_YAML, WORKSPACE_YAML, writePolicy } from '../helpers/fixtures';
 import { useScratchDirs } from '../helpers/tmp';
 
@@ -39,8 +38,8 @@ useScratchTelemetry();
 
 const scratch = useScratchDirs('review-fixes');
 
-// A cold live extraction of the client declarations takes several seconds (ts-morph); it is setup, not a timing assertion.
-vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
+// A live extraction of the client declarations takes seconds (ts-morph): the extractor module is a stub serving the shipped artifact's operations; the real one runs in the e2e lane (t-r12-ir-artifact.e2e.test.ts).
+vi.mock('../../wrapper/ir-live', () => stubbedIrLive());
 
 /** Policy directories that cases only read (`verify` and `doctor` never write into the working directory), built once for the file. */
 let goodPolicyDir: string;
@@ -225,19 +224,25 @@ describe('Decision D-06 - attribute precedence, never merged, files re-read on e
     expect(hasCode(error, 'invalid_argument')).toBe(true);
   });
 
-  /** Runs the attributes layer once against `envelope` and returns the envelope afterwards. */
-  async function runLayer(source: IAttributesSource, envelope: Record<string, unknown>): Promise<Record<string, unknown>> {
+  /** Runs the attributes layer once against a call carrying `envelope` and a fresh ctx; returns the ctx entry and the envelope afterwards. */
+  async function runLayer(source: IAttributesSource, envelope: Record<string, unknown>): Promise<{ readonly attributes: PolicyAttributes | undefined; readonly envelope: Record<string, unknown> }> {
     const plugin = createAttributesLayerPlugin(source);
     const layer = plugin.capabilities?.layer?.layer as unknown as (call: unknown, next: () => Promise<unknown>) => Promise<unknown>;
-    await layer({ envelope }, async () => 'next');
-    return envelope;
+    const store = new Map<unknown, unknown>();
+    const ctx = { get: (key: unknown) => store.get(key), set: (key: unknown, value: unknown) => void store.set(key, value) };
+    await layer({ envelope, ctx }, async () => 'next');
+    return { attributes: ctx.get(PolicyAttributes) as PolicyAttributes | undefined, envelope };
   }
 
-  it('D-06 the attributes layer overwrites whatever a caller put on the envelope, and deletes it when there are none', async () => {
+  it('D-06 the attributes layer writes the configured attributes to the call ctx, and writes nothing when there are none (the envelope is never the carrier)', async () => {
     const configured = createAttributesSource({ flag: '{"role":"dev"}', cwd: process.cwd() });
-    expect(await runLayer(configured, { attributes: { role: 'admin' } })).toEqual({ attributes: { role: 'dev' } });
+    const withFlag = await runLayer(configured, { attributes: { role: 'admin' } });
+    expect(withFlag.attributes?.values).toEqual({ role: 'dev' });
+    expect(withFlag.envelope).toEqual({ attributes: { role: 'admin' } });
     const none = createAttributesSource({ cwd: process.cwd() });
-    expect(await runLayer(none, { attributes: { role: 'admin' }, other: 1 })).toEqual({ other: 1 });
+    const without = await runLayer(none, { attributes: { role: 'admin' }, other: 1 });
+    expect(without.attributes).toBeUndefined();
+    expect(without.envelope).toEqual({ attributes: { role: 'admin' }, other: 1 });
   });
 
   it('D-06 a read failure on a call is permission_denied, never a call that proceeds', async () => {
@@ -342,40 +347,6 @@ describe('Review fix E12 - log level, doctor exit code, README exit-code table',
   });
 });
 
-describe('Review fix E9 - dereferenceSchema is strict', () => {
-  it('E9 inlines local definitions and drops the definition tables', () => {
-    const schema = {
-      type: 'object',
-      properties: { a: { $ref: '#/definitions/Item' }, b: { $ref: '#/$defs/Other' } },
-      definitions: { Item: { type: 'string' } },
-      $defs: { Other: { type: 'number' } },
-    };
-    expect(dereferenceSchema(schema)).toEqual({ type: 'object', properties: { a: { type: 'string' }, b: { type: 'number' } } });
-  });
-
-  it('E9 an unresolved $ref throws naming the ref and the schema path', () => {
-    expect(() => dereferenceSchema({ type: 'object', properties: { a: { $ref: '#/definitions/Missing' } } })).toThrow(
-      /unresolved \$ref "#\/definitions\/Missing" at properties\.a/
-    );
-  });
-
-  it('E9 a non-local $ref throws too', () => {
-    expect(() => dereferenceSchema({ properties: { a: { $ref: 'https://example.com/x.json' } } })).toThrow(/unresolved \$ref "https:\/\/example.com\/x.json" at properties\.a/);
-  });
-
-  it('E9 a reference cycle throws naming the chain instead of recursing', () => {
-    const schema = {
-      properties: { node: { $ref: '#/definitions/Node' } },
-      definitions: { Node: { type: 'object', properties: { next: { $ref: '#/definitions/Node' } } } },
-    };
-    expect(() => dereferenceSchema(schema)).toThrow(/cyclic \$ref "#\/definitions\/Node" at properties\.node\.properties\.next \(Node -> Node\)/);
-  });
-
-  it('E9 a root-level $ref reports <root>', () => {
-    expect(() => dereferenceSchema({ $ref: '#/definitions/Nope' })).toThrow(/at <root>/);
-  });
-});
-
 describe('Review fix E10 - the hidden ir-artifact subcommand', () => {
   async function run(argv: string[], cwd: string) {
     const err: string[] = [];
@@ -407,21 +378,6 @@ describe('Review fix E10 - the hidden ir-artifact subcommand', () => {
       }
       expect(await readdir(dir, { recursive: true })).toEqual(['inner']);
     });
-  });
-
-  it('E10 --out under dist/ bakes an artifact that is then usable, and the file is removed afterwards', async () => {
-    const target = join(policyDistDir(), `.ir-artifact-spec-${process.pid}.json`);
-    try {
-      const { code, stderr } = await run(['--out', target], process.cwd());
-      expect(stderr).toBe('');
-      expect(code).toBe(0);
-      const baked = JSON.parse(await readFile(target, 'utf8')) as { formatVersion: number; operations: { kind: string }[] };
-      expect(baked.formatVersion).toBe(POLICY_IR_FORMAT_VERSION);
-      expect(baked.operations.length).toBeGreaterThan(0);
-    } finally {
-      await rm(target, { force: true });
-    }
-    expect(existsSync(target)).toBe(false);
   });
 });
 
@@ -468,12 +424,10 @@ describe('Review fixes E1 / E13 - dist layout lookup, stale artifact warning, lo
   });
 
   describe('a baked artifact is used only when it is current', () => {
-    /** The text of one artifact produced by the real `writeBakedIr` (a live ts-morph extraction of seconds), baked once for the describe; cases write copies of it. */
+    /** The text of the artifact the build shipped in dist/, read once for the describe; cases write copies of it. */
     let bakedText: string;
     beforeAll(async () => {
-      const file = join(await scratch.fresh('bake'), 'api.ir.json');
-      await writeBakedIr(file);
-      bakedText = await readFile(file, 'utf8');
+      bakedText = await shippedBakedIrText();
     });
 
     /** Writes a copy of the baked artifact into `dir`, applies `change` to its JSON, and returns the inspection. */
@@ -482,7 +436,7 @@ describe('Review fixes E1 / E13 - dist layout lookup, stale artifact warning, lo
       const artifact = JSON.parse(bakedText) as Record<string, unknown>;
       change(artifact);
       await writeFile(file, JSON.stringify(artifact));
-      return inspectBakedIr(dir);
+      return await inspectBakedIr(dir);
     }
 
     it('E1 a freshly baked artifact is accepted', async () => {
@@ -496,7 +450,7 @@ describe('Review fixes E1 / E13 - dist layout lookup, stale artifact warning, lo
       { name: 'a different artifact format', change: (a) => void (a['formatVersion'] = 0), reason: /artifact format 0 is not 1/ },
       { name: 'a different extractor version', change: (a) => void (a['extractorVersion'] = '0.0.0-other'), reason: /baked by extractor 0\.0\.0-other/ },
       { name: 'no operations', change: (a) => void (a['operations'] = []), reason: /holds no operations/ },
-      { name: 'a changed client surface', change: (a) => void (a['surfaceSha256'] = 'deadbeef'), reason: /declarations changed since the artifact was baked/ },
+      { name: 'a changed client surface', change: (a) => void ((a['artifactSource'] as { deps: Record<string, string> }).deps = { 'service/api.d.ts': 'deadbeef' }), reason: /declarations changed since the artifact was baked/ },
     ];
     for (const row of stale) {
       it(`E1 ${row.name} is rejected with a reason`, async () => {
@@ -509,9 +463,9 @@ describe('Review fixes E1 / E13 - dist layout lookup, stale artifact warning, lo
 
     it('E1 a missing artifact is reported as missing and a corrupt one as unreadable', async () => {
       await scratch.with('e1-missing', async (dir) => {
-        expect(inspectBakedIr(dir)).toEqual({ reason: 'missing' });
+        expect(await inspectBakedIr(dir)).toEqual({ reason: 'missing' });
         await writeFile(join(dir, 'api.ir.json'), '{not json');
-        const corrupt = inspectBakedIr(dir);
+        const corrupt = await inspectBakedIr(dir);
         expect('reason' in corrupt && corrupt.reason).toMatch(/artifact is unreadable/);
       });
     });
@@ -533,6 +487,7 @@ describe('Review fixes E1 / E13 - dist layout lookup, stale artifact warning, lo
         const lines: string[] = [];
         const live = await extractPolicyOperations((line) => void lines.push(line), dir);
         expect(lines).toEqual([]);
+        expect(live.length).toBeGreaterThan(0);
         await writeFile(join(dir, 'api.ir.json'), bakedText);
         const baked = await extractPolicyOperations((line) => void lines.push(line), dir);
         expect(lines).toEqual([]);

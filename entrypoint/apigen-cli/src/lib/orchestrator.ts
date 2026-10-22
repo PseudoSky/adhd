@@ -29,14 +29,20 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {
-  extract,
   composeSchemas,
   createExtractionSession,
+  createExtractorRegistry,
+  extractSourceEntry,
   pluginsToEnvelopeMiddlewares,
-  createExtractInvokerFromPlugins,
+  registerTypescriptSubprocessExtractor,
+  releaseExtractionMemory,
+  TS_SUBPROCESS_HOST,
+  resolveSourceReference,
 } from '@adhd/apigen-core-client';
 import type {
+  ExtractInvoker,
   ExtractionSession,
+  ISourceResolution,
   Operation,
   Descriptor,
   ComposedSchemas,
@@ -178,19 +184,48 @@ export interface GenerateResult {
 export type HostLang = 'ts';
 
 /**
- * Detects the host language from a file path extension.
+ * Classifies `filePath` with the shared source-reference resolver and returns
+ * its resolution when it names a TypeScript source.
  *
- * @throws if the extension is not a recognised TypeScript extension.
+ * @throws if the reference is not a TypeScript source.
  */
-export function detectLang(filePath: string): HostLang {
-  const ext = path.extname(filePath).toLowerCase();
-  if (ext === '.ts' || ext === '.tsx' || ext === '.mts' || ext === '.cts') {
-    return 'ts';
+function resolveTypeScriptSource(filePath: string): ISourceResolution {
+  const resolved = resolveSourceReference(filePath);
+  if (resolved.ok && resolved.value.translator === 'ts') {
+    return resolved.value;
   }
+  const ext = path.extname(filePath).toLowerCase();
   throw new Error(
     `apigen-orchestrator: unsupported source extension "${ext}" for file "${filePath}". ` +
       `Currently supported: .ts .tsx .mts .cts`
   );
+}
+
+/**
+ * Detects the host language from a file path extension, via the shared
+ * source-reference resolver.
+ *
+ * @throws if the extension is not a recognised TypeScript extension.
+ */
+export function detectLang(filePath: string): HostLang {
+  resolveTypeScriptSource(filePath);
+  return 'ts';
+}
+
+/** The extractors this orchestrator runs, keyed by translator id. */
+const extractorRegistry = createExtractorRegistry();
+registerTypescriptSubprocessExtractor(extractorRegistry);
+
+/**
+ * Whether the invocation's flat `--opt` bag asks for the subprocess TypeScript
+ * extractor (`--opt extract.subprocess=true`). The choice changes where
+ * extraction runs, never its result or its cache key.
+ */
+function wantsSubprocessExtractor(
+  extractLayerOptions: Record<string, unknown>
+): boolean {
+  const flag = extractLayerOptions['extract.subprocess'];
+  return flag === true || flag === 'true' || flag === '1';
 }
 
 // ---------------------------------------------------------------------------
@@ -268,6 +303,40 @@ export function loadOverrideConfig(
   return merged;
 }
 
+/**
+ * Returns the plugin option bag with the projection overrides attached under
+ * the `projection` key — the key the output plugins (fastify, express, mcp)
+ * read to build their per-operation plans, so `--opt http.verb.<id>=GET`
+ * changes the verb the generated or mounted route uses for `<id>`.
+ *
+ * An empty override config leaves the bag untouched, so operations without an
+ * override keep their projected verb. Overrides win over a `projection` value
+ * already present in the bag, key by key.
+ *
+ * @param pluginOpts - The flat `--opt` bag handed to the plugin.
+ * @param overrides - Parsed projection overrides for this invocation.
+ */
+export function withProjectionOption(
+  pluginOpts: Record<string, unknown>,
+  overrides: OverrideConfig | undefined
+): Record<string, unknown> {
+  if (!overrides?.http?.verb || Object.keys(overrides.http.verb).length === 0) {
+    return pluginOpts;
+  }
+  const existing = (pluginOpts['projection'] ?? {}) as OverrideConfig;
+  return {
+    ...pluginOpts,
+    projection: {
+      ...existing,
+      ...overrides,
+      http: {
+        ...existing.http,
+        verb: { ...existing.http?.verb, ...overrides.http.verb },
+      },
+    },
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Core orchestration
 // ---------------------------------------------------------------------------
@@ -281,7 +350,8 @@ interface SourceExtraction {
 /**
  * Extract canonical `Operation[]` from a single source file.
  *
- * Uses `@adhd/apigen-core-client's v2 `extract()` function.
+ * Delegates to `@adhd/apigen-core-client`'s `extractSourceEntry`, the one IR
+ * entry shared by `generate`, `run` and `serve`.
  *
  * Returns the resolved `namespace` alongside the operations — the ONLY
  * place `resolveNamespace()` is called for a given source, so downstream
@@ -313,50 +383,32 @@ async function extractSource(
   logger?: Logger,
   session?: ExtractionSession,
   usePluginObjects: Plugin[] = [],
-  extractLayerOptions: Record<string, unknown> = {}
+  extractLayerOptions: Record<string, unknown> = {},
+  invokerCache?: Map<string, ExtractInvoker>
 ): Promise<SourceExtraction> {
-  const lang = detectLang(entry.file);
+  const resolution = resolveTypeScriptSource(entry.file);
+  const tsconfig = resolveTsconfig(entry.file, entry.tsconfig);
+  const namespace =
+    entry.namespace ??
+    resolveNamespace(entry.file, { tsconfig: entry.tsconfig });
 
-  if (lang === 'ts') {
-    const tsconfig = resolveTsconfig(entry.file, entry.tsconfig);
-    const namespace =
-      entry.namespace ??
-      resolveNamespace(entry.file, { tsconfig: entry.tsconfig });
-
-    logger?.info(`extracting ${entry.file} (host: ts, ns: ${namespace})`);
-    const invokeExtract = createExtractInvokerFromPlugins(
-      usePluginObjects,
-      (call) =>
-        extract({
-          sourceFile: call.source,
-          namespace: call.namespace,
-          tsconfig:
-            typeof call.extractorOptions?.['tsconfig'] === 'string'
-              ? (call.extractorOptions['tsconfig'] as string)
-              : undefined,
-          session: call.extractorOptions?.['session'] as
-            | ExtractionSession
-            | undefined,
-        }),
-      extractLayerOptions
-    );
-    const ops = await invokeExtract({
-      source: entry.file,
-      host: 'ts',
-      namespace,
-      extractorOptions: { tsconfig, session },
-    });
-    logger?.info(
-      `extracted ${ops.length} operations from ${path.basename(entry.file)}`
-    );
-    logger?.debug({ ops: ops.map((o) => o.id) }, 'operation ids');
-    return { namespace, ops };
-  }
-
-  // Future hosts: shell to apigen-<lang>-extractor subprocess → parse JSON.
-  throw new Error(
-    `apigen-orchestrator: host "${lang}" extractor not implemented`
-  );
+  const subprocess = wantsSubprocessExtractor(extractLayerOptions);
+  const { operations } = await extractSourceEntry({
+    reference: entry.file,
+    resolution,
+    namespace,
+    tsconfig,
+    usePlugins: usePluginObjects,
+    extractLayerOptions,
+    // The subprocess extractor drops the run-scoped session itself (it cannot
+    // cross a process boundary), so it is passed unconditionally here.
+    session,
+    invokerCache,
+    registry: extractorRegistry,
+    extractor: subprocess ? TS_SUBPROCESS_HOST : undefined,
+    logger,
+  });
+  return { namespace, ops: operations };
 }
 
 /**
@@ -461,9 +513,19 @@ export async function buildDescriptor(
   const session = createExtractionSession();
   try {
     // --- Step 1+2: detect + extract per source -------------------------------
+    // One invoker cache for the invocation: `extractLayer.createLayer` runs
+    // once however many sources there are.
+    const invokerCache = new Map<string, ExtractInvoker>();
     const perSource: SourceExtraction[] = await Promise.all(
       sources.map((entry) =>
-        extractSource(entry, logger, session, usePluginObjects, extractLayerOptions)
+        extractSource(
+          entry,
+          logger,
+          session,
+          usePluginObjects,
+          extractLayerOptions,
+          invokerCache
+        )
       )
     );
 
@@ -647,7 +709,7 @@ export async function orchestrateGenerate(
   const input: PluginInput = {
     packages,
     outputDir,
-    options: pluginOpts,
+    options: withProjectionOption(pluginOpts, opts.overrides),
     logger: opts.logger,
     // DEBT-APIGEN-PLUGIN-MCP-GENERATE-OPERATIONS-001: thread the real merged
     // Operation[] through so generate() can call project(op) on real ops
@@ -744,7 +806,7 @@ export async function orchestrateRun(
   const input: RunInput = {
     packages,
     outputDir: '',
-    options: pluginOpts,
+    options: withProjectionOption(pluginOpts, opts.overrides),
     signal,
     logger: opts.logger,
     // BUG-APIGEN-024: thread the real merged Operation[] through so `--use`
@@ -752,6 +814,11 @@ export async function orchestrateRun(
     // from actual extracted operations instead of an empty stub.
     operations: descriptor.operations,
   };
+
+  // Extraction is finished and `buildDescriptor` already disposed its session.
+  // The process now serves for as long as the plugin runs, so also release the
+  // process-lifetime ts-morph tier that `dispose()` leaves in place.
+  releaseExtractionMemory();
 
   await plugin.run(input);
 }

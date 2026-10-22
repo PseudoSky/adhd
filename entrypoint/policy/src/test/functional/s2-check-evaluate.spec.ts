@@ -38,7 +38,7 @@ async function withDemo<T>(fn: (demo: string, run: (argv: string[]) => ReturnTyp
 describe('Feature: Gate a script on an exit code - check and evaluate', () => {
   it('@S2.1 an allowed call exits 0 with the decision on stdout', async () => {
     await withDemo(async (demo, run) => {
-      const result = await run(['check', '--input', callInput({ tool: 'files.read', args: { path: `${demo}/work/readme.md` }, attributes: devAttributes(demo) })]);
+      const result = await run(['check', '--input', callInput({ tool: 'files/read', args: { path: `${demo}/work/readme.md` }, attributes: devAttributes(demo) })]);
       expect(result.exitCode).toBe(0);
       const decision = parseJson<IDecisionJson>(result.stdout);
       expect(decision.effect).toBe('allow');
@@ -48,7 +48,7 @@ describe('Feature: Gate a script on an exit code - check and evaluate', () => {
 
   it('@S2.1 the command also answers without the namespace prefix and with the prefix spelled out', async () => {
     await withDemo(async (demo, run) => {
-      const input = callInput({ tool: 'files.read', args: { path: `${demo}/work/readme.md` }, attributes: devAttributes(demo) });
+      const input = callInput({ tool: 'files/read', args: { path: `${demo}/work/readme.md` }, attributes: devAttributes(demo) });
       const bare = await run(['check', '--input', input]);
       const prefixed = await run(['policy', 'check', '--input', input]);
       expect(prefixed.exitCode).toBe(0);
@@ -61,7 +61,7 @@ describe('Feature: Gate a script on an exit code - check and evaluate', () => {
       const result = await run([
         'check',
         '--input',
-        callInput({ tool: 'files.write', args: { path: `${demo}/work/out/notes.txt`, content: 'hi' }, attributes: devAttributes(demo) }),
+        callInput({ tool: 'files/write', args: { path: `${demo}/work/out/notes.txt`, content: 'hi' }, attributes: devAttributes(demo) }),
       ]);
       expect(result.exitCode).toBe(0);
       expect(parseJson<IDecisionJson>(result.stdout).set).toEqual({ overwrite: false });
@@ -70,7 +70,7 @@ describe('Feature: Gate a script on an exit code - check and evaluate', () => {
 
   it('@S2.2 a secret path is refused with exit 3, no decision on stdout, and stderr naming the deny', async () => {
     await withDemo(async (demo, run) => {
-      const result = await run(['check', '--input', callInput({ tool: 'files.read', args: { path: `${demo}/work/.env` }, attributes: devAttributes(demo) })]);
+      const result = await run(['check', '--input', callInput({ tool: 'files/read', args: { path: `${demo}/work/.env` }, attributes: devAttributes(demo) })]);
       expect(result.exitCode).toBe(3);
       expect(result.stdout).toBe('');
       expect(result.stderr).toContain('permission_denied');
@@ -82,7 +82,7 @@ describe('Feature: Gate a script on an exit code - check and evaluate', () => {
 
   it('@S2.3 evaluate reports where check gates: same .env read exits 0 with deny / explicit-deny and the matched deny id', async () => {
     await withDemo(async (demo, run) => {
-      const result = await run(['evaluate', '--input', callInput({ tool: 'files.read', args: { path: `${demo}/work/.env` }, attributes: devAttributes(demo) })]);
+      const result = await run(['evaluate', '--input', callInput({ tool: 'files/read', args: { path: `${demo}/work/.env` }, attributes: devAttributes(demo) })]);
       expect(result.exitCode).toBe(0);
       const decision = parseJson<IDecisionJson>(result.stdout);
       expect(decision.effect).toBe('deny');
@@ -93,8 +93,8 @@ describe('Feature: Gate a script on an exit code - check and evaluate', () => {
 
   describe('@S2.5 a caller who supplies nothing is a guest and is denied', () => {
     const rows = [
-      { tool: 'files.write', args: (demo: string) => ({ path: `${demo}/work/out/notes.txt` }), code: 'no-match' },
-      { tool: 'billing.refund', args: () => ({ customer: 'cust_1', amount: 1 }), code: 'explicit-deny' },
+      { tool: 'files/write', args: (demo: string) => ({ path: `${demo}/work/out/notes.txt` }), code: 'no-match' },
+      { tool: 'billing/refund', args: () => ({ customer: 'cust_1', amount: 1 }), code: 'explicit-deny' },
     ];
     for (const row of rows) {
       it(`@S2.5 ${row.tool}: evaluate denies with ${row.code}; check exits 3`, async () => {
@@ -119,7 +119,7 @@ describe('Feature: Gate a script on an exit code - check and evaluate', () => {
     for (const row of rows) {
       it(`@S2.6 amount ${row.amount}: evaluate is ${row.effect}${row.code ? ` / ${row.code}` : ''}; check exits 3`, async () => {
         await withDemo(async (_demo, run) => {
-          const input = callInput({ tool: 'billing.refund', args: { customer: 'cust_1', amount: row.amount }, attributes: SUPPORT_ATTRIBUTES });
+          const input = callInput({ tool: 'billing/refund', args: { customer: 'cust_1', amount: row.amount }, attributes: SUPPORT_ATTRIBUTES });
           const evaluated = await run(['evaluate', '--input', input]);
           expect(evaluated.exitCode).toBe(0);
           const decision = parseJson<IDecisionJson>(evaluated.stdout);
@@ -147,7 +147,7 @@ describe('Feature: Gate a script on an exit code - check and evaluate', () => {
 
   it('@S2.9 a flag the command does not have (the demo wording --tool) is invalid_argument, exit 2', async () => {
     await withDemo(async (_demo, run) => {
-      const result = await run(['check', '--tool', 'files.read']);
+      const result = await run(['check', '--tool', 'files/read']);
       expect(result.exitCode).toBe(2);
       expect(result.stdout).toBe('');
       expect(result.stderr).toContain('invalid_argument');
@@ -164,7 +164,7 @@ describe('Feature: Gate a script on an exit code - check and evaluate', () => {
 
   it('@S2.1 the policy source is announced on stderr, not stdout (D-12)', async () => {
     await withDemo(async (demo, run) => {
-      const result = await run(['evaluate', '--input', callInput({ tool: 'files.read', args: { path: `${demo}/work/readme.md` }, attributes: devAttributes(demo) })]);
+      const result = await run(['evaluate', '--input', callInput({ tool: 'files/read', args: { path: `${demo}/work/readme.md` }, attributes: devAttributes(demo) })]);
       expect(result.stderr).toContain(`policy: ${join(demo, 'workspace-policy.yaml')}`);
       expect(result.stdout).not.toContain('policy:');
       expect(() => JSON.parse(result.stdout)).not.toThrow();
@@ -173,7 +173,7 @@ describe('Feature: Gate a script on an exit code - check and evaluate', () => {
 
   it('@S2.5 with no policy file anywhere the built-in deny-all default applies and is announced (D-10)', async () => {
     await withTmpDir('s2-nopolicy', async (dir) => {
-      const input = callInput({ tool: 'files.read', args: { path: '/x' } });
+      const input = callInput({ tool: 'files/read', args: { path: '/x' } });
       const evaluated = await runCli(['evaluate', '--input', input], { cwd: dir, home: dir });
       expect(evaluated.exitCode).toBe(0);
       expect(parseJson<IDecisionJson>(evaluated.stdout).effect).toBe('deny');

@@ -1,3 +1,10 @@
+## Unreleased
+
+### 🩹 Fixes
+
+- **apigen-engine-runtime:** nullable `oneOf` / `anyOf` query params (e.g. `GET /list-projects?limit=2`) are coerced like their non-nullable form (9429470e).
+- **apigen-engine-runtime:** `UsePlugin['capabilities']['layer']` is derived from core-client `LayerCapability` instead of duplicated (cfd37408). `UsePlugin.capabilities` is therefore typed from the core `LayerCapability`; readers typed against the runtime `Call` adapt to the core call shape.
+
 ## 0.3.5 (2026-10-21)
 
 ### 🩹 Fixes

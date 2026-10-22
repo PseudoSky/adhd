@@ -26,8 +26,9 @@ import { atomicWriteJson } from '../atomic-write-json';
  *
  * - `get` returns `undefined` on a missing/corrupt entry — a MISS must never
  *   throw (the layer treats it as "compute it").
- * - `put` writes atomically (temp file + `rename()`); the layer calls it
- *   fire-and-forget, so a slow filesystem can never add latency to a MISS.
+ * - `put` writes atomically (temp file + `rename()`); the layer awaits it
+ *   before resolving a MISS, so a successful write is complete when the caller
+ *   sees the result. A failing `put` is non-fatal to the extraction.
  */
 export function createLocalFsBackend(dir: string): IrCacheBackend {
   return {

@@ -1,6 +1,8 @@
+import { expect } from 'vitest';
 import type { ApiError } from '@adhd/apigen-base-errors';
-import { createInvoker, LayerContext } from '@adhd/apigen-engine-runtime';
+import { adaptCoreLayer, createInvoker, LayerContext } from '@adhd/apigen-engine-runtime';
 import type { Call, ComposedSchemas, Layer, UsePlugin } from '@adhd/apigen-engine-runtime';
+import { PolicyAttributes } from '../../attributes';
 
 /** The operations the host exposes in these tests, with their `data` parameters. */
 function op(params: Record<string, unknown>): ComposedSchemas[string] {
@@ -11,10 +13,10 @@ function op(params: Record<string, unknown>): ComposedSchemas[string] {
 }
 
 export const SCHEMAS: ComposedSchemas = {
-  'files.read': op({ path: { type: 'string' } }),
-  'files.write': op({ path: { type: 'string' }, overwrite: { type: 'boolean' } }),
-  'refunds.issue': op({ amount: { type: 'number' } }),
-  'stream.items': op({}),
+  'files/read': op({ path: { type: 'string' } }),
+  'files/write': op({ path: { type: 'string' }, overwrite: { type: 'boolean' } }),
+  'refunds/issue': op({ amount: { type: 'number' } }),
+  'stream/items': op({}),
 };
 
 /** One recorded execution of an operation; the marker the Layer must keep unset when it refuses. */
@@ -33,28 +35,38 @@ export interface IHost {
       readonly envelope?: Record<string, unknown>;
       readonly signal?: AbortSignal;
       readonly transport?: string;
+      /** Attributes an earlier (auth) Layer wrote to `ctx` as `PolicyAttributes`; absent writes nothing. */
+      readonly attributes?: unknown;
       /** Layers declared before the policy Layer (an auth layer), outermost first. */
       readonly before?: readonly Layer[];
     }
   ): Promise<unknown>;
 }
 
-/** The Layer capability of a plugin, as the apigen host mounts it. */
-export function layerOf(plugin: UsePlugin): Layer {
-  const layer = plugin.capabilities?.layer?.layer;
-  if (layer === undefined) throw new Error('plugin has no layer capability');
-  return layer as unknown as Layer;
+/** What the harness needs of a plugin: its id and Layer capability (a `Plugin` is not structurally a `UsePlugin` until its `mount` is, cfd37408). */
+export type LayerPlugin = Pick<UsePlugin, 'id'> & {
+  readonly capabilities?: Pick<NonNullable<UsePlugin['capabilities']>, 'layer'>;
+};
+
+/**
+ * The Layer of a plugin, materialised exactly as the apigen host does
+ * (`adaptCoreLayer` calls `createLayer(layerOptions)` once).
+ */
+export function layerOf(plugin: LayerPlugin, layerOptions: Record<string, unknown> = {}): Layer {
+  const cap = plugin.capabilities?.layer;
+  expect(cap, 'plugin has no layer capability').toBeDefined();
+  return adaptCoreLayer(cap as NonNullable<typeof cap>, layerOptions, plugin.id);
 }
 
 /** The real `createInvoker` composed from `plugin`'s Layer, over operations that record their own execution. */
-export function createHost(plugin: UsePlugin): IHost {
+export function createHost(plugin: LayerPlugin, layerOptions: Record<string, unknown> = {}): IHost {
   const ran: IRan[] = [];
   const fns: Record<string, (...args: unknown[]) => unknown> = {
-    'files.read': (...args) => (ran.push({ fn: 'files.read', args }), 'read-ran'),
-    'files.write': (...args) => (ran.push({ fn: 'files.write', args }), 'write-ran'),
-    'refunds.issue': (...args) => (ran.push({ fn: 'refunds.issue', args }), 'refund-ran'),
-    'stream.items': (...args) => {
-      ran.push({ fn: 'stream.items', args });
+    'files/read': (...args) => (ran.push({ fn: 'files/read', args }), 'read-ran'),
+    'files/write': (...args) => (ran.push({ fn: 'files/write', args }), 'write-ran'),
+    'refunds/issue': (...args) => (ran.push({ fn: 'refunds/issue', args }), 'refund-ran'),
+    'stream/items': (...args) => {
+      ran.push({ fn: 'stream/items', args });
       return (async function* () {
         yield 1;
         yield 2;
@@ -64,10 +76,14 @@ export function createHost(plugin: UsePlugin): IHost {
   return {
     ran,
     invoke(fn, domainArgs, options = {}) {
-      const invoke = createInvoker([...(options.before ?? []), layerOf(plugin)]);
+      const invoke = createInvoker([...(options.before ?? []), layerOf(plugin, layerOptions)]);
+      const ctx = new LayerContext();
+      if (options.attributes !== undefined) {
+        ctx.set(PolicyAttributes, new PolicyAttributes(options.attributes as never));
+      }
       const call: Call = {
         operation: { id: fn },
-        ctx: new LayerContext(),
+        ctx,
         envelope: options.envelope ?? {},
         domainArgs,
         transport: (options.transport ?? 'cli') as Call['transport'],

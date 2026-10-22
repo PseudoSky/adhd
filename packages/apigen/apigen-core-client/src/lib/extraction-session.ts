@@ -36,7 +36,32 @@
 
 import type { Project, SourceFile } from 'ts-morph';
 import fs from 'node:fs';
+import path from 'node:path';
 import { lazyRequire } from './esm-require';
+
+/**
+ * The resolved `extends` chain of a tsconfig: `tsconfig` itself followed by
+ * every config it extends, transitively, as absolute paths (TypeScript's own
+ * resolution, so relative and package `extends` both resolve). Editing any of
+ * these changes the compiler options an extraction ran under, so the TS
+ * extractor reports them in `ExtractResult.sourceFiles`. An unreadable config
+ * yields just `[tsconfig]`.
+ */
+export function resolveTsconfigChain(tsconfig: string): string[] {
+  const { ts } = lazyRequire('ts-morph') as typeof import('ts-morph');
+  try {
+    // Parsing populates `extendedSourceFiles` with the whole transitive chain.
+    const sourceFile = ts.readJsonConfigFile(tsconfig, ts.sys.readFile);
+    ts.parseJsonSourceFileConfigFileContent(
+      sourceFile,
+      ts.sys,
+      path.dirname(tsconfig)
+    );
+    return [tsconfig, ...(sourceFile.extendedSourceFiles ?? [])];
+  } catch {
+    return [tsconfig];
+  }
+}
 
 // PERF (BUG-APIGEN-CORE-CLIENT-STARTUP-001): `Project` is used as a runtime
 // VALUE (via `new Project(...)`) inside `syntacticResolverProject()` and
@@ -285,6 +310,23 @@ export function persistentSchemasFor(
     _persistentSchemas.set(key, entry);
   }
   return entry.schemas;
+}
+
+/**
+ * Release everything extraction retains for the life of the process: the
+ * persistent ts-morph Projects, the persistent schema tier, and the syntactic
+ * resolver Project. `ExtractionSession.dispose()` frees only the per-run
+ * caches and leaves this tier to speed up the next extraction in the same
+ * process, so a host that finishes extracting and then serves for a long time
+ * calls this once between the two.
+ *
+ * The tier is process-global: the call clears it for every session and every
+ * concurrent extraction in this process, not only the caller's. Extractions in
+ * flight rebuild what they need on their next lookup, at the cost of a cold
+ * start.
+ */
+export function releaseExtractionMemory(): void {
+  clearPersistentProjectCache();
 }
 
 /** Drop the process-lifetime Project + schema caches (tests / explicit memory reclaim). */

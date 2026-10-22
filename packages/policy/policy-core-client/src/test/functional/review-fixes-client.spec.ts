@@ -21,7 +21,7 @@ describe('Feature: review fixes - the client fails closed and says why', () => {
     const spawn = layer('project', {
       version: 1,
       attributes: { role: 'name', write_roots: 'paths' },
-      permissions: [{ tool: 'agent.spawn', args: { child: { write_roots: { _within: '$attributes.write_roots' } } } }],
+      permissions: [{ tool: 'agent/spawn', args: { child: { write_roots: { _within: '$attributes.write_roots' } } } }],
     });
     const client = createPolicyClient({ layers: [spawn] });
 
@@ -48,33 +48,33 @@ describe('Feature: review fixes - the client fails closed and says why', () => {
       version: 1,
       attributes: { pattern: 'name' },
       permissions: [
-        { tool: 'files.read' },
-        { tool: 'files.read', effect: 'deny', args: { path: { _regex: '$attributes.pattern' } } },
+        { tool: 'files/read' },
+        { tool: 'files/read', effect: 'deny', args: { path: { _regex: '$attributes.pattern' } } },
       ],
     };
 
     it('@C2 a deny whose regular expression comes from an attribute and does not compile denies eval-error naming the permission', async () => {
       const client = createPolicyClient({ layers: [layer('project', doc)] });
-      const decision = await client.evaluate({ tool: 'files.read', args: { path: '/a/.env' }, attributes: { pattern: '(' } });
+      const decision = await client.evaluate({ tool: 'files/read', args: { path: '/a/.env' }, attributes: { pattern: '(' } });
       expect(decision.effect).toBe('deny');
       expect(decision.denial?.code).toBe('eval-error');
       expect(decision.denial?.reason).toContain('project:1');
       expect(decision.set).toEqual({});
       // explain reports the same refusal.
-      const explained = await client.explain({ tool: 'files.read', args: { path: '/a/.env' }, attributes: { pattern: '(' } });
+      const explained = await client.explain({ tool: 'files/read', args: { path: '/a/.env' }, attributes: { pattern: '(' } });
       expect(explained.decision.denial?.code).toBe('eval-error');
     });
 
     it('@C2 the same deny with a valid pattern works as a deny, and without a match the allow stands', async () => {
       const client = createPolicyClient({ layers: [layer('project', doc)] });
-      const hit = await client.evaluate({ tool: 'files.read', args: { path: '/a/.env' }, attributes: { pattern: '\\.env$' } });
+      const hit = await client.evaluate({ tool: 'files/read', args: { path: '/a/.env' }, attributes: { pattern: '\\.env$' } });
       expect(hit.denial?.code).toBe('explicit-deny');
-      const miss = await client.evaluate({ tool: 'files.read', args: { path: '/a/notes' }, attributes: { pattern: '\\.env$' } });
+      const miss = await client.evaluate({ tool: 'files/read', args: { path: '/a/notes' }, attributes: { pattern: '\\.env$' } });
       expect(miss.effect).toBe('allow');
     });
 
     it('@C2 a literal regular expression that does not compile is rejected when the policy is verified', async () => {
-      const bad = { version: 1, permissions: [{ tool: 'x.y', effect: 'deny', args: { path: { _regex: '(' } } }] };
+      const bad = { version: 1, permissions: [{ tool: 'x/y', effect: 'deny', args: { path: { _regex: '(' } } }] };
       const report = await createPolicyClient({ layers: [layer('project', bad)] }).verify();
       expect(report.ok).toBe(false);
       expect(report.errors[0]).toMatchObject({ code: 'unknown-operator', path: '/project/permissions/0/args/path/_regex' });
@@ -151,21 +151,21 @@ describe('Feature: review fixes - the client fails closed and says why', () => {
   describe('C8/C2 synthetic row keys are stripped from arguments', () => {
     it('@C8 an argument named $$c0 cannot turn a comparison against an absent attribute into a match', async () => {
       const client = createPolicyClient({
-        layers: [layer('project', { version: 1, attributes: { home: 'name' }, permissions: [{ tool: 'f.open', args: { dir: { _eq: '$attributes.home' } } }] })],
+        layers: [layer('project', { version: 1, attributes: { home: 'name' }, permissions: [{ tool: 'f/open', args: { dir: { _eq: '$attributes.home' } } }] })],
       });
-      const forged = await client.evaluate({ tool: 'f.open', args: { dir: 'x', $$c0: 1 } });
+      const forged = await client.evaluate({ tool: 'f/open', args: { dir: 'x', $$c0: 1 } });
       expect(forged.denial?.code).toBe('no-match');
       // The honest call with the attribute present is allowed, so the rule itself works.
-      expect((await client.evaluate({ tool: 'f.open', args: { dir: 'x' }, attributes: { home: 'x' } })).effect).toBe('allow');
+      expect((await client.evaluate({ tool: 'f/open', args: { dir: 'x' }, attributes: { home: 'x' } })).effect).toBe('allow');
     });
 
     it('@C8 an argument named $$s0 cannot stand in for a _within result', async () => {
       const client = createPolicyClient({
-        layers: [layer('project', { version: 1, attributes: { roots: 'paths' }, permissions: [{ tool: 'f.open', args: { path: { _within: '$attributes.roots' } } }] })],
+        layers: [layer('project', { version: 1, attributes: { roots: 'paths' }, permissions: [{ tool: 'f/open', args: { path: { _within: '$attributes.roots' } } }] })],
       });
       const attributes = { roots: ['/work'] };
-      expect((await client.evaluate({ tool: 'f.open', args: { path: '/etc/passwd', $$s0: true }, attributes })).denial?.code).toBe('no-match');
-      expect((await client.evaluate({ tool: 'f.open', args: { path: '/work/a' }, attributes })).effect).toBe('allow');
+      expect((await client.evaluate({ tool: 'f/open', args: { path: '/etc/passwd', $$s0: true }, attributes })).denial?.code).toBe('no-match');
+      expect((await client.evaluate({ tool: 'f/open', args: { path: '/work/a' }, attributes })).effect).toBe('allow');
     });
   });
 
@@ -181,9 +181,9 @@ describe('Feature: review fixes - the client fails closed and says why', () => {
 
   describe('C6 draft', () => {
     const operations = [
-      { name: 'fs.read', args: [{ name: 'path', type: 'string', kind: 'path', provenance: 'declared' as const }], hints: { readOnly: true } },
-      { name: 'fs.readMany', args: [{ name: 'paths', type: 'string[]', kind: 'path', provenance: 'declared' as const }], hints: { readOnly: true } },
-      { name: 'fs.remove', args: [{ name: 'path', type: 'string', kind: 'path' }], hints: { destructive: true } },
+      { name: 'fs/read', args: [{ name: 'path', type: 'string', kind: 'path', provenance: 'declared' as const }], hints: { readOnly: true } },
+      { name: 'fs/read-many', args: [{ name: 'paths', type: 'string[]', kind: 'path', provenance: 'declared' as const }], hints: { readOnly: true } },
+      { name: 'fs/remove', args: [{ name: 'path', type: 'string', kind: 'path' }], hints: { destructive: true } },
     ];
 
     it('@C6 the drafted policy denies secret paths including a trailing slash and nested segments, and allows ordinary ones', async () => {
@@ -191,7 +191,7 @@ describe('Feature: review fixes - the client fails closed and says why', () => {
       const client = createPolicyClient({ layers: [layer('project', drafted.document)] });
       const attributes = { read_roots: ['/x'] };
       const call = (path: string): Promise<string> =>
-        client.evaluate({ tool: 'fs.read', args: { path }, attributes }).then((d) => `${d.effect}${d.denial ? ':' + d.denial.code : ''}`);
+        client.evaluate({ tool: 'fs/read', args: { path }, attributes }).then((d) => `${d.effect}${d.denial ? ':' + d.denial.code : ''}`);
 
       expect(await call('/x/ok.txt')).toBe('allow');
       expect(await call('/x/.env')).toBe('deny:explicit-deny');
@@ -211,25 +211,25 @@ describe('Feature: review fixes - the client fails closed and says why', () => {
     it('@C6 a list-valued path argument is listed as inferred for review and keeps its root constraint per element', async () => {
       const drafted = await createPolicyClient({ layers: [] }).draft({ operations });
       expect(drafted.inferred).toContainEqual(
-        expect.objectContaining({ operation: 'fs.readMany', argument: 'paths', reason: expect.stringContaining('list-valued') })
+        expect.objectContaining({ operation: 'fs/read-many', argument: 'paths', reason: expect.stringContaining('list-valued') })
       );
-      expect(drafted.inferred.some((entry) => entry.operation === 'fs.read')).toBe(false);
+      expect(drafted.inferred.some((entry) => entry.operation === 'fs/read')).toBe(false);
 
       const client = createPolicyClient({ layers: [layer('project', drafted.document)] });
       const attributes = { read_roots: ['/x'] };
-      expect((await client.evaluate({ tool: 'fs.readMany', args: { paths: ['/x/a', '/x/b'] }, attributes })).effect).toBe('allow');
-      expect((await client.evaluate({ tool: 'fs.readMany', args: { paths: ['/x/a', '/etc/passwd'] }, attributes })).denial?.code).toBe('no-match');
+      expect((await client.evaluate({ tool: 'fs/read-many', args: { paths: ['/x/a', '/x/b'] }, attributes })).effect).toBe('allow');
+      expect((await client.evaluate({ tool: 'fs/read-many', args: { paths: ['/x/a', '/etc/passwd'] }, attributes })).denial?.code).toBe('no-match');
     });
 
     it('@C6 destructive operations are denied outright, read-only allowed, others ask; the yaml parses back to the document', async () => {
       const drafted = await createPolicyClient({ layers: [] }).draft({
-        operations: [...operations, { name: 'fs.write', args: [{ name: 'path', type: 'string', kind: 'path' }] }],
+        operations: [...operations, { name: 'fs/write', args: [{ name: 'path', type: 'string', kind: 'path' }] }],
         options: { source: 'demo' },
       });
       const client = createPolicyClient({ layers: [layer('project', parsePolicyYaml(drafted.yaml, 'drafted.yaml'))] });
       const attributes = { read_roots: ['/x'], write_roots: ['/x'] };
-      expect((await client.evaluate({ tool: 'fs.remove', args: { path: '/x/a' }, attributes })).denial?.code).toBe('explicit-deny');
-      expect((await client.evaluate({ tool: 'fs.write', args: { path: '/x/a' }, attributes })).effect).toBe('ask');
+      expect((await client.evaluate({ tool: 'fs/remove', args: { path: '/x/a' }, attributes })).denial?.code).toBe('explicit-deny');
+      expect((await client.evaluate({ tool: 'fs/write', args: { path: '/x/a' }, attributes })).effect).toBe('ask');
       expect(parsePolicyYaml(drafted.yaml, 'drafted.yaml')).toEqual(JSON.parse(JSON.stringify(drafted.document)));
     });
 
@@ -237,8 +237,8 @@ describe('Feature: review fixes - the client fails closed and says why', () => {
       const drafted = await createPolicyClient({ layers: [] }).draft({ operations, options: { source: 'demo', secretPatterns: ['%/vault/%'] } });
       const client = createPolicyClient({ layers: [layer('project', drafted.document)] });
       const attributes = { read_roots: ['/x'] };
-      expect((await client.evaluate({ tool: 'fs.read', args: { path: '/x/vault/k' }, attributes })).denial?.code).toBe('explicit-deny');
-      expect((await client.evaluate({ tool: 'fs.read', args: { path: '/x/.env' }, attributes })).effect).toBe('allow');
+      expect((await client.evaluate({ tool: 'fs/read', args: { path: '/x/vault/k' }, attributes })).denial?.code).toBe('explicit-deny');
+      expect((await client.evaluate({ tool: 'fs/read', args: { path: '/x/.env' }, attributes })).effect).toBe('allow');
       await expect(client.draft({ operations: 'nope' as never })).rejects.toMatchObject({ code: 'invalid_argument' });
     });
   });
@@ -262,18 +262,18 @@ describe('Feature: review fixes - the client fails closed and says why', () => {
     it('@C8 an unchanged file is read once however many decisions are taken, and a changed file is reloaded', async () => {
       await withTmpDir('cache', async (dir) => {
         const file = join(dir, 'global.yaml');
-        await writeFile(file, allowDoc('a.one'));
+        await writeFile(file, allowDoc('a/one'));
         const { fs, reads } = countingFs();
         const client = createPolicyClient(createCtx({ source: createFsLayerSource({ explicit: [file], fs }) }));
 
-        for (let i = 0; i < 5; i += 1) expect((await client.evaluate({ tool: 'a.one' })).effect).toBe('allow');
-        expect((await client.evaluate({ tool: 'a.two' })).denial?.code).toBe('no-match');
+        for (let i = 0; i < 5; i += 1) expect((await client.evaluate({ tool: 'a/one' })).effect).toBe('allow');
+        expect((await client.evaluate({ tool: 'a/two' })).denial?.code).toBe('no-match');
         expect(reads.filter((p) => p === file)).toHaveLength(1);
 
         // A different size changes the signature: the file is read again and the new policy decides.
-        await writeFile(file, allowDoc('a.two') + '\n');
-        expect((await client.evaluate({ tool: 'a.two' })).effect).toBe('allow');
-        expect((await client.evaluate({ tool: 'a.one' })).denial?.code).toBe('no-match');
+        await writeFile(file, allowDoc('a/two') + '\n');
+        expect((await client.evaluate({ tool: 'a/two' })).effect).toBe('allow');
+        expect((await client.evaluate({ tool: 'a/one' })).denial?.code).toBe('no-match');
         expect(reads.filter((p) => p === file)).toHaveLength(2);
       });
     });
@@ -281,14 +281,14 @@ describe('Feature: review fixes - the client fails closed and says why', () => {
     it('@C8 the compiled policy object is reused while nothing changed and replaced after an edit', async () => {
       await withTmpDir('cache-hash', async (dir) => {
         const file = join(dir, 'global.yaml');
-        await writeFile(file, allowDoc('a.one'));
+        await writeFile(file, allowDoc('a/one'));
         const ctx = createCtx({ source: createFsLayerSource({ explicit: [file] }) });
         const client = createPolicyClient(ctx);
         const first = await ctx.policy();
         expect(await ctx.policy()).toBe(first);
         const summary = await client.compile();
         expect(summary.contentHash).toBe(first.contentHash);
-        await writeFile(file, allowDoc('a.three'));
+        await writeFile(file, allowDoc('a/three'));
         const edited = await ctx.policy();
         expect(edited).not.toBe(first);
         expect(edited.contentHash).not.toBe(first.contentHash);
@@ -298,7 +298,7 @@ describe('Feature: review fixes - the client fails closed and says why', () => {
     it('@C8 touching a file without changing its text keeps the parsed layers: the source returns the same array', async () => {
       await withTmpDir('cache-touch', async (dir) => {
         const file = join(dir, 'global.yaml');
-        await writeFile(file, allowDoc('a.one'));
+        await writeFile(file, allowDoc('a/one'));
         await utimes(file, new Date(1_000_000_000_000), new Date(1_000_000_000_000));
         const { fs, reads } = countingFs();
         const source = createFsLayerSource({ explicit: [file], fs });
@@ -320,15 +320,15 @@ describe('Feature: review fixes - the client fails closed and says why', () => {
         const global = join(dir, 'global.yaml');
         const project = join(dir, 'project.yaml');
         const local = join(dir, 'local.yaml');
-        await writeFile(global, allowDoc('g.tool'));
-        await writeFile(project, allowDoc('p.tool'));
-        await writeFile(local, allowDoc('l.tool'));
+        await writeFile(global, allowDoc('g/tool'));
+        await writeFile(project, allowDoc('p/tool'));
+        await writeFile(local, allowDoc('l/tool'));
         const { fs, reads } = countingFs();
         const client = createPolicyClient(createCtx({ source: createFsLayerSource({ explicit: [global, project, local], fs }) }));
-        expect((await client.evaluate({ tool: 'l.tool' })).effect).toBe('allow');
-        await writeFile(local, allowDoc('l.other') + '\n');
-        expect((await client.evaluate({ tool: 'l.other' })).effect).toBe('allow');
-        expect((await client.evaluate({ tool: 'g.tool' })).effect).toBe('allow');
+        expect((await client.evaluate({ tool: 'l/tool' })).effect).toBe('allow');
+        await writeFile(local, allowDoc('l/other') + '\n');
+        expect((await client.evaluate({ tool: 'l/other' })).effect).toBe('allow');
+        expect((await client.evaluate({ tool: 'g/tool' })).effect).toBe('allow');
         expect(reads.filter((p) => p === global)).toHaveLength(1);
         expect(reads.filter((p) => p === project)).toHaveLength(1);
         expect(reads.filter((p) => p === local)).toHaveLength(2);
@@ -344,16 +344,16 @@ describe('Feature: review fixes - the client fails closed and says why', () => {
         const home = join(base, 'home');
         const cwd = join(home, 'proj', 'sub');
         await mkdir(cwd, { recursive: true });
-        await writeFile(join(base, 'workspace-policy.yaml'), fileText('leak.tool'));
+        await writeFile(join(base, 'workspace-policy.yaml'), fileText('leak/tool'));
 
         const bounded = createPolicyClient(createCtx({ source: createFsLayerSource({ cwd, stopAt: home }) }));
-        expect((await bounded.evaluate({ tool: 'leak.tool' })).denial?.code).toBe('no-match');
+        expect((await bounded.evaluate({ tool: 'leak/tool' })).denial?.code).toBe('no-match');
         expect((await bounded.show()).sources).toEqual([{ layer: 'global', source: 'built-in' }]);
 
         // Control inside the test: the same tree without a ceiling adopts the file above.
         const unbounded = createPolicyClient(createCtx({ source: createFsLayerSource({ cwd }) }));
         // (this walk continues to the filesystem root, so it finds the file in `base` first)
-        expect((await unbounded.evaluate({ tool: 'leak.tool' })).effect).toBe('allow');
+        expect((await unbounded.evaluate({ tool: 'leak/tool' })).effect).toBe('allow');
       });
     });
 
@@ -363,15 +363,15 @@ describe('Feature: review fixes - the client fails closed and says why', () => {
         const proj = join(home, 'proj');
         const cwd = join(proj, 'sub');
         await mkdir(cwd, { recursive: true });
-        await writeFile(join(home, 'workspace-policy.yaml'), fileText('home.tool'));
+        await writeFile(join(home, 'workspace-policy.yaml'), fileText('home/tool'));
 
         const atCeiling = createPolicyClient(createCtx({ source: createFsLayerSource({ cwd, stopAt: home }) }));
-        expect((await atCeiling.evaluate({ tool: 'home.tool' })).effect).toBe('allow');
+        expect((await atCeiling.evaluate({ tool: 'home/tool' })).effect).toBe('allow');
 
-        await writeFile(join(proj, 'workspace-policy.yaml'), fileText('proj.tool'));
+        await writeFile(join(proj, 'workspace-policy.yaml'), fileText('proj/tool'));
         const nearest = createPolicyClient(createCtx({ source: createFsLayerSource({ cwd, stopAt: home }) }));
-        expect((await nearest.evaluate({ tool: 'proj.tool' })).effect).toBe('allow');
-        expect((await nearest.evaluate({ tool: 'home.tool' })).denial?.code).toBe('no-match');
+        expect((await nearest.evaluate({ tool: 'proj/tool' })).effect).toBe('allow');
+        expect((await nearest.evaluate({ tool: 'home/tool' })).denial?.code).toBe('no-match');
         expect((await nearest.show()).sources[0].source).toBe(join(proj, 'workspace-policy.yaml'));
       });
     });
@@ -382,9 +382,9 @@ describe('Feature: review fixes - the client fails closed and says why', () => {
         const cwd = join(base, 'work', 'deep');
         await mkdir(elsewhere, { recursive: true });
         await mkdir(cwd, { recursive: true });
-        await writeFile(join(base, 'workspace-policy.yaml'), fileText('top.tool'));
+        await writeFile(join(base, 'workspace-policy.yaml'), fileText('top/tool'));
         const client = createPolicyClient(createCtx({ source: createFsLayerSource({ cwd, stopAt: elsewhere }) }));
-        expect((await client.evaluate({ tool: 'top.tool' })).effect).toBe('allow');
+        expect((await client.evaluate({ tool: 'top/tool' })).effect).toBe('allow');
       });
     });
 

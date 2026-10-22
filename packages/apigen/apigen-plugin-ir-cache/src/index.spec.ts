@@ -111,7 +111,7 @@ describe('irCachePlugin.capabilities.extractLayer.createLayer — --opt cache=<p
 
     await invoke(call);
     expect(calls).toBe(1);
-    // Writes are fire-and-forget — poll for the real observable effect.
+    // The layer awaits the MISS write-through; poll anyway for the real observable effect.
     await waitUntil(() => fs.existsSync(cachePathA));
 
     // The default location must NOT have been written either.

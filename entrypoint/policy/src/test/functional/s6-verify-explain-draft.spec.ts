@@ -77,7 +77,7 @@ attributes:
 runtime:
   calls: number
 permissions:
-  - tool: slack.post
+  - tool: slack/post
     context: { 'runtime.calls': { _lt: 3 } }
 `
       );
@@ -92,7 +92,7 @@ permissions:
   it('@S6.3 a policy that does not load stops the tool: no decision, stderr names the file, exit 1', async () => {
     await withDemo(async (demo) => {
       const bad = at(demo, 'bad');
-      const result = await runCli(['check', '--input', callInput({ tool: 'files.read', args: { path: '/etc/hosts' } })], { cwd: bad, home: demo });
+      const result = await runCli(['check', '--input', callInput({ tool: 'files/read', args: { path: '/etc/hosts' } })], { cwd: bad, home: demo });
       expect(result.exitCode).toBe(1);
       expect(result.stdout).toBe('');
       expect(result.stderr).toContain(join(bad, 'workspace-policy.yaml'));
@@ -101,7 +101,7 @@ permissions:
 
   it('@S6.3 evaluate on the unloadable policy also exits 1, never 0 and never a decision', async () => {
     await withDemo(async (demo) => {
-      const result = await runCli(['evaluate', '--input', callInput({ tool: 'files.read', args: { path: '/etc/hosts' } })], { cwd: at(demo, 'bad'), home: demo });
+      const result = await runCli(['evaluate', '--input', callInput({ tool: 'files/read', args: { path: '/etc/hosts' } })], { cwd: at(demo, 'bad'), home: demo });
       expect(result.exitCode).toBe(1);
       expect(result.stdout).toBe('');
     });
@@ -109,7 +109,7 @@ permissions:
 
   it("@S6.3 the same call where a good file is found yields that file's decision, never partial rules from the broken one", async () => {
     await withDemo(async (demo) => {
-      const input = callInput({ tool: 'files.read', args: { path: `${demo}/work/readme.md` }, attributes: devAttributes(demo) });
+      const input = callInput({ tool: 'files/read', args: { path: `${demo}/work/readme.md` }, attributes: devAttributes(demo) });
       const result = await runCli(['check', '--input', input], { cwd: at(demo, 'work'), home: demo });
       expect(result.exitCode).toBe(0);
       expect(parseJson<{ effect: string; matched: string[] }>(result.stdout)).toMatchObject({ effect: 'allow', matched: ['project:0'] });
@@ -121,7 +121,7 @@ permissions:
   it('@S6.4 explain a refusal: deny / explicit-deny, the read allow and the secret deny both matched, substituted _within equals read_roots', async () => {
     await withDemo(async (demo) => {
       const attributes = devAttributes(demo);
-      const result = await runCli(['explain', '--input', callInput({ tool: 'files.read', args: { path: `${demo}/work/.env` }, attributes })], {
+      const result = await runCli(['explain', '--input', callInput({ tool: 'files/read', args: { path: `${demo}/work/.env` }, attributes })], {
         cwd: demo,
         home: demo,
       });
