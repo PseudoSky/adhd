@@ -389,10 +389,10 @@
       "end_ref": null
     },
     "search-port-guards": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-10-22T03:00:36.466Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "ce035f12c0f6b277a7079cb202aaad5e68f4351a",
       "end_ref": null
     },
     "search-verbs": {
@@ -1696,7 +1696,7 @@
     "version": "0.8.35",
     "hash": "0b6bc1f3d70e"
   },
-  "current_state": "search-port-fetch",
+  "current_state": "search-port-guards",
   "dod_provenance": {
     "confirmed_at": "2026-10-12T23:49:38.410Z",
     "by": "pseudosky",
