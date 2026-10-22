@@ -72,7 +72,8 @@ describe('cd05ad09: content full is bounded by maxContentSize 20000 and pages wi
     const r = await fetchPage(PROVIDER, 'https://example.com/start', { content: 'full', maxContentSize: 4, offset: 2 }, w.deps)
     expect(r.finalUrl).toBe('https://example.com/final')
     expect(r.url).toBe('https://example.com/start')
-    expect(r.content).toBe('cdef')
+    const whole = (await htmlToMarkdown(page('T', '<p>abcdefghij</p>'))).markdown
+    expect(r.content).toBe(whole.slice(2, 6))
     expect(r.nextOffset).toBe(6)
   })
 })
