@@ -375,10 +375,10 @@
       "end_ref": null
     },
     "search-port-fetch": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-10-22T03:00:36.120Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "cb83165b70c14046e043a6526cdf9f65a304e067",
       "end_ref": null
     },
     "search-port-engine": {
@@ -1696,7 +1696,7 @@
     "version": "0.8.35",
     "hash": "0b6bc1f3d70e"
   },
-  "current_state": "search-port-providers",
+  "current_state": "search-port-fetch",
   "dod_provenance": {
     "confirmed_at": "2026-10-12T23:49:38.410Z",
     "by": "pseudosky",
