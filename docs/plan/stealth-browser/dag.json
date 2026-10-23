@@ -1069,7 +1069,8 @@
       "kind": "work",
       "phase": "verify",
       "depends_on": [
-        "search-hosts"
+        "search-hosts",
+        "search-tracing-fixes"
       ],
       "guard": "python3 docs/plan/stealth-browser/scripts/guard.py tracing-log-validation",
       "artifacts": [
