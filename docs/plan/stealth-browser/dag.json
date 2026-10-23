@@ -1295,6 +1295,24 @@
       ],
       "context": "contexts/fix-search-engine.md",
       "notes": "executor=typescript-pro tier=sonnet/high; OD-11 provisional resolution"
+    },
+    "fix-search-output": {
+      "kind": "work",
+      "phase": "migrate",
+      "depends_on": [
+        "conform-search"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py fix-search-output",
+      "artifacts": [
+        "entrypoint/stealth-search/src/lib/search.ts",
+        "entrypoint/stealth-search/src/api.ts",
+        "entrypoint/stealth-search/src/lib/output.ts",
+        "entrypoint/stealth-search/test/unit/verbs/",
+        "entrypoint/stealth-search/test/helpers/verbs/",
+        "docs/plan/stealth-browser/evidence/fix-search-output.md"
+      ],
+      "context": "contexts/fix-search-output.md",
+      "notes": "executor=typescript-pro tier=sonnet/medium"
     }
   },
   "authored_with": {
