@@ -17,7 +17,7 @@
  *
  * HONEST LIMIT (do not overstate): `metrics.json` covers the executors that wrap
  * their work in `withMetrics` — version, publish, publish-hygiene, dist-manifest,
- * verify-dist-load, sync-deps-check, secret-scan, assets-*. Plain nx
+ * verify-dist-load, secret-scan, assets-*. Plain nx
  * `build`/`test` tasks are NOT in it: nx caches them and their per-task timings
  * live in nx's own run data (`.nx/workspace-data/*.db`). This report says so in
  * its own output rather than implying total coverage.
@@ -171,7 +171,7 @@ if (has('json')) {
   }
   const fails = run.filter((r) => r.success === false);
   console.log(`\nfailures: ${fails.length}` + (fails.length ? ' — ' + fails.map((f) => `${f.task}:${f.project}`).join(', ') : ''));
-  console.log('covered: version, publish, release-reset, publish-hygiene, dist-manifest, verify-dist-load, sync-deps-check, secret-scan, assets-*');
+  console.log('covered: version, publish, release-reset, publish-hygiene, dist-manifest, verify-dist-load, secret-scan, assets-*');
   console.log('NOT covered (nx-native — read nx run data): build, test, e2e, lint, typecheck*');
 }
 process.exit(state === 'unreadable' ? 1 : 0);

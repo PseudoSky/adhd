@@ -1,7 +1,7 @@
 /**
- * guards: a bumped installed version of a dependency declared by project A changes A's lint and sync-deps-check task hashes and leaves B's unchanged; a warm-cache lint of A misses and fails after the bump, without nx reset (fbbb1464 AC3, AC4)
+ * guards: a bumped installed version of a dependency declared by project A changes A's lint task hash and leaves B's unchanged; a warm-cache lint of A misses and fails after the bump, without nx reset (fbbb1464 AC3, AC4)
  * tier: P
- * gap: This cannot be observed at tier S because the lint and sync-deps-check cache keys are produced by Nx's task hasher over a real workspace graph (external nodes from the lockfile, installed versions, and the plugin-emitted inputs), which only a subprocess `nx run` reaches.
+ * gap: This cannot be observed at tier S because the lint cache key is produced by Nx's task hasher over a real workspace graph (external nodes from the lockfile, installed versions, and the plugin-emitted inputs), which only a subprocess `nx run` reaches.
  * cites: fbbb1464 AC3, fbbb1464 AC4
  * red: AC3 B-clause negative control (comment-only/node_modules-only expectation flipped to "must miss") failed with
  *   AssertionError "B sync-deps-check was invalidated by a comment-only lockfile edit or a node_modules-only edit"
@@ -10,7 +10,7 @@
  * Fixture: an isolated workspace under .adhd/tmp (scratch root) with fake HOME, two projects, and the
  * repo's own lint/plugin.js and deps/plugin.js registered by absolute path (never copied). Project A declares
  * `fixture-probe-dep`; project B does not. Each target's executor is overridden in project.json to a cheap
- * command (lint and sync-deps-check keep the plugin-emitted cache inputs, which are what is under test). The
+ * command (lint keeps the plugin-emitted cache inputs, which are what is under test). The
  * lint command is a manifest-range check: it fails when the installed version of a declared dependency is not
  * the declared version, which models the reported scenario.
  *
@@ -133,7 +133,7 @@ function installProbe(ws, version) {
   writeFileSync(join(ws, 'pnpm-lock.yaml'), lockfile(version));
 }
 
-/** Manifest-range check used as both lint and sync-deps-check command: fails when an installed declared version differs. */
+/** Manifest-range check used as the lint command: fails when an installed declared version differs. */
 const CHECK_SCRIPT = `import { appendFileSync, mkdirSync, readFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 const dir = process.argv[2];
@@ -173,14 +173,11 @@ function makeFixture() {
   w('pnpm-workspace.yaml', "packages:\n  - 'projects/*'\n");
   w('eslint.base.config.mjs', 'export default [];\n');
   w('eslint.config.mjs', 'export default [];\n');
-  // targetDefaults mirror the repo root nx.json's `cache: true` for lint and sync-deps-check: without it the
+  // targetDefaults mirror the repo root nx.json's `cache: true` for lint: without it the
   // explicit run-commands targets below are never cacheable and no warm re-run can observe a hit. The root's
-  // `lint.dependsOn: ["sync-deps-check"]` is deliberately NOT mirrored: with it, an out-of-range installed
-  // version fails sync-deps-check first, lint never executes, and AC4 (lint's own cache entry) is unobservable.
   w('nx.json', json({
     plugins: [{ plugin: LINT_PLUGIN }, { plugin: DEPS_PLUGIN }],
     targetDefaults: {
-      'sync-deps-check': { cache: true },
       lint: { cache: true },
     },
   }));
@@ -202,7 +199,6 @@ function makeFixture() {
       targets: {
         build: { executor: 'nx:noop' },
         lint: { executor: 'nx:run-commands', options: { command: command('lint') } },
-        'sync-deps-check': { executor: 'nx:run-commands', options: { command: command('sync-deps-check') } },
       },
     }));
     w(`${root}/eslint.config.mjs`, 'export default [];\n');
@@ -258,18 +254,18 @@ function nxRun(fx, project, target) {
   return { status: r.status, cached: !executed, out };
 }
 
-test('AC3: bumping an installed declared dependency misses only the declaring project lint and sync-deps-check', () => {
+test('AC3: bumping an installed declared dependency misses only the declaring project lint', () => {
   const fx = makeFixture();
   try {
     // Populate both projects' caches, then confirm a re-run is a hit (precondition: caching works).
     for (const project of ['proj-a', 'proj-b']) {
-      for (const target of ['sync-deps-check', 'lint']) {
+      for (const target of ['lint']) {
         const r = nxRun(fx, project, target);
         assert.equal(r.status, 0, `populate ${project}:${target} failed\n${r.out}`);
       }
     }
     for (const project of ['proj-a', 'proj-b']) {
-      for (const target of ['sync-deps-check', 'lint']) {
+      for (const target of ['lint']) {
         const r = nxRun(fx, project, target);
         assert.equal(r.cached, true, `precondition: re-run of ${project}:${target} must be a cache hit\n${r.out}`);
       }
@@ -280,7 +276,7 @@ test('AC3: bumping an installed declared dependency misses only the declaring pr
     // B does not declare the probe. Amended B-clause (fbbb1464 AC3, option A): a non-declaring project may be
     // invalidated at most once per external-graph change, then stays cached; comment-only lockfile edits and
     // node_modules-only edits do not invalidate.
-    for (const target of ['sync-deps-check', 'lint']) {
+    for (const target of ['lint']) {
       // (1) The first run after the external-graph change may miss; it must still succeed.
       const first = nxRun(fx, 'proj-b', target);
       assert.equal(first.status, 0, `B ${target} first run after the external-graph change must succeed (a miss is permitted)\n${first.out}`);
@@ -292,12 +288,11 @@ test('AC3: bumping an installed declared dependency misses only the declaring pr
     const lockPath = join(fx.ws, 'pnpm-lock.yaml');
     writeFileSync(lockPath, `# comment-only edit, no package content change\n${readFileSync(lockPath, 'utf8')}`);
     writeFileSync(join(fx.ws, 'node_modules', ESLINT, 'node-modules-only-edit.txt'), 'not a manifest change\n');
-    for (const target of ['sync-deps-check', 'lint']) {
+    for (const target of ['lint']) {
       assert.equal(nxRun(fx, 'proj-b', target).cached, true, `B ${target} was invalidated by a comment-only lockfile edit or a node_modules-only edit`);
     }
 
     // A declares the probe: both keys must change (a miss, not a replay of the old entry).
-    assert.equal(nxRun(fx, 'proj-a', 'sync-deps-check').cached, false, 'A sync-deps-check hash did not change after a declared dependency was bumped');
     assert.equal(nxRun(fx, 'proj-a', 'lint').cached, false, 'A lint hash did not change after a declared dependency was bumped');
   } finally {
     fx.cleanup();

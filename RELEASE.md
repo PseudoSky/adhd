@@ -60,7 +60,7 @@ The monorepo's release pipeline is now built on 5 custom Nx plugins with 10+ exe
 | Plugin                 | Executors                                                                            | Purpose                                |
 | ---------------------- | ------------------------------------------------------------------------------------ | -------------------------------------- |
 | `@adhd/nx-build`       | `version`, `publish`, `reconcile`, `manifest`, `verify-dist-load`, `hygiene`, `link` | Full release lifecycle                 |
-| `@adhd/nx-deps`        | `sync-deps`, `sync-deps-check`                                                       | Dependency range reconciliation        |
+| `@adhd/nx-deps`        | `sync-deps`                                                                        | Dependency range reconciliation        |
 | `@adhd/nx-assets`      | `copy`                                                                               | README/CHANGELOG to dist               |
 | `@adhd/nx-secret-scan` | `scan`                                                                               | Credential detection (whole-repo task) |
 | `@adhd/nx-test`        | `wiring`                                                                             | Test configuration verification        |

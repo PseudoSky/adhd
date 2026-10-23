@@ -24,7 +24,7 @@ is consequence for a consumer of the shipped artifact; "Level" names the test le
 | R2 | Dist entry loads in tests (resolves to `src`) but throws when a consumer `require()`s the real bundle. | High | Medium | `verify-dist-load` (AGENTS.md §5) |
 | R3 | A provider/runtime path is only exercised with a scripted stub, so a real model/CLI path is broken in production. | High | Medium | e2e with a real provider (this document, "Environments") |
 | R4 | A dispatch-driven feature (session threading, HITL, budget cap, default MCP servers, policy) is unit-green but unreachable once the real MCP boundary is crossed. | High | Medium | integration/e2e across the real MCP seam |
-| R5 | Dependency drift (`package.json` vs imports) silently ships a broken dependency set. | Medium | Medium | `sync-deps-check` via `nx lint` (AGENTS.md §5) |
+| R5 | Dependency drift (`package.json` vs imports) silently ships a broken dependency set. | Medium | Medium | `@nx/dependency-checks` via `nx lint` (AGENTS.md §5) |
 | R6 | A test writes outside `tmp/` or leaks a DB/artifact into the tree. | Medium | Low | lint + teardown-in-`finally` rule (AGENTS.md §10) |
 | R7 | Flake from fixed sleeps / shared state / wall-clock, so a real failure hides behind a retry. | Medium | Medium | determinism rules below; no silent retries (AGENTS.md §7) |
 
@@ -148,7 +148,7 @@ gate the suite cannot actually enforce is not listed.
 |---|---|---|
 | Tests pass | 0 failures | `npx nx affected -t test` (AGENTS.md §5) |
 | Built artifact loads | `require()`/`import()` of the real `dist` entry succeeds | `npx nx run <project>:verify-dist-load` (AGENTS.md §5) |
-| Dependency integrity | no drift | `nx lint` → `sync-deps-check` (AGENTS.md §5) |
+| Dependency integrity | no drift | `nx lint` (`@nx/dependency-checks`) (AGENTS.md §5) |
 | Live e2e | runs only when explicitly gated; when enabled, 0 failures and loud failure on missing credentials | the gated suite itself (this document, "Environments — live e2e") |
 | Coverage | measured per suite; not a self-certifying threshold — report the tool's number | `vitest --coverage` (v8) |
 

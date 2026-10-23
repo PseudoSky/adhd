@@ -7,7 +7,7 @@ const { isScratchPath } = require('../lib/scratch-root');
 const { declaredExternalDeps } = require('../lib/declared-external-deps');
 function skip(p) { return p === '.' || p.startsWith('node_modules/') || p.includes('/node_modules/') || p.startsWith('dist/') || p.includes('/dist/') || isScratchPath(p); }
 // Shared cache inputs for both targets (BUILD-TOOLING-METRICS-001 profiling
-// found sync-deps/sync-deps-check UNCACHED — 1566 calls, 66% of all
+// found sync-deps UNCACHED — 1566 calls, 66% of all
 // build-tooling-plugin wall-time, almost all of them no-op re-runs against
 // unchanged inputs). `default` (not `production` — `production` deliberately
 // EXCLUDES `{projectRoot}/eslint.config.mjs`, whose `ignoredDependencies`/etc.
@@ -22,7 +22,7 @@ function skip(p) { return p === '.' || p.startsWith('node_modules/') || p.includ
 // too; without them a bump of a declared-but-not-imported dep misses this
 // cache entry, and the check reports a stale verdict from a warm cache.
 /**
- * Cache inputs shared by `sync-deps` and `sync-deps-check` for one project.
+ * Cache inputs of `sync-deps` for one project.
  * Per-project because the declared external dependency set is per-project
  * (fbbb1464); the rest of the list is identical for every project.
  *
@@ -64,11 +64,6 @@ exports.createNodes = ['**/package.json', (configFiles, _o, ctx) =>
             executor: '@adhd/nx-deps:sync',
             cache: true,
             outputs: ['{projectRoot}/package.json'],
-            inputs,
-          },
-          'sync-deps-check': {
-            executor: '@adhd/nx-deps:check',
-            cache: true,
             inputs,
           },
         },

@@ -84,6 +84,18 @@ exports.createNodes = [
                   '{workspaceRoot}/eslint.base.config.mjs',
                   '{workspaceRoot}/eslint.config.mjs',
                   `{projectRoot}/${basename(configPath)}`,
+                  // Dependencies' package.json (declared name + version): checkVersionMismatches
+                  // reads them, so a workspace dependency bumping its own version must miss the
+                  // lint cache (carried over from the removed sync-deps-check's `^production`).
+                  '^pkgManifest',
+                  // The project's OWN declared dependency maps. `default` carries package.json only
+                  // through the `manifest` json input, which was measured NOT to invalidate on a
+                  // dependency-range edit (name edits miss, range edits hit), so a drifted range
+                  // read a stale green lint. Listing the fields explicitly closes that hole.
+                  {
+                    json: `{projectRoot}/package.json`,
+                    fields: ['dependencies', 'devDependencies', 'peerDependencies', 'optionalDependencies'],
+                  },
                   // fbbb1464: `externalDependencies` REPLACES Nx's default hashing of
                   // installed external versions, so the project's own declared deps
                   // must be listed or a bump of one never misses this cache entry.

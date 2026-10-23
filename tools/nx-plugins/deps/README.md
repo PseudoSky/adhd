@@ -1,6 +1,6 @@
 # @adhd/nx-deps
 
-`sync-deps` (fix) / `sync-deps-check` (read-only) — guarded `@nx/dependency-checks`, both backed by [`eslint-check.mjs`](eslint-check.mjs) (see its header for the full yarn.lock/node_modules landmine writeup — BUG-REPO-PRECOMMIT-DEPCHECK-STRIPS-USED-DEPS-001).
+`sync-deps` (fix) — guarded `@nx/dependency-checks --fix`, backed by [`eslint-check.mjs`](eslint-check.mjs) (see its header for the full yarn.lock/node_modules landmine writeup — BUG-REPO-PRECOMMIT-DEPCHECK-STRIPS-USED-DEPS-001).
 
 ## `lint` now `dependsOn: ["sync-deps"]` (BUILD-TOOLING-VERSION-SYNC-DEPS-001)
 
@@ -26,12 +26,12 @@ The pre-commit hook (`.githooks/pre-commit`) keeps its own, separate, **hard-fai
 
 ### Cache key — installed versions of the project's declared dependencies (fbbb1464)
 
-The `lint` target (`tools/nx-plugins/lint/plugin.js`) and both `sync-deps` / `sync-deps-check` targets (this plugin) declare `{ externalDependencies: [...] }` as a cache input. Declaring that input **replaces** Nx's default hashing of installed external versions for the target, so each target lists every npm dependency its own project declares:
+The `lint` target (`tools/nx-plugins/lint/plugin.js`) and the `sync-deps` target (this plugin) declare `{ externalDependencies: [...] }` as a cache input. Declaring that input **replaces** Nx's default hashing of installed external versions for the target, so each target lists every npm dependency its own project declares:
 
 - the names come from `dependencies`, `devDependencies`, `peerDependencies` and `optionalDependencies` in the project's `package.json` (except `@adhd/*`), via [`lib/declared-external-deps.js`](../lib/declared-external-deps.js) (`declaredExternalDeps`);
-- `@adhd/*` names are excluded (workspace siblings are covered by `^production`), and `eslint` is always listed once, first;
+- `@adhd/*` names are excluded (workspace siblings are covered by `^production` for `sync-deps` and `^pkgManifest` for `lint`), and `eslint` is always listed once, first;
 - the lockfile is **not** an input. Hashing it would re-run lint for every project on any dependency bump in the workspace.
 
-The effect is that bumping an installed version of a dependency a project declares invalidates that project's `lint` and `sync-deps-check` entries, and nothing else.
+The effect is that bumping an installed version of a dependency a project declares invalidates that project's `lint` and `sync-deps` entries, and nothing else.
 
 Global scope follows `nx.json` `namedInputs.sharedGlobals`, which lists `tools/nx-plugins/build/**/*` and `tools/nx-plugins/lint/**/*` and no other path under `tools/nx-plugins/`. Editing either listed directory invalidates every project's `default`-based inputs. Editing `tools/nx-plugins/lib/` or `tools/nx-plugins/deps/` (other than `eslint-check.mjs`, which the `sync-deps` targets list explicitly) does not.

@@ -17,6 +17,7 @@
       "manifest",
       "sharedGlobals"
     ],
+    "pkgManifest": ["{projectRoot}/package.json"],
     "manifest": [
       {
         "json": "{projectRoot}/package.json",
@@ -278,12 +279,8 @@
         "publish-hygiene"
       ]
     },
-    "sync-deps-check": {
-      "cache": true
-    },
     "lint": {
-      "cache": true,
-      "dependsOn": ["sync-deps-check"]
+      "cache": true
     }
   },
   "release": {

@@ -17,7 +17,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -210,4 +210,28 @@ test('lint createNodes throws naming the file when package.json is malformed', (
       );
     },
   );
+});
+
+/**
+ * regression:be8a4d5a · tier S · be8a4d5a AC2
+ * Failure mode: lint loses the dependency-version invalidation the removed
+ * sync-deps-check carried (`^production`), so a workspace dependency bumping its
+ * own version leaves a stale green lint (checkVersionMismatches reads it); or the
+ * project's own dependency-range edit leaves a stale green lint (measured: the
+ * `manifest` json input does not invalidate on a range edit).
+ */
+test('lint inputs carry ^pkgManifest and nx.json defines the pkgManifest named input', () => {
+  withWorkspace(
+    { [`${PROJECT}/project.json`]: PROJECT_JSON, [CONFIG]: ESLINT_CONFIG },
+    (ws) => {
+      assert.ok(lintInputs(ws).includes('^pkgManifest'), 'lint inputs include ^pkgManifest');
+      const own = lintInputs(ws).find((i) => typeof i === 'object' && i !== null && 'json' in i);
+      assert.ok(own, 'lint inputs hash the project own dependency maps (json input with fields)');
+      assert.deepEqual(own.fields, ['dependencies', 'devDependencies', 'peerDependencies', 'optionalDependencies']);
+    },
+  );
+  const nx = JSON.parse(readFileSync(join(REPO_ROOT, 'nx.json'), 'utf8'));
+  assert.deepEqual(nx.namedInputs.pkgManifest, ['{projectRoot}/package.json']);
+  assert.equal(nx.targetDefaults['sync-deps-check'], undefined);
+  assert.equal(nx.targetDefaults.lint.dependsOn, undefined);
 });

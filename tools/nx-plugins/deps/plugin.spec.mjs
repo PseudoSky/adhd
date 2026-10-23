@@ -3,15 +3,16 @@
  * tier: S
  * cites: fbbb1464 AC2, AC5
  *
- * Tests for deps/plugin.js createNodes — the `sync-deps` and `sync-deps-check`
- * targets' shared `externalDependencies` cache input (spec fbbb1464).
+ * Tests for deps/plugin.js createNodes — the `sync-deps` target's
+ * `externalDependencies` cache input (spec fbbb1464). `sync-deps-check` no
+ * longer exists: `lint` runs the same @nx/dependency-checks rule (be8a4d5a).
  *
  * Scope of this file (tier S): the input LIST each target emits for fixture
  * projects. The task-hash behavior (AC3: a bumped installed version changes the
- * sync-deps-check hash; AC4: a warm-cache lint of a mismatched project fails
+ * lint hash; AC4: a warm-cache lint of a mismatched project fails
  * after the bump) is NOT proven here. It needs Nx's hasher over a real
  * workspace, which cannot run in the unit lane. Tier-P gap: this cannot be
- * observed at tier S because the sync-deps-check cache key is produced by Nx's
+ * observed at tier S because the lint cache key is produced by Nx's
  * task hasher over a real project graph (external nodes, installed versions and
  * the plugin-emitted inputs), which only a subprocess `nx run` reaches. AC3/AC4
  * are covered by tools/nx-plugins/lint/declared-deps-hash.e2e.spec.mjs (tier P, e2e lane).
@@ -88,11 +89,11 @@ function externalDependencies(inputs) {
 
 /**
  * regression:fbbb1464 · tier S · fbbb1464 AC2
- * Failure mode: sync-deps and sync-deps-check diverge, so one of the two
- * targets caches on a stale declared set and reports a verdict from a warm
- * cache after a dependency bump.
+ * Failure mode: the removed `sync-deps-check` target is re-emitted, spawning a
+ * second ESLint process per project that duplicates `lint`'s dependency check
+ * (be8a4d5a); or `sync-deps` loses its declared set.
  */
-test('sync-deps and sync-deps-check carry the same declared externalDependencies set', () => {
+test('sync-deps carries the declared externalDependencies set and no sync-deps-check target is emitted', () => {
   const manifest = JSON.stringify({
     dependencies: { a: '^1.0.0', '@adhd/x': '*' },
     devDependencies: { b: '^2.0.0' },
@@ -106,9 +107,8 @@ test('sync-deps and sync-deps-check carry the same declared externalDependencies
     (ws) => {
       const targets = syncTargets(ws, [`${PROJECT_A}/package.json`]);
       const syncDeps = externalDependencies(targets[PROJECT_A]['sync-deps'].inputs);
-      const check = externalDependencies(targets[PROJECT_A]['sync-deps-check'].inputs);
       assert.deepEqual([...syncDeps].sort(), ['a', 'b', 'eslint']);
-      assert.deepEqual([...check].sort(), [...syncDeps].sort());
+      assert.equal(targets[PROJECT_A]['sync-deps-check'], undefined);
     },
   );
 });
@@ -129,10 +129,6 @@ test('sync targets for a project with no declared dependencies are eslint only',
       const targets = syncTargets(ws, [`${PROJECT_A}/package.json`]);
       assert.deepEqual(
         externalDependencies(targets[PROJECT_A]['sync-deps'].inputs),
-        ['eslint'],
-      );
-      assert.deepEqual(
-        externalDependencies(targets[PROJECT_A]['sync-deps-check'].inputs),
         ['eslint'],
       );
     },
@@ -160,8 +156,8 @@ test('sync target externalDependencies are per-project and do not leak across pr
         `${PROJECT_A}/package.json`,
         `${PROJECT_B}/package.json`,
       ]);
-      const aExt = externalDependencies(targets[PROJECT_A]['sync-deps-check'].inputs);
-      const bExt = externalDependencies(targets[PROJECT_B]['sync-deps-check'].inputs);
+      const aExt = externalDependencies(targets[PROJECT_A]['sync-deps'].inputs);
+      const bExt = externalDependencies(targets[PROJECT_B]['sync-deps'].inputs);
       assert.deepEqual([...aExt].sort(), ['a', 'eslint']);
       assert.deepEqual([...bExt].sort(), ['c', 'eslint']);
       assert.ok(!aExt.includes('c'));

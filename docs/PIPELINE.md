@@ -12,7 +12,7 @@ source is authoritative, and this doc is the index that keeps the pieces togethe
 ## 1. Build graph
 - **Task graph** — `nx.json` (`targetDefaults` + `plugins`); custom executors live under
   `tools/nx-plugins/{build,lint,assets,deps,test}/plugin.js`. Key edges: `build` →
-  `dependsOn: ["^build","typecheck"]`; `test` → `["lint","^build"]`; `lint` → `["sync-deps-check"]`;
+  `dependsOn: ["^build","typecheck"]`; `test` → `["lint","^build"]`; `lint` → none;
   `publish` → `["build","assets","test","dist-manifest","verify-dist-load","publish-hygiene"]`
   (`targetDefaults["nx-release-publish"]`). The inferred `version`/`publish` targets
   (`tools/nx-plugins/build/plugin.js`) order after each RUNTIME dependency's `version`/`publish`/`test`
@@ -95,7 +95,7 @@ and `vercel` apps post check suites; none gates a merge. DeepSource is **not use
   `-t test` in a row — dependency tasks included — end in `Cache: N/N hit` AND exit 0; there is no
   recorded exception.
 - **Cached targets** (all `cache: true`): `build`, `typecheck`, `typecheck-spec`, `lint`,
-  `sync-deps-check`, `test`, `assets`, `build-bin`, `vocabulary-gate`, `traceability`, backlog `build`
+  `test`, `assets`, `build-bin`, `vocabulary-gate`, `traceability`, backlog `build`
   (vite + `ir-artifact` bake, formerly uncached), `dispatch-cli:generate-cli` (declared
   `apigen-cli:build` dependency, outputs `dist/entrypoint/dispatch-cli/cli`), `dist-manifest`
   (inputs: own `package.json`/`CHANGELOG.md` + the `package.json` of each declared RUNTIME workspace
@@ -204,7 +204,7 @@ and `vercel` apps post check suites; none gates a merge. DeepSource is **not use
   `metrics.json`, and per package PUBLISHED vs SKIPPED from the publish executor's own `outcome`
   (never a registry re-read).
 - **Coverage** — `metrics.json` covers `withMetrics` executors only (version, publish,
-  publish-hygiene, dist-manifest, verify-dist-load, sync-deps-check, secret-scan, assets-*); plain nx
+  publish-hygiene, dist-manifest, verify-dist-load, secret-scan, assets-*); plain nx
   build/test timings live in `.nx/workspace-data`.
 - **GAP** — the CPU guard is the only enforced budget and is off by default; no committed wall-clock
   or artifact-size threshold fails a build today.
