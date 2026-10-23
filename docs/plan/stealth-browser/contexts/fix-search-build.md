@@ -43,6 +43,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 
 - [fix-search-build.2] The published manifest has no `nx` key: a spec cites [fix-search-build.2] and asserts it on the manifest the dist-manifest/pack step emits (titles carry `nx key`, `published manifest`), while the source package.json may keep it.
 - [fix-search-build.3] evidence/fix-search-build.md records the red-first proof: a `RED:` line with the failing assertion of each new spec on the untouched source and a `GREEN:` line with the passing run after the fix.
+- [fix-search-build.4] `nx run stealth-search:lint`, `:typecheck`, `:typecheck-spec`, `:test`, `:build` exit 0 and evidence/fix-search-build.md records each as `EXIT <command>: 0`.
 ---
 
 ## Reservations
