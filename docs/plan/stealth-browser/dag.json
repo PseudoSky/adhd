@@ -1313,6 +1313,27 @@
       ],
       "context": "contexts/fix-search-output.md",
       "notes": "executor=typescript-pro tier=sonnet/medium"
+    },
+    "search-mcp-iserror": {
+      "kind": "work",
+      "phase": "surface",
+      "depends_on": [
+        "conform-search"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py search-mcp-iserror",
+      "artifacts": [
+        "entrypoint/stealth-search/src/server.ts",
+        "entrypoint/stealth-search/src/errors.ts",
+        "entrypoint/stealth-search/docs/ERRORS.md",
+        "entrypoint/stealth-search/test/unit/hosts/",
+        "entrypoint/stealth-search/test/unit/use-cases/hosts.spec.ts",
+        "entrypoint/stealth-search/test/unit/errors/",
+        "entrypoint/stealth-search/project.json",
+        "entrypoint/stealth-search/vitest.e2e.config.ts",
+        "docs/plan/stealth-browser/evidence/search-mcp-iserror.md"
+      ],
+      "context": "contexts/search-mcp-iserror.md",
+      "notes": "executor=typescript-pro tier=sonnet/high; adhd ADR-0018; backlog 4909102e"
     }
   },
   "authored_with": {
