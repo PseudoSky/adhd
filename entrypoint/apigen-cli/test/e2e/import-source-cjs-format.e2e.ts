@@ -86,9 +86,8 @@ describe('importSource: CommonJS-format source with a .js-extension relative spe
       name: toolName,
       arguments: { data: { name: 'world' } },
     })) as { content: Array<{ type: string; text: string }> };
-    const got = JSON.parse(
-      res.content.find((c) => c.type === 'text')?.text ?? 'null'
-    );
+    // ADR-0004: a string result is the flat text payload itself, not a JSON document.
+    const got = res.content.find((c) => c.type === 'text')?.text;
     expect(got).toBe('hello world');
   }, 30_000);
 });

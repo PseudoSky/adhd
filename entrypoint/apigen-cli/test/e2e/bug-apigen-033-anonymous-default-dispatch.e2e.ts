@@ -140,9 +140,8 @@ describe('BUG-APIGEN-033: anonymous default-export dispatch, against the REAL bu
       arguments: { data: { name: 'Ada' } },
     })) as { content: Array<{ type: string; text: string }>; isError?: boolean };
     expect(res.isError, JSON.stringify(res)).not.toBe(true);
-    const got = JSON.parse(
-      res.content.find((c) => c.type === 'text')?.text ?? 'null'
-    );
+    // ADR-0004: a string result is the flat text payload itself, not a JSON document.
+    const got = res.content.find((c) => c.type === 'text')?.text;
     expect(got).toBe('hello Ada');
   }, 30_000);
 });

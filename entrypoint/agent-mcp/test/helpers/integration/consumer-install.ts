@@ -33,12 +33,13 @@ function workspacePackageDirs(): Map<string, string> {
   const walk = (dir: string, depth: number): void => {
     if (depth > 3) return;
     for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
-      if (!e.isDirectory() || ['node_modules', 'dist', '.nx'].includes(e.name)) continue;
+      if (!e.isDirectory() || ['node_modules', 'dist', '.nx', 'tmp'].includes(e.name)) continue;
       const p = path.join(dir, e.name);
       const pj = path.join(p, 'package.json');
       if (fs.existsSync(pj)) {
         try {
           dirs.set(readJson(pj).name, p);
+          continue; // a workspace package is a leaf: nested manifests (tmp scratch, fixtures) never shadow it
         } catch {
           /* not a package manifest */
         }

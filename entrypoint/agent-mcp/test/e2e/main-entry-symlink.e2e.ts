@@ -17,7 +17,7 @@
  * env, then exited 0 silently: no server, no port bound, no DB touched.
  *
  * This test drives the REAL, BUILT production entry
- * (`entrypoint/agent-mcp/dist/src/index.js` — the exact file `npm`/`npx`
+ * (`entrypoint/agent-mcp/dist/bundle/index.js` — the exact file `npm`/`npx`
  * launch via the package's `bin` field) through an actual filesystem
  * symlink, as a real child process (`node <symlink>`), and asserts the real
  * HTTP transport port becomes reachable within a bounded deadline — the
@@ -54,9 +54,9 @@
  *
  * The absolute-symlink launch above does not exercise that residual
  * divergence, and it also does not reproduce npm's real launch shape — the
- * published package's `bin` is `./src/index.js` (dist-root-rebased), npm
+ * published package's `bin` is `./bundle/index.js` (dist-root-rebased), npm
  * creates `node_modules/.bin/agent-mcp` as a RELATIVE symlink
- * (`../@adhd/agent-mcp/src/index.js`), and the real install copies (never
+ * (`../@adhd/agent-mcp/bundle/index.js`), and the real install copies (never
  * symlinks) the package content. So this file adds a second test that
  * builds a scratch package tree under `os.tmpdir()` (on macOS that is
  * `/private/var/...`, exercising the `/var` -> `/private/var` symlinked
@@ -109,7 +109,7 @@ const __dirname = fileURLToPath(new URL('.', import.meta.url));
 
 // entrypoint/agent-mcp/src/__tests__/ -> entrypoint/agent-mcp/
 const PACKAGE_ROOT = resolve(__dirname, "..", "..");
-const DIST_ENTRY = join(PACKAGE_ROOT, "dist", "src", "index.js");
+const DIST_ENTRY = join(PACKAGE_ROOT, "dist", "bundle", "index.js");
 const DIST_ROOT = join(PACKAGE_ROOT, "dist");
 
 // entrypoint/agent-mcp/src/__tests__/ -> repo root (4 levels up), per
@@ -280,7 +280,7 @@ async function buildNpmShapeScratchTree(): Promise<{
     // 1. Package content = a COPY of the built dist — exactly what `npm
     //    install` unpacks from the published tarball (a real file tree,
     //    never a symlink back into the repo). The dist root IS the package
-    //    root once published (dist-manifest rebases bin -> ./src/index.js).
+    //    root once published (dist-manifest rebases bin -> ./bundle/index.js).
     cpSync(DIST_ROOT, pkgAgentMcp, { recursive: true });
 
     // 2. Runtime deps from the rebased manifest, linked offline from the
@@ -292,10 +292,10 @@ async function buildNpmShapeScratchTree(): Promise<{
     linkScratchPackageDeps(pkgNodeModules, distManifest.dependencies, PACKAGE_ROOT, REPO_ROOT);
 
     // 3. npm's .bin entry: a RELATIVE symlink, exactly as npm creates it —
-    //    `node_modules/.bin/agent-mcp -> ../@adhd/agent-mcp/src/index.js`.
+    //    `node_modules/.bin/agent-mcp -> ../@adhd/agent-mcp/bundle/index.js`.
     const binDir = join(pkgNodeModules, ".bin");
     mkdirSync(binDir, { recursive: true });
-    symlinkSync("../@adhd/agent-mcp/src/index.js", join(binDir, "agent-mcp"));
+    symlinkSync("../@adhd/agent-mcp/bundle/index.js", join(binDir, "agent-mcp"));
 
     // A fake $HOME so this test never touches the real machine's
     // ~/.adhd/agent-mcp/* files (same isolation as the absolute-symlink
@@ -305,7 +305,7 @@ async function buildNpmShapeScratchTree(): Promise<{
 
     const port = await reserveFreePort();
 
-    return { pkg, fakeHome, port, entryPath: join(pkgAgentMcp, "src", "index.js") };
+    return { pkg, fakeHome, port, entryPath: join(pkgAgentMcp, "bundle", "index.js") };
 }
 
 const cleanupDirs: string[] = [];
