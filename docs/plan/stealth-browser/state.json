@@ -417,10 +417,10 @@
       "end_ref": "1cc1afba43c34f4f66b993a1cc421e1fbeca12ad"
     },
     "search-usecases": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-10-23T20:59:09.772Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "a811a487d03cceebf6f8367964a5441c14c11110",
       "end_ref": null
     },
     "search-examples": {
@@ -1780,7 +1780,7 @@
     "version": "0.8.35",
     "hash": "0b6bc1f3d70e"
   },
-  "current_state": "sp-switch",
+  "current_state": "search-usecases",
   "dod_provenance": {
     "confirmed_at": "2026-10-12T23:49:38.410Z",
     "by": "pseudosky",
