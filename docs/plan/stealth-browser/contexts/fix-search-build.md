@@ -39,7 +39,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
      matching audit check ID so Check 3's ID-mirror holds. Do not hand-add
      bare [slug.N] tokens here without a matching audit check. -->
 
-_No criteria yet._
+- [fix-search-build.1] A spec under test/unit/build cites [fix-search-build.1] and proves the baked cache: a fresh cache avoids extraction, a stale key re-extracts: titles carry `I-35`, `baked`, `stale`, `cold`; and the build produces the cache file in dist.
 
 ---
 
