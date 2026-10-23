@@ -424,10 +424,10 @@
       "end_ref": null
     },
     "search-examples": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-10-23T20:59:10.103Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "5e12c1604cdcb7a412073124c522f516e0f661e8",
       "end_ref": null
     },
     "tracing-log-validation": {
@@ -1780,7 +1780,7 @@
     "version": "0.8.35",
     "hash": "0b6bc1f3d70e"
   },
-  "current_state": "search-usecases",
+  "current_state": "search-examples",
   "dod_provenance": {
     "confirmed_at": "2026-10-12T23:49:38.410Z",
     "by": "pseudosky",
