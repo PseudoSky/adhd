@@ -368,11 +368,11 @@
       "end_ref": "f48ab75adacf084470b17c724b1a51d8ebbf041c"
     },
     "search-port-providers": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-10-22T03:00:35.763Z",
-      "done_at": null,
+      "done_at": "2026-10-23T17:33:33.115Z",
       "start_ref": "b5c4e077c7e76cfe8dd09bf619b3953b1d93b7aa",
-      "end_ref": null
+      "end_ref": "d863207fb3be21789950fe0fe53a8c30090db171"
     },
     "search-port-fetch": {
       "status": "in_progress",
@@ -944,6 +944,18 @@
       "audit_criteria_total": 6,
       "by": "pseudosky",
       "note": "guard exit 0 (orchestrator-verified); sonnet; cdba8a4e 93b96f92"
+    },
+    {
+      "ts": "2026-10-23T17:33:33.115Z",
+      "from": "tests-use-cases",
+      "to": "search-port-providers",
+      "start_ref": "b5c4e077c7e76cfe8dd09bf619b3953b1d93b7aa",
+      "end_ref": "d863207fb3be21789950fe0fe53a8c30090db171",
+      "audit_exit": 0,
+      "audit_criteria_passed": 10,
+      "audit_criteria_total": 10,
+      "by": "pseudosky",
+      "note": "guard exit 0 (orchestrator-verified); sonnet; resumed after outage"
     }
   ],
   "amendment_log": [
@@ -1708,7 +1720,7 @@
     "version": "0.8.35",
     "hash": "0b6bc1f3d70e"
   },
-  "current_state": "tests-use-cases",
+  "current_state": "search-port-engine",
   "dod_provenance": {
     "confirmed_at": "2026-10-12T23:49:38.410Z",
     "by": "pseudosky",
