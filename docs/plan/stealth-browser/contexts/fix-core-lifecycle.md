@@ -37,7 +37,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
      matching audit check ID so Check 3's ID-mirror holds. Do not hand-add
      bare [slug.N] tokens here without a matching audit check. -->
 
-_No criteria yet._
+- [fix-core-lifecycle.1] (backlog 86a2318f) A spec under test/unit/lifecycle cites [fix-core-lifecycle.1] and proves `defaultReaperEntry` resolves to an absolute path under ESM and under CJS and fails with a typed error when unresolvable: titles carry `defaultReaperEntry`, `ESM`, `CJS`, `86a2318f`; the spec is green.
 
 ---
 
