@@ -39,7 +39,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
      matching audit check ID so Check 3's ID-mirror holds. Do not hand-add
      bare [slug.N] tokens here without a matching audit check. -->
 
-_No criteria yet._
+- [fix-tripwire.1] (backlog 84e1f7a2) The expiry audit line is `ttl-expired`: `src/lib/audit.ts` (or the module that writes the line) names `ttl-expired`, a spec under test/unit simulates a tripped entry whose ttl has passed and asserts the written audit line's reason, titles carry `ttl-expired`, `audit` and `84e1f7a2`, the spec cites [fix-tripwire.1], no tripwire test uses `it.fails`, and the spec is green.
 
 ---
 
