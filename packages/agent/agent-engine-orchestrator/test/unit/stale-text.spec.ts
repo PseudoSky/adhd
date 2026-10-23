@@ -21,7 +21,7 @@ const read = (rel: string): string => readFileSync(join(pkgRoot, rel), "utf8");
 describe("a2a9c6db AC3: engine/denial-message.ts is deleted, not left dead", () => {
   it("a2a9c6db AC3: the module and its test are gone and no source claims 'adds no default allowlist'", () => {
     expect(existsSync(join(pkgRoot, "src/engine/denial-message.ts"))).toBe(false);
-    expect(existsSync(join(pkgRoot, "src/__tests__/denial-message.test.ts"))).toBe(false);
+    expect(existsSync(join(pkgRoot, "test/unit/denial-message.spec.ts"))).toBe(false);
     expect(read("src/engine/native-tool-guidance.ts")).not.toMatch(/adds no default allowlist/);
     expect(read("src/index.ts")).not.toMatch(/denial-message/);
   });

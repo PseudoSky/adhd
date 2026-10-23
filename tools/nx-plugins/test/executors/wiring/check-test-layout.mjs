@@ -18,6 +18,8 @@
  *   L4 file and directory names under `test/{unit,e2e,helpers}` are lower-case kebab (dots separate qualifiers)
  *   L5 a project with `test/unit` specs takes its vitest `include` from `UNIT_FILE_INCLUDES`
  *   L6 a `tsconfig.spec.json` includes `test/` (a project with none is ratcheted by lane-reachability rule 6)
+ *   L8 test code names no legacy location (`src/__tests__`, `src/test/`, `.e2e.test.`) outside comments
+ *   L9 a test file is named for its subject, never for a ticket id (`b3999dfa-docs-contract.spec.ts`); the ticket belongs in the header
  *   L7 a file under `src/` never imports from `test/` (production code, and the build that compiles it, cannot depend on tests)
  *
  * Exit code is the only signal (0 = conforming, 1 = violations, 2 = the walker found nothing to scan).
@@ -125,6 +127,16 @@ export function collectLayoutViolations(workspaceRoot) {
             break;
           }
         }
+      }
+    }
+
+    // L8 + L9 — no legacy locations in code, no ticket-id names
+    for (const lane of ['unit', 'e2e', 'helpers']) {
+      for (const rel of filesUnder(testDir).filter((r) => r.startsWith(`${lane}/`))) {
+        if (!/\.[cm]?[jt]sx?$/.test(rel)) continue;
+        if (/^[0-9a-f]{8}-/.test(rel.split('/').pop())) add('L9', `${root}/test/${rel}`, 'named for a ticket id; name it for its subject and cite the ticket in the header');
+        const code = readFileSync(join(testDir, rel), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:'"`\\])\/\/.*$/gm, '$1');
+        if (/src\/__tests__|(?<!java\/)src\/test\/|['"]src['"],\s*['"](?:test|__tests__)['"]|\.e2e\.test\./.test(code)) add('L8', `${root}/test/${rel}`, 'code names a legacy test location; tests live in test/{unit,e2e,helpers,fixtures,golden}');
       }
     }
 

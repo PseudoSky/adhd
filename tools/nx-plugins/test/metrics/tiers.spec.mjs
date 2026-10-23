@@ -36,7 +36,7 @@ describe('TIER_BUDGETS', () => {
 describe('inferTierFromName', () => {
   it('names the e2e files tier P and every other test file tier S (testing.md section 1)', () => {
     assert.equal(inferTierFromName('/r/a/b.e2e.ts'), 'P');
-    assert.equal(inferTierFromName('/r/a/b.e2e.test.ts'), 'P');
+    assert.equal(inferTierFromName('/r/a/b.e2e.ts'), 'P');
     assert.equal(inferTierFromName('/r/a/b.spec.ts'), 'S');
     assert.equal(inferTierFromName('/r/a/b.spec.mjs'), 'S');
   });

@@ -158,6 +158,10 @@ export function main(argv) {
     console.error(`check-test-headers: baseline ${opt.baseline} is unreadable: ${err.message}`);
     return 65;
   }
+  if (files === 0) {
+    console.error('check-test-headers: zero test files scanned; the walker is broken (a scan that finds nothing must fail, not pass)');
+    return 2;
+  }
   const violations = evaluate(found, baseline);
   const perRule = {};
   for (const rules of Object.values(found)) for (const r of rules) perRule[r] = (perRule[r] ?? 0) + 1;

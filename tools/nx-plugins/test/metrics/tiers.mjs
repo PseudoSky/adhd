@@ -39,7 +39,7 @@ export const TIER_ORDER = Object.freeze(['S', 'P', 'H', 'X']);
 
 /** The tier a file name implies when its header declares none (testing.md section 1). */
 export function inferTierFromName(file) {
-  return /\.e2e\.[^/]*$/.test(file) || /\.e2e\.test\./.test(file) ? 'P' : 'S';
+  return /\.e2e\.[^/]*$/.test(file) ? 'P' : 'S';
 }
 
 /**

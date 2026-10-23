@@ -50,7 +50,7 @@ behaviour**:
      optional proxy; see that package's README "Guarded live runner").
    - `entrypoint/dispatch-cli/test/e2e/integration/live-dispatch-five-acs.e2e.ts`
      (this change's live proof; see "Environments").
-   - `entrypoint/agent-mcp/src/__tests__/integration/live-*.e2e.test.ts`.
+   - `entrypoint/agent-mcp/test/e2e/integration/live-*.e2e.ts`.
 
 A test that can be written one level lower must be. E2E is reserved for the journeys a
 consumer actually takes through the real boundary.
@@ -66,14 +66,14 @@ Techniques in use (per AGENTS.md §7's proof standard):
   empty vs. non-empty `mcpServers` maps.
 - **Negative cases** — malformed/missing/adversarial input must fail per contract, not crash.
   Example: HITL with a stale `resumeToken` must reject with `VALIDATION_ERROR`
-  (`hitl-suspend-resume.e2e.test.ts`); an unknown `--allow-fs` action must reject before
+  (`hitl-suspend-resume.e2e.ts`); an unknown `--allow-fs` action must reject before
   touching a runner.
 - **Decision tables / state transitions** — enumerate combinations and state changes.
   Example: task status transitions (`pending → running → awaiting_input → completed`).
 - **Negative controls with teeth** — a behavioural test must go red if the fix is
   reverted. Proven by a deliberately-wrong variant (source edit + rerun, or a second
   fixture branch), never by assertion alone. This change's controls are listed in
-  `live-dispatch-five-acs.e2e.test.ts`'s header.
+  `live-dispatch-five-acs.e2e.ts`'s header.
 
 A case is reproducible: it names its input, its action, its expected result, and anyone
 can run it.

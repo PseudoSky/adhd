@@ -1,14 +1,14 @@
 /**
- * test-layout.spec.ts — a freshly scaffolded package conforms to the test
- * layout standard (docs/standards/testing.md, "Test file layout").
+ * Contract of a freshly scaffolded package's test layout (docs/standards/testing.md, "Test file layout").
  *
- * Failure mode guarded: the generator emits specs under `src/lib/` and a vite
- * `include` of the old globs, so every new package starts out violating
- * `check-test-layout.mjs` (L1, L5, L6) and a test discovery gap goes unseen.
- * Tier: S. Cites: docs/standards/testing.md layout rules L1-L6.
- * Red run: with `relocateScaffoldSpec` and the `UNIT_FILE_INCLUDES` patch
- * removed, all four assertions below failed (spec found under src/lib, vite
- * config lacked UNIT_FILE_INCLUDES, tsconfig.spec.json lacked `test/**`).
+ * guards: the generator emits a starter spec under src/lib, a vite include other than UNIT_FILE_INCLUDES, or a
+ *   tsconfig.spec.json that does not reach test/, so every new package starts out violating check-test-layout.
+ * failure mode: a scaffolded package fails L1/L5/L6 on its first commit, or its starter spec is never collected.
+ * tier: S (in-memory Nx Tree; no process spawned, nothing sleeps). Fidelity gap: none at tier S.
+ * cites: docs/standards/testing.md "Test file layout"; tools/nx-plugins/test/executors/wiring/check-test-layout.mjs.
+ * red: 2026-10-23, generator.ts with the relocateScaffoldSpec call commented out: `nx run workspace-codegen-nx:test`
+ *   exit 1, 2 failed | 57 passed (the two starter-spec placement assertions); restored with git restore.
+ * risk map (standard): a scaffold that silently drifts from the layout (high); an over-strict scaffold assertion (low).
  */
 import { describe, it, expect, beforeEach } from 'vitest';
 import { createTreeWithEmptyWorkspace } from '@nx/devkit/testing';

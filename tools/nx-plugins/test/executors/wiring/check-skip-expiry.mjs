@@ -289,6 +289,7 @@ export function collectSkipExpiry(workspaceRoot, { baseline = loadBaseline(BASEL
       if (actual < allowed) add('C-baseline-stale', `${rel} baseline allows ${allowed} untracked ${kind} marker(s) but holds ${actual}; run with --write-baseline so the ratchet only shrinks`);
     }
   }
+  if (paths.length === 0) add('E-scan-found-nothing', `${workspaceRoot} — zero test files scanned; the walker is broken`);
   const remaining = Object.values(legacy).reduce((s, k) => s + Object.values(k).reduce((a, b) => a + b, 0), 0);
   if (baseline.reviewBy && today > baseline.reviewBy && remaining > 0) {
     add('D-baseline-expired', `the legacy baseline was due for review by ${baseline.reviewBy} and still holds ${remaining} untracked marker(s); track or remove them`);

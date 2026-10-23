@@ -135,6 +135,20 @@ test('L7: a src file importing from test/ is flagged (import, re-export and requ
   assert.deepEqual(rulesOf({ ...CONFORMING, [`${P}/src/lib/ok.ts`]: "export { X } from './latest/thing.js';\n" }), []);
 });
 
+test('L8: code naming a legacy location is flagged; a comment, a Maven path and a clean file are not', () => {
+  const at = (body) => rulesOf({ ...CONFORMING, [`${P}/test/unit/index.spec.ts`]: body });
+  assert.deepEqual(at("const f = 'src/__tests__/x.ts';\n"), ['L8']);
+  assert.deepEqual(at("const f = join(root, 'src', 'test', 'helpers');\n"), ['L8']);
+  assert.deepEqual(at("const f = 'a.e2e.test.ts';\n"), ['L8']);
+  assert.deepEqual(at("// formerly src/__tests__/x.ts\n/* src/test/y */\nconst f = 'packages/apigen/java/src/test/resources/A.java';\n"), []);
+});
+
+test('L9: a ticket-id file name is flagged in every lane directory; a subject name is not', () => {
+  assert.deepEqual(rulesOf({ ...CONFORMING, [`${P}/test/unit/b3999dfa-docs.spec.ts`]: '' }), ['L9']);
+  assert.deepEqual(rulesOf({ ...CONFORMING, [`${P}/test/e2e/cafe9a17-run.e2e.ts`]: '' }), ['L9']);
+  assert.deepEqual(rulesOf({ ...CONFORMING, [`${P}/test/unit/docs-defaults.spec.ts`]: '' }), []);
+});
+
 test('scope: the native-layout Maven module is not governed, and a workspace with no project scans zero', () => {
   const native = { 'packages/apigen/java/package.json': PKG, 'packages/apigen/java/project.json': '{}', 'packages/apigen/java/src/test/java/A.spec.ts': '' };
   assert.deepEqual(rulesOf(native), []);

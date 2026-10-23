@@ -34,7 +34,7 @@
     "entrypoint/agent-mcp/test/e2e/audit-tracing-healthy.e2e.ts": [
       "H1"
     ],
-    "entrypoint/agent-mcp/test/unit/b3999dfa-docs-contract.spec.ts": [
+    "entrypoint/agent-mcp/test/unit/docs-defaults-contract.spec.ts": [
       "H1"
     ],
     "entrypoint/agent-mcp/test/unit/bind-host.spec.ts": [
