@@ -43,7 +43,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
      matching audit check ID so Check 3's ID-mirror holds. Do not hand-add
      bare [slug.N] tokens here without a matching audit check. -->
 
-_No criteria yet._
+- [main-merge.1] HEAD contains a merge commit that has main's tip (the `MAIN-SHA:` recorded in evidence/main-merge.md, default `git rev-parse main`) as a parent, and that tip is an ancestor of HEAD.
 
 ---
 
