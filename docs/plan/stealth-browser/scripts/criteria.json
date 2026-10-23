@@ -4977,6 +4977,15 @@
       "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py conform-core --only conform-core.4",
       "expect": "exit0",
       "cwd": "repo-root"
+    },
+    {
+      "id": "conform-core.5",
+      "phase": "migrate",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py conform-core --only conform-core.5",
+      "expect": "exit0",
+      "cwd": "repo-root"
     }
   ]
 }
