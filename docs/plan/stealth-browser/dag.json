@@ -1119,6 +1119,21 @@
       ],
       "context": "contexts/consumer-relink.md",
       "notes": "dispatcher-gated after publication in order tripwire, stealth-core-browser, stealth-search"
+    },
+    "main-merge": {
+      "kind": "work",
+      "phase": "scaffold",
+      "depends_on": [
+        "sp-switch"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py main-merge",
+      "artifacts": [
+        ".adhd/workspace.json",
+        "tsconfig.base.json",
+        "pnpm-lock.yaml"
+      ],
+      "context": "contexts/main-merge.md",
+      "notes": "executor=haiku"
     }
   },
   "authored_with": {
