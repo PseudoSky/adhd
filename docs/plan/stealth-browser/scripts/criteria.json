@@ -5652,6 +5652,15 @@
       "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py tracing-log-validation --only tracing-log-validation.10",
       "expect": "exit0",
       "cwd": "repo-root"
+    },
+    {
+      "id": "tracing-log-validation.11",
+      "phase": "verify",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py tracing-log-validation --only tracing-log-validation.11",
+      "expect": "exit0",
+      "cwd": "repo-root"
     }
   ]
 }
