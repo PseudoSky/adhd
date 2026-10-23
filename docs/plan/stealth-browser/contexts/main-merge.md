@@ -1,6 +1,6 @@
 # main-merge — STATE_NAME
 
-**Phase:** scaffold · **Kind:** work · **Depends on:** sp-switch · **Guard:** `python3 docs/plan/stealth-browser/scripts/guard.py main-merge`
+**Phase:** scaffold · **Kind:** work · **Depends on:** search-examples, search-usecases, sp-reaper-smoke, sp-switch, tests-unit-surface, tests-use-cases, tripwire-reverse-migrate · **Guard:** `python3 docs/plan/stealth-browser/scripts/guard.py main-merge`
 
 ---
 
@@ -16,7 +16,7 @@
      matching audit check ID so Check 3's ID-mirror holds. Do not hand-add
      bare [slug.N] tokens here without a matching audit check. -->
 
-- [main-merge.1] probe criterion
+_No criteria yet._
 
 ---
 
@@ -24,11 +24,11 @@
 
 ```text
 read_only:  []
-mutates:    [".adhd/workspace.json", "tsconfig.base.json", "pnpm-lock.yaml"]
+mutates:    [".adhd/workspace.json", "tsconfig.base.json", "pnpm-lock.yaml", "package.json", "docs/plan/stealth-browser/evidence/main-merge.md"]
 ```
 
 ---
 
 ## Notes for executor
 
-executor=haiku
+executor=haiku tier=haiku; merge conflict union edits and a lockfile regeneration; depends on every completed leaf state so all completed owners are ancestors of the conform and fix states
