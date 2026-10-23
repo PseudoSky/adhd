@@ -47,6 +47,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 
 - [search-tracing-fixes.2] Telemetry starts before flag validation: a spec cites [search-tracing-fixes.2] and asserts a rejected flag (for example `--cdp-port abc`) still produces a start and an error span (titles carry `rejected flag`, `span`, `before flag validation`), and `--help` produces none (title `help is not a dispatch`); docs/OBSERVABILITY.md states that `--help` is not a dispatch.
 - [search-tracing-fixes.3] One error event per failure: a spec cites [search-tracing-fixes.3] and asserts exactly one `adhd.<op>.error` event for a failing call, never an `adhd.op.error` with the op id `op` (titles carry `duplicate`, `op id`, `adhd.op.error`).
+- [search-tracing-fixes.4] evidence/search-tracing-fixes.md records the red-first proof: a `RED:` line with the failing assertion of each new spec on the untouched source and a `GREEN:` line with the passing run after the fix.
 ---
 
 ## Reservations

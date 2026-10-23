@@ -5553,6 +5553,15 @@
       "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-tracing-fixes --only search-tracing-fixes.3",
       "expect": "exit0",
       "cwd": "repo-root"
+    },
+    {
+      "id": "search-tracing-fixes.4",
+      "phase": "surface",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-tracing-fixes --only search-tracing-fixes.4",
+      "expect": "exit0",
+      "cwd": "repo-root"
     }
   ]
 }
