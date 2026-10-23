@@ -1268,6 +1268,33 @@
       ],
       "context": "contexts/fix-search-fetch.md",
       "notes": "executor=typescript-pro tier=sonnet/medium"
+    },
+    "fix-search-engine": {
+      "kind": "work",
+      "phase": "migrate",
+      "depends_on": [
+        "conform-search",
+        "conform-core"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py fix-search-engine",
+      "artifacts": [
+        "entrypoint/stealth-search/src/lib/dom.ts",
+        "entrypoint/stealth-search/src/lib/providers.ts",
+        "entrypoint/stealth-search/src/lib/utils.ts",
+        "entrypoint/stealth-search/src/lib/network.ts",
+        "entrypoint/stealth-search/src/lib/challenge.ts",
+        "entrypoint/stealth-search/test/unit/engine/",
+        "entrypoint/stealth-search/test/unit/providers/",
+        "entrypoint/stealth-search/test/fixtures/engine/",
+        "entrypoint/stealth-search/test/fixtures/providers/",
+        "entrypoint/stealth-search/test/helpers/engine/",
+        "packages/stealth/stealth-core-browser/src/lib/capture/dom.ts",
+        "packages/stealth/stealth-core-browser/test/unit/capture-parsers/dom.spec.ts",
+        "docs/plan/stealth-browser/OPEN-DECISIONS.md",
+        "docs/plan/stealth-browser/evidence/fix-search-engine.md"
+      ],
+      "context": "contexts/fix-search-engine.md",
+      "notes": "executor=typescript-pro tier=sonnet/high; OD-11 provisional resolution"
     }
   },
   "authored_with": {
