@@ -382,11 +382,11 @@
       "end_ref": "232fdefb3686a9e1201184693d9ad9d96a289262"
     },
     "search-port-engine": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-10-23T17:41:20.365Z",
-      "done_at": null,
+      "done_at": "2026-10-23T18:10:28.074Z",
       "start_ref": "a34be83b9f4dbc58140d2a49173c8518e3c6efbb",
-      "end_ref": null
+      "end_ref": "9237096eb43e1354c86fd8b9d03f843fc088fc59"
     },
     "search-port-guards": {
       "status": "complete",
@@ -980,6 +980,18 @@
       "audit_criteria_total": 11,
       "by": "pseudosky",
       "note": "guard exit 0 (orchestrator-verified); sonnet; resumed after outage"
+    },
+    {
+      "ts": "2026-10-23T18:10:28.074Z",
+      "from": "search-port-engine",
+      "to": "search-port-engine",
+      "start_ref": "a34be83b9f4dbc58140d2a49173c8518e3c6efbb",
+      "end_ref": "9237096eb43e1354c86fd8b9d03f843fc088fc59",
+      "audit_exit": 0,
+      "audit_criteria_passed": 15,
+      "audit_criteria_total": 15,
+      "by": "pseudosky",
+      "note": "guard exit 0 (orchestrator-verified); sonnet; 9237096eb"
     }
   ],
   "amendment_log": [
@@ -1744,7 +1756,7 @@
     "version": "0.8.35",
     "hash": "0b6bc1f3d70e"
   },
-  "current_state": "search-port-engine",
+  "current_state": "search-verbs",
   "dod_provenance": {
     "confirmed_at": "2026-10-12T23:49:38.410Z",
     "by": "pseudosky",
