@@ -466,10 +466,10 @@
       "end_ref": null
     },
     "conform-core": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-10-23T22:23:58.836Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "2d8569f80733c1b970bd90b468f4b063c77bc43f",
       "end_ref": null
     },
     "conform-search": {
@@ -1953,7 +1953,7 @@
     "version": "0.8.35",
     "hash": "0b6bc1f3d70e"
   },
-  "current_state": "conform-tripwire",
+  "current_state": "conform-core",
   "dod_provenance": {
     "confirmed_at": "2026-10-12T23:49:38.410Z",
     "by": "pseudosky",
