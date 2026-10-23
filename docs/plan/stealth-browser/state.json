@@ -431,10 +431,10 @@
       "end_ref": "efb0087501c503188eb63dda9350f2a23396e278"
     },
     "tracing-log-validation": {
-      "status": "in_progress",
-      "started_at": "2026-10-23T20:59:10.357Z",
+      "status": "blocked",
+      "started_at": null,
       "done_at": null,
-      "start_ref": "b578e96f45e3bf8d8ba37276c81c7a55986ed84f",
+      "start_ref": null,
       "end_ref": null
     },
     "search-cutover": {
@@ -1920,6 +1920,15 @@
       "files_synced": [
         "scripts/guards/search_b.py"
       ],
+      "by": "pseudosky"
+    },
+    {
+      "ts": "2026-10-23T22:08:13.228Z",
+      "state": "tracing-log-validation",
+      "class": "planner",
+      "type": "plan-edit",
+      "reason": "first run failed (UNKNOWN_PROVIDER unreachable, rejected flag without span, duplicate op id `op`); reset in_progress to pending because the state now depends on search-tracing-fixes, which cmdStart resume would not enforce; criteria .10 and .11 added",
+      "files_synced": [],
       "by": "pseudosky"
     }
   ],
