@@ -49,6 +49,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 - [search-tracing-fixes.3] One error event per failure: a spec cites [search-tracing-fixes.3] and asserts exactly one `adhd.<op>.error` event for a failing call, never an `adhd.op.error` with the op id `op` (titles carry `duplicate`, `op id`, `adhd.op.error`).
 - [search-tracing-fixes.4] evidence/search-tracing-fixes.md records the red-first proof: a `RED:` line with the failing assertion of each new spec on the untouched source and a `GREEN:` line with the passing run after the fix.
 - [search-tracing-fixes.5] `nx run stealth-search:lint`, `:typecheck`, `:typecheck-spec`, `:test`, `:build` exit 0 and evidence/search-tracing-fixes.md records each as `EXIT <command>: 0`.
+- [search-tracing-fixes.6] Only owned paths changed by [psm:search-tracing-fixes] commits (tracing, telemetry, cli, host files, api.ts, host specs, observability docs).
 ---
 
 ## Reservations
