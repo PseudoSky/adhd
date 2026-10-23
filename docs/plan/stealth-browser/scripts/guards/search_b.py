@@ -327,13 +327,13 @@ _UC_DIR = f"{SEARCH_DIR}/test/unit/use-cases"
 
 
 def _uc_text():
-    return "\n".join(read(f) for f in spec_files_of(SEARCH_DIR, "use-cases"))
+    return "\n".join(read(f) for f in spec_files_of(SEARCH_DIR, "unit/use-cases"))
 
 
 @check(_UC, 1)
 def _bu1():
     """test/unit/use-cases/ holds spec files that each cite ticket 8468f7b1 and a search-usecases.N id, with at least 14 test cases in total (ported e2e, guard and lifecycle scenarios, no e2e lane)."""
-    files = spec_files_of(SEARCH_DIR, "use-cases")
+    files = spec_files_of(SEARCH_DIR, "unit/use-cases")
     ok, why = cites(files, _UC)
     n = len(re.findall(r"^\s*(?:it|test)(?:\.each\([^)]*\))?\s*\(", _uc_text(), re.M))
     return ok and n >= 14, f"{why} cases={n}"
@@ -370,7 +370,7 @@ def _bu4():
 @check(_UC, 5)
 def _bu5():
     """ADR-0009: the use-case specs spawn no process, open no real socket and touch no Chrome: no child_process, spawn/exec, WebSocket construction, port 9222 or non-loopback URL fetch appears in them, and none uses .skip, .only or .todo."""
-    files = spec_files_of(SEARCH_DIR, "use-cases")
+    files = spec_files_of(SEARCH_DIR, "unit/use-cases")
     bad = offenders(files, r"child_process|\bspawn\(|\bexecFile?\(|new\s+WebSocket\(|\b9222\b|\.(?:skip|only|todo)\b")
     return bool(files) and not bad, f"offending specs: {bad}"
 
@@ -378,7 +378,7 @@ def _bu5():
 @check(_UC, 6)
 def _bu6():
     """The scenarios exercise the real code, not mocks of it: no spec replaces a stealth-search module with vi.mock of a relative src path, and every spec imports from src (relative '../../')."""
-    files = spec_files_of(SEARCH_DIR, "use-cases")
+    files = spec_files_of(SEARCH_DIR, "unit/use-cases")
     mocked = offenders(files, r"vi\.mock\(\s*['\"]\.{1,2}/")
     noimp = [f for f in files if not re.search(r"from\s+['\"]\.\./\.\./", read(f))]
     return bool(files) and not mocked and not noimp, f"mocked={mocked} no-src-import={noimp}"
@@ -387,7 +387,7 @@ def _bu6():
 @check(_UC, 7)
 def _bu7():
     """`nx run stealth-search:test -- test/unit/use-cases` exits 0."""
-    if not spec_files_of(SEARCH_DIR, "use-cases"):
+    if not spec_files_of(SEARCH_DIR, "unit/use-cases"):
         return False, "no use-case specs"
     rc, out = nx_run(SEARCH_PROJECT, "test", "--", "test/unit/use-cases")
     return rc == 0, out[-300:]
