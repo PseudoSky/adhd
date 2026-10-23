@@ -138,7 +138,7 @@ describe('8468f7b1 [chrome-lifecycle.29] the real proxy link never re-ensures on
     backend.host = worldHost()
     sp.ensureBackend = vi.fn(async () => ({ disposition: 'spawned', detail: 'ok', pid: 5 }))
     sp.dialBackend = vi.fn(backend.dial)
-    const m = new ChromeManager({ cdpHost: HOST, idleTimeoutMs: IDLE, orphanWindowMs, stateDir: STATE_DIR, logger: () => undefined })
+    const m = new ChromeManager({ cdpHost: HOST, idleTimeoutMs: IDLE, orphanWindowMs, stateDir: STATE_DIR, entryPath: '/pkg/dist/index.js', logger: () => undefined })
     await m.ready()
     expect(sp.ensureBackend).toHaveBeenCalledTimes(1)
     chromeGone()

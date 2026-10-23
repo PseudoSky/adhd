@@ -15,6 +15,8 @@
  * tier: S
  * cites: 8468f7b1 [chrome-lifecycle.15]
  */
+import { isAbsolute } from 'node:path'
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('node:fs', async () => (await import('../../helpers/lifecycle/manager-world.js')).fsModule())
@@ -137,12 +139,16 @@ describe('8468f7b1 [chrome-lifecycle.15] ensure dispositions', () => {
     expect(JSON.parse(args[3]!)).toMatchObject({ port: PORT, stateDir: STATE_DIR, idleTimeoutMs: 120_000, shutdownGraceMs: 30_000, orphanWindowMs: 30_000, scope: 'port-occupant' })
   })
 
-  it('the default entry is the bundle this code runs from', async () => {
+  it('with no entryPath the link resolves the entry itself: an absolute path, or a typed REAPER_UNAVAILABLE (never a null entry)', async () => {
     const l = link({ entryPath: undefined })
-    await l.ensureAndHello()
-    const args = (vi.mocked(sp.ensureBackend).mock.calls[0]![0] as { args: string[] }).args
-    expect(typeof args[2]).toBe('string')
-    expect(args[2]!.length).toBeGreaterThan(0)
+    const up = await l.ensureAndHello()
+    if (up) {
+      const args = (vi.mocked(sp.ensureBackend).mock.calls[0]![0] as { args: string[] }).args
+      expect(isAbsolute(args[2]!)).toBe(true)
+    } else {
+      expect(sp.ensureBackend).not.toHaveBeenCalled()
+      expect(l.lastError()?.code).toBe('REAPER_UNAVAILABLE')
+    }
   })
 })
 

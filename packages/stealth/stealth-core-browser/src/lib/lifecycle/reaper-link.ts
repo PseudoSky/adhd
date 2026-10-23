@@ -17,7 +17,10 @@
  * Ticket 8468f7b1 · plan state chrome-lifecycle (CL15 CL22).
  */
 
-import { lifecycleError, lifecycleErrors, type LifecycleError } from './errors.js'
+import { createRequire } from 'node:module'
+import { isAbsolute } from 'node:path'
+
+import { errorMessage, lifecycleError, lifecycleErrors, type LifecycleError } from './errors.js'
 import type { ReaperScope } from './reap-policy.js'
 import type { ChromeReaperConfig } from './reaper-entry.js'
 import type { ReapOutcome, ReaperStatus, RpcResponse } from './reaper-host.js'
@@ -91,13 +94,54 @@ export function reaperSingletonKey(port: number): string {
   return `stealth-browser-reaper:${port}`
 }
 
+/** The package whose built CommonJS entry the reaper process requires. */
+const PACKAGE_NAME = '@adhd/stealth-core-browser'
+
+/** Where this module runs from: the CJS `__filename` and/or the ESM module URL. Either may be absent. */
+export interface ReaperEntrySource {
+  /** CommonJS `__filename`; absent when the module is loaded as ESM. */
+  filename?: string
+  /** ESM `import.meta.url` (a file URL); the anchor package resolution starts from. */
+  moduleUrl?: string
+}
+
 /**
- * The CommonJS bundle this code runs from. In the built package every module
- * is inlined into `dist/index.js`, so `__filename` is that entry; the reaper
- * process `require`s it (sp-reaper-load-proof).
+ * Resolve the built CommonJS entry the reaper process `require`s (sp-reaper-load-proof). Always an
+ * absolute path; a package that cannot be resolved is a REAPER_UNAVAILABLE `LifecycleError`, never null.
+ * - CJS: the published build inlines every module into `dist/index.js`, so a JavaScript `filename`
+ *   is that bundle and is the entry.
+ * - ESM, or CJS loaded from TypeScript source (a `.ts` file cannot be `require`d by a bare node
+ *   process): resolve the package entry from the module URL, the way a consumer would.
  */
-export function defaultReaperEntry(): string | null {
-  return typeof __filename === 'string' ? __filename : null
+export function resolveReaperEntry(source: ReaperEntrySource): string {
+  const { filename, moduleUrl } = source
+  if (typeof filename === 'string' && isAbsolute(filename) && /\.[cm]?js$/.test(filename)) return filename
+  if (typeof moduleUrl !== 'string' || moduleUrl === '') {
+    throw lifecycleError('REAPER_UNAVAILABLE', `The reaper entry is unknown: neither a CommonJS __filename nor an ESM module URL is available to resolve ${PACKAGE_NAME} from.`)
+  }
+  try {
+    return createRequire(moduleUrl).resolve(PACKAGE_NAME)
+  } catch (e) {
+    throw lifecycleError('REAPER_UNAVAILABLE', `The reaper entry cannot be resolved: ${PACKAGE_NAME} is not resolvable from ${moduleUrl} (${errorMessage(e)}); build the package or pass entryPath.`, { cause: e })
+  }
+}
+
+/**
+ * The entry the reaper requires for THIS module, under ESM and CJS (backlog 86a2318f). `source`
+ * defaults to the real module location; it is injectable so specs can simulate either loader.
+ */
+export function defaultReaperEntry(source?: ReaperEntrySource): string {
+  return resolveReaperEntry(source ?? realSource())
+}
+
+function realSource(): ReaperEntrySource {
+  return {
+    ...(typeof __filename === 'string' ? { filename: __filename } : {}),
+    // The CJS build rewrites `import.meta.url` to `pathToFileURL(__filename).href` (tools/vite-plugins/import-meta-url-cjs.mjs).
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment -- @ts-expect-error would itself fail under the ESM spec tsconfig, where the line is valid
+    // @ts-ignore TS1343: tsconfig.lib compiles as commonjs; the bundler, not tsc, emits this module
+    moduleUrl: import.meta.url as string,
+  }
 }
 
 function isOk(r: RpcResponse | undefined): boolean {
@@ -151,9 +195,11 @@ export function createProxyReaperLink(cfg: ProxyReaperLinkConfig): ReaperLink {
 
   const ensureOnce = async (): Promise<boolean> => {
     if (current) return true
-    const entry = cfg.entryPath ?? defaultReaperEntry()
-    if (!entry) {
-      lastError = lifecycleErrors.reaperUnavailable(cfg.port, reaperCause('the package entry path is unknown (not running from the built CommonJS bundle)'))
+    let entry: string
+    try {
+      entry = cfg.entryPath ?? defaultReaperEntry()
+    } catch (e) {
+      lastError = lifecycleErrors.reaperUnavailable(cfg.port, e, cfg.stateDir)
       return false
     }
     let res

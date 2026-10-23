@@ -38,6 +38,7 @@ function degradedManager(): ChromeManager {
     cdpHost: HOST,
     idleTimeoutMs: IDLE,
     stateDir: STATE_DIR,
+    entryPath: '/pkg/dist/index.js',
     logger: (m) => {
       logs.push(m)
       if (m.startsWith('warning:')) warn(m)
