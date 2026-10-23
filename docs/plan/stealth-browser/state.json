@@ -389,11 +389,11 @@
       "end_ref": null
     },
     "search-port-guards": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-10-22T03:00:36.466Z",
-      "done_at": null,
+      "done_at": "2026-10-23T17:40:57.401Z",
       "start_ref": "ce035f12c0f6b277a7079cb202aaad5e68f4351a",
-      "end_ref": null
+      "end_ref": "c619fcd7539fa06375d1d1a3a857f69482cb8c0f"
     },
     "search-verbs": {
       "status": "pending",
@@ -966,6 +966,18 @@
       "audit_exit": 0,
       "audit_criteria_passed": 10,
       "audit_criteria_total": 10,
+      "by": "pseudosky",
+      "note": "guard exit 0 (orchestrator-verified); sonnet; resumed after outage"
+    },
+    {
+      "ts": "2026-10-23T17:40:57.401Z",
+      "from": "search-port-engine",
+      "to": "search-port-guards",
+      "start_ref": "ce035f12c0f6b277a7079cb202aaad5e68f4351a",
+      "end_ref": "c619fcd7539fa06375d1d1a3a857f69482cb8c0f",
+      "audit_exit": 0,
+      "audit_criteria_passed": 11,
+      "audit_criteria_total": 11,
       "by": "pseudosky",
       "note": "guard exit 0 (orchestrator-verified); sonnet; resumed after outage"
     }
