@@ -1172,6 +1172,21 @@
       ],
       "context": "contexts/conform-core.md",
       "notes": "executor=haiku tier=haiku; mechanical codemod. Escalate to sonnet only when typecheck-spec stays red after two attempts. [inv:test-layout]"
+    },
+    "conform-search": {
+      "kind": "work",
+      "phase": "migrate",
+      "depends_on": [
+        "main-merge"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py conform-search",
+      "artifacts": [
+        "entrypoint/stealth-search/",
+        "tools/nx-plugins/build/executors/typecheck-spec/stealth-search.baseline.json",
+        "docs/plan/stealth-browser/evidence/conform-search.md"
+      ],
+      "context": "contexts/conform-search.md",
+      "notes": "executor=haiku tier=haiku; mechanical codemod. Escalate to sonnet only when typecheck-spec stays red after two attempts. [inv:test-layout]"
     }
   },
   "authored_with": {
