@@ -50,6 +50,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 - [search-mcp-iserror.4] No empty e2e lane: `vitest.e2e.config.ts` and the `e2e` target of project.json are gone, or `test/e2e/*.e2e.ts` exists with a tier P/H/X header carrying `gap:`; main's `check-lane-reachability.mjs` prints no line naming entrypoint/stealth-search.
 - [search-mcp-iserror.5] evidence/search-mcp-iserror.md records the red-first proof: a `RED:` line with the failing assertion of each new spec on the untouched source and a `GREEN:` line with the passing run after the fix.
 - [search-mcp-iserror.6] `nx run stealth-search:lint`, `:typecheck`, `:typecheck-spec`, `:test`, `:build` exit 0 and evidence/search-mcp-iserror.md records each as `EXIT <command>: 0`.
+- [search-mcp-iserror.7] Only owned paths changed by [psm:search-mcp-iserror] commits (server.ts, errors.ts, host specs, project.json, vitest.e2e.config.ts).
 ---
 
 ## Reservations
