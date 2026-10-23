@@ -1,4 +1,7 @@
 /**
+ * guards: the human gate hangs, retries without re-verifying, or clears without the operator answer
+ * tier: S
+ * cites: ticket 8468f7b1; [tripwire-interactive.1] TW24, [tripwire-interactive.2] TW25, [tripwire-interactive.3] TW26.
  * Ticket 8468f7b1 - the human-in-the-loop gates over injected IO:
  * interactiveGate (banner, retry/Enter/other => hitl-retry + reverified,
  * clear => hitl-clear, abort => TripwireAbortedError with the lock kept,
@@ -19,9 +22,9 @@ import {
   nodeTripwireIo,
   type HitlInfo,
   type Tripwire,
-} from '../../index';
-import { fakeIo } from '../support/io';
-import { eventsOf, makeEnv, rejectionOf, type Env } from '../support/harness';
+} from '../../src/index';
+import { fakeIo } from '../helpers/io';
+import { eventsOf, makeEnv, rejectionOf, type Env } from '../helpers/harness';
 
 const KEY = 'google';
 const PAGE = 'https://www.google.com/sorry/index';

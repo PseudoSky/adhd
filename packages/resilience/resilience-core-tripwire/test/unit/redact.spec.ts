@@ -1,4 +1,7 @@
 /**
+ * guards: a credential or secret URL parameter reaches the lock or the audit in clear text
+ * tier: S
+ * cites: ticket 8468f7b1; [tripwire-core.7] TW7 (and the TW33 persistence half of [tripwire-core.27]).
  * Ticket 8468f7b1 - redaction: the default redactor drops credential
  * keys (authorization, cookie, set-cookie, token, secret, password,
  * x-auth), strips secret URL query params and credentials, truncates long
@@ -7,8 +10,8 @@
  * Criteria: [tripwire-core.7] TW7 (and the TW33 persistence half of
  * [tripwire-core.27]).
  */
-import { defaultRedactor, TripwireTrippedError } from '../../index';
-import { makeEnv } from '../support/harness';
+import { defaultRedactor, TripwireTrippedError } from '../../src/index';
+import { makeEnv } from '../helpers/harness';
 
 describe('[tripwire-core.7] TW7 default redactor', () => {
   const redact = defaultRedactor();

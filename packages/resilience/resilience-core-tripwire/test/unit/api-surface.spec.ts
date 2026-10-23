@@ -1,4 +1,7 @@
 /**
+ * guards: the runtime exports or exported types drift from the pinned surface, or a consumer-specific name leaks into the entry point
+ * tier: S
+ * cites: ticket 8468f7b1; [tripwire-core.24] TW30, [tripwire-interactive.8] TW30 TW31.
  * Ticket 8468f7b1 - the public surface of the single entry point: the
  * runtime exports are pinned exactly (Object.keys of the index module), the
  * spec's types are exported, no exported name is consumer-specific
@@ -10,7 +13,7 @@
  */
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import * as index from '../../index';
+import * as index from '../../src/index';
 import type {
   ClearMethod,
   ClearOptions,
@@ -35,9 +38,9 @@ import type {
   TripwireStatus,
   TripwireStorage,
   TripwireWarning,
-} from '../../index';
+} from '../../src/index';
 
-const PKG_ROOT = join(__dirname, '..', '..', '..');
+const PKG_ROOT = join(__dirname, '..', '..');
 
 describe('[tripwire-core.24] TW30 public surface', () => {
   it('Object.keys(require index) is exactly the specified runtime API', () => {

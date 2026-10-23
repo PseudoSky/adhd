@@ -1,4 +1,7 @@
 /**
+ * guards: a tripped client key still lets a send reach the network, or the confirm-token unlock does not reopen it
+ * tier: S
+ * cites: ticket 8468f7b1; [tripwire-interactive.6] (TW1, TW3, TW10, TW14, TW27).
  * Ticket 8468f7b1 - scenario: the reverse-apis request-builder consumer,
  * end to end on the memory fs. A miniature `send` mirrors the real
  * pipeline order: the tripwire gate (assertOpen) runs BEFORE pacing and
@@ -16,9 +19,9 @@ import {
   isTripwireTrippedError,
   runUnlockCli,
   type Tripwire,
-} from '../../index';
-import { eventsOf, makeEnv, rejectionOf, type Env } from '../support/harness';
-import { fakeIo } from '../support/io';
+} from '../../src/index';
+import { eventsOf, makeEnv, rejectionOf, type Env } from '../helpers/harness';
+import { fakeIo } from '../helpers/io';
 
 interface Response {
   status: number;

@@ -1,4 +1,7 @@
 /**
+ * guards: an audit line is missing, oversized or miscounted, or an audit failure throws instead of warning
+ * tier: S
+ * cites: ticket 8468f7b1; [tripwire-core.19] TW19, [tripwire-core.20] TW20, [tripwire-core.21] TW21, [tripwire-core.22] TW22.
  * Ticket 8468f7b1 - the NDJSON audit: one line per event for all six
  * events, every line under 4 KB; the byte-accurate maxAuditBytes cap with
  * multibyte lines and an atomic replace; the audit directory follows
@@ -14,7 +17,7 @@ import {
   createMemoryFs,
   createTripwire,
   type MemoryFs,
-} from '../../index';
+} from '../../src/index';
 import {
   AUDIT_LINE_MAX_BYTES,
   clampAuditBytes,
@@ -22,8 +25,8 @@ import {
   formatAuditLine,
   keepNewest,
   MIN_AUDIT_BYTES,
-} from '../../lib/audit';
-import { makeEnv, processView, STATE_DIR } from '../support/harness';
+} from '../../src/lib/audit';
+import { makeEnv, processView, STATE_DIR } from '../helpers/harness';
 
 const enc = new TextEncoder();
 const strict = new TextDecoder('utf-8', { fatal: true });

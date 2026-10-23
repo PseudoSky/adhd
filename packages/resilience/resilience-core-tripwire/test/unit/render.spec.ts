@@ -1,4 +1,7 @@
 /**
+ * guards: a status renderer drops a field or breaks the one-line JSON contract
+ * tier: S
+ * cites: ticket 8468f7b1; [tripwire-interactive.5] TW28.
  * Ticket 8468f7b1 - the pure status renderers: renderStatusText gives the
  * per-key block (reason, trippedAt, blockedCount, query, pageUrl, and
  * reverifiedAt / resolvedAt only when present) or `No tripwires
@@ -11,8 +14,8 @@ import {
   renderStatusText,
   statusJsonLine,
   type TripwireRecord,
-} from '../../index';
-import { makeEnv } from '../support/harness';
+} from '../../src/index';
+import { makeEnv } from '../helpers/harness';
 
 function rec(
   key: string,

@@ -1,4 +1,7 @@
 /**
+ * guards: adhdDataDir reads process.env or the file system, or ignores its env parameter
+ * tier: S
+ * cites: ticket 8468f7b1; [tripwire-core.30] TW37.
  * Ticket 8468f7b1 - adhdDataDir: `<ADHD_HOME>/<segments>` with ADHD_HOME
  * taken from the `env` PARAMETER, else `<home>/.adhd`; pure (it never
  * reads process.env, never touches the file system).
@@ -6,7 +9,7 @@
  */
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { adhdDataDir } from '../../index';
+import { adhdDataDir } from '../../src/index';
 
 describe('[tripwire-core.30] TW37 adhdDataDir', () => {
   afterEach(() => {

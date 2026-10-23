@@ -1,4 +1,7 @@
 /**
+ * guards: the unlock CLI exits with the wrong code, or confirms without the token
+ * tier: S
+ * cites: ticket 8468f7b1; [tripwire-interactive.4] TW27.
  * Ticket 8468f7b1 - runUnlockCli over injected IO: usage (1), no lock (0),
  * the forensic fields with (none) fallbacks, the unparseable-lock warning,
  * the TTY confirm path (unlock-cli-tty), the CONFIRM env path
@@ -12,9 +15,9 @@ import {
   createTripwire,
   runUnlockCli,
   type Tripwire,
-} from '../../index';
-import { eventsOf, makeEnv, type Env } from '../support/harness';
-import { fakeIo } from '../support/io';
+} from '../../src/index';
+import { eventsOf, makeEnv, type Env } from '../helpers/harness';
+import { fakeIo } from '../helpers/io';
 
 /** The last element (the spec lib predates Array.prototype.at). */
 function last<T>(xs: readonly T[]): T | undefined {
@@ -63,7 +66,7 @@ describe('[tripwire-interactive.4] TW27 runUnlockCli', () => {
   it('an invalid key returns 1 before any IO', async () => {
     const env = makeEnv();
     const io = fakeIo();
-    expect(await runUnlockCli(['../etc'], io, env.tw)).toBe(1);
+    expect(await runUnlockCli(['../../lib/etc'], io, env.tw)).toBe(1);
     expect(io.errText()).toContain('invalid tripwire key');
     expect(env.mfs.ops).toEqual([]);
   });

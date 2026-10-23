@@ -1,4 +1,7 @@
 /**
+ * guards: a storage backend breaks the shared TripwireStorage contract
+ * tier: S
+ * cites: ticket 8468f7b1; [tripwire-core.31] TW38.
  * Ticket 8468f7b1 - the TripwireStorage contract suite, run identically on
  * createMemoryStorage, createFileStorage over the memory fs (with and
  * without hard-link support, covering the open-wx fallback of the
@@ -16,7 +19,7 @@ import {
   createNodeFs,
   isTripwireError,
   type TripwireStorage,
-} from '../../index';
+} from '../../src/index';
 
 interface Harness {
   storage: TripwireStorage;
@@ -170,7 +173,7 @@ describe.each(factories)('[tripwire-core.31] TW38 contract: %s', (_n, make) => {
   it('an invalid generation in the lock content is treated as none',
     async () => {
       await h.storage.createLockIfAbsent('k', JSON.stringify({
-        generation: '../../etc/passwd',
+        generation: '../../src/etc/passwd',
       }));
       await h.storage.incrementBlocked('k');
       expect((await h.storage.blocked('k')).count).toBe(1);
@@ -207,7 +210,7 @@ describe.each(factories)('[tripwire-core.31] TW38 contract: %s', (_n, make) => {
   });
 
   it('rejects invalid keys with TRIPWIRE_INVALID_KEY', async () => {
-    for (const k of ['../x', 'a/b', '.k', '']) {
+    for (const k of ['../../lib/x', 'a/b', '.k', '']) {
       const err = await h.storage.readLock(k).then(
         () => undefined,
         (e: unknown) => e,

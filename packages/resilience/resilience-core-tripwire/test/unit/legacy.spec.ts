@@ -1,4 +1,7 @@
 /**
+ * guards: a previous implementation lock record is not honoured, or its counts are dropped
+ * tier: S
+ * cites: ticket 8468f7b1; [tripwire-core.4] TW4.
  * Ticket 8468f7b1 - legacy flat lock shapes written by the two previous
  * implementations are read and honoured: the reverse request-builder
  * `{reason, trippedAt, lastStatus, lastOperationId}` and the agent-search
@@ -6,8 +9,8 @@
  * land in `context`; the in-record count adds to the sidecar count.
  * Criteria: [tripwire-core.4] TW4.
  */
-import { CONFIRM_TOKEN, TripwireTrippedError } from '../../index';
-import { makeEnv } from '../support/harness';
+import { CONFIRM_TOKEN, TripwireTrippedError } from '../../src/index';
+import { makeEnv } from '../helpers/harness';
 
 const REVERSE_LOCK = {
   reason: 'http-4xx',

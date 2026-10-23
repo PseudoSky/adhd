@@ -1,4 +1,7 @@
 /**
+ * guards: the unlock bin mishandles an exit code or prompt path end to end
+ * tier: S
+ * cites: ticket 8468f7b1; [tripwire-interactive.4] TW27.
  * Ticket 8468f7b1 - scenario: the reverse-apis unlock bin, end to end on
  * the memory fs. The bin is the five-line recipe (state dir from
  * TRIPWIRE_DIR or adhdDataDir, a confirm-token tripwire, runUnlockCli)
@@ -19,7 +22,7 @@ import {
   type AuditEvent,
   type MemoryFs,
   type UnlockExitCode,
-} from '../../index';
+} from '../../src/index';
 
 /** The last element (the spec lib predates Array.prototype.at). */
 function last<T>(xs: readonly T[]): T | undefined {

@@ -1,4 +1,7 @@
 /**
+ * guards: a legal interleaving of racing tripwire operations violates the latch invariants
+ * tier: S
+ * cites: ticket 8468f7b1; [tripwire-core.11] TW11 (N interleaved gates give blockedCount === N), [tripwire-core.12] TW12 (a gate racing a clear never recreates the lock), [tripwire-core.29] TW36 (trip/trip, gate/gate, gate/clear, clear/clear, trip/clear and audit rotate/append hold the TW1, TW11, TW12 and TW20 invariants).
  * Ticket 8468f7b1 - the interleaving suite over the memory-fs scheduler.
  * Every fs operation of the racing tripwire instances is held and released
  * in an order chosen by the explorer (bounded exhaustive enumeration plus
@@ -19,17 +22,17 @@ import {
   type FsPort,
   type MemoryFs,
   type Tripwire,
-} from '../../index';
-import { createAuditLog, MIN_AUDIT_BYTES } from '../../lib/audit';
-import type { FsOpRecord, SchedulePicker } from '../../lib/memory-fs';
-import { exploreExhaustive, exploreRandom } from '../support/explore';
+} from '../../src/index';
+import { createAuditLog, MIN_AUDIT_BYTES } from '../../src/lib/audit';
+import type { FsOpRecord, SchedulePicker } from '../../src/lib/memory-fs';
+import { exploreExhaustive, exploreRandom } from '../helpers/explore';
 import {
   eventsOf,
   makeEnv,
   processView,
   STATE_DIR,
   type Env,
-} from '../support/harness';
+} from '../helpers/harness';
 
 const SLOW = 120_000;
 const enc = new TextEncoder();

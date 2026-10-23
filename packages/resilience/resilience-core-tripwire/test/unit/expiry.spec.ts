@@ -1,12 +1,15 @@
 /**
+ * guards: an expired lock still blocks, or a lock without a ttl expires
+ * tier: S
+ * cites: ticket 8468f7b1; [tripwire-core.13] TW13.
  * Ticket 8468f7b1 - optional expiry: an older-than-ttlMs lock is open and
  * lazily removed with exactly one tripwire-expired audit; without expiry a
  * lock never expires; status hides expired locks unless includeExpired
  * (one rule for the CLI and the MCP surface).
  * Criteria: [tripwire-core.13] TW13.
  */
-import { exploreExhaustive } from '../support/explore';
-import { eventsOf, makeEnv } from '../support/harness';
+import { exploreExhaustive } from '../helpers/explore';
+import { eventsOf, makeEnv } from '../helpers/harness';
 
 const TTL = { ttlMs: 7_200_000 };
 

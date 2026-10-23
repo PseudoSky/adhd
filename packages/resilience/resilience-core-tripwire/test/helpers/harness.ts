@@ -15,8 +15,8 @@ import {
   type Tripwire,
   type TripwireOptions,
   type TripwireWarning,
-} from '../../index';
-import { MUTATING_FS_OPS, type FsOpRecord } from '../../lib/memory-fs';
+} from '../../src/index';
+import { MUTATING_FS_OPS, type FsOpRecord } from '../../src/lib/memory-fs';
 
 export const STATE_DIR = '/state';
 export const T0 = Date.parse('2026-10-12T00:00:00.000Z');

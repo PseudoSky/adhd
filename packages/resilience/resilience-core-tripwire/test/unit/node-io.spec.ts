@@ -1,4 +1,7 @@
 /**
+ * guards: the Node adapter hangs on closed input, loses piped answers, or writes prompts to stdout
+ * tier: S
+ * cites: ticket 8468f7b1; [tripwire-interactive.8] TW31, [tripwire-interactive.2] TW25.
  * Ticket 8468f7b1 - nodeTripwireIo, the single Node adapter of
  * TripwireIo (TW31: the only lib module touching the process streams and
  * environment): prompts go to stderr, out/err are line-oriented, piped
@@ -7,7 +10,7 @@
  * Criteria: [tripwire-interactive.8] TW31, [tripwire-interactive.2] TW25.
  */
 import { PassThrough } from 'node:stream';
-import { nodeTripwireIo } from '../../index';
+import { nodeTripwireIo } from '../../src/index';
 
 function sink(): { stream: PassThrough; text: () => string } {
   const stream = new PassThrough();

@@ -3,7 +3,7 @@
  * exhaustive depth-first enumeration of every interleaving (bounded by a
  * run budget) plus seeded-random schedules for larger cases.
  */
-import type { SchedulePicker } from '../../lib/memory-fs';
+import type { SchedulePicker } from '../../src/lib/memory-fs';
 
 /** Runs one scenario with the given picker and asserts its invariants. */
 export type ScenarioRun = (pick: SchedulePicker) => Promise<void>;

@@ -1,12 +1,15 @@
 /**
+ * guards: a reader sees a partial file, tmp names collide, or files are created with loose permissions
+ * tier: S
+ * cites: ticket 8468f7b1; [tripwire-core.2] TW2, [tripwire-core.6] TW6.
  * Ticket 8468f7b1 - file storage write protocol over the memory fs:
  * unique tmp names and complete-or-absent reads at every interleaving
  * point, and 0600 files / 0700 directories.
  * Criteria: [tripwire-core.2] TW2, [tripwire-core.6] TW6.
  */
-import { createFileStorage, createMemoryFs, type MemoryFs } from '../../index';
-import { exploreExhaustive, exploreRandom } from '../support/explore';
-import { makeEnv, processView, STATE_DIR } from '../support/harness';
+import { createFileStorage, createMemoryFs, type MemoryFs } from '../../src/index';
+import { exploreExhaustive, exploreRandom } from '../helpers/explore';
+import { makeEnv, processView, STATE_DIR } from '../helpers/harness';
 
 const LOCK = `${STATE_DIR}/tripwire/k.lock`;
 const MARKER = `${STATE_DIR}/tripwire/k.cleared`;

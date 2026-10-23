@@ -1,4 +1,7 @@
 /**
+ * guards: the agent-search flow reaches Chrome past a tripped key, or the HITL and expiry paths regress end to end
+ * tier: S
+ * cites: ticket 8468f7b1; [tripwire-interactive.7] (TW13, TW15, TW18, TW24, TW26).
  * Ticket 8468f7b1 - scenario: the agent-search consumer, end to end on the
  * memory fs, with its real configuration (clearPolicy 'open', expiry
  * ttlMs 2 h, namespace agent-search). A miniature search mirrors the
@@ -19,9 +22,9 @@ import {
   statusJsonLine,
   type TripwireIo,
   type TripwireRecord,
-} from '../../index';
-import { eventsOf, makeEnv, rejectionOf, type Env } from '../support/harness';
-import { fakeIo } from '../support/io';
+} from '../../src/index';
+import { eventsOf, makeEnv, rejectionOf, type Env } from '../helpers/harness';
+import { fakeIo } from '../helpers/io';
 
 const TWO_HOURS = 7_200_000;
 const PAGE = 'https://www.google.com/sorry/index';

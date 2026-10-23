@@ -1,4 +1,7 @@
 /**
+ * guards: a README example fails to compile or run, or the README drifts from the spec
+ * tier: S
+ * cites: ticket 8468f7b1; [tripwire-docs.4] README examples compile and run.
  * Ticket 8468f7b1 - the README examples, compiled and executed.
  *
  * Every fenced `ts` block of README.md is pasted verbatim (imports aside)
@@ -14,7 +17,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { PassThrough } from 'node:stream';
-import * as index from '../../index';
+import * as index from '../../src/index';
 import {
   CONFIRM_TOKEN,
   TripwireAbortedError,
@@ -34,9 +37,9 @@ import {
   type Tripwire,
   type TripwireIo,
   type TripwireOptions,
-} from '../../index';
+} from '../../src/index';
 
-const PKG_ROOT = join(__dirname, '..', '..', '..');
+const PKG_ROOT = join(__dirname, '..', '..');
 const ADHD_HOME = '/home/op/.adhd';
 
 interface FakeResponse {

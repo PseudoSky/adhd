@@ -1,4 +1,7 @@
 /**
+ * guards: the core latch loses its first record, fails open on a bad read, or accepts an invalid key
+ * tier: S
+ * cites: ticket 8468f7b1; [tripwire-core.1] TW1, [tripwire-core.3] TW3, [tripwire-core.5] TW5, [tripwire-core.8] TW8, [tripwire-core.9] TW9, [tripwire-core.10] TW10, [tripwire-core.23] TW23.
  * Ticket 8468f7b1 - createTripwire core behaviour: retrip keeps the first
  * record, fail-closed reads, key validation, context round-trip, the gate
  * and assertOpen, and the in-memory latch on a persist failure.
@@ -12,8 +15,8 @@ import {
   isTripwireError,
   isTripwireTrippedError,
   type Tripwire,
-} from '../../index';
-import { eventsOf, makeEnv, rejectionOf, T0 } from '../support/harness';
+} from '../../src/index';
+import { eventsOf, makeEnv, rejectionOf, T0 } from '../helpers/harness';
 
 describe('[tripwire-core.1] TW1 second trip keeps the first record', () => {
   it('returns created: false and audits tripwire-retripped', async () => {

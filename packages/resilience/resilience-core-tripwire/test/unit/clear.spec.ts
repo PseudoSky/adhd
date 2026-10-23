@@ -1,4 +1,7 @@
 /**
+ * guards: a clear proceeds without the confirm token, or a cleared lock leaks into the next trip record
+ * tier: S
+ * cites: ticket 8468f7b1; [tripwire-core.14] TW14, [tripwire-core.15] TW15, [tripwire-core.16] TW16, [tripwire-core.17] TW17, [tripwire-core.18] TW18.
  * Ticket 8468f7b1 - clearing: the confirm-token policy (TripwireConfirmError
  * without CONFIRM_TOKEN, no state change), the open policy (mcp-clear),
  * clearing an absent lock, the cleared marker feeding priorClear on the
@@ -11,8 +14,8 @@ import {
   CONFIRM_TOKEN,
   TripwireConfirmError,
   isTripwireError,
-} from '../../index';
-import { eventsOf, makeEnv, rejectionOf } from '../support/harness';
+} from '../../src/index';
+import { eventsOf, makeEnv, rejectionOf } from '../helpers/harness';
 
 describe('[tripwire-core.14] TW14 confirm-token policy', () => {
   it('a missing or wrong token throws TripwireConfirmError, no change',

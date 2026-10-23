@@ -296,7 +296,7 @@ disk, one per host. Files are created with mode `0600` and directories `0700`.
 - [CHANGELOG.md](CHANGELOG.md)
 
 Every `ts` example in this file is compiled and executed against an in-memory
-filesystem by `src/test/unit/readme-examples.spec.ts`, so the examples cannot
+filesystem by `test/unit/readme-examples.spec.ts`, so the examples cannot
 drift from the code.
 
 ## Building and testing

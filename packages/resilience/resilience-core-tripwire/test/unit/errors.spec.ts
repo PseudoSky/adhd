@@ -1,4 +1,7 @@
 /**
+ * guards: a typed error loses its code or brand so cross-copy detection fails, or a response body is persisted
+ * tier: S
+ * cites: ticket 8468f7b1; [tripwire-core.26] TW32, [tripwire-core.27] TW33.
  * Ticket 8468f7b1 - typed errors: a stable `code` from the closed registry
  * and the brand Symbol.for('adhd.tripwire.error') on every error class, so
  * isTripwireError / isTripwireTrippedError recognise an error thrown by a
@@ -20,12 +23,12 @@ import {
   TripwireTrippedError,
   type TripwireErrorCode,
   type TripwireRecord,
-} from '../../index';
+} from '../../src/index';
 import {
   TRIPWIRE_ERROR_BRAND,
   TRIPWIRE_ERROR_CODES,
-} from '../../lib/errors';
-import { makeEnv, rejectionOf } from '../support/harness';
+} from '../../src/lib/errors';
+import { makeEnv, rejectionOf } from '../helpers/harness';
 
 /** The brand, spelled independently of this module's copy. */
 const BRAND = Symbol.for('adhd.tripwire.error');
@@ -72,7 +75,7 @@ describe('[tripwire-core.26] TW32 stable code and brand on every error', () => {
       'TRIPWIRE_TRIPPED'],
     ['TripwireConfirmError', new TripwireConfirmError('k'),
       'TRIPWIRE_CONFIRM_REQUIRED'],
-    ['TripwireKeyError', new TripwireKeyError('../x'), 'TRIPWIRE_INVALID_KEY'],
+    ['TripwireKeyError', new TripwireKeyError('../../lib/x'), 'TRIPWIRE_INVALID_KEY'],
     ['TripwireIoError', new TripwireIoError('trip.persist', new Error('EIO')),
       'TRIPWIRE_IO'],
     ['TripwireAbortedError', new TripwireAbortedError(), 'TRIPWIRE_ABORTED'],
@@ -133,7 +136,7 @@ describe('[tripwire-core.26] TW32 stable code and brand on every error', () => {
 
   it('errors thrown by the latch carry their codes', async () => {
     const env = makeEnv();
-    const keyErr = await rejectionOf(env.tw.read('../escape'));
+    const keyErr = await rejectionOf(env.tw.read('../../lib/escape'));
     expect(isTripwireError(keyErr)).toBe(true);
     expect((keyErr as TripwireError).code).toBe('TRIPWIRE_INVALID_KEY');
     await env.tw.trip('k', {

@@ -4,7 +4,7 @@
  * break-glass clear. Single entry point (no subpath exports).
  *
  * The runtime surface is exactly the API of the package specification
- * (pinned by src/test/unit/api-surface.spec.ts), plus `createNodeFs`, the
+ * (pinned by test/unit/api-surface.spec.ts), plus `createNodeFs`, the
  * Node `FsPort` a caller needs to run `createFileStorage` on a real disk.
  * The interactive and CLI surface (interactiveGate, confirmSolved,
  * runUnlockCli, renderStatusText, statusJsonLine) takes an injected

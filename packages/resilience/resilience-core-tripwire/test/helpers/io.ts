@@ -5,7 +5,7 @@
  * prompt is captured. An exhausted script answers `null` (EOF), so a
  * buggy loop terminates instead of hanging.
  */
-import type { TripwireIo } from '../../index';
+import type { TripwireIo } from '../../src/index';
 
 export type Answer = string | null | (() => string | null | Promise<string | null>);
 
