@@ -1,25 +1,27 @@
 /**
  * guards: a reader sees a partial file, tmp names collide, or files are created with loose permissions
  * tier: S
- * cites: ticket 8468f7b1; [tripwire-core.2] TW2, [tripwire-core.6] TW6.
+ * cites: ticket 8468f7b1; [tripwire-core.2] TW2, [tripwire-core.6] TW6; 8468f7b1 [fix-tripwire.2]
  * Ticket 8468f7b1 - file storage write protocol over the memory fs:
  * unique tmp names and complete-or-absent reads at every interleaving
  * point, and 0600 files / 0700 directories.
  * Criteria: [tripwire-core.2] TW2, [tripwire-core.6] TW6.
  */
 import { createFileStorage, createMemoryFs, type MemoryFs } from '../../src/index';
+import type { FsPort } from '../../src/lib/memory-fs';
 import { exploreExhaustive, exploreRandom } from '../helpers/explore';
+import { createGates } from '../helpers/gates';
 import { makeEnv, processView, STATE_DIR } from '../helpers/harness';
 
 const LOCK = `${STATE_DIR}/tripwire/k.lock`;
 const MARKER = `${STATE_DIR}/tripwire/k.cleared`;
 
-function storageOn(mfs: MemoryFs) {
+function storageOn(mfs: MemoryFs, fs: FsPort = processView(mfs)) {
   return createFileStorage({
     stateDir: STATE_DIR,
     auditPath: `${STATE_DIR}/audit.log`,
     maxAuditBytes: 100_000,
-    fs: processView(mfs),
+    fs,
     clock: () => 0,
   });
 }
@@ -60,7 +62,7 @@ describe('[tripwire-core.2] TW2 unique .tmp names, complete-or-ENOENT', () => {
     expect(mfs.files().filter((f) => f.endsWith('.tmp'))).toEqual([]);
   });
 
-  it('interleaved writers never share a tmp name; readers see whole JSON',
+  it('deterministic interleaved writers never share a tmp name; readers see whole JSON',
     async () => {
       const allTmps = new Set<string>();
       const run = async (
@@ -68,9 +70,10 @@ describe('[tripwire-core.2] TW2 unique .tmp names, complete-or-ENOENT', () => {
       ): Promise<void> => {
         const mfs = createMemoryFs();
         const problems = watchComplete(mfs, [LOCK, MARKER]);
-        const a = storageOn(mfs);
-        const b = storageOn(mfs);
-        const results = await mfs.schedule<unknown>([
+        const gates = createGates(mfs);
+        const a = storageOn(mfs, gates.fs);
+        const b = storageOn(mfs, gates.fs);
+        const results = await gates.run<unknown>([
           () => a.createLockIfAbsent('k', JSON.stringify({ by: 'a' })),
           () => b.createLockIfAbsent('k', JSON.stringify({ by: 'b' })),
           () => a.writeClearedMarker('k', JSON.stringify({ m: 'a' })),

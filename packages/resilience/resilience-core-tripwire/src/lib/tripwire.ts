@@ -13,7 +13,11 @@
 import { randomBytes } from 'node:crypto';
 import { userInfo } from 'node:os';
 import { join } from 'node:path';
-import { clampAuditBytes, formatAuditLine } from './audit.js';
+import {
+  clampAuditBytes,
+  EXPIRY_AUDIT_REASON,
+  formatAuditLine,
+} from './audit.js';
 import {
   TripwireConfirmError,
   TripwireIoError,
@@ -443,7 +447,7 @@ export function createTripwire<C extends TripContext = TripContext>(
       await audit({
         event: 'tripwire-expired',
         key,
-        reason: r.reason,
+        reason: EXPIRY_AUDIT_REASON,
         trippedAt: r.trippedAt,
         blockedCount: r.blockedCount,
         method: 'expired',

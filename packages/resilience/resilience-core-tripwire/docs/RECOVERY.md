@@ -150,7 +150,7 @@ jq -c 'select(.event == "tripwire-cleared") | {ts, key, method, actor}' "$ADHD_H
 | `tripwire-retripped` | A trip hit an already tripped key; the first record was kept. |
 | `tripwire-cleared` | A clear. `method` says how, `actor` who, `reverified` whether the human re-checked upstream. |
 | `tripwire-resolved` | The success path: the upstream recovered. `durationMs` is the time tripped. |
-| `tripwire-expired` | A gate found a lock older than the instance `expiry` and removed it. |
+| `tripwire-expired` | A gate found a lock older than the instance `expiry` and removed it; its `reason` is `ttl-expired`. |
 
 Other fields on every line: `ts`, `key`, `namespace`, and `sessionId` when the
 application supplies one. `method` is one of `unlock-cli-tty`, `unlock-cli-env`,

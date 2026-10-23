@@ -256,7 +256,7 @@ describe('[tripwire-interactive.7] agent-search: TTL expiry (2 h) and ' +
     expect(eventsOf(env, 'tripwire-expired')).toEqual([
       expect.objectContaining({
         key: 'google',
-        reason: 'captcha',
+        reason: 'ttl-expired',
         method: 'expired',
         blockedCount: 1,
       }),

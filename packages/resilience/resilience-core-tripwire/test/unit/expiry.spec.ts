@@ -37,7 +37,7 @@ describe('[tripwire-core.13] TW13 expiry with ttlMs', () => {
     expect(ex).toHaveLength(1);
     expect(ex[0]).toMatchObject({
       key: 'google',
-      reason: 'captcha',
+      reason: 'ttl-expired',
       blockedCount: 1,
       method: 'expired',
     });

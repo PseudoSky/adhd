@@ -19,6 +19,8 @@ import type { AuditEvent } from './types.js';
 export const DEFAULT_MAX_AUDIT_BYTES = 5 * 1024 * 1024;
 /** Smallest audit cap `maxAuditBytes` is clamped to, in bytes. */
 export const MIN_AUDIT_BYTES = 100_000;
+/** Audit `reason` of the `tripwire-expired` line: the entry's ttl passed. */
+export const EXPIRY_AUDIT_REASON = 'ttl-expired';
 /** Every audit line (including its newline) is shorter than this. */
 export const AUDIT_LINE_MAX_BYTES = 4096;
 
