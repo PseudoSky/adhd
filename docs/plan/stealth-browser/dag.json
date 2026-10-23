@@ -1403,6 +1403,29 @@
       ],
       "context": "contexts/plan-notes.md",
       "notes": "executor=haiku tier=haiku; documentation only"
+    },
+    "release-readiness": {
+      "kind": "work",
+      "phase": "release",
+      "depends_on": [
+        "search-cutover",
+        "plan-notes",
+        "fix-tripwire",
+        "fix-core-parsers",
+        "fix-core-lifecycle",
+        "fix-core-errors"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py release-readiness",
+      "artifacts": [
+        "docs/plan/stealth-browser/release-readiness/",
+        "docs/plan/stealth-browser/APPROVAL-split.md",
+        "docs/plan/stealth-browser/APPROVAL-tripwire.md",
+        "docs/plan/stealth-browser/APPROVAL.md",
+        "docs/plan/stealth-browser/APPROVALS.md",
+        "docs/plan/stealth-browser/evidence/release-readiness.md"
+      ],
+      "context": "contexts/release-readiness.md",
+      "notes": "executor=haiku tier=haiku; runs gates and records exit codes"
     }
   },
   "authored_with": {
