@@ -270,10 +270,10 @@
       "end_ref": "40029d6d334ff7144ef10bf2843e6e5376f9cdc5"
     },
     "sp-switch": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-10-23T21:27:00.420Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "6fe52ae6b04d5ae07ec562c0ebc130255bccf745",
       "end_ref": null
     },
     "tripwire-scaffold": {
