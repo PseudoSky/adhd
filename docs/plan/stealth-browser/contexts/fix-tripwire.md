@@ -44,6 +44,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 - [fix-tripwire.2] The interleaved-writers spec is deterministic: a storage spec cites [fix-tripwire.2], its titles carry `interleaved` and `deterministic`, it has no `setTimeout`, `sleep(` or numeric per-test timeout, and it passes in three consecutive uncached runs.
 - [fix-tripwire.3] evidence/fix-tripwire.md names the root cause of the tripwire-core.32 flake (`root cause: ...`) and `guard.py tripwire-core --only tripwire-core.32` exits 0 three runs in a row.
 - [fix-tripwire.4] evidence/fix-tripwire.md records the red-first proof: a `RED:` line with the failing assertion of each new spec on the untouched source and a `GREEN:` line with the passing run after the fix.
+- [fix-tripwire.5] `nx run resilience-core-tripwire:lint`, `:typecheck`, `:typecheck-spec`, `:test`, `:build` exit 0 and evidence/fix-tripwire.md records each as `EXIT <command>: 0`.
 ---
 
 ## Reservations
