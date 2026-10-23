@@ -342,7 +342,7 @@ export const PROVIDERS = {
         // PyPI emits RELATIVE hrefs (`/project/requests/`); the HTML parser has
         // no page URL to absolutize against, so a urlTemplate is required.
         urlTemplate: 'https://pypi.org{}',
-        snippet: 'span.package-snippet__description',
+        snippet: 'p.package-snippet__description',
         meta: { version: 'span.package-snippet__version' },
       },
       extraWaitMs: 3000,  // Cloudflare managed challenge needs ~2-3s to auto-clear
@@ -353,7 +353,7 @@ export const PROVIDERS = {
         container: { tag: 'A', attrs: { class: 'package-snippet' } },
         title: { tag: 'SPAN', attrs: { class: 'package-snippet__name' } },
         link: { tag: 'A', attrs: { class: 'package-snippet' }, attr: 'href' },
-        snippet: { tag: 'SPAN', attrs: { class: 'package-snippet__description' } },
+        snippet: { tag: 'P', attrs: { class: 'package-snippet__description' } },
         extra: {
           version: { tag: 'SPAN', attrs: { class: 'package-snippet__version' } },
         },

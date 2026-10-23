@@ -165,13 +165,17 @@ describe('8468f7b1 AC2 [tests-unit-extract.1] walkDomTree (structural mode)', ()
     expect(await walkStructural(doc(el('DIV', [], [noJs, twoKids, noKids])))).toEqual([])
   })
 
-  it('falls back to the shortest text chunk when there is no heading', async () => {
+  it('skips an anchor with no heading: the whitespace-split title fallback is gone', async () => {
     const anchor = el('A', ['jsname', 'a', 'href', 'https://nh.test/'], [
       el('DIV', [], [el('DIV', [], [el('SPAN', [], [txt('Short')]), el('SPAN', [], [txt('a much longer breadcrumb')])])]),
     ])
+    expect(await walkStructural(doc(el('DIV', [], [anchor, el('DIV'), el('DIV')])))).toEqual([])
+  })
+
+  it('normalizes a google goto redirect href to an absolute url', async () => {
+    const anchor = el('A', ['jsname', 'a', 'href', '/goto?url=abc'], [el('DIV', [], [el('DIV', [], [el('H3', [], [txt('T')])])])])
     const out = await walkStructural(doc(el('DIV', [], [anchor, el('DIV'), el('DIV')])))
-    expect(out).toHaveLength(1)
-    expect(out[0].title).toBe('Short a much longer breadcrumb')
+    expect(out.map((r) => r.url)).toEqual(['https://www.google.com/goto?url=abc'])
   })
 
   it('skips results with no recoverable title', async () => {

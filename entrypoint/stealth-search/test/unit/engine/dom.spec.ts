@@ -225,30 +225,28 @@ describe('Google SERP walker lives in dom.ts [search-port-engine.10]', () => {
     expect(r.results[1]?.snippet).toContain('structured logging in Node.js')
   })
 
-  it('Google SERP walker: the same markup with every class name renamed still parses (class-independent)', () => {
+  it('Google SERP walker: the same markup with every class name renamed still parses (class-independent)', async () => {
     const renamed = fixture('google-serp.html').replace(/class="[^"]*"/g, 'class="zz"')
-    const results = extractGoogleSerp(htmlToDomTree(renamed))
+    const results = await extractGoogleSerp(htmlToDomTree(renamed))
     expect(results.map((x) => x.title)).toEqual(['pino - super fast, all natural JSON logger for Node.js', '11 Node.js logging best practices'])
   })
 
-  it('Google SERP walker: duplicate urls are dropped and a video-timestamp link (a wrapper with two children) is not a result', () => {
-    const results = extractGoogleSerp(htmlToDomTree(fixture('google-serp.html')))
+  it('Google SERP walker: duplicate urls are dropped and a video-timestamp link (a wrapper with two children) is not a result', async () => {
+    const results = await extractGoogleSerp(htmlToDomTree(fixture('google-serp.html')))
     expect(results).toHaveLength(2)
     expect(results.some((x) => x.url.includes('youtube.com'))).toBe(false)
   })
 
-  it('Google SERP walker: an anchor without a heading takes the shortest text chunk as the title; an anchor with no text is skipped', () => {
+  it('Google SERP walker: an anchor without a heading and an anchor with no text are skipped (no guessed title)', async () => {
     const html =
       '<div id="rso"><div><div><a jsname="a" href="https://a.test/x"><div><div><span>A short title</span><span>•</span><span>a.test › deep › breadcrumb › path › here</span></div></div></div></a><span>x</span><p>y</p></div></div>' +
       '<div><a jsname="b" href="https://b.test/empty"><div><div></div></div></a></div></div>'
-    const results = extractGoogleSerp(htmlToDomTree(html))
-    expect(results).toHaveLength(1)
-    expect(results[0]?.title).toBe('A short title')
+    expect(await extractGoogleSerp(htmlToDomTree(html))).toEqual([])
   })
 
-  it('Google SERP walker: a redirect href is normalized (goto, protocol-relative, q= redirects)', () => {
+  it('Google SERP walker: a redirect href is normalized (goto, protocol-relative, q= redirects)', async () => {
     const card = (href: string, title: string): string => `<div><a jsname="k" href="${href}"><div><div><h3>${title}</h3></div></div></a></div>`
-    const results = extractGoogleSerp(htmlToDomTree(`<body>${card('/goto?url=abc', 'One')}${card('//example.com/p', 'Two')}${card('/url?q=https%3A%2F%2Fthree.test%2F&sa=U', 'Three')}</body>`))
+    const results = await extractGoogleSerp(htmlToDomTree(`<body>${card('/goto?url=abc', 'One')}${card('//example.com/p', 'Two')}${card('/url?q=https%3A%2F%2Fthree.test%2F&sa=U', 'Three')}</body>`))
     expect(results.map((x) => x.url)).toEqual(['https://www.google.com/goto?url=abc', 'https://example.com/p', 'https://three.test/'])
   })
 
@@ -260,11 +258,10 @@ describe('Google SERP walker lives in dom.ts [search-port-engine.10]', () => {
     }
   })
 
-  it('Google SERP walker is search-owned: dom.ts imports no SERP- or Google-named symbol from the core package', () => {
+  it('Google SERP walker is delegated: dom.ts calls the core walkDomTree and carries no walker of its own', () => {
     const source = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'src', 'lib', 'dom.ts'), 'utf8')
-    const imports = [...source.matchAll(/import\s*(?:type\s*)?\{([^}]*)\}\s*from\s*['"]@adhd\/stealth-core-browser['"]/g)].flatMap((m) => (m[1] ?? '').split(',').map((n) => n.trim()))
-    expect(imports.length).toBeGreaterThan(0)
-    expect(imports.filter((n) => /serp|google/i.test(n))).toEqual([])
-    expect(source).toMatch(/export function extractGoogleSerp/)
+    expect(source).toMatch(/capture\.walkDomTree/)
+    expect(source).toMatch(/export async function extractGoogleSerp/)
+    expect(source).not.toMatch(/function hasDivDiv/)
   })
 })

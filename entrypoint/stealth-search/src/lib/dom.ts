@@ -10,9 +10,9 @@
  *   - `domSearch`            navigate, ban-check, wait for the selector, walk, extract
  *   - `waitForSelector`      polls with jittered 600-1800 ms retries, raises SELECTOR_TIMEOUT when exhausted
  *   - `extractFromDom`       pattern extractor (container / title / link / snippet / extra patterns)
- *   - `extractGoogleSerp`    structural Google result-page (SERP) walker: class-independent, keyed on the
- *                            `a[jsname] > div > div` result-title anchor. A search feature owned here, not
- *                            by the core (backlog 406a4e66).
+ *   - `extractGoogleSerp`    adapter to the ONE structural Google result-page (SERP) walker, which lives
+ *                            in the core (`capture.walkDomTree`, OD-11 provisional; restore the search-side
+ *                            walker from git history, see docs/plan/stealth-browser/OPEN-DECISIONS.md).
  *   - ban checks             `detectBanInPage` (selector probes plus the provider's own ban rules over the
  *                            serialized DOM) and `checkPageUrlForBan` (redirect to a login or challenge URL)
  *
@@ -20,7 +20,7 @@
  * strategy with a virtual clock.
  *
  * Inventory rows: I-25 (DOM extraction, ban checks, selector wait with jittered 600-1800 ms retry),
- * I-25.a (Google SERP walker, search-owned).
+ * I-25.a (Google SERP walker, delegated to the core).
  * Ticket 8468f7b1 · plan state search-port-engine · backlog 406a4e66.
  */
 import { capture, type cdp } from '@adhd/stealth-core-browser'
@@ -144,7 +144,7 @@ export async function domSearch(
     if (pageBan) return hitlResponse(provider, query, startedAt, deps, pageBan, searchUrl)
 
     const full = await pageSession.send<{ root: DomNode }>('DOM.getDocument', { depth: -1 })
-    const results = domCfg.structural ? extractGoogleSerp(full.root) : extractFromDom(full.root, domCfg.extract, provider.network?.fields?.urlTemplate)
+    const results = domCfg.structural ? await extractGoogleSerp(full.root) : extractFromDom(full.root, domCfg.extract, provider.network?.fields?.urlTemplate)
 
     return {
       provider: provider.id,
@@ -214,7 +214,8 @@ function findChild(node: DomNode, pattern: DomPattern, depth = 4): DomNode | und
 }
 
 function extractValue(container: DomNode, pattern: DomPattern & { attr?: string }): string {
-  const el = findChild(container, pattern)
+  // The container may itself be the element (pypi's result card is the anchor), so test it first.
+  const el = matches(container, pattern) ? container : findChild(container, pattern)
   if (!el) return ''
   if (pattern.attr) return getAttr(el, pattern.attr) ?? ''
   return getText(el)
@@ -279,102 +280,25 @@ export function extractFromDom(domRoot: DomNode, extract: DomExtractor, urlTempl
   return results
 }
 
-// ─── Google SERP walker (structural, class-independent) ──────────────────────
+// ─── Google SERP walker (delegated to the core) ──────────────────────────────
 
 /**
- * Extract results from a Google result page by structural position, never by class name. Finds
- * `a[jsname][href]` anchors matching the `a > div > div` pattern (the stable structural marker of a
- * result title), reads the heading as the title, walks the parent chain to the result card and takes
- * the longest descriptive text in the card as the snippet. Duplicate URLs are dropped.
+ * Extract results from a Google result page by structural position, never by class name. The one
+ * walker lives in the core (`capture.walkDomTree` in structural mode, OD-11); this is a thin adapter
+ * that replays the already-fetched tree through it, so the page is not navigated or fetched twice.
+ * Anchors without a heading are not results. Duplicate URLs are dropped.
  */
-export function extractGoogleSerp(domRoot: DomNode): SearchResult[] {
-  const results: SearchResult[] = []
-  const seen = new Set<string>()
-
-  // CDP DOM nodes carry no parent pointers, so the parent chain rides along on the stack.
-  const candidates: Array<{ node: DomNode; parentChain: DomNode[] }> = []
-  const stack: Array<{ node: DomNode; parentChain: DomNode[] }> = [{ node: domRoot, parentChain: [] }]
-
-  while (stack.length > 0) {
-    const { node, parentChain } = stack.pop() as { node: DomNode; parentChain: DomNode[] }
-    if (node.nodeName === 'A' && getAttr(node, 'jsname') && getAttr(node, 'href')) candidates.push({ node, parentChain })
-    if (node.children) {
-      for (let i = node.children.length - 1; i >= 0; i--) {
-        stack.push({ node: node.children[i], parentChain: [...parentChain, node] })
-      }
-    }
+export async function extractGoogleSerp(domRoot: DomNode): Promise<SearchResult[]> {
+  const probe = domRoot.nodeId + 1_000_000
+  const replay = {
+    send: async (method: string, params?: Record<string, unknown>): Promise<unknown> => {
+      if (method === 'DOM.getDocument') return { root: domRoot }
+      if (method === 'DOM.querySelector') return { nodeId: params?.['nodeId'] === domRoot.nodeId ? probe : 0 }
+      return {}
+    },
   }
-
-  for (const { node, parentChain } of candidates) {
-    if (!hasDivDiv(node)) continue
-
-    const url = getAttr(node, 'href') ?? ''
-    if (!url || seen.has(url)) continue
-    seen.add(url)
-
-    // The breadcrumb lives inside the same anchor, so the heading is read specifically.
-    let title = findHeadingText(node)
-    if (!title) {
-      // No heading: take the shortest text chunk (breadcrumbs hold URL paths, headings do not).
-      const allText = getText(node)
-      const chunks = allText.split(/\s{2,}|•|\|/).map((s) => s.trim()).filter(Boolean)
-      chunks.sort((a, b) => a.length - b.length)
-      title = chunks[0] ?? allText
-    }
-    if (!title) continue
-
-    const container = findContainer(parentChain)
-    const snippet = container ? findSnippet(container, title) : ''
-    results.push({ title, url: normalizeUrl(url), snippet })
-  }
-
-  return results
-}
-
-/** The text of the first heading (H2/H3) inside a node. */
-function findHeadingText(node: DomNode): string {
-  if (['H2', 'H3'].includes(node.nodeName)) return getText(node)
-  if (node.children) {
-    for (const c of node.children) {
-      const t = findHeadingText(c)
-      if (t) return t
-    }
-  }
-  return ''
-}
-
-/**
- * True for the real-result `a > div > div` shape: the wrapper div has exactly one child and it is a div.
- * Non-result links (video timestamps, knowledge panels) carry two or more children in the wrapper.
- */
-function hasDivDiv(node: DomNode): boolean {
-  if (!node.children) return false
-  const wrapper = node.children.find((c) => c.nodeName === 'DIV')
-  if (!wrapper?.children) return false
-  return wrapper.children.length === 1 && wrapper.children[0].nodeName === 'DIV'
-}
-
-/** The result card: the nearest ancestor div with at least 3 children and over 50 characters of text, else 4 levels up. */
-function findContainer(parentChain: DomNode[]): DomNode | null {
-  for (let i = parentChain.length - 1; i >= 0; i--) {
-    const p = parentChain[i]
-    if (p.nodeName === 'DIV' && p.children && p.children.length >= 3 && getText(p).length > 50) return p
-  }
-  return parentChain[Math.max(0, parentChain.length - 4)] ?? null
-}
-
-/** The longest descriptive text (over 40 characters) in a card that is not the title. */
-function findSnippet(container: DomNode, title: string): string {
-  const texts: string[] = []
-  const walk = (n: DomNode): void => {
-    if (n.nodeName === 'SCRIPT' || n.nodeName === 'STYLE') return
-    const t = getText(n)
-    if (t.length > 40 && !t.includes(title) && !title.includes(t)) texts.push(t)
-    if (n.children) for (const c of n.children) walk(c)
-  }
-  walk(container)
-  texts.sort((a, b) => b.length - a.length)
-  return texts[0] ?? ''
+  const parsed = await capture.walkDomTree(replay as never, { navigateUrl: 'about:blank', waitFor: 'html', timeoutMs: 1_000 }, { structural: true })
+  return parsed.map(({ title, url, snippet }) => ({ title, url, snippet }))
 }
 
 // ─── Wait for selector (poll DOM.querySelector, no JS injection) ──────────────

@@ -126,7 +126,8 @@ function findChild(node: DomNode, pattern: DomPattern, depth = 4): DomNode | und
 }
 
 function extractValue(container: DomNode, pattern: DomPattern & { attr?: string }): string {
-  const el = findChild(container, pattern)
+  // The container may itself be the element (an anchor result card), so it is tested before its descendants.
+  const el = matches(container, pattern) ? container : findChild(container, pattern)
   if (!el) return ''
   if (pattern.attr) {
     const v = getAttr(el, pattern.attr)
@@ -154,6 +155,8 @@ function normalizeUrl(raw: string): string {
   const googleMatch = raw.match(/[?&]q=([^&]+)/)
   if (googleMatch && !raw.startsWith('http')) return decodeURIComponent(googleMatch[1])
   if (raw.startsWith('//')) return 'https:' + raw
+  // Google's newer SERP encrypted redirect.
+  if (raw.startsWith('/goto?url=')) return `https://www.google.com${raw}`
   return raw
 }
 
@@ -210,15 +213,9 @@ function extractStructuralFromDom(domRoot: DomNode): ParseResult[] {
     // Title: find the heading tag (H2/H3) inside the a[jsname].
     // Google wraps the breadcrumb inside the same anchor, so we must
     // find the heading specifically rather than taking all text.
-    let title = findHeadingText(node)
-    if (!title) {
-      // Fallback: if no heading found, use shortest text chunk from a
-      // (breadcrumbs contain URL paths, headings don't)
-      const allText = getText(node)
-      const chunks = allText.split(/\s{2,}|•|\|/).map(s => s.trim()).filter(Boolean)
-      chunks.sort((a, b) => a.length - b.length)
-      title = chunks[0] ?? allText
-    }
+    // Google wraps the breadcrumb inside the same anchor, so the heading is read specifically. An anchor
+    // without a heading is not a result: there is no reliable title to guess from the collapsed text.
+    const title = findHeadingText(node)
     if (!title) continue
 
     // Container: walk up from a[jsname] to find the result card.
