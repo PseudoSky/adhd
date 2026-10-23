@@ -5,7 +5,7 @@ import { defineE2eConfig } from '../../tools/vite-plugins/e2e-config.mjs';
 /**
  * Subprocess / real-server E2E lane for this project (backlog 5b839b90 AC1).
  *
- * Runs ONLY the `*.e2e.ts` and `*.e2e.test.ts` files under src/ — the suites that spawn
+ * Runs ONLY the `*.e2e.ts` files under test/e2e/ — the suites that spawn
  * processes (stdio MCP servers via npx/uvx/srt, built bins, forked lock holders).
  * The unit `test` lane excludes exactly these files (`E2E_FILE_EXCLUDES` in
  * `vite.config.ts`). Reached by `nx affected -t e2e --parallel=1` at the push/CI

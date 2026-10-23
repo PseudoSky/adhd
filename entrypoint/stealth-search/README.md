@@ -5,7 +5,7 @@ Stealth Chrome search and fetch (CDP DOM walks, no automation flags) as a CLI an
 Bins: `stealth-search`, `stealth-search-mcp`. Install with `pnpm add @adhd/stealth-search`.
 
 Every code block below is listed in `examples/manifest.json` and verified by
-`src/test/unit/examples/examples.spec.ts`: TypeScript blocks are lines of a runnable file in
+`test/unit/examples/examples.spec.ts`: TypeScript blocks are lines of a runnable file in
 `examples/`, command lines name real operations and flags, and the sample output is what the
 example prints against a fake Chrome.
 

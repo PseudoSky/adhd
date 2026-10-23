@@ -1,7 +1,7 @@
 /// <reference types='vitest' />
 import { defineConfig } from 'vite';
 import { configDefaults } from 'vitest/config';
-import { E2E_FILE_EXCLUDES } from '../../tools/vite-plugins/e2e-globs.mjs';
+import { E2E_FILE_EXCLUDES, UNIT_FILE_INCLUDES } from '../../tools/vite-plugins/e2e-globs.mjs';
 import { vitestTestDefaults } from '../../tools/vite-plugins/vitest-pool-defaults.mjs';
 import dts from 'vite-plugin-dts';
 import * as path from 'path';
@@ -31,8 +31,8 @@ export default defineConfig(() => ({
     dts({
       entryRoot: 'src',
       tsconfigPath: path.join(import.meta.dirname, 'tsconfig.lib.json'),
-      // src/test/** holds test-support lacking a .spec/.test suffix; keep it out of shipped declarations.
-      exclude: ['bin/**', 'src/test/**'],
+      // test/ holds the test lane (specs, helpers, fixtures) and is never shipped declarations.
+      exclude: ['bin/**'],
       pathsToAliases: false,
     }),
   ],
@@ -68,7 +68,7 @@ export default defineConfig(() => ({
     watch: false,
     globals: true,
     environment: 'node',
-    include: ['src/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'],
+    include: UNIT_FILE_INCLUDES,
     // Subprocess / real-server suites run in the separate e2e lane, never here
     // (docs/decisions/0009-test-lanes-unit-vs-e2e.md).
     exclude: [...configDefaults.exclude, ...E2E_FILE_EXCLUDES],
