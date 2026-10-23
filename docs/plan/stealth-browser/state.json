@@ -501,10 +501,10 @@
       "end_ref": null
     },
     "fix-core-errors": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-10-23T22:57:26.839Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "a6dce780b700ca4734e1bd090d16b7378bc59855",
       "end_ref": null
     },
     "fix-search-fetch": {
@@ -1989,7 +1989,7 @@
     "version": "0.8.35",
     "hash": "0b6bc1f3d70e"
   },
-  "current_state": "fix-core-lifecycle",
+  "current_state": "fix-core-errors",
   "dod_provenance": {
     "confirmed_at": "2026-10-12T23:49:38.410Z",
     "by": "pseudosky",
