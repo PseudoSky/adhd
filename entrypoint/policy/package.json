@@ -1,7 +1,6 @@
 {
   "name": "@adhd/policy",
   "version": "0.0.4",
-  "type": "module",
   "bin": {
     "adhd-policy": "./dist/cli.js",
     "adhd-policy-mcp": "./dist/mcp.js",
