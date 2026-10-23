@@ -98,7 +98,7 @@ function rgCount(token) {
  * default-lane `*.spec.ts` stubs are exactly that and prove nothing).
  */
 function resolveCandidate(cell) {
-  const m = cell.match(/(src\/[^\s,;`)]+\.(?:spec|e2e)\.ts)/g);
+  const m = cell.match(/((?:src|test)\/[^\s,;`)]+\.(?:spec|e2e)\.ts)/g);
   if (!m) return null;
   for (const rel of m) {
     const abs = join(PKG_ROOT, rel);

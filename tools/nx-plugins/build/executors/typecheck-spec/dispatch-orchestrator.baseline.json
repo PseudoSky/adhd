@@ -8,10 +8,10 @@
     "packages/agent/agent-engine-orchestrator/src/plugins/loader.ts": 1,
     "packages/agent/agent-store-prompts/src/db/migrate-runner.ts": 1,
     "packages/agent/agent-store-tools/src/db/migrate-runner.ts": 1,
-    "packages/dispatch/dispatch-orchestrator/src/test/agent-runner-comment.spec.ts": 1,
-    "packages/dispatch/dispatch-orchestrator/src/test/hitl-suspension.spec.ts": 4,
-    "packages/dispatch/dispatch-orchestrator/src/test/orchestrator.spec.ts": 1,
-    "packages/dispatch/dispatch-orchestrator/src/test/real-turn-telemetry.spec.ts": 3,
+    "packages/dispatch/dispatch-orchestrator/test/unit/agent-runner-comment.spec.ts": 1,
+    "packages/dispatch/dispatch-orchestrator/test/unit/hitl-suspension.spec.ts": 4,
+    "packages/dispatch/dispatch-orchestrator/test/unit/orchestrator.spec.ts": 1,
+    "packages/dispatch/dispatch-orchestrator/test/unit/real-turn-telemetry.spec.ts": 3,
     "packages/dispatch/dispatch-orchestrator/vite.config.ts": 4
   }
 }

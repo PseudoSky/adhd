@@ -65,7 +65,7 @@ export default defineConfig(() => ({
     watch: false,
     globals: true,
     environment: 'node',
-    include: ['{src,tests}/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'],
+    include: ['{src,test,tests}/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'],
     // The loopback-socket suites (tier P) are `*.e2e.test.ts` and run in the `e2e` target (vitest.e2e.config.mts), never here (ADR 0009).
     exclude: [...configDefaults.exclude, ...E2E_FILE_EXCLUDES],
     reporters: ['default'],

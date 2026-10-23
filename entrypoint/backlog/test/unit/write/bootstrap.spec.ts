@@ -1,0 +1,279 @@
+/**
+ * bootstrap.spec.ts — proves `write/bootstrap.ts` actually wires `search`/
+ * `embedding` through the REAL `api.ts` surface in production shape, not a
+ * hand-built handle.
+ *
+ * Every component here is real EXCEPT the embedding model itself: a real
+ * store opened through the same `openGraphBacklogStore` factory production
+ * uses, `api.ts`'s own `create`/`query`/`upsertProject` verbs (never the
+ * write-layer internals called directly), a real `@adhd/sox-vector-store`
+ * Turso vector space, and real duplicate-gate/on-write-embed wiring via
+ * `write/bootstrap.ts`'s `bootstrapSemanticStoreMembers` — the exact
+ * production code path. Embeddings mocked here — explicit, scoped user
+ * authorization (see entrypoint/backlog/STATE.md), covers embedding cost
+ * only: this file's assertions ((a) a BYTE-IDENTICAL second `create` is
+ * caught by the duplicate gate, (b) the SAME title text used to create an
+ * issue also finds it via `filter.semantic`) never require genuine
+ * cross-vocabulary semantic similarity — a deterministic fake that maps
+ * identical text to an identical vector is sufficient and has full teeth
+ * for both. Genuine cross-vocabulary semantic similarity is exercised by the
+ * real-model suite, never by this file's deterministic fake.
+ *
+ * **Why `ADHD_BACKLOG_EMBEDDING_ENABLED` is set explicitly.** `env.ts`
+ * declares `embedding.enabled`'s CODE default as `false`, but `cli.spec.ts`'s
+ * own `NO_EMBED` fixture notes the machine-wide GLOBAL-scope config on this
+ * box already flips it to `true` — so relying on either the code default or
+ * ambient machine state would make this test's embedding-on precondition
+ * non-deterministic across machines. This test pins it explicitly, the same
+ * way `cli.spec.ts` pins it OFF for its own determinism.
+ */
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { readFileSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import type { StoreAdapter } from '@adhd/sox-store-adapter';
+import {
+  openTursoVectorStore,
+  type AsyncVectorBackend,
+  type VectorSpace,
+} from '@adhd/sox-vector-store';
+import {
+  openGraphBacklogStore,
+  type GraphBacklogStore,
+} from '../../../src/store/graph-backlog-store.js';
+import { buildBacklogEnv } from '../../../src/env.js';
+import { create, query, upsertProject, type BacklogCtx } from '../../../src/api.js';
+import { freshTmpDir } from '../../../src/test/helpers/tmp-store.js';
+import { isOutcomeOk } from '../../../src/envelope.js';
+import { isVectorSpacePopulated } from '../../../src/write/bootstrap.js';
+import { createFakeEmbeddingModule } from '../../../src/test/helpers/fake-embedding-provider.js';
+
+// Embeddings mocked here — explicit, scoped user authorization (see
+// entrypoint/backlog/STATE.md), covers embedding cost only. Intercepts the
+// exact `import('@adhd/sox-embedding-provider')` specifier
+// `write/bootstrap.ts`'s own local `loadOptional` seam resolves at runtime (a
+// non-literal dynamic import, deliberately decoupled from this package's type
+// graph) — this file never installs `@adhd/sox-embedding-provider` at all.
+vi.mock('@adhd/sox-embedding-provider', () => createFakeEmbeddingModule());
+
+/** No cold ONNX model init anymore — the fake never touches disk/network — but the real Turso vector-store round-trip still needs headroom. */
+const EMBED_TIMEOUT = 30_000;
+
+const ENV_VAR = 'ADHD_BACKLOG_EMBEDDING_ENABLED';
+
+/** Opens a real `GraphBacklogStore` through the production factory plus a real `BacklogCtx.env` with embeddings pinned on. */
+async function openBootstrapTestCtx(
+  name: string
+): Promise<{ ctx: BacklogCtx; dir: string; store: GraphBacklogStore }> {
+  const dir = freshTmpDir(name);
+  const dbPath = join(dir, 'backlog.db');
+  const store = await openGraphBacklogStore(dbPath);
+  const env = buildBacklogEnv({ adhdRoot: dir });
+  return { ctx: { store, env }, dir, store };
+}
+
+/**
+ * True when `source` has an `import … from '…'` or `export … from '…'`
+ * statement (single- or MULTI-line, `import type` or value, named, default,
+ * namespace or re-export) that mentions `symbol`. Comments are stripped first,
+ * so PROSE may name the symbol freely (as the mirror's own doc comment does)
+ * while any real statement naming it — however it is laid out — is caught. The
+ * previous line-anchored regex missed `import type {\n  Sym\n} from '…'` and
+ * `export { Sym } from '…'` (55ba4178).
+ */
+export function importsOrReExportsSymbol(source: string, symbol: string): boolean {
+  const code = source
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/(^|[^:])\/\/[^\n]*/g, '$1');
+  const statement = /(?:^|\n)\s*(?:import|export)\b[^;]*?\bfrom\s*['"][^'"]+['"]/g;
+  const word = new RegExp(`\\b${symbol.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`);
+  for (const m of code.matchAll(statement)) {
+    if (word.test(m[0])) return true;
+  }
+  return false;
+}
+
+describe('write/bootstrap.ts — search/embedding wired through the real api.ts surface', () => {
+  let dir: string | undefined;
+  let adapter: StoreAdapter | undefined;
+  let prevEnvVar: string | undefined;
+
+  afterEach(async () => {
+    if (adapter) await adapter.close();
+    if (dir) rmSync(dir, { recursive: true, force: true });
+    if (prevEnvVar === undefined) delete process.env[ENV_VAR];
+    else process.env[ENV_VAR] = prevEnvVar;
+    dir = undefined;
+    adapter = undefined;
+    prevEnvVar = undefined;
+  });
+
+  it(
+    '(a) a near-duplicate `create` is intercepted by the real duplicate gate, and ' +
+      '(b) an issue created through `create` is findable via a `semantic` filter through `query` with NO manual indexing step',
+    async () => {
+      prevEnvVar = process.env[ENV_VAR];
+      process.env[ENV_VAR] = 'true';
+
+      const opened = await openBootstrapTestCtx('bootstrap-spec');
+      dir = opened.dir;
+      adapter = opened.store.adapter;
+      const ctx = opened.ctx;
+
+      const projectResult = await upsertProject(ctx, {
+        name: 'BOOTSTRAP-WIRING-TEST',
+        by: 'bootstrap.spec',
+      });
+      expect(isOutcomeOk(projectResult), JSON.stringify(projectResult)).toBe(
+        true
+      );
+
+      const title = 'Publish gate trips intermittently under machine load';
+      const body =
+        'The release publish gate reports a spurious failure with no code change to explain it.';
+
+      // First create: `awaitEmbed:true` so its on-write vector is durably
+      // indexed before the second create's duplicate scan runs — otherwise
+      // the fire-and-forget default would make the scan's outcome racy.
+      const first = await create(ctx, {
+        title,
+        body,
+        project: 'BOOTSTRAP-WIRING-TEST',
+        by: 'bootstrap.spec',
+        awaitEmbed: true,
+      });
+      expect(isOutcomeOk(first), JSON.stringify(first)).toBe(true);
+      if (!isOutcomeOk(first)) throw new Error('unreachable');
+      expect(first.data.created).toBe(true);
+      const firstUid = first.data.uid;
+      expect(firstUid).toBeDefined();
+
+      // (a) — a byte-identical second create must be caught by the duplicate
+      // gate (default `duplicateAction:'abort'`): this ONLY happens if
+      // `writeHandle(ctx)` handed `createIssue` a real, wired `search`.
+      // Before this module existed, `scanForDuplicates` always saw
+      // `handle.search === undefined` and returned `[]` unconditionally.
+      const second = await create(ctx, {
+        title,
+        body,
+        project: 'BOOTSTRAP-WIRING-TEST',
+        by: 'bootstrap.spec',
+      });
+      expect(isOutcomeOk(second), JSON.stringify(second)).toBe(true);
+      if (!isOutcomeOk(second)) throw new Error('unreachable');
+      expect(second.data.created).toBe(false);
+      expect(second.data.reason).toBe('duplicate-suppressed');
+      expect(second.data.duplicateCandidates?.length ?? 0).toBeGreaterThan(0);
+      expect(second.data.duplicateCandidates?.[0]?.uid).toBe(firstUid);
+
+      // (b) — the FIRST issue must be findable via `filter.semantic` through
+      // `query`, with no separate indexing step run by this test: the only
+      // thing that populated the vector space was `create`'s own on-write
+      // embed (`embedding-observer.ts`'s `scheduleIssueEmbedding`), which
+      // ONLY runs when `writeHandle(ctx)` hands `createIssue` a real, wired
+      // `embedding` member.
+      const found = await query(ctx, { filter: { semantic: title } });
+      expect(isOutcomeOk(found), JSON.stringify(found)).toBe(true);
+      if (!isOutcomeOk(found)) throw new Error('unreachable');
+      if (found.data.view !== 'list')
+        throw new Error(`expected view:'list', got view:'${found.data.view}'`);
+      expect(found.data.items.map((i) => i.uid)).toContain(firstUid);
+    },
+    EMBED_TIMEOUT
+  );
+});
+
+describe('write/bootstrap.ts — isVectorSpacePopulated uses the bounded capability probe', () => {
+  it("delegates to the backend's hasVectors: empty space ⇒ false, one vector ⇒ true", async () => {
+    const opened = await openBootstrapTestCtx('is-vector-space-populated');
+    const { store, dir } = opened;
+    try {
+      const space: VectorSpace = { modelId: 'bounded-probe-spec', dim: 3 };
+      // Real Turso vector backend over the real store adapter — the same
+      // substrate production uses. `openTursoVectorStore` ensures the space.
+      const vec = await openTursoVectorStore(store.adapter, space);
+
+      const spy = vi.spyOn(vec, 'hasVectors');
+
+      // An ensured-but-empty space ⇒ false, answered by the probe itself.
+      expect(await isVectorSpacePopulated(vec, space.modelId)).toBe(false);
+      expect(spy).toHaveBeenCalledTimes(1);
+      expect(spy).toHaveBeenCalledWith(space.modelId);
+
+      // One vector ⇒ true, still through the SAME probe — no second mechanism.
+      await vec.upsert(1, Float32Array.from([1, 0, 0]), space);
+      expect(await isVectorSpacePopulated(vec, space.modelId)).toBe(true);
+      expect(spy).toHaveBeenCalledTimes(2);
+    } finally {
+      await store.adapter.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  // Placement decision: this compile-time-coupling guard lives here, beside
+  // its sibling `isVectorSpacePopulated` probes — NOT in
+  // `rag-optional-deps.spec.ts`. That file's charter is the MANIFEST (optional
+  // specifiers surviving `sync-deps`), a runtime hazard; this is compile-time
+  // type coupling, a hard build-break hazard — different failure modes.
+  it("does not statically import the optional store's additive probe interface by name", () => {
+    // REGRESSION GUARD with teeth. The build broke (TS2305 "no exported
+    // member") on a machine whose hoisted `@adhd/sox-vector-store` lagged the
+    // declared range, because `bootstrap.ts` imported the additive
+    // existence-probe interface BY NAME from that optional package. The module
+    // now mirrors the capability locally (`OptVectorExistenceProbe`), so it
+    // compiles against the pinned `AsyncVectorBackend` contract alone — the
+    // same decoupling `loadOptional()` already gives it at RUNTIME. This reads
+    // the source (the offending line is erased at compile time, so no runtime
+    // assertion can observe it) and fails if the by-name IMPORT returns. The
+    // pattern is deliberately narrowed to import shape rather than the bare
+    // identifier, so PROSE may name the upstream interface (as the mirror's own
+    // doc comment does) while an actual by-name import still fails — otherwise
+    // the natural act of documenting the mirror would trip the gate. The
+    // line-anchored `^import` (`m` flag) keeps a prose mention from matching.
+    const source = readFileSync(
+      new URL('../../../src/write/bootstrap.ts', import.meta.url),
+      'utf8'
+    );
+    expect(
+      importsOrReExportsSymbol(source, 'AsyncVectorExistenceProbe'),
+      "bootstrap.ts must not import the optional store's additive probe interface by name — it breaks the build against a lagging install; mirror it locally (see OptVectorExistenceProbe)"
+    ).toBe(false);
+  });
+
+  it('degrades to false when the backend lacks the additive hasVectors capability (never falls back to an unbounded scan)', async () => {
+    // A structural double predating the additive `AsyncVectorExistenceProbe`
+    // capability: only the pinned `AsyncVectorBackend` surface. Its `iter`
+    // THROWS, so this assertion is RED if the readiness probe ever regresses
+    // to the `iter`-first-row corpus scan it replaced (BUG e19bc9d0) — the
+    // negative control for the bounded-probe contract.
+    const legacy = {
+      iter(): AsyncIterable<never> {
+        throw new Error('the readiness probe must not scan the corpus');
+      },
+    } as unknown as AsyncVectorBackend;
+
+    expect(await isVectorSpacePopulated(legacy, 'legacy-model')).toBe(false);
+  });
+});
+
+describe('importsOrReExportsSymbol — the guard has teeth (55ba4178)', () => {
+  const SYM = 'AsyncVectorExistenceProbe';
+  it('catches a single-line named import', () => {
+    expect(importsOrReExportsSymbol(`import { ${SYM} } from '@adhd/sox-vector-store';`, SYM)).toBe(true);
+  });
+  it('catches a MULTI-line `import type` (the form the old line-anchored regex missed)', () => {
+    const src = `import type {\n  AsyncVectorBackend,\n  ${SYM},\n} from '@adhd/sox-vector-store';\n`;
+    expect(importsOrReExportsSymbol(src, SYM)).toBe(true);
+  });
+  it('catches an aliased import and a re-export', () => {
+    expect(importsOrReExportsSymbol(`import { ${SYM} as P } from 'x';`, SYM)).toBe(true);
+    expect(importsOrReExportsSymbol(`export type { ${SYM} } from 'x';`, SYM)).toBe(true);
+    expect(importsOrReExportsSymbol(`export * from 'x'; import * as ns from 'y';`, SYM)).toBe(false);
+  });
+  it('ignores prose and comments that merely name the symbol', () => {
+    const src = `/** mirrors ${SYM} from the optional store */\n// import { ${SYM} } from 'x';\nimport { other } from 'y';\nconst a = 1;\n`;
+    expect(importsOrReExportsSymbol(src, SYM)).toBe(false);
+  });
+  it('does not match a longer identifier that merely contains the symbol', () => {
+    expect(importsOrReExportsSymbol(`import { My${SYM}2 } from 'x';`, SYM)).toBe(false);
+  });
+});

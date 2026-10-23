@@ -62,7 +62,7 @@ export default defineConfig({
     // exclusion structural rather than an emergent property of glob semantics.
     // The resource lane runs only via `nx run apigen-plugin-cli-output:e2e`
     // (see the sibling `vitest.e2e.config.ts`, the only place including `.e2e.ts`).
-    include: ['src/**/*.spec.ts'],
+    include: ['src/**/*.spec.ts', 'test/**/*.spec.ts'],
     reporters: ['default'],
     coverage: {
       reportsDirectory: projectCoverage(__dirname),

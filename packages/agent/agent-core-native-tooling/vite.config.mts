@@ -66,7 +66,7 @@ export default defineConfig(() => ({
     watch: false,
     globals: true,
     environment: 'node',
-    include: ['{src,tests}/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'],
+    include: ['{src,test,tests}/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'],
     // Subprocess suites (real srt + uvx) run in the `e2e` lane (ADR-0009).
     exclude: [...configDefaults.exclude, ...E2E_FILE_EXCLUDES],
     reporters: ['default'],

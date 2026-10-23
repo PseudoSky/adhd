@@ -21,7 +21,7 @@ export default defineConfig({
     //   fileParallelism: false serializes files to avoid DB teardown races.
     pool: 'forks',
     fileParallelism: false,
-    include: ['src/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'],
+    include: ['src/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}', 'test/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'],
 
     reporters: ['default'],
     coverage: {

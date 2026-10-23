@@ -158,7 +158,7 @@ export default defineConfig({
     // default lane spec-only preserves the fast inner loop; the `.e2e.ts`
     // exclusion is structural (the glob), not an emergent property of glob
     // semantics.
-    include: ['src/**/*.spec.ts'],
+    include: ['src/**/*.spec.ts', 'test/**/*.spec.ts'],
     testTimeout: 30000,
     hookTimeout: 30000,
 

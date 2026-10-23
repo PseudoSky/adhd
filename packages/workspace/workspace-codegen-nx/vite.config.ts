@@ -46,6 +46,6 @@ export default defineConfig({
     // ALL vitest output (a passing/failing suite prints nothing). Declaring
     // `['default']` restores normal per-test output. F3 fix.
     reporters: ['default'],
-    include: ['src/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'],
+    include: ['src/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}', 'test/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'],
   },
 });

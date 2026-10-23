@@ -60,7 +60,7 @@ export default defineConfig({
     // resource lane runs only via `nx run apigen-plugin-java-javalin:e2e`
     // (see the sibling `vitest.e2e.config.ts`, the only place that includes
     // `.e2e.ts`).
-    include: ['src/**/*.spec.ts'],
+    include: ['src/**/*.spec.ts', 'test/**/*.spec.ts'],
     reporters: ['default'],
     coverage: {
       reportsDirectory: '../../../coverage/packages/apigen/plugins/java-javalin',

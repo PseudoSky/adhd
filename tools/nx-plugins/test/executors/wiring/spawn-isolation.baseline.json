@@ -57,19 +57,19 @@
       "count": 1,
       "reason": "spawns the lock-holder child with no env override; the HOME assignments earlier in the file are scoped to other tests, so this child inherits the restored real HOME"
     },
-    "entrypoint/backlog/src/store/embed-funnel-watchdog.e2e.ts": {
+    "entrypoint/backlog/test/e2e/store/embed-funnel-watchdog.e2e.ts": {
       "count": 2,
       "reason": "isolated by SOX_ECOSYSTEM_HOME (a per-test socket/run dir), which is NOT an accepted isolation mechanism under 0945d1b9 (HOME redirect only); the children still inherit the real HOME"
     },
-    "entrypoint/backlog/src/store/embed-funnel.e2e.ts": {
+    "entrypoint/backlog/test/e2e/store/embed-funnel.e2e.ts": {
       "count": 1,
       "reason": "isolated by SOX_ECOSYSTEM_HOME (a per-test socket/run dir), which is NOT an accepted isolation mechanism under 0945d1b9 (HOME redirect only); the child still inherits the real HOME"
     },
-    "entrypoint/backlog/src/vocabulary-gate.e2e.ts": {
+    "entrypoint/backlog/test/e2e/vocabulary-gate.e2e.ts": {
       "count": 1,
       "reason": "spawns the package-local gate script with no env override; the script is a static scan that does not resolve the environment cascade, but no HOME redirect is set at the call (not SOX_ECOSYSTEM_HOME-isolated: the file sets no env)"
     },
-    "entrypoint/backlog/src/web-ui.e2e.ts": {
+    "entrypoint/backlog/test/e2e/web-ui.e2e.ts": {
       "count": 1,
       "reason": "spawns run-web-ui.mjs with an explicit --sandbox passthrough (the backlog --namespace sandbox mechanism) and ADHD_BACKLOG_DATABASE_PATH, but no HOME is set at the call and run-web-ui is not a recognized isolation helper; the child inherits the real HOME"
     },

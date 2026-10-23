@@ -346,13 +346,13 @@
     "entrypoint/agent-mcp/src/__tests__/wiring.test.ts": [
       "H1"
     ],
-    "entrypoint/apigen-cli/src/lib/apigen-cli.spec.ts": [
+    "entrypoint/apigen-cli/test/unit/lib/apigen-cli.spec.ts": [
       "H1"
     ],
-    "entrypoint/apigen-cli/src/lib/resolve-tsconfig.spec.ts": [
+    "entrypoint/apigen-cli/test/unit/lib/resolve-tsconfig.spec.ts": [
       "H1"
     ],
-    "entrypoint/apigen-cli/src/test/e2e/bug-apigen-033-anonymous-default-dispatch.e2e.ts": [
+    "entrypoint/apigen-cli/test/e2e/bug-apigen-033-anonymous-default-dispatch.e2e.ts": [
       "H1"
     ],
     "entrypoint/apigen-cli/src/test/e2e/bug-apigen-033-anonymous-default-dispatch.spec.ts": [
@@ -361,7 +361,7 @@
     "entrypoint/apigen-cli/src/test/e2e/cjs-import-meta-url.spec.ts": [
       "H1"
     ],
-    "entrypoint/apigen-cli/src/test/e2e/dist-entry-no-argv-side-effect.e2e.ts": [
+    "entrypoint/apigen-cli/test/e2e/dist-entry-no-argv-side-effect.e2e.ts": [
       "H1"
     ],
     "entrypoint/apigen-cli/src/test/e2e/dist-entry-no-argv-side-effect.spec.ts": [
@@ -370,766 +370,766 @@
     "entrypoint/apigen-cli/src/test/e2e/dist-esm-load.spec.ts": [
       "H1"
     ],
-    "entrypoint/apigen-cli/src/test/e2e/import-source-cjs-format.e2e.ts": [
+    "entrypoint/apigen-cli/test/e2e/import-source-cjs-format.e2e.ts": [
       "H1"
     ],
     "entrypoint/apigen-cli/src/test/e2e/import-source-cjs-format.spec.ts": [
       "H1"
     ],
-    "entrypoint/apigen-cli/src/test/e2e/real-consumer.e2e.ts": [
+    "entrypoint/apigen-cli/test/e2e/real-consumer.e2e.ts": [
       "H1"
     ],
     "entrypoint/apigen-cli/src/test/e2e/real-consumer.spec.ts": [
       "H1"
     ],
-    "entrypoint/apigen-cli/src/test/e2e/ts-types.e2e.ts": [
+    "entrypoint/apigen-cli/test/e2e/ts-types.e2e.ts": [
       "H1"
     ],
     "entrypoint/apigen-cli/src/test/e2e/ts-types.spec.ts": [
       "H1"
     ],
-    "entrypoint/apigen-cli/src/test/generate.e2e.ts": [
+    "entrypoint/apigen-cli/test/e2e/generate.e2e.ts": [
       "H1"
     ],
-    "entrypoint/apigen-cli/src/test/generate.spec.ts": [
+    "entrypoint/apigen-cli/test/unit/generate.spec.ts": [
       "H1"
     ],
-    "entrypoint/apigen-cli/src/test/integration/batch-plugin-cli-live-dispatch.spec.ts": [
+    "entrypoint/apigen-cli/test/integration/batch-plugin-cli-live-dispatch.spec.ts": [
       "H1"
     ],
-    "entrypoint/apigen-cli/src/test/integration/batch-plugin-e2e-express.e2e.ts": [
+    "entrypoint/apigen-cli/test/e2e/integration/batch-plugin-e2e-express.e2e.ts": [
       "H1"
     ],
-    "entrypoint/apigen-cli/src/test/integration/batch-plugin-e2e-express.spec.ts": [
+    "entrypoint/apigen-cli/test/integration/batch-plugin-e2e-express.spec.ts": [
       "H1"
     ],
-    "entrypoint/apigen-cli/src/test/integration/batch-plugin-e2e.e2e.ts": [
+    "entrypoint/apigen-cli/test/e2e/integration/batch-plugin-e2e.e2e.ts": [
       "H1"
     ],
-    "entrypoint/apigen-cli/src/test/integration/batch-plugin-e2e.spec.ts": [
+    "entrypoint/apigen-cli/test/integration/batch-plugin-e2e.spec.ts": [
       "H1"
     ],
-    "entrypoint/apigen-cli/src/test/integration/canonical.e2e.ts": [
+    "entrypoint/apigen-cli/test/e2e/integration/canonical.e2e.ts": [
       "H1"
     ],
-    "entrypoint/apigen-cli/src/test/integration/canonical.spec.ts": [
+    "entrypoint/apigen-cli/test/integration/canonical.spec.ts": [
       "H1"
     ],
-    "entrypoint/apigen-cli/src/test/integration/cross-host-response-envelope.e2e.ts": [
+    "entrypoint/apigen-cli/test/e2e/integration/cross-host-response-envelope.e2e.ts": [
       "H1"
     ],
-    "entrypoint/apigen-cli/src/test/integration/cross-host-response-envelope.spec.ts": [
+    "entrypoint/apigen-cli/test/integration/cross-host-response-envelope.spec.ts": [
       "H1"
     ],
-    "entrypoint/apigen-cli/src/test/integration/envelope-capability-use-plugin.e2e.ts": [
+    "entrypoint/apigen-cli/test/e2e/integration/envelope-capability-use-plugin.e2e.ts": [
       "H1"
     ],
-    "entrypoint/apigen-cli/src/test/integration/envelope-capability-use-plugin.spec.ts": [
+    "entrypoint/apigen-cli/test/integration/envelope-capability-use-plugin.spec.ts": [
       "H1"
     ],
-    "entrypoint/apigen-cli/src/test/integration/export-shape-matrix.e2e.ts": [
+    "entrypoint/apigen-cli/test/e2e/integration/export-shape-matrix.e2e.ts": [
       "H1"
     ],
-    "entrypoint/apigen-cli/src/test/integration/export-shape-matrix.spec.ts": [
+    "entrypoint/apigen-cli/test/integration/export-shape-matrix.spec.ts": [
       "H1"
     ],
-    "entrypoint/apigen-cli/src/test/integration/gateway-mixed-host.e2e.ts": [
+    "entrypoint/apigen-cli/test/e2e/integration/gateway-mixed-host.e2e.ts": [
       "H1"
     ],
-    "entrypoint/apigen-cli/src/test/integration/gateway-mixed-host.spec.ts": [
+    "entrypoint/apigen-cli/test/integration/gateway-mixed-host.spec.ts": [
       "H1"
     ],
-    "entrypoint/apigen-cli/src/test/integration/ir-cache-cross-target.e2e.ts": [
+    "entrypoint/apigen-cli/test/e2e/integration/ir-cache-cross-target.e2e.ts": [
       "H1"
     ],
-    "entrypoint/apigen-cli/src/test/integration/ir-cache-cross-target.spec.ts": [
+    "entrypoint/apigen-cli/test/integration/ir-cache-cross-target.spec.ts": [
       "H1"
     ],
-    "entrypoint/apigen-cli/src/test/integration/ir-cache-plugin-registration.e2e.ts": [
+    "entrypoint/apigen-cli/test/e2e/integration/ir-cache-plugin-registration.e2e.ts": [
       "H1"
     ],
-    "entrypoint/apigen-cli/src/test/integration/ir-cache-plugin-registration.spec.ts": [
+    "entrypoint/apigen-cli/test/integration/ir-cache-plugin-registration.spec.ts": [
       "H1"
     ],
-    "entrypoint/apigen-cli/src/test/integration/java-ts-decimal-parity.e2e.ts": [
+    "entrypoint/apigen-cli/test/e2e/integration/java-ts-decimal-parity.e2e.ts": [
       "H1"
     ],
-    "entrypoint/apigen-cli/src/test/integration/java-ts-decimal-parity.spec.ts": [
+    "entrypoint/apigen-cli/test/integration/java-ts-decimal-parity.spec.ts": [
       "H1"
     ],
-    "entrypoint/apigen-cli/src/test/integration/mount-delegation-conformance.e2e.ts": [
+    "entrypoint/apigen-cli/test/e2e/integration/mount-delegation-conformance.e2e.ts": [
       "H1"
     ],
-    "entrypoint/apigen-cli/src/test/integration/mount-delegation-conformance.spec.ts": [
+    "entrypoint/apigen-cli/test/integration/mount-delegation-conformance.spec.ts": [
       "H1"
     ],
-    "entrypoint/apigen-cli/src/test/integration/schema.e2e.ts": [
+    "entrypoint/apigen-cli/test/e2e/integration/schema.e2e.ts": [
       "H1"
     ],
-    "entrypoint/apigen-cli/src/test/integration/schema.spec.ts": [
+    "entrypoint/apigen-cli/test/integration/schema.spec.ts": [
       "H1"
     ],
-    "entrypoint/apigen-cli/src/test/integration/streaming.e2e.ts": [
+    "entrypoint/apigen-cli/test/e2e/integration/streaming.e2e.ts": [
       "H1"
     ],
-    "entrypoint/apigen-cli/src/test/integration/streaming.spec.ts": [
+    "entrypoint/apigen-cli/test/integration/streaming.spec.ts": [
       "H1"
     ],
-    "entrypoint/apigen-cli/src/test/list-types.spec.ts": [
+    "entrypoint/apigen-cli/test/unit/list-types.spec.ts": [
       "H1"
     ],
-    "entrypoint/apigen-cli/src/test/orchestrator.e2e.ts": [
+    "entrypoint/apigen-cli/test/e2e/orchestrator.e2e.ts": [
       "H1"
     ],
-    "entrypoint/apigen-cli/src/test/orchestrator.spec.ts": [
+    "entrypoint/apigen-cli/test/unit/orchestrator.spec.ts": [
       "H1"
     ],
-    "entrypoint/apigen-cli/src/test/perf.e2e.ts": [
+    "entrypoint/apigen-cli/test/e2e/perf.e2e.ts": [
       "H1"
     ],
-    "entrypoint/apigen-cli/src/test/perf.spec.ts": [
+    "entrypoint/apigen-cli/test/unit/perf.spec.ts": [
       "H1"
     ],
-    "entrypoint/apigen-cli/src/test/plugin-registry.spec.ts": [
+    "entrypoint/apigen-cli/test/unit/plugin-registry.spec.ts": [
       "H1"
     ],
-    "entrypoint/apigen-cli/src/test/run.e2e.ts": [
+    "entrypoint/apigen-cli/test/e2e/run.e2e.ts": [
       "H1"
     ],
-    "entrypoint/apigen-cli/src/test/run.spec.ts": [
+    "entrypoint/apigen-cli/test/unit/run.spec.ts": [
       "H1"
     ],
-    "entrypoint/apigen-cli/src/test/serve.e2e.ts": [
+    "entrypoint/apigen-cli/test/e2e/serve.e2e.ts": [
       "H1"
     ],
-    "entrypoint/apigen-cli/src/test/serve.spec.ts": [
+    "entrypoint/apigen-cli/test/unit/serve.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/api.catalog-invariant-write-path.spec.ts": [
+    "entrypoint/backlog/test/unit/api.catalog-invariant-write-path.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/api.semantic-laziness.spec.ts": [
+    "entrypoint/backlog/test/unit/api.semantic-laziness.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/api.semantic-production-seam.e2e.ts": [
+    "entrypoint/backlog/test/e2e/api.semantic-production-seam.e2e.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/api.semantic-production-seam.spec.ts": [
+    "entrypoint/backlog/test/unit/api.semantic-production-seam.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/api.surface.e2e.ts": [
+    "entrypoint/backlog/test/e2e/api.surface.e2e.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/api.surface.spec.ts": [
+    "entrypoint/backlog/test/unit/api.surface.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/batch-adoption.e2e.ts": [
+    "entrypoint/backlog/test/e2e/batch-adoption.e2e.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/batch-adoption.spec.ts": [
+    "entrypoint/backlog/test/unit/batch-adoption.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/c8-vocabulary.spec.ts": [
+    "entrypoint/backlog/test/unit/c8-vocabulary.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/ci-node-version.spec.ts": [
+    "entrypoint/backlog/test/unit/ci-node-version.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/cli-envelope.e2e.ts": [
+    "entrypoint/backlog/test/e2e/cli-envelope.e2e.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/cli-envelope.spec.ts": [
+    "entrypoint/backlog/test/unit/cli-envelope.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/cli-input-envelope.spec.ts": [
+    "entrypoint/backlog/test/unit/cli-input-envelope.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/cli.e2e.ts": [
+    "entrypoint/backlog/test/e2e/cli.e2e.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/cli.spec.ts": [
+    "entrypoint/backlog/test/unit/cli.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/cli.store-check.e2e.ts": [
+    "entrypoint/backlog/test/e2e/cli.store-check.e2e.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/cli.store-check.spec.ts": [
+    "entrypoint/backlog/test/unit/cli.store-check.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/contract-matrix.e2e.ts": [
+    "entrypoint/backlog/test/e2e/contract-matrix.e2e.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/e2e-timeout-budget.spec.ts": [
+    "entrypoint/backlog/test/unit/e2e-timeout-budget.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/env.spec.ts": [
+    "entrypoint/backlog/test/unit/env.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/envelope-codes.spec.ts": [
+    "entrypoint/backlog/test/unit/envelope-codes.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/install-skill-usage.e2e.ts": [
+    "entrypoint/backlog/test/e2e/install-skill-usage.e2e.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/install-skill-usage.spec.ts": [
+    "entrypoint/backlog/test/unit/install-skill-usage.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/install-skill.precondition.spec.ts": [
+    "entrypoint/backlog/test/unit/install-skill.precondition.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/install-skill.spec.ts": [
+    "entrypoint/backlog/test/unit/install-skill.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/install.codex-verify.spec.ts": [
+    "entrypoint/backlog/test/unit/install.codex-verify.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/install.e2e.ts": [
+    "entrypoint/backlog/test/e2e/install.e2e.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/install.mocked.spec.ts": [
+    "entrypoint/backlog/test/unit/install.mocked.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/install.published-layout.e2e.ts": [
+    "entrypoint/backlog/test/e2e/install.published-layout.e2e.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/install.published-layout.spec.ts": [
+    "entrypoint/backlog/test/unit/install.published-layout.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/install.spec.ts": [
+    "entrypoint/backlog/test/unit/install.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/ir-artifact.spec.ts": [
+    "entrypoint/backlog/test/unit/ir-artifact.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/ir-cache.durability.e2e.ts": [
+    "entrypoint/backlog/test/e2e/ir-cache.durability.e2e.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/ir-cache.durability.spec.ts": [
+    "entrypoint/backlog/test/unit/ir-cache.durability.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/ir-cache.integration.e2e.ts": [
+    "entrypoint/backlog/test/e2e/ir-cache.integration.e2e.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/ir-cache.integration.spec.ts": [
+    "entrypoint/backlog/test/unit/ir-cache.integration.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/ir-cache.perf.e2e.ts": [
+    "entrypoint/backlog/test/e2e/ir-cache.perf.e2e.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/ir-cache.perf.spec.ts": [
+    "entrypoint/backlog/test/unit/ir-cache.perf.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/lifecycle.spec.ts": [
+    "entrypoint/backlog/test/unit/lifecycle.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/mcp-discoverability-real-ops.spec.ts": [
+    "entrypoint/backlog/test/unit/mcp-discoverability-real-ops.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/mcp-host.e2e.ts": [
+    "entrypoint/backlog/test/e2e/mcp-host.e2e.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/membership-backfill-runner.e2e.ts": [
+    "entrypoint/backlog/test/e2e/membership-backfill-runner.e2e.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/p7/I/spec-append-docs.p7.spec.ts": [
+    "entrypoint/backlog/test/unit/spec-append-docs.p7.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/phase6-ab.e2e.ts": [
+    "entrypoint/backlog/test/e2e/phase6-ab.e2e.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/phase6-docs.spec.ts": [
+    "entrypoint/backlog/test/unit/phase6-docs.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/production-write-gate.e2e.ts": [
+    "entrypoint/backlog/test/e2e/production-write-gate.e2e.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/query-output-codec.spec.ts": [
+    "entrypoint/backlog/test/unit/query-output-codec.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/query/c1-reference.spec.ts": [
+    "entrypoint/backlog/test/unit/query/c1-reference.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/query/card.obligations.spec.ts": [
+    "entrypoint/backlog/test/unit/query/card.obligations.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/query/card.page-keyed-edge-read.spec.ts": [
+    "entrypoint/backlog/test/unit/query/card.page-keyed-edge-read.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/query/card.spec.ts": [
+    "entrypoint/backlog/test/unit/query/card.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/query/filter-plan-project-path.spec.ts": [
+    "entrypoint/backlog/test/unit/query/filter-plan-project-path.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/query/get-superseded-uid.spec.ts": [
+    "entrypoint/backlog/test/unit/query/get-superseded-uid.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/query/get.spec.ts": [
+    "entrypoint/backlog/test/unit/query/get.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/query/identity-by-name.spec.ts": [
+    "entrypoint/backlog/test/unit/query/identity-by-name.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/query/lookup-rm-location.spec.ts": [
+    "entrypoint/backlog/test/unit/query/lookup-rm-location.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/query/markdown-format.spec.ts": [
+    "entrypoint/backlog/test/unit/query/markdown-format.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/query/markdown.spec.ts": [
+    "entrypoint/backlog/test/unit/query/markdown.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/query/meta-wire.e2e.ts": [
+    "entrypoint/backlog/test/e2e/query/meta-wire.e2e.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/query/meta-wire.spec.ts": [
+    "entrypoint/backlog/test/unit/query/meta-wire.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/query/meta.spec.ts": [
+    "entrypoint/backlog/test/unit/query/meta.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/query/orphaned-parent.spec.ts": [
+    "entrypoint/backlog/test/unit/query/orphaned-parent.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/query/paging-wire.e2e.ts": [
+    "entrypoint/backlog/test/e2e/query/paging-wire.e2e.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/query/paging-wire.spec.ts": [
+    "entrypoint/backlog/test/unit/query/paging-wire.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/query/paging.spec.ts": [
+    "entrypoint/backlog/test/unit/query/paging.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/query/query.ready.spec.ts": [
+    "entrypoint/backlog/test/unit/query/query.ready.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/query/registry-orphans.spec.ts": [
+    "entrypoint/backlog/test/unit/query/registry-orphans.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/query/registry-wire.e2e.ts": [
+    "entrypoint/backlog/test/e2e/query/registry-wire.e2e.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/query/registry-wire.spec.ts": [
+    "entrypoint/backlog/test/unit/query/registry-wire.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/query/reservations.spec.ts": [
+    "entrypoint/backlog/test/unit/query/reservations.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/query/search-ranked-zero-filter.spec.ts": [
+    "entrypoint/backlog/test/unit/query/search-ranked-zero-filter.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/query/similar-view.spec.ts": [
+    "entrypoint/backlog/test/unit/query/similar-view.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/query/sort-priority-direction.spec.ts": [
+    "entrypoint/backlog/test/unit/query/sort-priority-direction.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/query/spec-fragment.spec.ts": [
+    "entrypoint/backlog/test/unit/query/spec-fragment.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/query/spec-staleness.spec.ts": [
+    "entrypoint/backlog/test/unit/query/spec-staleness.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/query/stale-limit.spec.ts": [
+    "entrypoint/backlog/test/unit/query/stale-limit.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/query/superseded-fields.spec.ts": [
+    "entrypoint/backlog/test/unit/query/superseded-fields.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/query/superseded-listing.spec.ts": [
+    "entrypoint/backlog/test/unit/query/superseded-listing.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/query/superseded-ranking.spec.ts": [
+    "entrypoint/backlog/test/unit/query/superseded-ranking.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/query/superseded-views.spec.ts": [
+    "entrypoint/backlog/test/unit/query/superseded-views.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/query/text-routing.spec.ts": [
+    "entrypoint/backlog/test/unit/query/text-routing.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/query/timeline.spec.ts": [
+    "entrypoint/backlog/test/unit/query/timeline.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/query/uid-prefix.spec.ts": [
+    "entrypoint/backlog/test/unit/query/uid-prefix.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/query/unknown-filter-value.spec.ts": [
+    "entrypoint/backlog/test/unit/query/unknown-filter-value.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/query/verdict-list-bound.e2e.ts": [
+    "entrypoint/backlog/test/e2e/query/verdict-list-bound.e2e.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/query/verdict.spec.ts": [
+    "entrypoint/backlog/test/unit/query/verdict.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/query/views/registry.e2e.ts": [
+    "entrypoint/backlog/test/e2e/query/views/registry.e2e.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/query/views/registry.spec.ts": [
+    "entrypoint/backlog/test/unit/query/views/registry.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/query/views/semantic.spec.ts": [
+    "entrypoint/backlog/test/unit/query/views/semantic.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/query/views/stats.spec.ts": [
+    "entrypoint/backlog/test/unit/query/views/stats.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/readiness.spec.ts": [
+    "entrypoint/backlog/test/unit/readiness.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/report-hygiene.e2e.ts": [
+    "entrypoint/backlog/test/e2e/report-hygiene.e2e.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/report-hygiene.spec.ts": [
+    "entrypoint/backlog/test/unit/report-hygiene.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/retry-policy.spec.ts": [
+    "entrypoint/backlog/test/unit/retry-policy.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/search-shortcut-wire.e2e.ts": [
+    "entrypoint/backlog/test/e2e/search-shortcut-wire.e2e.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/search-shortcut-wire.spec.ts": [
+    "entrypoint/backlog/test/unit/search-shortcut-wire.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/search-shortcut.spec.ts": [
+    "entrypoint/backlog/test/unit/search-shortcut.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/serve.e2e.ts": [
+    "entrypoint/backlog/test/e2e/serve.e2e.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/serve.readiness.e2e.ts": [
+    "entrypoint/backlog/test/e2e/serve.readiness.e2e.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/serve.service-config.e2e.ts": [
+    "entrypoint/backlog/test/e2e/serve.service-config.e2e.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/serve.singleton.e2e.ts": [
+    "entrypoint/backlog/test/e2e/serve.singleton.e2e.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/serve.singleton.spec.ts": [
+    "entrypoint/backlog/test/unit/serve.singleton.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/serve.spec.ts": [
+    "entrypoint/backlog/test/unit/serve.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/serve.telemetry-role.spec.ts": [
+    "entrypoint/backlog/test/unit/serve.telemetry-role.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/server.e2e.ts": [
+    "entrypoint/backlog/test/e2e/server.e2e.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/server.mcp.e2e.ts": [
+    "entrypoint/backlog/test/e2e/server.mcp.e2e.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/server.mcp.spec.ts": [
+    "entrypoint/backlog/test/unit/server.mcp.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/server.published-layout.e2e.ts": [
+    "entrypoint/backlog/test/e2e/server.published-layout.e2e.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/server.published-layout.spec.ts": [
+    "entrypoint/backlog/test/unit/server.published-layout.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/server.spec.ts": [
+    "entrypoint/backlog/test/unit/server.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/server.startup-path.e2e.ts": [
+    "entrypoint/backlog/test/e2e/server.startup-path.e2e.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/server.startup-path.spec.ts": [
+    "entrypoint/backlog/test/unit/server.startup-path.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/server.tracing-required.spec.ts": [
+    "entrypoint/backlog/test/unit/server.tracing-required.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/server.tracing-six-tags.spec.ts": [
+    "entrypoint/backlog/test/unit/server.tracing-six-tags.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/server.verbs.e2e.ts": [
+    "entrypoint/backlog/test/e2e/server.verbs.e2e.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/server.verbs.spec.ts": [
+    "entrypoint/backlog/test/unit/server.verbs.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/service-config.spec.ts": [
+    "entrypoint/backlog/test/unit/service-config.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/session-flows-doc.e2e.ts": [
+    "entrypoint/backlog/test/e2e/session-flows-doc.e2e.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/session-flows-doc.spec.ts": [
+    "entrypoint/backlog/test/unit/session-flows-doc.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/skill-quick-reference.spec.ts": [
+    "entrypoint/backlog/test/unit/skill-quick-reference.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/stats-surface.wire.e2e.ts": [
+    "entrypoint/backlog/test/e2e/stats-surface.wire.e2e.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/stats-surface.wire.spec.ts": [
+    "entrypoint/backlog/test/unit/stats-surface.wire.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/store/acked-write-durability.e2e.ts": [
+    "entrypoint/backlog/test/e2e/store/acked-write-durability.e2e.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/store/acked-write-durability.spec.ts": [
+    "entrypoint/backlog/test/unit/store/acked-write-durability.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/store/catalog-invariant-guard.spec.ts": [
+    "entrypoint/backlog/test/unit/store/catalog-invariant-guard.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/store/embed-drain.spec.ts": [
+    "entrypoint/backlog/test/unit/store/embed-drain.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/store/embed-funnel-watchdog.e2e.ts": [
+    "entrypoint/backlog/test/e2e/store/embed-funnel-watchdog.e2e.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/store/embed-funnel-watchdog.spec.ts": [
+    "entrypoint/backlog/test/unit/store/embed-funnel-watchdog.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/store/embed-funnel.e2e.ts": [
+    "entrypoint/backlog/test/e2e/store/embed-funnel.e2e.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/store/embed-funnel.spec.ts": [
+    "entrypoint/backlog/test/unit/store/embed-funnel.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/store/embed-write-path.spec.ts": [
+    "entrypoint/backlog/test/unit/store/embed-write-path.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/store/graph-backlog-store.spec.ts": [
+    "entrypoint/backlog/test/unit/store/graph-backlog-store.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/store/sidecar-hardening.spec.ts": [
+    "entrypoint/backlog/test/unit/store/sidecar-hardening.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/store/signal-cleanup.spec.ts": [
+    "entrypoint/backlog/test/unit/store/signal-cleanup.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/store/vocabulary-drift.spec.ts": [
+    "entrypoint/backlog/test/unit/store/vocabulary-drift.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/store/vocabulary-guard.e2e.ts": [
+    "entrypoint/backlog/test/e2e/store/vocabulary-guard.e2e.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/store/vocabulary-guard.spec.ts": [
+    "entrypoint/backlog/test/unit/store/vocabulary-guard.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/test/helpers/ci-env.spec.ts": [
+    "entrypoint/backlog/test/unit/helpers/ci-env.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/test/helpers/spawn-isolated-bin.e2e.ts": [
+    "entrypoint/backlog/test/e2e/helpers/spawn-isolated-bin.e2e.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/test/helpers/spawn-isolated-bin.spec.ts": [
+    "entrypoint/backlog/test/unit/helpers/spawn-isolated-bin.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/test/helpers/spawn-timeout.spec.ts": [
+    "entrypoint/backlog/test/unit/helpers/spawn-timeout.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/uid-verbs.ambiguity.spec.ts": [
+    "entrypoint/backlog/test/unit/uid-verbs.ambiguity.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/vocabulary-gate.e2e.ts": [
+    "entrypoint/backlog/test/e2e/vocabulary-gate.e2e.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/vocabulary-gate.spec.ts": [
+    "entrypoint/backlog/test/unit/vocabulary-gate.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/web-ui.e2e.ts": [
+    "entrypoint/backlog/test/e2e/web-ui.e2e.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/web-ui.spec.ts": [
+    "entrypoint/backlog/test/unit/web-ui.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/write/actor-mismatch.spec.ts": [
+    "entrypoint/backlog/test/unit/write/actor-mismatch.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/write/anchor-check.spec.ts": [
+    "entrypoint/backlog/test/unit/write/anchor-check.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/write/attestation.spec.ts": [
+    "entrypoint/backlog/test/unit/write/attestation.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/write/audit-fields.spec.ts": [
+    "entrypoint/backlog/test/unit/write/audit-fields.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/write/bootstrap-cache.spec.ts": [
+    "entrypoint/backlog/test/unit/write/bootstrap-cache.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/write/bootstrap.spec.ts": [
+    "entrypoint/backlog/test/unit/write/bootstrap.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/write/catalog-case-variant.spec.ts": [
+    "entrypoint/backlog/test/unit/write/catalog-case-variant.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/write/catalog-merge.spec.ts": [
+    "entrypoint/backlog/test/unit/write/catalog-merge.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/write/catalog-mint-terminal.spec.ts": [
+    "entrypoint/backlog/test/unit/write/catalog-mint-terminal.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/write/catalog-repair.e2e.ts": [
+    "entrypoint/backlog/test/e2e/write/catalog-repair.e2e.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/write/catalog-repair.spec.ts": [
+    "entrypoint/backlog/test/unit/write/catalog-repair.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/write/catalog-verbs.e2e.ts": [
+    "entrypoint/backlog/test/e2e/write/catalog-verbs.e2e.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/write/catalog-verbs.spec.ts": [
+    "entrypoint/backlog/test/unit/write/catalog-verbs.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/write/catalog.spec.ts": [
+    "entrypoint/backlog/test/unit/write/catalog.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/write/citation-path.spec.ts": [
+    "entrypoint/backlog/test/unit/write/citation-path.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/write/citation.evidence-gate.spec.ts": [
+    "entrypoint/backlog/test/unit/write/citation.evidence-gate.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/write/citation.existence.spec.ts": [
+    "entrypoint/backlog/test/unit/write/citation.existence.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/write/citation.matrix.spec.ts": [
+    "entrypoint/backlog/test/unit/write/citation.matrix.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/write/citation.spec.ts": [
+    "entrypoint/backlog/test/unit/write/citation.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/write/claim.e2e.ts": [
+    "entrypoint/backlog/test/e2e/write/claim.e2e.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/write/claim.gate.spec.ts": [
+    "entrypoint/backlog/test/unit/write/claim.gate.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/write/claim.spec.ts": [
+    "entrypoint/backlog/test/unit/write/claim.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/write/create-duplicate-gate.spec.ts": [
+    "entrypoint/backlog/test/unit/write/create-duplicate-gate.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/write/create-fts-quote.spec.ts": [
+    "entrypoint/backlog/test/unit/write/create-fts-quote.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/write/create-issue.spec.ts": [
+    "entrypoint/backlog/test/unit/write/create-issue.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/write/create-similar-scope.spec.ts": [
+    "entrypoint/backlog/test/unit/write/create-similar-scope.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/write/cross-process-gate-safety.e2e.ts": [
+    "entrypoint/backlog/test/e2e/write/cross-process-gate-safety.e2e.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/write/cross-process-write-safety.e2e.ts": [
+    "entrypoint/backlog/test/e2e/write/cross-process-write-safety.e2e.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/write/cross-process-write-safety.spec.ts": [
+    "entrypoint/backlog/test/unit/write/cross-process-write-safety.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/write/delete-listing.spec.ts": [
+    "entrypoint/backlog/test/unit/write/delete-listing.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/write/delete.spec.ts": [
+    "entrypoint/backlog/test/unit/write/delete.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/write/embedding-observer.spec.ts": [
+    "entrypoint/backlog/test/unit/write/embedding-observer.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/write/gate.spec.ts": [
+    "entrypoint/backlog/test/unit/write/gate.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/write/lifecycle.spec.ts": [
+    "entrypoint/backlog/test/unit/write/lifecycle.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/write/membership-backfill.guard.spec.ts": [
+    "entrypoint/backlog/test/unit/write/membership-backfill.guard.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/write/membership-backfill.spec.ts": [
+    "entrypoint/backlog/test/unit/write/membership-backfill.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/write/membership.scan-count.spec.ts": [
+    "entrypoint/backlog/test/unit/write/membership.scan-count.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/write/membership.spec.ts": [
+    "entrypoint/backlog/test/unit/write/membership.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/write/move.spec.ts": [
+    "entrypoint/backlog/test/unit/write/move.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/write/obligation.spec.ts": [
+    "entrypoint/backlog/test/unit/write/obligation.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/write/op-event.spec.ts": [
+    "entrypoint/backlog/test/unit/write/op-event.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/write/rag-optional-deps.spec.ts": [
+    "entrypoint/backlog/test/unit/write/rag-optional-deps.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/write/relate-similar.e2e.ts": [
+    "entrypoint/backlog/test/e2e/write/relate-similar.e2e.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/write/relate.similar.spec.ts": [
+    "entrypoint/backlog/test/unit/write/relate.similar.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/write/relate.spec.ts": [
+    "entrypoint/backlog/test/unit/write/relate.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/write/reservation.explicit-paths.spec.ts": [
+    "entrypoint/backlog/test/unit/write/reservation.explicit-paths.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/write/reservation.spec.ts": [
+    "entrypoint/backlog/test/unit/write/reservation.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/write/review-nits.spec.ts": [
+    "entrypoint/backlog/test/unit/write/review-nits.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/write/session.spec.ts": [
+    "entrypoint/backlog/test/unit/write/session.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/write/similarity-scan.spec.ts": [
+    "entrypoint/backlog/test/unit/write/similarity-scan.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/write/spec-revision.p7.spec.ts": [
+    "entrypoint/backlog/test/unit/write/spec-revision.p7.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/write/spec-revision.root-replace.spec.ts": [
+    "entrypoint/backlog/test/unit/write/spec-revision.root-replace.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/write/spec-revision.spec.ts": [
+    "entrypoint/backlog/test/unit/write/spec-revision.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/write/spec-set-s02t1.spec.ts": [
+    "entrypoint/backlog/test/unit/write/spec-set-s02t1.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/write/stale-snapshot-classification.spec.ts": [
+    "entrypoint/backlog/test/unit/write/stale-snapshot-classification.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/write/superseded-uid-guard.spec.ts": [
+    "entrypoint/backlog/test/unit/write/superseded-uid-guard.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/write/transition.claim-held.spec.ts": [
+    "entrypoint/backlog/test/unit/write/transition.claim-held.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/write/transition.deferred-reconcile.spec.ts": [
+    "entrypoint/backlog/test/unit/write/transition.deferred-reconcile.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/write/transition.gate.spec.ts": [
+    "entrypoint/backlog/test/unit/write/transition.gate.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/write/transition.spec.ts": [
+    "entrypoint/backlog/test/unit/write/transition.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/write/transition.superseded.spec.ts": [
+    "entrypoint/backlog/test/unit/write/transition.superseded.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/write/update.spec.ts": [
+    "entrypoint/backlog/test/unit/write/update.spec.ts": [
       "H1"
     ],
-    "entrypoint/backlog/src/write/write-io-failure.spec.ts": [
+    "entrypoint/backlog/test/unit/write/write-io-failure.spec.ts": [
       "H1"
     ],
     "entrypoint/backlog/tools/etl/embed-backfill.spec.ts": [
@@ -1144,13 +1144,13 @@
     "entrypoint/backlog/tools/etl/status-vocabulary-canonicalization.spec.ts": [
       "H1"
     ],
-    "entrypoint/decompile-cli/src/lib/validators/local/__tests__/index.spec.ts": [
+    "entrypoint/decompile-cli/test/unit/lib/validators/local/index.spec.ts": [
       "H1"
     ],
-    "entrypoint/decompile-cli/src/lib/validators/url/index.spec.ts": [
+    "entrypoint/decompile-cli/test/unit/lib/validators/url/index.spec.ts": [
       "H1"
     ],
-    "entrypoint/dispatch-cli/src/test/agent-mcp-env-rename.spec.ts": [
+    "entrypoint/dispatch-cli/test/unit/agent-mcp-env-rename.spec.ts": [
       "H1"
     ],
     "entrypoint/dispatch-cli/src/test/agents-import.e2e.test.ts": [
@@ -1159,58 +1159,58 @@
     "entrypoint/dispatch-cli/src/test/cli-smoke.e2e.test.ts": [
       "H1"
     ],
-    "entrypoint/dispatch-cli/src/test/core.spec.ts": [
+    "entrypoint/dispatch-cli/test/unit/core.spec.ts": [
       "H1"
     ],
-    "entrypoint/dispatch-cli/src/test/default-mcp-servers.spec.ts": [
+    "entrypoint/dispatch-cli/test/unit/default-mcp-servers.spec.ts": [
       "H1"
     ],
     "entrypoint/dispatch-cli/src/test/dispatch-default-mcp-servers.e2e.test.ts": [
       "H1"
     ],
-    "entrypoint/dispatch-cli/src/test/dispatch-guards.spec.ts": [
+    "entrypoint/dispatch-cli/test/unit/dispatch-guards.spec.ts": [
       "H1"
     ],
-    "entrypoint/dispatch-cli/src/test/dispatch-native-tooling-producer.guard.spec.ts": [
+    "entrypoint/dispatch-cli/test/unit/dispatch-native-tooling-producer.guard.spec.ts": [
       "H1"
     ],
     "entrypoint/dispatch-cli/src/test/dispatch-native-tooling.e2e.test.ts": [
       "H1"
     ],
-    "entrypoint/dispatch-cli/src/test/dispatch-self-producer.spec.ts": [
+    "entrypoint/dispatch-cli/test/unit/dispatch-self-producer.spec.ts": [
       "H1"
     ],
-    "entrypoint/dispatch-cli/src/test/docs-contract.spec.ts": [
+    "entrypoint/dispatch-cli/test/unit/docs-contract.spec.ts": [
       "H1"
     ],
-    "entrypoint/dispatch-cli/src/test/hitl-suspension.spec.ts": [
+    "entrypoint/dispatch-cli/test/unit/hitl-suspension.spec.ts": [
       "H1"
     ],
     "entrypoint/dispatch-cli/src/test/import-agents-no-provider.e2e.test.ts": [
       "H1"
     ],
-    "entrypoint/dispatch-cli/src/test/import-agents.spec.ts": [
+    "entrypoint/dispatch-cli/test/unit/import-agents.spec.ts": [
       "H1"
     ],
     "entrypoint/dispatch-cli/src/test/integration/live-dispatch-five-acs.e2e.test.ts": [
       "H1"
     ],
-    "entrypoint/dispatch-cli/src/test/integration/live-guard-core.spec.ts": [
+    "entrypoint/dispatch-cli/test/integration/live-guard-core.spec.ts": [
       "H1"
     ],
     "entrypoint/dispatch-cli/src/test/legacy-migration-skip.e2e.test.ts": [
       "H1"
     ],
-    "entrypoint/dispatch-cli/src/test/live-harness-hermetic.spec.ts": [
+    "entrypoint/dispatch-cli/test/unit/live-harness-hermetic.spec.ts": [
       "H1"
     ],
-    "entrypoint/dispatch-cli/src/test/production-runner-no-auto-create.spec.ts": [
+    "entrypoint/dispatch-cli/test/unit/production-runner-no-auto-create.spec.ts": [
       "H1"
     ],
-    "entrypoint/dispatch-cli/src/test/resolve-dispatch-mcp-servers.spec.ts": [
+    "entrypoint/dispatch-cli/test/unit/resolve-dispatch-mcp-servers.spec.ts": [
       "H1"
     ],
-    "entrypoint/environment-cli/src/__tests__/cli.spec.ts": [
+    "entrypoint/environment-cli/test/unit/cli.spec.ts": [
       "H1"
     ],
     "packages/agent/agent-base-types/src/failure-events.test.ts": [
@@ -1231,22 +1231,22 @@
     "packages/agent/agent-core-env/src/__tests__/resolve-registry-db-path.test.ts": [
       "H1"
     ],
-    "packages/agent/agent-core-native-tooling/src/index.spec.ts": [
+    "packages/agent/agent-core-native-tooling/test/unit/index.spec.ts": [
       "H1"
     ],
-    "packages/agent/agent-core-native-tooling/src/lib/eol.spec.ts": [
+    "packages/agent/agent-core-native-tooling/test/unit/lib/eol.spec.ts": [
       "H1"
     ],
-    "packages/agent/agent-core-native-tooling/src/lib/permissions.spec.ts": [
+    "packages/agent/agent-core-native-tooling/test/unit/lib/permissions.spec.ts": [
       "H1"
     ],
-    "packages/agent/agent-core-native-tooling/src/lib/readme-egress-doc.spec.ts": [
+    "packages/agent/agent-core-native-tooling/test/unit/lib/readme-egress-doc.spec.ts": [
       "H1"
     ],
-    "packages/agent/agent-core-native-tooling/src/lib/resolver-roots.spec.ts": [
+    "packages/agent/agent-core-native-tooling/test/unit/lib/resolver-roots.spec.ts": [
       "H1"
     ],
-    "packages/agent/agent-core-native-tooling/src/lib/resolver.spec.ts": [
+    "packages/agent/agent-core-native-tooling/test/unit/lib/resolver.spec.ts": [
       "H1"
     ],
     "packages/agent/agent-core-native-tooling/src/lib/shell-egress.e2e.test.ts": [
@@ -1621,7 +1621,7 @@
     "packages/agent/agent-engine-orchestrator/src/__tests__/window-messages.test.ts": [
       "H1"
     ],
-    "packages/agent/agent-generator-plugin/src/test/generator.spec.ts": [
+    "packages/agent/agent-generator-plugin/test/unit/generator.spec.ts": [
       "H1"
     ],
     "packages/agent/agent-plugin-budget/src/__tests__/budget-plugin.test.ts": [
@@ -1675,7 +1675,7 @@
     "packages/agent/agent-store-prompts/src/__tests__/roundtrip.test.ts": [
       "H1"
     ],
-    "packages/agent/agent-store-prompts/src/__tests__/seed.spec.ts": [
+    "packages/agent/agent-store-prompts/test/unit/seed.spec.ts": [
       "H1"
     ],
     "packages/agent/agent-store-prompts/src/__tests__/usecase-store.test.ts": [
@@ -1732,589 +1732,589 @@
     "packages/agent/agent-store-tools/src/__tests__/tool-store.test.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-base-errors/src/lib/errors.spec.ts": [
+    "packages/apigen/apigen-base-errors/test/unit/lib/errors.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-base-logical/src/lib/codecs/codecs.spec.ts": [
+    "packages/apigen/apigen-base-logical/test/unit/lib/codecs/codecs.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-base-logical/src/lib/descriptor-ext.spec.ts": [
+    "packages/apigen/apigen-base-logical/test/unit/lib/descriptor-ext.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-base-logical/src/lib/emit.spec.ts": [
+    "packages/apigen/apigen-base-logical/test/unit/lib/emit.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-base-logical/src/lib/example.spec.ts": [
+    "packages/apigen/apigen-base-logical/test/unit/lib/example.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-base-logical/src/lib/hints.spec.ts": [
+    "packages/apigen/apigen-base-logical/test/unit/lib/hints.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-base-logical/src/lib/registry.spec.ts": [
+    "packages/apigen/apigen-base-logical/test/unit/lib/registry.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-base-logical/src/lib/runmode.spec.ts": [
+    "packages/apigen/apigen-base-logical/test/unit/lib/runmode.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-base-schema/src/test/schema.spec.ts": [
+    "packages/apigen/apigen-base-schema/test/unit/schema.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-base-types/src/lib/apigen-apigen-base-types.spec.ts": [
+    "packages/apigen/apigen-base-types/test/unit/lib/apigen-apigen-base-types.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-core-client/src/lib/apigen-core.spec.ts": [
+    "packages/apigen/apigen-core-client/test/unit/lib/apigen-core.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-core-client/src/test/additional-properties.e2e.ts": [
+    "packages/apigen/apigen-core-client/test/e2e/additional-properties.e2e.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-core-client/src/test/additional-properties.spec.ts": [
+    "packages/apigen/apigen-core-client/test/unit/additional-properties.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-core-client/src/test/batch.spec.ts": [
+    "packages/apigen/apigen-core-client/test/unit/batch.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-core-client/src/test/compose-schemas.spec.ts": [
+    "packages/apigen/apigen-core-client/test/unit/compose-schemas.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-core-client/src/test/dist-artifact-smoke.e2e.ts": [
+    "packages/apigen/apigen-core-client/test/e2e/dist-artifact-smoke.e2e.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-core-client/src/test/dist-artifact-smoke.spec.ts": [
+    "packages/apigen/apigen-core-client/test/unit/dist-artifact-smoke.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-core-client/src/test/extract-classes.e2e.ts": [
+    "packages/apigen/apigen-core-client/test/e2e/extract-classes.e2e.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-core-client/src/test/extract-classes.spec.ts": [
+    "packages/apigen/apigen-core-client/test/unit/extract-classes.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-core-client/src/test/extract.e2e.ts": [
+    "packages/apigen/apigen-core-client/test/e2e/extract.e2e.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-core-client/src/test/extract.spec.ts": [
+    "packages/apigen/apigen-core-client/test/unit/extract.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-core-client/src/test/extraction-session.e2e.ts": [
+    "packages/apigen/apigen-core-client/test/e2e/extraction-session.e2e.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-core-client/src/test/extraction-session.spec.ts": [
+    "packages/apigen/apigen-core-client/test/unit/extraction-session.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-core-client/src/test/format-alias.e2e.ts": [
+    "packages/apigen/apigen-core-client/test/e2e/format-alias.e2e.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-core-client/src/test/format-alias.spec.ts": [
+    "packages/apigen/apigen-core-client/test/unit/format-alias.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-core-client/src/test/get-safety.spec.ts": [
+    "packages/apigen/apigen-core-client/test/unit/get-safety.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-core-client/src/test/morph-walk-boolean-union.spec.ts": [
+    "packages/apigen/apigen-core-client/test/unit/morph-walk-boolean-union.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-core-client/src/test/morph-walk-dedupe.spec.ts": [
+    "packages/apigen/apigen-core-client/test/unit/morph-walk-dedupe.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-core-client/src/test/nominal.spec.ts": [
+    "packages/apigen/apigen-core-client/test/unit/nominal.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-core-client/src/test/required-fields.e2e.ts": [
+    "packages/apigen/apigen-core-client/test/e2e/required-fields.e2e.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-core-client/src/test/required-fields.spec.ts": [
+    "packages/apigen/apigen-core-client/test/unit/required-fields.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-core-client/src/test/schema-cache-stampede.e2e.ts": [
+    "packages/apigen/apigen-core-client/test/e2e/schema-cache-stampede.e2e.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-core-client/src/test/schema-cache-stampede.spec.ts": [
+    "packages/apigen/apigen-core-client/test/unit/schema-cache-stampede.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-core-client/src/test/source-language.spec.ts": [
+    "packages/apigen/apigen-core-client/test/unit/source-language.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-core-client/src/test/startup-lazy-load.e2e.ts": [
+    "packages/apigen/apigen-core-client/test/e2e/startup-lazy-load.e2e.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-core-client/src/test/startup-lazy-load.spec.ts": [
+    "packages/apigen/apigen-core-client/test/unit/startup-lazy-load.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-core-client/src/test/stream-type.spec.ts": [
+    "packages/apigen/apigen-core-client/test/unit/stream-type.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-core-client/src/test/ts-json-schema.e2e.ts": [
+    "packages/apigen/apigen-core-client/test/e2e/ts-json-schema.e2e.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-core-client/src/test/ts-json-schema.spec.ts": [
+    "packages/apigen/apigen-core-client/test/unit/ts-json-schema.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-core-client/src/test/union-catchall.spec.ts": [
+    "packages/apigen/apigen-core-client/test/unit/union-catchall.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-core-client/src/test/union.spec.ts": [
+    "packages/apigen/apigen-core-client/test/unit/union.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-engine-conformance/src/test/gate-workspace-root.spec.ts": [
+    "packages/apigen/apigen-engine-conformance/test/unit/gate-workspace-root.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-engine-conformance/src/test/gate.e2e.ts": [
+    "packages/apigen/apigen-engine-conformance/test/e2e/gate.e2e.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-engine-conformance/src/test/gate.spec.ts": [
+    "packages/apigen/apigen-engine-conformance/test/unit/gate.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-engine-conformance/src/test/vectors.spec.ts": [
+    "packages/apigen/apigen-engine-conformance/test/unit/vectors.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-engine-gateway/src/test/gateway.spec.ts": [
+    "packages/apigen/apigen-engine-gateway/test/unit/gateway.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-engine-naming/src/test/emit.spec.ts": [
+    "packages/apigen/apigen-engine-naming/test/unit/emit.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-engine-naming/src/test/naming.spec.ts": [
+    "packages/apigen/apigen-engine-naming/test/unit/naming.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-engine-runtime/src/lib/apigen-runtime.spec.ts": [
+    "packages/apigen/apigen-engine-runtime/test/unit/lib/apigen-runtime.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-engine-runtime/src/lib/bind-host.spec.ts": [
+    "packages/apigen/apigen-engine-runtime/test/unit/lib/bind-host.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-engine-runtime/src/lib/describe-params.spec.ts": [
+    "packages/apigen/apigen-engine-runtime/test/unit/lib/describe-params.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-engine-runtime/src/lib/logical/host-ts.spec.ts": [
+    "packages/apigen/apigen-engine-runtime/test/unit/lib/logical/host-ts.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-engine-runtime/src/lib/logical/nominal-codec.spec.ts": [
+    "packages/apigen/apigen-engine-runtime/test/unit/lib/logical/nominal-codec.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-engine-runtime/src/lib/logical/union-codec.spec.ts": [
+    "packages/apigen/apigen-engine-runtime/test/unit/lib/logical/union-codec.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-engine-runtime/src/lib/op-plan.spec.ts": [
+    "packages/apigen/apigen-engine-runtime/test/unit/lib/op-plan.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-engine-runtime/src/lib/stream.spec.ts": [
+    "packages/apigen/apigen-engine-runtime/test/unit/lib/stream.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-engine-runtime/src/test-support/isolated-git.e2e.ts": [
+    "packages/apigen/apigen-engine-runtime/test/e2e-support/isolated-git.e2e.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-engine-runtime/src/test-support/isolated-git.spec.ts": [
+    "packages/apigen/apigen-engine-runtime/test/unit/test-support/isolated-git.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-engine-runtime/src/test-support/parity-harness.e2e.ts": [
+    "packages/apigen/apigen-engine-runtime/test/e2e-support/parity-harness.e2e.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-engine-runtime/src/test-support/parity-harness.spec.ts": [
+    "packages/apigen/apigen-engine-runtime/test/unit/test-support/parity-harness.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-engine-runtime/src/test/api-package.spec.ts": [
+    "packages/apigen/apigen-engine-runtime/test/unit/api-package.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-engine-runtime/src/test/batch.spec.ts": [
+    "packages/apigen/apigen-engine-runtime/test/unit/batch.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-engine-runtime/src/test/bug-apigen-029.spec.ts": [
+    "packages/apigen/apigen-engine-runtime/test/unit/bug-apigen-029.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-engine-runtime/src/test/bug-apigen-030.spec.ts": [
+    "packages/apigen/apigen-engine-runtime/test/unit/bug-apigen-030.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-engine-runtime/src/test/build-context.spec.ts": [
+    "packages/apigen/apigen-engine-runtime/test/unit/build-context.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-engine-runtime/src/test/coerce-query.spec.ts": [
+    "packages/apigen/apigen-engine-runtime/test/unit/coerce-query.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-engine-runtime/src/test/dispatch-for-plan-transport.spec.ts": [
+    "packages/apigen/apigen-engine-runtime/test/unit/dispatch-for-plan-transport.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-engine-runtime/src/test/dispatch.spec.ts": [
+    "packages/apigen/apigen-engine-runtime/test/unit/dispatch.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-engine-runtime/src/test/event-bus.spec.ts": [
+    "packages/apigen/apigen-engine-runtime/test/unit/event-bus.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-engine-runtime/src/test/instance-registry.spec.ts": [
+    "packages/apigen/apigen-engine-runtime/test/unit/instance-registry.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-engine-runtime/src/test/invoke.spec.ts": [
+    "packages/apigen/apigen-engine-runtime/test/unit/invoke.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-engine-runtime/src/test/mcp-output-schema.spec.ts": [
+    "packages/apigen/apigen-engine-runtime/test/unit/mcp-output-schema.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-engine-runtime/src/test/named-type-param.spec.ts": [
+    "packages/apigen/apigen-engine-runtime/test/unit/named-type-param.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-engine-runtime/src/test/validate-layer.spec.ts": [
+    "packages/apigen/apigen-engine-runtime/test/unit/validate-layer.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-generator-nx/src/lib/apigen-nx.spec.ts": [
+    "packages/apigen/apigen-generator-nx/test/unit/lib/apigen-nx.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-generator-nx/src/test/executor.spec.ts": [
+    "packages/apigen/apigen-generator-nx/test/unit/executor.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-generator-nx/src/test/generator.spec.ts": [
+    "packages/apigen/apigen-generator-nx/test/unit/generator.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-generator-nx/src/test/host-generator.spec.ts": [
+    "packages/apigen/apigen-generator-nx/test/unit/host-generator.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-plugin-api-express/src/test/emit-injection.spec.ts": [
+    "packages/apigen/apigen-plugin-api-express/test/unit/emit-injection.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-plugin-api-express/src/test/generated-host-bind.spec.ts": [
+    "packages/apigen/apigen-plugin-api-express/test/unit/generated-host-bind.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-plugin-api-express/src/test/hyphenated-identifier.spec.ts": [
+    "packages/apigen/apigen-plugin-api-express/test/unit/hyphenated-identifier.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-plugin-api-express/src/test/plugin.e2e.ts": [
+    "packages/apigen/apigen-plugin-api-express/test/e2e/plugin.e2e.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-plugin-api-express/src/test/plugin.spec.ts": [
+    "packages/apigen/apigen-plugin-api-express/test/unit/plugin.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-plugin-api-express/src/test/route-index.spec.ts": [
+    "packages/apigen/apigen-plugin-api-express/test/unit/route-index.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-plugin-api-express/src/test/route-parity.e2e.ts": [
+    "packages/apigen/apigen-plugin-api-express/test/e2e/route-parity.e2e.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-plugin-api-express/src/test/route-parity.spec.ts": [
+    "packages/apigen/apigen-plugin-api-express/test/unit/route-parity.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-plugin-api-express/src/test/tracing-transport.e2e.ts": [
+    "packages/apigen/apigen-plugin-api-express/test/e2e/tracing-transport.e2e.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-plugin-api-fastify/src/test/emit-injection.spec.ts": [
+    "packages/apigen/apigen-plugin-api-fastify/test/unit/emit-injection.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-plugin-api-fastify/src/test/generated-host-bind.spec.ts": [
+    "packages/apigen/apigen-plugin-api-fastify/test/unit/generated-host-bind.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-plugin-api-fastify/src/test/hyphenated-identifier.spec.ts": [
+    "packages/apigen/apigen-plugin-api-fastify/test/unit/hyphenated-identifier.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-plugin-api-fastify/src/test/lifecycle-child.spec.ts": [
+    "packages/apigen/apigen-plugin-api-fastify/test/unit/lifecycle-child.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-plugin-api-fastify/src/test/plugin.e2e.ts": [
+    "packages/apigen/apigen-plugin-api-fastify/test/e2e/plugin.e2e.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-plugin-api-fastify/src/test/plugin.spec.ts": [
+    "packages/apigen/apigen-plugin-api-fastify/test/unit/plugin.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-plugin-api-fastify/src/test/stream.spec.ts": [
+    "packages/apigen/apigen-plugin-api-fastify/test/unit/stream.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-plugin-api-fastify/src/test/tracing-transport.e2e.ts": [
+    "packages/apigen/apigen-plugin-api-fastify/test/e2e/tracing-transport.e2e.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-plugin-batch/src/test/plugin.spec.ts": [
+    "packages/apigen/apigen-plugin-batch/test/unit/plugin.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-plugin-cli-output/src/test/help-sections.spec.ts": [
+    "packages/apigen/apigen-plugin-cli-output/test/unit/help-sections.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-plugin-cli-output/src/test/hyphenated-namespace.spec.ts": [
+    "packages/apigen/apigen-plugin-cli-output/test/unit/hyphenated-namespace.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-plugin-cli-output/src/test/mount-cli-flags.spec.ts": [
+    "packages/apigen/apigen-plugin-cli-output/test/unit/mount-cli-flags.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-plugin-cli-output/src/test/plugin.spec.ts": [
+    "packages/apigen/apigen-plugin-cli-output/test/unit/plugin.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-plugin-cli-output/src/test/relative-import-path.spec.ts": [
+    "packages/apigen/apigen-plugin-cli-output/test/unit/relative-import-path.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-plugin-cli-output/src/test/root-oneof-branch.e2e.ts": [
+    "packages/apigen/apigen-plugin-cli-output/test/e2e/root-oneof-branch.e2e.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-plugin-cli-output/src/test/root-oneof-branch.spec.ts": [
+    "packages/apigen/apigen-plugin-cli-output/test/unit/root-oneof-branch.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-plugin-cli-output/src/test/run-cli-integration.e2e.ts": [
+    "packages/apigen/apigen-plugin-cli-output/test/e2e/run-cli-integration.e2e.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-plugin-cli-output/src/test/run-cli-integration.spec.ts": [
+    "packages/apigen/apigen-plugin-cli-output/test/unit/run-cli-integration.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-plugin-cli-output/src/test/run.spec.ts": [
+    "packages/apigen/apigen-plugin-cli-output/test/unit/run.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-plugin-cli-output/src/test/tracing-transport.e2e.ts": [
+    "packages/apigen/apigen-plugin-cli-output/test/e2e/tracing-transport.e2e.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-plugin-health/src/test/plugin.spec.ts": [
+    "packages/apigen/apigen-plugin-health/test/unit/plugin.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-plugin-ir-cache/src/index.spec.ts": [
+    "packages/apigen/apigen-plugin-ir-cache/test/unit/index.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-plugin-ir-cache/src/lib/atomic-write-json.spec.ts": [
+    "packages/apigen/apigen-plugin-ir-cache/test/unit/lib/atomic-write-json.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-plugin-ir-cache/src/lib/ir-cache-layer.spec.ts": [
+    "packages/apigen/apigen-plugin-ir-cache/test/unit/lib/ir-cache-layer.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-plugin-ir-cache/src/lib/target.spec.ts": [
+    "packages/apigen/apigen-plugin-ir-cache/test/unit/lib/target.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-plugin-java-javalin/src/test/plugin.e2e.ts": [
+    "packages/apigen/apigen-plugin-java-javalin/test/e2e/plugin.e2e.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-plugin-java-javalin/src/test/plugin.spec.ts": [
+    "packages/apigen/apigen-plugin-java-javalin/test/unit/plugin.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-plugin-java-javalin/src/test/process-cleanup.e2e.ts": [
+    "packages/apigen/apigen-plugin-java-javalin/test/e2e/process-cleanup.e2e.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-plugin-java-javalin/src/test/process-cleanup.spec.ts": [
+    "packages/apigen/apigen-plugin-java-javalin/test/unit/process-cleanup.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-plugin-jsonschema/src/test/plugin.spec.ts": [
+    "packages/apigen/apigen-plugin-jsonschema/test/unit/plugin.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-plugin-logger/src/test/plugin.spec.ts": [
+    "packages/apigen/apigen-plugin-logger/test/unit/plugin.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-plugin-mcp/src/test/flat-content-payload.spec.ts": [
+    "packages/apigen/apigen-plugin-mcp/test/unit/flat-content-payload.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-plugin-mcp/src/test/generate.spec.ts": [
+    "packages/apigen/apigen-plugin-mcp/test/unit/generate.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-plugin-mcp/src/test/generated-host-bind.spec.ts": [
+    "packages/apigen/apigen-plugin-mcp/test/unit/generated-host-bind.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-plugin-mcp/src/test/plugin.spec.ts": [
+    "packages/apigen/apigen-plugin-mcp/test/unit/plugin.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-plugin-mcp/src/test/run-lifecycle.spec.ts": [
+    "packages/apigen/apigen-plugin-mcp/test/unit/run-lifecycle.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-plugin-mcp/src/test/run.e2e.ts": [
+    "packages/apigen/apigen-plugin-mcp/test/e2e/run.e2e.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-plugin-mcp/src/test/run.spec.ts": [
+    "packages/apigen/apigen-plugin-mcp/test/unit/run.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-plugin-mcp/src/test/stream.spec.ts": [
+    "packages/apigen/apigen-plugin-mcp/test/unit/stream.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-plugin-mcp/src/test/tool-naming.spec.ts": [
+    "packages/apigen/apigen-plugin-mcp/test/unit/tool-naming.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-plugin-mcp/src/test/tracing-transport.e2e.ts": [
+    "packages/apigen/apigen-plugin-mcp/test/e2e/tracing-transport.e2e.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-plugin-mcp/src/test/transport-http-parity.e2e.ts": [
+    "packages/apigen/apigen-plugin-mcp/test/e2e/transport-http-parity.e2e.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-plugin-mcp/src/test/transport-http-parity.spec.ts": [
+    "packages/apigen/apigen-plugin-mcp/test/unit/transport-http-parity.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-plugin-openapi/src/test/plugin.spec.ts": [
+    "packages/apigen/apigen-plugin-openapi/test/unit/plugin.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-plugin-py-flask/src/test/plugin.e2e.ts": [
+    "packages/apigen/apigen-plugin-py-flask/test/e2e/plugin.e2e.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-plugin-py-flask/src/test/plugin.spec.ts": [
+    "packages/apigen/apigen-plugin-py-flask/test/unit/plugin.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-plugin-py-grpc/src/test/plugin.e2e.ts": [
+    "packages/apigen/apigen-plugin-py-grpc/test/e2e/plugin.e2e.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-plugin-py-grpc/src/test/plugin.spec.ts": [
+    "packages/apigen/apigen-plugin-py-grpc/test/unit/plugin.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-plugin-tracing/src/lib/plugin.spec.ts": [
+    "packages/apigen/apigen-plugin-tracing/test/unit/lib/plugin.spec.ts": [
       "H1"
     ],
-    "packages/apigen/apigen-plugin-ts-types/src/test/emit-types.spec.ts": [
+    "packages/apigen/apigen-plugin-ts-types/test/unit/emit-types.spec.ts": [
       "H1"
     ],
-    "packages/apigen/codegen/openapi/src/lib/to-openapi.spec.ts": [
+    "packages/apigen/codegen/openapi/test/unit/lib/to-openapi.spec.ts": [
       "H1"
     ],
-    "packages/apigen/python-env/src/test/python-env.e2e.ts": [
+    "packages/apigen/python-env/test/e2e/python-env.e2e.ts": [
       "H1"
     ],
-    "packages/apigen/python-env/src/test/python-env.spec.ts": [
+    "packages/apigen/python-env/test/unit/python-env.spec.ts": [
       "H1"
     ],
-    "packages/data/data-base-transforms/src/lib/collections.spec.ts": [
+    "packages/data/data-base-transforms/test/unit/lib/collections.spec.ts": [
       "H1"
     ],
-    "packages/data/data-base-transforms/src/lib/date.spec.ts": [
+    "packages/data/data-base-transforms/test/unit/lib/date.spec.ts": [
       "H1"
     ],
-    "packages/data/data-base-transforms/src/lib/filters.spec.ts": [
+    "packages/data/data-base-transforms/test/unit/lib/filters.spec.ts": [
       "H1"
     ],
-    "packages/data/data-base-transforms/src/lib/function.spec.ts": [
+    "packages/data/data-base-transforms/test/unit/lib/function.spec.ts": [
       "H1"
     ],
-    "packages/data/data-base-transforms/src/lib/humanize.spec.ts": [
+    "packages/data/data-base-transforms/test/unit/lib/humanize.spec.ts": [
       "H1"
     ],
-    "packages/data/data-base-transforms/src/lib/object.spec.ts": [
+    "packages/data/data-base-transforms/test/unit/lib/object.spec.ts": [
       "H1"
     ],
-    "packages/data/data-base-transforms/src/lib/regex.spec.ts": [
+    "packages/data/data-base-transforms/test/unit/lib/regex.spec.ts": [
       "H1"
     ],
-    "packages/data/data-base-transforms/src/lib/stats.spec.ts": [
+    "packages/data/data-base-transforms/test/unit/lib/stats.spec.ts": [
       "H1"
     ],
-    "packages/data/data-base-transforms/src/lib/structures.spec.ts": [
+    "packages/data/data-base-transforms/test/unit/lib/structures.spec.ts": [
       "H1"
     ],
-    "packages/data/data-base-transforms/src/lib/text.spec.ts": [
+    "packages/data/data-base-transforms/test/unit/lib/text.spec.ts": [
       "H1"
     ],
-    "packages/data/data-core-structures/src/lib/data.spec.ts": [
+    "packages/data/data-core-structures/test/unit/lib/data.spec.ts": [
       "H1"
     ],
-    "packages/data/data-core-structures/src/lib/index-structures/audit-fixes.spec.ts": [
+    "packages/data/data-core-structures/test/unit/lib/index-structures/audit-fixes.spec.ts": [
       "H1"
     ],
-    "packages/data/data-core-structures/src/lib/index-structures/index-structures.big-o.spec.ts": [
+    "packages/data/data-core-structures/test/unit/lib/index-structures/index-structures.big-o.spec.ts": [
       "H1"
     ],
-    "packages/data/data-core-structures/src/lib/index-structures/index-structures.edge-cases.spec.ts": [
+    "packages/data/data-core-structures/test/unit/lib/index-structures/index-structures.edge-cases.spec.ts": [
       "H1"
     ],
-    "packages/data/data-core-structures/src/lib/index-structures/index-structures.independent.big-o.spec.ts": [
+    "packages/data/data-core-structures/test/unit/lib/index-structures/index-structures.independent.big-o.spec.ts": [
       "H1"
     ],
-    "packages/data/data-core-structures/src/lib/index-structures/index-structures.spec.ts": [
+    "packages/data/data-core-structures/test/unit/lib/index-structures/index-structures.spec.ts": [
       "H1"
     ],
-    "packages/data/data-query-engine/src/index.spec.ts": [
+    "packages/data/data-query-engine/test/unit/index.spec.ts": [
       "H1"
     ],
-    "packages/data/data-query-engine/src/lib/aggregate.spec.ts": [
+    "packages/data/data-query-engine/test/unit/lib/aggregate.spec.ts": [
       "H1"
     ],
-    "packages/data/data-query-engine/src/lib/complexity.spec.ts": [
+    "packages/data/data-query-engine/test/unit/lib/complexity.spec.ts": [
       "H1"
     ],
-    "packages/data/data-query-engine/src/lib/gaps.spec.ts": [
+    "packages/data/data-query-engine/test/unit/lib/gaps.spec.ts": [
       "H1"
     ],
-    "packages/data/data-query-engine/src/lib/grouping-sets.spec.ts": [
+    "packages/data/data-query-engine/test/unit/lib/grouping-sets.spec.ts": [
       "H1"
     ],
-    "packages/data/data-query-engine/src/lib/integration.spec.ts": [
+    "packages/data/data-query-engine/test/unit/lib/integration.spec.ts": [
       "H1"
     ],
-    "packages/data/data-query-engine/src/lib/model/canonical.deep.spec.ts": [
+    "packages/data/data-query-engine/test/unit/lib/model/canonical.deep.spec.ts": [
       "H1"
     ],
-    "packages/data/data-query-engine/src/lib/model/edge-cases.spec.ts": [
+    "packages/data/data-query-engine/test/unit/lib/model/edge-cases.spec.ts": [
       "H1"
     ],
-    "packages/data/data-query-engine/src/lib/model/model.big-o.spec.ts": [
+    "packages/data/data-query-engine/test/unit/lib/model/model.big-o.spec.ts": [
       "H1"
     ],
-    "packages/data/data-query-engine/src/lib/model/model.spec.ts": [
+    "packages/data/data-query-engine/test/unit/lib/model/model.spec.ts": [
       "H1"
     ],
-    "packages/data/data-query-engine/src/lib/model/plan.spec.ts": [
+    "packages/data/data-query-engine/test/unit/lib/model/plan.spec.ts": [
       "H1"
     ],
-    "packages/data/data-query-engine/src/lib/model/review.independent.spec.ts": [
+    "packages/data/data-query-engine/test/unit/lib/model/review.independent.spec.ts": [
       "H1"
     ],
-    "packages/data/data-query-engine/src/lib/model/scan.differential.spec.ts": [
+    "packages/data/data-query-engine/test/unit/lib/model/scan.differential.spec.ts": [
       "H1"
     ],
-    "packages/data/data-query-engine/src/lib/parser.spec.ts": [
+    "packages/data/data-query-engine/test/unit/lib/parser.spec.ts": [
       "H1"
     ],
-    "packages/data/data-query-engine/src/lib/period.spec.ts": [
+    "packages/data/data-query-engine/test/unit/lib/period.spec.ts": [
       "H1"
     ],
-    "packages/data/data-query-engine/src/lib/query.spec.ts": [
+    "packages/data/data-query-engine/test/unit/lib/query.spec.ts": [
       "H1"
     ],
-    "packages/data/data-query-engine/src/lib/scan.spec.ts": [
+    "packages/data/data-query-engine/test/unit/lib/scan.spec.ts": [
       "H1"
     ],
-    "packages/dispatch/dispatch-base-spec/src/test/lane-tool-grant.spec.ts": [
+    "packages/dispatch/dispatch-base-spec/test/unit/lane-tool-grant.spec.ts": [
       "H1"
     ],
-    "packages/dispatch/dispatch-base-spec/src/test/plan.spec.ts": [
+    "packages/dispatch/dispatch-base-spec/test/unit/plan.spec.ts": [
       "H1"
     ],
-    "packages/dispatch/dispatch-base-spec/src/test/provider-binding-migration.spec.ts": [
+    "packages/dispatch/dispatch-base-spec/test/unit/provider-binding-migration.spec.ts": [
       "H1"
     ],
-    "packages/dispatch/dispatch-base-spec/src/test/validate.spec.ts": [
+    "packages/dispatch/dispatch-base-spec/test/unit/validate.spec.ts": [
       "H1"
     ],
-    "packages/dispatch/dispatch-base-types/src/lib/dispatch-dispatch-base-types.spec.ts": [
+    "packages/dispatch/dispatch-base-types/test/unit/lib/dispatch-dispatch-base-types.spec.ts": [
       "H1"
     ],
-    "packages/dispatch/dispatch-core-client/src/lib/dispatch-client.spec.ts": [
+    "packages/dispatch/dispatch-core-client/test/unit/lib/dispatch-client.spec.ts": [
       "H1"
     ],
-    "packages/dispatch/dispatch-core-client/src/test/client.spec.ts": [
+    "packages/dispatch/dispatch-core-client/test/unit/client.spec.ts": [
       "H1"
     ],
-    "packages/dispatch/dispatch-core-optimizer/src/lib/optimize.spec.ts": [
+    "packages/dispatch/dispatch-core-optimizer/test/unit/lib/optimize.spec.ts": [
       "H1"
     ],
-    "packages/dispatch/dispatch-core-optimizer/src/lib/snapshot.spec.ts": [
+    "packages/dispatch/dispatch-core-optimizer/test/unit/lib/snapshot.spec.ts": [
       "H1"
     ],
-    "packages/dispatch/dispatch-orchestrator/src/test/agent-runner-comment.spec.ts": [
+    "packages/dispatch/dispatch-orchestrator/test/unit/agent-runner-comment.spec.ts": [
       "H1"
     ],
-    "packages/dispatch/dispatch-orchestrator/src/test/agent-runner.spec.ts": [
+    "packages/dispatch/dispatch-orchestrator/test/unit/agent-runner.spec.ts": [
       "H1"
     ],
-    "packages/dispatch/dispatch-orchestrator/src/test/hitl-suspension.spec.ts": [
+    "packages/dispatch/dispatch-orchestrator/test/unit/hitl-suspension.spec.ts": [
       "H1"
     ],
-    "packages/dispatch/dispatch-orchestrator/src/test/liveness.spec.ts": [
+    "packages/dispatch/dispatch-orchestrator/test/unit/liveness.spec.ts": [
       "H1"
     ],
-    "packages/dispatch/dispatch-orchestrator/src/test/mock-agent-runner.spec.ts": [
+    "packages/dispatch/dispatch-orchestrator/test/unit/mock-agent-runner.spec.ts": [
       "H1"
     ],
-    "packages/dispatch/dispatch-orchestrator/src/test/no-auto-create-dispatch.spec.ts": [
+    "packages/dispatch/dispatch-orchestrator/test/unit/no-auto-create-dispatch.spec.ts": [
       "H1"
     ],
-    "packages/dispatch/dispatch-orchestrator/src/test/orchestrator-cap-output.spec.ts": [
+    "packages/dispatch/dispatch-orchestrator/test/unit/orchestrator-cap-output.spec.ts": [
       "H1"
     ],
-    "packages/dispatch/dispatch-orchestrator/src/test/orchestrator.spec.ts": [
+    "packages/dispatch/dispatch-orchestrator/test/unit/orchestrator.spec.ts": [
       "H1"
     ],
-    "packages/dispatch/dispatch-orchestrator/src/test/policy-dispatch-log.spec.ts": [
+    "packages/dispatch/dispatch-orchestrator/test/unit/policy-dispatch-log.spec.ts": [
       "H1"
     ],
-    "packages/dispatch/dispatch-orchestrator/src/test/process-guard.spec.ts": [
+    "packages/dispatch/dispatch-orchestrator/test/unit/process-guard.spec.ts": [
       "H1"
     ],
-    "packages/dispatch/dispatch-orchestrator/src/test/provider-binding-chain.spec.ts": [
+    "packages/dispatch/dispatch-orchestrator/test/unit/provider-binding-chain.spec.ts": [
       "H1"
     ],
-    "packages/dispatch/dispatch-orchestrator/src/test/real-turn-telemetry.spec.ts": [
+    "packages/dispatch/dispatch-orchestrator/test/unit/real-turn-telemetry.spec.ts": [
       "H1"
     ],
-    "packages/dispatch/dispatch-serializer-json/src/index.spec.ts": [
+    "packages/dispatch/dispatch-serializer-json/test/unit/index.spec.ts": [
       "H1"
     ],
     "packages/environment/environment-base-spec/src/__tests__/index.test.ts": [
@@ -2368,79 +2368,79 @@
     "packages/environment/environment-core-node/src/__tests__/environment.test.ts": [
       "H1"
     ],
-    "packages/ui-react/ui-react-base-hooks/src/lib/use-async/index.spec.ts": [
+    "packages/ui-react/ui-react-base-hooks/test/unit/lib/use-async/index.spec.ts": [
       "H1"
     ],
-    "packages/ui-react/ui-react-base-hooks/src/lib/use-copy-to-clipboard/index.spec.ts": [
+    "packages/ui-react/ui-react-base-hooks/test/unit/lib/use-copy-to-clipboard/index.spec.ts": [
       "H1"
     ],
-    "packages/ui-react/ui-react-base-hooks/src/lib/use-debounce/index.spec.tsx": [
+    "packages/ui-react/ui-react-base-hooks/test/unit/lib/use-debounce/index.spec.tsx": [
       "H1"
     ],
-    "packages/ui-react/ui-react-base-hooks/src/lib/use-file-download/compression.spec.ts": [
+    "packages/ui-react/ui-react-base-hooks/test/unit/lib/use-file-download/compression.spec.ts": [
       "H1"
     ],
-    "packages/ui-react/ui-react-base-hooks/src/lib/use-file-download/encryption.spec.ts": [
+    "packages/ui-react/ui-react-base-hooks/test/unit/lib/use-file-download/encryption.spec.ts": [
       "H1"
     ],
-    "packages/ui-react/ui-react-base-hooks/src/lib/use-file-download/import-meta-url.spec.ts": [
+    "packages/ui-react/ui-react-base-hooks/test/unit/lib/use-file-download/import-meta-url.spec.ts": [
       "H1"
     ],
-    "packages/ui-react/ui-react-base-hooks/src/lib/use-file-download/index.spec.tsx": [
+    "packages/ui-react/ui-react-base-hooks/test/unit/lib/use-file-download/index.spec.tsx": [
       "H1"
     ],
-    "packages/ui-react/ui-react-base-hooks/src/lib/use-infinite-scroll/index.spec.tsx": [
+    "packages/ui-react/ui-react-base-hooks/test/unit/lib/use-infinite-scroll/index.spec.tsx": [
       "H1"
     ],
-    "packages/ui-react/ui-react-base-hooks/src/lib/use-local-storage/index.spec.ts": [
+    "packages/ui-react/ui-react-base-hooks/test/unit/lib/use-local-storage/index.spec.ts": [
       "H1"
     ],
-    "packages/ui-react/ui-react-base-hooks/src/lib/use-throttle-state/index.spec.ts": [
+    "packages/ui-react/ui-react-base-hooks/test/unit/lib/use-throttle-state/index.spec.ts": [
       "H1"
     ],
-    "packages/ui-react/ui-react-base-hooks/src/lib/use-throttle/index.spec.ts": [
+    "packages/ui-react/ui-react-base-hooks/test/unit/lib/use-throttle/index.spec.ts": [
       "H1"
     ],
-    "packages/ui-react/ui-react-base-storybook/src/lib/storybook.spec.tsx": [
+    "packages/ui-react/ui-react-base-storybook/test/unit/lib/storybook.spec.tsx": [
       "H1"
     ],
-    "packages/workspace/workspace-base-standard/src/checker.spec.ts": [
+    "packages/workspace/workspace-base-standard/test/unit/checker.spec.ts": [
       "H1"
     ],
-    "packages/workspace/workspace-base-standard/src/managed-region.spec.ts": [
+    "packages/workspace/workspace-base-standard/test/unit/managed-region.spec.ts": [
       "H1"
     ],
-    "packages/workspace/workspace-base-standard/src/metadata.spec.ts": [
+    "packages/workspace/workspace-base-standard/test/unit/metadata.spec.ts": [
       "H1"
     ],
-    "packages/workspace/workspace-base-standard/src/provenance.spec.ts": [
+    "packages/workspace/workspace-base-standard/test/unit/provenance.spec.ts": [
       "H1"
     ],
-    "packages/workspace/workspace-base-standard/src/required.spec.ts": [
+    "packages/workspace/workspace-base-standard/test/unit/required.spec.ts": [
       "H1"
     ],
-    "packages/workspace/workspace-base-standard/src/taxonomy.spec.ts": [
+    "packages/workspace/workspace-base-standard/test/unit/taxonomy.spec.ts": [
       "H1"
     ],
-    "packages/workspace/workspace-base-tools/src/get-package-info.spec.ts": [
+    "packages/workspace/workspace-base-tools/test/unit/get-package-info.spec.ts": [
       "H1"
     ],
-    "packages/workspace/workspace-base-tools/src/lib/workspace-workspace-base-tools.spec.ts": [
+    "packages/workspace/workspace-base-tools/test/unit/lib/workspace-workspace-base-tools.spec.ts": [
       "H1"
     ],
-    "packages/workspace/workspace-base-vite-paths/src/lib/workspace-workspace-base-vite-paths.spec.ts": [
+    "packages/workspace/workspace-base-vite-paths/test/unit/lib/workspace-workspace-base-vite-paths.spec.ts": [
       "H1"
     ],
-    "packages/workspace/workspace-codegen-nx/src/generators/base/generator.spec.ts": [
+    "packages/workspace/workspace-codegen-nx/test/unit/generators/base/generator.spec.ts": [
       "H1"
     ],
-    "packages/workspace/workspace-codegen-nx/src/generators/shared/source-resolution-optout.spec.ts": [
+    "packages/workspace/workspace-codegen-nx/test/unit/generators/shared/source-resolution-optout.spec.ts": [
       "H1"
     ],
-    "packages/workspace/workspace-codegen-nx/src/generators/shared/typecheck-spec-wiring.spec.ts": [
+    "packages/workspace/workspace-codegen-nx/test/unit/generators/shared/typecheck-spec-wiring.spec.ts": [
       "H1"
     ],
-    "packages/workspace/workspace-codegen-nx/src/generators/types/generator.spec.ts": [
+    "packages/workspace/workspace-codegen-nx/test/unit/generators/types/generator.spec.ts": [
       "H1"
     ],
     "scripts/worktree-scripts.spec.mjs": [

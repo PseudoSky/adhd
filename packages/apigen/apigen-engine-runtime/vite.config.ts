@@ -71,7 +71,7 @@ export default defineConfig({
     // `nx affected -t test` or the pre-commit / pre-push hooks; the resource
     // lane runs only via `nx run apigen-engine-runtime:e2e` (see the sibling
     // `vitest.e2e.config.ts`, the only place that includes `.e2e.ts`).
-    include: ['src/**/*.spec.ts'],
+    include: ['src/**/*.spec.ts', 'test/**/*.spec.ts'],
 
     reporters: ['default'],
     coverage: {

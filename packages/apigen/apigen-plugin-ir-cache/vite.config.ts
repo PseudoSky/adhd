@@ -60,7 +60,7 @@ export default defineConfig({
       dir: '../../../node_modules/.vitest',
     },
     environment: 'node',
-    include: ['src/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'],
+    include: ['src/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}', 'test/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'],
     // The real ts-morph extraction suite (tier P) is `*.e2e.test.ts` and runs in the `e2e` target (vitest.e2e.config.ts), never here (ADR 0009).
     exclude: [...configDefaults.exclude, ...E2E_FILE_EXCLUDES],
 

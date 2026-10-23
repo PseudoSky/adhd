@@ -67,7 +67,7 @@ export default defineConfig({
     // `.e2e.ts`). It must never run under `nx affected -t test` or the
     // pre-commit / pre-push hooks; the live matrix runs out-of-band via the
     // `conformance` target, and the `e2e` target asserts on its report.
-    include: ['src/**/*.spec.ts'],
+    include: ['src/**/*.spec.ts', 'test/**/*.spec.ts'],
 
     reporters: ['default'],
     coverage: {

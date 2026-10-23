@@ -16,7 +16,7 @@
  */
 
 /** Include globs (relative to the project root) selecting the e2e lane. */
-export const E2E_FILE_INCLUDES = ['src/**/*.e2e.ts', 'src/**/*.e2e.test.ts'];
+export const E2E_FILE_INCLUDES = ['src/**/*.e2e.ts', 'src/**/*.e2e.test.ts', 'test/**/*.e2e.ts', 'test/**/*.e2e.test.ts'];
 
 /** Exclude globs for the unit lane: the same files, rooted at `**` for vitest's `exclude`. */
 export const E2E_FILE_EXCLUDES = ['**/*.e2e.ts', '**/*.e2e.test.ts'];

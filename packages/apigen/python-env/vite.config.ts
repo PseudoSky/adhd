@@ -123,7 +123,7 @@ export default defineConfig({
     // `nx affected -t test` or the pre-commit/pre-push hooks. This project has
     // exclusively `*.spec.ts` test files, so narrowing the glob is
     // behaviour-preserving and makes the `.e2e.ts` exclusion structural.
-    include: ['src/**/*.spec.ts'],
+    include: ['src/**/*.spec.ts', 'test/**/*.spec.ts'],
 
     reporters: ['default'],
     coverage: {

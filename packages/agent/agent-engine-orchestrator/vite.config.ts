@@ -46,7 +46,7 @@ export default defineConfig({
     environment: 'node',
     pool: 'forks',
     fileParallelism: false,
-    include: ['src/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'],
+    include: ['src/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}', 'test/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'],
     // Subprocess / real-server suites (`*.e2e.ts`, `*.e2e.test.ts`) run in the separate
     // `e2e` lane (vitest.e2e.config.ts), never here (backlog 5b839b90 AC1;
     // docs/decisions/0009-test-lanes-unit-vs-e2e.md). Gated by check-agent-lane-spawn.mjs.

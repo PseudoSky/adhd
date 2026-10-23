@@ -64,7 +64,7 @@ export default defineConfig({
     // exclusively `*.spec.ts` test files, so narrowing the glob is
     // behaviour-preserving and makes the `.e2e.ts` exclusion structural rather
     // than an emergent property of glob semantics.
-    include: ['src/**/*.spec.ts'],
+    include: ['src/**/*.spec.ts', 'test/**/*.spec.ts'],
     reporters: ['default'],
     coverage: {
       reportsDirectory: projectCoverage(__dirname),
