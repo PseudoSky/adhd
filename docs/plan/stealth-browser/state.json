@@ -487,10 +487,10 @@
       "end_ref": null
     },
     "fix-core-parsers": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-10-23T22:57:26.530Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "f38fe5f9447663bd4d02eb0be26dc88cb9d50b42",
       "end_ref": null
     },
     "fix-core-lifecycle": {
@@ -1989,7 +1989,7 @@
     "version": "0.8.35",
     "hash": "0b6bc1f3d70e"
   },
-  "current_state": "fix-tripwire",
+  "current_state": "fix-core-parsers",
   "dod_provenance": {
     "confirmed_at": "2026-10-12T23:49:38.410Z",
     "by": "pseudosky",
