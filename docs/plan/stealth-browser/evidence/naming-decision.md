@@ -39,18 +39,20 @@ table that is needed before an operation is chosen (for `--help`, for the MCP ho
 operation at all, and to fill `host` and `port` of the chosen operation). A parser that owns that
 table, renders its defaults in `--help` from one typed list and reports a bad value as
 `HOST_FLAG_INVALID` is therefore needed, and `commander` stays a dependency of the entrypoint.
-Methods used: `Command`, `.argument`, `.option`, `.exitOverride`, `.allowUnknownOption`,
-`.configureOutput`, `.parse` and `.opts`.
+The parser (`src/host-flags.ts`) uses `Command`, `CommanderError`, `.argument`, `.option`,
+`.exitOverride`, `.allowUnknownOption`, `.allowExcessArguments`, `.helpOption`, `.configureOutput`,
+`.parse`, `.opts` and `.args`.
 
 COMMANDER: ^14.0.3
 
 The source repository declares `^15.0.0`, but commander 15 requires Node >= 22.12 while
 stealth-search supports Node >= 22.5 (search-hosts.9, preflight in both bins), and the workspace
-pins commander 14.0.3 (`pnpm-lock.yaml`). The ported CLI uses only `Command`, `.argument`,
-`.option`, `.parse` and `.opts`, identical in both majors, so nothing is lost by staying on ^14.0.3.
+pins commander 14.0.3 (`pnpm-lock.yaml`). Every commander method listed above exists in 14.0.3 and
+is exercised by `src/test/unit/hosts/host-flags.spec.ts`; nothing the hosts need requires 15, so
+the range stays at ^14.0.3 and the Node floor stays at 22.5.
 
 ## Other measured facts the hosts rely on
 
 - The apigen `mcpPlugin` re-throws a failed tool call as a JSON-RPC error and has no `isError` result channel. A failure is therefore an error response (a rejected `launchChrome` with `extraArgs` is `-32603 Validation failed: unknown key 'extraArgs'`), and a `hitl` search outcome is data in a normal result.
-- The extraction of the eleven operations from `dist/api.d.ts` costs seconds (a TypeScript program), so both hosts keep the extracted operations in `<data-dir>/cache/operations.json` under a key of the declaration text and the extractor and core versions.
+- The extraction of the eleven operations from `dist/api.d.ts` costs seconds (a TypeScript program), so both hosts keep the extracted operations in `<data-dir>/cache/operations.json` under a content key: the declaration text, the extractor and core package versions and a hash of the core declarations (never a timestamp).
 - `launchChrome` is hardened in the host copy of the composed schema: `data.input` is required, so an empty or flat call is rejected before the function runs (the function would otherwise start a Chrome with default arguments).
