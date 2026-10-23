@@ -40,6 +40,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 - [fix-core-lifecycle.1] (backlog 86a2318f) A spec under test/unit/lifecycle cites [fix-core-lifecycle.1] and proves `defaultReaperEntry` resolves to an absolute path under ESM and under CJS and fails with a typed error when unresolvable: titles carry `defaultReaperEntry`, `ESM`, `CJS`, `86a2318f`; the spec is green.
 
 - [fix-core-lifecycle.2] evidence/fix-core-lifecycle.md records the red-first proof: a `RED:` line with the failing assertion of each new spec on the untouched source and a `GREEN:` line with the passing run after the fix.
+- [fix-core-lifecycle.3] `nx run stealth-core-browser:lint`, `:typecheck`, `:typecheck-spec`, `:test`, `:build` exit 0 and evidence/fix-core-lifecycle.md records each as `EXIT <command>: 0`.
 ---
 
 ## Reservations
