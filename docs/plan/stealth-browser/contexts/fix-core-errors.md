@@ -42,6 +42,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 - [fix-core-errors.2] test/unit/surface/api.spec.ts cites [fix-core-errors.2] and asserts the typed code of an invalid endpoint (titles carry `invalidEndpoint`, `code` and `typed`), with no `instanceof` assertion on it, and is green.
 - [fix-core-errors.3] evidence/fix-core-errors.md records the red-first proof: a `RED:` line with the failing assertion of each new spec on the untouched source and a `GREEN:` line with the passing run after the fix.
 - [fix-core-errors.4] `nx run stealth-core-browser:lint`, `:typecheck`, `:typecheck-spec`, `:test`, `:build` exit 0 and evidence/fix-core-errors.md records each as `EXIT <command>: 0`.
+- [fix-core-errors.5] Only owned paths changed by [psm:fix-core-errors] commits (errors.ts, docs/ERRORS.md, surface and errors specs).
 ---
 
 ## Reservations
