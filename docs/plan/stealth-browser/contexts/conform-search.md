@@ -51,6 +51,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 
 - [conform-search.2] Support code and fixtures moved to their homes: engine/harness.ts, fetch/harness.ts, guards/guards-harness.ts, hosts/host-harness.ts, verbs/harness.ts exist under `test/helpers/`, fixtures under `test/fixtures/engine`, `test/fixtures/fetch`, `test/fixtures/providers`, and no html, pdf or json fixture is left under `test/unit`.
 - [conform-search.3] Configs conform: `vite.config.ts` includes `UNIT_FILE_INCLUDES` from tools/vite-plugins/e2e-globs.mjs, `tsconfig.lib.json` excludes `test/**`, `tsconfig.spec.json` includes `test/**/*.ts` and `test/**/*.tsx`, and no config names `src/test`.
+- [conform-search.4] Every spec carries the header of docs/standards/testing.md: a comment block in its first 60 lines with `guards:`, `tier: S` and `cites:` plus the ticket 8468f7b1.
 ---
 
 ## Reservations

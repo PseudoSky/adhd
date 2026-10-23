@@ -5049,6 +5049,15 @@
       "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py conform-search --only conform-search.3",
       "expect": "exit0",
       "cwd": "repo-root"
+    },
+    {
+      "id": "conform-search.4",
+      "phase": "migrate",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py conform-search --only conform-search.4",
+      "expect": "exit0",
+      "cwd": "repo-root"
     }
   ]
 }
