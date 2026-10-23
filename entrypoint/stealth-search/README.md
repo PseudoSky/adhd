@@ -42,7 +42,7 @@ stealth-search describeProvider --provider github
 ```sh
 stealth-search chromeStatus --cdp-port 9333
 stealth-search launchChrome --port 9333
-stealth-search checkChromeActivity --port 9333
+stealth-search checkChromeActivity --port 9333 --within-minutes 5
 stealth-search listPageTargets --port 9333
 stealth-search tripwireStatus
 stealth-search clearTripwire --provider google

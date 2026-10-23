@@ -305,13 +305,13 @@ def _bh15():
 
 @check(_HOSTS, 16)
 def _bh16():
-    """Host unit specs simulate real use in-process: spec files under src/test/unit/hosts/ cite ticket 8468f7b1 and [search-hosts.16], import no child_process, and drive the real flag parser (every flag of the table, defaults, HOST_FLAG_INVALID for bad values), the extraArgs rejection, the NODE_TOO_OLD preflight function, the transport selection and exit-hook wiring through the exported host factories; `nx run stealth-search:test -- src/test/unit/hosts` exits 0."""
+    """Host unit specs simulate real use in-process: spec files under test/unit/hosts/ cite ticket 8468f7b1 and [search-hosts.16], import no child_process, and drive the real flag parser (every flag of the table, defaults, HOST_FLAG_INVALID for bad values), the extraArgs rejection, the NODE_TOO_OLD preflight function, the transport selection and exit-hook wiring through the exported host factories; `nx run stealth-search:test -- test/unit/hosts` exits 0."""
     files = spec_files_of(SEARCH_DIR, "unit/hosts")
     ok, why = cites(files, "search-hosts")
     spawn = offenders(files, r"child_process|\bspawn\(|\bexecFile?\(")
     if not ok or spawn:
         return False, f"{why} spawners={spawn}"
-    rc, out = nx_run(SEARCH_PROJECT, "test", "--", "src/test/unit/hosts")
+    rc, out = nx_run(SEARCH_PROJECT, "test", "--", "test/unit/hosts")
     return rc == 0, out[-300:]
 
 
@@ -323,7 +323,7 @@ def _bh17():
 
 # =============================================================== search-usecases
 _UC = "search-usecases"
-_UC_DIR = f"{SEARCH_DIR}/src/test/use-cases"
+_UC_DIR = f"{SEARCH_DIR}/test/unit/use-cases"
 
 
 def _uc_text():
@@ -332,7 +332,7 @@ def _uc_text():
 
 @check(_UC, 1)
 def _bu1():
-    """src/test/use-cases/ holds spec files that each cite ticket 8468f7b1 and a search-usecases.N id, with at least 14 test cases in total (ported e2e, guard and lifecycle scenarios, no e2e lane)."""
+    """test/unit/use-cases/ holds spec files that each cite ticket 8468f7b1 and a search-usecases.N id, with at least 14 test cases in total (ported e2e, guard and lifecycle scenarios, no e2e lane)."""
     files = spec_files_of(SEARCH_DIR, "use-cases")
     ok, why = cites(files, _UC)
     n = len(re.findall(r"^\s*(?:it|test)(?:\.each\([^)]*\))?\s*\(", _uc_text(), re.M))
@@ -386,10 +386,10 @@ def _bu6():
 
 @check(_UC, 7)
 def _bu7():
-    """`nx run stealth-search:test -- src/test/use-cases` exits 0."""
+    """`nx run stealth-search:test -- test/unit/use-cases` exits 0."""
     if not spec_files_of(SEARCH_DIR, "use-cases"):
         return False, "no use-case specs"
-    rc, out = nx_run(SEARCH_PROJECT, "test", "--", "src/test/use-cases")
+    rc, out = nx_run(SEARCH_PROJECT, "test", "--", "test/unit/use-cases")
     return rc == 0, out[-300:]
 
 
@@ -440,7 +440,10 @@ def _bx3():
     d = _b_decision()
     if not lines or not d["style"]:
         return False, f"command lines={len(lines)} style={d['style']}"
-    flags_src = read(f"{SEARCH_DIR}/src/host-flags.ts") + read(f"{SEARCH_DIR}/src/api.ts") + read(f"{SEARCH_DIR}/src/lib/types.ts")
+    # The verb inputs of the lifecycle operations (checkChromeActivity --within-minutes, listPageTargets, ...) are declared by the core package's
+    # public api and re-projected by search, so the core declarations count as flag sources too.
+    flags_src = (read(f"{SEARCH_DIR}/src/host-flags.ts") + read(f"{SEARCH_DIR}/src/api.ts") + read(f"{SEARCH_DIR}/src/lib/types.ts")
+                 + read(f"{CORE_DIR}/src/api.ts") + read(f"{CORE_DIR}/src/lib/types.ts"))
     bad = []
     for ln in lines:
         for fl in re.findall(r"(--[a-z][a-z0-9-]*)", ln):
@@ -454,7 +457,7 @@ def _bx3():
 
 @check(_EX, 4)
 def _bx4():
-    """A unit test src/test/unit/examples/ runs every example's `run` (against injected fakes) and verifies every README manifest entry; it cites ticket 8468f7b1 and [search-examples.4], imports no child_process, and `nx run stealth-search:test -- src/test/unit/examples` exits 0 (100% README examples)."""
+    """A unit test test/unit/examples/ runs every example's `run` (against injected fakes) and verifies every README manifest entry; it cites ticket 8468f7b1 and [search-examples.4], imports no child_process, and `nx run stealth-search:test -- test/unit/examples` exits 0 (100% README examples)."""
     files = spec_files_of(SEARCH_DIR, "unit/examples")
     ok, why = cites(files, _EX)
     t = "\n".join(read(f) for f in files)
@@ -462,7 +465,7 @@ def _bx4():
     unseen = [n for n in names if n[:-3] not in t]
     if not ok or "manifest.json" not in t or "README.md" not in t or unseen or offenders(files, r"child_process|\bspawn\("):
         return False, f"{why} manifest/readme referenced={'manifest.json' in t}/{'README.md' in t} unexercised={unseen}"
-    rc, out = nx_run(SEARCH_PROJECT, "test", "--", "src/test/unit/examples")
+    rc, out = nx_run(SEARCH_PROJECT, "test", "--", "test/unit/examples")
     return rc == 0, out[-300:]
 
 
@@ -936,7 +939,7 @@ def _br9():
 # ============================================================ backlog fold-in (2026-10-14 search bugs): hosts
 @check("search-hosts", 18)
 def _sh18():
-    """(backlog abeedba8) The CLI exits as soon as its JSON is written: the host closes every browser handle, flushes stdout, then exits 0. Proven by (a) a spec under src/test/unit/hosts/ on the exported CLI runner with an injected stdout sink and exit function asserting the order write, flush, handles closed, exit(0), and that no timer or socket handle is left open (the idle-shutdown child is detached with stdio ignored and never inherits stdout), and (b) a real-process probe run by this guard: three `node dist/bin/cli.js chromeStatus --cdp-port 19999` processes started together with stdout redirected to files each exit 0 within 15 s and each file holds one parseable JSON document with running=false (a 0-byte output fails). Titles carry `flush`, `exit`, `detached`, `idleShutdown`, `stdout` and the uid abeedba8, and the spec cites [search-hosts.18]."""
+    """(backlog abeedba8) The CLI exits as soon as its JSON is written: the host closes every browser handle, flushes stdout, then exits 0. Proven by (a) a spec under test/unit/hosts/ on the exported CLI runner with an injected stdout sink and exit function asserting the order write, flush, handles closed, exit(0), and that no timer or socket handle is left open (the idle-shutdown child is detached with stdio ignored and never inherits stdout), and (b) a real-process probe run by this guard: three `node dist/bin/cli.js chromeStatus --cdp-port 19999` processes started together with stdout redirected to files each exit 0 within 15 s and each file holds one parseable JSON document with running=false (a 0-byte output fails). Titles carry `flush`, `exit`, `detached`, `idleShutdown`, `stdout` and the uid abeedba8, and the spec cites [search-hosts.18]."""
     ok, detail = _bug_ac("search", "search-hosts", 18, ["abeedba8"], "hosts", ["flush", "exit", "detached", "idleShutdown", "stdout"])
     if not ok:
         return False, detail
@@ -972,7 +975,7 @@ def _sh18():
 
 @check("search-hosts", 19)
 def _sh19():
-    """(backlog 657bd597) Human-in-the-loop prompts never hang on a closed or non-interactive stdin: the CLI's `InteractionPort` implementation checks `process.stdin.isTTY` and the stream end; with a closed stdin or no TTY the gate prompt and the solved confirmation reject immediately with StealthSearchError HITL_ABORTED (no new code; the exit code comes from `exitCodeFor`, stable and non-zero) within 1000 ms and the tripped provider stays tripped. A spec under src/test/unit/hosts/ simulates a closed stdin stream and a non-TTY stdin through the real prompter with fake streams and fake timers; titles carry `isTTY`, `closed stdin`, `HITL_ABORTED`, `1000` and the uid 657bd597, and the spec cites [search-hosts.19]."""
+    """(backlog 657bd597) Human-in-the-loop prompts never hang on a closed or non-interactive stdin: the CLI's `InteractionPort` implementation checks `process.stdin.isTTY` and the stream end; with a closed stdin or no TTY the gate prompt and the solved confirmation reject immediately with StealthSearchError HITL_ABORTED (no new code; the exit code comes from `exitCodeFor`, stable and non-zero) within 1000 ms and the tripped provider stays tripped. A spec under test/unit/hosts/ simulates a closed stdin stream and a non-TTY stdin through the real prompter with fake streams and fake timers; titles carry `isTTY`, `closed stdin`, `HITL_ABORTED`, `1000` and the uid 657bd597, and the spec cites [search-hosts.19]."""
     files = nontest_ts(SEARCH_DIR)
     if not any(re.search(r"isTTY", code_lines(read(f))) for f in files):
         return False, "no host source checks stdin.isTTY"
@@ -981,7 +984,7 @@ def _sh19():
 
 @check("search-hosts", 20)
 def _sh20():
-    """(backlog 9d05e8b2) The CLI and the MCP host report the same tripwire status: both route `tripwireStatus` through the one verb (neither src/cli.ts nor src/server.ts holds an expiry or TTL predicate of its own), and a spec under src/test/unit/hosts/ seeds a data dir with one live and one expired lock and asserts that the CLI projection and the MCP tool result list exactly the same tripped set (the expired lock in neither). Titles carry `tripwireStatus`, `expired`, `CLI`, `MCP`, `same` and the uid 9d05e8b2, and the spec cites [search-hosts.20]."""
+    """(backlog 9d05e8b2) The CLI and the MCP host report the same tripwire status: both route `tripwireStatus` through the one verb (neither src/cli.ts nor src/server.ts holds an expiry or TTL predicate of its own), and a spec under test/unit/hosts/ seeds a data dir with one live and one expired lock and asserts that the CLI projection and the MCP tool result list exactly the same tripped set (the expired lock in neither). Titles carry `tripwireStatus`, `expired`, `CLI`, `MCP`, `same` and the uid 9d05e8b2, and the spec cites [search-hosts.20]."""
     own = [f for f in (f"{SEARCH_DIR}/src/cli.ts", f"{SEARCH_DIR}/src/server.ts") if exists(f)]
     dup = [f for f in own if re.search(r"expiresAt|\bttl\b|Date\.now\(\)", code_lines(read(f)), re.I)]
     if len(own) < 2 or dup:
@@ -991,5 +994,5 @@ def _sh20():
 
 @check("search-hosts", 21)
 def _sh21():
-    """(backlog 86ed154e) The CLI never exits 0 with empty output: every operation writes one non-empty JSON document to stdout before exit 0, and an empty or undefined verb result becomes a typed HOST_BOOT_FAILED failure with a non-zero exit (`HOST_BOOT_FAILED: <message>` on one stderr line) instead of a silent exit 0. A spec under src/test/unit/hosts/ runs three CLI runner invocations concurrently with fake verbs (one returning undefined) and asserts three stdout documents or a typed failure each; titles carry `empty`, `undefined`, `HOST_BOOT_FAILED`, `stdout`, `concurrent` and the uid 86ed154e, and the spec cites [search-hosts.21]."""
+    """(backlog 86ed154e) The CLI never exits 0 with empty output: every operation writes one non-empty JSON document to stdout before exit 0, and an empty or undefined verb result becomes a typed HOST_BOOT_FAILED failure with a non-zero exit (`HOST_BOOT_FAILED: <message>` on one stderr line) instead of a silent exit 0. A spec under test/unit/hosts/ runs three CLI runner invocations concurrently with fake verbs (one returning undefined) and asserts three stdout documents or a typed failure each; titles carry `empty`, `undefined`, `HOST_BOOT_FAILED`, `stdout`, `concurrent` and the uid 86ed154e, and the spec cites [search-hosts.21]."""
     return _bug_ac("search", "search-hosts", 21, ["86ed154e"], "hosts", ["empty", "undefined", "HOST_BOOT_FAILED", "stdout", "concurrent"])

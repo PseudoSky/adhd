@@ -291,8 +291,8 @@ def nontest_ts(d, *subdirs):
 
 
 def spec_files_of(d, sub=""):
-    """*.spec.ts files under d/src/test/<sub>."""
-    root = f"{d}/src/test/{sub}".rstrip("/")
+    """*.spec.ts files under d/test/<sub> (the layout of docs/standards/testing.md: test/{unit,e2e,helpers,fixtures,golden})."""
+    root = f"{d}/test/{sub}".rstrip("/")
     return [f for f in walk(root) if f.endswith((".spec.ts", ".test.ts"))]
 
 
@@ -365,7 +365,15 @@ def mcp_run(cmd, calls=(), env=None, cwd=None, timeout=60, close_stdin=False):
                 p.wait(timeout=15)
             except subprocess.TimeoutExpired:
                 pass
+    except (BrokenPipeError, ConnectionResetError):
+        # The child exited before it read our request (for example `npx` failing to resolve an unpublished package): the stdin pipe is
+        # closed under us. That is a red answer (no tools listed, stderr captured below), never a crash of the guard.
+        out["died_early"] = True
     finally:
+        try:
+            p.stdin.close()  # a buffered write to a dead child would otherwise raise BrokenPipeError again from the pipe's finalizer
+        except OSError:
+            pass
         if p.poll() is None:
             p.kill()
             p.wait()
@@ -1143,7 +1151,7 @@ def _t6():
     return rc == 0 and o[0], out[-200:] + o[1]
 
 
-SPEC = f"{P}/src/test/unit/tracing/tracing-namespace.spec.ts"
+SPEC = f"{P}/test/unit/tracing/tracing-namespace.spec.ts"
 
 
 @check("tracing-namespace-proof", 1)
@@ -1170,12 +1178,12 @@ def _tn3():
 
 @check("tracing-namespace-proof", 4)
 def _tn4():
-    """Mutation teeth, in-process (never touching src/tracing.ts): the spec builds a second plugin with serviceName 'apigen' via makeTracingPlugin and proves the SAME namespace assertion helper rejects its records (expect(...).toThrow), while the configured plugin passes; `nx run stealth-browser:test -- src/test/unit/tracing` exits 0 and src/tracing.ts is byte-identical before and after the run."""
+    """Mutation teeth, in-process (never touching src/tracing.ts): the spec builds a second plugin with serviceName 'apigen' via makeTracingPlugin and proves the SAME namespace assertion helper rejects its records (expect(...).toThrow), while the configured plugin passes; `nx run stealth-browser:test -- test/unit/tracing` exits 0 and src/tracing.ts is byte-identical before and after the run."""
     path = f"{P}/src/tracing.ts"
     t = read(SPEC)
     mut = re.search(r"makeTracingPlugin\(\s*\{[^}]*serviceName:\s*['\"]apigen['\"]", t) is not None and re.search(r"toThrow|rejects\.", t) is not None
     before = hashlib.sha256(read(path).encode()).hexdigest()
-    rc, out = sh([NX, "run", f"{proj_name()}:test", "--", "src/test/unit/tracing"], timeout=1500)
+    rc, out = sh([NX, "run", f"{proj_name()}:test", "--", "test/unit/tracing"], timeout=1500)
     after = hashlib.sha256(read(path).encode()).hexdigest()
     return mut and rc == 0 and before == after, f"in-process mutant case={mut} rc={rc} tracing.ts unchanged={before == after}"
 
@@ -1194,7 +1202,7 @@ SPAWNERS = ("cdp/browser", "chrome-manager", "cdp/index", "cdp/targets", "cdp/se
 
 def spec_for(e):
     base = os.path.basename(e["dst"])[:-3]
-    return f"{P}/src/test/unit/{e['bucket']}/{base}.spec.ts"
+    return f"{P}/test/unit/{e['bucket']}/{base}.spec.ts"
 
 
 def unit_checks(slug, buckets, owned_hint):
@@ -1266,8 +1274,8 @@ unit_checks("tests-unit-extract", ["capture-parsers"], "")
 
 @check("tests-unit-surface", 1)
 def _tus1():
-    """src/test/unit/surface/api.spec.ts and index.spec.ts exist and assert all six verbs and the five root namespaces (cdp, storage, capture, parsers, chromeManager)."""
-    a, b = read(f"{P}/src/test/unit/surface/api.spec.ts"), read(f"{P}/src/test/unit/surface/index.spec.ts")
+    """test/unit/surface/api.spec.ts and index.spec.ts exist and assert all six verbs and the five root namespaces (cdp, storage, capture, parsers, chromeManager)."""
+    a, b = read(f"{P}/test/unit/surface/api.spec.ts"), read(f"{P}/test/unit/surface/index.spec.ts")
     return all(v in a for v in VERBS) and all(k in b for k in AREAS), "surface specs"
 
 
@@ -1277,7 +1285,7 @@ def _tus2():
     ids = criteria_ids()
     ok = True
     for f in ("api", "index"):
-        t = read(f"{P}/src/test/unit/surface/{f}.spec.ts")
+        t = read(f"{P}/test/unit/surface/{f}.spec.ts")
         ok = ok and TICKET in t and bool(set(re.findall(r"\[([a-z0-9-]+\.\d+)\]", t)) & ids) and bool(re.search(r"vi\.mock\(|vi\.stubGlobal\(", t))
     return ok, "citations + mocks"
 
@@ -1345,7 +1353,7 @@ def gate_checks(slug, evidence, pre=None):
     n = len(names) + 1
 
     def citations():
-        files = [f for d in (CORE_DIR, SEARCH_DIR) for f in walk(f"{d}/src/test", (".ts",)) if f.endswith(".spec.ts")]
+        files = [f for d in (CORE_DIR, SEARCH_DIR) for f in walk(f"{d}/test", (".ts",)) if f.endswith(".spec.ts")]
         ids = criteria_ids()
         bad = [f for f in files if TICKET not in read(f) or not (set(re.findall(r"\[([a-z0-9-]+\.\d+)\]", read(f))) & ids)]
         return not bad and bool(files) and exists(SEARCH_DIR) and exists(CORE_DIR), f"uncited tests {bad[:6]}"
@@ -1685,7 +1693,7 @@ def _af8():
 @check("audit-final", 10)
 def _af10():
     """Every spec file cites ticket 8468f7b1 and a valid criterion id (final re-run of the citation rule)."""
-    files = [f for d in (CORE_DIR, SEARCH_DIR) for f in walk(f"{d}/src/test", (".ts",))]
+    files = [f for d in (CORE_DIR, SEARCH_DIR) for f in walk(f"{d}/test", (".ts",))]
     ids = criteria_ids()
     bad = [f for f in files if TICKET not in read(f) or not (set(re.findall(r"\[([a-z0-9-]+\.\d+)\]", read(f))) & ids)]
     return not bad and bool(files) and exists(SEARCH_DIR), f"uncited {bad[:5]}"
@@ -1949,7 +1957,7 @@ def banned_hits(files):
 
 
 def spec_files(sub):
-    return [f for f in walk(f"{P}/src/test/{sub}") if f.endswith((".spec.ts", ".test.ts"))]
+    return [f for f in walk(f"{P}/test/{sub}") if f.endswith((".spec.ts", ".test.ts"))]
 
 
 def dts_exports(path, seen=None):
@@ -2134,7 +2142,7 @@ EX = f"{P}/examples"
 # ---------------------------------------------------------------- tests (P1, P2, P9 coverage)
 @check("tests-unit-surface", 5)
 def _tus5():
-    """(PA3.1, greenfield) This state OWNS the public-API export snapshot: src/test/unit/surface/public-api.spec.ts lists every root export name of src/index.ts (the five core namespaces, the `lifecycle` namespace wired by core-seam and the six verbs) and the member names of each namespace and fails on drift (toEqual of the sorted names); the names added by prod-errors (`recording`, StealthCoreBrowserError, ERROR_CODES, exitCodeFor) are an all-or-none group, so the spec passes both before and after prod-errors lands and fails on any other drift; it cites ticket 8468f7b1, a valid tests-unit-surface.N id and PA3.1, and `nx run stealth-core-browser:test -- src/test/unit/surface/public-api` exits 0."""
+    """(PA3.1, greenfield) This state OWNS the public-API export snapshot: test/unit/surface/public-api.spec.ts lists every root export name of src/index.ts (the five core namespaces, the `lifecycle` namespace wired by core-seam and the six verbs) and the member names of each namespace and fails on drift (toEqual of the sorted names); the names added by prod-errors (`recording`, StealthCoreBrowserError, ERROR_CODES, exitCodeFor) are an all-or-none group, so the spec passes both before and after prod-errors lands and fails on any other drift; it cites ticket 8468f7b1, a valid tests-unit-surface.N id and PA3.1, and `nx run stealth-core-browser:test -- test/unit/surface/public-api` exits 0."""
     specs = [f for f in spec_files("unit/surface") if "public-api" in os.path.basename(f)]
     t = "\n".join(read(f) for f in specs)
     names = set(AREAS) | {"lifecycle"} | set(VERBS) | {"recording", "StealthCoreBrowserError", "ERROR_CODES", "exitCodeFor"}
@@ -2143,7 +2151,7 @@ def _tus5():
     ok = bool(specs) and not miss and re.search(r"toEqual", t) is not None and TICKET in t and bool(ids & criteria_ids()) and "PA3.1" in t
     if not ok:
         return False, f"specs={len(specs)} unlisted={miss}"
-    rc, out = sh([NX, "run", f"{proj_name()}:test", "--", "src/test/unit/surface/public-api"], timeout=1500)
+    rc, out = sh([NX, "run", f"{proj_name()}:test", "--", "test/unit/surface/public-api"], timeout=1500)
     return rc == 0, out[-200:]
 
 # ---------------------------------------------------------------- docs (P6, P8, P9)
@@ -2301,14 +2309,14 @@ def _pf1():
 def _pf2():
     """Defect 1 (BigInt): storage/helpers.ts still opens with `readBigInts` (the immutable read-only opener is kept), hydrateVisit and getRedirectChain return plain numbers (converted, not dropped), and the former `it.fails` pin in domains-storage/history.spec.ts is a real passing test: no `it.fails` remains under src/test and a spec asserts the redirect-chain ids are `number`."""
     h = read(f"{P}/src/lib/storage/helpers.ts")
-    specs = "\n".join(read(f) for f in walk(f"{P}/src/test/unit/domains-storage"))
-    return "readBigInts" in h and "immutable=1" in h and "it.fails" not in "\n".join(read(f) for f in walk(f"{P}/src/test")) and "getRedirectChain" in specs and re.search(r"typeof[^\n]*['\"]number['\"]|toBeTypeOf\(['\"]number['\"]\)", specs) is not None, "bigint defect pinned green"
+    specs = "\n".join(read(f) for f in walk(f"{P}/test/unit/domains-storage"))
+    return "readBigInts" in h and "immutable=1" in h and "it.fails" not in "\n".join(read(f) for f in walk(f"{P}/test")) and "getRedirectChain" in specs and re.search(r"typeof[^\n]*['\"]number['\"]|toBeTypeOf\(['\"]number['\"]\)", specs) is not None, "bigint defect pinned green"
 
 
 @check("port-fixes", 3)
 def _pf3():
     """Defect 2 (cookie expiry): a unit test in domains-storage/cookies.spec.ts proves CookieClient.getCookies maps `expires_utc = 0` (a session cookie) to a null expiry instead of 1601-01-01."""
-    t = read(f"{P}/src/test/unit/domains-storage/cookies.spec.ts")
+    t = read(f"{P}/test/unit/domains-storage/cookies.spec.ts")
     return "expires_utc" in t and re.search(r"expires_utc[^\n]*\b0\b", t) is not None and "toBeNull" in t and "1601" in t and "[port-fixes." in t, "session-cookie expiry regression test"
 
 
@@ -2316,15 +2324,15 @@ def _pf3():
 def _pf4():
     """Defect 3 (cdpCall before open): domains/transport.ts waits for the socket to open before `send`, and a unit test in domains-storage/transport.spec.ts drives a WebSocket stub that opens asynchronously and proves cdpCall resolves with the reply (not null) and never sends before open."""
     code = read(f"{P}/src/lib/domains/transport.ts")
-    t = read(f"{P}/src/test/unit/domains-storage/transport.spec.ts")
+    t = read(f"{P}/test/unit/domains-storage/transport.spec.ts")
     waits = re.search(r"readyState|addEventListener\(['\"]open|\.on\(['\"]open|once\(['\"]open|onopen", code) is not None
     return waits and "cdpCall" in t and re.search(r"open", t) is not None and "not.toBeNull" in t and "[port-fixes." in t, f"waits={waits}"
 
 
 @check("port-fixes", 5)
 def _pf5():
-    """The scratch chrome-lifecycle-test.ts is ported as a unit/lifecycle spec: src/test/unit/chrome-manager/chrome-lifecycle.spec.ts covers all five scenarios (deferral does not stamp the deferrer's heartbeat, genuine activity stamps, stale sibling lets shutdown proceed, absent sibling proceeds, dead sibling PID is ignored), uses a temp heartbeat path and a dead CDP port (never the live /tmp/stealth-browser-heartbeat), cites ticket 8468f7b1 and a valid port-fixes.N id; chrome-lifecycle later replaces the heartbeat mechanism with connection-based presence through the reaper link and keeps the same behaviors (it then cites [chrome-lifecycle.N] and the heartbeat tokens are no longer required)."""
-    t = read(f"{P}/src/test/unit/chrome-manager/chrome-lifecycle.spec.ts")
+    """The scratch chrome-lifecycle-test.ts is ported as a unit/lifecycle spec: test/unit/chrome-manager/chrome-lifecycle.spec.ts covers all five scenarios (deferral does not stamp the deferrer's heartbeat, genuine activity stamps, stale sibling lets shutdown proceed, absent sibling proceeds, dead sibling PID is ignored), uses a temp heartbeat path and a dead CDP port (never the live /tmp/stealth-browser-heartbeat), cites ticket 8468f7b1 and a valid port-fixes.N id; chrome-lifecycle later replaces the heartbeat mechanism with connection-based presence through the reaper link and keeps the same behaviors (it then cites [chrome-lifecycle.N] and the heartbeat tokens are no longer required)."""
+    t = read(f"{P}/test/unit/chrome-manager/chrome-lifecycle.spec.ts")
     lifecycle_shape = "[chrome-lifecycle." in t  # chrome-lifecycle rewrites this spec onto the reaper-link mechanism (connection presence, no heartbeat file)
     need = ("shutdownIfIdle", "bump", "livelock") if lifecycle_shape else ("shutdownIfIdle", "heartbeatPath", "mkdtemp", "bump", "livelock")
     live = re.search(r"['\"`]/tmp/stealth-browser-heartbeat['\"`]", t) is not None
@@ -2475,6 +2483,10 @@ def _afx4():
 @check("audit-fixes", 5)
 def _afx5():
     """After the corrections lint, typecheck, typecheck-spec and the unit lane exit 0 (`nx run <project>:lint typecheck typecheck-spec test` for stealth-core-browser and stealth-search); the full gate run follows in gates-first."""
+    # The state's own work product comes first: the gates are green on the untouched tree, so without the resolution record this criterion proves nothing.
+    res = jread(f"{PLAN}/review/PRE-REVIEW-RESOLUTION.json", None)
+    if not isinstance(res, (dict, list)) or not res:
+        return False, "review/PRE-REVIEW-RESOLUTION.json missing or empty: the corrections have not been recorded"
     bad = []
     for proj in (CORE_PROJECT, SEARCH_PROJECT):
         for t in ("lint", "typecheck", "typecheck-spec", "test"):
@@ -2519,7 +2531,7 @@ def _pe1():
 
 @check("prod-errors", 2)
 def _pe2():
-    """(PA5.4, widened) src/test/unit/errors/ has a unit test PER CODE: each code of the registry (all 32 codes) is asserted (`code` and a remediation message; CaptureError and LifecycleError instances are `instanceof StealthCoreBrowserError`) and each of the 14 library codes is reached through the real library path (`rejects.toMatchObject({ code: '<CODE>' })` or `.code).toBe('<CODE>')` against the in-process fake server/stubs), citing ticket 8468f7b1, a valid prod-errors.N id and PA5.1 / PA5.4."""
+    """(PA5.4, widened) test/unit/errors/ has a unit test PER CODE: each code of the registry (all 32 codes) is asserted (`code` and a remediation message; CaptureError and LifecycleError instances are `instanceof StealthCoreBrowserError`) and each of the 14 library codes is reached through the real library path (`rejects.toMatchObject({ code: '<CODE>' })` or `.code).toBe('<CODE>')` against the in-process fake server/stubs), citing ticket 8468f7b1, a valid prod-errors.N id and PA5.1 / PA5.4."""
     specs = spec_files("unit/errors")
     t = "\n".join(read(f) for f in specs)
     miss = [c for c in all_codes() if t.count(c) < 1]
@@ -2635,7 +2647,7 @@ def _pex5():
 
 @check("prod-examples", 6)
 def _pex6():
-    """The examples are exercised, not just typechecked: a spec under src/test/unit/examples/ imports every examples/verbs and examples/namespaces file and runs its `run()` against the in-process fake CDP server (no live Chrome), citing ticket 8468f7b1, a valid prod-examples.N id and PA7.2 / PA7.4."""
+    """The examples are exercised, not just typechecked: a spec under test/unit/examples/ imports every examples/verbs and examples/namespaces file and runs its `run()` against the in-process fake CDP server (no live Chrome), citing ticket 8468f7b1, a valid prod-examples.N id and PA7.2 / PA7.4."""
     specs = spec_files("unit/examples")
     t = "\n".join(read(f) for f in specs)
     unused = [f for f in EX_VERB_FILES + EX_NS_FILES if os.path.splitext(f)[0] not in t]
@@ -2644,9 +2656,9 @@ def _pex6():
 
 
 # ============================================================ tests-use-cases (replaces the e2e lane)
-UC = f"{P}/src/test/use-cases"
-SUP = f"{P}/src/test/support"
-UC_SPEC = f"{P}/src/test/use-cases"
+UC = f"{P}/test/unit/use-cases"
+SUP = f"{P}/test/helpers"
+UC_SPEC = f"{P}/test/unit/use-cases"
 
 
 def uc_specs():
@@ -2655,7 +2667,7 @@ def uc_specs():
 
 @check("tests-use-cases", 1)
 def _uc1():
-    """The scenario fixtures exist under src/test/support/: real-shape profile databases (profile-fixtures.ts builds History, Cookies and Bookmarks SQLite files through a builder, no hand-written rows in the specs) and realistic HTML plus network-trace fixtures (page-fixtures.ts); the suites reuse the cdp-test-harness (FakeCdpServer, loadFixture, FakeProc) and add no loopback socket (no node:net, node:http or ws)."""
+    """The scenario fixtures exist under test/helpers/: real-shape profile databases (profile-fixtures.ts builds History, Cookies and Bookmarks SQLite files through a builder, no hand-written rows in the specs) and realistic HTML plus network-trace fixtures (page-fixtures.ts); the suites reuse the cdp-test-harness (FakeCdpServer, loadFixture, FakeProc) and add no loopback socket (no node:net, node:http or ws)."""
     need = ("profile-fixtures.ts", "page-fixtures.ts")
     miss = [f for f in need if len(read(f"{SUP}/{f}").strip()) < 200]
     t = "\n".join(read(f) for f in uc_specs())
@@ -2666,7 +2678,7 @@ def _uc1():
 
 @check("tests-use-cases", 2)
 def _uc2():
-    """At least 12 use-case specs under src/test/use-cases/, named after user scenarios (not modules: e.g. `recover-a-crashed-chrome.spec.ts`), each `describe` opening with `Scenario:` plus the user goal; together they cover all six verbs and all seven root namespaces (library scenarios only: the CLI and MCP host scenarios live in search-usecases), each citing ticket 8468f7b1, a valid tests-use-cases.N id and the AC ids they exercise."""
+    """At least 12 use-case specs under test/unit/use-cases/, named after user scenarios (not modules: e.g. `recover-a-crashed-chrome.spec.ts`), each `describe` opening with `Scenario:` plus the user goal; together they cover all six verbs and all seven root namespaces (library scenarios only: the CLI and MCP host scenarios live in search-usecases), each citing ticket 8468f7b1, a valid tests-use-cases.N id and the AC ids they exercise."""
     specs = uc_specs()
     t = "\n".join(read(f) for f in specs)
     modlike = [os.path.basename(f) for f in specs if re.fullmatch(r"(cdp|storage|capture|parsers|chrome-manager|api|index|session|helpers|types)\.spec\.ts", os.path.basename(f))]
@@ -2700,15 +2712,15 @@ def _uc4():
 
 @check("tests-use-cases", 5)
 def _uc5():
-    """`nx run stealth-core-browser:test -- src/test/use-cases` exits 0 in under 120 seconds wall clock and leaves no listener behind on the ports it used."""
+    """`nx run stealth-core-browser:test -- test/unit/use-cases` exits 0 in under 120 seconds wall clock and leaves no listener behind on the ports it used."""
     t0 = time.time()
-    rc, out = sh([NX, "run", f"{proj_name()}:test", "--", "src/test/use-cases"], timeout=1800)
+    rc, out = sh([NX, "run", f"{proj_name()}:test", "--", "test/unit/use-cases"], timeout=1800)
     return rc == 0 and time.time() - t0 < 120 + 60, f"rc={rc} {time.time() - t0:.0f}s {out[-150:]}"
 
 
 @check("tests-use-cases", 6)
 def _uc6():
-    """Only owned paths changed by [psm:tests-use-cases] commits (src/test/use-cases/**, src/test/support/**); no production file is edited to make a simulation pass."""
+    """Only owned paths changed by [psm:tests-use-cases] commits (test/unit/use-cases/**, test/helpers/**); no production file is edited to make a simulation pass."""
     return ownership_ok("tests-use-cases")
 
 
@@ -2985,7 +2997,7 @@ BAN_WORDS = r"node:net|node:http|child_process|from ['\"]ws['\"]"
 
 def ac_spec(sub, fname, cid, must=(), anywhere=False):
     """(ok, why) for one acceptance spec: the file exists, cites ticket 8468f7b1 and its [state.N] id (the CU/CL/HC number is in the text) and contains every `must` token."""
-    p = f"{P}/src/test/{sub}/{fname}"
+    p = f"{P}/test/{sub}/{fname}"
     t = read(p)
     miss = [m for m in must if m not in t]
     return bool(t.strip()) and TICKET in t and f"[{cid}]" in t and not miss, f"{sub}/{fname}: exists={bool(t.strip())} cites ticket={TICKET in t} id={f'[{cid}]' in t} missing tokens={miss}"
@@ -2996,19 +3008,19 @@ def lib_text(sub):
 
 
 def run_unit(sub):
-    rc, out = sh([NX, "run", f"{proj_name()}:test", "--", f"src/test/unit/{sub}"], timeout=1800)
+    rc, out = sh([NX, "run", f"{proj_name()}:test", "--", f"test/unit/{sub}"], timeout=1800)
     return rc == 0, f"unit/{sub} rc={rc} {out[-150:]}"
 
 
 @check("cdp-test-harness", 1)
 def _h1():
-    """The in-memory CDP harness exists: src/test/support/fake-cdp.ts exports FakeCdpServer (install, received, unexpected, emitNow, closeFromServer, openCount), loadFixture and the CdpFixture / CdpFixtureStep types, and src/test/fixtures/cdp/ holds the 14 `<name>.cdp.json` fixtures (doc-200, search-404, rate-limit-429, redirect-301-200, extrainfo-before-main, extrainfo-after-main, cached-304, cors-failure, post-json-api, binary-base64, no-body-204, two-tabs-parallel, isolated-context-ok, isolated-context-target-missing), each valid JSON with `meta.name`, `meta.origin` (`recorded` or `synthetic-protocol-conformant`) and a `steps` array."""
-    t = read(f"{P}/src/test/support/fake-cdp.ts")
+    """The in-memory CDP harness exists: test/helpers/fake-cdp.ts exports FakeCdpServer (install, received, unexpected, emitNow, closeFromServer, openCount), loadFixture and the CdpFixture / CdpFixtureStep types, and test/fixtures/cdp/ holds the 14 `<name>.cdp.json` fixtures (doc-200, search-404, rate-limit-429, redirect-301-200, extrainfo-before-main, extrainfo-after-main, cached-304, cors-failure, post-json-api, binary-base64, no-body-204, two-tabs-parallel, isolated-context-ok, isolated-context-target-missing), each valid JSON with `meta.name`, `meta.origin` (`recorded` or `synthetic-protocol-conformant`) and a `steps` array."""
+    t = read(f"{P}/test/helpers/fake-cdp.ts")
     ex = exports_of(t)
     api = {"FakeCdpServer", "loadFixture"} <= ex and {"CdpFixture", "CdpFixtureStep"} <= ex and all(m in t for m in ("install", "received", "unexpected", "emitNow", "closeFromServer", "openCount"))
     bad = []
     for n in FIXTURE_NAMES:
-        d = jread(f"{P}/src/test/fixtures/cdp/{n}.cdp.json", None)
+        d = jread(f"{P}/test/fixtures/cdp/{n}.cdp.json", None)
         if not (isinstance(d, dict) and (d.get("meta") or {}).get("name") == n and (d.get("meta") or {}).get("origin") in ("recorded", "synthetic-protocol-conformant") and isinstance(d.get("steps"), list) and d["steps"]):
             bad.append(n)
     return api and not bad, f"api={api} bad fixtures={bad}"
@@ -3016,14 +3028,14 @@ def _h1():
 
 @check("cdp-test-harness", 2)
 def _h2():
-    """The harness is pure (unit purity): no `node:net`, `node:http`, `child_process` or `ws` import anywhere under src/test/support (the loopback-socket variant belongs to a later e2e follow-up, not this lane)."""
-    hits = [os.path.relpath(f, P) for f in walk(f"{P}/src/test/support", (".ts",)) if re.search(BAN_WORDS, read(f))]
-    return not hits and exists(f"{P}/src/test/support/fake-cdp.ts"), f"impure support files {hits}"
+    """The harness is pure (unit purity): no `node:net`, `node:http`, `child_process` or `ws` import anywhere under test/helpers (the loopback-socket variant belongs to a later e2e follow-up, not this lane)."""
+    hits = [os.path.relpath(f, P) for f in walk(f"{P}/test/helpers", (".ts",)) if re.search(BAN_WORDS, read(f))]
+    return not hits and exists(f"{P}/test/helpers/fake-cdp.ts"), f"impure support files {hits}"
 
 
 @check("cdp-test-harness", 3)
 def _h3():
-    """src/test/unit/support/fake-cdp.spec.ts covers HC1 id correlation, HC2 strict unknown command (CDP error -32601, listed in `.unexpected`), HC3 fake-timer ordering of `delayMs` events, HC4 the Network-domain field-name allow-list over every fixture, HC5 `closeFromServer` firing `close`; it cites ticket 8468f7b1 and a valid cdp-test-harness.N id, and `nx run stealth-browser:test` exits 0."""
+    """test/unit/support/fake-cdp.spec.ts covers HC1 id correlation, HC2 strict unknown command (CDP error -32601, listed in `.unexpected`), HC3 fake-timer ordering of `delayMs` events, HC4 the Network-domain field-name allow-list over every fixture, HC5 `closeFromServer` firing `close`; it cites ticket 8468f7b1 and a valid cdp-test-harness.N id, and `nx run stealth-browser:test` exits 0."""
     ok, why = ac_spec("unit/support", "fake-cdp.spec.ts", "cdp-test-harness.3", ("HC1", "HC2", "HC3", "HC4", "HC5", "-32601"))
     rc, out = sh([NX, "run", f"{proj_name()}:test"], timeout=2400)
     return ok and rc == 0, f"{why} test rc={rc}"
@@ -3031,23 +3043,23 @@ def _h3():
 
 @check("cdp-test-harness", 4)
 def _h4():
-    """Only owned paths changed by [psm:cdp-test-harness] commits (src/test/support/, src/test/fixtures/cdp/, src/test/unit/support/)."""
+    """Only owned paths changed by [psm:cdp-test-harness] commits (test/helpers/, test/fixtures/cdp/, test/unit/support/)."""
     return ownership_ok("cdp-test-harness")
 
 
 @check("cdp-test-harness", 5)
 def _h5():
-    """src/test/support/mem-fs.ts exports an in-memory FsLike (MemFs) with exclusive create (`wx` fails on an existing file), atomic rename, readdir, mode and uid; src/test/unit/support/mem-fs.spec.ts proves exclusive-create failure and rename atomicity and cites 8468f7b1 and [cdp-test-harness.5]."""
-    t = read(f"{P}/src/test/support/mem-fs.ts")
+    """test/helpers/mem-fs.ts exports an in-memory FsLike (MemFs) with exclusive create (`wx` fails on an existing file), atomic rename, readdir, mode and uid; test/unit/support/mem-fs.spec.ts proves exclusive-create failure and rename atomicity and cites 8468f7b1 and [cdp-test-harness.5]."""
+    t = read(f"{P}/test/helpers/mem-fs.ts")
     ok = "MemFs" in exports_of(t) and all(k in t for k in ("rename", "readdir", "mode", "uid")) and re.search(r"wx|exclusive|EEXIST", t) is not None
     s_ok, why = ac_spec("unit/support", "mem-fs.spec.ts", "cdp-test-harness.5", ("rename",))
-    return ok and s_ok and re.search(r"EEXIST|exclusive", read(f"{P}/src/test/unit/support/mem-fs.spec.ts")) is not None, f"mem-fs={ok} {why}"
+    return ok and s_ok and re.search(r"EEXIST|exclusive", read(f"{P}/test/unit/support/mem-fs.spec.ts")) is not None, f"mem-fs={ok} {why}"
 
 
 @check("cdp-test-harness", 6)
 def _h6():
-    """src/test/support/fake-proc.ts exports FakeProc with `pidAlive`, `procStart`, `kill(pid|-pgid, signal)` (logged) and a recording `spawn`; src/test/unit/support/fake-proc.spec.ts covers each and cites 8468f7b1 and [cdp-test-harness.6]."""
-    t = read(f"{P}/src/test/support/fake-proc.ts")
+    """test/helpers/fake-proc.ts exports FakeProc with `pidAlive`, `procStart`, `kill(pid|-pgid, signal)` (logged) and a recording `spawn`; test/unit/support/fake-proc.spec.ts covers each and cites 8468f7b1 and [cdp-test-harness.6]."""
+    t = read(f"{P}/test/helpers/fake-proc.ts")
     ok = "FakeProc" in exports_of(t) and all(k in t for k in ("pidAlive", "procStart", "kill", "spawn"))
     s_ok, why = ac_spec("unit/support", "fake-proc.spec.ts", "cdp-test-harness.6", ("pidAlive", "procStart", "kill", "spawn"))
     return ok and s_ok, f"fake-proc={ok} {why}"
@@ -3166,7 +3178,7 @@ def _cu12():
 
 @check("capture-upgrade", 13)
 def _cu13():
-    """CU13 hygiene: only owned paths changed by [psm:capture-upgrade] commits (src/lib/recording/, capture/network.ts, capture/index.ts, src/test/unit/capture/, capture-parsers/network.spec.ts), `node:sqlite` and `process.env` never appear in src/lib/recording, the only top-level reference to @adhd/sox-store-adapter in src/lib/recording is `import type` (no value import and no require), and `nx run stealth-browser:test -- src/test/unit/capture` exits 0."""
+    """CU13 hygiene: only owned paths changed by [psm:capture-upgrade] commits (src/lib/recording/, capture/network.ts, capture/index.ts, test/unit/capture/, capture-parsers/network.spec.ts), `node:sqlite` and `process.env` never appear in src/lib/recording, the only top-level reference to @adhd/sox-store-adapter in src/lib/recording is `import type` (no value import and no require), and `nx run stealth-browser:test -- test/unit/capture` exits 0."""
     o = ownership_ok("capture-upgrade")
     r = lib_text("recording")
     value_import = re.search(r"^\s*(import\s+(?!type\b)[^;]*from\s*['\"]@adhd/sox-store-adapter['\"]|.*require\(\s*['\"]@adhd/sox-store-adapter)", r, re.M) is not None
@@ -3192,7 +3204,7 @@ _spec_check(26, "open-store-sink.spec.ts", "CU26 openStoreRecordingSink: src/lib
 
 @check("capture-upgrade", 27)
 def _cu27():
-    """CU27 module-format guard (ADR-0003): src/test/unit/capture/build-format.spec.ts asserts on the source text that src/lib/recording references @adhd/sox-store-adapter at top level only through `import type` and has exactly one dynamic `import('@adhd/sox-store-adapter')` call site (inside the `loadAdapter` default); the guard re-checks both facts on src/lib/recording, requires `@adhd/sox-store-adapter` in package.json `dependencies` and `externalizeRealDeps(__dirname)` in vite.config.ts (owned by port-fixes), and when dist/index.js exists it contains no `require('@adhd/sox-store-adapter')`."""
+    """CU27 module-format guard (ADR-0003): test/unit/capture/build-format.spec.ts asserts on the source text that src/lib/recording references @adhd/sox-store-adapter at top level only through `import type` and has exactly one dynamic `import('@adhd/sox-store-adapter')` call site (inside the `loadAdapter` default); the guard re-checks both facts on src/lib/recording, requires `@adhd/sox-store-adapter` in package.json `dependencies` and `externalizeRealDeps(__dirname)` in vite.config.ts (owned by port-fixes), and when dist/index.js exists it contains no `require('@adhd/sox-store-adapter')`."""
     r = lib_text("recording")
     dyn = re.findall(r"import\(\s*['\"]@adhd/sox-store-adapter['\"]\s*\)", r)
     top = [m for m in re.findall(r"^\s*import\s+[^;]*from\s*['\"]@adhd/sox-store-adapter['\"]", r, re.M) if not re.match(r"\s*import\s+type\b", m)]
@@ -3234,10 +3246,10 @@ _cl_spec(10, "ordered-shutdown.spec.ts", "CL10 (F16) ordered shutdown: ordered-s
 
 @check("chrome-lifecycle", 11)
 def _cl11():
-    """CL11 (F18) group kill: src/lib/cdp/browser.ts exports `killProcessGroup(pid)` (extract-only: the SIGTERM-to-group, bounded wait, SIGKILL-to-group, single-pid fallback logic that the tracked-branch kill already used, moved to a named export), src/test/unit/cdp/browser.spec.ts keeps every `expect(` line and every `it(` or `describe(` title line it had at the chrome-lifecycle start_ref (fallback: the tests-unit-core end_ref) and is still green: fixture-only changes (helpers, `execSync` mocks, the simulated `ps -o command=` answers) and the `-sTCP:LISTEN` insertion into the lsof command string are allowed, any other changed assertion fails, and process-group.spec.ts proves `killProcessGroup` issues the same signal sequence as the tracked branch (SIGTERM, a bounded wait, SIGKILL, fallback to the single pid)."""
+    """CL11 (F18) group kill: src/lib/cdp/browser.ts exports `killProcessGroup(pid)` (extract-only: the SIGTERM-to-group, bounded wait, SIGKILL-to-group, single-pid fallback logic that the tracked-branch kill already used, moved to a named export), test/unit/cdp/browser.spec.ts keeps every `expect(` line and every `it(` or `describe(` title line it had at the chrome-lifecycle start_ref (fallback: the tests-unit-core end_ref) and is still green: fixture-only changes (helpers, `execSync` mocks, the simulated `ps -o command=` answers) and the `-sTCP:LISTEN` insertion into the lsof command string are allowed, any other changed assertion fails, and process-group.spec.ts proves `killProcessGroup` issues the same signal sequence as the tracked branch (SIGTERM, a bounded wait, SIGKILL, fallback to the single pid)."""
     b = read(f"{P}/src/lib/cdp/browser.ts")
     ok, why = ac_spec("unit/lifecycle", "process-group.spec.ts", "chrome-lifecycle.11", ("killProcessGroup", "SIGTERM", "SIGKILL"))
-    spec = f"{P}/src/test/unit/cdp/browser.spec.ts"
+    spec = f"{P}/test/unit/cdp/browser.spec.ts"
     st = (state().get("states") or {})
     ref = (st.get("chrome-lifecycle") or {}).get("start_ref") or (st.get("tests-unit-core") or {}).get("end_ref")
     if not ref or not exists(spec):
@@ -3319,9 +3331,9 @@ _cl_spec(21, "best-effort.spec.ts", "CL21 (F26) best-effort I/O: best-effort.spe
 
 @check("chrome-lifecycle", 22)
 def _cl22():
-    """CL22 one seam: `ReaperLink` (src/lib/lifecycle/reaper-link.ts) is the only port (the real adapter `createProxyReaperLink` and a test fake at src/test/unit/lifecycle/fake-reaper-link.ts that the manager tests substitute); src/lib/lifecycle/sp.ts is the ONLY file under src/ that imports `@adhd/sox-service-proxy` (static import) and it re-exports at least ensureBackend, serveBackend, dialBackend, backendSocketPath, ensurePrivateSocketDir, readProcessStartToken, isSameProcess, createIdleRetirer and createCircuitBreaker; no `PresenceStore`, `FilePresenceStore` or `ReaperLauncher` identifier exists; decideReap, the tiers, the breaker, the isolated pages, the exit hooks and the manager never import the package directly."""
+    """CL22 one seam: `ReaperLink` (src/lib/lifecycle/reaper-link.ts) is the only port (the real adapter `createProxyReaperLink` and a test fake at test/helpers/lifecycle/fake-reaper-link.ts that the manager tests substitute); src/lib/lifecycle/sp.ts is the ONLY file under src/ that imports `@adhd/sox-service-proxy` (static import) and it re-exports at least ensureBackend, serveBackend, dialBackend, backendSocketPath, ensurePrivateSocketDir, readProcessStartToken, isSameProcess, createIdleRetirer and createCircuitBreaker; no `PresenceStore`, `FilePresenceStore` or `ReaperLauncher` identifier exists; decideReap, the tiers, the breaker, the isolated pages, the exit hooks and the manager never import the package directly."""
     sp = read(f"{P}/src/lib/lifecycle/sp.ts")
-    fake = read(f"{P}/src/test/unit/lifecycle/fake-reaper-link.ts")
+    fake = read(f"{P}/test/helpers/lifecycle/fake-reaper-link.ts")
     leak = [os.path.relpath(f, P) for f in walk(f"{P}/src/lib", (".ts",)) if os.path.basename(f) != "sp.ts" and PROXY_PKG in read(f)]
     gone = [os.path.relpath(f, P) for f in walk(f"{P}/src", (".ts",)) if re.search(r"\b(PresenceStore|FilePresenceStore|ReaperLauncher)\b", code_lines(read(f)))]
     link = read(f"{P}/src/lib/lifecycle/reaper-link.ts")
@@ -3331,9 +3343,9 @@ def _cl22():
 
 @check("chrome-lifecycle", 23)
 def _cl23():
-    """CL23 hygiene: `process.env` never appears in src/lib/lifecycle (no env toggles, ADR-0013), no spec under src/test/unit/lifecycle opens a socket or spawns a process (no unmocked node:net, node:http or child_process), only owned paths changed by [psm:chrome-lifecycle] commits, and `nx run stealth-browser:test -- src/test/unit/lifecycle` exits 0 without touching a real port 9222."""
+    """CL23 hygiene: `process.env` never appears in src/lib/lifecycle (no env toggles, ADR-0013), no spec under test/unit/lifecycle opens a socket or spawns a process (no unmocked node:net, node:http or child_process), only owned paths changed by [psm:chrome-lifecycle] commits, and `nx run stealth-browser:test -- test/unit/lifecycle` exits 0 without touching a real port 9222."""
     o = ownership_ok("chrome-lifecycle")
-    specs = [f for f in walk(f"{P}/src/test/unit/lifecycle", (".ts",)) if re.search(r"from ['\"]node:(net|http)['\"]", read(f))]
+    specs = [f for f in walk(f"{P}/test/unit/lifecycle", (".ts",)) if re.search(r"from ['\"]node:(net|http)['\"]", read(f))]
     if not walk(f"{P}/src/lib/lifecycle", (".ts",)):
         return False, "no lifecycle sources yet"
     ok, why = run_unit("lifecycle")
@@ -3406,7 +3418,7 @@ SEARCH_INV = f"{PLAN}/evidence/search-failsafe-inventory.json"
 
 
 def search_unpinned():
-    """Rows of the search-side inventory (evidence/search-failsafe-inventory.json) that are not pinned: a row with a `pin` {file, test} must have the pin file under entrypoint/stealth-search/src/test/ cite `[<row id>]` and contain the named test; a row with `pin: null` needs a `reason`. Returns the ids; ['<no inventory>'] while the inventory does not exist."""
+    """Rows of the search-side inventory (evidence/search-failsafe-inventory.json) that are not pinned: a row with a `pin` {file, test} must have the pin file under entrypoint/stealth-search/test/ cite `[<row id>]` and contain the named test; a row with `pin: null` needs a `reason`. Returns the ids; ['<no inventory>'] while the inventory does not exist."""
     d = jread(SEARCH_INV, {}) or {}
     rows = d.get("rows") or []
     if not rows:
@@ -3461,14 +3473,14 @@ def _fi2():
 
 @check("failsafe-inventory", 3)
 def _fi3():
-    """Every row names an `owner_state` from the closed set (port-fixes, tests-unit-core, tests-unit-data, tests-unit-extract, tests-unit-surface, capture-upgrade, chrome-lifecycle) and a planned `pin` ({file under entrypoint/stealth-browser/src/test/ inside that owner's owned test directory, test: an it()/test() name substring}); rows tagged reaper, cross-process, livelock, launch-lock-oexcl, group-kill or newtab-fix are owned by chrome-lifecycle or tests-unit-core, rows tagged capture by capture-upgrade or tests-unit-extract."""
+    """Every row names an `owner_state` from the closed set (port-fixes, tests-unit-core, tests-unit-data, tests-unit-extract, tests-unit-surface, capture-upgrade, chrome-lifecycle) and a planned `pin` ({file under entrypoint/stealth-browser/test/ inside that owner's owned test directory, test: an it()/test() name substring}); rows tagged reaper, cross-process, livelock, launch-lock-oexcl, group-kill or newtab-fix are owned by chrome-lifecycle or tests-unit-core, rows tagged capture by capture-upgrade or tests-unit-extract."""
     own = ownership()
     bad = []
     for r in inventory_rows():
         o, pin = r.get("owner_state"), r.get("pin") or {}
         pf = f"{P}/{pin.get('file', '')}"
         owned = own.get(o, [])
-        inside = any(pf.startswith(x) for x in owned if x.endswith("/") and "/src/test/" in x) or any(pf == x for x in owned)
+        inside = any(pf.startswith(x) for x in owned if x.endswith("/") and "/test/" in x) or any(pf == x for x in owned)
         if o not in INV_OWNERS or not pin.get("file") or not pin.get("test") or not inside:
             bad.append(r.get("id"))
     return len(inventory_rows()) >= 40 and not bad, f"rows with a missing/unowned pin {bad[:10]}"
@@ -3599,7 +3611,7 @@ SEAM = ("configureManagers", "managerFor", "chromeExitTarget")
 def _sh15():
     """(P7, P8) the manager seam is shared and reachable from the root: src/lib/managers.ts exports configureManagers, managerFor and chromeExitTarget and is the only non-test file under src/ that constructs a ChromeManager (`new ChromeManager(`); src/api.ts imports managerFor from './lib/managers.js' and neither file reads process.env; `ChromeManagerOptions` declares `keepAlive?` and `entryPath?` and chrome-manager.ts passes entryPath to createProxyReaperLink; src/index.ts exports `lifecycle` from './lib/lifecycle/index.js' and src/lib/lifecycle/index.ts re-exports from '../managers.js'; `require()` of the built dist/index.js exposes lifecycle.configureManagers, lifecycle.managerFor, lifecycle.chromeExitTarget, lifecycle.installProcessExitHooks and lifecycle.runChromeReaper."""
     mg, api, cm = read(f"{P}/src/lib/managers.ts"), read(f"{P}/src/api.ts"), read(f"{P}/src/lib/chrome-manager.ts")
-    sites = [os.path.relpath(f, P) for f in walk(f"{P}/src", (".ts",)) if "/src/test/" not in f and "new ChromeManager(" in code_lines(read(f))]
+    sites = [os.path.relpath(f, P) for f in walk(f"{P}/src", (".ts",)) if "/test/" not in f and "new ChromeManager(" in code_lines(read(f))]
     seam = set(SEAM) <= exports_of(mg) and sites == ["src/lib/managers.ts"]
     routed = "managerFor" in api and re.search(r"from\s*['\"]\./lib/managers\.js['\"]", api) is not None and "process.env" not in api + mg
     opts = re.search(r"keepAlive\?\s*:", cm) is not None and re.search(r"entryPath\?\s*:", cm) is not None and re.search(r"createProxyReaperLink\(\{.{0,1500}?\bentryPath\b", cm, re.S) is not None
@@ -3621,7 +3633,7 @@ def _sh15():
 
 @check("surface-hosts", 16)
 def _sh16():
-    """Host unit specs simulate real use in-process: spec files under src/test/unit/hosts/ cite ticket 8468f7b1 and [surface-hosts.16], import no node:child_process, and drive the real configureManagers, managerFor and chromeExitTarget (`keepAlive` true never arms the idle timer, `release()` and `shutdownIfIdle()` reach every live manager) and the host flag mapping of `--port`, `--user-data-dir`, `--idle-shutdown` and `--keep-alive`; `nx run stealth-browser:test -- src/test/unit/hosts` exits 0."""
+    """Host unit specs simulate real use in-process: spec files under test/unit/hosts/ cite ticket 8468f7b1 and [surface-hosts.16], import no node:child_process, and drive the real configureManagers, managerFor and chromeExitTarget (`keepAlive` true never arms the idle timer, `release()` and `shutdownIfIdle()` reach every live manager) and the host flag mapping of `--port`, `--user-data-dir`, `--idle-shutdown` and `--keep-alive`; `nx run stealth-browser:test -- test/unit/hosts` exits 0."""
     specs = spec_files("unit/hosts")
     t = "\n".join(read(f) for f in specs)
     must = [*SEAM, "keepAlive", "release(", "shutdownIfIdle(", "--port", "--user-data-dir", "--idle-shutdown", "--keep-alive"]
@@ -3886,7 +3898,7 @@ def _sw2():
 
 @check("sp-switch", 3)
 def _sw3():
-    """The registry build passes the same gates: after the switch `nx run stealth-core-browser:build` and `nx run stealth-core-browser:test -- src/test/unit/lifecycle` exit 0, and smoke/switch.md records `BUILD: exit=0` and `LIFECYCLE-UNIT: exit=0`."""
+    """The registry build passes the same gates: after the switch `nx run stealth-core-browser:build` and `nx run stealth-core-browser:test -- test/unit/lifecycle` exit 0, and smoke/switch.md records `BUILD: exit=0` and `LIFECYCLE-UNIT: exit=0`."""
     t = read(SPS)
     if not (re.search(r"^BUILD: exit=0\s*$", t, re.M) and re.search(r"^LIFECYCLE-UNIT: exit=0\s*$", t, re.M)):
         return False, "evidence missing"
@@ -3933,7 +3945,7 @@ def tw_nx(target, timeout=1800):
 
 
 def tw_spec(fname, cid, must=()):
-    p = f"{TW}/src/test/unit/{fname}"
+    p = f"{TW}/test/unit/{fname}"
     t = read(p)
     miss = [m for m in must if m not in t]
     return bool(t.strip()) and TICKET in t and f"[{cid}]" in t and not miss, f"{fname}: exists={bool(t.strip())} cites ticket={TICKET in t} id={f'[{cid}]' in t} missing tokens={miss}"
@@ -3961,7 +3973,7 @@ def tw_purity():
 
 def tw_citations():
     """TW35: every spec under src/test cites ticket 8468f7b1 and a tripwire criterion id [tripwire-<state>.N] or a TW id."""
-    specs = [f for f in walk(f"{TW}/src/test", (".ts",)) if f.endswith(".spec.ts")]
+    specs = [f for f in walk(f"{TW}/test", (".ts",)) if f.endswith(".spec.ts")]
     ids = criteria_ids()
     bad = [os.path.relpath(f, TW) for f in specs if TICKET not in read(f) or not (set(re.findall(r"\[((?:tripwire-[a-z-]+)\.\d+)\]", read(f))) & ids)]
     return bool(specs) and not bad, f"uncited specs {bad[:6]}"
@@ -4071,7 +4083,7 @@ TW_CORE_MAP = [
 def _mk_core(n, label, fname, must, text):
     def fn():
         return tw_spec(fname, f"tripwire-core.{n}", (label,) + tuple(must))
-    fn.__doc__ = f"{label} {text}; proven in src/test/unit/{fname} (cites ticket 8468f7b1, the id and {label})."
+    fn.__doc__ = f"{label} {text}; proven in test/unit/{fname} (cites ticket 8468f7b1, the id and {label})."
     check("tripwire-core", n)(fn)
 
 
@@ -4257,11 +4269,11 @@ def _twd3():
 
 @check("tripwire-docs", 4)
 def _twd4():
-    """README examples compile and run: src/test/unit/readme-examples.spec.ts cites ticket 8468f7b1 and its id, contains one test per fenced `ts` block of README.md (each README example is copied into the spec and exercised against the memory fs), and `nx run resilience-core-tripwire:typecheck-spec` and `:test` exit 0."""
+    """README examples compile and run: test/unit/readme-examples.spec.ts cites ticket 8468f7b1 and its id, contains one test per fenced `ts` block of README.md (each README example is copied into the spec and exercised against the memory fs), and `nx run resilience-core-tripwire:typecheck-spec` and `:test` exit 0."""
     readme = read(f"{TW}/README.md")
     blocks = len(re.findall(r"^```(?:ts|typescript)\b", readme, re.M))
     ok, why = tw_spec("readme-examples.spec.ts", "tripwire-docs.4", ("README",))
-    spec = read(f"{TW}/src/test/unit/readme-examples.spec.ts")
+    spec = read(f"{TW}/test/unit/readme-examples.spec.ts")
     if not (ok and blocks >= 3 and len(re.findall(r"\b(?:it|test)\(", spec)) >= blocks):
         return False, f"{why}; ts blocks={blocks}"
     a, _ = tw_nx("typecheck-spec")
@@ -4521,7 +4533,9 @@ def _gf12():
     """Release hygiene for the service proxy and the tripwire: no @adhd/* dependency, devDependency or override in the root, stealth-core-browser, stealth-search or tripwire manifests starts with `file:`, `link:` or `portal:`, no `pnpm.overrides["@adhd/sox-service-proxy"]` remains (sp-switch removed it), pnpm-lock.yaml has no `adhd-dev-tarballs` or `file:/Users` resolution, and the stealth-browser dependency on @adhd/sox-service-proxy is `~0.6.0`."""
     lock = read("pnpm-lock.yaml")
     bad = local_specifiers()
-    return not bad and PROXY_PKG not in root_overrides() and "adhd-dev-tarballs" not in lock and "file:/Users" not in lock and sp_dep() == "~0.6.0", f"local specifiers {bad}; override={root_overrides().get(PROXY_PKG)}; dependency={sp_dep()!r}"
+    ev = jread(f"{PLAN}/evidence/gates-first.json", {}) or {}
+    mine = state_status("gates-first") in ("in_progress", "complete") and bool(ev.get("all_green")) and ev.get("tree") == tree_sha()  # the state's own work product: a green gate run on the current code tree, recorded after the state started
+    return mine and not bad and PROXY_PKG not in root_overrides() and "adhd-dev-tarballs" not in lock and "file:/Users" not in lock and sp_dep() == "~0.6.0", f"gates-first evidence current={mine}; local specifiers {bad}; override={root_overrides().get(PROXY_PKG)}; dependency={sp_dep()!r}"
 
 
 @check("merge-readiness", 5)
@@ -4539,7 +4553,8 @@ def _mr6():
     """The tree being merged carries no local specifier: no @adhd/* `file:` / `link:` / `portal:` value or service-proxy override in the root, stealth-core-browser, stealth-search or tripwire manifests, and no `adhd-dev-tarballs` or `file:/Users` text in pnpm-lock.yaml (a published manifest never carries a path)."""
     lock = read("pnpm-lock.yaml")
     bad = local_specifiers()
-    return not bad and PROXY_PKG not in root_overrides() and "adhd-dev-tarballs" not in lock and "file:/Users" not in lock and sp_dep() == "~0.6.0", f"local specifiers {bad}; stealth-browser proxy dependency={sp_dep()!r}"
+    mine = exists(f"{PLAN}/RELEASE-DECISION.md")  # the state's own work product
+    return mine and not bad and PROXY_PKG not in root_overrides() and "adhd-dev-tarballs" not in lock and "file:/Users" not in lock and sp_dep() == "~0.6.0", f"RELEASE-DECISION.md present={mine}; local specifiers {bad}; stealth-browser proxy dependency={sp_dep()!r}"
 
 
 @check("docs-marketing-run", 11)

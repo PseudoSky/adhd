@@ -18,8 +18,8 @@ def _dd(slug, n, fn):
 
 
 # ---------------------------------------------------------------- core-seam (state is in progress: proven red by running --only by hand)
-CORE_FIXTURE_SPECS = ["src/test/unit/cdp/browser.spec.ts", "src/test/unit/lifecycle/kill.spec.ts", "src/test/unit/lifecycle/launch.spec.ts",
-                      "src/test/unit/lifecycle/concurrent-launch.spec.ts", "src/test/unit/lifecycle/reaper-scope.spec.ts"]
+CORE_FIXTURE_SPECS = ["test/unit/cdp/browser.spec.ts", "test/unit/lifecycle/kill.spec.ts", "test/unit/lifecycle/launch.spec.ts",
+                      "test/unit/lifecycle/concurrent-launch.spec.ts", "test/unit/lifecycle/reaper-scope.spec.ts"]
 
 
 def _d_sm7():
@@ -157,7 +157,7 @@ _dd("search-verbs", 13, lambda: _bug_ac("search", "search-verbs", 13, ["591e1a7"
 _dd("search-verbs", 14, lambda: _bug_ac("search", "search-verbs", 14, ["591e1a7"], "verbs",
     ["timeoutMs", "networkSearch", "post-challenge", "30000", "12000"], [("src/lib/search.ts", r"timeoutMs")]))
 _dd("search-verbs", 15, lambda: _bug_ac("search", "search-verbs", 15, ["591e1a7"], "verbs",
-    ["strategy-unsupported", "SEARCH_FAILED", "before any page", "github", "dom"], [("src/lib/search.ts", r"strategy-unsupported")]))
+    ["strategy-unsupported", "SEARCH_FAILED", "before any page", "github", "dom"], [("src/lib/search.ts", r"\bthrow\s+strategyUnsupported\s*\(")]))
 _dd("search-verbs", 16, lambda: _bug_ac("search", "search-verbs", 16, ["c00edea"], "verbs",
     ["attempts", "empty", "decideRetry", "legitimate zero results", "noCaptureOutcome"], [("src/lib/search.ts", r"decideRetry")]))
 

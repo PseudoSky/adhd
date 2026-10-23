@@ -38,7 +38,7 @@ ARGS = ap.parse_args()
 check("dod.1", "three generator-built packages (stealth-core-browser, stealth-search, resilience-core-tripwire), sibling-structure parity",
       f"{G} audit-final --only audit-final.1 | grep -q PASS")
 check("dod.2", "use-case unit suites (library scenarios in the core, CLI and MCP scenarios in the search entrypoint, against the in-process fake CDP server) pass",
-      f"{NX} run stealth-core-browser:test -- src/test/use-cases && {NX} run stealth-search:test -- src/test/use-cases && {G} tests-use-cases | grep -q PASS && {G} search-usecases | grep -q PASS", also=("pre-review",))
+      f"{NX} run stealth-core-browser:test -- test/unit/use-cases && {NX} run stealth-search:test -- test/unit/use-cases && {G} tests-use-cases | grep -q PASS && {G} search-usecases | grep -q PASS", also=("pre-review",))
 check("dod.3", "tracing namespace is adhd, never apigen (configuration pins + the validating agent's read of the logs written by the built CLI and MCP hosts)",
       f"{G} audit-final --only audit-final.3 | grep -q PASS", also=("pre-review",))
 check("dod.4", "behavior-preserving port (exports, similarity, tokens)",

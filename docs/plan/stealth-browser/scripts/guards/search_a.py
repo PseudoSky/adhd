@@ -23,7 +23,7 @@ SA_OWNERS = {"search-inventory", "search-errors", "search-port-providers", "sear
              "search-verbs", "search-hosts", "search-usecases", "search-examples", "search-cutover", "search-tracing", "core-seam",
              "docs-marketing-run", "readme-rewrite", "core-scaffold", "tripwire-pack", "none"}
 
-# slug -> (source files, spec dir under src/test/unit)
+# slug -> (source files, spec dir under test/unit)
 SA_SCOPE = {
     "search-errors": (["src/errors.ts"], "errors"),
     "search-port-providers": (["src/lib/types.ts", "src/lib/providers.ts", "src/lib/utils.ts", "src/lib/queries/last-search.ts"], "providers"),
@@ -247,7 +247,7 @@ def _si3():
 
 @check("search-inventory", 4)
 def _si4():
-    """Each row names the destination state it is implemented in and carries a `pin` {file, test} placeholder under entrypoint/stealth-search/src/test/ or `pin: null` with a `reason` for rows owned by hosts, usecases, examples, cutover or docs states; the 209 rows of evidence/failsafe-inventory.json are not duplicated (no row repeats a `fs-NNN` id)."""
+    """Each row names the destination state it is implemented in and carries a `pin` {file, test} placeholder under entrypoint/stealth-search/test/ or `pin: null` with a `reason` for rows owned by hosts, usecases, examples, cutover or docs states; the 209 rows of evidence/failsafe-inventory.json are not duplicated (no row repeats a `fs-NNN` id)."""
     rows = _sa_rows()
     bad = []
     for r in rows:
@@ -257,7 +257,7 @@ def _si4():
         elif pin is None:
             if not r.get("reason"):
                 bad.append(f"{r.get('id')}: null pin without reason")
-        elif not (isinstance(pin, dict) and str(pin.get("file", "")).startswith("src/test/") and pin.get("test")):
+        elif not (isinstance(pin, dict) and str(pin.get("file", "")).startswith("test/") and pin.get("test")):
             bad.append(f"{r.get('id')}: pin")
     return bool(rows) and not bad, f"pin problems {bad[:8]}"
 
@@ -286,7 +286,7 @@ def _se1():
 
 @check("search-errors", 2)
 def _se2():
-    """Every code is proven by a unit spec through the real path (the spec triggers the failure and asserts `instanceof StealthSearchError`, `instanceof StealthCoreBrowserError`, the `code` and the `exitCodeFor` value; no mocking of the error class), each spec cites ticket 8468f7b1 and a search-errors.N id, and each of the 13 code strings appears in at least one spec under src/test/unit/errors/."""
+    """Every code is proven by a unit spec through the real path (the spec triggers the failure and asserts `instanceof StealthSearchError`, `instanceof StealthCoreBrowserError`, the `code` and the `exitCodeFor` value; no mocking of the error class), each spec cites ticket 8468f7b1 and a search-errors.N id, and each of the 13 code strings appears in at least one spec under test/unit/errors/."""
     specs = _sa_specs("search-errors")
     txt = _sa_text(specs)
     miss = [c for c in SA_CODES if c not in txt]
@@ -717,13 +717,13 @@ def _st5():
 # Each criterion below is red until a spec that cites its [slug.N] id AND the backlog uid it simulates exists
 # and the owning unit directory runs green.  Specs are plan-owned test files under the owning state's reserved dirs.
 def _bug_ac(project, slug, n, uids, sub, tokens, src=None, nx_all=False):
-    """Shared check body: specs under src/test/unit/<sub> that cite [slug.n] carry every uid and token, the optional
+    """Shared check body: specs under test/unit/<sub> that cite [slug.n] carry every uid and token, the optional
     source patterns match, and the unit directory (or the whole project when nx_all) runs green through nx."""
     root = SEARCH_DIR if project == "search" else CORE_DIR
     tag = f"[{slug}.{n}]"
     specs = [f for f in spec_files_of(root, f"unit/{sub}") if tag in read(f)]
     if not specs:
-        return False, f"no spec under {root}/src/test/unit/{sub} cites {tag}"
+        return False, f"no spec under {root}/test/unit/{sub} cites {tag}"
     txt = "\n".join(read(f) for f in specs)
     low = txt.lower()
     miss_uid = [u for u in uids if u not in txt]
@@ -736,14 +736,14 @@ def _bug_ac(project, slug, n, uids, sub, tokens, src=None, nx_all=False):
             bad_src.append(f"{rel}: /{rx}/")
     if miss_uid or miss_tok or not ok or bad_src:
         return False, f"uids missing {miss_uid} tokens missing {miss_tok} {detail} source patterns unmet {bad_src}"
-    target = ["test"] if nx_all else ["test", "--", f"src/test/unit/{sub}"]
+    target = ["test"] if nx_all else ["test", "--", f"test/unit/{sub}"]
     rc, out = nx_run(SEARCH_PROJECT if project == "search" else CORE_PROJECT, *target)
     return rc == 0, f"nx test exit {rc}: {out[-200:]}"
 
 
 @check("search-port-fetch", 9)
 def _spf9():
-    """(backlog cd05ad09) The fetch result is token-efficient by default: with the default `content: 'none'` it holds only the metadata fields provider, url, finalUrl, outcome, status, contentType, contentSize, title, truncated, attempts and tookMs (no `content`, no HTML, no `raw.preview`); `content: 'full'` adds `content` as HTML-stripped markdown or text bounded by `maxContentSize` (the exported constant `DEFAULT_MAX_CONTENT_SIZE = 20000` bytes in src/lib/fetch/fetch.ts) starting at `offset`, and returns `nextOffset` while truncated so a caller can page. A spec under src/test/unit/fetch/ simulates the real case, a 408112-byte repository README page: the default result serializes under 2048 bytes, `content: 'full'` returns at most 20000 bytes plus `nextOffset`, and following `nextOffset` reaches the end with `nextOffset` absent; spec titles carry the literals `contentSize`, `nextOffset`, `maxContentSize`, `offset`, `finalUrl`, `408112`, `2048`, `20000` and the uid cd05ad09, and the spec cites [search-port-fetch.9]."""
+    """(backlog cd05ad09) The fetch result is token-efficient by default: with the default `content: 'none'` it holds only the metadata fields provider, url, finalUrl, outcome, status, contentType, contentSize, title, truncated, attempts and tookMs (no `content`, no HTML, no `raw.preview`); `content: 'full'` adds `content` as HTML-stripped markdown or text bounded by `maxContentSize` (the exported constant `DEFAULT_MAX_CONTENT_SIZE = 20000` bytes in src/lib/fetch/fetch.ts) starting at `offset`, and returns `nextOffset` while truncated so a caller can page. A spec under test/unit/fetch/ simulates the real case, a 408112-byte repository README page: the default result serializes under 2048 bytes, `content: 'full'` returns at most 20000 bytes plus `nextOffset`, and following `nextOffset` reaches the end with `nextOffset` absent; spec titles carry the literals `contentSize`, `nextOffset`, `maxContentSize`, `offset`, `finalUrl`, `408112`, `2048`, `20000` and the uid cd05ad09, and the spec cites [search-port-fetch.9]."""
     return _bug_ac("search", "search-port-fetch", 9, ["cd05ad09"], "fetch",
                    ["contentSize", "nextOffset", "maxContentSize", "offset", "finalUrl", "408112", "2048", "20000"],
                    [("src/lib/fetch/fetch.ts", r"DEFAULT_MAX_CONTENT_SIZE\s*=\s*20_?000\b")])
@@ -751,15 +751,15 @@ def _spf9():
 
 @check("search-port-fetch", 10)
 def _spf10():
-    """(backlog 86ed154e) A fetch of a missing page is never `success`: HTTP 404 and 410 return outcome `error` carrying the HTTP `status` and a message that begins `SEARCH_FAILED:` (no new error code: the registry stays at the 13 of search-errors); a soft not-found (status 200 whose title or first heading matches a not-found phrase on a sparse page under 3000 characters, or a deep path that redirects to the site root so `finalUrl` differs from `url`) returns outcome `error` the same way; a long real page (over 3000 characters) that merely contains the phrase 'page not found' in its body stays `success`. Specs under src/test/unit/fetch/ simulate the reported cases (self-hosting docs URL that 404s, a marketing page reached by redirect, a guide page that is real) with HTML fixtures; titles carry `404`, `410`, `soft-404`, `redirect`, `SEARCH_FAILED`, `false positive` and the uid 86ed154e, and the spec cites [search-port-fetch.10]."""
+    """(backlog 86ed154e) A fetch of a missing page is never `success`: HTTP 404 and 410 return outcome `error` carrying the HTTP `status` and a message that begins `SEARCH_FAILED:` (no new error code: the registry stays at the 13 of search-errors); a soft not-found (status 200 whose title or first heading matches a not-found phrase on a sparse page under 3000 characters, or a deep path that redirects to the site root so `finalUrl` differs from `url`) returns outcome `error` the same way; a long real page (over 3000 characters) that merely contains the phrase 'page not found' in its body stays `success`. Specs under test/unit/fetch/ simulate the reported cases (self-hosting docs URL that 404s, a marketing page reached by redirect, a guide page that is real) with HTML fixtures; titles carry `404`, `410`, `soft-404`, `redirect`, `SEARCH_FAILED`, `false positive` and the uid 86ed154e, and the spec cites [search-port-fetch.10]."""
     return _bug_ac("search", "search-port-fetch", 10, ["86ed154e"], "fetch",
                    ["404", "410", "soft-404", "redirect", "SEARCH_FAILED", "false positive"])
 
 
 @check("search-port-providers", 9)
 def _spp9():
-    """(backlog 861571da, 224e7a44; commits 591e1a7, c00edea) The github provider returns results or a typed outcome, never a silent empty or a long hang. Repository search (default `type=repositories`) is API-primary: `providers.github.network` is the direct public REST fetch (`api.github.com/search/repositories`, no browser), and its FALLBACK is the rendered result page captured through `providers.github.fallbackNetwork` (embedded-json on `github.com/search`, `dataTarget` react-app.embeddedData, resultSelector `payload.blackbirdSearchRoute.results`, titles `owner/name`, stars from `followers`); `providers.github` has NO `dom` config and no dom strategy. `type:code` resolves through `resolveProvider` to a network-only override (`strategies.primary` network, no `fallback`, no `dom`, no `fallbackNetwork`, `sharedProfile: true`, snippetLines 5, extraWaitMs 500, the same resultSelector); the code-search-signed-out.html fixture yields zero results and matches the override's `emptyRequiresLogin` rule, whose `loginUrl(returnTo)` is `https://github.com/login?return_to=<encoded returnTo>`, while a signed-in variant of that fixture (the same page with `logged_in` true) and repo-search.html never match it and a signed-in result maps path, repo, language and snippet; the engine turns the rule hit into outcome `hitl` reason `login_required` (search-port-engine.11) and that outcome never writes a tripwire (search-port-guards.11, search-verbs.13); a rate-limit fixture returns `rate_limited`. The fixtures are copies of agent-browser/test-fixtures/github/ (repo-search.html, code-search-signed-out.html) stored under src/test/unit/providers/fixtures/github/ and byte-identical to them. Specs under src/test/unit/providers/ drive the real provider functions over the fixtures (the two-repo page gives vitejs/vite first, stars 83351, language TypeScript); titles carry `type:code`, `login wall`, `fallbackNetwork`, `login_required`, `rate_limited`, `repositories`, `sharedProfile` and the uids 861571da, 224e7a44 and 591e1a7, and the spec cites [search-port-providers.9]."""
-    fx = f"{SEARCH_DIR}/src/test/unit/providers/fixtures/github"
+    """(backlog 861571da, 224e7a44; commits 591e1a7, c00edea) The github provider returns results or a typed outcome, never a silent empty or a long hang. Repository search (default `type=repositories`) is API-primary: `providers.github.network` is the direct public REST fetch (`api.github.com/search/repositories`, no browser), and its FALLBACK is the rendered result page captured through `providers.github.fallbackNetwork` (embedded-json on `github.com/search`, `dataTarget` react-app.embeddedData, resultSelector `payload.blackbirdSearchRoute.results`, titles `owner/name`, stars from `followers`); `providers.github` has NO `dom` config and no dom strategy. `type:code` resolves through `resolveProvider` to a network-only override (`strategies.primary` network, no `fallback`, no `dom`, no `fallbackNetwork`, `sharedProfile: true`, snippetLines 5, extraWaitMs 500, the same resultSelector); the code-search-signed-out.html fixture yields zero results and matches the override's `emptyRequiresLogin` rule, whose `loginUrl(returnTo)` is `https://github.com/login?return_to=<encoded returnTo>`, while a signed-in variant of that fixture (the same page with `logged_in` true) and repo-search.html never match it and a signed-in result maps path, repo, language and snippet; the engine turns the rule hit into outcome `hitl` reason `login_required` (search-port-engine.11) and that outcome never writes a tripwire (search-port-guards.11, search-verbs.13); a rate-limit fixture returns `rate_limited`. The fixtures are copies of agent-browser/test-fixtures/github/ (repo-search.html, code-search-signed-out.html) stored under test/fixtures/providers/github/ and byte-identical to them. Specs under test/unit/providers/ drive the real provider functions over the fixtures (the two-repo page gives vitejs/vite first, stars 83351, language TypeScript); titles carry `type:code`, `login wall`, `fallbackNetwork`, `login_required`, `rate_limited`, `repositories`, `sharedProfile` and the uids 861571da, 224e7a44 and 591e1a7, and the spec cites [search-port-providers.9]."""
+    fx = f"{SEARCH_DIR}/test/fixtures/providers/github"
     bad = []
     for name in ("repo-search.html", "code-search-signed-out.html"):
         mine = read(f"{fx}/{name}")
@@ -775,14 +775,14 @@ def _spp9():
 
 @check("search-port-engine", 9)
 def _spe9():
-    """(backlog 224e7a44) A network-capture failure never hangs or escapes as an unhandled rejection: when the CDP socket closes or errors during capture (a fake page whose capture rejects with a socket-closed error) the engine falls back once to the provider's next strategy when it declares one (the dom strategy only for a provider that has a `dom` config; github has none, so there the failure returns outcome `error` naming the cause, search-port-engine.14) and returns its results; when the fallback also fails it returns outcome `error` whose message names the cause. Specs under src/test/unit/engine/ register a process `unhandledRejection` listener and assert it never fires; titles carry `socket closed`, `falls back`, `dom`, `unhandledRejection` and the uid 224e7a44, and the spec cites [search-port-engine.9]."""
+    """(backlog 224e7a44) A network-capture failure never hangs or escapes as an unhandled rejection: when the CDP socket closes or errors during capture (a fake page whose capture rejects with a socket-closed error) the engine falls back once to the provider's next strategy when it declares one (the dom strategy only for a provider that has a `dom` config; github has none, so there the failure returns outcome `error` naming the cause, search-port-engine.14) and returns its results; when the fallback also fails it returns outcome `error` whose message names the cause. Specs under test/unit/engine/ register a process `unhandledRejection` listener and assert it never fires; titles carry `socket closed`, `falls back`, `dom`, `unhandledRejection` and the uid 224e7a44, and the spec cites [search-port-engine.9]."""
     return _bug_ac("search", "search-port-engine", 9, ["224e7a44"], "engine",
                    ["socket closed", "falls back", "dom", "unhandledRejection"])
 
 
 @check("search-port-engine", 10)
 def _spe10():
-    """(backlog 406a4e66) Google result-page (SERP) parsing is a search feature owned by stealth-search, not the core: src/lib/dom.ts holds the Google SERP walker (OD-11 keeps it as a ported feature) and imports no SERP- or Google-named symbol from @adhd/stealth-core-browser; a spec under src/test/unit/engine/ parses a Google result-page fixture through it. Deleting the original from the core is a core-side follow-up that belongs to the OD-11 decision and is recorded as a finding in this state's context, not required here. Titles carry `Google`, `SERP` and the uid 406a4e66, and the spec cites [search-port-engine.10]."""
+    """(backlog 406a4e66) Google result-page (SERP) parsing is a search feature owned by stealth-search, not the core: src/lib/dom.ts holds the Google SERP walker (OD-11 keeps it as a ported feature) and imports no SERP- or Google-named symbol from @adhd/stealth-core-browser; a spec under test/unit/engine/ parses a Google result-page fixture through it. Deleting the original from the core is a core-side follow-up that belongs to the OD-11 decision and is recorded as a finding in this state's context, not required here. Titles carry `Google`, `SERP` and the uid 406a4e66, and the spec cites [search-port-engine.10]."""
     dom = read(f"{SEARCH_DIR}/src/lib/dom.ts")
     imports = re.findall(r"import\s*(?:type\s*)?\{([^}]*)\}\s*from\s*['\"]@adhd/stealth-core-browser['\"]", dom)
     leaked = [n.strip() for blob in imports for n in blob.split(",") if re.search(r"serp|google", n, re.I)]
@@ -802,7 +802,7 @@ def _si6():
 
 @check("search-verbs", 10)
 def _sv10():
-    """(backlog cd05ad09) Verb output is token-efficient by default: `SearchInput` gains `offset` (number) and `preview: 'none'|'include'` (an enum, no boolean) and defaults to `content: 'none'`, `preview: 'none'` and `maxContentSize` = `DEFAULT_MAX_CONTENT_SIZE` (20000 bytes); `search` results are `{title, url, snippet}` items with no `raw.preview` and no HTML unless `preview: 'include'`. A spec under src/test/unit/verbs/ on the fake core simulates a 400 KB page for the duckduckgo, github and fetch providers and asserts the default serialized result stays under 8192 bytes (`Buffer.byteLength`), that `preview: 'include'` adds the preview, and that `content: 'full'` is bounded by `maxContentSize` with `nextOffset`; titles carry `maxContentSize`, `nextOffset`, `snippet`, `preview`, `byteLength`, `8192` and the uid cd05ad09, and the spec cites [search-verbs.10]."""
+    """(backlog cd05ad09) Verb output is token-efficient by default: `SearchInput` gains `offset` (number) and `preview: 'none'|'include'` (an enum, no boolean) and defaults to `content: 'none'`, `preview: 'none'` and `maxContentSize` = `DEFAULT_MAX_CONTENT_SIZE` (20000 bytes); `search` results are `{title, url, snippet}` items with no `raw.preview` and no HTML unless `preview: 'include'`. A spec under test/unit/verbs/ on the fake core simulates a 400 KB page for the duckduckgo, github and fetch providers and asserts the default serialized result stays under 8192 bytes (`Buffer.byteLength`), that `preview: 'include'` adds the preview, and that `content: 'full'` is bounded by `maxContentSize` with `nextOffset`; titles carry `maxContentSize`, `nextOffset`, `snippet`, `preview`, `byteLength`, `8192` and the uid cd05ad09, and the spec cites [search-verbs.10]."""
     return _bug_ac("search", "search-verbs", 10, ["cd05ad09"], "verbs",
                    ["maxContentSize", "nextOffset", "snippet", "preview", "byteLength", "8192"],
                    [("src/api.ts", r"preview\??:\s*['\"]none['\"]\s*\|\s*['\"]include['\"]"), ("src/api.ts", r"\boffset\??:\s*number")])
@@ -810,7 +810,7 @@ def _sv10():
 
 @check("search-verbs", 11)
 def _sv11():
-    """(backlog 861571da, 224e7a44) A hung provider cannot outlive the deadline: src/lib/search.ts applies one overall deadline `timeoutMs` (default `DEFAULT_SEARCH_TIMEOUT_MS = 30000`, shared across all attempts, never the 90 s of the old tool) and, when the engine never settles, a github search resolves under vitest fake timers with outcome `timeout` at that deadline (not `error` after two attempts), the concurrency slot is released, the context is disposed and the cooldown is not armed by the timeout. A spec under src/test/unit/verbs/ simulates it; titles carry `useFakeTimers`, `timeout`, `github`, `dispose`, `release`, `30000` and the uids 861571da and 224e7a44, and the spec cites [search-verbs.11]."""
+    """(backlog 861571da, 224e7a44) A hung provider cannot outlive the deadline: src/lib/search.ts applies one overall deadline `timeoutMs` (default `DEFAULT_SEARCH_TIMEOUT_MS = 30000`, shared across all attempts, never the 90 s of the old tool) and, when the engine never settles, a github search resolves under vitest fake timers with outcome `timeout` at that deadline (not `error` after two attempts), the concurrency slot is released, the context is disposed and the cooldown is not armed by the timeout. A spec under test/unit/verbs/ simulates it; titles carry `useFakeTimers`, `timeout`, `github`, `dispose`, `release`, `30000` and the uids 861571da and 224e7a44, and the spec cites [search-verbs.11]."""
     return _bug_ac("search", "search-verbs", 11, ["861571da", "224e7a44"], "verbs",
                    ["useFakeTimers", "timeout", "github", "dispose", "release", "30000"],
                    [("src/lib/search.ts", r"DEFAULT_SEARCH_TIMEOUT_MS\s*=\s*30_?000\b")])
@@ -818,14 +818,14 @@ def _sv11():
 
 @check("search-verbs", 12)
 def _sv12():
-    """(backlog 86ed154e) Parallel calls return one result each: a spec under src/test/unit/verbs/ starts five concurrent `search` calls with the fetch provider through the real queue on the fake core (one URL not found, one whose CDP call rejects with a Page.enable timeout, one whose page closes mid-render, two good) and asserts with Promise.all that five results come back, each carrying its own `url` and `provider`, the failing ones as outcome `error` (never undefined, null, an empty object or a thrown rejection), and the concurrency cap respected. Titles carry `Promise.all`, `concurrent`, `per-URL`, `Page.enable`, `outcome` and the uid 86ed154e, and the spec cites [search-verbs.12]."""
+    """(backlog 86ed154e) Parallel calls return one result each: a spec under test/unit/verbs/ starts five concurrent `search` calls with the fetch provider through the real queue on the fake core (one URL not found, one whose CDP call rejects with a Page.enable timeout, one whose page closes mid-render, two good) and asserts with Promise.all that five results come back, each carrying its own `url` and `provider`, the failing ones as outcome `error` (never undefined, null, an empty object or a thrown rejection), and the concurrency cap respected. Titles carry `Promise.all`, `concurrent`, `per-URL`, `Page.enable`, `outcome` and the uid 86ed154e, and the spec cites [search-verbs.12]."""
     return _bug_ac("search", "search-verbs", 12, ["86ed154e"], "verbs",
                    ["Promise.all", "concurrent", "per-URL", "Page.enable", "outcome"])
 
 
 @check("search-port-guards", 9)
 def _spg9():
-    """(backlog c6d7fbcf, 982ea870, 9487dcd0, d201694e, a3266358, 6ae134b9, 08801f2a, 84e1f7a2, 3aaa855f; 9d05e8b2 is search-hosts.20) The search wiring of the tripwire package (tripwire.ts over `createTripwire`) is proven by one spec set under src/test/unit/guards/ (for example tripwire-wiring.spec.ts) whose titles carry the nine uids: a corrupt lock file fails closed (c6d7fbcf: the provider reads as tripped or raises TRIPWIRE_STATE_UNREADABLE, never as clear); a `SearchHostConfig` data-dir override moves both the lock and the audit file and nothing is written under the default root (982ea870); created lock and audit files are 0600 in 0700 directories (9487dcd0); re-tripping a tripped provider keeps the first cause and counts the re-trip (d201694e); concurrent writes use distinct temp file names (a3266358); N concurrent blocked-count increments yield N (6ae134b9); the audit cap rewrite is atomic and counts lines, with a multibyte case (08801f2a); TTL expiry removal writes an audit line with reason `ttl-expired` (84e1f7a2); the clear path leaves a final record identical to a plain delete, with no dead resolved or reverified write (3aaa855f). A behavior the tripwire package itself fails is not fixed here: the spec states it with `it.fails` naming the uid and the executor records a finding under a `## Findings` heading of this state's context. Titles carry `0600`, `0700`, `ttl-expired`, `multibyte`, and the spec cites [search-port-guards.9]; `nx run stealth-search:test -- src/test/unit/guards` exits 0."""
+    """(backlog c6d7fbcf, 982ea870, 9487dcd0, d201694e, a3266358, 6ae134b9, 08801f2a, 84e1f7a2, 3aaa855f; 9d05e8b2 is search-hosts.20) The search wiring of the tripwire package (tripwire.ts over `createTripwire`) is proven by one spec set under test/unit/guards/ (for example tripwire-wiring.spec.ts) whose titles carry the nine uids: a corrupt lock file fails closed (c6d7fbcf: the provider reads as tripped or raises TRIPWIRE_STATE_UNREADABLE, never as clear); a `SearchHostConfig` data-dir override moves both the lock and the audit file and nothing is written under the default root (982ea870); created lock and audit files are 0600 in 0700 directories (9487dcd0); re-tripping a tripped provider keeps the first cause and counts the re-trip (d201694e); concurrent writes use distinct temp file names (a3266358); N concurrent blocked-count increments yield N (6ae134b9); the audit cap rewrite is atomic and counts lines, with a multibyte case (08801f2a); TTL expiry removal writes an audit line with reason `ttl-expired` (84e1f7a2); the clear path leaves a final record identical to a plain delete, with no dead resolved or reverified write (3aaa855f). A behavior the tripwire package itself fails is not fixed here: the spec states it with `it.fails` naming the uid and the executor records a finding under a `## Findings` heading of this state's context. Titles carry `0600`, `0700`, `ttl-expired`, `multibyte`, and the spec cites [search-port-guards.9]; `nx run stealth-search:test -- test/unit/guards` exits 0."""
     return _bug_ac("search", "search-port-guards", 9,
                    ["c6d7fbcf", "982ea870", "9487dcd0", "d201694e", "a3266358", "6ae134b9", "08801f2a", "84e1f7a2", "3aaa855f"],
                    "guards", ["0600", "0700", "ttl-expired", "multibyte"])
@@ -833,7 +833,7 @@ def _spg9():
 
 @check("search-port-guards", 10)
 def _spg10():
-    """(backlog 93dee018) The tripped state tells agents how to clear it: every tripped entry of `tripwireStatus` carries `clearWith: 'clearTripwire'` (the agent-callable verb, `clearPolicy: 'open'`) plus `trippedAt` and `expiresAt`, expired locks are not listed, and `clearTripwire` of a tripped provider returns true, records a cleared audit event and lets the next search proceed. A spec under src/test/unit/guards/ simulates the researcher flow (search returns hitl, tripwireStatus lists the provider with clearWith, clearTripwire is called, the next search succeeds); titles carry `clearWith`, `clearTripwire`, `cleared`, `hitl`, `expiresAt` and the uid 93dee018, and the spec cites [search-port-guards.10]."""
+    """(backlog 93dee018) The tripped state tells agents how to clear it: every tripped entry of `tripwireStatus` carries `clearWith: 'clearTripwire'` (the agent-callable verb, `clearPolicy: 'open'`) plus `trippedAt` and `expiresAt`, expired locks are not listed, and `clearTripwire` of a tripped provider returns true, records a cleared audit event and lets the next search proceed. A spec under test/unit/guards/ simulates the researcher flow (search returns hitl, tripwireStatus lists the provider with clearWith, clearTripwire is called, the next search succeeds); titles carry `clearWith`, `clearTripwire`, `cleared`, `hitl`, `expiresAt` and the uid 93dee018, and the spec cites [search-port-guards.10]."""
     return _bug_ac("search", "search-port-guards", 10, ["93dee018"], "guards",
                    ["clearWith", "clearTripwire", "cleared", "hitl", "expiresAt"],
                    [("src/lib/tripwire.ts", r"clearWith")])

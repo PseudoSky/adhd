@@ -72,20 +72,33 @@
     "entrypoint/stealth-browser/src/test/unit/chrome-manager/",
     "packages/stealth/stealth-core-browser/src/test/unit/foundation/",
     "packages/stealth/stealth-core-browser/src/test/unit/cdp/",
-    "packages/stealth/stealth-core-browser/src/test/unit/chrome-manager/"
+    "packages/stealth/stealth-core-browser/src/test/unit/chrome-manager/",
+    "entrypoint/stealth-browser/test/unit/foundation/",
+    "entrypoint/stealth-browser/test/unit/cdp/",
+    "entrypoint/stealth-browser/test/unit/chrome-manager/",
+    "packages/stealth/stealth-core-browser/test/unit/foundation/",
+    "packages/stealth/stealth-core-browser/test/unit/cdp/",
+    "packages/stealth/stealth-core-browser/test/unit/chrome-manager/"
   ],
   "tests-unit-data": [
     "entrypoint/stealth-browser/src/test/unit/domains-storage/",
     "entrypoint/stealth-browser/src/test/unit/queries/",
     "packages/stealth/stealth-core-browser/src/test/unit/domains-storage/",
-    "packages/stealth/stealth-core-browser/src/test/unit/queries/"
+    "packages/stealth/stealth-core-browser/src/test/unit/queries/",
+    "entrypoint/stealth-browser/test/unit/domains-storage/",
+    "entrypoint/stealth-browser/test/unit/queries/",
+    "packages/stealth/stealth-core-browser/test/unit/domains-storage/",
+    "packages/stealth/stealth-core-browser/test/unit/queries/"
   ],
   "tests-unit-extract": [
     "entrypoint/stealth-browser/src/test/unit/capture-parsers/",
-    "packages/stealth/stealth-core-browser/src/test/unit/capture-parsers/"
+    "packages/stealth/stealth-core-browser/src/test/unit/capture-parsers/",
+    "entrypoint/stealth-browser/test/unit/capture-parsers/",
+    "packages/stealth/stealth-core-browser/test/unit/capture-parsers/"
   ],
   "tests-unit-surface": [
-    "packages/stealth/stealth-core-browser/src/test/unit/surface/"
+    "packages/stealth/stealth-core-browser/src/test/unit/surface/",
+    "packages/stealth/stealth-core-browser/test/unit/surface/"
   ],
   "gates-first": [
     "docs/plan/stealth-browser/evidence/"
@@ -135,12 +148,14 @@
     "packages/stealth/stealth-core-browser/src/index.ts",
     "packages/stealth/stealth-core-browser/docs/ERRORS.md",
     "packages/stealth/stealth-core-browser/src/test/unit/errors/",
-    "packages/stealth/stealth-core-browser/src/api.ts"
+    "packages/stealth/stealth-core-browser/src/api.ts",
+    "packages/stealth/stealth-core-browser/test/unit/errors/"
   ],
   "prod-examples": [
     "packages/stealth/stealth-core-browser/examples/",
     "packages/stealth/stealth-core-browser/src/test/unit/examples/",
-    "packages/stealth/stealth-core-browser/tsconfig.spec.json"
+    "packages/stealth/stealth-core-browser/tsconfig.spec.json",
+    "packages/stealth/stealth-core-browser/test/unit/examples/"
   ],
   "port-fixes": [
     "entrypoint/stealth-browser/src/lib/",
@@ -157,7 +172,11 @@
     "packages/stealth/stealth-core-browser/src/types/",
     "packages/stealth/stealth-core-browser/src/test/unit/chrome-manager/chrome-lifecycle.spec.ts",
     "packages/stealth/stealth-core-browser/src/test/unit/domains-storage/",
-    "packages/stealth/stealth-core-browser/package.json"
+    "packages/stealth/stealth-core-browser/package.json",
+    "entrypoint/stealth-browser/test/unit/chrome-manager/chrome-lifecycle.spec.ts",
+    "entrypoint/stealth-browser/test/unit/domains-storage/",
+    "packages/stealth/stealth-core-browser/test/unit/chrome-manager/chrome-lifecycle.spec.ts",
+    "packages/stealth/stealth-core-browser/test/unit/domains-storage/"
   ],
   "capture-upgrade": [
     "entrypoint/stealth-browser/src/lib/recording/",
@@ -169,7 +188,11 @@
     "packages/stealth/stealth-core-browser/src/lib/capture/network.ts",
     "packages/stealth/stealth-core-browser/src/lib/capture/index.ts",
     "packages/stealth/stealth-core-browser/src/test/unit/capture/",
-    "packages/stealth/stealth-core-browser/src/test/unit/capture-parsers/network.spec.ts"
+    "packages/stealth/stealth-core-browser/src/test/unit/capture-parsers/network.spec.ts",
+    "entrypoint/stealth-browser/test/unit/capture/",
+    "entrypoint/stealth-browser/test/unit/capture-parsers/network.spec.ts",
+    "packages/stealth/stealth-core-browser/test/unit/capture/",
+    "packages/stealth/stealth-core-browser/test/unit/capture-parsers/network.spec.ts"
   ],
   "chrome-lifecycle": [
     "entrypoint/stealth-browser/src/lib/lifecycle/",
@@ -188,12 +211,21 @@
     "packages/stealth/stealth-core-browser/src/test/unit/chrome-manager/",
     "packages/stealth/stealth-core-browser/src/test/unit/cdp/targets.spec.ts",
     "packages/stealth/stealth-core-browser/src/lib/cdp/browser.ts",
-    "packages/stealth/stealth-core-browser/src/lib/runtime-deps.ts"
+    "packages/stealth/stealth-core-browser/src/lib/runtime-deps.ts",
+    "entrypoint/stealth-browser/test/unit/lifecycle/",
+    "entrypoint/stealth-browser/test/unit/chrome-manager/",
+    "entrypoint/stealth-browser/test/unit/cdp/targets.spec.ts",
+    "packages/stealth/stealth-core-browser/test/unit/lifecycle/",
+    "packages/stealth/stealth-core-browser/test/unit/chrome-manager/",
+    "packages/stealth/stealth-core-browser/test/unit/cdp/targets.spec.ts"
   ],
   "tests-use-cases": [
     "packages/stealth/stealth-core-browser/src/test/use-cases/",
     "packages/stealth/stealth-core-browser/src/test/support/profile-fixtures.ts",
-    "packages/stealth/stealth-core-browser/src/test/support/page-fixtures.ts"
+    "packages/stealth/stealth-core-browser/src/test/support/page-fixtures.ts",
+    "packages/stealth/stealth-core-browser/test/unit/use-cases/",
+    "packages/stealth/stealth-core-browser/test/helpers/profile-fixtures.ts",
+    "packages/stealth/stealth-core-browser/test/helpers/page-fixtures.ts"
   ],
   "audit-pre-review": [
     "/Users/nix/dev/node/adhd/.worktrees/stealth-browser/docs/plan/stealth-browser/review/PRE-REVIEW.json",
@@ -232,7 +264,13 @@
     "entrypoint/stealth-browser/src/test/unit/support/",
     "packages/stealth/stealth-core-browser/src/test/support/",
     "packages/stealth/stealth-core-browser/src/test/fixtures/cdp/",
-    "packages/stealth/stealth-core-browser/src/test/unit/support/"
+    "packages/stealth/stealth-core-browser/src/test/unit/support/",
+    "entrypoint/stealth-browser/test/helpers/",
+    "entrypoint/stealth-browser/test/fixtures/cdp/",
+    "entrypoint/stealth-browser/test/unit/support/",
+    "packages/stealth/stealth-core-browser/test/helpers/",
+    "packages/stealth/stealth-core-browser/test/fixtures/cdp/",
+    "packages/stealth/stealth-core-browser/test/unit/support/"
   ],
   "failsafe-inventory": [
     "docs/plan/stealth-browser/evidence/failsafe-inventory.json"
@@ -276,7 +314,8 @@
     "packages/resilience/resilience-core-tripwire/README.md",
     "packages/resilience/resilience-core-tripwire/CHANGELOG.md",
     "packages/resilience/resilience-core-tripwire/docs/",
-    "packages/resilience/resilience-core-tripwire/src/test/unit/readme-examples.spec.ts"
+    "packages/resilience/resilience-core-tripwire/src/test/unit/readme-examples.spec.ts",
+    "packages/resilience/resilience-core-tripwire/test/unit/readme-examples.spec.ts"
   ],
   "tripwire-pack": [
     "docs/plan/stealth-browser/evidence/tripwire/",
@@ -340,7 +379,14 @@
     "packages/stealth/stealth-core-browser/src/test/unit/cdp/browser.spec.ts",
     "packages/stealth/stealth-core-browser/src/test/unit/lifecycle/concurrent-launch.spec.ts",
     "packages/stealth/stealth-core-browser/src/test/unit/lifecycle/reaper-scope.spec.ts",
-    "packages/stealth/stealth-core-browser/src/test/unit/capture-parsers/bans.spec.ts"
+    "packages/stealth/stealth-core-browser/src/test/unit/capture-parsers/bans.spec.ts",
+    "packages/stealth/stealth-core-browser/test/unit/seam/",
+    "packages/stealth/stealth-core-browser/test/unit/lifecycle/kill.spec.ts",
+    "packages/stealth/stealth-core-browser/test/unit/lifecycle/launch.spec.ts",
+    "packages/stealth/stealth-core-browser/test/unit/cdp/browser.spec.ts",
+    "packages/stealth/stealth-core-browser/test/unit/lifecycle/concurrent-launch.spec.ts",
+    "packages/stealth/stealth-core-browser/test/unit/lifecycle/reaper-scope.spec.ts",
+    "packages/stealth/stealth-core-browser/test/unit/capture-parsers/bans.spec.ts"
   ],
   "search-scaffold": [
     "entrypoint/stealth-search/",
@@ -355,31 +401,36 @@
   "search-errors": [
     "entrypoint/stealth-search/src/errors.ts",
     "entrypoint/stealth-search/src/test/unit/errors/",
-    "entrypoint/stealth-search/docs/ERRORS.md"
+    "entrypoint/stealth-search/docs/ERRORS.md",
+    "entrypoint/stealth-search/test/unit/errors/"
   ],
   "search-port-providers": [
     "entrypoint/stealth-search/src/lib/types.ts",
     "entrypoint/stealth-search/src/lib/providers.ts",
     "entrypoint/stealth-search/src/lib/utils.ts",
     "entrypoint/stealth-search/src/lib/queries/last-search.ts",
-    "entrypoint/stealth-search/src/test/unit/providers/"
+    "entrypoint/stealth-search/src/test/unit/providers/",
+    "entrypoint/stealth-search/test/unit/providers/"
   ],
   "search-port-fetch": [
     "entrypoint/stealth-search/src/lib/fetch/",
     "entrypoint/stealth-search/src/test/unit/fetch/",
-    "docs/plan/stealth-browser/evidence/split/u-pdf.json"
+    "docs/plan/stealth-browser/evidence/split/u-pdf.json",
+    "entrypoint/stealth-search/test/unit/fetch/"
   ],
   "search-port-engine": [
     "entrypoint/stealth-search/src/lib/network.ts",
     "entrypoint/stealth-search/src/lib/dom.ts",
     "entrypoint/stealth-search/src/lib/challenge.ts",
-    "entrypoint/stealth-search/src/test/unit/engine/"
+    "entrypoint/stealth-search/src/test/unit/engine/",
+    "entrypoint/stealth-search/test/unit/engine/"
   ],
   "search-port-guards": [
     "entrypoint/stealth-search/src/lib/guard.ts",
     "entrypoint/stealth-search/src/lib/tripwire.ts",
     "entrypoint/stealth-search/src/lib/config.ts",
-    "entrypoint/stealth-search/src/test/unit/guards/"
+    "entrypoint/stealth-search/src/test/unit/guards/",
+    "entrypoint/stealth-search/test/unit/guards/"
   ],
   "search-verbs": [
     "entrypoint/stealth-search/src/api.ts",
@@ -387,7 +438,8 @@
     "entrypoint/stealth-search/src/host-projection.ts",
     "entrypoint/stealth-search/src/index.ts",
     "entrypoint/stealth-search/src/test/unit/verbs/",
-    "docs/plan/stealth-browser/evidence/split/search-verbs-probes.json"
+    "docs/plan/stealth-browser/evidence/split/search-verbs-probes.json",
+    "entrypoint/stealth-search/test/unit/verbs/"
   ],
   "search-tracing": [
     "entrypoint/stealth-search/src/tracing.ts",
@@ -402,15 +454,18 @@
     "entrypoint/stealth-search/src/test/unit/hosts/",
     "entrypoint/stealth-search/package.json",
     "pnpm-lock.yaml",
-    "docs/plan/stealth-browser/evidence/naming-decision.md"
+    "docs/plan/stealth-browser/evidence/naming-decision.md",
+    "entrypoint/stealth-search/test/unit/hosts/"
   ],
   "search-usecases": [
-    "entrypoint/stealth-search/src/test/use-cases/"
+    "entrypoint/stealth-search/src/test/use-cases/",
+    "entrypoint/stealth-search/test/unit/use-cases/"
   ],
   "search-examples": [
     "entrypoint/stealth-search/examples/",
     "entrypoint/stealth-search/src/test/unit/examples/",
-    "entrypoint/stealth-search/README.md"
+    "entrypoint/stealth-search/README.md",
+    "entrypoint/stealth-search/test/unit/examples/"
   ],
   "tracing-log-validation": [
     "docs/plan/stealth-browser/evidence/tracing-log-validation.md",
