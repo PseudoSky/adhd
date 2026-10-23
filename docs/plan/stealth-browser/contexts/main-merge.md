@@ -47,6 +47,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 
 - [main-merge.2] The conflicts are resolved by union: no conflict markers in .adhd/workspace.json, tsconfig.base.json or pnpm-lock.yaml; workspace.json parses and holds the groups policy, resilience and stealth; tsconfig.base.json paths hold @adhd/policy-core-client, @adhd/policy, @adhd/apigen-plugin-policy, @adhd/resilience-core-tripwire, @adhd/stealth-core-browser and @adhd/stealth-search and keeps main's parity-harness path.
 - [main-merge.3] The lockfile is consistent with the manifests: `pnpm install --frozen-lockfile` exits 0, pnpm-lock.yaml resolves @adhd/sox-service-proxy 0.6.x from the registry, contains neither `adhd-dev-tarballs` nor `file:/Users`, and the root has no @adhd/sox-service-proxy override.
+- [main-merge.4] The three packages still build and typecheck on the merged tree: `nx run-many -t build` and `-t typecheck -p stealth-core-browser,stealth-search,resilience-core-tripwire` exit 0.
 ---
 
 ## Reservations
