@@ -39,6 +39,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 
 - [plan-notes.1] README.md has a `Known issues` section naming core-seam .8 and commit aa5df30a (untagged, history not rewritten), compile-task.js truncating piped output at 64 KiB, plan-scaffold committing with --no-verify, and the missing add-dependency verb.
 
+- [plan-notes.2] README.md has an `Amendment 2026-10-23` paragraph that names main-merge, conform-tripwire, conform-core, conform-search, search-mcp-iserror, search-tracing-fixes and release-readiness, and the plugin cache was not edited (no change under ~/.claude/plugins in the evidence).
 ---
 
 ## Reservations
