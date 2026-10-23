@@ -45,6 +45,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 - [fix-search-engine.3] Exactly one SERP walker remains: core `src/lib/capture/dom.ts` holds it, search `src/lib/dom.ts` has no second copy of the walker, and docs/plan/stealth-browser/OPEN-DECISIONS.md has an `OD-11` entry marked provisional and reversible.
 - [fix-search-engine.4] evidence/fix-search-engine.md records the red-first proof: a `RED:` line with the failing assertion of each new spec on the untouched source and a `GREEN:` line with the passing run after the fix.
 - [fix-search-engine.5] `nx run stealth-search:lint`, `:typecheck`, `:typecheck-spec`, `:test` exit 0 and evidence/fix-search-engine.md records each as `EXIT <command>: 0`.
+- [fix-search-engine.6] Only owned paths changed by [psm:fix-search-engine] commits (search dom, providers, engine files; core capture/dom.ts; OPEN-DECISIONS.md).
 ---
 
 ## Reservations
