@@ -49,6 +49,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 
 - [conform-tripwire.1] The unit lane lives where main's layout puts it: `packages/resilience/resilience-core-tripwire/src/test` is gone, `test/unit` holds at least the original spec count, every file under `test/unit` is a `*.spec.ts(x)` (L3), and `test/` has only the children unit, e2e, helpers, fixtures, golden and setup.ts (L2).
 
+- [conform-tripwire.2] Support code and fixtures moved to their homes: explore.ts, harness.ts, io.ts exist under `test/helpers/`, and no html, pdf or json fixture is left under `test/unit`.
 ---
 
 ## Reservations
