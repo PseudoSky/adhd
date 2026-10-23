@@ -17,6 +17,8 @@ try {
 
 `exitCodeFor(code)` returns the status in the Exit column; an unknown code (a host's own) maps to 1. `StealthCoreBrowserError.classifyLaunchFailure(error)` refines a launch failure: a cause chain holding `ENOENT` is `CHROME_NOT_FOUND`, `EADDRINUSE` is `PORT_IN_USE`, any other typed error keeps its code and an untyped one is `LAUNCH_FAILED`.
 
+An endpoint that cannot address a Chrome (a port outside 1-65535 or non-integer, a host with a path or whitespace) is a plain `StealthCoreBrowserError` with code `CDP_UNREACHABLE` and `detail.reason` of `invalid-endpoint`; it is thrown before any socket is touched. Tell it apart by `error.code` (and `error.detail?.reason`), exactly as for every other code. It is not a `RangeError`.
+
 The codes below are listed in the order of `ERROR_CODES`.
 
 ## Environment

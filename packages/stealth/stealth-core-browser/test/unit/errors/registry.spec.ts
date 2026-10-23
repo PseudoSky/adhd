@@ -151,11 +151,11 @@ describe('8468f7b1 [prod-errors.8] the launch classifier maps ENOENT to CHROME_N
   })
 })
 
-describe('8468f7b1 [prod-errors.8] the invalid-endpoint error is both a RangeError and a package error', () => {
-  it('invalidEndpoint passes instanceof RangeError and instanceof StealthCoreBrowserError with a CDP_UNREACHABLE code and reason', () => {
+describe('8468f7b1 [prod-errors.8] the invalid-endpoint error is a typed package error', () => {
+  it('invalidEndpoint is a StealthCoreBrowserError with a CDP_UNREACHABLE code and reason', () => {
     const e = StealthCoreBrowserError.invalidEndpoint('port must be an integer between 1 and 65535, got 0')
-    expect(e).toBeInstanceOf(RangeError)
     expect(e).toBeInstanceOf(StealthCoreBrowserError)
+    expect(e).not.toBeInstanceOf(RangeError)
     expect(e.code).toBe('CDP_UNREACHABLE')
     expect(e.detail).toEqual({ reason: 'invalid-endpoint' })
     expect(e.message).toMatch(/^port must be an integer/)

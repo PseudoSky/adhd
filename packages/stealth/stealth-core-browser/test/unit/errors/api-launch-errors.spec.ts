@@ -1,7 +1,7 @@
 /**
  * The verbs of src/api.ts never replace a typed error with a plain Error: a LifecycleError (or any
  * StealthCoreBrowserError) from the manager's ready() reaches the caller unchanged, an untyped failure becomes a
- * registry code with `cause`, and an invalid endpoint is a typed RangeError.
+ * registry code with `cause`, and an invalid endpoint is a typed StealthCoreBrowserError.
  * Ticket 8468f7b1 · [prod-errors.9] [prod-errors.2] · PA5.1 / PA5.4.
  * The managers seam is configured with a fake manager whose ready() rejects; targets are stubbed: no Chrome, no network.
  * guards: launchChrome rethrows the LifecycleError LAUNCH_FAILED of a foreign-profile refusal with its reason detail
@@ -109,12 +109,11 @@ describe('8468f7b1 [prod-errors.9] chromeStatus keeps typed errors and types the
   })
 })
 
-describe('8468f7b1 [prod-errors.2] an invalid endpoint is a typed RangeError', () => {
-  it('rejects an out-of-range port and a host with a path with CDP_UNREACHABLE that is also a RangeError', async () => {
+describe('8468f7b1 [prod-errors.2] an invalid endpoint is a typed StealthCoreBrowserError', () => {
+  it('rejects an out-of-range port and a host with a path with the typed CDP_UNREACHABLE code', async () => {
     for (const input of [{ port: 0 }, { port: 70_000 }, { port: 1.5 }, { host: 'a/b' }, { host: 'a b' }]) {
       const p = chromeStatus(input)
       await expect(p).rejects.toMatchObject({ code: 'CDP_UNREACHABLE', detail: { reason: 'invalid-endpoint' } })
-      await expect(p).rejects.toBeInstanceOf(RangeError)
       await expect(p).rejects.toBeInstanceOf(StealthCoreBrowserError)
     }
     expect(seam.isChromeReachable).not.toHaveBeenCalled()

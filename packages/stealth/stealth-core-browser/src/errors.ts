@@ -155,9 +155,6 @@ export function exitCodeFor(code: string): number {
   return isCode(code) ? EXIT_CODES[code as ErrorCode] : UNKNOWN_EXIT_CODE
 }
 
-/** Marks every package error, including the RangeError flavour, so `instanceof` stays one check. */
-const BRAND = Symbol.for('@adhd/stealth-core-browser/error')
-
 /** The longest cause chain `classifyLaunchFailure` follows. */
 const MAX_CAUSE_DEPTH = 6
 
@@ -192,13 +189,6 @@ export class StealthCoreBrowserError extends Error {
     this.code = code
     this.remediation = REMEDIATION[code]
     if (init.detail !== undefined) this.detail = init.detail
-    Object.defineProperty(this, BRAND, { value: true })
-  }
-
-  /** True for this class, its subclasses and the RangeError flavour of an invalid endpoint. */
-  static override [Symbol.hasInstance](value: unknown): boolean {
-    if (Function.prototype[Symbol.hasInstance].call(this, value)) return true
-    return this === StealthCoreBrowserError && typeof value === 'object' && value !== null && (value as Record<symbol, unknown>)[BRAND] === true
   }
 
   /** A coded error whose message is `summary` followed by the code's remediation. */
@@ -207,12 +197,11 @@ export class StealthCoreBrowserError extends Error {
   }
 
   /**
-   * The error of an endpoint (host or port) that cannot address a Chrome. It is a RangeError
-   * (the value is out of range) AND a package error (code CDP_UNREACHABLE, `detail.reason`
-   * 'invalid-endpoint'), so both checks hold.
+   * The error of an endpoint (host or port) that cannot address a Chrome: code CDP_UNREACHABLE
+   * with `detail.reason` 'invalid-endpoint'. Tell it apart by `code` (and `detail.reason`).
    */
   static invalidEndpoint(message: string): StealthCoreBrowserError {
-    return new InvalidEndpointError(`${message} — ${REMEDIATION.CDP_UNREACHABLE}`)
+    return new StealthCoreBrowserError('CDP_UNREACHABLE', `${message} — ${REMEDIATION.CDP_UNREACHABLE}`, { detail: { reason: 'invalid-endpoint' } })
   }
 
   /**
@@ -232,18 +221,5 @@ export class StealthCoreBrowserError extends Error {
     }
     const own = codeOf(error)
     return own !== undefined && isCode(own) ? (own as ErrorCode) : 'LAUNCH_FAILED'
-  }
-}
-
-/** The RangeError flavour of an invalid endpoint; it carries the same fields as the base class. */
-class InvalidEndpointError extends RangeError {
-  readonly code: ErrorCode = 'CDP_UNREACHABLE'
-  readonly remediation: string = REMEDIATION.CDP_UNREACHABLE
-  readonly detail: Record<string, unknown> = { reason: 'invalid-endpoint' }
-
-  constructor(message: string) {
-    super(message)
-    this.name = 'StealthCoreBrowserError'
-    Object.defineProperty(this, BRAND, { value: true })
   }
 }

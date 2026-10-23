@@ -5,9 +5,9 @@
  *
  * Every library touch point (CDP targets, the manager seam, the activity and
  * context queries) is replaced with a mock: no process, no socket, no Chrome.
- * guards: reports a stopped Chrome without asking for its version
+ * guards: reports a stopped Chrome without asking for its version; an invalidEndpoint failure is a typed error told apart by its code
  * tier: S
- * cites: 8468f7b1 [tests-unit-surface.1] [tests-unit-surface.2]
+ * cites: 8468f7b1 [tests-unit-surface.1] [tests-unit-surface.2] [fix-core-errors.2]
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -37,6 +37,7 @@ vi.mock('../../../src/lib/managers.js', () => ({
 vi.mock('../../../src/lib/queries/activity.js', () => ({ checkChromeActivity: lib.readActivity }))
 vi.mock('../../../src/lib/queries/context.js', () => ({ getPageContext: lib.readContext }))
 
+import { ERROR_CODES, StealthCoreBrowserError, exitCodeFor } from '../../../src/errors.js'
 import { chromeStatus, checkChromeActivity, getPageContext, launchChrome, listPageTargets, shutdownChrome } from '../../../src/api.js'
 
 beforeEach(() => {
@@ -62,13 +63,31 @@ describe('chromeStatus', () => {
     expect(lib.isManagedAt).toHaveBeenCalledWith('chrome.local', 9333)
   })
 
-  it('rejects an out-of-range port and a host with a path or whitespace', async () => {
-    await expect(chromeStatus({ port: 0 })).rejects.toThrow(RangeError)
-    await expect(chromeStatus({ port: 70000 })).rejects.toThrow(RangeError)
-    await expect(chromeStatus({ port: 1.5 })).rejects.toThrow(RangeError)
-    await expect(chromeStatus({ host: 'a/b' })).rejects.toThrow(RangeError)
-    await expect(chromeStatus({ host: 'a b' })).rejects.toThrow(RangeError)
+  it('rejects an out-of-range port and a host with a path or whitespace without touching Chrome', async () => {
+    await expect(chromeStatus({ port: 0 })).rejects.toMatchObject({ code: 'CDP_UNREACHABLE' })
+    await expect(chromeStatus({ port: 70000 })).rejects.toMatchObject({ code: 'CDP_UNREACHABLE' })
+    await expect(chromeStatus({ port: 1.5 })).rejects.toMatchObject({ code: 'CDP_UNREACHABLE' })
+    await expect(chromeStatus({ host: 'a/b' })).rejects.toMatchObject({ code: 'CDP_UNREACHABLE' })
+    await expect(chromeStatus({ host: 'a b' })).rejects.toMatchObject({ code: 'CDP_UNREACHABLE' })
     expect(lib.isChromeReachable).not.toHaveBeenCalled()
+  })
+
+  it('an invalidEndpoint failure carries a typed code a host reads to pick its exit status, with no prototype bridge', async () => {
+    const caught = await chromeStatus({ port: 0 }).then(
+      () => undefined,
+      (e: unknown) => e as StealthCoreBrowserError,
+    )
+    expect(caught).toBeDefined()
+    const error = caught as StealthCoreBrowserError
+    expect(error.code === 'CDP_UNREACHABLE').toBe(true)
+    expect(ERROR_CODES).toContain(error.code)
+    expect(error.name).toBe('StealthCoreBrowserError')
+    expect(error.detail).toEqual({ reason: 'invalid-endpoint' })
+    expect(error.remediation).toMatch(/launchChrome/)
+    expect(exitCodeFor(error.code)).toBe(21)
+    // a plain typed error of the package, not a RangeError dressed up as one
+    expect(error.constructor).toBe(StealthCoreBrowserError)
+    expect(Object.prototype.hasOwnProperty.call(StealthCoreBrowserError, Symbol.hasInstance)).toBe(false)
   })
 
   it('trims the host and falls back to the default for a blank one', async () => {
