@@ -431,7 +431,7 @@
       "end_ref": "efb0087501c503188eb63dda9350f2a23396e278"
     },
     "tracing-log-validation": {
-      "status": "blocked",
+      "status": "pending",
       "started_at": null,
       "done_at": null,
       "start_ref": null,
@@ -1925,10 +1925,14 @@
     {
       "ts": "2026-10-23T22:08:13.228Z",
       "state": "tracing-log-validation",
-      "class": "planner",
+      "class": "executor",
       "type": "plan-edit",
       "reason": "first run failed (UNKNOWN_PROVIDER unreachable, rejected flag without span, duplicate op id `op`); reset in_progress to pending because the state now depends on search-tracing-fixes, which cmdStart resume would not enforce; criteria .10 and .11 added",
-      "files_synced": [],
+      "files_synced": [
+        "dag.json",
+        "contexts/tracing-log-validation.md",
+        "scripts/criteria.json"
+      ],
       "by": "pseudosky"
     }
   ],
