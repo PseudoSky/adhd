@@ -1,0 +1,10 @@
+[
+  { "id": "cli-search", "block": 0, "kind": "sh", "source": "search" },
+  { "id": "cli-fetch", "block": 1, "kind": "sh", "source": "search" },
+  { "id": "cli-providers", "block": 2, "kind": "sh", "source": "listProviders" },
+  { "id": "cli-chrome", "block": 3, "kind": "sh", "source": "launchChrome" },
+  { "id": "mcp-config", "block": 4, "kind": "json", "source": "stealth-search-mcp" },
+  { "id": "ts-search", "block": 5, "kind": "ts", "source": "examples/search-web.ts" },
+  { "id": "ts-fetch", "block": 6, "kind": "ts", "source": "examples/fetch-page.ts" },
+  { "id": "out-search", "block": 7, "kind": "text", "source": "examples/search-web.ts" }
+]
