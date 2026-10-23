@@ -494,10 +494,10 @@
       "end_ref": null
     },
     "fix-core-lifecycle": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-10-23T22:57:26.668Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "615cd4d959ccdddb87e730f561c1215dc5704097",
       "end_ref": null
     },
     "fix-core-errors": {
@@ -1989,7 +1989,7 @@
     "version": "0.8.35",
     "hash": "0b6bc1f3d70e"
   },
-  "current_state": "fix-core-parsers",
+  "current_state": "fix-core-lifecycle",
   "dod_provenance": {
     "confirmed_at": "2026-10-12T23:49:38.410Z",
     "by": "pseudosky",
