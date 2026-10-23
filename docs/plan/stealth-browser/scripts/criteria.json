@@ -5220,6 +5220,15 @@
       "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py fix-core-lifecycle --only fix-core-lifecycle.3",
       "expect": "exit0",
       "cwd": "repo-root"
+    },
+    {
+      "id": "fix-core-lifecycle.4",
+      "phase": "migrate",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py fix-core-lifecycle --only fix-core-lifecycle.4",
+      "expect": "exit0",
+      "cwd": "repo-root"
     }
   ]
 }
