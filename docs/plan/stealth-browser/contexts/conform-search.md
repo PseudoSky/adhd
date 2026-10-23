@@ -56,6 +56,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 - [conform-search.6] No document or source comment of the package names the legacy layout: README.md, AGENTS.md, docs/** and sources contain no `src/test`, `src/__tests__` or `.e2e.test.` (CHANGELOG.md excepted).
 - [conform-search.7] `nx run stealth-search:lint`, `:typecheck`, `:typecheck-spec`, `:test` and `:build` exit 0 and evidence/conform-search.md records each as `EXIT <command>: 0`.
 - [conform-search.8] No completed state regressed: search-examples, search-usecases, search-errors whole-state guards still exit 0 on the moved tree.
+- [conform-search.9] Only owned paths changed by [psm:conform-search] commits (entrypoint/stealth-search/** and its typecheck-spec baseline).
 ---
 
 ## Reservations
