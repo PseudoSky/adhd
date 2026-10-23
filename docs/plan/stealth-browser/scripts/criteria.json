@@ -5337,6 +5337,15 @@
       "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py fix-search-engine --only fix-search-engine.2",
       "expect": "exit0",
       "cwd": "repo-root"
+    },
+    {
+      "id": "fix-search-engine.3",
+      "phase": "migrate",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py fix-search-engine --only fix-search-engine.3",
+      "expect": "exit0",
+      "cwd": "repo-root"
     }
   ]
 }

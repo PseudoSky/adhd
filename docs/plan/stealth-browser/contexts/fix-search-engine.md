@@ -42,6 +42,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 - [fix-search-engine.1] A spec under test/unit/providers cites [fix-search-engine.1] and drives the real pypi dom config over a real-shape fixture (`test/fixtures/providers/pypi/*.html`, anchor containers): titles carry `pypi`, `anchor`, `findChild`, `url` and `description`; the spec is green.
 
 - [fix-search-engine.2] A spec under test/unit/engine cites [fix-search-engine.2] and walks a Google SERP fixture through the single walker: titles carry `title`, `single walker`, `whitespace` and `google`; the dead `\s{2,}` title fallback no longer exists in search or core dom.ts.
+- [fix-search-engine.3] Exactly one SERP walker remains: core `src/lib/capture/dom.ts` holds it, search `src/lib/dom.ts` has no second copy of the walker, and docs/plan/stealth-browser/OPEN-DECISIONS.md has an `OD-11` entry marked provisional and reversible.
 ---
 
 ## Reservations
