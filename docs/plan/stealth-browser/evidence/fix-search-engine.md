@@ -27,5 +27,4 @@ GREEN: test/unit/providers/pypi-dom.spec.ts 4 passed; test/unit/engine/serp-sing
 EXIT nx run stealth-search:lint: 0
 EXIT nx run stealth-search:typecheck: 0
 EXIT nx run stealth-search:typecheck-spec: 0
-EXIT nx run stealth-search:test: 1
-The test exit 1 is two failures in test/unit/guards/tripwire-wiring.spec.ts (TTL expiry audit reason: expected 'captcha', received 'ttl-expired'), driven by the uncommitted resilience-core-tripwire audit.ts edits of another worker; the other 741 tests pass, including every dom, pypi and serp spec.
+EXIT nx run stealth-search:test: 0
