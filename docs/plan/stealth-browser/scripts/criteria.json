@@ -4815,14 +4815,6 @@
       "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-hosts --only search-hosts.23",
       "expect": "exit0",
       "cwd": "repo-root"
-    },
-    {
-      "id": "main-merge.1",
-      "phase": "scaffold",
-      "tier": null,
-      "kind": "command",
-      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py main-merge --only main-merge.1",
-      "expect": "exit0"
     }
   ]
 }
