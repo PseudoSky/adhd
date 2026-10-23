@@ -45,6 +45,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 
 - [search-mcp-iserror.1] The three assertions follow ADR-0018: mcp-inprocess.spec.ts and use-cases/hosts.spec.ts assert `isError` true with the `invalid_argument` text for extra-args/chromePath/required-key validation failures (the specs cite [search-mcp-iserror.1]; titles carry `isError`, `invalid_argument`, `ADR-0018`), and UNKNOWN_PROVIDER still rejects; the host specs are green.
 
+- [search-mcp-iserror.2] (backlog 4909102e) The isError channel is closed and the comments tell the truth: a spec cites [search-mcp-iserror.2] proving how a typed StealthSearchError reaches an MCP client (titles carry `4909102e`, `isError`, `code`), and `src/errors.ts` no longer claims an isError form that does not exist.
 ---
 
 ## Reservations
