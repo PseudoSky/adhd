@@ -1187,6 +1187,20 @@
       ],
       "context": "contexts/conform-search.md",
       "notes": "executor=haiku tier=haiku; mechanical codemod. Escalate to sonnet only when typecheck-spec stays red after two attempts. [inv:test-layout]"
+    },
+    "fix-tripwire": {
+      "kind": "work",
+      "phase": "migrate",
+      "depends_on": [
+        "conform-tripwire"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py fix-tripwire",
+      "artifacts": [
+        "packages/resilience/resilience-core-tripwire/",
+        "docs/plan/stealth-browser/evidence/fix-tripwire.md"
+      ],
+      "context": "contexts/fix-tripwire.md",
+      "notes": "executor=typescript-pro tier=sonnet/medium; backlog 84e1f7a2"
     }
   },
   "authored_with": {
