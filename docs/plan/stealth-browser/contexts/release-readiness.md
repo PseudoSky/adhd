@@ -39,7 +39,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
      matching audit check ID so Check 3's ID-mirror holds. Do not hand-add
      bare [slug.N] tokens here without a matching audit check. -->
 
-_No criteria yet._
+- [release-readiness.1] evidence/release-readiness.md records `EXIT <command>: <code>` for `pnpm check:release-ranges`, `pnpm release:dry`, the AGENTS.md affected gate, check-test-wiring, check-skip-expiry and check-lane-reachability, and every code is 0.
 
 ---
 

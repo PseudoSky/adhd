@@ -5607,6 +5607,15 @@
       "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py plan-notes --only plan-notes.3",
       "expect": "exit0",
       "cwd": "repo-root"
+    },
+    {
+      "id": "release-readiness.1",
+      "phase": "release",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py release-readiness --only release-readiness.1",
+      "expect": "exit0",
+      "cwd": "repo-root"
     }
   ]
 }
