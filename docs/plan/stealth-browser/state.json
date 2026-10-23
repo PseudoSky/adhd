@@ -424,11 +424,11 @@
       "end_ref": "59c4d3688e1ca367315e1eb1a6fc9cfd36a1b3ac"
     },
     "search-examples": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-10-23T20:59:10.103Z",
-      "done_at": null,
+      "done_at": "2026-10-23T21:26:40.872Z",
       "start_ref": "5e12c1604cdcb7a412073124c522f516e0f661e8",
-      "end_ref": null
+      "end_ref": "efb0087501c503188eb63dda9350f2a23396e278"
     },
     "tracing-log-validation": {
       "status": "in_progress",
@@ -1026,6 +1026,18 @@
       "audit_exit": 0,
       "audit_criteria_passed": 8,
       "audit_criteria_total": 8,
+      "by": "pseudosky",
+      "note": "guard exit 0 (orchestrator-verified); sonnet"
+    },
+    {
+      "ts": "2026-10-23T21:26:40.872Z",
+      "from": "sp-switch",
+      "to": "search-examples",
+      "start_ref": "5e12c1604cdcb7a412073124c522f516e0f661e8",
+      "end_ref": "efb0087501c503188eb63dda9350f2a23396e278",
+      "audit_exit": 0,
+      "audit_criteria_passed": 5,
+      "audit_criteria_total": 5,
       "by": "pseudosky",
       "note": "guard exit 0 (orchestrator-verified); sonnet"
     }
