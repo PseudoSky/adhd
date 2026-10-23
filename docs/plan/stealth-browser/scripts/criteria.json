@@ -5499,6 +5499,15 @@
       "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py fix-search-build --only fix-search-build.2",
       "expect": "exit0",
       "cwd": "repo-root"
+    },
+    {
+      "id": "fix-search-build.3",
+      "phase": "migrate",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py fix-search-build --only fix-search-build.3",
+      "expect": "exit0",
+      "cwd": "repo-root"
     }
   ]
 }

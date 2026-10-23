@@ -42,6 +42,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 - [fix-search-build.1] A spec under test/unit/build cites [fix-search-build.1] and proves the baked cache: a fresh cache avoids extraction, a stale key re-extracts: titles carry `I-35`, `baked`, `stale`, `cold`; and the build produces the cache file in dist.
 
 - [fix-search-build.2] The published manifest has no `nx` key: a spec cites [fix-search-build.2] and asserts it on the manifest the dist-manifest/pack step emits (titles carry `nx key`, `published manifest`), while the source package.json may keep it.
+- [fix-search-build.3] evidence/fix-search-build.md records the red-first proof: a `RED:` line with the failing assertion of each new spec on the untouched source and a `GREEN:` line with the passing run after the fix.
 ---
 
 ## Reservations
