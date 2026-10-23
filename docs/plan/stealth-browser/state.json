@@ -508,11 +508,11 @@
       "end_ref": "9ce1e650c26c63c04cd06e2207f12261503f5c54"
     },
     "fix-search-fetch": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-10-23T22:57:26.976Z",
-      "done_at": null,
+      "done_at": "2026-10-23T23:53:13.276Z",
       "start_ref": "e08aef70b35de76b534273f808bf597d72053559",
-      "end_ref": null
+      "end_ref": "79cf1df028d51cb34590a4db830b8cd1165a7949"
     },
     "fix-search-engine": {
       "status": "in_progress",
@@ -1248,6 +1248,18 @@
       "audit_criteria_total": 5,
       "by": "pseudosky",
       "note": "commit c31513fcc; guard 5/5 exit 0 re-run by orchestrator"
+    },
+    {
+      "ts": "2026-10-23T23:53:13.276Z",
+      "from": "search-mcp-iserror",
+      "to": "fix-search-fetch",
+      "start_ref": "e08aef70b35de76b534273f808bf597d72053559",
+      "end_ref": "79cf1df028d51cb34590a4db830b8cd1165a7949",
+      "audit_exit": 0,
+      "audit_criteria_passed": 5,
+      "audit_criteria_total": 5,
+      "by": "pseudosky",
+      "note": "orchestrator-verified; guard re-run"
     }
   ],
   "amendment_log": [
