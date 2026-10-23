@@ -396,10 +396,10 @@
       "end_ref": "c619fcd7539fa06375d1d1a3a857f69482cb8c0f"
     },
     "search-verbs": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-10-23T18:10:51.620Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "4e34ad17e89188797ebaaf218758e77a70a640ab",
       "end_ref": null
     },
     "search-tracing": {
