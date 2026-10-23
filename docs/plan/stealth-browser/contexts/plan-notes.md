@@ -37,7 +37,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
      matching audit check ID so Check 3's ID-mirror holds. Do not hand-add
      bare [slug.N] tokens here without a matching audit check. -->
 
-_No criteria yet._
+- [plan-notes.1] README.md has a `Known issues` section naming core-seam .8 and commit aa5df30a (untagged, history not rewritten), compile-task.js truncating piped output at 64 KiB, plan-scaffold committing with --no-verify, and the missing add-dependency verb.
 
 ---
 
