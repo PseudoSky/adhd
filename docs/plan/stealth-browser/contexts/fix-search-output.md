@@ -39,7 +39,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
      matching audit check ID so Check 3's ID-mirror holds. Do not hand-add
      bare [slug.N] tokens here without a matching audit check. -->
 
-_No criteria yet._
+- [fix-search-output.1] A spec under test/unit/verbs cites [fix-search-output.1] and simulates 40 long-snippet results: titles carry `8192`, `bytes`, `count`, `whole results` and `truncated`; the default output stays within the byte bound, short outputs are untouched; the spec is green.
 
 ---
 
