@@ -41,6 +41,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 
 - [fix-core-parsers.2] evidence/fix-core-parsers.md records the red-first proof: a `RED:` line with the failing assertion of each new spec on the untouched source and a `GREEN:` line with the passing run after the fix.
 - [fix-core-parsers.3] `nx run stealth-core-browser:lint`, `:typecheck`, `:typecheck-spec`, `:test` exit 0 and evidence/fix-core-parsers.md records each as `EXIT <command>: 0`.
+- [fix-core-parsers.4] Only owned paths changed by [psm:fix-core-parsers] commits (parsers.ts and its specs).
 ---
 
 ## Reservations

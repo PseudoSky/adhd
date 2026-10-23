@@ -5184,6 +5184,15 @@
       "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py fix-core-parsers --only fix-core-parsers.3",
       "expect": "exit0",
       "cwd": "repo-root"
+    },
+    {
+      "id": "fix-core-parsers.4",
+      "phase": "migrate",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py fix-core-parsers --only fix-core-parsers.4",
+      "expect": "exit0",
+      "cwd": "repo-root"
     }
   ]
 }
