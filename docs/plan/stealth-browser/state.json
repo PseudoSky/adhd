@@ -522,10 +522,10 @@
       "end_ref": null
     },
     "fix-search-output": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-10-23T22:57:27.253Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "c95b92b46632440376cd87dd72583c9de58bbc85",
       "end_ref": null
     },
     "search-mcp-iserror": {
@@ -1989,7 +1989,7 @@
     "version": "0.8.35",
     "hash": "0b6bc1f3d70e"
   },
-  "current_state": "fix-search-engine",
+  "current_state": "fix-search-output",
   "dod_provenance": {
     "confirmed_at": "2026-10-12T23:49:38.410Z",
     "by": "pseudosky",
