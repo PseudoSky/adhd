@@ -375,11 +375,11 @@
       "end_ref": "d863207fb3be21789950fe0fe53a8c30090db171"
     },
     "search-port-fetch": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-10-22T03:00:36.120Z",
-      "done_at": null,
+      "done_at": "2026-10-23T17:37:24.172Z",
       "start_ref": "cb83165b70c14046e043a6526cdf9f65a304e067",
-      "end_ref": null
+      "end_ref": "232fdefb3686a9e1201184693d9ad9d96a289262"
     },
     "search-port-engine": {
       "status": "pending",
@@ -951,6 +951,18 @@
       "to": "search-port-providers",
       "start_ref": "b5c4e077c7e76cfe8dd09bf619b3953b1d93b7aa",
       "end_ref": "d863207fb3be21789950fe0fe53a8c30090db171",
+      "audit_exit": 0,
+      "audit_criteria_passed": 10,
+      "audit_criteria_total": 10,
+      "by": "pseudosky",
+      "note": "guard exit 0 (orchestrator-verified); sonnet; resumed after outage"
+    },
+    {
+      "ts": "2026-10-23T17:37:24.172Z",
+      "from": "search-port-engine",
+      "to": "search-port-fetch",
+      "start_ref": "cb83165b70c14046e043a6526cdf9f65a304e067",
+      "end_ref": "232fdefb3686a9e1201184693d9ad9d96a289262",
       "audit_exit": 0,
       "audit_criteria_passed": 10,
       "audit_criteria_total": 10,
