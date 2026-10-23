@@ -50,6 +50,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 - [conform-core.1] The unit lane lives where main's layout puts it: `packages/stealth/stealth-core-browser/src/test` is gone, `test/unit` holds at least the original spec count, every file under `test/unit` is a `*.spec.ts(x)` (L3), and `test/` has only the children unit, e2e, helpers, fixtures, golden and setup.ts (L2).
 
 - [conform-core.2] Support code and fixtures moved to their homes: fake-cdp.ts, mem-fs.ts, fake-proc.ts, profile-fixtures.ts, page-fixtures.ts, capture/capture-kit.ts ... exist under `test/helpers/`, fixtures under `test/fixtures/cdp`, and no html, pdf or json fixture is left under `test/unit`.
+- [conform-core.3] Configs conform: `vite.config.ts` includes `UNIT_FILE_INCLUDES` from tools/vite-plugins/e2e-globs.mjs, `tsconfig.lib.json` excludes `test/**`, `tsconfig.spec.json` includes `test/**/*.ts` and `test/**/*.tsx` and keeps examples/**/*.ts, and no config names `src/test`.
 ---
 
 ## Reservations
