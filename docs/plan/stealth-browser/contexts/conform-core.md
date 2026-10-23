@@ -51,6 +51,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 
 - [conform-core.2] Support code and fixtures moved to their homes: fake-cdp.ts, mem-fs.ts, fake-proc.ts, profile-fixtures.ts, page-fixtures.ts, capture/capture-kit.ts ... exist under `test/helpers/`, fixtures under `test/fixtures/cdp`, and no html, pdf or json fixture is left under `test/unit`.
 - [conform-core.3] Configs conform: `vite.config.ts` includes `UNIT_FILE_INCLUDES` from tools/vite-plugins/e2e-globs.mjs, `tsconfig.lib.json` excludes `test/**`, `tsconfig.spec.json` includes `test/**/*.ts` and `test/**/*.tsx` and keeps examples/**/*.ts, and no config names `src/test`.
+- [conform-core.4] Every spec carries the header of docs/standards/testing.md: a comment block in its first 60 lines with `guards:`, `tier: S` and `cites:` plus the ticket 8468f7b1.
 ---
 
 ## Reservations
