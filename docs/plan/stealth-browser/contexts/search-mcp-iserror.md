@@ -43,7 +43,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
      matching audit check ID so Check 3's ID-mirror holds. Do not hand-add
      bare [slug.N] tokens here without a matching audit check. -->
 
-_No criteria yet._
+- [search-mcp-iserror.1] The three assertions follow ADR-0018: mcp-inprocess.spec.ts and use-cases/hosts.spec.ts assert `isError` true with the `invalid_argument` text for extra-args/chromePath/required-key validation failures (the specs cite [search-mcp-iserror.1]; titles carry `isError`, `invalid_argument`, `ADR-0018`), and UNKNOWN_PROVIDER still rejects; the host specs are green.
 
 ---
 

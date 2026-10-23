@@ -5418,6 +5418,15 @@
       "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py fix-search-output --only fix-search-output.5",
       "expect": "exit0",
       "cwd": "repo-root"
+    },
+    {
+      "id": "search-mcp-iserror.1",
+      "phase": "surface",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py search-mcp-iserror --only search-mcp-iserror.1",
+      "expect": "exit0",
+      "cwd": "repo-root"
     }
   ]
 }
