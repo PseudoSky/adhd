@@ -40,6 +40,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 - [fix-core-errors.1] `src/errors.ts` has no `Symbol.hasInstance`, and docs/ERRORS.md no longer mentions a `hasInstance` or instanceof bridge.
 
 - [fix-core-errors.2] test/unit/surface/api.spec.ts cites [fix-core-errors.2] and asserts the typed code of an invalid endpoint (titles carry `invalidEndpoint`, `code` and `typed`), with no `instanceof` assertion on it, and is green.
+- [fix-core-errors.3] evidence/fix-core-errors.md records the red-first proof: a `RED:` line with the failing assertion of each new spec on the untouched source and a `GREEN:` line with the passing run after the fix.
 ---
 
 ## Reservations
