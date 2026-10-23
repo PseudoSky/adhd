@@ -508,10 +508,10 @@
       "end_ref": null
     },
     "fix-search-fetch": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-10-23T22:57:26.976Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "e08aef70b35de76b534273f808bf597d72053559",
       "end_ref": null
     },
     "fix-search-engine": {
@@ -1989,7 +1989,7 @@
     "version": "0.8.35",
     "hash": "0b6bc1f3d70e"
   },
-  "current_state": "fix-core-errors",
+  "current_state": "fix-search-fetch",
   "dod_provenance": {
     "confirmed_at": "2026-10-12T23:49:38.410Z",
     "by": "pseudosky",
