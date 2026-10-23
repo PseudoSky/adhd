@@ -43,6 +43,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 
 - [fix-search-fetch.2] fetch-route.spec.ts has no non-null assertion and `nx run stealth-search:lint` prints no warning naming it.
 - [fix-search-fetch.3] evidence/fix-search-fetch.md records the red-first proof: a `RED:` line with the failing assertion of each new spec on the untouched source and a `GREEN:` line with the passing run after the fix.
+- [fix-search-fetch.4] `nx run stealth-search:lint`, `:typecheck`, `:typecheck-spec`, `:test` exit 0 and evidence/fix-search-fetch.md records each as `EXIT <command>: 0`.
 ---
 
 ## Reservations
