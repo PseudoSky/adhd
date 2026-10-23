@@ -1251,6 +1251,23 @@
       ],
       "context": "contexts/fix-core-errors.md",
       "notes": "executor=typescript-pro tier=sonnet/medium"
+    },
+    "fix-search-fetch": {
+      "kind": "work",
+      "phase": "migrate",
+      "depends_on": [
+        "conform-search"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py fix-search-fetch",
+      "artifacts": [
+        "entrypoint/stealth-search/src/lib/fetch/",
+        "entrypoint/stealth-search/test/unit/fetch/",
+        "entrypoint/stealth-search/test/fixtures/fetch/",
+        "entrypoint/stealth-search/test/helpers/fetch/",
+        "docs/plan/stealth-browser/evidence/fix-search-fetch.md"
+      ],
+      "context": "contexts/fix-search-fetch.md",
+      "notes": "executor=typescript-pro tier=sonnet/medium"
     }
   },
   "authored_with": {
