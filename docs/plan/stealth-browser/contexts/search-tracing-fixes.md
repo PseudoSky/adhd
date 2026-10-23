@@ -43,7 +43,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
      matching audit check ID so Check 3's ID-mirror holds. Do not hand-add
      bare [slug.N] tokens here without a matching audit check. -->
 
-_No criteria yet._
+- [search-tracing-fixes.1] UNKNOWN_PROVIDER is reachable from both hosts: a spec cites [search-tracing-fixes.1] and drives the CLI and the in-process MCP host with an unknown provider, asserting the verb's UNKNOWN_PROVIDER error and the span's recorded code; titles carry `UNKNOWN_PROVIDER`, `cli`, `mcp`, `span`; the provider input has no enum and the CLI flag check no longer rejects it.
 
 ---
 
