@@ -487,11 +487,11 @@
       "end_ref": null
     },
     "fix-core-parsers": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-10-23T22:57:26.530Z",
-      "done_at": null,
+      "done_at": "2026-10-23T23:20:13.098Z",
       "start_ref": "f38fe5f9447663bd4d02eb0be26dc88cb9d50b42",
-      "end_ref": null
+      "end_ref": "b3577260298abade0007790790087711edee31d4"
     },
     "fix-core-lifecycle": {
       "status": "in_progress",
@@ -1212,6 +1212,18 @@
       "audit_criteria_total": 9,
       "by": "pseudosky",
       "note": "commit acb75b56a; guard 9/9 exit 0 re-run after search_b.py path repair (plan-edit)"
+    },
+    {
+      "ts": "2026-10-23T23:20:13.098Z",
+      "from": "fix-search-output",
+      "to": "fix-core-parsers",
+      "start_ref": "f38fe5f9447663bd4d02eb0be26dc88cb9d50b42",
+      "end_ref": "b3577260298abade0007790790087711edee31d4",
+      "audit_exit": 0,
+      "audit_criteria_passed": 4,
+      "audit_criteria_total": 4,
+      "by": "pseudosky",
+      "note": "commit 551aa0101; guard 4/4 exit 0 re-run by orchestrator"
     }
   ],
   "amendment_log": [
@@ -1989,7 +2001,7 @@
     "version": "0.8.35",
     "hash": "0b6bc1f3d70e"
   },
-  "current_state": "fix-search-output",
+  "current_state": "search-mcp-iserror",
   "dod_provenance": {
     "confirmed_at": "2026-10-12T23:49:38.410Z",
     "by": "pseudosky",
