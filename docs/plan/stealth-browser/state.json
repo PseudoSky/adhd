@@ -459,11 +459,11 @@
       "end_ref": "fb48127261e3099e8b1ff3a8523dde7573e8c037"
     },
     "conform-tripwire": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-10-23T22:23:58.697Z",
-      "done_at": null,
+      "done_at": "2026-10-23T22:42:56.048Z",
       "start_ref": "71bc6e1abaaea513719ddc3722f8a3c7a9fa1552",
-      "end_ref": null
+      "end_ref": "f1486b4db45c667fe363330f0ac328842daa4605"
     },
     "conform-core": {
       "status": "in_progress",
@@ -1176,6 +1176,18 @@
       "audit_criteria_total": 5,
       "by": "pseudosky",
       "note": "merge eb6526ed9 of main e21558fc1; guard exit 0 (5/5) verified by orchestrator"
+    },
+    {
+      "ts": "2026-10-23T22:42:56.048Z",
+      "from": "conform-search",
+      "to": "conform-tripwire",
+      "start_ref": "71bc6e1abaaea513719ddc3722f8a3c7a9fa1552",
+      "end_ref": "f1486b4db45c667fe363330f0ac328842daa4605",
+      "audit_exit": 0,
+      "audit_criteria_passed": 9,
+      "audit_criteria_total": 9,
+      "by": "pseudosky",
+      "note": "commit f1486b4db; guard 9/9 exit 0 re-run by orchestrator"
     }
   ],
   "amendment_log": [
@@ -1953,7 +1965,7 @@
     "version": "0.8.35",
     "hash": "0b6bc1f3d70e"
   },
-  "current_state": "conform-search",
+  "current_state": "fix-tripwire",
   "dod_provenance": {
     "confirmed_at": "2026-10-12T23:49:38.410Z",
     "by": "pseudosky",
