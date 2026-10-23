@@ -4860,6 +4860,15 @@
       "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py main-merge --only main-merge.5",
       "expect": "exit0",
       "cwd": "repo-root"
+    },
+    {
+      "id": "conform-tripwire.1",
+      "phase": "migrate",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py conform-tripwire --only conform-tripwire.1",
+      "expect": "exit0",
+      "cwd": "repo-root"
     }
   ]
 }
