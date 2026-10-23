@@ -431,10 +431,10 @@
       "end_ref": null
     },
     "tracing-log-validation": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-10-23T20:59:10.357Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "b578e96f45e3bf8d8ba37276c81c7a55986ed84f",
       "end_ref": null
     },
     "search-cutover": {
@@ -1780,7 +1780,7 @@
     "version": "0.8.35",
     "hash": "0b6bc1f3d70e"
   },
-  "current_state": "search-examples",
+  "current_state": "tracing-log-validation",
   "dod_provenance": {
     "confirmed_at": "2026-10-12T23:49:38.410Z",
     "by": "pseudosky",
