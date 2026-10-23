@@ -452,11 +452,11 @@
       "end_ref": null
     },
     "main-merge": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-10-23T22:13:16.326Z",
-      "done_at": null,
+      "done_at": "2026-10-23T22:23:58.482Z",
       "start_ref": "b909ff6d6619bb87de4858cfee1dc5aa5dfe3b3c",
-      "end_ref": null
+      "end_ref": "fb48127261e3099e8b1ff3a8523dde7573e8c037"
     },
     "conform-tripwire": {
       "status": "pending",
@@ -1164,6 +1164,18 @@
       "audit_criteria_total": 5,
       "by": "pseudosky",
       "note": "guard exit 0 (orchestrator-verified); sonnet; f9e408cd9"
+    },
+    {
+      "ts": "2026-10-23T22:23:58.482Z",
+      "from": "main-merge",
+      "to": "main-merge",
+      "start_ref": "b909ff6d6619bb87de4858cfee1dc5aa5dfe3b3c",
+      "end_ref": "fb48127261e3099e8b1ff3a8523dde7573e8c037",
+      "audit_exit": 0,
+      "audit_criteria_passed": 5,
+      "audit_criteria_total": 5,
+      "by": "pseudosky",
+      "note": "merge eb6526ed9 of main e21558fc1; guard exit 0 (5/5) verified by orchestrator"
     }
   ],
   "amendment_log": [
@@ -1941,7 +1953,7 @@
     "version": "0.8.35",
     "hash": "0b6bc1f3d70e"
   },
-  "current_state": "main-merge",
+  "current_state": "conform-tripwire",
   "dod_provenance": {
     "confirmed_at": "2026-10-12T23:49:38.410Z",
     "by": "pseudosky",
