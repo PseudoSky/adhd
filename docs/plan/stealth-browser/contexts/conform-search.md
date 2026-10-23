@@ -54,6 +54,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 - [conform-search.4] Every spec carries the header of docs/standards/testing.md: a comment block in its first 60 lines with `guards:`, `tier: S` and `cites:` plus the ticket 8468f7b1.
 - [conform-search.5] Main's scanners name nothing of this package: check-test-layout.mjs, check-test-headers.mjs and check-skip-expiry.mjs print no violation line for `entrypoint/stealth-search/`, and `test-headers.baseline.json` is byte-identical to main's.
 - [conform-search.6] No document or source comment of the package names the legacy layout: README.md, AGENTS.md, docs/** and sources contain no `src/test`, `src/__tests__` or `.e2e.test.` (CHANGELOG.md excepted).
+- [conform-search.7] `nx run stealth-search:lint`, `:typecheck`, `:typecheck-spec`, `:test` and `:build` exit 0 and evidence/conform-search.md records each as `EXIT <command>: 0`.
 ---
 
 ## Reservations
