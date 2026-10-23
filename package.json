@@ -9,6 +9,7 @@
     "build": "nx run-many --targets=build --configuration=production --all",
     "release": "node tools/nx-plugins/build/executors/smoke-test/run-release.mjs",
     "release:dry": "export ADHD_NX_VERSION_DRY_RUN=1 && pnpm run build && export RELEASE_RUN_TOKEN=$(uuidgen) && RELEASE_PROJECTS=$(node -e 'const {computeChangedProjectSet}=require(\"./tools/nx-plugins/build/lib/changed-set.js\");process.stdout.write(computeChangedProjectSet({workspaceRoot: process.cwd()}).projectNames.join(\",\"));') && if [ -z \"$RELEASE_PROJECTS\" ]; then echo \"release:dry: no changed projects — nothing to version/publish\"; else ADHD_NX_VERSION_DRY_RUN=1 npx nx run-many -t version --projects=$RELEASE_PROJECTS --dryRun && node tools/nx-plugins/build/executors/range-check/check-release-ranges.mjs && npx nx run-many -t publish --projects=$RELEASE_PROJECTS --dryRun; fi",
+    "release:pending": "node tools/nx-plugins/build/executors/publish/release-pending.mjs",
     "release:commit": "node tools/nx-plugins/build/executors/publish/release-commit.mjs",
     "release:commit:dry": "node tools/nx-plugins/build/executors/publish/release-commit.mjs --dry-run",
     "release:sync-global": "node tools/nx-plugins/build/executors/sync-global/sync-global.mjs",
