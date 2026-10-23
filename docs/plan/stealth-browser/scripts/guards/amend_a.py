@@ -191,7 +191,7 @@ def am_spec(slug, p):
         return False, f"tokens missing {miss} {why} {bad}"
     extra = ["--skip-nx-cache"] if p.get("repeat", 1) > 1 else []
     for _ in range(p.get("repeat", 1)):
-        rc, out = nx_run(proj, "test", "--", f"test/{p['sub']}", *extra)
+        rc, out = nx_run(proj, "test", *extra, "--", f"test/{p['sub']}")
         if rc != 0:
             return False, f"nx test exit {rc}: {out[-250:]}"
     return True, "ok"

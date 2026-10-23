@@ -51,7 +51,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 
 ```text
 read_only:  []
-mutates:    ["entrypoint/stealth-search/src/lib/search.ts", "entrypoint/stealth-search/src/api.ts", "entrypoint/stealth-search/src/lib/output.ts", "entrypoint/stealth-search/test/unit/verbs/", "entrypoint/stealth-search/test/helpers/verbs/", "docs/plan/stealth-browser/evidence/fix-search-output.md"]
+mutates:    ["entrypoint/stealth-search/src/lib/search.ts", "entrypoint/stealth-search/src/api.ts", "entrypoint/stealth-search/src/lib/output.ts", "entrypoint/stealth-search/test/unit/verbs/", "entrypoint/stealth-search/test/helpers/verbs/", "entrypoint/stealth-search/test/unit/guards/tripwire-wiring.spec.ts", "docs/plan/stealth-browser/evidence/fix-search-output.md"]
 ```
 
 ---
