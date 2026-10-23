@@ -45,6 +45,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 
 - [search-tracing-fixes.1] UNKNOWN_PROVIDER is reachable from both hosts: a spec cites [search-tracing-fixes.1] and drives the CLI and the in-process MCP host with an unknown provider, asserting the verb's UNKNOWN_PROVIDER error and the span's recorded code; titles carry `UNKNOWN_PROVIDER`, `cli`, `mcp`, `span`; the provider input has no enum and the CLI flag check no longer rejects it.
 
+- [search-tracing-fixes.2] Telemetry starts before flag validation: a spec cites [search-tracing-fixes.2] and asserts a rejected flag (for example `--cdp-port abc`) still produces a start and an error span (titles carry `rejected flag`, `span`, `before flag validation`), and `--help` produces none (title `help is not a dispatch`); docs/OBSERVABILITY.md states that `--help` is not a dispatch.
 ---
 
 ## Reservations
