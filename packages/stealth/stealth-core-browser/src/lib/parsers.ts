@@ -350,7 +350,7 @@ function extractSnippet(body: string, matchIndex: number, snippetPattern: string
   const m = snippetPattern.match(/^(\w+)(?:\.(.+))?$/)
   if (!m) return ''
   const [, tag, cls] = m
-  const ctx = body.slice(Math.max(0, matchIndex - 500), Math.min(body.length, matchIndex + 5000))
+  const ctx = body.slice(matchIndex, Math.min(body.length, matchIndex + 5000))
   const cp = cls ? `class="[^"]*${escapeRe(cls)}[^"]*"` : ''
   const re = new RegExp(`<${tag}[^>]*${cp}[^>]*>([\\s\\S]*?)<\\/${tag}>`, 'i')
   const hit = re.exec(ctx)
