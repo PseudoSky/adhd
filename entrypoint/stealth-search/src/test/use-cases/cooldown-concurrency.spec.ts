@@ -6,6 +6,7 @@
  * Ticket 8468f7b1 · [search-usecases.1] [search-usecases.2] [search-usecases.5] [search-usecases.6]
  */
 import { describe, expect, it, vi } from 'vitest'
+import type { SearchResponse } from '../../lib/types.js'
 import { hitlResponse, input, makeWorld, response, scriptedEngine } from '../unit/verbs/harness.js'
 
 describe('a hostile outcome arms the cooldown', () => {
@@ -89,7 +90,7 @@ describe('the concurrency cap of 2 queues the third call FIFO', () => {
     const started: string[] = []
     const world = makeWorld({
       strategies: (_page, _provider, query) =>
-        new Promise((resolve) => {
+        new Promise<SearchResponse>((resolve) => {
           started.push(query)
           gates.push(() => resolve(response({ query })))
         }),

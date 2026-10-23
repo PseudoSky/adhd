@@ -35,7 +35,7 @@ import { getProvider } from '../../lib/providers.js'
 import { defaultHostSettings } from '../../host-flags.js'
 import { startMcpHost } from '../../server.js'
 import type { McpHostDeps, McpHostHandle, Verbs } from '../../server.js'
-import { hitlResponse, input, makeFakeCore, makeWorld, response, scriptedEngine } from '../unit/verbs/harness.js'
+import { input, makeFakeCore, makeWorld, response, scriptedEngine } from '../unit/verbs/harness.js'
 import { BUILD_TIMEOUT_MS, FakeStdin, cliHarness, fakeVerbs, packageFor, trippedWorld, wire } from '../unit/hosts/host-harness.js'
 
 const TOOLS = ['search', 'listProviders', 'describeProvider', 'tripwireStatus', 'clearTripwire', 'getPageContext', 'chromeStatus', 'launchChrome', 'shutdownChrome', 'listPageTargets', 'checkChromeActivity'].map((n) => `stealth_${n}`)
