@@ -382,10 +382,10 @@
       "end_ref": "232fdefb3686a9e1201184693d9ad9d96a289262"
     },
     "search-port-engine": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-10-23T17:41:20.365Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "a34be83b9f4dbc58140d2a49173c8518e3c6efbb",
       "end_ref": null
     },
     "search-port-guards": {
