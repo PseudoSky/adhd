@@ -410,11 +410,11 @@
       "end_ref": "aa5df30a701d6fc8566886c0e5d93629ddb60e39"
     },
     "search-hosts": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-10-23T19:02:04.291Z",
-      "done_at": null,
+      "done_at": "2026-10-23T20:58:41.217Z",
       "start_ref": "912911db2903e6f5cc9ccfad87b817b507339032",
-      "end_ref": null
+      "end_ref": "1cc1afba43c34f4f66b993a1cc421e1fbeca12ad"
     },
     "search-usecases": {
       "status": "pending",
@@ -1004,6 +1004,18 @@
       "audit_criteria_total": 16,
       "by": "pseudosky",
       "note": "guard exit 0 (orchestrator-verified); sonnet; 0b71fbfdd"
+    },
+    {
+      "ts": "2026-10-23T20:58:41.217Z",
+      "from": "search-hosts",
+      "to": "search-hosts",
+      "start_ref": "912911db2903e6f5cc9ccfad87b817b507339032",
+      "end_ref": "1cc1afba43c34f4f66b993a1cc421e1fbeca12ad",
+      "audit_exit": 0,
+      "audit_criteria_passed": 23,
+      "audit_criteria_total": 23,
+      "by": "pseudosky",
+      "note": "guard exit 0 (orchestrator-verified) after search-hosts.11 guard amendment; sonnet; 612f29df7"
     }
   ],
   "amendment_log": [
@@ -1768,7 +1780,7 @@
     "version": "0.8.35",
     "hash": "0b6bc1f3d70e"
   },
-  "current_state": "search-hosts",
+  "current_state": "sp-switch",
   "dod_provenance": {
     "confirmed_at": "2026-10-12T23:49:38.410Z",
     "by": "pseudosky",
