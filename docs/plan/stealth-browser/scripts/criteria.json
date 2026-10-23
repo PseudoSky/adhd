@@ -4914,6 +4914,15 @@
       "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py conform-tripwire --only conform-tripwire.6",
       "expect": "exit0",
       "cwd": "repo-root"
+    },
+    {
+      "id": "conform-tripwire.7",
+      "phase": "migrate",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py conform-tripwire --only conform-tripwire.7",
+      "expect": "exit0",
+      "cwd": "repo-root"
     }
   ]
 }
