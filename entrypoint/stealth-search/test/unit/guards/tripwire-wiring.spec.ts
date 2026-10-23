@@ -4,8 +4,6 @@
  * cites: ticket 8468f7b1 [search-port-guards.9]
  * The search wiring of the tripwire package (tripwire.ts over createTripwire), one case per
  * backlog item that the old hand-rolled search-tripwire.ts got wrong. Each title carries its uid.
- * Where the package itself does not deliver the behavior the spec states it with `it.fails`
- * (see the findings in the state report).
  * Ticket 8468f7b1 · [search-port-guards.9]
  */
 import { describe, expect, it } from 'vitest'
@@ -110,7 +108,7 @@ describe('tripwire wiring [search-port-guards.9]', () => {
     expect(env.fs.ops.filter((o) => (o.op === 'openExclusive' || o.op === 'write') && o.path === env.config.auditPath)).toEqual([])
   })
 
-  it('84e1f7a2: TTL expiry removal is audited (tripwire-expired, method expired, original reason kept)', async () => {
+  it('84e1f7a2: TTL expiry removal is audited (tripwire-expired, method expired, reason ttl-expired)', async () => {
     const env = makeEnv()
     await env.tripwire.fire(fireInput('github', 'captcha'))
     env.clock.now += 7200001
@@ -118,18 +116,7 @@ describe('tripwire wiring [search-port-guards.9]', () => {
     expect(env.fs.exists('/data/tripwire/github.lock')).toBe(false)
     const expired = auditLines(env).filter((l) => l['event'] === 'tripwire-expired')
     expect(expired).toHaveLength(1)
-    expect(expired[0]).toMatchObject({ key: 'github', method: 'expired', reason: 'captcha' })
-  })
-
-  // FINDING (tripwire package): the expiry audit line carries the original trip reason and
-  // method 'expired', never the literal reason `ttl-expired` that backlog 84e1f7a2 names.
-  it.fails('84e1f7a2: TTL expiry removal writes an audit line with reason ttl-expired', async () => {
-    const env = makeEnv()
-    await env.tripwire.fire(fireInput('github', 'captcha'))
-    env.clock.now += 7200001
-    await env.tripwire.gate('github')
-    const expired = auditLines(env).filter((l) => l['event'] === 'tripwire-expired')
-    expect(expired[0]?.['reason']).toBe('ttl-expired')
+    expect(expired[0]).toMatchObject({ key: 'github', method: 'expired', reason: 'ttl-expired' })
   })
 
   it('3aaa855f: the clear path leaves a final record identical to a plain delete, with no dead resolved or reverified write', async () => {
