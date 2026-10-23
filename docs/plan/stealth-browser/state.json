@@ -410,10 +410,10 @@
       "end_ref": "aa5df30a701d6fc8566886c0e5d93629ddb60e39"
     },
     "search-hosts": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-10-23T19:02:04.291Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "912911db2903e6f5cc9ccfad87b817b507339032",
       "end_ref": null
     },
     "search-usecases": {
