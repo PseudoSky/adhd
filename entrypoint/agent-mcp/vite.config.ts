@@ -1,7 +1,7 @@
 /// <reference types='vitest' />
 import { defineConfig } from 'vite';
 import { configDefaults } from 'vitest/config';
-import { E2E_FILE_EXCLUDES } from '../../tools/vite-plugins/e2e-globs.mjs';
+import { E2E_FILE_EXCLUDES, UNIT_FILE_INCLUDES } from '../../tools/vite-plugins/e2e-globs.mjs';
 import { nxViteTsPaths } from '@nx/vite/plugins/nx-tsconfig-paths.plugin';
 import { importMetaUrlCjs } from '../../tools/vite-plugins/import-meta-url-cjs.mjs';
 import { projectCacheDir, projectCoverage } from '../../packages/workspace/workspace-base-vite-paths/src/index';
@@ -12,7 +12,7 @@ export default defineConfig({
   cacheDir: projectCacheDir(__dirname),
 
   // ONE `plugins:` array — a duplicate key silently drops every plugin but the
-  // last (backlog 50b77657). Deliberately OMITS nxViteTsPathsPre(): src/__tests__/main-entry-symlink.e2e.test.ts
+  // last (backlog 50b77657). Deliberately OMITS nxViteTsPathsPre(): src/__tests__/main-entry-symlink.e2e.ts
   // spawns the REAL built entry (dist/src/index.js) as a Node child process, and
   // a real-Node child resolves `@adhd/*` through node_modules to each
   // dependency's built `dist` — it cannot be made to follow the parent's
@@ -58,8 +58,8 @@ export default defineConfig({
     environment: 'node',
     pool: 'forks',
     fileParallelism: false,
-    include: ['src/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}', 'test/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'],
-    // Subprocess / real-server suites (`*.e2e.ts`, `*.e2e.test.ts`) run in the separate
+    include: UNIT_FILE_INCLUDES,
+    // Subprocess / real-server suites (`*.e2e.ts`, `*.e2e.ts`) run in the separate
     // `e2e` lane (vitest.e2e.config.ts), never here (backlog 5b839b90 AC1;
     // docs/decisions/0009-test-lanes-unit-vs-e2e.md). Gated by check-agent-lane-spawn.mjs.
     exclude: [...configDefaults.exclude, ...E2E_FILE_EXCLUDES],

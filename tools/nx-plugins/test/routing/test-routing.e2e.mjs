@@ -310,6 +310,6 @@ test('T43 (blind-review 10): gate source under tools/nx-plugins/test/ is behavio
   assert.equal(isBehaviorBearing('tools/nx-plugins/test/routing/test-routing.mjs'), true);
   assert.equal(isBehaviorBearing('tools/nx-plugins/test/gates/run-gates.mjs'), true);
   assert.equal(isBehaviorBearing('tools/nx-plugins/test/gates/run-gates.spec.mjs'), false);
-  assert.equal(isBehaviorBearing('entrypoint/backlog/src/test/helpers/ci-env.ts'), false);
+  assert.equal(isBehaviorBearing('entrypoint/backlog/test/helpers/ci-env.ts'), false);
   assert.equal(isBehaviorBearing('entrypoint/backlog/src/store/a.ts'), true);
 });

@@ -29,7 +29,7 @@ function seed(tree: ReturnType<typeof createTreeWithEmptyWorkspace>) {
   return tree;
 }
 
-/** Workspace root — 5 levels up from `<root>/packages/agent/<pkg>/src/test`. */
+/** Workspace root — 5 levels up from `<root>/packages/agent/<pkg>/test/unit`. */
 const WORKSPACE_ROOT = path.resolve(__dirname, '../../../../..');
 
 /** Every live `@adhd/*` package name in this workspace (packages/ + entrypoint/). */
@@ -190,7 +190,7 @@ describe('registry-package generator', () => {
       'src/index.ts',
       'src/db/schema.ts',
       'src/db/migrate-runner.ts',
-      'src/__tests__/skeleton.test.ts',
+      'test/unit/skeleton.spec.ts',
       'drizzle/meta/_journal.json',
     ]) {
       expect(tree.exists(`${base}/${f}`)).toBe(true);
@@ -264,7 +264,7 @@ describe('registry-package generator', () => {
     const tree = seed(createTreeWithEmptyWorkspace());
     await registryPackageGenerator(tree, { name: 'budget' });
     const spec = tree.read(
-      'packages/agent/agent-budget/src/__tests__/skeleton.test.ts',
+      'packages/agent/agent-budget/test/unit/skeleton.spec.ts',
       'utf-8'
     );
     expect(spec).not.toBeNull();
@@ -458,7 +458,7 @@ describe('emitted skeleton test — quoted identifier runs on a real DB', () => 
     const tree = seed(createTreeWithEmptyWorkspace());
     await registryPackageGenerator(tree, { name: 'billing' });
     const spec = tree.read(
-      'packages/agent/agent-billing/src/__tests__/skeleton.test.ts',
+      'packages/agent/agent-billing/test/unit/skeleton.spec.ts',
       'utf-8'
     );
     expect(spec).not.toBeNull();

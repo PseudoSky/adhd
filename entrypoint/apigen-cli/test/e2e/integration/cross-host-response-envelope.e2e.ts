@@ -61,7 +61,7 @@ import {
   liveTestTimeoutMs,
   captureStderr,
   waitForHttp as sharedWaitForHttp,
-} from '../../../src/test/support/readiness';
+} from '../../helpers/readiness';
 
 // ---------------------------------------------------------------------------
 // Paths

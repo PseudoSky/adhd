@@ -13,7 +13,7 @@ export default [
             '{projectRoot}/vite.config.{js,ts,mjs,mts}',
             // Test code (and its real-component harness) never ships; its devDependencies
             // are not production dependencies.
-            '{projectRoot}/src/test/**',
+            '{projectRoot}/test/**',
             '{projectRoot}/src/**/*.{test,spec}.ts',
           ],
         },

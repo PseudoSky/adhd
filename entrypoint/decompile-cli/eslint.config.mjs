@@ -49,7 +49,7 @@ export default [
     },
     {
         ignores: [
-            "**/src/tests/fixtures/**/*",
+            "**/test/fixtures/**/*",
             "**/vite.config.js",
             "**/vite.config.ts",
             "**/vite.config.mjs",

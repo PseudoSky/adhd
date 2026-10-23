@@ -49,13 +49,13 @@ import { existsSync, readFileSync, rmSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
-import { freshTmpDir } from '../../../src/test/helpers/tmp-store.js';
+import { freshTmpDir } from '../../helpers/tmp-store.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 /** `src/store/` -> repo root. */
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..', '..');
 const TSX_CLI = join(REPO_ROOT, 'node_modules', 'tsx', 'dist', 'cli.mjs');
-const RUNNER = join(HERE, '..', '..', '..', 'src', 'test', 'helpers', 'embed-funnel-consumer.ts');
+const RUNNER = join(HERE, '..', '..', '..', 'test', 'helpers', 'embed-funnel-consumer.ts');
 
 /** The consumer's absolute-lifetime knob (mirrors the consumer's own constant). */
 const WATCHDOG_ENV = 'SOX_FUNNEL_CONSUMER_WATCHDOG_MS';

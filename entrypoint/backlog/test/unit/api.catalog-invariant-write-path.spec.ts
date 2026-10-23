@@ -57,7 +57,7 @@ import { buildBacklogEnv } from '../../src/env.js';
 import { create, upsertProject, type BacklogCtx } from '../../src/api.js';
 import { executeWriteTransaction, writeNodeTx } from '../../src/write/tx.js';
 import { isOutcomeOk } from '../../src/envelope.js';
-import { freshTmpDir } from '../../src/test/helpers/tmp-store.js';
+import { freshTmpDir } from '../helpers/tmp-store.js';
 import { runBacklogCli } from '../../src/cli.js';
 import { inspectCatalogInvariants } from '../../src/store/catalog-invariant-guard.js';
 import {

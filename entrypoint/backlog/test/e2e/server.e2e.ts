@@ -34,7 +34,7 @@ import { startBacklogServer } from '../../src/server.js';
 import {
   openTestIssueStore,
   seedProject,
-} from '../../src/test/helpers/open-test-issue-store.js';
+} from '../helpers/open-test-issue-store.js';
 import { createIssue } from '../../src/write/create-issue.js';
 import { buildBacklogEnv, resolveBacklogDbPath } from '../../src/env.js';
 import type { IOutcomeEnvelope } from '../../src/envelope.js';

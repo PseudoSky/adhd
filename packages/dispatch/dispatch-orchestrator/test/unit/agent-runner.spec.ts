@@ -12,8 +12,8 @@ import {
   FakeMcpToolClient,
   mcpError,
   type FakeToolHandler,
-} from '../../src/test/helpers/fake-mcp-client.js';
-import { makeUnit } from '../../src/test/helpers/fixtures.js';
+} from '../helpers/fake-mcp-client.js';
+import { makeUnit } from '../helpers/fixtures.js';
 
 // ---------------------------------------------------------------------------
 // usageToTurns — (a) mapping with teeth

@@ -11,7 +11,7 @@ import {
 } from '../../workspace/workspace-base-vite-paths/src/index';
 import { importMetaUrlCjs } from '../../../tools/vite-plugins/import-meta-url-cjs.mjs';
 import { externalizeRealDeps } from '../../../tools/vite-plugins/externalize.mjs';
-import { E2E_FILE_EXCLUDES } from '../../../tools/vite-plugins/e2e-globs.mjs';
+import { E2E_FILE_EXCLUDES, UNIT_FILE_INCLUDES } from '../../../tools/vite-plugins/e2e-globs.mjs';
 import { nxCopyAssetsPlugin } from '@nx/vite/plugins/nx-copy-assets.plugin';
 
 export default defineConfig(() => ({
@@ -65,8 +65,8 @@ export default defineConfig(() => ({
     watch: false,
     globals: true,
     environment: 'node',
-    include: ['{src,test,tests}/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'],
-    // The loopback-socket suites (tier P) are `*.e2e.test.ts` and run in the `e2e` target (vitest.e2e.config.mts), never here (ADR 0009).
+    include: UNIT_FILE_INCLUDES,
+    // The loopback-socket suites (tier P) are `*.e2e.ts` and run in the `e2e` target (vitest.e2e.config.mts), never here (ADR 0009).
     exclude: [...configDefaults.exclude, ...E2E_FILE_EXCLUDES],
     reporters: ['default'],
     coverage: {

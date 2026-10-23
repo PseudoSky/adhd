@@ -17,8 +17,8 @@ import {
   openTestIssueStore,
   removeTestIssueStoreDir,
   type TestIssueStore,
-} from '../../../src/test/helpers/open-test-issue-store.js';
-import { freshTmpDir } from '../../../src/test/helpers/tmp-store.js';
+} from '../../helpers/open-test-issue-store.js';
+import { freshTmpDir } from '../../helpers/tmp-store.js';
 import { createIssue } from '../../../src/write/create-issue.js';
 import { update } from '../../../src/write/update.js';
 import { relate } from '../../../src/write/relate.js';

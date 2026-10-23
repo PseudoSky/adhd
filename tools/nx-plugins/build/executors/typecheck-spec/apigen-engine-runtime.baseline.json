@@ -4,7 +4,7 @@
   "files": {
     "packages/apigen/apigen-engine-runtime/test/unit/lib/logical/nominal-codec.spec.ts": 1,
     "packages/apigen/apigen-engine-runtime/test/unit/lib/stream.spec.ts": 2,
-    "packages/apigen/apigen-engine-runtime/test/e2e-support/isolated-git.e2e.ts": 9,
+    "packages/apigen/apigen-engine-runtime/test/e2e/isolated-git.e2e.ts": 9,
     "packages/apigen/apigen-engine-runtime/test/unit/batch.spec.ts": 13,
     "packages/apigen/apigen-engine-runtime/test/unit/bug-apigen-029.spec.ts": 1,
     "packages/apigen/apigen-engine-runtime/test/unit/bug-apigen-030.spec.ts": 1,

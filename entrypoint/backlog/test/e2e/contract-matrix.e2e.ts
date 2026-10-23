@@ -23,17 +23,17 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { runIsolatedBin } from '../../src/test/helpers/spawn-isolated-bin.js';
+import { runIsolatedBin } from '../helpers/spawn-isolated-bin.js';
 import {
   connectMcpHost,
   callToolJson,
   DIST_INDEX,
   type IMcpHost,
-} from '../../src/test/helpers/spawn-mcp-host.js';
+} from '../helpers/spawn-mcp-host.js';
 import {
   openTestIssueStore,
   seedProject,
-} from '../../src/test/helpers/open-test-issue-store.js';
+} from '../helpers/open-test-issue-store.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');

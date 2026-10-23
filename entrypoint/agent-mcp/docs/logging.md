@@ -437,7 +437,7 @@ Above the cap the model sees the first `floor(cap * 0.75)` chars, a marker, and 
 - `transform:tool_result` hooks run on the capped result.
 - Spill-to-file (the `claude` CLI saves an oversize result to a file and returns a stub) is available as an opt-in mode, off by default; see [Optional spill-to-file](#optional-spill-to-file-for-over-cap-tool-results). The cap is its fallback.
 
-Example: `ADHD_AGENT_TOOL_RESULT_MAX_CHARS=8000 agent-mcp` bounds each tool result to 8000 chars plus the marker. The proof is `src/__tests__/integration/tool-result-cap.e2e.test.ts` (real orchestrator, real stdio MCP server returning 100,000 chars, with a cap-disabled negative control).
+Example: `ADHD_AGENT_TOOL_RESULT_MAX_CHARS=8000 agent-mcp` bounds each tool result to 8000 chars plus the marker. The proof is `test/e2e/integration/tool-result-cap.e2e.ts` (real orchestrator, real stdio MCP server returning 100,000 chars, with a cap-disabled negative control).
 
 ### Optional spill-to-file for over-cap tool results
 
@@ -527,7 +527,7 @@ the production store, by design. Setting any of the four relocating variables (`
 
 ## Proving it live: the env-gated test
 
-`src/__tests__/live/tracing-live.e2e.test.ts` (backlog `c536ce29` LIVE-AC1..AC5) starts the real
+`test/e2e/live/tracing-live.e2e.ts` (backlog `c536ce29` LIVE-AC1..AC5) starts the real
 dev server on a free port with the production store, drives it as an MCP client, runs one
 `Reply with exactly: ok` task on a `claudecli` agent and one on an Anthropic-OAuth agent
 (`ADHD_AGENT_ANTHROPIC_SECRET`), then checks the DB and the three logs: both tasks completed, one
@@ -552,9 +552,9 @@ Run:
 
 ```console
 $ cd entrypoint/agent-mcp
-$ AGENT_MCP_LIVE=1 npx vitest run --config vitest.e2e.config.ts src/__tests__/live/tracing-live.e2e.test.ts
+$ AGENT_MCP_LIVE=1 npx vitest run --config vitest.e2e.config.ts test/e2e/live/tracing-live.e2e.ts
  RUN  v4.1.9 .../entrypoint/agent-mcp
- ✓ src/__tests__/live/tracing-live.e2e.test.ts (8 tests) 32331ms
+ ✓ test/e2e/live/tracing-live.e2e.ts (8 tests) 32331ms
  Test Files  1 passed (1)
       Tests  8 passed (8)
 ```
@@ -676,4 +676,4 @@ Models occasionally send a structured argument as a JSON-encoded string, for exa
 - Each coercion writes a `TOOL_ARG_COERCED` row to `task_events` with payload `{taskId, tool, property, from: "string", to: "array" | "object"}` and a `WARN` log line `TOOL_ARG_COERCED`. The `TOOL_CALL` event keeps the arguments exactly as the model sent them.
 - A string that does not coerce (`cat /etc/hosts` for an array property, an array containing a non-string element, JSON of the wrong type) is not sent to the tool. The model gets an error result naming the property, the declared type and a worked example, e.g. `Example: {"command": ["first", "second"]}`.
 
-`EngineConfig.toolArgCoercion.enabled` (default on) exists as a test switch for negative controls. The proof is `src/__tests__/integration/tool-arg-coercion.e2e.test.ts` (real orchestrator, real stdio MCP server declaring `command` as an array of strings, the captured failing payload, with a coercion-off negative control).
+`EngineConfig.toolArgCoercion.enabled` (default on) exists as a test switch for negative controls. The proof is `test/e2e/integration/tool-arg-coercion.e2e.ts` (real orchestrator, real stdio MCP server declaring `command` as an array of strings, the captured failing payload, with a coercion-off negative control).

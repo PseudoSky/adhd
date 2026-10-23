@@ -8,8 +8,7 @@
     "@adhd/apigen-core-client": "^0.3.6",
     "@adhd/apigen-base-logical": "^0.1.5",
     "@adhd/apigen-base-errors": "^0.2.3",
-    "@adhd/apigen-engine-naming": "^0.2.7",
-    "better-sqlite3": "12.10.0"
+    "@adhd/apigen-engine-naming": "^0.2.7"
   },
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
@@ -40,5 +39,8 @@
   "homepage": "https://github.com/PseudoSky/adhd/tree/main/packages/apigen/apigen-engine-runtime#readme",
   "bugs": {
     "url": "https://github.com/PseudoSky/adhd/issues"
+  },
+  "devDependencies": {
+    "better-sqlite3": "12.10.0"
   }
 }

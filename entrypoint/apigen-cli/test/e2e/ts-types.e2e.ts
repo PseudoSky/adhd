@@ -16,7 +16,7 @@ import * as path from 'node:path';
 // esbuild is a devDependency of apigen-cli; a missing install must fail the
 // import loudly (never silently skip the compile check).
 import { transform } from 'esbuild';
-import { liveTestTimeoutMs } from '../../src/test/support/readiness';
+import { liveTestTimeoutMs } from '../helpers/readiness';
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..', '..');
 const BUILT_BIN = path.join(REPO_ROOT, 'entrypoint', 'apigen-cli', 'dist', 'index.js');
@@ -24,7 +24,6 @@ const FIXTURE = path.join(
   REPO_ROOT,
   'entrypoint',
   'apigen-cli',
-  'src',
   'test',
   'fixtures',
   'ts-types-source.ts'

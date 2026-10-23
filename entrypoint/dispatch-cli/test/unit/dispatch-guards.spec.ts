@@ -16,7 +16,7 @@ import { createJsonFileSerializer } from '@adhd/dispatch-serializer-json';
 import { acquireDispatchLock, DuplicateDispatchError, MockAgentRunner } from '@adhd/dispatch-orchestrator';
 
 import { dispatchLockPath, runCycleCore, validateCore } from '../../src/lib/core.js';
-import { makeFixtureDag } from '../../src/test/helpers/fixtures.js';
+import { makeFixtureDag } from '../helpers/fixtures.js';
 
 const TMP_ROOT = path.join(process.cwd(), 'tmp', 'dispatch-cli', 'guards-spec');
 beforeAll(() => {

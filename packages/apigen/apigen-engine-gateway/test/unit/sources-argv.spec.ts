@@ -25,9 +25,9 @@ import {
   type IResolveDeps,
   type IResolvedSource,
 } from '../../src/index';
-import { createFakeLauncher } from '../../src/test/helpers/fake-launcher';
-import { flush } from '../../src/test/helpers/flush';
-import { caught } from '../../src/test/helpers/caught';
+import { createFakeLauncher } from '../helpers/fake-launcher';
+import { flush } from '../helpers/flush';
+import { caught } from '../helpers/caught';
 
 
 type SeenCall = { id: unknown; args: unknown; transport: unknown; safe: unknown };

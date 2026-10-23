@@ -262,7 +262,7 @@ describe('buildUnionSchema — [inv:hints-advisory]: structural schema survives 
 // ---------------------------------------------------------------------------
 
 describe('boolean-in-union extraction — no duplicated oneOf branch (3a3e5884)', () => {
-  const dir = path.resolve(__dirname, '../../src/test/fixtures/union-boolean');
+  const dir = path.resolve(__dirname, '../../test/fixtures/union-boolean');
   const fixture = path.join(dir, 'boolean-unions.ts');
   const strictConfig = path.join(dir, 'strict.json');
 

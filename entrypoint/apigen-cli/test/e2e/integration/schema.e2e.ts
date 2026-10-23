@@ -15,7 +15,7 @@ import type { GeneratedSchemas, MiddlewareDef } from '@adhd/apigen-engine-runtim
 // exact same fixture and the exact same [inv:ctx-name-only] assertion.
 
 const realApi = fileURLToPath(
-  new URL('../../../src/test/fixtures/real-api.ts', import.meta.url)
+  new URL('../../../test/fixtures/real-api.ts', import.meta.url)
 );
 
 describe('[dod.3] schema generation excludes ctx', () => {

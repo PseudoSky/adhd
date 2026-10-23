@@ -18,7 +18,7 @@ import { mkdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'nod
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { freshTmpDir } from '../../../src/test/helpers/tmp-store.js';
+import { freshTmpDir } from '../../helpers/tmp-store.js';
 import {
   canonicalizePath,
   displayExternalRoot,

@@ -19,8 +19,8 @@
 import { join } from 'node:path';
 import { rmSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { openTmpStore, freshTmpDir, type TmpStore } from '../../../src/test/helpers/tmp-store.js';
-import { seedNote, setProjectNoteRemovers } from '../../../src/test/helpers/seed-note.js';
+import { openTmpStore, freshTmpDir, type TmpStore } from '../../helpers/tmp-store.js';
+import { seedNote, setProjectNoteRemovers } from '../../helpers/seed-note.js';
 import {
   closeGraphBacklogStore,
   openGraphBacklogStore,

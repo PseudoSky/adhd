@@ -5,8 +5,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { makePolicyPlugin } from '../../src/index';
 import type { IPolicyAskHandler, IPolicyDecider, IPolicyLayerOptions, PolicyErrorPhase } from '../../src/index';
-import { createHost, latch, refusal } from '../../src/test/helpers/harness';
-import { realDecider, unloadableDecider } from '../../src/test/helpers/policies';
+import { createHost, latch, refusal } from '../helpers/harness';
+import { realDecider, unloadableDecider } from '../helpers/policies';
 
 /** A distinctive value placed in the call arguments, envelope and error messages: it must never reach the client or stderr. */
 const SECRET = 'canary-value-7f3a91';

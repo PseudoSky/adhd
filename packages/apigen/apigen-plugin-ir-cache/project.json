@@ -31,7 +31,7 @@
       }
     },
     "e2e": {
-      "//": "Real-extraction lane (docs/decisions/0009-test-lanes-unit-vs-e2e.md). Runs ONLY src/**/*.e2e.ts and src/**/*.e2e.test.ts via vitest.e2e.config.ts: the tier P suite that drives the real ts-morph extractor over real temporary source trees (ir-cache-invalidation, 24.7 s for 9 cases). The unit `test` target excludes those files. Reached by CI (`nx affected -t e2e --parallel=1`), never by the local pre-push hook; not env-gated. Cached on content (lane-reachability rule 3); declares no outputs. dependsOn mirrors `test` (the suite imports src, so only ^build).",
+      "//": "Real-extraction lane (docs/decisions/0009-test-lanes-unit-vs-e2e.md). Runs ONLY src/**/*.e2e.ts and src/**/*.e2e.ts via vitest.e2e.config.ts: the tier P suite that drives the real ts-morph extractor over real temporary source trees (ir-cache-invalidation, 24.7 s for 9 cases). The unit `test` target excludes those files. Reached by CI (`nx affected -t e2e --parallel=1`), never by the local pre-push hook; not env-gated. Cached on content (lane-reachability rule 3); declares no outputs. dependsOn mirrors `test` (the suite imports src, so only ^build).",
       "executor": "nx:run-commands",
       "dependsOn": [
         "^build"

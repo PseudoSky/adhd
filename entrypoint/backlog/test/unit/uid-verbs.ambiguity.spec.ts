@@ -13,12 +13,12 @@
  * instead of `ambiguous_reference`, turning its row red.
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { openTmpStore, type TmpStore } from '../../src/test/helpers/tmp-store.js';
+import { openTmpStore, type TmpStore } from '../helpers/tmp-store.js';
 import { buildBacklogEnv } from '../../src/env.js';
 import * as api from '../../src/api.js';
 import { BACKLOG_VERBS } from '../../src/vocabulary.js';
 import type { IOutcomeEnvelope } from '../../src/envelope.js';
-import { seedNote } from '../../src/test/helpers/seed-note.js';
+import { seedNote } from '../helpers/seed-note.js';
 
 /** Verbs that take no uid reference (names, filters, or no input). */
 const NON_UID_VERBS = new Set([

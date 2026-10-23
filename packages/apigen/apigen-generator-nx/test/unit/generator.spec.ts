@@ -57,7 +57,7 @@ describe('plugin generator', () => {
       tree.exists('packages/apigen/plugins/python-grpc/src/index.ts')
     ).toBe(true);
     expect(
-      tree.exists('packages/apigen/plugins/python-grpc/src/test/plugin.spec.ts')
+      tree.exists('packages/apigen/plugins/python-grpc/test/unit/lib/plugin.spec.ts')
     ).toBe(true);
     expect(
       tree.exists('packages/apigen/plugins/python-grpc/package.json')
@@ -149,7 +149,7 @@ describe('plugin generator', () => {
     );
     await pluginGenerator(tree, { name: 'spec-check' });
     const spec = tree.read(
-      'packages/apigen/plugins/spec-check/src/test/plugin.spec.ts',
+      'packages/apigen/plugins/spec-check/test/unit/lib/plugin.spec.ts',
       'utf-8'
     );
     expect(spec).not.toBeNull();

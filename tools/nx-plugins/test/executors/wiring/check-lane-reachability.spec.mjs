@@ -67,7 +67,7 @@ function baseFiles(overrides = {}) {
   const files = {
     'packages/foo/project.json': JSON.stringify(fooProject, null, 2),
     'packages/foo/package.json': JSON.stringify({ name: '@adhd/foo', version: '0.0.0' }),
-    'packages/foo/src/a.e2e.ts': '',
+    'packages/foo/test/e2e/a.e2e.ts': '',
     // A valid single-array config so rule 7 (the repo-wide sweep) is silent on the base fixture.
     'packages/foo/vite.config.ts': 'export default {\n  plugins: [nxViteTsPaths()],\n};\n',
     '.githooks/pre-push': 'flags=$(node "$repo_root/.githooks/lib/pre-push-flags.mjs")\n',
@@ -100,7 +100,7 @@ test('rule 1 RED: e2e files with no e2e target', async () => {
   const { files } = baseFiles();
   files['packages/baz/project.json'] = JSON.stringify({ name: 'baz', targets: {} });
   files['packages/baz/package.json'] = JSON.stringify({ name: '@adhd/baz' });
-  files['packages/baz/src/b.e2e.ts'] = '';
+  files['packages/baz/test/e2e/b.e2e.ts'] = '';
   const root = fixture(files);
   try {
     const res = await check(root);
@@ -285,7 +285,7 @@ test('rule 8 fires: an agent-family unit test spawning a subprocess [5b839b90 AC
     'packages/agent/agent-foo/project.json': JSON.stringify({ name: 'agent-foo', targets: {} }),
     'packages/agent/agent-foo/package.json': JSON.stringify({ name: '@adhd/agent-foo', version: '0.0.0' }),
     'packages/agent/agent-foo/vite.config.ts': 'export default { plugins: [] };\n',
-    'packages/agent/agent-foo/src/spawn.test.ts': "import { spawnSync } from 'node:child_process';\nspawnSync('npx', []);\n",
+    'packages/agent/agent-foo/test/unit/spawn.spec.ts': "import { spawnSync } from 'node:child_process';\nspawnSync('npx', []);\n",
   });
   try {
     const res = await check(root);

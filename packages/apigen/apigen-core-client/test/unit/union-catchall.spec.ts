@@ -44,7 +44,7 @@ import {
   X_APIGEN_TOJSON,
 } from '@adhd/apigen-base-logical';
 
-const fixture = (name: string) => path.resolve(__dirname, '../../src/test/fixtures', name);
+const fixture = (name: string) => path.resolve(__dirname, '../../test/fixtures', name);
 
 function makeAjv(): Ajv {
   const ajv = new Ajv({ allErrors: true });

@@ -63,7 +63,7 @@ const DEFAULT_PACKAGE_ROOTS = [
 // already covers the generic test-dir patterns added for DEBT-002 #3
 // (`test/`, `tests/`, `__mocks__/`, `fixtures/`), not just the original
 // filename-shaped ones. Confirmed live: `apigen-generator-nx` ships
-// `src/generators/plugin/__files__/src/test/plugin.spec.ts__tmpl__` (a real
+// `src/generators/plugin/__files__/test/unit/lib/plugin.spec.ts__tmpl__` (a real
 // scaffold template for projects IT generates) and correctly passes — see
 // check-publish-hygiene.spec.mjs's dedicated "generator-template
 // false-positive fix" tests, including the negative control proving a

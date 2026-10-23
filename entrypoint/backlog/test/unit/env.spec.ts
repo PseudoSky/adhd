@@ -17,8 +17,8 @@ import {
   resolveBacklogDbPath,
   resolveIrCacheFile,
 } from '../../src/env.js';
-import { osTmpDir } from '../../src/test/helpers/tmp-store.js';
-import { seedProject } from '../../src/test/helpers/open-test-issue-store.js';
+import { osTmpDir } from '../helpers/tmp-store.js';
+import { seedProject } from '../helpers/open-test-issue-store.js';
 import { create, get, type BacklogCtx } from '../../src/api.js';
 import {
   openGraphBacklogStore,

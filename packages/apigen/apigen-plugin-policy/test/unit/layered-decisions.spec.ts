@@ -5,8 +5,8 @@
 import { describe, expect, it } from 'vitest';
 import type { Layer } from '@adhd/apigen-engine-runtime';
 import { makePolicyPlugin, PolicyAttributes } from '../../src/index';
-import { createHost, refusal } from '../../src/test/helpers/harness';
-import { demoLayers, layer, realDecider, GLOBAL, LOCAL, PROJECT, SHARED, WORK } from '../../src/test/helpers/policies';
+import { createHost, refusal } from '../helpers/harness';
+import { demoLayers, layer, realDecider, GLOBAL, LOCAL, PROJECT, SHARED, WORK } from '../helpers/policies';
 
 /** The Layer over a real policy-core-client decider compiled from the given layers. */
 function host(layers = demoLayers()): ReturnType<typeof createHost> {

@@ -13,7 +13,7 @@
  *
  * The ONLY double is the MCP client (`IMcpToolClient`): the
  * external agent-mcp boundary, whose real form spawns a child and calls a paid
- * model. The live equivalent (`live-dispatch-five-acs.e2e.test.ts`, env-gated)
+ * model. The live equivalent (`live-dispatch-five-acs.e2e.ts`, env-gated)
  * drives the REAL agent-mcp + real model; this test proves the same mechanics
  * deterministically and by default.
  *
@@ -35,7 +35,7 @@ import {
 } from '@adhd/dispatch-orchestrator';
 
 import { runCycleCore, statusCore } from '../../src/lib/core.js';
-import { makeFixtureDag } from '../../src/test/helpers/fixtures.js';
+import { makeFixtureDag } from '../helpers/fixtures.js';
 
 const TMP_ROOT = path.join(
   process.cwd(),

@@ -48,7 +48,7 @@ import { makeValidateLayer } from '../../src/lib/validate-layer';
 import type { Call } from '../../src/lib/invoke';
 import type { ComposedSchemas } from '../../src/lib/types';
 
-const fixture = path.resolve(__dirname, '..', '..', 'src', 'test', 'fixtures', 'bug-apigen-030.ts');
+const fixture = path.resolve(__dirname, '..', '..', 'test', 'fixtures', 'bug-apigen-030.ts');
 
 function makeCall(operationId: string, domainArgs: Record<string, unknown>): Call {
   return {

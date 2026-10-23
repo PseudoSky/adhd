@@ -469,7 +469,7 @@ interface HttpFixtureOutput {
   body: string;
 }
 
-const GOLDEN_PATH = path.join(__dirname, '..', '..', 'src', 'test', 'golden', 'express.snapshot.json');
+const GOLDEN_PATH = path.join(__dirname, '..', '..', 'test', 'golden', 'express.snapshot.json');
 
 /** The one fixture name EXCLUDED from the byte-identical parity group (DEBT-003). */
 const VOID_RETURN_FIXTURE = 'void-return';

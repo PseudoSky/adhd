@@ -48,7 +48,7 @@ import * as net from 'node:net';
 import { tokenize } from '@adhd/apigen-core-client';
 import type { Operation, Segment } from '@adhd/apigen-core-client';
 import { project, envelopeKey } from '@adhd/apigen-engine-naming';
-import { waitForHttp, liveTestTimeoutMs, captureStderr } from '../../../src/test/support/readiness';
+import { waitForHttp, liveTestTimeoutMs, captureStderr } from '../../helpers/readiness';
 
 // ---------------------------------------------------------------------------
 // Paths

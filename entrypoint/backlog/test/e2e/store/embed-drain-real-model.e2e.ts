@@ -66,12 +66,12 @@ import {
 import { buildBacklogEnv } from '../../../src/env.js';
 import { create, query, upsertProject, type BacklogCtx } from '../../../src/api.js';
 import { bootstrapSemanticStoreMembers } from '../../../src/write/bootstrap.js';
-import { freshTmpDir } from '../../../src/test/helpers/tmp-store.js';
-import { seedProject } from '../../../src/test/helpers/open-test-issue-store.js';
+import { freshTmpDir } from '../../helpers/tmp-store.js';
+import { seedProject } from '../../helpers/open-test-issue-store.js';
 import {
   mintBacklogSandbox,
   runInBacklogSandbox,
-} from '../../../src/test/helpers/spawn-backlog-bin.js';
+} from '../../helpers/spawn-backlog-bin.js';
 import { isOutcomeOk } from '../../../src/envelope.js';
 
 const ENV_VAR = 'ADHD_BACKLOG_EMBEDDING_ENABLED';

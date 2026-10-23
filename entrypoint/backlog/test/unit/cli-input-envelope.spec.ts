@@ -3,7 +3,7 @@
  * consumer seam.
  *
  * Every assertion spawns the REAL BUILT `dist/index.js` as a child process
- * (`src/test/helpers/spawn-isolated-bin.ts`; never an in-process import, which
+ * (`test/helpers/spawn-isolated-bin.ts`; never an in-process import, which
  * would bypass the mount where the guard lives), against a throwaway
  * `ADHD_BACKLOG_DATABASE_PATH` — never the machine's real backlog graph.
  *
@@ -26,7 +26,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { runIsolatedBin } from '../../src/test/helpers/spawn-isolated-bin.js';
+import { runIsolatedBin } from '../helpers/spawn-isolated-bin.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DIST_INDEX = join(HERE, '..', '..', 'dist', 'index.js');

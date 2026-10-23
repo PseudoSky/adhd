@@ -10,7 +10,7 @@ import {
   miniMilestone,
   miniOp,
   passingGuardEntry,
-} from '../../../src/test/fixtures.js';
+} from '../../helpers/fixtures.js';
 
 const FUNCTION_SHAPE = {
   kind: 'function' as const,

@@ -21,9 +21,9 @@ import {
   operationsFromMcpTools,
 } from '../../src/index';
 import type { IOpenedMcpUpstream } from '../../src/index';
-import { flush } from '../../src/test/helpers/flush';
-import { createStubMcpUpstream } from '../../src/test/helpers/stub-mcp-upstream';
-import type { IStubOptions } from '../../src/test/helpers/stub-mcp-upstream';
+import { flush } from '../helpers/flush';
+import { createStubMcpUpstream } from '../helpers/stub-mcp-upstream';
+import type { IStubOptions } from '../helpers/stub-mcp-upstream';
 
 const OBJECT_SCHEMA = { type: 'object', properties: { path: { type: 'string' } } };
 

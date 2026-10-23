@@ -25,11 +25,11 @@ import {
   seedProject,
   removeTestIssueStoreDir,
   type TestIssueStore,
-} from '../../../src/test/helpers/open-test-issue-store.js';
-import { freshTmpDir } from '../../../src/test/helpers/tmp-store.js';
+} from '../../helpers/open-test-issue-store.js';
+import { freshTmpDir } from '../../helpers/tmp-store.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const FIXTURE = join(HERE, '..', '..', '..', 'src', 'test', 'fixtures', 'relate-similar-writer.ts');
+const FIXTURE = join(HERE, '..', '..', '..', 'test', 'fixtures', 'relate-similar-writer.ts');
 const TSX_BIN = join(HERE, '..', '..', '..', '..', '..', 'node_modules', '.bin', 'tsx');
 
 type WriteStore = Pick<TestIssueStore, 'adapter' | 'graph' | 'typePolicy'>;

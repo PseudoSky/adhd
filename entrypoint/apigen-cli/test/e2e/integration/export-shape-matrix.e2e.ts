@@ -21,7 +21,7 @@ import { extract } from '@adhd/apigen-core-client';
 import { project } from '@adhd/apigen-engine-naming';
 import type { Operation } from '@adhd/apigen-core-client';
 
-const shapesDir = path.join(__dirname, '..', '..', '..', 'src', 'test', 'fixtures', 'shapes');
+const shapesDir = path.join(__dirname, '..', '..', '..', 'test', 'fixtures', 'shapes');
 
 /** The leaf (export) segment's raw spelling — the exported symbol name. */
 function leafName(op: Operation): string {

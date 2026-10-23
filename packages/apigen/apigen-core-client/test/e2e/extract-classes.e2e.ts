@@ -16,7 +16,7 @@ import { describe, it, expect } from 'vitest';
 import { extractClasses } from '../../src/lib/extract-classes';
 import type { Operation } from '../../src/lib/descriptor';
 
-const fixture = (name: string) => path.resolve(__dirname, '../../src/test/fixtures', name);
+const fixture = (name: string) => path.resolve(__dirname, '../../test/fixtures', name);
 
 // ---------------------------------------------------------------------------
 // Helpers

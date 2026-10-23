@@ -31,14 +31,14 @@ import {
   openTestIssueStore,
   seedProject,
   removeTestIssueStoreDir,
-} from '../../../src/test/helpers/open-test-issue-store.js';
-import { freshTmpDir } from '../../../src/test/helpers/tmp-store.js';
+} from '../../helpers/open-test-issue-store.js';
+import { freshTmpDir } from '../../helpers/tmp-store.js';
 import { createIssue } from '../../../src/write/create-issue.js';
 import { obligate } from '../../../src/write/obligation.js';
 import { nowISO, writeNodeTx } from '../../../src/write/tx.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const WORKER_SCRIPT = join(HERE, '..', '..', '..', 'src', 'test', 'fixtures', 'cross-process-gate-worker.ts');
+const WORKER_SCRIPT = join(HERE, '..', '..', '..', 'test', 'fixtures', 'cross-process-gate-worker.ts');
 const TSX_BIN = join(HERE, '..', '..', '..', '..', '..', 'node_modules', '.bin', 'tsx');
 
 interface WorkerOutcome {

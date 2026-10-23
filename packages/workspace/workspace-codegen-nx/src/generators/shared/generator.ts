@@ -130,6 +130,7 @@ export async function scaffoldGenerator(tree: Tree, schema: ScaffoldGeneratorSch
   patchEslintrc(tree, projectRoot);
   patchTsconfigLib(tree, projectRoot);
   patchTsconfigSpec(tree, projectRoot);
+  relocateScaffoldSpec(tree, projectRoot);
   patchTypecheckSpec(tree, projectRoot, projectName);
   // DEBT-WORKSPACE-VITE-PATHS-001: deliberately NOT declaring the
   // vite-paths package (workspace-base-vite-paths) as a package.json
@@ -176,6 +177,13 @@ function patchViteConfig(tree: Tree, dir: string, platform: 'node' | 'browser' |
   if (!vitePath) return;
   let content = tree.read(vitePath, 'utf-8');
   if (!content) return;
+
+  // Test layout standard: the unit lane is `test/unit/**/*.spec.ts(x)`, defined
+  // once in tools/vite-plugins/e2e-globs.mjs (`UNIT_FILE_INCLUDES`).
+  if (!content.includes('UNIT_FILE_INCLUDES')) {
+    content = content.replace(/include:\s*\[[^\]]*\]/, 'include: UNIT_FILE_INCLUDES');
+    content = `import { UNIT_FILE_INCLUDES } from '../../../tools/vite-plugins/e2e-globs.mjs';\n${content}`;
+  }
 
   // Add emptyOutDir: true
   if (!content.includes('emptyOutDir')) {
@@ -510,9 +518,33 @@ function patchTsconfigLib(tree: Tree, dir: string) {
   const tsconfigLibPath = joinPathFragments(dir, 'tsconfig.lib.json');
   if (!tree.exists(tsconfigLibPath)) return;
   const tsconfigLib = readJson(tree, tsconfigLibPath);
-  if (tsconfigLib.exclude && !tsconfigLib.exclude.includes('src/test/**')) {
-    tsconfigLib.exclude.push('src/test/**');
+  if (tsconfigLib.exclude && !tsconfigLib.exclude.includes('test/**')) {
+    tsconfigLib.exclude.push('test/**');
     writeJson(tree, tsconfigLibPath, tsconfigLib);
+  }
+}
+
+/**
+ * Test layout standard (docs/standards/testing.md, "Test file layout"): tests
+ * live outside `src/`, one directory per lane — `test/unit/**\/*.spec.ts(x)`
+ * and `test/e2e/**\/*.e2e.ts` — mirroring `src/`. The `@nx/js` library
+ * generator emits `src/lib/<name>.spec.ts`; move it to `test/unit/lib/` and
+ * re-point its relative import at the source file so the scaffold conforms to
+ * `check-test-layout.mjs` from the first commit.
+ */
+function relocateScaffoldSpec(tree: Tree, dir: string) {
+  const libDir = joinPathFragments(dir, 'src', 'lib');
+  if (!tree.exists(libDir)) return;
+  for (const file of tree.children(libDir)) {
+    if (!file.endsWith('.spec.ts')) continue;
+    const from = joinPathFragments(libDir, file);
+    const to = joinPathFragments(dir, 'test', 'unit', 'lib', file);
+    const body = (tree.read(from, 'utf-8') ?? '').replace(
+      /from '\.\/([^']+)'/g,
+      "from '../../../src/lib/$1'"
+    );
+    tree.write(to, body);
+    tree.delete(from);
   }
 }
 
@@ -538,6 +570,14 @@ function patchTsconfigSpec(tree: Tree, dir: string) {
     moduleResolution: 'bundler',
     allowJs: true,
   };
+  spec.include = [
+    'vite.config.ts',
+    'vite.config.mts',
+    'vitest.config.ts',
+    'test/**/*.ts',
+    'test/**/*.tsx',
+    'src/**/*.d.ts',
+  ];
   writeJson(tree, specPath, spec);
 }
 

@@ -17,7 +17,7 @@ import {
 } from '../../src/lib/commands/serve';
 import { tokenize, type Operation, type Segment } from '@adhd/apigen-core-client';
 import { project } from '@adhd/apigen-engine-naming';
-import { READY_TIMEOUT_MS, liveTestTimeoutMs } from '../../src/test/support/readiness';
+import { READY_TIMEOUT_MS, liveTestTimeoutMs } from '../helpers/readiness';
 
 // ───────────────────────────────────────────────────────────────────────────
 // apigen-serve-core py-grpc-serve-split: the gRPC front-proxy fixture below

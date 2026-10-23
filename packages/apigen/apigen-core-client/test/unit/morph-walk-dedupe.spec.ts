@@ -49,7 +49,7 @@ interface Op {
   output: Schema;
 }
 
-const FIXTURE = path.resolve(__dirname, '../../src/test/fixtures/union-reordered-keys.ts');
+const FIXTURE = path.resolve(__dirname, '../../test/fixtures/union-reordered-keys.ts');
 
 const _cache = new Map<string, Promise<Map<string, Op>>>();
 function extractFixture(): Promise<Map<string, Op>> {

@@ -124,7 +124,7 @@ describe('[ADR-0004] wrapMcpStructuredContent', () => {
 
 const UNION_CATCHALL_FIXTURE = path.join(
   __dirname,
-  '../../../apigen-core-client/src/test/fixtures/union-catchall.ts'
+  '../../../apigen-core-client/test/fixtures/union-catchall.ts'
 );
 
 function makeAjv(): Ajv {

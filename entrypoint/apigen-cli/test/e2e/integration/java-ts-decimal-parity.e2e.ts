@@ -29,7 +29,7 @@ import {
   liveTestTimeoutMs,
   captureStderr,
   waitForHttp,
-} from '../../../src/test/support/readiness';
+} from '../../helpers/readiness';
 
 // ---------------------------------------------------------------------------
 // Paths

@@ -3,7 +3,7 @@
  * `server.tracing-required.spec.ts` relies on.
  */
 import { describe, expect, it } from 'vitest';
-import { isCiRun } from '../../../src/test/helpers/ci-env.js';
+import { isCiRun } from '../../helpers/ci-env.js';
 
 describe('55ba4178 B-AC11 isCiRun', () => {
   it('55ba4178 B-AC11 true for the values CI providers set', () => {

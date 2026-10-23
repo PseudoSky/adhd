@@ -37,18 +37,18 @@ behaviour**:
    (`layer:test-logic`). No I/O, no subprocess, no model.
 2. **Integration (middle)** — real stores/engine wired against a temp SQLite DB and an
    in-memory MCP transport:
-   - `entrypoint/agent-mcp/src/__tests__/integration/harness.ts` (`buildHarness`) is the
+   - `entrypoint/agent-mcp/test/helpers/integration/harness.ts` (`buildHarness`) is the
      canonical fixture; it runs the real drizzle migrations, real stores, real queue, real
      `PolicyEngine`, and the same `dispatchFn` wiring as production.
-   - `entrypoint/dispatch-cli/src/test/helpers/agent-mcp-registry.ts` spawns the **built**
+   - `entrypoint/dispatch-cli/test/helpers/agent-mcp-registry.ts` spawns the **built**
      agent-mcp over real stdio JSON-RPC.
 3. **End-to-end (few, highest-value)** — real DAG + real orchestrator + real MCP boundary,
    and (only where a real provider is required) a real model. Entry points:
-   - `entrypoint/dispatch-cli/src/test/integration/real-e2e.ts` (self-executing script).
-   - `entrypoint/dispatch-cli/src/test/integration/run-live-guarded.ts` (self-executing,
+   - `entrypoint/dispatch-cli/test/helpers/integration/real-e2e.ts` (self-executing script).
+   - `entrypoint/dispatch-cli/test/helpers/integration/run-live-guarded.ts` (self-executing,
      guarded live runner: strict turn cap + continuous cost kill + message-size cap +
      optional proxy; see that package's README "Guarded live runner").
-   - `entrypoint/dispatch-cli/src/test/integration/live-dispatch-five-acs.e2e.test.ts`
+   - `entrypoint/dispatch-cli/test/e2e/integration/live-dispatch-five-acs.e2e.ts`
      (this change's live proof; see "Environments").
    - `entrypoint/agent-mcp/src/__tests__/integration/live-*.e2e.test.ts`.
 
@@ -81,7 +81,7 @@ can run it.
 ## Test data & fixtures
 
 - **Fixtures & data:** created per test from factories, isolated from production data.
-  - `ScriptedProvider` (`entrypoint/agent-mcp/src/__tests__/integration/scripted-provider.ts`)
+  - `ScriptedProvider` (`entrypoint/agent-mcp/test/helpers/integration/scripted-provider.ts`)
     is the only permitted LLM stub for default-running tests.
   - `MockAgentRunner` (public export of `@adhd/dispatch-orchestrator`) stands in for the
     task-runner boundary in default-running dispatch tests.

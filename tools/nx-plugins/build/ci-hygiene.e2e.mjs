@@ -125,7 +125,7 @@ test('255394d0 C-AC4 NEGATIVE CONTROL: a package.json with the old pins is repor
 });
 
 // ── C-AC5 ────────────────────────────────────────────────────────────────────
-const FILE = 'packages/agent/agent-core-env/src/__tests__/open-registry-db.test.ts';
+const FILE = 'packages/agent/agent-core-env/test/unit/open-registry-db.spec.ts';
 function nxTest(extra) {
   const env = cleanGitEnv(process.env, { CI: 'true' });
   // NX_INVOCATION_ROOT_PID keys nx's recursive-invocation guard: when this spec runs inside an outer

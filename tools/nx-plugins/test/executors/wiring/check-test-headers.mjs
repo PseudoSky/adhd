@@ -69,7 +69,7 @@ const CP_CALL = /\b(?:spawnSync|spawn|execFileSync|execFile|execSync|fork)\s*\(|
 export const spawnsProcess = (src) => CP_IMPORT.test(src) && CP_CALL.test(blank(src));
 
 /**
- * True when the file name puts a test in the e2e lane: `*.e2e.ts`, `*.e2e.test.ts` (vitest, ADR 0009) or `*.e2e.mjs`
+ * True when the file name puts a test in the e2e lane: `*.e2e.ts` (vitest, ADR 0009) or `*.e2e.mjs`
  * (the build-tools `node --test` lane). The same name rule `metrics/tiers.mjs` infers tier P from.
  * @param {string} rel workspace-relative path
  */

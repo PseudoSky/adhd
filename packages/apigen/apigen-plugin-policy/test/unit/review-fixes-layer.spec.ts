@@ -7,8 +7,8 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { makePolicyPlugin } from '../../src/index';
 import type { IPolicyDecideRequest, IPolicyDecider, IPolicyDecision, PolicyErrorPhase } from '../../src/index';
-import { createHost, latch, refusal } from '../../src/test/helpers/harness';
-import { realDecider } from '../../src/test/helpers/policies';
+import { createHost, latch, refusal } from '../helpers/harness';
+import { realDecider } from '../helpers/policies';
 
 const GENERIC = 'policy decision failed';
 const ALLOW = Promise.resolve({ decision: 'allow' } as IPolicyDecision);

@@ -39,7 +39,7 @@ import {
   READY_TIMEOUT_MS,
   liveTestTimeoutMs,
   captureStderr,
-} from '../../src/test/support/readiness';
+} from '../helpers/readiness';
 
 // DEBT-APIGEN-CLI-STALE-ROUTE-TOOL-NAME-ASSERTIONS-001: since BUG-APIGEN-
 // OPENAPI-ROUTE-PATH-MISMATCH-001, every transport derives its operation

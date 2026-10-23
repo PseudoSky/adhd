@@ -42,10 +42,10 @@ import {
 } from '../../../src/store/graph-backlog-store.js';
 import { buildBacklogEnv } from '../../../src/env.js';
 import { create, query, upsertProject, type BacklogCtx } from '../../../src/api.js';
-import { freshTmpDir } from '../../../src/test/helpers/tmp-store.js';
+import { freshTmpDir } from '../../helpers/tmp-store.js';
 import { isOutcomeOk } from '../../../src/envelope.js';
 import { isVectorSpacePopulated } from '../../../src/write/bootstrap.js';
-import { createFakeEmbeddingModule } from '../../../src/test/helpers/fake-embedding-provider.js';
+import { createFakeEmbeddingModule } from '../../helpers/fake-embedding-provider.js';
 
 // Embeddings mocked here — explicit, scoped user authorization (see
 // entrypoint/backlog/STATE.md), covers embedding cost only. Intercepts the

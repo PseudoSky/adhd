@@ -20,7 +20,7 @@ policy file for the unrelated **sonirico `mcp-shell`** Go binary, which
 machine-global agents reference through the `MCP_SHELL_SEC_CONFIG_FILE` env var.
 NAT-TOOL-4 **AC6** requires it to remain: deleting it re-breaks resolved bugs
 `f141baad` + `299be025`. The `f141baad` contract test
-(`entrypoint/agent-mcp/src/__tests__/docs-and-config-contract.test.ts`) asserts
+(`entrypoint/agent-mcp/test/unit/docs-and-config-contract.spec.ts`) asserts
 the canonical `tools/mcp-shell/security.yaml` exists and that every catalog
 entry points `MCP_SHELL_SEC_CONFIG_FILE` at it.
 

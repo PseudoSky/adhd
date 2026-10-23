@@ -43,7 +43,7 @@ root `/P` then `/Q` while the stored JSON stays byte-identical.
   is never written as a provider model; it surfaces in `result.warnings`. An imported
   agent therefore needs a session/global provider binding at task time, else
   `NO_PROVIDER_SELECTED` (`import-agents-claudecli`; proven by
-  `src/test/import-agents-no-provider.e2e.test.ts` + `import-agents.spec.ts`). A third producer is caught by agent-mcp's
+  `test/e2e/import-agents-no-provider.e2e.ts` + `import-agents.spec.ts`). A third producer is caught by agent-mcp's
   one-producer guard, which scans `entrypoint/dispatch-cli/src`.
 - `AgentMcpRunner.ensureAgent` writes the declarative config on CREATE and
   performs NO write on reuse — `agent_update` is never called, so the stored
@@ -51,11 +51,11 @@ root `/P` then `/Q` while the stored JSON stays byte-identical.
 
 Proven default-running + hermetic (real spawned agent-mcp, fake `$HOME`, temp
 registry DB): `src/test/resolve-dispatch-mcp-servers.spec.ts`,
-`src/test/dispatch-native-tooling.e2e.test.ts`.
+`test/e2e/dispatch-native-tooling.e2e.ts`.
 
 ## Live dispatch e2e — env-gated (paid/external model)
 
-`src/test/integration/live-dispatch-five-acs.e2e.test.ts` drives the REAL system
+`test/e2e/integration/live-dispatch-five-acs.e2e.ts` drives the REAL system
 end to end — real `orchestrateCycle` → real `AgentMcpRunner` → a real spawned
 `@adhd/agent-mcp` (stdio JSON-RPC, real stores/engine) → a REAL provider — to prove
 five live acceptance criteria (`fa9d3079`, `03145a46`, `5339c2e5`, `daafe2d3`,
@@ -83,11 +83,11 @@ npx nx run agent-mcp:dist-manifest
 
 # default: claudecli (subscription; needs `claude auth status` = loggedIn)
 cd entrypoint/dispatch-cli && DISPATCH_E2E_LIVE=1 npx vitest run --config vite.config.ts \
-  src/test/integration/live-dispatch-five-acs.e2e.test.ts
+  test/e2e/integration/live-dispatch-five-acs.e2e.ts
 
 # alternate provider
 cd entrypoint/dispatch-cli && DISPATCH_E2E_LIVE=1 DISPATCH_E2E_PROVIDER=deepseek \
-  npx vitest run --config vite.config.ts src/test/integration/live-dispatch-five-acs.e2e.test.ts
+  npx vitest run --config vite.config.ts test/e2e/integration/live-dispatch-five-acs.e2e.ts
 ```
 
 (The dispatch-cli `test` target has no `--testFile` option and builds `backlog`
@@ -124,7 +124,7 @@ own header.
 
 ## Guarded live runner — `run-live-guarded.ts` (env-gated; paid model)
 
-`src/test/integration/run-live-guarded.ts` is a self-executing, **guarded** live
+`test/helpers/integration/run-live-guarded.ts` is a self-executing, **guarded** live
 runner: it drives a real `orchestrateCycle` → real `AgentMcpRunner` → a real
 spawned `@adhd/agent-mcp` → a real provider, wrapped in hard guards so a live run
 cannot run away. It is NOT collected by Vitest (`vite.config.ts` includes only
@@ -145,7 +145,7 @@ cannot run away. It is NOT collected by Vitest (`vite.config.ts` includes only
 - **Fails loudly** when enabled without the credential / built agent-mcp / stub.
 
 Run: `DISPATCH_E2E_LIVE=1 npx tsx --tsconfig tsconfig.base.json
-entrypoint/dispatch-cli/src/test/integration/run-live-guarded.ts` (see `README.md`
+entrypoint/dispatch-cli/test/helpers/integration/run-live-guarded.ts` (see `README.md`
 "Guarded live runner" for the full env surface). The same gate record appears in
 this package's `README.md` and in the script's own header.
 

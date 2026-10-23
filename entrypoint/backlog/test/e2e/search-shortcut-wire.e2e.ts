@@ -31,7 +31,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { runIsolatedBin } from '../../src/test/helpers/spawn-isolated-bin.js';
+import { runIsolatedBin } from '../helpers/spawn-isolated-bin.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DIST_INDEX = join(HERE, '..', '..', 'dist', 'index.js');

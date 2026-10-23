@@ -1266,7 +1266,7 @@ draft):**
   real store, real `BacklogCtx` built via `buildBacklogEnv({..., namespace:
   'test' })` against a temp `dbPath`; `vi.mock('@adhd/sox-embedding-provider',
   ...)` with the deterministic fake from
-  `src/test/helpers/fake-embedding-provider.ts`, and a per-call spy on
+  `test/helpers/fake-embedding-provider.ts`, and a per-call spy on
   `createEmbeddingProvider`, so every assertion is an invocation COUNT, never
   wall-clock):
   - `embedding.enabled: true`, each of `claim`/`transition`/`move`/`relate`/

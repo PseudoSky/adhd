@@ -38,7 +38,7 @@ import * as ts from 'typescript';
 
 const HERE = __dirname;
 const REPO_ROOT = path.resolve(HERE, '../../../../..');
-const HELPERS_DIR = path.join(HERE, '../../src/test/helpers');
+const HELPERS_DIR = path.join(HERE, '../../test/helpers');
 const PROBE = path.join(HELPERS_DIR, 'heavy-dep-probe.js');
 const DRIVER = path.join(HELPERS_DIR, 'startup-probe-driver.js');
 const MODULE_UNDER_TEST = path.resolve(

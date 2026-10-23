@@ -39,7 +39,7 @@ const BUILT_BIN = path.join(
   'dist',
   'index.js'
 );
-const ALPHA_SRC = path.join(__dirname, '..', '..', '..', 'src', 'test', 'fixtures', 'alpha.ts');
+const ALPHA_SRC = path.join(__dirname, '..', '..', '..', 'test', 'fixtures', 'alpha.ts');
 
 /** Every `CachedExtractEntry` shape, per `ir-cache-layer.ts`. */
 interface CachedExtractEntryLike {

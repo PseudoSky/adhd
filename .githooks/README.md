@@ -75,8 +75,8 @@ still exited 0. Three layers now stop it:
    `scrubProcessGitEnv()` once at the top. TypeScript projects cannot import
    across Nx project roots, so each keeps a typed twin of the same ~8-line
    contract (delete every `/^GIT_/` key) next to its tests — backlog:
-   `entrypoint/backlog/src/test/helpers/git-env.ts`; apigen:
-   `runGit`/`sanitizedGitEnv` in `apigen-engine-runtime/src/test-support/parity-harness.ts`.
+   `entrypoint/backlog/test/helpers/git-env.ts`; apigen:
+   `runGit`/`sanitizedGitEnv` in `apigen-engine-runtime/test/helpers/parity-harness.ts`.
    No new package: a one-function helper has no importers to justify one.
 2. **Hook-level unset** (`lib/git-env-guard.sh`, sourced by `pre-commit` and
    `pre-push`): `no_hook_git_env <cmd>` runs the lint/test/`nx affected`

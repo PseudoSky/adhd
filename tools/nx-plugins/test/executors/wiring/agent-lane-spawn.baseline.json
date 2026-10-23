@@ -1,4 +1,4 @@
 {
-  "//": "Files known to spawn a real stdio MCP server through the Orchestrator (not statically provable). Pending move to *.e2e.test.ts; the entry must be removed when the file moves (rule B).",
+  "//": "Files known to spawn a real stdio MCP server through the Orchestrator (not statically provable). Pending move to test/e2e/*.e2e.ts; the entry must be removed when the file moves (rule B).",
   "pendingMove": []
 }

@@ -10,7 +10,7 @@ import {
   miniOp,
   passingGuardEntry,
   suspendedEntry,
-} from '../../../src/test/fixtures.js';
+} from '../../helpers/fixtures.js';
 
 // ---------------------------------------------------------------------------
 // topoSortMilestones

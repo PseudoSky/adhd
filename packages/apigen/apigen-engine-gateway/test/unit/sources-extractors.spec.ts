@@ -21,10 +21,10 @@ import {
 } from '@adhd/apigen-core-client';
 import type { ExtractCall, ExtractorRegistry, ISourceResolution, TranslatorId } from '@adhd/apigen-core-client';
 import { isGatewayError, registerSourceExtractors } from '../../src/index';
-import { createFakeLauncher } from '../../src/test/helpers/fake-launcher';
-import { flush } from '../../src/test/helpers/flush';
-import { createStubMcpUpstream } from '../../src/test/helpers/stub-mcp-upstream';
-import type { IStubOptions } from '../../src/test/helpers/stub-mcp-upstream';
+import { createFakeLauncher } from '../helpers/fake-launcher';
+import { flush } from '../helpers/flush';
+import { createStubMcpUpstream } from '../helpers/stub-mcp-upstream';
+import type { IStubOptions } from '../helpers/stub-mcp-upstream';
 
 const OBJECT_SCHEMA = { type: 'object', properties: { path: { type: 'string' } } };
 const TOOLS: IStubOptions['tools'] = [

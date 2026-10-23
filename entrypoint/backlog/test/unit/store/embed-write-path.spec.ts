@@ -51,8 +51,8 @@ import {
   removeTestIssueStoreDir,
   seedProject,
   type TestIssueStore,
-} from '../../../src/test/helpers/open-test-issue-store.js';
-import { freshTmpDir } from '../../../src/test/helpers/tmp-store.js';
+} from '../../helpers/open-test-issue-store.js';
+import { freshTmpDir } from '../../helpers/tmp-store.js';
 import { closeGraphBacklogStore } from '../../../src/store/graph-backlog-store.js';
 
 /** A controllable deferred promise — the deterministic gate used by the fire-and-forget test. */

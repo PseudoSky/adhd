@@ -33,16 +33,16 @@ import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { buildBacklogEnv } from '../../../src/env.js';
 import { bootstrapSemanticStoreMembers } from '../../../src/write/bootstrap.js';
-import { freshTmpDir } from '../../../src/test/helpers/tmp-store.js';
+import { freshTmpDir } from '../../helpers/tmp-store.js';
 import {
   openTestIssueStore,
   removeTestIssueStoreDir,
-} from '../../../src/test/helpers/open-test-issue-store.js';
+} from '../../helpers/open-test-issue-store.js';
 import {
   createFakeEmbeddingModule,
   embedTextDeterministic,
   FAKE_EMBEDDING_DIMENSIONS,
-} from '../../../src/test/helpers/fake-embedding-provider.js';
+} from '../../helpers/fake-embedding-provider.js';
 
 vi.mock('@adhd/sox-embedding-provider', () => createFakeEmbeddingModule());
 

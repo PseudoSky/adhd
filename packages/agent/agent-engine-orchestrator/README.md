@@ -27,7 +27,7 @@ This package is **published and importable** (`npm install @adhd/agent-engine-or
 No credential for <provider>; set ADHD_AGENT_<PROVIDER>_SECRET
 ```
 
-The `env: { secret: "ADHD_AGENT_..." }` pointers on agent definitions only resolve when the host supplies an `EngineConfig` whose `getProviderConfig` is backed by `@adhd/environment` (as `@adhd/agent-mcp` does in `entrypoint/agent-mcp/src/config.ts`'s `toEngineConfig()`). See `entrypoint/agent-mcp/src/__tests__/config.provider-credentials.test.ts` for the negative control that asserts this failure mode with no env layers.
+The `env: { secret: "ADHD_AGENT_..." }` pointers on agent definitions only resolve when the host supplies an `EngineConfig` whose `getProviderConfig` is backed by `@adhd/environment` (as `@adhd/agent-mcp` does in `entrypoint/agent-mcp/src/config.ts`'s `toEngineConfig()`). See `entrypoint/agent-mcp/test/unit/config.provider-credentials.spec.ts` for the negative control that asserts this failure mode with no env layers.
 
 For engine integration:
 
@@ -89,7 +89,7 @@ Estimator tolerance (`ebfe7421` AC2): the real tools-block count is not separate
 0.810 / 0.800 (2532/3130, 3566/4404, 3770/4714). The upper bound keeps the estimate a lower bound; the lower bound
 (above the 0.75 gate ratio) means the gate clears every real prefix at or above the model minimum. The tools-block
 component is `countTokens(JSON.stringify(tools)) + serverToolTokens(tools)`; on this fixture the server-tool credit
-is 2180. Enforced by `src/__tests__/cacheguard-estimator-tolerance.test.ts`.
+is 2180. Enforced by `test/unit/cacheguard-estimator-tolerance.spec.ts`.
 
 Premium measurement (`ebfe7421` CG-AC3): a live run on `main` at `ca4851b5` against `claude-haiku-4-5` through the
 anthropic provider (no tools; `cache_control` marks placed on the system and messages by the guard; real prefix
@@ -144,7 +144,7 @@ two adapters:
   cross-process store is `provider_trips` in the provider-failure SPEC (PF-3), not built yet.
 
 The engine's provider catch (`engine/orchestrator.ts`) still re-derives the task error code from text and
-drops `ToolError.data`; see `src/__tests__/flt-engine-surface.test.ts`.
+drops `ToolError.data`; see `test/unit/flt-engine-surface.spec.ts`.
 
 ### Compatibility with native `claude -p`
 
@@ -284,7 +284,7 @@ The live run replays its own full echo and is never capped or expired mid-run; t
 
 **TTL is session idle time.** `loadSessionEchoes` (`src/tools/task.ts`) measures the gap between now and the newest message of the history loaded before the new prompt is appended. When that gap is strictly longer than the TTL, every tier S block of the whole session is stripped from replay (all or nothing per session; tier T is kept), and `SessionStore.sweepEchoes` reclaims the stored bodies on a throttled sweep outside the model-call path.
 
-**Degrade once, then self-heal.** If the API rejects the replayed history (an `invalid_request` naming an echoed block type), the provider retries exactly once with the legacy rebuild and reports `echoDegraded`. Only a rejection of the first request of a call qualifies. The engine then appends `provider:history_degraded`, deletes the session's stored echo and stops echoing for the rest of the run, so later tasks do not re-send the rejected blocks. A context-length rejection is not an echo rejection: it is not retried, the echo is not degraded and its rows are kept, and the task fails with the same provider error it gets without echo, `PROVIDER_ERROR` (an Anthropic "prompt is too long" 400 classifies as `unknown`; pinned by `src/__tests__/anthropic-echo-session.test.ts` and `agent-core-provider/src/__tests__/failure/classify.fixtures.test.ts`).
+**Degrade once, then self-heal.** If the API rejects the replayed history (an `invalid_request` naming an echoed block type), the provider retries exactly once with the legacy rebuild and reports `echoDegraded`. Only a rejection of the first request of a call qualifies. The engine then appends `provider:history_degraded`, deletes the session's stored echo and stops echoing for the rest of the run, so later tasks do not re-send the rejected blocks. A context-length rejection is not an echo rejection: it is not retried, the echo is not degraded and its rows are kept, and the task fails with the same provider error it gets without echo, `PROVIDER_ERROR` (an Anthropic "prompt is too long" 400 classifies as `unknown`; pinned by `test/unit/anthropic-echo-session.spec.ts` and `agent-core-provider/src/__tests__/failure/classify.fixtures.test.ts`).
 
 **`pause_turn` continuation.** When the API pauses a long server-tool turn, the provider re-sends the request with the paused content appended (`src/providers/anthropic-pause.ts`). Every continuation is a real model call and is counted in `reportedModelCalls`. Before each one the engine runs the abort check and `pre:model_request` enforcement (budget and cost caps; enforce only, so tracing spans and turn counters stay one per turn) and appends `provider:pause_continued {n}`. The turn is allowed at most 5 requests: the 5th consecutive pause fails the task with `PROVIDER_ERROR` ("provider paused the turn 5 times without finishing") instead of completing on partial content, and a paused turn that holds a client `tool_use` also fails with `PROVIDER_ERROR`. The spend of the calls already made is recorded on the failed `MODEL_RESPONSE`.
 
@@ -300,7 +300,7 @@ The live run replays its own full echo and is never capped or expired mid-run; t
 
 | Test file | Gate | Calls | Owner |
 | --- | --- | --- | --- |
-| `src/__tests__/anthropic-echo-live.e2e.test.ts` | `ADHD_AGENT_LIVE_ECHO=1` (plus `ANTHROPIC_API_KEY`) | a real paid model, Anthropic `claude-haiku-5-5` at effort `high`; at most 6 requests per run (hard counter), `max_tokens` 4096, no retries; typical run 4 requests | **nix (repo owner)** |
+| `test/e2e/anthropic-echo-live.e2e.ts` | `ADHD_AGENT_LIVE_ECHO=1` (plus `ANTHROPIC_API_KEY`) | a real paid model, Anthropic `claude-haiku-5-5` at effort `high`; at most 6 requests per run (hard counter), `max_tokens` 4096, no retries; typical run 4 requests | **nix (repo owner)** |
 
 - **Why it is gated.** It calls a real paid model, the only gate reason the repo allows (root `AGENTS.md` section 7, "Live testing is mandatory"). Nothing else about it is gated: its offline half (request-cap, body-inspection and redaction controls, plus a full run of the same rig against the offline contract fake, and a check that this section, `AGENTS.md` and the file header all name the gate and the owner) runs ungated in the project's `e2e` target (CI `nx affected -t e2e`; ADR 0009, backlog f3683008), not in the pre-push `test` lane.
 - **Off by default and off in CI.** Unset, every live test is reported `SKIPPED` with a reason naming the gate and the owner, and the file makes no network call. Setting the gate without `ANTHROPIC_API_KEY` turns the suite red; there is no silent skip once enabled.

@@ -35,8 +35,8 @@
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { join } from 'node:path';
-import { openTestIssueStore, removeTestIssueStoreDir, seedProject, type TestIssueStore } from '../../../src/test/helpers/open-test-issue-store.js';
-import { freshTmpDir } from '../../../src/test/helpers/tmp-store.js';
+import { openTestIssueStore, removeTestIssueStoreDir, seedProject, type TestIssueStore } from '../../helpers/open-test-issue-store.js';
+import { freshTmpDir } from '../../helpers/tmp-store.js';
 import { openGraphBacklogStore } from '../../../src/store/graph-backlog-store.js';
 import {
   assertCatalogInvariants,

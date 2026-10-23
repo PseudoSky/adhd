@@ -10,7 +10,7 @@ third-party service. This package has one such test.
 
 | Test file | Gate | Calls | Owner / approver |
 | --- | --- | --- | --- |
-| `src/__tests__/anthropic-echo-live.e2e.test.ts` | `ADHD_AGENT_LIVE_ECHO=1` (plus `ANTHROPIC_API_KEY`) | a real paid model, Anthropic `claude-haiku-5-5` at effort `high`; at most 6 requests per run (hard counter), `max_tokens` 4096, no retries | **nix (repo owner)** |
+| `test/e2e/anthropic-echo-live.e2e.ts` | `ADHD_AGENT_LIVE_ECHO=1` (plus `ANTHROPIC_API_KEY`) | a real paid model, Anthropic `claude-haiku-5-5` at effort `high`; at most 6 requests per run (hard counter), `max_tokens` 4096, no retries | **nix (repo owner)** |
 
 Rules for agents:
 

@@ -37,12 +37,12 @@ import {
   type IPassthroughErrorContext,
   type IPassthroughServer,
 } from '../../src/index';
-import { createFakeLauncher } from '../../src/test/helpers/fake-launcher';
-import { flush, settle } from '../../src/test/helpers/flush';
-import { createStubMcpUpstream } from '../../src/test/helpers/stub-mcp-upstream';
-import type { IStubOptions, IStubMcpUpstream } from '../../src/test/helpers/stub-mcp-upstream';
-import { IMMEDIATE_BACKOFF, openUpstreamRig } from '../../src/test/helpers/upstream-rig';
-import type { IUpstreamRig } from '../../src/test/helpers/upstream-rig';
+import { createFakeLauncher } from '../helpers/fake-launcher';
+import { flush, settle } from '../helpers/flush';
+import { createStubMcpUpstream } from '../helpers/stub-mcp-upstream';
+import type { IStubOptions, IStubMcpUpstream } from '../helpers/stub-mcp-upstream';
+import { IMMEDIATE_BACKOFF, openUpstreamRig } from '../helpers/upstream-rig';
+import type { IUpstreamRig } from '../helpers/upstream-rig';
 
 const FILE_SCHEMA = {
   type: 'object',

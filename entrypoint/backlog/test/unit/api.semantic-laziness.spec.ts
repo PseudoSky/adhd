@@ -73,7 +73,7 @@ import {
   upsertProject,
   type BacklogCtx,
 } from '../../src/api.js';
-import { freshTmpDir } from '../../src/test/helpers/tmp-store.js';
+import { freshTmpDir } from '../helpers/tmp-store.js';
 import { isOutcomeOk, type IOutcomeEnvelope } from '../../src/envelope.js';
 
 /** Precisely-typed spy factory — `ReturnType<typeof vi.spyOn>` widens to `unknown[]`, which will not accept the real mock. */
@@ -95,7 +95,7 @@ const providerSpy = vi.hoisted(() => ({
 
 vi.mock('@adhd/sox-embedding-provider', async () => {
   const { createFakeEmbeddingModule } = await import(
-    '../../src/test/helpers/fake-embedding-provider.js'
+    '../helpers/fake-embedding-provider.js'
   );
   const fake = createFakeEmbeddingModule();
   return {

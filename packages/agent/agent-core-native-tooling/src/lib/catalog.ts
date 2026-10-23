@@ -18,7 +18,7 @@
  *                   BOTH servers). `unbash` DROPPED; `rust-mcp-filesystem` deferred.
  * The same approval record is in this package's `README.md` and in the gated
  * live-test header
- * (`entrypoint/agent-mcp/src/__tests__/integration/native-tooling-adoption.e2e.test.ts`),
+ * (`entrypoint/agent-mcp/test/e2e/integration/native-tooling-adoption.e2e.ts`),
  * per AGENTS.md §7 / ADR-0008 D7 (README + AGENTS.md + gated test header).
  * ─────────────────────────────────────────────────────────────────────────────
  */

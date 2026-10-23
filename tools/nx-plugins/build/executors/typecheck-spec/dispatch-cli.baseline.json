@@ -3,7 +3,7 @@
   "total": 6,
   "files": {
     "entrypoint/dispatch-cli/test/unit/docs-contract.spec.ts": 1,
-    "entrypoint/dispatch-cli/src/test/helpers/agent-mcp-registry.ts": 1,
+    "entrypoint/dispatch-cli/test/helpers/agent-mcp-registry.ts": 1,
     "entrypoint/dispatch-cli/test/unit/import-agents.spec.ts": 1,
     "entrypoint/dispatch-cli/test/unit/live-harness-hermetic.spec.ts": 1,
     "entrypoint/dispatch-cli/vite.config.ts": 2

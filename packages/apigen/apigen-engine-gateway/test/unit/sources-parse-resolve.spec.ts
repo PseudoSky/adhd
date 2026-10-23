@@ -22,7 +22,7 @@ import {
   resolveSource,
   type IResolveDeps,
 } from '../../src/index';
-import { createFakeLauncher } from '../../src/test/helpers/fake-launcher';
+import { createFakeLauncher } from '../helpers/fake-launcher';
 
 /** Probe that knows nothing: `bin:` references need none. */
 const NO_PROBE: ISourceProbe = { isFile: () => false, isExecutable: () => false, onPath: () => false };

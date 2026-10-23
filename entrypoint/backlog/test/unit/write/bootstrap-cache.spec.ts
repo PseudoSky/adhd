@@ -47,8 +47,8 @@ import {
   bootstrapSemanticStoreMembers,
   type SemanticStoreMembers,
 } from '../../../src/write/bootstrap.js';
-import { openTestIssueStore } from '../../../src/test/helpers/open-test-issue-store.js';
-import { freshTmpDir } from '../../../src/test/helpers/tmp-store.js';
+import { openTestIssueStore } from '../../helpers/open-test-issue-store.js';
+import { freshTmpDir } from '../../helpers/tmp-store.js';
 
 /**
  * Per-call behavior for the mocked `createEmbeddingProvider`, hoisted so the
@@ -67,7 +67,7 @@ const providerSpy = vi.hoisted(() => ({
 // `loadOptional` seam resolves at runtime.
 vi.mock('@adhd/sox-embedding-provider', async () => {
   const { createFakeEmbeddingModule } = await import(
-    '../../../src/test/helpers/fake-embedding-provider.js'
+    '../../helpers/fake-embedding-provider.js'
   );
   const fake = createFakeEmbeddingModule();
   return {

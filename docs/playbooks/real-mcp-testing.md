@@ -83,7 +83,7 @@ Plainly:
 
 ```bash
 DISPATCH_E2E_LIVE=1 npx tsx --tsconfig tsconfig.base.json \
-  entrypoint/dispatch-cli/src/test/integration/run-live-guarded.ts
+  entrypoint/dispatch-cli/test/helpers/integration/run-live-guarded.ts
 ```
 
 Without the gate, the runner is a no-op that says so (this output is captured
@@ -91,7 +91,7 @@ from the real script; exit `0`, no model call):
 
 ```text
 [run-live-guarded] NOT RUN — DISPATCH_E2E_LIVE is not "1". This runner fires a real, billed model call; it is env-gated per AGENTS.md §7 (a real model is the single permitted gate reason). Gate owner: pseudosky. Run it with:
-  DISPATCH_E2E_LIVE=1 npx tsx --tsconfig tsconfig.base.json entrypoint/dispatch-cli/src/test/integration/run-live-guarded.ts
+  DISPATCH_E2E_LIVE=1 npx tsx --tsconfig tsconfig.base.json entrypoint/dispatch-cli/test/helpers/integration/run-live-guarded.ts
 ```
 
 When gated, the startup line and the per-poll cost line are:
@@ -143,7 +143,7 @@ Run only the delegation scenario:
 
 ```bash
 DISPATCH_E2E_SCENARIO=delegation DISPATCH_E2E_LIVE=1 npx tsx --tsconfig tsconfig.base.json \
-  entrypoint/dispatch-cli/src/test/integration/run-live-guarded.ts
+  entrypoint/dispatch-cli/test/helpers/integration/run-live-guarded.ts
 ```
 
 The broader live five-AC suite exercises the same real delegation boundary as
@@ -160,7 +160,7 @@ it proves the kill path, not the feature:
 ```bash
 DISPATCH_E2E_LIVE=1 DISPATCH_E2E_MAX_COST_USD=0 DISPATCH_E2E_POLL_MS=100 \
   DISPATCH_E2E_SCENARIO=delegation npx tsx --tsconfig tsconfig.base.json \
-  entrypoint/dispatch-cli/src/test/integration/run-live-guarded.ts
+  entrypoint/dispatch-cli/test/helpers/integration/run-live-guarded.ts
 ```
 
 Expected:
@@ -210,7 +210,7 @@ priced turn.)
 **ONE-LINE reproduce** (paste from the repo root):
 
 ```bash
-corepack pnpm install && npx nx run agent-mcp:dist-manifest && { set -a; source ~/.adhd/.env; set +a; } && DISPATCH_E2E_LIVE=1 npx tsx --tsconfig tsconfig.base.json entrypoint/dispatch-cli/src/test/integration/run-live-guarded.ts
+corepack pnpm install && npx nx run agent-mcp:dist-manifest && { set -a; source ~/.adhd/.env; set +a; } && DISPATCH_E2E_LIVE=1 npx tsx --tsconfig tsconfig.base.json entrypoint/dispatch-cli/test/helpers/integration/run-live-guarded.ts
 ```
 
 Swap `DISPATCH_E2E_LIVE=1` for the kill demo's leading vars, or add
@@ -237,7 +237,7 @@ run `uvx` fetches `mcp-shell-server` from PyPI into the fake home — the same
 external dependency NAT-TOOL-8 gates on, here reached under the same live gate.
 
 Run one: `DISPATCH_E2E_SCENARIO=native-fs-shell DISPATCH_E2E_LIVE=1 npx tsx
---tsconfig tsconfig.base.json entrypoint/dispatch-cli/src/test/integration/run-live-guarded.ts`.
+--tsconfig tsconfig.base.json entrypoint/dispatch-cli/test/helpers/integration/run-live-guarded.ts`.
 
 The deterministic half of N9 (resolved-toolset registry connect, permission-gate
 deny, single producer, portability) runs by default, unflagged, in the two

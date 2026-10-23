@@ -12,8 +12,8 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { gitEnv } from '../../src/test/helpers/git-env.js';
-import { spawnTimeoutMs } from '../../src/test/helpers/spawn-timeout.js';
+import { gitEnv } from '../helpers/git-env.js';
+import { spawnTimeoutMs } from '../helpers/spawn-timeout.js';
 
 const SCRIPT = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'report', 'deploy-verify.sh');
 

@@ -81,7 +81,7 @@ Verified against the adopted servers: the shell server's tool is `shell_execute`
 The same record is in this package's `README.md`, and the gated live test that
 exercises the adopted shell server through the real `agent_verify_mcp` handshake
 carries it in its header:
-`entrypoint/agent-mcp/src/__tests__/integration/native-tooling-adoption.e2e.test.ts`.
+`entrypoint/agent-mcp/test/e2e/integration/native-tooling-adoption.e2e.ts`.
 
 ## Building / testing
 

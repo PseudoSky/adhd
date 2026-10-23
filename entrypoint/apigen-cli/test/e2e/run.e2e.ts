@@ -29,7 +29,7 @@ async function freePort(): Promise<number> {
   });
 }
 
-const fixturesDir = path.join(__dirname, '../../src/test/fixtures');
+const fixturesDir = path.join(__dirname, '../../test/fixtures');
 const registryDir = path.join(fixturesDir, 'registry');
 const apiFixture = path.join(fixturesDir, 'api.ts');
 

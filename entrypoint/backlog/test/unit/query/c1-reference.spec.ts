@@ -45,7 +45,7 @@ import { resolveLogicalIssue, resolveUidPrefix } from '../../../src/query/resolv
 import {
   openTmpStore,
   type TmpStore,
-} from '../../../src/test/helpers/tmp-store.js';
+} from '../../helpers/tmp-store.js';
 
 /**
  * Rewrite a node's uid to a KNOWN value inside one `immediate` transaction —

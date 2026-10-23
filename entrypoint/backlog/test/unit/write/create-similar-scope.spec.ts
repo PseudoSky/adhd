@@ -17,7 +17,7 @@ import type { BacklogConfig } from '../../../src/env.js';
 import { resolveProjectPolicy } from '../../../src/write/catalog.js';
 import { createIssue, type ICreateIssueResult } from '../../../src/write/create-issue.js';
 import { bootstrapSemanticStoreMembers } from '../../../src/write/bootstrap.js';
-import { createFakeEmbeddingModule } from '../../../src/test/helpers/fake-embedding-provider.js';
+import { createFakeEmbeddingModule } from '../../helpers/fake-embedding-provider.js';
 
 // Embeddings mocked here — explicit, scoped user authorization (STATE.md),
 // covers embedding cost only.
@@ -27,8 +27,8 @@ import {
   removeTestIssueStoreDir,
   seedProject,
   type TestIssueStore,
-} from '../../../src/test/helpers/open-test-issue-store.js';
-import { freshTmpDir } from '../../../src/test/helpers/tmp-store.js';
+} from '../../helpers/open-test-issue-store.js';
+import { freshTmpDir } from '../../helpers/tmp-store.js';
 
 const EMBEDDING_CFG: BacklogConfig['embedding'] = {
   enabled: true,

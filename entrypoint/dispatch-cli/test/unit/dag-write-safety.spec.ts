@@ -16,7 +16,7 @@
  *   "A second process" for AC4 is an acquire that presents a different pid than
  *   the holder's, which is exactly how the guard distinguishes processes.
  * Items: 0b80a7b5 (slice D1-D3), criteria AC3, AC4. The cross-process proof of the
- *   same lock (AC6) is in dag-write-safety.e2e.test.ts.
+ *   same lock (AC6) is in dag-write-safety.e2e.ts.
  * Red run: `red: pending (user hold)` — authored under a no-run hold. Expected
  *   against the base (21ba12b3) core.ts: AC3 fails on `expected resolved to be
  *   rejected` (the dry run returns before any lock); AC4 fails on
@@ -35,7 +35,7 @@ import * as path from 'node:path';
 import { acquireDispatchLock, DuplicateDispatchError, MockAgentRunner } from '@adhd/dispatch-orchestrator';
 
 import * as core from '../../src/lib/core.js';
-import { makeFixtureDag, makeOp } from '../../src/test/helpers/fixtures.js';
+import { makeFixtureDag, makeOp } from '../helpers/fixtures.js';
 
 const TMP_ROOT = path.join(process.cwd(), 'tmp', 'dispatch-cli', 'dag-write-safety-spec');
 const OTHER_PROCESS_PID = 2_147_000_000; // a pid that is not this process (never probed: only the holder is)

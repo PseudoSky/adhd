@@ -19,7 +19,7 @@ const spawnMock = vi.hoisted(() => vi.fn());
 vi.mock('node:child_process', () => ({ spawn: spawnMock }));
 
 import { isGatewayError, nodeProcessLauncher } from '../../src/index';
-import { flush } from '../../src/test/helpers/flush';
+import { flush } from '../helpers/flush';
 
 class FakeStream extends EventEmitter {
   encoding: string | undefined;

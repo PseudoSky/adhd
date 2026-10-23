@@ -86,8 +86,8 @@ Seven shipped capabilities cannot be proven with the current tooling setup. Each
 **Effort:** ~2 hours (make live-dag.e2e.test.ts run by default with fallback provider detection)
 
 **File locations:**
-- Live test: `src/__tests__/integration/live-dag.e2e.test.ts:75-76` (skipIf(!isLive) guard)
-- Calc server fixture: `src/__tests__/integration/fixtures/calc-server.mjs`
+- Live test: `test/e2e/integration/live-dag.e2e.ts:75-76` (skipIf(!isLive) guard)
+- Calc server fixture: `test/fixtures/integration/calc-server.mjs`
 
 ---
 
@@ -99,13 +99,13 @@ Seven shipped capabilities cannot be proven with the current tooling setup. Each
 
 **Needed to verify:**
 - **Tool:** Real LLM (LM Studio or Anthropic)
-- **Setup:** Same as #4; test wiring in src/__tests__/integration/live-dag.e2e.test.ts already exists
+- **Setup:** Same as #4; test wiring in test/e2e/integration/live-dag.e2e.ts already exists
 - **Assertion:** 3-level recursion happens (coordinator→fanout→workers); every worker invokes calc tool; all tasks persisted
 
 **Effort:** ~1 hour (remove skipIf guard + add provider auto-detection fallback)
 
 **File locations:**
-- Test: `src/__tests__/integration/live-dag.e2e.test.ts` (complete test, just gated)
+- Test: `test/e2e/integration/live-dag.e2e.ts` (complete test, just gated)
 
 ---
 
@@ -193,7 +193,7 @@ Seven shipped capabilities cannot be proven with the current tooling setup. Each
 ### Nice-to-Have (gated by env, runs in CI with fallback):
 
 3. **Ungat live-dag.e2e.test.ts** — remove AGENT_MCP_LIVE=1 guard, add provider auto-detection
-   - File: src/__tests__/integration/live-dag.e2e.test.ts (modify)
+   - File: test/e2e/integration/live-dag.e2e.ts (modify)
    - Time: ~1 hour
    - Dependency: LM Studio OR Anthropic API key (env var)
    - Fallback: Skip if neither available, warn in logs

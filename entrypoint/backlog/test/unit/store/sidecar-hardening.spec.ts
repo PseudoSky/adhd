@@ -11,7 +11,7 @@ import { linkSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, syml
 import { join } from 'node:path';
 import { closeGraphBacklogStore, openGraphBacklogStore } from '../../../src/store/graph-backlog-store.js';
 import { quarantineUnsafeSidecars } from '../../../src/store/sidecar-hardening.js';
-import { TMP_ROOT } from '../../../src/test/helpers/tmp-store.js';
+import { TMP_ROOT } from '../../helpers/tmp-store.js';
 
 describe('515a2b50 SEC-F2 sidecar hardening', () => {
   let dir = '';

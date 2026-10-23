@@ -44,7 +44,7 @@ const BUILT_BIN = path.join(
   'dist',
   'index.js'
 );
-const shapesDir = path.join(__dirname, '..', '..', 'src', 'test', 'fixtures', 'shapes');
+const shapesDir = path.join(__dirname, '..', '..', 'test', 'fixtures', 'shapes');
 
 let mcpClient: Client | undefined;
 let mcpTransport: StdioClientTransport | undefined;

@@ -43,13 +43,13 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
-import { buildIsolatedEnv } from '../../src/test/helpers/spawn-isolated-bin.js';
+import { buildIsolatedEnv } from '../helpers/spawn-isolated-bin.js';
 import {
   callToolJson,
   DIST_INDEX,
   type IMcpHost,
-} from '../../src/test/helpers/spawn-mcp-host.js';
-import { spawnTimeoutMs } from '../../src/test/helpers/spawn-timeout.js';
+} from '../helpers/spawn-mcp-host.js';
+import { spawnTimeoutMs } from '../helpers/spawn-timeout.js';
 
 /**
  * The child env that makes `isLiveProductionStore` true while keeping the

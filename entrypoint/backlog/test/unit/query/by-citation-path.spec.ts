@@ -22,7 +22,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { openTmpStore, type TmpStore } from '../../../src/test/helpers/tmp-store.js';
+import { openTmpStore, type TmpStore } from '../../helpers/tmp-store.js';
 import { buildBacklogEnv } from '../../../src/env.js';
 import * as api from '../../../src/api.js';
 import type { IOutcomeEnvelope } from '../../../src/envelope.js';

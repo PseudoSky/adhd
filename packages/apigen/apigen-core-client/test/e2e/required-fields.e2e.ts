@@ -31,7 +31,7 @@ import Ajv from 'ajv';
 import { extract } from '../../src/index';
 import type { GeneratedSchemas } from '../../src/lib/types';
 
-const fixture = (name: string) => path.resolve(__dirname, '../../src/test/fixtures', name);
+const fixture = (name: string) => path.resolve(__dirname, '../../test/fixtures', name);
 
 const _genCache = new Map<string, Promise<GeneratedSchemas>>();
 function gen(sourceFile: string): Promise<GeneratedSchemas> {

@@ -16,7 +16,7 @@
  * against cheap real commands (`sh -c "exit 0|1"`). The only test
  * double is `MockAgentRunner` — the documented external boundary (a real
  * agent-mcp dispatch is a paid third-party model call; see
- * packages/dispatch/dispatch-orchestrator/src/test/helpers/mock-agent-runner.ts).
+ * packages/dispatch/dispatch-orchestrator/src/lib/mock-agent-runner.ts).
  *
  * Every assertion targets a CONSUMER-VISIBLE outcome: what's actually written
  * to the dag.json file on disk, re-read through a fresh client/serializer —
@@ -39,7 +39,7 @@ import { createDagClient } from '@adhd/dispatch-core-client';
 import { createJsonFileSerializer } from '@adhd/dispatch-serializer-json';
 import { snapshot, optimize } from '@adhd/dispatch-core-optimizer';
 
-import { MockAgentRunner } from '../../src/test/helpers/mock-agent-runner.js';
+import { MockAgentRunner } from '../../src/lib/mock-agent-runner.js';
 import type {
   DispatchTaskStatus,
   IDispatchAgentRunner,

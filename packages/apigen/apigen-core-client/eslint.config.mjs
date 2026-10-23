@@ -38,7 +38,7 @@ export default [
     },
   },
   {
-    files: ['**/src/test/fixtures/**/*.ts'],
+    files: ['**/test/fixtures/**/*.ts'],
     rules: {
       '@typescript-eslint/no-empty-function': 'off',
       '@typescript-eslint/no-unused-vars': 'off',

@@ -120,8 +120,8 @@ no first-byte probe and no cache fields, so those attributes are absent from its
 The provider-independent attributes (`stop_reason`, token counts, `compute_ms`, every tool-call signal,
 startup, dispatch, the `agent.task` wall-time split) are identical across providers. Proven per
 provider family (OpenAI Chat Completions and Anthropic Messages streaming, each through its real
-adapter over loopback HTTP) in `src/lib/r10-dispatch-trace.e2e.test.ts` and, for the engine-populated
-model-call signals and the exact dispatch `call_id`, `src/lib/r10-s5b-engine-trace.e2e.test.ts`.
+adapter over loopback HTTP) in `test/e2e/lib/r10-dispatch-trace.e2e.ts` and, for the engine-populated
+model-call signals and the exact dispatch `call_id`, `test/e2e/lib/r10-s5b-engine-trace.e2e.ts`.
 
 Content rule: no tool arguments, results, prompts or thinking text reach any attribute.
 `agent.tool.args_sha256` stays the only argument identity (the verbatim `agent.tool.args` exists only
@@ -131,7 +131,7 @@ under the explicit `captureArgs` opt-in).
 configuration cascade, `tracing.logDir` (env `ADHD_AGENT_TRACING_LOG_DIR`), for example
 `OUT/runs/C1/logs/trace`; tracing is default-on, so no switch is involved. A mock-provider run through
 the real plugin stack writes a record per span name above to that directory (S5-AC0 is proven by
-`src/lib/r10-dispatch-trace.e2e.test.ts`), and every record is one JSON object per line with the
+`test/e2e/lib/r10-dispatch-trace.e2e.ts`), and every record is one JSON object per line with the
 attributes as flat top-level keys.
 
 ### Metrics

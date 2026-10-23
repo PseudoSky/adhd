@@ -17,10 +17,10 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { mintBacklogSandbox, type SandboxHandle } from '../../src/test/helpers/spawn-backlog-bin.js';
-import { call, driveSessionFlows, ok, type ISessionFlowsResult } from '../../src/test/helpers/session-flows-driver.js';
-import { runInBacklogSandbox } from '../../src/test/helpers/spawn-backlog-bin.js';
-import { e2eTestTimeoutMs } from '../../src/test/helpers/spawn-timeout.js';
+import { mintBacklogSandbox, type SandboxHandle } from '../helpers/spawn-backlog-bin.js';
+import { call, driveSessionFlows, ok, type ISessionFlowsResult } from '../helpers/session-flows-driver.js';
+import { runInBacklogSandbox } from '../helpers/spawn-backlog-bin.js';
+import { e2eTestTimeoutMs } from '../helpers/spawn-timeout.js';
 
 describe('phase 6 A — the built bin', () => {
   let scratch: string;

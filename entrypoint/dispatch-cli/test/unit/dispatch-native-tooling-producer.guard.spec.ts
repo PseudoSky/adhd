@@ -9,7 +9,7 @@
  * reappears anywhere in this package's production source, or (b) `core.ts`
  * reintroduces host-side `resolveNativeToolingMap` resolution (baking a root).
  *
- * Mirrors `entrypoint/agent-mcp/src/__tests__/default-mcp-producer.guard.test.ts`
+ * Mirrors `entrypoint/agent-mcp/test/unit/default-mcp-producer.guard.spec.ts`
  * for the dispatch host. Excludes tests/fixtures (they legitimately reference
  * the resolver, and this file names the literals it searches for).
  */

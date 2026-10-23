@@ -43,7 +43,7 @@ import {
 } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { runIsolatedBin } from '../../src/test/helpers/spawn-isolated-bin.js';
+import { runIsolatedBin } from '../helpers/spawn-isolated-bin.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const PKG_ROOT = join(HERE, '../..');

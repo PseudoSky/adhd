@@ -46,7 +46,7 @@ const searchName = project(operationFor(PKG, 'search')).mcp.name;
 
 const fixturePath = path.join(
   __dirname,
-  '..', '..', 'src', 'test', 'fixtures', 'flat-content-mcp-entry.js'
+  '..', '..', 'test', 'fixtures', 'flat-content-mcp-entry.js'
 );
 const distEntry = path.join(__dirname, '..', '..', 'dist', 'index.js');
 

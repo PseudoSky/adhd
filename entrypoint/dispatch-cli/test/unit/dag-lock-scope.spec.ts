@@ -30,7 +30,7 @@ import { acquireDispatchLock, DuplicateDispatchError, MockAgentRunner } from '@a
 import type { DispatchUnit } from '@adhd/dispatch-base-spec';
 
 import * as core from '../../src/lib/core.js';
-import { makeFixtureDag, makeOp } from '../../src/test/helpers/fixtures.js';
+import { makeFixtureDag, makeOp } from '../helpers/fixtures.js';
 
 const TMP_ROOT = path.join(process.cwd(), 'tmp', 'dispatch-cli', 'dag-lock-scope-spec');
 const OTHER_PROCESS_PID = 2_147_000_000;

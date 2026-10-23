@@ -1,4 +1,5 @@
 /// <reference types='vitest' />
+import { UNIT_FILE_INCLUDES } from '../../../tools/vite-plugins/e2e-globs.mjs';
 import { defineConfig } from 'vite';
 import dts from 'vite-plugin-dts';
 import * as path from 'path';
@@ -61,7 +62,7 @@ export default defineConfig({
     // exclusion structural rather than an emergent property of glob semantics.
     // The resource lane runs only via `nx run apigen-plugin-py-flask:e2e` (see
     // the sibling `vitest.e2e.config.ts`, the only place that includes `.e2e.ts`).
-    include: ['src/**/*.spec.ts', 'test/**/*.spec.ts'],
+    include: UNIT_FILE_INCLUDES,
     reporters: ['default'],
     coverage: {
       reportsDirectory: projectCoverage(__dirname),

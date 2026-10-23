@@ -12,7 +12,7 @@ import {
   mintBacklogSandbox,
   runBacklogBin,
   type SandboxHandle,
-} from '../../src/test/helpers/spawn-backlog-bin.js';
+} from '../helpers/spawn-backlog-bin.js';
 
 describe('backlog serve --probe — readiness on the real spawned bin', () => {
   let sandbox: SandboxHandle | undefined;

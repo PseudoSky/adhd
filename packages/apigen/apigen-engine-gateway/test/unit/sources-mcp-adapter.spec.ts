@@ -21,11 +21,11 @@ import {
   type HostAdapter,
   type IProcessLauncher,
 } from '../../src/index';
-import { flush } from '../../src/test/helpers/flush';
-import { createStubMcpUpstream } from '../../src/test/helpers/stub-mcp-upstream';
-import type { IStubOptions } from '../../src/test/helpers/stub-mcp-upstream';
-import { IMMEDIATE_BACKOFF, openUpstreamRig } from '../../src/test/helpers/upstream-rig';
-import { caught } from '../../src/test/helpers/caught';
+import { flush } from '../helpers/flush';
+import { createStubMcpUpstream } from '../helpers/stub-mcp-upstream';
+import type { IStubOptions } from '../helpers/stub-mcp-upstream';
+import { IMMEDIATE_BACKOFF, openUpstreamRig } from '../helpers/upstream-rig';
+import { caught } from '../helpers/caught';
 
 const OBJECT_SCHEMA = { type: 'object', properties: { path: { type: 'string' } } };
 const BACKOFF_MS = 10;

@@ -25,7 +25,7 @@ const projects = globSync('{packages/*/*,entrypoint/*}/project.json', {
 const gaps = [];
 for (const projectJson of projects) {
   const root = dirname(projectJson);
-  const specs = globSync(join(root, 'src/**/*.{spec,test}.{ts,tsx,js,mjs}'), {
+  const specs = globSync([join(root, 'test/unit/**/*.spec.{ts,tsx}'), join(root, 'test/e2e/**/*.e2e.ts')], {
     ignore: ['**/node_modules/**', '**/__files__/**'],
   });
   if (specs.length === 0) continue;
@@ -39,6 +39,12 @@ if (gaps.length > 0) {
   console.error('  Fix: add a `test` target (see packages/agent/agent-store-runtime/project.json for the shape).');
   process.exit(1);
 }
+
+// The layout rules (check-test-layout.mjs) keep every test where the `test` and `e2e` lanes look for it.
+const layoutCheck = spawnSync(process.execPath, [join(dirname(fileURLToPath(import.meta.url)), 'check-test-layout.mjs')], {
+  stdio: 'inherit',
+});
+if (layoutCheck.status !== 0) process.exit(layoutCheck.status ?? 1);
 
 // Delegate the workspace-scoped lane-reachability assertions (rule set in
 // check-lane-reachability.mjs). This keeps the two checks inseparable: a project

@@ -31,8 +31,6 @@
     "source-map": "0.6.1",
     "tough-cookie": "4.1.4",
     "tslib": "^2.3.0",
-    "@babel/register": "7.29.7",
-    "react": "19.3.0",
     "@adhd/data-base-transforms": "^2.3.4"
   },
   "files": [
@@ -59,5 +57,9 @@
   "homepage": "https://github.com/PseudoSky/adhd/tree/main/entrypoint/decompile-cli#readme",
   "bugs": {
     "url": "https://github.com/PseudoSky/adhd/issues"
+  },
+  "devDependencies": {
+    "@babel/register": "7.29.7",
+    "react": "19.3.0"
   }
 }

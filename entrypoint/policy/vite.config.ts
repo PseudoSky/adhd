@@ -7,7 +7,7 @@ import { nxViteTsPathsPre } from '../../tools/vite-plugins/source-resolution.mjs
 import { projectCacheDir, projectCoverage } from '../../packages/workspace/workspace-base-vite-paths/src/index';
 import { externalizeRealDeps } from '../../tools/vite-plugins/externalize.mjs';
 import { importMetaUrlCjs } from '../../tools/vite-plugins/import-meta-url-cjs.mjs';
-import { E2E_FILE_EXCLUDES } from '../../tools/vite-plugins/e2e-globs.mjs';
+import { E2E_FILE_EXCLUDES, UNIT_FILE_INCLUDES } from '../../tools/vite-plugins/e2e-globs.mjs';
 
 export default defineConfig({
   root: __dirname,
@@ -43,8 +43,8 @@ export default defineConfig({
     globals: true,
     cache: { dir: path.join(__dirname, '../../node_modules/.vitest') },
     environment: 'node',
-    include: ['src/**/*.spec.ts'],
-    // The socket-binding suites (tier P) are `*.e2e.test.ts` and run in the `e2e` target (vitest.e2e.config.ts), never here (ADR 0009).
+    include: UNIT_FILE_INCLUDES,
+    // The socket-binding suites (tier P) are `*.e2e.ts` and run in the `e2e` target (vitest.e2e.config.ts), never here (ADR 0009).
     exclude: [...configDefaults.exclude, ...E2E_FILE_EXCLUDES],
     reporters: ['default'],
     coverage: { reportsDirectory: projectCoverage(__dirname), provider: 'v8' },

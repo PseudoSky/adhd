@@ -1,0 +1,195 @@
+/**
+ * guards: The adhd-policy-http entry fails to serve the policy operations on its loopback port, binds a wrong port, leaves a signal handler or listener behind, or swallows a bad or taken ADHD_POLICY_HTTP_PORT instead of exiting 2 or 1.
+ * tier: P
+ * cites: docs/plan/policy-core/tickets/T17.md (HTTP entry, E6) and tickets/COVERAGE.md (adhd-policy-mcp / -http projections, T06)
+ * gap: This cannot be observed at tier S because the entry binds a real listening socket on an OS-assigned loopback port and answers real HTTP requests over it, and a listening socket exists only at tier P.
+ * item: qa-variance (docs/discovery/qa-test-variance-tail-policy.md)
+ * red: pending (tests not run per user); assertions are unchanged, only the waits for the entry to come up and go down moved from a fixed number of event-loop turns to a bounded real-time deadline.
+ */
+import { createServer, type Server } from 'node:net';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { HTTP_PORT_ENV_VAR } from '../../../src/wrapper/http-port';
+import { useScratchTelemetry } from '../../helpers/capture';
+
+useScratchTelemetry();
+
+// The entry file runs `runEntry(...)` without top-level await (CJS bundle), so importing it settles at once. The real
+// runEntry still runs; this wrapper only keeps the promise it returns so the test can await the entry's lifecycle.
+const entryRuns = vi.hoisted(() => [] as Array<Promise<void>>);
+vi.mock('../../../src/wrapper/run-entry', async (importOriginal) => {
+  const real = await importOriginal<typeof import('../../../src/wrapper/run-entry')>();
+  return {
+    ...real,
+    runEntry: (start: () => Promise<void>): Promise<void> => {
+      const run = real.runEntry(start);
+      entryRuns.push(run);
+      return run;
+    },
+  };
+});
+
+// Loading the entry builds the policy package (a cold live extraction takes seconds); it is setup, not a timing assertion.
+vi.setConfig({ testTimeout: 60_000 });
+
+/** How long a wait for the entry to come up or go down may take. Below the 60 s test timeout so a real hang reports the wait that failed. */
+const WAIT_DEADLINE_MS = 50_000;
+const POLL_INTERVAL_MS = 10;
+
+/** Resolves once `condition()` holds or the deadline passes (the caller's assertion then reports the failure); polls on real timers so the entry's own work is not starved. */
+async function waitFor(condition: () => boolean): Promise<void> {
+  const deadline = Date.now() + WAIT_DEADLINE_MS;
+  while (!condition() && Date.now() < deadline) await new Promise<void>((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
+}
+
+const SIGNALS = ['SIGINT', 'SIGTERM'] as const;
+
+/** A port nothing is listening on right now (the OS picked it for a probe server that is closed again). */
+async function freePort(): Promise<number> {
+  return await new Promise<number>((resolve, reject) => {
+    const probe = createServer();
+    probe.once('error', reject);
+    probe.listen(0, '127.0.0.1', () => {
+      const { port } = probe.address() as { port: number };
+      probe.close(() => resolve(port));
+    });
+  });
+}
+
+/** Opens a TCP listener on a free port and keeps it, so the entry's bind to the same port fails. */
+async function occupy(): Promise<{ port: number; server: Server }> {
+  return await new Promise((resolve, reject) => {
+    const server = createServer();
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', () => resolve({ port: (server.address() as { port: number }).port, server }));
+  });
+}
+
+interface IEntered {
+  /** Settles when the entry module finished (the server closed, or the start failed). */
+  readonly done: Promise<void>;
+  /** Delivers SIGTERM to the signal handlers the entry installed (not to anyone else's). */
+  readonly terminate: () => void;
+  readonly stderr: string[];
+}
+
+const realPort = process.env[HTTP_PORT_ENV_VAR];
+const realWrite = process.stderr.write;
+const realExitCode = process.exitCode;
+
+afterEach(() => {
+  if (realPort === undefined) delete process.env[HTTP_PORT_ENV_VAR];
+  else process.env[HTTP_PORT_ENV_VAR] = realPort;
+  process.stderr.write = realWrite;
+  process.exitCode = realExitCode;
+});
+
+/** Imports the real `src/entry/http.ts` (what `adhd-policy-http` runs) with the port variable set to `port`. */
+function enterHttp(port: string | undefined): IEntered {
+  if (port === undefined) delete process.env[HTTP_PORT_ENV_VAR];
+  else process.env[HTTP_PORT_ENV_VAR] = port;
+  const stderr: string[] = [];
+  process.stderr.write = ((chunk: string | Uint8Array): boolean => (stderr.push(typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString('utf8')), true)) as typeof process.stderr.write;
+  process.exitCode = undefined;
+  const before = new Map(SIGNALS.map((signal) => [signal, process.listeners(signal)] as const));
+  vi.resetModules();
+  entryRuns.length = 0;
+  const done = import('../../../src/entry/http').then(() => entryRuns[entryRuns.length - 1]);
+  const installed = (): Array<() => void> => SIGNALS.flatMap((signal) => process.listeners(signal).filter((l) => !before.get(signal)?.includes(l))) as Array<() => void>;
+  return { done, stderr, terminate: () => installed()[0]?.call(process) };
+}
+
+/**
+ * Polls until `url` accepts a connection, the entry module settles (it failed to start), or the deadline passes.
+ * The wait is a real-time deadline, not a count of event-loop turns: a cold live extraction takes seconds, and a
+ * refused connection costs microseconds, so a turn count would run out long before a slow start-up finished.
+ */
+async function untilUp(url: string, failed: Promise<void>): Promise<Response> {
+  let finished = false;
+  void failed.then(() => (finished = true));
+  const deadline = Date.now() + WAIT_DEADLINE_MS;
+  while (!finished && Date.now() < deadline) {
+    try {
+      return await fetch(url);
+    } catch {
+      await new Promise<void>((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
+    }
+  }
+  throw new Error(`${url} never came up`);
+}
+
+const post = (port: number, route: string, body: unknown): Promise<Response> =>
+  fetch(`http://127.0.0.1:${port}${route}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+
+describe('adhd-policy-http entry (src/entry/http.ts) in process', () => {
+  it('serves the policy operations on the loopback port from ADHD_POLICY_HTTP_PORT, refuses over HTTP the way check does, and stops on the signal', async () => {
+    const port = await freePort();
+    const entered = enterHttp(String(port));
+    try {
+      const up = await untilUp(`http://127.0.0.1:${port}/policy/doctor`, entered.done);
+      expect(up.status).toBe(200);
+      const verify = await post(port, '/policy/verify', { data: { input: {} } });
+      expect(verify.status).toBe(200);
+      expect(await verify.json()).toMatchObject({ ok: true, errors: [], sources: ['built-in'] });
+      const check = await post(port, '/policy/check', { data: { input: { tool: 'files/read', args: { path: '/x' } } } });
+      expect(check.status).toBe(403);
+      expect(JSON.stringify(await check.json())).toContain('permission_denied');
+    } finally {
+      entered.terminate();
+      await entered.done;
+    }
+    await expect(fetch(`http://127.0.0.1:${port}/policy/doctor`)).rejects.toThrow();
+    expect(process.exitCode).toBeUndefined();
+    expect(entered.stderr.join('')).not.toContain('Error');
+  });
+
+  it('with the port variable unset the entry binds an OS-chosen ephemeral port and releases it on the signal', async () => {
+    const servers = (): number => process.getActiveResourcesInfo().filter((name) => name === 'TCPServerWrap').length;
+    const before = servers();
+    const entered = enterHttp(undefined);
+    let finished = false;
+    void entered.done.then(() => (finished = true));
+    await waitFor(() => finished || servers() !== before);
+    expect(finished).toBe(false);
+    expect(servers()).toBe(before + 1);
+    entered.terminate();
+    await entered.done;
+    await waitFor(() => servers() === before);
+    expect(servers()).toBe(before);
+    expect(process.exitCode).toBeUndefined();
+  });
+
+  it('a signal removes both handlers, so the next one gets the default behaviour', async () => {
+    const port = await freePort();
+    const counts = SIGNALS.map((signal) => process.listenerCount(signal));
+    const entered = enterHttp(String(port));
+    await untilUp(`http://127.0.0.1:${port}/policy/doctor`, entered.done);
+    expect(SIGNALS.map((signal) => process.listenerCount(signal))).toEqual(counts.map((count) => count + 1));
+    entered.terminate();
+    await entered.done;
+    expect(SIGNALS.map((signal) => process.listenerCount(signal))).toEqual(counts);
+  });
+
+  for (const bad of ['abc', '-1', '70000', '80.5']) {
+    it(`E6 a bad ${HTTP_PORT_ENV_VAR} ("${bad}") exits 2 naming the variable and binds nothing`, async () => {
+      const entered = enterHttp(bad);
+      await entered.done;
+      expect(process.exitCode).toBe(2);
+      expect(entered.stderr.join('')).toContain(HTTP_PORT_ENV_VAR);
+      entered.terminate();
+    });
+  }
+
+  it('E6 a port that is already taken exits 1 with the bind error on stderr and does not disturb the other listener', async () => {
+    const taken = await occupy();
+    try {
+      const entered = enterHttp(String(taken.port));
+      await entered.done;
+      expect(process.exitCode).toBe(1);
+      expect(entered.stderr.join('')).toMatch(/EADDRINUSE/);
+      entered.terminate();
+      expect(taken.server.listening).toBe(true);
+    } finally {
+      await new Promise<void>((resolve) => taken.server.close(() => resolve()));
+    }
+  });
+});

@@ -31,7 +31,7 @@ import { spawn, spawnSync, type ChildProcessWithoutNullStreams } from 'node:chil
 import * as readline from 'node:readline';
 import * as path from 'node:path';
 
-const HARNESS = path.resolve(__dirname, '../../src/test/fixtures/spawn-orphan-child.ts');
+const HARNESS = path.resolve(__dirname, '../../test/fixtures/spawn-orphan-child.ts');
 const TSX_BIN = path.resolve(__dirname, '../../../../../node_modules/.bin/tsx');
 
 interface HarnessHandle {

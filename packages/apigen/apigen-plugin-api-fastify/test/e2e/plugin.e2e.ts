@@ -1117,7 +1117,7 @@ interface HttpFixtureOutput {
   body: string;
 }
 
-const GOLDEN_PATH = path.join(__dirname, '..', '..', 'src', 'test', 'golden', 'fastify.snapshot.json');
+const GOLDEN_PATH = path.join(__dirname, '..', '..', 'test', 'golden', 'fastify.snapshot.json');
 
 /** Parse SSE frames from a response body. Returns `{ event?, data }[]`. */
 function parseSseFramesParity(

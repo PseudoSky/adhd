@@ -63,7 +63,7 @@ import {
 // exactly like the plugin's run() path. Never bare `python3`.
 const PYENV = ensurePythonEnv();
 const PYTHON_PKG_DIR = PYENV.pythonPkgDir;
-const FIXTURE_MODULE = path.resolve(__dirname, '..', '..', 'src', 'test', 'fixtures', 'test_api.py');
+const FIXTURE_MODULE = path.resolve(__dirname, '..', '..', 'test', 'fixtures', 'test_api.py');
 const NS = 'testapi';
 // BUG-APIGEN-TEST-FIXED-PORT-COLLISION-001: no fixed port. Every
 // `startServer()` call below requests an OS-assigned ephemeral port
@@ -733,7 +733,7 @@ interface HttpFixtureOutput {
 // BUG-APIGEN-TEST-FIXED-PORT-COLLISION-001: no fixed PARITY_PORT — this
 // suite's own server (below) requests ephemeral port 0 and learns the
 // actual bound port via the `onListening` escape hatch.
-const PARITY_GOLDEN_PATH = path.join(__dirname, '..', '..', 'src', 'test', 'golden', 'py-flask.snapshot.json');
+const PARITY_GOLDEN_PATH = path.join(__dirname, '..', '..', 'test', 'golden', 'py-flask.snapshot.json');
 
 /** Route for `fnName` in the fixture module, with an empty input schema —
  * route derivation depends only on namespace/path (see `routeFor` above). */
@@ -993,7 +993,7 @@ describe('[py-flask-serve-split.7] negative control — the parity gate actually
 describe('[BUG-APIGEN-053] parent-death watchdog', () => {
   const HARNESS_PATH = path.resolve(
     __dirname,
-    '../../../python-env/src/test-support/spawn-and-hold.mjs'
+    '../../../python-env/test/helpers/spawn-and-hold.mjs'
   );
 
   // Safety net: force-SIGKILL any harness/grandchild PID captured by the

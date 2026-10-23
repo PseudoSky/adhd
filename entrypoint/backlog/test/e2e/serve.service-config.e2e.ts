@@ -29,7 +29,7 @@ import {
   DIST_INDEX,
   mintBacklogSandbox,
   type SandboxHandle,
-} from '../../src/test/helpers/spawn-backlog-bin.js';
+} from '../helpers/spawn-backlog-bin.js';
 
 /** A currently-free loopback TCP port, released before the spawn. */
 async function freePort(): Promise<number> {

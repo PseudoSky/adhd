@@ -31,7 +31,7 @@ from collections import defaultdict
 from pathlib import Path
 
 # The span paths `CORE_MAPPINGS` in packages/agent/agent-plugin-tracing/src/lib/mappings.ts emits.
-# `packages/agent/agent-plugin-tracing/src/lib/audit-declared.test.ts` fails if this list drifts
+# `packages/agent/agent-plugin-tracing/test/unit/lib/audit-declared.spec.ts` fails if this list drifts
 # from that table.
 DECLARED_PATHS = (
     "agent.session",

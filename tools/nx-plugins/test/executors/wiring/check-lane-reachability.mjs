@@ -21,7 +21,7 @@
  * workflows, before the lanes, so a mis-wired gate fails in seconds.
  *
  * RULES (any violation => exit 1):
- *   1. A project that ships `src/**\/*.e2e.ts` or `src/**\/*.e2e.test.ts` MUST declare an `e2e` target
+ *   1. A project that ships `test/e2e/**\/*.e2e.ts` MUST declare an `e2e` target
  *      (otherwise its heavy suites are dead config).
  *   2. NO project's `test.dependsOn` may contain `e2e` (the coupling that made
  *      the heavy lane run uncached on every `nx affected -t test` — re-adding it
@@ -58,7 +58,7 @@
  *   8. No agent-family (packages/agent/*, entrypoint/agent-mcp, entrypoint/dispatch-cli)
  *      UNIT-lane test spawns a subprocess (child_process / StdioClientTransport /
  *      StdioMcpClient / a real-executable stdio MCP server), and every project that
- *      ships `*.e2e.test.ts` excludes them from its unit lane. Delegated to
+ *      ships `*.e2e.ts` excludes them from its unit lane. Delegated to
  *      `check-agent-lane-spawn.mjs` (backlog 5b839b90 AC2).
  *
  *   9. Every spawn of a Node bin (`process.execPath` / `node` / `fork(module)`) in a
@@ -191,7 +191,7 @@ export async function runChecks({ workspaceRoot, gateTargets, createNodesFn, bas
       ignore: ['**/node_modules/**'],
     });
     if (e2eFiles.length > 0 && !(p.json.targets && p.json.targets.e2e)) {
-      add('1-e2e-files-without-target', `${p.root} — ${e2eFiles.length} src/**/*.e2e.ts / *.e2e.test.ts file(s) but no \`e2e\` target (dead config).`);
+      add('1-e2e-files-without-target', `${p.root} — ${e2eFiles.length} test/e2e/**/*.e2e.ts file(s) but no \`e2e\` target (dead config).`);
     }
   }
 

@@ -14,8 +14,8 @@ import type {
   Segment,
 } from '@adhd/apigen-core-client';
 import { CLI_EXIT_CODE } from '@adhd/apigen-base-errors';
-import * as backlogFixture from '../../src/test/fixtures/backlog.fixture';
-import { getItem, listItems, deleteItem, whoAmI } from '../../src/test/fixtures/backlog.fixture';
+import * as backlogFixture from '../fixtures/backlog.fixture';
+import { getItem, listItems, deleteItem, whoAmI } from '../fixtures/backlog.fixture';
 
 // ---------------------------------------------------------------------------
 // Real fn table from a REAL imported fixture module — the same helper

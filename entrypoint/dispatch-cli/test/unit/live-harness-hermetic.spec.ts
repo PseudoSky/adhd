@@ -25,9 +25,9 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 // src/test/ -> package root
-const PKG_ROOT = join(fileURLToPath(new URL('../../src/test', import.meta.url)), '..', '..');
+const PKG_ROOT = join(fileURLToPath(new URL('.', import.meta.url)), '..', '..');
 const LIVE_E2E = readFileSync(
-  join(PKG_ROOT, 'src', 'test', 'integration', 'live-dispatch-five-acs.e2e.test.ts'),
+  join(PKG_ROOT, 'test', 'e2e', 'integration', 'live-dispatch-five-acs.e2e.ts'),
   'utf8'
 );
 

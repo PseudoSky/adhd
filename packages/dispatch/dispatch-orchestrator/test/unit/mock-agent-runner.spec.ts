@@ -1,8 +1,8 @@
 import { existsSync, readFileSync, rmdirSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { MockAgentRunner } from '../../src/test/helpers/mock-agent-runner.js';
-import { makeUnit } from '../../src/test/helpers/fixtures.js';
+import { MockAgentRunner } from '../../src/lib/mock-agent-runner.js';
+import { makeUnit } from '../helpers/fixtures.js';
 
 // Namespaced under tmp/ per CLAUDE.md's "one canonical root" convention, and
 // kept separate from MockAgentRunner's own default debugDir

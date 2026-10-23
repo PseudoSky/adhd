@@ -72,8 +72,8 @@ import {
 // (grpc extra), exactly like the plugin's run() path. Never bare `python3`.
 const PYENV = ensurePythonEnv({ extras: ['grpc'] });
 const PYTHON_PKG_DIR = PYENV.pythonPkgDir;
-const FIXTURE_MODULE = path.resolve(__dirname, '..', '..', 'src', 'test', 'fixtures', 'grpc_api.py');
-const STREAMING_FIXTURE_MODULE = path.resolve(__dirname, '..', '..', 'src', 'test', 'fixtures', 'streaming_api.py');
+const FIXTURE_MODULE = path.resolve(__dirname, '..', '..', 'test', 'fixtures', 'grpc_api.py');
+const STREAMING_FIXTURE_MODULE = path.resolve(__dirname, '..', '..', 'test', 'fixtures', 'streaming_api.py');
 const NS = 'pkg';
 // BUG-APIGEN-TEST-FIXED-PORT-COLLISION-001: no fixed port. Every
 // `startServer()` call below requests an OS-assigned ephemeral port
@@ -699,7 +699,7 @@ interface GrpcFixtureOutput {
 // BUG-APIGEN-TEST-FIXED-PORT-COLLISION-001: no fixed PARITY_PORT — this
 // suite's own server (below) requests ephemeral port 0 and learns the
 // actual bound port via the `onListening` escape hatch.
-const PARITY_GOLDEN_PATH = path.join(__dirname, '..', '..', 'src', 'test', 'golden', 'py-grpc.snapshot.json');
+const PARITY_GOLDEN_PATH = path.join(__dirname, '..', '..', 'test', 'golden', 'py-grpc.snapshot.json');
 
 const parityFixtures: ReadonlyArray<GoldenFixture<GrpcFixtureInput>> = [
   {
@@ -918,7 +918,7 @@ describe('[py-grpc-serve-split.4] negative control — the parity gate actually 
 describe('[BUG-APIGEN-053] parent-death watchdog', () => {
   const HARNESS_PATH = path.resolve(
     __dirname,
-    '../../../python-env/src/test-support/spawn-and-hold.mjs'
+    '../../../python-env/test/helpers/spawn-and-hold.mjs'
   );
 
   // Safety net: force-SIGKILL any harness/grandchild PID captured by the

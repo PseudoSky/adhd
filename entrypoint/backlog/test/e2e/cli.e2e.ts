@@ -54,7 +54,7 @@ import { dirname, join, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createIssue } from '../../src/write/create-issue.js';
 import { getIssue } from '../../src/query/get.js';
-import { seedProject } from '../../src/test/helpers/open-test-issue-store.js';
+import { seedProject } from '../helpers/open-test-issue-store.js';
 import type { BacklogCtx } from '../../src/api.js';
 import { buildBacklogEnv } from '../../src/env.js';
 import {
@@ -85,8 +85,8 @@ import {
   extractMintedSandboxRoot,
   type SpawnResult,
   type SandboxPathBody,
-} from '../../src/test/helpers/spawn-backlog-bin.js';
-import { spawnTimeoutMs } from '../../src/test/helpers/spawn-timeout.js';
+} from '../helpers/spawn-backlog-bin.js';
+import { spawnTimeoutMs } from '../helpers/spawn-timeout.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 

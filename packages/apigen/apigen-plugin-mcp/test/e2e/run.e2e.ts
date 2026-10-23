@@ -1141,7 +1141,7 @@ interface McpFixtureOutput {
   errorMessage?: string;
 }
 
-const GOLDEN_PATH = path.join(__dirname, '..', '..', 'src', 'test', 'golden', 'mcp.snapshot.json');
+const GOLDEN_PATH = path.join(__dirname, '..', '..', 'test', 'golden', 'mcp.snapshot.json');
 
 /** The byte-identical fixture classes (malformed/streaming/mount proven separately). */
 const parityFixtures: ReadonlyArray<GoldenFixture<McpFixtureInput>> = [

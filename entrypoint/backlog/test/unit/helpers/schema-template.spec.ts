@@ -17,13 +17,13 @@ import {
   openGraphBacklogStore,
   closeGraphBacklogStore,
 } from '../../../src/store/graph-backlog-store.js';
-import { seedFromSchemaTemplate } from '../../../src/test/helpers/schema-template.js';
-import { freshTmpDir } from '../../../src/test/helpers/tmp-store.js';
+import { seedFromSchemaTemplate } from '../../helpers/schema-template.js';
+import { freshTmpDir } from '../../helpers/tmp-store.js';
 import {
   openTestIssueStore,
   removeTestIssueStoreDir,
   seedProject,
-} from '../../../src/test/helpers/open-test-issue-store.js';
+} from '../../helpers/open-test-issue-store.js';
 
 describe('seedFromSchemaTemplate', () => {
   let dir: string;

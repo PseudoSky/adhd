@@ -20,7 +20,7 @@ import { createDagClient } from '@adhd/dispatch-core-client';
 import { createJsonFileSerializer } from '@adhd/dispatch-serializer-json';
 import { snapshot, optimize } from '@adhd/dispatch-core-optimizer';
 
-import { MockAgentRunner } from '../../src/test/helpers/mock-agent-runner.js';
+import { MockAgentRunner } from '../../src/lib/mock-agent-runner.js';
 import { orchestrateCycle, type OrchestratorDeps } from '../../src/lib/orchestrator.js';
 
 // Repo-canonical ephemeral root (CLAUDE.md "Test/ephemeral artifacts"):

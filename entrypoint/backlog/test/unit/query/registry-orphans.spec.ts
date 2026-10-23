@@ -9,7 +9,7 @@
  * finding, so the "0 after merge" assertion goes red.
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { openTmpStore, type TmpStore } from '../../../src/test/helpers/tmp-store.js';
+import { openTmpStore, type TmpStore } from '../../helpers/tmp-store.js';
 import { buildBacklogEnv } from '../../../src/env.js';
 import * as api from '../../../src/api.js';
 import type { IOutcomeEnvelope } from '../../../src/envelope.js';

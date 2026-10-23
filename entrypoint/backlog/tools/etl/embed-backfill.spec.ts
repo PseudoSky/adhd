@@ -26,8 +26,8 @@ import {
   openTestIssueStore,
   removeTestIssueStoreDir,
   type TestIssueStore,
-} from '../../src/test/helpers/open-test-issue-store.js';
-import { freshTmpDir } from '../../src/test/helpers/tmp-store.js';
+} from '../../test/helpers/open-test-issue-store.js';
+import { freshTmpDir } from '../../test/helpers/tmp-store.js';
 import { executeWriteTransaction, writeNodeTx } from '../../src/write/tx.js';
 import type { IEmbeddingBackend } from '../../src/write/tx.js';
 import { runEmbedBackfill, type IEmbedBackfillDisposition } from './embed-backfill.js';

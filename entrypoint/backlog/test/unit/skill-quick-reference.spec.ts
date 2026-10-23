@@ -24,7 +24,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { runIsolatedBin } from '../../src/test/helpers/spawn-isolated-bin.js';
+import { runIsolatedBin } from '../helpers/spawn-isolated-bin.js';
 import { translateGetPositional } from '../../src/cli-input-envelope.js';
 import { installSkill } from '../../src/install-skill.js';
 import { BACKLOG_VERBS } from '../../src/vocabulary.js';

@@ -45,8 +45,8 @@ import {
   removeTestIssueStoreDir,
   seedProject,
   type TestIssueStore,
-} from '../../../src/test/helpers/open-test-issue-store.js';
-import { freshTmpDir } from '../../../src/test/helpers/tmp-store.js';
+} from '../../helpers/open-test-issue-store.js';
+import { freshTmpDir } from '../../helpers/tmp-store.js';
 import { createIssue } from '../../../src/write/create-issue.js';
 import {
   upsertProject,
@@ -774,7 +774,7 @@ describe('registry CRUD — upsertProject/upsertComponent/upsertLocation/rmLocat
     const CATALOG_TS = join(HERE, '../../../src/write/catalog.ts');
     const OPEN_STORE_TS = join(
       HERE,
-      '..', '..', '..', 'src', 'test', 'helpers', 'open-test-issue-store.ts'
+      '..', '..', '..', 'test', 'helpers', 'open-test-issue-store.ts'
     );
     const TSX_BIN = join(
       HERE,

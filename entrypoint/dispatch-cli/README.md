@@ -142,7 +142,7 @@ agent-mcp child resolves `nativeTooling` at **task time** against its own cwd
 
 Proven default-running and hermetically (real spawned agent-mcp, fake `$HOME`,
 temp registry DB, isolated cwd): `src/test/resolve-dispatch-mcp-servers.spec.ts`
-and `src/test/dispatch-native-tooling.e2e.test.ts`.
+and `test/e2e/dispatch-native-tooling.e2e.ts`.
 
 ## Self-enforcement — lane grants and duplicate runs
 
@@ -173,7 +173,7 @@ This automatically builds and tests:
 
 ## Real end-to-end lifecycle test
 
-`src/test/integration/real-e2e.ts` is a self-executing `tsx` script (NOT a
+`test/helpers/integration/real-e2e.ts` is a self-executing `tsx` script (NOT a
 Vitest spec — it lives outside `src/**/*.{spec,test}.ts` on purpose, so `nx
 test dispatch-cli` never picks it up) that drives the FULL
 `docs/plan/dispatch-production` product lifecycle through real components:
@@ -189,7 +189,7 @@ agent-mcp task-runner boundary). Run it with:
 
 ```bash
 npx nx build dispatch-cli && npx tsx --tsconfig tsconfig.base.json \
-  entrypoint/dispatch-cli/src/test/integration/real-e2e.ts
+  entrypoint/dispatch-cli/test/helpers/integration/real-e2e.ts
 ```
 
 It prints a per-scenario result table and exits 0 iff every required
@@ -222,12 +222,12 @@ Run it explicitly with:
 
 ```bash
 DISPATCH_E2E_LIVE=1 npx tsx --tsconfig tsconfig.base.json \
-  entrypoint/dispatch-cli/src/test/integration/real-e2e.ts
+  entrypoint/dispatch-cli/test/helpers/integration/real-e2e.ts
 ```
 
 ### Live five-AC e2e suite (`live-dispatch-five-acs.e2e.test.ts`)
 
-A second, independent live suite (`src/test/integration/live-dispatch-five-acs.e2e.test.ts`)
+A second, independent live suite (`test/e2e/integration/live-dispatch-five-acs.e2e.ts`)
 drives the real dispatch stack across the real MCP boundary against a real model to
 prove five acceptance criteria that no real-model run had exercised: `fa9d3079`
 (`dag.session_id` end-to-end), `03145a46` (HITL reachable from dispatch), `5339c2e5`
@@ -252,7 +252,7 @@ npx nx run agent-mcp:dist-manifest
 
 DISPATCH_E2E_LIVE=1 sh -c 'cd entrypoint/dispatch-cli && \
   npx vitest run --config vite.config.ts \
-  src/test/integration/live-dispatch-five-acs.e2e.test.ts'
+  test/e2e/integration/live-dispatch-five-acs.e2e.ts'
 ```
 
 `claudecli` cannot be advertised agent-mcp's client-side pseudo-tools, so the
@@ -278,7 +278,7 @@ function-tool provider).
 
 ### Guarded live runner (`run-live-guarded.ts`)
 
-`src/test/integration/run-live-guarded.ts` wraps a real dispatch-through-a-real-
+`test/helpers/integration/run-live-guarded.ts` wraps a real dispatch-through-a-real-
 agent-mcp run with **hard, mechanical guards** so a live test can never run away.
 It is a self-executing script (not collected by Vitest), reusing the same real
 substrate as the five-AC suite, and is the harness a later authorized live test
@@ -314,12 +314,12 @@ npx nx run agent-mcp:dist-manifest
 set -a; source ~/.adhd/.env; set +a
 
 DISPATCH_E2E_LIVE=1 npx tsx --tsconfig tsconfig.base.json \
-  entrypoint/dispatch-cli/src/test/integration/run-live-guarded.ts
+  entrypoint/dispatch-cli/test/helpers/integration/run-live-guarded.ts
 
 # prove the KILL fires (a cap of 0 breaches on the first priced turn)
 DISPATCH_E2E_LIVE=1 DISPATCH_E2E_MAX_COST_USD=0 DISPATCH_E2E_POLL_MS=100 \
   DISPATCH_E2E_SCENARIO=delegation npx tsx --tsconfig tsconfig.base.json \
-  entrypoint/dispatch-cli/src/test/integration/run-live-guarded.ts
+  entrypoint/dispatch-cli/test/helpers/integration/run-live-guarded.ts
 # exits non-zero, prints [GUARD-KILL:cost-exceeded] with the observed cost.
 ```
 

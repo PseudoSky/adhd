@@ -1,3 +1,4 @@
+import { UNIT_FILE_INCLUDES } from '../../../tools/vite-plugins/e2e-globs.mjs';
 import { nxViteTsPaths } from '@nx/vite/plugins/nx-tsconfig-paths.plugin';
 import { nxViteTsPathsPre } from '../../../tools/vite-plugins/source-resolution.mjs';
 import { projectCacheDir, projectCoverage } from '../../workspace/workspace-base-vite-paths/src/index';
@@ -55,7 +56,7 @@ export default defineConfig({
       dir: '../../../node_modules/.vitest',
     },
     environment: 'jsdom',
-    include: ['src/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}', 'test/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'],
+    include: UNIT_FILE_INCLUDES,
 
     reporters: ['default'],
     coverage: {

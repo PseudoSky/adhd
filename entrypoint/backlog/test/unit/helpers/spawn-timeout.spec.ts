@@ -11,7 +11,7 @@
  * it belongs in the default `test` lane, not the resource `e2e` lane.
  */
 import { afterEach, describe, expect, it } from 'vitest';
-import { DEFAULT_SPAWN_TIMEOUT_MS, spawnTimeoutMs } from '../../../src/test/helpers/spawn-timeout.js';
+import { DEFAULT_SPAWN_TIMEOUT_MS, spawnTimeoutMs } from '../../helpers/spawn-timeout.js';
 
 describe('spawnTimeoutMs', () => {
   const prev = process.env.ADHD_SPAWN_TIMEOUT_MS;

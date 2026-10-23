@@ -40,7 +40,7 @@ import {
   makeFixtureDag,
   makeOp,
   makeSuspensionLogEntry,
-} from '../../src/test/helpers/fixtures.js';
+} from '../helpers/fixtures.js';
 
 // Repo-canonical ephemeral root (CLAUDE.md "Test/ephemeral artifacts"):
 // tmp/<package>/<test-scoped>/ — gitignored, fully removed on teardown.

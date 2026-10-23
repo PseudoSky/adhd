@@ -1,7 +1,7 @@
 /// <reference types='vitest' />
 import { defineConfig } from 'vite';
 import { configDefaults } from 'vitest/config';
-import { E2E_FILE_EXCLUDES } from '../../tools/vite-plugins/e2e-globs.mjs';
+import { E2E_FILE_EXCLUDES, UNIT_FILE_INCLUDES } from '../../tools/vite-plugins/e2e-globs.mjs';
 import dts from 'vite-plugin-dts';
 import * as path from 'path';
 import { nxViteTsPaths } from '@nx/vite/plugins/nx-tsconfig-paths.plugin';
@@ -15,7 +15,7 @@ export default defineConfig({
   root: __dirname,
   cacheDir: projectCacheDir(__dirname),
 
-  // Deliberately OMITS nxViteTsPathsPre(): src/test/cli-smoke.e2e.test.ts spawns the
+  // Deliberately OMITS nxViteTsPathsPre(): src/test/cli-smoke.e2e.ts spawns the
   // COMPILED bin (dist/bin/cli.js) as a real Node child process, and a real-Node
   // child resolves `@adhd/*` through node_modules to each dependency's built
   // `dist` — it cannot be made to follow the parent's tsconfig paths. The
@@ -31,11 +31,11 @@ export default defineConfig({
     dts({
       entryRoot: 'src',
       tsconfigPath: path.join(__dirname, 'tsconfig.lib.json'),
-      // src/test/** holds test-support (fixtures + the real-e2e harness) that lack a
+      // test/** holds test-support (fixtures + the real-e2e harness) that lack a
       // .spec/.test suffix, so tsconfig.lib.json's *.spec/*.test excludes miss them and
       // vite-plugin-dts would ship test/*.d.ts (DEBT-DISPATCH-CLI-TEST-DECL-BLOAT-001).
       // Public API types (index/api/lib) are unaffected.
-      exclude: ['bin/**', 'src/test/**'],
+      exclude: ['bin/**', 'test/**'],
     }),
   ],
 
@@ -67,8 +67,8 @@ export default defineConfig({
       dir: path.join(repoRoot, 'node_modules/.vitest'),
     },
     environment: 'node',
-    include: ['src/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}', 'test/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'],
-    // Subprocess / real-server suites (`*.e2e.ts`, `*.e2e.test.ts`) run in the separate
+    include: UNIT_FILE_INCLUDES,
+    // Subprocess / real-server suites (`*.e2e.ts`, `*.e2e.ts`) run in the separate
     // `e2e` lane (vitest.e2e.config.ts), never here (backlog 5b839b90 AC1;
     // docs/decisions/0009-test-lanes-unit-vs-e2e.md). Gated by check-agent-lane-spawn.mjs.
     exclude: [...configDefaults.exclude, ...E2E_FILE_EXCLUDES],

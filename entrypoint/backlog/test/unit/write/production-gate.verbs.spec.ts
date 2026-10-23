@@ -22,7 +22,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { openTmpStore, type TmpStore } from '../../../src/test/helpers/tmp-store.js';
+import { openTmpStore, type TmpStore } from '../../helpers/tmp-store.js';
 import { buildBacklogEnv } from '../../../src/env.js';
 import * as api from '../../../src/api.js';
 import { BACKLOG_VERBS } from '../../../src/vocabulary.js';

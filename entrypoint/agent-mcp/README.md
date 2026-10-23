@@ -472,11 +472,11 @@ service, which CI cannot provide):
 
 | Test file | Gate | Real dependency |
 |---|---|---|
-| `src/__tests__/integration/live-budget.e2e.test.ts` | `AGENT_MCP_BUDGET_LIVE=1` | real provider (LM Studio / Anthropic) |
-| `src/__tests__/integration/live-dag.e2e.test.ts` | `AGENT_MCP_LIVE=1` | real provider (LM Studio / Anthropic) |
-| `src/__tests__/integration/live-oauth.e2e.test.ts` | `AGENT_MCP_LIVE=1` | real Anthropic OAuth |
-| `src/__tests__/live/tracing-live.e2e.test.ts` | `AGENT_MCP_LIVE=1` | real `claude` CLI + real Anthropic OAuth, real dev server, **production store** (c536ce29 LIVE-AC1..AC5) |
-| `src/__tests__/integration/live-cache-smoke.e2e.test.ts` | `ADHD_AGENT_LIVE_CACHE=1` | paid Anthropic `claude-haiku-4-5` via the product's own credential path (`ADHD_AGENT_ANTHROPIC_SECRET`); one task, ~3 model calls, isolated store under `tmp/agent-mcp/`; **owner pseudosky**, approved 2026-10-10 ("i don't care about the budget but do not burn the 5h window"); fail-closed 5h-window guard (refuses at utilization >= 0.60, status not `allowed`, or unreadable). Proves 8ecaa160 AC1 / ebfe7421 AC1 (closes ee3381d8). Its offline controls (negative control + guard teeth) run ungated. |
+| `test/e2e/integration/live-budget.e2e.ts` | `AGENT_MCP_BUDGET_LIVE=1` | real provider (LM Studio / Anthropic) |
+| `test/e2e/integration/live-dag.e2e.ts` | `AGENT_MCP_LIVE=1` | real provider (LM Studio / Anthropic) |
+| `test/e2e/integration/live-oauth.e2e.ts` | `AGENT_MCP_LIVE=1` | real Anthropic OAuth |
+| `test/e2e/live/tracing-live.e2e.ts` | `AGENT_MCP_LIVE=1` | real `claude` CLI + real Anthropic OAuth, real dev server, **production store** (c536ce29 LIVE-AC1..AC5) |
+| `test/e2e/integration/live-cache-smoke.e2e.ts` | `ADHD_AGENT_LIVE_CACHE=1` | paid Anthropic `claude-haiku-4-5` via the product's own credential path (`ADHD_AGENT_ANTHROPIC_SECRET`); one task, ~3 model calls, isolated store under `tmp/agent-mcp/`; **owner pseudosky**, approved 2026-10-10 ("i don't care about the budget but do not burn the 5h window"); fail-closed 5h-window guard (refuses at utilization >= 0.60, status not `allowed`, or unreadable). Proves 8ecaa160 AC1 / ebfe7421 AC1 (closes ee3381d8). Its offline controls (negative control + guard teeth) run ungated. |
 
 **Approved by:** pseudosky (repo owner); `live-cache-smoke.e2e.test.ts` (`ADHD_AGENT_LIVE_CACHE=1`) by direct owner instruction on 2026-10-10 under a hard rule never to burn the Anthropic 5-hour window (run from the repo root: `ADHD_AGENT_LIVE_CACHE=1 npx vitest run --config entrypoint/agent-mcp/vitest.e2e.config.ts live-cache-smoke` (not via `nx run`, whose cache is blind to the env var); unset it reports SKIPPED naming the gate and owner); `tracing-live.e2e.test.ts` additionally by direct owner instruction on 2026-10-09 (run guide: [docs/logging.md](./docs/logging.md#proving-it-live-the-env-gated-test)). Rationale: each calls a real, paid model the CI
 cannot provide, so the gate saves money and avoids an outside system — the one qualifying
@@ -486,7 +486,7 @@ invariants. The same record appears in this package's `AGENTS.md` and in each te
 
 ## R10 end-to-end consumer proof (default-running, no gate)
 
-`src/__tests__/r10-s8-consumer-proof.e2e.test.ts` (scaffold: `src/__tests__/r10-s8-scaffold.ts`) proves the R10
+`test/e2e/r10-s8-consumer-proof.e2e.ts` (scaffold: `test/helpers/r10-s8-scaffold.ts`) proves the R10
 product changes the way a host consumes them, for **both** the Anthropic and the OpenAI-compatible adapter, in one
 run of about four seconds. It drives the real `createServer` through a real MCP `Client` (in-memory transport), over
 the real stores, queue, orchestrator, host hooks and default tracing plugin, with the real `AnthropicProvider` /
@@ -523,9 +523,9 @@ The live tests that prove the adopted servers start and execute through the real
 
 | Test file | Gate | Real dependency |
 |---|---|---|
-| `src/__tests__/integration/native-tooling-adoption.e2e.test.ts` | `NAT_TOOL_LIVE=1` | `uvx mcp-shell-server` (external PyPI package) + `srt` |
-| `src/__tests__/integration/native-tooling-real-ops.e2e.test.ts` | `NAT_TOOL_LIVE=1` | `uvx mcp-shell-server` (external PyPI package) + `srt` |
-| `src/__tests__/integration/agent-portability-live.e2e.test.ts` | `NAT_TOOL_LIVE=1` | paid DeepSeek model (`ADHD_AGENT_DEEPSEEK_SECRET`); owner pseudosky, $0.05 cap (dispatch-2026-10-06-48dc). The non-model portability matrix (`agent-portability.e2e.test.ts`) is NOT gated. |
+| `test/e2e/integration/native-tooling-adoption.e2e.ts` | `NAT_TOOL_LIVE=1` | `uvx mcp-shell-server` (external PyPI package) + `srt` |
+| `test/e2e/integration/native-tooling-real-ops.e2e.ts` | `NAT_TOOL_LIVE=1` | `uvx mcp-shell-server` (external PyPI package) + `srt` |
+| `test/e2e/integration/agent-portability-live.e2e.ts` | `NAT_TOOL_LIVE=1` | paid DeepSeek model (`ADHD_AGENT_DEEPSEEK_SECRET`); owner pseudosky, $0.05 cap (dispatch-2026-10-06-48dc). The non-model portability matrix (`agent-portability.e2e.test.ts`) is NOT gated. |
 
 These live tests are **off by default** (they skip unless `NAT_TOOL_LIVE=1`) and are not
 run by the pre-push hook; CI's `e2e` lane runs them skipped. The table above is

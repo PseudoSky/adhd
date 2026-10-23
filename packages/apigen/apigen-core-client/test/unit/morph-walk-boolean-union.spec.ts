@@ -40,7 +40,7 @@ import {
   X_APIGEN_TOJSON,
 } from '@adhd/apigen-base-logical';
 
-const FIXTURE_DIR = path.resolve(__dirname, '../../src/test/fixtures/union-boolean');
+const FIXTURE_DIR = path.resolve(__dirname, '../../test/fixtures/union-boolean');
 const FIXTURE = path.join(FIXTURE_DIR, 'boolean-unions.ts');
 const STRICT_TSCONFIG = path.join(FIXTURE_DIR, 'strict.json');
 

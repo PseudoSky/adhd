@@ -41,8 +41,8 @@ import {
   openTestIssueStore,
   seedProject,
   type TestIssueStore,
-} from '../../../src/test/helpers/open-test-issue-store.js';
-import { freshTmpDir } from '../../../src/test/helpers/tmp-store.js';
+} from '../../helpers/open-test-issue-store.js';
+import { freshTmpDir } from '../../helpers/tmp-store.js';
 
 /**
  * Writes one live node of a kind this build does NOT recognize, through the

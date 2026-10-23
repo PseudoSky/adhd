@@ -21,7 +21,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 // src/test/ -> package root
-const PKG_ROOT = join(fileURLToPath(new URL('../../src/test', import.meta.url)), '..', '..');
+const PKG_ROOT = join(fileURLToPath(new URL('.', import.meta.url)), '..', '..');
 
 function read(rel: string): string {
   return readFileSync(join(PKG_ROOT, rel), 'utf8');
@@ -39,7 +39,7 @@ const STALE_HITL_PHRASES = [
 const DOCS: Record<string, string> = {
   'README.md': read('README.md'),
   'AGENTS.md': read('AGENTS.md'),
-  'live-e2e header': read('src/test/integration/live-dispatch-five-acs.e2e.test.ts'),
+  'live-e2e header': read('test/e2e/integration/live-dispatch-five-acs.e2e.ts'),
 };
 
 describe('docs contract — HITL (03145a46) is reachable, not blocked', () => {

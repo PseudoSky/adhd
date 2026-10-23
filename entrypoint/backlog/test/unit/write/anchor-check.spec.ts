@@ -12,12 +12,12 @@
  */
 import { execFileSync } from 'node:child_process';
 // 50e8c966: hook-exported GIT_DIR/GIT_INDEX_FILE must never reach a fixture git spawn.
-import { gitEnv } from '../../../src/test/helpers/git-env.js';
+import { gitEnv } from '../../helpers/git-env.js';
 import { createHash } from 'node:crypto';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { freshTmpDir, osTmpDir } from '../../../src/test/helpers/tmp-store.js';
+import { freshTmpDir, osTmpDir } from '../../helpers/tmp-store.js';
 import { checkAnchor, existsAtHead, parseAnchor } from '../../../src/write/anchor-check.js';
 import { AnchorLocatorInvalidError } from '../../../src/write/errors.js';
 

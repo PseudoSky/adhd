@@ -7,7 +7,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import policyPlugin, { makePolicyPlugin, PolicyAttributes } from '../../src/index';
 import type { IPolicyDecideRequest, IPolicyDecider, IPolicyDecision } from '../../src/index';
-import { createHost, latch, layerOf, refusal } from '../../src/test/helpers/harness';
+import { createHost, latch, layerOf, refusal } from '../helpers/harness';
 
 const ALLOW: IPolicyDecision = { decision: 'allow' };
 

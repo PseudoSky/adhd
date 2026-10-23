@@ -12,88 +12,88 @@
     "expired": 0
   },
   "files": {
-    "entrypoint/agent-mcp/src/__tests__/integration/agent-portability-live.e2e.test.ts": {
+    "entrypoint/agent-mcp/test/e2e/integration/agent-portability-live.e2e.ts": {
       "skip": 1
     },
-    "entrypoint/agent-mcp/src/__tests__/integration/live-budget.e2e.test.ts": {
+    "entrypoint/agent-mcp/test/e2e/integration/live-budget.e2e.ts": {
       "skip": 1
     },
-    "entrypoint/agent-mcp/src/__tests__/integration/live-dag.e2e.test.ts": {
+    "entrypoint/agent-mcp/test/e2e/integration/live-dag.e2e.ts": {
       "skip": 1
     },
-    "entrypoint/agent-mcp/src/__tests__/integration/live-oauth.e2e.test.ts": {
+    "entrypoint/agent-mcp/test/e2e/integration/live-oauth.e2e.ts": {
       "skip": 1
     },
-    "entrypoint/agent-mcp/src/__tests__/integration/native-tooling-adoption.e2e.test.ts": {
+    "entrypoint/agent-mcp/test/e2e/integration/native-tooling-adoption.e2e.ts": {
       "skip": 1
     },
-    "entrypoint/agent-mcp/src/__tests__/integration/native-tooling-real-ops.e2e.test.ts": {
+    "entrypoint/agent-mcp/test/e2e/integration/native-tooling-real-ops.e2e.ts": {
       "skip": 1
     },
-    "entrypoint/agent-mcp/src/__tests__/live/tracing-live.e2e.test.ts": {
+    "entrypoint/agent-mcp/test/e2e/live/tracing-live.e2e.ts": {
       "skip": 1
     },
-    "entrypoint/apigen-cli/src/test/e2e/bug-apigen-033-anonymous-default-dispatch.spec.ts": {
+    "entrypoint/apigen-cli/test/unit/bug-apigen-033-anonymous-default-dispatch.spec.ts": {
       "todo": 3
     },
-    "entrypoint/apigen-cli/src/test/e2e/dist-entry-no-argv-side-effect.spec.ts": {
+    "entrypoint/apigen-cli/test/unit/dist-entry-no-argv-side-effect.spec.ts": {
       "todo": 3
     },
-    "entrypoint/apigen-cli/src/test/e2e/import-source-cjs-format.spec.ts": {
+    "entrypoint/apigen-cli/test/unit/import-source-cjs-format.spec.ts": {
       "todo": 1
     },
     "entrypoint/apigen-cli/test/e2e/real-consumer.e2e.ts": {
       "skip": 3
     },
-    "entrypoint/apigen-cli/src/test/e2e/real-consumer.spec.ts": {
+    "entrypoint/apigen-cli/test/unit/real-consumer.spec.ts": {
       "todo": 3
     },
-    "entrypoint/apigen-cli/src/test/e2e/ts-types.spec.ts": {
+    "entrypoint/apigen-cli/test/unit/ts-types.spec.ts": {
       "todo": 2
     },
     "entrypoint/apigen-cli/test/unit/generate.spec.ts": {
       "todo": 33
     },
-    "entrypoint/apigen-cli/test/integration/batch-plugin-e2e-express.spec.ts": {
+    "entrypoint/apigen-cli/test/unit/integration/batch-plugin-e2e-express.spec.ts": {
       "todo": 2
     },
-    "entrypoint/apigen-cli/test/integration/batch-plugin-e2e.spec.ts": {
+    "entrypoint/apigen-cli/test/unit/integration/batch-plugin-e2e.spec.ts": {
       "todo": 2
     },
-    "entrypoint/apigen-cli/test/integration/canonical.spec.ts": {
+    "entrypoint/apigen-cli/test/unit/integration/canonical.spec.ts": {
       "todo": 2
     },
-    "entrypoint/apigen-cli/test/integration/cross-host-response-envelope.spec.ts": {
+    "entrypoint/apigen-cli/test/unit/integration/cross-host-response-envelope.spec.ts": {
       "todo": 2
     },
-    "entrypoint/apigen-cli/test/integration/envelope-capability-use-plugin.spec.ts": {
+    "entrypoint/apigen-cli/test/unit/integration/envelope-capability-use-plugin.spec.ts": {
       "todo": 1
     },
-    "entrypoint/apigen-cli/test/integration/export-shape-matrix.spec.ts": {
+    "entrypoint/apigen-cli/test/unit/integration/export-shape-matrix.spec.ts": {
       "todo": 7
     },
-    "entrypoint/apigen-cli/test/integration/gateway-mixed-host.spec.ts": {
+    "entrypoint/apigen-cli/test/unit/integration/gateway-mixed-host.spec.ts": {
       "todo": 2
     },
-    "entrypoint/apigen-cli/test/integration/ir-cache-cross-target.spec.ts": {
+    "entrypoint/apigen-cli/test/unit/integration/ir-cache-cross-target.spec.ts": {
       "todo": 1
     },
-    "entrypoint/apigen-cli/test/integration/ir-cache-plugin-registration.spec.ts": {
+    "entrypoint/apigen-cli/test/unit/integration/ir-cache-plugin-registration.spec.ts": {
       "todo": 6
     },
     "entrypoint/apigen-cli/test/e2e/integration/java-ts-decimal-parity.e2e.ts": {
       "skip": 1
     },
-    "entrypoint/apigen-cli/test/integration/java-ts-decimal-parity.spec.ts": {
+    "entrypoint/apigen-cli/test/unit/integration/java-ts-decimal-parity.spec.ts": {
       "todo": 2
     },
-    "entrypoint/apigen-cli/test/integration/mount-delegation-conformance.spec.ts": {
+    "entrypoint/apigen-cli/test/unit/integration/mount-delegation-conformance.spec.ts": {
       "todo": 4
     },
-    "entrypoint/apigen-cli/test/integration/schema.spec.ts": {
+    "entrypoint/apigen-cli/test/unit/integration/schema.spec.ts": {
       "todo": 2
     },
-    "entrypoint/apigen-cli/test/integration/streaming.spec.ts": {
+    "entrypoint/apigen-cli/test/unit/integration/streaming.spec.ts": {
       "todo": 2
     },
     "entrypoint/apigen-cli/test/unit/orchestrator.spec.ts": {
@@ -228,7 +228,7 @@
     "entrypoint/backlog/test/unit/write/cross-process-write-safety.spec.ts": {
       "todo": 4
     },
-    "entrypoint/dispatch-cli/src/test/integration/live-dispatch-five-acs.e2e.test.ts": {
+    "entrypoint/dispatch-cli/test/e2e/integration/live-dispatch-five-acs.e2e.ts": {
       "skip": 5
     },
     "packages/apigen/apigen-core-client/test/unit/additional-properties.spec.ts": {
@@ -261,13 +261,13 @@
     "packages/apigen/apigen-core-client/test/unit/ts-json-schema.spec.ts": {
       "todo": 40
     },
-    "packages/apigen/apigen-engine-runtime/test/e2e-support/isolated-git.e2e.ts": {
+    "packages/apigen/apigen-engine-runtime/test/e2e/isolated-git.e2e.ts": {
       "skip": 1
     },
     "packages/apigen/apigen-engine-runtime/test/unit/test-support/isolated-git.spec.ts": {
       "todo": 5
     },
-    "packages/apigen/apigen-engine-runtime/test/e2e-support/parity-harness.e2e.ts": {
+    "packages/apigen/apigen-engine-runtime/test/e2e/parity-harness.e2e.ts": {
       "skip": 2
     },
     "packages/apigen/apigen-engine-runtime/test/unit/test-support/parity-harness.spec.ts": {

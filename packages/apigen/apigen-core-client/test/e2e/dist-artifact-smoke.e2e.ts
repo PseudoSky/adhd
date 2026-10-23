@@ -34,7 +34,7 @@ import * as path from 'node:path';
 const HERE = __dirname;
 const REPO_ROOT = path.resolve(HERE, '../../../../..');
 const DIST_ESM_ENTRY = path.resolve(HERE, '..', '..', 'dist', 'index.mjs');
-const FIXTURE = path.resolve(HERE, '..', '..', 'src', 'test', 'fixtures', 'extract-named-fn.ts');
+const FIXTURE = path.resolve(HERE, '..', '..', 'test', 'fixtures', 'extract-named-fn.ts');
 const RESULT_MARKER = '__SMOKE_RESULT__';
 
 /**

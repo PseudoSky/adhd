@@ -35,7 +35,7 @@ import {
   openTestIssueStore,
   seedProject,
   type TestIssueStore,
-} from '../../src/test/helpers/open-test-issue-store.js';
+} from '../helpers/open-test-issue-store.js';
 import { writeNodeTx, nowISO } from '../../src/write/tx.js';
 import {
   planTerminalBackfill,
@@ -48,7 +48,7 @@ import {
 import {
   mintBacklogSandbox,
   runInBacklogSandbox,
-} from '../../src/test/helpers/spawn-backlog-bin.js';
+} from '../helpers/spawn-backlog-bin.js';
 
 /** Sandbox roots minted by this file — removed after every test. */
 const dirs: string[] = [];

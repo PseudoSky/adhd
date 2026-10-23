@@ -69,11 +69,11 @@ import {
   type IMountedOperationSurface,
 } from '../../src/server.js';
 import type { BacklogCtx } from '../../src/api.js';
-import { runIsolatedBin } from '../../src/test/helpers/spawn-isolated-bin.js';
+import { runIsolatedBin } from '../helpers/spawn-isolated-bin.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DIST_INDEX = join(HERE, '..', '..', 'dist', 'index.js');
-const MCP_ENTRY = join(HERE, '..', '..', 'src', 'test', 'fixtures', 'mcp-stdio-entry.js');
+const MCP_ENTRY = join(HERE, '..', '..', 'test', 'fixtures', 'mcp-stdio-entry.js');
 
 /**
  * Operations contributed by a `usePlugins` MOUNT plugin rather than by the

@@ -2,7 +2,7 @@
  * server.mcp.e2e.ts — SPEC.md §7 DoD clause 3 (MCP variant). Per AGENTS.md
  * "Proving an MCP server works — drive the real tools, never a bypass": this
  * spawns the REAL BUILT server (`dist/index.js` via
- * `src/test/fixtures/mcp-stdio-entry.js`) as a genuine child process and
+ * `test/fixtures/mcp-stdio-entry.js`) as a genuine child process and
  * drives it with a real `@modelcontextprotocol/sdk` `Client` over the real
  * `StdioClientTransport` — never an in-process call into `mcpPlugin.run()`'s
  * internals (which would skip exactly the transport/tool-registration layer
@@ -19,14 +19,14 @@ import { createIssue } from '../../src/write/create-issue.js';
 import {
   openTestIssueStore,
   seedProject,
-} from '../../src/test/helpers/open-test-issue-store.js';
+} from '../helpers/open-test-issue-store.js';
 import { buildBacklogEnv, resolveBacklogDbPath } from '../../src/env.js';
 import type { IOutcomeEnvelope } from '../../src/envelope.js';
 import type { IIssueCard, IIssueQueryResult } from '../../src/query/types.js';
 import type { ICreateIssueResult } from '../../src/write/create-issue.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const ENTRY_SCRIPT = join(HERE, '..', '..', 'src', 'test', 'fixtures', 'mcp-stdio-entry.js');
+const ENTRY_SCRIPT = join(HERE, '..', '..', 'test', 'fixtures', 'mcp-stdio-entry.js');
 
 describe('startBacklogServer — live MCP stdio mount, real @modelcontextprotocol/sdk client', () => {
   let client: Client | undefined;

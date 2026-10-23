@@ -35,7 +35,7 @@ import {
   mintBacklogSandbox,
   stdioSpawnOptionsForSandbox,
   type SandboxHandle,
-} from '../../src/test/helpers/spawn-backlog-bin.js';
+} from '../helpers/spawn-backlog-bin.js';
 
 /**
  * Live-derived from `client.ts`'s ACTUAL exports (`buildBacklogApigenPackage`

@@ -10,9 +10,9 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { driveSessionFlows } from '../../src/test/helpers/session-flows-driver.js';
-import { parseDoc, toEvidence } from '../../src/test/helpers/session-flows-evidence.js';
-import { e2eTestTimeoutMs } from '../../src/test/helpers/spawn-timeout.js';
+import { driveSessionFlows } from '../helpers/session-flows-driver.js';
+import { parseDoc, toEvidence } from '../helpers/session-flows-evidence.js';
+import { e2eTestTimeoutMs } from '../helpers/spawn-timeout.js';
 
 const DOC = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..', 'docs', 'plan', 'backlog-consolidation', 'session-flows.md');
 

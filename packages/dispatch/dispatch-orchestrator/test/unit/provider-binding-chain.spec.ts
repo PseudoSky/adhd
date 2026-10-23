@@ -29,7 +29,7 @@ import { snapshot, optimize } from '@adhd/dispatch-core-optimizer';
 
 import { AgentMcpRunner } from '../../src/lib/agent-runner.js';
 import { orchestrateCycle, type OrchestratorDeps } from '../../src/lib/orchestrator.js';
-import { FakeMcpToolClient, mcpError } from '../../src/test/helpers/fake-mcp-client.js';
+import { FakeMcpToolClient, mcpError } from '../helpers/fake-mcp-client.js';
 
 const TMP_ROOT = path.join(process.cwd(), 'tmp', 'dispatch-orchestrator', 'provider-binding-chain');
 

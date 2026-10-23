@@ -4,11 +4,11 @@
 **Owner:** devops (pipeline) with the repo owner.
 **Supersedes:** nothing.
 **Drives:** backlog 5b839b90 (agent packages: separate subprocess-spawning tests into a dedicated e2e lane).
-**Grounding:** owner request (verbatim): "I want you to properly set up the e2e spec lanes for agent packages such that subprocess running tests properly separate there should be an adr about this already." A search of `docs/decisions/` (0001–0008) and `docs/` found no ADR on test lanes; the only record was `docs/PIPELINE.md` §2 (stages 4–5) and the per-project comments in `entrypoint/backlog/project.json` / `packages/apigen/apigen-plugin-mcp/project.json`. Incident: `packages/agent/agent-engine-orchestrator/src/__tests__/native-tooling-caller-cwd.test.ts` spawns a real `npx` MCP server inside the unit lane and timed out under load, blocking a release.
+**Grounding:** owner request (verbatim): "I want you to properly set up the e2e spec lanes for agent packages such that subprocess running tests properly separate there should be an adr about this already." A search of `docs/decisions/` (0001–0008) and `docs/` found no ADR on test lanes; the only record was `docs/PIPELINE.md` §2 (stages 4–5) and the per-project comments in `entrypoint/backlog/project.json` / `packages/apigen/apigen-plugin-mcp/project.json`. Incident: `packages/agent/agent-engine-orchestrator/test/unit/native-tooling-caller-cwd.spec.ts` spawns a real `npx` MCP server inside the unit lane and timed out under load, blocking a release.
 
 ## TL;DR for the next agent
 
-A test that spawns a process (`child_process`, `StdioClientTransport`/`StdioMcpClient`, a stdio MCP server on `npx`/`uvx`/`srt`/`node`) is an **e2e** test: name it `*.e2e.test.ts` (agent family) or `*.e2e.ts` (apigen/backlog convention) and it runs in the project's `e2e` target (`nx affected -t e2e --parallel=1`) — its own pipeline stage (docs/PIPELINE.md:30), not `nx test`. The unit `test` target excludes those files. Separately, e2e tests are not env-gated except under the paid-third-party exception in AGENTS.md §7. The trap: renaming a file is not enough — the project needs an `e2e` target and a `vitest.e2e.config.ts`; `check-lane-reachability.mjs` rules 1 and 8 fail the gate if either is missing.
+A test that spawns a process (`child_process`, `StdioClientTransport`/`StdioMcpClient`, a stdio MCP server on `npx`/`uvx`/`srt`/`node`) is an **e2e** test: it is a `*.e2e.ts` file under `<project>/test/e2e/` and it runs in the project's `e2e` target (`nx affected -t e2e --parallel=1`) — its own pipeline stage (docs/PIPELINE.md:30), not `nx test`. The unit `test` target excludes those files. Separately, e2e tests are not env-gated except under the paid-third-party exception in AGENTS.md §7. The trap: renaming a file is not enough — the project needs an `e2e` target and a `vitest.e2e.config.ts`; `check-lane-reachability.mjs` rules 1 and 8 fail the gate if either is missing.
 
 ## Context
 
@@ -22,7 +22,7 @@ Unit `test` = no subprocess, no bound ports to real servers, fast, cacheable at 
 
 ### D2 — File convention and single source
 
-An e2e file matches `*.e2e.ts` or `*.e2e.test.ts` (`tools/vite-plugins/e2e-globs.mjs` is the one definition). The unit lane excludes them (`E2E_FILE_EXCLUDES` in the project's `vite.config.ts` `test.exclude`); the e2e lane includes them (`defineE2eConfig` in `tools/vite-plugins/e2e-config.mjs`, via `vitest.e2e.config.ts`). A file is in exactly one lane. New `*.e2e.test.ts` files in an agent project land in e2e automatically.
+Tests live in `<project>/test/`, one directory per lane: `test/unit/**/*.spec.ts(x)` is the unit lane and `test/e2e/**/*.e2e.ts` is the e2e lane. Both trees mirror `src/`; shared support code is in `test/helpers/`, data in `test/fixtures/` and `test/golden/` (docs/standards/testing.md, "Test file layout"). `tools/vite-plugins/e2e-globs.mjs` is the one definition of the lane globs (`UNIT_FILE_INCLUDES`, `E2E_FILE_INCLUDES`, `E2E_FILE_EXCLUDES`). The unit lane includes `UNIT_FILE_INCLUDES` and excludes `E2E_FILE_EXCLUDES` (the project's `vite.config.ts` `test.include` / `test.exclude`); the e2e lane includes `E2E_FILE_INCLUDES` (`defineE2eConfig` in `tools/vite-plugins/e2e-config.mjs`, via `vitest.e2e.config.ts`). A file is in exactly one lane. A new `*.e2e.ts` file in `test/e2e/` lands in e2e automatically. `check-test-layout.mjs` fails a project whose files are named or placed otherwise.
 
 ### D3 — Isolation
 
@@ -30,7 +30,7 @@ An e2e that spawns agent-mcp passes an isolated cwd and a fake `HOME` (adhd ADR-
 
 ### D4 — Mechanical enforcement
 
-`tools/nx-plugins/test/executors/wiring/check-agent-lane-spawn.mjs` (invoked as rule 8 of `check-lane-reachability.mjs`, run unconditionally by pre-push and both CI workflows (the check runs in pre-push; the `e2e` lane itself runs in CI only — see Amendment)) fails when an agent-family unit-lane file spawns a subprocess, when a project with `*.e2e.test.ts` does not exclude them from its unit lane, or when a `pendingMove` baseline entry is stale. Negative controls: `check-agent-lane-spawn.spec.mjs`.
+`tools/nx-plugins/test/executors/wiring/check-agent-lane-spawn.mjs` (invoked as rule 8 of `check-lane-reachability.mjs`, run unconditionally by pre-push and both CI workflows (the check runs in pre-push; the `e2e` lane itself runs in CI only — see Amendment)) fails when an agent-family unit-lane file spawns a subprocess, when a project with `*.e2e.ts` files does not exclude them from its unit lane, or when a `pendingMove` baseline entry is stale. Negative controls: `check-agent-lane-spawn.spec.mjs`.
 
 ## Consequences
 

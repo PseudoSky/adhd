@@ -66,12 +66,12 @@ import {
   mintBacklogSandbox,
   stdioSpawnOptionsForSandbox,
   type SandboxHandle,
-} from '../../../src/test/helpers/spawn-backlog-bin.js';
+} from '../../helpers/spawn-backlog-bin.js';
 import { buildBacklogEnv, resolveBacklogDbPath } from '../../../src/env.js';
 import {
   openTestIssueStore,
   seedProject,
-} from '../../../src/test/helpers/open-test-issue-store.js';
+} from '../../helpers/open-test-issue-store.js';
 import type { IOutcomeEnvelope } from '../../../src/envelope.js';
 import type { ICreateIssueResult } from '../../../src/write/create-issue.js';
 import type { IIssueQueryResult } from '../../../src/query/types.js';

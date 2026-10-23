@@ -22,7 +22,7 @@ import { buildBacklogEnv, resolveBacklogDbPath } from '../../src/env.js';
 import {
   openTestIssueStore,
   seedProject,
-} from '../../src/test/helpers/open-test-issue-store.js';
+} from '../helpers/open-test-issue-store.js';
 import type { IOutcomeEnvelope } from '../../src/envelope.js';
 import type { IIssueCard } from '../../src/query/types.js';
 import type { ICreateIssueResult } from '../../src/write/create-issue.js';
@@ -39,7 +39,7 @@ import {
   runBacklogBin,
   stdioSpawnOptionsForSandbox,
   type SandboxHandle,
-} from '../../src/test/helpers/spawn-backlog-bin.js';
+} from '../helpers/spawn-backlog-bin.js';
 
 /** See install.e2e.ts's identical helper doc comment. */
 async function expectedMcpToolNames(): Promise<string[]> {

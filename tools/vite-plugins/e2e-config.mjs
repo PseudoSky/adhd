@@ -18,8 +18,8 @@ import {
  * This factory is the single source of truth for the lane's mechanics.
  *
  * It applies exactly three things:
- *   1. Narrows `test.include` to `E2E_FILE_INCLUDES` (`src/**\/*.e2e.ts` and
- *      `src/**\/*.e2e.test.ts`, see `./e2e-globs.mjs`) — the resource suites only.
+ *   1. Narrows `test.include` to `E2E_FILE_INCLUDES` (`test/e2e/**\/*.e2e.ts`, see
+ *      `./e2e-globs.mjs`) — the resource suites only.
  *      The base config's `test.exclude` is inherited MINUS those e2e globs (a unit
  *      lane excludes them; this lane must not).
  *   2. Points the vitest transform cache at a DISTINCT `<cacheDir>-e2e`.
@@ -32,7 +32,7 @@ import {
  *
  * `include` REPLACE, not concatenate: vite's `mergeConfig` CONCATENATES array
  * fields (`mergeConfigRecursively`: `[...existing, ...value]`), so merging the
- * base config as-is would leave the base lane's `include: ['src/**\/*.spec.ts']`
+ * base config as-is would leave the base lane's `include: UNIT_FILE_INCLUDES`
  * in place and this lane would also re-run every default-lane spec (verified
  * against vitest 1.6.1). Destructuring `test` out of the base before merging,
  * then re-adding it with a single-element `include`, makes the override's glob

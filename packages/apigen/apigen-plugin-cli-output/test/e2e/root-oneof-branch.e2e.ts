@@ -14,7 +14,7 @@
 // sibling `vitest.e2e.config.ts` — that target is deliberately ABSENT from
 // every `test.dependsOn` and from `affected`. The in-process `resolveRootUnion`
 // + `generate()` unit tests stay in `root-oneof-branch.spec.ts`; the shared
-// fixture both lanes import lives in `./fixtures/root-oneof-branch.fixture.ts`.
+// fixture both lanes import lives in `../fixtures/root-oneof-branch.fixture.ts`.
 
 import { describe, it, expect, afterEach } from 'vitest';
 import * as fs from 'node:fs';
@@ -24,7 +24,7 @@ import { promisify } from 'node:util';
 import type { PluginInput } from '@adhd/apigen-core-client';
 import { generate } from '../../src/lib/generate';
 import { dataSchemaProps } from '../../src/lib/schema-introspect';
-import { realBatchDomainSchema } from '../../src/test/fixtures/root-oneof-branch.fixture';
+import { realBatchDomainSchema } from '../fixtures/root-oneof-branch.fixture';
 
 const execFileAsync = promisify(execFile);
 

@@ -61,7 +61,7 @@ The zero-config DB path is resolved under the scope root:
 - **Overridable** only by an explicit **absolute** `ADHD_AGENT_DATABASE_PATH` (process env or `~/.adhd/.env`) or `db.path` in a system/global `config.yaml` (relative values there anchor to the file's directory); a relative process-env value is rejected at startup and a launch-directory `.env` cannot set it (`src/config-store-path.ts`, `src/utils/load-env.ts`). Unset = the production store. No mode toggle; startup logs `store=<abs> mode=<production|custom> source=<env|cascade|default>`
 - **Dev path must be ABSOLUTE in the process environment, `.env` included.** `nx` exports the repo-root `.env` into every task, so a relative `ADHD_AGENT_DATABASE_PATH` there is ignored with a warning in agent-mcp's own loader but rejected (`must be an absolute path`) when exported by `nx`. Use an absolute path in `.env`. The unit lane is hermetic (`vitest.setup.mjs` deletes inherited `ADHD_AGENT_*` before tests; a test that needs one sets it in its own body) and `verify-dist-load` scrubs `ADHD_*` from the child env, so a local `.env` can neither break nor mask the shipped-artifact checks.
 
-Verified end-to-end in `src/__tests__/integration/real-environment.e2e.test.ts` (ENV-ADOPT-PROOF-000).
+Verified end-to-end in `test/e2e/integration/real-environment.e2e.ts` (ENV-ADOPT-PROOF-000).
 
 ### Configuration: Environment Variables
 
@@ -90,7 +90,7 @@ These env vars configure the server-wide default agent and provider credentials:
 
 **Log tree (c536ce29):** `agentMcpEnvironmentSpec.dirs` declares `logs` and `temp`, both `scope:'global'` + `share:'shared'` (the `logs`/`temp` kind default is per-instance, and `instanceId` is regenerated every start, so the default would mint an unbounded new tree per restart; the instance lives in file names instead). `resolveLogRoots()` returns `{root, api, ops, trace, temp}` from `operationalEnv` — never hard-code a log or scratch path, never use `os.tmpdir()`/`homedir()` for state. `logging.*` keys (`ADHD_AGENT_LOGGING_*`, see README "Log tree") are values with defaults; the only off-switch is `logging.api=off` (raw API bodies only; ops and trace stay on). Proven by `src/__tests__/wirelog-paths.test.ts`. Reading and auditing the logs: [docs/logging.md](./docs/logging.md). Parallel-process safe by design (ADR-0012): each process writes only its own pid-named files.
 
-`@adhd/agent-plugin-tracing` is a default plugin (`defaultPluginEntries()` in `src/config.ts`), loaded through the single default-plugin seam `src/plugins/load-defaults.ts`. Typed `tracing` config block (values only; **no enable/disable field or env var exists**): `tracing.service` (`ADHD_AGENT_TRACING_SERVICE`, default `agent-mcp`), `tracing.logSink` (`ADHD_AGENT_TRACING_LOG_SINK`, `file|stderr|none`, default `file`), `tracing.logDir` (`ADHD_AGENT_TRACING_LOG_DIR`, unset in the FieldSpec; `defaultPluginEntries()` passes `<logs>/trace` = `~/.adhd/agent-mcp/<ns>/logs/trace` unless set — c536ce29), `tracing.captureArgs` (`ADHD_AGENT_TRACING_CAPTURE_ARGS`, default `false`). Absent block ⇒ loaded with these defaults; invalid block ⇒ the loader skips the plugin and logs `Plugin config failed schema validation`. `ADHD_AGENT_DISABLE_BUDGET_PLUGIN` affects only the budget plugin. The plugin reuses an already-initialised `@adhd/sox-telemetry` provider rather than initialising a second one. Verify a sink with `scripts/audit_tracing.py`. Proven by `src/__tests__/tracing-default-load.test.ts` (unit) and `src/__tests__/integration/tracing-e2e.e2e.test.ts` (built server + real sink).
+`@adhd/agent-plugin-tracing` is a default plugin (`defaultPluginEntries()` in `src/config.ts`), loaded through the single default-plugin seam `src/plugins/load-defaults.ts`. Typed `tracing` config block (values only; **no enable/disable field or env var exists**): `tracing.service` (`ADHD_AGENT_TRACING_SERVICE`, default `agent-mcp`), `tracing.logSink` (`ADHD_AGENT_TRACING_LOG_SINK`, `file|stderr|none`, default `file`), `tracing.logDir` (`ADHD_AGENT_TRACING_LOG_DIR`, unset in the FieldSpec; `defaultPluginEntries()` passes `<logs>/trace` = `~/.adhd/agent-mcp/<ns>/logs/trace` unless set — c536ce29), `tracing.captureArgs` (`ADHD_AGENT_TRACING_CAPTURE_ARGS`, default `false`). Absent block ⇒ loaded with these defaults; invalid block ⇒ the loader skips the plugin and logs `Plugin config failed schema validation`. `ADHD_AGENT_DISABLE_BUDGET_PLUGIN` affects only the budget plugin. The plugin reuses an already-initialised `@adhd/sox-telemetry` provider rather than initialising a second one. Verify a sink with `scripts/audit_tracing.py`. Proven by `test/unit/tracing-default-load.spec.ts` (unit) and `test/e2e/integration/tracing-e2e.e2e.ts` (built server + real sink).
 
 ### Configuration: Native tooling environment variables
 
@@ -393,12 +393,12 @@ reason is that a real model is a paid third-party service; skipping it in CI sav
 and avoids an outside system. The same record is in this package's `README.md` and each
 test's header.
 
-A fourth, `src/__tests__/live/tracing-live.e2e.test.ts` (`AGENT_MCP_LIVE=1`, c536ce29 LIVE-AC1..AC5), drives the
+A fourth, `test/e2e/live/tracing-live.e2e.ts` (`AGENT_MCP_LIVE=1`, c536ce29 LIVE-AC1..AC5), drives the
 real `claude` CLI provider and a real Anthropic OAuth token through the real dev server on the **production store**
 (`~/.adhd/agent-mcp/production`; it refuses to run if any DB/log-dir override env var is set). Same gate
 reason; **approved by:** pseudosky (repo owner), by direct instruction on 2026-10-09. Guide: [docs/logging.md](./docs/logging.md).
 
-A fifth, `src/__tests__/integration/live-cache-smoke.e2e.test.ts` (`ADHD_AGENT_LIVE_CACHE=1`, 8ecaa160 AC1 / ebfe7421 AC1), drives the
+A fifth, `test/e2e/integration/live-cache-smoke.e2e.ts` (`ADHD_AGENT_LIVE_CACHE=1`, 8ecaa160 AC1 / ebfe7421 AC1), drives the
 real built agent-mcp over stdio with a real MCP client on an isolated store under `tmp/agent-mcp/` and one paid
 `claude-haiku-4-5` task (~3 model calls) to prove a shell-only Anthropic turn with `web_search`/`web_fetch` advertised records
 `cache_creation` or `cache_read` tokens > 0. Same gate reason; **approved by:** pseudosky (repo owner), 2026-10-10, with the standing
@@ -417,9 +417,9 @@ hermetically):
 
 | Test file | Gate | Real dependency |
 |---|---|---|
-| `src/__tests__/integration/native-tooling-adoption.e2e.test.ts` | `NAT_TOOL_LIVE=1` | `uvx mcp-shell-server` (external PyPI package) + `srt` |
-| `src/__tests__/integration/native-tooling-real-ops.e2e.test.ts` | `NAT_TOOL_LIVE=1` | `uvx mcp-shell-server` (external PyPI package) + `srt` |
-| `src/__tests__/integration/agent-portability-live.e2e.test.ts` | `NAT_TOOL_LIVE=1` | paid DeepSeek model (`ADHD_AGENT_DEEPSEEK_SECRET`); owner pseudosky, $0.05 cap (dispatch-2026-10-06-48dc). The non-model portability matrix (`agent-portability.e2e.test.ts`) is NOT gated. |
+| `test/e2e/integration/native-tooling-adoption.e2e.ts` | `NAT_TOOL_LIVE=1` | `uvx mcp-shell-server` (external PyPI package) + `srt` |
+| `test/e2e/integration/native-tooling-real-ops.e2e.ts` | `NAT_TOOL_LIVE=1` | `uvx mcp-shell-server` (external PyPI package) + `srt` |
+| `test/e2e/integration/agent-portability-live.e2e.ts` | `NAT_TOOL_LIVE=1` | paid DeepSeek model (`ADHD_AGENT_DEEPSEEK_SECRET`); owner pseudosky, $0.05 cap (dispatch-2026-10-06-48dc). The non-model portability matrix (`agent-portability.e2e.test.ts`) is NOT gated. |
 
 These live tests are **off by default** (they skip unless `NAT_TOOL_LIVE=1`) and are not
 run by the pre-push hook; CI's `e2e` lane runs them skipped. The table above is
@@ -489,7 +489,7 @@ Migration is auto-applied on server start.
 
 - **0017:** Adds the `message_provider_echo` table (provider-native assistant content for replay: thinking signatures, server tool use and results) and its session index. Additive only: `messages` is not altered and the statements are `IF NOT EXISTS`, so a previous-version binary keeps working against a migrated database.
 
-**Journal `when` caveat (b3999dfa AC7).** drizzle applies a migration only when its journal `when` is greater than the newest `created_at` already in a database's `__drizzle_migrations` ledger (it compares timestamps, not hashes or idx). Migrations `0007` to `0017` carry hand-assigned `when` values (`1782874595963` to `...973`: each the previous entry plus one), not a real clock reading. Today's clock is above them, so a freshly generated migration sorts after; but a migration whose `when` is LOWER than an entry already shipped (a clock-skewed machine, or a branch generated before another branch's higher-stamped migration shipped) is silently SKIPPED on every database already migrated past that entry, with no error. When adding a migration, make its `when` strictly greater than the last entry in `drizzle/meta/_journal.json` (edit the generated entry if needed), and keep the migration tests deriving their expectations from the journal (`src/__tests__/fixtures/migration-journal.ts`) rather than hardcoding counts.
+**Journal `when` caveat (b3999dfa AC7).** drizzle applies a migration only when its journal `when` is greater than the newest `created_at` already in a database's `__drizzle_migrations` ledger (it compares timestamps, not hashes or idx). Migrations `0007` to `0017` carry hand-assigned `when` values (`1782874595963` to `...973`: each the previous entry plus one), not a real clock reading. Today's clock is above them, so a freshly generated migration sorts after; but a migration whose `when` is LOWER than an entry already shipped (a clock-skewed machine, or a branch generated before another branch's higher-stamped migration shipped) is silently SKIPPED on every database already migrated past that entry, with no error. When adding a migration, make its `when` strictly greater than the last entry in `drizzle/meta/_journal.json` (edit the generated entry if needed), and keep the migration tests deriving their expectations from the journal (`test/fixtures/migration-journal.ts`) rather than hardcoding counts.
 
 ## Example Usage (Fact-Based)
 

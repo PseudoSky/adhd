@@ -593,7 +593,7 @@ WHY HOME ALONE IS NOT THE INVARIANT: resolveRoots routes storage through HOME on
 
 NO TEETH: the commit verification was a manual RED/GREEN probe of the store-free sandbox-path verb plus a manual production live-item count (1683 -> 1683). No automated test fails if the redirect is removed, so the invariant is unenforced at 15 sites[1][2][3][4].
 
-FIX SKETCH: extract one helper (entrypoint/backlog/src/test/helpers/spawn-isolated-bin.ts) that owns the whole env construction (spread process.env, ADHD_BACKLOG_SCOPE=project, HOME=<tempRoot>, cwd=<tempRoot>, optional extraEnv) and have all 15 sites call it; add a guard spec that drives the store-free sandbox-path verb through the helper and asserts dbPath startsWith the temp root, with a negative control that omits HOME and must go red.
+FIX SKETCH: extract one helper (entrypoint/backlog/test/helpers/spawn-isolated-bin.ts) that owns the whole env construction (spread process.env, ADHD_BACKLOG_SCOPE=project, HOME=<tempRoot>, cwd=<tempRoot>, optional extraEnv) and have all 15 sites call it; add a guard spec that drives the store-free sandbox-path verb through the helper and asserts dbPath startsWith the temp root, with a negative control that omits HOME and must go red.
 
 DEDUPE: the abort scan surfaced c68ce863 / 7b821ac6 / 82468ca7 / 4d4b4029 / e7595669; all are distinct root causes (resolver layer, sandbox telemetry/IR cache, a documented skip, the agent-mcp test, the CLI default), none is this backlog-suite enforcement follow-up. Related: 82468ca7 (open environment-builder root cause), 4d4b4029 (the HOME-only proof), 40d9da12 (cli-envelope tmpRoot leak).
 

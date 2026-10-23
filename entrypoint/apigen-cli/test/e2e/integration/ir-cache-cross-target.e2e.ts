@@ -28,7 +28,7 @@ const BUILT_BIN = path.join(
   'dist',
   'index.js'
 );
-const ALPHA_SRC = path.join(__dirname, '..', '..', '..', 'src', 'test', 'fixtures', 'alpha.ts');
+const ALPHA_SRC = path.join(__dirname, '..', '..', '..', 'test', 'fixtures', 'alpha.ts');
 
 function runCli(args: string[]): string {
   return execFileSync(process.execPath, [BUILT_BIN, ...args], {

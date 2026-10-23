@@ -65,7 +65,7 @@ import {
   AMBIENT_REDIRECT_ENV_KEYS,
   buildIsolatedEnv,
   runIsolatedBin,
-} from '../../../src/test/helpers/spawn-isolated-bin.js';
+} from '../../helpers/spawn-isolated-bin.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DIST_INDEX = join(HERE, '..', '..', '..', 'dist', 'index.js');

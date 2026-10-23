@@ -9,8 +9,8 @@ import { PassThrough } from 'node:stream';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { JSONRPCMessage } from '@modelcontextprotocol/sdk/types.js';
 import { createLauncherTransport, createStdioHostTransport } from '../../src/index';
-import { FakeProcess } from '../../src/test/helpers/fake-process';
-import { flush, settle } from '../../src/test/helpers/flush';
+import { FakeProcess } from '../helpers/fake-process';
+import { flush, settle } from '../helpers/flush';
 
 const ping = (id: number): JSONRPCMessage => ({ jsonrpc: '2.0', id, method: 'ping' });
 

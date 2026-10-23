@@ -37,7 +37,7 @@ import { fileURLToPath } from 'node:url';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DIST_INDEX = join(HERE, '..', '..', 'dist', 'index.js');
 const API_IR = join(HERE, '..', '..', 'dist', 'api.ir.json');
-const PROBE = join(HERE, '..', '..', 'src', 'test', 'helpers', 'startup-path-probe.cjs');
+const PROBE = join(HERE, '..', '..', 'test', 'helpers', 'startup-path-probe.cjs');
 
 /** Bounded deadline so a wedged worker fails loudly instead of hanging. */
 const PROBE_TIMEOUT_MS = 25_000;

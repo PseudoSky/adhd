@@ -50,7 +50,7 @@ import {
 
 import { AgentMcpRunner, usageToTurns } from '../../src/lib/agent-runner.js';
 import { reconcileTurns } from '../../src/lib/orchestrator.js';
-import { FakeMcpToolClient } from '../../src/test/helpers/fake-mcp-client.js';
+import { FakeMcpToolClient } from '../helpers/fake-mcp-client.js';
 
 // ---------------------------------------------------------------------------
 // ── Harness (mirrors agent-engine-orchestrator's own

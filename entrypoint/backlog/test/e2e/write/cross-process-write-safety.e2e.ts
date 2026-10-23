@@ -46,7 +46,7 @@
  * rows silently failed to land.
  */
 import { spawn } from 'node:child_process';
-import { e2eTestTimeoutMs } from '../../../src/test/helpers/spawn-timeout.js';
+import { e2eTestTimeoutMs } from '../../helpers/spawn-timeout.js';
 import { existsSync, rmSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -56,14 +56,14 @@ import {
   seedProject,
   removeTestIssueStoreDir,
   type TestIssueStore,
-} from '../../../src/test/helpers/open-test-issue-store.js';
-import { freshTmpDir } from '../../../src/test/helpers/tmp-store.js';
+} from '../../helpers/open-test-issue-store.js';
+import { freshTmpDir } from '../../helpers/tmp-store.js';
 import { queryIssues } from '../../../src/query/query.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const WRITER_SCRIPT = join(
   HERE,
-  '..', '..', '..', 'src', 'test', 'fixtures', 'cross-process-issue-writer.ts'
+  '..', '..', '..', 'test', 'fixtures', 'cross-process-issue-writer.ts'
 );
 // Resolved once — `npx`'s own PATH search is a wall-clock cost per spawn we
 // don't need to pay twice per test; the workspace-root `.bin/tsx` is the

@@ -50,7 +50,7 @@ import { orchestrateCycle, type OrchestratorDeps } from '../../src/lib/orchestra
 import {
   FakeMcpToolClient,
   type FakeToolHandler,
-} from '../../src/test/helpers/fake-mcp-client.js';
+} from '../helpers/fake-mcp-client.js';
 
 const TMP_ROOT = path.join(
   process.cwd(),

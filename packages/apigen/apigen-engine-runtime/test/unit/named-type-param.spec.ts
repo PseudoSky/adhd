@@ -39,7 +39,7 @@ import { createInvoker, LayerContext } from '../../src/lib/invoke';
 import { makeValidateLayer } from '../../src/lib/validate-layer';
 import type { Call } from '../../src/lib/invoke';
 
-const fixture = path.resolve(__dirname, '..', '..', 'src', 'test', 'fixtures', 'named-type-param.ts');
+const fixture = path.resolve(__dirname, '..', '..', 'test', 'fixtures', 'named-type-param.ts');
 
 function makeCall(domainArgs: Record<string, unknown>): Call {
   return {

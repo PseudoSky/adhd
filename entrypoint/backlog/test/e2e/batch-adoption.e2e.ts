@@ -63,7 +63,7 @@ import { startBacklogServer } from '../../src/server.js';
 import {
   openTestIssueStore,
   seedProject,
-} from '../../src/test/helpers/open-test-issue-store.js';
+} from '../helpers/open-test-issue-store.js';
 import { buildBacklogEnv, resolveBacklogDbPath } from '../../src/env.js';
 
 async function freePort(): Promise<number> {

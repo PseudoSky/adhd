@@ -20,7 +20,7 @@ import {
   E2E_TEST_TIMEOUT_HEADROOM_MS,
   e2eTestTimeoutMs,
   spawnTimeoutMs,
-} from '../../src/test/helpers/spawn-timeout.js';
+} from '../helpers/spawn-timeout.js';
 
 // The e2e lane lives in the sibling `test/e2e` tree; scanning this spec's own dir would find zero files and pass vacuously.
 const E2E_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'e2e');

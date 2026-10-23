@@ -14,7 +14,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { parseDoc, toMermaid } from '../../src/test/helpers/session-flows-evidence.js';
+import { parseDoc, toMermaid } from '../helpers/session-flows-evidence.js';
 
 const DOC = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..', 'docs', 'plan', 'backlog-consolidation', 'session-flows.md');
 

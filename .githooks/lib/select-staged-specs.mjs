@@ -6,9 +6,9 @@
 // vitest invocations, scoped to ONLY the spec files that are honestly
 // implicated by what is staged:
 //
-//   1. A staged file that IS itself a spec (`*.spec.ts`/`*.test.ts`) — run it.
-//   2. A staged non-spec file with a co-located same-basename spec in the
-//      SAME directory (`foo.ts` -> `foo.spec.ts`) — run that spec.
+//   1. A staged file that IS itself a spec (`*.spec.ts`) — run it.
+//   2. A staged non-spec file with a mirrored same-basename spec under
+//      the project's `test/unit/` (`src/a/foo.ts` -> `test/unit/a/foo.spec.ts`) — run that spec.
 //
 // Deliberately NOT "every spec in the touched directory": measured against
 // entrypoint/backlog/src/write/ (8 specs, real-concurrency proofs per
@@ -113,15 +113,20 @@ export function computePlan(staged) {
       continue;
     }
 
-    const isSpec = /\.(spec|test)\.(ts|tsx|mts|cts)$/.test(rel);
+    const isSpec = /\.spec\.(ts|tsx|mts|cts)$/.test(rel);
     let specAbs = null;
     if (isSpec) {
       specAbs = abs;
     } else {
+      // Test layout standard: `<project>/src/<rel>/foo.ts` is covered by
+      // `<project>/test/unit/<rel>/foo.spec.ts` (docs/standards/testing.md).
       const ext = path.extname(abs);
-      const base = abs.slice(0, -ext.length);
-      const candidate = `${base}.spec${ext}`;
-      if (existsSync(candidate)) specAbs = candidate;
+      const srcDir = path.join(projectRootAbs, 'src') + path.sep;
+      if (abs.startsWith(srcDir)) {
+        const relInSrc = abs.slice(srcDir.length, -ext.length);
+        const candidate = path.join(projectRootAbs, 'test', 'unit', `${relInSrc}.spec${ext}`);
+        if (existsSync(candidate)) specAbs = candidate;
+      }
     }
 
     if (!specAbs) {

@@ -32,7 +32,7 @@ import {
   extractMintedSandboxRoot,
   looksLikeOwnSandboxDir,
   runBacklogBin,
-} from '../../src/test/helpers/spawn-backlog-bin.js';
+} from '../helpers/spawn-backlog-bin.js';
 
 const minted: string[] = [];
 

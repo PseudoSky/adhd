@@ -7,10 +7,19 @@
     "composite": false,
     "noEmit": true,
     "rootDir": "../../..",
-    "types": ["vitest/globals", "vitest/importMeta", "vite/client", "node", "vitest"]
+    "types": [
+      "vitest/globals",
+      "vitest/importMeta",
+      "vite/client",
+      "node",
+      "vitest"
+    ]
   },
-  "exclude": [],
+  "exclude": [
+  ],
   "include": [
     "test/**/*.ts",
-    "test/**/*.tsx","src/**/*.test.ts", "src/**/*.spec.ts", "src/**/*.d.ts"]
+    "test/**/*.tsx",
+    "src/**/*.d.ts"
+  ]
 }

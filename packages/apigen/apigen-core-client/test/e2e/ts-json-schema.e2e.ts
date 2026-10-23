@@ -12,7 +12,7 @@ import { describe, it, expect } from 'vitest';
 import { extract } from '../../src/index';
 import type { GeneratedSchemas } from '../../src/lib/types';
 
-const fixture = (name: string) => path.resolve(__dirname, '../../src/test/fixtures', name);
+const fixture = (name: string) => path.resolve(__dirname, '../../test/fixtures', name);
 
 // BUG-APIGEN-CORE-005 (v1 retirement): this suite drove the deleted v1
 // `generateSchemas()` directly; every assertion below reads

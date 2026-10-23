@@ -1,4 +1,5 @@
 /// <reference types='vitest' />
+import { UNIT_FILE_INCLUDES } from '../../../tools/vite-plugins/e2e-globs.mjs';
 import { defineConfig } from 'vite';
 import dts from 'vite-plugin-dts';
 import * as path from 'path';
@@ -21,9 +22,9 @@ export default defineConfig({
       entryRoot: 'src',
       tsconfigPath: path.join(__dirname, 'tsconfig.lib.json'),
       // `*.e2e.ts` suites are resource-consuming tests (see their `.spec.ts`
-      // stubs); like `src/test/**` they must never emit declarations into
+      // stubs); like `test/**` they must never emit declarations into
       // dist/.
-      exclude: ['src/test/**', 'src/**/*.e2e.ts'],
+      exclude: ['test/**', 'test/e2e/**/*.e2e.ts'],
     }),
   ],
 
@@ -67,7 +68,7 @@ export default defineConfig({
     // test files, so narrowing the glob is behaviour-preserving and makes the
     // `.e2e.ts` exclusion structural rather than an emergent property of glob
     // semantics.
-    include: ['src/**/*.spec.ts', 'test/**/*.spec.ts'],
+    include: UNIT_FILE_INCLUDES,
     reporters: ['default'],
     coverage: {
       reportsDirectory: projectCoverage(__dirname),

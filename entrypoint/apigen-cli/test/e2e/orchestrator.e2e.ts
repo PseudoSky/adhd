@@ -42,7 +42,7 @@ import type {
 // Fixture paths
 // ---------------------------------------------------------------------------
 
-const fixturesDir = path.join(__dirname, '../../src/test/fixtures');
+const fixturesDir = path.join(__dirname, '../../test/fixtures');
 const alphaFixture = path.join(fixturesDir, 'alpha.ts');
 const betaFixture = path.join(fixturesDir, 'beta.ts');
 

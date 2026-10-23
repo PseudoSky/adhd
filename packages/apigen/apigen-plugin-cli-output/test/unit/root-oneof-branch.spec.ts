@@ -14,13 +14,13 @@
 // in the sibling `root-oneof-branch.e2e.ts` (resource-consuming lane; see its
 // header). It was extracted out of this default target so `nx affected -t test`
 // / the pre-commit + pre-push hooks never spawn a process for it; the shared
-// fixture both lanes import lives in `./fixtures/root-oneof-branch.fixture.ts`.
+// fixture both lanes import lives in `../fixtures/root-oneof-branch.fixture.ts`.
 
 import { describe, it, expect } from 'vitest';
 import type { PluginInput } from '@adhd/apigen-core-client';
 import { generate } from '../../src/lib/generate';
 import { resolveRootUnion, dataSchemaProps } from '../../src/lib/schema-introspect';
-import { realBatchDomainSchema } from '../../src/test/fixtures/root-oneof-branch.fixture';
+import { realBatchDomainSchema } from '../fixtures/root-oneof-branch.fixture';
 
 function makeInput(overrides: Partial<PluginInput> = {}): PluginInput {
   return {

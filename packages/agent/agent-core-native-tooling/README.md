@@ -110,7 +110,7 @@ human-gated decision, recorded as APPROVED:
 **Approved by: pseudosky (repo owner), 2026-10-05**, under the owner directive
 *"Finish the project"*. The same record is in this package's `AGENTS.md` and in
 the gated live-test header
-(`entrypoint/agent-mcp/src/__tests__/integration/native-tooling-adoption.e2e.test.ts`).
+(`entrypoint/agent-mcp/test/e2e/integration/native-tooling-adoption.e2e.ts`).
 
 
 ## Default shell allowlist (ADR-0008 D5 policy change)
@@ -250,7 +250,7 @@ npx nx test agent-core-native-tooling
 npx nx run agent-core-native-tooling:e2e
 ```
 
-`src/lib/shell-egress.e2e.test.ts` (0ba70e47) drives the real `srt` plus the real
+`test/e2e/lib/shell-egress.e2e.ts` (0ba70e47) drives the real `srt` plus the real
 `uvx mcp-shell-server==1.1.12` through `resolveNativeTooling`'s own output and
 calls `shell_execute curl` against a local HTTP server, asserting the body comes
 back. It needs `srt` (workspace dependency) and `uvx` on the machine (plus
@@ -260,9 +260,9 @@ same call cannot resolve the host without the allowlist. `srt` refuses
 destinations that resolve to the host itself, so the local server is wired in as
 `srt`'s `network.parentProxy` rather than curled directly.
 
-`src/lib/shell-exit-status.e2e.test.ts` (61358b6f) drives the same real `srt` +
+`test/e2e/lib/shell-exit-status.e2e.ts` (61358b6f) drives the same real `srt` +
 real server through a real MCP client and asserts the `[exit status: N]` trailer
-(and its negative control); `src/lib/default-shell-allowlist.e2e.test.ts` calls
+(and its negative control); `test/e2e/lib/default-shell-allowlist.e2e.ts` calls
 every `DEFAULT_SHELL_ALLOW_COMMANDS` entry through the real server. `uvx` (and
 `srt` for the exit-status suite) must be installed; both fail loudly if missing.
 

@@ -40,7 +40,7 @@ const BUILT_BIN = path.join(
 // broke against the real @adhd/sox-memory-core package.
 const CJS_FORMAT_SRC = path.join(
   __dirname,
-  '..', '..', 'src', 'test', 'fixtures', 'cjs-format-js-import', 'index.ts'
+  '..', '..', 'test', 'fixtures', 'cjs-format-js-import', 'index.ts'
 );
 
 let mcpClient: Client | undefined;

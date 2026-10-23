@@ -38,10 +38,10 @@
           ]
         },
         {
-          "runtime": "git ls-files --cached --others --exclude-standard -- entrypoint/apigen-cli/src/test/fixtures | xargs git hash-object | shasum"
+          "runtime": "git ls-files --cached --others --exclude-standard -- entrypoint/apigen-cli/test/fixtures | xargs git hash-object | shasum"
         }
       ],
-      "//inputs-fixtures": "cache-dag item 1/3 audit: `.nxignore` lists entrypoint/apigen-cli/src/test/fixtures, so nx's file hasher never sees it, yet src/test/orchestrator.spec.ts (and the e2e suites) read those fixtures. The runtime input hashes their working-tree content so editing a fixture invalidates the cached test result."
+      "//inputs-fixtures": "cache-dag item 1/3 audit: `.nxignore` lists entrypoint/apigen-cli/test/fixtures, so nx's file hasher never sees it, yet src/test/orchestrator.spec.ts (and the e2e suites) read those fixtures. The runtime input hashes their working-tree content so editing a fixture invalidates the cached test result."
     },
     "e2e": {
       "executor": "nx:run-commands",
@@ -67,7 +67,7 @@
           ]
         },
         {
-          "runtime": "git ls-files --cached --others --exclude-standard -- entrypoint/apigen-cli/src/test/fixtures | xargs git hash-object | shasum"
+          "runtime": "git ls-files --cached --others --exclude-standard -- entrypoint/apigen-cli/test/fixtures | xargs git hash-object | shasum"
         }
       ]
     },
@@ -81,14 +81,14 @@
         "default",
         "^production",
         {
-          "runtime": "git ls-files --cached --others --exclude-standard -- entrypoint/apigen-cli/src/test/fixtures | xargs git hash-object | shasum"
+          "runtime": "git ls-files --cached --others --exclude-standard -- entrypoint/apigen-cli/test/fixtures | xargs git hash-object | shasum"
         }
       ],
       "dependsOn": [
         "build"
       ],
       "options": {
-        "source": "src/test/fixtures/real-api.ts",
+        "source": "test/fixtures/real-api.ts",
         "type": "mcp",
         "outDir": "tmp/apigen-generate-out"
       }

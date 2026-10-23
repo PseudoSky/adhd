@@ -80,7 +80,7 @@ import type {
   ICreateIssueResult,
 } from '../../src/write/create-issue.js';
 import { bootstrapSemanticStoreMembers } from '../../src/write/bootstrap.js';
-import { freshTmpDir } from '../../src/test/helpers/tmp-store.js';
+import { freshTmpDir } from '../helpers/tmp-store.js';
 import { isOutcomeOk } from '../../src/envelope.js';
 
 const ENV_VAR = 'ADHD_BACKLOG_EMBEDDING_ENABLED';

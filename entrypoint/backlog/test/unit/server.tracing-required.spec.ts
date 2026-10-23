@@ -15,7 +15,7 @@
  * than the package's bare apigen-namespaced singleton. It is labelled as such and
  * is not the proof.
  */
-import { isCiRun } from '../../src/test/helpers/ci-env.js';
+import { isCiRun } from '../helpers/ci-env.js';
 import { describe, expect, it, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync, rmSync, existsSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';

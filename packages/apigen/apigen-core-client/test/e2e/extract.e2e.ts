@@ -19,7 +19,7 @@ import Ajv from 'ajv';
 import { extract } from '../../src/lib/extract';
 import { createExtractionSession } from '../../src/lib/extraction-session';
 
-const fixture = (name: string) => path.resolve(__dirname, '../../src/test/fixtures', name);
+const fixture = (name: string) => path.resolve(__dirname, '../../test/fixtures', name);
 
 // ---------------------------------------------------------------------------
 // Shape 1: Named function export

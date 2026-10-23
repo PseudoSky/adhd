@@ -30,11 +30,11 @@ import {
   callToolJson,
   DIST_INDEX,
   type IMcpHost,
-} from '../../src/test/helpers/spawn-mcp-host.js';
+} from '../helpers/spawn-mcp-host.js';
 import {
   openTestIssueStore,
   seedProject,
-} from '../../src/test/helpers/open-test-issue-store.js';
+} from '../helpers/open-test-issue-store.js';
 import { createIssue } from '../../src/write/create-issue.js';
 import { getIssue } from '../../src/query/get.js';
 import type { IIssueCard, IIssueListResult } from '../../src/query/types.js';

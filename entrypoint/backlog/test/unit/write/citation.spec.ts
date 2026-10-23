@@ -13,7 +13,7 @@
  */
 import { execFileSync } from 'node:child_process';
 // 50e8c966: hook-exported GIT_DIR/GIT_INDEX_FILE must never reach a fixture git spawn.
-import { gitEnv } from '../../../src/test/helpers/git-env.js';
+import { gitEnv } from '../../helpers/git-env.js';
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import { rmSync, writeFileSync } from 'node:fs';
@@ -22,8 +22,8 @@ import {
   openTestIssueStore,
   removeTestIssueStoreDir,
   type TestIssueStore,
-} from '../../../src/test/helpers/open-test-issue-store.js';
-import { freshTmpDir } from '../../../src/test/helpers/tmp-store.js';
+} from '../../helpers/open-test-issue-store.js';
+import { freshTmpDir } from '../../helpers/tmp-store.js';
 import { upsertProject } from '../../../src/write/catalog.js';
 import { createIssue } from '../../../src/write/create-issue.js';
 import { addCitation, removeCitation } from '../../../src/write/citation.js';

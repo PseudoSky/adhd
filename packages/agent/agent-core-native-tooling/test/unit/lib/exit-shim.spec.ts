@@ -7,7 +7,7 @@
  */
 /**
  * 61358b6f — unit coverage of the exit-status shim (no subprocess; the real-server
- * proof is `shell-exit-status.e2e.test.ts`).
+ * proof is `shell-exit-status.e2e.ts`).
  */
 import { chmodSync, existsSync, lstatSync, mkdtempSync, readFileSync, readdirSync, readlinkSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';

@@ -596,7 +596,7 @@ describe('[cli-parity] TransportAdapter/OpPlan golden-snapshot parity gate', () 
     { name: 'per-command-help', input: { argv: ['harness', 'get-item', '--help'] } },
   ];
 
-  const GOLDEN_PATH = path.join(__dirname, '..', '..', 'src', 'test', 'golden', 'cli.snapshot.json');
+  const GOLDEN_PATH = path.join(__dirname, '..', '..', 'test', 'golden', 'cli.snapshot.json');
 
   // [cli-adapter.3]/[cli-adapter.4] — the parity gate itself. Recapture
   // through the (post-migration) adapter-based `run()` and assert

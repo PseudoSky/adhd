@@ -24,7 +24,7 @@ import {
   closeGraphBacklogStore,
   type GraphBacklogStore,
 } from '../../../src/store/graph-backlog-store.js';
-import { TMP_ROOT } from '../../../src/test/helpers/tmp-store.js';
+import { TMP_ROOT } from '../../helpers/tmp-store.js';
 
 /** Normalizes `pragmaGet('busy_timeout')`'s adapter-dependent shape to a bare number. */
 function busyTimeoutValue(raw: unknown): number | undefined {

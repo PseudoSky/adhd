@@ -20,7 +20,7 @@
  * so BOTH of this repo's own dev tools mask the bug — neither can be used
  * to prove it. Proving it requires a genuine, unmodified `node` process
  * running real ESM with zero loader/bundler shims, exactly the class of
- * proof `entrypoint/apigen-cli/src/test/e2e/dist-entry-no-argv-side-effect.spec.ts`
+ * proof `entrypoint/apigen-cli/test/unit/dist-entry-no-argv-side-effect.spec.ts`
  * already established for the sibling `__dirname`/`import.meta` bug class in
  * this repo. This test bundles `gate.ts` with `esbuild` (a real, always-
  * present transitive dependency of this package's own `vite` toolchain —
