@@ -488,5 +488,132 @@
     "/Users/nix/dev/ai/sox-ecosystem/tools/test-c1b17653-researcher-single-definition.mjs",
     "/Users/nix/dev/ai/sox-ecosystem/docs/guidelines/authoring.md",
     "/Users/nix/dev/ai/sox-ecosystem/docs/spec/cross-platform-install-rendering.md"
+  ],
+  "main-merge": [
+    ".adhd/workspace.json",
+    "tsconfig.base.json",
+    "pnpm-lock.yaml",
+    "package.json",
+    "docs/plan/stealth-browser/evidence/main-merge.md"
+  ],
+  "conform-tripwire": [
+    "packages/resilience/resilience-core-tripwire/",
+    "tools/nx-plugins/build/executors/typecheck-spec/resilience-core-tripwire.baseline.json",
+    "docs/plan/stealth-browser/evidence/conform-tripwire.md"
+  ],
+  "conform-core": [
+    "packages/stealth/stealth-core-browser/",
+    "tools/nx-plugins/build/executors/typecheck-spec/stealth-core-browser.baseline.json",
+    "docs/plan/stealth-browser/evidence/conform-core.md"
+  ],
+  "conform-search": [
+    "entrypoint/stealth-search/",
+    "tools/nx-plugins/build/executors/typecheck-spec/stealth-search.baseline.json",
+    "docs/plan/stealth-browser/evidence/conform-search.md"
+  ],
+  "fix-tripwire": [
+    "packages/resilience/resilience-core-tripwire/",
+    "docs/plan/stealth-browser/evidence/fix-tripwire.md"
+  ],
+  "fix-core-parsers": [
+    "packages/stealth/stealth-core-browser/src/lib/parsers.ts",
+    "packages/stealth/stealth-core-browser/test/unit/parsers/",
+    "packages/stealth/stealth-core-browser/test/fixtures/parsers/",
+    "packages/stealth/stealth-core-browser/test/helpers/parsers/",
+    "docs/plan/stealth-browser/evidence/fix-core-parsers.md"
+  ],
+  "fix-core-lifecycle": [
+    "packages/stealth/stealth-core-browser/src/lib/lifecycle/",
+    "packages/stealth/stealth-core-browser/test/unit/lifecycle/",
+    "packages/stealth/stealth-core-browser/test/helpers/lifecycle/",
+    "docs/plan/stealth-browser/evidence/fix-core-lifecycle.md"
+  ],
+  "fix-core-errors": [
+    "packages/stealth/stealth-core-browser/src/errors.ts",
+    "packages/stealth/stealth-core-browser/docs/ERRORS.md",
+    "packages/stealth/stealth-core-browser/test/unit/surface/",
+    "packages/stealth/stealth-core-browser/test/unit/errors/",
+    "docs/plan/stealth-browser/evidence/fix-core-errors.md"
+  ],
+  "fix-search-fetch": [
+    "entrypoint/stealth-search/src/lib/fetch/",
+    "entrypoint/stealth-search/test/unit/fetch/",
+    "entrypoint/stealth-search/test/fixtures/fetch/",
+    "entrypoint/stealth-search/test/helpers/fetch/",
+    "docs/plan/stealth-browser/evidence/fix-search-fetch.md"
+  ],
+  "fix-search-engine": [
+    "entrypoint/stealth-search/src/lib/dom.ts",
+    "entrypoint/stealth-search/src/lib/providers.ts",
+    "entrypoint/stealth-search/src/lib/utils.ts",
+    "entrypoint/stealth-search/src/lib/network.ts",
+    "entrypoint/stealth-search/src/lib/challenge.ts",
+    "entrypoint/stealth-search/test/unit/engine/",
+    "entrypoint/stealth-search/test/unit/providers/",
+    "entrypoint/stealth-search/test/fixtures/engine/",
+    "entrypoint/stealth-search/test/fixtures/providers/",
+    "entrypoint/stealth-search/test/helpers/engine/",
+    "packages/stealth/stealth-core-browser/src/lib/capture/dom.ts",
+    "packages/stealth/stealth-core-browser/test/unit/capture-parsers/dom.spec.ts",
+    "docs/plan/stealth-browser/OPEN-DECISIONS.md",
+    "docs/plan/stealth-browser/evidence/fix-search-engine.md"
+  ],
+  "fix-search-output": [
+    "entrypoint/stealth-search/src/lib/search.ts",
+    "entrypoint/stealth-search/src/api.ts",
+    "entrypoint/stealth-search/src/lib/output.ts",
+    "entrypoint/stealth-search/test/unit/verbs/",
+    "entrypoint/stealth-search/test/helpers/verbs/",
+    "docs/plan/stealth-browser/evidence/fix-search-output.md"
+  ],
+  "search-mcp-iserror": [
+    "entrypoint/stealth-search/src/server.ts",
+    "entrypoint/stealth-search/src/errors.ts",
+    "entrypoint/stealth-search/docs/ERRORS.md",
+    "entrypoint/stealth-search/test/unit/hosts/",
+    "entrypoint/stealth-search/test/unit/use-cases/hosts.spec.ts",
+    "entrypoint/stealth-search/test/unit/errors/",
+    "entrypoint/stealth-search/project.json",
+    "entrypoint/stealth-search/vitest.e2e.config.ts",
+    "docs/plan/stealth-browser/evidence/search-mcp-iserror.md"
+  ],
+  "fix-search-build": [
+    "entrypoint/stealth-search/package.json",
+    "entrypoint/stealth-search/project.json",
+    "entrypoint/stealth-search/vite.config.ts",
+    "entrypoint/stealth-search/tsconfig.build-bin.json",
+    "entrypoint/stealth-search/bin/",
+    "entrypoint/stealth-search/scripts/",
+    "entrypoint/stealth-search/src/server.ts",
+    "entrypoint/stealth-search/test/unit/build/",
+    "docs/plan/stealth-browser/evidence/fix-search-build.md"
+  ],
+  "search-tracing-fixes": [
+    "entrypoint/stealth-search/src/tracing.ts",
+    "entrypoint/stealth-search/src/telemetry.ts",
+    "entrypoint/stealth-search/src/cli.ts",
+    "entrypoint/stealth-search/src/host-flags.ts",
+    "entrypoint/stealth-search/src/host-errors.ts",
+    "entrypoint/stealth-search/src/host-projection.ts",
+    "entrypoint/stealth-search/src/api.ts",
+    "entrypoint/stealth-search/src/index.ts",
+    "entrypoint/stealth-search/test/unit/hosts/",
+    "entrypoint/stealth-search/test/unit/tracing/",
+    "entrypoint/stealth-search/docs/OBSERVABILITY.md",
+    "entrypoint/stealth-search/docs/CONFIGURATION.md",
+    "entrypoint/stealth-search/README.md",
+    "docs/plan/stealth-browser/evidence/search-tracing-fixes.md"
+  ],
+  "plan-notes": [
+    "docs/plan/stealth-browser/README.md",
+    "docs/plan/stealth-browser/evidence/plan-notes.md"
+  ],
+  "release-readiness": [
+    "docs/plan/stealth-browser/release-readiness/",
+    "docs/plan/stealth-browser/APPROVAL-split.md",
+    "docs/plan/stealth-browser/APPROVAL-tripwire.md",
+    "docs/plan/stealth-browser/APPROVAL.md",
+    "docs/plan/stealth-browser/APPROVALS.md",
+    "docs/plan/stealth-browser/evidence/release-readiness.md"
   ]
 }

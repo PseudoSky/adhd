@@ -1,0 +1,1063 @@
+{
+ "main-merge.1": {
+  "text": "HEAD contains a merge commit that has main's tip (the `MAIN-SHA:` recorded in evidence/main-merge.md, default `git rev-parse main`) as a parent, and that tip is an ancestor of HEAD.",
+  "type": "merge_commit",
+  "p": {}
+ },
+ "main-merge.2": {
+  "text": "The conflicts are resolved by union: no conflict markers in .adhd/workspace.json, tsconfig.base.json or pnpm-lock.yaml; workspace.json parses and holds the groups policy, resilience and stealth; tsconfig.base.json paths hold @adhd/policy-core-client, @adhd/policy, @adhd/apigen-plugin-policy, @adhd/resilience-core-tripwire, @adhd/stealth-core-browser and @adhd/stealth-search and keeps main's parity-harness path.",
+  "type": "merge_union",
+  "p": {}
+ },
+ "main-merge.3": {
+  "text": "The lockfile is consistent with the manifests: `pnpm install --frozen-lockfile` exits 0, pnpm-lock.yaml resolves @adhd/sox-service-proxy 0.6.x from the registry, contains neither `adhd-dev-tarballs` nor `file:/Users`, and the root has no @adhd/sox-service-proxy override.",
+  "type": "merge_lock",
+  "p": {}
+ },
+ "main-merge.4": {
+  "text": "The three packages still build and typecheck on the merged tree: `nx run-many -t build` and `-t typecheck -p stealth-core-browser,stealth-search,resilience-core-tripwire` exit 0.",
+  "type": "merge_build",
+  "p": {}
+ },
+ "main-merge.5": {
+  "text": "Only owned files carry resolution edits: the files that differ from both parents of the merge commit are within the owned set (.adhd/workspace.json, tsconfig.base.json, pnpm-lock.yaml, package.json, evidence/main-merge.md), and [psm:main-merge] commits touch only owned paths.",
+  "type": "merge_own",
+  "p": {}
+ },
+ "conform-tripwire.1": {
+  "text": "The unit lane lives where main's layout puts it: `packages/resilience/resilience-core-tripwire/src/test` is gone, `test/unit` holds at least the original spec count, every file under `test/unit` is a `*.spec.ts(x)` (L3), and `test/` has only the children unit, e2e, helpers, fixtures, golden and setup.ts (L2).",
+  "type": "layout",
+  "p": {
+   "pkg": "tw"
+  }
+ },
+ "conform-tripwire.2": {
+  "text": "Support code and fixtures moved to their homes: explore.ts, harness.ts, io.ts exist under `test/helpers/`, and no html, pdf or json fixture is left under `test/unit`.",
+  "type": "helpers",
+  "p": {
+   "pkg": "tw",
+   "helpers": [
+    "explore.ts",
+    "harness.ts",
+    "io.ts"
+   ],
+   "fixtures": []
+  }
+ },
+ "conform-tripwire.3": {
+  "text": "Configs conform: `vite.config.ts` includes `UNIT_FILE_INCLUDES` from tools/vite-plugins/e2e-globs.mjs, `tsconfig.lib.json` excludes `test/**`, `tsconfig.spec.json` includes `test/**/*.ts` and `test/**/*.tsx`, and no config names `src/test`.",
+  "type": "config",
+  "p": {
+   "pkg": "tw",
+   "keep": []
+  }
+ },
+ "conform-tripwire.4": {
+  "text": "Every spec carries the header of docs/standards/testing.md: a comment block in its first 60 lines with `guards:`, `tier: S` and `cites:` plus the ticket 8468f7b1.",
+  "type": "headers",
+  "p": {
+   "pkg": "tw"
+  }
+ },
+ "conform-tripwire.5": {
+  "text": "Main's scanners name nothing of this package: check-test-layout.mjs, check-test-headers.mjs and check-skip-expiry.mjs print no violation line for `packages/resilience/resilience-core-tripwire/`, and `test-headers.baseline.json` is byte-identical to main's.",
+  "type": "scanners",
+  "p": {
+   "pkg": "tw"
+  }
+ },
+ "conform-tripwire.6": {
+  "text": "No document or source comment of the package names the legacy layout: README.md, AGENTS.md, docs/** and sources contain no `src/test`, `src/__tests__` or `.e2e.test.` (CHANGELOG.md excepted).",
+  "type": "docs",
+  "p": {
+   "pkg": "tw"
+  }
+ },
+ "conform-tripwire.7": {
+  "text": "`nx run resilience-core-tripwire:lint`, `:typecheck`, `:typecheck-spec`, `:test` and `:build` exit 0 and evidence/conform-tripwire.md records each as `EXIT <command>: 0`.",
+  "type": "gates",
+  "p": {
+   "pkg": "tw",
+   "targets": [
+    "lint",
+    "typecheck",
+    "typecheck-spec",
+    "test",
+    "build"
+   ]
+  }
+ },
+ "conform-tripwire.8": {
+  "text": "No completed state regressed: tripwire-interactive, tripwire-docs whole-state guards still exit 0 on the moved tree.",
+  "type": "regress",
+  "p": {
+   "after": 1,
+   "states": [
+    "tripwire-interactive",
+    "tripwire-docs"
+   ]
+  }
+ },
+ "conform-tripwire.9": {
+  "text": "Only owned paths changed by [psm:conform-tripwire] commits (packages/resilience/resilience-core-tripwire/** and its typecheck-spec baseline).",
+  "type": "own",
+  "p": {}
+ },
+ "conform-core.1": {
+  "text": "The unit lane lives where main's layout puts it: `packages/stealth/stealth-core-browser/src/test` is gone, `test/unit` holds at least the original spec count, every file under `test/unit` is a `*.spec.ts(x)` (L3), and `test/` has only the children unit, e2e, helpers, fixtures, golden and setup.ts (L2).",
+  "type": "layout",
+  "p": {
+   "pkg": "core"
+  }
+ },
+ "conform-core.2": {
+  "text": "Support code and fixtures moved to their homes: fake-cdp.ts, mem-fs.ts, fake-proc.ts, profile-fixtures.ts, page-fixtures.ts, capture/capture-kit.ts ... exist under `test/helpers/`, fixtures under `test/fixtures/cdp`, and no html, pdf or json fixture is left under `test/unit`.",
+  "type": "helpers",
+  "p": {
+   "pkg": "core",
+   "helpers": [
+    "fake-cdp.ts",
+    "mem-fs.ts",
+    "fake-proc.ts",
+    "profile-fixtures.ts",
+    "page-fixtures.ts",
+    "capture/capture-kit.ts",
+    "domains-storage/profile-fixture.ts",
+    "lifecycle/browser-mocks.ts",
+    "lifecycle/fake-backend.ts",
+    "lifecycle/fake-reaper-link.ts",
+    "lifecycle/host-fixture.ts",
+    "lifecycle/manager-clients.ts",
+    "lifecycle/manager-world.ts",
+    "use-cases/scenario-kit.ts"
+   ],
+   "fixtures": [
+    "cdp"
+   ]
+  }
+ },
+ "conform-core.3": {
+  "text": "Configs conform: `vite.config.ts` includes `UNIT_FILE_INCLUDES` from tools/vite-plugins/e2e-globs.mjs, `tsconfig.lib.json` excludes `test/**`, `tsconfig.spec.json` includes `test/**/*.ts` and `test/**/*.tsx` and keeps examples/**/*.ts, and no config names `src/test`.",
+  "type": "config",
+  "p": {
+   "pkg": "core",
+   "keep": [
+    "examples/**/*.ts"
+   ]
+  }
+ },
+ "conform-core.4": {
+  "text": "Every spec carries the header of docs/standards/testing.md: a comment block in its first 60 lines with `guards:`, `tier: S` and `cites:` plus the ticket 8468f7b1.",
+  "type": "headers",
+  "p": {
+   "pkg": "core"
+  }
+ },
+ "conform-core.5": {
+  "text": "Main's scanners name nothing of this package: check-test-layout.mjs, check-test-headers.mjs and check-skip-expiry.mjs print no violation line for `packages/stealth/stealth-core-browser/`, and `test-headers.baseline.json` is byte-identical to main's.",
+  "type": "scanners",
+  "p": {
+   "pkg": "core"
+  }
+ },
+ "conform-core.6": {
+  "text": "No document or source comment of the package names the legacy layout: README.md, AGENTS.md, docs/** and sources contain no `src/test`, `src/__tests__` or `.e2e.test.` (CHANGELOG.md excepted).",
+  "type": "docs",
+  "p": {
+   "pkg": "core"
+  }
+ },
+ "conform-core.7": {
+  "text": "`nx run stealth-core-browser:lint`, `:typecheck`, `:typecheck-spec`, `:test` and `:build` exit 0 and evidence/conform-core.md records each as `EXIT <command>: 0`.",
+  "type": "gates",
+  "p": {
+   "pkg": "core",
+   "targets": [
+    "lint",
+    "typecheck",
+    "typecheck-spec",
+    "test",
+    "build"
+   ]
+  }
+ },
+ "conform-core.8": {
+  "text": "No completed state regressed: cdp-test-harness, tests-use-cases, failsafe-inventory whole-state guards still exit 0 on the moved tree.",
+  "type": "regress",
+  "p": {
+   "after": 1,
+   "states": [
+    "cdp-test-harness",
+    "tests-use-cases",
+    "failsafe-inventory"
+   ]
+  }
+ },
+ "conform-core.9": {
+  "text": "Only owned paths changed by [psm:conform-core] commits (packages/stealth/stealth-core-browser/** and its typecheck-spec baseline).",
+  "type": "own",
+  "p": {}
+ },
+ "conform-search.1": {
+  "text": "The unit lane lives where main's layout puts it: `entrypoint/stealth-search/src/test` is gone, `test/unit` holds at least the original spec count, every file under `test/unit` is a `*.spec.ts(x)` (L3), and `test/` has only the children unit, e2e, helpers, fixtures, golden and setup.ts (L2).",
+  "type": "layout",
+  "p": {
+   "pkg": "search"
+  }
+ },
+ "conform-search.2": {
+  "text": "Support code and fixtures moved to their homes: engine/harness.ts, fetch/harness.ts, guards/guards-harness.ts, hosts/host-harness.ts, verbs/harness.ts exist under `test/helpers/`, fixtures under `test/fixtures/engine`, `test/fixtures/fetch`, `test/fixtures/providers`, and no html, pdf or json fixture is left under `test/unit`.",
+  "type": "helpers",
+  "p": {
+   "pkg": "search",
+   "helpers": [
+    "engine/harness.ts",
+    "fetch/harness.ts",
+    "guards/guards-harness.ts",
+    "hosts/host-harness.ts",
+    "verbs/harness.ts"
+   ],
+   "fixtures": [
+    "engine",
+    "fetch",
+    "providers"
+   ]
+  }
+ },
+ "conform-search.3": {
+  "text": "Configs conform: `vite.config.ts` includes `UNIT_FILE_INCLUDES` from tools/vite-plugins/e2e-globs.mjs, `tsconfig.lib.json` excludes `test/**`, `tsconfig.spec.json` includes `test/**/*.ts` and `test/**/*.tsx`, and no config names `src/test`.",
+  "type": "config",
+  "p": {
+   "pkg": "search",
+   "keep": []
+  }
+ },
+ "conform-search.4": {
+  "text": "Every spec carries the header of docs/standards/testing.md: a comment block in its first 60 lines with `guards:`, `tier: S` and `cites:` plus the ticket 8468f7b1.",
+  "type": "headers",
+  "p": {
+   "pkg": "search"
+  }
+ },
+ "conform-search.5": {
+  "text": "Main's scanners name nothing of this package: check-test-layout.mjs, check-test-headers.mjs and check-skip-expiry.mjs print no violation line for `entrypoint/stealth-search/`, and `test-headers.baseline.json` is byte-identical to main's.",
+  "type": "scanners",
+  "p": {
+   "pkg": "search"
+  }
+ },
+ "conform-search.6": {
+  "text": "No document or source comment of the package names the legacy layout: README.md, AGENTS.md, docs/** and sources contain no `src/test`, `src/__tests__` or `.e2e.test.` (CHANGELOG.md excepted).",
+  "type": "docs",
+  "p": {
+   "pkg": "search"
+  }
+ },
+ "conform-search.7": {
+  "text": "`nx run stealth-search:lint`, `:typecheck`, `:typecheck-spec`, `:test` and `:build` exit 0 and evidence/conform-search.md records each as `EXIT <command>: 0`.",
+  "type": "gates",
+  "p": {
+   "pkg": "search",
+   "targets": [
+    "lint",
+    "typecheck",
+    "typecheck-spec",
+    "test",
+    "build"
+   ]
+  }
+ },
+ "conform-search.8": {
+  "text": "No completed state regressed: search-examples, search-usecases, search-errors whole-state guards still exit 0 on the moved tree.",
+  "type": "regress",
+  "p": {
+   "after": 1,
+   "states": [
+    "search-examples",
+    "search-usecases",
+    "search-errors"
+   ]
+  }
+ },
+ "conform-search.9": {
+  "text": "Only owned paths changed by [psm:conform-search] commits (entrypoint/stealth-search/** and its typecheck-spec baseline).",
+  "type": "own",
+  "p": {}
+ },
+ "fix-tripwire.1": {
+  "text": "(backlog 84e1f7a2) The expiry audit line is `ttl-expired`: `src/lib/audit.ts` (or the module that writes the line) names `ttl-expired`, a spec under test/unit simulates a tripped entry whose ttl has passed and asserts the written audit line's reason, titles carry `ttl-expired`, `audit` and `84e1f7a2`, the spec cites [fix-tripwire.1], no tripwire test uses `it.fails`, and the spec is green.",
+  "type": "spec",
+  "p": {
+   "pkg": "tw",
+   "sub": "unit",
+   "uids": [
+    "84e1f7a2"
+   ],
+   "tokens": [
+    "ttl-expired",
+    "audit"
+   ],
+   "present": [
+    [
+     "src/lib/audit.ts",
+     "ttl-expired"
+    ]
+   ],
+   "absent_in_tests": [
+    "\\bit\\.fails\\b"
+   ]
+  }
+ },
+ "fix-tripwire.2": {
+  "text": "The interleaved-writers spec is deterministic: a storage spec cites [fix-tripwire.2], its titles carry `interleaved` and `deterministic`, it has no `setTimeout`, `sleep(` or numeric per-test timeout, and it passes in three consecutive uncached runs.",
+  "type": "spec",
+  "p": {
+   "pkg": "tw",
+   "sub": "unit",
+   "tokens": [
+    "interleaved",
+    "deterministic"
+   ],
+   "absent_in_specs": [
+    "setTimeout\\(|\\bsleep\\(|,\\s*\\d{4,}\\s*\\)\\s*;?\\s*$"
+   ],
+   "repeat": 3
+  }
+ },
+ "fix-tripwire.3": {
+  "text": "evidence/fix-tripwire.md names the root cause of the tripwire-core.32 flake (`root cause: ...`) and `guard.py tripwire-core --only tripwire-core.32` exits 0 three runs in a row.",
+  "type": "repeat_guard",
+  "p": {
+   "state": "tripwire-core",
+   "only": "tripwire-core.32",
+   "times": 3
+  }
+ },
+ "fix-tripwire.4": {
+  "text": "evidence/fix-tripwire.md records the red-first proof: a `RED:` line with the failing assertion of each new spec on the untouched source and a `GREEN:` line with the passing run after the fix.",
+  "type": "evidence",
+  "p": {
+   "file": "evidence/fix-tripwire.md",
+   "tokens": [
+    "RED:",
+    "GREEN:"
+   ]
+  }
+ },
+ "fix-tripwire.5": {
+  "text": "`nx run resilience-core-tripwire:lint`, `:typecheck`, `:typecheck-spec`, `:test`, `:build` exit 0 and evidence/fix-tripwire.md records each as `EXIT <command>: 0`.",
+  "type": "gates",
+  "p": {
+   "pkg": "tw",
+   "targets": [
+    "lint",
+    "typecheck",
+    "typecheck-spec",
+    "test",
+    "build"
+   ]
+  }
+ },
+ "fix-tripwire.6": {
+  "text": "Only owned paths changed by [psm:fix-tripwire] commits (the tripwire package).",
+  "type": "own",
+  "p": {}
+ },
+ "fix-core-parsers.1": {
+  "text": "A spec under test/unit/parsers cites [fix-core-parsers.1] and simulates a list of short cards: titles carry `extractSnippet`, `short cards`, `previous card` and `500`; each card's snippet equals its own text; the spec is green.",
+  "type": "spec",
+  "p": {
+   "pkg": "core",
+   "sub": "unit/parsers",
+   "tokens": [
+    "extractSnippet",
+    "short cards",
+    "previous card",
+    "500"
+   ]
+  }
+ },
+ "fix-core-parsers.2": {
+  "text": "evidence/fix-core-parsers.md records the red-first proof: a `RED:` line with the failing assertion of each new spec on the untouched source and a `GREEN:` line with the passing run after the fix.",
+  "type": "evidence",
+  "p": {
+   "file": "evidence/fix-core-parsers.md",
+   "tokens": [
+    "RED:",
+    "GREEN:"
+   ]
+  }
+ },
+ "fix-core-parsers.3": {
+  "text": "`nx run stealth-core-browser:lint`, `:typecheck`, `:typecheck-spec`, `:test` exit 0 and evidence/fix-core-parsers.md records each as `EXIT <command>: 0`.",
+  "type": "gates",
+  "p": {
+   "pkg": "core",
+   "targets": [
+    "lint",
+    "typecheck",
+    "typecheck-spec",
+    "test"
+   ]
+  }
+ },
+ "fix-core-parsers.4": {
+  "text": "Only owned paths changed by [psm:fix-core-parsers] commits (parsers.ts and its specs).",
+  "type": "own",
+  "p": {}
+ },
+ "fix-core-lifecycle.1": {
+  "text": "(backlog 86a2318f) A spec under test/unit/lifecycle cites [fix-core-lifecycle.1] and proves `defaultReaperEntry` resolves to an absolute path under ESM and under CJS and fails with a typed error when unresolvable: titles carry `defaultReaperEntry`, `ESM`, `CJS`, `86a2318f`; the spec is green.",
+  "type": "spec",
+  "p": {
+   "pkg": "core",
+   "sub": "unit/lifecycle",
+   "uids": [
+    "86a2318f"
+   ],
+   "tokens": [
+    "defaultReaperEntry",
+    "ESM",
+    "CJS"
+   ],
+   "present": [
+    [
+     "src/lib/lifecycle/reaper-link.ts",
+     "defaultReaperEntry"
+    ]
+   ]
+  }
+ },
+ "fix-core-lifecycle.2": {
+  "text": "evidence/fix-core-lifecycle.md records the red-first proof: a `RED:` line with the failing assertion of each new spec on the untouched source and a `GREEN:` line with the passing run after the fix.",
+  "type": "evidence",
+  "p": {
+   "file": "evidence/fix-core-lifecycle.md",
+   "tokens": [
+    "RED:",
+    "GREEN:"
+   ]
+  }
+ },
+ "fix-core-lifecycle.3": {
+  "text": "`nx run stealth-core-browser:lint`, `:typecheck`, `:typecheck-spec`, `:test`, `:build` exit 0 and evidence/fix-core-lifecycle.md records each as `EXIT <command>: 0`.",
+  "type": "gates",
+  "p": {
+   "pkg": "core",
+   "targets": [
+    "lint",
+    "typecheck",
+    "typecheck-spec",
+    "test",
+    "build"
+   ]
+  }
+ },
+ "fix-core-lifecycle.4": {
+  "text": "Only owned paths changed by [psm:fix-core-lifecycle] commits (lifecycle src, specs and helpers).",
+  "type": "own",
+  "p": {}
+ },
+ "fix-core-errors.1": {
+  "text": "`src/errors.ts` has no `Symbol.hasInstance`, and docs/ERRORS.md no longer mentions a `hasInstance` or instanceof bridge.",
+  "type": "text",
+  "p": {
+   "absent": [
+    [
+     "packages/stealth/stealth-core-browser/src/errors.ts",
+     "Symbol\\.hasInstance"
+    ],
+    [
+     "packages/stealth/stealth-core-browser/docs/ERRORS.md",
+     "hasInstance|instanceof bridge"
+    ]
+   ]
+  }
+ },
+ "fix-core-errors.2": {
+  "text": "test/unit/surface/api.spec.ts cites [fix-core-errors.2] and asserts the typed code of an invalid endpoint (titles carry `invalidEndpoint`, `code` and `typed`), with no `instanceof` assertion on it, and is green.",
+  "type": "spec",
+  "p": {
+   "pkg": "core",
+   "sub": "unit/surface",
+   "tokens": [
+    "invalidEndpoint",
+    "code",
+    "typed"
+   ],
+   "absent_in_specs": [
+    "instanceof\\s+\\w*[Ii]nvalidEndpoint"
+   ]
+  }
+ },
+ "fix-core-errors.3": {
+  "text": "evidence/fix-core-errors.md records the red-first proof: a `RED:` line with the failing assertion of each new spec on the untouched source and a `GREEN:` line with the passing run after the fix.",
+  "type": "evidence",
+  "p": {
+   "file": "evidence/fix-core-errors.md",
+   "tokens": [
+    "RED:",
+    "GREEN:"
+   ]
+  }
+ },
+ "fix-core-errors.4": {
+  "text": "`nx run stealth-core-browser:lint`, `:typecheck`, `:typecheck-spec`, `:test`, `:build` exit 0 and evidence/fix-core-errors.md records each as `EXIT <command>: 0`.",
+  "type": "gates",
+  "p": {
+   "pkg": "core",
+   "targets": [
+    "lint",
+    "typecheck",
+    "typecheck-spec",
+    "test",
+    "build"
+   ]
+  }
+ },
+ "fix-core-errors.5": {
+  "text": "Only owned paths changed by [psm:fix-core-errors] commits (errors.ts, docs/ERRORS.md, surface and errors specs).",
+  "type": "own",
+  "p": {}
+ },
+ "fix-search-fetch.1": {
+  "text": "A spec under test/unit/fetch cites [fix-search-fetch.1] and simulates a public hostname resolving to private addresses: titles carry `resolves`, `169.254.169.254`, `10.0.0.5`, `::1`, `FETCH_URL_REFUSED` and `injected resolver`; the refusal happens before any request; the spec is green.",
+  "type": "spec",
+  "p": {
+   "pkg": "search",
+   "sub": "unit/fetch",
+   "tokens": [
+    "resolves",
+    "169.254.169.254",
+    "10.0.0.5",
+    "::1",
+    "FETCH_URL_REFUSED",
+    "injected resolver"
+   ],
+   "present": [
+    [
+     "src/lib/fetch/policy.ts",
+     "lookup|resolve"
+    ]
+   ]
+  }
+ },
+ "fix-search-fetch.2": {
+  "text": "fetch-route.spec.ts has no non-null assertion and `nx run stealth-search:lint` prints no warning naming it.",
+  "type": "text",
+  "p": {
+   "absent": [
+    [
+     "entrypoint/stealth-search/test/unit/fetch/fetch-route.spec.ts",
+     "[\\w)\\]]!(?:\\.|\\[)"
+    ]
+   ]
+  }
+ },
+ "fix-search-fetch.3": {
+  "text": "evidence/fix-search-fetch.md records the red-first proof: a `RED:` line with the failing assertion of each new spec on the untouched source and a `GREEN:` line with the passing run after the fix.",
+  "type": "evidence",
+  "p": {
+   "file": "evidence/fix-search-fetch.md",
+   "tokens": [
+    "RED:",
+    "GREEN:"
+   ]
+  }
+ },
+ "fix-search-fetch.4": {
+  "text": "`nx run stealth-search:lint`, `:typecheck`, `:typecheck-spec`, `:test` exit 0 and evidence/fix-search-fetch.md records each as `EXIT <command>: 0`.",
+  "type": "gates",
+  "p": {
+   "pkg": "search",
+   "targets": [
+    "lint",
+    "typecheck",
+    "typecheck-spec",
+    "test"
+   ]
+  }
+ },
+ "fix-search-fetch.5": {
+  "text": "Only owned paths changed by [psm:fix-search-fetch] commits (fetch src, specs, fixtures and helpers).",
+  "type": "own",
+  "p": {}
+ },
+ "fix-search-engine.1": {
+  "text": "A spec under test/unit/providers cites [fix-search-engine.1] and drives the real pypi dom config over a real-shape fixture (`test/fixtures/providers/pypi/*.html`, anchor containers): titles carry `pypi`, `anchor`, `findChild`, `url` and `description`; the spec is green.",
+  "type": "spec",
+  "p": {
+   "pkg": "search",
+   "sub": "unit/providers",
+   "tokens": [
+    "pypi",
+    "anchor",
+    "findChild",
+    "url",
+    "description"
+   ]
+  }
+ },
+ "fix-search-engine.2": {
+  "text": "A spec under test/unit/engine cites [fix-search-engine.2] and walks a Google SERP fixture through the single walker: titles carry `title`, `single walker`, `whitespace` and `google`; the dead `\\s{2,}` title fallback no longer exists in search or core dom.ts.",
+  "type": "spec",
+  "p": {
+   "pkg": "search",
+   "sub": "unit/engine",
+   "tokens": [
+    "title",
+    "single walker",
+    "whitespace",
+    "google"
+   ],
+   "absent": [
+    [
+     "src/lib/dom.ts",
+     "\\\\s\\{2,\\}"
+    ]
+   ]
+  }
+ },
+ "fix-search-engine.3": {
+  "text": "Exactly one SERP walker remains: core `src/lib/capture/dom.ts` holds it, search `src/lib/dom.ts` has no second copy of the walker, and docs/plan/stealth-browser/OPEN-DECISIONS.md has an `OD-11` entry marked provisional and reversible.",
+  "type": "text",
+  "p": {
+   "present": [
+    [
+     "packages/stealth/stealth-core-browser/src/lib/capture/dom.ts",
+     "export"
+    ],
+    [
+     "docs/plan/stealth-browser/OPEN-DECISIONS.md",
+     "OD-11"
+    ]
+   ],
+   "absent": [
+    [
+     "packages/stealth/stealth-core-browser/src/lib/capture/dom.ts",
+     "\\\\s\\{2,\\}"
+    ]
+   ]
+  }
+ },
+ "fix-search-engine.4": {
+  "text": "evidence/fix-search-engine.md records the red-first proof: a `RED:` line with the failing assertion of each new spec on the untouched source and a `GREEN:` line with the passing run after the fix.",
+  "type": "evidence",
+  "p": {
+   "file": "evidence/fix-search-engine.md",
+   "tokens": [
+    "RED:",
+    "GREEN:"
+   ]
+  }
+ },
+ "fix-search-engine.5": {
+  "text": "`nx run stealth-search:lint`, `:typecheck`, `:typecheck-spec`, `:test` exit 0 and evidence/fix-search-engine.md records each as `EXIT <command>: 0`.",
+  "type": "gates",
+  "p": {
+   "pkg": "search",
+   "targets": [
+    "lint",
+    "typecheck",
+    "typecheck-spec",
+    "test"
+   ]
+  }
+ },
+ "fix-search-engine.6": {
+  "text": "Only owned paths changed by [psm:fix-search-engine] commits (search dom, providers, engine files; core capture/dom.ts; OPEN-DECISIONS.md).",
+  "type": "own",
+  "p": {}
+ },
+ "fix-search-output.1": {
+  "text": "A spec under test/unit/verbs cites [fix-search-output.1] and simulates 40 long-snippet results: titles carry `8192`, `bytes`, `count`, `whole results` and `truncated`; the default output stays within the byte bound, short outputs are untouched; the spec is green.",
+  "type": "spec",
+  "p": {
+   "pkg": "search",
+   "sub": "unit/verbs",
+   "tokens": [
+    "8192",
+    "bytes",
+    "count",
+    "whole results",
+    "truncated"
+   ]
+  }
+ },
+ "fix-search-output.2": {
+  "text": "retry.spec.ts no longer mutates the shared registry: no assignment to `PROVIDERS.github.retry` (or any `PROVIDERS.*`) remains in test/unit, and a spec cites [fix-search-output.2] proving the registry is pristine across tests (titles carry `registry`, `pristine`, `per-test`).",
+  "type": "spec",
+  "p": {
+   "pkg": "search",
+   "sub": "unit/verbs",
+   "tokens": [
+    "registry",
+    "pristine",
+    "per-test"
+   ],
+   "absent_in_tests": [
+    "PROVIDERS\\.\\w+\\.[\\w.]+\\s*=[^=]"
+   ]
+  }
+ },
+ "fix-search-output.3": {
+  "text": "evidence/fix-search-output.md records the red-first proof: a `RED:` line with the failing assertion of each new spec on the untouched source and a `GREEN:` line with the passing run after the fix.",
+  "type": "evidence",
+  "p": {
+   "file": "evidence/fix-search-output.md",
+   "tokens": [
+    "RED:",
+    "GREEN:"
+   ]
+  }
+ },
+ "fix-search-output.4": {
+  "text": "`nx run stealth-search:lint`, `:typecheck`, `:typecheck-spec`, `:test` exit 0 and evidence/fix-search-output.md records each as `EXIT <command>: 0`.",
+  "type": "gates",
+  "p": {
+   "pkg": "search",
+   "targets": [
+    "lint",
+    "typecheck",
+    "typecheck-spec",
+    "test"
+   ]
+  }
+ },
+ "fix-search-output.5": {
+  "text": "Only owned paths changed by [psm:fix-search-output] commits (search.ts, api.ts, output.ts and the verbs specs).",
+  "type": "own",
+  "p": {}
+ },
+ "search-mcp-iserror.1": {
+  "text": "The three assertions follow ADR-0018: mcp-inprocess.spec.ts and use-cases/hosts.spec.ts assert `isError` true with the `invalid_argument` text for extra-args/chromePath/required-key validation failures (the specs cite [search-mcp-iserror.1]; titles carry `isError`, `invalid_argument`, `ADR-0018`), and UNKNOWN_PROVIDER still rejects; the host specs are green.",
+  "type": "spec",
+  "p": {
+   "pkg": "search",
+   "sub": "unit/hosts",
+   "tokens": [
+    "isError",
+    "invalid_argument",
+    "ADR-0018"
+   ],
+   "absent_in_specs": [
+    "no isError channel"
+   ]
+  }
+ },
+ "search-mcp-iserror.2": {
+  "text": "(backlog 4909102e) The isError channel is closed and the comments tell the truth: a spec cites [search-mcp-iserror.2] proving how a typed StealthSearchError reaches an MCP client (titles carry `4909102e`, `isError`, `code`), and `src/errors.ts` no longer claims an isError form that does not exist.",
+  "type": "spec",
+  "p": {
+   "pkg": "search",
+   "sub": "unit/hosts",
+   "uids": [
+    "4909102e"
+   ],
+   "tokens": [
+    "isError",
+    "code"
+   ]
+  }
+ },
+ "search-mcp-iserror.3": {
+  "text": "`src/server.ts` uses `buildApigenPackage` from `@adhd/apigen-engine-runtime`, has no `dereferenceSchema`, and keeps `requireExplicitInput`.",
+  "type": "text",
+  "p": {
+   "present": [
+    [
+     "entrypoint/stealth-search/src/server.ts",
+     "buildApigenPackage"
+    ],
+    [
+     "entrypoint/stealth-search/src/server.ts",
+     "requireExplicitInput"
+    ]
+   ],
+   "absent": [
+    [
+     "entrypoint/stealth-search/src/server.ts",
+     "dereferenceSchema"
+    ]
+   ]
+  }
+ },
+ "search-mcp-iserror.4": {
+  "text": "No empty e2e lane: `vitest.e2e.config.ts` and the `e2e` target of project.json are gone, or `test/e2e/*.e2e.ts` exists with a tier P/H/X header carrying `gap:`; main's `check-lane-reachability.mjs` prints no line naming entrypoint/stealth-search.",
+  "type": "text",
+  "p": {
+   "absent": [
+    [
+     "entrypoint/stealth-search/project.json",
+     "\"e2e\"\\s*:"
+    ]
+   ]
+  }
+ },
+ "search-mcp-iserror.5": {
+  "text": "evidence/search-mcp-iserror.md records the red-first proof: a `RED:` line with the failing assertion of each new spec on the untouched source and a `GREEN:` line with the passing run after the fix.",
+  "type": "evidence",
+  "p": {
+   "file": "evidence/search-mcp-iserror.md",
+   "tokens": [
+    "RED:",
+    "GREEN:"
+   ]
+  }
+ },
+ "search-mcp-iserror.6": {
+  "text": "`nx run stealth-search:lint`, `:typecheck`, `:typecheck-spec`, `:test`, `:build` exit 0 and evidence/search-mcp-iserror.md records each as `EXIT <command>: 0`.",
+  "type": "gates",
+  "p": {
+   "pkg": "search",
+   "targets": [
+    "lint",
+    "typecheck",
+    "typecheck-spec",
+    "test",
+    "build"
+   ]
+  }
+ },
+ "search-mcp-iserror.7": {
+  "text": "Only owned paths changed by [psm:search-mcp-iserror] commits (server.ts, errors.ts, host specs, project.json, vitest.e2e.config.ts).",
+  "type": "own",
+  "p": {}
+ },
+ "fix-search-build.1": {
+  "text": "A spec under test/unit/build cites [fix-search-build.1] and proves the baked cache: a fresh cache avoids extraction, a stale key re-extracts: titles carry `I-35`, `baked`, `stale`, `cold`; and the build produces the cache file in dist.",
+  "type": "spec",
+  "p": {
+   "pkg": "search",
+   "sub": "unit/build",
+   "tokens": [
+    "I-35",
+    "baked",
+    "stale",
+    "cold"
+   ]
+  }
+ },
+ "fix-search-build.2": {
+  "text": "The published manifest has no `nx` key: a spec cites [fix-search-build.2] and asserts it on the manifest the dist-manifest/pack step emits (titles carry `nx key`, `published manifest`), while the source package.json may keep it.",
+  "type": "spec",
+  "p": {
+   "pkg": "search",
+   "sub": "unit/build",
+   "tokens": [
+    "nx key",
+    "published manifest"
+   ]
+  }
+ },
+ "fix-search-build.3": {
+  "text": "evidence/fix-search-build.md records the red-first proof: a `RED:` line with the failing assertion of each new spec on the untouched source and a `GREEN:` line with the passing run after the fix.",
+  "type": "evidence",
+  "p": {
+   "file": "evidence/fix-search-build.md",
+   "tokens": [
+    "RED:",
+    "GREEN:"
+   ]
+  }
+ },
+ "fix-search-build.4": {
+  "text": "`nx run stealth-search:lint`, `:typecheck`, `:typecheck-spec`, `:test`, `:build` exit 0 and evidence/fix-search-build.md records each as `EXIT <command>: 0`.",
+  "type": "gates",
+  "p": {
+   "pkg": "search",
+   "targets": [
+    "lint",
+    "typecheck",
+    "typecheck-spec",
+    "test",
+    "build"
+   ]
+  }
+ },
+ "fix-search-build.5": {
+  "text": "Only owned paths changed by [psm:fix-search-build] commits (package.json, project.json, vite.config.ts, bin, scripts, server.ts, build specs).",
+  "type": "own",
+  "p": {}
+ },
+ "search-tracing-fixes.1": {
+  "text": "UNKNOWN_PROVIDER is reachable from both hosts: a spec cites [search-tracing-fixes.1] and drives the CLI and the in-process MCP host with an unknown provider, asserting the verb's UNKNOWN_PROVIDER error and the span's recorded code; titles carry `UNKNOWN_PROVIDER`, `cli`, `mcp`, `span`; the provider input has no enum and the CLI flag check no longer rejects it.",
+  "type": "spec",
+  "p": {
+   "pkg": "search",
+   "sub": "unit/hosts",
+   "tokens": [
+    "UNKNOWN_PROVIDER",
+    "cli",
+    "mcp",
+    "span"
+   ],
+   "absent": [
+    [
+     "src/api.ts",
+     "provider\\??:\\s*['\"]\\w+['\"]\\s*\\|"
+    ]
+   ]
+  }
+ },
+ "search-tracing-fixes.2": {
+  "text": "Telemetry starts before flag validation: a spec cites [search-tracing-fixes.2] and asserts a rejected flag (for example `--cdp-port abc`) still produces a start and an error span (titles carry `rejected flag`, `span`, `before flag validation`), and `--help` produces none (title `help is not a dispatch`); docs/OBSERVABILITY.md states that `--help` is not a dispatch.",
+  "type": "spec",
+  "p": {
+   "pkg": "search",
+   "sub": "unit/hosts",
+   "tokens": [
+    "rejected flag",
+    "span",
+    "before flag validation",
+    "help is not a dispatch"
+   ],
+   "present": [
+    [
+     "docs/OBSERVABILITY.md",
+     "(?i)--help.*not a dispatch|not a dispatch.*--help"
+    ]
+   ]
+  }
+ },
+ "search-tracing-fixes.3": {
+  "text": "One error event per failure: a spec cites [search-tracing-fixes.3] and asserts exactly one `adhd.<op>.error` event for a failing call, never an `adhd.op.error` with the op id `op` (titles carry `duplicate`, `op id`, `adhd.op.error`).",
+  "type": "spec",
+  "p": {
+   "pkg": "search",
+   "sub": "unit/hosts",
+   "tokens": [
+    "duplicate",
+    "op id",
+    "adhd.op.error"
+   ]
+  }
+ },
+ "search-tracing-fixes.4": {
+  "text": "evidence/search-tracing-fixes.md records the red-first proof: a `RED:` line with the failing assertion of each new spec on the untouched source and a `GREEN:` line with the passing run after the fix.",
+  "type": "evidence",
+  "p": {
+   "file": "evidence/search-tracing-fixes.md",
+   "tokens": [
+    "RED:",
+    "GREEN:"
+   ]
+  }
+ },
+ "search-tracing-fixes.5": {
+  "text": "`nx run stealth-search:lint`, `:typecheck`, `:typecheck-spec`, `:test`, `:build` exit 0 and evidence/search-tracing-fixes.md records each as `EXIT <command>: 0`.",
+  "type": "gates",
+  "p": {
+   "pkg": "search",
+   "targets": [
+    "lint",
+    "typecheck",
+    "typecheck-spec",
+    "test",
+    "build"
+   ]
+  }
+ },
+ "search-tracing-fixes.6": {
+  "text": "Only owned paths changed by [psm:search-tracing-fixes] commits (tracing, telemetry, cli, host files, api.ts, host specs, observability docs).",
+  "type": "own",
+  "p": {}
+ },
+ "plan-notes.1": {
+  "text": "README.md has a `Known issues` section naming core-seam .8 and commit aa5df30a (untagged, history not rewritten), compile-task.js truncating piped output at 64 KiB, plan-scaffold committing with --no-verify, and the missing add-dependency verb.",
+  "type": "text",
+  "p": {
+   "present": [
+    [
+     "docs/plan/stealth-browser/README.md",
+     "(?is)known issues.*aa5df30a.*64 ?KiB.*no-verify"
+    ]
+   ]
+  }
+ },
+ "plan-notes.2": {
+  "text": "README.md has an `Amendment 2026-10-23` paragraph that names main-merge, conform-tripwire, conform-core, conform-search, search-mcp-iserror, search-tracing-fixes and release-readiness, and the plugin cache was not edited (no change under ~/.claude/plugins in the evidence).",
+  "type": "text",
+  "p": {
+   "present": [
+    [
+     "docs/plan/stealth-browser/README.md",
+     "(?is)amendment 2026-10-23.*main-merge.*conform-core.*search-tracing-fixes.*release-readiness"
+    ]
+   ]
+  }
+ },
+ "plan-notes.3": {
+  "text": "Only owned paths changed by [psm:plan-notes] commits (README.md).",
+  "type": "own",
+  "p": {}
+ },
+ "release-readiness.1": {
+  "text": "evidence/release-readiness.md records `EXIT <command>: <code>` for `pnpm check:release-ranges`, `pnpm release:dry`, the AGENTS.md affected gate, check-test-wiring, check-skip-expiry and check-lane-reachability, and every code is 0.",
+  "type": "evidence",
+  "p": {
+   "file": "evidence/release-readiness.md",
+   "tokens": [
+    "EXIT pnpm check:release-ranges: 0",
+    "EXIT pnpm release:dry: 0",
+    "EXIT nx affected: 0",
+    "EXIT check-test-wiring: 0",
+    "EXIT check-skip-expiry: 0",
+    "EXIT check-lane-reachability: 0"
+   ]
+  }
+ },
+ "release-readiness.2": {
+  "text": "release-readiness/sync-global.md names the bins stealth-search and stealth-search-mcp, the PUBLISHING.md Step 3.5 outcomes `refused`, `unverifiable` and `legacy-pending`, whether a pre-existing global shim exists, and the expected outcome.",
+  "type": "evidence",
+  "p": {
+   "file": "release-readiness/sync-global.md",
+   "tokens": [
+    "stealth-search-mcp",
+    "legacy-pending",
+    "unverifiable",
+    "refused",
+    "expected outcome"
+   ]
+  }
+ },
+ "release-readiness.3": {
+  "text": "The AGENTS.md:25 new-package approval is recorded for all three packages: APPROVAL-split.md, APPROVAL-tripwire.md and APPROVALS.md together name @adhd/resilience-core-tripwire, @adhd/stealth-core-browser and @adhd/stealth-search, each with the verbatim human request and a date.",
+  "type": "text",
+  "p": {
+   "present": [
+    [
+     "docs/plan/stealth-browser/APPROVAL-split.md",
+     "@adhd/stealth-search"
+    ],
+    [
+     "docs/plan/stealth-browser/APPROVAL-split.md",
+     "@adhd/stealth-core-browser"
+    ],
+    [
+     "docs/plan/stealth-browser/APPROVAL-tripwire.md",
+     "@adhd/resilience-core-tripwire"
+    ],
+    [
+     "docs/plan/stealth-browser/evidence/release-readiness.md",
+     "APPROVAL-CHECK: tripwire=ok core=ok search=ok"
+    ]
+   ]
+  }
+ },
+ "release-readiness.4": {
+  "text": "Only owned paths changed by [psm:release-readiness] commits (release-readiness/, the APPROVAL documents).",
+  "type": "own",
+  "p": {}
+ },
+ "tracing-log-validation.10": {
+  "text": "The validation is fresh: state search-tracing-fixes is complete and evidence/tracing-log-validation.json carries a `validated_at` later than that state's `done_at` (the failed earlier run is not reused).",
+  "type": "tlv_fresh",
+  "p": {}
+ },
+ "tracing-log-validation.11": {
+  "text": "The re-run covers the fixes without side effects: checks cli_unknown_provider_span, mcp_unknown_provider_span, cli_rejected_flag_span and help_is_not_a_dispatch are PASS with sample lines; `process_spawn_mocked` is true and `real_chrome_launched` false; no command or call mentions port 9222; MCP inputs are passed in the `data.input` envelope; no sample line carries the op id `op`.",
+  "type": "tlv_reach",
+  "p": {}
+ }
+}

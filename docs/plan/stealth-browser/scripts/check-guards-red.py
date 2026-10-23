@@ -23,7 +23,9 @@ NEW_STATES = ["failsafe-inventory", "port-fixes", "cdp-test-harness", "capture-u
               "tripwire-scaffold", "tripwire-core", "tripwire-interactive", "tripwire-docs", "tripwire-pack", "tripwire-reverse-migrate", "tripwire-reverse-relink",
               # the split amendment: generator-built core library, the search entrypoint and its states
               "core-scaffold", "core-seam", "search-scaffold", "search-inventory", "search-errors", "search-port-providers", "search-port-fetch", "search-port-engine", "search-port-guards",
-              "search-verbs", "search-tracing", "search-hosts", "search-usecases", "search-examples", "tracing-log-validation", "search-cutover"]
+              "search-verbs", "search-tracing", "search-hosts", "search-usecases", "search-examples", "tracing-log-validation", "search-cutover",
+              # the 2026-10-23 main-sync amendment
+              "main-merge", "conform-tripwire", "conform-core", "conform-search", "fix-tripwire", "fix-core-parsers", "fix-core-lifecycle", "fix-core-errors", "fix-search-fetch", "fix-search-engine", "fix-search-output", "search-mcp-iserror", "fix-search-build", "search-tracing-fixes", "plan-notes", "release-readiness"]
 # commit-ownership criteria are vacuously green until a [psm:<slug>] commit exists, like every <state>.ownership criterion
 OWNERSHIP = re.compile(r"owned paths|ownership|changed no source|touch only|local-only, staged", re.I)
 FOLDED = {s: [int(i.rsplit(".", 1)[1]) for i, doc in LIST[s] if not OWNERSHIP.search(doc)] for s in NEW_STATES}

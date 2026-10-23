@@ -255,9 +255,9 @@ Run: `plan-orchestrator execute stealth-browser` (resume: `node $SKILL/scripts/s
   - given: the built packages and the shared harness (in-memory CDP server, in-memory filesystem, fake process table, profile and page fixtures)
   - when: the core use-case suites call the chrome verbs through the library and the search use-case suites call the search and chrome verbs through the library, the stealth-search CLI and the stealth-search-mcp host, exercising at least six typed error codes
   - then: each surface returns the same structured results and shutdown stops only the launched Chrome
-  - entrypoint: `nx run stealth-search:test -- src/test/use-cases`
+  - entrypoint: `nx run stealth-search:test -- test/unit/use-cases`
   - observable: `vitest exit 0 in stealth-core-browser and stealth-search with at least 12 core and 12 search scenario suites green; the suites run in the unit lane with no socket, no subprocess and no network`
-  - negative-control: `nx run stealth-search:test -- src/test/use-cases fails (vitest exit non-zero) if the MCP host module is renamed or a verb is pointed at a port the harness does not serve while a suite expects success`
+  - negative-control: `nx run stealth-search:test -- test/unit/use-cases fails (vitest exit non-zero) if the MCP host module is renamed or a verb is pointed at a port the harness does not serve while a suite expects success`
   - delivered-by: `surface-api, prod-errors, prod-examples, cdp-test-harness, capture-upgrade, chrome-lifecycle, tests-use-cases, search-errors, search-port-providers, search-port-fetch, search-port-engine, search-port-guards, search-verbs, search-hosts, search-usecases, search-examples`
 
 - `[dod.3]` **Tracing is namespaced adhd in the stealth-search CLI and MCP host: configuration pins hold and one validating agent read the logs the built bins wrote, which carry adhd.<op> records and no apigen.* records (behavioral)** — Tracing is namespaced adhd on both hosts; no tests, one agent validates the written logs.
