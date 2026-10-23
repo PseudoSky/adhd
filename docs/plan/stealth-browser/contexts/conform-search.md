@@ -49,6 +49,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 
 - [conform-search.1] The unit lane lives where main's layout puts it: `entrypoint/stealth-search/src/test` is gone, `test/unit` holds at least the original spec count, every file under `test/unit` is a `*.spec.ts(x)` (L3), and `test/` has only the children unit, e2e, helpers, fixtures, golden and setup.ts (L2).
 
+- [conform-search.2] Support code and fixtures moved to their homes: engine/harness.ts, fetch/harness.ts, guards/guards-harness.ts, hosts/host-harness.ts, verbs/harness.ts exist under `test/helpers/`, fixtures under `test/fixtures/engine`, `test/fixtures/fetch`, `test/fixtures/providers`, and no html, pdf or json fixture is left under `test/unit`.
 ---
 
 ## Reservations
