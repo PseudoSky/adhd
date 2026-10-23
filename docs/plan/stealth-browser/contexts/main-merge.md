@@ -45,6 +45,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 
 - [main-merge.1] HEAD contains a merge commit that has main's tip (the `MAIN-SHA:` recorded in evidence/main-merge.md, default `git rev-parse main`) as a parent, and that tip is an ancestor of HEAD.
 
+- [main-merge.2] The conflicts are resolved by union: no conflict markers in .adhd/workspace.json, tsconfig.base.json or pnpm-lock.yaml; workspace.json parses and holds the groups policy, resilience and stealth; tsconfig.base.json paths hold @adhd/policy-core-client, @adhd/policy, @adhd/apigen-plugin-policy, @adhd/resilience-core-tripwire, @adhd/stealth-core-browser and @adhd/stealth-search and keeps main's parity-harness path.
 ---
 
 ## Reservations
