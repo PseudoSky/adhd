@@ -37,7 +37,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
      matching audit check ID so Check 3's ID-mirror holds. Do not hand-add
      bare [slug.N] tokens here without a matching audit check. -->
 
-_No criteria yet._
+- [fix-core-errors.1] `src/errors.ts` has no `Symbol.hasInstance`, and docs/ERRORS.md no longer mentions a `hasInstance` or instanceof bridge.
 
 ---
 
