@@ -10,13 +10,18 @@
  * URLs are refused locally BEFORE any navigation. A refusal is a RESPONSE outcome `error` whose
  * message carries `FETCH_URL_REFUSED` (built in fetch.ts), never a thrown error.
  *
- * Known limit: the check is name-based, so a public hostname that RESOLVES to a private address
- * (DNS rebinding) passes. The fetch tier is cookieless, which bounds what that can leak; a
- * resolve-then-pin step must precede any credential-bearing tier.
+ * `validateFetchUrl` is the name-based half. `resolveAndCheck` is the resolution half: a public
+ * hostname is resolved through an INJECTED resolver and every returned address must be public, so a
+ * name that RESOLVES to a private address (DNS rebinding) is refused with `FETCH_URL_REFUSED`
+ * carrying the offending address in `detail`. A resolver failure is a typed `SEARCH_FAILED`. The
+ * browser resolves again at connect time, so a resolve-then-pin step must still precede any
+ * credential-bearing tier; the fetch tier is cookieless, which bounds what that can leak.
  *
  * Ticket 8468f7b1 · plan state search-port-fetch.
  */
+import dns from 'node:dns'
 import net from 'node:net'
+import { searchError } from '../../errors.js'
 
 /** Max URL length (matches the reference WebFetch cap). */
 export const MAX_URL_LENGTH = 2000
@@ -117,4 +122,40 @@ export function validateFetchUrl(raw: string): UrlVerdict {
   if (forbidden) return { ok: false, reason: forbidden }
   if (u.protocol === 'http:') u.protocol = 'https:'
   return { ok: true, url: u }
+}
+
+/** Resolves a hostname to every address it maps to. Injected so the unit lane never touches the network. */
+export type HostResolver = (host: string) => Promise<string[]>
+
+/** The production resolver: the system resolver, all A and AAAA answers. */
+export const systemResolver: HostResolver = async (host) => (await dns.promises.lookup(host, { all: true })).map((a) => a.address)
+
+/**
+ * Resolve `host` and refuse it when ANY returned address is private, loopback, link-local or
+ * unique-local. IP literals are not resolved (the name-based check already judged them).
+ *
+ * @throws StealthSearchError `FETCH_URL_REFUSED` (detail.address, detail.host) for a private answer;
+ *   `SEARCH_FAILED` (detail.reason `dns-resolution-failed`) when the resolver fails or answers nothing.
+ */
+export async function resolveAndCheck(host: string, resolve: HostResolver): Promise<string[]> {
+  const bare = host.replace(/^\[|\]$/g, '').replace(/\.$/, '')
+  if (net.isIP(bare)) return [bare]
+  let addresses: string[]
+  try {
+    addresses = await resolve(bare)
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    throw searchError('SEARCH_FAILED', `could not resolve ${bare}: ${msg}`, { detail: { reason: 'dns-resolution-failed', host: bare } })
+  }
+  if (addresses.length === 0) {
+    throw searchError('SEARCH_FAILED', `resolver returned no address for ${bare}`, { detail: { reason: 'dns-resolution-failed', host: bare } })
+  }
+  for (const address of addresses) {
+    if (isForbiddenIp(address)) {
+      throw searchError('FETCH_URL_REFUSED', `${bare} resolves to ${address} (private/loopback/link-local)`, {
+        detail: { reason: 'resolves-to-private-address', host: bare, address },
+      })
+    }
+  }
+  return addresses
 }

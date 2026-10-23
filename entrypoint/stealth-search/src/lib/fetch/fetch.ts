@@ -20,7 +20,7 @@ import type { BanRule } from '@adhd/stealth-core-browser'
 import { isSearchError, searchError } from '../../errors.js'
 import { htmlToMarkdown, type MarkdownResult } from './markdown.js'
 import { extractPdfText, type PdfText } from './pdf.js'
-import { validateFetchUrl } from './policy.js'
+import { resolveAndCheck, systemResolver, validateFetchUrl } from './policy.js'
 
 /** Browser-like user agent for the PDF byte-fetch fallback (this tier is cookieless anyway). */
 export const FETCH_UA =
@@ -141,6 +141,8 @@ export interface FetchDeps {
   toMarkdown(html: string): Promise<MarkdownResult>
   extractPdf(bytes: Uint8Array): Promise<PdfText>
   fetchImpl: typeof fetch
+  /** Resolves a hostname to every address; the SSRF check refuses a name that resolves to a private one. */
+  resolveHost(host: string): Promise<string[]>
   now(): number
   sleep(ms: number): Promise<void>
   /** Progress and prompts for a human (a challenge being waited out). */
@@ -157,6 +159,7 @@ export function defaultFetchDeps(): FetchDeps {
     toMarkdown: (html) => htmlToMarkdown(html),
     extractPdf: (bytes) => extractPdfText(bytes),
     fetchImpl: (input, init) => fetch(input, init),
+    resolveHost: systemResolver,
     now: () => Date.now(),
     sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
     log: (message) => {
@@ -305,6 +308,7 @@ async function pdfBytesDirect(url: string, deps: FetchDeps): Promise<Uint8Array>
       if (!verdict.ok || !verdict.url) {
         throw searchError('FETCH_URL_REFUSED', `redirect target refused: ${verdict.reason}`, { detail: { reason: verdict.reason } })
       }
+      await resolveAndCheck(verdict.url.hostname, deps.resolveHost)
       current = verdict.url.toString()
       continue
     }
@@ -366,6 +370,11 @@ export async function fetchPage(provider: FetchProviderConfig, url: string, opti
   const verdict = validateFetchUrl(url)
   if (!verdict.ok || !verdict.url) {
     return failure(searchError('FETCH_URL_REFUSED', `invalid fetch target: ${verdict.reason}`, { detail: { reason: verdict.reason } }))
+  }
+  try {
+    await resolveAndCheck(verdict.url.hostname, deps.resolveHost)
+  } catch (err) {
+    return failure(err)
   }
   const target = verdict.url.toString()
   finalUrl = target

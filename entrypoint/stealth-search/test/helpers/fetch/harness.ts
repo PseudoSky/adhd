@@ -95,6 +95,7 @@ export function makeWorld(script: PageScript, extra: Partial<FetchDeps> = {}): W
     },
     toMarkdown: (html) => htmlToMarkdown(html),
     extractPdf: (bytes) => extractPdfText(bytes),
+    resolveHost: async () => ['93.184.216.34'],
     now: () => clock.t,
     sleep: async (ms) => {
       clock.t += ms
