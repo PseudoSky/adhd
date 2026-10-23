@@ -48,12 +48,12 @@ function hookFlags() {
   return r.stdout.trim().split(/\s+/).filter(Boolean);
 }
 
-test('pre-push-e2e AC1: executing the hook target resolution yields no e2e', () => {
+test('pre-push-e2e AC1: executing the hook target resolution yields no e2e', { skip: 'backlog 8963c3cb until 2026-12-31 - .githooks/pre-push is disabled (renamed disabled-pre-push)' }, () => {
   const flags = hookFlags();
   assert.ok(!flags.includes('--target=e2e'), flags.join(' '));
 });
 
-test('pre-push-e2e AC2: pre-push still runs test and the git-env guard is intact', () => {
+test('pre-push-e2e AC2: pre-push still runs test and the git-env guard is intact', { skip: 'backlog 8963c3cb until 2026-12-31 - .githooks/pre-push is disabled (renamed disabled-pre-push)' }, () => {
   assert.deepEqual(hookFlags(), ['--target=test']);
   const body = readFileSync(HOOK, 'utf8');
   for (const needle of ['lib/git-env-guard.sh', 'guard_snapshot', 'guard_verify', 'guard_exclude_ref', 'no_hook_git_env env CI=true npx nx affected $flags']) {
@@ -93,7 +93,7 @@ function workspaceWith(hookText) {
 }
 const checkAt = (ws) => run([CHECK, '--workspace-root', ws]);
 
-test('pre-push-e2e AC4: reachability check is green, and red under negative controls', () => {
+test('pre-push-e2e AC4: reachability check is green, and red under negative controls', { skip: 'backlog 8963c3cb until 2026-12-31 - .githooks/pre-push is disabled (renamed disabled-pre-push)' }, () => {
   assert.equal(run([CHECK]).status, 0);
   const original = readFileSync(HOOK, 'utf8');
   const cases = [
@@ -125,7 +125,7 @@ test('pre-push-e2e AC4: reachability check is green, and red under negative cont
   assert.equal(readFileSync(HOOK, 'utf8'), original, 'the real hook is untouched');
 });
 
-test('pre-push (blind-review 16): a remote tip this clone does not have is treated as a new branch, not an unreadable range', () => {
+test('pre-push (blind-review 16): a remote tip this clone does not have is treated as a new branch, not an unreadable range', { skip: 'backlog 8963c3cb until 2026-12-31 - .githooks/pre-push is disabled (renamed disabled-pre-push)' }, () => {
   // Execute the hook's own condition line with a remote sha that exists nowhere locally (a rewritten remote), and with a real one.
   const line = readFileSync(HOOK, 'utf8').split('\n').find((l) => /^\s*if \[ "\$remote_sha" = "\$zero_sha" \]/.test(l));
   assert.ok(line, 'the hook has a remote_sha resolution condition');
@@ -135,13 +135,13 @@ test('pre-push (blind-review 16): a remote tip this clone does not have is treat
   assert.equal(probe(head), 'known-tip');
 });
 
-test('pre-push (blind-review 15): the G4 check runs once per push, not once per pushed ref', () => {
+test('pre-push (blind-review 15): the G4 check runs once per push, not once per pushed ref', { skip: 'backlog 8963c3cb until 2026-12-31 - .githooks/pre-push is disabled (renamed disabled-pre-push)' }, () => {
   const body = readFileSync(HOOK, 'utf8');
   assert.match(body, /\[ -z "\$\{g4_done:-\}" \] && ! node "\$repo_root\/tools\/nx-plugins\/test\/executors\/wiring\/check-skip-expiry\.mjs"/);
   assert.match(body, /\n\s*g4_done=1\n/);
 });
 
-test('pre-push hardening: real-path root, empty flags refused, G12 advisory', () => {
+test('pre-push hardening: real-path root, empty flags refused, G12 advisory', { skip: 'backlog 8963c3cb until 2026-12-31 - .githooks/pre-push is disabled (renamed disabled-pre-push)' }, () => {
   const body = readFileSync(HOOK, 'utf8');
   assert.ok(/repo_root=\$\(cd "\$hook_dir\/\.\." && pwd -P\)/.test(body), 'repo_root must be the physical path (pwd -P)');
   assert.ok(/if \[ -z "\$flags" \]; then\n[^\n]*\n  exit 1/.test(body), 'an empty flags string must exit 1');

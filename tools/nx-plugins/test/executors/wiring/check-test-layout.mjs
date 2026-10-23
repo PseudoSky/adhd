@@ -24,7 +24,7 @@
  *
  * Exit code is the only signal (0 = conforming, 1 = violations, 2 = the walker found nothing to scan).
  */
-import { existsSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, realpathSync, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { globScan } from './glob-exclusions.mjs';
@@ -173,4 +173,4 @@ function main() {
   console.log(`✓ test layout OK — ${projects} projects, ${testFiles} test files conform.`);
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main();
+if ((() => { try { return realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url)); } catch { return false; } })()) main();

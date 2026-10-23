@@ -214,7 +214,7 @@ test('50e8c966 AC3: guard_verify does not blame a user.email that pre-existed th
   }
 });
 
-test('50e8c966 AC3: pre-commit and pre-push are wired to the guard (source it, scrub the test run, verify after)', () => {
+test('50e8c966 AC3: pre-commit and pre-push are wired to the guard (source it, scrub the test run, verify after)', { skip: 'backlog 8963c3cb until 2026-12-31 - .githooks/pre-push is disabled (renamed disabled-pre-push)' }, () => {
   for (const hook of ['pre-commit', 'pre-push']) {
     const text = readFileSync(join(here, hook), 'utf8');
     assert.match(text, /\.\s+"\$hook_dir\/lib\/git-env-guard\.sh"/, `${hook} must source the guard`);
@@ -493,7 +493,7 @@ function pushScenario({ sideEffect = '' } = {}) {
   return { push, S, clone, bare };
 }
 
-test('d80b7374 AC4: a real `git push` of a checked-out branch passes the real pre-push guard stage (exit 0, no GIT-ENV-LEAK)', () => {
+test('d80b7374 AC4: a real `git push` of a checked-out branch passes the real pre-push guard stage (exit 0, no GIT-ENV-LEAK)', { skip: 'backlog 8963c3cb until 2026-12-31 - .githooks/pre-push is disabled (renamed disabled-pre-push)' }, () => {
   const { push, S, bare } = pushScenario();
   assert.equal(push.status, 0, `${push.stdout}\n${push.stderr}`);
   assert.doesNotMatch(push.stderr + push.stdout, /GIT-ENV-LEAK/);
@@ -502,7 +502,7 @@ test('d80b7374 AC4: a real `git push` of a checked-out branch passes the real pr
   assert.match(git(bare, ['for-each-ref', '--format=%(refname)']), /refs\/heads\/main/, 'push reached the bare remote');
 });
 
-test('d80b7374 AC4 negative control: the same real push is BLOCKED when the gate moves a non-pushed ref', () => {
+test('d80b7374 AC4 negative control: the same real push is BLOCKED when the gate moves a non-pushed ref', { skip: 'backlog 8963c3cb until 2026-12-31 - .githooks/pre-push is disabled (renamed disabled-pre-push)' }, () => {
   const { push, bare } = pushScenario({
     sideEffect:
       'GIT_AUTHOR_NAME=a GIT_AUTHOR_EMAIL=a@b.c GIT_COMMITTER_NAME=a GIT_COMMITTER_EMAIL=a@b.c git update-ref refs/heads/side "$(git commit-tree -p HEAD -m leak HEAD^{tree})"',

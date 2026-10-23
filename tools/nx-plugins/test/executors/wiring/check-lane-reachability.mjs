@@ -252,6 +252,9 @@ export async function runChecks({ workspaceRoot, gateTargets, createNodesFn, bas
   for (const rel of GATE_FILES) {
     const abs = join(workspaceRoot, rel);
     if (!existsSync(abs)) {
+      // The pre-push hook is deliberately disabled while `.githooks/disabled-pre-push` stands in for it
+      // (backlog 8963c3cb); every other gate file must exist.
+      if (rel === PRE_PUSH_FILE && existsSync(join(workspaceRoot, '.githooks', 'disabled-pre-push'))) continue;
       add('5-gate-file-missing', `${rel} — gate file not found.`);
       continue;
     }

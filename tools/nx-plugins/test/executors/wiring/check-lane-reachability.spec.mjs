@@ -180,6 +180,20 @@ test('rule 5 RED: pre-push runs e2e (reads lane-gate.mjs directly, or names --ta
   }
 });
 
+test('rule 5: a missing pre-push hook is flagged unless .githooks/disabled-pre-push stands in for it (backlog 8963c3cb)', async () => {
+  const { files } = baseFiles();
+  delete files['.githooks/pre-push'];
+  const missing = fixture({ ...files });
+  const disabled = fixture({ ...files, '.githooks/disabled-pre-push': '#!/bin/sh\n' });
+  try {
+    assert.ok(hasRule(await check(missing), '5-gate-file-missing'), 'a missing hook with no stand-in must fail');
+    assert.ok(!hasRule(await check(disabled), '5-gate-file-missing'), 'a deliberately disabled hook must not fail');
+  } finally {
+    close(missing);
+    close(disabled);
+  }
+});
+
 test('rule 5 RED: resolved pre-push targets include e2e or drop test', async () => {
   const root = fixture(baseFiles().files);
   try {
