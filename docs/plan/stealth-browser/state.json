@@ -459,10 +459,10 @@
       "end_ref": "fb48127261e3099e8b1ff3a8523dde7573e8c037"
     },
     "conform-tripwire": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-10-23T22:23:58.697Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "71bc6e1abaaea513719ddc3722f8a3c7a9fa1552",
       "end_ref": null
     },
     "conform-core": {
