@@ -1334,6 +1334,27 @@
       ],
       "context": "contexts/search-mcp-iserror.md",
       "notes": "executor=typescript-pro tier=sonnet/high; adhd ADR-0018; backlog 4909102e"
+    },
+    "fix-search-build": {
+      "kind": "work",
+      "phase": "migrate",
+      "depends_on": [
+        "search-mcp-iserror"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py fix-search-build",
+      "artifacts": [
+        "entrypoint/stealth-search/package.json",
+        "entrypoint/stealth-search/project.json",
+        "entrypoint/stealth-search/vite.config.ts",
+        "entrypoint/stealth-search/tsconfig.build-bin.json",
+        "entrypoint/stealth-search/bin/",
+        "entrypoint/stealth-search/scripts/",
+        "entrypoint/stealth-search/src/server.ts",
+        "entrypoint/stealth-search/test/unit/build/",
+        "docs/plan/stealth-browser/evidence/fix-search-build.md"
+      ],
+      "context": "contexts/fix-search-build.md",
+      "notes": "executor=typescript-pro tier=sonnet/high; I-35"
     }
   },
   "authored_with": {
