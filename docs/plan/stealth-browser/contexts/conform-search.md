@@ -47,7 +47,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
      matching audit check ID so Check 3's ID-mirror holds. Do not hand-add
      bare [slug.N] tokens here without a matching audit check. -->
 
-_No criteria yet._
+- [conform-search.1] The unit lane lives where main's layout puts it: `entrypoint/stealth-search/src/test` is gone, `test/unit` holds at least the original spec count, every file under `test/unit` is a `*.spec.ts(x)` (L3), and `test/` has only the children unit, e2e, helpers, fixtures, golden and setup.ts (L2).
 
 ---
 
