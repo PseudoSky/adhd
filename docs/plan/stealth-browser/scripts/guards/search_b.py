@@ -233,13 +233,13 @@ def _bh10():
 
 @check(_HOSTS, 11)
 def _bh11():
-    """No environment variable is read anywhere in src/ or bin/ of stealth-search (ADR-0001: every former SEARCH_* toggle is a typed option or host flag) and no tsx runtime import remains."""
+    """No environment variable is read anywhere in src/ or bin/ of stealth-search (ADR-0001: every former SEARCH_* toggle is a typed option or host flag) and no tsx runtime import remains; the SEARCH_FAILED error code and SEARCH_* constants are legitimate identifiers, only env reads and tsx imports are checked."""
     if not (exists(f"{SEARCH_DIR}/src/server.ts") and exists(f"{SEARCH_DIR}/src/cli.ts")):
         return False, "src/server.ts and src/cli.ts (the state's own work products) do not exist yet"
     files = nontest_ts(SEARCH_DIR)
     env = env_readers(files)
-    tsx = offenders(files, r"from\s+['\"]tsx|require\(['\"]tsx|\bSEARCH_[A-Z_]{3,}\b")
-    return bool(files) and not env and not tsx, f"env readers={env} tsx/SEARCH_*={tsx}"
+    tsx = offenders(files, r"from\s+['\"]tsx|require\(['\"]tsx")
+    return bool(files) and not env and not tsx, f"env readers={env} tsx imports={tsx}"
 
 
 @check(_HOSTS, 12)
