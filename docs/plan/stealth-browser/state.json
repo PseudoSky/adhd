@@ -452,10 +452,10 @@
       "end_ref": null
     },
     "main-merge": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-10-23T22:13:16.326Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "b909ff6d6619bb87de4858cfee1dc5aa5dfe3b3c",
       "end_ref": null
     },
     "conform-tripwire": {
@@ -1941,7 +1941,7 @@
     "version": "0.8.35",
     "hash": "0b6bc1f3d70e"
   },
-  "current_state": "sp-switch",
+  "current_state": "main-merge",
   "dod_provenance": {
     "confirmed_at": "2026-10-12T23:49:38.410Z",
     "by": "pseudosky",
