@@ -42,6 +42,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 - [fix-search-output.1] A spec under test/unit/verbs cites [fix-search-output.1] and simulates 40 long-snippet results: titles carry `8192`, `bytes`, `count`, `whole results` and `truncated`; the default output stays within the byte bound, short outputs are untouched; the spec is green.
 
 - [fix-search-output.2] retry.spec.ts no longer mutates the shared registry: no assignment to `PROVIDERS.github.retry` (or any `PROVIDERS.*`) remains in test/unit, and a spec cites [fix-search-output.2] proving the registry is pristine across tests (titles carry `registry`, `pristine`, `per-test`).
+- [fix-search-output.3] evidence/fix-search-output.md records the red-first proof: a `RED:` line with the failing assertion of each new spec on the untouched source and a `GREEN:` line with the passing run after the fix.
 ---
 
 ## Reservations

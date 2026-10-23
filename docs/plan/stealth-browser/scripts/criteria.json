@@ -5391,6 +5391,15 @@
       "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py fix-search-output --only fix-search-output.2",
       "expect": "exit0",
       "cwd": "repo-root"
+    },
+    {
+      "id": "fix-search-output.3",
+      "phase": "migrate",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py fix-search-output --only fix-search-output.3",
+      "expect": "exit0",
+      "cwd": "repo-root"
     }
   ]
 }
