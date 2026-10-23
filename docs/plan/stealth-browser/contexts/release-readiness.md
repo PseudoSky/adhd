@@ -43,6 +43,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 
 - [release-readiness.2] release-readiness/sync-global.md names the bins stealth-search and stealth-search-mcp, the PUBLISHING.md Step 3.5 outcomes `refused`, `unverifiable` and `legacy-pending`, whether a pre-existing global shim exists, and the expected outcome.
 - [release-readiness.3] The AGENTS.md:25 new-package approval is recorded for all three packages: APPROVAL-split.md, APPROVAL-tripwire.md and APPROVALS.md together name @adhd/resilience-core-tripwire, @adhd/stealth-core-browser and @adhd/stealth-search, each with the verbatim human request and a date.
+- [release-readiness.4] Only owned paths changed by [psm:release-readiness] commits (release-readiness/, the APPROVAL documents).
 ---
 
 ## Reservations
