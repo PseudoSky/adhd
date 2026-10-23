@@ -1142,6 +1142,21 @@
       ],
       "context": "contexts/main-merge.md",
       "notes": "executor=haiku tier=haiku; merge conflict union edits and a lockfile regeneration; depends on every completed leaf state so all completed owners are ancestors of the conform and fix states"
+    },
+    "conform-tripwire": {
+      "kind": "work",
+      "phase": "migrate",
+      "depends_on": [
+        "main-merge"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py conform-tripwire",
+      "artifacts": [
+        "packages/resilience/resilience-core-tripwire/",
+        "tools/nx-plugins/build/executors/typecheck-spec/resilience-core-tripwire.baseline.json",
+        "docs/plan/stealth-browser/evidence/conform-tripwire.md"
+      ],
+      "context": "contexts/conform-tripwire.md",
+      "notes": "executor=haiku tier=haiku; mechanical codemod. Escalate to sonnet only when typecheck-spec stays red after two attempts. [inv:test-layout]"
     }
   },
   "authored_with": {
