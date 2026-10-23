@@ -1,0 +1,62 @@
+{
+  "schema": "search-verbs-probes/1",
+  "method": "throwaway scripts (scratchpad, not committed): extract() of the BUILT entrypoint/stealth-search/dist/api.d.ts with @adhd/apigen-core-client (namespace stealth, dropFileSegment), composeSchemas, then the real cliPlugin --help and a real mcpPlugin stdio server queried with the MCP SDK client (tools/list)",
+  "u_reexport": {
+    "result": "pass",
+    "tools_checked": [
+      "chromeStatus",
+      "launchChrome",
+      "shutdownChrome",
+      "listPageTargets",
+      "checkChromeActivity"
+    ],
+    "properties_seen": {
+      "chromeStatus": [
+        "host",
+        "port"
+      ],
+      "launchChrome": [
+        "port",
+        "userDataDir"
+      ],
+      "shutdownChrome": [
+        "host",
+        "port"
+      ],
+      "listPageTargets": [
+        "host",
+        "port"
+      ],
+      "checkChromeActivity": [
+        "withinMinutes",
+        "host",
+        "port"
+      ]
+    },
+    "note": "the five core verbs re-exported with `export { ... } from '@adhd/stealth-core-browser'` keep every input property in the extracted IR (ADR-0004 b6a04e7f not reproduced); no wrapper needed. launchChrome exposes only port and userDataDir."
+  },
+  "u_bool": {
+    "result": "pass",
+    "help_ok": true,
+    "tools_list_ok": true,
+    "tools_listed": 11,
+    "search_input_properties": [
+      "provider",
+      "query",
+      "qualifier",
+      "strategy",
+      "content",
+      "preview",
+      "offset",
+      "maxContentSize",
+      "timeoutMs",
+      "maxAttempts",
+      "challengeWaitMs",
+      "visibility",
+      "pageDisposal",
+      "host",
+      "port"
+    ],
+    "note": "`--help` and `search --help` exit 0 and render every SearchInput enum; tools/list over stdio returns all eleven tools"
+  }
+}
