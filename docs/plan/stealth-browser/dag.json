@@ -1389,6 +1389,20 @@
       ],
       "context": "contexts/search-tracing-fixes.md",
       "notes": "executor=typescript-pro tier=sonnet/high; fixes the failed tracing-log-validation"
+    },
+    "plan-notes": {
+      "kind": "work",
+      "phase": "docs",
+      "depends_on": [
+        "main-merge"
+      ],
+      "guard": "python3 docs/plan/stealth-browser/scripts/guard.py plan-notes",
+      "artifacts": [
+        "docs/plan/stealth-browser/README.md",
+        "docs/plan/stealth-browser/evidence/plan-notes.md"
+      ],
+      "context": "contexts/plan-notes.md",
+      "notes": "executor=haiku tier=haiku; documentation only"
     }
   },
   "authored_with": {
