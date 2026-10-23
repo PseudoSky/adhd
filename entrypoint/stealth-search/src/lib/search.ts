@@ -71,6 +71,8 @@ const DEFAULT_HOST = '127.0.0.1'
 const DEFAULT_PORT = 9222
 /** Bytes of the raw response / converted document a caller gets for `preview: 'include'`. */
 const PREVIEW_BYTES = 4096
+/** Default byte bound of the serialized output of a search (`Buffer.byteLength(JSON.stringify(out))`); whole results are dropped to fit. */
+export const DEFAULT_MAX_RESULT_BYTES = 8192
 /** A snippet is cut to this many characters so a result list stays small. */
 const SNIPPET_MAX_CHARS = 300
 /** The settle deadline of the fetch pipeline when the caller's timeout is larger. */
@@ -114,6 +116,8 @@ export interface SearchDeps {
   strategies: typeof runStrategies
   /** Overrides for the fetch pipeline's session, settle, markdown and clock entries. */
   fetch: Partial<FetchDeps>
+  /** The provider registry the verb resolves ids against; tests inject a per-test copy instead of mutating the module singleton. */
+  providers: Readonly<Record<ProviderName, ProviderConfig>>
   sleep(ms: number): Promise<void>
   now(): number
   log(message: string): void
@@ -146,6 +150,7 @@ function defaultDeps(): SearchDeps {
     engine: {},
     strategies: runStrategies,
     fetch: {},
+    providers: PROVIDERS as Readonly<Record<ProviderName, ProviderConfig>>,
     sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
     now: () => Date.now(),
     log: (message) => {
@@ -265,6 +270,28 @@ interface Shape {
   preview: 'none' | 'include'
   offset: number
   maxContentSize: number
+  maxResultBytes: number
+}
+
+const byteSize = (value: unknown): number => Buffer.byteLength(JSON.stringify(value))
+
+/**
+ * Keep the longest whole-result prefix whose serialized output fits `maxBytes`. Untouched when everything fits;
+ * otherwise `omitted` (the dropped count) is set and counted in the size.
+ */
+function boundResults(out: SearchOutput, maxBytes: number): SearchOutput {
+  if (byteSize(out) <= maxBytes) return out
+  const total = out.results.length
+  const marked = { ...out, results: [] as SearchHit[], omitted: total }
+  let used = byteSize(marked)
+  let keep = 0
+  for (const hit of out.results) {
+    const next = used + byteSize(hit) + (keep > 0 ? 1 : 0)
+    if (next > maxBytes) break
+    used = next
+    keep++
+  }
+  return { ...out, results: out.results.slice(0, keep), omitted: total - keep }
 }
 
 /** Turn an engine response into the verb's token-efficient output. */
@@ -295,7 +322,7 @@ function shapeEngine(raw: SearchResponse, shape: Shape): SearchOutput {
   } else if (raw.contentSize !== undefined) {
     out.contentSize = raw.contentSize
   }
-  return out
+  return boundResults(out, shape.maxResultBytes)
 }
 
 /** Turn a fetch result into the verb's output (`results` stay empty, the document rides in `content`). */
@@ -594,7 +621,9 @@ export function createSearchService(options: SearchServiceOptions = {}): SearchS
   const search: SearchService['search'] = async (input) => {
     const started = deps.now()
     // 1. Unknown provider, before any gate.
-    const p = getProvider(String(input.provider))
+    const name = String(input.provider)
+    getProvider(name) // throws UNKNOWN_PROVIDER for an id outside the registry
+    const p: ProviderConfig = deps.providers[name as ProviderName]
     const query = input.query ?? ''
     if (query.trim() === '') {
       throw searchError('SEARCH_FAILED', 'query must not be empty', { detail: { reason: 'query-required', provider: p.id } })
@@ -604,6 +633,7 @@ export function createSearchService(options: SearchServiceOptions = {}): SearchS
     checkNumber(p.id, 'challengeWaitMs', input.challengeWaitMs, 0, true)
     checkNumber(p.id, 'offset', input.offset, 0, true)
     checkNumber(p.id, 'maxContentSize', input.maxContentSize, 0, true)
+    checkNumber(p.id, 'maxResultBytes', input.maxResultBytes, 1, true)
     const endpoint = resolveEndpoint(input)
 
     const forced = input.strategy ?? 'auto'
@@ -664,6 +694,7 @@ export function createSearchService(options: SearchServiceOptions = {}): SearchS
       preview: input.preview ?? 'none',
       offset: input.offset ?? 0,
       maxContentSize: input.maxContentSize ?? DEFAULT_MAX_CONTENT_SIZE,
+      maxResultBytes: input.maxResultBytes ?? DEFAULT_MAX_RESULT_BYTES,
     }
 
     // 5. Bounded concurrency around the window-opening body.

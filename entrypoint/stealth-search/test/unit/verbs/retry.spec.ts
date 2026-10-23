@@ -9,16 +9,10 @@
  * Inventory rows: I-06 (retry with backoff), I-07 (hostile outcomes end the call).
  * Ticket 8468f7b1 · commit c00edea · [search-verbs.16]
  */
-import { afterEach, describe, expect, it } from 'vitest'
-import { PROVIDERS } from '../../../src/lib/providers.js'
+import { describe, expect, it } from 'vitest'
 import { noCaptureOutcome } from '../../../src/lib/network.js'
 import { body, makeDeps, recordingCapture } from '../../helpers/engine/harness.js'
-import { input, makeWorld, response, scriptedEngine } from '../../helpers/verbs/harness.js'
-
-const original = { ...PROVIDERS.github.retry }
-afterEach(() => {
-  Object.assign(PROVIDERS.github.retry, original)
-})
+import { input, makeWorld, providersWithGithubRetry, response, scriptedEngine } from '../../helpers/verbs/harness.js'
 
 const failure = (socketError: string | null) => {
   const outcome = noCaptureOutcome(socketError)
@@ -87,9 +81,8 @@ describe('c00edea: noCaptureOutcome transport failures still retry up to maxAtte
   })
 
   it("decideRetry onTimeout 'abort' stops after the first timeout: attempts 1, no sleep", async () => {
-    ;(PROVIDERS.github.retry as { onTimeout: string }).onTimeout = 'abort'
     const engine = scriptedEngine(failure(null))
-    const world = makeWorld({ strategies: engine.strategies })
+    const world = makeWorld({ strategies: engine.strategies, providers: providersWithGithubRetry({ onTimeout: 'abort' }) })
     const out = await world.svc.search(input({ maxAttempts: 3 }))
     expect(out).toMatchObject({ outcome: 'timeout', attempts: 1 })
     expect(engine.calls).toHaveLength(1)

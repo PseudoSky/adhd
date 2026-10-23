@@ -13,7 +13,8 @@ import { createSearchService } from '../../../src/lib/search.js'
 import type { SearchCore, SearchDeps, SearchPage, SearchService } from '../../../src/lib/search.js'
 import type { FetchDeps } from '../../../src/lib/fetch/fetch.js'
 import type { EngineDeps } from '../../../src/lib/network.js'
-import type { HitlInfo, SearchResponse } from '../../../src/lib/types.js'
+import { PROVIDERS } from '../../../src/lib/providers.js'
+import type { HitlInfo, ProviderConfig, SearchResponse } from '../../../src/lib/types.js'
 
 export const T0 = Date.parse('2026-10-21T10:00:00.000Z')
 
@@ -144,6 +145,8 @@ export interface WorldParts {
   strategies?: SearchDeps['strategies']
   engine?: Partial<EngineDeps>
   fetch?: Partial<FetchDeps>
+  /** A per-test provider registry; defaults to the module registry. */
+  providers?: SearchDeps['providers']
   interaction?: InteractionPort
   config?: Partial<SearchHostConfig>
   core?: FakeCore
@@ -183,6 +186,7 @@ export function makeWorld(parts: WorldParts = {}): World {
     ...(parts.strategies ? { strategies: parts.strategies } : {}),
     ...(parts.engine ? { engine: parts.engine } : {}),
     ...(parts.fetch ? { fetch: parts.fetch } : {}),
+    ...(parts.providers ? { providers: parts.providers } : {}),
   }
   const svc = createSearchService({
     ...(parts.interaction ? { interaction: parts.interaction } : {}),
@@ -232,4 +236,13 @@ export function countingFs(fs: MemoryFs): { fs: MemoryFs; count: () => number } 
     },
   }
   return { fs: new Proxy(fs, handler), count: () => n }
+}
+
+/**
+ * A per-test copy of the provider registry whose github `retry` is replaced by `retry` overrides. The module
+ * registry is never written: the github entry and its retry object are fresh copies.
+ */
+export function providersWithGithubRetry(retry: Partial<ProviderConfig['retry']>): SearchDeps['providers'] {
+  const github = PROVIDERS.github as ProviderConfig
+  return { ...PROVIDERS, github: { ...github, retry: { ...github.retry, ...retry } } } as SearchDeps['providers']
 }

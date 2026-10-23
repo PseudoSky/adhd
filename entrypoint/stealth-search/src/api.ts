@@ -80,6 +80,8 @@ export interface SearchInput {
   offset?: number
   /** Size of the `content` window in bytes (default 20000; 0 = unbounded). */
   maxContentSize?: number
+  /** Byte bound of the serialized result list (default 8192): whole results are dropped from the tail, never cut, and `omitted` counts them. Must be a positive integer. */
+  maxResultBytes?: number
   /** One deadline for the whole call across every attempt, and the wait for each capture, in ms (default 30000). */
   timeoutMs?: number
   /** Attempts on a transient failure (default: the provider's own policy, 3 at most). */
@@ -136,6 +138,8 @@ export interface SearchOutput {
   finalUrl?: string
   count: number
   results: SearchHit[]
+  /** How many whole results were dropped from the tail to fit `maxResultBytes`; absent when nothing was dropped (the list is truncated exactly when this is present). */
+  omitted?: number
   outcome: 'success' | 'empty' | 'error' | 'timeout' | 'hitl' | 'captcha' | 'rate_limited' | 'banned'
   error?: string
   warning?: string
