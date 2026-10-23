@@ -5013,6 +5013,15 @@
       "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py conform-core --only conform-core.8",
       "expect": "exit0",
       "cwd": "repo-root"
+    },
+    {
+      "id": "conform-core.9",
+      "phase": "migrate",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py conform-core --only conform-core.9",
+      "expect": "exit0",
+      "cwd": "repo-root"
     }
   ]
 }

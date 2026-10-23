@@ -56,6 +56,7 @@ Each criterion is a deterministic check in `docs/plan/stealth-browser/scripts/gu
 - [conform-core.6] No document or source comment of the package names the legacy layout: README.md, AGENTS.md, docs/** and sources contain no `src/test`, `src/__tests__` or `.e2e.test.` (CHANGELOG.md excepted).
 - [conform-core.7] `nx run stealth-core-browser:lint`, `:typecheck`, `:typecheck-spec`, `:test` and `:build` exit 0 and evidence/conform-core.md records each as `EXIT <command>: 0`.
 - [conform-core.8] No completed state regressed: cdp-test-harness, tests-use-cases, failsafe-inventory whole-state guards still exit 0 on the moved tree.
+- [conform-core.9] Only owned paths changed by [psm:conform-core] commits (packages/stealth/stealth-core-browser/** and its typecheck-spec baseline).
 ---
 
 ## Reservations
