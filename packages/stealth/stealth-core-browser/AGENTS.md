@@ -8,7 +8,7 @@ Factual notes for LLM/agent consumption. This file is not marketing.
 
 ## Layout
 
-- `src/` library source (relative imports use `.js` specifiers); unit specs `*.spec.ts` and e2e `*.e2e.test.ts` live under `src/test/`.
+- `src/` library source (relative imports use `.js` specifiers); unit specs `test/unit/**/*.spec.ts`, support modules in `test/helpers/`, fixtures in `test/fixtures/`.
 - `bin/` CLI and MCP entry points, compiled by `build-bin` into `dist/bin` and `dist/src`.
 
 ## Targets

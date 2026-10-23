@@ -4,7 +4,7 @@
  * `ReaperLink` is the ONE seam between a ChromeManager (the client) and the
  * reaper host for its port. The manager depends only on this port; the real
  * adapter (`createProxyReaperLink`, over the service-proxy transport through
- * `sp.ts`) and the unit-test fake (`src/test/unit/lifecycle/fake-reaper-link.ts`)
+ * `sp.ts`) and the unit-test fake (`test/helpers/lifecycle/fake-reaper-link.ts`)
  * both implement it.
  *
  * Link rules (SPEC-single-pass-lifecycle.md 3.4): one held connection per
