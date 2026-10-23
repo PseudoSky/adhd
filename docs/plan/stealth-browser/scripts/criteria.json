@@ -5112,6 +5112,15 @@
       "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py fix-tripwire --only fix-tripwire.1",
       "expect": "exit0",
       "cwd": "repo-root"
+    },
+    {
+      "id": "fix-tripwire.2",
+      "phase": "migrate",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/stealth-browser/scripts/guard.py fix-tripwire --only fix-tripwire.2",
+      "expect": "exit0",
+      "cwd": "repo-root"
     }
   ]
 }
