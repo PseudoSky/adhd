@@ -468,7 +468,8 @@
         "search-usecases",
         "search-examples",
         "tracing-log-validation",
-        "search-cutover"
+        "search-cutover",
+        "release-readiness"
       ],
       "guard": "python3 docs/plan/stealth-browser/scripts/guard.py audit-pre-review",
       "artifacts": [
