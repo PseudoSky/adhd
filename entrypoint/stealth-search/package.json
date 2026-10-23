@@ -41,7 +41,6 @@
     "@adhd/apigen-engine-naming": "^0.2.5",
     "@adhd/apigen-engine-runtime": "^0.3.3",
     "@adhd/apigen-plugin-cli-output": "^0.2.8",
-    "@adhd/apigen-plugin-ir-cache": "^0.1.4",
     "@adhd/apigen-plugin-mcp": "^0.3.3",
     "@adhd/apigen-plugin-tracing": "^0.2.0",
     "@adhd/resilience-core-tripwire": "^0.1.0",
@@ -54,5 +53,12 @@
   },
   "devDependencies": {
     "@types/turndown": "^5.0.6"
+  },
+  "nx": {
+    "targets": {
+      "build-bin": {
+        "executor": "nx:run-commands"
+      }
+    }
   }
 }

@@ -779,9 +779,6 @@ importers:
       '@adhd/apigen-plugin-cli-output':
         specifier: ^0.2.8
         version: link:../../packages/apigen/apigen-plugin-cli-output
-      '@adhd/apigen-plugin-ir-cache':
-        specifier: ^0.1.4
-        version: link:../../packages/apigen/apigen-plugin-ir-cache
       '@adhd/apigen-plugin-mcp':
         specifier: ^0.3.3
         version: link:../../packages/apigen/apigen-plugin-mcp
